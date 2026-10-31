@@ -4,7 +4,7 @@
 
 ## Console entry (English)
 
-In **Play Console → Policy and programs → App content → Sign-in details (App access) → Manage → Add new instructions** use the following template. Verify the exact controls against the uploaded **versionCode 2000074**, not a development screenshot.
+In **Play Console → Policy and programs → App content → Sign-in details (App access) → Manage → Add new instructions** use the following template. Verify the exact controls against the uploaded **versionCode 2000075**, not a development screenshot.
 
 **Instruction title:** BLOFY PLAYER — Android TV Review Access
 
@@ -15,7 +15,7 @@ In **Play Console → Policy and programs → App content → Sign-in details (A
 > 1. Launch BLOFY PLAYER on an Android TV device using the TV remote. Select **Add / Manage Playlists** (or the corresponding Arabic label).
 > 2. Select **+ Xtream** and fill in the server address, username and password using the TV keyboard.
 > 3. Choose **Save and Connect**, wait until the initial demo catalog finishes loading, then open **Live TV**, **Movies** and **Series** from the home screen to inspect navigation and playback.
-> 4. Use Up/Down/Left/Right, OK and Back throughout. If the login screen shows an activation/QR code, the reviewer must also have a reusable way to pass that activation step **without contacting support**; include those instructions and any needed reviewer code here.
+> 4. Use Up/Down/Left/Right, OK and Back throughout. The app creates a server-side trial for a new device when activation is checked. Verify that this path works for a clean reviewer device with no prior trial and that no paid-license purchase is required during review. The QR code opens the activation server's **/portal** page; provide its English instructions if the reviewer needs to pair playlists. If the trial expires or is blocked, supply a reusable self-service reviewer license method without contacting support.
 > 5. All demo content is explicitly licensed/authorized for testing and the demo remains accessible globally throughout review and for future audits.
 
 **Server URL:** `[ADD REVIEWER DEMO SERVER HTTPS URL]`
@@ -24,7 +24,9 @@ In **Play Console → Policy and programs → App content → Sign-in details (A
 
 **Password:** `[ADD REUSABLE REVIEWER PASSWORD]`
 
-**Activation instructions if required:** `[ADD THE SELF-SERVICE REUSABLE TV ACTIVATION METHOD / CODE]`
+**Activation instructions if required:** `[VERIFY AUTOMATIC TRIAL OR ADD DURABLE SELF-SERVICE REVIEWER ACTIVATION]`
+
+**Pairing page used by the app's QR:** `https://api.blofyplayer.com/portal` (the QR carries the new device ID and six-digit key in its URL fragment; the reviewer must not need to send a screenshot to support). The previously used `/connect` API path is not a registered backend route.
 
 ## Required acceptance test before sending
 
@@ -35,4 +37,4 @@ In **Play Console → Policy and programs → App content → Sign-in details (A
 - If there is any region-specific blocking or paywall, reviewer access must bypass it only for the demo tenant and without exposing customer content.
 - Google requires credentials and instructions in **English**. If QR is the only route, use a reusable static URL and detailed instructions.
 
-**Do not claim the login issue is resolved until these steps have actually passed on the store-version app.**
+**Do not claim the login issue is resolved until these steps have actually passed on the store-version app.** Do not paste placeholders into Play Console or submit without legally authorized demo playback content.

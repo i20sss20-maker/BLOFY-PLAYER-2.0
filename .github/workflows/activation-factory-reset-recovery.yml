@@ -1,0 +1,27 @@
+name: BLOFY activation factory-reset recovery
+on:
+  push:
+    branches: [fix/factory-reset-license-recovery-20261030]
+    paths:
+      - 'services/activation/**'
+      - '.github/workflows/activation-factory-reset-recovery.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  server-recovery-security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check recovery modules and server syntax
+        run: |
+          node --check services/activation/src/license-recovery.mjs
+          node --check services/activation/src/server.mjs
+          node --check services/activation/test/license-recovery.test.mjs
+      - name: Run security and reset regression tests
+        run: node --test services/activation/test/license-recovery.test.mjs services/activation/test/auth-protection.test.mjs

@@ -54,7 +54,7 @@ class CommercialPreparationTest {
         val permissions = app.packageManager.getPackageInfo(app.packageName, PackageManager.GET_PERMISSIONS).requestedPermissions.orEmpty()
         assertEquals(!BuildConfig.IS_GOOGLE_PLAY, permissions.contains("android.permission.REQUEST_INSTALL_PACKAGES"))
         val portal = checkNotNull(ActivationPortalUrl.create("https://example.test", "BLOFY-ABCD-EFGH", "123456"))
-        assertEquals(if (BuildConfig.IS_GOOGLE_PLAY) "/connect" else "/", java.net.URI(portal).path)
+        assertEquals("/portal", java.net.URI(portal).path)
         if (BuildConfig.IS_GOOGLE_PLAY) {
             val controller = Robolectric.buildActivity(AccountActivity::class.java).setup()
             AppUpdatePrompt.check(controller.get(), force = true)

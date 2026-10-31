@@ -83,9 +83,30 @@ class AccountActivity : AppCompatActivity() {
             confirm(getString(R.string.license_restore_warning)) {
                 perform {
                     refreshActivation()
-                    AccountClient.post(applicationContext, "/api/v1/license/recovery/restore", JSONObject().put("recoveryCode", code))
+                    val manager = ActivationManager(
+                        applicationContext, BlofyDatabase.get(applicationContext).dao()
+                    )
+                    val temporaryId = withContext(Dispatchers.IO) {
+                        manager.ensureIdentity().deviceId
+                    }
+                    val response = AccountClient.post(
+                        applicationContext, "/api/v1/license/recovery/restore",
+                        JSONObject().put("recoveryCode", code)
+                    )
+                    val canonicalId = response.optString("canonicalDeviceId")
+                    if (canonicalId.isBlank()) throw AccountClient.Failure("recovery_unavailable")
+                    // A factory reset can change ANDROID_ID. The trusted server
+                    // has already validated the one-time secret and the new device
+                    // credential; explicitly adopt its verified original device ID.
+                    withContext(Dispatchers.IO) {
+                        manager.adoptServerVerifiedRecovery(temporaryId, canonicalId)
+                    }
+                    refreshActivation()
+                    val actual = withContext(Dispatchers.IO) {
+                        manager.ensureIdentity().deviceId
+                    }
+                    if (actual != canonicalId) throw AccountClient.Failure("recovery_sync_required")
                     input.text.clear()
-                    try { refreshActivation() } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { }
                     status.setText(R.string.license_restored)
                 }
             }

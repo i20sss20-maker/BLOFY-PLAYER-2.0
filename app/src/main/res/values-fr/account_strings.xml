@@ -4,7 +4,7 @@
     <string name="privacy_summary">Nous utilisons un identifiant d’installation et une empreinte de l’identifiant Android pour gérer l’activation et la période d’essai. Nous n’utilisons ni numéro de téléphone ni IMEI. Consultez la politique de confidentialité pour les données et leur suppression.</string>
     <string name="privacy_diagnostics">Partager les diagnostics de lecture pour améliorer la stabilité (facultatif)</string>
     <string name="license_recovery_title">Récupération de licence</string>
-    <string name="license_recovery_hint">Conservez une clé de récupération hors de cet appareil avant de désinstaller. Elle transfère uniquement la licence payante ; les listes et mots de passe ne sont pas importés automatiquement.</string>
+    <string name="license_recovery_hint">Conservez une clé de récupération hors de l’appareil avant une réinitialisation ou une réinstallation. Elle restaure le numéro BLOFY et la date d’expiration d’origine ainsi que les listes enregistrées sur le serveur. La période d’essai ne recommence pas.</string>
     <string name="license_create_key">Créer une clé de récupération</string>
     <string name="license_create_warning">Toute ancienne clé de récupération sera invalidée. Enregistrez la nouvelle clé avant de quitter cet écran.</string>
     <string name="license_enter_key">Clé de récupération</string>
@@ -12,7 +12,7 @@
     <string name="license_restore_warning">La durée restante de la licence sera transférée sur cet appareil et l’ancien appareil sera désactivé. Continuer ?</string>
     <string name="license_invalid_key">La clé est invalide ou déjà utilisée, ou la licence est expirée ou bloquée.</string>
     <string name="license_restored">Licence restaurée. Revenez à la connexion et actualisez le statut.</string>
-    <string name="license_paid_required">Une licence payante valide est nécessaire pour créer une clé de récupération.</string>
+    <string name="license_paid_required">Impossible de créer une clé de récupération pour cette licence.</string>
     <string name="license_same_device">Cette licence appartient déjà à cet appareil.</string>
     <string name="license_already_active">Cet appareil possède déjà une licence valide ; elle n’a pas été remplacée.</string>
     <string name="license_keep_key">Conservez cette clé en lieu sûr sans la partager. Elle ne sera plus affichée.</string>

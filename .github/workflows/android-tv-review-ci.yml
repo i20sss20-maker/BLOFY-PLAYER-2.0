@@ -1,7 +1,7 @@
-name: Android TV 9 - Google Play rejection review
+name: BLOFY Android TV 9 identity recovery candidate 2000075
 on:
   push:
-    branches: [fix/android-tv-play-2000074]
+    branches: [fix/factory-reset-license-recovery-20261030]
     paths:
       - 'app/**'
       - '.github/workflows/android-tv-review-ci.yml'
@@ -11,10 +11,31 @@ permissions:
   contents: read
 
 concurrency:
-  group: android-tv-play-2000074-${{ github.ref }}
+  group: android-tv-play-2000075-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  recovery-unit-gate:
+    name: Verify Android identity and recovery unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Verify recovery rules cannot restart a trial
+        run: node --test services/activation/test/license-recovery.test.mjs
+      - name: Verify app's full Android identity test suite
+        run: gradle --no-daemon -PBLOFY_DISTRIBUTION=play testDebugUnitTest
+
   tv9-emulator-review:
     runs-on: ubuntu-latest
     timeout-minutes: 55
@@ -62,8 +83,8 @@ jobs:
           if-no-files-found: ignore
 
   signed-play-candidate:
-    name: Verify and sign AAB 2000074 after TV emulator passes
-    needs: [tv9-emulator-review]
+    name: Verify and sign AAB 2000075 after TV emulator passes
+    needs: [recovery-unit-gate, tv9-emulator-review]
     runs-on: ubuntu-latest
     timeout-minutes: 120
     environment: production
@@ -84,7 +105,7 @@ jobs:
         run: |
           set -euo pipefail
           grep -Fq 'applicationId = "tv.blofy.player.v2"' app/build.gradle.kts
-          grep -Fq 'versionCode = 2000074' app/build.gradle.kts
+          grep -Fq 'versionCode = 2000075' app/build.gradle.kts
           test -s app/src/main/res/drawable-xhdpi/blofy_tv_banner.png
           test -s app/src/main/res/mipmap-nodpi/blofy_tv_icon.png
           test ! -e app/src/main/res/drawable/blofy_tv_banner.xml
@@ -144,7 +165,7 @@ jobs:
           test -s "$apk" && test -s "$aab"
           tools="$ANDROID_HOME/build-tools/35.0.0"
           "$tools/aapt" dump badging "$apk" | tee candidate/badging.txt
-          grep -Fq "package: name='tv.blofy.player.v2' versionCode='2000074' versionName='2.0.0-rc07.55.6-tv-review'" candidate/badging.txt
+          grep -Fq "package: name='tv.blofy.player.v2' versionCode='2000075' versionName='2.0.0-rc07.55.7-identity-recovery'" candidate/badging.txt
           "$tools/apksigner" verify --print-certs "$apk" > candidate/signature.txt
           actual="$("$tools/apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n1 | tr -d '[:space:]-:' | tr '[:lower:]' '[:upper:]')"
           test "$actual" = "$EXPECTED_CERT_SHA256"
@@ -154,13 +175,13 @@ jobs:
           for abi in arm64-v8a armeabi-v7a x86 x86_64; do
             grep -Eiq "^lib/$abi/lib(ffmpeg|ffmpegJNI).*\.so$" "$RUNNER_TEMP/native-files.txt"
           done
-          cp "$aab" candidate/BLOFY-PLAYER-AndroidTV-review-v2000074.aab
-          printf 'source_sha=%s\npackage=tv.blofy.player.v2\nversionCode=2000074\nactivation=https://api.blofyplayer.com\nupdates=https://updates.blofyplayer.com\nffmpeg=true\nr8=true\nproduction_signed=true\npublished=false\n' "$GITHUB_SHA" > candidate/build-info.txt
+          cp "$aab" candidate/BLOFY-PLAYER-AndroidTV-review-v2000075.aab
+          printf 'source_sha=%s\npackage=tv.blofy.player.v2\nversionCode=2000075\nactivation=https://api.blofyplayer.com\nupdates=https://updates.blofyplayer.com\nffmpeg=true\nr8=true\nproduction_signed=true\npublished=false\n' "$GITHUB_SHA" > candidate/build-info.txt
           (cd candidate && sha256sum *.aab > SHA256SUMS && sha256sum --check SHA256SUMS)
       - name: Upload signed AAB (owner review; NOT a Play publication)
         uses: actions/upload-artifact@v4
         with:
-          name: BLOFY-ANDROID-TV-REVIEW-2000074-SIGNED-${{ github.sha }}
+          name: BLOFY-ANDROID-TV-REVIEW-2000075-SIGNED-${{ github.sha }}
           path: candidate/
           if-no-files-found: error
           retention-days: 14
