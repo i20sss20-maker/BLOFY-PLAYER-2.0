@@ -22,7 +22,7 @@ object ActivationPortalUrl {
             append(normalizedCode)
         }
         return portal.newBuilder()
-            // A fragment is never sent to Vercel or included in HTTP access logs.
+            // A fragment is client-side only and is not included in portal HTTP requests or access logs.
             .fragment(activationFragment)
             .build()
             .toString()
