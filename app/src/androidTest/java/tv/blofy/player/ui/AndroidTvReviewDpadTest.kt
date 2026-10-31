@@ -1,6 +1,8 @@
 package tv.blofy.player.ui
 
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Color
 import android.view.KeyEvent
 import android.widget.Button
 import androidx.test.core.app.ActivityScenario
@@ -36,13 +38,31 @@ class AndroidTvReviewDpadTest {
         assertNotNull("TV launcher banner must be packaged into the app, not just Play listing", banner)
         assertEquals("TV xhdpi banner width", 320, banner.width)
         assertEquals("TV xhdpi banner height", 180, banner.height)
+        assertOpaqueFullCanvas(banner, "TV banner")
         banner.recycle()
 
         val icon = BitmapFactory.decodeResource(context.resources, R.mipmap.blofy_tv_icon, options)
         assertNotNull("TV icon must be bundled with the app", icon)
         assertEquals("TV icon width", 512, icon.width)
         assertEquals("TV icon height", 512, icon.height)
+        assertOpaqueFullCanvas(icon, "TV icon")
         icon.recycle()
+
+        assertEquals("The Play manifest must actually select the verified banner",
+            R.drawable.blofy_tv_banner, context.applicationInfo.banner)
+        assertEquals("The Play manifest must actually select the verified icon",
+            R.mipmap.blofy_tv_icon, context.applicationInfo.icon)
+    }
+
+    private fun assertOpaqueFullCanvas(bitmap: Bitmap, label: String) {
+        val row = IntArray(bitmap.width)
+        for (y in 0 until bitmap.height) {
+            bitmap.getPixels(row, 0, bitmap.width, 0, y, bitmap.width, 1)
+            for (x in row.indices) {
+                assertEquals("$label must fill every pixel; transparent at ($x,$y)",
+                    255, Color.alpha(row[x]))
+            }
+        }
     }
 
     @Test fun loginFocusCanReachHeaderByRemoteAndReturnToPlaylistActions() {
