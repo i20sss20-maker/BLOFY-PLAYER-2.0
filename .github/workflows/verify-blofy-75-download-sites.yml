@@ -60,9 +60,14 @@ jobs:
           curl -sSI -H 'Cache-Control: no-cache' --connect-timeout 8 --max-time 20 "$portal/apk?version=2000075" || true
           echo "Alternative /latest.apk:"
           curl -sSI --connect-timeout 8 --max-time 20 "$portal/latest.apk" || true
-          # The previously distributed Downloader URL must never offer version 73.
-          ! grep -Fq 'rc07.55.5-PRODUCTION-SIGNED.apk' /tmp/portal-apk-head.txt
-          grep -Fqi 'location: https://updates.blofyplayer.com/download/latest.apk' /tmp/portal-apk-head.txt
+          # Old URLs may retain their first redirect to the 73 filename, but
+          # the archive file server must route their final bytes to signed 75.
+          curl -sS --head --location --max-redirs 7 --connect-timeout 8 --max-time 40 \
+            "$portal/apk" -o /tmp/legacy-final-headers.txt \
+            -w 'LEGACY_STATUS=%{http_code} LEGACY_URL=%{url_effective}\n' | tee /tmp/legacy-result
+          grep -Fq 'LEGACY_STATUS=200' /tmp/legacy-result
+          grep -Fq 'LEGACY_URL=https://updates.blofyplayer.com/download/latest.apk' /tmp/legacy-result
+          grep -Fq 'BLOFY-PLAYER-2.0.0-rc07.55.7-identity-recovery.apk' /tmp/legacy-final-headers.txt
           grep -Fq 'href="https://updates.blofyplayer.com/d/blofy"' /tmp/portal.html
           curl -fsSL --connect-timeout 8 --max-time 20 "$updates/health" | \
             jq -e '.release.app.versionCode==2000075'
