@@ -29,7 +29,6 @@ jobs:
             --dir signed
           test -s signed/BLOFY-PLAYER-v76-Play73-OWNER-SIGNED.apk
           file signed/BLOFY-PLAYER-v76-Play73-OWNER-SIGNED.apk
-          file signed/BLOFY-PLAYER-v76-Play73-OWNER-SIGNED.apk | grep -q 'Zip archive data'
           unzip -t signed/BLOFY-PLAYER-v76-Play73-OWNER-SIGNED.apk | tail -1
           unzip -Z1 signed/BLOFY-PLAYER-v76-Play73-OWNER-SIGNED.apk | grep -Fx 'AndroidManifest.xml'
           unzip -Z1 signed/BLOFY-PLAYER-v76-Play73-OWNER-SIGNED.apk | grep -Fx 'classes.dex'
