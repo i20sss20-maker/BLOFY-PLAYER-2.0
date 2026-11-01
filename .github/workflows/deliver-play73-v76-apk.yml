@@ -53,4 +53,4 @@ jobs:
               --notes "Signed installable APK for OWNER TESTING ONLY. Preserves actual signed v2000073 source/branding, versionCode 2000076, D-pad and TV art changes. Signed original release certificate, FFmpeg included, uses live activation and updates endpoints. Signed Android CI and Android TV 9 emulator tests passed. Activation, playback and D-pad MUST be tested on real devices before any store/website publication. NEVER interpret this pre-release as a production release."
           fi
           gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json url,assets,isPrerelease \
-            --jq '{url:url,isPrerelease:isPrerelease,assets:[.assets[].url]}'
+            --jq '{url:.url,isPrerelease:.isPrerelease,assets:[.assets[].url]}'
