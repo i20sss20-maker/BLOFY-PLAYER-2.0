@@ -27,8 +27,9 @@ data class ActivationIdentityMigrationRequest(
 )
 
 data class ActivationIdentityMigrationResponse(
-    val migrated: Boolean,
+    val migrated: Boolean = false,
     val alreadyStable: Boolean = false,
+    val aliasBound: Boolean = false,
     val deviceId: String? = null
 )
 
@@ -36,7 +37,9 @@ data class ActivationCheckResponse(
     val status: String,
     val expiresAt: Long? = null,
     val serverTime: Long? = null,
-    val message: String? = null
+    val message: String? = null,
+    val canonicalDeviceId: String? = null,
+    val recovered: Boolean = false
 ) {
     enum class State { TRIAL, ACTIVE, EXPIRED, BLOCKED, UNKNOWN }
 

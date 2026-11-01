@@ -8,9 +8,11 @@ class ActivationPortalUrlTest {
     @Test
     fun productionUrlIncludesDeviceCredentials() {
         assertEquals(
-            "https://blofy-player-2-0.vercel.app/#deviceId=BLOFY-66HL-GB09&code=123456",
+            if (tv.blofy.player.BuildConfig.IS_GOOGLE_PLAY)
+                "https://api.blofyplayer.com/connect#deviceId=BLOFY-66HL-GB09&code=123456"
+            else "https://api.blofyplayer.com/#deviceId=BLOFY-66HL-GB09&code=123456",
             ActivationPortalUrl.create(
-                "https://blofy-player-2-0.vercel.app/",
+                "https://api.blofyplayer.com/",
                 "BLOFY-66HL-GB09",
                 "123456"
             )
@@ -20,7 +22,9 @@ class ActivationPortalUrlTest {
     @Test
     fun portalUsesProductionOriginEvenWhenBaseContainsApiPath() {
         assertEquals(
-            "https://example.com/#deviceId=BLOFY-ABCD-EF12&code=000042",
+            if (tv.blofy.player.BuildConfig.IS_GOOGLE_PLAY)
+                "https://example.com/connect#deviceId=BLOFY-ABCD-EF12&code=000042"
+            else "https://example.com/#deviceId=BLOFY-ABCD-EF12&code=000042",
             ActivationPortalUrl.create(
                 "https://example.com/api/v1/",
                 "BLOFY-ABCD-EF12",
