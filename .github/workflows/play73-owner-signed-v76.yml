@@ -7,6 +7,7 @@ on:
     paths:
       - .github/workflows/play73-owner-signed-v76.yml
       - app/**
+      - tools/verify_play_2000073.py
   workflow_dispatch:
 
 permissions:
@@ -42,6 +43,8 @@ jobs:
         run: |
           test "$(git hash-object app/src/main/res/drawable/blofy_home_background.xml)" = 435f8ef89e0c2d7179f11d4c8417a14f0ef5d4f1
           test "$(git hash-object app/src/main/java/tv/blofy/player/ui/common/BlofyTvDesign.kt)" = 10543a8cb4b8aead4ead9beeb5f606943c751dd0
+      - name: Verify all original Play73 Activity routes are present in successor
+        run: python3 tools/verify_play_2000073.py
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -51,7 +54,7 @@ jobs:
         with:
           gradle-version: "8.11.1"
 
-      - name: Validate rc07.55.5 identity and signing inputs
+      - name: Validate signed Play73 successor v76 identity and signing inputs
         shell: bash
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.BLOFY_ANDROID_KEYSTORE_BASE64 }}
