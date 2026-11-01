@@ -34,7 +34,6 @@ import tv.blofy.player.core.provider.LiveFormat
 import tv.blofy.player.core.provider.PlayerPreference
 import tv.blofy.player.core.provider.ProviderProfile
 import tv.blofy.player.core.provider.TransportPreference
-import tv.blofy.player.data.CatalogPlaybackGate
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.CategoryEntity
@@ -154,6 +153,8 @@ class ContentBrowserActivity : AppCompatActivity() {
                     // provider category with zero/stale rows can never make Live look globally empty.
                     loadStreams(saved)
                 }
+                // All kinds, including Live, require an initial DPAD-focused category.
+                requestInitialCatalogFocus()
             }
         }
     }
@@ -546,7 +547,7 @@ class ContentBrowserActivity : AppCompatActivity() {
     }
 
     private fun requestInitialCatalogFocus() {
-        if (phoneMode || kind == KIND_LIVE || categoryList.hasFocus() || streamList.hasFocus()) return
+        if (phoneMode || categoryList.hasFocus() || streamList.hasFocus()) return
         categoryList.post {
             categoryList.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus()
                 ?: categoryList.post { categoryList.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus() }
@@ -584,10 +585,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         val profile = profile(provider)
         val route = ContentUrlResolver.liveRoute(provider, profile, stream)
         if (previewSession == null) {
-            // Even the small TV channel preview uses a real decoder and network stream.
-            // Treat it as playback so automatic full-library downloads wait.
             previewSession = BlofyPlaybackSession(this, profile, "live_preview")
-            CatalogPlaybackGate.playerStarted()
             previewView?.player = previewSession?.player
         }
         lastPreviewKey = stream.key
@@ -607,13 +605,8 @@ class ContentBrowserActivity : AppCompatActivity() {
 
     private fun stopPreview() {
         previewJob?.cancel()
-        val active = previewSession ?: return
+        previewSession?.release { previewView?.player = null }
         previewSession = null
-        try {
-            active.release { previewView?.player = null }
-        } finally {
-            CatalogPlaybackGate.playerStopped()
-        }
     }
 
     private fun openStream(stream: StreamEntity) {
