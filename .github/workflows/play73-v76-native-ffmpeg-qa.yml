@@ -1,0 +1,85 @@
+name: BLOFY Play73 v76 FFmpeg QA (owner test only)
+on:
+  push:
+    branches: [qa/play73-v76-full-ffmpeg-20261102]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full-native-owner-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      NDK_VERSION: "28.0.13004108"
+      ORG_GRADLE_PROJECT_BLOFY_ACTIVATION_BASE_URL: https://api.blofyplayer.com
+      ORG_GRADLE_PROJECT_BLOFY_UPDATE_BASE_URL: https://updates.blofyplayer.com
+      ORG_GRADLE_PROJECT_BLOFY_DISTRIBUTION: play
+      ORG_GRADLE_PROJECT_BLOFY_TV_QA: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Install SDK, native NDK and CMake
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;35.0.0" "ndk;$NDK_VERSION" "cmake;3.22.1"
+          command -v ninja || { sudo apt-get update && sudo apt-get install -y ninja-build; }
+      - name: Build exact original Media3 1.6.1 FFmpeg decoder extension
+        shell: bash
+        env:
+          ENABLED_DECODERS: ac3 eac3 dca truehd aac mp3 opus vorbis flac
+        run: |
+          set -euo pipefail
+          export NDK_PATH="$ANDROID_HOME/ndk/$NDK_VERSION"
+          export PATH="$ANDROID_HOME/cmake/3.22.1/bin:$PATH"
+          chmod +x tools/build_media3_ffmpeg.sh
+          tools/build_media3_ffmpeg.sh
+          test -s build/ffmpeg-native/media3-decoder-ffmpeg-1.6.1.aar
+      - name: Confirm this is v73 UI and an isolated v76 QA package
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object app/src/main/res/drawable-nodpi/blofy_logo.png)" = 8a84b6b7d65f494e13e26c687fe0a980a664e208
+          test "$(git hash-object app/src/main/res/drawable/blofy_home_background.xml)" = d1da19380252088e49b8c6185125d100bd249b6c
+          test "$(git hash-object app/src/main/java/tv/blofy/player/data/PlaylistManager.kt)" = e78cb30c615d2089455a169a6f347543d7486384
+          grep -Fq 'versionCode = 2000076' app/build.gradle.kts
+          grep -Fq 'applicationIdSuffix = ".qa"' app/build.gradle.kts
+      - name: Build native-full isolated APK and run unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          aar="$GITHUB_WORKSPACE/build/ffmpeg-native/media3-decoder-ffmpeg-1.6.1.aar"
+          gradle --no-daemon --max-workers=2 -Dorg.gradle.jvmargs="-Xmx2048m -XX:MaxMetaspaceSize=768m" -PBLOFY_FFMPEG_AAR="$aar" testDebugUnitTest lintDebug assembleDebug
+      - name: Verify package name and all native ABIs
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk="app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | tee app-badging.txt
+          grep -Fq "package: name='tv.blofy.player.v2.qa' versionCode='2000076'" app-badging.txt
+          unzip -Z1 "$apk" > native-list.txt
+          for abi in armeabi-v7a arm64-v8a x86 x86_64; do
+            grep -Fq "lib/$abi/libffmpegJNI.so" native-list.txt
+          done
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -P 16 -v 4 "$apk"
+          sha256sum "$apk" > BLOFY-Play73-v76-FFmpeg-QA-SHA256SUMS
+          printf 'package=tv.blofy.player.v2.qa\nversionCode=2000076\nsource_sha=%s\noriginal_play73_engine=true\nffmpeg_native=true\nrelease_signed=false\nplay_published=false\n' "$GITHUB_SHA" > build-details.txt
+      - name: Upload private owner Android QA APK (NOT published)
+        uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-PLAYER-v76-Play73-FULL-FFmpeg-QA-${{ github.sha }}
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            BLOFY-Play73-v76-FFmpeg-QA-SHA256SUMS
+            build-details.txt
+            app-badging.txt
+          if-no-files-found: error
+          retention-days: 14
