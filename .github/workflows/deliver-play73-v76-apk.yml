@@ -1,0 +1,57 @@
+name: Deliver signed BLOFY v76 APK for direct owner installation
+
+on:
+  push:
+    branches: [delivery/play73-v76-direct-apk-20261102]
+    paths:
+      - .github/workflows/deliver-play73-v76-apk.yml
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  upload-direct-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Download APK from VERIFIED signed Play73 v76 workflow run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SIGNED_SHA: 7a6fb0c3b725330b5e75d2738ef682a399d08cc6
+          SIGNED_RUN: "41361616481"
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p signed
+          gh run download "$SIGNED_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name "BLOFY-PLAYER-v76-Play73-OWNER-SIGNED-APK-$SIGNED_SHA" \
+            --dir signed
+          test -s signed/BLOFY-PLAYER-v76-Play73-OWNER-SIGNED.apk
+          file signed/BLOFY-PLAYER-v76-Play73-OWNER-SIGNED.apk
+          file signed/BLOFY-PLAYER-v76-Play73-OWNER-SIGNED.apk | grep -q 'Zip archive data'
+          unzip -t signed/BLOFY-PLAYER-v76-Play73-OWNER-SIGNED.apk | tail -1
+          unzip -Z1 signed/BLOFY-PLAYER-v76-Play73-OWNER-SIGNED.apk | grep -Fx 'AndroidManifest.xml'
+          unzip -Z1 signed/BLOFY-PLAYER-v76-Play73-OWNER-SIGNED.apk | grep -Fx 'classes.dex'
+          sha256sum signed/BLOFY-PLAYER-v76-Play73-OWNER-SIGNED.apk
+
+      - name: Publish direct signed APK as TEST prerelease, not to Play/store/site
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="blofy-v76-play73-owner-install-test-20261102"
+          apk="signed/BLOFY-PLAYER-v76-Play73-OWNER-SIGNED.apk"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$tag" "$apk" --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$tag" "$apk" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "7a6fb0c3b725330b5e75d2738ef682a399d08cc6" \
+              --title "BLOFY PLAYER 76 – Play 73 original purple – owner APK test only" \
+              --prerelease \
+              --notes "Signed installable APK for OWNER TESTING ONLY. Preserves actual signed v2000073 source/branding, versionCode 2000076, D-pad and TV art changes. Signed original release certificate, FFmpeg included, uses live activation and updates endpoints. Signed Android CI and Android TV 9 emulator tests passed. Activation, playback and D-pad MUST be tested on real devices before any store/website publication. NEVER interpret this pre-release as a production release."
+          fi
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json url,assets,isPrerelease \
+            --jq '{url:url,isPrerelease:isPrerelease,assets:[.assets[].url]}'
