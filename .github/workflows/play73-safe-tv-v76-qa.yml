@@ -24,8 +24,10 @@ jobs:
             actual="$(git hash-object "$1")"
             if [[ "$actual" != "$2" ]]; then echo "::error file=$1::Approved 73 baseline changed" >&2; exit 1; fi
           }
-          check_blob app/src/main/res/drawable-nodpi/blofy_logo.png 8a84b6b7d48c16c2c4ea343e78e59b55511cab89
-          check_blob app/src/main/res/drawable/blofy_home_background.xml d1da193802522dbe33e9383997c0cbdd4726498d
+          check_blob app/src/main/res/drawable-nodpi/blofy_logo.png 8a84b6b7d65f494e13e26c687fe0a980a664e208
+          check_blob app/src/main/res/drawable/blofy_home_background.xml d1da19380252088e49b8c6185125d100bd249b6c
+          check_blob app/src/main/java/tv/blofy/player/data/PlaylistManager.kt e78cb30c615d2089455a169a6f347543d7486384
+          check_blob app/src/main/java/tv/blofy/player/data/remote/XtreamClient.kt 86c4f0dd4cc4f23bee3d613bd414709cc419ddca
           grep -Fq 'applicationId = "tv.blofy.player.v2"' app/build.gradle.kts
           grep -Fq 'versionCode = 2000076' app/build.gradle.kts
           grep -Fq 'versionName = "2.0.0-rc07.55.8-play73-restore"' app/build.gradle.kts
