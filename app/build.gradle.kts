@@ -42,8 +42,8 @@ android {
         applicationId = "tv.blofy.player.v2"
         minSdk = 23
         targetSdk = 36
-        versionCode = 2000073
-        versionName = "2.0.0-rc07.55.5"
+        versionCode = 2000076
+        versionName = "2.0.0-rc07.55.8-play73-restore"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "ACTIVATION_BASE_URL", "\"$activationBaseUrlEscaped\"")
         buildConfigField("String", "UPDATE_BASE_URL", "\"$updateBaseUrlEscaped\"")
@@ -63,6 +63,14 @@ android {
         }
     }
     buildTypes {
+        getByName("debug") {
+            // QA APK must install alongside the published Google Play app and never overwrite user data.
+            // This variant is opt-in; release behavior and original package name remain unchanged.
+            if (providers.gradleProperty("BLOFY_TV_QA").orElse("false").get().toBoolean()) {
+                applicationIdSuffix = ".qa"
+                versionNameSuffix = "-QA"
+            }
+        }
         getByName("release") {
             isDebuggable = false
             isJniDebuggable = false

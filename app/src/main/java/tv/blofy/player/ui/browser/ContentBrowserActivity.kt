@@ -153,6 +153,8 @@ class ContentBrowserActivity : AppCompatActivity() {
                     // provider category with zero/stale rows can never make Live look globally empty.
                     loadStreams(saved)
                 }
+                // All kinds, including Live, require an initial DPAD-focused category.
+                requestInitialCatalogFocus()
             }
         }
     }
@@ -545,7 +547,7 @@ class ContentBrowserActivity : AppCompatActivity() {
     }
 
     private fun requestInitialCatalogFocus() {
-        if (phoneMode || kind == KIND_LIVE || categoryList.hasFocus() || streamList.hasFocus()) return
+        if (phoneMode || categoryList.hasFocus() || streamList.hasFocus()) return
         categoryList.post {
             categoryList.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus()
                 ?: categoryList.post { categoryList.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus() }
