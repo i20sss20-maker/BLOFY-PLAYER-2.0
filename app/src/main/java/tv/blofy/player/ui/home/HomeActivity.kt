@@ -2,6 +2,7 @@ package tv.blofy.player.ui.home
 
 import tv.blofy.player.ui.common.ContentPresentation
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.CatalogTotals
 
 import android.content.Intent
 import android.content.res.ColorStateList
@@ -83,6 +84,7 @@ class HomeActivity : AppCompatActivity() {
     private val posterHeight get() = posterWidth * 3 / 2
     private var firstAction: View? = null
     private val actionViews = linkedMapOf<String, View>()
+    private val countBadges = mutableMapOf<String, TextView>()
     private var homeFocusController: HomeFocusController? = null
 
     private var heroItem: StreamEntity? = null
@@ -305,6 +307,7 @@ class HomeActivity : AppCompatActivity() {
     private data class HomeData(
         val providerId: String,
         val providerName: String,
+        val totals: CatalogTotals,
         val heroItems: List<StreamEntity>,
         val continueWatching: List<StreamEntity>,
         val recentlyWatched: List<StreamEntity>,
@@ -329,6 +332,13 @@ class HomeActivity : AppCompatActivity() {
                 val all = snapshot?.candidateKeys?.mapNotNull { dao.stream(it) }?.takeIf { it.isNotEmpty() }
                     ?: dao.latestHomeStreams(provider.id, 320)
                 val history = HomeWatchHistory.load(dao, provider.id)
+                // Exact COUNT queries are indexed and run off the UI thread;
+                // no large stream lists or paginated-size approximations.
+                val totals = CatalogTotals(
+                    dao.catalogCountAll(provider.id, "live"),
+                    dao.catalogCountAll(provider.id, "movie"),
+                    dao.catalogCountAll(provider.id, "series")
+                )
                 val rated = all.sortedByDescending { ratingValue(it.rating) }
                     .filter { ratingValue(it.rating) > 0.0 }.take(24)
                 val arabic = all.filter { hasArabic(it.name) || hasArabic(it.genre.orEmpty()) || it.genre.orEmpty().contains("arab", true) }.take(20)
@@ -337,6 +347,7 @@ class HomeActivity : AppCompatActivity() {
                 HomeData(
                     providerId = provider.id,
                     providerName = provider.name,
+                    totals = totals,
                     heroItems = heroes,
                     continueWatching = history.continueItems,
                     recentlyWatched = history.recentItems,
@@ -360,6 +371,7 @@ class HomeActivity : AppCompatActivity() {
             displayedHomeData = data
             displayedCatalogEpoch = CatalogSyncState.lastSyncedAt(applicationContext, data.providerId)
             serverLabel?.text = data.providerName.ifBlank { "BLOFY" }
+            updateNavigationCounts(data.totals)
             heroProviderId = data.providerId
             heroCandidates = data.heroItems
             heroIndex = 0
@@ -522,9 +534,9 @@ class HomeActivity : AppCompatActivity() {
             clipChildren = false
             setPadding(0, 0, 0, dp(22))
         }
-        addStory(quick, "live_story", getString(R.string.home_live_tv), getString(R.string.home_live_tv_subtitle), contentIntent("live"))
-        addStory(quick, "movie_story", getString(R.string.home_movies), getString(R.string.home_movies_subtitle), contentIntent("movie"))
-        addStory(quick, "series_story", getString(R.string.home_series), getString(R.string.home_series_subtitle), contentIntent("series"))
+        addStory(quick, "live_story", getString(R.string.home_live_tv), getString(R.string.home_live_tv_subtitle), contentIntent("live"), data.totals.live)
+        addStory(quick, "movie_story", getString(R.string.home_movies), getString(R.string.home_movies_subtitle), contentIntent("movie"), data.totals.movies)
+        addStory(quick, "series_story", getString(R.string.home_series), getString(R.string.home_series_subtitle), contentIntent("series"), data.totals.series)
         addStory(quick, "favorite_story", getString(R.string.home_favorites), getString(R.string.home_favorites_subtitle), Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_FAVORITES))
         addStory(quick, "search_story", getString(R.string.home_search), getString(R.string.home_search_subtitle), Intent(this, SearchActivity::class.java))
         if (layoutSpec.compact) {
@@ -1004,6 +1016,7 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun buildSidebar() = LinearLayout(this).apply {
+        countBadges.clear()
         orientation = LinearLayout.VERTICAL
         gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
         layoutDirection = uiDirection
@@ -1015,13 +1028,50 @@ class HomeActivity : AppCompatActivity() {
             contentDescription = "BLOFY PLAYER"
         }, LinearLayout.LayoutParams(dp(72), dp(44)).apply { bottomMargin = dp(18) })
         addView(sideSelected(R.drawable.cinema_home, getString(R.string.home_home)))
-        addView(sideAction("side_live", R.drawable.cinema_live, getString(R.string.home_live), contentIntent("live")))
-        addView(sideAction("side_movies", R.drawable.cinema_movies, getString(R.string.home_movies), contentIntent("movie")))
-        addView(sideAction("side_series", R.drawable.cinema_series, getString(R.string.home_series), contentIntent("series")))
+        addView(countedSideAction("side_live", R.drawable.cinema_live, getString(R.string.home_live), contentIntent("live")))
+        addView(countedSideAction("side_movies", R.drawable.cinema_movies, getString(R.string.home_movies), contentIntent("movie")))
+        addView(countedSideAction("side_series", R.drawable.cinema_series, getString(R.string.home_series), contentIntent("series")))
         addView(sideAction("side_collections", R.drawable.cinema_collections, getString(R.string.home_collections), collectionIntent(SmartCollectionsActivity.MODE_TOP_RATED)))
         addView(sideAction("side_favorites", R.drawable.cinema_favorite, getString(R.string.home_favorites), Intent(this@HomeActivity, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_FAVORITES)))
         addView(sideAction("side_search", R.drawable.cinema_search, getString(R.string.home_search), Intent(this@HomeActivity, SearchActivity::class.java)))
         addView(sideAction("side_settings", R.drawable.cinema_settings, getString(R.string.home_settings), Intent(this@HomeActivity, SettingsActivity::class.java)))
+    }
+
+    private fun countedSideAction(key: String, icon: Int, label: String, intent: Intent) =
+        sideAction(key, icon, label, intent).apply {
+            val badge = TextView(this@HomeActivity).apply {
+                textSize = 10.5f
+                typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
+                setTextColor(BlofyTvDesign.Lavender)
+                gravity = Gravity.CENTER
+                isFocusable = false
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                visibility = View.GONE
+                setPadding(dp(4), dp(2), dp(4), dp(2))
+                background = BlofyTvDesign.badge(dp(8).toFloat())
+            }
+            addView(badge, LinearLayout.LayoutParams(-2, dp(25)))
+            countBadges[key] = badge
+        }
+
+    private fun updateNavigationCounts(totals: CatalogTotals) {
+        for ((key, kind) in listOf("side_live" to "live", "side_movies" to "movie", "side_series" to "series")) {
+            val count = CatalogTotals.formatted(totals.forKind(kind))
+            countBadges[key]?.apply {
+                text = count
+                visibility = View.VISIBLE
+            }
+            val label = when (kind) {
+                "live" -> getString(R.string.home_live)
+                "movie" -> getString(R.string.home_movies)
+                else -> getString(R.string.home_series)
+            }
+            actionViews[key]?.contentDescription = "$label · " + getString(R.string.catalog_exact_count, count)
+            (actionViews["tab_$kind"] as? Button)?.let { button ->
+                button.text = "$label · $count"
+                button.contentDescription = "$label · " + getString(R.string.catalog_exact_count, count)
+            }
+        }
     }
 
     private fun sideBase(icon: Int, label: String) = LinearLayout(this).apply {
@@ -1137,11 +1187,18 @@ class HomeActivity : AppCompatActivity() {
     }
     private fun heroButton(label: String, key: String, intent: Intent, primary: Boolean) = actionHeroButton(label, key, primary) { startActivity(intent) }
 
-    private fun addStory(row: LinearLayout, key: String, title: String, subtitle: String, intent: Intent) {
+    private fun addStory(row: LinearLayout, key: String, title: String, subtitle: String, intent: Intent, total: Int? = null) {
         val card = LinearLayout(this).apply {
             id = View.generateViewId(); orientation = LinearLayout.VERTICAL; gravity = Gravity.BOTTOM or Gravity.START; layoutDirection = uiDirection; setPadding(dp(16), dp(13), dp(16), dp(13)); background = storySurface(false); isFocusable = true; isFocusableInTouchMode = remote; isClickable = true
             addView(TextView(this@HomeActivity).apply { text = title; textSize = 15f; typeface = BlofyTvDesign.preferredTypeface(this, bold = true); setTextColor(TEXT_PRIMARY); gravity = Gravity.START })
-            addView(TextView(this@HomeActivity).apply { text = subtitle; textSize = 11f; setTextColor(TEXT_MUTED); gravity = Gravity.START })
+            addView(TextView(this@HomeActivity).apply {
+                text = if (total != null) getString(R.string.catalog_exact_count, CatalogTotals.formatted(total)) else subtitle
+                textSize = if (total != null) 13f else 11f
+                typeface = BlofyTvDesign.preferredTypeface(this, bold = total != null)
+                setTextColor(if (total != null) BlofyTvDesign.Lavender else TEXT_MUTED)
+                gravity = Gravity.START
+                contentDescription = if (total != null) "$title: " + getString(R.string.catalog_exact_count, CatalogTotals.formatted(total)) else subtitle
+            })
             setOnFocusChangeListener { view, focused -> view.background = storySurface(focused); childrenTextColor(this, focused); if (focused) FocusMemory.save(this@HomeActivity, SCREEN_KEY, key); animateFocus(view, focused, 1.015f, 0f, dp(10).toFloat()) }
             setOnClickListener { startActivity(intent) }
         }
