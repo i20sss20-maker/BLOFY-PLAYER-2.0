@@ -1072,7 +1072,10 @@ class HomeActivity : AppCompatActivity() {
             }
             actionViews[key]?.contentDescription = "$label · " + getString(R.string.catalog_exact_count, count)
             (actionViews["tab_$kind"] as? Button)?.let { button ->
-                button.text = "$label · $count"
+                button.text = "$label\n$count"
+                button.textSize = 12f
+                button.maxLines = 2
+                button.gravity = Gravity.CENTER
                 button.contentDescription = "$label · " + getString(R.string.catalog_exact_count, count)
             }
         }
