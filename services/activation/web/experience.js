@@ -98,6 +98,8 @@ if(page==='admin'){
   const expiry=(value,status)=>status==='pending'?'لم تبدأ التجربة':value?date(value):status==='active'?'مدى الحياة':'—';
   function panel(name){for(const key of ['devices','support','releases','codes'])$(key+'-view').hidden=key!==name;document.querySelectorAll('[data-panel]').forEach(b=>b.setAttribute('aria-current',b.dataset.panel===name?'page':'false'));$('admin-view-title').textContent={devices:'الأجهزة والاشتراكات',support:'طلبات الدعم',releases:'إصدارات التطبيق',codes:'أكواد BLOFY'}[name];if(name==='codes')loadCodes();}
   document.querySelectorAll('[data-panel]').forEach(button=>button.addEventListener('click',()=>panel(button.dataset.panel)));
+  window.addEventListener('hashchange',()=>{const name=location.hash.slice(1);if(['devices','support','releases','codes'].includes(name))panel(name);});
+  if(['devices','support','releases','codes'].includes(location.hash.slice(1)))panel(location.hash.slice(1));
   async function loadCodes(){
     setStatus('code-status','جاري قراءة الأكواد…');
     try{
