@@ -15,6 +15,23 @@ const pool = new Pool({
 
 // Activated only after the independently signed APK and its permanent release URL are verified.
 const BLOFY_ONLY_75 = String(process.env.BLOFY_SINGLE_RELEASE_75 || '').toLowerCase() === 'true';
+const BLOFY_APPROVED_XIAOMI_74 = String(process.env.BLOFY_APPROVED_XIAOMI_74 || '').toLowerCase() === 'true';
+function approvedXiaomi74Release() {
+  // Fail closed if a signed and tested official-package APK is not yet uploaded.
+  // The original Xiaomi APK's tv.blofy.player.xiaomi package must NEVER become
+  // the primary download for tv.blofy.player.v2 users.
+  const downloadUrl = String(process.env.BLOFY_APPROVED_XIAOMI_74_APK_URL || '').trim();
+  if (!downloadUrl) throw new Error('BLOFY_APPROVED_XIAOMI_74_APK_URL_required');
+  return {
+    versionCode: 2000080,
+    versionName: '2.0.0-rc07.55.6',
+    downloadUrl,
+    releaseNotes: 'BLOFY PLAYER 74 — تصميم نسخة Xiaomi المفضلة، شعار واضح وبانر Android TV ‏320×180، وتحسين التنقل بالريموت. مبني للحزمة الرسمية tv.blofy.player.v2 برقم تحديث داخلي جديد 2000080 ليتوافق مع إصدارات الموقع السابقة. لا تحذف التطبيق أو بياناته.',
+    minSupportedVersionCode: 1,
+    stage: 'public'
+  };
+}
+
 const ONLY_75_RELEASE = {
   versionCode: 2000075,
   versionName: '2.0.0-rc07.55.7-identity-recovery',
@@ -251,7 +268,7 @@ export async function initReleaseStore() {
   if (BLOFY_ONLY_75) {
     // Remove every previous advertised build, including auto-seeded versions.
     // Keep download statistics in separate tables; preserve old APK blobs as rollback assets.
-    const release = cleanRelease(ONLY_75_RELEASE, 'public');
+    const release = cleanRelease(BLOFY_APPROVED_XIAOMI_74 ? approvedXiaomi74Release() : ONLY_75_RELEASE, 'public');
     const alreadyOnly75 = state.activeVersionCode === release.versionCode &&
       state.releases.length === 1 &&
       JSON.stringify(state.releases[0]) === JSON.stringify(release);
