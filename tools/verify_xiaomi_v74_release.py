@@ -21,7 +21,7 @@ assert 'REQUEST_INSTALL_PACKAGES' not in (root / "app/src/play/AndroidManifest.x
 for resource in ("app/src/main/res/drawable-xhdpi/blofy_tv_banner.png",
                  "app/src/main/res/drawable-nodpi/blofy_tv_banner.png"):
     blob = (root / resource).read_bytes()
-    assert blob[:8] == b"\\x89PNG\\r\\n\\x1a\\n"
+    assert blob[:8] == b"\x89PNG\r\n\x1a\n"
     assert struct.unpack(">II", blob[16:24]) == (320, 180), resource
 logo = (root / "app/src/main/res/drawable-nodpi/blofy_logo.png").read_bytes()
 assert struct.unpack(">II", logo[16:24]) == (512, 512)
