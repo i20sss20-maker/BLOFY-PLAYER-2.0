@@ -15,6 +15,28 @@ const pool = new Pool({
 
 // Activated only after the independently signed APK and its permanent release URL are verified.
 const BLOFY_ONLY_75 = String(process.env.BLOFY_SINGLE_RELEASE_75 || '').toLowerCase() === 'true';
+const BLOFY_APPROVED_BLOFY_76 = String(process.env.BLOFY_APPROVED_BLOFY_76 || '').toLowerCase() === 'true';
+function approvedBlofy76Release() {
+  // Fail closed if a signed and tested official-package APK is not yet uploaded.
+  // The original Xiaomi APK's tv.blofy.player.xiaomi package must NEVER become
+  // the primary download for tv.blofy.player.v2 users.
+  const downloadUrl = String(process.env.BLOFY_APPROVED_BLOFY_76_APK_URL || '').trim();
+  if (!downloadUrl) throw new Error('BLOFY_APPROVED_BLOFY_76_APK_URL_required');
+  // A newer versionCode is necessary but not sufficient. Promotion stays off by
+  // default until a same-package, same-signature APK passes owner device testing.
+  if (2000076 <= ONLY_75_RELEASE.versionCode) {
+    throw new Error('blofy_76_versioncode_not_newer_than_website');
+  }
+  return {
+    versionCode: 2000076,
+    versionName: '2.0.0-rc07.55.6',
+    downloadUrl,
+    releaseNotes: 'BLOFY PLAYER 76 — الواجهة البنفسجية المعتمدة، شعار واضح وبانر Android TV ‏320×180، وتحسين التنقل بالريموت. مبني للحزمة الرسمية tv.blofy.player.v2 برقم بناء داخلي 2000076 ليحدّث نسخة الموقع 2000075 دون حذف بيانات التطبيق. لا تحذف التطبيق أو بياناته.',
+    minSupportedVersionCode: 1,
+    stage: 'public'
+  };
+}
+
 const ONLY_75_RELEASE = {
   versionCode: 2000075,
   versionName: '2.0.0-rc07.55.7-identity-recovery',
@@ -251,7 +273,7 @@ export async function initReleaseStore() {
   if (BLOFY_ONLY_75) {
     // Remove every previous advertised build, including auto-seeded versions.
     // Keep download statistics in separate tables; preserve old APK blobs as rollback assets.
-    const release = cleanRelease(ONLY_75_RELEASE, 'public');
+    const release = cleanRelease(BLOFY_APPROVED_BLOFY_76 ? approvedBlofy76Release() : ONLY_75_RELEASE, 'public');
     const alreadyOnly75 = state.activeVersionCode === release.versionCode &&
       state.releases.length === 1 &&
       JSON.stringify(state.releases[0]) === JSON.stringify(release);
