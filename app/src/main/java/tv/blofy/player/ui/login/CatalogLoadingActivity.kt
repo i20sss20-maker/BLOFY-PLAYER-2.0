@@ -8,6 +8,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 import android.widget.Button
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
@@ -41,6 +42,8 @@ import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.preparation.FullCatalogPreparer
 import tv.blofy.player.data.preparation.FullLibrarySyncWorker
 import tv.blofy.player.data.remote.XtreamClient
+import tv.blofy.player.data.remote.CatalogSourceProblem
+import tv.blofy.player.data.CatalogSectionRetry
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.TvUiTuning
@@ -82,6 +85,9 @@ class CatalogLoadingActivity : AppCompatActivity() {
         if (loadJob?.isActive == true) return
         forceRefreshOnRetry = forceRefresh
         retryButton.visibility = View.GONE
+        // A DNS error may have switched this action to playlist selection.
+        retryButton.text = getString(R.string.catalog_retry)
+        retryButton.setOnClickListener { startLoading(providerId, forceRefreshOnRetry) }
         stage.setTextColor(BlofyTvDesign.TextPrimary)
         displayedPercent = 0 // A retry is a new attempt; monotonicity holds within each attempt.
         render(1, getString(R.string.catalog_preflight))
@@ -153,11 +159,28 @@ class CatalogLoadingActivity : AppCompatActivity() {
             background = BlofyTvDesign.glassSurface(u(BlofyTvDesign.PanelRadius).toFloat())
             elevation = u(6).toFloat()
         }
-        panel.addView(ImageView(this).apply {
-            setImageResource(R.drawable.blofy_logo)
-            scaleType = ImageView.ScaleType.CENTER_INSIDE
-            adjustViewBounds = true
-        }, LinearLayout.LayoutParams(u(if (compact) 128 else if (shortTv) 154 else 196), u(if (compact) 70 else if (shortTv) 82 else 108)))
+        // Original Play73 logo has dark-blue lettering. On a dark-purple background it
+        // became almost unreadable. Keep the EXACT approved PNG, but display it at a
+        // legible size on a pale, high-contrast tile; do not replace the brand asset.
+        val brandSize = u(if (compact) 100 else if (shortTv) 112 else 128)
+        val brandTile = FrameLayout(this).apply {
+            setPadding(u(5), u(5), u(5), u(5))
+            background = GradientDrawable().apply {
+                setColor(0xFFF7F3FF.toInt())
+                cornerRadius = u(22).toFloat()
+                setStroke(u(1), 0xFFBA95EB.toInt())
+            }
+            elevation = u(4).toFloat()
+            addView(ImageView(this@CatalogLoadingActivity).apply {
+                setImageResource(R.drawable.blofy_logo)
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                contentDescription = "BLOFY PLAYER"
+            }, FrameLayout.LayoutParams(-1, -1))
+        }
+        panel.addView(brandTile, LinearLayout.LayoutParams(brandSize, brandSize).apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+            bottomMargin = u(if (compact) 8 else 12)
+        })
         panel.addView(TextView(this).apply {
             text = getString(R.string.catalog_title)
             BlofyTvDesign.applyTitle(this)
@@ -418,7 +441,19 @@ class CatalogLoadingActivity : AppCompatActivity() {
                 if (!CatalogSyncState.isEntryReady(applicationContext, providerId)) awaitEntryReadyCache(providerId)
                 openHome(providerId)
             } else {
-                fail(getString(R.string.catalog_first_failed, error.message ?: getString(R.string.catalog_unknown_error)))
+                val unavailableHost = CatalogSourceProblem.unresolvableHost(error, source.baseUrl)
+                if (unavailableHost != null) {
+                    // DNS failure is not a temporary JSON body disconnect. Never rewrite
+                    // a customer-selected source to an unrelated host automatically.
+                    fail(getString(R.string.catalog_source_dns_failed, unavailableHost))
+                    retryButton.text = getString(R.string.catalog_choose_playlist)
+                    retryButton.setOnClickListener {
+                        startActivity(Intent(this, LoginActivity::class.java))
+                        finish()
+                    }
+                } else {
+                    fail(getString(R.string.catalog_first_failed, error.message ?: getString(R.string.catalog_unknown_error)))
+                }
             }
         } finally {
             if (persistence.catalogCommitted) forceRefreshOnRetry = false
@@ -447,7 +482,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
             PlaylistSyncStage.MOVIES -> getString(R.string.catalog_stage_movies)
             PlaylistSyncStage.SERIES -> getString(R.string.catalog_stage_series)
         }
-        val status = if (p.retryAttempt > 0) "$label • ${getString(R.string.catalog_retry)} (${p.retryAttempt}/3)" else label
+        val status = if (p.retryAttempt > 0) "$label • ${getString(R.string.catalog_retry)} (${p.retryAttempt}/${CatalogSectionRetry.MAX_ATTEMPTS})" else label
         render((p.percent.coerceIn(0, 95) * 30 / 95), status)
         progressMeta.text = getString(R.string.catalog_progress_steps, p.step.coerceAtLeast(1), p.totalSteps.coerceAtLeast(1))
         progressMeta.visibility = View.VISIBLE
