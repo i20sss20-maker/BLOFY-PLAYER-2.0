@@ -76,6 +76,21 @@ export function createBlofyCodeHandlers({ pool, secretHex, json, readJson, requi
       result.rowCount ? { revoked: true } : { error: 'not_found' });
   }
 
+  async function adminById(req, res, id, action) {
+    if (!requireAdmin(req, res)) return;
+    if (!/^[0-9a-fA-F-]{36}$/.test(id)) return json(res, 400, { error: 'invalid_provider_id' });
+    if (!['revoke','unbind'].includes(action)) return json(res, 400, { error: 'invalid_action' });
+    const result = action === 'revoke'
+      ? await pool.query(
+          'UPDATE blofy_code_subscriptions SET active=FALSE,updated_at=NOW() WHERE id=$1 RETURNING id',
+          [id])
+      : await pool.query(
+          'UPDATE blofy_code_subscriptions SET device_id=NULL,updated_at=NOW() WHERE id=$1 AND active=TRUE RETURNING id',
+          [id]);
+    return json(res, result.rowCount ? 200 : 404,
+      result.rowCount ? { ok: true } : { error: 'code_not_found_or_inactive' });
+  }
+
   async function list(req, res) {
     if (!requireAdmin(req, res)) return;
     const result = await pool.query(
@@ -133,5 +148,5 @@ export function createBlofyCodeHandlers({ pool, secretHex, json, readJson, requi
       client.release();
     }
   }
-  return { issue, revoke, list, redeem };
+  return { issue, revoke, list, redeem, adminById };
 }
