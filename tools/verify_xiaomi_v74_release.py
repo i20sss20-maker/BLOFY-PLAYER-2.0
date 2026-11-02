@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Fail closed on BLOFY 74 Google TV regressions in the restored Xiaomi UI."""
+"""Fail closed on BLOFY PLAYER v76 Google TV regressions in the restored Xiaomi UI."""
 from pathlib import Path
 import re, struct
 
 root = Path(__file__).resolve().parent.parent
 gradle = (root / "app/build.gradle.kts").read_text()
 assert 'applicationId = if (xiaomiEdition) "tv.blofy.player.xiaomi" else "tv.blofy.player.v2"' in gradle
-assert 'versionCode = 2000074' in gradle, "Owner requires Play 73 successor versionCode 2000074"
+assert 'versionCode = 2000076' in gradle, "Owner requests internal build 2000076 after withdrawn 2000075"
 assert '"2.0.0-rc07.55.6"' in gradle
 assert 'versionName = "2.0.0-rc07.55.6"' in gradle
 assert 'rc07.55.6-xiaomi' not in gradle, 'Display version must remain BLOFY PLAYER without Xiaomi suffix'
