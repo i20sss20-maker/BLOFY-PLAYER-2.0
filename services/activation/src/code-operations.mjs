@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import net from 'node:net';
 import { selectedCodeSource, checkCodeAccount } from './code-account-status.mjs';
 import { assertPublicXtreamUrl, isBlockedNetworkAddress } from './xtream-core.mjs';
 import { createBlofyCodeCrypto } from './blofy-code-handlers.mjs';
@@ -104,7 +105,7 @@ export function createCodeOperationsHandlers({
     try {
       selected = selectedCodeSource({source:payload.source || 'custom',host:payload.host});
       const hostname = new URL(selected.host).hostname;
-      if (hostname === 'localhost' || hostname.endsWith('.local') || isBlockedNetworkAddress(hostname))
+      if (hostname === 'localhost' || hostname.endsWith('.local') || (net.isIP(hostname) !== 0 && isBlockedNetworkAddress(hostname)))
         throw Error('invalid_code_host');
       // Host is operator-entered. Check DNS without making a credentialed request.
       await Promise.race([
