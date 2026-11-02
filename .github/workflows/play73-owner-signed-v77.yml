@@ -3,12 +3,11 @@ name: BLOFY Play73 v77 Signed APK and AAB owner-only
 
 on:
   push:
-    branches: [fix/actual-play73-tv-v77-20261102]
+    branches: [fix/play73-v77-catalog-connection-recovery-20261102]
     paths:
       - .github/workflows/play73-owner-signed-v77.yml
       - app/**
       - tools/verify_play_2000073.py
-      - .github/workflows/play73-owner-signed-v77.yml
   workflow_dispatch:
 
 permissions:
