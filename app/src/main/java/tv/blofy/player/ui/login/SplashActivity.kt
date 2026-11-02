@@ -14,6 +14,7 @@ import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
 import tv.blofy.player.ui.common.BlofyTvDesign
 
@@ -54,7 +55,8 @@ class SplashActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             delay(550)
-            startActivity(Intent(this@SplashActivity, LoginActivity::class.java))
+            startActivity(Intent(this@SplashActivity,
+                if (BuildConfig.CODE_ONLY_EDITION) CodeOnlyLoginActivity::class.java else LoginActivity::class.java))
             finish()
             overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
         }

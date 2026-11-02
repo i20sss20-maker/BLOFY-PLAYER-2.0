@@ -20,6 +20,7 @@ import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.update.BlofyUpdateClient
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.login.CodeOnlyLoginActivity
 import tv.blofy.player.ui.login.LoginActivity
 import tv.blofy.player.ui.playlist.ProviderManagerActivity
 import java.text.DateFormat
@@ -127,14 +128,20 @@ class SystemStatusActivity : AppCompatActivity() {
             setOnClickListener { startActivity(intent) }
         }
 
-        val pair = action("▣  ربط الجهاز", Intent(this, LoginActivity::class.java))
-        val lists = action("▤  إدارة القوائم", Intent(this, ProviderManagerActivity::class.java))
-        if (compact) {
-            actions.addView(pair, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(58)).apply { bottomMargin = dp(8) })
-            actions.addView(lists, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(58)))
+        if (BuildConfig.CODE_ONLY_EDITION) {
+            val login = action("▣  الدخول بالكود", Intent(this, CodeOnlyLoginActivity::class.java))
+            actions.addView(login, LinearLayout.LayoutParams(
+                if (compact) LinearLayout.LayoutParams.MATCH_PARENT else dp(280), dp(58)))
         } else {
-            actions.addView(pair, LinearLayout.LayoutParams(0, dp(58), 1f).apply { marginStart = dp(8) })
-            actions.addView(lists, LinearLayout.LayoutParams(0, dp(58), 1f))
+            val pair = action("▣  ربط الجهاز", Intent(this, LoginActivity::class.java))
+            val lists = action("▤  إدارة القوائم", Intent(this, ProviderManagerActivity::class.java))
+            if (compact) {
+                actions.addView(pair, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(58)).apply { bottomMargin = dp(8) })
+                actions.addView(lists, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(58)))
+            } else {
+                actions.addView(pair, LinearLayout.LayoutParams(0, dp(58), 1f).apply { marginStart = dp(8) })
+                actions.addView(lists, LinearLayout.LayoutParams(0, dp(58), 1f))
+            }
         }
         content.addView(actions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         setContentView(root)
@@ -143,7 +150,8 @@ class SystemStatusActivity : AppCompatActivity() {
             val dao = BlofyDatabase.get(applicationContext).dao()
             val releaseRequest = async {
                 val endpoint = BuildConfig.UPDATE_BASE_URL.trim()
-                if (endpoint.isBlank()) null else runCatching { BlofyUpdateClient.fetch(endpoint) }.getOrNull()
+                if (BuildConfig.CODE_ONLY_EDITION || endpoint.isBlank()) null
+                else runCatching { BlofyUpdateClient.fetch(endpoint) }.getOrNull()
             }
             val provider = dao.providers().first().firstOrNull()
             val activation = dao.activation()
@@ -165,7 +173,11 @@ class SystemStatusActivity : AppCompatActivity() {
             }
 
             servicesBody.text = buildString {
-                appendLine("خدمة التفعيل: ${if (BuildConfig.ACTIVATION_BASE_URL.isBlank()) "غير مضبوطة" else "مضبوطة"}")
+                if (BuildConfig.CODE_ONLY_EDITION) {
+                    appendLine("وضع الدخول: كود فقط")
+                    appendLine("هوست الأكواد: ${if (BuildConfig.CODE_AUTH_BASE_URL.isBlank()) "بانتظار التهيئة" else "مضبوط"}")
+                } else {
+                    appendLine("خدمة التفعيل: ${if (BuildConfig.ACTIVATION_BASE_URL.isBlank()) "غير مضبوطة" else "مضبوطة"}")
                 appendLine("خدمة التحديث: ${if (BuildConfig.UPDATE_BASE_URL.isBlank()) "غير مضبوطة" else if (officialRelease != null) "متصلة" else "تعذر التحقق الآن"}")
                 if (officialRelease != null) {
                     val updateState = if (BlofyUpdateClient.isUpdateAvailable(BuildConfig.VERSION_CODE, officialRelease)) " • يتوفر تحديث" else " • أنت محدّث"
@@ -173,6 +185,7 @@ class SystemStatusActivity : AppCompatActivity() {
                 }
                 appendLine("حالة التفعيل: $activationText")
                 append("آخر تحقق: ${activation?.lastCheckAt?.let(::formatTime) ?: "—"}")
+                }
             }
 
             providerBody.text = if (provider == null) {

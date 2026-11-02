@@ -10,6 +10,11 @@ val activationBaseUrl = providers.gradleProperty("BLOFY_ACTIVATION_BASE_URL").or
 val activationBaseUrlEscaped = activationBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")
 val updateBaseUrl = providers.gradleProperty("BLOFY_UPDATE_BASE_URL").orElse("https://updates.blofyplayer.com").get().trim()
 val updateBaseUrlEscaped = updateBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")
+// Optional separately installable code-only edition. Values are supplied by a private build
+// configuration, never committed as upstream credentials.
+val codeOnlyEdition = providers.gradleProperty("BLOFY_CODE_ONLY_EDITION").orElse("false").get().equals("true", true)
+val codeAuthBaseUrl = providers.gradleProperty("BLOFY_CODE_AUTH_BASE_URL").orElse("").get().trim()
+val codeAuthBaseUrlEscaped = codeAuthBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")
 val buildSha = providers.gradleProperty("BLOFY_BUILD_SHA")
     .orElse(providers.environmentVariable("GITHUB_SHA"))
     .orElse("local").get().trim().ifBlank { "local" }
@@ -28,13 +33,15 @@ android {
     namespace = "tv.blofy.player"
     compileSdk = 36
     defaultConfig {
-        applicationId = "tv.blofy.player.v2"
+        applicationId = if (codeOnlyEdition) "tv.blofy.player.v2.code" else "tv.blofy.player.v2"
         minSdk = 23
         targetSdk = 36
         versionCode = 2000007
         versionName = "2.0.0-rc06"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "ACTIVATION_BASE_URL", "\"$activationBaseUrlEscaped\"")
+        buildConfigField("boolean", "CODE_ONLY_EDITION", codeOnlyEdition.toString())
+        buildConfigField("String", "CODE_AUTH_BASE_URL", "\"$codeAuthBaseUrlEscaped\"")
         buildConfigField("String", "UPDATE_BASE_URL", "\"$updateBaseUrlEscaped\"")
         buildConfigField("String", "BUILD_SHA", "\"$buildShaEscaped\"")
         buildConfigField("boolean", "FFMPEG_EXTENSION_BUNDLED", (ffmpegAar != null).toString())

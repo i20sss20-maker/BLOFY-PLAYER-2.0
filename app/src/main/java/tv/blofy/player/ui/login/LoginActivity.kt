@@ -66,6 +66,13 @@ class LoginActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Legacy entry points may still target this Activity. Never show playlist
+        // or QR activation in the separate code-only edition.
+        if (BuildConfig.CODE_ONLY_EDITION) {
+            startActivity(Intent(this, CodeOnlyLoginActivity::class.java))
+            finish()
+            return
+        }
         theme = ThemeManager.current(this)
         deviceKind = DeviceClass.detect(this)
         setContentView(if (deviceKind == DeviceClass.Kind.TV) buildApprovedTvLogin() else buildPhoneLogin())
