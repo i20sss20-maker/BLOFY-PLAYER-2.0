@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="catalog_exact_count">Totale: %1$s</string>
+    <string name="catalog_count_loading">Conteggio…</string>
+</resources>

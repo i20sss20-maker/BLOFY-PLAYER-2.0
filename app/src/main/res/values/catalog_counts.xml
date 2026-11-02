@@ -1,0 +1,4 @@
+<resources>
+    <string name="catalog_exact_count">Total: %1$s</string>
+    <string name="catalog_count_loading">Counting…</string>
+</resources>

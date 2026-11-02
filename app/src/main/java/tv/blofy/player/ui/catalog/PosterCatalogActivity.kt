@@ -15,6 +15,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -25,6 +26,7 @@ import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.CategoryEntity
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.CatalogTotals
 import tv.blofy.player.ui.common.FocusTextAdapter
 import tv.blofy.player.ui.common.TwoPaneFocusGuard
 import tv.blofy.player.ui.common.TvUiTuning
@@ -41,6 +43,8 @@ class PosterCatalogActivity : AppCompatActivity() {
     private lateinit var countView: TextView
     private lateinit var searchBar: TextView
     private var pageJob: Job? = null
+    private var countJob: Job? = null
+    private var exactCount: Int? = null
     private var providerId = ""
     private var selectedCategoryId: String? = null
     private var displayedCategoryId: String? = null
@@ -302,6 +306,7 @@ class PosterCatalogActivity : AppCompatActivity() {
 
         selectedCategoryId = id
         generation++
+        refreshExactCount()
         pageJob?.cancel()
         hasMore = true
         lastRowId = 0L
@@ -363,12 +368,42 @@ class PosterCatalogActivity : AppCompatActivity() {
         }
     }
 
+    private fun refreshExactCount() {
+        countJob?.cancel()
+        exactCount = null
+        countView.text = getString(R.string.catalog_count_loading)
+        if (providerId.isBlank()) return
+        val owner = providerId
+        val categoryId = selectedCategoryId
+        val requestGeneration = generation
+        countJob = lifecycleScope.launch {
+            try {
+                val total = withContext(Dispatchers.IO) {
+                    val dao = BlofyDatabase.get(applicationContext).dao()
+                    if (categoryId == null) dao.catalogCountAll(owner, kind)
+                    else dao.catalogCountInCategory(owner, kind, categoryId)
+                }
+                if (providerId == owner && selectedCategoryId == categoryId && generation == requestGeneration) {
+                    exactCount = total
+                    updateCount()
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // If a database is briefly unavailable, keep the clearly marked
+                // paginated lower bound rather than invent a total.
+                if (generation == requestGeneration) updateCount()
+            }
+        }
+    }
+
     private fun updateCount() {
-        val suffix = if (hasMore) "+" else ""
-        countView.text = "${loadedItems.size}$suffix"
+        val total = exactCount ?: loadedItems.size
+        val suffix = if (exactCount == null && hasMore) "+" else ""
+        countView.text = CatalogTotals.formatted(total) + suffix
         countView.contentDescription = getString(
             if (kind == KIND_SERIES) R.string.series_count else R.string.movie_count,
-            loadedItems.size,
+            total,
             suffix
         )
     }
@@ -431,8 +466,12 @@ class PosterCatalogActivity : AppCompatActivity() {
     private fun categoryRemoteId(category: CategoryEntity) = category.remoteId.takeUnless { it == ALL_CATEGORY_ID }
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
+    override fun onResume() {
+        super.onResume()
+        if (providerId.isNotBlank()) refreshExactCount()
+    }
     override fun onPause() { saveMemorySnapshot(); super.onPause() }
-    override fun onDestroy() { pageJob?.cancel(); generation++; super.onDestroy() }
+    override fun onDestroy() { pageJob?.cancel(); countJob?.cancel(); generation++; super.onDestroy() }
 
     companion object {
         const val EXTRA_KIND = "kind"

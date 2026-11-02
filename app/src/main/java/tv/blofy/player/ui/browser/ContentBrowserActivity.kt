@@ -19,6 +19,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.PlayerView
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -46,6 +47,7 @@ import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.catalog.CatalogPageMemory
 import tv.blofy.player.ui.common.CinemaStyle
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.CatalogTotals
 import tv.blofy.player.ui.common.FocusTextAdapter
 import tv.blofy.player.ui.common.TwoPaneFocusGuard
 import tv.blofy.player.ui.details.MovieDetailsActivity
@@ -71,6 +73,10 @@ class ContentBrowserActivity : AppCompatActivity() {
     private lateinit var categoryList: RecyclerView
     private lateinit var streamList: RecyclerView
     private var catalogStatus: TextView? = null
+    private var exactCountBadge: TextView? = null
+    private var exactCountJob: Job? = null
+    private var countRequest = 0
+    private var categoryNames: Map<String, String> = emptyMap()
     private var catalogRetry: Button? = null
     private var lastPreviewKey: String? = null
     private var resumedOnce = false
@@ -142,6 +148,7 @@ class ContentBrowserActivity : AppCompatActivity() {
                 // All content kinds expose a stable synthetic All entry. For Live this prevents a
                 // stale/empty saved provider category from becoming the only entry path to channels.
                 val displayed = listOf(allCategory()) + items
+                categoryNames = items.associate { it.remoteId to it.name }
                 categoryAdapter.submit(displayed)
                 if (kind != KIND_LIVE) {
                     if (currentCategoryId == null && catalogItems.isEmpty() && !catalogLoading) {
@@ -183,6 +190,22 @@ class ContentBrowserActivity : AppCompatActivity() {
             // The global search shortcut occupies the trailing side of this header.
             setPaddingRelative(dp(8), 0, dp(178), dp(if (phoneMode) 8 else 10))
         }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (phoneMode) 54 else 62)))
+
+        exactCountBadge = TextView(this).apply {
+            tag = "blofy_catalog_exact_count"
+            text = getString(R.string.catalog_count_loading)
+            textSize = if (phoneMode) 12f else 14f
+            typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
+            setTextColor(BlofyTvDesign.Lavender)
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            layoutDirection = resources.configuration.layoutDirection
+            setPaddingRelative(dp(16), 0, dp(16), 0)
+            background = BlofyTvDesign.elevatedSurface(dp(12).toFloat())
+            isFocusable = false
+        }
+        root.addView(exactCountBadge, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(if (phoneMode) 31 else 37)
+        ).apply { bottomMargin = dp(if (phoneMode) 8 else 12) })
 
         val body = LinearLayout(this).apply {
             orientation = if (phoneMode) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
@@ -346,6 +369,40 @@ class ContentBrowserActivity : AppCompatActivity() {
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(40)))
     }
 
+    private fun refreshExactCount(categoryId: String?) {
+        if (!::provider.isInitialized) return
+        exactCountJob?.cancel()
+        val request = ++countRequest
+        val owner = provider.id
+        val kindSnapshot = kind
+        exactCountBadge?.text = getString(R.string.catalog_count_loading)
+        exactCountJob = lifecycleScope.launch {
+            try {
+                val total = withContext(Dispatchers.IO) {
+                    val dao = BlofyDatabase.get(applicationContext).dao()
+                    if (categoryId == null) dao.catalogCountAll(owner, kindSnapshot)
+                    else dao.catalogCountInCategory(owner, kindSnapshot, categoryId)
+                }
+                if (request != countRequest || !::provider.isInitialized ||
+                    provider.id != owner || currentCategoryId != categoryId) return@launch
+                val title = if (categoryId != null) categoryNames[categoryId].orEmpty()
+                    .ifBlank { getString(R.string.home_live) }
+                    else when (kindSnapshot) {
+                        KIND_MOVIE -> getString(R.string.all_movies)
+                        KIND_SERIES -> getString(R.string.all_series)
+                        else -> getString(R.string.browser_all_channels)
+                    }
+                val value = getString(R.string.catalog_exact_count, CatalogTotals.formatted(total))
+                exactCountBadge?.text = "$title  •  $value"
+                exactCountBadge?.contentDescription = "$title: $value"
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                if (request == countRequest) exactCountBadge?.text = getString(R.string.catalog_count_loading)
+            }
+        }
+    }
+
     private fun loadStreams(categoryId: String?) {
         if (!::provider.isInitialized) return
         if (kind == KIND_LIVE) {
@@ -355,6 +412,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         if (currentCategoryId == categoryId && (catalogItems.isNotEmpty() || catalogLoading)) return
         saveCatalogMemorySnapshot()
         currentCategoryId = categoryId
+        refreshExactCount(categoryId)
         catalogGeneration += 1
         streamsJob?.cancel()
         catalogItems.clear()
@@ -429,6 +487,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         if (currentCategoryId == categoryId && (liveItems.isNotEmpty() || liveLoading)) return
         saveLiveMemorySnapshot()
         currentCategoryId = categoryId
+        refreshExactCount(categoryId)
         rememberCategory(categoryId)
         lastPreviewKey = null
         previewJob?.cancel()
@@ -675,6 +734,7 @@ class ContentBrowserActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (::provider.isInitialized) refreshExactCount(currentCategoryId)
         if (resumedOnce && previewEnabled && ::provider.isInitialized) {
             lastPreviewKey = null
             restartSavedPreview()
