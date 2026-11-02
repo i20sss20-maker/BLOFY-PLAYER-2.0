@@ -44,6 +44,12 @@ export function createBlofyCodeHandlers({ pool, secretHex, json, readJson, requi
   async function issue(req, res) {
     if (!requireAdmin(req, res)) return;
     const input = await readJson(req);
+    // Current BLOFY code client is deliberately limited to one upstream.
+    // Validate the optional host on the SERVER too, so a pasted foreign Xtream
+    // link can never produce a real-looking code for the wrong service.
+    if (input.host != null && input.host !== CODE_HOST) {
+      return json(res, 400, { error: 'invalid_code_host' });
+    }
     const username = typeof input.username === 'string' ? input.username.trim() : '';
     const password = typeof input.password === 'string' ? input.password : '';
     const code = input.code == null
