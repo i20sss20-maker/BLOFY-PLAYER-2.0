@@ -226,3 +226,19 @@ CREATE TABLE IF NOT EXISTS app_releases (
   release_notes TEXT,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Independent BLOFY code-login accounts. Existing STROING 8K subscriber host
+-- and manual Xtream records remain unchanged. Codes and credentials are sealed.
+CREATE TABLE IF NOT EXISTS blofy_code_subscriptions (
+  id UUID PRIMARY KEY,
+  code_proof TEXT NOT NULL UNIQUE,
+  username_enc TEXT NOT NULL,
+  password_enc TEXT NOT NULL,
+  device_id TEXT REFERENCES devices(device_id) ON DELETE SET NULL,
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  expires_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_blofy_codes_device ON blofy_code_subscriptions(device_id);
+CREATE INDEX IF NOT EXISTS idx_blofy_codes_active ON blofy_code_subscriptions(active) WHERE active=TRUE;
