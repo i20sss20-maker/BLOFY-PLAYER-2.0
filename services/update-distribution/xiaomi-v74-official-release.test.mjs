@@ -7,9 +7,10 @@ test('default public website remains on working signed v75 until owner accepts v
   assert.match(source, /BLOFY_APPROVED_XIAOMI_74 \? approvedXiaomi74Release\(\) : ONLY_75_RELEASE/);
   assert.match(source, /versionCode: 2000075/);
 });
-test('new v74 display release only accepts a real signed package URL and update-capable code', () => {
+test('official v74 display release is blocked from replacing website 75 due to Android downgrade', () => {
   assert.match(source, /BLOFY_APPROVED_XIAOMI_74_APK_URL_required/);
-  assert.match(source, /versionCode: 2000080/);
+  assert.match(source, /versionCode: 2000074/);
   assert.match(source, /versionName: '2\.0\.0-rc07\.55\.6'/);
+  assert.match(source, /blofy_74_2000074_cannot_replace_website_2000075/);
   assert.match(source, /tv\.blofy\.player\.xiaomi/);
 });
