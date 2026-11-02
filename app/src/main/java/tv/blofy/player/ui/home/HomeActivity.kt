@@ -2,7 +2,6 @@ package tv.blofy.player.ui.home
 
 import tv.blofy.player.ui.common.ContentPresentation
 import tv.blofy.player.ui.common.BlofyTvDesign
-import tv.blofy.player.ui.common.CatalogTotals
 
 import android.content.Intent
 import android.content.res.ColorStateList
@@ -84,7 +83,6 @@ class HomeActivity : AppCompatActivity() {
     private val posterHeight get() = posterWidth * 3 / 2
     private var firstAction: View? = null
     private val actionViews = linkedMapOf<String, View>()
-    private val countBadges = mutableMapOf<String, TextView>()
     private var homeFocusController: HomeFocusController? = null
 
     private var heroItem: StreamEntity? = null
@@ -307,7 +305,6 @@ class HomeActivity : AppCompatActivity() {
     private data class HomeData(
         val providerId: String,
         val providerName: String,
-        val totals: CatalogTotals,
         val heroItems: List<StreamEntity>,
         val continueWatching: List<StreamEntity>,
         val recentlyWatched: List<StreamEntity>,
@@ -332,13 +329,6 @@ class HomeActivity : AppCompatActivity() {
                 val all = snapshot?.candidateKeys?.mapNotNull { dao.stream(it) }?.takeIf { it.isNotEmpty() }
                     ?: dao.latestHomeStreams(provider.id, 320)
                 val history = HomeWatchHistory.load(dao, provider.id)
-                // Exact COUNT queries are indexed and run off the UI thread;
-                // no large stream lists or paginated-size approximations.
-                val totals = CatalogTotals(
-                    dao.catalogCountAll(provider.id, "live"),
-                    dao.catalogCountAll(provider.id, "movie"),
-                    dao.catalogCountAll(provider.id, "series")
-                )
                 val rated = all.sortedByDescending { ratingValue(it.rating) }
                     .filter { ratingValue(it.rating) > 0.0 }.take(24)
                 val arabic = all.filter { hasArabic(it.name) || hasArabic(it.genre.orEmpty()) || it.genre.orEmpty().contains("arab", true) }.take(20)
@@ -347,7 +337,6 @@ class HomeActivity : AppCompatActivity() {
                 HomeData(
                     providerId = provider.id,
                     providerName = provider.name,
-                    totals = totals,
                     heroItems = heroes,
                     continueWatching = history.continueItems,
                     recentlyWatched = history.recentItems,
@@ -371,7 +360,6 @@ class HomeActivity : AppCompatActivity() {
             displayedHomeData = data
             displayedCatalogEpoch = CatalogSyncState.lastSyncedAt(applicationContext, data.providerId)
             serverLabel?.text = data.providerName.ifBlank { "BLOFY" }
-            updateNavigationCounts(data.totals)
             heroProviderId = data.providerId
             heroCandidates = data.heroItems
             heroIndex = 0
@@ -509,11 +497,6 @@ class HomeActivity : AppCompatActivity() {
         val feed = homeFeed ?: return
         actionViews.keys.filter { it.startsWith("poster_") || it.startsWith("top10_") || it.endsWith("_story") || it.startsWith("stats_") || it == "featured" }.toList().forEach { actionViews.remove(it) }
         while (feed.childCount > 1) feed.removeViewAt(1)
-        feed.addView(buildCatalogStats(data.totals), LinearLayout.LayoutParams(-1, dp(if (layoutSpec.compact) 90 else 102)).apply {
-            topMargin = dp(if (layoutSpec.compact) 10 else 14)
-            bottomMargin = dp(16)
-        })
-
         if (data.continueWatching.isNotEmpty()) {
             addShelf(feed, getString(R.string.home_continue_watching), getString(R.string.home_continue_subtitle), "continue", data.providerId, data.continueWatching, data.watchStates)
         }
@@ -538,9 +521,9 @@ class HomeActivity : AppCompatActivity() {
             clipChildren = false
             setPadding(0, 0, 0, dp(22))
         }
-        addStory(quick, "live_story", getString(R.string.home_live_tv), getString(R.string.home_live_tv_subtitle), contentIntent("live"), data.totals.live)
-        addStory(quick, "movie_story", getString(R.string.home_movies), getString(R.string.home_movies_subtitle), contentIntent("movie"), data.totals.movies)
-        addStory(quick, "series_story", getString(R.string.home_series), getString(R.string.home_series_subtitle), contentIntent("series"), data.totals.series)
+        addStory(quick, "live_story", getString(R.string.home_live_tv), getString(R.string.home_live_tv_subtitle), contentIntent("live"))
+        addStory(quick, "movie_story", getString(R.string.home_movies), getString(R.string.home_movies_subtitle), contentIntent("movie"))
+        addStory(quick, "series_story", getString(R.string.home_series), getString(R.string.home_series_subtitle), contentIntent("series"))
         addStory(quick, "favorite_story", getString(R.string.home_favorites), getString(R.string.home_favorites_subtitle), Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_FAVORITES))
         addStory(quick, "search_story", getString(R.string.home_search), getString(R.string.home_search_subtitle), Intent(this, SearchActivity::class.java))
         if (layoutSpec.compact) {
@@ -818,7 +801,7 @@ class HomeActivity : AppCompatActivity() {
             descendantFocusability = android.view.ViewGroup.FOCUS_AFTER_DESCENDANTS
             overScrollMode = View.OVER_SCROLL_NEVER
             background = GradientDrawable().apply {
-                setColor(CinemaStyle.Surface); cornerRadius = dp(18).toFloat()
+                setColor(CinemaStyle.Surface); cornerRadius = dp(BlofyTvDesign.PanelRadius).toFloat()
                 setStroke(dp(1), 0x66FFFFFF)
             }
             addView(buildSidebar(), FrameLayout.LayoutParams(-1, -2))
@@ -1020,7 +1003,6 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun buildSidebar() = LinearLayout(this).apply {
-        countBadges.clear()
         orientation = LinearLayout.VERTICAL
         gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
         layoutDirection = uiDirection
@@ -1032,64 +1014,24 @@ class HomeActivity : AppCompatActivity() {
             contentDescription = "BLOFY PLAYER"
         }, LinearLayout.LayoutParams(dp(72), dp(44)).apply { bottomMargin = dp(18) })
         addView(sideSelected(R.drawable.cinema_home, getString(R.string.home_home)))
-        addView(countedSideAction("side_live", R.drawable.cinema_live, getString(R.string.home_live), contentIntent("live")))
-        addView(countedSideAction("side_movies", R.drawable.cinema_movies, getString(R.string.home_movies), contentIntent("movie")))
-        addView(countedSideAction("side_series", R.drawable.cinema_series, getString(R.string.home_series), contentIntent("series")))
+        addView(sideAction("side_live", R.drawable.cinema_live, getString(R.string.home_live), contentIntent("live")))
+        addView(sideAction("side_movies", R.drawable.cinema_movies, getString(R.string.home_movies), contentIntent("movie")))
+        addView(sideAction("side_series", R.drawable.cinema_series, getString(R.string.home_series), contentIntent("series")))
         addView(sideAction("side_collections", R.drawable.cinema_collections, getString(R.string.home_collections), collectionIntent(SmartCollectionsActivity.MODE_TOP_RATED)))
         addView(sideAction("side_favorites", R.drawable.cinema_favorite, getString(R.string.home_favorites), Intent(this@HomeActivity, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_FAVORITES)))
         addView(sideAction("side_search", R.drawable.cinema_search, getString(R.string.home_search), Intent(this@HomeActivity, SearchActivity::class.java)))
         addView(sideAction("side_settings", R.drawable.cinema_settings, getString(R.string.home_settings), Intent(this@HomeActivity, SettingsActivity::class.java)))
     }
 
-    private fun countedSideAction(key: String, icon: Int, label: String, intent: Intent) =
-        sideAction(key, icon, label, intent).apply {
-            val badge = TextView(this@HomeActivity).apply {
-                textSize = 10.5f
-                typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
-                setTextColor(BlofyTvDesign.Lavender)
-                gravity = Gravity.CENTER
-                isFocusable = false
-                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-                visibility = View.GONE
-                setPadding(dp(4), dp(2), dp(4), dp(2))
-                background = BlofyTvDesign.badge(dp(8).toFloat())
-            }
-            addView(badge, LinearLayout.LayoutParams(-2, dp(25)))
-            countBadges[key] = badge
-        }
-
-    private fun updateNavigationCounts(totals: CatalogTotals) {
-        for ((key, kind) in listOf("side_live" to "live", "side_movies" to "movie", "side_series" to "series")) {
-            val count = CatalogTotals.formatted(totals.forKind(kind))
-            countBadges[key]?.apply {
-                text = count
-                visibility = View.VISIBLE
-            }
-            val label = when (kind) {
-                "live" -> getString(R.string.home_live)
-                "movie" -> getString(R.string.home_movies)
-                else -> getString(R.string.home_series)
-            }
-            actionViews[key]?.contentDescription = "$label · " + getString(R.string.catalog_exact_count, count)
-            (actionViews["tab_$kind"] as? Button)?.let { button ->
-                button.text = "$label\n$count"
-                button.textSize = 12f
-                button.maxLines = 2
-                button.gravity = Gravity.CENTER
-                button.contentDescription = "$label · " + getString(R.string.catalog_exact_count, count)
-            }
-        }
-    }
-
     private fun sideBase(icon: Int, label: String) = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-        layoutDirection = uiDirection; setPadding(dp(9), 0, dp(9), 0)
+        layoutDirection = uiDirection; setPadding(dp(10), 0, dp(10), 0)
         addView(ImageView(this@HomeActivity).apply {
             setImageResource(icon); imageTintList = ColorStateList.valueOf(TEXT_MUTED)
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-        }, LinearLayout.LayoutParams(dp(17), dp(17)).apply { marginEnd = dp(8) })
+        }, LinearLayout.LayoutParams(dp(20), dp(20)).apply { marginEnd = dp(9) })
         addView(TextView(this@HomeActivity).apply {
-            text = label; textSize = 12f; typeface = BlofyTvDesign.preferredTypeface(this)
+            text = label; textSize = 13f; typeface = BlofyTvDesign.preferredTypeface(this)
             setTextColor(TEXT_PRIMARY); gravity = Gravity.START or Gravity.CENTER_VERTICAL
             isSingleLine = true; ellipsize = TextUtils.TruncateAt.END
         }, LinearLayout.LayoutParams(0, -1, 1f))
@@ -1194,78 +1136,16 @@ class HomeActivity : AppCompatActivity() {
     }
     private fun heroButton(label: String, key: String, intent: Intent, primary: Boolean) = actionHeroButton(label, key, primary) { startActivity(intent) }
 
-    /** Subtle, D-pad-accessible library summary. Exact totals include every indexed item. */
-    private fun buildCatalogStats(totals: CatalogTotals) = LinearLayout(this).apply {
-        orientation = LinearLayout.HORIZONTAL
-        layoutDirection = uiDirection
-        gravity = Gravity.CENTER_VERTICAL
-        setPadding(dp(2), dp(2), dp(2), dp(2))
-        for ((kind, title, value) in listOf(
-            Triple("live", getString(R.string.home_live), totals.live),
-            Triple("movie", getString(R.string.home_movies), totals.movies),
-            Triple("series", getString(R.string.home_series), totals.series)
-        )) {
-            val card = LinearLayout(this@HomeActivity).apply {
-                tag = "stats_$kind"
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER_VERTICAL or Gravity.START
-                setPadding(dp(if (layoutSpec.compact) 10 else 18), dp(7), dp(6), dp(7))
-                isFocusable = true
-                isFocusableInTouchMode = remote
-                isClickable = true
-                clipToPadding = false
-                fun surface(focused: Boolean) = GradientDrawable(
-                    GradientDrawable.Orientation.TL_BR,
-                    intArrayOf(if (focused) 0xFF442366.toInt() else 0xFF261739.toInt(), 0xFF15111E.toInt())
-                ).apply {
-                    cornerRadius = dp(15).toFloat()
-                    setStroke(dp(1), if (focused) BlofyTvDesign.PurpleSoft else 0xFF56386B.toInt())
-                }
-                background = surface(false)
-                addView(TextView(this@HomeActivity).apply {
-                    text = CatalogTotals.formatted(value)
-                    textSize = if (layoutSpec.compact) 20f else 25f
-                    typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
-                    setTextColor(Color.WHITE)
-                    isSingleLine = true
-                    maxLines = 1
-                    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-                })
-                addView(TextView(this@HomeActivity).apply {
-                    text = title
-                    textSize = if (layoutSpec.compact) 11f else 13f
-                    typeface = BlofyTvDesign.preferredTypeface(this)
-                    setTextColor(BlofyTvDesign.Lavender)
-                    isSingleLine = true
-                    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-                })
-                contentDescription = "$title: " + getString(R.string.catalog_exact_count, CatalogTotals.formatted(value))
-                setOnFocusChangeListener { view, focused ->
-                    view.background = surface(focused)
-                    if (focused) FocusMemory.save(this@HomeActivity, SCREEN_KEY, "stats_$kind")
-                    animateFocus(view, focused, 1.02f, 0f, dp(5).toFloat())
-                }
-                setOnClickListener { startActivity(contentIntent(kind)) }
-            }
-            registerAction("stats_$kind", card)
-            addView(card, LinearLayout.LayoutParams(0, -1, 1f).apply {
-                marginStart = dp(3)
-                marginEnd = dp(3)
-            })
-        }
-    }
-
-    private fun addStory(row: LinearLayout, key: String, title: String, subtitle: String, intent: Intent, total: Int? = null) {
+    private fun addStory(row: LinearLayout, key: String, title: String, subtitle: String, intent: Intent) {
         val card = LinearLayout(this).apply {
             id = View.generateViewId(); orientation = LinearLayout.VERTICAL; gravity = Gravity.BOTTOM or Gravity.START; layoutDirection = uiDirection; setPadding(dp(16), dp(13), dp(16), dp(13)); background = storySurface(false); isFocusable = true; isFocusableInTouchMode = remote; isClickable = true
             addView(TextView(this@HomeActivity).apply { text = title; textSize = 15f; typeface = BlofyTvDesign.preferredTypeface(this, bold = true); setTextColor(TEXT_PRIMARY); gravity = Gravity.START })
             addView(TextView(this@HomeActivity).apply {
-                text = if (total != null) getString(R.string.catalog_exact_count, CatalogTotals.formatted(total)) else subtitle
-                textSize = if (total != null) 13f else 11f
-                typeface = BlofyTvDesign.preferredTypeface(this, bold = total != null)
-                setTextColor(if (total != null) BlofyTvDesign.Lavender else TEXT_MUTED)
+                text = subtitle
+                textSize = 11f
+                typeface = BlofyTvDesign.preferredTypeface(this)
+                setTextColor(TEXT_MUTED)
                 gravity = Gravity.START
-                contentDescription = if (total != null) "$title: " + getString(R.string.catalog_exact_count, CatalogTotals.formatted(total)) else subtitle
             })
             setOnFocusChangeListener { view, focused -> view.background = storySurface(focused); childrenTextColor(this, focused); if (focused) FocusMemory.save(this@HomeActivity, SCREEN_KEY, key); animateFocus(view, focused, 1.015f, 0f, dp(10).toFloat()) }
             setOnClickListener { startActivity(intent) }

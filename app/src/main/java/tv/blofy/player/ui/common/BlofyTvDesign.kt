@@ -46,9 +46,9 @@ object BlofyTvDesign {
     const val RailWidth = 250
     const val CategoryRowHeight = 60
     const val LiveListWidth = 455
-    const val CardRadius = 14
-    const val PanelRadius = 18
-    const val ButtonRadius = 12
+    const val CardRadius = 16
+    const val PanelRadius = 22
+    const val ButtonRadius = 14
     const val BadgeRadius = 12
     const val StandardGap = 18
     const val FocusInMs = 95L

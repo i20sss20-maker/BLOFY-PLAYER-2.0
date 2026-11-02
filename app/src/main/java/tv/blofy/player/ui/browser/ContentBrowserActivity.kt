@@ -200,7 +200,7 @@ class ContentBrowserActivity : AppCompatActivity() {
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
             layoutDirection = resources.configuration.layoutDirection
             setPaddingRelative(dp(16), 0, dp(16), 0)
-            background = BlofyTvDesign.elevatedSurface(dp(12).toFloat())
+            background = BlofyTvDesign.elevatedSurface(dp(BlofyTvDesign.CardRadius).toFloat())
             isFocusable = false
         }
         root.addView(exactCountBadge, LinearLayout.LayoutParams(
