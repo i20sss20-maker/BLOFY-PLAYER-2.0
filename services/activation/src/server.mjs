@@ -621,6 +621,15 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && requestUrl.pathname === '/health') return await health(res);
     if (req.method === 'POST' && requestUrl.pathname === '/api/v1/activation/check') return await activationCheck(req, res);
     if (req.method === 'POST' && requestUrl.pathname === '/api/v1/blofy-codes/redeem') return await blofyCodes.redeem(req, res);
+    if (requestUrl.pathname.startsWith('/api/v1/admin/blofy-codes') && ['POST','DELETE','PATCH'].includes(req.method)) {
+      const origin = String(req.headers.origin || '');
+      const host = String(req.headers.host || '');
+      if (req.headers['sec-fetch-site'] === 'cross-site' || (origin && (() => {
+        try { return new URL(origin).host !== host; } catch { return true; }
+      })())) return json(res, 403, { error: 'forbidden_origin' });
+      if (req.method === 'POST' && !String(req.headers['content-type'] || '').toLowerCase().startsWith('application/json'))
+        return json(res, 415, { error: 'json_required' });
+    }
     if (requestUrl.pathname === '/api/v1/admin/blofy-codes' && req.method === 'POST') return await blofyCodes.issue(req, res);
     if (requestUrl.pathname === '/api/v1/admin/blofy-codes' && req.method === 'GET') return await blofyCodes.list(req, res);
     const codeAdminMatch = requestUrl.pathname.match(/^\/api\/v1\/admin\/blofy-codes\/ids\/([0-9a-fA-F-]{36})(\/unbind)?$/);
