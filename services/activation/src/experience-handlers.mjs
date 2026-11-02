@@ -13,7 +13,7 @@ export function createExperienceHandlers({ pool, json, readJson, requireAdmin, a
   const normalized = row => row.trial_registration_pending === true && row.status === 'expired' ? 'pending' :
     ['active','trial'].includes(row.status) && ms(row.expires_at) && ms(row.expires_at) <= Date.now() ? 'expired' : row.status;
   const pageFiles = { '/':'landing.html', '/downloads':'downloads.html', '/account':'account.html', '/downloads/android-tv-test':'android-tv-test.html' };
-  const assetFiles = { '/experience.css':'experience.css', '/premium.css':'premium.css', '/experience.js':'experience.js', '/android-tv-test.js':'android-tv-test.js', '/app-preview.png':'app-preview.png', '/IBMPlexSansArabic-Regular.ttf':'IBMPlexSansArabic-Regular.ttf', '/IBMPlexSansArabic-Medium.ttf':'IBMPlexSansArabic-Medium.ttf', '/OFL.txt':'OFL.txt' };
+  const assetFiles = { '/experience.css':'experience.css', '/premium.css':'premium.css', '/experience.js':'experience.js', '/xtream-code-import.js':'xtream-code-import.js', '/android-tv-test.js':'android-tv-test.js', '/app-preview.png':'app-preview.png', '/IBMPlexSansArabic-Regular.ttf':'IBMPlexSansArabic-Regular.ttf', '/IBMPlexSansArabic-Medium.ttf':'IBMPlexSansArabic-Medium.ttf', '/OFL.txt':'OFL.txt' };
 
   async function releases() {
     const result = await pool.query('SELECT * FROM app_releases ORDER BY channel');
