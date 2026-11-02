@@ -9,7 +9,8 @@ function injected() {
 test('injects BLOFY v5 subscriber UI exactly once', () => {
   const html = injected();
   assert.match(html, /data-blofy-subscriber-ui="5"/);
-  assert.match(html, /مشتركين BLOFY/);
+  assert.match(html, /STROING 8K/);
+  assert.match(html, /BLOFY \(كود\)/);
   assert.match(html, /\/api\/v1\/subscribers\/session/);
   assert.match(html, /\/api\/v1\/portal\/playlists/);
   assert.equal(injectSubscriberPortalUi(html), html);
@@ -23,15 +24,16 @@ test('removes M3U from the visible provider selector and retains Xtream plus BLO
   const html = injected();
   assert.match(html, /option\.value === 'm3u'\) option\.remove\(\)/);
   assert.match(html, /option\.value = 'blofy'/);
-  assert.match(html, /option\.textContent = 'مشتركين BLOFY'/);
+  assert.match(html, /option\.textContent = 'STROING 8K'/);
+  assert.match(html, /codeChoice.value = 'blofycode'/);
   assert.match(html, /Xtream Codes/);
 });
 
 test('BLOFY mode hides only the host and keeps username and password visible', () => {
   const html = injected();
-  assert.match(html, /setHidden\(fieldWrapper\(base\), blofy\)/);
-  assert.match(html, /setHidden\(fieldWrapper\(user\), false\)/);
-  assert.match(html, /setHidden\(fieldWrapper\(pass\), false\)/);
+  assert.match(html, /setHidden\(fieldWrapper\(base\), blofy \|\| coded\)/);
+  assert.match(html, /setHidden\(fieldWrapper\(user\), coded\)/);
+  assert.match(html, /setHidden\(fieldWrapper\(pass\), coded\)/);
   assert.match(html, /أدخل اسم المستخدم وكلمة المرور فقط/);
 });
 
@@ -40,7 +42,7 @@ test('subscriber edit never exposes stored opaque credentials', () => {
   assert.match(html, /editingSubscriberId = item\.id/);
   assert.match(html, /qs\('username'\)\.value = ''/);
   assert.match(html, /qs\('password'\)\.value = ''/);
-  assert.match(html, /اكتب اسم المستخدم وكلمة المرور من جديد/);
+  assert.match(html, /STROING 8K من جديد/);
 });
 
 test('subscriber save uses a fresh secure session and writes directly to the portal endpoint', () => {
@@ -50,7 +52,7 @@ test('subscriber save uses a fresh secure session and writes directly to the por
   assert.match(html, /baseUrl: session\.baseUrl/);
   assert.match(html, /username: session\.username/);
   assert.match(html, /password: session\.password/);
-  assert.match(html, /id: editingSubscriberId \|\| undefined/);
+  assert.match(html, /id: saved\.id \|\| \(saved\.mode === 'blofycode'/);
 });
 
 test('subscriber save interception runs in capture phase before the normal portal save handler', () => {
@@ -96,4 +98,13 @@ test('renewal works without putting the pairing code in the destination URL', ()
   const section = html.split('function installRenewalUi() {')[1].split('function install() {')[0];
   assert.match(section, /window\.location\.assign\('\/pay'\)/);
   assert.doesNotMatch(section, /wa\.me|deviceAuth\(\)|activationCode|بيانات الجهاز غير مكتملة/);
+});
+
+test('BLOFY code is independent from old login and never leaks code into URLs', () => {
+  const html = injected();
+  assert.match(html, /blofyCodeField/);
+  assert.match(html, /\/api\/v1\/blofy-codes\/redeem/);
+  assert.match(html, /mode === 'blofycode'/);
+  assert.match(html, /payload\.baseUrl !== 'http:\/\/annkel\.com:80'/);
+  assert.doesNotMatch(html, /\/api\/v1\/subscribers\/session\?code=/);
 });
