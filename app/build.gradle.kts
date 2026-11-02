@@ -47,10 +47,10 @@ android {
         applicationId = if (xiaomiEdition) "tv.blofy.player.xiaomi" else "tv.blofy.player.v2"
         minSdk = 23
         targetSdk = 36
-        // Upgrade over versionCode 2000076. Before production Play upload, confirm
+        // Owner QA UI update over versionCode 2000077. Before production Play upload, confirm
         // this code is higher than every previously uploaded Play artifact.
-        versionCode = 2000077
-        versionName = "2.0.0-rc07.55.8" // Exact BLOFY PLAYER display version; no Xiaomi suffix in any build
+        versionCode = 2000078
+        versionName = "2.0.0-rc07.55.8.1" // Exact BLOFY PLAYER display version; no Xiaomi suffix in any build
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "ACTIVATION_BASE_URL", "\"$activationBaseUrlEscaped\"")
         buildConfigField("String", "UPDATE_BASE_URL", "\"$updateBaseUrlEscaped\"")
