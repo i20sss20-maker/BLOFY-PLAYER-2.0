@@ -1,4 +1,4 @@
-name: BLOFY Xiaomi UX v74 – official package TV/Play candidate (owner-only)
+name: BLOFY PLAYER 74 – official TV/Play candidate (owner-only)
 on:
   push:
     branches: [fix/xiaomi-74-website-play-tv-quality-20261102]
@@ -151,15 +151,15 @@ jobs:
           common="-PBLOFY_XIAOMI_EDITION=false -PBLOFY_SECURITY_R8=true -PBLOFY_ACTIVATION_BASE_URL=$ACTIVATION_BASE -PBLOFY_UPDATE_BASE_URL=$UPDATE_BASE -PBLOFY_BUILD_SHA=$GITHUB_SHA -PBLOFY_FFMPEG_AAR=$GITHUB_WORKSPACE/build/ffmpeg-native/media3-decoder-ffmpeg-1.6.1.aar"
           gradle --no-daemon --max-workers=2 $common -PBLOFY_DISTRIBUTION=website assembleRelease
           mkdir -p release-candidate
-          cp app/build/outputs/apk/release/app-release.apk release-candidate/BLOFY-PLAYER-v74-Xiaomi-UX-OFFICIAL-WEBSITE-2000080.apk
+          cp app/build/outputs/apk/release/app-release.apk release-candidate/BLOFY-PLAYER-74-OFFICIAL-WEBSITE-2000080.apk
           gradle --no-daemon --max-workers=2 $common -PBLOFY_DISTRIBUTION=play bundleRelease
-          cp app/build/outputs/bundle/release/app-release.aab release-candidate/BLOFY-PLAYER-v74-Xiaomi-UX-GOOGLE-PLAY-2000080.aab
+          cp app/build/outputs/bundle/release/app-release.aab release-candidate/BLOFY-PLAYER-74-GOOGLE-PLAY-2000080.aab
       - name: Verify genuine signing, package, version, Android9 and TV metadata
         run: |
           set -euo pipefail
           tools="$ANDROID_HOME/build-tools/$SDK_TOOLS"
-          apk=release-candidate/BLOFY-PLAYER-v74-Xiaomi-UX-OFFICIAL-WEBSITE-2000080.apk
-          aab=release-candidate/BLOFY-PLAYER-v74-Xiaomi-UX-GOOGLE-PLAY-2000080.aab
+          apk=release-candidate/BLOFY-PLAYER-74-OFFICIAL-WEBSITE-2000080.apk
+          aab=release-candidate/BLOFY-PLAYER-74-GOOGLE-PLAY-2000080.aab
           test -s "$apk" && test -s "$aab"
           unzip -t "$apk" | tail -n 1
           unzip -t "$aab" | tail -n 1
@@ -183,7 +183,7 @@ jobs:
           (cd release-candidate && sha256sum *.apk *.aab > SHA256SUMS)
       - uses: actions/upload-artifact@v4
         with:
-          name: BLOFY-PLAYER-XiaomiUX-v74-PLAY-WEBSITE-OWNER-TEST-${{ github.sha }}
+          name: BLOFY-PLAYER-74-PLAY-WEBSITE-OWNER-TEST-${{ github.sha }}
           path: release-candidate/
           retention-days: 30
           if-no-files-found: error
