@@ -11,7 +11,7 @@ test('admin console keeps devices, support, releases and renewal controls in one
   }
   assert.match(html, /release-manager\.js/);
   assert.match(html, /data-panel=["']releases["']/);
-  assert.match(html, /إعادة تفعيله/);
+  assert.match(html, /تمديد التفعيل/);
 });
 
 test('sources console keeps BLOFY gateway, upstream Xtream and catalog controls clearly separated', async () => {
@@ -42,7 +42,7 @@ test('admin customer list shows stored phone numbers and can filter contacts mis
   const html = await web('admin.html');
   const js = await web('experience.js');
   assert.match(html, /<th>رقم الجوال<\/th>/);
-  assert.match(js, /item\.phone\|\|'غير مسجّل'/);
+  assert.match(js, /if\(item\.phone\)/);
   assert.match(js, /withoutPhone/);
   assert.match(js, /count\.with_phone/);
   assert.match(js, /count\.without_phone/);
@@ -55,4 +55,14 @@ test('admin contact directory provides registered-phone shortcut and editable se
  assert.match(html,/دليل العملاء المسجلين بأرقام جوال/);
  assert.match(js,/filter.value=onlyContacts\?'withPhone':'all'/);
  assert.match(js,/navigator.clipboard.writeText\(item.phone\)/);
+});
+
+test('BLOFY code admin is isolated from the existing source and release controls', async () => {
+  const html = await web('admin.html');
+  const js = await web('experience.js');
+  for(const id of ['codes-view','code-form','code-status','code-issued','code-rows']) {
+    assert.match(html,new RegExp('id=["\x27]'+id+'["\x27]'));
+  }
+  assert.match(html,/STROING 8K/);
+  assert.match(js,/\/api\/v1\/admin\/blofy-codes/);
 });
