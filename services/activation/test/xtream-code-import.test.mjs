@@ -11,31 +11,31 @@ const parse = context.BlofyXtreamImporter.parseXtream;
 
 test('paste Xtream get.php or player_api.php URL and extract login locally', () => {
   const a = parse('http://annkel.com:80/get.php?username=customer1&password=p%40ss%26word&type=m3u_plus&output=ts');
-  assert.equal(a.host, 'http://annkel.com:80');
+  assert.equal(a.host, 'http://annkel.com');
   assert.equal(a.username,'customer1');
   assert.equal(a.password,'p@ss&word');
   const b = parse('annkel.com:80/player_api.php?username=hello&password=secure123');
   assert.equal(b.username,'hello');
   assert.equal(b.password,'secure123');
+  const c=parse('https://iptv.example.net/get.php?username=c&password=other');
+  assert.equal(c.host,'https://iptv.example.net');
 });
 
 test('paste Xtream host username password as three lines', () => {
   const a=parse('Host: http://annkel.com:80\nUsername: u-33\nPassword: z:test');
   assert.equal(a.username,'u-33');
   assert.equal(a.password,'z:test');
+  assert.equal(a.host,'http://annkel.com');
 });
 
 test('reject unsafe URLs, host mismatch, malformed credentials, and duplicates without exposing secrets', () => {
   const entries=[
     'http://127.0.0.1:80/get.php?username=a&password=b',
-    'http://annkel.com.evil.test/get.php?username=a&password=b',
-    'http://annkel.com:8080/get.php?username=a&password=b',
-    'https://annkel.com/get.php?username=a&password=b',
+    'http://192.168.1.4/get.php?username=a&password=b',
     'http://attacker@annkel.com/get.php?username=a&password=b',
     'http://annkel.com/get.php?username=a&password=exposedSecret&username=other',
     'http://annkel.com/get.php?username=a',
     'http://annkel.com/unrelated.php?username=a&password=b',
-    'Host: http://example.com:80\nUsername: a\nPassword: exposedSecret',
     '',
     'not-a-valid-url'
   ];

@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { createFixedWindowLimiter, requestClientKey } from './auth-protection.mjs';
+import { selectedCodeSource, checkCodeAccount } from './code-account-status.mjs';
 
 const CODE_HOST = 'http://annkel.com:80'; // Dedicated new source; NOT the STROING 8K host.
 const CODE_PATTERN = /^[A-Z0-9-]{8,32}$/;
@@ -36,38 +37,55 @@ export function createBlofyCodeCrypto(secretHex) {
   return { proof, seal, open };
 }
 
-export function createBlofyCodeHandlers({ pool, secretHex, json, readJson, requireAdmin, authorizedDevice }) {
+export function createBlofyCodeHandlers({ pool, secretHex, json, readJson, requireAdmin, authorizedDevice, checkAccount = checkCodeAccount, strongHost }) {
   const codec = createBlofyCodeCrypto(secretHex);
 
-  // Operator maps a one-time-issued code to a legitimate Xtream account.
-  // No code or upstream secret is stored as plaintext in the database.
+  // Numeric 8-digit codes: short for TV remotes yet 100 million possibilities.
+  // The HMAC proof keeps the code secret in the database; collisions retry safely.
   async function issue(req, res) {
     if (!requireAdmin(req, res)) return;
     const input = await readJson(req);
-    // Current BLOFY code client is deliberately limited to one upstream.
-    // Validate the optional host on the SERVER too, so a pasted foreign Xtream
-    // link can never produce a real-looking code for the wrong service.
-    if (input.host != null && input.host !== CODE_HOST) {
+    let selection;
+    try {
+      selection = selectedCodeSource(input, { strongHost });
+      if (input.source == null && input.host && input.host !== selection.host)
+        throw new Error('invalid_code_host');
+    } catch {
       return json(res, 400, { error: 'invalid_code_host' });
     }
     const username = typeof input.username === 'string' ? input.username.trim() : '';
     const password = typeof input.password === 'string' ? input.password : '';
-    const code = input.code == null
-      ? crypto.randomBytes(10).toString('hex').toUpperCase()
-      : normalizedBlofyCode(input.code);
-    const expiresAt = input.expiresAt == null ? null : Number(input.expiresAt);
-    if (!code || !username || !password || username.length > 256 || password.length > 512 ||
-        (expiresAt !== null && (!Number.isSafeInteger(expiresAt) || expiresAt <= Date.now()))) {
+    if (!username || !password || username.length > 256 || password.length > 512 ||
+        /[\u0000-\u001f\u007f]/.test(username + password)) {
       return json(res, 400, { error: 'invalid_code_account' });
     }
-    const id = crypto.randomUUID();
-    const result = await pool.query(
-      'INSERT INTO blofy_code_subscriptions (id,code_proof,username_enc,password_enc,expires_at,active) VALUES ($1,$2,$3,$4,$5,TRUE) ON CONFLICT(code_proof) DO NOTHING RETURNING id',
-      [id, codec.proof(code), codec.seal(username), codec.seal(password),
-       expiresAt == null ? null : new Date(expiresAt)]
-    );
-    if (!result.rows[0]) return json(res, 409, { error: 'code_exists' });
-    return json(res, 201, { code, providerId: id, host: CODE_HOST, expiresAt });
+    let account;
+    try { account = await checkAccount({host: selection.host,username,password}); }
+    catch (error) {
+      const kind = String(error?.message || '');
+      return json(res, kind === 'code_source_expired' || kind === 'code_source_credentials_invalid' ? 422 : 503,
+        { error: ['code_source_expired','code_source_credentials_invalid'].includes(kind) ? kind : 'code_source_unavailable' });
+    }
+    const expiresAt = account.expiresAt ?? null;
+    if (expiresAt != null && (!Number.isSafeInteger(expiresAt) || expiresAt <= Date.now()))
+      return json(res, 422, { error:'code_source_expired' });
+
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const code = crypto.randomInt(0, 100_000_000).toString().padStart(8, '0');
+      const id = crypto.randomUUID();
+      const result = await pool.query(
+        `INSERT INTO blofy_code_subscriptions
+         (id,code_proof,username_enc,password_enc,host_enc,source_label,expires_at,active)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE)
+         ON CONFLICT(code_proof) DO NOTHING RETURNING id`,
+        [id, codec.proof(code), codec.seal(username), codec.seal(password),
+          codec.seal(selection.host), selection.label,
+          expiresAt == null ? null : new Date(expiresAt)]
+      );
+      if (result.rows[0]) return json(res, 201,
+        { code, providerId:id, host:selection.host, source:selection.source, expiresAt });
+    }
+    return json(res, 503, {error:'code_generation_unavailable'});
   }
 
   async function revoke(req, res, codeInput) {
@@ -100,10 +118,11 @@ export function createBlofyCodeHandlers({ pool, secretHex, json, readJson, requi
   async function list(req, res) {
     if (!requireAdmin(req, res)) return;
     const result = await pool.query(
-      'SELECT id,active,expires_at,device_id,created_at FROM blofy_code_subscriptions ORDER BY created_at DESC LIMIT 200'
+      'SELECT id,active,expires_at,device_id,created_at,source_label FROM blofy_code_subscriptions ORDER BY created_at DESC LIMIT 200'
     );
     return json(res, 200, { items: result.rows.map(row => ({
       providerId: row.id, active: row.active, boundDeviceId: row.device_id,
+      source: row.source_label || 'BLOFY',
       expiresAt: row.expires_at ? new Date(row.expires_at).getTime() : null,
       createdAt: new Date(row.created_at).getTime()
     })) });
@@ -128,24 +147,36 @@ export function createBlofyCodeHandlers({ pool, secretHex, json, readJson, requi
         'SELECT * FROM blofy_code_subscriptions WHERE code_proof=$1 FOR UPDATE', [codec.proof(code)]
       );
       const row = result.rows[0];
-      const expired = row?.expires_at && new Date(row.expires_at).getTime() <= Date.now();
-      if (!row || !row.active || expired || (row.device_id && row.device_id !== deviceId)) {
+      if (!row || !row.active || (row.device_id && row.device_id !== deviceId)) {
         await client.query('COMMIT');
         return json(res, 403, { error: 'code_unavailable' });
       }
-      if (!row.device_id) {
-        await client.query(
-          'UPDATE blofy_code_subscriptions SET device_id=$2,updated_at=NOW() WHERE id=$1 AND device_id IS NULL',
-          [row.id, deviceId]
-        );
-      }
       const username = codec.open(row.username_enc);
       const password = codec.open(row.password_enc);
+      // Existing issued codes are preserved; newer numeric codes carry a sealed host.
+      const host = row.host_enc ? codec.open(row.host_enc) : CODE_HOST;
+      let expiresAt = row.expires_at ? new Date(row.expires_at).getTime() : null;
+      if (row.host_enc) {
+        try {
+          const latest = await checkAccount({host,username,password});
+          expiresAt = latest.expiresAt ?? null; // Reads provider renewal automatically.
+        } catch (error) {
+          await client.query('COMMIT');
+          return json(res, 403, {error: String(error?.message || '') === 'code_source_expired'
+            ? 'code_source_expired' : 'code_unavailable'});
+        }
+      } else if (expiresAt && expiresAt <= Date.now()) {
+        await client.query('COMMIT');
+        return json(res, 403, {error:'code_unavailable'});
+      }
+      await client.query(
+        'UPDATE blofy_code_subscriptions SET device_id=COALESCE(device_id,$2),expires_at=$3,updated_at=NOW() WHERE id=$1',
+        [row.id,deviceId,expiresAt == null ? null : new Date(expiresAt)]
+      );
       await client.query('COMMIT');
       return json(res, 200, {
-        delivery: 'direct', providerId: row.id, providerName: 'BLOFY',
-        baseUrl: CODE_HOST, username, password,
-        expiresAt: row.expires_at ? new Date(row.expires_at).getTime() : null
+        delivery: 'direct', providerId: row.id, providerName: row.source_label || 'BLOFY',
+        baseUrl: host, username, password, expiresAt
       });
     } catch (error) {
       await client.query('ROLLBACK').catch(() => {});

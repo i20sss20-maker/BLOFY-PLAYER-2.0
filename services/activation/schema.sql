@@ -137,4 +137,8 @@ CREATE TABLE IF NOT EXISTS blofy_code_subscriptions (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+-- Host is stored encrypted, never as a plaintext external source URL.
+-- Additive migrations preserve already issued legacy BLOFY codes.
+ALTER TABLE blofy_code_subscriptions ADD COLUMN IF NOT EXISTS host_enc TEXT;
+ALTER TABLE blofy_code_subscriptions ADD COLUMN IF NOT EXISTS source_label TEXT;
 CREATE INDEX IF NOT EXISTS idx_blofy_codes_device ON blofy_code_subscriptions(device_id);
