@@ -1,0 +1,29 @@
+name: Read-only test update APK GET and byte ranges
+on:
+  push:
+    branches: [diagnostics/play73-original-archive-readonly-20261102]
+    paths: [.github/workflows/test-update-apk-get.yml]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Compare GET range and response content of update APK URLs
+        shell: bash
+        run: |
+          set -uo pipefail
+          for name in github75 site75 site73; do
+            case "$name" in
+              github75) url="https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/blofy-player-v2000075-website/BLOFY-PLAYER-v2000075-WEBSITE-SIGNED.apk";;
+              site75) url="https://updates.blofyplayer.com/download/latest.apk";;
+              site73) url="https://updates.blofyplayer.com/files/releases/BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED.apk";;
+            esac
+            echo "=== SOURCE $name ==="
+            curl --silent --show-error --location --range 0-1023 --max-time 18 --retry 0 \
+              --dump-header "/tmp/$name.header" --output "/tmp/$name.bin" \
+              --write-out "GET_RESULT=$name code=%{http_code} final=%{url_effective} type=%{content_type} length=%{size_download}\n" "$url" || true
+            grep -Eia "^(HTTP/|content-length:|content-type:|content-range:|location:)" "/tmp/$name.header" | sed -E 's/(\?.*)/ [redacted]/' | head -n 20 || true
+            stat -c 'received_bytes=%s' "/tmp/$name.bin" 2>/dev/null || true
+          done
