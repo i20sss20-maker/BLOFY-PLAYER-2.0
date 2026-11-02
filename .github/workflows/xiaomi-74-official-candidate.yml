@@ -2,10 +2,6 @@ name: BLOFY Xiaomi UX v74 – official package TV/Play candidate (owner-only)
 on:
   push:
     branches: [fix/xiaomi-74-website-play-tv-quality-20261102]
-    paths:
-      - 'app/**'
-      - 'tools/verify_xiaomi_v74_release.py'
-      - '.github/workflows/xiaomi-74-official-candidate.yml'
   workflow_dispatch:
 permissions:
   contents: read
@@ -176,6 +172,9 @@ jobs:
           actual="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' release-candidate/signature.txt | head -n1 | tr -d '[:space:]-:' | tr '[:lower:]' '[:upper:]')"
           test "$actual" = "$CERT_SHA256"
           jarsigner -verify "$aab"
+          keytool -printcert -jarfile "$aab" > release-candidate/aab-certificate.txt
+          aab_cert="$(sed -n 's/^[[:space:]]*SHA256: //p' release-candidate/aab-certificate.txt | head -n1 | tr -d '[:space:]:-' | tr '[:lower:]' '[:upper:]')"
+          test "$aab_cert" = "$CERT_SHA256"
           "$tools/aapt" dump permissions "$apk" > release-candidate/permissions.txt
           if grep -Fq 'android.permission.REQUEST_INSTALL_PACKAGES' release-candidate/permissions.txt; then
             echo "Website APK uses optional installer permission; Play variant must not request it."
