@@ -1,0 +1,66 @@
+name: BLOFY 76 signed APK owner test - permanent GitHub release
+on:
+  push:
+    branches: [feat/blofy-76-integrated-owner-qa-20261102]
+    paths: [.github/workflows/blofy-76-owner-github-release.yml]
+permissions:
+  contents: write
+  actions: read
+jobs:
+  owner-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Download successful signed official-package output, not a debug APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p official
+          gh run download 41481497514 --repo "${{ github.repository }}" \
+            --name BLOFY-PLAYER-76-PLAY-WEBSITE-OWNER-TEST-2ed0e022d2a959ff58ae0adf38973f6ebd4ca8fa \
+            --dir official
+          (cd official && sha256sum -c SHA256SUMS)
+          test -s official/BLOFY-PLAYER-76-OFFICIAL-WEBSITE-2000076.apk
+          grep -Fxq 'VersionCode=2000076' official/BUILD_INFO.txt
+          grep -Fxq 'Package=tv.blofy.player.v2' official/BUILD_INFO.txt
+          grep -Fxq 'Published=false' official/BUILD_INFO.txt
+          mkdir -p out
+          cp official/BLOFY-PLAYER-76-OFFICIAL-WEBSITE-2000076.apk out/BLOFY-PLAYER-76-OWNER-TEST-SIGNED.apk
+          (cd out && sha256sum BLOFY-PLAYER-76-OWNER-TEST-SIGNED.apk > SHA256SUMS)
+      - name: Validate actual signed APK install metadata and the supported ABIs
+        run: |
+          set -euo pipefail
+          tools="$ANDROID_HOME/build-tools/35.0.0"
+          apk=out/BLOFY-PLAYER-76-OWNER-TEST-SIGNED.apk
+          "$tools/apksigner" verify --print-certs "$apk" > out/signature.txt
+          "$tools/aapt" dump badging "$apk" > out/manifest.txt
+          grep -Fq "package: name='tv.blofy.player.v2' versionCode='2000076'" out/manifest.txt
+          grep -Fq "sdkVersion:'23'" out/manifest.txt
+          test "$(stat -c%s "$apk")" -gt 50000000
+          # Keep the original release certificate verified by the signed owner workflow.
+          grep -Fiq 'c3b98cccd2f0c86809014acd9368bf61c7004cfd419cd867b71fef10bfa6255e' out/signature.txt
+      - name: Publish release asset on GitHub for a real .apk URL (no ChatGPT link)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="blofy-v76-owner-download-test-20261102"
+          if gh release view "$tag" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release upload "$tag" out/BLOFY-PLAYER-76-OWNER-TEST-SIGNED.apk out/SHA256SUMS --clobber --repo "${{ github.repository }}"
+          else
+            gh release create "$tag" out/BLOFY-PLAYER-76-OWNER-TEST-SIGNED.apk out/SHA256SUMS \
+              --repo "${{ github.repository }}" --target "${{ github.sha }}" \
+              --title "BLOFY PLAYER 76 — owner download test" --prerelease \
+              --notes "Official signed tv.blofy.player.v2 (versionCode 2000076), built and SHA256 verified via signed Android TV 9 candidate CI. Owner installation previously failed through chat attachment; this is a permanent direct APK link for website/manual QA. Do not auto-update existing customers before hardware acceptance."
+          fi
+          gh release view "$tag" --repo "${{ github.repository }}" --json assets,url | tee out/release-info.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-76-OFFICIAL-APK-GITHUB-RELEASE-VERIFICATION
+          path: |
+            out/SHA256SUMS
+            out/manifest.txt
+            out/signature.txt
+            out/release-info.json
+          if-no-files-found: error
