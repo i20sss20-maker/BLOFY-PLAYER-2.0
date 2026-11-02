@@ -17,12 +17,15 @@ test('paste Xtream get.php or player_api.php URL and extract login locally', () 
   const b = parse('annkel.com:80/player_api.php?username=hello&password=secure123');
   assert.equal(b.username,'hello');
   assert.equal(b.password,'secure123');
+  const c=parse('https://iptv.example.net/get.php?username=c&password=other');
+  assert.equal(c.host,'https://iptv.example.net');
 });
 
 test('paste Xtream host username password as three lines', () => {
   const a=parse('Host: http://annkel.com:80\nUsername: u-33\nPassword: z:test');
   assert.equal(a.username,'u-33');
   assert.equal(a.password,'z:test');
+  assert.equal(a.host,'http://annkel.com');
 });
 
 test('reject unsafe URLs, host mismatch, malformed credentials, and duplicates without exposing secrets', () => {
@@ -30,7 +33,7 @@ test('reject unsafe URLs, host mismatch, malformed credentials, and duplicates w
     'http://127.0.0.1:80/get.php?username=a&password=b',
     'http://annkel.com.evil.test/get.php?username=a&password=b',
     'http://annkel.com:8080/get.php?username=a&password=b',
-    'https://annkel.com/get.php?username=a&password=b',
+    'http://192.168.1.4/get.php?username=a&password=b',
     'http://attacker@annkel.com/get.php?username=a&password=b',
     'http://annkel.com/get.php?username=a&password=exposedSecret&username=other',
     'http://annkel.com/get.php?username=a',
