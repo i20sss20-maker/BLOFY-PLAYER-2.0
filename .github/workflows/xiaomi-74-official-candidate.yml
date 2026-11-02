@@ -1,7 +1,7 @@
 name: BLOFY PLAYER 76 – official TV/Play candidate (owner-only)
 on:
   push:
-    branches: [fix/xiaomi-74-website-play-tv-quality-20261102]
+    branches: [fix/xiaomi-74-website-play-tv-quality-20261102, feat/blofy-76-integrated-owner-qa-20261102]
   workflow_dispatch:
 permissions:
   contents: read

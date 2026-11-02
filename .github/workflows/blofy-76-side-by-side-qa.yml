@@ -1,0 +1,82 @@
+name: BLOFY 76 TV9 side-by-side installable QA
+on:
+  push:
+    branches: [feat/blofy-76-integrated-owner-qa-20261102]
+    paths: [.github/workflows/blofy-76-side-by-side-qa.yml]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  qa-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Install Android SDK 36
+        run: |
+          set -euo pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;35.0.0"
+      - name: Restore known-good FFmpeg JNI from successful Android CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p build/ffmpeg-native
+          gh run download 41481513423 --repo "${{ github.repository }}" \
+            --name media3-ffmpeg-1.6.1-aar-214371372b8e82cfa53ebd89e90569c7e5903177 \
+            --dir build/ffmpeg-native
+          file="$(find build/ffmpeg-native -type f -name 'media3-decoder-ffmpeg-1.6.1.aar' -print -quit)"
+          test -s "$file"
+          cp "$file" build/ffmpeg-native/qa-ffmpeg.aar
+          shafile="$(find build/ffmpeg-native -type f -name 'media3-decoder-ffmpeg-1.6.1.aar.sha256' -print -quit)"
+          test -s "$shafile"
+          expected="$(awk '{print $1}' "$shafile" | head -1)"
+          test "$(sha256sum build/ffmpeg-native/qa-ffmpeg.aar | awk '{print $1}')" = "$expected"
+      - name: Build a separate Android TV test package; do not overwrite installed Google Play app
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --max-workers=2 \
+            -PBLOFY_DISTRIBUTION=play \
+            -PBLOFY_XIAOMI_EDITION=false \
+            -PBLOFY_TEST_SIDELOAD=true \
+            -PBLOFY_FFMPEG_AAR="$GITHUB_WORKSPACE/build/ffmpeg-native/qa-ffmpeg.aar" \
+            -PBLOFY_ACTIVATION_BASE_URL=https://api.blofyplayer.com \
+            -PBLOFY_UPDATE_BASE_URL=https://updates.blofyplayer.com \
+            assembleDebug
+          mkdir -p owner-test
+          cp app/build/outputs/apk/debug/app-debug.apk owner-test/BLOFY-PLAYER-76-TV9-SIDE-BY-SIDE-TEST.apk
+          tools="$ANDROID_HOME/build-tools/35.0.0"
+          "$tools/apksigner" verify --print-certs owner-test/BLOFY-PLAYER-76-TV9-SIDE-BY-SIDE-TEST.apk > owner-test/signature.txt
+          "$tools/aapt" dump badging owner-test/BLOFY-PLAYER-76-TV9-SIDE-BY-SIDE-TEST.apk > owner-test/badging.txt
+          grep -Fq "package: name='tv.blofy.player.v2.testing'" owner-test/badging.txt
+          grep -Fq "sdkVersion:'23'" owner-test/badging.txt
+          echo 'Isolated test-only package tv.blofy.player.v2.testing; does not upgrade or delete original tv.blofy.player.v2. Separate local data and test activation; do not distribute to customers.' > owner-test/README.txt
+          (cd owner-test && sha256sum BLOFY-PLAYER-76-TV9-SIDE-BY-SIDE-TEST.apk > SHA256SUMS)
+      - name: Publish test APK artifact before slow emulator validation
+        uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-76-TV9-OWNER-INSTALLABLE-APK
+          path: owner-test/
+          retention-days: 30
+          if-no-files-found: error
+      - name: Install APK on Android TV 9 emulator and verify it launches
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 28
+          target: android-tv
+          arch: x86
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -gpu swiftshader_indirect -noaudio -no-boot-anim
+          script: |
+            set -e
+            adb install -r owner-test/BLOFY-PLAYER-76-TV9-SIDE-BY-SIDE-TEST.apk
+            adb shell pm list packages | grep -F 'package:tv.blofy.player.v2.testing'
+            adb shell am start -W -n tv.blofy.player.v2.testing/tv.blofy.player.ui.login.SplashActivity | tee owner-test/tv9-launch.txt

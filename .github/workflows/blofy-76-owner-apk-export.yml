@@ -1,0 +1,46 @@
+name: BLOFY 76 owner APK - single file download
+on:
+  push:
+    branches: [feat/blofy-76-integrated-owner-qa-20261102]
+    paths: [.github/workflows/blofy-76-owner-apk-export.yml]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  export-owner-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Retrieve verified signed APK and AAB from successful owner-only build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p candidate
+          gh run download 41481497514 --repo "${{ github.repository }}" --name BLOFY-PLAYER-76-PLAY-WEBSITE-OWNER-TEST-2ed0e022d2a959ff58ae0adf38973f6ebd4ca8fa --dir candidate
+          (cd candidate && sha256sum -c SHA256SUMS)
+          test -s candidate/BLOFY-PLAYER-76-OFFICIAL-WEBSITE-2000076.apk
+          test -s candidate/BLOFY-PLAYER-76-GOOGLE-PLAY-2000076.aab
+          grep -Fxq "Published=false" candidate/BUILD_INFO.txt
+          grep -Fq "VersionCode=2000076" candidate/BUILD_INFO.txt
+          grep -Fq "Package=tv.blofy.player.v2" candidate/BUILD_INFO.txt
+      - name: Upload independent, unbroken APK download for owner test
+        uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-76-OWNER-SIGNED-APK-ONLY
+          path: |
+            candidate/BLOFY-PLAYER-76-OFFICIAL-WEBSITE-2000076.apk
+            candidate/BUILD_INFO.txt
+            candidate/SHA256SUMS
+          retention-days: 30
+          if-no-files-found: error
+      - name: Upload independent AAB for later Play testing
+        uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-76-OWNER-GOOGLE-PLAY-AAB-ONLY
+          path: |
+            candidate/BLOFY-PLAYER-76-GOOGLE-PLAY-2000076.aab
+            candidate/BUILD_INFO.txt
+            candidate/SHA256SUMS
+          retention-days: 30
+          if-no-files-found: error

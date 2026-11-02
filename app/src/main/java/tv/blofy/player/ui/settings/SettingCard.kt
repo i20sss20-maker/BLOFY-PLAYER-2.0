@@ -1,11 +1,13 @@
 package tv.blofy.player.ui.settings
 
 import android.content.Context
+import android.content.res.ColorStateList
 import android.view.Gravity
 import android.view.View
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.Button
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
@@ -19,6 +21,12 @@ internal class SettingCard(context: Context) : LinearLayout(context) {
     private val valueView = label(13f, true).apply { setTextColor(CinemaStyle.Accent) }
     private val hintView = label(12f, false).apply { setTextColor(CinemaStyle.Muted) }
     private val indicator = label(16f, true).apply { setTextColor(BlofyTvDesign.PurpleSoft) }
+    private val busyIndicator = ProgressBar(context, null, android.R.attr.progressBarStyleSmall).apply {
+        isIndeterminate = true
+        indeterminateTintList = ColorStateList.valueOf(CinemaStyle.Accent)
+        visibility = GONE
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+    }
 
     init {
         orientation = VERTICAL
@@ -34,6 +42,7 @@ internal class SettingCard(context: Context) : LinearLayout(context) {
         val heading = LinearLayout(context).apply { gravity = Gravity.CENTER_VERTICAL }
         heading.addView(titleView, LayoutParams(0, -2, 1f))
         heading.addView(indicator, LayoutParams(dp(24), -2).apply { marginStart = dp(8) })
+        heading.addView(busyIndicator, LayoutParams(dp(24), dp(24)).apply { marginStart = dp(8) })
         addView(heading, LayoutParams(-1, -2))
         valueView.setPadding(dp(10), dp(5), dp(10), dp(5))
         valueView.background = valueBackground(false)
@@ -68,6 +77,12 @@ internal class SettingCard(context: Context) : LinearLayout(context) {
         indicator.text = if (cycle) "↔" else if (layoutDirection == LAYOUT_DIRECTION_RTL) "‹" else "›"
         contentDescription = listOf(title, value, hint, if (cycle) context.getString(R.string.setting_cycle_hint) else "")
             .filter(String::isNotBlank).joinToString(". ")
+    }
+
+    /** Show the refresh spinner in the same TV-focusable settings card, without navigating away. */
+    fun setBusy(busy: Boolean) {
+        indicator.visibility = if (busy) GONE else VISIBLE
+        busyIndicator.visibility = if (busy) VISIBLE else GONE
     }
 
     override fun onInitializeAccessibilityNodeInfo(info: AccessibilityNodeInfo) {
