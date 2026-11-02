@@ -1,0 +1,32 @@
+name: Compare BLOFY 73 owner build and website 75 certificates
+on:
+  push:
+    branches: [diagnostics/play73-original-archive-readonly-20261102]
+    paths: [.github/workflows/verify-website-update-signatures.yml]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 17
+    steps:
+      - name: Fetch archived owner test 73 and website 75 independently
+        run: |
+          set -euo pipefail
+          for v in 73 75; do
+            case $v in
+              73) url="https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/blofy-android-tv-2000073-owner-test/BLOFY-PLAYER-ANDROID-TV-2000073-SIGNED-TEST.apk";;
+              75) url="https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/blofy-player-v2000075-website/BLOFY-PLAYER-v2000075-WEBSITE-SIGNED.apk";;
+            esac
+            curl --fail --silent --show-error --location --max-time 400 --retry 2 --retry-delay 3 "$url" -o "v$v.apk"
+            test -s "v$v.apk"
+          done
+      - name: Inspect signature and identity only (not Play Store installed key)
+        run: |
+          set -euo pipefail
+          for v in 73 75; do
+            echo "==== VERSION $v ===="
+            "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "v$v.apk" | head -n1
+            "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "v$v.apk" | grep -E '^Signer #1 certificate SHA-256 digest:'
+            sha256sum "v$v.apk"
+          done
