@@ -14,7 +14,7 @@ class ProviderDisplayNameTest {
     )
 
     @Test fun legacySubscriberNamesAreRebrandedWithoutChangingConnection() {
-        for (name in listOf("مشتركين BLOFY", "مشتركو BLOFY", "BLOFY Subscribers", "BLOFY Playlist")) {
+        for (name in listOf("مشتركين BLOFY", "مشتركو BLOFY", "BLOFY Subscribers")) {
             val original = provider(name)
             assertEquals("STROING 8K", ProviderDisplayName.forUi(original))
             assertEquals("https://old-host.example", original.baseUrl)
@@ -26,5 +26,7 @@ class ProviderDisplayNameTest {
     @Test fun customerNamesAndManualXtreamRemainUntouched() {
         assertEquals("My Xtream", ProviderDisplayName.forUi(provider("My Xtream")))
         assertEquals("Family TV", ProviderDisplayName.forUi(provider("Family TV")))
+        assertEquals("BLOFY Playlist", ProviderDisplayName.forUi(provider("BLOFY Playlist")))
+        assertEquals("STROING 8K", ProviderDisplayName.forUi(provider("BLOFY Playlist").copy(subscriberToken = "old-token")))
     }
 }
