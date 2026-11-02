@@ -195,12 +195,42 @@ function harness({ transport, whatsapp = true, authenticated = true } = {}) {
 
 test('runtime: v6 retains its selector, optional name and capture save interceptor', () => {
   const h = harness();
-  assert.deepEqual(h.n('providerType').options.map(x => x.value), ['xtream', 'blofy']);
+  assert.deepEqual(h.n('providerType').options.map(x => x.value), ['xtream', 'blofy', 'blofycode']);
   assert.equal(h.n('saveBtn').dataset.blofySubscriberInterceptorV6, '1');
   assert.equal(typeof h.n('saveBtn').onclick, 'function');
   assert.equal((h.n('saveBtn').listeners.click || []).length, 1);
   assert.equal((h.n('saveBtn').listeners.click || [])[0].capture, true);
   assert.equal(h.n('name').required, false);
+});
+
+
+test('runtime: independent BLOFY code binds saved playlist without changing the subscriber path', async () => {
+  const response={ delivery:'direct', providerId:'b7ab91a6-fb17-4594-9fcf-5c09cf52230a',
+    baseUrl:'http://annkel.com:80',username:'owner-u',password:'owner-pass' };
+  const h=harness({transport:req=>req.url.endsWith('/blofy-codes/redeem')?reply(response):reply({ok:true})});
+  h.n('providerType').value='blofycode';
+  await h.n('providerType').dispatchEvent(new BrowserEvent('change'));
+  h.n('blofyCode').value='12345678AB';
+  await h.save();
+  assert.equal(h.requests.length,2);
+  assert.equal(h.requests[0].url,'/api/v1/blofy-codes/redeem');
+  assert.equal(h.requests[0].body.code,'12345678AB');
+  assert.equal(h.requests[1].url,'/api/v1/portal/playlists');
+  assert.equal(h.requests[1].body.id,response.providerId);
+  assert.equal(h.requests[1].body.name,'My test list');
+  assert.equal(h.requests[1].body.baseUrl,response.baseUrl);
+  assert.equal(h.requests[1].body.username,response.username);
+  assert.equal(h.legacyCount(),0);
+});
+
+test('runtime: an invalid BLOFY code never calls the network or changes saved accounts', async () => {
+  const h=harness();
+  h.n('providerType').value='blofycode';
+  await h.n('providerType').dispatchEvent(new BrowserEvent('change'));
+  h.n('blofyCode').value='BAD';
+  await h.save();
+  assert.equal(h.requests.length,0);
+  assert.match(h.n('editorStatus').textContent,/تحقق من كود/);
 });
 
 test('runtime: subscriber creation posts the resolved session exactly once', async () => {
