@@ -1,0 +1,25 @@
+name: Test Railway private PostgreSQL DNS recovery
+on:
+  push:
+    branches: [fix/activation-railway-dns-startup-recovery-20261102]
+    paths:
+      - 'services/activation/src/startup-db-retry.mjs'
+      - 'services/activation/src/bootstrap.mjs'
+      - 'services/activation/src/server.mjs'
+      - 'services/activation/test/startup-db-retry.test.mjs'
+      - '.github/workflows/test-startup-db-retry.yml'
+permissions: {contents: read}
+jobs:
+  startup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Syntax check
+        run: |
+          node --check services/activation/src/startup-db-retry.mjs
+          node --check services/activation/src/bootstrap.mjs
+          node --check services/activation/src/server.mjs
+      - name: Confirm recovery of only transient DNS and DB startup failures
+        run: node --test services/activation/test/startup-db-retry.test.mjs
