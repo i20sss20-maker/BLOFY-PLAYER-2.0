@@ -91,7 +91,7 @@ class AndroidTvV74ReviewTest {
         ActivityScenario.launch(LoginActivity::class.java).use { scenario ->
             scenario.onActivity { a ->
                 a.renderPortalPlaylists(listOf(first, second))
-                assertTrue(a.findViewWithTag<View>(first.id).requestFocus())
+                assertTrue(a.window.decorView.findViewWithTag<View>(first.id).requestFocus())
             }
             instrumentation.waitForIdleSync()
             scenario.onActivity { a -> assertEquals(first.id, a.currentFocus?.tag) }
