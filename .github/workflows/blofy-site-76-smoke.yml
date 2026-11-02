@@ -1,0 +1,38 @@
+name: BLOFY website 76 production smoke check
+on:
+  push:
+    branches: [feat/blofy-76-integrated-owner-qa-20261102]
+    paths: [.github/workflows/blofy-site-76-smoke.yml]
+permissions:
+  contents: read
+jobs:
+  verify-public-downloads:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check live release health payload is official 76
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 --retry-delay 3 --connect-timeout 8 --max-time 35 'https://updates.blofyplayer.com/health' -o /tmp/health.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/health.json'))
+          app=j['release']['app']
+          print({k:app.get(k) for k in ('versionCode','versionName','downloadUrl')})
+          assert j.get('ok') is True
+          assert app['versionCode']==2000076
+          assert app['downloadUrl'].startswith('https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/blofy-v76-owner-download-test-20261102/')
+          PY
+      - name: Verify live downloads page and direct link
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 2 --max-time 35 'https://updates.blofyplayer.com/downloads' -o /tmp/downloads.html
+          grep -Fq 'Version Code 2000076' /tmp/downloads.html
+          curl -fsSLI --retry 2 --max-time 70 'https://updates.blofyplayer.com/download/latest.apk' -o /tmp/head.txt
+          cat /tmp/head.txt | head -35
+          grep -Eq '^HTTP/[^ ]+ 200' /tmp/head.txt
+      - name: Confirm direct permanent GitHub asset answers
+        run: |
+          set -euo pipefail
+          curl -fsSLI --retry 2 --max-time 50 'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/blofy-v76-owner-download-test-20261102/BLOFY-PLAYER-76-OWNER-TEST-SIGNED.apk' -o /tmp/github-head.txt
+          head -25 /tmp/github-head.txt
