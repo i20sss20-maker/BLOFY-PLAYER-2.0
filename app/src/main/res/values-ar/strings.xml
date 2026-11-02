@@ -40,6 +40,8 @@
     <string name="catalog_subtitle">يتم حفظ الكتالوج الأساسي أولًا، وتستكمل التفاصيل والحلقات الإضافية بأمان في الخلفية.</string>
     <string name="catalog_note">أول مزامنة تعتمد على حجم القائمة وسرعة السيرفر. بعد ذلك يفتح التطبيق من التخزين المحلي.</string>
     <string name="catalog_connecting">جاري الاتصال بالخادم…</string>
+    <string name="catalog_choose_playlist">تغيير القائمة أو السيرفر</string>
+    <string name="catalog_source_dns_failed">عنوان سيرفر القائمة %1$s غير قابل للوصول. تحقق من الشبكة أو حدّث عنوان السيرفر في BLOFY ثم حاول مجددًا.</string>
     <string name="catalog_retry">↻ استكمال / إعادة المحاولة</string>
     <string name="catalog_preflight">فحص المكتبة المحفوظة…</string>
     <string name="catalog_ready">المكتبة جاهزة</string>
