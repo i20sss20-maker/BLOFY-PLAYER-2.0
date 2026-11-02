@@ -8,6 +8,11 @@ gradle = (root / "app/build.gradle.kts").read_text()
 assert 'applicationId = if (xiaomiEdition) "tv.blofy.player.xiaomi" else "tv.blofy.player.v2"' in gradle
 assert 'versionCode = 2000080' in gradle, "Never reuse Play Console's removed/previous 2000074"
 assert '"2.0.0-rc07.55.6"' in gradle
+assert 'versionName = "2.0.0-rc07.55.6"' in gradle
+assert 'rc07.55.6-xiaomi' not in gradle, 'Display version must remain BLOFY PLAYER without Xiaomi suffix'
+for locale in ('values', 'values-ar', 'values-en'):
+    resource = (root / 'app/src/main/res' / locale / 'strings.xml').read_text()
+    assert '<string name="app_name">BLOFY PLAYER</string>' in resource, locale
 assert 'BLOFY_XIAOMI_EDITION' in gradle
 assert 'BLOFY_DISTRIBUTION' in gradle
 for manifest_name in ("app/src/main/AndroidManifest.xml", "app/src/play/AndroidManifest.xml"):
