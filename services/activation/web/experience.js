@@ -7,7 +7,7 @@ const date = value => value ? new Date(value).toLocaleString('en-US',{dateStyle:
 const labels = {active:'ساري',trial:'تجربة',pending:'تسجيل غير مكتمل',expired:'منتهٍ',blocked:'موقوف',open:'مفتوح',resolved:'تم الحل',testing:'تجريبي',stable:'معتمد'};
 const badge = value => node('span',labels[value]||value,'badge '+value);
 const setStatus=(id,text,bad=false)=>{const el=$(id);el.textContent=text;el.classList.toggle('bad',bad);};
-const errors = {device_changed:'تغيّرت بيانات الجهاز. حدّث السجل وراجعها قبل إعادة الحفظ.',invalid_device_edit:'راجع بيانات العميل وحدود الحقول.',invalid_device_email:'أدخل بريدًا صحيحًا أو اتركه فارغًا.',device_restore_unavailable:'لا توجد حالة سابقة موثقة لاستعادتها. راجع التفعيل قبل تغيير حالة هذا الجهاز.',invalid_duration:'اختر مدة التمديد.',already_lifetime:'هذا الجهاز مفعّل مدى الحياة ولا يحتاج تمديدًا.',device_blocked:'هذا الجهاز موقوف. لا يمكن تمديده أثناء الإيقاف.',activation_changed:'تغيّر تفعيل الجهاز. أغلق التأكيد وراجع التمديد من جديد.',request_conflict:'هذا الطلب مستخدم لعملية أخرى. أعد فتح سجل الجهاز.',unauthorized_device:'كود الجهاز أو رمز الربط غير صحيح، أو الجهاز غير متاح.',check_recently_requested:'تم الفحص قبل قليل. انتظر 15 ثانية ثم أعد المحاولة.',support_recently_submitted:'وصل طلبك السابق. يمكنك إرسال طلب جديد بعد خمس دقائق.',invalid_release:'تحقق من رقم النسخة واسمها ورابط التحميل الآمن.',invalid_device:'تحقق من كود الجهاز.',description_required:'اكتب وصفًا واضحًا للمشكلة.',plan_not_found:'الخطة المختارة غير متاحة.',device_not_found:'لم نعثر على هذا الجهاز.',rate_limited:'طلبات كثيرة. انتظر قليلًا ثم أعد المحاولة.'};
+const errors = {device_changed:'تغيّرت بيانات الجهاز. حدّث السجل وراجعها قبل إعادة الحفظ.',invalid_device_edit:'راجع بيانات العميل وحدود الحقول.',invalid_device_email:'أدخل بريدًا صحيحًا أو اتركه فارغًا.',device_restore_unavailable:'لا توجد حالة سابقة موثقة لاستعادتها. راجع التفعيل قبل تغيير حالة هذا الجهاز.',invalid_duration:'اختر مدة التمديد.',already_lifetime:'هذا الجهاز مفعّل مدى الحياة ولا يحتاج تمديدًا.',device_blocked:'هذا الجهاز موقوف. لا يمكن تمديده أثناء الإيقاف.',activation_changed:'تغيّر تفعيل الجهاز. أغلق التأكيد وراجع التمديد من جديد.',request_conflict:'هذا الطلب مستخدم لعملية أخرى. أعد فتح سجل الجهاز.',unauthorized_device:'كود الجهاز أو رمز الربط غير صحيح، أو الجهاز غير متاح.',check_recently_requested:'تم الفحص قبل قليل. انتظر 15 ثانية ثم أعد المحاولة.',support_recently_submitted:'وصل طلبك السابق. يمكنك إرسال طلب جديد بعد خمس دقائق.',invalid_release:'تحقق من رقم النسخة واسمها ورابط التحميل الآمن.',invalid_device:'تحقق من كود الجهاز.',description_required:'اكتب وصفًا واضحًا للمشكلة.',plan_not_found:'الخطة المختارة غير متاحة.',device_not_found:'لم نعثر على هذا الجهاز.',rate_limited:'طلبات كثيرة. انتظر قليلًا ثم أعد المحاولة.',invalid_code_host:'عنوان السيرفر غير صحيح أو غير مدعوم.',invalid_code_account:'أدخل اسم المستخدم وكلمة المرور.',code_source_credentials_invalid:'بيانات Xtream غير صحيحة أو الاشتراك موقوف.',code_source_expired:'اشتراك Xtream منتهٍ. جدده من المصدر.',code_source_unavailable:'تعذر فحص Xtream الآن. راجع الهوست والاتصال.'};
 async function api(url, body, method) {
   const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),20000);
   try {
@@ -128,18 +128,28 @@ if(page==='admin'){
         });
         commands.append(revoke,unbind);
         row.append(node('td',item.providerId,'version-cell'),
+          node('td',item.source||'BLOFY'),
           node('td',item.active?'نشط':'موقوف'),
           node('td',item.boundDeviceId||'لم يُربط'),
           node('td',item.expiresAt?date(item.expiresAt):'بدون انتهاء'),commands);
         $('code-rows').append(row);
       }
       if(!data.items?.length){
-        const empty=node('tr');const td=node('td','لا توجد أكواد بعد.','empty');td.colSpan=5;empty.append(td);$('code-rows').append(empty);
+        const empty=node('tr');const td=node('td','لا توجد أكواد بعد.','empty');td.colSpan=6;empty.append(td);$('code-rows').append(empty);
       }
       setStatus('code-status','');
     }catch(error){setStatus('code-status',error.message,true);}
   }
   $('code-refresh').addEventListener('click',loadCodes);
+  const codeHostField=$('code-custom-host-field');
+  function syncCodeHost(){
+    const custom=$('code-source').value==='custom';
+    codeHostField.hidden=!custom;
+    codeHostField.style.display=custom?'':'none';
+    $('code-custom-host').required=custom;
+  }
+  $('code-source').addEventListener('change',syncCodeHost);
+  syncCodeHost();
   function importXtreamForCode(form){
     const raw=String(form.elements.xtreamImport.value||'').trim();
     if(!raw)throw new Error('الصق رابط Xtream أو بيانات السيرفر أولًا.');
@@ -148,6 +158,15 @@ if(page==='admin'){
     // The raw URL contains a password; discard it from the textarea promptly.
     form.elements.username.value=account.username;
     form.elements.password.value=account.password;
+    // Imported Xtream URLs select their host automatically.
+    if(account.host!=='http://annkel.com:80'){
+      $('code-source').value='custom';
+      $('code-custom-host').value=account.host;
+    }else if($('code-source').value==='custom'){
+      $('code-source').value='blofy';
+      $('code-custom-host').value='';
+    }
+    syncCodeHost();
     form.elements.xtreamImport.value='';
     setStatus('code-import-status','تم استخراج بيانات الحساب وربطها بسيرفر BLOFY المعتمد. يمكنك إصدار الكود.');
   }
@@ -173,12 +192,11 @@ if(page==='admin'){
     }catch(error){setStatus('code-import-status',error.message,true);return;}
     const entries=new FormData(form);
     const payload={
-      host:'http://annkel.com:80',
+      source:$('code-source').value,
       username:String(entries.get('username')||'').trim(),
       password:String(entries.get('password')||'')
     };
-    const expiry=String(entries.get('expiry')||'');
-    if(expiry)payload.expiresAt=new Date(expiry).getTime();
+    if(payload.source==='custom')payload.host=$('code-custom-host').value.trim();
     button.disabled=true;
     $('code-issued').textContent='—';
     $('code-copy').hidden=true;
@@ -188,8 +206,10 @@ if(page==='admin'){
       $('code-issued').textContent=result.code;
       $('code-copy').hidden=false;
       form.reset();
+      syncCodeHost();
       await loadCodes();
-      setStatus('code-status','تم إصدار الكود وإضافته إلى قائمة الأكواد تلقائيًا. انسخه الآن؛ لا يمكن عرضه مرة أخرى.');
+      setStatus('code-status','تم إنشاء كود من 8 أرقام. الانتهاء: '+
+        (result.expiresAt?date(result.expiresAt):'حسب السيرفر (لم يحدد تاريخًا)')+'. انسخ الكود الآن.');
     }catch(error){setStatus('code-status',error.message,true);}
     finally{button.disabled=false;}
   });
