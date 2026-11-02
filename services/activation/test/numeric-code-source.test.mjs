@@ -84,3 +84,42 @@ test('existing codes with legacy sealed credentials can still be redeemed', asyn
   assert.equal(result[0].body.username,user);
   assert.ok(queryCount>=3);
 });
+
+test('admin explicitly binds an unassigned numeric code to an active registered device',async()=>{
+  const calls=[];const messages=[];
+  const pool={query:async(query,args)=>{
+    calls.push({query,args});
+    if(query.startsWith('SELECT status,expires_at FROM devices'))return {rows:[{status:'active',expires_at:null}]};
+    if(query.startsWith('UPDATE blofy_code_subscriptions SET device_id'))return {rowCount:1};
+    throw new Error('unexpected query');
+  }};
+  const handlers=createBlofyCodeHandlers({
+    pool,secretHex:'aa'.repeat(32),
+    json:(_,status,body)=>messages.push({status,body}),
+    readJson:async()=>({deviceId:'BLOFY-ABC1234'}),
+    requireAdmin:()=>true,authorizedDevice:async()=>null
+  });
+  await handlers.adminById({}, {}, '11111111-1111-1111-1111-111111111111', 'bind');
+  assert.equal(messages[0].status,200);
+  assert.equal(messages[0].body.deviceId,'BLOFY-ABC1234');
+  assert.equal(calls.length,2);
+  assert.ok(calls[1].query.includes('device_id IS NULL')); // never steal another device
+});
+
+test('code device binding rejects inactive or unknown device without updating the code',async()=>{
+  for(const status of ['blocked','expired','missing']){
+    const messages=[];let writes=0;
+    const h=createBlofyCodeHandlers({
+      pool:{query:async(sql)=>{
+        if(sql.startsWith('SELECT status,expires_at'))return {rows:status==='missing'?[]:[{status,expires_at:null}]};
+        writes++;return {rowCount:1};
+      }},
+      secretHex:'aa'.repeat(32),json:(_,http,body)=>messages.push({http,body}),
+      readJson:async()=>({deviceId:'BLOFY-ABC1234'}),requireAdmin:()=>true,
+      authorizedDevice:async()=>null
+    });
+    await h.adminById({}, {}, '11111111-1111-1111-1111-111111111111', 'bind');
+    assert.equal(messages[0].http,422);
+    assert.equal(writes,0);
+  }
+});

@@ -103,7 +103,27 @@ export function createBlofyCodeHandlers({ pool, secretHex, json, readJson, requi
   async function adminById(req, res, id, action) {
     if (!requireAdmin(req, res)) return;
     if (!/^[0-9a-fA-F-]{36}$/.test(id)) return json(res, 400, { error: 'invalid_provider_id' });
-    if (!['revoke','unbind'].includes(action)) return json(res, 400, { error: 'invalid_action' });
+    if (!['revoke','unbind','bind'].includes(action)) return json(res, 400, { error: 'invalid_action' });
+    if (action === 'bind') {
+      const input = await readJson(req);
+      const deviceId = typeof input.deviceId === 'string' ? input.deviceId.trim().toUpperCase() : '';
+      if (!/^BLOFY-[A-Z0-9-]{4,32}$/.test(deviceId))
+        return json(res, 400, { error: 'invalid_device_id' });
+      const device = await pool.query(
+        'SELECT status,expires_at FROM devices WHERE device_id=$1 LIMIT 1', [deviceId]
+      );
+      const row = device.rows[0];
+      if (!row || !['active','trial'].includes(row.status) ||
+          (row.expires_at && new Date(row.expires_at).getTime() <= Date.now()))
+        return json(res, 422, { error:'code_device_inactive' });
+      // Never hijack an existing binding: explicitly unbind first.
+      const bound = await pool.query(
+        'UPDATE blofy_code_subscriptions SET device_id=$2,updated_at=NOW() WHERE id=$1 AND active=TRUE AND device_id IS NULL RETURNING id',
+        [id, deviceId]
+      );
+      return json(res, bound.rowCount ? 200 : 409,
+        bound.rowCount ? { ok:true, deviceId } : { error:'code_already_bound_or_inactive' });
+    }
     const result = action === 'revoke'
       ? await pool.query(
           'UPDATE blofy_code_subscriptions SET active=FALSE,updated_at=NOW() WHERE id=$1 RETURNING id',

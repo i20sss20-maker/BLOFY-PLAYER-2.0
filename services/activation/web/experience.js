@@ -7,7 +7,7 @@ const date = value => value ? new Date(value).toLocaleString('en-US',{dateStyle:
 const labels = {active:'ساري',trial:'تجربة',pending:'تسجيل غير مكتمل',expired:'منتهٍ',blocked:'موقوف',open:'مفتوح',resolved:'تم الحل',testing:'تجريبي',stable:'معتمد'};
 const badge = value => node('span',labels[value]||value,'badge '+value);
 const setStatus=(id,text,bad=false)=>{const el=$(id);el.textContent=text;el.classList.toggle('bad',bad);};
-const errors = {device_changed:'تغيّرت بيانات الجهاز. حدّث السجل وراجعها قبل إعادة الحفظ.',invalid_device_edit:'راجع بيانات العميل وحدود الحقول.',invalid_device_email:'أدخل بريدًا صحيحًا أو اتركه فارغًا.',device_restore_unavailable:'لا توجد حالة سابقة موثقة لاستعادتها. راجع التفعيل قبل تغيير حالة هذا الجهاز.',invalid_duration:'اختر مدة التمديد.',already_lifetime:'هذا الجهاز مفعّل مدى الحياة ولا يحتاج تمديدًا.',device_blocked:'هذا الجهاز موقوف. لا يمكن تمديده أثناء الإيقاف.',activation_changed:'تغيّر تفعيل الجهاز. أغلق التأكيد وراجع التمديد من جديد.',request_conflict:'هذا الطلب مستخدم لعملية أخرى. أعد فتح سجل الجهاز.',unauthorized_device:'كود الجهاز أو رمز الربط غير صحيح، أو الجهاز غير متاح.',check_recently_requested:'تم الفحص قبل قليل. انتظر 15 ثانية ثم أعد المحاولة.',support_recently_submitted:'وصل طلبك السابق. يمكنك إرسال طلب جديد بعد خمس دقائق.',invalid_release:'تحقق من رقم النسخة واسمها ورابط التحميل الآمن.',invalid_device:'تحقق من كود الجهاز.',description_required:'اكتب وصفًا واضحًا للمشكلة.',plan_not_found:'الخطة المختارة غير متاحة.',device_not_found:'لم نعثر على هذا الجهاز.',rate_limited:'طلبات كثيرة. انتظر قليلًا ثم أعد المحاولة.',invalid_code_host:'عنوان السيرفر غير صحيح أو غير مدعوم.',invalid_code_account:'أدخل اسم المستخدم وكلمة المرور.',code_source_credentials_invalid:'بيانات Xtream غير صحيحة أو الاشتراك موقوف.',code_source_expired:'اشتراك Xtream منتهٍ. جدده من المصدر.',code_source_unavailable:'تعذر فحص Xtream الآن. راجع الهوست والاتصال.'};
+const errors = {device_changed:'تغيّرت بيانات الجهاز. حدّث السجل وراجعها قبل إعادة الحفظ.',invalid_device_edit:'راجع بيانات العميل وحدود الحقول.',invalid_device_email:'أدخل بريدًا صحيحًا أو اتركه فارغًا.',device_restore_unavailable:'لا توجد حالة سابقة موثقة لاستعادتها. راجع التفعيل قبل تغيير حالة هذا الجهاز.',invalid_duration:'اختر مدة التمديد.',already_lifetime:'هذا الجهاز مفعّل مدى الحياة ولا يحتاج تمديدًا.',device_blocked:'هذا الجهاز موقوف. لا يمكن تمديده أثناء الإيقاف.',activation_changed:'تغيّر تفعيل الجهاز. أغلق التأكيد وراجع التمديد من جديد.',request_conflict:'هذا الطلب مستخدم لعملية أخرى. أعد فتح سجل الجهاز.',unauthorized_device:'كود الجهاز أو رمز الربط غير صحيح، أو الجهاز غير متاح.',check_recently_requested:'تم الفحص قبل قليل. انتظر 15 ثانية ثم أعد المحاولة.',support_recently_submitted:'وصل طلبك السابق. يمكنك إرسال طلب جديد بعد خمس دقائق.',invalid_release:'تحقق من رقم النسخة واسمها ورابط التحميل الآمن.',invalid_device:'تحقق من كود الجهاز.',description_required:'اكتب وصفًا واضحًا للمشكلة.',plan_not_found:'الخطة المختارة غير متاحة.',device_not_found:'لم نعثر على هذا الجهاز.',rate_limited:'طلبات كثيرة. انتظر قليلًا ثم أعد المحاولة.',invalid_code_host:'عنوان السيرفر غير صحيح أو غير مدعوم.',invalid_code_account:'أدخل اسم المستخدم وكلمة المرور.',code_source_credentials_invalid:'بيانات Xtream غير صحيحة أو الاشتراك موقوف.',code_source_expired:'اشتراك Xtream منتهٍ. جدده من المصدر.',code_source_unavailable:'تعذر فحص Xtream الآن. راجع الهوست والاتصال.',invalid_device_id:'رقم الجهاز غير صحيح.',code_device_inactive:'الجهاز غير مسجّل أو اشتراكه غير نشط.',code_already_bound_or_inactive:'الكود مرتبط بجهاز آخر أو موقوف. افصل الجهاز أولًا.'};
 async function api(url, body, method) {
   const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),20000);
   try {
@@ -126,7 +126,24 @@ if(page==='admin'){
           try{await api('/api/v1/admin/blofy-codes/ids/'+encodeURIComponent(item.providerId)+'/unbind',{});await loadCodes();}
           catch(error){setStatus('code-status',error.message,true);unbind.disabled=false;}
         });
-        commands.append(revoke,unbind);
+        const bind=node('button','ربط جهاز');
+        bind.type='button';
+        bind.disabled=!item.active||!!item.boundDeviceId;
+        bind.addEventListener('click',async()=>{
+          const deviceId=prompt('أدخل رقم جهاز BLOFY الذي تريد ربط هذا الكود به:');
+          if(deviceId==null)return;
+          const safe=String(deviceId).trim().toUpperCase();
+          if(!/^BLOFY-[A-Z0-9-]{4,32}$/.test(safe)){
+            setStatus('code-status','رقم الجهاز غير صحيح. انسخه كما يظهر في التطبيق.',true);return;
+          }
+          bind.disabled=true;
+          try{
+            await api('/api/v1/admin/blofy-codes/ids/'+encodeURIComponent(item.providerId)+'/bind',{deviceId:safe});
+            await loadCodes();
+            setStatus('code-status','تم ربط الكود بالجهاز '+safe+'.');
+          }catch(error){setStatus('code-status',error.message,true);bind.disabled=false;}
+        });
+        commands.append(revoke,unbind,bind);
         row.append(node('td',item.providerId,'version-cell'),
           node('td',item.source||'BLOFY'),
           node('td',item.active?'نشط':'موقوف'),
