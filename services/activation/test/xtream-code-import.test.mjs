@@ -57,7 +57,7 @@ test('the management page imports before admin script and creates codes with exi
   assert.match(html,/id="code-import-btn"/);
   assert.match(admin,/BlofyXtreamImporter\.parseXtream/);
   assert.match(admin,/api\('\/api\/v1\/admin\/blofy-codes',payload\)/);
-  assert.match(service,/\/'xtream-code-import\.js'/);
+  assert.ok(service.includes("'/xtream-code-import.js':'xtream-code-import.js'"));
 });
 
 test('server blocks code issuance for an unapproved upstream host', async () => {
