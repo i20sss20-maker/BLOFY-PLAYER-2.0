@@ -21,6 +21,7 @@ import {
 } from './diagnostics-sanitizer.mjs';
 import { activationReleaseMetadata, publishedAppRelease } from './release-metadata.mjs';
 import { createExperienceHandlers } from './experience-handlers.mjs';
+import { createBlofyCodeHandlers } from './blofy-code-handlers.mjs';
 
 const { Pool } = pg;
 const PORT = Number(process.env.PORT || 8080);
@@ -166,6 +167,7 @@ async function authorizedDevice(deviceId, activationCode, req, requireActive = t
 }
 
 const portal = createPortalHandlers({ pool, json, readJson, authorizedDevice });
+const blofyCodes = createBlofyCodeHandlers({ pool, secretHex: PLAYLIST_ENCRYPTION_KEY, json, readJson, requireAdmin, authorizedDevice });
 const experience = createExperienceHandlers({ pool, json, readJson, requireAdmin, authorizedDevice,
   authorizedAccountDevice: (id, code, req) => authorizedDevice(id, code, req, false) });
 
@@ -618,6 +620,11 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && requestUrl.pathname === '/blofy-logo.png') return await servePortalLogo(res);
     if (req.method === 'GET' && requestUrl.pathname === '/health') return await health(res);
     if (req.method === 'POST' && requestUrl.pathname === '/api/v1/activation/check') return await activationCheck(req, res);
+    if (req.method === 'POST' && requestUrl.pathname === '/api/v1/blofy-codes/redeem') return await blofyCodes.redeem(req, res);
+    if (requestUrl.pathname === '/api/v1/admin/blofy-codes' && req.method === 'POST') return await blofyCodes.issue(req, res);
+    if (requestUrl.pathname === '/api/v1/admin/blofy-codes' && req.method === 'GET') return await blofyCodes.list(req, res);
+    const codeRevokeMatch = requestUrl.pathname.match(/^\/api\/v1\/admin\/blofy-codes\/([A-Za-z0-9-]+)$/);
+    if (codeRevokeMatch && req.method === 'DELETE') return await blofyCodes.revoke(req, res, codeRevokeMatch[1]);
     if (req.method === 'POST' && requestUrl.pathname === '/api/v1/activation/rotate') return await activationRotate(req, res);
     if (req.method === 'POST' && requestUrl.pathname === '/api/v1/provider-profile') return await providerProfile(req, res);
     if (req.method === 'POST' && requestUrl.pathname === '/api/v1/diagnostics/playback') return await playbackDiagnostic(req, res);
