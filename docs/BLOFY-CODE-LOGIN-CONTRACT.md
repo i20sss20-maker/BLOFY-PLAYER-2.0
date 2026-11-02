@@ -1,24 +1,35 @@
-# BLOFY PLAYER — three independent login paths
+# BLOFY PLAYER — three independent login choices
 
-## Owner-approved UI labels (exact)
-- **BLOFY (كود)**: new, separate code-only entry. Dedicated host **not yet provided**; do not send codes to any existing server.
-- **STROING 8K**: formerly “مشتركو BLOFY”. Existing username/password subscriber flow, original production activation base URL, and original subscriber backend remain unchanged.
-- **Xtream**: existing manual host/username/password entry, unchanged.
+## User-confirmed choices
+- **BLOFY**: NEW dedicated code-login, source host `http://annkel.com:80`.
+- **STROING 8K**: previously called “مشتركو BLOFY”, with **original existing** username/password login, original subscriber host and backend settings unchanged.
+- **Xtream**: original manual server + username + password form, unchanged.
 
-## Safe current scope
-The new code entry is **UI-only** until the new host and its real API contract are supplied. Pressing submit with a nonempty code must show a clear not-configured message, not fabricate authorization. There is **no automatic association** yet and no change to installed accounts, playlists, API routes, identities, or playback. Existing legacy saved names are display-only rebranded, not migrated.
+### What actually exists on this branch
+A new BLOFY code gateway in the existing activation backend, with `POST /api/v1/blofy-codes/redeem`.
+The Android UI passes a code + existing activated device identity **only** over the BLOFY HTTPS activation base URL. The gateway binds the code to its first eligible device and returns a mapped Xtream account on `http://annkel.com:80`. Android then uses its existing playlist import/caching flow, preserving Media3, VLC, FFmpeg and all playback logic.
 
-## Owner input still required
-1. Dedicated BLOFY code-host base URL (HTTPS preferred).
-2. Whether it exposes a redemption API or an Xtream-specific code endpoint, with documented request/response examples.
-3. Exact code format, expiry/invalid-device behavior and whether redemption is one-time or repeatable.
-4. Device binding rules, reactivation/renewal behavior, expected number of devices, and test code.
-5. Whether redemption returns a playlist URL directly or a signed short-lived token that the BLOFY activation backend resolves server-side.
+The URL supplied by the owner is **an upstream host, not proof of a code redemption API**. This implementation uses **BLOFY-issued codes** that the operator maps to accounts for that host, rather than assuming an undocumented code endpoint exists at annkel.com. The operator must provision authorized host credentials before issuing a usable code.
 
-## Implementation gates after host arrives
-- Keep host/credentials separate from all old STROING 8K / Xtream paths.
-- Support remote code validation with bounded timeouts, non-leaky errors, retry, accessible TV keyboard and correct D-pad focus.
-- Avoid secret material in logs, URLs, screenshots, analytics or saved plaintext. Never hardcode the new host's master credentials into the app.
-- Provision the returned authorized playlist using the existing catalog/provider integration **without modifying player/Media3/VLC/FFmpeg or playback transports**.
-- Test invalid/expired/blocked codes, reconnect after restart, TV remote, Android 9, offline fallback and saved account preservation.
-- Require owner testing and signed APK checks before publishing. Production website/Play builds are not changed by this branch.
+### Admin workflow
+An authenticated owner can use existing `BLOFY_ADMIN_TOKEN` through the HTTPS BLOFY activation service:
+- `POST /api/v1/admin/blofy-codes` with `{"username":"<upstream user>","password":"<upstream password>","expiresAt":<optional UNIX milliseconds>}`; returns a fresh random code **once** and a stable provider ID.
+- `GET /api/v1/admin/blofy-codes` returns code records and device binding **without** secrets.
+- `DELETE /api/v1/admin/blofy-codes/<issued-code>` blocks **new redemptions**, not any already provisioned upstream login.
+The admin bearer token must never be stored in the Android app or shown in a client-facing page. Code proofs are keyed HMAC; upstream credentials are sealed AES-256-GCM in Postgres.
+
+### Security / limitations
+- **HTTP warning:** `annkel.com:80` is plain HTTP. The BLOFY code redemption gateway itself uses HTTPS, but subsequent upstream Xtream access may expose the upstream credentials on the network. Prefer an authenticated HTTPS origin from the host provider before production launch. No playback / transport engine code was changed.
+- Host health and the host-specific Xtream account **have not been verified**. A real authorized test subscription is required.
+- Codes remain mapped to the same device; deleting/rotating an app install identity may need an owner-controlled reset/migration mechanism.
+- Revoking a code prevents re-redemption; **it cannot invalidate upstream credentials already stored on the device**. Real subscription expiry/revocation must also be enforced by the upstream Xtream provider.
+- Backend release is NOT deployed by this PR. A new Android APK/AAB cannot be considered released before backend deployment, CI, physical Android TV remote testing, signing and owner acceptance.
+
+### Acceptance tests
+1. Existing STROING 8K login works with previous host and unchanged user/password.
+2. Existing Xtream manual login and saved lists are not modified.
+3. A BLOFY code can be issued via protected admin API, redeemed on an activated test device and rejected on another device.
+4. Invalid/expired/revoked codes fail without clearing existing playlists.
+5. Android 9 TV: full D-pad focus for entry, editor keyboard, submission and saved list selection.
+6. Actual annkel.com Xtream account imports at least one authorized category and plays using untouched engines.
+7. Build on original signed identity; release website and Play only after checks and user acceptance.
