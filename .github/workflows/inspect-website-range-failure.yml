@@ -1,0 +1,25 @@
+name: Inspect site APK ranged GET failure
+on:
+  push:
+    branches: [diagnostics/play73-original-archive-readonly-20261102]
+    paths: [.github/workflows/inspect-website-range-failure.yml]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Probe GET ranges on homepage update
+        shell: bash
+        run: |
+          set -uo pipefail
+          for url in "https://updates.blofyplayer.com/download/latest.apk" "https://updates.blofyplayer.com/d/blofy"; do
+            echo "TARGET $url"
+            for range in 0-0 0-1023 1000-1999; do
+              echo "RANGE $range"
+              curl --silent --show-error --location --max-time 12 --range "$range" \
+                -o /tmp/data -w 'http=%{http_code} bytes=%{size_download} type=%{content_type}\n' "$url" || true
+              if [ "$(stat -c %s /tmp/data 2>/dev/null)" -lt 1024 ]; then cat /tmp/data; echo; fi
+            done
+          done
