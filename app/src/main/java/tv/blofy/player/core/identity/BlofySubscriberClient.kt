@@ -30,6 +30,7 @@ object BlofySubscriberClient {
     )
 
     private val client = OkHttpClient.Builder()
+            .addInterceptor(ProductionPortalDnsFallback.interceptor)
         .callTimeout(18, TimeUnit.SECONDS)
         .connectTimeout(6, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
