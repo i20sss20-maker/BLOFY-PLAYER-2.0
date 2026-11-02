@@ -22,11 +22,16 @@ function approvedXiaomi74Release() {
   // the primary download for tv.blofy.player.v2 users.
   const downloadUrl = String(process.env.BLOFY_APPROVED_XIAOMI_74_APK_URL || '').trim();
   if (!downloadUrl) throw new Error('BLOFY_APPROVED_XIAOMI_74_APK_URL_required');
+  // The public website is on 2000075. Android cannot update it with 2000074.
+  // Do not permit accidental promotion by toggling a Railway environment flag.
+  if (2000074 <= ONLY_75_RELEASE.versionCode) {
+    throw new Error('blofy_74_2000074_cannot_replace_website_2000075');
+  }
   return {
-    versionCode: 2000080,
+    versionCode: 2000074,
     versionName: '2.0.0-rc07.55.6',
     downloadUrl,
-    releaseNotes: 'BLOFY PLAYER 74 — الواجهة البنفسجية المعتمدة، شعار واضح وبانر Android TV ‏320×180، وتحسين التنقل بالريموت. مبني للحزمة الرسمية tv.blofy.player.v2 برقم تحديث داخلي جديد 2000080 ليتوافق مع إصدارات الموقع السابقة. لا تحذف التطبيق أو بياناته.',
+    releaseNotes: 'BLOFY PLAYER 74 — الواجهة البنفسجية المعتمدة، شعار واضح وبانر Android TV ‏320×180، وتحسين التنقل بالريموت. مبني للحزمة الرسمية tv.blofy.player.v2 برقم بناء داخلي 2000074، ولا يعمل كتحديث فوق إصدار الموقع 2000075. لا تحذف التطبيق أو بياناته.',
     minSupportedVersionCode: 1,
     stage: 'public'
   };
