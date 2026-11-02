@@ -18,7 +18,8 @@ export function selectedCodeSource(input, { strongHost = process.env.BLOFY_CODE_
       !url.hostname || url.pathname !== '/' ||
       url.search || url.hash || url.username || url.password ||
       url.hostname.length > 253 || !['', '/'].includes(url.pathname)) throw new Error('invalid_code_host');
-  const host = url.toString().replace(/\/$/, '');
+  const host = url.protocol === 'http:' && url.hostname.toLowerCase() === 'annkel.com' && !url.port
+    ? BLOFY_CODE_DEFAULT_HOST : url.toString().replace(/\/$/, '');
   // A host must never be inferred from an untrusted redirect or from URL credentials.
   // The admin sets it explicitly, and code redemption obtains the sealed original host.
   return { source, label: source === 'strong' ? 'STROING 8K' : source === 'blofy' ? 'BLOFY' : 'Xtream', host };
