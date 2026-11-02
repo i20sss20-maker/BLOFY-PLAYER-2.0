@@ -18,7 +18,7 @@ import java.util.concurrent.TimeUnit
 /**
  * Dedicated code-only login. Talks only to the HTTPS BLOFY activation API,
  * never to old STROING 8K login, and never submits a code directly to Xtream.
- * The backend maps a redeemed code to annkel.com Xtream credentials.
+ * The backend maps a redeemed code to validated, administrator-selected Xtream credentials.
  */
 object BlofyCodeClient {
     data class Account(
@@ -42,10 +42,12 @@ object BlofyCodeClient {
         require(root.optString("delivery") == "direct") { "invalid_response" }
         val raw = root.optString("baseUrl").trim().trimEnd('/')
         val url = raw.toHttpUrlOrNull()
-        // Owner-supplied code host ONLY; never accept arbitrary hosts from a code response.
+        // This account comes only from our TLS activation API after a bound-device
+        // redemption. The admin may choose a public Xtream host per code.
+        // Reject private/loopback hosts, URL credentials, paths, queries and fragments.
         require(
-            url != null && url.scheme == "http" && url.host.equals("annkel.com", true) &&
-                url.port == 80 && url.encodedPath.trimEnd('/').isEmpty() &&
+            url != null && url.scheme in setOf("http", "https") &&
+                url.encodedPath.trimEnd('/').isEmpty() &&
                 url.query == null && url.fragment == null &&
                 url.encodedUsername.isEmpty() && url.encodedPassword.isEmpty() &&
                 PlaylistUrlPolicy.isValid(raw)
@@ -55,7 +57,9 @@ object BlofyCodeClient {
         val username = root.optString("username")
         val password = root.optString("password")
         require(username.isNotBlank() && password.isNotBlank()) { "missing_provider_credentials" }
-        return Account(id, "BLOFY", raw, username, password)
+        val displayName = root.optString("providerName", "BLOFY")
+        val safeName = if (displayName in setOf("BLOFY", "STROING 8K", "Xtream")) displayName else "BLOFY"
+        return Account(id, safeName, raw, username, password)
     }
 
     suspend fun redeem(context: Context, code: String): Account = withContext(Dispatchers.IO) {

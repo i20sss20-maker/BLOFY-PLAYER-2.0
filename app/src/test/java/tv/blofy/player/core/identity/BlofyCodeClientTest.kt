@@ -26,12 +26,23 @@ class BlofyCodeClientTest {
         assertEquals("password-example", account.password)
     }
 
-    @Test fun aCodeCannotRedirectCredentialsToAnotherHost() {
+    @Test fun hostFromAuthorizedBLOFYCodeCanBeSelectedAndNamed() {
+        val strong = BlofyCodeClient.parseAccount(
+            payload("https://strong.example.org:8443").put("providerName", "STROING 8K"))
+        assertEquals("https://strong.example.org:8443", strong.baseUrl)
+        assertEquals("STROING 8K", strong.name)
+        val external = BlofyCodeClient.parseAccount(
+            payload("http://stream.example.net:8080").put("providerName", "Xtream"))
+        assertEquals("Xtream", external.name)
+    }
+
+    @Test fun codeResponseRejectsPrivateHostsCredentialsPathsAndWrongDelivery() {
         for (candidate in listOf(
-            "http://evil.example", "https://annkel.com", "http://annkel.com.evil.test",
             "http://user:pass@annkel.com", "http://annkel.com/other",
             "http://annkel.com?x=bad", "http://127.0.0.1",
-            "http://annkel.com:8080"
+            "http://192.168.1.10", "http://localhost",
+            "http://annkel.com#fragment", "file:///etc/passwd",
+            "http://10.0.0.2", "https://stream.example.org/extra"
         )) assertThrows(IllegalArgumentException::class.java) {
             BlofyCodeClient.parseAccount(payload(candidate))
         }
