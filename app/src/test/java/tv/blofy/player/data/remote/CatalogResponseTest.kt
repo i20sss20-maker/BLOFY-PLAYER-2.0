@@ -40,6 +40,16 @@ class CatalogResponseTest {
         }
     }
 
+    @Test fun transparentCatalogGzipIsOnlyEnabledForFirstPartyHost() {
+        assertTrue(XtreamClient.supportsTransparentCatalogGzip(
+            "blofy-sources-xtream-production.up.railway.app"))
+        assertTrue(XtreamClient.supportsTransparentCatalogGzip(
+            "BLOFY-SOURCES-XTREAM-PRODUCTION.UP.RAILWAY.APP"))
+        assertFalse(XtreamClient.supportsTransparentCatalogGzip("another-provider.example"))
+        assertFalse(XtreamClient.supportsTransparentCatalogGzip(
+            "blofy-sources-xtream-production.up.railway.app.evil.example"))
+    }
+
     @Test fun httpFailureDoesNotReachTheCatalogParser() = runBlocking {
         MockWebServer().use { server ->
             server.enqueue(MockResponse().setResponseCode(503).setBody("unavailable"))
