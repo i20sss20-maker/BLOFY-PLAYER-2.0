@@ -1,0 +1,25 @@
+name: Check activation DNS and official fallback without touching devices
+on:
+  push:
+    branches: [diagnostics/play73-original-archive-readonly-20261102]
+    paths: [.github/workflows/diagnose-activation-dns.yml]
+permissions: 
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe domains and activation health only (no device ID or code)
+        shell: bash
+        run: |
+          set -uo pipefail
+          for host in api.blofyplayer.com blofyplayer.com blofy-activation-portal-production.up.railway.app; do
+            echo "HOST $host"
+            getent ahosts "$host" | head -n2 || true
+            for route in /health /connect; do
+              curl --show-error --silent --max-time 12 --output /dev/null \
+                --write-out "result host=$host route=$route code=%{http_code} endpoint=%{remote_ip} tls=%{ssl_verify_result}\n" \
+                "https://$host$route" || true
+            done
+          done
