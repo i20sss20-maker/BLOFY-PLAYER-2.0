@@ -214,7 +214,7 @@ jobs:
       # Only this explicitly requested QA commit can publish a direct APK link.
       # The release is a GitHub prerelease, NOT a Google Play/website deployment.
       - name: Publish verified v77 owner APK as one-time GitHub QA prerelease
-        if: ${{ github.event_name == 'push' && startsWith(github.event.head_commit.message, 'ci(v77): enable one-time QA prerelease') }}
+        if: "${{ github.event_name == 'push' && startsWith(github.event.head_commit.message, 'ci(v77): enable one-time QA prerelease') }}"
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -224,7 +224,8 @@ jobs:
           test -s "$apk"
           (cd signed-test && sha256sum --check SHA256SUMS)
           tools="$ANDROID_HOME/build-tools/$ANDROID_BUILD_TOOLS_VERSION"
-          "$tools/aapt" dump badging "$apk" | grep -Fq "package: name='$EXPECTED_APPLICATION_ID' versionCode='$EXPECTED_VERSION_CODE' versionName='$EXPECTED_VERSION_NAME'"
+          "$tools/aapt" dump badging "$apk" > "$RUNNER_TEMP/release-badging.txt"
+          grep -Fq "package: name='$EXPECTED_APPLICATION_ID' versionCode='$EXPECTED_VERSION_CODE' versionName='$EXPECTED_VERSION_NAME'" "$RUNNER_TEMP/release-badging.txt"
           "$tools/zipalign" -c -P 16 -v 4 "$apk" >/dev/null
           "$tools/apksigner" verify --verbose "$apk"
           actual="$("$tools/apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n1 | tr -d '[:space:]-:' | tr '[:lower:]' '[:upper:]')"
