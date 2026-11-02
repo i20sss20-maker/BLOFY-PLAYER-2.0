@@ -1,5 +1,6 @@
 package tv.blofy.player.ui.playlist
 
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
@@ -15,16 +16,22 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import tv.blofy.player.R
+import tv.blofy.player.BuildConfig
 import tv.blofy.player.core.device.DeviceClass
+import tv.blofy.player.core.identity.BlofyCodeClient
+import tv.blofy.player.core.identity.PortalPlaylistClient
+import tv.blofy.player.data.local.BlofyDatabase
+import tv.blofy.player.data.local.ProviderEntity
+import tv.blofy.player.ui.login.CatalogLoadingActivity
 import tv.blofy.player.ui.common.BlofyTvDesign
 
-/**
- * New BLOFY code entry is deliberately independent from the existing STROING 8K
- * subscriber route and manual Xtream entry. No redemption, local provider writes,
- * credential storage or network request happens until the owner provides the
- * dedicated code host and its authentication contract.
- */
+/** Dedicated BLOFY code login; old STROING 8K and Xtream paths are unchanged. */
 class BlofyCodeActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -94,13 +101,86 @@ class BlofyCodeActivity : AppCompatActivity() {
             setPadding(dp(12), dp(12), dp(12), dp(12))
         }
 
+        var submitting = false
+        lateinit var enter: Button
         fun submit() {
-            // Do not guess a code API or leak a subscription code to the old host.
-            status.setText(if (code.text.toString().trim().isBlank())
-                R.string.blofy_code_required else R.string.blofy_code_unconfigured)
+            if (submitting) return
+            val codeValue = code.text.toString().trim()
+            if (codeValue.isBlank()) {
+                status.setText(R.string.blofy_code_required)
+                code.requestFocus()
+                return
+            }
+            if (!codeValue.matches(Regex("[A-Za-z0-9-]{8,32}"))) {
+                status.setText(R.string.blofy_code_invalid)
+                code.requestFocus()
+                return
+            }
+            if (BuildConfig.ACTIVATION_BASE_URL.isBlank()) {
+                status.setText(R.string.blofy_code_unconfigured)
+                return
+            }
+            submitting = true
+            enter.isEnabled = false
+            code.isEnabled = false
+            status.setText(R.string.blofy_code_verifying)
+            lifecycleScope.launch {
+                try {
+                    val prepared = withContext(Dispatchers.IO) {
+                        val account = BlofyCodeClient.redeem(applicationContext, codeValue)
+                        val dao = BlofyDatabase.get(applicationContext).dao()
+                        val existing = dao.provider(account.id)
+                        // Use the existing catalog integration; NEVER alter the player engines.
+                        val next = ProviderEntity(
+                            id = account.id,
+                            name = account.name,
+                            baseUrl = account.baseUrl,
+                            username = account.username,
+                            password = account.password,
+                            providerType = "xtream",
+                            liveFormat = existing?.liveFormat ?: "ts",
+                            preferredTransport = existing?.preferredTransport ?: "cronet",
+                            preferredEngine = existing?.preferredEngine ?: "media3",
+                            allowCrossProtocolRedirects = existing?.allowCrossProtocolRedirects ?: true,
+                            enabled = existing?.enabled ?: false
+                        )
+                        PortalPlaylistClient.prepareSubscriberProvider(
+                            applicationContext, BuildConfig.ACTIVATION_BASE_URL.trim(), dao, next, account.id
+                        )
+                    }
+                    setResult(RESULT_OK)
+                    startActivity(Intent(this@BlofyCodeActivity, CatalogLoadingActivity::class.java).apply {
+                        putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, prepared.providerId)
+                        putExtra(CatalogLoadingActivity.EXTRA_FORCE_REFRESH,
+                            prepared.sourceChanged && prepared.hadReadyCatalog)
+                        prepared.approvedSourceFingerprint?.let {
+                            putExtra(CatalogLoadingActivity.EXTRA_APPROVED_SOURCE_FINGERPRINT, it)
+                        }
+                    })
+                    finish()
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    val key = error.message.orEmpty()
+                    status.setText(when (key) {
+                        "invalid_code" -> R.string.blofy_code_invalid
+                        "code_unavailable" -> R.string.blofy_code_unavailable
+                        "device_not_active" -> R.string.blofy_code_device_inactive
+                        "rate_limited" -> R.string.blofy_code_rate_limited
+                        else -> R.string.blofy_code_network_error
+                    })
+                    code.requestFocus()
+                } finally {
+                    submitting = false
+                    if (!isFinishing && !isDestroyed) {
+                        enter.isEnabled = true
+                        code.isEnabled = true
+                    }
+                }
+            }
         }
 
-        val enter = Button(this).apply {
+        enter = Button(this).apply {
             id = View.generateViewId()
             text = getString(R.string.blofy_code_submit)
             isAllCaps = false
