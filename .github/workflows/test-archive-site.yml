@@ -1,0 +1,16 @@
+name: Validate BLOFY downloads site
+on:
+  push:
+    branches: [fix/blofy-archive-link-20261102]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm run check
+        working-directory: services/update-distribution
