@@ -1,5 +1,6 @@
 package tv.blofy.player.ui.playlist
 
+import tv.blofy.player.core.identity.BlofySubscriberClient
 import tv.blofy.player.data.local.ProviderEntity
 
 /**
@@ -11,13 +12,14 @@ object ProviderDisplayName {
         "مشتركين BLOFY",
         "مشتركو BLOFY",
         "BLOFY Subscribers",
-        "BLOFY Subscriber",
-        "BLOFY Playlist"
+        "BLOFY Subscriber"
     )
 
     fun forUi(provider: ProviderEntity): String {
         val savedName = provider.name.trim()
-        return if (legacyNames.any { it.equals(savedName, ignoreCase = true) }) "STROING 8K"
-        else savedName
+        val isSubscriberBrand = legacyNames.any { it.equals(savedName, ignoreCase = true) }
+        val oldDefault = savedName.equals("BLOFY Playlist", ignoreCase = true) &&
+            BlofySubscriberClient.isManaged(provider)
+        return if (isSubscriberBrand || oldDefault) "STROING 8K" else savedName
     }
 }
