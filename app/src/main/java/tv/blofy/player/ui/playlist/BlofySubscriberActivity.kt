@@ -178,7 +178,7 @@ class BlofySubscriberActivity : AppCompatActivity() {
                 password.requestFocus()
                 return
             }
-            val selectedName = playlistName.text.toString().trim().ifBlank { "BLOFY Playlist" }
+            val selectedName = playlistName.text.toString().trim().ifBlank { "STROING 8K" }
             val endpoint = BuildConfig.ACTIVATION_BASE_URL.trim()
             if (endpoint.isBlank()) {
                 status.setText(R.string.subscriber_service_unavailable)
