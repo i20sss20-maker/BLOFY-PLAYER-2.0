@@ -209,7 +209,7 @@ test('runtime: independent BLOFY code binds saved playlist without changing the 
     baseUrl:'http://annkel.com:80',username:'owner-u',password:'owner-pass' };
   const h=harness({transport:req=>req.url.endsWith('/blofy-codes/redeem')?reply(response):reply({ok:true})});
   h.n('providerType').value='blofycode';
-  await h.n('providerType').dispatchEvent(new BrowserEvent('change'));
+  h.context.typeUi();
   h.n('blofyCode').value='12345678AB';
   await h.save();
   assert.equal(h.requests.length,2);
@@ -226,7 +226,7 @@ test('runtime: independent BLOFY code binds saved playlist without changing the 
 test('runtime: an invalid BLOFY code never calls the network or changes saved accounts', async () => {
   const h=harness();
   h.n('providerType').value='blofycode';
-  await h.n('providerType').dispatchEvent(new BrowserEvent('change'));
+  h.context.typeUi();
   h.n('blofyCode').value='BAD';
   await h.save();
   assert.equal(h.requests.length,0);
