@@ -1,0 +1,99 @@
+name: Deliver original Google Play rc07.55.5 v2000073 bundle as universal install APK
+on:
+  push:
+    branches: [diagnostics/play73-original-archive-readonly-20261102]
+    paths: [.github/workflows/deliver-original-play73-from-aab.yml]
+permissions:
+  contents: read
+jobs:
+  package-original-aab:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 45
+    env:
+      AAB_SOURCE: https://blofy-aab-share-2000073-v2-production.up.railway.app/BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED-2000073.aab
+      EXPECTED_CERT_SHA256: C3B98CCCD2F0C86809014ACD9368BF61C7004CFD419CD867B71FEF10BFA6255E
+      ANDROID_BUILD_TOOLS_VERSION: "35.0.0"
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Download unchanged owner-preserved Google Play 2000073 AAB
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p original-apk
+          curl --fail --show-error --location --retry 4 --retry-all-errors --max-time 180 \
+            "$AAB_SOURCE" -o original.aab
+          test "$(stat -c %s original.aab)" -eq 109673629
+          unzip -t original.aab | tail -n1
+          unzip -Z1 original.aab | grep -Fq 'base/manifest/AndroidManifest.xml'
+          sha256sum original.aab | tee original-apk/ORIGINAL-AAB-SHA256.txt
+      - name: Obtain official bundletool and verify original AAB
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --show-error --location --retry 3 \
+            "https://github.com/google/bundletool/releases/download/1.18.2/bundletool-all-1.18.2.jar" -o bundletool.jar
+          java -jar bundletool.jar version
+          java -jar bundletool.jar validate --bundle=original.aab
+          java -jar bundletool.jar dump manifest --bundle=original.aab --xpath=/manifest/@package | grep -Fx 'tv.blofy.player.v2'
+          java -jar bundletool.jar dump manifest --bundle=original.aab --xpath=/manifest/@android:versionCode | grep -Fx '2000073'
+          java -jar bundletool.jar dump manifest --bundle=original.aab --xpath=/manifest/@android:versionName | grep -Fx '2.0.0-rc07.55.5'
+      - name: Decode original approved signing keystore
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.BLOFY_ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.BLOFY_ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.BLOFY_ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.BLOFY_ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          umask 077
+          for name in KEYSTORE_BASE64 STORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            [[ -n "${!name:-}" ]] || { echo "::error::Missing signing input $name"; exit 1; }
+          done
+          printf '%s' "$KEYSTORE_BASE64" | tr -cd 'A-Za-z0-9+/=' > "$RUNNER_TEMP/ks.b64"
+          rem=$(( $(wc -c < "$RUNNER_TEMP/ks.b64") % 4 ))
+          if [ "$rem" -ne 0 ]; then printf '%*s' $((4 - rem)) '' | tr ' ' '=' >> "$RUNNER_TEMP/ks.b64"; fi
+          base64 --decode "$RUNNER_TEMP/ks.b64" > "$RUNNER_TEMP/owner.keystore"
+          printf %s "$STORE_PASSWORD" > "$RUNNER_TEMP/owner-storepass"
+          printf %s "$KEY_PASSWORD" > "$RUNNER_TEMP/owner-keypass"
+          printf %s "$KEY_ALIAS" > "$RUNNER_TEMP/owner-alias"
+          cert="$(keytool -exportcert -keystore "$RUNNER_TEMP/owner.keystore" \
+             -storepass:file "$RUNNER_TEMP/owner-storepass" -alias "$KEY_ALIAS" | sha256sum | awk '{print toupper($1)}')"
+          [[ "$cert" == "$EXPECTED_CERT_SHA256" ]]
+      - name: Generate installable universal APK from original AAB, no source rebuild
+        shell: bash
+        run: |
+          set -euo pipefail
+          java -jar bundletool.jar build-apks \
+            --bundle=original.aab --output=original.apks --mode=universal \
+            --ks="$RUNNER_TEMP/owner.keystore" \
+            --ks-key-alias="$(cat "$RUNNER_TEMP/owner-alias")" \
+            --ks-pass="file:$RUNNER_TEMP/owner-storepass" \
+            --key-pass="file:$RUNNER_TEMP/owner-keypass"
+          unzip -p original.apks universal.apk > original-apk/BLOFY-PLAYER-2.0-rc07.55.5-PLAY-2000073-UNIVERSAL.apk
+          test -s original-apk/BLOFY-PLAYER-2.0-rc07.55.5-PLAY-2000073-UNIVERSAL.apk
+          unzip -t original-apk/BLOFY-PLAYER-2.0-rc07.55.5-PLAY-2000073-UNIVERSAL.apk | tail -1
+          sdk="$ANDROID_HOME/build-tools/$ANDROID_BUILD_TOOLS_VERSION"
+          if [ ! -x "$sdk/aapt" ]; then
+            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "build-tools;$ANDROID_BUILD_TOOLS_VERSION"
+          fi
+          apk="original-apk/BLOFY-PLAYER-2.0-rc07.55.5-PLAY-2000073-UNIVERSAL.apk"
+          "$sdk/aapt" dump badging "$apk" > original-apk/badging.txt
+          grep -Fq "package: name='tv.blofy.player.v2' versionCode='2000073' versionName='2.0.0-rc07.55.5'" original-apk/badging.txt
+          "$sdk/apksigner" verify --verbose --print-certs "$apk" > original-apk/signature.txt
+          actual="$("$sdk/apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n1 | tr -d '[:space:]-:' | tr '[:lower:]' '[:upper:]')"
+          [[ "$actual" == "$EXPECTED_CERT_SHA256" ]]
+          sha256sum "$apk" > original-apk/SHA256SUMS.txt
+          printf "Original AAB: v2000073, 2.0.0-rc07.55.5; extracted unchanged from Railway Play AAB archive.\nAPK: universal package generated by official bundletool from same AAB; NOT the exact Play Store device-optimized split APK. Signed using verified original BLOFY certificate.\nNo application source changes. Not published to website or Google Play.\n" > original-apk/READ-ME.txt
+      - name: Keep APK as private Actions artifact for owner's original-version test
+        uses: actions/upload-artifact@v4
+        with:
+          name: ORIGINAL-BLOFY-GOOGLE-PLAY-73-rc07.55.5-APK
+          path: original-apk/
+          retention-days: 30
+          if-no-files-found: error
