@@ -140,23 +140,56 @@ if(page==='admin'){
     }catch(error){setStatus('code-status',error.message,true);}
   }
   $('code-refresh').addEventListener('click',loadCodes);
+  function importXtreamForCode(form){
+    const raw=String(form.elements.xtreamImport.value||'').trim();
+    if(!raw)throw new Error('الصق رابط Xtream أو بيانات السيرفر أولًا.');
+    if(!window.BlofyXtreamImporter)throw new Error('تعذر قراءة رابط Xtream. حدّث الصفحة.');
+    const account=window.BlofyXtreamImporter.parseXtream(raw);
+    // The raw URL contains a password; discard it from the textarea promptly.
+    form.elements.username.value=account.username;
+    form.elements.password.value=account.password;
+    form.elements.xtreamImport.value='';
+    setStatus('code-import-status','تم استخراج بيانات الحساب وربطها بسيرفر BLOFY المعتمد. يمكنك إصدار الكود.');
+  }
+  $('code-import-btn').addEventListener('click',()=>{
+    try{importXtreamForCode($('code-form'));}
+    catch(error){setStatus('code-import-status',error.message,true);}
+  });
+  $('code-copy').addEventListener('click',async()=>{
+    const code=$('code-issued').textContent;
+    if(!/^[A-Z0-9-]{8,32}$/.test(code))return;
+    try{
+      await navigator.clipboard.writeText(code);
+      setStatus('code-status','تم نسخ الكود. يظهر مرة واحدة فقط، احتفظ به بشكل آمن.');
+    }catch{setStatus('code-status','تعذر النسخ التلقائي. حدد الكود وانسخه يدويًا.',true);}
+  });
   $('code-form').addEventListener('submit',async event=>{
     event.preventDefault();
     const form=event.currentTarget;
     const button=form.querySelector('button[type="submit"]');
+    try{
+      // One-step flow: paste Xtream link then press Create. The import button is optional.
+      if(String(form.elements.xtreamImport.value||'').trim())importXtreamForCode(form);
+    }catch(error){setStatus('code-import-status',error.message,true);return;}
     const entries=new FormData(form);
-    const payload={username:String(entries.get('username')||'').trim(),password:String(entries.get('password')||'')};
+    const payload={
+      host:'http://annkel.com:80',
+      username:String(entries.get('username')||'').trim(),
+      password:String(entries.get('password')||'')
+    };
     const expiry=String(entries.get('expiry')||'');
     if(expiry)payload.expiresAt=new Date(expiry).getTime();
     button.disabled=true;
     $('code-issued').textContent='—';
+    $('code-copy').hidden=true;
     setStatus('code-status','جاري إصدار الكود…');
     try{
       const result=await api('/api/v1/admin/blofy-codes',payload);
       $('code-issued').textContent=result.code;
+      $('code-copy').hidden=false;
       form.reset();
-      setStatus('code-status','تم الإصدار. انسخ الكود الآن، سيظهر مرة واحدة فقط.');
       await loadCodes();
+      setStatus('code-status','تم إصدار الكود وإضافته إلى قائمة الأكواد تلقائيًا. انسخه الآن؛ لا يمكن عرضه مرة أخرى.');
     }catch(error){setStatus('code-status',error.message,true);}
     finally{button.disabled=false;}
   });
