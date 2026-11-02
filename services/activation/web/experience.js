@@ -159,7 +159,7 @@ if(page==='admin'){
     form.elements.username.value=account.username;
     form.elements.password.value=account.password;
     // Imported Xtream URLs select their host automatically.
-    if(account.host!=='http://annkel.com:80'){
+    if(new URL(account.host).origin !== new URL('http://annkel.com:80').origin){
       $('code-source').value='custom';
       $('code-custom-host').value=account.host;
     }else if($('code-source').value==='custom'){
