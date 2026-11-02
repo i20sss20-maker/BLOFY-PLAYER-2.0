@@ -13,6 +13,8 @@ concurrency:
 
 jobs:
   preserve-approved-73:
+    # This v76 gate must not reject intentionally newer Play73-preserving version codes.
+    if: github.event_name != 'pull_request' || github.head_ref == 'fix/actual-play73-tv-v76-20261102'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
