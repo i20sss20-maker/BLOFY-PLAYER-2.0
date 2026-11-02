@@ -6,8 +6,8 @@ package tv.blofy.player.ui.login
  */
 internal object LoginLayoutSpec {
     fun tvQrSizeDp(heightDp: Int): Int =
-        if (heightDp <= 600) (heightDp - 375).coerceIn(132, 178)
-        else (heightDp - 420).coerceIn(190, 238)
+        if (heightDp <= 600) (heightDp - 405).coerceIn(128, 166)
+        else (heightDp - 360).coerceIn(180, 220)
 
     fun phoneQrSizeDp(widthDp: Int): Int =
         ((widthDp - 48).coerceAtLeast(0) * 0.58f).toInt().coerceIn(156, 208)
