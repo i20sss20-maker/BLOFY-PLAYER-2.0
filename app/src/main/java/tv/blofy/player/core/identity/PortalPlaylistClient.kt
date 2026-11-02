@@ -56,6 +56,7 @@ object PortalPlaylistClient {
     private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     // Activation credentials must never follow redirects to another endpoint.
     private val client = OkHttpClient.Builder()
+            .addInterceptor(ProductionPortalDnsFallback.interceptor)
         .followRedirects(false)
         .followSslRedirects(false)
         .callTimeout(12, TimeUnit.SECONDS)
