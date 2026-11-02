@@ -21,7 +21,7 @@ object CinemaStyle {
     val Accent = 0xFFC9A7FF.toInt()
     const val ActionHeight = 34
 
-    fun surface(context: Context, focused: Boolean = false, filledFocus: Boolean = false, radiusDp: Int = 12) = GradientDrawable(
+    fun surface(context: Context, focused: Boolean = false, filledFocus: Boolean = false, radiusDp: Int = BlofyTvDesign.CardRadius) = GradientDrawable(
         GradientDrawable.Orientation.TL_BR,
         when {
             focused && filledFocus -> intArrayOf(0xFFE6D2FF.toInt(), Accent, 0xFFB882F0.toInt())
@@ -46,7 +46,7 @@ object CinemaStyle {
             else -> intArrayOf(Surface, 0xFF1A1026.toInt())
         }
     ).apply {
-        cornerRadius = 10 * context.resources.displayMetrics.density
+        cornerRadius = BlofyTvDesign.ButtonRadius * context.resources.displayMetrics.density
         setStroke(
             ((if (focused) 2 else 1) * context.resources.displayMetrics.density).toInt(),
             if (focused) 0xFFF0E1FF.toInt() else 0x52FFFFFF
