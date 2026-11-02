@@ -10,7 +10,7 @@ export function shouldRedirectLegacyFile(singleRelease75, filename) {
 }
 
 export function renderPlay73ArchiveCard() {
-  return `<section class="official-card" id="blofy-73-archive" aria-label="BLOFY PLAYER 73 archive">
+  return `<section class="official-card archived-v73" id="blofy-73-archive" aria-label="BLOFY PLAYER 73 archive">
     <div class="official-icon"><img src="https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/app/src/main/res/drawable-nodpi/blofy_logo.png" alt="BLOFY PLAYER"></div>
     <div class="official-copy">
       <div class="official-title"><h2>BLOFY PLAYER 73</h2><span class="badge">نسخة مؤرشفة</span></div>
