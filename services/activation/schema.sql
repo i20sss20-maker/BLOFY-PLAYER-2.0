@@ -142,3 +142,14 @@ CREATE TABLE IF NOT EXISTS blofy_code_subscriptions (
 ALTER TABLE blofy_code_subscriptions ADD COLUMN IF NOT EXISTS host_enc TEXT;
 ALTER TABLE blofy_code_subscriptions ADD COLUMN IF NOT EXISTS source_label TEXT;
 CREATE INDEX IF NOT EXISTS idx_blofy_codes_device ON blofy_code_subscriptions(device_id);
+
+-- Code manager host presets contain public base URLs only, never customer credentials.
+CREATE TABLE IF NOT EXISTS blofy_code_host_presets (
+  id UUID PRIMARY KEY,
+  name VARCHAR(64) NOT NULL UNIQUE,
+  source VARCHAR(12) NOT NULL CHECK (source IN ('blofy','strong','custom')),
+  base_url TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_blofy_codes_expiry ON blofy_code_subscriptions(expires_at)
+  WHERE active = TRUE;

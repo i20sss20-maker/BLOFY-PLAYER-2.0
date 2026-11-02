@@ -1,0 +1,55 @@
+/* Scoped, responsive controls for BLOFY's existing purple admin design. */
+#codes-view .code-operations-header{
+  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;
+  gap:16px;padding:20px 23px;border:1px solid #49335f;border-radius:20px;
+  background:linear-gradient(120deg,#211334,#141121 65%,#0c1017);margin-bottom:16px
+}
+#codes-view .code-operations-header h2{font-size:clamp(20px,2.3vw,28px);margin:8px 0}
+#codes-view .code-ops-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin:0 0 16px}
+#codes-view .code-ops-stat{display:flex;flex-direction:column;gap:10px;background:linear-gradient(145deg,#211a32,#14121d);
+  border:1px solid #433253;border-radius:16px;padding:17px;min-height:96px;justify-content:center}
+#codes-view .code-ops-stat strong{font-size:26px;line-height:1.1;color:#fff;direction:ltr;text-align:right;font-variant-numeric:tabular-nums}
+#codes-view .code-ops-stat span{font-size:12px;color:#c7b7d9}
+#codes-view .code-ops-attention{border-color:#a47536}
+#codes-view .code-ops-stat[role=button]{cursor:pointer}
+#codes-view .code-ops-stat:focus-visible{outline:3px solid #ac79ff;outline-offset:3px}
+#codes-view .code-ops-grid{display:grid;grid-template-columns:1.1fr 1fr;gap:16px;margin:0 0 20px}
+#codes-view .code-ops-grid>.card{margin:0;min-width:0}
+#codes-view .code-ops-host-form{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:end}
+#codes-view .code-ops-host-form .full{grid-column:1/-1}
+#codes-view .code-ops-host-form label{display:flex;flex-direction:column;gap:6px}
+#codes-view .code-ops-host-form input,#codes-view .code-ops-host-form select{
+  width:100%;min-width:0;box-sizing:border-box
+}
+#codes-view .code-ops-host-list{margin-top:16px;max-height:320px;overflow-y:auto}
+#codes-view .code-ops-host,#codes-view .code-ops-alert{
+  border-top:1px solid #35283e;padding:12px 0;display:flex;justify-content:space-between;
+  align-items:center;gap:12px;flex-wrap:wrap
+}
+#codes-view .code-ops-host-details{min-width:160px;display:flex;flex:1;flex-direction:column;gap:4px;overflow-wrap:anywhere}
+#codes-view .code-ops-host-details small,#codes-view .code-ops-alert small{display:block;color:#bdb1cc;font-size:12px}
+#codes-view .code-ops-host-details code{font-size:12px;direction:ltr;text-align:right;unicode-bidi:plaintext;color:#cba6ff}
+#codes-view .code-ops-host-actions{display:flex;gap:6px;flex-wrap:wrap}
+#codes-view .code-ops-host-actions button,#codes-view .code-ops-alert button{font-size:12px;padding:8px 10px}
+#codes-view .code-ops-alert-list{max-height:300px;overflow:auto}
+#codes-view .code-ops-registry,#codes-view .code-ops-bulk{margin-top:18px}
+#codes-view .code-ops-registry .toolbar{display:flex;flex-wrap:wrap;align-items:end;gap:10px;margin:18px 0}
+#codes-view .code-ops-registry .toolbar input{flex:2;min-width:150px}
+#codes-view .code-ops-registry .toolbar select{flex:1;min-width:145px}
+#codes-view .code-ops-registry .table-wrap,#codes-view .code-ops-bulk .table-wrap{overflow-x:auto}
+#codes-view .code-ops-registry td,#codes-view .code-ops-bulk td{font-variant-numeric:tabular-nums}
+#codes-view .code-ops-registry .actions,#codes-view .code-ops-bulk .actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:12px 0}
+#codes-view .code-ops-file-label{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+#codes-view .code-ops-file-label input{max-width:100%}
+#codes-view .code-ops-bulk tbody td:last-child{font-weight:700;color:#e3ccff;font-size:18px}
+#codes-view #code-ops-bulk-status,#codes-view #code-ops-search-status{min-height:22px}
+@media(max-width:920px){#codes-view .code-ops-grid{grid-template-columns:1fr}}
+@media(max-width:600px){
+  #codes-view .code-operations-header{padding:14px}
+  #codes-view .code-ops-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  #codes-view .code-ops-stat{padding:11px}
+  #codes-view .code-ops-stat strong{font-size:22px}
+  #codes-view .code-ops-host-form{grid-template-columns:1fr}
+  #codes-view .code-ops-host-form .full{grid-column:auto}
+  #codes-view .code-ops-host-actions{width:100%}
+}

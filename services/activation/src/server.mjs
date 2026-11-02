@@ -12,6 +12,7 @@ import { readFile } from 'node:fs/promises';
 import pg from 'pg';
 import { createPortalHandlers } from './portal.mjs';
 import { createBlofyCodeHandlers } from './blofy-code-handlers.mjs';
+import { createCodeOperationsHandlers } from './code-operations.mjs';
 import {
   createActivationCredentialCodec,
   createFixedWindowLimiter,
@@ -174,6 +175,7 @@ async function authorizedDevice(deviceId, activationCode, req) {
 
 const portal = createPortalHandlers({ pool, json, readJson, authorizedDevice });
 const blofyCodes = createBlofyCodeHandlers({ pool, secretHex: PLAYLIST_ENCRYPTION_KEY, json, readJson, requireAdmin, authorizedDevice });
+const codeOperations = createCodeOperationsHandlers({ pool, secretHex: PLAYLIST_ENCRYPTION_KEY, json, readJson, requireAdmin });
 const commercial = createCommercialHandlers({ pool, keyHex: PLAYLIST_ENCRYPTION_KEY, json, readJson });
 const cloud = createProfileCloudHandlers({ pool, json, readJson, authorizedDevice });
 
@@ -777,6 +779,23 @@ const server = http.createServer(async (req, res) => {
     if (await cloud(req, res)) return;
     if (req.method === 'POST' && requestUrl.pathname === '/api/v1/activation/check') return await activationCheck(req, res);
     if (req.method === 'POST' && requestUrl.pathname === '/api/v1/blofy-codes/redeem') return await blofyCodes.redeem(req, res);
+    // Operator-only code operations; never reveal raw provider passwords or code proofs.
+    if (req.method === 'GET' && requestUrl.pathname === '/api/v1/admin/code-ops/summary')
+      return await codeOperations.summary(req, res);
+    if (req.method === 'GET' && requestUrl.pathname === '/api/v1/admin/code-ops/search')
+      return await codeOperations.search(req, res, requestUrl);
+    if (requestUrl.pathname === '/api/v1/admin/code-ops/hosts') {
+      if (req.method === 'GET') return await codeOperations.hosts(req, res);
+      if (req.method === 'POST') return await codeOperations.addHost(req, res);
+    }
+    const savedHostMatch = requestUrl.pathname.match(/^\/api\/v1\/admin\/code-ops\/hosts\/([0-9a-fA-F-]{36})(\/check)?$/);
+    if (savedHostMatch && req.method === 'DELETE' && !savedHostMatch[2])
+      return await codeOperations.removeHost(req,res,savedHostMatch[1]);
+    if (savedHostMatch && req.method === 'POST' && savedHostMatch[2])
+      return await codeOperations.checkHost(req,res,savedHostMatch[1]);
+    const codeHealthMatch = requestUrl.pathname.match(/^\/api\/v1\/admin\/code-ops\/codes\/([0-9a-fA-F-]{36})\/check$/);
+    if (codeHealthMatch && req.method === 'POST')
+      return await codeOperations.checkCode(req,res,codeHealthMatch[1]);
     if (requestUrl.pathname === '/api/v1/admin/blofy-codes' && req.method === 'POST') return await blofyCodes.issue(req, res);
     if (requestUrl.pathname === '/api/v1/admin/blofy-codes' && req.method === 'GET') return await blofyCodes.list(req, res);
     const codeAdminMatch = requestUrl.pathname.match(/^\/api\/v1\/admin\/blofy-codes\/ids\/([0-9a-fA-F-]{36})(\/(?:bind|unbind))?$/);
