@@ -50,7 +50,7 @@ jobs:
             lintDebug assembleDebug assembleDebugAndroidTest
           aapt="$ANDROID_HOME/build-tools/$SDK_TOOLS/aapt"
           "$aapt" dump badging app/build/outputs/apk/debug/app-debug.apk > /tmp/tv74-play-badging.txt
-          grep -Fq "package: name='tv.blofy.player.v2' versionCode='2000080' versionName='2.0.0-rc07.55.6'" /tmp/tv74-play-badging.txt
+          grep -Fq "package: name='tv.blofy.player.v2' versionCode='2000074' versionName='2.0.0-rc07.55.6'" /tmp/tv74-play-badging.txt
           "$aapt" dump permissions app/build/outputs/apk/debug/app-debug.apk > /tmp/tv74-play-permissions.txt
           ! grep -Fq 'android.permission.REQUEST_INSTALL_PACKAGES' /tmp/tv74-play-permissions.txt
       - uses: actions/upload-artifact@v4
@@ -139,7 +139,7 @@ jobs:
           chmod +x tools/build_media3_ffmpeg.sh
           tools/build_media3_ffmpeg.sh
           sha256sum --check build/ffmpeg-native/media3-decoder-ffmpeg-1.6.1.aar.sha256
-      - name: Build update-compatible website APK and Play Console AAB from SAME Xiaomi source
+      - name: Build owner-test APK and Play Console AAB with versionCode 2000074 (not website update-compatible)
         env:
           BLOFY_RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/blofy.keystore
           BLOFY_RELEASE_STORE_PASSWORD: ${{ secrets.BLOFY_ANDROID_KEYSTORE_PASSWORD }}
@@ -151,20 +151,20 @@ jobs:
           common="-PBLOFY_XIAOMI_EDITION=false -PBLOFY_SECURITY_R8=true -PBLOFY_ACTIVATION_BASE_URL=$ACTIVATION_BASE -PBLOFY_UPDATE_BASE_URL=$UPDATE_BASE -PBLOFY_BUILD_SHA=$GITHUB_SHA -PBLOFY_FFMPEG_AAR=$GITHUB_WORKSPACE/build/ffmpeg-native/media3-decoder-ffmpeg-1.6.1.aar"
           gradle --no-daemon --max-workers=2 $common -PBLOFY_DISTRIBUTION=website assembleRelease
           mkdir -p release-candidate
-          cp app/build/outputs/apk/release/app-release.apk release-candidate/BLOFY-PLAYER-74-OFFICIAL-WEBSITE-2000080.apk
+          cp app/build/outputs/apk/release/app-release.apk release-candidate/BLOFY-PLAYER-74-OFFICIAL-WEBSITE-2000074.apk
           gradle --no-daemon --max-workers=2 $common -PBLOFY_DISTRIBUTION=play bundleRelease
-          cp app/build/outputs/bundle/release/app-release.aab release-candidate/BLOFY-PLAYER-74-GOOGLE-PLAY-2000080.aab
+          cp app/build/outputs/bundle/release/app-release.aab release-candidate/BLOFY-PLAYER-74-GOOGLE-PLAY-2000074.aab
       - name: Verify genuine signing, package, version, Android9 and TV metadata
         run: |
           set -euo pipefail
           tools="$ANDROID_HOME/build-tools/$SDK_TOOLS"
-          apk=release-candidate/BLOFY-PLAYER-74-OFFICIAL-WEBSITE-2000080.apk
-          aab=release-candidate/BLOFY-PLAYER-74-GOOGLE-PLAY-2000080.aab
+          apk=release-candidate/BLOFY-PLAYER-74-OFFICIAL-WEBSITE-2000074.apk
+          aab=release-candidate/BLOFY-PLAYER-74-GOOGLE-PLAY-2000074.aab
           test -s "$apk" && test -s "$aab"
           unzip -t "$apk" | tail -n 1
           unzip -t "$aab" | tail -n 1
           "$tools/aapt" dump badging "$apk" | tee release-candidate/manifest.txt
-          grep -Fq "package: name='tv.blofy.player.v2' versionCode='2000080' versionName='2.0.0-rc07.55.6'" release-candidate/manifest.txt
+          grep -Fq "package: name='tv.blofy.player.v2' versionCode='2000074' versionName='2.0.0-rc07.55.6'" release-candidate/manifest.txt
           min="$("$tools/aapt" dump badging "$apk" | sed -n "s/^sdkVersion:'\([0-9]*\)'/\1/p")"
           test "$min" -le 28
           "$tools/zipalign" -c -P 16 -v 4 "$apk"
@@ -179,7 +179,7 @@ jobs:
           if grep -Fq 'android.permission.REQUEST_INSTALL_PACKAGES' release-candidate/permissions.txt; then
             echo "Website APK uses optional installer permission; Play variant must not request it."
           fi
-          printf 'Source=%s\nDisplay=2.0.0-rc07.55.6 (BLOFY 74)\nVersionCode=2000080\nPackage=tv.blofy.player.v2\nWebsite=APK\nGooglePlay=AAB\nPublished=false\n' "$GITHUB_SHA" > release-candidate/BUILD_INFO.txt
+          printf 'Source=%s\nDisplay=2.0.0-rc07.55.6 (BLOFY 74)\nVersionCode=2000074\nPackage=tv.blofy.player.v2\nWebsite=APK\nGooglePlay=AAB\nPublished=false\n' "$GITHUB_SHA" > release-candidate/BUILD_INFO.txt
           (cd release-candidate && sha256sum *.apk *.aab > SHA256SUMS)
       - uses: actions/upload-artifact@v4
         with:
