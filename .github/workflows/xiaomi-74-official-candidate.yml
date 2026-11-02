@@ -1,0 +1,193 @@
+name: BLOFY Xiaomi UX v74 – official package TV/Play candidate (owner-only)
+on:
+  push:
+    branches: [fix/xiaomi-74-website-play-tv-quality-20261102]
+    paths:
+      - 'app/**'
+      - 'tools/verify_xiaomi_v74_release.py'
+      - '.github/workflows/xiaomi-74-official-candidate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: blofy-xiaomi-v74-official-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  CERT_SHA256: C3B98CCCD2F0C86809014ACD9368BF61C7004CFD419CD867B71FEF10BFA6255E
+  ACTIVATION_BASE: https://api.blofyplayer.com
+  UPDATE_BASE: https://updates.blofyplayer.com
+  NDK_VERSION: "28.0.13004108"
+  CMAKE_VERSION: "3.22.1"
+  SDK_TOOLS: "35.0.0"
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.11.1'}
+      - name: Check original Xiaomi UX with official application ID and TV launcher assets
+        run: |
+          set -euo pipefail
+          python3 tools/verify_xiaomi_v74_release.py
+          test "$(git hash-object app/src/main/res/drawable-nodpi/blofy_logo.png)" = "8a84b6b7d65f494e13e26c687fe0a980a664e208"
+          test ! -e app/src/main/res/drawable/blofy_tv_banner.xml
+      - name: Install Android API36
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;$SDK_TOOLS"
+      - name: Run unit tests isolated from BLOFY production
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --max-workers=2 -PBLOFY_XIAOMI_EDITION=false -PBLOFY_DISTRIBUTION=play \
+            -PBLOFY_ACTIVATION_BASE_URL=http://127.0.0.1:9 \
+            -PBLOFY_UPDATE_BASE_URL=http://127.0.0.1:9 \
+            testDebugUnitTest
+      - name: Lint and compile Play manifest with real domains
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --max-workers=2 -PBLOFY_XIAOMI_EDITION=false -PBLOFY_DISTRIBUTION=play \
+            -PBLOFY_ACTIVATION_BASE_URL="$ACTIVATION_BASE" -PBLOFY_UPDATE_BASE_URL="$UPDATE_BASE" \
+            lintDebug assembleDebug assembleDebugAndroidTest
+          aapt="$ANDROID_HOME/build-tools/$SDK_TOOLS/aapt"
+          "$aapt" dump badging app/build/outputs/apk/debug/app-debug.apk > /tmp/tv74-play-badging.txt
+          grep -Fq "package: name='tv.blofy.player.v2' versionCode='2000080' versionName='2.0.0-rc07.55.6'" /tmp/tv74-play-badging.txt
+          "$aapt" dump permissions app/build/outputs/apk/debug/app-debug.apk > /tmp/tv74-play-permissions.txt
+          ! grep -Fq 'android.permission.REQUEST_INSTALL_PACKAGES' /tmp/tv74-play-permissions.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: BLOFY-Xiaomi74-Play-candidate-tests-${{ github.sha }}
+          path: |
+            app/build/test-results/testDebugUnitTest/
+            app/build/reports/lint-results-debug.*
+          if-no-files-found: ignore
+  android-tv-9-remote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.11.1'}
+      - name: Enable hardware acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Test actual Android 9 TV remote and app launcher
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 28
+          target: android-tv
+          arch: x86
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -gpu swiftshader_indirect -noaudio -no-boot-anim
+          script: |
+            gradle --no-daemon --max-workers=2 -PBLOFY_XIAOMI_EDITION=false -PBLOFY_DISTRIBUTION=play -PBLOFY_ACTIVATION_BASE_URL=http://127.0.0.1:9 -PBLOFY_UPDATE_BASE_URL=http://127.0.0.1:9 assembleDebug assembleDebugAndroidTest
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            adb shell am instrument -w -e class tv.blofy.player.ui.AndroidTvV74ReviewTest -e tvReview true tv.blofy.player.v2.test/androidx.test.runner.AndroidJUnitRunner | tee tv74-dpad.txt
+            grep -q 'OK (2 tests)' tv74-dpad.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: BLOFY-Xiaomi74-AndroidTV9-Remote-${{ github.sha }}
+          path: tv74-dpad.txt
+          if-no-files-found: ignore
+  signed-apk-aab:
+    needs: [tests, android-tv-9-remote]
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.11.1'}
+      - name: Install native SDK toolchain
+        run: |
+          set -euo pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;$SDK_TOOLS" "ndk;$NDK_VERSION" "cmake;$CMAKE_VERSION"
+          command -v ninja >/dev/null || { sudo apt-get update && sudo apt-get install -y ninja-build; }
+      - name: Restore original BLOFY production signing identity
+        shell: bash
+        env:
+          KEY_B64: ${{ secrets.BLOFY_ANDROID_KEYSTORE_BASE64 }}
+          PASS: ${{ secrets.BLOFY_ANDROID_KEYSTORE_PASSWORD }}
+          KEY: ${{ secrets.BLOFY_ANDROID_KEY_ALIAS }}
+          KEYPASS: ${{ secrets.BLOFY_ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          umask 077
+          for key in KEY_B64 PASS KEY KEYPASS; do [[ -n "${!key:-}" ]] || exit 1; done
+          printf '%s' "$KEY_B64" | tr -cd 'A-Za-z0-9+/=' > "$RUNNER_TEMP/blofy.ks.b64"
+          rem=$(( $(wc -c < "$RUNNER_TEMP/blofy.ks.b64") % 4 ))
+          if [ "$rem" -ne 0 ]; then printf '%*s' $((4-rem)) '' | tr ' ' '=' >> "$RUNNER_TEMP/blofy.ks.b64"; fi
+          base64 --decode "$RUNNER_TEMP/blofy.ks.b64" > "$RUNNER_TEMP/blofy.keystore"
+          actual="$(keytool -exportcert -keystore "$RUNNER_TEMP/blofy.keystore" -storepass:env PASS -alias "$KEY" | sha256sum | awk '{print toupper($1)}')"
+          test "$actual" = "$CERT_SHA256"
+      - name: Build Media3 FFmpeg JNI (original playback engines unchanged)
+        env:
+          ENABLED_DECODERS: ac3 eac3 dca truehd aac mp3 opus vorbis flac
+        run: |
+          set -euo pipefail
+          export NDK_PATH="$ANDROID_HOME/ndk/$NDK_VERSION"
+          export PATH="$ANDROID_HOME/cmake/$CMAKE_VERSION/bin:$PATH"
+          chmod +x tools/build_media3_ffmpeg.sh
+          tools/build_media3_ffmpeg.sh
+          sha256sum --check build/ffmpeg-native/media3-decoder-ffmpeg-1.6.1.aar.sha256
+      - name: Build update-compatible website APK and Play Console AAB from SAME Xiaomi source
+        env:
+          BLOFY_RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/blofy.keystore
+          BLOFY_RELEASE_STORE_PASSWORD: ${{ secrets.BLOFY_ANDROID_KEYSTORE_PASSWORD }}
+          BLOFY_RELEASE_KEY_ALIAS: ${{ secrets.BLOFY_ANDROID_KEY_ALIAS }}
+          BLOFY_RELEASE_KEY_PASSWORD: ${{ secrets.BLOFY_ANDROID_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          common="-PBLOFY_XIAOMI_EDITION=false -PBLOFY_SECURITY_R8=true -PBLOFY_ACTIVATION_BASE_URL=$ACTIVATION_BASE -PBLOFY_UPDATE_BASE_URL=$UPDATE_BASE -PBLOFY_BUILD_SHA=$GITHUB_SHA -PBLOFY_FFMPEG_AAR=$GITHUB_WORKSPACE/build/ffmpeg-native/media3-decoder-ffmpeg-1.6.1.aar"
+          gradle --no-daemon --max-workers=2 $common -PBLOFY_DISTRIBUTION=website assembleRelease
+          mkdir -p release-candidate
+          cp app/build/outputs/apk/release/app-release.apk release-candidate/BLOFY-PLAYER-v74-Xiaomi-UX-OFFICIAL-WEBSITE-2000080.apk
+          gradle --no-daemon --max-workers=2 $common -PBLOFY_DISTRIBUTION=play bundleRelease
+          cp app/build/outputs/bundle/release/app-release.aab release-candidate/BLOFY-PLAYER-v74-Xiaomi-UX-GOOGLE-PLAY-2000080.aab
+      - name: Verify genuine signing, package, version, Android9 and TV metadata
+        run: |
+          set -euo pipefail
+          tools="$ANDROID_HOME/build-tools/$SDK_TOOLS"
+          apk=release-candidate/BLOFY-PLAYER-v74-Xiaomi-UX-OFFICIAL-WEBSITE-2000080.apk
+          aab=release-candidate/BLOFY-PLAYER-v74-Xiaomi-UX-GOOGLE-PLAY-2000080.aab
+          test -s "$apk" && test -s "$aab"
+          unzip -t "$apk" | tail -n 1
+          unzip -t "$aab" | tail -n 1
+          "$tools/aapt" dump badging "$apk" | tee release-candidate/manifest.txt
+          grep -Fq "package: name='tv.blofy.player.v2' versionCode='2000080' versionName='2.0.0-rc07.55.6'" release-candidate/manifest.txt
+          min="$("$tools/aapt" dump badging "$apk" | sed -n "s/^sdkVersion:'\([0-9]*\)'/\1/p")"
+          test "$min" -le 28
+          "$tools/zipalign" -c -P 16 -v 4 "$apk"
+          "$tools/apksigner" verify --print-certs "$apk" > release-candidate/signature.txt
+          actual="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' release-candidate/signature.txt | head -n1 | tr -d '[:space:]-:' | tr '[:lower:]' '[:upper:]')"
+          test "$actual" = "$CERT_SHA256"
+          jarsigner -verify "$aab"
+          "$tools/aapt" dump permissions "$apk" > release-candidate/permissions.txt
+          if grep -Fq 'android.permission.REQUEST_INSTALL_PACKAGES' release-candidate/permissions.txt; then
+            echo "Website APK uses optional installer permission; Play variant must not request it."
+          fi
+          printf 'Source=%s\nDisplay=2.0.0-rc07.55.6 (BLOFY 74)\nVersionCode=2000080\nPackage=tv.blofy.player.v2\nWebsite=APK\nGooglePlay=AAB\nPublished=false\n' "$GITHUB_SHA" > release-candidate/BUILD_INFO.txt
+          (cd release-candidate && sha256sum *.apk *.aab > SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-PLAYER-XiaomiUX-v74-PLAY-WEBSITE-OWNER-TEST-${{ github.sha }}
+          path: release-candidate/
+          retention-days: 30
+          if-no-files-found: error
+      - name: Remove signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/blofy.keystore" "$RUNNER_TEMP/blofy.ks.b64"
