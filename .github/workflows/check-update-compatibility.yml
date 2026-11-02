@@ -1,0 +1,31 @@
+name: Read-only signing compatibility check for website BLOFY 73 -> 75
+on:
+  push:
+    branches: [diagnostics/play73-original-archive-readonly-20261102]
+    paths: [.github/workflows/check-update-compatibility.yml]
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Download archived 73 and current 75 without modifying services
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL --max-time 240 --retry 3 --retry-all-errors "https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/blofy-player-v2000075-website/BLOFY-PLAYER-v2000075-WEBSITE-SIGNED.apk" -o current75.apk
+          curl -fsSL --max-time 240 --retry 3 --retry-all-errors -H 'Cache-Control: no-cache' "https://blofy-update-distribution-production.up.railway.app/files/releases/BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED.apk" -o archived73.apk
+          test -s archived73.apk && test -s current75.apk
+          echo "SIZES $(stat -c '%n:%s' archived73.apk current75.apk | tr '\n' ' ')"
+      - name: Check signatures, package identities, APK structural validity
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in archived73.apk current75.apk; do
+            echo "===== $f ====="
+            unzip -t "$f" | tail -n1
+            "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$f" | head -n2
+            "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$f" | grep -E '(SHA-256 digest|Signer #1 certificate DN)'
+            sha256sum "$f"
+          done
