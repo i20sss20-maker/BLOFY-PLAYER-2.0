@@ -1,4 +1,5 @@
-# Owner-only signed APK/AAB from the repo's preserved 2000073 source; NEVER publish.
+# Owner-only signed APK/AAB from preserved Play73. Never publish to Google Play or the customer website.
+# A one-time, branch-only QA GitHub prerelease is allowed only on the explicit opt-in commit.
 name: BLOFY Play73 v77 Signed APK and AAB owner-only
 
 on:
@@ -11,7 +12,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
+  actions: read
 
 concurrency:
   group: blofy-play73-v77-owner-signed-only
@@ -32,7 +34,7 @@ env:
 
 jobs:
   signed-test:
-    name: Preserve 73 + FFmpeg + R8 + signed 76 APK/AAB
+    name: Preserve 73 + FFmpeg + R8 + signed 77 APK/AAB
     runs-on: ubuntu-latest
     timeout-minutes: 120
     environment: production
@@ -208,3 +210,68 @@ jobs:
           path: signed-test/BLOFY-PLAYER-v77-Play73-OWNER-SIGNED.apk
           if-no-files-found: error
           retention-days: 30
+
+      # Only this explicitly requested QA commit can publish a direct APK link.
+      # The release is a GitHub prerelease, NOT a Google Play/website deployment.
+      - name: Publish verified v77 owner APK as one-time GitHub QA prerelease
+        if: ${{ github.event_name == 'push' && startsWith(github.event.head_commit.message, 'ci(v77): enable one-time QA prerelease') }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          apk="signed-test/BLOFY-PLAYER-v77-Play73-OWNER-SIGNED.apk"
+          test -s "$apk"
+          (cd signed-test && sha256sum --check SHA256SUMS)
+          tools="$ANDROID_HOME/build-tools/$ANDROID_BUILD_TOOLS_VERSION"
+          "$tools/aapt" dump badging "$apk" | grep -Fq "package: name='$EXPECTED_APPLICATION_ID' versionCode='$EXPECTED_VERSION_CODE' versionName='$EXPECTED_VERSION_NAME'"
+          "$tools/zipalign" -c -P 16 -v 4 "$apk" >/dev/null
+          "$tools/apksigner" verify --verbose "$apk"
+          actual="$("$tools/apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n1 | tr -d '[:space:]-:' | tr '[:lower:]' '[:upper:]')"
+          [[ "$actual" == "$EXPECTED_CERT_SHA256" ]]
+          unzip -tqq "$apk"
+          unzip -Z1 "$apk" > "$RUNNER_TEMP/v77-apk-entries.txt"
+          grep -Fxq 'AndroidManifest.xml' "$RUNNER_TEMP/v77-apk-entries.txt"
+          grep -Fxq 'classes.dex' "$RUNNER_TEMP/v77-apk-entries.txt"
+          for abi in arm64-v8a armeabi-v7a x86 x86_64; do
+            grep -Eiq "^lib/$abi/lib(ffmpeg|ffmpegJNI).*\\.so$" "$RUNNER_TEMP/v77-apk-entries.txt"
+          done
+          # A successful signed build is not enough: require CI, native FFmpeg,
+          # and the v77 QA workflow (which includes the Android TV9 D-pad job)
+          # to pass for this EXACT commit before making the prerelease visible.
+          for attempt in $(seq 1 24); do
+            runs="$(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/runs" -f head_sha="$GITHUB_SHA" -f per_page=100)"
+            missing=0
+            for name in 'BLOFY Android CI' 'BLOFY FFmpeg Native' 'BLOFY Google Play 73 restoration – v77 QA (NOT publication)'; do
+              if ! jq -e --arg name "$name" --arg sha "$GITHUB_SHA" '[.workflow_runs[] | select(.name == $name and .head_sha == $sha and .conclusion == "success")] | length > 0' >/dev/null <<< "$runs"; then
+                echo "Waiting for successful $name on $GITHUB_SHA"
+                missing=1
+              fi
+            done
+            [[ "$missing" == 0 ]] && break
+            [[ "$attempt" -lt 24 ]] || { echo "::error::CI/FFmpeg/TV9 QA gates did not pass on exact commit"; exit 1; }
+            sleep 15
+          done
+          (cd signed-test && sha256sum BLOFY-PLAYER-v77-Play73-OWNER-SIGNED.apk > BLOFY-PLAYER-v77-Play73-OWNER-SIGNED.apk.sha256)
+          tag="blofy-v77-play73-owner-qa-${GITHUB_SHA:0:12}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "QA prerelease already exists: $tag"
+            exit 0
+          fi
+          cat > "$RUNNER_TEMP/v77-qa-release-notes.md" <<EOF
+          BLOFY PLAYER v77 / Play73-preserving owner-signed QA build.
+
+          - Source commit: $GITHUB_SHA
+          - Android versionCode: $EXPECTED_VERSION_CODE
+          - Signing certificate SHA-256: $EXPECTED_CERT_SHA256
+          - Activation: $ACTIVATION_BASE_URL
+          - Updates: $UPDATE_BASE_URL
+          - Passed: Android CI, FFmpeg Native, v77 QA, Android TV9 D-pad, signed APK/AAB verification.
+          - This is a GitHub-only prerelease for the owner's device testing. NOT Google Play or the customer website.
+          - The actual cause of the upstream provider's "connection closed" at 28% is not yet proven. Test on the owner's physical device before treating the issue as fixed.
+          EOF
+          gh release create "$tag" "$apk" "signed-test/BLOFY-PLAYER-v77-Play73-OWNER-SIGNED.apk.sha256" \
+            --target "$GITHUB_SHA" \
+            --title "BLOFY PLAYER v77 Play73 Owner QA (${GITHUB_SHA:0:12})" \
+            --notes-file "$RUNNER_TEMP/v77-qa-release-notes.md" \
+            --prerelease --latest=false
