@@ -369,7 +369,7 @@
     <string name="provider_manager_title">قوائم BLOFY</string>
     <string name="provider_manager_refresh_from_website">↻  تحديث من الموقع</string>
     <string name="provider_manager_subtitle">اتصل مباشرة بالسيرفر المحفوظ أو عدّل بياناته</string>
-    <string name="provider_manager_subscriber_hint">STROING 8K على الهوست القديم باسم المستخدم وكلمة المرور، ونظام أكواد BLOFY مستقل.</string>
+    <string name="provider_manager_subscriber_hint">STROING 8K: الهوست القديم • Xtream مستقل • BLOFY: كود</string>
     <string name="provider_manager_add_subscriber">+  STROING 8K</string>
     <string name="provider_manager_saved_servers">السيرفرات المحفوظة</string>
     <string name="provider_manager_read_failed">تعذر قراءة القوائم المحفوظة • أعد فتح الصفحة للمحاولة</string>
