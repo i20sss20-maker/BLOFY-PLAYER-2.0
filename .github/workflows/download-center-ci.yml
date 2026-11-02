@@ -107,7 +107,9 @@ jobs:
           grep -Fq 'href="/download/v74-display74.apk"' /tmp/downloads.html
           grep -Fq 'v74-display74-remote-qa-20261025/BLOFY-PLAYER-Android-TV-v74-DISPLAY74-SIGNED.apk.sha256' /tmp/downloads.html
           grep -Fq 'href="/d/blofy"' /tmp/downloads.html
-          test "$(grep -o 'class="official-card"' /tmp/downloads.html | wc -l | tr -d '[:space:]')" = 2
+          # Main card, visible TV-v74 QA, and separate standalone Xiaomi test card.
+          # Production with BLOFY_SINGLE_RELEASE_75=true hides both extra cards.
+          test "$(grep -o 'class="official-card"' /tmp/downloads.html | wc -l | tr -d '[:space:]')" = 3
           ! grep -Fq 'data-cinematic-v74="true"' /tmp/downloads.html
           ! grep -Fq 'data-cinematic-v74-patch="true"' /tmp/downloads.html
           ! grep -Fq 'data-v74-remote-qa="true"' /tmp/downloads.html
