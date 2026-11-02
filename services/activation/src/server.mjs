@@ -1,4 +1,5 @@
 import { databaseOptions } from './database-options.mjs';
+import { withDatabaseStartRetry } from './startup-db-retry.mjs';
 import http from 'node:http';
 import { servePrivacyPage } from './privacy-pages.mjs';
 import { PUBLIC_ANALYTICS_CSP, withPublicAnalytics } from './public-analytics.mjs';
@@ -824,7 +825,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 async function start() {
-  await initializeDatabase();
+  await withDatabaseStartRetry(() => initializeDatabase());
   // Public deployment diagnostics only: never print config variables, credentials, or full request data.
   console.info('BLOFY_PUBLIC_RELEASE_AT_BOOT', JSON.stringify({
     versionCode: RELEASE_METADATA.app.versionCode,
