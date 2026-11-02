@@ -47,7 +47,9 @@ android {
         applicationId = if (xiaomiEdition) "tv.blofy.player.xiaomi" else "tv.blofy.player.v2"
         minSdk = 23
         targetSdk = 36
-        versionCode = 2000074
+        // Google Play never accepts an already-used versionCode 2000074; v80 is an update-capable successor.
+        // User-facing release is still BLOFY 74 / rc07.55.6, from Xiaomi's approved UX source.
+        versionCode = 2000080
         versionName = if (xiaomiEdition) "2.0.0-rc07.55.6-xiaomi" else "2.0.0-rc07.55.6"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "ACTIVATION_BASE_URL", "\"$activationBaseUrlEscaped\"")
