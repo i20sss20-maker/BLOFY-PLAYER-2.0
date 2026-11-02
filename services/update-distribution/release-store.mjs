@@ -16,6 +16,18 @@ const pool = new Pool({
 // Activated only after the independently signed APK and its permanent release URL are verified.
 const BLOFY_ONLY_75 = String(process.env.BLOFY_SINGLE_RELEASE_75 || '').toLowerCase() === 'true';
 const BLOFY_APPROVED_BLOFY_76 = String(process.env.BLOFY_APPROVED_BLOFY_76 || '').toLowerCase() === 'true';
+const BLOFY_APPROVED_BLOFY_77 = String(process.env.BLOFY_APPROVED_BLOFY_77 || '').toLowerCase() === 'true';
+function approvedBlofy77Release() {
+  const downloadUrl = 'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/blofy-55-8-2000077-owner-ready/BLOFY-PLAYER-55.8-2000077-SIGNED.apk';
+  return {
+    versionCode: 2000077,
+    versionName: '2.0.0-rc07.55.8',
+    downloadUrl,
+    releaseNotes: 'BLOFY PLAYER 55.8 — عرض إجمالي القنوات والأفلام والمسلسلات من المكتبة، واجهة BLOFY البنفسجية الجديدة، وتحسين توافق أكواد الاشتراك مع سيرفرات Xtream وSTROING 8K. إصدار موحّد رسمي لنفس التطبيق tv.blofy.player.v2. يحدث النسخة السابقة دون حذف بياناتك عند توافق توقيع التثبيت.',
+    minSupportedVersionCode: 1,
+    stage: 'public'
+  };
+}
 function approvedBlofy76Release() {
   // Fail closed if a signed and tested official-package APK is not yet uploaded.
   // The original Xiaomi APK's tv.blofy.player.xiaomi package must NEVER become
@@ -273,7 +285,7 @@ export async function initReleaseStore() {
   if (BLOFY_ONLY_75) {
     // Remove every previous advertised build, including auto-seeded versions.
     // Keep download statistics in separate tables; preserve old APK blobs as rollback assets.
-    const release = cleanRelease(BLOFY_APPROVED_BLOFY_76 ? approvedBlofy76Release() : ONLY_75_RELEASE, 'public');
+    const release = cleanRelease(BLOFY_APPROVED_BLOFY_77 ? approvedBlofy77Release() : BLOFY_APPROVED_BLOFY_76 ? approvedBlofy76Release() : ONLY_75_RELEASE, 'public');
     const alreadyOnly75 = state.activeVersionCode === release.versionCode &&
       state.releases.length === 1 &&
       JSON.stringify(state.releases[0]) === JSON.stringify(release);
