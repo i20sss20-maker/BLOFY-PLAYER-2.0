@@ -10,15 +10,13 @@
     const address = /^[a-z][a-z0-9+.-]*:\/\//i.test(input) ? input : 'http://' + input;
     let parsed;
     try { parsed = new URL(address); } catch { fail(); }
-    // The current Android BLOFY-code client intentionally accepts ONLY this upstream.
-    // Never accept arbitrary URLs that would issue a valid-looking but unusable code.
+    // Client validation is only a convenience. The server pins DNS and rejects
+    // private IPs; no network request is ever made from this parser.
+    const host = parsed.hostname.toLowerCase();
+    const isIpLiteral = host.includes(':') || host.split('.').every(part => part && /^\d+$/.test(part));
     if (!['http:','https:'].includes(parsed.protocol) ||
-        !parsed.hostname || parsed.username || parsed.password || parsed.hash ||
-        parsed.hostname.toLowerCase() === 'localhost' ||
-        parsed.hostname.toLowerCase().endsWith('.local') ||
-        /^(?:127|0|10|192\\.168|169\\.254)\\./.test(parsed.hostname) ||
-        /^(?:172\\.(?:1[6-9]|2[0-9]|3[0-1]))\\./.test(parsed.hostname) ||
-        /^(?:\\[?::1\\]?|\\[?fc|\\[?fd)/i.test(parsed.hostname)) fail();
+        !host || parsed.username || parsed.password || parsed.hash ||
+        host === 'localhost' || host.endsWith('.local') || isIpLiteral) fail();
     return parsed;
   }
   function normalizedSecret(value, limit) {
