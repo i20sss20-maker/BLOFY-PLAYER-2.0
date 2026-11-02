@@ -15,23 +15,23 @@ const pool = new Pool({
 
 // Activated only after the independently signed APK and its permanent release URL are verified.
 const BLOFY_ONLY_75 = String(process.env.BLOFY_SINGLE_RELEASE_75 || '').toLowerCase() === 'true';
-const BLOFY_APPROVED_XIAOMI_74 = String(process.env.BLOFY_APPROVED_XIAOMI_74 || '').toLowerCase() === 'true';
-function approvedXiaomi74Release() {
+const BLOFY_APPROVED_BLOFY_76 = String(process.env.BLOFY_APPROVED_BLOFY_76 || '').toLowerCase() === 'true';
+function approvedBlofy76Release() {
   // Fail closed if a signed and tested official-package APK is not yet uploaded.
   // The original Xiaomi APK's tv.blofy.player.xiaomi package must NEVER become
   // the primary download for tv.blofy.player.v2 users.
-  const downloadUrl = String(process.env.BLOFY_APPROVED_XIAOMI_74_APK_URL || '').trim();
-  if (!downloadUrl) throw new Error('BLOFY_APPROVED_XIAOMI_74_APK_URL_required');
-  // The public website is on 2000075. Android cannot update it with 2000074.
-  // Do not permit accidental promotion by toggling a Railway environment flag.
-  if (2000074 <= ONLY_75_RELEASE.versionCode) {
-    throw new Error('blofy_74_2000074_cannot_replace_website_2000075');
+  const downloadUrl = String(process.env.BLOFY_APPROVED_BLOFY_76_APK_URL || '').trim();
+  if (!downloadUrl) throw new Error('BLOFY_APPROVED_BLOFY_76_APK_URL_required');
+  // A newer versionCode is necessary but not sufficient. Promotion stays off by
+  // default until a same-package, same-signature APK passes owner device testing.
+  if (2000076 <= ONLY_75_RELEASE.versionCode) {
+    throw new Error('blofy_76_versioncode_not_newer_than_website');
   }
   return {
-    versionCode: 2000074,
+    versionCode: 2000076,
     versionName: '2.0.0-rc07.55.6',
     downloadUrl,
-    releaseNotes: 'BLOFY PLAYER 74 — الواجهة البنفسجية المعتمدة، شعار واضح وبانر Android TV ‏320×180، وتحسين التنقل بالريموت. مبني للحزمة الرسمية tv.blofy.player.v2 برقم بناء داخلي 2000074، ولا يعمل كتحديث فوق إصدار الموقع 2000075. لا تحذف التطبيق أو بياناته.',
+    releaseNotes: 'BLOFY PLAYER 76 — الواجهة البنفسجية المعتمدة، شعار واضح وبانر Android TV ‏320×180، وتحسين التنقل بالريموت. مبني للحزمة الرسمية tv.blofy.player.v2 برقم بناء داخلي 2000076 ليحدّث نسخة الموقع 2000075 دون حذف بيانات التطبيق. لا تحذف التطبيق أو بياناته.',
     minSupportedVersionCode: 1,
     stage: 'public'
   };
@@ -273,7 +273,7 @@ export async function initReleaseStore() {
   if (BLOFY_ONLY_75) {
     // Remove every previous advertised build, including auto-seeded versions.
     // Keep download statistics in separate tables; preserve old APK blobs as rollback assets.
-    const release = cleanRelease(BLOFY_APPROVED_XIAOMI_74 ? approvedXiaomi74Release() : ONLY_75_RELEASE, 'public');
+    const release = cleanRelease(BLOFY_APPROVED_BLOFY_76 ? approvedBlofy76Release() : ONLY_75_RELEASE, 'public');
     const alreadyOnly75 = state.activeVersionCode === release.versionCode &&
       state.releases.length === 1 &&
       JSON.stringify(state.releases[0]) === JSON.stringify(release);
