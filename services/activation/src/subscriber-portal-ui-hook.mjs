@@ -91,8 +91,34 @@ ${allowRenewal ? renewalStyles : ''}
     if (!select.querySelector('option[value="blofy"]')) {
       var option = document.createElement('option');
       option.value = 'blofy';
-      option.textContent = 'مشتركين BLOFY';
+      option.textContent = 'STROING 8K';
       select.appendChild(option);
+    }
+    var existingSubscriber = select.querySelector('option[value="blofy"]');
+    if (existingSubscriber) existingSubscriber.textContent = 'STROING 8K';
+    if (!select.querySelector('option[value="blofycode"]')) {
+      var codeChoice = document.createElement('option');
+      codeChoice.value = 'blofycode';
+      codeChoice.textContent = 'BLOFY (كود)';
+      select.appendChild(codeChoice);
+    }
+    if (!qs('blofyCodeField')) {
+      var codeLabel = document.createElement('label');
+      codeLabel.className = 'field full';
+      codeLabel.id = 'blofyCodeField';
+      codeLabel.style.display = 'none';
+      codeLabel.textContent = 'كود اشتراك BLOFY';
+      var codeInput = document.createElement('input');
+      codeInput.id = 'blofyCode';
+      codeInput.name = 'blofy-code';
+      codeInput.placeholder = 'أدخل الكود';
+      codeInput.maxLength = 32;
+      codeInput.autocomplete = 'off';
+      codeInput.spellcheck = false;
+      codeInput.style.direction = 'ltr';
+      codeLabel.appendChild(codeInput);
+      var codeGrid = select.closest('.form-grid');
+      if (codeGrid) codeGrid.appendChild(codeLabel);
     }
     if (!qs('blofySubscriberHint')) {
       var hint = document.createElement('div');
@@ -109,23 +135,30 @@ ${allowRenewal ? renewalStyles : ''}
     var select = qs('providerType');
     if (!select) return;
     var blofy = select.value === 'blofy';
-    var base = qs('baseUrl');
-    var user = qs('username');
-    var pass = qs('password');
-    var hint = qs('blofySubscriberHint');
-    setHidden(fieldWrapper(base), blofy);
-    if (blofy) {
-      setHidden(fieldWrapper(user), false);
-      setHidden(fieldWrapper(pass), false);
+    var coded = select.value === 'blofycode';
+    var base = qs('baseUrl'), user = qs('username'), pass = qs('password');
+    var hint = qs('blofySubscriberHint'), codeField = qs('blofyCodeField');
+    setHidden(fieldWrapper(base), blofy || coded);
+    if (blofy || coded) {
+      setHidden(fieldWrapper(user), coded);
+      setHidden(fieldWrapper(pass), coded);
     }
     if (hint) hint.style.display = blofy ? 'block' : 'none';
-    if (blofy) {
-      if (base) { base.value = ''; base.setCustomValidity(''); }
+    if (codeField) codeField.style.display = coded ? '' : 'none';
+    if (coded) {
+      if (base) { base.value = ''; base.required = false; base.setCustomValidity(''); }
+      if (user) { user.required = false; user.value = ''; }
+      if (pass) { pass.required = false; pass.value = ''; }
+      editingSubscriberId = null;
+      status('أدخل كود BLOFY فقط. لا تحتاج رابط أو اسم مستخدم.', false);
+    } else if (blofy) {
+      if (base) { base.value = ''; base.required = false; base.setCustomValidity(''); }
       if (user) { user.placeholder = 'اسم المستخدم'; user.required = true; }
       if (pass) { pass.placeholder = 'كلمة المرور'; pass.required = true; }
-      status('أدخل اسم المستخدم وكلمة المرور فقط ثم اضغط حفظ.', false);
+      status('STROING 8K: أدخل اسم المستخدم وكلمة المرور فقط.', false);
     } else {
       editingSubscriberId = null;
+      if (base) base.required = true;
       if (user) user.required = true;
       if (pass) pass.required = true;
     }
@@ -142,7 +175,7 @@ ${allowRenewal ? renewalStyles : ''}
     typeUi = function () {
       editorGeneration++;
       var select = qs('providerType');
-      if (!select || select.value !== 'blofy') originalTypeUi.apply(this, arguments);
+      if (!select || (select.value !== 'blofy' && select.value !== 'blofycode')) originalTypeUi.apply(this, arguments);
       applyMode();
     };
     var select = qs('providerType');
@@ -179,7 +212,7 @@ ${allowRenewal ? renewalStyles : ''}
       if (qs('username')) qs('username').value = '';
       if (qs('password')) qs('password').value = '';
       applyMode();
-      status('اكتب اسم المستخدم وكلمة المرور من جديد لتحديث اشتراك BLOFY.', false);
+      status('أدخل بيانات STROING 8K من جديد لتحديث الاشتراك.', false);
     };
   }
   async function createSubscriberSession(state) {
@@ -199,9 +232,33 @@ ${allowRenewal ? renewalStyles : ''}
       if (code === 'unauthorized_device') throw new Error('الجهاز غير مفعل أو بيانات الربط غير صحيحة');
       if (code === 'subscriber_service_unavailable') throw new Error('خدمة مشتركين BLOFY غير متاحة حاليًا');
       if (code === 'subscriber_upstream_unavailable') throw new Error('سيرفر المشتركين لا يستجيب حاليًا');
-      throw new Error('تعذر تسجيل الدخول إلى مشتركين BLOFY');
+      throw new Error('تعذر تسجيل الدخول إلى STROING 8K');
     }
     if (!payload.baseUrl || !payload.username || !payload.password) throw new Error('تعذر تجهيز بيانات مشترك BLOFY. حاول مرة أخرى.');
+    return payload;
+  }
+  async function redeemBlofyCode(device) {
+    var input = qs('blofyCode');
+    var code = String(input && input.value || '').trim().toUpperCase();
+    if (!/^[A-Z0-9-]{8,32}$/.test(code)) throw new Error('تحقق من كود BLOFY (8 إلى 32 حرفًا).');
+    if (!device.deviceId || !device.activationCode) throw new Error('اربط الجهاز أولاً ثم أعد المحاولة.');
+    var response = await fetch('/api/v1/blofy-codes/redeem', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ deviceId: device.deviceId, activationCode: device.activationCode, code: code })
+    });
+    var payload = {};
+    try { payload = await response.json(); } catch (_) {}
+    if (!response.ok) {
+      if (payload.error === 'code_unavailable') throw new Error('الكود غير صحيح أو منتهٍ أو مرتبط بجهاز آخر.');
+      if (payload.error === 'rate_limited') throw new Error('محاولات كثيرة. حاول بعد قليل.');
+      if (payload.error === 'device_not_active') throw new Error('الجهاز غير مفعّل. راجع تفعيل BLOFY.');
+      throw new Error('تعذر ربط كود BLOFY. أعد المحاولة.');
+    }
+    if (payload.delivery !== 'direct' || payload.baseUrl !== 'http://annkel.com:80' ||
+        !/^[0-9a-f-]{36}$/i.test(payload.providerId || '') || !payload.username || !payload.password) {
+      throw new Error('استجابة سيرفر BLOFY غير مكتملة.');
+    }
     return payload;
   }
   async function saveSubscriber() {
@@ -214,6 +271,7 @@ ${allowRenewal ? renewalStyles : ''}
       auth: deviceAuth(), authReference: typeof auth !== 'undefined' && auth,
       generation: editorGeneration, id: editingSubscriberId || undefined,
       name: String(qs('name') && qs('name').value || '').trim(),
+      mode: qs('providerType') && qs('providerType').value,
       active: !qs('active') || qs('active').checked
     };
     function sameDevice() {
@@ -222,16 +280,16 @@ ${allowRenewal ? renewalStyles : ''}
         saved.auth.deviceId === current.deviceId && saved.auth.activationCode === current.activationCode;
     }
     function stillCurrent() { return sameDevice() && saved.generation === editorGeneration; }
-    status('جاري التحقق من اشتراك BLOFY…', false);
+    status(saved.mode === 'blofycode' ? 'جاري التحقق من كود BLOFY…' : 'جاري التحقق من STROING 8K…', false);
     try {
-      var session = await createSubscriberSession(saved.auth);
+      var session = saved.mode === 'blofycode' ? await redeemBlofyCode(saved.auth) : await createSubscriberSession(saved.auth);
       if (!stillCurrent()) return;
       var response = await fetch('/api/v1/portal/playlists', {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           deviceId: saved.auth.deviceId, activationCode: saved.auth.activationCode,
-          id: saved.id,
-          name: saved.name || session.providerName || 'مشتركين BLOFY',
+          id: saved.id || (saved.mode === 'blofycode' ? session.providerId : undefined),
+          name: saved.name || (saved.mode === 'blofycode' ? 'BLOFY' : 'STROING 8K'),
           providerType: 'xtream', baseUrl: session.baseUrl, username: session.username, password: session.password,
           active: saved.active
         })
@@ -268,7 +326,7 @@ ${allowRenewal ? renewalStyles : ''}
     if (!button || !select || button.dataset.blofySubscriberInterceptorV6) return;
     button.dataset.blofySubscriberInterceptorV6 = '1';
     button.addEventListener('click', function (event) {
-      if (select.value !== 'blofy') return;
+      if (select.value !== 'blofy' && select.value !== 'blofycode') return;
       if (event) {
         if (typeof event.preventDefault === 'function') event.preventDefault();
         if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();

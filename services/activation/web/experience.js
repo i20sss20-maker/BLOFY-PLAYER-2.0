@@ -96,8 +96,70 @@ if(page==='admin'){
   const record=$('customer-record'),confirmDialog=$('renewal-confirm');
   const request=(route,body)=>api('/api/v1/admin/experience/'+route,body);
   const expiry=(value,status)=>status==='pending'?'لم تبدأ التجربة':value?date(value):status==='active'?'مدى الحياة':'—';
-  function panel(name){for(const key of ['devices','support','releases'])$(key+'-view').hidden=key!==name;document.querySelectorAll('[data-panel]').forEach(b=>b.setAttribute('aria-current',b.dataset.panel===name?'page':'false'));$('admin-view-title').textContent={devices:'الأجهزة والاشتراكات',support:'طلبات الدعم',releases:'إصدارات التطبيق'}[name];}
+  function panel(name){for(const key of ['devices','support','releases','codes'])$(key+'-view').hidden=key!==name;document.querySelectorAll('[data-panel]').forEach(b=>b.setAttribute('aria-current',b.dataset.panel===name?'page':'false'));$('admin-view-title').textContent={devices:'الأجهزة والاشتراكات',support:'طلبات الدعم',releases:'إصدارات التطبيق',codes:'أكواد BLOFY'}[name];if(name==='codes')loadCodes();}
   document.querySelectorAll('[data-panel]').forEach(button=>button.addEventListener('click',()=>panel(button.dataset.panel)));
+  window.addEventListener('hashchange',()=>{const name=location.hash.slice(1);if(['devices','support','releases','codes'].includes(name))panel(name);});
+  if(['devices','support','releases','codes'].includes(location.hash.slice(1)))panel(location.hash.slice(1));
+  async function loadCodes(){
+    setStatus('code-status','جاري قراءة الأكواد…');
+    try{
+      const data=await api('/api/v1/admin/blofy-codes');
+      $('code-rows').replaceChildren();
+      for(const item of data.items||[]){
+        const row=node('tr');
+        const commands=node('td');
+        const revoke=node('button','إيقاف');
+        revoke.type='button';
+        revoke.disabled=!item.active;
+        revoke.addEventListener('click',async()=>{
+          if(!confirm('إيقاف هذا الكود؟ لن يمكن إعادة تسجيل الدخول به.'))return;
+          revoke.disabled=true;
+          try{await api('/api/v1/admin/blofy-codes/ids/'+encodeURIComponent(item.providerId),null,'DELETE');await loadCodes();}
+          catch(error){setStatus('code-status',error.message,true);revoke.disabled=false;}
+        });
+        const unbind=node('button','فصل الجهاز');
+        unbind.type='button';
+        unbind.disabled=!item.active||!item.boundDeviceId;
+        unbind.addEventListener('click',async()=>{
+          if(!confirm('فصل الكود عن جهازه الحالي؟ سيتمكن مستخدم آخر من ربط الكود.'))return;
+          unbind.disabled=true;
+          try{await api('/api/v1/admin/blofy-codes/ids/'+encodeURIComponent(item.providerId)+'/unbind',{});await loadCodes();}
+          catch(error){setStatus('code-status',error.message,true);unbind.disabled=false;}
+        });
+        commands.append(revoke,unbind);
+        row.append(node('td',item.providerId,'version-cell'),
+          node('td',item.active?'نشط':'موقوف'),
+          node('td',item.boundDeviceId||'لم يُربط'),
+          node('td',item.expiresAt?date(item.expiresAt):'بدون انتهاء'),commands);
+        $('code-rows').append(row);
+      }
+      if(!data.items?.length){
+        const empty=node('tr');const td=node('td','لا توجد أكواد بعد.','empty');td.colSpan=5;empty.append(td);$('code-rows').append(empty);
+      }
+      setStatus('code-status','');
+    }catch(error){setStatus('code-status',error.message,true);}
+  }
+  $('code-refresh').addEventListener('click',loadCodes);
+  $('code-form').addEventListener('submit',async event=>{
+    event.preventDefault();
+    const form=event.currentTarget;
+    const button=form.querySelector('button[type="submit"]');
+    const entries=new FormData(form);
+    const payload={username:String(entries.get('username')||'').trim(),password:String(entries.get('password')||'')};
+    const expiry=String(entries.get('expiry')||'');
+    if(expiry)payload.expiresAt=new Date(expiry).getTime();
+    button.disabled=true;
+    $('code-issued').textContent='—';
+    setStatus('code-status','جاري إصدار الكود…');
+    try{
+      const result=await api('/api/v1/admin/blofy-codes',payload);
+      $('code-issued').textContent=result.code;
+      form.reset();
+      setStatus('code-status','تم الإصدار. انسخ الكود الآن، سيظهر مرة واحدة فقط.');
+      await loadCodes();
+    }catch(error){setStatus('code-status',error.message,true);}
+    finally{button.disabled=false;}
+  });
   async function overview(){const [data,tickets]=await Promise.all([request('overview'),request('tickets')]);$('overview').replaceChildren();for(const [key,label]of [['total','أجهزة مسجّلة'],['active','تفعيل ساري'],['pending','تسجيل غير مكتمل'],['expired','تفعيل منتهٍ'],['support','طلبات دعم']]){const card=node('div',null,'metric');card.append(node('strong',Number(data[key]||0).toLocaleString('en-US')),node('span',label));$('overview').append(card);}
     const box=$('open-tickets');box.replaceChildren(node('h2','طلبات الدعم المفتوحة'));for(const ticket of tickets.items){const row=node('div',null,'support-ticket');row.append(node('strong',ticket.device_id),node('p',ticket.description,'content-text'));const button=node('button','فتح سجل الجهاز ←');button.addEventListener('click',()=>openRecord(ticket.device_id));row.append(button);box.append(row);}if(!tickets.items.length)box.append(node('p','كل شيء هادئ. لا توجد طلبات دعم مفتوحة.','empty'));
   }
