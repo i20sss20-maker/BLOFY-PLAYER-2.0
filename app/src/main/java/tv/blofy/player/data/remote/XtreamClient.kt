@@ -22,9 +22,16 @@ object XtreamClient {
                 .header("User-Agent", original.header("User-Agent") ?: "BLOFY PLAYER/2.0 (Android TV)")
                 .header("Accept", original.header("Accept") ?: "application/json,text/plain,*/*")
                 .apply {
-                    // Keep bulk-catalog compatibility; allow OkHttp's transparent gzip for
-                    // the small, user-selected series detail request.
-                    if (original.url.queryParameter("action") != "get_series_info") {
+                    // BLOFY SOURCES serves bulk Xtream arrays as streamed JSON and supports
+                    // gzip. Never force identity for its large lists: let OkHttp add gzip and
+                    // transparently decompress before the JsonReader consumes the body.
+                    // Keep the existing identity workaround for unrelated Xtream panels,
+                    // where broken content-encoding is a known compatibility problem.
+                    val bulkAction = original.url.queryParameter("action") in setOf(
+                        "get_live_streams", "get_vod_streams", "get_series"
+                    )
+                    val firstPartyBulk = bulkAction && supportsTransparentCatalogGzip(original.url.host)
+                    if (!firstPartyBulk && original.url.queryParameter("action") != "get_series_info") {
                         header("Accept-Encoding", original.header("Accept-Encoding") ?: "identity")
                     }
                 }
@@ -47,6 +54,10 @@ object XtreamClient {
             }
         }
         .build()
+
+    // Tested separately so a later URL/host change cannot silently disable compression.
+    internal fun supportsTransparentCatalogGzip(host: String): Boolean =
+        host.equals("blofy-sources-xtream-production.up.railway.app", ignoreCase = true)
 
     val api: XtreamApi by lazy { createApi(okHttp) }
 

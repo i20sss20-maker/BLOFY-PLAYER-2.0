@@ -41,14 +41,26 @@ class CatalogSectionRetryTest {
         }
     }
 
-    @Test fun exhaustedTransientFailureIsReportedAfterThreeAttempts() = runBlocking {
+    @Test fun exhaustedTransientFailureIsReportedAfterFourAttempts() = runBlocking {
         var calls = 0
         val waits = mutableListOf<Long>()
         val error = http(502)
         val failure = runCatching { CatalogSectionRetry.run(pause = { waits += it }) { calls++; throw error } }.exceptionOrNull()
         assertSame(error, failure)
-        assertEquals(3, calls)
-        assertEquals(listOf(1_000L, 3_000L), waits)
+        assertEquals(4, calls)
+        assertEquals(listOf(1_000L, 3_000L, 7_000L), waits)
+    }
+
+    @Test fun connectionClosedRecoversOnFourthAttempt() = runBlocking {
+        var calls = 0
+        val waits = mutableListOf<Long>()
+        val result = CatalogSectionRetry.run(pause = { waits += it }) {
+            if (++calls < 4) throw IOException("connection closed")
+            "catalog complete"
+        }
+        assertEquals("catalog complete", result)
+        assertEquals(4, calls)
+        assertEquals(listOf(1_000L, 3_000L, 7_000L), waits)
     }
 
     @Test fun cancellationDuringBackoffStopsWithoutAnotherRequest() = runBlocking {

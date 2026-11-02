@@ -40,6 +40,8 @@
     <string name="catalog_subtitle">The base catalog is saved first. Extra details and episodes continue safely in the background.</string>
     <string name="catalog_note">First sync depends on playlist size and server speed. Later launches open from local storage.</string>
     <string name="catalog_connecting">Connecting to server…</string>
+    <string name="catalog_choose_playlist">Change playlist / server</string>
+    <string name="catalog_source_dns_failed">Playlist server %1$s cannot be found. Check the connection or update this playlist’s server address in BLOFY, then try again.</string>
     <string name="catalog_retry">↻ Continue / Retry</string>
     <string name="catalog_preflight">Checking saved library…</string>
     <string name="catalog_ready">Library ready</string>

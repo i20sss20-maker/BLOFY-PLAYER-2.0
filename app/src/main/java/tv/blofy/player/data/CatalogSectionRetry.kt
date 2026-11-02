@@ -12,7 +12,7 @@ import retrofit2.HttpException
 
 /** Retry only the failed catalog section; never restart sections already committed to disk. */
 internal object CatalogSectionRetry {
-    const val MAX_ATTEMPTS = 3
+    const val MAX_ATTEMPTS = 4
 
     suspend fun <T> run(
         onRetry: suspend (Int) -> Unit = {},
@@ -31,7 +31,14 @@ internal object CatalogSectionRetry {
                 if (attempt >= MAX_ATTEMPTS || !isTransient(failure)) throw failure
                 attempt += 1
                 onRetry(attempt)
-                pause(if (attempt == 2) 1_000L else 3_000L)
+                // Streaming gateways sometimes sever large catalog responses during a brief
+                // restart. Retry the unfinished section with growing backoff, keeping
+                // completed first-import sections durable; never retry auth/SSL failures.
+                pause(when (attempt) {
+                    2 -> 1_000L
+                    3 -> 3_000L
+                    else -> 7_000L
+                })
             }
         }
     }

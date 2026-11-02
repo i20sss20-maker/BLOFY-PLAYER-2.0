@@ -42,8 +42,8 @@ android {
         applicationId = "tv.blofy.player.v2"
         minSdk = 23
         targetSdk = 36
-        versionCode = 2000076
-        versionName = "2.0.0-rc07.55.8-play73-restore"
+        versionCode = 2000077
+        versionName = "2.0.0-rc07.55.9-play73-catalog-recovery"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "ACTIVATION_BASE_URL", "\"$activationBaseUrlEscaped\"")
         buildConfigField("String", "UPDATE_BASE_URL", "\"$updateBaseUrlEscaped\"")
