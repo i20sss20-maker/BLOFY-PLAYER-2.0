@@ -779,11 +779,12 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && requestUrl.pathname === '/api/v1/blofy-codes/redeem') return await blofyCodes.redeem(req, res);
     if (requestUrl.pathname === '/api/v1/admin/blofy-codes' && req.method === 'POST') return await blofyCodes.issue(req, res);
     if (requestUrl.pathname === '/api/v1/admin/blofy-codes' && req.method === 'GET') return await blofyCodes.list(req, res);
-    const codeAdminMatch = requestUrl.pathname.match(/^\/api\/v1\/admin\/blofy-codes\/ids\/([0-9a-fA-F-]{36})(\/unbind)?$/);
+    const codeAdminMatch = requestUrl.pathname.match(/^\/api\/v1\/admin\/blofy-codes\/ids\/([0-9a-fA-F-]{36})(\/(?:bind|unbind))?$/);
     if (codeAdminMatch && req.method === 'DELETE' && !codeAdminMatch[2])
       return await blofyCodes.adminById(req, res, codeAdminMatch[1], 'revoke');
     if (codeAdminMatch && req.method === 'POST' && codeAdminMatch[2])
-      return await blofyCodes.adminById(req, res, codeAdminMatch[1], 'unbind');
+      return await blofyCodes.adminById(req, res, codeAdminMatch[1],
+        codeAdminMatch[2] === '/bind' ? 'bind' : 'unbind');
     const codeRevokeMatch = requestUrl.pathname.match(/^\/api\/v1\/admin\/blofy-codes\/([A-Za-z0-9-]+)$/);
     if (codeRevokeMatch && req.method === 'DELETE') return await blofyCodes.revoke(req, res, codeRevokeMatch[1]);
     if (req.method === 'POST' && requestUrl.pathname === '/api/v1/activation/rotate') return await activationRotate(req, res);
