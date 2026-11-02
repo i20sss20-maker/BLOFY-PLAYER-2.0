@@ -31,7 +31,7 @@ test('code issuance is restricted to admin and never stores plaintext code or cr
   await handlers.issue({}, {});
   assert.equal(responses[0].status, 201);
   assert.equal(responses[0].body.host, 'http://annkel.com:80');
-  assert.match(responses[0].body.code, /^\\d{8}$/);
+  assert.match(responses[0].body.code, /^\d{8}$/);
   assert.equal(responses[0].body.expiresAt,1893456000000);
   assert.equal(sqlArgs[1].includes(responses[0].body.code), false);
   assert.equal(sqlArgs[2].includes('account-u'), false);
