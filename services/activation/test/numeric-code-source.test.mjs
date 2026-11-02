@@ -7,6 +7,7 @@ test('source choices preserve existing BLOFY host, support STROING 8K, and allow
   assert.equal(selectedCodeSource({source:'blofy'}).host,'http://annkel.com:80');
   assert.equal(selectedCodeSource({source:'strong'}).label,'STROING 8K');
   assert.equal(selectedCodeSource({source:'strong'}, {strongHost:'https://strong.example.com'}).host,'https://strong.example.com');
+  assert.equal(selectedCodeSource({source:'strong', host:'https://newstrong.example.org:8443'}).host,'https://newstrong.example.org:8443');
   assert.equal(selectedCodeSource({source:'custom',host:'https://service.example.net:8888'}).host,'https://service.example.net:8888');
   for(const host of ['http://example.com/login','http://user:secret@example.com','file:///etc/passwd','https://example.com?token=x']){
     assert.throws(()=>selectedCodeSource({source:'custom',host}),/invalid_code_host/);

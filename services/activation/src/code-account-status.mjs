@@ -11,7 +11,7 @@ export function selectedCodeSource(input, { strongHost = process.env.BLOFY_CODE_
   const source = String(input?.source || 'blofy').toLowerCase();
   if (!['blofy', 'strong', 'custom'].includes(source)) throw new Error('invalid_code_source');
   const value = source === 'blofy' ? BLOFY_CODE_DEFAULT_HOST
-    : source === 'strong' ? strongHost : String(input?.host || '');
+    : source === 'strong' ? String(input?.host || strongHost) : String(input?.host || '');
   let url;
   try { url = new URL(normalizeXtreamBaseUrl(value)); } catch { throw new Error('invalid_code_host'); }
   if (!['http:', 'https:'].includes(url.protocol) ||
