@@ -1,6 +1,7 @@
 // Install the persisted production data key before any crypto-aware handler is imported.
 import { installPersistedDataKey } from './data-key-state.mjs';
-await installPersistedDataKey();
+import { withDatabaseStartRetry } from './startup-db-retry.mjs';
+await withDatabaseStartRetry(() => installPersistedDataKey());
 
 await import('./migration-export-hook.mjs');
 await import('./migration-import-hook.mjs');
