@@ -1,4 +1,4 @@
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:locale="en" tools:ignore="MissingTranslation">
     <string name="blofy_code_entry">+  BLOFY Code</string>
     <string name="blofy_code_title">BLOFY Server</string>
     <string name="blofy_code_subtitle">Enter a code issued by BLOFY to connect your subscription to the dedicated BLOFY server.</string>
