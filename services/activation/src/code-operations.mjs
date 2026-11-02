@@ -98,7 +98,7 @@ export function createCodeOperationsHandlers({
     if (!requireAdmin(req, res)) return;
     const payload = await readJson(req);
     const name = cleanLabel(payload.name);
-    if (name.length < 2 || name.length > 64 || /[\\u0000-\\u001f\\u007f]/.test(name))
+    if (name.length < 2 || name.length > 64 || /[\u0000-\u001f\u007f]/.test(name))
       return json(res,400,{error:'invalid_host_name'});
     let selected;
     try {
