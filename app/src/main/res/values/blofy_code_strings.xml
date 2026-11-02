@@ -8,4 +8,10 @@
     <string name="blofy_code_required">Enter the subscription code first.</string>
     <string name="blofy_code_unconfigured">BLOFY code server is not configured yet. No changes have been made to your saved subscriptions.</string>
     <string name="blofy_code_pending">BLOFY code hosting will be connected separately. STROING 8K and Xtream are unchanged.</string>
+    <string name="blofy_code_verifying">Checking BLOFY code and linking your server…</string>
+    <string name="blofy_code_invalid">Code format is invalid. Check and try again.</string>
+    <string name="blofy_code_unavailable">Code is invalid, expired, disabled or already assigned to another device.</string>
+    <string name="blofy_code_device_inactive">Activate your BLOFY device before using a code.</string>
+    <string name="blofy_code_rate_limited">Too many attempts. Try again shortly.</string>
+    <string name="blofy_code_network_error">Could not verify your code. Check the connection and retry; saved lists were not changed.</string>
 </resources>
