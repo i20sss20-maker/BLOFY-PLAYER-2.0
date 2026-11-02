@@ -227,7 +227,7 @@ class PosterCatalogActivity : AppCompatActivity() {
             layoutDirection = View.LAYOUT_DIRECTION_LTR
             textDirection = View.TEXT_DIRECTION_LTR
             setPadding(dp(if (deviceKind == DeviceClass.Kind.PHONE) 8 else 12), 0, dp(if (deviceKind == DeviceClass.Kind.PHONE) 8 else 12), 0)
-            background = BlofyTvDesign.badge(dp(9).toFloat())
+            background = BlofyTvDesign.badge(dp(BlofyTvDesign.BadgeRadius).toFloat())
         }
         header.addView(countView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(28)))
         content.addView(header)
