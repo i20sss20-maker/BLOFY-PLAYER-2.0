@@ -1,9 +1,9 @@
 <resources>
     <string name="blofy_code_entry">+  BLOFY (كود)</string>
     <string name="blofy_code_title">سيرفر BLOFY</string>
-    <string name="blofy_code_subtitle">أدخل كود BLOFY الخاص بك للربط التلقائي بالسيرفر المخصص.</string>
+    <string name="blofy_code_subtitle">أدخل كود الاشتراك المكوّن من 8 أرقام لربط جهازك بسيرفر BLOFY أو STROING أو Xtream الذي حدده المشرف.</string>
     <string name="blofy_code_label">كود الاشتراك</string>
-    <string name="blofy_code_hint">أدخل الكود هنا</string>
+    <string name="blofy_code_hint">8 أرقام</string>
     <string name="blofy_code_submit">اتصال بالكود</string>
     <string name="blofy_code_required">أدخل كود الاشتراك أولًا.</string>
     <string name="blofy_code_unconfigured">خدمة تفعيل BLOFY غير مهيأة في هذه النسخة. لم تُغيّر الاشتراكات المحفوظة.</string>
