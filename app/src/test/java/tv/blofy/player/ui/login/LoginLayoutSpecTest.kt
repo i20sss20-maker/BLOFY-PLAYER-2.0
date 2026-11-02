@@ -21,7 +21,7 @@ class LoginLayoutSpecTest {
     }
 
     @Test fun shortTvReservesMoreWidthForActivation() {
-        assertEquals(0.44f, LoginLayoutSpec.tvActivationWeight(960))
-        assertEquals(0.40f, LoginLayoutSpec.tvActivationWeight(1280))
+        assertEquals(0.44f, LoginLayoutSpec.tvActivationWeight(960), 0.0001f)
+        assertEquals(0.40f, LoginLayoutSpec.tvActivationWeight(1280), 0.0001f)
     }
 }
