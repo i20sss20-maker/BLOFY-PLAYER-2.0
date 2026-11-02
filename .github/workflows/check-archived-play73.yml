@@ -1,0 +1,27 @@
+name: Read-only check of archived approved Play73 artifacts
+on:
+  push:
+    branches: [diagnostics/play73-original-archive-readonly-20261102]
+    paths: [.github/workflows/check-archived-play73.yml]
+permissions:
+  contents: read
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check archived APK and original Play2000073 AAB link headers without downloading or altering the website
+        shell: bash
+        run: |
+          set -euo pipefail
+          for label in WEBSITE_ORIGINAL_73 PLAY_AAB_SHARE PLAY_AAB_SHARE_OLD; do
+            case "$label" in
+              WEBSITE_ORIGINAL_73) url="https://updates.blofyplayer.com/files/releases/BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED.apk";;
+              PLAY_AAB_SHARE) url="https://blofy-aab-share-2000073-v2-production.up.railway.app/BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED-2000073.aab";;
+              PLAY_AAB_SHARE_OLD) url="https://blofy-aab-2000073-share-production.up.railway.app/BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED-2000073.aab";;
+            esac
+            echo "=== $label ==="
+            curl --silent --show-error --max-time 12 -I "$url" | grep -Ei '^(HTTP/|location:|content-type:|content-length:|content-disposition:)' || true
+            echo "final-follow-redirect:"
+            curl --silent --show-error --max-time 12 -IL "$url" | grep -Ei '^(HTTP/|location:|content-type:|content-length:|content-disposition:)' || true
+          done
