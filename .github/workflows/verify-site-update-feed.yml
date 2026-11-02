@@ -1,0 +1,30 @@
+name: Verify real BLOFY website update feed and signed APK
+on:
+  push:
+    branches: [diagnostics/play73-original-archive-readonly-20261102]
+    paths: [.github/workflows/verify-site-update-feed.yml]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Check public update metadata, redirect and archived original; read-only
+        run: |
+          set -euo pipefail
+          for url in "https://updates.blofyplayer.com/health" "https://updates.blofyplayer.com/release.json"; do
+            echo "FEED $url"
+            curl -fsSL --max-time 20 -H "Cache-Control: no-cache" "$url" > /tmp/feed.json
+            python3 -m json.tool /tmp/feed.json >/dev/null
+            python3 - <<'PY'
+          import json
+          x=json.load(open('/tmp/feed.json'))
+          print('ok=',x.get('ok'))
+          print('release=',repr(x.get('release')))
+          PY
+          done
+          for url in "https://updates.blofyplayer.com/download/latest.apk" "https://updates.blofyplayer.com/files/releases/BLOFY-PLAYER-2.0-rc07.55.5-PRODUCTION-SIGNED.apk" "https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/blofy-player-v2000075-website/BLOFY-PLAYER-v2000075-WEBSITE-SIGNED.apk"; do
+            echo "APK $url"
+            curl --head --location --fail --show-error --silent --max-time 25 "$url" | grep -Ei '^(HTTP/|location:|content-type:|content-length:|content-disposition:|accept-ranges:)' || true
+          done
