@@ -126,9 +126,9 @@ jobs:
           fi
       - name: Verify actual catalog queries on 200k rows
         run: python3 tools/check_catalog_queries.py
-      - name: Verify Play v74 UX / internal 2000074 manifest and TV routes
+      - name: Verify Play Xiaomi-design UX / internal 2000076 manifest and TV routes
         env:
-          BLOFY_EXPECTED_PLAY_VERSION_CODE: "2000074"
+          BLOFY_EXPECTED_PLAY_VERSION_CODE: "2000076"
         run: python3 tools/verify_play_2000073.py
       - name: Test lint and assemble
         shell: bash
@@ -204,11 +204,11 @@ jobs:
           for route in VlcFallbackActivity LibraryDownloadActivity SectionSearchActivity; do
             grep -Fq "$route" "$RUNNER_TEMP/play-apk-manifest.txt"
           done
-          cp "$APK" app/build/outputs/apk/debug/blofy-play-2000074-test-only.apk
+          cp "$APK" app/build/outputs/apk/debug/blofy-play-2000076-test-only.apk
       - name: Save Google Play 2000073 debug artifact
         uses: actions/upload-artifact@v4
         with:
-          name: BLOFY-PLAY-2000074-TEST-ONLY-${{ github.sha }}
-          path: app/build/outputs/apk/debug/blofy-play-2000074-test-only.apk
+          name: BLOFY-PLAY-2000076-TEST-ONLY-${{ github.sha }}
+          path: app/build/outputs/apk/debug/blofy-play-2000076-test-only.apk
           if-no-files-found: error
           retention-days: 14
