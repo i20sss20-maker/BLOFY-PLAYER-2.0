@@ -10,6 +10,7 @@ object ActivationRemoteClient {
         val normalized = baseUrl.trim().let { if (it.endsWith('/')) it else "$it/" }
         require(normalized.startsWith("https://") || normalized.startsWith("http://")) { "Invalid activation endpoint" }
         val client = OkHttpClient.Builder()
+            .addInterceptor(ProductionPortalDnsFallback.interceptor)
             // Two bounded attempts fit inside the existing login screen deadline.
             .callTimeout(8, TimeUnit.SECONDS)
             .connectTimeout(5, TimeUnit.SECONDS)
