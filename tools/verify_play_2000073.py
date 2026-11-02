@@ -35,7 +35,7 @@ app = manifest.find("application")
 assert app is not None and app.attrib.get(ns + "allowBackup") == "false"
 assert manifest.find("uses-permission[@android:name='android.permission.REQUEST_INSTALL_PACKAGES']", {"android":"http://schemas.android.com/apk/res/android"}) is None, "Play must not request sideload permissions"
 gradle = (root / "app/build.gradle.kts").read_text(encoding="utf-8")
-version_match = re.search(r"versionCode\\s*=\\s*(\\d+)\\b", gradle)
+version_match = re.search(r"versionCode\s*=\s*(\d+)\b", gradle)
 assert version_match and int(version_match.group(1)) >= 2000076, "Play73 successors must increase versionCode beyond 2000075"
 
 # Check every activity targeted by a statically typed intent, including TV fallbacks.
