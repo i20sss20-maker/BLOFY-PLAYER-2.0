@@ -109,24 +109,41 @@ class ProviderManagerActivity : AppCompatActivity() {
             gravity = Gravity.START
             clipChildren = false
         }
-        val subscriberButton = actionButton("subscriber", getString(R.string.provider_manager_add_subscriber), primary = true) {
+        val codeButton = actionButton("code", getString(R.string.blofy_code_entry), primary = true) {
+            startActivity(Intent(this, BlofyCodeActivity::class.java))
+        }
+        val subscriberButton = actionButton("subscriber", getString(R.string.provider_manager_add_subscriber)) {
+            // Existing STROING 8K service stays on its original BLOFY subscriber host.
             startActivity(Intent(this, BlofySubscriberActivity::class.java))
         }
         addButton = actionButton("add", "+  Xtream") {
             startActivity(Intent(this, PlaylistActivity::class.java).putExtra(PlaylistActivity.EXTRA_DIRECT_FORM, true))
         }
         if (isTv) {
-            actions.addView(subscriberButton, LinearLayout.LayoutParams(dp(310), dp(64)).apply { marginStart = dp(12) })
-            actions.addView(addButton, LinearLayout.LayoutParams(dp(270), dp(64)))
+            // Three distinct entry systems; all visible on Android TV without a mouse.
+            actions.addView(codeButton, LinearLayout.LayoutParams(dp(250), dp(64)).apply { marginStart = dp(12) })
+            actions.addView(subscriberButton, LinearLayout.LayoutParams(dp(280), dp(64)).apply { marginStart = dp(12) })
+            actions.addView(addButton, LinearLayout.LayoutParams(dp(250), dp(64)).apply { marginStart = dp(12) })
+            val rtl = resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL
+            if (rtl) {
+                codeButton.nextFocusLeftId = subscriberButton.id
+                subscriberButton.nextFocusRightId = codeButton.id
+                subscriberButton.nextFocusLeftId = addButton.id
+                addButton.nextFocusRightId = subscriberButton.id
+            } else {
+                codeButton.nextFocusRightId = subscriberButton.id
+                subscriberButton.nextFocusLeftId = codeButton.id
+                subscriberButton.nextFocusRightId = addButton.id
+                addButton.nextFocusLeftId = subscriberButton.id
+            }
             root.addView(actions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(70)).apply {
                 bottomMargin = dp(18); gravity = Gravity.START
             })
         } else {
-            actions.addView(subscriberButton, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(56)).apply { bottomMargin = dp(8) })
-            actions.addView(addButton, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(56)))
-            root.addView(actions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                bottomMargin = dp(16)
-            })
+            actions.addView(codeButton, LinearLayout.LayoutParams(-1, dp(56)).apply { bottomMargin = dp(8) })
+            actions.addView(subscriberButton, LinearLayout.LayoutParams(-1, dp(56)).apply { bottomMargin = dp(8) })
+            actions.addView(addButton, LinearLayout.LayoutParams(-1, dp(56)))
+            root.addView(actions, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(16) })
         }
 
         root.addView(TextView(this).apply {
@@ -214,7 +231,7 @@ class ProviderManagerActivity : AppCompatActivity() {
             .filter { it.providerType.equals("xtream", true) || isBlofySubscriber(it) }
         val generation = ++summaryGeneration
         summaryViews.clear()
-        focusButtons.keys.filter { it !in setOf("add", "subscriber", "website_refresh") }.toList().forEach { focusButtons.remove(it) }
+        focusButtons.keys.filter { it !in setOf("add", "subscriber", "code", "website_refresh") }.toList().forEach { focusButtons.remove(it) }
         list.removeAllViews()
         if (items.isEmpty()) {
             list.addView(TextView(this).apply {
@@ -247,7 +264,7 @@ class ProviderManagerActivity : AppCompatActivity() {
                 layoutDirection = resources.configuration.layoutDirection
             }
             info.addView(TextView(this).apply {
-                text = provider.name
+                text = ProviderDisplayName.forUi(provider)
                 textSize = 18f
                 typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
                 gravity = Gravity.START
@@ -259,7 +276,7 @@ class ProviderManagerActivity : AppCompatActivity() {
                     append(getString(
                         R.string.provider_manager_source_format,
                         getString(if (provider.enabled) R.string.provider_manager_active else R.string.provider_manager_saved),
-                        if (isBlofySubscriber(provider)) "BLOFY Secure" else "XTREAM"
+                        if (isBlofySubscriber(provider)) "STROING 8K" else "XTREAM"
                     ))
                 }
                 textSize = 13f
@@ -354,6 +371,7 @@ class ProviderManagerActivity : AppCompatActivity() {
         val key = FocusMemory.restore(this, SCREEN_KEY)
         val target = key?.let(focusButtons::get)
             ?: focusButtons.entries.firstOrNull { it.key.endsWith(":connect") }?.value
+            ?: focusButtons["code"]
             ?: focusButtons["subscriber"]
             ?: addButton
         target.post { if (!isFinishing && !refreshingFromWebsite && !changingProvider) target.requestFocus() }
