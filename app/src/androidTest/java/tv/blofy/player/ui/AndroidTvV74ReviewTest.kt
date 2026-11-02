@@ -17,6 +17,7 @@ import org.junit.runner.RunWith
 import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
+import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.ui.login.LoginActivity
 
 /** Test actual Google TV launcher assets and physical D-pad focus, never only source regex. */
@@ -77,6 +78,53 @@ class AndroidTvV74ReviewTest {
             scenario.onActivity { a ->
                 assertEquals(a.getString(R.string.account_title), (a.currentFocus as? Button)?.text?.toString())
             }
+        }
+    }
+    @Test fun dpadNavigatesEverySavedPlaylistWithoutSkippingTheScroll() {
+        // Test in-memory cards so this never changes the user's accounts or playlists.
+        val first = ProviderEntity(
+            id = "tv-review-remote-first", name = "Remote first",
+            baseUrl = "http://127.0.0.1:9", username = "test", password = "",
+            updatedAt = 200L
+        )
+        val second = first.copy(id = "tv-review-remote-second", name = "Remote second", updatedAt = 100L)
+        ActivityScenario.launch(LoginActivity::class.java).use { scenario ->
+            scenario.onActivity { a ->
+                a.renderPortalPlaylists(listOf(first, second))
+                assertTrue(a.findViewWithTag<View>(first.id).requestFocus())
+            }
+            instrumentation.waitForIdleSync()
+            scenario.onActivity { a -> assertEquals(first.id, a.currentFocus?.tag) }
+
+            instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_DOWN)
+            scenario.onActivity { a -> assertEquals(second.id, a.currentFocus?.tag) }
+
+            instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_DOWN)
+            scenario.onActivity { a ->
+                assertEquals(a.getString(R.string.login_add_playlist), (a.currentFocus as? Button)?.text?.toString())
+            }
+
+            instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_UP)
+            scenario.onActivity { a -> assertEquals(second.id, a.currentFocus?.tag) }
+
+            instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_UP)
+            scenario.onActivity { a -> assertEquals(first.id, a.currentFocus?.tag) }
+
+            instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_UP)
+            scenario.onActivity { a ->
+                assertEquals(a.getString(R.string.refresh_from_website), (a.currentFocus as? Button)?.text?.toString())
+            }
+            instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_DOWN)
+            scenario.onActivity { a -> assertEquals(first.id, a.currentFocus?.tag) }
+
+            // Updating saved cards must keep the chosen card and rebind its new view ID.
+            scenario.onActivity { a ->
+                a.renderPortalPlaylists(listOf(first.copy(name = "Remote first updated"), second))
+                assertEquals(first.id, a.currentFocus?.tag)
+                assertTrue(a.currentFocus?.isClickable == true)
+            }
+            instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_DOWN)
+            scenario.onActivity { a -> assertEquals(second.id, a.currentFocus?.tag) }
         }
     }
 }
