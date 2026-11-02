@@ -1,0 +1,17 @@
+<resources xmlns:tools="http://schemas.android.com/tools" tools:locale="en" tools:ignore="MissingTranslation">
+    <string name="blofy_code_entry">+  BLOFY Code</string>
+    <string name="blofy_code_title">BLOFY Server</string>
+    <string name="blofy_code_subtitle">Enter a code issued by BLOFY to connect your subscription to the dedicated BLOFY server.</string>
+    <string name="blofy_code_label">Subscription code</string>
+    <string name="blofy_code_hint">Enter your code</string>
+    <string name="blofy_code_submit">Connect with code</string>
+    <string name="blofy_code_required">Enter the subscription code first.</string>
+    <string name="blofy_code_unconfigured">BLOFY activation service is not configured in this build. Saved subscriptions were not changed.</string>
+    <string name="blofy_code_pending">Dedicated BLOFY code sign-in. STROING 8K and Xtream are unchanged.</string>
+    <string name="blofy_code_verifying">Checking BLOFY code and linking your server…</string>
+    <string name="blofy_code_invalid">Code format is invalid. Check and try again.</string>
+    <string name="blofy_code_unavailable">Code is invalid, expired, disabled or already assigned to another device.</string>
+    <string name="blofy_code_device_inactive">Activate your BLOFY device before using a code.</string>
+    <string name="blofy_code_rate_limited">Too many attempts. Try again shortly.</string>
+    <string name="blofy_code_network_error">Could not verify your code. Check the connection and retry; saved lists were not changed.</string>
+</resources>

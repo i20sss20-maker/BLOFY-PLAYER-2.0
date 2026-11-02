@@ -239,7 +239,7 @@
     <string name="guide_live_badge">مباشر</string>
 
 
-    <string name="subscriber_title">مشتركو BLOFY</string>
+    <string name="subscriber_title">STROING 8K</string>
     <string name="subscriber_subtitle">سجّل باسم المستخدم وكلمة المرور فقط</string>
     <string name="subscriber_playlist_name">اسم القائمة (اختياري)</string>
     <string name="subscriber_username">اسم المستخدم</string>
@@ -369,14 +369,14 @@
     <string name="provider_manager_title">قوائم BLOFY</string>
     <string name="provider_manager_refresh_from_website">↻  تحديث من الموقع</string>
     <string name="provider_manager_subtitle">اتصل مباشرة بالسيرفر المحفوظ أو عدّل بياناته</string>
-    <string name="provider_manager_subscriber_hint">مشتركو BLOFY يحتاجون اسم المستخدم وكلمة المرور فقط</string>
-    <string name="provider_manager_add_subscriber">+  مشتركو BLOFY</string>
+    <string name="provider_manager_subscriber_hint">STROING 8K: الهوست القديم • Xtream مستقل • BLOFY: كود</string>
+    <string name="provider_manager_add_subscriber">+  STROING 8K</string>
     <string name="provider_manager_saved_servers">السيرفرات المحفوظة</string>
     <string name="provider_manager_read_failed">تعذر قراءة القوائم المحفوظة • أعد فتح الصفحة للمحاولة</string>
     <string name="provider_manager_refresh_unconfigured">خدمة تحديث القوائم غير مهيأة</string>
     <string name="provider_manager_refreshing">جاري التحديث…</string>
     <string name="provider_manager_fetching">جاري جلب القوائم وبياناتها من الموقع…</string>
-    <string name="provider_manager_empty">ما عندك سيرفرات محفوظة حتى الآن\nأضف مشترك BLOFY أو Xtream</string>
+    <string name="provider_manager_empty">ما عندك سيرفرات محفوظة حتى الآن\nأضف BLOFY بالكود أو STROING 8K أو Xtream</string>
     <string name="provider_manager_active">● القائمة النشطة</string>
     <string name="provider_manager_saved">○ قائمة محفوظة</string>\n    <string name="provider_manager_source_format">%1$s  •  %2$s</string>
     <string name="provider_manager_summary_loading">قراءة حالة المكتبة…</string>

@@ -225,7 +225,7 @@
     <string name="guide_live_badge">Live</string>
 
 
-    <string name="subscriber_title">BLOFY Subscribers</string>
+    <string name="subscriber_title">STROING 8K</string>
     <string name="subscriber_subtitle">Sign in with your username and password only</string>
     <string name="subscriber_playlist_name">Playlist name (optional)</string>
     <string name="subscriber_username">Username</string>
@@ -355,14 +355,14 @@
     <string name="provider_manager_title">BLOFY Playlists</string>
     <string name="provider_manager_refresh_from_website">↻  Refresh from website</string>
     <string name="provider_manager_subtitle">Connect directly to a saved server or edit its details</string>
-    <string name="provider_manager_subscriber_hint">BLOFY subscribers only need a username and password</string>
-    <string name="provider_manager_add_subscriber">+  BLOFY Subscriber</string>
+    <string name="provider_manager_subscriber_hint">STROING 8K: old host • Xtream: unchanged • BLOFY: code</string>
+    <string name="provider_manager_add_subscriber">+  STROING 8K</string>
     <string name="provider_manager_saved_servers">Saved servers</string>
     <string name="provider_manager_read_failed">Could not read saved playlists • reopen this page to try again</string>
     <string name="provider_manager_refresh_unconfigured">Playlist refresh service is not configured</string>
     <string name="provider_manager_refreshing">Refreshing…</string>
     <string name="provider_manager_fetching">Fetching playlists and details from the website…</string>
-    <string name="provider_manager_empty">No saved servers yet\nAdd a BLOFY Subscriber or Xtream server</string>
+    <string name="provider_manager_empty">No saved servers yet\nAdd BLOFY Code, STROING 8K or Xtream</string>
     <string name="provider_manager_active">● Active playlist</string>
     <string name="provider_manager_saved">○ Saved playlist</string>\n    <string name="provider_manager_source_format">%1$s  •  %2$s</string>
     <string name="provider_manager_summary_loading">Reading library status…</string>

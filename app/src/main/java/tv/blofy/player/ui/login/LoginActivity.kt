@@ -49,6 +49,7 @@ import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.TvUiTuning
 import tv.blofy.player.ui.home.HomeActivity
 import tv.blofy.player.ui.playlist.PlaylistActivity
+import tv.blofy.player.ui.playlist.ProviderDisplayName
 
 class LoginActivity : AppCompatActivity() {
     // Tests point requests at MockWebServer; production always starts from the signed build config.
@@ -494,7 +495,7 @@ class LoginActivity : AppCompatActivity() {
             .filter { it.providerType.equals("xtream", true) }
             .sortedWith(compareByDescending<ProviderEntity> { it.enabled }.thenByDescending { it.updatedAt })
         val row = playlistRow ?: return
-        val presentation = providers.map { listOf(it.id, it.name, it.providerType, it.enabled.toString()) }
+        val presentation = providers.map { listOf(it.id, ProviderDisplayName.forUi(it), it.providerType, it.enabled.toString()) }
         if (presentation == renderedPlaylists) return
         renderedPlaylists = presentation
         val focusedId = (0 until row.childCount).map { row.getChildAt(it) }
@@ -545,7 +546,7 @@ class LoginActivity : AppCompatActivity() {
         isClickable = true
         background = playlistCardBackground(provider.enabled, false)
         val type = if (provider.providerType.equals("xtream", true)) "Xtream" else "M3U"
-        val displayName = provider.name.trim().takeIf { it.length > 1 }
+        val displayName = ProviderDisplayName.forUi(provider).takeIf { it.length > 1 }
             ?: getString(R.string.login_playlist_default_name, type)
         val info = LinearLayout(this@LoginActivity).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL or Gravity.START }
         info.addView(TextView(this@LoginActivity).apply {
@@ -677,7 +678,7 @@ class LoginActivity : AppCompatActivity() {
         val local = withContext(Dispatchers.IO) { dao.providerSnapshotStored() }
         renderPortalPlaylists(local)
         val active = local.firstOrNull { it.enabled }
-        status.text = if (active == null) getString(R.string.login_waiting_for_playlist) else getString(R.string.login_ready_provider, active.name)
+        status.text = if (active == null) getString(R.string.login_waiting_for_playlist) else getString(R.string.login_ready_provider, ProviderDisplayName.forUi(active))
         val identity = withContext(Dispatchers.IO) { manager.ensureIdentity() }
         renderIdentity(identity.deviceId, identity.activationCode)
         bindTrialStatus(identity)
