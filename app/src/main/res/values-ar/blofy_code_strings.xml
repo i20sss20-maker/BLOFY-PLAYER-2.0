@@ -8,4 +8,10 @@
     <string name="blofy_code_required">أدخل كود الاشتراك أولًا.</string>
     <string name="blofy_code_unconfigured">سيرفر أكواد BLOFY غير مربوط بعد. لم تُغيّر أي اشتراكات محفوظة.</string>
     <string name="blofy_code_pending">نظام أكواد BLOFY مستقل. STROING 8K وXtream يعملان كما كانا.</string>
+    <string name="blofy_code_verifying">جاري التحقق من كود BLOFY وربط السيرفر…</string>
+    <string name="blofy_code_invalid">صيغة الكود غير صحيحة. تحقق وحاول مرة أخرى.</string>
+    <string name="blofy_code_unavailable">الكود غير صحيح أو منتهي أو موقوف أو مربوط بجهاز آخر.</string>
+    <string name="blofy_code_device_inactive">فعّل جهاز BLOFY أولًا ثم أدخل الكود.</string>
+    <string name="blofy_code_rate_limited">محاولات كثيرة. حاول بعد قليل.</string>
+    <string name="blofy_code_network_error">تعذر التحقق من الكود. افحص الإنترنت وأعد المحاولة. القوائم المحفوظة لم تتغير.</string>
 </resources>
