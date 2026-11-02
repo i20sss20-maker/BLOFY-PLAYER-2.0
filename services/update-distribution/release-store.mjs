@@ -26,7 +26,7 @@ function approvedXiaomi74Release() {
     versionCode: 2000080,
     versionName: '2.0.0-rc07.55.6',
     downloadUrl,
-    releaseNotes: 'BLOFY PLAYER 74 — تصميم نسخة Xiaomi المفضلة، شعار واضح وبانر Android TV ‏320×180، وتحسين التنقل بالريموت. مبني للحزمة الرسمية tv.blofy.player.v2 برقم تحديث داخلي جديد 2000080 ليتوافق مع إصدارات الموقع السابقة. لا تحذف التطبيق أو بياناته.',
+    releaseNotes: 'BLOFY PLAYER 74 — الواجهة البنفسجية المعتمدة، شعار واضح وبانر Android TV ‏320×180، وتحسين التنقل بالريموت. مبني للحزمة الرسمية tv.blofy.player.v2 برقم تحديث داخلي جديد 2000080 ليتوافق مع إصدارات الموقع السابقة. لا تحذف التطبيق أو بياناته.',
     minSupportedVersionCode: 1,
     stage: 'public'
   };
