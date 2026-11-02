@@ -143,10 +143,11 @@ if(page==='admin'){
   $('code-refresh').addEventListener('click',loadCodes);
   const codeHostField=$('code-custom-host-field');
   function syncCodeHost(){
-    const custom=$('code-source').value==='custom';
-    codeHostField.hidden=!custom;
-    codeHostField.style.display=custom?'':'none';
-    $('code-custom-host').required=custom;
+    const source=$('code-source').value;
+    const showHost=source==='custom' || source==='strong';
+    codeHostField.hidden=!showHost;
+    codeHostField.style.display=showHost?'':'none';
+    $('code-custom-host').required=source==='custom';
   }
   $('code-source').addEventListener('change',syncCodeHost);
   syncCodeHost();
@@ -160,7 +161,7 @@ if(page==='admin'){
     form.elements.password.value=account.password;
     // Imported Xtream URLs select their host automatically.
     if(new URL(account.host).origin !== new URL('http://annkel.com:80').origin){
-      $('code-source').value='custom';
+      if($('code-source').value!=='strong')$('code-source').value='custom';
       $('code-custom-host').value=account.host;
     }else if($('code-source').value==='custom'){
       $('code-source').value='blofy';
@@ -196,7 +197,8 @@ if(page==='admin'){
       username:String(entries.get('username')||'').trim(),
       password:String(entries.get('password')||'')
     };
-    if(payload.source==='custom')payload.host=$('code-custom-host').value.trim();
+    if(['custom','strong'].includes(payload.source) && $('code-custom-host').value.trim())
+      payload.host=$('code-custom-host').value.trim();
     button.disabled=true;
     $('code-issued').textContent='—';
     $('code-copy').hidden=true;
