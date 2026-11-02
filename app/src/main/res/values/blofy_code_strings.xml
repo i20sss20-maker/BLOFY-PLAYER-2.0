@@ -1,0 +1,11 @@
+<resources>
+    <string name="blofy_code_entry">+  BLOFY Code</string>
+    <string name="blofy_code_title">BLOFY Server</string>
+    <string name="blofy_code_subtitle">Enter your BLOFY subscription code. The server will be linked automatically once configured.</string>
+    <string name="blofy_code_label">Subscription code</string>
+    <string name="blofy_code_hint">Enter your code</string>
+    <string name="blofy_code_submit">Connect with code</string>
+    <string name="blofy_code_required">Enter the subscription code first.</string>
+    <string name="blofy_code_unconfigured">BLOFY code server is not configured yet. No changes have been made to your saved subscriptions.</string>
+    <string name="blofy_code_pending">BLOFY code hosting will be connected separately. STROING 8K and Xtream are unchanged.</string>
+</resources>
