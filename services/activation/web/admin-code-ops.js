@@ -295,13 +295,15 @@
     status('code-ops-bulk-status','تم مسح النتائج والملف من الصفحة.');
   });
   async function openHub() {
-    if(location.hash!=='#codes')return;
+    // Existing admin tabs are buttons; they do not always update the URL hash.
+    if(byId('codes-view').hidden)return;
     if(started)return; started=true;
     await Promise.all([loadSummary(),loadHosts(),loadSearch()]);
   }
   byId('code-ops-refresh').addEventListener('click',async()=>{
     await Promise.all([loadSummary(),loadHosts(),loadSearch()]);
   });
-  addEventListener('hashchange',openHub);
+  addEventListener('hashchange',()=>queueMicrotask(openHub));
+  document.querySelector('[data-panel="codes"]')?.addEventListener('click',()=>queueMicrotask(openHub));
   openHub();
 })();
