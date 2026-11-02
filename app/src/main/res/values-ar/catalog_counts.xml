@@ -1,0 +1,4 @@
+<resources>
+    <string name="catalog_exact_count">الإجمالي: %1$s</string>
+    <string name="catalog_count_loading">جارٍ حساب العدد…</string>
+</resources>
