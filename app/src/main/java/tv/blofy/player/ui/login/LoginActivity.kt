@@ -67,6 +67,7 @@ class LoginActivity : AppCompatActivity() {
     private lateinit var connectButton: Button
     private lateinit var refreshCodeButton: Button
     private var playlistRow: LinearLayout? = null
+    private var tvPrivacyButton: Button? = null
     private var connectJob: Job? = null
     private var playlistJob: Job? = null
     private var identityJob: Job? = null
@@ -98,10 +99,17 @@ class LoginActivity : AppCompatActivity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
+        // Preserve the Xiaomi v74 logo asset but give it a high-contrast TV tile:
+        // its original dark lettering disappears against the plum header.
         header.addView(ImageView(this).apply {
             setImageResource(R.drawable.blofy_logo)
             scaleType = ImageView.ScaleType.FIT_CENTER
-        }, LinearLayout.LayoutParams(dp(78), dp(50)).apply { marginEnd = dp(16) })
+            setPadding(dp(5), dp(5), dp(5), dp(5))
+            background = GradientDrawable().apply {
+                setColor(0xFFF5F0FF.toInt())
+                cornerRadius = dp(14).toFloat()
+            }
+        }, LinearLayout.LayoutParams(dp(76), dp(66)).apply { marginEnd = dp(16) })
         header.addView(LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             addView(loginText(R.string.login_welcome_title, 24f, true))
@@ -109,10 +117,13 @@ class LoginActivity : AppCompatActivity() {
         }, LinearLayout.LayoutParams(0, -2, 1f))
         refreshCodeButton = actionButton(getString(R.string.refresh_from_website)) { requestIdentityRefresh(true) }.apply {
             textSize = 12f
+            id = View.generateViewId()
         }
         header.addView(refreshCodeButton, LinearLayout.LayoutParams(dp(196), dp(44)).apply { marginStart = dp(16) })
-        header.addView(accountButton(), LinearLayout.LayoutParams(dp(176), dp(44)).apply { marginStart = dp(8) })
-        root.addView(header, LinearLayout.LayoutParams(-1, dp(56)))
+        val privacyButton = accountButton().apply { id = View.generateViewId() }
+        tvPrivacyButton = privacyButton
+        header.addView(privacyButton, LinearLayout.LayoutParams(dp(176), dp(44)).apply { marginStart = dp(8) })
+        root.addView(header, LinearLayout.LayoutParams(-1, dp(72)))
 
         val shortTv = resources.configuration.screenHeightDp <= 600
         val workspace = LinearLayout(this).apply {
@@ -232,8 +243,32 @@ class LoginActivity : AppCompatActivity() {
         }
         addPlaylist = primaryActionButton(getString(R.string.login_add_playlist)) {
             startActivity(Intent(this@LoginActivity, PlaylistActivity::class.java))
-        }.apply { textSize = 14f }
-        connectButton = actionButton(getString(R.string.login_enter_blofy)) { startOrCancelConnect() }.apply { textSize = 14f }
+        }.apply {
+            textSize = 14f
+            id = View.generateViewId()
+        }
+        connectButton = actionButton(getString(R.string.login_enter_blofy)) { startOrCancelConnect() }.apply {
+            textSize = 14f
+            id = View.generateViewId()
+        }
+        // Android TV 9 remotes must not jump to the QR (not focusable) or exit.
+        // Explicitly connect the header and first action row in both directions.
+        val rtl = direction == View.LAYOUT_DIRECTION_RTL
+        refreshCodeButton.nextFocusDownId = addPlaylist.id
+        privacyButton.nextFocusDownId = connectButton.id
+        addPlaylist.nextFocusUpId = refreshCodeButton.id
+        connectButton.nextFocusUpId = privacyButton.id
+        if (rtl) {
+            refreshCodeButton.nextFocusLeftId = privacyButton.id
+            privacyButton.nextFocusRightId = refreshCodeButton.id
+            addPlaylist.nextFocusLeftId = connectButton.id
+            connectButton.nextFocusRightId = addPlaylist.id
+        } else {
+            refreshCodeButton.nextFocusRightId = privacyButton.id
+            privacyButton.nextFocusLeftId = refreshCodeButton.id
+            addPlaylist.nextFocusRightId = connectButton.id
+            connectButton.nextFocusLeftId = addPlaylist.id
+        }
         actions.addView(addPlaylist, LinearLayout.LayoutParams(0, dp(48), 1f).apply { marginEnd = dp(12) })
         actions.addView(connectButton, LinearLayout.LayoutParams(0, dp(48), 1f))
         playlists.addView(actions)
@@ -453,7 +488,8 @@ class LoginActivity : AppCompatActivity() {
         }
     }
 
-    private fun renderPortalPlaylists(allProviders: List<ProviderEntity>) {
+    // Internal so Android TV instrumentation can verify real saved-card remote navigation.
+    internal fun renderPortalPlaylists(allProviders: List<ProviderEntity>) {
         val providers = tv.blofy.player.core.identity.PortalSyncBook.visible(this, allProviders)
             .filter { it.providerType.equals("xtream", true) }
             .sortedWith(compareByDescending<ProviderEntity> { it.enabled }.thenByDescending { it.updatedAt })
@@ -466,16 +502,40 @@ class LoginActivity : AppCompatActivity() {
         row.removeAllViews()
         if (providers.isEmpty()) {
             row.addView(emptyPlaylistView(getString(R.string.login_no_playlists)), LinearLayout.LayoutParams(-1, dp(86)))
+            linkTvPlaylistDpad(emptyList())
+            // Do not strand focus when the website removes the selected playlist.
+            if (focusedId != null && deviceKind == DeviceClass.Kind.TV) addPlaylist.requestFocus()
             return
         }
         providers.forEach { provider ->
             row.addView(playlistCard(provider), LinearLayout.LayoutParams(-1, dp(80)).apply { bottomMargin = dp(9) })
         }
-        if (focusedId != null) row.findViewWithTag<View>(focusedId)?.requestFocus()
+        val cards = (0 until row.childCount).map { row.getChildAt(it) }
+        linkTvPlaylistDpad(cards)
+        // Refreshes replace card views. Restore the selected card, or the nearest valid one.
+        if (focusedId != null) (row.findViewWithTag<View>(focusedId) ?: cards.first()).requestFocus()
+    }
+
+    /** Explicit DPAD graph: header -> first list -> all saved lists -> bottom actions.
+     * Android TV focus search may otherwise skip the ScrollView and jump straight to buttons.
+     */
+    private fun linkTvPlaylistDpad(cards: List<View>) {
+        if (deviceKind != DeviceClass.Kind.TV) return
+        val first = cards.firstOrNull()
+        val last = cards.lastOrNull()
+        refreshCodeButton.nextFocusDownId = first?.id ?: addPlaylist.id
+        tvPrivacyButton?.nextFocusDownId = first?.id ?: connectButton.id
+        addPlaylist.nextFocusUpId = last?.id ?: refreshCodeButton.id
+        connectButton.nextFocusUpId = last?.id ?: (tvPrivacyButton?.id ?: refreshCodeButton.id)
+        cards.forEachIndexed { index, card ->
+            card.nextFocusUpId = cards.getOrNull(index - 1)?.id ?: refreshCodeButton.id
+            card.nextFocusDownId = cards.getOrNull(index + 1)?.id ?: addPlaylist.id
+        }
     }
 
     private fun playlistCard(provider: ProviderEntity) = LinearLayout(this).apply {
         tag = provider.id
+        id = View.generateViewId() // Stable target for the current dynamic DPAD focus graph.
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         layoutDirection = resources.configuration.layoutDirection
