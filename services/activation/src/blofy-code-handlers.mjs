@@ -56,7 +56,7 @@ export function createBlofyCodeHandlers({ pool, secretHex, json, readJson, requi
     const username = typeof input.username === 'string' ? input.username.trim() : '';
     const password = typeof input.password === 'string' ? input.password : '';
     if (!username || !password || username.length > 256 || password.length > 512 ||
-        /[\\u0000-\\u001f\\u007f]/.test(username + password)) {
+        /[\u0000-\u001f\u007f]/.test(username + password)) {
       return json(res, 400, { error: 'invalid_code_account' });
     }
     let account;
