@@ -60,6 +60,13 @@ jobs:
           grep -Fq "sdkVersion:'23'" owner-test/badging.txt
           echo 'Isolated test-only package tv.blofy.player.v2.testing; does not upgrade or delete original tv.blofy.player.v2. Separate local data and test activation; do not distribute to customers.' > owner-test/README.txt
           (cd owner-test && sha256sum BLOFY-PLAYER-76-TV9-SIDE-BY-SIDE-TEST.apk > SHA256SUMS)
+      - name: Publish test APK artifact before slow emulator validation
+        uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-76-TV9-OWNER-INSTALLABLE-APK
+          path: owner-test/
+          retention-days: 30
+          if-no-files-found: error
       - name: Install APK on Android TV 9 emulator and verify it launches
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -73,9 +80,3 @@ jobs:
             adb install -r owner-test/BLOFY-PLAYER-76-TV9-SIDE-BY-SIDE-TEST.apk
             adb shell pm list packages | grep -F 'package:tv.blofy.player.v2.testing'
             adb shell am start -W -n tv.blofy.player.v2.testing/tv.blofy.player.ui.login.SplashActivity | tee owner-test/tv9-launch.txt
-      - uses: actions/upload-artifact@v4
-        with:
-          name: BLOFY-76-TV9-OWNER-INSTALLABLE-APK
-          path: owner-test/
-          retention-days: 30
-          if-no-files-found: error
