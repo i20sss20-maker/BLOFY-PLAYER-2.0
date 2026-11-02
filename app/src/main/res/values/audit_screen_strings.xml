@@ -355,7 +355,7 @@
     <string name="provider_manager_title">BLOFY Playlists</string>
     <string name="provider_manager_refresh_from_website">↻  Refresh from website</string>
     <string name="provider_manager_subtitle">Connect directly to a saved server or edit its details</string>
-    <string name="provider_manager_subscriber_hint">STROING 8K uses the existing subscription host and username/password. BLOFY Code is separate.</string>
+    <string name="provider_manager_subscriber_hint">STROING 8K: old host • Xtream: unchanged • BLOFY: code</string>
     <string name="provider_manager_add_subscriber">+  STROING 8K</string>
     <string name="provider_manager_saved_servers">Saved servers</string>
     <string name="provider_manager_read_failed">Could not read saved playlists • reopen this page to try again</string>
