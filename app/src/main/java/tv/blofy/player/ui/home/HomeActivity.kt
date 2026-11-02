@@ -507,8 +507,12 @@ class HomeActivity : AppCompatActivity() {
 
     private fun renderHomeFeed(data: HomeData) {
         val feed = homeFeed ?: return
-        actionViews.keys.filter { it.startsWith("poster_") || it.startsWith("top10_") || it.endsWith("_story") || it == "featured" }.toList().forEach { actionViews.remove(it) }
+        actionViews.keys.filter { it.startsWith("poster_") || it.startsWith("top10_") || it.endsWith("_story") || it.startsWith("stats_") || it == "featured" }.toList().forEach { actionViews.remove(it) }
         while (feed.childCount > 1) feed.removeViewAt(1)
+        feed.addView(buildCatalogStats(data.totals), LinearLayout.LayoutParams(-1, dp(if (layoutSpec.compact) 90 else 102)).apply {
+            topMargin = dp(if (layoutSpec.compact) 10 else 14)
+            bottomMargin = dp(16)
+        })
 
         if (data.continueWatching.isNotEmpty()) {
             addShelf(feed, getString(R.string.home_continue_watching), getString(R.string.home_continue_subtitle), "continue", data.providerId, data.continueWatching, data.watchStates)
@@ -1186,6 +1190,67 @@ class HomeActivity : AppCompatActivity() {
         setOnClickListener { action() }; registerAction(key, this)
     }
     private fun heroButton(label: String, key: String, intent: Intent, primary: Boolean) = actionHeroButton(label, key, primary) { startActivity(intent) }
+
+    /** Subtle, D-pad-accessible library summary. Exact totals include every indexed item. */
+    private fun buildCatalogStats(totals: CatalogTotals) = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        layoutDirection = uiDirection
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(dp(2), dp(2), dp(2), dp(2))
+        for ((kind, title, value) in listOf(
+            Triple("live", getString(R.string.home_live), totals.live),
+            Triple("movie", getString(R.string.home_movies), totals.movies),
+            Triple("series", getString(R.string.home_series), totals.series)
+        )) {
+            val card = LinearLayout(this@HomeActivity).apply {
+                tag = "stats_$kind"
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_VERTICAL or Gravity.START
+                setPadding(dp(if (layoutSpec.compact) 10 else 18), dp(7), dp(6), dp(7))
+                isFocusable = true
+                isFocusableInTouchMode = remote
+                isClickable = true
+                clipToPadding = false
+                fun surface(focused: Boolean) = GradientDrawable(
+                    GradientDrawable.Orientation.TL_BR,
+                    intArrayOf(if (focused) 0xFF442366.toInt() else 0xFF261739.toInt(), 0xFF15111E.toInt())
+                ).apply {
+                    cornerRadius = dp(15).toFloat()
+                    setStroke(dp(1), if (focused) BlofyTvDesign.PurpleSoft else 0xFF56386B.toInt())
+                }
+                background = surface(false)
+                addView(TextView(this@HomeActivity).apply {
+                    text = CatalogTotals.formatted(value)
+                    textSize = if (layoutSpec.compact) 20f else 25f
+                    typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
+                    setTextColor(Color.WHITE)
+                    isSingleLine = true
+                    maxLines = 1
+                    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                })
+                addView(TextView(this@HomeActivity).apply {
+                    text = title
+                    textSize = if (layoutSpec.compact) 11f else 13f
+                    typeface = BlofyTvDesign.preferredTypeface(this)
+                    setTextColor(BlofyTvDesign.Lavender)
+                    isSingleLine = true
+                    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                })
+                contentDescription = "$title: " + getString(R.string.catalog_exact_count, CatalogTotals.formatted(value))
+                setOnFocusChangeListener { view, focused ->
+                    view.background = surface(focused)
+                    if (focused) FocusMemory.save(this@HomeActivity, SCREEN_KEY, "stats_$kind")
+                    animateFocus(view, focused, 1.02f, 0f, dp(5).toFloat())
+                }
+                setOnClickListener { startActivity(contentIntent(kind)) }
+            }
+            registerAction("stats_$kind", card)
+            addView(card, LinearLayout.LayoutParams(0, -1, 1f).apply {
+                marginStart = dp(3)
+                marginEnd = dp(3)
+            })
+        }
+    }
 
     private fun addStory(row: LinearLayout, key: String, title: String, subtitle: String, intent: Intent, total: Int? = null) {
         val card = LinearLayout(this).apply {
