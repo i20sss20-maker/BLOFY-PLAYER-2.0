@@ -31,7 +31,7 @@ class ProductionPortalDnsFallbackTest {
         val src = "https://api.blofyplayer.com/api/v1/portal/playlists/list?keep=exact".toHttpUrl()
         val results = ProductionPortalDnsFallback.candidates(src)
         assertEquals(3, results.size)
-        assertEquals(listOf("/api/v1/portal/playlists/list").repeat(3), results.map { it.encodedPath })
+        assertEquals(List(3) { "/api/v1/portal/playlists/list" }, results.map { it.encodedPath })
         assertEquals(listOf("keep=exact", "keep=exact", "keep=exact"), results.map { it.encodedQuery })
     }
 }
