@@ -88,7 +88,7 @@ jobs:
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
             adb shell am instrument -w -e class tv.blofy.player.ui.AndroidTvV74ReviewTest -e tvReview true tv.blofy.player.v2.test/androidx.test.runner.AndroidJUnitRunner | tee tv74-dpad.txt
-            grep -q 'OK (2 tests)' tv74-dpad.txt
+            grep -q 'OK (3 tests)' tv74-dpad.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
