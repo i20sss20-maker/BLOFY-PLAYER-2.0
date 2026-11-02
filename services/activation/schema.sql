@@ -123,3 +123,18 @@ CREATE TABLE IF NOT EXISTS cloud_pair_codes (
 );
 ALTER TABLE cloud_pair_codes
   ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+-- New BLOFY code access is isolated from existing STROING 8K and manual Xtream.
+-- Persist only HMAC proofs and AES-256-GCM encrypted source credentials.
+CREATE TABLE IF NOT EXISTS blofy_code_subscriptions (
+  id UUID PRIMARY KEY,
+  code_proof TEXT NOT NULL UNIQUE,
+  username_enc TEXT NOT NULL,
+  password_enc TEXT NOT NULL,
+  device_id TEXT REFERENCES devices(device_id) ON DELETE SET NULL,
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  expires_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_blofy_codes_device ON blofy_code_subscriptions(device_id);
