@@ -36,7 +36,6 @@ import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.DeviceLocalTime
-import tv.blofy.player.ui.login.CatalogLoadingActivity
 import tv.blofy.player.ui.playlist.ProviderManagerActivity
 import tv.blofy.player.ui.profile.HomePersonalizationActivity
 import java.text.SimpleDateFormat
@@ -56,6 +55,7 @@ class SettingsActivity : AppCompatActivity() {
     private var refreshState: WorkInfo.State? = null
     private var refreshStage: String? = null
     private var refreshRequested = false
+    private var refreshNotice: String? = null
     private val prefs by lazy { getSharedPreferences(RuntimeSettings.PREFS, MODE_PRIVATE) }
     private val isRtl: Boolean get() = resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL
     private val uiDirection: Int get() = if (isRtl) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
@@ -378,11 +378,15 @@ class SettingsActivity : AppCompatActivity() {
         if (observedRefreshProvider == providerId) return
         refreshJobs?.removeObservers(this)
         observedRefreshProvider = providerId
+        refreshState = null
+        refreshStage = null
+        refreshRequested = false
+        refreshNotice = null
         refreshJobs = WorkManager.getInstance(applicationContext)
             .getWorkInfosForUniqueWorkLiveData(CatalogRefreshWorker.manualWorkName(providerId))
             .also { jobs ->
                 jobs.observe(this) { all ->
-                    val current = all.firstOrNull { !it.state.isFinished } ?: all.firstOrNull()
+                    val current = all.firstOrNull { !it.state.isFinished } ?: all.lastOrNull()
                     refreshState = current?.state
                     refreshStage = current?.progress?.getString("catalog_stage")
                     if (::status.isInitialized) updateSyncStatus()
@@ -390,63 +394,93 @@ class SettingsActivity : AppCompatActivity() {
             }
     }
 
+    /** Single manual action: progress and final result stay on this settings card. */
     private fun refreshLibrary() {
-        val active = provider ?: run {
-            status.text = getString(R.string.setting_no_active_playlist)
+        val active = provider
+        if (active == null) {
+            refreshNotice = copy("اختر قائمة تشغيل أولًا.", "Choose a playlist first.")
+            updateSyncStatus()
             return
         }
         if (!CatalogSyncState.isReady(applicationContext, active.id)) {
-            status.text = getString(R.string.setting_refresh_opening)
-            startActivity(Intent(this, CatalogLoadingActivity::class.java).apply {
-                putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, active.id)
-            })
+            refreshNotice = copy(
+                "أكمل إعداد القائمة أولًا، ثم حدّث المحتوى من هنا.",
+                "Finish the first playlist setup, then refresh content here."
+            )
+            updateSyncStatus()
             return
         }
+        // The card stays focusable for TV remotes, but repeated presses never enqueue duplicates.
+        if (refreshState == WorkInfo.State.RUNNING ||
+            refreshState == WorkInfo.State.ENQUEUED ||
+            refreshState == WorkInfo.State.BLOCKED
+        ) return
+
         observeRefresh(active.id)
+        refreshNotice = null
         refreshRequested = true
+        refreshStage = null
         refreshState = WorkInfo.State.ENQUEUED
-        CatalogRefreshWorker.enqueueNow(applicationContext, active.id)
-        status.text = copy(
-            "بدأ تحديث المحتوى بالخلفية، وتظل المكتبة محفوظة ومتاحة أثناء المشاهدة.",
-            "Content refresh started silently. The saved library stays available for viewing."
-        )
+        updateSyncStatus()
+        try {
+            CatalogRefreshWorker.enqueueNow(applicationContext, active.id, manual = true)
+        } catch (_: Exception) {
+            refreshState = WorkInfo.State.FAILED
+            refreshNotice = copy("تعذر بدء التحديث. حاول مجددًا.", "Could not start refresh. Try again.")
+            updateSyncStatus()
+        }
     }
 
     private fun updateSyncStatus() {
         val active = provider
-        status.text = when {
-            active == null -> getString(R.string.setting_status_reading)
-            refreshState == WorkInfo.State.RUNNING -> {
-                val section = when (refreshStage) {
-                    "LIVE" -> getString(R.string.home_live)
-                    "MOVIES" -> getString(R.string.home_movies)
-                    "SERIES" -> getString(R.string.home_series)
-                    else -> null
-                }
-                if (section == null) getString(R.string.home_catalog_refresh_running_v74)
-                else "${getString(R.string.home_catalog_refresh_running_v74)} · $section"
-            }
-            refreshState == WorkInfo.State.ENQUEUED || refreshState == WorkInfo.State.BLOCKED ->
-                getString(R.string.home_catalog_refresh_waiting_v74)
-            refreshRequested && refreshState == WorkInfo.State.SUCCEEDED ->
-                getString(R.string.home_catalog_refresh_done_v74)
-            refreshRequested && (refreshState == WorkInfo.State.FAILED || refreshState == WorkInfo.State.CANCELLED) ->
-                getString(R.string.home_catalog_refresh_failed_v74)
-            else -> {
-                val last = CatalogSyncState.lastSyncedAt(applicationContext, active.id)
-                if (last > 0L) getString(R.string.setting_status_saved_at, formatSyncTime(last))
-                else getString(R.string.setting_status_saved)
-            }
+        status.text = if (active == null) getString(R.string.setting_status_reading)
+        else {
+            val last = CatalogSyncState.lastSyncedAt(applicationContext, active.id)
+            if (last > 0L) getString(R.string.setting_status_saved_at, formatSyncTime(last))
+            else getString(R.string.setting_status_saved)
         }
-        if (::refreshCard.isInitialized) refreshCard.bind(getString(R.string.setting_refresh_content), syncSubtitle())
+        if (!::refreshCard.isInitialized) return
+
+        val busy = refreshState == WorkInfo.State.RUNNING ||
+            refreshState == WorkInfo.State.ENQUEUED ||
+            refreshState == WorkInfo.State.BLOCKED
+        val section = when (refreshStage) {
+            "LIVE" -> getString(R.string.home_live)
+            "MOVIES" -> getString(R.string.home_movies)
+            "SERIES" -> getString(R.string.home_series)
+            "SAVE" -> copy("حفظ التغييرات", "Saving changes")
+            else -> null
+        }
+        val value = when {
+            refreshNotice != null -> copy("تعذر بدء التحديث", "Refresh unavailable")
+            active == null -> copy("تحديث الآن", "Refresh now")
+            refreshState == WorkInfo.State.RUNNING -> copy("جارٍ تحديث المحتوى…", "Updating content…")
+            refreshState == WorkInfo.State.ENQUEUED || refreshState == WorkInfo.State.BLOCKED ->
+                copy("بانتظار بدء التحديث…", "Waiting to refresh…")
+            refreshRequested && refreshState == WorkInfo.State.SUCCEEDED ->
+                copy("✓ تم تحديث المحتوى", "✓ Content updated")
+            refreshRequested && (refreshState == WorkInfo.State.FAILED || refreshState == WorkInfo.State.CANCELLED) ->
+                copy("تعذر التحديث • اضغط للمحاولة", "Refresh failed • tap to retry")
+            else -> copy("تحديث الآن", "Refresh now")
+        }
+        val hint = when {
+            refreshNotice != null -> refreshNotice.orEmpty()
+            refreshState == WorkInfo.State.RUNNING ->
+                section?.let { copy("المرحلة الحالية: $it", "Current section: $it") }
+                    ?: copy("يُحدَّث المحتوى والمكتبة السابقة محفوظة", "Updating; your saved library remains available")
+            refreshState == WorkInfo.State.ENQUEUED || refreshState == WorkInfo.State.BLOCKED ->
+                copy("سيبدأ عند توفر الاتصال والموارد", "Starts when network and device are ready")
+            else -> syncSubtitle()
+        }
+        refreshCard.bind(getString(R.string.setting_refresh_content), value, hint)
+        refreshCard.setBusy(busy)
     }
 
     private fun syncSubtitle(): String {
-        val active = provider ?: return getString(R.string.setting_manual_only)
+        val active = provider ?: return copy("لا توجد قائمة محددة", "No playlist selected")
         val last = CatalogSyncState.lastSyncedAt(applicationContext, active.id)
-        val cadence = copy("تحديث صامت كل 30 دقيقة تقريبًا", "Quiet refresh about every 30 minutes")
-        return if (last > 0L) "${getString(R.string.setting_last_refresh, formatSyncTime(last))} • $cadence"
-        else cadence
+        return if (last > 0L) getString(R.string.setting_last_refresh, formatSyncTime(last))
+        else copy("لم يتم التحديث بعد", "Not refreshed yet")
     }
 
     private fun formatSyncTime(value: Long): String {
