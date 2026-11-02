@@ -6,9 +6,9 @@ import org.junit.Test
 
 class LoginLayoutSpecTest {
     @Test fun qrRemainsSquareFriendlyAcrossTvSizes() {
-        assertEquals(132, LoginLayoutSpec.tvQrSizeDp(480))
-        assertEquals(165, LoginLayoutSpec.tvQrSizeDp(540))
-        assertEquals(238, LoginLayoutSpec.tvQrSizeDp(720))
+        assertEquals(128, LoginLayoutSpec.tvQrSizeDp(480))
+        assertEquals(135, LoginLayoutSpec.tvQrSizeDp(540))
+        assertEquals(220, LoginLayoutSpec.tvQrSizeDp(720))
         assertEquals(72, LoginLayoutSpec.tvPlaylistRowHeightDp(540))
         assertEquals(84, LoginLayoutSpec.tvPlaylistRowHeightDp(720))
     }
