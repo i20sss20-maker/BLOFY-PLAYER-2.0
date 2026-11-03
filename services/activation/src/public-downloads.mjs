@@ -2,11 +2,20 @@ import { withPublicAnalytics, PUBLIC_ANALYTICS_CSP } from './public-analytics.mj
 /** Public downloads are server-rendered: no JavaScript, fetch or WebView feature is required. */
 const PATHS = new Set(['/downloads', '/downloads/', '/releases', '/releases/']);
 const BLOFY_ONLY_75 = String(process.env.BLOFY_SINGLE_RELEASE_75 || '').toLowerCase() === 'true';
+const BLOFY_PUBLIC_RELEASE_2000078 = String(process.env.BLOFY_PUBLIC_RELEASE_2000078 || '').toLowerCase() === 'true';
+const BLOFY_ONLY_CURRENT = BLOFY_PUBLIC_RELEASE_2000078 || BLOFY_ONLY_75;
 const ONLY_75 = {
   versionCode: 2000075,
   versionName: '2.0.0-rc07.55.7-identity-recovery',
   downloadUrl: 'https://updates.blofyplayer.com/download/latest.apk',
   releaseNotes: 'BLOFY PLAYER 75 — دعم Android TV 9، وتحسين التنقل بالريموت، وبانر وأيقونة التلفزيون، وربط الأجهزة والتحديث الداخلي لنسخ الموقع.',
+  isPrimary: true
+};
+const APPROVED_2000078 = {
+  versionCode: 2000078,
+  versionName: '2.0.0-rc07.55.8.1',
+  downloadUrl: 'https://updates.blofyplayer.com/download/latest.apk',
+  releaseNotes: 'BLOFY PLAYER 55.8.1 — تحسين القوائم والبطاقات، تحسين صفحة QR والتفعيل، وإظهار أعداد المحتوى داخل أقسام القنوات والأفلام والمسلسلات فقط. النسخة موقعة بالشهادة الأصلية ويمكن تحديث النسخ المتوافقة دون حذف بياناتها.',
   isPrimary: true
 };
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, ch => ({
@@ -23,7 +32,7 @@ function apkUrl(value) {
 }
 
 export function renderPublicDownloads(items = [], { unavailable = false } = {}) {
-  const releases = (BLOFY_ONLY_75 ? [ONLY_75] : (Array.isArray(items) ? items : [])).filter(item => item &&
+  const releases = (BLOFY_PUBLIC_RELEASE_2000078 ? [APPROVED_2000078] : BLOFY_ONLY_75 ? [ONLY_75] : (Array.isArray(items) ? items : [])).filter(item => item &&
     Number.isSafeInteger(Number(item.versionCode)) && Number(item.versionCode) > 0 &&
     typeof item.versionName === 'string' && item.versionName.length > 0 && item.versionName.length <= 64 && apkUrl(item.downloadUrl))
     .slice(0, 200).sort((a, b) => Number(b.isPrimary === true) - Number(a.isPrimary === true) || Number(b.versionCode) - Number(a.versionCode));
@@ -49,10 +58,10 @@ export function renderPublicDownloads(items = [], { unavailable = false } = {}) 
 <div class="official-store-links"><a class="btn primary" id="google-play-primary" href="https://play.google.com/store/apps/details?id=tv.blofy.player.v2" rel="noopener noreferrer">التثبيت الرسمي من Google Play ↗</a><a class="btn" href="#versions-title">تحميل APK بديل</a><a class="btn" href="/pay">تجديد التفعيل</a></div>
 <div class="wa-contact-actions"><a class="wa-contact-support" href="https://wa.me/966568941484?text=%D9%85%D8%B1%D8%AD%D8%A8%D9%8B%D8%A7%D8%8C%20%D8%A3%D8%AD%D8%AA%D8%A7%D8%AC%20%D8%AF%D8%B9%D9%85%20%D9%81%D9%86%D9%8A%20%D9%84%D8%AA%D8%B7%D8%A8%D9%8A%D9%82%20BLOFY%20PLAYER." rel="noopener noreferrer">💬 الدعم الفني عبر واتساب</a><a class="wa-contact-renew" href="/pay">♻ تجديد التفعيل والدفع بالبطاقات</a></div>
 <p class="wa-payment-note">لتجديد تفعيل BLOFY PLAYER افتح بوابة الدفع الآمنة واختر باقتك. واتساب للدعم الفني فقط، ولا ترسل رمز ربط جهازك لأي شخص.</p>
-${primary && !unavailable ? `<a id="download-primary" class="btn download-main" href="${BLOFY_ONLY_75 ? 'https://updates.blofyplayer.com/d/blofy' : '/download/latest.apk'}"><span>تنزيل APK مباشر</span><span class="download-version" dir="ltr">${escapeHtml(primary.versionName)} · APK</span></a><p class="download-assurance">للتحديث: ثبّت فوق النسخة الحالية ولا تحذف التطبيق القديم.</p><p class="download-assurance">للـ Downloader استخدم الرابط السريع: <strong dir="ltr">updates.blofyplayer.com/d/blofy</strong></p>` : ''}
+${primary && !unavailable ? `<a id="download-primary" class="btn download-main" href="${BLOFY_ONLY_CURRENT ? 'https://updates.blofyplayer.com/d/blofy' : '/download/latest.apk'}"><span>تنزيل APK مباشر</span><span class="download-version" dir="ltr">${escapeHtml(primary.versionName)} · APK</span></a><p class="download-assurance">للتحديث: ثبّت فوق النسخة الحالية ولا تحذف التطبيق القديم.</p><p class="download-assurance">للـ Downloader استخدم الرابط السريع: <strong dir="ltr">updates.blofyplayer.com/d/blofy</strong></p>` : ''}
 </section>
 <section class="download-steps" aria-label="خطوات التثبيت"><article><strong>01</strong><div><h2>نزّل الإصدار</h2><p>التثبيت الموصى به من Google Play، أو استخدم رابط APK البديل عند الحاجة.</p></div></article><article><strong>02</strong><div><h2>ثبّت أو حدّث</h2><p>اسمح بالتثبيت من مصدر التنزيل عند الطلب.</p></div></article><article><strong>03</strong><div><h2>اربط جهازك</h2><p>افتح BLOFY ثم استخدم رقم الجهاز ورمز الربط.</p></div></article></section>
-${BLOFY_ONLY_75 ? '' : `<section class="section" aria-label="BLOFY PLAYER 74 السينمائي">
+${BLOFY_ONLY_CURRENT ? '' : `<section class="section" aria-label="BLOFY PLAYER 74 السينمائي">
   <article class="card download-card available" data-cinematic-v74="true">
     <span class="badge">ANDROID TV • BLOFY 74</span>
     <h2>بلوفي بلاير 74 — الواجهة السينمائية الجديدة</h2>
