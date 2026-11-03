@@ -62,8 +62,16 @@ class PlaylistManager(
                 },
                 suspend {
                     onProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3))
-                    freshItemCount += syncVod(provider) { percent ->
-                        onProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3, percent))
+                    freshItemCount += syncVod(provider) { percent, parsedCount ->
+                        onProgress(
+                            PlaylistSyncProgress(
+                                stage = PlaylistSyncStage.MOVIES,
+                                step = 2,
+                                totalSteps = 3,
+                                downloadPercent = percent,
+                                parsedItems = parsedCount
+                            )
+                        )
                     }
                 },
                 suspend {
@@ -164,7 +172,7 @@ class PlaylistManager(
      */
     suspend fun syncVod(
         provider: ProviderEntity,
-        onProgress: suspend (Int) -> Unit = {}
+        onProgress: suspend (Int?, Int) -> Unit = { _, _ -> }
     ): Int {
         if (provider.providerType.equals("m3u", true)) return 0
         val categories = api.list(actionUrl(provider, "get_vod_categories"))
@@ -195,18 +203,20 @@ class PlaylistManager(
                     vodEntity(provider, row)?.let { streamRows += previousFlags.applyTo(it) }
 
                     if (sourceStreamCount % 256 == 0) {
+                        // A trustworthy percentage exists only when the
+                        // server declares a byte count. Item count alone does
+                        // NOT reveal the fraction of a large catalog remaining.
                         val percent = if (declaredBytes > 0L) {
-                            60 + ((counting.bytesRead.toDouble() / declaredBytes.toDouble()) * 28.0).toInt().coerceIn(0, 28)
-                        } else {
-                            60 + (sourceStreamCount / 500).coerceIn(0, 27)
-                        }
-                        onProgress(percent.coerceIn(60, 88))
+                            ((counting.bytesRead.toDouble() / declaredBytes) * 100.0)
+                                .toInt().coerceIn(0, 99)
+                        } else null
+                        onProgress(percent, sourceStreamCount)
                     }
                 }
                 reader.endArray()
             }
         }
-        onProgress(88)
+        onProgress(if (declaredBytes > 0L) 100 else null, sourceStreamCount)
 
         if (CatalogReplacementPolicy.shouldReplace(
                 previousStreamCount = previousCount,
