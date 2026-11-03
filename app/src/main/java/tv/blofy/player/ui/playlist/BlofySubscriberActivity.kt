@@ -28,6 +28,7 @@ import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.identity.BlofySubscriberClient
 import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.data.CatalogSyncState
+import tv.blofy.player.data.CatalogReusePolicy
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.PlaylistSyncPolicy
 import tv.blofy.player.data.PlaylistSyncProgress
@@ -105,7 +106,7 @@ class BlofySubscriberActivity : AppCompatActivity() {
                                 oldProvider.baseUrl != next.baseUrl ||
                                 oldProvider.username != next.username ||
                                 oldProvider.password != next.password
-                            if (hasCatalog && !connectionChanged) {
+                            if (CatalogReusePolicy.canReuseSavedCatalog(hasCatalog, connectionChanged)) {
                                 // A failed previous refresh may leave the ready
                                 // marker false. Never erase an existing library.
                                 dao.upsertProvider(next)
