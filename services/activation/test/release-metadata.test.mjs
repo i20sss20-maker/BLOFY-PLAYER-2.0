@@ -58,3 +58,18 @@ test('explicit later metadata can still be configured without silently reverting
   assert.equal(app.versionName, '2.0.0-rc07.55.6');
   assert.match(app.downloadUrl, /approved-future\.apk$/);
 });
+
+test('explicit public 2000078 switch wins over stale activation health release variables', () => {
+  const app = appReleaseMetadata({
+    BLOFY_PUBLIC_RELEASE_2000078: 'true',
+    BLOFY_APP_VERSION_CODE: '2000073',
+    BLOFY_APP_VERSION_NAME: '2.0.0-rc07.55.5',
+    BLOFY_APP_DOWNLOAD_URL: 'https://updates.blofyplayer.com/files/releases/old.apk'
+  });
+  assert.equal(app.versionCode, 2000078);
+  assert.equal(app.versionName, '2.0.0-rc07.55.8.1');
+  assert.equal(app.downloadUrl, 'https://updates.blofyplayer.com/download/latest.apk');
+  assert.equal(app.minSupportedVersionCode, 1);
+  const off = appReleaseMetadata({ BLOFY_PUBLIC_RELEASE_2000078: 'false' });
+  assert.equal(off.versionCode, 2000073);
+});
