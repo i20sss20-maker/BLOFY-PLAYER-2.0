@@ -4,6 +4,9 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.google.gson.stream.JsonReader
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
+import java.io.IOException
+import retrofit2.HttpException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
@@ -445,13 +448,26 @@ internal suspend fun runXtreamSections(sections: List<suspend () -> Unit>): Xtre
     var successCount = 0
     val failures = mutableListOf<Exception>()
     sections.forEach { syncSection ->
-        try {
-            syncSection()
-            successCount += 1
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (failure: Exception) {
-            failures += failure
+        var attempt = 0
+        while (true) {
+            attempt += 1
+            try {
+                syncSection()
+                successCount += 1
+                break
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                // Xtream catalog reads are idempotent. A provider may close a large
+                // JSON response mid-transfer; retry only transient network failures.
+                val transient = failure is IOException ||
+                    (failure is HttpException && (failure.code() == 429 || failure.code() in 500..599))
+                if (!transient || attempt >= 3) {
+                    failures += failure
+                    break
+                }
+                delay(500L * attempt)
+            }
         }
     }
     if (successCount == 0) {
