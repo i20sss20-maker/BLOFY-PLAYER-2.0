@@ -116,7 +116,7 @@ class BlofySubscriberActivity : AppCompatActivity() {
                                     CatalogSyncState.markReady(applicationContext, providerId)
                                 } catch (error: Throwable) {
                                     dao.clearProviderCatalog(providerId)
-                                    CatalogSyncState.markPending(applicationContext, providerId)
+                                    CatalogSyncState.markFailed(applicationContext, providerId)
                                     throw error
                                 }
                             } else {
