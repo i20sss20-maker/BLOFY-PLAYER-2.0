@@ -131,10 +131,9 @@ class PlaylistActivity : AppCompatActivity() {
                     val next = ProviderEntity(id, name.text.toString().trim().ifBlank { if (isM3u) "BLOFY M3U" else "BLOFY Server" }, if (isM3u) baseUrl else baseUrl.trimEnd('/'), user, pass, type,
                         existing?.liveFormat ?: "ts", existing?.preferredTransport ?: "cronet", existing?.preferredEngine ?: "media3", existing?.allowCrossProtocolRedirects ?: true, true, System.currentTimeMillis())
                     val hasCatalog = dao.hasCatalog(id)
-                    val connectionChanged = existing != null && (
+                    val connectionChanged = existing == null ||
                         existing.baseUrl != next.baseUrl || existing.username != next.username ||
                         existing.password != next.password || existing.providerType != next.providerType
-                    )
                     if (CatalogReusePolicy.canReuseSavedCatalog(hasCatalog, connectionChanged)) {
                         // Already downloaded, same source: never discard data just
                         // because an older app build left the ready marker unset.
