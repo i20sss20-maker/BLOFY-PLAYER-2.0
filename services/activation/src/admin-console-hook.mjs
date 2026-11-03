@@ -18,6 +18,9 @@ pool.on('error', error => console.error('admin database error:', safeErrorSummar
 const token = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
 const limiter = createFixedWindowLimiter({ limit: 60, windowMs: 60000 });
 const catalog = createReleaseCatalog(pool, appReleaseMetadata());
+const PUBLIC_2000078 = String(process.env.BLOFY_PUBLIC_RELEASE_2000078 || '').toLowerCase() === 'true';
+// Public releases are from one approved immutable signed build while rollout is active.
+const publicApprovedRelease = () => ({ ...appReleaseMetadata(), isPrimary: true, channel: 'stable' });
 let adminReady;
 const json = (res, status, body, extra = {}) => {
   const payload = JSON.stringify(body);
@@ -95,17 +98,17 @@ http.createServer = function withAdminConsole(listener) {
         res.end(body); return;
       }
       if (req.method === 'GET' && url.pathname === '/api/v1/releases') {
-        const { items } = await catalog.list(); json(res, 200, { items }); return;
+        const { items } = PUBLIC_2000078 ? { items: [publicApprovedRelease()] } : await catalog.list(); json(res, 200, { items }); return;
       }
       if (['GET','HEAD'].includes(req.method) && ['/download/latest.apk','/latest.apk','/apk'].includes(url.pathname)) {
-        const release = await catalog.primary();
+        const release = PUBLIC_2000078 ? publicApprovedRelease() : await catalog.primary();
         if (!release) { json(res, 404, { error: 'release_not_found' }); return; }
         res.writeHead(302, { location: release.downloadUrl, 'cache-control': 'no-store, max-age=0', 'referrer-policy': 'no-referrer' });
         res.end(); return;
       }
       if (req.method === 'GET' && url.pathname === '/health') {
         await pool.query('SELECT 1');
-        const release = { ...activationReleaseMetadata(), app: await catalog.primary() };
+        const release = { ...activationReleaseMetadata(), app: PUBLIC_2000078 ? appReleaseMetadata() : await catalog.primary() };
         json(res, 200, { ok: true, database: 'ready', playlistEncryption: 'ready', release, time: Date.now() }); return;
       }
       if (await deviceAdmin(req, res, url)) return;
