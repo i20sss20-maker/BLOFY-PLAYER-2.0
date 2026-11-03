@@ -32,6 +32,7 @@ import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.core.url.PlaylistUrlPolicy
 import tv.blofy.player.data.CatalogSyncState
+import tv.blofy.player.data.CatalogReusePolicy
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.PlaylistSyncPolicy
 import tv.blofy.player.data.PlaylistSyncProgress
@@ -134,13 +135,13 @@ class PlaylistActivity : AppCompatActivity() {
                         existing.baseUrl != next.baseUrl || existing.username != next.username ||
                         existing.password != next.password || existing.providerType != next.providerType
                     )
-                    if (hasCatalog && !connectionChanged) {
+                    if (CatalogReusePolicy.canReuseSavedCatalog(hasCatalog, connectionChanged)) {
                         // Already downloaded, same source: never discard data just
                         // because an older app build left the ready marker unset.
                         dao.upsertProvider(next)
                         dao.disableAllProviders()
                         dao.activateProvider(id)
-                    } else if (hasCatalog) {
+                    } else if (CatalogReusePolicy.shouldStageReplacement(hasCatalog, connectionChanged)) {
                         // Replacing an existing source must be transactional. Keep
                         // old categories, favorites and streams until ALL sections
                         // from the new source have downloaded successfully.
