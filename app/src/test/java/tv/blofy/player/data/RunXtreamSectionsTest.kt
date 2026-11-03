@@ -44,6 +44,24 @@ class RunXtreamSectionsTest {
     }
 
     @Test
+    fun failingMovieSectionIsReportedWithoutLosingWorkingSections() = runBlocking {
+        val result = runXtreamSections(
+            listOf<suspend () -> Unit>(
+                { /* live downloaded */ },
+                { throw IllegalArgumentException("provider's movie section invalid") },
+                { /* series downloaded */ }
+            )
+        )
+        assertEquals(2, result.successCount)
+        assertEquals(1, result.failureCount)
+        assertEquals(listOf(1), result.failedSectionIndices)
+        assertEquals(
+            "الأفلام",
+            PlaylistSyncResult(5, 1, listOf(PlaylistSyncStage.MOVIES)).failedSectionNames()
+        )
+    }
+
+    @Test
     fun invalidProviderFailureIsNotRetried() = runBlocking {
         var attempts = 0
         try {
