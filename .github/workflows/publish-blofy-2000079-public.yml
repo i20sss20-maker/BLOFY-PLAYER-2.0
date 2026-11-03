@@ -1,0 +1,89 @@
+name: BLOFY signed 2000079 public APK distribution
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/publish-blofy-2000079-public.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: blofy-2000079-website-signed-release
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      SOURCE_RUN: '41666487013'
+      SOURCE_SHA: 180f87ed173e6a26ebb51188547e50fb125133bc
+      SOURCE_ARTIFACT: BLOFY-55-8-2-2000079-APK-AAB-OWNER-SIGNED
+      APK_FILENAME: BLOFY-PLAYER-55.8.2-2000079-SIGNED.apk
+      AAB_FILENAME: BLOFY-PLAYER-55.8.2-2000079-GOOGLE-PLAY.aab
+      EXPECTED_CERT: C3B98CCCD2F0C86809014ACD9368BF61C7004CFD419CD867B71FEF10BFA6255E
+      TAG: blofy-player-v2000079-website
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify exact production-signed source run
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" > source-run.json
+          jq -e --arg sha "$SOURCE_SHA" '.status=="completed" and .conclusion=="success" and .head_sha==$sha' source-run.json
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Existing release tag: refusing to overwrite signed APK"; exit 1
+          fi
+      - name: Download reviewed signing output only
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p staging public
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name "$SOURCE_ARTIFACT" --dir staging
+          apk="$(find staging -type f -name "$APK_FILENAME" -print -quit)"
+          sums="$(find staging -type f -name SHA256SUMS -print -quit)"
+          test -s "$apk" && test -s "$sums"
+          expected="$(grep -F "  output/$APK_FILENAME" "$sums" | awk '{print $1}')"
+          test "${#expected}" -eq 64
+          actual="$(sha256sum "$apk" | awk '{print $1}')"
+          test "$actual" = "$expected"
+          cp "$apk" "public/$APK_FILENAME"
+          (cd public && sha256sum "$APK_FILENAME" > SHA256SUMS && sha256sum -c SHA256SUMS)
+      - name: Inspect actual APK package, version, signature, TV ABI and updater permission
+        shell: bash
+        run: |
+          set -euo pipefail
+          tool="$ANDROID_HOME/build-tools/35.0.0"
+          if [ ! -x "$tool/aapt" ]; then
+            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'build-tools;35.0.0'
+          fi
+          apk="public/$APK_FILENAME"
+          "$tool/aapt" dump badging "$apk" > public/badging.txt
+          grep -Fq "package: name='tv.blofy.player.v2' versionCode='2000079' versionName='2.0.0-rc07.55.8.2'" public/badging.txt
+          ! grep -Fq 'application-debuggable' public/badging.txt
+          "$tool/aapt" dump permissions "$apk" > public/permissions.txt
+          grep -Fq 'android.permission.REQUEST_INSTALL_PACKAGES' public/permissions.txt
+          "$tool/apksigner" verify --verbose --print-certs "$apk" > public/signature.txt
+          actual="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' public/signature.txt | head -1 | tr -d '[:space:]-:' | tr '[:lower:]' '[:upper:]')"
+          test "$actual" = "$EXPECTED_CERT"
+          "$tool/zipalign" -c -P 16 -v 4 "$apk" > public/zipalign.txt
+          unzip -Z1 "$apk" > public/apk-file-list.txt
+          for abi in arm64-v8a armeabi-v7a x86 x86_64; do
+            grep -Eiq "^lib/$abi/lib(ffmpeg|ffmpegJNI).*\.so$" public/apk-file-list.txt
+          done
+      - name: Publish immutable signed public website APK asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'package=tv.blofy.player.v2\nversionCode=2000079\nversionName=2.0.0-rc07.55.8.2\nsourceRun=%s\nsourceSha=%s\nsignedOriginalCertificate=%s\nwebsiteUpdater=true\n' "$SOURCE_RUN" "$SOURCE_SHA" "$EXPECTED_CERT" > public/BUILD_INFO.txt
+          gh release create "$TAG" "public/$APK_FILENAME" public/SHA256SUMS public/BUILD_INFO.txt \
+            --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" --latest=false \
+            --title 'BLOFY PLAYER 55.8.2 (2000079) — Signed website APK' \
+            --notes 'Official original-key signed website APK, verified versionCode 2000079, package tv.blofy.player.v2, 16K alignment, native FFmpeg and in-app updater permission. Updates TV/card sizing, QR activation layout, and shows counts only inside catalog sections. Google Play distribution remains controlled separately. Do not uninstall the existing app or delete data.'
+      - name: Verify published release metadata and immutable asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets,tagName > published.json
+          jq -e --arg a "$APK_FILENAME" '.assets | any(.name==$a and .size>100000000)' published.json
