@@ -49,8 +49,8 @@ android {
         targetSdk = 36
         // Owner QA UI update over versionCode 2000077. Before production Play upload, confirm
         // this code is higher than every previously uploaded Play artifact.
-        versionCode = 2000078
-        versionName = "2.0.0-rc07.55.8.1" // Exact BLOFY PLAYER display version; no Xiaomi suffix in any build
+        versionCode = 2000079
+        versionName = "2.0.0-rc07.55.8.2" // Exact BLOFY PLAYER display version; no Xiaomi suffix in any build
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "ACTIVATION_BASE_URL", "\"$activationBaseUrlEscaped\"")
         buildConfigField("String", "UPDATE_BASE_URL", "\"$updateBaseUrlEscaped\"")
