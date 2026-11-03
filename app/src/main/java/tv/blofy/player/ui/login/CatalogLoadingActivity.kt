@@ -278,11 +278,13 @@ class CatalogLoadingActivity : AppCompatActivity() {
             withContext(Dispatchers.IO) {
                 if (firstLoad) dao.clearProviderCatalog(providerId) else dao.discardStagedCatalog(syncProvider.id)
             }
+            CatalogSyncState.markFailed(applicationContext, providerId)
             throw cancelled
         } catch (error: Throwable) {
             withContext(Dispatchers.IO) {
                 if (firstLoad) dao.clearProviderCatalog(providerId) else dao.discardStagedCatalog(syncProvider.id)
             }
+            CatalogSyncState.markFailed(applicationContext, providerId)
             fail("تعذر تجهيز المكتبة: ${error.message ?: "خطأ غير معروف"}")
         }
     }
