@@ -154,7 +154,7 @@ class PlaylistActivity : AppCompatActivity() {
                                 }
                             }
                             check(result.freshItemCount > 0) { "السيرفر لم يرجع محتوى" }
-                            check(result.failedSectionCount == 0) { "تعذر تحميل أحد أقسام القائمة" }
+                            check(result.failedSectionCount == 0) { "تعذر تحديث: ${result.failedSectionNames()}" }
                             dao.promoteStagedCatalog(staging.id, next)
                             promoted = true
                         } finally {
@@ -170,7 +170,7 @@ class PlaylistActivity : AppCompatActivity() {
                                 }
                             }
                             check(result.freshItemCount > 0) { "السيرفر لم يرجع محتوى" }
-                            check(result.failedSectionCount == 0) { "تعذر تحميل أحد أقسام القائمة" }
+                            check(result.failedSectionCount == 0) { "تعذر تحديث: ${result.failedSectionNames()}" }
                             dao.saveAndActivateProvider(next)
                         } catch (error: Throwable) {
                             withContext(NonCancellable) { dao.clearProviderCatalog(id) }
