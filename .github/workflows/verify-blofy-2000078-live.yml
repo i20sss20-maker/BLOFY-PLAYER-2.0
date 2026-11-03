@@ -2,7 +2,7 @@ name: Verify BLOFY 2000078 website and internal update feed
 on:
   push:
     branches: [main]
-    paths: ['.github/workflows/verify-blofy-2000078-live.yml', 'services/activation/src/release-metadata.mjs', 'services/activation/src/public-downloads.mjs', 'services/update-distribution/release-store.mjs']
+    paths: ['.github/workflows/verify-blofy-2000078-live.yml', 'services/activation/src/release-metadata.mjs', 'services/activation/src/admin-console-hook.mjs', 'services/activation/src/public-downloads.mjs', 'services/update-distribution/release-store.mjs']
   workflow_dispatch:
 permissions:
   contents: read
