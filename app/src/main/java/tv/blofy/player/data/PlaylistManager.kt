@@ -29,7 +29,16 @@ data class PlaylistSyncResult(
     val freshItemCount: Int,
     val failedSectionCount: Int = 0,
     val failedSections: List<PlaylistSyncStage> = emptyList()
-)
+) {
+    fun failedSectionNames(): String = failedSections.joinToString("، ") { stage ->
+        when (stage) {
+            PlaylistSyncStage.M3U -> "القائمة"
+            PlaylistSyncStage.LIVE -> "القنوات"
+            PlaylistSyncStage.MOVIES -> "الأفلام"
+            PlaylistSyncStage.SERIES -> "المسلسلات"
+        }
+    }.ifBlank { "بعض أقسام الباقة" }
+}
 
 class PlaylistManager(
     private val api: XtreamApi,
