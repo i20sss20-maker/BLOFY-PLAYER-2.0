@@ -16,6 +16,8 @@ const pool = new Pool({
 // Activated only after the independently signed APK and its permanent release URL are verified.
 const BLOFY_ONLY_75 = String(process.env.BLOFY_SINGLE_RELEASE_75 || '').toLowerCase() === 'true';
 const BLOFY_APPROVED_BLOFY_76 = String(process.env.BLOFY_APPROVED_BLOFY_76 || '').toLowerCase() === 'true';
+// Production switch is enabled only after a signed, verified APK is published at its permanent URL.
+const BLOFY_PUBLIC_RELEASE_2000078 = String(process.env.BLOFY_PUBLIC_RELEASE_2000078 || '').toLowerCase() === 'true';
 function approvedBlofy76Release() {
   // Fail closed if a signed and tested official-package APK is not yet uploaded.
   // The original Xiaomi APK's tv.blofy.player.xiaomi package must NEVER become
@@ -42,6 +44,15 @@ const ONLY_75_RELEASE = {
   versionName: '2.0.0-rc07.55.7-identity-recovery',
   downloadUrl: 'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/blofy-player-v2000075-website/BLOFY-PLAYER-v2000075-WEBSITE-SIGNED.apk',
   releaseNotes: 'BLOFY PLAYER 75 — تحسين توافق Android TV 9، وأيقونة وبانر التلفزيون، والتنقل بالريموت، وإصلاح ربط الأجهزة. يتضمن فحص تحديثات داخل التطبيق للنسخ المثبتة من الموقع. لا تحذف بيانات التطبيق عند التحديث.',
+  minSupportedVersionCode: 1,
+  stage: 'public'
+};
+
+const APPROVED_2000078_RELEASE = {
+  versionCode: 2000078,
+  versionName: '2.0.0-rc07.55.8.1',
+  downloadUrl: 'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/blofy-player-v2000078-website/BLOFY-PLAYER-55.8.1-2000078-SIGNED.apk',
+  releaseNotes: 'BLOFY PLAYER 55.8.1 — تحسين القائمة الجانبية وتناسق البطاقات والواجهة البنفسجية، تحسين حجم رمز QR وصفحة التفعيل، وإظهار أعداد القنوات والأفلام والمسلسلات داخل الأقسام فقط. النسخة موقعة بالشهادة الأصلية وتُثبت فوق الإصدارات المتوافقة دون حذف البيانات.',
   minSupportedVersionCode: 1,
   stage: 'public'
 };
@@ -270,10 +281,10 @@ export async function initReleaseStore() {
     };
   }
 
-  if (BLOFY_ONLY_75) {
-    // Remove every previous advertised build, including auto-seeded versions.
-    // Keep download statistics in separate tables; preserve old APK blobs as rollback assets.
-    const release = cleanRelease(BLOFY_APPROVED_BLOFY_76 ? approvedBlofy76Release() : ONLY_75_RELEASE, 'public');
+  if (BLOFY_ONLY_75 || BLOFY_PUBLIC_RELEASE_2000078) {
+    // Advertise one reviewed APK to the website and all sideload-capable in-app updaters.
+    // Keep archived blobs and download metrics for rollback, but hide old builds publicly.
+    const release = cleanRelease(BLOFY_PUBLIC_RELEASE_2000078 ? APPROVED_2000078_RELEASE : BLOFY_APPROVED_BLOFY_76 ? approvedBlofy76Release() : ONLY_75_RELEASE, 'public');
     const alreadyOnly75 = state.activeVersionCode === release.versionCode &&
       state.releases.length === 1 &&
       JSON.stringify(state.releases[0]) === JSON.stringify(release);
