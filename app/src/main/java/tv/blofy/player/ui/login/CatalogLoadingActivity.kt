@@ -266,7 +266,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
                 }
             }
             check(result.freshItemCount > 0) { "لم يرجع السيرفر محتوى صالح" }
-            check(result.failedSectionCount == 0) { "تعذر تحميل أحد أقسام الباقة" }
+            check(result.failedSectionCount == 0) { "تعذر تحديث: ${result.failedSectionNames()}" }
 
             render(96, if (firstLoad) "جاري إنهاء المكتبة..." else "جاري حفظ التحديث بأمان...")
             withContext(Dispatchers.IO) {
