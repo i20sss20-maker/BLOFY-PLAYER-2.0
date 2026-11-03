@@ -19,6 +19,7 @@ import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.R
@@ -49,6 +50,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
     private lateinit var backButton: Button
     private var currentProviderId: String = ""
     private var lastPercent = 0
+    private var hasSavedLibrary = false
     private val isPhone by lazy { DeviceClass.detect(this) == DeviceClass.Kind.PHONE }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -172,7 +174,13 @@ class CatalogLoadingActivity : AppCompatActivity() {
             recoveryActions.visibility = android.view.View.GONE
             startSync()
         }
-        backButton = recoveryButton("رجوع") { finish() }
+        backButton = recoveryButton("رجوع") {
+            if (hasSavedLibrary) {
+                CatalogSyncState.markFailed(applicationContext, currentProviderId)
+                startActivity(Intent(this, HomeActivity::class.java))
+            }
+            finish()
+        }
         recoveryActions.addView(retryButton, LinearLayout.LayoutParams(0, dp(56), 1f).apply { marginStart = dp(8) })
         recoveryActions.addView(backButton, LinearLayout.LayoutParams(0, dp(56), 1f))
         panel.addView(recoveryActions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(64)).apply { topMargin = dp(12) })
@@ -240,6 +248,8 @@ class CatalogLoadingActivity : AppCompatActivity() {
             ?: return fail("قائمة التشغيل غير موجودة")
 
         val firstLoad = withContext(Dispatchers.IO) { !dao.hasStreamsForProvider(providerId) }
+        hasSavedLibrary = !firstLoad
+        backButton.text = if (hasSavedLibrary) "الدخول بالمكتبة المحفوظة" else "رجوع"
         val syncProvider: ProviderEntity = if (firstLoad) {
             target.copy(enabled = true, updatedAt = System.currentTimeMillis())
         } else {
@@ -275,13 +285,13 @@ class CatalogLoadingActivity : AppCompatActivity() {
             startActivity(Intent(this, HomeActivity::class.java))
             finish()
         } catch (cancelled: CancellationException) {
-            withContext(Dispatchers.IO) {
+            withContext(NonCancellable + Dispatchers.IO) {
                 if (firstLoad) dao.clearProviderCatalog(providerId) else dao.discardStagedCatalog(syncProvider.id)
             }
             CatalogSyncState.markFailed(applicationContext, providerId)
             throw cancelled
         } catch (error: Throwable) {
-            withContext(Dispatchers.IO) {
+            withContext(NonCancellable + Dispatchers.IO) {
                 if (firstLoad) dao.clearProviderCatalog(providerId) else dao.discardStagedCatalog(syncProvider.id)
             }
             CatalogSyncState.markFailed(applicationContext, providerId)
@@ -331,7 +341,9 @@ class CatalogLoadingActivity : AppCompatActivity() {
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         stage.text = message
         stage.setTextColor(BlofyTvDesign.Danger)
-        detail.text = "لم يتم اعتماد المكتبة غير المكتملة • يمكنك إعادة المحاولة بأمان"
+        detail.text = if (hasSavedLibrary)
+            "لم يُعتمد التحديث غير المكتمل • مكتبتك السابقة محفوظة ويمكن الدخول إليها"
+        else "لم يتم اعتماد المكتبة غير المكتملة • يمكنك إعادة المحاولة بأمان"
         recoveryContainer()?.visibility = android.view.View.VISIBLE
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
