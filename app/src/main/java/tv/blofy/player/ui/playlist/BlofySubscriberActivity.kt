@@ -129,7 +129,7 @@ class BlofySubscriberActivity : AppCompatActivity() {
                                         }
                                     }
                                     check(result.freshItemCount > 0) { "لم يرجع الاشتراك أي محتوى" }
-                                    check(result.failedSectionCount == 0) { "تعذر تحميل أحد أقسام الاشتراك" }
+                                    check(result.failedSectionCount == 0) { "تعذر تحديث: ${result.failedSectionNames()}" }
                                     if (hasCatalog) dao.promoteStagedCatalog(working.id, next)
                                     else dao.saveAndActivateProvider(next)
                                     committed = true
