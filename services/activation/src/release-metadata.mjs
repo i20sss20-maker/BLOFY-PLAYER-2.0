@@ -49,7 +49,20 @@ export function sanitizeReleaseNotes(value) {
   return candidate.slice(0, 600);
 }
 
+// Keep the public website, activation health and external in-app updater on one approved build.
+// This explicit production switch takes precedence over stale legacy BLOFY_APP_* variables.
+const APPROVED_PUBLIC_2000078 = Object.freeze({
+  versionCode: 2000078,
+  versionName: '2.0.0-rc07.55.8.1',
+  minSupportedVersionCode: 1,
+  downloadUrl: 'https://updates.blofyplayer.com/download/latest.apk',
+  releaseNotes: 'BLOFY PLAYER 55.8.1 — تحسين القوائم والبطاقات وصفحة QR والتفعيل وتناسق المربعات، مع إبقاء أعداد المحتوى داخل أقسام المكتبة. تحديث رسمي موقّع بالشهادة الأصلية.'
+});
+
 export function appReleaseMetadata(env = process.env) {
+  if (String(env.BLOFY_PUBLIC_RELEASE_2000078 || '').toLowerCase() === 'true') {
+    return { ...APPROVED_PUBLIC_2000078 };
+  }
   const configuredVersionCode = sanitizeVersionCode(env.BLOFY_APP_VERSION_CODE);
   const useConfiguredRelease = configuredVersionCode != null && configuredVersionCode >= DEFAULT_APP_RELEASE.versionCode;
 
