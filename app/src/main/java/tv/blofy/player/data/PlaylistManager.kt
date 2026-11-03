@@ -27,7 +27,8 @@ import java.nio.charset.StandardCharsets
 
 data class PlaylistSyncResult(
     val freshItemCount: Int,
-    val failedSectionCount: Int = 0
+    val failedSectionCount: Int = 0,
+    val failedSections: List<PlaylistSyncStage> = emptyList()
 )
 
 class PlaylistManager(
@@ -64,7 +65,10 @@ class PlaylistManager(
         )
         return PlaylistSyncResult(
             freshItemCount = freshItemCount,
-            failedSectionCount = sectionResult.failureCount
+            failedSectionCount = sectionResult.failureCount,
+            failedSections = sectionResult.failedSectionIndices.mapNotNull {
+                listOf(PlaylistSyncStage.LIVE, PlaylistSyncStage.MOVIES, PlaylistSyncStage.SERIES).getOrNull(it)
+            }
         )
     }
 
@@ -441,13 +445,18 @@ internal object CatalogReplacementPolicy {
 }
 
 /** Lets an unavailable Xtream section fall back to its cache without blocking other sections. */
-internal data class XtreamSectionResult(val successCount: Int, val failureCount: Int)
+internal data class XtreamSectionResult(
+    val successCount: Int,
+    val failureCount: Int,
+    val failedSectionIndices: List<Int> = emptyList()
+)
 
 internal suspend fun runXtreamSections(sections: List<suspend () -> Unit>): XtreamSectionResult {
     require(sections.isNotEmpty()) { "At least one Xtream section is required" }
     var successCount = 0
     val failures = mutableListOf<Exception>()
-    sections.forEach { syncSection ->
+    val failedIndices = mutableListOf<Int>()
+    sections.forEachIndexed { sectionIndex, syncSection ->
         var attempt = 0
         while (true) {
             attempt += 1
@@ -466,6 +475,7 @@ internal suspend fun runXtreamSections(sections: List<suspend () -> Unit>): Xtre
                 }
                 if (!transient || attempt >= 3) {
                     failures += failure
+                    failedIndices += sectionIndex
                     break
                 }
                 delay(500L * attempt)
@@ -477,5 +487,5 @@ internal suspend fun runXtreamSections(sections: List<suspend () -> Unit>): Xtre
         failures.drop(1).forEach(first::addSuppressed)
         throw first
     }
-    return XtreamSectionResult(successCount, failures.size)
+    return XtreamSectionResult(successCount, failures.size, failedIndices)
 }
