@@ -8,7 +8,11 @@ data class PlaylistSyncProgress(
     val stage: PlaylistSyncStage,
     val step: Int,
     val totalSteps: Int,
-    val percentOverride: Int? = null
+    val percentOverride: Int? = null,
+    /** Verified transfer fraction for the current section only. Null if the server
+     * does not supply Content-Length; never invent an overall percentage. */
+    val downloadPercent: Int? = null,
+    val parsedItems: Int? = null
 ) {
     /** Overall progress for the first full catalog download. */
     val percent: Int
