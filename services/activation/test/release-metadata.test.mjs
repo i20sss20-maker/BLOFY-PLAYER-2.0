@@ -73,3 +73,16 @@ test('explicit public 2000078 switch wins over stale activation health release v
   const off = appReleaseMetadata({ BLOFY_PUBLIC_RELEASE_2000078: 'false' });
   assert.equal(off.versionCode, 2000073);
 });
+
+test('public 2000079 supersedes 2000078 with approved original-signed updater metadata', () => {
+  const app = appReleaseMetadata({
+    BLOFY_PUBLIC_RELEASE_2000078: 'true',
+    BLOFY_PUBLIC_RELEASE_2000079: 'true',
+    BLOFY_APP_VERSION_CODE: '2000073'
+  });
+  assert.equal(app.versionCode, 2000079);
+  assert.equal(app.versionName, '2.0.0-rc07.55.8.2');
+  assert.equal(app.downloadUrl, 'https://updates.blofyplayer.com/download/latest.apk');
+  assert.equal(app.minSupportedVersionCode, 1);
+  assert.equal(appReleaseMetadata({ BLOFY_PUBLIC_RELEASE_2000078: 'true' }).versionCode, 2000078);
+});

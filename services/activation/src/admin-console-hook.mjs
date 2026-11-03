@@ -19,6 +19,8 @@ const token = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
 const limiter = createFixedWindowLimiter({ limit: 60, windowMs: 60000 });
 const catalog = createReleaseCatalog(pool, appReleaseMetadata());
 const PUBLIC_2000078 = String(process.env.BLOFY_PUBLIC_RELEASE_2000078 || '').toLowerCase() === 'true';
+const PUBLIC_2000079 = String(process.env.BLOFY_PUBLIC_RELEASE_2000079 || '').toLowerCase() === 'true';
+const PUBLIC_APPROVED = PUBLIC_2000079 || PUBLIC_2000078;
 // Public releases are from one approved immutable signed build while rollout is active.
 const publicApprovedRelease = () => ({ ...appReleaseMetadata(), isPrimary: true, channel: 'stable' });
 let adminReady;
@@ -98,17 +100,17 @@ http.createServer = function withAdminConsole(listener) {
         res.end(body); return;
       }
       if (req.method === 'GET' && url.pathname === '/api/v1/releases') {
-        const { items } = PUBLIC_2000078 ? { items: [publicApprovedRelease()] } : await catalog.list(); json(res, 200, { items }); return;
+        const { items } = PUBLIC_APPROVED ? { items: [publicApprovedRelease()] } : await catalog.list(); json(res, 200, { items }); return;
       }
       if (['GET','HEAD'].includes(req.method) && ['/download/latest.apk','/latest.apk','/apk'].includes(url.pathname)) {
-        const release = PUBLIC_2000078 ? publicApprovedRelease() : await catalog.primary();
+        const release = PUBLIC_APPROVED ? publicApprovedRelease() : await catalog.primary();
         if (!release) { json(res, 404, { error: 'release_not_found' }); return; }
         res.writeHead(302, { location: release.downloadUrl, 'cache-control': 'no-store, max-age=0', 'referrer-policy': 'no-referrer' });
         res.end(); return;
       }
       if (req.method === 'GET' && url.pathname === '/health') {
         await pool.query('SELECT 1');
-        const release = { ...activationReleaseMetadata(), app: PUBLIC_2000078 ? appReleaseMetadata() : await catalog.primary() };
+        const release = { ...activationReleaseMetadata(), app: PUBLIC_APPROVED ? appReleaseMetadata() : await catalog.primary() };
         json(res, 200, { ok: true, database: 'ready', playlistEncryption: 'ready', release, time: Date.now() }); return;
       }
       if (await deviceAdmin(req, res, url)) return;

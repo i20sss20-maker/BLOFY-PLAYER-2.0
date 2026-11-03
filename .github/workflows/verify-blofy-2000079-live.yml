@@ -1,0 +1,57 @@
+name: Verify BLOFY 2000079 website and internal update feed
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/verify-blofy-2000079-live.yml', 'services/activation/src/release-metadata.mjs', 'services/activation/src/admin-console-hook.mjs', 'services/activation/src/public-downloads.mjs', 'services/update-distribution/release-store.mjs']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-production:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Check public updater and primary website release versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p verify
+          for endpoint in updates.blofyplayer.com blofyplayer.com; do
+            for attempt in $(seq 1 18); do
+              if curl -fsSL --connect-timeout 6 --max-time 25 "https://$endpoint/health" -o "verify/$endpoint.json" &&
+                jq -e '.release.app.versionCode == 2000079 and .release.app.versionName == "2.0.0-rc07.55.8.2"' "verify/$endpoint.json" >/dev/null; then
+                break
+              fi
+              if [ "$attempt" -eq 18 ]; then
+                echo "::error::2000079 not live on $endpoint"; cat "verify/$endpoint.json" || true; exit 1
+              fi
+              sleep 8
+            done
+          done
+          jq -e '.release.app.downloadUrl == "https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/blofy-player-v2000079-website/BLOFY-PLAYER-55.8.2-2000079-SIGNED.apk"' verify/updates.blofyplayer.com.json
+      - name: Verify both public download pages display only new version
+        shell: bash
+        run: |
+          set -euo pipefail
+          for host in updates.blofyplayer.com blofyplayer.com; do
+            curl -fsSL --connect-timeout 6 --max-time 30 "https://$host/downloads" > "verify/$host.html"
+            grep -Fq '2.0.0-rc07.55.8.2' "verify/$host.html"
+            if grep -E -q 'data-version-code="2000075"|data-v74-display-qa="true"|data-cinematic-v74="true"' "verify/$host.html"; then
+              echo "::error::Retired build still promoted on $host"; exit 1
+            fi
+          done
+          grep -Fq 'href="/d/blofy"' verify/updates.blofyplayer.com.html
+          grep -Fq 'updates.blofyplayer.com/d/blofy' verify/blofyplayer.com.html
+      - name: Verify downloadable endpoints and retired file redirects
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in /download/latest.apk /d/blofy; do
+            status="$(curl -L -sS -I --connect-timeout 7 --max-time 55 -o "verify/headers-$(basename "$path").txt" -w '%{http_code}' "https://updates.blofyplayer.com$path")"
+            [ "$status" = '200' ] || [ "$status" = '206' ] || { echo "::error::Failed $path status=$status"; exit 1; }
+          done
+          headers="$(curl -sSI --connect-timeout 5 --max-time 20 https://updates.blofyplayer.com/files/releases/legacy-2000073.apk)"
+          printf '%s' "$headers" | grep -Eiq '^HTTP/[0-9.]+ 303'
+          printf '%s' "$headers" | grep -Eiq '^location: /download/latest.apk'
+      - name: Report verification
+        run: echo 'BLOFY signed APK 2000079 website and internal updater metadata are live.'
