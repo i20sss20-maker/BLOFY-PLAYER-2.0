@@ -460,8 +460,10 @@ internal suspend fun runXtreamSections(sections: List<suspend () -> Unit>): Xtre
             } catch (failure: Exception) {
                 // Xtream catalog reads are idempotent. A provider may close a large
                 // JSON response mid-transfer; retry only transient network failures.
-                val transient = failure is IOException ||
-                    (failure is HttpException && (failure.code() == 429 || failure.code() in 500..599))
+                val transient = generateSequence<Throwable>(failure) { it.cause }.any {
+                    it is IOException ||
+                        (it is HttpException && (it.code() == 429 || it.code() in 500..599))
+                }
                 if (!transient || attempt >= 3) {
                     failures += failure
                     break
