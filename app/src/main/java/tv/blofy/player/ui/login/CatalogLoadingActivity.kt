@@ -27,6 +27,7 @@ import kotlinx.coroutines.withContext
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.data.CatalogSyncState
+import tv.blofy.player.data.CatalogSyncFailureMessage
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.PlaylistSyncPolicy
 import tv.blofy.player.data.PlaylistSyncProgress
@@ -299,7 +300,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
                 if (firstLoad) dao.clearProviderCatalog(providerId) else dao.discardStagedCatalog(syncProvider.id)
             }
             CatalogSyncState.markFailed(applicationContext, providerId)
-            fail("تعذر تجهيز المكتبة: ${error.message ?: "خطأ غير معروف"}")
+            fail(CatalogSyncFailureMessage.describe(error))
         }
     }
 
