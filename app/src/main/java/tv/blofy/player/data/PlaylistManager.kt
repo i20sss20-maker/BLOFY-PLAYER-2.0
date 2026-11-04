@@ -417,7 +417,7 @@ class PlaylistManager(
         retainItems: Boolean,
         onBatch: suspend (List<StreamEntity>) -> Unit,
         map: (Map<String, Any?>) -> StreamEntity?
-    ): StreamingParseResult<T> {
+    ): StreamingParseResult<StreamEntity> {
         val categories = (categoryIds.filter { it.isNotBlank() } + "0").distinct()
         check(categories.size in 2..MAX_RECOVERY_CATEGORIES) {
             "Catalog provider does not support safe category recovery"
