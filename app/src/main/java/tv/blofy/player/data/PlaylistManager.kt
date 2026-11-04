@@ -340,23 +340,24 @@ class PlaylistManager(
         val items: List<T>
     )
 
-    private suspend fun <T> parseStreamingArray(
+    private suspend fun parseStreamingArray(
         url: String,
         progressStart: Int,
         progressEnd: Int,
         onProgress: suspend (Int) -> Unit,
         retainItems: Boolean = true,
-        onBatch: suspend (List<T>) -> Unit = {},
+        onBatch: suspend (List<StreamEntity>) -> Unit = {},
         recoverCategoryIds: List<String>? = null,
-        map: (Map<String, Any?>) -> T?,
-    ): StreamingParseResult<T> {
+        orderOffset: Long = 0L,
+        map: (Map<String, Any?>) -> StreamEntity?,
+    ): StreamingParseResult<StreamEntity> {
         if (recoverCategoryIds != null) {
             return parseSegmentedArray(url, recoverCategoryIds, progressStart, progressEnd,
                 onProgress, retainItems, onBatch, map)
         }
         val coroutineContext = currentCoroutineContext()
-        val items = if (retainItems) ArrayList<T>(4096) else null
-        val batch = ArrayList<T>(DIRECT_STREAM_BATCH)
+        val items = if (retainItems) ArrayList<StreamEntity>(4096) else null
+        val batch = ArrayList<StreamEntity>(DIRECT_STREAM_BATCH)
         var sourceCount = 0
         var itemCount = 0
         api.streamingCall(url).readCatalog { responseBody ->
@@ -370,7 +371,8 @@ class PlaylistManager(
                     if (sourceCount % 128 == 0) coroutineContext.ensureActive()
                     val row: Map<String, Any?> = gson.fromJson(reader, mapType)
                     sourceCount += 1
-                    val converted = map(row)
+                    // The source array sequence is authoritative, even for invalid skipped rows.
+                    val converted = map(row)?.copy(sourceOrder = orderOffset + sourceCount.toLong())
                     if (converted != null) {
                         itemCount += 1
                         items?.add(converted)
@@ -406,21 +408,21 @@ class PlaylistManager(
      * Existing rows are only replaced after every category, including uncategorized (0),
      * has been completely consumed and validated. Individual chunks retry independently.
      */
-    private suspend fun <T> parseSegmentedArray(
+    private suspend fun parseSegmentedArray(
         url: String,
         categoryIds: List<String>,
         progressStart: Int,
         progressEnd: Int,
         onProgress: suspend (Int) -> Unit,
         retainItems: Boolean,
-        onBatch: suspend (List<T>) -> Unit,
-        map: (Map<String, Any?>) -> T?
+        onBatch: suspend (List<StreamEntity>) -> Unit,
+        map: (Map<String, Any?>) -> StreamEntity?
     ): StreamingParseResult<T> {
         val categories = (categoryIds.filter { it.isNotBlank() } + "0").distinct()
         check(categories.size in 2..MAX_RECOVERY_CATEGORIES) {
             "Catalog provider does not support safe category recovery"
         }
-        val items = if (retainItems) ArrayList<T>() else null
+        val items = if (retainItems) ArrayList<StreamEntity>() else null
         var sourceCount = 0
         var itemCount = 0
         categories.forEachIndexed { index, categoryId ->
@@ -431,7 +433,8 @@ class PlaylistManager(
             val chunk = CatalogSectionRetry.run {
                 parseStreamingArray(
                     "$url&category_id=${enc(categoryId)}",
-                    start, end, onProgress, retainItems, onBatch
+                    start, end, onProgress, retainItems, onBatch,
+                    orderOffset = sourceCount.toLong()
                 ) { row ->
                     val actualCategory = row.id("category_id") ?: if (categoryId == "0") "0" else null
                     check(actualCategory == categoryId) {
