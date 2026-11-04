@@ -55,6 +55,8 @@ class PosterCatalogActivity : AppCompatActivity() {
     private var hasMore = true
     private var lastRowId = 0L
     private var loadingPage = false
+    // Never put a pre-refresh poster page under the new server-order cache key.
+    private var loadedCatalogEpoch = -1L
     private var generation = 0
     private var gridColumns = 6
     private val focusedPosterKeys = mutableMapOf<String, String>()
@@ -301,7 +303,8 @@ class PosterCatalogActivity : AppCompatActivity() {
     private fun loadStreams(id: String?) {
         if (providerId.isBlank()) return
         if (selectedCategoryId == id) {
-            if (displayedCategoryId == id && loadedItems.isNotEmpty()) return
+            if (displayedCategoryId == id && loadedItems.isNotEmpty() &&
+                loadedCatalogEpoch == CatalogSyncState.lastSyncedAt(applicationContext, providerId)) return
             if (loadingPage) return
         }
 
@@ -313,10 +316,12 @@ class PosterCatalogActivity : AppCompatActivity() {
         lastRowId = 0L
         loadingPage = false
 
+        val currentEpoch = CatalogSyncState.lastSyncedAt(applicationContext, providerId)
         val cached = CatalogPageMemory.get(memoryKey(id))
         if (cached != null && cached.items.isNotEmpty()) {
             loadedItems.clear()
             loadedItems.addAll(cached.items)
+            loadedCatalogEpoch = currentEpoch
             displayedCategoryId = id
             lastRowId = cached.lastRowId
             hasMore = cached.items.size >= PAGE_SIZE
@@ -348,6 +353,7 @@ class PosterCatalogActivity : AppCompatActivity() {
                 page to (page.lastOrNull()?.sourceOrder ?: cursor)
             }
             if (requestGeneration != generation || requestCategoryId != selectedCategoryId) return@launch
+            loadedCatalogEpoch = CatalogSyncState.lastSyncedAt(applicationContext, providerId)
             lastRowId = result.second
             hasMore = result.first.size >= PAGE_SIZE
             if (reset) {
@@ -410,7 +416,8 @@ class PosterCatalogActivity : AppCompatActivity() {
     }
 
     private fun saveMemorySnapshot() {
-        if (providerId.isBlank() || loadedItems.isEmpty()) return
+        if (providerId.isBlank() || loadedItems.isEmpty() ||
+            loadedCatalogEpoch != CatalogSyncState.lastSyncedAt(applicationContext, providerId)) return
         if (displayedCategoryId != selectedCategoryId) return
         CatalogPageMemory.put(memoryKey(displayedCategoryId), loadedItems, if (hasMore) Int.MAX_VALUE else loadedItems.size, lastRowId, focusedPosterKeys[memoryKey(displayedCategoryId)])
     }
@@ -469,7 +476,15 @@ class PosterCatalogActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (providerId.isNotBlank()) refreshExactCount()
+        if (providerId.isNotBlank()) {
+            refreshExactCount()
+            if (loadedItems.isNotEmpty() &&
+                loadedCatalogEpoch != CatalogSyncState.lastSyncedAt(applicationContext, providerId)) {
+                // An atomic catalog refresh changed the server order while a details screen
+                // was on top. Re-query the selected category; do not re-cache old posters.
+                loadStreams(selectedCategoryId)
+            }
+        }
     }
     override fun onPause() { saveMemorySnapshot(); super.onPause() }
     override fun onDestroy() { pageJob?.cancel(); countJob?.cancel(); generation++; super.onDestroy() }
