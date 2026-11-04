@@ -56,7 +56,7 @@ class CatalogLoadPersistenceTest {
     }
 
     private fun stream(owner: ProviderEntity, kind: String = "live", id: String = "1") =
-        StreamEntity("${owner.id}:$kind:$id", owner.id, id, null, kind, "Saved $kind $id")
+        StreamEntity("${owner.id}:$kind:$id", owner.id, id, null, kind, "Saved $kind $id", sourceOrder = 1L)
 
     private suspend fun saveRows(owner: ProviderEntity, id: String = "1") {
         for (kind in listOf("live", "movie")) {
