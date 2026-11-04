@@ -18,7 +18,7 @@ interface XtreamApi {
     /** Streams very large catalog arrays without buffering the complete HTTP body in memory. */
     @Streaming
     @GET
-    fun streamingCall(@Url url: String): Call<ResponseBody>
+    fun streamingCall(@Url url: String, @Header("Accept-Encoding") encoding: String? = null): Call<ResponseBody>
 
     /**
      * Some Xtream-compatible servers return `get_series_info` as a top-level JSON array
