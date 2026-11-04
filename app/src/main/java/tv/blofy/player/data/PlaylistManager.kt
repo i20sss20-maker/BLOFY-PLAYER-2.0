@@ -1,5 +1,6 @@
 package tv.blofy.player.data
 
+import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.google.gson.stream.JsonReader
@@ -46,55 +47,70 @@ class PlaylistManager(
 
         var freshItemCount = 0
         val failed = mutableListOf<XtreamSectionIssue>()
+        val validated = completedSections.toMutableSet()
+        val reportProgress: suspend (PlaylistSyncProgress) -> Unit = { update ->
+            onProgress(update.copy(completedSectionCount = validated.size))
+        }
+        val recordCompletion: suspend (String) -> Unit = { kind ->
+            onSectionComplete(kind)
+            validated += kind
+            val stage = when (kind) {
+                "live" -> PlaylistSyncStage.LIVE
+                "movie" -> PlaylistSyncStage.MOVIES
+                "series" -> PlaylistSyncStage.SERIES
+                else -> PlaylistSyncStage.M3U
+            }
+            reportProgress(PlaylistSyncProgress(stage, validated.size, 3))
+        }
         val sectionResult = try {
             runXtreamSections(
             listOf(
                 suspend {
-                    onProgress(PlaylistSyncProgress(PlaylistSyncStage.LIVE, 1, 3))
+                    reportProgress(PlaylistSyncProgress(PlaylistSyncStage.LIVE, 1, 3))
                     freshItemCount += if ("live" in completedSections) dao.catalogCountAll(provider.id, "live") else syncLive(provider,
                         onProgress = { percent ->
-                            onProgress(PlaylistSyncProgress(PlaylistSyncStage.LIVE, 1, 3, percent))
+                            reportProgress(PlaylistSyncProgress(PlaylistSyncStage.LIVE, 1, 3, percent))
                         },
                         onTransfer = { sectionPercent, count ->
-                            onProgress(PlaylistSyncProgress(
+                            reportProgress(PlaylistSyncProgress(
                                 stage = PlaylistSyncStage.LIVE, step = 1, totalSteps = 3,
                                 parsedItems = count, sectionTransferPercent = sectionPercent))
                         }
                     )
-                    onSectionComplete("live")
+                    recordCompletion("live")
                 },
                 suspend {
-                    onProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3))
+                    reportProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3))
                     freshItemCount += if ("movie" in completedSections) dao.catalogCountAll(provider.id, "movie") else syncVod(provider,
                         onProgress = { percent ->
-                            onProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3, percent))
+                            reportProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3, percent))
                         },
                         onTransfer = { sectionPercent, count ->
-                            onProgress(PlaylistSyncProgress(
+                            reportProgress(PlaylistSyncProgress(
                                 stage = PlaylistSyncStage.MOVIES, step = 2, totalSteps = 3,
                                 parsedItems = count, sectionTransferPercent = sectionPercent))
                         }
                     )
-                    onSectionComplete("movie")
+                    recordCompletion("movie")
                 },
                 suspend {
-                    onProgress(PlaylistSyncProgress(PlaylistSyncStage.SERIES, 3, 3))
+                    reportProgress(PlaylistSyncProgress(PlaylistSyncStage.SERIES, 3, 3))
                     freshItemCount += if ("series" in completedSections) dao.catalogCountAll(provider.id, "series") else syncSeries(provider,
                         onProgress = { percent ->
-                            onProgress(PlaylistSyncProgress(PlaylistSyncStage.SERIES, 3, 3, percent))
+                            reportProgress(PlaylistSyncProgress(PlaylistSyncStage.SERIES, 3, 3, percent))
                         },
                         onTransfer = { sectionPercent, count ->
-                            onProgress(PlaylistSyncProgress(
+                            reportProgress(PlaylistSyncProgress(
                                 stage = PlaylistSyncStage.SERIES, step = 3, totalSteps = 3,
                                 parsedItems = count, sectionTransferPercent = sectionPercent))
                         }
                     )
-                    onSectionComplete("series")
+                    recordCompletion("series")
                 }
             ),
             onRetry = { section, attempt ->
                 val stage = listOf(PlaylistSyncStage.LIVE, PlaylistSyncStage.MOVIES, PlaylistSyncStage.SERIES)[section]
-                onProgress(PlaylistSyncProgress(stage, section + 1, 3, retryAttempt = attempt))
+                reportProgress(PlaylistSyncProgress(stage, section + 1, 3, retryAttempt = attempt))
             },
             onSectionFailure = { index, error ->
                 failed += XtreamSectionIssue.from(index, error)
@@ -185,17 +201,12 @@ class PlaylistManager(
         }
         val direct = prepareDirectSectionIfEmpty(provider.id, "movie", previousCount, categoryRows)
         val parsed = try {
-            parseStreamingArray(
-                actionUrl(provider, "get_vod_streams"), 60, 88, onProgress,
-                retainItems = !direct,
-                onBatch = directBatchSink(direct),
-                onTransfer = onTransfer,
-                onReset = {
-                    if (direct) {
-                        clearDirectSection(provider.id, "movie")
-                        categoryRows.chunked(DIRECT_CATEGORY_BATCH).forEach { dao.upsertCategories(it) }
-                    }
-                }
+            parseStreamingWithCategoryFallback(
+                provider = provider, action = "get_vod_streams",
+                kind = "movie", categoryRows = categoryRows,
+                progressStart = 60, progressEnd = 88,
+                onProgress = onProgress, onTransfer = onTransfer,
+                direct = direct
             ) { row -> vodEntity(provider, row)?.let(previousFlags::applyTo) }
         } catch (failure: Throwable) {
             if (direct) clearDirectSection(provider.id, "movie")
@@ -461,11 +472,15 @@ class PlaylistManager(
         var sourceCount = 0
         var itemCount = 0
         var transferLengthKnown = false
+        var received: CountingInputStream? = null
+        var expectedLength = -1L
         try {
         api.streamingCall(url, encoding).readCatalog { responseBody ->
             val declaredBytes = responseBody.contentLength()
+            expectedLength = declaredBytes
             transferLengthKnown = declaredBytes > 0L
             val counting = CountingInputStream(responseBody.byteStream())
+            received = counting
             JsonReader(InputStreamReader(counting, Charsets.UTF_8)).use { reader ->
                 reader.beginArray()
                 val gson = Gson()
@@ -506,6 +521,23 @@ class PlaylistManager(
         }
         } catch (failure: Exception) {
             currentCoroutineContext().ensureActive()
+            // Essential on-device evidence for a truncated or malformed
+            // Xtream response. Do NOT log the URL: it embeds both credentials.
+            val safeAction = when {
+                "action=get_live_streams" in url -> "live"
+                "action=get_vod_streams" in url -> "movie"
+                "action=get_series" in url -> "series"
+                else -> "catalog"
+            }
+            val status = generateSequence(failure as Throwable) { it.cause }.take(8)
+                .filterIsInstance<retrofit2.HttpException>().firstOrNull()?.code()
+            Log.w(
+                "BLOFY-CATALOG",
+                "section=$safeAction mode=${encoding ?: "auto"} items=$sourceCount " +
+                    "receivedBytes=${received?.bytesRead ?: 0L} length=$expectedLength " +
+                    "http=${status ?: 0} error=${failure.javaClass.simpleName} " +
+                    "nested=${failure.cause?.javaClass?.simpleName ?: "none"}"
+            )
             if (encoding == null && CatalogTransportFallbackPolicy.shouldTryIdentity(failure)) {
                 // Some panels terminate a compressed response prematurely, but
                 // correctly serve uncompressed HTTP/1.1. Discard any streamed

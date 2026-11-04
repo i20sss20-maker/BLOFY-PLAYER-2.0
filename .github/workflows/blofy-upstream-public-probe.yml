@@ -1,0 +1,32 @@
+name: BLOFY public Xtream host connectivity diagnostic (no credentials)
+on:
+  push:
+    branches: [fix/blofy-catalog-diagnostic-87-20261104]
+    paths:
+      - .github/workflows/blofy-upstream-public-probe.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: DNS, scheme, response headers and access characteristics
+        run: |
+          set -uo pipefail
+          host=annkel.com
+          echo "DNS answers:"
+          getent ahostsv4 "$host" | awk '!seen[$1]++ {print $1}' | head -3 || true
+          for suffix in / /player_api.php '/player_api.php?action=get_live_categories'; do
+            echo "--- endpoint: ${suffix%%\?*} (unauthenticated) ---"
+            # No account credentials or response bodies are transmitted/stored.
+            env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY \
+              curl --noproxy '*' --http1.1 --max-time 20 --connect-timeout 8 \
+                -sS -L --max-redirs 2 \
+                -o /dev/null -w 'http=%{http_code} content_type=%{content_type} bytes=%{size_download} connects=%{num_connects} time=%{time_total} redirect=%{num_redirects}\n' \
+                -D /tmp/headers-public.txt \
+                "http://$host:80$suffix" || true
+            grep -iE '^HTTP/|^content-type:|^content-length:|^content-encoding:|^transfer-encoding:|^location:|^server:' \
+               /tmp/headers-public.txt | sed -E 's/([?&](username|password|token)=)[^&]+/\1[REDACTED]/g' | head -16 || true
+          done

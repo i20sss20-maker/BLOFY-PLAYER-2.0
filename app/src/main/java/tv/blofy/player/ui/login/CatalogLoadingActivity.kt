@@ -60,6 +60,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
     private var loadJob: Job? = null
     private var forceRefreshOnRetry = false
     private var displayedPercent = 0
+    private var confirmedSectionCount = 0
     private lateinit var percent: TextView
     private lateinit var stage: TextView
     private lateinit var progress: ProgressBar
@@ -90,6 +91,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
         retryButton.visibility = View.GONE
         stage.setTextColor(BlofyTvDesign.TextPrimary)
         displayedPercent = 0
+        confirmedSectionCount = 0
         render(1, getString(R.string.catalog_preflight))
         loadJob = lifecycleScope.launch {
             var preflight = true
@@ -420,6 +422,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
         // this number is explicitly approximate; only a completed transaction
         // can display 100. Never return to an empty spinner when the supplier
         // omits its Content-Length header.
+        confirmedSectionCount = maxOf(confirmedSectionCount, p.completedSectionCount.coerceIn(0, 3))
         val estimate = CatalogProgressEstimate.from(p)
         displayedPercent = maxOf(displayedPercent, estimate).coerceAtMost(95)
         progress.isIndeterminate = false
@@ -475,13 +478,17 @@ class CatalogLoadingActivity : AppCompatActivity() {
 
     private fun fail(message: String) {
         progress.isIndeterminate = false
-        progress.progress = displayedPercent.coerceIn(0, 99)
-        percent.text = getString(R.string.catalog_percent, displayedPercent.coerceIn(0, 99))
+        // The last attempted stage is NOT downloaded data. On failure show
+        // sections actually validated, not a fictitious 65% for attempted Series.
+        val verified = (5 + 30 * confirmedSectionCount).coerceIn(0, 95)
+        displayedPercent = verified
+        progress.progress = verified
+        percent.text = getString(R.string.catalog_percent, verified)
         stage.text = message
         stage.setTextColor(BlofyTvDesign.Error)
         retryButton.visibility = View.VISIBLE
         retryButton.post { if (!isFinishing && deviceKind == DeviceClass.Kind.TV) retryButton.requestFocus() }
-        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+        // Error is already visible in the card; avoid duplicating it in a toast.
     }
 
     companion object {

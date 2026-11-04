@@ -11,7 +11,9 @@ data class PlaylistSyncProgress(
     val percentOverride: Int? = null,
     val retryAttempt: Int = 0,
     val parsedItems: Int? = null,
-    val sectionTransferPercent: Int? = null
+    val sectionTransferPercent: Int? = null,
+    /** Successfully downloaded and validated sections, not the current section index. */
+    val completedSectionCount: Int = 0
 ) {
     /** Overall progress for the first full catalog download. */
     val percent: Int
