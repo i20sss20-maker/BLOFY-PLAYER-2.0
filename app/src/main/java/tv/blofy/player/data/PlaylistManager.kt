@@ -139,7 +139,7 @@ class PlaylistManager(
                 onProgress = onProgress, onTransfer = onTransfer,
                 direct = direct
             ) { row ->
-                val id = row.id("stream_id") ?: return@parseStreamingArray null
+                val id = row.id("stream_id") ?: return@parseStreamingWithCategoryFallback null
                 val archive = row.string("tv_archive").let { it == "1" || it.equals("true", true) }
                 previousFlags.applyTo(
                     StreamEntity(
@@ -252,7 +252,7 @@ class PlaylistManager(
                 onProgress = onProgress, onTransfer = onTransfer,
                 direct = direct
             ) { row ->
-                val id = row.id("series_id") ?: return@parseStreamingArray null
+                val id = row.id("series_id") ?: return@parseStreamingWithCategoryFallback null
                 val backdrop = when (val raw = row["backdrop_path"]) {
                     is List<*> -> raw.firstOrNull()?.toString()
                     else -> raw?.toString()
