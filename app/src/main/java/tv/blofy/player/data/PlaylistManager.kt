@@ -185,17 +185,12 @@ class PlaylistManager(
         }
         val direct = prepareDirectSectionIfEmpty(provider.id, "movie", previousCount, categoryRows)
         val parsed = try {
-            parseStreamingArray(
-                actionUrl(provider, "get_vod_streams"), 60, 88, onProgress,
-                retainItems = !direct,
-                onBatch = directBatchSink(direct),
-                onTransfer = onTransfer,
-                onReset = {
-                    if (direct) {
-                        clearDirectSection(provider.id, "movie")
-                        categoryRows.chunked(DIRECT_CATEGORY_BATCH).forEach { dao.upsertCategories(it) }
-                    }
-                }
+            parseStreamingWithCategoryFallback(
+                provider = provider, action = "get_vod_streams",
+                kind = "movie", categoryRows = categoryRows,
+                progressStart = 60, progressEnd = 88,
+                onProgress = onProgress, onTransfer = onTransfer,
+                direct = direct
             ) { row -> vodEntity(provider, row)?.let(previousFlags::applyTo) }
         } catch (failure: Throwable) {
             if (direct) clearDirectSection(provider.id, "movie")
