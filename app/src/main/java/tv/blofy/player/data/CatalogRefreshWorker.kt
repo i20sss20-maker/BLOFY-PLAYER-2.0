@@ -57,28 +57,45 @@ class CatalogRefreshWorker(
         }
         } catch (cancelled: CancellationException) {
             throw cancelled
-        } catch (_: Exception) {
-            // A temporary encrypted-provider/Room read failure should not permanently
-            // disable periodic work. WorkManager can back off and retry safely.
-            Result.retry()
+        } catch (error: Exception) {
+            val manual = inputData.getBoolean(KEY_MANUAL, false)
+            stopOrRetry(manual, CatalogRetryDecision.shouldRetry(error, runAttemptCount))
         }
     }
+
+    private fun stopOrRetry(manual: Boolean, retryable: Boolean): Result =
+        if (retryable) Result.retry() else if (manual) Result.failure() else Result.success()
 
     private suspend fun refreshCatalog(provider: ProviderEntity, dao: BlofyDao, manual: Boolean): Result {
         val app = applicationContext
         // A first import writes batches before it commits; those rows are not a refresh baseline.
         if (!CatalogSyncState.isReady(app, provider.id) || !dao.hasCatalog(provider.id)) return Result.success()
 
-        val sourceChanged = PortalSyncBook.hasPendingSource(app, provider.id)
-        if (!manual && !sourceChanged && !CatalogAutoRefreshPolicy.isDue(
+        val knownPending = PortalSyncBook.hasPendingSource(app, provider.id)
+        if (!manual && !knownPending && !CatalogAutoRefreshPolicy.isDue(
                 CatalogSyncState.lastSyncedAt(app, provider.id), System.currentTimeMillis()
             )
         ) return Result.success()
-        // A streaming player must not compete with a full-library download/SQLite promotion.
+        // Never disrupt actual playback with a background library download.
         if (CatalogPlaybackGate.isPlaying) return Result.retry()
+
+        // The hidden BLOFY host is centrally managed and may have rotated.
+        // Refresh the direct connection BEFORE requesting categories. This also
+        // creates a staged source if it changed, preserving the old catalog.
+        val current = try {
+            PortalPlaylistClient.ensureSubscriberConnection(
+                app, tv.blofy.player.BuildConfig.ACTIVATION_BASE_URL, dao, provider.id
+            ) ?: provider
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            return stopOrRetry(manual, CatalogRetryDecision.shouldRetry(error, runAttemptCount))
+        }
+        val sourceChanged = PortalSyncBook.hasPendingSource(app, provider.id)
         val refreshSource = if (sourceChanged) {
-            PortalPlaylistClient.pendingSource(app, dao, provider.id) ?: return Result.retry()
-        } else provider
+            PortalPlaylistClient.pendingSource(app, dao, provider.id)
+                ?: return stopOrRetry(manual, runAttemptCount < 2)
+        } else current
 
         val previousCounts = CatalogRefreshIntegrityPolicy.Counts(
             live = dao.catalogCountAll(provider.id, "live"),
@@ -115,11 +132,16 @@ class CatalogRefreshWorker(
                     }
                 )
             }
-            if (sync.failedSectionCount > 0) return Result.retry()
+            if (sync.failedSectionCount > 0) {
+                setProgress(androidx.work.workDataOf("catalog_error" to sync.safeFailureMessage()))
+                return stopOrRetry(
+                    manual, CatalogRetryDecision.shouldRetry(sync.failedSections, runAttemptCount)
+                )
+            }
             if (sync.freshItemCount <= 0) {
                 // A zero-item Xtream reply must never replace the known-good catalog.
                 checkpoint.discard(saved, dao)
-                return Result.retry()
+                return stopOrRetry(manual, false)
             }
 
             val candidateCounts = CatalogRefreshIntegrityPolicy.Counts(
@@ -132,7 +154,7 @@ class CatalogRefreshWorker(
             if (!CatalogRefreshIntegrityPolicy.accepts(previousCounts, candidateCounts)) {
                 // Valid-looking truncated server replies are not safe to resume indefinitely.
                 checkpoint.discard(saved, dao)
-                return Result.retry()
+                return stopOrRetry(manual, false)
             }
 
             setProgress(androidx.work.workDataOf("catalog_stage" to "SAVE"))
@@ -167,11 +189,13 @@ class CatalogRefreshWorker(
         } catch (_: TimeoutCancellationException) {
             // A provider timeout is retryable; a cancelled Worker must still stop immediately.
             currentCoroutineContext().ensureActive()
-            if (promoted) Result.success() else Result.retry()
+            if (promoted) Result.success() else stopOrRetry(manual, runAttemptCount < 2)
         } catch (cancelled: CancellationException) {
             throw cancelled
-        } catch (_: Exception) {
-            if (promoted) Result.success() else Result.retry()
+        } catch (error: Exception) {
+            if (promoted) Result.success() else stopOrRetry(
+                manual, CatalogRetryDecision.shouldRetry(error, runAttemptCount)
+            )
         } finally {
             // On a timeout/cancellation/temporary error keep the *staged* completed sections.
             // Incomplete streamed sections are cleared and retried on the next worker run.
