@@ -484,27 +484,23 @@ class CatalogLoadingActivity : AppCompatActivity() {
     }
 
     private fun renderProgress(p: PlaylistSyncProgress) {
-        val label = when (p.stage) {
+        val section = when (p.stage) {
             PlaylistSyncStage.M3U -> getString(R.string.catalog_stage_m3u)
             PlaylistSyncStage.LIVE -> getString(R.string.catalog_stage_live)
             PlaylistSyncStage.MOVIES -> getString(R.string.catalog_stage_movies)
             PlaylistSyncStage.SERIES -> getString(R.string.catalog_stage_series)
         }
-        val status = if (p.retryAttempt > 0) "$label • ${getString(R.string.catalog_retry)} (${p.retryAttempt}/3)" else label
-        if (p.parsedItems == null) {
-            render((p.percent.coerceIn(0, 95) * 30 / 95), status)
-            progressMeta.text = getString(R.string.catalog_progress_steps, p.step.coerceAtLeast(1), p.totalSteps.coerceAtLeast(1))
-        } else {
-            // Progress without Content-Length is unknown, not a fabricated percentage.
-            stage.text = status
-            progress.isIndeterminate = p.sectionTransferPercent == null
-            percent.text = p.sectionTransferPercent?.let {
-                getString(R.string.catalog_percent, it)
-            } ?: "…"
-            if (p.sectionTransferPercent != null) progress.progress = p.sectionTransferPercent
-            progressMeta.text = "القسم ${p.step}/${p.totalSteps} • ${p.parsedItems} عنصر" +
-                (if (p.sectionTransferPercent != null) " • نسبة تنزيل القسم" else " • السيرفر لا يحدد حجم التحميل")
-        }
+        // The section byte percentage is NOT overall catalog completion.
+        // Keep the main progress indeterminate until every section has fully
+        // downloaded and the atomic Room commit has succeeded.
+        progress.isIndeterminate = true
+        percent.text = "…"
+        stage.text = if (p.retryAttempt > 0) {
+            "$section • ${getString(R.string.catalog_retry)} (${p.retryAttempt}/3)"
+        } else section
+        progressMeta.text = "القسم ${p.step.coerceAtLeast(1)}/${p.totalSteps.coerceAtLeast(1)}" +
+            p.parsedItems?.let { " • تمت قراءة $it عنصر" }.orEmpty() +
+            p.sectionTransferPercent?.let { " • تنزيل $section: $it%" }.orEmpty()
         progressMeta.visibility = View.VISIBLE
     }
 
@@ -582,6 +578,8 @@ class CatalogLoadingActivity : AppCompatActivity() {
 
     private fun fail(message: String) {
         progress.isIndeterminate = false
+        progress.progress = 0
+        percent.text = "تعذر"
         progressMeta.visibility = View.GONE
         stage.text = message
         stage.setTextColor(BlofyTvDesign.Error)
