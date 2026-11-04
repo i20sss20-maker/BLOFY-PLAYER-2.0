@@ -132,11 +132,12 @@ class PlaylistManager(
         }
         val direct = prepareDirectSectionIfEmpty(provider.id, "live", previousCount, categoryRows)
         val parsed = try {
-            parseStreamingArray(
-                actionUrl(provider, "get_live_streams"), 18, 30, onProgress,
-                retainItems = !direct,
-                onBatch = directBatchSink(direct),
-                onTransfer = onTransfer
+            parseStreamingWithCategoryFallback(
+                provider = provider, action = "get_live_streams",
+                kind = "live", categoryRows = categoryRows,
+                progressStart = 18, progressEnd = 30,
+                onProgress = onProgress, onTransfer = onTransfer,
+                direct = direct
             ) { row ->
                 val id = row.id("stream_id") ?: return@parseStreamingArray null
                 val archive = row.string("tv_archive").let { it == "1" || it.equals("true", true) }
@@ -244,11 +245,12 @@ class PlaylistManager(
         }
         val direct = prepareDirectSectionIfEmpty(provider.id, "series", previousCount, categoryRows)
         val parsed = try {
-            parseStreamingArray(
-                actionUrl(provider, "get_series"), 88, 95, onProgress,
-                retainItems = !direct,
-                onBatch = directBatchSink(direct),
-                onTransfer = onTransfer
+            parseStreamingWithCategoryFallback(
+                provider = provider, action = "get_series",
+                kind = "series", categoryRows = categoryRows,
+                progressStart = 88, progressEnd = 95,
+                onProgress = onProgress, onTransfer = onTransfer,
+                direct = direct
             ) { row ->
                 val id = row.id("series_id") ?: return@parseStreamingArray null
                 val backdrop = when (val raw = row["backdrop_path"]) {
@@ -284,6 +286,92 @@ class PlaylistManager(
         finishSection(provider.id, "series", previousCount, categories.size, categoryRows, parsed, direct)
         onProgress(95)
         return parsed.itemCount
+    }
+
+    /**
+     * A supplier may terminate an enormous single JSON array before the final
+     * closing bracket. When that happens, use the documented Xtream category_id
+     * filter to download smaller independent arrays. Never report success until
+     * EVERY known category has finished and its JSON closed cleanly.
+     *
+     * Partial global batches are removed before fallback. Each category is
+     * buffered and validated first, then persisted; a failed category therefore
+     * cannot poison its next retry with half of a streamed batch.
+     */
+    private suspend fun parseStreamingWithCategoryFallback(
+        provider: ProviderEntity,
+        action: String,
+        kind: String,
+        categoryRows: List<CategoryEntity>,
+        progressStart: Int,
+        progressEnd: Int,
+        onProgress: suspend (Int) -> Unit,
+        onTransfer: suspend (Int?, Int) -> Unit,
+        direct: Boolean,
+        map: (Map<String, Any?>) -> StreamEntity?
+    ): StreamingParseResult<StreamEntity> {
+        try {
+            return parseStreamingArray(
+                actionUrl(provider, action), progressStart, progressEnd,
+                onProgress = onProgress, onTransfer = onTransfer,
+                retainItems = !direct, onBatch = directBatchSink(direct),
+                map = map
+            )
+        } catch (original: Exception) {
+            currentCoroutineContext().ensureActive()
+            val categories = categoryRows.filter { it.remoteId.isNotBlank() }.distinctBy { it.remoteId }
+            if (!CatalogSplitDownloadPolicy.canSplit(original, categories.size)) throw original
+
+            // Global responses may already have deposited temporary batches.
+            if (direct) {
+                clearDirectSection(provider.id, kind)
+                categories.chunked(DIRECT_CATEGORY_BATCH).forEach { dao.upsertCategories(it) }
+            }
+            val seenKeys = HashSet<String>()
+            val allItems = if (direct) null else ArrayList<StreamEntity>()
+            var parsedCount = 0
+            onTransfer(null, 0)
+            for ((index, category) in categories.withIndex()) {
+                currentCoroutineContext().ensureActive()
+                val categoryResult = try {
+                    CatalogSectionRetry.run {
+                        parseStreamingArray(
+                            actionUrl(provider, action, mapOf("category_id" to category.remoteId)),
+                            progressStart, progressEnd,
+                            onProgress = { /* Total catalog percentage is unknown. */ },
+                            onTransfer = { _, _ -> /* Report aggregate items after category validation. */ },
+                            retainItems = true,
+                            map = { row ->
+                                val returnedId = row.id("category_id")
+                                if (returnedId != null && returnedId != category.remoteId) null
+                                else map(row)
+                            }
+                        )
+                    }
+                } catch (error: Exception) {
+                    // A category has already exhausted its own bounded retries.
+                    // Suppress an expensive restart of every previous category.
+                    throw IllegalStateException(
+                        "تعذر إكمال مجموعة $kind ${index + 1}/${categories.size}", error
+                    )
+                }
+                val unique = categoryResult.items.filter { seenKeys.add(it.key) }
+                if (direct) {
+                    unique.chunked(DIRECT_STREAM_BATCH).forEach { batch ->
+                        if (batch.isNotEmpty()) dao.insertCatalogBatch(batch, batch.map(::searchRow))
+                    }
+                } else {
+                    allItems!!.addAll(unique)
+                }
+                parsedCount += unique.size
+                onTransfer(null, parsedCount)
+                onProgress(
+                    progressStart + ((index + 1) * (progressEnd - progressStart) / categories.size)
+                )
+            }
+            check(parsedCount > 0) { "لم يُرجع السيرفر محتوى صالحاً لقسم $kind" }
+            return StreamingParseResult(parsedCount, parsedCount, allItems ?: emptyList())
+        }
     }
 
     private suspend fun prepareDirectSectionIfEmpty(
