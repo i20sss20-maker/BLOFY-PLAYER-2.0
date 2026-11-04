@@ -87,12 +87,14 @@ class ContentBrowserActivity : AppCompatActivity() {
     private var liveHasMore = true
     private var liveLastRowId = 0L
     private var liveLoading = false
+    private var loadedLiveEpoch = -1L
     private var liveGeneration = 0
 
     private val catalogItems = ArrayList<StreamEntity>(CATALOG_PAGE_SIZE)
     private var catalogHasMore = true
     private var catalogLastRowId = 0L
     private var catalogLoading = false
+    private var loadedCatalogEpoch = -1L
     private var catalogGeneration = 0
 
     private val kind by lazy { intent.getStringExtra(EXTRA_KIND) ?: KIND_LIVE }
@@ -410,7 +412,8 @@ class ContentBrowserActivity : AppCompatActivity() {
             loadLiveStreams(categoryId)
             return
         }
-        if (currentCategoryId == categoryId && (catalogItems.isNotEmpty() || catalogLoading)) return
+        if (currentCategoryId == categoryId && (catalogItems.isNotEmpty() || catalogLoading) &&
+            loadedCatalogEpoch == CatalogSyncState.lastSyncedAt(applicationContext, provider.id)) return
         saveCatalogMemorySnapshot()
         currentCategoryId = categoryId
         refreshExactCount(categoryId)
@@ -421,9 +424,11 @@ class ContentBrowserActivity : AppCompatActivity() {
         catalogLastRowId = 0L
         catalogLoading = false
 
+        val epoch = CatalogSyncState.lastSyncedAt(applicationContext, provider.id)
         val cached = CatalogPageMemory.get(catalogMemoryKey())
         if (cached != null && cached.items.isNotEmpty()) {
             catalogItems.addAll(cached.items)
+            loadedCatalogEpoch = epoch
             catalogLastRowId = cached.lastRowId
             catalogHasMore = cached.total == Int.MAX_VALUE
             streamAdapter.replace(cached.items)
@@ -453,6 +458,7 @@ class ContentBrowserActivity : AppCompatActivity() {
             }
             if (generation != catalogGeneration) return@launch
             catalogLastRowId = result.second
+            loadedCatalogEpoch = CatalogSyncState.lastSyncedAt(applicationContext, provider.id)
             catalogHasMore = result.first.size >= CATALOG_PAGE_SIZE
             if (reset) {
                 catalogItems.clear()
@@ -472,7 +478,8 @@ class ContentBrowserActivity : AppCompatActivity() {
     }
 
     private fun saveCatalogMemorySnapshot() {
-        if (kind == KIND_LIVE || !::provider.isInitialized || catalogItems.isEmpty()) return
+        if (kind == KIND_LIVE || !::provider.isInitialized || catalogItems.isEmpty() ||
+            loadedCatalogEpoch != CatalogSyncState.lastSyncedAt(applicationContext, provider.id)) return
         CatalogPageMemory.put(
             catalogMemoryKey(),
             catalogItems,
@@ -485,7 +492,8 @@ class ContentBrowserActivity : AppCompatActivity() {
     private fun catalogMemoryKey(): String = "${provider.id}:$kind:${currentCategoryId ?: ALL_CATEGORY_ID}:${CatalogSyncState.lastSyncedAt(applicationContext, provider.id)}"
 
     private fun loadLiveStreams(categoryId: String?) {
-        if (currentCategoryId == categoryId && (liveItems.isNotEmpty() || liveLoading)) return
+        if (currentCategoryId == categoryId && (liveItems.isNotEmpty() || liveLoading) &&
+            loadedLiveEpoch == CatalogSyncState.lastSyncedAt(applicationContext, provider.id)) return
         saveLiveMemorySnapshot()
         currentCategoryId = categoryId
         refreshExactCount(categoryId)
@@ -499,9 +507,11 @@ class ContentBrowserActivity : AppCompatActivity() {
         liveLastRowId = 0L
         liveLoading = false
 
+        val epoch = CatalogSyncState.lastSyncedAt(applicationContext, provider.id)
         val cached = CatalogPageMemory.get(liveMemoryKey())
         if (cached != null && cached.items.isNotEmpty()) {
             liveItems.addAll(cached.items)
+            loadedLiveEpoch = epoch
             liveLastRowId = cached.lastRowId
             liveHasMore = cached.total == Int.MAX_VALUE
             streamAdapter.replace(cached.items)
@@ -530,6 +540,7 @@ class ContentBrowserActivity : AppCompatActivity() {
             }
             if (generation != liveGeneration) return@launch
             liveLastRowId = result.second
+            loadedLiveEpoch = CatalogSyncState.lastSyncedAt(applicationContext, provider.id)
             liveHasMore = result.first.size >= LIVE_PAGE_SIZE
             if (reset) {
                 liveItems.clear()
@@ -551,7 +562,8 @@ class ContentBrowserActivity : AppCompatActivity() {
     }
 
     private fun saveLiveMemorySnapshot() {
-        if (kind != KIND_LIVE || !::provider.isInitialized || liveItems.isEmpty()) return
+        if (kind != KIND_LIVE || !::provider.isInitialized || liveItems.isEmpty() ||
+            loadedLiveEpoch != CatalogSyncState.lastSyncedAt(applicationContext, provider.id)) return
         CatalogPageMemory.put(
             liveMemoryKey(),
             liveItems,
@@ -735,7 +747,16 @@ class ContentBrowserActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (::provider.isInitialized) refreshExactCount(currentCategoryId)
+        if (::provider.isInitialized) {
+            refreshExactCount(currentCategoryId)
+            val epoch = CatalogSyncState.lastSyncedAt(applicationContext, provider.id)
+            // The user may return from details after a committed refresh. Reopen the
+            // currently selected section in new server order, preserving the category.
+            if (kind == KIND_LIVE && liveItems.isNotEmpty() && loadedLiveEpoch != epoch)
+                loadLiveStreams(currentCategoryId)
+            if (kind != KIND_LIVE && catalogItems.isNotEmpty() && loadedCatalogEpoch != epoch)
+                loadStreams(currentCategoryId)
+        }
         if (resumedOnce && previewEnabled && ::provider.isInitialized) {
             lastPreviewKey = null
             restartSavedPreview()
