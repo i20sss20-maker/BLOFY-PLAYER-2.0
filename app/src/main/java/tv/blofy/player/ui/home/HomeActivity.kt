@@ -107,6 +107,7 @@ class HomeActivity : AppCompatActivity() {
     private var refreshBusy = false
     private var refreshStage: String? = null
     private var refreshPercent = 0
+    private var refreshItems = 0
     private var refreshAttempt = 0
     private var refreshError: String? = null
     private var refreshRequestInFlight = false
@@ -924,6 +925,7 @@ class HomeActivity : AppCompatActivity() {
         refreshStartedHere = false
         refreshPercent = CatalogRefreshCheckpoint(applicationContext, providerId).visiblePercent()
         refreshAttempt = 0
+        refreshItems = 0
         refreshError = null
         refreshStage = null
         renderManualRefreshStatus(null)
@@ -935,6 +937,7 @@ class HomeActivity : AppCompatActivity() {
                         ?: infos.firstOrNull()
                     refreshStage = current?.progress?.getString(CatalogRefreshWorker.KEY_STAGE)
                     refreshAttempt = current?.runAttemptCount ?: 0
+                    refreshItems = current?.progress?.getInt(CatalogRefreshWorker.KEY_ITEMS, 0) ?: 0
                     refreshError = current?.outputData?.getString(CatalogRefreshWorker.KEY_ERROR)
                     val observed = current?.progress?.getInt(CatalogRefreshWorker.KEY_PERCENT, 0) ?: 0
                     val saved = CatalogRefreshCheckpoint(applicationContext, providerId).visiblePercent()
@@ -978,6 +981,7 @@ class HomeActivity : AppCompatActivity() {
             refreshStage = "START"
             refreshError = null
             refreshAttempt = 0
+            refreshItems = 0
             renderManualRefreshStatus(WorkInfo.State.ENQUEUED)
             CatalogRefreshWorker.enqueueNow(applicationContext, providerId, manual = true)
             } finally {
@@ -1031,10 +1035,17 @@ class HomeActivity : AppCompatActivity() {
                 "PAUSED" -> "بعد انتهاء المشاهدة"
                 else -> null
             }
+            // The percentage is a durable high-watermark; on retry it can remain at 64
+            // while the server sends a new VOD section. Show real items processed.
+            val itemsLabel = when {
+                refreshItems >= 1_000 -> " • ${refreshItems / 1_000}k"
+                refreshItems > 0 -> " • ${refreshItems}"
+                else -> ""
+            }
             text = when (state) {
                 WorkInfo.State.RUNNING -> when {
-                    refreshAttempt > 0 -> "استكمال • ${stageLabel ?: "المكتبة"}"
-                    stageLabel != null -> "تحديث • ${stageLabel}"
+                    refreshAttempt > 0 -> "استكمال • ${stageLabel ?: "المكتبة"}$itemsLabel"
+                    stageLabel != null -> "تحديث • ${stageLabel}$itemsLabel"
                     else -> getString(R.string.home_catalog_refresh_running_v74)
                 }
                 WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED ->
