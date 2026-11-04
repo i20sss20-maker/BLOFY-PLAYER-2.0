@@ -1,0 +1,43 @@
+name: BLOFY 84 signed APK direct delivery
+on:
+  push:
+    branches: [fix/blofy-clean-catalog-screen-84-20261104]
+    paths:
+      - .github/workflows/blofy-84-apk-only-delivery.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  deliver:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Retrieve already verified signed BLOFY 84 build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p payload
+          gh run download 41763085407 --repo "$GITHUB_REPOSITORY" \
+            --name BLOFY-55-8-7-2000084-APK-AAB-OWNER-SIGNED --dir payload
+      - name: Verify APK contents, hash and owner-signed metadata
+        run: |
+          set -euo pipefail
+          apk=payload/BLOFY-PLAYER-55.8.7-2000084-SIGNED.apk
+          test -s "$apk"
+          unzip -tq "$apk" >/dev/null
+          grep -Fq 'VersionCode=2000084' payload/BUILD_INFO.txt
+          grep -Fq 'Signed=true' payload/BUILD_INFO.txt
+          grep -Fq 'OriginalSignatureSha256=C3B98CCCD2F0C86809014ACD9368BF61C7004CFD419CD867B71FEF10BFA6255E' payload/BUILD_INFO.txt
+          expected="$(grep 'BLOFY-PLAYER-55.8.7-2000084-SIGNED.apk' payload/SHA256SUMS | awk '{print $1}')"
+          test -n "$expected"
+          test "$expected" = "$(sha256sum "$apk" | awk '{print $1}')"
+      - name: Upload just the installable official APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-PLAYER-84-OWNER-SIGNED-APK-ONLY
+          path: payload/BLOFY-PLAYER-55.8.7-2000084-SIGNED.apk
+          retention-days: 30
+          compression-level: 6
+          if-no-files-found: error
