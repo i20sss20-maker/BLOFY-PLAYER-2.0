@@ -112,4 +112,44 @@ class PlaylistManagerCategoryFallbackTest {
             assertEquals(0, db.dao().catalogCountAll(provider.id, "live"))
         }
     }
+
+    @Test fun truncatedGlobalMoviesRecoverByCategoryWithoutKeepingPartialRows(): Unit = runBlocking(Dispatchers.IO) {
+        MockWebServer().use { server ->
+            val counts = ConcurrentHashMap<String, Int>()
+            val partial = (1000..1800).joinToString(",") {
+                """{"stream_id":$it,"name":"Interrupted VOD $it","category_id":"1"}"""
+            }
+            server.dispatcher = object : Dispatcher() {
+                override fun dispatch(req: RecordedRequest): MockResponse {
+                    val action = req.requestUrl?.queryParameter("action").orEmpty()
+                    val category = req.requestUrl?.queryParameter("category_id")
+                    counts.merge("$action:${category ?: "all"}", 1, Int::plus)
+                    val body = when {
+                        action == "get_vod_categories" ->
+                            """[{"category_id":"1","category_name":"One"},{"category_id":"2","category_name":"Two"}]"""
+                        action == "get_live_categories" || action == "get_series_categories" -> "[]"
+                        action == "get_live_streams" || action == "get_series" -> "[]"
+                        action == "get_vod_streams" && category == null -> "[$partial,{"
+                        action == "get_vod_streams" && category == "1" ->
+                            """[{"stream_id":1,"category_id":"1","name":"Movie One"}]"""
+                        action == "get_vod_streams" && category == "2" ->
+                            """[{"stream_id":2,"category_id":"2","name":"Movie Two"}]"""
+                        else -> "[]"
+                    }
+                    return MockResponse().setBody(body)
+                }
+            }
+            server.start()
+            val provider = ProviderEntity("vod-split", "BLOFY", server.url("/").toString(), "user", "pass")
+            val result = PlaylistManager(XtreamClient.createApi(OkHttpClient()), db.dao()).syncAll(provider)
+            assertEquals(0, result.failedSectionCount)
+            assertEquals(2, result.freshItemCount)
+            assertEquals(listOf("1", "2"),
+                db.dao().streamSnapshot(provider.id, "movie").map { it.remoteId }.sorted())
+            assertEquals(2, counts["get_vod_streams:all"])
+            assertEquals(1, counts["get_vod_streams:1"])
+            assertEquals(1, counts["get_vod_streams:2"])
+            assertTrue(db.dao().searchStreamsFts(provider.id, "Interrupted*", 10).isEmpty())
+        }
+    }
 }
