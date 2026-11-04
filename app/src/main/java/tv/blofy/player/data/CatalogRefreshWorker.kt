@@ -105,6 +105,7 @@ class CatalogRefreshWorker(
         var lastStage = "START"
         var lastRetry = -1
         suspend fun publish(stage: String, attemptedPercent: Int, attempt: Int = 0) {
+            val previous = lastPercent
             val percent = maxOf(lastPercent, attemptedPercent)
                 .coerceIn(0, CatalogRefreshProgress.COMMIT_START)
             if (percent > lastPercent) {
@@ -112,7 +113,7 @@ class CatalogRefreshWorker(
             }
             // Do not write WorkManager's database for every JSON row. The visible
             // percentage comes from measured section progress and never counts backwards.
-            if (stage != lastStage || percent != lastPercent || attempt != lastRetry) {
+            if (stage != lastStage || lastPercent != previous || attempt != lastRetry) {
                 lastStage = stage
                 lastRetry = attempt
                 setProgress(workDataOf(KEY_STAGE to stage, KEY_PERCENT to lastPercent, KEY_RETRY to attempt))
@@ -127,7 +128,11 @@ class CatalogRefreshWorker(
                     completedSections = saved.completed,
                     onSectionComplete = { kind ->
                         checkpoint.completed(saved, kind, dao)
-                        publish(kind.uppercase(), CatalogRefreshProgress.afterSection(kind))
+                        publish(when (kind) {
+                            "live" -> "LIVE"
+                            "movie" -> "MOVIES"
+                            else -> "SERIES"
+                        }, CatalogRefreshProgress.afterSection(kind))
                     },
                     onProgress = { progress ->
                         if (CatalogPlaybackGate.isPlaying) throw PlaybackInProgressException()
