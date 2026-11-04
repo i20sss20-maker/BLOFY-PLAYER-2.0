@@ -8,13 +8,9 @@ package tv.blofy.player.data
  */
 internal object CatalogProgressEstimate {
     fun from(progress: PlaylistSyncProgress): Int {
-        val stageIndex = when (progress.stage) {
-            PlaylistSyncStage.M3U -> 0
-            PlaylistSyncStage.LIVE -> 0
-            PlaylistSyncStage.MOVIES -> 1
-            PlaylistSyncStage.SERIES -> 2
-        }
-        val baseline = 5 + stageIndex * 30
+        // A later section can start even when all previous ones FAILED.
+        // Stage index must never masquerade as sections actually downloaded.
+        val baseline = 5 + progress.completedSectionCount.coerceIn(0, 3) * 30
         val fraction = progress.sectionTransferPercent?.coerceIn(0, 100)?.toDouble()?.div(100.0)
             ?: when (progress.stage) {
                 PlaylistSyncStage.M3U -> 0.0
