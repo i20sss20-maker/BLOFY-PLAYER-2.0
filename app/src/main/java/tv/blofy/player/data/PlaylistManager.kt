@@ -46,23 +46,44 @@ class PlaylistManager(
             listOf(
                 suspend {
                     onProgress(PlaylistSyncProgress(PlaylistSyncStage.LIVE, 1, 3))
-                    freshItemCount += if ("live" in completedSections) dao.catalogCountAll(provider.id, "live") else syncLive(provider) { percent ->
-                        onProgress(PlaylistSyncProgress(PlaylistSyncStage.LIVE, 1, 3, percent))
-                    }
+                    freshItemCount += if ("live" in completedSections) dao.catalogCountAll(provider.id, "live") else syncLive(provider,
+                        onProgress = { percent ->
+                            onProgress(PlaylistSyncProgress(PlaylistSyncStage.LIVE, 1, 3, percent))
+                        },
+                        onTransfer = { sectionPercent, count ->
+                            onProgress(PlaylistSyncProgress(
+                                stage = PlaylistSyncStage.LIVE, step = 1, totalSteps = 3,
+                                parsedItems = count, sectionTransferPercent = sectionPercent))
+                        }
+                    )
                     onSectionComplete("live")
                 },
                 suspend {
                     onProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3))
-                    freshItemCount += if ("movie" in completedSections) dao.catalogCountAll(provider.id, "movie") else syncVod(provider) { percent ->
-                        onProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3, percent))
-                    }
+                    freshItemCount += if ("movie" in completedSections) dao.catalogCountAll(provider.id, "movie") else syncVod(provider,
+                        onProgress = { percent ->
+                            onProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3, percent))
+                        },
+                        onTransfer = { sectionPercent, count ->
+                            onProgress(PlaylistSyncProgress(
+                                stage = PlaylistSyncStage.MOVIES, step = 2, totalSteps = 3,
+                                parsedItems = count, sectionTransferPercent = sectionPercent))
+                        }
+                    )
                     onSectionComplete("movie")
                 },
                 suspend {
                     onProgress(PlaylistSyncProgress(PlaylistSyncStage.SERIES, 3, 3))
-                    freshItemCount += if ("series" in completedSections) dao.catalogCountAll(provider.id, "series") else syncSeries(provider) { percent ->
-                        onProgress(PlaylistSyncProgress(PlaylistSyncStage.SERIES, 3, 3, percent))
-                    }
+                    freshItemCount += if ("series" in completedSections) dao.catalogCountAll(provider.id, "series") else syncSeries(provider,
+                        onProgress = { percent ->
+                            onProgress(PlaylistSyncProgress(PlaylistSyncStage.SERIES, 3, 3, percent))
+                        },
+                        onTransfer = { sectionPercent, count ->
+                            onProgress(PlaylistSyncProgress(
+                                stage = PlaylistSyncStage.SERIES, step = 3, totalSteps = 3,
+                                parsedItems = count, sectionTransferPercent = sectionPercent))
+                        }
+                    )
                     onSectionComplete("series")
                 }
             ),
@@ -76,7 +97,8 @@ class PlaylistManager(
 
     suspend fun syncLive(
         provider: ProviderEntity,
-        onProgress: suspend (Int) -> Unit = {}
+        onProgress: suspend (Int) -> Unit = {},
+        onTransfer: suspend (Int?, Int) -> Unit = { _, _ -> }
     ): Int {
         val categories = api.list(actionUrl(provider, "get_live_categories"))
         val previousCount = dao.catalogCountAll(provider.id, "live")
@@ -99,7 +121,8 @@ class PlaylistManager(
             parseStreamingArray(
                 actionUrl(provider, "get_live_streams"), 18, 30, onProgress,
                 retainItems = !direct,
-                onBatch = directBatchSink(direct)
+                onBatch = directBatchSink(direct),
+                onTransfer = onTransfer
             ) { row ->
                 val id = row.id("stream_id") ?: return@parseStreamingArray null
                 val archive = row.string("tv_archive").let { it == "1" || it.equals("true", true) }
@@ -133,7 +156,8 @@ class PlaylistManager(
 
     suspend fun syncVod(
         provider: ProviderEntity,
-        onProgress: suspend (Int) -> Unit = {}
+        onProgress: suspend (Int) -> Unit = {},
+        onTransfer: suspend (Int?, Int) -> Unit = { _, _ -> }
     ): Int {
         val categories = api.list(actionUrl(provider, "get_vod_categories"))
         val previousCount = dao.catalogCountAll(provider.id, "movie")
@@ -149,7 +173,8 @@ class PlaylistManager(
             parseStreamingArray(
                 actionUrl(provider, "get_vod_streams"), 60, 88, onProgress,
                 retainItems = !direct,
-                onBatch = directBatchSink(direct)
+                onBatch = directBatchSink(direct),
+                onTransfer = onTransfer
             ) { row -> vodEntity(provider, row)?.let(previousFlags::applyTo) }
         } catch (failure: Throwable) {
             if (direct) clearDirectSection(provider.id, "movie")
@@ -191,7 +216,8 @@ class PlaylistManager(
 
     suspend fun syncSeries(
         provider: ProviderEntity,
-        onProgress: suspend (Int) -> Unit = {}
+        onProgress: suspend (Int) -> Unit = {},
+        onTransfer: suspend (Int?, Int) -> Unit = { _, _ -> }
     ): Int {
         val categories = api.list(actionUrl(provider, "get_series_categories"))
         val previousCount = dao.catalogCountAll(provider.id, "series")
@@ -207,7 +233,8 @@ class PlaylistManager(
             parseStreamingArray(
                 actionUrl(provider, "get_series"), 88, 95, onProgress,
                 retainItems = !direct,
-                onBatch = directBatchSink(direct)
+                onBatch = directBatchSink(direct),
+                onTransfer = onTransfer
             ) { row ->
                 val id = row.id("series_id") ?: return@parseStreamingArray null
                 val backdrop = when (val raw = row["backdrop_path"]) {
@@ -307,6 +334,7 @@ class PlaylistManager(
         progressStart: Int,
         progressEnd: Int,
         onProgress: suspend (Int) -> Unit,
+        onTransfer: suspend (Int?, Int) -> Unit = { _, _ -> },
         retainItems: Boolean = true,
         onBatch: suspend (List<T>) -> Unit = {},
         map: (Map<String, Any?>) -> T?,
@@ -316,8 +344,10 @@ class PlaylistManager(
         val batch = ArrayList<T>(DIRECT_STREAM_BATCH)
         var sourceCount = 0
         var itemCount = 0
+        var transferLengthKnown = false
         api.streamingCall(url).readCatalog { responseBody ->
             val declaredBytes = responseBody.contentLength()
+            transferLengthKnown = declaredBytes > 0L
             val counting = CountingInputStream(responseBody.byteStream())
             JsonReader(InputStreamReader(counting, Charsets.UTF_8)).use { reader ->
                 reader.beginArray()
@@ -347,12 +377,15 @@ class PlaylistManager(
                             (sourceCount.toDouble() / (sourceCount + 2000.0)).coerceIn(0.0, 0.96)
                         }
                         onProgress(progressStart + (fraction * span).toInt())
+                        val verified = if (declaredBytes > 0L) (fraction * 100).toInt().coerceIn(0, 99) else null
+                        onTransfer(verified, itemCount)
                     }
                 }
                 reader.endArray()
             }
         }
         if (!retainItems && batch.isNotEmpty()) onBatch(batch.toList())
+        onTransfer(if (transferLengthKnown) 100 else null, itemCount)
         return StreamingParseResult(sourceCount, itemCount, items ?: emptyList())
     }
 
