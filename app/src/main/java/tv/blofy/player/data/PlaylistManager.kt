@@ -47,55 +47,70 @@ class PlaylistManager(
 
         var freshItemCount = 0
         val failed = mutableListOf<XtreamSectionIssue>()
+        val validated = completedSections.toMutableSet()
+        val reportProgress: suspend (PlaylistSyncProgress) -> Unit = { update ->
+            onProgress(update.copy(completedSectionCount = validated.size))
+        }
+        val recordCompletion: suspend (String) -> Unit = { kind ->
+            onSectionComplete(kind)
+            validated += kind
+            val stage = when (kind) {
+                "live" -> PlaylistSyncStage.LIVE
+                "movie" -> PlaylistSyncStage.MOVIES
+                "series" -> PlaylistSyncStage.SERIES
+                else -> PlaylistSyncStage.M3U
+            }
+            reportProgress(PlaylistSyncProgress(stage, validated.size, 3))
+        }
         val sectionResult = try {
             runXtreamSections(
             listOf(
                 suspend {
-                    onProgress(PlaylistSyncProgress(PlaylistSyncStage.LIVE, 1, 3))
+                    reportProgress(PlaylistSyncProgress(PlaylistSyncStage.LIVE, 1, 3))
                     freshItemCount += if ("live" in completedSections) dao.catalogCountAll(provider.id, "live") else syncLive(provider,
                         onProgress = { percent ->
-                            onProgress(PlaylistSyncProgress(PlaylistSyncStage.LIVE, 1, 3, percent))
+                            reportProgress(PlaylistSyncProgress(PlaylistSyncStage.LIVE, 1, 3, percent))
                         },
                         onTransfer = { sectionPercent, count ->
-                            onProgress(PlaylistSyncProgress(
+                            reportProgress(PlaylistSyncProgress(
                                 stage = PlaylistSyncStage.LIVE, step = 1, totalSteps = 3,
                                 parsedItems = count, sectionTransferPercent = sectionPercent))
                         }
                     )
-                    onSectionComplete("live")
+                    recordCompletion("live")
                 },
                 suspend {
-                    onProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3))
+                    reportProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3))
                     freshItemCount += if ("movie" in completedSections) dao.catalogCountAll(provider.id, "movie") else syncVod(provider,
                         onProgress = { percent ->
-                            onProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3, percent))
+                            reportProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3, percent))
                         },
                         onTransfer = { sectionPercent, count ->
-                            onProgress(PlaylistSyncProgress(
+                            reportProgress(PlaylistSyncProgress(
                                 stage = PlaylistSyncStage.MOVIES, step = 2, totalSteps = 3,
                                 parsedItems = count, sectionTransferPercent = sectionPercent))
                         }
                     )
-                    onSectionComplete("movie")
+                    recordCompletion("movie")
                 },
                 suspend {
-                    onProgress(PlaylistSyncProgress(PlaylistSyncStage.SERIES, 3, 3))
+                    reportProgress(PlaylistSyncProgress(PlaylistSyncStage.SERIES, 3, 3))
                     freshItemCount += if ("series" in completedSections) dao.catalogCountAll(provider.id, "series") else syncSeries(provider,
                         onProgress = { percent ->
-                            onProgress(PlaylistSyncProgress(PlaylistSyncStage.SERIES, 3, 3, percent))
+                            reportProgress(PlaylistSyncProgress(PlaylistSyncStage.SERIES, 3, 3, percent))
                         },
                         onTransfer = { sectionPercent, count ->
-                            onProgress(PlaylistSyncProgress(
+                            reportProgress(PlaylistSyncProgress(
                                 stage = PlaylistSyncStage.SERIES, step = 3, totalSteps = 3,
                                 parsedItems = count, sectionTransferPercent = sectionPercent))
                         }
                     )
-                    onSectionComplete("series")
+                    recordCompletion("series")
                 }
             ),
             onRetry = { section, attempt ->
                 val stage = listOf(PlaylistSyncStage.LIVE, PlaylistSyncStage.MOVIES, PlaylistSyncStage.SERIES)[section]
-                onProgress(PlaylistSyncProgress(stage, section + 1, 3, retryAttempt = attempt))
+                reportProgress(PlaylistSyncProgress(stage, section + 1, 3, retryAttempt = attempt))
             },
             onSectionFailure = { index, error ->
                 failed += XtreamSectionIssue.from(index, error)
