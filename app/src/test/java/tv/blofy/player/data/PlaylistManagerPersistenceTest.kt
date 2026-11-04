@@ -70,7 +70,7 @@ class PlaylistManagerPersistenceTest {
     }
 
     @Test fun rejectedEmptyRefreshKeepsExistingRowsAndReportsFailure(): Unit = runBlocking(Dispatchers.IO) {
-        val saved = StreamEntity("candidate:live:saved", provider.id, "saved", null, "live", "Saved live", favorite = true)
+        val saved = StreamEntity("candidate:live:saved", provider.id, "saved", null, "live", "Saved live", favorite = true, sourceOrder = 1L)
         db.dao().replaceCatalog(provider.id, "live", emptyList(), listOf(saved))
 
         val result = PlaylistManager(FixtureApi(liveCategories = emptyList(), liveStreams = "[]"), db.dao())
