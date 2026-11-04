@@ -173,7 +173,7 @@ interface BlofyDao {
     @Query("DELETE FROM activation") suspend fun clearActivation()
     @Transaction suspend fun replaceActivation(state: ActivationEntity) { clearActivation(); upsertActivation(state) }
 
-    @Query("SELECT * FROM categories WHERE providerId = :providerId AND kind = :kind AND hidden = 0 ORDER BY orderIndex, `key`") fun categories(providerId: String, kind: String): Flow<List<CategoryEntity>>
+    @Query("SELECT * FROM categories WHERE providerId = :providerId AND kind = :kind AND hidden = 0 ORDER BY orderIndex, rowid") fun categories(providerId: String, kind: String): Flow<List<CategoryEntity>>
     @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND (:categoryId IS NULL OR categoryId = :categoryId) ORDER BY sourceOrder, `key`") fun streams(providerId: String, kind: String, categoryId: String?): Flow<List<StreamEntity>>
 
     @Query("SELECT COUNT(*) FROM streams WHERE providerId = :providerId AND kind = :kind") suspend fun catalogCountAll(providerId: String, kind: String): Int
