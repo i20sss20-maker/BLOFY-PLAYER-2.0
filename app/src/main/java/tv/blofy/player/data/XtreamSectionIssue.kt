@@ -25,8 +25,8 @@ data class XtreamSectionIssue(val section: PlaylistSyncStage, val httpStatus: In
                     PlaylistSyncStage.SERIES -> "المسلسلات"
                     PlaylistSyncStage.M3U -> "القائمة"
                 }
-                when (issue.httpStatus) {
-                    401, 403 -> "رفض السيرفر اشتراك $area (HTTP ${issue.httpStatus})"
+                when (val code = issue.httpStatus ?: -1) {
+                    401, 403 -> "رفض السيرفر اشتراك $area (HTTP ${code})"
                     404 -> "مسار $area غير متاح في الهوست (HTTP 404)"
                     429 -> "السيرفر مشغول عند تحميل $area (HTTP 429)"
                     in 500..599 -> "خطأ سيرفر $area (HTTP ${issue.httpStatus})"
