@@ -561,7 +561,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         )
     }
 
-    private fun liveMemoryKey(): String = "${provider.id}:live:${currentCategoryId ?: ALL_CATEGORY_ID}"
+    private fun liveMemoryKey(): String = "${provider.id}:live:${currentCategoryId ?: ALL_CATEGORY_ID}:${CatalogSyncState.lastSyncedAt(applicationContext, provider.id)}"
 
     private fun startInitialPreview(page: List<StreamEntity>) {
         if (page.isEmpty()) return
