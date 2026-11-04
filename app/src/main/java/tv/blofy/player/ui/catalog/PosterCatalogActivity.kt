@@ -340,11 +340,11 @@ class PosterCatalogActivity : AppCompatActivity() {
             val dao = BlofyDatabase.get(applicationContext).dao()
             val result = withContext(Dispatchers.IO) {
                 val page = if (requestCategoryId == null) {
-                    dao.catalogPageAfterAll(providerId, kind, cursor, PAGE_SIZE)
+                    dao.catalogSourcePageAfterAll(providerId, kind, cursor, PAGE_SIZE)
                 } else {
-                    dao.catalogPageAfterInCategory(providerId, kind, requestCategoryId, cursor, PAGE_SIZE)
+                    dao.catalogSourcePageAfterInCategory(providerId, kind, requestCategoryId, cursor, PAGE_SIZE)
                 }
-                page to (page.lastOrNull()?.let { dao.streamRowId(it.key) } ?: cursor)
+                page to (page.lastOrNull()?.sourceOrder ?: cursor)
             }
             if (requestGeneration != generation || requestCategoryId != selectedCategoryId) return@launch
             lastRowId = result.second
