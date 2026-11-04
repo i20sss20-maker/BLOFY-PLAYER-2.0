@@ -625,7 +625,16 @@ class LoginActivity : AppCompatActivity() {
             // DeviceIdentity also protects synchronous durable writes and firmware binder reads.
             // Never wait for its monitor before drawing the first Login frame.
             val cached = try {
-                withContext(Dispatchers.IO) { DeviceIdentity.cachedIdentity(applicationContext) }
+                withContext(Dispatchers.IO) {
+                    DeviceIdentity.cachedIdentity(applicationContext) ?: run {
+                        // Only a genuinely fresh installation may show a locally derived code
+                        // before Room is ready. Existing databases are authoritative and must
+                        // not be replaced by a newly invented credential.
+                        val database = applicationContext.getDatabasePath("blofy-player-2.db")
+                        if (database.exists()) null
+                        else DeviceIdentity.deviceId(applicationContext) to DeviceIdentity.activationCode(applicationContext)
+                    }
+                }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { null }
             // A late cache read must not replace an identity resolved/rotated by an explicit flow.
@@ -636,21 +645,11 @@ class LoginActivity : AppCompatActivity() {
     private fun requestIdentityRefresh(fromWebsite: Boolean = false) {
         if (identityJob?.isActive == true || connectJob?.isActive == true || playlistJob?.isActive == true) return
         identityJob = lifecycleScope.launch {
-            // Independent UI deadline: a blocked firmware/SQLite call may finish cancellation
-            // late. The placeholder must still become an actionable error on time.
-            val owner = coroutineContext[Job]
+            // The playlist deadline is not an identity deadline. Slow SQLite catalog reads
+            // must never cancel the 6-digit code / Device ID recovery task.
             val cardsDeadline = lifecycleScope.launch {
                 delay(savedPlaylistDeadlineMillis)
-                if (renderedPlaylists == null || !identityRendered) {
-                    owner?.cancel()
-                    renderPlaylistLoadFailure()
-                    if (!identityRendered) {
-                        status.setText(R.string.login_identity_read_failed)
-                        qrView.visibility = View.INVISIBLE
-                        qrMessage.setText(R.string.login_identity_read_failed)
-                        qrMessage.visibility = View.VISIBLE
-                    }
-                }
+                if (renderedPlaylists == null) renderPlaylistLoadFailure()
             }
             try {
                 if (fromWebsite) {
@@ -678,15 +677,26 @@ class LoginActivity : AppCompatActivity() {
     private suspend fun refreshIdentityAndProvider(fromWebsite: Boolean) {
         val dao = withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao() }
         val manager = ActivationManager(applicationContext, dao)
-        // Identity and card labels do not use transport secrets. A slow TV Keystore must not
-        // hold the initial screen here; selection/connect resolves the chosen provider later.
-        val local = withContext(Dispatchers.IO) { dao.providerSnapshotStored() }
-        renderPortalPlaylists(local)
-        val active = local.firstOrNull { it.enabled }
-        status.text = if (active == null) getString(R.string.login_waiting_for_playlist) else getString(R.string.login_ready_provider, ProviderDisplayName.forUi(active))
+        // Device ID and pairing code are independent of IPTV catalog size, stored playlist
+        // rows, host credentials and website availability. Always display them first.
         val identity = withContext(Dispatchers.IO) { manager.ensureIdentity() }
         renderIdentity(identity.deviceId, identity.activationCode)
         bindTrialStatus(identity)
+
+        // A busy or malformed playlist table must not hide a valid activation code.
+        val local = try {
+            withContext(Dispatchers.IO) { dao.providerSnapshotStored() }
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) {
+            renderPlaylistLoadFailure()
+            null
+        }
+        if (local != null) {
+            renderPortalPlaylists(local)
+            val active = local.firstOrNull { it.enabled }
+            status.text = if (active == null) getString(R.string.login_waiting_for_playlist)
+                else getString(R.string.login_ready_provider, ProviderDisplayName.forUi(active))
+        }
         if (!fromWebsite) return
         val endpoint = activationEndpoint
         if (endpoint.isBlank()) { status.setText(R.string.refresh_site_missing); return }
