@@ -249,7 +249,7 @@ interface BlofyDao {
         SELECT streams.* FROM streams
         INNER JOIN streams_fts ON streams.`key` = streams_fts.contentKey
         WHERE streams_fts.providerId = :providerId AND streams_fts.kind = :kind AND streams_fts MATCH :query
-        ORDER BY streams.name LIMIT :limit
+        ORDER BY streams.sourceOrder, streams.`key` LIMIT :limit
     """)
     suspend fun searchStreamsFtsByKind(providerId: String, kind: String, query: String, limit: Int): List<StreamEntity>
     @Query("UPDATE streams SET favorite = :favorite WHERE `key` = :contentKey") suspend fun setFavorite(contentKey: String, favorite: Boolean)
