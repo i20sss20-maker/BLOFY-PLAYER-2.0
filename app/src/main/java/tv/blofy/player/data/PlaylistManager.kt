@@ -471,7 +471,10 @@ class PlaylistManager(
                             }
                         }
                     }
-                    if (sourceCount % 256 == 0) {
+                    // Emitting two coroutine callbacks for every 256 rows can
+                    // repeatedly switch to the main thread on low-end TV
+                    // hardware. Keep exact item counters, but emit less often.
+                    if (sourceCount % 1024 == 0) {
                         val span = (progressEnd - progressStart).coerceAtLeast(1)
                         val fraction = if (declaredBytes > 0L) {
                             (counting.bytesRead.toDouble() / declaredBytes.toDouble()).coerceIn(0.0, 1.0)
