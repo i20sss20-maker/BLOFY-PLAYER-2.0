@@ -38,12 +38,19 @@ class CategoryOrderRefreshTest {
     fun cleanup() = db.close()
 
     @Test
-    fun stagedRefresh_keepsUserCategoryVisibilityAndOrder(): Unit = runBlocking(Dispatchers.IO) {
+    fun stagedRefresh_keepsHiddenFlagButUsesCurrentServerOrder(): Unit = runBlocking(Dispatchers.IO) {
+        // Existing category was previously pinned manually (orderIndex=70).
+        // A fresh Xtream result is authoritative: its first position is 0.
+        db.dao().upsertCategories(listOf(
+            CategoryEntity("staged:live:11", "staged", "11", "live", "News", orderIndex = 1)
+        ))
         db.dao().promoteStagedRefresh("staged", saved)
 
-        val category = db.dao().categorySnapshot("saved", "live").single()
-        assertTrue(category.hidden)
-        assertEquals(70, category.orderIndex)
+        val categories = db.dao().categorySnapshot("saved", "live").sortedBy { it.orderIndex }
+        assertEquals(listOf("10", "11"), categories.map { it.remoteId })
+        assertTrue(categories[0].hidden)
+        assertEquals(0, categories[0].orderIndex)
+        assertEquals(1, categories[1].orderIndex)
     }
 
     private fun stream(providerId: String, kind: String, id: Int) = StreamEntity(
