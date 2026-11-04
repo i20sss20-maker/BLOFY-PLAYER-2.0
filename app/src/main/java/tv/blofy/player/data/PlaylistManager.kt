@@ -130,7 +130,7 @@ class PlaylistManager(
         onProgress: suspend (Int) -> Unit = {},
         onTransfer: suspend (Int?, Int) -> Unit = { _, _ -> }
     ): Int {
-        val categories = api.list(actionUrl(provider, "get_live_categories"))
+        val categories = readCategories(provider, "get_live_categories")
         val previousCount = dao.catalogCountAll(provider.id, "live")
         val previousFlags = PreviousStreamFlags(dao.persistedStreamFlags(provider.id, "live"))
         val coroutineContext = currentCoroutineContext()
@@ -190,7 +190,7 @@ class PlaylistManager(
         onProgress: suspend (Int) -> Unit = {},
         onTransfer: suspend (Int?, Int) -> Unit = { _, _ -> }
     ): Int {
-        val categories = api.list(actionUrl(provider, "get_vod_categories"))
+        val categories = readCategories(provider, "get_vod_categories")
         val previousCount = dao.catalogCountAll(provider.id, "movie")
         val previousFlags = PreviousStreamFlags(dao.persistedStreamFlags(provider.id, "movie"))
         val coroutineContext = currentCoroutineContext()
@@ -251,7 +251,7 @@ class PlaylistManager(
         onProgress: suspend (Int) -> Unit = {},
         onTransfer: suspend (Int?, Int) -> Unit = { _, _ -> }
     ): Int {
-        val categories = api.list(actionUrl(provider, "get_series_categories"))
+        val categories = readCategories(provider, "get_series_categories")
         val previousCount = dao.catalogCountAll(provider.id, "series")
         val previousFlags = PreviousStreamFlags(dao.persistedStreamFlags(provider.id, "series"))
         val coroutineContext = currentCoroutineContext()
@@ -448,6 +448,13 @@ class PlaylistManager(
         if (!direct) dao.replaceCatalog(providerId, kind, categoryRows, parsed.items)
     }
 
+    /** Categories need the same cancellation, decoding fallback and complete-array check as streams. */
+    private suspend fun readCategories(provider: ProviderEntity, action: String): List<Map<String, Any?>> =
+        parseStreamingArray(
+            actionUrl(provider, action), 0, 0,
+            onProgress = {}, map = { it }
+        ).items
+
     private data class StreamingParseResult<T>(
         val sourceCount: Int,
         val itemCount: Int,
@@ -482,6 +489,10 @@ class PlaylistManager(
             val counting = CountingInputStream(responseBody.byteStream())
             received = counting
             JsonReader(InputStreamReader(counting, Charsets.UTF_8)).use { reader ->
+                // Match GsonConverterFactory's legacy reader behavior (BOM/XSSI prefix,
+                // comments and unquoted provider fields), while still requiring the entire
+                // array to close before any section can be marked complete.
+                reader.isLenient = true
                 reader.beginArray()
                 val gson = Gson()
                 val mapType = object : TypeToken<Map<String, Any?>>() {}.type

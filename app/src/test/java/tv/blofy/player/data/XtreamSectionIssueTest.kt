@@ -50,6 +50,12 @@ class XtreamSectionIssueTest {
         assertTrue(message.length < 125)
     }
 
+    @Test fun malformedJsonIsNotReportedAsNetworkInterruption() {
+        val issue = XtreamSectionIssue.from(0, com.google.gson.JsonSyntaxException("private response"))
+        assertEquals(XtreamSectionIssue.FailureType.INVALID_CONTENT, issue.failureType)
+        assertFalse(XtreamSectionIssue.describe(listOf(issue)).contains("private"))
+    }
+
     @Test fun reportsEveryBrokenSection() {
         val message = PlaylistSyncResult(
             freshItemCount = 350,

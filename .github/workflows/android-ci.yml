@@ -2,7 +2,7 @@ name: BLOFY Android CI
 
 on:
   push:
-    branches: [main, rc07-commercial-stability]
+    branches: [main, rc07-commercial-stability, fix/blofy-catalog-compat-88-20261104]
   pull_request:
   workflow_dispatch:
 
@@ -128,7 +128,7 @@ jobs:
         run: python3 tools/check_catalog_queries.py
       - name: Verify Play Xiaomi-design UX / internal 2000077 manifest and TV routes
         env:
-          BLOFY_EXPECTED_PLAY_VERSION_CODE: "2000087"
+          BLOFY_EXPECTED_PLAY_VERSION_CODE: "2000088"
         run: python3 tools/verify_play_2000073.py
       - name: Test lint and assemble
         shell: bash

@@ -109,6 +109,56 @@ class XtreamCatalogTransportTest {
         }
     }
 
+    @Test fun truncatedCategoriesRecoverWithIdentityBeforeLoadingStreams(): Unit = runBlocking(Dispatchers.IO) {
+        MockWebServer().use { server ->
+            val seen = ConcurrentHashMap<String, MutableList<String>>()
+            server.dispatcher = object : Dispatcher() {
+                override fun dispatch(req: RecordedRequest): MockResponse {
+                    val action = req.requestUrl?.queryParameter("action").orEmpty()
+                    val encoding = req.getHeader("Accept-Encoding").orEmpty()
+                    seen.computeIfAbsent(action) { java.util.Collections.synchronizedList(mutableListOf()) }.add(encoding)
+                    val data = when {
+                        action.endsWith("categories") -> """[{"category_id":"1","category_name":"One"}]"""
+                        action == "get_series" -> """[{"series_id":3,"category_id":"1","name":"Series"}]"""
+                        else -> """[{"stream_id":1,"category_id":"1","name":"Item"}]"""
+                    }
+                    val body = if (action.endsWith("categories") && encoding != "identity") data.dropLast(4) else data
+                    return if (encoding == "gzip") MockResponse().setHeader("Content-Encoding", "gzip").setBody(compress(body))
+                        else MockResponse().setBody(body)
+                }
+            }
+            server.start()
+            val provider = ProviderEntity("category-encoding", "BLOFY", server.url("/").toString(), "u", "p")
+            val result = PlaylistManager(XtreamClient.api, database.dao()).syncAll(provider)
+            assertEquals(0, result.failedSectionCount)
+            assertEquals(3, result.freshItemCount)
+            listOf("get_live_categories", "get_vod_categories", "get_series_categories").forEach {
+                assertEquals(listOf("gzip", "identity"), seen[it])
+            }
+        }
+    }
+
+    @Test fun legacyGsonCompatibleCatalogPrefixDoesNotBlockEntry(): Unit = runBlocking(Dispatchers.IO) {
+        MockWebServer().use { server ->
+            server.dispatcher = object : Dispatcher() {
+                override fun dispatch(req: RecordedRequest): MockResponse {
+                    val action = req.requestUrl?.queryParameter("action").orEmpty()
+                    val data = when {
+                        action.endsWith("categories") -> """[{"category_id":"1","category_name":"One"}]"""
+                        action == "get_series" -> """[{"series_id":3,"category_id":"1","name":"Series"}]"""
+                        else -> """[{"stream_id":1,"category_id":"1","name":"Item"}]"""
+                    }
+                    return MockResponse().setBody(")]}'\n" + data)
+                }
+            }
+            server.start()
+            val provider = ProviderEntity("legacy-prefix", "BLOFY", server.url("/").toString(), "u", "p")
+            val result = PlaylistManager(XtreamClient.api, database.dao()).syncAll(provider)
+            assertEquals(0, result.failedSectionCount)
+            assertEquals(3, result.freshItemCount)
+        }
+    }
+
     @Test fun doNotReinterpretDnsTlsOrAuthorizationAsEncodingProblem() {
         assertFalse(CatalogTransportFallbackPolicy.shouldTryIdentity(java.net.UnknownHostException("host")))
         assertFalse(CatalogTransportFallbackPolicy.shouldTryIdentity(
