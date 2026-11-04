@@ -151,7 +151,9 @@ class CatalogLoadingActivity : AppCompatActivity() {
     private fun preparationMessage(error: Throwable): String = when (error) {
         is FullCatalogPreparer.Incomplete -> error.message.orEmpty()
         is ArtworkLoader.StorageFull -> error.message.orEmpty()
-        else -> getString(R.string.catalog_prepare_failed)
+        else -> if (error.message?.startsWith("تعذر تجديد هوست BLOFY الداخلي") == true)
+            "تعذر تحديث هوست BLOFY • أعد تسجيل الدخول إلى مشتركين BLOFY"
+        else getString(R.string.catalog_prepare_failed)
     }
 
     private fun buildUi() {
@@ -389,7 +391,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
                 }
             }
             check(result.freshItemCount > 0) { getString(R.string.catalog_invalid_content) }
-            check(result.failedSectionCount == 0) { getString(R.string.catalog_section_failed) }
+            check(result.failedSectionCount == 0) { result.safeFailureMessage() }
             val savingLabel = getString(if (firstLoad) R.string.catalog_finishing else R.string.catalog_saving_refresh)
             render(30, savingLabel)
             // SQLite commit has no measurable percentage. Keep the completed download checkpoint internally,
@@ -451,7 +453,15 @@ class CatalogLoadingActivity : AppCompatActivity() {
                 if (!CatalogSyncState.isEntryReady(applicationContext, providerId)) awaitEntryReadyCache(providerId)
                 openHome(providerId)
             } else {
-                fail(getString(R.string.catalog_first_failed, error.message ?: getString(R.string.catalog_unknown_error)))
+                val safe = when {
+                    error.message?.startsWith("مسار ") == true -> error.message.orEmpty()
+                    error.message?.startsWith("تعذر اكتمال تحميل") == true -> error.message.orEmpty()
+                    error.message?.startsWith("تعذر تحميل") == true -> error.message.orEmpty()
+                    error.message?.startsWith("رفض السيرفر") == true -> error.message.orEmpty()
+                    error.message?.startsWith("خطأ سيرفر") == true -> error.message.orEmpty()
+                    else -> getString(R.string.catalog_unknown_error)
+                }
+                fail(getString(R.string.catalog_first_failed, safe))
             }
         } finally {
             if (persistence.catalogCommitted) forceRefreshOnRetry = false
