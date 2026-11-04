@@ -1,5 +1,6 @@
 package tv.blofy.player.data
 
+import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.google.gson.stream.JsonReader
@@ -456,11 +457,15 @@ class PlaylistManager(
         var sourceCount = 0
         var itemCount = 0
         var transferLengthKnown = false
+        var received: CountingInputStream? = null
+        var expectedLength = -1L
         try {
         api.streamingCall(url, encoding).readCatalog { responseBody ->
             val declaredBytes = responseBody.contentLength()
+            expectedLength = declaredBytes
             transferLengthKnown = declaredBytes > 0L
             val counting = CountingInputStream(responseBody.byteStream())
+            received = counting
             JsonReader(InputStreamReader(counting, Charsets.UTF_8)).use { reader ->
                 reader.beginArray()
                 val gson = Gson()
@@ -501,6 +506,23 @@ class PlaylistManager(
         }
         } catch (failure: Exception) {
             currentCoroutineContext().ensureActive()
+            // Essential on-device evidence for a truncated or malformed
+            // Xtream response. Do NOT log the URL: it embeds both credentials.
+            val safeAction = when {
+                "action=get_live_streams" in url -> "live"
+                "action=get_vod_streams" in url -> "movie"
+                "action=get_series" in url -> "series"
+                else -> "catalog"
+            }
+            val status = generateSequence(failure as Throwable) { it.cause }.take(8)
+                .filterIsInstance<retrofit2.HttpException>().firstOrNull()?.code()
+            Log.w(
+                "BLOFY-CATALOG",
+                "section=$safeAction mode=${encoding ?: "auto"} items=$sourceCount " +
+                    "receivedBytes=${received?.bytesRead ?: 0L} length=$expectedLength " +
+                    "http=${status ?: 0} error=${failure.javaClass.simpleName} " +
+                    "nested=${failure.cause?.javaClass?.simpleName ?: "none"}"
+            )
             if (encoding == null && CatalogTransportFallbackPolicy.shouldTryIdentity(failure)) {
                 // Some panels terminate a compressed response prematurely, but
                 // correctly serve uncompressed HTTP/1.1. Discard any streamed
