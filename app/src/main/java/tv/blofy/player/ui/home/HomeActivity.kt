@@ -45,6 +45,7 @@ import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.remote.FocusMemory
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.CatalogRefreshWorker
+import tv.blofy.player.data.CatalogRefreshCheckpoint
 import tv.blofy.player.data.HomeSnapshotStore
 import tv.blofy.player.data.preparation.FullLibrarySyncWorker
 import tv.blofy.player.ui.login.CatalogLoadingActivity
@@ -105,6 +106,9 @@ class HomeActivity : AppCompatActivity() {
     private var refreshStartedHere = false
     private var refreshBusy = false
     private var refreshStage: String? = null
+    private var refreshPercent = 0
+    private var refreshAttempt = 0
+    private var refreshError: String? = null
     private var refreshRequestInFlight = false
 
     private val uiHandler = Handler(Looper.getMainLooper())
@@ -884,13 +888,17 @@ class HomeActivity : AppCompatActivity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
         }
-        refreshSpinner = ProgressBar(this).apply {
-            isIndeterminate = true
+        refreshSpinner = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            isIndeterminate = false
+            max = 100
+            progress = 0
             visibility = View.GONE
             contentDescription = getString(R.string.home_catalog_refresh_running_v74)
-            indeterminateTintList = ColorStateList.valueOf(PURPLE_BRIGHT)
+            progressTintList = ColorStateList.valueOf(PURPLE_BRIGHT)
+            progressBackgroundTintList = ColorStateList.valueOf(0x6658436B)
         }
-        footer.addView(refreshSpinner, LinearLayout.LayoutParams(dp(if (compact) 12 else 15), dp(if (compact) 12 else 15)))
+        footer.addView(refreshSpinner, LinearLayout.LayoutParams(dp(if (compact) 22 else 62),
+            dp(if (compact) 5 else 6)).apply { marginEnd = dp(5) })
         if (!compact) {
             refreshHint = TextView(this).apply {
                 gravity = Gravity.CENTER_VERTICAL
@@ -914,6 +922,10 @@ class HomeActivity : AppCompatActivity() {
         refreshWork?.removeObservers(this)
         refreshObservedProvider = providerId
         refreshStartedHere = false
+        refreshPercent = CatalogRefreshCheckpoint(applicationContext, providerId).visiblePercent()
+        refreshAttempt = 0
+        refreshError = null
+        refreshStage = null
         renderManualRefreshStatus(null)
         refreshWork = WorkManager.getInstance(applicationContext)
             .getWorkInfosForUniqueWorkLiveData(CatalogRefreshWorker.manualWorkName(providerId))
@@ -921,7 +933,13 @@ class HomeActivity : AppCompatActivity() {
                 liveData.observe(this) { infos ->
                     val current = infos.firstOrNull { !it.state.isFinished }
                         ?: infos.firstOrNull()
-                    refreshStage = current?.progress?.getString("catalog_stage")
+                    refreshStage = current?.progress?.getString(CatalogRefreshWorker.KEY_STAGE)
+                    refreshAttempt = current?.runAttemptCount ?: 0
+                    refreshError = current?.outputData?.getString(CatalogRefreshWorker.KEY_ERROR)
+                    val observed = current?.progress?.getInt(CatalogRefreshWorker.KEY_PERCENT, 0) ?: 0
+                    val saved = CatalogRefreshCheckpoint(applicationContext, providerId).visiblePercent()
+                    refreshPercent = if (current?.state == WorkInfo.State.SUCCEEDED) 100
+                        else maxOf(refreshPercent, saved, observed).coerceIn(0, 95)
                     renderManualRefreshStatus(current?.state)
                 }
             }
@@ -955,6 +973,11 @@ class HomeActivity : AppCompatActivity() {
             }
             observeManualRefresh(providerId)
             refreshStartedHere = true
+            // New request, but keep an unfinished checkpoint percentage for resumption.
+            refreshPercent = CatalogRefreshCheckpoint(applicationContext, providerId).visiblePercent()
+            refreshStage = "START"
+            refreshError = null
+            refreshAttempt = 0
             renderManualRefreshStatus(WorkInfo.State.ENQUEUED)
             CatalogRefreshWorker.enqueueNow(applicationContext, providerId, manual = true)
             } finally {
@@ -966,9 +989,24 @@ class HomeActivity : AppCompatActivity() {
     private fun renderManualRefreshStatus(state: WorkInfo.State?) {
         val working = state == WorkInfo.State.RUNNING
         val waiting = state == WorkInfo.State.ENQUEUED || state == WorkInfo.State.BLOCKED
-        refreshBusy = working || waiting
-        refreshSpinner?.visibility = if (working || waiting) View.VISIBLE else View.GONE
-        if (!refreshStartedHere && !working && !waiting) {
+        val active = working || waiting
+        refreshBusy = active
+        refreshSpinner?.apply {
+            visibility = if (active) View.VISIBLE else View.GONE
+            isIndeterminate = false
+            progress = refreshPercent.coerceIn(0, 95)
+        }
+        refreshButton?.apply {
+            isEnabled = !active
+            text = if (active) {
+                if (deviceKind == DeviceClass.Kind.PHONE) "↻ ${refreshPercent}%"
+                else "${getString(R.string.home_catalog_refresh_v74)} ${refreshPercent}%"
+            } else if (deviceKind == DeviceClass.Kind.PHONE) "↻"
+                else getString(R.string.home_catalog_refresh_v74)
+            contentDescription = if (active) "${getString(R.string.home_catalog_refresh_running_v74)} ${refreshPercent}%"
+                else getString(R.string.home_catalog_refresh_v74)
+        }
+        if (!refreshStartedHere && !active) {
             val last = refreshObservedProvider?.let { CatalogSyncState.lastSyncedAt(applicationContext, it) } ?: 0L
             refreshHint?.apply {
                 if (last > 0L) {
@@ -979,21 +1017,31 @@ class HomeActivity : AppCompatActivity() {
             }
             return
         }
-        val messageId = when (state) {
-            WorkInfo.State.RUNNING -> R.string.home_catalog_refresh_running_v74
-            WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED -> R.string.home_catalog_refresh_waiting_v74
-            WorkInfo.State.SUCCEEDED -> R.string.home_catalog_refresh_done_v74
-            WorkInfo.State.FAILED, WorkInfo.State.CANCELLED -> R.string.home_catalog_refresh_failed_v74
-            else -> R.string.home_catalog_refresh_waiting_v74
-        }
         refreshHint?.apply {
-            val stage = if (working) when (refreshStage) {
+            val stageLabel = when (refreshStage) {
                 "LIVE" -> getString(R.string.home_live)
                 "MOVIES" -> getString(R.string.home_movies)
                 "SERIES" -> getString(R.string.home_series)
+                "SAVE" -> "حفظ المكتبة"
+                "PAUSED" -> "بعد انتهاء المشاهدة"
                 else -> null
-            } else null
-            text = if (stage != null) "${getString(messageId)} · $stage" else getString(messageId)
+            }
+            text = when (state) {
+                WorkInfo.State.RUNNING -> when {
+                    refreshAttempt > 0 -> "استكمال • ${stageLabel ?: "المكتبة"}"
+                    stageLabel != null -> "تحديث • ${stageLabel}"
+                    else -> getString(R.string.home_catalog_refresh_running_v74)
+                }
+                WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED ->
+                    if (refreshAttempt > 0) "استكمال عند توفر الاتصال" else getString(R.string.home_catalog_refresh_waiting_v74)
+                WorkInfo.State.SUCCEEDED -> "اكتمل التحديث 100%"
+                WorkInfo.State.FAILED, WorkInfo.State.CANCELLED -> when (refreshError) {
+                    "STORAGE" -> "المساحة غير كافية • تحقق من التخزين"
+                    "INTEGRITY", "EMPTY", "INCOMPLETE" -> "المصدر ناقص • لم يتم استبدال مكتبتك"
+                    else -> "تعذر التحديث • اضغط لإعادة المحاولة"
+                }
+                else -> getString(R.string.home_catalog_refresh_waiting_v74)
+            }
             visibility = View.VISIBLE
         }
         if (state == WorkInfo.State.SUCCEEDED || state == WorkInfo.State.FAILED || state == WorkInfo.State.CANCELLED) {
