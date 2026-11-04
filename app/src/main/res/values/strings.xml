@@ -58,6 +58,7 @@
     <string name="catalog_kept_opening">Saved library kept and opened safely</string>
     <string name="catalog_first_failed">Could not prepare library: %1$s</string>
     <string name="catalog_unknown_error">Unknown error</string>
+    <string name="catalog_source_interrupted">Playlist server disconnected while sending content. Your saved data is safe; tap Continue / Retry.</string>
     <string name="catalog_stage_m3u">Downloading playlist</string>
     <string name="catalog_stage_live">Downloading channels</string>
     <string name="catalog_stage_movies">Downloading movies</string>
