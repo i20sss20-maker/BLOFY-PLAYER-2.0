@@ -31,7 +31,7 @@ class SubscriberCatalogMigrationTest {
         val dao = db.dao()
         dao.upsertProviderStored(old)
         val row = StreamEntity("movie-key", old.id, "42", "c", "movie", "Saved", icon = "$proxy/raw/older-token/images/42.jpg",
-            directSource = "$proxy/raw/older-token/movie/u/p/42.mp4", backdrop = "https://art.example.test/backdrop.jpg", favorite = true, locked = true)
+            directSource = "$proxy/raw/older-token/movie/u/p/42.mp4", backdrop = "https://art.example.test/backdrop.jpg", favorite = true, locked = true, sourceOrder = 1L)
         val other = row.copy(key = "other-key", providerId = "other")
         dao.replaceCatalog(old.id, "movie", emptyList(), listOf(row))
         dao.upsertStreams(listOf(other))
