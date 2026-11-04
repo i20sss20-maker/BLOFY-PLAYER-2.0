@@ -106,19 +106,26 @@ class CatalogRefreshWorker(
         var lastPercent = checkpoint.percent(saved)
         var lastStage = "START"
         var lastRetry = -1
-        suspend fun publish(stage: String, attemptedPercent: Int, attempt: Int = 0) {
-            val previous = lastPercent
+        var lastItems = 0
+        suspend fun publish(stage: String, attemptedPercent: Int, attempt: Int = 0, processedItems: Int? = null) {
+            val previousPercent = lastPercent
+            val previousItems = lastItems
             val percent = maxOf(lastPercent, attemptedPercent)
                 .coerceIn(0, CatalogRefreshProgress.COMMIT_START)
             if (percent > lastPercent) {
                 lastPercent = checkpoint.recordPercent(saved, percent)
             }
-            // Do not write WorkManager's database for every JSON row. The visible
-            // percentage comes from measured section progress and never counts backwards.
-            if (stage != lastStage || lastPercent != previous || attempt != lastRetry) {
+            // A section may be redownloaded after an EOF with the previous 64% checkpoint.
+            // Show real processed-row movement even while the high-water percentage stays put.
+            // The stream parser reports at most once per ~1024 rows.
+            if (stage != lastStage || attempt > lastRetry) lastItems = 0
+            if (processedItems != null) lastItems = processedItems.coerceAtLeast(0)
+            if (stage != lastStage || lastPercent != previousPercent ||
+                attempt != lastRetry || lastItems != previousItems) {
                 lastStage = stage
                 lastRetry = attempt
-                setProgress(workDataOf(KEY_STAGE to stage, KEY_PERCENT to lastPercent, KEY_RETRY to attempt))
+                setProgress(workDataOf(KEY_STAGE to stage, KEY_PERCENT to lastPercent,
+                    KEY_RETRY to attempt, KEY_ITEMS to lastItems))
             }
         }
         setProgress(workDataOf(KEY_STAGE to "START", KEY_PERCENT to lastPercent,
@@ -139,7 +146,7 @@ class CatalogRefreshWorker(
                     onProgress = { progress ->
                         if (CatalogPlaybackGate.isPlaying) throw PlaybackInProgressException()
                         publish(progress.stage.name, CatalogRefreshProgress.forSection(progress),
-                            progress.retryAttempt)
+                            progress.retryAttempt, progress.itemsProcessed)
                     }
                 )
             }
@@ -217,6 +224,7 @@ class CatalogRefreshWorker(
         internal const val KEY_STAGE = "catalog_stage"
         internal const val KEY_PERCENT = "catalog_percent"
         internal const val KEY_RETRY = "catalog_retry"
+        internal const val KEY_ITEMS = "catalog_items"
         internal const val KEY_ERROR = "catalog_error"
         private const val MAX_MANUAL_RETRIES = 4
         private val workerLocks = ConcurrentHashMap<String, Mutex>()
