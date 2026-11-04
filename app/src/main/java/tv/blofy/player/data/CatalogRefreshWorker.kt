@@ -89,7 +89,9 @@ class CatalogRefreshWorker(
             series = dao.catalogCountAll(provider.id, "series")
         )
 
-        if (!LocalStorageManager.prepareForCatalogRefresh(app)) return retryOrFail(manual, "STORAGE")
+        if (!LocalStorageManager.prepareForCatalogRefresh(app)) {
+            return if (manual) Result.failure(workDataOf(KEY_ERROR to "STORAGE")) else Result.retry()
+        }
 
         // Persist completed sections across ordinary WorkManager's time budget. A retry
         // skips validated live/movie/series sections instead of starting the full list over.
@@ -145,7 +147,7 @@ class CatalogRefreshWorker(
             if (sync.freshItemCount <= 0) {
                 // A zero-item Xtream reply must never replace the known-good catalog.
                 checkpoint.discard(saved, dao)
-                return retryOrFail(manual, "EMPTY")
+                return if (manual) Result.failure(workDataOf(KEY_ERROR to "EMPTY")) else Result.retry()
             }
 
             val candidateCounts = CatalogRefreshIntegrityPolicy.Counts(
@@ -158,7 +160,7 @@ class CatalogRefreshWorker(
             if (!CatalogRefreshIntegrityPolicy.accepts(previousCounts, candidateCounts)) {
                 // Valid-looking truncated server replies are not safe to resume indefinitely.
                 checkpoint.discard(saved, dao)
-                return retryOrFail(manual, "INTEGRITY")
+                return if (manual) Result.failure(workDataOf(KEY_ERROR to "INTEGRITY")) else Result.retry()
             }
 
             publish("SAVE", CatalogRefreshProgress.COMMIT_START)
@@ -233,6 +235,13 @@ class CatalogRefreshWorker(
             .setRequiresStorageNotLow(true)
             .build()
 
+        // Foreground manual clicks must not wait forever behind WorkManager's
+        // storage-not-low constraint. The worker performs its own explicit storage
+        // preflight and returns a visible failure without touching saved rows.
+        private val manualConstraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+
         fun cancelLegacyAutomatic(context: Context) {
             WorkManager.getInstance(context.applicationContext).cancelUniqueWork(LEGACY_PERIODIC_NAME)
         }
@@ -265,7 +274,7 @@ class CatalogRefreshWorker(
         fun enqueueNow(context: Context, providerId: String, manual: Boolean = true) {
             if (providerId.isBlank()) return
             val request = OneTimeWorkRequestBuilder<CatalogRefreshWorker>()
-                .setConstraints(constraints)
+                .setConstraints(if (manual) manualConstraints else constraints)
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 20, TimeUnit.SECONDS)
                 .setInputData(androidx.work.workDataOf(KEY_PROVIDER_ID to providerId, KEY_MANUAL to manual))
                 .build()
