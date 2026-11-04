@@ -75,6 +75,32 @@ class BlofySubscriberDirectTest {
         assertThrows(IllegalArgumentException::class.java) { BlofySubscriberClient.serviceEndpoint("https://user:password@app.example.test") }
     }
 
+    @Test fun changedHiddenHostRestoresManagedConnectionWithoutChangingSavedIdentity() {
+        val saved = ProviderEntity(
+            "stable-subscriber", "My BLOFY", "http://old-host.example:80",
+            "old-user", "old-password", subscriberToken = "opaque-old-token"
+        )
+        val resolved = BlofySubscriberClient.Session(
+            "Managed", "http://annkel.com:80", "real-user", "real-password",
+            0L, "other-server-id", "opaque-renewed-token"
+        )
+        val next = PortalPlaylistClient.refreshedManagedSource(saved, resolved)
+        assertEquals(saved.id, next.id)
+        assertEquals(saved.name, next.name)
+        assertEquals("http://annkel.com:80", next.baseUrl)
+        assertEquals("real-user", next.username)
+        assertEquals("opaque-renewed-token", next.subscriberToken)
+        assertFalse(PortalPlaylistClient.sameSource(saved, next))
+    }
+
+    @Test fun ordinaryXtreamAccountsNeverEnterManagedHostRotation() {
+        val saved = ProviderEntity("id", "Custom", "http://custom.example", "u", "p")
+        val resolved = BlofySubscriberClient.Session("Other", "http://changed.example", "x", "y", 0L)
+        assertThrows(IllegalArgumentException::class.java) {
+            PortalPlaylistClient.refreshedManagedSource(saved, resolved)
+        }
+    }
+
     @Test fun sourceChangesRemainVisibleForManagedAccounts() {
         val first = ProviderEntity("id", "Saved", "https://origin.example.test", "u", "p", subscriberToken = "one")
         assertTrue(PortalPlaylistClient.sameSource(first, first.copy(subscriberToken = "renewed")))

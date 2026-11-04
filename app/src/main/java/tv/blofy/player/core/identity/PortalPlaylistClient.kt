@@ -335,7 +335,54 @@ object PortalPlaylistClient {
             val direct = checkNotNull(resolved[candidate.username]) { "أعد تسجيل الدخول إلى مشترك BLOFY" }
             migrateSubscriber(context, dao, candidate, direct)
         }
+        val current = dao.provider(providerId) ?: return null
+        // Direct BLOFY sessions are also centrally managed. The hidden host
+        // can change independently of the Android app; refreshing only legacy
+        // proxy sessions left old direct-host users stuck on HTTP 404 forever.
+        if (current.subscriberToken.isBlank()) return current
+        val currentSession = BlofySubscriberClient.resolveConnections(
+            context, endpoint, listOf(current.subscriberToken)
+        )[current.subscriberToken] ?: throw IllegalStateException(
+            "تعذر تجديد هوست BLOFY الداخلي • أعد تسجيل الدخول إلى مشتركين BLOFY"
+        )
+        val updated = refreshedManagedSource(current, currentSession)
+        if (sameSource(current, updated) && current.subscriberToken == updated.subscriberToken) {
+            return current
+        }
+        val hasCommitted = CatalogSyncState.isReady(context, providerId) && dao.hasCatalog(providerId)
+        if (hasCommitted) {
+            // Never replace working source credentials before a *complete* new
+            // catalog has been streamed, verified and committed to Room.
+            // A pending explicit portal/account change takes priority.
+            // A pending rotation of THIS SAME managed session may be refreshed
+            // again when the hidden host is rotated twice before a successful sync.
+            val stagingId = PortalSyncBook.pendingSourceId(providerId)
+            val pending = if (PortalSyncBook.hasPendingSource(context, providerId))
+                dao.provider(stagingId) else null
+            if (!PortalSyncBook.hasPendingSource(context, providerId) ||
+                (pending != null && pending.subscriberToken.isNotBlank() &&
+                    pending.subscriberToken == current.subscriberToken)) {
+                dao.upsertProvider(updated.copy(id = stagingId, enabled = false))
+                PortalSyncBook.markPendingSource(context, providerId)
+            }
+        } else {
+            dao.upsertProvider(updated)
+        }
         return dao.provider(providerId)
+    }
+
+    /** Server-controlled host rotation changes the connection, never catalog identity. */
+    internal fun refreshedManagedSource(
+        previous: ProviderEntity,
+        direct: BlofySubscriberClient.Session
+    ): ProviderEntity {
+        require(previous.subscriberToken.isNotBlank()) { "BLOFY managed subscriber required" }
+        return previous.copy(
+            baseUrl = direct.baseUrl,
+            username = direct.username,
+            password = direct.password,
+            subscriberToken = direct.sessionToken
+        )
     }
 
     private suspend fun migrateSubscriber(context: Context, dao: BlofyDao, provider: ProviderEntity, direct: BlofySubscriberClient.Session) {
