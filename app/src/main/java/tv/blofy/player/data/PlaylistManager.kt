@@ -24,8 +24,11 @@ import java.nio.charset.StandardCharsets
 
 data class PlaylistSyncResult(
     val freshItemCount: Int,
-    val failedSectionCount: Int = 0
-)
+    val failedSectionCount: Int = 0,
+    val failedSections: List<XtreamSectionIssue> = emptyList()
+) {
+    fun safeFailureMessage(): String = XtreamSectionIssue.describe(failedSections)
+}
 
 /** Xtream-only catalog synchronization for BLOFY rc07.12+. */
 class PlaylistManager(
@@ -42,7 +45,9 @@ class PlaylistManager(
         require(provider.username.isNotBlank() && provider.password.isNotBlank()) { "Xtream credentials required" }
 
         var freshItemCount = 0
-        val sectionResult = runXtreamSections(
+        val failed = mutableListOf<XtreamSectionIssue>()
+        val sectionResult = try {
+            runXtreamSections(
             listOf(
                 suspend {
                     onProgress(PlaylistSyncProgress(PlaylistSyncStage.LIVE, 1, 3))
@@ -90,9 +95,18 @@ class PlaylistManager(
             onRetry = { section, attempt ->
                 val stage = listOf(PlaylistSyncStage.LIVE, PlaylistSyncStage.MOVIES, PlaylistSyncStage.SERIES)[section]
                 onProgress(PlaylistSyncProgress(stage, section + 1, 3, retryAttempt = attempt))
+            },
+            onSectionFailure = { index, error ->
+                failed += XtreamSectionIssue.from(index, error)
             }
         )
-        return PlaylistSyncResult(freshItemCount, sectionResult.failureCount)
+        } catch (error: Exception) {
+            // runXtreamSections throws when all sections fail. Keep the actual
+            // section + status but never include an upstream URL or password.
+            if (failed.isNotEmpty()) throw IllegalStateException(XtreamSectionIssue.describe(failed), error)
+            throw error
+        }
+        return PlaylistSyncResult(freshItemCount, sectionResult.failureCount, failed)
     }
 
     suspend fun syncLive(
@@ -534,7 +548,8 @@ internal data class XtreamSectionResult(val successCount: Int, val failureCount:
 
 internal suspend fun runXtreamSections(
     sections: List<suspend () -> Unit>,
-    onRetry: suspend (Int, Int) -> Unit = { _, _ -> }
+    onRetry: suspend (Int, Int) -> Unit = { _, _ -> },
+    onSectionFailure: suspend (Int, Exception) -> Unit = { _, _ -> }
 ): XtreamSectionResult {
     require(sections.isNotEmpty()) { "At least one Xtream section is required" }
     var successCount = 0
@@ -547,6 +562,7 @@ internal suspend fun runXtreamSections(
             throw cancelled
         } catch (failure: Exception) {
             failures += failure
+            onSectionFailure(index, failure)
         }
     }
     if (successCount == 0) {
