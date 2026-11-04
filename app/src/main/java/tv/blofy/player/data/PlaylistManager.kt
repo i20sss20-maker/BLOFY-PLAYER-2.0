@@ -46,29 +46,61 @@ class PlaylistManager(
             listOf(
                 suspend {
                     onProgress(PlaylistSyncProgress(PlaylistSyncStage.LIVE, 1, 3))
-                    freshItemCount += if ("live" in completedSections) dao.catalogCountAll(provider.id, "live") else syncLive(provider) { percent ->
+                    freshItemCount += if ("live" in completedSections) dao.catalogCountAll(provider.id, "live") else syncLive(provider, onProgress = { percent ->
                         onProgress(PlaylistSyncProgress(PlaylistSyncStage.LIVE, 1, 3, percent))
-                    }
+                    })
                     onSectionComplete("live")
                 },
                 suspend {
                     onProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3))
-                    freshItemCount += if ("movie" in completedSections) dao.catalogCountAll(provider.id, "movie") else syncVod(provider) { percent ->
+                    freshItemCount += if ("movie" in completedSections) dao.catalogCountAll(provider.id, "movie") else syncVod(provider, onProgress = { percent ->
                         onProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3, percent))
-                    }
+                    })
                     onSectionComplete("movie")
                 },
                 suspend {
                     onProgress(PlaylistSyncProgress(PlaylistSyncStage.SERIES, 3, 3))
-                    freshItemCount += if ("series" in completedSections) dao.catalogCountAll(provider.id, "series") else syncSeries(provider) { percent ->
+                    freshItemCount += if ("series" in completedSections) dao.catalogCountAll(provider.id, "series") else syncSeries(provider, onProgress = { percent ->
                         onProgress(PlaylistSyncProgress(PlaylistSyncStage.SERIES, 3, 3, percent))
-                    }
+                    })
                     onSectionComplete("series")
                 }
             ),
             onRetry = { section, attempt ->
                 val stage = listOf(PlaylistSyncStage.LIVE, PlaylistSyncStage.MOVIES, PlaylistSyncStage.SERIES)[section]
                 onProgress(PlaylistSyncProgress(stage, section + 1, 3, retryAttempt = attempt))
+            },
+            onExhausted = { section, failure ->
+                if (!CatalogSectionRetry.isTruncatedBody(failure)) false
+                else {
+                    // Full-catalog responses on some IPTV hosts are closed mid-transfer.
+                    // After three ordinary retries, request the same section in smaller
+                    // category chunks. Never count a partial chunk as successful.
+                    when (section) {
+                        0 -> {
+                            onProgress(PlaylistSyncProgress(PlaylistSyncStage.LIVE, 1, 3, retryAttempt = 3))
+                            freshItemCount += syncLive(provider, recoverByCategory = true) { percent ->
+                                onProgress(PlaylistSyncProgress(PlaylistSyncStage.LIVE, 1, 3, percent))
+                            }
+                            onSectionComplete("live")
+                        }
+                        1 -> {
+                            onProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3, retryAttempt = 3))
+                            freshItemCount += syncVod(provider, recoverByCategory = true) { percent ->
+                                onProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3, percent))
+                            }
+                            onSectionComplete("movie")
+                        }
+                        else -> {
+                            onProgress(PlaylistSyncProgress(PlaylistSyncStage.SERIES, 3, 3, retryAttempt = 3))
+                            freshItemCount += syncSeries(provider, recoverByCategory = true) { percent ->
+                                onProgress(PlaylistSyncProgress(PlaylistSyncStage.SERIES, 3, 3, percent))
+                            }
+                            onSectionComplete("series")
+                        }
+                    }
+                    true
+                }
             }
         )
         return PlaylistSyncResult(freshItemCount, sectionResult.failureCount)
@@ -76,6 +108,7 @@ class PlaylistManager(
 
     suspend fun syncLive(
         provider: ProviderEntity,
+        recoverByCategory: Boolean = false,
         onProgress: suspend (Int) -> Unit = {}
     ): Int {
         val categories = api.list(actionUrl(provider, "get_live_categories"))
@@ -99,7 +132,8 @@ class PlaylistManager(
             parseStreamingArray(
                 actionUrl(provider, "get_live_streams"), 18, 30, onProgress,
                 retainItems = !direct,
-                onBatch = directBatchSink(direct)
+                onBatch = directBatchSink(direct),
+                recoverCategoryIds = if (recoverByCategory) categoryRows.map { it.remoteId } else null
             ) { row ->
                 val id = row.id("stream_id") ?: return@parseStreamingArray null
                 val archive = row.string("tv_archive").let { it == "1" || it.equals("true", true) }
@@ -133,6 +167,7 @@ class PlaylistManager(
 
     suspend fun syncVod(
         provider: ProviderEntity,
+        recoverByCategory: Boolean = false,
         onProgress: suspend (Int) -> Unit = {}
     ): Int {
         val categories = api.list(actionUrl(provider, "get_vod_categories"))
@@ -149,7 +184,8 @@ class PlaylistManager(
             parseStreamingArray(
                 actionUrl(provider, "get_vod_streams"), 60, 88, onProgress,
                 retainItems = !direct,
-                onBatch = directBatchSink(direct)
+                onBatch = directBatchSink(direct),
+                recoverCategoryIds = if (recoverByCategory) categoryRows.map { it.remoteId } else null
             ) { row -> vodEntity(provider, row)?.let(previousFlags::applyTo) }
         } catch (failure: Throwable) {
             if (direct) clearDirectSection(provider.id, "movie")
@@ -191,6 +227,7 @@ class PlaylistManager(
 
     suspend fun syncSeries(
         provider: ProviderEntity,
+        recoverByCategory: Boolean = false,
         onProgress: suspend (Int) -> Unit = {}
     ): Int {
         val categories = api.list(actionUrl(provider, "get_series_categories"))
@@ -207,7 +244,8 @@ class PlaylistManager(
             parseStreamingArray(
                 actionUrl(provider, "get_series"), 88, 95, onProgress,
                 retainItems = !direct,
-                onBatch = directBatchSink(direct)
+                onBatch = directBatchSink(direct),
+                recoverCategoryIds = if (recoverByCategory) categoryRows.map { it.remoteId } else null
             ) { row ->
                 val id = row.id("series_id") ?: return@parseStreamingArray null
                 val backdrop = when (val raw = row["backdrop_path"]) {
@@ -309,8 +347,13 @@ class PlaylistManager(
         onProgress: suspend (Int) -> Unit,
         retainItems: Boolean = true,
         onBatch: suspend (List<T>) -> Unit = {},
+        recoverCategoryIds: List<String>? = null,
         map: (Map<String, Any?>) -> T?,
     ): StreamingParseResult<T> {
+        if (recoverCategoryIds != null) {
+            return parseSegmentedArray(url, recoverCategoryIds, progressStart, progressEnd,
+                onProgress, retainItems, onBatch, map)
+        }
         val coroutineContext = currentCoroutineContext()
         val items = if (retainItems) ArrayList<T>(4096) else null
         val batch = ArrayList<T>(DIRECT_STREAM_BATCH)
@@ -353,6 +396,60 @@ class PlaylistManager(
             }
         }
         if (!retainItems && batch.isNotEmpty()) onBatch(batch.toList())
+        return StreamingParseResult(sourceCount, itemCount, items ?: emptyList())
+    }
+
+    /**
+     * A fallback for Xtream providers which truncate very large uncompressed JSON arrays.
+     * Each category MUST be returned by the source with matching category_id; providers
+     * ignoring the query parameter fail closed instead of silently importing partial lists.
+     * Existing rows are only replaced after every category, including uncategorized (0),
+     * has been completely consumed and validated. Individual chunks retry independently.
+     */
+    private suspend fun <T> parseSegmentedArray(
+        url: String,
+        categoryIds: List<String>,
+        progressStart: Int,
+        progressEnd: Int,
+        onProgress: suspend (Int) -> Unit,
+        retainItems: Boolean,
+        onBatch: suspend (List<T>) -> Unit,
+        map: (Map<String, Any?>) -> T?
+    ): StreamingParseResult<T> {
+        val categories = (categoryIds.filter { it.isNotBlank() } + "0").distinct()
+        check(categories.size in 2..MAX_RECOVERY_CATEGORIES) {
+            "Catalog provider does not support safe category recovery"
+        }
+        val items = if (retainItems) ArrayList<T>() else null
+        var sourceCount = 0
+        var itemCount = 0
+        categories.forEachIndexed { index, categoryId ->
+            currentCoroutineContext().ensureActive()
+            val span = progressEnd - progressStart
+            val start = progressStart + (span * index / categories.size)
+            val end = progressStart + (span * (index + 1) / categories.size)
+            val chunk = CatalogSectionRetry.run {
+                parseStreamingArray(
+                    "$url&category_id=${enc(categoryId)}",
+                    start, end, onProgress, retainItems, onBatch
+                ) { row ->
+                    val actualCategory = row.id("category_id") ?: if (categoryId == "0") "0" else null
+                    check(actualCategory == categoryId) {
+                        "Catalog provider did not honor its category filter"
+                    }
+                    map(row)
+                }
+            }
+            sourceCount += chunk.sourceCount
+            itemCount += chunk.itemCount
+            items?.addAll(chunk.items)
+            onProgress(end)
+        }
+        // An upstream that rejects category_id with an empty 200 response is not supported.
+        // A no-content section should use the original unsegmented path instead.
+        check(sourceCount > 0 && itemCount > 0) {
+            "Catalog provider returned no complete categorized content"
+        }
         return StreamingParseResult(sourceCount, itemCount, items ?: emptyList())
     }
 
@@ -425,6 +522,7 @@ class PlaylistManager(
     private companion object {
         const val DIRECT_STREAM_BATCH = 700
         const val DIRECT_CATEGORY_BATCH = 500
+        const val MAX_RECOVERY_CATEGORIES = 501
     }
 }
 
@@ -501,7 +599,8 @@ internal data class XtreamSectionResult(val successCount: Int, val failureCount:
 
 internal suspend fun runXtreamSections(
     sections: List<suspend () -> Unit>,
-    onRetry: suspend (Int, Int) -> Unit = { _, _ -> }
+    onRetry: suspend (Int, Int) -> Unit = { _, _ -> },
+    onExhausted: suspend (Int, Exception) -> Boolean = { _, _ -> false }
 ): XtreamSectionResult {
     require(sections.isNotEmpty()) { "At least one Xtream section is required" }
     var successCount = 0
@@ -513,7 +612,15 @@ internal suspend fun runXtreamSections(
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Exception) {
-            failures += failure
+            try {
+                if (onExhausted(index, failure)) successCount += 1
+                else failures += failure
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (recoveryFailure: Exception) {
+                recoveryFailure.addSuppressed(failure)
+                failures += recoveryFailure
+            }
         }
     }
     if (successCount == 0) {
