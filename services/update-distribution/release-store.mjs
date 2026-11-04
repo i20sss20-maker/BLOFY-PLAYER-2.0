@@ -21,6 +21,7 @@ const BLOFY_PUBLIC_RELEASE_2000078 = String(process.env.BLOFY_PUBLIC_RELEASE_200
 const BLOFY_PUBLIC_RELEASE_2000079 = String(process.env.BLOFY_PUBLIC_RELEASE_2000079 || '').toLowerCase() === 'true';
 const BLOFY_PUBLIC_RELEASE_2000080 = String(process.env.BLOFY_PUBLIC_RELEASE_2000080 || '').toLowerCase() === 'true';
 const BLOFY_PUBLIC_RELEASE_2000081 = String(process.env.BLOFY_PUBLIC_RELEASE_2000081 || '').toLowerCase() === 'true';
+const BLOFY_PUBLIC_RELEASE_2000082 = String(process.env.BLOFY_PUBLIC_RELEASE_2000082 || '').toLowerCase() === 'true';
 function approvedBlofy76Release() {
   // Fail closed if a signed and tested official-package APK is not yet uploaded.
   // The original Xiaomi APK's tv.blofy.player.xiaomi package must NEVER become
@@ -51,6 +52,14 @@ const ONLY_75_RELEASE = {
   stage: 'public'
 };
 
+const APPROVED_2000082_RELEASE = {
+  versionCode: 2000082,
+  versionName: '2.0.0-rc07.55.8.5',
+  downloadUrl: 'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/blofy-player-v2000082-website/BLOFY-PLAYER-55.8.5-2000082-SIGNED.apk',
+  releaseNotes: 'BLOFY PLAYER 55.8.5 — تحديث المكتبة بنسبة تقدم مستمرة عبر استئناف تنزيل الأقسام المكتملة، ومنع محاولات التحديث المفتوحة بلا نهاية. فئات القنوات والأفلام والمسلسلات تحافظ على ترتيب المصدر.',
+  minSupportedVersionCode: 1,
+  stage: 'public'
+};
 const APPROVED_2000081_RELEASE = {
   versionCode: 2000081,
   versionName: '2.0.0-rc07.55.8.4',
@@ -308,10 +317,10 @@ export async function initReleaseStore() {
     };
   }
 
-  if (BLOFY_ONLY_75 || BLOFY_PUBLIC_RELEASE_2000078 || BLOFY_PUBLIC_RELEASE_2000079 || BLOFY_PUBLIC_RELEASE_2000080 || BLOFY_PUBLIC_RELEASE_2000081) {
+  if (BLOFY_ONLY_75 || BLOFY_PUBLIC_RELEASE_2000078 || BLOFY_PUBLIC_RELEASE_2000079 || BLOFY_PUBLIC_RELEASE_2000080 || BLOFY_PUBLIC_RELEASE_2000081 || BLOFY_PUBLIC_RELEASE_2000082) {
     // Advertise one reviewed APK to the website and all sideload-capable in-app updaters.
     // Keep archived blobs and download metrics for rollback, but hide old builds publicly.
-    const release = cleanRelease(BLOFY_PUBLIC_RELEASE_2000081 ? APPROVED_2000081_RELEASE : BLOFY_PUBLIC_RELEASE_2000080 ? APPROVED_2000080_RELEASE : BLOFY_PUBLIC_RELEASE_2000079 ? APPROVED_2000079_RELEASE : BLOFY_PUBLIC_RELEASE_2000078 ? APPROVED_2000078_RELEASE : BLOFY_APPROVED_BLOFY_76 ? approvedBlofy76Release() : ONLY_75_RELEASE, 'public');
+    const release = cleanRelease(BLOFY_PUBLIC_RELEASE_2000082 ? APPROVED_2000082_RELEASE : BLOFY_PUBLIC_RELEASE_2000081 ? APPROVED_2000081_RELEASE : BLOFY_PUBLIC_RELEASE_2000080 ? APPROVED_2000080_RELEASE : BLOFY_PUBLIC_RELEASE_2000079 ? APPROVED_2000079_RELEASE : BLOFY_PUBLIC_RELEASE_2000078 ? APPROVED_2000078_RELEASE : BLOFY_APPROVED_BLOFY_76 ? approvedBlofy76Release() : ONLY_75_RELEASE, 'public');
     const alreadyOnly75 = state.activeVersionCode === release.versionCode &&
       state.releases.length === 1 &&
       JSON.stringify(state.releases[0]) === JSON.stringify(release);
