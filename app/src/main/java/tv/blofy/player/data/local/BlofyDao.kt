@@ -144,7 +144,7 @@ interface BlofyDao {
     }
 
     @Query("SELECT * FROM categories WHERE providerId = :providerId") suspend fun allCategoriesForProvider(providerId: String): List<CategoryEntity>
-    @Query("SELECT * FROM categories WHERE providerId = :providerId AND kind = :kind") suspend fun categorySnapshot(providerId: String, kind: String): List<CategoryEntity>
+    @Query("SELECT * FROM categories WHERE providerId = :providerId AND kind = :kind ORDER BY orderIndex, rowid") suspend fun categorySnapshot(providerId: String, kind: String): List<CategoryEntity>
     @Query("SELECT * FROM streams WHERE providerId = :providerId") suspend fun allStreamsForProvider(providerId: String): List<StreamEntity>
     @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind") suspend fun streamSnapshot(providerId: String, kind: String): List<StreamEntity>
     @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND (favorite = 1 OR locked = 1)") suspend fun persistedStreamFlags(providerId: String, kind: String): List<StreamEntity>
