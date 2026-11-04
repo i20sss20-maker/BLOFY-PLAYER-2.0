@@ -73,7 +73,7 @@ class CatalogReadPerformanceTest {
             it.version = 13
         }
         db = open()
-        assertEquals(row.copy(sourceOrder = rowid), db.dao().streamByIdentity("p", "series", "42"))
+        assertEquals(row.copy(sourceOrder = checkNotNull(rowid)), db.dao().streamByIdentity("p", "series", "42"))
         assertEquals(rowid, db.dao().streamRowId(row.key))
         assertEquals(watch, db.dao().watchState(row.key))
         val plan = db.openHelper.readableDatabase.query("EXPLAIN QUERY PLAN UPDATE streams SET favorite=1 WHERE providerId='p' AND kind='series' AND remoteId='42'").use {
