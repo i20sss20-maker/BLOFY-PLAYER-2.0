@@ -51,6 +51,13 @@ export function sanitizeReleaseNotes(value) {
 
 // Keep the public website, activation health and external in-app updater on one approved build.
 // This explicit production switch takes precedence over stale legacy BLOFY_APP_* variables.
+const APPROVED_PUBLIC_2000080 = Object.freeze({
+  versionCode: 2000080,
+  versionName: '2.0.0-rc07.55.8.3',
+  minSupportedVersionCode: 1,
+  downloadUrl: 'https://updates.blofyplayer.com/download/latest.apk',
+  releaseNotes: 'BLOFY PLAYER 55.8.3 — إصلاح ظهور رمز الربط ذي الستة أرقام عند بطء قراءة القوائم، دون تغيير رقم الجهاز أو حذف البيانات. تحديث رسمي موقّع.'
+});
 const APPROVED_PUBLIC_2000079 = Object.freeze({
   versionCode: 2000079,
   versionName: '2.0.0-rc07.55.8.2',
@@ -67,6 +74,9 @@ const APPROVED_PUBLIC_2000078 = Object.freeze({
 });
 
 export function appReleaseMetadata(env = process.env) {
+  if (String(env.BLOFY_PUBLIC_RELEASE_2000080 || '').toLowerCase() === 'true') {
+    return { ...APPROVED_PUBLIC_2000080 };
+  }
   if (String(env.BLOFY_PUBLIC_RELEASE_2000079 || '').toLowerCase() === 'true') {
     return { ...APPROVED_PUBLIC_2000079 };
   }
