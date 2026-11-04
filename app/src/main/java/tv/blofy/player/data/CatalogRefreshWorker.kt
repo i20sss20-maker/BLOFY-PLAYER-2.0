@@ -280,7 +280,7 @@ class CatalogRefreshWorker(
                 .build()
             WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(
                 if (manual) manualWorkName(providerId) else NOW_NAME_PREFIX + providerId,
-                ExistingWorkPolicy.KEEP,
+                if (manual) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP,
                 request
             )
         }
