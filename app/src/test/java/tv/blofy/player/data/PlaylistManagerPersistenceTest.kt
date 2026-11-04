@@ -135,7 +135,7 @@ class PlaylistManagerPersistenceTest {
             if (url.contains("action=get_live_categories")) liveCategories
             else listOf(mapOf("category_id" to "1", "category_name" to "Category"))
 
-        override fun streamingCall(url: String): retrofit2.Call<ResponseBody> {
+        override fun streamingCall(url: String, encoding: String?): retrofit2.Call<ResponseBody> {
             val payload = when {
                 url.contains("action=get_live_streams") -> liveStreams
                 url.contains("action=get_vod_streams") -> "[{\"stream_id\":1,\"name\":\"Movie item\",\"category_id\":1}]"
