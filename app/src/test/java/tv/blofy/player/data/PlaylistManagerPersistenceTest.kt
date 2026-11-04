@@ -127,6 +127,84 @@ class PlaylistManagerPersistenceTest {
         }
     }
 
+    @Test fun truncatedWholeCatalogRecoversFromValidatedCategoryChunks(): Unit = runBlocking(Dispatchers.IO) {
+        okhttp3.mockwebserver.MockWebServer().use { server ->
+            val fullAttempts = java.util.concurrent.atomic.AtomicInteger()
+            val categoriesRequested = mutableListOf<String>()
+            server.dispatcher = object : okhttp3.mockwebserver.Dispatcher() {
+                override fun dispatch(request: okhttp3.mockwebserver.RecordedRequest): okhttp3.mockwebserver.MockResponse {
+                    val action = request.requestUrl!!.queryParameter("action")
+                    val category = request.requestUrl!!.queryParameter("category_id")
+                    val body = when (action) {
+                        "get_live_categories" -> "[{\"category_id\":1,\"category_name\":\"Live\"}]"
+                        "get_vod_categories", "get_series_categories" -> "[]"
+                        "get_live_streams" -> {
+                            if (category == null) {
+                                fullAttempts.incrementAndGet()
+                                return okhttp3.mockwebserver.MockResponse()
+                                    .setBody("[{\"stream_id\":1,\"category_id\":1,\"name\":\"Interrupted first download\"}]")
+                                    .setSocketPolicy(okhttp3.mockwebserver.SocketPolicy.DISCONNECT_DURING_RESPONSE_BODY)
+                            }
+                            synchronized(categoriesRequested) { categoriesRequested += category }
+                            if (category == "1") "[{\"stream_id\":1,\"category_id\":1,\"name\":\"Recovered\"}]"
+                            else "[]"
+                        }
+                        "get_vod_streams" -> "[{\"stream_id\":2,\"name\":\"Movie\"}]"
+                        "get_series" -> "[{\"series_id\":3,\"name\":\"Series\"}]"
+                        else -> "[]"
+                    }
+                    return okhttp3.mockwebserver.MockResponse().setBody(body)
+                }
+            }
+            server.start()
+            val api = tv.blofy.player.data.remote.XtreamClient.createApi(okhttp3.OkHttpClient())
+            val local = provider.copy(baseUrl = server.url("/").toString())
+            val result = PlaylistManager(api, db.dao()).syncAll(local)
+            assertEquals(0, result.failedSectionCount)
+            assertEquals(3, result.freshItemCount)
+            assertEquals(3, fullAttempts.get())
+            assertEquals(listOf("1", "0"), synchronized(categoriesRequested) { categoriesRequested.toList() })
+            assertEquals("Recovered", db.dao().stream("${provider.id}:live:1")?.name)
+            assertEquals(1, db.dao().catalogCountAll(provider.id, "live"))
+        }
+    }
+
+    @Test fun ignoredCategoryFilterCannotPublishIncompleteLibrary(): Unit = runBlocking(Dispatchers.IO) {
+        okhttp3.mockwebserver.MockWebServer().use { server ->
+            server.dispatcher = object : okhttp3.mockwebserver.Dispatcher() {
+                override fun dispatch(request: okhttp3.mockwebserver.RecordedRequest): okhttp3.mockwebserver.MockResponse {
+                    val action = request.requestUrl!!.queryParameter("action")
+                    val category = request.requestUrl!!.queryParameter("category_id")
+                    val body = when (action) {
+                        "get_live_categories" -> "[{\"category_id\":1,\"category_name\":\"Live\"}]"
+                        "get_vod_categories", "get_series_categories" -> "[]"
+                        "get_live_streams" -> {
+                            if (category == null) return okhttp3.mockwebserver.MockResponse()
+                                .setBody("[{\"stream_id\":1,\"category_id\":1,\"name\":\"Incomplete\"}]")
+                                .setSocketPolicy(okhttp3.mockwebserver.SocketPolicy.DISCONNECT_DURING_RESPONSE_BODY)
+                            "[{\"stream_id\":77,\"category_id\":99,\"name\":\"Unfiltered\"}]"
+                        }
+                        "get_vod_streams" -> "[{\"stream_id\":2,\"name\":\"Movie\"}]"
+                        "get_series" -> "[{\"series_id\":3,\"name\":\"Series\"}]"
+                        else -> "[]"
+                    }
+                    return okhttp3.mockwebserver.MockResponse().setBody(body)
+                }
+            }
+            server.start()
+            val local = provider.copy(baseUrl = server.url("/").toString())
+            val result = PlaylistManager(
+                tv.blofy.player.data.remote.XtreamClient.createApi(okhttp3.OkHttpClient()),
+                db.dao()
+            ).syncAll(local)
+            assertEquals(1, result.failedSectionCount)
+            assertEquals(2, result.freshItemCount)
+            assertEquals(0, db.dao().catalogCountAll(provider.id, "live"))
+            assertTrue(db.dao().searchStreamsFts(provider.id, "Incomplete*", 10).isEmpty())
+            assertTrue(db.dao().searchStreamsFts(provider.id, "Unfiltered*", 10).isEmpty())
+        }
+    }
+
     private class FixtureApi(
         val liveCategories: List<Map<String, Any?>> = listOf(mapOf("category_id" to "1", "category_name" to "Category")),
         val liveStreams: String = "[{\"stream_id\":1,\"name\":\"Live item\",\"category_id\":1}]"
