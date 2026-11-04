@@ -172,16 +172,13 @@ class LoginLocalEntryRegressionTest {
             checkNotNull(controller).setup().visible()
             shadowOf(Looper.getMainLooper()).idle()
             assertFalse("Login waited for an identity write before rendering", timedOut.get())
-            val cardsDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2)
-            while (field<List<List<String>>?>("renderedPlaylists") == null && System.nanoTime() < cardsDeadline) {
-                shadowOf(Looper.getMainLooper()).idle()
-                Thread.sleep(10)
-            }
-            assertNotNull(field<List<List<String>>?>("renderedPlaylists"))
+            // The playlist-only watchdog may report slow cards, but must never cancel
+            // the six-digit pairing-code read or label the device identity as broken.
             shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(1_100))
-            assertEquals(activity.getString(tv.blofy.player.R.string.login_identity_read_failed),
+            assertNotEquals(activity.getString(tv.blofy.player.R.string.login_identity_read_failed),
                 field<TextView>("status").text.toString())
-            assertFalse(field<Job?>("identityJob")?.isActive == true)
+            assertTrue("The identity task must survive a delayed SQLite/firmware read",
+                field<Job?>("identityJob")?.isActive == true)
             assertTrue(field<Button>("addPlaylist").performClick())
             assertNotNull("The screen must accept input during the blocked read", shadowOf(activity).nextStartedActivity)
             assertEquals(1L, release.count)
@@ -189,6 +186,10 @@ class LoginLocalEntryRegressionTest {
             release.countDown()
             writer.join(2_000)
             awaitJob("identityJob")
+            assertNotNull("Saved cards must recover after the blocked identity is released",
+                field<List<List<String>>?>("renderedPlaylists"))
+            assertTrue("Six-digit code must recover without reinstall",
+                field<TextView>("codeView").text.toString().matches(Regex("\\d{6}")))
         }
     }
 
