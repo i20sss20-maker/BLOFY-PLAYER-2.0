@@ -137,6 +137,8 @@ class PlaylistManagerPersistenceTest {
 
         override fun streamingCall(url: String, encoding: String?): retrofit2.Call<ResponseBody> {
             val payload = when {
+                url.contains("action=get_live_categories") -> com.google.gson.Gson().toJson(liveCategories)
+                url.contains("_categories") -> """[{"category_id":"1","category_name":"Category"}]"""
                 url.contains("action=get_live_streams") -> liveStreams
                 url.contains("action=get_vod_streams") -> "[{\"stream_id\":1,\"name\":\"Movie item\",\"category_id\":1}]"
                 else -> "[{\"series_id\":1,\"name\":\"Series item\",\"category_id\":1}]"

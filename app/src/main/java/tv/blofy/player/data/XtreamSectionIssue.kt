@@ -25,7 +25,8 @@ data class XtreamSectionIssue(
             val status = chain.filterIsInstance<HttpException>().firstOrNull()?.code()
             val kind = when {
                 chain.any { it is SocketTimeoutException } -> FailureType.TIMEOUT
-                chain.any { it is EOFException || it is JsonParseException } -> FailureType.INTERRUPTED
+                chain.any { it is EOFException } -> FailureType.INTERRUPTED
+                chain.any { it is JsonParseException || it is com.google.gson.stream.MalformedJsonException } -> FailureType.INVALID_CONTENT
                 chain.any { it is IOException } -> FailureType.NETWORK
                 chain.any { it is IllegalStateException && it.message?.startsWith("Incomplete ") == true } ->
                     FailureType.INVALID_CONTENT
@@ -49,7 +50,7 @@ data class XtreamSectionIssue(
                     FailureType.INTERRUPTED -> "انقطع نقل بيانات السيرفر"
                     FailureType.TIMEOUT -> "انتهت مهلة استجابة السيرفر"
                     FailureType.NETWORK -> "تعذر الاتصال بالسيرفر"
-                    FailureType.INVALID_CONTENT -> "بيانات السيرفر غير مكتملة"
+                    FailureType.INVALID_CONTENT -> "صيغة بيانات السيرفر غير صالحة أو غير مكتملة"
                     FailureType.UNKNOWN -> "تعذر اكتمال بيانات السيرفر"
                 }
                 return "تعذر تحميل $names • $reason"
