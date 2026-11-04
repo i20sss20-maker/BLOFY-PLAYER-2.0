@@ -58,6 +58,7 @@
     <string name="catalog_kept_opening">تم الاحتفاظ بالمكتبة المحفوظة وفتحها بأمان</string>
     <string name="catalog_first_failed">تعذر تجهيز المكتبة: %1$s</string>
     <string name="catalog_unknown_error">خطأ غير معروف</string>
+    <string name="catalog_source_interrupted">انقطع اتصال مصدر القائمة أثناء تحميل المحتوى. بياناتك محفوظة، اضغط متابعة / إعادة المحاولة.</string>
     <string name="catalog_stage_m3u">جاري تحميل القائمة</string>
     <string name="catalog_stage_live">جاري تحميل القنوات</string>
     <string name="catalog_stage_movies">جاري تحميل الأفلام</string>
