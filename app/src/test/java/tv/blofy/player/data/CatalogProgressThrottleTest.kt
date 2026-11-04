@@ -24,4 +24,12 @@ class CatalogProgressThrottleTest {
         assertTrue(throttle.shouldRender(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3, retryAttempt = 2)))
         assertFalse(throttle.shouldRender(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3, retryAttempt = 2)))
     }
+    @Test fun verifiedSectionCompletionIsDisplayedImmediately() {
+        val throttle = CatalogProgressThrottle(intervalMs = 500L, clockMs = { 100L })
+        val first = PlaylistSyncProgress(PlaylistSyncStage.LIVE, 1, 3)
+        assertTrue(throttle.shouldRender(first))
+        assertFalse(throttle.shouldRender(first.copy(parsedItems = 20000)))
+        assertTrue(throttle.shouldRender(first.copy(completedSectionCount = 1)))
+    }
+
 }
