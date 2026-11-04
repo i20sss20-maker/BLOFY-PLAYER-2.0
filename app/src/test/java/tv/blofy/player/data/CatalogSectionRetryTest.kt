@@ -51,6 +51,32 @@ class CatalogSectionRetryTest {
         assertEquals(listOf(1_000L, 3_000L), waits)
     }
 
+    @Test fun detectsTruncatedCatalogTransportWithoutTreatingOtherErrorsAsRecoverable() {
+        assertTrue(CatalogSectionRetry.isTruncatedBody(IOException("unexpected end of stream on secret URL")))
+        assertTrue(CatalogSectionRetry.isTruncatedBody(JsonSyntaxException(EOFException("End of input"))))
+        assertFalse(CatalogSectionRetry.isTruncatedBody(http(403)))
+        assertFalse(CatalogSectionRetry.isTruncatedBody(IllegalStateException("incomplete catalog")))
+        assertFalse(CatalogSectionRetry.isTruncatedBody(SSLHandshakeException("bad certificate")))
+    }
+
+    @Test fun onlyExhaustedSectionCanRecoverAndReportSuccess() = runBlocking {
+        var fullAttempts = 0
+        var fallbackCalls = 0
+        val result = runXtreamSections(
+            sections = listOf(suspend { fullAttempts++; throw EOFException("truncated response") }),
+            onExhausted = { index, error ->
+                assertEquals(0, index)
+                assertTrue(error is EOFException)
+                fallbackCalls++
+                true
+            }
+        )
+        assertEquals(CatalogSectionRetry.MAX_ATTEMPTS, fullAttempts)
+        assertEquals(1, fallbackCalls)
+        assertEquals(1, result.successCount)
+        assertEquals(0, result.failureCount)
+    }
+
     @Test fun cancellationDuringBackoffStopsWithoutAnotherRequest() = runBlocking {
         var calls = 0
         val failure = runCatching {
