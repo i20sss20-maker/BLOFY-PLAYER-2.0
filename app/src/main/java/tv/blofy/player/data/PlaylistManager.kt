@@ -189,7 +189,13 @@ class PlaylistManager(
                 actionUrl(provider, "get_vod_streams"), 60, 88, onProgress,
                 retainItems = !direct,
                 onBatch = directBatchSink(direct),
-                onTransfer = onTransfer
+                onTransfer = onTransfer,
+                onReset = {
+                    if (direct) {
+                        clearDirectSection(provider.id, "movie")
+                        categoryRows.chunked(DIRECT_CATEGORY_BATCH).forEach { dao.upsertCategories(it) }
+                    }
+                }
             ) { row -> vodEntity(provider, row)?.let(previousFlags::applyTo) }
         } catch (failure: Throwable) {
             if (direct) clearDirectSection(provider.id, "movie")
@@ -315,6 +321,12 @@ class PlaylistManager(
                 actionUrl(provider, action), progressStart, progressEnd,
                 onProgress = onProgress, onTransfer = onTransfer,
                 retainItems = !direct, onBatch = directBatchSink(direct),
+                onReset = {
+                    if (direct) {
+                        clearDirectSection(provider.id, kind)
+                        categoryRows.chunked(DIRECT_CATEGORY_BATCH).forEach { dao.upsertCategories(it) }
+                    }
+                },
                 map = map
             )
         } catch (original: Exception) {
@@ -439,6 +451,8 @@ class PlaylistManager(
         onTransfer: suspend (Int?, Int) -> Unit = { _, _ -> },
         retainItems: Boolean = true,
         onBatch: suspend (List<T>) -> Unit = {},
+        onReset: suspend () -> Unit = {},
+        encoding: String? = null,
         map: (Map<String, Any?>) -> T?,
     ): StreamingParseResult<T> {
         val coroutineContext = currentCoroutineContext()
@@ -447,7 +461,8 @@ class PlaylistManager(
         var sourceCount = 0
         var itemCount = 0
         var transferLengthKnown = false
-        api.streamingCall(url).readCatalog { responseBody ->
+        try {
+        api.streamingCall(url, encoding).readCatalog { responseBody ->
             val declaredBytes = responseBody.contentLength()
             transferLengthKnown = declaredBytes > 0L
             val counting = CountingInputStream(responseBody.byteStream())
@@ -488,6 +503,23 @@ class PlaylistManager(
                 }
                 reader.endArray()
             }
+        }
+        } catch (failure: Exception) {
+            currentCoroutineContext().ensureActive()
+            if (encoding == null && CatalogTransportFallbackPolicy.shouldTryIdentity(failure)) {
+                // Some panels terminate a compressed response prematurely, but
+                // correctly serve uncompressed HTTP/1.1. Discard any streamed
+                // intermediate rows before retrying to avoid stale search rows.
+                onReset()
+                onTransfer(null, 0)
+                return parseStreamingArray(
+                    url, progressStart, progressEnd, onProgress,
+                    onTransfer = onTransfer, retainItems = retainItems,
+                    onBatch = onBatch, onReset = onReset,
+                    encoding = "identity", map = map
+                )
+            }
+            throw failure
         }
         if (!retainItems && batch.isNotEmpty()) onBatch(batch.toList())
         onTransfer(if (transferLengthKnown) 100 else null, itemCount)
