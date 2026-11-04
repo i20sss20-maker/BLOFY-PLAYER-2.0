@@ -838,7 +838,7 @@ class HomeActivity : AppCompatActivity() {
         }
         header.addView(serverLabel, LinearLayout.LayoutParams(0, -2, 1f))
         header.addView(buildRefreshControl(compact = false),
-            LinearLayout.LayoutParams(dp(180), dp(62)).apply { marginStart = dp(12) })
+            LinearLayout.LayoutParams(dp(if (deviceKind == DeviceClass.Kind.PHONE) 154 else 248), dp(62)).apply { marginStart = dp(10) })
         main.addView(header, LinearLayout.LayoutParams(-1, dp(64)))
         val scroll = ScrollView(this).apply {
             tag = "blofy_home_feed_scroll"
@@ -884,10 +884,25 @@ class HomeActivity : AppCompatActivity() {
             }
             setOnClickListener { requestManualCatalogRefresh() }
         }
-        wrapper.addView(refreshButton, LinearLayout.LayoutParams(-1, dp(if (compact) 32 else 38)))
+        wrapper.addView(refreshButton, LinearLayout.LayoutParams(-1, dp(if (compact) 32 else 34)))
+        // Windows-style progress: meaningful status first, then a full-width visible bar.
+        // Keep the existing D-pad accessible refresh button; never block the rest of Home.
         val footer = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutDirection = uiDirection
+        }
+        if (!compact) {
+            refreshHint = TextView(this).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                textSize = 12f
+                typeface = BlofyTvDesign.preferredTypeface(this)
+                setTextColor(TEXT_SECONDARY)
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.END
+                visibility = View.GONE
+            }
+            footer.addView(refreshHint, LinearLayout.LayoutParams(-1, dp(17)))
         }
         refreshSpinner = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             isIndeterminate = false
@@ -898,22 +913,10 @@ class HomeActivity : AppCompatActivity() {
             progressTintList = ColorStateList.valueOf(PURPLE_BRIGHT)
             progressBackgroundTintList = ColorStateList.valueOf(0x6658436B)
         }
-        footer.addView(refreshSpinner, LinearLayout.LayoutParams(dp(if (compact) 22 else 62),
-            dp(if (compact) 5 else 6)).apply { marginEnd = dp(5) })
-        if (!compact) {
-            refreshHint = TextView(this).apply {
-                gravity = Gravity.CENTER_VERTICAL
-                textSize = 10f
-                typeface = BlofyTvDesign.preferredTypeface(this)
-                setTextColor(TEXT_SECONDARY)
-                maxLines = 1
-                ellipsize = TextUtils.TruncateAt.END
-                visibility = View.GONE
-                setPadding(dp(5), 0, 0, 0)
-            }
-            footer.addView(refreshHint, LinearLayout.LayoutParams(-2, dp(20)))
-        }
-        wrapper.addView(footer, LinearLayout.LayoutParams(-1, dp(if (compact) 14 else 20)))
+        footer.addView(refreshSpinner, LinearLayout.LayoutParams(-1, dp(if (compact) 6 else 8)).apply {
+            topMargin = dp(if (compact) 0 else 2)
+        })
+        wrapper.addView(footer, LinearLayout.LayoutParams(-1, dp(if (compact) 10 else 26)))
         registerAction("home_refresh", checkNotNull(refreshButton))
         return wrapper
     }
@@ -1000,7 +1003,7 @@ class HomeActivity : AppCompatActivity() {
         refreshSpinner?.apply {
             visibility = if (active) View.VISIBLE else View.GONE
             isIndeterminate = false
-            progress = refreshPercent.coerceIn(0, 95)
+            progress = if (state == WorkInfo.State.SUCCEEDED) 100 else refreshPercent.coerceIn(0, 95)
         }
         refreshButton?.apply {
             isEnabled = !working
@@ -1015,6 +1018,9 @@ class HomeActivity : AppCompatActivity() {
             contentDescription = if (active) "${getString(R.string.home_catalog_refresh_running_v74)} ${refreshPercent}%"
                 else getString(R.string.home_catalog_refresh_v74)
         }
+        refreshHint?.contentDescription = if (active)
+            "تحديث محتوى BLOFY، ${refreshPercent}%، ${refreshItems} عنصر"
+        else getString(R.string.home_catalog_refresh_v74)
         if (!refreshStartedHere && !active) {
             val last = refreshObservedProvider?.let { CatalogSyncState.lastSyncedAt(applicationContext, it) } ?: 0L
             refreshHint?.apply {
@@ -1037,16 +1043,16 @@ class HomeActivity : AppCompatActivity() {
             }
             // The percentage is a durable high-watermark; on retry it can remain at 64
             // while the server sends a new VOD section. Show real items processed.
-            val itemsLabel = when {
-                refreshItems >= 1_000 -> " • ${refreshItems / 1_000}k"
-                refreshItems > 0 -> " • ${refreshItems}"
-                else -> ""
-            }
+            val itemsLabel = if (refreshItems > 0)
+                " • " + java.lang.String.format(java.util.Locale.US, "%,d", refreshItems) + " عنصر"
+            else ""
             text = when (state) {
                 WorkInfo.State.RUNNING -> when {
-                    refreshAttempt > 0 -> "استكمال • ${stageLabel ?: "المكتبة"}$itemsLabel"
-                    stageLabel != null -> "تحديث • ${stageLabel}$itemsLabel"
-                    else -> getString(R.string.home_catalog_refresh_running_v74)
+                    refreshStage == "SAVE" -> "جاري حفظ المكتبة…"
+                    refreshStage == "PAUSED" -> "التحديث مؤجل أثناء المشاهدة"
+                    refreshAttempt > 0 && refreshItems == 0 -> "إعادة اتصال • ${stageLabel ?: "المكتبة"}"
+                    refreshItems == 0 -> "تحميل أقسام ${stageLabel ?: "المكتبة"}…"
+                    else -> "تحميل ${stageLabel ?: "المكتبة"}$itemsLabel"
                 }
                 WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED ->
                     if (refreshAttempt > 0) "استكمال عند توفر الاتصال" else getString(R.string.home_catalog_refresh_waiting_v74)
