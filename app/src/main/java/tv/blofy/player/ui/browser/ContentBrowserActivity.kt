@@ -37,6 +37,7 @@ import tv.blofy.player.core.provider.ProviderProfile
 import tv.blofy.player.core.provider.TransportPreference
 import tv.blofy.player.data.CatalogPlaybackGate
 import tv.blofy.player.data.PlaylistManager
+import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.CategoryEntity
 import tv.blofy.player.data.local.ProviderEntity
@@ -481,7 +482,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         )
     }
 
-    private fun catalogMemoryKey(): String = "${provider.id}:$kind:${currentCategoryId ?: ALL_CATEGORY_ID}"
+    private fun catalogMemoryKey(): String = "${provider.id}:$kind:${currentCategoryId ?: ALL_CATEGORY_ID}:${CatalogSyncState.lastSyncedAt(applicationContext, provider.id)}"
 
     private fun loadLiveStreams(categoryId: String?) {
         if (currentCategoryId == categoryId && (liveItems.isNotEmpty() || liveLoading)) return
