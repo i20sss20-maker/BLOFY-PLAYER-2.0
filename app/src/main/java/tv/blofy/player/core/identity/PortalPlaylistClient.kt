@@ -359,8 +359,14 @@ object PortalPlaylistClient {
             // Never replace working source credentials before a *complete* new
             // catalog has been streamed, verified and committed to Room.
             // A pending explicit portal/account change takes priority.
-            if (!PortalSyncBook.hasPendingSource(context, providerId)) {
-                val stagingId = PortalSyncBook.pendingSourceId(providerId)
+            // A pending rotation of THIS SAME managed session may be refreshed
+            // again when the hidden host is rotated twice before a successful sync.
+            val stagingId = PortalSyncBook.pendingSourceId(providerId)
+            val pending = if (PortalSyncBook.hasPendingSource(context, providerId))
+                dao.provider(stagingId) else null
+            if (!PortalSyncBook.hasPendingSource(context, providerId) ||
+                (pending != null && pending.subscriberToken.isNotBlank() &&
+                    pending.subscriberToken == current.subscriberToken)) {
                 dao.upsertProvider(updated.copy(id = stagingId, enabled = false))
                 PortalSyncBook.markPendingSource(context, providerId)
             }
