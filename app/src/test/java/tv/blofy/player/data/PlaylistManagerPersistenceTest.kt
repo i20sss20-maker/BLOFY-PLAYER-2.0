@@ -34,6 +34,24 @@ class PlaylistManagerPersistenceTest {
 
     @After fun cleanup() = db.close()
 
+    @Test fun importUsesPanelCategoryOrderAndChannelNumberRatherThanAlphabeticOrder(): Unit =
+        runBlocking(Dispatchers.IO) {
+            val categories = listOf(
+                mapOf("category_id" to "10", "category_name" to "Alpha", "category_order" to "20"),
+                mapOf("category_id" to "2", "category_name" to "Zulu", "category_order" to "1")
+            )
+            val streams = """[
+                {"stream_id":77,"name":"Alpha channel","category_id":10,"num":22},
+                {"stream_id":5,"name":"Zulu channel","category_id":2,"num":1}
+            ]""".trimIndent()
+            val manager = PlaylistManager(FixtureApi(liveCategories = categories, liveStreams = streams), db.dao())
+            assertEquals(2, manager.syncLive(provider))
+            assertEquals(listOf("2", "10"),
+                db.dao().categorySnapshot(provider.id, "live").map { it.remoteId })
+            assertEquals(listOf("5", "77"),
+                db.dao().catalogSourcePageAfterAll(provider.id, "live", 0L, 10).map { it.remoteId })
+        }
+
     @Test fun failedSearchWriteCannotLeaveAHalfSavedCatalogBatch(): Unit = runBlocking(Dispatchers.IO) {
         val stream = StreamEntity("batch:movie:1", "batch", "1", null, "movie", "Fixture")
         db.openHelper.writableDatabase.execSQL("DROP TABLE streams_fts")
