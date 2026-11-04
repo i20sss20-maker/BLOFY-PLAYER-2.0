@@ -34,6 +34,22 @@ class XtreamSectionIssueTest {
         assertTrue(message.contains("رفض"))
     }
 
+    @Test fun groupedInterruptedSectionsStayReadableWithoutLeakingSecrets() {
+        val interrupted = java.io.EOFException("username=private&password=secret")
+        val issues = listOf(
+            XtreamSectionIssue.from(0, IllegalStateException("wrapper", interrupted)),
+            XtreamSectionIssue.from(1, IllegalStateException("wrapper", interrupted)),
+            XtreamSectionIssue.from(2, IllegalStateException("wrapper", interrupted))
+        )
+        val message = XtreamSectionIssue.describe(issues)
+        assertTrue(message.contains("القنوات"))
+        assertTrue(message.contains("الأفلام"))
+        assertTrue(message.contains("المسلسلات"))
+        assertTrue(message.contains("انقطع"))
+        assertFalse(message.contains("secret"))
+        assertTrue(message.length < 125)
+    }
+
     @Test fun reportsEveryBrokenSection() {
         val message = PlaylistSyncResult(
             freshItemCount = 350,
