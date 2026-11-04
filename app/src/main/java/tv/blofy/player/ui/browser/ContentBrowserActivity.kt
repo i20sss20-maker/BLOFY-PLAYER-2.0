@@ -445,9 +445,9 @@ class ContentBrowserActivity : AppCompatActivity() {
         streamsJob = lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
             val result = withContext(Dispatchers.IO) {
-                val page = if (categoryId == null) dao.catalogPageAfterAll(provider.id, kind, cursor, CATALOG_PAGE_SIZE)
-                else dao.catalogPageAfterInCategory(provider.id, kind, categoryId, cursor, CATALOG_PAGE_SIZE)
-                val rowId = page.lastOrNull()?.let { dao.streamRowId(it.key) } ?: cursor
+                val page = if (categoryId == null) dao.catalogSourcePageAfterAll(provider.id, kind, cursor, CATALOG_PAGE_SIZE)
+                else dao.catalogSourcePageAfterInCategory(provider.id, kind, categoryId, cursor, CATALOG_PAGE_SIZE)
+                val rowId = page.lastOrNull()?.sourceOrder ?: cursor
                 page to rowId
             }
             if (generation != catalogGeneration) return@launch
@@ -522,9 +522,9 @@ class ContentBrowserActivity : AppCompatActivity() {
         livePageJob = lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
             val result = withContext(Dispatchers.IO) {
-                val page = if (categoryId == null) dao.catalogPageAfterAll(provider.id, KIND_LIVE, cursor, LIVE_PAGE_SIZE)
-                else dao.catalogPageAfterInCategory(provider.id, KIND_LIVE, categoryId, cursor, LIVE_PAGE_SIZE)
-                val rowId = page.lastOrNull()?.let { dao.streamRowId(it.key) } ?: cursor
+                val page = if (categoryId == null) dao.catalogSourcePageAfterAll(provider.id, KIND_LIVE, cursor, LIVE_PAGE_SIZE)
+                else dao.catalogSourcePageAfterInCategory(provider.id, KIND_LIVE, categoryId, cursor, LIVE_PAGE_SIZE)
+                val rowId = page.lastOrNull()?.sourceOrder ?: cursor
                 page to rowId
             }
             if (generation != liveGeneration) return@launch
@@ -759,8 +759,8 @@ class ContentBrowserActivity : AppCompatActivity() {
                 ?.takeIf(::canRestorePreview)
             val fallback = if (saved == null) {
                 withContext(Dispatchers.IO) {
-                    if (currentCategoryId == null) dao.catalogPageAfterAll(provider.id, KIND_LIVE, 0L, 1).firstOrNull()
-                    else dao.catalogPageAfterInCategory(provider.id, KIND_LIVE, currentCategoryId.orEmpty(), 0L, 1).firstOrNull()
+                    if (currentCategoryId == null) dao.catalogSourcePageAfterAll(provider.id, KIND_LIVE, 0L, 1).firstOrNull()
+                    else dao.catalogSourcePageAfterInCategory(provider.id, KIND_LIVE, currentCategoryId.orEmpty(), 0L, 1).firstOrNull()
                 }
             } else null
             val target = saved ?: fallback

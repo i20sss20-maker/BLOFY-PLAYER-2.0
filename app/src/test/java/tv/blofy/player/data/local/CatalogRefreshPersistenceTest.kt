@@ -39,7 +39,7 @@ class CatalogRefreshPersistenceTest {
     @After fun cleanup() = db.close()
 
     private fun stream(providerId: String, kind: String, id: Int) = StreamEntity(
-        "$providerId:$kind:$id", providerId, "$id", null, kind, "Saved Item $id"
+        "$providerId:$kind:$id", providerId, "$id", null, kind, "Saved Item $id", sourceOrder = id.toLong()
     )
 
     private suspend fun catalog(providerId: String, live: Int, movies: Int, series: Int) {

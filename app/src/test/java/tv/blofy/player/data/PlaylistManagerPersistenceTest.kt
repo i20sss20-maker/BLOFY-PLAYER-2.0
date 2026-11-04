@@ -70,7 +70,7 @@ class PlaylistManagerPersistenceTest {
     }
 
     @Test fun rejectedEmptyRefreshKeepsExistingRowsAndReportsFailure(): Unit = runBlocking(Dispatchers.IO) {
-        val saved = StreamEntity("candidate:live:saved", provider.id, "saved", null, "live", "Saved live", favorite = true)
+        val saved = StreamEntity("candidate:live:saved", provider.id, "saved", null, "live", "Saved live", favorite = true, sourceOrder = 1L)
         db.dao().replaceCatalog(provider.id, "live", emptyList(), listOf(saved))
 
         val result = PlaylistManager(FixtureApi(liveCategories = emptyList(), liveStreams = "[]"), db.dao())
@@ -162,7 +162,7 @@ class PlaylistManagerPersistenceTest {
             val result = PlaylistManager(api, db.dao()).syncAll(local)
             assertEquals(0, result.failedSectionCount)
             assertEquals(3, result.freshItemCount)
-            assertEquals(3, fullAttempts.get())
+            assertEquals(2, fullAttempts.get())
             assertEquals(listOf("1", "0"), synchronized(categoriesRequested) { categoriesRequested.toList() })
             assertEquals("Recovered", db.dao().stream("${provider.id}:live:1")?.name)
             assertEquals(1, db.dao().catalogCountAll(provider.id, "live"))

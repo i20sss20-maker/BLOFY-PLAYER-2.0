@@ -57,6 +57,9 @@ data class CategoryEntity(
         // Identity lookups also restore saved flags during a catalog refresh or local restore.
         Index(value = ["providerId", "kind", "remoteId"]),
         Index(value = ["providerId", "kind", "categoryId"]),
+        // Preserve the playlist order without sorting by content title or SQLite rowid.
+        Index(value = ["providerId", "kind", "sourceOrder"]),
+        Index(value = ["providerId", "kind", "categoryId", "sourceOrder"]),
         Index(
             name = "index_streams_home_page",
             value = ["providerId", "kind", "addedAt", "name", "key"],
@@ -87,7 +90,8 @@ data class StreamEntity(
     val archiveEnabled: Boolean = false,
     val archiveDurationDays: Int = 0,
     val favorite: Boolean = false,
-    val locked: Boolean = false
+    val locked: Boolean = false,
+    @ColumnInfo(defaultValue = "0") val sourceOrder: Long = 0L
 )
 
 @Entity(tableName = "episodes", indices = [Index("providerId"), Index("seriesId"), Index("season")])

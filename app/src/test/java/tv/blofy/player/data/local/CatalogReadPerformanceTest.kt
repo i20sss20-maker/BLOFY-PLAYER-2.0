@@ -73,7 +73,7 @@ class CatalogReadPerformanceTest {
             it.version = 13
         }
         db = open()
-        assertEquals(row, db.dao().streamByIdentity("p", "series", "42"))
+        assertEquals(row.copy(sourceOrder = checkNotNull(rowid)), db.dao().streamByIdentity("p", "series", "42"))
         assertEquals(rowid, db.dao().streamRowId(row.key))
         assertEquals(watch, db.dao().watchState(row.key))
         val plan = db.openHelper.readableDatabase.query("EXPLAIN QUERY PLAN UPDATE streams SET favorite=1 WHERE providerId='p' AND kind='series' AND remoteId='42'").use {
@@ -84,7 +84,7 @@ class CatalogReadPerformanceTest {
 
     @Test fun v10IndexMigrationKeepsSavedRowsRowidsCredentialsFtsAndResume(): Unit = runBlocking(Dispatchers.IO) {
         val provider = ProviderEntity("p", "Saved", "BLOFYENC1:preserve-host", "BLOFYENC1:preserve-user", "BLOFYENC1:preserve-password")
-        val row = StreamEntity("saved", "p", "1", "c", "movie", "Saved", addedAt = 42L, favorite = true)
+        val row = StreamEntity("saved", "p", "1", "c", "movie", "Saved", addedAt = 42L, favorite = true, sourceOrder = 1L)
         val watch = WatchStateEntity(row.key, "p", "movie", 50_000, 100_000)
         val activation = ActivationEntity("BLOFY-TEST-ABCD", "123456", true)
         db.dao().upsertProviderStored(provider)

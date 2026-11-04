@@ -40,7 +40,7 @@ class SearchIndexMigrationTest {
     }
 
     @Test fun v9ReadyPreferenceCannotHideTheIndexDroppedByMigration(): Unit = runBlocking(Dispatchers.IO) {
-        val stream = StreamEntity("${provider.id}:movie:1", provider.id, "1", null, "movie", "أحمد", favorite = true)
+        val stream = StreamEntity("${provider.id}:movie:1", provider.id, "1", null, "movie", "أحمد", favorite = true, sourceOrder = 1L)
         val watch = WatchStateEntity(stream.key, provider.id, "movie", 45_000L, 180_000L)
         val activation = ActivationEntity("BLOFY-TEST-ABCD", "123456", activated = true)
         db.dao().upsertProviderStored(provider)

@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-internal const val BLOFY_DATABASE_VERSION = 14
+internal const val BLOFY_DATABASE_VERSION = 15
 
 @Database(
     entities = [
@@ -258,7 +258,26 @@ abstract class BlofyDatabase : RoomDatabase() {
             object : Migration(13, 14) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     // Add an identity index without rewriting saved rows or their rowids.
-                    db.execSQL("CREATE INDEX IF NOT EXISTS `index_streams_providerId_kind_remoteId` ON `streams` (`providerId`, `kind`, `remoteId`)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS `index_streams_providerId_kind_remoteId` ON `streams` (`providerId`, `kind`, `remoteId`)") 
+                }
+            },
+            object : Migration(14, 15) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    // Keep existing activation, favorites and content. Existing rows retain their
+                    // approximate server/insertion sequence until the next successful refresh.
+                    var hasSourceOrder = false
+                    db.query("PRAGMA table_info(`streams`)").use { cursor ->
+                        val nameColumn = cursor.getColumnIndexOrThrow("name")
+                        while (cursor.moveToNext()) {
+                            if (cursor.getString(nameColumn) == "sourceOrder") hasSourceOrder = true
+                        }
+                    }
+                    if (!hasSourceOrder) {
+                        db.execSQL("ALTER TABLE `streams` ADD COLUMN `sourceOrder` INTEGER NOT NULL DEFAULT 0")
+                    }
+                    db.execSQL("UPDATE `streams` SET `sourceOrder` = rowid WHERE `sourceOrder` = 0")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS `index_streams_providerId_kind_sourceOrder` ON `streams` (`providerId`, `kind`, `sourceOrder`)")
+                    db.execSQL("CREATE INDEX IF NOT EXISTS `index_streams_providerId_kind_categoryId_sourceOrder` ON `streams` (`providerId`, `kind`, `categoryId`, `sourceOrder`)")
                 }
             }
         )

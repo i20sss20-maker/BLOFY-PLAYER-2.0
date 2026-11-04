@@ -47,7 +47,7 @@ class LibraryScrollRegressionTest {
             db.dao().saveAndActivateProvider(ProviderEntity("saved", "Saved", "https://example.test", "viewer", "secret"))
             db.dao().upsertStreams((1..30).map { index ->
                 StreamEntity("saved:movie:$index", "saved", index.toString(), null, "movie",
-                    "Film ${index.toString().padStart(2, '0')}", favorite = true)
+                    "Film ${index.toString().padStart(2, '0')}", favorite = true, sourceOrder = index.toLong())
             })
         }
     }

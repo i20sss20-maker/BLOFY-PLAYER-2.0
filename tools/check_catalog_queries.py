@@ -37,6 +37,8 @@ def main():
     db = sqlite3.connect(":memory:")
     schema = re.search(r'CREATE TABLE `streams_new` \([\s\S]*?\n\s*\)', database)[0]
     db.execute(schema.replace("streams_new", "streams"))
+    # The legacy CREATE TABLE is from v5; mirror Room v15 order-field migration.
+    db.execute("ALTER TABLE streams ADD COLUMN sourceOrder INTEGER NOT NULL DEFAULT 0")
     indexes = re.findall(r'db.execSQL\("(CREATE INDEX[^"\n]+ ON `streams`[^"\n]+)"\)', database)
     added = {"index_streams_providerId_kind", "index_streams_providerId_kind_categoryId", "index_streams_home_page"}
     for sql in indexes:

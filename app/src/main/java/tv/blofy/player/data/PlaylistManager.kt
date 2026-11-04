@@ -46,21 +46,27 @@ class PlaylistManager(
             listOf(
                 suspend {
                     onProgress(PlaylistSyncProgress(PlaylistSyncStage.LIVE, 1, 3))
-                    freshItemCount += if ("live" in completedSections) dao.catalogCountAll(provider.id, "live") else syncLive(provider, onProgress = { percent ->
+                    freshItemCount += if ("live" in completedSections) dao.catalogCountAll(provider.id, "live") else syncLive(provider, onItems = { count ->
+                        onProgress(PlaylistSyncProgress(PlaylistSyncStage.LIVE, 1, 3, itemsProcessed = count))
+                    }, onProgress = { percent ->
                         onProgress(PlaylistSyncProgress(PlaylistSyncStage.LIVE, 1, 3, percent))
                     })
                     onSectionComplete("live")
                 },
                 suspend {
                     onProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3))
-                    freshItemCount += if ("movie" in completedSections) dao.catalogCountAll(provider.id, "movie") else syncVod(provider, onProgress = { percent ->
+                    freshItemCount += if ("movie" in completedSections) dao.catalogCountAll(provider.id, "movie") else syncVod(provider, onItems = { count ->
+                        onProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3, itemsProcessed = count))
+                    }, onProgress = { percent ->
                         onProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3, percent))
                     })
                     onSectionComplete("movie")
                 },
                 suspend {
                     onProgress(PlaylistSyncProgress(PlaylistSyncStage.SERIES, 3, 3))
-                    freshItemCount += if ("series" in completedSections) dao.catalogCountAll(provider.id, "series") else syncSeries(provider, onProgress = { percent ->
+                    freshItemCount += if ("series" in completedSections) dao.catalogCountAll(provider.id, "series") else syncSeries(provider, onItems = { count ->
+                        onProgress(PlaylistSyncProgress(PlaylistSyncStage.SERIES, 3, 3, itemsProcessed = count))
+                    }, onProgress = { percent ->
                         onProgress(PlaylistSyncProgress(PlaylistSyncStage.SERIES, 3, 3, percent))
                     })
                     onSectionComplete("series")
@@ -79,21 +85,30 @@ class PlaylistManager(
                     when (section) {
                         0 -> {
                             onProgress(PlaylistSyncProgress(PlaylistSyncStage.LIVE, 1, 3, retryAttempt = 3))
-                            freshItemCount += syncLive(provider, recoverByCategory = true) { percent ->
+                            freshItemCount += syncLive(provider, recoverByCategory = true, onItems = { count ->
+                                onProgress(PlaylistSyncProgress(PlaylistSyncStage.LIVE, 1, 3,
+                                    itemsProcessed = count, retryAttempt = 3))
+                            }) { percent ->
                                 onProgress(PlaylistSyncProgress(PlaylistSyncStage.LIVE, 1, 3, percent))
                             }
                             onSectionComplete("live")
                         }
                         1 -> {
                             onProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3, retryAttempt = 3))
-                            freshItemCount += syncVod(provider, recoverByCategory = true) { percent ->
+                            freshItemCount += syncVod(provider, recoverByCategory = true, onItems = { count ->
+                                onProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3,
+                                    itemsProcessed = count, retryAttempt = 3))
+                            }) { percent ->
                                 onProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3, percent))
                             }
                             onSectionComplete("movie")
                         }
                         else -> {
                             onProgress(PlaylistSyncProgress(PlaylistSyncStage.SERIES, 3, 3, retryAttempt = 3))
-                            freshItemCount += syncSeries(provider, recoverByCategory = true) { percent ->
+                            freshItemCount += syncSeries(provider, recoverByCategory = true, onItems = { count ->
+                                onProgress(PlaylistSyncProgress(PlaylistSyncStage.SERIES, 3, 3,
+                                    itemsProcessed = count, retryAttempt = 3))
+                            }) { percent ->
                                 onProgress(PlaylistSyncProgress(PlaylistSyncStage.SERIES, 3, 3, percent))
                             }
                             onSectionComplete("series")
@@ -109,6 +124,7 @@ class PlaylistManager(
     suspend fun syncLive(
         provider: ProviderEntity,
         recoverByCategory: Boolean = false,
+        onItems: suspend (Int) -> Unit = {},
         onProgress: suspend (Int) -> Unit = {}
     ): Int {
         val categories = api.list(actionUrl(provider, "get_live_categories"))
@@ -133,7 +149,8 @@ class PlaylistManager(
                 actionUrl(provider, "get_live_streams"), 18, 30, onProgress,
                 retainItems = !direct,
                 onBatch = directBatchSink(direct),
-                recoverCategoryIds = if (recoverByCategory) categoryRows.map { it.remoteId } else null
+                recoverCategoryIds = if (recoverByCategory) categoryRows.map { it.remoteId } else null,
+                onItems = onItems
             ) { row ->
                 val id = row.id("stream_id") ?: return@parseStreamingArray null
                 val archive = row.string("tv_archive").let { it == "1" || it.equals("true", true) }
@@ -168,6 +185,7 @@ class PlaylistManager(
     suspend fun syncVod(
         provider: ProviderEntity,
         recoverByCategory: Boolean = false,
+        onItems: suspend (Int) -> Unit = {},
         onProgress: suspend (Int) -> Unit = {}
     ): Int {
         val categories = api.list(actionUrl(provider, "get_vod_categories"))
@@ -185,7 +203,8 @@ class PlaylistManager(
                 actionUrl(provider, "get_vod_streams"), 60, 88, onProgress,
                 retainItems = !direct,
                 onBatch = directBatchSink(direct),
-                recoverCategoryIds = if (recoverByCategory) categoryRows.map { it.remoteId } else null
+                recoverCategoryIds = if (recoverByCategory) categoryRows.map { it.remoteId } else null,
+                onItems = onItems
             ) { row -> vodEntity(provider, row)?.let(previousFlags::applyTo) }
         } catch (failure: Throwable) {
             if (direct) clearDirectSection(provider.id, "movie")
@@ -228,6 +247,7 @@ class PlaylistManager(
     suspend fun syncSeries(
         provider: ProviderEntity,
         recoverByCategory: Boolean = false,
+        onItems: suspend (Int) -> Unit = {},
         onProgress: suspend (Int) -> Unit = {}
     ): Int {
         val categories = api.list(actionUrl(provider, "get_series_categories"))
@@ -245,7 +265,8 @@ class PlaylistManager(
                 actionUrl(provider, "get_series"), 88, 95, onProgress,
                 retainItems = !direct,
                 onBatch = directBatchSink(direct),
-                recoverCategoryIds = if (recoverByCategory) categoryRows.map { it.remoteId } else null
+                recoverCategoryIds = if (recoverByCategory) categoryRows.map { it.remoteId } else null,
+                onItems = onItems
             ) { row ->
                 val id = row.id("series_id") ?: return@parseStreamingArray null
                 val backdrop = when (val raw = row["backdrop_path"]) {
@@ -340,23 +361,25 @@ class PlaylistManager(
         val items: List<T>
     )
 
-    private suspend fun <T> parseStreamingArray(
+    private suspend fun parseStreamingArray(
         url: String,
         progressStart: Int,
         progressEnd: Int,
         onProgress: suspend (Int) -> Unit,
         retainItems: Boolean = true,
-        onBatch: suspend (List<T>) -> Unit = {},
+        onBatch: suspend (List<StreamEntity>) -> Unit = {},
         recoverCategoryIds: List<String>? = null,
-        map: (Map<String, Any?>) -> T?,
-    ): StreamingParseResult<T> {
+        orderOffset: Long = 0L,
+        onItems: suspend (Int) -> Unit = {},
+        map: (Map<String, Any?>) -> StreamEntity?,
+    ): StreamingParseResult<StreamEntity> {
         if (recoverCategoryIds != null) {
             return parseSegmentedArray(url, recoverCategoryIds, progressStart, progressEnd,
-                onProgress, retainItems, onBatch, map)
+                onProgress, retainItems, onBatch, onItems, map)
         }
         val coroutineContext = currentCoroutineContext()
-        val items = if (retainItems) ArrayList<T>(4096) else null
-        val batch = ArrayList<T>(DIRECT_STREAM_BATCH)
+        val items = if (retainItems) ArrayList<StreamEntity>(4096) else null
+        val batch = ArrayList<StreamEntity>(DIRECT_STREAM_BATCH)
         var sourceCount = 0
         var itemCount = 0
         api.streamingCall(url).readCatalog { responseBody ->
@@ -370,7 +393,8 @@ class PlaylistManager(
                     if (sourceCount % 128 == 0) coroutineContext.ensureActive()
                     val row: Map<String, Any?> = gson.fromJson(reader, mapType)
                     sourceCount += 1
-                    val converted = map(row)
+                    // The source array sequence is authoritative, even for invalid skipped rows.
+                    val converted = map(row)?.copy(sourceOrder = orderOffset + sourceCount.toLong())
                     if (converted != null) {
                         itemCount += 1
                         items?.add(converted)
@@ -382,6 +406,7 @@ class PlaylistManager(
                             }
                         }
                     }
+                    if (sourceCount % 1024 == 0) onItems(itemCount)
                     if (sourceCount % 256 == 0) {
                         val span = (progressEnd - progressStart).coerceAtLeast(1)
                         val fraction = if (declaredBytes > 0L) {
@@ -396,6 +421,7 @@ class PlaylistManager(
             }
         }
         if (!retainItems && batch.isNotEmpty()) onBatch(batch.toList())
+        onItems(itemCount)
         return StreamingParseResult(sourceCount, itemCount, items ?: emptyList())
     }
 
@@ -406,21 +432,22 @@ class PlaylistManager(
      * Existing rows are only replaced after every category, including uncategorized (0),
      * has been completely consumed and validated. Individual chunks retry independently.
      */
-    private suspend fun <T> parseSegmentedArray(
+    private suspend fun parseSegmentedArray(
         url: String,
         categoryIds: List<String>,
         progressStart: Int,
         progressEnd: Int,
         onProgress: suspend (Int) -> Unit,
         retainItems: Boolean,
-        onBatch: suspend (List<T>) -> Unit,
-        map: (Map<String, Any?>) -> T?
-    ): StreamingParseResult<T> {
+        onBatch: suspend (List<StreamEntity>) -> Unit,
+        onItems: suspend (Int) -> Unit,
+        map: (Map<String, Any?>) -> StreamEntity?
+    ): StreamingParseResult<StreamEntity> {
         val categories = (categoryIds.filter { it.isNotBlank() } + "0").distinct()
         check(categories.size in 2..MAX_RECOVERY_CATEGORIES) {
             "Catalog provider does not support safe category recovery"
         }
-        val items = if (retainItems) ArrayList<T>() else null
+        val items = if (retainItems) ArrayList<StreamEntity>() else null
         var sourceCount = 0
         var itemCount = 0
         categories.forEachIndexed { index, categoryId ->
@@ -431,7 +458,9 @@ class PlaylistManager(
             val chunk = CatalogSectionRetry.run {
                 parseStreamingArray(
                     "$url&category_id=${enc(categoryId)}",
-                    start, end, onProgress, retainItems, onBatch
+                    start, end, onProgress, retainItems, onBatch,
+                    orderOffset = sourceCount.toLong(),
+                    onItems = { count -> onItems(itemCount + count) }
                 ) { row ->
                     val actualCategory = row.id("category_id") ?: if (categoryId == "0") "0" else null
                     check(actualCategory == categoryId) {
@@ -450,6 +479,7 @@ class PlaylistManager(
         check(sourceCount > 0 && itemCount > 0) {
             "Catalog provider returned no complete categorized content"
         }
+        onItems(itemCount)
         return StreamingParseResult(sourceCount, itemCount, items ?: emptyList())
     }
 
@@ -607,7 +637,7 @@ internal suspend fun runXtreamSections(
     val failures = mutableListOf<Exception>()
     sections.forEachIndexed { index, syncSection ->
         try {
-            CatalogSectionRetry.run(onRetry = { onRetry(index, it) }, block = syncSection)
+            CatalogSectionRetry.run(onRetry = { onRetry(index, it) }, maxTruncatedAttempts = 2, block = syncSection)
             successCount += 1
         } catch (cancelled: CancellationException) {
             throw cancelled

@@ -21,7 +21,7 @@ class CatalogLoadRecoveryTest {
     private val databaseName = "catalog-load-recovery-regression.db"
     private lateinit var db: BlofyDatabase
     private val provider = ProviderEntity("interrupted-import", "Saved playlist", "https://fixture.example.test", "u", "p")
-    private val stream = StreamEntity("${provider.id}:live:1", provider.id, "1", "news", "live", "Saved channel", favorite = true)
+    private val stream = StreamEntity("${provider.id}:live:1", provider.id, "1", "news", "live", "Saved channel", favorite = true, sourceOrder = 1L)
     private val category = CategoryEntity("${provider.id}:live:news", provider.id, "news", "live", "News")
     private val activation = ActivationEntity("BLOFY-TEST-ABCD", "123456", activated = true)
 

@@ -42,7 +42,7 @@ class ContentRepositorySearchTest {
                 kind, "أحمد")
             dao.replaceCatalog(providerId, kind, emptyList(), listOf(target))
 
-            assertEquals(listOf(target), repository.searchKind(providerId, kind, "احمد", 120))
+            assertEquals(listOf(target.copy(sourceOrder = 1L)), repository.searchKind(providerId, kind, "احمد", 120))
         }
     }
 

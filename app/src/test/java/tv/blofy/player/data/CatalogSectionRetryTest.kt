@@ -71,7 +71,7 @@ class CatalogSectionRetryTest {
                 true
             }
         )
-        assertEquals(CatalogSectionRetry.MAX_ATTEMPTS, fullAttempts)
+        assertEquals(2, fullAttempts)
         assertEquals(1, fallbackCalls)
         assertEquals(1, result.successCount)
         assertEquals(0, result.failureCount)
