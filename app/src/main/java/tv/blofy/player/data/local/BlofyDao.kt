@@ -466,7 +466,9 @@ interface BlofyDao {
             categories.asSequence().chunked(CATALOG_INSERT_BATCH_SIZE)
                 .forEach { batch -> if (batch.isNotEmpty()) upsertCategories(batch) }
             clearSearchIndex(providerId, kind)
-            streams.asSequence().chunked(SEARCH_INSERT_BATCH_SIZE).forEach { batch ->
+            streams.asSequence().mapIndexed { index, item ->
+                item.copy(sourceOrder = index.toLong() + 1L)
+            }.chunked(SEARCH_INSERT_BATCH_SIZE).forEach { batch ->
                 if (batch.isNotEmpty()) {
                     upsertStreams(batch)
                     insertSearchRows(batch.map(::searchRow))
