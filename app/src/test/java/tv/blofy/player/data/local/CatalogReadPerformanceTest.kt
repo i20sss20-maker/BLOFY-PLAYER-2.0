@@ -84,7 +84,7 @@ class CatalogReadPerformanceTest {
 
     @Test fun v10IndexMigrationKeepsSavedRowsRowidsCredentialsFtsAndResume(): Unit = runBlocking(Dispatchers.IO) {
         val provider = ProviderEntity("p", "Saved", "BLOFYENC1:preserve-host", "BLOFYENC1:preserve-user", "BLOFYENC1:preserve-password")
-        val row = StreamEntity("saved", "p", "1", "c", "movie", "Saved", addedAt = 42L, favorite = true)
+        val row = StreamEntity("saved", "p", "1", "c", "movie", "Saved", addedAt = 42L, favorite = true, sourceOrder = 1L)
         val watch = WatchStateEntity(row.key, "p", "movie", 50_000, 100_000)
         val activation = ActivationEntity("BLOFY-TEST-ABCD", "123456", true)
         db.dao().upsertProviderStored(provider)
