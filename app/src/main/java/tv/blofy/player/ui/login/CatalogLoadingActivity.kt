@@ -33,6 +33,7 @@ import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.data.CatalogSyncState
+import tv.blofy.player.data.CatalogProgressThrottle
 import tv.blofy.player.data.LocalStorageManager
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.PlaylistSyncPolicy
@@ -48,6 +49,7 @@ import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.TvUiTuning
 import tv.blofy.player.ui.home.HomeActivity
 import java.util.UUID
+import java.util.Locale
 
 class CatalogLoadingActivity : AppCompatActivity() {
     private lateinit var retryButton: Button
@@ -59,12 +61,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
     private var displayedPercent = 0
     private lateinit var percent: TextView
     private lateinit var stage: TextView
-    private lateinit var progressMeta: TextView
     private lateinit var progress: ProgressBar
-    private lateinit var serverStep: TextView
-    private lateinit var contentStep: TextView
-    private lateinit var prepareStep: TextView
-    private lateinit var readyStep: TextView
     private lateinit var deviceKind: DeviceClass.Kind
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -199,15 +196,6 @@ class CatalogLoadingActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
             setPadding(0, u(4), 0, u(4))
         })
-        panel.addView(TextView(this).apply {
-            text = getString(R.string.catalog_subtitle)
-            BlofyTvDesign.applyBody(this)
-            textSize = s(if (compact) 12f else 14f)
-            setTextColor(BlofyTvDesign.TextMuted)
-            gravity = Gravity.CENTER
-            setPadding(0, 0, 0, u(if (compact) 12 else if (shortTv) 12 else 20))
-        })
-
         val progressRow = LinearLayout(this).apply {
             orientation = if (compact) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -256,39 +244,6 @@ class CatalogLoadingActivity : AppCompatActivity() {
             setPadding(0, u(if (compact) 6 else if (shortTv) 4 else 10), 0, u(4))
         }
         panel.addView(stage)
-        progressMeta = TextView(this).apply {
-            visibility = View.GONE
-            textSize = s(if (compact) 11f else 12.5f)
-            typeface = BlofyTvDesign.MediumTypeface
-            setTextColor(BlofyTvDesign.PurpleSoft)
-            gravity = Gravity.CENTER
-            layoutDirection = View.LAYOUT_DIRECTION_LTR
-            textDirection = View.TEXT_DIRECTION_LTR
-            includeFontPadding = false
-        }
-        panel.addView(progressMeta, LinearLayout.LayoutParams(-1, u(if (compact) 20 else 24)))
-        panel.addView(TextView(this).apply {
-            text = getString(R.string.catalog_note)
-            BlofyTvDesign.applyCaption(this)
-            textSize = s(if (compact) 11f else 12.5f)
-            gravity = Gravity.CENTER
-            setPadding(0, 0, 0, u(if (compact) 14 else if (shortTv) 10 else 22))
-        })
-
-        val steps = LinearLayout(this).apply {
-            orientation = if (compact) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            layoutDirection = resources.configuration.layoutDirection
-        }
-        serverStep = step(getString(R.string.catalog_step_server))
-        contentStep = step(getString(R.string.catalog_step_content))
-        prepareStep = step(getString(R.string.catalog_step_prepare))
-        readyStep = step(getString(R.string.catalog_step_ready))
-        steps.addView(serverStep, stepParams(compact))
-        steps.addView(contentStep, stepParams(compact))
-        steps.addView(prepareStep, stepParams(compact))
-        steps.addView(readyStep, stepParams(compact))
-
         retryButton = Button(this).apply {
             text = getString(R.string.catalog_retry)
             isAllCaps = false
@@ -304,11 +259,6 @@ class CatalogLoadingActivity : AppCompatActivity() {
             if (compact) LinearLayout.LayoutParams.MATCH_PARENT else u(380),
             u(if (compact) 50 else 54)
         ).apply { bottomMargin = u(if (compact) 8 else 0) })
-        panel.addView(steps, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            if (compact) LinearLayout.LayoutParams.WRAP_CONTENT else u(if (shortTv) 50 else 60)
-        ))
-
         val panelWidth = when {
             compact -> LinearLayout.LayoutParams.MATCH_PARENT
             tablet -> u(minOf(760, (screenWidthDp - 56).coerceAtLeast(520)))
@@ -316,27 +266,6 @@ class CatalogLoadingActivity : AppCompatActivity() {
         }
         root.addView(panel, LinearLayout.LayoutParams(panelWidth, LinearLayout.LayoutParams.WRAP_CONTENT))
         setContentView(root)
-    }
-
-    private fun step(label: String) = TextView(this).apply {
-        text = getString(R.string.catalog_step_state, "○", label)
-        textSize = TvUiTuning.sp(this@CatalogLoadingActivity, if (deviceKind == DeviceClass.Kind.PHONE) 11.5f else 12.5f)
-        typeface = BlofyTvDesign.MediumTypeface
-        setTextColor(BlofyTvDesign.TextMuted)
-        gravity = Gravity.CENTER
-        background = stepBackground(false, false)
-        setPadding(TvUiTuning.dp(this@CatalogLoadingActivity, 8), 0, TvUiTuning.dp(this@CatalogLoadingActivity, 8), 0)
-    }
-
-    private fun stepParams(compact: Boolean) = if (compact) {
-        LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, TvUiTuning.dp(this, 32)).apply {
-            topMargin = TvUiTuning.dp(this@CatalogLoadingActivity, 2)
-        }
-    } else {
-        LinearLayout.LayoutParams(0, TvUiTuning.dp(this, if (resources.configuration.screenHeightDp in 1..620) 44 else 50), 1f).apply {
-            marginStart = TvUiTuning.dp(this@CatalogLoadingActivity, 5)
-            marginEnd = TvUiTuning.dp(this@CatalogLoadingActivity, 5)
-        }
     }
 
     private suspend fun sync(providerId: String, forceRefresh: Boolean) {
@@ -381,12 +310,15 @@ class CatalogLoadingActivity : AppCompatActivity() {
         try {
             render(5, getString(if (firstLoad) R.string.catalog_start_full else R.string.catalog_start_refresh))
             persistence.prepareFirstImport()
+            val progressThrottle = CatalogProgressThrottle()
             val result = PlaylistSyncPolicy.run {
                 withContext(Dispatchers.IO) {
                     PlaylistManager(XtreamClient.api, dao).syncAll(syncProvider,
                         completedSections = persistence.completedSections,
                         onSectionComplete = persistence::sectionCompleted) { p ->
-                        withContext(Dispatchers.Main.immediate) { renderProgress(p) }
+                        if (progressThrottle.shouldRender(p)) {
+                            withContext(Dispatchers.Main.immediate) { renderProgress(p) }
+                        }
                     }
                 }
             }
@@ -484,50 +416,31 @@ class CatalogLoadingActivity : AppCompatActivity() {
     }
 
     private fun renderProgress(p: PlaylistSyncProgress) {
-        val section = when (p.stage) {
+        val label = when (p.stage) {
             PlaylistSyncStage.M3U -> getString(R.string.catalog_stage_m3u)
             PlaylistSyncStage.LIVE -> getString(R.string.catalog_stage_live)
             PlaylistSyncStage.MOVIES -> getString(R.string.catalog_stage_movies)
             PlaylistSyncStage.SERIES -> getString(R.string.catalog_stage_series)
         }
-        // The section byte percentage is NOT overall catalog completion.
-        // Keep the main progress indeterminate until every section has fully
-        // downloaded and the atomic Room commit has succeeded.
-        progress.isIndeterminate = true
-        percent.text = "…"
-        stage.text = if (p.retryAttempt > 0) {
-            "$section • ${getString(R.string.catalog_retry)} (${p.retryAttempt}/3)"
-        } else section
-        progressMeta.text = "القسم ${p.step.coerceAtLeast(1)}/${p.totalSteps.coerceAtLeast(1)}" +
-            p.parsedItems?.let { " • تمت قراءة $it عنصر" }.orEmpty() +
-            p.sectionTransferPercent?.let { " • تنزيل $section: $it%" }.orEmpty()
-        progressMeta.visibility = View.VISIBLE
+        // Only show section-specific progress when the server declares a
+        // real byte length. No invented 99% overall completion.
+        progress.isIndeterminate = p.sectionTransferPercent == null
+        if (p.sectionTransferPercent != null) progress.progress = p.sectionTransferPercent
+        percent.text = "${p.step.coerceAtLeast(1)}/${p.totalSteps.coerceAtLeast(1)}"
+        stage.text = when {
+            p.retryAttempt > 0 -> "$label • ${getString(R.string.catalog_retry)} (${p.retryAttempt}/3)"
+            p.parsedItems != null -> "$label • ${String.format(Locale.US, "%,d", p.parsedItems)} عنصر"
+            else -> label
+        }
     }
 
     private fun render(value: Int, label: String) {
-        val safe = maxOf(displayedPercent, value.coerceIn(0, 100))
-        displayedPercent = safe
-        progressMeta.visibility = View.GONE
-        progress.isIndeterminate = false
-        progress.progress = safe
-        percent.text = getString(R.string.catalog_percent, safe)
+        val completed = value >= 100
+        displayedPercent = maxOf(displayedPercent, value.coerceIn(0, 100))
+        progress.isIndeterminate = !completed
+        if (completed) progress.progress = 100
+        percent.text = if (completed) "✓" else "…"
         stage.text = label
-        val serverDone = safe >= 10
-        val contentDone = safe >= 30
-        val prepareDone = safe >= 100
-        val readyDone = safe >= 100
-        serverStep.setTextColor(if (serverDone) BlofyTvDesign.Mint else if (safe in 1..9) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
-        contentStep.setTextColor(if (contentDone) BlofyTvDesign.Mint else if (safe in 10..29) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
-        prepareStep.setTextColor(if (prepareDone) BlofyTvDesign.Mint else if (safe in 30..99) BlofyTvDesign.PurpleSoft else BlofyTvDesign.TextMuted)
-        readyStep.setTextColor(if (readyDone) BlofyTvDesign.Mint else BlofyTvDesign.TextMuted)
-        serverStep.background = stepBackground(serverDone, safe in 1..9)
-        contentStep.background = stepBackground(contentDone, safe in 10..29)
-        prepareStep.background = stepBackground(prepareDone, safe in 30..99)
-        readyStep.background = stepBackground(readyDone, safe >= 100)
-        serverStep.text = getString(R.string.catalog_step_state, if (serverDone) "✓" else if (safe in 1..9) "●" else "○", getString(R.string.catalog_step_server))
-        contentStep.text = getString(R.string.catalog_step_state, if (contentDone) "✓" else if (safe in 10..29) "●" else "○", getString(R.string.catalog_step_content))
-        prepareStep.text = getString(R.string.catalog_step_state, if (prepareDone) "✓" else if (safe in 30..99) "●" else "○", getString(R.string.catalog_step_prepare))
-        readyStep.text = getString(R.string.catalog_step_state, if (readyDone) "✓" else "○", getString(R.string.catalog_step_ready))
     }
 
     private suspend fun openHome(providerId: String) {
@@ -580,7 +493,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
         progress.isIndeterminate = false
         progress.progress = 0
         percent.text = "تعذر"
-        progressMeta.visibility = View.GONE
+        percent.text = "!"
         stage.text = message
         stage.setTextColor(BlofyTvDesign.Error)
         retryButton.visibility = View.VISIBLE
