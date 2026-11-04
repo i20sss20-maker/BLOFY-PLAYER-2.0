@@ -51,7 +51,8 @@ import java.util.UUID
 
 class CatalogLoadingActivity : AppCompatActivity() {
     private lateinit var retryButton: Button
-    private lateinit var cancelButton: Button
+    // Back key remains available for accessibility; no on-screen cancel action.
+    private var leaving = false
     private var hasSavedLibrary = false
     private var loadJob: Job? = null
     private var forceRefreshOnRetry = false
@@ -79,7 +80,6 @@ class CatalogLoadingActivity : AppCompatActivity() {
         }
         val forceRefresh = intent.getBooleanExtra(EXTRA_FORCE_REFRESH, false)
         retryButton.setOnClickListener { startLoading(providerId, forceRefreshOnRetry) }
-        cancelButton.setOnClickListener { leaveLoading(providerId) }
         onBackPressedDispatcher.addCallback(this) { leaveLoading(providerId) }
         startLoading(providerId, forceRefresh)
     }
@@ -87,9 +87,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
     private fun startLoading(providerId: String, forceRefresh: Boolean) {
         if (loadJob?.isActive == true) return
         hasSavedLibrary = false
-        cancelButton.isEnabled = true
-        cancelButton.text = "إلغاء التحديث"
-        cancelButton.visibility = View.VISIBLE
+        leaving = false
         forceRefreshOnRetry = forceRefresh
         retryButton.visibility = View.GONE
         stage.setTextColor(BlofyTvDesign.TextPrimary)
@@ -111,7 +109,6 @@ class CatalogLoadingActivity : AppCompatActivity() {
                         }
                     }
                     hasSavedLibrary = hasCachedCatalog
-                    cancelButton.text = if (hasSavedLibrary) "الدخول بالمكتبة المحفوظة" else "إلغاء التحديث"
                     if (!forceRefresh && hasCachedCatalog) {
                         openHome(providerId)
                         return@withProviderLock
@@ -138,8 +135,8 @@ class CatalogLoadingActivity : AppCompatActivity() {
     }
 
     private fun leaveLoading(providerId: String) {
-        if (isFinishing || !cancelButton.isEnabled) return
-        cancelButton.isEnabled = false
+        if (isFinishing || leaving) return
+        leaving = true
         val active = loadJob
         lifecycleScope.launch {
             // Wait for the previous job to roll back any temporary data before
@@ -300,30 +297,10 @@ class CatalogLoadingActivity : AppCompatActivity() {
                 BlofyTvDesign.installTvFocus(this, u(16).toFloat(), 1.02f, true) {}
             }
         }
-        cancelButton = Button(this).apply {
-            text = "إلغاء التحديث"
-            isAllCaps = false
-            isFocusable = true
-            isFocusableInTouchMode = deviceKind == DeviceClass.Kind.TV
-            if (deviceKind == DeviceClass.Kind.TV) {
-                BlofyTvDesign.installTvFocus(this, u(16).toFloat(), 1.02f, true) {}
-            }
-        }
-        val actions = LinearLayout(this).apply {
-            orientation = if (compact) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-        }
-        val buttonHeight = u(if (compact) 50 else 54)
-        if (compact) {
-            actions.addView(retryButton, LinearLayout.LayoutParams(-1, buttonHeight))
-            actions.addView(cancelButton, LinearLayout.LayoutParams(-1, buttonHeight))
-        } else {
-            actions.addView(retryButton, LinearLayout.LayoutParams(0, buttonHeight, 1f))
-            actions.addView(cancelButton, LinearLayout.LayoutParams(0, buttonHeight, 1f))
-        }
-        panel.addView(actions, LinearLayout.LayoutParams(
-            if (compact) LinearLayout.LayoutParams.MATCH_PARENT else u(640),
-            if (compact) buttonHeight * 2 else buttonHeight
+        // Recovery is a single centered Retry button and is shown only on errors.
+        panel.addView(retryButton, LinearLayout.LayoutParams(
+            if (compact) LinearLayout.LayoutParams.MATCH_PARENT else u(380),
+            u(if (compact) 50 else 54)
         ).apply { bottomMargin = u(if (compact) 8 else 0) })
         panel.addView(steps, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
