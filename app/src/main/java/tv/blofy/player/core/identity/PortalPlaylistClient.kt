@@ -335,6 +335,38 @@ object PortalPlaylistClient {
             val direct = checkNotNull(resolved[candidate.username]) { "أعد تسجيل الدخول إلى مشترك BLOFY" }
             migrateSubscriber(context, dao, candidate, direct)
         }
+        val current = dao.provider(providerId) ?: return null
+        // Direct BLOFY sessions are also centrally managed. The hidden host
+        // can change independently of the Android app; refreshing only legacy
+        // proxy sessions left old direct-host users stuck on HTTP 404 forever.
+        if (current.subscriberToken.isBlank()) return current
+        val currentSession = BlofySubscriberClient.resolveConnections(
+            context, endpoint, listOf(current.subscriberToken)
+        )[current.subscriberToken] ?: throw IllegalStateException(
+            "تعذر تجديد هوست BLOFY الداخلي • أعد تسجيل الدخول إلى مشتركين BLOFY"
+        )
+        val updated = current.copy(
+            baseUrl = currentSession.baseUrl,
+            username = currentSession.username,
+            password = currentSession.password,
+            subscriberToken = currentSession.sessionToken
+        )
+        if (sameSource(current, updated) && current.subscriberToken == updated.subscriberToken) {
+            return current
+        }
+        val hasCommitted = CatalogSyncState.isReady(context, providerId) && dao.hasCatalog(providerId)
+        if (hasCommitted) {
+            // Never replace working source credentials before a *complete* new
+            // catalog has been streamed, verified and committed to Room.
+            // A pending explicit portal/account change takes priority.
+            if (!PortalSyncBook.hasPendingSource(context, providerId)) {
+                val stagingId = PortalSyncBook.pendingSourceId(providerId)
+                dao.upsertProvider(updated.copy(id = stagingId, enabled = false))
+                PortalSyncBook.markPendingSource(context, providerId)
+            }
+        } else {
+            dao.upsertProvider(updated)
+        }
         return dao.provider(providerId)
     }
 
