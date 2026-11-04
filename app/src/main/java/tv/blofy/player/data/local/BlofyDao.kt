@@ -173,8 +173,8 @@ interface BlofyDao {
     @Query("DELETE FROM activation") suspend fun clearActivation()
     @Transaction suspend fun replaceActivation(state: ActivationEntity) { clearActivation(); upsertActivation(state) }
 
-    @Query("SELECT * FROM categories WHERE providerId = :providerId AND kind = :kind AND hidden = 0 ORDER BY orderIndex, name") fun categories(providerId: String, kind: String): Flow<List<CategoryEntity>>
-    @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND (:categoryId IS NULL OR categoryId = :categoryId) ORDER BY name") fun streams(providerId: String, kind: String, categoryId: String?): Flow<List<StreamEntity>>
+    @Query("SELECT * FROM categories WHERE providerId = :providerId AND kind = :kind AND hidden = 0 ORDER BY orderIndex, `key`") fun categories(providerId: String, kind: String): Flow<List<CategoryEntity>>
+    @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND (:categoryId IS NULL OR categoryId = :categoryId) ORDER BY sourceOrder, `key`") fun streams(providerId: String, kind: String, categoryId: String?): Flow<List<StreamEntity>>
 
     @Query("SELECT COUNT(*) FROM streams WHERE providerId = :providerId AND kind = :kind") suspend fun catalogCountAll(providerId: String, kind: String): Int
     @Query("SELECT COUNT(*) FROM streams WHERE providerId = :providerId AND kind = :kind AND categoryId = :categoryId") suspend fun catalogCountInCategory(providerId: String, kind: String, categoryId: String): Int
@@ -184,6 +184,14 @@ interface BlofyDao {
 
     @Query("SELECT * FROM streams INDEXED BY index_streams_providerId_kind_categoryId WHERE providerId = :providerId AND kind = :kind AND categoryId = :categoryId AND rowid > :afterRowId ORDER BY rowid LIMIT :limit")
     suspend fun catalogPageAfterInCategory(providerId: String, kind: String, categoryId: String, afterRowId: Long, limit: Int): List<StreamEntity>
+
+    // UI catalog pages follow the provider stream sequence; keep rowid pages above
+    // untouched for background enrichment and maintenance scans.
+    @Query("SELECT * FROM streams INDEXED BY index_streams_providerId_kind_sourceOrder WHERE providerId = :providerId AND kind = :kind AND sourceOrder > :afterOrder ORDER BY sourceOrder, `key` LIMIT :limit")
+    suspend fun catalogSourcePageAfterAll(providerId: String, kind: String, afterOrder: Long, limit: Int): List<StreamEntity>
+
+    @Query("SELECT * FROM streams INDEXED BY index_streams_providerId_kind_categoryId_sourceOrder WHERE providerId = :providerId AND kind = :kind AND categoryId = :categoryId AND sourceOrder > :afterOrder ORDER BY sourceOrder, `key` LIMIT :limit")
+    suspend fun catalogSourcePageAfterInCategory(providerId: String, kind: String, categoryId: String, afterOrder: Long, limit: Int): List<StreamEntity>
 
     @Query("SELECT rowid FROM streams WHERE `key` = :contentKey LIMIT 1")
     suspend fun streamRowId(contentKey: String): Long?
@@ -214,7 +222,7 @@ interface BlofyDao {
         ORDER BY COALESCE(streams.addedAt, 0) DESC, streams.name, streams.`key`
     """)
     suspend fun latestHomeStreams(providerId: String, limit: Int = 14): List<StreamEntity>
-    @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND (name LIKE '%' || :query || '%' OR genre LIKE '%' || :query || '%' OR year LIKE '%' || :query || '%') ORDER BY name LIMIT :limit") suspend fun searchCatalog(providerId: String, kind: String, query: String, limit: Int = 300): List<StreamEntity>
+    @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND (name LIKE '%' || :query || '%' OR genre LIKE '%' || :query || '%' OR year LIKE '%' || :query || '%') ORDER BY sourceOrder, `key` LIMIT :limit") suspend fun searchCatalog(providerId: String, kind: String, query: String, limit: Int = 300): List<StreamEntity>
 
     @Query("SELECT * FROM streams WHERE `key` = :contentKey LIMIT 1") suspend fun stream(contentKey: String): StreamEntity?
     @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND remoteId = :remoteId LIMIT 1") suspend fun streamByIdentity(providerId: String, kind: String, remoteId: String): StreamEntity?
@@ -228,13 +236,13 @@ interface BlofyDao {
         ORDER BY name DESC, `key` LIMIT 1
     """)
     suspend fun seriesWithLegacyDecimalId(providerId: String, normalizedId: String): StreamEntity?
-    @Query("SELECT * FROM streams WHERE providerId = :providerId AND favorite = 1 ORDER BY name") fun favorites(providerId: String): Flow<List<StreamEntity>>
-    @Query("SELECT * FROM streams WHERE providerId = :providerId AND name LIKE '%' || :query || '%' ORDER BY name LIMIT :limit") suspend fun searchStreams(providerId: String, query: String, limit: Int = 80): List<StreamEntity>
+    @Query("SELECT * FROM streams WHERE providerId = :providerId AND favorite = 1 ORDER BY kind, sourceOrder, `key`") fun favorites(providerId: String): Flow<List<StreamEntity>>
+    @Query("SELECT * FROM streams WHERE providerId = :providerId AND name LIKE '%' || :query || '%' ORDER BY kind, sourceOrder, `key` LIMIT :limit") suspend fun searchStreams(providerId: String, query: String, limit: Int = 80): List<StreamEntity>
     @Query("""
         SELECT streams.* FROM streams
         INNER JOIN streams_fts ON streams.`key` = streams_fts.contentKey
         WHERE streams_fts.providerId = :providerId AND streams_fts MATCH :query
-        ORDER BY streams.name LIMIT :limit
+        ORDER BY streams.kind, streams.sourceOrder, streams.`key` LIMIT :limit
     """)
     suspend fun searchStreamsFts(providerId: String, query: String, limit: Int = 100): List<StreamEntity>
     @Query("""
@@ -470,12 +478,15 @@ interface BlofyDao {
         val oldCategories = oldCategoriesList.associateBy { it.key }
         val preservedCategories = categories.map { incoming ->
             oldCategories[incoming.key]?.let { old ->
-                incoming.copy(orderIndex = old.orderIndex, hidden = old.hidden)
+                incoming.copy(hidden = old.hidden)
             } ?: incoming
         }
         val oldStreams = streamSnapshot(providerId, kind).associateBy { it.key }
+        val upstreamStreams = streams.mapIndexed { index, stream ->
+            stream.copy(sourceOrder = index.toLong() + 1L)
+        }
         val incomingCategoryKeys = preservedCategories.asSequence().map { it.key }.toHashSet()
-        val incomingStreamKeys = streams.asSequence().map { it.key }.toHashSet()
+        val incomingStreamKeys = upstreamStreams.asSequence().map { it.key }.toHashSet()
 
         oldCategories.keys.filterNot(incomingCategoryKeys::contains)
             .chunked(SQLITE_BIND_BATCH_SIZE)
@@ -487,7 +498,7 @@ interface BlofyDao {
         preservedCategories.asSequence().filter { oldCategories[it.key] != it }
             .chunked(CATALOG_INSERT_BATCH_SIZE)
             .forEach { if (it.isNotEmpty()) upsertCategories(it) }
-        streams.asSequence().filter { oldStreams[it.key] != it }
+        upstreamStreams.asSequence().filter { oldStreams[it.key] != it }
             .chunked(CATALOG_INSERT_BATCH_SIZE)
             .forEach { if (it.isNotEmpty()) upsertStreams(it) }
 
