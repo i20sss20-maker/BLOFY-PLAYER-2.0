@@ -37,6 +37,8 @@ import tv.blofy.player.data.CatalogProgressThrottle
 import tv.blofy.player.data.CatalogProgressEstimate
 import tv.blofy.player.data.LocalStorageManager
 import tv.blofy.player.data.PlaylistManager
+import tv.blofy.player.data.ManagedCatalogTransport
+import tv.blofy.player.data.PlaylistSyncResult
 import tv.blofy.player.data.PlaylistSyncPolicy
 import tv.blofy.player.data.PlaylistSyncProgress
 import tv.blofy.player.data.PlaylistSyncStage
@@ -305,16 +307,54 @@ class CatalogLoadingActivity : AppCompatActivity() {
         try {
             render(5, getString(if (firstLoad) R.string.catalog_start_full else R.string.catalog_start_refresh))
             persistence.prepareFirstImport()
-            val progressThrottle = CatalogProgressThrottle()
             val result = PlaylistSyncPolicy.run {
                 withContext(Dispatchers.IO) {
-                    PlaylistManager(XtreamClient.api, dao).syncAll(syncProvider,
-                        completedSections = persistence.completedSections,
-                        onSectionComplete = persistence::sectionCompleted) { p ->
-                        if (progressThrottle.shouldRender(p)) {
-                            withContext(Dispatchers.Main.immediate) { renderProgress(p) }
+                    // Older functional BLOFY clients routed their large Xtream
+                    // catalog via the authenticated HTTPS portal. The latest
+                    // direct-host route can fail halfway through huge arrays.
+                    // Restore the proxy for catalog metadata ONLY; retain the
+                    // original direct source for all login and playback data.
+                    val attempts = ManagedCatalogTransport.candidates(
+                        syncProvider, tv.blofy.player.BuildConfig.ACTIVATION_BASE_URL
+                    )
+                    val finished = persistence.completedSections.toMutableSet()
+                    var result: PlaylistSyncResult? = null
+                    var lastFailure: Exception? = null
+                    val manager = PlaylistManager(XtreamClient.api, dao)
+                    for ((index, route) in attempts.withIndex()) {
+                        currentCoroutineContext().ensureActive()
+                        val progressThrottle = CatalogProgressThrottle()
+                        if (index > 0) {
+                            withContext(Dispatchers.Main.immediate) {
+                                stage.text = "استكمال المكتبة عبر اتصال بديل"
+                            }
+                        }
+                        try {
+                            val candidate = manager.syncAll(
+                                route,
+                                completedSections = finished.toSet(),
+                                onSectionComplete = { kind ->
+                                    persistence.sectionCompleted(kind)
+                                    finished.add(kind)
+                                }
+                            ) { p ->
+                                if (progressThrottle.shouldRender(p)) {
+                                    withContext(Dispatchers.Main.immediate) { renderProgress(p) }
+                                }
+                            }
+                            result = candidate
+                            if (candidate.failedSectionCount == 0 && candidate.freshItemCount > 0) {
+                                break
+                            }
+                            lastFailure = IllegalStateException(candidate.safeFailureMessage())
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (failure: Exception) {
+                            lastFailure = failure
                         }
                     }
+                    result?.takeIf { it.failedSectionCount == 0 && it.freshItemCount > 0 }
+                        ?: throw (lastFailure ?: IllegalStateException("تعذر تنزيل مكتبة BLOFY"))
                 }
             }
             check(result.freshItemCount > 0) { getString(R.string.catalog_invalid_content) }
