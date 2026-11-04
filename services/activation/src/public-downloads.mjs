@@ -6,12 +6,20 @@ const BLOFY_PUBLIC_RELEASE_2000078 = String(process.env.BLOFY_PUBLIC_RELEASE_200
 const BLOFY_PUBLIC_RELEASE_2000079 = String(process.env.BLOFY_PUBLIC_RELEASE_2000079 || '').toLowerCase() === 'true';
 const BLOFY_PUBLIC_RELEASE_2000080 = String(process.env.BLOFY_PUBLIC_RELEASE_2000080 || '').toLowerCase() === 'true';
 const BLOFY_PUBLIC_RELEASE_2000081 = String(process.env.BLOFY_PUBLIC_RELEASE_2000081 || '').toLowerCase() === 'true';
-const BLOFY_ONLY_CURRENT = BLOFY_PUBLIC_RELEASE_2000081 || BLOFY_PUBLIC_RELEASE_2000080 || BLOFY_PUBLIC_RELEASE_2000079 || BLOFY_PUBLIC_RELEASE_2000078 || BLOFY_ONLY_75;
+const BLOFY_PUBLIC_RELEASE_2000082 = String(process.env.BLOFY_PUBLIC_RELEASE_2000082 || '').toLowerCase() === 'true';
+const BLOFY_ONLY_CURRENT = BLOFY_PUBLIC_RELEASE_2000082 || BLOFY_PUBLIC_RELEASE_2000081 || BLOFY_PUBLIC_RELEASE_2000080 || BLOFY_PUBLIC_RELEASE_2000079 || BLOFY_PUBLIC_RELEASE_2000078 || BLOFY_ONLY_75;
 const ONLY_75 = {
   versionCode: 2000075,
   versionName: '2.0.0-rc07.55.7-identity-recovery',
   downloadUrl: 'https://updates.blofyplayer.com/download/latest.apk',
   releaseNotes: 'BLOFY PLAYER 75 — دعم Android TV 9، وتحسين التنقل بالريموت، وبانر وأيقونة التلفزيون، وربط الأجهزة والتحديث الداخلي لنسخ الموقع.',
+  isPrimary: true
+};
+const APPROVED_2000082 = {
+  versionCode: 2000082,
+  versionName: '2.0.0-rc07.55.8.5',
+  downloadUrl: 'https://updates.blofyplayer.com/download/latest.apk',
+  releaseNotes: 'BLOFY PLAYER 55.8.5 — شريط تقدم تحديث المحتوى بنسبة متدرجة مع استكمال المحفوظ دون إعادة من البداية، وترتيب فئات السيرفر الأصلي للقنوات والأفلام والمسلسلات.',
   isPrimary: true
 };
 const APPROVED_2000081 = {
@@ -56,7 +64,7 @@ function apkUrl(value) {
 }
 
 export function renderPublicDownloads(items = [], { unavailable = false } = {}) {
-  const releases = (BLOFY_PUBLIC_RELEASE_2000081 ? [APPROVED_2000081] : BLOFY_PUBLIC_RELEASE_2000080 ? [APPROVED_2000080] : BLOFY_PUBLIC_RELEASE_2000079 ? [APPROVED_2000079] : BLOFY_PUBLIC_RELEASE_2000078 ? [APPROVED_2000078] : BLOFY_ONLY_75 ? [ONLY_75] : (Array.isArray(items) ? items : [])).filter(item => item &&
+  const releases = (BLOFY_PUBLIC_RELEASE_2000082 ? [APPROVED_2000082] : BLOFY_PUBLIC_RELEASE_2000081 ? [APPROVED_2000081] : BLOFY_PUBLIC_RELEASE_2000080 ? [APPROVED_2000080] : BLOFY_PUBLIC_RELEASE_2000079 ? [APPROVED_2000079] : BLOFY_PUBLIC_RELEASE_2000078 ? [APPROVED_2000078] : BLOFY_ONLY_75 ? [ONLY_75] : (Array.isArray(items) ? items : [])).filter(item => item &&
     Number.isSafeInteger(Number(item.versionCode)) && Number(item.versionCode) > 0 &&
     typeof item.versionName === 'string' && item.versionName.length > 0 && item.versionName.length <= 64 && apkUrl(item.downloadUrl))
     .slice(0, 200).sort((a, b) => Number(b.isPrimary === true) - Number(a.isPrimary === true) || Number(b.versionCode) - Number(a.versionCode));
