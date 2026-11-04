@@ -21,13 +21,10 @@ object XtreamClient {
             val request = original.newBuilder()
                 .header("User-Agent", original.header("User-Agent") ?: "BLOFY PLAYER/2.0 (Android TV)")
                 .header("Accept", original.header("Accept") ?: "application/json,text/plain,*/*")
-                .apply {
-                    // Keep bulk-catalog compatibility; allow OkHttp's transparent gzip for
-                    // the small, user-selected series detail request.
-                    if (original.url.queryParameter("action") != "get_series_info") {
-                        header("Accept-Encoding", original.header("Accept-Encoding") ?: "identity")
-                    }
-                }
+                // Let OkHttp negotiate transparent gzip by default. Forcing
+                // "identity" made giant Xtream arrays travel uncompressed and
+                // increased the chance of a broken/short response. An explicit
+                // identity override is available only for compatibility retries.
                 .build()
             val response = chain.proceed(request)
 
