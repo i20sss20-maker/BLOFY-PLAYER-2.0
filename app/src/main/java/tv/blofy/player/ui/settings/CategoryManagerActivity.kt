@@ -115,7 +115,7 @@ class CategoryManagerActivity : AppCompatActivity() {
     private fun render(items: List<CategoryEntity>, kind: String) {
         list.removeAllViews()
         val hidden = items.count { it.hidden }
-        status.text = getString(R.string.category_manager_status, kindLabel(kind), items.size, hidden)
+        status.text = getString(R.string.category_manager_status, kindLabel(kind), items.size, hidden) + " • ترتيب السيرفر"
         if (items.isEmpty()) {
             list.addView(TextView(this).apply {
                 text = getString(R.string.category_manager_empty)
@@ -168,17 +168,6 @@ class CategoryManagerActivity : AppCompatActivity() {
                 if (isTv) width = dp(86)
                 marginStart = dp(6)
             })
-            addView(smallButton(getString(R.string.category_manager_pin_top)) { move(index, 0) }, LinearLayout.LayoutParams(0, dp(46), if (isTv) 0f else 1f).apply {
-                if (isTv) width = dp(82)
-                marginStart = dp(6)
-            })
-            addView(smallButton("↑") { move(index, index - 1) }, LinearLayout.LayoutParams(0, dp(46), if (isTv) 0f else 1f).apply {
-                if (isTv) width = dp(58)
-                marginStart = dp(6)
-            })
-            addView(smallButton("↓") { move(index, index + 1) }, LinearLayout.LayoutParams(0, dp(46), if (isTv) 0f else 1f).apply {
-                if (isTv) width = dp(58)
-            })
         }
         addView(actions, if (isTv) LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(54)) else LinearLayout.LayoutParams(-1, dp(54)))
     }
@@ -187,20 +176,6 @@ class CategoryManagerActivity : AppCompatActivity() {
         lifecycleScope.launch {
             withContext(Dispatchers.IO) {
                 BlofyDatabase.get(applicationContext).dao().upsertCategories(listOf(category.copy(hidden = !category.hidden)))
-            }
-            loadCategories()
-        }
-    }
-
-    private fun move(from: Int, target: Int) {
-        if (from !in currentItems.indices || target !in currentItems.indices || from == target) return
-        val reordered = currentItems.toMutableList().apply {
-            val item = removeAt(from)
-            add(target, item)
-        }.mapIndexed { position, category -> category.copy(orderIndex = position * 10) }
-        lifecycleScope.launch {
-            withContext(Dispatchers.IO) {
-                BlofyDatabase.get(applicationContext).dao().upsertCategories(reordered)
             }
             loadCategories()
         }
