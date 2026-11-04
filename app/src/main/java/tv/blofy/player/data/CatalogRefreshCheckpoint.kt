@@ -38,6 +38,7 @@ internal class CatalogRefreshCheckpoint(private val context: Context, private va
                 .putString(key("stage"), stageId)
                 .putString(key("source"), expected)
                 .putLong(key("created"), System.currentTimeMillis())
+                .putInt(key("percent"), 0)
                 .commit()) { "Unable to save background catalog refresh checkpoint" }
         }
 
@@ -60,15 +61,37 @@ internal class CatalogRefreshCheckpoint(private val context: Context, private va
         return State(stageId, verified)
     }
 
+    /** Read-only Home progress for a worker waiting for network/playback/OS scheduling. */
+    fun visiblePercent(): Int = if (prefs.getString(key("stage"), null).isNullOrBlank()) 0
+        else prefs.getInt(key("percent"), 0).coerceIn(0, CatalogRefreshProgress.COMMIT_START)
+
+    /** Durable per-attempt high-watermark, tied to the same staged catalog and source. */
+    fun percent(state: State): Int =
+        if (prefs.getString(key("stage"), null) == state.stagedId)
+            maxOf(CatalogRefreshProgress.completedBaseline(state.completed),
+                prefs.getInt(key("percent"), 0)).coerceIn(0, CatalogRefreshProgress.COMMIT_START)
+        else 0
+
+    fun recordPercent(state: State, attempted: Int): Int {
+        if (prefs.getString(key("stage"), null) != state.stagedId) return 0
+        val next = maxOf(percent(state), attempted.coerceIn(0, CatalogRefreshProgress.COMMIT_START))
+        if (next > prefs.getInt(key("percent"), 0)) {
+            prefs.edit().putInt(key("percent"), next).apply()
+        }
+        return next
+    }
+
     suspend fun completed(state: State, kind: String, dao: BlofyDao) {
         require(kind in SECTIONS)
         // Only called after the streaming parser reaches the end and the DB writes complete.
         // An empty but legitimately completed section is allowed.
         if (prefs.getString(key("stage"), null) != state.stagedId) return
         val count = dao.catalogCountAll(state.stagedId, kind)
+        val next = maxOf(percent(state), CatalogRefreshProgress.afterSection(kind))
         check(prefs.edit()
             .putInt(key("count:$kind"), count)
             .putBoolean(key("done:$kind"), true)
+            .putInt(key("percent"), next)
             .commit()) { "Unable to checkpoint $kind refresh" }
     }
 
@@ -81,7 +104,7 @@ internal class CatalogRefreshCheckpoint(private val context: Context, private va
 
     private fun erase(stagedId: String) {
         if (prefs.getString(key("stage"), null) != stagedId) return
-        val edit = prefs.edit().remove(key("stage")).remove(key("source")).remove(key("created"))
+        val edit = prefs.edit().remove(key("stage")).remove(key("source")).remove(key("created")).remove(key("percent"))
         SECTIONS.forEach { edit.remove(key("done:$it")).remove(key("count:$it")) }
         check(edit.commit()) { "Unable to remove completed background refresh checkpoint" }
     }

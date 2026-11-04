@@ -53,6 +53,27 @@ class CatalogRefreshCheckpointTest {
         assertNull(dao.stream(item(source.id, "live", 10).key))
     }
 
+    @Test fun progressNeverMovesBackwardsWhenRetryRestartsAndOnlyCommitsAtEnd(): Unit = runBlocking(Dispatchers.IO) {
+        val dao = db.dao()
+        val checkpoint = CatalogRefreshCheckpoint(app, source.id)
+        val first = checkpoint.prepare(source, dao)
+        assertEquals(0, checkpoint.percent(first))
+        assertEquals(27, checkpoint.recordPercent(first, 27))
+        assertEquals(27, checkpoint.recordPercent(first, 9))
+        assertEquals(27, checkpoint.visiblePercent())
+        checkpoint.completed(first, "live", dao)
+        assertEquals(33, checkpoint.visiblePercent())
+        val second = checkpoint.prepare(source, dao)
+        assertEquals(first.stagedId, second.stagedId)
+        assertEquals(33, checkpoint.percent(second))
+        assertEquals(33, checkpoint.recordPercent(second, 15))
+        assertEquals(58, checkpoint.recordPercent(second, 58))
+        checkpoint.completed(second, "movie", dao)
+        assertEquals(66, checkpoint.percent(second))
+        checkpoint.finish(second)
+        assertEquals(0, checkpoint.visiblePercent())
+    }
+
     @Test fun credentialChangeDiscardsOldCandidateAndStartsNewStage(): Unit = runBlocking(Dispatchers.IO) {
         val dao = db.dao()
         val checkpoint = CatalogRefreshCheckpoint(app, source.id)
