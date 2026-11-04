@@ -990,15 +990,20 @@ class HomeActivity : AppCompatActivity() {
         val working = state == WorkInfo.State.RUNNING
         val waiting = state == WorkInfo.State.ENQUEUED || state == WorkInfo.State.BLOCKED
         val active = working || waiting
-        refreshBusy = active
+        // RUNNING work is not restartable. A queued legacy/blocked job can be
+        // replaced explicitly by the user without deleting completed sections.
+        refreshBusy = working
         refreshSpinner?.apply {
             visibility = if (active) View.VISIBLE else View.GONE
             isIndeterminate = false
             progress = refreshPercent.coerceIn(0, 95)
         }
         refreshButton?.apply {
-            isEnabled = !active
-            text = if (active) {
+            isEnabled = !working
+            text = if (waiting) {
+                if (deviceKind == DeviceClass.Kind.PHONE) "↻ ${refreshPercent}%"
+                else "استئناف التحديث ${refreshPercent}%"
+            } else if (active) {
                 if (deviceKind == DeviceClass.Kind.PHONE) "↻ ${refreshPercent}%"
                 else "${getString(R.string.home_catalog_refresh_v74)} ${refreshPercent}%"
             } else if (deviceKind == DeviceClass.Kind.PHONE) "↻"
