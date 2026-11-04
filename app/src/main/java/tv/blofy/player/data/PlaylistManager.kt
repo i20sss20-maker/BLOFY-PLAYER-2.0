@@ -131,7 +131,7 @@ class PlaylistManager(
         val previousCount = dao.catalogCountAll(provider.id, "live")
         val previousFlags = PreviousStreamFlags(dao.persistedStreamFlags(provider.id, "live"))
         val coroutineContext = currentCoroutineContext()
-        val categoryRows = categories.mapIndexedNotNull { index, row ->
+        val categoryRows = XtreamServerOrder.categories(categories).mapIndexedNotNull { index, row ->
             if (index % 256 == 0) coroutineContext.ensureActive()
             val id = row.id("category_id") ?: return@mapIndexedNotNull null
             CategoryEntity(
@@ -192,7 +192,7 @@ class PlaylistManager(
         val previousCount = dao.catalogCountAll(provider.id, "movie")
         val previousFlags = PreviousStreamFlags(dao.persistedStreamFlags(provider.id, "movie"))
         val coroutineContext = currentCoroutineContext()
-        val categoryRows = categories.mapIndexedNotNull { index, row ->
+        val categoryRows = XtreamServerOrder.categories(categories).mapIndexedNotNull { index, row ->
             if (index % 256 == 0) coroutineContext.ensureActive()
             val id = row.id("category_id") ?: return@mapIndexedNotNull null
             CategoryEntity("${provider.id}:movie:$id", provider.id, id, "movie", row.string("category_name") ?: "Movies", index)
@@ -254,7 +254,7 @@ class PlaylistManager(
         val previousCount = dao.catalogCountAll(provider.id, "series")
         val previousFlags = PreviousStreamFlags(dao.persistedStreamFlags(provider.id, "series"))
         val coroutineContext = currentCoroutineContext()
-        val categoryRows = categories.mapIndexedNotNull { index, row ->
+        val categoryRows = XtreamServerOrder.categories(categories).mapIndexedNotNull { index, row ->
             if (index % 256 == 0) coroutineContext.ensureActive()
             val id = row.id("category_id") ?: return@mapIndexedNotNull null
             CategoryEntity("${provider.id}:series:$id", provider.id, id, "series", row.string("category_name") ?: "Series", index)
@@ -394,7 +394,9 @@ class PlaylistManager(
                     val row: Map<String, Any?> = gson.fromJson(reader, mapType)
                     sourceCount += 1
                     // The source array sequence is authoritative, even for invalid skipped rows.
-                    val converted = map(row)?.copy(sourceOrder = orderOffset + sourceCount.toLong())
+                    val converted = map(row)?.copy(
+                        sourceOrder = XtreamServerOrder.streamPosition(row, orderOffset + sourceCount.toLong())
+                    )
                     if (converted != null) {
                         itemCount += 1
                         items?.add(converted)

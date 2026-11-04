@@ -144,7 +144,7 @@ interface BlofyDao {
     }
 
     @Query("SELECT * FROM categories WHERE providerId = :providerId") suspend fun allCategoriesForProvider(providerId: String): List<CategoryEntity>
-    @Query("SELECT * FROM categories WHERE providerId = :providerId AND kind = :kind") suspend fun categorySnapshot(providerId: String, kind: String): List<CategoryEntity>
+    @Query("SELECT * FROM categories WHERE providerId = :providerId AND kind = :kind ORDER BY orderIndex, rowid") suspend fun categorySnapshot(providerId: String, kind: String): List<CategoryEntity>
     @Query("SELECT * FROM streams WHERE providerId = :providerId") suspend fun allStreamsForProvider(providerId: String): List<StreamEntity>
     @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind") suspend fun streamSnapshot(providerId: String, kind: String): List<StreamEntity>
     @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND (favorite = 1 OR locked = 1)") suspend fun persistedStreamFlags(providerId: String, kind: String): List<StreamEntity>
@@ -173,7 +173,7 @@ interface BlofyDao {
     @Query("DELETE FROM activation") suspend fun clearActivation()
     @Transaction suspend fun replaceActivation(state: ActivationEntity) { clearActivation(); upsertActivation(state) }
 
-    @Query("SELECT * FROM categories WHERE providerId = :providerId AND kind = :kind AND hidden = 0 ORDER BY orderIndex, `key`") fun categories(providerId: String, kind: String): Flow<List<CategoryEntity>>
+    @Query("SELECT * FROM categories WHERE providerId = :providerId AND kind = :kind AND hidden = 0 ORDER BY orderIndex, rowid") fun categories(providerId: String, kind: String): Flow<List<CategoryEntity>>
     @Query("SELECT * FROM streams WHERE providerId = :providerId AND kind = :kind AND (:categoryId IS NULL OR categoryId = :categoryId) ORDER BY sourceOrder, `key`") fun streams(providerId: String, kind: String, categoryId: String?): Flow<List<StreamEntity>>
 
     @Query("SELECT COUNT(*) FROM streams WHERE providerId = :providerId AND kind = :kind") suspend fun catalogCountAll(providerId: String, kind: String): Int
@@ -467,7 +467,7 @@ interface BlofyDao {
                 .forEach { batch -> if (batch.isNotEmpty()) upsertCategories(batch) }
             clearSearchIndex(providerId, kind)
             streams.asSequence().mapIndexed { index, item ->
-                item.copy(sourceOrder = index.toLong() + 1L)
+                item.copy(sourceOrder = item.sourceOrder.takeIf { it > 0L } ?: (index.toLong() + 1L))
             }.chunked(SEARCH_INSERT_BATCH_SIZE).forEach { batch ->
                 if (batch.isNotEmpty()) {
                     upsertStreams(batch)
@@ -485,7 +485,7 @@ interface BlofyDao {
         }
         val oldStreams = streamSnapshot(providerId, kind).associateBy { it.key }
         val upstreamStreams = streams.mapIndexed { index, stream ->
-            stream.copy(sourceOrder = index.toLong() + 1L)
+            stream.copy(sourceOrder = stream.sourceOrder.takeIf { it > 0L } ?: (index.toLong() + 1L))
         }
         val incomingCategoryKeys = preservedCategories.asSequence().map { it.key }.toHashSet()
         val incomingStreamKeys = upstreamStreams.asSequence().map { it.key }.toHashSet()

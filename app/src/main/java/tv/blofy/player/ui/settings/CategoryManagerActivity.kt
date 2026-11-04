@@ -104,7 +104,7 @@ class CategoryManagerActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val items = withContext(Dispatchers.IO) {
                 BlofyDatabase.get(applicationContext).dao().categorySnapshot(id, kind)
-                    .sortedWith(compareBy<CategoryEntity> { it.orderIndex }.thenBy { it.name.lowercase() })
+                    .sortedBy { it.orderIndex }
             }
             if (generation != loadGeneration || kind != currentKind || isFinishing || isDestroyed) return@launch
             currentItems = items
