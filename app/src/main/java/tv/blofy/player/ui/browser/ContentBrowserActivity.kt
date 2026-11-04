@@ -524,7 +524,7 @@ class ContentBrowserActivity : AppCompatActivity() {
             val result = withContext(Dispatchers.IO) {
                 val page = if (categoryId == null) dao.catalogSourcePageAfterAll(provider.id, KIND_LIVE, cursor, LIVE_PAGE_SIZE)
                 else dao.catalogSourcePageAfterInCategory(provider.id, KIND_LIVE, categoryId, cursor, LIVE_PAGE_SIZE)
-                val rowId = page.lastOrNull()?.let { dao.streamRowId(it.key) } ?: cursor
+                val rowId = page.lastOrNull()?.sourceOrder ?: cursor
                 page to rowId
             }
             if (generation != liveGeneration) return@launch
