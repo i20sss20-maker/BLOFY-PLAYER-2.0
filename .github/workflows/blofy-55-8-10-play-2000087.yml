@@ -141,3 +141,5 @@ jobs:
       - name: Signed Google Play upload-ready build (not published)
         run: |
           echo 'Signed APK and AAB uploaded as Actions artifacts; no Play or public auto-update changes.'
+
+# Rebuild current v87 head after manifest/TV routing audit updates.
