@@ -1,6 +1,7 @@
 package tv.blofy.player.data
 
 import com.google.gson.JsonParseException
+import java.io.EOFException
 import java.io.IOException
 import javax.net.ssl.SSLHandshakeException
 import javax.net.ssl.SSLPeerUnverifiedException
@@ -34,6 +35,22 @@ internal object CatalogSectionRetry {
                 pause(if (attempt == 2) 1_000L else 3_000L)
             }
         }
+    }
+
+    /** A large Xtream JSON response ended before its closing bytes arrived. After ordinary
+     * whole-section retries are exhausted, the caller can safely try smaller category reads.
+     * Never fall back on auth errors, TLS failures, invalid JSON shapes or SQLite failures.
+     */
+    internal fun isTruncatedBody(failure: Throwable, depth: Int = 0): Boolean {
+        if (depth > 8) return false
+        if (failure is SSLHandshakeException || failure is SSLPeerUnverifiedException) return false
+        if (failure is EOFException) return true
+        if (failure is IOException) {
+            val text = failure.message.orEmpty().lowercase()
+            if ("unexpected end of stream" in text || "unexpected end of input" in text ||
+                "premature end" in text || "stream was reset" in text) return true
+        }
+        return failure.cause?.takeIf { it !== failure }?.let { isTruncatedBody(it, depth + 1) } ?: false
     }
 
     private fun isTransient(failure: Throwable, depth: Int = 0): Boolean {
