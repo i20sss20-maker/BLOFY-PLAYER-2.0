@@ -22,6 +22,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
+import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.CategoryEntity
 import tv.blofy.player.data.local.StreamEntity
@@ -414,7 +415,7 @@ class PosterCatalogActivity : AppCompatActivity() {
         CatalogPageMemory.put(memoryKey(displayedCategoryId), loadedItems, if (hasMore) Int.MAX_VALUE else loadedItems.size, lastRowId, focusedPosterKeys[memoryKey(displayedCategoryId)])
     }
 
-    private fun memoryKey(categoryId: String? = selectedCategoryId) = "$providerId:$kind:${categoryId ?: ALL_CATEGORY_ID}"
+    private fun memoryKey(categoryId: String? = selectedCategoryId) = "$providerId:$kind:${categoryId ?: ALL_CATEGORY_ID}:${CatalogSyncState.lastSyncedAt(applicationContext, providerId)}"
 
     private fun requestPosterFocus(): Boolean {
         if (displayedCategoryId != selectedCategoryId || (loadingPage && lastRowId == 0L)) return false
