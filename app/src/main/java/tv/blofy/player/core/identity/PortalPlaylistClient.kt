@@ -345,12 +345,7 @@ object PortalPlaylistClient {
         )[current.subscriberToken] ?: throw IllegalStateException(
             "تعذر تجديد هوست BLOFY الداخلي • أعد تسجيل الدخول إلى مشتركين BLOFY"
         )
-        val updated = current.copy(
-            baseUrl = currentSession.baseUrl,
-            username = currentSession.username,
-            password = currentSession.password,
-            subscriberToken = currentSession.sessionToken
-        )
+        val updated = refreshedManagedSource(current, currentSession)
         if (sameSource(current, updated) && current.subscriberToken == updated.subscriberToken) {
             return current
         }
@@ -374,6 +369,20 @@ object PortalPlaylistClient {
             dao.upsertProvider(updated)
         }
         return dao.provider(providerId)
+    }
+
+    /** Server-controlled host rotation changes the connection, never catalog identity. */
+    internal fun refreshedManagedSource(
+        previous: ProviderEntity,
+        direct: BlofySubscriberClient.Session
+    ): ProviderEntity {
+        require(previous.subscriberToken.isNotBlank()) { "BLOFY managed subscriber required" }
+        return previous.copy(
+            baseUrl = direct.baseUrl,
+            username = direct.username,
+            password = direct.password,
+            subscriberToken = direct.sessionToken
+        )
     }
 
     private suspend fun migrateSubscriber(context: Context, dao: BlofyDao, provider: ProviderEntity, direct: BlofySubscriberClient.Session) {
