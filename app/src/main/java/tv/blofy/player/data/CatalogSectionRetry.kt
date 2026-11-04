@@ -18,8 +18,10 @@ internal object CatalogSectionRetry {
     suspend fun <T> run(
         onRetry: suspend (Int) -> Unit = {},
         pause: suspend (Long) -> Unit = { delay(it) },
+        maxTruncatedAttempts: Int = MAX_ATTEMPTS,
         block: suspend () -> T
     ): T {
+        require(maxTruncatedAttempts in 1..MAX_ATTEMPTS)
         var attempt = 1
         while (true) {
             currentCoroutineContext().ensureActive()
@@ -29,7 +31,12 @@ internal object CatalogSectionRetry {
                 throw cancelled
             } catch (failure: Exception) {
                 currentCoroutineContext().ensureActive()
-                if (attempt >= MAX_ATTEMPTS || !isTransient(failure)) throw failure
+                // Repeating a 100k-row truncated payload until it reaches the same EOF
+                // can exhaust WorkManager's deadline and leave the UI at 64% on each retry.
+                // Prefer validated per-category fallback after a bounded whole-array retry.
+                if (attempt >= MAX_ATTEMPTS ||
+                    (isTruncatedBody(failure) && attempt >= maxTruncatedAttempts) ||
+                    !isTransient(failure)) throw failure
                 attempt += 1
                 onRetry(attempt)
                 pause(if (attempt == 2) 1_000L else 3_000L)
