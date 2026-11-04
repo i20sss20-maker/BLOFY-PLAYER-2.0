@@ -176,10 +176,10 @@ class CatalogLoadingActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             setPadding(
-                u(if (compact) 20 else if (tablet) 34 else if (shortTv) 34 else 52),
-                u(if (compact) 22 else if (shortTv) 22 else 34),
-                u(if (compact) 20 else if (tablet) 34 else if (shortTv) 34 else 52),
-                u(if (compact) 22 else if (shortTv) 22 else 34)
+                u(if (compact) 18 else if (tablet) 28 else if (shortTv) 26 else 36),
+                u(if (compact) 18 else if (shortTv) 18 else 26),
+                u(if (compact) 18 else if (tablet) 28 else if (shortTv) 26 else 36),
+                u(if (compact) 18 else if (shortTv) 18 else 26)
             )
             background = BlofyTvDesign.glassSurface(u(BlofyTvDesign.PanelRadius).toFloat())
             elevation = u(6).toFloat()
@@ -188,19 +188,19 @@ class CatalogLoadingActivity : AppCompatActivity() {
             setImageResource(R.drawable.blofy_logo)
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             adjustViewBounds = true
-        }, LinearLayout.LayoutParams(u(if (compact) 128 else if (shortTv) 154 else 196), u(if (compact) 70 else if (shortTv) 82 else 108)))
+        }, LinearLayout.LayoutParams(u(if (compact) 106 else if (shortTv) 114 else 132), u(if (compact) 62 else if (shortTv) 70 else 78)))
         panel.addView(TextView(this).apply {
             text = getString(R.string.catalog_title)
             BlofyTvDesign.applyTitle(this)
-            textSize = s(if (compact) 23f else if (tablet) 27f else if (shortTv) 27f else 30f)
+            textSize = s(if (compact) 22f else if (tablet) 24f else if (shortTv) 24f else 26f)
             gravity = Gravity.CENTER
-            setPadding(0, u(4), 0, u(4))
+            setPadding(0, u(2), 0, u(14))
         })
         val progressRow = LinearLayout(this).apply {
-            orientation = if (compact) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+            orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_LTR
-            setPadding(u(if (compact) 14 else 20), u(if (compact) 12 else if (shortTv) 11 else 16), u(if (compact) 14 else 20), u(if (compact) 12 else if (shortTv) 11 else 16))
+            setPadding(u(if (compact) 12 else 16), u(10), u(if (compact) 12 else 16), u(10))
             background = progressCardBackground()
         }
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
@@ -209,16 +209,12 @@ class CatalogLoadingActivity : AppCompatActivity() {
             progressTintList = ColorStateList.valueOf(BlofyTvDesign.PurpleBright)
             progressBackgroundTintList = ColorStateList.valueOf(BlofyTvDesign.Divider)
         }
-        if (compact) {
-            progressRow.addView(progress, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, u(12)).apply {
-                bottomMargin = u(8)
-            })
-        } else {
-            progressRow.addView(progress, LinearLayout.LayoutParams(0, u(16), 1f).apply { marginEnd = u(20) })
-        }
+        progressRow.addView(progress, LinearLayout.LayoutParams(0, u(10), 1f).apply {
+            marginEnd = u(12)
+        })
         percent = TextView(this).apply {
-            text = "0%"
-            textSize = s(if (compact) 30f else if (shortTv) 33f else 36f)
+            text = "…"
+            textSize = s(if (compact) 18f else 20f)
             typeface = BlofyTvDesign.DisplayTypeface
             setTextColor(BlofyTvDesign.TextPrimary)
             gravity = Gravity.CENTER
@@ -227,21 +223,17 @@ class CatalogLoadingActivity : AppCompatActivity() {
             includeFontPadding = false
             background = percentBadgeBackground()
         }
-        progressRow.addView(percent, if (compact) {
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, u(48))
-        } else {
-            LinearLayout.LayoutParams(u(if (shortTv) 102 else 112), u(if (shortTv) 52 else 58))
-        })
-        panel.addView(progressRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, u(if (compact) 86 else if (shortTv) 76 else 88)).apply {
-            bottomMargin = u(if (compact) 6 else if (shortTv) 6 else 10)
+        progressRow.addView(percent, LinearLayout.LayoutParams(u(if (compact) 64 else 72), u(40)))
+        panel.addView(progressRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, u(if (compact) 64 else if (shortTv) 62 else 68)).apply {
+            bottomMargin = u(6)
         })
 
         stage = TextView(this).apply {
             text = getString(R.string.catalog_connecting)
             BlofyTvDesign.applyHeading(this)
-            textSize = s(if (compact) 17f else if (shortTv) 20f else 22f)
+            textSize = s(if (compact) 17f else if (shortTv) 18f else 20f)
             gravity = Gravity.CENTER
-            setPadding(0, u(if (compact) 6 else if (shortTv) 4 else 10), 0, u(4))
+            setPadding(0, u(4), 0, u(12))
         }
         panel.addView(stage)
         retryButton = Button(this).apply {
@@ -256,13 +248,13 @@ class CatalogLoadingActivity : AppCompatActivity() {
         }
         // Recovery is a single centered Retry button and is shown only on errors.
         panel.addView(retryButton, LinearLayout.LayoutParams(
-            if (compact) LinearLayout.LayoutParams.MATCH_PARENT else u(380),
+            if (compact) LinearLayout.LayoutParams.MATCH_PARENT else u(300),
             u(if (compact) 50 else 54)
         ).apply { bottomMargin = u(if (compact) 8 else 0) })
         val panelWidth = when {
             compact -> LinearLayout.LayoutParams.MATCH_PARENT
-            tablet -> u(minOf(760, (screenWidthDp - 56).coerceAtLeast(520)))
-            else -> u(minOf(980, (screenWidthDp - 120).coerceAtLeast(680)))
+            tablet -> u(minOf(680, (screenWidthDp - 56).coerceAtLeast(480)))
+            else -> u(minOf(780, (screenWidthDp - 120).coerceAtLeast(600)))
         }
         root.addView(panel, LinearLayout.LayoutParams(panelWidth, LinearLayout.LayoutParams.WRAP_CONTENT))
         setContentView(root)
@@ -468,25 +460,6 @@ class CatalogLoadingActivity : AppCompatActivity() {
     ).apply {
         cornerRadius = TvUiTuning.dp(this@CatalogLoadingActivity, 16).toFloat()
         setStroke(TvUiTuning.dp(this@CatalogLoadingActivity, 1), BlofyTvDesign.FocusStroke)
-    }
-
-    private fun stepBackground(done: Boolean, active: Boolean) = GradientDrawable(
-        GradientDrawable.Orientation.LEFT_RIGHT,
-        when {
-            done -> intArrayOf(0x5538CFA4, 0x33217E67)
-            active -> intArrayOf(0x665F3890, 0x33351F50)
-            else -> intArrayOf(0x331B1424, 0x22110D17)
-        }
-    ).apply {
-        cornerRadius = TvUiTuning.dp(this@CatalogLoadingActivity, 12).toFloat()
-        setStroke(
-            TvUiTuning.dp(this@CatalogLoadingActivity, 1),
-            when {
-                done -> 0x995BDEBB.toInt()
-                active -> 0x998C65B6.toInt()
-                else -> 0x334E3A60
-            }
-        )
     }
 
     private fun fail(message: String) {
