@@ -3,7 +3,7 @@ on:
   push:
     branches: [fix/blofy-server-catalog-order-2000083]
     paths:
-      - .github/workflows/blofy-refresh-2000083.yml
+      - .github/workflows/blofy-order-2000083.yml
       - app/**
       - tools/verify_play_2000073.py
   workflow_dispatch:
