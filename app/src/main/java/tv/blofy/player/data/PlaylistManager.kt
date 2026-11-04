@@ -610,7 +610,7 @@ internal suspend fun runXtreamSections(
     val failures = mutableListOf<Exception>()
     sections.forEachIndexed { index, syncSection ->
         try {
-            CatalogSectionRetry.run(onRetry = { onRetry(index, it) }, block = syncSection)
+            CatalogSectionRetry.run(onRetry = { onRetry(index, it) }, maxTruncatedAttempts = 2, block = syncSection)
             successCount += 1
         } catch (cancelled: CancellationException) {
             throw cancelled
