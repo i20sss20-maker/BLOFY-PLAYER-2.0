@@ -34,6 +34,7 @@ import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.CatalogProgressThrottle
+import tv.blofy.player.data.CatalogProgressEstimate
 import tv.blofy.player.data.LocalStorageManager
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.PlaylistSyncPolicy
@@ -408,31 +409,41 @@ class CatalogLoadingActivity : AppCompatActivity() {
     }
 
     private fun renderProgress(p: PlaylistSyncProgress) {
-        val label = when (p.stage) {
+        val section = when (p.stage) {
             PlaylistSyncStage.M3U -> getString(R.string.catalog_stage_m3u)
             PlaylistSyncStage.LIVE -> getString(R.string.catalog_stage_live)
             PlaylistSyncStage.MOVIES -> getString(R.string.catalog_stage_movies)
             PlaylistSyncStage.SERIES -> getString(R.string.catalog_stage_series)
         }
-        // Only show section-specific progress when the server declares a
-        // real byte length. No invented 99% overall completion.
-        progress.isIndeterminate = p.sectionTransferPercent == null
-        if (p.sectionTransferPercent != null) progress.progress = p.sectionTransferPercent
-        percent.text = "${p.step.coerceAtLeast(1)}/${p.totalSteps.coerceAtLeast(1)}"
+
+        // Three sections share 90 percentage points. Without Content-Length
+        // this number is explicitly approximate; only a completed transaction
+        // can display 100. Never return to an empty spinner when the supplier
+        // omits its Content-Length header.
+        val estimate = CatalogProgressEstimate.from(p)
+        displayedPercent = maxOf(displayedPercent, estimate).coerceAtMost(95)
+        progress.isIndeterminate = false
+        progress.progress = displayedPercent
+        percent.text = getString(R.string.catalog_percent, displayedPercent)
         stage.text = when {
-            p.retryAttempt > 0 -> "$label • ${getString(R.string.catalog_retry)} (${p.retryAttempt}/3)"
-            p.parsedItems != null -> "$label • ${String.format(Locale.US, "%,d", p.parsedItems)} عنصر"
-            else -> label
+            p.retryAttempt > 0 ->
+                "$section • ${getString(R.string.catalog_retry)} (${p.retryAttempt}/3)"
+            p.parsedItems != null ->
+                "$section • ${String.format(Locale.US, "%,d", p.parsedItems)} عنصر"
+            else -> section
         }
+        progress.contentDescription = "تقدم تقريبي لتجهيز المكتبة ${displayedPercent} بالمئة"
     }
 
     private fun render(value: Int, label: String) {
         val completed = value >= 100
         displayedPercent = maxOf(displayedPercent, value.coerceIn(0, 100))
-        progress.isIndeterminate = !completed
-        if (completed) progress.progress = 100
-        percent.text = if (completed) "✓" else "…"
+        progress.isIndeterminate = false
+        progress.progress = displayedPercent
+        percent.text = getString(R.string.catalog_percent, displayedPercent)
         stage.text = label
+        progress.contentDescription = if (completed) "اكتمل تجهيز مكتبة BLOFY"
+            else "تقدم تقريبي لتجهيز المكتبة ${displayedPercent} بالمئة"
     }
 
     private suspend fun openHome(providerId: String) {
@@ -464,9 +475,8 @@ class CatalogLoadingActivity : AppCompatActivity() {
 
     private fun fail(message: String) {
         progress.isIndeterminate = false
-        progress.progress = 0
-        percent.text = "تعذر"
-        percent.text = "!"
+        progress.progress = displayedPercent.coerceIn(0, 99)
+        percent.text = getString(R.string.catalog_percent, displayedPercent.coerceIn(0, 99))
         stage.text = message
         stage.setTextColor(BlofyTvDesign.Error)
         retryButton.visibility = View.VISIBLE
