@@ -467,7 +467,7 @@ interface BlofyDao {
                 .forEach { batch -> if (batch.isNotEmpty()) upsertCategories(batch) }
             clearSearchIndex(providerId, kind)
             streams.asSequence().mapIndexed { index, item ->
-                item.copy(sourceOrder = index.toLong() + 1L)
+                item.copy(sourceOrder = item.sourceOrder.takeIf { it > 0L } ?: (index.toLong() + 1L))
             }.chunked(SEARCH_INSERT_BATCH_SIZE).forEach { batch ->
                 if (batch.isNotEmpty()) {
                     upsertStreams(batch)
@@ -485,7 +485,7 @@ interface BlofyDao {
         }
         val oldStreams = streamSnapshot(providerId, kind).associateBy { it.key }
         val upstreamStreams = streams.mapIndexed { index, stream ->
-            stream.copy(sourceOrder = index.toLong() + 1L)
+            stream.copy(sourceOrder = stream.sourceOrder.takeIf { it > 0L } ?: (index.toLong() + 1L))
         }
         val incomingCategoryKeys = preservedCategories.asSequence().map { it.key }.toHashSet()
         val incomingStreamKeys = upstreamStreams.asSequence().map { it.key }.toHashSet()
