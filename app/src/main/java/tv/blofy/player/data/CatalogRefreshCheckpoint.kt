@@ -61,6 +61,10 @@ internal class CatalogRefreshCheckpoint(private val context: Context, private va
         return State(stageId, verified)
     }
 
+    /** Read-only Home progress for a worker waiting for network/playback/OS scheduling. */
+    fun visiblePercent(): Int = if (prefs.getString(key("stage"), null).isNullOrBlank()) 0
+        else prefs.getInt(key("percent"), 0).coerceIn(0, CatalogRefreshProgress.COMMIT_START)
+
     /** Durable per-attempt high-watermark, tied to the same staged catalog and source. */
     fun percent(state: State): Int =
         if (prefs.getString(key("stage"), null) == state.stagedId)
