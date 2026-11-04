@@ -15,10 +15,12 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
+import androidx.activity.addCallback
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -49,6 +51,8 @@ import java.util.UUID
 
 class CatalogLoadingActivity : AppCompatActivity() {
     private lateinit var retryButton: Button
+    private lateinit var cancelButton: Button
+    private var hasSavedLibrary = false
     private var loadJob: Job? = null
     private var forceRefreshOnRetry = false
     private var displayedPercent = 0
@@ -75,15 +79,21 @@ class CatalogLoadingActivity : AppCompatActivity() {
         }
         val forceRefresh = intent.getBooleanExtra(EXTRA_FORCE_REFRESH, false)
         retryButton.setOnClickListener { startLoading(providerId, forceRefreshOnRetry) }
+        cancelButton.setOnClickListener { leaveLoading(providerId) }
+        onBackPressedDispatcher.addCallback(this) { leaveLoading(providerId) }
         startLoading(providerId, forceRefresh)
     }
 
     private fun startLoading(providerId: String, forceRefresh: Boolean) {
         if (loadJob?.isActive == true) return
+        hasSavedLibrary = false
+        cancelButton.isEnabled = true
+        cancelButton.text = "إلغاء التحديث"
+        cancelButton.visibility = View.VISIBLE
         forceRefreshOnRetry = forceRefresh
         retryButton.visibility = View.GONE
         stage.setTextColor(BlofyTvDesign.TextPrimary)
-        displayedPercent = 0 // A retry is a new attempt; monotonicity holds within each attempt.
+        displayedPercent = 0
         render(1, getString(R.string.catalog_preflight))
         loadJob = lifecycleScope.launch {
             var preflight = true
@@ -92,27 +102,52 @@ class CatalogLoadingActivity : AppCompatActivity() {
                 onFailure = { fail(preparationMessage(it)) }
             ) {
                 CatalogLoadPersistence.withProviderLock(providerId) {
-                    PortalPlaylistClient.ensureSubscriberConnection(applicationContext, tv.blofy.player.BuildConfig.ACTIVATION_BASE_URL,
-                        BlofyDatabase.get(applicationContext).dao(), providerId)
+                    val dao = BlofyDatabase.get(applicationContext).dao()
+                    // Check the committed local catalog FIRST. A down upstream server
+                    // must never prevent a user from opening last week's working library.
                     val hasCachedCatalog = withTimeout(20_000L) {
                         withContext(Dispatchers.IO) {
-                            CatalogLoadPersistence.hasCommittedCatalog(applicationContext, BlofyDatabase.get(applicationContext).dao(), providerId)
+                            CatalogLoadPersistence.hasCommittedCatalog(applicationContext, dao, providerId)
                         }
                     }
-                    preflight = false
-                    val catalogReady = CatalogSyncState.isReady(applicationContext, providerId)
-                    if (!forceRefresh && CatalogSyncState.isEntryReady(applicationContext, providerId) && hasCachedCatalog) {
+                    hasSavedLibrary = hasCachedCatalog
+                    cancelButton.text = if (hasSavedLibrary) "الدخول بالمكتبة المحفوظة" else "إلغاء التحديث"
+                    if (!forceRefresh && hasCachedCatalog) {
                         openHome(providerId)
-                    } else if (!forceRefresh && catalogReady && hasCachedCatalog) {
-                        awaitEntryReadyCache(providerId)
-                        openHome(providerId)
-                    } else {
-                        // A manual refresh stages a replacement. Keep the old entry state until commit.
-                        if (!hasCachedCatalog) CatalogSyncState.markPending(applicationContext, providerId)
-                        sync(providerId, forceRefresh)
+                        return@withProviderLock
                     }
+                    try {
+                        PortalPlaylistClient.ensureSubscriberConnection(
+                            applicationContext, tv.blofy.player.BuildConfig.ACTIVATION_BASE_URL, dao, providerId
+                        )
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (error: Exception) {
+                        if (!hasCachedCatalog) throw error
+                        // Offline refresh is not a reason to erase the known-good library.
+                        Toast.makeText(this@CatalogLoadingActivity, "تعذر الاتصال بالتحديث • تم الاحتفاظ بالمكتبة", Toast.LENGTH_LONG).show()
+                        openHome(providerId)
+                        return@withProviderLock
+                    }
+                    preflight = false
+                    if (!hasCachedCatalog) CatalogSyncState.markPending(applicationContext, providerId)
+                    sync(providerId, forceRefresh)
                 }
             }
+        }
+    }
+
+    private fun leaveLoading(providerId: String) {
+        if (isFinishing || !cancelButton.isEnabled) return
+        cancelButton.isEnabled = false
+        val active = loadJob
+        lifecycleScope.launch {
+            // Wait for the previous job to roll back any temporary data before
+            // opening the preserved catalog or leaving first-time setup.
+            active?.cancelAndJoin()
+            if (hasSavedLibrary && CatalogSyncState.isReady(applicationContext, providerId)) {
+                openHome(providerId)
+            } else finish()
         }
     }
 
@@ -265,9 +300,30 @@ class CatalogLoadingActivity : AppCompatActivity() {
                 BlofyTvDesign.installTvFocus(this, u(16).toFloat(), 1.02f, true) {}
             }
         }
-        panel.addView(retryButton, LinearLayout.LayoutParams(
-            if (compact) LinearLayout.LayoutParams.MATCH_PARENT else u(320),
-            u(if (compact) 50 else 54)
+        cancelButton = Button(this).apply {
+            text = "إلغاء التحديث"
+            isAllCaps = false
+            isFocusable = true
+            isFocusableInTouchMode = deviceKind == DeviceClass.Kind.TV
+            if (deviceKind == DeviceClass.Kind.TV) {
+                BlofyTvDesign.installTvFocus(this, u(16).toFloat(), 1.02f, true) {}
+            }
+        }
+        val actions = LinearLayout(this).apply {
+            orientation = if (compact) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        val buttonHeight = u(if (compact) 50 else 54)
+        if (compact) {
+            actions.addView(retryButton, LinearLayout.LayoutParams(-1, buttonHeight))
+            actions.addView(cancelButton, LinearLayout.LayoutParams(-1, buttonHeight))
+        } else {
+            actions.addView(retryButton, LinearLayout.LayoutParams(0, buttonHeight, 1f))
+            actions.addView(cancelButton, LinearLayout.LayoutParams(0, buttonHeight, 1f))
+        }
+        panel.addView(actions, LinearLayout.LayoutParams(
+            if (compact) LinearLayout.LayoutParams.MATCH_PARENT else u(640),
+            if (compact) buttonHeight * 2 else buttonHeight
         ).apply { bottomMargin = u(if (compact) 8 else 0) })
         panel.addView(steps, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
@@ -448,8 +504,20 @@ class CatalogLoadingActivity : AppCompatActivity() {
             PlaylistSyncStage.SERIES -> getString(R.string.catalog_stage_series)
         }
         val status = if (p.retryAttempt > 0) "$label • ${getString(R.string.catalog_retry)} (${p.retryAttempt}/3)" else label
-        render((p.percent.coerceIn(0, 95) * 30 / 95), status)
-        progressMeta.text = getString(R.string.catalog_progress_steps, p.step.coerceAtLeast(1), p.totalSteps.coerceAtLeast(1))
+        if (p.parsedItems == null) {
+            render((p.percent.coerceIn(0, 95) * 30 / 95), status)
+            progressMeta.text = getString(R.string.catalog_progress_steps, p.step.coerceAtLeast(1), p.totalSteps.coerceAtLeast(1))
+        } else {
+            // Progress without Content-Length is unknown, not a fabricated percentage.
+            stage.text = status
+            progress.isIndeterminate = p.sectionTransferPercent == null
+            percent.text = p.sectionTransferPercent?.let {
+                getString(R.string.catalog_percent, it)
+            } ?: "…"
+            if (p.sectionTransferPercent != null) progress.progress = p.sectionTransferPercent
+            progressMeta.text = "القسم ${p.step}/${p.totalSteps} • ${p.parsedItems} عنصر" +
+                (if (p.sectionTransferPercent != null) " • نسبة تنزيل القسم" else " • السيرفر لا يحدد حجم التحميل")
+        }
         progressMeta.visibility = View.VISIBLE
     }
 
