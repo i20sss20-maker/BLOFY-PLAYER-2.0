@@ -418,7 +418,12 @@ class CatalogLoadingActivity : AppCompatActivity() {
                 if (!CatalogSyncState.isEntryReady(applicationContext, providerId)) awaitEntryReadyCache(providerId)
                 openHome(providerId)
             } else {
-                fail(getString(R.string.catalog_first_failed, error.message ?: getString(R.string.catalog_unknown_error)))
+                // Never show the IPTV request URL: Xtream URLs contain username/password.
+                // In particular OkHttp's "unexpected end of stream on <URL>" is sensitive.
+                val safeReason = if (tv.blofy.player.data.CatalogSectionRetry.isTruncatedBody(error))
+                    getString(R.string.catalog_source_interrupted)
+                else getString(R.string.catalog_prepare_failed)
+                fail(getString(R.string.catalog_first_failed, safeReason))
             }
         } finally {
             if (persistence.catalogCommitted) forceRefreshOnRetry = false
