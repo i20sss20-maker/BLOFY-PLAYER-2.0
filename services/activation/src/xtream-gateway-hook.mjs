@@ -30,6 +30,7 @@ import { pipeline } from 'node:stream/promises';
 import pg from 'pg';
 import { validateBulkAccountRequest } from './xtream-bulk-policy.mjs';
 import { gatewayItemsPageQuery } from './xtream-gateway-query.mjs';
+import { recordXtreamPlayback,xtreamPlaybackSnapshot } from './xtream-playback-metrics.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
@@ -612,13 +613,21 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
     sourceId = row.source_id;
     extension = row.container_extension;
   }
+  // A media client's requested filename extension might be guessed. Movies and
+  // episodes use the authoritative extension stored at import time, not a guess.
+  // Live streams may choose TS or HLS when the source supports those formats.
+  const mediaExtension=kind==='live'?(requestedExtension||extension):(extension||requestedExtension);
+  const startedAt=Date.now();
+  const observe=(phase,details={})=>{
+    if(req.method!=='HEAD')recordXtreamPlayback({kind,phase,...details});
+  };
   // Keep each viewer's stream independent. Only retry failures before video bytes reach them.
   const client = new AbortController();
   const abort = () => { if (!client.signal.aborted) client.abort(); };
   const onClose = () => { if (!res.writableEnded) abort(); };
   req.once('aborted', abort);
   res.once('close', onClose);
-  const upstream = mediaUpstreamUrl(row, kind, sourceId, requestedExtension || extension);
+  const upstream = mediaUpstreamUrl(row, kind, sourceId, mediaExtension);
   const headers = { 'user-agent': String(req.headers['user-agent'] || 'BLOFY-Xtream-Gateway/1.0') };
   if (req.headers.range) headers.range = String(req.headers.range);
   const maxAttempts = req.method === 'HEAD' ? 1 : 2;
@@ -645,6 +654,12 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
             await new Promise(resolve=>setTimeout(resolve, 200*attempt));
             continue;
           }
+          observe('failed',{
+            upstreamStatus:response.status,
+            reason:['403','404','408','429','500','502','503','504'].includes(String(response.status))
+              ?'upstream_http_'+response.status:'upstream_http_other',
+            attempts:attempt
+          });
           return text(res, 502, 'Upstream unavailable');
         }
         const outputHeaders = {};
@@ -671,6 +686,7 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
           throw new Error('upstream_non_media_response');
         }
         // Only announce a successful response once the provider really sent media bytes.
+        observe('started',{upstreamStatus:response.status,startupMs:Date.now()-startedAt,attempts:attempt});
         res.writeHead(response.status, outputHeaders);
         const stream = Readable.from((async function* () {
           yield first.value;
@@ -691,6 +707,7 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
           await new Promise(resolve=>setTimeout(resolve,200*attempt));
           continue;
         }
+        observe(res.headersSent?'interrupted':'failed',{reason:safeReason,attempts:attempt});
         if (!res.headersSent) return text(res, safeReason==='headers_timeout'||safeReason==='media_read_timeout'?504:502, 'Upstream unavailable');
         if (!res.destroyed) res.destroy();
         return;
@@ -837,6 +854,9 @@ http.createServer = function withBlofyXtreamGateway(listener) {
       if (!url.pathname.startsWith('/api/v1/admin/xtream-gateway')) return listener(req, res);
       if (!requireAdmin(req, res)) return;
       await ensureReady();
+      if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream-gateway/playback-health') {
+        return json(res,200,{ok:true,metrics:xtreamPlaybackSnapshot()});
+      }
       if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream-gateway') {
         const items = await listAccounts();
         return json(res, 200, { serverUrl: origin(req), items });

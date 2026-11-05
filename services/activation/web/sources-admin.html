@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#09090e">
   <link rel="icon" type="image/png" href="/blofy-logo.png"><link rel="apple-touch-icon" href="/blofy-logo.png"><meta name="robots" content="noindex,nofollow"><title>BLOFY STREAM | إدارة المصادر والاشتراكات</title>
-  <link rel="stylesheet" href="/sources-admin.css?v=20261106-production-sort-v1">
+  <link rel="stylesheet" href="/sources-admin.css?v=20261106-restream-health-v2">
   <link rel="stylesheet" href="/site-polish.css?v=20261025-lux-final">
 </head>
 <body>
@@ -110,6 +110,22 @@
         </section>
         <p id="xtreamTotalsNotice" class="stream-totals-notice" role="status">جاري فحص أعداد المحتوى من السيرفرات الموجودة في هذه اللوحة…</p>
 
+        <section class="panel blofy-playback-health" aria-labelledby="blofyPlaybackHeading">
+          <div class="panel-head">
+            <div>
+              <span class="panel-kicker">BLOFY RESTREAM HEALTH</span>
+              <h2 id="blofyPlaybackHeading">مراقبة جودة إعادة البث</h2>
+              <p>نتائج تشغيل القنوات والأفلام على موقع BLOFY الأساسي خلال آخر ساعة، وليس مجرد فحص قائمة المحتوى.</p>
+            </div>
+            <button id="blofyPlaybackRefresh" class="button ghost" type="button">تحديث التشغيل</button>
+          </div>
+          <div class="blofy-playback-metrics" id="blofyPlaybackMetrics" aria-live="polite">
+            <p class="muted">جارٍ تحميل بيانات التشغيل…</p>
+          </div>
+          <p class="muted" id="blofyPlaybackNote" role="status">الأرقام تخص السيرفر الحالي فقط، وتتجدد مع إعادة تشغيله.</p>
+          <div class="blofy-playback-issues" id="blofyPlaybackIssues" aria-live="polite"></div>
+        </section>
+
         <section class="panel form-panel" id="xtAddSourceSection">
           <div class="panel-head">
             <div><span class="panel-kicker">UPSTREAM SOURCES</span><h2>إضافة حساب Xtream إلى المكتبة</h2><p>كرر هذه العملية لكل حساب تملك حق إعادة توزيع محتواه؛ يتم دمج القنوات والأفلام والمسلسلات من الحسابات المنشورة في مكتبة واحدة.</p></div>
@@ -181,7 +197,7 @@
       <footer><span>BLOFY STREAM · إدارة Xtream</span></footer>
     </main>
   </div>
-  <script src="/sources-admin.js?v=20261106-production-sort-v1" defer></script>
+  <script src="/sources-admin.js?v=20261106-restream-health-v2" defer></script>
   <script src="/xtream-gateway-admin.js?v=20261105-source-selection-v1" defer></script>
 </body>
 </html>

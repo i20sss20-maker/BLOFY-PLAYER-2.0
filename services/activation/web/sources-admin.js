@@ -753,6 +753,63 @@ async function bulkCatalog(enabled) {
   }
 }
 
+async function loadBlofyPlaybackHealth(){
+  const box=el('blofyPlaybackMetrics'),issues=el('blofyPlaybackIssues');
+  const note=el('blofyPlaybackNote');
+  try{
+    const result=await api('/api/v1/admin/xtream-gateway/playback-health');
+    const m=result.metrics||{};
+    const asMs=value=>value===null||value===undefined?'—':Number(value).toLocaleString('en-US')+' ms';
+    const stats=[
+      ['بدأ التشغيل',m.started??0],
+      ['فشل بدء البث',m.failed??0],
+      ['انقطع بعد البدء',m.interrupted??0],
+      ['بدأ ببطء',m.slowStarts??0],
+      ['متوسط البداية الوسيط',asMs(m.medianStartMs)],
+      ['95% يبدأ خلال',asMs(m.p95StartMs)]
+    ];
+    box.replaceChildren();
+    for(const [label,value] of stats){
+      const card=make('div','blofy-playback-metric');
+      card.append(make('small','',label),
+        make('strong','',typeof value==='number'?value.toLocaleString('en-US'):value));
+      box.append(card);
+    }
+    issues.replaceChildren();
+    const errorNames={
+      upstream_http_403:'المصدر رفض الوصول (403)',
+      upstream_http_404:'المحتوى أو مساره غير موجود (404)',
+      upstream_http_429:'تجاوز حد اتصالات المصدر',
+      headers_timeout:'تأخر الاتصال بالمصدر',
+      media_read_timeout:'انقطع وصول بيانات الفيديو',
+      upstream_empty_media:'المصدر أرسل بثًا فارغًا',
+      upstream_non_media_response:'المصدر أرسل صفحة بدل الفيديو',
+      upstream_unreachable:'تعذر الوصول للمصدر',
+      upstream_http_other:'المصدر رفض الطلب'
+    };
+    const recent=Array.isArray(m.recentIssues)?m.recentIssues:[];
+    for(const row of recent){
+      const item=make('div','blofy-playback-issue');
+      const media={live:'قناة',movie:'فيلم',series:'حلقة'}[row.kind]||'بث';
+      const phase=row.phase==='interrupted'?'انقطع بعد التشغيل':'فشل التشغيل';
+      const reason=errorNames[row.reason]||row.reason||
+        (row.upstreamStatus?'استجابة المصدر '+row.upstreamStatus:'سبب غير معروف');
+      item.append(make('strong','',media+' · '+phase),
+        make('small','',reason+' · '+new Date(row.at).toLocaleString('ar-SA')));
+      issues.append(item);
+    }
+    if(!recent.length){
+      issues.append(make('p','muted','لا توجد أخطاء تشغيل مسجلة خلال الساعة الماضية على هذه النسخة.'));
+    }
+    const upstreamCodes=Object.entries(m.upstreamCodes||{});
+    note.textContent='الأرقام لآخر ساعة على هذا السيرفر فقط. نجاح بدء البث لا يضمن استمرار القناة طوال المشاهدة.'+
+      (upstreamCodes.length?' · أخطاء المصدر: '+upstreamCodes.map(([code,n])=>'HTTP '+code+' ('+n+')').join('، '):'');
+  }catch(error){
+    note.textContent='تعذر تحديث مراقبة إعادة البث: '+error.message;
+    if(!box.children.length)box.append(make('p','muted','لا تتوفر بيانات التشغيل الآن.'));
+  }
+}
+
 async function switchTab(name) {
   if (!TAB_NAMES.has(name)) return;
   state.activeTab = name;
@@ -763,7 +820,7 @@ async function switchTab(name) {
     page.hidden = !active;
     page.classList.toggle('active', active);
   });
-  if (name === 'xtream') await loadXtream();
+  if (name === 'xtream') { await loadXtream(); await loadBlofyPlaybackHealth(); }
   if (name === 'catalog') {
     await loadXtream(true);
     await loadCategories();
@@ -772,12 +829,13 @@ async function switchTab(name) {
 }
 
 async function refreshCurrent() {
-  if (state.activeTab === 'xtream') await loadXtream();
+  if (state.activeTab === 'xtream') { await loadXtream(); await loadBlofyPlaybackHealth(); }
   else { await loadXtream(true); await loadCategories(); await loadCatalog(); }
 }
 
 document.querySelectorAll('.tab').forEach(button => button.addEventListener('click', () => switchTab(button.dataset.tab)));
 el('refreshBtn').addEventListener('click', refreshCurrent);
+el('blofyPlaybackRefresh').addEventListener('click', loadBlofyPlaybackHealth);
 el('xtreamForm').addEventListener('submit', addXtream);
 el('syncAllXtreamBtn').addEventListener('click', syncAllXtream);
 // Capture source commands before a background catalog refresh can detach
@@ -824,5 +882,6 @@ window.addEventListener('hashchange', () => {
 });
 
 loadXtream(true);
+loadBlofyPlaybackHealth();
 const initialTab = tabFromHash();
 if (initialTab && initialTab !== 'xtream') switchTab(initialTab);
