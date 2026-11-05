@@ -120,6 +120,38 @@ test('production rejects other origins, the HTTP version of its own host and mal
     assert.equal(res.status,403,bad);
   }
 });
+test('Railway proxy allows exact public BLOFY origin for cookie-authenticated native POST controls',async()=>{
+  // Production receives an internal Railway Host/forwarded Host, while the
+  // browser correctly reports the external HTTPS canonical site.
+  const a=makeRuntime({VERCEL_ENV:undefined,NODE_ENV:'production'});
+  const cookie=a.sessionCookie(await a.makeSession());
+  for(const url of ['/api/v1/admin/xtream/controls/source-id/toggle-enabled',
+    '/api/v1/admin/xtream/controls/source-id/toggle-publish',
+    '/api/v1/admin/xtream/controls/source-id/sync-all']){
+    const result=await a.request({method:'POST',url,headers:{
+      host:'blofy-activation-portal-production.up.railway.app',
+      'x-forwarded-host':'blofy-activation-portal-production.up.railway.app',
+      'x-forwarded-proto':'https',
+      origin:'https://blofyplayer.com',cookie
+    }});
+    assert.equal(result.status,200,url);
+  }
+  for(const origin of [
+    'http://blofyplayer.com','https://blofyplayer.com.attacker.invalid',
+    'https://attacker.invalid','https://blofyplayer.com:444',
+    'https://blofyplayer.com/','null',''
+  ]){
+    const result=await a.request({method:'POST',url:'/api/v1/admin/xtream/controls/source-id/toggle-enabled',
+      headers:{host:'blofy-activation-portal-production.up.railway.app',
+        'x-forwarded-host':'blofy-activation-portal-production.up.railway.app',
+        'x-forwarded-proto':'https',origin,cookie}});
+    assert.equal(result.status,403,origin);
+  }
+  const noOrigin=await a.request({method:'POST',
+    url:'/api/v1/admin/xtream/controls/source-id/toggle-enabled',
+    headers:{host:'blofy-activation-portal-production.up.railway.app',cookie}});
+  assert.equal(noOrigin.status,403);
+});
 test('an unrelated Authorization header cannot bypass the missing-Origin cookie guard',async()=>{
   const a=makeRuntime(),cookie=a.sessionCookie(await a.makeSession());
   for(const authorization of ['', 'Bearer not-valid', 'Basic not-valid']){
