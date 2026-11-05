@@ -221,7 +221,7 @@ function serverCard(item) {
   });
 
   const settings = make('details', 'server-advanced');
-  const advancedSummary = make('summary', '', 'إعدادات إضافية · الأولوية والمزامنة حسب النوع');
+  const advancedSummary = make('summary', '', 'تعديل بيانات المصدر · مزامنة أنواع محددة');
   const advancedFields = make('div', 'server-settings');
   settings.append(advancedSummary, advancedFields);
   const editableFields = [
@@ -260,7 +260,7 @@ function serverCard(item) {
   });
 
   const extraActions = make('div', 'server-actions server-actions-advanced');
-  for (const [label, action] of [['Live فقط', 'sync-live'], ['أفلام فقط', 'sync-movie'], ['مسلسلات فقط', 'sync-series'], ['حفظ الأولوية', 'save']]) {
+  for (const [label, action] of [['Live فقط', 'sync-live'], ['أفلام فقط', 'sync-movie'], ['مسلسلات فقط', 'sync-series'], ['حفظ التعديلات', 'save']]) {
     const button = make('button', 'button ghost', label);
     button.type='button';button.dataset.action=action;
     button.disabled = item.syncing && action.startsWith('sync');
