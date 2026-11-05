@@ -275,13 +275,27 @@ async function handleServerAction(item, card, button) {
     if (action === 'toggle-enabled' || action === 'toggle-publish') {
       const isEnable=action==='toggle-enabled';
       const next=isEnable?!item.enabled:!item.publishCatalog;
+      const field=isEnable?'enabled':'publishCatalog';
       const payload=isEnable?{enabled:next}:{publishCatalog:next};
-      await api(`/api/v1/admin/xtream/servers/${item.id}`, {
+      const result=await api(`/api/v1/admin/xtream/servers/${item.id}`, {
         method:'PATCH',body:JSON.stringify(payload)
       });
+      if(!result.item||Boolean(result.item[field])!==next){
+        throw new Error('لم يؤكد السيرفر حفظ التغيير. لم نغير الحالة في الواجهة.');
+      }
+      // A source should never vanish just because a "published"/"enabled"
+      // filter was selected when the administrator paused or hid it.
+      if(el('xtSourceFilter').value!=='all'){
+        el('xtSourceFilter').value='all';
+      }
+      await loadXtream(true);
+      const saved=state.xtreamServers.find(source=>source.id===item.id);
+      if(saved&&Boolean(saved[field])!==next){
+        throw new Error('حالة المصدر لا تطابق التغيير بعد إعادة القراءة من قاعدة البيانات.');
+      }
       showMessage(isEnable
-        ?(`تم ${next?'تفعيل':'إيقاف'} مصدر «${item.name}»`)
-        :(`تم ${next?'نشر':'إخفاء'} محتوى «${item.name}» ${next?'لعملائك':'عن عملائك'}`));
+        ?(`تم حفظ ${next?'تفعيل':'إيقاف'} المصدر «${item.name}» في قاعدة البيانات، وسيبقى كذلك بعد تحديث الصفحة.`)
+        :(`تم حفظ ${next?'نشر':'إخفاء'} محتوى «${item.name}» ${next?'للعملاء':'عن العملاء'}.`));
     } else if (action === 'test') {
       await api(`/api/v1/admin/xtream/servers/${item.id}/test`, { method: 'POST', body: '{}' });
       showMessage(`اتصال ${item.name} ناجح.`);
@@ -309,7 +323,7 @@ async function handleServerAction(item, card, button) {
       await api(`/api/v1/admin/xtream/servers/${item.id}/sync`, { method: 'POST', body: JSON.stringify({ types: type }) });
       showMessage(`بدأت مزامنة ${item.name}.`);
     }
-    await loadXtream(true);
+    if(action!=='toggle-enabled'&&action!=='toggle-publish')await loadXtream(true);
   } catch (error) {
     showMessage(`فشلت العملية: ${error.message}`, 'error');
   } finally {
