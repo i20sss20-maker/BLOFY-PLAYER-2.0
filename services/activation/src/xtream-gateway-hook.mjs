@@ -328,7 +328,7 @@ async function ensureCategoryMaps(mediaType) {
     SELECT c.server_id,c.media_type,c.source_category_id
     FROM blofy_xtream_categories c
     JOIN blofy_xtream_servers s ON s.id=c.server_id
-    WHERE c.media_type=$1 AND c.enabled=TRUE AND s.enabled=TRUE
+    WHERE c.media_type=$1 AND c.enabled=TRUE AND s.enabled=TRUE AND s.publish_catalog=TRUE
     ON CONFLICT(server_id,media_type,source_category_id) DO NOTHING`, [mediaType]);
 }
 
@@ -339,7 +339,7 @@ async function ensureItemMaps(mediaType) {
     FROM blofy_xtream_items i
     JOIN blofy_xtream_servers s ON s.id=i.server_id
     LEFT JOIN blofy_xtream_categories c ON c.server_id=i.server_id AND c.media_type=i.media_type AND c.source_category_id=i.category_id
-    WHERE i.media_type=$1 AND i.enabled=TRUE AND s.enabled=TRUE AND (c.enabled IS NULL OR c.enabled=TRUE)
+    WHERE i.media_type=$1 AND i.enabled=TRUE AND s.enabled=TRUE AND s.publish_catalog=TRUE AND (c.enabled IS NULL OR c.enabled=TRUE)
     ON CONFLICT(server_id,media_type,source_id) DO NOTHING`, [mediaType]);
 }
 
@@ -368,7 +368,7 @@ async function walkGatewayItems(mediaType, filter, onRow) {
   let lastId = 0;
   for (;;) {
     const values = [mediaType, lastId];
-    const where = ['m.media_type=$1','m.gateway_id>$2','s.enabled=TRUE','i.enabled=TRUE','(c.enabled IS NULL OR c.enabled=TRUE)'];
+    const where = ['m.media_type=$1','m.gateway_id>$2','s.enabled=TRUE','s.publish_catalog=TRUE','i.enabled=TRUE','(c.enabled IS NULL OR c.enabled=TRUE)'];
     if (filter) {
       values.push(filter.server_id, filter.source_category_id);
       where.push(`i.server_id=$${values.length-1}`, `i.category_id=$${values.length}`);
@@ -416,7 +416,7 @@ async function gatewayItemById(mediaType, gatewayId) {
     JOIN blofy_xtream_items i ON i.server_id=m.server_id AND i.media_type=m.media_type AND i.source_id=m.source_id
     JOIN blofy_xtream_servers s ON s.id=i.server_id
     LEFT JOIN blofy_xtream_gateway_category_map cm ON cm.server_id=i.server_id AND cm.media_type=i.media_type AND cm.source_category_id=i.category_id
-    WHERE m.gateway_id=$1 AND m.media_type=$2 AND i.enabled=TRUE`, [id,mediaType])).rows[0] || null;
+    WHERE m.gateway_id=$1 AND m.media_type=$2 AND i.enabled=TRUE AND s.enabled=TRUE AND s.publish_catalog=TRUE AND (c.enabled IS NULL OR c.enabled=TRUE)`, [id,mediaType])).rows[0] || null;
 }
 
 function decryptServerCredentials(row) {
@@ -534,7 +534,7 @@ async function episodeByGatewayId(gatewayId) {
   return (await pool.query(`SELECT e.gateway_id,e.server_id,e.source_episode_id,e.container_extension,
       s.base_url,s.username_secret,s.password_secret,s.enabled AS server_enabled
     FROM blofy_xtream_gateway_episode_map e JOIN blofy_xtream_servers s ON s.id=e.server_id
-    WHERE e.gateway_id=$1`, [id])).rows[0] || null;
+    WHERE e.gateway_id=$1 AND s.enabled=TRUE AND s.publish_catalog=TRUE`, [id])).rows[0] || null;
 }
 
 function mediaUpstreamUrl(row, kind, sourceId, extension) {
@@ -679,7 +679,7 @@ async function gatewayHealth() {
   await ensureReady();
   const accounts = Number((await pool.query(`SELECT COUNT(*)::int AS count FROM blofy_xtream_gateway_accounts WHERE enabled=TRUE AND (expires_at IS NULL OR expires_at>NOW())`)).rows[0]?.count || 0);
   const rows = (await pool.query(`SELECT media_type,COUNT(*)::int AS count FROM blofy_xtream_items i JOIN blofy_xtream_servers s ON s.id=i.server_id
-    WHERE s.enabled=TRUE AND i.enabled=TRUE GROUP BY media_type`)).rows;
+    WHERE s.enabled=TRUE AND s.publish_catalog=TRUE AND i.enabled=TRUE GROUP BY media_type`)).rows;
   const catalog = { live: 0, movie: 0, series: 0 };
   for (const row of rows) if (Object.hasOwn(catalog,row.media_type)) catalog[row.media_type] = Number(row.count);
   return { ok: true, compatible: 'Xtream Codes API', accounts, catalog, playbackProxy: true };
