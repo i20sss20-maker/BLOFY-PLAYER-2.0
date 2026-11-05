@@ -1,5 +1,5 @@
 const gx = id => document.getElementById(id);
-const gatewayState = { serverUrl: '', items: [], sources: [] };
+const gatewayState = { serverUrl: '', items: [], sources: [], lastIssued: [] };
 
 async function gatewayApi(path, options = {}) {
   const response = await fetch(path, {
@@ -50,6 +50,51 @@ function showCredentials(credentials) {
   gx('gatewayCredUser').textContent = credentials.username || '—';
   gx('gatewayCredPass').textContent = credentials.password || '—';
   gx('gatewayCredentials').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function renderGatewayBatch(credentials){
+  gatewayState.lastIssued=credentials.map(x=>({
+    serverUrl:String(x.serverUrl||''),
+    username:String(x.username||''),
+    password:String(x.password||'')
+  }));
+  const panel=gx('gatewayBatchCredentials'),rows=gx('gatewayBatchRows');
+  rows.replaceChildren();
+  for(const account of gatewayState.lastIssued){
+    const line=gatewayNode('div','gateway-batch-row');
+    const heading=gatewayNode('strong','',account.username);
+    const data=gatewayNode('code','',account.serverUrl+'  ·  '+account.password);
+    line.append(heading,data);rows.append(line);
+  }
+  panel.hidden=gatewayState.lastIssued.length<=1;
+  gx('gatewayCredentials').hidden=gatewayState.lastIssued.length!==1;
+  if(gatewayState.lastIssued.length===1)showCredentials(gatewayState.lastIssued[0]);
+}
+
+function formatBatchText(){
+  return gatewayState.lastIssued.map(x=>'Host: '+x.serverUrl+'\\nUsername: '+x.username+'\\nPassword: '+x.password).join('\\n\\n');
+}
+function downloadBatchCsv(){
+  if(!gatewayState.lastIssued.length)return;
+  const quote=v=>{
+    let raw=String(v??'');
+    if(/^[\\s]*[=+\\-@]/.test(raw))raw="'"+raw;
+    return '"'+raw.replaceAll('"','""')+'"';
+  };
+  const lines=['Host,Username,Password'].concat(
+    gatewayState.lastIssued.map(x=>[x.serverUrl,x.username,x.password].map(quote).join(','))
+  );
+  const url=URL.createObjectURL(new Blob(['\\ufeff'+lines.join('\\r\\n')],{type:'text/csv;charset=utf-8'}));
+  const link=document.createElement('a');
+  link.href=url;link.download='BLOFY-new-Xtream-accounts.csv';document.body.append(link);link.click();link.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+function hideIssuedCredentials(){
+  gatewayState.lastIssued=[];
+  gx('gatewayBatchCredentials').hidden=true;
+  gx('gatewayCredentials').hidden=true;
+  gx('gatewayBatchRows').replaceChildren();
+  gx('gatewayCredPass').textContent='—';
 }
 
 function accountExpiresAt(value){
@@ -198,15 +243,17 @@ gx('gatewayCreateBtn')?.addEventListener('click', async () => {
     if(!published.some(x=>x.status==='online')){
       if(!window.confirm('ليس لديك مصادر منشورة ومتصلة حاليًا. سيتم إصدار البيانات بدون تأكيد عمل المحتوى. هل تريد المتابعة؟'))return;
     }
-    const data = await gatewayApi('/api/v1/admin/xtream-gateway/accounts', {
+    const count=Number(gx('gatewayQuantity')?.value||1);
+    if(![1,5,10].includes(count))throw new Error('عدد الحسابات غير صالح');
+    const data = await gatewayApi('/api/v1/admin/xtream-gateway/accounts/bulk', {
       method: 'POST',
       body: JSON.stringify({
-        label:label||'BLOFY Player',maxConnections,
+        count,label:label||'BLOFY Player',maxConnections,
         expiresAt:new Date(Date.now()+days*86400000).toISOString()
       })
     });
-    showCredentials(data.credentials);
-    gatewayMessage('تم إصدار Host وUsername وPassword. انسخها الآن؛ كلمة السر لا يمكن استعادتها بعد إخفائها.');
+    renderGatewayBatch(Array.isArray(data.credentials)?data.credentials:[]);
+    gatewayMessage('تم إصدار '+String(data.count||0)+' حساب Xtream. انسخ Host وUsername وPassword الآن، أو حمّل ملف CSV.');
     await loadGateway();
   } catch (error) {
     gatewayMessage(`تعذر إنشاء بيانات الدخول: ${error.message}`, 'error');
@@ -225,7 +272,10 @@ gx('gatewayCopyAllBtn')?.addEventListener('click', () => {
   copyText(`Server: ${host}\nUsername: ${username}\nPassword: ${password}`, 'تم نسخ بيانات Xtream كاملة.');
 });
 
-gx('gatewayHideCredentialsBtn')?.addEventListener('click', () => { gx('gatewayCredentials').hidden = true; });
+gx('gatewayHideCredentialsBtn')?.addEventListener('click', hideIssuedCredentials);
+gx('gatewayHideBatchBtn')?.addEventListener('click', hideIssuedCredentials);
+gx('gatewayCopyBatchBtn')?.addEventListener('click',()=>copyText(formatBatchText(),'تم نسخ بيانات جميع الحسابات.'));
+gx('gatewayDownloadBatchBtn')?.addEventListener('click',downloadBatchCsv);
 
 function openGatewayHashTab() {
   const name = String(location.hash || '').replace(/^#/, '').trim().toLowerCase();
