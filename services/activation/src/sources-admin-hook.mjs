@@ -23,41 +23,9 @@ pool.on('error', error => console.error('sources database error:', safeErrorSumm
 const limiter = createFixedWindowLimiter({ limit: 90, windowMs: 60_000 });
 let readyPromise;
 
-const INITIAL_SOURCES = [
-  {
-    id: 'internet-archive', internalName: 'InternetArchiveProvider', name: 'InternetArchiveProvider',
-    description: 'Watch content from the Internet Archive at archive.org',
-    iconUrl: 'https://www.google.com/s2/favicons?domain=archive.org&sz=%size%',
-    pluginUrl: 'https://raw.githubusercontent.com/recloudstream/extensions/builds/InternetArchiveProvider.cs3',
-    repositoryUrl: 'https://github.com/recloudstream/extensions',
-    fileHash: 'sha256-54f3de560bebeff2e4a10d1163f6146313c59061d21c3a230125611f01b531eb',
-    fileSize: 28037, apiVersion: 1, pluginVersion: 1, status: 1, language: null,
-    authors: ['Luna712'], tvTypes: ['Others'], enabled: true, category: 'archive', priority: 10,
-    rightsNote: 'Provider points to archive.org; item rights vary and must be respected.'
-  },
-  {
-    id: 'twitch', internalName: 'TwitchProvider', name: 'TwitchProvider',
-    description: 'Watch livestreams from Twitch',
-    iconUrl: 'https://www.google.com/s2/favicons?domain=twitch.tv&sz=%size%',
-    pluginUrl: 'https://raw.githubusercontent.com/recloudstream/extensions/builds/TwitchProvider.cs3',
-    repositoryUrl: 'https://github.com/recloudstream/extensions',
-    fileHash: 'sha256-a7cc95f77bbd00a311d122201c63babe70b63fb398641fa28bf2b2c77346150a',
-    fileSize: 15239, apiVersion: 1, pluginVersion: 2, status: 1, language: null,
-    authors: ['CranberrySoup'], tvTypes: ['Live'], enabled: true, category: 'live', priority: 20,
-    rightsNote: 'Content rights remain with creators and the platform.'
-  },
-  {
-    id: 'dailymotion', internalName: 'DailymotionProvider', name: 'DailymotionProvider',
-    description: 'Watch content from Dailymotion',
-    iconUrl: 'https://www.google.com/s2/favicons?domain=www.dailymotion.com&sz=%size%',
-    pluginUrl: 'https://raw.githubusercontent.com/recloudstream/extensions/builds/DailymotionProvider.cs3',
-    repositoryUrl: 'https://github.com/recloudstream/extensions',
-    fileHash: 'sha256-9036525a64e8b3c8fe04f94e9fe89a744c13d69af684ed0d2ad2a7eb0f332cd9',
-    fileSize: 11472, apiVersion: 1, pluginVersion: 4, status: 1, language: null,
-    authors: ['Luna712'], tvTypes: ['Others'], enabled: true, category: 'video', priority: 30,
-    rightsNote: 'Content rights remain with creators and the platform.'
-  }
-];
+// Legacy add-on plugin sources were retired at the owner's request.
+// Xtream account sources are stored separately in blofy_xtream_servers
+// and are never touched by this cleanup.
 
 function json(res, status, body, extra = {}) {
   const payload = JSON.stringify(body);
@@ -253,10 +221,9 @@ async function ensureReady() {
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`);
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_sources_published ON blofy_source_registry(enabled,status,priority)');
-      const count = Number((await client.query('SELECT COUNT(*)::int AS count FROM blofy_source_registry')).rows[0]?.count || 0);
-      if (!count) {
-        for (const item of INITIAL_SOURCES) await insertSource(client, item);
-      }
+      // Retire all old extra/plug-in sources. This is a separate registry
+      // from the customer's Xtream sources and does not affect any Xtream data.
+      await client.query('DELETE FROM blofy_source_registry');
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK').catch(() => {});
@@ -435,8 +402,7 @@ http.createServer = function withBlofySources(listener) {
       }
       if (req.method === 'POST' && url.pathname === '/api/v1/admin/sources/sync') {
         if (!requireAdmin(req, res)) return;
-        const synced = await syncFromGitHub();
-        return json(res, 200, { ok: true, synced });
+        return json(res, 410, { error:'legacy_plugin_sources_retired', message:'Use Xtream sources instead.' });
       }
       const sourceMatch = url.pathname.match(/^\/api\/v1\/admin\/sources\/([a-z0-9][a-z0-9-]{1,63})$/i);
       if (sourceMatch && req.method === 'PATCH') return await patchSource(req, res, sourceMatch[1].toLowerCase());
