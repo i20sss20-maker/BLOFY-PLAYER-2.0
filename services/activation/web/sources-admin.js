@@ -418,6 +418,13 @@ async function handleServerAction(item, card, button) {
     button.disabled = false;
     button.textContent = old;
     if(document.activeElement===button)button.blur();
+    const status=state.sourceFeedback.get(item.id);
+    if(status?.text==='تم استلام الضغط على الزر. جارٍ إرسال الطلب للسيرفر…'){
+      const message='انتهى الطلب. النتيجة الدقيقة ظاهرة في رسالة الحالة أعلى اللوحة.';
+      state.sourceFeedback.set(item.id,{text:message,kind:'ok'});
+      const inline=card.querySelector('.source-action-feedback');
+      if(inline)inline.textContent=message;
+    }
     renderXtream();
   }
 }
