@@ -588,11 +588,13 @@ function renderCategoryManager() {
   target.replaceChildren();
   const all=state.categories||[];
   const query=String(el('categorySearch')?.value||'').trim().toLowerCase();
-  const matches=all.filter(category=>String(category.name||'').toLowerCase().includes(query));
+  const filter=el('categoryVisibility')?.value||'all';
+  const matches=all.filter(category=>String(category.name||'').toLowerCase().includes(query)&&
+    (filter==='all'||(filter==='hidden'?!category.enabled:category.enabled)));
   const countOn=all.filter(category=>category.enabled).length;
   el('categoryManagerSummary').textContent=
     'الفئات: '+all.length+' · الظاهرة: '+countOn+' · المخفية: '+(all.length-countOn)+
-    (query?' · نتائج البحث: '+matches.length:'')+(query?' · امسح البحث لتحريك الفئات':'');
+    (query||filter!=='all'?' · النتائج: '+matches.length:'');
   const rows=matches.slice(0,120);
   if(!rows.length){
     target.append(make('p','empty','ما توجد فئات مطابقة للمصدر والنوع المحددين.'));
@@ -601,13 +603,14 @@ function renderCategoryManager() {
   for(const category of rows){
     const row=make('article','category-manager-row'+(category.enabled?'':' hidden-category'));
     const info=make('div','category-manager-label');
-    info.append(make('strong','',category.name));
+    info.append(make('strong','',String(position+1)+' · '+category.name));
     info.append(make('small','',Number(category.itemCount||0).toLocaleString('en-US')+' عنصر'));
     const actions=make('div','category-manager-actions');
     const position=all.findIndex(x=>x.id===category.id);
     const buttons=[
-      ['↑','up','رفع الفئة',Boolean(query)||position===0],
-      ['↓','down','خفض الفئة',Boolean(query)||position===all.length-1],
+      ['للأول','top','انقل القسم لأول القائمة',position===0],
+      ['↑','up','رفع الفئة',position===0],
+      ['↓','down','خفض الفئة',position===all.length-1],
       [category.enabled?'إخفاء':'إظهار','toggle',category.enabled?'إخفاء عن العملاء':'إظهار للعملاء',false]
     ];
     for(const [label,action,title,disabled] of buttons){
@@ -806,6 +809,7 @@ el('catalogServer').addEventListener('change', async () => { await loadCategorie
 el('catalogType').addEventListener('change', async () => { await loadCategories(); await loadCatalog(); });
 el('catalogCategory').addEventListener('change', loadCatalog);
 el('categorySearch').addEventListener('input',renderCategoryManager);
+el('categoryVisibility').addEventListener('change',renderCategoryManager);
 el('categoryManagerRows').addEventListener('click',event=>{
   const button=event.target.closest('button[data-action][data-category-id]');
   if(button)changeCategory(button).catch(error=>showMessage('تعذر حفظ الفئة: '+error.message,'error'));
