@@ -63,6 +63,17 @@ function xtStatusClass(status) {
   return 'unknown';
 }
 
+function nativeSourceForm(id, action, label, cls='button ghost') {
+  const form=make('form','source-native-form');
+  form.method='post';
+  form.action='/api/v1/admin/xtream/controls/'+encodeURIComponent(id)+'/'+action;
+  const button=make('button',cls,label);
+  button.type='submit';
+  button.dataset.action=action;
+  form.append(button);
+  return form;
+}
+
 function serverCard(item) {
   const card = make('article', 'server-card');
   card.dataset.id = item.id;
@@ -88,7 +99,11 @@ function serverCard(item) {
   const settings = make('details', 'server-advanced');
   const advancedSummary = make('summary', '', 'تعديل بيانات المصدر · مزامنة أنواع محددة');
   const advancedFields = make('div', 'server-settings');
-  settings.append(advancedSummary, advancedFields);
+  const editForm=make('form','source-native-edit');
+  editForm.method='post';
+  editForm.action='/api/v1/admin/xtream/controls/'+encodeURIComponent(item.id)+'/save';
+  editForm.append(advancedFields);
+  settings.append(advancedSummary,editForm);
   const editableFields = [
     ['name','اسم المصدر','text',item.name,160],
     ['baseUrl','Host / URL','url',item.baseUrl,500],
@@ -101,6 +116,7 @@ function serverCard(item) {
     field.append(make('span','',labelText));
     const input=document.createElement('input');
     input.type=inputType;input.value=value;input.dataset.role=role;
+    input.name=role;
     input.className='small-input';
     input.autocomplete='off';
     if(inputType==='number'){input.min='0';input.max='10000';input.step='1'}
@@ -123,19 +139,27 @@ function serverCard(item) {
     buttons.splice(2,0,['⏹ إلغاء المزامنة','cancel-sync','button ghost']);
   }
   buttons.forEach(([text, action, cls]) => {
-    const button = make('button', cls, text);
-    button.type = 'button'; button.dataset.action = action;
-    button.disabled = item.syncing && action.startsWith('sync');
-    actions.append(button);
+    if(action==='delete'){
+      const link=make('a',cls,text);
+      link.href='/api/v1/admin/xtream/controls/'+encodeURIComponent(item.id)+'/confirm-delete';
+      link.dataset.action='delete';
+      actions.append(link);
+      return;
+    }
+    const form=nativeSourceForm(item.id,action,text,cls);
+    form.querySelector('button').disabled=item.syncing && action.startsWith('sync');
+    actions.append(form);
   });
 
   const extraActions = make('div', 'server-actions server-actions-advanced');
-  for (const [label, action] of [['Live فقط', 'sync-live'], ['أفلام فقط', 'sync-movie'], ['مسلسلات فقط', 'sync-series'], ['حفظ التعديلات', 'save']]) {
-    const button = make('button', 'button ghost', label);
-    button.type='button';button.dataset.action=action;
-    button.disabled = item.syncing && action.startsWith('sync');
-    extraActions.append(button);
+  for (const [label, action] of [['Live فقط', 'sync-live'], ['أفلام فقط', 'sync-movie'], ['مسلسلات فقط', 'sync-series']]) {
+    const form=nativeSourceForm(item.id,action,label);
+    form.querySelector('button').disabled=item.syncing;
+    extraActions.append(form);
   }
+  const saveButton=make('button','button primary','حفظ التعديلات');
+  saveButton.type='submit';
+  editForm.append(saveButton);
   settings.append(extraActions);
   const info = make('div', 'server-info');
   if (item.accountInfo?.maxConnections != null) info.append(make('span', 'badge', `Max ${item.accountInfo.maxConnections}`));
@@ -212,12 +236,12 @@ function refreshSourceCard(card, item) {
   let cancel=buttons?.querySelector('button[data-action="cancel-sync"]');
   if(item.syncing||item.status==='syncing'){
     if(!cancel&&buttons){
-      cancel=make('button','button ghost','⏹ إلغاء المزامنة');
-      cancel.type='button';cancel.dataset.action='cancel-sync';
-      buttons.insertBefore(cancel,buttons.querySelector('button[data-action="sync-all"]'));
+      const form=nativeSourceForm(item.id,'cancel-sync','⏹ إلغاء المزامنة');
+      cancel=form.querySelector('button');
+      buttons.insertBefore(form,buttons.querySelector('button[data-action="sync-all"]')?.closest('form')||null);
     }
   }else if(cancel){
-    cancel.remove();
+    cancel.closest('form')?.remove();
   }
   const info=card.querySelector('.server-info');
   if(info){
@@ -755,6 +779,8 @@ document.addEventListener('click',event=>{
   const button=event.target instanceof Element
     ?event.target.closest('button[data-action]'):null;
   if(!button||!el('xtreamServers').contains(button))return;
+  // Browser form submissions are authoritative; they work even with broken JS.
+  if(button.closest('.source-native-form')||button.closest('.source-native-edit'))return;
   const card=button.closest('.server-card[data-id]');
   if(!card||card.dataset.busy==='1'||button.disabled)return;
   event.preventDefault();
