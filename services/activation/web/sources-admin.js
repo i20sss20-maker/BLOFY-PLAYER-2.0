@@ -220,49 +220,70 @@ function serverCard(item) {
     metrics.append(box);
   });
 
-  const settings = make('div', 'server-settings');
-  const enabledLabel = make('label', 'check compact');
-  const enabled = document.createElement('input');
-  enabled.type = 'checkbox'; enabled.checked = item.enabled; enabled.dataset.role = 'enabled';
-  enabledLabel.append(enabled, make('span', '', 'مفعل'));
-  const publishLabel = make('label', 'check compact');
-  const publish = document.createElement('input');
-  publish.type = 'checkbox'; publish.checked = item.publishCatalog; publish.dataset.role = 'publish';
-  publishLabel.append(publish, make('span', '', 'نشر الكتالوج'));
-  const priority = document.createElement('input');
-  priority.type = 'number'; priority.min = '0'; priority.max = '10000'; priority.value = String(item.priority ?? 100); priority.dataset.role = 'priority';
-  priority.className = 'small-input';
-  settings.append(enabledLabel, publishLabel, make('span', 'muted', item.transportSecurity === 'https' ? 'HTTPS' : 'HTTP'), priority);
-
+  const settings = make('details', 'server-advanced');
+  const advancedSummary = make('summary', '', 'تعديل بيانات المصدر · مزامنة أنواع محددة');
+  const advancedFields = make('div', 'server-settings');
+  settings.append(advancedSummary, advancedFields);
+  const editableFields = [
+    ['name','اسم المصدر','text',item.name,160],
+    ['baseUrl','Host / URL','url',item.baseUrl,500],
+    ['username','Username جديد (اتركه فارغًا دون تغيير)','text','',512],
+    ['password','Password جديد (اتركه فارغًا دون تغيير)','password','',1024],
+    ['priority','الأولوية (رقم أقل = أولوية أعلى)','number',String(item.priority??100),5]
+  ];
+  for (const [role,labelText,inputType,value,maxLength] of editableFields) {
+    const field=make('label','server-edit-field');
+    field.append(make('span','',labelText));
+    const input=document.createElement('input');
+    input.type=inputType;input.value=value;input.dataset.role=role;
+    input.className='small-input';
+    input.autocomplete='off';
+    if(inputType==='number'){input.min='0';input.max='10000';input.step='1'}
+    else input.maxLength=maxLength;
+    field.append(input);advancedFields.append(field);
+  }
+  const editNotice=make('p','muted','لن تُعرض كلمات المرور الحالية. إدخال بيانات جديدة يستلزم إعادة فحص الاتصال ومزامنة المصدر.');
+  advancedFields.append(editNotice);
   const actions = make('div', 'server-actions');
   const buttons = [
-    ['فحص', 'test', 'button'],
-    ['مزامنة الكل', 'sync-all', 'button primary'],
-    ['Live', 'sync-live', 'button ghost'],
-    ['Movies', 'sync-movie', 'button ghost'],
-    ['Series', 'sync-series', 'button ghost'],
-    ['حفظ', 'save', 'button'],
-    ['حذف', 'delete', 'button danger']
+    [item.enabled ? '⏸ إيقاف المصدر' : '▶ تفعيل المصدر', 'toggle-enabled', item.enabled ? 'button source-toggle-stop' : 'button primary'],
+    [item.publishCatalog ? 'إخفاء المحتوى عن العملاء' : 'نشر المحتوى للعملاء', 'toggle-publish', item.publishCatalog ? 'button ghost' : 'button primary'],
+    ['⟳ مزامنة المحتوى', 'sync-all', 'button'],
+    ['فحص الاتصال', 'test', 'button ghost'],
+    ['حذف المصدر', 'delete', 'button danger']
   ];
   buttons.forEach(([text, action, cls]) => {
     const button = make('button', cls, text);
     button.type = 'button'; button.dataset.action = action;
-    button.disabled = item.syncing && action.startsWith('sync');
+    button.disabled = item.syncing && (action.startsWith('sync') || action === 'delete');
     actions.append(button);
   });
 
+  const extraActions = make('div', 'server-actions server-actions-advanced');
+  for (const [label, action] of [['Live فقط', 'sync-live'], ['أفلام فقط', 'sync-movie'], ['مسلسلات فقط', 'sync-series'], ['حفظ التعديلات', 'save']]) {
+    const button = make('button', 'button ghost', label);
+    button.type='button';button.dataset.action=action;
+    button.disabled = item.syncing && action.startsWith('sync');
+    extraActions.append(button);
+  }
+  settings.append(extraActions);
   const info = make('div', 'server-info');
   if (item.accountInfo?.maxConnections != null) info.append(make('span', 'badge', `Max ${item.accountInfo.maxConnections}`));
   if (item.accountInfo?.activeConnections != null) info.append(make('span', 'badge', `Active ${item.accountInfo.activeConnections}`));
   if (item.lastSyncAt) info.append(make('span', 'muted', `آخر مزامنة: ${new Date(item.lastSyncAt).toLocaleString('ar-SA')}`));
   if (item.lastError) info.append(make('span', 'error-text', `آخر خطأ: ${item.lastError}`));
 
-  actions.addEventListener('click', event => {
+  card.addEventListener('click', event => {
     const button = event.target.closest('button[data-action]');
     if (!button) return;
     handleServerAction(item, card, button);
   });
-  card.append(header, metrics, settings, actions, info);
+  const indicators = make('div', 'source-quick-status');
+  indicators.append(
+    make('span', item.enabled ? 'source-state-pill on' : 'source-state-pill off', item.enabled ? '● المصدر مفعّل' : '● المصدر موقوف'),
+    make('span', item.enabled && item.publishCatalog ? 'source-state-pill published' : 'source-state-pill hidden', item.enabled && item.publishCatalog ? '● منشور للمشتركين' : '○ غير ظاهر للمشتركين')
+  );
+  card.append(header, indicators, metrics, actions, settings, info);
   return card;
 }
 
@@ -299,8 +320,18 @@ function renderXtream() {
 
   const list = el('xtreamServers');
   list.replaceChildren();
-  if (!state.xtreamServers.length) list.append(make('div', 'empty', 'ما فيه سيرفرات Xtream مضافة للحين.'));
-  state.xtreamServers.forEach(item => list.append(serverCard(item)));
+  const query=String(el('xtSourceSearch')?.value||'').trim().toLowerCase();
+  const filter=String(el('xtSourceFilter')?.value||'all');
+  const visible=state.xtreamServers.filter(item=>
+    (!query||String(item.name+' '+item.baseUrl).toLowerCase().includes(query)) &&
+    (filter==='all'||(filter==='enabled'&&item.enabled)||(filter==='disabled'&&!item.enabled)||(filter==='published'&&item.enabled&&item.publishCatalog))
+  );
+  const countEnabled=state.xtreamServers.filter(x=>x.enabled).length;
+  const countPublished=state.xtreamServers.filter(x=>x.enabled&&x.publishCatalog).length;
+  el('xtSourceSummary').textContent='الإجمالي: '+state.xtreamServers.length+' · المفعلة: '+countEnabled+' · المنشورة: '+countPublished+' · المعروضة: '+visible.length;
+  if(!state.xtreamServers.length)list.append(make('div','empty','ما عندك مصادر Xtream مضافة. اضغط «+ إضافة Xtream جديد» للبدء.'));
+  else if(!visible.length)list.append(make('div','empty','ما فيه مصادر تطابق البحث أو الفلتر الحالي.'));
+  visible.forEach(item=>list.append(serverCard(item)));
   el('xtreamLoading').hidden = true;
   list.hidden = false;
   updateCatalogServerOptions();
@@ -392,21 +423,34 @@ async function handleServerAction(item, card, button) {
   const old = button.textContent;
   button.textContent = '...';
   try {
-    if (action === 'test') {
+    if (action === 'toggle-enabled' || action === 'toggle-publish') {
+      const isEnable=action==='toggle-enabled';
+      const next=isEnable?!item.enabled:!item.publishCatalog;
+      const payload=isEnable?{enabled:next}:{publishCatalog:next};
+      await api(`/api/v1/admin/xtream/servers/${item.id}`, {
+        method:'PATCH',body:JSON.stringify(payload)
+      });
+      showMessage(isEnable
+        ?(`تم ${next?'تفعيل':'إيقاف'} مصدر «${item.name}»`)
+        :(`تم ${next?'نشر':'إخفاء'} محتوى «${item.name}» ${next?'لعملائك':'عن عملائك'}`));
+    } else if (action === 'test') {
       await api(`/api/v1/admin/xtream/servers/${item.id}/test`, { method: 'POST', body: '{}' });
       showMessage(`اتصال ${item.name} ناجح.`);
     } else if (action === 'save') {
+      const input=role=>card.querySelector('[data-role="'+role+'"]').value.trim();
+      const next={
+        name:input('name'),baseUrl:input('baseUrl'),
+        priority:Number(input('priority'))
+      };
+      if(input('username'))next.username=input('username');
+      if(input('password'))next.password=input('password');
       await api(`/api/v1/admin/xtream/servers/${item.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          enabled: card.querySelector('[data-role="enabled"]').checked,
-          publishCatalog: card.querySelector('[data-role="publish"]').checked,
-          priority: Number(card.querySelector('[data-role="priority"]').value || 100)
-        })
+        method:'PATCH',body:JSON.stringify(next)
       });
-      showMessage('تم حفظ إعدادات السيرفر.');
+      showMessage('تم حفظ تعديل مصدر «'+item.name+'». اضغط «فحص الاتصال» ثم «مزامنة المحتوى» إذا غيّرت بيانات Host أو Username أو Password.');
     } else if (action === 'delete') {
-      if (!window.confirm(`حذف ${item.name} وكل الكتالوج المستورد منه؟`)) return;
+      const total=Number(item.counts?.total||0).toLocaleString('en-US');
+      if(!window.confirm(`حذف مصدر «${item.name}» نهائيًا من BLOFY؟\\nسيتم حذف ${total} عنصر مستورد منه ولن يظهر محتواه لعملائك.\\nلن يتأثر اشتراكك الأصلي لدى مزود Xtream.\\n\\nهل تؤكد الحذف؟`))return;
       await api(`/api/v1/admin/xtream/servers/${item.id}`, { method: 'DELETE' });
       showMessage('تم حذف السيرفر وبياناته المستوردة.');
     } else if (action.startsWith('sync-')) {
@@ -589,6 +633,14 @@ el('copyRepoBtn').addEventListener('click', async () => {
 });
 el('xtreamForm').addEventListener('submit', addXtream);
 el('syncAllXtreamBtn').addEventListener('click', syncAllXtream);
+el('xtSourceSearch').addEventListener('input', renderXtream);
+el('xtSourceFilter').addEventListener('change', renderXtream);
+el('xtNewSourceBtn').addEventListener('click', () => {
+  el('xtAddSourceSection').scrollIntoView({behavior:'smooth',block:'center'});
+  el('xtName').focus({preventScroll:true});
+});
+el('xtRefreshSourcesBtn').addEventListener('click', ()=>loadXtream().catch(error=>showMessage('تعذر تحديث مصادر Xtream: '+error.message,'error')));
+
 el('catalogServer').addEventListener('change', async () => { await loadCategories(); await loadCatalog(); });
 el('catalogType').addEventListener('change', async () => { await loadCategories(); await loadCatalog(); });
 el('catalogCategory').addEventListener('change', loadCatalog);
