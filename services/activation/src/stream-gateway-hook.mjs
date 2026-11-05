@@ -20,6 +20,8 @@ export function mapStreamAdminPath(pathname) {
   if (pathname === PREFIX + '/admin-assets/admin.css') return '/admin-assets/admin.css';
   if (pathname === PREFIX + '/admin-assets/admin.js') return '/admin-assets/admin.js';
   if (pathname === PREFIX + '/admin-assets/xtream-simple.js') return '/admin-assets/xtream-simple.js';
+  if (pathname === PREFIX + '/admin-assets/stream-quick.js') return '/admin-assets/stream-quick.js';
+  if (pathname === PREFIX + '/admin-assets/stream-quick.css') return '/admin-assets/stream-quick.css';
   if (pathname.startsWith(PREFIX + '/admin-api/')) return '/admin-api/' + pathname.slice((PREFIX + '/admin-api/').length);
   return null;
 }
@@ -86,7 +88,9 @@ async function proxyAdmin(req, res, targetPath) {
       if (targetPath === '/') {
         body = body.replaceAll('/admin-assets/admin.css', '/stream/admin-assets/admin.css')
                    .replaceAll('/admin-assets/admin.js', '/stream/admin-assets/admin.js')
-                   .replaceAll('/admin-assets/xtream-simple.js', '/stream/admin-assets/xtream-simple.js');
+                   .replaceAll('/admin-assets/xtream-simple.js', '/stream/admin-assets/xtream-simple.js')
+                   .replaceAll('/admin-assets/stream-quick.js', '/stream/admin-assets/stream-quick.js')
+                   .replaceAll('/admin-assets/stream-quick.css', '/stream/admin-assets/stream-quick.css');
       } else {
         body = body.replace("const API='/admin-api/';", "const API='/stream/admin-api/';");
       }
