@@ -872,7 +872,7 @@ http.createServer = function withBlofyXtream(listener) {
         return json(res, 202, { started });
       }
 
-      const serverMatch = url.pathname.match(/^\/api\/v1\/admin\/xtream\/servers\/([0-9a-f-]+)(?:\/(test|sync))?$/i);
+      const serverMatch = url.pathname.match(/^\/api\/v1\/admin\/xtream\/servers\/([0-9a-f-]+)(?:\/(test|sync|cancel-sync))?$/i);
       if (serverMatch) {
         const id = serverMatch[1];
         const action = serverMatch[2];
