@@ -235,6 +235,52 @@ async function createAccount(body, req) {
   throw Object.assign(new Error('xtream_gateway_username_generation_failed'), { status: 503 });
 }
 
+async function createAccountsBulk(body, req) {
+  await ensureReady();
+  const count=Number(body.count||1);
+  if(!Number.isInteger(count)||count<1||count>10){
+    throw Object.assign(new Error('xtream_gateway_bulk_count_invalid'),{status:400});
+  }
+  const label=cleanLabel(body.label,'BLOFY Player');
+  const maxConnections=Number(body.maxConnections||1);
+  if(!Number.isInteger(maxConnections)||maxConnections<1||maxConnections>20){
+    throw Object.assign(new Error('xtream_gateway_max_connections_invalid'),{status:400});
+  }
+  if(!body.expiresAt){
+    throw Object.assign(new Error('xtream_gateway_expiry_required'),{status:400});
+  }
+  const expiresAt=new Date(body.expiresAt);
+  if(!Number.isFinite(expiresAt.getTime())||expiresAt.getTime()<=Date.now()){
+    throw Object.assign(new Error('xtream_gateway_expiry_invalid'),{status:400});
+  }
+  const connection=await pool.connect();
+  const created=[], issued=new Set();
+  try{
+    await connection.query('BEGIN');
+    for(let i=0;i<count;i++){
+      let username=generateGatewayUsername();
+      for(let tries=0;issued.has(username)&&tries<5;tries++)username=generateGatewayUsername();
+      if(issued.has(username))throw Object.assign(new Error('xtream_gateway_bulk_username_collision'),{status:409});
+      issued.add(username);
+      const password=generateGatewayPassword();
+      const id=crypto.randomUUID(),proof=gatewayCredentialProof(username,password,KEY_HEX);
+      const accountLabel=count===1?label:`${label} ${String(i+1).padStart(2,'0')}`;
+      const row=(await connection.query(`INSERT INTO blofy_xtream_gateway_accounts(id,label,username,password_proof,enabled,max_connections,expires_at)
+        VALUES($1,$2,$3,$4,TRUE,$5,$6) RETURNING *`,[
+        id,accountLabel,username,proof,maxConnections,expiresAt
+      ])).rows[0];
+      created.push({item:adminAccount(row),username,password});
+    }
+    await connection.query('COMMIT');
+  }catch(error){
+    await connection.query('ROLLBACK').catch(()=>{});
+    throw error;
+  }finally{connection.release();}
+  const host=origin(req);
+  return {serverUrl:host,count:created.length,items:created.map(x=>x.item),
+    credentials:created.map(x=>({serverUrl:host,username:x.username,password:x.password}))};
+}
+
 async function patchAccount(id, body) {
   await ensureReady();
   if (!validUuid(id)) throw Object.assign(new Error('xtream_gateway_account_invalid'), { status: 400 });
@@ -687,6 +733,9 @@ http.createServer = function withBlofyXtreamGateway(listener) {
       }
       if (req.method === 'POST' && url.pathname === '/api/v1/admin/xtream-gateway/accounts') {
         return json(res, 201, await createAccount(await readJson(req), req));
+      }
+      if (req.method === 'POST' && url.pathname === '/api/v1/admin/xtream-gateway/accounts/bulk') {
+        return json(res, 201, await createAccountsBulk(await readJson(req), req));
       }
       const match = url.pathname.match(/^\/api\/v1\/admin\/xtream-gateway\/accounts\/([0-9a-f-]+)(?:\/(reset))?$/i);
       if (match) {
