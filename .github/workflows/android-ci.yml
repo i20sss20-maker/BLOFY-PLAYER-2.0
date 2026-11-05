@@ -128,7 +128,7 @@ jobs:
         run: python3 tools/check_catalog_queries.py
       - name: Verify Play Xiaomi-design UX / internal 2000077 manifest and TV routes
         env:
-          BLOFY_EXPECTED_PLAY_VERSION_CODE: "2000084"
+          BLOFY_EXPECTED_PLAY_VERSION_CODE: "2000085"
         run: python3 tools/verify_play_2000073.py
       - name: Test lint and assemble
         shell: bash
