@@ -123,6 +123,24 @@ object CatalogSyncState {
             .putLong(UPDATED_PREFIX + providerId, epoch).commit()) { "Unable to persist catalog state" }
     }
 
+    /**
+     * Saved stream/category ordering changed, but the catalog, metadata and episodes
+     * are the same. Bump only the display epoch so old poster/channel page caches
+     * cannot reintroduce their former ordering.
+     */
+    @Synchronized
+    fun markOrderChanged(context: Context, providerId: String) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val epoch = maxOf(System.currentTimeMillis(), prefs.getLong(UPDATED_PREFIX + providerId, 0L) + 1L)
+        check(prefs.edit().putLong(UPDATED_PREFIX + providerId, epoch)
+            .remove(ENTRY_EPOCH_PREFIX + providerId)
+            .putBoolean(VERIFIED_PREFIX + providerId, false).commit()) {
+            "Could not save playlist ordering update"
+        }
+        HomeSnapshotStore.clear(context.applicationContext, providerId)
+        CatalogManifestStore.clear(context.applicationContext, providerId)
+    }
+
     suspend fun markSourceReplaced(context: Context, providerId: String) =
         withContext(NonCancellable + Dispatchers.IO) {
             markCatalogCommitted(context, providerId)
