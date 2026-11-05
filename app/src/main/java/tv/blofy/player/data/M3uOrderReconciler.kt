@@ -32,9 +32,10 @@ internal class M3uOrderReconciler(
         val liveTotal: Int,
         val movieMatched: Int,
         val movieTotal: Int,
-        val categoryMatches: Int
+        val categoryMatches: Int,
+        val seriesCategoriesMatched: Int
     ) {
-        val anyMatched get() = liveMatched > 0 || movieMatched > 0
+        val anyMatched get() = liveMatched > 0 || movieMatched > 0 || seriesCategoriesMatched > 0
     }
 
     suspend fun apply(provider: ProviderEntity): Result = withContext(Dispatchers.IO) {
@@ -71,10 +72,50 @@ internal class M3uOrderReconciler(
             liveCategories, liveTotal) else KindResult(0, 0)
         val movies = if (movieTotal > 0) applyKind(provider.id, "movie", snapshot.movie, snapshot.movieGroups,
             movieCategories, movieTotal) else KindResult(0, 0)
+        val series = applySeriesCategoryOrder(provider.id, snapshot.seriesGroups,
+            dao.categorySnapshot(provider.id, "series"))
         val result = Result(live.matched, liveTotal, movies.matched, movieTotal,
-            live.categories + movies.categories)
+            live.categories + movies.categories + series, series)
         check(result.anyMatched) { "M3U order could not be matched to Xtream stream IDs" }
         result
+    }
+
+    private suspend fun applySeriesCategoryOrder(
+        providerId: String,
+        groups: Map<String, Int>,
+        categories: List<CategoryEntity>
+    ): Int = withContext(Dispatchers.IO) {
+        if (groups.isEmpty() || categories.isEmpty()) return@withContext 0
+        val uniqueNames = categories.groupBy { M3uOriginalOrder.normalizeGroup(it.name) }
+            .filterValues { it.size == 1 }
+        val matches = groups.mapNotNull { (group, rank) ->
+            uniqueNames[group]?.singleOrNull()?.let { it to rank }
+        }
+        if (matches.size * 100 < categories.size * 65) return@withContext 0
+
+        val sqlite = database.openHelper.writableDatabase
+        sqlite.beginTransactionNonExclusive()
+        try {
+            sqlite.execSQL(
+                "UPDATE categories SET orderIndex = orderIndex + 1000000 WHERE providerId = ? AND kind = 'series'",
+                arrayOf<Any>(providerId)
+            )
+            val update = sqlite.compileStatement(
+                "UPDATE categories SET orderIndex = ? WHERE providerId = ? AND kind = 'series' AND remoteId = ?"
+            )
+            try {
+                for ((category, rank) in matches) {
+                    currentCoroutineContext().ensureActive()
+                    update.clearBindings()
+                    update.bindLong(1, rank.toLong())
+                    update.bindString(2, providerId)
+                    update.bindString(3, category.remoteId)
+                    update.executeUpdateDelete()
+                }
+            } finally { update.close() }
+            sqlite.setTransactionSuccessful()
+        } finally { sqlite.endTransaction() }
+        matches.size
     }
 
     private data class KindResult(val matched: Int, val categories: Int)
