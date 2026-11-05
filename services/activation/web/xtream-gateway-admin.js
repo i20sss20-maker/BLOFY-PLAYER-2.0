@@ -56,21 +56,42 @@ function renderGatewayBatch(credentials){
   gatewayState.lastIssued=credentials.map(x=>({
     serverUrl:String(x.serverUrl||''),
     username:String(x.username||''),
-    password:String(x.password||'')
+    password:String(x.password||''),
+    appCode:''
   }));
   const panel=gx('gatewayBatchCredentials'),rows=gx('gatewayBatchRows');
   rows.replaceChildren();
-  for(const account of gatewayState.lastIssued){
+  gatewayState.lastIssued.forEach((account,index)=>{
     const line=gatewayNode('div','gateway-batch-row');
-    const heading=gatewayNode('strong','',account.username);
-    const data=gatewayNode('code','',account.serverUrl+'  ·  '+account.password);
-    line.append(heading,data);rows.append(line);
-  }
-  panel.hidden=gatewayState.lastIssued.length<=1;
-  gx('gatewayCredentials').hidden=gatewayState.lastIssued.length!==1;
-  if(gatewayState.lastIssued.length===1)showCredentials(gatewayState.lastIssued[0]);
+    const details=gatewayNode('div','gateway-batch-details');
+    details.append(gatewayNode('strong','',account.username));
+    details.append(gatewayNode('code','',account.serverUrl+' · '+account.password));
+    const button=gatewayNode('button','button ghost','إصدار كود تطبيق BLOFY');
+    button.type='button';
+    button.addEventListener('click',async()=>{
+      if(!window.confirm('هل تريد إصدار كود تفعيل تطبيق BLOFY لهذا الحساب؟'))return;
+      button.disabled=true;
+      try{
+        const result=await gatewayApi('/api/v1/admin/blofy-codes',{
+          method:'POST',body:JSON.stringify({
+            source:'custom',host:account.serverUrl,username:account.username,password:account.password
+          })
+        });
+        if(!result.code)throw new Error('blofy_code_not_returned');
+        account.appCode=String(result.code);
+        button.replaceWith(gatewayNode('strong','gateway-app-code', 'كود التطبيق: '+account.appCode));
+        gatewayMessage('تم إصدار كود BLOFY لهذا الحساب. احفظه الآن مع بيانات Xtream.');
+      }catch(error){
+        button.disabled=false;
+        gatewayMessage('تعذر إصدار كود BLOFY: '+error.message,'error');
+      }
+    });
+    line.append(details,button);
+    rows.append(line);
+  });
+  panel.hidden=gatewayState.lastIssued.length===0;
+  gx('gatewayCredentials').hidden=true;
 }
-
 function formatBatchText(){
   return gatewayState.lastIssued.map(x=>'Host: '+x.serverUrl+'\nUsername: '+x.username+'\nPassword: '+x.password).join('\n\n');
 }
@@ -81,8 +102,8 @@ function downloadBatchCsv(){
     if(/^[\s]*[=+\-@]/.test(raw))raw="'"+raw;
     return '"'+raw.replaceAll('"','""')+'"';
   };
-  const lines=['Host,Username,Password'].concat(
-    gatewayState.lastIssued.map(x=>[x.serverUrl,x.username,x.password].map(quote).join(','))
+  const lines=['Host,Username,Password,BlofyAppCode'].concat(
+    gatewayState.lastIssued.map(x=>[x.serverUrl,x.username,x.password,x.appCode||''].map(quote).join(','))
   );
   const url=URL.createObjectURL(new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'}));
   const link=document.createElement('a');
