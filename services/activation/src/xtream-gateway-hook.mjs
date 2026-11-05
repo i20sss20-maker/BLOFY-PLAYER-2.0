@@ -349,8 +349,8 @@ async function gatewayCategories(mediaType) {
     FROM blofy_xtream_gateway_category_map m
     JOIN blofy_xtream_categories c ON c.server_id=m.server_id AND c.media_type=m.media_type AND c.source_category_id=m.source_category_id
     JOIN blofy_xtream_servers s ON s.id=c.server_id
-    WHERE m.media_type=$1 AND c.enabled=TRUE AND s.enabled=TRUE
-    ORDER BY s.priority,c.name`, [mediaType])).rows.map(formatGatewayCategory);
+    WHERE m.media_type=$1 AND c.enabled=TRUE AND s.enabled=TRUE AND s.publish_catalog=TRUE
+    ORDER BY s.priority,c.sort_order,c.name`, [mediaType])).rows.map(formatGatewayCategory);
 }
 
 async function categoryFilter(mediaType, gatewayId) {
