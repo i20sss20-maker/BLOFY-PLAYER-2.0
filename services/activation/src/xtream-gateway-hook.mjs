@@ -619,7 +619,7 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
   const mediaExtension=kind==='live'?(requestedExtension||extension):(extension||requestedExtension);
   const startedAt=Date.now();
   const observe=(phase,details={})=>{
-    if(req.method!=='HEAD')recordXtreamPlayback({kind,phase,...details});
+    if(req.method!=='HEAD')recordXtreamPlayback({kind,itemId:gatewayId,phase,...details});
   };
   // Keep each viewer's stream independent. Only retry failures before video bytes reach them.
   const client = new AbortController();
@@ -723,6 +723,68 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
   } finally {
     req.off('aborted',abort);
     res.off('close',onClose);
+  }
+}
+
+// Explicit operator-only probe. Check first bytes, never return upstream URLs,
+// source IDs, provider passwords, client IPs or full media payloads.
+let itemProbeAt=0;
+let itemProbeRunning=false;
+async function probeGatewayMedia(kind,itemId){
+  if(!['live','movie','series'].includes(kind)||!Number.isSafeInteger(itemId)||itemId<1)
+    throw Object.assign(new Error('xtream_media_probe_invalid'),{status:400});
+  const now=Date.now();
+  if(itemProbeRunning)throw Object.assign(new Error('xtream_media_probe_busy'),{status:429});
+  if(now-itemProbeAt<12000)throw Object.assign(new Error('xtream_media_probe_cooldown'),{status:429});
+  itemProbeAt=now;
+  itemProbeRunning=true;
+  const started=Date.now();
+  let reader,response;
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),10000);
+  try{
+    const row=kind==='series'
+      ?await episodeByGatewayId(itemId)
+      :await gatewayItemById(kind==='live'?'live':'movie',itemId);
+    if(!row||!row.server_enabled)return{ok:false,kind,itemId,reason:'catalog_item_not_found',httpStatus:null};
+    const ext=safeGatewayExtension(row.container_extension,kind==='live'?'ts':'mp4');
+    const sourceId=kind==='series'?row.source_episode_id:row.source_id;
+    const url=mediaUpstreamUrl(row,kind,sourceId,ext);
+    response=await checkedFetch(url,{
+      method:'GET',headers:{
+        'user-agent':'BLOFY-Media-Diagnostics/1.0',
+        ...(kind==='live'?{}:{range:'bytes=0-2047'})
+      },signal:controller.signal
+    });
+    const status=response.status;
+    if(!(response.ok||status===206)){
+      return{ok:false,kind,itemId,httpStatus:status,reason:'upstream_http_'+status,
+        elapsedMs:Date.now()-started};
+    }
+    if(!response.body)return{ok:false,kind,itemId,httpStatus:status,reason:'upstream_empty_media',elapsedMs:Date.now()-started};
+    reader=response.body.getReader();
+    let first;
+    do{first=await reader.read()}while(!first.done&&!first.value?.byteLength);
+    if(first.done)return{ok:false,kind,itemId,httpStatus:status,reason:'upstream_empty_media',elapsedMs:Date.now()-started};
+    const mime=String(response.headers.get('content-type')||'').toLowerCase();
+    const prefix=Buffer.from(first.value).subarray(0,160).toString('utf8').trimStart().toLowerCase();
+    if(mime.includes('text/html')||mime.includes('application/json')||prefix.startsWith('<html')||prefix.startsWith('<!doctype html'))
+      return{ok:false,kind,itemId,httpStatus:status,reason:'upstream_non_media_response',elapsedMs:Date.now()-started};
+    const type=prefix.startsWith('#extm3u')?'hls':
+      first.value[0]===0x47?'ts':
+      Buffer.from(first.value).subarray(4,8).toString('ascii')==='ftyp'?'mp4':
+      first.value[0]===0x1a&&first.value[1]===0x45?'mkv':'unknown';
+    return{ok:true,kind,itemId,httpStatus:status,format:type,elapsedMs:Date.now()-started,
+      note:'first_media_bytes_only'};
+  }catch(error){
+    return{ok:false,kind,itemId,httpStatus:null,
+      reason:controller.signal.aborted?'timeout':'source_unreachable',elapsedMs:Date.now()-started};
+  }finally{
+    clearTimeout(timeout);
+    controller.abort();
+    if(reader){try{await reader.cancel()}catch{}try{reader.releaseLock()}catch{}}
+    else if(response?.body){try{await response.body.cancel()}catch{}}
+    itemProbeRunning=false;
   }
 }
 
@@ -854,6 +916,14 @@ http.createServer = function withBlofyXtreamGateway(listener) {
       if (!url.pathname.startsWith('/api/v1/admin/xtream-gateway')) return listener(req, res);
       if (!requireAdmin(req, res)) return;
       await ensureReady();
+      if (req.method === 'POST' && url.pathname === '/api/v1/admin/xtream-gateway/playback-probe') {
+        const body=await readJson(req);
+        const raw=String(body.itemId??'');
+        if(!/^[1-9][0-9]{0,14}$/.test(raw))
+          return json(res,400,{error:'xtream_media_probe_invalid'});
+        const result=await probeGatewayMedia(body.kind,Number(raw));
+        return json(res,200,result);
+      }
       if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream-gateway/playback-health') {
         return json(res,200,{ok:true,metrics:xtreamPlaybackSnapshot()});
       }

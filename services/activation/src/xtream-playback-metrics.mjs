@@ -12,14 +12,16 @@ const REASONS=new Set([
   'upstream_non_media_response','upstream_unreachable'
 ]);
 
-export function recordXtreamPlayback({kind,phase,upstreamStatus,reason,startupMs,attempts}={},now=Date.now()){
+export function recordXtreamPlayback({kind,phase,upstreamStatus,reason,startupMs,attempts,itemId}={},now=Date.now()){
   if(!KINDS.has(kind)||!PHASES.has(phase))return;
   const safeStatus=Number.isInteger(Number(upstreamStatus))&&Number(upstreamStatus)>=100&&Number(upstreamStatus)<=599
     ?Number(upstreamStatus):null;
   const safeReason=REASONS.has(reason)?reason:'';
   const time=Number.isFinite(now)?now:Date.now();
+  const parsedId=Number(itemId);
+  const safeId=/^[1-9][0-9]{0,14}$/.test(String(itemId??''))&&Number.isSafeInteger(parsedId)?parsedId:null;
   samples.push({
-    at:time,kind,phase,
+    at:time,kind,phase,itemId:safeId,
     status:safeStatus,reason:safeReason,
     startupMs:Number.isFinite(startupMs)&&startupMs>=0?Math.min(Math.round(startupMs),120000):null,
     attempts:Number.isInteger(attempts)?Math.min(Math.max(attempts,1),3):null
@@ -62,6 +64,7 @@ export function xtreamPlaybackSnapshot(now=Date.now()){
     recentIssues:[...failed,...interrupted].sort((a,b)=>b.at-a.at).slice(0,12).map(row=>({
       at:new Date(row.at).toISOString(),
       kind:row.kind,
+      itemId:row.itemId,
       phase:row.phase,
       upstreamStatus:row.status,
       reason:row.reason,
