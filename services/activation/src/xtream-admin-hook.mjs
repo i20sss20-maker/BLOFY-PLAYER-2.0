@@ -31,6 +31,44 @@ const pool = new pg.Pool({
 });
 pool.on('error', error => console.error('xtream database error:', safeErrorSummary(error)));
 
+// Reserve connections for short, committed administration mutations.
+// Long catalog synchronizations and cleanup must never starve Delete/Pause.
+const controlPool = new pg.Pool({
+  ...databaseOptions(DATABASE_URL),
+  max: 2,
+  connectionTimeoutMillis: 2500,
+  idleTimeoutMillis: 15000,
+  statement_timeout: 6500
+});
+controlPool.on('error', error => console.error('xtream admin database error:',safeErrorSummary(error)));
+
+async function sourceMutation(sql, values) {
+  for (let attempt=0;attempt<3;attempt++) {
+    let client;
+    try {
+      client = await controlPool.connect();
+      await client.query('BEGIN');
+      // Fail quickly instead of leaving user actions pending for the HTTP
+      // gateway's 15-second timeout when imports hold conflicting row locks.
+      await client.query("SET LOCAL lock_timeout='1300ms'");
+      await client.query("SET LOCAL statement_timeout='2800ms'");
+      const result=await client.query(sql,values);
+      await client.query('COMMIT');
+      return result;
+    } catch(error) {
+      if(client)await client.query('ROLLBACK').catch(()=>{});
+      const retryable=['55P03','57014','53300'].includes(String(error?.code||''))
+        || /lock timeout|timeout exceeded when trying to connect|Connection terminated unexpectedly/i.test(String(error?.message||''));
+      if(!retryable)throw error;
+      if(attempt===2)throw Object.assign(new Error('xtream_source_busy_retry'),{status:409});
+      await new Promise(resolve=>setTimeout(resolve,150*(attempt+1)));
+    } finally {
+      client?.release();
+    }
+  }
+  throw Object.assign(new Error('xtream_source_busy_retry'),{status:409});
+}
+
 const limiter = createFixedWindowLimiter({ limit: 180, windowMs: 60_000 });
 const syncLocks = new Set();
 const cancelledSources = new Set();
@@ -234,13 +272,13 @@ function adminServer(row) {
 
 async function serverRows() {
   await ensureReady();
-  return (await pool.query('SELECT * FROM blofy_xtream_servers WHERE deletion_requested_at IS NULL ORDER BY priority ASC,name ASC')).rows;
+  return (await controlPool.query('SELECT * FROM blofy_xtream_servers WHERE deletion_requested_at IS NULL ORDER BY priority ASC,name ASC')).rows;
 }
 
 async function serverById(id) {
   await ensureReady();
   if (!validUuid(id)) return null;
-  return (await pool.query('SELECT * FROM blofy_xtream_servers WHERE id=$1 AND deletion_requested_at IS NULL', [id])).rows[0] || null;
+  return (await controlPool.query('SELECT * FROM blofy_xtream_servers WHERE id=$1 AND deletion_requested_at IS NULL', [id])).rows[0] || null;
 }
 
 // A large catalog can hold thousands of foreign-key references. Mark a source
@@ -286,7 +324,10 @@ async function resumePendingPurges() {
 }
 
 async function requestDeleteSource(id) {
-  const result = await pool.query(`UPDATE blofy_xtream_servers
+  await ensureReady();
+  // Cancel future import batches before competing for the record lock.
+  cancelledSources.add(id);
+  const result = await sourceMutation(`UPDATE blofy_xtream_servers
     SET enabled=FALSE,publish_catalog=FALSE,status='offline',
         deletion_requested_at=COALESCE(deletion_requested_at,NOW()),updated_at=NOW()
     WHERE id=$1 RETURNING id`,[id]);
@@ -591,7 +632,7 @@ async function patchServer(id, body) {
   }
   if (!updates.length) throw Object.assign(new Error('nothing_to_update'), { status: 400 });
   values.push(id);
-  const result = await pool.query(`UPDATE blofy_xtream_servers SET ${updates.join(',')},updated_at=NOW() WHERE id=$${values.length} AND deletion_requested_at IS NULL RETURNING *`, values);
+  const result = await sourceMutation(`UPDATE blofy_xtream_servers SET ${updates.join(',')},updated_at=NOW() WHERE id=${values.length} AND deletion_requested_at IS NULL RETURNING *`, values);
   if(!result.rows[0])throw Object.assign(new Error('xtream_server_not_found'),{status:404});
   return adminServer(result.rows[0]);
 }
