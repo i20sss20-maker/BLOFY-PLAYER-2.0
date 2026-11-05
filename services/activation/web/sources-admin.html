@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#09090e">
   <link rel="icon" type="image/png" href="/blofy-logo.png"><link rel="apple-touch-icon" href="/blofy-logo.png"><meta name="robots" content="noindex,nofollow"><title>BLOFY STREAM | إدارة المصادر والاشتراكات</title>
-  <link rel="stylesheet" href="/sources-admin.css?v=20261106-media-probe-v3">
+  <link rel="stylesheet" href="/sources-admin.css?v=20261106-content-sort-v5">
   <link rel="stylesheet" href="/site-polish.css?v=20261025-lux-final">
 </head>
 <body>
@@ -201,6 +201,15 @@
               <div><h3>تنظيم الأقسام بسهولة</h3><p>انقل القسم للأول بضغطة واحدة، أو عدّل ترتيبه، وأخفِ الأقسام غير المطلوبة دون حذف محتواها. الحفظ تلقائي.</p></div>
               <div class="category-toolbar"><input id="categorySearch" type="search" autocomplete="off" placeholder="ابحث باسم الفئة" aria-label="بحث في الأقسام"><select id="categoryVisibility" aria-label="فلترة ظهور الأقسام"><option value="all">جميع الأقسام</option><option value="visible">الظاهرة</option><option value="hidden">المخفية</option></select></div>
             </div>
+            <div class="category-auto-sort" aria-label="ترتيب سريع للأقسام">
+              <strong>ترتيب تلقائي للأقسام</strong>
+              <select id="categoryAutoSortMode" aria-label="طريقة ترتيب الأقسام">
+                <option value="popular">الأكثر محتوى أولًا</option>
+                <option value="alphabetical">أبجديًا بحسب اسم القسم</option>
+              </select>
+              <button id="categoryAutoSortBtn" class="button ghost" type="button">تطبيق الترتيب</button>
+              <small>يطبّق على المصدر والنوع المحددين فقط، ولا يحذف شيئًا أو يغيّر الأقسام المخفية.</small>
+            </div>
             <div id="categoryManagerSummary" class="category-manager-summary" role="status">اختر مصدرًا ونوع المحتوى لعرض الفئات.</div>
             <div id="categoryManagerRows" class="category-manager-rows"></div>
           </div>
@@ -213,7 +222,7 @@
       <footer><span>BLOFY STREAM · إدارة Xtream</span></footer>
     </main>
   </div>
-  <script src="/sources-admin.js?v=20261106-gateway-auth-health-v4" defer></script>
+  <script src="/sources-admin.js?v=20261106-content-sort-v5" defer></script>
   <script src="/xtream-gateway-admin.js?v=20261105-source-selection-v1" defer></script>
 </body>
 </html>

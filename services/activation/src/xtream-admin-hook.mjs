@@ -19,6 +19,7 @@ import pg from 'pg';
 import { downloadXtreamM3uCatalog } from './xtream-m3u-catalog.mjs';
 import { distinctXtreamRecords } from './xtream-import-dedup.mjs';
 import { CONTROL_PATH, controlPage, deleteConfirmationPage, readControlForm } from './xtream-native-controls.mjs';
+import { sortXtreamCategories } from './xtream-category-sort.mjs';
 import { nativeXtreamCsrfToken } from './xtream-native-csrf.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
@@ -825,6 +826,47 @@ async function patchCategory(serverId, mediaType, categoryId, enabled) {
   return result.rows[0];
 }
 
+// Operator-triggered, transactional reordering only. No catalog rows,
+// visibility, subscriber entitlements or upstream credentials are touched.
+async function autoSortCategories(serverId,mediaType,mode){
+  if(!validUuid(serverId)||!validType(mediaType)||!['popular','alphabetical'].includes(mode))
+    throw Object.assign(new Error('xtream_category_sort_invalid'),{status:400});
+  const client=await pool.connect();
+  try{
+    await client.query('BEGIN');
+    await client.query("SET LOCAL lock_timeout='1300ms'");
+    await client.query("SET LOCAL statement_timeout='12000ms'");
+    const records=await client.query(`SELECT source_category_id,name,item_count
+      FROM blofy_xtream_categories
+      WHERE server_id=$1 AND media_type=$2
+      ORDER BY sort_order,name,source_category_id
+      LIMIT 1001 FOR UPDATE`,[serverId,mediaType]);
+    if(records.rows.length>1000)
+      throw Object.assign(new Error('xtream_category_sort_too_many'),{status:409});
+    if(!records.rows.length){
+      await client.query('COMMIT');
+      return{updated:0,mode,unchanged:true};
+    }
+    const current=records.rows.map(row=>String(row.source_category_id));
+    const ordered=sortXtreamCategories(records.rows,mode);
+    const unchanged=current.every((id,index)=>id===ordered[index]);
+    if(!unchanged){
+      await client.query(`UPDATE blofy_xtream_categories c
+        SET sort_order=rank.pos::int,updated_at=NOW()
+        FROM unnest($3::text[]) WITH ORDINALITY AS rank(category_id,pos)
+        WHERE c.server_id=$1 AND c.media_type=$2 AND c.source_category_id=rank.category_id`,
+        [serverId,mediaType,ordered]);
+    }
+    await client.query('COMMIT');
+    return{updated:ordered.length,mode,unchanged};
+  }catch(error){
+    await client.query('ROLLBACK').catch(()=>{});
+    if(['55P03','57014'].includes(String(error?.code||'')))
+      throw Object.assign(new Error('xtream_category_busy_retry'),{status:409});
+    throw error;
+  }finally{client.release();}
+}
+
 async function moveCategory(serverId, mediaType, categoryId, direction) {
   if (!validUuid(serverId) || !validType(mediaType) || !['up','down','top'].includes(direction))
     throw Object.assign(new Error('xtream_category_move_invalid'), { status: 400 });
@@ -1024,6 +1066,10 @@ http.createServer = function withBlofyXtream(listener) {
       if (req.method === 'POST' && url.pathname === '/api/v1/admin/xtream/servers') {
         const item = await createServer(await readJson(req));
         return json(res, 201, { item });
+      }
+      if (req.method === 'POST' && url.pathname === '/api/v1/admin/xtream/categories/auto-sort') {
+        const body=await readJson(req);
+        return json(res,200,await autoSortCategories(body.serverId,body.mediaType,body.mode));
       }
       if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream/categories') {
         return json(res, 200, { items: await listCategories(url.searchParams.get('serverId'), url.searchParams.get('type')) });

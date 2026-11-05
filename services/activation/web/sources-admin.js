@@ -625,6 +625,31 @@ function renderCategoryManager() {
   if(matches.length>rows.length)target.append(make('p','muted','المعروض أول 120 فئة. استخدم البحث للوصول إلى بقية الفئات.'));
 }
 
+async function autoSortCurrentCategories(){
+  const serverId=el('catalogServer').value,mediaType=el('catalogType').value;
+  const mode=el('categoryAutoSortMode').value,button=el('categoryAutoSortBtn');
+  if(!serverId){showMessage('اختر المصدر أولًا ثم نوع المحتوى.','error');return;}
+  if(!state.categories.length){showMessage('لا توجد أقسام لترتيبها في هذا الاختيار.','error');return;}
+  if(!['popular','alphabetical'].includes(mode))return;
+  const description=mode==='popular'?'الأقسام الأكثر محتوى أولًا':'الترتيب الأبجدي للأقسام';
+  if(!window.confirm('تطبيق '+description+' على '+state.categories.length+' قسمًا لهذا المصدر فقط؟ ستبقى الأقسام المخفية كما هي.'))return;
+  button.disabled=true;
+  button.textContent='جارٍ حفظ الترتيب…';
+  try{
+    const result=await api('/api/v1/admin/xtream/categories/auto-sort',{
+      method:'POST',body:JSON.stringify({serverId,mediaType,mode})
+    });
+    await loadCategories();
+    showMessage(result.unchanged?'الأقسام مرتبة بالفعل بهذا الشكل.':
+      'تم ترتيب '+Number(result.updated||0).toLocaleString('en-US')+' قسمًا وحفظ التغييرات. لا تغيير على إظهارها أو محتواها.');
+  }catch(error){
+    showMessage('تعذر ترتيب الأقسام: '+(error.message==='xtream_category_busy_retry'?
+      'المصدر مشغول بالمزامنة. جرّب مجددًا بعد انتهاء مزامنته.':error.message),'error');
+  }finally{
+    button.disabled=false;button.textContent='تطبيق الترتيب';
+  }
+}
+
 async function changeCategory(button) {
   const categoryId=button.dataset.categoryId;
   const action=button.dataset.action;
@@ -924,6 +949,7 @@ el('catalogType').addEventListener('change', async () => { await loadCategories(
 el('catalogCategory').addEventListener('change', loadCatalog);
 el('categorySearch').addEventListener('input',renderCategoryManager);
 el('categoryVisibility').addEventListener('change',renderCategoryManager);
+el('categoryAutoSortBtn').addEventListener('click',autoSortCurrentCategories);
 el('categoryManagerRows').addEventListener('click',event=>{
   const button=event.target.closest('button[data-action][data-category-id]');
   if(button)changeCategory(button).catch(error=>showMessage('تعذر حفظ الفئة: '+error.message,'error'));
