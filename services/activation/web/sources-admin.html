@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#09090e">
   <link rel="icon" type="image/png" href="/blofy-logo.png"><link rel="apple-touch-icon" href="/blofy-logo.png"><meta name="robots" content="noindex,nofollow"><title>BLOFY STREAM | إدارة المصادر والاشتراكات</title>
-  <link rel="stylesheet" href="/sources-admin.css?v=20261105-fullwidth">
+  <link rel="stylesheet" href="/sources-admin.css?v=20261105-manager">
   <link rel="stylesheet" href="/site-polish.css?v=20261025-lux-final">
 </head>
 <body>
@@ -144,7 +144,7 @@
         </section>
         <p id="xtreamTotalsNotice" class="stream-totals-notice" role="status">جاري فحص أعداد المحتوى من السيرفرات الموجودة في هذه اللوحة…</p>
 
-        <section class="panel form-panel">
+        <section class="panel form-panel" id="xtAddSourceSection">
           <div class="panel-head">
             <div><span class="panel-kicker">UPSTREAM SOURCES</span><h2>إضافة حساب Xtream إلى المكتبة</h2><p>كرر هذه العملية لكل حساب تملك حق إعادة توزيع محتواه؛ يتم دمج القنوات والأفلام والمسلسلات من الحسابات المنشورة في مكتبة واحدة.</p></div>
             <button id="syncAllXtreamBtn" class="button primary" type="button">مزامنة كل المصادر</button>
@@ -162,8 +162,23 @@
           <p class="security-note">يفضّل HTTPS. المصدر الذي يستخدم HTTP قد يرسل بيانات الدخول للمزود بدون تشفير شبكي.</p>
         </section>
 
-        <section class="panel">
-          <div class="panel-head"><div><h2>المصادر المضافة</h2><p>المزامنة تستورد الكتالوج والبيانات فقط. ملفات الفيديو نفسها لا تُنسخ إلى خوادم BLOFY.</p></div></div>
+        <section class="panel xtream-manager-panel" id="xtreamManager">
+          <div class="panel-head">
+            <div>
+              <span class="panel-kicker">XTREAM SOURCE MANAGER</span>
+              <h2>إدارة حسابات Xtream</h2>
+              <p>أضف أي عدد من المصادر وفعّل أو أوقف كل واحد بشكل مستقل. حذف المصدر يزيل محتواه من BLOFY، ولا يلغي اشتراكك لدى المزود.</p>
+            </div>
+            <div class="inline-actions">
+              <button id="xtNewSourceBtn" class="button primary" type="button">+ إضافة Xtream جديد</button>
+              <button id="xtRefreshSourcesBtn" class="button ghost" type="button">تحديث القائمة</button>
+            </div>
+          </div>
+          <div class="xtream-source-toolbar">
+            <label><span>بحث عن المصدر</span><input id="xtSourceSearch" type="search" placeholder="الاسم أو عنوان Host" autocomplete="off"></label>
+            <label><span>عرض المصادر</span><select id="xtSourceFilter"><option value="all">جميع المصادر</option><option value="enabled">المفعّلة</option><option value="disabled">الموقوفة</option><option value="published">المنشورة للعملاء</option></select></label>
+            <span id="xtSourceSummary" class="xtream-source-summary" role="status">جاري تحميل المصادر…</span>
+          </div>
           <div id="xtreamLoading" class="loading">جارٍ تحميل المصادر…</div>
           <div id="xtreamServers" class="server-list" hidden></div>
         </section>
@@ -191,7 +206,7 @@
       <footer><span>BLOFY Sources</span><span>•</span><a href="https://github.com/i20sss20-maker/BLOFY-SOURCES" target="_blank" rel="noreferrer">GitHub</a></footer>
     </main>
   </div>
-  <script src="/sources-admin.js?v=20261105-fullwidth" defer></script>
+  <script src="/sources-admin.js?v=20261105-manager" defer></script>
   <script src="/xtream-gateway-admin.js?v=20261105-fullwidth" defer></script>
 </body>
 </html>
