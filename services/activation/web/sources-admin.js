@@ -3,6 +3,7 @@ const state = {
   xtreamServers: [],
   xtreamTotals: {},
   xtreamLoadSequence: 0,
+  sourceFeedback: new Map(),
   categories: [],
   catalog: [],
   activeTab: 'xtream',
@@ -73,6 +74,7 @@ function serverCard(item) {
   const title = make('div');
   title.append(make('strong', '', item.name));
   title.append(make('code', 'server-url', item.baseUrl));
+  title.append(make('small','source-id','ID: '+String(item.id||'').slice(0,8));
   const status = make('span', `server-status ${xtStatusClass(item.syncing ? 'syncing' : item.status)}`, item.syncing ? 'Syncing' : item.status);
   header.append(title, status);
 
@@ -135,6 +137,11 @@ function serverCard(item) {
   if (item.accountInfo?.activeConnections != null) info.append(make('span', 'badge', `Active ${item.accountInfo.activeConnections}`));
   if (item.lastSyncAt) info.append(make('span', 'muted', `آخر مزامنة: ${new Date(item.lastSyncAt).toLocaleString('ar-SA')}`));
   if (item.lastError) info.append(make('span', 'error-text', `آخر خطأ: ${item.lastError}`));
+  const feedback=state.sourceFeedback.get(item.id);
+  const actionStatus=make('p',feedback?.kind==='error'?'source-action-feedback error':'source-action-feedback',feedback?.text||'');
+  actionStatus.setAttribute('role','status');
+  actionStatus.hidden=!feedback;
+  info.append(actionStatus);
 
   card.addEventListener('click', event => {
     const button = event.target.closest('button[data-action]');
@@ -328,6 +335,16 @@ async function handleServerAction(item, card, button) {
   button.disabled = true;
   const old = button.textContent;
   button.textContent = 'جارٍ الحفظ…';
+  const writeFeedback=(message,kind='ok')=>{
+    state.sourceFeedback.set(item.id,{text:message,kind});
+    const target=card.querySelector('.source-action-feedback');
+    if(target){
+      target.textContent=message;
+      target.classList.toggle('error',kind==='error');
+      target.hidden=false;
+    }
+  };
+  writeFeedback('تم استلام الضغط على الزر. جارٍ إرسال الطلب للسيرفر…');
   try {
     if (action === 'toggle-enabled' || action === 'toggle-publish') {
       const isEnable=action==='toggle-enabled';
@@ -394,11 +411,18 @@ async function handleServerAction(item, card, button) {
     }
     if(!['toggle-enabled','toggle-publish','delete'].includes(action))await loadXtream(true);
   } catch (error) {
+    writeFeedback('لم يُحفظ التغيير: '+error.message,'error');
     showMessage(`فشلت العملية: ${error.message}`, 'error');
   } finally {
     card.dataset.busy = '0';
     button.disabled = false;
     button.textContent = old;
+    const feedback=state.sourceFeedback.get(item.id);
+    if(feedback?.kind!=='error' && !feedback?.text?.includes('تم حفظ')){
+      // The global message includes action-specific details and remains
+      // visible. Mirror successful results inside this source card.
+      writeFeedback('انتهى الطلب. راجع رسالة النتيجة أعلى اللوحة.');
+    }
     if(document.activeElement===button)button.blur();
     // Apply state received during the request without disrupting the click.
     renderXtream();
