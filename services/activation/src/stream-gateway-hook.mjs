@@ -9,7 +9,7 @@ const origin = (() => {
   if (!UPSTREAM) return null;
   const u = new URL(UPSTREAM);
   if (u.protocol !== 'https:' || u.username || u.password || u.search || u.hash ||
-      !/^[a-z0-9-]+\\.up\\.railway\\.app$/i.test(u.hostname) || (u.pathname !== '/' && u.pathname !== '')) {
+      !/^[a-z0-9-]+\.up\.railway\.app$/i.test(u.hostname) || (u.pathname !== '/' && u.pathname !== '')) {
     throw new Error('BLOFY_STREAM_UPSTREAM must be an HTTPS Railway service origin');
   }
   return u.origin;
@@ -24,7 +24,7 @@ export function mapStreamAdminPath(pathname) {
 }
 
 function responseCookie(cookie) {
-  return cookie.replace(/^blofy_admin=/, 'blofy_stream_admin=').replace(/;\\s*Path=\\/([^;]*)/i, '; Path=/stream');
+  return cookie.replace(/^blofy_admin=/, 'blofy_stream_admin=').replace(/;\s*Path=\/([^;]*)/i, '; Path=/stream');
 }
 function streamCookies(value) {
   return String(value || '').split(';').map(v => v.trim())
