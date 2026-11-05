@@ -51,7 +51,7 @@ function make(tag, className, text) {
 function sourceCard(item) {
   const card = make('article', `source${item.enabled ? '' : ' off'}`);
   card.dataset.id = item.id;
-  const main = make('div', 'source-main');
+  const main = make('div', 'source-card-main');
   const icon = make('div', 'icon');
   if (item.iconUrl) {
     const img = document.createElement('img');
