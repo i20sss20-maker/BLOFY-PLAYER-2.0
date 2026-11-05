@@ -16,12 +16,14 @@ test('sources manager has independent search, filter, add and refresh controls',
 
 test('each Xtream source has direct on/off, publish, sync and delete actions',()=>{
   const card=ui.slice(ui.indexOf('function serverCard('),ui.indexOf('function renderXtream('));
-  for(const action of ['toggle-enabled','toggle-publish','sync-all','delete','save']) {
+  for(const action of ['toggle-enabled','toggle-publish','sync-all','delete']) {
     assert.ok(card.includes("'"+action+"'"),action);
   }
   assert.match(card,/item\.enabled \? '⏸ إيقاف المصدر' : '▶ تفعيل المصدر'/);
   assert.match(card,/item\.publishCatalog \? 'إخفاء المحتوى عن العملاء' : 'نشر المحتوى للعملاء'/);
   assert.match(card,/item\.syncing && action\.startsWith\('sync'\)/);
+  assert.match(card,/editForm\.action=.*\/save/);
+  assert.match(card,/saveButton\.type='submit'/);
   assert.doesNotMatch(card,/action === 'delete'\)/);
 });
 
