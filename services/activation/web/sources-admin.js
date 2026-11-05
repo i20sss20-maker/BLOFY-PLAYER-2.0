@@ -104,7 +104,7 @@ function serverCard(item) {
   buttons.forEach(([text, action, cls]) => {
     const button = make('button', cls, text);
     button.type = 'button'; button.dataset.action = action;
-    button.disabled = item.syncing && (action.startsWith('sync') || action === 'delete');
+    button.disabled = item.syncing && action.startsWith('sync');
     actions.append(button);
   });
 
