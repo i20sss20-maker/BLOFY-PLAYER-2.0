@@ -57,6 +57,11 @@ internal class M3uOrderReconciler(
             }
         }
         val dao = database.dao()
+        val current = checkNotNull(dao.provider(provider.id)) { "Provider no longer exists" }
+        check(current.baseUrl == provider.baseUrl &&
+            current.username == provider.username && current.password == provider.password) {
+            "Playlist was changed while checking the source order"
+        }
         val liveTotal = dao.catalogCountAll(provider.id, "live")
         val movieTotal = dao.catalogCountAll(provider.id, "movie")
         val liveCategories = dao.categorySnapshot(provider.id, "live")
