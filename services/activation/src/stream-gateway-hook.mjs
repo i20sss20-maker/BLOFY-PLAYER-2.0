@@ -17,6 +17,7 @@ const origin = (() => {
 
 export function mapStreamAdminPath(pathname) {
   if (pathname === PREFIX || pathname === PREFIX + '/') return '/';
+  if (['/source','/codes','/users','/content','/appcodes'].includes(pathname.slice(PREFIX.length)) && pathname.startsWith(PREFIX+'/')) return '/';
   if (pathname === PREFIX + '/admin-assets/admin.css') return '/admin-assets/admin.css';
   if (pathname === PREFIX + '/admin-assets/admin.js') return '/admin-assets/admin.js';
   if (pathname === PREFIX + '/admin-assets/xtream-simple.js') return '/admin-assets/xtream-simple.js';
