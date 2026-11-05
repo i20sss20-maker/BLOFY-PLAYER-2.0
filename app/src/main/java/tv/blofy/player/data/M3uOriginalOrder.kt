@@ -14,6 +14,7 @@ internal class M3uOriginalOrder {
     val movie = LinkedHashMap<String, Long>()
     val liveGroups = LinkedHashMap<String, Int>()
     val movieGroups = LinkedHashMap<String, Int>()
+    val seriesGroups = LinkedHashMap<String, Int>()
     var validHeader: Boolean = false
         private set
     var lineCount: Int = 0
@@ -50,10 +51,14 @@ internal class M3uOriginalOrder {
             }
             if (rows != null) {
                 if (id !in rows) rows[id] = rows.size.toLong() + 1L
-                pendingGroup?.let { group ->
-                    val groups = if (kind == "live") liveGroups else movieGroups
-                    if (group !in groups) groups[group] = groups.size
+            }
+            pendingGroup?.let { group ->
+                val groups = when (kind) {
+                    "live" -> liveGroups
+                    "movie" -> movieGroups
+                    else -> seriesGroups
                 }
+                if (group !in groups) groups[group] = groups.size
             }
         }
         pendingGroup = null
