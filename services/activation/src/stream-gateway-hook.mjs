@@ -15,9 +15,24 @@ const origin = (() => {
   return u.origin;
 })();
 
+// The authoritative multi-source, subscriber and Xtream gateway lives on the
+// main BLOFY site. Keep the separate Railway Stream service accessible only under
+// /stream/legacy for review of old accounts, without deleting its stored records.
+export function unifiedStreamDestination(pathname) {
+  const routes = {
+    '/stream':'/sources-admin#xtream',
+    '/stream/':'/sources-admin#xtream',
+    '/stream/source':'/sources-admin#xtream',
+    '/stream/codes':'/sources-admin#xtream',
+    '/stream/users':'/sources-admin#xtream',
+    '/stream/content':'/sources-admin#catalog',
+    '/stream/appcodes':'/admin#codes'
+  };
+  return Object.hasOwn(routes,pathname)?routes[pathname]:null;
+}
+
 export function mapStreamAdminPath(pathname) {
-  if (pathname === PREFIX || pathname === PREFIX + '/') return '/';
-  if (['/source','/codes','/users','/content','/appcodes'].includes(pathname.slice(PREFIX.length)) && pathname.startsWith(PREFIX+'/')) return '/';
+  if (pathname === PREFIX + '/legacy' || pathname === PREFIX + '/legacy/') return '/';
   if (pathname === PREFIX + '/admin-assets/admin.css') return '/admin-assets/admin.css';
   if (pathname === PREFIX + '/admin-assets/admin.js') return '/admin-assets/admin.js';
   if (pathname === PREFIX + '/admin-assets/xtream-simple.js') return '/admin-assets/xtream-simple.js';
@@ -110,6 +125,12 @@ http.createServer = function withBlofyStream(listener) {
   return previousCreateServer((req, res) => {
     try {
       const url = new URL(req.url || '/', 'http://localhost');
+      const destination = unifiedStreamDestination(url.pathname);
+      if (destination && (req.method === 'GET' || req.method === 'HEAD')) {
+        // Same-origin, fixed allowlisted redirect; no user URL is interpolated.
+        res.writeHead(302, { location: destination, 'cache-control':'no-store', 'x-content-type-options':'nosniff' });
+        return res.end();
+      }
       const mapped = mapStreamAdminPath(url.pathname);
       if (!mapped) return listener(req, res);
       if (!origin) {
