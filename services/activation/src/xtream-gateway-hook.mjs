@@ -667,9 +667,8 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
         const prefix = Buffer.from(first.value).subarray(0,200).toString('utf8').trimStart().toLowerCase();
         const mime = String(response.headers.get('content-type') || '').toLowerCase();
         if (mime.includes('text/html') || mime.includes('application/json') ||
-            prefix.startsWith('<!doctype html') || prefix.startsWith('<html') ||
-            (kind==='live' && (mime.includes('mpegurl') || prefix.startsWith('#extm3u')))) {
-          throw new Error('upstream_not_ts_media');
+            prefix.startsWith('<!doctype html') || prefix.startsWith('<html')) {
+          throw new Error('upstream_non_media_response');
         }
         // Only announce a successful response once the provider really sent media bytes.
         res.writeHead(response.status, outputHeaders);
@@ -686,9 +685,9 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
       } catch (error) {
         if (client.signal.aborted) return;
         const reason = controller.signal.reason?.message || error?.message || 'media_error';
-        const safeReason = ['headers_timeout','media_read_timeout','upstream_empty_media','upstream_not_ts_media'].includes(reason) ? reason : 'upstream_unreachable';
+        const safeReason = ['headers_timeout','media_read_timeout','upstream_empty_media','upstream_non_media_response'].includes(reason) ? reason : 'upstream_unreachable';
         console.warn('xtream media relay error', {kind,itemId:gatewayId,reason:safeReason,attempt});
-        if (!res.headersSent && attempt < maxAttempts && safeReason!=='upstream_not_ts_media') {
+        if (!res.headersSent && attempt < maxAttempts && safeReason!=='upstream_non_media_response') {
           await new Promise(resolve=>setTimeout(resolve,200*attempt));
           continue;
         }
