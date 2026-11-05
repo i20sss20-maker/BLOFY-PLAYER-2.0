@@ -34,7 +34,7 @@ class PlaylistManagerPersistenceTest {
 
     @After fun cleanup() = db.close()
 
-    @Test fun importUsesPanelCategoryOrderAndChannelNumberRatherThanAlphabeticOrder(): Unit =
+    @Test fun importPreservesXtreamApiResponseArrayForCategoriesAndStreams(): Unit =
         runBlocking(Dispatchers.IO) {
             val categories = listOf(
                 mapOf("category_id" to "10", "category_name" to "Alpha", "category_order" to "20"),
@@ -46,9 +46,9 @@ class PlaylistManagerPersistenceTest {
             ]""".trimIndent()
             val manager = PlaylistManager(FixtureApi(liveCategories = categories, liveStreams = streams), db.dao())
             assertEquals(2, manager.syncLive(provider))
-            assertEquals(listOf("2", "10"),
+            assertEquals(listOf("10", "2"),
                 db.dao().categorySnapshot(provider.id, "live").map { it.remoteId })
-            assertEquals(listOf("5", "77"),
+            assertEquals(listOf("77", "5"),
                 db.dao().catalogSourcePageAfterAll(provider.id, "live", 0L, 10).map { it.remoteId })
         }
 
