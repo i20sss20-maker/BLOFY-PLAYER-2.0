@@ -307,6 +307,40 @@ interface BlofyDao {
     @Query("""UPDATE streams_fts SET providerId = :targetProviderId, contentKey = :targetProviderId || substr(contentKey, length(:stagedProviderId) + 1) WHERE providerId = :stagedProviderId""")
     suspend fun promoteStagedSearchIndexInPlace(stagedProviderId: String, targetProviderId: String)
 
+    /**
+     * Preserve an explicitly selected M3U lineup when a new Xtream background
+     * catalog is staged. The existing subscriber is the ordering authority;
+     * new IDs are placed after all previously known IDs until the owner runs
+     * manual M3U matching again. Do not change the account or any favorites.
+     */
+    @Query("""
+        UPDATE streams SET sourceOrder = COALESCE(
+            (SELECT old.sourceOrder FROM streams AS old
+                WHERE old.providerId = :targetProviderId AND old.kind = streams.kind
+                AND old.remoteId = streams.remoteId LIMIT 1),
+            streams.sourceOrder + 1000000000000
+        )
+        WHERE providerId = :stagedProviderId AND kind IN ('live', 'movie')
+    """)
+    suspend fun preserveM3uStreamOrder(stagedProviderId: String, targetProviderId: String)
+
+    @Query("""
+        UPDATE categories SET orderIndex = COALESCE(
+            (SELECT old.orderIndex FROM categories AS old
+                WHERE old.providerId = :targetProviderId AND old.kind = categories.kind
+                AND old.remoteId = categories.remoteId LIMIT 1),
+            categories.orderIndex + 1000000
+        )
+        WHERE providerId = :stagedProviderId AND kind IN ('live', 'movie')
+    """)
+    suspend fun preserveM3uCategoryOrder(stagedProviderId: String, targetProviderId: String)
+
+    @Transaction
+    suspend fun preserveM3uOrderingOnRefresh(stagedProviderId: String, targetProviderId: String) {
+        preserveM3uStreamOrder(stagedProviderId, targetProviderId)
+        preserveM3uCategoryOrder(stagedProviderId, targetProviderId)
+    }
+
     /** Same-source refreshes must validate the durable candidate before replacing known-good rows. */
     @Transaction
     suspend fun promoteStagedRefresh(
