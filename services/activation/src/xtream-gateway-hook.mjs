@@ -28,6 +28,7 @@ import { readFile } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import pg from 'pg';
 import { validateBulkAccountRequest } from './xtream-bulk-policy.mjs';
+import { gatewayItemsPageQuery } from './xtream-gateway-query.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
@@ -408,26 +409,8 @@ async function walkGatewayItems(mediaType, filter, onRow, sourceId=null) {
   await ensureItemMaps(mediaType,sourceId);
   let lastId = 0;
   for (;;) {
-    const values = [mediaType, lastId];
-    const where = ['m.media_type=$1','m.gateway_id>$2','s.enabled=TRUE','s.publish_catalog=TRUE','i.enabled=TRUE','(c.enabled IS NULL OR c.enabled=TRUE)'];
-    if (sourceId) {
-      values.push(sourceId);
-      where.push(`i.server_id=$${values.length}`);
-    }
-    if (filter) {
-      values.push(filter.server_id, filter.source_category_id);
-      where.push(`i.server_id=$${values.length-1}`, `i.category_id=$${values.length}`);
-    }
-    values.push(2000);
-    const rows = (await pool.query(`SELECT m.gateway_id,i.server_id,i.source_id,i.category_id,i.name,i.icon_url,i.container_extension,i.metadata,
-        cm.gateway_id AS category_gateway_id,s.priority
-      FROM blofy_xtream_gateway_item_map m
-      JOIN blofy_xtream_items i ON i.server_id=m.server_id AND i.media_type=m.media_type AND i.source_id=m.source_id
-      JOIN blofy_xtream_servers s ON s.id=i.server_id
-      LEFT JOIN blofy_xtream_categories c ON c.server_id=i.server_id AND c.media_type=i.media_type AND c.source_category_id=i.category_id
-      LEFT JOIN blofy_xtream_gateway_category_map cm ON cm.server_id=i.server_id AND cm.media_type=i.media_type AND cm.source_category_id=i.category_id
-      WHERE ${where.join(' AND ')}
-      ORDER BY m.gateway_id ASC LIMIT $${values.length}`, values)).rows;
+    const page=gatewayItemsPageQuery(mediaType,lastId,{filter,sourceId});
+    const rows=(await pool.query(page)).rows;
     if (!rows.length) break;
     for (const row of rows) await onRow(row);
     lastId = Number(rows[rows.length - 1].gateway_id);
