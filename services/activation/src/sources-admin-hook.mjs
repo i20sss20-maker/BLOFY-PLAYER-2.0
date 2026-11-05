@@ -420,3 +420,13 @@ http.createServer = function withBlofySources(listener) {
     }
   });
 };
+
+// Clean up retired extra/plug-in sources during startup, even when no admin has
+// opened the page yet. This registry does not contain Xtream sources or accounts.
+if (DATABASE_URL) {
+  const cleanupTimer=setTimeout(() => {
+    void ensureReady().catch(error =>
+      console.warn('legacy source registry cleanup retryable:',safeErrorSummary(error)));
+  }, 1500);
+  cleanupTimer.unref?.();
+}

@@ -17,6 +17,7 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import pg from 'pg';
 import { downloadXtreamM3uCatalog } from './xtream-m3u-catalog.mjs';
+import { distinctXtreamRecords } from './xtream-import-dedup.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
@@ -349,7 +350,7 @@ async function testServer(id) {
 async function flushCategoryBatch(serverId, mediaType, syncToken, batch) {
   if (!batch.length) return;
   if (cancelledSources.has(serverId)) throw Object.assign(new Error('xtream_sync_cancelled'), { status: 409 });
-  const payload = batch.map(item => ({
+  const payload = distinctXtreamRecords(batch,'sourceCategoryId').map(item => ({
     source_category_id: item.sourceCategoryId,
     name: item.name,
     parent_id: item.parentId,
@@ -367,7 +368,7 @@ async function flushCategoryBatch(serverId, mediaType, syncToken, batch) {
 async function flushItemBatch(serverId, mediaType, syncToken, batch) {
   if (!batch.length) return;
   if (cancelledSources.has(serverId)) throw Object.assign(new Error('xtream_sync_cancelled'), { status: 409 });
-  const payload = batch.map(item => ({
+  const payload = distinctXtreamRecords(batch,'sourceId').map(item => ({
     source_id: item.sourceId,
     category_id: item.categoryId,
     name: item.name,
