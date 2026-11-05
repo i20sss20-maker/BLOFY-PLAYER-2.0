@@ -415,6 +415,7 @@ async function gatewayItemById(mediaType, gatewayId) {
     FROM blofy_xtream_gateway_item_map m
     JOIN blofy_xtream_items i ON i.server_id=m.server_id AND i.media_type=m.media_type AND i.source_id=m.source_id
     JOIN blofy_xtream_servers s ON s.id=i.server_id
+    LEFT JOIN blofy_xtream_categories c ON c.server_id=i.server_id AND c.media_type=i.media_type AND c.source_category_id=i.category_id
     LEFT JOIN blofy_xtream_gateway_category_map cm ON cm.server_id=i.server_id AND cm.media_type=i.media_type AND cm.source_category_id=i.category_id
     WHERE m.gateway_id=$1 AND m.media_type=$2 AND i.enabled=TRUE AND s.enabled=TRUE AND s.publish_catalog=TRUE AND (c.enabled IS NULL OR c.enabled=TRUE)`, [id,mediaType])).rows[0] || null;
 }
@@ -700,15 +701,15 @@ http.createServer = function withBlofyXtreamGateway(listener) {
         return res.end(body);
       }
       if (req.method === 'GET' && url.pathname === '/xtream/health') return json(res, 200, await gatewayHealth());
-      if ((req.method === 'GET' || req.method === 'POST') && (url.pathname === '/player_api.php' || url.pathname === '/panel_api.php')) return handlePlayerApi(req, res, url);
-      if (req.method === 'GET' && url.pathname === '/get.php') return handleM3u(req, res, url);
+      if ((req.method === 'GET' || req.method === 'POST') && (url.pathname === '/player_api.php' || url.pathname === '/panel_api.php')) return await handlePlayerApi(req, res, url);
+      if (req.method === 'GET' && url.pathname === '/get.php') return await handleM3u(req, res, url);
       if (req.method === 'GET' && url.pathname === '/xmltv.php') {
         const account = await authenticate(url.searchParams.get('username') || '', url.searchParams.get('password') || '');
         return account ? text(res, 200, '<?xml version="1.0" encoding="UTF-8"?><tv></tv>\n', 'application/xml; charset=utf-8') : text(res, 401, 'Unauthorized');
       }
       const mediaMatch = url.pathname.match(/^\/(live|movie|series)\/([^/]+)\/([^/]+)\/([0-9]+)(?:\.([A-Za-z0-9]{1,8}))?$/i);
       if (mediaMatch && (req.method === 'GET' || req.method === 'HEAD')) {
-        return proxyMedia(req, res, mediaMatch[1].toLowerCase(), decodeURIComponent(mediaMatch[2]), decodeURIComponent(mediaMatch[3]), mediaMatch[4], mediaMatch[5]);
+        return await proxyMedia(req, res, mediaMatch[1].toLowerCase(), decodeURIComponent(mediaMatch[2]), decodeURIComponent(mediaMatch[3]), mediaMatch[4], mediaMatch[5]);
       }
 
       if (!url.pathname.startsWith('/api/v1/admin/xtream-gateway')) return listener(req, res);
