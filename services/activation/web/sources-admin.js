@@ -601,12 +601,12 @@ function renderCategoryManager() {
     return;
   }
   for(const category of rows){
+    const position=all.findIndex(x=>x.id===category.id);
     const row=make('article','category-manager-row'+(category.enabled?'':' hidden-category'));
     const info=make('div','category-manager-label');
     info.append(make('strong','',String(position+1)+' · '+category.name));
     info.append(make('small','',Number(category.itemCount||0).toLocaleString('en-US')+' عنصر'));
     const actions=make('div','category-manager-actions');
-    const position=all.findIndex(x=>x.id===category.id);
     const buttons=[
       ['للأول','top','انقل القسم لأول القائمة',position===0],
       ['↑','up','رفع الفئة',position===0],
