@@ -152,6 +152,63 @@ test('Railway proxy allows exact public BLOFY origin for cookie-authenticated na
     headers:{host:'blofy-activation-portal-production.up.railway.app',cookie}});
   assert.equal(noOrigin.status,403);
 });
+test('native Xtream controls accept genuine same-origin browser navigations when Origin is absent or null behind Railway',async()=>{
+  const a=makeRuntime({VERCEL_ENV:undefined,NODE_ENV:'production'});
+  const cookie=a.sessionCookie(await a.makeSession());
+  const baseHeaders={
+    host:'blofy-activation-portal-production.up.railway.app',
+    'x-forwarded-host':'blofy-activation-portal-production.up.railway.app',
+    'x-forwarded-proto':'https',
+    cookie,
+    'content-type':'application/x-www-form-urlencoded'
+  };
+  const path='/api/v1/admin/xtream/controls/1195bcd7-44ba-4710-af22-cb4237dc4aa1/toggle-publish';
+  for(const extra of [
+    {'sec-fetch-site':'same-origin','sec-fetch-mode':'navigate','sec-fetch-dest':'document'},
+    {origin:'null','sec-fetch-site':'same-origin','sec-fetch-mode':'navigate','sec-fetch-dest':'document'},
+    {'referer':'https://blofyplayer.com/sources-admin#xtream'},
+    {origin:'null',referer:'https://blofyplayer.com/api/v1/admin/xtream/controls'}
+  ]){
+    const res=await a.request({method:'POST',url:path,headers:{...baseHeaders,...extra}});
+    assert.equal(res.status,200,'genuine native source form should reach backend: '+JSON.stringify(extra));
+  }
+});
+
+test('native Xtream exception does not bypass CSRF or cover other admin endpoints',async()=>{
+  const a=makeRuntime({VERCEL_ENV:undefined,NODE_ENV:'production'});
+  const cookie=a.sessionCookie(await a.makeSession());
+  const base={
+    host:'blofy-activation-portal-production.up.railway.app',
+    'x-forwarded-host':'blofy-activation-portal-production.up.railway.app',
+    'x-forwarded-proto':'https',cookie,
+    'content-type':'application/x-www-form-urlencoded',
+    'sec-fetch-site':'same-origin','sec-fetch-mode':'navigate','sec-fetch-dest':'document'
+  };
+  const path='/api/v1/admin/xtream/controls/1195bcd7-44ba-4710-af22-cb4237dc4aa1/toggle-enabled';
+  for(const changed of [
+    {'sec-fetch-site':'cross-site'},
+    {'sec-fetch-site':'same-site'},
+    {'sec-fetch-mode':'cors'},
+    {'sec-fetch-dest':'iframe'},
+    {origin:'https://attacker.invalid'},
+    {origin:'http://blofyplayer.com'},
+    {origin:'https://blofyplayer.com.attacker.invalid'}
+  ]){
+    const res=await a.request({method:'POST',url:path,headers:{...base,...changed}});
+    assert.equal(res.status,403,'reject untrusted navigation: '+JSON.stringify(changed));
+  }
+  for(const invalid of [
+    {url:'/api/v1/admin/experience/releases',headers:base},
+    {url:'/api/v1/admin/xtream/servers',headers:base},
+    {url:path,headers:{...base,'content-type':'application/json'}},
+    {url:path,headers:{...base,'sec-fetch-site':undefined,
+      'sec-fetch-mode':undefined,'sec-fetch-dest':undefined,referer:'https://attacker.invalid'}}
+  ]){
+    const res=await a.request({method:'POST',...invalid});
+    assert.equal(res.status,403,'deny broad CSRF bypass: '+invalid.url);
+  }
+});
+
 test('an unrelated Authorization header cannot bypass the missing-Origin cookie guard',async()=>{
   const a=makeRuntime(),cookie=a.sessionCookie(await a.makeSession());
   for(const authorization of ['', 'Bearer not-valid', 'Basic not-valid']){
