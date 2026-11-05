@@ -44,6 +44,6 @@ test('deletion never runs all source purges concurrently',()=>{
 
 test('admin manager forces fresh state after deployment',()=>{
   assert.match(frontend,/cache: 'no-store'/);
-  assert.match(html,/sources-admin\.js\?v=20261105-action-capture-v6/);
+  assert.match(html,/sources-admin\.js\?v=20261105-native-forms-v7/);
   assert.match(frontend,/xtreamLoadSequence/);
 });
