@@ -9,7 +9,8 @@ const REASONS=new Set([
   'upstream_http_403','upstream_http_404','upstream_http_408','upstream_http_429',
   'upstream_http_500','upstream_http_502','upstream_http_503','upstream_http_504',
   'upstream_http_other','headers_timeout','media_read_timeout','upstream_empty_media',
-  'upstream_non_media_response','upstream_unreachable'
+  'upstream_non_media_response','upstream_unreachable',
+  'gateway_auth_denied','catalog_item_unavailable'
 ]);
 
 export function recordXtreamPlayback({kind,phase,upstreamStatus,reason,startupMs,attempts,itemId}={},now=Date.now()){
@@ -56,6 +57,9 @@ export function xtreamPlaybackSnapshot(now=Date.now()){
     started:started.length,
     failed:failed.length,
     interrupted:interrupted.length,
+    gatewayAuthDenied:failed.filter(row=>row.reason==='gateway_auth_denied').length,
+    unavailableItems:failed.filter(row=>row.reason==='catalog_item_unavailable').length,
+    upstreamFailed:failed.filter(row=>row.reason!=='gateway_auth_denied'&&row.reason!=='catalog_item_unavailable').length,
     slowStarts:started.filter(row=>row.startupMs!==null&&row.startupMs>6000).length,
     medianStartMs:percentile(0.5),
     p95StartMs:percentile(0.95),
