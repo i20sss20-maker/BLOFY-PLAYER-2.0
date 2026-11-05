@@ -51,7 +51,7 @@ function make(tag, className, text) {
 function sourceCard(item) {
   const card = make('article', `source${item.enabled ? '' : ' off'}`);
   card.dataset.id = item.id;
-  const main = make('div', 'source-main');
+  const main = make('div', 'source-card-main');
   const icon = make('div', 'icon');
   if (item.iconUrl) {
     const img = document.createElement('img');
@@ -273,6 +273,30 @@ function renderXtream() {
   el('xtLive').textContent = Number(totals.live || 0).toLocaleString();
   el('xtMovies').textContent = Number(totals.movie || 0).toLocaleString();
   el('xtSeries').textContent = Number(totals.series || 0).toLocaleString();
+  const text=el('xtreamTotalsNotice');
+  if(text){
+    const count=Number(totals.live||0)+Number(totals.movie||0)+Number(totals.series||0);
+    const failed=state.xtreamServers.filter(item=>item.lastError);
+    const syncing=state.xtreamServers.filter(item=>item.syncing||item.status==='syncing');
+    text.className='stream-totals-notice';
+    if(!state.xtreamServers.length){
+      text.textContent='لم تضف حساب Xtream إلى هذه اللوحة بعد. ابدأ من نموذج Host وUsername وPassword بالأعلى. عناصر لوحة إعادة البث القديمة لا تُحسب هنا تلقائيًا.';
+      text.classList.add('warning');
+    }else if(syncing.length){
+      text.textContent='جارٍ استيراد '+syncing.length+' مصدر… سيظهر العدد الحقيقي بعد انتهاء المزامنة، ويمكنك تحديث الصفحة لمعرفة النتيجة.';
+    }else if(!count && failed.length){
+      const err=String(failed[0].lastError||'');
+      text.textContent='تم حفظ '+state.xtreamServers.length+' مصدر، لكن فشل استيراد المحتوى '+(err.includes('404')?'لأن المصدر لا يدعم مسارًا من API (404). جرّب زر «مزامنة الكل» مرة أخرى بعد التحديث.':err.includes('403')?'لأن المزود يرفض الاتصال (403). يجب إصلاح الوصول المصرح به لدى المصدر.':': '+err)+ ' لا تظهر عناصر من الفهرس القديم ضمن هذه الأرقام.';
+      text.classList.add('warning');
+    }else if(!count){
+      text.textContent='مصادر Xtream موجودة، ولكن لم تنجح مزامنة أي محتوى حتى الآن. اضغط «مزامنة الكل» من بطاقة المصدر.';
+      text.classList.add('warning');
+    }else{
+      text.textContent='تم استيراد '+count.toLocaleString('en-US')+' عنصر إلى مكتبة BLOFY الحالية.'+(failed.length?' توجد '+failed.length+' مصادر بها خطأ جزئي؛ راجع بطاقة المصدر.':'');
+      text.classList.add(failed.length?'warning':'ok');
+    }
+  }
+
   const list = el('xtreamServers');
   list.replaceChildren();
   if (!state.xtreamServers.length) list.append(make('div', 'empty', 'ما فيه سيرفرات Xtream مضافة للحين.'));
@@ -302,6 +326,9 @@ async function loadXtream(silent = false) {
     scheduleXtreamPoll();
   } catch (error) {
     if (!silent) showMessage(`تعذر تحميل Xtream: ${error.message}`, 'error');
+    const notice=el('xtreamTotalsNotice');
+    if(notice){notice.className='stream-totals-notice warning';notice.textContent='تعذر قراءة أعداد المحتوى من السيرفر: '+error.message;}
+    el('xtreamLoading').hidden=true;
   }
 }
 

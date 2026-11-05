@@ -16,6 +16,7 @@ import {
 import http from 'node:http';
 import crypto from 'node:crypto';
 import pg from 'pg';
+import { downloadXtreamM3uCatalog } from './xtream-m3u-catalog.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
@@ -313,35 +314,64 @@ async function flushItemBatch(serverId, mediaType, syncToken, batch) {
   batch.length = 0;
 }
 
-async function syncCategories(row, mediaType, creds, syncToken) {
-  const action = TYPE_ACTIONS[mediaType].categories;
-  const response = await checkedFetch(xtreamApiUrl(row.base_url, creds.username, creds.password, action), { timeoutMs: 60000 });
-  const batch = [];
-  let accepted = 0;
-  await parseTopLevelJsonArray(response.body, async raw => {
-    const item = normalizeXtreamCategory(mediaType, raw, syncToken);
-    if (!item) return;
-    batch.push(item);
-    accepted++;
-    if (batch.length >= 500) await flushCategoryBatch(row.id, mediaType, syncToken, batch);
+async function syncCategories(row, mediaType, creds, syncToken, getM3u) {
+  const action=TYPE_ACTIONS[mediaType].categories;
+  let response;
+  try{
+    response=await checkedFetch(xtreamApiUrl(row.base_url,creds.username,creds.password,action),{timeoutMs:60000});
+  }catch(error){
+    if(error.message!=='xtream_http_404')throw error;
+    if(mediaType==='series')return 0;
+    const fallback=await getM3u();
+    const batch=[];let total=0;
+    for(const item of fallback.categories[mediaType]){
+      batch.push({...item,syncToken});total++;
+      if(batch.length>=500)await flushCategoryBatch(row.id,mediaType,syncToken,batch);
+    }
+    await flushCategoryBatch(row.id,mediaType,syncToken,batch);
+    return total;
+  }
+  const batch=[];let accepted=0;
+  await parseTopLevelJsonArray(response.body,async raw=>{
+    const item=normalizeXtreamCategory(mediaType,raw,syncToken);
+    if(!item)return;
+    batch.push(item);accepted++;
+    if(batch.length>=500)await flushCategoryBatch(row.id,mediaType,syncToken,batch);
   });
-  await flushCategoryBatch(row.id, mediaType, syncToken, batch);
+  await flushCategoryBatch(row.id,mediaType,syncToken,batch);
   return accepted;
 }
 
-async function syncItems(row, mediaType, creds, syncToken) {
-  const action = TYPE_ACTIONS[mediaType].items;
-  const response = await checkedFetch(xtreamApiUrl(row.base_url, creds.username, creds.password, action), { timeoutMs: 180000 });
-  const batch = [];
-  let accepted = 0;
-  await parseTopLevelJsonArray(response.body, async raw => {
-    const item = normalizeXtreamItem(mediaType, raw, syncToken);
-    if (!item) return;
-    batch.push(item);
-    accepted++;
-    if (batch.length >= 500) await flushItemBatch(row.id, mediaType, syncToken, batch);
+async function syncItems(row, mediaType, creds, syncToken, getM3u) {
+  const action=TYPE_ACTIONS[mediaType].items;
+  let response;
+  try{
+    response=await checkedFetch(xtreamApiUrl(row.base_url,creds.username,creds.password,action),{timeoutMs:180000});
+  }catch(error){
+    if(error.message!=='xtream_http_404')throw error;
+    if(mediaType==='series')throw new Error('xtream_series_listing_api_unavailable');
+    const fallback=await getM3u(),batch=[];let total=0;
+    const categories=fallback.categories[mediaType].map(item=>({...item,syncToken}));
+    for(let i=0;i<categories.length;i+=500){
+      const page=categories.slice(i,i+500);
+      await flushCategoryBatch(row.id,mediaType,syncToken,page);
+    }
+    for(const item of fallback.records[mediaType]){
+      batch.push({...item,syncToken});total++;
+      if(batch.length>=500)await flushItemBatch(row.id,mediaType,syncToken,batch);
+    }
+    await flushItemBatch(row.id,mediaType,syncToken,batch);
+    if(!total)throw new Error('xtream_m3u_no_'+mediaType+'_items');
+    return total;
+  }
+  const batch=[];let accepted=0;
+  await parseTopLevelJsonArray(response.body,async raw=>{
+    const item=normalizeXtreamItem(mediaType,raw,syncToken);
+    if(!item)return;
+    batch.push(item);accepted++;
+    if(batch.length>=500)await flushItemBatch(row.id,mediaType,syncToken,batch);
   });
-  await flushItemBatch(row.id, mediaType, syncToken, batch);
+  await flushItemBatch(row.id,mediaType,syncToken,batch);
   return accepted;
 }
 
@@ -388,18 +418,32 @@ async function syncServer(id, requestedTypes = ['live','movie','series']) {
   try {
     const accountInfo = await fetchAccount(row);
     const creds = decryptCredentials(row);
-    const details = {};
+    const details = {}, failures=[];
+    let playlistPromise;
+    const getM3u=()=>{
+      if(!playlistPromise)playlistPromise=downloadXtreamM3uCatalog({
+        baseUrl:row.base_url,username:creds.username,password:creds.password
+      });
+      return playlistPromise;
+    };
     for (const mediaType of types) {
       const syncToken = crypto.randomUUID();
-      const categories = await syncCategories(row, mediaType, creds, syncToken);
-      const items = await syncItems(row, mediaType, creds, syncToken);
-      await finalizeTypeSync(id, mediaType, syncToken);
-      details[mediaType] = { categories, items };
+      try{
+        const categories = await syncCategories(row, mediaType, creds, syncToken, getM3u);
+        const items = await syncItems(row, mediaType, creds, syncToken, getM3u);
+        await finalizeTypeSync(id, mediaType, syncToken);
+        details[mediaType] = { categories, items };
+      }catch(error){
+        failures.push(mediaType+': '+redactXtreamError(error));
+        console.warn('Xtream catalog type failed:',id,mediaType,redactXtreamError(error));
+      }
     }
+    if(!Object.keys(details).length)throw new Error('xtream_catalog_unavailable: '+failures.join('; ').slice(0,280));
     const counts = await calculateCounts(id);
-    await pool.query(`UPDATE blofy_xtream_servers SET status='online',account_info=$2::jsonb,counts=$3::jsonb,last_error=NULL,last_test_at=NOW(),last_sync_at=NOW(),updated_at=NOW() WHERE id=$1`,
-      [id, JSON.stringify(accountInfo), JSON.stringify(counts)]);
-    return { id, counts, details };
+    const partialWarning=failures.length?'بعض الأنواع لم تُستورد: '+failures.join('; ').slice(0,250):null;
+    await pool.query(`UPDATE blofy_xtream_servers SET status='online',account_info=$2::jsonb,counts=$3::jsonb,last_error=$4,last_test_at=NOW(),last_sync_at=NOW(),updated_at=NOW() WHERE id=$1`,
+      [id, JSON.stringify(accountInfo), JSON.stringify(counts),partialWarning]);
+    return { id, counts, details, partialWarning };
   } catch (error) {
     const message = redactXtreamError(error);
     await pool.query(`UPDATE blofy_xtream_servers SET status='error',last_error=$2,updated_at=NOW() WHERE id=$1`, [id, message]).catch(() => {});
