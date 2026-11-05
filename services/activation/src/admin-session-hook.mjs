@@ -102,6 +102,45 @@ function sameOrigin(req) {
       source.origin==='https://blofyplayer.com';
   } catch { return false; }
 }
+
+// Chromium sometimes omits Origin, sets it to "null", or a reverse proxy
+// changes the receiving Host on a browser-initiated form navigation.
+// A browser-generated same-origin Fetch Metadata signal is an independent
+// CSRF proof for the native Xtream control form *only*. Other admin writes
+// keep the strict Origin requirement. Cross-site and same-site subdomain
+// requests cannot satisfy this rule. Admin session authentication is required
+// separately and is not bypassed by Fetch Metadata.
+function trustedNativeXtreamForm(req, url) {
+  if (req.method !== 'POST' ||
+      !/^\/api\/v1\/admin\/xtream\/controls\/(?:new\/(?:add)|[a-z0-9-]+\/(?:toggle-enabled|toggle-publish|test|probe-live|probe-movie|sync-all|sync-live|sync-movie|sync-series|cancel-sync|save|delete))$/i.test(url.pathname))
+    return false;
+  const contentType=String(req.headers['content-type']||'');
+  if (!/^application\/x-www-form-urlencoded(?:\s*;|$)/i.test(contentType)) return false;
+
+  const fetchSite=String(req.headers['sec-fetch-site']||'').toLowerCase();
+  const fetchMode=String(req.headers['sec-fetch-mode']||'').toLowerCase();
+  const fetchDest=String(req.headers['sec-fetch-dest']||'').toLowerCase();
+  if (fetchSite === 'cross-site' || fetchSite === 'same-site' || fetchSite === 'none')
+    return false;
+  if (fetchSite === 'same-origin' && fetchMode === 'navigate' &&
+      (fetchDest === 'document' || fetchDest === 'empty'))
+    return true;
+
+  // Browser versions/privacy tools that do not send Fetch Metadata can still
+  // provide a same-origin HTTPS Referer. Explicitly conflicting metadata is
+  // never overridden by Referer.
+  if (fetchSite || (fetchMode && fetchMode!=='navigate')) return false;
+  const referer=String(req.headers.referer||'');
+  if (!referer || referer.length>2048) return false;
+  try {
+    const parsed=new URL(referer);
+    if (parsed.origin !== 'https://blofyplayer.com' ||
+        parsed.username || parsed.password) return false;
+    const origin=String(req.headers.origin||'');
+    // An explicit foreign Origin must never be redeemed by a Referer.
+    return !origin || origin==='null' || origin==='https://blofyplayer.com';
+  } catch { return false; }
+}
 function validAdminBearer(req) {
   return !!ADMIN_TOKEN && safeEqual(req.headers.authorization||'', 'Bearer '+ADMIN_TOKEN);
 }
@@ -122,10 +161,17 @@ http.createServer = function patchedAdminSessionCreateServer(listener) {
     if (req.method==='GET' && url.pathname==='/admin') return html(res, await validSession(req)?await dashboardPage():await loginPage());
     if (!url.pathname.startsWith('/api/v1/admin/')) return listener(req,res);
     if (!['GET','HEAD'].includes(req.method) && url.pathname.startsWith('/api/v1/admin/')) {
-      const origin = req.headers.origin;
-      if (origin !== undefined && !sameOrigin(req)) return json(res,403,{error:'invalid_origin'});
-      // An arbitrary Authorization header must not exempt an authenticated cookie from CSRF checks.
-      if (sessionClaims(req) && !origin && !validAdminBearer(req)) return json(res,403,{error:'invalid_origin'});
+      const origin=req.headers.origin;
+      const originAllowed=origin !== undefined && sameOrigin(req);
+      const nativeFormAllowed=trustedNativeXtreamForm(req,url);
+      // Keep all ordinary admin API routes under the original strict Origin
+      // policy. Only native Xtream forms accept browser-guaranteed metadata.
+      if (origin !== undefined && !originAllowed && !nativeFormAllowed)
+        return json(res,403,{error:'invalid_origin'});
+      // Missing Origin is denied for cookie sessions unless it is a verified
+      // same-origin browser navigation (not just an Authorization header).
+      if (sessionClaims(req) && !origin && !validAdminBearer(req) && !nativeFormAllowed)
+        return json(res,403,{error:'invalid_origin'});
     }
     if (req.method==='POST' && url.pathname==='/api/v1/admin/session/login') {
       if (!ADMIN_USERNAME || !ADMIN_PASSWORD || !ADMIN_TOKEN) return json(res,503,{error:'admin_login_not_configured'});
