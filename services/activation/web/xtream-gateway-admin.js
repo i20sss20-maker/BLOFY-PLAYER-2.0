@@ -72,19 +72,19 @@ function renderGatewayBatch(credentials){
 }
 
 function formatBatchText(){
-  return gatewayState.lastIssued.map(x=>'Host: '+x.serverUrl+'\\nUsername: '+x.username+'\\nPassword: '+x.password).join('\\n\\n');
+  return gatewayState.lastIssued.map(x=>'Host: '+x.serverUrl+'\nUsername: '+x.username+'\nPassword: '+x.password).join('\n\n');
 }
 function downloadBatchCsv(){
   if(!gatewayState.lastIssued.length)return;
   const quote=v=>{
     let raw=String(v??'');
-    if(/^[\\s]*[=+\\-@]/.test(raw))raw="'"+raw;
+    if(/^[\s]*[=+\-@]/.test(raw))raw="'"+raw;
     return '"'+raw.replaceAll('"','""')+'"';
   };
   const lines=['Host,Username,Password'].concat(
     gatewayState.lastIssued.map(x=>[x.serverUrl,x.username,x.password].map(quote).join(','))
   );
-  const url=URL.createObjectURL(new Blob(['\\ufeff'+lines.join('\\r\\n')],{type:'text/csv;charset=utf-8'}));
+  const url=URL.createObjectURL(new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'}));
   const link=document.createElement('a');
   link.href=url;link.download='BLOFY-new-Xtream-accounts.csv';document.body.append(link);link.click();link.remove();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
