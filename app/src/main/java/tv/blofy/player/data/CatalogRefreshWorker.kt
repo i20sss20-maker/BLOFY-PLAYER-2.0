@@ -190,6 +190,7 @@ class CatalogRefreshWorker(
                         dao.promoteStagedBackgroundRefresh(staged.id, provider, refreshedProvider)
                         promoted = true
                         runCatching { CatalogSyncState.markSourceReplaced(app, provider.id) }
+                        M3uOrderingPreference.disable(app, provider.id)
                     }
                 } else {
                     withContext(NonCancellable + Dispatchers.IO) {
