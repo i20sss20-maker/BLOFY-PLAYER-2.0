@@ -170,6 +170,14 @@ class CatalogRefreshWorker(
                 return if (manual) Result.failure(workDataOf(KEY_ERROR to "INTEGRITY")) else Result.retry()
             }
 
+            // Preserve the explicit M3U channel/movie order on each *same-source*
+            // Xtream refresh. Old matched IDs remain in position; new IDs follow them.
+            // This reads only local indexed rows and never re-downloads a second
+            // massive playlist while updating content.
+            if (!sourceChanged && M3uOrderingPreference.enabled(app, provider.id)) {
+                dao.preserveM3uOrderingOnRefresh(staged.id, provider.id)
+            }
+
             publish("SAVE", CatalogRefreshProgress.COMMIT_START)
             val refreshedProvider = refreshSource.copy(enabled = true, updatedAt = staged.updatedAt)
             currentCoroutineContext().ensureActive()
