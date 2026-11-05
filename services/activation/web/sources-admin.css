@@ -140,3 +140,13 @@
 /* Visible, cancelable Xtream catalog imports */
 .xtream-manager-panel .sync-progress-note{display:block;padding:10px 12px;background:#171d2a;border:1px solid #47617e;border-radius:9px;color:#a7d9ff;line-height:1.6;font-size:12px}
 .xtream-manager-panel button[data-action="cancel-sync"]{background:#38271e;border-color:#9c6946;color:#ffe0bc}
+ 
+/* Native form fallback: all source buttons submit to the authenticated server. */
+.xtream-manager-panel .server-actions>.source-native-form{margin:0;min-width:0;display:block}
+.xtream-manager-panel .server-actions>.source-native-form button{width:100%;height:100%}
+.xtream-manager-panel .server-actions>.source-native-form:has(.danger){grid-column:1/-1}
+.xtream-manager-panel .server-actions>a.button.danger{grid-column:1/-1;display:flex;align-items:center;justify-content:center;text-decoration:none}
+.xtream-manager-panel .source-native-edit{display:block;margin:0}
+.xtream-manager-panel .source-native-edit>button{width:100%;margin-top:12px}
+.xtream-manager-panel .server-actions-advanced>.source-native-form{min-width:0}
+.xtream-manager-panel .server-actions-advanced button{width:100%;height:100%}
