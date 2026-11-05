@@ -26,6 +26,7 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import pg from 'pg';
 import { validateBulkAccountRequest } from './xtream-bulk-policy.mjs';
 import { gatewayItemsPageQuery } from './xtream-gateway-query.mjs';
@@ -486,6 +487,7 @@ async function checkedFetch(url, { timeoutMs = 30000, method = 'GET', headers = 
     });
     if ([301,302,303,307,308].includes(response.status)) {
       const location = response.headers.get('location');
+      await response.body?.cancel().catch(()=>{});
       if (!location || redirects === 3) throw new Error('xtream_gateway_redirect_invalid');
       current = new URL(location, current);
       if (!['http:','https:'].includes(current.protocol)) throw new Error('xtream_gateway_redirect_invalid');
@@ -610,33 +612,101 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
     sourceId = row.source_id;
     extension = row.container_extension;
   }
-  const controller = new AbortController();
-  const abort = () => { if (!controller.signal.aborted) controller.abort(); };
-  res.on('close', () => { if (!res.writableEnded) abort(); });
+  // Keep each viewer's stream independent. Only retry failures before video bytes reach them.
+  const client = new AbortController();
+  const abort = () => { if (!client.signal.aborted) client.abort(); };
+  const onClose = () => { if (!res.writableEnded) abort(); };
+  req.once('aborted', abort);
+  res.once('close', onClose);
   const upstream = mediaUpstreamUrl(row, kind, sourceId, requestedExtension || extension);
   const headers = { 'user-agent': String(req.headers['user-agent'] || 'BLOFY-Xtream-Gateway/1.0') };
   if (req.headers.range) headers.range = String(req.headers.range);
-  const response = await checkedFetch(upstream, {
-    method: req.method === 'HEAD' ? 'HEAD' : 'GET',
-    timeoutMs: 30000,
-    headers,
-    signal: controller.signal
-  });
-  if (!(response.ok || response.status === 206)) return text(res, 502, 'Upstream unavailable');
-  const outputHeaders = {};
-  for (const name of ['content-type','content-length','content-range','accept-ranges','cache-control','last-modified','etag']) {
-    const value = response.headers.get(name);
-    if (value) outputHeaders[name] = value;
+  const maxAttempts = req.method === 'HEAD' ? 1 : 2;
+  try {
+    for (let attempt=1;attempt<=maxAttempts;attempt++) {
+      if (client.signal.aborted) return;
+      const controller = new AbortController();
+      const cancel = () => controller.abort();
+      client.signal.addEventListener('abort', cancel, { once: true });
+      let reader = null, response = null;
+      try {
+        let timer = setTimeout(() => controller.abort(new Error('headers_timeout')), 12000);
+        try {
+          response = await checkedFetch(upstream, {
+            method: req.method === 'HEAD' ? 'HEAD' : 'GET',
+            timeoutMs: 12000, headers, signal: controller.signal
+          });
+        } finally { clearTimeout(timer); }
+        if (!(response.ok || response.status === 206)) {
+          const retryable = [408,500,502,503,504].includes(response.status);
+          console.warn('xtream media upstream status', {kind, itemId:gatewayId, status:response.status, attempt});
+          await response.body?.cancel().catch(()=>{});
+          if (retryable && attempt < maxAttempts) {
+            await new Promise(resolve=>setTimeout(resolve, 200*attempt));
+            continue;
+          }
+          return text(res, 502, 'Upstream unavailable');
+        }
+        const outputHeaders = {};
+        for (const name of ['content-type','content-length','content-range','accept-ranges','cache-control','last-modified','etag']) {
+          const value = response.headers.get(name);
+          if (value) outputHeaders[name] = value;
+        }
+        outputHeaders['x-content-type-options'] = 'nosniff';
+        if (req.method === 'HEAD' || !response.body) {
+          res.writeHead(response.status, outputHeaders);
+          return res.end();
+        }
+        reader = response.body.getReader();
+        const readChunk = async (duration) => {
+          const timeout = setTimeout(() => controller.abort(new Error('media_read_timeout')), duration);
+          try { return await reader.read(); } finally { clearTimeout(timeout); }
+        };
+        const first = await readChunk(15000);
+        if (first.done || !first.value?.byteLength) throw new Error('upstream_empty_media');
+        const prefix = Buffer.from(first.value).subarray(0,200).toString('utf8').trimStart().toLowerCase();
+        const mime = String(response.headers.get('content-type') || '').toLowerCase();
+        if (mime.includes('text/html') || mime.includes('application/json') ||
+            prefix.startsWith('<!doctype html') || prefix.startsWith('<html')) {
+          throw new Error('upstream_non_media_response');
+        }
+        // Only announce a successful response once the provider really sent media bytes.
+        res.writeHead(response.status, outputHeaders);
+        const stream = Readable.from((async function* () {
+          yield first.value;
+          while (true) {
+            const chunk = await readChunk(45000);
+            if (chunk.done) return;
+            if (chunk.value?.byteLength) yield chunk.value;
+          }
+        })());
+        await pipeline(stream, res);
+        return;
+      } catch (error) {
+        if (client.signal.aborted) return;
+        const reason = controller.signal.reason?.message || error?.message || 'media_error';
+        const safeReason = ['headers_timeout','media_read_timeout','upstream_empty_media','upstream_non_media_response'].includes(reason) ? reason : 'upstream_unreachable';
+        console.warn('xtream media relay error', {kind,itemId:gatewayId,reason:safeReason,attempt});
+        if (!res.headersSent && attempt < maxAttempts && safeReason!=='upstream_non_media_response') {
+          await new Promise(resolve=>setTimeout(resolve,200*attempt));
+          continue;
+        }
+        if (!res.headersSent) return text(res, safeReason==='headers_timeout'||safeReason==='media_read_timeout'?504:502, 'Upstream unavailable');
+        if (!res.destroyed) res.destroy();
+        return;
+      } finally {
+        controller.abort();
+        client.signal.removeEventListener('abort',cancel);
+        if (reader) {
+          try { await reader.cancel(); } catch {}
+          try { reader.releaseLock(); } catch {}
+        }
+      }
+    }
+  } finally {
+    req.off('aborted',abort);
+    res.off('close',onClose);
   }
-  outputHeaders['x-content-type-options'] = 'nosniff';
-  res.writeHead(response.status, outputHeaders);
-  if (req.method === 'HEAD' || !response.body) return res.end();
-  const stream = Readable.fromWeb(response.body);
-  stream.on('error', error => {
-    if (!controller.signal.aborted) console.error('xtream media relay failed:', redactXtreamError(error));
-    if (!res.destroyed) res.destroy();
-  });
-  stream.pipe(res);
 }
 
 function playerServerInfo(req) {

@@ -150,3 +150,10 @@
 .xtream-manager-panel .source-native-edit>button{width:100%;margin-top:12px}
 .xtream-manager-panel .server-actions-advanced>.source-native-form{min-width:0}
 .xtream-manager-panel .server-actions-advanced button{width:100%;height:100%}
+
+/* BLOFY STREAM main-site category organizer (not the legacy test UI). */
+.category-toolbar{display:flex;align-items:center;gap:8px;flex:1 1 300px;justify-content:flex-end}
+.category-toolbar input{min-width:140px;flex:1 1 160px}
+.category-toolbar select{min-height:42px;border:1px solid #564569;background:#15101f;color:#f4e9ff;border-radius:9px;padding:8px;font:inherit;max-width:145px}
+.category-manager-row button[data-action="top"]{background:#56398a;color:white;border-color:#7862ad}
+@media(max-width:690px){.category-toolbar{flex-basis:100%;display:grid;grid-template-columns:minmax(0,1.4fr) minmax(100px,.7fr);gap:7px}.category-toolbar select{max-width:none;width:100%}.category-manager-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}.category-manager-actions .button{padding:8px 4px;font-size:12px}}

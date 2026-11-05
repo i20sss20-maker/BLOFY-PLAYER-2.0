@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#09090e">
   <link rel="icon" type="image/png" href="/blofy-logo.png"><link rel="apple-touch-icon" href="/blofy-logo.png"><meta name="robots" content="noindex,nofollow"><title>BLOFY STREAM | إدارة المصادر والاشتراكات</title>
-  <link rel="stylesheet" href="/sources-admin.css?v=20261105-native-forms-v8">
+  <link rel="stylesheet" href="/sources-admin.css?v=20261106-production-sort-v1">
   <link rel="stylesheet" href="/site-polish.css?v=20261025-lux-final">
 </head>
 <body>
@@ -159,15 +159,15 @@
         <section class="panel">
           <div class="catalog-controls">
             <label><span>المصدر</span><select id="catalogServer"></select></label>
-            <label><span>النوع</span><select id="catalogType"><option value="movie">Movies</option><option value="series">Series</option><option value="live">Live</option></select></label>
+            <label><span>النوع</span><select id="catalogType"><option value="live">القنوات</option><option value="movie">الأفلام</option><option value="series">المسلسلات</option></select></label>
             <label><span>القسم</span><select id="catalogCategory"><option value="">كل الأقسام</option></select></label>
             <label class="wide"><span>بحث</span><input id="catalogSearch" placeholder="اسم فيلم، مسلسل أو قناة"></label>
             <button id="catalogLoadBtn" class="button primary" type="button">عرض</button>
           </div>
           <div class="category-manager">
             <div class="category-manager-head">
-              <div><h3>ترتيب الفئات</h3><p>تُحفظ التغييرات تلقائيًا على السيرفر وتظهر في قائمة Xtream لدى العملاء.</p></div>
-              <input id="categorySearch" type="search" autocomplete="off" placeholder="ابحث باسم الفئة">
+              <div><h3>تنظيم الأقسام بسهولة</h3><p>انقل القسم للأول بضغطة واحدة، أو عدّل ترتيبه، وأخفِ الأقسام غير المطلوبة دون حذف محتواها. الحفظ تلقائي.</p></div>
+              <div class="category-toolbar"><input id="categorySearch" type="search" autocomplete="off" placeholder="ابحث باسم الفئة" aria-label="بحث في الأقسام"><select id="categoryVisibility" aria-label="فلترة ظهور الأقسام"><option value="all">جميع الأقسام</option><option value="visible">الظاهرة</option><option value="hidden">المخفية</option></select></div>
             </div>
             <div id="categoryManagerSummary" class="category-manager-summary" role="status">اختر مصدرًا ونوع المحتوى لعرض الفئات.</div>
             <div id="categoryManagerRows" class="category-manager-rows"></div>
@@ -181,7 +181,7 @@
       <footer><span>BLOFY STREAM · إدارة Xtream</span></footer>
     </main>
   </div>
-  <script src="/sources-admin.js?v=20261106-signed-actions-v9" defer></script>
+  <script src="/sources-admin.js?v=20261106-production-sort-v1" defer></script>
   <script src="/xtream-gateway-admin.js?v=20261105-source-selection-v1" defer></script>
 </body>
 </html>
