@@ -19,7 +19,10 @@ test('sources console keeps BLOFY gateway, upstream Xtream and catalog controls 
   for (const id of ['gatewayCreateBtn','gatewayServerUrl','xtreamForm','xtreamServers','catalogServer','catalogType','catalogItems']) {
     assert.match(html, new RegExp(`id=["']${id}["']`), `missing ${id}`);
   }
-  assert.match(html, /سيرفرك الخاص/);
+  assert.match(html, /حسابات Xtream موحّدة/);
+  for(const id of ['gatewayDurationDays','gatewayQuantity','gatewayBatchCredentials','xtRightsConfirmed']) {
+    assert.match(html,new RegExp('id=["\\\']'+id+'["\\\']'));
+  }
   assert.match(html, /إنشاء بيانات دخول/);
   assert.match(html, /الكتالوج المستورد/);
 });
