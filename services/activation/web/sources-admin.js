@@ -26,6 +26,7 @@ function showMessage(text, kind = 'ok') {
 async function api(path, options = {}) {
   const response = await fetch(path, {
     credentials: 'same-origin',
+    cache: 'no-store',
     headers: { 'content-type': 'application/json', ...(options.headers || {}) },
     ...options
   });
@@ -35,7 +36,15 @@ async function api(path, options = {}) {
   }
   let body = {};
   try { body = await response.json(); } catch {}
-  if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
+  if (!response.ok) {
+    const errors={
+      xtream_source_busy_retry:'المصدر مشغول بمزامنة كبيرة في قاعدة البيانات. أوقفت بدء دفعات جديدة؛ أعد المحاولة بعد قليل.',
+      xtream_unavailable:'تعذر الوصول لقاعدة بيانات المصادر. التغيير لم يُحفظ؛ جرّب مرة أخرى.',
+      xtream_server_not_found:'المصدر غير موجود أو سُجل حذفه بالفعل.'
+    };
+    const reason=String(body.error||'');
+    throw new Error(errors[reason]||reason||`HTTP ${response.status}`);
+  }
   return body;
 }
 
@@ -323,17 +332,29 @@ async function handleServerAction(item, card, button) {
       showMessage('تم حفظ تعديل مصدر «'+item.name+'». اضغط «فحص الاتصال» ثم «مزامنة المحتوى» إذا غيّرت بيانات Host أو Username أو Password.');
     } else if (action === 'delete') {
       const total=Number(item.counts?.total||0).toLocaleString('en-US');
-      if(!window.confirm(`حذف مصدر «${item.name}» نهائيًا من BLOFY؟\\nسيتم حذف ${total} عنصر مستورد منه ولن يظهر محتواه لعملائك.\\nلن يتأثر اشتراكك الأصلي لدى مزود Xtream.\\n\\nهل تؤكد الحذف؟`))return;
+      if(!window.confirm(`حذف مصدر «${item.name}» نهائيًا من BLOFY؟\nسيُخفى ${total} عنصر عن المشتركين فور حفظ الحذف في قاعدة البيانات.\nلن يتأثر الاشتراك الأصلي لدى مزود Xtream.\n\nهل تؤكد الحذف؟`))return;
+      window.clearTimeout(state.pollTimer);
       const result=await api(`/api/v1/admin/xtream/servers/${item.id}`, { method: 'DELETE' });
-      showMessage(result.deletionQueued
-        ?'تم إيقاف «'+item.name+'» وإخفاؤه عن المشتركين فورًا. حذف عناصره الكبيرة يجري على دفعات في الخلفية.'
-        :'تم حذف المصدر.');
+      if(result.deletionQueued!==true||result.deletedFromCatalog!==true)
+        throw new Error('لم يؤكد السيرفر حفظ الحذف. المصدر لم يُحذف من القائمة.');
+      // DELETE only succeeds after PostgreSQL commits the deletion tombstone.
+      // Verify the authoritative source listing before showing success.
+      try {
+        await loadXtream(true,true);
+        if(state.xtreamServers.some(source=>source.id===item.id))
+          throw new Error('المصدر ما زال ظاهرًا في استجابة القائمة الجديدة.');
+        showMessage('تم حفظ حذف المصدر «'+item.name+'» في قاعدة البيانات. لن يرجع بعد التحديث. يجري تنظيف '+total+' عنصر بالخلفية.');
+      } catch(readError) {
+        // A committed DELETE must not be reported as a failed deletion just
+        // because the follow-up display refresh timed out.
+        showMessage('حُفظ طلب الحذف في قاعدة البيانات، لكن تعذّر تأكيد تحديث القائمة: '+readError.message,'error');
+      }
     } else if (action.startsWith('sync-')) {
       const type = action === 'sync-all' ? ['live','movie','series'] : [action.replace('sync-', '')];
       await api(`/api/v1/admin/xtream/servers/${item.id}/sync`, { method: 'POST', body: JSON.stringify({ types: type }) });
       showMessage(`بدأت مزامنة ${item.name}.`);
     }
-    if(action!=='toggle-enabled'&&action!=='toggle-publish')await loadXtream(true);
+    if(!['toggle-enabled','toggle-publish','delete'].includes(action))await loadXtream(true);
   } catch (error) {
     showMessage(`فشلت العملية: ${error.message}`, 'error');
   } finally {
