@@ -487,6 +487,7 @@ async function checkedFetch(url, { timeoutMs = 30000, method = 'GET', headers = 
     });
     if ([301,302,303,307,308].includes(response.status)) {
       const location = response.headers.get('location');
+      await response.body?.cancel().catch(()=>{});
       if (!location || redirects === 3) throw new Error('xtream_gateway_redirect_invalid');
       current = new URL(location, current);
       if (!['http:','https:'].includes(current.protocol)) throw new Error('xtream_gateway_redirect_invalid');
