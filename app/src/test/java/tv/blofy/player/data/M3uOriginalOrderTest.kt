@@ -28,6 +28,14 @@ class M3uOriginalOrderTest {
         assertEquals(listOf("17", "5"), parser.movie.keys.toList())
     }
 
+    @Test fun legacyThreeSegmentLiveUrlIsRecognized() {
+        val parser = M3uOriginalOrder()
+        listOf("#EXTM3U", """#EXTINF:-1 group-title="Local",Channel""",
+            "http://provider.example:80/demo/password/00019.ts").forEach(parser::accept)
+        assertEquals(listOf("19"), parser.live.keys.toList())
+        assertEquals(listOf("local"), parser.liveGroups.keys.toList())
+    }
+
     @Test fun seriesEpisodesNeverMislabelledAsSeriesIdentifiers() {
         val parser = M3uOriginalOrder()
         listOf("#EXTM3U", """#EXTINF:-1 group-title="Series",Show S01E01""",
