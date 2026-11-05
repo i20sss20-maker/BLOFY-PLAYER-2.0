@@ -415,6 +415,7 @@ async function gatewayItemById(mediaType, gatewayId) {
     FROM blofy_xtream_gateway_item_map m
     JOIN blofy_xtream_items i ON i.server_id=m.server_id AND i.media_type=m.media_type AND i.source_id=m.source_id
     JOIN blofy_xtream_servers s ON s.id=i.server_id
+    LEFT JOIN blofy_xtream_categories c ON c.server_id=i.server_id AND c.media_type=i.media_type AND c.source_category_id=i.category_id
     LEFT JOIN blofy_xtream_gateway_category_map cm ON cm.server_id=i.server_id AND cm.media_type=i.media_type AND cm.source_category_id=i.category_id
     WHERE m.gateway_id=$1 AND m.media_type=$2 AND i.enabled=TRUE AND s.enabled=TRUE AND s.publish_catalog=TRUE AND (c.enabled IS NULL OR c.enabled=TRUE)`, [id,mediaType])).rows[0] || null;
 }
