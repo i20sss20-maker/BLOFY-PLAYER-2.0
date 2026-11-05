@@ -151,6 +151,7 @@ async function ensureReady() {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`);
+      await client.query('ALTER TABLE blofy_xtream_gateway_accounts ADD COLUMN IF NOT EXISTS source_id UUID');
       await client.query(`CREATE TABLE IF NOT EXISTS blofy_xtream_gateway_category_map (
         gateway_id BIGSERIAL PRIMARY KEY,
         server_id UUID NOT NULL REFERENCES blofy_xtream_servers(id) ON DELETE CASCADE,
@@ -190,6 +191,7 @@ function adminAccount(row) {
     id: row.id,
     label: row.label,
     username: row.username,
+    sourceId: row.source_id || null,
     enabled: Boolean(row.enabled),
     maxConnections: Number(row.max_connections),
     expiresAt: row.expires_at ? new Date(row.expires_at).getTime() : null,
@@ -204,9 +206,23 @@ async function listAccounts() {
   return (await pool.query('SELECT * FROM blofy_xtream_gateway_accounts ORDER BY created_at DESC')).rows.map(adminAccount);
 }
 
+// NULL means all published BLOFY sources (existing accounts keep this mode).
+// A bound account must NEVER switch to all when a source is removed.
+async function checkedAccountSourceId(value) {
+  if (value == null || value === '') return null;
+  const id=String(value);
+  if(!validUuid(id))throw Object.assign(new Error('xtream_gateway_source_id_invalid'),{status:400});
+  const row=(await pool.query(`SELECT id FROM blofy_xtream_servers
+     WHERE id=$1 AND enabled=TRUE AND publish_catalog=TRUE
+       AND deletion_requested_at IS NULL`,[id])).rows[0];
+  if(!row)throw Object.assign(new Error('xtream_gateway_source_not_ready'),{status:409});
+  return row.id;
+}
+
 async function createAccount(body, req) {
   await ensureReady();
   const label = cleanLabel(body.label, 'BLOFY Player');
+  const sourceId=await checkedAccountSourceId(body.sourceId);
   const maxConnections = Math.max(1, Math.min(20, Number(body.maxConnections) || 1));
   let username = body.username ? normalizeGatewayUsername(body.username) : null;
   const password = body.password ? normalizeGatewayPassword(body.password) : generateGatewayPassword();
@@ -221,8 +237,8 @@ async function createAccount(body, req) {
     const id = crypto.randomUUID();
     const proof = gatewayCredentialProof(username, password, KEY_HEX);
     try {
-      const row = (await pool.query(`INSERT INTO blofy_xtream_gateway_accounts(id,label,username,password_proof,enabled,max_connections,expires_at)
-        VALUES($1,$2,$3,$4,TRUE,$5,$6) RETURNING *`, [id,label,username,proof,maxConnections,expiresAt])).rows[0];
+      const row = (await pool.query(`INSERT INTO blofy_xtream_gateway_accounts(id,label,username,password_proof,enabled,max_connections,expires_at,source_id)
+        VALUES($1,$2,$3,$4,TRUE,$5,$6,$7) RETURNING *`, [id,label,username,proof,maxConnections,expiresAt,sourceId])).rows[0];
       return {
         item: adminAccount(row),
         credentials: { serverUrl: origin(req), username, password }
@@ -240,6 +256,7 @@ async function createAccountsBulk(body, req) {
   await ensureReady();
   const { count,maxConnections,expiresAt }=validateBulkAccountRequest(body);
   const label=cleanLabel(body.label,'BLOFY Player');
+  const sourceId=await checkedAccountSourceId(body.sourceId);
   const connection=await pool.connect();
   const created=[], issued=new Set();
   try{
@@ -252,9 +269,9 @@ async function createAccountsBulk(body, req) {
       const password=generateGatewayPassword();
       const id=crypto.randomUUID(),proof=gatewayCredentialProof(username,password,KEY_HEX);
       const accountLabel=count===1?label:`${label} ${String(i+1).padStart(2,'0')}`;
-      const row=(await connection.query(`INSERT INTO blofy_xtream_gateway_accounts(id,label,username,password_proof,enabled,max_connections,expires_at)
-        VALUES($1,$2,$3,$4,TRUE,$5,$6) RETURNING *`,[
-        id,accountLabel,username,proof,maxConnections,expiresAt
+      const row=(await connection.query(`INSERT INTO blofy_xtream_gateway_accounts(id,label,username,password_proof,enabled,max_connections,expires_at,source_id)
+        VALUES($1,$2,$3,$4,TRUE,$5,$6,$7) RETURNING *`,[
+        id,accountLabel,username,proof,maxConnections,expiresAt,sourceId
       ])).rows[0];
       created.push({item:adminAccount(row),username,password});
     }
@@ -275,6 +292,7 @@ async function patchAccount(id, body) {
   const values = [];
   const set = (column, value) => { values.push(value); updates.push(`${column}=$${values.length}`); };
   if (body.label !== undefined) set('label', cleanLabel(body.label));
+  if (body.sourceId !== undefined) set('source_id', await checkedAccountSourceId(body.sourceId));
   if (body.enabled !== undefined) set('enabled', Boolean(body.enabled));
   if (body.maxConnections !== undefined) {
     const max = Number(body.maxConnections);
