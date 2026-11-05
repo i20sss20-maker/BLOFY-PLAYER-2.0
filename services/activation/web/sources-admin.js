@@ -2,6 +2,7 @@ const el = id => document.getElementById(id);
 const state = {
   xtreamServers: [],
   xtreamTotals: {},
+  xtreamLoadSequence: 0,
   categories: [],
   catalog: [],
   activeTab: 'xtream',
@@ -196,19 +197,28 @@ function scheduleXtreamPoll() {
   }, 3500);
 }
 
-async function loadXtream(silent = false) {
+async function loadXtream(silent = false, strict = false) {
+  const seq=++state.xtreamLoadSequence;
   if (!silent) el('xtreamLoading').hidden = false;
   try {
     const data = await api('/api/v1/admin/xtream/servers');
+    // Ignore stale requests started before a later refresh or mutation.
+    if(seq!==state.xtreamLoadSequence) {
+      if(strict)throw new Error('xtream_readback_superseded');
+      return null;
+    }
     state.xtreamServers = Array.isArray(data.items) ? data.items : [];
     state.xtreamTotals = data.totals || {};
     renderXtream();
     scheduleXtreamPoll();
+    return data;
   } catch (error) {
     if (!silent) showMessage(`تعذر تحميل Xtream: ${error.message}`, 'error');
     const notice=el('xtreamTotalsNotice');
     if(notice){notice.className='stream-totals-notice warning';notice.textContent='تعذر قراءة أعداد المحتوى من السيرفر: '+error.message;}
     el('xtreamLoading').hidden=true;
+    if(strict)throw error;
+    return null;
   }
 }
 
@@ -288,9 +298,9 @@ async function handleServerAction(item, card, button) {
       if(el('xtSourceFilter').value!=='all'){
         el('xtSourceFilter').value='all';
       }
-      await loadXtream(true);
+      await loadXtream(true,true);
       const saved=state.xtreamServers.find(source=>source.id===item.id);
-      if(saved&&Boolean(saved[field])!==next){
+      if(!saved||Boolean(saved[field])!==next){
         throw new Error('حالة المصدر لا تطابق التغيير بعد إعادة القراءة من قاعدة البيانات.');
       }
       showMessage(isEnable
