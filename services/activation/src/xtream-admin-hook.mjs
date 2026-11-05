@@ -888,7 +888,7 @@ function controlRedirect(res,kind,value){
   res.end();
 }
 async function handleControlAction(req,res,id,action) {
-  const available=['toggle-enabled','toggle-publish','test','sync-all','sync-live','sync-movie','sync-series','cancel-sync','save','delete'];
+  const available=['toggle-enabled','toggle-publish','test','probe-live','probe-movie','sync-all','sync-live','sync-movie','sync-series','cancel-sync','save','delete'];
   if(id==='new'&&action==='add'){
     const fields=await readControlForm(req);
     if(fields.rightsConfirmed!=='yes')throw Object.assign(new Error('rights_confirmation_required'),{status:400});
@@ -930,6 +930,10 @@ async function handleControlAction(req,res,id,action) {
   if(action==='cancel-sync'){
     await cancelSourceSync(id);
     return controlRedirect(res,'ok','cancelled');
+  }
+  if(action==='probe-live'||action==='probe-movie'){
+    const result=await probeXtreamPlayback(id,action==='probe-live'?'live':'movie');
+    return controlRedirect(res,result.ok?'ok':'error',result.ok?'probe-ok':('playback_'+String(result.reason||'failed').slice(0,80)));
   }
   if(action==='test'){
     // Never block a 15s proxy request on an upstream test that may take 20s.
@@ -976,7 +980,7 @@ http.createServer = function withBlofyXtream(listener) {
         if(!source)return json(res,404,{error:'xtream_server_not_found'});
         return sendControlHtml(res,deleteConfirmationPage(source));
       }
-      const nativeAction=url.pathname.match(/^\/api\/v1\/admin\/xtream\/controls\/([a-z0-9-]+)\/(toggle-enabled|toggle-publish|test|sync-all|sync-live|sync-movie|sync-series|cancel-sync|save|delete|add)$/i);
+      const nativeAction=url.pathname.match(/^\/api\/v1\/admin\/xtream\/controls\/([a-z0-9-]+)\/(toggle-enabled|toggle-publish|test|probe-live|probe-movie|sync-all|sync-live|sync-movie|sync-series|cancel-sync|save|delete|add)$/i);
       if(nativeAction&&req.method==='POST'){
         try{return await handleControlAction(req,res,nativeAction[1],nativeAction[2]);}
         catch(error){
