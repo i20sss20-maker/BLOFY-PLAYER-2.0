@@ -220,7 +220,10 @@ function serverCard(item) {
     metrics.append(box);
   });
 
-  const settings = make('div', 'server-settings');
+  const settings = make('details', 'server-advanced');
+  const advancedSummary = make('summary', '', 'إعدادات إضافية · الأولوية والمزامنة حسب النوع');
+  const advancedFields = make('div', 'server-settings');
+  settings.append(advancedSummary, advancedFields);
   const enabledLabel = make('label', 'check compact');
   const enabled = document.createElement('input');
   enabled.type = 'checkbox'; enabled.checked = item.enabled; enabled.dataset.role = 'enabled';
@@ -232,37 +235,48 @@ function serverCard(item) {
   const priority = document.createElement('input');
   priority.type = 'number'; priority.min = '0'; priority.max = '10000'; priority.value = String(item.priority ?? 100); priority.dataset.role = 'priority';
   priority.className = 'small-input';
-  settings.append(enabledLabel, publishLabel, make('span', 'muted', item.transportSecurity === 'https' ? 'HTTPS' : 'HTTP'), priority);
+  advancedFields.append(enabledLabel, publishLabel, make('span', 'muted', item.transportSecurity === 'https' ? 'HTTPS' : 'HTTP'), priority);
 
   const actions = make('div', 'server-actions');
   const buttons = [
-    ['فحص', 'test', 'button'],
-    ['مزامنة الكل', 'sync-all', 'button primary'],
-    ['Live', 'sync-live', 'button ghost'],
-    ['Movies', 'sync-movie', 'button ghost'],
-    ['Series', 'sync-series', 'button ghost'],
-    ['حفظ', 'save', 'button'],
-    ['حذف', 'delete', 'button danger']
+    [item.enabled ? '⏸ إيقاف المصدر' : '▶ تفعيل المصدر', 'toggle-enabled', item.enabled ? 'button source-toggle-stop' : 'button primary'],
+    [item.publishCatalog ? 'إخفاء المحتوى عن العملاء' : 'نشر المحتوى للعملاء', 'toggle-publish', item.publishCatalog ? 'button ghost' : 'button primary'],
+    ['⟳ مزامنة المحتوى', 'sync-all', 'button'],
+    ['فحص الاتصال', 'test', 'button ghost'],
+    ['حذف المصدر', 'delete', 'button danger']
   ];
   buttons.forEach(([text, action, cls]) => {
     const button = make('button', cls, text);
     button.type = 'button'; button.dataset.action = action;
-    button.disabled = item.syncing && action.startsWith('sync');
+    button.disabled = item.syncing && (action.startsWith('sync') || action === 'delete');
     actions.append(button);
   });
 
+  const extraActions = make('div', 'server-actions server-actions-advanced');
+  for (const [label, action] of [['Live فقط', 'sync-live'], ['أفلام فقط', 'sync-movie'], ['مسلسلات فقط', 'sync-series'], ['حفظ الأولوية', 'save']]) {
+    const button = make('button', 'button ghost', label);
+    button.type='button';button.dataset.action=action;
+    button.disabled = item.syncing && action.startsWith('sync');
+    extraActions.append(button);
+  }
+  settings.append(extraActions);
   const info = make('div', 'server-info');
   if (item.accountInfo?.maxConnections != null) info.append(make('span', 'badge', `Max ${item.accountInfo.maxConnections}`));
   if (item.accountInfo?.activeConnections != null) info.append(make('span', 'badge', `Active ${item.accountInfo.activeConnections}`));
   if (item.lastSyncAt) info.append(make('span', 'muted', `آخر مزامنة: ${new Date(item.lastSyncAt).toLocaleString('ar-SA')}`));
   if (item.lastError) info.append(make('span', 'error-text', `آخر خطأ: ${item.lastError}`));
 
-  actions.addEventListener('click', event => {
+  card.addEventListener('click', event => {
     const button = event.target.closest('button[data-action]');
     if (!button) return;
     handleServerAction(item, card, button);
   });
-  card.append(header, metrics, settings, actions, info);
+  const indicators = make('div', 'source-quick-status');
+  indicators.append(
+    make('span', item.enabled ? 'source-state-pill on' : 'source-state-pill off', item.enabled ? '● المصدر مفعّل' : '● المصدر موقوف'),
+    make('span', item.enabled && item.publishCatalog ? 'source-state-pill published' : 'source-state-pill hidden', item.enabled && item.publishCatalog ? '● منشور للمشتركين' : '○ غير ظاهر للمشتركين')
+  );
+  card.append(header, indicators, metrics, actions, settings, info);
   return card;
 }
 
