@@ -179,3 +179,11 @@
 .blofy-playback-probe-controls button{white-space:nowrap}
 .blofy-playback-issue button{margin-inline-start:auto}
 @media(max-width:650px){.blofy-playback-probe-controls{grid-template-columns:1fr 1fr}.blofy-playback-probe-controls button{grid-column:1/-1}}
+
+/* Fast, operator-controlled category sorting on BLOFY's main production dashboard. */
+.category-auto-sort{display:flex;align-items:center;flex-wrap:wrap;gap:9px;margin:12px 0;padding:13px;border:1px solid #574371;border-radius:11px;background:#1b1427}
+.category-auto-sort strong{font-size:13px}
+.category-auto-sort select{font:inherit;color:#f7efff;border:1px solid #685280;background:#16101e;border-radius:9px;min-height:42px;min-width:200px;padding:8px 12px}
+.category-auto-sort small{flex-basis:100%;color:#c3b7d7;line-height:1.7}
+.category-auto-sort .button{min-height:42px}
+@media(max-width:640px){.category-auto-sort select,.category-auto-sort .button{width:100%;flex:1 1 100%}}
