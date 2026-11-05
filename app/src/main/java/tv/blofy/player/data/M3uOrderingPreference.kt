@@ -8,6 +8,10 @@ internal object M3uOrderingPreference {
     fun enabled(context: Context, providerId: String): Boolean =
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getBoolean(providerId, false)
+    fun disable(context: Context, providerId: String) {
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().remove(providerId).apply()
+    }
     fun enable(context: Context, providerId: String) {
         check(context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().putBoolean(providerId, true).commit()) {
