@@ -390,7 +390,7 @@ async function walkGatewayItems(mediaType, filter, onRow, sourceId=null) {
     const where = ['m.media_type=$1','m.gateway_id>$2','s.enabled=TRUE','s.publish_catalog=TRUE','i.enabled=TRUE','(c.enabled IS NULL OR c.enabled=TRUE)'];
     if (sourceId) {
       values.push(sourceId);
-      where.push(`i.server_id=${values.length}`);
+      where.push(`i.server_id=$${values.length}`);
     }
     if (filter) {
       values.push(filter.server_id, filter.source_category_id);
