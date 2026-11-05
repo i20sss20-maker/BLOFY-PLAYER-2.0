@@ -97,7 +97,13 @@ android {
     packaging { resources.excludes += setOf("META-INF/DEPENDENCIES", "META-INF/LICENSE*", "META-INF/NOTICE*") }
     testOptions {
         unitTests.isIncludeAndroidResources = true
-        unitTests.all { it.testLogging.exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
+        unitTests.all {
+            it.testLogging.exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+            // Robolectric resolves android-all-instrumented separately from Gradle dependencies.
+            // repo1.maven.org rate-limits shared CI runners (HTTP 429); use Maven Central's
+            // canonical endpoint to keep actual regression tests enabled.
+            it.systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2")
+        }
     }
 }
 
