@@ -1,7 +1,5 @@
 const el = id => document.getElementById(id);
 const state = {
-  items: [],
-  repoUrl: '',
   xtreamServers: [],
   xtreamTotals: {},
   categories: [],
@@ -9,8 +7,7 @@ const state = {
   activeTab: 'xtream',
   pollTimer: null
 };
-const statusLabels = { 0: 'متوقف', 1: 'يعمل', 2: 'بطيء', 3: 'Beta' };
-const TAB_NAMES = new Set(['sources', 'xtream', 'catalog']);
+const TAB_NAMES = new Set(['xtream', 'catalog']);
 const tabFromHash = () => {
   const name = String(location.hash || '').replace(/^#/, '').trim().toLowerCase();
   return TAB_NAMES.has(name) ? name : null;
@@ -22,7 +19,7 @@ function showMessage(text, kind = 'ok') {
   box.className = `message ${kind}`;
   box.hidden = false;
   window.clearTimeout(showMessage.timer);
-  showMessage.timer = window.setTimeout(() => { box.hidden = true; }, 5000);
+  showMessage.timer = window.setTimeout(() => { box.hidden = true; }, kind === 'error' ? 16000 : 8500);
 }
 
 async function api(path, options = {}) {
@@ -46,154 +43,6 @@ function make(tag, className, text) {
   if (className) node.className = className;
   if (text !== undefined) node.textContent = text;
   return node;
-}
-
-function sourceCard(item) {
-  const card = make('article', `source${item.enabled ? '' : ' off'}`);
-  card.dataset.id = item.id;
-  const main = make('div', 'source-card-main');
-  const icon = make('div', 'icon');
-  if (item.iconUrl) {
-    const img = document.createElement('img');
-    img.src = item.iconUrl;
-    img.alt = '';
-    img.loading = 'lazy';
-    img.referrerPolicy = 'no-referrer';
-    img.addEventListener('error', () => {
-      img.remove();
-      icon.append(make('span', '', (item.name || '?').slice(0, 1).toUpperCase()));
-    }, { once: true });
-    icon.append(img);
-  } else icon.append(make('span', '', (item.name || '?').slice(0, 1).toUpperCase()));
-
-  const title = make('div', 'source-title');
-  title.append(make('strong', '', item.name));
-  title.append(make('small', '', item.internalName));
-  const badges = make('div', 'badges');
-  (item.tvTypes || []).slice(0, 4).forEach(type => badges.append(make('span', 'badge', type)));
-  if (item.category) badges.append(make('span', 'badge', item.category));
-  if (item.language) badges.append(make('span', 'badge', item.language.toUpperCase()));
-  title.append(badges);
-  main.append(icon, title);
-
-  const enabledField = make('div', 'field');
-  enabledField.append(make('label', '', 'النشر'));
-  const switchLabel = make('label', 'switch');
-  const enabled = document.createElement('input');
-  enabled.type = 'checkbox';
-  enabled.checked = item.enabled;
-  enabled.dataset.role = 'enabled';
-  switchLabel.append(enabled, make('span', 'slider'));
-  const wrap = make('div', 'switch-wrap');
-  wrap.append(switchLabel, make('span', 'status-note', item.enabled ? 'منشور' : 'مخفي'));
-  enabledField.append(wrap);
-
-  const statusField = make('div', 'field');
-  statusField.append(make('label', '', 'الحالة'));
-  const select = document.createElement('select');
-  select.dataset.role = 'status';
-  [1, 2, 0, 3].forEach(value => {
-    const option = document.createElement('option');
-    option.value = String(value);
-    option.textContent = statusLabels[value];
-    option.selected = Number(item.status) === value;
-    select.append(option);
-  });
-  statusField.append(select, make('div', `status-note s${item.status}`, `v${item.version}`));
-
-  const priorityField = make('div', 'field');
-  priorityField.append(make('label', '', 'الترتيب'));
-  const priority = document.createElement('input');
-  priority.type = 'number';
-  priority.min = '0';
-  priority.max = '10000';
-  priority.step = '1';
-  priority.value = String(item.priority ?? 100);
-  priority.dataset.role = 'priority';
-  priorityField.append(priority);
-
-  const save = make('button', 'button save', 'حفظ');
-  save.type = 'button';
-  save.addEventListener('click', () => saveSource(card, save));
-  enabled.addEventListener('change', () => {
-    card.classList.toggle('off', !enabled.checked);
-    const text = enabledField.querySelector('.status-note');
-    if (text) text.textContent = enabled.checked ? 'منشور' : 'مخفي';
-  });
-  card.append(main, enabledField, statusField, priorityField, save);
-  return card;
-}
-
-function renderSources() {
-  const list = el('sources');
-  list.replaceChildren();
-  state.items.forEach(item => list.append(sourceCard(item)));
-  el('loading').hidden = true;
-  list.hidden = false;
-  const total = state.items.length;
-  const enabled = state.items.filter(item => item.enabled).length;
-  const down = state.items.filter(item => item.enabled && Number(item.status) === 0).length;
-  const beta = state.items.filter(item => item.enabled && Number(item.status) === 3).length;
-  el('statTotal').textContent = String(total);
-  el('statEnabled').textContent = String(enabled);
-  el('statDown').textContent = String(down);
-  el('statBeta').textContent = String(beta);
-  el('repoUrl').textContent = state.repoUrl || '—';
-}
-
-async function loadSources() {
-  el('loading').hidden = false;
-  try {
-    const data = await api('/api/v1/admin/sources');
-    state.items = Array.isArray(data.items) ? data.items : [];
-    state.repoUrl = data.publicRepoUrl || '';
-    renderSources();
-  } catch (error) {
-    if (error.message !== 'unauthorized') {
-      el('loading').hidden = true;
-      showMessage(`تعذر تحميل الإضافات: ${error.message}`, 'error');
-    }
-  }
-}
-
-async function saveSource(card, button) {
-  const id = card.dataset.id;
-  const enabled = card.querySelector('[data-role="enabled"]')?.checked ?? false;
-  const status = Number(card.querySelector('[data-role="status"]')?.value ?? 1);
-  const priority = Number(card.querySelector('[data-role="priority"]')?.value ?? 100);
-  button.disabled = true;
-  button.textContent = 'يحفظ…';
-  try {
-    const data = await api(`/api/v1/admin/sources/${encodeURIComponent(id)}`, {
-      method: 'PATCH', body: JSON.stringify({ enabled, status, priority })
-    });
-    const index = state.items.findIndex(item => item.id === id);
-    if (index >= 0 && data.item) state.items[index] = data.item;
-    renderSources();
-    showMessage('تم حفظ المصدر ونشر التغيير.');
-  } catch (error) {
-    showMessage(`تعذر الحفظ: ${error.message}`, 'error');
-  } finally {
-    button.disabled = false;
-    button.textContent = 'حفظ';
-  }
-}
-
-async function syncSources() {
-  const button = el('syncBtn');
-  button.disabled = true;
-  const old = button.textContent;
-  button.textContent = 'تتم المزامنة…';
-  try {
-    const data = await api('/api/v1/admin/sources/sync', { method: 'POST', body: '{}' });
-    showMessage(`تمت مزامنة ${data.synced || 0} مصدر من GitHub.`);
-    await loadSources();
-  } catch (error) {
-    showMessage(`فشلت المزامنة: ${error.message}`, 'error');
-  } finally {
-    button.disabled = false;
-    button.textContent = old;
-  }
 }
 
 function xtStatusClass(status) {
@@ -400,7 +249,7 @@ async function addXtream(event) {
     el('xtEnabled').checked = true;
     el('xtPublish').checked = true;
     el('xtPriority').value = '100';
-    showMessage('تمت إضافة السيرفر وفحصه وبدأ استيراد Live + Movies + Series.');
+    showMessage('تم حفظ حساب Xtream وبدء الاستيراد. راجع قسم المصادر للتأكد من الأعداد وحالة النشر.');
     await loadXtream();
   } catch (error) {
     const raw=String(error.message||error);
@@ -451,8 +300,10 @@ async function handleServerAction(item, card, button) {
     } else if (action === 'delete') {
       const total=Number(item.counts?.total||0).toLocaleString('en-US');
       if(!window.confirm(`حذف مصدر «${item.name}» نهائيًا من BLOFY؟\\nسيتم حذف ${total} عنصر مستورد منه ولن يظهر محتواه لعملائك.\\nلن يتأثر اشتراكك الأصلي لدى مزود Xtream.\\n\\nهل تؤكد الحذف؟`))return;
-      await api(`/api/v1/admin/xtream/servers/${item.id}`, { method: 'DELETE' });
-      showMessage('تم حذف السيرفر وبياناته المستوردة.');
+      const result=await api(`/api/v1/admin/xtream/servers/${item.id}`, { method: 'DELETE' });
+      showMessage(result.deletionQueued
+        ?'تم إيقاف «'+item.name+'» وإخفاؤه عن المشتركين فورًا. حذف عناصره الكبيرة يجري على دفعات في الخلفية.'
+        :'تم حذف المصدر.');
     } else if (action.startsWith('sync-')) {
       const type = action === 'sync-all' ? ['live','movie','series'] : [action.replace('sync-', '')];
       await api(`/api/v1/admin/xtream/servers/${item.id}/sync`, { method: 'POST', body: JSON.stringify({ types: type }) });
@@ -495,13 +346,75 @@ function updateCatalogServerOptions() {
   if (state.xtreamServers.some(server => server.id === current)) select.value = current;
 }
 
+function renderCategoryManager() {
+  const target=el('categoryManagerRows');
+  if(!target)return;
+  target.replaceChildren();
+  const all=state.categories||[];
+  const query=String(el('categorySearch')?.value||'').trim().toLowerCase();
+  const matches=all.filter(category=>String(category.name||'').toLowerCase().includes(query));
+  const countOn=all.filter(category=>category.enabled).length;
+  el('categoryManagerSummary').textContent=
+    'الفئات: '+all.length+' · الظاهرة: '+countOn+' · المخفية: '+(all.length-countOn)+
+    (query?' · نتائج البحث: '+matches.length:'')+(query?' · امسح البحث لتحريك الفئات':'');
+  const rows=matches.slice(0,120);
+  if(!rows.length){
+    target.append(make('p','empty','ما توجد فئات مطابقة للمصدر والنوع المحددين.'));
+    return;
+  }
+  for(const category of rows){
+    const row=make('article','category-manager-row'+(category.enabled?'':' hidden-category'));
+    const info=make('div','category-manager-label');
+    info.append(make('strong','',category.name));
+    info.append(make('small','',Number(category.itemCount||0).toLocaleString('en-US')+' عنصر'));
+    const actions=make('div','category-manager-actions');
+    const position=all.findIndex(x=>x.id===category.id);
+    const buttons=[
+      ['↑','up','رفع الفئة',Boolean(query)||position===0],
+      ['↓','down','خفض الفئة',Boolean(query)||position===all.length-1],
+      [category.enabled?'إخفاء':'إظهار','toggle',category.enabled?'إخفاء عن العملاء':'إظهار للعملاء',false]
+    ];
+    for(const [label,action,title,disabled] of buttons){
+      const button=make('button','button ghost',label);
+      button.type='button';button.dataset.action=action;button.dataset.categoryId=category.id;
+      button.title=title;button.disabled=disabled;
+      actions.append(button);
+    }
+    row.append(info,actions);
+    target.append(row);
+  }
+  if(matches.length>rows.length)target.append(make('p','muted','المعروض أول 120 فئة. استخدم البحث للوصول إلى بقية الفئات.'));
+}
+
+async function changeCategory(button) {
+  const categoryId=button.dataset.categoryId;
+  const action=button.dataset.action;
+  const category=state.categories.find(x=>x.id===categoryId);
+  const serverId=el('catalogServer').value,kind=el('catalogType').value;
+  if(!category||!serverId)return;
+  button.disabled=true;
+  try{
+    const payload=action==='toggle'?{enabled:!category.enabled}:{direction:action};
+    await api('/api/v1/admin/xtream/categories/'+encodeURIComponent(serverId)+'/'+encodeURIComponent(kind)+'/'+encodeURIComponent(categoryId),{
+      method:'PATCH',body:JSON.stringify(payload)
+    });
+    // Read back persisted state rather than trusting a local optimistic toggle.
+    await loadCategories();
+    showMessage(action==='toggle'
+      ?'تم حفظ '+(payload.enabled?'إظهار':'إخفاء')+' الفئة «'+category.name+'».'
+      :'تم حفظ ترتيب الفئة «'+category.name+'» في قاعدة البيانات.');
+  }catch(error){
+    showMessage('فشل حفظ الفئة «'+category.name+'»: '+error.message,'error');
+  }finally{button.disabled=false;}
+}
+
 async function loadCategories() {
   const serverId = el('catalogServer').value;
   const type = el('catalogType').value;
   const select = el('catalogCategory');
   select.replaceChildren();
   const all = document.createElement('option'); all.value = ''; all.textContent = 'كل الأقسام'; select.append(all);
-  if (!serverId) return;
+  if (!serverId){state.categories=[];renderCategoryManager();return;}
   try {
     const data = await api(`/api/v1/admin/xtream/categories?serverId=${encodeURIComponent(serverId)}&type=${encodeURIComponent(type)}`);
     state.categories = Array.isArray(data.items) ? data.items : [];
@@ -511,7 +424,9 @@ async function loadCategories() {
       option.textContent = `${category.enabled ? '' : '⛔ '} ${category.name} (${Number(category.itemCount || 0).toLocaleString()})`;
       select.append(option);
     });
+    renderCategoryManager();
   } catch (error) {
+    el('categoryManagerSummary').textContent='تعذر تحميل الفئات: '+error.message;
     showMessage(`تعذر تحميل الأقسام: ${error.message}`, 'error');
   }
 }
@@ -618,19 +533,12 @@ async function switchTab(name) {
 }
 
 async function refreshCurrent() {
-  if (state.activeTab === 'sources') await loadSources();
-  else if (state.activeTab === 'xtream') await loadXtream();
+  if (state.activeTab === 'xtream') await loadXtream();
   else { await loadXtream(true); await loadCategories(); await loadCatalog(); }
 }
 
 document.querySelectorAll('.tab').forEach(button => button.addEventListener('click', () => switchTab(button.dataset.tab)));
 el('refreshBtn').addEventListener('click', refreshCurrent);
-el('syncBtn').addEventListener('click', syncSources);
-el('copyRepoBtn').addEventListener('click', async () => {
-  if (!state.repoUrl) return;
-  try { await navigator.clipboard.writeText(state.repoUrl); showMessage('تم نسخ رابط المستودع.'); }
-  catch { showMessage('تعذر النسخ التلقائي. انسخ الرابط يدويًا.', 'error'); }
-});
 el('xtreamForm').addEventListener('submit', addXtream);
 el('syncAllXtreamBtn').addEventListener('click', syncAllXtream);
 el('xtSourceSearch').addEventListener('input', renderXtream);
@@ -644,6 +552,11 @@ el('xtRefreshSourcesBtn').addEventListener('click', ()=>loadXtream().catch(error
 el('catalogServer').addEventListener('change', async () => { await loadCategories(); await loadCatalog(); });
 el('catalogType').addEventListener('change', async () => { await loadCategories(); await loadCatalog(); });
 el('catalogCategory').addEventListener('change', loadCatalog);
+el('categorySearch').addEventListener('input',renderCategoryManager);
+el('categoryManagerRows').addEventListener('click',event=>{
+  const button=event.target.closest('button[data-action][data-category-id]');
+  if(button)changeCategory(button).catch(error=>showMessage('تعذر حفظ الفئة: '+error.message,'error'));
+});
 el('catalogLoadBtn').addEventListener('click', loadCatalog);
 el('catalogSearch').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); loadCatalog(); } });
 el('enableTypeBtn').addEventListener('click', () => bulkCatalog(true));
@@ -653,7 +566,6 @@ window.addEventListener('hashchange', () => {
   if (name && name !== state.activeTab) switchTab(name);
 });
 
-loadSources();
 loadXtream(true);
 const initialTab = tabFromHash();
-if (initialTab && initialTab !== 'sources') switchTab(initialTab);
+if (initialTab && initialTab !== 'xtream') switchTab(initialTab);

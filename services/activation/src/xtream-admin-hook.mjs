@@ -32,6 +32,9 @@ pool.on('error', error => console.error('xtream database error:', safeErrorSumma
 
 const limiter = createFixedWindowLimiter({ limit: 180, windowMs: 60_000 });
 const syncLocks = new Set();
+const cancelledSources = new Set();
+const purgeRunning = new Set();
+let purgeSweepStarted = false;
 let readyPromise;
 
 const TYPE_ACTIONS = {
@@ -144,6 +147,7 @@ async function ensureReady() {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`);
+      await client.query('ALTER TABLE blofy_xtream_servers ADD COLUMN IF NOT EXISTS deletion_requested_at TIMESTAMPTZ');
       await client.query(`CREATE TABLE IF NOT EXISTS blofy_xtream_categories (
         server_id UUID NOT NULL REFERENCES blofy_xtream_servers(id) ON DELETE CASCADE,
         media_type TEXT NOT NULL CHECK(media_type IN ('live','movie','series')),
@@ -151,6 +155,7 @@ async function ensureReady() {
         name TEXT NOT NULL,
         parent_id TEXT,
         enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        sort_order INTEGER NOT NULL DEFAULT 100000,
         item_count INTEGER NOT NULL DEFAULT 0,
         sync_token TEXT,
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -170,6 +175,7 @@ async function ensureReady() {
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         PRIMARY KEY(server_id,media_type,source_id)
       )`);
+      await client.query('ALTER TABLE blofy_xtream_categories ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 100000');
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_servers_publish ON blofy_xtream_servers(enabled,publish_catalog,priority)');
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_categories_filter ON blofy_xtream_categories(server_id,media_type,enabled,name)');
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_items_filter ON blofy_xtream_items(server_id,media_type,category_id,enabled,name)');
@@ -181,7 +187,18 @@ async function ensureReady() {
       client.release();
     }
   })().catch(error => { readyPromise = null; throw error; });
-  return readyPromise;
+  const result = await readyPromise;
+  if (!purgeSweepStarted) {
+    purgeSweepStarted = true;
+    const timer=setInterval(() => {
+      void resumePendingPurges().catch(error =>
+        console.warn('Xtream purge scan failed:', redactXtreamError(error)));
+    }, 60000);
+    timer.unref?.();
+    setTimeout(() => void resumePendingPurges().catch(error =>
+      console.warn('Xtream startup purge scan failed:', redactXtreamError(error))), 250);
+  }
+  return result;
 }
 
 function decryptCredentials(row) {
@@ -216,13 +233,66 @@ function adminServer(row) {
 
 async function serverRows() {
   await ensureReady();
-  return (await pool.query('SELECT * FROM blofy_xtream_servers ORDER BY priority ASC,name ASC')).rows;
+  return (await pool.query('SELECT * FROM blofy_xtream_servers WHERE deletion_requested_at IS NULL ORDER BY priority ASC,name ASC')).rows;
 }
 
 async function serverById(id) {
   await ensureReady();
   if (!validUuid(id)) return null;
-  return (await pool.query('SELECT * FROM blofy_xtream_servers WHERE id=$1', [id])).rows[0] || null;
+  return (await pool.query('SELECT * FROM blofy_xtream_servers WHERE id=$1 AND deletion_requested_at IS NULL', [id])).rows[0] || null;
+}
+
+// A large catalog can hold thousands of foreign-key references. Mark a source
+// disabled immediately and remove its records in bounded batches; a request must
+// not spend the proxy's 15s timeout deleting 100,000+ rows.
+const XTREAM_PURGE_TABLES = [
+  'blofy_xtream_gateway_episode_map',
+  'blofy_xtream_gateway_item_map',
+  'blofy_xtream_gateway_category_map',
+  'blofy_xtream_items',
+  'blofy_xtream_categories'
+];
+
+async function purgeSource(id) {
+  if (purgeRunning.has(id)) return;
+  purgeRunning.add(id);
+  cancelledSources.add(id);
+  try {
+    for (const table of XTREAM_PURGE_TABLES) {
+      for (;;) {
+        const result = await pool.query(`DELETE FROM ${table}
+          WHERE ctid IN (SELECT ctid FROM ${table} WHERE server_id=$1 LIMIT 400)`, [id]);
+        if (!result.rowCount) break;
+        // Yield the event loop between bounded deletes; concurrent requests can
+        // still pause other sources or read customer accounts.
+        await new Promise(resolve => setImmediate(resolve));
+      }
+    }
+    await pool.query('DELETE FROM blofy_xtream_servers WHERE id=$1 AND deletion_requested_at IS NOT NULL', [id]);
+  } catch (error) {
+    // deletion_requested_at remains persisted, so startup/periodic retries
+    // safely resume rather than exposing a partially removed source.
+    console.warn('Xtream source cleanup will retry:', id, redactXtreamError(error));
+  } finally {
+    purgeRunning.delete(id);
+    if (!syncLocks.has(id)) cancelledSources.delete(id);
+  }
+}
+
+async function resumePendingPurges() {
+  const pending = await pool.query('SELECT id FROM blofy_xtream_servers WHERE deletion_requested_at IS NOT NULL LIMIT 20');
+  for (const row of pending.rows) void purgeSource(row.id);
+}
+
+async function requestDeleteSource(id) {
+  const result = await pool.query(`UPDATE blofy_xtream_servers
+    SET enabled=FALSE,publish_catalog=FALSE,status='offline',
+        deletion_requested_at=COALESCE(deletion_requested_at,NOW()),updated_at=NOW()
+    WHERE id=$1 RETURNING id`,[id]);
+  if (!result.rows.length) return false;
+  cancelledSources.add(id);
+  void purgeSource(id);
+  return true;
 }
 
 async function checkedFetch(url, { timeoutMs = 30000 } = {}) {
@@ -278,6 +348,7 @@ async function testServer(id) {
 
 async function flushCategoryBatch(serverId, mediaType, syncToken, batch) {
   if (!batch.length) return;
+  if (cancelledSources.has(serverId)) throw Object.assign(new Error('xtream_sync_cancelled'), { status: 409 });
   const payload = batch.map(item => ({
     source_category_id: item.sourceCategoryId,
     name: item.name,
@@ -295,6 +366,7 @@ async function flushCategoryBatch(serverId, mediaType, syncToken, batch) {
 
 async function flushItemBatch(serverId, mediaType, syncToken, batch) {
   if (!batch.length) return;
+  if (cancelledSources.has(serverId)) throw Object.assign(new Error('xtream_sync_cancelled'), { status: 409 });
   const payload = batch.map(item => ({
     source_id: item.sourceId,
     category_id: item.categoryId,
@@ -411,11 +483,12 @@ async function syncServer(id, requestedTypes = ['live','movie','series']) {
   if (syncLocks.has(id)) throw Object.assign(new Error('xtream_sync_in_progress'), { status: 409 });
   const row = await serverById(id);
   if (!row) throw Object.assign(new Error('xtream_server_not_found'), { status: 404 });
+  if (!row.enabled) throw Object.assign(new Error('xtream_source_paused'), { status: 409 });
   const types = [...new Set(requestedTypes.map(validType).filter(Boolean))];
   if (!types.length) throw Object.assign(new Error('xtream_sync_types_invalid'), { status: 400 });
   syncLocks.add(id);
-  await pool.query(`UPDATE blofy_xtream_servers SET status='syncing',last_error=NULL,updated_at=NOW() WHERE id=$1`, [id]);
   try {
+    await pool.query(`UPDATE blofy_xtream_servers SET status='syncing',last_error=NULL,updated_at=NOW() WHERE id=$1 AND enabled=TRUE AND deletion_requested_at IS NULL`, [id]);
     const accountInfo = await fetchAccount(row);
     const creds = decryptCredentials(row);
     const details = {}, failures=[];
@@ -427,10 +500,12 @@ async function syncServer(id, requestedTypes = ['live','movie','series']) {
       return playlistPromise;
     };
     for (const mediaType of types) {
+      if (cancelledSources.has(id)) throw Object.assign(new Error('xtream_sync_cancelled'),{status:409});
       const syncToken = crypto.randomUUID();
       try{
         const categories = await syncCategories(row, mediaType, creds, syncToken, getM3u);
         const items = await syncItems(row, mediaType, creds, syncToken, getM3u);
+        if (cancelledSources.has(id)) throw Object.assign(new Error('xtream_sync_cancelled'),{status:409});
         await finalizeTypeSync(id, mediaType, syncToken);
         details[mediaType] = { categories, items };
       }catch(error){
@@ -438,18 +513,21 @@ async function syncServer(id, requestedTypes = ['live','movie','series']) {
         console.warn('Xtream catalog type failed:',id,mediaType,redactXtreamError(error));
       }
     }
+    if (cancelledSources.has(id)) throw Object.assign(new Error('xtream_sync_cancelled'), { status: 409 });
     if(!Object.keys(details).length)throw new Error('xtream_catalog_unavailable: '+failures.join('; ').slice(0,280));
     const counts = await calculateCounts(id);
     const partialWarning=failures.length?'بعض الأنواع لم تُستورد: '+failures.join('; ').slice(0,250):null;
-    await pool.query(`UPDATE blofy_xtream_servers SET status='online',account_info=$2::jsonb,counts=$3::jsonb,last_error=$4,last_test_at=NOW(),last_sync_at=NOW(),updated_at=NOW() WHERE id=$1`,
+    await pool.query(`UPDATE blofy_xtream_servers SET status='online',account_info=$2::jsonb,counts=$3::jsonb,last_error=$4,last_test_at=NOW(),last_sync_at=NOW(),updated_at=NOW() WHERE id=$1 AND enabled=TRUE AND deletion_requested_at IS NULL`,
       [id, JSON.stringify(accountInfo), JSON.stringify(counts),partialWarning]);
     return { id, counts, details, partialWarning };
   } catch (error) {
     const message = redactXtreamError(error);
-    await pool.query(`UPDATE blofy_xtream_servers SET status='error',last_error=$2,updated_at=NOW() WHERE id=$1`, [id, message]).catch(() => {});
+    await pool.query(`UPDATE blofy_xtream_servers SET status='error',last_error=$2,updated_at=NOW()
+      WHERE id=$1 AND enabled=TRUE AND deletion_requested_at IS NULL`, [id, message]).catch(() => {});
     throw error;
   } finally {
     syncLocks.delete(id);
+    cancelledSources.delete(id);
   }
 }
 
@@ -493,7 +571,14 @@ async function patchServer(id, body) {
   if (body.password !== undefined && String(body.password).trim()) {
     set('password_secret', encryptXtreamSecret(cleanText(body.password, 1024), KEY_HEX, `password:${id}`));
   }
-  if (body.enabled !== undefined) set('enabled', Boolean(body.enabled));
+  if (body.enabled !== undefined) {
+    const enabled=Boolean(body.enabled);
+    set('enabled',enabled);
+    if (!enabled) {
+      if (syncLocks.has(id)) cancelledSources.add(id);
+      set('status','offline');
+    }
+  }
   if (body.publishCatalog !== undefined) set('publish_catalog', Boolean(body.publishCatalog));
   if (body.priority !== undefined) {
     const priority = Number(body.priority);
@@ -502,7 +587,8 @@ async function patchServer(id, body) {
   }
   if (!updates.length) throw Object.assign(new Error('nothing_to_update'), { status: 400 });
   values.push(id);
-  const result = await pool.query(`UPDATE blofy_xtream_servers SET ${updates.join(',')},updated_at=NOW() WHERE id=$${values.length} RETURNING *`, values);
+  const result = await pool.query(`UPDATE blofy_xtream_servers SET ${updates.join(',')},updated_at=NOW() WHERE id=${values.length} AND deletion_requested_at IS NULL RETURNING *`, values);
+  if(!result.rows[0])throw Object.assign(new Error('xtream_server_not_found'),{status:404});
   return adminServer(result.rows[0]);
 }
 
@@ -512,7 +598,7 @@ async function listCategories(serverId, mediaType) {
   const values = [];
   if (serverId) { if (!validUuid(serverId)) throw Object.assign(new Error('xtream_server_id_invalid'), { status: 400 }); values.push(serverId); where.push(`server_id=$${values.length}`); }
   if (mediaType) { const type = validType(mediaType); if (!type) throw Object.assign(new Error('xtream_type_invalid'), { status: 400 }); values.push(type); where.push(`media_type=$${values.length}`); }
-  const sql = `SELECT server_id,media_type,source_category_id,name,parent_id,enabled,item_count,updated_at FROM blofy_xtream_categories ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY media_type,name LIMIT 5000`;
+  const sql = `SELECT server_id,media_type,source_category_id,name,parent_id,enabled,sort_order,item_count,updated_at FROM blofy_xtream_categories ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY media_type,sort_order,name LIMIT 5000`;
   return (await pool.query(sql, values)).rows.map(row => ({
     serverId: row.server_id,
     mediaType: row.media_type,
@@ -520,6 +606,7 @@ async function listCategories(serverId, mediaType) {
     name: row.name,
     parentId: row.parent_id,
     enabled: Boolean(row.enabled),
+    sortOrder: Number(row.sort_order||100000),
     itemCount: Number(row.item_count),
     updatedAt: new Date(row.updated_at).getTime()
   }));
@@ -568,6 +655,33 @@ async function patchCategory(serverId, mediaType, categoryId, enabled) {
     [serverId, mediaType, categoryId, Boolean(enabled)]);
   if (!result.rows[0]) throw Object.assign(new Error('xtream_category_not_found'), { status: 404 });
   return result.rows[0];
+}
+
+async function moveCategory(serverId, mediaType, categoryId, direction) {
+  if (!validUuid(serverId) || !validType(mediaType) || !['up','down'].includes(direction))
+    throw Object.assign(new Error('xtream_category_move_invalid'), { status: 400 });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const response=await client.query(`SELECT source_category_id FROM blofy_xtream_categories
+      WHERE server_id=$1 AND media_type=$2 ORDER BY sort_order,name,source_category_id FOR UPDATE`,[serverId,mediaType]);
+    const ids=response.rows.map(row=>row.source_category_id);
+    const at=ids.indexOf(String(categoryId));
+    if(at===-1)throw Object.assign(new Error('xtream_category_not_found'),{status:404});
+    const next=at+(direction==='up'?-1:1);
+    if(next<0||next>=ids.length){await client.query('COMMIT');return {moved:false};}
+    [ids[at],ids[next]]=[ids[next],ids[at]];
+    await client.query(`UPDATE blofy_xtream_categories c
+      SET sort_order=rank.pos::int,updated_at=NOW()
+      FROM unnest($3::text[]) WITH ORDINALITY AS rank(category_id,pos)
+      WHERE c.server_id=$1 AND c.media_type=$2 AND c.source_category_id=rank.category_id`,
+      [serverId,mediaType,ids]);
+    await client.query('COMMIT');
+    return {moved:true};
+  }catch(error){
+    await client.query('ROLLBACK').catch(()=>{});
+    throw error;
+  }finally{client.release();}
 }
 
 async function patchItem(serverId, mediaType, sourceId, enabled) {
@@ -677,8 +791,10 @@ http.createServer = function withBlofyXtream(listener) {
         if (!validUuid(id)) return json(res, 400, { error: 'xtream_server_id_invalid' });
         if (!action && req.method === 'PATCH') return json(res, 200, { item: await patchServer(id, await readJson(req)) });
         if (!action && req.method === 'DELETE') {
-          const result = await pool.query('DELETE FROM blofy_xtream_servers WHERE id=$1', [id]);
-          return json(res, result.rowCount ? 200 : 404, result.rowCount ? { deleted: true } : { error: 'xtream_server_not_found' });
+          const accepted = await requestDeleteSource(id);
+          return json(res, accepted ? 202 : 404, accepted
+            ? { deletionQueued: true, deletedFromCatalog: true }
+            : { error: 'xtream_server_not_found' });
         }
         if (action === 'test' && req.method === 'POST') return json(res, 200, { item: await testServer(id) });
         if (action === 'sync' && req.method === 'POST') {
@@ -692,6 +808,11 @@ http.createServer = function withBlofyXtream(listener) {
       const categoryMatch = url.pathname.match(/^\/api\/v1\/admin\/xtream\/categories\/([0-9a-f-]+)\/(live|movie|series)\/([^/]+)$/i);
       if (categoryMatch && req.method === 'PATCH') {
         const body = await readJson(req);
+        if(body.direction!==undefined) {
+          const result=await moveCategory(categoryMatch[1],categoryMatch[2].toLowerCase(),
+            decodeURIComponent(categoryMatch[3]),body.direction);
+          return json(res,200,{updated:true,...result});
+        }
         if (body.enabled === undefined) return json(res, 400, { error: 'nothing_to_update' });
         await patchCategory(categoryMatch[1], categoryMatch[2].toLowerCase(), decodeURIComponent(categoryMatch[3]), body.enabled);
         return json(res, 200, { updated: true });
