@@ -19,7 +19,7 @@ function showMessage(text, kind = 'ok') {
   box.className = `message ${kind}`;
   box.hidden = false;
   window.clearTimeout(showMessage.timer);
-  showMessage.timer = window.setTimeout(() => { box.hidden = true; }, 5000);
+  showMessage.timer = window.setTimeout(() => { box.hidden = true; }, kind === 'error' ? 16000 : 8500);
 }
 
 async function api(path, options = {}) {
@@ -249,7 +249,7 @@ async function addXtream(event) {
     el('xtEnabled').checked = true;
     el('xtPublish').checked = true;
     el('xtPriority').value = '100';
-    showMessage('تمت إضافة السيرفر وفحصه وبدأ استيراد Live + Movies + Series.');
+    showMessage('تم حفظ حساب Xtream وبدء الاستيراد. راجع قسم المصادر للتأكد من الأعداد وحالة النشر.');
     await loadXtream();
   } catch (error) {
     const raw=String(error.message||error);
@@ -300,8 +300,10 @@ async function handleServerAction(item, card, button) {
     } else if (action === 'delete') {
       const total=Number(item.counts?.total||0).toLocaleString('en-US');
       if(!window.confirm(`حذف مصدر «${item.name}» نهائيًا من BLOFY؟\\nسيتم حذف ${total} عنصر مستورد منه ولن يظهر محتواه لعملائك.\\nلن يتأثر اشتراكك الأصلي لدى مزود Xtream.\\n\\nهل تؤكد الحذف؟`))return;
-      await api(`/api/v1/admin/xtream/servers/${item.id}`, { method: 'DELETE' });
-      showMessage('تم حذف السيرفر وبياناته المستوردة.');
+      const result=await api(`/api/v1/admin/xtream/servers/${item.id}`, { method: 'DELETE' });
+      showMessage(result.deletionQueued
+        ?'تم إيقاف «'+item.name+'» وإخفاؤه عن المشتركين فورًا. حذف عناصره الكبيرة يجري على دفعات في الخلفية.'
+        :'تم حذف المصدر.');
     } else if (action.startsWith('sync-')) {
       const type = action === 'sync-all' ? ['live','movie','series'] : [action.replace('sync-', '')];
       await api(`/api/v1/admin/xtream/servers/${item.id}/sync`, { method: 'POST', body: JSON.stringify({ types: type }) });
