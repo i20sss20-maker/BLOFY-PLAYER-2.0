@@ -136,3 +136,7 @@
 .xtream-manager-panel .source-action-feedback[hidden]{display:none}
 .xtream-manager-panel .server-card[data-busy="1"]{border-color:#765ab8}
 .xtream-manager-panel .server-card button[disabled]{opacity:.6;cursor:progress}
+
+/* Visible, cancelable Xtream catalog imports */
+.xtream-manager-panel .sync-progress-note{display:block;padding:10px 12px;background:#171d2a;border:1px solid #47617e;border-radius:9px;color:#a7d9ff;line-height:1.6;font-size:12px}
+.xtream-manager-panel button[data-action="cancel-sync"]{background:#38271e;border-color:#9c6946;color:#ffe0bc}
