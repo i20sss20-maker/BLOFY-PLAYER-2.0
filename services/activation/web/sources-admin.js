@@ -417,14 +417,7 @@ async function handleServerAction(item, card, button) {
     card.dataset.busy = '0';
     button.disabled = false;
     button.textContent = old;
-    const feedback=state.sourceFeedback.get(item.id);
-    if(feedback?.kind!=='error' && !feedback?.text?.includes('تم حفظ')){
-      // The global message includes action-specific details and remains
-      // visible. Mirror successful results inside this source card.
-      writeFeedback('انتهى الطلب. راجع رسالة النتيجة أعلى اللوحة.');
-    }
     if(document.activeElement===button)button.blur();
-    // Apply state received during the request without disrupting the click.
     renderXtream();
   }
 }
