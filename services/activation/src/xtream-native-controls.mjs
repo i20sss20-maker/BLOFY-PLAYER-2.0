@@ -10,8 +10,9 @@ export function escapeControlHtml(value) {
 const esc=escapeControlHtml;
 const enc=value=>encodeURIComponent(String(value));
 const n=value=>Number(value||0).toLocaleString('en-US');
-const form=(id,action,label,klass='')=>
-  '<form method="post" action="'+CONTROL_PATH+'/'+enc(id)+'/'+enc(action)+'" class="one-action">'+
+const form=(id,action,label,klass='',csrfToken='')=>
+  '<form method="post" action="'+CONTROL_PATH+'/'+enc(id)+'/'+enc(action)+
+  (csrfToken?'?csrf='+enc(csrfToken):'')+'" class="one-action">'+
   '<button type="submit" class="'+esc(klass)+'">'+esc(label)+'</button></form>';
 
 export async function readControlForm(req) {
@@ -50,7 +51,9 @@ function noticeText(code) {
   };
   return notices[String(code||'')]||'';
 }
-export function controlPage({items=[],success='',error=''}) {
+export function controlPage({items=[],success='',error='',csrfToken=''}) {
+  const securedForm=(id,action,label,klass='')=>form(id,action,label,klass,csrfToken);
+  const securedUrl=(path)=>path+(csrfToken?'?csrf='+enc(csrfToken):'');
   const message=noticeText(success);
   const cards=items.map(item=>{
     const id=esc(item.id),name=esc(item.name),url=esc(item.baseUrl);
@@ -60,7 +63,7 @@ export function controlPage({items=[],success='',error=''}) {
     const lastError=item.lastError?'<p class="err">آخر خطأ: '+esc(item.lastError)+'</p>':'';
     const metrics='<div class="metrics"><span>القنوات <b>'+n(counts.live)+'</b></span><span>الأفلام <b>'+n(counts.movie)+'</b></span><span>المسلسلات <b>'+n(counts.series)+'</b></span><span>الإجمالي <b>'+n(counts.total)+'</b></span></div>';
     const editForm='<details><summary>تعديل المصدر (يُحفظ في قاعدة البيانات)</summary>'+
-      '<form class="edit" method="post" action="'+CONTROL_PATH+'/'+id+'/save">'+
+      '<form class="edit" method="post" action="'+securedUrl(CONTROL_PATH+'/'+id+'/save')+'">'+
       '<label>الاسم<input name="name" required maxlength="160" value="'+name+'"></label>'+
       '<label>Host<input name="baseUrl" type="url" required maxlength="500" dir="ltr" value="'+url+'"></label>'+
       '<label>Username جديد (اختياري)<input name="username" maxlength="512" autocomplete="off"></label>'+
@@ -73,16 +76,16 @@ export function controlPage({items=[],success='',error=''}) {
       '<span class="badge '+(enabled&&published?'on':'off')+'">'+(enabled&&published?'منشور':'غير منشور')+'</span></div></div>'+
       metrics+
       '<div class="actions">'+
-      form(id,'toggle-enabled',enabled?'إيقاف المصدر':'تفعيل المصدر')+
-      form(id,'toggle-publish',published?'إخفاء عن العملاء':'نشر للعملاء')+
-      form(id,'test','فحص الاتصال')+
-      form(id,'probe-live','اختبار بث قناة')+
-      form(id,'probe-movie','اختبار تشغيل فيلم')+
-      form(id,'sync-all','مزامنة الكل')+
-      form(id,'sync-live','مزامنة القنوات')+
-      form(id,'sync-movie','مزامنة الأفلام')+
-      form(id,'sync-series','مزامنة المسلسلات')+
-      form(id,'cancel-sync','إلغاء المزامنة')+
+      securedForm(id,'toggle-enabled',enabled?'إيقاف المصدر':'تفعيل المصدر')+
+      securedForm(id,'toggle-publish',published?'إخفاء عن العملاء':'نشر للعملاء')+
+      securedForm(id,'test','فحص الاتصال')+
+      securedForm(id,'probe-live','اختبار بث قناة')+
+      securedForm(id,'probe-movie','اختبار تشغيل فيلم')+
+      securedForm(id,'sync-all','مزامنة الكل')+
+      securedForm(id,'sync-live','مزامنة القنوات')+
+      securedForm(id,'sync-movie','مزامنة الأفلام')+
+      securedForm(id,'sync-series','مزامنة المسلسلات')+
+      securedForm(id,'cancel-sync','إلغاء المزامنة')+
       '<a class="danger" href="'+CONTROL_PATH+'/'+id+'/confirm-delete">حذف المصدر</a></div>'+
       editForm+lastError+'</article>';
   }).join('');
@@ -105,7 +108,7 @@ export function controlPage({items=[],success='',error=''}) {
   '<nav><a href="/sources-admin#xtream">اللوحة الرئيسية</a><a href="'+CONTROL_PATH+'">تحديث القائمة</a></nav></header>'+
   (message?'<p class="note" role="status">'+esc(message)+'</p>':'')+
   (error?'<p class="err" role="alert">تعذر تنفيذ العملية: '+esc(error)+'</p>':'')+
-  '<section class="add"><h2>إضافة مصدر Xtream جديد</h2><form method="post" action="'+CONTROL_PATH+'/new/add">'+
+  '<section class="add"><h2>إضافة مصدر Xtream جديد</h2><form method="post" action="'+securedUrl(CONTROL_PATH+'/new/add')+'">'+
   '<label>اسم المصدر<input name="name" maxlength="160" required></label>'+
   '<label>Host<input name="baseUrl" type="url" maxlength="500" required placeholder="https://your-host.example"></label>'+
   '<label>Username<input name="username" maxlength="512" required autocomplete="off"></label>'+
@@ -117,13 +120,14 @@ export function controlPage({items=[],success='',error=''}) {
   '<div class="grid">'+(cards||'<p class="muted">لا توجد مصادر مضافة.</p>')+'</div></main></body></html>';
 }
 
-export function deleteConfirmationPage(source) {
+export function deleteConfirmationPage(source,csrfToken='') {
   const id=esc(source.id),name=esc(source.name);
   return '<!doctype html><html lang="ar" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'+
     '<title>تأكيد الحذف — BLOFY</title><body style="background:#100c19;color:#fff;font:18px system-ui;padding:30px;max-width:700px;margin:auto">'+
     '<h1>تأكيد حذف مصدر Xtream</h1><p>أنت على وشك حذف <strong>'+name+
     '</strong>. سيُخفى محتواه عن العملاء فورًا، ثم يُزال من BLOFY على دفعات. هذا لا يلغي اشتراكك عند مزود المصدر.</p>'+
-    '<form method="post" action="'+CONTROL_PATH+'/'+id+'/delete">'+
+    '<form method="post" action="'+CONTROL_PATH+'/'+id+'/delete'+
+    (csrfToken?'?csrf='+enc(csrfToken):'')+'">'+
     '<input type="hidden" name="confirmId" value="'+id+'">'+
     '<label><input type="checkbox" name="ack" value="yes" required> أؤكد حذف هذا المصدر ومحتواه من BLOFY.</label>'+
     '<p><button type="submit" style="padding:14px;background:#82344a;color:#fff;border:0;border-radius:9px">تأكيد الحذف النهائي</button></p></form>'+

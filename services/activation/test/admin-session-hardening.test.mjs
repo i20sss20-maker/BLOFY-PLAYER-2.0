@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import crypto from 'node:crypto';
 import { readFile } from 'node:fs/promises';
+import { nativeXtreamCsrfToken,verifyNativeXtreamCsrf } from '../src/xtream-native-csrf.mjs';
 
 // Executes the actual hook with in-memory HTTP/file doubles and generated test credentials.
 // No requests to production, no database mutation, no real credentials, no dependencies.
@@ -18,6 +19,7 @@ function makeRuntime(env={}, database=memoryDatabase()) {
   const http={createServer:listener=>listener};
   const context=vm.createContext({http,crypto,Buffer,URL,process:{env:testEnv},
     Date:class extends Date {static now(){return now;}},
+    verifyNativeXtreamCsrf,
     createAdminSessionStore:({key})=>{
       const scope=key.toString('hex');
       if(!database.scopes.has(scope))database.scopes.set(scope,{sessions:new Map(),clients:new Map(),account:null});
@@ -119,6 +121,42 @@ test('production rejects other origins, the HTTP version of its own host and mal
     const res=await a.request({method:'POST',url:'/api/v1/admin/experience/releases',headers:{cookie,origin:bad}});
     assert.equal(res.status,403,bad);
   }
+});
+test('session-signed Xtream forms work when Chrome omits Origin but other admin endpoints remain protected',async()=>{
+  const a=makeRuntime({VERCEL_ENV:undefined,NODE_ENV:'production'});
+  const firstRaw=await a.makeSession(),firstCookie=a.sessionCookie(firstRaw);
+  const secondRaw=await a.makeSession(),secondCookie=a.sessionCookie(secondRaw);
+  const key=crypto.createHmac('sha256',a.env.BLOFY_ADMIN_TOKEN)
+    .update(JSON.stringify(['blofy-admin-session-v3',a.env.BLOFY_ADMIN_USERNAME,
+      a.env.BLOFY_ADMIN_PASSWORD])).digest();
+  const token=nativeXtreamCsrfToken({headers:{cookie:firstCookie}},key);
+  assert.match(token,/^[a-zA-Z0-9_-]{43}$/);
+  const path='/api/v1/admin/xtream/controls/1195bcd7-44ba-4710-af22-cb4237dc4aa1/toggle-publish';
+  const root={
+    host:'blofy-activation-portal-production.up.railway.app',
+    'x-forwarded-host':'blofy-activation-portal-production.up.railway.app',
+    'x-forwarded-proto':'https',cookie:firstCookie,
+    'content-type':'application/x-www-form-urlencoded'
+  };
+  for(const origin of [undefined,'null']){
+    const headers={...root};
+    if(origin!==undefined)headers.origin=origin;
+    const accepted=await a.request({method:'POST',url:path+'?csrf='+token,headers});
+    assert.equal(accepted.status,200,'signed same-session Xtream form must reach backend');
+  }
+  for(const [url,headers] of [
+    [path,root],
+    [path+'?csrf=forged',{...root}],
+    [path+'?csrf='+token,{...root,cookie:secondCookie}],
+    [path+'?csrf='+token,{...root,'content-type':'application/json'}],
+    [path+'?csrf='+token,{...root,origin:'https://attacker.invalid'}],
+    ['/api/v1/admin/experience/releases?csrf='+token,root],
+    ['/api/v1/admin/xtream/servers?csrf='+token,root]
+  ]){
+    const denied=await a.request({method:'POST',url,headers});
+    assert.equal(denied.status,403,'fail closed for missing/foreign/replayed CSRF proof: '+url);
+  }
+  assert.equal(verifyNativeXtreamCsrf({headers:{cookie:secondCookie}},key,token),false);
 });
 test('Railway proxy allows exact public BLOFY origin for cookie-authenticated native POST controls',async()=>{
   // Production receives an internal Railway Host/forwarded Host, while the

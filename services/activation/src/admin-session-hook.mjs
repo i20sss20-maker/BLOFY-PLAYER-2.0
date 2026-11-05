@@ -2,6 +2,7 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { createAdminSessionStore } from './admin-session-store.mjs';
+import { verifyNativeXtreamCsrf } from './xtream-native-csrf.mjs';
 
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
 const ADMIN_USERNAME = String(process.env.BLOFY_ADMIN_USERNAME || '').trim();
@@ -102,6 +103,21 @@ function sameOrigin(req) {
       source.origin==='https://blofyplayer.com';
   } catch { return false; }
 }
+function validSignedXtreamControl(req,url) {
+  if (req.method!=='POST' ||
+    !/^\/api\/v1\/admin\/xtream\/controls\/(?:new\/add|[a-z0-9-]+\/(?:toggle-enabled|toggle-publish|test|probe-live|probe-movie|sync-all|sync-live|sync-movie|sync-series|cancel-sync|save|delete))$/i.test(url.pathname))
+    return false;
+  if (!/^application\/x-www-form-urlencoded(?:\s*;|$)/i.test(String(req.headers['content-type']||'')))
+    return false;
+  // Even a correct token must not override an explicitly foreign Origin.
+  const claimedOrigin=String(req.headers.origin||'');
+  if(claimedOrigin && claimedOrigin!=='null' &&
+      claimedOrigin!=='https://blofyplayer.com' && !sameOrigin(req))return false;
+  // Independent session-bound CSRF proof: an outside site cannot read this
+  // token due to SOP, and it cannot mint a token for another cookie.
+  if(!sessionClaims(req))return false;
+  return verifyNativeXtreamCsrf(req,SESSION_KEY,url.searchParams.get('csrf'));
+}
 function validAdminBearer(req) {
   return !!ADMIN_TOKEN && safeEqual(req.headers.authorization||'', 'Bearer '+ADMIN_TOKEN);
 }
@@ -122,10 +138,13 @@ http.createServer = function patchedAdminSessionCreateServer(listener) {
     if (req.method==='GET' && url.pathname==='/admin') return html(res, await validSession(req)?await dashboardPage():await loginPage());
     if (!url.pathname.startsWith('/api/v1/admin/')) return listener(req,res);
     if (!['GET','HEAD'].includes(req.method) && url.pathname.startsWith('/api/v1/admin/')) {
-      const origin = req.headers.origin;
-      if (origin !== undefined && !sameOrigin(req)) return json(res,403,{error:'invalid_origin'});
-      // An arbitrary Authorization header must not exempt an authenticated cookie from CSRF checks.
-      if (sessionClaims(req) && !origin && !validAdminBearer(req)) return json(res,403,{error:'invalid_origin'});
+      const origin=req.headers.origin;
+      const signedNativeForm=validSignedXtreamControl(req,url);
+      if (origin!==undefined && !sameOrigin(req) && !signedNativeForm)
+        return json(res,403,{error:'invalid_origin'});
+      // Keep the original strict Origin policy on every other admin request.
+      if (sessionClaims(req) && !origin && !validAdminBearer(req) && !signedNativeForm)
+        return json(res,403,{error:'invalid_origin'});
     }
     if (req.method==='POST' && url.pathname==='/api/v1/admin/session/login') {
       if (!ADMIN_USERNAME || !ADMIN_PASSWORD || !ADMIN_TOKEN) return json(res,503,{error:'admin_login_not_configured'});

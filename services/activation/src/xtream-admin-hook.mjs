@@ -19,9 +19,15 @@ import pg from 'pg';
 import { downloadXtreamM3uCatalog } from './xtream-m3u-catalog.mjs';
 import { distinctXtreamRecords } from './xtream-import-dedup.mjs';
 import { CONTROL_PATH, controlPage, deleteConfirmationPage, readControlForm } from './xtream-native-controls.mjs';
+import { nativeXtreamCsrfToken } from './xtream-native-csrf.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
+const ADMIN_SESSION_KEY=crypto.createHmac('sha256',ADMIN_TOKEN)
+  .update(JSON.stringify(['blofy-admin-session-v3',
+    String(process.env.BLOFY_ADMIN_USERNAME||'').trim(),
+    String(process.env.BLOFY_ADMIN_PASSWORD||'').trim()])).digest();
+
 const KEY_HEX = String(process.env.BLOFY_PLAYLIST_ENCRYPTION_KEY || '').trim();
 const pool = new pg.Pool({
   ...databaseOptions(DATABASE_URL),
@@ -879,7 +885,7 @@ async function publicSummary() {
 
 function sendControlHtml(res,content){
   res.writeHead(200,{'content-type':'text/html; charset=utf-8','cache-control':'private, no-store',
-    'x-content-type-options':'nosniff','x-frame-options':'DENY'});
+    'x-content-type-options':'nosniff','x-frame-options':'DENY','referrer-policy':'no-referrer'});
   res.end(content);
 }
 function controlRedirect(res,kind,value){
@@ -971,14 +977,15 @@ http.createServer = function withBlofyXtream(listener) {
       if(req.method==='GET' && url.pathname===CONTROL_PATH){
         const items=(await serverRows()).map(adminServer);
         return sendControlHtml(res,controlPage({
-          items,success:url.searchParams.get('ok')||'',error:url.searchParams.get('error')||''
+          items,success:url.searchParams.get('ok')||'',error:url.searchParams.get('error')||'',
+          csrfToken:nativeXtreamCsrfToken(req,ADMIN_SESSION_KEY)
         }));
       }
       const nativeConfirm=url.pathname.match(/^\/api\/v1\/admin\/xtream\/controls\/([0-9a-f-]+)\/confirm-delete$/i);
       if(nativeConfirm&&req.method==='GET'){
         const source=await serverById(nativeConfirm[1]);
         if(!source)return json(res,404,{error:'xtream_server_not_found'});
-        return sendControlHtml(res,deleteConfirmationPage(source));
+        return sendControlHtml(res,deleteConfirmationPage(source,nativeXtreamCsrfToken(req,ADMIN_SESSION_KEY)));
       }
       const nativeAction=url.pathname.match(/^\/api\/v1\/admin\/xtream\/controls\/([a-z0-9-]+)\/(toggle-enabled|toggle-publish|test|probe-live|probe-movie|sync-all|sync-live|sync-movie|sync-series|cancel-sync|save|delete|add)$/i);
       if(nativeAction&&req.method==='POST'){
@@ -1001,7 +1008,7 @@ http.createServer = function withBlofyXtream(listener) {
           return acc;
         }, { servers: 0, online: 0, syncing: 0, live: 0, movie: 0, series: 0 });
         totals.total = totals.live + totals.movie + totals.series;
-        return json(res, 200, { items, totals });
+        return json(res, 200, { items, totals,csrfToken:nativeXtreamCsrfToken(req,ADMIN_SESSION_KEY) });
       }
       if (req.method === 'POST' && url.pathname === '/api/v1/admin/xtream/servers') {
         const item = await createServer(await readJson(req));

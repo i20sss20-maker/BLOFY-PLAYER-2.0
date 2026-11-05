@@ -3,6 +3,7 @@ const state = {
   xtreamServers: [],
   xtreamTotals: {},
   xtreamLoadSequence: 0,
+  nativeCsrfToken: '',
   sourceFeedback: new Map(),
   categories: [],
   catalog: [],
@@ -66,7 +67,8 @@ function xtStatusClass(status) {
 function nativeSourceForm(id, action, label, cls='button ghost') {
   const form=make('form','source-native-form');
   form.method='post';
-  form.action='/api/v1/admin/xtream/controls/'+encodeURIComponent(id)+'/'+action;
+  form.action='/api/v1/admin/xtream/controls/'+encodeURIComponent(id)+'/'+action+
+    (state.nativeCsrfToken?'?csrf='+encodeURIComponent(state.nativeCsrfToken):'');
   const button=make('button',cls,label);
   button.type='submit';
   button.dataset.action=action;
@@ -101,7 +103,8 @@ function serverCard(item) {
   const advancedFields = make('div', 'server-settings');
   const editForm=make('form','source-native-edit');
   editForm.method='post';
-  editForm.action='/api/v1/admin/xtream/controls/'+encodeURIComponent(item.id)+'/save';
+  editForm.action='/api/v1/admin/xtream/controls/'+encodeURIComponent(item.id)+'/save'+
+    (state.nativeCsrfToken?'?csrf='+encodeURIComponent(state.nativeCsrfToken):'');
   editForm.append(advancedFields);
   settings.append(advancedSummary,editForm);
   const editableFields = [
@@ -355,6 +358,7 @@ async function loadXtream(silent = false, strict = false) {
       if(strict)throw new Error('xtream_readback_superseded');
       return null;
     }
+    state.nativeCsrfToken=String(data.csrfToken||'');
     state.xtreamServers = Array.isArray(data.items) ? data.items : [];
     state.xtreamTotals = data.totals || {};
     renderXtream();
