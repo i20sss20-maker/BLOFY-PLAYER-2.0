@@ -365,6 +365,68 @@ async function checkedFetch(url, { timeoutMs = 30000 } = {}) {
   throw new Error('xtream_redirect_loop');
 }
 
+// Short, explicit playback probe: checks the actual upstream media endpoint,
+// not just player_api.php authentication. Credentials and source URLs never
+// appear in the response; the request is initiated by the administrator only.
+async function probeXtreamPlayback(id,mediaType='live') {
+  if(!['live','movie'].includes(mediaType))
+    throw Object.assign(new Error('xtream_probe_type_invalid'),{status:400});
+  const source=await serverById(id);
+  if(!source)throw Object.assign(new Error('xtream_server_not_found'),{status:404});
+  if(!source.enabled)throw Object.assign(new Error('xtream_source_paused'),{status:409});
+  const candidates=(await pool.query(`SELECT source_id,name,container_extension
+    FROM blofy_xtream_items
+    WHERE server_id=$1 AND media_type=$2 AND enabled=TRUE
+    ORDER BY name ASC LIMIT 3`,[id,mediaType])).rows;
+  if(!candidates.length)return {ok:false,mediaType,reason:'no_imported_items',checks:[]};
+  const creds=decryptCredentials(source),checks=[];
+  for(const item of candidates){
+    const ext=mediaType==='live'?'ts':String(item.container_extension||'mp4').replace(/^\./,'').toLowerCase();
+    if(!/^[a-z0-9]{1,8}$/.test(ext)||!item.source_id)continue;
+    const path=[mediaType==='movie'?'movie':'live',creds.username,creds.password,String(item.source_id)]
+      .map(encodeURIComponent).join('/')+'.'+ext;
+    let target=new URL(path,normalizeXtreamBaseUrl(source.base_url)+'/');
+    const started=Date.now(),controller=new AbortController();
+    const timeout=setTimeout(()=>controller.abort(),8500);
+    let httpStatus=null,contentType='',errorCode=null;
+    try{
+      for(let hop=0;hop<=3;hop++){
+        await assertPublicXtreamUrl(target.origin);
+        const response=await fetch(target,{
+          method:'GET',redirect:'manual',signal:controller.signal,
+          headers:{
+            'user-agent':'BLOFY-Media-Probe/1.0',
+            ...(mediaType==='movie'?{range:'bytes=0-1023'}:{})
+          }
+        });
+        if([301,302,303,307,308].includes(response.status)){
+          const redirect=response.headers.get('location');
+          await response.body?.cancel().catch(()=>{});
+          if(!redirect||hop===3)throw new Error('redirect_invalid');
+          target=new URL(redirect,target);
+          if(!['http:','https:'].includes(target.protocol))throw new Error('redirect_invalid');
+          continue;
+        }
+        httpStatus=response.status;
+        contentType=String(response.headers.get('content-type')||'').slice(0,100);
+        await response.body?.cancel().catch(()=>{});
+        break;
+      }
+    }catch(error){
+      errorCode=controller.signal.aborted?'timeout':redactXtreamError(error);
+    }finally{clearTimeout(timeout);}
+    const ok=(httpStatus===200||httpStatus===206)
+      && !/text\/html|application\/json|text\/xml/i.test(contentType);
+    checks.push({
+      title:cleanText(item.name,160),mediaType,httpStatus,contentType,
+      latencyMs:Date.now()-started,ok,error:errorCode
+    });
+    if(ok)break;
+  }
+  return {ok:checks.some(check=>check.ok),mediaType,checks,
+    note:'فحص استجابة HTTP للبث فقط. التأكد من عرض الصورة والصوت يحتاج تشغيلًا فعليًا بالمشغل.'};
+}
+
 async function fetchAccount(row) {
   const creds = decryptCredentials(row);
   await assertPublicXtreamUrl(row.base_url);
@@ -872,7 +934,7 @@ http.createServer = function withBlofyXtream(listener) {
         return json(res, 202, { started });
       }
 
-      const serverMatch = url.pathname.match(/^\/api\/v1\/admin\/xtream\/servers\/([0-9a-f-]+)(?:\/(test|sync|cancel-sync))?$/i);
+      const serverMatch = url.pathname.match(/^\/api\/v1\/admin\/xtream\/servers\/([0-9a-f-]+)(?:\/(test|sync|cancel-sync|probe-playback))?$/i);
       if (serverMatch) {
         const id = serverMatch[1];
         const action = serverMatch[2];
@@ -885,6 +947,10 @@ http.createServer = function withBlofyXtream(listener) {
             : { error: 'xtream_server_not_found' });
         }
         if (action === 'test' && req.method === 'POST') return json(res, 200, { item: await testServer(id) });
+        if (action === 'probe-playback' && req.method === 'POST') {
+          const body=await readJson(req);
+          return json(res,200,await probeXtreamPlayback(id,String(body.mediaType||'live')));
+        }
         if (action === 'cancel-sync' && req.method === 'POST') {
           return json(res,200,await cancelSourceSync(id));
         }
