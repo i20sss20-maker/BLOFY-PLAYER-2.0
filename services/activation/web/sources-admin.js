@@ -820,7 +820,7 @@ async function switchTab(name) {
     page.hidden = !active;
     page.classList.toggle('active', active);
   });
-  if (name === 'xtream') await loadXtream();
+  if (name === 'xtream') { await loadXtream(); await loadBlofyPlaybackHealth(); }
   if (name === 'catalog') {
     await loadXtream(true);
     await loadCategories();
@@ -829,12 +829,13 @@ async function switchTab(name) {
 }
 
 async function refreshCurrent() {
-  if (state.activeTab === 'xtream') await loadXtream();
+  if (state.activeTab === 'xtream') { await loadXtream(); await loadBlofyPlaybackHealth(); }
   else { await loadXtream(true); await loadCategories(); await loadCatalog(); }
 }
 
 document.querySelectorAll('.tab').forEach(button => button.addEventListener('click', () => switchTab(button.dataset.tab)));
 el('refreshBtn').addEventListener('click', refreshCurrent);
+el('blofyPlaybackRefresh').addEventListener('click', loadBlofyPlaybackHealth);
 el('xtreamForm').addEventListener('submit', addXtream);
 el('syncAllXtreamBtn').addEventListener('click', syncAllXtream);
 // Capture source commands before a background catalog refresh can detach
@@ -881,5 +882,6 @@ window.addEventListener('hashchange', () => {
 });
 
 loadXtream(true);
+loadBlofyPlaybackHealth();
 const initialTab = tabFromHash();
 if (initialTab && initialTab !== 'xtream') switchTab(initialTab);
