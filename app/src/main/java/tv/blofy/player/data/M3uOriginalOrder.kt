@@ -38,9 +38,11 @@ internal class M3uOriginalOrder {
 
         // Match an Xtream media URL without ever exposing the embedded credentials.
         val match = MEDIA_PATH.find(line)
-        if (match != null) {
-            val kind = match.groupValues[1].lowercase(Locale.ROOT)
-            val id = match.groupValues[2].trimStart('0').ifEmpty { "0" }
+        val compactLive = if (match == null) COMPACT_LIVE_PATH.find(line) else null
+        if (match != null || compactLive != null) {
+            val kind = match?.groupValues?.get(1)?.lowercase(Locale.ROOT) ?: "live"
+            val rawId = match?.groupValues?.get(2) ?: compactLive!!.groupValues[1]
+            val id = rawId.trimStart('0').ifEmpty { "0" }
             val rows = when (kind) {
                 "live" -> live
                 "movie" -> movie
@@ -60,6 +62,10 @@ internal class M3uOriginalOrder {
     companion object {
         private val GROUP_TITLE = Regex("""(?:^|\s)group-title\s*=\s*"([^"]+)"""", RegexOption.IGNORE_CASE)
         private val MEDIA_PATH = Regex("""(?i)/(live|movie|series)/[^/?#]+/[^/?#]+/([0-9]+)(?:\.[a-z0-9]+)?(?:[?#]|$)""")
+        // Legacy Xtream get.php M3U may use /username/password/id.ts for Live.
+        private val COMPACT_LIVE_PATH = Regex(
+            """(?i)^https?://[^/?#]+/[^/?#]+/[^/?#]+/([0-9]+)(?:\.(?:ts|m3u8))?(?:[?#]|$)"""
+        )
 
         fun normalizeGroup(value: String): String =
             value.trim().replace(Regex("\\s+"), " ").lowercase(Locale.ROOT)
