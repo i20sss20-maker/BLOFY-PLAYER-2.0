@@ -394,7 +394,7 @@ async function probeXtreamPlayback(id,mediaType='live') {
       .map(encodeURIComponent).join('/')+'.'+ext;
     let target=new URL(path,normalizeXtreamBaseUrl(source.base_url)+'/');
     const started=Date.now(),controller=new AbortController();
-    const timeout=setTimeout(()=>controller.abort(),5200);
+    const timeout=setTimeout(()=>controller.abort(),9500);
     let httpStatus=null,contentType='',errorCode=null;
     try{
       for(let hop=0;hop<=3;hop++){
@@ -416,14 +416,25 @@ async function probeXtreamPlayback(id,mediaType='live') {
         }
         httpStatus=response.status;
         contentType=String(response.headers.get('content-type')||'').slice(0,100);
-        await response.body?.cancel().catch(()=>{});
+        if((httpStatus===200||httpStatus===206) && response.body){
+          const reader=response.body.getReader();
+          try{
+            const first=await reader.read();
+            const prefix=Buffer.from(first.value||[]).subarray(0,100).toString('utf8').trimStart().toLowerCase();
+            if(first.done||!first.value?.byteLength)errorCode='empty_media';
+            else if(prefix.startsWith('<html')||prefix.startsWith('<!doctype html'))errorCode='upstream_html_instead_of_video';
+          }finally{
+            try{await reader.cancel()}catch{}
+            try{reader.releaseLock()}catch{}
+          }
+        }else await response.body?.cancel().catch(()=>{});
         break;
       }
     }catch(error){
       errorCode=controller.signal.aborted?'timeout':redactXtreamError(error);
     }finally{clearTimeout(timeout);}
     const ok=(httpStatus===200||httpStatus===206)
-      && !/text\/html|application\/json|text\/xml/i.test(contentType);
+      && !errorCode && !/text\/html|application\/json|text\/xml/i.test(contentType);
     checks.push({
       title:cleanText(item.name,160),mediaType,httpStatus,contentType,
       latencyMs:Date.now()-started,ok,error:errorCode
