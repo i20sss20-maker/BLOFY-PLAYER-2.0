@@ -313,8 +313,18 @@ function renderXtream() {
 
   const list = el('xtreamServers');
   list.replaceChildren();
-  if (!state.xtreamServers.length) list.append(make('div', 'empty', 'ما فيه سيرفرات Xtream مضافة للحين.'));
-  state.xtreamServers.forEach(item => list.append(serverCard(item)));
+  const query=String(el('xtSourceSearch')?.value||'').trim().toLowerCase();
+  const filter=String(el('xtSourceFilter')?.value||'all');
+  const visible=state.xtreamServers.filter(item=>
+    (!query||String(item.name+' '+item.baseUrl).toLowerCase().includes(query)) &&
+    (filter==='all'||(filter==='enabled'&&item.enabled)||(filter==='disabled'&&!item.enabled)||(filter==='published'&&item.enabled&&item.publishCatalog))
+  );
+  const countEnabled=state.xtreamServers.filter(x=>x.enabled).length;
+  const countPublished=state.xtreamServers.filter(x=>x.enabled&&x.publishCatalog).length;
+  el('xtSourceSummary').textContent='الإجمالي: '+state.xtreamServers.length+' · المفعلة: '+countEnabled+' · المنشورة: '+countPublished+' · المعروضة: '+visible.length;
+  if(!state.xtreamServers.length)list.append(make('div','empty','ما عندك مصادر Xtream مضافة. اضغط «+ إضافة Xtream جديد» للبدء.'));
+  else if(!visible.length)list.append(make('div','empty','ما فيه مصادر تطابق البحث أو الفلتر الحالي.'));
+  visible.forEach(item=>list.append(serverCard(item)));
   el('xtreamLoading').hidden = true;
   list.hidden = false;
   updateCatalogServerOptions();
@@ -406,7 +416,17 @@ async function handleServerAction(item, card, button) {
   const old = button.textContent;
   button.textContent = '...';
   try {
-    if (action === 'test') {
+    if (action === 'toggle-enabled' || action === 'toggle-publish') {
+      const isEnable=action==='toggle-enabled';
+      const next=isEnable?!item.enabled:!item.publishCatalog;
+      const payload=isEnable?{enabled:next}:{publishCatalog:next};
+      await api(`/api/v1/admin/xtream/servers/${item.id}`, {
+        method:'PATCH',body:JSON.stringify(payload)
+      });
+      showMessage(isEnable
+        ?(`تم ${next?'تفعيل':'إيقاف'} مصدر «${item.name}»`)
+        :(`تم ${next?'نشر':'إخفاء'} محتوى «${item.name}» ${next?'لعملائك':'عن عملائك'}`));
+    } else if (action === 'test') {
       await api(`/api/v1/admin/xtream/servers/${item.id}/test`, { method: 'POST', body: '{}' });
       showMessage(`اتصال ${item.name} ناجح.`);
     } else if (action === 'save') {
@@ -420,7 +440,8 @@ async function handleServerAction(item, card, button) {
       });
       showMessage('تم حفظ إعدادات السيرفر.');
     } else if (action === 'delete') {
-      if (!window.confirm(`حذف ${item.name} وكل الكتالوج المستورد منه؟`)) return;
+      const total=Number(item.counts?.total||0).toLocaleString('en-US');
+      if(!window.confirm(`حذف مصدر «${item.name}» نهائيًا من BLOFY؟\\nسيتم حذف ${total} عنصر مستورد منه ولن يظهر محتواه لعملائك.\\nلن يتأثر اشتراكك الأصلي لدى مزود Xtream.\\n\\nهل تؤكد الحذف؟`))return;
       await api(`/api/v1/admin/xtream/servers/${item.id}`, { method: 'DELETE' });
       showMessage('تم حذف السيرفر وبياناته المستوردة.');
     } else if (action.startsWith('sync-')) {
@@ -603,6 +624,14 @@ el('copyRepoBtn').addEventListener('click', async () => {
 });
 el('xtreamForm').addEventListener('submit', addXtream);
 el('syncAllXtreamBtn').addEventListener('click', syncAllXtream);
+el('xtSourceSearch').addEventListener('input', renderXtream);
+el('xtSourceFilter').addEventListener('change', renderXtream);
+el('xtNewSourceBtn').addEventListener('click', () => {
+  el('xtAddSourceSection').scrollIntoView({behavior:'smooth',block:'center'});
+  el('xtName').focus({preventScroll:true});
+});
+el('xtRefreshSourcesBtn').addEventListener('click', ()=>loadXtream().catch(error=>showMessage('تعذر تحديث مصادر Xtream: '+error.message,'error')));
+
 el('catalogServer').addEventListener('change', async () => { await loadCategories(); await loadCatalog(); });
 el('catalogType').addEventListener('change', async () => { await loadCategories(); await loadCatalog(); });
 el('catalogCategory').addEventListener('change', loadCatalog);
