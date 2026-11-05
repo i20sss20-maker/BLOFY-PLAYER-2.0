@@ -115,6 +115,8 @@ function serverCard(item) {
     [item.publishCatalog ? 'إخفاء المحتوى عن العملاء' : 'نشر المحتوى للعملاء', 'toggle-publish', item.publishCatalog ? 'button ghost' : 'button primary'],
     ['⟳ مزامنة المحتوى', 'sync-all', 'button'],
     ['فحص الاتصال', 'test', 'button ghost'],
+    ['اختبار بث قناة', 'probe-live', 'button ghost'],
+    ['اختبار تشغيل فيلم', 'probe-movie', 'button ghost'],
     ['حذف المصدر', 'delete', 'button danger']
   ];
   if(item.syncing||item.status==='syncing'){
@@ -448,6 +450,23 @@ async function handleServerAction(item, card, button) {
         ?'تم تصحيح حالة المزامنة القديمة للمصدر «'+item.name+'». يمكنك بدء مزامنة جديدة.'
         :'لا توجد مزامنة نشطة لهذا المصدر.');
       await loadXtream(true);
+    } else if (action === 'probe-live' || action === 'probe-movie') {
+      const mediaType=action==='probe-live'?'live':'movie';
+      writeFeedback('جارٍ فحص رابط '+(mediaType==='live'?'القنوات':'الأفلام')+' من المصدر مباشرة…');
+      const result=await api('/api/v1/admin/xtream/servers/'+item.id+'/probe-playback',{
+        method:'POST',body:JSON.stringify({mediaType})
+      });
+      const checked=Array.isArray(result.checks)?result.checks:[];
+      const summary=checked.map(check=>
+        check.title+' · HTTP '+(check.httpStatus||'تعذر الاتصال')+
+        (check.contentType?' · '+check.contentType:'')+
+        (check.error?' · '+check.error:'')).join(' | ');
+      const message=result.ok
+        ?'✓ المصدر يرد على طلب تشغيل '+(mediaType==='live'?'قناة':'فيلم')+'. '+summary
+        :'تعذر التأكد من رابط التشغيل. '+(result.reason==='no_imported_items'
+          ?'لا توجد عناصر مستوردة من هذا النوع حتى الآن.':summary);
+      writeFeedback(message,result.ok?'ok':'error');
+      showMessage(message,result.ok?'success':'error');
     } else if (action === 'test') {
       await api(`/api/v1/admin/xtream/servers/${item.id}/test`, { method: 'POST', body: '{}' });
       showMessage(`اتصال ${item.name} ناجح.`);
