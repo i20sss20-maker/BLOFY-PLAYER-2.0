@@ -74,7 +74,7 @@ function serverCard(item) {
   const title = make('div');
   title.append(make('strong', '', item.name));
   title.append(make('code', 'server-url', item.baseUrl));
-  title.append(make('small','source-id','ID: '+String(item.id||'').slice(0,8));
+  title.append(make('small','source-id','ID: '+String(item.id||'').slice(0,8)));
   const status = make('span', `server-status ${xtStatusClass(item.syncing ? 'syncing' : item.status)}`, item.syncing ? 'Syncing' : item.status);
   header.append(title, status);
 
