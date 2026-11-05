@@ -5,6 +5,9 @@ import { mapStreamAdminPath } from '../src/stream-gateway-hook.mjs';
 test('same-domain admin routes are limited to a safe namespace', () => {
   assert.equal(mapStreamAdminPath('/stream'), '/');
   assert.equal(mapStreamAdminPath('/stream/'), '/');
+  for (const route of ['source','codes','users','content','appcodes']) {
+    assert.equal(mapStreamAdminPath('/stream/'+route), '/');
+  }
   assert.equal(mapStreamAdminPath('/stream/admin-assets/admin.css'), '/admin-assets/admin.css');
   assert.equal(mapStreamAdminPath('/stream/admin-assets/admin.js'), '/admin-assets/admin.js');
   assert.equal(mapStreamAdminPath('/stream/admin-api/status'), '/admin-api/status');
