@@ -109,6 +109,10 @@ function validSignedXtreamControl(req,url) {
     return false;
   if (!/^application\/x-www-form-urlencoded(?:\s*;|$)/i.test(String(req.headers['content-type']||'')))
     return false;
+  // Even a correct token must not override an explicitly foreign Origin.
+  const claimedOrigin=String(req.headers.origin||'');
+  if(claimedOrigin && claimedOrigin!=='null' &&
+      claimedOrigin!=='https://blofyplayer.com' && !sameOrigin(req))return false;
   // Independent session-bound CSRF proof: an outside site cannot read this
   // token due to SOP, and it cannot mint a token for another cookie.
   if(!sessionClaims(req))return false;
