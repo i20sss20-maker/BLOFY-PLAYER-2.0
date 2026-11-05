@@ -487,8 +487,8 @@ async function syncServer(id, requestedTypes = ['live','movie','series']) {
   const types = [...new Set(requestedTypes.map(validType).filter(Boolean))];
   if (!types.length) throw Object.assign(new Error('xtream_sync_types_invalid'), { status: 400 });
   syncLocks.add(id);
-  await pool.query(`UPDATE blofy_xtream_servers SET status='syncing',last_error=NULL,updated_at=NOW() WHERE id=$1`, [id]);
   try {
+    await pool.query(`UPDATE blofy_xtream_servers SET status='syncing',last_error=NULL,updated_at=NOW() WHERE id=$1 AND enabled=TRUE AND deletion_requested_at IS NULL`, [id]);
     const accountInfo = await fetchAccount(row);
     const creds = decryptCredentials(row);
     const details = {}, failures=[];
