@@ -42,6 +42,7 @@ class M3uOriginalOrderTest {
             "http://host/series/demo/secret/300.mp4").forEach(parser::accept)
         assertTrue(parser.live.isEmpty())
         assertTrue(parser.movie.isEmpty())
+        assertEquals(listOf("series"), parser.seriesGroups.keys.toList())
     }
 
     @Test(expected = IllegalArgumentException::class)
