@@ -117,6 +117,13 @@ function trustedNativeXtreamForm(req, url) {
   const contentType=String(req.headers['content-type']||'');
   if (!/^application\/x-www-form-urlencoded(?:\s*;|$)/i.test(contentType)) return false;
 
+  // Do not accept an explicitly foreign Origin even when a client sends
+  // forged/contradictory fetch metadata. The "null" case is handled only
+  // by a real same-origin browser navigation or a canonical HTTPS Referer.
+  const claimedOrigin=String(req.headers.origin||'');
+  if (claimedOrigin && claimedOrigin!=='null' &&
+      claimedOrigin!=='https://blofyplayer.com' && !sameOrigin(req))
+    return false;
   const fetchSite=String(req.headers['sec-fetch-site']||'').toLowerCase();
   const fetchMode=String(req.headers['sec-fetch-mode']||'').toLowerCase();
   const fetchDest=String(req.headers['sec-fetch-dest']||'').toLowerCase();
