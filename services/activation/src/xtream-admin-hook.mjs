@@ -293,7 +293,9 @@ const XTREAM_PURGE_TABLES = [
 ];
 
 async function purgeSource(id) {
-  if (purgeRunning.has(id)) return;
+  // One catalog cleanup at a time: avoid overwhelming PostgreSQL while admins
+  // are attempting to pause/delete other sources or serve existing viewers.
+  if (purgeRunning.has(id) || purgeRunning.size>=1) return;
   purgeRunning.add(id);
   cancelledSources.add(id);
   try {
@@ -304,10 +306,11 @@ async function purgeSource(id) {
         if (!result.rowCount) break;
         // Yield the event loop between bounded deletes; concurrent requests can
         // still pause other sources or read customer accounts.
-        await new Promise(resolve => setImmediate(resolve));
+        await new Promise(resolve => setTimeout(resolve,12));
       }
     }
     await pool.query('DELETE FROM blofy_xtream_servers WHERE id=$1 AND deletion_requested_at IS NOT NULL', [id]);
+    console.info('Xtream source cleanup completed:',id);
   } catch (error) {
     // deletion_requested_at remains persisted, so startup/periodic retries
     // safely resume rather than exposing a partially removed source.
