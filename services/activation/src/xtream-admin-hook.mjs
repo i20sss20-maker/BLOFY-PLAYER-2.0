@@ -18,6 +18,7 @@ import crypto from 'node:crypto';
 import pg from 'pg';
 import { downloadXtreamM3uCatalog } from './xtream-m3u-catalog.mjs';
 import { distinctXtreamRecords } from './xtream-import-dedup.mjs';
+import { CONTROL_PATH, controlPage, deleteConfirmationPage, readControlForm } from './xtream-native-controls.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
@@ -876,6 +877,71 @@ async function publicSummary() {
   };
 }
 
+function sendControlHtml(res,content){
+  res.writeHead(200,{'content-type':'text/html; charset=utf-8','cache-control':'private, no-store',
+    'x-content-type-options':'nosniff','x-frame-options':'DENY'});
+  res.end(content);
+}
+function controlRedirect(res,kind,value){
+  const target=CONTROL_PATH+'?'+(kind==='error'?'error':'ok')+'='+encodeURIComponent(String(value||''));
+  res.writeHead(303,{'location':target,'cache-control':'no-store'});
+  res.end();
+}
+async function handleControlAction(req,res,id,action) {
+  const available=['toggle-enabled','toggle-publish','test','sync-all','sync-live','sync-movie','sync-series','cancel-sync','save','delete'];
+  if(id==='new'&&action==='add'){
+    const fields=await readControlForm(req);
+    if(fields.rightsConfirmed!=='yes')throw Object.assign(new Error('rights_confirmation_required'),{status:400});
+    const item=await createServer({name:fields.name,baseUrl:fields.baseUrl,username:fields.username,
+      password:fields.password,priority:fields.priority,enabled:true,publishCatalog:false});
+    startSync(item.id,['live','movie','series']);
+    return controlRedirect(res,'ok','added');
+  }
+  if(!validUuid(id)||!available.includes(action))
+    throw Object.assign(new Error('xtream_control_action_invalid'),{status:400});
+  const current=await serverById(id);
+  if(!current)throw Object.assign(new Error('xtream_server_not_found'),{status:404});
+  if(action==='toggle-enabled'){
+    const next=!current.enabled;
+    await patchServer(id,{enabled:next});
+    return controlRedirect(res,'ok',next?'enabled':'paused');
+  }
+  if(action==='toggle-publish'){
+    const next=!current.publish_catalog;
+    await patchServer(id,{publishCatalog:next});
+    return controlRedirect(res,'ok',next?'published':'hidden');
+  }
+  if(action==='delete'){
+    const fields=await readControlForm(req);
+    if(fields.confirmId!==id||fields.ack!=='yes')
+      throw Object.assign(new Error('xtream_delete_confirmation_required'),{status:400});
+    if(!await requestDeleteSource(id))
+      throw Object.assign(new Error('xtream_server_not_found'),{status:404});
+    return controlRedirect(res,'ok','deleted');
+  }
+  if(action==='save'){
+    const fields=await readControlForm(req);
+    const body={name:fields.name,baseUrl:fields.baseUrl,priority:fields.priority};
+    if(fields.username?.trim())body.username=fields.username;
+    if(fields.password?.trim())body.password=fields.password;
+    await patchServer(id,body);
+    return controlRedirect(res,'ok','saved');
+  }
+  if(action==='cancel-sync'){
+    await cancelSourceSync(id);
+    return controlRedirect(res,'ok','cancelled');
+  }
+  if(action==='test'){
+    // Never block a 15s proxy request on an upstream test that may take 20s.
+    void testServer(id).catch(error=>console.warn('xtream direct check failed:',id,redactXtreamError(error)));
+    return controlRedirect(res,'ok','testing');
+  }
+  if(!current.enabled)throw Object.assign(new Error('xtream_source_paused'),{status:409});
+  const types=action==='sync-all'?['live','movie','series']:[action.slice('sync-'.length)];
+  startSync(id,types);
+  return controlRedirect(res,'ok','syncing');
+}
+
 const previousCreateServer = http.createServer.bind(http);
 http.createServer = function withBlofyXtream(listener) {
   if (typeof listener !== 'function') return previousCreateServer(listener);
@@ -895,6 +961,29 @@ http.createServer = function withBlofyXtream(listener) {
       if (!url.pathname.startsWith('/api/v1/admin/xtream')) return listener(req, res);
       if (!requireAdmin(req, res)) return;
       await ensureReady();
+
+      // Fully server-rendered, session-protected control plane. It works
+      // when browser-side JavaScript/extensions block source button events.
+      if(req.method==='GET' && url.pathname===CONTROL_PATH){
+        const items=(await serverRows()).map(adminServer);
+        return sendControlHtml(res,controlPage({
+          items,success:url.searchParams.get('ok')||'',error:url.searchParams.get('error')||''
+        }));
+      }
+      const nativeConfirm=url.pathname.match(/^\/api\/v1\/admin\/xtream\/controls\/([0-9a-f-]+)\/confirm-delete$/i);
+      if(nativeConfirm&&req.method==='GET'){
+        const source=await serverById(nativeConfirm[1]);
+        if(!source)return json(res,404,{error:'xtream_server_not_found'});
+        return sendControlHtml(res,deleteConfirmationPage(source));
+      }
+      const nativeAction=url.pathname.match(/^\/api\/v1\/admin\/xtream\/controls\/([a-z0-9-]+)\/(toggle-enabled|toggle-publish|test|sync-all|sync-live|sync-movie|sync-series|cancel-sync|save|delete|add)$/i);
+      if(nativeAction&&req.method==='POST'){
+        try{return await handleControlAction(req,res,nativeAction[1],nativeAction[2]);}
+        catch(error){
+          console.warn('xtream control failed:',redactXtreamError(error));
+          return controlRedirect(res,'error',redactXtreamError(error));
+        }
+      }
 
       if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream/servers') {
         const items = (await serverRows()).map(adminServer);
