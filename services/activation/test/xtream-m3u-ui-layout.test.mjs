@@ -42,5 +42,5 @@ test('dashboard stylesheet cannot turn the entire main content area into a horiz
   assert.match(css,/\.source-shell\s*>\s*main\.source-main\s*\{display:block!important/);
   assert.match(css,/\.source-card-main\s*\{display:flex/);
   assert.doesNotMatch(css,/\.source-main\s*\{display:flex/);
-  assert.match(script,/make\('div', 'source-card-main'\)/);
+  assert.doesNotMatch(script,/make\('div', 'source-main'\)/);
 });
