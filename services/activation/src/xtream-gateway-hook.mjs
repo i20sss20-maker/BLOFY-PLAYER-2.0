@@ -577,12 +577,12 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
   if (!account) return text(res, 401, 'Unauthorized');
   let row, sourceId, extension;
   if (kind === 'series') {
-    row = await episodeByGatewayId(gatewayId);
+    row = await episodeByGatewayId(gatewayId,account.source_id||null);
     if (!row || !row.server_enabled) return text(res, 404, 'Stream not found');
     sourceId = row.source_episode_id;
     extension = row.container_extension;
   } else {
-    row = await gatewayItemById(kind === 'live' ? 'live' : 'movie', gatewayId);
+    row = await gatewayItemById(kind === 'live' ? 'live' : 'movie', gatewayId,account.source_id||null);
     if (!row || !row.server_enabled) return text(res, 404, 'Stream not found');
     sourceId = row.source_id;
     extension = row.container_extension;
@@ -655,18 +655,18 @@ async function handlePlayerApi(req, res, url) {
   if (!account) return json(res, 200, { user_info: { auth: 0, status: 'Disabled' }, server_info: playerServerInfo(req) });
   const action = String(url.searchParams.get('action') || '');
   if (!action) return json(res, 200, { user_info: accountInfo(account, username, password), server_info: playerServerInfo(req) });
-  if (action === 'get_live_categories') return json(res, 200, await gatewayCategories('live'));
-  if (action === 'get_vod_categories') return json(res, 200, await gatewayCategories('movie'));
-  if (action === 'get_series_categories') return json(res, 200, await gatewayCategories('series'));
-  if (action === 'get_live_streams') return streamGatewayItems(res, 'live', url.searchParams.get('category_id'));
-  if (action === 'get_vod_streams') return streamGatewayItems(res, 'movie', url.searchParams.get('category_id'));
-  if (action === 'get_series') return streamGatewayItems(res, 'series', url.searchParams.get('category_id'));
+  if (action === 'get_live_categories') return json(res, 200, await gatewayCategories('live',account.source_id||null));
+  if (action === 'get_vod_categories') return json(res, 200, await gatewayCategories('movie',account.source_id||null));
+  if (action === 'get_series_categories') return json(res, 200, await gatewayCategories('series',account.source_id||null));
+  if (action === 'get_live_streams') return streamGatewayItems(res, 'live', url.searchParams.get('category_id'),account.source_id||null);
+  if (action === 'get_vod_streams') return streamGatewayItems(res, 'movie', url.searchParams.get('category_id'),account.source_id||null);
+  if (action === 'get_series') return streamGatewayItems(res, 'series', url.searchParams.get('category_id'),account.source_id||null);
   if (action === 'get_vod_info') {
-    const value = await vodInfo(url.searchParams.get('vod_id'));
+    const value = await vodInfo(url.searchParams.get('vod_id'),account.source_id||null);
     return json(res, value ? 200 : 404, value || { error: 'vod_not_found' });
   }
   if (action === 'get_series_info') {
-    const value = await seriesInfo(url.searchParams.get('series_id'));
+    const value = await seriesInfo(url.searchParams.get('series_id'),account.source_id||null);
     return json(res, value ? 200 : 404, value || { error: 'series_not_found' });
   }
   if (action === 'get_short_epg' || action === 'get_simple_data_table') return json(res, 200, { epg_listings: [] });
@@ -696,7 +696,7 @@ async function handleM3u(req, res, url) {
       const kind = mediaType === 'live' ? 'live' : 'movie';
       res.write(`#EXTINF:-1 tvg-name="${name}" tvg-logo="${logo}" group-title="${group}",${name}\n`);
       res.write(`${base}/${kind}/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${row.gateway_id}.${ext}\n`);
-    });
+    }, account.source_id||null);
   }
   res.end();
 }
