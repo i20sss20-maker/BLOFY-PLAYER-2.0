@@ -224,19 +224,26 @@ function serverCard(item) {
   const advancedSummary = make('summary', '', 'إعدادات إضافية · الأولوية والمزامنة حسب النوع');
   const advancedFields = make('div', 'server-settings');
   settings.append(advancedSummary, advancedFields);
-  const enabledLabel = make('label', 'check compact');
-  const enabled = document.createElement('input');
-  enabled.type = 'checkbox'; enabled.checked = item.enabled; enabled.dataset.role = 'enabled';
-  enabledLabel.append(enabled, make('span', '', 'مفعل'));
-  const publishLabel = make('label', 'check compact');
-  const publish = document.createElement('input');
-  publish.type = 'checkbox'; publish.checked = item.publishCatalog; publish.dataset.role = 'publish';
-  publishLabel.append(publish, make('span', '', 'نشر الكتالوج'));
-  const priority = document.createElement('input');
-  priority.type = 'number'; priority.min = '0'; priority.max = '10000'; priority.value = String(item.priority ?? 100); priority.dataset.role = 'priority';
-  priority.className = 'small-input';
-  advancedFields.append(enabledLabel, publishLabel, make('span', 'muted', item.transportSecurity === 'https' ? 'HTTPS' : 'HTTP'), priority);
-
+  const editableFields = [
+    ['name','اسم المصدر','text',item.name,160],
+    ['baseUrl','Host / URL','url',item.baseUrl,500],
+    ['username','Username جديد (اتركه فارغًا دون تغيير)','text','',512],
+    ['password','Password جديد (اتركه فارغًا دون تغيير)','password','',1024],
+    ['priority','الأولوية (رقم أقل = أولوية أعلى)','number',String(item.priority??100),5]
+  ];
+  for (const [role,labelText,inputType,value,maxLength] of editableFields) {
+    const field=make('label','server-edit-field');
+    field.append(make('span','',labelText));
+    const input=document.createElement('input');
+    input.type=inputType;input.value=value;input.dataset.role=role;
+    input.className='small-input';
+    input.autocomplete='off';
+    if(inputType==='number'){input.min='0';input.max='10000';input.step='1'}
+    else input.maxLength=maxLength;
+    field.append(input);advancedFields.append(field);
+  }
+  const editNotice=make('p','muted','لن تُعرض كلمات المرور الحالية. إدخال بيانات جديدة يستلزم إعادة فحص الاتصال ومزامنة المصدر.');
+  advancedFields.append(editNotice);
   const actions = make('div', 'server-actions');
   const buttons = [
     [item.enabled ? '⏸ إيقاف المصدر' : '▶ تفعيل المصدر', 'toggle-enabled', item.enabled ? 'button source-toggle-stop' : 'button primary'],
@@ -430,15 +437,17 @@ async function handleServerAction(item, card, button) {
       await api(`/api/v1/admin/xtream/servers/${item.id}/test`, { method: 'POST', body: '{}' });
       showMessage(`اتصال ${item.name} ناجح.`);
     } else if (action === 'save') {
+      const input=role=>card.querySelector('[data-role="'+role+'"]').value.trim();
+      const next={
+        name:input('name'),baseUrl:input('baseUrl'),
+        priority:Number(input('priority'))
+      };
+      if(input('username'))next.username=input('username');
+      if(input('password'))next.password=input('password');
       await api(`/api/v1/admin/xtream/servers/${item.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          enabled: card.querySelector('[data-role="enabled"]').checked,
-          publishCatalog: card.querySelector('[data-role="publish"]').checked,
-          priority: Number(card.querySelector('[data-role="priority"]').value || 100)
-        })
+        method:'PATCH',body:JSON.stringify(next)
       });
-      showMessage('تم حفظ إعدادات السيرفر.');
+      showMessage('تم حفظ تعديل مصدر «'+item.name+'». اضغط «فحص الاتصال» ثم «مزامنة المحتوى» إذا غيّرت بيانات Host أو Username أو Password.');
     } else if (action === 'delete') {
       const total=Number(item.counts?.total||0).toLocaleString('en-US');
       if(!window.confirm(`حذف مصدر «${item.name}» نهائيًا من BLOFY؟\\nسيتم حذف ${total} عنصر مستورد منه ولن يظهر محتواه لعملائك.\\nلن يتأثر اشتراكك الأصلي لدى مزود Xtream.\\n\\nهل تؤكد الحذف؟`))return;
