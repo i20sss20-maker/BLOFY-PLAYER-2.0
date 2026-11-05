@@ -23,6 +23,10 @@ const request=async(method,path,form=null)=>{
   return res;
 };
 try{
+  // The Xtream catalog schema is created lazily on first authenticated use.
+  // The activation /health endpoint does not initialize this separate module.
+  const initialized=await request('GET',root);
+  assert.equal(initialized.status,200,'Xtream admin schema should initialize on first GET');
   await pool.query('INSERT INTO blofy_xtream_servers(id,name,base_url,username_secret,password_secret,enabled,publish_catalog,priority,status,counts) VALUES ($1,$2,$3,$4,$5,TRUE,FALSE,100,\'unknown\',\'{}\'::jsonb)',
     [id,'Native Form CI Source','https://example.com','test-only-user','test-only-pass']);
 
