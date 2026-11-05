@@ -753,6 +753,43 @@ async function bulkCatalog(enabled) {
   }
 }
 
+async function runBlofyItemProbe(){
+  const button=el('blofyProbeRun'),note=el('blofyProbeResult');
+  const kind=el('blofyProbeKind').value;
+  const itemId=el('blofyProbeId').value.trim();
+  if(!['live','movie','series'].includes(kind)||!(/^[1-9][0-9]{0,14}$/.test(itemId))){
+    note.textContent='اختر النوع وأدخل رقم المحتوى الصحيح فقط.';return;
+  }
+  button.disabled=true;
+  note.textContent='جارٍ طلب أول بيانات الفيديو من المصدر…';
+  try{
+    const result=await api('/api/v1/admin/xtream-gateway/playback-probe',{
+      method:'POST',body:JSON.stringify({kind,itemId})
+    });
+    const reasons={
+      catalog_item_not_found:'العنصر غير موجود أو مخفي من المصدر المنشور.',
+      upstream_empty_media:'رابط المصدر لا يرسل بيانات فيديو.',
+      upstream_non_media_response:'المصدر يعيد صفحة ويب بدل الفيديو.',
+      source_unreachable:'تعذر الاتصال بالمصدر.',
+      timeout:'انتهت مهلة الاتصال دون فيديو.',
+      upstream_http_403:'المصدر يرفض الوصول؛ راجع صلاحية الحساب لدى المزود.',
+      upstream_http_404:'رابط التشغيل غير موجود لدى المزود.',
+      upstream_http_429:'تجاوز حد اتصالات المزود أو تقييد الطلبات.'
+    };
+    if(result.ok){
+      const format={ts:'TS',hls:'HLS',mp4:'MP4',mkv:'MKV',unknown:'غير محدد'}[result.format]||'غير محدد';
+      note.textContent='✅ وصلت أول بيانات الفيديو · صيغة '+format+' · '+Number(result.elapsedMs||0).toLocaleString('en-US')+' ms. هذا لا يضمن استمرار التشغيل.';
+    }else{
+      note.textContent='❌ فشل المصدر'+(result.httpStatus?' · HTTP '+result.httpStatus:'')+' — '+
+        (reasons[result.reason]||'راجع إعدادات المصدر والرابط والصيغة وحقوق التشغيل.');
+    }
+  }catch(error){
+    note.textContent=/xtream_media_probe_(cooldown|busy)/.test(error.message)
+      ?'الفحص محدود لمنع استهلاك المصدر؛ جرّبه بعد 12 ثانية.'
+      :'تعذر إكمال الفحص: '+error.message;
+  }finally{button.disabled=false}
+}
+
 async function loadBlofyPlaybackHealth(){
   const box=el('blofyPlaybackMetrics'),issues=el('blofyPlaybackIssues');
   const note=el('blofyPlaybackNote');
@@ -796,6 +833,12 @@ async function loadBlofyPlaybackHealth(){
         (row.upstreamStatus?'استجابة المصدر '+row.upstreamStatus:'سبب غير معروف');
       item.append(make('strong','',media+' · '+phase),
         make('small','',reason+' · '+new Date(row.at).toLocaleString('ar-SA')));
+      if(Number.isSafeInteger(row.itemId)&&row.itemId>0){
+        const probe=make('button','button ghost','فحص #'+row.itemId);
+        probe.type='button';probe.dataset.probeItem=String(row.itemId);
+        probe.dataset.probeKind=row.kind;
+        item.append(probe);
+      }
       issues.append(item);
     }
     if(!recent.length){
@@ -836,6 +879,14 @@ async function refreshCurrent() {
 document.querySelectorAll('.tab').forEach(button => button.addEventListener('click', () => switchTab(button.dataset.tab)));
 el('refreshBtn').addEventListener('click', refreshCurrent);
 el('blofyPlaybackRefresh').addEventListener('click', loadBlofyPlaybackHealth);
+el('blofyProbeRun').addEventListener('click',runBlofyItemProbe);
+el('blofyPlaybackIssues').addEventListener('click',event=>{
+  const button=event.target.closest('button[data-probe-item]');
+  if(!button)return;
+  el('blofyProbeKind').value=button.dataset.probeKind;
+  el('blofyProbeId').value=button.dataset.probeItem;
+  runBlofyItemProbe();
+});
 el('xtreamForm').addEventListener('submit', addXtream);
 el('syncAllXtreamBtn').addEventListener('click', syncAllXtream);
 // Capture source commands before a background catalog refresh can detach
