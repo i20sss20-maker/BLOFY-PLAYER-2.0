@@ -61,6 +61,7 @@
           </div>
 
           <div class="gateway-subscription-form">
+            <label class="gateway-source-picker"><span>اختر Xtream للعميل</span><select id="gatewaySourceId" aria-label="مصدر محتوى اشتراك العميل"><option value="">كل مصادر BLOFY المنشورة</option></select><small>حدد المصدر الذي تريد استخراج بيانات دخول BLOFY لمحتواه. لا يتم إنشاء حساب جديد عند المزود الأصلي.</small></label>
             <label><span>اسم المشترك</span><input id="gatewayCustomerLabel" maxlength="120" placeholder="مثال: عميل BLOFY" value="BLOFY Player"></label>
             <label><span>مدة الاشتراك</span><select id="gatewayDurationDays"><option value="30">شهر</option><option value="90">3 أشهر</option><option value="180">6 أشهر</option><option value="365">سنة</option><option value="1">يوم واحد</option></select></label>
             <label><span>المشاهدة المتزامنة</span><select id="gatewayMaxConnections"><option value="1">جهاز واحد</option><option value="2">جهازان</option><option value="3">3 أجهزة</option></select></label>
@@ -180,6 +181,6 @@
     </main>
   </div>
   <script src="/sources-admin.js?v=20261105-stable-sources-v4" defer></script>
-  <script src="/xtream-gateway-admin.js?v=20261105-fullwidth" defer></script>
+  <script src="/xtream-gateway-admin.js?v=20261105-source-selection-v1" defer></script>
 </body>
 </html>
