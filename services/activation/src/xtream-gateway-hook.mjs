@@ -701,15 +701,15 @@ http.createServer = function withBlofyXtreamGateway(listener) {
         return res.end(body);
       }
       if (req.method === 'GET' && url.pathname === '/xtream/health') return json(res, 200, await gatewayHealth());
-      if ((req.method === 'GET' || req.method === 'POST') && (url.pathname === '/player_api.php' || url.pathname === '/panel_api.php')) return handlePlayerApi(req, res, url);
-      if (req.method === 'GET' && url.pathname === '/get.php') return handleM3u(req, res, url);
+      if ((req.method === 'GET' || req.method === 'POST') && (url.pathname === '/player_api.php' || url.pathname === '/panel_api.php')) return await handlePlayerApi(req, res, url);
+      if (req.method === 'GET' && url.pathname === '/get.php') return await handleM3u(req, res, url);
       if (req.method === 'GET' && url.pathname === '/xmltv.php') {
         const account = await authenticate(url.searchParams.get('username') || '', url.searchParams.get('password') || '');
         return account ? text(res, 200, '<?xml version="1.0" encoding="UTF-8"?><tv></tv>\n', 'application/xml; charset=utf-8') : text(res, 401, 'Unauthorized');
       }
       const mediaMatch = url.pathname.match(/^\/(live|movie|series)\/([^/]+)\/([^/]+)\/([0-9]+)(?:\.([A-Za-z0-9]{1,8}))?$/i);
       if (mediaMatch && (req.method === 'GET' || req.method === 'HEAD')) {
-        return proxyMedia(req, res, mediaMatch[1].toLowerCase(), decodeURIComponent(mediaMatch[2]), decodeURIComponent(mediaMatch[3]), mediaMatch[4], mediaMatch[5]);
+        return await proxyMedia(req, res, mediaMatch[1].toLowerCase(), decodeURIComponent(mediaMatch[2]), decodeURIComponent(mediaMatch[3]), mediaMatch[4], mediaMatch[5]);
       }
 
       if (!url.pathname.startsWith('/api/v1/admin/xtream-gateway')) return listener(req, res);
