@@ -575,7 +575,7 @@ async function patchServer(id, body) {
     const enabled=Boolean(body.enabled);
     set('enabled',enabled);
     if (!enabled) {
-      cancelledSources.add(id);
+      if (syncLocks.has(id)) cancelledSources.add(id);
       set('status','offline');
     }
   }
