@@ -418,21 +418,39 @@ async function walkGatewayItems(mediaType, filter, onRow, sourceId=null) {
   }
 }
 
+async function writeStreamChunk(res,chunk) {
+  if(res.destroyed||res.writableEnded)throw new Error('xtream_client_disconnected');
+  if(res.write(chunk))return;
+  await new Promise((resolve,reject)=>{
+    const cleanup=()=>{res.off('drain',ok);res.off('close',closed);res.off('error',failed);};
+    const ok=()=>{cleanup();resolve();};
+    const closed=()=>{cleanup();reject(new Error('xtream_client_disconnected'));};
+    const failed=()=>{cleanup();reject(new Error('xtream_stream_write_failed'));};
+    res.once('drain',ok);res.once('close',closed);res.once('error',failed);
+  });
+}
+
 async function streamGatewayItems(res, mediaType, categoryId, sourceId=null) {
   const filter = await categoryFilter(mediaType, categoryId, sourceId);
+  // Prepare expensive source mapping BEFORE committing HTTP 200. Fail with a
+  // real response status if the database is unavailable instead of sending
+  // an incomplete JSON list that Xtream clients cannot parse.
+  await ensureCategoryMaps(mediaType,sourceId);
+  await ensureItemMaps(mediaType,sourceId);
   res.writeHead(200, {
     'content-type': 'application/json; charset=utf-8',
     'cache-control': 'no-store',
     'x-content-type-options': 'nosniff'
   });
-  res.write('[');
+  await writeStreamChunk(res,'[');
   let first = true;
-  await walkGatewayItems(mediaType, filter, row => {
-    if (!first) res.write(',');
+  await walkGatewayItems(mediaType, filter, async row => {
+    const prefix=first?'':',';
     first = false;
-    res.write(JSON.stringify(formatGatewayItem(mediaType, row)));
+    await writeStreamChunk(res,prefix+JSON.stringify(formatGatewayItem(mediaType,row)));
   }, sourceId);
-  res.end(']');
+  await writeStreamChunk(res,']');
+  res.end();
 }
 
 async function gatewayItemById(mediaType, gatewayId, sourceId=null) {
@@ -685,22 +703,26 @@ async function handleM3u(req, res, url) {
   const account = await authenticate(username, password, { touch: true });
   if (!account) return text(res, 401, 'Unauthorized');
   const base = origin(req);
+  for(const kind of ['live','movie']){
+    await ensureCategoryMaps(kind,account.source_id||null);
+    await ensureItemMaps(kind,account.source_id||null);
+  }
   res.writeHead(200, {
     'content-type': 'audio/x-mpegurl; charset=utf-8',
     'cache-control': 'no-store',
     'content-disposition': 'inline; filename="blofy.m3u"'
   });
-  res.write('#EXTM3U\n');
+  await writeStreamChunk(res,'#EXTM3U\n');
   for (const mediaType of ['live','movie']) {
-    await walkGatewayItems(mediaType, null, row => {
+    await walkGatewayItems(mediaType, null, async row => {
       const item = formatGatewayItem(mediaType, row);
       const group = escapeM3uAttribute(row.metadata?.genre || (mediaType === 'live' ? 'Live' : 'Movies'));
       const name = escapeM3uAttribute(row.name);
       const logo = escapeM3uAttribute(row.icon_url || '');
       const ext = mediaType === 'live' ? 'ts' : safeGatewayExtension(row.container_extension, 'mp4');
       const kind = mediaType === 'live' ? 'live' : 'movie';
-      res.write(`#EXTINF:-1 tvg-name="${name}" tvg-logo="${logo}" group-title="${group}",${name}\n`);
-      res.write(`${base}/${kind}/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${row.gateway_id}.${ext}\n`);
+      await writeStreamChunk(res,`#EXTINF:-1 tvg-name="${name}" tvg-logo="${logo}" group-title="${group}",${name}\n`);
+      await writeStreamChunk(res,`${base}/${kind}/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${row.gateway_id}.${ext}\n`);
     }, account.source_id||null);
   }
   res.end();
