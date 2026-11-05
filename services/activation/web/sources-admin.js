@@ -800,6 +800,9 @@ async function loadBlofyPlaybackHealth(){
     const stats=[
       ['بدأ التشغيل',m.started??0],
       ['فشل بدء البث',m.failed??0],
+      ['رفض دخول BLOFY',m.gatewayAuthDenied??0],
+      ['محتوى غير متاح',m.unavailableItems??0],
+      ['أخطاء المصدر',m.upstreamFailed??0],
       ['انقطع بعد البدء',m.interrupted??0],
       ['بدأ ببطء',m.slowStarts??0],
       ['متوسط البداية الوسيط',asMs(m.medianStartMs)],
@@ -814,6 +817,8 @@ async function loadBlofyPlaybackHealth(){
     }
     issues.replaceChildren();
     const errorNames={
+      gateway_auth_denied:'بيانات دخول حساب BLOFY غير صالحة أو منتهية (401) — راجع حالة الحساب وبيانات Host واسم المستخدم وكلمة المرور الصادرة من BLOFY.',
+      catalog_item_unavailable:'هذا المحتوى غير متاح في المكتبة المنشورة (404)، أو لا ينتمي للمصدر المرتبط بالحساب.',
       upstream_http_403:'المصدر رفض الوصول (403)',
       upstream_http_404:'المحتوى أو مساره غير موجود (404)',
       upstream_http_429:'تجاوز حد اتصالات المصدر',
@@ -833,7 +838,7 @@ async function loadBlofyPlaybackHealth(){
         (row.upstreamStatus?'استجابة المصدر '+row.upstreamStatus:'سبب غير معروف');
       item.append(make('strong','',media+' · '+phase),
         make('small','',reason+' · '+new Date(row.at).toLocaleString('ar-SA')));
-      if(Number.isSafeInteger(row.itemId)&&row.itemId>0){
+      if(!['gateway_auth_denied','catalog_item_unavailable'].includes(row.reason)&&Number.isSafeInteger(row.itemId)&&row.itemId>0){
         const probe=make('button','button ghost','فحص #'+row.itemId);
         probe.type='button';probe.dataset.probeItem=String(row.itemId);
         probe.dataset.probeKind=row.kind;
@@ -845,7 +850,7 @@ async function loadBlofyPlaybackHealth(){
       issues.append(make('p','muted','لا توجد أخطاء تشغيل مسجلة خلال الساعة الماضية على هذه النسخة.'));
     }
     const upstreamCodes=Object.entries(m.upstreamCodes||{});
-    note.textContent='الأرقام لآخر ساعة على هذا السيرفر فقط. نجاح بدء البث لا يضمن استمرار القناة طوال المشاهدة.'+
+    note.textContent='الأرقام لآخر ساعة على هذا السيرفر فقط. رفض حساب BLOFY (401) يختلف عن رفض المصدر (403)، ولا يعني حدوث عطل بالمصدر. نجاح بدء البث لا يضمن استمراره طوال المشاهدة.'+
       (upstreamCodes.length?' · أخطاء المصدر: '+upstreamCodes.map(([code,n])=>'HTTP '+code+' ('+n+')').join('، '):'');
   }catch(error){
     note.textContent='تعذر تحديث مراقبة إعادة البث: '+error.message;
