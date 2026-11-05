@@ -17,6 +17,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
+import tv.blofy.player.data.CatalogSyncState
+import tv.blofy.player.data.M3uOrderReconciler
+import tv.blofy.player.data.M3uOrderingPreference
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.CategoryEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
@@ -29,6 +32,9 @@ class CategoryManagerActivity : AppCompatActivity() {
     private var currentKind = "live"
     private var currentItems: List<CategoryEntity> = emptyList()
     private var loadGeneration = 0
+    private lateinit var m3uButton: Button
+    private var isMatchingM3u = false
+    private var orderFeedback: String? = null
     private val isTv by lazy { DeviceClass.isTv(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -73,6 +79,15 @@ class CategoryManagerActivity : AppCompatActivity() {
         }
         root.addView(tabs, LinearLayout.LayoutParams(-1, dp(54)).apply { bottomMargin = dp(8) })
 
+        // Some Xtream panels return a category/stream order different from their
+        // own get.php M3U export. The owner explicitly chooses which to follow.
+        m3uButton = actionButton("مطابقة ترتيب القائمة الأصلية M3U (القنوات والأفلام)") {
+            matchM3uOrder()
+        }
+        root.addView(m3uButton, LinearLayout.LayoutParams(-1, dp(if (isTv) 52 else 60)).apply {
+            bottomMargin = dp(8)
+        })
+
         list = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutDirection = resources.configuration.layoutDirection
@@ -115,7 +130,10 @@ class CategoryManagerActivity : AppCompatActivity() {
     private fun render(items: List<CategoryEntity>, kind: String) {
         list.removeAllViews()
         val hidden = items.count { it.hidden }
-        status.text = getString(R.string.category_manager_status, kindLabel(kind), items.size, hidden) + " • ترتيب السيرفر"
+        status.text = orderFeedback ?: (
+            getString(R.string.category_manager_status, kindLabel(kind), items.size, hidden) +
+                " • حسب ترتيب المصدر الحالي"
+        )
         if (items.isEmpty()) {
             list.addView(TextView(this).apply {
                 text = getString(R.string.category_manager_empty)
@@ -170,6 +188,36 @@ class CategoryManagerActivity : AppCompatActivity() {
             })
         }
         addView(actions, if (isTv) LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(54)) else LinearLayout.LayoutParams(-1, dp(54)))
+    }
+
+    private fun matchM3uOrder() {
+        if (isMatchingM3u) return
+        val id = providerId ?: return
+        isMatchingM3u = true
+        m3uButton.isEnabled = false
+        status.text = "جار فحص ترتيب M3U الأصلي ومقارنته ببيانات بلوفي…"
+        lifecycleScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    val db = BlofyDatabase.get(applicationContext)
+                    val provider = checkNotNull(db.dao().provider(id)) { "Playlist not found" }
+                    M3uOrderReconciler(db).apply(provider)
+                }
+                M3uOrderingPreference.enable(applicationContext, id)
+                CatalogSyncState.markOrderChanged(applicationContext, id)
+                orderFeedback = "تمت مطابقة ${result.liveMatched}/${result.liveTotal} قناة و" +
+                    "${result.movieMatched}/${result.movieTotal} فيلم • " +
+                    "${result.categoryMatches} فئة. سيُحفظ ترتيب M3U عند تحديث الباقة."
+            } catch (failure: kotlinx.coroutines.CancellationException) {
+                throw failure
+            } catch (_: Exception) {
+                orderFeedback = "تعذرت المطابقة: السيرفر لم يوفر M3U مكتملًا ومتوافقًا. لم نغير ترتيبك السابق."
+            } finally {
+                isMatchingM3u = false
+                m3uButton.isEnabled = true
+                loadCategories()
+            }
+        }
     }
 
     private fun toggleHidden(category: CategoryEntity) {
