@@ -99,6 +99,41 @@ class CategoryOrderRefreshTest {
         }
     }
 
+    @Test
+    fun m3uChosenOrderSurvivesAFullXtreamRefreshAndKeepsFavorite(): Unit =
+        runBlocking(Dispatchers.IO) {
+            val dao = db.dao()
+            dao.upsertStreams(listOf(
+                stream("saved", "live", 1).copy(sourceOrder = 7L),
+                stream("saved", "live", 2).copy(sourceOrder = 1L),
+                stream("saved", "movie", 1).copy(sourceOrder = 9L),
+                stream("saved", "movie", 2).copy(sourceOrder = 2L),
+                stream("staged", "live", 1).copy(sourceOrder = 1L),
+                stream("staged", "live", 2).copy(sourceOrder = 2L),
+                stream("staged", "live", 3).copy(sourceOrder = 3L),
+                stream("staged", "movie", 1).copy(sourceOrder = 1L),
+                stream("staged", "movie", 2).copy(sourceOrder = 2L),
+                stream("staged", "movie", 3).copy(sourceOrder = 3L)
+            ))
+            dao.upsertCategories(listOf(
+                CategoryEntity("staged:live:11", "staged", "11", "live",
+                    "New Category", orderIndex = 1)
+            ))
+            dao.setFavorite("saved:live:2", true)
+
+            dao.preserveM3uOrderingOnRefresh("staged", "saved")
+            dao.promoteStagedRefresh("staged", saved)
+
+            assertEquals(listOf("2", "1", "3"),
+                dao.catalogSourcePageAfterAll("saved", "live", 0L, 10).map { it.remoteId })
+            assertEquals(listOf("2", "1", "3"),
+                dao.catalogSourcePageAfterAll("saved", "movie", 0L, 10).map { it.remoteId })
+            assertEquals(listOf("10", "11"),
+                dao.categorySnapshot("saved", "live").map { it.remoteId })
+            assertTrue(checkNotNull(dao.stream("saved:live:2")).favorite)
+            assertEquals(1, dao.catalogCountAll("saved", "series"))
+        }
+
     private fun stream(providerId: String, kind: String, id: Int) = StreamEntity(
         key = "$providerId:$kind:$id",
         providerId = providerId,
