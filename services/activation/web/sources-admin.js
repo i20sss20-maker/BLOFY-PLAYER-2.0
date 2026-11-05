@@ -399,6 +399,7 @@ async function handleServerAction(item, card, button) {
     card.dataset.busy = '0';
     button.disabled = false;
     button.textContent = old;
+    if(document.activeElement===button)button.blur();
     // Apply state received during the request without disrupting the click.
     renderXtream();
   }
