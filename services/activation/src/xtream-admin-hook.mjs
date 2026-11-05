@@ -591,7 +591,7 @@ async function patchServer(id, body) {
   }
   if (!updates.length) throw Object.assign(new Error('nothing_to_update'), { status: 400 });
   values.push(id);
-  const result = await pool.query(`UPDATE blofy_xtream_servers SET ${updates.join(',')},updated_at=NOW() WHERE id=${values.length} AND deletion_requested_at IS NULL RETURNING *`, values);
+  const result = await pool.query(`UPDATE blofy_xtream_servers SET ${updates.join(',')},updated_at=NOW() WHERE id=$${values.length} AND deletion_requested_at IS NULL RETURNING *`, values);
   if(!result.rows[0])throw Object.assign(new Error('xtream_server_not_found'),{status:404});
   return adminServer(result.rows[0]);
 }
