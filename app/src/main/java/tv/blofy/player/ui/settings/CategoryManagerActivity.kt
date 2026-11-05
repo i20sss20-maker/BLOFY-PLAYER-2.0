@@ -91,7 +91,7 @@ class CategoryManagerActivity : AppCompatActivity() {
 
         // Some Xtream panels return a category/stream order different from their
         // own get.php M3U export. The owner explicitly chooses which to follow.
-        m3uButton = actionButton("مطابقة ترتيب القائمة الأصلية M3U (القنوات والأفلام)") {
+        m3uButton = actionButton("مطابقة ترتيب M3U الأصلي • القنوات والأفلام والفئات") {
             matchM3uOrder()
         }
         root.addView(m3uButton, LinearLayout.LayoutParams(-1, dp(if (isTv) 52 else 60)).apply {
@@ -228,7 +228,7 @@ class CategoryManagerActivity : AppCompatActivity() {
                     " • الترتيب: M3U"
                 orderFeedback = "تمت مطابقة ${result.liveMatched}/${result.liveTotal} قناة و" +
                     "${result.movieMatched}/${result.movieTotal} فيلم • " +
-                    "${result.categoryMatches} فئة. سيُحفظ ترتيب M3U عند تحديث الباقة."
+                    "${result.categoryMatches} فئة (منها ${result.seriesCategoriesMatched} للمسلسلات). سيُحفظ الترتيب بعد التحديث."
             } catch (failure: kotlinx.coroutines.CancellationException) {
                 throw failure
             } catch (_: Exception) {
