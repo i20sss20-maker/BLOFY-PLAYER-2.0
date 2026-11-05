@@ -815,7 +815,7 @@ async function patchCategory(serverId, mediaType, categoryId, enabled) {
 }
 
 async function moveCategory(serverId, mediaType, categoryId, direction) {
-  if (!validUuid(serverId) || !validType(mediaType) || !['up','down'].includes(direction))
+  if (!validUuid(serverId) || !validType(mediaType) || !['up','down','top'].includes(direction))
     throw Object.assign(new Error('xtream_category_move_invalid'), { status: 400 });
   const client = await pool.connect();
   try {
@@ -825,9 +825,9 @@ async function moveCategory(serverId, mediaType, categoryId, direction) {
     const ids=response.rows.map(row=>row.source_category_id);
     const at=ids.indexOf(String(categoryId));
     if(at===-1)throw Object.assign(new Error('xtream_category_not_found'),{status:404});
-    const next=at+(direction==='up'?-1:1);
-    if(next<0||next>=ids.length){await client.query('COMMIT');return {moved:false};}
-    [ids[at],ids[next]]=[ids[next],ids[at]];
+    const next=direction==='top'?0:at+(direction==='up'?-1:1);
+    if(next<0||next>=ids.length||next===at){await client.query('COMMIT');return {moved:false};}
+    ids.splice(next,0,...ids.splice(at,1));
     await client.query(`UPDATE blofy_xtream_categories c
       SET sort_order=rank.pos::int,updated_at=NOW()
       FROM unnest($3::text[]) WITH ORDINALITY AS rank(category_id,pos)
