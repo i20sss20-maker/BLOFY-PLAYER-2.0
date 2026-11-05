@@ -27,6 +27,7 @@ import crypto from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import pg from 'pg';
+import { validateBulkAccountRequest } from './xtream-bulk-policy.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
@@ -237,22 +238,8 @@ async function createAccount(body, req) {
 
 async function createAccountsBulk(body, req) {
   await ensureReady();
-  const count=Number(body.count||1);
-  if(!Number.isInteger(count)||count<1||count>10){
-    throw Object.assign(new Error('xtream_gateway_bulk_count_invalid'),{status:400});
-  }
+  const { count,maxConnections,expiresAt }=validateBulkAccountRequest(body);
   const label=cleanLabel(body.label,'BLOFY Player');
-  const maxConnections=Number(body.maxConnections||1);
-  if(!Number.isInteger(maxConnections)||maxConnections<1||maxConnections>20){
-    throw Object.assign(new Error('xtream_gateway_max_connections_invalid'),{status:400});
-  }
-  if(!body.expiresAt){
-    throw Object.assign(new Error('xtream_gateway_expiry_required'),{status:400});
-  }
-  const expiresAt=new Date(body.expiresAt);
-  if(!Number.isFinite(expiresAt.getTime())||expiresAt.getTime()<=Date.now()){
-    throw Object.assign(new Error('xtream_gateway_expiry_invalid'),{status:400});
-  }
   const connection=await pool.connect();
   const created=[], issued=new Set();
   try{
