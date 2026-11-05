@@ -340,29 +340,50 @@ async function authenticate(usernameInput, passwordInput, { touch = false } = {}
   return row;
 }
 
-async function ensureCategoryMaps(mediaType) {
+// A 290k-item catalog used to scan and ON CONFLICT every item for every
+// Xtream player request. Single-flight + bounded freshness avoids repeated
+// heavyweight map INSERTs while still detecting newly imported items.
+const categoryMapJobs=new Map();
+const itemMapJobs=new Map();
+const MAP_FRESHNESS_MS=20000;
+async function oncePerMediaMap(cache,key,task){
+  const old=cache.get(key),now=Date.now();
+  if(old && now-old.startedAt<MAP_FRESHNESS_MS)return old.promise;
+  const entry={startedAt:now,promise:null};
+  entry.promise=Promise.resolve().then(task);
+  cache.set(key,entry);
+  try{return await entry.promise;}
+  catch(error){if(cache.get(key)===entry)cache.delete(key);throw error;}
+}
+
+async function ensureCategoryMaps(mediaType,sourceId=null) {
   await ensureReady();
-  await pool.query(`INSERT INTO blofy_xtream_gateway_category_map(server_id,media_type,source_category_id)
+  const key=mediaType+':'+(sourceId||'*');
+  return oncePerMediaMap(categoryMapJobs,key,()=>pool.query(`INSERT INTO blofy_xtream_gateway_category_map(server_id,media_type,source_category_id)
     SELECT c.server_id,c.media_type,c.source_category_id
     FROM blofy_xtream_categories c
     JOIN blofy_xtream_servers s ON s.id=c.server_id
     WHERE c.media_type=$1 AND c.enabled=TRUE AND s.enabled=TRUE AND s.publish_catalog=TRUE
-    ON CONFLICT(server_id,media_type,source_category_id) DO NOTHING`, [mediaType]);
+      AND ($2::uuid IS NULL OR s.id=$2::uuid)
+    ON CONFLICT(server_id,media_type,source_category_id) DO NOTHING`,[mediaType,sourceId]));
 }
 
-async function ensureItemMaps(mediaType) {
+async function ensureItemMaps(mediaType,sourceId=null) {
   await ensureReady();
-  await pool.query(`INSERT INTO blofy_xtream_gateway_item_map(server_id,media_type,source_id)
+  const key=mediaType+':'+(sourceId||'*');
+  return oncePerMediaMap(itemMapJobs,key,()=>pool.query(`INSERT INTO blofy_xtream_gateway_item_map(server_id,media_type,source_id)
     SELECT i.server_id,i.media_type,i.source_id
     FROM blofy_xtream_items i
     JOIN blofy_xtream_servers s ON s.id=i.server_id
     LEFT JOIN blofy_xtream_categories c ON c.server_id=i.server_id AND c.media_type=i.media_type AND c.source_category_id=i.category_id
-    WHERE i.media_type=$1 AND i.enabled=TRUE AND s.enabled=TRUE AND s.publish_catalog=TRUE AND (c.enabled IS NULL OR c.enabled=TRUE)
-    ON CONFLICT(server_id,media_type,source_id) DO NOTHING`, [mediaType]);
+    WHERE i.media_type=$1 AND i.enabled=TRUE AND s.enabled=TRUE AND s.publish_catalog=TRUE
+      AND (c.enabled IS NULL OR c.enabled=TRUE)
+      AND ($2::uuid IS NULL OR i.server_id=$2::uuid)
+    ON CONFLICT(server_id,media_type,source_id) DO NOTHING`,[mediaType,sourceId]));
 }
 
 async function gatewayCategories(mediaType, sourceId=null) {
-  await ensureCategoryMaps(mediaType);
+  await ensureCategoryMaps(mediaType,sourceId);
   return (await pool.query(`SELECT m.gateway_id,c.name
     FROM blofy_xtream_gateway_category_map m
     JOIN blofy_xtream_categories c ON c.server_id=m.server_id AND c.media_type=m.media_type AND c.source_category_id=m.source_category_id
@@ -382,8 +403,8 @@ async function categoryFilter(mediaType, gatewayId, sourceId=null) {
 }
 
 async function walkGatewayItems(mediaType, filter, onRow, sourceId=null) {
-  await ensureCategoryMaps(mediaType);
-  await ensureItemMaps(mediaType);
+  await ensureCategoryMaps(mediaType,sourceId);
+  await ensureItemMaps(mediaType,sourceId);
   let lastId = 0;
   for (;;) {
     const values = [mediaType, lastId];
