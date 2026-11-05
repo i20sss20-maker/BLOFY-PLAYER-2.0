@@ -331,7 +331,7 @@ interface BlofyDao {
                 AND old.remoteId = categories.remoteId LIMIT 1),
             categories.orderIndex + 1000000
         )
-        WHERE providerId = :stagedProviderId AND kind IN ('live', 'movie')
+        WHERE providerId = :stagedProviderId AND kind IN ('live', 'movie', 'series')
     """)
     suspend fun preserveM3uCategoryOrder(stagedProviderId: String, targetProviderId: String)
 
