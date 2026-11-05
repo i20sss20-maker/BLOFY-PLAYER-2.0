@@ -33,6 +33,7 @@ class CategoryManagerActivity : AppCompatActivity() {
     private var currentItems: List<CategoryEntity> = emptyList()
     private var loadGeneration = 0
     private lateinit var m3uButton: Button
+    private lateinit var sourceHostView: TextView
     private var isMatchingM3u = false
     private var orderFeedback: String? = null
     private val isTv by lazy { DeviceClass.isTv(this) }
@@ -79,6 +80,15 @@ class CategoryManagerActivity : AppCompatActivity() {
         }
         root.addView(tabs, LinearLayout.LayoutParams(-1, dp(54)).apply { bottomMargin = dp(8) })
 
+        sourceHostView = TextView(this).apply {
+            text = "مصدر المحتوى الحالي"
+            textSize = 12f
+            setTextColor(BlofyTvDesign.TextSecondary)
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            typeface = BlofyTvDesign.BodyTypeface
+        }
+        root.addView(sourceHostView, LinearLayout.LayoutParams(-1, dp(29)))
+
         // Some Xtream panels return a category/stream order different from their
         // own get.php M3U export. The owner explicitly chooses which to follow.
         m3uButton = actionButton("مطابقة ترتيب القائمة الأصلية M3U (القنوات والأفلام)") {
@@ -101,9 +111,18 @@ class CategoryManagerActivity : AppCompatActivity() {
         setContentView(root)
 
         lifecycleScope.launch {
-            providerId = withContext(Dispatchers.IO) {
-                BlofyDatabase.get(applicationContext).dao().providers().first().firstOrNull()?.id
+            val selected = withContext(Dispatchers.IO) {
+                BlofyDatabase.get(applicationContext).dao().providers().first().firstOrNull()
             }
+            providerId = selected?.id
+            val uri = runCatching { java.net.URI(selected?.baseUrl) }.getOrNull()
+            val host = uri?.host?.let { name ->
+                if (uri.port > 0) "$name:${uri.port}" else name
+            } ?: "غير معروف"
+            val fromM3u = selected?.id?.let {
+                M3uOrderingPreference.enabled(applicationContext, it)
+            } == true
+            sourceHostView.text = "المصدر: $host • الترتيب: ${if (fromM3u) "M3U" else "Xtream API"}"
             loadCategories()
         }
     }
@@ -205,6 +224,8 @@ class CategoryManagerActivity : AppCompatActivity() {
                 }
                 M3uOrderingPreference.enable(applicationContext, id)
                 CatalogSyncState.markOrderChanged(applicationContext, id)
+                sourceHostView.text = sourceHostView.text.toString().substringBefore(" • الترتيب:") +
+                    " • الترتيب: M3U"
                 orderFeedback = "تمت مطابقة ${result.liveMatched}/${result.liveTotal} قناة و" +
                     "${result.movieMatched}/${result.movieTotal} فيلم • " +
                     "${result.categoryMatches} فئة. سيُحفظ ترتيب M3U عند تحديث الباقة."
