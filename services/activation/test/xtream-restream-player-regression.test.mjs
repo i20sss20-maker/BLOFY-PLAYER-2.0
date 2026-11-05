@@ -52,3 +52,15 @@ test('protected Live and VOD diagnostics check real upstream media and report no
   assert.match(web,/اختبار بث قناة/);
   assert.match(web,/اختبار تشغيل فيلم/);
 });
+
+test('huge Xtream playlists obey HTTP backpressure and validate maps before success',async()=>{
+  const gateway=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
+  const output=gateway.slice(gateway.indexOf('async function streamGatewayItems('),gateway.indexOf('async function gatewayItemById('));
+  const m3u=gateway.slice(gateway.indexOf('async function handleM3u('),gateway.indexOf('async function gatewayHealth('));
+  assert.match(gateway,/async function writeStreamChunk\(res,chunk\)/);
+  assert.match(gateway,/res\.once\('drain',ok\)/);
+  assert.ok(output.indexOf('await ensureItemMaps') < output.indexOf('res.writeHead(200'));
+  assert.match(output,/await writeStreamChunk\(res,prefix\+JSON\.stringify/);
+  assert.match(m3u,/await writeStreamChunk\(res,'#EXTM3U/);
+  assert.match(m3u,/await writeStreamChunk\(res,`#EXTINF/);
+});
