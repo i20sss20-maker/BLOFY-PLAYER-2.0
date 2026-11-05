@@ -65,6 +65,10 @@ function xtStatusClass(status) {
 function serverCard(item) {
   const card = make('article', 'server-card');
   card.dataset.id = item.id;
+  card._latestSource = item;
+  // A changing status is not a reason to destroy the user's active form.
+  card.dataset.renderSignature = JSON.stringify(item);
+  card.dataset.busy = '0';
   const header = make('div', 'server-head');
   const title = make('div');
   title.append(make('strong', '', item.name));
@@ -134,8 +138,8 @@ function serverCard(item) {
 
   card.addEventListener('click', event => {
     const button = event.target.closest('button[data-action]');
-    if (!button) return;
-    handleServerAction(item, card, button);
+    if (!button || !card.contains(button) || card.dataset.busy === '1') return;
+    handleServerAction(card._latestSource, card, button);
   });
   const indicators = make('div', 'source-quick-status');
   indicators.append(
@@ -178,7 +182,6 @@ function renderXtream() {
   }
 
   const list = el('xtreamServers');
-  list.replaceChildren();
   const query=String(el('xtSourceSearch')?.value||'').trim().toLowerCase();
   const filter=String(el('xtSourceFilter')?.value||'all');
   const visible=state.xtreamServers.filter(item=>
@@ -188,9 +191,41 @@ function renderXtream() {
   const countEnabled=state.xtreamServers.filter(x=>x.enabled).length;
   const countPublished=state.xtreamServers.filter(x=>x.enabled&&x.publishCatalog).length;
   el('xtSourceSummary').textContent='الإجمالي: '+state.xtreamServers.length+' · المفعلة: '+countEnabled+' · المنشورة: '+countPublished+' · المعروضة: '+visible.length;
-  if(!state.xtreamServers.length)list.append(make('div','empty','ما عندك مصادر Xtream مضافة. اضغط «+ إضافة Xtream جديد» للبدء.'));
-  else if(!visible.length)list.append(make('div','empty','ما فيه مصادر تطابق البحث أو الفلتر الحالي.'));
-  visible.forEach(item=>list.append(serverCard(item)));
+  // Keyed reconciliation is critical for large imports. Previously the whole
+  // list was destroyed every 3.5 seconds: buttons vanished, opened editors
+  // collapsed and typing was lost even when no server-side change happened.
+  const existing=new Map([...list.querySelectorAll(':scope > article.server-card[data-id]')]
+    .map(card=>[card.dataset.id,card]));
+  const desired=[];
+  for(const item of visible){
+    const old=existing.get(item.id);
+    const signature=JSON.stringify(item);
+    // Never replace a pending mutation or a user-opened editing form.
+    const interacting=old && (old.dataset.busy==='1'
+      || Boolean(old.querySelector('details[open]'))
+      || old.contains(document.activeElement));
+    if(old && (old.dataset.renderSignature===signature || interacting)){
+      old._latestSource=item;
+      desired.push(old);
+    }else{
+      const card=serverCard(item);
+      desired.push(card);
+    }
+  }
+  if(desired.length===0){
+    const hint=make('div','empty',state.xtreamServers.length
+      ?'ما فيه مصادر تطابق البحث أو الفلتر الحالي.'
+      :'ما عندك مصادر Xtream مضافة. اضغط «+ إضافة Xtream جديد» للبدء.');
+    list.replaceChildren(hint);
+  }else{
+    // Do not move a card already in the correct position, because doing so
+    // blurs focused fields in some browsers.
+    for(let i=0;i<desired.length;i++){
+      if(list.children[i]!==desired[i])list.insertBefore(desired[i],list.children[i]||null);
+    }
+    const allowed=new Set(desired);
+    for(const node of [...list.children])if(!allowed.has(node))node.remove();
+  }
   el('xtreamLoading').hidden = true;
   list.hidden = false;
   updateCatalogServerOptions();
@@ -198,7 +233,9 @@ function renderXtream() {
 
 function scheduleXtreamPoll() {
   window.clearTimeout(state.pollTimer);
-  const busy = state.xtreamServers.some(item => item.syncing || item.status === 'syncing');
+  // A persisted 'syncing' status can survive a service restart. Poll only
+  // while a real import is in progress rather than replacing cards forever.
+  const busy = state.xtreamServers.some(item => item.syncing === true);
   if (!busy) return;
   state.pollTimer = window.setTimeout(async () => {
     await loadXtream(true);
@@ -287,9 +324,10 @@ async function addXtream(event) {
 
 async function handleServerAction(item, card, button) {
   const action = button.dataset.action;
+  card.dataset.busy = '1';
   button.disabled = true;
   const old = button.textContent;
-  button.textContent = '...';
+  button.textContent = 'جارٍ الحفظ…';
   try {
     if (action === 'toggle-enabled' || action === 'toggle-publish') {
       const isEnable=action==='toggle-enabled';
@@ -358,8 +396,11 @@ async function handleServerAction(item, card, button) {
   } catch (error) {
     showMessage(`فشلت العملية: ${error.message}`, 'error');
   } finally {
+    card.dataset.busy = '0';
     button.disabled = false;
     button.textContent = old;
+    // Apply state received during the request without disrupting the click.
+    renderXtream();
   }
 }
 
