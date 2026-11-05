@@ -61,3 +61,36 @@ test('main site health path is authenticated and player retains imported movie e
   assert.match(js,/function loadBlofyPlaybackHealth\(/);
   assert.match(js,/blofyPlaybackRefresh'\)\.addEventListener/);
 });
+
+test('gateway 401 and missing catalog 404 are tracked without blaming the source provider',()=>{
+  resetXtreamPlaybackMetricsForTest();
+  const now=Date.now();
+  recordXtreamPlayback({kind:'movie',phase:'failed',reason:'gateway_auth_denied',itemId:698244},now);
+  recordXtreamPlayback({kind:'live',phase:'failed',reason:'catalog_item_unavailable',itemId:688516},now+1);
+  recordXtreamPlayback({kind:'series',phase:'failed',reason:'upstream_http_403',upstreamStatus:403,itemId:999},now+2);
+  const result=xtreamPlaybackSnapshot(now+3);
+  assert.equal(result.failed,3);
+  assert.equal(result.gatewayAuthDenied,1);
+  assert.equal(result.unavailableItems,1);
+  assert.equal(result.upstreamFailed,1);
+  assert.deepEqual(result.upstreamCodes,{'403':1});
+  assert.equal(result.recentIssues[0].itemId,999);
+  assert.equal(result.recentIssues[1].reason,'catalog_item_unavailable');
+  assert.equal(result.recentIssues[2].reason,'gateway_auth_denied');
+  resetXtreamPlaybackMetricsForTest();
+});
+
+test('actual gateway denies unauthorized media before fetching upstream or disclosing credentials',async()=>{
+  const [gateway,ui]=await Promise.all([
+    readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8'),
+    readFile(new URL('../web/sources-admin.js',import.meta.url),'utf8')
+  ]);
+  const proxy=gateway.slice(gateway.indexOf('async function proxyMedia('),gateway.indexOf('async function probeGatewayMedia('));
+  assert.match(proxy,/reason:'gateway_auth_denied'/);
+  assert.match(proxy,/reason:'catalog_item_unavailable'/);
+  assert.ok(proxy.indexOf("if (!account) {")<proxy.indexOf("const upstream = mediaUpstreamUrl"));
+  assert.match(ui,/gateway_auth_denied:'بيانات دخول حساب BLOFY/);
+  assert.match(ui,/catalog_item_unavailable:'هذا المحتوى غير متاح/);
+  assert.match(ui,/gatewayAuthDenied/);
+  assert.match(ui,/upstreamFailed/);
+});
