@@ -15,3 +15,10 @@
 .xtream-form .advanced-field{opacity:.75}
 @media(max-width:740px){.gateway-subscription-form{grid-template-columns:1fr 1fr}.gateway-subscription-form label:first-child{grid-column:1/-1}}
 @media(max-width:500px){.gateway-subscription-form{grid-template-columns:1fr}.gateway-subscription-form label:first-child{grid-column:auto}}
+
+.gateway-batch-credentials{padding:18px;background:#17111f;border:1px solid #634882;border-radius:14px;margin:16px 0}
+.gateway-batch-rows{display:grid;gap:8px;margin-top:14px;max-height:330px;overflow-y:auto}
+.gateway-batch-row{display:flex;align-items:center;justify-content:space-between;gap:13px;padding:10px 12px;background:#100d17;border:1px solid #453454;border-radius:9px}
+.gateway-batch-row strong{min-width:0;overflow-wrap:anywhere}
+.gateway-batch-row code{color:#cbb9f6;direction:ltr;text-align:left;overflow-wrap:anywhere;font-size:12px}
+@media(max-width:690px){.gateway-batch-row{flex-direction:column;align-items:flex-start}.gateway-batch-row code{width:100%;text-align:right}}
