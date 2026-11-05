@@ -43,6 +43,7 @@ function noticeText(code) {
     hidden:'تم إخفاء المحتوى عن العملاء.',
     saved:'تم حفظ بيانات المصدر. افحص الاتصال وأعد المزامنة إذا غيّرت بيانات الدخول.',
     testing:'بدأ فحص الاتصال؛ حدث الصفحة لمعرفة النتيجة.',
+    'probe-ok':'تم اختبار بث الوسائط واستجاب المصدر بنجاح.',
     syncing:'بدأت المزامنة. المكتبة الكبيرة قد تستغرق وقتًا.',
     cancelled:'تم إرسال طلب إلغاء المزامنة.',
     deleted:'تم تسجيل حذف المصدر نهائيًا من القائمة ويجري تنظيف المحتوى بالخلفية.'
@@ -75,6 +76,8 @@ export function controlPage({items=[],success='',error=''}) {
       form(id,'toggle-enabled',enabled?'إيقاف المصدر':'تفعيل المصدر')+
       form(id,'toggle-publish',published?'إخفاء عن العملاء':'نشر للعملاء')+
       form(id,'test','فحص الاتصال')+
+      form(id,'probe-live','اختبار بث قناة')+
+      form(id,'probe-movie','اختبار تشغيل فيلم')+
       form(id,'sync-all','مزامنة الكل')+
       form(id,'sync-live','مزامنة القنوات')+
       form(id,'sync-movie','مزامنة الأفلام')+
