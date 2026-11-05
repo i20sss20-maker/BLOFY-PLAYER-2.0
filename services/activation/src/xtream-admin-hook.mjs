@@ -377,7 +377,7 @@ async function probeXtreamPlayback(id,mediaType='live') {
   const candidates=(await pool.query(`SELECT source_id,name,container_extension
     FROM blofy_xtream_items
     WHERE server_id=$1 AND media_type=$2 AND enabled=TRUE
-    ORDER BY name ASC LIMIT 3`,[id,mediaType])).rows;
+    ORDER BY name ASC LIMIT 2`,[id,mediaType])).rows;
   if(!candidates.length)return {ok:false,mediaType,reason:'no_imported_items',checks:[]};
   const creds=decryptCredentials(source),checks=[];
   for(const item of candidates){
@@ -387,7 +387,7 @@ async function probeXtreamPlayback(id,mediaType='live') {
       .map(encodeURIComponent).join('/')+'.'+ext;
     let target=new URL(path,normalizeXtreamBaseUrl(source.base_url)+'/');
     const started=Date.now(),controller=new AbortController();
-    const timeout=setTimeout(()=>controller.abort(),8500);
+    const timeout=setTimeout(()=>controller.abort(),5200);
     let httpStatus=null,contentType='',errorCode=null;
     try{
       for(let hop=0;hop<=3;hop++){
