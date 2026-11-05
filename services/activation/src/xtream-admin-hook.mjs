@@ -71,6 +71,7 @@ async function sourceMutation(sql, values) {
 
 const limiter = createFixedWindowLimiter({ limit: 180, windowMs: 60_000 });
 const syncLocks = new Set();
+const syncProgress = new Map();
 const cancelledSources = new Set();
 const purgeRunning = new Set();
 let purgeSweepStarted = false;
@@ -260,6 +261,7 @@ function adminServer(row) {
     accountInfo: row.account_info || {},
     counts,
     syncing: syncLocks.has(row.id),
+    syncProgress: syncProgress.get(row.id) || null,
     lastError: row.last_error,
     lastTestAt: row.last_test_at ? new Date(row.last_test_at).getTime() : null,
     lastSyncAt: row.last_sync_at ? new Date(row.last_sync_at).getTime() : null,
@@ -430,6 +432,8 @@ async function flushItemBatch(serverId, mediaType, syncToken, batch) {
       category_id=EXCLUDED.category_id,name=EXCLUDED.name,icon_url=EXCLUDED.icon_url,
       container_extension=EXCLUDED.container_extension,metadata=EXCLUDED.metadata,sync_token=EXCLUDED.sync_token,updated_at=NOW()`,
     [serverId, mediaType, JSON.stringify(payload)]);
+  const progress=syncProgress.get(serverId);
+  if(progress){progress.imported+=payload.length;progress.updatedAt=Date.now();}
   batch.length = 0;
 }
 
@@ -551,6 +555,7 @@ async function syncServer(id, requestedTypes = ['live','movie','series']) {
   const types = [...new Set(requestedTypes.map(validType).filter(Boolean))];
   if (!types.length) throw Object.assign(new Error('xtream_sync_types_invalid'), { status: 400 });
   syncLocks.add(id);
+  syncProgress.set(id,{mediaType:'starting',imported:0,startedAt:Date.now(),updatedAt:Date.now()});
   try {
     await pool.query(`UPDATE blofy_xtream_servers SET status='syncing',last_error=NULL,updated_at=NOW() WHERE id=$1 AND enabled=TRUE AND deletion_requested_at IS NULL`, [id]);
     const accountInfo = await fetchAccount(row);
@@ -564,6 +569,7 @@ async function syncServer(id, requestedTypes = ['live','movie','series']) {
       return playlistPromise;
     };
     for (const mediaType of types) {
+      syncProgress.set(id,{mediaType,imported:0,startedAt:Date.now(),updatedAt:Date.now()});
       if (cancelledSources.has(id)) throw Object.assign(new Error('xtream_sync_cancelled'),{status:409});
       const syncToken = crypto.randomUUID();
       try{
@@ -586,13 +592,28 @@ async function syncServer(id, requestedTypes = ['live','movie','series']) {
     return { id, counts, details, partialWarning };
   } catch (error) {
     const message = redactXtreamError(error);
-    await pool.query(`UPDATE blofy_xtream_servers SET status='error',last_error=$2,updated_at=NOW()
+    const cancelled=message==='xtream_sync_cancelled';
+    await pool.query(`UPDATE blofy_xtream_servers SET status='${cancelled?'unknown':'error'}',last_error=$2,updated_at=NOW()
       WHERE id=$1 AND enabled=TRUE AND deletion_requested_at IS NULL`, [id, message]).catch(() => {});
     throw error;
   } finally {
     syncLocks.delete(id);
+    syncProgress.delete(id);
     cancelledSources.delete(id);
   }
+}
+
+async function cancelSourceSync(id) {
+  const row=await serverById(id);
+  if(!row)throw Object.assign(new Error('xtream_server_not_found'),{status:404});
+  const wasRunning=syncLocks.has(id);
+  if(wasRunning)cancelledSources.add(id);
+  if(!wasRunning&&row.status==='syncing'){
+    await sourceMutation(`UPDATE blofy_xtream_servers
+      SET status='unknown',last_error='xtream_sync_not_running',updated_at=NOW()
+      WHERE id=$1 AND deletion_requested_at IS NULL`,[id]);
+  }
+  return {cancelRequested:wasRunning,staleStateCleared:!wasRunning&&row.status==='syncing'};
 }
 
 function startSync(id, types) {
@@ -864,6 +885,9 @@ http.createServer = function withBlofyXtream(listener) {
             : { error: 'xtream_server_not_found' });
         }
         if (action === 'test' && req.method === 'POST') return json(res, 200, { item: await testServer(id) });
+        if (action === 'cancel-sync' && req.method === 'POST') {
+          return json(res,200,await cancelSourceSync(id));
+        }
         if (action === 'sync' && req.method === 'POST') {
           const body = await readJson(req);
           const types = Array.isArray(body.types) ? body.types : ['live','movie','series'];
