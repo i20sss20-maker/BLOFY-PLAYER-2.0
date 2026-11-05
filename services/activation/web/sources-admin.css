@@ -22,3 +22,9 @@
 .gateway-batch-row strong{min-width:0;overflow-wrap:anywhere}
 .gateway-batch-row code{color:#cbb9f6;direction:ltr;text-align:left;overflow-wrap:anywhere;font-size:12px}
 @media(max-width:690px){.gateway-batch-row{flex-direction:column;align-items:flex-start}.gateway-batch-row code{width:100%;text-align:right}}
+
+.gateway-batch-details{display:grid;gap:7px;min-width:0}
+.gateway-batch-details code{overflow-wrap:anywhere;word-break:break-word}
+.gateway-batch-row button{flex-shrink:0;font-size:12px}
+.gateway-app-code{color:#d4baff;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;direction:ltr;text-align:left;padding:7px 10px;border-radius:9px;background:#332046}
+@media(max-width:690px){.gateway-batch-row button{width:100%}}
