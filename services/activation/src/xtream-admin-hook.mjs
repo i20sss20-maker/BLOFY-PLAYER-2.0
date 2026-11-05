@@ -348,6 +348,7 @@ async function testServer(id) {
 
 async function flushCategoryBatch(serverId, mediaType, syncToken, batch) {
   if (!batch.length) return;
+  if (cancelledSources.has(serverId)) throw Object.assign(new Error('xtream_sync_cancelled'), { status: 409 });
   const payload = batch.map(item => ({
     source_category_id: item.sourceCategoryId,
     name: item.name,
@@ -365,6 +366,7 @@ async function flushCategoryBatch(serverId, mediaType, syncToken, batch) {
 
 async function flushItemBatch(serverId, mediaType, syncToken, batch) {
   if (!batch.length) return;
+  if (cancelledSources.has(serverId)) throw Object.assign(new Error('xtream_sync_cancelled'), { status: 409 });
   const payload = batch.map(item => ({
     source_id: item.sourceId,
     category_id: item.categoryId,
@@ -481,6 +483,7 @@ async function syncServer(id, requestedTypes = ['live','movie','series']) {
   if (syncLocks.has(id)) throw Object.assign(new Error('xtream_sync_in_progress'), { status: 409 });
   const row = await serverById(id);
   if (!row) throw Object.assign(new Error('xtream_server_not_found'), { status: 404 });
+  if (!row.enabled) throw Object.assign(new Error('xtream_source_paused'), { status: 409 });
   const types = [...new Set(requestedTypes.map(validType).filter(Boolean))];
   if (!types.length) throw Object.assign(new Error('xtream_sync_types_invalid'), { status: 400 });
   syncLocks.add(id);
@@ -497,10 +500,12 @@ async function syncServer(id, requestedTypes = ['live','movie','series']) {
       return playlistPromise;
     };
     for (const mediaType of types) {
+      if (cancelledSources.has(id)) throw Object.assign(new Error('xtream_sync_cancelled'),{status:409});
       const syncToken = crypto.randomUUID();
       try{
         const categories = await syncCategories(row, mediaType, creds, syncToken, getM3u);
         const items = await syncItems(row, mediaType, creds, syncToken, getM3u);
+        if (cancelledSources.has(id)) throw Object.assign(new Error('xtream_sync_cancelled'),{status:409});
         await finalizeTypeSync(id, mediaType, syncToken);
         details[mediaType] = { categories, items };
       }catch(error){
@@ -508,18 +513,21 @@ async function syncServer(id, requestedTypes = ['live','movie','series']) {
         console.warn('Xtream catalog type failed:',id,mediaType,redactXtreamError(error));
       }
     }
+    if (cancelledSources.has(id)) throw Object.assign(new Error('xtream_sync_cancelled'), { status: 409 });
     if(!Object.keys(details).length)throw new Error('xtream_catalog_unavailable: '+failures.join('; ').slice(0,280));
     const counts = await calculateCounts(id);
     const partialWarning=failures.length?'بعض الأنواع لم تُستورد: '+failures.join('; ').slice(0,250):null;
-    await pool.query(`UPDATE blofy_xtream_servers SET status='online',account_info=$2::jsonb,counts=$3::jsonb,last_error=$4,last_test_at=NOW(),last_sync_at=NOW(),updated_at=NOW() WHERE id=$1`,
+    await pool.query(`UPDATE blofy_xtream_servers SET status='online',account_info=$2::jsonb,counts=$3::jsonb,last_error=$4,last_test_at=NOW(),last_sync_at=NOW(),updated_at=NOW() WHERE id=$1 AND enabled=TRUE AND deletion_requested_at IS NULL`,
       [id, JSON.stringify(accountInfo), JSON.stringify(counts),partialWarning]);
     return { id, counts, details, partialWarning };
   } catch (error) {
     const message = redactXtreamError(error);
-    await pool.query(`UPDATE blofy_xtream_servers SET status='error',last_error=$2,updated_at=NOW() WHERE id=$1`, [id, message]).catch(() => {});
+    await pool.query(`UPDATE blofy_xtream_servers SET status='error',last_error=$2,updated_at=NOW()
+      WHERE id=$1 AND enabled=TRUE AND deletion_requested_at IS NULL`, [id, message]).catch(() => {});
     throw error;
   } finally {
     syncLocks.delete(id);
+    cancelledSources.delete(id);
   }
 }
 
@@ -563,7 +571,14 @@ async function patchServer(id, body) {
   if (body.password !== undefined && String(body.password).trim()) {
     set('password_secret', encryptXtreamSecret(cleanText(body.password, 1024), KEY_HEX, `password:${id}`));
   }
-  if (body.enabled !== undefined) set('enabled', Boolean(body.enabled));
+  if (body.enabled !== undefined) {
+    const enabled=Boolean(body.enabled);
+    set('enabled',enabled);
+    if (!enabled) {
+      cancelledSources.add(id);
+      set('status','offline');
+    }
+  }
   if (body.publishCatalog !== undefined) set('publish_catalog', Boolean(body.publishCatalog));
   if (body.priority !== undefined) {
     const priority = Number(body.priority);
@@ -572,7 +587,8 @@ async function patchServer(id, body) {
   }
   if (!updates.length) throw Object.assign(new Error('nothing_to_update'), { status: 400 });
   values.push(id);
-  const result = await pool.query(`UPDATE blofy_xtream_servers SET ${updates.join(',')},updated_at=NOW() WHERE id=$${values.length} RETURNING *`, values);
+  const result = await pool.query(`UPDATE blofy_xtream_servers SET ${updates.join(',')},updated_at=NOW() WHERE id=${values.length} AND deletion_requested_at IS NULL RETURNING *`, values);
+  if(!result.rows[0])throw Object.assign(new Error('xtream_server_not_found'),{status:404});
   return adminServer(result.rows[0]);
 }
 
