@@ -90,7 +90,16 @@ function sameOrigin(req) {
     const local=!process.env.VERCEL_ENV && process.env.NODE_ENV!=='production' &&
       ['localhost','127.0.0.1','[::1]'].includes(target.hostname);
     if (local && source.protocol==='http:') target.protocol='http:';
-    return source.origin===target.origin;
+    if (source.origin===target.origin) return true;
+    // BLOFY's public website is served through an upstream reverse proxy on
+    // Railway. Some requests arrive with Railway's internal forwarded host
+    // while Chromium correctly sends Origin: https://blofyplayer.com for
+    // native HTML form POSTs. Trust the *exact* canonical browser Origin in
+    // that deployment, never arbitrary forwarded-host values or HTTP.
+    // Browser Origin is not settable by cross-origin pages; authorization
+    // still requires the existing signed admin session or admin bearer.
+    return !process.env.VERCEL_ENV &&
+      source.origin==='https://blofyplayer.com';
   } catch { return false; }
 }
 function validAdminBearer(req) {
