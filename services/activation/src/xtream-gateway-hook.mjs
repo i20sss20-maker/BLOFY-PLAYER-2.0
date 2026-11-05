@@ -348,12 +348,13 @@ const itemMapJobs=new Map();
 const MAP_FRESHNESS_MS=20000;
 async function oncePerMediaMap(cache,key,task){
   const old=cache.get(key),now=Date.now();
-  if(old && now-old.startedAt<MAP_FRESHNESS_MS)return old.promise;
-  const entry={startedAt:now,promise:null};
+  if(old && (!old.settled || now-old.startedAt<MAP_FRESHNESS_MS))return old.promise;
+  const entry={startedAt:now,promise:null,settled:false};
   entry.promise=Promise.resolve().then(task);
   cache.set(key,entry);
   try{return await entry.promise;}
   catch(error){if(cache.get(key)===entry)cache.delete(key);throw error;}
+  finally{entry.settled=true;}
 }
 
 async function ensureCategoryMaps(mediaType,sourceId=null) {
