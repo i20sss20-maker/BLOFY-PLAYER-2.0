@@ -359,6 +359,9 @@ http.createServer = function withBlofySources(listener) {
     catch { return listener(req, res); }
     try {
       if (req.method === 'GET' && url.pathname === '/sources-admin') {
+        // Retire old extra-source records on first admin visit without delaying
+        // Xtream management or showing a 503 when the legacy registry is offline.
+        void ensureReady().catch(error => console.warn('extra source cleanup unavailable:',safeErrorSummary(error)));
         return html(res, await readFile(new URL('../web/sources-admin.html', import.meta.url), 'utf8'));
       }
       if (req.method === 'GET' && url.pathname === '/sources-admin.css') {
