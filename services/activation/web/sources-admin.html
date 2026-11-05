@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#09090e">
   <link rel="icon" type="image/png" href="/blofy-logo.png"><link rel="apple-touch-icon" href="/blofy-logo.png"><meta name="robots" content="noindex,nofollow"><title>BLOFY STREAM | إدارة المصادر والاشتراكات</title>
-  <link rel="stylesheet" href="/sources-admin.css?v=20261105-manager">
+  <link rel="stylesheet" href="/sources-admin.css?v=20261105-clean-categories">
   <link rel="stylesheet" href="/site-polish.css?v=20261025-lux-final">
 </head>
 <body>
@@ -15,7 +15,7 @@
       <span class="rail-label">مركز التحكم</span>
       <nav class="rail-links" aria-label="تنقل الإدارة">
         <a href="/admin"><span>▣</span>الأجهزة والاشتراكات</a>
-        <a class="active" href="#xtream"><span>◈</span>المصادر و Xtream</a>
+        <a class="active" href="#xtream"><span>◈</span>إدارة Xtream</a>
         <a href="/admin#codes"><span>⌁</span>أكواد BLOFY</a>
         <a href="/api/v1/admin/device-insights"><span>⌁</span>تقارير الأجهزة</a>
         <a href="/admin#releases"><span>↓</span>الإصدارات</a>
@@ -37,46 +37,11 @@
       </header>
 
       <nav class="tabs" aria-label="أقسام المصادر">
-        <button class="tab" type="button" data-tab="sources"><span>03</span>إضافات أخرى</button>
-        <button class="tab active" type="button" data-tab="xtream"><span>01</span>المصادر واشتراكات العملاء</button>
-        <button class="tab" type="button" data-tab="catalog"><span>02</span>المكتبة الموحدة</button>
+        <button class="tab active" type="button" data-tab="xtream"><span>01</span>مصادر Xtream والاشتراكات</button>
+        <button class="tab" type="button" data-tab="catalog"><span>02</span>تنظيم الفئات والمكتبة</button>
       </nav>
 
       <div id="message" class="message" hidden></div>
-
-      <section id="tab-sources" class="tab-page" hidden>
-        <section class="section-intro">
-          <div><span class="eyebrow">SOURCES</span><h2>مصادر BLOFY</h2><p>هذه الإضافات هي المصادر المدارة من BLOFY. فعّل ما تحتاجه وعطّل الباقي بدون لمس التطبيق.</p></div>
-          <div class="intro-step"><strong>1</strong><span>فعّل المصادر</span></div>
-        </section>
-
-        <section class="stats" aria-label="إحصائيات الإضافات">
-          <article><span>الإجمالي</span><strong id="statTotal">—</strong></article>
-          <article><span>المنشور</span><strong id="statEnabled">—</strong></article>
-          <article><span>متوقف</span><strong id="statDown">—</strong></article>
-          <article><span>تجريبي</span><strong id="statBeta">—</strong></article>
-        </section>
-
-        <section class="repo-card">
-          <div class="repo-info">
-            <span class="label">رابط BLOFY Sources لـ CNCVerse</span>
-            <code id="repoUrl">جارٍ التحميل…</code>
-          </div>
-          <div class="inline-actions">
-            <button id="copyRepoBtn" class="button ghost" type="button">نسخ الرابط</button>
-            <button class="button primary" id="syncBtn" type="button">مزامنة GitHub</button>
-          </div>
-        </section>
-
-        <section class="panel">
-          <div class="panel-head">
-            <div><h2>الإضافات</h2><p>التغيير هنا ينعكس على قائمة المصادر المنشورة لـ BLOFY.</p></div>
-            <div class="legend"><span><i class="dot ok"></i> يعمل</span><span><i class="dot slow"></i> بطيء</span><span><i class="dot down"></i> متوقف</span><span><i class="dot beta"></i> Beta</span></div>
-          </div>
-          <div id="loading" class="loading">جارٍ تحميل المصادر…</div>
-          <div id="sources" class="source-list" hidden></div>
-        </section>
-      </section>
 
       <section id="tab-xtream" class="tab-page active">
         <section class="section-intro">
@@ -84,7 +49,7 @@
           <div class="intro-step"><strong>2</strong><span>أنشئ بيانات الدخول</span></div>
         </section>
 
-        <p class="security-note stream-migration-note">ملاحظة: الحسابات والمكتبة المحفوظة في لوحة إعادة البث السابقة ليست منقولة تلقائيًا إلى قاعدة BLOFY الرئيسية. للمراجعة فقط: <a href="/stream/legacy" target="_blank" rel="noopener">اللوحة القديمة</a>. أضف مصادر مصرحًا بها هنا لتظهر في المكتبة الموحدة.</p>
+
         <section class="panel gateway-panel">
           <div class="panel-head gateway-title-row">
             <div>
@@ -186,7 +151,7 @@
 
       <section id="tab-catalog" class="tab-page" hidden>
         <section class="section-intro">
-          <div><span class="eyebrow">CATALOG</span><h2>الكتالوج المستورد</h2><p>حدد المصدر والنوع والقسم، ثم فعّل أو عطّل ما تريد ظهوره داخل سيرفر BLOFY.</p></div>
+          <div><span class="eyebrow">BLOFY CATEGORIES</span><h2>تنظيم الفئات والمكتبة</h2><p>اختر مصدر Xtream ونوع المحتوى، ثم رتّب أقسام القنوات والأفلام والمسلسلات، أو أخفِ أي قسم عن عملائك.</p></div>
           <div class="intro-step"><strong>3</strong><span>رتّب ما يظهر</span></div>
         </section>
         <section class="panel">
@@ -197,16 +162,24 @@
             <label class="wide"><span>بحث</span><input id="catalogSearch" placeholder="اسم فيلم، مسلسل أو قناة"></label>
             <button id="catalogLoadBtn" class="button primary" type="button">عرض</button>
           </div>
+          <div class="category-manager">
+            <div class="category-manager-head">
+              <div><h3>ترتيب الفئات</h3><p>تُحفظ التغييرات تلقائيًا على السيرفر وتظهر في قائمة Xtream لدى العملاء.</p></div>
+              <input id="categorySearch" type="search" autocomplete="off" placeholder="ابحث باسم الفئة">
+            </div>
+            <div id="categoryManagerSummary" class="category-manager-summary" role="status">اختر مصدرًا ونوع المحتوى لعرض الفئات.</div>
+            <div id="categoryManagerRows" class="category-manager-rows"></div>
+          </div>
           <div class="bulk-actions"><button id="enableTypeBtn" class="button" type="button">تفعيل الكل</button><button id="disableTypeBtn" class="button ghost" type="button">تعطيل الكل</button><span id="catalogHint" class="muted"></span></div>
           <div id="catalogLoading" class="loading" hidden>جارٍ تحميل الكتالوج…</div>
           <div id="catalogItems" class="catalog-list"></div>
         </section>
       </section>
 
-      <footer><span>BLOFY Sources</span><span>•</span><a href="https://github.com/i20sss20-maker/BLOFY-SOURCES" target="_blank" rel="noreferrer">GitHub</a></footer>
+      <footer><span>BLOFY STREAM · إدارة Xtream</span></footer>
     </main>
   </div>
-  <script src="/sources-admin.js?v=20261105-manager" defer></script>
+  <script src="/sources-admin.js?v=20261105-clean-categories" defer></script>
   <script src="/xtream-gateway-admin.js?v=20261105-fullwidth" defer></script>
 </body>
 </html>
