@@ -351,6 +351,11 @@ async function syncItems(row, mediaType, creds, syncToken, getM3u) {
     if(error.message!=='xtream_http_404')throw error;
     if(mediaType==='series')throw new Error('xtream_series_listing_api_unavailable');
     const fallback=await getM3u(),batch=[];let total=0;
+    const categories=fallback.categories[mediaType].map(item=>({...item,syncToken}));
+    for(let i=0;i<categories.length;i+=500){
+      const page=categories.slice(i,i+500);
+      await flushCategoryBatch(row.id,mediaType,syncToken,page);
+    }
     for(const item of fallback.records[mediaType]){
       batch.push({...item,syncToken});total++;
       if(batch.length>=500)await flushItemBatch(row.id,mediaType,syncToken,batch);
