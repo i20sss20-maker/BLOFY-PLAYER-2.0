@@ -600,16 +600,26 @@ function mediaUpstreamUrl(row, kind, sourceId, extension) {
 async function proxyMedia(req, res, kind, username, password, gatewayId, requestedExtension) {
   if (!requirePublicBudget(req, res)) return;
   const account = await authenticate(username, password, { touch: false });
-  if (!account) return text(res, 401, 'Unauthorized');
+  if (!account) {
+    // A rejected BLOFY account is not an upstream media 403/404.
+    if(req.method!=='HEAD')recordXtreamPlayback({kind,phase:'failed',itemId:gatewayId,reason:'gateway_auth_denied'});
+    return text(res, 401, 'Unauthorized');
+  }
   let row, sourceId, extension;
   if (kind === 'series') {
     row = await episodeByGatewayId(gatewayId,account.source_id||null);
-    if (!row || !row.server_enabled) return text(res, 404, 'Stream not found');
+    if (!row || !row.server_enabled) {
+      if(req.method!=='HEAD')recordXtreamPlayback({kind,phase:'failed',itemId:gatewayId,reason:'catalog_item_unavailable'});
+      return text(res, 404, 'Stream not found');
+    }
     sourceId = row.source_episode_id;
     extension = row.container_extension;
   } else {
     row = await gatewayItemById(kind === 'live' ? 'live' : 'movie', gatewayId,account.source_id||null);
-    if (!row || !row.server_enabled) return text(res, 404, 'Stream not found');
+    if (!row || !row.server_enabled) {
+      if(req.method!=='HEAD')recordXtreamPlayback({kind,phase:'failed',itemId:gatewayId,reason:'catalog_item_unavailable'});
+      return text(res, 404, 'Stream not found');
+    }
     sourceId = row.source_id;
     extension = row.container_extension;
   }
