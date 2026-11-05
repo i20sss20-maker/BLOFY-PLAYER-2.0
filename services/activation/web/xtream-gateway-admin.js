@@ -142,6 +142,31 @@ function updateSourceReadiness(){
   el.classList.toggle('source-warning',!online.length);
 }
 
+function gatewaySourceOptions(select,chosen,editable=true) {
+  const prior=String(chosen||'');
+  select.replaceChildren();
+  const all=gatewayNode('option','','كل مصادر BLOFY المنشورة');
+  all.value='';select.append(all);
+  for(const source of gatewayState.sources){
+    const available=Boolean(source.enabled && source.publishCatalog);
+    if(!available && source.id!==prior)continue;
+    const option=gatewayNode('option','',source.name+' · '+String(source.counts?.total||0).toLocaleString('en-US')+' عنصر'+(available?'':' (غير متاح)'));
+    option.value=source.id;option.disabled=!available;select.append(option);
+  }
+  if(prior && !gatewayState.sources.some(x=>x.id===prior)){
+    const unavailable=gatewayNode('option','','المصدر الأصلي محذوف أو غير متاح');
+    unavailable.value=prior;unavailable.disabled=true;select.append(unavailable);
+  }
+  select.value=prior;
+  if(select.value!==prior)select.value='';
+  select.disabled=!editable;
+}
+
+function renderGatewaySourcePicker(){
+  const picker=gx('gatewaySourceId');if(!picker)return;
+  gatewaySourceOptions(picker,picker.value);
+}
+
 function renderGatewayAccounts() {
   const list = gx('gatewayAccounts');
   list.replaceChildren();
@@ -158,6 +183,27 @@ function renderGatewayAccounts() {
     main.append(user);
     const meta = gatewayNode('small', 'muted', `${item.enabled ? 'مفعل' : 'متوقف'} · ${item.maxConnections || 1} اتصال · ينتهي: ${accountExpiresAt(item.expiresAt)}`);
     main.append(meta);
+    const linked=gatewayState.sources.find(source=>source.id===item.sourceId);
+    main.append(gatewayNode('small','muted','محتوى الحساب: '+(item.sourceId?(linked?.name||'المصدر الأصلي غير متاح'):'جميع المصادر المنشورة')));
+    const sourceTools=gatewayNode('div','gateway-account-source-picker');
+    const sourceSelect=gatewayNode('select','');
+    gatewaySourceOptions(sourceSelect,item.sourceId);
+    const sourceSave=gatewayNode('button','button ghost','تغيير المصدر');
+    sourceSave.type='button';
+    sourceSave.addEventListener('click',async()=>{
+      if(!window.confirm('تغيير مصدر المحتوى لهذا المستخدم؟ سيتغير ما يمكنه مشاهدته فورًا.'))return;
+      sourceSave.disabled=true;
+      try{
+        await gatewayApi('/api/v1/admin/xtream-gateway/accounts/'+encodeURIComponent(item.id),{
+          method:'PATCH',body:JSON.stringify({sourceId:sourceSelect.value||null})
+        });
+        gatewayMessage('تم حفظ مصدر المحتوى لهذا المستخدم.');
+        await loadGateway();
+      }catch(error){gatewayMessage('تعذر تغيير المصدر: '+error.message,'error');}
+      finally{sourceSave.disabled=false;}
+    });
+    sourceTools.append(sourceSelect,sourceSave);
+    main.append(sourceTools);
 
     const actions = gatewayNode('div', 'inline-actions');
     const copy = gatewayNode('button', 'button ghost', 'نسخ اليوزر');
@@ -241,6 +287,8 @@ async function loadGateway() {
       const sources=await gatewayApi('/api/v1/admin/xtream/servers');
       gatewayState.sources=Array.isArray(sources.items)?sources.items:[];
       updateSourceReadiness();
+      renderGatewaySourcePicker();
+      renderGatewayAccounts();
     }catch{if(gx('gatewaySourceHealth'))gx('gatewaySourceHealth').textContent='تعذر التحقق من المصادر الآن.';}
   } catch (error) {
     if (error.message !== 'unauthorized') gatewayMessage(`تعذر تحميل بوابة Xtream: ${error.message}`, 'error');
@@ -261,15 +309,20 @@ gx('gatewayCreateBtn')?.addEventListener('click', async () => {
     if(!Number.isInteger(days)||days<1||days>3650)throw new Error('مدة الاشتراك غير صالحة');
     if(!Number.isInteger(maxConnections)||maxConnections<1||maxConnections>3)throw new Error('عدد الاتصالات غير صالح');
     const published=publishedSources();
-    if(!published.some(x=>x.status==='online')){
-      if(!window.confirm('ليس لديك مصادر منشورة ومتصلة حاليًا. سيتم إصدار البيانات بدون تأكيد عمل المحتوى. هل تريد المتابعة؟'))return;
+    const requestedSource=String(gx('gatewaySourceId')?.value||'');
+    if(requestedSource&&!published.some(x=>x.id===requestedSource)){
+      throw new Error('المصدر المختار غير منشور أو موقوف. فعّله وانشر محتواه أولًا.');
     }
+    if(!published.some(x=>x.status==='online'&&(!requestedSource||x.id===requestedSource))){
+      if(!window.confirm('المصدر المختار غير متصل حاليًا. قد يصدر اليوزر لكن المحتوى لا يعمل. هل تريد المتابعة؟'))return;
+    }
+    const sourceId=String(gx('gatewaySourceId')?.value||'');
     const count=Number(gx('gatewayQuantity')?.value||1);
     if(![1,5,10].includes(count))throw new Error('عدد الحسابات غير صالح');
     const data = await gatewayApi('/api/v1/admin/xtream-gateway/accounts/bulk', {
       method: 'POST',
       body: JSON.stringify({
-        count,label:label||'BLOFY Player',maxConnections,
+        count,label:label||'BLOFY Player',maxConnections,sourceId:sourceId||null,
         expiresAt:new Date(Date.now()+days*86400000).toISOString()
       })
     });

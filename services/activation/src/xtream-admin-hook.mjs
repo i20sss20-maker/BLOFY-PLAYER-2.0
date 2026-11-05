@@ -379,14 +379,16 @@ async function fetchAccount(row) {
 async function testServer(id) {
   const row = await serverById(id);
   if (!row) throw Object.assign(new Error('xtream_server_not_found'), { status: 404 });
+  if (!row.enabled) throw Object.assign(new Error('xtream_source_paused'), { status: 409 });
   try {
     const info = await fetchAccount(row);
     const result = await pool.query(`UPDATE blofy_xtream_servers SET status='online',account_info=$2::jsonb,last_error=NULL,last_test_at=NOW(),updated_at=NOW()
-      WHERE id=$1 RETURNING *`, [id, JSON.stringify(info)]);
+      WHERE id=$1 AND enabled=TRUE AND deletion_requested_at IS NULL RETURNING *`, [id, JSON.stringify(info)]);
+    if(!result.rows[0])throw Object.assign(new Error('xtream_source_paused'),{status:409});
     return adminServer(result.rows[0]);
   } catch (error) {
     const message = redactXtreamError(error);
-    await pool.query(`UPDATE blofy_xtream_servers SET status='offline',last_error=$2,last_test_at=NOW(),updated_at=NOW() WHERE id=$1`, [id, message]).catch(() => {});
+    await pool.query(`UPDATE blofy_xtream_servers SET status='offline',last_error=$2,last_test_at=NOW(),updated_at=NOW() WHERE id=$1 AND enabled=TRUE AND deletion_requested_at IS NULL`, [id, message]).catch(() => {});
     throw error;
   }
 }
@@ -493,25 +495,42 @@ async function syncItems(row, mediaType, creds, syncToken, getM3u) {
 }
 
 async function finalizeTypeSync(serverId, mediaType, syncToken) {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    await client.query('DELETE FROM blofy_xtream_items WHERE server_id=$1 AND media_type=$2 AND sync_token IS DISTINCT FROM $3', [serverId, mediaType, syncToken]);
-    await client.query('DELETE FROM blofy_xtream_categories WHERE server_id=$1 AND media_type=$2 AND sync_token IS DISTINCT FROM $3', [serverId, mediaType, syncToken]);
-    await client.query(`UPDATE blofy_xtream_categories c SET item_count=s.count,updated_at=NOW()
-      FROM (SELECT category_id,COUNT(*)::int AS count FROM blofy_xtream_items WHERE server_id=$1 AND media_type=$2 GROUP BY category_id) s
-      WHERE c.server_id=$1 AND c.media_type=$2 AND c.source_category_id=s.category_id`, [serverId, mediaType]);
-    await client.query(`UPDATE blofy_xtream_categories SET item_count=0,updated_at=NOW()
-      WHERE server_id=$1 AND media_type=$2 AND NOT EXISTS (
-        SELECT 1 FROM blofy_xtream_items i WHERE i.server_id=$1 AND i.media_type=$2 AND i.category_id=blofy_xtream_categories.source_category_id
-      )`, [serverId, mediaType]);
-    await client.query('COMMIT');
-  } catch (error) {
-    await client.query('ROLLBACK').catch(() => {});
-    throw error;
-  } finally {
-    client.release();
+  // A 290k-row catalog must not be deleted in one transaction. That held
+  // locks long enough to block source pause/delete, and then timed out.
+  // Keep imported rows, prune stale ones in committed bounded batches.
+  for(const table of ['blofy_xtream_items','blofy_xtream_categories']){
+    for(;;){
+      if(cancelledSources.has(serverId))throw Object.assign(new Error('xtream_sync_cancelled'),{status:409});
+      const result=await pool.query(`DELETE FROM ${table}
+        WHERE ctid IN (
+          SELECT ctid FROM ${table}
+          WHERE server_id=$1 AND media_type=$2
+            AND sync_token IS DISTINCT FROM $3
+          LIMIT 350
+        )`,[serverId,mediaType,syncToken]);
+      if(result.rowCount<350)break;
+      await new Promise(resolve=>setTimeout(resolve,8));
+    }
   }
+  if(cancelledSources.has(serverId))throw Object.assign(new Error('xtream_sync_cancelled'),{status:409});
+  // One indexed GROUP BY and a small category update instead of the
+  // historical full-table NOT EXISTS update on every category.
+  await pool.query(`UPDATE blofy_xtream_categories c SET item_count=counts.count,updated_at=NOW()
+    FROM (
+      SELECT c2.server_id,c2.media_type,c2.source_category_id,
+        COALESCE(i.total,0)::int AS count
+      FROM blofy_xtream_categories c2
+      LEFT JOIN (
+        SELECT server_id,media_type,category_id,COUNT(*) AS total
+        FROM blofy_xtream_items WHERE server_id=$1 AND media_type=$2
+        GROUP BY server_id,media_type,category_id
+      ) i ON i.server_id=c2.server_id AND i.media_type=c2.media_type
+        AND i.category_id=c2.source_category_id
+      WHERE c2.server_id=$1 AND c2.media_type=$2
+    ) counts
+    WHERE c.server_id=counts.server_id AND c.media_type=counts.media_type
+      AND c.source_category_id=counts.source_category_id
+      AND c.item_count IS DISTINCT FROM counts.count`,[serverId,mediaType]);
 }
 
 async function calculateCounts(serverId) {
@@ -848,8 +867,13 @@ http.createServer = function withBlofyXtream(listener) {
         if (action === 'sync' && req.method === 'POST') {
           const body = await readJson(req);
           const types = Array.isArray(body.types) ? body.types : ['live','movie','series'];
-          startSync(id, types);
-          return json(res, 202, { started: true, id, types: types.map(validType).filter(Boolean) });
+          const selected=types.map(validType).filter(Boolean);
+          const source=await serverById(id);
+          if(!source)return json(res,404,{error:'xtream_server_not_found'});
+          if(!source.enabled)return json(res,409,{error:'xtream_source_paused'});
+          if(!selected.length)return json(res,400,{error:'xtream_sync_types_invalid'});
+          startSync(id, selected);
+          return json(res, 202, { started: true, id, types:selected });
         }
       }
 

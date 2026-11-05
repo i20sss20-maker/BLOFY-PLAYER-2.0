@@ -151,6 +151,7 @@ async function ensureReady() {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`);
+      await client.query('ALTER TABLE blofy_xtream_gateway_accounts ADD COLUMN IF NOT EXISTS source_id UUID');
       await client.query(`CREATE TABLE IF NOT EXISTS blofy_xtream_gateway_category_map (
         gateway_id BIGSERIAL PRIMARY KEY,
         server_id UUID NOT NULL REFERENCES blofy_xtream_servers(id) ON DELETE CASCADE,
@@ -190,6 +191,7 @@ function adminAccount(row) {
     id: row.id,
     label: row.label,
     username: row.username,
+    sourceId: row.source_id || null,
     enabled: Boolean(row.enabled),
     maxConnections: Number(row.max_connections),
     expiresAt: row.expires_at ? new Date(row.expires_at).getTime() : null,
@@ -204,9 +206,23 @@ async function listAccounts() {
   return (await pool.query('SELECT * FROM blofy_xtream_gateway_accounts ORDER BY created_at DESC')).rows.map(adminAccount);
 }
 
+// NULL means all published BLOFY sources (existing accounts keep this mode).
+// A bound account must NEVER switch to all when a source is removed.
+async function checkedAccountSourceId(value) {
+  if (value == null || value === '') return null;
+  const id=String(value);
+  if(!validUuid(id))throw Object.assign(new Error('xtream_gateway_source_id_invalid'),{status:400});
+  const row=(await pool.query(`SELECT id FROM blofy_xtream_servers
+     WHERE id=$1 AND enabled=TRUE AND publish_catalog=TRUE
+       AND deletion_requested_at IS NULL`,[id])).rows[0];
+  if(!row)throw Object.assign(new Error('xtream_gateway_source_not_ready'),{status:409});
+  return row.id;
+}
+
 async function createAccount(body, req) {
   await ensureReady();
   const label = cleanLabel(body.label, 'BLOFY Player');
+  const sourceId=await checkedAccountSourceId(body.sourceId);
   const maxConnections = Math.max(1, Math.min(20, Number(body.maxConnections) || 1));
   let username = body.username ? normalizeGatewayUsername(body.username) : null;
   const password = body.password ? normalizeGatewayPassword(body.password) : generateGatewayPassword();
@@ -221,8 +237,8 @@ async function createAccount(body, req) {
     const id = crypto.randomUUID();
     const proof = gatewayCredentialProof(username, password, KEY_HEX);
     try {
-      const row = (await pool.query(`INSERT INTO blofy_xtream_gateway_accounts(id,label,username,password_proof,enabled,max_connections,expires_at)
-        VALUES($1,$2,$3,$4,TRUE,$5,$6) RETURNING *`, [id,label,username,proof,maxConnections,expiresAt])).rows[0];
+      const row = (await pool.query(`INSERT INTO blofy_xtream_gateway_accounts(id,label,username,password_proof,enabled,max_connections,expires_at,source_id)
+        VALUES($1,$2,$3,$4,TRUE,$5,$6,$7) RETURNING *`, [id,label,username,proof,maxConnections,expiresAt,sourceId])).rows[0];
       return {
         item: adminAccount(row),
         credentials: { serverUrl: origin(req), username, password }
@@ -240,6 +256,7 @@ async function createAccountsBulk(body, req) {
   await ensureReady();
   const { count,maxConnections,expiresAt }=validateBulkAccountRequest(body);
   const label=cleanLabel(body.label,'BLOFY Player');
+  const sourceId=await checkedAccountSourceId(body.sourceId);
   const connection=await pool.connect();
   const created=[], issued=new Set();
   try{
@@ -252,9 +269,9 @@ async function createAccountsBulk(body, req) {
       const password=generateGatewayPassword();
       const id=crypto.randomUUID(),proof=gatewayCredentialProof(username,password,KEY_HEX);
       const accountLabel=count===1?label:`${label} ${String(i+1).padStart(2,'0')}`;
-      const row=(await connection.query(`INSERT INTO blofy_xtream_gateway_accounts(id,label,username,password_proof,enabled,max_connections,expires_at)
-        VALUES($1,$2,$3,$4,TRUE,$5,$6) RETURNING *`,[
-        id,accountLabel,username,proof,maxConnections,expiresAt
+      const row=(await connection.query(`INSERT INTO blofy_xtream_gateway_accounts(id,label,username,password_proof,enabled,max_connections,expires_at,source_id)
+        VALUES($1,$2,$3,$4,TRUE,$5,$6,$7) RETURNING *`,[
+        id,accountLabel,username,proof,maxConnections,expiresAt,sourceId
       ])).rows[0];
       created.push({item:adminAccount(row),username,password});
     }
@@ -275,6 +292,7 @@ async function patchAccount(id, body) {
   const values = [];
   const set = (column, value) => { values.push(value); updates.push(`${column}=$${values.length}`); };
   if (body.label !== undefined) set('label', cleanLabel(body.label));
+  if (body.sourceId !== undefined) set('source_id', await checkedAccountSourceId(body.sourceId));
   if (body.enabled !== undefined) set('enabled', Boolean(body.enabled));
   if (body.maxConnections !== undefined) {
     const max = Number(body.maxConnections);
@@ -343,32 +361,37 @@ async function ensureItemMaps(mediaType) {
     ON CONFLICT(server_id,media_type,source_id) DO NOTHING`, [mediaType]);
 }
 
-async function gatewayCategories(mediaType) {
+async function gatewayCategories(mediaType, sourceId=null) {
   await ensureCategoryMaps(mediaType);
   return (await pool.query(`SELECT m.gateway_id,c.name
     FROM blofy_xtream_gateway_category_map m
     JOIN blofy_xtream_categories c ON c.server_id=m.server_id AND c.media_type=m.media_type AND c.source_category_id=m.source_category_id
     JOIN blofy_xtream_servers s ON s.id=c.server_id
     WHERE m.media_type=$1 AND c.enabled=TRUE AND s.enabled=TRUE AND s.publish_catalog=TRUE
-    ORDER BY s.priority,c.sort_order,c.name`, [mediaType])).rows.map(formatGatewayCategory);
+      AND ($2::uuid IS NULL OR s.id=$2::uuid)
+    ORDER BY s.priority,c.sort_order,c.name`, [mediaType,sourceId])).rows.map(formatGatewayCategory);
 }
 
-async function categoryFilter(mediaType, gatewayId) {
+async function categoryFilter(mediaType, gatewayId, sourceId=null) {
   if (gatewayId == null || gatewayId === '' || String(gatewayId) === '0') return null;
   const id = Number(gatewayId);
   if (!Number.isSafeInteger(id) || id < 1) throw Object.assign(new Error('xtream_gateway_category_invalid'), { status: 400 });
-  const row = (await pool.query('SELECT server_id,source_category_id FROM blofy_xtream_gateway_category_map WHERE gateway_id=$1 AND media_type=$2', [id,mediaType])).rows[0];
+  const row = (await pool.query('SELECT server_id,source_category_id FROM blofy_xtream_gateway_category_map WHERE gateway_id=$1 AND media_type=$2 AND ($3::uuid IS NULL OR server_id=$3::uuid)', [id,mediaType,sourceId])).rows[0];
   if (!row) throw Object.assign(new Error('xtream_gateway_category_not_found'), { status: 404 });
   return row;
 }
 
-async function walkGatewayItems(mediaType, filter, onRow) {
+async function walkGatewayItems(mediaType, filter, onRow, sourceId=null) {
   await ensureCategoryMaps(mediaType);
   await ensureItemMaps(mediaType);
   let lastId = 0;
   for (;;) {
     const values = [mediaType, lastId];
     const where = ['m.media_type=$1','m.gateway_id>$2','s.enabled=TRUE','s.publish_catalog=TRUE','i.enabled=TRUE','(c.enabled IS NULL OR c.enabled=TRUE)'];
+    if (sourceId) {
+      values.push(sourceId);
+      where.push(`i.server_id=${values.length}`);
+    }
     if (filter) {
       values.push(filter.server_id, filter.source_category_id);
       where.push(`i.server_id=$${values.length-1}`, `i.category_id=$${values.length}`);
@@ -390,8 +413,8 @@ async function walkGatewayItems(mediaType, filter, onRow) {
   }
 }
 
-async function streamGatewayItems(res, mediaType, categoryId) {
-  const filter = await categoryFilter(mediaType, categoryId);
+async function streamGatewayItems(res, mediaType, categoryId, sourceId=null) {
+  const filter = await categoryFilter(mediaType, categoryId, sourceId);
   res.writeHead(200, {
     'content-type': 'application/json; charset=utf-8',
     'cache-control': 'no-store',
@@ -403,11 +426,11 @@ async function streamGatewayItems(res, mediaType, categoryId) {
     if (!first) res.write(',');
     first = false;
     res.write(JSON.stringify(formatGatewayItem(mediaType, row)));
-  });
+  }, sourceId);
   res.end(']');
 }
 
-async function gatewayItemById(mediaType, gatewayId) {
+async function gatewayItemById(mediaType, gatewayId, sourceId=null) {
   const id = Number(gatewayId);
   if (!Number.isSafeInteger(id) || id < 1) return null;
   return (await pool.query(`SELECT m.gateway_id,i.server_id,i.source_id,i.category_id,i.name,i.icon_url,i.container_extension,i.metadata,
@@ -417,7 +440,8 @@ async function gatewayItemById(mediaType, gatewayId) {
     JOIN blofy_xtream_servers s ON s.id=i.server_id
     LEFT JOIN blofy_xtream_categories c ON c.server_id=i.server_id AND c.media_type=i.media_type AND c.source_category_id=i.category_id
     LEFT JOIN blofy_xtream_gateway_category_map cm ON cm.server_id=i.server_id AND cm.media_type=i.media_type AND cm.source_category_id=i.category_id
-    WHERE m.gateway_id=$1 AND m.media_type=$2 AND i.enabled=TRUE AND s.enabled=TRUE AND s.publish_catalog=TRUE AND (c.enabled IS NULL OR c.enabled=TRUE)`, [id,mediaType])).rows[0] || null;
+    WHERE m.gateway_id=$1 AND m.media_type=$2 AND i.enabled=TRUE AND s.enabled=TRUE AND s.publish_catalog=TRUE AND (c.enabled IS NULL OR c.enabled=TRUE)
+      AND ($3::uuid IS NULL OR i.server_id=$3::uuid)`, [id,mediaType,sourceId])).rows[0] || null;
 }
 
 function decryptServerCredentials(row) {
@@ -462,8 +486,8 @@ async function fetchUpstreamApi(row, action, extra = {}) {
   catch { throw new Error('xtream_gateway_upstream_json_invalid'); }
 }
 
-async function vodInfo(gatewayId) {
-  const row = await gatewayItemById('movie', gatewayId);
+async function vodInfo(gatewayId, sourceId=null) {
+  const row = await gatewayItemById('movie', gatewayId, sourceId);
   if (!row || !row.server_enabled) return null;
   const payload = stripUpstreamSecrets(await fetchUpstreamApi(row, 'get_vod_info', { vod_id: row.source_id }));
   const movieData = payload?.movie_data && typeof payload.movie_data === 'object' ? payload.movie_data : {};
@@ -494,8 +518,8 @@ async function ensureEpisodeMaps(serverId, seriesSourceId, episodes) {
   return new Map(rows.map(row => [String(row.source_episode_id), { id: Number(row.gateway_id), extension: safeGatewayExtension(row.container_extension, 'mp4') }]));
 }
 
-async function seriesInfo(gatewayId) {
-  const row = await gatewayItemById('series', gatewayId);
+async function seriesInfo(gatewayId, sourceId=null) {
+  const row = await gatewayItemById('series', gatewayId, sourceId);
   if (!row || !row.server_enabled) return null;
   const raw = await fetchUpstreamApi(row, 'get_series_info', { series_id: row.source_id });
   const payload = stripUpstreamSecrets(raw);
@@ -529,13 +553,14 @@ async function seriesInfo(gatewayId) {
   return { ...payload, episodes };
 }
 
-async function episodeByGatewayId(gatewayId) {
+async function episodeByGatewayId(gatewayId,sourceId=null) {
   const id = Number(gatewayId);
   if (!Number.isSafeInteger(id) || id < 1) return null;
   return (await pool.query(`SELECT e.gateway_id,e.server_id,e.source_episode_id,e.container_extension,
       s.base_url,s.username_secret,s.password_secret,s.enabled AS server_enabled
     FROM blofy_xtream_gateway_episode_map e JOIN blofy_xtream_servers s ON s.id=e.server_id
-    WHERE e.gateway_id=$1 AND s.enabled=TRUE AND s.publish_catalog=TRUE`, [id])).rows[0] || null;
+    WHERE e.gateway_id=$1 AND s.enabled=TRUE AND s.publish_catalog=TRUE
+      AND ($2::uuid IS NULL OR e.server_id=$2::uuid)`, [id,sourceId])).rows[0] || null;
 }
 
 function mediaUpstreamUrl(row, kind, sourceId, extension) {
@@ -552,12 +577,12 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
   if (!account) return text(res, 401, 'Unauthorized');
   let row, sourceId, extension;
   if (kind === 'series') {
-    row = await episodeByGatewayId(gatewayId);
+    row = await episodeByGatewayId(gatewayId,account.source_id||null);
     if (!row || !row.server_enabled) return text(res, 404, 'Stream not found');
     sourceId = row.source_episode_id;
     extension = row.container_extension;
   } else {
-    row = await gatewayItemById(kind === 'live' ? 'live' : 'movie', gatewayId);
+    row = await gatewayItemById(kind === 'live' ? 'live' : 'movie', gatewayId,account.source_id||null);
     if (!row || !row.server_enabled) return text(res, 404, 'Stream not found');
     sourceId = row.source_id;
     extension = row.container_extension;
@@ -630,18 +655,18 @@ async function handlePlayerApi(req, res, url) {
   if (!account) return json(res, 200, { user_info: { auth: 0, status: 'Disabled' }, server_info: playerServerInfo(req) });
   const action = String(url.searchParams.get('action') || '');
   if (!action) return json(res, 200, { user_info: accountInfo(account, username, password), server_info: playerServerInfo(req) });
-  if (action === 'get_live_categories') return json(res, 200, await gatewayCategories('live'));
-  if (action === 'get_vod_categories') return json(res, 200, await gatewayCategories('movie'));
-  if (action === 'get_series_categories') return json(res, 200, await gatewayCategories('series'));
-  if (action === 'get_live_streams') return streamGatewayItems(res, 'live', url.searchParams.get('category_id'));
-  if (action === 'get_vod_streams') return streamGatewayItems(res, 'movie', url.searchParams.get('category_id'));
-  if (action === 'get_series') return streamGatewayItems(res, 'series', url.searchParams.get('category_id'));
+  if (action === 'get_live_categories') return json(res, 200, await gatewayCategories('live',account.source_id||null));
+  if (action === 'get_vod_categories') return json(res, 200, await gatewayCategories('movie',account.source_id||null));
+  if (action === 'get_series_categories') return json(res, 200, await gatewayCategories('series',account.source_id||null));
+  if (action === 'get_live_streams') return streamGatewayItems(res, 'live', url.searchParams.get('category_id'),account.source_id||null);
+  if (action === 'get_vod_streams') return streamGatewayItems(res, 'movie', url.searchParams.get('category_id'),account.source_id||null);
+  if (action === 'get_series') return streamGatewayItems(res, 'series', url.searchParams.get('category_id'),account.source_id||null);
   if (action === 'get_vod_info') {
-    const value = await vodInfo(url.searchParams.get('vod_id'));
+    const value = await vodInfo(url.searchParams.get('vod_id'),account.source_id||null);
     return json(res, value ? 200 : 404, value || { error: 'vod_not_found' });
   }
   if (action === 'get_series_info') {
-    const value = await seriesInfo(url.searchParams.get('series_id'));
+    const value = await seriesInfo(url.searchParams.get('series_id'),account.source_id||null);
     return json(res, value ? 200 : 404, value || { error: 'series_not_found' });
   }
   if (action === 'get_short_epg' || action === 'get_simple_data_table') return json(res, 200, { epg_listings: [] });
@@ -671,7 +696,7 @@ async function handleM3u(req, res, url) {
       const kind = mediaType === 'live' ? 'live' : 'movie';
       res.write(`#EXTINF:-1 tvg-name="${name}" tvg-logo="${logo}" group-title="${group}",${name}\n`);
       res.write(`${base}/${kind}/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${row.gateway_id}.${ext}\n`);
-    });
+    }, account.source_id||null);
   }
   res.end();
 }
