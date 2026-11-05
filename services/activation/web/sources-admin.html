@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#09090e">
-  <link rel="icon" type="image/png" href="/blofy-logo.png"><link rel="apple-touch-icon" href="/blofy-logo.png"><meta name="robots" content="noindex,nofollow"><title>BLOFY | المصادر و Xtream</title>
+  <link rel="icon" type="image/png" href="/blofy-logo.png"><link rel="apple-touch-icon" href="/blofy-logo.png"><meta name="robots" content="noindex,nofollow"><title>BLOFY STREAM | إدارة المصادر والاشتراكات</title>
   <link rel="stylesheet" href="/sources-admin.css">
   <link rel="stylesheet" href="/site-polish.css?v=20261025-lux-final">
 </head>
@@ -27,8 +27,8 @@
       <header class="topbar">
         <div>
           <p class="eyebrow">BLOFY CONTENT CONTROL</p>
-          <h1>المصادر و Xtream</h1>
-          <p class="subtitle">أنشئ بيانات سيرفر BLOFY، أضف مصادر مسموح لك باستخدامها، ثم تحكم بالكتالوج من شاشة واحدة.</p>
+          <h1>BLOFY STREAM</h1>
+          <p class="subtitle">لوحة واحدة تجمع حسابات Xtream المصرح بها، وتدير مكتبة BLOFY واشتراكات العملاء وبيانات Host وUsername وPassword.</p>
         </div>
         <div class="top-actions">
           <a class="button ghost" href="/admin">رجوع للإدارة</a>
@@ -37,14 +37,14 @@
       </header>
 
       <nav class="tabs" aria-label="أقسام المصادر">
-        <button class="tab active" type="button" data-tab="sources"><span>01</span>الإضافات</button>
-        <button class="tab" type="button" data-tab="xtream"><span>02</span>سيرفر BLOFY و Xtream</button>
-        <button class="tab" type="button" data-tab="catalog"><span>03</span>الكتالوج</button>
+        <button class="tab" type="button" data-tab="sources"><span>03</span>إضافات أخرى</button>
+        <button class="tab active" type="button" data-tab="xtream"><span>01</span>المصادر واشتراكات العملاء</button>
+        <button class="tab" type="button" data-tab="catalog"><span>02</span>المكتبة الموحدة</button>
       </nav>
 
       <div id="message" class="message" hidden></div>
 
-      <section id="tab-sources" class="tab-page active">
+      <section id="tab-sources" class="tab-page" hidden>
         <section class="section-intro">
           <div><span class="eyebrow">SOURCES</span><h2>مصادر BLOFY</h2><p>هذه الإضافات هي المصادر المدارة من BLOFY. فعّل ما تحتاجه وعطّل الباقي بدون لمس التطبيق.</p></div>
           <div class="intro-step"><strong>1</strong><span>فعّل المصادر</span></div>
@@ -78,22 +78,30 @@
         </section>
       </section>
 
-      <section id="tab-xtream" class="tab-page" hidden>
+      <section id="tab-xtream" class="tab-page active">
         <section class="section-intro">
-          <div><span class="eyebrow">BLOFY XTREAM</span><h2>سيرفرك الخاص</h2><p>أنشئ Server + Username + Password ثم استخدمها في أي تطبيق يدعم Xtream Codes API.</p></div>
+          <div><span class="eyebrow">BLOFY XTREAM</span><h2>حسابات Xtream موحّدة</h2><p>أضف مصادر متعددة، ثم أنشئ للمشترك Host وUsername وPassword خاصًا ببلوفي، دون كشف بيانات المصادر الأصلية.</p></div>
           <div class="intro-step"><strong>2</strong><span>أنشئ بيانات الدخول</span></div>
         </section>
 
+        <p class="security-note stream-migration-note">ملاحظة: الحسابات والمكتبة المحفوظة في لوحة إعادة البث السابقة ليست منقولة تلقائيًا إلى قاعدة BLOFY الرئيسية. للمراجعة فقط: <a href="/stream/legacy" target="_blank" rel="noopener">اللوحة القديمة</a>. أضف مصادر مصرحًا بها هنا لتظهر في المكتبة الموحدة.</p>
         <section class="panel gateway-panel">
           <div class="panel-head gateway-title-row">
             <div>
               <span class="panel-kicker">BLOFY XTREAM GATEWAY</span>
-              <h2>بيانات السيرفر التي ستستخدمها في التطبيقات</h2>
-              <p>السيرفر يعرض فقط العناصر المفعلة في الكتالوج. إنشاء بيانات الدخول لا يضيف محتوى من نفسه.</p>
+              <h2>إصدار اشتراكات العملاء وبيانات الدخول</h2>
+              <p>يظهر لكل مشترك محتوى المصادر التي تمت الموافقة على نشرها. إنشاء حساب لا يزيد اتصالات المصادر الأصلية.</p>
             </div>
             <button id="gatewayCreateBtn" class="button primary big-action" type="button">إنشاء بيانات دخول</button>
           </div>
 
+          <div class="gateway-subscription-form">
+            <label><span>اسم المشترك</span><input id="gatewayCustomerLabel" maxlength="120" placeholder="مثال: عميل BLOFY" value="BLOFY Player"></label>
+            <label><span>مدة الاشتراك</span><select id="gatewayDurationDays"><option value="30">شهر</option><option value="90">3 أشهر</option><option value="180">6 أشهر</option><option value="365">سنة</option><option value="1">يوم واحد</option></select></label>
+            <label><span>المشاهدة المتزامنة</span><select id="gatewayMaxConnections"><option value="1">جهاز واحد</option><option value="2">جهازان</option><option value="3">3 أجهزة</option></select></label>
+            <label><span>عدد الاشتراكات الجديدة</span><select id="gatewayQuantity"><option value="1">حساب واحد</option><option value="5">5 حسابات</option><option value="10">10 حسابات</option></select></label>
+          </div>
+          <p class="security-note" id="gatewaySourceHealth">يجري فحص جاهزية مصادر المحتوى…</p>
           <div class="gateway-host-row">
             <div><span class="label">Server / Host</span><code id="gatewayServerUrl">جارٍ التحميل…</code></div>
             <button id="gatewayCopyHostBtn" class="button ghost" type="button">نسخ الرابط</button>
@@ -111,9 +119,20 @@
             </div>
           </div>
 
+          <section id="gatewayBatchCredentials" class="gateway-batch-credentials" hidden>
+            <div class="gateway-credential-head">
+              <div><strong>بيانات المشتركين الجديدة</strong><small>هذه الكلمات تظهر مرة واحدة. احفظ CSV قبل إغلاق الصفحة.</small></div>
+              <div class="inline-actions">
+                <button id="gatewayCopyBatchBtn" class="button primary" type="button">نسخ الكل</button>
+                <button id="gatewayDownloadBatchBtn" class="button ghost" type="button">تحميل CSV</button>
+                <button id="gatewayHideBatchBtn" class="button ghost" type="button">إخفاء</button>
+              </div>
+            </div>
+            <div id="gatewayBatchRows" class="gateway-batch-rows"></div>
+          </section>
           <div id="gatewayLoading" class="loading">جارٍ تحميل بيانات الدخول…</div>
           <div id="gatewayAccounts" class="gateway-accounts"></div>
-          <p class="security-note">استخدم السيرفر فقط مع محتوى تملك حق الوصول إليه أو إعادة بثه. BLOFY لا ينسخ ملفات الفيديو إلى التخزين.</p>
+          <p class="security-note">بيانات Host وUsername وPassword تصدر بشكل مستقل، لكن مدة الحساب وعدد الاتصالات لا يتجاوزان قيود وحقوق المصادر الأصلية. كلمات المرور تظهر مرة واحدة فقط.</p>
         </section>
 
         <section class="stats five" aria-label="إحصائيات Xtream">
@@ -126,18 +145,18 @@
 
         <section class="panel form-panel">
           <div class="panel-head">
-            <div><span class="panel-kicker">UPSTREAM SOURCES</span><h2>إضافة مصدر Xtream</h2><p>إذا عندك مصدر Xtream تملكه أو مصرح لك باستخدامه، أضفه هنا ثم اسحب Live + Movies + Series.</p></div>
+            <div><span class="panel-kicker">UPSTREAM SOURCES</span><h2>إضافة حساب Xtream إلى المكتبة</h2><p>كرر هذه العملية لكل حساب تملك حق إعادة توزيع محتواه؛ يتم دمج القنوات والأفلام والمسلسلات من الحسابات المنشورة في مكتبة واحدة.</p></div>
             <button id="syncAllXtreamBtn" class="button primary" type="button">مزامنة كل المصادر</button>
           </div>
           <form id="xtreamForm" class="xtream-form" autocomplete="off">
-            <label><span>اسم المصدر</span><input id="xtName" required maxlength="160" placeholder="مثال: Main Server"></label>
+            <label><span>اسم المصدر (اختياري)</span><input id="xtName" maxlength="160" placeholder="مثال: حساب رقم 1"></label>
             <label class="wide"><span>Host / URL</span><input id="xtBaseUrl" required inputmode="url" placeholder="https://example.com:443"></label>
             <label><span>Username</span><input id="xtUsername" required autocomplete="new-password" autocapitalize="none" spellcheck="false"></label>
             <label><span>Password</span><input id="xtPassword" required type="password" autocomplete="new-password"></label>
-            <label><span>الأولوية</span><input id="xtPriority" type="number" min="0" max="10000" value="100"></label>
+            <label class="advanced-field"><span>الأولوية (متقدم)</span><input id="xtPriority" type="number" min="0" max="10000" value="100"></label>
             <label class="check"><input id="xtEnabled" type="checkbox" checked><span>مفعل</span></label>
-            <label class="check"><input id="xtPublish" type="checkbox"><span>نشر الكتالوج العام</span></label>
-            <button id="xtAddBtn" class="button primary submit" type="submit">إضافة + فحص</button>
+            <label class="check"><input id="xtPublish" type="checkbox" checked><span>إظهار المحتوى للمشتركين بعد نجاح المزامنة</span></label>
+            <label class="check rights"><input id="xtRightsConfirmed" type="checkbox" required><span>أؤكد أن لدي صلاحية استخدام هذا المحتوى وإعادة توزيعه عبر BLOFY.</span></label><button id="xtAddBtn" class="button primary submit" type="submit">ربط Xtream واستيراد المحتوى</button>
           </form>
           <p class="security-note">يفضّل HTTPS. المصدر الذي يستخدم HTTP قد يرسل بيانات الدخول للمزود بدون تشفير شبكي.</p>
         </section>

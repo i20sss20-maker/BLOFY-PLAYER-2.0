@@ -6,7 +6,7 @@ const state = {
   xtreamTotals: {},
   categories: [],
   catalog: [],
-  activeTab: 'sources',
+  activeTab: 'xtream',
   pollTimer: null
 };
 const statusLabels = { 0: 'متوقف', 1: 'يعمل', 2: 'بطيء', 3: 'Beta' };
@@ -308,6 +308,12 @@ async function loadXtream(silent = false) {
 async function addXtream(event) {
   event.preventDefault();
   const button = el('xtAddBtn');
+  const rightsConfirmed=el('xtRightsConfirmed').checked;
+  if(!rightsConfirmed){showMessage('يلزم تأكيد صلاحية توزيع المحتوى.','error');return;}
+  const host=el('xtBaseUrl').value.trim();
+  let label=el('xtName').value.trim();
+  if(!label){try{label='XTREAM · '+new URL(host).hostname}catch{label='BLOFY Xtream'}}
+  let createdId=null;
   button.disabled = true;
   const old = button.textContent;
   button.textContent = 'يتم الإضافة…';
@@ -315,28 +321,38 @@ async function addXtream(event) {
     const data = await api('/api/v1/admin/xtream/servers', {
       method: 'POST',
       body: JSON.stringify({
-        name: el('xtName').value,
-        baseUrl: el('xtBaseUrl').value,
+        name: label,
+        baseUrl: host,
         username: el('xtUsername').value,
         password: el('xtPassword').value,
         priority: Number(el('xtPriority').value || 100),
         enabled: el('xtEnabled').checked,
-        publishCatalog: el('xtPublish').checked
+        publishCatalog: el('xtPublish').checked,
+        rightsConfirmed
       })
     });
     const id = data.item?.id;
     if (!id) throw new Error('xtream_create_failed');
+    createdId=id;
     button.textContent = 'يتم الفحص…';
     await api(`/api/v1/admin/xtream/servers/${id}/test`, { method: 'POST', body: '{}' });
     button.textContent = 'بدء الاستيراد…';
     await api(`/api/v1/admin/xtream/servers/${id}/sync`, { method: 'POST', body: JSON.stringify({ types: ['live','movie','series'] }) });
     el('xtreamForm').reset();
     el('xtEnabled').checked = true;
+    el('xtPublish').checked = true;
     el('xtPriority').value = '100';
     showMessage('تمت إضافة السيرفر وفحصه وبدأ استيراد Live + Movies + Series.');
     await loadXtream();
   } catch (error) {
-    showMessage(`تعذر إضافة السيرفر: ${error.message}`, 'error');
+    const raw=String(error.message||error);
+    const reason=raw.includes('403')?'المصدر رفض الاتصال من سيرفر BLOFY (403). راجع صلاحيات المصدر أو السماح لاتصال السيرفر؛ لا يمكن تجاوز المنع من BLOFY.':
+      raw.includes('401')?'بيانات الدخول غير مقبولة من المصدر (401).':
+      raw.includes('404')?'رابط المصدر أو واجهة Xtream غير متاحة (404).':raw;
+    showMessage(createdId
+      ?'حُفظ المصدر، لكن لم تكتمل عملية الفحص أو الاستيراد: '+reason+' يمكنك إعادة الفحص من بطاقة المصدر.'
+      :'تعذر إضافة المصدر: '+reason,'error');
+    if(createdId)await loadXtream().catch(()=>{});
   } finally {
     button.disabled = false;
     button.textContent = old;

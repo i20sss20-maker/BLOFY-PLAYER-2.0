@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mapStreamAdminPath } from '../src/stream-gateway-hook.mjs';
+import { mapStreamAdminPath, unifiedStreamDestination } from '../src/stream-gateway-hook.mjs';
 
 test('same-domain admin routes are limited to a safe namespace', () => {
-  assert.equal(mapStreamAdminPath('/stream'), '/');
-  assert.equal(mapStreamAdminPath('/stream/'), '/');
+  assert.equal(mapStreamAdminPath('/stream'), null);
+  assert.equal(mapStreamAdminPath('/stream/'), null);
   for (const route of ['source','codes','users','content','appcodes']) {
-    assert.equal(mapStreamAdminPath('/stream/'+route), '/');
+    assert.equal(mapStreamAdminPath('/stream/'+route), null);
   }
   assert.equal(mapStreamAdminPath('/stream/admin-assets/admin.css'), '/admin-assets/admin.css');
   assert.equal(mapStreamAdminPath('/stream/admin-assets/admin.js'), '/admin-assets/admin.js');
@@ -20,3 +20,5 @@ test('same-domain admin routes are limited to a safe namespace', () => {
   assert.equal(mapStreamAdminPath('/stream/admin-assets/unknown.js'), null);
   assert.equal(mapStreamAdminPath('/streaming'), null);
 });
+
+test('stream console paths lead to the primary admin',()=>{assert.equal(unifiedStreamDestination('/stream'),'/sources-admin#xtream');assert.equal(unifiedStreamDestination('/stream/content'),'/sources-admin#catalog');assert.equal(unifiedStreamDestination('/stream/appcodes'),'/admin#codes');assert.equal(mapStreamAdminPath('/stream/legacy'),'/');});

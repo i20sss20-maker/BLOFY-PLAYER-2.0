@@ -1,5 +1,5 @@
 const gx = id => document.getElementById(id);
-const gatewayState = { serverUrl: '', items: [] };
+const gatewayState = { serverUrl: '', items: [], sources: [], lastIssued: [] };
 
 async function gatewayApi(path, options = {}) {
   const response = await fetch(path, {
@@ -52,6 +52,96 @@ function showCredentials(credentials) {
   gx('gatewayCredentials').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
+function renderGatewayBatch(credentials){
+  gatewayState.lastIssued=credentials.map(x=>({
+    serverUrl:String(x.serverUrl||''),
+    username:String(x.username||''),
+    password:String(x.password||''),
+    appCode:''
+  }));
+  const panel=gx('gatewayBatchCredentials'),rows=gx('gatewayBatchRows');
+  rows.replaceChildren();
+  gatewayState.lastIssued.forEach((account,index)=>{
+    const line=gatewayNode('div','gateway-batch-row');
+    const details=gatewayNode('div','gateway-batch-details');
+    details.append(gatewayNode('strong','',account.username));
+    details.append(gatewayNode('code','',account.serverUrl+' · '+account.password));
+    const button=gatewayNode('button','button ghost','إصدار كود تطبيق BLOFY');
+    button.type='button';
+    button.addEventListener('click',async()=>{
+      if(!window.confirm('هل تريد إصدار كود تفعيل تطبيق BLOFY لهذا الحساب؟'))return;
+      button.disabled=true;
+      try{
+        const result=await gatewayApi('/api/v1/admin/blofy-codes',{
+          method:'POST',body:JSON.stringify({
+            source:'custom',host:account.serverUrl,username:account.username,password:account.password
+          })
+        });
+        if(!result.code)throw new Error('blofy_code_not_returned');
+        account.appCode=String(result.code);
+        button.replaceWith(gatewayNode('strong','gateway-app-code', 'كود التطبيق: '+account.appCode));
+        gatewayMessage('تم إصدار كود BLOFY لهذا الحساب. احفظه الآن مع بيانات Xtream.');
+      }catch(error){
+        button.disabled=false;
+        gatewayMessage('تعذر إصدار كود BLOFY: '+error.message,'error');
+      }
+    });
+    line.append(details,button);
+    rows.append(line);
+  });
+  panel.hidden=gatewayState.lastIssued.length===0;
+  gx('gatewayCredentials').hidden=true;
+}
+function formatBatchText(){
+  return gatewayState.lastIssued.map(x=>'Host: '+x.serverUrl+'\nUsername: '+x.username+'\nPassword: '+x.password).join('\n\n');
+}
+function downloadBatchCsv(){
+  if(!gatewayState.lastIssued.length)return;
+  const quote=v=>{
+    let raw=String(v??'');
+    if(/^[\s]*[=+\-@]/.test(raw))raw="'"+raw;
+    return '"'+raw.replaceAll('"','""')+'"';
+  };
+  const lines=['Host,Username,Password,BlofyAppCode'].concat(
+    gatewayState.lastIssued.map(x=>[x.serverUrl,x.username,x.password,x.appCode||''].map(quote).join(','))
+  );
+  const url=URL.createObjectURL(new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'}));
+  const link=document.createElement('a');
+  link.href=url;link.download='BLOFY-new-Xtream-accounts.csv';document.body.append(link);link.click();link.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+function hideIssuedCredentials(){
+  gatewayState.lastIssued=[];
+  gx('gatewayBatchCredentials').hidden=true;
+  gx('gatewayCredentials').hidden=true;
+  gx('gatewayBatchRows').replaceChildren();
+  gx('gatewayCredPass').textContent='—';
+}
+
+function accountExpiresAt(value){
+  if(!value)return 'بدون انتهاء';
+  const date=new Date(value);
+  return Number.isFinite(date.getTime())?date.toLocaleDateString('ar-SA'):'غير معروف';
+}
+
+function publishedSources(){
+  return gatewayState.sources.filter(x=>x.enabled&&x.publishCatalog);
+}
+
+function updateSourceReadiness(){
+  const el=gx('gatewaySourceHealth');
+  if(!el)return;
+  const published=publishedSources();
+  const online=published.filter(x=>x.status==='online');
+  const total=published.reduce((acc,x)=>acc+Number(x.counts?.live||0)+Number(x.counts?.movie||0)+Number(x.counts?.series||0),0);
+  el.textContent=!published.length
+    ?'⚠ لا توجد مصادر منشورة للمشتركين. أضف مصدر Xtream مرخّصًا، افحصه وفعّل نشر المحتوى أولًا.'
+    :online.length===0
+      ?'⚠ يوجد '+published.length+' مصدر منشور، لكنها غير متصلة حاليًا. قد تصدر بيانات الدخول بدون تشغيل المحتوى.'
+      :'✓ '+online.length+' مصدر متصل من '+published.length+' منشور · '+total.toLocaleString('en-US')+' عنصر ضمن المكتبة. تحقق من تشغيل العناوين قبل البيع.';
+  el.classList.toggle('source-warning',!online.length);
+}
+
 function renderGatewayAccounts() {
   const list = gx('gatewayAccounts');
   list.replaceChildren();
@@ -66,7 +156,7 @@ function renderGatewayAccounts() {
     main.append(gatewayNode('strong', '', item.label || 'BLOFY Player'));
     const user = gatewayNode('code', '', item.username);
     main.append(user);
-    const meta = gatewayNode('small', 'muted', `${item.enabled ? 'مفعل' : 'متوقف'} · ${item.maxConnections || 1} اتصال`);
+    const meta = gatewayNode('small', 'muted', `${item.enabled ? 'مفعل' : 'متوقف'} · ${item.maxConnections || 1} اتصال · ينتهي: ${accountExpiresAt(item.expiresAt)}`);
     main.append(meta);
 
     const actions = gatewayNode('div', 'inline-actions');
@@ -116,7 +206,24 @@ function renderGatewayAccounts() {
       finally { remove.disabled = false; }
     });
 
-    actions.append(copy, toggle, reset, remove);
+    const renew=gatewayNode('button', 'button ghost', 'تجديد شهر');
+    renew.type='button';
+    renew.addEventListener('click',async()=>{
+      if(!window.confirm('تجديد اشتراك '+item.username+' لمدة 30 يومًا؟'))return;
+      renew.disabled=true;
+      try{
+        const now=Date.now();
+        const starting=Math.max(now,Number(item.expiresAt)||0);
+        await gatewayApi('/api/v1/admin/xtream-gateway/accounts/'+encodeURIComponent(item.id),{
+          method:'PATCH',body:JSON.stringify({expiresAt:new Date(starting+30*24*60*60*1000).toISOString(),enabled:true})
+        });
+        gatewayMessage('تم تجديد اشتراك '+item.username+' لمدة شهر.');
+        await loadGateway();
+      }catch(error){gatewayMessage('تعذر التجديد: '+error.message,'error')}
+      finally{renew.disabled=false}
+    });
+
+    actions.append(copy, renew, toggle, reset, remove);
     card.append(main, actions);
     list.append(card);
   }
@@ -130,6 +237,11 @@ async function loadGateway() {
     gatewayState.serverUrl = data.serverUrl || '';
     gatewayState.items = Array.isArray(data.items) ? data.items : [];
     renderGatewayAccounts();
+    try{
+      const sources=await gatewayApi('/api/v1/admin/xtream/servers');
+      gatewayState.sources=Array.isArray(sources.items)?sources.items:[];
+      updateSourceReadiness();
+    }catch{if(gx('gatewaySourceHealth'))gx('gatewaySourceHealth').textContent='تعذر التحقق من المصادر الآن.';}
   } catch (error) {
     if (error.message !== 'unauthorized') gatewayMessage(`تعذر تحميل بوابة Xtream: ${error.message}`, 'error');
   } finally {
@@ -143,12 +255,26 @@ gx('gatewayCreateBtn')?.addEventListener('click', async () => {
   const old = button.textContent;
   button.textContent = 'جارٍ الإنشاء…';
   try {
-    const data = await gatewayApi('/api/v1/admin/xtream-gateway/accounts', {
+    const days=Number(gx('gatewayDurationDays')?.value||30);
+    const maxConnections=Number(gx('gatewayMaxConnections')?.value||1);
+    const label=String(gx('gatewayCustomerLabel')?.value||'BLOFY Player').trim();
+    if(!Number.isInteger(days)||days<1||days>3650)throw new Error('مدة الاشتراك غير صالحة');
+    if(!Number.isInteger(maxConnections)||maxConnections<1||maxConnections>3)throw new Error('عدد الاتصالات غير صالح');
+    const published=publishedSources();
+    if(!published.some(x=>x.status==='online')){
+      if(!window.confirm('ليس لديك مصادر منشورة ومتصلة حاليًا. سيتم إصدار البيانات بدون تأكيد عمل المحتوى. هل تريد المتابعة؟'))return;
+    }
+    const count=Number(gx('gatewayQuantity')?.value||1);
+    if(![1,5,10].includes(count))throw new Error('عدد الحسابات غير صالح');
+    const data = await gatewayApi('/api/v1/admin/xtream-gateway/accounts/bulk', {
       method: 'POST',
-      body: JSON.stringify({ label: 'BLOFY Player', maxConnections: 1 })
+      body: JSON.stringify({
+        count,label:label||'BLOFY Player',maxConnections,
+        expiresAt:new Date(Date.now()+days*86400000).toISOString()
+      })
     });
-    showCredentials(data.credentials);
-    gatewayMessage('تم إنشاء بيانات Xtream جاهزة للاستخدام.');
+    renderGatewayBatch(Array.isArray(data.credentials)?data.credentials:[]);
+    gatewayMessage('تم إصدار '+String(data.count||0)+' حساب Xtream. انسخ Host وUsername وPassword الآن، أو حمّل ملف CSV.');
     await loadGateway();
   } catch (error) {
     gatewayMessage(`تعذر إنشاء بيانات الدخول: ${error.message}`, 'error');
@@ -167,7 +293,10 @@ gx('gatewayCopyAllBtn')?.addEventListener('click', () => {
   copyText(`Server: ${host}\nUsername: ${username}\nPassword: ${password}`, 'تم نسخ بيانات Xtream كاملة.');
 });
 
-gx('gatewayHideCredentialsBtn')?.addEventListener('click', () => { gx('gatewayCredentials').hidden = true; });
+gx('gatewayHideCredentialsBtn')?.addEventListener('click', hideIssuedCredentials);
+gx('gatewayHideBatchBtn')?.addEventListener('click', hideIssuedCredentials);
+gx('gatewayCopyBatchBtn')?.addEventListener('click',()=>copyText(formatBatchText(),'تم نسخ بيانات جميع الحسابات.'));
+gx('gatewayDownloadBatchBtn')?.addEventListener('click',downloadBatchCsv);
 
 function openGatewayHashTab() {
   const name = String(location.hash || '').replace(/^#/, '').trim().toLowerCase();

@@ -3,3 +3,28 @@
 @media(max-width:1100px){.stats.five{grid-template-columns:repeat(3,1fr)}.xtream-form{grid-template-columns:repeat(2,minmax(0,1fr))}.catalog-controls{grid-template-columns:1fr 1fr}.catalog-controls .wide{grid-column:1/-1}.catalog-list{grid-template-columns:1fr}.credential-grid{grid-template-columns:1fr 1fr}.source{grid-template-columns:1.4fr 1fr 1fr}.source-main{grid-column:1/-1}.save{width:100%}}
 @media(max-width:900px){.source-shell{padding-inline-start:0}.source-rail{position:sticky;inset:auto;top:0;width:100%;height:auto;padding:9px 13px;display:flex;flex-direction:row;align-items:center;gap:9px;border-inline-end:0;border-bottom:1px solid var(--border);overflow:auto}.source-brand{flex:0 0 auto}.brand-mark{width:32px;height:32px;border-radius:9px}.source-brand span:last-child{display:none}.rail-label,.rail-bottom{display:none}.rail-links{display:flex;gap:5px;flex:0 0 auto}.rail-links a{min-height:38px;white-space:nowrap;padding:7px 10px}.rail-links a span{display:none}.source-main{padding:0 18px 44px}.topbar{min-height:auto;padding:22px 0}.panel-head,.section-intro{align-items:flex-start;flex-direction:column}.stats{grid-template-columns:repeat(2,1fr)}.server-metrics{grid-template-columns:repeat(2,1fr)}.gateway-account,.gateway-credential-head{align-items:flex-start;flex-direction:column}}
 @media(max-width:580px){.source-main{padding-inline:13px}.topbar{align-items:flex-start;flex-direction:column;gap:14px}.topbar h1{font-size:27px}.top-actions{width:100%}.top-actions .button{flex:1}.tabs{margin-inline:-3px}.tab{padding:9px 11px}.tab span{display:none}.section-intro{padding-bottom:12px}.intro-step{display:none}.stats,.stats.five{grid-template-columns:1fr 1fr}.stats article{min-height:86px;padding:13px}.stats strong{font-size:24px}.repo-card{align-items:flex-start;flex-direction:column}.repo-card .inline-actions{width:100%}.repo-card .button{flex:1}.panel{padding:15px}.legend{display:none}.source{grid-template-columns:1fr}.source-main{grid-column:auto}.xtream-form{grid-template-columns:1fr}.xtream-form .wide{grid-column:auto}.catalog-controls{grid-template-columns:1fr}.catalog-controls .wide{grid-column:auto}.server-head{flex-direction:column}.gateway-host-row{align-items:flex-start;flex-direction:column}.credential-grid{grid-template-columns:1fr}.catalog-item{align-items:flex-start}.gateway-title-row .button{width:100%}}
+
+/* Unified Xtream sources and subscriber issuance */
+.gateway-subscription-form{display:grid;grid-template-columns:1.5fr 1fr 1fr;gap:13px;margin:17px 0;padding:16px;background:rgba(115,84,185,.08);border:1px solid var(--border);border-radius:14px}
+.gateway-subscription-form label{display:flex;flex-direction:column;gap:8px;min-width:0}
+.gateway-subscription-form label span{font-size:12px;color:#c3b2d9}
+.gateway-subscription-form input,.gateway-subscription-form select{min-height:43px;max-width:100%;width:100%;background:#15121d;border:1px solid #4e3a61;border-radius:9px;color:#eee7fb;padding:10px;font:inherit}
+.source-warning{color:#ffcc94!important}
+.xtream-form .rights{grid-column:1/-1;max-width:100%;line-height:1.8}
+.xtream-form .rights span{font-weight:650}
+.xtream-form .advanced-field{opacity:.75}
+@media(max-width:740px){.gateway-subscription-form{grid-template-columns:1fr 1fr}.gateway-subscription-form label:first-child{grid-column:1/-1}}
+@media(max-width:500px){.gateway-subscription-form{grid-template-columns:1fr}.gateway-subscription-form label:first-child{grid-column:auto}}
+
+.gateway-batch-credentials{padding:18px;background:#17111f;border:1px solid #634882;border-radius:14px;margin:16px 0}
+.gateway-batch-rows{display:grid;gap:8px;margin-top:14px;max-height:330px;overflow-y:auto}
+.gateway-batch-row{display:flex;align-items:center;justify-content:space-between;gap:13px;padding:10px 12px;background:#100d17;border:1px solid #453454;border-radius:9px}
+.gateway-batch-row strong{min-width:0;overflow-wrap:anywhere}
+.gateway-batch-row code{color:#cbb9f6;direction:ltr;text-align:left;overflow-wrap:anywhere;font-size:12px}
+@media(max-width:690px){.gateway-batch-row{flex-direction:column;align-items:flex-start}.gateway-batch-row code{width:100%;text-align:right}}
+
+.gateway-batch-details{display:grid;gap:7px;min-width:0}
+.gateway-batch-details code{overflow-wrap:anywhere;word-break:break-word}
+.gateway-batch-row button{flex-shrink:0;font-size:12px}
+.gateway-app-code{color:#d4baff;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;direction:ltr;text-align:left;padding:7px 10px;border-radius:9px;background:#332046}
+@media(max-width:690px){.gateway-batch-row button{width:100%}}
