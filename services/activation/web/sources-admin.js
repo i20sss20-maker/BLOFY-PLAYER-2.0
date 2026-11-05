@@ -339,10 +339,16 @@ async function handleServerAction(item, card, button) {
         throw new Error('لم يؤكد السيرفر حفظ الحذف. المصدر لم يُحذف من القائمة.');
       // DELETE only succeeds after PostgreSQL commits the deletion tombstone.
       // Verify the authoritative source listing before showing success.
-      await loadXtream(true,true);
-      if(state.xtreamServers.some(source=>source.id===item.id))
-        throw new Error('المصدر ما زال موجودًا بعد إعادة قراءة قاعدة البيانات. لم نعتبر الحذف ناجحًا.');
-      showMessage('تم حفظ حذف المصدر «'+item.name+'» في قاعدة البيانات. لن يرجع بعد التحديث. يجري تنظيف '+total+' عنصر بالخلفية.');
+      try {
+        await loadXtream(true,true);
+        if(state.xtreamServers.some(source=>source.id===item.id))
+          throw new Error('المصدر ما زال ظاهرًا في استجابة القائمة الجديدة.');
+        showMessage('تم حفظ حذف المصدر «'+item.name+'» في قاعدة البيانات. لن يرجع بعد التحديث. يجري تنظيف '+total+' عنصر بالخلفية.');
+      } catch(readError) {
+        // A committed DELETE must not be reported as a failed deletion just
+        // because the follow-up display refresh timed out.
+        showMessage('حُفظ طلب الحذف في قاعدة البيانات، لكن تعذّر تأكيد تحديث القائمة: '+readError.message,'error');
+      }
     } else if (action.startsWith('sync-')) {
       const type = action === 'sync-all' ? ['live','movie','series'] : [action.replace('sync-', '')];
       await api(`/api/v1/admin/xtream/servers/${item.id}/sync`, { method: 'POST', body: JSON.stringify({ types: type }) });
