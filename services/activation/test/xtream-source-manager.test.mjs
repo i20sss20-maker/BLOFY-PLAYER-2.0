@@ -21,7 +21,8 @@ test('each Xtream source has direct on/off, publish, sync and delete actions',()
   }
   assert.match(card,/item\.enabled \? '⏸ إيقاف المصدر' : '▶ تفعيل المصدر'/);
   assert.match(card,/item\.publishCatalog \? 'إخفاء المحتوى عن العملاء' : 'نشر المحتوى للعملاء'/);
-  assert.match(card,/item\.syncing && \(action\.startsWith\('sync'\) \|\| action === 'delete'\)/);
+  assert.match(card,/item\.syncing && action\.startsWith\('sync'\)/);
+  assert.doesNotMatch(card,/action === 'delete'\)/);
 });
 
 test('switches persist immediately through the protected admin PATCH route and deletion is confirmed',()=>{
