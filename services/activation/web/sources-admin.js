@@ -344,13 +344,75 @@ function updateCatalogServerOptions() {
   if (state.xtreamServers.some(server => server.id === current)) select.value = current;
 }
 
+function renderCategoryManager() {
+  const target=el('categoryManagerRows');
+  if(!target)return;
+  target.replaceChildren();
+  const all=state.categories||[];
+  const query=String(el('categorySearch')?.value||'').trim().toLowerCase();
+  const matches=all.filter(category=>String(category.name||'').toLowerCase().includes(query));
+  const countOn=all.filter(category=>category.enabled).length;
+  el('categoryManagerSummary').textContent=
+    'الفئات: '+all.length+' · الظاهرة: '+countOn+' · المخفية: '+(all.length-countOn)+
+    (query?' · نتائج البحث: '+matches.length:'')+(query?' · امسح البحث لتحريك الفئات':'');
+  const rows=matches.slice(0,120);
+  if(!rows.length){
+    target.append(make('p','empty','ما توجد فئات مطابقة للمصدر والنوع المحددين.'));
+    return;
+  }
+  for(const category of rows){
+    const row=make('article','category-manager-row'+(category.enabled?'':' hidden-category'));
+    const info=make('div','category-manager-label');
+    info.append(make('strong','',category.name));
+    info.append(make('small','',Number(category.itemCount||0).toLocaleString('en-US')+' عنصر'));
+    const actions=make('div','category-manager-actions');
+    const position=all.findIndex(x=>x.id===category.id);
+    const buttons=[
+      ['↑','up','رفع الفئة',Boolean(query)||position===0],
+      ['↓','down','خفض الفئة',Boolean(query)||position===all.length-1],
+      [category.enabled?'إخفاء':'إظهار','toggle',category.enabled?'إخفاء عن العملاء':'إظهار للعملاء',false]
+    ];
+    for(const [label,action,title,disabled] of buttons){
+      const button=make('button','button ghost',label);
+      button.type='button';button.dataset.action=action;button.dataset.categoryId=category.id;
+      button.title=title;button.disabled=disabled;
+      actions.append(button);
+    }
+    row.append(info,actions);
+    target.append(row);
+  }
+  if(matches.length>rows.length)target.append(make('p','muted','المعروض أول 120 فئة. استخدم البحث للوصول إلى بقية الفئات.'));
+}
+
+async function changeCategory(button) {
+  const categoryId=button.dataset.categoryId;
+  const action=button.dataset.action;
+  const category=state.categories.find(x=>x.id===categoryId);
+  const serverId=el('catalogServer').value,kind=el('catalogType').value;
+  if(!category||!serverId)return;
+  button.disabled=true;
+  try{
+    const payload=action==='toggle'?{enabled:!category.enabled}:{direction:action};
+    await api('/api/v1/admin/xtream/categories/'+encodeURIComponent(serverId)+'/'+encodeURIComponent(kind)+'/'+encodeURIComponent(categoryId),{
+      method:'PATCH',body:JSON.stringify(payload)
+    });
+    // Read back persisted state rather than trusting a local optimistic toggle.
+    await loadCategories();
+    showMessage(action==='toggle'
+      ?'تم حفظ '+(payload.enabled?'إظهار':'إخفاء')+' الفئة «'+category.name+'».'
+      :'تم حفظ ترتيب الفئة «'+category.name+'» في قاعدة البيانات.');
+  }catch(error){
+    showMessage('فشل حفظ الفئة «'+category.name+'»: '+error.message,'error');
+  }finally{button.disabled=false;}
+}
+
 async function loadCategories() {
   const serverId = el('catalogServer').value;
   const type = el('catalogType').value;
   const select = el('catalogCategory');
   select.replaceChildren();
   const all = document.createElement('option'); all.value = ''; all.textContent = 'كل الأقسام'; select.append(all);
-  if (!serverId) return;
+  if (!serverId){state.categories=[];renderCategoryManager();return;}
   try {
     const data = await api(`/api/v1/admin/xtream/categories?serverId=${encodeURIComponent(serverId)}&type=${encodeURIComponent(type)}`);
     state.categories = Array.isArray(data.items) ? data.items : [];
@@ -360,7 +422,9 @@ async function loadCategories() {
       option.textContent = `${category.enabled ? '' : '⛔ '} ${category.name} (${Number(category.itemCount || 0).toLocaleString()})`;
       select.append(option);
     });
+    renderCategoryManager();
   } catch (error) {
+    el('categoryManagerSummary').textContent='تعذر تحميل الفئات: '+error.message;
     showMessage(`تعذر تحميل الأقسام: ${error.message}`, 'error');
   }
 }
@@ -486,6 +550,11 @@ el('xtRefreshSourcesBtn').addEventListener('click', ()=>loadXtream().catch(error
 el('catalogServer').addEventListener('change', async () => { await loadCategories(); await loadCatalog(); });
 el('catalogType').addEventListener('change', async () => { await loadCategories(); await loadCatalog(); });
 el('catalogCategory').addEventListener('change', loadCatalog);
+el('categorySearch').addEventListener('input',renderCategoryManager);
+el('categoryManagerRows').addEventListener('click',event=>{
+  const button=event.target.closest('button[data-action][data-category-id]');
+  if(button)changeCategory(button).catch(error=>showMessage('تعذر حفظ الفئة: '+error.message,'error'));
+});
 el('catalogLoadBtn').addEventListener('click', loadCatalog);
 el('catalogSearch').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); loadCatalog(); } });
 el('enableTypeBtn').addEventListener('click', () => bulkCatalog(true));
