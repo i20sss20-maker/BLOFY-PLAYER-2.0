@@ -152,11 +152,8 @@ function serverCard(item) {
   actionStatus.hidden=!feedback;
   info.append(actionStatus);
 
-  card.addEventListener('click', event => {
-    const button = event.target.closest('button[data-action]');
-    if (!button || !card.contains(button) || card.dataset.busy === '1') return;
-    handleServerAction(card._latestSource, card, button);
-  });
+  // Source actions are handled by one stable capturing listener on document.
+  // Never attach the handler to nodes that background polling may replace.
   const indicators = make('div', 'source-quick-status');
   indicators.append(
     make('span', item.enabled ? 'source-state-pill on' : 'source-state-pill off', item.enabled ? '● المصدر مفعّل' : '● المصدر موقوف'),
@@ -164,6 +161,77 @@ function serverCard(item) {
   );
   card.append(header, indicators, metrics, actions, settings, info);
   return card;
+}
+
+function refreshSourceCard(card, item) {
+  // Keep card and all its buttons mounted while data changes.
+  // Source clicks previously disappeared before their own event handlers ran.
+  card._latestSource=item;
+  card.dataset.renderSignature=JSON.stringify(item);
+  const status=card.querySelector('.server-status');
+  if(status) {
+    status.className='server-status '+xtStatusClass(item.syncing?'syncing':item.status);
+    status.textContent=item.syncing?'Syncing':String(item.status||'unknown');
+  }
+  const title=card.querySelector('.server-head > div');
+  if(title) {
+    const name=title.querySelector('strong');
+    const host=title.querySelector('.server-url');
+    if(name)name.textContent=item.name;
+    if(host)host.textContent=item.baseUrl;
+  }
+  for(const [index,value] of [item.counts?.live,item.counts?.movie,item.counts?.series,item.counts?.total].entries()){
+    const total=card.querySelectorAll('.server-metrics strong')[index];
+    if(total)total.textContent=Number(value||0).toLocaleString('en-US');
+  }
+  const pills=card.querySelectorAll('.source-quick-status .source-state-pill');
+  if(pills[0]){
+    pills[0].className='source-state-pill '+(item.enabled?'on':'off');
+    pills[0].textContent=item.enabled?'● المصدر مفعّل':'● المصدر موقوف';
+  }
+  if(pills[1]){
+    pills[1].className='source-state-pill '+(item.enabled&&item.publishCatalog?'published':'hidden');
+    pills[1].textContent=item.enabled&&item.publishCatalog?'● منشور للمشتركين':'○ غير ظاهر للمشتركين';
+  }
+  const enabledButton=card.querySelector('button[data-action="toggle-enabled"]');
+  if(enabledButton){
+    enabledButton.textContent=item.enabled?'⏸ إيقاف المصدر':'▶ تفعيل المصدر';
+    enabledButton.className=item.enabled?'button source-toggle-stop':'button primary';
+  }
+  const publishedButton=card.querySelector('button[data-action="toggle-publish"]');
+  if(publishedButton){
+    publishedButton.textContent=item.publishCatalog?'إخفاء المحتوى عن العملاء':'نشر المحتوى للعملاء';
+    publishedButton.className=item.publishCatalog?'button ghost':'button primary';
+  }
+  card.querySelectorAll('button[data-action^="sync-"]').forEach(button=>{
+    button.disabled=Boolean(item.syncing);
+  });
+  const buttons=card.querySelector('.server-actions:not(.server-actions-advanced)');
+  let cancel=buttons?.querySelector('button[data-action="cancel-sync"]');
+  if(item.syncing||item.status==='syncing'){
+    if(!cancel&&buttons){
+      cancel=make('button','button ghost','⏹ إلغاء المزامنة');
+      cancel.type='button';cancel.dataset.action='cancel-sync';
+      buttons.insertBefore(cancel,buttons.querySelector('button[data-action="sync-all"]'));
+    }
+  }else if(cancel){
+    cancel.remove();
+  }
+  const info=card.querySelector('.server-info');
+  if(info){
+    let progress=info.querySelector('.sync-progress-note');
+    if(item.syncProgress){
+      if(!progress){progress=make('span','sync-progress-note');info.prepend(progress);}
+      const types={starting:'تهيئة',live:'القنوات',movie:'الأفلام',series:'المسلسلات'};
+      progress.textContent='جاري استيراد '+(types[item.syncProgress.mediaType]||item.syncProgress.mediaType)+' · '+
+        Number(item.syncProgress.imported||0).toLocaleString('en-US')+' عنصر';
+    }else progress?.remove();
+    let error=info.querySelector('.error-text');
+    if(item.lastError){
+      if(!error){error=make('span','error-text');info.append(error);}
+      error.textContent='آخر خطأ: '+item.lastError;
+    }else error?.remove();
+  }
 }
 
 function renderXtream() {
@@ -215,18 +283,10 @@ function renderXtream() {
   const desired=[];
   for(const item of visible){
     const old=existing.get(item.id);
-    const signature=JSON.stringify(item);
-    // Never replace a pending mutation or a user-opened editing form.
-    const interacting=old && (old.dataset.busy==='1'
-      || Boolean(old.querySelector('details[open]'))
-      || old.contains(document.activeElement));
-    if(old && (old.dataset.renderSignature===signature || interacting)){
-      old._latestSource=item;
+    if(old) {
+      refreshSourceCard(old,item);
       desired.push(old);
-    }else{
-      const card=serverCard(item);
-      desired.push(card);
-    }
+    }else desired.push(serverCard(item));
   }
   if(desired.length===0){
     const hint=make('div','empty',state.xtreamServers.length
@@ -670,6 +730,21 @@ document.querySelectorAll('.tab').forEach(button => button.addEventListener('cli
 el('refreshBtn').addEventListener('click', refreshCurrent);
 el('xtreamForm').addEventListener('submit', addXtream);
 el('syncAllXtreamBtn').addEventListener('click', syncAllXtream);
+// Capture source commands before a background catalog refresh can detach
+// individual cards. Buttons are ordinary type=button controls; no form submit.
+document.addEventListener('click',event=>{
+  const button=event.target instanceof Element
+    ?event.target.closest('button[data-action]'):null;
+  if(!button||!el('xtreamServers').contains(button))return;
+  const card=button.closest('.server-card[data-id]');
+  if(!card||card.dataset.busy==='1'||button.disabled)return;
+  event.preventDefault();
+  event.stopPropagation();
+  const item=card._latestSource;
+  if(!item){showMessage('تعذر تحديد المصدر لهذا الزر؛ حدث القائمة وحاول مجددًا.','error');return;}
+  void handleServerAction(item,card,button).catch(error=>
+    showMessage('تعذر تنفيذ إجراء المصدر: '+String(error?.message||'خطأ غير معروف'),'error'));
+},true);
 el('xtSourceSearch').addEventListener('input', renderXtream);
 el('xtSourceFilter').addEventListener('change', renderXtream);
 el('xtNewSourceBtn').addEventListener('click', () => {
