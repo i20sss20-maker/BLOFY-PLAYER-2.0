@@ -49,8 +49,8 @@ android {
         targetSdk = 36
         // Owner QA UI update over versionCode 2000077. Before production Play upload, confirm
         // this code is higher than every previously uploaded Play artifact.
-        versionCode = 2000084
-        versionName = "2.0.0-rc07.55.8.7" // Exact BLOFY PLAYER display version; no Xiaomi suffix in any build
+        versionCode = 2000085
+        versionName = "2.0.0-rc07.55.8.8" // Exact BLOFY PLAYER display version; no Xiaomi suffix in any build
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "ACTIVATION_BASE_URL", "\"$activationBaseUrlEscaped\"")
         buildConfigField("String", "UPDATE_BASE_URL", "\"$updateBaseUrlEscaped\"")
@@ -97,7 +97,13 @@ android {
     packaging { resources.excludes += setOf("META-INF/DEPENDENCIES", "META-INF/LICENSE*", "META-INF/NOTICE*") }
     testOptions {
         unitTests.isIncludeAndroidResources = true
-        unitTests.all { it.testLogging.exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
+        unitTests.all {
+            it.testLogging.exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+            // Robolectric resolves android-all-instrumented separately from Gradle dependencies.
+            // repo1.maven.org rate-limits shared CI runners (HTTP 429); use Maven Central's
+            // canonical endpoint to keep actual regression tests enabled.
+            it.systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2")
+        }
     }
 }
 
