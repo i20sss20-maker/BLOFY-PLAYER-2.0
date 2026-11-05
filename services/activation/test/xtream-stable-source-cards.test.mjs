@@ -11,26 +11,32 @@ const renderer=ui.slice(ui.indexOf('function renderXtream('),ui.indexOf('functio
 const handler=ui.slice(ui.indexOf('async function handleServerAction('),ui.indexOf('async function syncAllXtream('));
 const poll=ui.slice(ui.indexOf('function scheduleXtreamPoll('),ui.indexOf('async function loadXtream('));
 
-test('source cards are keyed and survive background refresh while active',()=>{
+test('source cards are keyed and never replaced by background sync polling',()=>{
   assert.match(renderer,/existing=new Map/);
   assert.match(renderer,/existing\.get\(item\.id\)/);
-  assert.match(renderer,/old\.dataset\.busy==='1'/);
-  assert.match(renderer,/old\.querySelector\('details\[open\]'\)/);
-  assert.match(renderer,/old\.contains\(document\.activeElement\)/);
-  assert.match(renderer,/old\._latestSource=item/);
+  assert.match(renderer,/refreshSourceCard\(old,item\)/);
+  assert.match(renderer,/desired\.push\(old\)/);
   assert.match(renderer,/list\.insertBefore\(desired\[i\],list\.children\[i\]\|\|null\)/);
-  assert.doesNotMatch(renderer,/list\.replaceChildren\(\);\s*const query/);
+  assert.doesNotMatch(renderer,/serverCard\(item\).*old\./);
+  const updater=ui.slice(ui.indexOf('function refreshSourceCard('),ui.indexOf('function renderXtream('));
+  assert.match(updater,/card\._latestSource=item/);
+  assert.match(updater,/card\.querySelector\('\.server-status'\)/);
+  assert.match(updater,/button\[data-action="toggle-enabled"\]/);
+  assert.doesNotMatch(updater,/replaceChildren/);
 });
 
-test('buttons act on the current source and mutation locks its card',()=>{
+test('Xtream buttons are captured at a stable document-level handler',()=>{
   assert.match(card,/card\._latestSource = item/);
   assert.match(card,/card\.dataset\.renderSignature = JSON\.stringify\(item\)/);
-  assert.match(card,/card\.dataset\.busy === '1'/);
-  assert.match(card,/handleServerAction\(card\._latestSource, card, button\)/);
+  assert.doesNotMatch(card,/card\.addEventListener\('click'/);
+  assert.match(ui,/document\.addEventListener\('click',event=>/);
+  assert.match(ui,/el\('xtreamServers'\)\.contains\(button\)/);
+  assert.match(ui,/event\.preventDefault\(\)/);
+  assert.match(ui,/event\.stopPropagation\(\)/);
+  assert.match(ui,/handleServerAction\(item,card,button\)/);
   assert.match(handler,/card\.dataset\.busy = '1'/);
   assert.match(handler,/button\.textContent = 'جارٍ الحفظ…'/);
   assert.match(handler,/card\.dataset\.busy = '0'/);
-  assert.match(handler,/if\(document\.activeElement===button\)button\.blur\(\)/);
   assert.match(handler,/writeFeedback\('لم يُحفظ التغيير:/);
 });
 
