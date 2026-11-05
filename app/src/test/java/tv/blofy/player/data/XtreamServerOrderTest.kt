@@ -1,48 +1,41 @@
 package tv.blofy.player.data
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
+import org.junit.Assert.assertSame
 import org.junit.Test
 
 class XtreamServerOrderTest {
-    @Test fun explicitCategoryOrderBeatsAlphabeticAndResponseOrder() {
+    @Test fun responseArrayOrderIsAuthoritativeEvenWhenMetadataDisagrees() {
         val rows = listOf(
             mapOf("category_id" to 97, "category_name" to "Alpha", "category_order" to "20"),
             mapOf("category_id" to 5, "category_name" to "Zulu", "category_order" to "2"),
             mapOf("category_id" to 1, "category_name" to "Beta", "category_order" to 3.0)
         )
-        assertEquals(listOf(5, 1, 97), XtreamServerOrder.categories(rows).map { it["category_id"] })
+        assertSame(rows, XtreamServerOrder.categories(rows))
+        assertEquals(listOf(97, 5, 1), XtreamServerOrder.categories(rows).map { it["category_id"] })
     }
 
-    @Test fun missingOrDuplicateCategoryOrderKeepsExactUpstreamSequence() {
-        val unnumbered = listOf(
-            mapOf("category_id" to "40", "category_name" to "Zulu"),
-            mapOf("category_id" to "2", "category_name" to "Alpha")
+    @Test fun emptyDuplicateAndMissingOrderingFieldsDoNotTriggerClientSorting() {
+        val rows = listOf(
+            mapOf("category_id" to "40", "category_name" to "Zulu", "order" to 2),
+            mapOf("category_id" to "2", "category_name" to "Alpha", "sort_order" to "0"),
+            mapOf("category_id" to "7", "category_name" to "Beta", "sort_order" to "0"),
+            mapOf("category_id" to "8", "category_name" to "Bravo")
         )
-        assertEquals(unnumbered, XtreamServerOrder.categories(unnumbered))
-        val tied = listOf(
-            mapOf("category_id" to "7", "category_order" to "0"),
-            mapOf("category_id" to "2", "category_order" to 0)
-        )
-        assertEquals(tied, XtreamServerOrder.categories(tied))
+        assertEquals(rows, XtreamServerOrder.categories(rows))
     }
 
-    @Test fun streamNumberOrderBeatsTitleAndJsonArrayPosition() {
-        val first = XtreamServerOrder.streamPosition(mapOf("num" to 20.0), 1)
-        val second = XtreamServerOrder.streamPosition(mapOf("num" to "1"), 2)
-        assertTrue(second < first)
-        assertTrue(XtreamServerOrder.streamPosition(mapOf("num" to "1"), 3) > second)
-        val missing = XtreamServerOrder.streamPosition(mapOf("name" to "Zulu"), 4)
-        val missingNext = XtreamServerOrder.streamPosition(mapOf("name" to "Alpha"), 5)
-        assertTrue(first < missing)
-        assertTrue(missing < missingNext)
+    @Test fun streamNumbersMustNotReorderLiveMoviesOrSeries() {
+        for (kind in listOf("live", "movie", "series")) {
+            val first = XtreamServerOrder.streamPosition(mapOf("name" to "Alpha $kind", "num" to 50), 1)
+            val second = XtreamServerOrder.streamPosition(mapOf("name" to "Zulu $kind", "num" to 1), 2)
+            val third = XtreamServerOrder.streamPosition(mapOf("name" to "Beta $kind"), 3)
+            assertEquals(listOf(1L, 2L, 3L), listOf(first, second, third))
+        }
     }
 
-    @Test fun invalidNumericMetadataUsesOriginalProviderArrayPosition() {
-        val negative = XtreamServerOrder.streamPosition(mapOf("num" to "-1"), 2)
-        val nonNumeric = XtreamServerOrder.streamPosition(mapOf("num" to "A-Z"), 3)
-        assertTrue(negative < nonNumeric)
-        val huge = XtreamServerOrder.streamPosition(mapOf("num" to Long.MAX_VALUE), 4)
-        assertTrue(nonNumeric < huge)
+    @Test fun failedRowsDoNotChangeOriginalPositionOfFollowingValidRows() {
+        // Parser counts every source row, including missing stream_id, before mapping.
+        assertEquals(4L, XtreamServerOrder.streamPosition(mapOf("num" to 1), 4))
     }
 }
