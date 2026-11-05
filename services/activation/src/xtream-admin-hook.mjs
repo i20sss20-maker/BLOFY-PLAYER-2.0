@@ -242,6 +242,59 @@ async function serverById(id) {
   return (await pool.query('SELECT * FROM blofy_xtream_servers WHERE id=$1 AND deletion_requested_at IS NULL', [id])).rows[0] || null;
 }
 
+// A large catalog can hold thousands of foreign-key references. Mark a source
+// disabled immediately and remove its records in bounded batches; a request must
+// not spend the proxy's 15s timeout deleting 100,000+ rows.
+const XTREAM_PURGE_TABLES = [
+  'blofy_xtream_gateway_episode_map',
+  'blofy_xtream_gateway_item_map',
+  'blofy_xtream_gateway_category_map',
+  'blofy_xtream_items',
+  'blofy_xtream_categories'
+];
+
+async function purgeSource(id) {
+  if (purgeRunning.has(id)) return;
+  purgeRunning.add(id);
+  cancelledSources.add(id);
+  try {
+    for (const table of XTREAM_PURGE_TABLES) {
+      for (;;) {
+        const result = await pool.query(`DELETE FROM ${table}
+          WHERE ctid IN (SELECT ctid FROM ${table} WHERE server_id=$1 LIMIT 400)`, [id]);
+        if (!result.rowCount) break;
+        // Yield the event loop between bounded deletes; concurrent requests can
+        // still pause other sources or read customer accounts.
+        await new Promise(resolve => setImmediate(resolve));
+      }
+    }
+    await pool.query('DELETE FROM blofy_xtream_servers WHERE id=$1 AND deletion_requested_at IS NOT NULL', [id]);
+  } catch (error) {
+    // deletion_requested_at remains persisted, so startup/periodic retries
+    // safely resume rather than exposing a partially removed source.
+    console.warn('Xtream source cleanup will retry:', id, redactXtreamError(error));
+  } finally {
+    purgeRunning.delete(id);
+    if (!syncLocks.has(id)) cancelledSources.delete(id);
+  }
+}
+
+async function resumePendingPurges() {
+  const pending = await pool.query('SELECT id FROM blofy_xtream_servers WHERE deletion_requested_at IS NOT NULL LIMIT 20');
+  for (const row of pending.rows) void purgeSource(row.id);
+}
+
+async function requestDeleteSource(id) {
+  const result = await pool.query(`UPDATE blofy_xtream_servers
+    SET enabled=FALSE,publish_catalog=FALSE,status='offline',
+        deletion_requested_at=COALESCE(deletion_requested_at,NOW()),updated_at=NOW()
+    WHERE id=$1 RETURNING id`,[id]);
+  if (!result.rows.length) return false;
+  cancelledSources.add(id);
+  void purgeSource(id);
+  return true;
+}
+
 async function checkedFetch(url, { timeoutMs = 30000 } = {}) {
   let current = new URL(url);
   for (let redirects = 0; redirects <= 3; redirects++) {
@@ -694,8 +747,10 @@ http.createServer = function withBlofyXtream(listener) {
         if (!validUuid(id)) return json(res, 400, { error: 'xtream_server_id_invalid' });
         if (!action && req.method === 'PATCH') return json(res, 200, { item: await patchServer(id, await readJson(req)) });
         if (!action && req.method === 'DELETE') {
-          const result = await pool.query('DELETE FROM blofy_xtream_servers WHERE id=$1', [id]);
-          return json(res, result.rowCount ? 200 : 404, result.rowCount ? { deleted: true } : { error: 'xtream_server_not_found' });
+          const accepted = await requestDeleteSource(id);
+          return json(res, accepted ? 202 : 404, accepted
+            ? { deletionQueued: true, deletedFromCatalog: true }
+            : { error: 'xtream_server_not_found' });
         }
         if (action === 'test' && req.method === 'POST') return json(res, 200, { item: await testServer(id) });
         if (action === 'sync' && req.method === 'POST') {
