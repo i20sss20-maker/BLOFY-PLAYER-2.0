@@ -28,6 +28,7 @@ import { readFile } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import pg from 'pg';
 import { validateBulkAccountRequest } from './xtream-bulk-policy.mjs';
+import { gatewayItemsPageQuery } from './xtream-gateway-query.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
@@ -340,29 +341,51 @@ async function authenticate(usernameInput, passwordInput, { touch = false } = {}
   return row;
 }
 
-async function ensureCategoryMaps(mediaType) {
+// A 290k-item catalog used to scan and ON CONFLICT every item for every
+// Xtream player request. Single-flight + bounded freshness avoids repeated
+// heavyweight map INSERTs while still detecting newly imported items.
+const categoryMapJobs=new Map();
+const itemMapJobs=new Map();
+const MAP_FRESHNESS_MS=20000;
+async function oncePerMediaMap(cache,key,task){
+  const old=cache.get(key),now=Date.now();
+  if(old && (!old.settled || now-old.startedAt<MAP_FRESHNESS_MS))return old.promise;
+  const entry={startedAt:now,promise:null,settled:false};
+  entry.promise=Promise.resolve().then(task);
+  cache.set(key,entry);
+  try{return await entry.promise;}
+  catch(error){if(cache.get(key)===entry)cache.delete(key);throw error;}
+  finally{entry.settled=true;}
+}
+
+async function ensureCategoryMaps(mediaType,sourceId=null) {
   await ensureReady();
-  await pool.query(`INSERT INTO blofy_xtream_gateway_category_map(server_id,media_type,source_category_id)
+  const key=mediaType+':'+(sourceId||'*');
+  return oncePerMediaMap(categoryMapJobs,key,()=>pool.query(`INSERT INTO blofy_xtream_gateway_category_map(server_id,media_type,source_category_id)
     SELECT c.server_id,c.media_type,c.source_category_id
     FROM blofy_xtream_categories c
     JOIN blofy_xtream_servers s ON s.id=c.server_id
     WHERE c.media_type=$1 AND c.enabled=TRUE AND s.enabled=TRUE AND s.publish_catalog=TRUE
-    ON CONFLICT(server_id,media_type,source_category_id) DO NOTHING`, [mediaType]);
+      AND ($2::uuid IS NULL OR s.id=$2::uuid)
+    ON CONFLICT(server_id,media_type,source_category_id) DO NOTHING`,[mediaType,sourceId]));
 }
 
-async function ensureItemMaps(mediaType) {
+async function ensureItemMaps(mediaType,sourceId=null) {
   await ensureReady();
-  await pool.query(`INSERT INTO blofy_xtream_gateway_item_map(server_id,media_type,source_id)
+  const key=mediaType+':'+(sourceId||'*');
+  return oncePerMediaMap(itemMapJobs,key,()=>pool.query(`INSERT INTO blofy_xtream_gateway_item_map(server_id,media_type,source_id)
     SELECT i.server_id,i.media_type,i.source_id
     FROM blofy_xtream_items i
     JOIN blofy_xtream_servers s ON s.id=i.server_id
     LEFT JOIN blofy_xtream_categories c ON c.server_id=i.server_id AND c.media_type=i.media_type AND c.source_category_id=i.category_id
-    WHERE i.media_type=$1 AND i.enabled=TRUE AND s.enabled=TRUE AND s.publish_catalog=TRUE AND (c.enabled IS NULL OR c.enabled=TRUE)
-    ON CONFLICT(server_id,media_type,source_id) DO NOTHING`, [mediaType]);
+    WHERE i.media_type=$1 AND i.enabled=TRUE AND s.enabled=TRUE AND s.publish_catalog=TRUE
+      AND (c.enabled IS NULL OR c.enabled=TRUE)
+      AND ($2::uuid IS NULL OR i.server_id=$2::uuid)
+    ON CONFLICT(server_id,media_type,source_id) DO NOTHING`,[mediaType,sourceId]));
 }
 
 async function gatewayCategories(mediaType, sourceId=null) {
-  await ensureCategoryMaps(mediaType);
+  await ensureCategoryMaps(mediaType,sourceId);
   return (await pool.query(`SELECT m.gateway_id,c.name
     FROM blofy_xtream_gateway_category_map m
     JOIN blofy_xtream_categories c ON c.server_id=m.server_id AND c.media_type=m.media_type AND c.source_category_id=m.source_category_id
@@ -382,30 +405,12 @@ async function categoryFilter(mediaType, gatewayId, sourceId=null) {
 }
 
 async function walkGatewayItems(mediaType, filter, onRow, sourceId=null) {
-  await ensureCategoryMaps(mediaType);
-  await ensureItemMaps(mediaType);
+  await ensureCategoryMaps(mediaType,sourceId);
+  await ensureItemMaps(mediaType,sourceId);
   let lastId = 0;
   for (;;) {
-    const values = [mediaType, lastId];
-    const where = ['m.media_type=$1','m.gateway_id>$2','s.enabled=TRUE','s.publish_catalog=TRUE','i.enabled=TRUE','(c.enabled IS NULL OR c.enabled=TRUE)'];
-    if (sourceId) {
-      values.push(sourceId);
-      where.push(`i.server_id=${values.length}`);
-    }
-    if (filter) {
-      values.push(filter.server_id, filter.source_category_id);
-      where.push(`i.server_id=$${values.length-1}`, `i.category_id=$${values.length}`);
-    }
-    values.push(2000);
-    const rows = (await pool.query(`SELECT m.gateway_id,i.server_id,i.source_id,i.category_id,i.name,i.icon_url,i.container_extension,i.metadata,
-        cm.gateway_id AS category_gateway_id,s.priority
-      FROM blofy_xtream_gateway_item_map m
-      JOIN blofy_xtream_items i ON i.server_id=m.server_id AND i.media_type=m.media_type AND i.source_id=m.source_id
-      JOIN blofy_xtream_servers s ON s.id=i.server_id
-      LEFT JOIN blofy_xtream_categories c ON c.server_id=i.server_id AND c.media_type=i.media_type AND c.source_category_id=i.category_id
-      LEFT JOIN blofy_xtream_gateway_category_map cm ON cm.server_id=i.server_id AND cm.media_type=i.media_type AND cm.source_category_id=i.category_id
-      WHERE ${where.join(' AND ')}
-      ORDER BY m.gateway_id ASC LIMIT $${values.length}`, values)).rows;
+    const page=gatewayItemsPageQuery(mediaType,lastId,{filter,sourceId});
+    const rows=(await pool.query(page)).rows;
     if (!rows.length) break;
     for (const row of rows) await onRow(row);
     lastId = Number(rows[rows.length - 1].gateway_id);
@@ -413,21 +418,39 @@ async function walkGatewayItems(mediaType, filter, onRow, sourceId=null) {
   }
 }
 
+async function writeStreamChunk(res,chunk) {
+  if(res.destroyed||res.writableEnded)throw new Error('xtream_client_disconnected');
+  if(res.write(chunk))return;
+  await new Promise((resolve,reject)=>{
+    const cleanup=()=>{res.off('drain',ok);res.off('close',closed);res.off('error',failed);};
+    const ok=()=>{cleanup();resolve();};
+    const closed=()=>{cleanup();reject(new Error('xtream_client_disconnected'));};
+    const failed=()=>{cleanup();reject(new Error('xtream_stream_write_failed'));};
+    res.once('drain',ok);res.once('close',closed);res.once('error',failed);
+  });
+}
+
 async function streamGatewayItems(res, mediaType, categoryId, sourceId=null) {
   const filter = await categoryFilter(mediaType, categoryId, sourceId);
+  // Prepare expensive source mapping BEFORE committing HTTP 200. Fail with a
+  // real response status if the database is unavailable instead of sending
+  // an incomplete JSON list that Xtream clients cannot parse.
+  await ensureCategoryMaps(mediaType,sourceId);
+  await ensureItemMaps(mediaType,sourceId);
   res.writeHead(200, {
     'content-type': 'application/json; charset=utf-8',
     'cache-control': 'no-store',
     'x-content-type-options': 'nosniff'
   });
-  res.write('[');
+  await writeStreamChunk(res,'[');
   let first = true;
-  await walkGatewayItems(mediaType, filter, row => {
-    if (!first) res.write(',');
+  await walkGatewayItems(mediaType, filter, async row => {
+    const prefix=first?'':',';
     first = false;
-    res.write(JSON.stringify(formatGatewayItem(mediaType, row)));
+    await writeStreamChunk(res,prefix+JSON.stringify(formatGatewayItem(mediaType,row)));
   }, sourceId);
-  res.end(']');
+  await writeStreamChunk(res,']');
+  res.end();
 }
 
 async function gatewayItemById(mediaType, gatewayId, sourceId=null) {
@@ -680,22 +703,26 @@ async function handleM3u(req, res, url) {
   const account = await authenticate(username, password, { touch: true });
   if (!account) return text(res, 401, 'Unauthorized');
   const base = origin(req);
+  for(const kind of ['live','movie']){
+    await ensureCategoryMaps(kind,account.source_id||null);
+    await ensureItemMaps(kind,account.source_id||null);
+  }
   res.writeHead(200, {
     'content-type': 'audio/x-mpegurl; charset=utf-8',
     'cache-control': 'no-store',
     'content-disposition': 'inline; filename="blofy.m3u"'
   });
-  res.write('#EXTM3U\n');
+  await writeStreamChunk(res,'#EXTM3U\n');
   for (const mediaType of ['live','movie']) {
-    await walkGatewayItems(mediaType, null, row => {
+    await walkGatewayItems(mediaType, null, async row => {
       const item = formatGatewayItem(mediaType, row);
       const group = escapeM3uAttribute(row.metadata?.genre || (mediaType === 'live' ? 'Live' : 'Movies'));
       const name = escapeM3uAttribute(row.name);
       const logo = escapeM3uAttribute(row.icon_url || '');
       const ext = mediaType === 'live' ? 'ts' : safeGatewayExtension(row.container_extension, 'mp4');
       const kind = mediaType === 'live' ? 'live' : 'movie';
-      res.write(`#EXTINF:-1 tvg-name="${name}" tvg-logo="${logo}" group-title="${group}",${name}\n`);
-      res.write(`${base}/${kind}/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${row.gateway_id}.${ext}\n`);
+      await writeStreamChunk(res,`#EXTINF:-1 tvg-name="${name}" tvg-logo="${logo}" group-title="${group}",${name}\n`);
+      await writeStreamChunk(res,`${base}/${kind}/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${row.gateway_id}.${ext}\n`);
     }, account.source_id||null);
   }
   res.end();
