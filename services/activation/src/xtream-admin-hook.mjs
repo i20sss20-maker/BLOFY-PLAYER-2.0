@@ -32,6 +32,9 @@ pool.on('error', error => console.error('xtream database error:', safeErrorSumma
 
 const limiter = createFixedWindowLimiter({ limit: 180, windowMs: 60_000 });
 const syncLocks = new Set();
+const cancelledSources = new Set();
+const purgeRunning = new Set();
+let purgeSweepStarted = false;
 let readyPromise;
 
 const TYPE_ACTIONS = {
@@ -144,6 +147,7 @@ async function ensureReady() {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`);
+      await client.query('ALTER TABLE blofy_xtream_servers ADD COLUMN IF NOT EXISTS deletion_requested_at TIMESTAMPTZ');
       await client.query(`CREATE TABLE IF NOT EXISTS blofy_xtream_categories (
         server_id UUID NOT NULL REFERENCES blofy_xtream_servers(id) ON DELETE CASCADE,
         media_type TEXT NOT NULL CHECK(media_type IN ('live','movie','series')),
@@ -151,6 +155,7 @@ async function ensureReady() {
         name TEXT NOT NULL,
         parent_id TEXT,
         enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        sort_order INTEGER NOT NULL DEFAULT 100000,
         item_count INTEGER NOT NULL DEFAULT 0,
         sync_token TEXT,
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -170,6 +175,7 @@ async function ensureReady() {
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         PRIMARY KEY(server_id,media_type,source_id)
       )`);
+      await client.query('ALTER TABLE blofy_xtream_categories ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 100000');
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_servers_publish ON blofy_xtream_servers(enabled,publish_catalog,priority)');
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_categories_filter ON blofy_xtream_categories(server_id,media_type,enabled,name)');
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_items_filter ON blofy_xtream_items(server_id,media_type,category_id,enabled,name)');
@@ -181,7 +187,18 @@ async function ensureReady() {
       client.release();
     }
   })().catch(error => { readyPromise = null; throw error; });
-  return readyPromise;
+  const result = await readyPromise;
+  if (!purgeSweepStarted) {
+    purgeSweepStarted = true;
+    const timer=setInterval(() => {
+      void resumePendingPurges().catch(error =>
+        console.warn('Xtream purge scan failed:', redactXtreamError(error)));
+    }, 60000);
+    timer.unref?.();
+    setTimeout(() => void resumePendingPurges().catch(error =>
+      console.warn('Xtream startup purge scan failed:', redactXtreamError(error))), 250);
+  }
+  return result;
 }
 
 function decryptCredentials(row) {
@@ -216,13 +233,13 @@ function adminServer(row) {
 
 async function serverRows() {
   await ensureReady();
-  return (await pool.query('SELECT * FROM blofy_xtream_servers ORDER BY priority ASC,name ASC')).rows;
+  return (await pool.query('SELECT * FROM blofy_xtream_servers WHERE deletion_requested_at IS NULL ORDER BY priority ASC,name ASC')).rows;
 }
 
 async function serverById(id) {
   await ensureReady();
   if (!validUuid(id)) return null;
-  return (await pool.query('SELECT * FROM blofy_xtream_servers WHERE id=$1', [id])).rows[0] || null;
+  return (await pool.query('SELECT * FROM blofy_xtream_servers WHERE id=$1 AND deletion_requested_at IS NULL', [id])).rows[0] || null;
 }
 
 async function checkedFetch(url, { timeoutMs = 30000 } = {}) {
