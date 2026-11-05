@@ -578,6 +578,9 @@ async function patchServer(id, body) {
     if (!enabled) {
       if (syncLocks.has(id)) cancelledSources.add(id);
       set('status','offline');
+    } else if (!current.enabled) {
+      // Re-activated sources are awaiting a fresh connection check.
+      set('status','unknown');
     }
   }
   if (body.publishCatalog !== undefined) set('publish_catalog', Boolean(body.publishCatalog));
