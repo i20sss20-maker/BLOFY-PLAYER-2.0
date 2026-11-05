@@ -117,6 +117,9 @@ function serverCard(item) {
     ['فحص الاتصال', 'test', 'button ghost'],
     ['حذف المصدر', 'delete', 'button danger']
   ];
+  if(item.syncing||item.status==='syncing'){
+    buttons.splice(2,0,['⏹ إلغاء المزامنة','cancel-sync','button ghost']);
+  }
   buttons.forEach(([text, action, cls]) => {
     const button = make('button', cls, text);
     button.type = 'button'; button.dataset.action = action;
@@ -136,6 +139,12 @@ function serverCard(item) {
   if (item.accountInfo?.maxConnections != null) info.append(make('span', 'badge', `Max ${item.accountInfo.maxConnections}`));
   if (item.accountInfo?.activeConnections != null) info.append(make('span', 'badge', `Active ${item.accountInfo.activeConnections}`));
   if (item.lastSyncAt) info.append(make('span', 'muted', `آخر مزامنة: ${new Date(item.lastSyncAt).toLocaleString('ar-SA')}`));
+  if(item.syncProgress){
+    const typeNames={starting:'تهيئة',live:'القنوات',movie:'الأفلام',series:'المسلسلات'};
+    info.append(make('span','sync-progress-note',
+      'جاري استيراد '+(typeNames[item.syncProgress.mediaType]||item.syncProgress.mediaType)+
+      ' · '+Number(item.syncProgress.imported||0).toLocaleString('en-US')+' عنصر حتى الآن'));
+  }
   if (item.lastError) info.append(make('span', 'error-text', `آخر خطأ: ${item.lastError}`));
   const feedback=state.sourceFeedback.get(item.id);
   const actionStatus=make('p',feedback?.kind==='error'?'source-action-feedback error':'source-action-feedback',feedback?.text||'');
@@ -370,6 +379,15 @@ async function handleServerAction(item, card, button) {
       showMessage(isEnable
         ?(`تم حفظ ${next?'تفعيل':'إيقاف'} المصدر «${item.name}» في قاعدة البيانات، وسيبقى كذلك بعد تحديث الصفحة.`)
         :(`تم حفظ ${next?'نشر':'إخفاء'} محتوى «${item.name}» ${next?'للعملاء':'عن العملاء'}.`));
+    } else if (action === 'cancel-sync') {
+      const result=await api('/api/v1/admin/xtream/servers/'+item.id+'/cancel-sync',{
+        method:'POST',body:'{}'
+      });
+      if(result.cancelRequested)showMessage('تم طلب إلغاء مزامنة «'+item.name+'». سيكمل السيرفر إيقافها بعد الدفعة الحالية.');
+      else showMessage(result.staleStateCleared
+        ?'تم تصحيح حالة المزامنة القديمة للمصدر «'+item.name+'». يمكنك بدء مزامنة جديدة.'
+        :'لا توجد مزامنة نشطة لهذا المصدر.');
+      await loadXtream(true);
     } else if (action === 'test') {
       await api(`/api/v1/admin/xtream/servers/${item.id}/test`, { method: 'POST', body: '{}' });
       showMessage(`اتصال ${item.name} ناجح.`);
