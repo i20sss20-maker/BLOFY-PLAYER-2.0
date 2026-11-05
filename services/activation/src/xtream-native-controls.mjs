@@ -108,7 +108,7 @@ export function controlPage({items=[],success='',error='',csrfToken=''}) {
   '<nav><a href="/sources-admin#xtream">اللوحة الرئيسية</a><a href="'+CONTROL_PATH+'">تحديث القائمة</a></nav></header>'+
   (message?'<p class="note" role="status">'+esc(message)+'</p>':'')+
   (error?'<p class="err" role="alert">تعذر تنفيذ العملية: '+esc(error)+'</p>':'')+
-  '<section class="add"><h2>إضافة مصدر Xtream جديد</h2><form method="post" action="'+CONTROL_PATH+'/new/add">'+
+  '<section class="add"><h2>إضافة مصدر Xtream جديد</h2><form method="post" action="'+securedUrl(CONTROL_PATH+'/new/add')+'">'+
   '<label>اسم المصدر<input name="name" maxlength="160" required></label>'+
   '<label>Host<input name="baseUrl" type="url" maxlength="500" required placeholder="https://your-host.example"></label>'+
   '<label>Username<input name="username" maxlength="512" required autocomplete="off"></label>'+
