@@ -334,7 +334,7 @@ async function handleServerAction(item, card, button) {
       const total=Number(item.counts?.total||0).toLocaleString('en-US');
       if(!window.confirm(`حذف مصدر «${item.name}» نهائيًا من BLOFY؟\nسيُخفى ${total} عنصر عن المشتركين فور حفظ الحذف في قاعدة البيانات.\nلن يتأثر الاشتراك الأصلي لدى مزود Xtream.\n\nهل تؤكد الحذف؟`))return;
       window.clearTimeout(state.pollTimer);
-      const result=await api(`/api/v1/admin/xtream/servers/${item.id}`, { method:'DELETE' });
+      const result=await api(`/api/v1/admin/xtream/servers/${item.id}`, { method: 'DELETE' });
       if(result.deletionQueued!==true||result.deletedFromCatalog!==true)
         throw new Error('لم يؤكد السيرفر حفظ الحذف. المصدر لم يُحذف من القائمة.');
       // DELETE only succeeds after PostgreSQL commits the deletion tombstone.
