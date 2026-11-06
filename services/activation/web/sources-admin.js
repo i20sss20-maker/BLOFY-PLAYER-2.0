@@ -285,101 +285,6 @@ function refreshSourceCard(card, item) {
   }
 }
 
-function renderStudioOverview(){
-  const box=el('studioQuickStats'),alerts=el('studioSourceAlerts');
-  if(!box||!alerts)return;
-  box.replaceChildren();alerts.replaceChildren();
-  const sources=state.xtreamServers||[];
-  const now=Date.now();
-  const published=sources.filter(x=>x.enabled&&x.publishCatalog);
-  const flagged=sources.filter(x=>x.enabled&&(x.lastError||x.status==='offline'||x.status==='error'));
-  const stale=sources.filter(x=>x.enabled&&x.publishCatalog&&x.lastSyncAt&&now-Number(x.lastSyncAt)>48*3600_000);
-  const untested=sources.filter(x=>x.enabled&&!x.lastTestAt);
-  const stats=[
-    ['المصادر المسجلة',sources.length],
-    ['مفهرسة ومنشورة',published.length],
-    ['تحتاج متابعة',flagged.length],
-    ['مزامنتها قديمة',stale.length],
-    ['لم تُفحص',untested.length]
-  ];
-  for(const [label,count] of stats){
-    const card=make('div','studio-stat');
-    card.append(make('small','',label),make('strong','',Number(count).toLocaleString('en-US')));
-    box.append(card);
-  }
-  const warns=[...new Map([...flagged,...stale,...untested].map(x=>[x.id,x])).values()].slice(0,8);
-  if(!sources.length)alerts.append(make('p','muted','أضف مصدر Xtream لعرض حالته هنا.'));
-  else if(!warns.length)alerts.append(make('p','studio-notice ok','لا توجد تحذيرات فهرسة مسجلة. تأكد من تشغيل الفيديو بالفحص الفعلي.'));
-  for(const item of warns){
-    const detail=item.lastError?xtreamSourceErrorText(item.lastError):
-      item.status==='offline'||item.status==='error'?'المصدر لم ينجح في آخر اتصال أو مزامنة.':
-      item.lastSyncAt&&now-Number(item.lastSyncAt)>48*3600_000?'آخر مزامنة أقدم من 48 ساعة.':
-      'لا يوجد تاريخ فحص موثوق لهذا المصدر.';
-    const row=make('div','studio-alert');
-    row.append(make('strong','',item.name),make('span','',detail));
-    const button=make('button','button ghost','عرض المصدر');
-    button.type='button';
-    button.addEventListener('click',()=>{
-      const card=el('xtreamServers').querySelector('[data-id="'+item.id+'"]');
-      if(card){card.scrollIntoView({behavior:'smooth',block:'center'});}
-      else{el('xtSourceSearch').value=item.name;el('xtSourceFilter').value='all';renderXtream();}
-    });
-    row.append(button);alerts.append(row);
-  }
-}
-
-async function loadCatalogAudit(){
-  const button=el('catalogAuditBtn'),results=el('catalogAuditResults');
-  const serverId=el('catalogServer').value,mediaType=el('catalogType').value;
-  if(!serverId){showMessage('اختر مصدر Xtream أولًا.','error');return;}
-  button.disabled=true;button.textContent='جارٍ قراءة العينة…';
-  results.replaceChildren(make('p','muted','يجري فحص عينة محدودة بدون تعديل أي محتوى…'));
-  try{
-    const query=new URLSearchParams({serverId,type:mediaType});
-    const report=await api('/api/v1/admin/xtream/catalog/insights?'+query);
-    // Ignore stale responses if a source/type was changed while scanning.
-    if(serverId!==el('catalogServer').value||mediaType!==el('catalogType').value)return;
-    results.replaceChildren();
-    const cards=make('div','catalog-audit-stats');
-    for(const [title,count] of [
-      ['عناصر العينة',report.sampledPrimary||0],
-      ['صور ناقصة',report.missingPoster||0],
-      ['سنة غير معروفة',report.missingYear||0],
-      ['قصة غير متوفرة',report.missingPlot||0],
-      ['مجموعات مكررة',report.duplicateGroupCount||0]
-    ]){
-      const card=make('article','catalog-audit-stat');
-      card.append(make('small','',title),make('strong','',Number(count).toLocaleString('en-US')));
-      cards.append(card);
-    }
-    results.append(cards);
-    const section=(title,rows,render)=>{
-      const box=make('section','catalog-audit-section');
-      box.append(make('h4','',title));
-      if(!rows?.length)box.append(make('p','muted','لم تظهر نتائج في هذه العينة.'));
-      else for(const item of rows.slice(0,10))box.append(render(item));
-      return box;
-    };
-    results.append(section('النسخ المكررة المحتملة',report.duplicateGroups,row=>{
-      const card=make('div','catalog-audit-result');
-      card.append(make('strong','',row.name),
-        make('small','',String(row.copies)+' نسخ · '+(row.year??'سنة غير معروفة')));
-      return card;
-    }));
-    results.append(section('بدائل محتملة من مصادر أخرى (للمراجعة فقط)',report.candidateAlternatives,row=>{
-      const card=make('div','catalog-audit-result');
-      card.append(make('strong','',row.name),
-        make('small','',(row.otherSources||[]).join('، ')+' · لم يُتحقق من التشغيل أو حقوق المصدر'));
-      return card;
-    }));
-    results.append(make('p','muted','المعاينة محدودة إلى '+Number(report.sampledPrimary||0).toLocaleString('en-US')+
-      ' عنصر من المصدر و'+Number(report.sampledOther||0).toLocaleString('en-US')+
-      ' من المصادر الأخرى. لا تحذف النسخ أو تختار مصدر تشغيل احتياطي تلقائيًا.'));
-  }catch(error){
-    results.replaceChildren(make('p','muted','تعذر فحص عينة المكتبة: '+error.message));
-  }finally{button.disabled=false;button.textContent='فحص عينة المكتبة';}
-}
-
 function renderXtream() {
   const totals = state.xtreamTotals || {};
   el('xtServers').textContent = String(totals.servers || 0);
@@ -490,6 +395,101 @@ async function loadXtream(silent = false, strict = false) {
     if(strict)throw error;
     return null;
   }
+}
+
+function renderStudioOverview(){
+  const box=el('studioQuickStats'),alerts=el('studioSourceAlerts');
+  if(!box||!alerts)return;
+  box.replaceChildren();alerts.replaceChildren();
+  const sources=state.xtreamServers||[];
+  const now=Date.now();
+  const published=sources.filter(x=>x.enabled&&x.publishCatalog);
+  const flagged=sources.filter(x=>x.enabled&&(x.lastError||x.status==='offline'||x.status==='error'));
+  const stale=sources.filter(x=>x.enabled&&x.publishCatalog&&x.lastSyncAt&&now-Number(x.lastSyncAt)>48*3600_000);
+  const untested=sources.filter(x=>x.enabled&&!x.lastTestAt);
+  const stats=[
+    ['المصادر المسجلة',sources.length],
+    ['مفهرسة ومنشورة',published.length],
+    ['تحتاج متابعة',flagged.length],
+    ['مزامنتها قديمة',stale.length],
+    ['لم تُفحص',untested.length]
+  ];
+  for(const [label,count] of stats){
+    const card=make('div','studio-stat');
+    card.append(make('small','',label),make('strong','',Number(count).toLocaleString('en-US')));
+    box.append(card);
+  }
+  const warns=[...new Map([...flagged,...stale,...untested].map(x=>[x.id,x])).values()].slice(0,8);
+  if(!sources.length)alerts.append(make('p','muted','أضف مصدر Xtream لعرض حالته هنا.'));
+  else if(!warns.length)alerts.append(make('p','studio-notice ok','لا توجد تحذيرات فهرسة مسجلة. تأكد من تشغيل الفيديو بالفحص الفعلي.'));
+  for(const item of warns){
+    const detail=item.lastError?xtreamSourceErrorText(item.lastError):
+      item.status==='offline'||item.status==='error'?'المصدر لم ينجح في آخر اتصال أو مزامنة.':
+      item.lastSyncAt&&now-Number(item.lastSyncAt)>48*3600_000?'آخر مزامنة أقدم من 48 ساعة.':
+      'لا يوجد تاريخ فحص موثوق لهذا المصدر.';
+    const row=make('div','studio-alert');
+    row.append(make('strong','',item.name),make('span','',detail));
+    const button=make('button','button ghost','عرض المصدر');
+    button.type='button';
+    button.addEventListener('click',()=>{
+      const card=el('xtreamServers').querySelector('[data-id="'+item.id+'"]');
+      if(card){card.scrollIntoView({behavior:'smooth',block:'center'});}
+      else{el('xtSourceSearch').value=item.name;el('xtSourceFilter').value='all';renderXtream();}
+    });
+    row.append(button);alerts.append(row);
+  }
+}
+
+async function loadCatalogAudit(){
+  const button=el('catalogAuditBtn'),results=el('catalogAuditResults');
+  const serverId=el('catalogServer').value,mediaType=el('catalogType').value;
+  if(!serverId){showMessage('اختر مصدر Xtream أولًا.','error');return;}
+  button.disabled=true;button.textContent='جارٍ قراءة العينة…';
+  results.replaceChildren(make('p','muted','يجري فحص عينة محدودة بدون تعديل أي محتوى…'));
+  try{
+    const query=new URLSearchParams({serverId,type:mediaType});
+    const report=await api('/api/v1/admin/xtream/catalog/insights?'+query);
+    // Ignore stale responses if a source/type was changed while scanning.
+    if(serverId!==el('catalogServer').value||mediaType!==el('catalogType').value)return;
+    results.replaceChildren();
+    const cards=make('div','catalog-audit-stats');
+    for(const [title,count] of [
+      ['عناصر العينة',report.sampledPrimary||0],
+      ['صور ناقصة',report.missingPoster||0],
+      ['سنة غير معروفة',report.missingYear||0],
+      ['قصة غير متوفرة',report.missingPlot||0],
+      ['مجموعات مكررة',report.duplicateGroupCount||0]
+    ]){
+      const card=make('article','catalog-audit-stat');
+      card.append(make('small','',title),make('strong','',Number(count).toLocaleString('en-US')));
+      cards.append(card);
+    }
+    results.append(cards);
+    const section=(title,rows,render)=>{
+      const box=make('section','catalog-audit-section');
+      box.append(make('h4','',title));
+      if(!rows?.length)box.append(make('p','muted','لم تظهر نتائج في هذه العينة.'));
+      else for(const item of rows.slice(0,10))box.append(render(item));
+      return box;
+    };
+    results.append(section('النسخ المكررة المحتملة',report.duplicateGroups,row=>{
+      const card=make('div','catalog-audit-result');
+      card.append(make('strong','',row.name),
+        make('small','',String(row.copies)+' نسخ · '+(row.year??'سنة غير معروفة')));
+      return card;
+    }));
+    results.append(section('بدائل محتملة من مصادر أخرى (للمراجعة فقط)',report.candidateAlternatives,row=>{
+      const card=make('div','catalog-audit-result');
+      card.append(make('strong','',row.name),
+        make('small','',(row.otherSources||[]).join('، ')+' · لم يُتحقق من التشغيل أو حقوق المصدر'));
+      return card;
+    }));
+    results.append(make('p','muted','المعاينة محدودة إلى '+Number(report.sampledPrimary||0).toLocaleString('en-US')+
+      ' عنصر من المصدر و'+Number(report.sampledOther||0).toLocaleString('en-US')+
+      ' من المصادر الأخرى. لا تحذف النسخ أو تختار مصدر تشغيل احتياطي تلقائيًا.'));
+  }catch(error){
+    results.replaceChildren(make('p','muted','تعذر فحص عينة المكتبة: '+error.message));
+  }finally{button.disabled=false;button.textContent='فحص عينة المكتبة';}
 }
 
 async function addXtream(event) {
