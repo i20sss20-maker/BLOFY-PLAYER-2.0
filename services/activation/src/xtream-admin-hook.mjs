@@ -26,6 +26,7 @@ import { shouldRetryXtreamWithoutRange } from './xtream-media-range.mjs';
 import { auditXtreamCatalogSample } from './xtream-library-insights.mjs';
 import { normalizeXtreamDetails,mergedXtreamMetadata } from './xtream-item-details.mjs';
 import { tmdbConfigured,validatedTmdbId,fetchTmdbDetails } from './xtream-tmdb.mjs';
+import { MONITORED_MEDIA_TYPES,safeXtreamMonitorSample,pickXtreamMonitorSource } from './xtream-automatic-health.mjs';
 import { sortXtreamCategories } from './xtream-category-sort.mjs';
 import { nativeXtreamCsrfToken } from './xtream-native-csrf.mjs';
 
@@ -91,6 +92,8 @@ const cancelledSources = new Set();
 const purgeRunning = new Set();
 let purgeSweepStarted = false;
 let readyPromise;
+const autoProbeResults=new Map();
+let autoProbeStarted=false,autoProbeRunning=false,autoProbeCursor=0;
 
 const TYPE_ACTIONS = {
   live: { categories: 'get_live_categories', items: 'get_live_streams' },
@@ -252,6 +255,15 @@ async function ensureReady() {
     timer.unref?.();
     setTimeout(() => void resumePendingPurges().catch(error =>
       console.warn('Xtream startup purge scan failed:', redactXtreamError(error))), 250);
+  }
+  // At most one enabled, published source per 30-minute interval. No changes
+  // to catalog, subscriber accounts or provider settings on a probe failure.
+  if(!autoProbeStarted&&process.env.BLOFY_XTREAM_AUTO_HEALTH!=='0'){
+    autoProbeStarted=true;
+    const timer=setInterval(()=>void runAutomaticXtreamCheck(),30*60_000);
+    timer.unref?.();
+    const warmup=setTimeout(()=>void runAutomaticXtreamCheck(),120_000);
+    warmup.unref?.();
   }
   return result;
 }
@@ -1227,6 +1239,38 @@ async function enrichOneTmdbItem(serverId,mediaType,sourceId){
   return{updated:true,source:'TMDB',fieldsFound:Object.keys(details.metadata).length};
 }
 
+// Low-impact ongoing playback samples; the existing Railway monitoring
+// automation can inspect these sanitised log records for persistent failures.
+async function runAutomaticXtreamCheck(){
+  if(autoProbeRunning)return;
+  autoProbeRunning=true;
+  try{
+    const source=pickXtreamMonitorSource(
+      (await serverRows()).map(row=>({...row,syncing:syncLocks.has(row.id)})),autoProbeCursor++);
+    if(!source)return;
+    const kinds=[];
+    for(const kind of MONITORED_MEDIA_TYPES){
+      try{
+        const result=await probeXtreamPlayback(source.id,kind);
+        kinds.push(safeXtreamMonitorSample(kind,result));
+      }catch{
+        kinds.push(safeXtreamMonitorSample(kind,{ok:false,checks:[{error:'upstream_unreachable'}]}));
+      }
+    }
+    const passed=kinds.filter(item=>item.ok).length;
+    const failed=kinds.filter(item=>!item.ok&&!item.skipped).length;
+    const summary={sourceId:source.id,checkedAt:Date.now(),passed,failed,kinds};
+    autoProbeResults.set(source.id,summary);
+    if(autoProbeResults.size>40)autoProbeResults.delete(autoProbeResults.keys().next().value);
+    console.info('xtream automatic playback probe',{
+      sourceId:source.id,passed,failed,
+      checks:kinds.map(({kind,ok,skipped,httpStatus,reason})=>({kind,ok,skipped,httpStatus,reason}))
+    });
+  }catch{
+    console.warn('xtream automatic playback probe unavailable');
+  }finally{autoProbeRunning=false;}
+}
+
 async function patchItem(serverId, mediaType, sourceId, enabled) {
   if (!validUuid(serverId) || !validType(mediaType)) throw Object.assign(new Error('xtream_item_invalid'), { status: 400 });
   const result = await pool.query(`UPDATE blofy_xtream_items SET enabled=$4,updated_at=NOW() WHERE server_id=$1 AND media_type=$2 AND source_id=$3 RETURNING server_id,media_type,source_id,enabled`,
@@ -1414,6 +1458,13 @@ http.createServer = function withBlofyXtream(listener) {
       }
       if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream/categories') {
         return json(res, 200, { items: await listCategories(url.searchParams.get('serverId'), url.searchParams.get('type')) });
+      }
+      if(req.method==='GET'&&url.pathname==='/api/v1/admin/xtream/automatic-health'){
+        return json(res,200,{
+          enabled:process.env.BLOFY_XTREAM_AUTO_HEALTH!=='0',
+          intervalMinutes:30,
+          items:[...autoProbeResults.values()]
+        });
       }
       if(req.method==='GET'&&url.pathname==='/api/v1/admin/xtream/tmdb/status'){
         return json(res,200,{enabled:tmdbConfigured(),requiresCommercialLicense:true});
