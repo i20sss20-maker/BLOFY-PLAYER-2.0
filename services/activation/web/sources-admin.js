@@ -506,7 +506,8 @@ async function handleServerAction(item, card, button) {
       });
       const checked=Array.isArray(result.checks)?result.checks:[];
       const codeHint=check=>{
-        const status=check.httpStatus||Number(String(check.error||'').match(/^xtream_http_(\\d{3})$/)?.[1])||null;
+        const code=String(check.error||'');
+        const status=check.httpStatus||(code.startsWith('xtream_http_')?Number(code.slice(12)):null);
         if(status===403)return '403: رفض المصدر تشغيل المحتوى أو الوصول للـ API';
         if(status===401)return '401: بيانات اعتماد المصدر مرفوضة';
         if(status===404)return '404: الرابط أو المحتوى غير موجود لدى المصدر';
