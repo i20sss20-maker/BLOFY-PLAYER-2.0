@@ -62,7 +62,8 @@ export function xtreamProbeMessage(result, kind='live') {
     const pass=checks.find(x=>x?.ok);
     const status=pass?.httpStatus ? 'HTTP '+pass.httpStatus+' · ' : '';
     const episodes=pass?.episodeCount ? ' · عدد الحلقات: '+pass.episodeCount : '';
-    return 'نجح فحص '+label+': '+status+'وصلت استجابة صحيحة'+episodes+'. هذا فحص تقني وليس تشغيل صوت وصورة كاملًا.';
+    const fallback=pass?.rangeFallbackUsed?' · المصدر رفض Range لكن استجاب لطلب فيديو عادي':'';
+    return 'نجح فحص '+label+': '+status+'وصلت استجابة صحيحة'+episodes+fallback+'. هذا فحص تقني وليس تشغيل صوت وصورة كاملًا.';
   }
   if (result?.reason==='no_imported_items') return 'تعذر فحص '+label+': '+ERRORS.no_imported_items;
   const diagnostics=checks.filter(Boolean).slice(0,2).map(summaryForCheck);
