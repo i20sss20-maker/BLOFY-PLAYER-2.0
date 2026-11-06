@@ -1036,7 +1036,7 @@ async function listCatalog(query, publishedOnly = false) {
   if (publishedOnly) where.push('s.enabled=TRUE', 's.publish_catalog=TRUE', 'i.enabled=TRUE', '(c.enabled IS NULL OR c.enabled=TRUE)');
   if (query.serverId) { if (!validUuid(query.serverId)) throw Object.assign(new Error('xtream_server_id_invalid'), { status: 400 }); values.push(query.serverId); where.push(`i.server_id=$${values.length}`); }
   if (query.categoryId) { values.push(String(query.categoryId)); where.push(`i.category_id=$${values.length}`); }
-  if (query.q) { values.push(`%${String(query.q).slice(0,120).replace(/[%_]/g, '\\$&')}%`); where.push(`(COALESCE(NULLIF(i.custom_name,''),i.name) ILIKE ${values.length} ESCAPE '\\' OR translate(COALESCE(NULLIF(i.custom_name,''),i.name),'أإآٱىة','اااايه') ILIKE translate($${values.length},'أإآٱىة','اااايه') ESCAPE '\\' OR COALESCE(c.name,'') ILIKE $${values.length} ESCAPE '\\' OR COALESCE(i.metadata->>'genre','') ILIKE $${values.length} ESCAPE '\\')`); }
+  if (query.q) { values.push(`%${String(query.q).slice(0,120).replace(/[%_]/g, '\\$&')}%`); where.push(`(COALESCE(NULLIF(i.custom_name,''),i.name) ILIKE $${values.length} ESCAPE '\\' OR translate(COALESCE(NULLIF(i.custom_name,''),i.name),'أإآٱىة','اااايه') ILIKE translate($${values.length},'أإآٱىة','اااايه') ESCAPE '\\' OR COALESCE(c.name,'') ILIKE $${values.length} ESCAPE '\\' OR COALESCE(i.metadata->>'genre','') ILIKE $${values.length} ESCAPE '\\')`); }
   // Smart browsing filters media using its real metadata; neither filter
   // rewrites upstream categories or touches any customer-facing item IDs.
   if (query.year || query.language) {
@@ -1085,7 +1085,7 @@ async function listCatalog(query, publishedOnly = false) {
     ORDER BY (CASE WHEN i.media_type='live' AND i.featured THEN 0 ELSE 1 END),
       CASE WHEN i.media_type='live' THEN COALESCE(i.channel_number,999999) ELSE 999999 END,
       s.priority ASC,COALESCE(NULLIF(i.custom_name,''),i.name) ASC,i.source_id ASC
-    LIMIT ${values.length-1} OFFSET ${values.length}`, values)).rows;
+    LIMIT $${values.length-1} OFFSET $${values.length}`, values)).rows;
   return rows.map(row => ({
     serverId: row.server_id,
     serverName: row.server_name,
