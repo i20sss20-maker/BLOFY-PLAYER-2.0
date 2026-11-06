@@ -37,6 +37,15 @@ try{
   assert.ok(html.includes(root+'/'+id+'/toggle-enabled'));
   assert.ok(!html.includes('<script src='),'Control page must work with JavaScript disabled');
 
+  // Native M3U test form must reach the action handler instead of being
+  // treated as an unknown route. No external provider request is made when
+  // the isolated source has no M3U configured.
+  assert.ok(html.includes(root+'/'+id+'/test-m3u'));
+  const noM3u=await request('POST',root+'/'+id+'/test-m3u');
+  assert.equal(noM3u.status,303,'native M3U POST must redirect with a safe result');
+  assert.match(noM3u.headers.get('location')||'',/error=/);
+  assert.doesNotMatch(noM3u.headers.get('location')||'',/invalid_origin/);
+
   const pause=await request('POST',root+'/'+id+'/toggle-enabled');
   assert.equal(pause.status,303,'Pause must persist in PostgreSQL before redirect');
   let state=await pool.query('SELECT enabled,publish_catalog FROM blofy_xtream_servers WHERE id=$1',[id]);
