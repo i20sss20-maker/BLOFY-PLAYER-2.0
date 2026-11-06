@@ -395,8 +395,10 @@ function renderGatewayPreflight(data,scope){
     const card=gatewayNode('article','');
     card.append(gatewayNode('strong','',source.name||'Xtream'));
     for(const check of source.checks||[]){
+      const band=check.sampleBand==='low_id'?' · أول معرّف بالمكتبة':
+        check.sampleBand==='high_id'?' · آخر معرّف بالمكتبة':'';
       const line=gatewayNode('small',check.ok?'':'failed',
-        (check.ok?'✓ ':'✗ ')+(kinds[check.kind]||'فحص')+
+        (check.ok?'✓ ':'✗ ')+(kinds[check.kind]||'فحص')+band+
         (check.ok?' · بيانات صحيحة':(' · '+gatewayPreflightReason(check.reason))));
       card.append(line);
     }
