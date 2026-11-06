@@ -27,7 +27,7 @@ export async function readControlForm(req) {
   const query=new URLSearchParams(Buffer.concat(chunks).toString('utf8'));
   const body=Object.create(null);
   for(const [key,value] of query) {
-    if(!['name','baseUrl','username','password','priority','rightsConfirmed','confirmId','ack'].includes(key))
+    if(!['name','baseUrl','username','password','m3uUrl','m3uRemove','priority','rightsConfirmed','confirmId','ack'].includes(key))
       continue;
     if(Object.hasOwn(body,key))throw Object.assign(new Error('control_duplicate_field'),{status:400});
     body[key]=value;
@@ -43,6 +43,8 @@ function noticeText(code) {
     published:'تم نشر المحتوى للعملاء.',
     hidden:'تم إخفاء المحتوى عن العملاء.',
     saved:'تم حفظ بيانات المصدر. افحص الاتصال وأعد المزامنة إذا غيّرت بيانات الدخول.',
+    'm3u-saved':'✓ تم حفظ رابط M3U المشفر لهذا المصدر في قاعدة البيانات. ارجع إلى لوحة BLOFY وتأكد من ظهور M3U مرتبط، ثم اختبر قائمة M3U.',
+    'm3u-removed':'✓ تم إلغاء ربط M3U لهذا المصدر دون حذف مكتبة Xtream.',
     testing:'بدأ فحص الاتصال؛ حدث الصفحة لمعرفة النتيجة.',
     'probe-ok':'تم اختبار بث الوسائط واستجاب المصدر بنجاح.',
     syncing:'بدأت المزامنة. المكتبة الكبيرة قد تستغرق وقتًا.',
