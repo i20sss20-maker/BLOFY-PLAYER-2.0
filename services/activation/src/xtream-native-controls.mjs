@@ -84,6 +84,7 @@ export function controlPage({items=[],success='',error='',csrfToken=''}) {
       securedForm(id,'toggle-enabled',enabled?'إيقاف المصدر':'تفعيل المصدر')+
       securedForm(id,'toggle-publish',published?'إخفاء عن العملاء':'نشر للعملاء')+
       securedForm(id,'test','فحص الاتصال')+
+      securedForm(id,'test-m3u','▶ اختبار رابط M3U')+
       securedForm(id,'probe-live','اختبار بث قناة')+
       securedForm(id,'probe-movie','اختبار تشغيل فيلم')+
       securedForm(id,'probe-series','اختبار بيانات مسلسل')+
