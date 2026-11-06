@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#09090e">
   <link rel="icon" type="image/png" href="/blofy-logo.png"><link rel="apple-touch-icon" href="/blofy-logo.png"><meta name="robots" content="noindex,nofollow"><title>BLOFY STREAM | إدارة المصادر والاشتراكات</title>
-  <link rel="stylesheet" href="/sources-admin.css?v=20261106-content-sort-v5">
+  <link rel="stylesheet" href="/sources-admin.css?v=20261106-account-visibility-v7">
   <link rel="stylesheet" href="/site-polish.css?v=20261025-lux-final">
 </head>
 <body>
@@ -96,6 +96,17 @@
             </div>
             <div id="gatewayBatchRows" class="gateway-batch-rows"></div>
           </section>
+          <div class="gateway-accounts-toolbar">
+            <input id="gatewayAccountSearch" type="search" autocomplete="off" placeholder="ابحث عن اسم العميل أو Username" aria-label="ابحث عن حساب العميل">
+            <select id="gatewayAccountFilter" aria-label="فلترة حسابات العملاء">
+              <option value="all">كل الحسابات</option>
+              <option value="enabled">المفعّلة</option>
+              <option value="expired">منتهية الصلاحية</option>
+              <option value="expiring">تنتهي خلال 7 أيام</option>
+              <option value="disabled">الموقوفة</option>
+            </select>
+          </div>
+          <p class="gateway-accounts-summary" id="gatewayAccountsSummary" role="status"></p>
           <div id="gatewayLoading" class="loading">جارٍ تحميل بيانات الدخول…</div>
           <div id="gatewayAccounts" class="gateway-accounts"></div>
           <p class="security-note">بيانات Host وUsername وPassword تصدر بشكل مستقل، لكن مدة الحساب وعدد الاتصالات لا يتجاوزان قيود وحقوق المصادر الأصلية. كلمات المرور تظهر مرة واحدة فقط.</p>
@@ -223,6 +234,6 @@
     </main>
   </div>
   <script src="/sources-admin.js?v=20261106-catalog-safe-v6" defer></script>
-  <script src="/xtream-gateway-admin.js?v=20261105-source-selection-v1" defer></script>
+  <script src="/xtream-gateway-admin.js?v=20261106-account-visibility-v2" defer></script>
 </body>
 </html>

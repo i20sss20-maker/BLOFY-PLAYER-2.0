@@ -187,3 +187,11 @@
 .category-auto-sort small{flex-basis:100%;color:#c3b7d7;line-height:1.7}
 .category-auto-sort .button{min-height:42px}
 @media(max-width:640px){.category-auto-sort select,.category-auto-sort .button{width:100%;flex:1 1 100%}}
+
+/* BLOFY account list: compact searchable controls and expired-subscription warnings. */
+.gateway-accounts-toolbar{display:grid;grid-template-columns:minmax(180px,2fr) minmax(190px,1fr);gap:10px;margin:18px 0 8px}
+.gateway-accounts-toolbar input,.gateway-accounts-toolbar select{width:100%;min-width:0;min-height:43px;background:#15111d;color:var(--text);border:1px solid var(--border2);border-radius:10px;padding:8px 12px;font:inherit}
+.gateway-accounts-summary{margin:8px 0 12px;font-size:12px;color:var(--muted)}
+.gateway-account.expired{border-color:#703a46;background:linear-gradient(145deg,#22131b,#17141d)}
+.gateway-account.expired .gateway-account-main>strong{color:#ffb6be}
+@media(max-width:620px){.gateway-accounts-toolbar{grid-template-columns:1fr}}
