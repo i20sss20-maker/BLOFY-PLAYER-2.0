@@ -59,7 +59,7 @@ test('both account issuance routes require server-side successful playback prefl
   assert.match(src,/issuancePreflightRunning/);
   assert.match(src,/issuancePreflightCache/);
   assert.match(src,/checkedFetch\(url,\{method:'GET',headers,signal\}\)/);
-  assert.match(src,/return inspection.valid && inspection.format!=='unknown'/);
+  assert.match(src,/const ok=evidence.valid && evidence.format!=='unknown'/);
 });
 
 test('admin user issuance cannot skip a failed test with an offline confirmation',async()=>{
