@@ -1124,7 +1124,7 @@ function controlRedirect(res,kind,value){
   res.end();
 }
 async function handleControlAction(req,res,id,action) {
-  const available=['toggle-enabled','toggle-publish','test','probe-live','probe-movie','sync-all','sync-live','sync-movie','sync-series','cancel-sync','save','delete'];
+  const available=['toggle-enabled','toggle-publish','test','probe-live','probe-movie','probe-series','probe-episode','sync-all','sync-live','sync-movie','sync-series','cancel-sync','save','delete'];
   if(id==='new'&&action==='add'){
     const fields=await readControlForm(req);
     if(fields.rightsConfirmed!=='yes')throw Object.assign(new Error('rights_confirmation_required'),{status:400});
@@ -1167,9 +1167,17 @@ async function handleControlAction(req,res,id,action) {
     await cancelSourceSync(id);
     return controlRedirect(res,'ok','cancelled');
   }
-  if(action==='probe-live'||action==='probe-movie'){
-    const result=await probeXtreamPlayback(id,action==='probe-live'?'live':'movie');
-    return controlRedirect(res,result.ok?'ok':'error',result.ok?'probe-ok':('playback_'+String(result.reason||'failed').slice(0,80)));
+  if(['probe-live','probe-movie','probe-series','probe-episode'].includes(action)){
+    const mediaType=action.slice('probe-'.length);
+    const result=await probeXtreamPlayback(id,mediaType);
+    // Safe logging for later debugging: no source URLs, usernames, passwords,
+    // episode IDs or movie titles. Logs help distinguish failed API from media.
+    console.info('xtream source probe result',{
+      sourceId:id,mediaType,ok:Boolean(result.ok),
+      checks:(result.checks||[]).map(check=>({httpStatus:check.httpStatus,
+        error:check.error||null,ok:Boolean(check.ok),episodeCount:check.episodeCount||0}))
+    });
+    return controlRedirect(res,result.ok?'ok':'error','probe:'+xtreamProbeMessage(result,mediaType));
   }
   if(action==='test'){
     // Never block a 15s proxy request on an upstream test that may take 20s.
@@ -1217,7 +1225,7 @@ http.createServer = function withBlofyXtream(listener) {
         if(!source)return json(res,404,{error:'xtream_server_not_found'});
         return sendControlHtml(res,deleteConfirmationPage(source,nativeXtreamCsrfToken(req,ADMIN_SESSION_KEY)));
       }
-      const nativeAction=url.pathname.match(/^\/api\/v1\/admin\/xtream\/controls\/([a-z0-9-]+)\/(toggle-enabled|toggle-publish|test|probe-live|probe-movie|sync-all|sync-live|sync-movie|sync-series|cancel-sync|save|delete|add)$/i);
+      const nativeAction=url.pathname.match(/^\/api\/v1\/admin\/xtream\/controls\/([a-z0-9-]+)\/(toggle-enabled|toggle-publish|test|probe-live|probe-movie|probe-series|probe-episode|sync-all|sync-live|sync-movie|sync-series|cancel-sync|save|delete|add)$/i);
       if(nativeAction&&req.method==='POST'){
         try{return await handleControlAction(req,res,nativeAction[1],nativeAction[2]);}
         catch(error){
