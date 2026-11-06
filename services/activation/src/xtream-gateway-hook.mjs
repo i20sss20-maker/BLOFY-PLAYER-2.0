@@ -39,6 +39,7 @@ import { acceptsXtreamGzip } from './xtream-catalog-compression.mjs';
 import { shouldRetryXtreamWithoutRange,firstByteXtreamRange } from './xtream-media-range.mjs';
 import { recordXtreamPlayback,xtreamPlaybackSnapshot } from './xtream-playback-metrics.mjs';
 import { XtreamDenialCooldown } from './xtream-denial-cooldown.mjs';
+import { verifiedEpisodeExtension } from './xtream-episode-repair.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
@@ -55,6 +56,7 @@ pool.on('error', error => console.error('xtream gateway database error:', safeEr
 const adminLimiter = createFixedWindowLimiter({ limit: 120, windowMs: 60_000 });
 const publicLimiter = createFixedWindowLimiter({ limit: 1200, windowMs: 60_000 });
 const mediaDenialCooldown = new XtreamDenialCooldown();
+const episodeRepairCooldown = new Map();
 let readyPromise;
 
 function json(res, status, body, extra = {}) {
@@ -529,17 +531,28 @@ async function checkedFetch(url, { timeoutMs = 30000, method = 'GET', headers = 
   throw new Error('xtream_gateway_redirect_loop');
 }
 
-async function fetchUpstreamApi(row, action, extra = {}) {
+async function fetchUpstreamApi(row, action, extra = {}, {timeoutMs=45000,maxBytes=12_000_000}={}) {
   const creds = decryptServerCredentials(row);
   const response = await checkedFetch(xtreamApiUrl(row.base_url, creds.username, creds.password, action, extra), {
-    timeoutMs: 45000,
+    timeoutMs,
     headers: { accept: 'application/json', 'user-agent': 'BLOFY-Xtream-Gateway/1.0' }
   });
   if (!response.ok) throw new Error(`xtream_gateway_upstream_${response.status}`);
-  const textBody = await response.text();
-  if (Buffer.byteLength(textBody) > 12_000_000) throw new Error('xtream_gateway_info_too_large');
-  try { return JSON.parse(textBody); }
-  catch { throw new Error('xtream_gateway_upstream_json_invalid'); }
+  const chunks=[];let count=0;
+  try{
+    if(!response.body)throw new Error('xtream_gateway_upstream_json_invalid');
+    for await(const piece of response.body){
+      count+=piece.byteLength;
+      if(count>maxBytes)throw new Error('xtream_gateway_info_too_large');
+      chunks.push(Buffer.from(piece));
+    }
+    return JSON.parse(Buffer.concat(chunks,count).toString('utf8'));
+  }catch(error){
+    if(error?.message==='xtream_gateway_info_too_large')throw error;
+    throw new Error('xtream_gateway_upstream_json_invalid');
+  }finally{
+    await response.body?.cancel().catch(()=>{});
+  }
 }
 
 // Account-scoped program guide for one accessible channel. The provider API
@@ -652,11 +665,43 @@ async function seriesInfo(gatewayId, sourceId=null) {
 async function episodeByGatewayId(gatewayId,sourceId=null) {
   const id = Number(gatewayId);
   if (!Number.isSafeInteger(id) || id < 1) return null;
-  return (await pool.query(`SELECT e.gateway_id,e.server_id,e.source_episode_id,e.container_extension,
+  return (await pool.query(`SELECT e.gateway_id,e.server_id,e.series_source_id,e.source_episode_id,e.container_extension,
       s.base_url,s.username_secret,s.password_secret,s.enabled AS server_enabled
     FROM blofy_xtream_gateway_episode_map e JOIN blofy_xtream_servers s ON s.id=e.server_id
     WHERE e.gateway_id=$1 AND s.enabled=TRUE AND s.publish_catalog=TRUE
       AND ($2::uuid IS NULL OR e.server_id=$2::uuid)`, [id,sourceId])).rows[0] || null;
+}
+
+// Refresh a stale episode extension only after a real provider 404, using
+// this same series' official get_series_info. Bounded to one repair per item
+// per 90 seconds to avoid repeated expensive calls and traffic spikes.
+async function repairEpisodeOn404(row){
+  if(!row?.series_source_id||!row?.source_episode_id)return {status:'unavailable'};
+  const key=String(row.server_id)+':'+String(row.gateway_id);
+  const now=Date.now();
+  if((episodeRepairCooldown.get(key)||0)>now)return {status:'cooldown'};
+  episodeRepairCooldown.delete(key);
+  episodeRepairCooldown.set(key,now+90000);
+  while(episodeRepairCooldown.size>600)
+    episodeRepairCooldown.delete(episodeRepairCooldown.keys().next().value);
+  try{
+    const series=await fetchUpstreamApi(row,'get_series_info',{
+      series_id:row.series_source_id
+    },{timeoutMs:7000,maxBytes:3_000_000});
+    const decision=verifiedEpisodeExtension(series,row.source_episode_id,
+      safeGatewayExtension(row.container_extension,'mp4'));
+    if(decision.status!=='changed')return decision;
+    const changed=await pool.query(`UPDATE blofy_xtream_gateway_episode_map
+      SET container_extension=$4 WHERE gateway_id=$1 AND server_id=$2
+      AND source_episode_id=$3 RETURNING gateway_id`,
+      [row.gateway_id,row.server_id,row.source_episode_id,decision.extension]);
+    if(!changed.rowCount)return {status:'unavailable'};
+    // Keep the gateway episode ID and original provider episode ID stable.
+    // Only update the validated filename extension.
+    return decision;
+  }catch{
+    return {status:'unavailable'};
+  }
 }
 
 function mediaUpstreamUrl(row, kind, sourceId, extension) {
@@ -719,14 +764,14 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
   const onClose = () => { if (!res.writableEnded) abort(); };
   req.once('aborted', abort);
   res.once('close', onClose);
-  const upstream = mediaUpstreamUrl(row, kind, sourceId, mediaExtension);
+  let upstream = mediaUpstreamUrl(row, kind, sourceId, mediaExtension);
   const headers = { 'user-agent': String(req.headers['user-agent'] || 'BLOFY-Xtream-Gateway/1.0') };
   if (req.headers.range) headers.range = String(req.headers.range);
   // A provider returning 404/416 only for "Range: bytes=0-..." can be
   // rechecked once with plain GET. Never discard a nonzero seek request.
   const initialRange=firstByteXtreamRange(headers.range)&&req.method==='GET';
-  const maxAttempts = req.method === 'HEAD' ? 1 : initialRange ? 3 : 2;
-  let noRangeRetried=false, transientRetried=false;
+  const maxAttempts = req.method === 'HEAD' ? 1 : kind==='series' ? (initialRange?4:3) : (initialRange?3:2);
+  let noRangeRetried=false, transientRetried=false, episodeRepairTried=false;
   try {
     for (let attempt=1;attempt<=maxAttempts;attempt++) {
       if (client.signal.aborted) return;
@@ -760,6 +805,23 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
             noRangeRetried=true;
             delete headers.range;
             continue;
+          }
+          // A provider may change an episode from .mp4 to .mkv (or other
+          // declared container) while the BLOFY stable ID remains the same.
+          // Reconfirm from this *same series* once; never guess another ID.
+          if(kind==='series' && response.status===404 &&
+             !episodeRepairTried && req.method==='GET'){
+            episodeRepairTried=true;
+            const repaired=await repairEpisodeOn404(row);
+            if(repaired.status==='changed' && attempt<maxAttempts){
+              upstream=mediaUpstreamUrl(row,kind,sourceId,repaired.extension);
+              console.info('xtream episode extension refreshed',{kind,itemId:gatewayId});
+              continue;
+            }
+            if(repaired.status==='missing'){
+              observe('failed',{upstreamStatus:404,reason:'episode_missing_from_source',attempts:attempt});
+              return text(res,502,'Episode no longer listed by source');
+            }
           }
           if (retryable && !transientRetried && attempt < maxAttempts) {
             transientRetried=true;
@@ -859,7 +921,7 @@ async function probeGatewayMedia(kind,itemId){
     if(!row||!row.server_enabled)return{ok:false,kind,itemId,reason:'catalog_item_not_found',httpStatus:null};
     const ext=safeGatewayExtension(row.container_extension,kind==='live'?'ts':'mp4');
     const sourceId=kind==='series'?row.source_episode_id:row.source_id;
-    const url=mediaUpstreamUrl(row,kind,sourceId,ext);
+    let url=mediaUpstreamUrl(row,kind,sourceId,ext);
     const probeHeaders={
       'user-agent':'BLOFY-Media-Diagnostics/1.0',
       ...(kind==='live'?{}:{range:'bytes=0-2047'})
@@ -877,10 +939,27 @@ async function probeGatewayMedia(kind,itemId){
       rangeFallbackUsed=true;
       response=await checkedFetch(url,{method:'GET',headers:probeHeaders,signal:controller.signal});
     }
+    // The operator's manual episode probe also verifies changed extensions,
+    // rather than repeatedly reporting 404 for an obsolete cached suffix.
+    let repairedExtension=false;
+    if(kind==='series' && response.status===404){
+      const fix=await repairEpisodeOn404(row);
+      if(fix.status==='changed'){
+        await response.body?.cancel().catch(()=>{});
+        response=null;
+        url=mediaUpstreamUrl(row,kind,sourceId,fix.extension);
+        response=await checkedFetch(url,{method:'GET',headers:probeHeaders,signal:controller.signal});
+        repairedExtension=true;
+      }else if(fix.status==='missing'){
+        return{ok:false,kind,itemId,httpStatus:404,reason:'episode_missing_from_source',
+          elapsedMs:Date.now()-started};
+      }
+    }
     const status=response.status;
     if(!(response.ok||status===206)){
       const providerHint=await readXtreamProviderDenialHint(response);
       return{ok:false,kind,itemId,httpStatus:status,reason:'upstream_http_'+status,
+        repairedExtension,
         ...(providerHint?{providerHint}:{}),elapsedMs:Date.now()-started};
     }
     if(!response.body)return{ok:false,kind,itemId,httpStatus:status,reason:'upstream_empty_media',elapsedMs:Date.now()-started};
@@ -891,7 +970,7 @@ async function probeGatewayMedia(kind,itemId){
     const inspection=inspectXtreamMediaChunk(first.value,response.headers.get('content-type'));
     if(!inspection.valid)
       return{ok:false,kind,itemId,httpStatus:status,reason:inspection.reason,elapsedMs:Date.now()-started};
-    return{ok:true,kind,itemId,httpStatus:status,format:inspection.format,rangeFallbackUsed,elapsedMs:Date.now()-started,
+    return{ok:true,kind,itemId,httpStatus:status,format:inspection.format,rangeFallbackUsed,repairedExtension,elapsedMs:Date.now()-started,
       note:'first_media_bytes_only'};
   }catch(error){
     return{ok:false,kind,itemId,httpStatus:null,

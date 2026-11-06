@@ -53,5 +53,6 @@ test('real BLOFY admin can test a failed channel with one click without entering
   assert.match(js,/dataset\.probeItem/);
   assert.match(js,/dataset\.probeKind/);
   assert.match(js,/upstream_http_403:'المصدر يرفض الوصول/);
-  assert.match(js,/upstream_http_404:'رابط التشغيل غير موجود/);
+  assert.match(js,/upstream_http_404:'المصدر أعاد 404/);
+  assert.match(js,/episode_missing_from_source:/);
 });

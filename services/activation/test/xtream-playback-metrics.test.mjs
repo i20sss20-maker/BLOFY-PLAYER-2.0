@@ -92,7 +92,7 @@ test('actual gateway denies unauthorized media before fetching upstream or discl
   const proxy=gateway.slice(gateway.indexOf('async function proxyMedia('),gateway.indexOf('async function probeGatewayMedia('));
   assert.match(proxy,/reason:'gateway_auth_denied'/);
   assert.match(proxy,/reason:'catalog_item_unavailable'/);
-  assert.ok(proxy.indexOf("if (!account) {")<proxy.indexOf("const upstream = mediaUpstreamUrl"));
+  assert.ok(proxy.indexOf("if (!account) {")<proxy.indexOf("let upstream = mediaUpstreamUrl"));
   assert.match(ui,/gateway_auth_denied:'بيانات دخول حساب BLOFY/);
   assert.match(ui,/catalog_item_unavailable:'هذا المحتوى غير متاح/);
   assert.match(ui,/gatewayAuthDenied/);
