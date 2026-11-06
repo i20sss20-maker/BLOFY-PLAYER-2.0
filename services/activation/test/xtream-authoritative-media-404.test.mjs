@@ -51,6 +51,49 @@ test('source API cannot induce plaintext cross-origin, redirects, private loopba
   assert.deepEqual(authoritativeXtreamMediaCandidates(invalid,options),[]);
 });
 
+test('official movie info may declare playable links nested under info or relative to the provider',()=>{
+  const nested={movie_data:{stream_id:710997,container_extension:'mp4'},
+    info:{direct_source:'/media/710997.mp4?token=provider'}};
+  assert.deepEqual(authoritativeXtreamMediaCandidates(nested,options),[
+    {kind:'provider_direct',url:'http://provider.example:8080/media/710997.mp4?token=provider'}
+  ]);
+  const alternate={movie_data:{stream_id:'710997',container_extension:'mp4',
+    info:{direct_source:'movie/710997.mp4'}}};
+  assert.deepEqual(authoritativeXtreamMediaCandidates(alternate,options),[
+    {kind:'provider_direct',url:'http://provider.example:8080/movie/710997.mp4'}
+  ]);
+  const wrong={...nested,movie_data:{...nested.movie_data,stream_id:710998}};
+  assert.deepEqual(authoritativeXtreamMediaCandidates(wrong,options),[]);
+});
+
+test('provider episode info direct_source is tied to the exact episode, not a sibling',()=>{
+  const series={episodes:{'1':[
+    {id:'415',container_extension:'mkv',info:{direct_source:'https://cdn.example/series/415.mkv'}},
+    {id:'416',container_extension:'mkv',info:{direct_source:'https://cdn.example/series/416.mkv'}}
+  ]}};
+  const one=authoritativeXtreamMediaCandidates(series,{
+    kind:'series',itemId:'415',baseUrl:base,currentExtension:'mkv'
+  });
+  assert.deepEqual(one,[{kind:'provider_direct',url:'https://cdn.example/series/415.mkv'}]);
+  assert.deepEqual(authoritativeXtreamMediaCandidates(series,{
+    kind:'series',itemId:'417',baseUrl:base,currentExtension:'mkv'
+  }),[]);
+});
+
+test('relative provider URLs remain on source origin and unsafe URLs are rejected',()=>{
+  const safe=['/movie/710997.mp4','movie/710997.mp4','?type=movie&id=710997'];
+  for(const url of safe){
+    const resolved=authorizedXtreamDirectUrl(url,base);
+    assert.equal(new URL(resolved).origin,'http://provider.example:8080');
+  }
+  for(const url of [
+    '//evil.example/file','\\\\evil.example/file',
+    'javascript:alert(1)','data:text/html,hello',
+    'http://other.example/file','https://user:pass@cdn.example/file',
+    '/movie/file#fragment'
+  ])assert.equal(authorizedXtreamDirectUrl(url,base),null,url);
+});
+
 test('all actual fallback probes use checked public-URL fetch and validate real media before relay',async()=>{
   const hook=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
   const lookup=hook.slice(hook.indexOf('async function verifiedOfficialMediaAlternative('),
