@@ -9,6 +9,7 @@ if(!String(process.env.DATABASE_URL||'').includes('blofy_activation'))
   throw new Error('Studio Pro integration requires isolated CI database');
 const db=new pg.Pool({connectionString:process.env.DATABASE_URL,ssl:false});
 const sourceId=crypto.randomUUID();
+const serverId=sourceId;
 const prefix='/api/v1/admin/xtream/pro/';
 const request=async(method,path,body)=>{
   const response=await fetch(host+prefix+path,{
