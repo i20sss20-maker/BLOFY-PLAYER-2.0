@@ -420,9 +420,9 @@ async function preflightSource(row,deadline){
     if(!rows.length)continue;
     found++;
     if(kind==='series'){
-      let samples=[];
+      let samples=[],payload;
       try{
-        const payload=await fetchUpstreamApi(row,'get_series_info',
+        payload=await fetchUpstreamApi(row,'get_series_info',
           {series_id:rows[0].source_id},{
             timeoutMs:Math.min(6000,Math.max(1000,deadline-Date.now())),
             maxBytes:3_000_000
