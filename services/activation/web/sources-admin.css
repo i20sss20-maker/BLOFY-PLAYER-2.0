@@ -381,3 +381,46 @@
  .smart-command-form .inline-actions>.button{width:100%}
  .smart-command-suggestions button{font-size:11px;padding:9px}
 }
+
+/* BLOFY Studio Pro operator console */
+.studio-pro-panel{border:1px solid rgba(152,105,229,.32)}
+.studio-pro-scope{display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin-bottom:15px}
+.studio-pro-scope label{min-width:min(100%,340px);display:grid;gap:7px;flex:1}
+.studio-pro-scope label span,.studio-pro-batch-controls label span,.studio-pro-schedule label span{color:#c5b6df;font-size:12px}
+.studio-pro-scope select,.studio-pro-batch-controls select,.studio-pro-batch-controls input,
+.studio-pro-schedule select,.studio-pro-inline-form input{border:1px solid #65497c;border-radius:11px;background:#100c18;color:#f1ebfc;min-height:43px;padding:10px 12px;font:inherit;max-width:100%;width:100%}
+.studio-pro-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.studio-pro-stat{background:#191222;border:1px solid #473350;border-radius:11px;padding:13px;display:grid;gap:7px}
+.studio-pro-stat small{font-size:11px;color:#bba9d8}
+.studio-pro-stat strong{font-size:14px;font-weight:750;color:#f3eaff;overflow-wrap:anywhere}
+.studio-pro-panels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:20px}
+.studio-pro-subpanel{padding:17px;border:1px solid #534066;border-radius:16px;background:linear-gradient(140deg,#17101f,#1b1527);min-width:0}
+.studio-pro-subpanel h3{margin:0 0 6px;font-size:17px}
+.studio-pro-subpanel p{margin:7px 0 13px;font-size:12px;line-height:1.75}
+.studio-pro-subpanel:first-child{grid-column:1/-1}
+.studio-pro-channel-list{max-height:310px;overflow:auto;display:grid;gap:5px;margin:12px 0;border-radius:10px}
+.studio-pro-channel{display:flex;align-items:center;gap:11px;border:1px solid #483751;border-radius:10px;padding:10px;background:#18121f;cursor:pointer}
+.studio-pro-channel:hover{border-color:#9b77d9}
+.studio-pro-channel input{accent-color:#b389fa;width:19px;height:19px;flex:none}
+.studio-pro-channel span{flex:1;min-width:0;overflow-wrap:anywhere}
+.studio-pro-channel small{font-size:11px;color:#b5a4cb;white-space:nowrap}
+.studio-pro-batch-controls{display:grid;grid-template-columns:1fr minmax(120px,180px) auto;gap:10px;align-items:end}
+.studio-pro-batch-controls label,.studio-pro-schedule label{display:grid;gap:6px;min-width:0}
+.studio-pro-inline-form{display:flex;gap:8px;margin-bottom:12px}
+.studio-pro-inline-form input{flex:1;min-width:0}
+.studio-pro-list{display:grid;gap:8px}
+.studio-pro-record{display:flex;gap:10px;align-items:center;flex-wrap:wrap;border:1px solid #44344f;border-radius:10px;padding:10px;background:#181221}
+.studio-pro-record strong{min-width:130px;flex:1;font-size:13px;overflow-wrap:anywhere}
+.studio-pro-record small{color:#c6b8d3;flex:1;font-size:11px}
+.studio-pro-schedule{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:12px 0}
+.studio-pro-warning,.studio-pro-error{color:#ffd295!important}
+#studioProStatus{border-top:1px solid #443655;margin-top:18px;padding-top:13px}
+@media(max-width:960px){.studio-pro-panels{grid-template-columns:1fr}.studio-pro-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:620px){
+ .studio-pro-stats,.studio-pro-schedule{grid-template-columns:1fr}
+ .studio-pro-batch-controls{grid-template-columns:1fr}
+ .studio-pro-inline-form{flex-direction:column}
+ .studio-pro-scope{display:grid}
+ .studio-pro-subpanel{padding:13px}
+ .studio-pro-record{align-items:stretch}
+}
