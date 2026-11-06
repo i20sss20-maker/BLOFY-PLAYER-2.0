@@ -32,6 +32,7 @@ import { validateBulkAccountRequest } from './xtream-bulk-policy.mjs';
 import { gatewayItemsPageQuery } from './xtream-gateway-query.mjs';
 import { mergeXtreamPlayerRequest } from './xtream-player-post.mjs';
 import { inspectXtreamMediaChunk } from './xtream-media-inspector.mjs';
+import { normalizeXtreamEpg } from './xtream-epg.mjs';
 import { recordXtreamPlayback,xtreamPlaybackSnapshot } from './xtream-playback-metrics.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
@@ -514,6 +515,46 @@ async function fetchUpstreamApi(row, action, extra = {}) {
   catch { throw new Error('xtream_gateway_upstream_json_invalid'); }
 }
 
+// Account-scoped program guide for one accessible channel. The provider API
+// may not support EPG; an unavailable guide must never look like a fake listing.
+async function liveEpg(gatewayId, sourceId=null, action='get_short_epg', limit=20){
+  const empty={epg_listings:[]};
+  const id=Number(gatewayId);
+  if(!Number.isSafeInteger(id)||id<1)return empty;
+  const row=await gatewayItemById('live',id,sourceId);
+  if(!row||!row.server_enabled)return empty;
+  const creds=decryptServerCredentials(row);
+  const qs={stream_id:row.source_id};
+  if(action==='get_short_epg')qs.limit=Math.max(1,Math.min(50,Number(limit)||20));
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),10000);
+  let response;
+  try{
+    response=await checkedFetch(xtreamApiUrl(row.base_url,creds.username,creds.password,action,qs),{
+      timeoutMs:10000,signal:controller.signal,
+      headers:{accept:'application/json','user-agent':'BLOFY-Xtream-EPG/1.0'}
+    });
+    if(!response.ok)return empty;
+    const contentType=String(response.headers.get('content-type')||'').toLowerCase();
+    if(contentType.includes('text/html'))return empty;
+    if(!response.body)return empty;
+    let bytes=0;const chunks=[];
+    for await (const part of response.body){
+      bytes+=part.byteLength;
+      if(bytes>1024*1024)return empty;
+      chunks.push(Buffer.from(part));
+    }
+    const payload=JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    return normalizeXtreamEpg(payload,action==='get_short_epg'?qs.limit:50);
+  }catch{
+    // Do not leak provider URLs, usernames or passwords through player API.
+    return empty;
+  }finally{
+    clearTimeout(timeout);controller.abort();
+    try{await response?.body?.cancel()}catch{}
+  }
+}
+
 async function vodInfo(gatewayId, sourceId=null) {
   const row = await gatewayItemById('movie', gatewayId, sourceId);
   if (!row || !row.server_enabled) return null;
@@ -846,7 +887,11 @@ async function handlePlayerApi(req, res, url) {
     const value = await seriesInfo(url.searchParams.get('series_id'),account.source_id||null);
     return json(res, value ? 200 : 404, value || { error: 'series_not_found' });
   }
-  if (action === 'get_short_epg' || action === 'get_simple_data_table') return json(res, 200, { epg_listings: [] });
+  if (action === 'get_short_epg' || action === 'get_simple_data_table') {
+    const data=await liveEpg(url.searchParams.get('stream_id'),account.source_id||null,
+      action,url.searchParams.get('limit'));
+    return json(res,200,data);
+  }
   return json(res, 200, []);
 }
 
