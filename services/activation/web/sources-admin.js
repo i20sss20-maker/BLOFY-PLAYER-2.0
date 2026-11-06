@@ -1513,7 +1513,8 @@ async function runBlofyItemProbe(){
     if(result.ok){
       const format={ts:'TS',hls:'HLS',mp4:'MP4',mkv:'MKV',unknown:'غير محدد'}[result.format]||'غير محدد';
       note.textContent='✅ وصلت أول بيانات الفيديو · صيغة '+format+' · '+Number(result.elapsedMs||0).toLocaleString('en-US')+' ms'+
-        (result.rangeFallbackUsed?' · نجح الفحص بعد إعادة المحاولة بدون Range':'')+'. هذا لا يضمن استمرار التشغيل.';
+        (result.rangeFallbackUsed?' · نجح الفحص بعد إعادة المحاولة بدون Range':'')+
+        (result.repairedExtension?' · تم تحديث امتداد الحلقة تلقائيًا من بيانات المزود':'')+'. هذا لا يضمن استمرار التشغيل.';
     }else{
       note.textContent='❌ فشل المصدر'+(result.httpStatus?' · HTTP '+result.httpStatus:'')+' — '+
         (reasons[result.reason]||'راجع إعدادات المصدر والرابط والصيغة وحقوق التشغيل.')+
