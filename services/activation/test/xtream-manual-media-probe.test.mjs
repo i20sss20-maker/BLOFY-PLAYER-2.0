@@ -38,7 +38,9 @@ test('manual source media probe is admin-only, validates ID, rate-limits and nev
   assert.match(source,/response\.body\.cancel\(\)/);
   const piece=source.slice(source.indexOf('async function probeGatewayMedia('),source.indexOf('function playerServerInfo('));
   assert.doesNotMatch(piece,/return\{[^\n]*url:/);
-  assert.match(piece,/upstream_non_media_response/);
+  assert.match(piece,/inspectXtreamMediaChunk\(first.value,response.headers.get\('content-type'\)\)/);
+  const inspector=await read('src/xtream-media-inspector.mjs');
+  assert.match(inspector,/upstream_non_media_response/);
   assert.match(piece,/first_media_bytes_only/);
 });
 
