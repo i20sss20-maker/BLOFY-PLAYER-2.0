@@ -35,6 +35,7 @@ const ERRORS={
   series_response_too_large:'استجابة حلقات المسلسل تجاوزت حد فحص العينة.',
   empty_media:'المصدر لا يرسل أي بيانات فيديو.',
   upstream_html_instead_of_video:'المصدر أعاد صفحة HTML بدل الفيديو.',
+  upstream_non_media_response:'المصدر أعاد رسالة خطأ أو بيانات نصية بدل ملف الفيديو، حتى لو كانت استجابة HTTP 200.' ,
   timeout:'انتهت مهلة استجابة المصدر (9.5 ثوانٍ).',
   redirect_invalid:'تحويل غير صالح من رابط المصدر.',
   xtream_redirect_invalid:'تحويل غير صالح من API المصدر.',
