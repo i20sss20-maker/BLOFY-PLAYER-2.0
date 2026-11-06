@@ -23,6 +23,10 @@ test('production playback metrics summarize start latency and provider errors wi
   assert.equal(m.byKind.live.started,1);
   assert.equal(m.byKind.series.failed,1);
   assert.equal(m.upstreamCodes['403'],1);
+  recordXtreamPlayback({kind:'live',phase:'failed',upstreamStatus:456,reason:'upstream_http_456',itemId:12345},now+4);
+  const denied=xtreamPlaybackSnapshot(now+5);
+  assert.equal(denied.upstreamCodes['456'],1);
+  assert.equal(denied.recentIssues[0].reason,'upstream_http_456');
   assert.equal(m.recentIssues[0].reason,'media_read_timeout');
   assert.ok(!JSON.stringify(m).includes('sensitive'));
   assert.ok(!JSON.stringify(m).includes('example.org'));
