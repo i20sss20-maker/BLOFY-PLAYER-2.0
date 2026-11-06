@@ -304,3 +304,11 @@
 .catalog-enrich-panel progress{height:13px;width:100%;accent-color:#b18ee7;margin:13px 0 5px}
 .catalog-enrich-panel #catalogEnrichStatus{font-size:12px;line-height:1.6;margin:7px 0 0}
 @media(max-width:630px){.catalog-enrich-toolbar>.button{flex:1 1 120px}}
+
+.studio-footer{display:flex;flex-wrap:wrap;align-items:center;gap:12px;justify-content:space-between}
+.studio-footer #tmdbIntegrationState{font-size:11px;color:#b9a8c9}
+.tmdb-attribution{display:flex;align-items:center;gap:8px;flex:1 1 100%;font-size:10px;color:#a4a0a8}
+.tmdb-attribution[hidden]{display:none}
+.tmdb-attribution img{display:block;max-width:46px;height:auto;object-fit:contain}
+.tmdb-attribution a{display:inline-flex;align-items:center}
+.tmdb-attribution small{line-height:1.5;max-width:560px}
