@@ -98,9 +98,42 @@ test('media ID relocation is only committed after real source media verification
   assert.match(src,/const seasonNumber=episodeOrdinal\(seasonLabel,\{allowZero:true\}\)/);
   assert.match(src,/episodeNumber:episodeOrdinal\(episode.episode_num\)/);
   assert.match(src,/decision.status==='relocated' &&\s*!await confirmEpisodeReplacement/);
-  assert.match(src,/inspectXtreamMediaChunk\(chunk.value,response.headers.get\('content-type'\)\).valid/);
+  assert.match(src,/const inspection=inspectXtreamMediaChunk\(Buffer.concat\(parts,total\),response.headers.get\('content-type'\)\)/);
+  assert.match(src,/return inspection.valid && inspection.format!=='unknown'/);
   assert.match(src,/resolved_source_episode_id=COALESCE\(\$5::text,resolved_source_episode_id\)/);
+  assert.match(src,/ADD COLUMN IF NOT EXISTS verified_container_extension TEXT/);
+  assert.match(src,/COALESCE\(e.verified_container_extension,e.container_extension\) AS container_extension/);
+  assert.match(src,/COALESCE\(verified_container_extension,container_extension\) AS container_extension/);
+  assert.match(src,/verified_container_extension=CASE/);
+  assert.match(src,/WHEN blofy_xtream_gateway_episode_map.container_extension IS DISTINCT FROM EXCLUDED.container_extension/);
+  assert.match(src,/SET verified_container_extension=\$4/);
+  assert.match(src,/sameEpisodeContainerCandidates\(currentExtension\)/);
+  assert.match(src,/\['changed','relocated','alternate_extension'\].includes\(repaired.status\)/);
+  assert.match(src,/\['changed','relocated','alternate_extension'\].includes\(fix.status\)/);
   assert.match(src,/sourceId = row.resolved_source_episode_id \|\| row.source_episode_id/);
   assert.match(src,/sourceId=repaired.sourceId\|\|sourceId/);
   assert.match(src,/sourceId=fix.sourceId\|\|sourceId/);
+});
+
+test('alternative extension recovery tries only existing episode ID and common containers',async()=>{
+  const {sameEpisodeContainerCandidates}=await import('../src/xtream-episode-repair.mjs');
+  assert.deepEqual(sameEpisodeContainerCandidates('mp4'),['mkv','ts']);
+  assert.deepEqual(sameEpisodeContainerCandidates('mkv'),['mp4','ts']);
+  assert.deepEqual(sameEpisodeContainerCandidates('.TS'),['mp4','mkv']);
+  for(const unsafe of [
+    '../mkv','mp4?user=attacker','hls','m3u8','',null,'https://example.com/video.mkv'
+  ])assert.deepEqual(sameEpisodeContainerCandidates(unsafe),[],String(unsafe));
+});
+
+test('provider-rejected media does not trigger guessing or authorization bypass',async()=>{
+  const src=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
+  const playback=src.slice(src.indexOf('async function proxyMedia('),src.indexOf('async function probeGatewayMedia('));
+  const fallback=src.slice(src.indexOf('async function repairEpisodeOn404('),src.indexOf('function mediaUpstreamUrl('));
+  assert.match(playback,/kind==='series' && response.status===404/);
+  assert.match(playback,/mediaDenialCooldown.denied\(cooldownKey,response.status\)/);
+  assert.match(fallback,/if\(decision.status==='unchanged'\)/);
+  assert.match(fallback,/confirmEpisodeReplacement\(row,currentId,candidate\)/);
+  assert.match(fallback,/source_episode_id=\$3/);
+  assert.doesNotMatch(fallback,/encodeURIComponent\(creds.password\)/);
+  assert.doesNotMatch(fallback,/new URL\(.*candidate/);
 });
