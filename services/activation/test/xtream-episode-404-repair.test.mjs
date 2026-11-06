@@ -109,7 +109,7 @@ test('media ID relocation is only committed after real source media verification
   assert.match(src,/SET verified_container_extension=\$4/);
   assert.match(src,/sameEpisodeContainerCandidates\(currentExtension\)/);
   assert.match(src,/\['changed','relocated','alternate_extension','provider_verified'\].includes\(repaired.status\)/);
-  assert.match(src,/\['changed','relocated','alternate_extension'\].includes\(fix.status\)/);
+  assert.match(src,/\['changed','relocated','alternate_extension','provider_verified'\].includes\(fix.status\)/);
   assert.match(src,/sourceId = row.resolved_source_episode_id \|\| row.source_episode_id/);
   assert.match(src,/sourceId=repaired.sourceId\|\|sourceId/);
   assert.match(src,/sourceId=fix.sourceId\|\|sourceId/);
