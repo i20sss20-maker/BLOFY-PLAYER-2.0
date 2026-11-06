@@ -167,21 +167,55 @@ function renderGatewaySourcePicker(){
   gatewaySourceOptions(picker,picker.value);
 }
 
+function gatewayAccountFlags(item,now=Date.now()){
+  const expires=Number(item?.expiresAt);
+  const hasExpiry=Number.isFinite(expires)&&expires>0;
+  const expired=hasExpiry&&expires<=now;
+  const expiring=hasExpiry&&!expired&&expires-now<=7*86400000;
+  return {expired,expiring,disabled:!item.enabled};
+}
+
 function renderGatewayAccounts() {
   const list = gx('gatewayAccounts');
   list.replaceChildren();
   gx('gatewayServerUrl').textContent = gatewayState.serverUrl || '—';
-  if (!gatewayState.items.length) {
-    list.append(gatewayNode('div', 'empty-state', 'ما فيه بيانات دخول حتى الآن. اضغط «إنشاء بيانات دخول» وبتطلع لك جاهزة.'));
+  const query=String(gx('gatewayAccountSearch')?.value||'').trim().toLocaleLowerCase();
+  const filter=String(gx('gatewayAccountFilter')?.value||'all');
+  const all=gatewayState.items;
+  const expiredCount=all.filter(item=>gatewayAccountFlags(item).expired).length;
+  const soonCount=all.filter(item=>gatewayAccountFlags(item).expiring).length;
+  const disabledCount=all.filter(item=>!item.enabled).length;
+  const matching=all.filter(item=>{
+    const flags=gatewayAccountFlags(item);
+    const text=(String(item.label||'')+' '+String(item.username||'')).toLocaleLowerCase();
+    if(query&&!text.includes(query))return false;
+    if(filter==='enabled')return item.enabled&&!flags.expired;
+    if(filter==='expired')return flags.expired;
+    if(filter==='expiring')return flags.expiring;
+    if(filter==='disabled')return flags.disabled;
+    return true;
+  });
+  const summary=gx('gatewayAccountsSummary');
+  if(summary)summary.textContent='الحسابات: '+all.length.toLocaleString('en-US')+
+    ' · منتهية: '+expiredCount.toLocaleString('en-US')+
+    ' · تنتهي خلال أسبوع: '+soonCount.toLocaleString('en-US')+
+    ' · موقوفة: '+disabledCount.toLocaleString('en-US')+
+    ' · المعروض: '+matching.length.toLocaleString('en-US');
+  if (!matching.length) {
+    list.append(gatewayNode('div', 'empty-state',all.length?
+      'لا توجد حسابات مطابقة. غيّر البحث أو فلتر الحالة.':
+      'ما فيه بيانات دخول حتى الآن. اضغط «إنشاء بيانات دخول» وبتطلع لك جاهزة.'));
     return;
   }
-  for (const item of gatewayState.items) {
-    const card = gatewayNode('article', `gateway-account${item.enabled ? '' : ' off'}`);
+  for (const item of matching) {
+    const flags=gatewayAccountFlags(item);
+    const card = gatewayNode('article', `gateway-account${item.enabled ? '' : ' off'}${flags.expired?' expired':''}`);
     const main = gatewayNode('div', 'gateway-account-main');
     main.append(gatewayNode('strong', '', item.label || 'BLOFY Player'));
     const user = gatewayNode('code', '', item.username);
     main.append(user);
-    const meta = gatewayNode('small', 'muted', `${item.enabled ? 'مفعل' : 'متوقف'} · ${item.maxConnections || 1} اتصال · ينتهي: ${accountExpiresAt(item.expiresAt)}`);
+    const label=flags.expired?'🔴 منتهي الصلاحية':flags.disabled?'⏸ موقوف':flags.expiring?'🟠 ينتهي خلال 7 أيام':'✓ مفعل';
+    const meta = gatewayNode('small', 'muted', `${label} · ${item.maxConnections || 1} اتصال · ينتهي: ${accountExpiresAt(item.expiresAt)}`);
     main.append(meta);
     const linked=gatewayState.sources.find(source=>source.id===item.sourceId);
     main.append(gatewayNode('small','muted','محتوى الحساب: '+(item.sourceId?(linked?.name||'المصدر الأصلي غير متاح'):'جميع المصادر المنشورة')));
@@ -296,6 +330,9 @@ async function loadGateway() {
     if (loading) loading.hidden = true;
   }
 }
+
+gx('gatewayAccountSearch')?.addEventListener('input',renderGatewayAccounts);
+gx('gatewayAccountFilter')?.addEventListener('change',renderGatewayAccounts);
 
 gx('gatewayCreateBtn')?.addEventListener('click', async () => {
   const button = gx('gatewayCreateBtn');
