@@ -1568,8 +1568,19 @@ async function handleControlAction(req,res,id,action) {
     if(fields.password?.trim())body.password=fields.password;
     if(fields.m3uRemove==='yes')body.m3uUrl=null;
     else if(fields.m3uUrl?.trim())body.m3uUrl=fields.m3uUrl;
-    await patchServer(id,body);
-    return controlRedirect(res,'ok','saved');
+    const saved=await patchServer(id,body);
+    // Confirm the persisted state before claiming an M3U link was saved;
+    // never return the link itself or provider credentials in a response.
+    if(body.m3uUrl!==undefined){
+      const expected=body.m3uUrl!==null;
+      if(Boolean(saved.m3uConfigured)!==expected)
+        throw Object.assign(new Error('xtream_m3u_save_unconfirmed'),{status:503});
+      const readback=await serverById(id);
+      if(Boolean(readback?.m3u_url_secret)!==expected)
+        throw Object.assign(new Error('xtream_m3u_save_unconfirmed'),{status:503});
+    }
+    return controlRedirect(res,'ok',body.m3uUrl===null?'m3u-removed':
+      body.m3uUrl?'m3u-saved':'saved');
   }
   if(action==='cancel-sync'){
     await cancelSourceSync(id);
