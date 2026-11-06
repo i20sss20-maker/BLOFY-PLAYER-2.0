@@ -31,6 +31,7 @@ import pg from 'pg';
 import { validateBulkAccountRequest } from './xtream-bulk-policy.mjs';
 import { gatewayItemsPageQuery } from './xtream-gateway-query.mjs';
 import { mergeXtreamPlayerRequest } from './xtream-player-post.mjs';
+import { inspectXtreamMediaChunk } from './xtream-media-inspector.mjs';
 import { recordXtreamPlayback,xtreamPlaybackSnapshot } from './xtream-playback-metrics.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
@@ -690,12 +691,8 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
         };
         const first = await readChunk(15000);
         if (first.done || !first.value?.byteLength) throw new Error('upstream_empty_media');
-        const prefix = Buffer.from(first.value).subarray(0,200).toString('utf8').trimStart().toLowerCase();
-        const mime = String(response.headers.get('content-type') || '').toLowerCase();
-        if (mime.includes('text/html') || mime.includes('application/json') ||
-            prefix.startsWith('<!doctype html') || prefix.startsWith('<html')) {
-          throw new Error('upstream_non_media_response');
-        }
+        const inspection=inspectXtreamMediaChunk(first.value,response.headers.get('content-type'));
+        if(!inspection.valid)throw new Error(inspection.reason);
         // Only announce a successful response once the provider really sent media bytes.
         observe('started',{upstreamStatus:response.status,startupMs:Date.now()-startedAt,attempts:attempt});
         res.writeHead(response.status, outputHeaders);
@@ -777,15 +774,10 @@ async function probeGatewayMedia(kind,itemId){
     let first;
     do{first=await reader.read()}while(!first.done&&!first.value?.byteLength);
     if(first.done)return{ok:false,kind,itemId,httpStatus:status,reason:'upstream_empty_media',elapsedMs:Date.now()-started};
-    const mime=String(response.headers.get('content-type')||'').toLowerCase();
-    const prefix=Buffer.from(first.value).subarray(0,160).toString('utf8').trimStart().toLowerCase();
-    if(mime.includes('text/html')||mime.includes('application/json')||prefix.startsWith('<html')||prefix.startsWith('<!doctype html'))
-      return{ok:false,kind,itemId,httpStatus:status,reason:'upstream_non_media_response',elapsedMs:Date.now()-started};
-    const type=prefix.startsWith('#extm3u')?'hls':
-      first.value[0]===0x47?'ts':
-      Buffer.from(first.value).subarray(4,8).toString('ascii')==='ftyp'?'mp4':
-      first.value[0]===0x1a&&first.value[1]===0x45?'mkv':'unknown';
-    return{ok:true,kind,itemId,httpStatus:status,format:type,elapsedMs:Date.now()-started,
+    const inspection=inspectXtreamMediaChunk(first.value,response.headers.get('content-type'));
+    if(!inspection.valid)
+      return{ok:false,kind,itemId,httpStatus:status,reason:inspection.reason,elapsedMs:Date.now()-started};
+    return{ok:true,kind,itemId,httpStatus:status,format:inspection.format,elapsedMs:Date.now()-started,
       note:'first_media_bytes_only'};
   }catch(error){
     return{ok:false,kind,itemId,httpStatus:null,
