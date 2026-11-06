@@ -1680,7 +1680,7 @@ function controlRedirect(res,kind,value){
   res.end();
 }
 async function handleControlAction(req,res,id,action) {
-  const available=['toggle-enabled','toggle-publish','test','test-m3u','probe-live','probe-movie','probe-series','probe-episode','sync-all','sync-live','sync-movie','sync-series','cancel-sync','save','delete'];
+  const available=['toggle-enabled','toggle-publish','test','test-m3u','index-m3u','probe-live','probe-movie','probe-series','probe-episode','sync-all','sync-live','sync-movie','sync-series','cancel-sync','save','delete'];
   if(id==='new'&&action==='add'){
     const fields=await readControlForm(req);
     if(fields.rightsConfirmed!=='yes')throw Object.assign(new Error('rights_confirmation_required'),{status:400});
@@ -1731,6 +1731,12 @@ async function handleControlAction(req,res,id,action) {
     }
     return controlRedirect(res,'ok',body.m3uUrl===null?'m3u-removed':
       body.m3uUrl?'m3u-saved':'saved');
+  }
+  if(action==='index-m3u'){
+    if(!current.m3u_url_secret)
+      throw Object.assign(new Error('xtream_m3u_not_configured'),{status:409});
+    startHybridM3uIndex(id);
+    return controlRedirect(res,'ok','m3u-indexing');
   }
   if(action==='test-m3u'){
     // Executed only after admin session + session-bound native CSRF proof.
@@ -1840,7 +1846,7 @@ http.createServer = function withBlofyXtream(listener) {
         if(!source)return json(res,404,{error:'xtream_server_not_found'});
         return sendControlHtml(res,deleteConfirmationPage(source,nativeXtreamCsrfToken(req,ADMIN_SESSION_KEY)));
       }
-      const nativeAction=url.pathname.match(/^\/api\/v1\/admin\/xtream\/controls\/([a-z0-9-]+)\/(toggle-enabled|toggle-publish|test|test-m3u|probe-live|probe-movie|probe-series|probe-episode|sync-all|sync-live|sync-movie|sync-series|cancel-sync|save|delete|add)$/i);
+      const nativeAction=url.pathname.match(/^\/api\/v1\/admin\/xtream\/controls\/([a-z0-9-]+)\/(toggle-enabled|toggle-publish|test|test-m3u|index-m3u|probe-live|probe-movie|probe-series|probe-episode|sync-all|sync-live|sync-movie|sync-series|cancel-sync|save|delete|add)$/i);
       if(nativeAction&&req.method==='POST'){
         try{return await handleControlAction(req,res,nativeAction[1],nativeAction[2]);}
         catch(error){
@@ -1909,7 +1915,7 @@ http.createServer = function withBlofyXtream(listener) {
         return json(res, 202, { started });
       }
 
-      const serverMatch = url.pathname.match(/^\/api\/v1\/admin\/xtream\/servers\/([0-9a-f-]+)(?:\/(test|test-m3u|sync|cancel-sync|probe-playback))?$/i);
+      const serverMatch = url.pathname.match(/^\/api\/v1\/admin\/xtream\/servers\/([0-9a-f-]+)(?:\/(test|test-m3u|index-m3u|sync|cancel-sync|probe-playback))?$/i);
       if (serverMatch) {
         const id = serverMatch[1];
         const action = serverMatch[2];
@@ -1923,6 +1929,13 @@ http.createServer = function withBlofyXtream(listener) {
         }
         if (action === 'test' && req.method === 'POST') return json(res, 200, { item: await testServer(id) });
         if (action === 'test-m3u' && req.method === 'POST') return json(res,200,await checkSourceM3u(id));
+        if (action === 'index-m3u' && req.method === 'POST'){
+          const source=await serverById(id);
+          if(!source)return json(res,404,{error:'xtream_server_not_found'});
+          if(!source.m3u_url_secret)return json(res,409,{error:'xtream_m3u_not_configured'});
+          if(!source.enabled)return json(res,409,{error:'xtream_source_paused'});
+          return json(res,202,startHybridM3uIndex(id));
+        }
         if (action === 'probe-playback' && req.method === 'POST') {
           const body=await readJson(req);
           const mediaType=String(body.mediaType||'live');
