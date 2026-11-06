@@ -28,18 +28,28 @@ function getExactItem(payload,kind,itemId){
 }
 
 // Only official, individual get_vod_info / get_series_info direct_source values
-// may become a candidate. An HTTPS provider-declared CDN is permitted after
-// public-DNS checks in the caller; plaintext HTTP must stay on the SAME origin.
+// may become a candidate. Plaintext HTTP and any relative URI must remain
+// on the original authorized source origin; HTTPS CDN links must still pass
+// the caller's public DNS checks. No provider-supplied URL is used unverified.
 export function authorizedXtreamDirectUrl(raw,baseUrl){
   if(typeof raw!=='string'||!raw.trim()||raw.length>4096)return null;
-  if(!/^https?:\/\//i.test(raw.trim()))return null;
+  const value=raw.trim();
+  // Disallow protocol-relative links, backslashes and bare URI schemes. A
+  // relative path is accepted only as a local URL from the configured host.
+  if(value.startsWith('//')||value.includes('\\')||
+     (!/^https?:\/\//i.test(value)&&/^[a-z][a-z0-9+.-]*:/i.test(value)))
+    return null;
   let url,base;
-  try{url=new URL(raw.trim());base=new URL(baseUrl)}catch{return null}
+  try{
+    base=new URL(baseUrl);
+    url=/^https?:\/\//i.test(value)?new URL(value):new URL(value,base.href.replace(/\/?$/,'/'));
+  }catch{return null}
   if(!['http:','https:'].includes(url.protocol)||url.username||url.password||url.hash)return null;
+  if(!/^https?:\/\//i.test(value)&&url.origin!==base.origin)return null;
   if(url.protocol==='http:'&&url.origin!==base.origin)return null;
   if(url.hostname==='localhost'||url.hostname.endsWith('.local')||
      url.hostname.endsWith('.localhost'))return null;
-  // The caller always performs network-address verification on each fetch.
+  // The caller always verifies public network addresses on each fetch.
   return url.toString();
 }
 
@@ -47,11 +57,20 @@ export function authoritativeXtreamMediaCandidates(payload,{kind,itemId,baseUrl,
   const entry=getExactItem(payload,kind,itemId);
   if(!entry)return [];
   const candidates=[];
-  const direct=authorizedXtreamDirectUrl(entry.direct_source,baseUrl);
-  if(direct)candidates.push({kind:'provider_direct',url:direct});
+  // Some Xtream variants put direct_source under movie_data, info or the
+  // exact episode's info. Never read a sibling episode's direct_source.
+  const directFields=[entry.direct_source,entry?.info?.direct_source];
+  if(kind==='movie'){
+    directFields.push(payload?.info?.direct_source,payload?.direct_source);
+  }
+  for(const directValue of directFields){
+    const direct=authorizedXtreamDirectUrl(directValue,baseUrl);
+    if(direct&&!candidates.some(x=>x.url===direct))
+      candidates.push({kind:'provider_direct',url:direct});
+  }
   const declared=String(entry.container_extension??'').trim().replace(/^\./,'').toLowerCase();
   const current=String(currentExtension??'').trim().replace(/^\./,'').toLowerCase();
   if(MEDIA_EXT.test(declared)&&MEDIA_EXT.test(current)&&declared!==current)
     candidates.push({kind:'provider_extension',extension:declared});
-  return candidates;
+  return candidates.slice(0,4);
 }
