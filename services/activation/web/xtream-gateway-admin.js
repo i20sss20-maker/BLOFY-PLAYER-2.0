@@ -397,9 +397,17 @@ function renderGatewayPreflight(data,scope){
     for(const check of source.checks||[]){
       const band=check.sampleBand==='low_id'?' · أول معرّف بالمكتبة':
         check.sampleBand==='high_id'?' · آخر معرّف بالمكتبة':'';
+      // Source IDs are admin-only identifiers, not streaming URLs. Show
+      // them for failing items so the provider can investigate the exact VOD.
+      const ids=[
+        check.itemSourceId?'معرّف المحتوى '+check.itemSourceId:'',
+        check.seriesSourceId?'معرّف المسلسل '+check.seriesSourceId:'',
+        check.episodeSourceId?'معرّف الحلقة '+check.episodeSourceId:''
+      ].filter(Boolean).join(' · ');
       const line=gatewayNode('small',check.ok?'':'failed',
         (check.ok?'✓ ':'✗ ')+(kinds[check.kind]||'فحص')+band+
-        (check.ok?' · بيانات صحيحة':(' · '+gatewayPreflightReason(check.reason))));
+        (check.ok?' · بيانات صحيحة':(' · '+gatewayPreflightReason(check.reason)))+
+        (!check.ok&&ids?' · '+ids:''));
       card.append(line);
     }
     details?.append(card);
