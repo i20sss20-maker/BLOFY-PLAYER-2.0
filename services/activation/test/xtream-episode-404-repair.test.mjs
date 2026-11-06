@@ -48,7 +48,7 @@ test('episode gateway keeps same provider ID and bound source when repairing 404
   assert.match(src,/kind==='series' && response.status===404/);
   assert.match(src,/const repaired=await repairEpisodeOn404\(row\)/);
   assert.match(src,/const fix=await repairEpisodeOn404\(row\)/);
-  assert.match(src,/upstream=mediaUpstreamUrl\(row,kind,sourceId,repaired.extension\)/);
+  assert.match(src,/upstream=repaired.url\|\|mediaUpstreamUrl\(row,kind,sourceId,repaired.extension\)/);
   assert.match(src,/AND source_episode_id=\$3\s+RETURNING gateway_id/);
   assert.doesNotMatch(src,/UPDATE blofy_xtream_gateway_episode_map[\s\S]{0,140}source_episode_id=\$4/);
   assert.match(src,/reason:'episode_missing_from_source'/);
