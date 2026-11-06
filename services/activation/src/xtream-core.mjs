@@ -134,6 +134,8 @@ export function sanitizeXtreamAccount(payload) {
     expiresAt: toInt(user.exp_date),
     createdAt: toInt(user.created_at),
     isTrial: String(user.is_trial ?? '') === '1',
+    isRestreamer: user.is_restreamer === undefined || user.is_restreamer === null ? null :
+      (user.is_restreamer === true || user.is_restreamer === 1 || String(user.is_restreamer).toLowerCase() === '1' || String(user.is_restreamer).toLowerCase() === 'true'),
     activeConnections: toInt(user.active_cons),
     maxConnections: toInt(user.max_connections),
     allowedOutputFormats: Array.isArray(user.allowed_output_formats) ? user.allowed_output_formats.map(v => String(v).slice(0, 20)).slice(0, 20) : [],
