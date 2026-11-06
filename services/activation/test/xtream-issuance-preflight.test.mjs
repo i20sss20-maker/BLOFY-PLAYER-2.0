@@ -78,3 +78,18 @@ test('admin user issuance cannot skip a failed test with an offline confirmation
   assert.match(js,/if\(!gatewayPreflightReady\(\)\)/);
   assert.match(html,/xtream-gateway-admin\.js\?v=20261107-preflight-v1/);
 });
+
+test('preflight selects the source server ID used as encryption associated data',async()=>{
+  const src=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
+  const preflight=src.slice(src.indexOf('async function runIssuancePreflight('),src.indexOf('async function issuancePreflight('));
+  // Production uses per-server AES-GCM associated data: username:<server_id>.
+  // Without the alias both independent sources fail before any network call.
+  assert.match(preflight,/SELECT id,id AS server_id,name,base_url,username_secret,password_secret/);
+  const {encryptXtreamSecret,decryptXtreamSecret}=await import('../src/xtream-core.mjs');
+  const sourceId='11111111-1111-4111-8111-111111111111';
+  const key='cd'.repeat(32);
+  const encrypted=encryptXtreamSecret('fixture-media-user',key,'username:'+sourceId);
+  const dbRow={id:sourceId,server_id:sourceId,username_secret:encrypted};
+  assert.equal(decryptXtreamSecret(dbRow.username_secret,key,'username:'+dbRow.server_id),'fixture-media-user');
+  assert.throws(()=>decryptXtreamSecret(encrypted,key,'username:undefined'),/xtream_secret_decryption_failed/);
+});
