@@ -41,7 +41,7 @@ test('episode gateway keeps same provider ID and bound source when repairing 404
   const metrics=await readFile(new URL('../src/xtream-playback-metrics.mjs',import.meta.url),'utf8');
   const ui=await readFile(new URL('../web/sources-admin.js',import.meta.url),'utf8');
   assert.match(src,/SELECT e.gateway_id,e.server_id,e.series_source_id,e.source_episode_id/);
-  assert.match(src,/verifiedEpisodeExtension\(series,row.source_episode_id/);
+  assert.match(src,/verifiedEpisodeRecovery\(series,currentId/);
   assert.match(src,/get_series_info/);
   assert.match(src,/episodeRepairCooldown/);
   assert.match(src,/now\+90000/);
@@ -49,9 +49,52 @@ test('episode gateway keeps same provider ID and bound source when repairing 404
   assert.match(src,/const repaired=await repairEpisodeOn404\(row\)/);
   assert.match(src,/const fix=await repairEpisodeOn404\(row\)/);
   assert.match(src,/upstream=mediaUpstreamUrl\(row,kind,sourceId,repaired.extension\)/);
-  assert.match(src,/AND source_episode_id=\$3 RETURNING gateway_id/);
+  assert.match(src,/AND source_episode_id=\$3\s+RETURNING gateway_id/);
   assert.doesNotMatch(src,/UPDATE blofy_xtream_gateway_episode_map[\s\S]{0,140}source_episode_id=\$4/);
   assert.match(src,/reason:'episode_missing_from_source'/);
   assert.match(metrics,/episode_missing_from_source/);
   assert.match(ui,/الحلقة لم تعد موجودة/);
+});
+
+test('repair recovers a changed episode ID only for an exact unique known season and episode',async()=>{
+  const {episodeOrdinal,verifiedEpisodeRecovery}=await import('../src/xtream-episode-repair.mjs');
+  assert.equal(episodeOrdinal('001'), '1');
+  assert.equal(episodeOrdinal('0',{allowZero:true}), '0');
+  assert.equal(episodeOrdinal('1.5'),null);
+  const relocated=verifiedEpisodeRecovery(info,'old-415','mp4','01','1');
+  assert.deepEqual(relocated,{status:'relocated',sourceId:'415',extension:'mkv'});
+  assert.deepEqual(verifiedEpisodeRecovery(info,'415','mp4','1','1'),
+    {status:'changed',extension:'mkv'});
+  assert.deepEqual(verifiedEpisodeRecovery(info,'old-415','mp4',null,'1'),
+    {status:'missing'});
+  assert.deepEqual(verifiedEpisodeRecovery(info,'old-415','mp4','3','1'),
+    {status:'missing'});
+  assert.deepEqual(verifiedEpisodeRecovery(info,'old-415','mp4','1','2'),
+    {status:'relocated',sourceId:'416',extension:'mp4'});
+  const ambiguous={episodes:{'1':[
+    {id:'777',episode_num:1,container_extension:'mp4'},
+    {id:'778',episode_num:1,container_extension:'mkv'}]}};
+  assert.deepEqual(verifiedEpisodeRecovery(ambiguous,'old','mp4',1,1),
+    {status:'missing'});
+  assert.deepEqual(verifiedEpisodeRecovery({episodes:{'1':[
+    {id:'../outside',episode_num:1,container_extension:'mp4'}]}},'old','mp4',1,1),
+    {status:'missing'});
+  assert.deepEqual(verifiedEpisodeRecovery({episodes:{'1':[
+    {id:'777',episode_num:1,container_extension:'../mp4'}]}},'old','mp4',1,1),
+    {status:'missing'});
+});
+
+test('media ID relocation is only committed after real source media verification',async()=>{
+  const src=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
+  assert.match(src,/ADD COLUMN IF NOT EXISTS season_number TEXT/);
+  assert.match(src,/ADD COLUMN IF NOT EXISTS episode_number TEXT/);
+  assert.match(src,/ADD COLUMN IF NOT EXISTS resolved_source_episode_id TEXT/);
+  assert.match(src,/const seasonNumber=episodeOrdinal\(seasonLabel,\{allowZero:true\}\)/);
+  assert.match(src,/episodeNumber:episodeOrdinal\(episode.episode_num\)/);
+  assert.match(src,/decision.status==='relocated' &&\s*!await confirmEpisodeReplacement/);
+  assert.match(src,/inspectXtreamMediaChunk\(chunk.value,response.headers.get\('content-type'\)\).valid/);
+  assert.match(src,/resolved_source_episode_id=COALESCE\(\$5::text,resolved_source_episode_id\)/);
+  assert.match(src,/sourceId = row.resolved_source_episode_id \|\| row.source_episode_id/);
+  assert.match(src,/sourceId=repaired.sourceId\|\|sourceId/);
+  assert.match(src,/sourceId=fix.sourceId\|\|sourceId/);
 });
