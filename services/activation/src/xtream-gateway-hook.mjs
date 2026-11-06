@@ -33,6 +33,7 @@ import { validateBulkAccountRequest } from './xtream-bulk-policy.mjs';
 import { gatewayItemsPageQuery } from './xtream-gateway-query.mjs';
 import { mergeXtreamPlayerRequest } from './xtream-player-post.mjs';
 import { inspectXtreamMediaChunk } from './xtream-media-inspector.mjs';
+import { readXtreamProviderDenialHint } from './xtream-provider-denial.mjs';
 import { normalizeXtreamEpg } from './xtream-epg.mjs';
 import { acceptsXtreamGzip } from './xtream-catalog-compression.mjs';
 import { shouldRetryXtreamWithoutRange,firstByteXtreamRange } from './xtream-media-range.mjs';
@@ -732,6 +733,9 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
           }) && attempt < maxAttempts;
           console.warn('xtream media upstream status', {kind, itemId:gatewayId, status:response.status, attempt,
             retryWithoutRange});
+          // Never expose upstream bodies; store only a fixed, allowlisted hint
+          // if the provider itself explained a denied request.
+          const providerHint=retryWithoutRange?null:await readXtreamProviderDenialHint(response);
           await response.body?.cancel().catch(()=>{});
           if(retryWithoutRange){
             noRangeRetried=true;
@@ -747,7 +751,7 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
             upstreamStatus:response.status,
             reason:['403','404','408','429','456','500','502','503','504'].includes(String(response.status))
               ?'upstream_http_'+response.status:'upstream_http_other',
-            attempts:attempt
+            providerHint,attempts:attempt
           });
           return text(res, 502, 'Upstream unavailable');
         }
@@ -855,8 +859,9 @@ async function probeGatewayMedia(kind,itemId){
     }
     const status=response.status;
     if(!(response.ok||status===206)){
+      const providerHint=await readXtreamProviderDenialHint(response);
       return{ok:false,kind,itemId,httpStatus:status,reason:'upstream_http_'+status,
-        elapsedMs:Date.now()-started};
+        ...(providerHint?{providerHint}:{}),elapsedMs:Date.now()-started};
     }
     if(!response.body)return{ok:false,kind,itemId,httpStatus:status,reason:'upstream_empty_media',elapsedMs:Date.now()-started};
     reader=response.body.getReader();

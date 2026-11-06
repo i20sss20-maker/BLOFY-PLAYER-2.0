@@ -1,5 +1,6 @@
 // Admin-only Xtream diagnostics. No upstream URLs, passwords or video bytes
 // leave the probe. These helpers describe results without provider secrets.
+import { XTREAM_DENIAL_MESSAGES,validXtreamDenialHint } from './xtream-provider-denial.mjs';
 const EXTS = /^[a-z0-9]{2,8}$/;
 const IDS = /^[A-Za-z0-9._-]{1,128}$/;
 
@@ -73,11 +74,13 @@ const ERRORS={
 };
 function summaryForCheck(row) {
   const code=Number(row?.httpStatus);
-  if (code===401) return 'HTTP 401: المصدر رفض بيانات الدخول.';
-  if (code===403) return 'HTTP 403: المصدر يمنع تشغيل هذا المحتوى؛ راجع صلاحيات الحساب أو قيود الاتصال لدى المزود.';
-  if (code===456) return 'HTTP 456: رمز غير قياسي من المصدر؛ لا يمكن تأكيد السبب من الرمز وحده. تحقق من أذونات التشغيل وقيود حساب المصدر لدى المزود.';
-  if (code===404) return 'HTTP 404: ملف التشغيل أو API هذا المحتوى غير موجود لدى المصدر.';
-  if (code===429) return 'HTTP 429: تم تجاوز عدد طلبات/اتصالات المصدر.';
+  const hint=XTREAM_DENIAL_MESSAGES[validXtreamDenialHint(row?.providerHint)]||'';
+  const suffix=hint?' '+hint:'';
+  if (code===401) return 'HTTP 401: المصدر رفض بيانات الدخول.'+suffix;
+  if (code===403) return 'HTTP 403: المصدر يمنع تشغيل هذا المحتوى؛ راجع صلاحيات الحساب أو قيود الاتصال لدى المزود.'+suffix;
+  if (code===456) return 'HTTP 456: رمز غير قياسي من المصدر؛ لا يمكن تأكيد السبب من الرمز وحده. تحقق من أذونات التشغيل وقيود حساب المصدر لدى المزود.'+suffix;
+  if (code===404) return 'HTTP 404: ملف التشغيل أو API هذا المحتوى غير موجود لدى المصدر.'+suffix;
+  if (code===429) return 'HTTP 429: تم تجاوز عدد طلبات/اتصالات المصدر.'+suffix;
   if (code>=500&&code<=599) return 'HTTP '+code+': خلل مؤقت في استجابة المصدر.';
   const err=String(row?.error||'').slice(0,80);
   const e=err.match(/^xtream_http_([0-9]{3})$/);

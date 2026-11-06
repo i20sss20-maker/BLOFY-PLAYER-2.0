@@ -24,6 +24,7 @@ import { xtreamEpisodeSamples, xtreamEpisodePlaybackCandidates, xtreamProbeMessa
 import { inspectXtreamMediaChunk } from './xtream-media-inspector.mjs';
 import { shouldRetryXtreamWithoutRange } from './xtream-media-range.mjs';
 import { summarizeSourceMediaProbe,sourceMediaSummary,sourceAccountWarnings } from './xtream-source-media-health.mjs';
+import { readXtreamProviderDenialHint } from './xtream-provider-denial.mjs';
 import { auditXtreamCatalogSample } from './xtream-library-insights.mjs';
 import { normalizeXtreamDetails,mergedXtreamMetadata } from './xtream-item-details.mjs';
 import { tmdbConfigured,validatedTmdbId,fetchTmdbDetails } from './xtream-tmdb.mjs';
@@ -393,7 +394,7 @@ async function probeXtreamEpisodeMedia(source,creds,episode) {
   const path=['series',creds.username,creds.password,String(episode.id)]
     .map(encodeURIComponent).join('/')+'.'+episode.extension;
   let target=new URL(path,normalizeXtreamBaseUrl(source.base_url)+'/');
-  let httpStatus=null,contentType='',errorCode=null,reader=null,response=null;
+  let httpStatus=null,contentType='',errorCode=null,reader=null,response=null,providerHint=null;
   let useFirstByteRange=true;
   try{
     for(let hop=0;hop<=3;hop++){
@@ -430,7 +431,7 @@ async function probeXtreamEpisodeMedia(source,creds,episode) {
           const inspection=inspectXtreamMediaChunk(first.value,contentType);
           if(!inspection.valid)errorCode=inspection.reason;
         }
-      }else await response.body?.cancel().catch(()=>{});
+      }else providerHint=await readXtreamProviderDenialHint(response);
       break;
     }
   }catch(error){
@@ -444,7 +445,7 @@ async function probeXtreamEpisodeMedia(source,creds,episode) {
   }
   const ok=(httpStatus===200||httpStatus===206)
     && !errorCode && !/text\/html|application\/json|text\/xml/i.test(contentType);
-  return{ok,httpStatus,contentType,latencyMs:Date.now()-started,error:errorCode,
+  return{ok,httpStatus,contentType,providerHint,latencyMs:Date.now()-started,error:errorCode,
     rangeFallbackUsed:!useFirstByteRange};
 }
 
@@ -563,7 +564,7 @@ async function probeXtreamPlayback(id,mediaType='live') {
     let target=new URL(path,normalizeXtreamBaseUrl(source.base_url)+'/');
     const started=Date.now(),controller=new AbortController();
     const timeout=setTimeout(()=>controller.abort(),9500);
-    let httpStatus=null,contentType='',errorCode=null;
+    let httpStatus=null,contentType='',errorCode=null,providerHint=null;
     let useFirstByteRange=mediaType==='movie';
     try{
       for(let hop=0;hop<=3;hop++){
@@ -604,7 +605,7 @@ async function probeXtreamPlayback(id,mediaType='live') {
             try{await reader.cancel()}catch{}
             try{reader.releaseLock()}catch{}
           }
-        }else await response.body?.cancel().catch(()=>{});
+        }else providerHint=await readXtreamProviderDenialHint(response);
         break;
       }
     }catch(error){
@@ -616,7 +617,7 @@ async function probeXtreamPlayback(id,mediaType='live') {
       && !errorCode && !/text\/html|application\/json|text\/xml/i.test(contentType);
     checks.push({
       title:cleanText(item.name,160),mediaType,httpStatus,contentType,
-      latencyMs:Date.now()-started,ok,error:errorCode,rangeFallbackUsed:mediaType==='movie'&&!useFirstByteRange
+      latencyMs:Date.now()-started,ok,error:errorCode,providerHint,rangeFallbackUsed:mediaType==='movie'&&!useFirstByteRange
     });
     if(ok||[401,403,456].includes(httpStatus))break;
   }

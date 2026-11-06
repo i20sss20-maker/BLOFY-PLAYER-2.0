@@ -1,3 +1,5 @@
+import { validXtreamDenialHint } from './xtream-provider-denial.mjs';
+
 // Sanitized, bounded operator-only record of source-media probes.
 // Source credentials, upstream addresses, account names, titles, stream IDs
 // and provider response bodies are never persisted in diagnostic snapshots.
@@ -17,6 +19,7 @@ export function summarizeSourceMediaProbe(mediaType,result,now=Date.now()){
     ok,
     status:ok?'media-confirmed':REJECTED.has(httpStatus)?'provider-rejected':'unconfirmed',
     httpStatus,
+    ...(validXtreamDenialHint(chosen?.providerHint)?{providerHint:validXtreamDenialHint(chosen.providerHint)}:{}),
     sampled:checks.length,
     failed:checks.filter(row=>row&&!row.ok).length
   };
@@ -31,8 +34,10 @@ export function sourceMediaSummary(probes={},now=Date.now()){
     // Do not present yesterday's upstream failure as current health.
     if(!Number.isFinite(checked)||checked>now+60_000||now-checked>24*3600_000)return[];
     const code=Number(value.httpStatus);
+    const reasons={network_restriction:'قيد الشبكة',connection_limit:'حد الاتصالات',account_expired:'صلاحية الحساب',restream_not_allowed:'إعادة البث غير مصرح',output_format_rejected:'صيغة غير مسموحة',account_inactive:'الحساب غير نشط'};
+    const hint=reasons[validXtreamDenialHint(value.providerHint)]||'';
     if(value.ok)return[{kind,label,className:'on',text:'✓ '+label+' · عينة نجحت'}];
-    if(code===456)return[{kind,label,className:'off',text:'✕ '+label+' · رفض المصدر 456'}];
+    if(code===456)return[{kind,label,className:'off',text:'✕ '+label+' · رفض المصدر 456'+(hint?' · '+hint:'')}];
     if(code===401||code===403)return[{kind,label,className:'off',text:'✕ '+label+' · رفض المصدر '+code}];
     return[{kind,label,className:'hidden',text:'؟ '+label+' · فحص غير مؤكد'+(code>=400?' '+code:'')}];
   });
@@ -40,6 +45,8 @@ export function sourceMediaSummary(probes={},now=Date.now()){
 export function sourceAccountWarnings(info={},now=Date.now()){
   if(!info||typeof info!=='object')return[];
   const warnings=[];
+  if(info.isRestreamer === false)
+    warnings.push('المصدر يعلن أن هذا الحساب غير مخصص لإعادة البث (is_restreamer=0). اطلب حسابًا مصرحًا من المزود.');
   const expiry=Number(info.expiresAt);
   if(Number.isFinite(expiry)&&expiry>0&&expiry*1000<=now)
     warnings.push('انتهت صلاحية حساب المصدر حسب بيانات Xtream.');

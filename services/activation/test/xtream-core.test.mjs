@@ -71,6 +71,9 @@ test('account summary omits username and password returned by panels', () => {
   });
   assert.equal(summary.authenticated, true);
   assert.equal(summary.maxConnections, 2);
+  assert.equal(summary.isRestreamer, null);
+  assert.equal(sanitizeXtreamAccount({user_info:{auth:1,is_restreamer:0}}).isRestreamer,false);
+  assert.equal(sanitizeXtreamAccount({user_info:{auth:1,is_restreamer:1}}).isRestreamer,true);
   assert.equal(Object.hasOwn(summary, 'username'), false);
   assert.equal(Object.hasOwn(summary, 'password'), false);
 });
