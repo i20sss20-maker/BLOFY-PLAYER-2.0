@@ -516,7 +516,8 @@ async function handleServerAction(item, card, button) {
         const failures={empty_media:'البث فارغ',timeout:'انتهت مهلة المصدر',
           no_episode_info:'تفاصيل الحلقات غير متاحة',no_playable_episodes:'لم توجد حلقات قابلة للتشغيل',
           series_response_invalid:'بيانات المسلسل غير صالحة',series_response_too_large:'حجم معلومات المسلسل كبير',
-          upstream_html_instead_of_video:'المصدر يعيد صفحة بدل الفيديو'};
+          upstream_html_instead_of_video:'المصدر يعيد صفحة بدل الفيديو',
+          upstream_non_media_response:'المصدر يعيد رسالة أو صفحة بدل بيانات الفيديو (حتى مع HTTP 200)'};
         return failures[check.error]||'تعذر التحقق من البث';
       };
       const summary=checked.map(check=>
