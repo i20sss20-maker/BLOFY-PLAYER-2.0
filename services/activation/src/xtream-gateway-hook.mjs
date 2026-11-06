@@ -745,7 +745,7 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
           }
           observe('failed',{
             upstreamStatus:response.status,
-            reason:['403','404','408','429','500','502','503','504'].includes(String(response.status))
+            reason:['403','404','408','429','456','500','502','503','504'].includes(String(response.status))
               ?'upstream_http_'+response.status:'upstream_http_other',
             attempts:attempt
           });
