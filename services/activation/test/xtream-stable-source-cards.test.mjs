@@ -51,5 +51,5 @@ test('source control sees confirmed changes and never claims a delete before DB 
   assert.match(handler,/result\.deletionQueued!==true/);
   assert.match(handler,/state\.xtreamServers\.some\(source=>source\.id===item\.id\)/);
   assert.match(ui,/cache: 'no-store'/);
-  assert.match(html,/sources-admin\.js\?v=20261106-smart-studio-v10/);
+  assert.match(html,/sources-admin\.js\?v=20261106-source-probe-batch-v11/);
 });
