@@ -52,6 +52,12 @@ test('episode gateway keeps same provider ID and bound source when repairing 404
   assert.match(src,/AND source_episode_id=\$3\s+RETURNING gateway_id/);
   assert.doesNotMatch(src,/UPDATE blofy_xtream_gateway_episode_map[\s\S]{0,140}source_episode_id=\$4/);
   assert.match(src,/reason:'episode_missing_from_source'/);
+  assert.match(src,/reason:'episode_position_unknown'/);
+  assert.match(src,/reason:'episode_media_404_at_source'/);
+  assert.match(src,/status:'catalog_media_mismatch'/);
+  assert.match(src,/status:'position_unknown'/);
+  assert.match(src,/metadata_upstream_/);
+  assert.match(src,/xtream episode 404 diagnosis/);
   assert.match(metrics,/episode_missing_from_source/);
   assert.match(ui,/الحلقة لم تعد موجودة/);
 });
