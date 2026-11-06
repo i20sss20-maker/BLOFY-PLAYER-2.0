@@ -41,6 +41,7 @@ import { shouldRetryXtreamWithoutRange,firstByteXtreamRange } from './xtream-med
 import { recordXtreamPlayback,xtreamPlaybackSnapshot } from './xtream-playback-metrics.mjs';
 import { XtreamDenialCooldown } from './xtream-denial-cooldown.mjs';
 import { episodeOrdinal, verifiedEpisodeRecovery, sameEpisodeContainerCandidates } from './xtream-episode-repair.mjs';
+import { authoritativeXtreamMediaCandidates } from './xtream-authoritative-media.mjs';
 import { xtreamEpisodePlaybackCandidates } from './xtream-series-probe.mjs';
 import { MAX_ISSUANCE_SOURCES, PREFLIGHT_TTL_MS, issuanceErrorReason, summarizeIssuancePreflight } from './xtream-issuance-preflight.mjs';
 
@@ -266,6 +267,18 @@ async function probeIssuanceMedia(row,kind,id,extension,deadline){
       delete headers.range;
       response=await checkedFetch(url,{method:'GET',headers,signal});
     }
+    if(response.status===404&&kind!=='live'&&Date.now()+3000<deadline){
+      const alternate=await verifiedOfficialMediaAlternative(row,kind,id,extension,{
+        seriesSourceId:kind==='series'?row.series_source_id:null,
+        providerPayload:kind==='series'?row.series_payload:null,
+        deadline
+      });
+      if(alternate){
+        await response.body?.cancel().catch(()=>{});
+        response=null;
+        response=await checkedFetch(alternate.url,{method:'GET',headers,signal});
+      }
+    }
     if(!response.ok || !response.body){
       return {kind,ok:false,reason:response.status===404?'upstream_http_404':
         response.status===403?'upstream_http_403':
@@ -296,6 +309,79 @@ async function probeIssuanceMedia(row,kind,id,extension,deadline){
     try{reader?.releaseLock()}catch{}
     if(!reader)try{await response?.body?.cancel()}catch{}
   }
+}
+
+
+// The authoritative Xtream API may provide a media URL for the exact requested
+// VOD/episode even when the conventional /movie/... or /series/... path is 404.
+// Never try unrelated titles, IDs, hosts, accounts or extension guesses.
+// Check the media bytes *before* selecting any provider-declared alternative.
+async function confirmProviderMediaUrl(url,{deadline=Date.now()+8500}={}){
+  const timeLeft=deadline-Date.now();
+  if(timeLeft<=1000)return false;
+  const signal=AbortSignal.timeout(Math.min(8500,timeLeft));
+  let response,reader;
+  try{
+    const headers={'user-agent':'BLOFY-Media-Verify/1.0',range:'bytes=0-2047'};
+    response=await checkedFetch(url,{method:'GET',headers,signal});
+    if(shouldRetryXtreamWithoutRange({status:response.status,range:headers.range})){
+      await response.body?.cancel().catch(()=>{});
+      response=null;
+      delete headers.range;
+      response=await checkedFetch(url,{method:'GET',headers,signal});
+    }
+    if(!response.ok||!response.body)return false;
+    reader=response.body.getReader();
+    const parts=[];
+    let total=0;
+    for(let i=0;i<6&&total<512;i++){
+      const read=await reader.read();
+      if(read.done)break;
+      const part=Buffer.from(read.value||[]).subarray(0,512-total);
+      if(part.length){parts.push(part);total+=part.length;}
+    }
+    if(!total)return false;
+    const inspection=inspectXtreamMediaChunk(Buffer.concat(parts,total),
+      response.headers.get('content-type'));
+    return inspection.valid&&inspection.format!=='unknown';
+  }catch{return false}
+  finally{
+    if(reader){try{await reader.cancel()}catch{}try{reader.releaseLock()}catch{}}
+    else try{await response?.body?.cancel()}catch{}
+  }
+}
+
+async function verifiedOfficialMediaAlternative(row,kind,sourceId,currentExtension,
+  {seriesSourceId=null,providerPayload=null,deadline=Date.now()+11000}={}){
+  if(!['movie','series'].includes(kind)||Date.now()+1000>=deadline)return null;
+  let payload=providerPayload;
+  try{
+    if(!payload){
+      if(kind==='series'&&!seriesSourceId)return null;
+      payload=await fetchUpstreamApi(row,
+        kind==='movie'?'get_vod_info':'get_series_info',
+        kind==='movie'?{vod_id:String(sourceId)}:{series_id:String(seriesSourceId)},
+        {timeoutMs:Math.min(5500,Math.max(1000,deadline-Date.now())),maxBytes:3_000_000});
+    }
+    const candidates=authoritativeXtreamMediaCandidates(payload,{
+      kind,itemId:String(sourceId),baseUrl:row.base_url,currentExtension
+    });
+    for(const item of candidates){
+      if(Date.now()+1000>=deadline)break;
+      const url=item.kind==='provider_direct'?new URL(item.url):
+        mediaUpstreamUrl(row,kind,sourceId,item.extension);
+      if(await confirmProviderMediaUrl(url,{deadline})){
+        console.info('xtream verified provider media fallback',{kind,mode:item.kind});
+        return {url,mode:item.kind};
+      }
+    }
+  }catch(error){
+    // Never log metadata payloads, upstream URLs, accounts or media tokens.
+    console.warn('xtream provider media fallback unavailable',{
+      kind,reason:issuanceErrorReason(error?.message)
+    });
+  }
+  return null;
 }
 
 async function preflightSource(row,deadline){
@@ -348,7 +434,7 @@ async function preflightSource(row,deadline){
       }
       if(!samples.length){checks.push({kind,ok:false,reason:'series_has_no_episodes'});continue;}
       for(const sample of samples){
-        checks.push(await probeIssuanceMedia(row,'series',sample.id,sample.extension,deadline));
+        checks.push(await probeIssuanceMedia({...row,series_source_id:rows[0].source_id,series_payload:payload},'series',sample.id,sample.extension,deadline));
       }
     }else{
       for(const sample of rows){
