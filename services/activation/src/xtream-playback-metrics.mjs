@@ -12,7 +12,8 @@ const REASONS=new Set([
   'upstream_http_500','upstream_http_502','upstream_http_503','upstream_http_504',
   'upstream_http_other','headers_timeout','media_read_timeout','upstream_empty_media',
   'upstream_non_media_response','upstream_unreachable','upstream_denial_cooldown',
-  'gateway_auth_denied','catalog_item_unavailable','episode_missing_from_source'
+  'gateway_auth_denied','catalog_item_unavailable','episode_missing_from_source',
+  'episode_position_unknown','episode_media_404_at_source'
 ]);
 
 export function recordXtreamPlayback({kind,phase,upstreamStatus,reason,providerHint,startupMs,attempts,itemId}={},now=Date.now()){
