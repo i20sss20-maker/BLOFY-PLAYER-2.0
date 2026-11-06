@@ -16,7 +16,7 @@ test('native controls render independently of JavaScript and never echo password
   assert.match(page,/<!doctype html>/);
   assert.doesNotMatch(page,/<script(?:\s|>)/i);
   assert.match(page,/method="post"/);
-  for(const action of ['toggle-enabled','toggle-publish','test','sync-all','sync-live','sync-movie','sync-series','cancel-sync','save']){
+  for(const action of ['toggle-enabled','toggle-publish','test','test-m3u','sync-all','sync-live','sync-movie','sync-series','cancel-sync','save']){
     assert.ok(page.includes(CONTROL_PATH+'/'+id+'/'+action),action);
   }
   assert.ok(page.includes(CONTROL_PATH+'/'+id+'/confirm-delete'));

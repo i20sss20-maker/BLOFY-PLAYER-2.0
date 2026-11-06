@@ -45,6 +45,7 @@ function noticeText(code) {
     saved:'تم حفظ بيانات المصدر. افحص الاتصال وأعد المزامنة إذا غيّرت بيانات الدخول.',
     'm3u-saved':'✓ تم حفظ رابط M3U المشفر لهذا المصدر في قاعدة البيانات. ارجع إلى لوحة BLOFY وتأكد من ظهور M3U مرتبط، ثم اختبر قائمة M3U.',
     'm3u-removed':'✓ تم إلغاء ربط M3U لهذا المصدر دون حذف مكتبة Xtream.',
+    'm3u-tested':'✓ تم التحقق من رابط M3U المحفوظ وأن الملف يبدأ بترويسة قائمة سليمة. لا يعني ذلك أن كل الأفلام والحلقات تعمل.',
     testing:'بدأ فحص الاتصال؛ حدث الصفحة لمعرفة النتيجة.',
     'probe-ok':'تم اختبار بث الوسائط واستجاب المصدر بنجاح.',
     syncing:'بدأت المزامنة. المكتبة الكبيرة قد تستغرق وقتًا.',
@@ -84,6 +85,7 @@ export function controlPage({items=[],success='',error='',csrfToken=''}) {
       securedForm(id,'toggle-enabled',enabled?'إيقاف المصدر':'تفعيل المصدر')+
       securedForm(id,'toggle-publish',published?'إخفاء عن العملاء':'نشر للعملاء')+
       securedForm(id,'test','فحص الاتصال')+
+      securedForm(id,'test-m3u','▶ اختبار رابط M3U')+
       securedForm(id,'probe-live','اختبار بث قناة')+
       securedForm(id,'probe-movie','اختبار تشغيل فيلم')+
       securedForm(id,'probe-series','اختبار بيانات مسلسل')+

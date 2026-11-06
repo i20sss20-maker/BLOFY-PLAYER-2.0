@@ -1530,7 +1530,7 @@ function controlRedirect(res,kind,value){
   res.end();
 }
 async function handleControlAction(req,res,id,action) {
-  const available=['toggle-enabled','toggle-publish','test','probe-live','probe-movie','probe-series','probe-episode','sync-all','sync-live','sync-movie','sync-series','cancel-sync','save','delete'];
+  const available=['toggle-enabled','toggle-publish','test','test-m3u','probe-live','probe-movie','probe-series','probe-episode','sync-all','sync-live','sync-movie','sync-series','cancel-sync','save','delete'];
   if(id==='new'&&action==='add'){
     const fields=await readControlForm(req);
     if(fields.rightsConfirmed!=='yes')throw Object.assign(new Error('rights_confirmation_required'),{status:400});
@@ -1581,6 +1581,14 @@ async function handleControlAction(req,res,id,action) {
     }
     return controlRedirect(res,'ok',body.m3uUrl===null?'m3u-removed':
       body.m3uUrl?'m3u-saved':'saved');
+  }
+  if(action==='test-m3u'){
+    // Executed only after admin session + session-bound native CSRF proof.
+    // A valid playlist header is verified by the existing bounded reader,
+    // not by replacing source content or assuming individual videos work.
+    const check=await checkSourceM3u(id);
+    if(!check.ok)throw Object.assign(new Error('xtream_m3u_invalid_header'),{status:502});
+    return controlRedirect(res,'ok','m3u-tested');
   }
   if(action==='cancel-sync'){
     await cancelSourceSync(id);
@@ -1682,7 +1690,7 @@ http.createServer = function withBlofyXtream(listener) {
         if(!source)return json(res,404,{error:'xtream_server_not_found'});
         return sendControlHtml(res,deleteConfirmationPage(source,nativeXtreamCsrfToken(req,ADMIN_SESSION_KEY)));
       }
-      const nativeAction=url.pathname.match(/^\/api\/v1\/admin\/xtream\/controls\/([a-z0-9-]+)\/(toggle-enabled|toggle-publish|test|probe-live|probe-movie|probe-series|probe-episode|sync-all|sync-live|sync-movie|sync-series|cancel-sync|save|delete|add)$/i);
+      const nativeAction=url.pathname.match(/^\/api\/v1\/admin\/xtream\/controls\/([a-z0-9-]+)\/(toggle-enabled|toggle-publish|test|test-m3u|probe-live|probe-movie|probe-series|probe-episode|sync-all|sync-live|sync-movie|sync-series|cancel-sync|save|delete|add)$/i);
       if(nativeAction&&req.method==='POST'){
         try{return await handleControlAction(req,res,nativeAction[1],nativeAction[2]);}
         catch(error){

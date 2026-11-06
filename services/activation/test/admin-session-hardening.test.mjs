@@ -158,6 +158,42 @@ test('session-signed Xtream forms work when Chrome omits Origin but other admin 
   }
   assert.equal(verifyNativeXtreamCsrf({headers:{cookie:secondCookie}},key,token),false);
 });
+test('M3U native test POST accepts only same-session signed CSRF without Origin, never a foreign page',async()=>{
+  const a=makeRuntime({VERCEL_ENV:undefined,NODE_ENV:'production'});
+  const cookie=a.sessionCookie(await a.makeSession());
+  const secondCookie=a.sessionCookie(await a.makeSession());
+  const key=crypto.createHmac('sha256',a.env.BLOFY_ADMIN_TOKEN)
+    .update(JSON.stringify(['blofy-admin-session-v3',
+      a.env.BLOFY_ADMIN_USERNAME,a.env.BLOFY_ADMIN_PASSWORD])).digest();
+  const token=nativeXtreamCsrfToken({headers:{cookie}},key);
+  const path='/api/v1/admin/xtream/controls/1195bcd7-44ba-4710-af22-cb4237dc4aa1/test-m3u';
+  const base={
+    host:'blofy-activation-portal-production.up.railway.app',
+    'x-forwarded-host':'blofy-activation-portal-production.up.railway.app',
+    'x-forwarded-proto':'https',cookie,
+    'content-type':'application/x-www-form-urlencoded'
+  };
+  for(const nativeAction of ['test-m3u','probe-series','probe-episode']){
+    const route=path.replace('test-m3u',nativeAction);
+    const result=await a.request({
+      method:'POST',url:route+'?csrf='+token,headers:{...base}
+    });
+    assert.equal(result.status,200,'valid signed native '+nativeAction+' must reach backend');
+    assert.equal(result.body,'DOWNSTREAM');
+  }
+  for(const [url,headers] of [
+    [path,base],
+    [path+'?csrf=invalid',base],
+    [path+'?csrf='+token,{...base,cookie:secondCookie}],
+    [path+'?csrf='+token,{...base,origin:'https://evil.example'}],
+    [path+'?csrf='+token,{...base,'content-type':'application/json'}]
+  ]){
+    const denied=await a.request({method:'POST',url,headers});
+    assert.equal(denied.status,403,'M3U test must reject bad origin/token/session/content-type');
+    assert.match(denied.body,/invalid_origin/);
+  }
+});
+
 test('Railway proxy allows exact public BLOFY origin for cookie-authenticated native POST controls',async()=>{
   // Production receives an internal Railway Host/forwarded Host, while the
   // browser correctly reports the external HTTPS canonical site.
