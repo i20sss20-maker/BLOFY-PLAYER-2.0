@@ -21,6 +21,7 @@ import { distinctXtreamRecords } from './xtream-import-dedup.mjs';
 import { assessXtreamSync } from './xtream-sync-guard.mjs';
 import { CONTROL_PATH, controlPage, deleteConfirmationPage, readControlForm } from './xtream-native-controls.mjs';
 import { xtreamEpisodeSamples, xtreamProbeMessage } from './xtream-series-probe.mjs';
+import { inspectXtreamMediaChunk } from './xtream-media-inspector.mjs';
 import { sortXtreamCategories } from './xtream-category-sort.mjs';
 import { nativeXtreamCsrfToken } from './xtream-native-csrf.mjs';
 
@@ -409,9 +410,11 @@ async function probeXtreamEpisodeMedia(source,creds,episode) {
       if((httpStatus===200||httpStatus===206)&&response.body){
         reader=response.body.getReader();
         const first=await reader.read();
-        const prefix=Buffer.from(first.value||[]).subarray(0,100).toString('utf8').trimStart().toLowerCase();
         if(first.done||!first.value?.byteLength)errorCode='empty_media';
-        else if(prefix.startsWith('<html')||prefix.startsWith('<!doctype html'))errorCode='upstream_html_instead_of_video';
+        else {
+          const inspection=inspectXtreamMediaChunk(first.value,contentType);
+          if(!inspection.valid)errorCode=inspection.reason;
+        }
       }else await response.body?.cancel().catch(()=>{});
       break;
     }
@@ -546,9 +549,11 @@ async function probeXtreamPlayback(id,mediaType='live') {
           const reader=response.body.getReader();
           try{
             const first=await reader.read();
-            const prefix=Buffer.from(first.value||[]).subarray(0,100).toString('utf8').trimStart().toLowerCase();
             if(first.done||!first.value?.byteLength)errorCode='empty_media';
-            else if(prefix.startsWith('<html')||prefix.startsWith('<!doctype html'))errorCode='upstream_html_instead_of_video';
+            else {
+              const inspection=inspectXtreamMediaChunk(first.value,contentType);
+              if(!inspection.valid)errorCode=inspection.reason;
+            }
           }finally{
             try{await reader.cancel()}catch{}
             try{reader.releaseLock()}catch{}
