@@ -4,6 +4,7 @@ import {readFile} from 'node:fs/promises';
 import {
   summarizeIssuancePreflight,
   issuanceErrorReason,
+  shouldRetryIssuanceMedia,
   MAX_ISSUANCE_SOURCES,
   PREFLIGHT_TTL_MS
 } from '../src/xtream-issuance-preflight.mjs';
@@ -92,4 +93,17 @@ test('preflight selects the source server ID used as encryption associated data'
   const dbRow={id:sourceId,server_id:sourceId,username_secret:encrypted};
   assert.equal(decryptXtreamSecret(dbRow.username_secret,key,'username:'+dbRow.server_id),'fixture-media-user');
   assert.throws(()=>decryptXtreamSecret(encrypted,key,'username:undefined'),/xtream_secret_decryption_failed/);
+});
+
+test('temporary network errors retry once; provider 404, 403 and 456 never retry',()=>{
+  for(const reason of ['timeout','source_unreachable','upstream_http_5xx'])
+    assert.equal(shouldRetryIssuanceMedia({reason},8000),true,reason);
+  for(const httpStatus of [408,500,502,503,504])
+    assert.equal(shouldRetryIssuanceMedia({httpStatus},8000),true,String(httpStatus));
+  for(const [reason,httpStatus] of [
+    ['upstream_http_404',404],['upstream_http_403',403],
+    ['upstream_http_456',456],['source_auth_denied',401],
+    ['media_unverified',200]
+  ])assert.equal(shouldRetryIssuanceMedia({reason,httpStatus},8000),false,reason);
+  assert.equal(shouldRetryIssuanceMedia({reason:'timeout'},3300),false);
 });
