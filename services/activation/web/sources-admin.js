@@ -1065,7 +1065,27 @@ function catalogCard(item) {
   if(links.children.length)metaInfo.append(links);
   if(!metaInfo.children.length)metaInfo.append(make('p','muted','المصدر لم يوفر معلومات إضافية لهذا العنصر.'));
   details.append(metaInfo);
-  card.append(media,toggle,details);
+  const actions=make('div','catalog-actions');
+  actions.append(toggle);
+  if(item.type==='movie'||item.type==='series'){
+    const enrich=make('button','button ghost','✨ تحديث معلومات المحتوى');
+    enrich.type='button';
+    enrich.title='يجلب القصة والتقييم والصورة المتوفرة من مصدر Xtream لهذا العنصر فقط دون تغيير التشغيل أو التصنيف.';
+    enrich.addEventListener('click',async()=>{
+      enrich.disabled=true;enrich.textContent='جارٍ جلب المعلومات…';
+      try{
+        const r=await api('/api/v1/admin/xtream/items/'+encodeURIComponent(item.serverId)+
+          '/'+encodeURIComponent(item.type)+'/'+encodeURIComponent(item.id)+'/enrich',{method:'POST'});
+        showMessage('✓ تم تحديث معلومات '+item.name+'. الحقول المستلمة: '+Number(r.fieldsFound||0));
+        await loadCatalog();
+      }catch(error){
+        showMessage('تعذر تحديث معلومات '+item.name+': '+error.message,'error');
+        enrich.disabled=false;enrich.textContent='✨ تحديث معلومات المحتوى';
+      }
+    });
+    actions.append(enrich);
+  }
+  card.append(media,actions,details);
   return card;
 }
 
