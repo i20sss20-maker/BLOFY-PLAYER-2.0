@@ -295,3 +295,12 @@
 .catalog-actions .button{min-height:37px;padding:8px 12px;max-width:220px;white-space:normal;line-height:1.4;text-align:center}
 .catalog-actions .button:disabled{opacity:.65;cursor:progress}
 @media(max-width:600px){.catalog-actions{width:100%;flex-direction:row;flex-wrap:wrap}.catalog-actions .button{flex:1 1 150px;max-width:none}}
+
+.catalog-enrich-panel{margin:13px 0;padding:13px 16px;border:1px solid #584674;border-radius:13px;background:linear-gradient(115deg,#21162f,#14101e)}
+.catalog-enrich-toolbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+.catalog-enrich-toolbar>div{display:flex;flex-direction:column;gap:7px;flex:1 1 235px}
+.catalog-enrich-toolbar strong{font-size:14px;color:#eddefd}
+.catalog-enrich-toolbar small{font-size:11px;color:#c5b1d8;line-height:1.65}
+.catalog-enrich-panel progress{height:13px;width:100%;accent-color:#b18ee7;margin:13px 0 5px}
+.catalog-enrich-panel #catalogEnrichStatus{font-size:12px;line-height:1.6;margin:7px 0 0}
+@media(max-width:630px){.catalog-enrich-toolbar>.button{flex:1 1 120px}}

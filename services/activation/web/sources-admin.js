@@ -1089,6 +1089,69 @@ function catalogCard(item) {
   return card;
 }
 
+// The operator must explicitly approve each batch. Requests are sequential,
+// limited to eight missing-detail items on the visible page, and cancelable.
+let catalogEnrichSession=null;
+function refreshCatalogEnrichmentAvailability(){
+  const btn=el('catalogEnrichBatchBtn');
+  if(!btn)return;
+  const type=el('catalogType').value;
+  btn.disabled=Boolean(catalogEnrichSession)||!el('catalogServer').value||type==='live';
+}
+async function enrichCurrentCatalogPage(){
+  if(catalogEnrichSession)return;
+  const sourceId=el('catalogServer').value,type=el('catalogType').value;
+  if(!sourceId||!['movie','series'].includes(type)){
+    showMessage('اختر مصدرًا من الأفلام أو المسلسلات أولًا.','error');return;
+  }
+  const targets=state.catalog.filter(item=>item.serverId===sourceId&&item.type===type&&
+    (!item.iconUrl||!item.metadata?.plot||!item.metadata?.year)).slice(0,8);
+  if(!targets.length){
+    showMessage('لا توجد معلومات أساسية ناقصة ضمن العناصر المعروضة في هذه الصفحة.');return;
+  }
+  if(!window.confirm('تحديث معلومات '+targets.length+' أعمال من المصدر الأصلي؟ لن تتغير القنوات أو روابط التشغيل أو اشتراكات العملاء.'))return;
+  const session={cancelled:false,controller:null,processed:0,success:0,failed:0};
+  catalogEnrichSession=session;
+  const btn=el('catalogEnrichBatchBtn'),cancel=el('catalogEnrichCancelBtn');
+  const progress=el('catalogEnrichProgress'),status=el('catalogEnrichStatus');
+  btn.disabled=true;cancel.hidden=false;progress.hidden=false;
+  progress.max=targets.length;progress.value=0;
+  status.textContent='جارٍ تحديث '+targets.length+' عنصر…';
+  try{
+    for(const item of targets){
+      if(session.cancelled||el('catalogServer').value!==sourceId||el('catalogType').value!==type)break;
+      const controller=new AbortController();session.controller=controller;
+      const timeout=window.setTimeout(()=>controller.abort(),14500);
+      try{
+        await api('/api/v1/admin/xtream/items/'+encodeURIComponent(item.serverId)+
+          '/'+encodeURIComponent(item.type)+'/'+encodeURIComponent(item.id)+'/enrich',
+          {method:'POST',signal:controller.signal});
+        session.success++;
+      }catch{if(!session.cancelled)session.failed++;}
+      finally{
+        window.clearTimeout(timeout);
+        session.controller=null;session.processed++;
+        progress.value=session.processed;
+        status.textContent='تم: '+session.processed+'/'+targets.length+' · تحديث ناجح: '+
+          session.success+' · تعذر: '+session.failed;
+      }
+    }
+  }finally{
+    catalogEnrichSession=null;cancel.hidden=true;
+    status.textContent=(session.cancelled?'تم إيقاف العملية. ':'انتهت عملية تحديث العينة. ')+
+      'نجح '+session.success+' من '+session.processed+' · تعذر '+session.failed+
+      '. اطلع على الحقول في «معلومات المحتوى».';
+    refreshCatalogEnrichmentAvailability();
+    if(el('catalogServer').value===sourceId&&el('catalogType').value===type)
+      await loadCatalog();
+  }
+}
+function stopCatalogEnrichment(){
+  if(!catalogEnrichSession)return;
+  catalogEnrichSession.cancelled=true;
+  catalogEnrichSession.controller?.abort();
+}
+
 function renderCatalog() {
   const list = el('catalogItems');
   list.replaceChildren();
@@ -1103,6 +1166,7 @@ function renderCatalog() {
   el('catalogPageStatus').textContent='الصفحة '+page.toLocaleString('en-US');
   el('catalogPrevPage').disabled=state.catalogOffset===0;
   el('catalogNextPage').disabled=count<250;
+  refreshCatalogEnrichmentAvailability();
 }
 
 // Year/language browsing is read-only: never let the unfiltered bulk toggle
@@ -1404,6 +1468,8 @@ el('studioRefreshBtn').addEventListener('click',()=>loadXtream().catch(error=>sh
 el('xtProbeAllBtn').addEventListener('click',()=>void runXtreamBatchProbe());
 el('xtBatchProbeCancel').addEventListener('click',cancelXtreamBatchProbe);
 el('catalogAuditBtn').addEventListener('click',loadCatalogAudit);
+el('catalogEnrichBatchBtn').addEventListener('click',()=>void enrichCurrentCatalogPage());
+el('catalogEnrichCancelBtn').addEventListener('click',stopCatalogEnrichment);
 
 el('catalogServer').addEventListener('change', async () => { await loadCategories(); await loadCatalog(); });
 el('catalogType').addEventListener('change', async () => { updateCatalogVideoFilters(); await loadCategories(); await loadCatalog(); });
