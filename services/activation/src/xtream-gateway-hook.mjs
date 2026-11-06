@@ -719,17 +719,21 @@ async function confirmEpisodeReplacement(row,providerId,extension){
     }
     if(!response.ok||!response.body)return false;
     reader=response.body.getReader();
-    for(let n=0;n<3;n++){
+    const parts=[];
+    let total=0;
+    for(let n=0;n<6 && total<512;n++){
       const chunk=await reader.read();
-      if(chunk.done)return false;
-      if(chunk.value?.byteLength){
-        const inspection=inspectXtreamMediaChunk(chunk.value,response.headers.get('content-type'));
-        // Recovery must not cache an HTML error or unrecognized binary as a
-        // verified replacement even if regular relay can tolerate unknown media.
-        return inspection.valid && inspection.format!=='unknown';
-      }
+      if(chunk.done)break;
+      if(!chunk.value?.byteLength)continue;
+      const sample=Buffer.from(chunk.value).subarray(0,4096-total);
+      parts.push(sample);
+      total+=sample.byteLength;
     }
-    return false;
+    if(!total)return false;
+    const inspection=inspectXtreamMediaChunk(Buffer.concat(parts,total),response.headers.get('content-type'));
+    // Recovery must never persist a blank response, HTML or unrecognized
+    // binary as a verified replacement for a stable subscriber video ID.
+    return inspection.valid && inspection.format!=='unknown';
   }catch{return false;}
   finally{
     if(reader){try{await reader.cancel()}catch{}try{reader.releaseLock()}catch{}}
