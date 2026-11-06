@@ -5,7 +5,7 @@ import {readFile} from 'node:fs/promises';
 // Execute the actual production preflightSource implementation with safe fake
 // upstream responses and an isolated in-memory SQL adapter. This catches
 // runtime ReferenceErrors that syntax checks and regex-based tests missed.
-async function buildPreflight({movieSucceeds=true,seriesSucceeds=true,twoBands=false}={}){
+async function buildPreflight({movieSucceeds=true,seriesSucceeds=true,twoBands=false,emptyLast=false,noReplacement=false}={}){
   const src=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
   const start=src.indexOf('async function preflightSource(');
   const end=src.indexOf('async function runIssuancePreflight(',start);
@@ -14,6 +14,11 @@ async function buildPreflight({movieSucceeds=true,seriesSucceeds=true,twoBands=f
   const db={
     query:async(sql,params)=>{
       assert.match(sql,/blofy_xtream_items/);
+      if(sql.includes('LIMIT 8')){
+        return {rows:noReplacement?[{source_id:'903'}]:[
+          {source_id:'903'},{source_id:'805',container_extension:'mp4'}
+        ]};
+      }
       const newest=sql.includes('ORDER BY source_id DESC')&&twoBands;
       const byKind=newest?{
         live:[{source_id:'901',container_extension:'ts'}],
@@ -29,12 +34,14 @@ async function buildPreflight({movieSucceeds=true,seriesSucceeds=true,twoBands=f
   };
   const data={episodes:{'1':[{id:'404',container_extension:'mkv',episode_num:1}]}};
   const latestData={episodes:{'1':[{id:'904',container_extension:'mp4',episode_num:1}]}};
+  const substitute={episodes:{'1':[{id:'806',container_extension:'mp4',episode_num:1}]}};
   const mocks={
     pool:db,
     fetchUpstreamApi:async(row,action,params)=>{
       if(action===null)return {user_info:{auth:1}};
       assert.equal(action,'get_series_info');
-      if(twoBands&&params.series_id==='903')return latestData;
+      if(twoBands&&params.series_id==='903')return emptyLast?{episodes:{}}:latestData;
+      if(params.series_id==='805')return substitute;
       assert.equal(params.series_id,'303');
       return data;
     },
@@ -43,10 +50,11 @@ async function buildPreflight({movieSucceeds=true,seriesSucceeds=true,twoBands=f
     probeIssuanceWithTransientRetry:async(row,kind,id,ext)=>{
       if(kind==='series'){
         const isNewest=twoBands&&row.series_source_id==='903';
-        assert.equal(row.series_source_id,isNewest?'903':'303');
-        assert.equal(row.series_payload,isNewest?latestData:data);
-        assert.equal(id,isNewest?'904':'404');
-        assert.equal(ext,isNewest?'mp4':'mkv');
+        const isReplacement=row.series_source_id==='805';
+        assert.equal(row.series_source_id,isReplacement?'805':isNewest?'903':'303');
+        assert.equal(row.series_payload,isReplacement?substitute:isNewest?latestData:data);
+        assert.equal(id,isReplacement?'806':isNewest?'904':'404');
+        assert.equal(ext,isReplacement?'mp4':isNewest?'mp4':'mkv');
       }
       if(kind==='movie')return {kind,ok:movieSucceeds,reason:movieSucceeds?null:'upstream_http_404'};
       if(kind==='series')return {kind,ok:seriesSucceeds,reason:seriesSucceeds?null:'upstream_http_404'};
@@ -131,4 +139,24 @@ test('a first temporary transport error may recover, but HTTP 404 may never be r
   assert.equal(blocked.httpStatus,404);
   assert.equal(blocked.retried,undefined);
   assert.equal(results.length,0);
+});
+
+test('empty series ID is disclosed as warning and replaced with a real checked episode',async()=>{
+  const {summarizeIssuancePreflight}=await import('../src/xtream-issuance-preflight.mjs');
+  const report=await buildPreflight({twoBands:true,emptyLast:true});
+  assert.equal(report.warnings.length,1);
+  assert.equal(report.warnings[0].seriesSourceId,'903');
+  assert.equal(report.warnings[0].reason,'series_has_no_episodes');
+  const series=report.checks.filter(x=>x.kind==='series');
+  assert.equal(series.length,2);
+  assert.ok(series.every(x=>x.ok));
+  assert.equal(series[1].sampleBand,'replacement');
+  assert.equal(summarizeIssuancePreflight([report]).ready,true);
+});
+test('missing all substitute episodes still blocks new user issuance',async()=>{
+  const {summarizeIssuancePreflight}=await import('../src/xtream-issuance-preflight.mjs');
+  const report=await buildPreflight({twoBands:true,emptyLast:true,noReplacement:true});
+  assert.equal(report.warnings.length,1);
+  assert.ok(report.checks.some(x=>x.reason==='series_sample_unavailable'&&x.ok===false));
+  assert.equal(summarizeIssuancePreflight([report]).ready,false);
 });
