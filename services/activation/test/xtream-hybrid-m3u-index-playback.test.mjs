@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {parseHybridM3uMediaUrl,scanHybridM3uMedia,verifiedHybridRow} from '../src/xtream-hybrid-m3u.mjs';
+import {parseHybridM3uMediaUrl,scanHybridM3uMedia,verifiedHybridRow,collapseHybridM3uMediaBatch} from '../src/xtream-hybrid-m3u.mjs';
 const args={baseUrl:'http://provider.example:8080',username:'u',password:'p'};
 test('M3U recognizes only exact same-account movies and series episodes',()=>{
   const movie='http://provider.example:8080/movie/u/p/207458.mkv';
@@ -95,4 +95,26 @@ test('index and player never replace original Xtream catalog or bypass preflight
   assert.match(html,/sources-admin\.js\?v=20261107-hybrid-index-v2/);
   assert.doesNotMatch(admin.slice(admin.indexOf('async function runHybridM3uIndex('),
     admin.indexOf('async function createServer(')),/DELETE FROM blofy_xtream_items/);
+});
+
+test('duplicated movie IDs inside a single playlist batch never cause PostgreSQL double-conflict',()=>{
+  const base={kind:'movie',sourceId:'207458',extension:'mp4',
+    url:'http://provider.example:8080/movie/u/p/207458.mp4'};
+  const rows=collapseHybridM3uMediaBatch([
+    base,{...base}, // common provider duplicate, harmless
+    {...base,kind:'series',sourceId:'294466'}, // different key
+    {...base,url:'http://provider.example:8080/movie/u/p/207458.mkv'}
+  ]);
+  assert.equal(rows.length,2);
+  const movie=rows.find(x=>x.kind==='movie');
+  assert.equal(movie.url,base.url);
+  assert.equal(movie.ambiguous,true,'conflicting versions must never be chosen randomly');
+  assert.equal(rows.find(x=>x.kind==='series').ambiguous,false);
+  assert.equal(collapseHybridM3uMediaBatch([base,{...base}])[0].ambiguous,false);
+});
+test('real M3U upsert groups identical keys once and carries ambiguous flag through SQL',async()=>{
+  const code=await readFile(new URL('../src/xtream-admin-hook.mjs',import.meta.url),'utf8');
+  assert.match(code,/const rows=collapseHybridM3uMediaBatch\(batch\)\.map/);
+  assert.match(code,/r\.digest,r\.ambiguous/);
+  assert.match(code,/ambiguous=blofy_xtream_m3u_media_links\.ambiguous OR excluded\.ambiguous/);
 });
