@@ -34,6 +34,7 @@ export function xtreamEpisodePlaybackCandidates(payload, limit=3) {
   const seasons=(Array.isArray(groups)?[groups]:Object.values(groups))
     .filter(Array.isArray).slice(0,200);
   const max=Math.max(0,Math.min(6,Number(limit)||0));
+  if(!max)return[];
   const seen=new Set(),selected=[];
   const pick=row=>{
     const id=String(row?.id??'').trim();
