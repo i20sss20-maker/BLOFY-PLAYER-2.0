@@ -394,6 +394,13 @@ async function verifiedOfficialMediaAlternative(row,kind,sourceId,currentExtensi
   return null;
 }
 
+// The only identifiers revealed in an authenticated operator's failed probe
+// are sanitized catalog IDs. Never return source host, media URL or credentials.
+function diagnosticXtreamItemId(id){
+  const value=String(id??'');
+  return /^[A-Za-z0-9._-]{1,128}$/.test(value)?value:null;
+}
+
 async function preflightSource(row,deadline){
   const checks=[];
   const result={sourceId:row.id,name:String(row.name||'Xtream').slice(0,90),checks};
@@ -457,26 +464,31 @@ async function preflightSource(row,deadline){
           samples=xtreamEpisodePlaybackCandidates(payload,1);
         }catch(error){
           checks.push({kind,ok:false,reason:issuanceErrorReason(error?.message),
-            sampleBand:seriesRow.sampleBand});
+            sampleBand:seriesRow.sampleBand,
+            seriesSourceId:diagnosticXtreamItemId(seriesRow.source_id)});
           continue;
         }
         if(!samples.length){
           checks.push({kind,ok:false,reason:'series_has_no_episodes',
-            sampleBand:seriesRow.sampleBand});
+            sampleBand:seriesRow.sampleBand,
+            seriesSourceId:diagnosticXtreamItemId(seriesRow.source_id)});
           continue;
         }
         for(const sample of samples){
           const probe=await probeIssuanceWithTransientRetry({
             ...row,series_source_id:seriesRow.source_id,series_payload:payload
           },'series',sample.id,sample.extension,deadline);
-          checks.push({...probe,sampleBand:seriesRow.sampleBand});
+          checks.push({...probe,sampleBand:seriesRow.sampleBand,
+            ...(probe.ok?{}:{seriesSourceId:diagnosticXtreamItemId(seriesRow.source_id),
+              episodeSourceId:diagnosticXtreamItemId(sample.id)})});
         }
       }
     }else{
       const results=await Promise.all(rows.map(async sample=>{
         const ext=kind==='live'?'ts':safeGatewayExtension(sample.container_extension,'mp4');
         const probe=await probeIssuanceWithTransientRetry(row,kind,sample.source_id,ext,deadline);
-        return {...probe,sampleBand:sample.sampleBand};
+        return {...probe,sampleBand:sample.sampleBand,
+          ...(probe.ok?{}:{itemSourceId:diagnosticXtreamItemId(sample.source_id)})};
       }));
       checks.push(...results);
     }
