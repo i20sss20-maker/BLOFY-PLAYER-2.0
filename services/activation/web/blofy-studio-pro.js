@@ -82,6 +82,23 @@
     root.append(title);
     for(const item of current.channels){
       const label=h('label','studio-pro-channel');
+      label.draggable=true;
+      label.title='اسحب القناة لتغيير موضعها، ثم اختر الترقيم المتسلسل لحفظ الأرقام.';
+      label.addEventListener('dragstart',event=>{
+        event.dataTransfer?.setData('text/plain',item.id);
+        if(event.dataTransfer)event.dataTransfer.effectAllowed='move';
+      });
+      label.addEventListener('dragover',event=>event.preventDefault());
+      label.addEventListener('drop',event=>{
+        event.preventDefault();
+        const dragged=event.dataTransfer?.getData('text/plain')||'';
+        if(!current.channels.some(x=>x.id===dragged)||dragged===item.id)return;
+        const from=current.channels.findIndex(x=>x.id===dragged);
+        const to=current.channels.findIndex(x=>x.id===item.id);
+        current.channels.splice(to,0,...current.channels.splice(from,1));
+        current.selected.add(dragged);renderChannels();
+        status('✓ تغير ترتيب المعاينة فقط. اختر ترقيم متسلسل واحفظ لتطبيقه على القنوات المحددة.');
+      });
       const input=h('input');input.type='checkbox';input.checked=current.selected.has(item.id);
       input.addEventListener('change',()=>{
         if(input.checked)current.selected.add(item.id);else current.selected.delete(item.id);
@@ -90,7 +107,19 @@
       });
       const title=h('span','',item.name);
       const sub=h('small','',item.featured?'⭐ مميزة':item.enabled?'ظاهرة':'مخفية');
-      label.append(input,title,sub);
+      const arrow=(labelText,delta)=>{
+        const button=h('button','studio-pro-move',labelText);button.type='button';
+        button.setAttribute('aria-label',delta<0?'نقل القناة للأعلى':'نقل القناة للأسفل');
+        button.addEventListener('click',event=>{
+          event.preventDefault();event.stopPropagation();
+          const from=current.channels.findIndex(x=>x.id===item.id),to=from+delta;
+          if(to<0||to>=current.channels.length)return;
+          current.channels.splice(to,0,...current.channels.splice(from,1));
+          current.selected.add(item.id);renderChannels();
+          status('ترتيب المعاينة تغير. اختر ترقيم متسلسل لحفظ ترتيب القنوات المحددة.');
+        });return button;
+      };
+      label.append(input,title,sub,arrow('↑',-1),arrow('↓',1));
       root.append(label);
     }
   }
