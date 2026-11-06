@@ -96,6 +96,23 @@ function xtreamSourceErrorText(value){
   return error;
 }
 
+function updateSourceMediaIndicators(container,item){
+  container.querySelectorAll('.media-health-pill').forEach(node=>node.remove());
+  for(const row of (Array.isArray(item.mediaSummary)?item.mediaSummary:[]).slice(0,4)){
+    if(!row?.text)continue;
+    const state=['on','off','hidden'].includes(row.className)?row.className:'hidden';
+    const pill=make('span','source-state-pill media-health-pill '+state,String(row.text).slice(0,100));
+    container.append(pill);
+  }
+}
+function updateSourceAccountWarnings(info,item){
+  info.querySelectorAll('.account-health-warning').forEach(node=>node.remove());
+  for(const message of (Array.isArray(item.mediaWarnings)?item.mediaWarnings:[]).slice(0,3)){
+    if(typeof message!=='string'||!message)continue;
+    info.append(make('span','account-health-warning',message.slice(0,200)));
+  }
+}
+
 function serverCard(item) {
   const card = make('article', 'server-card');
   card.dataset.id = item.id;
@@ -108,7 +125,7 @@ function serverCard(item) {
   title.append(make('strong', '', item.name));
   title.append(make('code', 'server-url', item.baseUrl));
   title.append(make('small','source-id','ID: '+String(item.id||'').slice(0,8)));
-  const status = make('span', `server-status ${xtStatusClass(item.syncing ? 'syncing' : item.status)}`, item.syncing ? 'Syncing' : item.status);
+  const status = make('span', `server-status ${xtStatusClass(item.syncing ? 'syncing' : item.status)}`, item.syncing ? 'Syncing' : (item.status==='online'?'API ONLINE':item.status));
   header.append(title, status);
 
   const metrics = make('div', 'server-metrics');
@@ -190,6 +207,7 @@ function serverCard(item) {
   if (item.accountInfo?.maxConnections != null) info.append(make('span', 'badge', `Max ${item.accountInfo.maxConnections}`));
   if (item.accountInfo?.activeConnections != null) info.append(make('span', 'badge', `Active ${item.accountInfo.activeConnections}`));
   if (item.lastSyncAt) info.append(make('span', 'muted', `آخر مزامنة: ${new Date(item.lastSyncAt).toLocaleString('ar-SA')}`));
+  updateSourceAccountWarnings(info,item);
   if(item.syncProgress){
     const typeNames={starting:'تهيئة',live:'القنوات',movie:'الأفلام',series:'المسلسلات'};
     info.append(make('span','sync-progress-note',
@@ -210,6 +228,7 @@ function serverCard(item) {
     make('span', item.enabled ? 'source-state-pill on' : 'source-state-pill off', item.enabled ? '● المصدر مفعّل' : '● المصدر موقوف'),
     make('span', item.enabled && item.publishCatalog ? 'source-state-pill published' : 'source-state-pill hidden', item.enabled && item.publishCatalog ? '● منشور للمشتركين' : '○ غير ظاهر للمشتركين')
   );
+  updateSourceMediaIndicators(indicators,item);
   card.append(header, indicators, metrics, actions, settings, info);
   return card;
 }
@@ -222,7 +241,7 @@ function refreshSourceCard(card, item) {
   const status=card.querySelector('.server-status');
   if(status) {
     status.className='server-status '+xtStatusClass(item.syncing?'syncing':item.status);
-    status.textContent=item.syncing?'Syncing':String(item.status||'unknown');
+    status.textContent=item.syncing?'Syncing':item.status==='online'?'API ONLINE':String(item.status||'unknown');
   }
   const title=card.querySelector('.server-head > div');
   if(title) {
@@ -244,6 +263,7 @@ function refreshSourceCard(card, item) {
     pills[1].className='source-state-pill '+(item.enabled&&item.publishCatalog?'published':'hidden');
     pills[1].textContent=item.enabled&&item.publishCatalog?'● منشور للمشتركين':'○ غير ظاهر للمشتركين';
   }
+  updateSourceMediaIndicators(card.querySelector('.source-quick-status'),item);
   const enabledButton=card.querySelector('button[data-action="toggle-enabled"]');
   if(enabledButton){
     enabledButton.textContent=item.enabled?'⏸ إيقاف المصدر':'▶ تفعيل المصدر';
@@ -270,6 +290,7 @@ function refreshSourceCard(card, item) {
   }
   const info=card.querySelector('.server-info');
   if(info){
+    updateSourceAccountWarnings(info,item);
     let progress=info.querySelector('.sync-progress-note');
     if(item.syncProgress){
       if(!progress){progress=make('span','sync-progress-note');info.prepend(progress);}

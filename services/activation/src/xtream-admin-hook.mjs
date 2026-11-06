@@ -23,6 +23,7 @@ import { CONTROL_PATH, controlPage, deleteConfirmationPage, readControlForm } fr
 import { xtreamEpisodeSamples, xtreamEpisodePlaybackCandidates, xtreamProbeMessage } from './xtream-series-probe.mjs';
 import { inspectXtreamMediaChunk } from './xtream-media-inspector.mjs';
 import { shouldRetryXtreamWithoutRange } from './xtream-media-range.mjs';
+import { summarizeSourceMediaProbe,sourceMediaSummary,sourceAccountWarnings } from './xtream-source-media-health.mjs';
 import { auditXtreamCatalogSample } from './xtream-library-insights.mjs';
 import { normalizeXtreamDetails,mergedXtreamMetadata } from './xtream-item-details.mjs';
 import { tmdbConfigured,validatedTmdbId,fetchTmdbDetails } from './xtream-tmdb.mjs';
@@ -203,6 +204,7 @@ async function ensureReady() {
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`);
       await client.query('ALTER TABLE blofy_xtream_servers ADD COLUMN IF NOT EXISTS deletion_requested_at TIMESTAMPTZ');
+      await client.query("ALTER TABLE blofy_xtream_servers ADD COLUMN IF NOT EXISTS media_probe_state JSONB NOT NULL DEFAULT '{}'::jsonb");
       await client.query(`CREATE TABLE IF NOT EXISTS blofy_xtream_categories (
         server_id UUID NOT NULL REFERENCES blofy_xtream_servers(id) ON DELETE CASCADE,
         media_type TEXT NOT NULL CHECK(media_type IN ('live','movie','series')),
@@ -274,6 +276,8 @@ function adminServer(row) {
     priority: Number(row.priority),
     status: row.status,
     accountInfo: row.account_info || {},
+    mediaSummary:sourceMediaSummary(row.media_probe_state),
+    mediaWarnings:sourceAccountWarnings(row.account_info),
     counts,
     syncing: syncLocks.has(row.id),
     syncProgress: syncProgress.get(row.id) || null,
@@ -517,6 +521,22 @@ async function probeXtreamSeries(id,mediaType){
   }
   return{ok:checks.some(check=>check.ok),mediaType,checks,
     note:'مسلسلات: فحص API والحلقات. الحلقات: قراءة أول بايتات الفيديو فقط؛ لا يثبت استمرار الصوت والصورة.'};
+}
+
+// Keep source login/metadata health distinct from tested video availability.
+// A provider's HTTP 456 does not mean the Xtream API has gone offline.
+async function persistSourceMediaProbe(id,kind,result){
+  const probe=summarizeSourceMediaProbe(kind,result);
+  try{
+    await pool.query(`UPDATE blofy_xtream_servers
+      SET media_probe_state=COALESCE(media_probe_state,'{}'::jsonb) ||
+        jsonb_build_object($2::text,$3::jsonb)
+      WHERE id=$1 AND deletion_requested_at IS NULL`,[id,kind,JSON.stringify(probe)]);
+  }catch(error){
+    // Never fail a read-only operator diagnosis because the status history
+    // could not be persisted. Do not log source URL, secrets or stream IDs.
+    console.warn('xtream source diagnostic persistence failed:',String(error?.code||'unknown').slice(0,20));
+  }
 }
 
 // Short, explicit playback probe: checks the actual upstream media endpoint,
@@ -933,6 +953,9 @@ async function patchServer(id, body) {
     }
   }
   if (body.publishCatalog !== undefined) set('publish_catalog', Boolean(body.publishCatalog));
+  // Source, credentials or playback policy changes invalidate previous probes.
+  if(body.baseUrl!==undefined||String(body.username||'').trim()||String(body.password||'').trim())
+    updates.push("media_probe_state='{}'::jsonb");
   if (body.priority !== undefined) {
     const priority = Number(body.priority);
     if (!Number.isFinite(priority) || priority < 0 || priority > 10000) throw Object.assign(new Error('xtream_priority_invalid'), { status: 400 });
@@ -1333,6 +1356,7 @@ async function handleControlAction(req,res,id,action) {
   if(['probe-live','probe-movie','probe-series','probe-episode'].includes(action)){
     const mediaType=action.slice('probe-'.length);
     const result=await probeXtreamPlayback(id,mediaType);
+    await persistSourceMediaProbe(id,mediaType,result);
     // Safe logging for later debugging: no source URLs, usernames, passwords,
     // episode IDs or movie titles. Logs help distinguish failed API from media.
     console.info('xtream source probe result',{
@@ -1461,7 +1485,10 @@ http.createServer = function withBlofyXtream(listener) {
         if (action === 'test' && req.method === 'POST') return json(res, 200, { item: await testServer(id) });
         if (action === 'probe-playback' && req.method === 'POST') {
           const body=await readJson(req);
-          return json(res,200,await probeXtreamPlayback(id,String(body.mediaType||'live')));
+          const mediaType=String(body.mediaType||'live');
+          const result=await probeXtreamPlayback(id,mediaType);
+          await persistSourceMediaProbe(id,mediaType,result);
+          return json(res,200,result);
         }
         if (action === 'cancel-sync' && req.method === 'POST') {
           return json(res,200,await cancelSourceSync(id));
