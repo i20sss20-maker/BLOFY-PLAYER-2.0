@@ -813,6 +813,41 @@ async function listCatalog(query, publishedOnly = false) {
   if (query.serverId) { if (!validUuid(query.serverId)) throw Object.assign(new Error('xtream_server_id_invalid'), { status: 400 }); values.push(query.serverId); where.push(`i.server_id=$${values.length}`); }
   if (query.categoryId) { values.push(String(query.categoryId)); where.push(`i.category_id=$${values.length}`); }
   if (query.q) { values.push(`%${String(query.q).slice(0,120).replace(/[%_]/g, '\\$&')}%`); where.push(`i.name ILIKE $${values.length} ESCAPE '\\'`); }
+  // Smart browsing filters media using its real metadata; neither filter
+  // rewrites upstream categories or touches any customer-facing item IDs.
+  if (query.year || query.language) {
+    if(mediaType==='live')throw Object.assign(new Error('xtream_year_filter_video_only'),{status:400});
+    if(!query.serverId)throw Object.assign(new Error('xtream_smart_filter_source_required'),{status:400});
+  }
+  if(query.year){
+    const year=Number(query.year);
+    if(!Number.isInteger(year)||year<1950||year>2099)
+      throw Object.assign(new Error('xtream_year_invalid'),{status:400});
+    values.push(String(year));
+    // Prefer the actual source year, then release date, then a year written
+    // inside the title. Undated content remains unclassified.
+    where.push(`COALESCE(
+      NULLIF(NULLIF(i.metadata->>'year',''),'0'),
+      substring(i.metadata->>'releaseDate' from '(19[5-9][0-9]|20[0-9]{2})'),
+      substring(i.name from '(19[5-9][0-9]|20[0-9]{2})')
+    )=$${values.length}`);
+  }
+  if(query.language){
+    const patterns={
+      arabic:'عرب|arabic',
+      foreign:'أجنبي|اجنبي|انجليزي|إنجليزي|english|foreign|hollywood|american|أمريكي',
+      turkish:'تركي|turkish|turkey',
+      indian:'هندي|indian|bollywood|hindi',
+      korean:'كوري|korean',
+      anime:'انمي|أنمي|anime',
+      kids:'اطفال|أطفال|kids|children|cartoon|كرتون',
+      documentary:'وثائقي|documentary'
+    };
+    const pattern=patterns[String(query.language)];
+    if(!pattern)throw Object.assign(new Error('xtream_language_filter_invalid'),{status:400});
+    values.push(pattern);
+    where.push(`c.name ~* $${values.length}`);
+  }
   values.push(limit, offset);
   const rows = (await pool.query(`SELECT i.server_id,i.media_type,i.source_id,i.category_id,i.name,i.icon_url,i.container_extension,i.enabled,i.metadata,i.updated_at,
       s.name AS server_name,s.priority,c.name AS category_name,c.enabled AS category_enabled
@@ -849,7 +884,7 @@ async function patchCategory(serverId, mediaType, categoryId, enabled) {
 // Operator-triggered, transactional reordering only. No catalog rows,
 // visibility, subscriber entitlements or upstream credentials are touched.
 async function autoSortCategories(serverId,mediaType,mode){
-  if(!validUuid(serverId)||!validType(mediaType)||!['popular','alphabetical'].includes(mode))
+  if(!validUuid(serverId)||!validType(mediaType)||!['popular','alphabetical','smart'].includes(mode))
     throw Object.assign(new Error('xtream_category_sort_invalid'),{status:400});
   const client=await pool.connect();
   try{

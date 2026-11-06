@@ -599,47 +599,115 @@ function updateCatalogServerOptions() {
   if (state.xtreamServers.some(server => server.id === current)) select.value = current;
 }
 
-function renderCategoryManager() {
+const categorySmartUi={grouped:true};
+function describeCategoryShelf(name,mediaType){
+  const text=String(name||'').replace(/[٠-٩]/g,c=>String('٠١٢٣٤٥٦٧٨٩'.indexOf(c)));
+  const year=text.match(/(^|[^0-9])(19[5-9][0-9]|20[0-9]{2})(?=$|[^0-9])/);
+  const groups=mediaType==='live'?[
+    ['sports','⚽ رياضة',/رياضة|رياضي|sport|football|bein|كرة/iu],
+    ['news','📰 أخبار',/أخبار|اخبار|news/iu],
+    ['kids','🧸 أطفال',/أطفال|اطفال|kids|cartoon|كرتون/iu],
+    ['entertainment','📺 ترفيه',/ترفيه|entertainment|general|عام/iu]
+  ]:[
+    ['arabic','🎬 عربي',/عرب(?:ي|ية|ى)?|عربيه|arabic/iu],
+    ['foreign','🌍 أجنبي',/أجنبي|اجنبي|اجنبية|انجليزي|إنجليزي|english|foreign|hollywood|american|أمريكي|امريكي/iu],
+    ['turkish','🇹🇷 تركي',/تركي|تركية|turkish|turkey/iu],
+    ['indian','🇮🇳 هندي',/هندي|هندية|indian|hindi|bollywood/iu],
+    ['korean','🇰🇷 كوري',/كوري|كورية|korean/iu],
+    ['anime','✨ أنمي',/أنمي|انمي|anime|انيمي/iu],
+    ['kids','🧸 أطفال',/أطفال|اطفال|kids|cartoon|كرتون/iu],
+    ['documentary','🎞️ وثائقي',/وثائقي|وثائقية|documentary/iu]
+  ];
+  const index=groups.findIndex(([, ,pattern])=>pattern.test(text));
+  const picked=groups[index]||['other',mediaType==='live'?'📡 بقية القنوات':'📁 أقسام أخرى'];
+  return{key:picked[0],label:picked[1],priority:index<0?99:index,year:year?Number(year[2]):null};
+}
+
+function categoryRow(category,position,allLength){
+  const row=make('article','category-manager-row'+(category.enabled?'':' hidden-category'));
+  const info=make('div','category-manager-label');
+  const title=make('div','category-smart-name');
+  title.append(make('span','category-smart-index',String(position+1)),make('strong','',category.name));
+  info.append(title);
+  info.append(make('small','',Number(category.itemCount||0).toLocaleString('en-US')+' عنصر · '+(category.enabled?'ظاهر للمشتركين':'مخفي عن المشتركين')));
+  const actions=make('div','category-manager-actions');
+  for(const [label,action,titleText,disabled] of [
+    ['للأول','top','ضع هذا القسم أولًا في ترتيب تطبيقات المشتركين',position===0],
+    ['↑','up','رفع في الترتيب الحقيقي',position===0],
+    ['↓','down','خفض في الترتيب الحقيقي',position===allLength-1],
+    [category.enabled?'إخفاء':'إظهار','toggle',category.enabled?'إخفاء القسم عن المشتركين':'إظهار القسم للمشتركين',false]
+  ]){
+    const button=make('button','button ghost',label);
+    button.type='button';button.dataset.action=action;button.dataset.categoryId=category.id;
+    button.title=titleText;button.disabled=disabled;actions.append(button);
+  }
+  row.append(info,actions);
+  return row;
+}
+
+function renderCategoryManager(){
   const target=el('categoryManagerRows');
   if(!target)return;
   target.replaceChildren();
+  target.classList.toggle('is-grouped',categorySmartUi.grouped);
   const all=state.categories||[];
-  const query=String(el('categorySearch')?.value||'').trim().toLowerCase();
-  const filter=el('categoryVisibility')?.value||'all';
-  const matches=all.filter(category=>String(category.name||'').toLowerCase().includes(query)&&
-    (filter==='all'||(filter==='hidden'?!category.enabled:category.enabled)));
-  const countOn=all.filter(category=>category.enabled).length;
+  const query=String(el('categorySearch')?.value||'').trim().toLocaleLowerCase();
+  const visibility=el('categoryVisibility')?.value||'all';
+  const mediaType=el('catalogType').value;
+  const matches=all.map((item,index)=>({...item,originalPosition:index})).filter(item=>
+    (!query||String(item.name||'').toLocaleLowerCase().includes(query))&&
+    (visibility==='all'||(visibility==='hidden'?!item.enabled:item.enabled))
+  );
+  const visible=all.filter(item=>item.enabled).length;
   el('categoryManagerSummary').textContent=
-    'الفئات: '+all.length+' · الظاهرة: '+countOn+' · المخفية: '+(all.length-countOn)+
-    (query||filter!=='all'?' · النتائج: '+matches.length:'');
-  const rows=matches.slice(0,120);
-  if(!rows.length){
-    target.append(make('p','empty','ما توجد فئات مطابقة للمصدر والنوع المحددين.'));
+    'الأقسام: '+all.length.toLocaleString('en-US')+
+    ' · الظاهرة: '+visible.toLocaleString('en-US')+
+    ' · المخفية: '+(all.length-visible).toLocaleString('en-US')+
+    ' · نتائج العرض: '+matches.length.toLocaleString('en-US');
+  const show=matches.slice(0,240);
+  if(!show.length){
+    target.append(make('p','empty','ما توجد أقسام مطابقة. جرّب تغيير البحث أو اختيار مصدر آخر.'));
     return;
   }
-  for(const category of rows){
-    const position=all.findIndex(x=>x.id===category.id);
-    const row=make('article','category-manager-row'+(category.enabled?'':' hidden-category'));
-    const info=make('div','category-manager-label');
-    info.append(make('strong','',String(position+1)+' · '+category.name));
-    info.append(make('small','',Number(category.itemCount||0).toLocaleString('en-US')+' عنصر'));
-    const actions=make('div','category-manager-actions');
-    const buttons=[
-      ['للأول','top','انقل القسم لأول القائمة',position===0],
-      ['↑','up','رفع الفئة',position===0],
-      ['↓','down','خفض الفئة',position===all.length-1],
-      [category.enabled?'إخفاء':'إظهار','toggle',category.enabled?'إخفاء عن العملاء':'إظهار للعملاء',false]
-    ];
-    for(const [label,action,title,disabled] of buttons){
-      const button=make('button','button ghost',label);
-      button.type='button';button.dataset.action=action;button.dataset.categoryId=category.id;
-      button.title=title;button.disabled=disabled;
-      actions.append(button);
+  if(!categorySmartUi.grouped){
+    for(const item of show)target.append(categoryRow(item,item.originalPosition,all.length));
+  }else{
+    const sections=new Map();
+    for(const item of show){
+      const info=describeCategoryShelf(item.name,mediaType);
+      let section=sections.get(info.key);
+      if(!section){section={...info,years:new Map(),total:0,items:0};sections.set(info.key,section);}
+      const yearKey=mediaType==='live'?'all':String(info.year??'unknown');
+      if(!section.years.has(yearKey))section.years.set(yearKey,[]);
+      section.years.get(yearKey).push(item);
+      section.total++;
+      section.items+=Number(item.itemCount||0);
     }
-    row.append(info,actions);
-    target.append(row);
+    const ordered=[...sections.values()].sort((a,b)=>a.priority-b.priority);
+    ordered.forEach((section,sectionIndex)=>{
+      const outer=make('details','category-smart-section');
+      outer.open=sectionIndex===0||Boolean(query);
+      const head=make('summary','category-smart-section-head');
+      const title=make('strong','',section.label);
+      const meta=make('span','category-smart-count',section.total+' قسم · '+section.items.toLocaleString('en-US')+' عنصر');
+      head.append(title,meta);outer.append(head);
+      const years=[...section.years].sort(([a],[b])=>Number(b==='unknown'?0:b)-Number(a==='unknown'?0:a));
+      years.forEach(([year,items],yearIndex)=>{
+        const box=make('details','category-smart-year');
+        box.open=yearIndex===0||Boolean(query);
+        const sum=make('summary','category-smart-year-head');
+        const yearText=year==='all'?'جميع القنوات':year==='unknown'?'بدون سنة في اسم القسم':'سنة '+year;
+        sum.append(make('span','',yearText),make('small','',items.length+' قسم'));
+        box.append(sum);
+        const rows=make('div','category-smart-list');
+        for(const item of items)rows.append(categoryRow(item,item.originalPosition,all.length));
+        box.append(rows);outer.append(box);
+      });
+      target.append(outer);
+    });
   }
-  if(matches.length>rows.length)target.append(make('p','muted','المعروض أول 120 فئة. استخدم البحث للوصول إلى بقية الفئات.'));
+  if(matches.length>show.length)
+    target.append(make('p','muted','تم عرض أول 240 قسمًا. ابحث بالاسم للوصول إلى البقية.'));
 }
 
 async function autoSortCurrentCategories(){
@@ -647,8 +715,9 @@ async function autoSortCurrentCategories(){
   const mode=el('categoryAutoSortMode').value,button=el('categoryAutoSortBtn');
   if(!serverId){showMessage('اختر المصدر أولًا ثم نوع المحتوى.','error');return;}
   if(!state.categories.length){showMessage('لا توجد أقسام لترتيبها في هذا الاختيار.','error');return;}
-  if(!['popular','alphabetical'].includes(mode))return;
-  const description=mode==='popular'?'الأقسام الأكثر محتوى أولًا':'الترتيب الأبجدي للأقسام';
+  if(!['popular','alphabetical','smart'].includes(mode))return;
+  const description=mode==='smart'?'عربي ثم أجنبي ثم بقية الأقسام، وسنة 2026 ثم 2025 والأقدم داخل كل لغة':
+    mode==='popular'?'الأقسام الأكثر محتوى أولًا':'الترتيب الأبجدي للأقسام';
   if(!window.confirm('تطبيق '+description+' على '+state.categories.length+' قسمًا لهذا المصدر فقط؟ ستبقى الأقسام المخفية كما هي.'))return;
   button.disabled=true;
   button.textContent='جارٍ حفظ الترتيب…';
@@ -757,6 +826,72 @@ function renderCatalog() {
   el('catalogHint').textContent = state.catalog.length ? `معروض ${state.catalog.length} عنصر (حتى 250 في الصفحة).` : '';
 }
 
+// Year/language browsing is read-only: never let the unfiltered bulk toggle
+// accidentally modify an entire source while a smart shelf is selected.
+function updateCatalogVideoFilters(){
+  const video=el('catalogType').value!=='live';
+  for(const label of document.querySelectorAll('.catalog-video-filter'))label.hidden=!video;
+  for(const id of ['catalogYear','catalogLanguage']){
+    el(id).disabled=!video;
+    if(!video)el(id).value='';
+  }
+  const filtered=video&&Boolean(el('catalogYear').value||el('catalogLanguage').value);
+  el('enableTypeBtn').disabled=filtered;
+  el('disableTypeBtn').disabled=filtered;
+  el('catalogSmartNotice').textContent=filtered?
+    'عرض مخصص للغة والسنة — يمكنك البحث والتصفح وتعطيل عنصر واحد، لكن التغيير الجماعي متوقف لحماية بقية المحتوى.':
+    'اختر «عربي» و«2026» لعرض عناصر السنة الفعلية إن كانت محفوظة في بيانات المصدر. العرض لا يصنع تصنيفات أو سنوات وهمية.';
+}
+
+function initCatalogSmartShortcuts(){
+  const container=el('catalogSmartQuick');
+  const current=new Date().getFullYear();
+  const items=[
+    {title:'🎬 عربي '+current,type:'movie',language:'arabic',year:current},
+    {title:'🎬 عربي '+(current-1),type:'movie',language:'arabic',year:current-1},
+    {title:'🌍 أجنبي '+current,type:'movie',language:'foreign',year:current},
+    {title:'📺 مسلسلات عربي '+current,type:'series',language:'arabic',year:current},
+    {title:'⭐ كل أعمال '+current,type:'movie',language:'',year:current},
+    {title:'✕ مسح الفلاتر',type:'current',language:'',year:''}
+  ];
+  for(const [index,item] of items.entries()){
+    const btn=make('button','catalog-smart-chip'+(index===0?' featured':''),item.title);
+    btn.type='button';btn.dataset.shelf=String(index);
+    container.append(btn);
+  }
+  container.addEventListener('click',async event=>{
+    const button=event.target.closest('button[data-shelf]');
+    if(!button||!container.contains(button))return;
+    const selected=items[Number(button.dataset.shelf)];
+    if(!selected||!el('catalogServer').value){
+      showMessage('اختر مصدر Xtream أولًا لعرض الأقسام حسب اللغة والسنة.','error');return;
+    }
+    button.disabled=true;
+    try{
+      if(selected.type!=='current')el('catalogType').value=selected.type;
+      el('catalogLanguage').value=selected.language;
+      el('catalogYear').value=String(selected.year);
+      el('catalogSearch').value='';
+      updateCatalogVideoFilters();
+      await loadCategories();
+      await loadCatalog();
+      el('catalogItems').scrollIntoView({behavior:'smooth',block:'start'});
+    }catch(error){showMessage('تعذر استعراض القسم: '+error.message,'error');}
+    finally{button.disabled=false;}
+  });
+}
+
+function initCatalogYearPicker(){
+  const picker=el('catalogYear');
+  const start=new Date().getFullYear()+1;
+  for(let year=start;year>=1950;year--){
+    const option=document.createElement('option');
+    option.value=String(year);option.textContent=String(year);
+    picker.append(option);
+  }
+  updateCatalogVideoFilters();
+}
+
 async function loadCatalog() {
   const serverId = el('catalogServer').value;
   if (!serverId) return;
@@ -764,6 +899,8 @@ async function loadCatalog() {
   try {
     const params = new URLSearchParams({ serverId, type: el('catalogType').value, limit: '250' });
     if (el('catalogCategory').value) params.set('categoryId', el('catalogCategory').value);
+    if(el('catalogType').value!=='live'&&el('catalogYear').value)params.set('year',el('catalogYear').value);
+    if(el('catalogType').value!=='live'&&el('catalogLanguage').value)params.set('language',el('catalogLanguage').value);
     if (el('catalogSearch').value.trim()) params.set('q', el('catalogSearch').value.trim());
     const data = await api(`/api/v1/admin/xtream/catalog?${params}`);
     state.catalog = Array.isArray(data.items) ? data.items : [];
@@ -776,6 +913,9 @@ async function loadCatalog() {
 }
 
 async function bulkCatalog(enabled) {
+  if(el('catalogYear').value||el('catalogLanguage').value){
+    showMessage('ألغِ فلاتر السنة واللغة قبل أي تغيير جماعي.','error');return;
+  }
   const serverId = el('catalogServer').value;
   if (!serverId) return;
   const body = {
@@ -962,10 +1102,24 @@ el('xtNewSourceBtn').addEventListener('click', () => {
 el('xtRefreshSourcesBtn').addEventListener('click', ()=>loadXtream().catch(error=>showMessage('تعذر تحديث مصادر Xtream: '+error.message,'error')));
 
 el('catalogServer').addEventListener('change', async () => { await loadCategories(); await loadCatalog(); });
-el('catalogType').addEventListener('change', async () => { await loadCategories(); await loadCatalog(); });
+el('catalogType').addEventListener('change', async () => { updateCatalogVideoFilters(); await loadCategories(); await loadCatalog(); });
 el('catalogCategory').addEventListener('change', loadCatalog);
+for(const id of ['catalogYear','catalogLanguage'])el(id).addEventListener('change',()=>{
+  updateCatalogVideoFilters();loadCatalog().catch(error=>showMessage(error.message,'error'));
+});
 el('categorySearch').addEventListener('input',renderCategoryManager);
 el('categoryVisibility').addEventListener('change',renderCategoryManager);
+for(const [id,grouped] of [['categoryGroupedView',true],['categoryFlatView',false]]){
+  el(id).addEventListener('click',()=>{
+    categorySmartUi.grouped=grouped;
+    for(const [buttonId,active] of [['categoryGroupedView',grouped],['categoryFlatView',!grouped]]){
+      const button=el(buttonId);
+      button.className=active?'button primary':'button ghost';
+      button.setAttribute('aria-pressed',String(active));
+    }
+    renderCategoryManager();
+  });
+}
 el('categoryAutoSortBtn').addEventListener('click',autoSortCurrentCategories);
 el('categoryManagerRows').addEventListener('click',event=>{
   const button=event.target.closest('button[data-action][data-category-id]');
@@ -980,6 +1134,8 @@ window.addEventListener('hashchange', () => {
   if (name && name !== state.activeTab) switchTab(name);
 });
 
+initCatalogYearPicker();
+initCatalogSmartShortcuts();
 loadXtream(true);
 loadBlofyPlaybackHealth();
 const initialTab = tabFromHash();
