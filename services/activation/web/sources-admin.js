@@ -649,6 +649,7 @@ function renderCategoryManager(){
   const target=el('categoryManagerRows');
   if(!target)return;
   target.replaceChildren();
+  target.classList.toggle('is-grouped',categorySmartUi.grouped);
   const all=state.categories||[];
   const query=String(el('categorySearch')?.value||'').trim().toLocaleLowerCase();
   const visibility=el('categoryVisibility')?.value||'all';
@@ -840,6 +841,44 @@ function updateCatalogVideoFilters(){
   el('catalogSmartNotice').textContent=filtered?
     'عرض مخصص للغة والسنة — يمكنك البحث والتصفح وتعطيل عنصر واحد، لكن التغيير الجماعي متوقف لحماية بقية المحتوى.':
     'اختر «عربي» و«2026» لعرض عناصر السنة الفعلية إن كانت محفوظة في بيانات المصدر. العرض لا يصنع تصنيفات أو سنوات وهمية.';
+}
+
+function initCatalogSmartShortcuts(){
+  const container=el('catalogSmartQuick');
+  const current=new Date().getFullYear();
+  const items=[
+    {title:'🎬 عربي '+current,type:'movie',language:'arabic',year:current},
+    {title:'🎬 عربي '+(current-1),type:'movie',language:'arabic',year:current-1},
+    {title:'🌍 أجنبي '+current,type:'movie',language:'foreign',year:current},
+    {title:'📺 مسلسلات عربي '+current,type:'series',language:'arabic',year:current},
+    {title:'⭐ كل أعمال '+current,type:'movie',language:'',year:current},
+    {title:'✕ مسح الفلاتر',type:'current',language:'',year:''}
+  ];
+  for(const [index,item] of items.entries()){
+    const btn=make('button','catalog-smart-chip'+(index===0?' featured':''),item.title);
+    btn.type='button';btn.dataset.shelf=String(index);
+    container.append(btn);
+  }
+  container.addEventListener('click',async event=>{
+    const button=event.target.closest('button[data-shelf]');
+    if(!button||!container.contains(button))return;
+    const selected=items[Number(button.dataset.shelf)];
+    if(!selected||!el('catalogServer').value){
+      showMessage('اختر مصدر Xtream أولًا لعرض الأقسام حسب اللغة والسنة.','error');return;
+    }
+    button.disabled=true;
+    try{
+      if(selected.type!=='current')el('catalogType').value=selected.type;
+      el('catalogLanguage').value=selected.language;
+      el('catalogYear').value=String(selected.year);
+      el('catalogSearch').value='';
+      updateCatalogVideoFilters();
+      await loadCategories();
+      await loadCatalog();
+      el('catalogItems').scrollIntoView({behavior:'smooth',block:'start'});
+    }catch(error){showMessage('تعذر استعراض القسم: '+error.message,'error');}
+    finally{button.disabled=false;}
+  });
 }
 
 function initCatalogYearPicker(){
@@ -1096,6 +1135,7 @@ window.addEventListener('hashchange', () => {
 });
 
 initCatalogYearPicker();
+initCatalogSmartShortcuts();
 loadXtream(true);
 loadBlofyPlaybackHealth();
 const initialTab = tabFromHash();
