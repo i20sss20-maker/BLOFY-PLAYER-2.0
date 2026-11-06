@@ -859,8 +859,9 @@ async function probeGatewayMedia(kind,itemId){
     }
     const status=response.status;
     if(!(response.ok||status===206)){
+      const providerHint=await readXtreamProviderDenialHint(response);
       return{ok:false,kind,itemId,httpStatus:status,reason:'upstream_http_'+status,
-        elapsedMs:Date.now()-started};
+        ...(providerHint?{providerHint}:{}),elapsedMs:Date.now()-started};
     }
     if(!response.body)return{ok:false,kind,itemId,httpStatus:status,reason:'upstream_empty_media',elapsedMs:Date.now()-started};
     reader=response.body.getReader();
