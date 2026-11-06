@@ -813,6 +813,41 @@ async function listCatalog(query, publishedOnly = false) {
   if (query.serverId) { if (!validUuid(query.serverId)) throw Object.assign(new Error('xtream_server_id_invalid'), { status: 400 }); values.push(query.serverId); where.push(`i.server_id=$${values.length}`); }
   if (query.categoryId) { values.push(String(query.categoryId)); where.push(`i.category_id=$${values.length}`); }
   if (query.q) { values.push(`%${String(query.q).slice(0,120).replace(/[%_]/g, '\\$&')}%`); where.push(`i.name ILIKE $${values.length} ESCAPE '\\'`); }
+  // Smart browsing filters media using its real metadata; neither filter
+  // rewrites upstream categories or touches any customer-facing item IDs.
+  if (query.year || query.language) {
+    if(mediaType==='live')throw Object.assign(new Error('xtream_year_filter_video_only'),{status:400});
+    if(!query.serverId)throw Object.assign(new Error('xtream_smart_filter_source_required'),{status:400});
+  }
+  if(query.year){
+    const year=Number(query.year);
+    if(!Number.isInteger(year)||year<1950||year>2099)
+      throw Object.assign(new Error('xtream_year_invalid'),{status:400});
+    values.push(String(year));
+    // Fall back to a release year in the title only when the metadata
+    // year is absent. Never assign a fabricated year to undated items.
+    where.push(`(
+      (i.metadata->>'year')=${values.length}
+      OR (NULLIF(i.metadata->>'year','') IS NULL AND
+        i.name ~ ('(^|[^0-9])'||${values.length}||'([^0-9]|$)'))
+    )`);
+  }
+  if(query.language){
+    const patterns={
+      arabic:'عرب|arabic',
+      foreign:'أجنبي|اجنبي|انجليزي|إنجليزي|english|foreign|hollywood|american|أمريكي',
+      turkish:'تركي|turkish|turkey',
+      indian:'هندي|indian|bollywood|hindi',
+      korean:'كوري|korean',
+      anime:'انمي|أنمي|anime',
+      kids:'اطفال|أطفال|kids|children|cartoon|كرتون',
+      documentary:'وثائقي|documentary'
+    };
+    const pattern=patterns[String(query.language)];
+    if(!pattern)throw Object.assign(new Error('xtream_language_filter_invalid'),{status:400});
+    values.push(pattern);
+    where.push(`c.name ~* ${values.length}`);
+  }
   values.push(limit, offset);
   const rows = (await pool.query(`SELECT i.server_id,i.media_type,i.source_id,i.category_id,i.name,i.icon_url,i.container_extension,i.enabled,i.metadata,i.updated_at,
       s.name AS server_name,s.priority,c.name AS category_name,c.enabled AS category_enabled
