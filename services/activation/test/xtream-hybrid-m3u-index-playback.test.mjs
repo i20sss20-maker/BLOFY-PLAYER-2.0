@@ -40,3 +40,59 @@ test('rejected playlists and stale index generations never count as playable',as
   assert.equal(verifiedHybridRow({...item,ambiguous:true},'current'),false);
   assert.equal(verifiedHybridRow(item,'stale'),false);
 });
+
+test('actual gateway decrypts exact indexed ID, verifies video bytes, and refuses unindexed sources',async()=>{
+  const src=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
+  const a=src.indexOf('async function verifiedHybridM3uFallback(');
+  const b=src.indexOf('async function verifiedOfficialMediaAlternative(',a);
+  assert.ok(a>0&&b>a);
+  const gen='11111111-1111-4111-8111-111111111111';
+  const source={server_id:'22222222-2222-4222-8222-222222222222',
+    base_url:args.baseUrl,m3u_index_generation:gen};
+  const raw='http://provider.example:8080/movie/u/p/207458.mkv';
+  let checked=0;
+  const mocks={
+    pool:{query:async(sql,params)=>{
+      assert.match(sql,/blofy_xtream_m3u_media_links/);
+      assert.deepEqual(params,[source.server_id,gen,'movie','207458']);
+      return {rows:[{generation:gen,stream_url_secret:'cipher',ambiguous:false}]};
+    }},
+    verifiedHybridRow,parseHybridM3uMediaUrl,
+    decryptServerCredentials:()=>({username:'u',password:'p'}),
+    decryptXtreamSecret:(secret,key,aad)=>{
+      assert.equal(aad,'m3u-media:'+source.server_id+':'+gen+':movie:207458');
+      return raw;
+    },
+    KEY_HEX:'aa'.repeat(32),
+    confirmProviderMediaUrl:async url=>{checked++;assert.equal(url.toString(),raw);return true;},
+    console:{info:()=>{}}
+  };
+  const fn=new Function(...Object.keys(mocks),src.slice(a,b)+
+    ';return verifiedHybridM3uFallback;')(...Object.values(mocks));
+  const result=await fn(source,'movie','207458',{deadline:Date.now()+12000});
+  assert.equal(result?.mode,'m3u');assert.equal(result?.verified,true);
+  assert.equal(checked,1);
+  assert.equal(await fn({...source,m3u_index_generation:null},'movie','207458'),null);
+  assert.equal(await fn(source,'live','207458'),null);
+});
+test('index and player never replace original Xtream catalog or bypass preflight',async()=>{
+  const [admin,gateway,html,native,session]=await Promise.all([
+    readFile(new URL('../src/xtream-admin-hook.mjs',import.meta.url),'utf8'),
+    readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8'),
+    readFile(new URL('../web/sources-admin.html',import.meta.url),'utf8'),
+    readFile(new URL('../src/xtream-native-controls.mjs',import.meta.url),'utf8'),
+    readFile(new URL('../src/admin-session-hook.mjs',import.meta.url),'utf8')
+  ]);
+  assert.match(admin,/CREATE TABLE IF NOT EXISTS blofy_xtream_m3u_media_links/);
+  assert.match(admin,/m3u_index_generation=NULL/);
+  assert.match(admin,/encryptXtreamSecret\(item.url,KEY_HEX/);
+  assert.match(admin,/url_digest<>excluded.url_digest/);
+  assert.match(gateway,/verifiedHybridM3uFallback\(row,kind,id,\{deadline\}\)/);
+  assert.match(gateway,/verifiedHybridM3uFallback\(row,'movie',sourceId/);
+  assert.match(gateway,/verifiedHybridM3uFallback\(row,'series',sourceId/);
+  assert.match(native,/securedForm\(id,'index-m3u'/);
+  assert.match(session,/test-m3u\|index-m3u\|probe-live/);
+  assert.match(html,/sources-admin\.js\?v=20261107-hybrid-index-v2/);
+  assert.doesNotMatch(admin.slice(admin.indexOf('async function runHybridM3uIndex('),
+    admin.indexOf('async function createServer(')),/DELETE FROM blofy_xtream_items/);
+});
