@@ -43,7 +43,7 @@ import { XtreamDenialCooldown } from './xtream-denial-cooldown.mjs';
 import { episodeOrdinal, verifiedEpisodeRecovery, sameEpisodeContainerCandidates } from './xtream-episode-repair.mjs';
 import { authoritativeXtreamMediaCandidates } from './xtream-authoritative-media.mjs';
 import { xtreamEpisodePlaybackCandidates } from './xtream-series-probe.mjs';
-import { MAX_ISSUANCE_SOURCES, PREFLIGHT_TTL_MS, issuanceErrorReason, summarizeIssuancePreflight } from './xtream-issuance-preflight.mjs';
+import { MAX_ISSUANCE_SOURCES, PREFLIGHT_TTL_MS, issuanceErrorReason, summarizeIssuancePreflight, shouldRetryIssuanceMedia } from './xtream-issuance-preflight.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
@@ -312,6 +312,16 @@ async function probeIssuanceMedia(row,kind,id,extension,deadline){
 }
 
 
+// One additional, bounded check for a temporary network error. 403/404/456
+// remain hard failures; repeated failure never marks the source ready.
+async function probeIssuanceWithTransientRetry(row,kind,id,extension,deadline){
+  const first=await probeIssuanceMedia(row,kind,id,extension,deadline);
+  if(first.ok||!shouldRetryIssuanceMedia(first,deadline-Date.now()))return first;
+  await new Promise(resolve=>setTimeout(resolve,180));
+  const second=await probeIssuanceMedia(row,kind,id,extension,deadline);
+  return {...second,retried:true,firstFailureReason:first.reason};
+}
+
 // The authoritative Xtream API may provide a media URL for the exact requested
 // VOD/episode even when the conventional /movie/... or /series/... path is 404.
 // Never try unrelated titles, IDs, hosts, accounts or extension guesses.
@@ -456,7 +466,7 @@ async function preflightSource(row,deadline){
           continue;
         }
         for(const sample of samples){
-          const probe=await probeIssuanceMedia({
+          const probe=await probeIssuanceWithTransientRetry({
             ...row,series_source_id:seriesRow.source_id,series_payload:payload
           },'series',sample.id,sample.extension,deadline);
           checks.push({...probe,sampleBand:seriesRow.sampleBand});
@@ -465,7 +475,7 @@ async function preflightSource(row,deadline){
     }else{
       const results=await Promise.all(rows.map(async sample=>{
         const ext=kind==='live'?'ts':safeGatewayExtension(sample.container_extension,'mp4');
-        const probe=await probeIssuanceMedia(row,kind,sample.source_id,ext,deadline);
+        const probe=await probeIssuanceWithTransientRetry(row,kind,sample.source_id,ext,deadline);
         return {...probe,sampleBand:sample.sampleBand};
       }));
       checks.push(...results);
