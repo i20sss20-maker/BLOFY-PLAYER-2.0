@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#09090e">
   <link rel="icon" type="image/png" href="/blofy-logo.png"><link rel="apple-touch-icon" href="/blofy-logo.png"><meta name="robots" content="noindex,nofollow"><title>BLOFY STREAM | إدارة المصادر والاشتراكات</title>
-  <link rel="stylesheet" href="/sources-admin.css?v=20261106-smart-library-v7">
+  <link rel="stylesheet" href="/sources-admin.css?v=20261106-smart-studio-v10">
   <link rel="stylesheet" href="/site-polish.css?v=20261025-lux-final">
 </head>
 <body>
@@ -120,6 +120,18 @@
           <article><span>Series</span><strong id="xtSeries">0</strong></article>
         </section>
         <p id="xtreamTotalsNotice" class="stream-totals-notice" role="status">جاري فحص أعداد المحتوى من السيرفرات الموجودة في هذه اللوحة…</p>
+        <section class="panel studio-overview" aria-labelledby="studioOverviewTitle">
+          <div class="panel-head">
+            <div><span class="panel-kicker">BLOFY OPERATIONS</span>
+              <h2 id="studioOverviewTitle">ملخص المصادر الذكي</h2>
+              <p>الفرق بين استيراد المحتوى ونجاح تشغيل الفيديو واضح. راجع المصادر التي تحتاج تدخلك دون تغييرات تلقائية.</p>
+            </div>
+            <button id="studioRefreshBtn" class="button ghost" type="button">↻ تحديث الملخص</button>
+          </div>
+          <div id="studioQuickStats" class="studio-quick-stats" aria-live="polite"></div>
+          <div id="studioSourceAlerts" class="studio-source-alerts" aria-live="polite"></div>
+          <p class="muted studio-caveat">حالة «مفهرس» تعني ظهور المحتوى، ولا تثبت نجاح تشغيل قناة أو فيلم أو حلقة.</p>
+        </section>
 
         <section class="panel blofy-playback-health" aria-labelledby="blofyPlaybackHeading">
           <div class="panel-head">
@@ -215,6 +227,18 @@
             <label class="wide"><span>بحث</span><input id="catalogSearch" placeholder="اسم فيلم، مسلسل أو قناة"></label>
             <button id="catalogLoadBtn" class="button primary" type="button">عرض</button>
           </div>
+          <section class="catalog-audit" aria-labelledby="catalogAuditHeading">
+            <div class="catalog-audit-head">
+              <div><span class="panel-kicker">SMART CONTENT AUDIT</span>
+                <h3 id="catalogAuditHeading">مراجعة المكتبة قبل التنظيم</h3>
+                <p class="muted">صور ناقصة، سنوات غير معروفة، نسخ مكررة وبدائل محتملة من المصادر الأخرى. معاينة فقط، بدون حذف أو تغيير تشغيل.</p>
+              </div>
+              <button id="catalogAuditBtn" type="button" class="button ghost">فحص عينة المكتبة</button>
+            </div>
+            <div id="catalogAuditResults" class="catalog-audit-results" aria-live="polite">
+              <p class="muted">اختر المصدر والنوع واضغط الفحص. تُعرض عينة محدودة لتفادي الضغط على السيرفر.</p>
+            </div>
+          </section>
           <div class="catalog-smart-quick" id="catalogSmartQuick" aria-label="اختصارات تصفح المكتبة">
             <span class="catalog-smart-quick-label">✨ وصول سريع</span>
           </div>
@@ -241,6 +265,11 @@
             <div id="categoryManagerRows" class="category-manager-rows"></div>
           </div>
           <div class="bulk-actions"><button id="enableTypeBtn" class="button" type="button">تفعيل الكل</button><button id="disableTypeBtn" class="button ghost" type="button">تعطيل الكل</button><span id="catalogHint" class="muted"></span></div>
+          <div class="catalog-pagination" role="group" aria-label="التنقل بين صفحات المحتوى">
+            <button id="catalogPrevPage" class="button ghost" type="button" disabled>السابق</button>
+            <span id="catalogPageStatus" role="status">الصفحة 1</span>
+            <button id="catalogNextPage" class="button ghost" type="button" disabled>التالي</button>
+          </div>
           <p id="catalogSmartNotice" class="muted" role="status">استعراض السنوات واللغات قراءة فقط، ولا يغيّر تفعيل المحتوى.</p>
           <div id="catalogLoading" class="loading" hidden>جارٍ تحميل الكتالوج…</div>
           <div id="catalogItems" class="catalog-list"></div>
@@ -250,7 +279,7 @@
       <footer><span>BLOFY STREAM · إدارة Xtream</span></footer>
     </main>
   </div>
-  <script src="/sources-admin.js?v=20261106-media-check-v9" defer></script>
+  <script src="/sources-admin.js?v=20261106-smart-studio-v10" defer></script>
   <script src="/xtream-gateway-admin.js?v=20261106-account-visibility-v2" defer></script>
 </body>
 </html>

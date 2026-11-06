@@ -7,6 +7,9 @@ const state = {
   sourceFeedback: new Map(),
   categories: [],
   catalog: [],
+  catalogOffset: 0,
+  catalogQueryKey: '',
+  catalogRequestSerial: 0,
   activeTab: 'xtream',
   pollTimer: null
 };
@@ -289,6 +292,7 @@ function renderXtream() {
   el('xtLive').textContent = Number(totals.live || 0).toLocaleString();
   el('xtMovies').textContent = Number(totals.movie || 0).toLocaleString();
   el('xtSeries').textContent = Number(totals.series || 0).toLocaleString();
+  renderStudioOverview();
   const text=el('xtreamTotalsNotice');
   if(text){
     const count=Number(totals.live||0)+Number(totals.movie||0)+Number(totals.series||0);
@@ -391,6 +395,101 @@ async function loadXtream(silent = false, strict = false) {
     if(strict)throw error;
     return null;
   }
+}
+
+function renderStudioOverview(){
+  const box=el('studioQuickStats'),alerts=el('studioSourceAlerts');
+  if(!box||!alerts)return;
+  box.replaceChildren();alerts.replaceChildren();
+  const sources=state.xtreamServers||[];
+  const now=Date.now();
+  const published=sources.filter(x=>x.enabled&&x.publishCatalog);
+  const flagged=sources.filter(x=>x.enabled&&(x.lastError||x.status==='offline'||x.status==='error'));
+  const stale=sources.filter(x=>x.enabled&&x.publishCatalog&&x.lastSyncAt&&now-Number(x.lastSyncAt)>48*3600_000);
+  const untested=sources.filter(x=>x.enabled&&!x.lastTestAt);
+  const stats=[
+    ['المصادر المسجلة',sources.length],
+    ['مفهرسة ومنشورة',published.length],
+    ['تحتاج متابعة',flagged.length],
+    ['مزامنتها قديمة',stale.length],
+    ['لم تُفحص',untested.length]
+  ];
+  for(const [label,count] of stats){
+    const card=make('div','studio-stat');
+    card.append(make('small','',label),make('strong','',Number(count).toLocaleString('en-US')));
+    box.append(card);
+  }
+  const warns=[...new Map([...flagged,...stale,...untested].map(x=>[x.id,x])).values()].slice(0,8);
+  if(!sources.length)alerts.append(make('p','muted','أضف مصدر Xtream لعرض حالته هنا.'));
+  else if(!warns.length)alerts.append(make('p','studio-notice ok','لا توجد تحذيرات فهرسة مسجلة. تأكد من تشغيل الفيديو بالفحص الفعلي.'));
+  for(const item of warns){
+    const detail=item.lastError?xtreamSourceErrorText(item.lastError):
+      item.status==='offline'||item.status==='error'?'المصدر لم ينجح في آخر اتصال أو مزامنة.':
+      item.lastSyncAt&&now-Number(item.lastSyncAt)>48*3600_000?'آخر مزامنة أقدم من 48 ساعة.':
+      'لا يوجد تاريخ فحص موثوق لهذا المصدر.';
+    const row=make('div','studio-alert');
+    row.append(make('strong','',item.name),make('span','',detail));
+    const button=make('button','button ghost','عرض المصدر');
+    button.type='button';
+    button.addEventListener('click',()=>{
+      const card=el('xtreamServers').querySelector('[data-id="'+item.id+'"]');
+      if(card){card.scrollIntoView({behavior:'smooth',block:'center'});}
+      else{el('xtSourceSearch').value=item.name;el('xtSourceFilter').value='all';renderXtream();}
+    });
+    row.append(button);alerts.append(row);
+  }
+}
+
+async function loadCatalogAudit(){
+  const button=el('catalogAuditBtn'),results=el('catalogAuditResults');
+  const serverId=el('catalogServer').value,mediaType=el('catalogType').value;
+  if(!serverId){showMessage('اختر مصدر Xtream أولًا.','error');return;}
+  button.disabled=true;button.textContent='جارٍ قراءة العينة…';
+  results.replaceChildren(make('p','muted','يجري فحص عينة محدودة بدون تعديل أي محتوى…'));
+  try{
+    const query=new URLSearchParams({serverId,type:mediaType});
+    const report=await api('/api/v1/admin/xtream/catalog/insights?'+query);
+    // Ignore stale responses if a source/type was changed while scanning.
+    if(serverId!==el('catalogServer').value||mediaType!==el('catalogType').value)return;
+    results.replaceChildren();
+    const cards=make('div','catalog-audit-stats');
+    for(const [title,count] of [
+      ['عناصر العينة',report.sampledPrimary||0],
+      ['صور ناقصة',report.missingPoster||0],
+      ['سنة غير معروفة',report.missingYear||0],
+      ['قصة غير متوفرة',report.missingPlot||0],
+      ['مجموعات مكررة',report.duplicateGroupCount||0]
+    ]){
+      const card=make('article','catalog-audit-stat');
+      card.append(make('small','',title),make('strong','',Number(count).toLocaleString('en-US')));
+      cards.append(card);
+    }
+    results.append(cards);
+    const section=(title,rows,render)=>{
+      const box=make('section','catalog-audit-section');
+      box.append(make('h4','',title));
+      if(!rows?.length)box.append(make('p','muted','لم تظهر نتائج في هذه العينة.'));
+      else for(const item of rows.slice(0,10))box.append(render(item));
+      return box;
+    };
+    results.append(section('النسخ المكررة المحتملة',report.duplicateGroups,row=>{
+      const card=make('div','catalog-audit-result');
+      card.append(make('strong','',row.name),
+        make('small','',String(row.copies)+' نسخ · '+(row.year??'سنة غير معروفة')));
+      return card;
+    }));
+    results.append(section('بدائل محتملة من مصادر أخرى (للمراجعة فقط)',report.candidateAlternatives,row=>{
+      const card=make('div','catalog-audit-result');
+      card.append(make('strong','',row.name),
+        make('small','',(row.otherSources||[]).join('، ')+' · لم يُتحقق من التشغيل أو حقوق المصدر'));
+      return card;
+    }));
+    results.append(make('p','muted','المعاينة محدودة إلى '+Number(report.sampledPrimary||0).toLocaleString('en-US')+
+      ' عنصر من المصدر و'+Number(report.sampledOther||0).toLocaleString('en-US')+
+      ' من المصادر الأخرى. لا تحذف النسخ أو تختار مصدر تشغيل احتياطي تلقائيًا.'));
+  }catch(error){
+    results.replaceChildren(make('p','muted','تعذر فحص عينة المكتبة: '+error.message));
+  }finally{button.disabled=false;button.textContent='فحص عينة المكتبة';}
 }
 
 async function addXtream(event) {
@@ -806,7 +905,12 @@ function catalogCard(item) {
   const poster = make('div', 'catalog-icon');
   if (item.iconUrl) {
     const img = document.createElement('img');
-    img.src = item.iconUrl; img.alt = ''; img.loading = 'lazy'; img.referrerPolicy = 'no-referrer';
+    try {
+      const url=new URL(String(item.iconUrl),location.origin);
+      if(!['http:','https:'].includes(url.protocol))throw new Error('unsafe_image_scheme');
+      img.src=url.href;
+    }catch{img.removeAttribute('src');}
+    img.alt = ''; img.loading = 'lazy'; img.referrerPolicy = 'no-referrer';
     img.addEventListener('error', () => img.remove(), { once: true });
     poster.append(img);
   }
@@ -833,7 +937,47 @@ function catalogCard(item) {
       showMessage(`تعذر تحديث العنصر: ${error.message}`, 'error');
     }
   });
-  card.append(media, toggle);
+  const details=make('details','catalog-expanded');
+  const header=make('summary','', 'ℹ معلومات المحتوى');
+  details.append(header);
+  const metaInfo=make('div','catalog-expanded-body');
+  const fields=[
+    ['التصنيف',item.metadata?.genre],
+    ['سنة الإنتاج',item.metadata?.year||item.metadata?.releaseDate],
+    ['التقييم',item.metadata?.rating],
+    ['القصة',item.metadata?.plot],
+    ['الممثلون',item.metadata?.cast],
+    ['المخرج',item.metadata?.director],
+    ['مدة الحلقة',item.metadata?.episodeRunTime],
+    ['المصدر',item.serverName]
+  ];
+  for(const [label,value] of fields){
+    if(value===undefined||value===null||String(value).trim()==='')continue;
+    const line=make('div','catalog-expanded-line');
+    line.append(make('b','',label),make('span','',String(value).slice(0,1800)));
+    metaInfo.append(line);
+  }
+  const links=make('div','catalog-expanded-links');
+  const tmdb=String(item.metadata?.tmdb||'').trim();
+  const imdb=String(item.metadata?.imdb||'').trim();
+  const trailer=String(item.metadata?.youtubeTrailer||'').trim();
+  const addLink=(label,url)=>{
+    const a=make('a','button ghost',label);
+    a.href=url;a.target='_blank';a.rel='noopener noreferrer';
+    links.append(a);
+  };
+  if(/^\d{1,12}$/.test(tmdb)&&item.type!=='live')
+    addLink('TMDB','https://www.themoviedb.org/'+(item.type==='series'?'tv/':'movie/')+tmdb);
+  if(/^tt\d{5,12}$/.test(imdb))addLink('IMDb','https://www.imdb.com/title/'+imdb+'/');
+  try{
+    const video=new URL(trailer);
+    if(['www.youtube.com','youtube.com','youtu.be','m.youtube.com'].includes(video.hostname)&&
+      video.protocol==='https:')addLink('الإعلان التشويقي',video.href);
+  }catch{}
+  if(links.children.length)metaInfo.append(links);
+  if(!metaInfo.children.length)metaInfo.append(make('p','muted','المصدر لم يوفر معلومات إضافية لهذا العنصر.'));
+  details.append(metaInfo);
+  card.append(media,toggle,details);
   return card;
 }
 
@@ -842,7 +986,15 @@ function renderCatalog() {
   list.replaceChildren();
   if (!state.catalog.length) list.append(make('div', 'empty', 'ما فيه نتائج في هذا الاختيار.'));
   state.catalog.forEach(item => list.append(catalogCard(item)));
-  el('catalogHint').textContent = state.catalog.length ? `معروض ${state.catalog.length} عنصر (حتى 250 في الصفحة).` : '';
+  const count=state.catalog.length;
+  const page=Math.floor(state.catalogOffset/250)+1;
+  el('catalogHint').textContent=count?
+    'المعروض '+(state.catalogOffset+1).toLocaleString('en-US')+'–'+
+      (state.catalogOffset+count).toLocaleString('en-US')+' (من المحتوى المطابق).':
+    'لا توجد نتائج في هذه الصفحة.';
+  el('catalogPageStatus').textContent='الصفحة '+page.toLocaleString('en-US');
+  el('catalogPrevPage').disabled=state.catalogOffset===0;
+  el('catalogNextPage').disabled=count<250;
 }
 
 // Year/language browsing is read-only: never let the unfiltered bulk toggle
@@ -911,23 +1063,44 @@ function initCatalogYearPicker(){
   updateCatalogVideoFilters();
 }
 
+function catalogFilterQuery(){
+  const params=new URLSearchParams({
+    serverId:el('catalogServer').value,
+    type:el('catalogType').value,
+    limit:'250'
+  });
+  if(el('catalogCategory').value)params.set('categoryId',el('catalogCategory').value);
+  if(el('catalogType').value!=='live'&&el('catalogYear').value)params.set('year',el('catalogYear').value);
+  if(el('catalogType').value!=='live'&&el('catalogLanguage').value)params.set('language',el('catalogLanguage').value);
+  if(el('catalogSearch').value.trim())params.set('q',el('catalogSearch').value.trim());
+  return params;
+}
+
+async function changeCatalogPage(direction){
+  const next=Math.max(0,state.catalogOffset+direction*250);
+  if(direction>0&&state.catalog.length<250)return;
+  state.catalogOffset=next;
+  await loadCatalog();
+  el('catalogItems').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
 async function loadCatalog() {
-  const serverId = el('catalogServer').value;
-  if (!serverId) return;
-  el('catalogLoading').hidden = false;
-  try {
-    const params = new URLSearchParams({ serverId, type: el('catalogType').value, limit: '250' });
-    if (el('catalogCategory').value) params.set('categoryId', el('catalogCategory').value);
-    if(el('catalogType').value!=='live'&&el('catalogYear').value)params.set('year',el('catalogYear').value);
-    if(el('catalogType').value!=='live'&&el('catalogLanguage').value)params.set('language',el('catalogLanguage').value);
-    if (el('catalogSearch').value.trim()) params.set('q', el('catalogSearch').value.trim());
-    const data = await api(`/api/v1/admin/xtream/catalog?${params}`);
-    state.catalog = Array.isArray(data.items) ? data.items : [];
+  const serverId=el('catalogServer').value;
+  if(!serverId)return;
+  const params=catalogFilterQuery(),key=params.toString();
+  if(state.catalogQueryKey!==key){state.catalogQueryKey=key;state.catalogOffset=0;}
+  params.set('offset',String(state.catalogOffset));
+  const serial=++state.catalogRequestSerial;
+  el('catalogLoading').hidden=false;
+  try{
+    const response=await api('/api/v1/admin/xtream/catalog?'+params);
+    if(serial!==state.catalogRequestSerial)return;
+    state.catalog=Array.isArray(response.items)?response.items:[];
     renderCatalog();
-  } catch (error) {
-    showMessage(`تعذر تحميل الكتالوج: ${error.message}`, 'error');
-  } finally {
-    el('catalogLoading').hidden = true;
+  }catch(error){
+    if(serial===state.catalogRequestSerial)showMessage('تعذر تحميل الكتالوج: '+error.message,'error');
+  }finally{
+    if(serial===state.catalogRequestSerial)el('catalogLoading').hidden=true;
   }
 }
 
@@ -1119,6 +1292,8 @@ el('xtNewSourceBtn').addEventListener('click', () => {
   el('xtName').focus({preventScroll:true});
 });
 el('xtRefreshSourcesBtn').addEventListener('click', ()=>loadXtream().catch(error=>showMessage('تعذر تحديث مصادر Xtream: '+error.message,'error')));
+el('studioRefreshBtn').addEventListener('click',()=>loadXtream().catch(error=>showMessage(error.message,'error')));
+el('catalogAuditBtn').addEventListener('click',loadCatalogAudit);
 
 el('catalogServer').addEventListener('change', async () => { await loadCategories(); await loadCatalog(); });
 el('catalogType').addEventListener('change', async () => { updateCatalogVideoFilters(); await loadCategories(); await loadCatalog(); });
@@ -1145,7 +1320,17 @@ el('categoryManagerRows').addEventListener('click',event=>{
   if(button)changeCategory(button).catch(error=>showMessage('تعذر حفظ الفئة: '+error.message,'error'));
 });
 el('catalogLoadBtn').addEventListener('click', loadCatalog);
-el('catalogSearch').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); loadCatalog(); } });
+const catalogSearch=el('catalogSearch');
+let catalogSearchTimer=null;
+catalogSearch.addEventListener('input',()=>{
+  window.clearTimeout(catalogSearchTimer);
+  catalogSearchTimer=window.setTimeout(()=>void loadCatalog(),450);
+});
+catalogSearch.addEventListener('keydown',event=>{
+  if(event.key==='Enter'){event.preventDefault();window.clearTimeout(catalogSearchTimer);void loadCatalog();}
+});
+el('catalogPrevPage').addEventListener('click',()=>changeCatalogPage(-1));
+el('catalogNextPage').addEventListener('click',()=>changeCatalogPage(1));
 el('enableTypeBtn').addEventListener('click', () => bulkCatalog(true));
 el('disableTypeBtn').addEventListener('click', () => bulkCatalog(false));
 window.addEventListener('hashchange', () => {

@@ -22,6 +22,7 @@ import { assessXtreamSync } from './xtream-sync-guard.mjs';
 import { CONTROL_PATH, controlPage, deleteConfirmationPage, readControlForm } from './xtream-native-controls.mjs';
 import { xtreamEpisodeSamples, xtreamProbeMessage } from './xtream-series-probe.mjs';
 import { inspectXtreamMediaChunk } from './xtream-media-inspector.mjs';
+import { auditXtreamCatalogSample } from './xtream-library-insights.mjs';
 import { sortXtreamCategories } from './xtream-category-sort.mjs';
 import { nativeXtreamCsrfToken } from './xtream-native-csrf.mjs';
 
@@ -943,7 +944,7 @@ async function listCatalog(query, publishedOnly = false) {
   if (publishedOnly) where.push('s.enabled=TRUE', 's.publish_catalog=TRUE', 'i.enabled=TRUE', '(c.enabled IS NULL OR c.enabled=TRUE)');
   if (query.serverId) { if (!validUuid(query.serverId)) throw Object.assign(new Error('xtream_server_id_invalid'), { status: 400 }); values.push(query.serverId); where.push(`i.server_id=$${values.length}`); }
   if (query.categoryId) { values.push(String(query.categoryId)); where.push(`i.category_id=$${values.length}`); }
-  if (query.q) { values.push(`%${String(query.q).slice(0,120).replace(/[%_]/g, '\\$&')}%`); where.push(`i.name ILIKE $${values.length} ESCAPE '\\'`); }
+  if (query.q) { values.push(`%${String(query.q).slice(0,120).replace(/[%_]/g, '\\$&')}%`); where.push(`(i.name ILIKE $${values.length} ESCAPE '\\' OR translate(i.name,'أإآٱىة','اااايه') ILIKE translate($${values.length},'أإآٱىة','اااايه') ESCAPE '\\' OR COALESCE(c.name,'') ILIKE $${values.length} ESCAPE '\\' OR COALESCE(i.metadata->>'genre','') ILIKE $${values.length} ESCAPE '\\')`); }
   // Smart browsing filters media using its real metadata; neither filter
   // rewrites upstream categories or touches any customer-facing item IDs.
   if (query.year || query.language) {
@@ -1002,6 +1003,30 @@ async function listCatalog(query, publishedOnly = false) {
     metadata: row.metadata || {},
     updatedAt: new Date(row.updated_at).getTime()
   }));
+}
+
+// Operator-only read-only preview. Keep the sample bounded so a 250k-row
+// IPTV catalog cannot stall the primary playback database. All candidate
+// matching remains advisory: no silent remapping or rights assumptions.
+async function previewCatalogInsights(serverId,mediaType){
+  if(!validUuid(serverId)||!['movie','series','live'].includes(mediaType))
+    throw Object.assign(new Error('xtream_insights_selection_invalid'),{status:400});
+  await ensureReady();
+  const existing=await serverById(serverId);
+  if(!existing)throw Object.assign(new Error('xtream_server_not_found'),{status:404});
+  const [primary,alternates]=await Promise.all([
+    pool.query(`SELECT server_id::text,source_id,name,icon_url,metadata,enabled
+      FROM blofy_xtream_items WHERE server_id=$1 AND media_type=$2
+      ORDER BY source_id LIMIT 1200`,[serverId,mediaType]),
+    pool.query(`SELECT i.server_id::text,i.source_id,i.name,i.icon_url,i.metadata,
+        i.enabled,s.name AS server_name
+      FROM blofy_xtream_items i JOIN blofy_xtream_servers s ON s.id=i.server_id
+      WHERE i.media_type=$1 AND i.server_id<>$2 AND i.enabled=TRUE
+        AND s.enabled=TRUE AND s.publish_catalog=TRUE
+      LIMIT 1800`,[mediaType,serverId])
+  ]);
+  return {sourceName:existing.name,mediaType,
+    ...auditXtreamCatalogSample(primary.rows,alternates.rows)};
 }
 
 async function patchCategory(serverId, mediaType, categoryId, enabled) {
@@ -1267,6 +1292,10 @@ http.createServer = function withBlofyXtream(listener) {
       }
       if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream/categories') {
         return json(res, 200, { items: await listCategories(url.searchParams.get('serverId'), url.searchParams.get('type')) });
+      }
+      if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream/catalog/insights') {
+        return json(res,200,await previewCatalogInsights(
+          url.searchParams.get('serverId'),url.searchParams.get('type')));
       }
       if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream/catalog') {
         return json(res, 200, { items: await listCatalog(Object.fromEntries(url.searchParams), false) });
