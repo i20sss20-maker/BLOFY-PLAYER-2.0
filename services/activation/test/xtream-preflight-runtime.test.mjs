@@ -40,7 +40,7 @@ async function buildPreflight({movieSucceeds=true,seriesSucceeds=true,twoBands=f
     },
     sanitizeXtreamAccount:x=>({authenticated:x.user_info?.auth===1}),
     xtreamEpisodePlaybackCandidates:x=>x.episodes['1'].map(y=>({id:y.id,extension:y.container_extension})),
-    probeIssuanceMedia:async(row,kind,id,ext)=>{
+    probeIssuanceWithTransientRetry:async(row,kind,id,ext)=>{
       if(kind==='series'){
         const isNewest=twoBands&&row.series_source_id==='903';
         assert.equal(row.series_source_id,isNewest?'903':'303');
@@ -96,4 +96,28 @@ test('bad video in both catalog ID bands still blocks issuance',async()=>{
   assert.equal(summary.ready,false);
   assert.equal(summary.failed,4);
   assert.equal(summary.mediaSampleCount,6);
+});
+
+test('a first temporary transport error may recover, but HTTP 404 may never be retried',async()=>{
+  const source=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
+  const start=source.indexOf('async function probeIssuanceWithTransientRetry(');
+  const end=source.indexOf('// The authoritative Xtream API',start);
+  assert.ok(start>=0&&end>start);
+  const {shouldRetryIssuanceMedia}=await import('../src/xtream-issuance-preflight.mjs');
+  let results=[{kind:'live',ok:false,reason:'timeout'},{kind:'live',ok:true}];
+  const probe=async()=>results.shift();
+  const fn=new Function('probeIssuanceMedia','shouldRetryIssuanceMedia',
+    source.slice(start,end)+';return probeIssuanceWithTransientRetry;')(
+      probe,shouldRetryIssuanceMedia);
+  const result=await fn({},'live','101','ts',Date.now()+20_000);
+  assert.equal(result.ok,true);
+  assert.equal(result.retried,true);
+  assert.equal(result.firstFailureReason,'timeout');
+  assert.equal(results.length,0);
+  results=[{kind:'movie',ok:false,reason:'upstream_http_404',httpStatus:404}];
+  const blocked=await fn({},'movie','202','mp4',Date.now()+20_000);
+  assert.equal(blocked.ok,false);
+  assert.equal(blocked.httpStatus,404);
+  assert.equal(blocked.retried,undefined);
+  assert.equal(results.length,0);
 });
