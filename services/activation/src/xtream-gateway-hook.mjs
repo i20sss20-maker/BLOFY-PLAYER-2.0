@@ -41,7 +41,7 @@ import { shouldRetryXtreamWithoutRange,firstByteXtreamRange } from './xtream-med
 import { recordXtreamPlayback,xtreamPlaybackSnapshot } from './xtream-playback-metrics.mjs';
 import { XtreamDenialCooldown } from './xtream-denial-cooldown.mjs';
 import { episodeOrdinal, verifiedEpisodeRecovery, sameEpisodeContainerCandidates } from './xtream-episode-repair.mjs';
-import { authoritativeXtreamMediaCandidates } from './xtream-authoritative-media.mjs';
+import { authoritativeXtreamMediaCandidates, providerHasExactXtreamMediaItem } from './xtream-authoritative-media.mjs';
 import { xtreamEpisodePlaybackCandidates } from './xtream-series-probe.mjs';
 import { MAX_ISSUANCE_SOURCES, PREFLIGHT_TTL_MS, issuanceErrorReason, summarizeIssuancePreflight, shouldRetryIssuanceMedia } from './xtream-issuance-preflight.mjs';
 
@@ -273,10 +273,12 @@ async function probeIssuanceMedia(row,kind,id,extension,deadline){
         providerPayload:kind==='series'?row.series_payload:null,
         deadline
       });
-      if(alternate){
-        await response.body?.cancel().catch(()=>{});
-        response=null;
-        response=await checkedFetch(alternate.url,{method:'GET',headers,signal});
+      if(alternate?.verified){
+        // The alternative already passed the same checkedFetch video-byte
+        // verification. A second GET would waste source bandwidth and can
+        // time out after the original probe's 6.5s timeout expires.
+        return {kind,ok:true,reason:null,format:'provider_verified',
+          repaired:true,recoveryMode:alternate.mode};
       }
     }
     if(!response.ok || !response.body){
@@ -373,16 +375,33 @@ async function verifiedOfficialMediaAlternative(row,kind,sourceId,currentExtensi
         kind==='movie'?{vod_id:String(sourceId)}:{series_id:String(seriesSourceId)},
         {timeoutMs:Math.min(5500,Math.max(1000,deadline-Date.now())),maxBytes:3_000_000});
     }
+    // Never probe guessed IDs or substitute content: the provider must still
+    // list precisely this movie or episode under the requesting account.
+    if(!providerHasExactXtreamMediaItem(payload,{kind,itemId:String(sourceId)}))
+      return null;
     const candidates=authoritativeXtreamMediaCandidates(payload,{
       kind,itemId:String(sourceId),baseUrl:row.base_url,currentExtension
     });
+    // Some providers keep advertising .mp4 although the exact original ID
+    // is stored as .mkv or TS. Earlier this fallback existed only in the
+    // player-side series repair, not in movie relay or pre-issue QA, yielding
+    // false 404s. Try at most two other containers for the SAME provider ID.
+    const tested=new Set(candidates
+      .filter(item=>item.kind==='provider_extension')
+      .map(item=>item.extension));
+    for(const candidate of sameEpisodeContainerCandidates(currentExtension)){
+      if(!tested.has(candidate)){
+        candidates.push({kind:'same_id_container',extension:candidate});
+        tested.add(candidate);
+      }
+    }
     for(const item of candidates){
       if(Date.now()+1000>=deadline)break;
       const url=item.kind==='provider_direct'?new URL(item.url):
         mediaUpstreamUrl(row,kind,sourceId,item.extension);
       if(await confirmProviderMediaUrl(url,{deadline})){
         console.info('xtream verified provider media fallback',{kind,mode:item.kind});
-        return {url,mode:item.kind};
+        return {url,mode:item.kind,verified:true};
       }
     }
   }catch(error){
