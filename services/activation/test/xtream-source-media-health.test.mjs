@@ -40,6 +40,8 @@ test('source account flags display declared expired, exhausted connections or mi
   assert.match(notices.join(' '),/TS/);
   assert.deepEqual(sourceAccountWarnings({expiresAt:0,activeConnections:0,maxConnections:2,
     allowedOutputFormats:['ts','m3u8']},now),[]);
+  assert.match(sourceAccountWarnings({isRestreamer:false},now).join(' '),/is_restreamer=0/);
+  assert.deepEqual(sourceAccountWarnings({isRestreamer:true},now),[]);
 });
 
 test('both operator probe routes save sanitized diagnostics while keeping credentials inaccessible',async()=>{
