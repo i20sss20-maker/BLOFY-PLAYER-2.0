@@ -836,12 +836,23 @@ async function probeGatewayMedia(kind,itemId){
     const ext=safeGatewayExtension(row.container_extension,kind==='live'?'ts':'mp4');
     const sourceId=kind==='series'?row.source_episode_id:row.source_id;
     const url=mediaUpstreamUrl(row,kind,sourceId,ext);
+    const probeHeaders={
+      'user-agent':'BLOFY-Media-Diagnostics/1.0',
+      ...(kind==='live'?{}:{range:'bytes=0-2047'})
+    };
     response=await checkedFetch(url,{
-      method:'GET',headers:{
-        'user-agent':'BLOFY-Media-Diagnostics/1.0',
-        ...(kind==='live'?{}:{range:'bytes=0-2047'})
-      },signal:controller.signal
+      method:'GET',headers:probeHeaders,signal:controller.signal
     });
+    let rangeFallbackUsed=false;
+    // Keep diagnostics consistent with the actual playback gateway: some
+    // providers return 404/416 only for a first-byte Range request.
+    if(shouldRetryXtreamWithoutRange({status:response.status,range:probeHeaders.range})){
+      await response.body?.cancel().catch(()=>{});
+      response=null;
+      delete probeHeaders.range;
+      rangeFallbackUsed=true;
+      response=await checkedFetch(url,{method:'GET',headers:probeHeaders,signal:controller.signal});
+    }
     const status=response.status;
     if(!(response.ok||status===206)){
       return{ok:false,kind,itemId,httpStatus:status,reason:'upstream_http_'+status,
@@ -855,7 +866,7 @@ async function probeGatewayMedia(kind,itemId){
     const inspection=inspectXtreamMediaChunk(first.value,response.headers.get('content-type'));
     if(!inspection.valid)
       return{ok:false,kind,itemId,httpStatus:status,reason:inspection.reason,elapsedMs:Date.now()-started};
-    return{ok:true,kind,itemId,httpStatus:status,format:inspection.format,elapsedMs:Date.now()-started,
+    return{ok:true,kind,itemId,httpStatus:status,format:inspection.format,rangeFallbackUsed,elapsedMs:Date.now()-started,
       note:'first_media_bytes_only'};
   }catch(error){
     return{ok:false,kind,itemId,httpStatus:null,
