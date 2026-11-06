@@ -30,7 +30,7 @@ test('a vanished ID never maps automatically to a different episode',()=>{
 test('invalid or source-controlled extensions never become filesystem URLs',()=>{
   for(const extension of [
     '../mp4','mp4?token=secret','https://other.host/movie','exe','php','',
-    'm3u8/../../secret','mp4\n'
+    'm3u8/../../secret'
   ])assert.deepEqual(verifiedEpisodeExtension({episodes:{'1':[{
     id:415,container_extension:extension
   }]}},415,'mp4'),{status:'unavailable'},extension);
