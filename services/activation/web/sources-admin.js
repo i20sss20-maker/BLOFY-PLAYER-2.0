@@ -599,47 +599,114 @@ function updateCatalogServerOptions() {
   if (state.xtreamServers.some(server => server.id === current)) select.value = current;
 }
 
-function renderCategoryManager() {
+const categorySmartUi={grouped:true};
+function describeCategoryShelf(name,mediaType){
+  const text=String(name||'').replace(/[٠-٩]/g,c=>String('٠١٢٣٤٥٦٧٨٩'.indexOf(c)));
+  const year=text.match(/(^|[^0-9])(19[5-9][0-9]|20[0-9]{2})(?=$|[^0-9])/);
+  const groups=mediaType==='live'?[
+    ['sports','⚽ رياضة',/رياضة|رياضي|sport|football|bein|كرة/iu],
+    ['news','📰 أخبار',/أخبار|اخبار|news/iu],
+    ['kids','🧸 أطفال',/أطفال|اطفال|kids|cartoon|كرتون/iu],
+    ['entertainment','📺 ترفيه',/ترفيه|entertainment|general|عام/iu]
+  ]:[
+    ['arabic','🎬 عربي',/عرب(?:ي|ية|ى)?|عربيه|arabic/iu],
+    ['foreign','🌍 أجنبي',/أجنبي|اجنبي|اجنبية|انجليزي|إنجليزي|english|foreign|hollywood|american|أمريكي|امريكي/iu],
+    ['turkish','🇹🇷 تركي',/تركي|تركية|turkish|turkey/iu],
+    ['indian','🇮🇳 هندي',/هندي|هندية|indian|hindi|bollywood/iu],
+    ['korean','🇰🇷 كوري',/كوري|كورية|korean/iu],
+    ['anime','✨ أنمي',/أنمي|انمي|anime|انيمي/iu],
+    ['kids','🧸 أطفال',/أطفال|اطفال|kids|cartoon|كرتون/iu],
+    ['documentary','🎞️ وثائقي',/وثائقي|وثائقية|documentary/iu]
+  ];
+  const index=groups.findIndex(([, ,pattern])=>pattern.test(text));
+  const picked=groups[index]||['other',mediaType==='live'?'📡 بقية القنوات':'📁 أقسام أخرى'];
+  return{key:picked[0],label:picked[1],priority:index<0?99:index,year:year?Number(year[2]):null};
+}
+
+function categoryRow(category,position,allLength){
+  const row=make('article','category-manager-row'+(category.enabled?'':' hidden-category'));
+  const info=make('div','category-manager-label');
+  const title=make('div','category-smart-name');
+  title.append(make('span','category-smart-index',String(position+1)),make('strong','',category.name));
+  info.append(title);
+  info.append(make('small','',Number(category.itemCount||0).toLocaleString('en-US')+' عنصر · '+(category.enabled?'ظاهر للمشتركين':'مخفي عن المشتركين')));
+  const actions=make('div','category-manager-actions');
+  for(const [label,action,titleText,disabled] of [
+    ['للأول','top','ضع هذا القسم أولًا في ترتيب تطبيقات المشتركين',position===0],
+    ['↑','up','رفع في الترتيب الحقيقي',position===0],
+    ['↓','down','خفض في الترتيب الحقيقي',position===allLength-1],
+    [category.enabled?'إخفاء':'إظهار','toggle',category.enabled?'إخفاء القسم عن المشتركين':'إظهار القسم للمشتركين',false]
+  ]){
+    const button=make('button','button ghost',label);
+    button.type='button';button.dataset.action=action;button.dataset.categoryId=category.id;
+    button.title=titleText;button.disabled=disabled;actions.append(button);
+  }
+  row.append(info,actions);
+  return row;
+}
+
+function renderCategoryManager(){
   const target=el('categoryManagerRows');
   if(!target)return;
   target.replaceChildren();
   const all=state.categories||[];
-  const query=String(el('categorySearch')?.value||'').trim().toLowerCase();
-  const filter=el('categoryVisibility')?.value||'all';
-  const matches=all.filter(category=>String(category.name||'').toLowerCase().includes(query)&&
-    (filter==='all'||(filter==='hidden'?!category.enabled:category.enabled)));
-  const countOn=all.filter(category=>category.enabled).length;
+  const query=String(el('categorySearch')?.value||'').trim().toLocaleLowerCase();
+  const visibility=el('categoryVisibility')?.value||'all';
+  const mediaType=el('catalogType').value;
+  const matches=all.map((item,index)=>({...item,originalPosition:index})).filter(item=>
+    (!query||String(item.name||'').toLocaleLowerCase().includes(query))&&
+    (visibility==='all'||(visibility==='hidden'?!item.enabled:item.enabled))
+  );
+  const visible=all.filter(item=>item.enabled).length;
   el('categoryManagerSummary').textContent=
-    'الفئات: '+all.length+' · الظاهرة: '+countOn+' · المخفية: '+(all.length-countOn)+
-    (query||filter!=='all'?' · النتائج: '+matches.length:'');
-  const rows=matches.slice(0,120);
-  if(!rows.length){
-    target.append(make('p','empty','ما توجد فئات مطابقة للمصدر والنوع المحددين.'));
+    'الأقسام: '+all.length.toLocaleString('en-US')+
+    ' · الظاهرة: '+visible.toLocaleString('en-US')+
+    ' · المخفية: '+(all.length-visible).toLocaleString('en-US')+
+    ' · نتائج العرض: '+matches.length.toLocaleString('en-US');
+  const show=matches.slice(0,240);
+  if(!show.length){
+    target.append(make('p','empty','ما توجد أقسام مطابقة. جرّب تغيير البحث أو اختيار مصدر آخر.'));
     return;
   }
-  for(const category of rows){
-    const position=all.findIndex(x=>x.id===category.id);
-    const row=make('article','category-manager-row'+(category.enabled?'':' hidden-category'));
-    const info=make('div','category-manager-label');
-    info.append(make('strong','',String(position+1)+' · '+category.name));
-    info.append(make('small','',Number(category.itemCount||0).toLocaleString('en-US')+' عنصر'));
-    const actions=make('div','category-manager-actions');
-    const buttons=[
-      ['للأول','top','انقل القسم لأول القائمة',position===0],
-      ['↑','up','رفع الفئة',position===0],
-      ['↓','down','خفض الفئة',position===all.length-1],
-      [category.enabled?'إخفاء':'إظهار','toggle',category.enabled?'إخفاء عن العملاء':'إظهار للعملاء',false]
-    ];
-    for(const [label,action,title,disabled] of buttons){
-      const button=make('button','button ghost',label);
-      button.type='button';button.dataset.action=action;button.dataset.categoryId=category.id;
-      button.title=title;button.disabled=disabled;
-      actions.append(button);
+  if(!categorySmartUi.grouped){
+    for(const item of show)target.append(categoryRow(item,item.originalPosition,all.length));
+  }else{
+    const sections=new Map();
+    for(const item of show){
+      const info=describeCategoryShelf(item.name,mediaType);
+      let section=sections.get(info.key);
+      if(!section){section={...info,years:new Map(),total:0,items:0};sections.set(info.key,section);}
+      const yearKey=mediaType==='live'?'all':String(info.year??'unknown');
+      if(!section.years.has(yearKey))section.years.set(yearKey,[]);
+      section.years.get(yearKey).push(item);
+      section.total++;
+      section.items+=Number(item.itemCount||0);
     }
-    row.append(info,actions);
-    target.append(row);
+    const ordered=[...sections.values()].sort((a,b)=>a.priority-b.priority);
+    ordered.forEach((section,sectionIndex)=>{
+      const outer=make('details','category-smart-section');
+      outer.open=sectionIndex===0||Boolean(query);
+      const head=make('summary','category-smart-section-head');
+      const title=make('strong','',section.label);
+      const meta=make('span','category-smart-count',section.total+' قسم · '+section.items.toLocaleString('en-US')+' عنصر');
+      head.append(title,meta);outer.append(head);
+      const years=[...section.years].sort(([a],[b])=>Number(b==='unknown'?0:b)-Number(a==='unknown'?0:a));
+      years.forEach(([year,items],yearIndex)=>{
+        const box=make('details','category-smart-year');
+        box.open=yearIndex===0||Boolean(query);
+        const sum=make('summary','category-smart-year-head');
+        const yearText=year==='all'?'جميع القنوات':year==='unknown'?'بدون سنة في اسم القسم':'سنة '+year;
+        sum.append(make('span','',yearText),make('small','',items.length+' قسم'));
+        box.append(sum);
+        const rows=make('div','category-smart-list');
+        for(const item of items)rows.append(categoryRow(item,item.originalPosition,all.length));
+        box.append(rows);outer.append(box);
+      });
+      target.append(outer);
+    });
   }
-  if(matches.length>rows.length)target.append(make('p','muted','المعروض أول 120 فئة. استخدم البحث للوصول إلى بقية الفئات.'));
+  if(matches.length>show.length)
+    target.append(make('p','muted','تم عرض أول 240 قسمًا. ابحث بالاسم للوصول إلى البقية.'));
 }
 
 async function autoSortCurrentCategories(){
