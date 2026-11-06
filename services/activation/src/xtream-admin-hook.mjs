@@ -944,7 +944,7 @@ async function listCatalog(query, publishedOnly = false) {
   if (publishedOnly) where.push('s.enabled=TRUE', 's.publish_catalog=TRUE', 'i.enabled=TRUE', '(c.enabled IS NULL OR c.enabled=TRUE)');
   if (query.serverId) { if (!validUuid(query.serverId)) throw Object.assign(new Error('xtream_server_id_invalid'), { status: 400 }); values.push(query.serverId); where.push(`i.server_id=$${values.length}`); }
   if (query.categoryId) { values.push(String(query.categoryId)); where.push(`i.category_id=$${values.length}`); }
-  if (query.q) { values.push(`%${String(query.q).slice(0,120).replace(/[%_]/g, '\\$&')}%`); where.push(`(i.name ILIKE ${values.length} ESCAPE '\\' OR translate(i.name,'أإآٱىة','اااايه') ILIKE translate(${values.length},'أإآٱىة','اااايه') ESCAPE '\\' OR COALESCE(c.name,'') ILIKE ${values.length} ESCAPE '\\' OR COALESCE(i.metadata->>'genre','') ILIKE ${values.length} ESCAPE '\\')`); }
+  if (query.q) { values.push(`%${String(query.q).slice(0,120).replace(/[%_]/g, '\\$&')}%`); where.push(`(i.name ILIKE $${values.length} ESCAPE '\\' OR translate(i.name,'أإآٱىة','اااايه') ILIKE translate($${values.length},'أإآٱىة','اااايه') ESCAPE '\\' OR COALESCE(c.name,'') ILIKE $${values.length} ESCAPE '\\' OR COALESCE(i.metadata->>'genre','') ILIKE $${values.length} ESCAPE '\\')`); }
   // Smart browsing filters media using its real metadata; neither filter
   // rewrites upstream categories or touches any customer-facing item IDs.
   if (query.year || query.language) {
