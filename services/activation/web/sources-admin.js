@@ -499,7 +499,7 @@ async function runXtreamBatchProbe(){
   if(sourceBatchProbe)return;
   const search=String(el('xtSourceSearch').value||'').trim().toLocaleLowerCase();
   const filter=el('xtSourceFilter').value;
-  const available=state.xtreamServers.filter(row=>row.enabled&&
+  const available=state.xtreamServers.filter(row=>row.enabled&&filter!=='disabled'&&
     (!search||String(row.name+' '+row.baseUrl).toLocaleLowerCase().includes(search))&&
     (filter!=='published'||row.publishCatalog));
   if(!available.length){showMessage('لا توجد مصادر مفعّلة مطابقة للفحص.','error');return;}
