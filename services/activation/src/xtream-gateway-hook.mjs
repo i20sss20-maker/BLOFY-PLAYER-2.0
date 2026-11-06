@@ -26,6 +26,7 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { Readable } from 'node:stream';
+import { createGzip } from 'node:zlib';
 import { pipeline } from 'node:stream/promises';
 import pg from 'pg';
 import { validateBulkAccountRequest } from './xtream-bulk-policy.mjs';
@@ -33,6 +34,7 @@ import { gatewayItemsPageQuery } from './xtream-gateway-query.mjs';
 import { mergeXtreamPlayerRequest } from './xtream-player-post.mjs';
 import { inspectXtreamMediaChunk } from './xtream-media-inspector.mjs';
 import { normalizeXtreamEpg } from './xtream-epg.mjs';
+import { acceptsXtreamGzip } from './xtream-catalog-compression.mjs';
 import { shouldRetryXtreamWithoutRange,firstByteXtreamRange } from './xtream-media-range.mjs';
 import { recordXtreamPlayback,xtreamPlaybackSnapshot } from './xtream-playback-metrics.mjs';
 
@@ -436,27 +438,45 @@ async function writeStreamChunk(res,chunk) {
   });
 }
 
-async function streamGatewayItems(res, mediaType, categoryId, sourceId=null) {
-  const filter = await categoryFilter(mediaType, categoryId, sourceId);
-  // Prepare expensive source mapping BEFORE committing HTTP 200. Fail with a
-  // real response status if the database is unavailable instead of sending
-  // an incomplete JSON list that Xtream clients cannot parse.
+async function streamGatewayItems(req,res,mediaType,categoryId,sourceId=null) {
+  const filter=await categoryFilter(mediaType,categoryId,sourceId);
+  // Prepare source mappings before committing a successful response.
   await ensureCategoryMaps(mediaType,sourceId);
   await ensureItemMaps(mediaType,sourceId);
-  res.writeHead(200, {
-    'content-type': 'application/json; charset=utf-8',
-    'cache-control': 'no-store',
-    'x-content-type-options': 'nosniff'
-  });
-  await writeStreamChunk(res,'[');
-  let first = true;
-  await walkGatewayItems(mediaType, filter, async row => {
-    const prefix=first?'':',';
-    first = false;
-    await writeStreamChunk(res,prefix+JSON.stringify(formatGatewayItem(mediaType,row)));
-  }, sourceId);
-  await writeStreamChunk(res,']');
-  res.end();
+  const gzipEnabled=acceptsXtreamGzip(req.headers['accept-encoding']);
+  const headers={
+    'content-type':'application/json; charset=utf-8',
+    'cache-control':'no-store',
+    'x-content-type-options':'nosniff',
+    'vary':'Accept-Encoding'
+  };
+  if(gzipEnabled)headers['content-encoding']='gzip';
+  // Stream compress only when the player explicitly accepts gzip. This keeps
+  // giant JSON catalogs (including 100k+ movie lists) from filling slow links.
+  const gzip=gzipEnabled?createGzip({level:4}):null;
+  const output=gzip||res;
+  if(gzip){
+    const clientClosed=()=>{if(!res.writableEnded&&!gzip.destroyed)gzip.destroy();};
+    res.once('close',clientClosed);
+    gzip.once('close',()=>res.off('close',clientClosed));
+    gzip.once('error',()=>{if(!res.destroyed)res.destroy();});
+  }
+  res.writeHead(200,headers);
+  if(gzip)gzip.pipe(res);
+  try{
+    await writeStreamChunk(output,'[');
+    let first=true;
+    await walkGatewayItems(mediaType,filter,async row=>{
+      const prefix=first?'':',';
+      first=false;
+      await writeStreamChunk(output,prefix+JSON.stringify(formatGatewayItem(mediaType,row)));
+    },sourceId);
+    await writeStreamChunk(output,']');
+    output.end();
+  }catch(error){
+    if(gzip&&!gzip.destroyed)gzip.destroy();
+    throw error;
+  }
 }
 
 async function gatewayItemById(mediaType, gatewayId, sourceId=null) {
@@ -893,9 +913,9 @@ async function handlePlayerApi(req, res, url) {
   if (action === 'get_live_categories') return json(res, 200, await gatewayCategories('live',account.source_id||null));
   if (action === 'get_vod_categories') return json(res, 200, await gatewayCategories('movie',account.source_id||null));
   if (action === 'get_series_categories') return json(res, 200, await gatewayCategories('series',account.source_id||null));
-  if (action === 'get_live_streams') return streamGatewayItems(res, 'live', url.searchParams.get('category_id'),account.source_id||null);
-  if (action === 'get_vod_streams') return streamGatewayItems(res, 'movie', url.searchParams.get('category_id'),account.source_id||null);
-  if (action === 'get_series') return streamGatewayItems(res, 'series', url.searchParams.get('category_id'),account.source_id||null);
+  if (action === 'get_live_streams') return streamGatewayItems(req,res, 'live', url.searchParams.get('category_id'),account.source_id||null);
+  if (action === 'get_vod_streams') return streamGatewayItems(req,res, 'movie', url.searchParams.get('category_id'),account.source_id||null);
+  if (action === 'get_series') return streamGatewayItems(req,res, 'series', url.searchParams.get('category_id'),account.source_id||null);
   if (action === 'get_vod_info') {
     const value = await vodInfo(url.searchParams.get('vod_id'),account.source_id||null);
     return json(res, value ? 200 : 404, value || { error: 'vod_not_found' });
@@ -1017,6 +1037,8 @@ http.createServer = function withBlofyXtreamGateway(listener) {
       }
       return json(res, 404, { error: 'xtream_gateway_route_not_found' });
     } catch (error) {
+      // A player leaving a large catalog is not a server failure.
+      if(error?.message==='xtream_client_disconnected')return;
       console.error('xtream gateway request failed:', redactXtreamError(error));
       if (res.writableEnded || res.destroyed) return;
       if (res.headersSent) { res.destroy(); return; }
