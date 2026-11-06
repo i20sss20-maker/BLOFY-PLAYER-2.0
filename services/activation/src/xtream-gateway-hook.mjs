@@ -456,7 +456,7 @@ function diagnosticXtreamItemId(id){
 
 async function preflightSource(row,deadline){
   const checks=[];
-  const result={sourceId:row.id,name:String(row.name||'Xtream').slice(0,90),checks};
+  const result={sourceId:row.id,name:String(row.name||'Xtream').slice(0,90),checks,warnings:[]};
   try{
     const timeoutMs=Math.min(6000,Math.max(1000,deadline-Date.now()));
     if(timeoutMs<=1000){checks.push({kind:'account',ok:false,reason:'preflight_time_budget'});return result;}
@@ -500,9 +500,16 @@ async function preflightSource(row,deadline){
     if(!rows.length)continue;
     found++;
     if(kind==='series'){
-      // One real episode in each distinct series. Two episodes from the
-      // same oldest series previously gave a misleading source-wide verdict.
+      // Two distinct playable episode *samples* are required for the same
+      // source. A catalog series with no episodes is reported separately and
+      // replaced with another series; it never counts as a passing video.
+      const needed=rows.length;
+      let sampled=0,loadedSubstitutes=false;
+      const inspected=new Set();
       for(const seriesRow of rows){
+        if(sampled>=needed)break;
+        if(inspected.has(String(seriesRow.source_id)))continue;
+        inspected.add(String(seriesRow.source_id));
         if(Date.now()>deadline-1000){
           checks.push({kind:'preflight',ok:false,reason:'preflight_time_budget'});
           break;
@@ -522,11 +529,27 @@ async function preflightSource(row,deadline){
           continue;
         }
         if(!samples.length){
-          checks.push({kind,ok:false,reason:'series_has_no_episodes',
-            sampleBand:seriesRow.sampleBand,
+          result.warnings.push({reason:'series_has_no_episodes',
             seriesSourceId:diagnosticXtreamItemId(seriesRow.source_id)});
+          if(!loadedSubstitutes){
+            loadedSubstitutes=true;
+            try{
+              const more=(await pool.query(`SELECT source_id,container_extension
+                FROM blofy_xtream_items
+                WHERE server_id=$1 AND media_type='series' AND enabled=TRUE
+                ORDER BY source_id DESC LIMIT 8`,[row.id])).rows;
+              for(const candidate of more){
+                if(!rows.some(x=>x.source_id===candidate.source_id))
+                  rows.push({...candidate,sampleBand:'replacement'});
+              }
+            }catch{
+              // If the catalog query fails, the mandatory sample below fails
+              // rather than treating an unverified source as healthy.
+            }
+          }
           continue;
         }
+        sampled++;
         for(const sample of samples){
           const probe=await probeIssuanceWithTransientRetry({
             ...row,series_source_id:seriesRow.source_id,series_payload:payload
@@ -535,6 +558,9 @@ async function preflightSource(row,deadline){
             ...(probe.ok?{}:{seriesSourceId:diagnosticXtreamItemId(seriesRow.source_id),
               episodeSourceId:diagnosticXtreamItemId(sample.id)})});
         }
+      }
+      if(sampled<needed){
+        checks.push({kind:'series',ok:false,reason:'series_sample_unavailable'});
       }
     }else{
       const results=await Promise.all(rows.map(async sample=>{
