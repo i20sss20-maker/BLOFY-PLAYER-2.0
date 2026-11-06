@@ -56,8 +56,11 @@ export function normalizeXtreamDetails(kind,payload){
 
 export function mergedXtreamMetadata(raw){
   if(!raw||typeof raw!=='object'||Array.isArray(raw))return{};
-  const details=raw.sourceDetails;
-  if(!details||typeof details!=='object'||Array.isArray(details))return raw;
-  // Explicit source-info fields are preferable to incomplete list entries.
-  return {...raw,...details};
+  const source=raw.sourceDetails&&typeof raw.sourceDetails==='object'&&!Array.isArray(raw.sourceDetails)
+    ?raw.sourceDetails:{};
+  const tmdb=raw.tmdbDetails&&typeof raw.tmdbDetails==='object'&&!Array.isArray(raw.tmdbDetails)
+    ?raw.tmdbDetails:{};
+  // TMDB details are only stored after a verified exact-ID lookup. Source
+  // fields and imported fields still supply information omitted by TMDB.
+  return {...raw,...source,...tmdb};
 }
