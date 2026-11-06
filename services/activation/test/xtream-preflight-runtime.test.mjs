@@ -53,6 +53,7 @@ async function buildPreflight({movieSucceeds=true,seriesSucceeds=true,twoBands=f
       return {kind,ok:true};
     },
     safeGatewayExtension:(value,fallback)=>value||fallback,
+    diagnosticXtreamItemId:id=>/^[A-Za-z0-9._-]{1,128}$/.test(String(id))?String(id):null,
     issuanceErrorReason:()=> 'source_unreachable'
   };
   const fn=new Function(...Object.keys(mocks),body+';return preflightSource;')(...Object.values(mocks));
@@ -76,6 +77,13 @@ test('source video 404 is returned as a failed media test, never an HTTP 503 or 
   assert.equal(report.checks[0].ok,true);
   assert.deepEqual(report.checks.filter(x=>x.ok===false).map(x=>x.kind),
     ['movie','series']);
+  const movie=report.checks.find(x=>x.kind==='movie');
+  assert.equal(movie.itemSourceId,'202');
+  assert.equal(movie.seriesSourceId,undefined);
+  const episode=report.checks.find(x=>x.kind==='series');
+  assert.equal(episode.seriesSourceId,'303');
+  assert.equal(episode.episodeSourceId,'404');
+  assert.equal(report.checks.find(x=>x.kind==='live').itemSourceId,undefined);
 });
 
 test('404 triage samples both ends of each catalog type and two distinct series',async()=>{
@@ -96,7 +104,10 @@ test('bad video in both catalog ID bands still blocks issuance',async()=>{
   assert.equal(summary.ready,false);
   assert.equal(summary.failed,4);
   assert.equal(summary.mediaSampleCount,6);
+  assert.deepEqual(report.checks.filter(x=>x.kind==='movie').map(x=>x.itemSourceId),['202','902']);
+  assert.deepEqual(report.checks.filter(x=>x.kind==='series').map(x=>x.seriesSourceId),['303','903']);
 });
+
 
 test('a first temporary transport error may recover, but HTTP 404 may never be retried',async()=>{
   const source=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
