@@ -68,3 +68,15 @@ test('production source probing uses actual get_series_info and first episode by
   assert.match(ui,/\['اختبار تشغيل حلقة', 'probe-episode'/);
   assert.match(ui,/code\.startsWith\('xtream_http_'\)/);
 });
+
+test('movie, channel and episode probes never return raw credential-bearing network errors',async()=>{
+  const admin=await read('src/xtream-admin-hook.mjs');
+  const start=admin.indexOf('async function probeXtreamEpisodeMedia(');
+  const end=admin.indexOf('async function fetchAccount(',start);
+  const probe=admin.slice(start,end);
+  assert.ok(start>0&&end>start);
+  assert.doesNotMatch(probe,/errorCode=controller\.signal\.aborted\?'timeout':redactXtreamError\(error\)/);
+  assert.match(probe,/xtream_private_host_blocked/);
+  assert.match(probe,/upstream_unreachable/);
+  assert.doesNotMatch(probe,/console\.warn\([^\n]*target\.href/);
+});
