@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#09090e">
   <link rel="icon" type="image/png" href="/blofy-logo.png"><link rel="apple-touch-icon" href="/blofy-logo.png"><meta name="robots" content="noindex,nofollow"><title>BLOFY STREAM | إدارة المصادر والاشتراكات</title>
-  <link rel="stylesheet" href="/sources-admin.css?v=20261106-tmdb-gated-v15">
+  <link rel="stylesheet" href="/sources-admin.css?v=20261107-studio-v1">
   <link rel="stylesheet" href="/site-polish.css?v=20261025-lux-final">
 </head>
 <body>
@@ -39,6 +39,7 @@
       <nav class="tabs" aria-label="أقسام المصادر">
         <button class="tab active" type="button" data-tab="xtream"><span>01</span>مصادر Xtream والاشتراكات</button>
         <button class="tab" type="button" data-tab="catalog"><span>02</span>تنظيم الفئات والمكتبة</button>
+        <button class="tab" type="button" data-tab="studio"><span>03</span>هوية BLOFY وتخصيص القنوات</button>
       </nav>
 
       <div id="message" class="message" hidden></div>
@@ -217,6 +218,52 @@
         </section>
       </section>
 
+
+      <section id="tab-studio" class="tab-page" hidden>
+        <section class="section-intro">
+          <div><span class="eyebrow">BLOFY STUDIO</span><h2>هويتك، قنواتك، ترتيبك</h2>
+            <p>غيّر اسم سيرفرك وارفع لوقو حقيقي، ثم سمِّ القنوات واختر صورها ورقمها وأبرز المفضّلة. التعديلات مستقلة عن المصادر وتبقى بعد المزامنة.</p>
+          </div>
+          <div class="intro-step"><strong>03</strong><span>إدارة ذكية للمكتبة</span></div>
+        </section>
+        <section class="panel studio-identity" aria-labelledby="studioIdentityHeading">
+          <div class="panel-head">
+            <div><span class="panel-kicker">MY BLOFY BRAND</span>
+              <h2 id="studioIdentityHeading">هوية السيرفر وشعاره</h2>
+              <p>يظهر الاسم والشعار في بيانات سيرفر Xtream، وقد تختلف طريقة عرضهما حسب المشغل. لا يغيّر هذا شعار تطبيق BLOFY PLAYER المثبّت.</p>
+            </div>
+          </div>
+          <div class="studio-identity-grid">
+            <div class="studio-logo-preview" id="studioLogoPreview"><span id="studioLogoFallback">B</span><img id="studioLogoImage" alt="شعار سيرفر BLOFY" hidden></div>
+            <form id="studioIdentityForm" class="studio-identity-form">
+              <label><span>اسم السيرفر الظاهر للمشترك</span><input id="studioDisplayName" required minlength="1" maxlength="72" placeholder="BLOFY STREAM"></label>
+              <button type="submit" class="button primary" id="studioSaveName">حفظ اسم السيرفر</button>
+              <label><span>ارفع شعار PNG أو JPG أو WebP — بحد 1 ميجابايت</span>
+                <input type="file" id="studioLogoFile" accept="image/png,image/jpeg,image/webp"></label>
+              <div class="inline-actions">
+                <button type="button" class="button primary" id="studioUploadLogo">رفع الشعار</button>
+                <button type="button" class="button ghost" id="studioRemoveLogo">إزالة الشعار</button>
+              </div>
+              <p class="muted" id="studioBrandStatus" role="status" aria-live="polite">جاري تحميل الهوية…</p>
+            </form>
+          </div>
+        </section>
+        <section class="panel studio-channel-panel">
+          <div class="panel-head">
+            <div><span class="panel-kicker">CHANNEL PERSONALIZATION</span><h2>رتّب القنوات على مزاجك</h2>
+              <p>من المكتبة اختر «القنوات»، ثم استخدم «🎨 تخصيص» تحت كل قناة: اسم مخصص، رابط شعار HTTPS، تثبيت كمفضلة، رقم قناة تختاره، أو إخفاء القناة عن المشتركين.</p>
+            </div>
+            <button type="button" class="button primary" id="studioOpenChannels">فتح محرر القنوات ←</button>
+          </div>
+          <div class="studio-feature-cards">
+            <div><strong>📺 تسمية وشعارات</strong><small>غيّر اسم وصورة أي قناة من دون تعديل المصدر الأصلي.</small></div>
+            <div><strong>⭐ قنوات مميّزة</strong><small>علّم قنواتك المفضّلة وحدد رقمها؛ ترتيب المشغّل النهائي قد يختلف.</small></div>
+            <div><strong>👁️ إظهار وإخفاء</strong><small>تحكم فيما يراه المشترك مباشرة من المكتبة.</small></div>
+            <div><strong>🗂️ تنظيم الأقسام</strong><small>ترتيب الأقسام واللغة والسنة موجود في تبويب المكتبة.</small></div>
+          </div>
+        </section>
+      </section>
+
       <section id="tab-catalog" class="tab-page" hidden>
         <section class="section-intro">
           <div><span class="eyebrow">BLOFY SMART LIBRARY</span><h2>المكتبة الذكية</h2><p>تصفح المحتوى حسب اللغة ثم السنة: عربي ← 2026 ← 2025… ورتّب الأقسام للمشتركين بسهولة، دون حذف أو تكرار أي ملف.</p></div>
@@ -309,7 +356,7 @@
       </footer>
     </main>
   </div>
-  <script src="/sources-admin.js?v=20261106-tmdb-gated-v15" defer></script>
+  <script src="/sources-admin.js?v=20261107-studio-v1" defer></script>
   <script src="/xtream-gateway-admin.js?v=20261106-account-visibility-v2" defer></script>
 </body>
 </html>

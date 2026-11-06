@@ -83,7 +83,8 @@ export function formatGatewayItem(mediaType, row) {
   };
   if (mediaType === 'live') {
     return {
-      num: meta.num ?? null,
+      num: row.channel_number ?? meta.num ?? null,
+      is_favorite: row.featured ? 1 : 0,
       ...base,
       stream_type: 'live',
       stream_id: Number(row.gateway_id),

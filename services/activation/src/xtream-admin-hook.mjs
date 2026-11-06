@@ -30,6 +30,7 @@ import { auditXtreamCatalogSample } from './xtream-library-insights.mjs';
 import { normalizeXtreamDetails,mergedXtreamMetadata } from './xtream-item-details.mjs';
 import { tmdbConfigured,validatedTmdbId,fetchTmdbDetails } from './xtream-tmdb.mjs';
 import { sortXtreamCategories } from './xtream-category-sort.mjs';
+import {normalizeStudioName,normalizeStudioItemEdit,readStudioLogoRequest} from './xtream-studio-policy.mjs';
 import { nativeXtreamCsrfToken } from './xtream-native-csrf.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
@@ -234,6 +235,20 @@ async function ensureReady() {
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         PRIMARY KEY(server_id,media_type,source_id)
       )`);
+      // Publisher controls survive every Xtream re-import.
+      await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS custom_name TEXT');
+      await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS custom_icon_url TEXT');
+      await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS featured BOOLEAN NOT NULL DEFAULT FALSE');
+      await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS channel_number INTEGER');
+      await client.query(`CREATE TABLE IF NOT EXISTS blofy_xtream_studio_branding (
+        id SMALLINT PRIMARY KEY CHECK(id=1),
+        display_name TEXT NOT NULL DEFAULT 'BLOFY STREAM',
+        logo_mime TEXT,
+        logo_bytes BYTEA,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`);
+      await client.query(`INSERT INTO blofy_xtream_studio_branding(id,display_name)
+        VALUES(1,'BLOFY STREAM') ON CONFLICT(id) DO NOTHING`);
       await client.query('ALTER TABLE blofy_xtream_categories ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 100000');
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_servers_publish ON blofy_xtream_servers(enabled,publish_catalog,priority)');
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_categories_filter ON blofy_xtream_categories(server_id,media_type,enabled,name)');
@@ -1021,7 +1036,7 @@ async function listCatalog(query, publishedOnly = false) {
   if (publishedOnly) where.push('s.enabled=TRUE', 's.publish_catalog=TRUE', 'i.enabled=TRUE', '(c.enabled IS NULL OR c.enabled=TRUE)');
   if (query.serverId) { if (!validUuid(query.serverId)) throw Object.assign(new Error('xtream_server_id_invalid'), { status: 400 }); values.push(query.serverId); where.push(`i.server_id=$${values.length}`); }
   if (query.categoryId) { values.push(String(query.categoryId)); where.push(`i.category_id=$${values.length}`); }
-  if (query.q) { values.push(`%${String(query.q).slice(0,120).replace(/[%_]/g, '\\$&')}%`); where.push(`(i.name ILIKE $${values.length} ESCAPE '\\' OR translate(i.name,'أإآٱىة','اااايه') ILIKE translate($${values.length},'أإآٱىة','اااايه') ESCAPE '\\' OR COALESCE(c.name,'') ILIKE $${values.length} ESCAPE '\\' OR COALESCE(i.metadata->>'genre','') ILIKE $${values.length} ESCAPE '\\')`); }
+  if (query.q) { values.push(`%${String(query.q).slice(0,120).replace(/[%_]/g, '\\$&')}%`); where.push(`(COALESCE(NULLIF(i.custom_name,''),i.name) ILIKE $${values.length} ESCAPE '\\' OR translate(COALESCE(NULLIF(i.custom_name,''),i.name),'أإآٱىة','اااايه') ILIKE translate($${values.length},'أإآٱىة','اااايه') ESCAPE '\\' OR COALESCE(c.name,'') ILIKE $${values.length} ESCAPE '\\' OR COALESCE(i.metadata->>'genre','') ILIKE $${values.length} ESCAPE '\\')`); }
   // Smart browsing filters media using its real metadata; neither filter
   // rewrites upstream categories or touches any customer-facing item IDs.
   if (query.year || query.language) {
@@ -1058,13 +1073,19 @@ async function listCatalog(query, publishedOnly = false) {
     where.push(`c.name ~* $${values.length}`);
   }
   values.push(limit, offset);
-  const rows = (await pool.query(`SELECT i.server_id,i.media_type,i.source_id,i.category_id,i.name,i.icon_url,i.container_extension,i.enabled,i.metadata,i.updated_at,
+  const rows = (await pool.query(`SELECT i.server_id,i.media_type,i.source_id,i.category_id,
+      COALESCE(NULLIF(i.custom_name,''),i.name) AS name,COALESCE(NULLIF(i.custom_icon_url,''),i.icon_url) AS icon_url,
+      i.name AS original_name,i.icon_url AS original_icon_url,i.custom_name,i.custom_icon_url,i.featured,i.channel_number,
+      i.container_extension,i.enabled,i.metadata,i.updated_at,
       s.name AS server_name,s.priority,c.name AS category_name,c.enabled AS category_enabled
     FROM blofy_xtream_items i
     JOIN blofy_xtream_servers s ON s.id=i.server_id
     LEFT JOIN blofy_xtream_categories c ON c.server_id=i.server_id AND c.media_type=i.media_type AND c.source_category_id=i.category_id
     WHERE ${where.join(' AND ')}
-    ORDER BY s.priority ASC,i.name ASC LIMIT $${values.length-1} OFFSET $${values.length}`, values)).rows;
+    ORDER BY (CASE WHEN i.media_type='live' AND i.featured THEN 0 ELSE 1 END),
+      CASE WHEN i.media_type='live' THEN COALESCE(i.channel_number,999999) ELSE 999999 END,
+      s.priority ASC,COALESCE(NULLIF(i.custom_name,''),i.name) ASC,i.source_id ASC
+    LIMIT $${values.length-1} OFFSET $${values.length}`, values)).rows;
   return rows.map(row => ({
     serverId: row.server_id,
     serverName: row.server_name,
@@ -1074,6 +1095,12 @@ async function listCatalog(query, publishedOnly = false) {
     categoryName: row.category_name,
     name: row.name,
     iconUrl: row.icon_url,
+    originalName:row.original_name,
+    originalIconUrl:row.original_icon_url,
+    customName:row.custom_name,
+    customIconUrl:row.custom_icon_url,
+    featured:Boolean(row.featured),
+    channelNumber:row.channel_number==null?null:Number(row.channel_number),
     containerExtension: row.container_extension,
     enabled: Boolean(row.enabled),
     categoryEnabled: row.category_enabled == null ? true : Boolean(row.category_enabled),
@@ -1287,6 +1314,56 @@ async function patchItem(serverId, mediaType, sourceId, enabled) {
   return result.rows[0];
 }
 
+async function updateStudioItem(serverId,mediaType,sourceId,body,reset=false){
+  if(!validUuid(serverId)||!validType(mediaType)||!sourceId||sourceId.length>128)
+    throw Object.assign(new Error('studio_item_invalid'),{status:400});
+  const changes=reset?
+    {customName:null,customIconUrl:null,featured:false,channelNumber:null}:
+    normalizeStudioItemEdit(body,mediaType);
+  const cols={customName:'custom_name',customIconUrl:'custom_icon_url',
+    featured:'featured',channelNumber:'channel_number'};
+  const assignments=[],values=[serverId,mediaType,sourceId];
+  for(const [key,val] of Object.entries(changes)){
+    values.push(val);
+    assignments.push(cols[key]+'=$'+values.length);
+  }
+  const result=await pool.query(`UPDATE blofy_xtream_items SET ${assignments.join(',')},updated_at=NOW()
+    WHERE server_id=$1 AND media_type=$2 AND source_id=$3 RETURNING source_id`,values);
+  if(!result.rowCount)throw Object.assign(new Error('xtream_item_not_found'),{status:404});
+  return {updated:true};
+}
+
+export async function getXtreamStudioBranding(){
+  await ensureReady();
+  const row=(await pool.query('SELECT display_name,logo_mime,updated_at FROM blofy_xtream_studio_branding WHERE id=1')).rows[0];
+  return {name:row?.display_name||'BLOFY STREAM',
+    logoUrl:row?.logo_mime?'/xtream/studio-logo?v='+new Date(row.updated_at).getTime():null,
+    updatedAt:row?.updated_at?new Date(row.updated_at).getTime():null};
+}
+
+async function setStudioName(value){
+  const name=normalizeStudioName(value);
+  await pool.query('UPDATE blofy_xtream_studio_branding SET display_name=$1,updated_at=NOW() WHERE id=1',[name]);
+  return getXtreamStudioBranding();
+}
+async function storeStudioLogo(req){
+  const {image,mime}=await readStudioLogoRequest(req);
+  await pool.query('UPDATE blofy_xtream_studio_branding SET logo_mime=$1,logo_bytes=$2,updated_at=NOW() WHERE id=1',[mime,image]);
+  return getXtreamStudioBranding();
+}
+async function removeStudioLogo(){
+  await pool.query('UPDATE blofy_xtream_studio_branding SET logo_mime=NULL,logo_bytes=NULL,updated_at=NOW() WHERE id=1');
+  return getXtreamStudioBranding();
+}
+async function serveStudioLogo(res){
+  await ensureReady();
+  const row=(await pool.query('SELECT logo_mime,logo_bytes FROM blofy_xtream_studio_branding WHERE id=1')).rows[0];
+  if(!row?.logo_bytes)return json(res,404,{error:'studio_logo_not_found'});
+  res.writeHead(200,{'content-type':row.logo_mime,'content-length':row.logo_bytes.length,
+    'x-content-type-options':'nosniff','cache-control':'public, max-age=300'});
+  return res.end(row.logo_bytes);
+}
+
 async function bulkToggle(body) {
   const serverId = String(body.serverId || '');
   const mediaType = validType(body.mediaType);
@@ -1408,6 +1485,7 @@ http.createServer = function withBlofyXtream(listener) {
     try { url = new URL(req.url || '/', 'http://localhost'); }
     catch { return listener(req, res); }
     try {
+      if (req.method === 'GET' && url.pathname === '/xtream/studio-logo') return serveStudioLogo(res);
       if (req.method === 'GET' && url.pathname === '/sources/xtream/summary') return publicJson(res, await publicSummary());
       if (req.method === 'GET' && url.pathname === '/sources/xtream/catalog') {
         return publicJson(res, { items: await listCatalog(Object.fromEntries(url.searchParams), true) });
@@ -1443,6 +1521,17 @@ http.createServer = function withBlofyXtream(listener) {
         }
       }
 
+      if(url.pathname==='/api/v1/admin/xtream/studio'){
+        if(req.method==='GET')return json(res,200,await getXtreamStudioBranding());
+        if(req.method==='PATCH'){
+          const body=await readJson(req);
+          return json(res,200,await setStudioName(body.name));
+        }
+      }
+      if(url.pathname==='/api/v1/admin/xtream/studio/logo'){
+        if(req.method==='PUT')return json(res,200,await storeStudioLogo(req));
+        if(req.method==='DELETE')return json(res,200,await removeStudioLogo());
+      }
       if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream/servers') {
         const items = (await serverRows()).map(adminServer);
         const totals = items.reduce((acc, item) => {
@@ -1553,6 +1642,12 @@ http.createServer = function withBlofyXtream(listener) {
           enrichMatch[2].toLowerCase(),decodeURIComponent(enrichMatch[3])));
       }
 
+      const studioItemMatch=url.pathname.match(/^\/api\/v1\/admin\/xtream\/items\/([0-9a-f-]+)\/(live|movie|series)\/([^/]+)\/studio$/i);
+      if(studioItemMatch&&(req.method==='PATCH'||req.method==='DELETE')){
+        return json(res,200,await updateStudioItem(studioItemMatch[1],
+          studioItemMatch[2].toLowerCase(),decodeURIComponent(studioItemMatch[3]),
+          req.method==='PATCH'?await readJson(req):null,req.method==='DELETE'));
+      }
       const itemMatch = url.pathname.match(/^\/api\/v1\/admin\/xtream\/items\/([0-9a-f-]+)\/(live|movie|series)\/([^/]+)$/i);
       if (itemMatch && req.method === 'PATCH') {
         const body = await readJson(req);

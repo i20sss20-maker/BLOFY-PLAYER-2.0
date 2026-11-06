@@ -13,7 +13,7 @@ const state = {
   activeTab: 'xtream',
   pollTimer: null
 };
-const TAB_NAMES = new Set(['xtream', 'catalog']);
+const TAB_NAMES = new Set(['xtream', 'catalog', 'studio']);
 const tabFromHash = () => {
   const name = String(location.hash || '').replace(/^#/, '').trim().toLowerCase();
   return TAB_NAMES.has(name) ? name : null;
@@ -137,6 +137,8 @@ function serverCard(item) {
   const header = make('div', 'server-head');
   const title = make('div');
   title.append(make('strong', '', item.name));
+  if(item.featured&&item.type==='live')title.append(make('span','studio-featured-pill','★ مميزة'));
+  if(item.channelNumber&&item.type==='live')title.append(make('small','','رقم القناة: '+item.channelNumber));
   title.append(make('code', 'server-url', item.baseUrl));
   title.append(make('small','source-id','ID: '+String(item.id||'').slice(0,8)));
   const status = make('span', `server-status ${xtStatusClass(item.syncing ? 'syncing' : item.status)}`, item.syncing ? 'Syncing' : (item.status==='online'?'API ONLINE':item.status));
@@ -1178,7 +1180,69 @@ function catalogCard(item) {
       actions.append(button);
     }
   }
-  card.append(media,actions,details);
+  const studioEditor=make('details','catalog-studio-editor');
+  studioEditor.append(make('summary','','🎨 تخصيص الاسم والشعار'+(item.type==='live'?' والرقم':'') ));
+  const form=make('form','catalog-studio-form');
+  const row=make('div','catalog-studio-fields');
+  const label=(text,control)=>{
+    const box=make('label','catalog-studio-field');
+    box.append(make('span','',text),control);return box;
+  };
+  const nameInput=make('input','');
+  nameInput.type='text';nameInput.maxLength=160;
+  nameInput.placeholder=item.originalName||item.name;
+  nameInput.value=item.customName||'';
+  row.append(label('الاسم المخصص (اتركه فارغًا للعودة للأصلي)',nameInput));
+  const logoInput=make('input','');
+  logoInput.type='url';logoInput.maxLength=2048;
+  logoInput.placeholder='https://example.com/channel-logo.png';
+  logoInput.value=item.customIconUrl||'';
+  row.append(label('رابط شعار HTTPS',logoInput));
+  let pinInput=null,numberInput=null;
+  if(item.type==='live'){
+    pinInput=make('input','');
+    pinInput.type='checkbox';pinInput.checked=Boolean(item.featured);
+    row.append(label('⭐ تثبيت كمميزة',pinInput));
+    numberInput=make('input','');
+    numberInput.type='number';numberInput.min='1';numberInput.max='99999';
+    numberInput.placeholder='مثال 101';numberInput.value=item.channelNumber||'';
+    row.append(label('رقم القناة في Xtream',numberInput));
+  }
+  form.append(row);
+  const controls=make('div','inline-actions');
+  const save=make('button','button primary','حفظ التخصيص');save.type='submit';
+  const reset=make('button','button ghost','إرجاع الأصل');reset.type='button';
+  controls.append(save,reset);
+  form.append(controls);
+  const url='/api/v1/admin/xtream/items/'+encodeURIComponent(item.serverId)+
+    '/'+encodeURIComponent(item.type)+'/'+encodeURIComponent(item.id)+'/studio';
+  form.addEventListener('submit',async event=>{
+    event.preventDefault();save.disabled=true;reset.disabled=true;
+    try{
+      const data={displayName:nameInput.value.trim()||null,
+        iconUrl:logoInput.value.trim()||null};
+      if(item.type==='live'){
+        data.featured=pinInput.checked;
+        data.channelNumber=numberInput.value?Number(numberInput.value):null;
+      }
+      await api(url,{method:'PATCH',body:JSON.stringify(data)});
+      showMessage('✓ تم حفظ التخصيص للمشتركين: '+(data.displayName||item.originalName||item.name));
+      await loadCatalog();
+    }catch(error){
+      showMessage('تعذر حفظ القناة: '+error.message,'error');
+      save.disabled=false;reset.disabled=false;
+    }
+  });
+  reset.addEventListener('click',async()=>{
+    reset.disabled=true;save.disabled=true;
+    try{
+      await api(url,{method:'DELETE'});
+      showMessage('✓ رجعنا اسم وشعار القناة للقيم الأصلية.');
+      await loadCatalog();
+    }catch(error){showMessage('تعذر إرجاع الأصل: '+error.message,'error');reset.disabled=false;save.disabled=false;}
+  });
+  studioEditor.append(form);
+  card.append(media,actions,details,studioEditor);
   return card;
 }
 
@@ -1503,6 +1567,66 @@ async function loadBlofyPlaybackHealth(){
   }
 }
 
+function renderStudioBranding(data){
+  const name=String(data?.name||'BLOFY STREAM');
+  el('studioDisplayName').value=name;
+  const image=el('studioLogoImage');
+  image.hidden=!data.logoUrl;
+  if(data.logoUrl)image.src=data.logoUrl;
+  else image.removeAttribute('src');
+  el('studioLogoFallback').hidden=Boolean(data.logoUrl);
+  el('studioBrandStatus').textContent=data.logoUrl?
+    '✓ الشعار محفوظ في قاعدة البيانات ويظهر ضمن بيانات السيرفر.':
+    'ارفع شعارك لتظهر هوية BLOFY المخصصة في السيرفر.';
+}
+async function loadStudioBranding(){
+  try{
+    const data=await api('/api/v1/admin/xtream/studio');
+    renderStudioBranding(data);
+  }catch(error){
+    el('studioBrandStatus').textContent='تعذر تحميل الهوية: '+error.message;
+  }
+}
+async function saveStudioName(event){
+  event.preventDefault();
+  const button=el('studioSaveName');button.disabled=true;
+  try{
+    const result=await api('/api/v1/admin/xtream/studio',{
+      method:'PATCH',body:JSON.stringify({name:el('studioDisplayName').value.trim()})
+    });
+    renderStudioBranding(result);
+    showMessage('✓ تم حفظ اسم السيرفر: '+result.name);
+  }catch(error){showMessage('تعذر حفظ الاسم: '+error.message,'error');}
+  finally{button.disabled=false;}
+}
+async function changeStudioLogo(remove=false){
+  const button=el(remove?'studioRemoveLogo':'studioUploadLogo');
+  button.disabled=true;
+  try{
+    let file=null;
+    if(!remove){
+      file=el('studioLogoFile').files[0];
+      if(!file)throw new Error('اختر ملف شعار أولًا.');
+      if(!['image/png','image/jpeg','image/webp'].includes(file.type))
+        throw new Error('الشعار يجب أن يكون PNG أو JPG أو WebP.');
+      if(!file.size||file.size>1024*1024)throw new Error('حجم الشعار أكبر من 1 ميجابايت.');
+    }
+    const response=await fetch('/api/v1/admin/xtream/studio/logo',{
+      method:remove?'DELETE':'PUT',
+      credentials:'same-origin',
+      cache:'no-store',
+      ...(remove?{}:{headers:{'content-type':file.type},body:file})
+    });
+    if(response.status===401){location.href='/admin';return;}
+    const result=await response.json().catch(()=>({}));
+    if(!response.ok)throw new Error(result.error||'HTTP '+response.status);
+    renderStudioBranding(result);
+    el('studioLogoFile').value='';
+    showMessage(remove?'✓ تمت إزالة الشعار.':'✓ تم رفع شعار السيرفر وحفظه.');
+  }catch(error){showMessage('تعذر تغيير الشعار: '+error.message,'error');}
+  finally{button.disabled=false;}
+}
+
 async function switchTab(name) {
   if (!TAB_NAMES.has(name)) return;
   state.activeTab = name;
@@ -1514,6 +1638,7 @@ async function switchTab(name) {
     page.classList.toggle('active', active);
   });
   if (name === 'xtream') { await loadXtream(); await loadBlofyPlaybackHealth(); }
+  if (name === 'studio') await loadStudioBranding();
   if (name === 'catalog') {
     await loadXtream(true);
     await loadCategories();
@@ -1523,11 +1648,20 @@ async function switchTab(name) {
 
 async function refreshCurrent() {
   if (state.activeTab === 'xtream') { await loadXtream(); await loadBlofyPlaybackHealth(); }
+  else if(state.activeTab==='studio')await loadStudioBranding();
   else { await loadXtream(true); await loadCategories(); await loadCatalog(); }
 }
 
 document.querySelectorAll('.tab').forEach(button => button.addEventListener('click', () => switchTab(button.dataset.tab)));
 el('refreshBtn').addEventListener('click', refreshCurrent);
+el('studioIdentityForm').addEventListener('submit',saveStudioName);
+el('studioUploadLogo').addEventListener('click',()=>changeStudioLogo());
+el('studioRemoveLogo').addEventListener('click',()=>changeStudioLogo(true));
+el('studioOpenChannels').addEventListener('click',()=>{
+  el('catalogType').value='live';
+  updateCatalogVideoFilters();
+  switchTab('catalog');
+});
 el('blofyPlaybackRefresh').addEventListener('click', loadBlofyPlaybackHealth);
 el('blofyProbeRun').addEventListener('click',runBlofyItemProbe);
 el('blofyPlaybackIssues').addEventListener('click',event=>{

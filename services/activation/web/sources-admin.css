@@ -317,3 +317,36 @@
 .xtream-manager-panel .source-state-pill.media-health-pill{font-weight:600}
 .xtream-manager-panel .source-state-pill.media-health-pill.off{color:#ffb6c5;border-color:#835061;background:#301c26}
 .xtream-manager-panel .account-health-warning{display:inline-block;font-size:11px;color:#ffd39b;background:#292116;border:1px solid #665332;border-radius:9px;padding:4px 9px}
+
+
+/* BLOFY Studio — server identity and safely persisted client-facing curation */
+.studio-identity-grid{display:grid;grid-template-columns:180px minmax(0,1fr);gap:25px;align-items:start}
+.studio-logo-preview{width:180px;height:180px;display:grid;place-items:center;overflow:hidden;border-radius:23px;background:linear-gradient(145deg,#4b287e,#211730);border:1px solid #7655ab;box-shadow:0 12px 35px #09070f85}
+.studio-logo-preview span{font:800 80px "Segoe UI",sans-serif;color:#e8dcff}
+.studio-logo-preview img{width:100%;height:100%;object-fit:contain;padding:10px}
+.studio-logo-preview img[hidden],.studio-logo-preview span[hidden]{display:none}
+.studio-identity-form{display:grid;gap:12px;max-width:660px}
+.studio-identity-form label,.catalog-studio-field{display:flex;flex-direction:column;gap:6px;min-width:0}
+.studio-identity-form label>span,.catalog-studio-field>span{font-size:12px;color:#ccbbeb}
+.studio-identity-form input:not([type=file]),.catalog-studio-field input:not([type=checkbox]){background:#100d18;border:1px solid #58426b;border-radius:10px;color:#f1eaff;padding:11px;min-width:0;width:100%;font:inherit}
+.studio-identity-form input[type=file]{background:#100d18;border:1px dashed #5b4375;border-radius:10px;color:#d8c9f4;padding:11px;width:100%;max-width:100%}
+.studio-identity-form .button{justify-self:start}
+.studio-identity-form p{font-size:12px;margin:0}
+.studio-feature-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.studio-feature-cards>div{padding:17px;border-radius:12px;border:1px solid #453652;background:#18121f;display:grid;gap:5px}
+.studio-feature-cards strong{font-size:14px;color:#eaddff}
+.studio-feature-cards small{color:#ac9fbe;font-size:12px;line-height:1.6}
+.studio-featured-pill{display:inline-block;font-size:10px;color:#f3d28c;background:#2b2316;padding:2px 8px;border-radius:100px;border:1px solid #716040}
+.catalog-item:has(.catalog-studio-editor[open]){flex-wrap:wrap}
+.catalog-studio-editor{width:100%;border-top:1px solid #40314c;margin-top:8px;padding-top:10px}
+.catalog-studio-editor>summary{cursor:pointer;color:#d5c5f5;font-size:12px;list-style:revert}
+.catalog-studio-form{display:grid;gap:12px;padding:14px 0 4px}
+.catalog-studio-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.catalog-studio-field input[type=checkbox]{accent-color:#a584f7;width:20px;height:20px}
+.catalog-studio-form>.inline-actions .button{font-size:12px;min-height:40px}
+@media(max-width:680px){
+  .studio-identity-grid{grid-template-columns:1fr}
+  .studio-logo-preview{width:136px;height:136px}
+  .studio-feature-cards,.catalog-studio-fields{grid-template-columns:1fr}
+  .studio-identity-form .button{justify-self:stretch}
+}

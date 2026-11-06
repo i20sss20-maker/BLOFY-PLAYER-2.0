@@ -20,7 +20,10 @@ export function gatewayItemsPageQuery(mediaType,lastId,{sourceId=null,filter=nul
     where.push('i.category_id=$'+values.length);
   }
   values.push(2000);
-  const text=`SELECT m.gateway_id,i.server_id,i.source_id,i.category_id,i.name,i.icon_url,
+  const text=`SELECT m.gateway_id,i.server_id,i.source_id,i.category_id,
+      COALESCE(NULLIF(i.custom_name,''),i.name) AS name,
+      COALESCE(NULLIF(i.custom_icon_url,''),i.icon_url) AS icon_url,
+      i.featured,i.channel_number,
       i.container_extension,i.metadata,cm.gateway_id AS category_gateway_id,s.priority
     FROM blofy_xtream_gateway_item_map m
     JOIN blofy_xtream_items i

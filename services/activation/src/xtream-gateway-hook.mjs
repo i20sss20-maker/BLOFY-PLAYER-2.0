@@ -1,7 +1,7 @@
 import { databaseOptions } from './database-options.mjs';
 import { safeErrorSummary } from './diagnostics-sanitizer.mjs';
 import { createFixedWindowLimiter, requestClientKey } from './auth-protection.mjs';
-import { ensureXtreamAdminReady } from './xtream-admin-hook.mjs';
+import {ensureXtreamAdminReady,getXtreamStudioBranding} from './xtream-admin-hook.mjs';
 import {
   assertPublicXtreamUrl,
   decryptXtreamSecret,
@@ -483,7 +483,10 @@ async function streamGatewayItems(req,res,mediaType,categoryId,sourceId=null) {
 async function gatewayItemById(mediaType, gatewayId, sourceId=null) {
   const id = Number(gatewayId);
   if (!Number.isSafeInteger(id) || id < 1) return null;
-  return (await pool.query(`SELECT m.gateway_id,i.server_id,i.source_id,i.category_id,i.name,i.icon_url,i.container_extension,i.metadata,
+  return (await pool.query(`SELECT m.gateway_id,i.server_id,i.source_id,i.category_id,
+      COALESCE(NULLIF(i.custom_name,''),i.name) AS name,
+      COALESCE(NULLIF(i.custom_icon_url,''),i.icon_url) AS icon_url,
+      i.featured,i.channel_number,i.container_extension,i.metadata,
       cm.gateway_id AS category_gateway_id,s.base_url,s.username_secret,s.password_secret,s.enabled AS server_enabled
     FROM blofy_xtream_gateway_item_map m
     JOIN blofy_xtream_items i ON i.server_id=m.server_id AND i.media_type=m.media_type AND i.source_id=m.source_id
@@ -925,7 +928,15 @@ async function handlePlayerApi(req, res, url) {
   const account = await authenticate(username, password, { touch: true });
   if (!account) return json(res, 200, { user_info: { auth: 0, status: 'Disabled' }, server_info: playerServerInfo(req) });
   const action = String(url.searchParams.get('action') || '');
-  if (!action) return json(res, 200, { user_info: accountInfo(account, username, password), server_info: playerServerInfo(req) });
+  if (!action) {
+    const studio=await getXtreamStudioBranding();
+    const user=accountInfo(account,username,password);
+    user.message=studio.name;
+    return json(res,200,{user_info:user,server_info:{
+      ...playerServerInfo(req),server_name:studio.name,
+      server_logo:studio.logoUrl?origin(req)+studio.logoUrl:''
+    }});
+  }
   if (action === 'get_live_categories') return json(res, 200, await gatewayCategories('live',account.source_id||null));
   if (action === 'get_vod_categories') return json(res, 200, await gatewayCategories('movie',account.source_id||null));
   if (action === 'get_series_categories') return json(res, 200, await gatewayCategories('series',account.source_id||null));
