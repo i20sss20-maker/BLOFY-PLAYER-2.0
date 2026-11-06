@@ -32,7 +32,7 @@ test('account-selected source restricts all content and playback endpoints',()=>
   assert.match(gateway,/AND \(\$2::uuid IS NULL OR e\.server_id=\$2::uuid\)/);
   const player=gateway.slice(gateway.indexOf('async function handlePlayerApi('),gateway.indexOf('async function gatewayHealth('));
   assert.match(player,/gatewayCategories\('live',account\.source_id\|\|null\)/);
-  assert.match(player,/streamGatewayItems\(res, 'movie', url\.searchParams\.get\('category_id'\),account\.source_id\|\|null\)/);
+  assert.match(player,/streamGatewayItems\(req,res, 'movie', url\.searchParams\.get\('category_id'\),account\.source_id\|\|null\)/);
   assert.match(player,/seriesInfo\(url\.searchParams\.get\('series_id'\),account\.source_id\|\|null\)/);
   assert.match(player,/}, account\.source_id\|\|null\);/);
   const playback=gateway.slice(gateway.indexOf('async function proxyMedia('),gateway.indexOf('function playerServerInfo('));
