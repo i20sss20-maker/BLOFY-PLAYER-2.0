@@ -21,7 +21,7 @@ export function classifyXtreamProviderDenial(input){
 }
 export async function readXtreamProviderDenialHint(response){
   if(!response||![401,403,404,429,456].includes(response.status))return null;
-  let reader;
+  let reader,timer;
   try{
     // Header hints can be used as well, but raw header values are never exposed.
     const header=[
@@ -32,17 +32,22 @@ export async function readXtreamProviderDenialHint(response){
     if(fromHeader)return fromHeader;
     if(!response.body)return null;
     reader=response.body.getReader();
-    const first=await reader.read();
-    if(first.done||!first.value)return null;
+    const first=await Promise.race([
+      reader.read(),
+      new Promise(resolve=>{timer=setTimeout(()=>resolve(null),750);timer.unref?.();})
+    ]);
+    if(!first||first.done||!first.value)return null;
     return classifyXtreamProviderDenial(Buffer.from(first.value).subarray(0,2048).toString('utf8'));
   }catch{
     return null;
   }finally{
+    if(timer)clearTimeout(timer);
     if(reader){
-      try{await reader.cancel()}catch{}
+      // Cancellation must not hold the probe open if an upstream body stalls.
+      try{void reader.cancel().catch(()=>{})}catch{}
       try{reader.releaseLock()}catch{}
     }else if(response?.body){
-      try{await response.body.cancel()}catch{}
+      try{void response.body.cancel().catch(()=>{})}catch{}
     }
   }
 }
