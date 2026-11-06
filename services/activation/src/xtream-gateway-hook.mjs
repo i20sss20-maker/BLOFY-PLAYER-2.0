@@ -1014,6 +1014,15 @@ async function repairEpisodeOn404(row){
       series_id:row.series_source_id
     },{timeoutMs:7000,maxBytes:3_000_000});
     const currentId=row.resolved_source_episode_id||row.source_episode_id;
+    // Provider-provided direct_source and exact episode container metadata
+    // are checked first; an upstream 404 is not proof that all valid provider
+    // media paths have disappeared.
+    const official=await verifiedOfficialMediaAlternative(row,'series',currentId,
+      safeGatewayExtension(row.container_extension,'mp4'),{
+        providerPayload:series,seriesSourceId:row.series_source_id,
+        deadline:Date.now()+9000
+      });
+    if(official)return {status:'provider_verified',url:official.url};
     const decision=verifiedEpisodeRecovery(series,currentId,
       safeGatewayExtension(row.container_extension,'mp4'),
       row.season_number,row.episode_number);
@@ -1127,8 +1136,8 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
   // A provider returning 404/416 only for "Range: bytes=0-..." can be
   // rechecked once with plain GET. Never discard a nonzero seek request.
   const initialRange=firstByteXtreamRange(headers.range)&&req.method==='GET';
-  const maxAttempts = req.method === 'HEAD' ? 1 : kind==='series' ? (initialRange?4:3) : (initialRange?3:2);
-  let noRangeRetried=false, transientRetried=false, episodeRepairTried=false;
+  const maxAttempts = req.method === 'HEAD' ? 1 : (initialRange?4:3);
+  let noRangeRetried=false, transientRetried=false, episodeRepairTried=false, movieRepairTried=false;
   try {
     for (let attempt=1;attempt<=maxAttempts;attempt++) {
       if (client.signal.aborted) return;
@@ -1175,9 +1184,9 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
               hasEpisodePosition:episodeOrdinal(row.season_number,{allowZero:true})!==null&&
                 episodeOrdinal(row.episode_number)!==null
             });
-            if(['changed','relocated','alternate_extension'].includes(repaired.status) && attempt<maxAttempts){
+            if(['changed','relocated','alternate_extension','provider_verified'].includes(repaired.status) && attempt<maxAttempts){
               sourceId=repaired.sourceId||sourceId;
-              upstream=mediaUpstreamUrl(row,kind,sourceId,repaired.extension);
+              upstream=repaired.url||mediaUpstreamUrl(row,kind,sourceId,repaired.extension);
               console.info('xtream episode metadata verified and refreshed',{
                 kind,itemId:gatewayId,repair:repaired.status
               });
@@ -1194,6 +1203,22 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
             if(repaired.status==='catalog_media_mismatch'){
               observe('failed',{upstreamStatus:404,reason:'episode_media_404_at_source',attempts:attempt});
               return text(res,502,'Episode is listed but its source media returns 404');
+            }
+          }
+          // Source-specific movie 404: verify the current VOD ID against its
+          // official get_vod_info, then use only a declared, playable URL or
+          // updated container for that SAME movie. No guess or host swap.
+          if(kind==='movie'&&response.status===404&&
+             !movieRepairTried&&req.method==='GET'&&attempt<maxAttempts){
+            movieRepairTried=true;
+            const verified=await verifiedOfficialMediaAlternative(row,'movie',
+              sourceId,safeGatewayExtension(mediaExtension,'mp4'),{
+                deadline:Date.now()+10000
+              });
+            if(verified){
+              upstream=verified.url;
+              console.info('xtream movie media URL verified by provider',{itemId:gatewayId,mode:verified.mode});
+              continue;
             }
           }
           if (retryable && !transientRetried && attempt < maxAttempts) {
