@@ -902,7 +902,12 @@ function catalogCard(item) {
   const poster = make('div', 'catalog-icon');
   if (item.iconUrl) {
     const img = document.createElement('img');
-    img.src = item.iconUrl; img.alt = ''; img.loading = 'lazy'; img.referrerPolicy = 'no-referrer';
+    try {
+      const url=new URL(String(item.iconUrl),location.origin);
+      if(!['http:','https:'].includes(url.protocol))throw new Error('unsafe_image_scheme');
+      img.src=url.href;
+    }catch{img.removeAttribute('src');}
+    img.alt = ''; img.loading = 'lazy'; img.referrerPolicy = 'no-referrer';
     img.addEventListener('error', () => img.remove(), { once: true });
     poster.append(img);
   }
@@ -929,7 +934,47 @@ function catalogCard(item) {
       showMessage(`تعذر تحديث العنصر: ${error.message}`, 'error');
     }
   });
-  card.append(media, toggle);
+  const details=make('details','catalog-expanded');
+  const header=make('summary','', 'ℹ معلومات المحتوى');
+  details.append(header);
+  const metaInfo=make('div','catalog-expanded-body');
+  const fields=[
+    ['التصنيف',item.metadata?.genre],
+    ['سنة الإنتاج',item.metadata?.year||item.metadata?.releaseDate],
+    ['التقييم',item.metadata?.rating],
+    ['القصة',item.metadata?.plot],
+    ['الممثلون',item.metadata?.cast],
+    ['المخرج',item.metadata?.director],
+    ['مدة الحلقة',item.metadata?.episodeRunTime],
+    ['المصدر',item.serverName]
+  ];
+  for(const [label,value] of fields){
+    if(value===undefined||value===null||String(value).trim()==='')continue;
+    const line=make('div','catalog-expanded-line');
+    line.append(make('b','',label),make('span','',String(value).slice(0,1800)));
+    metaInfo.append(line);
+  }
+  const links=make('div','catalog-expanded-links');
+  const tmdb=String(item.metadata?.tmdb||'').trim();
+  const imdb=String(item.metadata?.imdb||'').trim();
+  const trailer=String(item.metadata?.youtubeTrailer||'').trim();
+  const addLink=(label,url)=>{
+    const a=make('a','button ghost',label);
+    a.href=url;a.target='_blank';a.rel='noopener noreferrer';
+    links.append(a);
+  };
+  if(/^\d{1,12}$/.test(tmdb)&&item.type!=='live')
+    addLink('TMDB','https://www.themoviedb.org/'+(item.type==='series'?'tv/':'movie/')+tmdb);
+  if(/^tt\d{5,12}$/.test(imdb))addLink('IMDb','https://www.imdb.com/title/'+imdb+'/');
+  try{
+    const video=new URL(trailer);
+    if(['www.youtube.com','youtube.com','youtu.be','m.youtube.com'].includes(video.hostname)&&
+      video.protocol==='https:')addLink('الإعلان التشويقي',video.href);
+  }catch{}
+  if(links.children.length)metaInfo.append(links);
+  if(!metaInfo.children.length)metaInfo.append(make('p','muted','المصدر لم يوفر معلومات إضافية لهذا العنصر.'));
+  details.append(metaInfo);
+  card.append(media,toggle,details);
   return card;
 }
 
