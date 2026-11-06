@@ -24,6 +24,7 @@ import { xtreamEpisodeSamples, xtreamProbeMessage } from './xtream-series-probe.
 import { inspectXtreamMediaChunk } from './xtream-media-inspector.mjs';
 import { shouldRetryXtreamWithoutRange } from './xtream-media-range.mjs';
 import { auditXtreamCatalogSample } from './xtream-library-insights.mjs';
+import { normalizeXtreamDetails,mergedXtreamMetadata } from './xtream-item-details.mjs';
 import { sortXtreamCategories } from './xtream-category-sort.mjs';
 import { nativeXtreamCsrfToken } from './xtream-native-csrf.mjs';
 
@@ -660,7 +661,11 @@ async function flushItemBatch(serverId, mediaType, syncToken, batch) {
     FROM jsonb_to_recordset($3::jsonb) AS x(source_id text,category_id text,name text,icon_url text,container_extension text,metadata jsonb,sync_token text)
     ON CONFLICT(server_id,media_type,source_id) DO UPDATE SET
       category_id=EXCLUDED.category_id,name=EXCLUDED.name,icon_url=EXCLUDED.icon_url,
-      container_extension=EXCLUDED.container_extension,metadata=EXCLUDED.metadata,sync_token=EXCLUDED.sync_token,updated_at=NOW()`,
+      container_extension=EXCLUDED.container_extension,
+      icon_url=COALESCE(NULLIF(EXCLUDED.icon_url,''),blofy_xtream_items.icon_url),
+      metadata=EXCLUDED.metadata || jsonb_build_object('sourceDetails',
+        COALESCE(blofy_xtream_items.metadata->'sourceDetails','{}'::jsonb)),
+      sync_token=EXCLUDED.sync_token,updated_at=NOW()`,
     [serverId, mediaType, JSON.stringify(payload)]);
   const progress=syncProgress.get(serverId);
   if(progress){progress.imported+=payload.length;progress.updatedAt=Date.now();}
@@ -1016,7 +1021,7 @@ async function listCatalog(query, publishedOnly = false) {
     containerExtension: row.container_extension,
     enabled: Boolean(row.enabled),
     categoryEnabled: row.category_enabled == null ? true : Boolean(row.category_enabled),
-    metadata: row.metadata || {},
+    metadata: mergedXtreamMetadata(row.metadata),
     updatedAt: new Date(row.updated_at).getTime()
   }));
 }
@@ -1119,6 +1124,63 @@ async function moveCategory(serverId, mediaType, categoryId, direction) {
     await client.query('ROLLBACK').catch(()=>{});
     throw error;
   }finally{client.release();}
+}
+
+// Manually enrich one existing VOD or series entry from its own configured
+// provider. Deliberately does NOT fetch or activate any media, remap gateway
+// stream IDs, or change content visibility / subscriber entitlements.
+async function enrichOneXtreamItem(serverId,mediaType,sourceId){
+  if(!validUuid(serverId)||!['movie','series'].includes(mediaType)||
+     !/^[A-Za-z0-9._-]{1,128}$/.test(String(sourceId||'')))
+    throw Object.assign(new Error('xtream_details_selection_invalid'),{status:400});
+  const source=await serverById(serverId);
+  if(!source||!source.enabled)
+    throw Object.assign(new Error('xtream_details_source_unavailable'),{status:409});
+  const exists=(await pool.query(`SELECT source_id FROM blofy_xtream_items
+    WHERE server_id=$1 AND media_type=$2 AND source_id=$3`,[serverId,mediaType,sourceId])).rows[0];
+  if(!exists)throw Object.assign(new Error('xtream_details_item_not_found'),{status:404});
+  const creds=decryptCredentials(source);
+  let response;
+  try{
+    response=await checkedFetch(xtreamApiUrl(source.base_url,creds.username,creds.password,
+      mediaType==='movie'?'get_vod_info':'get_series_info',
+      mediaType==='movie'?{vod_id:sourceId}:{series_id:sourceId}),{timeoutMs:15000});
+  }catch(error){
+    if(String(error?.message||'')==='xtream_http_404')
+      throw Object.assign(new Error('xtream_details_provider_not_supported'),{status:409});
+    throw Object.assign(new Error('xtream_details_fetch_failed'),{status:503});
+  }
+  let bytes=0;const chunks=[];
+  try{
+    if(!response.body)throw new Error('xtream_details_unavailable');
+    for await(const chunk of response.body){
+      bytes+=chunk.byteLength;
+      if(bytes>2_000_000)throw new Error('xtream_details_too_large');
+      chunks.push(Buffer.from(chunk));
+    }
+  }catch(error){
+    const name=['xtream_details_unavailable','xtream_details_too_large'].includes(error?.message)
+      ?error.message:'xtream_details_read_failed';
+    throw Object.assign(new Error(name),{status:409});
+  }finally{try{await response.body?.cancel()}catch{}}
+  let raw;
+  try{raw=JSON.parse(Buffer.concat(chunks).toString('utf8'))}
+  catch{throw Object.assign(new Error('xtream_details_invalid_json'),{status:409})}
+  let details;
+  try{details=normalizeXtreamDetails(mediaType,raw)}
+  catch{throw Object.assign(new Error('xtream_details_unavailable'),{status:409})}
+  const query=await sourceMutation(`UPDATE blofy_xtream_items AS item
+    SET metadata=COALESCE(item.metadata,'{}'::jsonb) ||
+      jsonb_build_object('sourceDetails',$4::jsonb),
+      icon_url=COALESCE(NULLIF(item.icon_url,''),$5),
+      updated_at=NOW()
+    WHERE item.server_id=$1 AND item.media_type=$2 AND item.source_id=$3
+      AND EXISTS(SELECT 1 FROM blofy_xtream_servers s
+        WHERE s.id=$1 AND s.enabled=TRUE AND s.deletion_requested_at IS NULL)
+    RETURNING item.source_id`,
+    [serverId,mediaType,sourceId,JSON.stringify(details.metadata),details.artworkUrl]);
+  if(!query.rowCount)throw Object.assign(new Error('xtream_details_item_not_found'),{status:404});
+  return{updated:true,fieldsFound:details.fieldsFound,posterAdded:Boolean(details.artworkUrl)};
 }
 
 async function patchItem(serverId, mediaType, sourceId, enabled) {
@@ -1374,6 +1436,12 @@ http.createServer = function withBlofyXtream(listener) {
         if (body.enabled === undefined) return json(res, 400, { error: 'nothing_to_update' });
         await patchCategory(categoryMatch[1], categoryMatch[2].toLowerCase(), decodeURIComponent(categoryMatch[3]), body.enabled);
         return json(res, 200, { updated: true });
+      }
+
+      const enrichMatch=url.pathname.match(/^\/api\/v1\/admin\/xtream\/items\/([0-9a-f-]+)\/(movie|series)\/([^/]+)\/enrich$/i);
+      if(enrichMatch&&req.method==='POST'){
+        return json(res,200,await enrichOneXtreamItem(enrichMatch[1],
+          enrichMatch[2].toLowerCase(),decodeURIComponent(enrichMatch[3])));
       }
 
       const itemMatch = url.pathname.match(/^\/api\/v1\/admin\/xtream\/items\/([0-9a-f-]+)\/(live|movie|series)\/([^/]+)$/i);
