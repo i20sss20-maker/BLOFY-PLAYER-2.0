@@ -58,3 +58,13 @@ export function verifiedEpisodeRecovery(payload,sourceEpisodeId,currentExtension
   if(matches.length!==1)return exact;
   return {status:'relocated',sourceId:matches[0].id,extension:matches[0].extension};
 }
+
+// On a confirmed provider 404, the provider's catalog can occasionally still
+// advertise .mp4 while the same episode ID only serves .mkv (or vice versa).
+// Bound any fallback to two common containers for that SAME exact episode ID;
+// do not vary host, identity, route, user, password or source.
+export function sameEpisodeContainerCandidates(extension){
+  const current=String(extension??'').trim().replace(/^\./,'').toLowerCase();
+  if(!['mp4','mkv','ts'].includes(current))return [];
+  return ['mp4','mkv','ts'].filter(candidate=>candidate!==current).slice(0,2);
+}
