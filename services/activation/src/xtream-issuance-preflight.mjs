@@ -30,3 +30,15 @@ export function issuanceErrorReason(value){
     return 'source_api_unavailable';
   return 'source_unreachable';
 }
+
+/**
+ * Transient fetch failures occasionally affect a single playable channel.
+ * Retry only transport/timeouts and temporary 5xx. Explicit provider 403,
+ * 404 and 456 must remain failures, not retry loops or fake readiness.
+ */
+export function shouldRetryIssuanceMedia({reason,httpStatus},remainingMs){
+  const status=Number(httpStatus);
+  const transient=reason==='timeout'||reason==='source_unreachable'||
+    reason==='upstream_http_5xx'||[408,500,502,503,504].includes(status);
+  return transient&&Number.isFinite(remainingMs)&&remainingMs>=3500;
+}
