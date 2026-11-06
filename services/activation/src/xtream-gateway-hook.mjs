@@ -7,6 +7,7 @@ import {
   decryptXtreamSecret,
   normalizeXtreamBaseUrl,
   redactXtreamError,
+  sanitizeXtreamAccount,
   xtreamApiUrl
 } from './xtream-core.mjs';
 import {
@@ -40,6 +41,8 @@ import { shouldRetryXtreamWithoutRange,firstByteXtreamRange } from './xtream-med
 import { recordXtreamPlayback,xtreamPlaybackSnapshot } from './xtream-playback-metrics.mjs';
 import { XtreamDenialCooldown } from './xtream-denial-cooldown.mjs';
 import { episodeOrdinal, verifiedEpisodeRecovery, sameEpisodeContainerCandidates } from './xtream-episode-repair.mjs';
+import { xtreamEpisodePlaybackCandidates } from './xtream-series-probe.mjs';
+import { MAX_ISSUANCE_SOURCES, PREFLIGHT_TTL_MS, issuanceErrorReason, summarizeIssuancePreflight } from './xtream-issuance-preflight.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
@@ -241,10 +244,177 @@ async function checkedAccountSourceId(value) {
   return row.id;
 }
 
+// Real, server-side pre-issuance checks, shared by preview AND both account
+// creation routes. Never issue an account based on the UI's "online" badge.
+const issuancePreflightCache=new Map();
+const issuancePreflightRunning=new Map();
+
+async function probeIssuanceMedia(row,kind,id,extension,deadline){
+  if(Date.now()>=deadline-1000)return {kind,ok:false,reason:'preflight_time_budget'};
+  const url=mediaUpstreamUrl(row,kind,id,extension);
+  const signal=AbortSignal.timeout(Math.min(6500,Math.max(1000,deadline-Date.now())));
+  let response,reader;
+  const headers={
+    'user-agent':'BLOFY-Issuance-Check/1.0',
+    ...(kind==='live'?{}:{range:'bytes=0-2047'})
+  };
+  try{
+    response=await checkedFetch(url,{method:'GET',headers,signal});
+    if(shouldRetryXtreamWithoutRange({status:response.status,range:headers.range})){
+      await response.body?.cancel().catch(()=>{});
+      response=null;
+      delete headers.range;
+      response=await checkedFetch(url,{method:'GET',headers,signal});
+    }
+    if(!response.ok || !response.body){
+      return {kind,ok:false,reason:response.status===404?'upstream_http_404':
+        response.status===403?'upstream_http_403':
+        response.status===456?'upstream_http_456':'upstream_http_other',
+        httpStatus:response.status};
+    }
+    reader=response.body.getReader();
+    const samples=[];
+    let total=0;
+    for(let n=0;n<6&&total<512;n++){
+      const chunk=await reader.read();
+      if(chunk.done)break;
+      const bytes=Buffer.from(chunk.value||[]);
+      if(!bytes.length)continue;
+      const part=bytes.subarray(0,4096-total);
+      samples.push(part);
+      total+=part.length;
+    }
+    const evidence=inspectXtreamMediaChunk(Buffer.concat(samples,total),response.headers.get('content-type'));
+    // Be conservative: unknown bytes cannot certify customer readiness.
+    const ok=evidence.valid && evidence.format!=='unknown';
+    return {kind,ok,reason:ok?null:(evidence.reason||'media_unverified'),
+      format:ok?evidence.format:null};
+  }catch(error){
+    return {kind,ok:false,reason:signal.aborted?'timeout':issuanceErrorReason(error?.message)};
+  }finally{
+    try{await reader?.cancel()}catch{}
+    try{reader?.releaseLock()}catch{}
+    if(!reader)try{await response?.body?.cancel()}catch{}
+  }
+}
+
+async function preflightSource(row,deadline){
+  const checks=[];
+  const result={sourceId:row.id,name:String(row.name||'Xtream').slice(0,90),checks};
+  try{
+    const timeoutMs=Math.min(6000,Math.max(1000,deadline-Date.now()));
+    if(timeoutMs<=1000){checks.push({kind:'account',ok:false,reason:'preflight_time_budget'});return result;}
+    const account=await fetchUpstreamApi(row,null,{},{
+      timeoutMs,maxBytes:200_000
+    });
+    if(!sanitizeXtreamAccount(account).authenticated){
+      checks.push({kind:'account',ok:false,reason:'source_auth_denied'});
+      return result;
+    }
+    checks.push({kind:'account',ok:true});
+  }catch(error){
+    checks.push({kind:'account',ok:false,reason:issuanceErrorReason(error?.message)});
+    return result;
+  }
+  let found=0;
+  for(const kind of ['live','movie','series']){
+    if(Date.now()>deadline-1000){
+      checks.push({kind:'preflight',ok:false,reason:'preflight_time_budget'});
+      return result;
+    }
+    let rows;
+    try{
+      rows=(await pool.query(`SELECT source_id,container_extension
+        FROM blofy_xtream_items WHERE server_id=$1 AND media_type=$2 AND enabled=TRUE
+        ORDER BY source_id LIMIT 2`,[row.id,kind])).rows;
+    }catch{
+      checks.push({kind,ok:false,reason:'catalog_unavailable'});
+      continue;
+    }
+    if(!rows.length)continue;
+    found++;
+    if(kind==='series'){
+      let samples=[];
+      try{
+        const payload=await fetchUpstreamApi(row,'get_series_info',
+          {series_id:rows[0].source_id},{
+            timeoutMs:Math.min(6000,Math.max(1000,deadline-Date.now())),
+            maxBytes:3_000_000
+          });
+        samples=xtreamEpisodePlaybackCandidates(payload,2);
+      }catch(error){
+        checks.push({kind,ok:false,reason:issuanceErrorReason(error?.message)});
+        continue;
+      }
+      if(!samples.length){checks.push({kind,ok:false,reason:'series_has_no_episodes'});continue;}
+      for(const sample of samples){
+        checks.push(await probeIssuanceMedia(row,'series',sample.id,sample.extension,deadline));
+      }
+    }else{
+      for(const sample of rows){
+        const ext=kind==='live'?'ts':safeGatewayExtension(sample.container_extension,'mp4');
+        checks.push(await probeIssuanceMedia(row,kind,sample.source_id,ext,deadline));
+      }
+    }
+  }
+  if(!found)checks.push({kind:'catalog',ok:false,reason:'source_catalog_empty'});
+  return result;
+}
+
+async function runIssuancePreflight(sourceId){
+  await ensureReady();
+  const started=Date.now(),deadline=started+40_000;
+  const rows=(await pool.query(`SELECT id,name,base_url,username_secret,password_secret
+    FROM blofy_xtream_servers
+    WHERE enabled=TRUE AND publish_catalog=TRUE AND deletion_requested_at IS NULL
+      AND ($1::uuid IS NULL OR id=$1::uuid)
+    ORDER BY priority,id LIMIT $2`,
+    [sourceId,MAX_ISSUANCE_SOURCES+1])).rows;
+  if(!rows.length)return {ready:false,passed:0,failed:1,
+    sourceCount:0,mediaSampleCount:0,reason:'no_published_sources',sources:[]};
+  if(rows.length>MAX_ISSUANCE_SOURCES)return {ready:false,passed:0,failed:1,
+    sourceCount:rows.length,mediaSampleCount:0,reason:'too_many_sources_select_one',sources:[]};
+  const sources=[];
+  // At most two sources concurrently. Never flood a provider with unlimited
+  // media checks, especially for all-sources subscriptions.
+  for(let i=0;i<rows.length;i+=2){
+    const batch=await Promise.all(rows.slice(i,i+2).map(row=>preflightSource(row,deadline)));
+    sources.push(...batch);
+  }
+  const summary=summarizeIssuancePreflight(sources);
+  return {...summary,ready:summary.ready&&Date.now()<=deadline,
+    sources,checkedAt:new Date().toISOString(),elapsedMs:Date.now()-started,
+    note:'First media bytes were sampled; no test can guarantee every title or future availability.'};
+}
+
+async function issuancePreflight(sourceId,{refresh=false}={}){
+  const key=String(sourceId||'*');
+  const cached=issuancePreflightCache.get(key);
+  if(cached && Date.now()-cached.checkedAt<(refresh?15_000:PREFLIGHT_TTL_MS))
+    return cached.result;
+  if(issuancePreflightRunning.has(key))return issuancePreflightRunning.get(key);
+  const task=runIssuancePreflight(sourceId).then(result=>{
+    issuancePreflightCache.set(key,{checkedAt:Date.now(),result});
+    while(issuancePreflightCache.size>25)
+      issuancePreflightCache.delete(issuancePreflightCache.keys().next().value);
+    return result;
+  }).finally(()=>issuancePreflightRunning.delete(key));
+  issuancePreflightRunning.set(key,task);
+  return task;
+}
+
+async function assertIssuanceReady(sourceId){
+  const verdict=await issuancePreflight(sourceId);
+  if(!verdict.ready)
+    throw Object.assign(new Error('xtream_gateway_issuance_preflight_failed'),{status:409});
+  return verdict;
+}
+
 async function createAccount(body, req) {
   await ensureReady();
   const label = cleanLabel(body.label, 'BLOFY Player');
   const sourceId=await checkedAccountSourceId(body.sourceId);
+  await assertIssuanceReady(sourceId);
   const maxConnections = Math.max(1, Math.min(20, Number(body.maxConnections) || 1));
   let username = body.username ? normalizeGatewayUsername(body.username) : null;
   const password = body.password ? normalizeGatewayPassword(body.password) : generateGatewayPassword();
@@ -279,6 +449,7 @@ async function createAccountsBulk(body, req) {
   const { count,maxConnections,expiresAt }=validateBulkAccountRequest(body);
   const label=cleanLabel(body.label,'BLOFY Player');
   const sourceId=await checkedAccountSourceId(body.sourceId);
+  await assertIssuanceReady(sourceId);
   const connection=await pool.connect();
   const created=[], issued=new Set();
   try{
@@ -1257,6 +1428,11 @@ http.createServer = function withBlofyXtreamGateway(listener) {
       }
       if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream-gateway/playback-health') {
         return json(res,200,{ok:true,metrics:xtreamPlaybackSnapshot()});
+      }
+      if (req.method === 'POST' && url.pathname === '/api/v1/admin/xtream-gateway/issuance-preflight') {
+        const body=await readJson(req);
+        const sourceId=await checkedAccountSourceId(body.sourceId);
+        return json(res,200,await issuancePreflight(sourceId,{refresh:true}));
       }
       if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream-gateway') {
         const items = await listAccounts();

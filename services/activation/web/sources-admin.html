@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#09090e">
   <link rel="icon" type="image/png" href="/blofy-logo.png"><link rel="apple-touch-icon" href="/blofy-logo.png"><meta name="robots" content="noindex,nofollow"><title>BLOFY STREAM | إدارة المصادر والاشتراكات</title>
-  <link rel="stylesheet" href="/sources-admin.css?v=20261106-pro-v1">
+  <link rel="stylesheet" href="/sources-admin.css?v=20261107-preflight-v1">
   <link rel="stylesheet" href="/site-polish.css?v=20261025-lux-final">
 </head>
 <body>
@@ -58,7 +58,7 @@
               <h2>إصدار اشتراكات العملاء وبيانات الدخول</h2>
               <p>يظهر لكل مشترك محتوى المصادر التي تمت الموافقة على نشرها. إنشاء حساب لا يزيد اتصالات المصادر الأصلية.</p>
             </div>
-            <button id="gatewayCreateBtn" class="button primary big-action" type="button">إنشاء بيانات دخول</button>
+            <button id="gatewayCreateBtn" class="button primary big-action" type="button" disabled title="نفّذ فحص التشغيل أولًا">إنشاء بيانات دخول</button>
           </div>
 
           <div class="gateway-subscription-form">
@@ -69,6 +69,16 @@
             <label><span>عدد الاشتراكات الجديدة</span><select id="gatewayQuantity"><option value="1">حساب واحد</option><option value="5">5 حسابات</option><option value="10">10 حسابات</option></select></label>
           </div>
           <p class="security-note" id="gatewaySourceHealth">يجري فحص جاهزية مصادر المحتوى…</p>
+          <section class="gateway-preflight" aria-label="فحص التشغيل قبل إصدار المستخدم">
+            <div class="gateway-preflight-head">
+              <div><strong>🛡️ فحص حقيقي قبل إصدار أي يوزر</strong>
+                <small>يفحص دخول المصدر ويجرب عينات تشغيل من القنوات والأفلام والحلقات. إذا فشل اختبار، يتوقف إصدار الحسابات حتى تُحل المشكلة.</small></div>
+              <button id="gatewayPreflightRun" class="button primary" type="button">▶ فحص التشغيل الآن</button>
+            </div>
+            <p id="gatewayPreflightStatus" role="status" aria-live="polite">⏸ الإصدار متوقف إلى أن ينجح فحص التشغيل للمصدر المختار.</p>
+            <div id="gatewayPreflightDetails" class="gateway-preflight-details" aria-live="polite"></div>
+            <p class="muted">الفحص يتحقق من عينات تشغيل حقيقية فقط؛ نجاحه لا يضمن أن جميع الأفلام والقنوات ستعمل طوال مدة الاشتراك.</p>
+          </section>
           <div class="gateway-host-row">
             <div><span class="label">Server / Host</span><code id="gatewayServerUrl">جارٍ التحميل…</code></div>
             <button id="gatewayCopyHostBtn" class="button ghost" type="button">نسخ الرابط</button>
@@ -495,6 +505,6 @@
   <script src="/blofy-smart-commands.js?v=20261106-v1" defer></script>
   <script src="/sources-admin.js?v=20261106-pro-v1" defer></script>
   <script src="/blofy-studio-pro.js?v=20261106-pro-v1" defer></script>
-  <script src="/xtream-gateway-admin.js?v=20261106-account-visibility-v2" defer></script>
+  <script src="/xtream-gateway-admin.js?v=20261107-preflight-v1" defer></script>
 </body>
 </html>
