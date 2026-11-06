@@ -42,6 +42,7 @@ import { recordXtreamPlayback,xtreamPlaybackSnapshot } from './xtream-playback-m
 import { XtreamDenialCooldown } from './xtream-denial-cooldown.mjs';
 import { episodeOrdinal, verifiedEpisodeRecovery, sameEpisodeContainerCandidates } from './xtream-episode-repair.mjs';
 import { authoritativeXtreamMediaCandidates, providerHasExactXtreamMediaItem } from './xtream-authoritative-media.mjs';
+import { parseHybridM3uMediaUrl, verifiedHybridRow } from './xtream-hybrid-m3u.mjs';
 import { xtreamEpisodePlaybackCandidates } from './xtream-series-probe.mjs';
 import { MAX_ISSUANCE_SOURCES, PREFLIGHT_TTL_MS, issuanceErrorReason, summarizeIssuancePreflight, shouldRetryIssuanceMedia } from './xtream-issuance-preflight.mjs';
 
@@ -268,17 +269,18 @@ async function probeIssuanceMedia(row,kind,id,extension,deadline){
       response=await checkedFetch(url,{method:'GET',headers,signal});
     }
     if(response.status===404&&kind!=='live'&&Date.now()+3000<deadline){
-      const alternate=await verifiedOfficialMediaAlternative(row,kind,id,extension,{
-        seriesSourceId:kind==='series'?row.series_source_id:null,
-        providerPayload:kind==='series'?row.series_payload:null,
-        deadline
-      });
-      if(alternate?.verified){
-        // The alternative already passed the same checkedFetch video-byte
-        // verification. A second GET would waste source bandwidth and can
-        // time out after the original probe's 6.5s timeout expires.
+      const fromM3u=await verifiedHybridM3uFallback(row,kind,id,{deadline});
+      const verified=fromM3u?.verified?fromM3u:
+        await verifiedOfficialMediaAlternative(row,kind,id,extension,{
+          seriesSourceId:kind==='series'?row.series_source_id:null,
+          providerPayload:kind==='series'?row.series_payload:null,
+          deadline
+        });
+      if(verified?.verified){
+        // Reuse actual verified bytes; do not issue a second expiring
+        // preflight request and misreport a successful media URL as failed.
         return {kind,ok:true,reason:null,format:'provider_verified',
-          repaired:true,recoveryMode:alternate.mode};
+          repaired:true,recoveryMode:verified.mode};
       }
     }
     if(!response.ok || !response.body){
@@ -360,6 +362,38 @@ async function confirmProviderMediaUrl(url,{deadline=Date.now()+8500}={}){
   finally{
     if(reader){try{await reader.cancel()}catch{}try{reader.releaseLock()}catch{}}
     else try{await response?.body?.cancel()}catch{}
+  }
+}
+
+
+// M3U Hybrid: the operator first indexes the linked same-account playlist.
+// On a genuine 404, use only a non-ambiguous EXACT original provider ID,
+// from this source's current index generation. Verify real video bytes
+// through the same SSRF-checked client before changing a subscriber stream.
+async function verifiedHybridM3uFallback(row,kind,sourceId,{deadline=Date.now()+8000}={}){
+  if(!row?.m3u_index_generation||!['movie','series'].includes(kind)||
+     Date.now()+1000>=deadline)return null;
+  try{
+    const match=(await pool.query(`SELECT generation,stream_url_secret,ambiguous
+      FROM blofy_xtream_m3u_media_links
+      WHERE server_id=$1 AND generation=$2 AND media_type=$3 AND source_id=$4
+      LIMIT 1`,[row.server_id,row.m3u_index_generation,kind,String(sourceId)])).rows[0];
+    if(!verifiedHybridRow(match,row.m3u_index_generation))return null;
+    const creds=decryptServerCredentials(row);
+    const textUrl=decryptXtreamSecret(match.stream_url_secret,KEY_HEX,
+      `m3u-media:${row.server_id}:${row.m3u_index_generation}:${kind}:${sourceId}`);
+    const parsed=parseHybridM3uMediaUrl(textUrl,{
+      baseUrl:row.base_url,username:creds.username,password:creds.password
+    });
+    if(!parsed||parsed.kind!==kind||parsed.sourceId!==String(sourceId))
+      return null;
+    const url=new URL(parsed.url);
+    if(!await confirmProviderMediaUrl(url,{deadline}))return null;
+    console.info('xtream verified same-source M3U media',{kind,mode:'m3u'});
+    return {url,mode:'m3u',verified:true};
+  }catch{
+    // No provider URL, token, credentials, or source playlist is logged.
+    return null;
   }
 }
 
@@ -519,7 +553,7 @@ async function preflightSource(row,deadline){
 async function runIssuancePreflight(sourceId){
   await ensureReady();
   const started=Date.now(),deadline=started+40_000;
-  const rows=(await pool.query(`SELECT id,id AS server_id,name,base_url,username_secret,password_secret
+  const rows=(await pool.query(`SELECT id,id AS server_id,name,base_url,username_secret,password_secret,m3u_index_generation
     FROM blofy_xtream_servers
     WHERE enabled=TRUE AND publish_catalog=TRUE AND deletion_requested_at IS NULL
       AND ($1::uuid IS NULL OR id=$1::uuid)
@@ -825,7 +859,8 @@ async function gatewayItemById(mediaType, gatewayId, sourceId=null) {
       COALESCE(NULLIF(i.custom_name,''),i.name) AS name,
       COALESCE(NULLIF(i.custom_icon_url,''),i.icon_url) AS icon_url,
       i.featured,i.channel_number,i.container_extension,i.metadata,
-      cm.gateway_id AS category_gateway_id,s.base_url,s.username_secret,s.password_secret,s.enabled AS server_enabled
+      cm.gateway_id AS category_gateway_id,s.base_url,s.username_secret,s.password_secret,
+      s.m3u_index_generation,s.enabled AS server_enabled
     FROM blofy_xtream_gateway_item_map m
     JOIN blofy_xtream_items i ON i.server_id=m.server_id AND i.media_type=m.media_type AND i.source_id=m.source_id
     JOIN blofy_xtream_servers s ON s.id=i.server_id
@@ -1019,7 +1054,8 @@ async function episodeByGatewayId(gatewayId,sourceId=null) {
   if (!Number.isSafeInteger(id) || id < 1) return null;
   return (await pool.query(`SELECT e.gateway_id,e.server_id,e.series_source_id,e.source_episode_id,e.resolved_source_episode_id,
       e.season_number,e.episode_number,COALESCE(e.verified_container_extension,e.container_extension) AS container_extension,
-      s.base_url,s.username_secret,s.password_secret,s.enabled AS server_enabled
+      s.base_url,s.username_secret,s.password_secret,s.m3u_index_generation,
+      s.enabled AS server_enabled
     FROM blofy_xtream_gateway_episode_map e JOIN blofy_xtream_servers s ON s.id=e.server_id
     WHERE e.gateway_id=$1 AND s.enabled=TRUE AND s.publish_catalog=TRUE
       AND ($2::uuid IS NULL OR e.server_id=$2::uuid)`, [id,sourceId])).rows[0] || null;
@@ -1247,6 +1283,15 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
           if(kind==='series' && response.status===404 &&
              !episodeRepairTried && req.method==='GET'){
             episodeRepairTried=true;
+            const hybridFirst=attempt<maxAttempts?
+              await verifiedHybridM3uFallback(row,'series',sourceId,{
+                deadline:Date.now()+8500
+              }):null;
+            if(hybridFirst?.verified){
+              upstream=hybridFirst.url;
+              console.info('xtream episode 404 recovered from indexed M3U',{itemId:gatewayId});
+              continue;
+            }
             const repaired=await repairEpisodeOn404(row);
             console.warn('xtream episode 404 diagnosis',{
               itemId:gatewayId,status:repaired.status,
@@ -1259,6 +1304,15 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
               console.info('xtream episode metadata verified and refreshed',{
                 kind,itemId:gatewayId,repair:repaired.status
               });
+              continue;
+            }
+            const hybrid=attempt<maxAttempts?
+              await verifiedHybridM3uFallback(row,'series',sourceId,{
+                deadline:Date.now()+9000
+              }):null;
+            if(hybrid?.verified){
+              upstream=hybrid.url;
+              console.info('xtream episode 404 recovered from indexed M3U',{itemId:gatewayId});
               continue;
             }
             if(repaired.status==='missing'){
@@ -1280,13 +1334,16 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
           if(kind==='movie'&&response.status===404&&
              !movieRepairTried&&req.method==='GET'&&attempt<maxAttempts){
             movieRepairTried=true;
-            const verified=await verifiedOfficialMediaAlternative(row,'movie',
+            const fromM3u=await verifiedHybridM3uFallback(row,'movie',sourceId,{
+              deadline:Date.now()+8500
+            });
+            const hybrid=fromM3u||await verifiedOfficialMediaAlternative(row,'movie',
               sourceId,safeGatewayExtension(mediaExtension,'mp4'),{
                 deadline:Date.now()+10000
               });
-            if(verified){
-              upstream=verified.url;
-              console.info('xtream movie media URL verified by provider',{itemId:gatewayId,mode:verified.mode});
+            if(hybrid?.verified){
+              upstream=hybrid.url;
+              console.info('xtream movie 404 recovered',{itemId:gatewayId,mode:hybrid.mode});
               continue;
             }
           }

@@ -92,6 +92,7 @@ test('preflight trusts already verified bytes rather than re-fetching a 404 afte
     mediaUpstreamUrl:()=>new URL('https://example.test/movie/207458.mp4'),
     checkedFetch:async()=>{upstreamCalls++;return {ok:false,status:404,body:{cancel:async()=>{cancels++}}};},
     shouldRetryXtreamWithoutRange:()=>false,
+    verifiedHybridM3uFallback:async()=>null,
     verifiedOfficialMediaAlternative:async()=>{
       alternatives++;
       return {url:new URL('https://example.test/movie/207458.mkv'),
@@ -123,6 +124,7 @@ test('preflight does not greenlight 404 unless fallback was verified',async()=>{
     mediaUpstreamUrl:()=>new URL('https://example.test/movie/207458.mp4'),
     checkedFetch:async()=>{upstreamCalls++;return {ok:false,status:404,body:{cancel:async()=>{}}};},
     shouldRetryXtreamWithoutRange:()=>false,
+    verifiedHybridM3uFallback:async()=>null,
     verifiedOfficialMediaAlternative:async()=>null,
     issuanceErrorReason:()=> 'source_unreachable',
     inspectXtreamMediaChunk:()=>{throw Error('must not validate 404 as media')},

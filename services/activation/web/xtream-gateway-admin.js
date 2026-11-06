@@ -406,7 +406,8 @@ function renderGatewayPreflight(data,scope){
       ].filter(Boolean).join(' · ');
       const line=gatewayNode('small',check.ok?'':'failed',
         (check.ok?'✓ ':'✗ ')+(kinds[check.kind]||'فحص')+band+
-        (check.ok?' · بيانات صحيحة':(' · '+gatewayPreflightReason(check.reason)))+
+        (check.ok?(check.recoveryMode==='m3u'?' · تم تشغيل الفيديو من M3U المرتبط':' · بيانات صحيحة'):
+          (' · '+gatewayPreflightReason(check.reason)))+
         (!check.ok&&ids?' · '+ids:''));
       card.append(line);
     }

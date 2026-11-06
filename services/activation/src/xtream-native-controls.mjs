@@ -46,6 +46,7 @@ function noticeText(code) {
     'm3u-saved':'✓ تم حفظ رابط M3U المشفر لهذا المصدر في قاعدة البيانات. ارجع إلى لوحة BLOFY وتأكد من ظهور M3U مرتبط، ثم اختبر قائمة M3U.',
     'm3u-removed':'✓ تم إلغاء ربط M3U لهذا المصدر دون حذف مكتبة Xtream.',
     'm3u-tested':'✓ تم التحقق من رابط M3U المحفوظ وأن الملف يبدأ بترويسة قائمة سليمة. لا يعني ذلك أن كل الأفلام والحلقات تعمل.',
+    'm3u-indexing':'بدأت فهرسة الروابط من M3U بأمان. حدّث الصفحة للاطلاع على عدد الأفلام والحلقات المفهرسة؛ لا تحذف المصدر.',
     testing:'بدأ فحص الاتصال؛ حدث الصفحة لمعرفة النتيجة.',
     'probe-ok':'تم اختبار بث الوسائط واستجاب المصدر بنجاح.',
     syncing:'بدأت المزامنة. المكتبة الكبيرة قد تستغرق وقتًا.',
@@ -79,13 +80,15 @@ export function controlPage({items=[],success='',error='',csrfToken=''}) {
       '<div class="head"><div><h2>'+name+'</h2><code>'+url+'</code><small>المعرف: '+id.slice(0,8)+'</small></div><div class="badges">'+
       '<span class="badge">'+status+'</span><span class="badge '+(enabled?'on':'off')+'">'+(enabled?'مفعّل':'موقوف')+'</span>'+
       '<span class="badge '+(enabled&&published?'on':'off')+'">'+(enabled&&published?'منشور':'غير منشور')+'</span>'+
-      '<span class="badge '+(item.m3uConfigured?'on':'off')+'">'+(item.m3uConfigured?'M3U مرتبط':'M3U غير مربوط')+'</span></div></div>'+
+      '<span class="badge '+(item.m3uConfigured?'on':'off')+'">'+(item.m3uConfigured?'M3U مرتبط':'M3U غير مربوط')+'</span>'+
+      '<span class="badge '+(item.m3uIndexed?'on':'off')+'">'+(item.m3uIndexed?'فهرس M3U جاهز':'فهرس M3U لم يكتمل')+'</span></div></div'+ '>'+
       metrics+
       '<div class="actions">'+
       securedForm(id,'toggle-enabled',enabled?'إيقاف المصدر':'تفعيل المصدر')+
       securedForm(id,'toggle-publish',published?'إخفاء عن العملاء':'نشر للعملاء')+
       securedForm(id,'test','فحص الاتصال')+
       securedForm(id,'test-m3u','▶ اختبار رابط M3U')+
+      securedForm(id,'index-m3u','⚡ فهرسة أفلام وحلقات M3U')+
       securedForm(id,'probe-live','اختبار بث قناة')+
       securedForm(id,'probe-movie','اختبار تشغيل فيلم')+
       securedForm(id,'probe-series','اختبار بيانات مسلسل')+

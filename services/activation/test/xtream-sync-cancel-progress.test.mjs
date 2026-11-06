@@ -12,7 +12,7 @@ test('cancel sync remains available while a 290k item import is running',()=>{
   assert.match(server,/async function cancelSourceSync\(id\)/);
   assert.match(server,/cancelledSources\.add\(id\)/);
   assert.match(server,/staleStateCleared/);
-  assert.match(server,/\(test\|test-m3u\|sync\|cancel-sync\|probe-playback\)/);
+  assert.match(server,/\(test\|test-m3u\|index-m3u\|sync\|cancel-sync\|probe-playback\)/);
   assert.match(server,/if \(action === 'cancel-sync' && req\.method === 'POST'\)/);
 });
 
