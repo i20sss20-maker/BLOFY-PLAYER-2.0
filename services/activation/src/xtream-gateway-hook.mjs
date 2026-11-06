@@ -30,6 +30,7 @@ import { pipeline } from 'node:stream/promises';
 import pg from 'pg';
 import { validateBulkAccountRequest } from './xtream-bulk-policy.mjs';
 import { gatewayItemsPageQuery } from './xtream-gateway-query.mjs';
+import { mergeXtreamPlayerRequest } from './xtream-player-post.mjs';
 import { recordXtreamPlayback,xtreamPlaybackSnapshot } from './xtream-playback-metrics.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
@@ -831,6 +832,8 @@ function accountInfo(row, username, password) {
 
 async function handlePlayerApi(req, res, url) {
   if (!requirePublicBudget(req, res)) return;
+  // Many Xtream-compatible clients submit credentials/actions via POST body.
+  url = await mergeXtreamPlayerRequest(req, url);
   const username = url.searchParams.get('username') || '';
   const password = url.searchParams.get('password') || '';
   const account = await authenticate(username, password, { touch: true });
