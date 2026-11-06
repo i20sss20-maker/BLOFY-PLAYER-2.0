@@ -89,7 +89,7 @@ test('media ID relocation is only committed after real source media verification
   assert.match(src,/ADD COLUMN IF NOT EXISTS season_number TEXT/);
   assert.match(src,/ADD COLUMN IF NOT EXISTS episode_number TEXT/);
   assert.match(src,/ADD COLUMN IF NOT EXISTS resolved_source_episode_id TEXT/);
-  assert.match(src,/seasonNumber:episodeOrdinal\(seasonLabel,\{allowZero:true\}\)/);
+  assert.match(src,/const seasonNumber=episodeOrdinal\(seasonLabel,\{allowZero:true\}\)/);
   assert.match(src,/episodeNumber:episodeOrdinal\(episode.episode_num\)/);
   assert.match(src,/decision.status==='relocated' &&\s*!await confirmEpisodeReplacement/);
   assert.match(src,/inspectXtreamMediaChunk\(chunk.value,response.headers.get\('content-type'\)\).valid/);
