@@ -1485,6 +1485,7 @@ http.createServer = function withBlofyXtream(listener) {
     try { url = new URL(req.url || '/', 'http://localhost'); }
     catch { return listener(req, res); }
     try {
+      if (req.method === 'GET' && url.pathname === '/xtream/studio-logo') return serveStudioLogo(res);
       if (req.method === 'GET' && url.pathname === '/sources/xtream/summary') return publicJson(res, await publicSummary());
       if (req.method === 'GET' && url.pathname === '/sources/xtream/catalog') {
         return publicJson(res, { items: await listCatalog(Object.fromEntries(url.searchParams), true) });
@@ -1520,6 +1521,17 @@ http.createServer = function withBlofyXtream(listener) {
         }
       }
 
+      if(url.pathname==='/api/v1/admin/xtream/studio'){
+        if(req.method==='GET')return json(res,200,await getXtreamStudioBranding());
+        if(req.method==='PATCH'){
+          const body=await readJson(req);
+          return json(res,200,await setStudioName(body.name));
+        }
+      }
+      if(url.pathname==='/api/v1/admin/xtream/studio/logo'){
+        if(req.method==='PUT')return json(res,200,await storeStudioLogo(req));
+        if(req.method==='DELETE')return json(res,200,await removeStudioLogo());
+      }
       if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream/servers') {
         const items = (await serverRows()).map(adminServer);
         const totals = items.reduce((acc, item) => {
@@ -1630,6 +1642,12 @@ http.createServer = function withBlofyXtream(listener) {
           enrichMatch[2].toLowerCase(),decodeURIComponent(enrichMatch[3])));
       }
 
+      const studioItemMatch=url.pathname.match(/^\/api\/v1\/admin\/xtream\/items\/([0-9a-f-]+)\/(live|movie|series)\/([^/]+)\/studio$/i);
+      if(studioItemMatch&&(req.method==='PATCH'||req.method==='DELETE')){
+        return json(res,200,await updateStudioItem(studioItemMatch[1],
+          studioItemMatch[2].toLowerCase(),decodeURIComponent(studioItemMatch[3]),
+          req.method==='PATCH'?await readJson(req):null,req.method==='DELETE'));
+      }
       const itemMatch = url.pathname.match(/^\/api\/v1\/admin\/xtream\/items\/([0-9a-f-]+)\/(live|movie|series)\/([^/]+)$/i);
       if (itemMatch && req.method === 'PATCH') {
         const body = await readJson(req);
