@@ -20,7 +20,7 @@ import { downloadXtreamM3uCatalog } from './xtream-m3u-catalog.mjs';
 import { distinctXtreamRecords } from './xtream-import-dedup.mjs';
 import { assessXtreamSync } from './xtream-sync-guard.mjs';
 import { CONTROL_PATH, controlPage, deleteConfirmationPage, readControlForm } from './xtream-native-controls.mjs';
-import { xtreamEpisodeSamples, xtreamProbeMessage } from './xtream-series-probe.mjs';
+import { xtreamEpisodeSamples, xtreamEpisodePlaybackCandidates, xtreamProbeMessage } from './xtream-series-probe.mjs';
 import { inspectXtreamMediaChunk } from './xtream-media-inspector.mjs';
 import { shouldRetryXtreamWithoutRange } from './xtream-media-range.mjs';
 import { auditXtreamCatalogSample } from './xtream-library-insights.mjs';
@@ -452,7 +452,7 @@ async function probeXtreamSeries(id,mediaType){
   const candidates=(await pool.query(`SELECT source_id,name
     FROM blofy_xtream_items
     WHERE server_id=$1 AND media_type='series' AND enabled=TRUE
-    ORDER BY name ASC LIMIT $2`,[id,mediaType==='episode'?1:2])).rows;
+    ORDER BY name ASC LIMIT $2`,[id,2])).rows;
   if(!candidates.length)return{ok:false,mediaType,reason:'no_imported_items',checks:[]};
   const creds=decryptCredentials(source),checks=[];
   for(const series of candidates){
@@ -479,13 +479,20 @@ async function probeXtreamSeries(id,mediaType){
       details=xtreamEpisodeSamples(payload,2);
       if(!details.episodeCount)throw new Error('no_playable_episodes');
       if(mediaType==='episode'){
-        const playback=await probeXtreamEpisodeMedia(source,creds,details.samples[0]);
-        checks.push({
-          title:cleanText(series.name,150),mediaType,
-          seriesHttpStatus:httpStatus,seasonCount:details.seasonCount,
-          episodeCount:details.episodeCount,
-          ...playback
-        });
+        // Try different seasons/positions, not merely the first episode.
+        // A 404 for one stale episode must not condemn the entire source.
+        for(const episode of xtreamEpisodePlaybackCandidates(payload,3)){
+          const playback=await probeXtreamEpisodeMedia(source,creds,episode);
+          checks.push({
+            title:cleanText(series.name,150),mediaType,
+            seriesHttpStatus:httpStatus,seasonCount:details.seasonCount,
+            episodeCount:details.episodeCount,
+            ...playback
+          });
+          // Provider-level access restrictions should never be bypassed by
+          // probing different IDs, filenames, headers or extra accounts.
+          if(playback.ok||[401,403,456].includes(playback.httpStatus))break;
+        }
       }else{
         checks.push({
           title:cleanText(series.name,150),mediaType,httpStatus,
@@ -506,7 +513,7 @@ async function probeXtreamSeries(id,mediaType){
         latencyMs:Date.now()-started,ok:false,error:errorCode
       });
     }
-    if(checks.at(-1)?.ok)break;
+    if(checks.at(-1)?.ok||[401,403,456].includes(checks.at(-1)?.httpStatus))break;
   }
   return{ok:checks.some(check=>check.ok),mediaType,checks,
     note:'مسلسلات: فحص API والحلقات. الحلقات: قراءة أول بايتات الفيديو فقط؛ لا يثبت استمرار الصوت والصورة.'};
@@ -525,7 +532,7 @@ async function probeXtreamPlayback(id,mediaType='live') {
   const candidates=(await pool.query(`SELECT source_id,name,container_extension
     FROM blofy_xtream_items
     WHERE server_id=$1 AND media_type=$2 AND enabled=TRUE
-    ORDER BY name ASC LIMIT 2`,[id,mediaType])).rows;
+    ORDER BY name ASC LIMIT 4`,[id,mediaType])).rows;
   if(!candidates.length)return {ok:false,mediaType,reason:'no_imported_items',checks:[]};
   const creds=decryptCredentials(source),checks=[];
   for(const item of candidates){
@@ -591,7 +598,7 @@ async function probeXtreamPlayback(id,mediaType='live') {
       title:cleanText(item.name,160),mediaType,httpStatus,contentType,
       latencyMs:Date.now()-started,ok,error:errorCode,rangeFallbackUsed:mediaType==='movie'&&!useFirstByteRange
     });
-    if(ok)break;
+    if(ok||[401,403,456].includes(httpStatus))break;
   }
   return {ok:checks.some(check=>check.ok),mediaType,checks,
     note:'فحص استجابة HTTP للبث فقط. التأكد من عرض الصورة والصوت يحتاج تشغيلًا فعليًا بالمشغل.'};

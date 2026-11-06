@@ -26,6 +26,35 @@ export function xtreamEpisodeSamples(payload, limit = 2) {
   return {seasonCount,episodeCount,samples};
 }
 
+// A healthy series can contain a missing first episode. Probe only a few
+// distinct seasons/positions before judging the entire series unavailable.
+export function xtreamEpisodePlaybackCandidates(payload, limit=3) {
+  const groups=payload&&typeof payload==='object'?payload.episodes:null;
+  if(!groups||typeof groups!=='object')return[];
+  const seasons=(Array.isArray(groups)?[groups]:Object.values(groups))
+    .filter(Array.isArray).slice(0,200);
+  const max=Math.max(0,Math.min(6,Number(limit)||0));
+  if(!max)return[];
+  const seen=new Set(),selected=[];
+  const pick=row=>{
+    const id=String(row?.id??'').trim();
+    if(!IDS.test(id)||seen.has(id))return;
+    const extension=String(row.container_extension||'mp4').replace(/^\./,'').toLowerCase();
+    seen.add(id);
+    selected.push({id,extension:EXTS.test(extension)?extension:'mp4'});
+  };
+  for(const position of [0,-1,0.5]){
+    for(const season of seasons){
+      const rows=season.slice(0,3000);
+      if(!rows.length)continue;
+      const index=position===0.5?Math.floor(rows.length/2):position===-1?rows.length-1:0;
+      pick(rows[index]);
+      if(selected.length>=max)return selected;
+    }
+  }
+  return selected;
+}
+
 const LABELS={live:'القناة',movie:'الفيلم',series:'المسلسل',episode:'الحلقة'};
 const ERRORS={
   no_imported_items:'لا توجد عناصر مستوردة من هذا النوع. افحص مزامنة المصدر أولًا.',
@@ -46,6 +75,7 @@ function summaryForCheck(row) {
   const code=Number(row?.httpStatus);
   if (code===401) return 'HTTP 401: المصدر رفض بيانات الدخول.';
   if (code===403) return 'HTTP 403: المصدر يمنع تشغيل هذا المحتوى؛ راجع صلاحيات الحساب أو قيود الاتصال لدى المزود.';
+  if (code===456) return 'HTTP 456: رمز غير قياسي من المصدر؛ لا يمكن تأكيد السبب من الرمز وحده. تحقق من أذونات التشغيل وقيود حساب المصدر لدى المزود.';
   if (code===404) return 'HTTP 404: ملف التشغيل أو API هذا المحتوى غير موجود لدى المصدر.';
   if (code===429) return 'HTTP 429: تم تجاوز عدد طلبات/اتصالات المصدر.';
   if (code>=500&&code<=599) return 'HTTP '+code+': خلل مؤقت في استجابة المصدر.';
@@ -63,7 +93,9 @@ export function xtreamProbeMessage(result, kind='live') {
     const status=pass?.httpStatus ? 'HTTP '+pass.httpStatus+' · ' : '';
     const episodes=pass?.episodeCount ? ' · عدد الحلقات: '+pass.episodeCount : '';
     const fallback=pass?.rangeFallbackUsed?' · المصدر رفض Range لكن استجاب لطلب فيديو عادي':'';
-    return 'نجح فحص '+label+': '+status+'وصلت استجابة صحيحة'+episodes+fallback+'. هذا فحص تقني وليس تشغيل صوت وصورة كاملًا.';
+    const failed=checks.filter(x=>x&&!x.ok).length;
+    const partial=failed?' · نجح بعد تعثر '+failed+' من العينات الأخرى':'';
+    return 'نجح فحص '+label+': '+status+'وصلت استجابة صحيحة'+episodes+fallback+partial+'. هذا فحص تقني وليس تشغيل صوت وصورة كاملًا.';
   }
   if (result?.reason==='no_imported_items') return 'تعذر فحص '+label+': '+ERRORS.no_imported_items;
   const diagnostics=checks.filter(Boolean).slice(0,2).map(summaryForCheck);

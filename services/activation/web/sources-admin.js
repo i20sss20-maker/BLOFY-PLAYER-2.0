@@ -534,8 +534,10 @@ async function runXtreamBatchProbe(){
             session.passed++;
             status.className='status passed';
             const sample=(result.checks||[]).find(x=>x.ok);
+            const failedSamples=(result.checks||[]).filter(x=>x&&!x.ok).length;
             status.textContent='✓ وصلت البيانات'+(sample?.episodeCount?' · '+sample.episodeCount+' حلقة':'')+
-              (sample?.httpStatus?' · HTTP '+sample.httpStatus:'');
+              (sample?.httpStatus?' · HTTP '+sample.httpStatus:'')+
+              (failedSamples?' · نجحت عينة بعد '+failedSamples+' عينة فاشلة':'');
           }else{
             session.failed++;
             status.className='status failed';
@@ -548,8 +550,15 @@ async function runXtreamBatchProbe(){
               no_playable_episodes:'لا توجد حلقات',timeout:'انتهت مهلة المصدر',
               upstream_unreachable:'فشل الاتصال بالمصدر'
             };
+            const statuses={
+              401:'المصدر رفض بيانات الدخول',
+              403:'المصدر يمنع تشغيل هذه العينة',
+              404:'رابط الملف غير موجود لدى المصدر؛ قد تعمل عناصر أخرى',
+              429:'تجاوز حد الطلبات أو الاتصالات',
+              456:'رمز غير قياسي من المصدر؛ راجع السماح بتشغيل الفيديو لدى المزود'
+            };
             status.textContent='✕ '+(http>=400&&http<=599?'HTTP '+http+' · ':'')+
-              (known[reason]||'المصدر لم يؤكد تشغيل العينة');
+              (statuses[http]||known[reason]||'المصدر لم يؤكد تشغيل العينة');
           }
         }catch(error){
           if(session.cancelled)break outer;
@@ -1357,11 +1366,13 @@ async function runBlofyItemProbe(){
       timeout:'انتهت مهلة الاتصال دون فيديو.',
       upstream_http_403:'المصدر يرفض الوصول؛ راجع صلاحية الحساب لدى المزود.',
       upstream_http_404:'رابط التشغيل غير موجود لدى المزود.',
+      upstream_http_456:'رمز غير قياسي من المزود؛ تحقق من أذونات التشغيل وقيود الحساب، ولا يمكن الجزم بسببه من الرمز وحده.',
       upstream_http_429:'تجاوز حد اتصالات المزود أو تقييد الطلبات.'
     };
     if(result.ok){
       const format={ts:'TS',hls:'HLS',mp4:'MP4',mkv:'MKV',unknown:'غير محدد'}[result.format]||'غير محدد';
-      note.textContent='✅ وصلت أول بيانات الفيديو · صيغة '+format+' · '+Number(result.elapsedMs||0).toLocaleString('en-US')+' ms. هذا لا يضمن استمرار التشغيل.';
+      note.textContent='✅ وصلت أول بيانات الفيديو · صيغة '+format+' · '+Number(result.elapsedMs||0).toLocaleString('en-US')+' ms'+
+        (result.rangeFallbackUsed?' · نجح الفحص بعد إعادة المحاولة بدون Range':'')+'. هذا لا يضمن استمرار التشغيل.';
     }else{
       note.textContent='❌ فشل المصدر'+(result.httpStatus?' · HTTP '+result.httpStatus:'')+' — '+
         (reasons[result.reason]||'راجع إعدادات المصدر والرابط والصيغة وحقوق التشغيل.');
