@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#09090e">
   <link rel="icon" type="image/png" href="/blofy-logo.png"><link rel="apple-touch-icon" href="/blofy-logo.png"><meta name="robots" content="noindex,nofollow"><title>BLOFY STREAM | إدارة المصادر والاشتراكات</title>
-  <link rel="stylesheet" href="/sources-admin.css?v=20261106-tmdb-gated-v15">
+  <link rel="stylesheet" href="/sources-admin.css?v=20261106-automatic-health-v16">
   <link rel="stylesheet" href="/site-polish.css?v=20261025-lux-final">
 </head>
 <body>
@@ -130,6 +130,12 @@
           </div>
           <div id="studioQuickStats" class="studio-quick-stats" aria-live="polite"></div>
           <div id="studioSourceAlerts" class="studio-source-alerts" aria-live="polite"></div>
+          <section class="studio-monitor-panel" aria-labelledby="studioMonitorTitle">
+            <h3 id="studioMonitorTitle">مراقبة تشغيل المصدر (عينات)</h3>
+            <div id="studioPlaybackMonitor" class="studio-monitor-results" aria-live="polite">
+              <p class="muted">سيبدأ فحص العينات تلقائيًا بعد تشغيل السيرفر، ثم كل 30 دقيقة لمصدر واحد بالتناوب.</p>
+            </div>
+          </section>
           <p class="muted studio-caveat">حالة «مفهرس» تعني ظهور المحتوى، ولا تثبت نجاح تشغيل قناة أو فيلم أو حلقة.</p>
         </section>
 
@@ -309,7 +315,7 @@
       </footer>
     </main>
   </div>
-  <script src="/sources-admin.js?v=20261106-tmdb-gated-v15" defer></script>
+  <script src="/sources-admin.js?v=20261106-automatic-health-v16" defer></script>
   <script src="/xtream-gateway-admin.js?v=20261106-account-visibility-v2" defer></script>
 </body>
 </html>
