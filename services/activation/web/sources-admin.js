@@ -197,6 +197,7 @@ function serverCard(item) {
     ['⟳ مزامنة المحتوى', 'sync-all', 'button'],
     ['فحص الاتصال', 'test', 'button ghost'],
     ['▶ اختبار رابط M3U', 'test-m3u', 'button ghost'],
+    ['⚡ فهرسة M3U للأفلام والحلقات', 'index-m3u', 'button ghost'],
     ['اختبار بث قناة', 'probe-live', 'button ghost'],
     ['اختبار تشغيل فيلم', 'probe-movie', 'button ghost'],
     ['اختبار بيانات مسلسل', 'probe-series', 'button ghost'],
@@ -258,6 +259,12 @@ function serverCard(item) {
     item.m3uConfigured?'● M3U مرتبط':'○ M3U غير مضاف');
   m3uBadge.dataset.role='m3uStatus';
   indicators.append(m3uBadge);
+  const m3uIndexBadge=make('span','source-state-pill '+(item.m3uIndexed?'on':'hidden'),
+    item.m3uIndexed?'● M3U مفهرس: '+Number(item.m3uIndex?.matched||0).toLocaleString('en-US'):
+      item.m3uIndex?.status==='indexing'?'◌ فهرسة M3U: '+Number(item.m3uIndex?.matched||0).toLocaleString('en-US'):
+      '○ M3U لم يُفهرس');
+  m3uIndexBadge.dataset.role='m3uIndexStatus';
+  indicators.append(m3uIndexBadge);
   updateSourceMediaIndicators(indicators,item);
   card.append(header, indicators, metrics, actions, settings, info);
   return card;
@@ -297,6 +304,16 @@ function refreshSourceCard(card, item) {
   if(m3uBadge){
     m3uBadge.className='source-state-pill '+(item.m3uConfigured?'on':'hidden');
     m3uBadge.textContent=item.m3uConfigured?'● M3U مرتبط':'○ M3U غير مضاف';
+  }
+  const indexBadge=card.querySelector('[data-role="m3uIndexStatus"]');
+  if(indexBadge){
+    const state=item.m3uIndex||{};
+    indexBadge.className='source-state-pill '+(item.m3uIndexed?'on':'hidden');
+    indexBadge.textContent=item.m3uIndexed?
+      '● M3U مفهرس: '+Number(state.matched||0).toLocaleString('en-US'):
+      state.status==='indexing'?
+        '◌ فهرسة M3U: '+Number(state.matched||0).toLocaleString('en-US'):
+        state.status==='failed'?'⚠ فشلت فهرسة M3U':'○ M3U لم يُفهرس';
   }
   updateSourceMediaIndicators(card.querySelector('.source-quick-status'),item);
   const enabledButton=card.querySelector('button[data-action="toggle-enabled"]');
@@ -419,7 +436,7 @@ function scheduleXtreamPoll() {
   window.clearTimeout(state.pollTimer);
   // A persisted 'syncing' status can survive a service restart. Poll only
   // while a real import is in progress rather than replacing cards forever.
-  const busy = state.xtreamServers.some(item => item.syncing === true);
+  const busy = state.xtreamServers.some(item => item.syncing === true || item.m3uIndex?.status==='indexing');
   if (!busy) return;
   state.pollTimer = window.setTimeout(async () => {
     await loadXtream(true);
@@ -828,6 +845,16 @@ async function handleServerAction(item, card, button) {
     } else if (action === 'test') {
       await api(`/api/v1/admin/xtream/servers/${item.id}/test`, { method: 'POST', body: '{}' });
       showMessage(`اتصال ${item.name} ناجح.`);
+    } else if(action==='index-m3u'){
+      if(!item.m3uConfigured)throw new Error('اربط قائمة M3U أولًا ثم اختبرها.');
+      writeFeedback('بدأ تجهيز فهرس روابط أفلام وحلقات M3U للمصدر نفسه دون تعديل مكتبة Xtream…');
+      const result=await api('/api/v1/admin/xtream/servers/'+item.id+'/index-m3u',{
+        method:'POST',body:'{}'
+      });
+      if(!result.started)throw new Error('تعذر بدء فهرسة M3U');
+      const note='بدأت فهرسة M3U للمصدر «'+item.name+
+        '». سيظهر عدد الروابط المكتملة هنا، وبعدها يتحقق BLOFY من الفيديو عند حدوث 404.';
+      writeFeedback(note);showMessage(note);
     } else if(action==='test-m3u'){
       // Do not trust a stale card captured before the M3U write/readback.
       // The authenticated server returns 409 if no secret is configured.
