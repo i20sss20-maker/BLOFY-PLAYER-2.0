@@ -1153,7 +1153,7 @@ async function runHybridM3uIndex(id){
       SET m3u_index_state=$2::jsonb WHERE id=$1 AND m3u_url_secret=$3
         AND m3u_index_state->>'generation'=$4`,
       [id,JSON.stringify({status:'failed',reason}),secretAtStart,generation]
-    ]).catch(()=>{});
+    ).catch(()=>{});
   }finally{
     try{await response?.body?.cancel()}catch{}
   }
