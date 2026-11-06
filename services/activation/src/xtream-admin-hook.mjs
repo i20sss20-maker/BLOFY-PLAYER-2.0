@@ -30,6 +30,8 @@ import { auditXtreamCatalogSample } from './xtream-library-insights.mjs';
 import { normalizeXtreamDetails,mergedXtreamMetadata } from './xtream-item-details.mjs';
 import { tmdbConfigured,validatedTmdbId,fetchTmdbDetails } from './xtream-tmdb.mjs';
 import { sortXtreamCategories } from './xtream-category-sort.mjs';
+import {createStudioPro} from './xtream-studio-pro.mjs';
+import {normalizeXtreamEpg} from './xtream-epg.mjs';
 import {normalizeStudioName,normalizeStudioItemEdit,readStudioLogoRequest} from './xtream-studio-policy.mjs';
 import { nativeXtreamCsrfToken } from './xtream-native-csrf.mjs';
 
@@ -942,6 +944,16 @@ function startSync(id, types) {
   if (syncLocks.has(id)) throw Object.assign(new Error('xtream_sync_in_progress'), { status: 409 });
   void syncServer(id, types).catch(error => console.error('xtream sync failed:', id, redactXtreamError(error)));
 }
+const studioPro=createStudioPro({pool,ensureXtreamReady:ensureReady,startSync});
+const studioTimer=setInterval(()=>{
+  void studioPro.tick().catch(error=>console.warn('BLOFY Studio schedule check failed:',String(error?.code||'unavailable').slice(0,30)));
+},300000);
+studioTimer.unref?.();
+const studioStartupTimer=setTimeout(()=>{
+  void studioPro.tick().catch(error=>console.warn('BLOFY Studio startup schedule check:',String(error?.code||'unavailable').slice(0,30)));
+},30000);
+studioStartupTimer.unref?.();
+
 
 async function createServer(body) {
   await ensureReady();
@@ -1112,6 +1124,32 @@ async function listCatalog(query, publishedOnly = false) {
 // Operator-only read-only preview. Keep the sample bounded so a 250k-row
 // IPTV catalog cannot stall the primary playback database. All candidate
 // matching remains advisory: no silent remapping or rights assumptions.
+async function previewAdminChannelEpg(serverId,sourceId){
+  if(!validUuid(serverId)||!/^[A-Za-z0-9._-]{1,128}$/.test(String(sourceId||'')))
+    throw Object.assign(new Error('studio_epg_selection_invalid'),{status:400});
+  const row=await serverById(serverId);
+  if(!row||!row.enabled)throw Object.assign(new Error('studio_epg_source_unavailable'),{status:409});
+  const found=(await pool.query("SELECT source_id FROM blofy_xtream_items WHERE server_id=$1 AND media_type='live' AND source_id=$2",
+    [serverId,sourceId])).rows[0];
+  if(!found)throw Object.assign(new Error('studio_epg_channel_not_found'),{status:404});
+  const creds=decryptCredentials(row);
+  const upstream=await checkedFetch(xtreamApiUrl(row.base_url,creds.username,creds.password,'get_short_epg',
+    {stream_id:sourceId,limit:'12'}),{timeoutMs:12000});
+  let total=0,parts=[];
+  try{
+    if(!upstream.body)throw new Error('studio_epg_empty');
+    for await(const part of upstream.body){
+      total+=part.byteLength;
+      if(total>300000)throw new Error('studio_epg_too_large');
+      parts.push(Buffer.from(part));
+    }
+  }finally{try{await upstream.body?.cancel()}catch{}}
+  let payload;
+  try{payload=JSON.parse(Buffer.concat(parts).toString('utf8'))}
+  catch{throw Object.assign(new Error('studio_epg_invalid_data'),{status:409})}
+  return {serverId,sourceId,...normalizeXtreamEpg(payload,12)};
+}
+
 async function previewCatalogInsights(serverId,mediaType){
   if(!validUuid(serverId)||!['movie','series','live'].includes(mediaType))
     throw Object.assign(new Error('xtream_insights_selection_invalid'),{status:400});
@@ -1496,6 +1534,42 @@ http.createServer = function withBlofyXtream(listener) {
       if (!url.pathname.startsWith('/api/v1/admin/xtream')) return listener(req, res);
       if (!requireAdmin(req, res)) return;
       await ensureReady();
+
+      // All Studio Pro calls inherit the existing admin authentication and
+      // rate limit. Saved presentations do not expose upstream secrets.
+      if(url.pathname.startsWith('/api/v1/admin/xtream/pro/')){
+        const suffix=url.pathname.slice('/api/v1/admin/xtream/pro/'.length);
+        if(suffix==='epg'&&req.method==='GET')
+          return json(res,200,await previewAdminChannelEpg(url.searchParams.get('serverId'),url.searchParams.get('sourceId')));
+        if(suffix==='overview'&&req.method==='GET')
+          return json(res,200,await studioPro.overview(url.searchParams.get('serverId')));
+        if(suffix==='bulk'&&req.method==='POST')
+          return json(res,200,await studioPro.bulk(await readJson(req)));
+        if(suffix==='snapshots'&&req.method==='GET')
+          return json(res,200,{items:await studioPro.listSnapshots(url.searchParams.get('serverId'))});
+        if(suffix==='snapshots'&&req.method==='POST'){
+          const body=await readJson(req);
+          return json(res,201,await studioPro.snapshot(body.serverId,body.label));
+        }
+        const restore=suffix.match(/^snapshots\/([0-9a-f-]+)\/restore$/i);
+        if(restore&&req.method==='POST'){
+          const body=await readJson(req);
+          return json(res,200,await studioPro.restore(body.serverId,restore[1]));
+        }
+        if(suffix==='collections'&&req.method==='GET')
+          return json(res,200,{items:await studioPro.collections(url.searchParams.get('serverId'))});
+        if(suffix==='collections'&&req.method==='POST')
+          return json(res,201,await studioPro.addCollection(await readJson(req)));
+        const collection=suffix.match(/^collections\/([0-9a-f-]+)$/i);
+        if(collection&&req.method==='DELETE')
+          return json(res,200,await studioPro.deleteCollection(url.searchParams.get('serverId'),collection[1]));
+        const schedule=suffix.match(/^schedule\/([0-9a-f-]+)$/i);
+        if(schedule&&req.method==='GET')
+          return json(res,200,await studioPro.schedule(schedule[1]));
+        if(schedule&&req.method==='PUT')
+          return json(res,200,await studioPro.setSchedule(schedule[1],await readJson(req)));
+        return json(res,404,{error:'studio_pro_route_not_found'});
+      }
 
       // Fully server-rendered, session-protected control plane. It works
       // when browser-side JavaScript/extensions block source button events.

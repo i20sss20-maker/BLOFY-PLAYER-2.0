@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#09090e">
   <link rel="icon" type="image/png" href="/blofy-logo.png"><link rel="apple-touch-icon" href="/blofy-logo.png"><meta name="robots" content="noindex,nofollow"><title>BLOFY STREAM | إدارة المصادر والاشتراكات</title>
-  <link rel="stylesheet" href="/sources-admin.css?v=20261107-studio-v1">
+  <link rel="stylesheet" href="/sources-admin.css?v=20261106-pro-v1">
   <link rel="stylesheet" href="/site-polish.css?v=20261025-lux-final">
 </head>
 <body>
@@ -307,6 +307,97 @@
             <div><strong>🗂️ تنظيم الأقسام</strong><small>ترتيب الأقسام واللغة والسنة موجود في تبويب المكتبة.</small></div>
           </div>
         </section>
+
+        <section class="panel studio-pro-panel" aria-labelledby="studioProHeading">
+          <div class="panel-head">
+            <div><span class="panel-kicker">BLOFY CONTROL CENTER PRO</span><h2 id="studioProHeading">مركز التحكم الاحترافي</h2>
+              <p>نظّم القنوات، احفظ نسخ التخصيصات، أنشئ مجموعات، وجدول تحديثات المحتوى. لا يشمل حفظ كلمات المرور أو تغيير صلاحيات المشتركين.</p>
+            </div>
+          </div>
+          <div class="studio-pro-scope">
+            <label><span>اختر مصدر Xtream</span><select id="studioProSource"><option value="">اختر مصدرًا</option></select></label>
+            <button id="studioProRefresh" class="button ghost" type="button">↻ تحديث حالة المركز</button>
+          </div>
+          <div id="studioProSummary" class="studio-pro-stats" aria-live="polite">
+            <p class="muted">اختر المصدر لقراءة ملخص المكتبة.</p>
+          </div>
+          <div class="studio-pro-panels">
+            <section class="studio-pro-subpanel" aria-labelledby="studioBatchHeading">
+              <h3 id="studioBatchHeading">📺 إدارة جماعية للقنوات</h3>
+              <p class="muted">حمّل أول 50 قناة في المصدر، وحدّد القنوات المطلوبة، ثم اختَر إظهارها أو إخفاءها أو تثبيتها أو ترقيمها. التعديلات لا تمس المصدر الأصلي.</p>
+              <div class="inline-actions">
+                <button id="studioProLoadChannels" class="button ghost" type="button">تحميل عينة القنوات</button>
+                <button id="studioProSelectAll" class="button ghost" type="button">تحديد المعروض</button>
+                <button id="studioProClearSelection" class="button ghost" type="button">مسح التحديد</button>
+              </div>
+              <div id="studioProChannels" class="studio-pro-channel-list" aria-live="polite"></div>
+              <div class="studio-pro-batch-controls">
+                <label><span>الإجراء على المحدد</span><select id="studioProBulkAction">
+                  <option value="feature">⭐ تثبيت كمميزة</option>
+                  <option value="unfeature">إلغاء التثبيت</option>
+                  <option value="show">إظهار القنوات</option>
+                  <option value="hide">إخفاء القنوات</option>
+                  <option value="renumber">ترقيم متسلسل</option>
+                  <option value="clear_numbers">إزالة أرقام مخصصة</option>
+                </select></label>
+                <label><span>رقم البداية (للترقيم فقط)</span><input id="studioProStartNumber" type="number" min="1" max="99999" value="1"></label>
+                <button id="studioProApplyBulk" class="button primary" type="button">معاينة وتنفيذ على المحدد</button>
+              </div>
+            </section>
+            <section class="studio-pro-subpanel" aria-labelledby="studioCollectionsHeading">
+              <h3 id="studioCollectionsHeading">🗂️ مجموعات القنوات المخصصة</h3>
+              <p class="muted">احفظ مجموعة من القنوات المحددة باسمك. هذه مجموعات تحرير داخل لوحة الإدارة فقط؛ لا تغيّر باقات العملاء تلقائيًا.</p>
+              <div class="studio-pro-inline-form">
+                <input id="studioProCollectionName" type="text" maxlength="80" placeholder="مثال: قنوات الرياضة المختارة" aria-label="اسم المجموعة">
+                <button id="studioProCreateCollection" class="button primary" type="button">إنشاء مجموعة من المحدد</button>
+              </div>
+              <div id="studioProCollections" class="studio-pro-list" aria-live="polite"></div>
+            </section>
+            <section class="studio-pro-subpanel" aria-labelledby="studioSnapshotsHeading">
+              <h3 id="studioSnapshotsHeading">💾 النسخ الاحتياطية والتراجع</h3>
+              <p class="muted">احفظ ترتيب الفئات والتخصيصات والإظهار والإخفاء. الاستعادة تعيد حالة العرض للمصدر المحدد فقط؛ لا تستعيد فيديوهات أو بيانات مزود Xtream.</p>
+              <div class="studio-pro-inline-form">
+                <input id="studioProSnapshotName" type="text" maxlength="80" placeholder="مثال: قبل ترتيب نوفمبر" aria-label="اسم النسخة الاحتياطية">
+                <button id="studioProCreateSnapshot" class="button primary" type="button">حفظ نسخة الآن</button>
+              </div>
+              <div id="studioProSnapshots" class="studio-pro-list" aria-live="polite"></div>
+            </section>
+            <section class="studio-pro-subpanel" aria-labelledby="studioScheduleHeading">
+              <h3 id="studioScheduleHeading">⏱️ التحديثات المجدولة</h3>
+              <p class="muted">جدول مزامنة بيانات Xtream دون تشغيل الفيديو. تُنفذ أثناء توفر Railway، وتظهر النتائج الفعلية في حالة المصدر.</p>
+              <div class="studio-pro-schedule">
+                <label><span>الدورية</span><select id="studioProScheduleHours">
+                  <option value="6">كل 6 ساعات</option><option value="12">كل 12 ساعة</option>
+                  <option value="24" selected>يوميًا</option><option value="48">كل يومين</option>
+                  <option value="168">أسبوعيًا</option>
+                </select></label>
+                <label><span>محتوى المزامنة</span><select id="studioProScheduleTypes">
+                  <option value="all">القنوات والأفلام والمسلسلات</option>
+                  <option value="live">القنوات</option><option value="movie">الأفلام</option>
+                  <option value="series">المسلسلات</option>
+                </select></label>
+              </div>
+              <div class="inline-actions">
+                <button id="studioProEnableSchedule" class="button primary" type="button">تفعيل الجدولة</button>
+                <button id="studioProDisableSchedule" class="button ghost" type="button">إيقاف الجدولة</button>
+              </div>
+              <p id="studioProScheduleStatus" class="muted" role="status">غير مفعلة افتراضيًا.</p>
+            </section>
+            <section class="studio-pro-subpanel" aria-labelledby="studioHealthHeading">
+              <h3 id="studioHealthHeading">📈 مراقبة البث والإحصائيات</h3>
+              <p class="muted">أرقام التشغيل الحقيقية من هذه النسخة خلال آخر ساعة. لا تشمل المشاهدات التي تمر مباشرة من جهاز العميل إلى مزوده.</p>
+              <button id="studioProLoadHealth" class="button ghost" type="button">فحص مؤشرات التشغيل</button>
+              <div id="studioProHealth" class="studio-pro-stats" aria-live="polite"></div>
+            </section>
+            <section class="studio-pro-subpanel" aria-labelledby="studioEpgHeading">
+              <h3 id="studioEpgHeading">📅 دليل برامج EPG</h3>
+              <p class="muted">اختر قناة من العينة بالأعلى لتجربة دليل البرامج الحقيقي من المزود. قد لا يدعمه المصدر؛ لن نعرض برامج تخمينية.</p>
+              <button id="studioProEpg" class="button ghost" type="button">عرض برامج القناة المحددة</button>
+              <div id="studioProEpgResult" class="studio-pro-list" aria-live="polite"></div>
+            </section>
+          </div>
+          <p id="studioProStatus" class="muted" role="status" aria-live="polite">حدد مصدرًا للبدء.</p>
+        </section>
       </section>
 
       <section id="tab-catalog" class="tab-page" hidden>
@@ -402,7 +493,8 @@
     </main>
   </div>
   <script src="/blofy-smart-commands.js?v=20261106-v1" defer></script>
-  <script src="/sources-admin.js?v=20261107-studio-v1" defer></script>
+  <script src="/sources-admin.js?v=20261106-pro-v1" defer></script>
+  <script src="/blofy-studio-pro.js?v=20261106-pro-v1" defer></script>
   <script src="/xtream-gateway-admin.js?v=20261106-account-visibility-v2" defer></script>
 </body>
 </html>
