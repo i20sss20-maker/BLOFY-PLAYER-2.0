@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { mergedXtreamMetadata } from './xtream-item-details.mjs';
 
 function keyBuffer(keyHex) {
   const value = String(keyHex || '').trim();
@@ -72,7 +73,7 @@ export function formatGatewayCategory(row) {
 }
 
 export function formatGatewayItem(mediaType, row) {
-  const meta = row.metadata && typeof row.metadata === 'object' ? row.metadata : {};
+  const meta = mergedXtreamMetadata(row.metadata);
   const categoryId = row.category_gateway_id == null ? '0' : String(row.category_gateway_id);
   const base = {
     name: String(row.name || ''),
