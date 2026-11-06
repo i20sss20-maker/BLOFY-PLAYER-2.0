@@ -1314,6 +1314,343 @@ async function patchItem(serverId, mediaType, sourceId, enabled) {
   return result.rows[0];
 }
 
+async function updateStudioItem(serverId,mediaType,sourceId,body,reset=false){
+  if(!validUuid(serverId)||!validType(mediaType)||!sourceId||sourceId.length>128)
+    throw Object.assign(new Error('studio_item_invalid'),{status:400});
+  const changes=reset?
+    {customName:null,customIconUrl:null,featured:false,channelNumber:null}:
+    normalizeStudioItemEdit(body,mediaType);
+  const cols={customName:'custom_name',customIconUrl:'custom_icon_url',
+    featured:'featured',channelNumber:'channel_number'};
+  const assignments=[],values=[serverId,mediaType,sourceId];
+  for(const [key,val] of Object.entries(changes)){
+    values.push(val);
+    assignments.push(cols[key]+'=
+  const serverId = String(body.serverId || '');
+  const mediaType = validType(body.mediaType);
+  if (!validUuid(serverId) || !mediaType) throw Object.assign(new Error('xtream_bulk_invalid'), { status: 400 });
+  const enabled = Boolean(body.enabled);
+  const target = ['categories','items','both'].includes(body.target) ? body.target : 'both';
+  const categoryId = body.categoryId == null ? null : String(body.categoryId);
+  let categories = 0;
+  let items = 0;
+  if (target === 'categories' || target === 'both') {
+    const result = categoryId
+      ? await pool.query('UPDATE blofy_xtream_categories SET enabled=$4,updated_at=NOW() WHERE server_id=$1 AND media_type=$2 AND source_category_id=$3', [serverId,mediaType,categoryId,enabled])
+      : await pool.query('UPDATE blofy_xtream_categories SET enabled=$3,updated_at=NOW() WHERE server_id=$1 AND media_type=$2', [serverId,mediaType,enabled]);
+    categories = result.rowCount;
+  }
+  if (target === 'items' || target === 'both') {
+    const result = categoryId
+      ? await pool.query('UPDATE blofy_xtream_items SET enabled=$4,updated_at=NOW() WHERE server_id=$1 AND media_type=$2 AND category_id=$3', [serverId,mediaType,categoryId,enabled])
+      : await pool.query('UPDATE blofy_xtream_items SET enabled=$3,updated_at=NOW() WHERE server_id=$1 AND media_type=$2', [serverId,mediaType,enabled]);
+    items = result.rowCount;
+  }
+  return { categories, items, enabled };
+}
+
+async function publicSummary() {
+  await ensureReady();
+  const servers = (await pool.query(`SELECT id,name,priority,status,counts,last_sync_at FROM blofy_xtream_servers WHERE enabled=TRUE AND publish_catalog=TRUE ORDER BY priority,name`)).rows;
+  return {
+    ok: true,
+    playbackProxy: false,
+    servers: servers.map(row => ({ id: row.id, name: row.name, status: row.status, counts: row.counts || {}, lastSyncAt: row.last_sync_at ? new Date(row.last_sync_at).getTime() : null }))
+  };
+}
+
+function sendControlHtml(res,content){
+  res.writeHead(200,{'content-type':'text/html; charset=utf-8','cache-control':'private, no-store',
+    'x-content-type-options':'nosniff','x-frame-options':'DENY','referrer-policy':'no-referrer'});
+  res.end(content);
+}
+function controlRedirect(res,kind,value){
+  const target=CONTROL_PATH+'?'+(kind==='error'?'error':'ok')+'='+encodeURIComponent(String(value||''));
+  res.writeHead(303,{'location':target,'cache-control':'no-store'});
+  res.end();
+}
+async function handleControlAction(req,res,id,action) {
+  const available=['toggle-enabled','toggle-publish','test','probe-live','probe-movie','probe-series','probe-episode','sync-all','sync-live','sync-movie','sync-series','cancel-sync','save','delete'];
+  if(id==='new'&&action==='add'){
+    const fields=await readControlForm(req);
+    if(fields.rightsConfirmed!=='yes')throw Object.assign(new Error('rights_confirmation_required'),{status:400});
+    const item=await createServer({name:fields.name,baseUrl:fields.baseUrl,username:fields.username,
+      password:fields.password,priority:fields.priority,enabled:true,publishCatalog:false});
+    startSync(item.id,['live','movie','series']);
+    return controlRedirect(res,'ok','added');
+  }
+  if(!validUuid(id)||!available.includes(action))
+    throw Object.assign(new Error('xtream_control_action_invalid'),{status:400});
+  const current=await serverById(id);
+  if(!current)throw Object.assign(new Error('xtream_server_not_found'),{status:404});
+  if(action==='toggle-enabled'){
+    const next=!current.enabled;
+    await patchServer(id,{enabled:next});
+    return controlRedirect(res,'ok',next?'enabled':'paused');
+  }
+  if(action==='toggle-publish'){
+    const next=!current.publish_catalog;
+    await patchServer(id,{publishCatalog:next});
+    return controlRedirect(res,'ok',next?'published':'hidden');
+  }
+  if(action==='delete'){
+    const fields=await readControlForm(req);
+    if(fields.confirmId!==id||fields.ack!=='yes')
+      throw Object.assign(new Error('xtream_delete_confirmation_required'),{status:400});
+    if(!await requestDeleteSource(id))
+      throw Object.assign(new Error('xtream_server_not_found'),{status:404});
+    return controlRedirect(res,'ok','deleted');
+  }
+  if(action==='save'){
+    const fields=await readControlForm(req);
+    const body={name:fields.name,baseUrl:fields.baseUrl,priority:fields.priority};
+    if(fields.username?.trim())body.username=fields.username;
+    if(fields.password?.trim())body.password=fields.password;
+    await patchServer(id,body);
+    return controlRedirect(res,'ok','saved');
+  }
+  if(action==='cancel-sync'){
+    await cancelSourceSync(id);
+    return controlRedirect(res,'ok','cancelled');
+  }
+  if(['probe-live','probe-movie','probe-series','probe-episode'].includes(action)){
+    const mediaType=action.slice('probe-'.length);
+    const result=await probeXtreamPlayback(id,mediaType);
+    await persistSourceMediaProbe(id,mediaType,result);
+    // Safe logging for later debugging: no source URLs, usernames, passwords,
+    // episode IDs or movie titles. Logs help distinguish failed API from media.
+    console.info('xtream source probe result',{
+      sourceId:id,mediaType,ok:Boolean(result.ok),
+      checks:(result.checks||[]).map(check=>({httpStatus:check.httpStatus,
+        error:check.error||null,ok:Boolean(check.ok),episodeCount:check.episodeCount||0}))
+    });
+    return controlRedirect(res,result.ok?'ok':'error','probe:'+xtreamProbeMessage(result,mediaType));
+  }
+  if(action==='test'){
+    // Never block a 15s proxy request on an upstream test that may take 20s.
+    void testServer(id).catch(error=>console.warn('xtream direct check failed:',id,redactXtreamError(error)));
+    return controlRedirect(res,'ok','testing');
+  }
+  if(!current.enabled)throw Object.assign(new Error('xtream_source_paused'),{status:409});
+  const types=action==='sync-all'?['live','movie','series']:[action.slice('sync-'.length)];
+  startSync(id,types);
+  return controlRedirect(res,'ok','syncing');
+}
+
+const previousCreateServer = http.createServer.bind(http);
+http.createServer = function withBlofyXtream(listener) {
+  if (typeof listener !== 'function') return previousCreateServer(listener);
+  return previousCreateServer(async (req, res) => {
+    if (res.writableEnded || res.destroyed) return;
+    let url;
+    try { url = new URL(req.url || '/', 'http://localhost'); }
+    catch { return listener(req, res); }
+    try {
+      if (req.method === 'GET' && url.pathname === '/xtream/studio-logo') return serveStudioLogo(res);
+      if (req.method === 'GET' && url.pathname === '/sources/xtream/summary') return publicJson(res, await publicSummary());
+      if (req.method === 'GET' && url.pathname === '/sources/xtream/catalog') {
+        return publicJson(res, { items: await listCatalog(Object.fromEntries(url.searchParams), true) });
+      }
+      // `/api/v1/admin/xtream-gateway/*` belongs to the dedicated BLOFY gateway
+      // handler. Do not let this broader `/api/v1/admin/xtream` router swallow it.
+      if (url.pathname.startsWith('/api/v1/admin/xtream-gateway')) return listener(req, res);
+      if (!url.pathname.startsWith('/api/v1/admin/xtream')) return listener(req, res);
+      if (!requireAdmin(req, res)) return;
+      await ensureReady();
+
+      // Fully server-rendered, session-protected control plane. It works
+      // when browser-side JavaScript/extensions block source button events.
+      if(req.method==='GET' && url.pathname===CONTROL_PATH){
+        const items=(await serverRows()).map(adminServer);
+        return sendControlHtml(res,controlPage({
+          items,success:url.searchParams.get('ok')||'',error:url.searchParams.get('error')||'',
+          csrfToken:nativeXtreamCsrfToken(req,ADMIN_SESSION_KEY)
+        }));
+      }
+      const nativeConfirm=url.pathname.match(/^\/api\/v1\/admin\/xtream\/controls\/([0-9a-f-]+)\/confirm-delete$/i);
+      if(nativeConfirm&&req.method==='GET'){
+        const source=await serverById(nativeConfirm[1]);
+        if(!source)return json(res,404,{error:'xtream_server_not_found'});
+        return sendControlHtml(res,deleteConfirmationPage(source,nativeXtreamCsrfToken(req,ADMIN_SESSION_KEY)));
+      }
+      const nativeAction=url.pathname.match(/^\/api\/v1\/admin\/xtream\/controls\/([a-z0-9-]+)\/(toggle-enabled|toggle-publish|test|probe-live|probe-movie|probe-series|probe-episode|sync-all|sync-live|sync-movie|sync-series|cancel-sync|save|delete|add)$/i);
+      if(nativeAction&&req.method==='POST'){
+        try{return await handleControlAction(req,res,nativeAction[1],nativeAction[2]);}
+        catch(error){
+          console.warn('xtream control failed:',redactXtreamError(error));
+          return controlRedirect(res,'error',redactXtreamError(error));
+        }
+      }
+
+      if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream/servers') {
+        const items = (await serverRows()).map(adminServer);
+        const totals = items.reduce((acc, item) => {
+          acc.servers++;
+          acc.live += Number(item.counts.live || 0);
+          acc.movie += Number(item.counts.movie || 0);
+          acc.series += Number(item.counts.series || 0);
+          if (item.status === 'online') acc.online++;
+          if (item.status === 'syncing' || item.syncing) acc.syncing++;
+          return acc;
+        }, { servers: 0, online: 0, syncing: 0, live: 0, movie: 0, series: 0 });
+        totals.total = totals.live + totals.movie + totals.series;
+        return json(res, 200, { items, totals,csrfToken:nativeXtreamCsrfToken(req,ADMIN_SESSION_KEY) });
+      }
+      if (req.method === 'POST' && url.pathname === '/api/v1/admin/xtream/servers') {
+        const item = await createServer(await readJson(req));
+        return json(res, 201, { item });
+      }
+      if (req.method === 'POST' && url.pathname === '/api/v1/admin/xtream/categories/auto-sort') {
+        const body=await readJson(req);
+        return json(res,200,await autoSortCategories(body.serverId,body.mediaType,body.mode));
+      }
+      if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream/categories') {
+        return json(res, 200, { items: await listCategories(url.searchParams.get('serverId'), url.searchParams.get('type')) });
+      }
+      if(req.method==='GET'&&url.pathname==='/api/v1/admin/xtream/tmdb/status'){
+        return json(res,200,{enabled:tmdbConfigured(),requiresCommercialLicense:true});
+      }
+      if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream/catalog/insights') {
+        return json(res,200,await previewCatalogInsights(
+          url.searchParams.get('serverId'),url.searchParams.get('type')));
+      }
+      if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream/catalog') {
+        return json(res, 200, { items: await listCatalog(Object.fromEntries(url.searchParams), false) });
+      }
+      if (req.method === 'POST' && url.pathname === '/api/v1/admin/xtream/bulk') {
+        return json(res, 200, await bulkToggle(await readJson(req)));
+      }
+      if (req.method === 'POST' && url.pathname === '/api/v1/admin/xtream/sync-all') {
+        const rows = await serverRows();
+        const started = [];
+        for (const row of rows.filter(item => item.enabled)) {
+          if (syncLocks.has(row.id)) continue;
+          startSync(row.id, ['live','movie','series']);
+          started.push(row.id);
+        }
+        return json(res, 202, { started });
+      }
+
+      const serverMatch = url.pathname.match(/^\/api\/v1\/admin\/xtream\/servers\/([0-9a-f-]+)(?:\/(test|sync|cancel-sync|probe-playback))?$/i);
+      if (serverMatch) {
+        const id = serverMatch[1];
+        const action = serverMatch[2];
+        if (!validUuid(id)) return json(res, 400, { error: 'xtream_server_id_invalid' });
+        if (!action && req.method === 'PATCH') return json(res, 200, { item: await patchServer(id, await readJson(req)) });
+        if (!action && req.method === 'DELETE') {
+          const accepted = await requestDeleteSource(id);
+          return json(res, accepted ? 202 : 404, accepted
+            ? { deletionQueued: true, deletedFromCatalog: true }
+            : { error: 'xtream_server_not_found' });
+        }
+        if (action === 'test' && req.method === 'POST') return json(res, 200, { item: await testServer(id) });
+        if (action === 'probe-playback' && req.method === 'POST') {
+          const body=await readJson(req);
+          const mediaType=String(body.mediaType||'live');
+          const result=await probeXtreamPlayback(id,mediaType);
+          await persistSourceMediaProbe(id,mediaType,result);
+          return json(res,200,result);
+        }
+        if (action === 'cancel-sync' && req.method === 'POST') {
+          return json(res,200,await cancelSourceSync(id));
+        }
+        if (action === 'sync' && req.method === 'POST') {
+          const body = await readJson(req);
+          const types = Array.isArray(body.types) ? body.types : ['live','movie','series'];
+          const selected=types.map(validType).filter(Boolean);
+          const source=await serverById(id);
+          if(!source)return json(res,404,{error:'xtream_server_not_found'});
+          if(!source.enabled)return json(res,409,{error:'xtream_source_paused'});
+          if(!selected.length)return json(res,400,{error:'xtream_sync_types_invalid'});
+          startSync(id, selected);
+          return json(res, 202, { started: true, id, types:selected });
+        }
+      }
+
+      const categoryMatch = url.pathname.match(/^\/api\/v1\/admin\/xtream\/categories\/([0-9a-f-]+)\/(live|movie|series)\/([^/]+)$/i);
+      if (categoryMatch && req.method === 'PATCH') {
+        const body = await readJson(req);
+        if(body.direction!==undefined) {
+          const result=await moveCategory(categoryMatch[1],categoryMatch[2].toLowerCase(),
+            decodeURIComponent(categoryMatch[3]),body.direction);
+          return json(res,200,{updated:true,...result});
+        }
+        if (body.enabled === undefined) return json(res, 400, { error: 'nothing_to_update' });
+        await patchCategory(categoryMatch[1], categoryMatch[2].toLowerCase(), decodeURIComponent(categoryMatch[3]), body.enabled);
+        return json(res, 200, { updated: true });
+      }
+
+      const tmdbMatch=url.pathname.match(/^\/api\/v1\/admin\/xtream\/items\/([0-9a-f-]+)\/(movie|series)\/([^/]+)\/tmdb-enrich$/i);
+      if(tmdbMatch&&req.method==='POST'){
+        return json(res,200,await enrichOneTmdbItem(tmdbMatch[1],
+          tmdbMatch[2].toLowerCase(),decodeURIComponent(tmdbMatch[3])));
+      }
+
+      const enrichMatch=url.pathname.match(/^\/api\/v1\/admin\/xtream\/items\/([0-9a-f-]+)\/(movie|series)\/([^/]+)\/enrich$/i);
+      if(enrichMatch&&req.method==='POST'){
+        return json(res,200,await enrichOneXtreamItem(enrichMatch[1],
+          enrichMatch[2].toLowerCase(),decodeURIComponent(enrichMatch[3])));
+      }
+
+      const itemMatch = url.pathname.match(/^\/api\/v1\/admin\/xtream\/items\/([0-9a-f-]+)\/(live|movie|series)\/([^/]+)$/i);
+      if (itemMatch && req.method === 'PATCH') {
+        const body = await readJson(req);
+        if (body.enabled === undefined) return json(res, 400, { error: 'nothing_to_update' });
+        await patchItem(itemMatch[1], itemMatch[2].toLowerCase(), decodeURIComponent(itemMatch[3]), body.enabled);
+        return json(res, 200, { updated: true });
+      }
+
+      return json(res, 404, { error: 'xtream_route_not_found' });
+    } catch (error) {
+      console.error('xtream request failed:', redactXtreamError(error));
+      if (res.writableEnded || res.destroyed) return;
+      if (res.headersSent) { res.destroy(); return; }
+      const status = Number(error?.status) || (String(error?.message || '').includes('private_host') ? 400 : 503);
+      return json(res, status, { error: status === 503 ? 'xtream_unavailable' : String(error?.message || 'xtream_request_failed') });
+    }
+  });
+};
+
+export { ensureReady as ensureXtreamAdminReady };
++values.length);
+  }
+  const result=await pool.query(`UPDATE blofy_xtream_items SET ${assignments.join(',')},updated_at=NOW()
+    WHERE server_id=$1 AND media_type=$2 AND source_id=$3 RETURNING source_id`,values);
+  if(!result.rowCount)throw Object.assign(new Error('xtream_item_not_found'),{status:404});
+  return {updated:true};
+}
+
+export async function getXtreamStudioBranding(){
+  await ensureReady();
+  const row=(await pool.query('SELECT display_name,logo_mime,updated_at FROM blofy_xtream_studio_branding WHERE id=1')).rows[0];
+  return {name:row?.display_name||'BLOFY STREAM',
+    logoUrl:row?.logo_mime?'/xtream/studio-logo?v='+new Date(row.updated_at).getTime():null,
+    updatedAt:row?.updated_at?new Date(row.updated_at).getTime():null};
+}
+
+async function setStudioName(value){
+  const name=normalizeStudioName(value);
+  await pool.query('UPDATE blofy_xtream_studio_branding SET display_name=$1,updated_at=NOW() WHERE id=1',[name]);
+  return getXtreamStudioBranding();
+}
+async function storeStudioLogo(req){
+  const {image,mime}=await readStudioLogoRequest(req);
+  await pool.query('UPDATE blofy_xtream_studio_branding SET logo_mime=$1,logo_bytes=$2,updated_at=NOW() WHERE id=1',[mime,image]);
+  return getXtreamStudioBranding();
+}
+async function removeStudioLogo(){
+  await pool.query('UPDATE blofy_xtream_studio_branding SET logo_mime=NULL,logo_bytes=NULL,updated_at=NOW() WHERE id=1');
+  return getXtreamStudioBranding();
+}
+async function serveStudioLogo(res){
+  await ensureReady();
+  const row=(await pool.query('SELECT logo_mime,logo_bytes FROM blofy_xtream_studio_branding WHERE id=1')).rows[0];
+  if(!row?.logo_bytes)return json(res,404,{error:'studio_logo_not_found'});
+  res.writeHead(200,{'content-type':row.logo_mime,'content-length':row.logo_bytes.length,
+    'x-content-type-options':'nosniff','cache-control':'public, max-age=300'});
+  return res.end(row.logo_bytes);
+}
+
 async function bulkToggle(body) {
   const serverId = String(body.serverId || '');
   const mediaType = validType(body.mediaType);
