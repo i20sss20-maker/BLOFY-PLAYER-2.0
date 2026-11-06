@@ -214,6 +214,8 @@ jobs:
           exit 1
       - name: Browser-independent Xtream admin buttons with PostgreSQL (real HTTP forms)
         run: node test/xtream-native-controls.integration.mjs
+      - name: Studio Pro API and reversible curation with isolated PostgreSQL
+        run: node test/xtream-studio-pro.integration.mjs
       - name: Unified production smoke suite
         run: node smoke.mjs
       - name: Portal to Android playlist sync E2E contract
