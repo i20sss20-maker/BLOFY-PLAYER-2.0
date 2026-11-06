@@ -289,3 +289,9 @@
 .xt-batch-probe-row .status.passed{color:#91ddb2}
 .xt-batch-probe-row .status.failed{color:#ffa7b2}
 @media(max-width:780px){.xt-batch-probe-results{grid-template-columns:1fr}.xt-batch-probe-row{align-items:start;flex-direction:column}}
+
+/* One-item metadata enrichment: explicit and safe by default. */
+.catalog-actions{display:flex;flex-direction:column;gap:7px;flex:0 0 auto;align-items:stretch;justify-content:center}
+.catalog-actions .button{min-height:37px;padding:8px 12px;max-width:220px;white-space:normal;line-height:1.4;text-align:center}
+.catalog-actions .button:disabled{opacity:.65;cursor:progress}
+@media(max-width:600px){.catalog-actions{width:100%;flex-direction:row;flex-wrap:wrap}.catalog-actions .button{flex:1 1 150px;max-width:none}}
