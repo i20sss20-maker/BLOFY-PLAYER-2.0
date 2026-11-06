@@ -1311,7 +1311,7 @@ async function probeGatewayMedia(kind,itemId){
   const started=Date.now();
   let reader,response;
   const controller=new AbortController();
-  const timeout=setTimeout(()=>controller.abort(),10000);
+  const timeout=setTimeout(()=>controller.abort(),20000);
   try{
     const row=kind==='series'
       ?await episodeByGatewayId(itemId)
@@ -1340,15 +1340,27 @@ async function probeGatewayMedia(kind,itemId){
     // The operator's manual episode probe also verifies changed extensions,
     // rather than repeatedly reporting 404 for an obsolete cached suffix.
     let repairedExtension=false,episodeRepairStatus=null;
+    if(kind==='movie' && response.status===404){
+      const alternate=await verifiedOfficialMediaAlternative(row,'movie',sourceId,ext,{
+        deadline:Date.now()+11000
+      });
+      if(alternate){
+        await response.body?.cancel().catch(()=>{});
+        response=null;
+        url=alternate.url;
+        response=await checkedFetch(url,{method:'GET',headers:probeHeaders,signal:controller.signal});
+        repairedExtension=true;
+      }
+    }
     if(kind==='series' && response.status===404){
       const fix=await repairEpisodeOn404(row);
       episodeRepairStatus=fix.status;
       console.warn('xtream episode operator probe diagnosis',{itemId,status:fix.status});
-      if(['changed','relocated','alternate_extension'].includes(fix.status)){
+      if(['changed','relocated','alternate_extension','provider_verified'].includes(fix.status)){
         await response.body?.cancel().catch(()=>{});
         response=null;
         sourceId=fix.sourceId||sourceId;
-        url=mediaUpstreamUrl(row,kind,sourceId,fix.extension);
+        url=fix.url||mediaUpstreamUrl(row,kind,sourceId,fix.extension);
         response=await checkedFetch(url,{method:'GET',headers:probeHeaders,signal:controller.signal});
         repairedExtension=true;
       }else if(['missing','position_unknown','catalog_media_mismatch'].includes(fix.status)){
