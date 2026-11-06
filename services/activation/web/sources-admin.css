@@ -350,3 +350,34 @@
   .studio-feature-cards,.catalog-studio-fields{grid-template-columns:1fr}
   .studio-identity-form .button{justify-self:stretch}
 }
+
+
+/* BLOFY Smart Command Center: bounded operator-assisted actions */
+.smart-command-panel{position:relative;overflow:hidden;border-color:rgba(168,124,252,.3)}
+.smart-command-panel::before{content:'';position:absolute;inset-inline:0;top:0;height:2px;background:linear-gradient(90deg,#573089,#a37ce9,#573089);pointer-events:none}
+.smart-command-form{display:grid;gap:13px}
+.smart-command-scope{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.smart-command-scope label{display:grid;gap:6px;min-width:0}
+.smart-command-scope label span,.smart-command-input-label{font-size:12px;color:#c8b6ea}
+.smart-command-scope select,.smart-command-form textarea{width:100%;min-width:0;border:1px solid #59436f;background:#120e1d;color:#f5efff;border-radius:12px;padding:12px;font:inherit}
+.smart-command-form textarea{resize:vertical;min-height:96px;line-height:1.85}
+.smart-command-form textarea:focus,.smart-command-scope select:focus{outline:2px solid #b58cf7;outline-offset:2px}
+.smart-command-suggestions{display:flex;gap:8px;flex-wrap:wrap}
+.smart-command-suggestions button{font:inherit;font-size:12px;cursor:pointer;border:1px solid #624a7d;border-radius:999px;padding:9px 12px;color:#d9cdf0;background:#251a36;transition:background .15s}
+.smart-command-suggestions button:hover,.smart-command-suggestions button:focus-visible{background:#3a2655}
+.smart-command-preview{border:1px solid #665285;border-radius:15px;background:#15101f;margin-top:15px;padding:16px;display:grid;gap:11px}
+.smart-command-preview[hidden]{display:none}
+.smart-command-preview h3{margin:0;font-size:17px}
+.smart-command-preview p{margin:0;color:#c7b9da;line-height:1.8}
+.smart-command-preview ol,.smart-command-preview ul{margin:0;padding-inline-start:25px;display:grid;gap:7px;color:#eee6ff}
+.smart-command-preview li{overflow-wrap:anywhere}
+.smart-command-preview .smart-danger{color:#ffd09b}
+.smart-command-preview .smart-good{color:#8de4bd}
+.smart-command-status{min-height:24px;margin:12px 0 0;white-space:pre-line;line-height:1.8}
+.smart-command-panel progress{width:100%;height:10px;accent-color:#b384f7;margin-top:10px}
+@media(max-width:680px){
+ .smart-command-scope{grid-template-columns:1fr}
+ .smart-command-form .inline-actions{display:grid;grid-template-columns:1fr}
+ .smart-command-form .inline-actions>.button{width:100%}
+ .smart-command-suggestions button{font-size:11px;padding:9px}
+}

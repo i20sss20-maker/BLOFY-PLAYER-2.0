@@ -422,6 +422,7 @@ async function loadXtream(silent = false, strict = false) {
     state.xtreamServers = Array.isArray(data.items) ? data.items : [];
     state.xtreamTotals = data.totals || {};
     renderXtream();
+    smartSources();
     scheduleXtreamPoll();
     return data;
   } catch (error) {
@@ -1681,8 +1682,275 @@ async function refreshCurrent() {
   else { await loadXtream(true); await loadCategories(); await loadCatalog(); }
 }
 
+
+// BLOFY Smart Command Center: safe previews over existing protected Xtream APIs.
+// No model key or external AI service. Execution never generates arbitrary URLs,
+// SQL, code, customer changes or hidden mutations.
+let smartCommandPlan=null,smartCommandRun=null;
+const smartKindLabels={live:'القنوات',movie:'الأفلام',series:'المسلسلات'};
+const smartNotice=message=>{el('smartCommandStatus').textContent=message;};
+function smartInvalidate(){
+  smartCommandPlan=null;
+  const button=el('smartCommandExecuteBtn');
+  button.hidden=true;button.disabled=true;
+  el('smartCommandPreview').hidden=true;
+}
+function smartSources(){
+  const select=el('smartCommandSource');
+  if(!select)return;
+  const previous=select.value;
+  select.replaceChildren(make('option','','اختر مصدر Xtream أولًا'));
+  select.firstChild.value='';
+  for(const source of state.xtreamServers){
+    const option=make('option','',source.name+(source.enabled?'':' · متوقف'));
+    option.value=source.id;
+    select.append(option);
+  }
+  if(state.xtreamServers.some(row=>row.id===previous))select.value=previous;
+}
+function smartItemLabel(item){return String(item?.name||'عنصر').slice(0,110);}
+function smartTargets(parsed,selection){
+  const raw=Array.isArray(parsed.mediaTypes)&&parsed.mediaTypes.length?
+    parsed.mediaTypes:selection==='all'?['live','movie','series']:[selection];
+  const types=[...new Set(raw.filter(x=>['live','movie','series'].includes(x)))];
+  if(parsed.intent==='enrich')return types.filter(x=>x!=='live');
+  return types;
+}
+function smartPreviewRow(container,text,cls=''){
+  container.append(make('li',cls,text));
+}
+async function buildSmartCommandPlan(event){
+  if(event)event.preventDefault();
+  if(smartCommandRun)return;
+  smartInvalidate();
+  const text=el('smartCommandText').value.trim();
+  const parser=globalThis.BlofySmartCommands;
+  if(!parser){smartNotice('تعذر تحميل محرك الأوامر. حدّث صفحة BLOFY وجرب مرة أخرى.');return;}
+  const parsed=parser.parse(text);
+  if(parsed.intent==='unknown'){smartNotice(parsed.reason);return;}
+  const serverId=el('smartCommandSource').value;
+  const source=state.xtreamServers.find(row=>row.id===serverId);
+  if(!source){smartNotice('اختر مصدر Xtream محددًا أولًا؛ ما راح أغيّر مصادر أخرى تلقائيًا.');return;}
+  const types=smartTargets(parsed,el('smartCommandType').value);
+  if(!types.length){smartNotice('تحديث معلومات الأعمال يدعم الأفلام والمسلسلات فقط. غيّر نطاق الأمر.');return;}
+  if(['sync','enrich','probe'].includes(parsed.intent)&&!source.enabled){
+    smartNotice('هذا المصدر متوقف. شغّله يدويًا قبل طلب المزامنة أو تحديث معلوماته أو فحصه.');return;
+  }
+  const snapshot={text,serverId,selectedType:el('smartCommandType').value,
+    sourceName:source.name,parsed,types,createdAt:Date.now(),tasks:[]};
+  const preview=el('smartCommandPreview');
+  preview.replaceChildren(make('h3','','فهمت طلبك: '+parsed.label),
+    make('p','','المصدر: '+source.name+' · النطاق: '+types.map(x=>smartKindLabels[x]).join(' + ')));
+  const list=make('ol','');
+  preview.append(list);
+  el('smartCommandPreviewBtn').disabled=true;
+  smartNotice('أتحقق من نطاق الأمر وأجمع معاينة فعلية بدون تنفيذ أي تغيير…');
+  try{
+    if(parsed.intent==='sort'){
+      for(const kind of types){
+        const response=await api('/api/v1/admin/xtream/categories?'+new URLSearchParams({serverId,type:kind}));
+        const categories=(response.items||[]).filter(x=>x.serverId===serverId&&x.mediaType===kind);
+        if(categories.length>1000)throw new Error('عدد أقسام '+smartKindLabels[kind]+' تجاوز 1000؛ رتّبها يدويًا.');
+        snapshot.tasks.push({kind,action:'sort',count:categories.length,
+          examples:categories.slice(0,4).map(x=>x.name)});
+        smartPreviewRow(list,'ترتيب '+categories.length+' قسمًا في '+smartKindLabels[kind]+
+          ' (الأسماء والمحتوى والظهور لا تتغير). '+(categories.length?
+          'مثال: '+categories.slice(0,3).map(x=>x.name).join('، '):'لا توجد أقسام.'));
+      }
+      const mode={smart:'ترتيب ذكي حسب اللغة والسنة الموجودة في أسماء الأقسام',
+        popular:'الأقسام الأكثر محتوى أولًا',alphabetical:'الترتيب الأبجدي'}[parsed.mode];
+      preview.append(make('p','',mode+'. سيحفظ السيرفر الترتيب بعد التنفيذ؛ هذه معاينة للنطاق، وليست قائمة نهائية متوقعة.'));
+    }else if(parsed.intent==='enrich'){
+      // Scan only the first 250 displayed records per selected type. No mass
+      // unbounded provider fetching, and no guessing from unsupported sources.
+      let slots=8;
+      for(const kind of types){
+        const response=await api('/api/v1/admin/xtream/catalog?'+
+          new URLSearchParams({serverId,type:kind,limit:'250',offset:'0'}));
+        const candidates=(response.items||[]).filter(item=>
+          item.serverId===serverId&&item.type===kind&&
+          (!item.iconUrl||!item.metadata?.plot||!item.metadata?.year));
+        const availableKinds=types.length;
+        const portion=availableKinds>1?Math.min(4,slots):slots;
+        const items=candidates.slice(0,portion).map(item=>({id:item.id,name:smartItemLabel(item)}));
+        slots-=items.length;
+        snapshot.tasks.push({action:'enrich',kind,items});
+        smartPreviewRow(list,'تحديث بيانات '+items.length+' من '+smartKindLabels[kind]+
+          ' (أول 250 عنصرًا في العينة): '+(items.length?
+            items.slice(0,4).map(x=>x.name).join('، '):'ما لقيت بيانات ناقصة في العينة.'));
+      }
+      preview.append(make('p','smart-danger',
+        'يستخدم بيانات Xtream الأصلية فقط؛ قد لا يرجع المزود معلومات إضافية. لا تُخمّن سنوات أو تقييمات ولا تتغير الروابط أو الاشتراكات. الحد الأقصى 8 أعمال في الأمر الواحد.'));
+    }else if(parsed.intent==='sync'){
+      snapshot.tasks.push({action:'sync',types});
+      smartPreviewRow(list,'طلب مزامنة '+types.map(x=>smartKindLabels[x]).join(' و ')+
+        ' من المصدر المحدد فقط؛ يبدأ الاستيراد على السيرفر في الخلفية بعد التأكيد.');
+      preview.append(make('p','smart-danger',
+        'المزامنة لا تعالج رفض HTTP 403/456 ولا تعني نجاح تشغيل الفيديو. المصدر والمشتركين يبقون كما هم.'));
+    }else if(parsed.intent==='probe'){
+      for(const kind of types){
+        snapshot.tasks.push({action:'probe',kind});
+        smartPreviewRow(list,'فحص عينة تشغيل فعلية من '+smartKindLabels[kind]+
+          ' وتسجيل حالة المصدر (قد ترجع 403 أو 456).');
+      }
+      preview.append(make('p','','عملية فحص فقط؛ لا تفعّل أو تنشر محتوى تلقائيًا.'));
+    }else if(parsed.intent==='audit'){
+      for(const kind of types){
+        snapshot.tasks.push({action:'audit',kind});
+        smartPreviewRow(list,'قراءة تقرير عينة '+smartKindLabels[kind]+
+          ': الصور والسنوات والقصص الناقصة والتكرارات المحتملة.');
+      }
+      preview.append(make('p','','النتائج تقديرية من عينة محدودة؛ لا يُحذف أو يُنقل أي عمل.'));
+    }else if(parsed.intent==='branding'){
+      snapshot.tasks.push({action:'branding'});
+      smartPreviewRow(list,'الانتقال إلى محرر اسم وشعار السيرفر الموجود في هذه الصفحة.');
+      preview.append(make('p','','رفع الشعار يحتاج اختيار ملف الصورة بنفسك؛ لا يُولّد المساعد شعارًا مزيفًا.'));
+    }else throw new Error('هذا الأمر غير مدعوم حاليًا.');
+    preview.hidden=false;
+    const count=snapshot.tasks.reduce((sum,t)=>sum+(t.action==='enrich'?t.items.length:1),0);
+    if(!count){smartNotice('ما فيه عناصر تحتاج تحديثًا في العينة المحددة. ما راح أنفذ طلبات فارغة.');return;}
+    smartCommandPlan=snapshot;
+    const go=el('smartCommandExecuteBtn');
+    go.hidden=false;go.disabled=false;
+    go.textContent=parsed.readOnly?'تشغيل الفحص / عرض التقرير':'اعتماد وتنفيذ الخطة';
+    smartNotice('المعاينة جاهزة. راجع المصدر والخطوات، ثم اضغط زر التنفيذ إذا وافقت.');
+  }catch(error){
+    preview.hidden=true;
+    smartNotice('تعذر تجهيز المعاينة: '+String(error.message||'خطأ غير معروف').slice(0,230));
+  }finally{
+    el('smartCommandPreviewBtn').disabled=false;
+  }
+}
+async function executeSmartCommand(){
+  if(smartCommandRun||!smartCommandPlan)return;
+  const plan=smartCommandPlan;
+  if(Date.now()-plan.createdAt>2*60*1000){
+    smartInvalidate();smartNotice('انتهت صلاحية المعاينة بعد دقيقتين. جهّز معاينة جديدة قبل التغيير.');return;
+  }
+  if(plan.text!==el('smartCommandText').value.trim()||
+     plan.serverId!==el('smartCommandSource').value||
+     plan.selectedType!==el('smartCommandType').value){
+    smartInvalidate();smartNotice('تغير النص أو المصدر أو النطاق. جهز معاينة جديدة أولًا.');return;
+  }
+  const source=state.xtreamServers.find(row=>row.id===plan.serverId);
+  if(!source){smartInvalidate();smartNotice('المصدر تغير أو لم يعد موجودًا. حدّث اللوحة.');return;}
+  if(!plan.parsed.readOnly&&!window.confirm('تأكيد تنفيذ «'+plan.parsed.label+
+     '» على المصدر «'+plan.sourceName+'» فقط؟ راجعت المعاينة أعلاه.'))return;
+  const session={cancelled:false,finished:0,success:0,failed:0};
+  smartCommandRun=session;
+  smartCommandPlan=null;
+  const button=el('smartCommandExecuteBtn');
+  button.disabled=true;el('smartCommandPreviewBtn').disabled=true;
+  const cancel=el('smartCommandCancelBtn');
+  cancel.hidden=false;cancel.disabled=false;
+  const progress=el('smartCommandProgress');
+  const tasks=plan.tasks.flatMap(task=>task.action==='enrich'?
+    task.items.map(item=>({...task,item})): [task]);
+  progress.hidden=false;progress.value=0;progress.max=tasks.length||1;
+  const results=make('ul','smart-command-outcomes');
+  el('smartCommandPreview').append(results);
+  let failedInRow=0;
+  try{
+    for(const task of tasks){
+      if(session.cancelled)break;
+      let message='';
+      try{
+        if(task.action==='sort'){
+          if(task.count){
+            const result=await api('/api/v1/admin/xtream/categories/auto-sort',{
+              method:'POST',body:JSON.stringify({serverId:plan.serverId,
+                mediaType:task.kind,mode:plan.parsed.mode})
+            });
+            message=smartKindLabels[task.kind]+': '+(result.unchanged?'الترتيب موجود مسبقًا':
+              'حُفظ ترتيب '+Number(result.updated||0)+' قسمًا');
+          }else message=smartKindLabels[task.kind]+': لا توجد أقسام';
+        }else if(task.action==='enrich'){
+          const result=await api('/api/v1/admin/xtream/items/'+encodeURIComponent(plan.serverId)+'/'+
+            encodeURIComponent(task.kind)+'/'+encodeURIComponent(task.item.id)+'/enrich',{
+              method:'POST',body:'{}'
+            });
+          message=task.item.name+': '+Number(result.fieldsFound||0)+' حقلًا من المصدر';
+        }else if(task.action==='sync'){
+          const result=await api('/api/v1/admin/xtream/servers/'+encodeURIComponent(plan.serverId)+'/sync',{
+            method:'POST',body:JSON.stringify({types:task.types})
+          });
+          message=result.started?'بدأت المزامنة على السيرفر، ولم يكتمل الاستيراد بعد.':
+            'لم يؤكد السيرفر بدء المزامنة.';
+          if(!result.started)throw new Error(message);
+        }else if(task.action==='probe'){
+          const result=await api('/api/v1/admin/xtream/servers/'+encodeURIComponent(plan.serverId)+'/probe-playback',{
+            method:'POST',body:JSON.stringify({mediaType:task.kind})
+          });
+          const example=(result.checks||[]).find(x=>x.ok)||
+            (result.checks||[]).find(x=>[403,456].includes(Number(x.httpStatus)))||
+            (result.checks||[])[0];
+          message=smartKindLabels[task.kind]+': '+(result.ok?'وصلت بيانات فيديو للعينة':
+            'فشل تشغيل العينة')+(example?.httpStatus?' · HTTP '+example.httpStatus:'')+
+            (example?.providerHint?' · تنبيه المصدر: '+({
+              network_restriction:'قيد شبكة محتمل',connection_limit:'حد الاتصالات',
+              restream_not_allowed:'إعادة البث غير مسموحة',account_expired:'انتهاء الاشتراك',
+              account_inactive:'حساب غير نشط',output_format_rejected:'صيغة مرفوضة'
+            }[example.providerHint]||'قيد من المصدر'):'');
+        }else if(task.action==='audit'){
+          const report=await api('/api/v1/admin/xtream/catalog/insights?'+
+            new URLSearchParams({serverId:plan.serverId,type:task.kind}));
+          message=smartKindLabels[task.kind]+': عينة '+Number(report.sampledPrimary||0)+
+            ' · صور ناقصة '+Number(report.missingPoster||0)+
+            ' · سنوات ناقصة '+Number(report.missingYear||0)+
+            ' · قصص ناقصة '+Number(report.missingPlot||0)+
+            ' · مجموعات مكررة محتملة '+Number(report.duplicateGroupCount||0);
+        }else if(task.action==='branding'){
+          el('studioIdentityHeading').scrollIntoView({behavior:'smooth',block:'center'});
+          message='فتح محرر الهوية؛ ارفع شعارك أو عدّل الاسم يدويًا.';
+        }
+        session.success++;failedInRow=0;
+        smartPreviewRow(results,'✓ '+message,'smart-good');
+      }catch(error){
+        session.failed++;failedInRow++;
+        const text=String(error.message||'خطأ غير معروف').slice(0,145);
+        smartPreviewRow(results,'✕ '+(task.item?.name||smartKindLabels[task.kind]||plan.parsed.label)+
+          ': '+text,'smart-danger');
+        // Stop on persistent provider or DB problems instead of flooding Xtream.
+        if(failedInRow>=2||/403|456|busy|429|503|rate_limited|unavailable/.test(text)){
+          session.cancelled=true;
+          smartPreviewRow(results,'تم إيقاف بقية الطلبات احترازيًا بعد رفض أو تعذر المصدر.','smart-danger');
+        }
+      }
+      session.finished++;
+      progress.value=session.finished;
+      smartNotice('المكتمل '+session.finished+'/'+tasks.length+' · نجح '+session.success+
+        ' · تعذر '+session.failed);
+    }
+  }finally{
+    smartCommandRun=null;
+    cancel.hidden=true;
+    el('smartCommandPreviewBtn').disabled=false;
+    button.hidden=true;
+    progress.hidden=false;
+    smartNotice((session.cancelled?'أُوقف المتبقي. ':'انتهى تنفيذ الأمر. ')+
+      'نجح '+session.success+' من '+session.finished+' خطوة، تعذر '+session.failed+
+      '. تحديث المعلومات لا يضمن توفير البيانات، والمزامنة قد تكون ما زالت تعمل.');
+    if(['sort','enrich','sync','probe'].includes(plan.parsed.intent)){
+      await loadXtream(true).catch(()=>{});
+    }
+  }
+}
+
 document.querySelectorAll('.tab').forEach(button => button.addEventListener('click', () => switchTab(button.dataset.tab)));
 el('refreshBtn').addEventListener('click', refreshCurrent);
+el('smartCommandForm').addEventListener('submit',event=>void buildSmartCommandPlan(event));
+el('smartCommandExecuteBtn').addEventListener('click',()=>void executeSmartCommand());
+el('smartCommandCancelBtn').addEventListener('click',()=>{
+  if(smartCommandRun){smartCommandRun.cancelled=true;smartNotice('سيُوقف BLOFY الطلبات المتبقية بعد انتهاء العملية الجارية.');}
+});
+for(const id of ['smartCommandSource','smartCommandType'])
+  el(id).addEventListener('change',smartInvalidate);
+el('smartCommandText').addEventListener('input',smartInvalidate);
+document.querySelectorAll('[data-smart-example]').forEach(button=>button.addEventListener('click',()=>{
+  el('smartCommandText').value=button.dataset.smartExample||'';
+  smartInvalidate();
+  el('smartCommandText').focus();
+}));
 el('studioIdentityForm').addEventListener('submit',saveStudioName);
 el('studioUploadLogo').addEventListener('click',()=>changeStudioLogo());
 el('studioRemoveLogo').addEventListener('click',()=>changeStudioLogo(true));

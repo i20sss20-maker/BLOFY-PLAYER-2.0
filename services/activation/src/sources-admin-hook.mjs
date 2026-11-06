@@ -370,6 +370,9 @@ http.createServer = function withBlofySources(listener) {
       if (req.method === 'GET' && url.pathname === '/sources-admin.js') {
         return asset(res, await readFile(new URL('../web/sources-admin.js', import.meta.url)), 'text/javascript; charset=utf-8');
       }
+      if (req.method === 'GET' && url.pathname === '/blofy-smart-commands.js') {
+        return asset(res, await readFile(new URL('../web/blofy-smart-commands.js', import.meta.url)), 'text/javascript; charset=utf-8');
+      }
       if (req.method === 'GET' && url.pathname === '/sources/repo.json') {
         await ensureReady();
         const base = origin(req);
