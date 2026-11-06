@@ -677,8 +677,8 @@ async function syncServer(id, requestedTypes = ['live','movie','series']) {
         if (cancelledSources.has(id)) throw Object.assign(new Error('xtream_sync_cancelled'),{status:409});
         await finalizeTypeSync(id, mediaType, syncToken,{preserveCategories:decision.preserveCategories});
         if(decision.preserveCategories)failures.push(mediaType+': xtream_categories_preserved');
-        details[mediaType] = { categories:decision.categories, items:decision.items,
-          preservedOldCategories:decision.preserveCategories };
+        details[mediaType] = { categories:decision.preserveCategories?Number(before.categories):decision.categories,
+          items:decision.items,preservedOldCategories:decision.preserveCategories };
       }catch(error){
         failures.push(mediaType+': '+redactXtreamError(error));
         console.warn('Xtream catalog type failed:',id,mediaType,redactXtreamError(error));
