@@ -25,6 +25,7 @@ import { inspectXtreamMediaChunk } from './xtream-media-inspector.mjs';
 import { shouldRetryXtreamWithoutRange } from './xtream-media-range.mjs';
 import { auditXtreamCatalogSample } from './xtream-library-insights.mjs';
 import { normalizeXtreamDetails,mergedXtreamMetadata } from './xtream-item-details.mjs';
+import { tmdbConfigured,validatedTmdbId,fetchTmdbDetails } from './xtream-tmdb.mjs';
 import { sortXtreamCategories } from './xtream-category-sort.mjs';
 import { nativeXtreamCsrfToken } from './xtream-native-csrf.mjs';
 
@@ -663,8 +664,11 @@ async function flushItemBatch(serverId, mediaType, syncToken, batch) {
       category_id=EXCLUDED.category_id,name=EXCLUDED.name,
       container_extension=EXCLUDED.container_extension,
       icon_url=COALESCE(NULLIF(EXCLUDED.icon_url,''),blofy_xtream_items.icon_url),
-      metadata=EXCLUDED.metadata || jsonb_build_object('sourceDetails',
-        COALESCE(blofy_xtream_items.metadata->'sourceDetails','{}'::jsonb)),
+      metadata=EXCLUDED.metadata ||
+        jsonb_build_object('sourceDetails',
+          COALESCE(blofy_xtream_items.metadata->'sourceDetails','{}'::jsonb)) ||
+        jsonb_build_object('tmdbDetails',
+          COALESCE(blofy_xtream_items.metadata->'tmdbDetails','{}'::jsonb)),
       sync_token=EXCLUDED.sync_token,updated_at=NOW()`,
     [serverId, mediaType, JSON.stringify(payload)]);
   const progress=syncProgress.get(serverId);
@@ -1183,6 +1187,46 @@ async function enrichOneXtreamItem(serverId,mediaType,sourceId){
   return{updated:true,fieldsFound:details.fieldsFound,posterAdded:Boolean(details.artworkUrl)};
 }
 
+// Commercial TMDB usage remains OFF until both the user-provided bearer token
+// and documented commercial-license confirmation exist in Railway. Only an
+// exact numeric TMDB ID already supplied by the linked Xtream source is used.
+async function enrichOneTmdbItem(serverId,mediaType,sourceId){
+  if(!tmdbConfigured())
+    throw Object.assign(new Error('tmdb_commercial_license_or_token_required'),{status:409});
+  if(!validUuid(serverId)||!['movie','series'].includes(mediaType)||
+     !/^[A-Za-z0-9._-]{1,128}$/.test(String(sourceId||'')))
+    throw Object.assign(new Error('tmdb_selection_invalid'),{status:400});
+  const row=(await pool.query(`SELECT i.metadata FROM blofy_xtream_items i
+      JOIN blofy_xtream_servers s ON s.id=i.server_id
+      WHERE i.server_id=$1 AND i.media_type=$2 AND i.source_id=$3
+        AND s.enabled=TRUE AND s.deletion_requested_at IS NULL`,
+        [serverId,mediaType,sourceId])).rows[0];
+  if(!row)throw Object.assign(new Error('tmdb_item_not_found'),{status:404});
+  const id=validatedTmdbId(mergedXtreamMetadata(row.metadata).tmdb);
+  if(!id)throw Object.assign(new Error('tmdb_id_not_supplied_by_source'),{status:409});
+  let details;
+  try{
+    details=await fetchTmdbDetails(mediaType,id,{
+      token:String(process.env.BLOFY_TMDB_READ_ACCESS_TOKEN||'').trim()
+    });
+  }catch(error){
+    const allowed=new Set(['tmdb_title_not_found','tmdb_rate_limited',
+      'tmdb_response_too_large','tmdb_invalid_json','tmdb_id_mismatch']);
+    throw Object.assign(new Error(allowed.has(error?.message)?error.message:'tmdb_upstream_unavailable'),{status:409});
+  }
+  const result=await sourceMutation(`UPDATE blofy_xtream_items i
+    SET metadata=COALESCE(i.metadata,'{}'::jsonb) ||
+      jsonb_build_object('tmdbDetails',$4::jsonb),
+      icon_url=COALESCE(NULLIF(i.icon_url,''),$5),updated_at=NOW()
+    WHERE i.server_id=$1 AND i.media_type=$2 AND i.source_id=$3
+      AND EXISTS(SELECT 1 FROM blofy_xtream_servers s WHERE s.id=$1
+        AND s.enabled=TRUE AND s.deletion_requested_at IS NULL)
+    RETURNING i.source_id`,
+    [serverId,mediaType,sourceId,JSON.stringify(details.metadata),details.artworkUrl]);
+  if(!result.rowCount)throw Object.assign(new Error('tmdb_item_not_found'),{status:404});
+  return{updated:true,source:'TMDB',fieldsFound:Object.keys(details.metadata).length};
+}
+
 async function patchItem(serverId, mediaType, sourceId, enabled) {
   if (!validUuid(serverId) || !validType(mediaType)) throw Object.assign(new Error('xtream_item_invalid'), { status: 400 });
   const result = await pool.query(`UPDATE blofy_xtream_items SET enabled=$4,updated_at=NOW() WHERE server_id=$1 AND media_type=$2 AND source_id=$3 RETURNING server_id,media_type,source_id,enabled`,
@@ -1371,6 +1415,9 @@ http.createServer = function withBlofyXtream(listener) {
       if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream/categories') {
         return json(res, 200, { items: await listCategories(url.searchParams.get('serverId'), url.searchParams.get('type')) });
       }
+      if(req.method==='GET'&&url.pathname==='/api/v1/admin/xtream/tmdb/status'){
+        return json(res,200,{enabled:tmdbConfigured(),requiresCommercialLicense:true});
+      }
       if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream/catalog/insights') {
         return json(res,200,await previewCatalogInsights(
           url.searchParams.get('serverId'),url.searchParams.get('type')));
@@ -1436,6 +1483,12 @@ http.createServer = function withBlofyXtream(listener) {
         if (body.enabled === undefined) return json(res, 400, { error: 'nothing_to_update' });
         await patchCategory(categoryMatch[1], categoryMatch[2].toLowerCase(), decodeURIComponent(categoryMatch[3]), body.enabled);
         return json(res, 200, { updated: true });
+      }
+
+      const tmdbMatch=url.pathname.match(/^\/api\/v1\/admin\/xtream\/items\/([0-9a-f-]+)\/(movie|series)\/([^/]+)\/tmdb-enrich$/i);
+      if(tmdbMatch&&req.method==='POST'){
+        return json(res,200,await enrichOneTmdbItem(tmdbMatch[1],
+          tmdbMatch[2].toLowerCase(),decodeURIComponent(tmdbMatch[3])));
       }
 
       const enrichMatch=url.pathname.match(/^\/api\/v1\/admin\/xtream\/items\/([0-9a-f-]+)\/(movie|series)\/([^/]+)\/enrich$/i);
