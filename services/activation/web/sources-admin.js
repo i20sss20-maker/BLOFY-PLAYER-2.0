@@ -79,6 +79,20 @@ function nativeSourceForm(id, action, label, cls='button ghost') {
   return form;
 }
 
+function xtreamProviderHintText(value){
+  // Fixed text only. No provider response body, source credentials, IPs,
+  // request paths or untrusted provider-controlled strings appear in the UI.
+  const hints={
+    network_restriction:'رد المصدر يشير إلى قيد IP أو الدولة أو مزود الإنترنت؛ اطلب السماح من المزود',
+    connection_limit:'رد المصدر يشير إلى حد الاتصالات المتزامنة',
+    account_expired:'رد المصدر يشير إلى انتهاء الاشتراك',
+    restream_not_allowed:'رد المصدر يشير إلى عدم السماح بإعادة البث لهذا الحساب',
+    output_format_rejected:'رد المصدر يشير إلى صيغة تشغيل غير مسموحة',
+    account_inactive:'رد المصدر يشير إلى حساب معطّل أو محظور'
+  };
+  return hints[String(value||'')]||'';
+}
+
 function xtreamSourceErrorText(value){
   const error=String(value||'');
   if(error.includes('xtream_catalog_empty_preserved'))
@@ -579,7 +593,8 @@ async function runXtreamBatchProbe(){
               456:'رمز غير قياسي من المصدر؛ راجع السماح بتشغيل الفيديو لدى المزود'
             };
             status.textContent='✕ '+(http>=400&&http<=599?'HTTP '+http+' · ':'')+
-              (statuses[http]||known[reason]||'المصدر لم يؤكد تشغيل العينة');
+              (statuses[http]||known[reason]||'المصدر لم يؤكد تشغيل العينة')+
+              (xtreamProviderHintText(sample?.providerHint)?' · '+xtreamProviderHintText(sample?.providerHint):'');
           }
         }catch(error){
           if(session.cancelled)break outer;
@@ -1401,7 +1416,8 @@ async function runBlofyItemProbe(){
         (result.rangeFallbackUsed?' · نجح الفحص بعد إعادة المحاولة بدون Range':'')+'. هذا لا يضمن استمرار التشغيل.';
     }else{
       note.textContent='❌ فشل المصدر'+(result.httpStatus?' · HTTP '+result.httpStatus:'')+' — '+
-        (reasons[result.reason]||'راجع إعدادات المصدر والرابط والصيغة وحقوق التشغيل.');
+        (reasons[result.reason]||'راجع إعدادات المصدر والرابط والصيغة وحقوق التشغيل.')+
+        (xtreamProviderHintText(result.providerHint)?' · '+xtreamProviderHintText(result.providerHint):'');
     }
   }catch(error){
     note.textContent=/xtream_media_probe_(cooldown|busy)/.test(error.message)
@@ -1458,7 +1474,9 @@ async function loadBlofyPlaybackHealth(){
       const reason=errorNames[row.reason]||row.reason||
         (row.upstreamStatus?'استجابة المصدر '+row.upstreamStatus:'سبب غير معروف');
       item.append(make('strong','',media+' · '+phase),
-        make('small','',reason+' · '+new Date(row.at).toLocaleString('ar-SA')));
+        make('small','',reason+
+          (xtreamProviderHintText(row.providerHint)?' · '+xtreamProviderHintText(row.providerHint):'')+
+          ' · '+new Date(row.at).toLocaleString('ar-SA')));
       if(!['gateway_auth_denied','catalog_item_unavailable'].includes(row.reason)&&Number.isSafeInteger(row.itemId)&&row.itemId>0){
         const probe=make('button','button ghost','فحص #'+row.itemId);
         probe.type='button';probe.dataset.probeItem=String(row.itemId);
