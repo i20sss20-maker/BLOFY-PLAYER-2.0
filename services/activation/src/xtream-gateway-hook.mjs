@@ -38,6 +38,7 @@ import { normalizeXtreamEpg } from './xtream-epg.mjs';
 import { acceptsXtreamGzip } from './xtream-catalog-compression.mjs';
 import { shouldRetryXtreamWithoutRange,firstByteXtreamRange } from './xtream-media-range.mjs';
 import { recordXtreamPlayback,xtreamPlaybackSnapshot } from './xtream-playback-metrics.mjs';
+import { XtreamDenialCooldown } from './xtream-denial-cooldown.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
@@ -53,6 +54,7 @@ pool.on('error', error => console.error('xtream gateway database error:', safeEr
 
 const adminLimiter = createFixedWindowLimiter({ limit: 120, windowMs: 60_000 });
 const publicLimiter = createFixedWindowLimiter({ limit: 1200, windowMs: 60_000 });
+const mediaDenialCooldown = new XtreamDenialCooldown();
 let readyPromise;
 
 function json(res, status, body, extra = {}) {
@@ -696,9 +698,21 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
   // Live streams may choose TS or HLS when the source supports those formats.
   const mediaExtension=kind==='live'?(requestedExtension||extension):(extension||requestedExtension);
   const startedAt=Date.now();
+  // A rejected individual channel cannot block another channel or source.
+  // This is an in-memory guard against repeat viewer requests, not a way
+  // around the provider's permissions. Only verified 403/456 trigger it.
+  const cooldownKey=String(row.server_id)+':'+kind+':'+String(gatewayId);
   const observe=(phase,details={})=>{
     if(req.method!=='HEAD')recordXtreamPlayback({kind,itemId:gatewayId,phase,...details});
   };
+  if(req.method!=='HEAD'){
+    const rejection=mediaDenialCooldown.active(cooldownKey);
+    if(rejection){
+      observe('failed',{upstreamStatus:rejection.status,reason:'upstream_denial_cooldown'});
+      return text(res,502,'Upstream playback temporarily unavailable','text/plain; charset=utf-8',
+        {'retry-after':String(rejection.retryAfterSeconds)});
+    }
+  }
   // Keep each viewer's stream independent. Only retry failures before video bytes reach them.
   const client = new AbortController();
   const abort = () => { if (!client.signal.aborted) client.abort(); };
@@ -739,6 +753,8 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
           // Never expose upstream bodies; store only a fixed, allowlisted hint
           // if the provider itself explained a denied request.
           const providerHint=retryWithoutRange?null:await readXtreamProviderDenialHint(response);
+          // Respect provider refusals, and cool down this channel only.
+          if(req.method!=='HEAD')mediaDenialCooldown.denied(cooldownKey,response.status);
           await response.body?.cancel().catch(()=>{});
           if(retryWithoutRange){
             noRangeRetried=true;
@@ -778,6 +794,7 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
         const inspection=inspectXtreamMediaChunk(first.value,response.headers.get('content-type'));
         if(!inspection.valid)throw new Error(inspection.reason);
         // Only announce a successful response once the provider really sent media bytes.
+        mediaDenialCooldown.clear(cooldownKey);
         observe('started',{upstreamStatus:response.status,startupMs:Date.now()-startedAt,attempts:attempt});
         res.writeHead(response.status, outputHeaders);
         const stream = Readable.from((async function* () {
