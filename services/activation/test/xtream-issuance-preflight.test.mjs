@@ -77,7 +77,7 @@ test('admin user issuance cannot skip a failed test with an offline confirmation
   assert.match(js,/gx\('gatewaySourceId'\)\?\.addEventListener\('change',clearGatewayPreflight\)/);
   assert.doesNotMatch(js,/المصدر المختار غير متصل حاليًا.*window\.confirm/);
   assert.match(js,/if\(!gatewayPreflightReady\(\)\)/);
-  assert.match(html,/xtream-gateway-admin\.js\?v=20261107-404-triage-v2/);
+  assert.match(html,/xtream-gateway-admin\.js\?v=20261107-404-ids-v3/);
 });
 
 test('preflight selects the source server ID used as encryption associated data',async()=>{
