@@ -1044,6 +1044,131 @@ async function checkSourceM3u(id){
   }
 }
 
+
+// Build the full authorized M3U media index only when the operator requests
+// it. A large 330k-entry playlist is streamed in bounded batches; old Xtream
+// records and customer accounts are never modified. The media URLs themselves
+// are stored AES-GCM encrypted in a versioned, source-scoped table.
+async function runHybridM3uIndex(id){
+  const source=await serverById(id);
+  if(!source?.m3u_url_secret)throw new Error('xtream_m3u_not_configured');
+  const generation=crypto.randomUUID();
+  const secretAtStart=source.m3u_url_secret;
+  const creds=decryptCredentials(source);
+  const listUrl=await safeM3uInput(
+    decryptXtreamSecret(secretAtStart,KEY_HEX,`m3u:${id}`),source.base_url);
+  const state={status:'indexing',generation,matched:0,movies:0,episodes:0};
+  await pool.query(`UPDATE blofy_xtream_servers SET m3u_index_state=$2::jsonb,
+    updated_at=NOW() WHERE id=$1 AND m3u_url_secret=$3`,[
+      id,JSON.stringify(state),secretAtStart
+    ]);
+  let response=null;
+  try{
+    let current=new URL(listUrl);
+    const signal=AbortSignal.timeout(120000);
+    for(let hop=0;hop<3;hop++){
+      await assertPublicXtreamUrl(current.origin);
+      if(current.protocol==='http:'&&current.origin!==new URL(source.base_url).origin)
+        throw new Error('xtream_m3u_https_required');
+      response=await fetch(current,{method:'GET',redirect:'manual',signal,
+        headers:{'accept':'audio/x-mpegurl,application/vnd.apple.mpegurl,text/plain,*/*',
+          'user-agent':'BLOFY-Hybrid-M3U-Index/1.0'}});
+      if([301,302,303,307,308].includes(response.status)){
+        const location=response.headers.get('location');
+        await response.body?.cancel().catch(()=>{});
+        response=null;
+        if(!location||hop===2)throw new Error('xtream_m3u_redirect_invalid');
+        const next=new URL(location,current);
+        if(next.protocol!=='https:'&&next.origin!==current.origin)
+          throw new Error('xtream_m3u_redirect_invalid');
+        if(next.origin!==current.origin&&current.search)
+          throw new Error('xtream_m3u_cross_origin_redirect_denied');
+        if(next.username||next.password||next.hash)
+          throw new Error('xtream_m3u_redirect_invalid');
+        current=next;continue;
+      }
+      break;
+    }
+    if(!response||response.status!==200||!response.body)
+      throw new Error(response?'xtream_m3u_http_'+response.status:'xtream_m3u_empty');
+    if(/text\/html|application\/json/i.test(response.headers.get('content-type')||''))
+      throw new Error('xtream_m3u_not_playlist');
+    let processed=0;
+    const stats=await scanHybridM3uMedia(response.body,{
+      baseUrl:source.base_url,username:creds.username,password:creds.password,
+      onBatch:async batch=>{
+        // Never persist raw playlist URLs; the only DB value is the encrypted
+        // source-specific signed link. Duplicate conflicting IDs are skipped.
+        const rows=batch.map(item=>({
+          kind:item.kind,source_id:item.sourceId,
+          secret:encryptXtreamSecret(item.url,KEY_HEX,
+            `m3u-media:${id}:${generation}:${item.kind}:${item.sourceId}`),
+          digest:crypto.createHash('sha256').update(item.url).digest('hex')
+        }));
+        await pool.query(`INSERT INTO blofy_xtream_m3u_media_links
+          (server_id,generation,media_type,source_id,stream_url_secret,url_digest)
+          SELECT $1::uuid,$2::uuid,r.kind,r.source_id,r.secret,r.digest
+          FROM jsonb_to_recordset($3::jsonb) AS r(
+            kind TEXT,source_id TEXT,secret TEXT,digest TEXT)
+          ON CONFLICT(server_id,generation,media_type,source_id) DO UPDATE
+          SET ambiguous=blofy_xtream_m3u_media_links.ambiguous OR
+            blofy_xtream_m3u_media_links.url_digest<>excluded.url_digest`,
+          [id,generation,JSON.stringify(rows)]);
+        processed+=batch.length;
+        if(processed%3000<batch.length){
+          const progress={status:'indexing',generation,matched:processed};
+          await pool.query(`UPDATE blofy_xtream_servers
+            SET m3u_index_state=$2::jsonb
+            WHERE id=$1 AND m3u_url_secret=$3`,
+            [id,JSON.stringify(progress),secretAtStart]);
+        }
+      }
+    });
+    if(!stats.matched)throw new Error('xtream_m3u_no_same_account_movies_or_episodes');
+    const resultState={status:'ready',generation,matched:stats.matched,
+      movies:stats.movies,episodes:stats.episodes,bytes:stats.bytes,
+      entries:stats.entries,finishedAt:new Date().toISOString()};
+    const commit=await pool.query(`UPDATE blofy_xtream_servers
+      SET m3u_index_generation=$2::uuid,m3u_index_state=$3::jsonb,updated_at=NOW()
+      WHERE id=$1 AND m3u_url_secret=$4 AND enabled=TRUE
+        AND deletion_requested_at IS NULL RETURNING id`,
+      [id,generation,JSON.stringify(resultState),secretAtStart]);
+    if(!commit.rowCount)throw new Error('xtream_m3u_source_changed_during_index');
+    console.info('BLOFY M3U hybrid index ready',{sourceId:id,
+      movies:stats.movies,episodes:stats.episodes,bytes:stats.bytes});
+    // Remove old generations in bounded batches; an interrupted cleanup can
+    // never invalidate the already committed current index.
+    for(let i=0;i<2000;i++){
+      const stale=await pool.query(`DELETE FROM blofy_xtream_m3u_media_links WHERE ctid IN
+        (SELECT ctid FROM blofy_xtream_m3u_media_links
+         WHERE server_id=$1 AND generation<>$2::uuid LIMIT 400)`,
+         [id,generation]);
+      if(!stale.rowCount)break;
+    }
+  }catch(error){
+    const reason=/^xtream_m3u_[a-z0-9_]+$/i.test(String(error?.message||''))?
+      error.message:'xtream_m3u_index_unavailable';
+    console.warn('BLOFY M3U hybrid index failed',{sourceId:id,reason});
+    await pool.query(`UPDATE blofy_xtream_servers
+      SET m3u_index_state=$2::jsonb WHERE id=$1 AND m3u_url_secret=$3
+        AND m3u_index_state->>'generation'=$4`,
+      [id,JSON.stringify({status:'failed',reason}),secretAtStart,generation]
+    ]).catch(()=>{});
+  }finally{
+    try{await response?.body?.cancel()}catch{}
+  }
+}
+function startHybridM3uIndex(id){
+  if(m3uIndexLocks.has(id))
+    throw Object.assign(new Error('xtream_m3u_index_in_progress'),{status:409});
+  m3uIndexLocks.add(id);
+  void runHybridM3uIndex(id)
+    .catch(error=>console.warn('BLOFY M3U hybrid index unavailable',
+      {sourceId:id,reason:'index_unavailable'}))
+    .finally(()=>m3uIndexLocks.delete(id));
+  return {started:true,sourceId:id};
+}
+
 async function createServer(body) {
   await ensureReady();
   const name = cleanText(body.name, 160);
