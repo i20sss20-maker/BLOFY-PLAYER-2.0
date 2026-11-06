@@ -36,6 +36,7 @@ test('preflight errors are scoped, bounded and sanitized without leaking credent
   assert.equal(issuanceErrorReason('xtream_gateway_upstream_403'),'upstream_403');
   assert.equal(issuanceErrorReason('xtream_gateway_upstream_json_invalid'),'source_api_unavailable');
   assert.equal(issuanceErrorReason('upstream password=secrets'),'source_unreachable');
+  assert.equal(issuanceErrorReason('xtream_secret_decryption_failed'),'source_credentials_unreadable');
 });
 
 test('both account issuance routes require server-side successful playback preflight before any insert',async()=>{
