@@ -29,6 +29,22 @@ export function parseHybridM3uMediaUrl(raw,{baseUrl,username,password}={}){
   return {kind:parts[0],sourceId:match[1],extension:match[2].toLowerCase(),url:url.toString()};
 }
 
+// A provider M3U can list the same ID multiple times within a SQL batch.
+// PostgreSQL forbids ON CONFLICT DO UPDATE targeting one key twice per
+// statement. Collapse duplicates, flag *different* URLs as ambiguous so
+// a subscriber never gets one arbitrarily chosen copy or edition.
+export function collapseHybridM3uMediaBatch(batch){
+  const unique=new Map();
+  for(const entry of batch||[]){
+    const key=String(entry.kind)+'\\x00'+String(entry.sourceId);
+    const previous=unique.get(key);
+    if(previous){
+      if(previous.url!==entry.url)previous.ambiguous=true;
+    }else unique.set(key,{...entry,ambiguous:false});
+  }
+  return [...unique.values()];
+}
+
 export async function scanHybridM3uMedia(readable,{baseUrl,username,password,onBatch,
   maxBytes=192*1024*1024,maxEntries=600000,batchSize=300}={}){
   if(!readable||typeof readable.getReader!=='function'||typeof onBatch!=='function')
