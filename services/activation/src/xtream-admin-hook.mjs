@@ -18,7 +18,7 @@ import crypto from 'node:crypto';
 import pg from 'pg';
 import { downloadXtreamM3uCatalog } from './xtream-m3u-catalog.mjs';
 import { validateM3uPlaylistUrl, isM3uPlaylistPrefix } from './xtream-m3u-link.mjs';
-import { scanHybridM3uMedia } from './xtream-hybrid-m3u.mjs';
+import { scanHybridM3uMedia,collapseHybridM3uMediaBatch } from './xtream-hybrid-m3u.mjs';
 import { distinctXtreamRecords } from './xtream-import-dedup.mjs';
 import { assessXtreamSync } from './xtream-sync-guard.mjs';
 import { CONTROL_PATH, controlPage, deleteConfirmationPage, readControlForm } from './xtream-native-controls.mjs';
@@ -303,7 +303,7 @@ async function ensureReady() {
         WHERE enabled=TRUE AND m3u_url_secret IS NOT NULL
           AND m3u_index_generation IS NULL AND deletion_requested_at IS NULL
           AND COALESCE(m3u_index_state->>'status','not_indexed')
-            IN ('not_indexed','indexing') ORDER BY priority,id LIMIT 1`)
+            IN ('not_indexed','indexing','failed') ORDER BY priority,id LIMIT 1`)
         .then(({rows})=>{
           if(rows[0]&&!m3uIndexLocks.has(rows[0].id))
             startHybridM3uIndex(rows[0].id);
@@ -1118,19 +1118,20 @@ async function runHybridM3uIndex(id){
       onBatch:async batch=>{
         // Never persist raw playlist URLs; the only DB value is the encrypted
         // source-specific signed link. Duplicate conflicting IDs are skipped.
-        const rows=batch.map(item=>({
+        const rows=collapseHybridM3uMediaBatch(batch).map(item=>({
           kind:item.kind,source_id:item.sourceId,
           secret:encryptXtreamSecret(item.url,KEY_HEX,
             `m3u-media:${id}:${generation}:${item.kind}:${item.sourceId}`),
-          digest:crypto.createHash('sha256').update(item.url).digest('hex')
+          digest:crypto.createHash('sha256').update(item.url).digest('hex'),
+          ambiguous:item.ambiguous===true
         }));
         await pool.query(`INSERT INTO blofy_xtream_m3u_media_links
-          (server_id,generation,media_type,source_id,stream_url_secret,url_digest)
-          SELECT $1::uuid,$2::uuid,r.kind,r.source_id,r.secret,r.digest
+          (server_id,generation,media_type,source_id,stream_url_secret,url_digest,ambiguous)
+          SELECT $1::uuid,$2::uuid,r.kind,r.source_id,r.secret,r.digest,r.ambiguous
           FROM jsonb_to_recordset($3::jsonb) AS r(
-            kind TEXT,source_id TEXT,secret TEXT,digest TEXT)
+            kind TEXT,source_id TEXT,secret TEXT,digest TEXT,ambiguous BOOLEAN)
           ON CONFLICT(server_id,generation,media_type,source_id) DO UPDATE
-          SET ambiguous=blofy_xtream_m3u_media_links.ambiguous OR
+          SET ambiguous=blofy_xtream_m3u_media_links.ambiguous OR excluded.ambiguous OR
             blofy_xtream_m3u_media_links.url_digest<>excluded.url_digest`,
           [id,generation,JSON.stringify(rows)]);
         processed+=batch.length;
