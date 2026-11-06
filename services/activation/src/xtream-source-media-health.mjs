@@ -9,7 +9,8 @@ export function summarizeSourceMediaProbe(mediaType,result,now=Date.now()){
   if(!KINDS.has(mediaType))throw new Error('invalid_source_probe_kind');
   const checks=Array.isArray(result?.checks)?result.checks.slice(0,8):[];
   const pass=checks.find(row=>row?.ok);
-  const fail=checks.find(row=>!row?.ok);
+  const fail=checks.find(row=>!row?.ok&&[401,403,456,429].includes(Number(row.httpStatus))) ||
+    checks.find(row=>!row?.ok);
   const chosen=result?.ok?pass:fail;
   const value=Number(chosen?.httpStatus);
   const httpStatus=Number.isInteger(value)&&value>=100&&value<=599?value:null;
