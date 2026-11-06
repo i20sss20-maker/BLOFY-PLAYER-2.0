@@ -824,13 +824,13 @@ async function listCatalog(query, publishedOnly = false) {
     if(!Number.isInteger(year)||year<1950||year>2099)
       throw Object.assign(new Error('xtream_year_invalid'),{status:400});
     values.push(String(year));
-    // Fall back to a release year in the title only when the metadata
-    // year is absent. Never assign a fabricated year to undated items.
-    where.push(`(
-      (i.metadata->>'year')=${values.length}
-      OR (NULLIF(i.metadata->>'year','') IS NULL AND
-        i.name ~ ('(^|[^0-9])'||${values.length}||'([^0-9]|$)'))
-    )`);
+    // Prefer the actual source year, then release date, then a year written
+    // inside the title. Undated content remains unclassified.
+    where.push(`COALESCE(
+      NULLIF(NULLIF(i.metadata->>'year',''),'0'),
+      substring(i.metadata->>'releaseDate' from '(19[5-9][0-9]|20[0-9]{2})'),
+      substring(i.name from '(19[5-9][0-9]|20[0-9]{2})')
+    )=$${values.length}`);
   }
   if(query.language){
     const patterns={
@@ -846,7 +846,7 @@ async function listCatalog(query, publishedOnly = false) {
     const pattern=patterns[String(query.language)];
     if(!pattern)throw Object.assign(new Error('xtream_language_filter_invalid'),{status:400});
     values.push(pattern);
-    where.push(`c.name ~* ${values.length}`);
+    where.push(`c.name ~* $${values.length}`);
   }
   values.push(limit, offset);
   const rows = (await pool.query(`SELECT i.server_id,i.media_type,i.source_id,i.category_id,i.name,i.icon_url,i.container_extension,i.enabled,i.metadata,i.updated_at,
