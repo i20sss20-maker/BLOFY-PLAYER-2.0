@@ -45,6 +45,8 @@ export function sourceMediaSummary(probes={},now=Date.now()){
 export function sourceAccountWarnings(info={},now=Date.now()){
   if(!info||typeof info!=='object')return[];
   const warnings=[];
+  if(info.isRestreamer === false)
+    warnings.push('المصدر يعلن أن هذا الحساب غير مخصص لإعادة البث (is_restreamer=0). اطلب حسابًا مصرحًا من المزود.');
   const expiry=Number(info.expiresAt);
   if(Number.isFinite(expiry)&&expiry>0&&expiry*1000<=now)
     warnings.push('انتهت صلاحية حساب المصدر حسب بيانات Xtream.');
