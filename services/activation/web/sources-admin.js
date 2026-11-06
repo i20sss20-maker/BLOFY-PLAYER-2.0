@@ -600,6 +600,11 @@ async function runXtreamBatchProbe(){
     summary.textContent=(session.cancelled?'أُلغي الفحص. ':'انتهى فحص العينات. ')+
       'نجح '+session.passed+' من '+session.finished+' اختبار؛ '+
       'فشل '+session.failed+'. النتائج تخص العينات ولا تثبت تشغيل جميع العناصر.';
+    // Probes persist sanitized media status per source. Refresh cards now so
+    // operators immediately see API ONLINE vs rejected media samples.
+    try{await loadXtream(true)}catch(error){
+      console.warn('Xtream probe card refresh failed:',String(error?.message||'unknown').slice(0,100));
+    }
   }
 }
 function cancelXtreamBatchProbe(){
