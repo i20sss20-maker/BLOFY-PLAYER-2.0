@@ -46,6 +46,9 @@ test('M3U is a separate encrypted per-source configuration and never returned as
   assert.match(hook,/set\('m3u_url_secret',encryptXtreamSecret\(link,KEY_HEX,`m3u:\$\{id\}`\)\)/);
   assert.match(hook,/decryptXtreamSecret\(source.m3u_url_secret,KEY_HEX,`m3u:\$\{id\}`\)/);
   assert.match(hook,/action === 'test-m3u'/);
+  assert.match(hook,/if\(action==='test-m3u'\)\{/);
+  assert.match(hook,/return controlRedirect\(res,'ok','m3u-tested'\)/);
+  assert.match(native,/securedForm\(id,'test-m3u','▶ اختبار رابط M3U'\)/);
   assert.match(html,/id="xtM3uUrl"/);
   assert.match(js,/m3uUrl:el\('xtM3uUrl'\).value.trim\(\)/);
   assert.match(js,/\['m3uUrl','رابط M3U/);
