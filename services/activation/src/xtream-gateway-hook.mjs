@@ -352,7 +352,7 @@ async function preflightSource(row,deadline){
       }
     }else{
       for(const sample of rows){
-        const ext=safeGatewayExtension(sample.container_extension,kind==='live'?'ts':'mp4');
+        const ext=kind==='live'?'ts':safeGatewayExtension(sample.container_extension,'mp4');
         checks.push(await probeIssuanceMedia(row,kind,sample.source_id,ext,deadline));
       }
     }
