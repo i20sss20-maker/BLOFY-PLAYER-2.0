@@ -76,6 +76,23 @@ function nativeSourceForm(id, action, label, cls='button ghost') {
   return form;
 }
 
+function xtreamSourceErrorText(value){
+  const error=String(value||'');
+  if(error.includes('xtream_catalog_empty_preserved'))
+    return 'المصدر أرسل قائمة فارغة؛ احتفظنا بالمحتوى القديم لحماية مكتبة المشتركين. افحص حساب Xtream ثم أعد المزامنة.';
+  if(error.includes('xtream_catalog_suspicious_drop_preserved'))
+    return 'المصدر أرسل قائمة ناقصة بشكل كبير؛ تم إيقاف حذف المحتوى القديم. تحقق من الاشتراك وحدود المصدر قبل إعادة المزامنة.';
+  if(error.includes('xtream_categories_preserved'))
+    return 'لم تصل الأقسام كاملة من المصدر؛ احتفظنا بأقسامك وترتيبها وإعدادات إخفائها.';
+  if(error.includes('xtream_http_403'))
+    return 'المصدر الأصلي رفض اتصال سيرفر BLOFY (403). تحقق من صلاحيات المصدر أو السماح بالاتصال لدى المزود.';
+  if(error.includes('xtream_http_404'))
+    return 'واجهة Xtream بالمصدر أعادت 404. راجع الهوست والمنفذ وصلاحية واجهة المصدر.';
+  if(error.includes('xtream_source_busy_retry')||error.includes('lock timeout'))
+    return 'قاعدة البيانات مشغولة بمزامنة أخرى. جرّب بعد انتهائها، ولا تكرر المزامنة بسرعة.';
+  return error;
+}
+
 function serverCard(item) {
   const card = make('article', 'server-card');
   card.dataset.id = item.id;
@@ -174,7 +191,7 @@ function serverCard(item) {
       'جاري استيراد '+(typeNames[item.syncProgress.mediaType]||item.syncProgress.mediaType)+
       ' · '+Number(item.syncProgress.imported||0).toLocaleString('en-US')+' عنصر حتى الآن'));
   }
-  if (item.lastError) info.append(make('span', 'error-text', `آخر خطأ: ${item.lastError}`));
+  if (item.lastError) info.append(make('span', 'error-text', `تنبيه المصدر: ${xtreamSourceErrorText(item.lastError)}`));
   const feedback=state.sourceFeedback.get(item.id);
   const actionStatus=make('p',feedback?.kind==='error'?'source-action-feedback error':'source-action-feedback',feedback?.text||'');
   actionStatus.setAttribute('role','status');
@@ -258,7 +275,7 @@ function refreshSourceCard(card, item) {
     let error=info.querySelector('.error-text');
     if(item.lastError){
       if(!error){error=make('span','error-text');info.append(error);}
-      error.textContent='آخر خطأ: '+item.lastError;
+      error.textContent='تنبيه المصدر: '+xtreamSourceErrorText(item.lastError);
     }else error?.remove();
   }
 }
