@@ -39,6 +39,7 @@ import { acceptsXtreamGzip } from './xtream-catalog-compression.mjs';
 import { shouldRetryXtreamWithoutRange,firstByteXtreamRange } from './xtream-media-range.mjs';
 import { recordXtreamPlayback,xtreamPlaybackSnapshot } from './xtream-playback-metrics.mjs';
 import { XtreamDenialCooldown } from './xtream-denial-cooldown.mjs';
+import { verifiedEpisodeExtension } from './xtream-episode-repair.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
@@ -55,6 +56,7 @@ pool.on('error', error => console.error('xtream gateway database error:', safeEr
 const adminLimiter = createFixedWindowLimiter({ limit: 120, windowMs: 60_000 });
 const publicLimiter = createFixedWindowLimiter({ limit: 1200, windowMs: 60_000 });
 const mediaDenialCooldown = new XtreamDenialCooldown();
+const episodeRepairCooldown = new Map();
 let readyPromise;
 
 function json(res, status, body, extra = {}) {
@@ -529,17 +531,28 @@ async function checkedFetch(url, { timeoutMs = 30000, method = 'GET', headers = 
   throw new Error('xtream_gateway_redirect_loop');
 }
 
-async function fetchUpstreamApi(row, action, extra = {}) {
+async function fetchUpstreamApi(row, action, extra = {}, {timeoutMs=45000,maxBytes=12_000_000}={}) {
   const creds = decryptServerCredentials(row);
   const response = await checkedFetch(xtreamApiUrl(row.base_url, creds.username, creds.password, action, extra), {
-    timeoutMs: 45000,
+    timeoutMs,
     headers: { accept: 'application/json', 'user-agent': 'BLOFY-Xtream-Gateway/1.0' }
   });
   if (!response.ok) throw new Error(`xtream_gateway_upstream_${response.status}`);
-  const textBody = await response.text();
-  if (Buffer.byteLength(textBody) > 12_000_000) throw new Error('xtream_gateway_info_too_large');
-  try { return JSON.parse(textBody); }
-  catch { throw new Error('xtream_gateway_upstream_json_invalid'); }
+  const chunks=[];let count=0;
+  try{
+    if(!response.body)throw new Error('xtream_gateway_upstream_json_invalid');
+    for await(const piece of response.body){
+      count+=piece.byteLength;
+      if(count>maxBytes)throw new Error('xtream_gateway_info_too_large');
+      chunks.push(Buffer.from(piece));
+    }
+    return JSON.parse(Buffer.concat(chunks,count).toString('utf8'));
+  }catch(error){
+    if(error?.message==='xtream_gateway_info_too_large')throw error;
+    throw new Error('xtream_gateway_upstream_json_invalid');
+  }finally{
+    await response.body?.cancel().catch(()=>{});
+  }
 }
 
 // Account-scoped program guide for one accessible channel. The provider API
@@ -652,11 +665,43 @@ async function seriesInfo(gatewayId, sourceId=null) {
 async function episodeByGatewayId(gatewayId,sourceId=null) {
   const id = Number(gatewayId);
   if (!Number.isSafeInteger(id) || id < 1) return null;
-  return (await pool.query(`SELECT e.gateway_id,e.server_id,e.source_episode_id,e.container_extension,
+  return (await pool.query(`SELECT e.gateway_id,e.server_id,e.series_source_id,e.source_episode_id,e.container_extension,
       s.base_url,s.username_secret,s.password_secret,s.enabled AS server_enabled
     FROM blofy_xtream_gateway_episode_map e JOIN blofy_xtream_servers s ON s.id=e.server_id
     WHERE e.gateway_id=$1 AND s.enabled=TRUE AND s.publish_catalog=TRUE
       AND ($2::uuid IS NULL OR e.server_id=$2::uuid)`, [id,sourceId])).rows[0] || null;
+}
+
+// Refresh a stale episode extension only after a real provider 404, using
+// this same series' official get_series_info. Bounded to one repair per item
+// per 90 seconds to avoid repeated expensive calls and traffic spikes.
+async function repairEpisodeOn404(row){
+  if(!row?.series_source_id||!row?.source_episode_id)return {status:'unavailable'};
+  const key=String(row.server_id)+':'+String(row.gateway_id);
+  const now=Date.now();
+  if((episodeRepairCooldown.get(key)||0)>now)return {status:'cooldown'};
+  episodeRepairCooldown.delete(key);
+  episodeRepairCooldown.set(key,now+90000);
+  while(episodeRepairCooldown.size>600)
+    episodeRepairCooldown.delete(episodeRepairCooldown.keys().next().value);
+  try{
+    const series=await fetchUpstreamApi(row,'get_series_info',{
+      series_id:row.series_source_id
+    },{timeoutMs:7000,maxBytes:3_000_000});
+    const decision=verifiedEpisodeExtension(series,row.source_episode_id,
+      safeGatewayExtension(row.container_extension,'mp4'));
+    if(decision.status!=='changed')return decision;
+    const changed=await pool.query(`UPDATE blofy_xtream_gateway_episode_map
+      SET container_extension=$4 WHERE gateway_id=$1 AND server_id=$2
+      AND source_episode_id=$3 RETURNING gateway_id`,
+      [row.gateway_id,row.server_id,row.source_episode_id,decision.extension]);
+    if(!changed.rowCount)return {status:'unavailable'};
+    // Keep the gateway episode ID and original provider episode ID stable.
+    // Only update the validated filename extension.
+    return decision;
+  }catch{
+    return {status:'unavailable'};
+  }
 }
 
 function mediaUpstreamUrl(row, kind, sourceId, extension) {
