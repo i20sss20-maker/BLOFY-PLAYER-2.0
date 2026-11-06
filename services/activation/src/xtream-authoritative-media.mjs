@@ -27,6 +27,12 @@ function getExactItem(payload,kind,itemId){
   return match;
 }
 
+// Only the exact catalog item returned by the provider can authorize a
+// same-ID alternate file container; a sibling episode never qualifies.
+export function providerHasExactXtreamMediaItem(payload,{kind,itemId}={}){
+  return getExactItem(payload,kind,itemId)!==null;
+}
+
 // Only official, individual get_vod_info / get_series_info direct_source values
 // may become a candidate. Plaintext HTTP and any relative URI must remain
 // on the original authorized source origin; HTTPS CDN links must still pass
