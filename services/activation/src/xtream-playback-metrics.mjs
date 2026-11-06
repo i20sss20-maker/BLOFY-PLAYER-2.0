@@ -1,3 +1,5 @@
+import { validXtreamDenialHint } from './xtream-provider-denial.mjs';
+
 // Bounded in-process metrics for the real BLOFY XTREAM media relay.
 // Never store subscriber names, credentials, provider URLs, client IPs, or raw errors.
 const samples=[];
@@ -13,7 +15,7 @@ const REASONS=new Set([
   'gateway_auth_denied','catalog_item_unavailable'
 ]);
 
-export function recordXtreamPlayback({kind,phase,upstreamStatus,reason,startupMs,attempts,itemId}={},now=Date.now()){
+export function recordXtreamPlayback({kind,phase,upstreamStatus,reason,providerHint,startupMs,attempts,itemId}={},now=Date.now()){
   if(!KINDS.has(kind)||!PHASES.has(phase))return;
   const safeStatus=Number.isInteger(Number(upstreamStatus))&&Number(upstreamStatus)>=100&&Number(upstreamStatus)<=599
     ?Number(upstreamStatus):null;
@@ -24,6 +26,7 @@ export function recordXtreamPlayback({kind,phase,upstreamStatus,reason,startupMs
   samples.push({
     at:time,kind,phase,itemId:safeId,
     status:safeStatus,reason:safeReason,
+    ...(validXtreamDenialHint(providerHint)?{providerHint:validXtreamDenialHint(providerHint)}:{}),
     startupMs:Number.isFinite(startupMs)&&startupMs>=0?Math.min(Math.round(startupMs),120000):null,
     attempts:Number.isInteger(attempts)?Math.min(Math.max(attempts,1),3):null
   });
@@ -72,6 +75,7 @@ export function xtreamPlaybackSnapshot(now=Date.now()){
       phase:row.phase,
       upstreamStatus:row.status,
       reason:row.reason,
+      ...(row.providerHint?{providerHint:row.providerHint}:{}),
       attempts:row.attempts
     }))
   };
