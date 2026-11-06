@@ -1,7 +1,16 @@
-// Repair Xtream episode file extensions only from the same provider's
-// authoritative get_series_info payload. Never invent an episode ID, guess
-// a host or change a subscriber's source when an upstream returns 404.
+// A BLOFY gateway episode ID must never silently become a different video.
+// Accept provider-reported extensions and, only when the original provider ID
+// disappeared, a unique season/episode match within that SAME source series.
 const SAFE_EXT=/^(mp4|mkv|ts|m3u8|avi|mov|webm|flv|wmv)$/i;
+const SAFE_ID=/^[A-Za-z0-9._-]{1,128}$/;
+
+export function episodeOrdinal(value,{allowZero=false}={}){
+  if(value===null||value===undefined||String(value).trim()==='')return null;
+  const s=String(value).trim();
+  if(!/^[0-9]{1,5}$/.test(s))return null;
+  const n=Number(s);
+  return Number.isSafeInteger(n)&&n<10000&&n>=(allowZero?0:1)?String(n):null;
+}
 
 export function verifiedEpisodeExtension(payload,sourceEpisodeId,currentExtension){
   const id=String(sourceEpisodeId??'');
@@ -21,7 +30,31 @@ export function verifiedEpisodeExtension(payload,sourceEpisodeId,currentExtensio
       return {status:'changed',extension:raw};
     }
   }
-  // The old ID is no longer advertised for this series. Do not map it to
-  // another episode by guesswork (that could show the wrong content).
   return {status:'missing'};
+}
+
+export function verifiedEpisodeRecovery(payload,sourceEpisodeId,currentExtension,seasonNumber,episodeNumber){
+  const exact=verifiedEpisodeExtension(payload,sourceEpisodeId,currentExtension);
+  // An existing ID may have a broken file at the provider. We must never
+  // interpret that alone as permission to select another episode.
+  if(exact.status!=='missing')return exact;
+  const season=episodeOrdinal(seasonNumber,{allowZero:true});
+  const number=episodeOrdinal(episodeNumber);
+  if(season===null||number===null)return exact;
+  const matches=[];
+  let scanned=0;
+  for(const [seasonKey,rows] of Object.entries(payload.episodes)){
+    if(episodeOrdinal(seasonKey,{allowZero:true})!==season||!Array.isArray(rows))continue;
+    for(const entry of rows){
+      if(++scanned>15000)return {status:'unavailable'};
+      if(episodeOrdinal(entry?.episode_num)!==number)continue;
+      const id=String(entry?.id??'').trim();
+      const extension=String(entry?.container_extension??'').trim().replace(/^\./,'').toLowerCase();
+      if(!SAFE_ID.test(id)||!SAFE_EXT.test(extension))return {status:'missing'};
+      matches.push({id,extension});
+      if(matches.length>1)return {status:'missing'}; // ambiguous episode
+    }
+  }
+  if(matches.length!==1)return exact;
+  return {status:'relocated',sourceId:matches[0].id,extension:matches[0].extension};
 }
