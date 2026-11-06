@@ -829,8 +829,9 @@ async function handleServerAction(item, card, button) {
       await api(`/api/v1/admin/xtream/servers/${item.id}/test`, { method: 'POST', body: '{}' });
       showMessage(`اتصال ${item.name} ناجح.`);
     } else if(action==='test-m3u'){
-      if(!item.m3uConfigured)throw new Error('أضف رابط M3U من تعديل بيانات المصدر ثم احفظ.');
-      writeFeedback('جارٍ فحص ترويسة قائمة M3U من المصدر المصرح به…');
+      // Do not trust a stale card captured before the M3U write/readback.
+      // The authenticated server returns 409 if no secret is configured.
+      writeFeedback('جارٍ فحص رابط M3U المحفوظ للمصدر…');
       const result=await api(`/api/v1/admin/xtream/servers/${item.id}/test-m3u`,{
         method:'POST',body:'{}'
       });
@@ -849,10 +850,21 @@ async function handleServerAction(item, card, button) {
       const removeM3u=card.querySelector('[data-role="m3uRemove"]')?.checked;
       if(removeM3u)next.m3uUrl=null;
       else if(m3uInput)next.m3uUrl=m3uInput;
-      await api(`/api/v1/admin/xtream/servers/${item.id}`, {
+      const result=await api(`/api/v1/admin/xtream/servers/${item.id}`, {
         method:'PATCH',body:JSON.stringify(next)
       });
-      showMessage('تم حفظ مصدر «'+item.name+'». إذا أضفت M3U اضغط «اختبار رابط M3U» للتأكد من صحته. لا تحتاج لمزامنة كاملة لمجرد ربط M3U.');
+      if(next.m3uUrl!==undefined){
+        const linked=next.m3uUrl!==null;
+        if(!result.item||Boolean(result.item.m3uConfigured)!==linked)
+          throw new Error('لم يؤكد السيرفر حفظ رابط M3U في قاعدة البيانات.');
+        const fresh=await loadXtream(true,true);
+        const persisted=fresh?.items?.find(source=>source.id===item.id);
+        if(!persisted||Boolean(persisted.m3uConfigured)!==linked)
+          throw new Error('لم تتطابق حالة رابط M3U بعد إعادة قراءة قاعدة البيانات.');
+      }
+      showMessage(next.m3uUrl===null?'تم حذف رابط M3U مع الاحتفاظ بمكتبة Xtream.':
+        next.m3uUrl?'✓ تم حفظ رابط M3U المشفر للمصدر. اضغط «اختبار رابط M3U» لتجربة القائمة.':
+        'تم حفظ مصدر «'+item.name+'».');
     } else if (action === 'delete') {
       const total=Number(item.counts?.total||0).toLocaleString('en-US');
       if(!window.confirm(`حذف مصدر «${item.name}» نهائيًا من BLOFY؟\nسيُخفى ${total} عنصر عن المشتركين فور حفظ الحذف في قاعدة البيانات.\nلن يتأثر الاشتراك الأصلي لدى مزود Xtream.\n\nهل تؤكد الحذف؟`))return;
