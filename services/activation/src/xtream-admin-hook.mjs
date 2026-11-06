@@ -30,6 +30,7 @@ import { auditXtreamCatalogSample } from './xtream-library-insights.mjs';
 import { normalizeXtreamDetails,mergedXtreamMetadata } from './xtream-item-details.mjs';
 import { tmdbConfigured,validatedTmdbId,fetchTmdbDetails } from './xtream-tmdb.mjs';
 import { sortXtreamCategories } from './xtream-category-sort.mjs';
+import {normalizeStudioName,normalizeStudioItemEdit,readStudioLogoRequest} from './xtream-studio-policy.mjs';
 import { nativeXtreamCsrfToken } from './xtream-native-csrf.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
@@ -234,6 +235,20 @@ async function ensureReady() {
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         PRIMARY KEY(server_id,media_type,source_id)
       )`);
+      // Publisher controls survive every Xtream re-import.
+      await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS custom_name TEXT');
+      await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS custom_icon_url TEXT');
+      await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS featured BOOLEAN NOT NULL DEFAULT FALSE');
+      await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS channel_number INTEGER');
+      await client.query(`CREATE TABLE IF NOT EXISTS blofy_xtream_studio_branding (
+        id SMALLINT PRIMARY KEY CHECK(id=1),
+        display_name TEXT NOT NULL DEFAULT 'BLOFY STREAM',
+        logo_mime TEXT,
+        logo_bytes BYTEA,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`);
+      await client.query(`INSERT INTO blofy_xtream_studio_branding(id,display_name)
+        VALUES(1,'BLOFY STREAM') ON CONFLICT(id) DO NOTHING`);
       await client.query('ALTER TABLE blofy_xtream_categories ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 100000');
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_servers_publish ON blofy_xtream_servers(enabled,publish_catalog,priority)');
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_categories_filter ON blofy_xtream_categories(server_id,media_type,enabled,name)');
@@ -1058,13 +1073,19 @@ async function listCatalog(query, publishedOnly = false) {
     where.push(`c.name ~* $${values.length}`);
   }
   values.push(limit, offset);
-  const rows = (await pool.query(`SELECT i.server_id,i.media_type,i.source_id,i.category_id,i.name,i.icon_url,i.container_extension,i.enabled,i.metadata,i.updated_at,
+  const rows = (await pool.query(`SELECT i.server_id,i.media_type,i.source_id,i.category_id,
+      COALESCE(NULLIF(i.custom_name,''),i.name) AS name,COALESCE(NULLIF(i.custom_icon_url,''),i.icon_url) AS icon_url,
+      i.name AS original_name,i.icon_url AS original_icon_url,i.custom_name,i.custom_icon_url,i.featured,i.channel_number,
+      i.container_extension,i.enabled,i.metadata,i.updated_at,
       s.name AS server_name,s.priority,c.name AS category_name,c.enabled AS category_enabled
     FROM blofy_xtream_items i
     JOIN blofy_xtream_servers s ON s.id=i.server_id
     LEFT JOIN blofy_xtream_categories c ON c.server_id=i.server_id AND c.media_type=i.media_type AND c.source_category_id=i.category_id
     WHERE ${where.join(' AND ')}
-    ORDER BY s.priority ASC,i.name ASC LIMIT $${values.length-1} OFFSET $${values.length}`, values)).rows;
+    ORDER BY (CASE WHEN i.media_type='live' AND i.featured THEN 0 ELSE 1 END),
+      CASE WHEN i.media_type='live' THEN COALESCE(i.channel_number,999999) ELSE 999999 END,
+      s.priority ASC,COALESCE(NULLIF(i.custom_name,''),i.name) ASC,i.source_id ASC
+    LIMIT ${values.length-1} OFFSET ${values.length}`, values)).rows;
   return rows.map(row => ({
     serverId: row.server_id,
     serverName: row.server_name,
@@ -1074,6 +1095,12 @@ async function listCatalog(query, publishedOnly = false) {
     categoryName: row.category_name,
     name: row.name,
     iconUrl: row.icon_url,
+    originalName:row.original_name,
+    originalIconUrl:row.original_icon_url,
+    customName:row.custom_name,
+    customIconUrl:row.custom_icon_url,
+    featured:Boolean(row.featured),
+    channelNumber:row.channel_number==null?null:Number(row.channel_number),
     containerExtension: row.container_extension,
     enabled: Boolean(row.enabled),
     categoryEnabled: row.category_enabled == null ? true : Boolean(row.category_enabled),
