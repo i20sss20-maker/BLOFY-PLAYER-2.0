@@ -81,6 +81,7 @@ jobs:
           # UI may default to STROING; the isolated fixture explicitly tests Xtream.
           agent-browser eval "(()=>{const select=document.getElementById('providerType');if(!select||![...select.options].some(x=>x.value==='xtream'))throw new Error('Xtream option unavailable');select.value='xtream';select.dispatchEvent(new Event('change',{bubbles:true}));if(select.value!=='xtream')throw new Error('Xtream selection failed');return 'Xtream fixture selected';})()"
           agent-browser fill '#name' 'Play QA'
+          agent-browser fill '#baseUrl' 'https://media.example.test'
           agent-browser fill '#username' 'fixture-user'
           agent-browser fill '#password' 'fixture-password'
           agent-browser eval "(()=>{const expected={name:'Play QA',username:'fixture-user',password:'fixture-password'};for(const [id,value] of Object.entries(expected)){const el=document.getElementById(id);if(!el)throw new Error('Missing field '+id);if(el.value!==value){el.focus();el.value=value;el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));}}if(Object.entries(expected).some(([id,value])=>document.getElementById(id).value!==value))throw new Error('Subscriber credentials did not settle');return 'Subscriber form values ready';})()"
