@@ -18,6 +18,7 @@ import crypto from 'node:crypto';
 import pg from 'pg';
 import { downloadXtreamM3uCatalog } from './xtream-m3u-catalog.mjs';
 import { validateM3uPlaylistUrl, isM3uPlaylistPrefix } from './xtream-m3u-link.mjs';
+import { scanHybridM3uMedia } from './xtream-hybrid-m3u.mjs';
 import { distinctXtreamRecords } from './xtream-import-dedup.mjs';
 import { assessXtreamSync } from './xtream-sync-guard.mjs';
 import { CONTROL_PATH, controlPage, deleteConfirmationPage, readControlForm } from './xtream-native-controls.mjs';
@@ -93,6 +94,7 @@ async function sourceMutation(sql, values) {
 
 const limiter = createFixedWindowLimiter({ limit: 180, windowMs: 60_000 });
 const syncLocks = new Set();
+const m3uIndexLocks = new Set();
 const syncProgress = new Map();
 const cancelledSources = new Set();
 const purgeRunning = new Set();
@@ -211,6 +213,20 @@ async function ensureReady() {
       )`);
       await client.query('ALTER TABLE blofy_xtream_servers ADD COLUMN IF NOT EXISTS deletion_requested_at TIMESTAMPTZ');
       await client.query('ALTER TABLE blofy_xtream_servers ADD COLUMN IF NOT EXISTS m3u_url_secret TEXT');
+      await client.query('ALTER TABLE blofy_xtream_servers ADD COLUMN IF NOT EXISTS m3u_index_generation UUID');
+      await client.query("ALTER TABLE blofy_xtream_servers ADD COLUMN IF NOT EXISTS m3u_index_state JSONB NOT NULL DEFAULT '{}'::jsonb");
+      await client.query(`CREATE TABLE IF NOT EXISTS blofy_xtream_m3u_media_links (
+        server_id UUID NOT NULL REFERENCES blofy_xtream_servers(id) ON DELETE CASCADE,
+        generation UUID NOT NULL,
+        media_type TEXT NOT NULL CHECK(media_type IN ('movie','series')),
+        source_id TEXT NOT NULL,
+        stream_url_secret TEXT NOT NULL,
+        url_digest TEXT NOT NULL,
+        ambiguous BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY(server_id,generation,media_type,source_id)
+      )`);
+      await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_m3u_links_generation ON blofy_xtream_m3u_media_links(server_id,generation)');
       await client.query("ALTER TABLE blofy_xtream_servers ADD COLUMN IF NOT EXISTS media_probe_state JSONB NOT NULL DEFAULT '{}'::jsonb");
       await client.query(`CREATE TABLE IF NOT EXISTS blofy_xtream_categories (
         server_id UUID NOT NULL REFERENCES blofy_xtream_servers(id) ON DELETE CASCADE,
@@ -293,6 +309,8 @@ function adminServer(row) {
     name: row.name,
     baseUrl: row.base_url,
     m3uConfigured: Boolean(row.m3u_url_secret),
+    m3uIndexed: Boolean(row.m3u_index_generation),
+    m3uIndex:row.m3u_index_state&&typeof row.m3u_index_state==='object'?row.m3u_index_state:{},
     enabled: Boolean(row.enabled),
     publishCatalog: Boolean(row.publish_catalog),
     priority: Number(row.priority),
@@ -1084,6 +1102,13 @@ async function patchServer(id, body) {
         body.baseUrl!==undefined?body.baseUrl:current.base_url);
       set('m3u_url_secret',encryptXtreamSecret(link,KEY_HEX,`m3u:${id}`));
     }
+  }
+  // Never play URLs indexed for an earlier M3U, upstream host, or account.
+  // Existing Xtream catalog and customers remain unchanged.
+  if(body.m3uUrl!==undefined||body.baseUrl!==undefined||
+     String(body.username||'').trim()||String(body.password||'').trim()){
+    updates.push("m3u_index_generation=NULL");
+    updates.push("m3u_index_state='{\"status\":\"not_indexed\"}'::jsonb");
   }
   // Source, credentials or playback policy changes invalidate previous probes.
   if(body.baseUrl!==undefined||String(body.username||'').trim()||String(body.password||'').trim())
