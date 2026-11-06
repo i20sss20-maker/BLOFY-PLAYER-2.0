@@ -435,7 +435,7 @@ async function probeXtreamSeries(id,mediaType){
   const candidates=(await pool.query(`SELECT source_id,name
     FROM blofy_xtream_items
     WHERE server_id=$1 AND media_type='series' AND enabled=TRUE
-    ORDER BY name ASC LIMIT ${2}`,[id,mediaType==='episode'?1:2])).rows;
+    ORDER BY name ASC LIMIT $2`,[id,mediaType==='episode'?1:2])).rows;
   if(!candidates.length)return{ok:false,mediaType,reason:'no_imported_items',checks:[]};
   const creds=decryptCredentials(source),checks=[];
   for(const series of candidates){
