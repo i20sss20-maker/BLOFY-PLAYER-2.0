@@ -17,6 +17,7 @@ test('Xtream API and media request errors are awaited by the HTTP boundary',()=>
   assert.match(handler,/return await handlePlayerApi\(req, res, url\)/);
   assert.match(handler,/return await handleM3u\(req, res, url\)/);
   assert.match(handler,/return await proxyMedia\(req, res, mediaMatch/);
-  assert.match(handler,/catch \(error\) \{\s*console\.error\('xtream gateway request failed:'/);
+  assert.match(handler,/if\(error\?\.message==='xtream_client_disconnected'\)return/);
+  assert.match(handler,/console\.error\('xtream gateway request failed:'/);
   assert.doesNotMatch(handler,/return proxyMedia\(req, res/);
 });
