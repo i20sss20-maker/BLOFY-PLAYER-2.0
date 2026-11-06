@@ -401,6 +401,10 @@
 .studio-pro-channel-list{max-height:310px;overflow:auto;display:grid;gap:5px;margin:12px 0;border-radius:10px}
 .studio-pro-channel{display:flex;align-items:center;gap:11px;border:1px solid #483751;border-radius:10px;padding:10px;background:#18121f;cursor:pointer}
 .studio-pro-channel:hover{border-color:#9b77d9}
+.studio-pro-channel[draggable=true]{cursor:grab}
+.studio-pro-channel[draggable=true]:active{cursor:grabbing}
+.studio-pro-move{border:1px solid #69517d;background:#2b2135;color:#f2e6ff;border-radius:8px;width:29px;height:30px;cursor:pointer;flex:none;font:inherit;font-size:16px}
+.studio-pro-move:hover{background:#473061}
 .studio-pro-channel input{accent-color:#b389fa;width:19px;height:19px;flex:none}
 .studio-pro-channel span{flex:1;min-width:0;overflow-wrap:anywhere}
 .studio-pro-channel small{font-size:11px;color:#b5a4cb;white-space:nowrap}
