@@ -72,5 +72,5 @@ test('original Xtream cards have native actions with clickable fallback rather t
   assert.match(web,/source-native-edit/);
   assert.match(web,/confirm-delete/);
   assert.match(html,/href="\/api\/v1\/admin\/xtream\/controls"/);
-  assert.match(html,/sources-admin\.js\?v=20261106-catalog-safe-v6/);
+  assert.match(html,/sources-admin\.js\?v=20261106-smart-library-v7/);
 });
