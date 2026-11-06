@@ -39,7 +39,7 @@ import { acceptsXtreamGzip } from './xtream-catalog-compression.mjs';
 import { shouldRetryXtreamWithoutRange,firstByteXtreamRange } from './xtream-media-range.mjs';
 import { recordXtreamPlayback,xtreamPlaybackSnapshot } from './xtream-playback-metrics.mjs';
 import { XtreamDenialCooldown } from './xtream-denial-cooldown.mjs';
-import { episodeOrdinal, verifiedEpisodeRecovery } from './xtream-episode-repair.mjs';
+import { episodeOrdinal, verifiedEpisodeRecovery, sameEpisodeContainerCandidates } from './xtream-episode-repair.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
@@ -193,6 +193,9 @@ async function ensureReady() {
       await client.query('ALTER TABLE blofy_xtream_gateway_episode_map ADD COLUMN IF NOT EXISTS season_number TEXT');
       await client.query('ALTER TABLE blofy_xtream_gateway_episode_map ADD COLUMN IF NOT EXISTS episode_number TEXT');
       await client.query('ALTER TABLE blofy_xtream_gateway_episode_map ADD COLUMN IF NOT EXISTS resolved_source_episode_id TEXT');
+      // A validated playable extension must survive provider metadata refreshes
+      // that still advertise a stale, non-playable filename suffix.
+      await client.query('ALTER TABLE blofy_xtream_gateway_episode_map ADD COLUMN IF NOT EXISTS verified_container_extension TEXT');
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_gateway_accounts_user ON blofy_xtream_gateway_accounts(username,enabled)');
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_gateway_item_lookup ON blofy_xtream_gateway_item_map(server_id,media_type,source_id)');
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_gateway_episode_lookup ON blofy_xtream_gateway_episode_map(server_id,source_episode_id)');
@@ -627,7 +630,10 @@ async function ensureEpisodeMaps(serverId, seriesSourceId, episodes) {
     FROM jsonb_to_recordset($3::jsonb) AS x(
       source_id text,container_extension text,season_number text,episode_number text)
     ON CONFLICT(server_id,series_source_id,source_episode_id) DO UPDATE
-      SET container_extension=EXCLUDED.container_extension,
+      SET verified_container_extension=CASE
+            WHEN blofy_xtream_gateway_episode_map.container_extension IS DISTINCT FROM EXCLUDED.container_extension
+            THEN NULL ELSE blofy_xtream_gateway_episode_map.verified_container_extension END,
+          container_extension=EXCLUDED.container_extension,
           season_number=COALESCE(EXCLUDED.season_number,blofy_xtream_gateway_episode_map.season_number),
           episode_number=COALESCE(EXCLUDED.episode_number,blofy_xtream_gateway_episode_map.episode_number)`,
     [serverId, String(seriesSourceId), JSON.stringify(unique.map(item => ({
@@ -635,7 +641,9 @@ async function ensureEpisodeMaps(serverId, seriesSourceId, episodes) {
       season_number:item.seasonNumber,episode_number:item.episodeNumber
     })))]);
   const ids = unique.map(item => item.sourceId);
-  const rows = (await pool.query(`SELECT gateway_id,source_episode_id,container_extension FROM blofy_xtream_gateway_episode_map
+  const rows = (await pool.query(`SELECT gateway_id,source_episode_id,
+      COALESCE(verified_container_extension,container_extension) AS container_extension
+    FROM blofy_xtream_gateway_episode_map
     WHERE server_id=$1 AND series_source_id=$2 AND source_episode_id=ANY($3::text[])`, [serverId,String(seriesSourceId),ids])).rows;
   return new Map(rows.map(row => [String(row.source_episode_id), { id: Number(row.gateway_id), extension: safeGatewayExtension(row.container_extension, 'mp4') }]));
 }
@@ -684,7 +692,7 @@ async function episodeByGatewayId(gatewayId,sourceId=null) {
   const id = Number(gatewayId);
   if (!Number.isSafeInteger(id) || id < 1) return null;
   return (await pool.query(`SELECT e.gateway_id,e.server_id,e.series_source_id,e.source_episode_id,e.resolved_source_episode_id,
-      e.season_number,e.episode_number,e.container_extension,
+      e.season_number,e.episode_number,COALESCE(e.verified_container_extension,e.container_extension) AS container_extension,
       s.base_url,s.username_secret,s.password_secret,s.enabled AS server_enabled
     FROM blofy_xtream_gateway_episode_map e JOIN blofy_xtream_servers s ON s.id=e.server_id
     WHERE e.gateway_id=$1 AND s.enabled=TRUE AND s.publish_catalog=TRUE
@@ -711,13 +719,21 @@ async function confirmEpisodeReplacement(row,providerId,extension){
     }
     if(!response.ok||!response.body)return false;
     reader=response.body.getReader();
-    for(let n=0;n<3;n++){
+    const parts=[];
+    let total=0;
+    for(let n=0;n<6 && total<512;n++){
       const chunk=await reader.read();
-      if(chunk.done)return false;
-      if(chunk.value?.byteLength)
-        return inspectXtreamMediaChunk(chunk.value,response.headers.get('content-type')).valid;
+      if(chunk.done)break;
+      if(!chunk.value?.byteLength)continue;
+      const sample=Buffer.from(chunk.value).subarray(0,4096-total);
+      parts.push(sample);
+      total+=sample.byteLength;
     }
-    return false;
+    if(!total)return false;
+    const inspection=inspectXtreamMediaChunk(Buffer.concat(parts,total),response.headers.get('content-type'));
+    // Recovery must never persist a blank response, HTML or unrecognized
+    // binary as a verified replacement for a stable subscriber video ID.
+    return inspection.valid && inspection.format!=='unknown';
   }catch{return false;}
   finally{
     if(reader){try{await reader.cancel()}catch{}try{reader.releaseLock()}catch{}}
@@ -749,13 +765,31 @@ async function repairEpisodeOn404(row){
         episodeOrdinal(row.episode_number)===null)){
       return {status:'position_unknown'};
     }
-    if(decision.status==='unchanged')return {status:'catalog_media_mismatch'};
+    if(decision.status==='unchanged'){
+      const currentExtension=safeGatewayExtension(row.container_extension,'mp4');
+      const currentId=row.resolved_source_episode_id||row.source_episode_id;
+      // A provider can keep advertising mp4 but serve this exact episode as
+      // mkv (or ts). Try only two bounded same-ID formats after a real 404.
+      for(const candidate of sameEpisodeContainerCandidates(currentExtension)){
+        if(!await confirmEpisodeReplacement(row,currentId,candidate))continue;
+        const verified=await pool.query(`UPDATE blofy_xtream_gateway_episode_map
+          SET verified_container_extension=$4
+          WHERE gateway_id=$1 AND server_id=$2 AND source_episode_id=$3
+          RETURNING gateway_id`,
+          [row.gateway_id,row.server_id,row.source_episode_id,candidate]);
+        if(verified.rowCount){
+          return {status:'alternate_extension',extension:candidate};
+        }
+      }
+      return {status:'catalog_media_mismatch'};
+    }
     if(decision.status!=='changed'&&decision.status!=='relocated')return decision;
     if(decision.status==='relocated' &&
        !await confirmEpisodeReplacement(row,decision.sourceId,decision.extension))
       return {status:'replacement_unplayable'};
     const changed=await pool.query(`UPDATE blofy_xtream_gateway_episode_map
-      SET container_extension=$4,
+      SET container_extension=CASE WHEN $5::text IS NULL THEN $4 ELSE container_extension END,
+          verified_container_extension=CASE WHEN $5::text IS NULL THEN NULL ELSE $4 END,
           resolved_source_episode_id=COALESCE($5::text,resolved_source_episode_id)
       WHERE gateway_id=$1 AND server_id=$2 AND source_episode_id=$3
       RETURNING gateway_id`,
@@ -884,7 +918,7 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
               hasEpisodePosition:episodeOrdinal(row.season_number,{allowZero:true})!==null&&
                 episodeOrdinal(row.episode_number)!==null
             });
-            if((repaired.status==='changed'||repaired.status==='relocated') && attempt<maxAttempts){
+            if(['changed','relocated','alternate_extension'].includes(repaired.status) && attempt<maxAttempts){
               sourceId=repaired.sourceId||sourceId;
               upstream=mediaUpstreamUrl(row,kind,sourceId,repaired.extension);
               console.info('xtream episode metadata verified and refreshed',{
@@ -1028,7 +1062,7 @@ async function probeGatewayMedia(kind,itemId){
       const fix=await repairEpisodeOn404(row);
       episodeRepairStatus=fix.status;
       console.warn('xtream episode operator probe diagnosis',{itemId,status:fix.status});
-      if(fix.status==='changed'||fix.status==='relocated'){
+      if(['changed','relocated','alternate_extension'].includes(fix.status)){
         await response.body?.cancel().catch(()=>{});
         response=null;
         sourceId=fix.sourceId||sourceId;
