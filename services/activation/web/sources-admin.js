@@ -709,7 +709,8 @@ async function handleServerAction(item, card, button) {
       const summary=checked.map(check=>
         check.title+' · '+(check.ok?'✓ HTTP '+check.httpStatus:codeHint(check))+
         (check.episodeCount?' · '+check.episodeCount+' حلقة':'')+
-        (check.seasonCount?' · '+check.seasonCount+' موسمًا':'')).join(' | ');
+        (check.seasonCount?' · '+check.seasonCount+' موسمًا':'')+
+        (check.rangeFallbackUsed?' · تمت إعادة التجربة بدون Range':'')).join(' | ');
       const message=result.ok
         ?'✓ نجح فحص '+labels[mediaType]+'؛ '+summary+
           ' · نجاح الفحص لا يؤكد استمرار الصوت والصورة.'

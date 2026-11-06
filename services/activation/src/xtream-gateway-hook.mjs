@@ -33,6 +33,7 @@ import { gatewayItemsPageQuery } from './xtream-gateway-query.mjs';
 import { mergeXtreamPlayerRequest } from './xtream-player-post.mjs';
 import { inspectXtreamMediaChunk } from './xtream-media-inspector.mjs';
 import { normalizeXtreamEpg } from './xtream-epg.mjs';
+import { shouldRetryXtreamWithoutRange,firstByteXtreamRange } from './xtream-media-range.mjs';
 import { recordXtreamPlayback,xtreamPlaybackSnapshot } from './xtream-playback-metrics.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
@@ -683,7 +684,11 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
   const upstream = mediaUpstreamUrl(row, kind, sourceId, mediaExtension);
   const headers = { 'user-agent': String(req.headers['user-agent'] || 'BLOFY-Xtream-Gateway/1.0') };
   if (req.headers.range) headers.range = String(req.headers.range);
-  const maxAttempts = req.method === 'HEAD' ? 1 : 2;
+  // A provider returning 404/416 only for "Range: bytes=0-..." can be
+  // rechecked once with plain GET. Never discard a nonzero seek request.
+  const initialRange=firstByteXtreamRange(headers.range)&&req.method==='GET';
+  const maxAttempts = req.method === 'HEAD' ? 1 : initialRange ? 3 : 2;
+  let noRangeRetried=false, transientRetried=false;
   try {
     for (let attempt=1;attempt<=maxAttempts;attempt++) {
       if (client.signal.aborted) return;
@@ -701,9 +706,20 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
         } finally { clearTimeout(timer); }
         if (!(response.ok || response.status === 206)) {
           const retryable = [408,500,502,503,504].includes(response.status);
-          console.warn('xtream media upstream status', {kind, itemId:gatewayId, status:response.status, attempt});
+          const retryWithoutRange = shouldRetryXtreamWithoutRange({
+            status:response.status,range:headers.range,method:req.method,
+            alreadyRetried:noRangeRetried
+          }) && attempt < maxAttempts;
+          console.warn('xtream media upstream status', {kind, itemId:gatewayId, status:response.status, attempt,
+            retryWithoutRange});
           await response.body?.cancel().catch(()=>{});
-          if (retryable && attempt < maxAttempts) {
+          if(retryWithoutRange){
+            noRangeRetried=true;
+            delete headers.range;
+            continue;
+          }
+          if (retryable && !transientRetried && attempt < maxAttempts) {
+            transientRetried=true;
             await new Promise(resolve=>setTimeout(resolve, 200*attempt));
             continue;
           }
@@ -752,7 +768,8 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
         const reason = controller.signal.reason?.message || error?.message || 'media_error';
         const safeReason = ['headers_timeout','media_read_timeout','upstream_empty_media','upstream_non_media_response'].includes(reason) ? reason : 'upstream_unreachable';
         console.warn('xtream media relay error', {kind,itemId:gatewayId,reason:safeReason,attempt});
-        if (!res.headersSent && attempt < maxAttempts && safeReason!=='upstream_non_media_response') {
+        if (!res.headersSent && !transientRetried && attempt < maxAttempts && safeReason!=='upstream_non_media_response') {
+          transientRetried=true;
           await new Promise(resolve=>setTimeout(resolve,200*attempt));
           continue;
         }

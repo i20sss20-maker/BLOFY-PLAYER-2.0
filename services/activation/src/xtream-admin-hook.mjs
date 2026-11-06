@@ -22,6 +22,7 @@ import { assessXtreamSync } from './xtream-sync-guard.mjs';
 import { CONTROL_PATH, controlPage, deleteConfirmationPage, readControlForm } from './xtream-native-controls.mjs';
 import { xtreamEpisodeSamples, xtreamProbeMessage } from './xtream-series-probe.mjs';
 import { inspectXtreamMediaChunk } from './xtream-media-inspector.mjs';
+import { shouldRetryXtreamWithoutRange } from './xtream-media-range.mjs';
 import { auditXtreamCatalogSample } from './xtream-library-insights.mjs';
 import { sortXtreamCategories } from './xtream-category-sort.mjs';
 import { nativeXtreamCsrfToken } from './xtream-native-csrf.mjs';
@@ -387,6 +388,7 @@ async function probeXtreamEpisodeMedia(source,creds,episode) {
     .map(encodeURIComponent).join('/')+'.'+episode.extension;
   let target=new URL(path,normalizeXtreamBaseUrl(source.base_url)+'/');
   let httpStatus=null,contentType='',errorCode=null,reader=null,response=null;
+  let useFirstByteRange=true;
   try{
     for(let hop=0;hop<=3;hop++){
       await assertPublicXtreamUrl(target.origin);
@@ -394,7 +396,7 @@ async function probeXtreamEpisodeMedia(source,creds,episode) {
         method:'GET',redirect:'manual',signal:controller.signal,
         headers:{
           'user-agent':'BLOFY-Media-Probe/1.0',
-          range:'bytes=0-1023',
+          ...(useFirstByteRange?{range:'bytes=0-1023'}:{}),
           accept:'*/*'
         }
       });
@@ -404,6 +406,12 @@ async function probeXtreamEpisodeMedia(source,creds,episode) {
         if(!location||hop===3)throw new Error('redirect_invalid');
         target=new URL(location,target);
         if(!['http:','https:'].includes(target.protocol))throw new Error('redirect_invalid');
+        continue;
+      }
+      if(shouldRetryXtreamWithoutRange({status:response.status,
+        range:useFirstByteRange?'bytes=0-1023':'',alreadyRetried:!useFirstByteRange}) && hop<3){
+        await response.body?.cancel().catch(()=>{});
+        useFirstByteRange=false;
         continue;
       }
       httpStatus=response.status;
@@ -430,7 +438,8 @@ async function probeXtreamEpisodeMedia(source,creds,episode) {
   }
   const ok=(httpStatus===200||httpStatus===206)
     && !errorCode && !/text\/html|application\/json|text\/xml/i.test(contentType);
-  return{ok,httpStatus,contentType,latencyMs:Date.now()-started,error:errorCode};
+  return{ok,httpStatus,contentType,latencyMs:Date.now()-started,error:errorCode,
+    rangeFallbackUsed:!useFirstByteRange};
 }
 
 async function probeXtreamSeries(id,mediaType){
@@ -526,6 +535,7 @@ async function probeXtreamPlayback(id,mediaType='live') {
     const started=Date.now(),controller=new AbortController();
     const timeout=setTimeout(()=>controller.abort(),9500);
     let httpStatus=null,contentType='',errorCode=null;
+    let useFirstByteRange=mediaType==='movie';
     try{
       for(let hop=0;hop<=3;hop++){
         await assertPublicXtreamUrl(target.origin);
@@ -533,7 +543,7 @@ async function probeXtreamPlayback(id,mediaType='live') {
           method:'GET',redirect:'manual',signal:controller.signal,
           headers:{
             'user-agent':'BLOFY-Media-Probe/1.0',
-            ...(mediaType==='movie'?{range:'bytes=0-1023'}:{})
+            ...(useFirstByteRange?{range:'bytes=0-1023'}:{})
           }
         });
         if([301,302,303,307,308].includes(response.status)){
@@ -542,6 +552,12 @@ async function probeXtreamPlayback(id,mediaType='live') {
           if(!redirect||hop===3)throw new Error('redirect_invalid');
           target=new URL(redirect,target);
           if(!['http:','https:'].includes(target.protocol))throw new Error('redirect_invalid');
+          continue;
+        }
+        if(shouldRetryXtreamWithoutRange({status:response.status,
+          range:useFirstByteRange?'bytes=0-1023':'',alreadyRetried:!useFirstByteRange}) && hop<3){
+          await response.body?.cancel().catch(()=>{});
+          useFirstByteRange=false;
           continue;
         }
         httpStatus=response.status;
@@ -571,7 +587,7 @@ async function probeXtreamPlayback(id,mediaType='live') {
       && !errorCode && !/text\/html|application\/json|text\/xml/i.test(contentType);
     checks.push({
       title:cleanText(item.name,160),mediaType,httpStatus,contentType,
-      latencyMs:Date.now()-started,ok,error:errorCode
+      latencyMs:Date.now()-started,ok,error:errorCode,rangeFallbackUsed:mediaType==='movie'&&!useFirstByteRange
     });
     if(ok)break;
   }
