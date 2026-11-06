@@ -603,6 +603,34 @@ async function runXtreamBatchProbe(){
               (statuses[http]||known[reason]||'المصدر لم يؤكد تشغيل العينة')+
               (xtreamProviderHintText(sample?.providerHint)?' · '+xtreamProviderHintText(sample?.providerHint):'')+
               (kind==='live'&&['ts','m3u8'].includes(sample?.outputFormat)?' · '+sample.outputFormat.toUpperCase():'');
+            // Denied media is not automatically switched to an unverified
+            // source. Offer the operator an explicit reversible unpublish.
+            if([403,456].includes(http)&&source.publishCatalog){
+              const pause=make('button','button ghost xt-denial-pause','إخفاء هذا المصدر عن المشتركين');
+              pause.type='button';
+              pause.title='إيقاف النشر فقط. يحتفظ BLOFY بالمصدر والمكتبة وحسابات المشتركين.';
+              pause.addEventListener('click',async()=>{
+                if(!window.confirm('المصدر «'+source.name+'» رفض تشغيل العينة (HTTP '+http+'). هل تريد إخفاء محتواه مؤقتًا عن المشتركين؟ لن يُحذف المصدر أو بياناته.'))return;
+                pause.disabled=true;
+                try{
+                  const changed=await api('/api/v1/admin/xtream/servers/'+encodeURIComponent(source.id),{
+                    method:'PATCH',body:JSON.stringify({publishCatalog:false})
+                  });
+                  if(changed.item?.publishCatalog!==false)throw new Error('لم يؤكد السيرفر إيقاف النشر.');
+                  await loadXtream(true,true);
+                  const verified=state.xtreamServers.find(item=>item.id===source.id);
+                  if(!verified||verified.publishCatalog!==false)
+                    throw new Error('حالة النشر غير مؤكدة بعد إعادة القراءة.');
+                  source.publishCatalog=false;
+                  pause.remove();
+                  showMessage('✓ تم إخفاء محتوى «'+source.name+'» عن المشتركين. المصدر محفوظ ويمكن إعادة نشره من بطاقة المصدر.');
+                }catch(error){
+                  showMessage('تعذر إخفاء المصدر: '+error.message,'error');
+                  pause.disabled=false;
+                }
+              });
+              row.append(pause);
+            }
           }
         }catch(error){
           if(session.cancelled)break outer;
@@ -1528,6 +1556,7 @@ async function loadBlofyPlaybackHealth(){
       upstream_http_403:'المصدر رفض الوصول (403)',
       upstream_http_404:'المحتوى أو مساره غير موجود (404)',
       upstream_http_456:'المصدر أعاد HTTP 456: رفض خاص بالمزود. تأكد من تفعيل مشاهدة الفيديو لهذا الحساب ومن قيود الشبكة أو الاتصال المسموح بها لدى المزود.',
+      upstream_denial_cooldown:'حماية مؤقتة: أوقف BLOFY المحاولات المتكررة لهذه القناة بعد رفض المصدر HTTP 403/456. لن يزيل ذلك قيود المزود.',
       upstream_http_429:'تجاوز حد اتصالات المصدر',
       headers_timeout:'تأخر الاتصال بالمصدر',
       media_read_timeout:'انقطع وصول بيانات الفيديو',

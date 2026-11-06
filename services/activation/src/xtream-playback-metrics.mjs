@@ -11,7 +11,7 @@ const REASONS=new Set([
   'upstream_http_403','upstream_http_404','upstream_http_408','upstream_http_429','upstream_http_456',
   'upstream_http_500','upstream_http_502','upstream_http_503','upstream_http_504',
   'upstream_http_other','headers_timeout','media_read_timeout','upstream_empty_media',
-  'upstream_non_media_response','upstream_unreachable',
+  'upstream_non_media_response','upstream_unreachable','upstream_denial_cooldown',
   'gateway_auth_denied','catalog_item_unavailable'
 ]);
 
