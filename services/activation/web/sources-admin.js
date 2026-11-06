@@ -825,6 +825,34 @@ function renderCatalog() {
   el('catalogHint').textContent = state.catalog.length ? `معروض ${state.catalog.length} عنصر (حتى 250 في الصفحة).` : '';
 }
 
+// Year/language browsing is read-only: never let the unfiltered bulk toggle
+// accidentally modify an entire source while a smart shelf is selected.
+function updateCatalogVideoFilters(){
+  const video=el('catalogType').value!=='live';
+  for(const label of document.querySelectorAll('.catalog-video-filter'))label.hidden=!video;
+  for(const id of ['catalogYear','catalogLanguage']){
+    el(id).disabled=!video;
+    if(!video)el(id).value='';
+  }
+  const filtered=video&&Boolean(el('catalogYear').value||el('catalogLanguage').value);
+  el('enableTypeBtn').disabled=filtered;
+  el('disableTypeBtn').disabled=filtered;
+  el('catalogSmartNotice').textContent=filtered?
+    'عرض مخصص للغة والسنة — يمكنك البحث والتصفح وتعطيل عنصر واحد، لكن التغيير الجماعي متوقف لحماية بقية المحتوى.':
+    'اختر «عربي» و«2026» لعرض عناصر السنة الفعلية إن كانت محفوظة في بيانات المصدر. العرض لا يصنع تصنيفات أو سنوات وهمية.';
+}
+
+function initCatalogYearPicker(){
+  const picker=el('catalogYear');
+  const start=new Date().getFullYear()+1;
+  for(let year=start;year>=1950;year--){
+    const option=document.createElement('option');
+    option.value=String(year);option.textContent=String(year);
+    picker.append(option);
+  }
+  updateCatalogVideoFilters();
+}
+
 async function loadCatalog() {
   const serverId = el('catalogServer').value;
   if (!serverId) return;
@@ -832,6 +860,8 @@ async function loadCatalog() {
   try {
     const params = new URLSearchParams({ serverId, type: el('catalogType').value, limit: '250' });
     if (el('catalogCategory').value) params.set('categoryId', el('catalogCategory').value);
+    if(el('catalogType').value!=='live'&&el('catalogYear').value)params.set('year',el('catalogYear').value);
+    if(el('catalogType').value!=='live'&&el('catalogLanguage').value)params.set('language',el('catalogLanguage').value);
     if (el('catalogSearch').value.trim()) params.set('q', el('catalogSearch').value.trim());
     const data = await api(`/api/v1/admin/xtream/catalog?${params}`);
     state.catalog = Array.isArray(data.items) ? data.items : [];
@@ -844,6 +874,9 @@ async function loadCatalog() {
 }
 
 async function bulkCatalog(enabled) {
+  if(el('catalogYear').value||el('catalogLanguage').value){
+    showMessage('ألغِ فلاتر السنة واللغة قبل أي تغيير جماعي.','error');return;
+  }
   const serverId = el('catalogServer').value;
   if (!serverId) return;
   const body = {
@@ -1030,8 +1063,11 @@ el('xtNewSourceBtn').addEventListener('click', () => {
 el('xtRefreshSourcesBtn').addEventListener('click', ()=>loadXtream().catch(error=>showMessage('تعذر تحديث مصادر Xtream: '+error.message,'error')));
 
 el('catalogServer').addEventListener('change', async () => { await loadCategories(); await loadCatalog(); });
-el('catalogType').addEventListener('change', async () => { await loadCategories(); await loadCatalog(); });
+el('catalogType').addEventListener('change', async () => { updateCatalogVideoFilters(); await loadCategories(); await loadCatalog(); });
 el('catalogCategory').addEventListener('change', loadCatalog);
+for(const id of ['catalogYear','catalogLanguage'])el(id).addEventListener('change',()=>{
+  updateCatalogVideoFilters();loadCatalog().catch(error=>showMessage(error.message,'error'));
+});
 el('categorySearch').addEventListener('input',renderCategoryManager);
 el('categoryVisibility').addEventListener('change',renderCategoryManager);
 for(const [id,grouped] of [['categoryGroupedView',true],['categoryFlatView',false]]){
@@ -1059,6 +1095,7 @@ window.addEventListener('hashchange', () => {
   if (name && name !== state.activeTab) switchTab(name);
 });
 
+initCatalogYearPicker();
 loadXtream(true);
 loadBlofyPlaybackHealth();
 const initialTab = tabFromHash();
