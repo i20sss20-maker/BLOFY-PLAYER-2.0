@@ -22,6 +22,7 @@ import { assessXtreamSync } from './xtream-sync-guard.mjs';
 import { CONTROL_PATH, controlPage, deleteConfirmationPage, readControlForm } from './xtream-native-controls.mjs';
 import { xtreamEpisodeSamples, xtreamProbeMessage } from './xtream-series-probe.mjs';
 import { inspectXtreamMediaChunk } from './xtream-media-inspector.mjs';
+import { auditXtreamCatalogSample } from './xtream-library-insights.mjs';
 import { sortXtreamCategories } from './xtream-category-sort.mjs';
 import { nativeXtreamCsrfToken } from './xtream-native-csrf.mjs';
 
@@ -1004,6 +1005,30 @@ async function listCatalog(query, publishedOnly = false) {
   }));
 }
 
+// Operator-only read-only preview. Keep the sample bounded so a 250k-row
+// IPTV catalog cannot stall the primary playback database. All candidate
+// matching remains advisory: no silent remapping or rights assumptions.
+async function previewCatalogInsights(serverId,mediaType){
+  if(!validUuid(serverId)||!['movie','series','live'].includes(mediaType))
+    throw Object.assign(new Error('xtream_insights_selection_invalid'),{status:400});
+  await ensureReady();
+  const existing=await serverById(serverId);
+  if(!existing)throw Object.assign(new Error('xtream_server_not_found'),{status:404});
+  const [primary,alternates]=await Promise.all([
+    pool.query(`SELECT server_id::text,source_id,name,icon_url,metadata,enabled
+      FROM blofy_xtream_items WHERE server_id=$1 AND media_type=$2
+      ORDER BY source_id LIMIT 1200`,[serverId,mediaType]),
+    pool.query(`SELECT i.server_id::text,i.source_id,i.name,i.icon_url,i.metadata,
+        i.enabled,s.name AS server_name
+      FROM blofy_xtream_items i JOIN blofy_xtream_servers s ON s.id=i.server_id
+      WHERE i.media_type=$1 AND i.server_id<>$2 AND i.enabled=TRUE
+        AND s.enabled=TRUE AND s.publish_catalog=TRUE
+      LIMIT 1800`,[mediaType,serverId])
+  ]);
+  return {sourceName:existing.name,mediaType,
+    ...auditXtreamCatalogSample(primary.rows,alternates.rows)};
+}
+
 async function patchCategory(serverId, mediaType, categoryId, enabled) {
   if (!validUuid(serverId) || !validType(mediaType)) throw Object.assign(new Error('xtream_category_invalid'), { status: 400 });
   const result = await pool.query(`UPDATE blofy_xtream_categories SET enabled=$4,updated_at=NOW() WHERE server_id=$1 AND media_type=$2 AND source_category_id=$3 RETURNING *`,
@@ -1267,6 +1292,10 @@ http.createServer = function withBlofyXtream(listener) {
       }
       if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream/categories') {
         return json(res, 200, { items: await listCategories(url.searchParams.get('serverId'), url.searchParams.get('type')) });
+      }
+      if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream/catalog/insights') {
+        return json(res,200,await previewCatalogInsights(
+          url.searchParams.get('serverId'),url.searchParams.get('type')));
       }
       if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream/catalog') {
         return json(res, 200, { items: await listCatalog(Object.fromEntries(url.searchParams), false) });
