@@ -492,6 +492,93 @@ async function loadCatalogAudit(){
   }finally{button.disabled=false;button.textContent='فحص عينة المكتبة';}
 }
 
+// Operator-initiated batch probes: one authorized source sample at a time.
+// Keep requests bounded and cancelable; never start continuous provider scans.
+let sourceBatchProbe=null;
+async function runXtreamBatchProbe(){
+  if(sourceBatchProbe)return;
+  const search=String(el('xtSourceSearch').value||'').trim().toLocaleLowerCase();
+  const filter=el('xtSourceFilter').value;
+  const available=state.xtreamServers.filter(row=>row.enabled&&
+    (!search||String(row.name+' '+row.baseUrl).toLocaleLowerCase().includes(search))&&
+    (filter!=='published'||row.publishCatalog));
+  if(!available.length){showMessage('لا توجد مصادر مفعّلة مطابقة للفحص.','error');return;}
+  const sources=available.slice(0,6);
+  const kinds=[['live','قناة'],['movie','فيلم'],['series','بيانات مسلسل'],['episode','حلقة']];
+  const total=sources.length*kinds.length;
+  const panel=el('xtBatchProbePanel'),list=el('xtBatchProbeResults');
+  const summary=el('xtBatchProbeSummary'),progress=el('xtBatchProbeProgress');
+  panel.hidden=false;list.replaceChildren();
+  progress.value=0;progress.max=total;
+  const session={cancelled:false,controller:null,finished:0,passed:0,failed:0};
+  sourceBatchProbe=session;
+  el('xtProbeAllBtn').disabled=true;
+  summary.textContent='بدء فحص '+sources.length+' مصادر · '+total+' عيّنة'+
+    (available.length>sources.length?' · عُرض أول 6 مصادر لتجنب الضغط الزائد.':'');
+  panel.scrollIntoView({behavior:'smooth',block:'center'});
+  try{
+    outer:for(const source of sources){
+      for(const [kind,label] of kinds){
+        if(session.cancelled)break outer;
+        const row=make('div','xt-batch-probe-row');
+        row.append(make('strong','',source.name+' · '+label),make('span','status','جارٍ الفحص…'));
+        list.append(row);
+        const status=row.querySelector('.status');
+        const controller=new AbortController();session.controller=controller;
+        const timeout=setTimeout(()=>controller.abort(),14500);
+        try{
+          const result=await api('/api/v1/admin/xtream/servers/'+encodeURIComponent(source.id)+'/probe-playback',{
+            method:'POST',body:JSON.stringify({mediaType:kind}),signal:controller.signal
+          });
+          if(result.ok){
+            session.passed++;
+            status.className='status passed';
+            const sample=(result.checks||[]).find(x=>x.ok);
+            status.textContent='✓ وصلت البيانات'+(sample?.episodeCount?' · '+sample.episodeCount+' حلقة':'')+
+              (sample?.httpStatus?' · HTTP '+sample.httpStatus:'');
+          }else{
+            session.failed++;
+            status.className='status failed';
+            const sample=(result.checks||[]).find(x=>!x.ok);
+            const http=Number(sample?.httpStatus);
+            const reason=String(sample?.error||result.reason||'');
+            const known={
+              empty_media:'بث فارغ',upstream_non_media_response:'استجابة نصية بدل فيديو',
+              no_imported_items:'لا يوجد محتوى مستورد',no_episode_info:'تفاصيل حلقات غير متاحة',
+              no_playable_episodes:'لا توجد حلقات',timeout:'انتهت مهلة المصدر',
+              upstream_unreachable:'فشل الاتصال بالمصدر'
+            };
+            status.textContent='✕ '+(http>=400&&http<=599?'HTTP '+http+' · ':'')+
+              (known[reason]||'المصدر لم يؤكد تشغيل العينة');
+          }
+        }catch(error){
+          if(session.cancelled)break outer;
+          session.failed++;status.className='status failed';
+          status.textContent=controller.signal.aborted?'انتهت مهلة العينة (14.5 ثانية)':
+            'تعذر الفحص: '+String(error.message||'خطأ').slice(0,90);
+        }finally{
+          clearTimeout(timeout);session.controller=null;
+          session.finished++;progress.value=session.finished;
+          summary.textContent='المكتمل: '+session.finished+'/'+total+
+            ' · ناجح: '+session.passed+' · تعذر: '+session.failed;
+        }
+      }
+    }
+  }finally{
+    sourceBatchProbe=null;
+    el('xtProbeAllBtn').disabled=false;
+    summary.textContent=(session.cancelled?'أُلغي الفحص. ':'انتهى فحص العينات. ')+
+      'نجح '+session.passed+' من '+session.finished+' اختبار؛ '+
+      'فشل '+session.failed+'. النتائج تخص العينات ولا تثبت تشغيل جميع العناصر.';
+  }
+}
+function cancelXtreamBatchProbe(){
+  const current=sourceBatchProbe;
+  if(!current)return;
+  current.cancelled=true;
+  current.controller?.abort();
+}
+
 async function addXtream(event) {
   event.preventDefault();
   const button = el('xtAddBtn');
@@ -1293,6 +1380,8 @@ el('xtNewSourceBtn').addEventListener('click', () => {
 });
 el('xtRefreshSourcesBtn').addEventListener('click', ()=>loadXtream().catch(error=>showMessage('تعذر تحديث مصادر Xtream: '+error.message,'error')));
 el('studioRefreshBtn').addEventListener('click',()=>loadXtream().catch(error=>showMessage(error.message,'error')));
+el('xtProbeAllBtn').addEventListener('click',()=>void runXtreamBatchProbe());
+el('xtBatchProbeCancel').addEventListener('click',cancelXtreamBatchProbe);
 el('catalogAuditBtn').addEventListener('click',loadCatalogAudit);
 
 el('catalogServer').addEventListener('change', async () => { await loadCategories(); await loadCatalog(); });
