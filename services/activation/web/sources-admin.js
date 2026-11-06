@@ -987,6 +987,24 @@ async function loadCategories() {
   }
 }
 
+let tmdbMetadataAvailable=false;
+async function loadTmdbIntegrationStatus(){
+  try{
+    const result=await api('/api/v1/admin/xtream/tmdb/status');
+    tmdbMetadataAvailable=Boolean(result.enabled);
+    const note=el('tmdbIntegrationState');
+    if(note)note.textContent=tmdbMetadataAvailable?
+      'TMDB التجاري مفعل: بيانات إضافية للأعمال التي لديها رقم TMDB موثوق.':
+      'TMDB غير مفعل: يلزم ترخيص استخدام تجاري ومفتاح قراءة في إعدادات السيرفر.';
+    el('tmdbAttribution').hidden=!tmdbMetadataAvailable;
+    if(state.catalog.length)renderCatalog();
+  }catch{
+    tmdbMetadataAvailable=false;
+    const note=el('tmdbIntegrationState');
+    if(note)note.textContent='حالة TMDB غير متاحة الآن.';
+  }
+}
+
 function catalogCard(item) {
   const card = make('article', `catalog-item${item.enabled ? '' : ' off'}`);
   const media = make('div', 'catalog-media');
@@ -1084,6 +1102,25 @@ function catalogCard(item) {
       }
     });
     actions.append(enrich);
+    const tmdbId=String(item.metadata?.tmdb||'').trim();
+    if(tmdbMetadataAvailable&&/^[1-9][0-9]{0,11}$/.test(tmdbId)){
+      const button=make('button','button ghost','🎞️ تحديث من TMDB');
+      button.type='button';
+      button.title='استخدام بيانات TMDB التجارية للعمل ذي الرقم المطابق فقط.';
+      button.addEventListener('click',async()=>{
+        button.disabled=true;button.textContent='جارٍ جلب TMDB…';
+        try{
+          await api('/api/v1/admin/xtream/items/'+encodeURIComponent(item.serverId)+
+            '/'+encodeURIComponent(item.type)+'/'+encodeURIComponent(item.id)+'/tmdb-enrich',{method:'POST'});
+          showMessage('✓ تم تحديث بيانات TMDB للعمل '+item.name);
+          await loadCatalog();
+        }catch(error){
+          showMessage('تعذر تحديث TMDB: '+error.message,'error');
+          button.disabled=false;button.textContent='🎞️ تحديث من TMDB';
+        }
+      });
+      actions.append(button);
+    }
   }
   card.append(media,actions,details);
   return card;
@@ -1518,5 +1555,6 @@ initCatalogYearPicker();
 initCatalogSmartShortcuts();
 loadXtream(true);
 loadBlofyPlaybackHealth();
+void loadTmdbIntegrationStatus();
 const initialTab = tabFromHash();
 if (initialTab && initialTab !== 'xtream') switchTab(initialTab);
