@@ -921,7 +921,7 @@ async function probeGatewayMedia(kind,itemId){
     if(!row||!row.server_enabled)return{ok:false,kind,itemId,reason:'catalog_item_not_found',httpStatus:null};
     const ext=safeGatewayExtension(row.container_extension,kind==='live'?'ts':'mp4');
     const sourceId=kind==='series'?row.source_episode_id:row.source_id;
-    const url=mediaUpstreamUrl(row,kind,sourceId,ext);
+    let url=mediaUpstreamUrl(row,kind,sourceId,ext);
     const probeHeaders={
       'user-agent':'BLOFY-Media-Diagnostics/1.0',
       ...(kind==='live'?{}:{range:'bytes=0-2047'})
@@ -939,10 +939,27 @@ async function probeGatewayMedia(kind,itemId){
       rangeFallbackUsed=true;
       response=await checkedFetch(url,{method:'GET',headers:probeHeaders,signal:controller.signal});
     }
+    // The operator's manual episode probe also verifies changed extensions,
+    // rather than repeatedly reporting 404 for an obsolete cached suffix.
+    let repairedExtension=false;
+    if(kind==='series' && response.status===404){
+      const fix=await repairEpisodeOn404(row);
+      if(fix.status==='changed'){
+        await response.body?.cancel().catch(()=>{});
+        response=null;
+        url=mediaUpstreamUrl(row,kind,sourceId,fix.extension);
+        response=await checkedFetch(url,{method:'GET',headers:probeHeaders,signal:controller.signal});
+        repairedExtension=true;
+      }else if(fix.status==='missing'){
+        return{ok:false,kind,itemId,httpStatus:404,reason:'episode_missing_from_source',
+          elapsedMs:Date.now()-started};
+      }
+    }
     const status=response.status;
     if(!(response.ok||status===206)){
       const providerHint=await readXtreamProviderDenialHint(response);
       return{ok:false,kind,itemId,httpStatus:status,reason:'upstream_http_'+status,
+        repairedExtension,
         ...(providerHint?{providerHint}:{}),elapsedMs:Date.now()-started};
     }
     if(!response.body)return{ok:false,kind,itemId,httpStatus:status,reason:'upstream_empty_media',elapsedMs:Date.now()-started};
@@ -953,7 +970,7 @@ async function probeGatewayMedia(kind,itemId){
     const inspection=inspectXtreamMediaChunk(first.value,response.headers.get('content-type'));
     if(!inspection.valid)
       return{ok:false,kind,itemId,httpStatus:status,reason:inspection.reason,elapsedMs:Date.now()-started};
-    return{ok:true,kind,itemId,httpStatus:status,format:inspection.format,rangeFallbackUsed,elapsedMs:Date.now()-started,
+    return{ok:true,kind,itemId,httpStatus:status,format:inspection.format,rangeFallbackUsed,repairedExtension,elapsedMs:Date.now()-started,
       note:'first_media_bytes_only'};
   }catch(error){
     return{ok:false,kind,itemId,httpStatus:null,
