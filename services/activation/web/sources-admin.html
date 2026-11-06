@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#09090e">
   <link rel="icon" type="image/png" href="/blofy-logo.png"><link rel="apple-touch-icon" href="/blofy-logo.png"><meta name="robots" content="noindex,nofollow"><title>BLOFY STREAM | إدارة المصادر والاشتراكات</title>
-  <link rel="stylesheet" href="/sources-admin.css?v=20261106-metadata-batch-v14">
+  <link rel="stylesheet" href="/sources-admin.css?v=20261106-tmdb-gated-v15">
   <link rel="stylesheet" href="/site-polish.css?v=20261025-lux-final">
 </head>
 <body>
@@ -297,10 +297,19 @@
         </section>
       </section>
 
-      <footer><span>BLOFY STREAM · إدارة Xtream</span></footer>
+      <footer class="studio-footer">
+        <span>BLOFY STREAM · إدارة Xtream</span>
+        <span id="tmdbIntegrationState" class="muted">TMDB: غير مفعل إلا بعد توثيق الترخيص التجاري ومفتاح API.</span>
+        <div id="tmdbAttribution" class="tmdb-attribution" hidden>
+          <a href="https://www.themoviedb.org" rel="noopener noreferrer" target="_blank" aria-label="TMDB">
+            <img src="https://www.themoviedb.org/assets/2/v4/logos/v2/blue_square_2-d537fb228cf3ded904ef09b136fe3fec72548ebc1fea3fbbd1ad9e36364db38b.svg"
+              alt="TMDB" loading="lazy" width="46" height="32"></a>
+          <small>This product uses the TMDB API but is not endorsed or certified by TMDB.</small>
+        </div>
+      </footer>
     </main>
   </div>
-  <script src="/sources-admin.js?v=20261106-metadata-batch-v14" defer></script>
+  <script src="/sources-admin.js?v=20261106-tmdb-gated-v15" defer></script>
   <script src="/xtream-gateway-admin.js?v=20261106-account-visibility-v2" defer></script>
 </body>
 </html>
