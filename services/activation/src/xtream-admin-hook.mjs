@@ -660,7 +660,7 @@ async function flushItemBatch(serverId, mediaType, syncToken, batch) {
     SELECT $1::uuid,$2::text,x.source_id,x.category_id,x.name,x.icon_url,x.container_extension,TRUE,COALESCE(x.metadata,'{}'::jsonb),x.sync_token,NOW()
     FROM jsonb_to_recordset($3::jsonb) AS x(source_id text,category_id text,name text,icon_url text,container_extension text,metadata jsonb,sync_token text)
     ON CONFLICT(server_id,media_type,source_id) DO UPDATE SET
-      category_id=EXCLUDED.category_id,name=EXCLUDED.name,icon_url=EXCLUDED.icon_url,
+      category_id=EXCLUDED.category_id,name=EXCLUDED.name,
       container_extension=EXCLUDED.container_extension,
       icon_url=COALESCE(NULLIF(EXCLUDED.icon_url,''),blofy_xtream_items.icon_url),
       metadata=EXCLUDED.metadata || jsonb_build_object('sourceDetails',
