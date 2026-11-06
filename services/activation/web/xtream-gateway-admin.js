@@ -331,6 +331,110 @@ async function loadGateway() {
   }
 }
 
+// The browser previews the same server-side preflight used for API issuance.
+// A source change or expired verdict immediately disables the issuance button.
+let gatewayPreflightVerdict=null;
+let gatewayPreflightTimer=null;
+function clearGatewayPreflight(){
+  gatewayPreflightVerdict=null;
+  window.clearTimeout(gatewayPreflightTimer);
+  if(gx('gatewayCreateBtn'))gx('gatewayCreateBtn').disabled=true;
+  const status=gx('gatewayPreflightStatus');
+  if(status){
+    status.className='';
+    status.textContent='⏸ الإصدار متوقف إلى أن ينجح فحص التشغيل للمصدر المختار.';
+  }
+  gx('gatewayPreflightDetails')?.replaceChildren();
+}
+function gatewayPreflightReady(){
+  return Boolean(gatewayPreflightVerdict?.ready&&
+    gatewayPreflightVerdict.scope===String(gx('gatewaySourceId')?.value||'')&&
+    Date.now()-gatewayPreflightVerdict.checkedAt<85_000);
+}
+function gatewayPreflightReason(reason){
+  const map={
+    source_auth_denied:'بيانات المصدر مرفوضة',
+    source_api_unavailable:'واجهة API لدى المصدر غير متاحة',
+    source_unreachable:'تعذر الاتصال بالمصدر',
+    upstream_http_403:'المصدر رفض تشغيل الفيديو (403)',
+    upstream_http_404:'ملف الفيديو غير موجود (404)',
+    upstream_http_456:'المصدر رفض تشغيل الفيديو (456)',
+    upstream_http_other:'المصدر أعاد خطأ تشغيل',
+    source_catalog_empty:'لا توجد عناصر مفعلة في هذا المصدر',
+    catalog_unavailable:'تعذر قراءة المكتبة',
+    series_has_no_episodes:'المسلسل المختار لا يحتوي حلقات',
+    media_unverified:'لم تصل بيانات فيديو موثوقة',
+    upstream_non_media_response:'المصدر أرسل صفحة بدلاً من فيديو',
+    upstream_empty_media:'الفيديو فارغ',
+    timeout:'انتهت مهلة الاتصال بالمصدر',
+    preflight_time_budget:'انتهت المهلة الإجمالية للفحص',
+    too_many_sources_select_one:'عدد المصادر كبير؛ اختر مصدرًا محددًا وافحصه',
+    no_published_sources:'لا توجد مصادر Xtream منشورة'
+  };
+  return map[reason]||'تعذر إثبات تشغيل هذا العنصر';
+}
+function renderGatewayPreflight(data,scope){
+  gatewayPreflightVerdict={
+    scope,ready:data.ready===true,checkedAt:Date.now()
+  };
+  const status=gx('gatewayPreflightStatus');
+  const good=data.ready===true;
+  if(status){
+    status.className=good?'ok':'failed';
+    status.textContent=(good?'✅ جاهز لإصدار المستخدم: ':'🔴 الإصدار متوقف: ')+
+      String(data.passed||0)+' اختبار ناجح · '+String(data.failed||0)+
+      ' فشل · '+String(data.mediaSampleCount||0)+' عينة فيديو · '+
+      String(data.sourceCount||0)+' مصدر.'+
+      (data.reason?' '+gatewayPreflightReason(data.reason):'');
+  }
+  const details=gx('gatewayPreflightDetails');
+  details?.replaceChildren();
+  const kinds={account:'دخول المزود',live:'قناة',movie:'فيلم',series:'حلقة',catalog:'المكتبة',preflight:'الفحص'};
+  for(const source of data.sources||[]){
+    const card=gatewayNode('article','');
+    card.append(gatewayNode('strong','',source.name||'Xtream'));
+    for(const check of source.checks||[]){
+      const line=gatewayNode('small',check.ok?'':'failed',
+        (check.ok?'✓ ':'✗ ')+(kinds[check.kind]||'فحص')+
+        (check.ok?' · بيانات صحيحة':(' · '+gatewayPreflightReason(check.reason))));
+      card.append(line);
+    }
+    details?.append(card);
+  }
+  const create=gx('gatewayCreateBtn');
+  if(create)create.disabled=!good;
+  window.clearTimeout(gatewayPreflightTimer);
+  if(good)gatewayPreflightTimer=window.setTimeout(clearGatewayPreflight,85000);
+}
+async function runGatewayPreflight(){
+  clearGatewayPreflight();
+  const run=gx('gatewayPreflightRun'),status=gx('gatewayPreflightStatus');
+  const scope=String(gx('gatewaySourceId')?.value||'');
+  run.disabled=true;
+  const prior=run.textContent;
+  run.textContent='جارٍ فحص التشغيل…';
+  status.textContent='🔎 يتم التحقق من حساب المزود ثم تشغيل عينات فعلية؛ لا يُنشأ أي مستخدم الآن.';
+  try{
+    const report=await gatewayApi('/api/v1/admin/xtream-gateway/issuance-preflight',{
+      method:'POST',body:JSON.stringify({sourceId:scope||null})
+    });
+    // Ignore a stale result if the source was changed while its check ran.
+    if(scope!==String(gx('gatewaySourceId')?.value||''))return;
+    renderGatewayPreflight(report,scope);
+    if(!report.ready)gatewayMessage('فشل فحص عينات التشغيل. لم يتم إصدار أي حساب؛ راجع النتائج أسفل زر الفحص.','error');
+  }catch(error){
+    clearGatewayPreflight();
+    status.className='failed';
+    status.textContent='🔴 تعذر إكمال فحص الإصدار: '+error.message;
+  }finally{
+    run.disabled=false;
+    run.textContent=prior;
+  }
+}
+gx('gatewaySourceId')?.addEventListener('change',clearGatewayPreflight);
+gx('gatewayPreflightRun')?.addEventListener('click',runGatewayPreflight);
+clearGatewayPreflight();
+
 gx('gatewayAccountSearch')?.addEventListener('input',renderGatewayAccounts);
 gx('gatewayAccountFilter')?.addEventListener('change',renderGatewayAccounts);
 
@@ -350,9 +454,8 @@ gx('gatewayCreateBtn')?.addEventListener('click', async () => {
     if(requestedSource&&!published.some(x=>x.id===requestedSource)){
       throw new Error('المصدر المختار غير منشور أو موقوف. فعّله وانشر محتواه أولًا.');
     }
-    if(!published.some(x=>x.status==='online'&&(!requestedSource||x.id===requestedSource))){
-      if(!window.confirm('المصدر المختار غير متصل حاليًا. قد يصدر اليوزر لكن المحتوى لا يعمل. هل تريد المتابعة؟'))return;
-    }
+    if(!gatewayPreflightReady())
+      throw new Error('لا يمكن إصدار مستخدم قبل اجتياز فحص تشغيل حديث. اضغط «فحص التشغيل الآن» أولًا.');
     const sourceId=String(gx('gatewaySourceId')?.value||'');
     const count=Number(gx('gatewayQuantity')?.value||1);
     if(![1,5,10].includes(count))throw new Error('عدد الحسابات غير صالح');
@@ -369,7 +472,7 @@ gx('gatewayCreateBtn')?.addEventListener('click', async () => {
   } catch (error) {
     gatewayMessage(`تعذر إنشاء بيانات الدخول: ${error.message}`, 'error');
   } finally {
-    button.disabled = false;
+    button.disabled = !gatewayPreflightReady();
     button.textContent = old;
   }
 });
