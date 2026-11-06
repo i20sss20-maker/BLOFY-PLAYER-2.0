@@ -269,13 +269,13 @@ async function probeIssuanceMedia(row,kind,id,extension,deadline){
       response=await checkedFetch(url,{method:'GET',headers,signal});
     }
     if(response.status===404&&kind!=='live'&&Date.now()+3000<deadline){
-      const alternate=await verifiedOfficialMediaAlternative(row,kind,id,extension,{
-        seriesSourceId:kind==='series'?row.series_source_id:null,
-        providerPayload:kind==='series'?row.series_payload:null,
-        deadline
-      });
-      const verified=alternate?.verified?alternate:
-        await verifiedHybridM3uFallback(row,kind,id,{deadline});
+      const fromM3u=await verifiedHybridM3uFallback(row,kind,id,{deadline});
+      const verified=fromM3u?.verified?fromM3u:
+        await verifiedOfficialMediaAlternative(row,kind,id,extension,{
+          seriesSourceId:kind==='series'?row.series_source_id:null,
+          providerPayload:kind==='series'?row.series_payload:null,
+          deadline
+        });
       if(verified?.verified){
         // Reuse actual verified bytes; do not issue a second expiring
         // preflight request and misreport a successful media URL as failed.
@@ -1283,6 +1283,15 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
           if(kind==='series' && response.status===404 &&
              !episodeRepairTried && req.method==='GET'){
             episodeRepairTried=true;
+            const hybridFirst=attempt<maxAttempts?
+              await verifiedHybridM3uFallback(row,'series',sourceId,{
+                deadline:Date.now()+8500
+              }):null;
+            if(hybridFirst?.verified){
+              upstream=hybridFirst.url;
+              console.info('xtream episode 404 recovered from indexed M3U',{itemId:gatewayId});
+              continue;
+            }
             const repaired=await repairEpisodeOn404(row);
             console.warn('xtream episode 404 diagnosis',{
               itemId:gatewayId,status:repaired.status,
@@ -1325,13 +1334,13 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
           if(kind==='movie'&&response.status===404&&
              !movieRepairTried&&req.method==='GET'&&attempt<maxAttempts){
             movieRepairTried=true;
-            const verified=await verifiedOfficialMediaAlternative(row,'movie',
+            const fromM3u=await verifiedHybridM3uFallback(row,'movie',sourceId,{
+              deadline:Date.now()+8500
+            });
+            const hybrid=fromM3u||await verifiedOfficialMediaAlternative(row,'movie',
               sourceId,safeGatewayExtension(mediaExtension,'mp4'),{
                 deadline:Date.now()+10000
               });
-            const hybrid=verified||await verifiedHybridM3uFallback(row,'movie',sourceId,{
-              deadline:Date.now()+9000
-            });
             if(hybrid?.verified){
               upstream=hybrid.url;
               console.info('xtream movie 404 recovered',{itemId:gatewayId,mode:hybrid.mode});
