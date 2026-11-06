@@ -17,6 +17,7 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import pg from 'pg';
 import { downloadXtreamM3uCatalog } from './xtream-m3u-catalog.mjs';
+import { validateM3uPlaylistUrl, isM3uPlaylistPrefix } from './xtream-m3u-link.mjs';
 import { distinctXtreamRecords } from './xtream-import-dedup.mjs';
 import { assessXtreamSync } from './xtream-sync-guard.mjs';
 import { CONTROL_PATH, controlPage, deleteConfirmationPage, readControlForm } from './xtream-native-controls.mjs';
@@ -209,6 +210,7 @@ async function ensureReady() {
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`);
       await client.query('ALTER TABLE blofy_xtream_servers ADD COLUMN IF NOT EXISTS deletion_requested_at TIMESTAMPTZ');
+      await client.query('ALTER TABLE blofy_xtream_servers ADD COLUMN IF NOT EXISTS m3u_url_secret TEXT');
       await client.query("ALTER TABLE blofy_xtream_servers ADD COLUMN IF NOT EXISTS media_probe_state JSONB NOT NULL DEFAULT '{}'::jsonb");
       await client.query(`CREATE TABLE IF NOT EXISTS blofy_xtream_categories (
         server_id UUID NOT NULL REFERENCES blofy_xtream_servers(id) ON DELETE CASCADE,
@@ -290,6 +292,7 @@ function adminServer(row) {
     id: row.id,
     name: row.name,
     baseUrl: row.base_url,
+    m3uConfigured: Boolean(row.m3u_url_secret),
     enabled: Boolean(row.enabled),
     publishCatalog: Boolean(row.publish_catalog),
     priority: Number(row.priority),
@@ -955,6 +958,74 @@ const studioStartupTimer=setTimeout(()=>{
 studioStartupTimer.unref?.();
 
 
+// Full M3U links may include an upstream password in the query string.
+ // Validate public DNS and retain the complete URL only as an encrypted secret.
+async function safeM3uInput(value,baseUrl){
+  const url=validateM3uPlaylistUrl(value,baseUrl);
+  await assertPublicXtreamUrl(new URL(url).origin);
+  return url;
+}
+
+async function checkSourceM3u(id){
+  const source=await serverById(id);
+  if(!source)throw Object.assign(new Error('xtream_server_not_found'),{status:404});
+  if(!source.m3u_url_secret)
+    throw Object.assign(new Error('xtream_m3u_not_configured'),{status:409});
+  let value=decryptXtreamSecret(source.m3u_url_secret,KEY_HEX,`m3u:${id}`);
+  const initial=await safeM3uInput(value,source.base_url);
+  let current=new URL(initial),response,reader;
+  const signal=AbortSignal.timeout(11500);
+  try{
+    for(let hops=0;hops<3;hops++){
+      await assertPublicXtreamUrl(current.origin);
+      // Never follow an insecure off-source redirect carrying secret query
+      // credentials. Redirects are checked before the next fetch.
+      if(current.protocol==='http:' && current.origin!==new URL(source.base_url).origin)
+        throw new Error('xtream_m3u_https_required');
+      response=await fetch(current,{
+        method:'GET',redirect:'manual',signal,
+        headers:{accept:'audio/x-mpegurl,application/vnd.apple.mpegurl,text/plain,*/*',
+          range:'bytes=0-8191','user-agent':'BLOFY-M3U-Verify/1.0'}
+      });
+      if([301,302,303,307,308].includes(response.status)){
+        const location=response.headers.get('location');
+        await response.body?.cancel().catch(()=>{});response=null;
+        if(!location||hops===2)throw new Error('xtream_m3u_redirect_invalid');
+        const next=new URL(location,current);
+        if(next.protocol!=='https:'&&next.origin!==current.origin)
+          throw new Error('xtream_m3u_redirect_invalid');
+        if(next.origin!==current.origin && current.search)
+          throw new Error('xtream_m3u_cross_origin_redirect_denied');
+        if(next.username||next.password||next.hash)throw new Error('xtream_m3u_redirect_invalid');
+        current=next;
+        continue;
+      }
+      if(!response.ok)throw new Error('xtream_m3u_http_'+response.status);
+      if(!response.body)throw new Error('xtream_m3u_empty');
+      reader=response.body.getReader();
+      let bytes=Buffer.alloc(0);
+      for(let n=0;n<6&&bytes.length<1024;n++){
+        const chunk=await reader.read();
+        if(chunk.done)break;
+        bytes=Buffer.concat([bytes,Buffer.from(chunk.value||[]).subarray(0,1024-bytes.length)]);
+      }
+      if(!isM3uPlaylistPrefix(bytes))throw new Error('xtream_m3u_invalid_header');
+      return {ok:true,configured:true,format:'m3u',sampleBytes:bytes.length,
+        note:'Playlist header verified; individual media has not been checked.'};
+    }
+    throw new Error('xtream_m3u_redirect_invalid');
+  }catch(error){
+    const known=/^xtream_m3u_[a-z0-9_]+$/i.test(String(error?.message||''));
+    throw Object.assign(new Error(known?error.message:'xtream_m3u_connection_failed'),{
+      status:502
+    });
+  }finally{
+    try{await reader?.cancel()}catch{}
+    try{reader?.releaseLock()}catch{}
+    if(!reader)try{await response?.body?.cancel()}catch{}
+  }
+}
+
 async function createServer(body) {
   await ensureReady();
   const name = cleanText(body.name, 160);
@@ -966,9 +1037,12 @@ async function createServer(body) {
   const id = crypto.randomUUID();
   const usernameSecret = encryptXtreamSecret(username, KEY_HEX, `username:${id}`);
   const passwordSecret = encryptXtreamSecret(password, KEY_HEX, `password:${id}`);
-  const result = await pool.query(`INSERT INTO blofy_xtream_servers(id,name,base_url,username_secret,password_secret,enabled,publish_catalog,priority)
-    VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-    [id, name, baseUrl, usernameSecret, passwordSecret, body.enabled !== false, Boolean(body.publishCatalog), priority]);
+  const m3uSecret=String(body.m3uUrl||'').trim()?
+    encryptXtreamSecret(await safeM3uInput(body.m3uUrl,baseUrl),KEY_HEX,`m3u:${id}`):null;
+  const result = await pool.query(`INSERT INTO blofy_xtream_servers(id,name,base_url,username_secret,password_secret,m3u_url_secret,enabled,publish_catalog,priority)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+    [id,name,baseUrl,usernameSecret,passwordSecret,m3uSecret,
+      body.enabled!==false,Boolean(body.publishCatalog),priority]);
   return adminServer(result.rows[0]);
 }
 
@@ -1002,6 +1076,15 @@ async function patchServer(id, body) {
     }
   }
   if (body.publishCatalog !== undefined) set('publish_catalog', Boolean(body.publishCatalog));
+  if(body.m3uUrl!==undefined){
+    if(body.m3uUrl===null){
+      set('m3u_url_secret',null);
+    }else if(String(body.m3uUrl).trim()){
+      const link=await safeM3uInput(body.m3uUrl,
+        body.baseUrl!==undefined?body.baseUrl:current.base_url);
+      set('m3u_url_secret',encryptXtreamSecret(link,KEY_HEX,`m3u:${id}`));
+    }
+  }
   // Source, credentials or playback policy changes invalidate previous probes.
   if(body.baseUrl!==undefined||String(body.username||'').trim()||String(body.password||'').trim())
     updates.push("media_probe_state='{}'::jsonb");
@@ -1452,7 +1535,7 @@ async function handleControlAction(req,res,id,action) {
     const fields=await readControlForm(req);
     if(fields.rightsConfirmed!=='yes')throw Object.assign(new Error('rights_confirmation_required'),{status:400});
     const item=await createServer({name:fields.name,baseUrl:fields.baseUrl,username:fields.username,
-      password:fields.password,priority:fields.priority,enabled:true,publishCatalog:false});
+      password:fields.password,m3uUrl:fields.m3uUrl,priority:fields.priority,enabled:true,publishCatalog:false});
     startSync(item.id,['live','movie','series']);
     return controlRedirect(res,'ok','added');
   }
@@ -1483,6 +1566,8 @@ async function handleControlAction(req,res,id,action) {
     const body={name:fields.name,baseUrl:fields.baseUrl,priority:fields.priority};
     if(fields.username?.trim())body.username=fields.username;
     if(fields.password?.trim())body.password=fields.password;
+    if(fields.m3uRemove==='yes')body.m3uUrl=null;
+    else if(fields.m3uUrl?.trim())body.m3uUrl=fields.m3uUrl;
     await patchServer(id,body);
     return controlRedirect(res,'ok','saved');
   }
@@ -1655,7 +1740,7 @@ http.createServer = function withBlofyXtream(listener) {
         return json(res, 202, { started });
       }
 
-      const serverMatch = url.pathname.match(/^\/api\/v1\/admin\/xtream\/servers\/([0-9a-f-]+)(?:\/(test|sync|cancel-sync|probe-playback))?$/i);
+      const serverMatch = url.pathname.match(/^\/api\/v1\/admin\/xtream\/servers\/([0-9a-f-]+)(?:\/(test|test-m3u|sync|cancel-sync|probe-playback))?$/i);
       if (serverMatch) {
         const id = serverMatch[1];
         const action = serverMatch[2];
@@ -1668,6 +1753,7 @@ http.createServer = function withBlofyXtream(listener) {
             : { error: 'xtream_server_not_found' });
         }
         if (action === 'test' && req.method === 'POST') return json(res, 200, { item: await testServer(id) });
+        if (action === 'test-m3u' && req.method === 'POST') return json(res,200,await checkSourceM3u(id));
         if (action === 'probe-playback' && req.method === 'POST') {
           const body=await readJson(req);
           const mediaType=String(body.mediaType||'live');
