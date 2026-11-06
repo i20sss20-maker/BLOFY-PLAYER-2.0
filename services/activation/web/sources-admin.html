@@ -226,6 +226,51 @@
           </div>
           <div class="intro-step"><strong>03</strong><span>إدارة ذكية للمكتبة</span></div>
         </section>
+        <section class="panel smart-command-panel" aria-labelledby="smartCommandHeading">
+          <div class="panel-head">
+            <div>
+              <span class="panel-kicker">BLOFY SMART COMMAND CENTER</span>
+              <h2 id="smartCommandHeading">مساعد BLOFY للأوامر الذكية</h2>
+              <p>اكتب طلبك بالعربي؛ المساعد يحدد العملية ويعرض معاينة قبل التنفيذ. يرتب الأقسام، يجلب المعلومات الناقصة، يفحص المصادر ويزامن المكتبة باستخدام أدوات BLOFY الحالية.</p>
+              <p class="muted">محرك أوامر محلي محدد الإجراءات، وليس نموذج ذكاء اصطناعي متصلًا بالإنترنت. لا يحذف المحتوى أو يغير المشتركين أو يتجاوز منع المصدر.</p>
+            </div>
+          </div>
+          <form id="smartCommandForm" class="smart-command-form">
+            <div class="smart-command-scope">
+              <label><span>المصدر المستهدف</span>
+                <select id="smartCommandSource" required><option value="">اختر مصدر Xtream أولًا</option></select>
+              </label>
+              <label><span>نطاق الأمر</span>
+                <select id="smartCommandType">
+                  <option value="live">القنوات</option>
+                  <option value="movie">الأفلام</option>
+                  <option value="series">المسلسلات</option>
+                  <option value="all">الكل (وفق نوع الأمر)</option>
+                </select>
+              </label>
+            </div>
+            <label class="smart-command-input-label" for="smartCommandText">وش تبي BLOFY يسوي؟</label>
+            <textarea id="smartCommandText" rows="3" maxlength="400" required
+              placeholder="مثال: رتّب أقسام القنوات بشكل ذكي، أو حدّث معلومات الأفلام الناقصة"></textarea>
+            <div class="smart-command-suggestions" aria-label="أوامر جاهزة">
+              <button type="button" data-smart-example="رتّب أقسام القنوات بشكل ذكي">✨ رتّب القنوات</button>
+              <button type="button" data-smart-example="رتب أقسام الأفلام بالأكثر محتوى">📊 الأكثر محتوى</button>
+              <button type="button" data-smart-example="حدث معلومات الأفلام الناقصة">🎞️ معلومات الأفلام</button>
+              <button type="button" data-smart-example="حدث معلومات المسلسلات الناقصة">📺 معلومات المسلسلات</button>
+              <button type="button" data-smart-example="زامن المحتوى من المصدر">↻ مزامنة المحتوى</button>
+              <button type="button" data-smart-example="اعمل تقرير جودة المكتبة">🔍 تقرير الجودة</button>
+              <button type="button" data-smart-example="افحص تشغيل بث القنوات">🛡️ فحص التشغيل</button>
+            </div>
+            <div class="inline-actions">
+              <button type="submit" id="smartCommandPreviewBtn" class="button primary">تحليل الأمر ومعاينة النتائج</button>
+              <button type="button" id="smartCommandExecuteBtn" class="button" disabled hidden>تنفيذ الخطة المعتمدة</button>
+              <button type="button" id="smartCommandCancelBtn" class="button ghost" hidden>إيقاف المتبقي</button>
+            </div>
+          </form>
+          <div id="smartCommandPreview" class="smart-command-preview" aria-live="polite" hidden></div>
+          <progress id="smartCommandProgress" value="0" max="1" hidden></progress>
+          <p id="smartCommandStatus" class="muted smart-command-status" role="status" aria-live="polite">اختر المصدر واكتب أمرًا لعرض خطوات التنفيذ.</p>
+        </section>
         <section class="panel studio-identity" aria-labelledby="studioIdentityHeading">
           <div class="panel-head">
             <div><span class="panel-kicker">MY BLOFY BRAND</span>
@@ -356,6 +401,7 @@
       </footer>
     </main>
   </div>
+  <script src="/blofy-smart-commands.js?v=20261106-v1" defer></script>
   <script src="/sources-admin.js?v=20261107-studio-v1" defer></script>
   <script src="/xtream-gateway-admin.js?v=20261106-account-visibility-v2" defer></script>
 </body>
