@@ -408,11 +408,21 @@ async function preflightSource(row,deadline){
       checks.push({kind:'preflight',ok:false,reason:'preflight_time_budget'});
       return result;
     }
+    // Do not judge a 330k-title catalog from its first two lexicographic
+    // IDs. Sample BOTH ends of the current imported index, preserving strict
+    // fail-closed readiness. These are ID bands, not publication dates.
     let rows;
     try{
-      rows=(await pool.query(`SELECT source_id,container_extension
-        FROM blofy_xtream_items WHERE server_id=$1 AND media_type=$2 AND enabled=TRUE
-        ORDER BY source_id LIMIT 2`,[row.id,kind])).rows;
+      const pick=direction=>pool.query(`SELECT source_id,container_extension
+        FROM blofy_xtream_items
+        WHERE server_id=$1 AND media_type=$2 AND enabled=TRUE
+        ORDER BY source_id ${direction} LIMIT 1`,[row.id,kind]);
+      const [first,last]=await Promise.all([pick('ASC'),pick('DESC')]);
+      rows=[
+        ...first.rows.map(item=>({...item,sampleBand:'low_id'})),
+        ...last.rows.filter(item=>!first.rows.some(firstItem=>
+          firstItem.source_id===item.source_id)).map(item=>({...item,sampleBand:'high_id'}))
+      ];
     }catch{
       checks.push({kind,ok:false,reason:'catalog_unavailable'});
       continue;
@@ -420,27 +430,45 @@ async function preflightSource(row,deadline){
     if(!rows.length)continue;
     found++;
     if(kind==='series'){
-      let samples=[],payload;
-      try{
-        payload=await fetchUpstreamApi(row,'get_series_info',
-          {series_id:rows[0].source_id},{
-            timeoutMs:Math.min(6000,Math.max(1000,deadline-Date.now())),
-            maxBytes:3_000_000
-          });
-        samples=xtreamEpisodePlaybackCandidates(payload,2);
-      }catch(error){
-        checks.push({kind,ok:false,reason:issuanceErrorReason(error?.message)});
-        continue;
-      }
-      if(!samples.length){checks.push({kind,ok:false,reason:'series_has_no_episodes'});continue;}
-      for(const sample of samples){
-        checks.push(await probeIssuanceMedia({...row,series_source_id:rows[0].source_id,series_payload:payload},'series',sample.id,sample.extension,deadline));
+      // One real episode in each distinct series. Two episodes from the
+      // same oldest series previously gave a misleading source-wide verdict.
+      for(const seriesRow of rows){
+        if(Date.now()>deadline-1000){
+          checks.push({kind:'preflight',ok:false,reason:'preflight_time_budget'});
+          break;
+        }
+        let payload,samples;
+        try{
+          payload=await fetchUpstreamApi(row,'get_series_info',
+            {series_id:seriesRow.source_id},{
+              timeoutMs:Math.min(6000,Math.max(1000,deadline-Date.now())),
+              maxBytes:3_000_000
+            });
+          samples=xtreamEpisodePlaybackCandidates(payload,1);
+        }catch(error){
+          checks.push({kind,ok:false,reason:issuanceErrorReason(error?.message),
+            sampleBand:seriesRow.sampleBand});
+          continue;
+        }
+        if(!samples.length){
+          checks.push({kind,ok:false,reason:'series_has_no_episodes',
+            sampleBand:seriesRow.sampleBand});
+          continue;
+        }
+        for(const sample of samples){
+          const probe=await probeIssuanceMedia({
+            ...row,series_source_id:seriesRow.source_id,series_payload:payload
+          },'series',sample.id,sample.extension,deadline);
+          checks.push({...probe,sampleBand:seriesRow.sampleBand});
+        }
       }
     }else{
-      for(const sample of rows){
+      const results=await Promise.all(rows.map(async sample=>{
         const ext=kind==='live'?'ts':safeGatewayExtension(sample.container_extension,'mp4');
-        checks.push(await probeIssuanceMedia(row,kind,sample.source_id,ext,deadline));
-      }
+        const probe=await probeIssuanceMedia(row,kind,sample.source_id,ext,deadline);
+        return {...probe,sampleBand:sample.sampleBand};
+      }));
+      checks.push(...results);
     }
   }
   if(!found)checks.push({kind:'catalog',ok:false,reason:'source_catalog_empty'});
