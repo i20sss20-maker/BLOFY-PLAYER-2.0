@@ -764,14 +764,14 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
   const onClose = () => { if (!res.writableEnded) abort(); };
   req.once('aborted', abort);
   res.once('close', onClose);
-  const upstream = mediaUpstreamUrl(row, kind, sourceId, mediaExtension);
+  let upstream = mediaUpstreamUrl(row, kind, sourceId, mediaExtension);
   const headers = { 'user-agent': String(req.headers['user-agent'] || 'BLOFY-Xtream-Gateway/1.0') };
   if (req.headers.range) headers.range = String(req.headers.range);
   // A provider returning 404/416 only for "Range: bytes=0-..." can be
   // rechecked once with plain GET. Never discard a nonzero seek request.
   const initialRange=firstByteXtreamRange(headers.range)&&req.method==='GET';
-  const maxAttempts = req.method === 'HEAD' ? 1 : initialRange ? 3 : 2;
-  let noRangeRetried=false, transientRetried=false;
+  const maxAttempts = req.method === 'HEAD' ? 1 : kind==='series' ? (initialRange?4:3) : (initialRange?3:2);
+  let noRangeRetried=false, transientRetried=false, episodeRepairTried=false;
   try {
     for (let attempt=1;attempt<=maxAttempts;attempt++) {
       if (client.signal.aborted) return;
@@ -805,6 +805,23 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
             noRangeRetried=true;
             delete headers.range;
             continue;
+          }
+          // A provider may change an episode from .mp4 to .mkv (or other
+          // declared container) while the BLOFY stable ID remains the same.
+          // Reconfirm from this *same series* once; never guess another ID.
+          if(kind==='series' && response.status===404 &&
+             !episodeRepairTried && req.method==='GET'){
+            episodeRepairTried=true;
+            const repaired=await repairEpisodeOn404(row);
+            if(repaired.status==='changed' && attempt<maxAttempts){
+              upstream=mediaUpstreamUrl(row,kind,sourceId,repaired.extension);
+              console.info('xtream episode extension refreshed',{kind,itemId:gatewayId});
+              continue;
+            }
+            if(repaired.status==='missing'){
+              observe('failed',{upstreamStatus:404,reason:'episode_missing_from_source',attempts:attempt});
+              return text(res,502,'Episode no longer listed by source');
+            }
           }
           if (retryable && !transientRetried && attempt < maxAttempts) {
             transientRetried=true;
