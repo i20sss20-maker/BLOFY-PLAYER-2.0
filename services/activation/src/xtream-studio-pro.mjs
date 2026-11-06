@@ -179,7 +179,7 @@ export function createStudioPro({pool,ensureXtreamReady,startSync}){
   async function setSchedule(serverId,body){
     await ready();await checkSource(serverId);
     const cfg=validateStudioSchedule(body);
-    await pool.query('INSERT INTO blofy_xtream_studio_schedules(server_id,enabled,interval_hours,types,next_run_at) VALUES($1,$2,$3,$4::jsonb,CASE WHEN $2 THEN NOW()+($3 * INTERVAL \'1 hour\') ELSE NULL END) ON CONFLICT(server_id) DO UPDATE SET enabled=EXCLUDED.enabled,interval_hours=EXCLUDED.interval_hours,types=EXCLUDED.types,next_run_at=EXCLUDED.next_run_at,updated_at=NOW()',
+    await pool.query('INSERT INTO blofy_xtream_studio_schedules(server_id,enabled,interval_hours,types,next_run_at) VALUES($1,$2,$3,$4::jsonb,CASE WHEN $2 THEN NOW()+($3::int * INTERVAL \'1 hour\') ELSE NULL END) ON CONFLICT(server_id) DO UPDATE SET enabled=EXCLUDED.enabled,interval_hours=EXCLUDED.interval_hours,types=EXCLUDED.types,next_run_at=EXCLUDED.next_run_at,updated_at=NOW()',
       [serverId,cfg.enabled,cfg.intervalHours,JSON.stringify(cfg.types)]);
     await record(serverId,'schedule_updated',{enabled:cfg.enabled,hours:cfg.intervalHours,types:cfg.types});
     return schedule(serverId);
@@ -191,7 +191,7 @@ export function createStudioPro({pool,ensureXtreamReady,startSync}){
       await db.query('BEGIN');
       await db.query("SET LOCAL statement_timeout='3000ms'");
       due=(await db.query('SELECT q.server_id,q.interval_hours,q.types FROM blofy_xtream_studio_schedules q JOIN blofy_xtream_servers s ON s.id=q.server_id WHERE q.enabled=TRUE AND q.next_run_at<=NOW() AND s.enabled=TRUE AND s.deletion_requested_at IS NULL AND s.status<>\'syncing\' ORDER BY q.next_run_at FOR UPDATE OF q SKIP LOCKED LIMIT 2')).rows;
-      for(const cfg of due)await db.query('UPDATE blofy_xtream_studio_schedules SET next_run_at=NOW()+($2 * INTERVAL \'1 hour\'),updated_at=NOW() WHERE server_id=$1',[cfg.server_id,cfg.interval_hours]);
+      for(const cfg of due)await db.query('UPDATE blofy_xtream_studio_schedules SET next_run_at=NOW()+($2::int * INTERVAL \'1 hour\'),updated_at=NOW() WHERE server_id=$1',[cfg.server_id,cfg.interval_hours]);
       await db.query('COMMIT');
     }catch(error){await db.query('ROLLBACK').catch(()=>{});throw error}
     finally{db.release()}
