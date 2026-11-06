@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#09090e">
   <link rel="icon" type="image/png" href="/blofy-logo.png"><link rel="apple-touch-icon" href="/blofy-logo.png"><meta name="robots" content="noindex,nofollow"><title>BLOFY STREAM | إدارة المصادر والاشتراكات</title>
-  <link rel="stylesheet" href="/sources-admin.css?v=20261106-account-visibility-v7">
+  <link rel="stylesheet" href="/sources-admin.css?v=20261106-smart-library-v7">
   <link rel="stylesheet" href="/site-polish.css?v=20261025-lux-final">
 </head>
 <body>
@@ -196,7 +196,7 @@
 
       <section id="tab-catalog" class="tab-page" hidden>
         <section class="section-intro">
-          <div><span class="eyebrow">BLOFY CATEGORIES</span><h2>تنظيم الفئات والمكتبة</h2><p>اختر مصدر Xtream ونوع المحتوى، ثم رتّب أقسام القنوات والأفلام والمسلسلات، أو أخفِ أي قسم عن عملائك.</p></div>
+          <div><span class="eyebrow">BLOFY SMART LIBRARY</span><h2>المكتبة الذكية</h2><p>تصفح المحتوى حسب اللغة ثم السنة: عربي ← 2026 ← 2025… ورتّب الأقسام للمشتركين بسهولة، دون حذف أو تكرار أي ملف.</p></div>
           <div class="intro-step"><strong>3</strong><span>رتّب ما يظهر</span></div>
         </section>
         <section class="panel">
@@ -204,27 +204,41 @@
             <label><span>المصدر</span><select id="catalogServer"></select></label>
             <label><span>النوع</span><select id="catalogType"><option value="live">القنوات</option><option value="movie">الأفلام</option><option value="series">المسلسلات</option></select></label>
             <label><span>القسم</span><select id="catalogCategory"><option value="">كل الأقسام</option></select></label>
+            <label class="catalog-video-filter"><span>اللغة / النوع</span><select id="catalogLanguage">
+              <option value="">جميع اللغات</option><option value="arabic">عربي</option>
+              <option value="foreign">أجنبي</option><option value="turkish">تركي</option>
+              <option value="indian">هندي</option><option value="korean">كوري</option>
+              <option value="anime">أنمي</option><option value="kids">أطفال</option>
+              <option value="documentary">وثائقي</option>
+            </select></label>
+            <label class="catalog-video-filter"><span>سنة الإنتاج</span><select id="catalogYear"><option value="">كل السنوات</option></select></label>
             <label class="wide"><span>بحث</span><input id="catalogSearch" placeholder="اسم فيلم، مسلسل أو قناة"></label>
             <button id="catalogLoadBtn" class="button primary" type="button">عرض</button>
           </div>
           <div class="category-manager">
             <div class="category-manager-head">
-              <div><h3>تنظيم الأقسام بسهولة</h3><p>انقل القسم للأول بضغطة واحدة، أو عدّل ترتيبه، وأخفِ الأقسام غير المطلوبة دون حذف محتواها. الحفظ تلقائي.</p></div>
+<div><h3>أقسام مرتبة وواضحة</h3><p>اعرض التصنيفات حسب اللغة والسنة، ثم اختر «ترتيب ذكي» ليظهر ترتيب الأقسام نفسه للمشتركين. لا يتغير اسم القسم أو محتواه.</p></div>
               <div class="category-toolbar"><input id="categorySearch" type="search" autocomplete="off" placeholder="ابحث باسم الفئة" aria-label="بحث في الأقسام"><select id="categoryVisibility" aria-label="فلترة ظهور الأقسام"><option value="all">جميع الأقسام</option><option value="visible">الظاهرة</option><option value="hidden">المخفية</option></select></div>
             </div>
             <div class="category-auto-sort" aria-label="ترتيب سريع للأقسام">
               <strong>ترتيب تلقائي للأقسام</strong>
               <select id="categoryAutoSortMode" aria-label="طريقة ترتيب الأقسام">
+                <option value="smart">✨ ذكي: عربي ← 2026 ← 2025</option>
                 <option value="popular">الأكثر محتوى أولًا</option>
                 <option value="alphabetical">أبجديًا بحسب اسم القسم</option>
               </select>
               <button id="categoryAutoSortBtn" class="button ghost" type="button">تطبيق الترتيب</button>
-              <small>يطبّق على المصدر والنوع المحددين فقط، ولا يحذف شيئًا أو يغيّر الأقسام المخفية.</small>
+              <small>الترتيب الذكي يعتمد على اسم القسم الموجود، ويضع الأحدث أولًا إذا كانت السنة مكتوبة. لن يخمّن سنوات المحتوى غير المعروفة.</small>
+            </div>
+            <div class="category-view-toggle" role="group" aria-label="طريقة عرض التصنيفات">
+              <button id="categoryGroupedView" class="button primary" type="button" aria-pressed="true">▦ مجموعات حسب اللغة والسنة</button>
+              <button id="categoryFlatView" class="button ghost" type="button" aria-pressed="false">≡ قائمة مرتبة</button>
             </div>
             <div id="categoryManagerSummary" class="category-manager-summary" role="status">اختر مصدرًا ونوع المحتوى لعرض الفئات.</div>
             <div id="categoryManagerRows" class="category-manager-rows"></div>
           </div>
           <div class="bulk-actions"><button id="enableTypeBtn" class="button" type="button">تفعيل الكل</button><button id="disableTypeBtn" class="button ghost" type="button">تعطيل الكل</button><span id="catalogHint" class="muted"></span></div>
+          <p id="catalogSmartNotice" class="muted" role="status">استعراض السنوات واللغات قراءة فقط، ولا يغيّر تفعيل المحتوى.</p>
           <div id="catalogLoading" class="loading" hidden>جارٍ تحميل الكتالوج…</div>
           <div id="catalogItems" class="catalog-list"></div>
         </section>
@@ -233,7 +247,7 @@
       <footer><span>BLOFY STREAM · إدارة Xtream</span></footer>
     </main>
   </div>
-  <script src="/sources-admin.js?v=20261106-catalog-safe-v6" defer></script>
+  <script src="/sources-admin.js?v=20261106-smart-library-v7" defer></script>
   <script src="/xtream-gateway-admin.js?v=20261106-account-visibility-v2" defer></script>
 </body>
 </html>
