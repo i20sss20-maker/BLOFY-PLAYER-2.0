@@ -66,6 +66,8 @@ export function controlPage({items=[],success='',error='',csrfToken=''}) {
       '<form class="edit" method="post" action="'+securedUrl(CONTROL_PATH+'/'+id+'/save')+'">'+
       '<label>الاسم<input name="name" required maxlength="160" value="'+name+'"></label>'+
       '<label>Host<input name="baseUrl" type="url" required maxlength="500" dir="ltr" value="'+url+'"></label>'+
+      '<label>رابط M3U جديد (اختياري)<input name="m3uUrl" type="url" maxlength="4096" autocomplete="off" dir="ltr" placeholder="https://provider.example/get.php?..."></label>'+
+      '<label><input name="m3uRemove" type="checkbox" value="yes"> حذف رابط M3U المحفوظ</label>'+
       '<label>Username جديد (اختياري)<input name="username" maxlength="512" autocomplete="off"></label>'+
       '<label>Password جديد (اختياري)<input name="password" type="password" maxlength="1024" autocomplete="new-password"></label>'+
       '<label>الأولوية<input name="priority" type="number" min="0" max="10000" value="'+esc(item.priority??100)+'"></label>'+
@@ -73,7 +75,8 @@ export function controlPage({items=[],success='',error='',csrfToken=''}) {
     return '<article class="card" id="source-'+id+'">'+
       '<div class="head"><div><h2>'+name+'</h2><code>'+url+'</code><small>المعرف: '+id.slice(0,8)+'</small></div><div class="badges">'+
       '<span class="badge">'+status+'</span><span class="badge '+(enabled?'on':'off')+'">'+(enabled?'مفعّل':'موقوف')+'</span>'+
-      '<span class="badge '+(enabled&&published?'on':'off')+'">'+(enabled&&published?'منشور':'غير منشور')+'</span></div></div>'+
+      '<span class="badge '+(enabled&&published?'on':'off')+'">'+(enabled&&published?'منشور':'غير منشور')+'</span>'+
+      '<span class="badge '+(item.m3uConfigured?'on':'off')+'">'+(item.m3uConfigured?'M3U مرتبط':'M3U غير مربوط')+'</span></div></div>'+
       metrics+
       '<div class="actions">'+
       securedForm(id,'toggle-enabled',enabled?'إيقاف المصدر':'تفعيل المصدر')+
@@ -114,6 +117,7 @@ export function controlPage({items=[],success='',error='',csrfToken=''}) {
   '<section class="add"><h2>إضافة مصدر Xtream جديد</h2><form method="post" action="'+securedUrl(CONTROL_PATH+'/new/add')+'">'+
   '<label>اسم المصدر<input name="name" maxlength="160" required></label>'+
   '<label>Host<input name="baseUrl" type="url" maxlength="500" required placeholder="https://your-host.example"></label>'+
+  '<label>رابط M3U اختياري<input name="m3uUrl" type="url" maxlength="4096" autocomplete="off" placeholder="https://provider.example/get.php?..."></label>'+
   '<label>Username<input name="username" maxlength="512" required autocomplete="off"></label>'+
   '<label>Password<input name="password" type="password" maxlength="1024" required autocomplete="off"></label>'+
   '<label>الأولوية<input name="priority" type="number" value="100" min="0" max="10000"></label>'+
