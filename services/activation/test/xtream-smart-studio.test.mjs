@@ -74,7 +74,7 @@ test('query placeholders and SQL wildcard escaping remain in place',async()=>{
   const line=b.split('\n').find(x=>x.includes('if (query.q)'));
   assert.ok(line);
   assert.equal(line.split('$$'+'{values.length}').length-1,4);
-  assert.match(line,/translate\(i\.name/);
+  assert.match(line,/translate\(COALESCE\(NULLIF\(i\.custom_name/);
   assert.match(line,/c\.name/);
   assert.match(line,/genre/);
 });
