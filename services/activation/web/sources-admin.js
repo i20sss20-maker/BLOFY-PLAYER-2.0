@@ -7,6 +7,9 @@ const state = {
   sourceFeedback: new Map(),
   categories: [],
   catalog: [],
+  catalogOffset: 0,
+  catalogQueryKey: '',
+  catalogRequestSerial: 0,
   activeTab: 'xtream',
   pollTimer: null
 };
@@ -983,7 +986,15 @@ function renderCatalog() {
   list.replaceChildren();
   if (!state.catalog.length) list.append(make('div', 'empty', 'ما فيه نتائج في هذا الاختيار.'));
   state.catalog.forEach(item => list.append(catalogCard(item)));
-  el('catalogHint').textContent = state.catalog.length ? `معروض ${state.catalog.length} عنصر (حتى 250 في الصفحة).` : '';
+  const count=state.catalog.length;
+  const page=Math.floor(state.catalogOffset/250)+1;
+  el('catalogHint').textContent=count?
+    'المعروض '+(state.catalogOffset+1).toLocaleString('en-US')+'–'+
+      (state.catalogOffset+count).toLocaleString('en-US')+' (من المحتوى المطابق).':
+    'لا توجد نتائج في هذه الصفحة.';
+  el('catalogPageStatus').textContent='الصفحة '+page.toLocaleString('en-US');
+  el('catalogPrevPage').disabled=state.catalogOffset===0;
+  el('catalogNextPage').disabled=count<250;
 }
 
 // Year/language browsing is read-only: never let the unfiltered bulk toggle
@@ -1052,23 +1063,44 @@ function initCatalogYearPicker(){
   updateCatalogVideoFilters();
 }
 
+function catalogFilterQuery(){
+  const params=new URLSearchParams({
+    serverId:el('catalogServer').value,
+    type:el('catalogType').value,
+    limit:'250'
+  });
+  if(el('catalogCategory').value)params.set('categoryId',el('catalogCategory').value);
+  if(el('catalogType').value!=='live'&&el('catalogYear').value)params.set('year',el('catalogYear').value);
+  if(el('catalogType').value!=='live'&&el('catalogLanguage').value)params.set('language',el('catalogLanguage').value);
+  if(el('catalogSearch').value.trim())params.set('q',el('catalogSearch').value.trim());
+  return params;
+}
+
+async function changeCatalogPage(direction){
+  const next=Math.max(0,state.catalogOffset+direction*250);
+  if(direction>0&&state.catalog.length<250)return;
+  state.catalogOffset=next;
+  await loadCatalog();
+  el('catalogItems').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
 async function loadCatalog() {
-  const serverId = el('catalogServer').value;
-  if (!serverId) return;
-  el('catalogLoading').hidden = false;
-  try {
-    const params = new URLSearchParams({ serverId, type: el('catalogType').value, limit: '250' });
-    if (el('catalogCategory').value) params.set('categoryId', el('catalogCategory').value);
-    if(el('catalogType').value!=='live'&&el('catalogYear').value)params.set('year',el('catalogYear').value);
-    if(el('catalogType').value!=='live'&&el('catalogLanguage').value)params.set('language',el('catalogLanguage').value);
-    if (el('catalogSearch').value.trim()) params.set('q', el('catalogSearch').value.trim());
-    const data = await api(`/api/v1/admin/xtream/catalog?${params}`);
-    state.catalog = Array.isArray(data.items) ? data.items : [];
+  const serverId=el('catalogServer').value;
+  if(!serverId)return;
+  const params=catalogFilterQuery(),key=params.toString();
+  if(state.catalogQueryKey!==key){state.catalogQueryKey=key;state.catalogOffset=0;}
+  params.set('offset',String(state.catalogOffset));
+  const serial=++state.catalogRequestSerial;
+  el('catalogLoading').hidden=false;
+  try{
+    const response=await api('/api/v1/admin/xtream/catalog?'+params);
+    if(serial!==state.catalogRequestSerial)return;
+    state.catalog=Array.isArray(response.items)?response.items:[];
     renderCatalog();
-  } catch (error) {
-    showMessage(`تعذر تحميل الكتالوج: ${error.message}`, 'error');
-  } finally {
-    el('catalogLoading').hidden = true;
+  }catch(error){
+    if(serial===state.catalogRequestSerial)showMessage('تعذر تحميل الكتالوج: '+error.message,'error');
+  }finally{
+    if(serial===state.catalogRequestSerial)el('catalogLoading').hidden=true;
   }
 }
 
@@ -1288,7 +1320,17 @@ el('categoryManagerRows').addEventListener('click',event=>{
   if(button)changeCategory(button).catch(error=>showMessage('تعذر حفظ الفئة: '+error.message,'error'));
 });
 el('catalogLoadBtn').addEventListener('click', loadCatalog);
-el('catalogSearch').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); loadCatalog(); } });
+const catalogSearch=el('catalogSearch');
+let catalogSearchTimer=null;
+catalogSearch.addEventListener('input',()=>{
+  window.clearTimeout(catalogSearchTimer);
+  catalogSearchTimer=window.setTimeout(()=>void loadCatalog(),450);
+});
+catalogSearch.addEventListener('keydown',event=>{
+  if(event.key==='Enter'){event.preventDefault();window.clearTimeout(catalogSearchTimer);void loadCatalog();}
+});
+el('catalogPrevPage').addEventListener('click',()=>changeCatalogPage(-1));
+el('catalogNextPage').addEventListener('click',()=>changeCatalogPage(1));
 el('enableTypeBtn').addEventListener('click', () => bulkCatalog(true));
 el('disableTypeBtn').addEventListener('click', () => bulkCatalog(false));
 window.addEventListener('hashchange', () => {
