@@ -53,7 +53,7 @@ export function normalizeStudioItemEdit(body,mediaType) {
 }
 
 export function validateStudioLogo(bytes,mime) {
-  if(!Buffer.isBuffer(bytes)||bytes.length===0||bytes.length>256*1024)
+  if(!Buffer.isBuffer(bytes)||bytes.length===0||bytes.length>1024*1024)
     throw Object.assign(new Error('studio_logo_size_invalid'),{status:413});
   const type=String(mime||'').split(';')[0].trim().toLowerCase();
   const png=bytes.length>=8&&bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]));
@@ -65,7 +65,7 @@ export function validateStudioLogo(bytes,mime) {
 }
 
 export async function readStudioLogoRequest(req) {
-  const limit=256*1024;
+  const limit=1024*1024;
   const chunks=[];
   let bytes=0;
   for await(const chunk of req) {
