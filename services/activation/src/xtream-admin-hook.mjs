@@ -18,6 +18,7 @@ import crypto from 'node:crypto';
 import pg from 'pg';
 import { downloadXtreamM3uCatalog } from './xtream-m3u-catalog.mjs';
 import { distinctXtreamRecords } from './xtream-import-dedup.mjs';
+import { assessXtreamSync } from './xtream-sync-guard.mjs';
 import { CONTROL_PATH, controlPage, deleteConfirmationPage, readControlForm } from './xtream-native-controls.mjs';
 import { sortXtreamCategories } from './xtream-category-sort.mjs';
 import { nativeXtreamCsrfToken } from './xtream-native-csrf.mjs';
@@ -579,11 +580,11 @@ async function syncItems(row, mediaType, creds, syncToken, getM3u) {
   return accepted;
 }
 
-async function finalizeTypeSync(serverId, mediaType, syncToken) {
+async function finalizeTypeSync(serverId, mediaType, syncToken,{preserveCategories=false}={}) {
   // A 290k-row catalog must not be deleted in one transaction. That held
   // locks long enough to block source pause/delete, and then timed out.
   // Keep imported rows, prune stale ones in committed bounded batches.
-  for(const table of ['blofy_xtream_items','blofy_xtream_categories']){
+  for(const table of preserveCategories?['blofy_xtream_items']:['blofy_xtream_items','blofy_xtream_categories']){
     for(;;){
       if(cancelledSources.has(serverId))throw Object.assign(new Error('xtream_sync_cancelled'),{status:409});
       const result=await pool.query(`DELETE FROM ${table}
@@ -654,11 +655,30 @@ async function syncServer(id, requestedTypes = ['live','movie','series']) {
       if (cancelledSources.has(id)) throw Object.assign(new Error('xtream_sync_cancelled'),{status:409});
       const syncToken = crypto.randomUUID();
       try{
+        // Snapshot each media type before mutation. In particular, a provider
+        // returning HTTP 200 with [] must never wipe a customer's old library.
+        const before=(await pool.query(`SELECT
+          (SELECT COUNT(*)::int FROM blofy_xtream_items WHERE server_id=$1 AND media_type=$2) AS items,
+          (SELECT COUNT(*)::int FROM blofy_xtream_categories WHERE server_id=$1 AND media_type=$2) AS categories`,
+          [id,mediaType])).rows[0];
         const categories = await syncCategories(row, mediaType, creds, syncToken, getM3u);
-        const items = await syncItems(row, mediaType, creds, syncToken, getM3u);
+        await syncItems(row, mediaType, creds, syncToken, getM3u);
         if (cancelledSources.has(id)) throw Object.assign(new Error('xtream_sync_cancelled'),{status:409});
-        await finalizeTypeSync(id, mediaType, syncToken);
-        details[mediaType] = { categories, items };
+        // Count unique rows with this token, not raw feed entries (which may
+        // contain duplicates), before any deletion of previously imported rows.
+        const imported=(await pool.query(`SELECT
+          (SELECT COUNT(*)::int FROM blofy_xtream_items WHERE server_id=$1 AND media_type=$2 AND sync_token=$3) AS items,
+          (SELECT COUNT(*)::int FROM blofy_xtream_categories WHERE server_id=$1 AND media_type=$2 AND sync_token=$3) AS categories`,
+          [id,mediaType,syncToken])).rows[0];
+        const decision=assessXtreamSync({
+          previousItems:Number(before.items),importedItems:Number(imported.items),
+          previousCategories:Number(before.categories),importedCategories:Number(imported.categories)
+        });
+        if (cancelledSources.has(id)) throw Object.assign(new Error('xtream_sync_cancelled'),{status:409});
+        await finalizeTypeSync(id, mediaType, syncToken,{preserveCategories:decision.preserveCategories});
+        if(decision.preserveCategories)failures.push(mediaType+': xtream_categories_preserved');
+        details[mediaType] = { categories:decision.categories, items:decision.items,
+          preservedOldCategories:decision.preserveCategories };
       }catch(error){
         failures.push(mediaType+': '+redactXtreamError(error));
         console.warn('Xtream catalog type failed:',id,mediaType,redactXtreamError(error));
