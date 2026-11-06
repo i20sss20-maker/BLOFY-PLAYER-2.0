@@ -1518,8 +1518,19 @@ async function runBlofyItemProbe(){
         (result.rangeFallbackUsed?' · نجح الفحص بعد إعادة المحاولة بدون Range':'')+
         (result.repairedExtension?' · تم تحديث امتداد الحلقة تلقائيًا من بيانات المزود':'')+'. هذا لا يضمن استمرار التشغيل.';
     }else{
+      const repairHints={
+        metadata_upstream_401:'API بيانات المسلسل يرفض بيانات الدخول للمصدر.',
+        metadata_upstream_403:'API بيانات المسلسل يرفض الوصول من هذا السيرفر.',
+        metadata_upstream_404:'API بيانات المسلسل نفسه يرجع 404، ولا يمكن التحقق من الحلقة.',
+        metadata_upstream_429:'API بيانات المسلسل محدود الطلبات.',
+        metadata_unavailable:'تعذر تحديث بيانات المسلسل لدى المزود.',
+        replacement_unplayable:'عُثر على معرّف محتمل جديد لكن فحص الفيديو فشل؛ لم نغيّر الحلقة.',
+        cooldown:'فحص الإصلاح مؤجل مؤقتًا لمنع ضغط المزود.'
+      };
+      const extra=repairHints[result.episodeRepairStatus];
       note.textContent='❌ فشل المصدر'+(result.httpStatus?' · HTTP '+result.httpStatus:'')+' — '+
         (reasons[result.reason]||'راجع إعدادات المصدر والرابط والصيغة وحقوق التشغيل.')+
+        (extra?' · '+extra:'')+
         (xtreamProviderHintText(result.providerHint)?' · '+xtreamProviderHintText(result.providerHint):'');
     }
   }catch(error){
