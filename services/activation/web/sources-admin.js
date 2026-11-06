@@ -714,8 +714,9 @@ async function autoSortCurrentCategories(){
   const mode=el('categoryAutoSortMode').value,button=el('categoryAutoSortBtn');
   if(!serverId){showMessage('اختر المصدر أولًا ثم نوع المحتوى.','error');return;}
   if(!state.categories.length){showMessage('لا توجد أقسام لترتيبها في هذا الاختيار.','error');return;}
-  if(!['popular','alphabetical'].includes(mode))return;
-  const description=mode==='popular'?'الأقسام الأكثر محتوى أولًا':'الترتيب الأبجدي للأقسام';
+  if(!['popular','alphabetical','smart'].includes(mode))return;
+  const description=mode==='smart'?'عربي ثم أجنبي ثم بقية الأقسام، وسنة 2026 ثم 2025 والأقدم داخل كل لغة':
+    mode==='popular'?'الأقسام الأكثر محتوى أولًا':'الترتيب الأبجدي للأقسام';
   if(!window.confirm('تطبيق '+description+' على '+state.categories.length+' قسمًا لهذا المصدر فقط؟ ستبقى الأقسام المخفية كما هي.'))return;
   button.disabled=true;
   button.textContent='جارٍ حفظ الترتيب…';
@@ -1033,6 +1034,17 @@ el('catalogType').addEventListener('change', async () => { await loadCategories(
 el('catalogCategory').addEventListener('change', loadCatalog);
 el('categorySearch').addEventListener('input',renderCategoryManager);
 el('categoryVisibility').addEventListener('change',renderCategoryManager);
+for(const [id,grouped] of [['categoryGroupedView',true],['categoryFlatView',false]]){
+  el(id).addEventListener('click',()=>{
+    categorySmartUi.grouped=grouped;
+    for(const [buttonId,active] of [['categoryGroupedView',grouped],['categoryFlatView',!grouped]]){
+      const button=el(buttonId);
+      button.className=active?'button primary':'button ghost';
+      button.setAttribute('aria-pressed',String(active));
+    }
+    renderCategoryManager();
+  });
+}
 el('categoryAutoSortBtn').addEventListener('click',autoSortCurrentCategories);
 el('categoryManagerRows').addEventListener('click',event=>{
   const button=event.target.closest('button[data-action][data-category-id]');
