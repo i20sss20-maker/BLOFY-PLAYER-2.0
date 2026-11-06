@@ -184,6 +184,7 @@
           <form id="xtreamForm" class="xtream-form" autocomplete="off">
             <label><span>اسم المصدر (اختياري)</span><input id="xtName" maxlength="160" placeholder="مثال: حساب رقم 1"></label>
             <label class="wide"><span>Host / URL</span><input id="xtBaseUrl" required inputmode="url" placeholder="https://example.com:443"></label>
+            <label class="wide"><span>رابط M3U اختياري (BLOFY Hybrid)</span><input id="xtM3uUrl" type="url" inputmode="url" maxlength="4096" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="https://provider.example/get.php?..." aria-describedby="xtM3uHelp"><small id="xtM3uHelp">اختياري: رابط قائمة M3U المصرّح بها لنفس المصدر. يُحفظ مشفرًا، ولا يُعرض رابطك بعد الحفظ. لا يستبدل Xtream تلقائيًا.</small></label>
             <label><span>Username</span><input id="xtUsername" required autocomplete="new-password" autocapitalize="none" spellcheck="false"></label>
             <label><span>Password</span><input id="xtPassword" required type="password" autocomplete="new-password"></label>
             <label class="advanced-field"><span>الأولوية (متقدم)</span><input id="xtPriority" type="number" min="0" max="10000" value="100"></label>
@@ -503,7 +504,7 @@
     </main>
   </div>
   <script src="/blofy-smart-commands.js?v=20261106-v1" defer></script>
-  <script src="/sources-admin.js?v=20261106-pro-v1" defer></script>
+  <script src="/sources-admin.js?v=20261107-hybrid-m3u-v1" defer></script>
   <script src="/blofy-studio-pro.js?v=20261106-pro-v1" defer></script>
   <script src="/xtream-gateway-admin.js?v=20261107-404-ids-v3" defer></script>
 </body>

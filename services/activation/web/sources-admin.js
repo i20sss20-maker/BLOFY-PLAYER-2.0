@@ -163,6 +163,7 @@ function serverCard(item) {
   const editableFields = [
     ['name','اسم المصدر','text',item.name,160],
     ['baseUrl','Host / URL','url',item.baseUrl,500],
+    ['m3uUrl','رابط M3U اختياري (اتركه فارغًا للإبقاء على الرابط المحفوظ)','url','',4096],
     ['username','Username جديد (اتركه فارغًا دون تغيير)','text','',512],
     ['password','Password جديد (اتركه فارغًا دون تغيير)','password','',1024],
     ['priority','الأولوية (رقم أقل = أولوية أعلى)','number',String(item.priority??100),5]
@@ -179,7 +180,15 @@ function serverCard(item) {
     else input.maxLength=maxLength;
     field.append(input);advancedFields.append(field);
   }
-  const editNotice=make('p','muted','لن تُعرض كلمات المرور الحالية. إدخال بيانات جديدة يستلزم إعادة فحص الاتصال ومزامنة المصدر.');
+  const m3uRemove=make('label','server-edit-field');
+  const m3uCheck=document.createElement('input');
+  m3uCheck.type='checkbox';m3uCheck.name='m3uRemove';m3uCheck.value='yes';
+  m3uCheck.dataset.role='m3uRemove';
+  m3uRemove.append(m3uCheck,make('span','',
+    'حذف رابط M3U المحفوظ لهذا المصدر (لا يحذف مكتبة Xtream)'));
+  advancedFields.append(m3uRemove);
+  const editNotice=make('p','muted',
+    'رابط M3U يُحفظ مشفرًا ولا يظهر بعد الحفظ. اتركه فارغًا للإبقاء عليه، أو اختر حذفه. لا يجري استبدال روابط تشغيل العملاء تلقائيًا قبل التحقق.');
   advancedFields.append(editNotice);
   const actions = make('div', 'server-actions');
   const buttons = [
@@ -187,6 +196,7 @@ function serverCard(item) {
     [item.publishCatalog ? 'إخفاء المحتوى عن العملاء' : 'نشر المحتوى للعملاء', 'toggle-publish', item.publishCatalog ? 'button ghost' : 'button primary'],
     ['⟳ مزامنة المحتوى', 'sync-all', 'button'],
     ['فحص الاتصال', 'test', 'button ghost'],
+    ['▶ اختبار رابط M3U', 'test-m3u', 'button ghost'],
     ['اختبار بث قناة', 'probe-live', 'button ghost'],
     ['اختبار تشغيل فيلم', 'probe-movie', 'button ghost'],
     ['اختبار بيانات مسلسل', 'probe-series', 'button ghost'],
@@ -244,6 +254,10 @@ function serverCard(item) {
     make('span', item.enabled ? 'source-state-pill on' : 'source-state-pill off', item.enabled ? '● المصدر مفعّل' : '● المصدر موقوف'),
     make('span', item.enabled && item.publishCatalog ? 'source-state-pill published' : 'source-state-pill hidden', item.enabled && item.publishCatalog ? '● منشور للمشتركين' : '○ غير ظاهر للمشتركين')
   );
+  const m3uBadge=make('span','source-state-pill '+(item.m3uConfigured?'on':'hidden'),
+    item.m3uConfigured?'● M3U مرتبط':'○ M3U غير مضاف');
+  m3uBadge.dataset.role='m3uStatus';
+  indicators.append(m3uBadge);
   updateSourceMediaIndicators(indicators,item);
   card.append(header, indicators, metrics, actions, settings, info);
   return card;
@@ -278,6 +292,11 @@ function refreshSourceCard(card, item) {
   if(pills[1]){
     pills[1].className='source-state-pill '+(item.enabled&&item.publishCatalog?'published':'hidden');
     pills[1].textContent=item.enabled&&item.publishCatalog?'● منشور للمشتركين':'○ غير ظاهر للمشتركين';
+  }
+  const m3uBadge=card.querySelector('[data-role="m3uStatus"]');
+  if(m3uBadge){
+    m3uBadge.className='source-state-pill '+(item.m3uConfigured?'on':'hidden');
+    m3uBadge.textContent=item.m3uConfigured?'● M3U مرتبط':'○ M3U غير مضاف';
   }
   updateSourceMediaIndicators(card.querySelector('.source-quick-status'),item);
   const enabledButton=card.querySelector('button[data-action="toggle-enabled"]');
@@ -684,6 +703,7 @@ async function addXtream(event) {
       body: JSON.stringify({
         name: label,
         baseUrl: host,
+        m3uUrl:el('xtM3uUrl').value.trim(),
         username: el('xtUsername').value,
         password: el('xtPassword').value,
         priority: Number(el('xtPriority').value || 100),
@@ -808,6 +828,15 @@ async function handleServerAction(item, card, button) {
     } else if (action === 'test') {
       await api(`/api/v1/admin/xtream/servers/${item.id}/test`, { method: 'POST', body: '{}' });
       showMessage(`اتصال ${item.name} ناجح.`);
+    } else if(action==='test-m3u'){
+      if(!item.m3uConfigured)throw new Error('أضف رابط M3U من تعديل بيانات المصدر ثم احفظ.');
+      writeFeedback('جارٍ فحص ترويسة قائمة M3U من المصدر المصرح به…');
+      const result=await api(`/api/v1/admin/xtream/servers/${item.id}/test-m3u`,{
+        method:'POST',body:'{}'
+      });
+      if(!result.ok)throw new Error('xtream_m3u_invalid_header');
+      const note='✓ رابط M3U صالح. تم التحقق من بداية ملف القائمة، ولم نفترض أن الأفلام أو الحلقات تعمل تلقائيًا.';
+      writeFeedback(note);showMessage(note);
     } else if (action === 'save') {
       const input=role=>card.querySelector('[data-role="'+role+'"]').value.trim();
       const next={
@@ -816,10 +845,14 @@ async function handleServerAction(item, card, button) {
       };
       if(input('username'))next.username=input('username');
       if(input('password'))next.password=input('password');
+      const m3uInput=input('m3uUrl');
+      const removeM3u=card.querySelector('[data-role="m3uRemove"]')?.checked;
+      if(removeM3u)next.m3uUrl=null;
+      else if(m3uInput)next.m3uUrl=m3uInput;
       await api(`/api/v1/admin/xtream/servers/${item.id}`, {
         method:'PATCH',body:JSON.stringify(next)
       });
-      showMessage('تم حفظ تعديل مصدر «'+item.name+'». اضغط «فحص الاتصال» ثم «مزامنة المحتوى» إذا غيّرت بيانات Host أو Username أو Password.');
+      showMessage('تم حفظ مصدر «'+item.name+'». إذا أضفت M3U اضغط «اختبار رابط M3U» للتأكد من صحته. لا تحتاج لمزامنة كاملة لمجرد ربط M3U.');
     } else if (action === 'delete') {
       const total=Number(item.counts?.total||0).toLocaleString('en-US');
       if(!window.confirm(`حذف مصدر «${item.name}» نهائيًا من BLOFY؟\nسيُخفى ${total} عنصر عن المشتركين فور حفظ الحذف في قاعدة البيانات.\nلن يتأثر الاشتراك الأصلي لدى مزود Xtream.\n\nهل تؤكد الحذف؟`))return;
