@@ -26,6 +26,36 @@ test('sorts Arabic names with numeric-aware comparisons and stable names',()=>{
   assert.throws(()=>sortXtreamCategories(sample,'unexpected'),/xtream_category_sort_invalid/);
 });
 
+test('smart grouping keeps Arabic 2026 first then Arabic 2025, then foreign and other media',()=>{
+  const rows=[
+    {source_category_id:'foreign',name:'أفلام أجنبي 2026',item_count:500,enabled:true},
+    {source_category_id:'ar25',name:'افلام عربية 2025',item_count:80,enabled:true},
+    {source_category_id:'ar26',name:'أفلام عربي 2026',item_count:60,enabled:true},
+    {source_category_id:'unknown',name:'أفلام متنوعة',item_count:2000,enabled:false},
+    {source_category_id:'turkish',name:'مسلسلات تركي 2024',item_count:20,enabled:true},
+    {source_category_id:'arArabicDigits',name:'أفلام عربي ٢٠٢٤',item_count:40,enabled:true}
+  ];
+  const before=JSON.stringify(rows);
+  assert.deepEqual(sortXtreamCategories(rows,'smart'),[
+    'ar26','ar25','arArabicDigits','foreign','turkish','unknown'
+  ]);
+  assert.equal(JSON.stringify(rows),before);
+  assert.equal(rows.at(-2).enabled,true);
+  assert.equal(rows.find(row=>row.source_category_id==='unknown').enabled,false);
+});
+
+test('grouping does not invent a release year for undated categories',async()=>{
+  const {classifyXtreamCategory}=await import('../src/xtream-category-sort.mjs');
+  assert.deepEqual(
+    classifyXtreamCategory('أفلام عربي ٢٠٢٦'),
+    {group:'arabic',label:'عربي',priority:0,year:2026}
+  );
+  const undated=classifyXtreamCategory('أفلام عربي كلاسيكية');
+  assert.equal(undated.group,'arabic');
+  assert.equal(undated.year,null);
+  assert.equal(classifyXtreamCategory('عربي 2027').year,2027);
+});
+
 test('one-click sorting only updates selected category order in an authorized transaction',async()=>{
   const [backend,js,html]=await Promise.all([
     readFile(new URL('../src/xtream-admin-hook.mjs',import.meta.url),'utf8'),
