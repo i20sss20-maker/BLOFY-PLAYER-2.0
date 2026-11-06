@@ -312,3 +312,8 @@
 .tmdb-attribution img{display:block;max-width:46px;height:auto;object-fit:contain}
 .tmdb-attribution a{display:inline-flex;align-items:center}
 .tmdb-attribution small{line-height:1.5;max-width:560px}
+
+/* Xtream API connectivity is not the same as successful video playback. */
+.xtream-manager-panel .source-state-pill.media-health-pill{font-weight:600}
+.xtream-manager-panel .source-state-pill.media-health-pill.off{color:#ffb6c5;border-color:#835061;background:#301c26}
+.xtream-manager-panel .account-health-warning{display:inline-block;font-size:11px;color:#ffd39b;background:#292116;border:1px solid #665332;border-radius:9px;padding:4px 9px}
