@@ -570,18 +570,23 @@ async function runXtreamBatchProbe(){
             status.className='status passed';
             const sample=(result.checks||[]).find(x=>x.ok);
             const failedSamples=(result.checks||[]).filter(x=>x&&!x.ok).length;
+            const formats=kind==='live'?(result.checks||[])
+              .filter(x=>['ts','m3u8'].includes(x.outputFormat))
+              .map(x=>x.outputFormat.toUpperCase()+' '+(x.httpStatus?'HTTP '+x.httpStatus:(x.error||'تعذر الاتصال'))):[];
             status.textContent='✓ وصلت البيانات'+(sample?.episodeCount?' · '+sample.episodeCount+' حلقة':'')+
               (sample?.httpStatus?' · HTTP '+sample.httpStatus:'')+
-              (failedSamples?' · نجحت عينة بعد '+failedSamples+' عينة فاشلة':'');
+              (failedSamples?' · نجحت عينة بعد '+failedSamples+' عينة فاشلة':'')+
+              (formats.length?' · '+formats.join(' / '):'');
           }else{
             session.failed++;
             status.className='status failed';
-            const sample=(result.checks||[]).find(x=>!x.ok);
+            const sample=(result.checks||[]).find(x=>!x.ok&&[401,403,456,429].includes(Number(x.httpStatus))) ||
+              (result.checks||[]).find(x=>!x.ok);
             const http=Number(sample?.httpStatus);
             const reason=String(sample?.error||result.reason||'');
             const known={
               empty_media:'بث فارغ',upstream_non_media_response:'استجابة نصية بدل فيديو',
-              no_imported_items:'لا يوجد محتوى مستورد',no_episode_info:'تفاصيل حلقات غير متاحة',
+              no_imported_items:'لا يوجد محتوى مستورد',output_format_not_allowed:'لا توجد TS أو M3U8 مصرح بها لهذا الحساب',no_episode_info:'تفاصيل حلقات غير متاحة',
               no_playable_episodes:'لا توجد حلقات',timeout:'انتهت مهلة المصدر',
               upstream_unreachable:'فشل الاتصال بالمصدر'
             };
@@ -594,7 +599,8 @@ async function runXtreamBatchProbe(){
             };
             status.textContent='✕ '+(http>=400&&http<=599?'HTTP '+http+' · ':'')+
               (statuses[http]||known[reason]||'المصدر لم يؤكد تشغيل العينة')+
-              (xtreamProviderHintText(sample?.providerHint)?' · '+xtreamProviderHintText(sample?.providerHint):'');
+              (xtreamProviderHintText(sample?.providerHint)?' · '+xtreamProviderHintText(sample?.providerHint):'')+
+              (kind==='live'&&['ts','m3u8'].includes(sample?.outputFormat)?' · '+sample.outputFormat.toUpperCase():'');
           }
         }catch(error){
           if(session.cancelled)break outer;

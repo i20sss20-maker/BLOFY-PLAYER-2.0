@@ -25,6 +25,7 @@ import { inspectXtreamMediaChunk } from './xtream-media-inspector.mjs';
 import { shouldRetryXtreamWithoutRange } from './xtream-media-range.mjs';
 import { summarizeSourceMediaProbe,sourceMediaSummary,sourceAccountWarnings } from './xtream-source-media-health.mjs';
 import { readXtreamProviderDenialHint } from './xtream-provider-denial.mjs';
+import { xtreamAllowedLiveFormats,shouldStopXtreamFormatComparison,outputFormatDescription } from './xtream-live-output-policy.mjs';
 import { auditXtreamCatalogSample } from './xtream-library-insights.mjs';
 import { normalizeXtreamDetails,mergedXtreamMetadata } from './xtream-item-details.mjs';
 import { tmdbConfigured,validatedTmdbId,fetchTmdbDetails } from './xtream-tmdb.mjs';
@@ -556,14 +557,25 @@ async function probeXtreamPlayback(id,mediaType='live') {
     ORDER BY name ASC LIMIT 4`,[id,mediaType])).rows;
   if(!candidates.length)return {ok:false,mediaType,reason:'no_imported_items',checks:[]};
   const creds=decryptCredentials(source),checks=[];
-  for(const item of candidates){
-    const ext=mediaType==='live'?'ts':String(item.container_extension||'mp4').replace(/^\./,'').toLowerCase();
+  const livePolicy=mediaType==='live'?xtreamAllowedLiveFormats(source.account_info):null;
+  if(livePolicy&&!livePolicy.formats.length)return{
+    ok:false,mediaType,reason:'output_format_not_allowed',checks:[],
+    note:outputFormatDescription(livePolicy)
+  };
+  // TS and M3U8 are tested only when explicitly declared by the source.
+  // Keep the entire live comparison below the 14.5s browser timeout.
+  const liveDeadline=Date.now()+11500;
+  outer:for(const item of candidates){
+    const importedExt=String(item.container_extension||'mp4').replace(/^\./,'').toLowerCase();
+    for(const ext of (livePolicy?livePolicy.formats:[importedExt])){
+    if(livePolicy&&Date.now()>liveDeadline-1200)break outer;
     if(!/^[a-z0-9]{1,8}$/.test(ext)||!item.source_id)continue;
     const path=[mediaType==='movie'?'movie':'live',creds.username,creds.password,String(item.source_id)]
       .map(encodeURIComponent).join('/')+'.'+ext;
     let target=new URL(path,normalizeXtreamBaseUrl(source.base_url)+'/');
     const started=Date.now(),controller=new AbortController();
-    const timeout=setTimeout(()=>controller.abort(),9500);
+    const timeout=setTimeout(()=>controller.abort(),livePolicy?
+      Math.max(1200,Math.min(4500,liveDeadline-Date.now())):9500);
     let httpStatus=null,contentType='',errorCode=null,providerHint=null;
     let useFirstByteRange=mediaType==='movie';
     try{
@@ -617,12 +629,21 @@ async function probeXtreamPlayback(id,mediaType='live') {
       && !errorCode && !/text\/html|application\/json|text\/xml/i.test(contentType);
     checks.push({
       title:cleanText(item.name,160),mediaType,httpStatus,contentType,
+      ...(livePolicy?{outputFormat:ext}:{}),
       latencyMs:Date.now()-started,ok,error:errorCode,providerHint,rangeFallbackUsed:mediaType==='movie'&&!useFirstByteRange
     });
-    if(ok||[401,403,456].includes(httpStatus))break;
+    // Respect access denials. A 456 is never treated as permission to try
+    // other endpoints, identities or formats after an upstream rejection.
+    if(shouldStopXtreamFormatComparison(httpStatus))break outer;
+    if(ok&&!livePolicy)break outer;
+    }
+    // Compare each advertised output format for one item before moving on;
+    // stop as soon as any of this item's declared formats serves media.
+    if(checks.some(check=>check.ok))break;
   }
   return {ok:checks.some(check=>check.ok),mediaType,checks,
-    note:'فحص استجابة HTTP للبث فقط. التأكد من عرض الصورة والصوت يحتاج تشغيلًا فعليًا بالمشغل.'};
+    note:(livePolicy?outputFormatDescription(livePolicy)+' HLS: وصول القائمة لا يؤكد عمل مقاطع الفيديو. ':'')+
+      'فحص استجابة HTTP للبث فقط. التأكد من عرض الصورة والصوت يحتاج تشغيلًا فعليًا بالمشغل.'};
 }
 
 async function fetchAccount(row) {

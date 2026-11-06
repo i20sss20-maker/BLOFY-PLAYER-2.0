@@ -61,6 +61,7 @@ const ERRORS={
   no_imported_items:'لا توجد عناصر مستوردة من هذا النوع. افحص مزامنة المصدر أولًا.',
   no_episode_info:'المصدر لم يُرجع تفاصيل الحلقات للمسلسل.',
   no_playable_episodes:'المصدر أعاد بيانات مسلسل بدون حلقات قابلة للتشغيل.',
+  output_format_not_allowed:'المصدر لا يعلن TS أو M3U8 كصيغ بث مسموحة لهذا الحساب؛ راجع المزود.',
   series_response_invalid:'بيانات المسلسل غير صالحة (JSON).',
   series_response_too_large:'استجابة حلقات المسلسل تجاوزت حد فحص العينة.',
   empty_media:'المصدر لا يرسل أي بيانات فيديو.',
@@ -101,6 +102,7 @@ export function xtreamProbeMessage(result, kind='live') {
     return 'نجح فحص '+label+': '+status+'وصلت استجابة صحيحة'+episodes+fallback+partial+'. هذا فحص تقني وليس تشغيل صوت وصورة كاملًا.';
   }
   if (result?.reason==='no_imported_items') return 'تعذر فحص '+label+': '+ERRORS.no_imported_items;
+  if (result?.reason==='output_format_not_allowed') return 'تعذر فحص '+label+': '+ERRORS.output_format_not_allowed;
   const diagnostics=checks.filter(Boolean).slice(0,2).map(summaryForCheck);
   return 'فشل فحص '+label+': '+(diagnostics.length?diagnostics.join(' | '):'تعذر التأكد من المصدر.');
 }
