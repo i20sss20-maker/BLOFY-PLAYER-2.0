@@ -1505,7 +1505,9 @@ async function runBlofyItemProbe(){
       source_unreachable:'تعذر الاتصال بالمصدر.',
       timeout:'انتهت مهلة الاتصال دون فيديو.',
       upstream_http_403:'المصدر يرفض الوصول؛ راجع صلاحية الحساب لدى المزود.',
-      upstream_http_404:'المصدر أعاد 404. قد يكون امتداد الحلقة تغيّر؛ يحاول BLOFY مراجعته من بيانات المسلسل مرة واحدة.',
+      upstream_http_404:'المصدر أعاد 404 لملف الفيديو. افحص بيانات المصدر وصلاحية إعادة البث؛ تغيير امتداد الملف وحده لا يكفي.',
+      episode_position_unknown:'معرّف الحلقة القديم اختفى، ولا توجد بيانات موسم/حلقة محفوظة لربطه بأمان. حدّث مكتبة المسلسل وافتح تفاصيله مجددًا.',
+      episode_media_404_at_source:'الحلقة موجودة في فهرس المزود ولكن رابط الفيديو نفسه يرجع 404. يلزم تحديث الملف أو صلاحيات تشغيله من المصدر.',
       episode_missing_from_source:'الحلقة لم تعد موجودة ضمن قائمة حلقات المسلسل لدى المزود. حدّث قائمة المسلسلات وأعد فتح المسلسل.',
       upstream_http_456:'رمز غير قياسي من المزود؛ تحقق من أذونات التشغيل وقيود الحساب، ولا يمكن الجزم بسببه من الرمز وحده.',
       upstream_http_429:'تجاوز حد اتصالات المزود أو تقييد الطلبات.'
@@ -1516,8 +1518,19 @@ async function runBlofyItemProbe(){
         (result.rangeFallbackUsed?' · نجح الفحص بعد إعادة المحاولة بدون Range':'')+
         (result.repairedExtension?' · تم تحديث امتداد الحلقة تلقائيًا من بيانات المزود':'')+'. هذا لا يضمن استمرار التشغيل.';
     }else{
+      const repairHints={
+        metadata_upstream_401:'API بيانات المسلسل يرفض بيانات الدخول للمصدر.',
+        metadata_upstream_403:'API بيانات المسلسل يرفض الوصول من هذا السيرفر.',
+        metadata_upstream_404:'API بيانات المسلسل نفسه يرجع 404، ولا يمكن التحقق من الحلقة.',
+        metadata_upstream_429:'API بيانات المسلسل محدود الطلبات.',
+        metadata_unavailable:'تعذر تحديث بيانات المسلسل لدى المزود.',
+        replacement_unplayable:'عُثر على معرّف محتمل جديد لكن فحص الفيديو فشل؛ لم نغيّر الحلقة.',
+        cooldown:'فحص الإصلاح مؤجل مؤقتًا لمنع ضغط المزود.'
+      };
+      const extra=repairHints[result.episodeRepairStatus];
       note.textContent='❌ فشل المصدر'+(result.httpStatus?' · HTTP '+result.httpStatus:'')+' — '+
         (reasons[result.reason]||'راجع إعدادات المصدر والرابط والصيغة وحقوق التشغيل.')+
+        (extra?' · '+extra:'')+
         (xtreamProviderHintText(result.providerHint)?' · '+xtreamProviderHintText(result.providerHint):'');
     }
   }catch(error){

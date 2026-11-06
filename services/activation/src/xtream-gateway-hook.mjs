@@ -744,10 +744,16 @@ async function repairEpisodeOn404(row){
     const decision=verifiedEpisodeRecovery(series,currentId,
       safeGatewayExtension(row.container_extension,'mp4'),
       row.season_number,row.episode_number);
+    if(decision.status==='missing'&&
+       (episodeOrdinal(row.season_number,{allowZero:true})===null||
+        episodeOrdinal(row.episode_number)===null)){
+      return {status:'position_unknown'};
+    }
+    if(decision.status==='unchanged')return {status:'catalog_media_mismatch'};
     if(decision.status!=='changed'&&decision.status!=='relocated')return decision;
     if(decision.status==='relocated' &&
        !await confirmEpisodeReplacement(row,decision.sourceId,decision.extension))
-      return {status:'unavailable'};
+      return {status:'replacement_unplayable'};
     const changed=await pool.query(`UPDATE blofy_xtream_gateway_episode_map
       SET container_extension=$4,
           resolved_source_episode_id=COALESCE($5::text,resolved_source_episode_id)
@@ -757,8 +763,10 @@ async function repairEpisodeOn404(row){
         decision.status==='relocated'?decision.sourceId:null]);
     if(!changed.rowCount)return {status:'unavailable'};
     return decision;
-  }catch{
-    return {status:'unavailable'};
+  }catch(error){
+    const hint=String(error?.message||'');
+    const match=hint.match(/^xtream_gateway_upstream_(401|403|404|429|456|500|502|503|504)$/);
+    return {status:match?'metadata_upstream_'+match[1]:'metadata_unavailable'};
   }
 }
 
@@ -871,6 +879,11 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
              !episodeRepairTried && req.method==='GET'){
             episodeRepairTried=true;
             const repaired=await repairEpisodeOn404(row);
+            console.warn('xtream episode 404 diagnosis',{
+              itemId:gatewayId,status:repaired.status,
+              hasEpisodePosition:episodeOrdinal(row.season_number,{allowZero:true})!==null&&
+                episodeOrdinal(row.episode_number)!==null
+            });
             if((repaired.status==='changed'||repaired.status==='relocated') && attempt<maxAttempts){
               sourceId=repaired.sourceId||sourceId;
               upstream=mediaUpstreamUrl(row,kind,sourceId,repaired.extension);
@@ -882,6 +895,14 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
             if(repaired.status==='missing'){
               observe('failed',{upstreamStatus:404,reason:'episode_missing_from_source',attempts:attempt});
               return text(res,502,'Episode no longer listed by source');
+            }
+            if(repaired.status==='position_unknown'){
+              observe('failed',{upstreamStatus:404,reason:'episode_position_unknown',attempts:attempt});
+              return text(res,502,'Episode needs a fresh series catalog');
+            }
+            if(repaired.status==='catalog_media_mismatch'){
+              observe('failed',{upstreamStatus:404,reason:'episode_media_404_at_source',attempts:attempt});
+              return text(res,502,'Episode is listed but its source media returns 404');
             }
           }
           if (retryable && !transientRetried && attempt < maxAttempts) {
@@ -1002,9 +1023,11 @@ async function probeGatewayMedia(kind,itemId){
     }
     // The operator's manual episode probe also verifies changed extensions,
     // rather than repeatedly reporting 404 for an obsolete cached suffix.
-    let repairedExtension=false;
+    let repairedExtension=false,episodeRepairStatus=null;
     if(kind==='series' && response.status===404){
       const fix=await repairEpisodeOn404(row);
+      episodeRepairStatus=fix.status;
+      console.warn('xtream episode operator probe diagnosis',{itemId,status:fix.status});
       if(fix.status==='changed'||fix.status==='relocated'){
         await response.body?.cancel().catch(()=>{});
         response=null;
@@ -1012,8 +1035,10 @@ async function probeGatewayMedia(kind,itemId){
         url=mediaUpstreamUrl(row,kind,sourceId,fix.extension);
         response=await checkedFetch(url,{method:'GET',headers:probeHeaders,signal:controller.signal});
         repairedExtension=true;
-      }else if(fix.status==='missing'){
-        return{ok:false,kind,itemId,httpStatus:404,reason:'episode_missing_from_source',
+      }else if(['missing','position_unknown','catalog_media_mismatch'].includes(fix.status)){
+        const reason=fix.status==='missing'?'episode_missing_from_source':
+          fix.status==='position_unknown'?'episode_position_unknown':'episode_media_404_at_source';
+        return{ok:false,kind,itemId,httpStatus:404,reason,episodeRepairStatus,
           elapsedMs:Date.now()-started};
       }
     }
@@ -1021,7 +1046,7 @@ async function probeGatewayMedia(kind,itemId){
     if(!(response.ok||status===206)){
       const providerHint=await readXtreamProviderDenialHint(response);
       return{ok:false,kind,itemId,httpStatus:status,reason:'upstream_http_'+status,
-        repairedExtension,
+        episodeRepairStatus,repairedExtension,
         ...(providerHint?{providerHint}:{}),elapsedMs:Date.now()-started};
     }
     if(!response.body)return{ok:false,kind,itemId,httpStatus:status,reason:'upstream_empty_media',elapsedMs:Date.now()-started};
