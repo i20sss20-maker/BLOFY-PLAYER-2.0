@@ -105,7 +105,7 @@ function sameOrigin(req) {
 }
 function validSignedXtreamControl(req,url) {
   if (req.method!=='POST' ||
-    !/^\/api\/v1\/admin\/xtream\/controls\/(?:new\/add|[a-z0-9-]+\/(?:toggle-enabled|toggle-publish|test|probe-live|probe-movie|sync-all|sync-live|sync-movie|sync-series|cancel-sync|save|delete))$/i.test(url.pathname))
+    !/^\/api\/v1\/admin\/xtream\/controls\/(?:new\/add|[a-z0-9-]+\/(?:toggle-enabled|toggle-publish|test|test-m3u|probe-live|probe-movie|probe-series|probe-episode|sync-all|sync-live|sync-movie|sync-series|cancel-sync|save|delete))$/i.test(url.pathname))
     return false;
   if (!/^application\/x-www-form-urlencoded(?:\s*;|$)/i.test(String(req.headers['content-type']||'')))
     return false;
