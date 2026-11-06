@@ -364,7 +364,7 @@ async function preflightSource(row,deadline){
 async function runIssuancePreflight(sourceId){
   await ensureReady();
   const started=Date.now(),deadline=started+40_000;
-  const rows=(await pool.query(`SELECT id,name,base_url,username_secret,password_secret
+  const rows=(await pool.query(`SELECT id,id AS server_id,name,base_url,username_secret,password_secret
     FROM blofy_xtream_servers
     WHERE enabled=TRUE AND publish_catalog=TRUE AND deletion_requested_at IS NULL
       AND ($1::uuid IS NULL OR id=$1::uuid)

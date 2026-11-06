@@ -22,6 +22,8 @@ export function issuanceErrorReason(value){
   const s=String(value??'');
   if(/^xtream_gateway_upstream_(?:401|403|404|429|456|5\d\d)$/.test(s))
     return s.replace(/^xtream_gateway_/,'');
+  if(s==='xtream_secret_decryption_failed'||s==='xtream_secret_invalid')
+    return 'source_credentials_unreadable';
   if(['xtream_gateway_info_too_large','xtream_gateway_upstream_json_invalid',
       'xtream_gateway_redirect_invalid','xtream_gateway_redirect_loop',
       'xtream_private_host_blocked','xtream_host_unresolved'].includes(s))

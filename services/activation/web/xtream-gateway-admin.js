@@ -354,6 +354,7 @@ function gatewayPreflightReady(){
 function gatewayPreflightReason(reason){
   const map={
     source_auth_denied:'بيانات المصدر مرفوضة',
+    source_credentials_unreadable:'تعذر قراءة بيانات المصدر المشفرة. تحقق من إعدادات تشفير المصدر.',
     source_api_unavailable:'واجهة API لدى المصدر غير متاحة',
     source_unreachable:'تعذر الاتصال بالمصدر',
     upstream_http_403:'المصدر رفض تشغيل الفيديو (403)',

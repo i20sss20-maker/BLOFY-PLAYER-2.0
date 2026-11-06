@@ -36,6 +36,7 @@ test('preflight errors are scoped, bounded and sanitized without leaking credent
   assert.equal(issuanceErrorReason('xtream_gateway_upstream_403'),'upstream_403');
   assert.equal(issuanceErrorReason('xtream_gateway_upstream_json_invalid'),'source_api_unavailable');
   assert.equal(issuanceErrorReason('upstream password=secrets'),'source_unreachable');
+  assert.equal(issuanceErrorReason('xtream_secret_decryption_failed'),'source_credentials_unreadable');
 });
 
 test('both account issuance routes require server-side successful playback preflight before any insert',async()=>{
@@ -76,4 +77,19 @@ test('admin user issuance cannot skip a failed test with an offline confirmation
   assert.doesNotMatch(js,/المصدر المختار غير متصل حاليًا.*window\.confirm/);
   assert.match(js,/if\(!gatewayPreflightReady\(\)\)/);
   assert.match(html,/xtream-gateway-admin\.js\?v=20261107-preflight-v1/);
+});
+
+test('preflight selects the source server ID used as encryption associated data',async()=>{
+  const src=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
+  const preflight=src.slice(src.indexOf('async function runIssuancePreflight('),src.indexOf('async function issuancePreflight('));
+  // Production uses per-server AES-GCM associated data: username:<server_id>.
+  // Without the alias both independent sources fail before any network call.
+  assert.match(preflight,/SELECT id,id AS server_id,name,base_url,username_secret,password_secret/);
+  const {encryptXtreamSecret,decryptXtreamSecret}=await import('../src/xtream-core.mjs');
+  const sourceId='11111111-1111-4111-8111-111111111111';
+  const key='cd'.repeat(32);
+  const encrypted=encryptXtreamSecret('fixture-media-user',key,'username:'+sourceId);
+  const dbRow={id:sourceId,server_id:sourceId,username_secret:encrypted};
+  assert.equal(decryptXtreamSecret(dbRow.username_secret,key,'username:'+dbRow.server_id),'fixture-media-user');
+  assert.throws(()=>decryptXtreamSecret(encrypted,key,'username:undefined'),/xtream_secret_decryption_failed/);
 });
