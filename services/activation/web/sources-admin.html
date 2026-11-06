@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#09090e">
   <link rel="icon" type="image/png" href="/blofy-logo.png"><link rel="apple-touch-icon" href="/blofy-logo.png"><meta name="robots" content="noindex,nofollow"><title>BLOFY STREAM | إدارة المصادر والاشتراكات</title>
-  <link rel="stylesheet" href="/sources-admin.css?v=20261106-smart-studio-v10">
+  <link rel="stylesheet" href="/sources-admin.css?v=20261106-source-probe-batch-v11">
   <link rel="stylesheet" href="/site-polish.css?v=20261025-lux-final">
 </head>
 <body>
@@ -194,6 +194,7 @@
               <a class="button primary" href="/api/v1/admin/xtream/controls">لوحة التحكم المباشرة (بدون تعليق)</a>
               <button id="xtNewSourceBtn" class="button primary" type="button">+ إضافة Xtream جديد</button>
               <button id="xtRefreshSourcesBtn" class="button ghost" type="button">تحديث القائمة</button>
+              <button id="xtProbeAllBtn" class="button ghost" type="button">🔎 اختبار المصادر كاملة</button>
             </div>
           </div>
           <div class="xtream-source-toolbar">
@@ -201,6 +202,16 @@
             <label><span>عرض المصادر</span><select id="xtSourceFilter"><option value="all">جميع المصادر</option><option value="enabled">المفعّلة</option><option value="disabled">الموقوفة</option><option value="published">المنشورة للعملاء</option></select></label>
             <span id="xtSourceSummary" class="xtream-source-summary" role="status">جاري تحميل المصادر…</span>
           </div>
+          <section id="xtBatchProbePanel" class="xt-batch-probe" hidden aria-label="نتائج فحص المصادر">
+            <div class="xt-batch-probe-head">
+              <strong>فحص التشغيل الشامل (عينات فقط)</strong>
+              <button id="xtBatchProbeCancel" type="button" class="button ghost">إيقاف الفحص</button>
+            </div>
+            <progress id="xtBatchProbeProgress" value="0" max="1"></progress>
+            <p id="xtBatchProbeSummary" role="status" aria-live="polite">جارٍ تجهيز الفحص…</p>
+            <div id="xtBatchProbeResults" class="xt-batch-probe-results" aria-live="polite"></div>
+            <small>يطلب بيانات قصيرة من قناة وفيلم ومسلسل وحلقة في كل مصدر. نجاح العينة لا يضمن جميع المحتوى. لا تُرسل كلمة مرور المصدر إلى الواجهة.</small>
+          </section>
           <div id="xtreamLoading" class="loading">جارٍ تحميل المصادر…</div>
           <div id="xtreamServers" class="server-list" hidden></div>
         </section>
@@ -279,7 +290,7 @@
       <footer><span>BLOFY STREAM · إدارة Xtream</span></footer>
     </main>
   </div>
-  <script src="/sources-admin.js?v=20261106-smart-studio-v10" defer></script>
+  <script src="/sources-admin.js?v=20261106-source-probe-batch-v11" defer></script>
   <script src="/xtream-gateway-admin.js?v=20261106-account-visibility-v2" defer></script>
 </body>
 </html>
