@@ -8,8 +8,10 @@ const host='https://provider.example:8443';
 test('M3U link supports an authorized signed playlist URL and never accepts unsafe schemes',()=>{
   const url='https://provider.example:8443/get.php?username=fixture&password=sensitive&type=m3u_plus';
   assert.equal(validateM3uPlaylistUrl(url,host),url);
-  assert.equal(validateM3uPlaylistUrl('http://provider.example:8443/get.php',host),
-    'http://provider.example:8443/get.php');
+  assert.equal(validateM3uPlaylistUrl('http://provider.example:8080/get.php','http://provider.example:8080'),
+    'http://provider.example:8080/get.php');
+  assert.throws(()=>validateM3uPlaylistUrl('http://provider.example:8443/get.php',host),
+    /xtream_m3u_https_required/);
   assert.equal(validateM3uPlaylistUrl('https://partner.example/authorized.m3u',host),
     'https://partner.example/authorized.m3u');
   for(const unsafe of [
