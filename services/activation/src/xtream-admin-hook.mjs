@@ -20,6 +20,7 @@ import { downloadXtreamM3uCatalog } from './xtream-m3u-catalog.mjs';
 import { distinctXtreamRecords } from './xtream-import-dedup.mjs';
 import { assessXtreamSync } from './xtream-sync-guard.mjs';
 import { CONTROL_PATH, controlPage, deleteConfirmationPage, readControlForm } from './xtream-native-controls.mjs';
+import { xtreamEpisodeSamples, xtreamProbeMessage } from './xtream-series-probe.mjs';
 import { sortXtreamCategories } from './xtream-category-sort.mjs';
 import { nativeXtreamCsrfToken } from './xtream-native-csrf.mjs';
 
@@ -374,10 +375,131 @@ async function checkedFetch(url, { timeoutMs = 30000 } = {}) {
   throw new Error('xtream_redirect_loop');
 }
 
+// Real series diagnostics: first confirm the selected source serves
+// get_series_info, then (for episode mode) read the first bytes of an actual
+// /series/<account>/<episode-id> media file. Never return source credentials.
+async function probeXtreamEpisodeMedia(source,creds,episode) {
+  const started=Date.now(),controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),9500);
+  const path=['series',creds.username,creds.password,String(episode.id)]
+    .map(encodeURIComponent).join('/')+'.'+episode.extension;
+  let target=new URL(path,normalizeXtreamBaseUrl(source.base_url)+'/');
+  let httpStatus=null,contentType='',errorCode=null,reader=null,response=null;
+  try{
+    for(let hop=0;hop<=3;hop++){
+      await assertPublicXtreamUrl(target.origin);
+      response=await fetch(target,{
+        method:'GET',redirect:'manual',signal:controller.signal,
+        headers:{
+          'user-agent':'BLOFY-Media-Probe/1.0',
+          range:'bytes=0-1023',
+          accept:'*/*'
+        }
+      });
+      if([301,302,303,307,308].includes(response.status)){
+        const location=response.headers.get('location');
+        await response.body?.cancel().catch(()=>{});
+        if(!location||hop===3)throw new Error('redirect_invalid');
+        target=new URL(location,target);
+        if(!['http:','https:'].includes(target.protocol))throw new Error('redirect_invalid');
+        continue;
+      }
+      httpStatus=response.status;
+      contentType=String(response.headers.get('content-type')||'').slice(0,100);
+      if((httpStatus===200||httpStatus===206)&&response.body){
+        reader=response.body.getReader();
+        const first=await reader.read();
+        const prefix=Buffer.from(first.value||[]).subarray(0,100).toString('utf8').trimStart().toLowerCase();
+        if(first.done||!first.value?.byteLength)errorCode='empty_media';
+        else if(prefix.startsWith('<html')||prefix.startsWith('<!doctype html'))errorCode='upstream_html_instead_of_video';
+      }else await response.body?.cancel().catch(()=>{});
+      break;
+    }
+  }catch(error){
+    errorCode=controller.signal.aborted?'timeout':redactXtreamError(error);
+  }finally{
+    clearTimeout(timeout);
+    controller.abort();
+    if(reader){try{await reader.cancel()}catch{}try{reader.releaseLock()}catch{}}
+  }
+  const ok=(httpStatus===200||httpStatus===206)
+    && !errorCode && !/text\/html|application\/json|text\/xml/i.test(contentType);
+  return{ok,httpStatus,contentType,latencyMs:Date.now()-started,error:errorCode};
+}
+
+async function probeXtreamSeries(id,mediaType){
+  const source=await serverById(id);
+  if(!source)throw Object.assign(new Error('xtream_server_not_found'),{status:404});
+  if(!source.enabled)throw Object.assign(new Error('xtream_source_paused'),{status:409});
+  // An episode probe needs only one series to bound upstream request time.
+  const candidates=(await pool.query(`SELECT source_id,name
+    FROM blofy_xtream_items
+    WHERE server_id=$1 AND media_type='series' AND enabled=TRUE
+    ORDER BY name ASC LIMIT $2`,[id,mediaType==='episode'?1:2])).rows;
+  if(!candidates.length)return{ok:false,mediaType,reason:'no_imported_items',checks:[]};
+  const creds=decryptCredentials(source),checks=[];
+  for(const series of candidates){
+    const started=Date.now();
+    let httpStatus=null,errorCode=null,details=null;
+    try{
+      const response=await checkedFetch(xtreamApiUrl(
+        source.base_url,creds.username,creds.password,'get_series_info',
+        {series_id:String(series.source_id)}
+      ),{timeoutMs:9500});
+      httpStatus=response.status;
+      const chunks=[];
+      let bytes=0;
+      if(!response.body)throw new Error('no_episode_info');
+      for await(const part of response.body){
+        bytes+=part.byteLength;
+        if(bytes>1_500_000)throw new Error('series_response_too_large');
+        chunks.push(Buffer.from(part));
+      }
+      let payload;
+      try{payload=JSON.parse(Buffer.concat(chunks).toString('utf8'))}
+      catch{throw new Error('series_response_invalid')}
+      if(!payload?.episodes)throw new Error('no_episode_info');
+      details=xtreamEpisodeSamples(payload,2);
+      if(!details.episodeCount)throw new Error('no_playable_episodes');
+      if(mediaType==='episode'){
+        const playback=await probeXtreamEpisodeMedia(source,creds,details.samples[0]);
+        checks.push({
+          title:cleanText(series.name,150),mediaType,
+          seriesHttpStatus:httpStatus,seasonCount:details.seasonCount,
+          episodeCount:details.episodeCount,
+          ...playback
+        });
+      }else{
+        checks.push({
+          title:cleanText(series.name,150),mediaType,httpStatus,
+          latencyMs:Date.now()-started,ok:true,error:null,
+          seasonCount:details.seasonCount,episodeCount:details.episodeCount
+        });
+      }
+    }catch(error){
+      const code=String(error?.message||'');
+      const match=code.match(/^xtream_http_([0-9]{3})$/);
+      if(match)httpStatus=Number(match[1]);
+      const safeErrors=new Set(['no_episode_info','no_playable_episodes','series_response_invalid','series_response_too_large']);
+      errorCode=safeErrors.has(code)?code:
+        /(?:abort|timeout)/i.test(code)?'timeout':
+        match?code:'upstream_unreachable';
+      checks.push({
+        title:cleanText(series.name,150),mediaType,httpStatus,
+        latencyMs:Date.now()-started,ok:false,error:errorCode
+      });
+    }
+    if(checks.at(-1)?.ok)break;
+  }
+  return{ok:checks.some(check=>check.ok),mediaType,checks,
+    note:'مسلسلات: فحص API والحلقات. الحلقات: قراءة أول بايتات الفيديو فقط؛ لا يثبت استمرار الصوت والصورة.'};
+}
+
 // Short, explicit playback probe: checks the actual upstream media endpoint,
 // not just player_api.php authentication. Credentials and source URLs never
 // appear in the response; the request is initiated by the administrator only.
 async function probeXtreamPlayback(id,mediaType='live') {
+  if(mediaType==='series'||mediaType==='episode')return probeXtreamSeries(id,mediaType);
   if(!['live','movie'].includes(mediaType))
     throw Object.assign(new Error('xtream_probe_type_invalid'),{status:400});
   const source=await serverById(id);
@@ -1002,7 +1124,7 @@ function controlRedirect(res,kind,value){
   res.end();
 }
 async function handleControlAction(req,res,id,action) {
-  const available=['toggle-enabled','toggle-publish','test','probe-live','probe-movie','sync-all','sync-live','sync-movie','sync-series','cancel-sync','save','delete'];
+  const available=['toggle-enabled','toggle-publish','test','probe-live','probe-movie','probe-series','probe-episode','sync-all','sync-live','sync-movie','sync-series','cancel-sync','save','delete'];
   if(id==='new'&&action==='add'){
     const fields=await readControlForm(req);
     if(fields.rightsConfirmed!=='yes')throw Object.assign(new Error('rights_confirmation_required'),{status:400});
@@ -1045,9 +1167,17 @@ async function handleControlAction(req,res,id,action) {
     await cancelSourceSync(id);
     return controlRedirect(res,'ok','cancelled');
   }
-  if(action==='probe-live'||action==='probe-movie'){
-    const result=await probeXtreamPlayback(id,action==='probe-live'?'live':'movie');
-    return controlRedirect(res,result.ok?'ok':'error',result.ok?'probe-ok':('playback_'+String(result.reason||'failed').slice(0,80)));
+  if(['probe-live','probe-movie','probe-series','probe-episode'].includes(action)){
+    const mediaType=action.slice('probe-'.length);
+    const result=await probeXtreamPlayback(id,mediaType);
+    // Safe logging for later debugging: no source URLs, usernames, passwords,
+    // episode IDs or movie titles. Logs help distinguish failed API from media.
+    console.info('xtream source probe result',{
+      sourceId:id,mediaType,ok:Boolean(result.ok),
+      checks:(result.checks||[]).map(check=>({httpStatus:check.httpStatus,
+        error:check.error||null,ok:Boolean(check.ok),episodeCount:check.episodeCount||0}))
+    });
+    return controlRedirect(res,result.ok?'ok':'error','probe:'+xtreamProbeMessage(result,mediaType));
   }
   if(action==='test'){
     // Never block a 15s proxy request on an upstream test that may take 20s.
@@ -1095,7 +1225,7 @@ http.createServer = function withBlofyXtream(listener) {
         if(!source)return json(res,404,{error:'xtream_server_not_found'});
         return sendControlHtml(res,deleteConfirmationPage(source,nativeXtreamCsrfToken(req,ADMIN_SESSION_KEY)));
       }
-      const nativeAction=url.pathname.match(/^\/api\/v1\/admin\/xtream\/controls\/([a-z0-9-]+)\/(toggle-enabled|toggle-publish|test|probe-live|probe-movie|sync-all|sync-live|sync-movie|sync-series|cancel-sync|save|delete|add)$/i);
+      const nativeAction=url.pathname.match(/^\/api\/v1\/admin\/xtream\/controls\/([a-z0-9-]+)\/(toggle-enabled|toggle-publish|test|probe-live|probe-movie|probe-series|probe-episode|sync-all|sync-live|sync-movie|sync-series|cancel-sync|save|delete|add)$/i);
       if(nativeAction&&req.method==='POST'){
         try{return await handleControlAction(req,res,nativeAction[1],nativeAction[2]);}
         catch(error){

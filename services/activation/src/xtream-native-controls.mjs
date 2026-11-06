@@ -54,7 +54,7 @@ function noticeText(code) {
 export function controlPage({items=[],success='',error='',csrfToken=''}) {
   const securedForm=(id,action,label,klass='')=>form(id,action,label,klass,csrfToken);
   const securedUrl=(path)=>path+(csrfToken?'?csrf='+enc(csrfToken):'');
-  const message=noticeText(success);
+  const message=noticeText(success)||(String(success).startsWith('probe:')?String(success).slice(6,340):'');
   const cards=items.map(item=>{
     const id=esc(item.id),name=esc(item.name),url=esc(item.baseUrl);
     const status=esc(String(item.status||'unknown'));
@@ -81,6 +81,8 @@ export function controlPage({items=[],success='',error='',csrfToken=''}) {
       securedForm(id,'test','فحص الاتصال')+
       securedForm(id,'probe-live','اختبار بث قناة')+
       securedForm(id,'probe-movie','اختبار تشغيل فيلم')+
+      securedForm(id,'probe-series','اختبار بيانات مسلسل')+
+      securedForm(id,'probe-episode','اختبار تشغيل حلقة')+
       securedForm(id,'sync-all','مزامنة الكل')+
       securedForm(id,'sync-live','مزامنة القنوات')+
       securedForm(id,'sync-movie','مزامنة الأفلام')+
@@ -107,7 +109,8 @@ export function controlPage({items=[],success='',error='',csrfToken=''}) {
   '</head><body><main><header><div><h1>BLOFY STREAM — إدارة مباشرة</h1><p class="muted">أوامر حقيقية تُرسل إلى السيرفر بدون الحاجة إلى JavaScript. كل تغيير يُحفظ قبل إعادة عرض المصادر.</p></div>'+
   '<nav><a href="/sources-admin#xtream">اللوحة الرئيسية</a><a href="'+CONTROL_PATH+'">تحديث القائمة</a></nav></header>'+
   (message?'<p class="note" role="status">'+esc(message)+'</p>':'')+
-  (error?'<p class="err" role="alert">تعذر تنفيذ العملية: '+esc(error)+'</p>':'')+
+  (error?'<p class="err" role="alert">'+
+    (String(error).startsWith('probe:')?'نتيجة الفحص: '+esc(String(error).slice(6,340)):'تعذر تنفيذ العملية: '+esc(error))+'</p>':'')+
   '<section class="add"><h2>إضافة مصدر Xtream جديد</h2><form method="post" action="'+securedUrl(CONTROL_PATH+'/new/add')+'">'+
   '<label>اسم المصدر<input name="name" maxlength="160" required></label>'+
   '<label>Host<input name="baseUrl" type="url" maxlength="500" required placeholder="https://your-host.example"></label>'+

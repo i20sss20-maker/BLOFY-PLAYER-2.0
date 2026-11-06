@@ -153,6 +153,8 @@ function serverCard(item) {
     ['فحص الاتصال', 'test', 'button ghost'],
     ['اختبار بث قناة', 'probe-live', 'button ghost'],
     ['اختبار تشغيل فيلم', 'probe-movie', 'button ghost'],
+    ['اختبار بيانات مسلسل', 'probe-series', 'button ghost'],
+    ['اختبار تشغيل حلقة', 'probe-episode', 'button ghost'],
     ['حذف المصدر', 'delete', 'button danger']
   ];
   if(item.syncing||item.status==='syncing'){
@@ -495,21 +497,37 @@ async function handleServerAction(item, card, button) {
         ?'تم تصحيح حالة المزامنة القديمة للمصدر «'+item.name+'». يمكنك بدء مزامنة جديدة.'
         :'لا توجد مزامنة نشطة لهذا المصدر.');
       await loadXtream(true);
-    } else if (action === 'probe-live' || action === 'probe-movie') {
-      const mediaType=action==='probe-live'?'live':'movie';
-      writeFeedback('جارٍ فحص رابط '+(mediaType==='live'?'القنوات':'الأفلام')+' من المصدر مباشرة…');
+    } else if (['probe-live','probe-movie','probe-series','probe-episode'].includes(action)) {
+      const mediaType=action.slice('probe-'.length);
+      const labels={live:'قناة',movie:'فيلم',series:'بيانات مسلسل',episode:'حلقة من مسلسل'};
+      writeFeedback('جارٍ فحص '+labels[mediaType]+' من مصدر Xtream مباشرة…');
       const result=await api('/api/v1/admin/xtream/servers/'+item.id+'/probe-playback',{
         method:'POST',body:JSON.stringify({mediaType})
       });
       const checked=Array.isArray(result.checks)?result.checks:[];
+      const codeHint=check=>{
+        const code=String(check.error||'');
+        const status=check.httpStatus||(code.startsWith('xtream_http_')?Number(code.slice(12)):null);
+        if(status===403)return '403: رفض المصدر تشغيل المحتوى أو الوصول للـ API';
+        if(status===401)return '401: بيانات اعتماد المصدر مرفوضة';
+        if(status===404)return '404: الرابط أو المحتوى غير موجود لدى المصدر';
+        if(status===429)return '429: تجاوز حدود اتصال المصدر';
+        if(status>=500)return status+': خلل في سيرفر المصدر';
+        const failures={empty_media:'البث فارغ',timeout:'انتهت مهلة المصدر',
+          no_episode_info:'تفاصيل الحلقات غير متاحة',no_playable_episodes:'لم توجد حلقات قابلة للتشغيل',
+          series_response_invalid:'بيانات المسلسل غير صالحة',series_response_too_large:'حجم معلومات المسلسل كبير',
+          upstream_html_instead_of_video:'المصدر يعيد صفحة بدل الفيديو'};
+        return failures[check.error]||'تعذر التحقق من البث';
+      };
       const summary=checked.map(check=>
-        check.title+' · HTTP '+(check.httpStatus||'تعذر الاتصال')+
-        (check.contentType?' · '+check.contentType:'')+
-        (check.error?' · '+check.error:'')).join(' | ');
+        check.title+' · '+(check.ok?'✓ HTTP '+check.httpStatus:codeHint(check))+
+        (check.episodeCount?' · '+check.episodeCount+' حلقة':'')+
+        (check.seasonCount?' · '+check.seasonCount+' موسمًا':'')).join(' | ');
       const message=result.ok
-        ?'✓ المصدر يرد على طلب تشغيل '+(mediaType==='live'?'قناة':'فيلم')+'. '+summary
-        :'تعذر التأكد من رابط التشغيل. '+(result.reason==='no_imported_items'
-          ?'لا توجد عناصر مستوردة من هذا النوع حتى الآن.':summary);
+        ?'✓ نجح فحص '+labels[mediaType]+'؛ '+summary+
+          ' · نجاح الفحص لا يؤكد استمرار الصوت والصورة.'
+        :'تعذر فحص '+labels[mediaType]+'؛ '+(result.reason==='no_imported_items'
+          ?'لا يوجد محتوى مستورد لهذا النوع حتى الآن. افحص المزامنة.':summary||'المصدر لا يرسل استجابة تشغيل صالحة.');
       writeFeedback(message,result.ok?'ok':'error');
       showMessage(message,result.ok?'success':'error');
     } else if (action === 'test') {

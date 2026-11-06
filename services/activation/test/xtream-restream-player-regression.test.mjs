@@ -48,9 +48,11 @@ test('protected Live and VOD diagnostics check real upstream media and report no
   assert.match(server,/await assertPublicXtreamUrl\(target\.origin\)/);
   assert.match(server,/response\.body\?\.cancel\(\)/);
   assert.match(server,/checks\.push\(\{/);
-  assert.match(web,/action === 'probe-live' \|\| action === 'probe-movie'/);
+  assert.match(web,/\['probe-live','probe-movie','probe-series','probe-episode'\]\.includes\(action\)/);
   assert.match(web,/اختبار بث قناة/);
   assert.match(web,/اختبار تشغيل فيلم/);
+  assert.match(web,/اختبار بيانات مسلسل/);
+  assert.match(web,/اختبار تشغيل حلقة/);
 });
 
 test('huge Xtream playlists obey HTTP backpressure and validate maps before success',async()=>{
