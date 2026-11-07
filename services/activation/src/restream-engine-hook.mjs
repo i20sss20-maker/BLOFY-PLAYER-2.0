@@ -4,6 +4,7 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import {normalizePrivateRestreamOrigin, publicRestreamState} from './restream-engine-core.mjs';
 import {verifyRestreamSmoke} from './restream-smoke.mjs';
+import {DEMO_PREFIX,serveRestreamDemo} from './restream-demo-hls.mjs';
 
 const ENGINE = normalizePrivateRestreamOrigin(process.env.BLOFY_RESTREAM_ENGINE_URL || '');
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
@@ -59,6 +60,14 @@ const previousCreateServer=http.createServer.bind(http);
 http.createServer=function withBlofyRestreamHealth(listener){
   if(typeof listener!=='function')return previousCreateServer(listener);
   return previousCreateServer((req,res)=>{
+    // Synthetic playback only. Every playlist/segment GET independently
+    // authenticates through the existing admin session/Bearer layer.
+    // No customer or third-party media can be requested via this route.
+    if(req.url?.split('?')[0]?.startsWith(DEMO_PREFIX)){
+      if(!authorized(req.headers.authorization))return write(res,401,{ok:false,error:'unauthorized'});
+      void serveRestreamDemo(req,res,{engineUrl:ENGINE});
+      return;
+    }
     if(req.method==='GET'&&req.url?.split('?')[0]==='/api/v1/admin/restream-engine/smoke'){
       if(!authorized(req.headers.authorization))return write(res,401,{ok:false,error:'unauthorized'});
       void runSmoke(res);
