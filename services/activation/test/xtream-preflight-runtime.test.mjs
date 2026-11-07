@@ -14,7 +14,7 @@ async function buildPreflight({movieSucceeds=true,seriesSucceeds=true,twoBands=f
   const body=src.slice(start,end);
   const db={
     query:async(sql,params)=>{
-      if(sql.includes('blofy_xtream_media_quarantine')){
+      if(sql.includes('FROM blofy_xtream_media_quarantine')&&!sql.includes('FROM blofy_xtream_items')){
         assert.equal(params[0],'source-fixture');
         return {rows:quarantinedFirst?
           (params[1]||[]).filter(id=>['404','904'].includes(String(id)))
