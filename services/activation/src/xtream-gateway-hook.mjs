@@ -543,8 +543,8 @@ async function fetchUpstreamApi(row, action, extra = {}) {
     timeoutMs: 45000,
     headers: { accept: 'application/json', 'user-agent': 'BLOFY-Xtream-Gateway/1.0' }
   });
-  // Enforce the 12 MB limit as bytes arrive, not after response.text() has
-  // already buffered an unbounded reply. Reject and release HTTP error bodies.
+  // Enforce the 12 MB limit as bytes arrive rather than after fully
+  // buffering the payload. Reject and release HTTP error bodies.
   return readXtreamGatewayJsonResponse(response);
 }
 
