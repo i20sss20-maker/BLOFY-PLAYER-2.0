@@ -1,0 +1,28 @@
+name: BLOFY STREAM isolated series safety checks
+on:
+  push:
+    branches:
+      - blofy-stream-stable-improvements-20261107
+    paths:
+      - 'services/activation/src/xtream-series-resolver.mjs'
+      - 'services/activation/src/xtream-gateway-hook.mjs'
+      - 'services/activation/test/xtream-series-resolver.test.mjs'
+      - '.github/workflows/blofy-stream-series-safety.yml'
+  workflow_dispatch:
+jobs:
+  episode-mapping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate episode resolver syntax
+        run: |
+          node --check services/activation/src/xtream-series-resolver.mjs
+          node --check services/activation/src/xtream-gateway-hook.mjs
+      - name: Series resolver regression tests
+        run: node --test services/activation/test/xtream-series-resolver.test.mjs
