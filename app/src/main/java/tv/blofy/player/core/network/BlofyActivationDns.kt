@@ -57,7 +57,7 @@ internal object BlofyActivationDns : Dns {
             return system(hostname).takeIf { it.isNotEmpty() } ?: throw UnknownHostException(hostname)
         } catch (error: UnknownHostException) {
             if (hostname != PRIMARY && hostname != RAILWAY) throw error
-            Log.w("BlofyNetwork", "System DNS unavailable for activation origin; trying secure DNS")
+            runCatching { Log.w("BlofyNetwork", "System DNS unavailable for activation origin; trying secure DNS") }
         }
         return try {
             secureFallback(hostname).takeIf { it.isNotEmpty() }
