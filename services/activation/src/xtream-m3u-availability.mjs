@@ -8,7 +8,7 @@ const safeStatus=status=>Number.isInteger(status)&&status>=100&&status<=599?stat
 export async function probeXtreamM3uAvailability({baseUrl,username,password},{
   fetchImpl=fetch,checkPublic=assertPublicXtreamUrl,timeoutMs=8000
 }={}){
-  const url=new URL(normalizeXtreamBaseUrl(baseUrl)+'/get.php');
+  const url=new URL('/get.php',normalizeXtreamBaseUrl(baseUrl));
   url.searchParams.set('username',username);
   url.searchParams.set('password',password);
   url.searchParams.set('type','m3u_plus');
