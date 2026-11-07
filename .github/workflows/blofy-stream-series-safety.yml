@@ -47,5 +47,9 @@ jobs:
           node --check services/activation/web/xtream-gateway-admin.js
           node --check services/activation/src/sources-admin-hook.mjs
       - name: Series and console regression tests
-        run: node --test services/activation/test/xtream-series-resolver.test.mjs services/activation/test/stream-console-ui.test.mjs
-          services/activation/test/stream-operations-regression.test.mjs services/activation/test/xtream-transport-errors.test.mjs
+        run: |
+          node --test \
+            services/activation/test/xtream-series-resolver.test.mjs \
+            services/activation/test/stream-console-ui.test.mjs \
+            services/activation/test/stream-operations-regression.test.mjs \
+            services/activation/test/xtream-transport-errors.test.mjs
