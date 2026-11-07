@@ -49,8 +49,7 @@ class ActivationManager(
             ActivationCheckRequest(
                 deviceId = current.deviceId,
                 activationCode = current.activationCode,
-                appVersion = appVersion,
-                trialScope = DeviceIdentity.trialScope(context)
+                appVersion = appVersion
             )
         )
         if (response.canUse()) rotatePendingCode(api, current)
