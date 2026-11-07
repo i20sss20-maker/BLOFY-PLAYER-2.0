@@ -7,6 +7,10 @@ import retrofit2.HttpException
 import tv.blofy.player.R
 import java.io.IOException
 import java.net.SocketTimeoutException
+import java.net.ConnectException
+import java.net.NoRouteToHostException
+import java.net.ProtocolException
+import java.io.EOFException
 import java.net.UnknownHostException
 import javax.net.ssl.SSLException
 
@@ -26,23 +30,37 @@ internal object PortalRefreshFeedback {
     fun failure(context: Context, error: Throwable): String {
         val safe = error as? PortalRefreshFailure
         val cause = safe?.cause ?: error
-        val http = safe?.httpStatus ?: (cause as? HttpException)?.code()
-        // Emit a credential-free failure category so emulator/TV logs can distinguish
-        // TLS, HTTP, timeout and local deserialization failures hidden by P-AUTH.
-        Log.w("BlofyPortal", "Refresh stage=${safe?.stage ?: "LOCAL"} cause=${cause.javaClass.simpleName} http=${http ?: 0}")
+        // Retrofit/OkHttp can wrap a concrete transport failure. Inspect only
+        // exception classes; never show messages, tokens, full URLs or request bodies.
+        val chain = generateSequence(cause) { current -> current.cause?.takeUnless { it === current } }
+            .take(8).toList()
+        val http = safe?.httpStatus ?: chain.filterIsInstance<HttpException>().firstOrNull()?.code()
+        val detail = when {
+            chain.any { it is UnknownHostException } -> "DNS"
+            chain.any { it is SSLException } -> "TLS"
+            chain.any { it is TimeoutCancellationException || it is SocketTimeoutException } -> "TIMEOUT"
+            http != null -> http.toString()
+            chain.any { it is ConnectException || it is NoRouteToHostException } -> "CONNECT"
+            chain.any { it is ProtocolException || it is EOFException } -> "PROTOCOL"
+            chain.any { it is IOException } -> "NETWORK"
+            else -> "LOCAL"
+        }
+        val stage = safe?.stage?.takeIf { it in setOf("LIST", "SUB", "AUTH", "DATA") } ?: "LOCAL"
+        Log.w("BlofyPortal", "Refresh stage=$stage category=$detail cause=${cause.javaClass.simpleName}")
         val reason = when {
-            cause is TimeoutCancellationException || cause is SocketTimeoutException -> R.string.portal_refresh_timeout
-            cause is SSLException -> R.string.portal_refresh_tls
-            cause is UnknownHostException -> R.string.portal_refresh_dns
+            detail == "TIMEOUT" -> R.string.portal_refresh_timeout
+            detail == "TLS" -> R.string.portal_refresh_tls
+            detail == "DNS" -> R.string.portal_refresh_dns
             http == 401 || http == 403 -> R.string.portal_refresh_identity
             http == 429 -> R.string.portal_refresh_busy
             http != null -> R.string.portal_refresh_service
             safe?.stage == "DATA" -> R.string.portal_refresh_data
+            detail in setOf("NETWORK", "CONNECT", "PROTOCOL") -> R.string.portal_refresh_network
             safe?.stage == "AUTH" -> R.string.portal_refresh_activation
-            cause is IOException -> R.string.portal_refresh_network
             else -> R.string.portal_refresh_local
         }
-        val stage = safe?.stage?.takeIf { it in setOf("LIST", "SUB", "AUTH", "DATA") } ?: "LOCAL"
-        return context.getString(reason) + " [P-" + stage + (http?.let { "-$it" } ?: "") + "]"
+        // Show a stable, useful category *on screen* because Android TV users
+        // cannot access Logcat. Keep old HTTP codes intact for support/testing.
+        return context.getString(reason) + " [P-" + stage + "-" + detail + "]"
     }
 }
