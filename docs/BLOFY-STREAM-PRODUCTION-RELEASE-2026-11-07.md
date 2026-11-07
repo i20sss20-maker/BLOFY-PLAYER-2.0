@@ -70,3 +70,13 @@ This leaves DB/subscribers, independent media engine and domain settings unchang
 - Railway backend stayed online with zero 5xx in the observed 415-request one-hour sample; all four persistent services healthy. The temporary public-asset verifier did not produce conclusive request logs and was deleted. Public asset verification is not claimed for this increment.
 - Still pending: verify a permitted real Xtream feed from production for live, movie and series playback. An upstream network restriction or provider refusal cannot be fixed merely by classifying errors. Do not deploy source workarounds or switch customer playback to MediaMTX until end-to-end testing succeeds.
 - Rollback for this increment: previous commit db4410ebfdf389e8225e411c1c513ddfe38f04ef (prior Railway deployment 9e27de05-22c8-45b0-93df-3d6c105dd4c1; if removed, redeploy pinned commit). Full original stable: 872d1eca1b66d18d7c44ad3a43a90727592aadbb.
+
+
+## Bounded Xtream account reconnection and source-probe accuracy
+- Modified only safe account metadata connectivity: failed non-2xx API bodies now cancel cleanly before returning `xtream_http_<status>`, reducing blocked upstream connections.
+- Source account metadata uses `xtream-api-resilience.mjs`: at most **two** GET attempts total, separated by 450 ms, only on allowlisted transient network failures or HTTP 502/503/504. No retries on HTTP 401, 403, 404, 429, 456, invalid certificates or forbidden private endpoints. Stream playback, episode content and catalog bulk downloads are never retried by this helper.
+- One-click source media samples (live/movie/episode) now preserve categorized transport errors instead of collapsing them into a generic unavailable string.
+- The batch media probe's `issues` filter now selects only sources with recorded errors, and source search includes the source ID.
+- The existing user account and catalog DB schemas, public playback URLs, provider permission checks and media retry count were **not changed**.
+- Regression coverage: `services/activation/test/xtream-api-resilience.test.mjs` plus existing `xtream-transport-errors.test.mjs`. Fourteen focused tests passed in an isolated JavaScript harness against the actual GitHub source; this is not an end-to-end playback test or verification of GitHub Actions.
+- This does not bypass upstream IP restrictions or provider limits. A real permitted source still needs a live/movie/episode playback test from the production Railway network before customer traffic switches to the separate MediaMTX engine.
