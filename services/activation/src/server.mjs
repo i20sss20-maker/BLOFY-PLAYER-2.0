@@ -777,6 +777,22 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && requestUrl.pathname === '/health') return await health(res);
     if (await commercial(req, res, requestUrl)) return;
     if (await cloud(req, res)) return;
+    // Older signed clients attempt a one-time stable-ID migration before checking their
+    // existing activation. Until authenticated migration is available on this server,
+    // explicitly defer it: never rotate identities, create trials or alter entitlements.
+    // A valid legacy ID/code proceeds to the normal activation/check endpoint unchanged.
+    if (req.method === 'POST' && requestUrl.pathname === '/api/v1/device/identity/migrate') {
+      const body = await readJson(req);
+      const deviceId = String(body.deviceId || '').trim();
+      const activationCode = String(body.activationCode || '').trim();
+      const targetDeviceId = String(body.targetDeviceId || '').trim();
+      const targetActivationCode = String(body.targetActivationCode || '').trim();
+      consumeDeviceAuthAttempt(req, deviceId);
+      if (!validIdentity(deviceId, activationCode) || !validIdentity(targetDeviceId, targetActivationCode)) {
+        return json(res, 400, { error: 'invalid_device_identity' });
+      }
+      return json(res, 200, { migrated: false, alreadyStable: false });
+    }
     if (req.method === 'POST' && requestUrl.pathname === '/api/v1/activation/check') return await activationCheck(req, res);
     if (req.method === 'POST' && requestUrl.pathname === '/api/v1/blofy-codes/redeem') return await blofyCodes.redeem(req, res);
     // Operator-only code operations; never reveal raw provider passwords or code proofs.
