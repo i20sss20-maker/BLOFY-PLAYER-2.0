@@ -970,6 +970,9 @@ async function handleM3u(req, res, url) {
   const account = await authenticate(username, password, { touch: true });
   if (!account) return text(res, 401, 'Unauthorized');
   const base = origin(req);
+  // These credentials are identical for every entry in this authorized M3U
+  // export. Encode them once rather than hundreds of thousands of times.
+  const encodedAccount = encodeURIComponent(username)+'/'+encodeURIComponent(password);
   for(const kind of ['live','movie']){
     await ensureCategoryMaps(kind,account.source_id||null);
     await ensureItemMaps(kind,account.source_id||null);
@@ -992,7 +995,7 @@ async function handleM3u(req, res, url) {
       // One write/drain check per entry rather than two: quicker exports
       // without changing M3U order, paths, credentials or authorization.
       await writeStreamChunk(res,`#EXTINF:-1 tvg-name="${name}" tvg-logo="${logo}" group-title="${group}",${name}\n`+
-        `${base}/${kind}/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${row.gateway_id}.${ext}\n`);
+        `${base}/${kind}/${encodedAccount}/${row.gateway_id}.${ext}\n`);
     }, account.source_id||null);
   }
   res.end();
