@@ -1,7 +1,10 @@
 package tv.blofy.player.core.identity
 
 import android.content.Context
+import android.provider.Settings
+import java.security.MessageDigest
 import java.security.SecureRandom
+import java.util.Locale
 
 object DeviceIdentity {
     private const val PREFERENCES = "blofy_device_identity"
@@ -29,6 +32,27 @@ object DeviceIdentity {
                 "Unable to persist the device ID"
             }
         }
+    }
+
+    /**
+     * The trial clock is scoped to a reasonably stable Android ID rather than the
+     * installation-specific pairing code. Never transmit the raw Android ID.
+     * Invalid/shared OEM placeholder IDs cannot claim a new automatic trial.
+     */
+    fun trialScope(context: Context): String? {
+        val androidId = runCatching {
+            Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
+        }.getOrNull()
+        return trialScopeFromAndroidId(context.packageName, androidId)
+    }
+
+    internal fun trialScopeFromAndroidId(packageName: String, rawAndroidId: String?): String? {
+        val androidId = rawAndroidId?.trim()?.lowercase(Locale.ROOT) ?: return null
+        if (!androidId.matches(Regex("[a-f0-9]{16}")) ||
+            androidId == "0000000000000000" || androidId == "9774d56d682e549c") return null
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest("blofy-android-trial-v1:$packageName:$androidId".toByteArray(Charsets.UTF_8))
+        return digest.joinToString("") { "%02x".format(it.toInt() and 0xff) }
     }
 
     @Synchronized
