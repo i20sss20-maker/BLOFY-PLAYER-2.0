@@ -167,9 +167,17 @@ function renderGatewaySourcePicker(){
   gatewaySourceOptions(picker,picker.value);
 }
 
+// Gateway account expirations may be numeric epoch milliseconds or ISO dates.
+// Null/invalid expirations are unlimited; never silently convert them to 30 days.
+function accountExpiryMs(value){
+  if(value==null||value==='')return null;
+  const n=Number(value);
+  const ms=Number.isFinite(n)&&n>0?(n<1e12?n*1000:n):Date.parse(String(value));
+  return Number.isFinite(ms)&&ms>0?ms:null;
+}
 function gatewayAccountFlags(item,now=Date.now()){
-  const expires=Number(item?.expiresAt);
-  const hasExpiry=Number.isFinite(expires)&&expires>0;
+  const expires=accountExpiryMs(item?.expiresAt);
+  const hasExpiry=expires!==null;
   const expired=hasExpiry&&expires<=now;
   const expiring=hasExpiry&&!expired&&expires-now<=7*86400000;
   return {expired,expiring,disabled:!item.enabled};
@@ -286,14 +294,18 @@ function renderGatewayAccounts() {
       finally { remove.disabled = false; }
     });
 
-    const renew=gatewayNode('button', 'button ghost', 'تجديد شهر');
+    const renew=gatewayNode('button', 'button ghost', accountExpiryMs(item.expiresAt)===null?'بدون انتهاء':'تجديد شهر');
     renew.type='button';
+    renew.disabled=accountExpiryMs(item.expiresAt)===null;
+    if(renew.disabled)renew.title='هذا الحساب بدون تاريخ انتهاء، ولا يحتاج لتجديد يغيّر صلاحياته.';
     renew.addEventListener('click',async()=>{
       if(!window.confirm('تجديد اشتراك '+item.username+' لمدة 30 يومًا؟'))return;
       renew.disabled=true;
       try{
         const now=Date.now();
-        const starting=Math.max(now,Number(item.expiresAt)||0);
+        const existingExpiry=accountExpiryMs(item.expiresAt);
+        if(existingExpiry===null)throw new Error('هذا الحساب غير محدد الانتهاء، ولا يحتاج لتجديد.');
+        const starting=Math.max(now,existingExpiry);
         await gatewayApi('/api/v1/admin/xtream-gateway/accounts/'+encodeURIComponent(item.id),{
           method:'PATCH',body:JSON.stringify({expiresAt:new Date(starting+30*24*60*60*1000).toISOString(),enabled:true})
         });
@@ -319,16 +331,13 @@ async function loadGateway() {
     // Summary only; never broadcast usernames, passwords, tokens or account records.
     const now=Date.now();
     const accounts=gatewayState.items;
-    const expiry=item=>{
-      if(item.expiresAt==null||item.expiresAt==='')return null;
-      const num=Number(item.expiresAt);
-      return Number.isFinite(num)?num:Date.parse(String(item.expiresAt));
-    };
+    const expiry=item=>accountExpiryMs(item.expiresAt);
     const accountSnapshot={
       total:accounts.length,
       active:accounts.filter(x=>x.enabled&&(expiry(x)==null||expiry(x)>now)).length,
       expiring:accounts.filter(x=>x.enabled&&expiry(x)!=null&&expiry(x)>now&&expiry(x)-now<=7*86400000).length,
-      expired:accounts.filter(x=>expiry(x)!=null&&expiry(x)<=now).length
+      expired:accounts.filter(x=>expiry(x)!=null&&expiry(x)<=now).length,
+      disabled:accounts.filter(x=>!x.enabled).length
     };
     window.__BLOFY_ACCOUNT_SUMMARY__=accountSnapshot;
     document.dispatchEvent(new CustomEvent('blofy:account-snapshot',{detail:accountSnapshot}));
