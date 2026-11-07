@@ -65,7 +65,18 @@ class ActivationManager(
 
     suspend fun refresh(api: ActivationApi, appVersion: String): ActivationCheckResponse {
         var current = ensureIdentity()
-        current = migrateStableIdentityIfNeeded(api, current)
+        // A stable-ID migration is optional compatibility work, not an entitlement check.
+        // Older activation backends may reject/timeout the migration route. Keep the
+        // previously issued identity and continue the authoritative activation/check.
+        // Never grant access from this fallback: only check() decides eligibility.
+        current = try {
+            migrateStableIdentityIfNeeded(api, current)
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            android.util.Log.w("BlofyActivation", "Identity migration deferred: ${error.javaClass.simpleName}")
+            current
+        }
         // Retry a possibly-committed rotation before checking the old code. The
         // server endpoint is idempotent for this exact old/new pair.
         current = rotatePendingCode(api, current) ?: current
