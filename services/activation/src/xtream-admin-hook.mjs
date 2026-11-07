@@ -1275,11 +1275,11 @@ if(process.env.BLOFY_XTREAM_INDEPENDENT_MEDIA_PROBE_ON_BOOT==='1'){
       if(!row?.enabled)return;
       const creds=decryptCredentials(row);
       const items=(await pool.query(`SELECT source_id FROM blofy_xtream_items
-        WHERE server_id=$1 AND media_type='live' AND enabled=TRUE ORDER BY source_id LIMIT 3`,
+        WHERE server_id=$1 AND media_type='live' AND enabled=TRUE ORDER BY random() LIMIT 3`,
         [id])).rows;
       const checks=[];
       for(const item of items){
-        let status=null,format=null,verified=false;
+        let status=null,format=null,verified=false,providerStatus=null,denialCode=null;
         try{
           const path=['live',encodeURIComponent(creds.username),encodeURIComponent(creds.password),
             encodeURIComponent(String(item.source_id))+'.ts'].join('/');
@@ -1297,16 +1297,35 @@ if(process.env.BLOFY_XTREAM_INDEPENDENT_MEDIA_PROBE_ON_BOOT==='1'){
                 format=result.format;verified=result.valid&&result.format==='ts';
               }
             }finally{await reader.cancel().catch(()=>{});reader.releaseLock();}
-          }else await response.body?.cancel().catch(()=>{});
+          }else{
+            // Only provider HTTP code and an allowlisted diagnostic identifier:
+            // never return/log source URLs, media payload or account data.
+            const buf=await response.text().catch(()=>'');
+            if(buf.length<=350){
+              try{
+                const diag=JSON.parse(buf);
+                if(['relay_provider_unavailable','relay_not_playable_media','relay_issue_invalid']
+                    .includes(diag?.code))denialCode=diag.code;
+                if(Number.isInteger(diag?.upstreamStatus)&&diag.upstreamStatus>=100&&
+                    diag.upstreamStatus<=599)providerStatus=diag.upstreamStatus;
+              }catch{}
+            }
+          }
         }catch{}
-        checks.push({status,format,verified});
+        checks.push({status,format,verified,providerStatus,denialCode});
         if(verified)break;
       }
       console.info('BLOFY_XTREAM_INDEPENDENT_MEDIA_PROOF',JSON.stringify({
         sourceId:id,checked:checks.length,
         mediaTransportVerified:checks.some(x=>x.verified),
         statuses:checks.map(x=>x.status),
+        upstreamStatuses:checks.map(x=>x.providerStatus),
+        denialCodes:checks.map(x=>x.denialCode),
         formats:checks.map(x=>x.format),
+        // The provider's own Xtream metadata, not a legal grant.
+        sourceAllowsRestream:row.account_info?.isRestreamer??null,
+        allowedOutputFormats:Array.isArray(row.account_info?.allowedOutputFormats)
+          ? row.account_info.allowedOutputFormats.filter(v=>['ts','m3u8','rtmp'].includes(v)) : [],
         audioVideoDecoded:false,customerCutover:false,credentialsLogged:false
       }));
     })().catch(()=>{

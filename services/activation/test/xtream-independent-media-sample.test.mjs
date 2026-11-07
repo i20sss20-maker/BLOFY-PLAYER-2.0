@@ -9,7 +9,9 @@ test('independent media sample is opt-in, bounded, confidential and does not cha
  assert.ok(start>0&&end>start);
  const probe=code.slice(start,end);
  assert.match(probe,/shouldUseIndependentXtreamSource\(id\)/);
- assert.match(probe,/ORDER BY source_id LIMIT 3/);
+ assert.match(probe,/ORDER BY random\(\) LIMIT 3/);
+ assert.match(probe,/upstreamStatuses:checks\.map/);
+ assert.match(probe,/denialCodes:checks\.map/);
  assert.match(probe,/issueStreamRelayGrant\(\{sourceUrl:sourceUrl\.href,kind:'live'\}\)/);
  assert.match(probe,/audioVideoDecoded:false/);
  assert.match(probe,/customerCutover:false/);
