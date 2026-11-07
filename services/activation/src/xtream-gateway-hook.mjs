@@ -41,6 +41,7 @@ import { acceptsXtreamGzip } from './xtream-catalog-compression.mjs';
 import { shouldRetryXtreamWithoutRange,firstByteXtreamRange } from './xtream-media-range.mjs';
 import { recordXtreamPlayback,xtreamPlaybackSnapshot } from './xtream-playback-metrics.mjs';
 import { XtreamDenialCooldown } from './xtream-denial-cooldown.mjs';
+import { createGatewayUsageThrottle } from './xtream-gateway-usage-throttle.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
@@ -57,6 +58,7 @@ pool.on('error', error => console.error('xtream gateway database error:', safeEr
 const adminLimiter = createFixedWindowLimiter({ limit: 120, windowMs: 60_000 });
 const publicLimiter = createFixedWindowLimiter({ limit: 1200, windowMs: 60_000 });
 const mediaDenialCooldown = new XtreamDenialCooldown();
+const accountUsageThrottle = createGatewayUsageThrottle();
 let readyPromise;
 
 function json(res, status, body, extra = {}) {
@@ -350,7 +352,9 @@ async function authenticate(usernameInput, passwordInput, { touch = false } = {}
   if (!row || !row.enabled) return null;
   if (row.expires_at && new Date(row.expires_at).getTime() <= Date.now()) return null;
   if (!verifyGatewayCredential(row.password_proof, username, password, KEY_HEX)) return null;
-  if (touch) void pool.query('UPDATE blofy_xtream_gateway_accounts SET last_used_at=NOW() WHERE id=$1', [row.id]).catch(() => {});
+  if (touch && accountUsageThrottle.shouldWrite(row.id))
+    void pool.query('UPDATE blofy_xtream_gateway_accounts SET last_used_at=NOW() WHERE id=$1', [row.id])
+      .catch(() => accountUsageThrottle.forget(row.id));
   return row;
 }
 
@@ -966,6 +970,9 @@ async function handleM3u(req, res, url) {
   const account = await authenticate(username, password, { touch: true });
   if (!account) return text(res, 401, 'Unauthorized');
   const base = origin(req);
+  // These credentials are identical for every entry in this authorized M3U
+  // export. Encode them once rather than hundreds of thousands of times.
+  const encodedAccount = encodeURIComponent(username)+'/'+encodeURIComponent(password);
   for(const kind of ['live','movie']){
     await ensureCategoryMaps(kind,account.source_id||null);
     await ensureItemMaps(kind,account.source_id||null);
@@ -978,14 +985,17 @@ async function handleM3u(req, res, url) {
   await writeStreamChunk(res,'#EXTM3U\n');
   for (const mediaType of ['live','movie']) {
     await walkGatewayItems(mediaType, null, async row => {
-      const item = formatGatewayItem(mediaType, row);
+      // M3U uses only the already-selected source fields; formatting a full
+      // Xtream API object per entry was unused work on huge playlist exports.
       const group = escapeM3uAttribute(row.metadata?.genre || (mediaType === 'live' ? 'Live' : 'Movies'));
       const name = escapeM3uAttribute(row.name);
       const logo = escapeM3uAttribute(row.icon_url || '');
       const ext = mediaType === 'live' ? 'ts' : safeGatewayExtension(row.container_extension, 'mp4');
       const kind = mediaType === 'live' ? 'live' : 'movie';
-      await writeStreamChunk(res,`#EXTINF:-1 tvg-name="${name}" tvg-logo="${logo}" group-title="${group}",${name}\n`);
-      await writeStreamChunk(res,`${base}/${kind}/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${row.gateway_id}.${ext}\n`);
+      // One write/drain check per entry rather than two: quicker exports
+      // without changing M3U order, paths, credentials or authorization.
+      await writeStreamChunk(res,`#EXTINF:-1 tvg-name="${name}" tvg-logo="${logo}" group-title="${group}",${name}\n`+
+        `${base}/${kind}/${encodedAccount}/${row.gateway_id}.${ext}\n`);
     }, account.source_id||null);
   }
   res.end();

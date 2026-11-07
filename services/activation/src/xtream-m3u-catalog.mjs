@@ -17,9 +17,17 @@ export function parseXtreamM3uCatalog(content,{baseUrl,username,password,maxItem
   const origin=new URL(baseUrl).origin;
   const records={live:[],movie:[],series:[]};
   const categories={live:new Map(),movie:new Map(),series:new Map()};
+  // Reuse each category hash instead of repeating SHA-256 for every channel.
+  // IPTV feeds routinely contain tens of thousands of entries sharing a group.
+  const categoryIds=new Map();
   let info=null,accepted=0;
-  for(const raw of playlist.split(/\r?\n/)){
-    const line=raw.trim();
+  // Walk the original text without allocating a second huge array of lines.
+  // This keeps peak memory lower for permitted 48 MiB M3U exports.
+  for(let pos=0;pos<playlist.length;){
+    const newline=playlist.indexOf('\n',pos);
+    const end=newline===-1?playlist.length:newline;
+    const line=playlist.slice(pos,end).trim();
+    pos=newline===-1?playlist.length:newline+1;
     if(line.startsWith('#EXTINF:')){
       const comma=line.indexOf(',');
       info=comma<0?null:{name:title(line.slice(comma+1)),attrs:attributes(line.slice(0,comma))};
@@ -48,8 +56,13 @@ export function parseXtreamM3uCatalog(content,{baseUrl,username,password,maxItem
     // series IDs would break get_series_info. Keep the source's series API authoritative.
     if(kind==='series')continue;
     const category=title(current.attrs['group-title']||'Other').slice(0,300)||'Other';
-    const categoryId=groupId(kind,category);
-    categories[kind].set(categoryId,{sourceCategoryId:categoryId,name:category,parentId:null});
+    const groupKey=kind+'\x00'+category;
+    let categoryId=categoryIds.get(groupKey);
+    if(!categoryId){
+      categoryId=groupId(kind,category);
+      categoryIds.set(groupKey,categoryId);
+      categories[kind].set(categoryId,{sourceCategoryId:categoryId,name:category,parentId:null});
+    }
     records[kind].push({
       sourceId:match[1],categoryId,name:current.name,
       iconUrl:String(current.attrs['tvg-logo']||'').slice(0,2048)||null,
