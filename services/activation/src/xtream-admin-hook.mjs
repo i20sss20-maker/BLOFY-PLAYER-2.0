@@ -775,6 +775,61 @@ if(process.env.BLOFY_XTREAM_ONE_SHOT_DIAGNOSTIC==='1'){
   timer.unref?.();
 }
 
+// Explicit one-time release smoke test, never run during ordinary restarts.
+// Test only the first account API that is reachable and already has indexed
+// content. Read the initial media bytes; DO NOT claim picture/audio playback.
+if(process.env.BLOFY_XTREAM_ONE_SHOT_MEDIA_PROBE==='1'){
+  const timer=setTimeout(()=>{
+    void(async()=>{
+      const sources=(await serverRows()).filter(row=>row.enabled===true);
+      let tested=0;
+      for(const row of sources.slice(0,4)){
+        let reachable=false;
+        try{
+          await fetchAccount(row,{timeoutMs:8000,maxAttempts:1});
+          reachable=true;
+        }catch{}
+        if(!reachable)continue;
+        const counts=row.counts||{};
+        // Never probe unavailable/unindexed kinds or the failed account.
+        const types=[
+          Number(counts.live)>0?'live':null,
+          Number(counts.movie)>0?'movie':null,
+          Number(counts.series)>0?'episode':null
+        ].filter(Boolean);
+        for(const mediaType of types){
+          try{
+            const result=await probeXtreamPlayback(row.id,mediaType);
+            // Logs deliberately exclude provider URLs, titles, stream IDs,
+            // credentials and the contents of any returned media chunk.
+            const checks=Array.isArray(result.checks)?result.checks:[];
+            const first=checks[0]||{};
+            const status=Number(first.httpStatus);
+            const safeCode=typeof first.error==='string'&&
+              /^(?:xtream_[a-z0-9_]+|timeout|empty_media|upstream_unreachable|upstream_non_media_response|upstream_html_instead_of_video|no_episode_info|no_playable_episodes)$/.test(first.error)
+                ?first.error:'none';
+            console.info('BLOFY_REAL_MEDIA_SAMPLE',JSON.stringify({
+              sourceId:row.id,type:mediaType,ok:Boolean(result.ok),
+              httpStatus:Number.isInteger(status)&&status>=100&&status<=599?status:null,
+              code:safeCode,checkCount:checks.length,pictureAndSoundVerified:false
+            }));
+            tested++;
+          }catch(error){
+            console.info('BLOFY_REAL_MEDIA_SAMPLE',JSON.stringify({
+              sourceId:row.id,type:mediaType,ok:false,
+              code:'sample_unavailable',checkCount:0,pictureAndSoundVerified:false
+            }));
+          }
+          await new Promise(resolve=>setTimeout(resolve,650));
+        }
+        break; // Exactly one provider in the pilot.
+      }
+      console.info('BLOFY_REAL_MEDIA_SAMPLE_END',JSON.stringify({tested}));
+    })().catch(()=>console.warn('BLOFY_REAL_MEDIA_SAMPLE_FAILED','unavailable'));
+  },16000);
+  timer.unref?.();
+}
+
 async function testServer(id) {
   const row = await serverById(id);
   if (!row) throw Object.assign(new Error('xtream_server_not_found'), { status: 404 });
