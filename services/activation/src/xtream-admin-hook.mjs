@@ -3,6 +3,7 @@ import { safeErrorSummary } from './diagnostics-sanitizer.mjs';
 import {safeXtreamTransportCategory} from './xtream-transport-errors.mjs';
 import {withXtreamAccountReconnect} from './xtream-api-resilience.mjs';
 import {createXtreamSyncQueue} from './xtream-sync-queue.mjs';
+import {xtreamConnectionReport} from './xtream-smart-connection.mjs';
 import { createFixedWindowLimiter, requestClientKey } from './auth-protection.mjs';
 import {
   assertPublicXtreamUrl,
@@ -696,12 +697,12 @@ async function probeXtreamPlayback(id,mediaType='live') {
       'فحص استجابة HTTP للبث فقط. التأكد من عرض الصورة والصوت يحتاج تشغيلًا فعليًا بالمشغل.'};
 }
 
-async function fetchAccount(row) {
+async function fetchAccount(row,{timeoutMs=20000,maxAttempts=2}={}) {
   const creds = decryptCredentials(row);
   await assertPublicXtreamUrl(row.base_url);
   const response = await withXtreamAccountReconnect(
-    ()=>checkedFetch(xtreamApiUrl(row.base_url,creds.username,creds.password),{timeoutMs:20000}),
-    {describe:redactXtreamError}
+    ()=>checkedFetch(xtreamApiUrl(row.base_url,creds.username,creds.password),{timeoutMs}),
+    {describe:redactXtreamError,maxAttempts}
   );
   const text = await response.text();
   if (Buffer.byteLength(text) > 1_000_000) throw new Error('xtream_account_response_too_large');
@@ -710,6 +711,37 @@ async function fetchAccount(row) {
   const info = sanitizeXtreamAccount(payload);
   if (!info.authenticated) throw Object.assign(new Error('xtream_auth_failed'), { status: 401 });
   return info;
+}
+
+const smartConnectionCooldowns=new Map();
+async function runSmartConnection(id){
+  const row=await serverById(id);
+  if(!row)throw Object.assign(new Error('xtream_server_not_found'),{status:404});
+  if(!row.enabled)throw Object.assign(new Error('xtream_source_paused'),{status:409});
+  // An administrator cannot use the endpoint to continuously poll an upstream.
+  const now=Date.now();
+  const old=smartConnectionCooldowns.get(id)||0;
+  if(now-old<30_000)return {
+    ...xtreamConnectionReport({errorCode:'xtream_connection_unknown',checkedAt:now}),
+    rateLimited:true,
+    title:'تم الفحص مؤخرًا',
+    nextStep:'انتظر 30 ثانية قبل إعادة الفحص حتى لا تضغط على المصدر.'
+  };
+  smartConnectionCooldowns.set(id,now);
+  if(smartConnectionCooldowns.size>512){
+    for(const [key,time] of smartConnectionCooldowns){
+      if(now-time>120_000)smartConnectionCooldowns.delete(key);
+    }
+  }
+  try {
+    // One bounded GET (8 seconds) using the credentials already stored on
+    // this authenticated source. No catalog sync, no media downloads and no
+    // source/subscriber DB mutations.
+    await fetchAccount(row,{timeoutMs:8000,maxAttempts:1});
+    return xtreamConnectionReport({ok:true,checkedAt:Date.now()});
+  }catch(error){
+    return xtreamConnectionReport({errorCode:redactXtreamError(error),checkedAt:Date.now()});
+  }
 }
 
 async function testServer(id) {
@@ -1721,7 +1753,7 @@ http.createServer = function withBlofyXtream(listener) {
         return json(res, 202, { started,queued,skipped });
       }
 
-      const serverMatch = url.pathname.match(/^\/api\/v1\/admin\/xtream\/servers\/([0-9a-f-]+)(?:\/(test|sync|cancel-sync|probe-playback))?$/i);
+      const serverMatch = url.pathname.match(/^\/api\/v1\/admin\/xtream\/servers\/([0-9a-f-]+)(?:\/(test|smart-connection|sync|cancel-sync|probe-playback))?$/i);
       if (serverMatch) {
         const id = serverMatch[1];
         const action = serverMatch[2];
@@ -1734,6 +1766,8 @@ http.createServer = function withBlofyXtream(listener) {
             : { error: 'xtream_server_not_found' });
         }
         if (action === 'test' && req.method === 'POST') return json(res, 200, { item: await testServer(id) });
+        if (action === 'smart-connection' && req.method === 'POST')
+          return json(res,200,{diagnosis:await runSmartConnection(id)});
         if (action === 'probe-playback' && req.method === 'POST') {
           const body=await readJson(req);
           const mediaType=String(body.mediaType||'live');
