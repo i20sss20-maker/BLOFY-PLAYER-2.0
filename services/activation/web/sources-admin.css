@@ -424,3 +424,17 @@
  .studio-pro-subpanel{padding:13px}
  .studio-pro-record{align-items:stretch}
 }
+
+
+/* BLOFY STREAM 2.0 — prominent, factual status on the official admin page */
+.stream-v2-version{font-size:.52em;color:var(--purple2);vertical-align:middle;font-family:"Segoe UI",sans-serif}
+.stream-v2-overview{margin:0 0 21px;border:1px solid #54416b;border-radius:17px;padding:22px;background:linear-gradient(135deg,rgba(115,79,187,.18),rgba(19,16,28,.98) 58%);box-shadow:0 14px 40px rgba(0,0,0,.11)}
+.stream-v2-intro{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.stream-v2-kicker{display:block;color:var(--purple2);font:700 12px Plex,sans-serif;margin:0 0 6px}
+.stream-v2-intro h2{margin:0;font-size:21px;line-height:1.5}
+.stream-v2-intro p{margin:5px 0 0;color:var(--muted);font-size:12px;line-height:1.85;max-width:810px}
+.stream-v2-states{display:grid;grid-template-columns:1.25fr 1fr 1fr;gap:11px;margin-top:17px}
+.stream-v2-states>div{min-width:0;padding:14px;border:1px solid #382d48;border-radius:12px;background:rgba(11,10,18,.53)}
+.stream-v2-states small{display:block;margin-bottom:4px;font-size:11px;color:#a89ab9}
+.stream-v2-states strong{display:block;font-size:12px;font-weight:600;color:#e7ddf5;line-height:1.7;overflow-wrap:anywhere}
+@media(max-width:760px){.stream-v2-intro{align-items:flex-start;flex-direction:column}.stream-v2-states{grid-template-columns:1fr}.stream-v2-overview{padding:16px}.stream-v2-intro h2{font-size:18px}}
