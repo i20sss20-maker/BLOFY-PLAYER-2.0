@@ -702,7 +702,7 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
         {'retry-after':String(rejection.retryAfterSeconds)});
     }
   }
-  let upstream = mediaUpstreamUrl(row, kind, sourceId, mediaExtension);
+  const upstream = mediaUpstreamUrl(row, kind, sourceId, mediaExtension);
   // Optional one-account canary: transfer the data plane to the isolated
   // Railway project. Authentication, catalog restrictions, source selection
   // and subscriber expiry stay checked here first. Disabled by default.
@@ -720,6 +720,7 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
       console.warn('BLOFY_STREAM_RELAY_CANARY_FALLBACK',{kind,reason:'relay_unavailable'});
     }
   }
+  let mediaFetchTarget=upstream;
   // Use independent Railway egress for ONE operator-allowed source and TS
   // only. Keep the original BLOFY Xtream URL, login and response behavior.
   // If the protected service cannot issue a ticket, fall back immediately.
@@ -727,7 +728,7 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
     sourceId:row.server_id,kind,extension:mediaExtension
   })){
     try{
-      upstream=new URL(await issueStreamRelayGrant({sourceUrl:upstream.href,kind}));
+      mediaFetchTarget=new URL(await issueStreamRelayGrant({sourceUrl:upstream.href,kind}));
     }catch{
       console.warn('BLOFY_XTREAM_INDEPENDENT_SOURCE_FALLBACK',{
         kind,sourceId:row.server_id,reason:'relay_ticket_unavailable'});
@@ -756,7 +757,7 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
       try {
         let timer = setTimeout(() => controller.abort(new Error('headers_timeout')), 12000);
         try {
-          response = await checkedFetch(upstream, {
+          response = await checkedFetch(mediaFetchTarget, {
             method: req.method === 'HEAD' ? 'HEAD' : 'GET',
             timeoutMs: 12000, headers, signal: controller.signal
           });
