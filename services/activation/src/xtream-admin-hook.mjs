@@ -6,6 +6,7 @@ import {createXtreamSyncQueue} from './xtream-sync-queue.mjs';
 import {xtreamConnectionReport} from './xtream-smart-connection.mjs';
 import {runXtreamBootDiagnostics} from './xtream-boot-diagnostics.mjs';
 import {observeRailwayEgress,probeXtreamSocket} from './xtream-egress-inspector.mjs';
+import {probeXtreamHttp11} from './xtream-http-compat-probe.mjs';
 import { createFixedWindowLimiter, requestClientKey } from './auth-protection.mjs';
 import {
   assertPublicXtreamUrl,
@@ -745,6 +746,26 @@ async function runSmartConnection(id){
   }catch(error){
     return xtreamConnectionReport({errorCode:redactXtreamError(error),checkedAt:Date.now()});
   }
+}
+
+// One-time transport compatibility experiment for a single saved source.
+// This does NOT modify the production request handler, and must not be used to
+// ignore HTTP 401/403/456 or to impersonate a permitted client identity.
+if(process.env.BLOFY_XTREAM_HTTP11_ONE_SHOT==='1'){
+  const timer=setTimeout(()=>{
+    void(async()=>{
+      const id=String(process.env.BLOFY_XTREAM_EGRESS_SOURCE_ID||'').trim();
+      if(!/^[0-9a-f-]{36}$/i.test(id))return;
+      const row=(await serverRows()).find(item=>item.id===id&&item.enabled===true);
+      if(!row)return;
+      const creds=decryptCredentials(row);
+      const result=await probeXtreamHttp11(xtreamApiUrl(row.base_url,creds.username,creds.password));
+      console.info('BLOFY_XTREAM_HTTP11_COMPARISON',JSON.stringify({
+        sourceId:row.id,...result,contentDownloaded:false,mediaTested:false
+      }));
+    })().catch(()=>console.warn('BLOFY_XTREAM_HTTP11_COMPARISON_FAILED','unavailable'));
+  },16000);
+  timer.unref?.();
 }
 
 // One-time, admin-authorized network diagnosis. This runs from the SAME
