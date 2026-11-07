@@ -18,6 +18,7 @@ import crypto from 'node:crypto';
 import pg from 'pg';
 import { downloadXtreamM3uCatalog } from './xtream-m3u-catalog.mjs';
 import { validateM3uPlaylistUrl, isM3uPlaylistPrefix } from './xtream-m3u-link.mjs';
+import { safeXtreamM3uFailure } from './xtream-m3u-errors.mjs';
 import { scanHybridM3uMedia,collapseHybridM3uMediaBatch } from './xtream-hybrid-m3u.mjs';
 import { distinctXtreamRecords } from './xtream-import-dedup.mjs';
 import { assessXtreamSync } from './xtream-sync-guard.mjs';
@@ -1007,7 +1008,7 @@ async function checkSourceM3u(id){
       response=await fetch(current,{
         method:'GET',redirect:'manual',signal,
         headers:{accept:'audio/x-mpegurl,application/vnd.apple.mpegurl,text/plain,*/*',
-          range:'bytes=0-8191','user-agent':'BLOFY-M3U-Verify/1.0'}
+          'user-agent':'BLOFY-M3U-Verify/1.0'}
       });
       if([301,302,303,307,308].includes(response.status)){
         const location=response.headers.get('location');
@@ -1037,8 +1038,7 @@ async function checkSourceM3u(id){
     }
     throw new Error('xtream_m3u_redirect_invalid');
   }catch(error){
-    const known=/^xtream_m3u_[a-z0-9_]+$/i.test(String(error?.message||''));
-    throw Object.assign(new Error(known?error.message:'xtream_m3u_connection_failed'),{
+    throw Object.assign(new Error(safeXtreamM3uFailure(error)),{
       status:502
     });
   }finally{
@@ -1151,8 +1151,7 @@ async function runHybridM3uIndex(id){
       if(!stale.rowCount)break;
     }
   }catch(error){
-    const reason=/^xtream_m3u_[a-z0-9_]+$/i.test(String(error?.message||''))?
-      error.message:'xtream_m3u_index_unavailable';
+    const reason=safeXtreamM3uFailure(error);
     console.warn('BLOFY M3U hybrid index failed',{sourceId:id,reason});
     await pool.query(`UPDATE blofy_xtream_servers
       SET m3u_index_state=$2::jsonb WHERE id=$1 AND m3u_url_secret=$3

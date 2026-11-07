@@ -93,6 +93,26 @@ function xtreamProviderHintText(value){
   return hints[String(value||'')]||'';
 }
 
+function xtreamM3uErrorText(value){
+  const map={
+    xtream_m3u_dns_failure:'تعذر العثور على عنوان مزود M3U (DNS)',
+    xtream_m3u_connection_refused:'المزود رفض اتصال M3U من Railway',
+    xtream_m3u_connect_timeout:'انتهت مهلة اتصال M3U بالمزود',
+    xtream_m3u_network_unreachable:'مزود M3U خارج نطاق وصول Railway',
+    xtream_m3u_connection_reset:'المزود أغلق اتصال M3U قبل إرسال القائمة',
+    xtream_m3u_tls_failure:'شهادة HTTPS لملف M3U غير صالحة',
+    xtream_m3u_connection_failed:'فشل استقبال القائمة من مزود M3U',
+    xtream_m3u_index_unavailable:'فشل تحميل فهرس M3U من المزود',
+    xtream_m3u_no_same_account_movies_or_episodes:'القائمة لا تتضمن أفلامًا أو حلقات مطابقة للحساب؛ تحقق أنها ليست قنوات فقط',
+    xtream_m3u_invalid_header:'المزود لم يعِد ملف M3U صالحًا',
+    xtream_m3u_http_401:'مزود M3U رفض بيانات الدخول (401)',
+    xtream_m3u_http_403:'مزود M3U رفض الوصول من Railway (403)',
+    xtream_m3u_http_404:'مسار ملف M3U غير موجود لدى المزود (404)',
+    xtream_m3u_http_429:'المزود حدّ عدد الطلبات (429)',
+    xtream_m3u_too_large:'قائمة M3U أكبر من الحد المسموح'
+  };
+  return map[String(value||'')]||'فشل سحب M3U؛ تأكد من حالة مزود المصدر';
+}
 function xtreamSourceErrorText(value){
   const error=String(value||'');
   const transportMessages={
@@ -253,6 +273,9 @@ function serverCard(item) {
       ' · '+Number(item.syncProgress.imported||0).toLocaleString('en-US')+' عنصر حتى الآن'));
   }
   if (item.lastError) info.append(make('span', 'error-text', `تنبيه المصدر: ${xtreamSourceErrorText(item.lastError)}`));
+  if(item.m3uIndex?.status==='failed')
+    info.append(make('span','m3u-index-error error-text',
+      'فهرسة M3U: '+xtreamM3uErrorText(item.m3uIndex?.reason)));
   const feedback=state.sourceFeedback.get(item.id);
   const actionStatus=make('p',feedback?.kind==='error'?'source-action-feedback error':'source-action-feedback',feedback?.text||'');
   actionStatus.setAttribute('role','status');
@@ -273,6 +296,7 @@ function serverCard(item) {
   const m3uIndexBadge=make('span','source-state-pill '+(item.m3uIndexed?'on':'hidden'),
     item.m3uIndexed?'● M3U مفهرس: '+Number(item.m3uIndex?.matched||0).toLocaleString('en-US'):
       item.m3uIndex?.status==='indexing'?'◌ فهرسة M3U: '+Number(item.m3uIndex?.matched||0).toLocaleString('en-US'):
+      item.m3uIndex?.status==='failed'?'⚠ فشلت فهرسة M3U':
       '○ M3U لم يُفهرس');
   m3uIndexBadge.dataset.role='m3uIndexStatus';
   indicators.append(m3uIndexBadge);
@@ -366,6 +390,11 @@ function refreshSourceCard(card, item) {
       if(!error){error=make('span','error-text');info.append(error);}
       error.textContent='تنبيه المصدر: '+xtreamSourceErrorText(item.lastError);
     }else error?.remove();
+    let indexError=info.querySelector('.m3u-index-error');
+    if(item.m3uIndex?.status==='failed'){
+      if(!indexError){indexError=make('span','m3u-index-error error-text');info.append(indexError);}
+      indexError.textContent='فهرسة M3U: '+xtreamM3uErrorText(item.m3uIndex?.reason);
+    }else indexError?.remove();
   }
 }
 
