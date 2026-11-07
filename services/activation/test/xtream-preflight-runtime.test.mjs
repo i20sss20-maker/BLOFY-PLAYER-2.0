@@ -5,7 +5,8 @@ import {readFile} from 'node:fs/promises';
 // Execute the actual production preflightSource implementation with safe fake
 // upstream responses and an isolated in-memory SQL adapter. This catches
 // runtime ReferenceErrors that syntax checks and regex-based tests missed.
-async function buildPreflight({movieSucceeds=true,seriesSucceeds=true,twoBands=false,emptyLast=false,noReplacement=false}={}){
+async function buildPreflight({movieSucceeds=true,seriesSucceeds=true,twoBands=false,emptyLast=false,
+ noReplacement=false,quarantinedFirst=false,replacementUnavailable=false}={}){
   const src=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
   const start=src.indexOf('async function preflightSource(');
   const end=src.indexOf('async function runIssuancePreflight(',start);
@@ -15,7 +16,9 @@ async function buildPreflight({movieSucceeds=true,seriesSucceeds=true,twoBands=f
     query:async(sql,params)=>{
       if(sql.includes('blofy_xtream_media_quarantine')){
         assert.equal(params[0],'source-fixture');
-        return {rows:[]};
+        return {rows:quarantinedFirst?
+          (params[1]||[]).filter(id=>['404','904'].includes(String(id)))
+            .map(id=>({source_id:String(id)})):[]};
       }
       assert.match(sql,/blofy_xtream_items/);
       if(sql.includes('LIMIT 5')){
@@ -36,7 +39,10 @@ async function buildPreflight({movieSucceeds=true,seriesSucceeds=true,twoBands=f
       return {rows:byKind[params[1]]||[]};
     }
   };
-  const data={episodes:{'1':[{id:'404',container_extension:'mkv',episode_num:1}]}};
+  const data={episodes:{'1':[
+    {id:'404',container_extension:'mkv',episode_num:1},
+    ...(quarantinedFirst?[{id:'405',container_extension:'mkv',episode_num:2}]:[])
+  ]}};
   const latestData={episodes:{'1':[{id:'904',container_extension:'mp4',episode_num:1}]}};
   const substitute={episodes:{'1':[{id:'806',container_extension:'mp4',episode_num:1}]}};
   const mocks={
@@ -45,19 +51,24 @@ async function buildPreflight({movieSucceeds=true,seriesSucceeds=true,twoBands=f
       if(action===null)return {user_info:{auth:1}};
       assert.equal(action,'get_series_info');
       if(twoBands&&params.series_id==='903')return emptyLast?{episodes:{}}:latestData;
-      if(params.series_id==='805')return substitute;
+      if(params.series_id==='805'){
+        if(replacementUnavailable)throw new Error('upstream timeout');
+        return substitute;
+      }
       assert.equal(params.series_id,'303');
       return data;
     },
     sanitizeXtreamAccount:x=>({authenticated:x.user_info?.auth===1}),
-    xtreamEpisodePlaybackCandidates:x=>(x?.episodes?.['1']||[]).map(y=>({id:y.id,extension:y.container_extension})),
+    xtreamEpisodePlaybackCandidates:(x,limit)=>(x?.episodes?.['1']||[])
+      .slice(0,limit).map(y=>({id:y.id,extension:y.container_extension})),
     probeIssuanceWithTransientRetry:async(row,kind,id,ext)=>{
       if(kind==='series'){
         const isNewest=twoBands&&row.series_source_id==='903';
         const isReplacement=row.series_source_id==='805';
         assert.equal(row.series_source_id,isReplacement?'805':isNewest?'903':'303');
         assert.equal(row.series_payload,isReplacement?substitute:isNewest?latestData:data);
-        assert.equal(id,isReplacement?'806':isNewest?'904':'404');
+        assert.equal(id,isReplacement?'806':isNewest?'904':
+          quarantinedFirst?'405':'404');
         assert.equal(ext,isReplacement?'mp4':isNewest?'mp4':'mkv');
       }
       if(kind==='movie')return {kind,ok:movieSucceeds,reason:movieSucceeds?null:'upstream_http_404'};
@@ -169,4 +180,26 @@ test('missing all substitute episodes still blocks new user issuance',async()=>{
   assert.equal(report.warnings.length,1);
   assert.ok(report.checks.some(x=>x.reason==='series_sample_unavailable'&&x.ok===false));
   assert.equal(summarizeIssuancePreflight([report]).ready,false);
+});
+
+test('preflight honors an already-quarantined episode and tests the next real one in its series',async()=>{
+  const {summarizeIssuancePreflight}=await import('../src/xtream-issuance-preflight.mjs');
+  const report=await buildPreflight({quarantinedFirst:true});
+  assert.equal(summarizeIssuancePreflight([report]).ready,true,
+    JSON.stringify(report));
+  assert.equal(report.checks.filter(x=>x.kind==='series').length,1);
+  assert.ok(report.warnings.some(w=>w.reason==='confirmed_source_media_404'&&
+    w.episodeSourceId==='404'));
+  assert.ok(report.checks.every(x=>x.ok===true));
+});
+
+test('broken replacement series metadata is bounded instead of reporting eight source failures',async()=>{
+  const {summarizeIssuancePreflight}=await import('../src/xtream-issuance-preflight.mjs');
+  const report=await buildPreflight({twoBands:true,emptyLast:true,
+    noReplacement:false,replacementUnavailable:true});
+  assert.equal(summarizeIssuancePreflight([report]).ready,false);
+  const warnings=report.warnings.filter(w=>w.reason==='series_replacement_unavailable');
+  assert.ok(warnings.length<=2,JSON.stringify(report));
+  assert.equal(report.checks.filter(x=>x.kind==='series'&&x.ok===false).length,1,
+    'report one missing-verified-episodes failure, not a wall of upstream errors');
 });
