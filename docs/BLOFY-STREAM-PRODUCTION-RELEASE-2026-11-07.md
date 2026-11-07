@@ -80,3 +80,12 @@ This leaves DB/subscribers, independent media engine and domain settings unchang
 - The existing user account and catalog DB schemas, public playback URLs, provider permission checks and media retry count were **not changed**.
 - Regression coverage: `services/activation/test/xtream-api-resilience.test.mjs` plus existing `xtream-transport-errors.test.mjs`. Fourteen focused tests passed in an isolated JavaScript harness against the actual GitHub source; this is not an end-to-end playback test or verification of GitHub Actions.
 - This does not bypass upstream IP restrictions or provider limits. A real permitted source still needs a live/movie/episode playback test from the production Railway network before customer traffic switches to the separate MediaMTX engine.
+
+
+## Serial Xtream import operations and recoverable queue (2026-11-07)
+- Root operational risk: the prior /api/v1/admin/xtream/sync-all loop launched all enabled sources concurrently; one large Xtream catalog could hold PostgreSQL connections while multiple sources made upstream requests. Logs around 09:35 UTC still reported a source transport reset. This is not proof of a BLOFY transport-only defect.
+- New process-local xtream-sync-queue.mjs limits bulk catalog imports to one active source and sixteen waiting sources. The queue is FIFO, duplicate-source requests are rejected, failed imports do not block subsequent sources, and queue exhaustion returns HTTP 429 for manual requests. Existing source pause/delete/cancel actions remove queued imports and cancel running imports; no subscriber tables or public media URLs were changed.
+- The operator panel clearly distinguishes "مزامنة جارية" from "في انتظار المزامنة"; active and queued counts are shown separately. A stale database "syncing" state after an interrupted process now has its own operator warning and can be cleared using the existing cancel action rather than being counted as an active job.
+- New regression coverage: services/activation/test/xtream-sync-queue.test.mjs. Nine focused queue tests passed in an independent JavaScript evaluation; no direct real-feed playback assertion has been made.
+- The queue is process-local. Running more than one portal replica requires a shared distributed queue/lease mechanism before parallel replica scaling; this release does not claim distributed safety.
+- Previous known successful production commit for rollback: 5b0faaf8a67aa6aa7153dde5f9521c2f314a5519. No customer traffic was cut over to MediaMTX.
