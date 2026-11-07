@@ -14,7 +14,7 @@ test('private smoke validates real HLS manifest + TS bytes and shares HLS sessio
   const fetchImpl=async (url,options)=>{
     const path=new URL(url).pathname;
     called.push({path,cookie:options.headers.cookie||''});
-    if(path==='/smoke/index.m3u8')
+    if(path==='/smoke/index.m3u8'&&!new URL(url).searchParams.has('session'))
       return new Response(null,{status:302,headers:{location:'/smoke/index.m3u8?session=1','set-cookie':'hls_session=abc123; Path=/smoke; HttpOnly'}});
     if(path==='/smoke/main_stream.m3u8')return new Response(variant);
     if(path==='/smoke/segment0.ts')return new Response(ts,{headers:{'content-type':'video/mp2t'}});
