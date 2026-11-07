@@ -1,0 +1,96 @@
+// BLOFY PLAYER stays the authoritative account, source and catalog control
+// plane. STREAM only receives a 45-second opaque capability over a pinned
+// HTTPS service-to-service origin. Default OFF and allowlisted BY account UUID.
+const HOST='blofy-stream-api-production.up.railway.app';
+const RESOURCE=/^\/relay\/[0-9a-f]{48}$/;
+const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+export function relayConfiguration(env=process.env){
+  const origin=String(env.BLOFY_STREAM_RELAY_ORIGIN||'').trim();
+  const token=String(env.BLOFY_STREAM_RELAY_SHARED_TOKEN||'');
+  const ids=String(env.BLOFY_STREAM_RELAY_CANARY_ACCOUNT_IDS||'')
+    .split(',').map(x=>x.trim().toLowerCase()).filter(x=>UUID.test(x));
+  const valid=origin==='https://'+HOST && token.length>=32;
+  return {origin:valid?origin:'',token:valid?token:'',canaryIds:new Set(ids),
+    enabled:valid&&env.BLOFY_STREAM_RELAY_ENABLED==='1'};
+}
+export function relayEligible({accountId,kind,extension},env=process.env){
+  const cfg=relayConfiguration(env);
+  if(!cfg.enabled||!cfg.canaryIds.has(String(accountId||'').toLowerCase()))return false;
+  if(!['live','movie','series'].includes(kind))return false;
+  // No HLS manifest redirection until every segment has independent auth.
+  if(kind==='live'&&String(extension||'').toLowerCase()!=='ts')return false;
+  return true;
+}
+async function remoteRelayRequest(path,{method='GET',body,env=process.env,
+  fetchImpl=fetch,timeoutMs=6000}={}){
+  const cfg=relayConfiguration(env);
+  if(!cfg.origin)throw new Error('stream_bridge_not_configured');
+  let response;
+  try{
+    response=await fetchImpl(cfg.origin+path,{
+      method,redirect:'manual',signal:AbortSignal.timeout(timeoutMs),
+      headers:{authorization:'Bearer '+cfg.token,accept:'application/json',
+        ...(body?{'content-type':'application/json'}:{})},
+      ...(body?{body:JSON.stringify(body)}:{})
+    });
+  }catch{throw new Error('stream_bridge_unreachable')}
+  if(response.status!==200&&response.status!==201){
+    await response.body?.cancel().catch(()=>{});
+    throw new Error('stream_bridge_denied');
+  }
+  // Safe bounded response parser; never trust arbitrarily large foreign JSON.
+  if(Number(response.headers.get('content-length')||0)>2048){
+    await response.body?.cancel().catch(()=>{});
+    throw new Error('stream_bridge_bad_response');
+  }
+  let size=0,chunks=[],reader=response.body?.getReader(),done=false;
+  if(!reader)throw new Error('stream_bridge_bad_response');
+  try{
+    while(true){
+      const item=await reader.read();
+      if(item.done){done=true;break;}
+      size+=item.value?.byteLength||0;
+      if(size>2048)throw new Error('stream_bridge_bad_response');
+      chunks.push(item.value);
+    }
+    return JSON.parse(Buffer.concat(chunks.map(x=>Buffer.from(x))).toString('utf8'));
+  }catch{throw new Error('stream_bridge_bad_response')}
+  finally{
+    if(!done)await reader.cancel().catch(()=>{});
+    reader.releaseLock();
+  }
+}
+export async function issueStreamRelayGrant({sourceUrl,kind},{
+  env=process.env,fetchImpl=fetch}={}){
+  if(!['live','movie','series'].includes(kind)||typeof sourceUrl!=='string')
+    throw new Error('stream_bridge_invalid_media');
+  const result=await remoteRelayRequest('/internal/relay-grants',{
+    method:'POST',body:{kind,sourceUrl},env,fetchImpl
+  });
+  if(!result?.ok||typeof result.path!=='string'||!RESOURCE.test(result.path)||
+      result.expiresInSeconds!==45)
+    throw new Error('stream_bridge_bad_response');
+  return 'https://'+HOST+result.path;
+}
+export async function checkStreamRelayBridge({env=process.env,fetchImpl=fetch}={}){
+  try{
+    const report=await remoteRelayRequest('/internal/relay-health',{env,fetchImpl});
+    return {ok:report?.ok===true&&report?.relayReady===true&&
+      report?.service==='BLOFY-STREAM'&&report?.role==='media_plane',
+      controlPlane:'BLOFY PLAYER',mediaPlane:'BLOFY STREAM',customerCutover:false};
+  }catch(error){
+    return {ok:false,code:['stream_bridge_not_configured','stream_bridge_denied',
+      'stream_bridge_unreachable','stream_bridge_bad_response'].includes(error.message)
+      ?error.message:'stream_bridge_failed',customerCutover:false};
+  }
+}
+// Probe verifies the secret and HTTPS route. It never requests a real source
+// or performs any customer cutover.
+if(process.env.BLOFY_STREAM_RELAY_PROBE_ON_BOOT==='1'){
+  const timer=setTimeout(()=>{
+    void checkStreamRelayBridge().then(r=>
+      console.info('BLOFY_STREAM_BRIDGE_PROOF',JSON.stringify(r))
+    );
+  },9000);
+  timer.unref?.();
+}
