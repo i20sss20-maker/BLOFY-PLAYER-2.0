@@ -477,7 +477,7 @@ async function probeXtreamEpisodeMedia(source,creds,episode) {
   }catch(error){
     errorCode=controller.signal.aborted?'timeout':
       ['redirect_invalid','xtream_private_host_blocked','xtream_host_unresolved'].includes(String(error?.message||''))
-        ?String(error.message):'upstream_unreachable';
+        ?String(error.message):(safeXtreamTransportCategory(error)||'upstream_unreachable');
   }finally{
     clearTimeout(timeout);
     controller.abort();
@@ -662,7 +662,7 @@ async function probeXtreamPlayback(id,mediaType='live') {
     }catch(error){
       errorCode=controller.signal.aborted?'timeout':
       ['redirect_invalid','xtream_private_host_blocked','xtream_host_unresolved'].includes(String(error?.message||''))
-        ?String(error.message):'upstream_unreachable';
+        ?String(error.message):(safeXtreamTransportCategory(error)||'upstream_unreachable');
     }finally{clearTimeout(timeout);}
     const ok=(httpStatus===200||httpStatus===206)
       && !errorCode && !/text\/html|application\/json|text\/xml/i.test(contentType);
