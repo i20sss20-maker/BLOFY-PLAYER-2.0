@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="/sources-admin.css?v=20261107-stream2-v2">
   <link rel="stylesheet" href="/site-polish.css?v=20261025-lux-final">
   <link rel="stylesheet" href="/stream-console.css?v=20261107-pro-v2">
-  <link rel="stylesheet" href="/stream-premium.css?v=20261107-command-v3">
+  <link rel="stylesheet" href="/stream-premium.css?v=20261107-command-v4">
 </head>
 <body>
   <div class="source-shell">
@@ -41,6 +41,7 @@
           </button>
           <button class="button premium-density" type="button" id="streamDensityToggle" aria-pressed="false" title="تغيير كثافة العرض">عرض مريح</button>
           <button class="button premium-refresh" id="refreshBtn" type="button"><span aria-hidden="true">↻</span> تحديث البيانات</button>
+          <button class="button premium-autorefresh" id="streamAutoRefreshToggle" type="button" aria-pressed="false" title="تحديث إحصائيات الإدارة تلقائيًا كل 90 ثانية دون فحص أو مزامنة المصادر">تحديث تلقائي: متوقف</button>
         </div>
       </header>
 
@@ -162,15 +163,28 @@
             <span class="premium-eyebrow">SUBSCRIBER MANAGEMENT</span>
             <h3 id="premiumSubscribersTitle">متابعة اشتراكات Xtream</h3>
             <p>تتحدث من الحسابات المسجلة في بوابة BLOFY. لا تشمل اشتراكات التطبيق المستقلة.</p>
+            <p class="premium-subscription-alert" id="premiumSubscriptionsNotice" role="status">جارٍ فحص حالة اشتراكات Xtream...</p>
           </div>
           <div class="premium-subscriber-metrics">
             <div><strong id="premiumAccountsActive">—</strong><span>نشطة</span></div>
             <div><strong id="premiumAccountsExpiring">—</strong><span>تنتهي خلال 7 أيام</span></div>
             <div><strong id="premiumAccountsExpired">—</strong><span>منتهية</span></div>
+            <div><strong id="premiumAccountsDisabled">—</strong><span>موقوفة</span></div>
           </div>
           <button type="button" class="premium-subscriber-action" data-open-workspace="accounts">إدارة الحسابات <span aria-hidden="true">←</span></button>
         </section>
 
+        <section class="premium-actionable-issues" id="premiumActionableIssues" aria-labelledby="premiumActionableTitle" hidden>
+          <div>
+            <span class="premium-eyebrow">ACTION REQUIRED</span>
+            <h3 id="premiumActionableTitle">عمليات تحتاج انتباهك</h3>
+            <p id="premiumActionableText">جارٍ تحليل البيانات...</p>
+          </div>
+          <div class="premium-actionable-buttons">
+            <button type="button" id="premiumReviewExpiring" class="button ghost" hidden>الاشتراكات القريبة من الانتهاء</button>
+            <button type="button" id="premiumReviewSources" class="button ghost" hidden>المصادر التي بها أخطاء</button>
+          </div>
+        </section>
         <section class="console-start-guide" aria-labelledby="consoleGuideTitle">
           <div><span class="console-kicker">خطوات العمل</span><h2 id="consoleGuideTitle">من المصدر إلى المشترك</h2></div>
           <ol><li><strong>أضف المصدر</strong><span>أدخل بيانات Xtream المصرح بها.</span></li><li><strong>افحص وحدث المحتوى</strong><span>تأكد من الاتصال والتشغيل قبل النشر.</span></li><li><strong>أنشئ اشتراكًا</strong><span>أصدر بيانات BLOFY للمشترك.</span></li></ol>
@@ -662,6 +676,6 @@
   <script src="/sources-admin.js?v=20261107-premium-v1" defer></script>
   <script src="/blofy-studio-pro.js?v=20261106-pro-v1" defer></script>
   <script src="/xtream-gateway-admin.js?v=20261106-account-visibility-v2" defer></script>
-  <script src="/stream-premium.js?v=20261107-command-v1" defer></script>
+  <script src="/stream-premium.js?v=20261107-command-v2" defer></script>
 </body>
 </html>
