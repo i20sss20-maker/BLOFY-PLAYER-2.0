@@ -364,6 +364,7 @@ function gatewayPreflightReason(reason){
     source_catalog_empty:'لا توجد عناصر مفعلة في هذا المصدر',
     catalog_unavailable:'تعذر قراءة المكتبة',
     series_has_no_episodes:'المسلسل المختار لا يحتوي حلقات',
+    series_sample_unavailable:'تعذر العثور على عينات حلقات بديلة قابلة للاختبار',
     media_unverified:'لم تصل بيانات فيديو موثوقة',
     upstream_non_media_response:'المصدر أرسل صفحة بدلاً من فيديو',
     upstream_empty_media:'الفيديو فارغ',
@@ -394,6 +395,12 @@ function renderGatewayPreflight(data,scope){
   for(const source of data.sources||[]){
     const card=gatewayNode('article','');
     card.append(gatewayNode('strong','',source.name||'Xtream'));
+    for(const warning of source.warnings||[]){
+      const id=warning.seriesSourceId?' · معرّف المسلسل '+warning.seriesSourceId:'';
+      card.append(gatewayNode('small','warning',
+        '⚠ '+gatewayPreflightReason(warning.reason)+id+
+        ' · هذا العنصر وحده لم يحتسب اختبار تشغيل؛ يتم فحص مسلسل بديل.'));
+    }
     for(const check of source.checks||[]){
       const band=check.sampleBand==='low_id'?' · أول معرّف بالمكتبة':
         check.sampleBand==='high_id'?' · آخر معرّف بالمكتبة':'';
