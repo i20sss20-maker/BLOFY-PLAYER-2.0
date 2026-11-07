@@ -356,6 +356,8 @@ async function loadGateway() {
   }
 }
 
+// Auto refresh is read-only. Do not sync providers or mutate any subscription.
+document.addEventListener('blofy:refresh-accounts',()=>{void loadGateway();});
 gx('gatewayAccountSearch')?.addEventListener('input',renderGatewayAccounts);
 gx('gatewayAccountFilter')?.addEventListener('change',renderGatewayAccounts);
 
