@@ -42,3 +42,18 @@ export function shouldRetryIssuanceMedia({reason,httpStatus},remainingMs){
     reason==='upstream_http_5xx'||[408,500,502,503,504].includes(status);
   return transient&&Number.isFinite(remainingMs)&&remainingMs>=3500;
 }
+
+/**
+ * Retry transient failures of the source account endpoint once. Never retry
+ * an explicit authentication denial, provider media 404, 429 rate limit,
+ * source validation error or invalid JSON. No request is allowed to extend
+ * the original pre-issuance deadline.
+ */
+export function shouldRetryXtreamAccountPreflight(error,remainingMs){
+  if(!Number.isFinite(remainingMs)||remainingMs<7500)return false;
+  const code=String(error?.message||'');
+  const type=String(error?.name||'');
+  return code==='fetch failed'||
+    type==='TimeoutError'||type==='AbortError'||
+    /^xtream_gateway_upstream_(408|500|502|503|504)$/.test(code);
+}

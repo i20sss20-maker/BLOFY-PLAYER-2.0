@@ -45,7 +45,7 @@ import { authoritativeXtreamMediaCandidates, providerHasExactXtreamMediaItem } f
 import { parseHybridM3uMediaUrl, verifiedHybridRow } from './xtream-hybrid-m3u.mjs';
 import {canQuarantineXtreamMedia,MEDIA_QUARANTINE_HOURS,MEDIA_QUARANTINE_REASON,quarantineMediaWarning} from './xtream-media-quarantine.mjs';
 import { xtreamEpisodePlaybackCandidates } from './xtream-series-probe.mjs';
-import { MAX_ISSUANCE_SOURCES, PREFLIGHT_TTL_MS, issuanceErrorReason, summarizeIssuancePreflight, shouldRetryIssuanceMedia } from './xtream-issuance-preflight.mjs';
+import { MAX_ISSUANCE_SOURCES, PREFLIGHT_TTL_MS, issuanceErrorReason, summarizeIssuancePreflight, shouldRetryIssuanceMedia, shouldRetryXtreamAccountPreflight } from './xtream-issuance-preflight.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
@@ -511,20 +511,37 @@ async function quarantineConfirmedMissingMedia(row,kind,id,probe){
 async function preflightSource(row,deadline){
   const checks=[];
   const result={sourceId:row.id,name:String(row.name||'Xtream').slice(0,90),checks,warnings:[]};
-  try{
-    const timeoutMs=Math.min(6000,Math.max(1000,deadline-Date.now()));
-    if(timeoutMs<=1000){checks.push({kind:'account',ok:false,reason:'preflight_time_budget'});return result;}
-    const account=await fetchUpstreamApi(row,null,{},{
-      timeoutMs,maxBytes:200_000
-    });
-    if(!sanitizeXtreamAccount(account).authenticated){
-      checks.push({kind:'account',ok:false,reason:'source_auth_denied'});
+  // Xtream source APIs can momentarily drop a TCP request even while the
+  // rest of the library and the other connected source are healthy. Retrying
+  // this one lightweight account check once is safe; never retry a 401/403/
+  // 456 denial, 404, 429 rate limit or invalid provider credentials.
+  for(let attempt=1;attempt<=2;attempt++){
+    const remaining=deadline-Date.now();
+    const timeoutMs=Math.min(attempt===1?4500:6000,remaining-1500);
+    if(timeoutMs<1000){
+      checks.push({kind:'account',ok:false,reason:'preflight_time_budget',
+        attempts:attempt-1});
       return result;
     }
-    checks.push({kind:'account',ok:true});
-  }catch(error){
-    checks.push({kind:'account',ok:false,reason:issuanceErrorReason(error?.message)});
-    return result;
+    try{
+      const account=await fetchUpstreamApi(row,null,{},{timeoutMs,maxBytes:200_000});
+      if(!sanitizeXtreamAccount(account).authenticated){
+        checks.push({kind:'account',ok:false,reason:'source_auth_denied',
+          attempts:attempt});
+        return result;
+      }
+      checks.push({kind:'account',ok:true,attempts:attempt,
+        ...(attempt===2?{recoveredAfterRetry:true}:{})});
+      break;
+    }catch(error){
+      if(attempt===1&&shouldRetryXtreamAccountPreflight(error,deadline-Date.now())){
+        await new Promise(resolve=>setTimeout(resolve,250));
+        continue;
+      }
+      checks.push({kind:'account',ok:false,
+        reason:issuanceErrorReason(error?.message),attempts:attempt});
+      return result;
+    }
   }
   let found=0;
   for(const kind of ['live','movie','series']){

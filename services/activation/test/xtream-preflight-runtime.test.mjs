@@ -1,12 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
+import {shouldRetryXtreamAccountPreflight} from '../src/xtream-issuance-preflight.mjs';
 
 // Execute the actual production preflightSource implementation with safe fake
 // upstream responses and an isolated in-memory SQL adapter. This catches
 // runtime ReferenceErrors that syntax checks and regex-based tests missed.
 async function buildPreflight({movieSucceeds=true,seriesSucceeds=true,twoBands=false,emptyLast=false,
- noReplacement=false,quarantinedFirst=false,replacementUnavailable=false}={}){
+ noReplacement=false,quarantinedFirst=false,replacementUnavailable=false,
+ accountFailure=null}={}){
   const src=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
   const start=src.indexOf('async function preflightSource(');
   const end=src.indexOf('async function runIssuancePreflight(',start);
@@ -50,10 +52,22 @@ async function buildPreflight({movieSucceeds=true,seriesSucceeds=true,twoBands=f
   ]}};
   const latestData={episodes:{'1':[{id:'904',container_extension:'mp4',episode_num:1}]}};
   const substitute={episodes:{'1':[{id:'806',container_extension:'mp4',episode_num:1}]}};
+  let accountAttempts=0;
   const mocks={
     pool:db,
     fetchUpstreamApi:async(row,action,params)=>{
-      if(action===null)return {user_info:{auth:1}};
+      if(action===null){
+        accountAttempts++;
+        if(accountFailure==='once'&&accountAttempts===1)
+          throw new Error('fetch failed');
+        if(accountFailure==='always')
+          throw new Error('fetch failed');
+        if(accountFailure==='auth-denied')
+          throw new Error('xtream_gateway_upstream_403');
+        if(accountFailure==='invalid-account')
+          return {user_info:{auth:0}};
+        return {user_info:{auth:1}};
+      }
       assert.equal(action,'get_series_info');
       if(twoBands&&params.series_id==='903')return emptyLast?{episodes:{}}:latestData;
       if(params.series_id==='805'){
@@ -84,6 +98,7 @@ async function buildPreflight({movieSucceeds=true,seriesSucceeds=true,twoBands=f
     diagnosticXtreamItemId:id=>/^[A-Za-z0-9._-]{1,128}$/.test(String(id))?String(id):null,
     quarantineConfirmedMissingMedia:async()=>false,
     issuanceErrorReason:()=> 'source_unreachable',
+    shouldRetryXtreamAccountPreflight,
     quarantineConfirmedMissingMedia:async()=>false,
     quarantineMediaWarning:(kind,id,{seriesId})=>({
       reason:'confirmed_source_media_404',kind,
@@ -207,4 +222,33 @@ test('broken replacement series metadata is bounded instead of reporting eight s
   assert.ok(warnings.length<=2,JSON.stringify(report));
   assert.equal(report.checks.filter(x=>x.kind==='series'&&x.ok===false).length,1,
     'report one missing-verified-episodes failure, not a wall of upstream errors');
+});
+
+test('one short Xtream account connection failure recovers on the second authenticated request',async()=>{
+  const report=await buildPreflight({accountFailure:'once'});
+  assert.equal(report.checks[0].kind,'account');
+  assert.equal(report.checks[0].ok,true);
+  assert.equal(report.checks[0].attempts,2);
+  assert.equal(report.checks[0].recoveredAfterRetry,true);
+  assert.ok(report.checks.filter(x=>['live','movie','series'].includes(x.kind))
+    .every(x=>x.ok===true),JSON.stringify(report.checks));
+});
+
+test('persistent connection failures block issuance after exactly two short attempts',async()=>{
+  const {summarizeIssuancePreflight}=await import('../src/xtream-issuance-preflight.mjs');
+  const report=await buildPreflight({accountFailure:'always'});
+  assert.equal(report.checks.length,1);
+  assert.deepEqual(report.checks[0],{
+    kind:'account',ok:false,reason:'source_unreachable',attempts:2
+  });
+  assert.equal(summarizeIssuancePreflight([report]).ready,false);
+});
+
+test('explicit 403 and denied source credentials must not be retried',async()=>{
+  for(const state of ['auth-denied','invalid-account']){
+    const report=await buildPreflight({accountFailure:state});
+    assert.equal(report.checks.length,1);
+    assert.equal(report.checks[0].ok,false);
+    assert.equal(report.checks[0].attempts,1);
+  }
 });

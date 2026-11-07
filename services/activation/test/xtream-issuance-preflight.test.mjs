@@ -5,6 +5,7 @@ import {
   summarizeIssuancePreflight,
   issuanceErrorReason,
   shouldRetryIssuanceMedia,
+  shouldRetryXtreamAccountPreflight,
   MAX_ISSUANCE_SOURCES,
   PREFLIGHT_TTL_MS
 } from '../src/xtream-issuance-preflight.mjs';
@@ -77,7 +78,7 @@ test('admin user issuance cannot skip a failed test with an offline confirmation
   assert.match(js,/gx\('gatewaySourceId'\)\?\.addEventListener\('change',clearGatewayPreflight\)/);
   assert.doesNotMatch(js,/المصدر المختار غير متصل حاليًا.*window\.confirm/);
   assert.match(js,/if\(!gatewayPreflightReady\(\)\)/);
-  assert.match(html,/xtream-gateway-admin\.js\?v=20261107-bounded-samples-v7/);
+  assert.match(html,/xtream-gateway-admin\.js\?v=20261107-auth-retry-v8/);
 });
 
 test('preflight selects the source server ID used as encryption associated data',async()=>{
@@ -106,4 +107,26 @@ test('temporary network errors retry once; provider 404, 403 and 456 never retry
     ['media_unverified',200]
   ])assert.equal(shouldRetryIssuanceMedia({reason,httpStatus},8000),false,reason);
   assert.equal(shouldRetryIssuanceMedia({reason:'timeout'},3300),false);
+});
+
+test('source auth retries only transport and 5xx while keeping 404/456 and rate limit strict',()=>{
+  const transient=['fetch failed','xtream_gateway_upstream_408',
+    'xtream_gateway_upstream_500','xtream_gateway_upstream_502',
+    'xtream_gateway_upstream_503','xtream_gateway_upstream_504'];
+  for(const message of transient)
+    assert.equal(shouldRetryXtreamAccountPreflight(new Error(message),12000),
+      true,message);
+  for(const error of [
+    Object.assign(new Error('timed out'),{name:'TimeoutError'}),
+    Object.assign(new Error('aborted'),{name:'AbortError'})
+  ])assert.equal(shouldRetryXtreamAccountPreflight(error,12000),true);
+  for(const message of ['xtream_gateway_upstream_401',
+    'xtream_gateway_upstream_403','xtream_gateway_upstream_404',
+    'xtream_gateway_upstream_429','xtream_gateway_upstream_456',
+    'xtream_gateway_upstream_json_invalid','xtream_private_host_blocked',
+    'xtream_secret_decryption_failed'])
+    assert.equal(shouldRetryXtreamAccountPreflight(new Error(message),12000),
+      false,message);
+  assert.equal(shouldRetryXtreamAccountPreflight(new Error('fetch failed'),2500),
+    false,'Never extend the overall issuance deadline for retries');
 });
