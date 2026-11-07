@@ -131,6 +131,21 @@
     action.textContent='فتح المصدر';action.addEventListener('click',()=>focusSource(source));
     li.append(inner,action);return li;
   }
+  const SOURCE_ISSUE_LABELS=Object.freeze({
+    xtream_transport_dns_failed:'تعذر DNS · تحقق من اسم المصدر',
+    xtream_transport_connection_refused:'اتصال مرفوض · راجع منفذ المصدر',
+    xtream_transport_connection_reset:'اتصال منقطع · المصدر قطع الطلب',
+    xtream_transport_timeout:'مهلة اتصال · المصدر لم يستجب',
+    xtream_transport_tls_invalid:'شهادة HTTPS تحتاج تصحيحًا',
+    xtream_transport_unreachable:'تعذر الوصول من Railway إلى المصدر',
+    xtream_http_401:'رفض مصادقة المصدر 401',
+    xtream_http_403:'المصدر رفض الوصول 403',
+    xtream_http_404:'مسار المصدر غير متاح 404',
+    xtream_http_456:'المزود رفض الطلب 456',
+    xtream_catalog_empty_preserved:'قائمة فارغة · المكتبة السابقة محفوظة',
+    xtream_catalog_suspicious_drop_preserved:'قائمة ناقصة · منع حذف المكتبة'
+  });
+
   function renderAlerts(sources){
     const list=byId('premiumSourceAlerts');
     if(!list)return;
@@ -150,7 +165,7 @@
     }else{
       const attention=[...problems.slice(0,3),...untested.slice(0,Math.max(0,3-problems.length))];
       for(const source of attention){
-        const text=source.issue?'آخر اتصال أو مزامنة يحتاج مراجعة':'المصدر لم يخضع لاختبار اتصال مسجل';
+        const text=source.issue?(SOURCE_ISSUE_LABELS[source.issueCode]||'آخر اتصال أو مزامنة يحتاج مراجعة'):'المصدر لم يخضع لاختبار اتصال مسجل';
         list.append(makeAlert(text,source));
       }
       elementText('premiumIssueHeadline',fmt(problems.length)+' مصدر بأخطاء · '+fmt(untested.length)+' غير مفحوص');
@@ -250,7 +265,8 @@
       sources:data.sources.map(s=>({
         id:String(s.id||''),name:String(s.name||'مصدر').slice(0,120),
         enabled:Boolean(s.enabled),published:Boolean(s.published),issue:Boolean(s.issue),
-        syncing:Boolean(s.syncing),tested:Boolean(s.tested)
+        syncing:Boolean(s.syncing),tested:Boolean(s.tested),
+        issueCode:Object.hasOwn(SOURCE_ISSUE_LABELS,String(s.issueCode||''))?String(s.issueCode):''
       })),
       totals:{
         live:number(data.totals.live),movie:number(data.totals.movie),
