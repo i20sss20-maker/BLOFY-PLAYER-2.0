@@ -53,6 +53,16 @@ test('admin denial cannot be mistaken for a media success',async()=>{
   assert.equal(report.mediaVerified,false);
 });
 
+test('internal HLS failures are categorized without echoing private error bodies',async()=>{
+  const report=await checkDemoProxy({adminToken:'token',fetchImpl:async()=>new Response(
+    JSON.stringify({ok:false,code:'restream_demo_playlist_failed',secret:'do-not-log'}),
+    {status:503,headers:{'content-type':'application/json'}})});
+  assert.equal(report.ok,false);
+  assert.equal(report.httpStatus,503);
+  assert.equal(report.proxyCode,'restream_demo_playlist_failed');
+  assert.doesNotMatch(JSON.stringify(report),/do-not-log|PRIVATE_TOKEN/);
+});
+
 test('fixed loopback origin rejects invalid or privileged ports; no client origin accepted',()=>{
   assert.equal(demoProxyLoopbackOrigin(3000),'http://127.0.0.1:3000');
   for(const port of [0,1,22,-1,65536,80.3,'not-a-number']){
