@@ -293,3 +293,35 @@ body {
 .premium-diagnostics-cards p{font-size:11px;color:#a9b4c9;line-height:1.85;margin:0}
 .premium-command-empty{padding:23px 15px;text-align:center;font-size:12px;color:#9da9c2}
 @media(max-width:720px){.premium-diagnostics-cards{grid-template-columns:1fr}}
+
+/* Subscriber operations: verified account data from existing protected gateway API. */
+.console-summary{grid-template-columns:repeat(5,minmax(0,1fr))}
+.premium-subscriber-strip{
+ margin:16px 0 20px;padding:21px 24px;display:grid;
+ grid-template-columns:minmax(0,1.2fr) minmax(275px,1fr) auto;
+ gap:20px;align-items:center;border:1px solid #444366;border-radius:18px;
+ background:radial-gradient(ellipse 44% 90% at 85% 0%,rgba(120,107,216,.14),transparent 85%),
+ linear-gradient(112deg,#1b1f35,#131926);
+}
+.premium-subscriber-lead h3{font-size:18px;margin:4px 0}
+.premium-subscriber-lead p{font-size:10px;color:#9faac0;line-height:1.8;margin:0}
+.premium-subscriber-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.premium-subscriber-metrics>div{padding:10px 12px;border-right:1px solid #3d425d;min-width:0}
+.premium-subscriber-metrics strong{font:750 25px "Segoe UI",sans-serif;display:block;color:#f3f0ff}
+.premium-subscriber-metrics>div:nth-child(2) strong{color:#f4c797}
+.premium-subscriber-metrics>div:nth-child(3) strong{color:#f2a7b3}
+.premium-subscriber-metrics span{display:block;font-size:10px;line-height:1.7;color:#a2adc5;white-space:nowrap}
+.premium-subscriber-action{border:1px solid #7f74b8;background:#312d4f;border-radius:10px;color:#e8e0ff;cursor:pointer;padding:12px 15px;font:700 11px Plex,sans-serif;white-space:nowrap}
+.premium-subscriber-action:hover{background:#4a3d73;border-color:#b2a4ec}
+.premium-subscriber-action span{padding-right:5px}
+@media(max-width:1220px){
+ .console-summary{grid-template-columns:repeat(3,minmax(0,1fr))}
+ .premium-subscriber-strip{grid-template-columns:minmax(0,1fr) minmax(275px,1.1fr)}
+ .premium-subscriber-action{grid-column:1/-1;justify-self:start}
+}
+@media(max-width:760px){
+ .console-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .premium-subscriber-strip{grid-template-columns:1fr;gap:16px;padding:19px}
+ .premium-subscriber-metrics>div{padding:9px 11px}
+ .premium-subscriber-action{grid-column:auto;width:100%}
+}
