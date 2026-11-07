@@ -66,7 +66,9 @@ test('source admin only categorizes network failures without retrying denied cre
  ]);
  assert.match(admin,/safeXtreamTransportCategory\(error\)/);
  assert.match(admin,/await response\.body\?\.cancel\(\)/);
- assert.match(admin,/if \(!response\.ok\) throw new Error\(`xtream_http_\$\{response\.status\}\`\)/);
+ assert.ok(admin.includes('if (!response.ok) {'));
+ assert.ok(admin.includes('await response.body?.cancel().catch(()=>{});'));
+ assert.ok(admin.includes('throw new Error(`xtream_http_${status}`)'));
  assert.match(gateway,/const networkReason=safeXtreamTransportCategory\(error\)/);
  assert.match(gateway,/return text\(res, 502, 'Upstream unavailable'\)/);
  for(const phrase of ['xtream_transport_dns_failed','xtream_transport_connection_reset',
