@@ -92,7 +92,7 @@ test('index and player never replace original Xtream catalog or bypass preflight
   assert.match(gateway,/verifiedHybridM3uFallback\(row,'series',sourceId/);
   assert.match(native,/securedForm\(id,'index-m3u'/);
   assert.match(session,/test-m3u\|index-m3u\|probe-live/);
-  assert.match(html,/sources-admin\.js\?v=20261107-hybrid-index-v2/);
+  assert.match(html,/sources-admin\.js\?v=20261107-transport-evidence-v3/);
   assert.doesNotMatch(admin.slice(admin.indexOf('async function runHybridM3uIndex('),
     admin.indexOf('async function createServer(')),/DELETE FROM blofy_xtream_items/);
 });
