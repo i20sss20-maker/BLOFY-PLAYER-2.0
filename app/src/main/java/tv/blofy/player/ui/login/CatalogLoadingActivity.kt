@@ -19,11 +19,15 @@ import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.Job
+import androidx.activity.addCallback
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.data.CatalogSyncState
+import tv.blofy.player.data.CatalogSyncFailureMessage
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.PlaylistSyncPolicy
 import tv.blofy.player.data.PlaylistSyncProgress
@@ -49,6 +53,8 @@ class CatalogLoadingActivity : AppCompatActivity() {
     private lateinit var backButton: Button
     private var currentProviderId: String = ""
     private var lastPercent = 0
+    private var hasSavedLibrary = false
+    private var syncJob: Job? = null
     private val isPhone by lazy { DeviceClass.detect(this) == DeviceClass.Kind.PHONE }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -60,7 +66,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
             fail("تعذر تحديد قائمة التشغيل")
             return
         }
-        CatalogSyncState.markPending(applicationContext, currentProviderId)
+        onBackPressedDispatcher.addCallback(this) { leaveSync() }
         startSync()
     }
 
@@ -168,11 +174,8 @@ class CatalogLoadingActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
             visibility = android.view.View.GONE
         }
-        retryButton = recoveryButton("↻  إعادة المحاولة") {
-            recoveryActions.visibility = android.view.View.GONE
-            startSync()
-        }
-        backButton = recoveryButton("رجوع") { finish() }
+        retryButton = recoveryButton("↻  إعادة المحاولة") { startSync() }
+        backButton = recoveryButton("إلغاء التحديث") { leaveSync() }
         recoveryActions.addView(retryButton, LinearLayout.LayoutParams(0, dp(56), 1f).apply { marginStart = dp(8) })
         recoveryActions.addView(backButton, LinearLayout.LayoutParams(0, dp(56), 1f))
         panel.addView(recoveryActions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(64)).apply { topMargin = dp(12) })
@@ -223,12 +226,22 @@ class CatalogLoadingActivity : AppCompatActivity() {
     }
 
     private fun startSync() {
+        if (syncJob?.isActive == true) return
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         lastPercent = 0
         render(0, "جاري الاتصال بالخادم...")
-        recoveryContainer()?.visibility = android.view.View.GONE
+        retryButton.visibility = android.view.View.GONE
+        backButton.text = "إلغاء التحديث"
+        recoveryContainer()?.visibility = android.view.View.VISIBLE
         CatalogSyncState.markPending(applicationContext, currentProviderId)
-        lifecycleScope.launch { sync(currentProviderId) }
+        syncJob = lifecycleScope.launch { sync(currentProviderId) }
+    }
+
+    private fun leaveSync() {
+        syncJob?.cancel()
+        CatalogSyncState.markFailed(applicationContext, currentProviderId)
+        if (hasSavedLibrary) startActivity(Intent(this, HomeActivity::class.java))
+        finish()
     }
 
     private fun recoveryContainer(): LinearLayout? =
@@ -240,6 +253,8 @@ class CatalogLoadingActivity : AppCompatActivity() {
             ?: return fail("قائمة التشغيل غير موجودة")
 
         val firstLoad = withContext(Dispatchers.IO) { !dao.hasStreamsForProvider(providerId) }
+        hasSavedLibrary = !firstLoad
+        backButton.text = if (hasSavedLibrary) "الدخول بالمكتبة المحفوظة" else "إلغاء التحديث"
         val syncProvider: ProviderEntity = if (firstLoad) {
             target.copy(enabled = true, updatedAt = System.currentTimeMillis())
         } else {
@@ -256,7 +271,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
                 }
             }
             check(result.freshItemCount > 0) { "لم يرجع السيرفر محتوى صالح" }
-            check(result.failedSectionCount == 0) { "تعذر تحميل أحد أقسام الباقة" }
+            check(result.failedSectionCount == 0) { "تعذر تحديث: ${result.failedSectionNames()}" }
 
             render(96, if (firstLoad) "جاري إنهاء المكتبة..." else "جاري حفظ التحديث بأمان...")
             withContext(Dispatchers.IO) {
@@ -275,61 +290,84 @@ class CatalogLoadingActivity : AppCompatActivity() {
             startActivity(Intent(this, HomeActivity::class.java))
             finish()
         } catch (cancelled: CancellationException) {
-            withContext(Dispatchers.IO) {
+            withContext(NonCancellable + Dispatchers.IO) {
                 if (firstLoad) dao.clearProviderCatalog(providerId) else dao.discardStagedCatalog(syncProvider.id)
             }
+            CatalogSyncState.markFailed(applicationContext, providerId)
             throw cancelled
         } catch (error: Throwable) {
-            withContext(Dispatchers.IO) {
+            withContext(NonCancellable + Dispatchers.IO) {
                 if (firstLoad) dao.clearProviderCatalog(providerId) else dao.discardStagedCatalog(syncProvider.id)
             }
-            fail("تعذر تجهيز المكتبة: ${error.message ?: "خطأ غير معروف"}")
+            CatalogSyncState.markFailed(applicationContext, providerId)
+            fail(CatalogSyncFailureMessage.describe(error))
         }
     }
 
     private fun renderProgress(p: PlaylistSyncProgress) {
-        val label = when (p.stage) {
-            PlaylistSyncStage.M3U -> "جاري تحميل القائمة"
-            PlaylistSyncStage.LIVE -> "جاري تحميل القنوات"
-            PlaylistSyncStage.MOVIES -> "جاري تحميل الأفلام"
-            PlaylistSyncStage.SERIES -> "جاري تحميل المسلسلات"
+        val section = when (p.stage) {
+            PlaylistSyncStage.M3U -> "القائمة"
+            PlaylistSyncStage.LIVE -> "القنوات"
+            PlaylistSyncStage.MOVIES -> "الأفلام"
+            PlaylistSyncStage.SERIES -> "المسلسلات"
         }
-        val detail = if (p.totalSteps > 1) label + " • " + p.step.coerceAtMost(p.totalSteps) + "/" + p.totalSteps else label
-        render(p.percent.coerceAtMost(95), detail)
+        val phase = if (p.totalSteps > 1) "القسم ${p.step} من ${p.totalSteps}" else "القائمة"
+        render(p.percent.coerceAtMost(95), "جاري تحميل $section • $phase")
+        val actual = p.downloadPercent
+        if (actual != null) {
+            progress.isIndeterminate = false
+            progress.progress = actual.coerceIn(0, 100)
+            percent.text = "${actual.coerceIn(0, 100)}%"
+            progress.contentDescription = "نسبة تنزيل بيانات $section ${actual.coerceIn(0, 100)} بالمئة"
+            detail.text = "هذه نسبة تنزيل $section فقط، وليست الباقة بالكامل" +
+                p.parsedItems?.let { " • تمت قراءة $it عنصر" }.orEmpty()
+        } else {
+            // Xtream does not always send Content-Length. Never display a
+            // fabricated percentage based on how many catalog items arrived.
+            detail.text = "التحميل جارٍ من السيرفر" +
+                p.parsedItems?.let { " • تمت قراءة $it عنصر" }.orEmpty() +
+                " • لا تتوفر نسبة دقيقة لهذا القسم"
+        }
     }
 
     private fun render(value: Int, label: String) {
-        val requested = value.coerceIn(0, 100)
-        val safe = if (requested >= 100) 100 else maxOf(lastPercent, requested)
+        val safe = if (value >= 100) 100 else maxOf(lastPercent, value.coerceIn(0, 99))
         lastPercent = safe
-        progress.progress = safe
-        progress.contentDescription = "تقدم تحميل مكتبة BLOFY $safe بالمئة"
-        percent.text = "$safe%"
+        progress.isIndeterminate = safe < 100
+        if (safe == 100) progress.progress = 100
+        progress.contentDescription = if (safe == 100)
+            "اكتمل تحديث مكتبة BLOFY" else "جاري تحديث مكتبة BLOFY"
+        percent.text = if (safe == 100) "100%" else "…"
         stage.text = label
         detail.text = when {
-            safe >= 100 -> "اكتمل الحفظ المحلي • الدخول التالي يستخدم المكتبة المحفوظة"
-            safe >= 90 -> "انتهى جلب المحتوى • جاري تثبيت المكتبة بأمان"
-            safe >= 15 -> "التحميل مستمر من السيرفر • آخر تقدم مؤكد $safe%"
-            safe >= 5 -> "تم الاتصال • جاري بدء جلب محتوى الباقة"
+            safe == 100 -> "اكتمل حفظ المكتبة الجديدة • يمكنك بدء المشاهدة"
+            safe >= 96 -> "انتهى تحميل الأقسام • جاري اعتماد المكتبة بأمان"
+            safe >= 15 -> "جاري جلب بيانات الأقسام من السيرفر"
+            safe >= 5 -> "جاري تحميل أقسام الباقة من السيرفر"
             else -> "جاري الاتصال والتحقق من القائمة…"
         }
         stage.setTextColor(BlofyTvDesign.TextPrimary)
-        recoveryContainer()?.visibility = android.view.View.GONE
-        serverStep.setTextColor(if (safe >= 5) BlofyTvDesign.PurpleBright else BlofyTvDesign.TextDim)
-        contentStep.setTextColor(if (safe >= 15) BlofyTvDesign.PurpleBright else BlofyTvDesign.TextDim)
-        prepareStep.setTextColor(if (safe >= 90) BlofyTvDesign.PurpleBright else BlofyTvDesign.TextDim)
+        serverStep.setTextColor(if (safe >= 60) BlofyTvDesign.PurpleBright else BlofyTvDesign.TextDim)
+        contentStep.setTextColor(if (safe >= 96) BlofyTvDesign.PurpleBright else BlofyTvDesign.TextDim)
+        prepareStep.setTextColor(if (safe >= 100) BlofyTvDesign.PurpleBright else BlofyTvDesign.TextDim)
         readyStep.setTextColor(if (safe >= 100) BlofyTvDesign.Mint else BlofyTvDesign.TextDim)
-        serverStep.text = if (safe >= 15) "✓  الاتصال بالخادم" else "●  الاتصال بالخادم"
-        contentStep.text = if (safe >= 90) "✓  جلب المحتوى" else "○  جلب المحتوى"
+        serverStep.text = if (safe >= 60) "✓  الاتصال بالخادم" else "●  الاتصال بالخادم"
+        contentStep.text = if (safe >= 96) "✓  جلب المحتوى" else "●  جلب المحتوى"
         prepareStep.text = if (safe >= 100) "✓  تحضير المكتبة" else "○  تحضير المكتبة"
         readyStep.text = if (safe >= 100) "✓  جاهز" else "○  جاهز"
     }
 
     private fun fail(message: String) {
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        progress.isIndeterminate = false
+        progress.progress = 0
+        percent.text = "تعذر"
+        retryButton.visibility = android.view.View.VISIBLE
         stage.text = message
         stage.setTextColor(BlofyTvDesign.Danger)
-        detail.text = "لم يتم اعتماد المكتبة غير المكتملة • يمكنك إعادة المحاولة بأمان"
+        detail.text = if (hasSavedLibrary)
+            "لم يُعتمد التحديث غير المكتمل • مكتبتك السابقة محفوظة ويمكن الدخول إليها"
+        else "لم يتم اعتماد المكتبة غير المكتملة • يمكنك إعادة المحاولة بأمان"
         recoveryContainer()?.visibility = android.view.View.VISIBLE
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }

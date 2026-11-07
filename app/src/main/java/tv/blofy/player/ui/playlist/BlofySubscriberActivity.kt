@@ -28,6 +28,7 @@ import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.identity.BlofySubscriberClient
 import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.data.CatalogSyncState
+import tv.blofy.player.data.CatalogReusePolicy
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.PlaylistSyncPolicy
 import tv.blofy.player.data.PlaylistSyncProgress
@@ -99,29 +100,49 @@ class BlofySubscriberActivity : AppCompatActivity() {
                             val dao = BlofyDatabase.get(applicationContext).dao()
                             val providerId = UUID.nameUUIDFromBytes("blofy-subscriber".toByteArray()).toString()
                             val next = ProviderEntity(providerId, "مشتركين BLOFY", session.baseUrl, session.username, session.password, "xtream", "ts", "cronet", "media3", true, true, System.currentTimeMillis())
-                            val readyCatalog = CatalogSyncState.isReady(applicationContext, providerId) && dao.hasCatalog(providerId)
-                            if (!readyCatalog) {
-                                CatalogSyncState.markPending(applicationContext, providerId)
-                                dao.clearProviderCatalog(providerId)
+                            val oldProvider = dao.provider(providerId)
+                            val hasCatalog = dao.hasCatalog(providerId)
+                            val connectionChanged = oldProvider == null ||
+                                oldProvider.baseUrl != next.baseUrl ||
+                                oldProvider.username != next.username ||
+                                oldProvider.password != next.password
+                            if (CatalogReusePolicy.canReuseSavedCatalog(hasCatalog, connectionChanged)) {
+                                // A failed previous refresh may leave the ready
+                                // marker false. Never erase an existing library.
                                 dao.upsertProvider(next)
+                                dao.disableAllProviders()
+                                dao.activateProvider(providerId)
+                                CatalogSyncState.markReady(applicationContext, providerId)
+                            } else {
+                                val working = if (hasCatalog) {
+                                    next.copy(id = UUID.randomUUID().toString(), enabled = false)
+                                } else next
+                                var committed = false
+                                if (!hasCatalog) {
+                                    CatalogSyncState.markPending(applicationContext, providerId)
+                                    dao.upsertProvider(next)
+                                }
                                 try {
                                     val result = PlaylistSyncPolicy.run {
-                                        PlaylistManager(XtreamClient.api, dao).syncAll(next) { progress ->
+                                        PlaylistManager(XtreamClient.api, dao).syncAll(working) { progress ->
                                             withContext(Dispatchers.Main) { status.text = syncProgressText(progress) }
                                         }
                                     }
                                     check(result.freshItemCount > 0) { "لم يرجع الاشتراك أي محتوى" }
-                                    check(result.failedSectionCount == 0) { "تعذر تحميل أحد أقسام الاشتراك" }
-                                    dao.saveAndActivateProvider(next)
+                                    check(result.failedSectionCount == 0) { "تعذر تحديث: ${result.failedSectionNames()}" }
+                                    if (hasCatalog) dao.promoteStagedCatalog(working.id, next)
+                                    else dao.saveAndActivateProvider(next)
+                                    committed = true
                                     CatalogSyncState.markReady(applicationContext, providerId)
-                                } catch (error: Throwable) {
-                                    dao.clearProviderCatalog(providerId)
-                                    CatalogSyncState.markPending(applicationContext, providerId)
-                                    throw error
+                                } finally {
+                                    if (!committed) {
+                                        withContext(kotlinx.coroutines.NonCancellable) {
+                                            if (hasCatalog) dao.discardStagedCatalog(working.id)
+                                            else dao.clearProviderCatalog(providerId)
+                                        }
+                                        CatalogSyncState.markFailed(applicationContext, providerId)
+                                    }
                                 }
-                            } else {
-                                dao.upsertProvider(next)
-                                dao.disableAllProviders(); dao.activateProvider(providerId)
                             }
                             runCatching { PortalPlaylistClient.pushProvider(applicationContext, endpoint, next) }
                         }

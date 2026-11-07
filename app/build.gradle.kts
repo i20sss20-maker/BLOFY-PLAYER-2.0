@@ -51,6 +51,11 @@ android {
         }
     }
     buildTypes {
+        getByName("debug") {
+            // Side-by-side test install: never replace an active Play/website installation.
+            applicationIdSuffix = ".catalogtest"
+            versionNameSuffix = "-catalogtest"
+        }
         getByName("release") {
             isDebuggable = false
             isJniDebuggable = false

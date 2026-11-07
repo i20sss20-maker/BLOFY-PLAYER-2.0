@@ -4,6 +4,9 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.google.gson.stream.JsonReader
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
+import java.io.IOException
+import retrofit2.HttpException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
@@ -24,8 +27,18 @@ import java.nio.charset.StandardCharsets
 
 data class PlaylistSyncResult(
     val freshItemCount: Int,
-    val failedSectionCount: Int = 0
-)
+    val failedSectionCount: Int = 0,
+    val failedSections: List<PlaylistSyncStage> = emptyList()
+) {
+    fun failedSectionNames(): String = failedSections.joinToString("، ") { stage ->
+        when (stage) {
+            PlaylistSyncStage.M3U -> "القائمة"
+            PlaylistSyncStage.LIVE -> "القنوات"
+            PlaylistSyncStage.MOVIES -> "الأفلام"
+            PlaylistSyncStage.SERIES -> "المسلسلات"
+        }
+    }.ifBlank { "بعض أقسام الباقة" }
+}
 
 class PlaylistManager(
     private val api: XtreamApi,
@@ -49,8 +62,16 @@ class PlaylistManager(
                 },
                 suspend {
                     onProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3))
-                    freshItemCount += syncVod(provider) { percent ->
-                        onProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3, percent))
+                    freshItemCount += syncVod(provider) { percent, parsedCount ->
+                        onProgress(
+                            PlaylistSyncProgress(
+                                stage = PlaylistSyncStage.MOVIES,
+                                step = 2,
+                                totalSteps = 3,
+                                downloadPercent = percent,
+                                parsedItems = parsedCount
+                            )
+                        )
                     }
                 },
                 suspend {
@@ -61,7 +82,10 @@ class PlaylistManager(
         )
         return PlaylistSyncResult(
             freshItemCount = freshItemCount,
-            failedSectionCount = sectionResult.failureCount
+            failedSectionCount = sectionResult.failureCount,
+            failedSections = sectionResult.failedSectionIndices.mapNotNull {
+                listOf(PlaylistSyncStage.LIVE, PlaylistSyncStage.MOVIES, PlaylistSyncStage.SERIES).getOrNull(it)
+            }
         )
     }
 
@@ -148,7 +172,7 @@ class PlaylistManager(
      */
     suspend fun syncVod(
         provider: ProviderEntity,
-        onProgress: suspend (Int) -> Unit = {}
+        onProgress: suspend (Int?, Int) -> Unit = { _, _ -> }
     ): Int {
         if (provider.providerType.equals("m3u", true)) return 0
         val categories = api.list(actionUrl(provider, "get_vod_categories"))
@@ -179,18 +203,20 @@ class PlaylistManager(
                     vodEntity(provider, row)?.let { streamRows += previousFlags.applyTo(it) }
 
                     if (sourceStreamCount % 256 == 0) {
+                        // A trustworthy percentage exists only when the
+                        // server declares a byte count. Item count alone does
+                        // NOT reveal the fraction of a large catalog remaining.
                         val percent = if (declaredBytes > 0L) {
-                            60 + ((counting.bytesRead.toDouble() / declaredBytes.toDouble()) * 28.0).toInt().coerceIn(0, 28)
-                        } else {
-                            60 + (sourceStreamCount / 500).coerceIn(0, 27)
-                        }
-                        onProgress(percent.coerceIn(60, 88))
+                            ((counting.bytesRead.toDouble() / declaredBytes) * 100.0)
+                                .toInt().coerceIn(0, 99)
+                        } else null
+                        onProgress(percent, sourceStreamCount)
                     }
                 }
                 reader.endArray()
             }
         }
-        onProgress(88)
+        onProgress(if (declaredBytes > 0L) 100 else null, sourceStreamCount)
 
         if (CatalogReplacementPolicy.shouldReplace(
                 previousStreamCount = previousCount,
@@ -438,20 +464,41 @@ internal object CatalogReplacementPolicy {
 }
 
 /** Lets an unavailable Xtream section fall back to its cache without blocking other sections. */
-internal data class XtreamSectionResult(val successCount: Int, val failureCount: Int)
+internal data class XtreamSectionResult(
+    val successCount: Int,
+    val failureCount: Int,
+    val failedSectionIndices: List<Int> = emptyList()
+)
 
 internal suspend fun runXtreamSections(sections: List<suspend () -> Unit>): XtreamSectionResult {
     require(sections.isNotEmpty()) { "At least one Xtream section is required" }
     var successCount = 0
     val failures = mutableListOf<Exception>()
-    sections.forEach { syncSection ->
-        try {
-            syncSection()
-            successCount += 1
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (failure: Exception) {
-            failures += failure
+    val failedIndices = mutableListOf<Int>()
+    sections.forEachIndexed { sectionIndex, syncSection ->
+        var attempt = 0
+        while (true) {
+            attempt += 1
+            try {
+                syncSection()
+                successCount += 1
+                break
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                // Xtream catalog reads are idempotent. A provider may close a large
+                // JSON response mid-transfer; retry only transient network failures.
+                val transient = generateSequence<Throwable>(failure) { it.cause }.any {
+                    it is IOException ||
+                        (it is HttpException && (it.code() == 429 || it.code() in 500..599))
+                }
+                if (!transient || attempt >= 3) {
+                    failures += failure
+                    failedIndices += sectionIndex
+                    break
+                }
+                delay(500L * attempt)
+            }
         }
     }
     if (successCount == 0) {
@@ -459,5 +506,5 @@ internal suspend fun runXtreamSections(sections: List<suspend () -> Unit>): Xtre
         failures.drop(1).forEach(first::addSuppressed)
         throw first
     }
-    return XtreamSectionResult(successCount, failures.size)
+    return XtreamSectionResult(successCount, failures.size, failedIndices)
 }
