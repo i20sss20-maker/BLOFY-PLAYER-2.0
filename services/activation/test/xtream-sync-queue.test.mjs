@@ -118,3 +118,15 @@ test('queue badges and separated active/waiting counts appear on the operator da
   assert.match(source,/queued:Boolean\(item\.queued\)/);
   assert.match(source,/data\.queued\?\.length/);
 });
+
+test('stale syncing state is distinguishable from active import after container restart',async()=>{
+  const source=await readFile(new URL('../src/xtream-admin-hook.mjs',import.meta.url),'utf8');
+  const ui=await readFile(new URL('../web/sources-admin.js',import.meta.url),'utf8');
+  const premium=await readFile(new URL('../web/stream-premium.js',import.meta.url),'utf8');
+  assert.match(source,/if\(item\.status==='syncing'&&!item\.syncing\)acc\.interrupted\+\+/);
+  assert.match(source,/interrupted: 0/);
+  assert.match(ui,/item\.status==='syncing'\?'تحقق من مزامنة سابقة'/);
+  assert.match(ui,/sync-interrupted-note/);
+  assert.match(ui,/xtream_sync_state_uncertain/);
+  assert.match(premium,/xtream_sync_state_uncertain/);
+});
