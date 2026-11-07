@@ -10,6 +10,8 @@ on:
       - 'services/activation/web/sources-admin.html'
       - 'services/activation/web/sources-admin.js'
       - 'services/activation/web/stream-console.css'
+      - 'services/activation/web/stream-premium.css'
+      - 'services/activation/web/stream-premium.js'
       - 'services/activation/src/sources-admin-hook.mjs'
       - 'services/activation/test/stream-console-ui.test.mjs'
       - '.github/workflows/blofy-stream-series-safety.yml'
@@ -30,6 +32,9 @@ jobs:
           node --check services/activation/src/xtream-series-resolver.mjs
           node --check services/activation/src/xtream-gateway-hook.mjs
       - name: Validate admin console JavaScript syntax
-        run: node --check services/activation/web/sources-admin.js
+        run: |
+          node --check services/activation/web/sources-admin.js
+          node --check services/activation/web/stream-premium.js
+          node --check services/activation/src/sources-admin-hook.mjs
       - name: Series and console regression tests
         run: node --test services/activation/test/xtream-series-resolver.test.mjs services/activation/test/stream-console-ui.test.mjs
