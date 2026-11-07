@@ -75,7 +75,7 @@ export async function checkDemoProxy({
   try{origin=demoProxyLoopbackOrigin(port)}
   catch{return {ok:false,stage:'configuration',reason:'demo_proxy_loopback_invalid',
     realSourceVerified:false,mediaVerified:false};}
-  let cookie='',stage='master',failedHttpStatus=null;
+  let cookie='',stage='master',failedHttpStatus=null,failedProxyCode=null;
   async function load(ref,base){
     const url=pathFor(ref,base,origin);
     let response;
@@ -90,7 +90,20 @@ export async function checkDemoProxy({
     if(!response.ok){
       const status=response.status;
       failedHttpStatus=Number.isInteger(status)&&status>=100&&status<=599?status:null;
-      await response.body?.cancel().catch(()=>{});
+      // The protected HLS proxy returns fixed internal diagnostic codes.
+      // Only those codes are read; provider bodies and secrets stay excluded.
+      const allowed=new Set(['restream_demo_unavailable','restream_demo_not_published',
+        'restream_demo_invalid_asset','restream_demo_invalid_playlist',
+        'restream_demo_unsupported_playlist','restream_demo_redirect_invalid',
+        'restream_demo_too_large','restream_demo_empty',
+        'restream_demo_network_refused','restream_demo_dns_failed',
+        'restream_demo_network_timeout','restream_demo_network_reset',
+        'restream_demo_not_configured']);
+      try{
+        const detail=JSON.parse((await readLimited(response,{maxBytes:1024})).toString('utf8'));
+        if(allowed.has(detail?.code))failedProxyCode=detail.code;
+      }catch{}
+      try{await response.body?.cancel()}catch{}
       throw new Error(status===401?'demo_proxy_unauthorized':'demo_proxy_http_error');
     }
     return {url,response};
@@ -130,7 +143,7 @@ export async function checkDemoProxy({
       'demo_proxy_playlist_invalid','demo_proxy_variant_missing','demo_proxy_segment_missing',
       'demo_proxy_not_mpegts','demo_proxy_unsafe_asset','demo_proxy_empty','demo_proxy_too_large']);
     return {ok:false,stage,reason:allowed.has(e?.message)?e.message:'demo_proxy_failed',
-      httpStatus:failedHttpStatus,elapsedMs:clock()-started,
+      httpStatus:failedHttpStatus,proxyCode:failedProxyCode,elapsedMs:clock()-started,
       realSourceVerified:false,mediaVerified:false,audioVideoDecoded:false};
   }
 }
