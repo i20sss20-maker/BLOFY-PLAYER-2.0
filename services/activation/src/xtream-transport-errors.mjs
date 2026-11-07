@@ -29,6 +29,9 @@ export function safeXtreamTransportCategory(error){
   const message=typeof error.message==='string'?error.message:'';
   // Only wrap fetch/network errors; ordinary HTTP 401/403/404 and application
   // validation errors stay untouched and are never retried here.
+  const ownCode=typeof error.code==='string'?error.code.toUpperCase():'';
+  if(DNS.has(ownCode)||REFUSED.has(ownCode)||RESET.has(ownCode)||TIMEOUT.has(ownCode)||TLS.has(ownCode))
+    return classifyXtreamTransportError(error);
   const cause=error.cause;
   if(cause||/^(?:fetch failed|network error|network request failed)$/i.test(message)
     ||error.name==='AbortError'||error.name==='TimeoutError')
