@@ -989,6 +989,25 @@ async function safeM3uInput(value,baseUrl){
   return url;
 }
 
+// Retry only an upstream TCP reset before any playlist bytes arrive.
+// Never retry an HTTP denial or a partial playlist; the shared signal bounds time.
+async function fetchM3uWithOneReconnect(url,options){
+  try{return await fetch(url,options)}catch(error){
+    let reason=error,reset=false;
+    for(let i=0;i<5&&reason;i++,reason=reason.cause){
+      if(['ECONNRESET','EPIPE','UND_ERR_SOCKET'].includes(String(reason.code||''))){reset=true;break;}
+    }
+    if(!reset||options.signal?.aborted)throw error;
+    await new Promise((resolve,reject)=>{
+      const abort=()=>{clearTimeout(timer);reject(options.signal?.reason||new Error('aborted'))};
+      const timer=setTimeout(()=>{options.signal?.removeEventListener('abort',abort);resolve()},1200);
+      options.signal?.addEventListener('abort',abort,{once:true});
+      if(options.signal?.aborted)abort();
+    });
+    return fetch(url,options);
+  }
+}
+
 async function checkSourceM3u(id){
   const source=await serverById(id);
   if(!source)throw Object.assign(new Error('xtream_server_not_found'),{status:404});
@@ -1005,7 +1024,7 @@ async function checkSourceM3u(id){
       // credentials. Redirects are checked before the next fetch.
       if(current.protocol==='http:' && current.origin!==new URL(source.base_url).origin)
         throw new Error('xtream_m3u_https_required');
-      response=await fetch(current,{
+      response=await fetchM3uWithOneReconnect(current,{
         method:'GET',redirect:'manual',signal,
         headers:{accept:'audio/x-mpegurl,application/vnd.apple.mpegurl,text/plain,*/*',
           'user-agent':'BLOFY-M3U-Verify/1.0'}
@@ -1074,7 +1093,7 @@ async function runHybridM3uIndex(id){
       await assertPublicXtreamUrl(current.origin);
       if(current.protocol==='http:'&&current.origin!==new URL(source.base_url).origin)
         throw new Error('xtream_m3u_https_required');
-      response=await fetch(current,{method:'GET',redirect:'manual',signal,
+      response=await fetchM3uWithOneReconnect(current,{method:'GET',redirect:'manual',signal,
         headers:{'accept':'audio/x-mpegurl,application/vnd.apple.mpegurl,text/plain,*/*',
           'user-agent':'BLOFY-Hybrid-M3U-Index/1.0'}});
       if([301,302,303,307,308].includes(response.status)){
