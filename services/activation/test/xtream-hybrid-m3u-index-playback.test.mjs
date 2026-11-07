@@ -87,7 +87,7 @@ test('index and player never replace original Xtream catalog or bypass preflight
   assert.match(admin,/m3u_index_generation=NULL/);
   assert.match(admin,/encryptXtreamSecret\(item.url,KEY_HEX/);
   assert.match(admin,/url_digest<>excluded.url_digest/);
-  assert.match(gateway,/verifiedHybridM3uFallback\(row,kind,id,\{deadline\}\)/);
+  assert.match(gateway,/verifiedHybridM3uFallback\(row,kind,id,\{deadline,diagnostic:m3uEvidence\}\)/);
   assert.match(gateway,/verifiedHybridM3uFallback\(row,'movie',sourceId/);
   assert.match(gateway,/verifiedHybridM3uFallback\(row,'series',sourceId/);
   assert.match(native,/securedForm\(id,'index-m3u'/);
