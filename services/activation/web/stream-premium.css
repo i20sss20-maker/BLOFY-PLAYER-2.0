@@ -355,3 +355,6 @@ body {
  .top-actions .premium-autorefresh{min-width:0;white-space:normal;font-size:10px}
  .premium-actionable-issues{padding:16px}
 }
+
+.premium-signal-stats{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media(max-width:740px){.premium-signal-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
