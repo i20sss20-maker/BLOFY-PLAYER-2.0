@@ -714,6 +714,7 @@ async function fetchAccount(row,{timeoutMs=20000,maxAttempts=2}={}) {
 }
 
 const smartConnectionCooldowns=new Map();
+const smartConnectionResults=new Map(); // diagnostic text only, expires after ten minutes
 async function runSmartConnection(id){
   const row=await serverById(id);
   if(!row)throw Object.assign(new Error('xtream_server_not_found'),{status:404});
@@ -1532,7 +1533,7 @@ function controlRedirect(res,kind,value){
   res.end();
 }
 async function handleControlAction(req,res,id,action) {
-  const available=['toggle-enabled','toggle-publish','test','probe-live','probe-movie','probe-series','probe-episode','sync-all','sync-live','sync-movie','sync-series','cancel-sync','save','delete'];
+  const available=['toggle-enabled','toggle-publish','test','smart-connection','probe-live','probe-movie','probe-series','probe-episode','sync-all','sync-live','sync-movie','sync-series','cancel-sync','save','delete'];
   if(id==='new'&&action==='add'){
     const fields=await readControlForm(req);
     if(fields.rightsConfirmed!=='yes')throw Object.assign(new Error('rights_confirmation_required'),{status:400});
@@ -1587,6 +1588,12 @@ async function handleControlAction(req,res,id,action) {
         error:check.error||null,ok:Boolean(check.ok),episodeCount:check.episodeCount||0}))
     });
     return controlRedirect(res,result.ok?'ok':'error','probe:'+xtreamProbeMessage(result,mediaType));
+  }
+  if(action==='smart-connection'){
+    const diagnosis=await runSmartConnection(id);
+    smartConnectionResults.set(id,{...diagnosis,recordedAt:Date.now()});
+    // Status-only redirect, never encode provider details in URL or logs.
+    return controlRedirect(res,'ok','smart_checked');
   }
   if(action==='test'){
     // Never block a 15s proxy request on an upstream test that may take 20s.
@@ -1662,6 +1669,10 @@ http.createServer = function withBlofyXtream(listener) {
         const items=(await serverRows()).map(adminServer);
         return sendControlHtml(res,controlPage({
           items,success:url.searchParams.get('ok')||'',error:url.searchParams.get('error')||'',
+          diagnostics:Object.fromEntries(items.map(item=>{
+            const result=smartConnectionResults.get(item.id);
+            return [item.id,result&&Date.now()-result.recordedAt<600_000?result:null];
+          }).filter(([,result])=>result)),
           csrfToken:nativeXtreamCsrfToken(req,ADMIN_SESSION_KEY)
         }));
       }
@@ -1671,7 +1682,7 @@ http.createServer = function withBlofyXtream(listener) {
         if(!source)return json(res,404,{error:'xtream_server_not_found'});
         return sendControlHtml(res,deleteConfirmationPage(source,nativeXtreamCsrfToken(req,ADMIN_SESSION_KEY)));
       }
-      const nativeAction=url.pathname.match(/^\/api\/v1\/admin\/xtream\/controls\/([a-z0-9-]+)\/(toggle-enabled|toggle-publish|test|probe-live|probe-movie|probe-series|probe-episode|sync-all|sync-live|sync-movie|sync-series|cancel-sync|save|delete|add)$/i);
+      const nativeAction=url.pathname.match(/^\/api\/v1\/admin\/xtream\/controls\/([a-z0-9-]+)\/(toggle-enabled|toggle-publish|test|smart-connection|probe-live|probe-movie|probe-series|probe-episode|sync-all|sync-live|sync-movie|sync-series|cancel-sync|save|delete|add)$/i);
       if(nativeAction&&req.method==='POST'){
         try{return await handleControlAction(req,res,nativeAction[1],nativeAction[2]);}
         catch(error){
