@@ -14,7 +14,7 @@ async function buildPreflight({movieSucceeds=true,seriesSucceeds=true,twoBands=f
   const db={
     query:async(sql,params)=>{
       assert.match(sql,/blofy_xtream_items/);
-      if(sql.includes('LIMIT 8')){
+      if(sql.includes('LIMIT 12')){
         return {rows:noReplacement?[{source_id:'903'}]:[
           {source_id:'903'},{source_id:'805',container_extension:'mp4'}
         ]};
@@ -62,6 +62,7 @@ async function buildPreflight({movieSucceeds=true,seriesSucceeds=true,twoBands=f
     },
     safeGatewayExtension:(value,fallback)=>value||fallback,
     diagnosticXtreamItemId:id=>/^[A-Za-z0-9._-]{1,128}$/.test(String(id))?String(id):null,
+    quarantineConfirmedMissingMedia:async()=>false,
     issuanceErrorReason:()=> 'source_unreachable'
   };
   const fn=new Function(...Object.keys(mocks),body+';return preflightSource;')(...Object.values(mocks));

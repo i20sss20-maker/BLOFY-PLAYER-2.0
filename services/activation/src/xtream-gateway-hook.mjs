@@ -43,6 +43,7 @@ import { XtreamDenialCooldown } from './xtream-denial-cooldown.mjs';
 import { episodeOrdinal, verifiedEpisodeRecovery, sameEpisodeContainerCandidates } from './xtream-episode-repair.mjs';
 import { authoritativeXtreamMediaCandidates, providerHasExactXtreamMediaItem } from './xtream-authoritative-media.mjs';
 import { parseHybridM3uMediaUrl, verifiedHybridRow } from './xtream-hybrid-m3u.mjs';
+import {canQuarantineXtreamMedia,MEDIA_QUARANTINE_HOURS,MEDIA_QUARANTINE_REASON,quarantineMediaWarning} from './xtream-media-quarantine.mjs';
 import { xtreamEpisodePlaybackCandidates } from './xtream-series-probe.mjs';
 import { MAX_ISSUANCE_SOURCES, PREFLIGHT_TTL_MS, issuanceErrorReason, summarizeIssuancePreflight, shouldRetryIssuanceMedia } from './xtream-issuance-preflight.mjs';
 
@@ -204,6 +205,15 @@ async function ensureReady() {
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_gateway_accounts_user ON blofy_xtream_gateway_accounts(username,enabled)');
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_gateway_item_lookup ON blofy_xtream_gateway_item_map(server_id,media_type,source_id)');
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_gateway_episode_lookup ON blofy_xtream_gateway_episode_map(server_id,source_episode_id)');
+      await client.query(`CREATE TABLE IF NOT EXISTS blofy_xtream_media_quarantine (
+        server_id UUID NOT NULL REFERENCES blofy_xtream_servers(id) ON DELETE CASCADE,
+        media_type TEXT NOT NULL CHECK (media_type IN ('movie','series')),
+        source_id TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        confirmed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        expires_at TIMESTAMPTZ NOT NULL,
+        PRIMARY KEY(server_id,media_type,source_id)
+      )`);
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK').catch(() => {});
@@ -484,6 +494,20 @@ function diagnosticXtreamItemId(id){
   return /^[A-Za-z0-9._-]{1,128}$/.test(value)?value:null;
 }
 
+// Quarantine one CONFIRMED missing asset for six hours; does not mutate
+// the imported catalog. A source denial or missing index is never enough.
+async function quarantineConfirmedMissingMedia(row,kind,id,probe){
+  if(!canQuarantineXtreamMedia({kind,sourceId:id,probe}))return false;
+  const result=await pool.query(`INSERT INTO blofy_xtream_media_quarantine
+    (server_id,media_type,source_id,reason,confirmed_at,expires_at)
+    VALUES($1,$2,$3,$4,NOW(),NOW()+($5::integer*INTERVAL '1 hour'))
+    ON CONFLICT(server_id,media_type,source_id) DO UPDATE
+    SET reason=EXCLUDED.reason,confirmed_at=NOW(),expires_at=EXCLUDED.expires_at
+    RETURNING source_id`,
+    [row.server_id,kind,String(id),MEDIA_QUARANTINE_REASON,MEDIA_QUARANTINE_HOURS]);
+  return result.rowCount>0;
+}
+
 async function preflightSource(row,deadline){
   const checks=[];
   const result={sourceId:row.id,name:String(row.name||'Xtream').slice(0,90),checks,warnings:[]};
@@ -516,6 +540,11 @@ async function preflightSource(row,deadline){
       const pick=direction=>pool.query(`SELECT source_id,container_extension
         FROM blofy_xtream_items
         WHERE server_id=$1 AND media_type=$2 AND enabled=TRUE
+          AND ($2<>'movie' OR NOT EXISTS (SELECT 1
+            FROM blofy_xtream_media_quarantine q
+            WHERE q.server_id=blofy_xtream_items.server_id
+              AND q.media_type='movie' AND q.source_id=blofy_xtream_items.source_id
+              AND q.expires_at>NOW()))
         ORDER BY source_id ${direction} LIMIT 1`,[row.id,kind]);
       const [first,last]=await Promise.all([pick('ASC'),pick('DESC')]);
       rows=[
@@ -536,6 +565,22 @@ async function preflightSource(row,deadline){
       const needed=rows.length;
       let sampled=0,loadedSubstitutes=false;
       const inspected=new Set();
+      const loadSubstitutes=async()=>{
+        if(loadedSubstitutes)return;
+        loadedSubstitutes=true;
+        try{
+          const more=(await pool.query(`SELECT source_id,container_extension
+            FROM blofy_xtream_items
+            WHERE server_id=$1 AND media_type='series' AND enabled=TRUE
+            ORDER BY source_id DESC LIMIT 12`,[row.id])).rows;
+          for(const candidate of more){
+            if(!rows.some(x=>x.source_id===candidate.source_id))
+              rows.push({...candidate,sampleBand:'replacement'});
+          }
+        }catch{
+          // Insufficient verified replacements must fail the issuance gate.
+        }
+      };
       for(const seriesRow of rows){
         if(sampled>=needed)break;
         if(inspected.has(String(seriesRow.source_id)))continue;
@@ -561,29 +606,21 @@ async function preflightSource(row,deadline){
         if(!samples.length){
           result.warnings.push({reason:'series_has_no_episodes',
             seriesSourceId:diagnosticXtreamItemId(seriesRow.source_id)});
-          if(!loadedSubstitutes){
-            loadedSubstitutes=true;
-            try{
-              const more=(await pool.query(`SELECT source_id,container_extension
-                FROM blofy_xtream_items
-                WHERE server_id=$1 AND media_type='series' AND enabled=TRUE
-                ORDER BY source_id DESC LIMIT 8`,[row.id])).rows;
-              for(const candidate of more){
-                if(!rows.some(x=>x.source_id===candidate.source_id))
-                  rows.push({...candidate,sampleBand:'replacement'});
-              }
-            }catch{
-              // If the catalog query fails, the mandatory sample below fails
-              // rather than treating an unverified source as healthy.
-            }
-          }
+          await loadSubstitutes();
           continue;
         }
-        sampled++;
         for(const sample of samples){
           const probe=await probeIssuanceWithTransientRetry({
             ...row,series_source_id:seriesRow.source_id,series_payload:payload
           },'series',sample.id,sample.extension,deadline);
+          if(await quarantineConfirmedMissingMedia(row,'series',sample.id,probe)){
+            result.warnings.push(quarantineMediaWarning('series',sample.id,{
+              seriesId:seriesRow.source_id
+            }));
+            await loadSubstitutes();
+            continue;
+          }
+          sampled++;
           checks.push({...probe,sampleBand:seriesRow.sampleBand,
             ...(probe.ok?{}:{seriesSourceId:diagnosticXtreamItemId(seriesRow.source_id),
               episodeSourceId:diagnosticXtreamItemId(sample.id)})});
@@ -592,14 +629,59 @@ async function preflightSource(row,deadline){
       if(sampled<needed){
         checks.push({kind:'series',ok:false,reason:'series_sample_unavailable'});
       }
-    }else{
+    }else if(kind==='live'){
       const results=await Promise.all(rows.map(async sample=>{
-        const ext=kind==='live'?'ts':safeGatewayExtension(sample.container_extension,'mp4');
-        const probe=await probeIssuanceWithTransientRetry(row,kind,sample.source_id,ext,deadline);
+        const probe=await probeIssuanceWithTransientRetry(row,kind,
+          sample.source_id,'ts',deadline);
         return {...probe,sampleBand:sample.sampleBand,
           ...(probe.ok?{}:{itemSourceId:diagnosticXtreamItemId(sample.source_id)})};
       }));
       checks.push(...results);
+    }else{
+      // A movie missing from both Xtream and its exact M3U link is isolated,
+      // not counted as a successfully played film. Require new VERIFIED
+      // movies to replace quarantined samples before issuing any account.
+      const required=rows.length;
+      let tested=0,loadedSubstitutes=false;
+      const seen=new Set();
+      for(const sample of rows){
+        if(tested>=required)break;
+        if(seen.has(String(sample.source_id)))continue;
+        seen.add(String(sample.source_id));
+        if(Date.now()>deadline-1000)break;
+        const ext=safeGatewayExtension(sample.container_extension,'mp4');
+        const probe=await probeIssuanceWithTransientRetry(row,kind,
+          sample.source_id,ext,deadline);
+        if(await quarantineConfirmedMissingMedia(row,'movie',sample.source_id,probe)){
+          result.warnings.push(quarantineMediaWarning('movie',sample.source_id));
+          if(!loadedSubstitutes){
+            loadedSubstitutes=true;
+            try{
+              const more=(await pool.query(`SELECT source_id,container_extension
+                FROM blofy_xtream_items
+                WHERE server_id=$1 AND media_type='movie' AND enabled=TRUE
+                  AND NOT EXISTS (SELECT 1 FROM blofy_xtream_media_quarantine q
+                    WHERE q.server_id=blofy_xtream_items.server_id
+                      AND q.media_type='movie'
+                      AND q.source_id=blofy_xtream_items.source_id
+                      AND q.expires_at>NOW())
+                ORDER BY source_id DESC LIMIT 12`,[row.id])).rows;
+              for(const candidate of more){
+                if(!rows.some(x=>x.source_id===candidate.source_id))
+                  rows.push({...candidate,sampleBand:'replacement'});
+              }
+            }catch{
+              // A failed catalog read can never turn a 404 into readiness.
+            }
+          }
+          continue;
+        }
+        tested++;
+        checks.push({...probe,sampleBand:sample.sampleBand,
+          ...(probe.ok?{}:{itemSourceId:diagnosticXtreamItemId(sample.source_id)})});
+      }
+      if(tested<required)checks.push({kind:'movie',ok:false,
+        reason:'media_sample_unavailable'});
     }
   }
   if(!found)checks.push({kind:'catalog',ok:false,reason:'source_catalog_empty'});
@@ -923,7 +1005,12 @@ async function gatewayItemById(mediaType, gatewayId, sourceId=null) {
     LEFT JOIN blofy_xtream_categories c ON c.server_id=i.server_id AND c.media_type=i.media_type AND c.source_category_id=i.category_id
     LEFT JOIN blofy_xtream_gateway_category_map cm ON cm.server_id=i.server_id AND cm.media_type=i.media_type AND cm.source_category_id=i.category_id
     WHERE m.gateway_id=$1 AND m.media_type=$2 AND i.enabled=TRUE AND s.enabled=TRUE AND s.publish_catalog=TRUE AND (c.enabled IS NULL OR c.enabled=TRUE)
-      AND ($3::uuid IS NULL OR i.server_id=$3::uuid)`, [id,mediaType,sourceId])).rows[0] || null;
+      AND ($3::uuid IS NULL OR i.server_id=$3::uuid)
+      AND ($2 <> 'movie' OR NOT EXISTS (
+        SELECT 1 FROM blofy_xtream_media_quarantine q
+        WHERE q.server_id=i.server_id AND q.media_type='movie'
+          AND q.source_id=i.source_id AND q.expires_at>NOW()
+      ))`, [id,mediaType,sourceId])).rows[0] || null;
 }
 
 function decryptServerCredentials(row) {
@@ -1086,11 +1173,21 @@ async function seriesInfo(gatewayId, sourceId=null) {
     }
   }
   const mapped = await ensureEpisodeMaps(row.server_id, row.source_id, sourceEpisodes);
+  const hiddenEpisodeIds=new Set();
+  if(sourceEpisodes.length){
+    const ids=[...new Set(sourceEpisodes.map(item=>item.sourceId))];
+    const active=(await pool.query(`SELECT source_id
+      FROM blofy_xtream_media_quarantine
+      WHERE server_id=$1 AND media_type='series' AND expires_at>NOW()
+        AND source_id=ANY($2::text[])`,[row.server_id,ids])).rows;
+    for(const unavailable of active)hiddenEpisodeIds.add(String(unavailable.source_id));
+  }
   const episodes = {};
   if (raw?.episodes && typeof raw.episodes === 'object') {
     for (const [season, list] of Object.entries(raw.episodes)) {
       if (!Array.isArray(list)) continue;
-      episodes[season] = list.map(episode => {
+      episodes[season] = list.filter(episode=>!hiddenEpisodeIds.has(String(episode?.id)))
+        .map(episode => {
         const clean = stripUpstreamSecrets(episode);
         const map = mapped.get(String(episode?.id));
         return {
@@ -1114,7 +1211,11 @@ async function episodeByGatewayId(gatewayId,sourceId=null) {
       s.enabled AS server_enabled
     FROM blofy_xtream_gateway_episode_map e JOIN blofy_xtream_servers s ON s.id=e.server_id
     WHERE e.gateway_id=$1 AND s.enabled=TRUE AND s.publish_catalog=TRUE
-      AND ($2::uuid IS NULL OR e.server_id=$2::uuid)`, [id,sourceId])).rows[0] || null;
+      AND ($2::uuid IS NULL OR e.server_id=$2::uuid)
+      AND NOT EXISTS (SELECT 1 FROM blofy_xtream_media_quarantine q
+        WHERE q.server_id=e.server_id AND q.media_type='series'
+          AND q.source_id=COALESCE(e.resolved_source_episode_id,e.source_episode_id)
+          AND q.expires_at>NOW())`, [id,sourceId])).rows[0] || null;
 }
 
 // Refresh a stale episode extension only after a real provider 404, using
@@ -1368,6 +1469,16 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
               });
               continue;
             }
+            // A subscriber has now independently confirmed a missing file
+            // through both the original provider path and its linked M3U.
+            // Quarantine that ONE episode temporarily; do not hide its series.
+            if(m3uEvidence.status==='provider_404'){
+              try{
+                await quarantineConfirmedMissingMedia(row,'series',sourceId,{
+                  ok:false,httpStatus:404,m3uRecoveryStatus:m3uEvidence.status
+                });
+              }catch{console.warn('xtream episode quarantine persistence failed');}
+            }
             if(repaired.status==='missing'){
               observe('failed',{upstreamStatus:404,reason:'episode_missing_from_source',attempts:attempt});
               return text(res,502,'Episode no longer listed by source');
@@ -1404,6 +1515,13 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
               upstream=hybrid.url;
               console.info('xtream movie 404 recovered',{itemId:gatewayId,mode:hybrid.mode});
               continue;
+            }
+            if(m3uEvidence.status==='provider_404'){
+              try{
+                await quarantineConfirmedMissingMedia(row,'movie',sourceId,{
+                  ok:false,httpStatus:404,m3uRecoveryStatus:m3uEvidence.status
+                });
+              }catch{console.warn('xtream movie quarantine persistence failed');}
             }
           }
           if (retryable && !transientRetried && attempt < maxAttempts) {

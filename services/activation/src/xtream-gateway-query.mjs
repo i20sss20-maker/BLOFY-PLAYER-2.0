@@ -9,6 +9,14 @@ export function gatewayItemsPageQuery(mediaType,lastId,{sourceId=null,filter=nul
     's.publish_catalog=TRUE','i.enabled=TRUE',
     '(c.enabled IS NULL OR c.enabled=TRUE)'
   ];
+  if(mediaType==='movie'){
+    // Only verified, expiring movie failures are hidden. Series remain in
+    // the catalog while individual confirmed-bad episodes are excluded from
+    // series_info and playback. Never remove the imported catalog row.
+    where.push(`NOT EXISTS (SELECT 1 FROM blofy_xtream_media_quarantine q
+      WHERE q.server_id=i.server_id AND q.media_type='movie'
+        AND q.source_id=i.source_id AND q.expires_at>NOW())`);
+  }
   if(sourceId){
     values.push(sourceId);
     where.push('i.server_id=$'+values.length);

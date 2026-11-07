@@ -365,6 +365,8 @@ function gatewayPreflightReason(reason){
     catalog_unavailable:'تعذر قراءة المكتبة',
     series_has_no_episodes:'المسلسل المختار لا يحتوي حلقات',
     series_sample_unavailable:'تعذر العثور على عينات حلقات بديلة قابلة للاختبار',
+    media_sample_unavailable:'تعذر العثور على عينتين صالحتي التشغيل بعد عزل المحتوى المعطل',
+    confirmed_source_media_404:'الملف يرجع 404 من Xtream ومن M3U؛ تم إخفاؤه مؤقتًا 6 ساعات دون حذفه',
     media_unverified:'لم تصل بيانات فيديو موثوقة',
     upstream_non_media_response:'المصدر أرسل صفحة بدلاً من فيديو',
     upstream_empty_media:'الفيديو فارغ',
@@ -419,10 +421,16 @@ function renderGatewayPreflight(data,scope){
     const card=gatewayNode('article','');
     card.append(gatewayNode('strong','',source.name||'Xtream'));
     for(const warning of source.warnings||[]){
-      const id=warning.seriesSourceId?' · معرّف المسلسل '+warning.seriesSourceId:'';
+      const ids=[
+        warning.itemSourceId?'معرّف الفيلم '+warning.itemSourceId:'',
+        warning.seriesSourceId?'معرّف المسلسل '+warning.seriesSourceId:'',
+        warning.episodeSourceId?'معرّف الحلقة '+warning.episodeSourceId:''
+      ].filter(Boolean).join(' · ');
+      const note=warning.reason==='confirmed_source_media_404'?
+        ' · يتطلب اجتياز عينات تشغيل بديلة قبل إصدار أي يوزر.':
+        ' · هذا العنصر وحده لم يحتسب اختبار تشغيل؛ يتم فحص مسلسل بديل.';
       card.append(gatewayNode('small','warning',
-        '⚠ '+gatewayPreflightReason(warning.reason)+id+
-        ' · هذا العنصر وحده لم يحتسب اختبار تشغيل؛ يتم فحص مسلسل بديل.'));
+        '⚠ '+gatewayPreflightReason(warning.reason)+(ids?' · '+ids:'')+note));
     }
     for(const check of source.checks||[]){
       const band=check.sampleBand==='low_id'?' · أول معرّف بالمكتبة':
