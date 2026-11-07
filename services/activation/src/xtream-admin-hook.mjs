@@ -2,6 +2,7 @@ import { databaseOptions } from './database-options.mjs';
 import { safeErrorSummary } from './diagnostics-sanitizer.mjs';
 import {safeXtreamTransportCategory} from './xtream-transport-errors.mjs';
 import {withXtreamAccountReconnect} from './xtream-api-resilience.mjs';
+import {createXtreamSyncQueue} from './xtream-sync-queue.mjs';
 import { createFixedWindowLimiter, requestClientKey } from './auth-protection.mjs';
 import {
   assertPublicXtreamUrl,
@@ -94,6 +95,12 @@ async function sourceMutation(sql, values) {
 
 const limiter = createFixedWindowLimiter({ limit: 180, windowMs: 60_000 });
 const syncLocks = new Set();
+// One source-wide import at a time, preserving time for playback/admin queries.
+// Queued imports are visible, cancellable, and never store upstream credentials.
+const syncQueue=createXtreamSyncQueue({
+  concurrency:1,maxPending:16,
+  onError:(id,error)=>console.error('xtream sync failed:',id,redactXtreamError(error))
+});
 const syncProgress = new Map();
 const cancelledSources = new Set();
 const purgeRunning = new Set();
@@ -300,8 +307,11 @@ function adminServer(row) {
     mediaSummary:sourceMediaSummary(row.media_probe_state),
     mediaWarnings:sourceAccountWarnings(row.account_info),
     counts,
-    syncing: syncLocks.has(row.id),
-    syncProgress: syncProgress.get(row.id) || null,
+    syncing: syncQueue.has(row.id)||syncLocks.has(row.id),
+    queued:syncQueue.isQueued(row.id),
+    syncProgress:syncQueue.isQueued(row.id)
+      ? {mediaType:'queued',imported:0}
+      : syncProgress.get(row.id) || null,
     lastError: row.last_error,
     lastTestAt: row.last_test_at ? new Date(row.last_test_at).getTime() : null,
     lastSyncAt: row.last_sync_at ? new Date(row.last_sync_at).getTime() : null,
@@ -372,6 +382,7 @@ async function requestDeleteSource(id) {
   await ensureReady();
   // Cancel future import batches before competing for the record lock.
   cancelledSources.add(id);
+  syncQueue.cancel(id);
   const result = await sourceMutation(`UPDATE blofy_xtream_servers
     SET enabled=FALSE,publish_catalog=FALSE,status='offline',
         deletion_requested_at=COALESCE(deletion_requested_at,NOW()),updated_at=NOW()
@@ -956,18 +967,29 @@ async function cancelSourceSync(id) {
   const row=await serverById(id);
   if(!row)throw Object.assign(new Error('xtream_server_not_found'),{status:404});
   const wasRunning=syncLocks.has(id);
+  const wasQueued=syncQueue.cancel(id);
   if(wasRunning)cancelledSources.add(id);
-  if(!wasRunning&&row.status==='syncing'){
+  if(!wasRunning&&!wasQueued&&row.status==='syncing'){
     await sourceMutation(`UPDATE blofy_xtream_servers
       SET status='unknown',last_error='xtream_sync_not_running',updated_at=NOW()
       WHERE id=$1 AND deletion_requested_at IS NULL`,[id]);
   }
-  return {cancelRequested:wasRunning,staleStateCleared:!wasRunning&&row.status==='syncing'};
+  return {cancelRequested:wasRunning||wasQueued,queuedCancelled:wasQueued,
+    staleStateCleared:!wasRunning&&!wasQueued&&row.status==='syncing'};
 }
 
 function startSync(id, types) {
-  if (syncLocks.has(id)) throw Object.assign(new Error('xtream_sync_in_progress'), { status: 409 });
-  void syncServer(id, types).catch(error => console.error('xtream sync failed:', id, redactXtreamError(error)));
+  if (syncQueue.has(id)||syncLocks.has(id))
+    throw Object.assign(new Error('xtream_sync_in_progress'), { status: 409 });
+  try{
+    return syncQueue.enqueue(id,()=>syncServer(id,types));
+  }catch(error){
+    if(error.message==='xtream_sync_queue_full')
+      throw Object.assign(new Error('xtream_sync_queue_full'),{status:429});
+    if(error.message==='xtream_sync_in_progress')
+      throw Object.assign(new Error('xtream_sync_in_progress'),{status:409});
+    throw error;
+  }
 }
 const studioPro=createStudioPro({pool,ensureXtreamReady:ensureReady,startSync});
 const studioTimer=setInterval(()=>{
@@ -1020,6 +1042,7 @@ async function patchServer(id, body) {
     set('enabled',enabled);
     if (!enabled) {
       if (syncLocks.has(id)) cancelledSources.add(id);
+      syncQueue.cancel(id);
       set('status','offline');
     } else if (!current.enabled) {
       // Re-activated sources are awaiting a fresh connection check.
@@ -1640,8 +1663,9 @@ http.createServer = function withBlofyXtream(listener) {
           acc.series += Number(item.counts.series || 0);
           if (item.status === 'online') acc.online++;
           if (item.status === 'syncing' || item.syncing) acc.syncing++;
+          if(item.queued)acc.queued++;
           return acc;
-        }, { servers: 0, online: 0, syncing: 0, live: 0, movie: 0, series: 0 });
+        }, { servers: 0, online: 0, syncing: 0, queued: 0, live: 0, movie: 0, series: 0 });
         totals.total = totals.live + totals.movie + totals.series;
         return json(res, 200, { items, totals,csrfToken:nativeXtreamCsrfToken(req,ADMIN_SESSION_KEY) });
       }
@@ -1672,12 +1696,23 @@ http.createServer = function withBlofyXtream(listener) {
       if (req.method === 'POST' && url.pathname === '/api/v1/admin/xtream/sync-all') {
         const rows = await serverRows();
         const started = [];
+        const queued=[];
+        const skipped=[];
         for (const row of rows.filter(item => item.enabled)) {
-          if (syncLocks.has(row.id)) continue;
-          startSync(row.id, ['live','movie','series']);
-          started.push(row.id);
+          if (syncQueue.has(row.id)||syncLocks.has(row.id)) continue;
+          try{
+            const job=startSync(row.id,['live','movie','series']);
+            started.push(row.id);
+            if(job.queued)queued.push(row.id);
+          }catch(error){
+            if(error.message==='xtream_sync_queue_full'){
+              skipped.push(row.id);
+              continue;
+            }
+            throw error;
+          }
         }
-        return json(res, 202, { started });
+        return json(res, 202, { started,queued,skipped });
       }
 
       const serverMatch = url.pathname.match(/^\/api\/v1\/admin\/xtream\/servers\/([0-9a-f-]+)(?:\/(test|sync|cancel-sync|probe-playback))?$/i);
@@ -1711,8 +1746,8 @@ http.createServer = function withBlofyXtream(listener) {
           if(!source)return json(res,404,{error:'xtream_server_not_found'});
           if(!source.enabled)return json(res,409,{error:'xtream_source_paused'});
           if(!selected.length)return json(res,400,{error:'xtream_sync_types_invalid'});
-          startSync(id, selected);
-          return json(res, 202, { started: true, id, types:selected });
+          const job=startSync(id,selected);
+          return json(res, 202, { started: true, queued:job.queued,queuePosition:job.position,id,types:selected });
         }
       }
 
