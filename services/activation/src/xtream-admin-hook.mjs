@@ -7,6 +7,7 @@ import {xtreamConnectionReport} from './xtream-smart-connection.mjs';
 import {runXtreamBootDiagnostics} from './xtream-boot-diagnostics.mjs';
 import {observeRailwayEgress,probeXtreamSocket} from './xtream-egress-inspector.mjs';
 import {probeXtreamHttp11} from './xtream-http-compat-probe.mjs';
+import {probeXtreamM3uAvailability} from './xtream-m3u-availability.mjs';
 import { createFixedWindowLimiter, requestClientKey } from './auth-protection.mjs';
 import {
   assertPublicXtreamUrl,
@@ -746,6 +747,28 @@ async function runSmartConnection(id){
   }catch(error){
     return xtreamConnectionReport({errorCode:redactXtreamError(error),checkedAt:Date.now()});
   }
+}
+
+// One-shot official M3U API availability check, using existing encrypted
+// source credentials. No indexing, playback or source DB updates.
+if(process.env.BLOFY_XTREAM_M3U_ONE_SHOT==='1'){
+  const timer=setTimeout(()=>{
+    void(async()=>{
+      const id=String(process.env.BLOFY_XTREAM_EGRESS_SOURCE_ID||'').trim();
+      if(!/^[0-9a-f-]{36}$/i.test(id))return;
+      const row=(await serverRows()).find(item=>item.id===id&&item.enabled===true);
+      if(!row)return;
+      const creds=decryptCredentials(row);
+      const result=await probeXtreamM3uAvailability({
+        baseUrl:row.base_url,username:creds.username,password:creds.password
+      });
+      console.info('BLOFY_XTREAM_M3U_AVAILABILITY',JSON.stringify({
+        sourceId:row.id,...result,
+        catalogImported:false,mediaPlayed:false,credentialsLogged:false
+      }));
+    })().catch(()=>console.warn('BLOFY_XTREAM_M3U_AVAILABILITY_FAILED','unavailable'));
+  },16000);
+  timer.unref?.();
 }
 
 // One-time transport compatibility experiment for a single saved source.
