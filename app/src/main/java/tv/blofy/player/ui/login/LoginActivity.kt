@@ -64,6 +64,7 @@ class LoginActivity : AppCompatActivity() {
     private lateinit var trialView: ActivationStatusView
     private var trialSnapshot: ActivationDisplayState.Snapshot? = null
     private var trialTicker: Job? = null
+    private var appContactJob: Job? = null
     private lateinit var addPlaylist: Button
     private lateinit var connectButton: Button
     private lateinit var refreshCodeButton: Button
@@ -803,6 +804,7 @@ class LoginActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         if (::status.isInitialized) requestIdentityRefresh()
+        startAppContactHeartbeat()
         trialTicker?.cancel()
         trialTicker = lifecycleScope.launch {
             while (true) {
@@ -815,7 +817,59 @@ class LoginActivity : AppCompatActivity() {
     override fun onPause() {
         identityJob?.cancel()
         trialTicker?.cancel()
+        appContactJob?.cancel()
+        appContactJob = null
         super.onPause()
+    }
+
+    /** Report actual Android contact after the QR is shown, without downloading large
+     * catalogs or granting an entitlement from the website. Existing activation checks
+     * remain authoritative, and a failed probe never clears a working cached playlist.
+     */
+    private fun startAppContactHeartbeat() {
+        appContactJob?.cancel()
+        appContactJob = lifecycleScope.launch {
+            delay(2_000L) // Let the existing fast local identity/playlist render finish first.
+            while (true) {
+                if (identityJob?.isActive != true &&
+                    connectJob?.isActive != true && playlistJob?.isActive != true) {
+                    val endpoint = activationEndpoint
+                    if (endpoint.isNotBlank()) {
+                        try {
+                            withTimeout(15_000L) {
+                                val dao = withContext(Dispatchers.IO) {
+                                    BlofyDatabase.get(applicationContext).dao()
+                                }
+                                val manager = ActivationManager(applicationContext, dao)
+                                val before = withContext(Dispatchers.IO) { manager.ensureIdentity() }
+                                val result = withContext(Dispatchers.IO) {
+                                    manager.refresh(ActivationRemoteClient.create(endpoint), BuildConfig.VERSION_NAME)
+                                }
+                                val after = withContext(Dispatchers.IO) { manager.ensureIdentity() }
+                                if (!isFinishing && !isDestroyed) {
+                                    if (deviceView.text.toString() != after.deviceId ||
+                                        codeView.text.toString() != after.activationCode) {
+                                        renderIdentity(after.deviceId, after.activationCode)
+                                    }
+                                    bindTrialStatus(after)
+                                    if (before.activated != result.canUse() ||
+                                        result.state() == ActivationCheckResponse.State.BLOCKED ||
+                                        result.state() == ActivationCheckResponse.State.EXPIRED) {
+                                        status.text = activationLabel(result)
+                                    }
+                                }
+                            }
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (_: Exception) {
+                            // Network/TLS diagnostics belong in the explicit Refresh flow.
+                            // Never claim a successful link or interrupt cached playback.
+                        }
+                    }
+                }
+                delay(30_000L)
+            }
+        }
     }
 
     private fun createQr(value: String): Bitmap {
