@@ -10,6 +10,9 @@
   const normalized=value=>String(value||'').toLocaleLowerCase('ar').replace(/[\u064B-\u065F\u0640]/g,'').trim();
   let snapshot={sources:[],totals:{live:0,movie:0,series:0,servers:0}};
   let accountSummary=null;
+  let lastSourceSummaryLoaded=false;
+  let autoRefreshEnabled=false;
+  let autoRefreshTimer=null;
   let selectedIndex=0;
   let visibleCommands=[];
   const palette=byId('streamCommandDialog');
@@ -172,16 +175,66 @@
         :'المكتبة لم تسجل عناصر مفهرسة بعد');
     }
   }
+  function updateActionCenter(){
+    const shell=byId('premiumActionableIssues');
+    if(!shell)return;
+    const problems=snapshot.sources.filter(x=>x.issue).length;
+    const expiring=accountSummary?.expiring??0;
+    const known=lastSourceSummaryLoaded||accountSummary!==null;
+    const important=problems+expiring;
+    shell.hidden=!known||important===0;
+    const text=byId('premiumActionableText');
+    if(text&&important){
+      const notes=[];
+      if(problems)notes.push(fmt(problems)+' مصدر يحتاج مراجعة اتصال أو مزامنة');
+      if(expiring)notes.push(fmt(expiring)+' اشتراك Xtream ينتهي خلال أسبوع');
+      text.textContent=notes.join(' · ')+'. هذه تنبيهات من البيانات المسجلة وليست نتيجة اختبار بث.';
+    }
+    const subs=byId('premiumReviewExpiring');
+    if(subs)subs.hidden=!expiring;
+    const sources=byId('premiumReviewSources');
+    if(sources)sources.hidden=!problems;
+  }
+  function openExpiringAccounts(){
+    openWorkspace('accounts');
+    const filter=byId('gatewayAccountFilter'),input=byId('gatewayAccountSearch');
+    if(input){input.value='';input.dispatchEvent(new Event('input',{bubbles:true}));}
+    if(filter){filter.value='expiring';filter.dispatchEvent(new Event('change',{bubbles:true}));}
+  }
+  function setAutoRefresh(value){
+    autoRefreshEnabled=Boolean(value);
+    if(autoRefreshTimer){clearInterval(autoRefreshTimer);autoRefreshTimer=null;}
+    if(autoRefreshEnabled){
+      autoRefreshTimer=setInterval(()=>{
+        if(document.visibilityState!=='visible')return;
+        byId('refreshBtn')?.click(); // Existing admin-only read endpoints; no sync or media probe.
+        document.dispatchEvent(new CustomEvent('blofy:refresh-accounts'));
+      },90000);
+    }
+    const btn=byId('streamAutoRefreshToggle');
+    if(btn){
+      btn.setAttribute('aria-pressed',String(autoRefreshEnabled));
+      btn.textContent=autoRefreshEnabled?'تحديث تلقائي: يعمل':'تحديث تلقائي: متوقف';
+    }
+    try{localStorage.setItem('blofy-stream-auto-refresh',autoRefreshEnabled?'1':'0')}catch{}
+  }
+
   function renderAccounts(data){
     if(!data||!Number.isFinite(Number(data.total)))return;
     accountSummary={
       total:number(data.total),active:number(data.active),
-      expiring:number(data.expiring),expired:number(data.expired)
+      expiring:number(data.expiring),expired:number(data.expired),disabled:number(data.disabled)
     };
     elementText('homeMetricActiveAccounts',fmt(accountSummary.active));
     elementText('premiumAccountsActive',fmt(accountSummary.active));
     elementText('premiumAccountsExpiring',fmt(accountSummary.expiring));
     elementText('premiumAccountsExpired',fmt(accountSummary.expired));
+    elementText('premiumAccountsDisabled',fmt(accountSummary.disabled));
+    const warning=byId('premiumSubscriptionsNotice');
+    if(warning)warning.textContent=accountSummary.expiring
+      ?fmt(accountSummary.expiring)+' اشتراك Xtream يقترب من الانتهاء، راجع تواريخ الحسابات قبل التجديد.'
+      :'تم تحميل بيانات حسابات Xtream. لا توجد اشتراكات تنتهي خلال أسبوع.';
+    updateActionCenter();
   }
 
   function renderSnapshot(data){
@@ -205,6 +258,8 @@
     renderCatalog(snapshot.totals);
     const time=new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
     elementText('premiumLastUpdated','آخر تحديث '+time);
+    lastSourceSummaryLoaded=true;
+    updateActionCenter();
     if(palette?.open)renderCommands(search?.value||'');
   }
   // Escape formula-like cells when exporting human-supplied source names.
@@ -226,6 +281,7 @@
       ['Active Xtream accounts',accountSummary?.active??'Unavailable'],
       ['Xtream accounts expiring within 7 days',accountSummary?.expiring??'Unavailable'],
       ['Expired Xtream accounts',accountSummary?.expired??'Unavailable'],
+      ['Disabled Xtream accounts',accountSummary?.disabled??'Unavailable'],
       [],
       ['Source name','Enabled','Published','Recorded issue','Syncing','Tested'],
       ...snapshot.sources.map(x=>[x.name,x.enabled?'Yes':'No',x.published?'Yes':'No',x.issue?'Yes':'No',x.syncing?'Yes':'No',x.tested?'Yes':'No'])
@@ -273,6 +329,11 @@
         if(button.dataset.openSourceFilter==='issues')openIssues();
       }));
     byId('streamExportReport')?.addEventListener('click',exportSnapshot);
+    byId('premiumReviewSources')?.addEventListener('click',openIssues);
+    byId('premiumReviewExpiring')?.addEventListener('click',openExpiringAccounts);
+    byId('streamAutoRefreshToggle')?.addEventListener('click',()=>setAutoRefresh(!autoRefreshEnabled));
+    let pref=false;try{pref=localStorage.getItem('blofy-stream-auto-refresh')==='1'}catch{}
+    setAutoRefresh(pref);
     let compact=false;try{compact=localStorage.getItem('blofy-stream-density')==='compact'}catch{}
     // Apply preference but do not modify any source or customer data.
     setCompact(compact);
