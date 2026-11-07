@@ -1,0 +1,68 @@
+name: BLOFY 55.8.5 pairing QA
+
+on:
+  push:
+    branches:
+      - fix/v2000082-link-heartbeat
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-pairing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Install Android SDK 36
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;35.0.0"
+      - name: Preserve official signed release identity
+        run: |
+          grep -Eq 'versionCode[[:space:]]*=[[:space:]]*2000082' app/build.gradle.kts
+          grep -Fq '2.0.0-rc07.55.8.5' app/build.gradle.kts
+          grep -Fq 'startAppContactHeartbeat()' app/src/main/java/tv/blofy/player/ui/login/LoginActivity.kt
+      - name: Unit tests without production contact
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle --no-daemon \
+            -PBLOFY_ACTIVATION_BASE_URL=http://127.0.0.1:9 \
+            -PBLOFY_UPDATE_BASE_URL=http://127.0.0.1:9 \
+            testDebugUnitTest 2>&1 | tee /tmp/blofy-pairing-gradle.log
+      - name: Lint and build owner QA APK
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle --no-daemon \
+            -PBLOFY_ACTIVATION_BASE_URL=https://api.blofyplayer.com \
+            -PBLOFY_UPDATE_BASE_URL=https://updates.blofyplayer.com \
+            lintDebug assembleDebug 2>&1 | tee -a /tmp/blofy-pairing-gradle.log
+      - name: Upload QA logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blofy-55-8-5-pairing-logs
+          path: |
+            /tmp/blofy-pairing-gradle.log
+            app/build/reports/lint-results-debug.*
+            app/build/test-results/testDebugUnitTest/
+          if-no-files-found: ignore
+      - name: Upload test APK (not production signed)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blofy-55-8-5-pairing-debug-only
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
