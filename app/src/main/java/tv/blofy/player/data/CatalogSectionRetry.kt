@@ -48,7 +48,7 @@ internal object CatalogSectionRetry {
         if (failure is IOException) {
             val text = failure.message.orEmpty().lowercase()
             if ("unexpected end of stream" in text || "unexpected end of input" in text ||
-                "premature end" in text || "stream was reset" in text) return true
+                "premature end" in text || "stream was reset" in text ||\n                "connection reset" in text || "connection closed" in text ||\n                "broken pipe" in text || "socket closed" in text) return true
         }
         return failure.cause?.takeIf { it !== failure }?.let { isTruncatedBody(it, depth + 1) } ?: false
     }
