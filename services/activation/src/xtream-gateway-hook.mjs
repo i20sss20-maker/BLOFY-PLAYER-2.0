@@ -559,76 +559,128 @@ async function preflightSource(row,deadline){
     if(!rows.length)continue;
     found++;
     if(kind==='series'){
-      // Two distinct playable episode *samples* are required for the same
-      // source. A catalog series with no episodes is reported separately and
-      // replaced with another series; it never counts as a passing video.
+      // Never hammer a slow provider by walking 12 adjacent (often broken)
+      // series IDs. Sample distinct seasons/positions within each series first,
+      // omit exact episodes already quarantined, then use a small mix of low-
+      // and high-ID series. A new account still requires two ACTUAL verified
+      // episode streams (no 404 or skipped item counts as a success).
       const needed=rows.length;
-      let sampled=0,loadedSubstitutes=false;
-      const inspected=new Set();
+      let sampled=0,loadedSubstitutes=false,inspectedSeries=0,metadataFailures=0;
+      const inspected=new Set(),maxSeriesToInspect=8;
       const loadSubstitutes=async()=>{
         if(loadedSubstitutes)return;
         loadedSubstitutes=true;
         try{
-          const more=(await pool.query(`SELECT source_id,container_extension
-            FROM blofy_xtream_items
-            WHERE server_id=$1 AND media_type='series' AND enabled=TRUE
-            ORDER BY source_id DESC LIMIT 12`,[row.id])).rows;
-          for(const candidate of more){
-            if(!rows.some(x=>x.source_id===candidate.source_id))
-              rows.push({...candidate,sampleBand:'replacement'});
+          const directions=['ASC','DESC'];
+          const [low,high]=await Promise.all(directions.map(direction=>
+            pool.query(`SELECT source_id,container_extension
+              FROM blofy_xtream_items
+              WHERE server_id=$1 AND media_type='series' AND enabled=TRUE
+              ORDER BY source_id ${direction} LIMIT 5`,[row.id])));
+          // Interleave instead of repeatedly picking neighboring high IDs:
+          // 9959/9958/9957 can all be from the same broken provider batch.
+          for(let i=0;i<5;i++){
+            for(const candidate of [low.rows[i],high.rows[i]]){
+              if(candidate&&!rows.some(x=>x.source_id===candidate.source_id))
+                rows.push({...candidate,sampleBand:'replacement'});
+            }
           }
         }catch{
-          // Insufficient verified replacements must fail the issuance gate.
+          // Do not assume the library is healthy when a replacement query fails.
         }
       };
       for(const seriesRow of rows){
-        if(sampled>=needed)break;
-        if(inspected.has(String(seriesRow.source_id)))continue;
-        inspected.add(String(seriesRow.source_id));
-        if(Date.now()>deadline-1000){
-          checks.push({kind:'preflight',ok:false,reason:'preflight_time_budget'});
-          break;
-        }
+        if(sampled>=needed||inspectedSeries>=maxSeriesToInspect)break;
+        const seriesId=String(seriesRow.source_id);
+        if(inspected.has(seriesId))continue;
+        inspected.add(seriesId);
+        inspectedSeries++;
+        if(Date.now()>deadline-3500)break;
         let payload,samples;
         try{
           payload=await fetchUpstreamApi(row,'get_series_info',
-            {series_id:seriesRow.source_id},{
-              timeoutMs:Math.min(6000,Math.max(1000,deadline-Date.now())),
+            {series_id:seriesId},{
+              timeoutMs:Math.min(seriesRow.sampleBand==='replacement'?3500:5500,
+                Math.max(1000,deadline-Date.now()-1200)),
               maxBytes:3_000_000
             });
-          samples=xtreamEpisodePlaybackCandidates(payload,1);
+          samples=xtreamEpisodePlaybackCandidates(payload,3);
         }catch(error){
-          checks.push({kind,ok:false,reason:issuanceErrorReason(error?.message),
+          const reason=issuanceErrorReason(error?.message);
+          if(seriesRow.sampleBand==='replacement'){
+            metadataFailures++;
+            // A single slow upstream must not produce a dozen identically
+            // worded red errors. Preserve a fail-closed summary below.
+            result.warnings.push({reason:'series_replacement_unavailable',
+              seriesSourceId:diagnosticXtreamItemId(seriesId)});
+            if(metadataFailures>=2)break;
+            continue;
+          }
+          checks.push({kind,ok:false,reason,
             sampleBand:seriesRow.sampleBand,
-            seriesSourceId:diagnosticXtreamItemId(seriesRow.source_id)});
+            seriesSourceId:diagnosticXtreamItemId(seriesId)});
+          await loadSubstitutes();
           continue;
         }
         if(!samples.length){
           result.warnings.push({reason:'series_has_no_episodes',
-            seriesSourceId:diagnosticXtreamItemId(seriesRow.source_id)});
+            seriesSourceId:diagnosticXtreamItemId(seriesId)});
           await loadSubstitutes();
           continue;
         }
+        const ids=samples.map(sample=>String(sample.id));
+        let quarantined=new Set();
+        try{
+          const blocked=(await pool.query(`SELECT source_id
+            FROM blofy_xtream_media_quarantine
+            WHERE server_id=$1 AND media_type='series' AND expires_at>NOW()
+              AND source_id=ANY($2::text[])`,[row.id,ids])).rows;
+          quarantined=new Set(blocked.map(x=>String(x.source_id)));
+        }catch{
+          // If isolation state is unreadable, require verified playback rather
+          // than trusting a potentially stale untested quarantine mark.
+        }
+        let seriesPassed=false;
         for(const sample of samples){
-          const probe=await probeIssuanceWithTransientRetry({
-            ...row,series_source_id:seriesRow.source_id,series_payload:payload
-          },'series',sample.id,sample.extension,deadline);
-          if(await quarantineConfirmedMissingMedia(row,'series',sample.id,probe)){
-            result.warnings.push(quarantineMediaWarning('series',sample.id,{
-              seriesId:seriesRow.source_id
-            }));
-            await loadSubstitutes();
+          if(Date.now()>deadline-1800)break;
+          if(quarantined.has(String(sample.id))){
+            if(result.warnings.length<12)result.warnings.push(
+              quarantineMediaWarning('series',sample.id,{seriesId}));
             continue;
           }
-          sampled++;
-          checks.push({...probe,sampleBand:seriesRow.sampleBand,
-            ...(probe.ok?{}:{seriesSourceId:diagnosticXtreamItemId(seriesRow.source_id),
-              episodeSourceId:diagnosticXtreamItemId(sample.id)})});
+          const probe=await probeIssuanceWithTransientRetry({
+            ...row,series_source_id:seriesId,series_payload:payload
+          },'series',sample.id,sample.extension,deadline);
+          if(await quarantineConfirmedMissingMedia(row,'series',sample.id,probe)){
+            if(result.warnings.length<12)result.warnings.push(
+              quarantineMediaWarning('series',sample.id,{seriesId}));
+            continue;
+          }
+          if(probe.ok){
+            sampled++;
+            checks.push({...probe,sampleBand:seriesRow.sampleBand});
+            seriesPassed=true;
+            break;
+          }
+          // Permission failures must always block issuance, even if a later
+          // unrelated episode works; do not probe more IDs around 403/456.
+          if([401,403,456].includes(Number(probe.httpStatus))){
+            checks.push({...probe,sampleBand:seriesRow.sampleBand,
+              seriesSourceId:diagnosticXtreamItemId(seriesId),
+              episodeSourceId:diagnosticXtreamItemId(sample.id)});
+            break;
+          }
+          if(seriesRow.sampleBand!=='replacement'){
+            checks.push({...probe,sampleBand:seriesRow.sampleBand,
+              seriesSourceId:diagnosticXtreamItemId(seriesId),
+              episodeSourceId:diagnosticXtreamItemId(sample.id)});
+          }
+          // Try another episode (same series), never a guessed media ID.
         }
+        if(!seriesPassed)await loadSubstitutes();
       }
-      if(sampled<needed){
-        checks.push({kind:'series',ok:false,reason:'series_sample_unavailable'});
-      }
+      if(sampled<needed)checks.push({kind:'series',ok:false,
+        reason:Date.now()>deadline-1800?'preflight_time_budget':'series_sample_unavailable'});
     }else if(kind==='live'){
       const results=await Promise.all(rows.map(async sample=>{
         const probe=await probeIssuanceWithTransientRetry(row,kind,
