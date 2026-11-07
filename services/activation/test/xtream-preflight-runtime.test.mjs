@@ -21,7 +21,12 @@ async function buildPreflight({movieSucceeds=true,seriesSucceeds=true,twoBands=f
             .map(id=>({source_id:String(id)})):[]};
       }
       assert.match(sql,/blofy_xtream_items/);
-      if(sql.includes('LIMIT 5')){
+      if(sql.includes('LIMIT 24')||sql.includes('LIMIT 3')){
+        if(sql.includes('ORDER BY md5')){
+          assert.match(sql,/ORDER BY md5\(source_id \|\| \$2::text\)/);
+          assert.equal(params[0],'source-fixture');
+          assert.match(params[1],/^\d{4}-\d\d-\d\dT\d\d$/);
+        }
         return {rows:noReplacement?[{source_id:'903'}]:[
           {source_id:'903'},{source_id:'805',container_extension:'mp4'}
         ]};
