@@ -612,7 +612,9 @@ async function ensureEpisodeMaps(serverId, seriesSourceId, episodes) {
   await pool.query(`INSERT INTO blofy_xtream_gateway_episode_map(server_id,series_source_id,source_episode_id,container_extension)
     SELECT $1::uuid,$2::text,x.source_id,x.container_extension
     FROM jsonb_to_recordset($3::jsonb) AS x(source_id text,container_extension text)
-    ON CONFLICT(server_id,series_source_id,source_episode_id) DO UPDATE SET container_extension=EXCLUDED.container_extension`,
+    ON CONFLICT(server_id,series_source_id,source_episode_id) DO UPDATE
+      SET container_extension=EXCLUDED.container_extension
+      WHERE blofy_xtream_gateway_episode_map.container_extension IS DISTINCT FROM EXCLUDED.container_extension`,
     [serverId, String(seriesSourceId), JSON.stringify(unique.map(item => ({ source_id: item.sourceId, container_extension: item.extension })))]);
   const ids = unique.map(item => item.sourceId);
   const rows = (await pool.query(`SELECT gateway_id,source_episode_id,container_extension FROM blofy_xtream_gateway_episode_map
