@@ -262,8 +262,13 @@ export async function parseTopLevelJsonArray(body, onItem, { maxItemBytes = 2_00
         continue;
       }
 
+      // Checking UTF-8 size after every character scans the whole growing
+      // object repeatedly (quadratic time on large Xtream catalog entries).
+      // UTF-8 byte length is never smaller than UTF-16 code-unit length:
+      // use the cheap code-unit bound here, then enforce the exact byte
+      // limit once in emit() before JSON.parse and database insertion.
       current += ch;
-      if (Buffer.byteLength(current) > maxItemBytes) throw new Error('xtream_item_too_large');
+      if (current.length > maxItemBytes) throw new Error('xtream_item_too_large');
       if (inString) {
         if (escape) escape = false;
         else if (ch === '\\') escape = true;
