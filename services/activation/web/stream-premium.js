@@ -218,6 +218,14 @@
     try{localStorage.setItem('blofy-stream-auto-refresh',autoRefreshEnabled?'1':'0')}catch{}
   }
 
+  function showSubscriberUnavailable(){
+    accountSummary=null;
+    for(const id of ['homeMetricActiveAccounts','premiumAccountsActive','premiumAccountsExpiring','premiumAccountsExpired','premiumAccountsDisabled'])
+      elementText(id,'—');
+    const notice=byId('premiumSubscriptionsNotice');
+    if(notice)notice.textContent='تعذر تحديث حالة حسابات Xtream. الأرقام غير متاحة الآن، ولم تتغير الاشتراكات.';
+    updateActionCenter();
+  }
   function renderAccounts(data){
     if(!data||!Number.isFinite(Number(data.total)))return;
     accountSummary={
@@ -341,6 +349,7 @@
     });
     document.addEventListener('blofy:stream-snapshot',event=>renderSnapshot(event.detail));
     document.addEventListener('blofy:account-snapshot',event=>renderAccounts(event.detail));
+    document.addEventListener('blofy:account-unavailable',showSubscriberUnavailable);
     if(window.__BLOFY_ACCOUNT_SUMMARY__)renderAccounts(window.__BLOFY_ACCOUNT_SUMMARY__);
     if(window.__BLOFY_STREAM_SNAPSHOT__)renderSnapshot(window.__BLOFY_STREAM_SNAPSHOT__);
     renderCommands();
