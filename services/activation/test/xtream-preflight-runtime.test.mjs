@@ -46,7 +46,7 @@ async function buildPreflight({movieSucceeds=true,seriesSucceeds=true,twoBands=f
       return data;
     },
     sanitizeXtreamAccount:x=>({authenticated:x.user_info?.auth===1}),
-    xtreamEpisodePlaybackCandidates:x=>x.episodes['1'].map(y=>({id:y.id,extension:y.container_extension})),
+    xtreamEpisodePlaybackCandidates:x=>(x?.episodes?.['1']||[]).map(y=>({id:y.id,extension:y.container_extension})),
     probeIssuanceWithTransientRetry:async(row,kind,id,ext)=>{
       if(kind==='series'){
         const isNewest=twoBands&&row.series_source_id==='903';
