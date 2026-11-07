@@ -615,8 +615,9 @@ async function runXtreamBatchProbe(){
   const search=String(el('xtSourceSearch').value||'').trim().toLocaleLowerCase();
   const filter=el('xtSourceFilter').value;
   const available=state.xtreamServers.filter(row=>row.enabled&&filter!=='disabled'&&
-    (!search||String(row.name+' '+row.baseUrl).toLocaleLowerCase().includes(search))&&
-    (filter!=='published'||row.publishCatalog));
+    (!search||String(row.name+' '+row.baseUrl+' '+row.id).toLocaleLowerCase().includes(search))&&
+    (filter!=='published'||row.publishCatalog)&&
+    (filter!=='issues'||Boolean(row.lastError||row.status==='offline'||row.status==='error')));
   if(!available.length){showMessage('لا توجد مصادر مفعّلة مطابقة للفحص.','error');return;}
   const sources=available.slice(0,6);
   const kinds=[['live','قناة'],['movie','فيلم'],['series','بيانات مسلسل'],['episode','حلقة']];
@@ -668,7 +669,13 @@ async function runXtreamBatchProbe(){
               empty_media:'بث فارغ',upstream_non_media_response:'استجابة نصية بدل فيديو',
               no_imported_items:'لا يوجد محتوى مستورد',output_format_not_allowed:'لا توجد TS أو M3U8 مصرح بها لهذا الحساب',no_episode_info:'تفاصيل حلقات غير متاحة',
               no_playable_episodes:'لا توجد حلقات',timeout:'انتهت مهلة المصدر',
-              upstream_unreachable:'فشل الاتصال بالمصدر'
+              upstream_unreachable:'فشل الاتصال بالمصدر',
+              xtream_transport_dns_failed:'تعذر DNS؛ راجع عنوان المصدر',
+              xtream_transport_connection_refused:'السيرفر رفض الاتصال؛ راجع المنفذ',
+              xtream_transport_connection_reset:'المصدر قطع الاتصال؛ راجع المزود',
+              xtream_transport_timeout:'انتهت مهلة الاتصال بالمصدر',
+              xtream_transport_tls_invalid:'شهادة HTTPS تحتاج إصلاحًا',
+              xtream_transport_unreachable:'تعذر الاتصال من Railway بالمصدر'
             };
             const statuses={
               401:'المصدر رفض بيانات الدخول',
