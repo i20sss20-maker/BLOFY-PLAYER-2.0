@@ -1667,10 +1667,11 @@ http.createServer = function withBlofyXtream(listener) {
           acc.movie += Number(item.counts.movie || 0);
           acc.series += Number(item.counts.series || 0);
           if (item.status === 'online') acc.online++;
-          if (item.status === 'syncing' || item.syncing) acc.syncing++;
+          if (item.syncing) acc.syncing++;
+          if(item.status==='syncing'&&!item.syncing)acc.interrupted++;
           if(item.queued)acc.queued++;
           return acc;
-        }, { servers: 0, online: 0, syncing: 0, queued: 0, live: 0, movie: 0, series: 0 });
+        }, { servers: 0, online: 0, syncing: 0, queued: 0, interrupted: 0, live: 0, movie: 0, series: 0 });
         totals.total = totals.live + totals.movie + totals.series;
         return json(res, 200, { items, totals,csrfToken:nativeXtreamCsrfToken(req,ADMIN_SESSION_KEY) });
       }
