@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#09090e">
   <link rel="icon" type="image/png" href="/blofy-logo.png"><link rel="apple-touch-icon" href="/blofy-logo.png"><meta name="robots" content="noindex,nofollow"><title>BLOFY STREAM | إدارة المصادر والاشتراكات</title>
-  <link rel="stylesheet" href="/sources-admin.css?v=20261106-pro-v1">
+  <link rel="stylesheet" href="/sources-admin.css?v=20261107-stream2-v2">
   <link rel="stylesheet" href="/site-polish.css?v=20261025-lux-final">
 </head>
 <body>
@@ -27,7 +27,7 @@
       <header class="topbar">
         <div>
           <p class="eyebrow">BLOFY CONTENT CONTROL</p>
-          <h1>BLOFY STREAM</h1>
+          <h1>BLOFY STREAM <span class="stream-v2-version">2.0</span></h1>
           <p class="subtitle">لوحة واحدة تجمع حسابات Xtream المصرح بها، وتدير مكتبة BLOFY واشتراكات العملاء وبيانات Host وUsername وPassword.</p>
         </div>
         <div class="top-actions">
@@ -35,6 +35,22 @@
           <button class="button" id="refreshBtn" type="button">↻ تحديث</button>
         </div>
       </header>
+
+      <section class="stream-v2-overview" aria-labelledby="streamV2Heading">
+        <div class="stream-v2-intro">
+          <div>
+            <span class="stream-v2-kicker">BLOFY STREAM 2.0 · النظام الرسمي</span>
+            <h2 id="streamV2Heading">محرك HLS الجديد على سيرفر BLOFY</h2>
+            <p>هذه حالة البنية الجديدة، وليست نتيجة تشغيل القنوات. تبقى مشاهدة المشتركين على مسار Xtream الحالي حتى ينجح اختبار المحتوى الحقيقي.</p>
+          </div>
+          <a class="button ghost" href="#blofyPlaybackHeading">فحص تشغيل المحتوى</a>
+        </div>
+        <div class="stream-v2-states">
+          <div><small>اتصال محرك HLS الرسمي</small><strong id="blofyRestreamEngineStatus" role="status" aria-live="polite">جاري فحص الاتصال…</strong></div>
+          <div><small>تشغيل العملاء</small><strong>المسار الحالي محفوظ</strong></div>
+          <div><small>المرحلة التالية</small><strong>اختبار القنوات والأفلام والحلقات</strong></div>
+        </div>
+      </section>
 
       <nav class="tabs" aria-label="أقسام المصادر">
         <button class="tab active" type="button" data-tab="xtream"><span>01</span>مصادر Xtream والاشتراكات</button>
@@ -146,7 +162,6 @@
           <div class="blofy-playback-metrics" id="blofyPlaybackMetrics" aria-live="polite">
             <p class="muted">جارٍ تحميل بيانات التشغيل…</p>
           </div>
-          <div class="blofy-playback-engine-status" id="blofyRestreamEngineStatus" role="status" aria-live="polite">جاري التحقق من اتصال محرك HLS الرسمي…</div>
           <p class="muted" id="blofyPlaybackNote" role="status">الأرقام تخص السيرفر الحالي فقط، وتتجدد مع إعادة تشغيله.</p>
           <div class="blofy-playback-probe">
             <div>
