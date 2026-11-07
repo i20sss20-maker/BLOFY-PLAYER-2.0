@@ -1,4 +1,5 @@
 // Server-rendered Xtream controls: reliable even when browser JS fails.
+import {xtreamConnectionReport} from './xtream-smart-connection.mjs';
 // All writes are handled by authenticated same-origin POSTs in xtream-admin-hook.
 export const CONTROL_PATH='/api/v1/admin/xtream/controls';
 
@@ -58,10 +59,12 @@ export function controlPage({items=[],success='',error='',csrfToken='',diagnosti
   const message=noticeText(success)||(String(success).startsWith('probe:')?String(success).slice(6,340):'');
   const cards=items.map(item=>{
     const id=esc(item.id),name=esc(item.name),url=esc(item.baseUrl);
-    const status=esc(String(item.status||'unknown'));
+    const status=esc(({online:'API متصل',offline:'تعذر الاتصال',syncing:'مزامنة',error:'خطأ',unknown:'غير مفحوص'})[String(item.status)]||'غير معروف');
     const enabled=Boolean(item.enabled),published=Boolean(item.publishCatalog);
     const counts=item.counts||{};
-    const lastError=item.lastError?'<p class="err">آخر خطأ: '+esc(item.lastError)+'</p>':'';
+    const lastError=item.lastError
+      ?'<p class="err">آخر تنبيه: '+esc(xtreamConnectionReport({errorCode:item.lastError}).title)+
+       '<br>'+esc(xtreamConnectionReport({errorCode:item.lastError}).nextStep)+'</p>':'';
     const metrics='<div class="metrics"><span>القنوات <b>'+n(counts.live)+'</b></span><span>الأفلام <b>'+n(counts.movie)+'</b></span><span>المسلسلات <b>'+n(counts.series)+'</b></span><span>الإجمالي <b>'+n(counts.total)+'</b></span></div>';
     const diagnosis=diagnostics[item.id];
     const smartReport=diagnosis
