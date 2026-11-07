@@ -51,5 +51,5 @@ test('source control sees confirmed changes and never claims a delete before DB 
   assert.match(handler,/result\.deletionQueued!==true/);
   assert.match(handler,/state\.xtreamServers\.some\(source=>source\.id===item\.id\)/);
   assert.match(ui,/cache: 'no-store'/);
-  assert.match(html,/sources-admin\.js\?v=20261107-hybrid-index-v2/);
+  assert.match(html,/sources-admin\.js\?v=20261107-transport-evidence-v3/);
 });

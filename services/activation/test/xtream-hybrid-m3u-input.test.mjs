@@ -56,7 +56,7 @@ test('M3U is a separate encrypted per-source configuration and never returned as
   assert.match(js,/item.m3uConfigured/);
   assert.match(native,/name="m3uUrl"/);
   assert.match(native,/name="m3uRemove"/);
-  assert.match(html,/sources-admin\.js\?v=20261107-hybrid-index-v2/);
+  assert.match(html,/sources-admin\.js\?v=20261107-transport-evidence-v3/);
 });
 
 test('real authenticated M3U probe checks source headers without returning URL or secrets',async()=>{

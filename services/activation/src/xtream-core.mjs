@@ -290,7 +290,40 @@ export async function parseTopLevelJsonArray(body, onItem, { maxItemBytes = 2_00
   return count;
 }
 
+// Node's "fetch failed" hides the low-level reason. Inspect ONLY a fixed
+// allowlist of error codes from the nested causes, never print a provider
+// URL, query string, account name, password, token or raw exception.
+export function xtreamTransportReason(error){
+  const stack=[error];
+  const seen=new Set();
+  const codes=new Set();
+  for(let i=0;i<12&&stack.length;i++){
+    const part=stack.shift();
+    if(!part||typeof part!=='object'||seen.has(part))continue;
+    seen.add(part);
+    if(typeof part.code==='string')codes.add(part.code.toUpperCase().slice(0,80));
+    if(part.cause)stack.push(part.cause);
+    if(Array.isArray(part.errors))stack.push(...part.errors.slice(0,6));
+  }
+  if(codes.has('ENOTFOUND')||codes.has('EAI_AGAIN'))return 'xtream_dns_failure';
+  if(codes.has('ECONNREFUSED'))return 'xtream_connection_refused';
+  if(codes.has('ETIMEDOUT')||codes.has('UND_ERR_CONNECT_TIMEOUT')||
+     error?.name==='TimeoutError'||error?.name==='AbortError')
+    return 'xtream_connect_timeout';
+  if(codes.has('ENETUNREACH')||codes.has('EHOSTUNREACH'))
+    return 'xtream_network_unreachable';
+  if(codes.has('ECONNRESET')||codes.has('EPIPE')||
+     codes.has('UND_ERR_SOCKET'))return 'xtream_connection_reset';
+  if([...codes].some(code=>code.startsWith('ERR_TLS_')||
+    ['CERT_HAS_EXPIRED','UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+      'DEPTH_ZERO_SELF_SIGNED_CERT'].includes(code)))return 'xtream_tls_failure';
+  if(String(error?.message||'')==='fetch failed')return 'xtream_transport_failed';
+  return null;
+}
+
 export function redactXtreamError(error) {
+  const classified=xtreamTransportReason(error);
+  if(classified)return classified;
   const message = String(error?.message || error || 'xtream_error');
   return message.replace(/([?&](?:username|password)=)[^&\s]+/gi, '$1***').slice(0, 400);
 }
