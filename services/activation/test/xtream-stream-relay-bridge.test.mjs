@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {
- relayConfiguration,relayEligible,issueStreamRelayGrant,checkStreamRelayBridge
+ relayConfiguration,relayEligible,issueStreamRelayGrant,checkStreamRelayBridge,
+ checkStreamRelaySyntheticMedia
 } from '../src/xtream-stream-relay-bridge.mjs';
 const account='b27ee9da-2f71-4ae3-a1ce-a5e051f60937';
 const key='stream-relay-test-key-with-at-least-32-random-characters';
@@ -82,4 +83,38 @@ test('authorization and account source constraints precede optional relay handof
   assert.match(segment,/reason:'relay_unavailable'/);
   assert.match(segment,/res\.writeHead\(307/);
   assert.doesNotMatch(segment,/BLOFY_STREAM_RELAY_CANARY_FALLBACK'.*upstream/);
+});
+
+test('full relay transport proof stays synthetic and verifies 564 TS bytes',async()=>{
+  const checked=[];
+  const ts=Buffer.alloc(188*3,0);
+  for(const x of [0,188,376])ts[x]=0x47;
+  const id='c'.repeat(48);
+  const result=await checkStreamRelaySyntheticMedia({env:enabled,fetchImpl:async(uri,options)=>{
+    checked.push(uri);
+    if(uri===origin+'/internal/relay-grants'){
+      assert.equal(options.method,'POST');
+      const payload=JSON.parse(options.body);
+      assert.deepEqual(payload,{kind:'live',sourceUrl:origin+'/synthetic/transport.ts'});
+      return new Response(JSON.stringify({ok:true,path:'/relay/'+id,expiresInSeconds:45}),
+        {status:201});
+    }
+    assert.equal(uri,origin+'/relay/'+id);
+    assert.equal(options.headers.range,'bytes=0-563');
+    return new Response(ts,{headers:{'content-type':'video/mp2t'}});
+  }});
+  assert.equal(result.ok,true);
+  assert.equal(result.code,'synthetic_relay_transport_verified');
+  assert.equal(result.bytesVerified,564);
+  assert.equal(result.realSourceVerified,false);
+  assert.equal(result.audioVideoDecoded,false);
+  assert.equal(result.customerCutover,false);
+  assert.equal(checked.length,2);
+});
+test('unavailable transport proof does not misreport playable media',async()=>{
+  const result=await checkStreamRelaySyntheticMedia({env:enabled,
+    fetchImpl:async()=>new Response('{}',{status:503})});
+  assert.equal(result.ok,false);
+  assert.equal(result.realSourceVerified,false);
+  assert.equal(result.audioVideoDecoded,false);
 });
