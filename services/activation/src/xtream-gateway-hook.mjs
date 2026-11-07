@@ -978,14 +978,17 @@ async function handleM3u(req, res, url) {
   await writeStreamChunk(res,'#EXTM3U\n');
   for (const mediaType of ['live','movie']) {
     await walkGatewayItems(mediaType, null, async row => {
-      const item = formatGatewayItem(mediaType, row);
+      // M3U uses only the already-selected source fields; formatting a full
+      // Xtream API object per entry was unused work on huge playlist exports.
       const group = escapeM3uAttribute(row.metadata?.genre || (mediaType === 'live' ? 'Live' : 'Movies'));
       const name = escapeM3uAttribute(row.name);
       const logo = escapeM3uAttribute(row.icon_url || '');
       const ext = mediaType === 'live' ? 'ts' : safeGatewayExtension(row.container_extension, 'mp4');
       const kind = mediaType === 'live' ? 'live' : 'movie';
-      await writeStreamChunk(res,`#EXTINF:-1 tvg-name="${name}" tvg-logo="${logo}" group-title="${group}",${name}\n`);
-      await writeStreamChunk(res,`${base}/${kind}/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${row.gateway_id}.${ext}\n`);
+      // One write/drain check per entry rather than two: quicker exports
+      // without changing M3U order, paths, credentials or authorization.
+      await writeStreamChunk(res,`#EXTINF:-1 tvg-name="${name}" tvg-logo="${logo}" group-title="${group}",${name}\n`+
+        `${base}/${kind}/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${row.gateway_id}.${ext}\n`);
     }, account.source_id||null);
   }
   res.end();
