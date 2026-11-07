@@ -53,3 +53,12 @@ The previous working production code is pinned at `5cc6547fb933b61ed475c2d8454ce
 - Required external resolution: provider check the source HTTP listener/firewall logs for the observed Railway egress IPs, confirm that server-to-server requests/re-streaming are permitted, and allowlist all assigned static addresses if their policy allows. Provider could also validate the exact Xtream API URL, port and protocol without disclosure of credentials in an issue.
 - All one-shot diagnostics were turned off via Railway production variables after testing; they are opt-in only. MediaMTX customer cutover remains disabled; no source or subscriber records were changed.
 - Production source code tested and deployed at `17559bc40df7cb71a4e4abf71244b4d11582fb70`. Return to pre-experiment pinned commit `f4e606380dd8dde231cede4e7c37267a2b99a33f` if needed. Dedicated UI-based outbound-IP status is not exposed through the connected Railway tool; true egress measurement was used instead.
+
+
+## Provider-approved restreaming: M3U fallback check (2026-11-07)
+- The user confirmed the external Xtream provider permits restreaming. This permission does not establish that the provider's edge WAF/firewall admits datacenter IPs or that all endpoints are accessible.
+- From the actual production Railway portal and the failing saved source (ID prefix 59a2fbf5), a single bounded read-only GET to the provider's official get.php M3U export endpoint returned `xtream_transport_connection_reset`, without any HTTP status. No catalog was downloaded, imported or modified.
+- Earlier probes: TCP socket connected; both native player_api.php and HTTP/1.1 Connection: close were reset at or before HTTP headers. The actual Railway outgoing address was observed as 152.55.184.241. The admin screenshot showed all assigned shared IPs: 208.77.244.242, 152.55.184.240, 152.55.184.241.
+- Therefore switching this source from Xtream API to M3U alone is not a supported fix. Source-specific allowlisting, provider-issued server-to-server API endpoint, or a relay approved by the provider remains necessary. Do not rotate proxies, spoof clients or auto-trigger repeated retries.
+- `xtream-m3u-availability.mjs` implements the safe, credential-free-output M3U check. It is gated by an opt-in one-shot variable, which was disabled after testing. New regression tests cover one-chunk limit, provider denials, invalid content, safe reset and no catalog changes.
+- The working source's initial live/movie/episode media HTTP samples previously succeeded; no customer HLS/MediaMTX cutover was performed.
