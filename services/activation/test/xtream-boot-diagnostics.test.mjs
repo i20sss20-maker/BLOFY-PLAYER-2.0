@@ -50,3 +50,19 @@ test('diagnostic is opt-in and never writes, syncs or serves content',async()=>{
  assert.match(snippet,/BLOFY_XTREAM_DIAGNOSTIC_END/);
  assert.doesNotMatch(snippet,/UPDATE |DELETE |INSERT |syncServer|probeXtreamPlayback|\.password_secret|\.username_secret/);
 });
+
+test('media release smoke is opt-in, limits to one reachable source and never changes customer streams',async()=>{
+ const source=await readFile(new URL('../src/xtream-admin-hook.mjs',import.meta.url),'utf8');
+ const start=source.indexOf("if(process.env.BLOFY_XTREAM_ONE_SHOT_MEDIA_PROBE==='1')");
+ const end=source.indexOf('async function testServer(id)',start);
+ assert.ok(start>=0&&end>start);
+ const segment=source.slice(start,end);
+ assert.match(segment,/fetchAccount\(row,\{timeoutMs:8000,maxAttempts:1\}\)/);
+ assert.match(segment,/if\(!reachable\)continue/);
+ assert.match(segment,/for\(const row of sources\.slice\(0,4\)\)/);
+ assert.match(segment,/break; \/\/ Exactly one provider/);
+ assert.match(segment,/probeXtreamPlayback\(row\.id,mediaType\)/);
+ assert.match(segment,/pictureAndSoundVerified:false/);
+ assert.doesNotMatch(segment,/persistSourceMediaProbe|syncServer\(|UPDATE |DELETE |INSERT |response\.body|username_secret|password_secret/);
+ assert.match(segment,/BLOFY_REAL_MEDIA_SAMPLE_END/);
+});
