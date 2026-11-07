@@ -29,7 +29,10 @@ const RELEASE_ARTIFACT_SHA256 = String(process.env.BLOFY_RELEASE_APK_SHA256 || '
 // Keep archived builds hidden when one current public release is selected.
 const BLOFY_ONLY_CURRENT = String(process.env.BLOFY_SINGLE_RELEASE_75 || '').toLowerCase() === 'true' ||
   String(process.env.BLOFY_PUBLIC_RELEASE_2000078 || '').toLowerCase() === 'true' ||
-  String(process.env.BLOFY_PUBLIC_RELEASE_2000079 || '').toLowerCase() === 'true';
+  String(process.env.BLOFY_PUBLIC_RELEASE_2000079 || '').toLowerCase() === 'true' ||
+  String(process.env.BLOFY_PUBLIC_RELEASE_2000080 || '').toLowerCase() === 'true' ||
+  String(process.env.BLOFY_PUBLIC_RELEASE_2000081 || '').toLowerCase() === 'true' ||
+  String(process.env.BLOFY_PUBLIC_RELEASE_2000082 || '').toLowerCase() === 'true';
 const XIAOMI_V74_APK_URL = 'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/xiaomi-v74-android9-owner-test-20261026/BLOFY-PLAYER-Xiaomi-v74-SIGNED.apk';
 const XIAOMI_V74_DOWNLOAD_PATH = '/download/xiaomi-v74.apk';
 const QA_APK_URL = String(process.env.BLOFY_QA_APK_URL || 'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/qa-20260926-stability/BLOFY-PLAYER-2.0-rc06-QA-PRODUCTION-SIGNED.apk').trim();
