@@ -44,6 +44,7 @@ import { XtreamDenialCooldown } from './xtream-denial-cooldown.mjs';
 import { createGatewayUsageThrottle } from './xtream-gateway-usage-throttle.mjs';
 import { readXtreamGatewayJsonResponse } from './xtream-gateway-response.mjs';
 import { createXtreamHealthSnapshot } from './xtream-health-snapshot.mjs';
+import {relayEligible,issueStreamRelayGrant} from './xtream-stream-relay-bridge.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
@@ -700,13 +701,30 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
         {'retry-after':String(rejection.retryAfterSeconds)});
     }
   }
+  const upstream = mediaUpstreamUrl(row, kind, sourceId, mediaExtension);
+  // Optional one-account canary: transfer the data plane to the isolated
+  // Railway project. Authentication, catalog restrictions, source selection
+  // and subscriber expiry stay checked here first. Disabled by default.
+  if(relayEligible({accountId:account.id,kind,extension:mediaExtension})){
+    try{
+      const destination=await issueStreamRelayGrant({
+        sourceUrl:upstream.href,kind
+      });
+      res.writeHead(307,{'location':destination,'cache-control':'no-store',
+        'referrer-policy':'no-referrer','x-content-type-options':'nosniff'});
+      return res.end();
+    }catch{
+      // If the new media plane cannot issue a safe ticket, keep the old
+      // playback route operational for this request and customer.
+      console.warn('BLOFY_STREAM_RELAY_CANARY_FALLBACK',{kind,reason:'relay_unavailable'});
+    }
+  }
   // Keep each viewer's stream independent. Only retry failures before video bytes reach them.
   const client = new AbortController();
   const abort = () => { if (!client.signal.aborted) client.abort(); };
   const onClose = () => { if (!res.writableEnded) abort(); };
   req.once('aborted', abort);
   res.once('close', onClose);
-  const upstream = mediaUpstreamUrl(row, kind, sourceId, mediaExtension);
   const headers = { 'user-agent': String(req.headers['user-agent'] || 'BLOFY-Xtream-Gateway/1.0') };
   if (req.headers.range) headers.range = String(req.headers.range);
   // A provider returning 404/416 only for "Range: bytes=0-..." can be
