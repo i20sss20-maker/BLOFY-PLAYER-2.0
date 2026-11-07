@@ -9,6 +9,7 @@
   const fmt=value=>Math.max(0,Number(value)||0).toLocaleString('en-US');
   const normalized=value=>String(value||'').toLocaleLowerCase('ar').replace(/[\u064B-\u065F\u0640]/g,'').trim();
   let snapshot={sources:[],totals:{live:0,movie:0,series:0,servers:0}};
+  let accountSummary=null;
   let selectedIndex=0;
   let visibleCommands=[];
   const palette=byId('streamCommandDialog');
@@ -171,6 +172,18 @@
         :'المكتبة لم تسجل عناصر مفهرسة بعد');
     }
   }
+  function renderAccounts(data){
+    if(!data||!Number.isFinite(Number(data.total)))return;
+    accountSummary={
+      total:number(data.total),active:number(data.active),
+      expiring:number(data.expiring),expired:number(data.expired)
+    };
+    elementText('homeMetricActiveAccounts',fmt(accountSummary.active));
+    elementText('premiumAccountsActive',fmt(accountSummary.active));
+    elementText('premiumAccountsExpiring',fmt(accountSummary.expiring));
+    elementText('premiumAccountsExpired',fmt(accountSummary.expired));
+  }
+
   function renderSnapshot(data){
     if(!data||!Array.isArray(data.sources)||!data.totals)return;
     snapshot={
@@ -210,6 +223,9 @@
       ['Indexed live',snapshot.totals.live],
       ['Indexed movies',snapshot.totals.movie],
       ['Indexed series',snapshot.totals.series],
+      ['Active Xtream accounts',accountSummary?.active??'Unavailable'],
+      ['Xtream accounts expiring within 7 days',accountSummary?.expiring??'Unavailable'],
+      ['Expired Xtream accounts',accountSummary?.expired??'Unavailable'],
       [],
       ['Source name','Enabled','Published','Recorded issue','Syncing','Tested'],
       ...snapshot.sources.map(x=>[x.name,x.enabled?'Yes':'No',x.published?'Yes':'No',x.issue?'Yes':'No',x.syncing?'Yes':'No',x.tested?'Yes':'No'])
@@ -264,6 +280,8 @@
       setCompact(!document.documentElement.classList.contains('stream-density-compact'));
     });
     document.addEventListener('blofy:stream-snapshot',event=>renderSnapshot(event.detail));
+    document.addEventListener('blofy:account-snapshot',event=>renderAccounts(event.detail));
+    if(window.__BLOFY_ACCOUNT_SUMMARY__)renderAccounts(window.__BLOFY_ACCOUNT_SUMMARY__);
     if(window.__BLOFY_STREAM_SNAPSHOT__)renderSnapshot(window.__BLOFY_STREAM_SNAPSHOT__);
     renderCommands();
   }
