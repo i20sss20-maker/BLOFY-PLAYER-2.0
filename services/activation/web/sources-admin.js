@@ -2057,7 +2057,20 @@ document.addEventListener('click',event=>{
 },true);
 el('xtSourceSearch').addEventListener('input', renderXtream);
 el('xtSourceFilter').addEventListener('change', renderXtream);
+function toggleSourceForm(expand){
+  const panel=el('xtAddSourceSection'),button=el('consoleToggleSourceForm');
+  const open=Boolean(expand);
+  panel.classList.toggle('is-collapsed',!open);
+  button.setAttribute('aria-expanded',String(open));
+  button.textContent=open?'إغلاق نموذج الإضافة':'+ إضافة مصدر جديد';
+}
+el('consoleToggleSourceForm').addEventListener('click',()=>{
+  const willExpand=el('xtAddSourceSection').classList.contains('is-collapsed');
+  toggleSourceForm(willExpand);
+  if(willExpand)el('xtName').focus({preventScroll:true});
+});
 el('xtNewSourceBtn').addEventListener('click', () => {
+  toggleSourceForm(true);
   el('xtAddSourceSection').scrollIntoView({behavior:'smooth',block:'center'});
   el('xtName').focus({preventScroll:true});
 });
