@@ -10,10 +10,10 @@ const state = {
   catalogOffset: 0,
   catalogQueryKey: '',
   catalogRequestSerial: 0,
-  activeTab: 'xtream',
+  activeTab: 'home',
   pollTimer: null
 };
-const TAB_NAMES = new Set(['xtream', 'catalog', 'studio']);
+const TAB_NAMES = new Set(['home', 'xtream', 'catalog', 'studio']);
 const tabFromHash = () => {
   const name = String(location.hash || '').replace(/^#/, '').trim().toLowerCase();
   return TAB_NAMES.has(name) ? name : null;
@@ -322,6 +322,35 @@ function refreshSourceCard(card, item) {
   }
 }
 
+
+function renderHomeMetrics(){
+  const totals=state.xtreamTotals||{};
+  for(const [id,key] of [['homeMetricSources','servers'],['homeMetricLive','live'],['homeMetricMovies','movie'],['homeMetricSeries','series']]){
+    const node=el(id);
+    if(node)node.textContent=Number(totals[key]||0).toLocaleString('en-US');
+  }
+}
+
+const WORKSPACE_MODES=new Set(['sources','accounts','diagnostics','all']);
+const WORKSPACE_HELP={
+  sources:'أضف مصدرًا أو اختر مصدرًا موجودًا، ثم افحصه قبل إتاحته للمشتركين.',
+  accounts:'أنشئ بيانات الدخول للمشترك أو ابحث عن حساب موجود. كلمات المرور الجديدة تظهر مرة واحدة.',
+  diagnostics:'راجع أخطاء الاتصال والتشغيل، ثم افحص قناة أو فيلمًا أو حلقة من قائمة BLOFY.',
+  all:'جميع أدوات الإدارة المتقدمة معروضة. يفضّل استخدام الأقسام المبسطة للمهام اليومية.'
+};
+function selectWorkspaceMode(mode){
+  if(!WORKSPACE_MODES.has(mode))return;
+  const workspace=el('tab-xtream');
+  workspace.dataset.workspaceMode=mode;
+  document.querySelectorAll('.console-workspace-nav button[data-workspace-mode]').forEach(button=>{
+    const active=button.dataset.workspaceMode===mode;
+    button.classList.toggle('is-active',active);
+    button.setAttribute('aria-pressed',String(active));
+  });
+  const help=el('consoleWorkspaceHint');
+  if(help)help.textContent=WORKSPACE_HELP[mode];
+}
+
 function renderXtream() {
   const totals = state.xtreamTotals || {};
   el('xtServers').textContent = String(totals.servers || 0);
@@ -329,6 +358,7 @@ function renderXtream() {
   el('xtLive').textContent = Number(totals.live || 0).toLocaleString();
   el('xtMovies').textContent = Number(totals.movie || 0).toLocaleString();
   el('xtSeries').textContent = Number(totals.series || 0).toLocaleString();
+  renderHomeMetrics();
   renderStudioOverview();
   const text=el('xtreamTotalsNotice');
   if(text){
@@ -1536,6 +1566,7 @@ async function loadRestreamEngineStatus(){
         ?'⚠️ محرك HLS الرسمي لا يستجيب حاليًا. تشغيل Xtream القديم لا يتأثر.'
         :'محرك HLS الجديد غير مهيأ بعد. تشغيل Xtream القديم لا يتأثر.';
   }catch{
+    node.dataset.health='unknown';
     node.textContent='تعذر فحص محرك HLS الجديد. لا يعني ذلك تعطل القنوات أو الأفلام.';
   }
 }
@@ -1678,12 +1709,14 @@ async function switchTab(name) {
   state.activeTab = name;
   if (location.hash !== `#${name}`) history.replaceState(null, '', `#${name}`);
   document.querySelectorAll('.tab').forEach(button => button.classList.toggle('active', button.dataset.tab === name));
+  document.querySelectorAll('[data-sidebar-tab]').forEach(link => link.classList.toggle('active',link.dataset.sidebarTab===name));
   document.querySelectorAll('.tab-page').forEach(page => {
     const active = page.id === `tab-${name}`;
     page.hidden = !active;
     page.classList.toggle('active', active);
   });
-  if (name === 'xtream') { await loadXtream(); await loadBlofyPlaybackHealth(); }
+  if (name === 'home') { await loadXtream(true); await loadRestreamEngineStatus(); }
+  if (name === 'xtream') { await loadXtream(); if(['diagnostics','all'].includes(el('tab-xtream').dataset.workspaceMode))await loadBlofyPlaybackHealth(); }
   if (name === 'studio') await loadStudioBranding();
   if (name === 'catalog') {
     await loadXtream(true);
@@ -1693,7 +1726,8 @@ async function switchTab(name) {
 }
 
 async function refreshCurrent() {
-  if (state.activeTab === 'xtream') { await loadXtream(); await loadBlofyPlaybackHealth(); }
+  if (state.activeTab === 'home') { await loadXtream(true); await loadRestreamEngineStatus(); }
+  else if (state.activeTab === 'xtream') { await loadXtream(); if(['diagnostics','all'].includes(el('tab-xtream').dataset.workspaceMode))await loadBlofyPlaybackHealth(); }
   else if(state.activeTab==='studio')await loadStudioBranding();
   else { await loadXtream(true); await loadCategories(); await loadCatalog(); }
 }
@@ -1951,6 +1985,24 @@ async function executeSmartCommand(){
     }
   }
 }
+
+document.querySelectorAll('.console-workspace-nav button[data-workspace-mode]').forEach(button=>{
+  button.addEventListener('click',()=>{
+    const mode=button.dataset.workspaceMode;
+    selectWorkspaceMode(mode);
+    if(mode==='diagnostics'||mode==='all')void loadBlofyPlaybackHealth();
+  });
+});
+document.querySelectorAll('[data-open-workspace]').forEach(button=>{
+  button.addEventListener('click',()=>{
+    selectWorkspaceMode(button.dataset.openWorkspace);
+    void switchTab('xtream').then(()=>window.scrollTo({top:0,behavior:'smooth'}));
+  });
+});
+document.querySelectorAll('[data-open-tab]').forEach(button=>{
+  button.addEventListener('click',()=>void switchTab(button.dataset.openTab).then(()=>window.scrollTo({top:0,behavior:'smooth'})));
+});
+selectWorkspaceMode('sources');
 
 document.querySelectorAll('.tab').forEach(button => button.addEventListener('click', () => switchTab(button.dataset.tab)));
 el('refreshBtn').addEventListener('click', refreshCurrent);
