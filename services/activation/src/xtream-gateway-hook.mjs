@@ -42,6 +42,8 @@ import { shouldRetryXtreamWithoutRange,firstByteXtreamRange } from './xtream-med
 import { recordXtreamPlayback,xtreamPlaybackSnapshot } from './xtream-playback-metrics.mjs';
 import { XtreamDenialCooldown } from './xtream-denial-cooldown.mjs';
 import { createGatewayUsageThrottle } from './xtream-gateway-usage-throttle.mjs';
+import { readXtreamGatewayJsonResponse } from './xtream-gateway-response.mjs';
+import { createXtreamHealthSnapshot } from './xtream-health-snapshot.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
@@ -541,11 +543,9 @@ async function fetchUpstreamApi(row, action, extra = {}) {
     timeoutMs: 45000,
     headers: { accept: 'application/json', 'user-agent': 'BLOFY-Xtream-Gateway/1.0' }
   });
-  if (!response.ok) throw new Error(`xtream_gateway_upstream_${response.status}`);
-  const textBody = await response.text();
-  if (Buffer.byteLength(textBody) > 12_000_000) throw new Error('xtream_gateway_info_too_large');
-  try { return JSON.parse(textBody); }
-  catch { throw new Error('xtream_gateway_upstream_json_invalid'); }
+  // Enforce the 12 MB limit as bytes arrive rather than after fully
+  // buffering the payload. Reject and release HTTP error bodies.
+  return readXtreamGatewayJsonResponse(response);
 }
 
 // Account-scoped program guide for one accessible channel. The provider API
@@ -612,7 +612,9 @@ async function ensureEpisodeMaps(serverId, seriesSourceId, episodes) {
   await pool.query(`INSERT INTO blofy_xtream_gateway_episode_map(server_id,series_source_id,source_episode_id,container_extension)
     SELECT $1::uuid,$2::text,x.source_id,x.container_extension
     FROM jsonb_to_recordset($3::jsonb) AS x(source_id text,container_extension text)
-    ON CONFLICT(server_id,series_source_id,source_episode_id) DO UPDATE SET container_extension=EXCLUDED.container_extension`,
+    ON CONFLICT(server_id,series_source_id,source_episode_id) DO UPDATE
+      SET container_extension=EXCLUDED.container_extension
+      WHERE blofy_xtream_gateway_episode_map.container_extension IS DISTINCT FROM EXCLUDED.container_extension`,
     [serverId, String(seriesSourceId), JSON.stringify(unique.map(item => ({ source_id: item.sourceId, container_extension: item.extension })))]);
   const ids = unique.map(item => item.sourceId);
   const rows = (await pool.query(`SELECT gateway_id,source_episode_id,container_extension FROM blofy_xtream_gateway_episode_map
@@ -1001,7 +1003,7 @@ async function handleM3u(req, res, url) {
   res.end();
 }
 
-async function gatewayHealth() {
+async function collectGatewayHealth() {
   await ensureReady();
   const accounts = Number((await pool.query(`SELECT COUNT(*)::int AS count FROM blofy_xtream_gateway_accounts WHERE enabled=TRUE AND (expires_at IS NULL OR expires_at>NOW())`)).rows[0]?.count || 0);
   const rows = (await pool.query(`SELECT media_type,COUNT(*)::int AS count FROM blofy_xtream_items i JOIN blofy_xtream_servers s ON s.id=i.server_id
@@ -1010,6 +1012,10 @@ async function gatewayHealth() {
   for (const row of rows) if (Object.hasOwn(catalog,row.media_type)) catalog[row.media_type] = Number(row.count);
   return { ok: true, compatible: 'Xtream Codes API', accounts, catalog, playbackProxy: true };
 }
+// Health totals can scan a large library; no need to rerun the aggregation
+// for every polling device. Never cache authentication or playback decisions.
+const cachedGatewayHealth = createXtreamHealthSnapshot(collectGatewayHealth);
+async function gatewayHealth(){ return cachedGatewayHealth(); }
 
 const previousCreateServer = http.createServer.bind(http);
 http.createServer = function withBlofyXtreamGateway(listener) {
