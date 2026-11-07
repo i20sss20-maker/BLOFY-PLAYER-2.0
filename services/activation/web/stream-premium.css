@@ -275,3 +275,21 @@ body {
  .console-action {transition:none}
  .console-action:hover {transform:none}
 }
+
+
+/* Contextual error guide: visible only in the diagnostics workspace. */
+#tab-xtream>.premium-diagnostics-guide{order:6;display:none}
+#tab-xtream[data-workspace-mode="diagnostics"]>.premium-diagnostics-guide,
+#tab-xtream[data-workspace-mode="all"]>.premium-diagnostics-guide{display:block}
+.premium-diagnostics-guide{border:1px solid #343b59;background:linear-gradient(150deg,#161c2d,#101622);border-radius:17px;padding:20px;margin-bottom:15px}
+.premium-diagnostics-head h3{font-size:20px;margin:4px 0}
+.premium-diagnostics-head p{color:#9ca8c0;font-size:11px;margin:0 0 16px}
+.premium-diagnostics-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px}
+.premium-diagnostics-cards article{border:1px solid #353b53;background:#101725;padding:15px;border-radius:12px}
+.premium-diagnostic-code{display:inline-block;direction:ltr;color:#f6c9a1;background:#392d38;padding:3px 10px;border-radius:7px;font:750 16px "Segoe UI",sans-serif}
+.premium-diagnostics-cards article:nth-child(2) .premium-diagnostic-code{color:#c9b8ff;background:#302d47}
+.premium-diagnostics-cards article:nth-child(3) .premium-diagnostic-code{color:#f5adb7;background:#3c2638}
+.premium-diagnostics-cards h4{font-size:14px;margin:10px 0 4px}
+.premium-diagnostics-cards p{font-size:11px;color:#a9b4c9;line-height:1.85;margin:0}
+.premium-command-empty{padding:23px 15px;text-align:center;font-size:12px;color:#9da9c2}
+@media(max-width:720px){.premium-diagnostics-cards{grid-template-columns:1fr}}
