@@ -75,7 +75,7 @@ export async function authenticatePortalDevice({ pool, authorizedDevice, deviceI
       `INSERT INTO devices(
          device_id,activation_code,status,trial_started_at,expires_at,last_seen_at,
          last_app_version,last_platform,trial_registration_pending
-       ) VALUES($1,$2,'expired',NULL,NOW(),NOW(),'web-portal','web',TRUE)
+       ) VALUES($1,$2,'expired',NULL,NOW(),NULL,NULL,NULL,TRUE)
        RETURNING *`,
       [canonicalId, proof]
     )).rows[0];
