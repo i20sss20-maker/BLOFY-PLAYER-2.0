@@ -4,6 +4,7 @@ import {safeXtreamTransportCategory} from './xtream-transport-errors.mjs';
 import {withXtreamAccountReconnect} from './xtream-api-resilience.mjs';
 import {createXtreamSyncQueue} from './xtream-sync-queue.mjs';
 import {xtreamConnectionReport} from './xtream-smart-connection.mjs';
+import {runXtreamBootDiagnostics} from './xtream-boot-diagnostics.mjs';
 import { createFixedWindowLimiter, requestClientKey } from './auth-protection.mjs';
 import {
   assertPublicXtreamUrl,
@@ -743,6 +744,35 @@ async function runSmartConnection(id){
   }catch(error){
     return xtreamConnectionReport({errorCode:redactXtreamError(error),checkedAt:Date.now()});
   }
+}
+
+// Opt-in, one-shot production probe: only enabled during an explicit
+// diagnostic release. No database changes, catalog requests or media reads.
+// Never print source URLs, account details, provider messages or credentials.
+if(process.env.BLOFY_XTREAM_ONE_SHOT_DIAGNOSTIC==='1'){
+  const timer=setTimeout(()=>{
+    void (async()=>{
+      const sources=await serverRows();
+      const reports=await runXtreamBootDiagnostics({
+        rows:sources,
+        probe:async row=>{
+          try{
+            await fetchAccount(row,{timeoutMs:8000,maxAttempts:1});
+            return xtreamConnectionReport({ok:true});
+          }catch(error){
+            return xtreamConnectionReport({errorCode:redactXtreamError(error)});
+          }
+        },
+        log:report=>console.info('BLOFY_XTREAM_DIAGNOSTIC',JSON.stringify(report)),
+        wait:ms=>new Promise(resolve=>setTimeout(resolve,ms))
+      });
+      console.info('BLOFY_XTREAM_DIAGNOSTIC_END',JSON.stringify({
+        checked:reports.length,failed:reports.filter(x=>x.code!=='xtream_api_reachable').length
+      }));
+    })().catch(error=>console.warn('BLOFY_XTREAM_DIAGNOSTIC_FAILED',
+      String(error?.code||'unavailable').slice(0,36)));
+  },12000);
+  timer.unref?.();
 }
 
 async function testServer(id) {
