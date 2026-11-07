@@ -66,7 +66,7 @@ test('premium dashboard includes functional insights and source search without c
  assert.match(premiumCss,/\.premium-ops-grid/);
  assert.match(premiumCss,/\.premium-command-dialog/);
 });
-test('all sensitive source connection values remain outside dashboard snapshots',()=>{
+test('all sensitive source connection values remain outside dashboard snapshots',async()=>{
  const base=await readFile(new URL('sources-admin.js',web),'utf8');
  assert.match(base,/window\.__BLOFY_STREAM_SNAPSHOT__/);
  assert.match(base,/new CustomEvent\('blofy:stream-snapshot'/);

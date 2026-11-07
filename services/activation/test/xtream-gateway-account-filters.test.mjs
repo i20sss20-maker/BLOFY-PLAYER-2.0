@@ -26,7 +26,8 @@ test('BLOFY Xtream issued accounts can be searched and filtered without backend 
 test('customer account renewal remains an explicit administrator action, passwords unchanged',async()=>{
   const js=await read('web/xtream-gateway-admin.js');
   const render=js.slice(js.indexOf('function renderGatewayAccounts()'),js.indexOf('async function loadGateway()'));
-  assert.match(render,/const renew=gatewayNode\('button', 'button ghost', 'تجديد شهر'\)/);
+  assert.match(render,/const renew=gatewayNode\('button', 'button ghost', accountExpiryMs\(item\.expiresAt\)===null\?'بدون انتهاء':'تجديد شهر'\)/);
+  assert.match(render,/renew\.disabled=accountExpiryMs\(item\.expiresAt\)===null/);
   assert.match(render,/window\.confirm\('تجديد اشتراك '/);
   assert.match(render,/method:'PATCH',body:JSON\.stringify\(\{expiresAt:/);
   assert.match(render,/actions\.append\(copy, renew, toggle, reset, remove\)/);

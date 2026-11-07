@@ -12,7 +12,7 @@ test('cancel sync remains available while a 290k item import is running',()=>{
   assert.match(server,/async function cancelSourceSync\(id\)/);
   assert.match(server,/cancelledSources\.add\(id\)/);
   assert.match(server,/staleStateCleared/);
-  assert.match(server,/\(test\|sync\|cancel-sync\|probe-playback\)/);
+  assert.match(server,/\(test\|smart-connection\|sync\|cancel-sync\|probe-playback\)/);
   assert.match(server,/if \(action === 'cancel-sync' && req\.method === 'POST'\)/);
 });
 
@@ -20,7 +20,8 @@ test('sync progress counts imported items and clears after completion',()=>{
   assert.match(server,/syncProgress\.set\(id,\{mediaType/);
   assert.match(server,/progress\.imported\+=payload\.length/);
   assert.match(server,/syncProgress\.delete\(id\)/);
-  assert.match(server,/syncProgress: syncProgress\.get\(row\.id\) \|\| null/);
+  assert.match(server,/syncProgress:syncQueue\.isQueued\(row\.id\)/);
+  assert.match(server,/syncProgress\.get\(row\.id\) \|\| null/);
   assert.match(server,/xtream_sync_cancelled/);
   assert.match(web,/item\.syncProgress\.imported/);
   assert.match(web,/action === 'cancel-sync'/);
@@ -31,5 +32,6 @@ test('no phantom sync queued for a paused or removed source',()=>{
   const handler=server.slice(server.indexOf("if (action === 'sync' && req.method === 'POST')"),server.indexOf("const categoryMatch = url.pathname.match"));
   assert.match(handler,/if\(!source\)return json\(res,404/);
   assert.match(handler,/if\(!source\.enabled\)return json\(res,409/);
-  assert.match(handler,/startSync\(id, selected\)/);
+  assert.match(handler,/const job=startSync\(id,selected\)/);
+  assert.match(handler,/queued:job\.queued,queuePosition:job\.position/);
 });

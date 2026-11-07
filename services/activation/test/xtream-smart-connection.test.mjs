@@ -42,7 +42,7 @@ test('reachable Xtream account does not claim playable streaming or active stati
 test('production admin check bounds to one GET, is authenticated and is non-mutating',async()=>{
  const admin=await readFile(new URL('../src/xtream-admin-hook.mjs',import.meta.url),'utf8');
  const begin=admin.indexOf('async function runSmartConnection(');
- const end=admin.indexOf('async function testServer(',begin);
+ const end=admin.indexOf('\n}\n',begin)+2;
  assert.ok(begin>=0&&end>begin);
  const segment=admin.slice(begin,end);
  assert.match(segment,/timeoutMs:8000,maxAttempts:1/);
