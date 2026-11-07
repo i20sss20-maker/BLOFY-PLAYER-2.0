@@ -460,7 +460,8 @@ function renderXtream() {
         published:Boolean(item.enabled&&item.publishCatalog),
         issue:Boolean(item.enabled&&(item.lastError||item.status==='offline'||item.status==='error')),
         issueCode,
-        syncing:Boolean(item.syncing||item.status==='syncing'),
+        syncing:Boolean(item.syncing&&!item.queued||item.status==='syncing'&&!item.queued),
+        queued:Boolean(item.queued),
         tested:Boolean(item.lastTestAt),
         status:String(item.status||'unknown').slice(0,24)
       };
