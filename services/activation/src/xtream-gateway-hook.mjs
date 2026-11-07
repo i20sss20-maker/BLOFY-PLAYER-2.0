@@ -703,19 +703,6 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
     }
   }
   let upstream = mediaUpstreamUrl(row, kind, sourceId, mediaExtension);
-  // Use independent Railway egress for ONE operator-allowed source and TS
-  // only. Keep the original BLOFY Xtream URL, login and response behavior.
-  // If the protected service cannot issue a ticket, fall back immediately.
-  if(shouldUseIndependentSourceMedia({
-    sourceId:row.server_id,kind,extension:mediaExtension
-  })){
-    try{
-      upstream=new URL(await issueStreamRelayGrant({sourceUrl:upstream.href,kind}));
-    }catch{
-      console.warn('BLOFY_XTREAM_INDEPENDENT_SOURCE_FALLBACK',{
-        kind,sourceId:row.server_id,reason:'relay_ticket_unavailable'});
-    }
-  }
   // Optional one-account canary: transfer the data plane to the isolated
   // Railway project. Authentication, catalog restrictions, source selection
   // and subscriber expiry stay checked here first. Disabled by default.
@@ -731,6 +718,19 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
       // If the new media plane cannot issue a safe ticket, keep the old
       // playback route operational for this request and customer.
       console.warn('BLOFY_STREAM_RELAY_CANARY_FALLBACK',{kind,reason:'relay_unavailable'});
+    }
+  }
+  // Use independent Railway egress for ONE operator-allowed source and TS
+  // only. Keep the original BLOFY Xtream URL, login and response behavior.
+  // If the protected service cannot issue a ticket, fall back immediately.
+  if(shouldUseIndependentSourceMedia({
+    sourceId:row.server_id,kind,extension:mediaExtension
+  })){
+    try{
+      upstream=new URL(await issueStreamRelayGrant({sourceUrl:upstream.href,kind}));
+    }catch{
+      console.warn('BLOFY_XTREAM_INDEPENDENT_SOURCE_FALLBACK',{
+        kind,sourceId:row.server_id,reason:'relay_ticket_unavailable'});
     }
   }
   // Keep each viewer's stream independent. Only retry failures before video bytes reach them.
