@@ -13,8 +13,12 @@ async function buildPreflight({movieSucceeds=true,seriesSucceeds=true,twoBands=f
   const body=src.slice(start,end);
   const db={
     query:async(sql,params)=>{
+      if(sql.includes('blofy_xtream_media_quarantine')){
+        assert.equal(params[0],'source-fixture');
+        return {rows:[]};
+      }
       assert.match(sql,/blofy_xtream_items/);
-      if(sql.includes('LIMIT 12')){
+      if(sql.includes('LIMIT 5')){
         return {rows:noReplacement?[{source_id:'903'}]:[
           {source_id:'903'},{source_id:'805',container_extension:'mp4'}
         ]};
@@ -63,7 +67,12 @@ async function buildPreflight({movieSucceeds=true,seriesSucceeds=true,twoBands=f
     safeGatewayExtension:(value,fallback)=>value||fallback,
     diagnosticXtreamItemId:id=>/^[A-Za-z0-9._-]{1,128}$/.test(String(id))?String(id):null,
     quarantineConfirmedMissingMedia:async()=>false,
-    issuanceErrorReason:()=> 'source_unreachable'
+    issuanceErrorReason:()=> 'source_unreachable',
+    quarantineConfirmedMissingMedia:async()=>false,
+    quarantineMediaWarning:(kind,id,{seriesId})=>({
+      reason:'confirmed_source_media_404',kind,
+      episodeSourceId:String(id),seriesSourceId:String(seriesId)
+    })
   };
   const fn=new Function(...Object.keys(mocks),body+';return preflightSource;')(...Object.values(mocks));
   return fn({id:'source-fixture',server_id:'source-fixture',name:'fixture'},
