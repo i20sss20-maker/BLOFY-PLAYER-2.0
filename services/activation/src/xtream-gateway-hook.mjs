@@ -559,34 +559,47 @@ async function preflightSource(row,deadline){
     if(!rows.length)continue;
     found++;
     if(kind==='series'){
-      // Never hammer a slow provider by walking 12 adjacent (often broken)
-      // series IDs. Sample distinct seasons/positions within each series first,
-      // omit exact episodes already quarantined, then use a small mix of low-
-      // and high-ID series. A new account still requires two ACTUAL verified
-      // episode streams (no 404 or skipped item counts as a success).
+      // Real providers can have thousands of series, but adjacent IDs may
+      // belong to the same inaccessible batch. A cross-library deterministic
+      // sample is safer than a walk over neighboring source IDs. Require two
+      // independent real, playable episodes; never count metadata or a
+      // quarantined 404 as evidence of actual playback.
       const needed=rows.length;
       let sampled=0,loadedSubstitutes=false,inspectedSeries=0,metadataFailures=0;
-      const inspected=new Set(),maxSeriesToInspect=8;
+      const inspected=new Set(),maxSeriesToInspect=10;
       const loadSubstitutes=async()=>{
         if(loadedSubstitutes)return;
         loadedSubstitutes=true;
         try{
-          const directions=['ASC','DESC'];
-          const [low,high]=await Promise.all(directions.map(direction=>
+          // Repeating ASC/DESC picked only 10007,10008,9959... from this
+          // source, where entire title batches return media 404. Mix stable
+          // pseudo-random picks from all imported series instead. The seed
+          // rotates hourly; the query never touches or edits the catalog.
+          const seed=new Date().toISOString().slice(0,13);
+          const [spread,low,high]=await Promise.all([
             pool.query(`SELECT source_id,container_extension
               FROM blofy_xtream_items
               WHERE server_id=$1 AND media_type='series' AND enabled=TRUE
-              ORDER BY source_id ${direction} LIMIT 5`,[row.id])));
-          // Interleave instead of repeatedly picking neighboring high IDs:
-          // 9959/9958/9957 can all be from the same broken provider batch.
-          for(let i=0;i<5;i++){
-            for(const candidate of [low.rows[i],high.rows[i]]){
-              if(candidate&&!rows.some(x=>x.source_id===candidate.source_id))
-                rows.push({...candidate,sampleBand:'replacement'});
-            }
+              ORDER BY md5(source_id || $2::text) LIMIT 24`,[row.id,seed]),
+            pool.query(`SELECT source_id,container_extension
+              FROM blofy_xtream_items
+              WHERE server_id=$1 AND media_type='series' AND enabled=TRUE
+              ORDER BY source_id ASC LIMIT 3`,[row.id]),
+            pool.query(`SELECT source_id,container_extension
+              FROM blofy_xtream_items
+              WHERE server_id=$1 AND media_type='series' AND enabled=TRUE
+              ORDER BY source_id DESC LIMIT 3`,[row.id])
+          ]);
+          const poolOfCandidates=[
+            ...(spread.rows||[]),...(low.rows||[]),...(high.rows||[])
+          ];
+          for(const candidate of poolOfCandidates){
+            if(candidate?.source_id!=null&&!rows.some(existing=>
+              String(existing.source_id)===String(candidate.source_id)))
+              rows.push({...candidate,sampleBand:'replacement'});
           }
         }catch{
-          // Do not assume the library is healthy when a replacement query fails.
+          // An unavailable catalog is never treated as a healthy stream.
         }
       };
       seriesLoop:for(const seriesRow of rows){
@@ -604,7 +617,7 @@ async function preflightSource(row,deadline){
                 Math.max(1000,deadline-Date.now()-1200)),
               maxBytes:3_000_000
             });
-          samples=xtreamEpisodePlaybackCandidates(payload,3);
+          samples=xtreamEpisodePlaybackCandidates(payload,2);
         }catch(error){
           const reason=issuanceErrorReason(error?.message);
           if(seriesRow.sampleBand==='replacement'){
@@ -613,7 +626,7 @@ async function preflightSource(row,deadline){
             // worded red errors. Preserve a fail-closed summary below.
             result.warnings.push({reason:'series_replacement_unavailable',
               seriesSourceId:diagnosticXtreamItemId(seriesId)});
-            if(metadataFailures>=2)break;
+            if(metadataFailures>=3)break;
             continue;
           }
           checks.push({kind,ok:false,reason,
