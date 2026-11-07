@@ -43,6 +43,7 @@ import { recordXtreamPlayback,xtreamPlaybackSnapshot } from './xtream-playback-m
 import { XtreamDenialCooldown } from './xtream-denial-cooldown.mjs';
 import { createGatewayUsageThrottle } from './xtream-gateway-usage-throttle.mjs';
 import { readXtreamGatewayJsonResponse } from './xtream-gateway-response.mjs';
+import { createXtreamHealthSnapshot } from './xtream-health-snapshot.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
@@ -1000,7 +1001,7 @@ async function handleM3u(req, res, url) {
   res.end();
 }
 
-async function gatewayHealth() {
+async function collectGatewayHealth() {
   await ensureReady();
   const accounts = Number((await pool.query(`SELECT COUNT(*)::int AS count FROM blofy_xtream_gateway_accounts WHERE enabled=TRUE AND (expires_at IS NULL OR expires_at>NOW())`)).rows[0]?.count || 0);
   const rows = (await pool.query(`SELECT media_type,COUNT(*)::int AS count FROM blofy_xtream_items i JOIN blofy_xtream_servers s ON s.id=i.server_id
@@ -1009,6 +1010,10 @@ async function gatewayHealth() {
   for (const row of rows) if (Object.hasOwn(catalog,row.media_type)) catalog[row.media_type] = Number(row.count);
   return { ok: true, compatible: 'Xtream Codes API', accounts, catalog, playbackProxy: true };
 }
+// Health totals can scan a large library; no need to rerun the aggregation
+// for every polling device. Never cache authentication or playback decisions.
+const cachedGatewayHealth = createXtreamHealthSnapshot(collectGatewayHealth);
+async function gatewayHealth(){ return cachedGatewayHealth(); }
 
 const previousCreateServer = http.createServer.bind(http);
 http.createServer = function withBlofyXtreamGateway(listener) {
