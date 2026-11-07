@@ -101,6 +101,18 @@ function xtreamSourceErrorText(value){
     return 'المصدر أرسل قائمة ناقصة بشكل كبير؛ تم إيقاف حذف المحتوى القديم. تحقق من الاشتراك وحدود المصدر قبل إعادة المزامنة.';
   if(error.includes('xtream_categories_preserved'))
     return 'لم تصل الأقسام كاملة من المصدر؛ احتفظنا بأقسامك وترتيبها وإعدادات إخفائها.';
+  if(error.includes('xtream_transport_dns_failed'))
+    return 'تعذر العثور على عنوان سيرفر المصدر (DNS). تحقق من اسم الهوست والمنفذ، ثم اطلب من مزود المصدر فحص سجلات DNS.';
+  if(error.includes('xtream_transport_connection_refused'))
+    return 'المصدر رفض الاتصال بالشبكة. راجع المنفذ والبروتوكول وتأكد أن الخدمة تستقبل اتصالات Railway.';
+  if(error.includes('xtream_transport_connection_reset'))
+    return 'المصدر قطع الاتصال قبل اكتمال الطلب. راجع اتصال السيرفر وحدود المزود أو السماح بعناوين Railway.';
+  if(error.includes('xtream_transport_timeout'))
+    return 'انتهت المهلة قبل استجابة المصدر. تحقق من استقرار الشبكة لدى المزود أو قيود الجدار الناري.';
+  if(error.includes('xtream_transport_tls_invalid'))
+    return 'شهادة HTTPS لدى المصدر غير موثوقة أو لا تطابق الهوست. اطلب إصلاح الشهادة من المزود، ولا تعطل التحقق الأمني.';
+  if(error.includes('xtream_transport_unreachable')||error==='fetch failed')
+    return 'تعذر الوصول إلى المصدر من سيرفر BLOFY. جرّب فحص الاتصال وتحقق من صلاحية الاتصال من Railway لدى المزود.';
   if(error.includes('xtream_http_403'))
     return 'المصدر الأصلي رفض اتصال سيرفر BLOFY (403). تحقق من صلاحيات المصدر أو السماح بالاتصال لدى المزود.';
   if(error.includes('xtream_http_404'))
@@ -1632,6 +1644,12 @@ async function loadBlofyPlaybackHealth(){
       media_read_timeout:'انقطع وصول بيانات الفيديو',
       upstream_empty_media:'المصدر أرسل بثًا فارغًا',
       upstream_non_media_response:'المصدر أرسل صفحة بدل الفيديو',
+      xtream_transport_dns_failed:'تعذر DNS للمصدر؛ تأكد من العنوان',
+      xtream_transport_connection_refused:'المصدر رفض اتصال الشبكة؛ راجع المنفذ والبروتوكول',
+      xtream_transport_connection_reset:'المصدر قطع الاتصال قبل استلام الفيديو',
+      xtream_transport_timeout:'اتصال المصدر لم يكتمل في الوقت المحدد',
+      xtream_transport_tls_invalid:'شهادة HTTPS بالمصدر غير صحيحة أو لا تطابق العنوان',
+      xtream_transport_unreachable:'تعذر اتصال السيرفر بمصدر الفيديو',
       upstream_unreachable:'تعذر الوصول للمصدر',
       upstream_http_other:'المصدر رفض الطلب'
     };
