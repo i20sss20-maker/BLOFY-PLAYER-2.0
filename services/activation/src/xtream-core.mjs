@@ -122,6 +122,17 @@ export function xtreamApiUrl(baseUrl, username, password, action = null, extra =
   return url;
 }
 
+// Build the official M3U export from the SAME base path as player_api.php.
+// URL('/get.php', base) discards /panel prefixes on valid Xtream services.
+export function xtreamM3uUrl(baseUrl,username,password,output='ts'){
+  const url=new URL(normalizeXtreamBaseUrl(baseUrl)+'/get.php');
+  url.searchParams.set('username',String(username||''));
+  url.searchParams.set('password',String(password||''));
+  url.searchParams.set('type','m3u_plus');
+  url.searchParams.set('output',String(output||'ts'));
+  return url;
+}
+
 export function sanitizeXtreamAccount(payload) {
   const user = payload && typeof payload === 'object' ? payload.user_info || {} : {};
   const server = payload && typeof payload === 'object' ? payload.server_info || {} : {};
