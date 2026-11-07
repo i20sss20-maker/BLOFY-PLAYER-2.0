@@ -325,3 +325,33 @@ body {
  .premium-subscriber-metrics>div{padding:9px 11px}
  .premium-subscriber-action{grid-column:auto;width:100%}
 }
+
+/* Complete operator experience: protected read-only refresh and action center. */
+.top-actions .premium-autorefresh{font-size:10px;white-space:nowrap;min-width:148px;color:#b6c2d7}
+.top-actions .premium-autorefresh[aria-pressed="true"]{color:#9bebc9;border-color:#38665e;background:rgba(34,84,71,.22)}
+.premium-subscriber-metrics{grid-template-columns:repeat(4,minmax(0,1fr))}
+.premium-subscription-alert{padding-top:7px!important;color:#b8c1d4!important}
+.premium-actionable-issues{margin:17px 0 20px;border:1px solid #81624e;border-radius:15px;padding:18px 22px;background:linear-gradient(118deg,#2b242c,#1d202f);display:flex;justify-content:space-between;align-items:center;gap:15px}
+.premium-actionable-issues[hidden]{display:none!important}
+.premium-actionable-issues h3{font-size:18px;margin:5px 0}
+.premium-actionable-issues p{font-size:11px;line-height:1.8;color:#d3c4b8;margin:0}
+.premium-actionable-issues .premium-eyebrow{color:#efc99d}
+.premium-actionable-buttons{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.premium-actionable-buttons .button{font-size:11px;min-height:38px;color:#fff0dc;background:rgba(255,255,255,.045);border-color:#776b66}
+@media(max-width:1300px){
+ .premium-subscriber-strip{grid-template-columns:1fr}
+ .premium-subscriber-action{grid-column:auto}
+}
+@media(max-width:900px){
+ .premium-actionable-issues{flex-direction:column;align-items:stretch}
+ .premium-actionable-buttons .button{flex:1}
+ .top-actions{flex-wrap:wrap}
+}
+@media(max-width:620px){
+ .premium-subscriber-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .premium-subscriber-metrics>div{border-right:0;border-bottom:1px solid #3d425d}
+ .top-actions{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+ .top-actions .premium-search-trigger{grid-column:1/-1;min-height:43px}
+ .top-actions .premium-autorefresh{min-width:0;white-space:normal;font-size:10px}
+ .premium-actionable-issues{padding:16px}
+}
