@@ -42,6 +42,7 @@ import { shouldRetryXtreamWithoutRange,firstByteXtreamRange } from './xtream-med
 import { recordXtreamPlayback,xtreamPlaybackSnapshot } from './xtream-playback-metrics.mjs';
 import { XtreamDenialCooldown } from './xtream-denial-cooldown.mjs';
 import { createGatewayUsageThrottle } from './xtream-gateway-usage-throttle.mjs';
+import { readXtreamGatewayJsonResponse } from './xtream-gateway-response.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
@@ -541,11 +542,9 @@ async function fetchUpstreamApi(row, action, extra = {}) {
     timeoutMs: 45000,
     headers: { accept: 'application/json', 'user-agent': 'BLOFY-Xtream-Gateway/1.0' }
   });
-  if (!response.ok) throw new Error(`xtream_gateway_upstream_${response.status}`);
-  const textBody = await response.text();
-  if (Buffer.byteLength(textBody) > 12_000_000) throw new Error('xtream_gateway_info_too_large');
-  try { return JSON.parse(textBody); }
-  catch { throw new Error('xtream_gateway_upstream_json_invalid'); }
+  // Enforce the 12 MB limit as bytes arrive, not after response.text() has
+  // already buffered an unbounded reply. Reject and release HTTP error bodies.
+  return readXtreamGatewayJsonResponse(response);
 }
 
 // Account-scoped program guide for one accessible channel. The provider API
