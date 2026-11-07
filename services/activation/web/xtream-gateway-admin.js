@@ -350,7 +350,11 @@ async function loadGateway() {
       renderGatewayAccounts();
     }catch{if(gx('gatewaySourceHealth'))gx('gatewaySourceHealth').textContent='تعذر التحقق من المصادر الآن.';}
   } catch (error) {
-    if (error.message !== 'unauthorized') gatewayMessage(`تعذر تحميل بوابة Xtream: ${error.message}`, 'error');
+    if (error.message !== 'unauthorized') {
+      gatewayMessage(`تعذر تحميل بوابة Xtream: ${error.message}`, 'error');
+      // Do not show stale subscriber figures as if they were current.
+      document.dispatchEvent(new CustomEvent('blofy:account-unavailable'));
+    }
   } finally {
     if (loading) loading.hidden = true;
   }
