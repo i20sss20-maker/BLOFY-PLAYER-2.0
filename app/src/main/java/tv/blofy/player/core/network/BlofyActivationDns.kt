@@ -29,11 +29,11 @@ internal object BlofyActivationDns : Dns {
 
     private val dohClient by lazy {
         OkHttpClient.Builder()
-            .dns(Dns { name ->
-                when (name) {
+            .dns(object : Dns {
+                override fun lookup(hostname: String): List<InetAddress> = when (hostname) {
                     "dns.google" -> listOf(InetAddress.getByAddress(byteArrayOf(8, 8, 8, 8)))
                     "cloudflare-dns.com" -> listOf(InetAddress.getByAddress(byteArrayOf(1, 1, 1, 1)))
-                    else -> Dns.SYSTEM.lookup(name)
+                    else -> Dns.SYSTEM.lookup(hostname)
                 }
             })
             .connectTimeout(3, TimeUnit.SECONDS)
