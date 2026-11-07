@@ -59,3 +59,14 @@ This leaves DB/subscribers, independent media engine and domain settings unchang
 - From Railway one-shot verification: public /health, /sources-admin, premium JS/CSS and admin JS each returned HTTP 200, with expected current release markers and `Cache-Control: no-store`. The verification function was deleted.
 - No change to live customer stream routes or upstream authorization. Provider-side Xtream connection resets and occasional 401/404/502 remain separate and require feed-level investigation; passing HLS connectivity does not prove playable third-party media.
 - Prior validated production commit for immediate UI rollback: `946f4a38efd1d7283328d34c11dff9aca36dd5a2` (Railway deploy `971c070d-2769-4d88-95e8-a5e61a3dcbb7`, now removed from active deployments; redeploy pinned commit if required). Full original stable rollback: `872d1eca1b66d18d7c44ad3a43a90727592aadbb`.
+
+
+## Xtream network diagnostic hardening (2026-11-07)
+- Official Railway activation portal deployed commit e0014ebc6d257d79acb13d69b7f9b3bff4caf782, deployment 3ca711a2-d74e-41c3-9762-559c6590b0c6, status SUCCESS. /health passed Railway deployment healthcheck and the database initialized.
+- Added xtream-transport-errors.mjs with allowlisted diagnostic codes for source DNS failure, refused/reset connections, network timeouts and untrusted TLS certificates. Provider hostname, usernames, passwords, URLs and error bodies never enter these diagnostic events.
+- Admin metadata fetch now categorizes connection failures, cancels HTTP redirect bodies, and keeps explicit 401/403/404/456 provider rejections separate. Media gateway improves operator diagnostics only, preserving customer playback paths, response status and retry budgets.
+- PRO dashboard source alerts receive allowlisted error codes only, never raw last-error payloads.
+- Added services/activation/test/xtream-transport-errors.test.mjs and wired it to branch CI. Seven focused tests passed through independent JavaScript evaluation, not a complete Node/GitHub Actions or end-to-end playback test.
+- Railway backend stayed online with zero 5xx in the observed 415-request one-hour sample; all four persistent services healthy. The temporary public-asset verifier did not produce conclusive request logs and was deleted. Public asset verification is not claimed for this increment.
+- Still pending: verify a permitted real Xtream feed from production for live, movie and series playback. An upstream network restriction or provider refusal cannot be fixed merely by classifying errors. Do not deploy source workarounds or switch customer playback to MediaMTX until end-to-end testing succeeds.
+- Rollback for this increment: previous commit db4410ebfdf389e8225e411c1c513ddfe38f04ef (prior Railway deployment 9e27de05-22c8-45b0-93df-3d6c105dd4c1; if removed, redeploy pinned commit). Full original stable: 872d1eca1b66d18d7c44ad3a43a90727592aadbb.
