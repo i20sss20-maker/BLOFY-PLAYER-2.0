@@ -1748,10 +1748,13 @@ async function switchTab(name) {
 }
 
 async function refreshCurrent() {
+  // Refresh all account/source summaries from the existing read-only admin APIs.
+  // This is never a provider sync, streaming probe or subscriber mutation.
   if (state.activeTab === 'home') { await loadXtream(true); await loadRestreamEngineStatus(); }
   else if (state.activeTab === 'xtream') { await loadXtream(); if(['diagnostics','all'].includes(el('tab-xtream').dataset.workspaceMode))await loadBlofyPlaybackHealth(); }
   else if(state.activeTab==='studio')await loadStudioBranding();
   else { await loadXtream(true); await loadCategories(); await loadCatalog(); }
+  document.dispatchEvent(new CustomEvent('blofy:refresh-accounts'));
 }
 
 
