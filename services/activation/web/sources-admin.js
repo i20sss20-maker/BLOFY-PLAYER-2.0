@@ -153,7 +153,7 @@ function serverCard(item) {
   if(item.channelNumber&&item.type==='live')title.append(make('small','','رقم القناة: '+item.channelNumber));
   title.append(make('code', 'server-url', item.baseUrl));
   title.append(make('small','source-id','ID: '+String(item.id||'').slice(0,8)));
-  const status = make('span', `server-status ${xtStatusClass(item.syncing ? 'syncing' : item.status)}`, item.syncing ? 'Syncing' : (item.status==='online'?'API ONLINE':item.status));
+  const status = make('span', `server-status ${xtStatusClass(item.syncing ? 'syncing' : item.status)}`, item.queued ? 'في انتظار المزامنة' : item.syncing ? 'مزامنة جارية' : (item.status==='online'?'API ONLINE':item.status));
   header.append(title, status);
 
   const metrics = make('div', 'server-metrics');
@@ -238,9 +238,10 @@ function serverCard(item) {
   updateSourceAccountWarnings(info,item);
   if(item.syncProgress){
     const typeNames={starting:'تهيئة',live:'القنوات',movie:'الأفلام',series:'المسلسلات'};
-    info.append(make('span','sync-progress-note',
-      'جاري استيراد '+(typeNames[item.syncProgress.mediaType]||item.syncProgress.mediaType)+
-      ' · '+Number(item.syncProgress.imported||0).toLocaleString('en-US')+' عنصر حتى الآن'));
+    info.append(make('span','sync-progress-note',item.queued
+      ? 'المصدر في قائمة انتظار المزامنة، بدون ضغط إضافي على السيرفر.'
+      : 'جاري استيراد '+(typeNames[item.syncProgress.mediaType]||item.syncProgress.mediaType)+
+        ' · '+Number(item.syncProgress.imported||0).toLocaleString('en-US')+' عنصر حتى الآن'));
   }
   if (item.lastError) info.append(make('span', 'error-text', `تنبيه المصدر: ${xtreamSourceErrorText(item.lastError)}`));
   const feedback=state.sourceFeedback.get(item.id);
@@ -269,7 +270,7 @@ function refreshSourceCard(card, item) {
   const status=card.querySelector('.server-status');
   if(status) {
     status.className='server-status '+xtStatusClass(item.syncing?'syncing':item.status);
-    status.textContent=item.syncing?'Syncing':item.status==='online'?'API ONLINE':String(item.status||'unknown');
+    status.textContent=item.queued?'في انتظار المزامنة':item.syncing?'مزامنة جارية':item.status==='online'?'API ONLINE':String(item.status||'unknown');
   }
   const title=card.querySelector('.server-head > div');
   if(title) {
@@ -323,8 +324,10 @@ function refreshSourceCard(card, item) {
     if(item.syncProgress){
       if(!progress){progress=make('span','sync-progress-note');info.prepend(progress);}
       const types={starting:'تهيئة',live:'القنوات',movie:'الأفلام',series:'المسلسلات'};
-      progress.textContent='جاري استيراد '+(types[item.syncProgress.mediaType]||item.syncProgress.mediaType)+' · '+
-        Number(item.syncProgress.imported||0).toLocaleString('en-US')+' عنصر';
+      progress.textContent=item.queued
+        ? 'بانتظار انتهاء مزامنة مصدر آخر، دون الضغط على السيرفر.'
+        : 'جاري استيراد '+(types[item.syncProgress.mediaType]||item.syncProgress.mediaType)+' · '+
+          Number(item.syncProgress.imported||0).toLocaleString('en-US')+' عنصر';
     }else progress?.remove();
     let error=info.querySelector('.error-text');
     if(item.lastError){
@@ -925,8 +928,10 @@ async function handleServerAction(item, card, button) {
       }
     } else if (action.startsWith('sync-')) {
       const type = action === 'sync-all' ? ['live','movie','series'] : [action.replace('sync-', '')];
-      await api(`/api/v1/admin/xtream/servers/${item.id}/sync`, { method: 'POST', body: JSON.stringify({ types: type }) });
-      showMessage(`بدأت مزامنة ${item.name}.`);
+      const queued=await api(`/api/v1/admin/xtream/servers/${item.id}/sync`, { method: 'POST', body: JSON.stringify({ types: type }) });
+      showMessage(queued.queued
+        ? `مزامنة «${item.name}» في قائمة الانتظار. سيتم تشغيلها تلقائيًا بعد المصدر الحالي، ويمكن إلغاؤها من بطاقة المصدر.`
+        : `بدأت مزامنة «${item.name}». سيتم تحديث حالة الفهرسة بعد اكتمالها.`);
     }
     if(!['toggle-enabled','toggle-publish','delete'].includes(action))await loadXtream(true);
   } catch (error) {
@@ -953,7 +958,10 @@ async function syncAllXtream() {
   button.disabled = true;
   try {
     const data = await api('/api/v1/admin/xtream/sync-all', { method: 'POST', body: '{}' });
-    showMessage(`بدأت مزامنة ${data.started?.length || 0} سيرفر.`);
+    showMessage('تم قبول '+Number(data.started?.length||0)+' مصدر للمزامنة. '+
+      (data.queued?.length?'المنتظر: '+data.queued.length+'. ':'')+
+      (data.skipped?.length?'تعذر جدولة '+data.skipped.length+' مصدر بسبب امتلاء قائمة الانتظار.':'')+
+      ' ستتم المعالجة تباعًا لحماية البث وقاعدة البيانات.');
     await loadXtream(true);
   } catch (error) {
     showMessage(`تعذر بدء المزامنة: ${error.message}`, 'error');
