@@ -84,8 +84,66 @@ export async function checkStreamRelayBridge({env=process.env,fetchImpl=fetch}={
       ?error.message:'stream_bridge_failed',customerCutover:false};
   }
 }
+// End-to-end opt-in transport proof using only an innocuous 564-byte fixture
+// hosted by our independent STREAM API. No provider or client data is fetched.
+export async function checkStreamRelaySyntheticMedia({env=process.env,fetchImpl=fetch}={}){
+  const cfg=relayConfiguration(env);
+  if(!cfg.origin)return {ok:false,code:'stream_bridge_not_configured',customerCutover:false};
+  try{
+    const path=await issueStreamRelayGrant({
+      kind:'live',sourceUrl:'https://'+HOST+'/synthetic/transport.ts'
+    },{env,fetchImpl});
+    const response=await fetchImpl(path,{
+      method:'GET',redirect:'manual',
+      headers:{range:'bytes=0-563',accept:'video/mp2t'},
+      signal:AbortSignal.timeout(15000)
+    });
+    if(response.status!==200&&response.status!==206){
+      await response.body?.cancel().catch(()=>{});
+      return {ok:false,code:'stream_bridge_media_http_error',
+        customerCutover:false,realSourceVerified:false,audioVideoDecoded:false};
+    }
+    const mime=String(response.headers.get('content-type')||'').toLowerCase();
+    if(!mime.startsWith('video/mp2t')){
+      await response.body?.cancel().catch(()=>{});
+      return {ok:false,code:'stream_bridge_media_invalid',
+        customerCutover:false,realSourceVerified:false,audioVideoDecoded:false};
+    }
+    const reader=response.body?.getReader();
+    if(!reader)throw new Error('stream_bridge_media_invalid');
+    const parts=[];let count=0,done=false;
+    try{
+      while(true){
+        const step=await reader.read();
+        if(step.done){done=true;break}
+        const part=Buffer.from(step.value||[]);
+        if(count+part.length>564)throw new Error('stream_bridge_media_invalid');
+        parts.push(part);count+=part.length;
+      }
+      const bytes=Buffer.concat(parts,count);
+      const passed=count===564&&[0,188,376].every(i=>bytes[i]===0x47);
+      return {ok:passed,code:passed?'synthetic_relay_transport_verified':'stream_bridge_media_invalid',
+        bytesVerified:passed?count:0,customerCutover:false,
+        realSourceVerified:false,audioVideoDecoded:false};
+    }finally{
+      if(!done)await reader.cancel().catch(()=>{});
+      reader.releaseLock();
+    }
+  }catch{
+    return {ok:false,code:'stream_bridge_media_unavailable',customerCutover:false,
+      realSourceVerified:false,audioVideoDecoded:false};
+  }
+}
 // Probe verifies the secret and HTTPS route. It never requests a real source
 // or performs any customer cutover.
+if(process.env.BLOFY_STREAM_RELAY_PROBE_MEDIA_ON_BOOT==='1'){
+  const timer=setTimeout(()=>{
+    void checkStreamRelaySyntheticMedia().then(r=>
+      console.info('BLOFY_STREAM_RELAY_MEDIA_PROOF',JSON.stringify(r))
+    );
+  },14000);
+  timer.unref?.();
+}
 if(process.env.BLOFY_STREAM_RELAY_PROBE_ON_BOOT==='1'){
   const timer=setTimeout(()=>{
     void checkStreamRelayBridge().then(r=>
