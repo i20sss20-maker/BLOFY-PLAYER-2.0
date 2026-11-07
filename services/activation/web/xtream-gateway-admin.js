@@ -448,7 +448,9 @@ function renderGatewayPreflight(data,scope){
         (check.ok?(check.recoveryMode==='m3u'?' · تم تشغيل الفيديو من M3U المرتبط':' · بيانات صحيحة'):
           (' · '+gatewayPreflightReason(check.reason)))+
         (!check.ok&&ids?' · '+ids:'')+
-        (!check.ok&&check.m3uRecoveryStatus?' · '+gatewayM3uRecoveryReason(check.m3uRecoveryStatus):''));
+        (!check.ok&&check.m3uRecoveryStatus?' · '+gatewayM3uRecoveryReason(check.m3uRecoveryStatus):'')+
+        (check.kind==='account'&&check.attempts>1?
+          check.ok?' · عاد اتصال المصدر بعد إعادة المحاولة':' · لم يستجب المصدر بعد محاولتين':''));
       card.append(line);
     }
     details?.append(card);
