@@ -21,6 +21,10 @@ test('bounded allowlisted filters cannot become SQL identifiers',()=>{
 test('sensitive fields are omitted and web portal is never labelled app version',()=>{
  const safe=safeDeviceInsight({...row,last_app_version:'web-portal'},now);
  assert.equal(safe.appVersion,null);assert.equal(safe.activation_code,undefined);assert.equal(JSON.stringify(safe).includes('secret'),false);
+ const placeholder=safeDeviceInsight({...row,last_app_version:'web-portal',last_platform:'web',last_seen_at:new Date(now)},now);
+ assert.equal(placeholder.reportedPlatform,'');assert.equal(placeholder.lastContactAt,null);
+ const linked=safeDeviceInsight({...row,last_app_version:'2.0.0-rc07.55.8.5',last_platform:'android',last_seen_at:new Date(now)},now);
+ assert.equal(linked.reportedPlatform,'android');assert.equal(linked.lastContactAt,now);
 });
 test('expired and lifetime states are distinguished',()=>{
  assert.equal(safeDeviceInsight({...row,expires_at:new Date(now-1)},now).status,'expired');

@@ -63,6 +63,9 @@ test('brand-new portal pairing creates only a pending expired row and authentica
   assert.match(insert.params[1], /^v1:[a-f0-9]{64}$/);
   assert.match(insert.sql, /'expired'/);
   assert.match(insert.sql, /TRUE/);
+  // A portal visit is not a real app heartbeat and must not spoof Android or web clients.
+  assert.match(insert.sql, /NOW\(\),NULL,NULL,NULL,TRUE/);
+  assert.doesNotMatch(insert.sql, /'web-portal'|'web'/);
 });
 
 test('existing pending device is accepted only with its matching activation proof', async () => {

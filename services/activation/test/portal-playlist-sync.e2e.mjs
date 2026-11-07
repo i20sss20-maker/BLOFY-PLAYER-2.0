@@ -65,8 +65,8 @@ try {
     assert.equal(pending.status, 'expired');
     assert.equal(pending.trial_registration_pending, true);
     assert.equal(pending.trial_started_at, null);
-    assert.equal(pending.last_platform, 'web');
-    assert.equal(pending.last_app_version, 'web-portal');
+    assert.equal(pending.last_platform, null);
+    assert.equal(pending.last_app_version, null);
     assert.ok(new Date(pending.expires_at).getTime() <= Date.now() + 5_000, 'pending web pairing must not grant future entitlement');
   }
 
