@@ -27,10 +27,12 @@ test('synthetic HLS master, variant, and TS segment remain same-origin and cooki
     paths.push(path);cookies.push(opts.headers.cookie||'');
     if(path==='/smoke/index.m3u8')
       return new Response(null,{status:302,headers:{
-        location:'/smoke/master.m3u8','set-cookie':'mtx_sid=ABCdef123; Path=/; Domain=private.example'
+        location:'/smoke/master.m3u8?cookieCheck=1','set-cookie':'mtx_sid=ABCdef123; Path=/; Domain=private.example'
       }});
-    if(path==='/smoke/master.m3u8')
+    if(path==='/smoke/master.m3u8'){
+      assert.equal(new URL(url).searchParams.get('cookieCheck'),'1');
       return new Response('#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=500000\nvariant.m3u8\n');
+    }
     if(path==='/smoke/variant.m3u8')
       return new Response('#EXTM3U\n#EXTINF:2.000,\nsegment0.ts\n');
     if(path==='/smoke/segment0.ts')return new Response(ts,{headers:{'content-type':'video/mp2t'}});
@@ -84,6 +86,7 @@ test('invalid or untrusted HLS asset never reaches internal network',async()=>{
       DEMO_PREFIX+'..%2fprivate.ts',
       DEMO_PREFIX+'not-a-segment.txt',
       DEMO_PREFIX+'segment.ts?target=https://outside.example',
+      DEMO_PREFIX+'index.m3u8?cookieCheck=2',
       DEMO_PREFIX+'%2e%2e%2fcredentials.ts'
     ]){
       const resp=await fetch(base+path);
