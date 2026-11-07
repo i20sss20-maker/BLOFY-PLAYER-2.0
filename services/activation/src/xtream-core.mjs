@@ -1,3 +1,4 @@
+import {safeXtreamTransportCategory} from './xtream-transport-errors.mjs';
 import crypto from 'node:crypto';
 import dns from 'node:dns/promises';
 import net from 'node:net';
@@ -291,6 +292,8 @@ export async function parseTopLevelJsonArray(body, onItem, { maxItemBytes = 2_00
 }
 
 export function redactXtreamError(error) {
+  const network=safeXtreamTransportCategory(error);
+  if(network)return network;
   const message = String(error?.message || error || 'xtream_error');
-  return message.replace(/([?&](?:username|password)=)[^&\s]+/gi, '$1***').slice(0, 400);
+  return message.replace(/([?&](?:username|password)=)[^&\\s]+/gi, '$1***').slice(0, 400);
 }
