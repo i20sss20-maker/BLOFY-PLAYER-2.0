@@ -388,8 +388,8 @@ function renderXtream() {
   const query=String(el('xtSourceSearch')?.value||'').trim().toLowerCase();
   const filter=String(el('xtSourceFilter')?.value||'all');
   const visible=state.xtreamServers.filter(item=>
-    (!query||String(item.name+' '+item.baseUrl).toLowerCase().includes(query)) &&
-    (filter==='all'||(filter==='enabled'&&item.enabled)||(filter==='disabled'&&!item.enabled)||(filter==='published'&&item.enabled&&item.publishCatalog))
+    (!query||String(item.name+' '+item.baseUrl+' '+item.id).toLowerCase().includes(query)) &&
+    (filter==='all'||(filter==='enabled'&&item.enabled)||(filter==='disabled'&&!item.enabled)||(filter==='published'&&item.enabled&&item.publishCatalog)||(filter==='issues'&&item.enabled&&Boolean(item.lastError||item.status==='offline'||item.status==='error')))
   );
   const countEnabled=state.xtreamServers.filter(x=>x.enabled).length;
   const countPublished=state.xtreamServers.filter(x=>x.enabled&&x.publishCatalog).length;
@@ -424,6 +424,28 @@ function renderXtream() {
   el('xtreamLoading').hidden = true;
   list.hidden = false;
   updateCatalogServerOptions();
+  // Publish only operational summary fields to the view-only premium dashboard.
+  // Never publish Xtream host, username, password, auth tokens or raw provider responses.
+  const dashboardSnapshot={
+    sources:state.xtreamServers.map(item=>({
+      id:String(item.id||''),
+      name:String(item.name||'مصدر بدون اسم').slice(0,120),
+      enabled:Boolean(item.enabled),
+      published:Boolean(item.enabled&&item.publishCatalog),
+      issue:Boolean(item.enabled&&(item.lastError||item.status==='offline'||item.status==='error')),
+      syncing:Boolean(item.syncing||item.status==='syncing'),
+      tested:Boolean(item.lastTestAt),
+      status:String(item.status||'unknown').slice(0,24)
+    })),
+    totals:{
+      servers:Number(totals.servers)||0,
+      live:Number(totals.live)||0,
+      movie:Number(totals.movie)||0,
+      series:Number(totals.series)||0
+    }
+  };
+  window.__BLOFY_STREAM_SNAPSHOT__=dashboardSnapshot;
+  document.dispatchEvent(new CustomEvent('blofy:stream-snapshot',{detail:dashboardSnapshot}));
 }
 
 function scheduleXtreamPoll() {
