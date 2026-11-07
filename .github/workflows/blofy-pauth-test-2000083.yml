@@ -11,7 +11,7 @@ permissions:
   actions: read
 concurrency:
   group: blofy-pauth-2000084-test
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   test-apk:
     runs-on: ubuntu-latest
