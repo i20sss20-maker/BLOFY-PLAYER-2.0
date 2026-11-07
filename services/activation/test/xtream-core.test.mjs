@@ -49,6 +49,42 @@ test('streaming array parser handles objects split across arbitrary chunks', asy
   assert.equal(items[0].nested.x, '{a}');
 });
 
+test('large Xtream catalogs stream without quadratic per-character UTF-8 rechecks', async () => {
+  const countExpected = 4000;
+  const records = Array.from({length:countExpected},(_,i)=>JSON.stringify({
+    stream_id:i+1,name:'فيلم جديد '+i+' '+('دقة عالية '.repeat(20)),
+    category_id:'11',container_extension:'mp4'
+  }));
+  const payload='['+records.join(',')+']';
+  const chunks=payload.match(/[\s\S]{1,257}/g);
+  let countSeen=0;
+  const count=await parseTopLevelJsonArray(Readable.from(chunks), item=>{
+    countSeen++;
+    assert.ok(item.stream_id>=1&&item.stream_id<=countExpected);
+  });
+  assert.equal(count,countExpected);
+  assert.equal(countSeen,countExpected);
+  const source=await import('node:fs/promises').then(fs=>
+    fs.readFile(new URL('../src/xtream-core.mjs',import.meta.url),'utf8'));
+  const parser=source.slice(source.indexOf('export async function parseTopLevelJsonArray('),
+    source.indexOf('export function redactXtreamError('));
+  assert.doesNotMatch(parser,/Buffer\.byteLength\(current\)/);
+  assert.match(parser,/current\.length > maxItemBytes/);
+});
+
+test('catalog item cap still measures actual UTF-8 bytes even when split mid-emoji', async () => {
+  const item=JSON.stringify({stream_id:1,name:'قناة 🎬 عربية'});
+  const encoded=Buffer.from('['+item+']','utf8');
+  const fragmented=()=>Readable.from(Array.from(encoded,byte=>Buffer.from([byte])));
+  const maxItemBytes=Buffer.byteLength(item);
+  const received=[];
+  assert.equal(await parseTopLevelJsonArray(fragmented(),row=>received.push(row),
+    {maxItemBytes}),1);
+  assert.equal(received[0].name,'قناة 🎬 عربية');
+  await assert.rejects(parseTopLevelJsonArray(fragmented(),()=>{},
+    {maxItemBytes:maxItemBytes-1}),/xtream_item_too_large/);
+});
+
 test('normalized catalog item keeps useful metadata but does not persist direct stream URL', () => {
   const item = normalizeXtreamItem('movie', {
     stream_id: 77,
