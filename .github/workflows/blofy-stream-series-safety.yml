@@ -21,6 +21,7 @@ on:
       - 'services/activation/src/xtream-sync-queue.mjs'
       - 'services/activation/test/xtream-sync-queue.test.mjs'
       - 'services/activation/src/xtream-smart-connection.mjs'
+      - 'services/activation/src/xtream-native-controls.mjs'
       - 'services/activation/test/xtream-smart-connection.test.mjs'
       - 'services/activation/test/xtream-api-resilience.test.mjs'
       - 'services/activation/src/xtream-core.mjs'
@@ -48,6 +49,7 @@ jobs:
           node --check services/activation/src/xtream-api-resilience.mjs
           node --check services/activation/src/xtream-sync-queue.mjs
           node --check services/activation/src/xtream-smart-connection.mjs
+          node --check services/activation/src/xtream-native-controls.mjs
           node --check services/activation/src/xtream-core.mjs
       - name: Validate admin console JavaScript syntax
         run: |
