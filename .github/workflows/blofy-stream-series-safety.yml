@@ -1,4 +1,4 @@
-name: BLOFY STREAM isolated series safety checks
+name: BLOFY STREAM safety and console UI checks
 on:
   push:
     branches:
@@ -7,6 +7,11 @@ on:
       - 'services/activation/src/xtream-series-resolver.mjs'
       - 'services/activation/src/xtream-gateway-hook.mjs'
       - 'services/activation/test/xtream-series-resolver.test.mjs'
+      - 'services/activation/web/sources-admin.html'
+      - 'services/activation/web/sources-admin.js'
+      - 'services/activation/web/stream-console.css'
+      - 'services/activation/src/sources-admin-hook.mjs'
+      - 'services/activation/test/stream-console-ui.test.mjs'
       - '.github/workflows/blofy-stream-series-safety.yml'
   workflow_dispatch:
 jobs:
@@ -24,5 +29,7 @@ jobs:
         run: |
           node --check services/activation/src/xtream-series-resolver.mjs
           node --check services/activation/src/xtream-gateway-hook.mjs
-      - name: Series resolver regression tests
-        run: node --test services/activation/test/xtream-series-resolver.test.mjs
+      - name: Validate admin console JavaScript syntax
+        run: node --check services/activation/web/sources-admin.js
+      - name: Series and console regression tests
+        run: node --test services/activation/test/xtream-series-resolver.test.mjs services/activation/test/stream-console-ui.test.mjs
