@@ -26,6 +26,17 @@ test('provider network failures receive fixed safe diagnostic identifiers',()=>{
   assert.equal(redactXtreamError(error),expected,code);
  }
 });
+test('direct preflight DNS errors use a safe category without revealing a hostname',()=>{
+ const error=Object.assign(new Error('getaddrinfo ENOTFOUND private-panel.example'),{code:'ENOTFOUND'});
+ assert.equal(safeXtreamTransportCategory(error),'xtream_transport_dns_failed');
+ assert.equal(redactXtreamError(error),'xtream_transport_dns_failed');
+});
+test('application and provider errors keep their category',()=>{
+ const error=Object.assign(new Error('xtream_source_busy_retry'),{code:'53300'});
+ assert.equal(safeXtreamTransportCategory(error),null);
+ assert.equal(redactXtreamError(error),'xtream_source_busy_retry');
+});
+
 test('timeouts and unknown fetch failures never leak upstream URLs or credentials',()=>{
  const url='https://host.example:8080/live/privateuser/privatepass/123.ts';
  const failures=[
