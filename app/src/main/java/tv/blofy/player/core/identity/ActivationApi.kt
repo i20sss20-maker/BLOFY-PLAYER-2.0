@@ -7,7 +7,8 @@ data class ActivationCheckRequest(
     val deviceId: String,
     val activationCode: String,
     val appVersion: String,
-    val platform: String = "android"
+    val platform: String = "android",
+    val trialScope: String? = null
 )
 
 data class ActivationRotateRequest(
