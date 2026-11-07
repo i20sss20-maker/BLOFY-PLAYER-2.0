@@ -439,16 +439,29 @@ function renderXtream() {
   // Publish only operational summary fields to the view-only premium dashboard.
   // Never publish Xtream host, username, password, auth tokens or raw provider responses.
   const dashboardSnapshot={
-    sources:state.xtreamServers.map(item=>({
-      id:String(item.id||''),
-      name:String(item.name||'مصدر بدون اسم').slice(0,120),
-      enabled:Boolean(item.enabled),
-      published:Boolean(item.enabled&&item.publishCatalog),
-      issue:Boolean(item.enabled&&(item.lastError||item.status==='offline'||item.status==='error')),
-      syncing:Boolean(item.syncing||item.status==='syncing'),
-      tested:Boolean(item.lastTestAt),
-      status:String(item.status||'unknown').slice(0,24)
-    })),
+    sources:state.xtreamServers.map(item=>{
+      // Only known fixed diagnostic IDs leave the source card; never broadcast
+      // raw upstream errors, hostnames, credentials or provider response text.
+      const error=String(item.lastError||'');
+      const issueCode=[
+        'xtream_transport_dns_failed','xtream_transport_connection_refused',
+        'xtream_transport_connection_reset','xtream_transport_timeout',
+        'xtream_transport_tls_invalid','xtream_transport_unreachable',
+        'xtream_http_401','xtream_http_403','xtream_http_404','xtream_http_456',
+        'xtream_catalog_empty_preserved','xtream_catalog_suspicious_drop_preserved'
+      ].find(code=>error.includes(code))||'';
+      return {
+        id:String(item.id||''),
+        name:String(item.name||'مصدر بدون اسم').slice(0,120),
+        enabled:Boolean(item.enabled),
+        published:Boolean(item.enabled&&item.publishCatalog),
+        issue:Boolean(item.enabled&&(item.lastError||item.status==='offline'||item.status==='error')),
+        issueCode,
+        syncing:Boolean(item.syncing||item.status==='syncing'),
+        tested:Boolean(item.lastTestAt),
+        status:String(item.status||'unknown').slice(0,24)
+      };
+    }),
     totals:{
       servers:Number(totals.servers)||0,
       live:Number(totals.live)||0,
