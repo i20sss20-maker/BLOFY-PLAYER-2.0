@@ -947,7 +947,12 @@ async function gatewayItemById(mediaType, gatewayId, sourceId=null) {
     LEFT JOIN blofy_xtream_categories c ON c.server_id=i.server_id AND c.media_type=i.media_type AND c.source_category_id=i.category_id
     LEFT JOIN blofy_xtream_gateway_category_map cm ON cm.server_id=i.server_id AND cm.media_type=i.media_type AND cm.source_category_id=i.category_id
     WHERE m.gateway_id=$1 AND m.media_type=$2 AND i.enabled=TRUE AND s.enabled=TRUE AND s.publish_catalog=TRUE AND (c.enabled IS NULL OR c.enabled=TRUE)
-      AND ($3::uuid IS NULL OR i.server_id=$3::uuid)`, [id,mediaType,sourceId])).rows[0] || null;
+      AND ($3::uuid IS NULL OR i.server_id=$3::uuid)
+      AND ($2 <> 'movie' OR NOT EXISTS (
+        SELECT 1 FROM blofy_xtream_media_quarantine q
+        WHERE q.server_id=i.server_id AND q.media_type='movie'
+          AND q.source_id=i.source_id AND q.expires_at>NOW()
+      ))`, [id,mediaType,sourceId])).rows[0] || null;
 }
 
 function decryptServerCredentials(row) {
@@ -1110,11 +1115,21 @@ async function seriesInfo(gatewayId, sourceId=null) {
     }
   }
   const mapped = await ensureEpisodeMaps(row.server_id, row.source_id, sourceEpisodes);
+  const hiddenEpisodeIds=new Set();
+  if(sourceEpisodes.length){
+    const ids=[...new Set(sourceEpisodes.map(item=>item.sourceId))];
+    const active=(await pool.query(`SELECT source_id
+      FROM blofy_xtream_media_quarantine
+      WHERE server_id=$1 AND media_type='series' AND expires_at>NOW()
+        AND source_id=ANY($2::text[])`,[row.server_id,ids])).rows;
+    for(const unavailable of active)hiddenEpisodeIds.add(String(unavailable.source_id));
+  }
   const episodes = {};
   if (raw?.episodes && typeof raw.episodes === 'object') {
     for (const [season, list] of Object.entries(raw.episodes)) {
       if (!Array.isArray(list)) continue;
-      episodes[season] = list.map(episode => {
+      episodes[season] = list.filter(episode=>!hiddenEpisodeIds.has(String(episode?.id)))
+        .map(episode => {
         const clean = stripUpstreamSecrets(episode);
         const map = mapped.get(String(episode?.id));
         return {
@@ -1138,7 +1153,11 @@ async function episodeByGatewayId(gatewayId,sourceId=null) {
       s.enabled AS server_enabled
     FROM blofy_xtream_gateway_episode_map e JOIN blofy_xtream_servers s ON s.id=e.server_id
     WHERE e.gateway_id=$1 AND s.enabled=TRUE AND s.publish_catalog=TRUE
-      AND ($2::uuid IS NULL OR e.server_id=$2::uuid)`, [id,sourceId])).rows[0] || null;
+      AND ($2::uuid IS NULL OR e.server_id=$2::uuid)
+      AND NOT EXISTS (SELECT 1 FROM blofy_xtream_media_quarantine q
+        WHERE q.server_id=e.server_id AND q.media_type='series'
+          AND q.source_id=COALESCE(e.resolved_source_episode_id,e.source_episode_id)
+          AND q.expires_at>NOW())`, [id,sourceId])).rows[0] || null;
 }
 
 // Refresh a stale episode extension only after a real provider 404, using
