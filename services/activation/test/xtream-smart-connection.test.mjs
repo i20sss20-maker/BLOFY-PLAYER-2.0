@@ -74,6 +74,8 @@ test('native no-JavaScript controls can check and display the same per-source sa
  assert.match(native,/const diagnosis=diagnostics\[item\.id\]/);
  assert.match(native,/esc\(diagnosis\.title\)/);
  assert.match(native,/esc\(diagnosis\.nextStep\)/);
+ assert.match(native,/xtreamConnectionReport\(\{errorCode:item\.lastError\}\)\.title/);
+ assert.doesNotMatch(native,/esc\(item\.lastError\)/);
  assert.match(native,/csrfToken/);
  assert.match(admin,/if\(action==='smart-connection'\)/);
  assert.match(admin,/smartConnectionResults\.set\(id/);
