@@ -45,6 +45,7 @@ import { createGatewayUsageThrottle } from './xtream-gateway-usage-throttle.mjs'
 import { readXtreamGatewayJsonResponse } from './xtream-gateway-response.mjs';
 import { createXtreamHealthSnapshot } from './xtream-health-snapshot.mjs';
 import {relayEligible,issueStreamRelayGrant} from './xtream-stream-relay-bridge.mjs';
+import {shouldUseIndependentSourceMedia} from './xtream-independent-source-media-policy.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
@@ -701,7 +702,20 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
         {'retry-after':String(rejection.retryAfterSeconds)});
     }
   }
-  const upstream = mediaUpstreamUrl(row, kind, sourceId, mediaExtension);
+  let upstream = mediaUpstreamUrl(row, kind, sourceId, mediaExtension);
+  // Use independent Railway egress for ONE operator-allowed source and TS
+  // only. Keep the original BLOFY Xtream URL, login and response behavior.
+  // If the protected service cannot issue a ticket, fall back immediately.
+  if(shouldUseIndependentSourceMedia({
+    sourceId:row.server_id,kind,extension:mediaExtension
+  })){
+    try{
+      upstream=new URL(await issueStreamRelayGrant({sourceUrl:upstream.href,kind}));
+    }catch{
+      console.warn('BLOFY_XTREAM_INDEPENDENT_SOURCE_FALLBACK',{
+        kind,sourceId:row.server_id,reason:'relay_ticket_unavailable'});
+    }
+  }
   // Optional one-account canary: transfer the data plane to the isolated
   // Railway project. Authentication, catalog restrictions, source selection
   // and subscriber expiry stay checked here first. Disabled by default.
