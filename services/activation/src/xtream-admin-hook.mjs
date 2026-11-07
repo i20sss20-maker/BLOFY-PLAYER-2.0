@@ -10,6 +10,7 @@ import {probeXtreamHttp11} from './xtream-http-compat-probe.mjs';
 import {compareXtreamFromIndependentRailway} from './xtream-independent-probe.mjs';
 import {shouldUseIndependentXtreamSource,fetchIndependentXtreamSource} from './xtream-independent-catalog-relay.mjs';
 import {issueStreamRelayGrant} from './xtream-stream-relay-bridge.mjs';
+import {probeOfficialXtreamPlaylistRoute} from './xtream-official-m3u-probe.mjs';
 import {probeXtreamM3uAvailability} from './xtream-m3u-availability.mjs';
 import { createFixedWindowLimiter, requestClientKey } from './auth-protection.mjs';
 import {
@@ -22,7 +23,8 @@ import {
   parseTopLevelJsonArray,
   redactXtreamError,
   sanitizeXtreamAccount,
-  xtreamApiUrl
+  xtreamApiUrl,
+  xtreamM3uUrl
 } from './xtream-core.mjs';
 import http from 'node:http';
 import crypto from 'node:crypto';
@@ -1334,6 +1336,30 @@ if(process.env.BLOFY_XTREAM_INDEPENDENT_MEDIA_PROBE_ON_BOOT==='1'){
     });
   },26000);
   mediaProbeTimer.unref?.();
+}
+
+// One-shot operator-only comparison of official M3U link destinations.
+// Reads the existing approved source's encrypted secrets in memory. Exactly
+// one protected STREAM service call, no DB changes and no customer redirect.
+if(process.env.BLOFY_XTREAM_OFFICIAL_M3U_PROBE_ON_BOOT==='1'){
+  const timer=setTimeout(()=>{
+    void(async()=>{
+      const sourceId=String(process.env.BLOFY_XTREAM_EGRESS_SOURCE_ID||'').trim();
+      if(!validUuid(sourceId)||!shouldUseIndependentXtreamSource(sourceId))return;
+      const row=await serverById(sourceId);
+      if(!row?.enabled)return;
+      const creds=decryptCredentials(row);
+      const url=xtreamM3uUrl(row.base_url,creds.username,creds.password,'ts');
+      const result=await probeOfficialXtreamPlaylistRoute(url.href);
+      console.info('BLOFY_XTREAM_OFFICIAL_M3U_PROOF',JSON.stringify({
+        sourceId,...result,credentialsLogged:false
+      }));
+    })().catch(()=>{
+      console.warn('BLOFY_XTREAM_OFFICIAL_M3U_PROOF',
+        JSON.stringify({ok:false,code:'probe_unavailable',credentialsLogged:false}));
+    });
+  },21000);
+  timer.unref?.();
 }
 
 async function cancelSourceSync(id) {
