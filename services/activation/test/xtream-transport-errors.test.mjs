@@ -73,3 +73,16 @@ test('source admin only categorizes network failures without retrying denied cre
    'xtream_transport_timeout','xtream_transport_tls_invalid','xtream_transport_connection_refused'])
    assert.ok(ui.includes(phrase),phrase);
 });
+
+test('premium operations snapshot exposes only allowlisted diagnostic IDs',async()=>{
+ const [sourceUi,premium]=await Promise.all([
+  readFile(new URL('../web/sources-admin.js',import.meta.url),'utf8'),
+  readFile(new URL('../web/stream-premium.js',import.meta.url),'utf8')
+ ]);
+ const section=sourceUi.split('const dashboardSnapshot=')[1]?.split('window.__BLOFY_STREAM_SNAPSHOT__')[0]||'';
+ assert.match(section,/issueCode/);
+ assert.match(section,/\.find\(code=>error\.includes\(code\)\)/);
+ assert.doesNotMatch(section,/issueCode:\s*(?:error|item\.lastError)\s*[,}]/);
+ assert.match(premium,/SOURCE_ISSUE_LABELS/);
+ assert.match(premium,/Object\.hasOwn\(SOURCE_ISSUE_LABELS/);
+});
