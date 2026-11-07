@@ -7,6 +7,7 @@ const js=await readFile(new URL('sources-admin.js',web),'utf8');
 const css=await readFile(new URL('stream-console.css',web),'utf8');
 const premiumCss=await readFile(new URL('stream-premium.css',web),'utf8');
 const premiumJs=await readFile(new URL('stream-premium.js',web),'utf8');
+const gatewayJs=await readFile(new URL('xtream-gateway-admin.js',web),'utf8');
 const hook=await readFile(new URL('../src/sources-admin-hook.mjs',import.meta.url),'utf8');
 
 test('default dashboard and deep-linked original tabs exist',()=>{
@@ -75,4 +76,16 @@ test('all sensitive source connection values remain outside dashboard snapshots'
  assert.ok(snippet.length>0);
  for(const field of ['baseUrl','username','password','token','credentials','secret'])
    assert.ok(!snippet.includes('item.'+field),'snapshot must not include '+field);
+});
+
+test('account insights are operational and sanitized',()=>{
+ for(const id of ['homeMetricActiveAccounts','premiumAccountsActive','premiumAccountsExpiring','premiumAccountsExpired'])
+   assert.ok(html.includes('id="'+id+'"'),id+' missing');
+ assert.match(premiumJs,/function renderAccounts\(/);
+ assert.match(premiumJs,/blofy:account-snapshot/);
+ assert.match(gatewayJs,/blofy:account-snapshot/);
+ const snapshot=gatewayJs.split('const accountSnapshot=')[1]?.split('window.__BLOFY_ACCOUNT_SUMMARY__')[0]||'';
+ assert.ok(snapshot.length>0);
+ for(const field of ['username','password','credential','token','secret','host'])
+   assert.ok(!snapshot.includes(field),'account summary should not contain '+field);
 });
