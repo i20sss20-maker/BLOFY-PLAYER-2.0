@@ -99,7 +99,6 @@ const syncProgress = new Map();
 const cancelledSources = new Set();
 const purgeRunning = new Set();
 let purgeSweepStarted = false;
-let m3uAutoScheduled = false;
 let readyPromise;
 
 const TYPE_ACTIONS = {
@@ -293,24 +292,10 @@ async function ensureReady() {
     setTimeout(() => void resumePendingPurges().catch(error =>
       console.warn('Xtream startup purge scan failed:', redactXtreamError(error))), 250);
   }
-  if(!m3uAutoScheduled){
-    m3uAutoScheduled=true;
-    // One already-linked source may be migrated automatically on release.
-    // Never block server startup, and never repeat a source that has a real
-    // completed or failed indexing verdict until an operator chooses retry.
-    const timer=setTimeout(()=>{
-      void pool.query(`SELECT id FROM blofy_xtream_servers
-        WHERE enabled=TRUE AND m3u_url_secret IS NOT NULL
-          AND m3u_index_generation IS NULL AND deletion_requested_at IS NULL
-          AND COALESCE(m3u_index_state->>'status','not_indexed')
-            IN ('not_indexed','indexing','failed') ORDER BY priority,id LIMIT 1`)
-        .then(({rows})=>{
-          if(rows[0]&&!m3uIndexLocks.has(rows[0].id))
-            startHybridM3uIndex(rows[0].id);
-        }).catch(()=>{});
-    },12000);
-    timer.unref?.();
-  }
+  // Do not start an unsolicited 300k+ item M3U download on service boot.
+  // Failed source fetches must not trigger more provider requests merely
+  // because a deployment restarted. The existing completed index stays
+  // untouched. Operators can explicitly use "index-m3u" if needed.
   return result;
 }
 
