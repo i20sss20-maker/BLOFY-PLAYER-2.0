@@ -1,18 +1,14 @@
 // Bounded read-only detection of the official Xtream get.php M3U export.
 // No playlist contents, account credentials, stream URLs, hostnames or
 // provider error text are returned or logged.
-import {assertPublicXtreamUrl,normalizeXtreamBaseUrl} from './xtream-core.mjs';
+import {assertPublicXtreamUrl,xtreamM3uUrl} from './xtream-core.mjs';
 import {safeXtreamTransportCategory} from './xtream-transport-errors.mjs';
 
 const safeStatus=status=>Number.isInteger(status)&&status>=100&&status<=599?status:null;
 export async function probeXtreamM3uAvailability({baseUrl,username,password},{
   fetchImpl=fetch,checkPublic=assertPublicXtreamUrl,timeoutMs=8000
 }={}){
-  const url=new URL('/get.php',normalizeXtreamBaseUrl(baseUrl));
-  url.searchParams.set('username',username);
-  url.searchParams.set('password',password);
-  url.searchParams.set('type','m3u_plus');
-  url.searchParams.set('output','ts');
+  const url=xtreamM3uUrl(baseUrl,username,password);
   await checkPublic(url.origin);
   const controller=new AbortController();
   const timer=setTimeout(()=>controller.abort(),timeoutMs);

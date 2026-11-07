@@ -30,7 +30,7 @@ test('authorized official M3U export is detected without catalog import or URL l
   }
  });
  assert.deepEqual(result,{ok:true,stage:'content',status:200,code:'xtream_m3u_reachable'});
- assert.equal(sourceUrl.pathname,'/get.php');
+ assert.equal(sourceUrl.pathname,'/base/get.php');
  assert.equal(response.state().reads,1);
  assert.equal(response.state().cancelled,true);
  assert.doesNotMatch(JSON.stringify(result),/secretuser|secretpass|private\.example|stream/);
