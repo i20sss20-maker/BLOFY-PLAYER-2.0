@@ -41,7 +41,13 @@ export async function probeOfficialXtreamPlaylistRoute(manifestUrl,{
     httpStatus:Number.isInteger(c.httpStatus)&&c.httpStatus>=100&&c.httpStatus<=599?c.httpStatus:null,
     code:CODE.has(c.code)?c.code:'unknown',
     format:FORMAT.has(c.format)?c.format:'unknown',
-    mediaBytesPresent:c.mediaBytesPresent===true
+    mediaBytesPresent:c.mediaBytesPresent===true,
+    redirectPresent:c.redirectPresent===true,
+    redirectPublic:typeof c.redirectPublic==='boolean'?c.redirectPublic:null,
+    redirectSameOrigin:typeof c.redirectSameOrigin==='boolean'?c.redirectSameOrigin:null,
+    redirectStatus:Number.isInteger(c.redirectStatus)&&c.redirectStatus>=100&&c.redirectStatus<=599?c.redirectStatus:null,
+    redirectCode:CODE.has(c.redirectCode)?c.redirectCode:null,
+    redirectMediaFormat:FORMAT.has(c.redirectMediaFormat)?c.redirectMediaFormat:null
   })):[];
   return {ok:d?.ok===true,code:CODE.has(d?.code)?d.code:null,
     stage:['validation','manifest','compared'].includes(d?.stage)?d.stage:'unknown',
