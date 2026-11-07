@@ -61,7 +61,7 @@ test('subscriber summary emits counts without exposing private account fields',(
     assert.ok(record.includes(count+':'),'Summary missing '+count);
 });
 
-test('manual and automatic refresh never double-fetch subscriptions',()=>{
+test('manual and automatic refresh never double-fetch subscriptions',async()=>{
   const source=await readFile(new URL('sources-admin.js',base),'utf8');
   const manual=source.split('async function refreshCurrent()')[1]?.split('// BLOFY Smart Command Center')[0]||'';
   assert.match(manual,/blofy:refresh-accounts/);
