@@ -31,3 +31,15 @@ Environment: Railway project BLOFY-RESTREAM-PILOT / test, isolated from producti
 
 ## Status
 A working **synthetic** live restream lab is deployed. Main BLOFY STREAM is intentionally unchanged.
+
+## Public playback 401 incident and resolution (2026-11-07)
+- A real browser test exposed HTTP 401 on `/demo/main_stream.m3u8` after the public master playlist returned 200. The MediaMTX direct public URL must not be recommended as a functioning player.
+- Observed the same failure on MediaMTX 1.21.3 and (in this Railway reverse-proxy environment) on 1.19.2; a version downgrade alone did **not** resolve the public HLS session issue.
+- Created a same-origin, demo-scoped HLS reverse proxy on the existing Bun lab-health service. Forwarded only `/demo/*` GET/HEAD, safe playlist and segment headers, relative Location and cookie; kept the MediaMTX origin on Railway private networking. No account data is proxied.
+- Railway Function listens on env PORT=8080; corrected the service domain from target port 3000 to port 8080.
+- Verified public proxy chain via Railway HTTP logs: master redirected 302 then 200; `/demo/main_stream.m3u8` returned **200**; `/demo/...ts` returned **200**; measured 89,676 verified MPEG-TS bytes, source probe reports `ok:true`.
+- NEW BROWSER TEST URL: https://blofy-restream-lab-health-test.up.railway.app/demo/
+- NEW HLS URL: https://blofy-restream-lab-health-test.up.railway.app/demo/index.m3u8
+- Health with public proxy verification: https://blofy-restream-lab-health-test.up.railway.app/health?proxy=1
+- All streams remain generated FFmpeg test pattern ONLY; the proxy is for testing and deliberately unprotected. Before live provider distribution, require authentication, signed URLs, per-viewer limits, upstream permissions, and load testing.
+- Browser playback on user's device is still to be confirmed. Production `blofyplayer.com` remains unchanged.
