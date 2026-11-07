@@ -47,3 +47,15 @@ This leaves DB/subscribers, independent media engine and domain settings unchang
 - Pre-release regression test file `services/activation/test/stream-console-ui.test.mjs` and workflow updated; a fully automated real-browser operator session was not executed.
 - Rollback to previous successful admin UI deployment `ac907c1d-af90-4ddf-af7a-5d19dff60e66` (commit `f6fd2a8c03c01904aaa074a1a14ce7112629f821`) if UI regression occurs.
 - MediaMTX is connected but currently **not** adopted for real Xtream customer playback. Original provider 502/series transport failures remain separate operational work.
+
+
+## BLOFY STREAM PRO operations hardening (2026-11-07)
+- Official Railway activation portal production deploy: `9e27de05-22c8-45b0-93df-3d6c105dd4c1`, SUCCESS, pinned commit `db4410ebfdf389e8225e411c1c513ddfe38f04ef`.
+- Implemented richer subscriber metrics: active, expiring within seven days, expired, and disabled. Admin receives explicit unavailable state if account API fails instead of silently retaining stale counts.
+- Fixed `expiresAt` parsing across epoch milliseconds, epoch seconds and ISO strings; existing accounts with unlimited access cannot accidentally be assigned a 30-day expiration by clicking renew.
+- Added a read-only opt-in 90-second refresh, paused while browser tab is not visible; manual refresh also updates source and subscription readouts. No provider sync, subscriber mutations, or playback tests are triggered.
+- Added contextual issues panel that links to real failed sources and expiring subscriber filters.
+- Added `stream-operations-regression.test.mjs` to CI list and exercised JavaScript syntax and date normalization locally in V8. Do not assume GitHub Actions passed unless a workflow conclusion is independently verified (legacy Vercel check is unrelated to Railway and may be red).
+- From Railway one-shot verification: public /health, /sources-admin, premium JS/CSS and admin JS each returned HTTP 200, with expected current release markers and `Cache-Control: no-store`. The verification function was deleted.
+- No change to live customer stream routes or upstream authorization. Provider-side Xtream connection resets and occasional 401/404/502 remain separate and require feed-level investigation; passing HLS connectivity does not prove playable third-party media.
+- Prior validated production commit for immediate UI rollback: `946f4a38efd1d7283328d34c11dff9aca36dd5a2` (Railway deploy `971c070d-2769-4d88-95e8-a5e61a3dcbb7`, now removed from active deployments; redeploy pinned commit if required). Full original stable rollback: `872d1eca1b66d18d7c44ad3a43a90727592aadbb`.
