@@ -1469,6 +1469,16 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
               });
               continue;
             }
+            // A subscriber has now independently confirmed a missing file
+            // through both the original provider path and its linked M3U.
+            // Quarantine that ONE episode temporarily; do not hide its series.
+            if(m3uEvidence.status==='provider_404'){
+              try{
+                await quarantineConfirmedMissingMedia(row,'series',sourceId,{
+                  ok:false,httpStatus:404,m3uRecoveryStatus:m3uEvidence.status
+                });
+              }catch{console.warn('xtream episode quarantine persistence failed');}
+            }
             if(repaired.status==='missing'){
               observe('failed',{upstreamStatus:404,reason:'episode_missing_from_source',attempts:attempt});
               return text(res,502,'Episode no longer listed by source');
@@ -1505,6 +1515,13 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
               upstream=hybrid.url;
               console.info('xtream movie 404 recovered',{itemId:gatewayId,mode:hybrid.mode});
               continue;
+            }
+            if(m3uEvidence.status==='provider_404'){
+              try{
+                await quarantineConfirmedMissingMedia(row,'movie',sourceId,{
+                  ok:false,httpStatus:404,m3uRecoveryStatus:m3uEvidence.status
+                });
+              }catch{console.warn('xtream movie quarantine persistence failed');}
             }
           }
           if (retryable && !transientRetried && attempt < maxAttempts) {
