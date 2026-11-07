@@ -589,7 +589,7 @@ async function preflightSource(row,deadline){
           // Do not assume the library is healthy when a replacement query fails.
         }
       };
-      for(const seriesRow of rows){
+      seriesLoop:for(const seriesRow of rows){
         if(sampled>=needed||inspectedSeries>=maxSeriesToInspect)break;
         const seriesId=String(seriesRow.source_id);
         if(inspected.has(seriesId))continue;
@@ -668,7 +668,7 @@ async function preflightSource(row,deadline){
             checks.push({...probe,sampleBand:seriesRow.sampleBand,
               seriesSourceId:diagnosticXtreamItemId(seriesId),
               episodeSourceId:diagnosticXtreamItemId(sample.id)});
-            break;
+            break seriesLoop;
           }
           if(seriesRow.sampleBand!=='replacement'){
             checks.push({...probe,sampleBand:seriesRow.sampleBand,
@@ -679,8 +679,12 @@ async function preflightSource(row,deadline){
         }
         if(!seriesPassed)await loadSubstitutes();
       }
-      if(sampled<needed)checks.push({kind:'series',ok:false,
-        reason:Date.now()>deadline-1800?'preflight_time_budget':'series_sample_unavailable'});
+      // Initial explicit failing video checks are already hard failures.
+      // Add one summary only when quarantined/empty/replacement samples have
+      // left us short of the required number of verified episodes.
+      if(sampled<needed&&!checks.some(check=>check.kind==='series'&&check.ok===false))
+        checks.push({kind:'series',ok:false,
+          reason:Date.now()>deadline-1800?'preflight_time_budget':'series_sample_unavailable'});
     }else if(kind==='live'){
       const results=await Promise.all(rows.map(async sample=>{
         const probe=await probeIssuanceWithTransientRetry(row,kind,
