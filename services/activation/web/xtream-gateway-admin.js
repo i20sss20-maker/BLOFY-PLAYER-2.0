@@ -316,6 +316,22 @@ async function loadGateway() {
     const data = await gatewayApi('/api/v1/admin/xtream-gateway');
     gatewayState.serverUrl = data.serverUrl || '';
     gatewayState.items = Array.isArray(data.items) ? data.items : [];
+    // Summary only; never broadcast usernames, passwords, tokens or account records.
+    const now=Date.now();
+    const accounts=gatewayState.items;
+    const expiry=item=>{
+      if(item.expiresAt==null||item.expiresAt==='')return null;
+      const num=Number(item.expiresAt);
+      return Number.isFinite(num)?num:Date.parse(String(item.expiresAt));
+    };
+    const accountSnapshot={
+      total:accounts.length,
+      active:accounts.filter(x=>x.enabled&&(expiry(x)==null||expiry(x)>now)).length,
+      expiring:accounts.filter(x=>x.enabled&&expiry(x)!=null&&expiry(x)>now&&expiry(x)-now<=7*86400000).length,
+      expired:accounts.filter(x=>expiry(x)!=null&&expiry(x)<=now).length
+    };
+    window.__BLOFY_ACCOUNT_SUMMARY__=accountSnapshot;
+    document.dispatchEvent(new CustomEvent('blofy:account-snapshot',{detail:accountSnapshot}));
     renderGatewayAccounts();
     try{
       const sources=await gatewayApi('/api/v1/admin/xtream/servers');
