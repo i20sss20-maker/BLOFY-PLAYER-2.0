@@ -127,6 +127,7 @@ function cookie(value,maxAgeSeconds) {
 async function loginPage() { return readFile(new URL('../web/admin-login.html',import.meta.url),'utf8'); }
 async function dashboardPage() { return readFile(new URL('../web/admin.html',import.meta.url),'utf8'); }
 async function blofyOnePage() { return readFile(new URL('../web/blofy-one.html',import.meta.url),'utf8'); }
+async function blofyOnePreviewPage() { return readFile(new URL('../web/blofy-one-preview.html',import.meta.url),'utf8'); }
 
 const previousCreateServer = http.createServer.bind(http);
 http.createServer = function patchedAdminSessionCreateServer(listener) {
@@ -140,6 +141,7 @@ http.createServer = function patchedAdminSessionCreateServer(listener) {
     // BLOFY ONE uses the existing signed admin cookie and login page.
     // No separate admin users, tokens, customer store or session model.
     if (req.method==='GET' && url.pathname==='/one') return html(res, await validSession(req)?await blofyOnePage():await loginPage());
+    if (req.method==='GET' && url.pathname==='/one/media-lab') return html(res, await validSession(req)?await blofyOnePreviewPage():await loginPage());
     if (!url.pathname.startsWith('/api/v1/admin/')) return listener(req,res);
     if (!['GET','HEAD'].includes(req.method) && url.pathname.startsWith('/api/v1/admin/')) {
       const origin=req.headers.origin;
