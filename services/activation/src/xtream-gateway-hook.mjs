@@ -256,6 +256,7 @@ async function probeIssuanceMedia(row,kind,id,extension,deadline){
   const url=mediaUpstreamUrl(row,kind,id,extension);
   const signal=AbortSignal.timeout(Math.min(6500,Math.max(1000,deadline-Date.now())));
   let response,reader;
+  const m3uEvidence={status:'not_checked'};
   const headers={
     'user-agent':'BLOFY-Issuance-Check/1.0',
     ...(kind==='live'?{}:{range:'bytes=0-2047'})
@@ -269,7 +270,7 @@ async function probeIssuanceMedia(row,kind,id,extension,deadline){
       response=await checkedFetch(url,{method:'GET',headers,signal});
     }
     if(response.status===404&&kind!=='live'&&Date.now()+3000<deadline){
-      const fromM3u=await verifiedHybridM3uFallback(row,kind,id,{deadline});
+      const fromM3u=await verifiedHybridM3uFallback(row,kind,id,{deadline,diagnostic:m3uEvidence});
       const verified=fromM3u?.verified?fromM3u:
         await verifiedOfficialMediaAlternative(row,kind,id,extension,{
           seriesSourceId:kind==='series'?row.series_source_id:null,
@@ -287,7 +288,8 @@ async function probeIssuanceMedia(row,kind,id,extension,deadline){
       return {kind,ok:false,reason:response.status===404?'upstream_http_404':
         response.status===403?'upstream_http_403':
         response.status===456?'upstream_http_456':'upstream_http_other',
-        httpStatus:response.status};
+        httpStatus:response.status,
+        ...(response.status===404&&kind!=='live'?{m3uRecoveryStatus:m3uEvidence.status}:{})};
     }
     reader=response.body.getReader();
     const samples=[];
@@ -330,9 +332,12 @@ async function probeIssuanceWithTransientRetry(row,kind,id,extension,deadline){
 // VOD/episode even when the conventional /movie/... or /series/... path is 404.
 // Never try unrelated titles, IDs, hosts, accounts or extension guesses.
 // Check the media bytes *before* selecting any provider-declared alternative.
-async function confirmProviderMediaUrl(url,{deadline=Date.now()+8500}={}){
+async function confirmProviderMediaUrl(url,{deadline=Date.now()+8500,diagnostic=null}={}){
   const timeLeft=deadline-Date.now();
-  if(timeLeft<=1000)return false;
+  if(timeLeft<=1000){
+    if(diagnostic)diagnostic.status='time_budget';
+    return false;
+  }
   const signal=AbortSignal.timeout(Math.min(8500,timeLeft));
   let response,reader;
   try{
@@ -344,7 +349,13 @@ async function confirmProviderMediaUrl(url,{deadline=Date.now()+8500}={}){
       delete headers.range;
       response=await checkedFetch(url,{method:'GET',headers,signal});
     }
-    if(!response.ok||!response.body)return false;
+    if(diagnostic)diagnostic.httpStatus=Number(response.status);
+    if(!response.ok||!response.body){
+      if(diagnostic)diagnostic.status=response.status===404?'provider_404':
+        [401,403,456].includes(response.status)?'provider_denied':
+        response.status===429?'provider_rate_limited':'provider_http_error';
+      return false;
+    }
     reader=response.body.getReader();
     const parts=[];
     let total=0;
@@ -354,45 +365,64 @@ async function confirmProviderMediaUrl(url,{deadline=Date.now()+8500}={}){
       const part=Buffer.from(read.value||[]).subarray(0,512-total);
       if(part.length){parts.push(part);total+=part.length;}
     }
-    if(!total)return false;
+    if(!total){
+      if(diagnostic)diagnostic.status='empty_media';
+      return false;
+    }
     const inspection=inspectXtreamMediaChunk(Buffer.concat(parts,total),
       response.headers.get('content-type'));
-    return inspection.valid&&inspection.format!=='unknown';
-  }catch{return false}
-  finally{
+    const valid=inspection.valid&&inspection.format!=='unknown';
+    if(diagnostic)diagnostic.status=valid?'verified':'non_video_bytes';
+    return valid;
+  }catch{
+    if(diagnostic)diagnostic.status=signal.aborted?'provider_timeout':'provider_unreachable';
+    return false;
+  }finally{
     if(reader){try{await reader.cancel()}catch{}try{reader.releaseLock()}catch{}}
     else try{await response?.body?.cancel()}catch{}
   }
 }
 
-
 // M3U Hybrid: the operator first indexes the linked same-account playlist.
 // On a genuine 404, use only a non-ambiguous EXACT original provider ID,
 // from this source's current index generation. Verify real video bytes
 // through the same SSRF-checked client before changing a subscriber stream.
-async function verifiedHybridM3uFallback(row,kind,sourceId,{deadline=Date.now()+8000}={}){
-  if(!row?.m3u_index_generation||!['movie','series'].includes(kind)||
-     Date.now()+1000>=deadline)return null;
+async function verifiedHybridM3uFallback(row,kind,sourceId,{deadline=Date.now()+8000,diagnostic=null}={}){
+  const status=value=>{if(diagnostic)diagnostic.status=value;};
+  if(!row?.m3u_index_generation){status('index_not_ready');return null;}
+  if(!['movie','series'].includes(kind)){status('unsupported_type');return null;}
+  if(Date.now()+1000>=deadline){status('time_budget');return null;}
   try{
     const match=(await pool.query(`SELECT generation,stream_url_secret,ambiguous
       FROM blofy_xtream_m3u_media_links
       WHERE server_id=$1 AND generation=$2 AND media_type=$3 AND source_id=$4
       LIMIT 1`,[row.server_id,row.m3u_index_generation,kind,String(sourceId)])).rows[0];
-    if(!verifiedHybridRow(match,row.m3u_index_generation))return null;
+    if(!match){status('id_not_in_m3u');return null;}
+    if(match.ambiguous){status('multiple_conflicting_m3u_links');return null;}
+    if(!verifiedHybridRow(match,row.m3u_index_generation)){
+      status('stale_index_entry');return null;
+    }
     const creds=decryptServerCredentials(row);
     const textUrl=decryptXtreamSecret(match.stream_url_secret,KEY_HEX,
       `m3u-media:${row.server_id}:${row.m3u_index_generation}:${kind}:${sourceId}`);
     const parsed=parseHybridM3uMediaUrl(textUrl,{
       baseUrl:row.base_url,username:creds.username,password:creds.password
     });
-    if(!parsed||parsed.kind!==kind||parsed.sourceId!==String(sourceId))
-      return null;
+    if(!parsed||parsed.kind!==kind||parsed.sourceId!==String(sourceId)){
+      status('m3u_link_identity_invalid');return null;
+    }
     const url=new URL(parsed.url);
-    if(!await confirmProviderMediaUrl(url,{deadline}))return null;
+    const probe={};
+    if(!await confirmProviderMediaUrl(url,{deadline,diagnostic:probe})){
+      status(probe.status||'m3u_media_unverified');
+      return null;
+    }
+    status('verified');
     console.info('xtream verified same-source M3U media',{kind,mode:'m3u'});
     return {url,mode:'m3u',verified:true};
   }catch{
     // No provider URL, token, credentials, or source playlist is logged.
+    status('m3u_check_unavailable');
     return null;
   }
 }
