@@ -2118,4 +2118,4 @@ loadXtream(true);
 loadBlofyPlaybackHealth();
 void loadTmdbIntegrationStatus();
 const initialTab = tabFromHash();
-if (initialTab && initialTab !== 'xtream') switchTab(initialTab);
+if (initialTab && initialTab !== state.activeTab) void switchTab(initialTab);
