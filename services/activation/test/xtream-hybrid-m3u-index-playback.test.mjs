@@ -118,3 +118,18 @@ test('real M3U upsert groups identical keys once and carries ambiguous flag thro
   assert.match(code,/r\.digest,r\.ambiguous/);
   assert.match(code,/ambiguous=blofy_xtream_m3u_media_links\.ambiguous OR excluded\.ambiguous/);
 });
+
+test('service restarts never automatically reindex a failed source; require explicit authenticated operator action',async()=>{
+  const src=await readFile(new URL('../src/xtream-admin-hook.mjs',import.meta.url),'utf8');
+  const ready=src.slice(src.indexOf('async function ensureReady('),
+    src.indexOf('function decryptCredentials(',src.indexOf('async function ensureReady(')));
+  assert.doesNotMatch(ready,/startHybridM3uIndex\\(/,
+    'no automatic massive playlist download on service startup');
+  assert.doesNotMatch(ready,/m3u_index_generation IS NULL/,
+    'do not repeatedly retry failed index after deployment');
+  assert.match(src,/if\\(action==='index-m3u'\\)/,
+    'only an authenticated native admin action can launch a new index');
+  assert.match(src,/if \\(action === 'index-m3u' && req.method === 'POST'\\)/,
+    'retain protected admin API for explicit indexing');
+  assert.match(src,/function startHybridM3uIndex\\(id\\)/);
+});
