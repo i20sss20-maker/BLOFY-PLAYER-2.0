@@ -1,6 +1,6 @@
 // Series-only translation of provider episodes into stable BLOFY IDs.
 // Never expose source episode IDs when a mapping is absent or invalid.
-const validSourceId = value => /^[A-Za-z0-9_-]{1,128}$/.test(String(value ?? ''));
+const validSourceId = value => (typeof value === 'string' || (typeof value === 'number' && Number.isSafeInteger(value))) && /^[A-Za-z0-9_-]{1,128}$/.test(String(value));
 const validGatewayId = value => Number.isSafeInteger(Number(value)) && Number(value) > 0;
 const safeExtension = value => /^(mp4|mkv|avi|mov|webm|ts)$/i.test(String(value || '')) ? String(value).toLowerCase() : 'mp4';
 
@@ -22,7 +22,7 @@ export function mapSeriesEpisodes(seasons, mappings, sanitize) {
   const result = {};
   if (!seasons || typeof seasons !== 'object' || Array.isArray(seasons)) return result;
   for (const [season, list] of Object.entries(seasons)) {
-    if (!Array.isArray(list)) continue;
+    if (!Array.isArray(list) || ['__proto__', 'prototype', 'constructor'].includes(season)) continue;
     result[season] = list.flatMap(episode => {
       if (!episode || typeof episode !== 'object' || !validSourceId(episode.id)) return [];
       const mapping = mappings.get(String(episode.id));
