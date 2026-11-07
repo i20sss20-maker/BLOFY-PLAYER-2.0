@@ -1,3 +1,4 @@
+import { collectSourceEpisodes, mapSeriesEpisodes } from './xtream-series-resolver.mjs';
 import { databaseOptions } from './database-options.mjs';
 import { safeErrorSummary } from './diagnostics-sanitizer.mjs';
 import { createFixedWindowLimiter, requestClientKey } from './auth-protection.mjs';
@@ -619,33 +620,12 @@ async function seriesInfo(gatewayId, sourceId=null) {
   if (!row || !row.server_enabled) return null;
   const raw = await fetchUpstreamApi(row, 'get_series_info', { series_id: row.source_id });
   const payload = stripUpstreamSecrets(raw);
-  const sourceEpisodes = [];
-  if (raw?.episodes && typeof raw.episodes === 'object') {
-    for (const list of Object.values(raw.episodes)) {
-      if (!Array.isArray(list)) continue;
-      for (const episode of list) {
-        if (!episode || episode.id == null) continue;
-        sourceEpisodes.push({ sourceId: String(episode.id), extension: safeGatewayExtension(episode.container_extension, 'mp4') });
-      }
-    }
-  }
+  // Only hand out stable IDs that exist in the episode map for this series.
+  // Missing mappings are deliberately omitted; raw provider IDs would point
+  // to unrelated BLOFY gateway IDs and cause false 404/502 playback errors.
+  const sourceEpisodes = collectSourceEpisodes(raw?.episodes);
   const mapped = await ensureEpisodeMaps(row.server_id, row.source_id, sourceEpisodes);
-  const episodes = {};
-  if (raw?.episodes && typeof raw.episodes === 'object') {
-    for (const [season, list] of Object.entries(raw.episodes)) {
-      if (!Array.isArray(list)) continue;
-      episodes[season] = list.map(episode => {
-        const clean = stripUpstreamSecrets(episode);
-        const map = mapped.get(String(episode?.id));
-        return {
-          ...clean,
-          id: map?.id ?? clean.id,
-          container_extension: map?.extension || safeGatewayExtension(clean.container_extension, 'mp4'),
-          direct_source: ''
-        };
-      });
-    }
-  }
+  const episodes = mapSeriesEpisodes(raw?.episodes, mapped, stripUpstreamSecrets);
   return { ...payload, episodes };
 }
 
