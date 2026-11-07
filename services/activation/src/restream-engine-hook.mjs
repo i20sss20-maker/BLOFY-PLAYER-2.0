@@ -3,6 +3,7 @@
 import http from 'node:http';
 import crypto from 'node:crypto';
 import {normalizePrivateRestreamOrigin, publicRestreamState} from './restream-engine-core.mjs';
+import {verifyRestreamSmoke} from './restream-smoke.mjs';
 
 const ENGINE = normalizePrivateRestreamOrigin(process.env.BLOFY_RESTREAM_ENGINE_URL || '');
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
@@ -31,10 +32,38 @@ async function status(res) {
     return write(res,503,{ok:false,...publicRestreamState({configured:true,responded:false,elapsedMs:Date.now()-started})});
   }
 }
+let smokeRunning=false,smokeCheckedAt=0;
+async function runSmoke(res){
+  const now=Date.now();
+  if(smokeRunning || (smokeCheckedAt>0&&now-smokeCheckedAt<30_000))
+    return write(res,429,{ok:false,error:'restream_smoke_rate_limited'});
+  smokeRunning=true;smokeCheckedAt=now;
+  try{
+    const report=await verifyRestreamSmoke(ENGINE);
+    return write(res,report.ok?200:503,report);
+  }finally{smokeRunning=false;}
+}
+if(process.env.BLOFY_RESTREAM_SMOKE_ON_BOOT==='1'){
+  // One bounded synthetic test per deploy; no customer paths or provider
+  // endpoints are requested. No repeating background polling.
+  const timer=setTimeout(()=>{
+    void verifyRestreamSmoke(ENGINE).then(report=>{
+      console.info('BLOFY_RESTREAM_SYNTHETIC_SMOKE',JSON.stringify(report));
+    }).catch(()=>console.info('BLOFY_RESTREAM_SYNTHETIC_SMOKE',JSON.stringify({
+      ok:false,code:'restream_smoke_failed',realSourceVerified:false
+    })));
+  },22000);
+  timer.unref?.();
+}
 const previousCreateServer=http.createServer.bind(http);
 http.createServer=function withBlofyRestreamHealth(listener){
   if(typeof listener!=='function')return previousCreateServer(listener);
   return previousCreateServer((req,res)=>{
+    if(req.method==='GET'&&req.url?.split('?')[0]==='/api/v1/admin/restream-engine/smoke'){
+      if(!authorized(req.headers.authorization))return write(res,401,{ok:false,error:'unauthorized'});
+      void runSmoke(res);
+      return;
+    }
     if(req.method==='GET'&&req.url?.split('?')[0]==='/api/v1/admin/restream-engine/health'){
       if(!authorized(req.headers.authorization))return write(res,401,{ok:false,error:'unauthorized'});
       void status(res);
