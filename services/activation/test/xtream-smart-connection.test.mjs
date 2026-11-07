@@ -64,3 +64,19 @@ test('the source UI provides one clear operator action with safe response handli
  assert.match(css,/button\[data-action="smart-connection"\]/);
  assert.match(html,/sources-admin\.js\?v=20261107-smart-v1/);
 });
+
+test('native no-JavaScript controls can check and display the same per-source safe report',async()=>{
+ const [native,admin]=await Promise.all([
+  readFile(new URL('../src/xtream-native-controls.mjs',import.meta.url),'utf8'),
+  readFile(new URL('../src/xtream-admin-hook.mjs',import.meta.url),'utf8')
+ ]);
+ assert.match(native,/securedForm\(id,'smart-connection'/);
+ assert.match(native,/const diagnosis=diagnostics\[item\.id\]/);
+ assert.match(native,/esc\(diagnosis\.title\)/);
+ assert.match(native,/esc\(diagnosis\.nextStep\)/);
+ assert.match(native,/csrfToken/);
+ assert.match(admin,/if\(action==='smart-connection'\)/);
+ assert.match(admin,/smartConnectionResults\.set\(id/);
+ assert.match(admin,/Date\.now\(\)-result\.recordedAt<600_000/);
+ assert.match(admin,/test\|smart-connection\|probe-live/);
+});
