@@ -153,7 +153,7 @@ function serverCard(item) {
   if(item.channelNumber&&item.type==='live')title.append(make('small','','رقم القناة: '+item.channelNumber));
   title.append(make('code', 'server-url', item.baseUrl));
   title.append(make('small','source-id','ID: '+String(item.id||'').slice(0,8)));
-  const status = make('span', `server-status ${xtStatusClass(item.syncing ? 'syncing' : item.status)}`, item.queued ? 'في انتظار المزامنة' : item.syncing ? 'مزامنة جارية' : (item.status==='online'?'API ONLINE':item.status));
+  const status = make('span', `server-status ${xtStatusClass(item.syncing ? 'syncing' : item.status)}`, item.queued ? 'في انتظار المزامنة' : item.syncing ? 'مزامنة جارية' : item.status==='syncing' ? 'تحقق من مزامنة سابقة' : (item.status==='online'?'API ONLINE':item.status));
   header.append(title, status);
 
   const metrics = make('div', 'server-metrics');
@@ -243,6 +243,8 @@ function serverCard(item) {
       : 'جاري استيراد '+(typeNames[item.syncProgress.mediaType]||item.syncProgress.mediaType)+
         ' · '+Number(item.syncProgress.imported||0).toLocaleString('en-US')+' عنصر حتى الآن'));
   }
+  if(item.status==='syncing'&&!item.syncing)
+    info.append(make('span','sync-interrupted-note','هذه حالة مزامنة سابقة غير مؤكدة. اضغط «إلغاء المزامنة» لإعادة ضبط الحالة قبل إعادة الفهرسة.'));
   if (item.lastError) info.append(make('span', 'error-text', `تنبيه المصدر: ${xtreamSourceErrorText(item.lastError)}`));
   const feedback=state.sourceFeedback.get(item.id);
   const actionStatus=make('p',feedback?.kind==='error'?'source-action-feedback error':'source-action-feedback',feedback?.text||'');
@@ -270,7 +272,7 @@ function refreshSourceCard(card, item) {
   const status=card.querySelector('.server-status');
   if(status) {
     status.className='server-status '+xtStatusClass(item.syncing?'syncing':item.status);
-    status.textContent=item.queued?'في انتظار المزامنة':item.syncing?'مزامنة جارية':item.status==='online'?'API ONLINE':String(item.status||'unknown');
+    status.textContent=item.queued?'في انتظار المزامنة':item.syncing?'مزامنة جارية':item.status==='syncing'?'تحقق من مزامنة سابقة':item.status==='online'?'API ONLINE':String(item.status||'unknown');
   }
   const title=card.querySelector('.server-head > div');
   if(title) {
@@ -320,6 +322,11 @@ function refreshSourceCard(card, item) {
   const info=card.querySelector('.server-info');
   if(info){
     updateSourceAccountWarnings(info,item);
+    let interrupted=info.querySelector('.sync-interrupted-note');
+    if(item.status==='syncing'&&!item.syncing){
+      if(!interrupted){interrupted=make('span','sync-interrupted-note');info.append(interrupted);}
+      interrupted.textContent='هذه حالة مزامنة سابقة غير مؤكدة. اضغط «إلغاء المزامنة» لإعادة ضبط الحالة قبل إعادة الفهرسة.';
+    }else interrupted?.remove();
     let progress=info.querySelector('.sync-progress-note');
     if(item.syncProgress){
       if(!progress){progress=make('span','sync-progress-note');info.prepend(progress);}
@@ -446,7 +453,8 @@ function renderXtream() {
       // Only known fixed diagnostic IDs leave the source card; never broadcast
       // raw upstream errors, hostnames, credentials or provider response text.
       const error=String(item.lastError||'');
-      const issueCode=[
+      const issueCode=(item.status==='syncing'&&!item.syncing)
+        ? 'xtream_sync_state_uncertain' : [
         'xtream_transport_dns_failed','xtream_transport_connection_refused',
         'xtream_transport_connection_reset','xtream_transport_timeout',
         'xtream_transport_tls_invalid','xtream_transport_unreachable',
@@ -458,7 +466,7 @@ function renderXtream() {
         name:String(item.name||'مصدر بدون اسم').slice(0,120),
         enabled:Boolean(item.enabled),
         published:Boolean(item.enabled&&item.publishCatalog),
-        issue:Boolean(item.enabled&&(item.lastError||item.status==='offline'||item.status==='error')),
+        issue:Boolean(item.enabled&&(item.lastError||item.status==='offline'||item.status==='error'||item.status==='syncing'&&!item.syncing)),
         issueCode,
         syncing:Boolean(item.syncing&&!item.queued||item.status==='syncing'&&!item.queued),
         queued:Boolean(item.queued),
