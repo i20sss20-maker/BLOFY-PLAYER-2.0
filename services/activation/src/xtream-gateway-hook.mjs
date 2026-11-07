@@ -540,6 +540,11 @@ async function preflightSource(row,deadline){
       const pick=direction=>pool.query(`SELECT source_id,container_extension
         FROM blofy_xtream_items
         WHERE server_id=$1 AND media_type=$2 AND enabled=TRUE
+          AND ($2<>'movie' OR NOT EXISTS (SELECT 1
+            FROM blofy_xtream_media_quarantine q
+            WHERE q.server_id=blofy_xtream_items.server_id
+              AND q.media_type='movie' AND q.source_id=blofy_xtream_items.source_id
+              AND q.expires_at>NOW()))
         ORDER BY source_id ${direction} LIMIT 1`,[row.id,kind]);
       const [first,last]=await Promise.all([pick('ASC'),pick('DESC')]);
       rows=[
@@ -560,6 +565,22 @@ async function preflightSource(row,deadline){
       const needed=rows.length;
       let sampled=0,loadedSubstitutes=false;
       const inspected=new Set();
+      const loadSubstitutes=async()=>{
+        if(loadedSubstitutes)return;
+        loadedSubstitutes=true;
+        try{
+          const more=(await pool.query(`SELECT source_id,container_extension
+            FROM blofy_xtream_items
+            WHERE server_id=$1 AND media_type='series' AND enabled=TRUE
+            ORDER BY source_id DESC LIMIT 12`,[row.id])).rows;
+          for(const candidate of more){
+            if(!rows.some(x=>x.source_id===candidate.source_id))
+              rows.push({...candidate,sampleBand:'replacement'});
+          }
+        }catch{
+          // Insufficient verified replacements must fail the issuance gate.
+        }
+      };
       for(const seriesRow of rows){
         if(sampled>=needed)break;
         if(inspected.has(String(seriesRow.source_id)))continue;
@@ -585,29 +606,21 @@ async function preflightSource(row,deadline){
         if(!samples.length){
           result.warnings.push({reason:'series_has_no_episodes',
             seriesSourceId:diagnosticXtreamItemId(seriesRow.source_id)});
-          if(!loadedSubstitutes){
-            loadedSubstitutes=true;
-            try{
-              const more=(await pool.query(`SELECT source_id,container_extension
-                FROM blofy_xtream_items
-                WHERE server_id=$1 AND media_type='series' AND enabled=TRUE
-                ORDER BY source_id DESC LIMIT 8`,[row.id])).rows;
-              for(const candidate of more){
-                if(!rows.some(x=>x.source_id===candidate.source_id))
-                  rows.push({...candidate,sampleBand:'replacement'});
-              }
-            }catch{
-              // If the catalog query fails, the mandatory sample below fails
-              // rather than treating an unverified source as healthy.
-            }
-          }
+          await loadSubstitutes();
           continue;
         }
-        sampled++;
         for(const sample of samples){
           const probe=await probeIssuanceWithTransientRetry({
             ...row,series_source_id:seriesRow.source_id,series_payload:payload
           },'series',sample.id,sample.extension,deadline);
+          if(await quarantineConfirmedMissingMedia(row,'series',sample.id,probe)){
+            result.warnings.push(quarantineMediaWarning('series',sample.id,{
+              seriesId:seriesRow.source_id
+            }));
+            await loadSubstitutes();
+            continue;
+          }
+          sampled++;
           checks.push({...probe,sampleBand:seriesRow.sampleBand,
             ...(probe.ok?{}:{seriesSourceId:diagnosticXtreamItemId(seriesRow.source_id),
               episodeSourceId:diagnosticXtreamItemId(sample.id)})});
@@ -616,14 +629,59 @@ async function preflightSource(row,deadline){
       if(sampled<needed){
         checks.push({kind:'series',ok:false,reason:'series_sample_unavailable'});
       }
-    }else{
+    }else if(kind==='live'){
       const results=await Promise.all(rows.map(async sample=>{
-        const ext=kind==='live'?'ts':safeGatewayExtension(sample.container_extension,'mp4');
-        const probe=await probeIssuanceWithTransientRetry(row,kind,sample.source_id,ext,deadline);
+        const probe=await probeIssuanceWithTransientRetry(row,kind,
+          sample.source_id,'ts',deadline);
         return {...probe,sampleBand:sample.sampleBand,
           ...(probe.ok?{}:{itemSourceId:diagnosticXtreamItemId(sample.source_id)})};
       }));
       checks.push(...results);
+    }else{
+      // A movie missing from both Xtream and its exact M3U link is isolated,
+      // not counted as a successfully played film. Require new VERIFIED
+      // movies to replace quarantined samples before issuing any account.
+      const required=rows.length;
+      let tested=0,loadedSubstitutes=false;
+      const seen=new Set();
+      for(const sample of rows){
+        if(tested>=required)break;
+        if(seen.has(String(sample.source_id)))continue;
+        seen.add(String(sample.source_id));
+        if(Date.now()>deadline-1000)break;
+        const ext=safeGatewayExtension(sample.container_extension,'mp4');
+        const probe=await probeIssuanceWithTransientRetry(row,kind,
+          sample.source_id,ext,deadline);
+        if(await quarantineConfirmedMissingMedia(row,'movie',sample.source_id,probe)){
+          result.warnings.push(quarantineMediaWarning('movie',sample.source_id));
+          if(!loadedSubstitutes){
+            loadedSubstitutes=true;
+            try{
+              const more=(await pool.query(`SELECT source_id,container_extension
+                FROM blofy_xtream_items
+                WHERE server_id=$1 AND media_type='movie' AND enabled=TRUE
+                  AND NOT EXISTS (SELECT 1 FROM blofy_xtream_media_quarantine q
+                    WHERE q.server_id=blofy_xtream_items.server_id
+                      AND q.media_type='movie'
+                      AND q.source_id=blofy_xtream_items.source_id
+                      AND q.expires_at>NOW())
+                ORDER BY source_id DESC LIMIT 12`,[row.id])).rows;
+              for(const candidate of more){
+                if(!rows.some(x=>x.source_id===candidate.source_id))
+                  rows.push({...candidate,sampleBand:'replacement'});
+              }
+            }catch{
+              // A failed catalog read can never turn a 404 into readiness.
+            }
+          }
+          continue;
+        }
+        tested++;
+        checks.push({...probe,sampleBand:sample.sampleBand,
+          ...(probe.ok?{}:{itemSourceId:diagnosticXtreamItemId(sample.source_id)})});
+      }
+      if(tested<required)checks.push({kind:'movie',ok:false,
+        reason:'media_sample_unavailable'});
     }
   }
   if(!found)checks.push({kind:'catalog',ok:false,reason:'source_catalog_empty'});
