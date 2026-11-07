@@ -55,6 +55,27 @@ function noticeText(code) {
   };
   return notices[String(code||'')]||'';
 }
+// Fixed user-facing explanation only; never render the secret playlist URL.
+function m3uErrorText(code){
+  const messages={
+    xtream_m3u_dns_failure:'تعذر حل اسم نطاق رابط M3U من Railway. تحقق من هوست المصدر.',
+    xtream_m3u_connection_refused:'خادم المصدر رفض اتصال M3U. تحقق من المنفذ ومن السماح باتصال السيرفر.',
+    xtream_m3u_connect_timeout:'انتهت مهلة الاتصال برابط M3U من Railway. قد يكون المزود لا يستجيب للسيرفر.',
+    xtream_m3u_network_unreachable:'شبكة مزود M3U لا يمكن الوصول إليها من سيرفر Railway.',
+    xtream_m3u_connection_reset:'مزود M3U أغلق الاتصال قبل وصول القائمة؛ تحقق من قيود الاتصال لدى المزود.',
+    xtream_m3u_tls_failure:'خطأ شهادة HTTPS في رابط M3U لدى المزود.',
+    xtream_m3u_connection_failed:'تعذر استقبال قائمة M3U من المزود على Railway. لا تحذف المصدر ولا تكرر الفهرسة.',
+    xtream_m3u_index_unavailable:'فشل سحب قائمة M3U من المزود. احتفظنا بالمكتبة ولا حاجة لحذف المصدر.',
+    xtream_m3u_no_same_account_movies_or_episodes:'وصلت قائمة M3U ولكن لم تتضمن أفلامًا أو حلقات مطابقة لحساب المصدر؛ ربما الرابط للقنوات فقط.',
+    xtream_m3u_invalid_header:'رد المزود لم يكن ملف M3U صالحًا. تحقق من نوع الرابط وبيانات الاشتراك.',
+    xtream_m3u_too_large:'ملف M3U أكبر من حد الفهرسة الآمن.',
+    xtream_m3u_http_401:'مزود M3U رفض بيانات الدخول (401).',
+    xtream_m3u_http_403:'مزود M3U رفض الوصول من سيرفر Railway (403).',
+    xtream_m3u_http_404:'ملف M3U غير موجود لدى المزود (404).',
+    xtream_m3u_http_429:'المزود حدّ عدد الطلبات (429). لا تكرر الفحص بسرعة.'
+  };
+  return messages[String(code||'')]||String(code||'');
+}
 export function controlPage({items=[],success='',error='',csrfToken=''}) {
   const securedForm=(id,action,label,klass='')=>form(id,action,label,klass,csrfToken);
   const securedUrl=(path)=>path+(csrfToken?'?csrf='+enc(csrfToken):'');
@@ -76,6 +97,8 @@ export function controlPage({items=[],success='',error='',csrfToken=''}) {
     };
     const lastError=item.lastError?'<p class="err">آخر خطأ: '+
       esc(sourceErrorTexts[item.lastError]||item.lastError)+'</p>':'';
+    const m3uIndexError=item.m3uIndex?.status==='failed'?
+      '<p class="err">فهرسة M3U: '+esc(m3uErrorText(item.m3uIndex.reason))+'</p>':'';
     const metrics='<div class="metrics"><span>القنوات <b>'+n(counts.live)+'</b></span><span>الأفلام <b>'+n(counts.movie)+'</b></span><span>المسلسلات <b>'+n(counts.series)+'</b></span><span>الإجمالي <b>'+n(counts.total)+'</b></span></div>';
     const editForm='<details><summary>تعديل المصدر (يُحفظ في قاعدة البيانات)</summary>'+
       '<form class="edit" method="post" action="'+securedUrl(CONTROL_PATH+'/'+id+'/save')+'">'+
@@ -110,7 +133,7 @@ export function controlPage({items=[],success='',error='',csrfToken=''}) {
       securedForm(id,'sync-series','مزامنة المسلسلات')+
       securedForm(id,'cancel-sync','إلغاء المزامنة')+
       '<a class="danger" href="'+CONTROL_PATH+'/'+id+'/confirm-delete">حذف المصدر</a></div>'+
-      editForm+lastError+'</article>';
+      editForm+lastError+m3uIndexError+'</article>';
   }).join('');
   return '<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">'+
   '<meta name="viewport" content="width=device-width,initial-scale=1">'+
@@ -131,7 +154,7 @@ export function controlPage({items=[],success='',error='',csrfToken=''}) {
   '<nav><a href="/sources-admin#xtream">اللوحة الرئيسية</a><a href="'+CONTROL_PATH+'">تحديث القائمة</a></nav></header>'+
   (message?'<p class="note" role="status">'+esc(message)+'</p>':'')+
   (error?'<p class="err" role="alert">'+
-    (String(error).startsWith('probe:')?'نتيجة الفحص: '+esc(String(error).slice(6,340)):'تعذر تنفيذ العملية: '+esc(error))+'</p>':'')+
+    (String(error).startsWith('probe:')?'نتيجة الفحص: '+esc(String(error).slice(6,340)):'تعذر تنفيذ العملية: '+esc(m3uErrorText(error)))+'</p>':'')+
   '<section class="add"><h2>إضافة مصدر Xtream جديد</h2><form method="post" action="'+securedUrl(CONTROL_PATH+'/new/add')+'">'+
   '<label>اسم المصدر<input name="name" maxlength="160" required></label>'+
   '<label>Host<input name="baseUrl" type="url" maxlength="500" required placeholder="https://your-host.example"></label>'+
