@@ -1,5 +1,6 @@
 import { databaseOptions } from './database-options.mjs';
 import { safeErrorSummary } from './diagnostics-sanitizer.mjs';
+import {safeXtreamTransportCategory} from './xtream-transport-errors.mjs';
 import { createFixedWindowLimiter, requestClientKey } from './auth-protection.mjs';
 import {
   assertPublicXtreamUrl,
@@ -384,14 +385,22 @@ async function checkedFetch(url, { timeoutMs = 30000 } = {}) {
   let current = new URL(url);
   for (let redirects = 0; redirects <= 3; redirects++) {
     await assertPublicXtreamUrl(`${current.protocol}//${current.host}`);
-    const response = await fetch(current, {
-      method: 'GET',
-      redirect: 'manual',
-      headers: { accept: 'application/json,text/plain;q=0.8,*/*;q=0.1', 'user-agent': 'BLOFY-Xtream/1.0' },
-      signal: AbortSignal.timeout(timeoutMs)
-    });
+    let response;
+    try {
+      response = await fetch(current, {
+        method: 'GET',
+        redirect: 'manual',
+        headers: { accept: 'application/json,text/plain;q=0.8,*/*;q=0.1', 'user-agent': 'BLOFY-Xtream/1.0' },
+        signal: AbortSignal.timeout(timeoutMs)
+      });
+    } catch (error) {
+      // Source-specific network failure, not a failed BLOFY account login.
+      // Keep source host, credentials and provider internals out of API errors.
+      throw new Error(safeXtreamTransportCategory(error)||'xtream_transport_unreachable');
+    }
     if ([301,302,303,307,308].includes(response.status)) {
       const location = response.headers.get('location');
+      await response.body?.cancel().catch(()=>{});
       if (!location || redirects === 3) throw new Error('xtream_redirect_invalid');
       current = new URL(location, current);
       if (!['http:', 'https:'].includes(current.protocol)) throw new Error('xtream_redirect_invalid');
