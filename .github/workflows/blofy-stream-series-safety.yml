@@ -27,6 +27,8 @@ on:
       - 'services/activation/test/xtream-boot-diagnostics.test.mjs'
       - 'services/activation/src/xtream-egress-inspector.mjs'
       - 'services/activation/test/xtream-egress-inspector.test.mjs'
+      - 'services/activation/src/xtream-http-compat-probe.mjs'
+      - 'services/activation/test/xtream-http-compat-probe.test.mjs'
       - 'services/activation/test/xtream-api-resilience.test.mjs'
       - 'services/activation/src/xtream-core.mjs'
       - 'services/activation/src/xtream-admin-hook.mjs'
@@ -55,6 +57,7 @@ jobs:
           node --check services/activation/src/xtream-smart-connection.mjs
           node --check services/activation/src/xtream-boot-diagnostics.mjs
           node --check services/activation/src/xtream-egress-inspector.mjs
+          node --check services/activation/src/xtream-http-compat-probe.mjs
           node --check services/activation/src/xtream-native-controls.mjs
           node --check services/activation/src/xtream-core.mjs
       - name: Validate admin console JavaScript syntax
@@ -74,4 +77,5 @@ jobs:
             services/activation/test/xtream-sync-queue.test.mjs \
             services/activation/test/xtream-smart-connection.test.mjs \
             services/activation/test/xtream-boot-diagnostics.test.mjs \
-            services/activation/test/xtream-egress-inspector.test.mjs
+            services/activation/test/xtream-egress-inspector.test.mjs \
+            services/activation/test/xtream-http-compat-probe.test.mjs
