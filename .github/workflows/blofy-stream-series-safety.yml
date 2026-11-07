@@ -17,6 +17,8 @@ on:
       - 'services/activation/test/stream-console-ui.test.mjs'
       - 'services/activation/test/stream-operations-regression.test.mjs'
       - 'services/activation/src/xtream-transport-errors.mjs'
+      - 'services/activation/src/xtream-api-resilience.mjs'
+      - 'services/activation/test/xtream-api-resilience.test.mjs'
       - 'services/activation/src/xtream-core.mjs'
       - 'services/activation/src/xtream-admin-hook.mjs'
       - 'services/activation/test/xtream-transport-errors.test.mjs'
@@ -39,6 +41,7 @@ jobs:
           node --check services/activation/src/xtream-gateway-hook.mjs
           node --check services/activation/src/xtream-admin-hook.mjs
           node --check services/activation/src/xtream-transport-errors.mjs
+          node --check services/activation/src/xtream-api-resilience.mjs
           node --check services/activation/src/xtream-core.mjs
       - name: Validate admin console JavaScript syntax
         run: |
@@ -52,4 +55,5 @@ jobs:
             services/activation/test/xtream-series-resolver.test.mjs \
             services/activation/test/stream-console-ui.test.mjs \
             services/activation/test/stream-operations-regression.test.mjs \
-            services/activation/test/xtream-transport-errors.test.mjs
+            services/activation/test/xtream-transport-errors.test.mjs \
+            services/activation/test/xtream-api-resilience.test.mjs
