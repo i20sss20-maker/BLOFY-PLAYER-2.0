@@ -16,6 +16,10 @@ on:
       - 'services/activation/src/sources-admin-hook.mjs'
       - 'services/activation/test/stream-console-ui.test.mjs'
       - 'services/activation/test/stream-operations-regression.test.mjs'
+      - 'services/activation/src/xtream-transport-errors.mjs'
+      - 'services/activation/src/xtream-core.mjs'
+      - 'services/activation/src/xtream-admin-hook.mjs'
+      - 'services/activation/test/xtream-transport-errors.test.mjs'
       - '.github/workflows/blofy-stream-series-safety.yml'
   workflow_dispatch:
 jobs:
@@ -33,6 +37,9 @@ jobs:
         run: |
           node --check services/activation/src/xtream-series-resolver.mjs
           node --check services/activation/src/xtream-gateway-hook.mjs
+          node --check services/activation/src/xtream-admin-hook.mjs
+          node --check services/activation/src/xtream-transport-errors.mjs
+          node --check services/activation/src/xtream-core.mjs
       - name: Validate admin console JavaScript syntax
         run: |
           node --check services/activation/web/sources-admin.js
@@ -40,4 +47,5 @@ jobs:
           node --check services/activation/web/xtream-gateway-admin.js
           node --check services/activation/src/sources-admin-hook.mjs
       - name: Series and console regression tests
-        run: node --test services/activation/test/xtream-series-resolver.test.mjs services/activation/test/stream-console-ui.test.mjs services/activation/test/stream-operations-regression.test.mjs
+        run: node --test services/activation/test/xtream-series-resolver.test.mjs services/activation/test/stream-console-ui.test.mjs
+          services/activation/test/stream-operations-regression.test.mjs services/activation/test/xtream-transport-errors.test.mjs
