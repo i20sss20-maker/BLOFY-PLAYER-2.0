@@ -1,6 +1,7 @@
 package tv.blofy.player.core.identity
 
 import android.content.Context
+import android.util.Log
 import kotlinx.coroutines.TimeoutCancellationException
 import retrofit2.HttpException
 import tv.blofy.player.R
@@ -26,6 +27,9 @@ internal object PortalRefreshFeedback {
         val safe = error as? PortalRefreshFailure
         val cause = safe?.cause ?: error
         val http = safe?.httpStatus ?: (cause as? HttpException)?.code()
+        // Emit a credential-free failure category so emulator/TV logs can distinguish
+        // TLS, HTTP, timeout and local deserialization failures hidden by P-AUTH.
+        Log.w("BlofyPortal", "Refresh stage=${safe?.stage ?: "LOCAL"} cause=${cause.javaClass.simpleName} http=${http ?: 0}")
         val reason = when {
             cause is TimeoutCancellationException || cause is SocketTimeoutException -> R.string.portal_refresh_timeout
             cause is SSLException -> R.string.portal_refresh_tls
