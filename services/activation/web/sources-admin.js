@@ -198,6 +198,7 @@ function serverCard(item) {
     [item.enabled ? '⏸ إيقاف المصدر' : '▶ تفعيل المصدر', 'toggle-enabled', item.enabled ? 'button source-toggle-stop' : 'button primary'],
     [item.publishCatalog ? 'إخفاء المحتوى عن العملاء' : 'نشر المحتوى للعملاء', 'toggle-publish', item.publishCatalog ? 'button ghost' : 'button primary'],
     ['⟳ مزامنة المحتوى', 'sync-all', 'button'],
+    ['🔎 تشخيص الاتصال الذكي', 'smart-connection', 'button primary'],
     ['فحص الاتصال', 'test', 'button ghost'],
     ['اختبار بث قناة', 'probe-live', 'button ghost'],
     ['اختبار تشغيل فيلم', 'probe-movie', 'button ghost'],
@@ -209,6 +210,13 @@ function serverCard(item) {
     buttons.splice(2,0,['⏹ إلغاء المزامنة','cancel-sync','button ghost']);
   }
   buttons.forEach(([text, action, cls]) => {
+    if(action==='smart-connection'){
+      const button=make('button',cls,text);
+      button.type='button';button.dataset.action=action;
+      button.title='فحص واحد لواجهة حساب المصدر من Railway؛ لا يبدأ فهرسة أو بث';
+      actions.append(button);
+      return;
+    }
     if(action==='delete'){
       const link=make('a',cls,text);
       link.href='/api/v1/admin/xtream/controls/'+encodeURIComponent(item.id)+'/confirm-delete';
@@ -901,6 +909,18 @@ async function handleServerAction(item, card, button) {
           ?'لا يوجد محتوى مستورد لهذا النوع حتى الآن. افحص المزامنة.':summary||'المصدر لا يرسل استجابة تشغيل صالحة.');
       writeFeedback(message,result.ok?'ok':'error');
       showMessage(message,result.ok?'success':'error');
+    } else if (action === 'smart-connection') {
+      writeFeedback('جارٍ اختبار اتصال Railway بواجهة حساب Xtream. لا تُشغّل الفهرسة خلال الفحص.');
+      const data=await api('/api/v1/admin/xtream/servers/'+encodeURIComponent(item.id)+'/smart-connection',{
+        method:'POST',body:'{}'
+      });
+      const report=data.diagnosis||{};
+      if(report.stage!=='xtream_account_api'||typeof report.title!=='string')
+        throw new Error('استجابة التشخيص غير متوقعة');
+      const message=report.title+'\n'+String(report.nextStep||'')+
+        '\n'+String(report.note||'فحص API لا يثبت تشغيل الفيديو.');
+      writeFeedback(message,report.ok?'ok':report.rateLimited?'ok':'error');
+      showMessage(report.title+(report.ok?' · يفصل فحص الفيديو لاحقًا.':' · انظر تفاصيل المصدر.'),report.ok?'success':'error');
     } else if (action === 'test') {
       await api(`/api/v1/admin/xtream/servers/${item.id}/test`, { method: 'POST', body: '{}' });
       showMessage(`اتصال ${item.name} ناجح.`);
