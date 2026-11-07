@@ -1,6 +1,7 @@
 import { databaseOptions } from './database-options.mjs';
 import { safeErrorSummary } from './diagnostics-sanitizer.mjs';
 import {safeXtreamTransportCategory} from './xtream-transport-errors.mjs';
+import {withXtreamAccountReconnect} from './xtream-api-resilience.mjs';
 import { createFixedWindowLimiter, requestClientKey } from './auth-protection.mjs';
 import {
   assertPublicXtreamUrl,
@@ -412,7 +413,13 @@ async function checkedFetch(url, { timeoutMs = 30000 } = {}) {
       if (!['http:', 'https:'].includes(current.protocol)) throw new Error('xtream_redirect_invalid');
       continue;
     }
-    if (!response.ok) throw new Error(`xtream_http_${response.status}`);
+    if (!response.ok) {
+      // Unread rejected API bodies retain upstream sockets; always release
+      // them before handling the provider status or falling back to M3U.
+      const status=response.status;
+      await response.body?.cancel().catch(()=>{});
+      throw new Error(`xtream_http_${status}`);
+    }
     return response;
   }
   throw new Error('xtream_redirect_loop');
@@ -681,7 +688,10 @@ async function probeXtreamPlayback(id,mediaType='live') {
 async function fetchAccount(row) {
   const creds = decryptCredentials(row);
   await assertPublicXtreamUrl(row.base_url);
-  const response = await checkedFetch(xtreamApiUrl(row.base_url, creds.username, creds.password), { timeoutMs: 20000 });
+  const response = await withXtreamAccountReconnect(
+    ()=>checkedFetch(xtreamApiUrl(row.base_url,creds.username,creds.password),{timeoutMs:20000}),
+    {describe:redactXtreamError}
+  );
   const text = await response.text();
   if (Buffer.byteLength(text) > 1_000_000) throw new Error('xtream_account_response_too_large');
   let payload;
