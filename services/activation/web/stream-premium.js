@@ -132,6 +132,7 @@
     li.append(inner,action);return li;
   }
   const SOURCE_ISSUE_LABELS=Object.freeze({
+    xtream_sync_state_uncertain:'مزامنة قديمة غير مؤكدة · راجع بطاقة المصدر',
     xtream_transport_dns_failed:'تعذر DNS · تحقق من اسم المصدر',
     xtream_transport_connection_refused:'اتصال مرفوض · راجع منفذ المصدر',
     xtream_transport_connection_reset:'اتصال منقطع · المصدر قطع الطلب',
