@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="/blofy-logo.png"><link rel="apple-touch-icon" href="/blofy-logo.png"><meta name="robots" content="noindex,nofollow"><title>BLOFY STREAM | إدارة المصادر والاشتراكات</title>
   <link rel="stylesheet" href="/sources-admin.css?v=20261107-stream2-v2">
   <link rel="stylesheet" href="/site-polish.css?v=20261025-lux-final">
-  <link rel="stylesheet" href="/stream-console.css?v=20261107-pro-v1">
+  <link rel="stylesheet" href="/stream-console.css?v=20261107-pro-v2">
 </head>
 <body>
   <div class="source-shell">
@@ -245,10 +245,10 @@
           <div class="blofy-playback-issues" id="blofyPlaybackIssues" aria-live="polite"></div>
         </section>
 
-        <section class="panel form-panel" id="xtAddSourceSection">
+        <section class="panel form-panel is-collapsed" id="xtAddSourceSection">
           <div class="panel-head">
             <div><span class="panel-kicker">UPSTREAM SOURCES</span><h2>إضافة حساب Xtream إلى المكتبة</h2><p>كرر هذه العملية لكل حساب تملك حق إعادة توزيع محتواه؛ يتم دمج القنوات والأفلام والمسلسلات من الحسابات المنشورة في مكتبة واحدة.</p></div>
-            <button id="syncAllXtreamBtn" class="button primary" type="button">مزامنة كل المصادر</button>
+            <div class="inline-actions"><button id="consoleToggleSourceForm" class="button ghost" type="button" aria-expanded="false" aria-controls="xtreamForm">+ إضافة مصدر جديد</button><button id="syncAllXtreamBtn" class="button ghost" type="button">مزامنة كل المصادر</button></div>
           </div>
           <form id="xtreamForm" class="xtream-form" autocomplete="off">
             <label><span>اسم المصدر (اختياري)</span><input id="xtName" maxlength="160" placeholder="مثال: حساب رقم 1"></label>
