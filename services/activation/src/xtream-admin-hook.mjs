@@ -9,6 +9,7 @@ import {observeRailwayEgress,probeXtreamSocket} from './xtream-egress-inspector.
 import {probeXtreamHttp11} from './xtream-http-compat-probe.mjs';
 import {compareXtreamFromIndependentRailway} from './xtream-independent-probe.mjs';
 import {shouldUseIndependentXtreamSource,fetchIndependentXtreamSource} from './xtream-independent-catalog-relay.mjs';
+import {issueStreamRelayGrant} from './xtream-stream-relay-bridge.mjs';
 import {probeXtreamM3uAvailability} from './xtream-m3u-availability.mjs';
 import { createFixedWindowLimiter, requestClientKey } from './auth-protection.mjs';
 import {
@@ -1259,6 +1260,61 @@ if(process.env.BLOFY_XTREAM_INDEPENDENT_LIVE_SYNC_ON_BOOT==='1'){
     });
   },24000);
   singleSyncTimer.unref?.();
+}
+
+// Read-only, source-authorized real transport probe from the NEW STREAM
+// project. Uses three indexed live channels and reads at most one initial
+// media chunk from each; never changes activation, source or user rows.
+// A valid TS signature is NOT proof that audio/video decodes on a TV.
+if(process.env.BLOFY_XTREAM_INDEPENDENT_MEDIA_PROBE_ON_BOOT==='1'){
+  const mediaProbeTimer=setTimeout(()=>{
+    void(async()=>{
+      const id=String(process.env.BLOFY_XTREAM_EGRESS_SOURCE_ID||'').trim();
+      if(!validUuid(id)||!shouldUseIndependentXtreamSource(id))return;
+      const row=await serverById(id);
+      if(!row?.enabled)return;
+      const creds=decryptCredentials(row);
+      const items=(await pool.query(`SELECT source_id FROM blofy_xtream_items
+        WHERE server_id=$1 AND media_type='live' AND enabled=TRUE ORDER BY source_id LIMIT 3`,
+        [id])).rows;
+      const checks=[];
+      for(const item of items){
+        let status=null,format=null,verified=false;
+        try{
+          const path=['live',encodeURIComponent(creds.username),encodeURIComponent(creds.password),
+            encodeURIComponent(String(item.source_id))+'.ts'].join('/');
+          const sourceUrl=new URL(path,normalizeXtreamBaseUrl(row.base_url)+'/');
+          const destination=await issueStreamRelayGrant({sourceUrl:sourceUrl.href,kind:'live'});
+          const response=await fetch(destination,{method:'GET',redirect:'error',
+            headers:{accept:'video/mp2t,*/*'},signal:AbortSignal.timeout(12000)});
+          status=response.status;
+          if((response.ok||response.status===206)&&response.body){
+            const reader=response.body.getReader();
+            try{
+              const first=await reader.read();
+              if(!first.done&&first.value?.byteLength){
+                const result=inspectXtreamMediaChunk(first.value,response.headers.get('content-type'));
+                format=result.format;verified=result.valid&&result.format==='ts';
+              }
+            }finally{await reader.cancel().catch(()=>{});reader.releaseLock();}
+          }else await response.body?.cancel().catch(()=>{});
+        }catch{}
+        checks.push({status,format,verified});
+        if(verified)break;
+      }
+      console.info('BLOFY_XTREAM_INDEPENDENT_MEDIA_PROOF',JSON.stringify({
+        sourceId:id,checked:checks.length,
+        mediaTransportVerified:checks.some(x=>x.verified),
+        statuses:checks.map(x=>x.status),
+        formats:checks.map(x=>x.format),
+        audioVideoDecoded:false,customerCutover:false,credentialsLogged:false
+      }));
+    })().catch(()=>{
+      console.warn('BLOFY_XTREAM_INDEPENDENT_MEDIA_PROOF',
+        JSON.stringify({ok:false,code:'probe_unavailable',customerCutover:false}));
+    });
+  },26000);
+  mediaProbeTimer.unref?.();
 }
 
 async function cancelSourceSync(id) {
