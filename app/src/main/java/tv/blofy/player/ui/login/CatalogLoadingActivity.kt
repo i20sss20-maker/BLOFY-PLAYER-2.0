@@ -52,6 +52,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
     private var loadJob: Job? = null
     private var forceRefreshOnRetry = false
     private var displayedPercent = 0
+    private var lastContentStage: PlaylistSyncStage? = null
     private lateinit var percent: TextView
     private lateinit var stage: TextView
     private lateinit var progressMeta: TextView
@@ -84,6 +85,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
         retryButton.visibility = View.GONE
         stage.setTextColor(BlofyTvDesign.TextPrimary)
         displayedPercent = 0 // A retry is a new attempt; monotonicity holds within each attempt.
+        lastContentStage = null
         render(1, getString(R.string.catalog_preflight))
         loadJob = lifecycleScope.launch {
             var preflight = true
@@ -420,9 +422,20 @@ class CatalogLoadingActivity : AppCompatActivity() {
             } else {
                 // Never show the IPTV request URL: Xtream URLs contain username/password.
                 // In particular OkHttp's "unexpected end of stream on <URL>" is sensitive.
-                val safeReason = if (tv.blofy.player.data.CatalogSectionRetry.isTruncatedBody(error))
-                    getString(R.string.catalog_source_interrupted)
-                else getString(R.string.catalog_prepare_failed)
+                // At 0-29% the app is still downloading Xtream sections, not
+                // preparing local search/home indexes. Show the actual failed
+                // phase without exposing upstream URLs or account credentials.
+                val contentPhase = lastContentStage
+                val safeReason = when {
+                    contentPhase != null && error is IllegalStateException &&
+                        error.message == getString(R.string.catalog_section_failed) ->
+                        getString(R.string.catalog_section_failed)
+                    contentPhase != null && tv.blofy.player.data.CatalogSectionRetry.isTruncatedBody(error) ->
+                        getString(R.string.catalog_source_interrupted)
+                    contentPhase != null -> getString(R.string.catalog_section_failed)
+                    else -> getString(R.string.catalog_prepare_failed)
+                }
+                android.util.Log.w("BlofyCatalog", "First import failed phase=${contentPhase?.name ?: "LOCAL"} type=${error.javaClass.simpleName}")
                 fail(getString(R.string.catalog_first_failed, safeReason))
             }
         } finally {
@@ -446,6 +459,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
     }
 
     private fun renderProgress(p: PlaylistSyncProgress) {
+        lastContentStage = p.stage
         val label = when (p.stage) {
             PlaylistSyncStage.M3U -> getString(R.string.catalog_stage_m3u)
             PlaylistSyncStage.LIVE -> getString(R.string.catalog_stage_live)

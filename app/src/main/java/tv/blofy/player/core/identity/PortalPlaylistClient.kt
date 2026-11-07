@@ -20,6 +20,8 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import tv.blofy.player.core.network.BlofyActivationOriginFallback
+import tv.blofy.player.core.network.BlofyActivationDns
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
@@ -56,15 +58,17 @@ object PortalPlaylistClient {
     private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     // Activation credentials must never follow redirects to another endpoint.
     private val client = OkHttpClient.Builder()
+        .dns(BlofyActivationDns)
         .followRedirects(false)
         .followSslRedirects(false)
-        .callTimeout(12, TimeUnit.SECONDS)
+        .callTimeout(20, TimeUnit.SECONDS)
         .connectTimeout(5, TimeUnit.SECONDS)
         .readTimeout(8, TimeUnit.SECONDS)
         .writeTimeout(8, TimeUnit.SECONDS)
+        .addInterceptor(BlofyActivationOriginFallback())
         .build()
     // Retry list reads once, without redirecting device credentials elsewhere.
-    private val listClient = client.newBuilder().callTimeout(8, TimeUnit.SECONDS)
+    private val listClient = client.newBuilder().callTimeout(16, TimeUnit.SECONDS)
         .followRedirects(false).followSslRedirects(false).build()
     private val jsonType = "application/json; charset=utf-8".toMediaType()
 

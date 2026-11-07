@@ -1,0 +1,61 @@
+name: Publish BLOFY 55.8.6 signed QA APK prerelease
+on:
+  push:
+    branches: [fix/p-auth-activation-recovery-20261107]
+    paths:
+      - '.github/workflows/blofy-pauth-prerelease-2000083.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: blofy-55-8-6-qa-prerelease
+  cancel-in-progress: false
+jobs:
+  publish-test-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SOURCE_RUN: '42410697169'
+      SOURCE_SHA: c9dbc90694f4d76fa5147bd53cf51301e242d102
+      SOURCE_ARTIFACT: BLOFY-55.8.6-2000083-P-AUTH-TEST-SIGNED
+      APK: BLOFY-PLAYER-55.8.6-2000083-P-AUTH-TEST-SIGNED.apk
+      TAG: blofy-player-v2000083-pauth-test
+      EXPECTED_CERT: C3B98CCCD2F0C86809014ACD9368BF61C7004CFD419CD867B71FEF10BFA6255E
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require completed verified signed source run
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" > source.json
+          jq -e --arg sha "$SOURCE_SHA" '.conclusion=="success" and .head_sha==$sha' source.json
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "QA release exists. Refusing overwrite"; exit 1
+          fi
+      - name: Fetch signed test artifact and validate package
+        run: |
+          set -euo pipefail
+          mkdir -p test-output
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name "$SOURCE_ARTIFACT" --dir test-output
+          apk="$(find test-output -type f -name "$APK" -print -quit)"
+          test -s "$apk"
+          sums="$(find test-output -type f -name SHA256SUMS -print -quit)"
+          test -s "$sums"
+          expected="$(grep -F "$APK" "$sums" | awk '{print $1}' | head -1)"
+          test "${#expected}" -eq 64
+          test "$(sha256sum "$apk" | awk '{print $1}')" = "$expected"
+          tool="$ANDROID_HOME/build-tools/35.0.0"
+          "$tool/aapt" dump badging "$apk" | grep -Fq "package: name='tv.blofy.player.v2' versionCode='2000083' versionName='2.0.0-rc07.55.8.6'"
+          "$tool/apksigner" verify --print-certs "$apk" > test-output/qa-signature.txt
+          cert="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' test-output/qa-signature.txt | head -1 | tr -d '[:space:]-:' | tr '[:lower:]' '[:upper:]')"
+          test "$cert" = "$EXPECTED_CERT"
+          cp "$apk" "./$APK"
+          cp "$sums" ./SHA256SUMS
+      - name: Publish standalone QA prerelease only (never update live feed)
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" "./$APK" ./SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" --prerelease --latest=false \
+            --title 'BLOFY PLAYER 55.8.6 (2000083) — P-AUTH QA only' \
+            --notes 'TEST BUILD ONLY; not distributed by website updater or Google Play. Signed with the same original production certificate so Android can install over 55.8.5 without clearing data. Fix: continue existing authenticated device check when optional identity migration fails, and log safe P-AUTH failure categories. Install over existing app, do NOT uninstall or clear data. Please report whether P-AUTH remains on emulator/Goldtek; server authentication remains authoritative.'
