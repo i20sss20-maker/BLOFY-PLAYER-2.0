@@ -1,6 +1,7 @@
 import { collectSourceEpisodes, mapSeriesEpisodes } from './xtream-series-resolver.mjs';
 import { databaseOptions } from './database-options.mjs';
 import { safeErrorSummary } from './diagnostics-sanitizer.mjs';
+import {safeXtreamTransportCategory} from './xtream-transport-errors.mjs';
 import { createFixedWindowLimiter, requestClientKey } from './auth-protection.mjs';
 import {ensureXtreamAdminReady,getXtreamStudioBranding} from './xtream-admin-hook.mjs';
 import {
@@ -790,7 +791,9 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
       } catch (error) {
         if (client.signal.aborted) return;
         const reason = controller.signal.reason?.message || error?.message || 'media_error';
-        const safeReason = ['headers_timeout','media_read_timeout','upstream_empty_media','upstream_non_media_response'].includes(reason) ? reason : 'upstream_unreachable';
+        const networkReason=safeXtreamTransportCategory(error);
+        const safeReason = ['headers_timeout','media_read_timeout','upstream_empty_media','upstream_non_media_response'].includes(reason)
+          ? reason : (networkReason||'upstream_unreachable');
         console.warn('xtream media relay error', {kind,itemId:gatewayId,reason:safeReason,attempt});
         if (!res.headersSent && !transientRetried && attempt < maxAttempts && safeReason!=='upstream_non_media_response') {
           transientRetried=true;
