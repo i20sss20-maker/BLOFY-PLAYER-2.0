@@ -5,6 +5,7 @@ import {withXtreamAccountReconnect} from './xtream-api-resilience.mjs';
 import {createXtreamSyncQueue} from './xtream-sync-queue.mjs';
 import {xtreamConnectionReport} from './xtream-smart-connection.mjs';
 import {runXtreamBootDiagnostics} from './xtream-boot-diagnostics.mjs';
+import {observeRailwayEgress,probeXtreamSocket} from './xtream-egress-inspector.mjs';
 import { createFixedWindowLimiter, requestClientKey } from './auth-protection.mjs';
 import {
   assertPublicXtreamUrl,
@@ -744,6 +745,37 @@ async function runSmartConnection(id){
   }catch(error){
     return xtreamConnectionReport({errorCode:redactXtreamError(error),checkedAt:Date.now()});
   }
+}
+
+// One-time, admin-authorized network diagnosis. This runs from the SAME
+// production portal process: no Railway Function with its own egress IP.
+// Never changes source settings, subscriber data or published streaming URLs.
+if(process.env.BLOFY_XTREAM_EGRESS_ONE_SHOT==='1'){
+  const timer=setTimeout(()=>{
+    void(async()=>{
+      const egress=await observeRailwayEgress();
+      console.info('BLOFY_EGRESS_IP_CHECK',JSON.stringify(egress));
+      const selectedId=String(process.env.BLOFY_XTREAM_EGRESS_SOURCE_ID||'').trim();
+      if(!/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(selectedId)){
+        console.info('BLOFY_EGRESS_SOURCE_CHECK',JSON.stringify({status:'not_selected'}));
+        return;
+      }
+      const row=(await serverRows()).find(item=>item.id===selectedId&&item.enabled===true);
+      if(!row){
+        console.info('BLOFY_EGRESS_SOURCE_CHECK',JSON.stringify({status:'not_found_or_disabled'}));
+        return;
+      }
+      const transport=await probeXtreamSocket(row.base_url);
+      let accountCode='xtream_api_reachable';
+      try{await fetchAccount(row,{timeoutMs:8000,maxAttempts:1});}
+      catch(error){accountCode=xtreamConnectionReport({errorCode:redactXtreamError(error)}).code;}
+      console.info('BLOFY_EGRESS_SOURCE_CHECK',JSON.stringify({
+        sourceId:row.id,transport,accountCode,
+        mediaChecked:false,credentialsLogged:false
+      }));
+    })().catch(()=>console.warn('BLOFY_EGRESS_DIAG_FAILED','unavailable'));
+  },14000);
+  timer.unref?.();
 }
 
 // Opt-in, one-shot production probe: only enabled during an explicit
