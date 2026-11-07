@@ -37,6 +37,23 @@ class DeviceIdentityTest {
     }
 
     @Test
+    fun trialScopeIsStableAcrossReinstallsButDoesNotExposeAndroidId() {
+        val id = "a1b2c3d4e5f60718"
+        val first = DeviceIdentity.trialScopeFromAndroidId("tv.blofy.player.v2", id)
+        assertTrue(first!!.matches(Regex("[a-f0-9]{64}")))
+        assertEquals(first, DeviceIdentity.trialScopeFromAndroidId("tv.blofy.player.v2", id.uppercase()))
+        assertNotEquals(first, DeviceIdentity.trialScopeFromAndroidId("tv.blofy.player.v2", "a1b2c3d4e5f60719"))
+        assertTrue(!first.contains(id))
+    }
+
+    @Test
+    fun invalidOrSharedOemAndroidIdCannotStartAnotherAutomaticTrial() {
+        for (id in listOf(null, "", "0000000000000000", "9774d56d682e549c", "not-a-device")) {
+            assertEquals(null, DeviceIdentity.trialScopeFromAndroidId("tv.blofy.player.v2", id))
+        }
+    }
+
+    @Test
     fun activationCodeIsNotDerivedFromDeviceId() {
         val first = DeviceIdentity.generateActivationCode { 123_456 }
         val second = DeviceIdentity.generateActivationCode { 654_321 }
