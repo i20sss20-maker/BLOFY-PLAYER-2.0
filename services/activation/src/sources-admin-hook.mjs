@@ -367,6 +367,9 @@ http.createServer = function withBlofySources(listener) {
       if (req.method === 'GET' && url.pathname === '/sources-admin.css') {
         return asset(res, await readFile(new URL('../web/sources-admin.css', import.meta.url)), 'text/css; charset=utf-8');
       }
+      if (req.method === 'GET' && url.pathname === '/stream-console.css') {
+        return asset(res, await readFile(new URL('../web/stream-console.css', import.meta.url)), 'text/css; charset=utf-8');
+      }
       if (req.method === 'GET' && url.pathname === '/sources-admin.js') {
         return asset(res, await readFile(new URL('../web/sources-admin.js', import.meta.url)), 'text/javascript; charset=utf-8');
       }
