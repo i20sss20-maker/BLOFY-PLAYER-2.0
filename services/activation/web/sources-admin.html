@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="/sources-admin.css?v=20261107-stream2-v2">
   <link rel="stylesheet" href="/site-polish.css?v=20261025-lux-final">
   <link rel="stylesheet" href="/stream-console.css?v=20261107-pro-v2">
-  <link rel="stylesheet" href="/stream-premium.css?v=20261107-command-v2">
+  <link rel="stylesheet" href="/stream-premium.css?v=20261107-command-v3">
 </head>
 <body>
   <div class="source-shell">
@@ -90,6 +90,7 @@
           <div><span>القنوات</span><strong id="homeMetricLive">—</strong><small>عناصر الفهرس فقط</small></div>
           <div><span>الأفلام</span><strong id="homeMetricMovies">—</strong><small>عناصر الفهرس فقط</small></div>
           <div><span>المسلسلات</span><strong id="homeMetricSeries">—</strong><small>عناصر الفهرس فقط</small></div>
+          <div><span>حسابات Xtream النشطة</span><strong id="homeMetricActiveAccounts">—</strong><small>مفعلة ولم تنتهِ</small></div>
         </section>
 
         <div class="console-section-heading">
@@ -154,6 +155,20 @@
               <button class="premium-panel-footer" type="button" data-open-tab="catalog">فتح إدارة المكتبة <span aria-hidden="true">←</span></button>
             </article>
           </div>
+        </section>
+
+        <section class="premium-subscriber-strip" aria-labelledby="premiumSubscribersTitle">
+          <div class="premium-subscriber-lead">
+            <span class="premium-eyebrow">SUBSCRIBER MANAGEMENT</span>
+            <h3 id="premiumSubscribersTitle">متابعة اشتراكات Xtream</h3>
+            <p>تتحدث من الحسابات المسجلة في بوابة BLOFY. لا تشمل اشتراكات التطبيق المستقلة.</p>
+          </div>
+          <div class="premium-subscriber-metrics">
+            <div><strong id="premiumAccountsActive">—</strong><span>نشطة</span></div>
+            <div><strong id="premiumAccountsExpiring">—</strong><span>تنتهي خلال 7 أيام</span></div>
+            <div><strong id="premiumAccountsExpired">—</strong><span>منتهية</span></div>
+          </div>
+          <button type="button" class="premium-subscriber-action" data-open-workspace="accounts">إدارة الحسابات <span aria-hidden="true">←</span></button>
         </section>
 
         <section class="console-start-guide" aria-labelledby="consoleGuideTitle">
