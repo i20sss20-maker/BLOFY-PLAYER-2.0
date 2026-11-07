@@ -49,6 +49,7 @@ test('admin denial cannot be mistaken for a media success',async()=>{
   const report=await checkDemoProxy({adminToken:'token',fetchImpl:fake});
   assert.equal(report.ok,false);
   assert.equal(report.reason,'demo_proxy_unauthorized');
+  assert.equal(report.httpStatus,401);
   assert.equal(report.mediaVerified,false);
 });
 
