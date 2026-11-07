@@ -859,6 +859,8 @@ class LoginActivity : AppCompatActivity() {
                                     }
                                 }
                             }
+                        } catch (_: TimeoutCancellationException) {
+                            // Retry after the next interval instead of ending pairing checks.
                         } catch (cancelled: CancellationException) {
                             throw cancelled
                         } catch (_: Exception) {
