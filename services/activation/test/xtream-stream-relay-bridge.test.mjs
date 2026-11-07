@@ -78,7 +78,7 @@ test('authorization and account source constraints precede optional relay handof
   const filter=segment.indexOf('gatewayItemById(');
   const check=segment.indexOf('if(relayEligible({accountId:account.id');
   const issue=segment.indexOf('issueStreamRelayGrant(');
-  const oldPath=segment.indexOf('checkedFetch(upstream');
+  const oldPath=segment.indexOf('checkedFetch(mediaFetchTarget');
   assert.ok(auth>=0&&filter>auth&&check>filter&&issue>check&&oldPath>issue);
   assert.match(segment,/reason:'relay_unavailable'/);
   assert.match(segment,/res\.writeHead\(307/);
