@@ -898,6 +898,9 @@ async function syncServer(id, requestedTypes = ['live','movie','series']) {
   syncLocks.add(id);
   syncProgress.set(id,{mediaType:'starting',imported:0,startedAt:Date.now(),updatedAt:Date.now()});
   try {
+    // A queued import can be cancelled while waiting or between its start
+    // and its first database read. Never contact upstream after cancellation.
+    if(cancelledSources.has(id))throw Object.assign(new Error('xtream_sync_cancelled'),{status:409});
     await pool.query(`UPDATE blofy_xtream_servers SET status='syncing',last_error=NULL,updated_at=NOW() WHERE id=$1 AND enabled=TRUE AND deletion_requested_at IS NULL`, [id]);
     const accountInfo = await fetchAccount(row);
     const creds = decryptCredentials(row);
