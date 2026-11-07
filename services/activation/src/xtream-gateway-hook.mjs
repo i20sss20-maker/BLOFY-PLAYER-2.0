@@ -1339,10 +1339,16 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
           if(kind==='series' && response.status===404 &&
              !episodeRepairTried && req.method==='GET'){
             episodeRepairTried=true;
+            const m3uEvidence={};
             const hybridFirst=attempt<maxAttempts?
               await verifiedHybridM3uFallback(row,'series',sourceId,{
-                deadline:Date.now()+8500
+                deadline:Date.now()+8500,diagnostic:m3uEvidence
               }):null;
+            if(!hybridFirst?.verified){
+              console.info('xtream episode M3U 404 fallback evidence',{
+                itemId:gatewayId,status:m3uEvidence.status||'not_checked'
+              });
+            }
             if(hybridFirst?.verified){
               upstream=hybridFirst.url;
               console.info('xtream episode 404 recovered from indexed M3U',{itemId:gatewayId});
@@ -1360,15 +1366,6 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
               console.info('xtream episode metadata verified and refreshed',{
                 kind,itemId:gatewayId,repair:repaired.status
               });
-              continue;
-            }
-            const hybrid=attempt<maxAttempts?
-              await verifiedHybridM3uFallback(row,'series',sourceId,{
-                deadline:Date.now()+9000
-              }):null;
-            if(hybrid?.verified){
-              upstream=hybrid.url;
-              console.info('xtream episode 404 recovered from indexed M3U',{itemId:gatewayId});
               continue;
             }
             if(repaired.status==='missing'){
@@ -1390,9 +1387,15 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
           if(kind==='movie'&&response.status===404&&
              !movieRepairTried&&req.method==='GET'&&attempt<maxAttempts){
             movieRepairTried=true;
+            const m3uEvidence={};
             const fromM3u=await verifiedHybridM3uFallback(row,'movie',sourceId,{
-              deadline:Date.now()+8500
+              deadline:Date.now()+8500,diagnostic:m3uEvidence
             });
+            if(!fromM3u?.verified){
+              console.info('xtream movie M3U 404 fallback evidence',{
+                itemId:gatewayId,status:m3uEvidence.status||'not_checked'
+              });
+            }
             const hybrid=fromM3u||await verifiedOfficialMediaAlternative(row,'movie',
               sourceId,safeGatewayExtension(mediaExtension,'mp4'),{
                 deadline:Date.now()+10000
