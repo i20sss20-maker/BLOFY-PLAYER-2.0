@@ -3,16 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#09090e">
-  <link rel="icon" type="image/png" href="/blofy-logo.png"><link rel="apple-touch-icon" href="/blofy-logo.png"><meta name="robots" content="noindex,nofollow"><title>BLOFY STREAM | إدارة المصادر والاشتراكات</title>
+  <meta name="theme-color" content="#080b13">
+  <link rel="icon" type="image/png" href="/blofy-logo.png"><link rel="apple-touch-icon" href="/blofy-logo.png"><meta name="robots" content="noindex,nofollow"><title>BLOFY STREAM | مركز العمليات</title>
   <link rel="stylesheet" href="/sources-admin.css?v=20261107-stream2-v2">
   <link rel="stylesheet" href="/site-polish.css?v=20261025-lux-final">
   <link rel="stylesheet" href="/stream-console.css?v=20261107-pro-v2">
+  <link rel="stylesheet" href="/stream-premium.css?v=20261107-command-v1">
 </head>
 <body>
   <div class="source-shell">
     <aside class="source-rail">
-      <a class="source-brand" href="/admin"><span class="brand-mark">B</span><span>BLOFY PLAYER</span></a>
+      <a class="source-brand" href="/admin"><span class="brand-mark">B</span><span>BLOFY <b>STREAM</b></span></a>
       <span class="rail-label">إدارة البث</span>
       <nav class="rail-links" aria-label="تنقل الإدارة">
         <a href="/admin"><span>▣</span>الأجهزة والاشتراكات</a>
@@ -30,13 +31,16 @@
     <main class="source-main">
       <header class="topbar">
         <div>
-          <p class="eyebrow">BLOFY / STREAM CONTROL</p>
-          <h1>BLOFY <span class="stream-v2-version">STREAM</span></h1>
-          <p class="subtitle">لوحة بسيطة لإدارة المصادر والمشتركين والمكتبة، وكل إعداد في مكانه.</p>
+          <p class="eyebrow">BLOFY · BUSINESS OPERATIONS</p>
+          <h1>BLOFY <span class="stream-v2-version">STREAM</span> <small class="premium-version">PRO</small></h1>
+          <p class="subtitle">مركز تشغيل وإدارة المحتوى والاشتراكات — من شاشة واحدة.</p>
         </div>
         <div class="top-actions">
-          <a class="button ghost" href="/admin">رجوع للإدارة</a>
-          <button class="button" id="refreshBtn" type="button">↻ تحديث</button>
+          <button class="button premium-search-trigger" type="button" id="streamCommandOpen" aria-keyshortcuts="Control+K Meta+K" aria-haspopup="dialog" aria-controls="streamCommandDialog">
+            <span aria-hidden="true">⌕</span> بحث سريع <kbd>⌘ K</kbd>
+          </button>
+          <button class="button premium-density" type="button" id="streamDensityToggle" aria-pressed="false" title="تغيير كثافة العرض">عرض مريح</button>
+          <button class="button premium-refresh" id="refreshBtn" type="button"><span aria-hidden="true">↻</span> تحديث البيانات</button>
         </div>
       </header>
 
@@ -50,23 +54,36 @@
       <div id="message" class="message" hidden></div>
 
       <section id="tab-home" class="tab-page active">
-        <div class="console-hero">
-          <div class="console-hero-copy">
-            <span class="console-kicker"><span class="console-kicker-dot" aria-hidden="true"></span> لوحة BLOFY STREAM الرسمية</span>
-            <h2>كل إدارة البث<br><em>من مكان واحد.</em></h2>
-            <p>إضافة مصدر، إصدار اشتراك، متابعة التشغيل، وتنظيم المكتبة. اختر المطلوب وراح تفتح لك أدواته فقط.</p>
-            <div class="console-hero-actions">
-              <button class="button primary" type="button" data-open-workspace="sources">إدارة المصادر</button>
-              <button class="button ghost" type="button" data-open-workspace="accounts">إنشاء اشتراك</button>
+        <section class="stream-horizon" aria-labelledby="streamHorizonTitle">
+          <div class="stream-horizon-copy">
+            <div class="stream-horizon-overline"><span class="horizon-spark" aria-hidden="true"></span> BLOFY CONTROL CENTER <span class="horizon-sep">/</span> PROFESSIONAL EDITION</div>
+            <h2 id="streamHorizonTitle">قوة في الإدارة.<br><span>بساطة في التحكم.</span></h2>
+            <p>كل ما تحتاجه لتشغيل BLOFY في مكان واحد. راقب المصادر، أدر المشتركين، افحص التشغيل وراجع المكتبة من غير زحمة إعدادات.</p>
+            <div class="stream-horizon-actions">
+              <button type="button" class="button primary" data-open-workspace="sources">
+                <span aria-hidden="true">＋</span> إدارة المصادر
+              </button>
+              <button type="button" class="button ghost" data-open-workspace="accounts">المشتركون <span aria-hidden="true">↗</span></button>
             </div>
+            <div class="stream-horizon-caption"><span class="horizon-lock" aria-hidden="true">✧</span> بيانات العملاء ومسارات التشغيل الحالية محفوظة</div>
           </div>
-          <div class="console-engine" aria-label="حالة المحرك">
-            <span class="console-engine-label">النظام الرسمي · 2.0</span>
-            <strong>حالة محرك البث</strong>
-            <p id="blofyRestreamEngineStatus" role="status" aria-live="polite">جاري فحص الاتصال…</p>
-            <div class="console-engine-note"><span aria-hidden="true">●</span> محرك HLS يعمل بشكل منفصل. حالة اتصاله لا تعني نجاح تشغيل القنوات؛ سيبقى مسار العملاء الحالي دون تغيير.</div>
+          <div class="stream-horizon-art" aria-hidden="true">
+            <div class="stream-horizon-grid"></div>
+            <div class="stream-orbit orbit-outer"></div>
+            <div class="stream-orbit orbit-mid"></div>
+            <div class="stream-orbit orbit-inner"></div>
+            <div class="stream-orbit-core"><span>B</span><small>BLOFY</small></div>
+            <div class="stream-orbit-label orbit-label-top">MEDIA NETWORK</div>
+            <div class="stream-orbit-label orbit-label-bottom">STREAM ENGINE · V2</div>
+            <span class="stream-orbit-ping ping-one"></span>
+            <span class="stream-orbit-ping ping-two"></span>
           </div>
-        </div>
+          <div class="stream-horizon-engine">
+            <div class="stream-horizon-engine-head"><span class="live-pulse" aria-hidden="true"></span> <strong>محرك البث الرسمي</strong> <small>HLS / RAILWAY</small></div>
+            <p id="blofyRestreamEngineStatus" role="status" aria-live="polite">جاري فحص اتصال المحرك...</p>
+            <div class="stream-horizon-engine-foot">الاتصال بالمحرك لا يؤكد تشغيل المحتوى. مشاهدة العملاء ما زالت على المسار الحالي.</div>
+          </div>
+        </section>
 
         <section class="console-summary" aria-label="ملخص المكتبة">
           <div><span>المصادر المضافة</span><strong id="homeMetricSources">—</strong><small>مصادر Xtream المسجلة</small></div>
@@ -104,6 +121,41 @@
             <small>فتح المكتبة <span aria-hidden="true">←</span></small>
           </button>
         </section>
+        <section class="premium-ops" aria-labelledby="premiumOpsHeading">
+          <div class="premium-ops-head">
+            <div><span class="console-kicker">المتابعة اللحظية للبيانات</span><h2 id="premiumOpsHeading">نظرة على عملياتك</h2><p>ملخص مباشر من بيانات المصادر المسجلة، بدون أرقام تقديرية.</p></div>
+            <div class="premium-ops-actions"><span id="premiumLastUpdated" class="premium-updated">لم تُحمّل البيانات بعد</span><button class="button ghost" type="button" id="streamExportReport">تصدير الملخص</button></div>
+          </div>
+          <div class="premium-ops-grid">
+            <article class="premium-panel premium-panel-sources">
+              <div class="premium-panel-head"><div><span class="premium-eyebrow">SOURCE INTELLIGENCE</span><h3>صحة المصادر</h3></div><button type="button" class="premium-text-action" data-open-source-filter="issues">عرض المتأثرة ←</button></div>
+              <div class="premium-signal-stats">
+                <div><strong id="premiumPublishedCount">—</strong><span>مصادر منشورة</span></div>
+                <div><strong id="premiumIssueCount">—</strong><span>تحتاج متابعة</span></div>
+                <div><strong id="premiumSyncCount">—</strong><span>قيد المزامنة</span></div>
+              </div>
+              <div class="premium-signal-line"><span>تنبيهات المصادر</span><small id="premiumIssueHeadline">جارٍ التحميل</small></div>
+              <ul id="premiumSourceAlerts" class="premium-alert-list" aria-live="polite"><li>جارٍ قراءة حالة المصادر...</li></ul>
+              <button class="premium-panel-footer" type="button" data-open-workspace="sources">فتح إدارة المصادر <span aria-hidden="true">←</span></button>
+            </article>
+            <article class="premium-panel premium-panel-library">
+              <div class="premium-panel-head"><div><span class="premium-eyebrow">CONTENT LIBRARY</span><h3>توزيع المكتبة</h3></div><span class="premium-panel-chip">محتوى مفهرس</span></div>
+              <div class="premium-library-body">
+                <div class="premium-donut" id="premiumCatalogDonut" role="img" aria-label="توزيع عناصر الفهرس حسب نوع المحتوى">
+                  <div class="premium-donut-inner"><strong id="premiumCatalogTotal">—</strong><span>عنصر</span></div>
+                </div>
+                <div class="premium-library-legend">
+                  <div><span><i class="premium-dot live"></i> القنوات</span><b id="premiumShareLive">—</b></div>
+                  <div><span><i class="premium-dot movie"></i> الأفلام</span><b id="premiumShareMovies">—</b></div>
+                  <div><span><i class="premium-dot series"></i> المسلسلات</span><b id="premiumShareSeries">—</b></div>
+                </div>
+              </div>
+              <p class="premium-panel-muted">الأرقام توضح الفهرسة فقط، وليست عدد المشاهدات أو نتيجة فحص التشغيل.</p>
+              <button class="premium-panel-footer" type="button" data-open-tab="catalog">فتح إدارة المكتبة <span aria-hidden="true">←</span></button>
+            </article>
+          </div>
+        </section>
+
         <section class="console-start-guide" aria-labelledby="consoleGuideTitle">
           <div><span class="console-kicker">خطوات العمل</span><h2 id="consoleGuideTitle">من المصدر إلى المشترك</h2></div>
           <ol><li><strong>أضف المصدر</strong><span>أدخل بيانات Xtream المصرح بها.</span></li><li><strong>افحص وحدث المحتوى</strong><span>تأكد من الاتصال والتشغيل قبل النشر.</span></li><li><strong>أنشئ اشتراكًا</strong><span>أصدر بيانات BLOFY للمشترك.</span></li></ol>
@@ -571,9 +623,22 @@
       </footer>
     </main>
   </div>
+  <dialog class="premium-command-dialog" id="streamCommandDialog" aria-labelledby="streamCommandHeading">
+    <div class="premium-command-shell">
+      <div class="premium-command-header">
+        <span aria-hidden="true">⌕</span>
+        <label for="streamCommandInput" class="sr-only">ابحث عن أداة أو مصدر</label>
+        <input id="streamCommandInput" type="search" placeholder="ابحث عن مصدر، مشترك، فحص، مكتبة..." autocomplete="off" spellcheck="false">
+        <button type="button" id="streamCommandClose" aria-label="إغلاق البحث">ESC</button>
+      </div>
+      <div class="premium-command-results" id="streamCommandResults" role="listbox" aria-label="نتائج البحث السريع"></div>
+      <p class="premium-command-tip" id="streamCommandHeading">اكتب اسم المصدر أو المهمة، ثم اضغط Enter للانتقال.</p>
+    </div>
+  </dialog>
   <script src="/blofy-smart-commands.js?v=20261106-v1" defer></script>
-  <script src="/sources-admin.js?v=20261107-pro-v1" defer></script>
+  <script src="/sources-admin.js?v=20261107-premium-v1" defer></script>
   <script src="/blofy-studio-pro.js?v=20261106-pro-v1" defer></script>
   <script src="/xtream-gateway-admin.js?v=20261106-account-visibility-v2" defer></script>
+  <script src="/stream-premium.js?v=20261107-command-v1" defer></script>
 </body>
 </html>
