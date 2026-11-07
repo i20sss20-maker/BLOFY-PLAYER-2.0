@@ -17,8 +17,13 @@ function validAsset(url,origin){
       url.hash||url.username||url.password||url.search.length>240)
     throw new Error('restream_demo_invalid_asset');
   // MediaMTX HLS uses only local paths. No user-supplied fetch targets.
-  for(const key of url.searchParams.keys()){
-    if(!['_HLS_msn','_HLS_part','_HLS_skip','session'].includes(key))
+  for(const [key,value] of url.searchParams){
+    // MediaMTX >=1.18 checks its HLS session with a one-time 302 to
+    // index.m3u8?cookieCheck=1. Allow only that exact marker, never arbitrary
+    // client-controlled upstream URL/source parameters.
+    if(key==='cookieCheck'&&value==='1')continue;
+    if(!['_HLS_msn','_HLS_part','_HLS_skip','session'].includes(key)||
+        value.length>128||/[\\\r\n]/.test(value))
       throw new Error('restream_demo_invalid_asset');
   }
   return url;
