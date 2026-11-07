@@ -1525,7 +1525,23 @@ async function runBlofyItemProbe(){
   }finally{button.disabled=false}
 }
 
+async function loadRestreamEngineStatus(){
+  const node=el('blofyRestreamEngineStatus');
+  if(!node)return;
+  try{
+    const data=await api('/api/v1/admin/restream-engine/health');
+    node.textContent=data.connected
+      ?'✅ محرك HLS الرسمي متصل داخل Railway · التشغيل الفعلي للمصادر يحتاج فحصًا منفصلًا.'
+      :data.configured
+        ?'⚠️ محرك HLS الرسمي لا يستجيب حاليًا. تشغيل Xtream القديم لا يتأثر.'
+        :'محرك HLS الجديد غير مهيأ بعد. تشغيل Xtream القديم لا يتأثر.';
+  }catch{
+    node.textContent='تعذر فحص محرك HLS الجديد. لا يعني ذلك تعطل القنوات أو الأفلام.';
+  }
+}
+
 async function loadBlofyPlaybackHealth(){
+  void loadRestreamEngineStatus();
   const box=el('blofyPlaybackMetrics'),issues=el('blofyPlaybackIssues');
   const note=el('blofyPlaybackNote');
   try{
