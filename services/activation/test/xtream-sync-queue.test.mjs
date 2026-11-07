@@ -94,3 +94,27 @@ test('production routes serialize manual and sync-all, support cancellation and 
   assert.match(ui,/item\.queued\?'في انتظار المزامنة'/);
   assert.match(ui,/بانتظار انتهاء مزامنة مصدر آخر/);
 });
+
+
+test('pausing and deleting a source cancels pending imports without touching subscriptions',async()=>{
+  const server=await readFile(new URL('../src/xtream-admin-hook.mjs',import.meta.url),'utf8');
+  const pause=server.slice(server.indexOf('async function patchServer('),server.indexOf('async function listCategories('));
+  const remove=server.slice(server.indexOf('async function requestDeleteSource('),server.indexOf('async function checkedFetch('));
+  assert.match(pause,/syncQueue\.cancel\(id\)/);
+  assert.match(remove,/syncQueue\.cancel\(id\)/);
+  const cancel=server.slice(server.indexOf('async function cancelSourceSync('),server.indexOf('function startSync('));
+  assert.match(cancel,/const wasQueued=syncQueue\.cancel\(id\)/);
+  assert.match(cancel,/staleStateCleared:clearStale/);
+  assert.doesNotMatch(cancel,/DELETE FROM|TRUNCATE|password/);
+});
+
+test('queue badges and separated active/waiting counts appear on the operator dashboard',async()=>{
+  const html=await readFile(new URL('../web/sources-admin.html',import.meta.url),'utf8');
+  const premium=await readFile(new URL('../web/stream-premium.js',import.meta.url),'utf8');
+  const source=await readFile(new URL('../web/sources-admin.js',import.meta.url),'utf8');
+  assert.match(html,/id="premiumQueuedCount"/);
+  assert.match(premium,/elementText\('premiumQueuedCount'/);
+  assert.match(premium,/queued:Boolean\(s\.queued\)/);
+  assert.match(source,/queued:Boolean\(item\.queued\)/);
+  assert.match(source,/data\.queued\?\.length/);
+});
