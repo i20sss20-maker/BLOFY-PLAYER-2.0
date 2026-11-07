@@ -44,6 +44,7 @@ function noticeText(code) {
     hidden:'تم إخفاء المحتوى عن العملاء.',
     saved:'تم حفظ بيانات المصدر. افحص الاتصال وأعد المزامنة إذا غيّرت بيانات الدخول.',
     testing:'بدأ فحص الاتصال؛ حدث الصفحة لمعرفة النتيجة.',
+    smart_checked:'انتهى الفحص الذكي. شاهد نتيجة اتصال السيرفر في بطاقته بالأسفل.',
     'probe-ok':'تم اختبار بث الوسائط واستجاب المصدر بنجاح.',
     syncing:'بدأت المزامنة. المكتبة الكبيرة قد تستغرق وقتًا.',
     cancelled:'تم إرسال طلب إلغاء المزامنة.',
@@ -51,7 +52,7 @@ function noticeText(code) {
   };
   return notices[String(code||'')]||'';
 }
-export function controlPage({items=[],success='',error='',csrfToken=''}) {
+export function controlPage({items=[],success='',error='',csrfToken='',diagnostics={}}) {
   const securedForm=(id,action,label,klass='')=>form(id,action,label,klass,csrfToken);
   const securedUrl=(path)=>path+(csrfToken?'?csrf='+enc(csrfToken):'');
   const message=noticeText(success)||(String(success).startsWith('probe:')?String(success).slice(6,340):'');
@@ -62,6 +63,11 @@ export function controlPage({items=[],success='',error='',csrfToken=''}) {
     const counts=item.counts||{};
     const lastError=item.lastError?'<p class="err">آخر خطأ: '+esc(item.lastError)+'</p>':'';
     const metrics='<div class="metrics"><span>القنوات <b>'+n(counts.live)+'</b></span><span>الأفلام <b>'+n(counts.movie)+'</b></span><span>المسلسلات <b>'+n(counts.series)+'</b></span><span>الإجمالي <b>'+n(counts.total)+'</b></span></div>';
+    const diagnosis=diagnostics[item.id];
+    const smartReport=diagnosis
+      ?'<section class="smart-result" role="status"><strong>فحص اتصال Railway: '+esc(diagnosis.title)+'</strong>'+
+       '<p>'+esc(diagnosis.nextStep)+'</p><small>'+esc(diagnosis.note)+'</small></section>':'';
+
     const editForm='<details><summary>تعديل المصدر (يُحفظ في قاعدة البيانات)</summary>'+
       '<form class="edit" method="post" action="'+securedUrl(CONTROL_PATH+'/'+id+'/save')+'">'+
       '<label>الاسم<input name="name" required maxlength="160" value="'+name+'"></label>'+
@@ -74,10 +80,11 @@ export function controlPage({items=[],success='',error='',csrfToken=''}) {
       '<div class="head"><div><h2>'+name+'</h2><code>'+url+'</code><small>المعرف: '+id.slice(0,8)+'</small></div><div class="badges">'+
       '<span class="badge">'+status+'</span><span class="badge '+(enabled?'on':'off')+'">'+(enabled?'مفعّل':'موقوف')+'</span>'+
       '<span class="badge '+(enabled&&published?'on':'off')+'">'+(enabled&&published?'منشور':'غير منشور')+'</span></div></div>'+
-      metrics+
+      metrics+smartReport+
       '<div class="actions">'+
       securedForm(id,'toggle-enabled',enabled?'إيقاف المصدر':'تفعيل المصدر')+
       securedForm(id,'toggle-publish',published?'إخفاء عن العملاء':'نشر للعملاء')+
+      securedForm(id,'smart-connection','🔎 تشخيص الاتصال الذكي','smart-action')+
       securedForm(id,'test','فحص الاتصال')+
       securedForm(id,'probe-live','اختبار بث قناة')+
       securedForm(id,'probe-movie','اختبار تشغيل فيلم')+
@@ -102,6 +109,7 @@ export function controlPage({items=[],success='',error='',csrfToken=''}) {
   '.badges{display:flex;gap:7px;flex-wrap:wrap}.badge{border:1px solid #685576;border-radius:20px;font-size:12px;padding:5px 9px}.badge.on{background:#13362a;color:#b3f1d4}.badge.off{background:#372329;color:#ffd0d6}'+
   '.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:17px 0}.metrics span{background:#110e1b;padding:11px 5px;text-align:center;font-size:12px;border-radius:10px}.metrics b{display:block;font-size:18px;margin-top:5px}'+
   '.actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.actions form,.one-action{margin:0}.actions button,.actions .danger,button{display:block;width:100%;min-height:42px;padding:11px;border-radius:10px;border:1px solid #6d5a7d;color:#f4e8ff;background:#302342;font:inherit;font-weight:600;cursor:pointer;text-decoration:none;text-align:center}'+
+  '.smart-action button{background:linear-gradient(125deg,#205362,#2c426a);border-color:#65c1ad;color:#edfffa}.smart-result{margin:12px 0 16px;padding:14px;border-radius:11px;border:1px solid #4e8c85;background:#152d38}.smart-result strong{display:block;color:#baf5e6}.smart-result p{margin:7px 0;color:#e6f1fa}.smart-result small{color:#aebfd2;line-height:1.6}'+
   'button:hover,.actions .danger:hover{background:#533873}.actions .danger{grid-column:1/-1;background:#43212a;border-color:#8d3b50}'+
   'details{margin-top:15px;border:1px solid #514060;padding:12px;border-radius:11px}summary{cursor:pointer}.edit,.add form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;margin-top:14px}'+
   'label{display:block;font-size:13px}input{display:block;width:100%;margin-top:6px;background:#110d1a;color:white;border:1px solid #766089;padding:12px;border-radius:9px;font:inherit}label:has(input[type=checkbox]){display:flex;align-items:center;gap:8px}input[type=checkbox]{width:auto;margin:0}.add button,.edit button{grid-column:1/-1}.note{padding:13px;background:#163425;color:#aef1d2;border-radius:10px}.err{padding:13px;border:1px solid #a1465c;background:#3e202a;border-radius:10px;color:#ffd2dc}.muted{color:#b7a8c9}'+
