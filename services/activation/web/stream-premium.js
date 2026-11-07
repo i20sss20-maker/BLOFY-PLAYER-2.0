@@ -265,7 +265,7 @@
       sources:data.sources.map(s=>({
         id:String(s.id||''),name:String(s.name||'مصدر').slice(0,120),
         enabled:Boolean(s.enabled),published:Boolean(s.published),issue:Boolean(s.issue),
-        syncing:Boolean(s.syncing),tested:Boolean(s.tested),
+        syncing:Boolean(s.syncing),queued:Boolean(s.queued),tested:Boolean(s.tested),
         issueCode:Object.hasOwn(SOURCE_ISSUE_LABELS,String(s.issueCode||''))?String(s.issueCode):''
       })),
       totals:{
@@ -277,6 +277,7 @@
     elementText('premiumPublishedCount',fmt(sources.filter(s=>s.published).length));
     elementText('premiumIssueCount',fmt(sources.filter(s=>s.issue).length));
     elementText('premiumSyncCount',fmt(sources.filter(s=>s.syncing).length));
+    elementText('premiumQueuedCount',fmt(sources.filter(s=>s.queued).length));
     renderAlerts(sources);
     renderCatalog(snapshot.totals);
     const time=new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
