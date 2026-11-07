@@ -972,13 +972,14 @@ async function cancelSourceSync(id) {
   const wasRunning=syncLocks.has(id)||(syncQueue.has(id)&&!syncQueue.isQueued(id));
   const wasQueued=syncQueue.cancel(id);
   if(wasRunning)cancelledSources.add(id);
-  if(!wasRunning&&!wasQueued&&row.status==='syncing'){
+  const clearStale=!wasRunning&&row.status==='syncing';
+  if(clearStale){
     await sourceMutation(`UPDATE blofy_xtream_servers
       SET status='unknown',last_error='xtream_sync_not_running',updated_at=NOW()
       WHERE id=$1 AND deletion_requested_at IS NULL`,[id]);
   }
   return {cancelRequested:wasRunning||wasQueued,queuedCancelled:wasQueued,
-    staleStateCleared:!wasRunning&&!wasQueued&&row.status==='syncing'};
+    staleStateCleared:clearStale};
 }
 
 function startSync(id, types) {
