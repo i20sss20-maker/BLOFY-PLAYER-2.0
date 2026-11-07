@@ -43,6 +43,7 @@ import { XtreamDenialCooldown } from './xtream-denial-cooldown.mjs';
 import { episodeOrdinal, verifiedEpisodeRecovery, sameEpisodeContainerCandidates } from './xtream-episode-repair.mjs';
 import { authoritativeXtreamMediaCandidates, providerHasExactXtreamMediaItem } from './xtream-authoritative-media.mjs';
 import { parseHybridM3uMediaUrl, verifiedHybridRow } from './xtream-hybrid-m3u.mjs';
+import {canQuarantineXtreamMedia,MEDIA_QUARANTINE_HOURS,MEDIA_QUARANTINE_REASON,quarantineMediaWarning} from './xtream-media-quarantine.mjs';
 import { xtreamEpisodePlaybackCandidates } from './xtream-series-probe.mjs';
 import { MAX_ISSUANCE_SOURCES, PREFLIGHT_TTL_MS, issuanceErrorReason, summarizeIssuancePreflight, shouldRetryIssuanceMedia } from './xtream-issuance-preflight.mjs';
 
@@ -204,6 +205,15 @@ async function ensureReady() {
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_gateway_accounts_user ON blofy_xtream_gateway_accounts(username,enabled)');
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_gateway_item_lookup ON blofy_xtream_gateway_item_map(server_id,media_type,source_id)');
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_gateway_episode_lookup ON blofy_xtream_gateway_episode_map(server_id,source_episode_id)');
+      await client.query(`CREATE TABLE IF NOT EXISTS blofy_xtream_media_quarantine (
+        server_id UUID NOT NULL REFERENCES blofy_xtream_servers(id) ON DELETE CASCADE,
+        media_type TEXT NOT NULL CHECK (media_type IN ('movie','series')),
+        source_id TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        confirmed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        expires_at TIMESTAMPTZ NOT NULL,
+        PRIMARY KEY(server_id,media_type,source_id)
+      )`);
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK').catch(() => {});
@@ -482,6 +492,20 @@ async function verifiedOfficialMediaAlternative(row,kind,sourceId,currentExtensi
 function diagnosticXtreamItemId(id){
   const value=String(id??'');
   return /^[A-Za-z0-9._-]{1,128}$/.test(value)?value:null;
+}
+
+// Quarantine one CONFIRMED missing asset for six hours; does not mutate
+// the imported catalog. A source denial or missing index is never enough.
+async function quarantineConfirmedMissingMedia(row,kind,id,probe){
+  if(!canQuarantineXtreamMedia({kind,sourceId:id,probe}))return false;
+  const result=await pool.query(`INSERT INTO blofy_xtream_media_quarantine
+    (server_id,media_type,source_id,reason,confirmed_at,expires_at)
+    VALUES($1,$2,$3,$4,NOW(),NOW()+($5::integer*INTERVAL '1 hour'))
+    ON CONFLICT(server_id,media_type,source_id) DO UPDATE
+    SET reason=EXCLUDED.reason,confirmed_at=NOW(),expires_at=EXCLUDED.expires_at
+    RETURNING source_id`,
+    [row.server_id,kind,String(id),MEDIA_QUARANTINE_REASON,MEDIA_QUARANTINE_HOURS]);
+  return result.rowCount>0;
 }
 
 async function preflightSource(row,deadline){
