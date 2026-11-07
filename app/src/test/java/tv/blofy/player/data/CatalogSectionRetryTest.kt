@@ -53,6 +53,10 @@ class CatalogSectionRetryTest {
 
     @Test fun detectsTruncatedCatalogTransportWithoutTreatingOtherErrorsAsRecoverable() {
         assertTrue(CatalogSectionRetry.isTruncatedBody(IOException("unexpected end of stream on secret URL")))
+        assertTrue(CatalogSectionRetry.isTruncatedBody(IOException("Connection reset by peer")))
+        assertTrue(CatalogSectionRetry.isTruncatedBody(IOException("Broken pipe")))
+        assertTrue(CatalogSectionRetry.isTruncatedBody(IOException("Socket closed")))
+        assertTrue(CatalogSectionRetry.isTruncatedBody(JsonSyntaxException(IOException("Connection reset"))))
         assertTrue(CatalogSectionRetry.isTruncatedBody(JsonSyntaxException(EOFException("End of input"))))
         assertFalse(CatalogSectionRetry.isTruncatedBody(http(403)))
         assertFalse(CatalogSectionRetry.isTruncatedBody(IllegalStateException("incomplete catalog")))
