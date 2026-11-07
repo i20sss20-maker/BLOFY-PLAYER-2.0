@@ -23,6 +23,24 @@ async function verify(){
   }finally{check.disabled=false;}
 }
 check.addEventListener('click',()=>{void verify();});
+const e2e=document.getElementById('one-preview-e2e');
+e2e?.addEventListener('click',async()=>{
+  if(e2e.disabled)return;
+  e2e.disabled=true;
+  status.textContent='يجري اختبار الجلسة وقائمة HLS ومقطع الفيديو داخل BLOFY…';
+  try{
+    const response=await fetch('/api/v1/admin/restream-engine/demo/check',{
+      method:'GET',credentials:'same-origin',cache:'no-store',
+      headers:{accept:'application/json'},signal:AbortSignal.timeout(45000)});
+    const report=await response.json();
+    if(response.status===401)status.textContent='جلسة المشرف غير صالحة؛ سجّل دخولك مجددًا.';
+    else if(response.status===429)status.textContent='تم الاختبار قبل قليل؛ أعد المحاولة بعد 30 ثانية.';
+    else if(report.ok&&report.mediaVerified){
+      status.textContent='نجح مسار HLS التجريبي كاملًا: جلسة المشرف، قائمة البث، ومقطع MPEG-TS. الصوت والصورة الحقيقية للمصدر الخارجي غير مؤكدة.';
+    }else status.textContent='تعذر إكمال اختبار المسار الداخلي ('+String(report.reason||'unavailable').slice(0,48)+').';
+  }catch{status.textContent='فشل فحص مسار HLS الداخلي؛ لم تتأثر اشتراكات العملاء.';}
+  finally{e2e.disabled=false;}
+});
 play.addEventListener('click',async()=>{
   play.disabled=true;
   try{
