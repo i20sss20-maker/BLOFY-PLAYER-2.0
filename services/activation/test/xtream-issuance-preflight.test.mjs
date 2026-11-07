@@ -56,7 +56,7 @@ test('both account issuance routes require server-side successful playback prefl
   assert.match(src,/const rows=\(await pool.query/);
   assert.match(src,/WHERE enabled=TRUE AND publish_catalog=TRUE AND deletion_requested_at IS NULL/);
   assert.match(src,/sanitizeXtreamAccount\(account\).authenticated/);
-  assert.match(src,/xtreamEpisodePlaybackCandidates\(payload,1\)/);
+  assert.match(src,/xtreamEpisodePlaybackCandidates\(payload,3\)/);
   assert.match(src,/inspectXtreamMediaChunk\(Buffer.concat\(samples,total\)/);
   assert.match(src,/issuancePreflightRunning/);
   assert.match(src,/issuancePreflightCache/);
@@ -77,7 +77,7 @@ test('admin user issuance cannot skip a failed test with an offline confirmation
   assert.match(js,/gx\('gatewaySourceId'\)\?\.addEventListener\('change',clearGatewayPreflight\)/);
   assert.doesNotMatch(js,/المصدر المختار غير متصل حاليًا.*window\.confirm/);
   assert.match(js,/if\(!gatewayPreflightReady\(\)\)/);
-  assert.match(html,/xtream-gateway-admin\.js\?v=20261107-media-quarantine-v6/);
+  assert.match(html,/xtream-gateway-admin\.js\?v=20261107-bounded-samples-v7/);
 });
 
 test('preflight selects the source server ID used as encryption associated data',async()=>{

@@ -365,6 +365,7 @@ function gatewayPreflightReason(reason){
     catalog_unavailable:'تعذر قراءة المكتبة',
     series_has_no_episodes:'المسلسل المختار لا يحتوي حلقات',
     series_sample_unavailable:'تعذر العثور على عينات حلقات بديلة قابلة للاختبار',
+    series_replacement_unavailable:'تعذّر الحصول على بيانات مسلسل بديل من المصدر؛ لم يُحتسب تشغيلًا ناجحًا',
     media_sample_unavailable:'تعذر العثور على عينتين صالحتي التشغيل بعد عزل المحتوى المعطل',
     confirmed_source_media_404:'الملف يرجع 404 من Xtream ومن M3U؛ تم إخفاؤه مؤقتًا 6 ساعات دون حذفه',
     media_unverified:'لم تصل بيانات فيديو موثوقة',
