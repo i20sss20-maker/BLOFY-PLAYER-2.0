@@ -129,7 +129,7 @@ export async function serveRestreamDemo(req,res,{
   const timeout=setTimeout(()=>controller.abort(),timeoutMs);
   const close=()=>controller.abort();
   res.on('close',close);
-  let upstream=null;
+  let upstream=null,phase='fetch';
   try{
     for(let attempt=0;attempt<4;attempt++){
       const h={'accept':'application/vnd.apple.mpegurl, video/mp2t, */*','user-agent':'BLOFY-One-Synthetic-HLS/1.0'};
@@ -154,6 +154,7 @@ export async function serveRestreamDemo(req,res,{
     }
     const isPlaylist=target.pathname.endsWith('.m3u8');
     if(isPlaylist){
+      phase='playlist';
       const playlist=rewritePrivateDemoPlaylist(await readPlaylist(upstream),target,origin);
       const headers=outputHeaders(cookies);
       delete headers['access-control-allow-origin'];
@@ -163,6 +164,7 @@ export async function serveRestreamDemo(req,res,{
       res.end(body);
       return;
     }
+    phase='segment';
     if(!upstream.body)throw new Error('restream_demo_empty');
     const headers=outputHeaders(cookies);
     delete headers['access-control-allow-origin'];
@@ -174,8 +176,19 @@ export async function serveRestreamDemo(req,res,{
       callback(null,chunk);
     }});
     await pipeline(Readable.fromWeb(upstream.body),limiter,res,{signal:controller.signal});
-  }catch{
-    if(!res.headersSent)writeJson(res,503,'restream_demo_unavailable');
+  }catch(error){
+    const allowed=new Set(['restream_demo_invalid_asset','restream_demo_invalid_playlist',
+      'restream_demo_unsupported_playlist','restream_demo_redirect_invalid',
+      'restream_demo_too_large','restream_demo_empty']);
+    const raw=String(error?.cause?.code||error?.code||'');
+    const network={ECONNREFUSED:'restream_demo_network_refused',
+      ENOTFOUND:'restream_demo_dns_failed',EAI_AGAIN:'restream_demo_dns_failed',
+      ETIMEDOUT:'restream_demo_network_timeout',ECONNRESET:'restream_demo_network_reset'};
+    const code=allowed.has(error?.message)?error.message:
+      network[raw]||(controller.signal.aborted?'restream_demo_network_timeout':
+        phase==='fetch'?'restream_demo_fetch_failed':
+        phase==='playlist'?'restream_demo_playlist_failed':'restream_demo_segment_failed');
+    if(!res.headersSent)writeJson(res,503,code);
     else if(!res.writableEnded)res.destroy();
   }finally{
     clearTimeout(timeout);
