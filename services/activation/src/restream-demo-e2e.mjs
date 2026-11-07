@@ -98,7 +98,8 @@ export async function checkDemoProxy({
         'restream_demo_too_large','restream_demo_empty',
         'restream_demo_network_refused','restream_demo_dns_failed',
         'restream_demo_network_timeout','restream_demo_network_reset',
-        'restream_demo_not_configured']);
+        'restream_demo_fetch_failed','restream_demo_playlist_failed',
+        'restream_demo_segment_failed','restream_demo_not_configured']);
       try{
         const detail=JSON.parse((await readLimited(response,{maxBytes:1024})).toString('utf8'));
         if(allowed.has(detail?.code))failedProxyCode=detail.code;
