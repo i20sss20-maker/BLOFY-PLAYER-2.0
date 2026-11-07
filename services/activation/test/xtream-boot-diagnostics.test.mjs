@@ -44,7 +44,7 @@ test('failing one source does not prevent the rest',async()=>{
 });
 test('diagnostic is opt-in and never writes, syncs or serves content',async()=>{
  const c=await readFile(new URL('../src/xtream-admin-hook.mjs',import.meta.url),'utf8');
- const snippet=c.slice(c.indexOf("if(process.env.BLOFY_XTREAM_ONE_SHOT_DIAGNOSTIC==='1')"),c.indexOf('async function testServer(id)'));
+ const snippet=c.slice(c.indexOf("if(process.env.BLOFY_XTREAM_ONE_SHOT_DIAGNOSTIC==='1')"),c.indexOf("if(process.env.BLOFY_XTREAM_ONE_SHOT_MEDIA_PROBE==='1')"));
  assert.match(snippet,/runXtreamBootDiagnostics/);
  assert.match(snippet,/fetchAccount\(row,\{timeoutMs:8000,maxAttempts:1\}\)/);
  assert.match(snippet,/BLOFY_XTREAM_DIAGNOSTIC_END/);
