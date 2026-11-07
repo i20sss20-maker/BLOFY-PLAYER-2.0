@@ -75,7 +75,7 @@ export async function checkDemoProxy({
   try{origin=demoProxyLoopbackOrigin(port)}
   catch{return {ok:false,stage:'configuration',reason:'demo_proxy_loopback_invalid',
     realSourceVerified:false,mediaVerified:false};}
-  let cookie='',stage='master';
+  let cookie='',stage='master',failedHttpStatus=null;
   async function load(ref,base){
     const url=pathFor(ref,base,origin);
     let response;
@@ -89,6 +89,7 @@ export async function checkDemoProxy({
     cookie=hlsCookie(response,cookie);
     if(!response.ok){
       const status=response.status;
+      failedHttpStatus=Number.isInteger(status)&&status>=100&&status<=599?status:null;
       await response.body?.cancel().catch(()=>{});
       throw new Error(status===401?'demo_proxy_unauthorized':'demo_proxy_http_error');
     }
@@ -129,6 +130,7 @@ export async function checkDemoProxy({
       'demo_proxy_playlist_invalid','demo_proxy_variant_missing','demo_proxy_segment_missing',
       'demo_proxy_not_mpegts','demo_proxy_unsafe_asset','demo_proxy_empty','demo_proxy_too_large']);
     return {ok:false,stage,reason:allowed.has(e?.message)?e.message:'demo_proxy_failed',
-      elapsedMs:clock()-started,realSourceVerified:false,mediaVerified:false,audioVideoDecoded:false};
+      httpStatus:failedHttpStatus,elapsedMs:clock()-started,
+      realSourceVerified:false,mediaVerified:false,audioVideoDecoded:false};
   }
 }
