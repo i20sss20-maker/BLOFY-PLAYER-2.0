@@ -207,8 +207,7 @@
     if(autoRefreshEnabled){
       autoRefreshTimer=setInterval(()=>{
         if(document.visibilityState!=='visible')return;
-        byId('refreshBtn')?.click(); // Existing admin-only read endpoints; no sync or media probe.
-        document.dispatchEvent(new CustomEvent('blofy:refresh-accounts'));
+        byId('refreshBtn')?.click(); // Existing read-only admin refresh also updates subscriber counts.
       },90000);
     }
     const btn=byId('streamAutoRefreshToggle');
