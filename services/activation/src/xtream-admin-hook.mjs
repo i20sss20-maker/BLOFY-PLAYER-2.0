@@ -966,7 +966,7 @@ async function syncServer(id, requestedTypes = ['live','movie','series']) {
 async function cancelSourceSync(id) {
   const row=await serverById(id);
   if(!row)throw Object.assign(new Error('xtream_server_not_found'),{status:404});
-  const wasRunning=syncLocks.has(id);
+  const wasRunning=syncLocks.has(id)||(syncQueue.has(id)&&!syncQueue.isQueued(id));
   const wasQueued=syncQueue.cancel(id);
   if(wasRunning)cancelledSources.add(id);
   if(!wasRunning&&!wasQueued&&row.status==='syncing'){
@@ -1041,7 +1041,8 @@ async function patchServer(id, body) {
     const enabled=Boolean(body.enabled);
     set('enabled',enabled);
     if (!enabled) {
-      if (syncLocks.has(id)) cancelledSources.add(id);
+      if (syncLocks.has(id)||(syncQueue.has(id)&&!syncQueue.isQueued(id)))
+        cancelledSources.add(id);
       syncQueue.cancel(id);
       set('status','offline');
     } else if (!current.enabled) {
