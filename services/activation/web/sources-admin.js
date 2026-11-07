@@ -95,6 +95,17 @@ function xtreamProviderHintText(value){
 
 function xtreamSourceErrorText(value){
   const error=String(value||'');
+  const transportMessages={
+    xtream_dns_failure:'تعذر حل عنوان المصدر من سيرفر BLOFY (DNS). افحص عنوان الهوست مع المزود، ولا تحذف المصدر.',
+    xtream_connection_refused:'خادم المصدر رفض اتصال Railway على المنفذ المحدد. راجع عنوان الهوست والمنفذ مع المزود.',
+    xtream_connect_timeout:'خادم المصدر لم يستجب خلال المهلة من Railway. تحقق من إتاحته للسيرفر قبل إعادة المزامنة.',
+    xtream_network_unreachable:'تعذر الوصول إلى شبكة المصدر من Railway. تأكد من السماح بالاتصال من السيرفر.',
+    xtream_connection_reset:'المصدر أغلق الاتصال أثناء الطلب. راجع حدود الاتصال أو حماية المزود.',
+    xtream_tls_failure:'فشل التحقق الآمن من شهادة TLS للمصدر. يلزم إصلاح شهادة المزود ولا ينبغي تعطيل التحقق.',
+    xtream_transport_failed:'فشل الاتصال بالمصدر خارج BLOFY؛ تحقق من المنفذ وحالة المزود ثم أعد فحص الاتصال مرة واحدة.'
+  };
+  if(Object.hasOwn(transportMessages,error))return transportMessages[error];
+  if(error==='fetch failed')return transportMessages.xtream_transport_failed;
   if(error.includes('xtream_catalog_empty_preserved'))
     return 'المصدر أرسل قائمة فارغة؛ احتفظنا بالمحتوى القديم لحماية مكتبة المشتركين. افحص حساب Xtream ثم أعد المزامنة.';
   if(error.includes('xtream_catalog_suspicious_drop_preserved'))
