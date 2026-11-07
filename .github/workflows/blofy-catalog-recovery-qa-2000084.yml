@@ -1,0 +1,63 @@
+name: Publish BLOFY 55.8.7 signed catalog reset-recovery QA APK
+on:
+  push:
+    branches: [fix/p-auth-activation-recovery-20261107]
+    paths:
+      - '.github/workflows/blofy-catalog-recovery-qa-2000084.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: blofy-55-8-7-catalog-qa-release
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      SOURCE_RUN: '42416143192'
+      SOURCE_SHA: 15828bf66e278d355b3615dc66ba85a5d8b0a02f
+      SOURCE_ARTIFACT: BLOFY-55.8.7-2000084-P-AUTH-TEST-SIGNED
+      APK: BLOFY-PLAYER-55.8.7-2000084-P-AUTH-TEST-SIGNED.apk
+      EXPECTED_CERT: C3B98CCCD2F0C86809014ACD9368BF61C7004CFD419CD867B71FEF10BFA6255E
+      TAG: blofy-player-v2000084-catalog-recovery-test
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify exact signed source was built successfully
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" > source.json
+          jq -e --arg sha "$SOURCE_SHA" '.status=="completed" and .conclusion=="success" and .head_sha==$sha' source.json
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Existing QA release must not be overwritten"; exit 1
+          fi
+      - name: Download and inspect signed APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p staging
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name "$SOURCE_ARTIFACT" --dir staging
+          apk="$(find staging -type f -name "$APK" -print -quit)"
+          sums="$(find staging -type f -name SHA256SUMS -print -quit)"
+          test -s "$apk" && test -s "$sums"
+          expected="$(grep -F "$APK" "$sums" | head -1 | awk '{print $1}')"
+          test "${#expected}" -eq 64
+          test "$(sha256sum "$apk" | awk '{print $1}')" = "$expected"
+          tool="$ANDROID_HOME/build-tools/35.0.0"
+          "$tool/aapt" dump badging "$apk" | grep -Fq "package: name='tv.blofy.player.v2' versionCode='2000084' versionName='2.0.0-rc07.55.8.7'"
+          "$tool/apksigner" verify --print-certs "$apk" > signature.txt
+          cert="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' signature.txt | head -1 | tr -d '[:space:]-:' | tr '[:lower:]' '[:upper:]')"
+          test "$cert" = "$EXPECTED_CERT"
+          cp "$apk" "./$APK"
+          sha256sum "./$APK" > SHA256SUMS
+      - name: Publish QA-only prerelease (not the website or updater)
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" "./$APK" SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" --prerelease --latest=false \
+            --title 'BLOFY PLAYER 55.8.7 (2000084) — P-AUTH and Xtream library recovery QA build' \
+            --notes 'TEST ONLY. Reuses the same QA version number 55.8.7. Includes previous secure activation DNS fallback. Also handles Xtream Connection reset/broken pipe/closed sockets by verified category retry, preserves completed sections and labels catalog failures correctly. Do not delete app data. No public app-update or Play publication. Does not bypass server activation. Signed with the original production key; install over existing version without deleting data. Not published in Google Play or website updater.'
