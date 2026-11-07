@@ -7,6 +7,7 @@ import {xtreamConnectionReport} from './xtream-smart-connection.mjs';
 import {runXtreamBootDiagnostics} from './xtream-boot-diagnostics.mjs';
 import {observeRailwayEgress,probeXtreamSocket} from './xtream-egress-inspector.mjs';
 import {probeXtreamHttp11} from './xtream-http-compat-probe.mjs';
+import {compareXtreamFromIndependentRailway} from './xtream-independent-probe.mjs';
 import {probeXtreamM3uAvailability} from './xtream-m3u-availability.mjs';
 import { createFixedWindowLimiter, requestClientKey } from './auth-protection.mjs';
 import {
@@ -820,6 +821,30 @@ if(process.env.BLOFY_XTREAM_EGRESS_ONE_SHOT==='1'){
     })().catch(()=>console.warn('BLOFY_EGRESS_DIAG_FAILED','unavailable'));
   },14000);
   timer.unref?.();
+}
+
+// One-shot, explicitly gated production-to-production account metadata test.
+// Reads existing encrypted source credentials in-memory and sends exactly one
+// bounded request over pinned authenticated HTTPS to independent STREAM.
+// Does not start catalog sync, media streaming or modify any source status.
+if(process.env.BLOFY_XTREAM_INDEPENDENT_PROBE_ON_BOOT==='1'){
+  const probeTimer=setTimeout(()=>{
+    void (async()=>{
+      const id=String(process.env.BLOFY_XTREAM_EGRESS_SOURCE_ID||'').trim();
+      if(!validUuid(id))return;
+      const row=await serverById(id);
+      if(!row||!row.enabled)return;
+      const creds=decryptCredentials(row);
+      const target=xtreamApiUrl(row.base_url,creds.username,creds.password).href;
+      const result=await compareXtreamFromIndependentRailway(target);
+      console.info('BLOFY_XTREAM_INDEPENDENT_COMPARE',
+        JSON.stringify({sourceId:id,...result,realPlaybackVerified:false,credentialsLogged:false}));
+    })().catch(()=>{
+      console.warn('BLOFY_XTREAM_INDEPENDENT_COMPARE',
+        JSON.stringify({ok:false,code:'probe_failed',credentialsLogged:false}));
+    });
+  },19000);
+  probeTimer.unref?.();
 }
 
 // Opt-in, one-shot production probe: only enabled during an explicit
