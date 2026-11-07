@@ -180,3 +180,6 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible {o
 #xtAddSourceSection .inline-actions{justify-content:flex-end}
 #xtAddSourceSection #consoleToggleSourceForm[aria-expanded="true"]{border-color:#8779cd;color:#eae5ff}
 @media(max-width:620px){#xtAddSourceSection .panel-head{flex-direction:column;align-items:stretch}#xtAddSourceSection .inline-actions>*{flex:1}}
+
+.console-engine>p[data-health="offline"],.console-engine>p[data-health="unknown"]{color:var(--red)}
+.console-engine>p[data-health="unconfigured"]{color:var(--amber)}
