@@ -45,6 +45,7 @@ import { createGatewayUsageThrottle } from './xtream-gateway-usage-throttle.mjs'
 import { readXtreamGatewayJsonResponse } from './xtream-gateway-response.mjs';
 import { createXtreamHealthSnapshot } from './xtream-health-snapshot.mjs';
 import {relayEligible,issueStreamRelayGrant} from './xtream-stream-relay-bridge.mjs';
+import {shouldUseIndependentSourceMedia} from './xtream-independent-source-media-policy.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
@@ -719,6 +720,20 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
       console.warn('BLOFY_STREAM_RELAY_CANARY_FALLBACK',{kind,reason:'relay_unavailable'});
     }
   }
+  let mediaFetchTarget=upstream;
+  // Use independent Railway egress for ONE operator-allowed source and TS
+  // only. Keep the original BLOFY Xtream URL, login and response behavior.
+  // If the protected service cannot issue a ticket, fall back immediately.
+  if(shouldUseIndependentSourceMedia({
+    sourceId:row.server_id,kind,extension:mediaExtension
+  })){
+    try{
+      mediaFetchTarget=new URL(await issueStreamRelayGrant({sourceUrl:upstream.href,kind}));
+    }catch{
+      console.warn('BLOFY_XTREAM_INDEPENDENT_SOURCE_FALLBACK',{
+        kind,sourceId:row.server_id,reason:'relay_ticket_unavailable'});
+    }
+  }
   // Keep each viewer's stream independent. Only retry failures before video bytes reach them.
   const client = new AbortController();
   const abort = () => { if (!client.signal.aborted) client.abort(); };
@@ -742,7 +757,7 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
       try {
         let timer = setTimeout(() => controller.abort(new Error('headers_timeout')), 12000);
         try {
-          response = await checkedFetch(upstream, {
+          response = await checkedFetch(mediaFetchTarget, {
             method: req.method === 'HEAD' ? 'HEAD' : 'GET',
             timeoutMs: 12000, headers, signal: controller.signal
           });

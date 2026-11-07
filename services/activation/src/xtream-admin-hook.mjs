@@ -10,6 +10,7 @@ import {probeXtreamHttp11} from './xtream-http-compat-probe.mjs';
 import {compareXtreamFromIndependentRailway} from './xtream-independent-probe.mjs';
 import {shouldUseIndependentXtreamSource,fetchIndependentXtreamSource} from './xtream-independent-catalog-relay.mjs';
 import {issueStreamRelayGrant} from './xtream-stream-relay-bridge.mjs';
+import {shouldUseIndependentSourceMedia} from './xtream-independent-source-media-policy.mjs';
 import {probeOfficialXtreamPlaylistRoute} from './xtream-official-m3u-probe.mjs';
 import {probeXtreamM3uAvailability} from './xtream-m3u-availability.mjs';
 import { createFixedWindowLimiter, requestClientKey } from './auth-protection.mjs';
@@ -635,6 +636,15 @@ async function probeXtreamPlayback(id,mediaType='live') {
     const path=[mediaType==='movie'?'movie':'live',creds.username,creds.password,String(item.source_id)]
       .map(encodeURIComponent).join('/')+'.'+ext;
     let target=new URL(path,normalizeXtreamBaseUrl(source.base_url)+'/');
+    // Admin playback checks must use the SAME egress that serves selected
+    // client TS streams; otherwise the old portal falsely reports resets.
+    if(shouldUseIndependentSourceMedia({
+      sourceId:source.id,kind:mediaType,extension:ext
+    })){
+      try{target=new URL(await issueStreamRelayGrant({
+        sourceUrl:target.href,kind:mediaType
+      }));}catch{}
+    }
     const started=Date.now(),controller=new AbortController();
     const timeout=setTimeout(()=>controller.abort(),livePolicy?
       Math.max(1200,Math.min(4500,liveDeadline-Date.now())):9500);
