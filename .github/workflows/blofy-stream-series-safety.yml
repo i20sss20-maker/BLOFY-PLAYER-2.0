@@ -15,6 +15,7 @@ on:
       - 'services/activation/web/xtream-gateway-admin.js'
       - 'services/activation/src/sources-admin-hook.mjs'
       - 'services/activation/test/stream-console-ui.test.mjs'
+      - 'services/activation/test/stream-operations-regression.test.mjs'
       - '.github/workflows/blofy-stream-series-safety.yml'
   workflow_dispatch:
 jobs:
@@ -39,4 +40,4 @@ jobs:
           node --check services/activation/web/xtream-gateway-admin.js
           node --check services/activation/src/sources-admin-hook.mjs
       - name: Series and console regression tests
-        run: node --test services/activation/test/xtream-series-resolver.test.mjs services/activation/test/stream-console-ui.test.mjs
+        run: node --test services/activation/test/xtream-series-resolver.test.mjs services/activation/test/stream-console-ui.test.mjs services/activation/test/stream-operations-regression.test.mjs
