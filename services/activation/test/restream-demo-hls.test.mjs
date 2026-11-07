@@ -117,6 +117,6 @@ test('every preview playlist and segment needs admin authorization and preview H
   assert.match(assets,/blofy-one-preview\.js/);
   const page=await readFile(new URL('../web/blofy-one-preview.html',import.meta.url),'utf8');
   assert.match(page,/BLOFY ONE/);
-  assert.match(page,/محتوى اشتراكات العملاء/);
+  assert.match(page,/بيانات اشتراكات العملاء/);
   assert.match(page,/<video/);
 });
