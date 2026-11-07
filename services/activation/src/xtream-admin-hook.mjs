@@ -8,6 +8,7 @@ import {runXtreamBootDiagnostics} from './xtream-boot-diagnostics.mjs';
 import {observeRailwayEgress,probeXtreamSocket} from './xtream-egress-inspector.mjs';
 import {probeXtreamHttp11} from './xtream-http-compat-probe.mjs';
 import {compareXtreamFromIndependentRailway} from './xtream-independent-probe.mjs';
+import {shouldUseIndependentXtreamSource,fetchIndependentXtreamSource} from './xtream-independent-catalog-relay.mjs';
 import {probeXtreamM3uAvailability} from './xtream-m3u-availability.mjs';
 import { createFixedWindowLimiter, requestClientKey } from './auth-protection.mjs';
 import {
@@ -399,7 +400,7 @@ async function requestDeleteSource(id) {
   return true;
 }
 
-async function checkedFetch(url, { timeoutMs = 30000 } = {}) {
+async function checkedFetch(url, { timeoutMs = 30000,sourceId=null } = {}) {
   let current = new URL(url);
   for (let redirects = 0; redirects <= 3; redirects++) {
     try {
@@ -411,12 +412,14 @@ async function checkedFetch(url, { timeoutMs = 30000 } = {}) {
     }
     let response;
     try {
-      response = await fetch(current, {
-        method: 'GET',
-        redirect: 'manual',
-        headers: { accept: 'application/json,text/plain;q=0.8,*/*;q=0.1', 'user-agent': 'BLOFY-Xtream/1.0' },
-        signal: AbortSignal.timeout(timeoutMs)
-      });
+      response = shouldUseIndependentXtreamSource(sourceId)
+        ? await fetchIndependentXtreamSource(current,{timeoutMs})
+        : await fetch(current, {
+            method: 'GET',redirect: 'manual',
+            headers: {accept:'application/json,text/plain;q=0.8,*/*;q=0.1',
+              'user-agent':'BLOFY-Xtream/1.0'},
+            signal: AbortSignal.timeout(timeoutMs)
+          });
     } catch (error) {
       // Source-specific network failure, not a failed BLOFY account login.
       // Keep source host, credentials and provider internals out of API errors.
@@ -706,7 +709,7 @@ async function fetchAccount(row,{timeoutMs=20000,maxAttempts=2}={}) {
   const creds = decryptCredentials(row);
   await assertPublicXtreamUrl(row.base_url);
   const response = await withXtreamAccountReconnect(
-    ()=>checkedFetch(xtreamApiUrl(row.base_url,creds.username,creds.password),{timeoutMs}),
+    ()=>checkedFetch(xtreamApiUrl(row.base_url,creds.username,creds.password),{timeoutMs,sourceId:row.id}),
     {describe:redactXtreamError,maxAttempts}
   );
   const text = await response.text();
@@ -827,6 +830,54 @@ if(process.env.BLOFY_XTREAM_EGRESS_ONE_SHOT==='1'){
 // Reads existing encrypted source credentials in-memory and sends exactly one
 // bounded request over pinned authenticated HTTPS to independent STREAM.
 // Does not start catalog sync, media streaming or modify any source status.
+if(process.env.BLOFY_XTREAM_INDEPENDENT_CATALOG_PROBE_ON_BOOT==='1'){
+  const testTimer=setTimeout(()=>{
+    void (async()=>{
+      const id=String(process.env.BLOFY_XTREAM_EGRESS_SOURCE_ID||'').trim();
+      if(!validUuid(id))return;
+      const row=await serverById(id);
+      if(!row||!row.enabled)return;
+      const creds=decryptCredentials(row);
+      const accountUrl=xtreamApiUrl(row.base_url,creds.username,creds.password,'get_live_categories');
+      // This probe intentionally bypasses the client-routing feature flag;
+      // all production account and sync traffic remains on its current path.
+      const response=await fetchIndependentXtreamSource(accountUrl.href,{timeoutMs:16000});
+      const status=response.status,reader=response.body?.getReader();
+      let chunks=[],bytes=0,complete=false;
+      try{
+        if(reader){
+          while(true){
+            const n=await reader.read();
+            if(n.done){complete=true;break;}
+            const part=Buffer.from(n.value||[]);
+            bytes+=part.length;
+            if(bytes>2_000_000)break;
+            chunks.push(part);
+          }
+        }
+        let arr=null;
+        if(complete&&status===200){
+          try{const parsed=JSON.parse(Buffer.concat(chunks).toString('utf8'));
+            if(Array.isArray(parsed))arr=parsed.length;
+          }catch{}
+        }
+        console.info('BLOFY_XTREAM_INDEPENDENT_CATALOG_PROOF',JSON.stringify({
+          sourceId:id,httpStatus:status,categoryCount:arr,
+          ok:status===200&&arr!==null,
+          indexed:false,customerCutover:false,credentialsLogged:false
+        }));
+      }finally{if(reader){
+        if(!complete)await reader.cancel().catch(()=>{});
+        reader.releaseLock();
+      }}
+    })().catch(()=>{
+      console.warn('BLOFY_XTREAM_INDEPENDENT_CATALOG_PROOF',
+        JSON.stringify({ok:false,code:'probe_unavailable',customerCutover:false}));
+    });
+  },19000);
+  testTimer.unref?.();
+}
+
 if(process.env.BLOFY_XTREAM_INDEPENDENT_PROBE_ON_BOOT==='1'){
   const probeTimer=setTimeout(()=>{
     void (async()=>{
@@ -1001,7 +1052,7 @@ async function syncCategories(row, mediaType, creds, syncToken, getM3u) {
   const action=TYPE_ACTIONS[mediaType].categories;
   let response;
   try{
-    response=await checkedFetch(xtreamApiUrl(row.base_url,creds.username,creds.password,action),{timeoutMs:60000});
+    response=await checkedFetch(xtreamApiUrl(row.base_url,creds.username,creds.password,action),{timeoutMs:60000,sourceId:row.id});
   }catch(error){
     if(error.message!=='xtream_http_404')throw error;
     if(mediaType==='series')return 0;
@@ -1029,7 +1080,7 @@ async function syncItems(row, mediaType, creds, syncToken, getM3u) {
   const action=TYPE_ACTIONS[mediaType].items;
   let response;
   try{
-    response=await checkedFetch(xtreamApiUrl(row.base_url,creds.username,creds.password,action),{timeoutMs:180000});
+    response=await checkedFetch(xtreamApiUrl(row.base_url,creds.username,creds.password,action),{timeoutMs:180000,sourceId:row.id});
   }catch(error){
     if(error.message!=='xtream_http_404')throw error;
     if(mediaType==='series')throw new Error('xtream_series_listing_api_unavailable');
