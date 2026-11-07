@@ -31,7 +31,8 @@ export function createExperienceHandlers({ pool, json, readJson, requireAdmin, a
     const playlists = await pool.query('SELECT id,name,provider_type,active,updated_at FROM device_playlists WHERE device_id=$1 ORDER BY active DESC,updated_at DESC',[deviceId]);
     const tickets = await pool.query('SELECT id,description,status,created_at,updated_at FROM support_tickets WHERE device_id=$1 ORDER BY created_at DESC LIMIT 30',[deviceId]);
     const audit = await pool.query('SELECT id,actor,action,details,created_at FROM device_audit WHERE device_id=$1 ORDER BY created_at DESC LIMIT 50',[deviceId]);
-    return {deviceId,status:normalized(row),expiresAt:ms(row.expires_at),lastSeenAt:ms(row.last_seen_at),appVersion:row.last_app_version,platform:row.last_platform,
+    const portalOnly = row.last_app_version === 'web-portal' && row.last_platform === 'web';
+    return {deviceId,status:normalized(row),expiresAt:ms(row.expires_at),lastSeenAt:portalOnly ? null : ms(row.last_seen_at),appVersion:portalOnly ? null : row.last_app_version,platform:portalOnly ? null : row.last_platform,
       customer:{name:row.customer_name,email:row.customer_email,phone:row.customer_phone},
       playlists:playlists.rows.map(p=>({id:p.id,name:p.name,type:p.provider_type,active:p.active,providerKey:pseudonymizeDiagnosticProviderKey(p.id)})),
       tickets:tickets.rows,audit:audit.rows};

@@ -24,6 +24,15 @@ test('portal-only pending registration is not presented as an expired entitlemen
  assert.match(contacted.registrationNote,/تواصل التطبيق/);assert.equal(contacted.status,'pending');
  assert.equal(deviceView({...row,last_platform:'android',last_app_version:'2.0.0-rc07.55'},now).registrationNote,null);
 });
+test('website-first activation preserves entitlement but is not misidentified as a connected app',()=>{
+ const item=deviceView({...row,status:'active',expires_at:null,last_app_version:'web-portal',last_platform:'web'},now);
+ assert.equal(item.status,'active');assert.equal(item.clientVersion,null);assert.equal(item.platform,null);
+ assert.equal(item.lastSeenAt,null);assert.equal(item.recentlySeen,false);
+ assert.match(item.registrationNote,/لم يصل اتصال من تطبيق الجهاز/);
+ const real=deviceView({...row,status:'active',expires_at:null,last_app_version:'2.0.0-rc07.55.8.5',last_platform:'android'},now);
+ assert.equal(real.clientVersion,'2.0.0-rc07.55.8.5');assert.equal(real.platform,'android');
+ assert.equal(real.registrationNote,null);
+});
 test('device view contains no pairing proof, playlist secrets, or invented hardware details',()=>{
  const x=deviceView({...row,activation_code:'SECRET',username_enc:'SECRET',password_enc:'SECRET',base_url_enc:'SECRET'},now);
  assert.ok(!JSON.stringify(x).includes('SECRET'));for(const key of ['model','ip','ram','activationCode'])assert.ok(!(key in x));

@@ -28,14 +28,15 @@ export function insightOptions(params) {
 export function safeDeviceInsight(row, now=Date.now()) {
   const expiresAt=timestamp(row.expires_at), firstRegisteredAt=timestamp(row.created_at);
   const expired=['active','trial'].includes(row.status) && expiresAt!==null && expiresAt<=now;
+  const portalOnly=row.last_app_version==='web-portal' && row.last_platform==='web';
   const appVersion=typeof row.last_app_version==='string' && !/^web(?:-|$)/i.test(row.last_app_version) ? row.last_app_version.slice(0,64) : null;
   return {deviceId:row.device_id, status:expired?'expired':row.status, firstRegisteredAt,
     isNew:firstRegisteredAt!==null && firstRegisteredAt<=now && now-firstRegisteredAt<=86400000,
     trialStartedAt:timestamp(row.trial_started_at), expiresAt,
     remainingDays:['active','trial'].includes(row.status) && expiresAt!==null?Math.max(0,Math.ceil((expiresAt-now)/86400000)):null,
     lifetime:row.status==='active' && row.expires_at==null,
-    lastContactAt:timestamp(row.last_seen_at), appVersion,
-    reportedPlatform:String(row.last_platform || '').slice(0,32),
+    lastContactAt:portalOnly?null:timestamp(row.last_seen_at), appVersion,
+    reportedPlatform:portalOnly?'':String(row.last_platform || '').slice(0,32),
     playlistCount:Number(row.playlist_count || 0), lastPlaylistSavedAt:timestamp(row.last_playlist_saved_at),
     lastRecordedErrorAt:timestamp(row.last_error_at),lastRecordedErrorCode:String(row.last_error_code || '').slice(0,128)};
 }
