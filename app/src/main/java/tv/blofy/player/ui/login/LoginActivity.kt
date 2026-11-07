@@ -63,7 +63,6 @@ class LoginActivity : AppCompatActivity() {
     private var pairingWatcherJob: Job? = null
     private var renderedQrUrl: String? = null
     private var renderedProviders: List<ProviderEntity> = emptyList()
-    private var lastActivationCheckAtMs = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -116,7 +115,7 @@ class LoginActivity : AppCompatActivity() {
         activation.addView(codeView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(60)))
         status.apply { textSize = 13f; gravity = Gravity.CENTER; setTextColor(BlofyTvDesign.TextSecondary); background = statusBackground(); setPadding(dp(12),0,dp(12),0) }
         activation.addView(status, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(42)).apply { topMargin = dp(10) })
-        refreshCodeButton = actionButton("↻  فحص الآن") { lifecycleScope.launch { refreshIdentityAndProvider(forceActivationCheck = true) } }
+        refreshCodeButton = actionButton("↻  فحص الآن") { lifecycleScope.launch { refreshIdentityAndProvider() } }
         activation.addView(refreshCodeButton, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(54)).apply { topMargin = dp(10) })
 
         val playlistsPanel = LinearLayout(this).apply {
@@ -186,7 +185,7 @@ class LoginActivity : AppCompatActivity() {
         })
         addPlaylist = actionButton("إضافة / إدارة القوائم") { startActivity(Intent(this, PlaylistActivity::class.java)) }
         connectButton = actionButton("تشغيل القائمة النشطة") { startOrCancelConnect() }
-        refreshCodeButton = actionButton("تحديث") { lifecycleScope.launch { refreshIdentityAndProvider(forceActivationCheck = true) } }
+        refreshCodeButton = actionButton("تحديث") { lifecycleScope.launch { refreshIdentityAndProvider() } }
         root.addView(addPlaylist, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,dp(64)))
         root.addView(connectButton, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,dp(60)).apply { topMargin = dp(8) })
         root.addView(refreshCodeButton, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,dp(56)).apply { topMargin = dp(8) })
@@ -319,30 +318,8 @@ class LoginActivity : AppCompatActivity() {
     private fun emptyPlaylistView(message: String) = TextView(this).apply { text = message; textSize = 13f; setTextColor(BlofyTvDesign.TextMuted); gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT; setPadding(dp(16),0,dp(16),0); background = fieldBackground() }
     private fun openCatalogLoading(providerId: String) { CatalogSyncState.markPending(applicationContext,providerId); startActivity(Intent(this,CatalogLoadingActivity::class.java).putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID,providerId)) }
 
-    private suspend fun refreshIdentityAndProvider(forceActivationCheck: Boolean = false) {
-        val dao = BlofyDatabase.get(applicationContext).dao()
-        val manager = ActivationManager(applicationContext, dao)
-        val identity = withContext(Dispatchers.IO) { manager.ensureIdentity() }
-        renderIdentity(identity.deviceId, identity.activationCode)
-        refreshProviderStatus()
-        val endpoint = BuildConfig.ACTIVATION_BASE_URL.trim()
-        renderPortalPlaylists(loadPortalProviders(endpoint, dao))
-
-        // QR pairing from the website creates a pending record. The app must prove its own
-        // device identity before the admin dashboard can report a real Android connection.
-        // Keep the probe throttled so older TVs do not overwhelm the activation service.
-        val now = android.os.SystemClock.elapsedRealtime()
-        if (endpoint.isNotBlank() && (forceActivationCheck || lastActivationCheckAtMs == 0L ||
-                now - lastActivationCheckAtMs >= PAIRING_ACTIVATION_REFRESH_MS)) {
-            lastActivationCheckAtMs = now
-            val check = runSuspendCatching {
-                withContext(Dispatchers.IO) {
-                    manager.refresh(ActivationRemoteClient.create(endpoint), BuildConfig.VERSION_NAME)
-                }
-            }
-            check.onSuccess { remote -> status.text = activationLabel(remote) }
-            check.onFailure { status.text = "تعذر التحقق من التفعيل • تحقق من اتصال الشاشة" }
-        }
+    private suspend fun refreshIdentityAndProvider() {
+        val dao = BlofyDatabase.get(applicationContext).dao(); val identity = withContext(Dispatchers.IO) { ActivationManager(applicationContext,dao).ensureIdentity() }; renderIdentity(identity.deviceId,identity.activationCode); refreshProviderStatus(); renderPortalPlaylists(loadPortalProviders(BuildConfig.ACTIVATION_BASE_URL.trim(),dao))
     }
     private suspend fun hasCachedCatalog(dao: BlofyDao, providerId: String): Boolean = withContext(Dispatchers.IO) { CatalogSyncState.isReady(applicationContext,providerId) && dao.hasStreamsForProvider(providerId) }
     private suspend fun <T> runSuspendCatching(block: suspend () -> T): Result<T> = try { Result.success(block()) } catch (c: CancellationException) { throw c } catch (e: Throwable) { Result.failure(e) }
@@ -445,6 +422,5 @@ class LoginActivity : AppCompatActivity() {
 
     companion object {
         private const val PAIRING_REFRESH_MS = 10_000L
-        private const val PAIRING_ACTIVATION_REFRESH_MS = 30_000L
     }
 }
