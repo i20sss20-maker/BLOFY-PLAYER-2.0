@@ -1236,6 +1236,31 @@ async function syncServer(id, requestedTypes = ['live','movie','series']) {
   }
 }
 
+// Explicit one-time ingestion trial after authenticated API and live-category
+// fetch both succeeded from the independent STREAM project. Only the single
+// approved source and ONLY live type. Preserve existing snapshot guards and
+// prevent overlapping imports through syncServer's existing lock.
+if(process.env.BLOFY_XTREAM_INDEPENDENT_LIVE_SYNC_ON_BOOT==='1'){
+  const singleSyncTimer=setTimeout(()=>{
+    void(async()=>{
+      const id=String(process.env.BLOFY_XTREAM_EGRESS_SOURCE_ID||'').trim();
+      if(!validUuid(id)||!shouldUseIndependentXtreamSource(id))return;
+      console.info('BLOFY_XTREAM_INDEPENDENT_LIVE_SYNC',JSON.stringify({
+        sourceId:id,status:'started',mediaType:'live',customerCutover:false}));
+      const result=await syncServer(id,['live']);
+      console.info('BLOFY_XTREAM_INDEPENDENT_LIVE_SYNC',JSON.stringify({
+        sourceId:id,status:'completed',mediaType:'live',
+        items:result.details?.live?.items??null,
+        categories:result.details?.live?.categories??null,
+        partialWarning:Boolean(result.partialWarning),customerCutover:false}));
+    })().catch(error=>{
+      console.warn('BLOFY_XTREAM_INDEPENDENT_LIVE_SYNC',JSON.stringify({
+        status:'failed',code:redactXtreamError(error),customerCutover:false}));
+    });
+  },24000);
+  singleSyncTimer.unref?.();
+}
+
 async function cancelSourceSync(id) {
   const row=await serverById(id);
   if(!row)throw Object.assign(new Error('xtream_server_not_found'),{status:404});
