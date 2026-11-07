@@ -169,3 +169,14 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible {o
  .console-action,.button {transition:none}
  .console-action:hover,.button:hover:not(:disabled){transform:none}
 }
+
+
+/* Source list first, add-source form expands only when requested. */
+#tab-xtream>.xtream-manager-panel{order:1}
+#tab-xtream>.form-panel{order:2}
+#xtAddSourceSection.is-collapsed>form,#xtAddSourceSection.is-collapsed>.security-note{display:none}
+#xtAddSourceSection.is-collapsed{padding-top:15px;padding-bottom:15px}
+#xtAddSourceSection.is-collapsed>.panel-head{margin-bottom:0;align-items:center}
+#xtAddSourceSection .inline-actions{justify-content:flex-end}
+#xtAddSourceSection #consoleToggleSourceForm[aria-expanded="true"]{border-color:#8779cd;color:#eae5ff}
+@media(max-width:620px){#xtAddSourceSection .panel-head{flex-direction:column;align-items:stretch}#xtAddSourceSection .inline-actions>*{flex:1}}
