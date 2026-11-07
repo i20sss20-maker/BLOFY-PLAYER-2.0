@@ -4,7 +4,7 @@ on:
     branches: [fix/p-auth-activation-recovery-20261107]
     paths:
       - 'app/**'
-      - '.github/workflows/blofy-pauth-test-2000084.yml'
+      - '.github/workflows/blofy-pauth-test-2000083.yml'
   workflow_dispatch:
 permissions:
   contents: read
