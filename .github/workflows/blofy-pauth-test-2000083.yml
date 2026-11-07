@@ -1,16 +1,16 @@
-name: BLOFY 55.8.6 P-AUTH signed test APK
+name: BLOFY 55.8.7 P-AUTH signed test APK
 on:
   push:
     branches: [fix/p-auth-activation-recovery-20261107]
     paths:
       - 'app/**'
-      - '.github/workflows/blofy-pauth-test-2000083.yml'
+      - '.github/workflows/blofy-pauth-test-2000084.yml'
   workflow_dispatch:
 permissions:
   contents: read
   actions: read
 concurrency:
-  group: blofy-pauth-2000083-test
+  group: blofy-pauth-2000084-test
   cancel-in-progress: false
 jobs:
   test-apk:
@@ -21,8 +21,8 @@ jobs:
       ACTIVATION_URL: https://api.blofyplayer.com
       UPDATE_URL: https://updates.blofyplayer.com
       EXPECTED_CERT: C3B98CCCD2F0C86809014ACD9368BF61C7004CFD419CD867B71FEF10BFA6255E
-      EXPECTED_CODE: '2000083'
-      EXPECTED_NAME: 2.0.0-rc07.55.8.6
+      EXPECTED_CODE: '2000084'
+      EXPECTED_NAME: 2.0.0-rc07.55.8.7
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -32,8 +32,8 @@ jobs:
       - name: Verify dedicated non-public test build
         run: |
           set -euo pipefail
-          grep -Fq 'versionCode = 2000083' app/build.gradle.kts
-          grep -Fq 'versionName = "2.0.0-rc07.55.8.6"' app/build.gradle.kts
+          grep -Fq 'versionCode = 2000084' app/build.gradle.kts
+          grep -Fq 'versionName = "2.0.0-rc07.55.8.7"' app/build.gradle.kts
           grep -Fq 'migrateStableIdentityIfNeeded(api, current)' app/src/main/java/tv/blofy/player/core/identity/ActivationManager.kt
           grep -Fq 'Identity migration deferred' app/src/main/java/tv/blofy/player/core/identity/ActivationManager.kt
       - name: Install Android SDK 36
@@ -90,14 +90,14 @@ jobs:
             -PBLOFY_FFMPEG_AAR="$GITHUB_WORKSPACE/build/ffmpeg-native/blofy-55-8.aar" \
             assembleRelease
           mkdir -p output
-          cp app/build/outputs/apk/release/app-release.apk output/BLOFY-PLAYER-55.8.6-2000083-P-AUTH-TEST-SIGNED.apk
+          cp app/build/outputs/apk/release/app-release.apk output/BLOFY-PLAYER-55.8.7-2000084-P-AUTH-TEST-SIGNED.apk
       - name: Verify package and original certificate
         run: |
           set -euo pipefail
-          apk=output/BLOFY-PLAYER-55.8.6-2000083-P-AUTH-TEST-SIGNED.apk
+          apk=output/BLOFY-PLAYER-55.8.7-2000084-P-AUTH-TEST-SIGNED.apk
           tool="$ANDROID_HOME/build-tools/35.0.0"
           "$tool/aapt" dump badging "$apk" > output/badging.txt
-          grep -Fq "package: name='tv.blofy.player.v2' versionCode='2000083' versionName='2.0.0-rc07.55.8.6'" output/badging.txt
+          grep -Fq "package: name='tv.blofy.player.v2' versionCode='2000084' versionName='2.0.0-rc07.55.8.7'" output/badging.txt
           ! grep -Fq 'application-debuggable' output/badging.txt
           "$tool/apksigner" verify --verbose --print-certs "$apk" > output/signature.txt
           cert="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' output/signature.txt | head -1 | tr -d '[:space:]-:' | tr '[:lower:]' '[:upper:]')"
@@ -107,7 +107,7 @@ jobs:
           printf 'TEST ONLY - Not published to updates or Play\nCommit=%s\n' "$GITHUB_SHA" > output/BUILD_INFO.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: BLOFY-55.8.6-2000083-P-AUTH-TEST-SIGNED
+          name: BLOFY-55.8.7-2000084-P-AUTH-TEST-SIGNED
           path: output/
           retention-days: 30
           if-no-files-found: error
