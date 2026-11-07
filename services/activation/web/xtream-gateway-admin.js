@@ -375,6 +375,29 @@ function gatewayPreflightReason(reason){
   };
   return map[reason]||'تعذر إثبات تشغيل هذا العنصر';
 }
+function gatewayM3uRecoveryReason(status){
+  const reasons={
+    index_not_ready:'M3U: لم تكتمل فهرسة هذا المصدر',
+    unsupported_type:'M3U: هذا النوع لا يدعم التشغيل البديل',
+    time_budget:'M3U: انتهت مهلة الفحص قبل التحقق من الرابط',
+    id_not_in_m3u:'M3U: معرّف الفيلم أو الحلقة غير موجود في القائمة المربوطة',
+    multiple_conflicting_m3u_links:'M3U: للمعرّف روابط مختلفة؛ أوقف النظام الاختيار العشوائي',
+    stale_index_entry:'M3U: الفهرس غير مطابق للإصدار الحالي',
+    m3u_link_identity_invalid:'M3U: رابط غير مطابق لمعرّف المحتوى أو بيانات المصدر',
+    provider_404:'M3U: الرابط موجود لكن ملفه يعيد 404 من مزود المحتوى',
+    provider_denied:'M3U: مزود المحتوى رفض تشغيل الرابط البديل',
+    provider_rate_limited:'M3U: مزود المحتوى يحدّ عدد الاتصالات',
+    provider_http_error:'M3U: رابط الفيديو البديل أعاد خطأ من المصدر',
+    provider_timeout:'M3U: مهلة وصول الفيديو البديل انتهت',
+    provider_unreachable:'M3U: تعذر الوصول إلى فيديو المصدر',
+    non_video_bytes:'M3U: الرابط يعيد بيانات غير صالحة كفيديو',
+    empty_media:'M3U: رابط الفيديو البديل لا يعيد بيانات',
+    m3u_media_unverified:'M3U: لم يتم إثبات وصول الفيديو',
+    m3u_check_unavailable:'M3U: تعذر اختبار الرابط المحفوظ',
+    not_checked:'M3U: لم يُفحص البديل بسبب ضيق الوقت'
+  };
+  return reasons[String(status||'')]||'M3U: لم يتوفر بديل مؤكد لهذا الفيديو';
+}
 function renderGatewayPreflight(data,scope){
   gatewayPreflightVerdict={
     scope,ready:data.ready===true,checkedAt:Date.now()
@@ -415,7 +438,8 @@ function renderGatewayPreflight(data,scope){
         (check.ok?'✓ ':'✗ ')+(kinds[check.kind]||'فحص')+band+
         (check.ok?(check.recoveryMode==='m3u'?' · تم تشغيل الفيديو من M3U المرتبط':' · بيانات صحيحة'):
           (' · '+gatewayPreflightReason(check.reason)))+
-        (!check.ok&&ids?' · '+ids:''));
+        (!check.ok&&ids?' · '+ids:'')+
+        (!check.ok&&check.m3uRecoveryStatus?' · '+gatewayM3uRecoveryReason(check.m3uRecoveryStatus):''));
       card.append(line);
     }
     details?.append(card);
