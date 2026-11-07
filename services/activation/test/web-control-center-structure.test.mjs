@@ -24,7 +24,7 @@ test('sources console keeps BLOFY gateway, upstream Xtream and catalog controls 
     assert.ok(html.includes('id="'+id+'"'), 'missing '+id);
   }
   assert.match(html, /إنشاء بيانات دخول/);
-  assert.match(html, /تنظيم الفئات والمكتبة/);
+  assert.match(html, /المكتبة الذكية/);
   assert.match(html, /id="categoryManagerRows"/);
   assert.doesNotMatch(html, /data-tab="sources"/);
 });
