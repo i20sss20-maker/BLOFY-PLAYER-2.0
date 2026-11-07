@@ -47,7 +47,7 @@ test('operator alerts and auto-refresh use existing admin read endpoints only',(
   assert.match(premium,/function setAutoRefresh\(/);
   assert.match(premium,/90000/);
   assert.match(premium,/document\.visibilityState/);
-  assert.match(premium,/blofy:refresh-accounts/);
+  assert.match(premium,/byId\('refreshBtn'\)\?\.click\(\)/);
   assert.match(gateway,/document\.addEventListener\('blofy:refresh-accounts'/);
   assert.match(css,/\.premium-actionable-issues/);
 });
