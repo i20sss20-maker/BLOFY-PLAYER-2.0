@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {createXtreamSyncQueue} from '../src/xtream-sync-queue.mjs';
 
-const flush=()=>new Promise(resolve=>setImmediate(resolve));
+const flush=async()=>{for(let i=0;i<20;i++)await Promise.resolve()};
 
 test('large catalog sources run one at a time and in FIFO order',async()=>{
   const queue=createXtreamSyncQueue({concurrency:1,maxPending:5});
