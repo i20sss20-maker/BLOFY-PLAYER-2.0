@@ -384,7 +384,13 @@ async function requestDeleteSource(id) {
 async function checkedFetch(url, { timeoutMs = 30000 } = {}) {
   let current = new URL(url);
   for (let redirects = 0; redirects <= 3; redirects++) {
-    await assertPublicXtreamUrl(`${current.protocol}//${current.host}`);
+    try {
+      await assertPublicXtreamUrl(`${current.protocol}//${current.host}`);
+    } catch (error) {
+      const category=safeXtreamTransportCategory(error);
+      if(category)throw new Error(category);
+      throw error; // Invalid or private host rejection stays explicit.
+    }
     let response;
     try {
       response = await fetch(current, {
