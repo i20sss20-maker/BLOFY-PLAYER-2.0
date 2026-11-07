@@ -59,6 +59,8 @@ function ensureAdmin() {
 const experience = createExperienceHandlers({ pool, json, readJson, requireAdmin, authorizedDevice: async () => null });
 const deviceAdmin = createDeviceAdmin({ pool, json, readJson, requireAdmin, ensureAdmin });
 const assets = new Map([
+  ['/blofy-one.css', ['blofy-one.css', 'text/css']],
+  ['/blofy-one.js', ['blofy-one.js', 'text/javascript']],
   ['/manifest.webmanifest', ['manifest.webmanifest', 'application/manifest+json']],
   ['/site-polish.css', ['site-polish.css', 'text/css']],
   ['/premium.css', ['premium.css', 'text/css']], ['/control-premium.css', ['control-premium.css', 'text/css']], ['/experience.js', ['experience.js', 'text/javascript']],
