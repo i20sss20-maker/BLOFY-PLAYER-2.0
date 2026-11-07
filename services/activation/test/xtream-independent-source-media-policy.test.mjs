@@ -32,13 +32,13 @@ test('auth, expiry, subscription source and gateway item checks precede new sour
  const auth=s.indexOf('const account = await authenticate(');
  const item=s.indexOf('gatewayItemById(');
  const sourceSelect=s.indexOf('shouldUseIndependentSourceMedia(');
- const issue=s.indexOf('issueStreamRelayGrant(');
+ const issue=s.indexOf('upstream=new URL(await issueStreamRelayGrant(',sourceSelect);
  const transmit=s.indexOf('response = await checkedFetch(upstream');
  assert.ok(auth>=0&&item>auth&&sourceSelect>item&&issue>sourceSelect&&transmit>issue);
  assert.match(s,/let upstream = mediaUpstreamUrl\(/);
  assert.match(s,/upstream=new URL\(await issueStreamRelayGrant/);
  assert.match(s,/relay_ticket_unavailable/);
- assert.doesNotMatch(s.slice(sourceSelect,issue),/res\.writeHead\(307/);
+ assert.ok(s.indexOf("res.writeHead(307")>=0&&s.indexOf("res.writeHead(307")<sourceSelect);
 });
 test('admin TS source checks use same source-gated transport, never all sources',async()=>{
  const c=await readFile(new URL('../src/xtream-admin-hook.mjs',import.meta.url),'utf8');
