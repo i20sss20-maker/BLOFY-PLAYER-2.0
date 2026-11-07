@@ -35,3 +35,15 @@ If the new portal release causes regressions, redeploy the previous successfully
 - previous deployment `01addffe-50c7-438b-965d-43f43a83893c`
 - commit `872d1eca1b66d18d7c44ad3a43a90727592aadbb`
 This leaves DB/subscribers, independent media engine and domain settings unchanged. Do NOT redeploy newest `main`, which contains experimental modifications absent from the recovered stable build. Use a pinned commit or explicit, reviewed release.
+
+## BLOFY STREAM PRO premium admin rollout (2026-11-07)
+- Official Railway activation service pinned to commit `946f4a38efd1d7283328d34c11dff9aca36dd5a2`. Deployment ID `971c070d-2769-4d88-95e8-a5e61a3dcbb7`, status SUCCESS and /health check succeeded.
+- New `stream-premium.css` and `stream-premium.js` served at versioned paths via `sources-admin-hook.mjs`. Live route has cinematic visual identity, RTL/mobile responsiveness, and operations home dashboard.
+- Added commands: Ctrl/Cmd+K search palette, deep-links to sources/accounts/diagnostics/library, source-specific name/ID search, errors-only filter, exported credential-free CSV summary, compact density preference, source issue insights and accurate indexed catalog donut.
+- Added read-only Xtream subscriber totals (active, next 7-day expiry, expired) computed from the existing protected account API, with no credential data sent through snapshot events.
+- Added 401/404/502 guidance with distinctions between upstream and BLOFY auth. Did **not** change production customer media routes.
+- Verified official public HTML, premium CSS, premium JS, original admin JS, account JS, /health: 200 with expected content; JS syntax checks passed. Unauthenticated protected engine admin returned 401.
+- Last-hour Railway portal HTTP sample at verification: 355 requests, 0 HTTP 5xx; all four services online. Temporary one-time release verifier service deleted.
+- Pre-release regression test file `services/activation/test/stream-console-ui.test.mjs` and workflow updated; a fully automated real-browser operator session was not executed.
+- Rollback to previous successful admin UI deployment `ac907c1d-af90-4ddf-af7a-5d19dff60e66` (commit `f6fd2a8c03c01904aaa074a1a14ce7112629f821`) if UI regression occurs.
+- MediaMTX is connected but currently **not** adopted for real Xtream customer playback. Original provider 502/series transport failures remain separate operational work.
