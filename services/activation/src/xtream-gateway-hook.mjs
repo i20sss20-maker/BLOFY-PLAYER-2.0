@@ -41,6 +41,7 @@ import { acceptsXtreamGzip } from './xtream-catalog-compression.mjs';
 import { shouldRetryXtreamWithoutRange,firstByteXtreamRange } from './xtream-media-range.mjs';
 import { recordXtreamPlayback,xtreamPlaybackSnapshot } from './xtream-playback-metrics.mjs';
 import { XtreamDenialCooldown } from './xtream-denial-cooldown.mjs';
+import { createGatewayUsageThrottle } from './xtream-gateway-usage-throttle.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
@@ -57,6 +58,7 @@ pool.on('error', error => console.error('xtream gateway database error:', safeEr
 const adminLimiter = createFixedWindowLimiter({ limit: 120, windowMs: 60_000 });
 const publicLimiter = createFixedWindowLimiter({ limit: 1200, windowMs: 60_000 });
 const mediaDenialCooldown = new XtreamDenialCooldown();
+const accountUsageThrottle = createGatewayUsageThrottle();
 let readyPromise;
 
 function json(res, status, body, extra = {}) {
@@ -350,7 +352,9 @@ async function authenticate(usernameInput, passwordInput, { touch = false } = {}
   if (!row || !row.enabled) return null;
   if (row.expires_at && new Date(row.expires_at).getTime() <= Date.now()) return null;
   if (!verifyGatewayCredential(row.password_proof, username, password, KEY_HEX)) return null;
-  if (touch) void pool.query('UPDATE blofy_xtream_gateway_accounts SET last_used_at=NOW() WHERE id=$1', [row.id]).catch(() => {});
+  if (touch && accountUsageThrottle.shouldWrite(row.id))
+    void pool.query('UPDATE blofy_xtream_gateway_accounts SET last_used_at=NOW() WHERE id=$1', [row.id])
+      .catch(() => accountUsageThrottle.forget(row.id));
   return row;
 }
 
