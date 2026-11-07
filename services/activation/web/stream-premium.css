@@ -358,3 +358,5 @@ body {
 
 .premium-signal-stats{grid-template-columns:repeat(4,minmax(0,1fr))}
 @media(max-width:740px){.premium-signal-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+.sync-interrupted-note{display:block;color:#f0c78a;font-size:11px;line-height:1.8;border-inline-start:3px solid #aa8661;background:rgba(170,130,69,.08);padding:8px 12px;border-radius:8px}
