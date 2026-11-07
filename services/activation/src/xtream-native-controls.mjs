@@ -64,7 +64,18 @@ export function controlPage({items=[],success='',error='',csrfToken=''}) {
     const status=esc(String(item.status||'unknown'));
     const enabled=Boolean(item.enabled),published=Boolean(item.publishCatalog);
     const counts=item.counts||{};
-    const lastError=item.lastError?'<p class="err">آخر خطأ: '+esc(item.lastError)+'</p>':'';
+    const sourceErrorTexts={
+      xtream_dns_failure:'تعذر حل عنوان المصدر من السيرفر (DNS). راجع عنوان الهوست.',
+      xtream_connection_refused:'المصدر رفض اتصال السيرفر. راجع الهوست والمنفذ مع المزود.',
+      xtream_connect_timeout:'المصدر لم يستجب خلال المهلة. لا تحذف المصدر؛ تحقق من الاتصال عند المزود.',
+      xtream_network_unreachable:'سيرفر BLOFY لا يستطيع الوصول لشبكة المصدر. تحقق من السماح باتصال السيرفر.',
+      xtream_connection_reset:'المزود أغلق اتصال السيرفر قبل وصول البيانات.',
+      xtream_tls_failure:'شهادة الحماية في المصدر غير صالحة أو لا تطابق العنوان.',
+      xtream_transport_failed:'تعذر الاتصال بالمصدر من السيرفر. لا تعيد حذفه؛ تحقق من المزود أولًا.',
+      'fetch failed':'تعذر الاتصال بالمصدر من السيرفر. لا تعيد حذفه؛ تحقق من المزود أولًا.'
+    };
+    const lastError=item.lastError?'<p class="err">آخر خطأ: '+
+      esc(sourceErrorTexts[item.lastError]||item.lastError)+'</p>':'';
     const metrics='<div class="metrics"><span>القنوات <b>'+n(counts.live)+'</b></span><span>الأفلام <b>'+n(counts.movie)+'</b></span><span>المسلسلات <b>'+n(counts.series)+'</b></span><span>الإجمالي <b>'+n(counts.total)+'</b></span></div>';
     const editForm='<details><summary>تعديل المصدر (يُحفظ في قاعدة البيانات)</summary>'+
       '<form class="edit" method="post" action="'+securedUrl(CONTROL_PATH+'/'+id+'/save')+'">'+
