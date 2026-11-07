@@ -468,7 +468,7 @@ function renderXtream() {
         published:Boolean(item.enabled&&item.publishCatalog),
         issue:Boolean(item.enabled&&(item.lastError||item.status==='offline'||item.status==='error'||item.status==='syncing'&&!item.syncing)),
         issueCode,
-        syncing:Boolean(item.syncing&&!item.queued||item.status==='syncing'&&!item.queued),
+        syncing:Boolean(item.syncing&&!item.queued),
         queued:Boolean(item.queued),
         tested:Boolean(item.lastTestAt),
         status:String(item.status||'unknown').slice(0,24)
