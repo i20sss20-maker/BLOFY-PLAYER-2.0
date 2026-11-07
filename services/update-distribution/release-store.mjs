@@ -55,7 +55,8 @@ const ONLY_75_RELEASE = {
 const APPROVED_2000082_RELEASE = {
   versionCode: 2000082,
   versionName: '2.0.0-rc07.55.8.5',
-  downloadUrl: 'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/blofy-player-v2000082-website/BLOFY-PLAYER-55.8.5-2000082-SIGNED.apk',
+  // Optional signed 55.8.5 patch asset; keep the original release URL until an owner-verified signed APK exists.
+  downloadUrl: String(process.env.BLOFY_PUBLIC_RELEASE_2000082_APK_URL || '').trim() || 'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/blofy-player-v2000082-website/BLOFY-PLAYER-55.8.5-2000082-SIGNED.apk',
   releaseNotes: 'BLOFY PLAYER 55.8.5 — تحديث المكتبة بنسبة تقدم مستمرة عبر استئناف تنزيل الأقسام المكتملة، ومنع محاولات التحديث المفتوحة بلا نهاية. فئات القنوات والأفلام والمسلسلات تحافظ على ترتيب المصدر.',
   minSupportedVersionCode: 1,
   stage: 'public'
