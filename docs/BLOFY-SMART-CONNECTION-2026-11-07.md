@@ -26,3 +26,20 @@ The previous working production code is pinned at `5cc6547fb933b61ed475c2d8454ce
 
 ## Test coverage
 `services/activation/test/xtream-smart-connection.test.mjs` checks stable error classifications, report sanitation, source-only bounded GET and access protection, both UIs, and clear separation of connectivity from media.
+
+
+## Verified production results, November 7 2026 (Asia/Riyadh)
+- Connected portal deployment after diagnosis: `f4e606380dd8dde231cede4e7c37267a2b99a33f`, successful production redeploy. Services: activation portal, restream engine, update distribution, Postgres — all online.
+- Real read-only source account checks from the **same** Railway portal: source ID prefix `d2bb0397` returned `xtream_api_reachable`; source ID prefix `59a2fbf5` returned `xtream_transport_connection_reset`. This proves the Railway egress environment can contact at least one provider, but does not establish the reset cause at the other provider.
+- Real media sample from the responsive source (initial bytes only): live HTTP 200, movie HTTP 206, episode HTTP 206. **Picture/audio playback and playback stability were not verified.** No source or customer media URLs were changed.
+- Real private MediaMTX transport check reached the HLS listener: base path returned HTTP 404; unconfigured test path returned redirect HTTP 302. Engine is network reachable but a working source HLS playlist was **not** established. CPU/network metrics also showed no active streamed traffic. Do not route customers to it on listener health alone.
+- Enabled Railway tracing and auto instrumentation on activation portal; left the other services untouched.
+- To avoid repeated upstream traffic, the one-shot source and media diagnostic environment switches were both set to `0` following tests. Temporary Railway functions were deleted. No static egress IP was provisioned.
+- New regression coverage for `xtream-boot-diagnostics.mjs`, and the one-shot media sampling path is environment gated. Six targeted tests passed for safe reads, bounded source selection and no secret logging.
+- At the observation time, 322 portal HTTP requests within an hour had zero HTTP 5xx. This **does not** describe upstream Xtream error rate.
+
+## Outstanding release gates
+1. Verify the failing provider supports server-to-server restreaming and request an allowlist for the official Railway egress IP. Railway Pro static outbound IP requires a Railway account-side networking action not exposed by the connected app actions. Do not change plans or enable paid services without the user's explicit account action.
+2. Repeat the upstream read-only probe on the second source after allowlisting. Stop on 401/403/456 (do not rotate proxies or circumvent provider access controls).
+3. Test continuous A/V in a real BLOFY PLAYER client for live, movie and episode, including seeking and long-running streaming.
+4. Test an actual licensed HLS feed through MediaMTX in an isolated environment; only enable gradual customer routing after stability, rights and rollback checks.
