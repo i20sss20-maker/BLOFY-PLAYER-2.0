@@ -564,7 +564,7 @@ async function probeXtreamSeries(id,mediaType){
       if(mediaType==='episode'){
         // Try different seasons/positions, not merely the first episode.
         // A 404 for one stale episode must not condemn the entire source.
-        for(const episode of xtreamEpisodePlaybackCandidates(payload,3)){
+        for(const episode of xtreamEpisodePlaybackCandidates(payload,3,{withPositions:true})){
           const playback=await probeXtreamEpisodeMedia(source,creds,episode);
           const position=' · '+(episode.seasonNumber===null?'موسم غير مرقم':'موسم '+episode.seasonNumber)+
             ' · حلقة '+episode.episodeNumber;
