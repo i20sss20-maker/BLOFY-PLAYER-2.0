@@ -15,6 +15,9 @@ function providerOrigin(server){
   catch{return null;}
   if(!['http:','https:'].includes(url.protocol)||url.username||url.password||
      url.search||url.hash||url.pathname!=='/')return null;
+  const hostname=url.hostname.toLowerCase();
+  if(hostname==='localhost'||hostname.endsWith('.localhost')||
+     hostname.endsWith('.local')||hostname.endsWith('.internal'))return null;
   const port=String(url.protocol==='https:'?server.https_port||server.port||'':
     server.port||'').trim();
   if(!url.port&&port){
