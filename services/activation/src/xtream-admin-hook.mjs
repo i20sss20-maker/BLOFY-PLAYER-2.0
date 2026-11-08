@@ -8,7 +8,8 @@ import {runXtreamBootDiagnostics} from './xtream-boot-diagnostics.mjs';
 import {observeRailwayEgress,probeXtreamSocket} from './xtream-egress-inspector.mjs';
 import {probeXtreamHttp11} from './xtream-http-compat-probe.mjs';
 import {compareXtreamFromIndependentRailway} from './xtream-independent-probe.mjs';
-import {shouldUseIndependentXtreamSource,fetchIndependentXtreamSource} from './xtream-independent-catalog-relay.mjs';
+import {shouldUseIndependentXtreamSource,fetchIndependentXtreamSource,
+  fetchIndependentXtreamManifest} from './xtream-independent-catalog-relay.mjs';
 import {issueStreamRelayGrant} from './xtream-stream-relay-bridge.mjs';
 import {shouldUseIndependentSourceMedia} from './xtream-independent-source-media-policy.mjs';
 import {probeOfficialXtreamPlaylistRoute} from './xtream-official-m3u-probe.mjs';
@@ -859,6 +860,11 @@ if(process.env.BLOFY_XTREAM_M3U_FULL_ID_COMPARE_ON_BOOT==='1'){
    const report=await reconcileXtreamM3uWithImportedCatalog({
     pool,sourceId:id,baseUrl:source.base_url,
     username:creds.username,password:creds.password
+   },{
+    // Source-specific protected egress; never used for a different Xtream
+    // source or any customer playback route.
+    independentImpl:shouldUseIndependentXtreamSource(id)?
+      manifest=>fetchIndependentXtreamManifest(manifest.href):null
    });
    console.info('BLOFY_XTREAM_M3U_FULL_ID_COMPARE',JSON.stringify({
     sourceId:id,...report,sourceMutation:false,customerCutover:false,
