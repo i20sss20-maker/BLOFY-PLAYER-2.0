@@ -23,6 +23,10 @@ export function summarizeSourceMediaProbe(mediaType,result,now=Date.now()){
     status:partial?'media-partial':ok?'media-confirmed':
       REJECTED.has(httpStatus)?'provider-rejected':'unconfirmed',
     httpStatus,
+    // The relay returned HTTP 502, but its allowlisted error proves the
+    // provider itself returned 404. Preserve both meanings for diagnostics.
+    ...(httpStatus===502&&chosen?.error==='relay_provider_not_found'
+      ?{upstreamStatus:404}:{}),
     ...(validXtreamDenialHint(chosen?.providerHint)?{providerHint:validXtreamDenialHint(chosen.providerHint)}:{}),
     sampled:checks.length,
     failed
@@ -46,6 +50,9 @@ export function sourceMediaSummary(probes={},now=Date.now()){
         text:'⚠ '+label+' · نجاح جزئي، '+failed+' عينات فاشلة'}];
     }
     if(value.ok)return[{kind,label,className:'on',text:'✓ '+label+' · عينة نجحت'}];
+    if(code===502&&value.upstreamStatus===404)
+      return[{kind,label,className:'hidden',
+        text:'✕ '+label+' · المزود أعاد 404 لعينة الفيديو؛ لا يعني توقف المصدر كاملًا'}];
     if(code===456)return[{kind,label,className:'off',text:'✕ '+label+' · رفض المصدر 456'+(hint?' · '+hint:'')}];
     if(code===401||code===403)return[{kind,label,className:'off',text:'✕ '+label+' · رفض المصدر '+code}];
     return[{kind,label,className:'hidden',text:'؟ '+label+' · فحص غير مؤكد'+(code>=400?' '+code:'')}];
