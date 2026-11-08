@@ -43,7 +43,7 @@ test('gateway mapping only refreshed as one bounded single-flight task',async()=
 test('protected Live and VOD diagnostics check real upstream media and report no credentials',async()=>{
   const server=await readFile(new URL('../src/xtream-admin-hook.mjs',import.meta.url),'utf8');
   const web=await readFile(new URL('../web/sources-admin.js',import.meta.url),'utf8');
-  assert.match(server,/async function probeXtreamPlayback\(id,mediaType='live'\)/);
+  assert.match(server,/async function probeXtreamPlayback\(id,mediaType='live',\{forcePortalDirect=false\}=\{\}\)/);
   assert.match(server,/action === 'probe-playback' && req\.method === 'POST'/);
   assert.match(server,/await assertPublicXtreamUrl\(target\.origin\)/);
   assert.match(server,/response\.body\?\.cancel\(\)/);
