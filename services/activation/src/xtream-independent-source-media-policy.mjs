@@ -10,7 +10,7 @@ export function shouldUseIndependentSourceMedia({sourceId,kind,extension},env=pr
    return false;
  const live=kind==='live'&&String(extension||'').toLowerCase()==='ts';
  const vod=['movie','series'].includes(kind)&&
-   /^[a-z0-9]{2,8}$/i.test(String(extension||''))&&
+   /^(mp4|mkv|avi|mov|webm|ts)$/i.test(String(extension||''))&&
    env.BLOFY_XTREAM_INDEPENDENT_VOD_PROXY_ENABLED==='1';
  if(!live&&!vod)return false;
  if(live&&env.BLOFY_XTREAM_INDEPENDENT_MEDIA_PROXY_ENABLED!=='1')return false;
