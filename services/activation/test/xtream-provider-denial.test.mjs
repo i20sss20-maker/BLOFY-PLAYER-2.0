@@ -73,7 +73,8 @@ test('backend probes and gateway never log or return upstream response bodies',a
   ]);
   assert.match(admin,/readXtreamProviderDenialHint\(response\)/);
   assert.match(admin,/providerHint,latencyMs:/);
-  assert.match(gateway,/providerHint=retryWithoutRange\?null:await readXtreamProviderDenialHint\(response\)/);
+  assert.match(gateway,/providerHint=retryWithoutRange\|\|usingIndependentRelay\?null:/);
+  assert.match(gateway,/await readXtreamProviderDenialHint\(response\)/);
   assert.match(gateway,/providerHint,attempts:attempt/);
   assert.match(gateway,/providerHint=await readXtreamProviderDenialHint\(response\)/);
   assert.match(js,/function xtreamProviderHintText/);
