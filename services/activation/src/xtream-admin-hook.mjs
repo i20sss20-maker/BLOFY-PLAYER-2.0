@@ -12,6 +12,7 @@ import {shouldUseIndependentXtreamSource,fetchIndependentXtreamSource} from './x
 import {issueStreamRelayGrant} from './xtream-stream-relay-bridge.mjs';
 import {shouldUseIndependentSourceMedia} from './xtream-independent-source-media-policy.mjs';
 import {probeOfficialXtreamPlaylistRoute} from './xtream-official-m3u-probe.mjs';
+import {readSanitizedXtreamRelayFailure} from './xtream-relay-diagnostic.mjs';
 import {probeXtreamM3uAvailability} from './xtream-m3u-availability.mjs';
 import { createFixedWindowLimiter, requestClientKey } from './auth-protection.mjs';
 import {
@@ -458,12 +459,16 @@ async function probeXtreamEpisodeMedia(source,creds,episode) {
   const path=['series',creds.username,creds.password,String(episode.id)]
     .map(encodeURIComponent).join('/')+'.'+episode.extension;
   let target=new URL(path,normalizeXtreamBaseUrl(source.base_url)+'/');
+  let usingIndependentRelay=false;
   // The original PLAYER egress is known to reset this provider's media.
   // Only selected source uses the verified independent STREAM proxy.
   if(shouldUseIndependentXtreamSource(source.id)){
-    try{target=new URL(await issueStreamRelayGrant({
-      sourceUrl:target.href,kind:'series'
-    }));}catch{}
+    try{
+      target=new URL(await issueStreamRelayGrant({
+        sourceUrl:target.href,kind:'series'
+      }));
+      usingIndependentRelay=true;
+    }catch{}
   }
   let httpStatus=null,contentType='',errorCode=null,reader=null,response=null,providerHint=null;
   let useFirstByteRange=true;
@@ -502,6 +507,8 @@ async function probeXtreamEpisodeMedia(source,creds,episode) {
           const inspection=inspectXtreamMediaChunk(first.value,contentType);
           if(!inspection.valid)errorCode=inspection.reason;
         }
+      }else if(usingIndependentRelay&&response.status===502){
+        errorCode=await readSanitizedXtreamRelayFailure(response);
       }else providerHint=await readXtreamProviderDenialHint(response);
       break;
     }
@@ -643,14 +650,18 @@ async function probeXtreamPlayback(id,mediaType='live') {
     const path=[mediaType==='movie'?'movie':'live',creds.username,creds.password,String(item.source_id)]
       .map(encodeURIComponent).join('/')+'.'+ext;
     let target=new URL(path,normalizeXtreamBaseUrl(source.base_url)+'/');
+    let usingIndependentRelay=false;
     // Admin playback checks must use the SAME egress that serves selected
     // client TS streams; otherwise the old portal falsely reports resets.
     if(shouldUseIndependentSourceMedia({
       sourceId:source.id,kind:mediaType,extension:ext
     })||(mediaType==='movie'&&shouldUseIndependentXtreamSource(source.id))){
-      try{target=new URL(await issueStreamRelayGrant({
-        sourceUrl:target.href,kind:mediaType
-      }));}catch{}
+      try{
+        target=new URL(await issueStreamRelayGrant({
+          sourceUrl:target.href,kind:mediaType
+        }));
+        usingIndependentRelay=true;
+      }catch{}
     }
     const started=Date.now(),controller=new AbortController();
     const timeout=setTimeout(()=>controller.abort(),livePolicy?
@@ -696,6 +707,10 @@ async function probeXtreamPlayback(id,mediaType='live') {
             try{await reader.cancel()}catch{}
             try{reader.releaseLock()}catch{}
           }
+        }else if(usingIndependentRelay&&response.status===502){
+          // Only inspect the fixed sanitized response from our own relay.
+          // Preserve HTTP 502 while identifying a confirmed provider 404.
+          errorCode=await readSanitizedXtreamRelayFailure(response);
         }else providerHint=await readXtreamProviderDenialHint(response);
         break;
       }
