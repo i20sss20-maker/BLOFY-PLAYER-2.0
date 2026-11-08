@@ -61,6 +61,7 @@ import {createStudioPro} from './xtream-studio-pro.mjs';
 import {normalizeXtreamEpg} from './xtream-epg.mjs';
 import {normalizeStudioName,normalizeStudioItemEdit,readStudioLogoRequest} from './xtream-studio-policy.mjs';
 import { nativeXtreamCsrfToken } from './xtream-native-csrf.mjs';
+import {streamBridgeAuthorized,streamSafeSource,streamSafeCatalog,streamSafeAccount} from './stream-unified-safe.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
@@ -2576,6 +2577,148 @@ async function handleControlAction(req,res,id,action) {
   return controlRedirect(res,'ok','syncing');
 }
 
+// A single authenticated control bridge: the independent STREAM dashboard can
+// manage the existing authoritative sources and accounts without redirecting
+// the browser, copying database encryption keys or storing provider passwords.
+const STREAM_BRIDGE_KEY=String(process.env.BLOFY_STREAM_UNIFIED_BRIDGE_KEY||'');
+const bridgeLimiter=createFixedWindowLimiter({limit:90,windowMs:60_000});
+const streamActions=new Map();
+async function callLocalGateway(method,path,body){
+  // The gateway owns account proofs; never reproduce its cryptography here.
+  if(!ADMIN_TOKEN)throw Object.assign(new Error('gateway_not_configured'),{status:503});
+  const port=Number(process.env.PORT||3000);
+  if(!Number.isSafeInteger(port)||port<1024||port>65535)
+    throw Object.assign(new Error('gateway_port_invalid'),{status:503});
+  const match=/^\/api\/v1\/admin\/xtream-gateway\/accounts(?:\/[0-9a-f-]{36})?$/.exec(path);
+  if(!match)throw Object.assign(new Error('gateway_route_denied'),{status:400});
+  const response=await fetch('http://127.0.0.1:'+port+path,{
+    method,redirect:'manual',signal:AbortSignal.timeout(9000),
+    headers:{authorization:'Bearer '+ADMIN_TOKEN,
+      'content-type':'application/json',accept:'application/json'},
+    ...(body!==undefined?{body:JSON.stringify(body)}:{})
+  });
+  if(Number(response.headers.get('content-length')||0)>16384)
+    throw Object.assign(new Error('gateway_response_too_large'),{status:503});
+  const raw=await response.text();
+  if(raw.length>16384)throw Object.assign(new Error('gateway_response_too_large'),{status:503});
+  const data=JSON.parse(raw);
+  if(!response.ok)return {status:response.status,data:{ok:false,code:String(data?.error||'gateway_failed').slice(0,64)}};
+  return {status:response.status,data};
+}
+async function unifiedStreamBridge(req,res,url){
+  if(!streamBridgeAuthorized(req.headers.authorization,STREAM_BRIDGE_KEY))
+    return json(res,401,{ok:false,code:'stream_bridge_unauthorized'});
+  const limit=bridgeLimiter.consume(requestClientKey(req));
+  if(!limit.allowed)return json(res,429,{ok:false,code:'stream_bridge_rate_limited'});
+  const p=url.pathname;
+  if(req.method==='GET'&&p==='/internal/blofy-stream/overview'){
+    const items=(await serverRows()).map(adminServer).map(streamSafeSource);
+    const totals=items.reduce((v,item)=>{
+      v.live+=item.counts.live;v.movie+=item.counts.movie;v.series+=item.counts.series;
+      if(item.enabled)v.enabled++;if(item.status==='online')v.online++;
+      return v;
+    },{servers:items.length,enabled:0,online:0,live:0,movie:0,series:0});
+    const [devices,gateway]=await Promise.all([
+      pool.query("SELECT COUNT(*)::int AS total,COUNT(*) FILTER (WHERE status IN ('trial','active') AND (expires_at IS NULL OR expires_at>NOW()))::int AS active FROM devices")
+        .then(r=>({total:r.rows[0].total,active:r.rows[0].active})).catch(()=>null),
+      pool.query("SELECT COUNT(*)::int AS total,COUNT(*) FILTER (WHERE enabled=TRUE AND (expires_at IS NULL OR expires_at>NOW()))::int AS active FROM blofy_xtream_gateway_accounts")
+        .then(r=>({total:r.rows[0].total,active:r.rows[0].active})).catch(()=>null)
+    ]);
+    return json(res,200,{ok:true,source:'blofy-activation-primary',
+      totals,sources:items,subscribers:{devices,gateway},updatedAt:Date.now()});
+  }
+  if(req.method==='GET'&&p==='/internal/blofy-stream/catalog'){
+    const type=url.searchParams.get('type');
+    if(!['live','movie','series'].includes(type))
+      return json(res,400,{ok:false,code:'invalid_media_type'});
+    const serverId=url.searchParams.get('serverId')||'';
+    if(serverId&&!validUuid(serverId))
+      return json(res,400,{ok:false,code:'invalid_server_id'});
+    const q=String(url.searchParams.get('q')||'').trim().slice(0,85);
+    const offset=Math.max(0,Math.min(1000000,Number(url.searchParams.get('offset'))||0));
+    const rows=await listCatalog({type,serverId:serverId||undefined,q,limit:40,offset},false);
+    return json(res,200,{ok:true,type,items:rows.map(streamSafeCatalog),
+      nextOffset:rows.length===40?offset+40:null});
+  }
+  if(req.method==='GET'&&p==='/internal/blofy-stream/accounts'){
+    const rows=(await pool.query(
+      'SELECT id,label,username,source_id,enabled,max_connections,expires_at,last_used_at FROM blofy_xtream_gateway_accounts ORDER BY created_at DESC LIMIT 200'
+    )).rows.map(streamSafeAccount);
+    return json(res,200,{ok:true,items:rows});
+  }
+  if(req.method==='POST'&&p==='/internal/blofy-stream/sources'){
+    const b=await readJson(req);
+    if(b.rightsConfirmed!==true)return json(res,400,{ok:false,code:'rights_confirmation_required'});
+    const name=cleanText(b.name,160),baseUrl=cleanText(b.baseUrl,600),
+      username=cleanText(b.username,512),password=cleanText(b.password,1024);
+    if(!name||!baseUrl||!username||!password)
+      return json(res,400,{ok:false,code:'source_fields_required'});
+    const item=await createServer({name,baseUrl,username,password,enabled:true,publishCatalog:false});
+    return json(res,201,{ok:true,item:streamSafeSource(item)});
+  }
+  if(req.method==='POST'&&p==='/internal/blofy-stream/accounts'){
+    const b=await readJson(req);
+    const account={
+      label:cleanText(b.label,120)||'BLOFY STREAM',
+      sourceId:b.sourceId||null,maxConnections:b.maxConnections||1,
+      expiresAt:b.expiresAt||null
+    };
+    const response=await callLocalGateway('POST','/api/v1/admin/xtream-gateway/accounts',account);
+    return json(res,response.status,{ok:response.status===201,...response.data});
+  }
+  const accountPath=p.match(/^\/internal\/blofy-stream\/accounts\/([0-9a-f-]{36})\/(enable|disable)$/i);
+  if(req.method==='POST'&&accountPath&&validUuid(accountPath[1])){
+    const response=await callLocalGateway('PATCH',
+      '/api/v1/admin/xtream-gateway/accounts/'+accountPath[1],
+      {enabled:accountPath[2]==='enable'});
+    return json(res,response.status,{ok:response.status===200,...response.data});
+  }
+  const match=p.match(/^\/internal\/blofy-stream\/sources\/([0-9a-f-]{36})\/(test|sync|probe|pause|resume|publish|unpublish|cancel-sync)$/i);
+  if(req.method==='POST'&&match){
+    const id=match[1],action=match[2];
+    if(!validUuid(id))return json(res,400,{ok:false,code:'invalid_server_id'});
+    const key=id+':'+action,now=Date.now();
+    if(now-(streamActions.get(key)||0)<8000)
+      return json(res,429,{ok:false,code:'source_action_cooldown'});
+    streamActions.set(key,now);
+    if(streamActions.size>300)streamActions.clear();
+    const source=await serverById(id);
+    if(!source)return json(res,404,{ok:false,code:'source_not_found'});
+    if(action==='test'){
+      const result=await testServer(id);
+      return json(res,200,{ok:true,item:streamSafeSource(result)});
+    }
+    if(action==='sync'){
+      if(!source.enabled)return json(res,409,{ok:false,code:'source_paused'});
+      const b=await readJson(req),types=Array.isArray(b.types)?b.types:['live','movie','series'];
+      const selected=types.map(validType).filter(Boolean);
+      if(!selected.length)return json(res,400,{ok:false,code:'invalid_types'});
+      const result=startSync(id,selected);
+      return json(res,202,{ok:true,started:true,queued:result.queued,
+        queuePosition:result.position??null,types:selected});
+    }
+    if(action==='cancel-sync')
+      return json(res,200,{ok:true,result:await cancelSourceSync(id)});
+    if(action==='probe'){
+      const b=await readJson(req);
+      const type=String(b.type||'live');
+      if(!['live','movie','series','episode'].includes(type))
+        return json(res,400,{ok:false,code:'invalid_probe_type'});
+      const result=await probeXtreamPlayback(id,type);
+      await persistSourceMediaProbe(id,type,result);
+      return json(res,200,{ok:true,mediaType:type,playable:result.ok===true,
+        reason:String(result.reason||'').slice(0,100),checks:(result.checks||[]).slice(0,6).map(x=>({
+          ok:x.ok===true,httpStatus:x.httpStatus??null,error:x.error||null
+        })),sampleOnly:true,fullPlaybackVerified:false});
+    }
+    const update=action==='pause'?{enabled:false}:action==='resume'?{enabled:true}:
+      action==='publish'?{publishCatalog:true}:{publishCatalog:false};
+    const result=await patchServer(id,update);
+    return json(res,200,{ok:true,item:streamSafeSource(result)});
+  }
+  return json(res,404,{ok:false,code:'stream_route_not_found'});
+}
+
 const previousCreateServer = http.createServer.bind(http);
 http.createServer = function withBlofyXtream(listener) {
   if (typeof listener !== 'function') return previousCreateServer(listener);
@@ -2585,6 +2728,16 @@ http.createServer = function withBlofyXtream(listener) {
     try { url = new URL(req.url || '/', 'http://localhost'); }
     catch { return listener(req, res); }
     try {
+      if(url.pathname.startsWith('/internal/blofy-stream/')) {
+        try{return await unifiedStreamBridge(req,res,url)}
+        catch(error){
+          const validStatus=[400,404,409,413,429,503].includes(Number(error?.status))?
+            Number(error.status):503;
+          // No raw URLs, tokens, source credentials or provider error messages.
+          return json(res,validStatus,{ok:false,code:validStatus===503?
+            'stream_authoritative_service_unavailable':'stream_operation_rejected'});
+        }
+      }
       if (req.method === 'GET' && url.pathname === '/xtream/studio-logo') return serveStudioLogo(res);
       if (req.method === 'GET' && url.pathname === '/sources/xtream/summary') return publicJson(res, await publicSummary());
       if (req.method === 'GET' && url.pathname === '/sources/xtream/catalog') {
