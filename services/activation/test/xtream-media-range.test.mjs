@@ -28,7 +28,7 @@ test('main gateway only drops initial 0-byte Range after a 404/416, keeps stable
   assert.match(media,/shouldRetryXtreamWithoutRange\(/);
   assert.match(media,/delete headers\.range/);
   assert.match(media,/const maxAttempts=req\.method==='HEAD'\?1:/);
-  assert.match(media,/\(initialRange\?3:2\)\+\(movieRefreshAllowed\?1:0\)/);
+  assert.match(media,/\(initialRange\?3:2\)\+\(movieRefreshAllowed\|\|episodeRefreshAllowed\?1:0\)/);
   assert.match(media,/\[408,500,502,503,504\]/);
   assert.match(media,/!transientRetried/);
   assert.match(media,/transientRetried=true/);
