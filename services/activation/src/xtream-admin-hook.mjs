@@ -799,6 +799,38 @@ async function runSmartConnection(id){
   }
 }
 
+// Read-only parity check from the original PLAYER egress for the SAME
+// alphabetically first movie IDs checked over isolated STREAM earlier.
+if(process.env.BLOFY_XTREAM_DIRECT_MEDIA_PROBE_ON_BOOT==='1'){
+ const timer=setTimeout(()=>{
+  void(async()=>{
+   const id=String(process.env.BLOFY_XTREAM_EGRESS_SOURCE_ID||'').trim();
+   if(!validUuid(id))return;
+   const result=await probeXtreamPlayback(id,'movie',{forcePortalDirect:true});
+   console.info('BLOFY_XTREAM_DIRECT_MEDIA_PROOF',JSON.stringify({
+    sourceId:id,ok:result.ok===true,
+    checks:(result.checks||[]).slice(0,4).map(row=>({
+      status:Number.isInteger(row.httpStatus)?row.httpStatus:null,
+      ok:row.ok===true,
+      error:['timeout','upstream_unreachable','empty_media',
+        'upstream_non_media_response','xtream_transport_connection_reset',
+        'xtream_host_unresolved','xtream_private_host_blocked',
+        'redirect_invalid'].includes(row.error)?row.error:row.error?'other':null,
+      rangeFallbackUsed:row.rangeFallbackUsed===true
+    })),
+    catalogMutation:false,customerCutover:false,
+    mediaPlayed:false,credentialsLogged:false
+   }));
+  })().catch(()=>{
+   console.warn('BLOFY_XTREAM_DIRECT_MEDIA_PROOF',JSON.stringify({
+    ok:false,code:'direct_probe_unavailable',
+    catalogMutation:false,credentialsLogged:false
+   }));
+  });
+ },25000);
+ timer.unref?.();
+}
+
 // One-shot official M3U API availability check, using existing encrypted
 // source credentials. No indexing, playback or source DB updates.
 if(process.env.BLOFY_XTREAM_M3U_ONE_SHOT==='1'){
@@ -856,38 +888,6 @@ if(process.env.BLOFY_XTREAM_MEDIA_CLIENT_PROFILES_ON_BOOT==='1'){
    console.warn('BLOFY_XTREAM_MEDIA_CLIENT_PROFILE_PROOF',JSON.stringify({
     ok:false,code:'profile_diagnostic_unavailable',
     catalogMutation:false,sourceCredentialsLogged:false
-   }));
-  });
- },25000);
- timer.unref?.();
-}
-
-// Read-only parity check from the original PLAYER egress for the SAME
-// alphabetically first movie IDs checked over isolated STREAM earlier.
-if(process.env.BLOFY_XTREAM_DIRECT_MEDIA_PROBE_ON_BOOT==='1'){
- const timer=setTimeout(()=>{
-  void(async()=>{
-   const id=String(process.env.BLOFY_XTREAM_EGRESS_SOURCE_ID||'').trim();
-   if(!validUuid(id))return;
-   const result=await probeXtreamPlayback(id,'movie',{forcePortalDirect:true});
-   console.info('BLOFY_XTREAM_DIRECT_MEDIA_PROOF',JSON.stringify({
-    sourceId:id,ok:result.ok===true,
-    checks:(result.checks||[]).slice(0,4).map(row=>({
-      status:Number.isInteger(row.httpStatus)?row.httpStatus:null,
-      ok:row.ok===true,
-      error:['timeout','upstream_unreachable','empty_media',
-        'upstream_non_media_response','xtream_transport_connection_reset',
-        'xtream_host_unresolved','xtream_private_host_blocked',
-        'redirect_invalid'].includes(row.error)?row.error:row.error?'other':null,
-      rangeFallbackUsed:row.rangeFallbackUsed===true
-    })),
-    catalogMutation:false,customerCutover:false,
-    mediaPlayed:false,credentialsLogged:false
-   }));
-  })().catch(()=>{
-   console.warn('BLOFY_XTREAM_DIRECT_MEDIA_PROOF',JSON.stringify({
-    ok:false,code:'direct_probe_unavailable',
-    catalogMutation:false,credentialsLogged:false
    }));
   });
  },25000);
