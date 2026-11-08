@@ -19,6 +19,7 @@ import {compareXtreamAdvertisedOrigin} from './xtream-advertised-origin-diagnost
 import {auditEntireXtreamStoredCatalog} from './xtream-full-catalog-integrity-audit.mjs';
 import {reconcileXtreamM3uWithImportedCatalog} from './xtream-m3u-catalog-reconciliation.mjs';
 import {inspectSameXtreamVodInfo} from './xtream-vod-info-direct-source-audit.mjs';
+import {summarizeSameMovieCandidates} from './xtream-cross-source-coverage-audit.mjs';
 import { createFixedWindowLimiter, requestClientKey } from './auth-protection.mjs';
 import {
   assertPublicXtreamUrl,
@@ -952,6 +953,63 @@ if(process.env.BLOFY_XTREAM_VOD_INFO_SAME_ID_ON_BOOT==='1'){
    JSON.stringify({ok:false,code:'probe_unavailable',
     mediaRequests:0,catalogMutation:false,credentialsLogged:false})));
  },24000);
+ timer.unref?.();
+}
+
+// Source-owner diagnostic: count candidate movie overlap between two
+// already configured, enabled/published sources. This only proves whether a
+// separately entitled alternative MAY exist. It never changes subscriptions,
+// selects a playback URL or logs names, movie IDs or credentials.
+if(process.env.BLOFY_XTREAM_CROSS_SOURCE_COVERAGE_ON_BOOT==='1'){
+ const timer=setTimeout(()=>{
+  void(async()=>{
+   const primaryId=String(process.env.BLOFY_XTREAM_COVERAGE_PRIMARY_ID||'').trim();
+   const alternateId=String(process.env.BLOFY_XTREAM_COVERAGE_ALTERNATE_ID||'').trim();
+   if(!validUuid(primaryId)||!validUuid(alternateId)||primaryId===alternateId)return;
+   const sources=(await pool.query(
+    'SELECT id,enabled,publish_catalog FROM blofy_xtream_servers WHERE id=ANY($1::uuid[])',
+    [[primaryId,alternateId]]
+   )).rows;
+   if(sources.length!==2||sources.some(x=>!x.enabled||!x.publish_catalog))return;
+   const originals=(await pool.query(
+    "SELECT name,metadata FROM blofy_xtream_items "+
+    "WHERE server_id=$1 AND media_type='movie' AND enabled=TRUE "+
+    "ORDER BY name ASC LIMIT 2",[primaryId]
+   )).rows;
+   const overlap=[];
+   for(const item of originals){
+    const tmdb=String(item?.metadata?.tmdb||'').trim();
+    const imdb=String(item?.metadata?.imdb||'').trim();
+    const alternate=(await pool.query(
+     "SELECT name,metadata FROM blofy_xtream_items "+
+     "WHERE server_id=$1 AND media_type='movie' AND enabled=TRUE "+
+     "AND ((lower(btrim(name))=lower(btrim($2::text))) "+
+     "OR ($3::text<>'' AND metadata->>'tmdb'=$3::text) "+
+     "OR ($4::text<>'' AND metadata->>'imdb'=$4::text)) "+
+     "LIMIT 20",[alternateId,item.name,tmdb,imdb]
+    )).rows;
+    overlap.push(summarizeSameMovieCandidates(item,alternate));
+   }
+   // A source-bound gateway account can only see its assigned source.
+   // An overlapping movie in the other source does NOT grant entitlement.
+   const accountStats=(await pool.query(
+    "SELECT COUNT(*)::int AS total, "+
+    "COUNT(*) FILTER (WHERE source_id IS NULL)::int AS unscoped "+
+    "FROM blofy_xtream_gateway_accounts "+
+    "WHERE enabled=TRUE AND (expires_at IS NULL OR expires_at>NOW())"
+   )).rows[0]||{};
+   console.info('BLOFY_XTREAM_CROSS_SOURCE_COVERAGE',JSON.stringify({
+    sampled:overlap.length,overlap,
+    eligibleUnscopedGatewayAccounts:Number(accountStats.unscoped)||0,
+    activeGatewayAccounts:Number(accountStats.total)||0,
+    mediaRequests:0,playbackVerified:false,
+    entitlementChanges:false,customerRerouting:false,
+    providerCredentialsLogged:false
+   }));
+  })().catch(()=>console.warn('BLOFY_XTREAM_CROSS_SOURCE_COVERAGE',
+   JSON.stringify({ok:false,code:'coverage_probe_unavailable',
+    entitlementChanges:false,customerRerouting:false,providerCredentialsLogged:false})));
+ },27000);
  timer.unref?.();
 }
 
