@@ -23,10 +23,11 @@ test('provider HTTP 456 keeps Xtream API up but marks tested video sample reject
 test('provider sample checks that succeed are marked media-confirmed without implying entire catalog works',()=>{
   const result=summarizeSourceMediaProbe('episode',{ok:true,
     checks:[{ok:false,httpStatus:404},{ok:false,httpStatus:404},{ok:true,httpStatus:206}]},now);
-  assert.equal(result.status,'media-confirmed');
+  assert.equal(result.status,'media-partial');
   assert.equal(result.sampled,3);
   assert.equal(result.failed,2);
-  assert.match(sourceMediaSummary({episode:result},now)[0].text,/عينة نجحت/);
+  assert.match(sourceMediaSummary({episode:result},now)[0].text,/نجاح جزئي، 2 عينات فاشلة/);
+  assert.equal(sourceMediaSummary({episode:result},now)[0].className,'hidden');
   assert.equal(sourceMediaSummary({episode:result},now+24*3600_000+1).length,0);
   assert.equal(sourceMediaSummary({episode:result},now-61_000).length,0);
 });
@@ -68,4 +69,26 @@ test('frontend identifies source API online without claiming video is operationa
   assert.match(js,/media-health-pill/);
   assert.match(js,/updateSourceAccountWarnings/);
   assert.match(css,/account-health-warning/);
+});
+
+test('clean single media sample keeps normal confirmed status and no secret data',()=>{
+ const pass=summarizeSourceMediaProbe('movie',{ok:true,checks:[
+  {ok:true,httpStatus:206,title:'private movie',password:'not-for-clients'}
+ ]},now);
+ assert.equal(pass.status,'media-confirmed');
+ assert.equal(pass.failed,0);
+ assert.equal(sourceMediaSummary({movie:pass},now)[0].className,'on');
+ assert.doesNotMatch(JSON.stringify(pass),/private movie|not-for-clients/);
+});
+test('provider failures cannot be masked by a success in the same source probe',()=>{
+ const mixed=summarizeSourceMediaProbe('live',{ok:true,checks:[
+   {ok:false,httpStatus:404,sourceUrl:'https://secret.example/u/p/99.ts'},
+   {ok:true,httpStatus:200}
+ ]},now);
+ assert.equal(mixed.status,'media-partial');
+ assert.equal(mixed.failed,1);
+ const chip=sourceMediaSummary({live:mixed},now)[0];
+ assert.equal(chip.className,'hidden');
+ assert.match(chip.text,/نجاح جزئي/);
+ assert.doesNotMatch(JSON.stringify(mixed),/secret\.example|\/u\/p\//);
 });
