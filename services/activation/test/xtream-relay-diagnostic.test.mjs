@@ -35,3 +35,12 @@ test('admin relay probe gate and diagnostics use only an issued grant',async()=>
  assert.match(s,/readSanitizedXtreamRelayFailure\(response\)/);
  assert.match(s,/shouldUseIndependentSourceMedia\(\{/);
 });
+
+test('episode probe also reports sanitized provider failures only after a relay grant',async()=>{
+ const c=await readFile(new URL('../src/xtream-admin-hook.mjs',import.meta.url),'utf8');
+ const a=c.indexOf('async function probeXtreamEpisodeMedia('),b=c.indexOf('async function probeXtreamSeries(',a);
+ const s=c.slice(a,b);
+ assert.match(s,/usingIndependentRelay=true/);
+ assert.match(s,/usingIndependentRelay&&response.status===502/);
+ assert.match(s,/readSanitizedXtreamRelayFailure\(response\)/);
+});
