@@ -54,7 +54,7 @@ test('mixed sample results are clearly labelled partial despite an overall passi
   assert.match(block,/xtream_transport_connection_reset:'انقطاع الاتصال'/);
   assert.match(block,/failedCheck/);
   assert.match(block,/partialReason/);
-  assert.match(block,/عينة فرعية فاشلة/);
+  assert.match(block,/عينات فرعية فاشلة/);
   assert.match(css,/\.xt-batch-probe-row \.status\.partial/);
 });
 
@@ -76,4 +76,17 @@ test('operator sees item-level sample failures without raw credentials or URLs',
    js.indexOf('async function addXtream(event)'));
  assert.equal((batch.match(/appendXtreamFailedSampleDetails\(row,result.checks\)/g)||[]).length,2);
  assert.match(css,/\.xt-batch-failed-details/);
+});
+
+test('batch summary never labels partial passing groups fully healthy',async()=>{
+ const js=await readFile(new URL('../web/sources-admin.js',import.meta.url),'utf8');
+ const a=js.indexOf('async function runXtreamBatchProbe()');
+ const b=js.indexOf('async function addXtream(event)',a);
+ const block=js.slice(a,b);
+ assert.ok(a>=0&&b>a);
+ assert.match(block,/سليم في العينة/);
+ assert.match(block,/session\.passed-session\.partial/);
+ assert.match(block,/نجاح جزئي/);
+ assert.match(block,/عينات فرعية فاشلة/);
+ assert.doesNotMatch(block,/'نجح '\+session\.passed\+' من '/);
 });

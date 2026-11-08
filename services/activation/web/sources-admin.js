@@ -815,7 +815,9 @@ async function runXtreamBatchProbe(){
           clearTimeout(timeout);session.controller=null;
           session.finished++;progress.value=session.finished;
           summary.textContent='المكتمل: '+session.finished+'/'+total+
-            ' · ناجح: '+session.passed+' (منها '+session.partial+' نجاح جزئي) · تعذر: '+session.failed;
+            ' · سليم في العينة: '+(session.passed-session.partial)+
+            ' · نجاح جزئي: '+session.partial+
+            ' · فشل: '+session.failed;
         }
       }
     }
@@ -823,9 +825,11 @@ async function runXtreamBatchProbe(){
     sourceBatchProbe=null;
     el('xtProbeAllBtn').disabled=false;
     summary.textContent=(session.cancelled?'أُلغي الفحص. ':'انتهى فحص العينات. ')+
-      'نجح '+session.passed+' من '+session.finished+' اختبار؛ '+
-      'فشل '+session.failed+'؛ نجاح جزئي '+session.partial+' اختبار مع '+session.failedSamples+
-      ' عينة فرعية فاشلة. النتائج تخص العينات ولا تثبت تشغيل جميع العناصر.';
+      'سليم في العينة '+(session.passed-session.partial)+' من '+session.finished+
+      ' · نجاح جزئي '+session.partial+
+      ' · فشل '+session.failed+
+      ' · عينات فرعية فاشلة '+session.failedSamples+
+      '. هذه النتائج تخص عينات محدودة ولا تثبت تشغيل جميع العناصر.';
     // Probes persist sanitized media status per source. Refresh cards now so
     // operators immediately see API ONLINE vs rejected media samples.
     try{await loadXtream(true)}catch(error){
