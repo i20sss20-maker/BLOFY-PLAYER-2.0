@@ -16,6 +16,7 @@ import {probeOfficialXtreamPlaylistRoute} from './xtream-official-m3u-probe.mjs'
 import {readSanitizedXtreamRelayFailure} from './xtream-relay-diagnostic.mjs';
 import {ensureUnavailableMediaTable,recoverySources,validUnavailableKey,
   registerProvider404,noteMediaRestored} from './xtream-unavailable-media-registry.mjs';
+import {operatorMediaRegistryOutcome} from './xtream-operator-media-recovery.mjs';
 import {probeXtreamM3uAvailability} from './xtream-m3u-availability.mjs';
 import {compareXtreamAdvertisedOrigin} from './xtream-advertised-origin-diagnostic.mjs';
 import {auditEntireXtreamStoredCatalog} from './xtream-full-catalog-integrity-audit.mjs';
@@ -474,12 +475,10 @@ async function recordOperatorVodAvailability(source,kind,itemId,seriesId,probe){
      !recoverySources().has(String(source.id||'').toLowerCase()))return;
   const key=validUnavailableKey({serverId:source.id,kind,itemId,seriesId});
   if(!key)return;
-  const missing=probe?.httpStatus===404||
-    (probe?.httpStatus===502&&probe?.error==='relay_provider_not_found');
+  const outcome=operatorMediaRegistryOutcome(probe);
   try{
-    if(missing)await registerProvider404(pool,key);
-    else if(probe?.ok===true&&[200,206].includes(probe?.httpStatus))
-      await noteMediaRestored(pool,key);
+    if(outcome==='missing')await registerProvider404(pool,key);
+    else if(outcome==='recovered')await noteMediaRestored(pool,key);
   }catch{
     // A registry problem cannot break admin playback diagnostics.
     // Never print a title, source ID, server URL or provider error body.
