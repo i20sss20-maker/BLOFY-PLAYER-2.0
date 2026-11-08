@@ -50,7 +50,8 @@ import {readSanitizedXtreamRelayFailure} from './xtream-relay-diagnostic.mjs';
 import {customerMediaFailureStatus} from './xtream-customer-media-failure.mjs';
 import {ensureUnavailableMediaTable,validUnavailableKey,recoverySources,
  recoveryEnabled,registerProvider404,noteMediaRestored,
- createRegistryWriteGuard,unavailableMediaSummary} from './xtream-unavailable-media-registry.mjs';
+ createRegistryWriteGuard,unavailableMediaSummary,
+ expediteUnavailableRecheck} from './xtream-unavailable-media-registry.mjs';
 import {runUnavailableRecheckBatch,classifyUnavailableProbe} from './xtream-unavailable-media-recheck.mjs';
 import {mayRefreshMovieExtension,correctedMovieExtension,
   mayRefreshEpisodeExtension,correctedEpisodeExtension} from './xtream-vod-extension-recovery.mjs';
@@ -844,7 +845,10 @@ async function probeUnavailableMediaOnSameSource(key){
  }
 }
 async function runDueUnavailableMedia(){
- if(unavailableRecoveryBusy||!recoveryEnabled())return;
+ const totals={checked:0,recovered:0,stillMissing:0,transient:0,
+  busy:false};
+ if(unavailableRecoveryBusy||!recoveryEnabled())
+  return {...totals,busy:unavailableRecoveryBusy};
  unavailableRecoveryBusy=true;
  try{
   // Each source has its own DB lease, which prevents duplicate probes across
@@ -853,6 +857,8 @@ async function runDueUnavailableMedia(){
    const result=await runUnavailableRecheckBatch({
     pool,sourceId:id,probe:probeUnavailableMediaOnSameSource,limit:3
    });
+   for(const field of ['checked','recovered','stillMissing','transient'])
+    totals[field]+=Number(result[field])||0;
    if(result.checked){
     console.info('BLOFY_UNAVAILABLE_MEDIA_RECHECK',JSON.stringify({
      sourceId:id,checked:result.checked,recovered:result.recovered,
@@ -862,7 +868,30 @@ async function runDueUnavailableMedia(){
     }));
    }
   }
+  return totals;
  }finally{unavailableRecoveryBusy=false;}
+}
+
+// Explicit operator one-shot: reconsider at most two *already recorded*
+// missing items on one source immediately. Separate from the periodic timer.
+// No media or subscriber writes except the registry status/backoff.
+if(process.env.BLOFY_XTREAM_UNAVAILABLE_EXPEDITE_ON_BOOT==='1'){
+ const timer=setTimeout(()=>{
+  void (async()=>{
+   await ensureReady();
+   const sourceId=String(process.env.BLOFY_XTREAM_UNAVAILABLE_EXPEDITE_SOURCE_ID||'').trim().toLowerCase();
+   if(!recoveryEnabled()||!validUuid(sourceId)||!recoverySources().has(sourceId))return;
+   const expedited=await expediteUnavailableRecheck(pool,sourceId,{limit:2});
+   const totals=await runDueUnavailableMedia();
+   console.info('BLOFY_UNAVAILABLE_EXPEDITE_PROOF',JSON.stringify({
+    sourceId,expedited,...totals,firstMediaBytesOnly:true,
+    catalogMutation:false,subscriberCutover:false,credentialsLogged:false
+   }));
+  })().catch(()=>console.warn('BLOFY_UNAVAILABLE_EXPEDITE_PROOF',
+   JSON.stringify({ok:false,code:'expedite_unavailable',
+    catalogMutation:false,subscriberCutover:false,credentialsLogged:false})));
+ },25000);
+ timer.unref?.();
 }
 
 // Optional first rollout: register only provider-confirmed 404 for the three
@@ -1491,6 +1520,21 @@ http.createServer = function withBlofyXtreamGateway(listener) {
         // Recheck only DB-leased records already due. No client playback.
         await runDueUnavailableMedia();
         return json(res,200,await unavailableMediaSummary(pool));
+      }
+      if(req.method==='POST'&&url.pathname==='/api/v1/admin/xtream-gateway/unavailable-media/recheck-now'){
+        if(!recoveryEnabled())
+          return json(res,409,{ok:false,error:'unavailable_recheck_disabled'});
+        const body=await readJson(req);
+        const sourceId=String(body.sourceId||'').trim().toLowerCase();
+        if(!validUuid(sourceId)||!recoverySources().has(sourceId))
+          return json(res,400,{ok:false,error:'unavailable_source_not_allowed'});
+        // Source-specific manual button cannot override other source grants.
+        // SQL excludes leased and recently rechecked items automatically.
+        const expedited=await expediteUnavailableRecheck(pool,sourceId,{limit:2});
+        const result=await runDueUnavailableMedia();
+        return json(res,200,{ok:true,expedited,...result,
+          scope:'verified_unavailable_media_only',subscriberCutover:false,
+          catalogMutation:false});
       }
       if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream-gateway') {
         const items = await listAccounts();
