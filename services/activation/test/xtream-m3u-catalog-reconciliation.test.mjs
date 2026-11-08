@@ -114,3 +114,27 @@ test('HTTP 403 is an actual denial, not a reason to retry another transport',asy
  assert.equal(result.playlistStatus,403);
  assert.equal(calls,0);
 });
+
+test('source-allowlisted independent manifest relay recovers full comparison after both portal connections fail',async()=>{
+ let isolatedCalls=0;
+ const r=await reconcileXtreamM3uWithImportedCatalog({...setup,pool},{
+  checkPublic:async()=>{},
+  fetchImpl:async()=>{throw Error('direct socket reset');},
+  http11Impl:async()=>{throw Error('http1 reset');},
+  independentImpl:async()=>{isolatedCalls++;return new Response(m3u,{status:200});}
+ });
+ assert.equal(r.ok,true);
+ assert.equal(r.transport,'isolated_stream');
+ assert.equal(r.matchedMovies,1);
+ assert.equal(r.movieExtensionsDisagreeing,1);
+ assert.equal(isolatedCalls,1);
+ assert.equal(r.mediaRequests,0);
+});
+test('independent M3U path is gated to explicit source selection before any request',async()=>{
+ const c=await readFile(new URL('../src/xtream-admin-hook.mjs',import.meta.url),'utf8');
+ const a=c.indexOf("if(process.env.BLOFY_XTREAM_M3U_FULL_ID_COMPARE_ON_BOOT==='1')");
+ const b=c.indexOf('// One-shot, read-only comparison with player_api.php server_info.',a);
+ const block=c.slice(a,b);
+ assert.match(block,/independentImpl:shouldUseIndependentXtreamSource\(id\)\?/);
+ assert.match(block,/fetchIndependentXtreamManifest\(manifest.href\)/);
+});
