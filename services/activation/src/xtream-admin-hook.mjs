@@ -14,6 +14,9 @@ import {issueStreamRelayGrant} from './xtream-stream-relay-bridge.mjs';
 import {shouldUseIndependentSourceMedia} from './xtream-independent-source-media-policy.mjs';
 import {probeOfficialXtreamPlaylistRoute} from './xtream-official-m3u-probe.mjs';
 import {readSanitizedXtreamRelayFailure} from './xtream-relay-diagnostic.mjs';
+import {ensureUnavailableMediaTable,recoverySources,validUnavailableKey,
+  registerProvider404,noteMediaRestored} from './xtream-unavailable-media-registry.mjs';
+import {operatorMediaRegistryOutcome} from './xtream-operator-media-recovery.mjs';
 import {probeXtreamM3uAvailability} from './xtream-m3u-availability.mjs';
 import {compareXtreamAdvertisedOrigin} from './xtream-advertised-origin-diagnostic.mjs';
 import {auditEntireXtreamStoredCatalog} from './xtream-full-catalog-integrity-audit.mjs';
@@ -284,6 +287,9 @@ async function ensureReady() {
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_servers_publish ON blofy_xtream_servers(enabled,publish_catalog,priority)');
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_categories_filter ON blofy_xtream_categories(server_id,media_type,enabled,name)');
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_items_filter ON blofy_xtream_items(server_id,media_type,category_id,enabled,name)');
+      // Independent admin probes run without customer gateway initialization.
+      // Ensure their verified 404 results can enter the SAME protected registry.
+      await ensureUnavailableMediaTable(client);
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK').catch(() => {});
@@ -461,6 +467,25 @@ async function checkedFetch(url, { timeoutMs = 30000,sourceId=null } = {}) {
 // Real series diagnostics: first confirm the selected source serves
 // get_series_info, then (for episode mode) read the first bytes of an actual
 // /series/<account>/<episode-id> media file. Never return source credentials.
+// Keep the operator playback proof and customer playback registry in sync.
+// Only source-allowlisted, exact-ID VOD results may change registry state.
+// The admin response continues to hide provider IDs, media URLs and secrets.
+async function recordOperatorVodAvailability(source,kind,itemId,seriesId,probe){
+  if(!source?.enabled||!source.publish_catalog||
+     !recoverySources().has(String(source.id||'').toLowerCase()))return;
+  const key=validUnavailableKey({serverId:source.id,kind,itemId,seriesId});
+  if(!key)return;
+  const outcome=operatorMediaRegistryOutcome(probe);
+  try{
+    if(outcome==='missing')await registerProvider404(pool,key);
+    else if(outcome==='recovered')await noteMediaRestored(pool,key);
+  }catch{
+    // A registry problem cannot break admin playback diagnostics.
+    // Never print a title, source ID, server URL or provider error body.
+    console.warn('BLOFY_OPERATOR_MEDIA_REGISTRY_UPDATE_FAILED');
+  }
+}
+
 async function probeXtreamEpisodeMedia(source,creds,episode) {
   const started=Date.now(),controller=new AbortController();
   const timeout=setTimeout(()=>controller.abort(),9500);
@@ -579,6 +604,8 @@ async function probeXtreamSeries(id,mediaType,{sampleOffset=0,probeAllCandidates
         // A 404 for one stale episode must not condemn the entire source.
         for(const episode of xtreamEpisodePlaybackCandidates(payload,probeAllCandidates?2:3,{withPositions:true})){
           const playback=await probeXtreamEpisodeMedia(source,creds,episode);
+          await recordOperatorVodAvailability(source,'series',String(episode.id),
+            String(series.source_id),playback);
           const position=' · '+(episode.seasonNumber===null?'موسم غير مرقم':'موسم '+episode.seasonNumber)+
             ' · حلقة '+episode.episodeNumber;
           checks.push({
@@ -757,6 +784,9 @@ async function probeXtreamPlayback(id,mediaType='live',{forcePortalDirect=false,
       directSourceAdvertised:item.advertised_direct_source==='true',
       rangeFallbackUsed:mediaType==='movie'&&!useFirstByteRange
     });
+    if(mediaType==='movie')
+      await recordOperatorVodAvailability(source,'movie',String(item.source_id),'',
+        {ok,httpStatus,error:errorCode});
     // Respect access denials. A 456 is never treated as permission to try
     // other endpoints, identities or formats after an upstream rejection.
     if(shouldStopXtreamFormatComparison(httpStatus))break outer;
