@@ -29,7 +29,7 @@ Mark PASS/FAIL with device model, Android API, network type, app version, time a
 5. Invalid device wall clock: QR remains visible; TLS errors have a support code, not a bypass; if TLS verification cannot succeed the user gets a recoverable error.
 6. No Wi-Fi, DNS failure, HTTPS handshake error, 429/503, and 20-second latency: no crash; backoff; retry when network returns. Codes have no secrets.
 7. Playlist sync fails after activation: the status describes playlist retry and existing playlists remain preserved.
-8. Kill/restart app, reboot TV, reinstall signed APK, switch language, press D-pad across all relevant controls.
+8. Kill/restart app, reboot TV, reinstall signed APK, switch language, press D-pad across all relevant controls. The optional updater cannot cancel and discard an in-progress download; exiting the page preserves its WorkManager job.
 9. Upgrade in place from 55.8.7: original certificate, package name, installed subscriptions and saved playlists must be preserved.
 10. Verify download resumes/fails cleanly, package signature matches the installed signing identity, and installer permission flow works on Android 9.
 

@@ -31,6 +31,7 @@ import kotlinx.coroutines.withContext
 import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
+import tv.blofy.player.core.identity.ActivationConnectionDiagnostics
 import tv.blofy.player.core.identity.ActivationCheckResponse
 import tv.blofy.player.core.identity.ActivationDisplayState
 import tv.blofy.player.core.identity.ActivationManager
