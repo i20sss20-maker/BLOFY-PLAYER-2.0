@@ -972,6 +972,48 @@ if(process.env.BLOFY_XTREAM_FULL_CATALOG_AUDIT_ON_BOOT==='1'){
  timer.unref?.();
 }
 
+// One-shot read-only dry run of the ACTUAL M3U importer, not a database
+// synchronization. Source 2's original 80+ MiB playlist must be parsed
+// safely through the approved STREAM relay when direct transport resets.
+// Never write catalog rows, clear existing items or expose source secrets.
+if(process.env.BLOFY_XTREAM_M3U_IMPORT_DRY_RUN_ON_BOOT==='1'){
+ const timer=setTimeout(()=>{
+  void(async()=>{
+   const id=String(process.env.BLOFY_XTREAM_EGRESS_SOURCE_ID||'').trim();
+   if(!validUuid(id)||!shouldUseIndependentXtreamSource(id))return;
+   await ensureReady();
+   const source=await serverById(id);
+   if(!source?.enabled)return;
+   const creds=decryptCredentials(source);
+   const catalog=await downloadXtreamM3uCatalog({
+    baseUrl:source.base_url,username:creds.username,password:creds.password
+   },{
+    independentImpl:manifest=>fetchIndependentXtreamManifest(manifest.href)
+   });
+   const live=catalog.records.live||[],movie=catalog.records.movie||[];
+   console.info('BLOFY_XTREAM_M3U_IMPORT_DRY_RUN',JSON.stringify({
+    sourceId:id,ok:true,readOnly:true,
+    rawLiveRecords:live.length,rawMovieRecords:movie.length,
+    uniqueLiveIds:new Set(live.map(x=>x.sourceId)).size,
+    uniqueMovieIds:new Set(movie.map(x=>x.sourceId)).size,
+    categoryCounts:{live:catalog.categories.live.length,
+      movie:catalog.categories.movie.length},
+    sourceMutation:false,customerCutover:false,credentialsLogged:false
+   }));
+  })().catch(error=>{
+   const code=String(error?.message||'');
+   const allowed=new Set(['xtream_m3u_timeout','xtream_m3u_unavailable',
+    'xtream_m3u_too_large','xtream_m3u_retained_too_large',
+    'xtream_m3u_invalid_header','xtream_m3u_line_too_large']);
+   console.warn('BLOFY_XTREAM_M3U_IMPORT_DRY_RUN',JSON.stringify({
+    ok:false,code:allowed.has(code)?code:'dry_run_unavailable',
+    sourceMutation:false,customerCutover:false,credentialsLogged:false
+   }));
+  });
+ },36000);
+ timer.unref?.();
+}
+
 // An operator may reconcile the entire stored movie/live ID set with one
 // official provider M3U download. Never probe every media URL or re-import.
 if(process.env.BLOFY_XTREAM_M3U_FULL_ID_COMPARE_ON_BOOT==='1'){
