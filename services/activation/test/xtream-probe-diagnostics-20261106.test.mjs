@@ -43,7 +43,7 @@ test('source diagnostics accurately explain nonstandard 456 without claiming pro
 
 test('live and movie source sampling is larger and the episode probe retries safe candidates',async()=>{
   const source=await read('src/xtream-admin-hook.mjs');
-  assert.match(source,/xtreamEpisodePlaybackCandidates\(payload,3,\{withPositions:true\}\)/);
+  assert.match(source,/xtreamEpisodePlaybackCandidates\(payload,probeAllCandidates\?2:3,\{withPositions:true\}\)/);
   assert.match(source,/ORDER BY name ASC LIMIT 4/);
   assert.match(source,/\[401,403,456\]\.includes\(playback\.httpStatus\)/);
   assert.match(source,/shouldRetryXtreamWithoutRange/);
