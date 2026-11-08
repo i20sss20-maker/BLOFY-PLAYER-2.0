@@ -4,7 +4,17 @@ const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]
 const EXT=/^(mp4|mkv|avi|mov|webm|ts)$/i;
 const IDS=/^[A-Za-z0-9._-]{1,128}$/;
 
+// Additive, source-scoped compatibility recovery for an actual upstream 404.
+// Existing source allowlists stay untouched. Metadata can only correct the
+// exact same movie or episode ID; no alternate IDs or credentials are tried.
+function missingMediaRecoverySource(sourceId,env){
+  const ids=String(env.BLOFY_XTREAM_MISSING_MEDIA_RECHECK_SOURCE_IDS||'')
+    .split(',').map(x=>x.trim().toLowerCase()).filter(x=>UUID.test(x));
+  return ids.includes(String(sourceId||'').toLowerCase());
+}
+
 export function mayRefreshMovieExtension(sourceId,env=process.env){
+  if(missingMediaRecoverySource(sourceId,env))return true;
   if(env.BLOFY_XTREAM_MOVIE_EXTENSION_REFRESH_ENABLED!=='1')return false;
   const ids=String(env.BLOFY_XTREAM_MOVIE_EXTENSION_REFRESH_SOURCE_IDS||'')
     .split(',').map(x=>x.trim().toLowerCase()).filter(x=>UUID.test(x));
@@ -24,6 +34,7 @@ export function correctedMovieExtension(payload,sourceId,oldExtension){
 }
 
 export function mayRefreshEpisodeExtension(sourceId,env=process.env){
+  if(missingMediaRecoverySource(sourceId,env))return true;
   if(env.BLOFY_XTREAM_EPISODE_EXTENSION_REFRESH_ENABLED!=='1')return false;
   const ids=String(env.BLOFY_XTREAM_EPISODE_EXTENSION_REFRESH_SOURCE_IDS||'')
     .split(',').map(x=>x.trim().toLowerCase()).filter(x=>UUID.test(x));
