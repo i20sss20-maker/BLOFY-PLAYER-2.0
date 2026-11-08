@@ -627,6 +627,39 @@ async function loadCatalogAudit(){
   }finally{button.disabled=false;button.textContent='فحص عينة المكتبة';}
 }
 
+// Display only the admin API's already-sanitized item titles and fixed error
+// categories. Never display raw source URLs, account identifiers or messages.
+function appendXtreamFailedSampleDetails(row,checks){
+  const failed=(Array.isArray(checks)?checks:[]).filter(x=>x&&!x.ok).slice(0,4);
+  if(!failed.length)return;
+  const known={
+    relay_provider_not_found:'ملف الوسائط غير موجود (404)',
+    relay_first_byte_timeout:'لم تصل بيانات الفيديو',
+    relay_transport_connection_reset:'انقطع اتصال الفيديو',
+    relay_transport_timeout:'انتهت مهلة الفيديو',
+    xtream_transport_connection_reset:'انقطع الاتصال',
+    timeout:'انتهت المهلة',
+    empty_media:'لا توجد بيانات فيديو',
+    upstream_non_media_response:'استجابة ليست فيديو',
+    relay_not_playable_media:'الاستجابة ليست فيديو صالحًا'
+  };
+  const details=make('details','xt-batch-failed-details');
+  details.append(make('summary','', 'عرض العينات الفاشلة ('+failed.length+')'));
+  const list=make('div','xt-batch-failed-items');
+  for(const [index,item] of failed.entries()){
+    const http=Number(item.httpStatus);
+    const code=String(item.error||'');
+    const status=[401,403,404,416,429,456,500,502,503,504].includes(http)?
+      'HTTP '+http:'';
+    // Titles are ordinary text nodes, never HTML; do not show IDs or URLs.
+    const title=String(item.title||'عينة '+(index+1)).slice(0,100);
+    const reason=known[code]||([401,403,404,416,429,456].includes(http)?
+      'المصدر أعاد '+status:'تعذر تشغيل العينة');
+    list.append(make('p','',title+' · '+[status,reason].filter(Boolean).join(' · ')));
+  }
+  details.append(list);row.append(details);
+}
+
 // Operator-initiated batch probes: one authorized source sample at a time.
 // Keep requests bounded and cancelable; never start continuous provider scans.
 let sourceBatchProbe=null;
@@ -705,6 +738,7 @@ async function runXtreamBatchProbe(){
               (sample?.httpStatus?' · HTTP '+sample.httpStatus:'')+
               (failedSamples?' · '+failedSamples+' عينة فاشلة ('+partialReason+')':'')+
               (formats.length?' · '+formats.join(' / '):'');
+            appendXtreamFailedSampleDetails(row,result.checks);
           }else{
             session.failed++;
             status.className='status failed';
@@ -742,6 +776,7 @@ async function runXtreamBatchProbe(){
               (statuses[http]||known[reason]||'المصدر لم يؤكد تشغيل العينة')+
               (xtreamProviderHintText(sample?.providerHint)?' · '+xtreamProviderHintText(sample?.providerHint):'')+
               (kind==='live'&&['ts','m3u8'].includes(sample?.outputFormat)?' · '+sample.outputFormat.toUpperCase():'');
+            appendXtreamFailedSampleDetails(row,result.checks);
             // Denied media is not automatically switched to an unverified
             // source. Offer the operator an explicit reversible unpublish.
             if([403,456].includes(http)&&source.publishCatalog){
