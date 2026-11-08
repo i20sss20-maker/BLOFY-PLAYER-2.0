@@ -9,7 +9,7 @@ import {observeRailwayEgress,probeXtreamSocket} from './xtream-egress-inspector.
 import {probeXtreamHttp11} from './xtream-http-compat-probe.mjs';
 import {compareXtreamFromIndependentRailway} from './xtream-independent-probe.mjs';
 import {shouldUseIndependentXtreamSource,fetchIndependentXtreamSource,
-  fetchIndependentXtreamManifest} from './xtream-independent-catalog-relay.mjs';
+  fetchIndependentXtreamManifest,probeIndependentXtreamClientProfiles} from './xtream-independent-catalog-relay.mjs';
 import {issueStreamRelayGrant} from './xtream-stream-relay-bridge.mjs';
 import {shouldUseIndependentSourceMedia} from './xtream-independent-source-media-policy.mjs';
 import {probeOfficialXtreamPlaylistRoute} from './xtream-official-m3u-probe.mjs';
@@ -819,6 +819,47 @@ if(process.env.BLOFY_XTREAM_M3U_ONE_SHOT==='1'){
     })().catch(()=>console.warn('BLOFY_XTREAM_M3U_AVAILABILITY_FAILED','unavailable'));
   },16000);
   timer.unref?.();
+}
+
+// Operator-only media-client compatibility check. Revisit the SAME first
+// three sorted movie IDs that produce mixed 206/404 in the admin probe.
+// No catalog edits, no alternative stream IDs, no customer routing changes.
+if(process.env.BLOFY_XTREAM_MEDIA_CLIENT_PROFILES_ON_BOOT==='1'){
+ const timer=setTimeout(()=>{
+  void(async()=>{
+   const id=String(process.env.BLOFY_XTREAM_EGRESS_SOURCE_ID||'').trim();
+   if(!validUuid(id)||!shouldUseIndependentXtreamSource(id))return;
+   await ensureReady();
+   const source=await serverById(id);
+   if(!source?.enabled)return;
+   const items=(await pool.query(
+    "SELECT source_id,container_extension FROM blofy_xtream_items "+
+    "WHERE server_id=$1 AND media_type='movie' AND enabled=TRUE "+
+    "ORDER BY name ASC LIMIT 3",[id])).rows;
+   const creds=decryptCredentials(source),samples=[];
+   for(const item of items){
+    const ext=String(item.container_extension||'').toLowerCase().replace(/^\./,'');
+    if(!/^[A-Za-z0-9_-]{1,128}$/.test(String(item.source_id||''))||
+       !/^(mp4|mkv|avi|mov|webm|ts)$/.test(ext))continue;
+    const path=['movie',creds.username,creds.password,String(item.source_id)]
+      .map(encodeURIComponent).join('/')+'.'+ext;
+    const target=new URL(path,normalizeXtreamBaseUrl(source.base_url)+'/');
+    samples.push({kind:'movie',sourceUrl:target.href});
+   }
+   if(!samples.length)return;
+   const result=await probeIndependentXtreamClientProfiles(samples);
+   console.info('BLOFY_XTREAM_MEDIA_CLIENT_PROFILE_PROOF',JSON.stringify({
+    sourceId:id,...result,customerCutover:false,
+    catalogMutation:false,sourceCredentialsLogged:false
+   }));
+  })().catch(()=>{
+   console.warn('BLOFY_XTREAM_MEDIA_CLIENT_PROFILE_PROOF',JSON.stringify({
+    ok:false,code:'profile_diagnostic_unavailable',
+    catalogMutation:false,sourceCredentialsLogged:false
+   }));
+  });
+ },25000);
+ timer.unref?.();
 }
 
 // Full local audit scans every imported item and stored episode mapping,
