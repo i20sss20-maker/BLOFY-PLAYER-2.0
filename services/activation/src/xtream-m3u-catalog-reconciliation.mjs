@@ -8,7 +8,7 @@ const EXT=/^[a-z0-9]{2,8}$/i;
 export async function reconcileXtreamM3uWithImportedCatalog({
   pool,sourceId,baseUrl,username,password
 },{fetchImpl=fetch,http11Impl=getXtreamManifestHttp11,
-  checkPublic=assertPublicXtreamUrl,
+  independentImpl=null,checkPublic=assertPublicXtreamUrl,
   maxBytes=64*1024*1024,timeoutMs=90000}={}){
  let stage='base_url';
  try{
@@ -36,9 +36,16 @@ export async function reconcileXtreamM3uWithImportedCatalog({
   });
  }catch{
   stage='playlist_http11_request';
-  // Only an exception, never a real HTTP status, permits HTTP/1.1 retry.
-  response=await http11Impl(url,{signal:AbortSignal.timeout(timeoutMs)});
-  transport='http11';
+  // Only a transport exception permits trying a different connection path.
+  try{
+   response=await http11Impl(url,{signal:AbortSignal.timeout(timeoutMs)});
+   transport='http11';
+  }catch{
+   if(typeof independentImpl!=='function')throw Error('manifest_independent_disabled');
+   stage='playlist_independent_request';
+   response=await independentImpl(url,{timeoutMs});
+   transport='isolated_stream';
+  }
  }
  if(response.status!==200||!response.body){
    await response.body?.cancel().catch(()=>{});
