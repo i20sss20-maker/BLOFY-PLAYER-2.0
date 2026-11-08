@@ -289,6 +289,12 @@
 .xt-batch-probe-row .status.passed{color:#91ddb2}
 .xt-batch-probe-row .status.partial{color:#ffcc80}
 .xt-batch-probe-row .status.failed{color:#ffa7b2}
+.xt-batch-probe-row{flex-wrap:wrap}
+.xt-batch-failed-details{flex:1 1 100%;min-width:0;border-top:1px solid #423554;padding-top:5px}
+.xt-batch-failed-details summary{cursor:pointer;color:#f5bf8e;font-size:11px}
+.xt-batch-failed-items{display:grid;gap:4px;margin-top:7px}
+.xt-batch-failed-items p{margin:0;color:#ddc8b5;font-size:11px;overflow-wrap:anywhere}
+
 @media(max-width:780px){.xt-batch-probe-results{grid-template-columns:1fr}.xt-batch-probe-row{align-items:start;flex-direction:column}}
 
 /* One-item metadata enrichment: explicit and safe by default. */
