@@ -1508,6 +1508,12 @@ async function syncServer(id, requestedTypes = ['live','movie','series']) {
     const getM3u=()=>{
       if(!playlistPromise)playlistPromise=downloadXtreamM3uCatalog({
         baseUrl:row.base_url,username:creds.username,password:creds.password
+      },{
+        // The approved source-pinned STREAM relay can read large official
+        // M3U responses that reset the portal's direct connection. Keep the
+        // same get.php URL; never fall back on provider HTTP denials.
+        independentImpl:shouldUseIndependentXtreamSource(id)?
+          manifest=>fetchIndependentXtreamManifest(manifest.href):null
       });
       return playlistPromise;
     };
