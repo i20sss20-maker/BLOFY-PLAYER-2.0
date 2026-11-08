@@ -2664,6 +2664,9 @@ async function unifiedStreamBridge(req,res,url){
       expiresAt:b.expiresAt||null
     };
     const response=await callLocalGateway('POST','/api/v1/admin/xtream-gateway/accounts',account);
+    // Loopback origin is never a valid end-user Xtream address.
+    if(response.status===201&&response.data?.credentials)
+      response.data.credentials.serverUrl='https://blofyplayer.com';
     return json(res,response.status,{ok:response.status===201,...response.data});
   }
   const accountPath=p.match(/^\/internal\/blofy-stream\/accounts\/([0-9a-f-]{36})\/(enable|disable)$/i);
