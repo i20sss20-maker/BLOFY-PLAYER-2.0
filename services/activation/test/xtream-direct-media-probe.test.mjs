@@ -11,7 +11,7 @@ test('direct source probe uses the SAME imported movie IDs as isolated probe',as
  assert.match(s,/!forcePortalDirect&&\(shouldUseIndependentSourceMedia/);
  assert.match(s,/shouldRetryXtreamWithoutRange/);
  const a=js.indexOf("if(process.env.BLOFY_XTREAM_DIRECT_MEDIA_PROBE_ON_BOOT==='1')");
- const b=js.indexOf('// Full local audit scans every imported item',a);
+ const b=js.indexOf('// One-shot official M3U API availability check',a);
  const hook=js.slice(a,b);
  assert.ok(a>=0&&b>a);
  assert.match(hook,/BLOFY_XTREAM_EGRESS_SOURCE_ID/);
@@ -22,7 +22,7 @@ test('direct source probe uses the SAME imported movie IDs as isolated probe',as
 test('operator result is status-only: no source names or media URLs',async()=>{
  const js=await readFile(new URL('../src/xtream-admin-hook.mjs',import.meta.url),'utf8');
  const a=js.indexOf("if(process.env.BLOFY_XTREAM_DIRECT_MEDIA_PROBE_ON_BOOT==='1')");
- const b=js.indexOf('// Full local audit scans every imported item',a);
+ const b=js.indexOf('// One-shot official M3U API availability check',a);
  const hook=js.slice(a,b);
  assert.doesNotMatch(hook,/title:row.title|row.name|row.source_id|sourceUrl/);
  assert.match(hook,/httpStatus/);
