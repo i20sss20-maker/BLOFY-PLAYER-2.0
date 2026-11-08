@@ -459,12 +459,16 @@ async function probeXtreamEpisodeMedia(source,creds,episode) {
   const path=['series',creds.username,creds.password,String(episode.id)]
     .map(encodeURIComponent).join('/')+'.'+episode.extension;
   let target=new URL(path,normalizeXtreamBaseUrl(source.base_url)+'/');
+  let usingIndependentRelay=false;
   // The original PLAYER egress is known to reset this provider's media.
   // Only selected source uses the verified independent STREAM proxy.
   if(shouldUseIndependentXtreamSource(source.id)){
-    try{target=new URL(await issueStreamRelayGrant({
-      sourceUrl:target.href,kind:'series'
-    }));}catch{}
+    try{
+      target=new URL(await issueStreamRelayGrant({
+        sourceUrl:target.href,kind:'series'
+      }));
+      usingIndependentRelay=true;
+    }catch{}
   }
   let httpStatus=null,contentType='',errorCode=null,reader=null,response=null,providerHint=null;
   let useFirstByteRange=true;
@@ -503,6 +507,8 @@ async function probeXtreamEpisodeMedia(source,creds,episode) {
           const inspection=inspectXtreamMediaChunk(first.value,contentType);
           if(!inspection.valid)errorCode=inspection.reason;
         }
+      }else if(usingIndependentRelay&&response.status===502){
+        errorCode=await readSanitizedXtreamRelayFailure(response);
       }else providerHint=await readXtreamProviderDenialHint(response);
       break;
     }
