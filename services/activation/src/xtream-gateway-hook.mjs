@@ -45,7 +45,7 @@ import { createGatewayUsageThrottle } from './xtream-gateway-usage-throttle.mjs'
 import { readXtreamGatewayJsonResponse } from './xtream-gateway-response.mjs';
 import { createXtreamHealthSnapshot } from './xtream-health-snapshot.mjs';
 import {relayEligible,issueStreamRelayGrant} from './xtream-stream-relay-bridge.mjs';
-import {shouldUseIndependentSourceMedia} from './xtream-independent-source-media-policy.mjs';
+import {shouldUseIndependentSourceMedia,shouldFallbackIndependentVod} from './xtream-independent-source-media-policy.mjs';
 import {readSanitizedXtreamRelayFailure} from './xtream-relay-diagnostic.mjs';
 import {mayRefreshMovieExtension,correctedMovieExtension,
   mayRefreshEpisodeExtension,correctedEpisodeExtension} from './xtream-vod-extension-recovery.mjs';
@@ -847,9 +847,14 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
     mayRefreshMovieExtension(row.server_id);
   const episodeRefreshAllowed=kind==='series'&&req.method==='GET'&&
     mayRefreshEpisodeExtension(row.server_id);
+  const fallbackAllowed=req.method==='GET'&&shouldFallbackIndependentVod({
+    sourceId:row.server_id,kind,extension:mediaExtension
+  });
   const maxAttempts=req.method==='HEAD'?1:
-    (initialRange?3:2)+(movieRefreshAllowed||episodeRefreshAllowed?1:0);
-  let noRangeRetried=false, transientRetried=false,extensionRefreshTried=false;
+    (initialRange?3:2)+(movieRefreshAllowed||episodeRefreshAllowed?1:0)+
+    (fallbackAllowed?1:0);
+  let noRangeRetried=false, transientRetried=false,extensionRefreshTried=false,
+    fallbackTried=false;
   try {
     for (let attempt=1;attempt<=maxAttempts;attempt++) {
       if (client.signal.aborted) return;
@@ -968,6 +973,30 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
         const safeReason = ['headers_timeout','media_read_timeout','upstream_empty_media','upstream_non_media_response'].includes(reason)
           ? reason : (networkReason||'upstream_unreachable');
         console.warn('xtream media relay error', {kind,itemId:gatewayId,reason:safeReason,attempt});
+        // Switch egress ONLY if the original connection failed before
+        // headers/media; never on a provider 403/404/456 or after bytes begin.
+        // Existing working playback remains on its original direct route.
+        const transportFailure=['upstream_unreachable','headers_timeout',
+          'xtream_transport_connection_reset','connection_reset','timeout']
+          .includes(safeReason);
+        if(fallbackAllowed&&!fallbackTried&&!usingIndependentRelay&&
+          !res.headersSent&&transportFailure&&attempt<maxAttempts){
+          fallbackTried=true;
+          try{
+            mediaFetchTarget=new URL(await issueStreamRelayGrant({
+              sourceUrl:upstream.href,kind
+            }));
+            usingIndependentRelay=true;
+            console.info('BLOFY_VOD_EGRESS_FALLBACK',{
+              kind,sourceId:row.server_id,state:'transport_recovered_via_relay'
+            });
+            continue;
+          }catch{
+            console.warn('BLOFY_VOD_EGRESS_FALLBACK',{
+              kind,sourceId:row.server_id,state:'relay_ticket_unavailable'
+            });
+          }
+        }
         if (!res.headersSent && !transientRetried && attempt < maxAttempts && safeReason!=='upstream_non_media_response') {
           transientRetried=true;
           await new Promise(resolve=>setTimeout(resolve,200*attempt));

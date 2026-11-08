@@ -22,3 +22,17 @@ export function shouldUseIndependentSourceMedia({sourceId,kind,extension},env=pr
  );
  return allowlist.has(String(sourceId||'').toLowerCase());
 }
+
+// Last-resort egress recovery for movie/episode transport failures only.
+// Unlike the primary VOD relay switch, this cannot alter an already working
+// response, and is never used for a provider HTTP denial or missing file.
+export function shouldFallbackIndependentVod({sourceId,kind,extension},env=process.env){
+ if(!['movie','series'].includes(kind)||
+    !/^(mp4|mkv|avi|mov|webm|ts)$/i.test(String(extension||'')))return false;
+ if(env.BLOFY_XTREAM_VOD_EGRESS_FALLBACK_ENABLED!=='1')return false;
+ return shouldUseIndependentSourceMedia({sourceId,kind,extension},{
+   ...env,BLOFY_XTREAM_INDEPENDENT_VOD_PROXY_ENABLED:'1',
+   BLOFY_XTREAM_INDEPENDENT_VOD_PROXY_SOURCE_IDS:
+     env.BLOFY_XTREAM_VOD_EGRESS_FALLBACK_SOURCE_IDS||''
+ });
+}
