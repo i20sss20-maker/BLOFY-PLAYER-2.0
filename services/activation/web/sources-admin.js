@@ -683,7 +683,14 @@ async function runXtreamBatchProbe(){
               timeout:'انتهاء المهلة',
               upstream_unreachable:'تعذر الوصول',
               empty_media:'فيديو فارغ',
-              upstream_non_media_response:'استجابة غير قابلة للتشغيل'
+              upstream_non_media_response:'استجابة غير قابلة للتشغيل',
+              relay_provider_not_found:'الملف غير موجود لدى مزود المصدر (404)',
+              relay_first_byte_timeout:'المصدر لم يرسل بيانات الفيديو',
+              relay_transport_connection_reset:'المصدر قطع اتصال البث',
+              relay_transport_timeout:'انتهت مهلة اتصال البث',
+              relay_not_playable_media:'المصدر لم يرسل فيديو صالحًا',
+              relay_redirect_denied:'تحويل رابط المصدر غير مسموح',
+              relay_provider_unavailable:'تعذر جلب الوسائط من المصدر'
             };
             const partialStatus=Number(failedCheck?.httpStatus);
             const partialReason=failedSamples?(
@@ -715,7 +722,14 @@ async function runXtreamBatchProbe(){
               xtream_transport_connection_reset:'المصدر قطع الاتصال؛ راجع المزود',
               xtream_transport_timeout:'انتهت مهلة الاتصال بالمصدر',
               xtream_transport_tls_invalid:'شهادة HTTPS تحتاج إصلاحًا',
-              xtream_transport_unreachable:'تعذر الاتصال من Railway بالمصدر'
+              xtream_transport_unreachable:'تعذر الاتصال من Railway بالمصدر',
+              relay_provider_not_found:'ملف الوسائط غير موجود لدى المزود (404)',
+              relay_first_byte_timeout:'لم تصل أول بيانات الفيديو خلال المهلة',
+              relay_transport_connection_reset:'المصدر قطع اتصال البث',
+              relay_transport_timeout:'انتهت مهلة اتصال البث',
+              relay_not_playable_media:'استجابة المصدر ليست فيديو صالحًا',
+              relay_redirect_denied:'تحويل غير مصرح لرابط الوسائط',
+              relay_provider_unavailable:'تعذر جلب الوسائط من المصدر'
             };
             const statuses={
               401:'المصدر رفض بيانات الدخول',
