@@ -458,6 +458,13 @@ async function probeXtreamEpisodeMedia(source,creds,episode) {
   const path=['series',creds.username,creds.password,String(episode.id)]
     .map(encodeURIComponent).join('/')+'.'+episode.extension;
   let target=new URL(path,normalizeXtreamBaseUrl(source.base_url)+'/');
+  // The original PLAYER egress is known to reset this provider's media.
+  // Only selected source uses the verified independent STREAM proxy.
+  if(shouldUseIndependentXtreamSource(source.id)){
+    try{target=new URL(await issueStreamRelayGrant({
+      sourceUrl:target.href,kind:'series'
+    }));}catch{}
+  }
   let httpStatus=null,contentType='',errorCode=null,reader=null,response=null,providerHint=null;
   let useFirstByteRange=true;
   try{
@@ -531,7 +538,7 @@ async function probeXtreamSeries(id,mediaType){
       const response=await checkedFetch(xtreamApiUrl(
         source.base_url,creds.username,creds.password,'get_series_info',
         {series_id:String(series.source_id)}
-      ),{timeoutMs:9500});
+      ),{timeoutMs:9500,sourceId:source.id});
       httpStatus=response.status;
       const chunks=[];
       let bytes=0;
@@ -640,7 +647,7 @@ async function probeXtreamPlayback(id,mediaType='live') {
     // client TS streams; otherwise the old portal falsely reports resets.
     if(shouldUseIndependentSourceMedia({
       sourceId:source.id,kind:mediaType,extension:ext
-    })){
+    })||(mediaType==='movie'&&shouldUseIndependentXtreamSource(source.id))){
       try{target=new URL(await issueStreamRelayGrant({
         sourceUrl:target.href,kind:mediaType
       }));}catch{}
