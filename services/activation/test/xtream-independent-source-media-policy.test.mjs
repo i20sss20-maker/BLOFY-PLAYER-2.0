@@ -124,3 +124,21 @@ test('customer gateway fallback is after account and catalog checks and transpor
  assert.match(s,/upstream_unreachable/);
  assert.doesNotMatch(s,/if\(response.status===404\)\s*\{\s*mediaFetchTarget/);
 });
+
+test('source fallback handles upstream 502/503 response only, not missing or denied provider media',async()=>{
+ const code=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
+ const a=code.indexOf('async function proxyMedia(');
+ const b=code.indexOf('async function probeGatewayMedia(',a);
+ const block=code.slice(a,b);
+ assert.ok(a>0&&b>a);
+ assert.match(block,/const httpEgressFailure=fallbackAllowed&&!fallbackTried&&/);
+ assert.match(block,/!usingIndependentRelay&&!res.headersSent&&!providerHint&&/);
+ assert.match(block,/\(response.status===502\|\|response.status===503\)/);
+ assert.match(block,/mediaFetchTarget=new URL\(await issueStreamRelayGrant/);
+ assert.match(block,/state:'retry_via_relay',cause:'upstream_http'/);
+ assert.match(block,/state:'retry_via_relay',cause:'transport'/);
+ assert.match(block,/if\(fallbackTried&&usingIndependentRelay\)/);
+ assert.match(block,/state:'media_first_bytes_received'/);
+ // Provider 404/403/456 must not trigger fallback; single-purpose status guard.
+ assert.doesNotMatch(block,/response.status===404\|\|response.status===403/);
+});
