@@ -65,3 +65,14 @@ test('operator gateway sample uses the same source-only independent live TS rout
  assert.match(probe,/BLOFY_XTREAM_GATEWAY_PROBE_FALLBACK/);
  assert.match(probe,/const upstream=mediaUpstreamUrl/);
 });
+
+test('admin VOD playback probe cannot imply subscriber playback through catalog-only relay',async()=>{
+ const c=await readFile(new URL('../src/xtream-admin-hook.mjs',import.meta.url),'utf8');
+ const start=c.indexOf('async function probeXtreamPlayback(');
+ const end=c.indexOf('async function fetchAccount(',start);
+ assert.ok(start>=0&&end>start);
+ const probe=c.slice(start,end);
+ assert.match(probe,/shouldUseIndependentSourceMedia\(\{/);
+ assert.doesNotMatch(probe,/mediaType==='movie'&&shouldUseIndependentXtreamSource/);
+ assert.match(probe,/sourceId:source.id,kind:mediaType,extension:ext/);
+});
