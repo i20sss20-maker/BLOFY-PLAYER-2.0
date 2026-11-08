@@ -94,3 +94,17 @@ test('retains 60005 official live/movie records before downstream deduplication'
  assert.equal(result.records.movie.length,0);
  assert.equal(result.categories.live.length,1);
 });
+
+
+test('operator dry-run invokes importer without modifying source catalog',async()=>{
+ const hook=await readFile(new URL('../src/xtream-admin-hook.mjs',import.meta.url),'utf8');
+ const a=hook.indexOf("if(process.env.BLOFY_XTREAM_M3U_IMPORT_DRY_RUN_ON_BOOT==='1')");
+ const b=hook.indexOf('// An operator may reconcile the entire stored movie/live ID set',a);
+ assert.ok(a>=0&&b>a);
+ const block=hook.slice(a,b);
+ assert.match(block,/shouldUseIndependentXtreamSource\(id\)/);
+ assert.match(block,/downloadXtreamM3uCatalog\(/);
+ assert.match(block,/fetchIndependentXtreamManifest\(manifest.href\)/);
+ assert.match(block,/sourceMutation:false,customerCutover:false/);
+ assert.doesNotMatch(block,/\bUPDATE\b|\bDELETE\b|\bINSERT\b|syncServer\(/);
+});
