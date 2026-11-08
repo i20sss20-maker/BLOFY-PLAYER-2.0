@@ -45,3 +45,18 @@ test('server source comparison runs one time only when flag is 1 and source is a
  assert.match(part,/credentialsLogged:false/);
  assert.doesNotMatch(part,/\bUPDATE\b|\bDELETE\b|\bINSERT\b/);
 });
+
+test('provider official playlist can report MKV/AVI media without URL disclosure',async()=>{
+ const payload={ok:true,stage:'compared',playlistHttpStatus:200,
+  playlistMediaUrlsFound:2,mediaTransportVerified:true,
+  checks:[{index:1,route:'series',httpStatus:302,format:'none',
+   redirectStatus:200,redirectMediaFormat:'mkv',mediaBytesPresent:true,
+   providerUrl:'https://cdn.example/private?token=SECRET'},
+   {index:2,route:'movie',httpStatus:200,format:'avi',mediaBytesPresent:true}]};
+ const result=await probeOfficialXtreamPlaylistRoute('http://provider.example/get.php',{
+   env,fetchImpl:async()=>new Response(JSON.stringify(payload),{status:200})
+ });
+ assert.equal(result.checks[0].redirectMediaFormat,'mkv');
+ assert.equal(result.checks[1].format,'avi');
+ assert.doesNotMatch(JSON.stringify(result),/SECRET|cdn\.example|providerUrl/);
+});

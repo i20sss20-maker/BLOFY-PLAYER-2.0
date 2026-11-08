@@ -6,7 +6,7 @@ const CODE=new Set(['connection_reset','timeout','connection_refused','dns_unava
  'sample_ready','body_complete','manifest_not_allowlisted','no_advertised_media_url',
  'unsafe_advertised_url']);
 const ROUTE=new Set(['live','movie','series','other']);
-const FORMAT=new Set(['none','playlist','error_document','mpegts','mp4','unknown']);
+const FORMAT=new Set(['none','playlist','error_document','mpegts','mp4','mkv','avi','unknown']);
 export async function probeOfficialXtreamPlaylistRoute(manifestUrl,{
  env=process.env,fetchImpl=fetch
 }={}){
