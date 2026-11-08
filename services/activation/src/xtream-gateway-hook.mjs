@@ -865,6 +865,50 @@ async function runDueUnavailableMedia(){
  }finally{unavailableRecoveryBusy=false;}
 }
 
+// Optional first rollout: register only provider-confirmed 404 for the three
+// already well-known first movie samples, using the same original source ID.
+// No player auth bypass, mass catalog scan, alternate-ID guess, or subscriber
+// source change. Disabled after a single operator-led production boot.
+async function seedUnavailableMediaOnce(){
+ if(process.env.BLOFY_XTREAM_UNAVAILABLE_SEED_ON_BOOT!=='1')return;
+ try{
+  await ensureReady();
+  for(const serverId of recoverySources()){
+   const source=(await pool.query(`SELECT id FROM blofy_xtream_servers
+    WHERE id=$1 AND enabled=TRUE AND publish_catalog=TRUE
+      AND deletion_requested_at IS NULL LIMIT 1`,[serverId])).rows[0];
+   if(!source)continue;
+   const items=(await pool.query(`SELECT source_id FROM blofy_xtream_items
+    WHERE server_id=$1 AND media_type='movie' AND enabled=TRUE
+    ORDER BY name ASC LIMIT 3`,[serverId])).rows;
+   const aggregate={sourceId:serverId,checked:0,verifiedMissing:0,
+    firstMediaBytes:0,transient:0,mediaDeleted:false,
+    catalogMutation:false,subscriberCutover:false,credentialsLogged:false};
+   for(const item of items){
+    const key=validUnavailableKey({serverId,kind:'movie',itemId:item.source_id});
+    if(!key)continue;
+    const result=await probeUnavailableMediaOnSameSource(key);
+    aggregate.checked++;
+    if(result==='provider404'){
+     await registerProvider404(pool,key);
+     aggregate.verifiedMissing++;
+    }else if(result==='recovered')aggregate.firstMediaBytes++;
+    else aggregate.transient++;
+    if(aggregate.checked<3)await new Promise(resolve=>setTimeout(resolve,750));
+   }
+   console.info('BLOFY_UNAVAILABLE_MEDIA_SEED',JSON.stringify(aggregate));
+  }
+ }catch{
+  console.warn('BLOFY_UNAVAILABLE_MEDIA_SEED',
+   JSON.stringify({ok:false,code:'safe_sample_unavailable',
+    catalogMutation:false,subscriberCutover:false,credentialsLogged:false}));
+ }
+}
+if(process.env.BLOFY_XTREAM_UNAVAILABLE_SEED_ON_BOOT==='1'){
+ const timer=setTimeout(()=>{void seedUnavailableMediaOnce()},30000);
+ timer.unref?.();
+}
+
 async function proxyMedia(req, res, kind, username, password, gatewayId, requestedExtension) {
   if (!requirePublicBudget(req, res)) return;
   const account = await authenticate(username, password, { touch: false });
