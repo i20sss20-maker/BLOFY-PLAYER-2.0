@@ -46,6 +46,7 @@ import { readXtreamGatewayJsonResponse } from './xtream-gateway-response.mjs';
 import { createXtreamHealthSnapshot } from './xtream-health-snapshot.mjs';
 import {relayEligible,issueStreamRelayGrant} from './xtream-stream-relay-bridge.mjs';
 import {shouldUseIndependentSourceMedia} from './xtream-independent-source-media-policy.mjs';
+import {readSanitizedXtreamRelayFailure} from './xtream-relay-diagnostic.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
@@ -721,6 +722,7 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
     }
   }
   let mediaFetchTarget=upstream;
+  let usingIndependentRelay=false;
   // Use independent Railway egress only for explicitly allowed source/kind:
   // live TS, or separately enabled VOD (movie/episode). All source, catalog,
   // subscriber and expiry checks have already completed above.
@@ -730,6 +732,7 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
   })){
     try{
       mediaFetchTarget=new URL(await issueStreamRelayGrant({sourceUrl:upstream.href,kind}));
+      usingIndependentRelay=true;
     }catch{
       console.warn('BLOFY_XTREAM_INDEPENDENT_SOURCE_FALLBACK',{
         kind,sourceId:row.server_id,reason:'relay_ticket_unavailable'});
@@ -764,16 +767,23 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
           });
         } finally { clearTimeout(timer); }
         if (!(response.ok || response.status === 206)) {
-          const retryable = [408,500,502,503,504].includes(response.status);
+          // An independent relay may surface provider 404 as outer HTTP 502.
+          // Do not retry that same unavailable file or count it as a transient
+          // gateway outage. Only read the fixed sanitized body of our relay.
+          const relayFailure=usingIndependentRelay&&response.status===502?
+            await readSanitizedXtreamRelayFailure(response):null;
+          const confirmedMissing=relayFailure==='relay_provider_not_found';
+          const retryable=!confirmedMissing&&[408,500,502,503,504].includes(response.status);
           const retryWithoutRange = shouldRetryXtreamWithoutRange({
             status:response.status,range:headers.range,method:req.method,
             alreadyRetried:noRangeRetried
           }) && attempt < maxAttempts;
           console.warn('xtream media upstream status', {kind, itemId:gatewayId, status:response.status, attempt,
-            retryWithoutRange});
+            retryWithoutRange,relayFailure});
           // Never expose upstream bodies; store only a fixed, allowlisted hint
           // if the provider itself explained a denied request.
-          const providerHint=retryWithoutRange?null:await readXtreamProviderDenialHint(response);
+          const providerHint=retryWithoutRange||usingIndependentRelay?null:
+            await readXtreamProviderDenialHint(response);
           // Respect provider refusals, and cool down this channel only.
           if(req.method!=='HEAD')mediaDenialCooldown.denied(cooldownKey,response.status);
           await response.body?.cancel().catch(()=>{});
@@ -789,8 +799,8 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
           }
           observe('failed',{
             upstreamStatus:response.status,
-            reason:['403','404','408','429','456','500','502','503','504'].includes(String(response.status))
-              ?'upstream_http_'+response.status:'upstream_http_other',
+            reason:relayFailure||(['403','404','408','429','456','500','502','503','504'].includes(String(response.status))
+              ?'upstream_http_'+response.status:'upstream_http_other'),
             providerHint,attempts:attempt
           });
           return text(res, 502, 'Upstream unavailable');
