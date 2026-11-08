@@ -18,7 +18,7 @@ test('series info and episode sample use selected source independent egress',asy
  const c=await readFile(new URL('../src/xtream-admin-hook.mjs',import.meta.url),'utf8');
  const a=c.indexOf('async function probeXtreamEpisodeMedia('),b=c.indexOf('async function probeXtreamSeries(',a);
  const e=c.slice(a,b);
- assert.match(e,/shouldUseIndependentSourceMedia\\(\\{/);
+ assert.ok(e.includes('shouldUseIndependentSourceMedia({'));
  assert.match(e,/sourceId:source.id,kind:'series',extension:episode.extension/);
  assert.match(e,/issueStreamRelayGrant\(/);
  assert.match(e,/sourceUrl:target.href,kind:'series'/);
@@ -29,6 +29,6 @@ test('movie check requires same catalog allowlist and never changes player route
  const c=await readFile(new URL('../src/xtream-admin-hook.mjs',import.meta.url),'utf8');
  const a=c.indexOf('async function probeXtreamPlayback('),b=c.indexOf('async function fetchAccount(',a);
  const p=c.slice(a,b);
- assert.match(p,/shouldUseIndependentSourceMedia\\(\\{/);
+ assert.ok(p.includes('shouldUseIndependentSourceMedia({'));
  assert.match(p,/issueStreamRelayGrant\(/);
 });
