@@ -20,6 +20,7 @@ import {auditEntireXtreamStoredCatalog} from './xtream-full-catalog-integrity-au
 import {reconcileXtreamM3uWithImportedCatalog} from './xtream-m3u-catalog-reconciliation.mjs';
 import {inspectSameXtreamVodInfo} from './xtream-vod-info-direct-source-audit.mjs';
 import {summarizeSameMovieCandidates} from './xtream-cross-source-coverage-audit.mjs';
+import {distributedMovieOffsets,summarizeDistributedMovieProbe} from './xtream-distributed-movie-audit.mjs';
 import { createFixedWindowLimiter, requestClientKey } from './auth-protection.mjs';
 import {
   assertPublicXtreamUrl,
@@ -632,18 +633,24 @@ async function persistSourceMediaProbe(id,kind,result){
 // Short, explicit playback probe: checks the actual upstream media endpoint,
 // not just player_api.php authentication. Credentials and source URLs never
 // appear in the response; the request is initiated by the administrator only.
-async function probeXtreamPlayback(id,mediaType='live',{forcePortalDirect=false}={}) {
+async function probeXtreamPlayback(id,mediaType='live',{forcePortalDirect=false,
+  sampleOffset=0,probeAllCandidates=false}={}) {
   if(mediaType==='series'||mediaType==='episode')return probeXtreamSeries(id,mediaType);
   if(!['live','movie'].includes(mediaType))
     throw Object.assign(new Error('xtream_probe_type_invalid'),{status:400});
   const source=await serverById(id);
   if(!source)throw Object.assign(new Error('xtream_server_not_found'),{status:404});
   if(!source.enabled)throw Object.assign(new Error('xtream_source_paused'),{status:409});
+  // The ordinary admin probe still starts at 0 and stops at first success.
+  // Only a separate, explicitly opted-in boot audit may spread samples.
+  const offset=mediaType==='movie'&&probeAllCandidates&&
+    Number.isSafeInteger(sampleOffset)&&sampleOffset>=0&&sampleOffset<=100000
+    ?sampleOffset:0;
   const candidates=(await pool.query(`SELECT source_id,name,container_extension,
       metadata->>'directSourcePresent' AS advertised_direct_source
     FROM blofy_xtream_items
     WHERE server_id=$1 AND media_type=$2 AND enabled=TRUE
-    ORDER BY name ASC LIMIT 4`,[id,mediaType])).rows;
+    ORDER BY name ASC LIMIT 4 OFFSET $3`,[id,mediaType,offset])).rows;
   if(!candidates.length)return {ok:false,mediaType,reason:'no_imported_items',checks:[]};
   const creds=decryptCredentials(source),checks=[];
   const livePolicy=mediaType==='live'?xtreamAllowedLiveFormats(source.account_info):null;
@@ -750,11 +757,15 @@ async function probeXtreamPlayback(id,mediaType='live',{forcePortalDirect=false}
     // Testing HLS after valid TS previously caused a false partial failure
     // when this particular provider resets HLS despite serving TS correctly.
     // Continue to the next declared format only if the current one failed.
-    if(ok)break outer;
+    if(!probeAllCandidates){
+      if(ok)break outer;
     }
-    // Compare each advertised output format for one item before moving on;
-    // stop as soon as any of this item's declared formats serves media.
-    if(checks.some(check=>check.ok))break;
+    }
+    // Ordinary admin checks stop at first successful media. An opt-in
+    // distributed audit must test all four chosen independent movie IDs.
+    if(!probeAllCandidates){
+      if(checks.some(check=>check.ok))break;
+    }
   }
   return {ok:checks.some(check=>check.ok),mediaType,checks,
     note:(livePolicy?outputFormatDescription(livePolicy)+' HLS: وصول القائمة لا يؤكد عمل مقاطع الفيديو. ':'')+
@@ -1010,6 +1021,59 @@ if(process.env.BLOFY_XTREAM_CROSS_SOURCE_COVERAGE_ON_BOOT==='1'){
    JSON.stringify({ok:false,code:'coverage_probe_unavailable',
     entitlementChanges:false,customerRerouting:false,providerCredentialsLogged:false})));
  },27000);
+ timer.unref?.();
+}
+
+// One-off, bounded source-2 movie health survey across different catalog
+// positions. The ordinary admin sample picks the first sorted movies and
+// stops on success, so those results cannot estimate provider-wide 404 rates.
+// Never touch user entitlements, URLs, catalog, or raw media files.
+if(process.env.BLOFY_XTREAM_DISTRIBUTED_MOVIE_AUDIT_ON_BOOT==='1'){
+ const timer=setTimeout(()=>{
+  void(async()=>{
+   const id=String(process.env.BLOFY_XTREAM_EGRESS_SOURCE_ID||'').trim();
+   if(!validUuid(id)||!shouldUseIndependentXtreamSource(id))return;
+   const source=await serverById(id);
+   if(!source?.enabled)return;
+   const total=Number((await pool.query(
+    "SELECT COUNT(*)::int AS n FROM blofy_xtream_items "+
+    "WHERE server_id=$1 AND media_type='movie' AND enabled=TRUE",
+    [id])).rows[0]?.n)||0;
+   const offsets=distributedMovieOffsets(total,{groups:3,perGroup:4});
+   const groups=[];
+   for(const offset of offsets){
+    try{
+     const probe=await probeXtreamPlayback(id,'movie',{
+      sampleOffset:offset,probeAllCandidates:true
+     });
+     groups.push(summarizeDistributedMovieProbe(probe));
+    }catch{
+     groups.push({checked:0,mediaSamples:0,missingFiles:0,
+      otherFailures:0,results:[],videoDecoded:false,
+      subscriberPlaybackVerified:false,probeUnavailable:true});
+    }
+    if(groups.length<offsets.length)
+     await new Promise(resolve=>setTimeout(resolve,800));
+   }
+   console.info('BLOFY_XTREAM_DISTRIBUTED_MOVIE_AUDIT',JSON.stringify({
+    sourceId:id,groups:groups.map((v,index)=>({
+     group:index+1,checked:v.checked,mediaSamples:v.mediaSamples,
+     missingFiles:v.missingFiles,otherFailures:v.otherFailures,
+     results:v.results,probeUnavailable:v.probeUnavailable===true
+    })),
+    checked:groups.reduce((s,v)=>s+v.checked,0),
+    mediaSamples:groups.reduce((s,v)=>s+v.mediaSamples,0),
+    provider404:groups.reduce((s,v)=>s+v.missingFiles,0),
+    otherFailures:groups.reduce((s,v)=>s+v.otherFailures,0),
+    scope:'stratified_tiny_sample_not_catalog_health',
+    movieBytesOnly:true,videoDecoded:false,
+    sourceMutation:false,subscriberCutover:false,
+    credentialsLogged:false
+   }));
+  })().catch(()=>console.warn('BLOFY_XTREAM_DISTRIBUTED_MOVIE_AUDIT',
+   JSON.stringify({ok:false,code:'movie_sample_audit_unavailable',
+    sourceMutation:false,subscriberCutover:false,credentialsLogged:false})));
+ },25000);
  timer.unref?.();
 }
 
