@@ -48,6 +48,10 @@ import {relayEligible,issueStreamRelayGrant} from './xtream-stream-relay-bridge.
 import {shouldUseIndependentSourceMedia,shouldFallbackIndependentVod} from './xtream-independent-source-media-policy.mjs';
 import {readSanitizedXtreamRelayFailure} from './xtream-relay-diagnostic.mjs';
 import {customerMediaFailureStatus} from './xtream-customer-media-failure.mjs';
+import {ensureUnavailableMediaTable,validUnavailableKey,recoverySources,
+ recoveryEnabled,registerProvider404,noteMediaRestored,
+ createRegistryWriteGuard,unavailableMediaSummary} from './xtream-unavailable-media-registry.mjs';
+import {runUnavailableRecheckBatch,classifyUnavailableProbe} from './xtream-unavailable-media-recheck.mjs';
 import {mayRefreshMovieExtension,correctedMovieExtension,
   mayRefreshEpisodeExtension,correctedEpisodeExtension} from './xtream-vod-extension-recovery.mjs';
 import {shouldUseIndependentXtreamSource,fetchIndependentXtreamSource} from './xtream-independent-catalog-relay.mjs';
@@ -81,6 +85,8 @@ function movieRefreshDue(key,now=Date.now()){
 }
 const accountUsageThrottle = createGatewayUsageThrottle();
 let readyPromise;
+const unavailableWriteGuard=createRegistryWriteGuard();
+let unavailableRecoveryTimerStarted=false,unavailableRecoveryBusy=false;
 
 function json(res, status, body, extra = {}) {
   const payload = JSON.stringify(body);
@@ -214,13 +220,24 @@ async function ensureReady() {
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_gateway_accounts_user ON blofy_xtream_gateway_accounts(username,enabled)');
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_gateway_item_lookup ON blofy_xtream_gateway_item_map(server_id,media_type,source_id)');
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_gateway_episode_lookup ON blofy_xtream_gateway_episode_map(server_id,source_episode_id)');
+      await ensureUnavailableMediaTable(client);
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK').catch(() => {});
       throw error;
     } finally { client.release(); }
   })().catch(error => { readyPromise = null; throw error; });
-  return readyPromise;
+  const ready=await readyPromise;
+  // Opt-in, source-allowlisted, lease-based recovery. Normal requests do not
+  // wait for health probes. Timers are unref'd and are never enabled by default.
+  if(!unavailableRecoveryTimerStarted&&recoveryEnabled()){
+    unavailableRecoveryTimerStarted=true;
+    const first=setTimeout(()=>{void runDueUnavailableMedia().catch(()=>{});},45000);
+    first.unref?.();
+    const timer=setInterval(()=>{void runDueUnavailableMedia().catch(()=>{});},3600000);
+    timer.unref?.();
+  }
+  return ready;
 }
 
 function adminAccount(row) {
