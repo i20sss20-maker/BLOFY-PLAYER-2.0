@@ -458,6 +458,13 @@ async function probeXtreamEpisodeMedia(source,creds,episode) {
   const path=['series',creds.username,creds.password,String(episode.id)]
     .map(encodeURIComponent).join('/')+'.'+episode.extension;
   let target=new URL(path,normalizeXtreamBaseUrl(source.base_url)+'/');
+  // The original PLAYER egress is known to reset this provider's media.
+  // Only selected source uses the verified independent STREAM proxy.
+  if(shouldUseIndependentXtreamSource(source.id)){
+    try{target=new URL(await issueStreamRelayGrant({
+      sourceUrl:target.href,kind:'series'
+    }));}catch{}
+  }
   let httpStatus=null,contentType='',errorCode=null,reader=null,response=null,providerHint=null;
   let useFirstByteRange=true;
   try{
@@ -531,7 +538,7 @@ async function probeXtreamSeries(id,mediaType){
       const response=await checkedFetch(xtreamApiUrl(
         source.base_url,creds.username,creds.password,'get_series_info',
         {series_id:String(series.source_id)}
-      ),{timeoutMs:9500});
+      ),{timeoutMs:9500,sourceId:source.id});
       httpStatus=response.status;
       const chunks=[];
       let bytes=0;
@@ -640,7 +647,7 @@ async function probeXtreamPlayback(id,mediaType='live') {
     // client TS streams; otherwise the old portal falsely reports resets.
     if(shouldUseIndependentSourceMedia({
       sourceId:source.id,kind:mediaType,extension:ext
-    })){
+    })||(mediaType==='movie'&&shouldUseIndependentXtreamSource(source.id))){
       try{target=new URL(await issueStreamRelayGrant({
         sourceUrl:target.href,kind:mediaType
       }));}catch{}
@@ -1369,6 +1376,36 @@ if(process.env.BLOFY_XTREAM_OFFICIAL_M3U_PROBE_ON_BOOT==='1'){
         JSON.stringify({ok:false,code:'probe_unavailable',credentialsLogged:false}));
     });
   },21000);
+  timer.unref?.();
+}
+
+// Operator-only one-shot assessment after the approved source was proved to
+// return real TS bytes via STREAM. No catalog or client traffic changes.
+if(process.env.BLOFY_XTREAM_INDEPENDENT_VOD_SERIES_PROBE_ON_BOOT==='1'){
+  const timer=setTimeout(()=>{
+    void(async()=>{
+      const id=String(process.env.BLOFY_XTREAM_EGRESS_SOURCE_ID||'').trim();
+      if(!validUuid(id)||!shouldUseIndependentXtreamSource(id))return;
+      for(const mediaType of ['movie','series','episode']){
+        let outcome;
+        try{
+          const report=await probeXtreamPlayback(id,mediaType);
+          outcome={ok:report.ok===true,itemsChecked:report.checks?.length||0,
+            statuses:report.checks?.slice(0,3).map(x=>x.httpStatus??x.seriesHttpStatus??null),
+            reasons:report.checks?.slice(0,3).map(x=>{
+              const key=String(x.error||'');
+              return ['timeout','upstream_unreachable','no_episode_info','series_response_invalid',
+                'empty_media','upstream_non_media_response','no_playable_episodes',
+                'series_response_too_large'].includes(key)?key:key?'other':null;
+            })};
+        }catch{outcome={ok:false,error:'probe_unavailable'};}
+        console.info('BLOFY_XTREAM_INDEPENDENT_VOD_SERIES_PROOF',
+          JSON.stringify({sourceId:id,mediaType,...outcome,
+            mediaBytesNotDecoded:true,customerCutover:false,credentialsLogged:false}));
+      }
+    })().catch(()=>{console.warn('BLOFY_XTREAM_INDEPENDENT_VOD_SERIES_PROOF',
+      JSON.stringify({ok:false,code:'probe_unavailable',customerCutover:false}));});
+  },22000);
   timer.unref?.();
 }
 
