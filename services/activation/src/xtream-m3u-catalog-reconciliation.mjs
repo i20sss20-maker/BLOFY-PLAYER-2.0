@@ -2,11 +2,13 @@
 // with the provider's official M3U export (one bounded HTTP request).
 // Stream the playlist; do NOT index it, follow media URLs or fetch videos.
 import {assertPublicXtreamUrl,normalizeXtreamBaseUrl,xtreamM3uUrl} from './xtream-core.mjs';
+import {getXtreamManifestHttp11} from './xtream-m3u-http11.mjs';
 const ID=/^[A-Za-z0-9_-]{1,128}$/;
 const EXT=/^[a-z0-9]{2,8}$/i;
 export async function reconcileXtreamM3uWithImportedCatalog({
   pool,sourceId,baseUrl,username,password
-},{fetchImpl=fetch,checkPublic=assertPublicXtreamUrl,
+},{fetchImpl=fetch,http11Impl=getXtreamManifestHttp11,
+  checkPublic=assertPublicXtreamUrl,
   maxBytes=64*1024*1024,timeoutMs=90000}={}){
  let stage='base_url';
  try{
@@ -25,14 +27,23 @@ export async function reconcileXtreamM3uWithImportedCatalog({
  }
  stage='playlist_request';
  const url=xtreamM3uUrl(baseUrl,username,password);
- const response=await fetchImpl(url,{
+ let response,transport='fetch';
+ try{
+  response=await fetchImpl(url,{
    redirect:'manual',signal:AbortSignal.timeout(timeoutMs),
-   headers:{accept:'audio/x-mpegurl,text/plain,*/*','user-agent':'BLOFY-Xtream-Audit/1.0'}
- });
+   headers:{accept:'audio/x-mpegurl,text/plain,*/*',
+     'user-agent':'BLOFY-Xtream-Audit/1.0'}
+  });
+ }catch{
+  stage='playlist_http11_request';
+  // Only an exception, never a real HTTP status, permits HTTP/1.1 retry.
+  response=await http11Impl(url,{signal:AbortSignal.timeout(timeoutMs)});
+  transport='http11';
+ }
  if(response.status!==200||!response.body){
    await response.body?.cancel().catch(()=>{});
    return {ok:false,code:'m3u_http_unavailable',
-     playlistStatus:response.status,mediaRequests:0};
+     playlistStatus:response.status,transport,mediaRequests:0};
  }
  stage='playlist_read';
  const found={live:new Set(),movie:new Set()},mismatch=new Set();
@@ -91,7 +102,7 @@ export async function reconcileXtreamM3uWithImportedCatalog({
  }finally{if(!response.bodyUsed)await response.body.cancel().catch(()=>{});}
  const missingByType=type=>Math.max(0,imported[type].size-found[type].size);
  return {ok:headerOk&&!incomplete,readOnly:true,
-   playlistHeaderValid:headerOk,incomplete,playlistStatus:response.status,
+   playlistHeaderValid:headerOk,incomplete,playlistStatus:response.status,transport,
    playlistBytesRead:bytes,importedLive:imported.live.size,
    importedMovies:imported.movie.size,
    matchedLive:found.live.size,matchedMovies:found.movie.size,
