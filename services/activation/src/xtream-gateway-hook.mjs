@@ -793,7 +793,8 @@ function asyncNoteRecovered(key){
 // STREAM ticket service. No alternate source, ID, credentials or CDN guessing.
 // Each probe reads only the first media chunk and cancels its remaining body.
 async function probeUnavailableMediaOnSameSource(key){
- const params=[key.serverId,key.itemId,key.seriesId];
+ const params=key.kind==='movie'?[key.serverId,key.itemId]:
+  [key.serverId,key.itemId,key.seriesId];
  const sql=key.kind==='movie'
   ?`SELECT i.server_id,i.container_extension,s.base_url,
      s.username_secret,s.password_secret FROM blofy_xtream_items i
