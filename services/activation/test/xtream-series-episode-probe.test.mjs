@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {xtreamEpisodeSamples,xtreamProbeMessage} from '../src/xtream-series-probe.mjs';
+import {xtreamEpisodeSamples,xtreamEpisodePlaybackCandidates,xtreamProbeMessage} from '../src/xtream-series-probe.mjs';
 import {controlPage,CONTROL_PATH} from '../src/xtream-native-controls.mjs';
 
 const read = path => readFile(new URL('../'+path,import.meta.url),'utf8');
@@ -79,4 +79,28 @@ test('movie, channel and episode probes never return raw credential-bearing netw
   assert.match(probe,/xtream_private_host_blocked/);
   assert.match(probe,/upstream_unreachable/);
   assert.doesNotMatch(probe,/console\.warn\([^\n]*target\.href/);
+});
+
+test('failed episode candidates carry safe season/episode positions, never a media URL',()=>{
+ const source={episodes:{
+  '1':[{id:'101',episode_num:1,container_extension:'mkv'},
+       {id:'102',episode_num:2,container_extension:'mp4'},
+       {id:'103',episode_num:3,container_extension:'mp4'}],
+  '2':[{id:'201',episode_num:1,container_extension:'mp4'}]
+ }};
+ const found=xtreamEpisodePlaybackCandidates(source,3,{withPositions:true});
+ assert.deepEqual(found.map(x=>[x.id,x.seasonNumber,x.episodeNumber]),
+   [['101',1,1],['201',2,1],['103',1,3]]);
+ assert.ok(found.every(x=>!('sourceUrl' in x)&&!('password' in x)));
+ assert.equal(xtreamEpisodePlaybackCandidates({episodes:{
+  'Season one':[{id:'7',episode_num:0}] }},1,{withPositions:true})[0].seasonNumber,null);
+});
+test('admin episode sample title adds position without exposing provider identifiers',async()=>{
+ const s=await read('src/xtream-admin-hook.mjs');
+ const a=s.indexOf('async function probeXtreamSeries(');
+ const b=s.indexOf('async function persistSourceMediaProbe(',a);
+ const block=s.slice(a,b);
+ assert.match(block,/episode\.seasonNumber/);
+ assert.match(block,/episode\.episodeNumber/);
+ assert.match(block,/title:cleanText\(series.name,120\)\+position/);
 });
