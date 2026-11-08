@@ -1379,6 +1379,36 @@ if(process.env.BLOFY_XTREAM_OFFICIAL_M3U_PROBE_ON_BOOT==='1'){
   timer.unref?.();
 }
 
+// Operator-only one-shot assessment after the approved source was proved to
+// return real TS bytes via STREAM. No catalog or client traffic changes.
+if(process.env.BLOFY_XTREAM_INDEPENDENT_VOD_SERIES_PROBE_ON_BOOT==='1'){
+  const timer=setTimeout(()=>{
+    void(async()=>{
+      const id=String(process.env.BLOFY_XTREAM_EGRESS_SOURCE_ID||'').trim();
+      if(!validUuid(id)||!shouldUseIndependentXtreamSource(id))return;
+      for(const mediaType of ['movie','series','episode']){
+        let outcome;
+        try{
+          const report=await probeXtreamPlayback(id,mediaType);
+          outcome={ok:report.ok===true,itemsChecked:report.checks?.length||0,
+            statuses:report.checks?.slice(0,3).map(x=>x.httpStatus??x.seriesHttpStatus??null),
+            reasons:report.checks?.slice(0,3).map(x=>{
+              const key=String(x.error||'');
+              return ['timeout','upstream_unreachable','no_episode_info','series_response_invalid',
+                'empty_media','upstream_non_media_response','no_playable_episodes',
+                'series_response_too_large'].includes(key)?key:key?'other':null;
+            })};
+        }catch{outcome={ok:false,error:'probe_unavailable'};}
+        console.info('BLOFY_XTREAM_INDEPENDENT_VOD_SERIES_PROOF',
+          JSON.stringify({sourceId:id,mediaType,...outcome,
+            mediaBytesNotDecoded:true,customerCutover:false,credentialsLogged:false}));
+      }
+    })().catch(()=>{console.warn('BLOFY_XTREAM_INDEPENDENT_VOD_SERIES_PROOF',
+      JSON.stringify({ok:false,code:'probe_unavailable',customerCutover:false}));});
+  },22000);
+  timer.unref?.();
+}
+
 async function cancelSourceSync(id) {
   const row=await serverById(id);
   if(!row)throw Object.assign(new Error('xtream_server_not_found'),{status:404});
