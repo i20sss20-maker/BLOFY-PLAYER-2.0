@@ -173,3 +173,37 @@ test('same movie canonical M3U URL matches gateway URL without leaking credentia
  assert.equal(r.sameMovieRouteProof[0].canonicalUrlSeen,true);
  assert.equal(r.sameMovieRouteProof[0].shortRouteSeen,false);
 });
+
+
+test('episode IDs from get_series_info are compared to exact official M3U URLs without playback',async()=>{
+ const playlist=['#EXTM3U',
+  'http://provider.example/series/u/privatePASS/e1.mp4',
+  'http://provider.example/series/u/privatePASS/e2.mkv',
+  'http://provider.example/series/u/privatePASS/other.ts'].join('\\n');
+ const result=await reconcileXtreamM3uWithImportedCatalog({...setup,pool},{
+  checkPublic:async()=>{},
+  sameEpisodeSamples:[
+   {id:'e1',extension:'mp4'},
+   {id:'e2',extension:'mp4'},
+   {id:'e3',extension:'mkv'}
+  ],
+  fetchImpl:async()=>new Response(playlist,{status:200})
+ });
+ assert.equal(result.ok,true);
+ assert.deepEqual(result.sameEpisodeRouteProof,[
+  {index:1,found:true,canonicalUrlSeen:true,seriesRouteSeen:true,extensionMatches:true},
+  {index:2,found:true,canonicalUrlSeen:false,seriesRouteSeen:true,extensionMatches:false},
+  {index:3,found:false,canonicalUrlSeen:false,seriesRouteSeen:false,extensionMatches:false}
+ ]);
+ assert.equal(result.mediaRequests,0);
+ assert.doesNotMatch(JSON.stringify(result),/privatePASS|provider\\.example|\\/series\\/|e1|e2|e3/);
+});
+test('episode sample comparison rejects unsafe IDs without disclosing source URLs',async()=>{
+ const result=await reconcileXtreamM3uWithImportedCatalog({...setup,pool},{
+  checkPublic:async()=>{},
+  sameEpisodeSamples:[{id:'../admin',extension:'mp4'},{id:'e1',extension:'mp4'}],
+  fetchImpl:async()=>new Response(m3u,{status:200})
+ });
+ assert.equal(result.sameEpisodeRouteProof.length,1);
+ assert.equal(result.sameEpisodeRouteProof[0].canonicalUrlSeen,true);
+});
