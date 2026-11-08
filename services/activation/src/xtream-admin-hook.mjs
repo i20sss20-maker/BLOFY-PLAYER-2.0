@@ -1024,59 +1024,6 @@ if(process.env.BLOFY_XTREAM_CROSS_SOURCE_COVERAGE_ON_BOOT==='1'){
  timer.unref?.();
 }
 
-// One-off, bounded source-2 movie health survey across different catalog
-// positions. The ordinary admin sample picks the first sorted movies and
-// stops on success, so those results cannot estimate provider-wide 404 rates.
-// Never touch user entitlements, URLs, catalog, or raw media files.
-if(process.env.BLOFY_XTREAM_DISTRIBUTED_MOVIE_AUDIT_ON_BOOT==='1'){
- const timer=setTimeout(()=>{
-  void(async()=>{
-   const id=String(process.env.BLOFY_XTREAM_EGRESS_SOURCE_ID||'').trim();
-   if(!validUuid(id)||!shouldUseIndependentXtreamSource(id))return;
-   const source=await serverById(id);
-   if(!source?.enabled)return;
-   const total=Number((await pool.query(
-    "SELECT COUNT(*)::int AS n FROM blofy_xtream_items "+
-    "WHERE server_id=$1 AND media_type='movie' AND enabled=TRUE",
-    [id])).rows[0]?.n)||0;
-   const offsets=distributedMovieOffsets(total,{groups:3,perGroup:4});
-   const groups=[];
-   for(const offset of offsets){
-    try{
-     const probe=await probeXtreamPlayback(id,'movie',{
-      sampleOffset:offset,probeAllCandidates:true
-     });
-     groups.push(summarizeDistributedMovieProbe(probe));
-    }catch{
-     groups.push({checked:0,mediaSamples:0,missingFiles:0,
-      otherFailures:0,results:[],videoDecoded:false,
-      subscriberPlaybackVerified:false,probeUnavailable:true});
-    }
-    if(groups.length<offsets.length)
-     await new Promise(resolve=>setTimeout(resolve,800));
-   }
-   console.info('BLOFY_XTREAM_DISTRIBUTED_MOVIE_AUDIT',JSON.stringify({
-    sourceId:id,groups:groups.map((v,index)=>({
-     group:index+1,checked:v.checked,mediaSamples:v.mediaSamples,
-     missingFiles:v.missingFiles,otherFailures:v.otherFailures,
-     results:v.results,probeUnavailable:v.probeUnavailable===true
-    })),
-    checked:groups.reduce((s,v)=>s+v.checked,0),
-    mediaSamples:groups.reduce((s,v)=>s+v.mediaSamples,0),
-    provider404:groups.reduce((s,v)=>s+v.missingFiles,0),
-    otherFailures:groups.reduce((s,v)=>s+v.otherFailures,0),
-    scope:'stratified_tiny_sample_not_catalog_health',
-    movieBytesOnly:true,videoDecoded:false,
-    sourceMutation:false,subscriberCutover:false,
-    credentialsLogged:false
-   }));
-  })().catch(()=>console.warn('BLOFY_XTREAM_DISTRIBUTED_MOVIE_AUDIT',
-   JSON.stringify({ok:false,code:'movie_sample_audit_unavailable',
-    sourceMutation:false,subscriberCutover:false,credentialsLogged:false})));
- },25000);
- timer.unref?.();
-}
-
 // Full local audit scans every imported item and stored episode mapping,
 // without contacting any media provider or changing any source/subscriber.
 if(process.env.BLOFY_XTREAM_FULL_CATALOG_AUDIT_ON_BOOT==='1'){
@@ -2838,3 +2785,59 @@ http.createServer = function withBlofyXtream(listener) {
 };
 
 export { ensureReady as ensureXtreamAdminReady };
+
+// One-off, bounded source-2 movie health survey across different catalog
+// positions. The ordinary admin sample picks the first sorted movies and
+// stops on success, so those results cannot estimate provider-wide 404 rates.
+// Never touch user entitlements, URLs, catalog, or raw media files.
+if(process.env.BLOFY_XTREAM_DISTRIBUTED_MOVIE_AUDIT_ON_BOOT==='1'){
+ const timer=setTimeout(()=>{
+  void(async()=>{
+   const id=String(process.env.BLOFY_XTREAM_EGRESS_SOURCE_ID||'').trim();
+   if(!validUuid(id)||!shouldUseIndependentXtreamSource(id))return;
+   const source=await serverById(id);
+   if(!source?.enabled)return;
+   const total=Number((await pool.query(
+    "SELECT COUNT(*)::int AS n FROM blofy_xtream_items "+
+    "WHERE server_id=$1 AND media_type='movie' AND enabled=TRUE",
+    [id])).rows[0]?.n)||0;
+   const offsets=distributedMovieOffsets(total,{groups:3,perGroup:4});
+   const groups=[];
+   for(const offset of offsets){
+    try{
+     const probe=await probeXtreamPlayback(id,'movie',{
+      sampleOffset:offset,probeAllCandidates:true
+     });
+     groups.push(summarizeDistributedMovieProbe(probe));
+    }catch{
+     groups.push({checked:0,mediaSamples:0,missingFiles:0,
+      otherFailures:0,results:[],videoDecoded:false,
+      subscriberPlaybackVerified:false,probeUnavailable:true});
+    }
+    if(groups.length<offsets.length)
+     await new Promise(resolve=>setTimeout(resolve,800));
+   }
+   console.info('BLOFY_XTREAM_DISTRIBUTED_MOVIE_AUDIT',JSON.stringify({
+    sourceId:id,groups:groups.map((v,index)=>({
+     group:index+1,checked:v.checked,mediaSamples:v.mediaSamples,
+     missingFiles:v.missingFiles,otherFailures:v.otherFailures,
+     results:v.results,probeUnavailable:v.probeUnavailable===true
+    })),
+    checked:groups.reduce((s,v)=>s+v.checked,0),
+    mediaSamples:groups.reduce((s,v)=>s+v.mediaSamples,0),
+    provider404:groups.reduce((s,v)=>s+v.missingFiles,0),
+    otherFailures:groups.reduce((s,v)=>s+v.otherFailures,0),
+    scope:'stratified_tiny_sample_not_catalog_health',
+    movieBytesOnly:true,videoDecoded:false,
+    sourceMutation:false,subscriberCutover:false,
+    credentialsLogged:false
+   }));
+  })().catch(()=>console.warn('BLOFY_XTREAM_DISTRIBUTED_MOVIE_AUDIT',
+   JSON.stringify({ok:false,code:'movie_sample_audit_unavailable',
+    sourceMutation:false,subscriberCutover:false,credentialsLogged:false})));
+ },25000);
+ timer.unref?.();
+}
+
+// END BLOFY DISTRIBUTED MOVIE AUDIT
+
