@@ -138,3 +138,38 @@ test('independent M3U path is gated to explicit source selection before any requ
  assert.match(block,/independentImpl:shouldUseIndependentXtreamSource\(id\)\?/);
  assert.match(block,/fetchIndependentXtreamManifest\(manifest.href\)/);
 });
+
+test('same imported movie's official canonical and shorthand M3U route are distinguished safely',async()=>{
+ const playlist=['#EXTM3U',
+ '#EXTINF:-1,Canonical',
+ 'http://provider.example/movie/u/privatePASS/m1.mkv',
+ '#EXTINF:-1,Short',
+ 'http://provider.example/u/privatePASS/m2.mkv'].join('\n');
+ const result=await reconcileXtreamM3uWithImportedCatalog({...setup,pool},{
+  checkPublic:async()=>{},
+  sameMovieSamples:[{source_id:'m1',container_extension:'mp4'},
+   {source_id:'m2',container_extension:'mkv'}],
+  fetchImpl:async()=>new Response(playlist,{status:200})
+ });
+ assert.equal(result.ok,true);
+ assert.equal(result.sameMovieRouteProof.length,2);
+ assert.deepEqual(result.sameMovieRouteProof[0],{
+  index:1,found:true,canonicalUrlSeen:false,
+  shortRouteSeen:false,movieRouteSeen:true
+ });
+ assert.deepEqual(result.sameMovieRouteProof[1],{
+  index:2,found:true,canonicalUrlSeen:false,
+  shortRouteSeen:true,movieRouteSeen:false
+ });
+ assert.doesNotMatch(JSON.stringify(result),/privatePASS|provider\.example|source_id|\/movie\/u/);
+});
+test('same movie canonical M3U URL matches gateway URL without leaking credentials',async()=>{
+ const playlist='#EXTM3U\nhttp://provider.example/movie/u/privatePASS/m1.mp4';
+ const r=await reconcileXtreamM3uWithImportedCatalog({...setup,pool},{
+  checkPublic:async()=>{},
+  sameMovieSamples:[{source_id:'m1',container_extension:'mp4'}],
+  fetchImpl:async()=>new Response(playlist,{status:200})
+ });
+ assert.equal(r.sameMovieRouteProof[0].canonicalUrlSeen,true);
+ assert.equal(r.sameMovieRouteProof[0].shortRouteSeen,false);
+});
