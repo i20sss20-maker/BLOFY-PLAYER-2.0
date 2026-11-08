@@ -29,7 +29,7 @@ export function xtreamEpisodeSamples(payload, limit = 2) {
 
 // A healthy series can contain a missing first episode. Probe only a few
 // distinct seasons/positions before judging the entire series unavailable.
-export function xtreamEpisodePlaybackCandidates(payload, limit=3) {
+export function xtreamEpisodePlaybackCandidates(payload, limit=3, {withPositions=false}={}) {
   const groups=payload&&typeof payload==='object'?payload.episodes:null;
   if(!groups||typeof groups!=='object')return[];
   // Episode names and source IDs are never exposed to clients. The admin
@@ -50,7 +50,7 @@ export function xtreamEpisodePlaybackCandidates(payload, limit=3) {
       explicitEpisode:index+1;
     seen.add(id);
     selected.push({id,extension:EXTS.test(extension)?extension:'mp4',
-      seasonNumber,episodeNumber});
+      ...(withPositions?{seasonNumber,episodeNumber}:{})});
   };
   for(const position of [0,-1,0.5]){
     for(const [season,rows] of seasons){
