@@ -1676,6 +1676,45 @@ if(process.env.BLOFY_XTREAM_LIVE_LONG_PROOF_ON_BOOT==='1'){
  timer.unref?.();
 }
 
+// One-time, source-pinned read-only evidence for the second provider's
+// partially failing episode sample. The admin HTTP 200 is NOT media success.
+// Never include titles, source episode IDs, usernames, URLs or passwords.
+if(process.env.BLOFY_XTREAM_ADDITIONAL_EPISODE_PROBE_ON_BOOT==='1'){
+ const timer=setTimeout(()=>{
+  void(async()=>{
+   const id=String(process.env.BLOFY_XTREAM_ADDITIONAL_EPISODE_SOURCE_ID||'').trim();
+   if(!validUuid(id))return;
+   const row=await serverById(id);
+   if(!row?.enabled)return;
+   const result=await probeXtreamPlayback(id,'episode');
+   const checks=Array.isArray(result.checks)?result.checks.slice(0,8):[];
+   const safeErrors=new Set([
+    'relay_provider_not_found','relay_first_byte_timeout',
+    'relay_transport_connection_reset','relay_transport_timeout',
+    'xtream_transport_connection_reset','xtream_transport_timeout',
+    'timeout','upstream_unreachable','empty_media','no_episode_info',
+    'no_playable_episodes','upstream_non_media_response',
+    'series_response_invalid','series_response_too_large'
+   ]);
+   console.info('BLOFY_XTREAM_ADDITIONAL_EPISODE_PROOF',JSON.stringify({
+    sourceId:id,ok:result.ok===true,
+    checked:checks.length,
+    successful:checks.filter(x=>x?.ok).length,
+    failures:checks.filter(x=>x&&!x.ok).length,
+    statuses:checks.map(x=>Number.isInteger(x?.httpStatus)?x.httpStatus:null),
+    errors:checks.map(x=>safeErrors.has(x?.error)?x.error:x?.error?'other':null),
+    latenciesMs:checks.map(x=>Number.isFinite(x?.latencyMs)
+      ?Math.max(0,Math.min(15000,Math.round(x.latencyMs))):null),
+    sourceMutation:false,subscriberCutover:false,
+    customerCredentialsLogged:false,videoDecoded:false
+   }));
+  })().catch(()=>console.warn('BLOFY_XTREAM_ADDITIONAL_EPISODE_PROOF',
+    JSON.stringify({ok:false,code:'episode_probe_unavailable',
+      sourceMutation:false,subscriberCutover:false,customerCredentialsLogged:false})));
+ },24000);
+ timer.unref?.();
+}
+
 // Read-only, source-authorized real transport probe from the NEW STREAM
 // project. Uses three indexed live channels and reads at most one initial
 // media chunk from each; never changes activation, source or user rows.
