@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {shouldUseIndependentSourceMedia} from '../src/xtream-independent-source-media-policy.mjs';
+import {shouldUseIndependentSourceMedia,shouldFallbackIndependentVod} from '../src/xtream-independent-source-media-policy.mjs';
 const affected='d9b0fcf1-0b7e-4209-b281-2b5cf1cef09a';
 const healthy='d2bb0397-1c56-4751-adc9-1a17758022f6';
 const cfg={BLOFY_XTREAM_INDEPENDENT_MEDIA_PROXY_ENABLED:'1',
@@ -89,4 +89,38 @@ test('movie and episode transfer is separately disabled by default and source-sc
    {sourceId:affected,kind:'series',extension:'../hack'},vod),false);
  assert.equal(shouldUseIndependentSourceMedia(
    {sourceId:affected,kind:'movie',extension:'mp4'},vod),true);
+});
+
+test('opt-in fallback never switches other sources, live, or unsupported formats',()=>{
+ const env={...cfg,BLOFY_XTREAM_VOD_EGRESS_FALLBACK_ENABLED:'1',
+   BLOFY_XTREAM_VOD_EGRESS_FALLBACK_SOURCE_IDS:affected};
+ for(const kind of ['movie','series']){
+   const media={sourceId:affected,kind,extension:'mkv'};
+   assert.equal(shouldFallbackIndependentVod(media,env),true);
+   assert.equal(shouldFallbackIndependentVod(media,cfg),false);
+   assert.equal(shouldFallbackIndependentVod({...media,sourceId:healthy},env),false);
+   assert.equal(shouldFallbackIndependentVod(media,{...env,
+      BLOFY_STREAM_RELAY_SHARED_TOKEN:'invalid'}),false);
+ }
+ for(const kind of ['live','other']){
+   assert.equal(shouldFallbackIndependentVod({
+     sourceId:affected,kind,extension:'ts'},env),false);
+ }
+ assert.equal(shouldFallbackIndependentVod({
+   sourceId:affected,kind:'series',extension:'m3u8'},env),false);
+});
+test('customer gateway fallback is after account and catalog checks and transport-only',async()=>{
+ const js=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
+ const start=js.indexOf('async function proxyMedia(');
+ const end=js.indexOf('async function probeGatewayMedia(',start);
+ const s=js.slice(start,end);
+ assert.ok(start>=0&&end>start);
+ assert.match(s,/fallbackAllowed=req.method==='GET'&&shouldFallbackIndependentVod/);
+ assert.match(s,/fallbackTried=false/);
+ assert.match(s,/!res.headersSent&&transportFailure&&attempt<maxAttempts/);
+ assert.match(s,/!fallbackTried&&!usingIndependentRelay/);
+ assert.match(s,/mediaFetchTarget=new URL\(await issueStreamRelayGrant/);
+ assert.match(s,/sourceUrl:upstream.href,kind/);
+ assert.match(s,/upstream_unreachable/);
+ assert.doesNotMatch(s,/if\(response.status===404\)\s*\{\s*mediaFetchTarget/);
 });
