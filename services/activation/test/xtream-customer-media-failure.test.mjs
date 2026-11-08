@@ -30,7 +30,7 @@ test('client gateway checks source grants before using trusted relay response an
  const returnStatus=part.indexOf('customerMediaFailureStatus({');
  assert.ok(issue>=0&&proof>issue&&returnStatus>proof);
  assert.match(part,/retryable=!confirmedMissing/);
- assert.match(part,/upstreamStatus:confirmedMissing?404:response.status/);
+ assert.ok(part.includes('upstreamStatus:confirmedMissing?404:response.status'));
  assert.match(part,/return text\(res,clientStatus,/);
  assert.match(part,/clientStatus===404\?'Media unavailable':'Upstream unavailable'/);
  assert.doesNotMatch(part,/res\.writeHead\(404[^\n]*sourceUrl/);
