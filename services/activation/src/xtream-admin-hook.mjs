@@ -18,6 +18,7 @@ import {probeXtreamM3uAvailability} from './xtream-m3u-availability.mjs';
 import {compareXtreamAdvertisedOrigin} from './xtream-advertised-origin-diagnostic.mjs';
 import {auditEntireXtreamStoredCatalog} from './xtream-full-catalog-integrity-audit.mjs';
 import {reconcileXtreamM3uWithImportedCatalog} from './xtream-m3u-catalog-reconciliation.mjs';
+import {inspectSameXtreamVodInfo} from './xtream-vod-info-direct-source-audit.mjs';
 import { createFixedWindowLimiter, requestClientKey } from './auth-protection.mjs';
 import {
   assertPublicXtreamUrl,
@@ -891,6 +892,58 @@ if(process.env.BLOFY_XTREAM_MEDIA_CLIENT_PROFILES_ON_BOOT==='1'){
    }));
   });
  },25000);
+ timer.unref?.();
+}
+
+// Operator-only, one-shot provider metadata comparison of the two imported
+// movie IDs that consistently return 404 through all media client profiles.
+// The official action is now accepted by the isolated source-pinned relay.
+// No signed source URL, secrets, movie names/IDs or raw response are logged.
+if(process.env.BLOFY_XTREAM_VOD_INFO_SAME_ID_ON_BOOT==='1'){
+ const timer=setTimeout(()=>{
+  void(async()=>{
+   const id=String(process.env.BLOFY_XTREAM_EGRESS_SOURCE_ID||'').trim();
+   if(!validUuid(id)||!shouldUseIndependentXtreamSource(id))return;
+   const source=await serverById(id);
+   if(!source?.enabled)return;
+   const creds=decryptCredentials(source);
+   const items=(await pool.query(
+    "SELECT source_id,container_extension FROM blofy_xtream_items "+
+    "WHERE server_id=$1 AND media_type='movie' AND enabled=TRUE "+
+    "ORDER BY name ASC LIMIT 2",[id])).rows;
+   const checks=[];
+   for(const item of items){
+    const url=xtreamApiUrl(source.base_url,creds.username,creds.password,
+      'get_vod_info',{vod_id:String(item.source_id)});
+    let response,bytes=0,buffer=[];
+    let result={ok:false,code:'vod_info_unavailable'};
+    try{
+     response=await fetchIndependentXtreamSource(url.href,{timeoutMs:7500});
+     if(response.status===200&&response.body){
+      const reader=response.body.getReader();
+      try{
+       for(;;){
+        const chunk=await reader.read();
+        if(chunk.done)break;
+        bytes+=chunk.value?.byteLength||0;
+        if(bytes>131072)throw Error('too_large');
+        buffer.push(Buffer.from(chunk.value));
+       }
+      }finally{await reader.cancel().catch(()=>{});reader.releaseLock();}
+      const data=JSON.parse(Buffer.concat(buffer).toString('utf8'));
+      result=inspectSameXtreamVodInfo(data,item.source_id,item.container_extension);
+     }
+    }catch{}finally{await response?.body?.cancel().catch(()=>{});}
+    checks.push({index:checks.length+1,...result});
+   }
+   console.info('BLOFY_XTREAM_VOD_INFO_SAME_ID_PROOF',JSON.stringify({
+    sourceId:id,checks,mediaRequests:0,customerCutover:false,
+    catalogMutation:false,credentialsLogged:false
+   }));
+  })().catch(()=>console.warn('BLOFY_XTREAM_VOD_INFO_SAME_ID_PROOF',
+   JSON.stringify({ok:false,code:'probe_unavailable',
+    mediaRequests:0,catalogMutation:false,credentialsLogged:false})));
+ },24000);
  timer.unref?.();
 }
 
