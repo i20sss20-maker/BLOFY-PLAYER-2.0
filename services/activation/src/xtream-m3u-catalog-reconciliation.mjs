@@ -9,7 +9,7 @@ export async function reconcileXtreamM3uWithImportedCatalog({
   pool,sourceId,baseUrl,username,password
 },{fetchImpl=fetch,http11Impl=getXtreamManifestHttp11,
   independentImpl=null,checkPublic=assertPublicXtreamUrl,
-  maxBytes=64*1024*1024,timeoutMs=90000}={}){
+  maxBytes=256*1024*1024,timeoutMs=115000}={}){
  let stage='base_url';
  try{
  const origin=new URL(normalizeXtreamBaseUrl(baseUrl));
@@ -63,7 +63,7 @@ export async function reconcileXtreamM3uWithImportedCatalog({
   if(!s)return;
   if(!firstNonempty){firstNonempty=true;headerOk=s.replace(/^\uFEFF/,'')==='#EXTM3U';return;}
   if(s.startsWith('#'))return;
-  if(lineCount++>=350000){incomplete=true;return;}
+  if(lineCount++>=1500000){incomplete=true;return;}
   if(s.length>4000){counts.ignoredUrls++;return;}
   let link;
   try{link=new URL(s)}catch{counts.ignoredUrls++;return}
