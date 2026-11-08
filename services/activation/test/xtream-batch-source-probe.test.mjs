@@ -37,3 +37,23 @@ test('batch inspection never changes source credentials, published content, or s
   assert.doesNotMatch(block,/\/sync'|\/bulk'|\/items\/|\/delete|api\([^\n]*PATCH/);
   assert.doesNotMatch(block,/password:|username:|host:/);
 });
+
+test('mixed sample results are clearly labelled partial despite an overall passing group',async()=>{
+  const [js,css]=await Promise.all([
+    readFile(new URL('../web/sources-admin.js',import.meta.url),'utf8'),
+    readFile(new URL('../web/sources-admin.css',import.meta.url),'utf8')
+  ]);
+  const start=js.indexOf('async function runXtreamBatchProbe()');
+  const end=js.indexOf('async function addXtream(event)',start);
+  const block=js.slice(start,end);
+  assert.match(block,/session\.partial\+\+/);
+  assert.match(block,/session\.failedSamples\+=failedSamples/);
+  assert.match(block,/status\.className=failedSamples\?'status partial':'status passed'/);
+  assert.match(block,/نجاح جزئي للعينة/);
+  assert.match(block,/partialReasons/);
+  assert.match(block,/xtream_transport_connection_reset:'انقطاع الاتصال'/);
+  assert.match(block,/failedCheck/);
+  assert.match(block,/partialReason/);
+  assert.match(block,/عينة فرعية فاشلة/);
+  assert.match(css,/\.xt-batch-probe-row \.status\.partial/);
+});

@@ -881,7 +881,24 @@ async function probeGatewayMedia(kind,itemId){
     if(!row||!row.server_enabled)return{ok:false,kind,itemId,reason:'catalog_item_not_found',httpStatus:null};
     const ext=safeGatewayExtension(row.container_extension,kind==='live'?'ts':'mp4');
     const sourceId=kind==='series'?row.source_episode_id:row.source_id;
-    const url=mediaUpstreamUrl(row,kind,sourceId,ext);
+    const upstream=mediaUpstreamUrl(row,kind,sourceId,ext);
+    let url=upstream;
+    // The operator's probe must follow the same opt-in TS transport as
+    // subscribers. Otherwise an upstream reset is a false negative while
+    // real gateway playback uses the independent STREAM service.
+    if(shouldUseIndependentSourceMedia({
+      sourceId:row.server_id,kind,extension:ext
+    })){
+      try{
+        url=new URL(await issueStreamRelayGrant({sourceUrl:upstream.href,kind}));
+      }catch{
+        // A failed capability request must never change source permissions,
+        // retry a denied provider response, or leak a signed media URL.
+        console.warn('BLOFY_XTREAM_GATEWAY_PROBE_FALLBACK',{
+          kind,reason:'relay_ticket_unavailable'
+        });
+      }
+    }
     const probeHeaders={
       'user-agent':'BLOFY-Media-Diagnostics/1.0',
       ...(kind==='live'?{}:{range:'bytes=0-2047'})

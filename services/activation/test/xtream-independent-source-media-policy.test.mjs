@@ -49,3 +49,20 @@ test('admin TS source checks use same source-gated transport, never all sources'
  assert.match(s,/issueStreamRelayGrant\(/);
  assert.match(s,/sourceUrl:target.href,kind:mediaType/);
 });
+
+test('operator gateway sample uses the same source-only independent live TS route',async()=>{
+ const c=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
+ const start=c.indexOf('async function probeGatewayMedia(');
+ const end=c.indexOf('function playerServerInfo(',start);
+ assert.ok(start>=0&&end>start);
+ const probe=c.slice(start,end);
+ const gate=probe.indexOf('shouldUseIndependentSourceMedia(');
+ const issue=probe.indexOf('issueStreamRelayGrant({sourceUrl:upstream.href,kind})');
+ const request=probe.indexOf('response=await checkedFetch(url,');
+ assert.ok(gate>=0&&issue>gate&&request>issue);
+ assert.match(probe,/sourceId:row.server_id,kind,extension:ext/);
+ assert.match(probe,/url=new URL\(await issueStreamRelayGrant/);
+ assert.match(probe,/BLOFY_XTREAM_GATEWAY_PROBE_FALLBACK/);
+ assert.match(probe,/const upstream=mediaUpstreamUrl/);
+});
+
