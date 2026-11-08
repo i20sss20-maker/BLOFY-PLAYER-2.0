@@ -460,7 +460,9 @@ async function probeXtreamEpisodeMedia(source,creds,episode) {
   let target=new URL(path,normalizeXtreamBaseUrl(source.base_url)+'/');
   // The original PLAYER egress is known to reset this provider's media.
   // Only selected source uses the verified independent STREAM proxy.
-  if(shouldUseIndependentXtreamSource(source.id)){
+  if(shouldUseIndependentSourceMedia({
+    sourceId:source.id,kind:'series',extension:episode.extension
+  })){
     try{target=new URL(await issueStreamRelayGrant({
       sourceUrl:target.href,kind:'series'
     }));}catch{}
@@ -647,7 +649,7 @@ async function probeXtreamPlayback(id,mediaType='live') {
     // client TS streams; otherwise the old portal falsely reports resets.
     if(shouldUseIndependentSourceMedia({
       sourceId:source.id,kind:mediaType,extension:ext
-    })||(mediaType==='movie'&&shouldUseIndependentXtreamSource(source.id))){
+    })){
       try{target=new URL(await issueStreamRelayGrant({
         sourceUrl:target.href,kind:mediaType
       }));}catch{}
