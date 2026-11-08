@@ -19,7 +19,7 @@ export function inspectXtreamMediaChunk(chunk, contentType = '') {
   if (known) return { valid: true, format, reason: null };
   // Some suppliers return HTTP 200 and even video/* for a textual
   // 404/502 payload. Reject these before the player gets a black frame.
-  const httpErrorText=/^(?:400|401|403|404|408|410|416|429|500|502|503|504)\\s*[:\\-]?\\s*(?:not\\s+found|unauthorized|forbidden|bad\\s+request|request\\s+timeout|range\\s+not\\s+satisfiable|too\\s+many\\s+requests|internal\\s+server\\s+error|bad\\s+gateway|service\\s+unavailable|gateway\\s+timeout)\\b/i.test(lower);
+  const httpErrorText=/^(?:400|401|403|404|408|410|416|429|500|502|503|504)\s*[:\-]?\s*(?:not\s+found|unauthorized|forbidden|bad\s+request|request\s+timeout|range\s+not\s+satisfiable|too\s+many\s+requests|internal\s+server\s+error|bad\s+gateway|service\s+unavailable|gateway\s+timeout)\b/i.test(lower);
   if (httpErrorText ||
       /^(text\/|application\/(?:json|xml|xhtml\+xml|problem\+json))/.test(mime) ||
       /^<(!doctype\s+html|html|\?xml)|^\{\s*"(?:(?:error|message|status|code)\b)/i.test(lower) ||
