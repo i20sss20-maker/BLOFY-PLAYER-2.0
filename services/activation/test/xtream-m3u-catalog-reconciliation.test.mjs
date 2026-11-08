@@ -65,3 +65,26 @@ test('operator boot source guard is read-only and never fetches media URLs indiv
  assert.match(audit,/maxBytes=64\*1024\*1024/);
  assert.doesNotMatch(audit,/\bUPDATE\b|\bDELETE\b|\bINSERT\b/);
 });
+
+test('failed provider transport emits a safe stage, never the signed playlist URL',async()=>{
+ const r=await reconcileXtreamM3uWithImportedCatalog({...setup,pool},{
+  checkPublic:async()=>{},
+  fetchImpl:async()=>{throw Error('url http://provider.example?password=privatePASS');}
+ });
+ assert.equal(r.ok,false);
+ assert.equal(r.stage,'playlist_request');
+ assert.equal(r.code,'reconciliation_stage_failed');
+ assert.doesNotMatch(JSON.stringify(r),/privatePASS|provider\.example|password=/);
+});
+test('DNS and database failures return different redacted stages',async()=>{
+ const dns=await reconcileXtreamM3uWithImportedCatalog({...setup,pool},{
+  checkPublic:async()=>{throw Error('source password');}
+ });
+ assert.equal(dns.stage,'public_dns');
+ const db=await reconcileXtreamM3uWithImportedCatalog({...setup,
+  pool:{query:async()=>{throw Error('db failure source password');}}},{
+  checkPublic:async()=>{}
+ });
+ assert.equal(db.stage,'database');
+ assert.doesNotMatch(JSON.stringify(db),/password/);
+});
