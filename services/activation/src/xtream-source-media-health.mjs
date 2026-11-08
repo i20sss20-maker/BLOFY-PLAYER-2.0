@@ -15,14 +15,17 @@ export function summarizeSourceMediaProbe(mediaType,result,now=Date.now()){
   const value=Number(chosen?.httpStatus);
   const httpStatus=Number.isInteger(value)&&value>=100&&value<=599?value:null;
   const ok=Boolean(result?.ok&&pass);
+  const failed=checks.filter(row=>row&&!row.ok).length;
+  const partial=ok&&failed>0;
   return {
     checkedAt:new Date(now).toISOString(),
     ok,
-    status:ok?'media-confirmed':REJECTED.has(httpStatus)?'provider-rejected':'unconfirmed',
+    status:partial?'media-partial':ok?'media-confirmed':
+      REJECTED.has(httpStatus)?'provider-rejected':'unconfirmed',
     httpStatus,
     ...(validXtreamDenialHint(chosen?.providerHint)?{providerHint:validXtreamDenialHint(chosen.providerHint)}:{}),
     sampled:checks.length,
-    failed:checks.filter(row=>row&&!row.ok).length
+    failed
   };
 }
 export function sourceMediaSummary(probes={},now=Date.now()){
@@ -37,6 +40,11 @@ export function sourceMediaSummary(probes={},now=Date.now()){
     const code=Number(value.httpStatus);
     const reasons={network_restriction:'قيد الشبكة',connection_limit:'حد الاتصالات',account_expired:'صلاحية الحساب',restream_not_allowed:'إعادة البث غير مصرح',output_format_rejected:'صيغة غير مسموحة',account_inactive:'الحساب غير نشط'};
     const hint=reasons[validXtreamDenialHint(value.providerHint)]||'';
+    if(value.ok&&Number(value.failed)>0){
+      const failed=Math.max(1,Math.min(8,Math.trunc(Number(value.failed))));
+      return[{kind,label,className:'hidden',
+        text:'⚠ '+label+' · نجاح جزئي، '+failed+' عينات فاشلة'}];
+    }
     if(value.ok)return[{kind,label,className:'on',text:'✓ '+label+' · عينة نجحت'}];
     if(code===456)return[{kind,label,className:'off',text:'✕ '+label+' · رفض المصدر 456'+(hint?' · '+hint:'')}];
     if(code===401||code===403)return[{kind,label,className:'off',text:'✕ '+label+' · رفض المصدر '+code}];
