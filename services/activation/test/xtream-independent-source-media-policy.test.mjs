@@ -16,7 +16,7 @@ test('new media route cannot switch without operator enablement, source allowlis
  assert.equal(shouldUseIndependentSourceMedia(media,{...cfg,BLOFY_STREAM_RELAY_SHARED_TOKEN:'short'}),false);
  assert.equal(shouldUseIndependentSourceMedia(media,{...cfg,BLOFY_STREAM_RELAY_ORIGIN:'https://evil.example'}),false);
 });
-test('other source, VOD, series and HLS remain on original paths',()=>{
+test('other source, VOD disabled, HLS and unsupported containers stay on old paths',()=>{
  for(const media of [
    {sourceId:healthy,kind:'live',extension:'ts'},
    {sourceId:affected,kind:'live',extension:'m3u8'},
@@ -24,6 +24,16 @@ test('other source, VOD, series and HLS remain on original paths',()=>{
    {sourceId:affected,kind:'series',extension:'mp4'},
    {sourceId:affected,kind:'live',extension:''}
  ])assert.equal(shouldUseIndependentSourceMedia(media,cfg),false);
+});
+test('VOD/episode only switch with second opt-in and exact server allowlist',()=>{
+ const enabled={...cfg,BLOFY_XTREAM_INDEPENDENT_VOD_PROXY_ENABLED:'1'};
+ for(const kind of ['movie','series']){
+   for(const ext of ['mp4','mkv','avi','mov','ts'])
+     assert.equal(shouldUseIndependentSourceMedia({sourceId:affected,kind,extension:ext},enabled),true);
+ }
+ assert.equal(shouldUseIndependentSourceMedia({sourceId:healthy,kind:'movie',extension:'mp4'},enabled),false);
+ assert.equal(shouldUseIndependentSourceMedia({sourceId:affected,kind:'movie',extension:'m3u8'},enabled),false);
+ assert.equal(shouldUseIndependentSourceMedia({sourceId:affected,kind:'live',extension:'mp4'},enabled),false);
 });
 test('auth, expiry, subscription source and gateway item checks precede new source relay',async()=>{
  const c=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');

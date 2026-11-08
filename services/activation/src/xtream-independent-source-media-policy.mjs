@@ -8,8 +8,12 @@ export function shouldUseIndependentSourceMedia({sourceId,kind,extension},env=pr
     env.BLOFY_STREAM_RELAY_ORIGIN!==STREAM||
     String(env.BLOFY_STREAM_RELAY_SHARED_TOKEN||'').length<32)
    return false;
- if(kind!=='live'||String(extension||'').toLowerCase()!=='ts')
-   return false;
+ const ext=String(extension||'').trim().replace(/^\\./,'').toLowerCase();
+ const live=kind==='live'&&ext==='ts';
+ const vod=['movie','series'].includes(kind)&&
+   env.BLOFY_XTREAM_INDEPENDENT_VOD_PROXY_ENABLED==='1'&&
+   ['mp4','mkv','avi','mov','ts'].includes(ext);
+ if(!live&&!vod)return false;
  const allowlist=new Set(
    String(env.BLOFY_XTREAM_INDEPENDENT_MEDIA_PROXY_SOURCE_IDS||'')
      .split(',').map(x=>x.trim().toLowerCase()).filter(x=>UUID.test(x))
