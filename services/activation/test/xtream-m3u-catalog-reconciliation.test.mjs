@@ -62,7 +62,7 @@ test('operator boot source guard is read-only and never fetches media URLs indiv
  assert.doesNotMatch(part,/\bUPDATE\b|\bDELETE\b|\bINSERT\b|syncServer\(/);
  const audit=await readFile(new URL('../src/xtream-m3u-catalog-reconciliation.mjs',import.meta.url),'utf8');
  assert.match(audit,/xtreamM3uUrl/);
- assert.match(audit,/maxBytes=64\*1024\*1024/);
+ assert.match(audit,/maxBytes=256\*1024\*1024/);
  assert.doesNotMatch(audit,/\bUPDATE\b|\bDELETE\b|\bINSERT\b/);
 });
 
