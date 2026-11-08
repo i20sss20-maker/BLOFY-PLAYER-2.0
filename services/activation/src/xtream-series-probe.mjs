@@ -85,6 +85,11 @@ const ERRORS={
   upstream_unreachable:'تعذر الوصول إلى سيرفر المصدر.'
 };
 function summaryForCheck(row) {
+  // BLOFY STREAM wraps a *confirmed upstream* 404 in its own HTTP 502.
+  // The signed relay's fixed diagnostic code is authoritative for the
+  // operator, not a generic claim that our gateway crashed.
+  if(row?.httpStatus===502&&row?.error==='relay_provider_not_found')
+    return 'HTTP 404 من المزود: ملف الفيديو لم يُتح للتشغيل. قد يكون غير متاح أو مقيّدًا؛ افحصه لدى المزود.';
   const code=Number(row?.httpStatus);
   const hint=XTREAM_DENIAL_MESSAGES[validXtreamDenialHint(row?.providerHint)]||'';
   const suffix=hint?' '+hint:'';
