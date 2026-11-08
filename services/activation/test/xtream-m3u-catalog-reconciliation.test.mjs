@@ -69,10 +69,11 @@ test('operator boot source guard is read-only and never fetches media URLs indiv
 test('failed provider transport emits a safe stage, never the signed playlist URL',async()=>{
  const r=await reconcileXtreamM3uWithImportedCatalog({...setup,pool},{
   checkPublic:async()=>{},
-  fetchImpl:async()=>{throw Error('url http://provider.example?password=privatePASS');}
+  fetchImpl:async()=>{throw Error('url http://provider.example?password=privatePASS');},
+  http11Impl:async()=>{throw Error('password privatePASS');}
  });
  assert.equal(r.ok,false);
- assert.equal(r.stage,'playlist_request');
+ assert.equal(r.stage,'playlist_http11_request');
  assert.equal(r.code,'reconciliation_stage_failed');
  assert.doesNotMatch(JSON.stringify(r),/privatePASS|provider\.example|password=/);
 });
@@ -87,4 +88,29 @@ test('DNS and database failures return different redacted stages',async()=>{
  });
  assert.equal(db.stage,'database');
  assert.doesNotMatch(JSON.stringify(db),/password/);
+});
+
+test('HTTP/1.1 fallback can read official playlist when native fetch transport throws',async()=>{
+ let transportCalls=0;
+ const result=await reconcileXtreamM3uWithImportedCatalog({...setup,pool},{
+  checkPublic:async()=>{},
+  fetchImpl:async()=>{throw Error('fetch socket reset');},
+  http11Impl:async()=>{transportCalls++;return new Response(m3u,{status:200});}
+ });
+ assert.equal(result.ok,true);
+ assert.equal(result.transport,'http11');
+ assert.equal(result.matchedMovies,1);
+ assert.equal(transportCalls,1);
+ assert.equal(result.mediaRequests,0);
+});
+test('HTTP 403 is an actual denial, not a reason to retry another transport',async()=>{
+ let calls=0;
+ const result=await reconcileXtreamM3uWithImportedCatalog({...setup,pool},{
+  checkPublic:async()=>{},
+  fetchImpl:async()=>new Response('Access denied',{status:403}),
+  http11Impl:async()=>{calls++;throw Error('should never run');}
+ });
+ assert.equal(result.ok,false);
+ assert.equal(result.playlistStatus,403);
+ assert.equal(calls,0);
 });
