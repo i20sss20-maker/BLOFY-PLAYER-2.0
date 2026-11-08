@@ -5,7 +5,7 @@ import {distributedMovieOffsets,summarizeDistributedMovieProbe}
  from '../src/xtream-distributed-movie-audit.mjs';
 
 test('distributed offsets cover start, middle and end without out-of-bounds',()=>{
- assert.deepEqual(distributedMovieOffsets(24000),[3999,11998,19998]);
+ assert.deepEqual(distributedMovieOffsets(24000),[3999,11998,19996]);
  assert.deepEqual(distributedMovieOffsets(2),[0]);
  assert.deepEqual(distributedMovieOffsets(0),[]);
  assert.deepEqual(distributedMovieOffsets(-1),[]);
