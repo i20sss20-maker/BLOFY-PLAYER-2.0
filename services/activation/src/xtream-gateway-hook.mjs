@@ -912,6 +912,32 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
           }
           const providerHint=retryWithoutRange||shouldRefresh||usingIndependentRelay?null:
             await readXtreamProviderDenialHint(response);
+          // Some upstream proxies return 502/503 instead of throwing for a
+          // broken connection. Only the original route can trigger this
+          // source-allowed fallback; confirmed missing media and provider
+          // denials remain terminal. Do not switch a healthy stream.
+          const httpEgressFailure=fallbackAllowed&&!fallbackTried&&
+            !usingIndependentRelay&&!res.headersSent&&!providerHint&&
+            (response.status===502||response.status===503)&&
+            attempt<maxAttempts;
+          if(httpEgressFailure){
+            fallbackTried=true;
+            await response.body?.cancel().catch(()=>{});
+            try{
+              mediaFetchTarget=new URL(await issueStreamRelayGrant({
+                sourceUrl:upstream.href,kind
+              }));
+              usingIndependentRelay=true;
+              console.info('BLOFY_VOD_EGRESS_FALLBACK',{
+                kind,sourceId:row.server_id,state:'retry_via_relay',cause:'upstream_http'
+              });
+              continue;
+            }catch{
+              console.warn('BLOFY_VOD_EGRESS_FALLBACK',{
+                kind,sourceId:row.server_id,state:'relay_ticket_unavailable'
+              });
+            }
+          }
           // Respect provider refusals, and cool down this channel only.
           if(req.method!=='HEAD')mediaDenialCooldown.denied(cooldownKey,response.status);
           await response.body?.cancel().catch(()=>{});
@@ -952,6 +978,12 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
         if (first.done || !first.value?.byteLength) throw new Error('upstream_empty_media');
         const inspection=inspectXtreamMediaChunk(first.value,response.headers.get('content-type'));
         if(!inspection.valid)throw new Error(inspection.reason);
+        // Confirm fallback only after validated media bytes; a ticket is not success.
+        if(fallbackTried&&usingIndependentRelay){
+          console.info('BLOFY_VOD_EGRESS_FALLBACK',{
+            kind,sourceId:row.server_id,state:'media_first_bytes_received'
+          });
+        }
         // Only announce a successful response once the provider really sent media bytes.
         mediaDenialCooldown.clear(cooldownKey);
         observe('started',{upstreamStatus:response.status,startupMs:Date.now()-startedAt,attempts:attempt});
@@ -988,7 +1020,7 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
             }));
             usingIndependentRelay=true;
             console.info('BLOFY_VOD_EGRESS_FALLBACK',{
-              kind,sourceId:row.server_id,state:'transport_recovered_via_relay'
+              kind,sourceId:row.server_id,state:'retry_via_relay',cause:'transport'
             });
             continue;
           }catch{
