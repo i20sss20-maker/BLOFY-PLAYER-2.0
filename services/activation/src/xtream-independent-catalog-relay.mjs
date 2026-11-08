@@ -1,6 +1,7 @@
 // Protected Xtream catalog API data-plane route. Original portal retains
 // account/playlist authority in PostgreSQL and sends only an allowlisted
 // source to the isolated Railway service over HTTPS. Default OFF.
+import {validXtreamDenialHint} from './xtream-provider-denial.mjs';
 const ENDPOINT='https://blofy-stream-api-production.up.railway.app';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export function shouldUseIndependentXtreamSource(sourceId,env=process.env){
@@ -112,6 +113,8 @@ export async function probeIndependentXtreamClientProfiles(samples,{
      status:Number.isInteger(x?.status)&&x.status>=100&&x.status<=599?x.status:null,
      mediaBytes:x?.mediaBytes===true,
      code:codes.has(x?.code)?x.code:'other',
+     ...(validXtreamDenialHint(x?.providerHint)?
+       {providerHint:validXtreamDenialHint(x.providerHint)}:{}),
      redirects:Number.isInteger(x?.redirects)&&x.redirects>=0&&x.redirects<=2?x.redirects:0,
      crossOriginRedirect:x?.crossOriginRedirect===true
    }))

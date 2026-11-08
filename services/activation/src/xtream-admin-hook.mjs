@@ -987,12 +987,52 @@ if(process.env.BLOFY_XTREAM_M3U_FULL_ID_COMPARE_ON_BOOT==='1'){
      "SELECT source_id,container_extension FROM blofy_xtream_items "+
      "WHERE server_id=$1 AND media_type='movie' AND enabled=TRUE "+
      "ORDER BY name ASC LIMIT 3",[id])).rows;
+   // Audit the exact episode IDs from the same first two imported series
+   // used by the existing playback diagnostic. This is API metadata only:
+   // no per-episode media requests, DB mutations or customer routing changes.
+   const sameEpisodeSamples=[];
+   if(shouldUseIndependentXtreamSource(id)){
+    const seriesRows=(await pool.query(
+     "SELECT source_id FROM blofy_xtream_items "+
+     "WHERE server_id=$1 AND media_type='series' AND enabled=TRUE "+
+     "ORDER BY name ASC LIMIT 2",[id])).rows;
+    for(const series of seriesRows){
+     if(!/^[A-Za-z0-9_-]{1,128}$/.test(String(series.source_id||'')))continue;
+     let response,reader;
+     try{
+      const apiUrl=xtreamApiUrl(source.base_url,creds.username,creds.password,
+       'get_series_info',{series_id:String(series.source_id)});
+      response=await fetchIndependentXtreamSource(apiUrl.href,{timeoutMs:10000});
+      if(response.status!==200||!response.body)continue;
+      reader=response.body.getReader();
+      let size=0,tooLarge=false,parts=[];
+      for(;;){
+       const item=await reader.read();
+       if(item.done)break;
+       size+=item.value?.byteLength||0;
+       if(size>1500000){tooLarge=true;break;}
+       parts.push(Buffer.from(item.value));
+      }
+      if(tooLarge)continue;
+      const payload=JSON.parse(Buffer.concat(parts).toString('utf8'));
+      for(const episode of xtreamEpisodePlaybackCandidates(payload,3)){
+       if(sameEpisodeSamples.length>=6)break;
+       sameEpisodeSamples.push({id:episode.id,extension:episode.extension});
+      }
+     }catch{
+      // An unavailable series API must never block the movie/live audit.
+     }finally{
+      if(reader){try{await reader.cancel()}catch{}try{reader.releaseLock()}catch{}}
+      else{try{await response?.body?.cancel()}catch{}}
+     }
+    }
+   }
    const report=await reconcileXtreamM3uWithImportedCatalog({
     pool,sourceId:id,baseUrl:source.base_url,
     username:creds.username,password:creds.password
    },{
     // Same imported movie IDs, read-only, no per-media request.
-    sameMovieSamples,
+    sameMovieSamples,sameEpisodeSamples,
     // Source-specific protected egress; never used for a different Xtream
     // source or any customer playback route.
     independentImpl:shouldUseIndependentXtreamSource(id)?

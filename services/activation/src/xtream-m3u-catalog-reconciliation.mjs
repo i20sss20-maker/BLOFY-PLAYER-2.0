@@ -10,7 +10,7 @@ export async function reconcileXtreamM3uWithImportedCatalog({
 },{fetchImpl=fetch,http11Impl=getXtreamManifestHttp11,
   independentImpl=null,checkPublic=assertPublicXtreamUrl,
   maxBytes=256*1024*1024,timeoutMs=115000,
-  sameMovieSamples=[]}={}){
+  sameMovieSamples=[],sameEpisodeSamples=[]}={}){
  let stage='base_url';
  try{
  const origin=new URL(normalizeXtreamBaseUrl(baseUrl));
@@ -66,6 +66,18 @@ export async function reconcileXtreamM3uWithImportedCatalog({
      found:false,canonicalUrlSeen:false,shortRouteSeen:false,
      movieRouteSeen:false
    }));
+ // Compare only the same provider-advertised episode IDs sampled from
+ // get_series_info. Do not persist the M3U URLs or guess fallback episode IDs.
+ const episodeSamples=(Array.isArray(sameEpisodeSamples)?sameEpisodeSamples:[])
+   .slice(0,6)
+   .filter(x=>ID.test(String(x?.id??x?.source_id??''))&&
+     EXT.test(String(x?.extension??x?.container_extension??'').replace(/^\./,'')))
+   .map((x,index)=>({
+     index:index+1,id:String(x.id??x.source_id),
+     extension:String(x.extension??x.container_extension).toLowerCase().replace(/^\./,''),
+     found:false,canonicalUrlSeen:false,seriesRouteSeen:false,
+     extensionMatches:false
+   }));
  const counts={movieUrls:0,liveUrls:0,seriesEpisodeUrls:0,
    extraMovieUrls:0,extraLiveUrls:0,ignoredUrls:0};
  const prefix=origin.pathname.split('/').filter(Boolean);
@@ -96,7 +108,20 @@ export async function reconcileXtreamM3uWithImportedCatalog({
   if(!match||!EXT.test(match[2])){counts.ignoredUrls++;return;}
   const id=match[1],ext=match[2].toLowerCase();
   if(parts.length===3&&['mp4','mkv','avi','mov','webm'].includes(ext))kind='movie';
-  if(kind==='series'){counts.seriesEpisodeUrls++;return;}
+  if(kind==='series'){
+    counts.seriesEpisodeUrls++;
+    for(const item of episodeSamples){
+      if(item.id!==id)continue;
+      item.found=true;item.seriesRouteSeen=true;
+      if(item.extension===ext)item.extensionMatches=true;
+      const canonical=new URL('series/'+[
+        username,password,item.id
+      ].map(encodeURIComponent).join('/')+'.'+item.extension,
+        normalizeXtreamBaseUrl(baseUrl)+'/');
+      if(link.href===canonical.href)item.canonicalUrlSeen=true;
+    }
+    return;
+  }
   if(kind==='movie'){
     for(const x of samples){
       if(x.id!==id)continue;
@@ -145,6 +170,10 @@ export async function reconcileXtreamM3uWithImportedCatalog({
    sameMovieRouteProof:samples.map(({index,found,canonicalUrlSeen,
       shortRouteSeen,movieRouteSeen})=>({
      index,found,canonicalUrlSeen,shortRouteSeen,movieRouteSeen
+   })),
+   sameEpisodeRouteProof:episodeSamples.map(({index,found,
+     canonicalUrlSeen,seriesRouteSeen,extensionMatches})=>({
+     index,found,canonicalUrlSeen,seriesRouteSeen,extensionMatches
    })),
    ...counts,mediaRequests:0,
    note:'Playlist matching is evidence of ID/extension differences, not proof of media playback.'};

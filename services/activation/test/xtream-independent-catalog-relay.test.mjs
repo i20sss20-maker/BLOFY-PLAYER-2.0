@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
-import {shouldUseIndependentXtreamSource,fetchIndependentXtreamSource}
+import {shouldUseIndependentXtreamSource,fetchIndependentXtreamSource,
+ probeIndependentXtreamClientProfiles}
  from '../src/xtream-independent-catalog-relay.mjs';
 const allowed='d9b0fcf1-0b7e-4209-b281-2b5cf1cef09a';
 const cfg={BLOFY_XTREAM_INDEPENDENT_API_ENABLED:'1',
@@ -54,4 +55,20 @@ test('original account and source filters precede independent catalog redirect',
  assert.match(code,/timeoutMs:60000,sourceId:row.id/);
  assert.match(code,/timeoutMs:180000,sourceId:row.id/);
  assert.match(code,/BLOFY_XTREAM_INDEPENDENT_CATALOG_PROBE_ON_BOOT==='1'/);
+});
+
+test('profile bridge preserves only vetted denial hint enums, never provider wording',async()=>{
+ const result=await probeIndependentXtreamClientProfiles([{
+  kind:'movie',sourceUrl:'http://annkel.com/movie/u/secret/7.mp4'
+ }],{env:cfg,fetchImpl:async()=>new Response(JSON.stringify({
+  ok:true,samples:[{index:1,kind:'movie',checks:[
+   {profile:'relay_range',status:404,code:'provider_not_found',
+    providerHint:'network_restriction',details:'DO NOT RETURN PRIVATE URL'},
+   {profile:'relay_plain',status:404,code:'provider_not_found',
+    providerHint:'arbitrary_unsafe_reason'}
+  ]}]
+ }),{status:200,headers:{'content-type':'application/json'}})});
+ assert.equal(result.samples[0].checks[0].providerHint,'network_restriction');
+ assert.equal(result.samples[0].checks[1].providerHint,undefined);
+ assert.doesNotMatch(JSON.stringify(result),/PRIVATE URL|arbitrary_unsafe_reason|annkel\\.com|secret/);
 });
