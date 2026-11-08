@@ -48,6 +48,10 @@ import {relayEligible,issueStreamRelayGrant} from './xtream-stream-relay-bridge.
 import {shouldUseIndependentSourceMedia,shouldFallbackIndependentVod} from './xtream-independent-source-media-policy.mjs';
 import {readSanitizedXtreamRelayFailure} from './xtream-relay-diagnostic.mjs';
 import {customerMediaFailureStatus} from './xtream-customer-media-failure.mjs';
+import {ensureUnavailableMediaTable,validUnavailableKey,recoverySources,
+ recoveryEnabled,registerProvider404,noteMediaRestored,
+ createRegistryWriteGuard,unavailableMediaSummary} from './xtream-unavailable-media-registry.mjs';
+import {runUnavailableRecheckBatch,classifyUnavailableProbe} from './xtream-unavailable-media-recheck.mjs';
 import {mayRefreshMovieExtension,correctedMovieExtension,
   mayRefreshEpisodeExtension,correctedEpisodeExtension} from './xtream-vod-extension-recovery.mjs';
 import {shouldUseIndependentXtreamSource,fetchIndependentXtreamSource} from './xtream-independent-catalog-relay.mjs';
@@ -81,6 +85,8 @@ function movieRefreshDue(key,now=Date.now()){
 }
 const accountUsageThrottle = createGatewayUsageThrottle();
 let readyPromise;
+const unavailableWriteGuard=createRegistryWriteGuard();
+let unavailableRecoveryTimerStarted=false,unavailableRecoveryBusy=false;
 
 function json(res, status, body, extra = {}) {
   const payload = JSON.stringify(body);
@@ -214,13 +220,24 @@ async function ensureReady() {
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_gateway_accounts_user ON blofy_xtream_gateway_accounts(username,enabled)');
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_gateway_item_lookup ON blofy_xtream_gateway_item_map(server_id,media_type,source_id)');
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_gateway_episode_lookup ON blofy_xtream_gateway_episode_map(server_id,source_episode_id)');
+      await ensureUnavailableMediaTable(client);
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK').catch(() => {});
       throw error;
     } finally { client.release(); }
   })().catch(error => { readyPromise = null; throw error; });
-  return readyPromise;
+  const ready=await readyPromise;
+  // Opt-in, source-allowlisted, lease-based recovery. Normal requests do not
+  // wait for health probes. Timers are unref'd and are never enabled by default.
+  if(!unavailableRecoveryTimerStarted&&recoveryEnabled()){
+    unavailableRecoveryTimerStarted=true;
+    const first=setTimeout(()=>{void runDueUnavailableMedia().catch(()=>{});},45000);
+    first.unref?.();
+    const timer=setInterval(()=>{void runDueUnavailableMedia().catch(()=>{});},3600000);
+    timer.unref?.();
+  }
+  return ready;
 }
 
 function adminAccount(row) {
@@ -752,6 +769,146 @@ async function freshAdvertisedEpisodeExtension(row,sourceId,previousExtension) {
   }
 }
 
+const recoverySuccessGuard=createRegistryWriteGuard({cooldownMs:21600000,max:5000});
+function mediaRegistryKey(row,kind,sourceId){
+ return validUnavailableKey({
+  serverId:row?.server_id,kind,itemId:sourceId,
+  seriesId:kind==='series'?row?.series_source_id:''
+ });
+}
+function asyncNoteMissing(key){
+ if(!key||!recoverySources().has(key.serverId))return;
+ const fingerprint=key.serverId+':'+key.kind+':'+key.itemId+':'+key.seriesId;
+ if(unavailableWriteGuard(fingerprint))
+  void registerProvider404(pool,key).catch(()=>{});
+}
+function asyncNoteRecovered(key){
+ if(!key||!recoverySources().has(key.serverId))return;
+ const fingerprint=key.serverId+':'+key.kind+':'+key.itemId+':'+key.seriesId;
+ if(recoverySuccessGuard(fingerprint))
+  void noteMediaRestored(pool,key).catch(()=>{});
+}
+
+// One approved, unchanged provider file URL through the existing authenticated
+// STREAM ticket service. No alternate source, ID, credentials or CDN guessing.
+// Each probe reads only the first media chunk and cancels its remaining body.
+async function probeUnavailableMediaOnSameSource(key){
+ const params=key.kind==='movie'?[key.serverId,key.itemId]:
+  [key.serverId,key.itemId,key.seriesId];
+ const sql=key.kind==='movie'
+  ?`SELECT i.server_id,i.container_extension,s.base_url,
+     s.username_secret,s.password_secret FROM blofy_xtream_items i
+    JOIN blofy_xtream_servers s ON s.id=i.server_id
+    WHERE i.server_id=$1 AND i.source_id=$2
+      AND i.media_type='movie' AND i.enabled=TRUE
+      AND s.enabled=TRUE AND s.publish_catalog=TRUE
+      AND s.deletion_requested_at IS NULL LIMIT 1`
+  :`SELECT e.server_id,e.container_extension,s.base_url,
+     s.username_secret,s.password_secret FROM blofy_xtream_gateway_episode_map e
+    JOIN blofy_xtream_servers s ON s.id=e.server_id
+    WHERE e.server_id=$1 AND e.source_episode_id=$2
+      AND e.series_source_id=$3 AND s.enabled=TRUE
+      AND s.publish_catalog=TRUE AND s.deletion_requested_at IS NULL LIMIT 1`;
+ let row;
+ try{row=(await pool.query(sql,params)).rows[0];}
+ catch{return 'transient';}
+ if(!row)return 'transient';
+ const ext=safeGatewayExtension(row.container_extension,'mp4');
+ if(!shouldUseIndependentSourceMedia({
+  sourceId:key.serverId,kind:key.kind,extension:ext
+ }))return 'transient';
+ let response,reader;
+ try{
+  const original=mediaUpstreamUrl(row,key.kind,key.itemId,ext);
+  const signed=await issueStreamRelayGrant({sourceUrl:original.href,kind:key.kind});
+  response=await checkedFetch(new URL(signed),{
+   timeoutMs:12000,signal:AbortSignal.timeout(12000),
+   method:'GET',headers:{range:'bytes=0-1023',
+    'user-agent':'BLOFY-Unavailable-First-Byte/1.0'}
+  });
+  if(response.status===502){
+   const relayFailure=await readSanitizedXtreamRelayFailure(response);
+   return classifyUnavailableProbe({status:502,relayFailure});
+  }
+  if(![200,206].includes(response.status)||!response.body)
+   return 'transient';
+  reader=response.body.getReader();
+  const first=await reader.read();
+  const valid=!!first.value?.byteLength&&!first.done&&
+   inspectXtreamMediaChunk(first.value,response.headers.get('content-type')).valid;
+  return classifyUnavailableProbe({status:response.status,firstChunkValid:valid});
+ }catch{return 'transient';}
+ finally{
+  if(reader){try{await reader.cancel()}catch{}try{reader.releaseLock()}catch{}}
+  else {try{await response?.body?.cancel()}catch{}}
+ }
+}
+async function runDueUnavailableMedia(){
+ if(unavailableRecoveryBusy||!recoveryEnabled())return;
+ unavailableRecoveryBusy=true;
+ try{
+  // Each source has its own DB lease, which prevents duplicate probes across
+  // replicas and keeps traffic below three first-byte attempts per hour.
+  for(const id of recoverySources()){
+   const result=await runUnavailableRecheckBatch({
+    pool,sourceId:id,probe:probeUnavailableMediaOnSameSource,limit:3
+   });
+   if(result.checked){
+    console.info('BLOFY_UNAVAILABLE_MEDIA_RECHECK',JSON.stringify({
+     sourceId:id,checked:result.checked,recovered:result.recovered,
+     stillMissing:result.stillMissing,transient:result.transient,
+     firstMediaBytesOnly:true,subscriberCutover:false,
+     catalogMutation:false,providerCredentialsLogged:false
+    }));
+   }
+  }
+ }finally{unavailableRecoveryBusy=false;}
+}
+
+// Optional first rollout: register only provider-confirmed 404 for the three
+// already well-known first movie samples, using the same original source ID.
+// No player auth bypass, mass catalog scan, alternate-ID guess, or subscriber
+// source change. Disabled after a single operator-led production boot.
+async function seedUnavailableMediaOnce(){
+ if(process.env.BLOFY_XTREAM_UNAVAILABLE_SEED_ON_BOOT!=='1')return;
+ try{
+  await ensureReady();
+  for(const serverId of recoverySources()){
+   const source=(await pool.query(`SELECT id FROM blofy_xtream_servers
+    WHERE id=$1 AND enabled=TRUE AND publish_catalog=TRUE
+      AND deletion_requested_at IS NULL LIMIT 1`,[serverId])).rows[0];
+   if(!source)continue;
+   const items=(await pool.query(`SELECT source_id FROM blofy_xtream_items
+    WHERE server_id=$1 AND media_type='movie' AND enabled=TRUE
+    ORDER BY name ASC LIMIT 3`,[serverId])).rows;
+   const aggregate={sourceId:serverId,checked:0,verifiedMissing:0,
+    firstMediaBytes:0,transient:0,mediaDeleted:false,
+    catalogMutation:false,subscriberCutover:false,credentialsLogged:false};
+   for(const item of items){
+    const key=validUnavailableKey({serverId,kind:'movie',itemId:item.source_id});
+    if(!key)continue;
+    const result=await probeUnavailableMediaOnSameSource(key);
+    aggregate.checked++;
+    if(result==='provider404'){
+     await registerProvider404(pool,key);
+     aggregate.verifiedMissing++;
+    }else if(result==='recovered')aggregate.firstMediaBytes++;
+    else aggregate.transient++;
+    if(aggregate.checked<3)await new Promise(resolve=>setTimeout(resolve,750));
+   }
+   console.info('BLOFY_UNAVAILABLE_MEDIA_SEED',JSON.stringify(aggregate));
+  }
+ }catch{
+  console.warn('BLOFY_UNAVAILABLE_MEDIA_SEED',
+   JSON.stringify({ok:false,code:'safe_sample_unavailable',
+    catalogMutation:false,subscriberCutover:false,credentialsLogged:false}));
+ }
+}
+if(process.env.BLOFY_XTREAM_UNAVAILABLE_SEED_ON_BOOT==='1'){
+ const timer=setTimeout(()=>{void seedUnavailableMediaOnce()},30000);
+ timer.unref?.();
+}
+
 async function proxyMedia(req, res, kind, username, password, gatewayId, requestedExtension) {
   if (!requirePublicBudget(req, res)) return;
   const account = await authenticate(username, password, { touch: false });
@@ -787,6 +944,9 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
   // This is an in-memory guard against repeat viewer requests, not a way
   // around the provider's permissions. Only verified 403/456 trigger it.
   const cooldownKey=String(row.server_id)+':'+kind+':'+String(gatewayId);
+  // The account and catalog item have already passed authorization.
+  // Track only verified upstream media failures, never local auth/catalog 404.
+  const unavailableKey=mediaRegistryKey(row,kind,sourceId);
   const observe=(phase,details={})=>{
     if(req.method!=='HEAD')recordXtreamPlayback({kind,itemId:gatewayId,phase,...details});
   };
@@ -965,6 +1125,10 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
               ?'upstream_http_'+response.status:'upstream_http_other'),
             providerHint,attempts:attempt
           });
+          // Only final, verified provider-file 404 after safe range/extension
+          // handling. No row is created for 502 transport errors or HTTP HEAD.
+          if(req.method==='GET'&&(confirmedMissing||response.status===404))
+            asyncNoteMissing(unavailableKey);
           return text(res,clientStatus,
             clientStatus===404?'Media unavailable':'Upstream unavailable');
         }
@@ -995,6 +1159,9 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
         }
         // Only announce a successful response once the provider really sent media bytes.
         mediaDenialCooldown.clear(cooldownKey);
+        // First validated media bytes clear any existing unavailable state.
+        // No content is deleted or returned to the viewer by this DB update.
+        if(req.method==='GET')asyncNoteRecovered(unavailableKey);
         observe('started',{upstreamStatus:response.status,startupMs:Date.now()-startedAt,attempts:attempt});
         res.writeHead(response.status, outputHeaders);
         const stream = Readable.from((async function* () {
@@ -1310,6 +1477,20 @@ http.createServer = function withBlofyXtreamGateway(listener) {
       }
       if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream-gateway/playback-health') {
         return json(res,200,{ok:true,metrics:xtreamPlaybackSnapshot()});
+      }
+      // Operator-only aggregate view: no media URLs, credentials, content
+      // names, gateway account identities or subscriber permissions.
+      if(req.method==='GET'&&url.pathname==='/api/v1/admin/xtream-gateway/unavailable-media'){
+        const sourceId=url.searchParams.get('sourceId')||null;
+        const result=await unavailableMediaSummary(pool,sourceId);
+        return json(res,result.ok?200:400,result);
+      }
+      if(req.method==='POST'&&url.pathname==='/api/v1/admin/xtream-gateway/unavailable-media/recheck'){
+        if(!recoveryEnabled())
+          return json(res,409,{ok:false,error:'unavailable_recheck_disabled'});
+        // Recheck only DB-leased records already due. No client playback.
+        await runDueUnavailableMedia();
+        return json(res,200,await unavailableMediaSummary(pool));
       }
       if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream-gateway') {
         const items = await listAccounts();
