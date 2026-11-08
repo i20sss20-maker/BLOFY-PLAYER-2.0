@@ -57,3 +57,23 @@ test('mixed sample results are clearly labelled partial despite an overall passi
   assert.match(block,/عينة فرعية فاشلة/);
   assert.match(css,/\.xt-batch-probe-row \.status\.partial/);
 });
+
+test('operator sees item-level sample failures without raw credentials or URLs',async()=>{
+ const [js,css]=await Promise.all([
+   readFile(new URL('../web/sources-admin.js',import.meta.url),'utf8'),
+   readFile(new URL('../web/sources-admin.css',import.meta.url),'utf8')
+ ]);
+ const begin=js.indexOf('function appendXtreamFailedSampleDetails(');
+ const end=js.indexOf('// Operator-initiated batch probes:',begin);
+ const helper=js.slice(begin,end);
+ assert.ok(begin>=0&&end>begin);
+ assert.match(helper,/filter\(x=>x&&!x.ok\)\.slice\(0,4\)/);
+ assert.match(helper,/String\(item.title\|\|/);
+ assert.match(helper,/make\('details'/);
+ assert.match(helper,/make\('summary'/);
+ assert.doesNotMatch(helper,/innerHTML|sourceUrl|password|username|baseUrl|mediaUrl/);
+ const batch=js.slice(js.indexOf('async function runXtreamBatchProbe()'),
+   js.indexOf('async function addXtream(event)'));
+ assert.equal((batch.match(/appendXtreamFailedSampleDetails\(row,result.checks\)/g)||[]).length,2);
+ assert.match(css,/\.xt-batch-failed-details/);
+});
