@@ -1,0 +1,96 @@
+/* BLOFY STREAM Simple Mode. Cosmetic and navigation-only; no API or data mutations. */
+:root{
+  --bg:#071428;--panel:#0b2038;--panel2:#10263f;--panel3:#09192c;
+  --border:#243d5e;--border2:#375576;--text:#eaf2ff;--muted:#91a5c0;
+  --purple:#a989ec;--purple2:#c5aefd;--green:#43d3a4;--amber:#ffca65;
+  --red:#f47e88;--blue:#49b0ed;
+}
+html,body{background:#071428;color:var(--text)}
+body{background:linear-gradient(140deg,#07172d 0%,#061225 68%,#071426 100%)!important}
+.source-rail{background:#07172b;border-color:#1d3553;box-shadow:none}
+.source-brand{font-size:17px;letter-spacing:.4px}
+.source-brand .brand-mark{width:47px;height:47px;border-radius:14px;font-size:24px;
+  background:linear-gradient(140deg,#b8a2ff,#6854bb);color:#130d2e;border:0}
+.source-rail .rail-label{color:#90a3bc;margin-top:25px}
+.source-rail .rail-links{gap:4px}
+.source-rail .rail-links a{border-radius:10px;min-height:45px;font-size:13px;font-weight:600;color:#a5b7cd}
+.source-rail .rail-links a:hover{background:#122b48;color:#eaf2ff}
+.source-rail .rail-links a.active{background:#2b2550;border-color:#5d518e;color:#eee6ff;box-shadow:none}
+.source-rail .rail-links a span{color:#aa8ee8}
+.source-rail .rail-bottom{border-color:#243b56}
+.source-main{width:min(1500px,100%);padding:0 26px 42px}
+.source-main>.topbar{min-height:83px;max-height:110px;margin-bottom:19px;padding:10px 0;gap:16px}
+.source-main>.topbar h1{font-size:23px;letter-spacing:0}
+.source-main>.topbar .eyebrow,.source-main>.topbar .subtitle,.source-main>.topbar .premium-version{display:none!important}
+.source-main>.topbar .top-actions{gap:8px}
+.source-main>.topbar .top-actions .premium-density,
+.source-main>.topbar .top-actions .premium-autorefresh,
+.source-main>.topbar .top-actions .premium-search-trigger{display:none!important}
+.source-main>.topbar .button{min-height:40px;font-size:12px}
+.source-main>.tabs{display:none!important}/* Sidebar contains the same functional data-sidebar-tab navigation. */
+.source-main .tab-page{padding-top:4px}
+.source-main .message:not([hidden]){margin:6px 0 13px}
+.source-main .panel,
+.source-main .repo-card,
+.source-main .stats article,
+.source-main .source,
+.source-main .gateway-account,
+.source-main .workspace-card{background:#0c2039;border-color:#2b4261;box-shadow:none}
+.source-main .panel{border-radius:13px;padding:17px 18px}
+.source-main .panel:hover{border-color:#375776}
+.source-main button,.source-main a{transition:background-color .15s,border-color .15s}
+.source-main .button{box-shadow:none}
+.source-main .button.primary{background:#865bca;border-color:#a986e4;box-shadow:none}
+.source-main .button.primary:hover{background:#9870d7}
+.source-main .button.ghost{background:#102741;border-color:#324e73}
+.source-main .stats article,
+.source-main .console-summary>div{border-bottom:3px solid #9b78dc!important}
+.source-main .stats article strong,
+.source-main .console-summary strong{color:#eef3ff}
+.source-main .stream-horizon{background:#0b2037;border:1px solid #263c61;box-shadow:none;
+  padding:20px 22px;border-radius:14px;min-height:0}
+.source-main .stream-horizon-art{display:none!important}
+.source-main .stream-horizon .stream-horizon-copy h2{font-size:clamp(20px,2vw,28px);line-height:1.35;margin:0}
+.source-main .stream-horizon .stream-horizon-copy p{font-size:13px;max-width:580px;margin-top:7px}
+.source-main .stream-horizon .stream-horizon-overline,
+.source-main .stream-horizon .stream-horizon-caption{display:none!important}
+.source-main .stream-horizon-engine{margin:0;background:#102941;border-color:#39516f;min-width:260px}
+.source-main .stream-horizon-actions .button{min-height:41px}
+.source-main .console-section-heading{margin:12px 0 10px}
+.source-main .console-section-heading h2{font-size:20px}
+.source-main .console-section-heading p{font-size:12px}
+.source-main .console-actions{gap:12px}
+.source-main .console-action{background:#0d253f;border:1px solid #2d486c;box-shadow:none;border-radius:13px;padding:16px}
+.source-main .console-action:hover{background:#123353;border-color:#9875d5}
+.source-main .console-action .console-action-icon{color:#ad90e8}
+.source-main .console-action strong{font-size:15px}
+.source-main .console-action span,
+.source-main .console-action small{line-height:1.5}
+.source-main .section-intro{padding:8px 3px 14px}
+.source-main .section-intro h2{font-size:21px}
+.source-main .source-list{gap:8px}
+.source-main .source{padding:12px}
+.source-main .badge{font-size:11px;padding:4px 8px}
+.source-main .tabs button{white-space:nowrap}
+.source-main input,.source-main select{border-radius:10px}
+.source-rail a[href*="/operator"]{border-color:#55568c!important;background:#172a48!important;color:#e4dbff!important}
+.source-rail a[href*="/operator"]:hover{background:#273357!important}
+@media(min-width:1150px){
+  .source-shell{padding-inline-start:245px}
+  .source-rail{width:245px}
+}
+@media(max-width:1050px){
+  .source-main{padding:0 16px 36px}
+  .source-main>.topbar{min-height:74px}
+  .source-main .stream-horizon{display:block}
+  .source-main .stream-horizon-engine{margin-top:15px}
+}
+@media(max-width:700px){
+  .source-main>.topbar{flex-wrap:wrap;max-height:none;min-height:75px}
+  .source-main>.topbar h1{font-size:20px}
+  .source-main .stream-horizon{padding:16px}
+  .source-main .stream-horizon .stream-horizon-copy h2{font-size:20px}
+  .source-main .panel{padding:14px}
+  .source-rail .rail-links a{font-size:12px}
+  .source-main .console-actions{grid-template-columns:repeat(1,minmax(0,1fr))}
+}
