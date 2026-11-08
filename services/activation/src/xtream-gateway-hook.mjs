@@ -65,6 +65,18 @@ pool.on('error', error => console.error('xtream gateway database error:', safeEr
 const adminLimiter = createFixedWindowLimiter({ limit: 120, windowMs: 60_000 });
 const publicLimiter = createFixedWindowLimiter({ limit: 1200, windowMs: 60_000 });
 const mediaDenialCooldown = new XtreamDenialCooldown();
+// Bound metadata refresh attempts for missing movies. Avoid repeatedly
+// querying the provider's catalog for the same broken item across viewers.
+const movieRefreshCooldown=new Map();
+function movieRefreshDue(key,now=Date.now()){
+  for(const [id,until] of movieRefreshCooldown){
+    if(until<=now)movieRefreshCooldown.delete(id);
+  }
+  if((movieRefreshCooldown.get(key)||0)>now)return false;
+  if(movieRefreshCooldown.size>=256)movieRefreshCooldown.delete(movieRefreshCooldown.keys().next().value);
+  movieRefreshCooldown.set(key,now+120000);
+  return true;
+}
 const accountUsageThrottle = createGatewayUsageThrottle();
 let readyPromise;
 
@@ -822,7 +834,8 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
           // Never expose upstream bodies; store only a fixed, allowlisted hint
           // if the provider itself explained a denied request.
           const shouldRefresh=movieRefreshAllowed&&!extensionRefreshTried&&
-            !retryWithoutRange&&(response.status===404||confirmedMissing)&&attempt<maxAttempts;
+            !retryWithoutRange&&(response.status===404||confirmedMissing)&&attempt<maxAttempts&&
+            movieRefreshDue(String(row.server_id)+':'+String(sourceId));
           if(shouldRefresh){
             extensionRefreshTried=true;
             await response.body?.cancel().catch(()=>{});
