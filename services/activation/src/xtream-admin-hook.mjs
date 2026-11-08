@@ -2661,6 +2661,65 @@ async function unifiedStreamBridge(req,res,url){
       sourceId,channelId,name:String(media.name||'').slice(0,160),
       extension:'ts',customerTrafficChanged:false});
   }
+  if(req.method==='GET'&&p==='/internal/blofy-stream/episodes'){
+    const sourceId=String(url.searchParams.get('sourceId')||'');
+    const seriesId=String(url.searchParams.get('seriesId')||'');
+    if(!validUuid(sourceId)||!/^[a-zA-Z0-9._-]{1,100}$/.test(seriesId))
+      return json(res,400,{ok:false,code:'stream_invalid_series'});
+    const series=(await pool.query(`SELECT source_id FROM blofy_xtream_items
+      WHERE server_id=$1 AND media_type='series' AND source_id=$2
+      AND enabled=TRUE LIMIT 1`,[sourceId,seriesId])).rows[0];
+    if(!series)return json(res,404,{ok:false,code:'stream_series_not_found'});
+    const episodes=(await pool.query(`SELECT source_episode_id,container_extension
+      FROM blofy_xtream_gateway_episode_map
+      WHERE server_id=$1 AND series_source_id=$2
+      ORDER BY source_episode_id LIMIT 120`,[sourceId,seriesId])).rows;
+    return json(res,200,{ok:true,items:episodes.map(row=>({
+      id:String(row.source_episode_id).slice(0,110),
+      extension:String(row.container_extension||'mp4').slice(0,10)
+    })),limit:120});
+  }
+  if(req.method==='POST'&&p==='/internal/blofy-stream/vod-item'){
+    const body=await readJson(req);
+    const sourceId=String(body.sourceId||''),itemId=String(body.itemId||'');
+    const type=String(body.type||'');
+    if(body.rightsConfirmed!==true)
+      return json(res,403,{ok:false,code:'stream_rights_confirmation_required'});
+    if(!validUuid(sourceId)||!/^[a-zA-Z0-9._-]{1,110}$/.test(itemId)||
+        !['movie','episode'].includes(type))
+      return json(res,400,{ok:false,code:'stream_vod_selection_invalid'});
+    const source=await serverById(sourceId);
+    if(!source?.enabled)
+      return json(res,409,{ok:false,code:'stream_source_not_enabled'});
+    let result;
+    if(type==='movie'){
+      result=(await pool.query(`SELECT source_id,name,container_extension FROM blofy_xtream_items
+        WHERE server_id=$1 AND media_type='movie' AND source_id=$2
+        AND enabled=TRUE LIMIT 1`,[sourceId,itemId])).rows[0];
+    }else{
+      result=(await pool.query(`SELECT e.source_episode_id AS source_id,
+          i.name AS name,e.container_extension
+        FROM blofy_xtream_gateway_episode_map e
+        JOIN blofy_xtream_items i ON i.server_id=e.server_id
+          AND i.media_type='series' AND i.source_id=e.series_source_id
+        WHERE e.server_id=$1 AND e.source_episode_id=$2
+          AND i.enabled=TRUE LIMIT 1`,[sourceId,itemId])).rows[0];
+    }
+    if(!result)return json(res,404,{ok:false,code:'stream_media_item_not_found'});
+    const extension=String(result.container_extension||'mp4').replace(/^\./,'').toLowerCase();
+    if(!['mp4','mkv','avi','mov','ts','m4v','webm'].includes(extension))
+      return json(res,409,{ok:false,code:'stream_vod_format_unavailable'});
+    const creds=decryptCredentials(source);
+    const path=[type==='movie'?'movie':'series',creds.username,creds.password,result.source_id]
+      .map(part=>encodeURIComponent(String(part))).join('/')+'.'+extension;
+    const base=normalizeXtreamBaseUrl(source.base_url);
+    const target=new URL(path,base+'/');
+    if(target.origin!==new URL(base).origin)
+      return json(res,409,{ok:false,code:'stream_source_origin_mismatch'});
+    return json(res,200,{ok:true,type,sourceUrl:target.href,
+      extension,sourceId,itemId,title:String(result.name||'').slice(0,170),
+      customerTrafficChanged:false});
+  }
   if(req.method==='GET'&&p==='/internal/blofy-stream/catalog'){
     const type=url.searchParams.get('type');
     if(!['live','movie','series'].includes(type))
