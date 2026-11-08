@@ -39,3 +39,31 @@ export async function fetchIndependentXtreamSource(url,{
  }
  return response;
 }
+
+// Strictly internal transport for a read-only manifest audit. Unlike catalog
+// player_api.php traffic, this endpoint forwards a bounded text M3U stream.
+// The operator must select an allowed source ID before calling this helper.
+export async function fetchIndependentXtreamManifest(url,{
+ env=process.env,fetchImpl=fetch,timeoutMs=105000
+}={}){
+ if(env.BLOFY_STREAM_RELAY_ORIGIN!==ENDPOINT||
+   String(env.BLOFY_STREAM_RELAY_SHARED_TOKEN||'').length<32)
+   throw Error('xtream_manifest_bridge_unavailable');
+ const target=new URL(url);
+ if(!['http:','https:'].includes(target.protocol)||
+   !target.pathname.endsWith('/get.php')||
+   !target.searchParams.get('username')||!target.searchParams.get('password')||
+   target.searchParams.get('type')!=='m3u_plus'||
+   target.searchParams.get('output')!=='ts'||
+   [...target.searchParams.keys()].sort().join(',')!=='output,password,type,username')
+   throw Error('xtream_manifest_url_invalid');
+ try{
+  return await fetchImpl(ENDPOINT+'/internal/xtream-manifest-relay',{
+   method:'POST',redirect:'manual',
+   headers:{authorization:'Bearer '+env.BLOFY_STREAM_RELAY_SHARED_TOKEN,
+    'content-type':'application/json',accept:'audio/x-mpegurl'},
+   body:JSON.stringify({sourceUrl:target.href}),
+   signal:AbortSignal.timeout(Math.min(Math.max(1000,timeoutMs),120000))
+  });
+ }catch{throw Error('xtream_manifest_bridge_unreachable')}
+}
