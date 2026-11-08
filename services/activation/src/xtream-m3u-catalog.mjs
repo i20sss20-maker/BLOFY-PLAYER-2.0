@@ -82,35 +82,103 @@ export function parseXtreamM3uCatalog(content,{baseUrl,username,password,maxItem
   return {records,categories:Object.fromEntries(Object.entries(categories).map(([kind,map])=>[kind,[...map.values()]]))};
 }
 
-export async function downloadXtreamM3uCatalog({baseUrl,username,password},{maxBytes=48*1024*1024,timeoutMs=90000}={}){
-  const url=xtreamM3uUrl(baseUrl,username,password);
-  // Defense in depth: the provider endpoint must resolve to a public host.
-  await assertPublicXtreamUrl(url.origin);
-  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);
+// Stream the official M3U and retain only live/movie entries. Source 2's
+// original M3U is larger than 80 MiB mainly because it also enumerates
+// hundreds of thousands of SERIES EPISODES, which must NOT be imported as
+// get_series_info series. Do not buffer the entire provider response in RAM.
+// Keep the existing, tested parseXtreamM3uCatalog semantics for retained rows.
+export async function downloadXtreamM3uCatalog({baseUrl,username,password},{
+ maxBytes=128*1024*1024,maxRetainedBytes=48*1024*1024,
+ timeoutMs=115000,fetchImpl=fetch,independentImpl=null,
+ checkPublic=assertPublicXtreamUrl
+}={}){
+ const url=xtreamM3uUrl(baseUrl,username,password);
+ // Never turn an upstream 401/403/404/456 into a fallback/bypass. Only a
+ // genuine transport exception may switch to the protected source-pinned
+ // Railway M3U relay, which retains the same official get.php URL.
+ await checkPublic(url.origin);
+ const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);
+ let response;
+ try{
   try{
-    let response;
-    try{
-      response=await fetch(url,{redirect:'error',signal:controller.signal,
-        headers:{accept:'audio/x-mpegurl,text/plain,*/*','user-agent':'BLOFY-Xtream/1.0'}});
-    }catch(error){
-      throw new Error(error.name==='AbortError'?'xtream_m3u_timeout':'xtream_m3u_unavailable');
+   response=await fetchImpl(url,{redirect:'error',signal:controller.signal,
+    headers:{accept:'audio/x-mpegurl,text/plain,*/*','user-agent':'BLOFY-Xtream/1.0'}});
+  }catch(error){
+   if(controller.signal.aborted)throw new Error('xtream_m3u_timeout');
+   if(typeof independentImpl!=='function')
+    throw new Error('xtream_m3u_unavailable');
+   try{response=await independentImpl(url,{timeoutMs});}
+   catch{throw new Error('xtream_m3u_unavailable');}
+  }
+  if(!response.ok){
+   await response.body?.cancel().catch(()=>{});
+   throw new Error('xtream_m3u_http_'+response.status);
+  }
+  if(/text\/html/i.test(response.headers.get('content-type')||'')){
+   await response.body?.cancel().catch(()=>{});
+   throw new Error('xtream_m3u_not_playlist');
+  }
+  if(!response.body)throw new Error('xtream_m3u_empty');
+  const origin=new URL(baseUrl).origin;
+  const prefix=new URL(baseUrl).pathname.split('/').filter(Boolean);
+  const retained=['#EXTM3U'];
+  let bytes=0,retainedBytes=8,partial='',header=false,pendingInf=null;
+  const decoder=new TextDecoder('utf-8');
+  const consume=line=>{
+   const s=line.trim();
+   if(!header){
+    if(!s)return;
+    if(!s.replace(/^\uFEFF/,'').startsWith('#EXTM3U'))
+     throw new Error('xtream_m3u_invalid_header');
+    header=true;return;
+   }
+   if(s.startsWith('#EXTINF:')){pendingInf=s;return;}
+   if(!s||s.startsWith('#'))return;
+   const info=pendingInf;pendingInf=null;
+   if(!info)return;
+   let link;
+   try{link=new URL(s);}catch{return;}
+   if(link.origin!==origin||link.search||link.hash||link.username||link.password)return;
+   let parts=link.pathname.split('/').filter(Boolean);
+   if(prefix.length&&prefix.every((p,i)=>parts[i]===p))
+    parts=parts.slice(prefix.length);
+   if(parts.length===4){
+    if(parts[0]!=='live'&&parts[0]!=='movie')return;
+   }else if(parts.length!==3)return;
+   // The normal parser is authoritative for exact user/password/extension,
+   // category and item checks. The prefilter only avoids storing episodes.
+   try{
+    if(decodeURIComponent(parts.at(-3))!==username||
+       decodeURIComponent(parts.at(-2))!==password)return;
+   }catch{return;}
+   retainedBytes+=Buffer.byteLength(info)+Buffer.byteLength(s)+2;
+   if(retainedBytes>maxRetainedBytes)throw new Error('xtream_m3u_retained_too_large');
+   retained.push(info,s);
+  };
+  try{
+   for await(const chunk of response.body){
+    bytes+=chunk.byteLength||chunk.length||0;
+    if(bytes>maxBytes)throw new Error('xtream_m3u_too_large');
+    partial+=decoder.decode(chunk,{stream:true});
+    let end;
+    while((end=partial.indexOf('\n'))>=0){
+     consume(partial.slice(0,end));
+     partial=partial.slice(end+1);
     }
-    if(!response.ok){
-      await response.body?.cancel().catch(()=>{});
-      throw new Error('xtream_m3u_http_'+response.status);
-    }
-    if(/text\/html/i.test(response.headers.get('content-type')||'')){
-      await response.body?.cancel().catch(()=>{});
-      throw new Error('xtream_m3u_not_playlist');
-    }
-    const pieces=[];let bytes=0;
-    for await(const piece of response.body){
-      bytes+=piece.length;
-      if(bytes>maxBytes){controller.abort();throw new Error('xtream_m3u_too_large');}
-      pieces.push(piece);
-    }
-    return parseXtreamM3uCatalog(Buffer.concat(pieces).toString('utf8'),{
-      baseUrl,username,password
-    });
-  }finally{clearTimeout(timer);}
+    if(partial.length>16384)throw new Error('xtream_m3u_line_too_large');
+   }
+   partial+=decoder.decode();
+   if(partial)consume(partial);
+   if(!header)throw new Error('xtream_m3u_invalid_header');
+  }catch(error){
+   await response.body?.cancel().catch(()=>{});
+   throw error;
+  }
+  return parseXtreamM3uCatalog(retained.join('\n'),{
+   baseUrl,username,password
+  });
+ }finally{
+  clearTimeout(timer);
+  controller.abort();
+ }
 }
