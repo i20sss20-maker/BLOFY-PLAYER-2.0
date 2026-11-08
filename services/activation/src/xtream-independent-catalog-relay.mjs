@@ -86,7 +86,8 @@ export async function probeIndependentXtreamClientProfiles(samples,{
    method:'POST',redirect:'manual',
    headers:{authorization:'Bearer '+env.BLOFY_STREAM_RELAY_SHARED_TOKEN,
     'content-type':'application/json',accept:'application/json'},
-   body:JSON.stringify({samples}),signal:AbortSignal.timeout(95000)
+   body:JSON.stringify({samples,compareHttp11:true}),
+   signal:AbortSignal.timeout(95000)
  });
  if(response.status!==200)throw Error('xtream_profile_diagnostic_http');
  const size=Number(response.headers.get('content-length')||0);
@@ -98,7 +99,7 @@ export async function probeIndependentXtreamClientProfiles(samples,{
  if(parsed?.ok!==true||!Array.isArray(parsed.samples))throw Error('xtream_profile_diagnostic_invalid');
  // Return fixed, allowlisted categories rather than trusting an arbitrary
  // object returned from a remote service to be safe for production logs.
- const profiles=new Set(['relay_range','relay_plain','player_plain']);
+ const profiles=new Set(['relay_range','relay_plain','player_plain','http11_plain']);
  const codes=new Set(['provider_not_found','provider_forbidden','provider_limited',
    'other_http','media_checked','empty_body','timeout','connection_reset',
    'unavailable','redirect_limit','cross_origin_redirect_disallowed',
@@ -106,7 +107,7 @@ export async function probeIndependentXtreamClientProfiles(samples,{
  return {ok:true,samples:parsed.samples.slice(0,3).map(s=>({
    index:Number.isInteger(s?.index)?s.index:null,
    kind:['movie','series'].includes(s?.kind)?s.kind:null,
-   checks:(Array.isArray(s?.checks)?s.checks:[]).slice(0,3).map(x=>({
+   checks:(Array.isArray(s?.checks)?s.checks:[]).slice(0,4).map(x=>({
      profile:profiles.has(x?.profile)?x.profile:'unknown',
      status:Number.isInteger(x?.status)&&x.status>=100&&x.status<=599?x.status:null,
      mediaBytes:x?.mediaBytes===true,
