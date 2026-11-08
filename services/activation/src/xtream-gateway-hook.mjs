@@ -47,6 +47,7 @@ import { readXtreamGatewayJsonResponse } from './xtream-gateway-response.mjs';
 import { createXtreamHealthSnapshot } from './xtream-health-snapshot.mjs';
 import {relayEligible,issueStreamRelayGrant} from './xtream-stream-relay-bridge.mjs';
 import {shouldUseIndependentSourceMedia,shouldFallbackIndependentVod} from './xtream-independent-source-media-policy.mjs';
+import {shouldCompareRelay404Direct} from './xtream-relay-404-direct-recovery.mjs';
 import {readSanitizedXtreamRelayFailure} from './xtream-relay-diagnostic.mjs';
 import {customerMediaFailureStatus} from './xtream-customer-media-failure.mjs';
 import {ensureUnavailableMediaTable,validUnavailableKey,recoverySources,
@@ -1049,6 +1050,7 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
     }
   }
   let mediaFetchTarget=upstream;
+  let directSourceTarget=upstream;
   let usingIndependentRelay=false;
   // Use independent Railway egress only for explicitly allowed source/kind:
   // live TS, or separately enabled VOD (movie/episode). All source, catalog,
@@ -1083,11 +1085,15 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
   const fallbackAllowed=req.method==='GET'&&shouldFallbackIndependentVod({
     sourceId:row.server_id,kind,extension:mediaExtension
   });
+  const relay404DirectAllowed=shouldCompareRelay404Direct({
+    sourceId:row.server_id,kind,method:req.method,range:headers.range,
+    usingIndependentRelay:true,relayFailure:'relay_provider_not_found'
+  });
   const maxAttempts=req.method==='HEAD'?1:
     (initialRange?3:2)+(movieRefreshAllowed||episodeRefreshAllowed?1:0)+
-    (fallbackAllowed?1:0);
+    (fallbackAllowed?1:0)+(relay404DirectAllowed?1:0);
   let noRangeRetried=false, transientRetried=false,extensionRefreshTried=false,
-    fallbackTried=false;
+    fallbackTried=false,directCompareTried=false;
   try {
     for (let attempt=1;attempt<=maxAttempts;attempt++) {
       if (client.signal.aborted) return;
@@ -1135,6 +1141,7 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
                 mediaFetchTarget=usingIndependentRelay?
                   new URL(await issueStreamRelayGrant({
                     sourceUrl:corrected.href,kind})):corrected;
+                directSourceTarget=corrected;
                 // The provider advertised an extension for the SAME movie or
                 // episode. The mapping and catalog remain untouched.
                 console.info('BLOFY_VOD_EXTENSION_RECOVERY',{
@@ -1142,6 +1149,24 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
                 continue;
               }catch{}
             }
+          }
+          // If provider 404 differs across the two Railway egress regions,
+          // check the EXACT same authorized URL once through the original
+          // gateway. A direct 404 remains final; do not switch sources or IDs.
+          if(shouldCompareRelay404Direct({sourceId:row.server_id,kind,
+              method:req.method,range:headers.range,usingIndependentRelay,
+              relayFailure,alreadyTried:directCompareTried}) &&
+              attempt<maxAttempts && !client.signal.aborted){
+            directCompareTried=true;
+            fallbackTried=true; // never bounce back to the failing relay
+            await response.body?.cancel().catch(()=>{});
+            mediaFetchTarget=directSourceTarget;
+            usingIndependentRelay=false;
+            if(firstByteXtreamRange(headers.range))delete headers.range;
+            delete headers['if-range'];
+            console.info('BLOFY_VOD_RELAY404_DIRECT_COMPARE',{
+              kind,sourceId:row.server_id,state:'same_file_direct_attempt'});
+            continue;
           }
           const providerHint=retryWithoutRange||shouldRefresh||usingIndependentRelay?null:
             await readXtreamProviderDenialHint(response);
@@ -1229,6 +1254,11 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
         const verifiedType=verifiedXtreamMediaContentType(
           response.headers.get('content-type'),inspection);
         if(verifiedType)outputHeaders['content-type']=verifiedType;
+        // Confirm alternate egress only after validated media bytes.
+        if(directCompareTried&&!usingIndependentRelay){
+          console.info('BLOFY_VOD_RELAY404_DIRECT_COMPARE',{
+            kind,sourceId:row.server_id,state:'direct_media_first_bytes_received'});
+        }
         // Confirm fallback only after validated media bytes; a ticket is not success.
         if(fallbackTried&&usingIndependentRelay){
           console.info('BLOFY_VOD_EGRESS_FALLBACK',{
