@@ -42,7 +42,8 @@ test('gateway recovers a movie only after real 404, bounded metadata and matchin
  assert.match(s,/24576/);
  assert.match(s,/correctedMovieExtension\(payload,sourceId,previousExtension\)/);
  assert.match(s,/movieRefreshAllowed=kind==='movie'&&req.method==='GET'/);
- assert.match(s,/!retryWithoutRange&&\(response.status===404\|\|confirmedMissing\)/);
+ assert.match(s,/!extensionRefreshTried&&!retryWithoutRange&&/);
+ assert.match(s,/\(response.status===404\|\|confirmedMissing\)/);
  assert.match(s,/extensionRefreshTried=true/);
  assert.match(s,/mediaUpstreamUrl\(row,kind,sourceId,freshExtension\)/);
  assert.doesNotMatch(s,/UPDATE blofy_xtream_items|DELETE FROM blofy_xtream_items/);
