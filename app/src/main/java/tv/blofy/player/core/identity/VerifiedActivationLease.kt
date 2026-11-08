@@ -2,6 +2,8 @@ package tv.blofy.player.core.identity
 
 import android.content.Context
 import android.os.SystemClock
+import android.os.Build
+import android.provider.Settings
 import tv.blofy.player.data.local.ActivationEntity
 
 /**
@@ -20,7 +22,8 @@ internal object VerifiedActivationLease {
     fun record(context: Context, identity: ActivationEntity, response: ActivationCheckResponse) {
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val serverTime = response.serverTime
-        if (!identity.activated || serverTime == null || serverTime <= 0L || !response.canUse()) {
+        val boot = bootCount(context)
+        if (!identity.activated || serverTime == null || serverTime <= 0L || boot < 0 || !response.canUse()) {
             prefs.edit().clear().apply()
             return
         }
@@ -30,6 +33,7 @@ internal object VerifiedActivationLease {
             .putLong("expires", identity.expiresAt ?: MISSING)
             .putLong("server_time", serverTime)
             .putLong("elapsed_at", SystemClock.elapsedRealtime())
+            .putInt("boot", boot)
             .apply()
     }
 
@@ -37,6 +41,8 @@ internal object VerifiedActivationLease {
     fun allows(context: Context, identity: ActivationEntity): Boolean? {
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         if (!prefs.contains("elapsed_at")) return null
+        val currentBoot = bootCount(context)
+        if (currentBoot < 0 || prefs.getInt("boot", -1) != currentBoot) return false
         if (prefs.getString("device", null) != identity.deviceId ||
             prefs.getString("code", null) != identity.activationCode ||
             prefs.getLong("expires", MISSING) != (identity.expiresAt ?: MISSING)) return false
@@ -48,6 +54,13 @@ internal object VerifiedActivationLease {
         )
     }
 
+    private fun bootCount(context: Context): Int {
+        if (Build.VERSION.SDK_INT < 24) return -1
+        return runCatching {
+            Settings.Global.getInt(context.applicationContext.contentResolver, Settings.Global.BOOT_COUNT, -1)
+        }.getOrDefault(-1)
+    }
+
     internal fun allowsAt(
         identity: ActivationEntity,
         serverTime: Long,
@@ -57,7 +70,7 @@ internal object VerifiedActivationLease {
         val elapsed = nowElapsed - verifiedAtElapsed
         // A reboot resets elapsedRealtime. Never interpret a reset as free time.
         if (!identity.activated || serverTime <= 0L || verifiedAtElapsed < 0L ||
-            elapsed !in 0..ActivationLease.OFFLINE_GRACE_MS) return false
+            elapsed !in 0L..ActivationLease.OFFLINE_GRACE_MS) return false
         val estimatedServerTime = serverTime + elapsed
         return identity.expiresAt == null || identity.expiresAt > estimatedServerTime
     }
