@@ -46,6 +46,7 @@ import { shouldRetryXtreamWithoutRange } from './xtream-media-range.mjs';
 import { summarizeSourceMediaProbe,sourceMediaSummary,sourceAccountWarnings } from './xtream-source-media-health.mjs';
 import { readXtreamProviderDenialHint } from './xtream-provider-denial.mjs';
 import { xtreamAllowedLiveFormats,shouldStopXtreamFormatComparison,outputFormatDescription } from './xtream-live-output-policy.mjs';
+import {liveDiagnosticTimeoutMs} from './xtream-live-probe-budget.mjs';
 import { auditXtreamCatalogSample } from './xtream-library-insights.mjs';
 import { normalizeXtreamDetails,mergedXtreamMetadata } from './xtream-item-details.mjs';
 import { tmdbConfigured,validatedTmdbId,fetchTmdbDetails } from './xtream-tmdb.mjs';
@@ -674,8 +675,11 @@ async function probeXtreamPlayback(id,mediaType='live',{forcePortalDirect=false}
       }catch{}
     }
     const started=Date.now(),controller=new AbortController();
+    // Live playback can legitimately take >4.5s to return its first media
+    // bytes; use a bounded longer probe without extending the global
+    // 11.5s browser budget or changing the customer playback timeout.
     const timeout=setTimeout(()=>controller.abort(),livePolicy?
-      Math.max(1200,Math.min(4500,liveDeadline-Date.now())):9500);
+      liveDiagnosticTimeoutMs(liveDeadline-Date.now()):9500);
     let httpStatus=null,contentType='',errorCode=null,providerHint=null;
     let useFirstByteRange=mediaType==='movie';
     try{
@@ -1636,6 +1640,36 @@ if(process.env.BLOFY_XTREAM_INDEPENDENT_LIVE_SYNC_ON_BOOT==='1'){
     });
   },24000);
   singleSyncTimer.unref?.();
+}
+
+// One-shot source-scoped replay of the exact admin live sample selection.
+// Reports only status, redacted error enum and latency. Never changes the
+// source account, catalog, subscriber routes or active client playback.
+if(process.env.BLOFY_XTREAM_LIVE_LONG_PROOF_ON_BOOT==='1'){
+ const timer=setTimeout(()=>{
+  void(async()=>{
+   const id=String(process.env.BLOFY_XTREAM_EGRESS_SOURCE_ID||'').trim();
+   if(!validUuid(id)||!shouldUseIndependentXtreamSource(id))return;
+   const result=await probeXtreamPlayback(id,'live');
+   const checks=Array.isArray(result.checks)?result.checks.slice(0,8):[];
+   const safeErrors=new Set(['timeout','empty_media','relay_first_byte_timeout',
+     'relay_provider_not_found','xtream_transport_connection_reset',
+     'upstream_unreachable','upstream_non_media_response','redirect_invalid']);
+   console.info('BLOFY_XTREAM_LIVE_LONG_PROOF',JSON.stringify({
+    sourceId:id,ok:result.ok===true,
+    checked:checks.length,successes:checks.filter(x=>x?.ok).length,
+    statuses:checks.map(x=>Number.isInteger(x.httpStatus)?x.httpStatus:null),
+    errors:checks.map(x=>safeErrors.has(x.error)?x.error:x.error?'other':null),
+    formats:checks.map(x=>['ts','m3u8'].includes(x.outputFormat)?x.outputFormat:null),
+    latencyMs:checks.map(x=>Number.isFinite(x.latencyMs)?Math.min(15000,Math.round(x.latencyMs)):null),
+    sourceMutation:false,subscriberCutover:false,credentialsLogged:false,
+    videoDecoded:false
+   }));
+  })().catch(()=>console.warn('BLOFY_XTREAM_LIVE_LONG_PROOF',
+    JSON.stringify({ok:false,code:'live_probe_unavailable',
+      sourceMutation:false,subscriberCutover:false,credentialsLogged:false})));
+ },23000);
+ timer.unref?.();
 }
 
 // Read-only, source-authorized real transport probe from the NEW STREAM
