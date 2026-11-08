@@ -56,6 +56,7 @@ import {runUnavailableRecheckBatch,classifyUnavailableProbe} from './xtream-unav
 import {mayRefreshMovieExtension,correctedMovieExtension,
   mayRefreshEpisodeExtension,correctedEpisodeExtension} from './xtream-vod-extension-recovery.mjs';
 import {shouldUseIndependentXtreamSource,fetchIndependentXtreamSource} from './xtream-independent-catalog-relay.mjs';
+import {sameSeriesRecoveryEpisode} from './xtream-recovery-episode-resolution.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
@@ -790,6 +791,43 @@ function asyncNoteRecovered(key){
   void noteMediaRestored(pool,key).catch(()=>{});
 }
 
+// Admin source probes can register a missing episode before a subscriber
+// ever loads the series, so the gateway episode-map row may not yet exist.
+// Read the already-imported series' current official get_series_info through
+// the same authorized source. Accept only the *original* episode ID from
+// that exact series and use only its declared extension. No map insertions.
+async function recoverOriginalUnmappedEpisode(key){
+ if(key.kind!=='series')return null;
+ let row;
+ try{
+  row=(await pool.query(`SELECT s.id AS server_id,s.base_url,
+     s.username_secret,s.password_secret
+    FROM blofy_xtream_servers s
+    JOIN blofy_xtream_items i ON i.server_id=s.id
+      AND i.media_type='series' AND i.source_id=$2 AND i.enabled=TRUE
+    WHERE s.id=$1 AND s.enabled=TRUE AND s.publish_catalog=TRUE
+      AND s.deletion_requested_at IS NULL LIMIT 1`,
+   [key.serverId,key.seriesId])).rows[0];
+ }catch{return null;}
+ if(!row)return null;
+ let response;
+ try{
+  const creds=decryptServerCredentials(row);
+  const url=xtreamApiUrl(row.base_url,creds.username,creds.password,
+   'get_series_info',{series_id:key.seriesId});
+  response=shouldUseIndependentXtreamSource(key.serverId)
+   ?await fetchIndependentXtreamSource(url.href,{timeoutMs:6500})
+   :await checkedFetch(url,{method:'GET',timeoutMs:7500,
+     signal:AbortSignal.timeout(9500),
+     headers:{accept:'application/json',
+      'user-agent':'BLOFY-Unavailable-Series-Check/1.0'}});
+  const json=await readXtreamGatewayJsonResponse(response,{maxBytes:1500000});
+  const exact=sameSeriesRecoveryEpisode(json,key.itemId);
+  return exact?{...row,container_extension:exact.extension}:null;
+ }catch{return null;}
+ finally{try{await response?.body?.cancel()}catch{}}
+}
+
 // One approved, unchanged provider file URL through the existing authenticated
 // STREAM ticket service. No alternate source, ID, credentials or CDN guessing.
 // Each probe reads only the first media chunk and cancels its remaining body.
@@ -813,6 +851,10 @@ async function probeUnavailableMediaOnSameSource(key){
  let row;
  try{row=(await pool.query(sql,params)).rows[0];}
  catch{return 'transient';}
+ // For operator-discovered series, absence of a player map must not
+ // prevent a true same-episode media recheck. Never infer another ID.
+ if(!row&&key.kind==='series')
+  row=await recoverOriginalUnmappedEpisode(key);
  if(!row)return 'transient';
  const ext=safeGatewayExtension(row.container_extension,'mp4');
  if(!shouldUseIndependentSourceMedia({
