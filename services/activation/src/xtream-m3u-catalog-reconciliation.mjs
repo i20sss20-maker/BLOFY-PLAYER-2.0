@@ -8,8 +8,12 @@ export async function reconcileXtreamM3uWithImportedCatalog({
   pool,sourceId,baseUrl,username,password
 },{fetchImpl=fetch,checkPublic=assertPublicXtreamUrl,
   maxBytes=64*1024*1024,timeoutMs=90000}={}){
+ let stage='base_url';
+ try{
  const origin=new URL(normalizeXtreamBaseUrl(baseUrl));
+ stage='public_dns';
  await checkPublic(origin.origin);
+ stage='database';
  const rows=(await pool.query(`SELECT media_type,source_id,container_extension
    FROM blofy_xtream_items WHERE server_id=$1 AND enabled=TRUE
      AND media_type IN ('live','movie')`,[sourceId])).rows;
@@ -19,6 +23,7 @@ export async function reconcileXtreamM3uWithImportedCatalog({
    imported[row.media_type].set(String(row.source_id),
      String(row.container_extension||'').replace(/^\./,'').toLowerCase());
  }
+ stage='playlist_request';
  const url=xtreamM3uUrl(baseUrl,username,password);
  const response=await fetchImpl(url,{
    redirect:'manual',signal:AbortSignal.timeout(timeoutMs),
@@ -29,6 +34,7 @@ export async function reconcileXtreamM3uWithImportedCatalog({
    return {ok:false,code:'m3u_http_unavailable',
      playlistStatus:response.status,mediaRequests:0};
  }
+ stage='playlist_read';
  const found={live:new Set(),movie:new Set()},mismatch=new Set();
  const counts={movieUrls:0,liveUrls:0,seriesEpisodeUrls:0,
    extraMovieUrls:0,extraLiveUrls:0,ignoredUrls:0};
@@ -94,4 +100,10 @@ export async function reconcileXtreamM3uWithImportedCatalog({
    movieExtensionsDisagreeing:mismatch.size,
    ...counts,mediaRequests:0,
    note:'Playlist matching is evidence of ID/extension differences, not proof of media playback.'};
+ }catch{
+  // Never emit an exception message: Node fetch errors may contain a full
+  // signed playlist URL or credentials. Only a fixed stage name is emitted.
+  return {ok:false,code:'reconciliation_stage_failed',stage,
+    readOnly:true,mediaRequests:0,credentialsLogged:false};
+ }
 }
