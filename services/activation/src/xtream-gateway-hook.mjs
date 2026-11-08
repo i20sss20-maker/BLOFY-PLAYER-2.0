@@ -822,7 +822,7 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
           // Never expose upstream bodies; store only a fixed, allowlisted hint
           // if the provider itself explained a denied request.
           const shouldRefresh=movieRefreshAllowed&&!extensionRefreshTried&&
-            (response.status===404||confirmedMissing)&&attempt<maxAttempts;
+            !retryWithoutRange&&(response.status===404||confirmedMissing)&&attempt<maxAttempts;
           if(shouldRefresh){
             extensionRefreshTried=true;
             await response.body?.cancel().catch(()=>{});
@@ -842,7 +842,7 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
               }catch{}
             }
           }
-          const providerHint=retryWithoutRange||usingIndependentRelay?null:
+          const providerHint=retryWithoutRange||shouldRefresh||usingIndependentRelay?null:
             await readXtreamProviderDenialHint(response);
           // Respect provider refusals, and cool down this channel only.
           if(req.method!=='HEAD')mediaDenialCooldown.denied(cooldownKey,response.status);
