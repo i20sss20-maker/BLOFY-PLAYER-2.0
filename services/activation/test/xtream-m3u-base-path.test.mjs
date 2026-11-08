@@ -47,7 +47,8 @@ test('M3U download and diagnostic share the safe path builder and release denial
   const b=await readFile(new URL('../src/xtream-m3u-availability.mjs',import.meta.url),'utf8');
   assert.match(a,/const url=xtreamM3uUrl\(baseUrl,username,password\)/);
   assert.match(b,/const url=xtreamM3uUrl\(baseUrl,username,password\)/);
-  assert.match(a,/await assertPublicXtreamUrl\(url\.origin\)/);
+  assert.match(a,/checkPublic=assertPublicXtreamUrl/);
+  assert.match(a,/await checkPublic\(url\.origin\)/);
   assert.match(a,/if\(!response\.ok\)\{\s*await response\.body\?\.cancel\(\)\.catch\(\(\)=>\{\}\)/);
   assert.doesNotMatch(a,/new URL\('\/get\.php'/);
   assert.doesNotMatch(b,/new URL\('\/get\.php'/);
