@@ -15,6 +15,7 @@ import {probeOfficialXtreamPlaylistRoute} from './xtream-official-m3u-probe.mjs'
 import {readSanitizedXtreamRelayFailure} from './xtream-relay-diagnostic.mjs';
 import {probeXtreamM3uAvailability} from './xtream-m3u-availability.mjs';
 import {compareXtreamAdvertisedOrigin} from './xtream-advertised-origin-diagnostic.mjs';
+import {auditEntireXtreamStoredCatalog} from './xtream-full-catalog-integrity-audit.mjs';
 import { createFixedWindowLimiter, requestClientKey } from './auth-protection.mjs';
 import {
   assertPublicXtreamUrl,
@@ -816,6 +817,31 @@ if(process.env.BLOFY_XTREAM_M3U_ONE_SHOT==='1'){
     })().catch(()=>console.warn('BLOFY_XTREAM_M3U_AVAILABILITY_FAILED','unavailable'));
   },16000);
   timer.unref?.();
+}
+
+// Full local audit scans every imported item and stored episode mapping,
+// without contacting any media provider or changing any source/subscriber.
+if(process.env.BLOFY_XTREAM_FULL_CATALOG_AUDIT_ON_BOOT==='1'){
+ const timer=setTimeout(()=>{
+  void(async()=>{
+   const id=String(process.env.BLOFY_XTREAM_EGRESS_SOURCE_ID||'').trim();
+   if(!validUuid(id))return;
+   await ensureReady();
+   const source=await serverById(id);
+   if(!source?.enabled)return;
+   const report=await auditEntireXtreamStoredCatalog(pool,id);
+   console.info('BLOFY_XTREAM_FULL_CATALOG_AUDIT',JSON.stringify({
+    sourceId:id,...report,mediaRequests:0,sourceMutation:false,
+    customerCutover:false,credentialsLogged:false
+   }));
+  })().catch(()=>{
+   console.warn('BLOFY_XTREAM_FULL_CATALOG_AUDIT',JSON.stringify({
+    ok:false,code:'read_only_audit_unavailable',mediaRequests:0,
+    sourceMutation:false,credentialsLogged:false
+   }));
+  });
+ },25000);
+ timer.unref?.();
 }
 
 // One-shot, read-only comparison with player_api.php server_info. Clients
