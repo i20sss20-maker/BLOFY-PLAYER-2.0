@@ -1408,14 +1408,29 @@ if(process.env.BLOFY_XTREAM_INDEPENDENT_VOD_SERIES_PROBE_ON_BOOT==='1'){
         let outcome;
         try{
           const report=await probeXtreamPlayback(id,mediaType);
-          outcome={ok:report.ok===true,itemsChecked:report.checks?.length||0,
-            statuses:report.checks?.slice(0,3).map(x=>x.httpStatus??x.seriesHttpStatus??null),
-            reasons:report.checks?.slice(0,3).map(x=>{
+          const samples=Array.isArray(report.checks)?report.checks.slice(0,8):[];
+          const good=samples.filter(x=>x?.ok).length;
+          const bad=samples.filter(x=>x&&!x.ok).length;
+          // HTTP 502 is the relay envelope for a verified provider 404.
+          // Expose fixed categories and complete counters, never provider
+          // stream IDs, URLs, raw bodies, or player credentials.
+          const upstreamMissing=samples.filter(x=>
+            x?.httpStatus===404||x?.error==='relay_provider_not_found').length;
+          outcome={
+            ok:good>0&&bad===0,partial:good>0&&bad>0,
+            cleanSamples:good,failedSamples:bad,
+            upstreamMissingSamples:upstreamMissing,
+            itemsChecked:samples.length,
+            statuses:samples.map(x=>x.httpStatus??x.seriesHttpStatus??null),
+            reasons:samples.map(x=>{
               const key=String(x.error||'');
-              return ['timeout','upstream_unreachable','no_episode_info','series_response_invalid',
-                'empty_media','upstream_non_media_response','no_playable_episodes',
+              return ['relay_provider_not_found','relay_first_byte_timeout',
+                'xtream_transport_connection_reset','timeout','upstream_unreachable',
+                'no_episode_info','series_response_invalid','empty_media',
+                'upstream_non_media_response','no_playable_episodes',
                 'series_response_too_large'].includes(key)?key:key?'other':null;
-            })};
+            })
+          };
         }catch{outcome={ok:false,error:'probe_unavailable'};}
         console.info('BLOFY_XTREAM_INDEPENDENT_VOD_SERIES_PROOF',
           JSON.stringify({sourceId:id,mediaType,...outcome,
