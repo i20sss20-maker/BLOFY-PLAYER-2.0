@@ -840,8 +840,9 @@ class LoginActivity : AppCompatActivity() {
                     val identity = withContext(Dispatchers.IO) { manager.ensureIdentity() }
                     renderIdentity(identity.deviceId, identity.activationCode)
                     bindTrialStatus(identity)
-                    if (remote.state() == ActivationCheckResponse.State.ACTIVE && remote.canUse()) {
-                        status.setText(R.string.login_device_active)
+                    if (remote.canUse()) {
+                        // Paid and trial devices both use the same server-approved pairing flow.
+                        status.text = activationLabel(remote)
                         // PULL_ONLY avoids uploading or removing customers' local playlists.
                         val synced = withContext(Dispatchers.IO) {
                             withTimeout(24_000L) {
