@@ -14,6 +14,7 @@ import {shouldUseIndependentSourceMedia} from './xtream-independent-source-media
 import {probeOfficialXtreamPlaylistRoute} from './xtream-official-m3u-probe.mjs';
 import {readSanitizedXtreamRelayFailure} from './xtream-relay-diagnostic.mjs';
 import {probeXtreamM3uAvailability} from './xtream-m3u-availability.mjs';
+import {compareXtreamAdvertisedOrigin} from './xtream-advertised-origin-diagnostic.mjs';
 import { createFixedWindowLimiter, requestClientKey } from './auth-protection.mjs';
 import {
   assertPublicXtreamUrl,
@@ -811,6 +812,58 @@ if(process.env.BLOFY_XTREAM_M3U_ONE_SHOT==='1'){
     })().catch(()=>console.warn('BLOFY_XTREAM_M3U_AVAILABILITY_FAILED','unavailable'));
   },16000);
   timer.unref?.();
+}
+
+// One-shot, read-only comparison with player_api.php server_info. Clients
+// often use the advertised media host/port, whereas the BLOFY gateway uses
+// the saved API base URL for both login and playback. This probe never logs
+// either host, credentials, response bodies or raw source URLs.
+if(process.env.BLOFY_XTREAM_ADVERTISED_ORIGIN_PROBE_ON_BOOT==='1'){
+  const t=setTimeout(()=>{
+    void(async()=>{
+      const id=String(process.env.BLOFY_XTREAM_EGRESS_SOURCE_ID||'').trim();
+      if(!validUuid(id))return;
+      const row=await serverById(id);
+      if(!row?.enabled)return;
+      const creds=decryptCredentials(row);
+      const response=await checkedFetch(
+        xtreamApiUrl(row.base_url,creds.username,creds.password),
+        {timeoutMs:7500,sourceId:id}
+      );
+      if(response.status!==200||!response.body){
+        await response.body?.cancel().catch(()=>{});
+        console.info('BLOFY_XTREAM_ADVERTISED_ORIGIN_PROOF',JSON.stringify({
+          sourceId:id,ok:false,code:'api_unavailable',
+          customerCutover:false,credentialsLogged:false}));
+        return;
+      }
+      const reader=response.body.getReader(),parts=[];
+      let size=0;
+      try{
+        for(;;){
+          const part=await reader.read();
+          if(part.done)break;
+          size+=part.value?.byteLength||0;
+          if(size>128000)throw Error('oversized');
+          parts.push(Buffer.from(part.value));
+        }
+      }finally{
+        try{await reader.cancel()}catch{}
+        try{reader.releaseLock()}catch{}
+      }
+      const doc=JSON.parse(Buffer.concat(parts).toString('utf8'));
+      if(![1,'1',true].includes(doc?.user_info?.auth))throw Error('auth');
+      const result=compareXtreamAdvertisedOrigin(row.base_url,doc?.server_info);
+      console.info('BLOFY_XTREAM_ADVERTISED_ORIGIN_PROOF',JSON.stringify({
+        sourceId:id,...result,customerCutover:false,
+        credentialsLogged:false,sourceMutation:false}));
+    })().catch(()=>{
+      console.warn('BLOFY_XTREAM_ADVERTISED_ORIGIN_PROOF',
+        JSON.stringify({ok:false,code:'probe_unavailable',
+          customerCutover:false,credentialsLogged:false}));
+    });
+  },18000);
+  t.unref?.();
 }
 
 // One-time transport compatibility experiment for a single saved source.
