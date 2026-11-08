@@ -18,7 +18,6 @@ export function streamSafeSource(row){
     counts:{live:count(c.live),movie:count(c.movie),series:count(c.series)},
     syncing:row?.syncing===true,queued:row?.queued===true,
     lastTestAt:row?.lastTestAt??null,lastSyncAt:row?.lastSyncAt??null,
-    lastError:row?.lastError?String(row.lastError).slice(0,180).replace(/https?:\/\/\S+/g,'[upstream]'):null,
     mediaSummary:row?.mediaSummary?{
       live:row.mediaSummary.live?.ok===true,
       movie:row.mediaSummary.movie?.ok===true,
