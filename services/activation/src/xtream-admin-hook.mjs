@@ -647,7 +647,7 @@ async function probeXtreamPlayback(id,mediaType='live') {
     // client TS streams; otherwise the old portal falsely reports resets.
     if(shouldUseIndependentSourceMedia({
       sourceId:source.id,kind:mediaType,extension:ext
-    })||(mediaType==='movie'&&shouldUseIndependentXtreamSource(source.id))){
+    })){
       try{target=new URL(await issueStreamRelayGrant({
         sourceUrl:target.href,kind:mediaType
       }));}catch{}
