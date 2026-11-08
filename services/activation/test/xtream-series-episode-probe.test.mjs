@@ -104,3 +104,16 @@ test('admin episode sample title adds position without exposing provider identif
  assert.match(block,/episode\.episodeNumber/);
  assert.match(block,/title:cleanText\(series.name,120\)\+position/);
 });
+
+test('episode candidate can report direct_source presence without exposing signed provider URL',()=>{
+ const direct='https://cdn.example/file.mkv?token=SUPERSECRET';
+ const rows=xtreamEpisodePlaybackCandidates({episodes:{'1':[
+   {id:'999',container_extension:'mkv',direct_source:direct}
+ ]}},1,{withPositions:true});
+ assert.equal(rows[0].directSourceAdvertised,true);
+ assert.doesNotMatch(JSON.stringify(rows),/SUPERSECRET|cdn\.example|file\.mkv|direct_source/);
+ const legacy=xtreamEpisodePlaybackCandidates({episodes:{'1':[
+   {id:'999',container_extension:'mkv',direct_source:direct}
+ ]}},1);
+ assert.ok(!('directSourceAdvertised' in legacy[0]));
+});

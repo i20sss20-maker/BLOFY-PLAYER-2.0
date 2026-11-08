@@ -574,6 +574,7 @@ async function probeXtreamSeries(id,mediaType){
             title:cleanText(series.name,120)+position,mediaType,
             seriesHttpStatus:httpStatus,seasonCount:details.seasonCount,
             episodeCount:details.episodeCount,
+            directSourceAdvertised:episode.directSourceAdvertised===true,
             ...playback
           });
           // Provider-level access restrictions should never be bypassed by
@@ -632,7 +633,8 @@ async function probeXtreamPlayback(id,mediaType='live') {
   const source=await serverById(id);
   if(!source)throw Object.assign(new Error('xtream_server_not_found'),{status:404});
   if(!source.enabled)throw Object.assign(new Error('xtream_source_paused'),{status:409});
-  const candidates=(await pool.query(`SELECT source_id,name,container_extension
+  const candidates=(await pool.query(`SELECT source_id,name,container_extension,
+      metadata->>'directSourcePresent' AS advertised_direct_source
     FROM blofy_xtream_items
     WHERE server_id=$1 AND media_type=$2 AND enabled=TRUE
     ORDER BY name ASC LIMIT 4`,[id,mediaType])).rows;
@@ -728,7 +730,9 @@ async function probeXtreamPlayback(id,mediaType='live') {
     checks.push({
       title:cleanText(item.name,160),mediaType,httpStatus,contentType,
       ...(livePolicy?{outputFormat:ext}:{}),
-      latencyMs:Date.now()-started,ok,error:errorCode,providerHint,rangeFallbackUsed:mediaType==='movie'&&!useFirstByteRange
+      latencyMs:Date.now()-started,ok,error:errorCode,providerHint,
+      directSourceAdvertised:item.advertised_direct_source==='true',
+      rangeFallbackUsed:mediaType==='movie'&&!useFirstByteRange
     });
     // Respect access denials. A 456 is never treated as permission to try
     // other endpoints, identities or formats after an upstream rejection.
@@ -1473,6 +1477,10 @@ if(process.env.BLOFY_XTREAM_INDEPENDENT_VOD_SERIES_PROBE_ON_BOOT==='1'){
             ok:good>0&&bad===0,partial:good>0&&bad>0,
             cleanSamples:good,failedSamples:bad,
             upstreamMissingSamples:upstreamMissing,
+            // Helps distinguish a missing /movie or /series route from
+            // a provider-authorized CDN/direct_source route, without leaking it.
+            failedWithAdvertisedDirectSource:samples.filter(x=>!x.ok&&
+              x.directSourceAdvertised===true).length,
             itemsChecked:samples.length,
             statuses:samples.map(x=>x.httpStatus??x.seriesHttpStatus??null),
             reasons:samples.map(x=>{
