@@ -833,7 +833,8 @@ class LoginActivity : AppCompatActivity() {
                 }
                 try {
                     val remote = withContext(Dispatchers.IO) {
-                        withTimeout(18_000L) { manager.refresh(api, BuildConfig.VERSION_NAME) }
+                        // Optional legacy-device migration may take a separate bounded call.
+                        withTimeout(60_000L) { manager.refresh(api, BuildConfig.VERSION_NAME) }
                     }
                     failures = 0
                     val identity = withContext(Dispatchers.IO) { manager.ensureIdentity() }
@@ -861,6 +862,9 @@ class LoginActivity : AppCompatActivity() {
                         remote.state() == ActivationCheckResponse.State.BLOCKED) {
                         status.text = activationLabel(remote)
                     }
+                } catch (_: TimeoutCancellationException) {
+                    // One network attempt timed out; keep checking while Login stays visible.
+                    failures++
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Exception) {
