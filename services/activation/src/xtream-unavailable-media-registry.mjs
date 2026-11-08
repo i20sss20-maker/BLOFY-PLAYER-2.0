@@ -99,6 +99,32 @@ export async function claimDueMedia(pool,serverId,{limit=DEFAULT_RECHECK_BATCH}=
  [serverId,limit]);
  return r.rows||[];
 }
+// Operator-requested exception to the long backoff: at most two already
+// registered missing items per source. Never scan the catalog or invent IDs.
+// A 30-minute in-flight lease is excluded; an item rechecked in the last
+// 15 minutes cannot be forced again. Leave every playback entitlement intact.
+export async function expediteUnavailableRecheck(pool,sourceId,{limit=2}={}){
+ if(!UUID.test(String(sourceId||''))||!Number.isInteger(limit)||
+    limit<1||limit>2)return 0;
+ const r=await pool.query(`WITH eligible AS (
+  SELECT server_id,kind,item_id,series_id
+  FROM blofy_xtream_unavailable_media
+  WHERE server_id=$1 AND state='missing'
+    AND next_check_at > NOW()+INTERVAL '1 hour'
+    AND (last_checked_at IS NULL OR
+         last_checked_at < NOW()-INTERVAL '15 minutes')
+  ORDER BY last_checked_at NULLS FIRST,first_missing_at
+  LIMIT $2 FOR UPDATE SKIP LOCKED
+ )
+ UPDATE blofy_xtream_unavailable_media v
+ SET next_check_at=NOW()-INTERVAL '1 minute'
+ FROM eligible e
+ WHERE v.server_id=e.server_id AND v.kind=e.kind
+   AND v.item_id=e.item_id AND v.series_id=e.series_id
+ RETURNING v.kind`,[sourceId,limit]);
+ return (r.rows||[]).length;
+}
+
 export async function finishUnavailableRecheck(pool,key,{result='transient',rechecks=0}={}){
  const k=validUnavailableKey(key);if(!k)return false;
  if(result==='recovered')return noteMediaRestored(pool,k);
