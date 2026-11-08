@@ -769,6 +769,101 @@ async function freshAdvertisedEpisodeExtension(row,sourceId,previousExtension) {
   }
 }
 
+const recoverySuccessGuard=createRegistryWriteGuard({cooldownMs:21600000,max:5000});
+function mediaRegistryKey(row,kind,sourceId){
+ return validUnavailableKey({
+  serverId:row?.server_id,kind,itemId:sourceId,
+  seriesId:kind==='series'?row?.series_source_id:''
+ });
+}
+function asyncNoteMissing(key){
+ if(!key||!recoverySources().has(key.serverId))return;
+ const fingerprint=key.serverId+':'+key.kind+':'+key.itemId+':'+key.seriesId;
+ if(unavailableWriteGuard(fingerprint))
+  void registerProvider404(pool,key).catch(()=>{});
+}
+function asyncNoteRecovered(key){
+ if(!key||!recoverySources().has(key.serverId))return;
+ const fingerprint=key.serverId+':'+key.kind+':'+key.itemId+':'+key.seriesId;
+ if(recoverySuccessGuard(fingerprint))
+  void noteMediaRestored(pool,key).catch(()=>{});
+}
+
+// One approved, unchanged provider file URL through the existing authenticated
+// STREAM ticket service. No alternate source, ID, credentials or CDN guessing.
+// Each probe reads only the first media chunk and cancels its remaining body.
+async function probeUnavailableMediaOnSameSource(key){
+ const params=[key.serverId,key.itemId,key.seriesId];
+ const sql=key.kind==='movie'
+  ?`SELECT i.server_id,i.container_extension,s.base_url,
+     s.username_secret,s.password_secret FROM blofy_xtream_items i
+    JOIN blofy_xtream_servers s ON s.id=i.server_id
+    WHERE i.server_id=$1 AND i.source_id=$2
+      AND i.media_type='movie' AND i.enabled=TRUE
+      AND s.enabled=TRUE AND s.publish_catalog=TRUE
+      AND s.deletion_requested_at IS NULL LIMIT 1`
+  :`SELECT e.server_id,e.container_extension,s.base_url,
+     s.username_secret,s.password_secret FROM blofy_xtream_gateway_episode_map e
+    JOIN blofy_xtream_servers s ON s.id=e.server_id
+    WHERE e.server_id=$1 AND e.source_episode_id=$2
+      AND e.series_source_id=$3 AND s.enabled=TRUE
+      AND s.publish_catalog=TRUE AND s.deletion_requested_at IS NULL LIMIT 1`;
+ let row;
+ try{row=(await pool.query(sql,params)).rows[0];}
+ catch{return 'transient';}
+ if(!row)return 'transient';
+ const ext=safeGatewayExtension(row.container_extension,'mp4');
+ if(!shouldUseIndependentSourceMedia({
+  sourceId:key.serverId,kind:key.kind,extension:ext
+ }))return 'transient';
+ let response,reader;
+ try{
+  const original=mediaUpstreamUrl(row,key.kind,key.itemId,ext);
+  const signed=await issueStreamRelayGrant({sourceUrl:original.href,kind:key.kind});
+  response=await checkedFetch(new URL(signed),{
+   timeoutMs:12000,signal:AbortSignal.timeout(12000),
+   method:'GET',headers:{range:'bytes=0-1023',
+    'user-agent':'BLOFY-Unavailable-First-Byte/1.0'}
+  });
+  if(response.status===502){
+   const relayFailure=await readSanitizedXtreamRelayFailure(response);
+   return classifyUnavailableProbe({status:502,relayFailure});
+  }
+  if(![200,206].includes(response.status)||!response.body)
+   return 'transient';
+  reader=response.body.getReader();
+  const first=await reader.read();
+  const valid=!!first.value?.byteLength&&!first.done&&
+   inspectXtreamMediaChunk(first.value,response.headers.get('content-type')).valid;
+  return classifyUnavailableProbe({status:response.status,firstChunkValid:valid});
+ }catch{return 'transient';}
+ finally{
+  if(reader){try{await reader.cancel()}catch{}try{reader.releaseLock()}catch{}}
+  else {try{await response?.body?.cancel()}catch{}}
+ }
+}
+async function runDueUnavailableMedia(){
+ if(unavailableRecoveryBusy||!recoveryEnabled())return;
+ unavailableRecoveryBusy=true;
+ try{
+  // Each source has its own DB lease, which prevents duplicate probes across
+  // replicas and keeps traffic below three first-byte attempts per hour.
+  for(const id of recoverySources()){
+   const result=await runUnavailableRecheckBatch({
+    pool,sourceId:id,probe:probeUnavailableMediaOnSameSource,limit:3
+   });
+   if(result.checked){
+    console.info('BLOFY_UNAVAILABLE_MEDIA_RECHECK',JSON.stringify({
+     sourceId:id,checked:result.checked,recovered:result.recovered,
+     stillMissing:result.stillMissing,transient:result.transient,
+     firstMediaBytesOnly:true,subscriberCutover:false,
+     catalogMutation:false,providerCredentialsLogged:false
+    }));
+   }
+  }
+ }finally{unavailableRecoveryBusy=false;}
+}
+
 async function proxyMedia(req, res, kind, username, password, gatewayId, requestedExtension) {
   if (!requirePublicBudget(req, res)) return;
   const account = await authenticate(username, password, { touch: false });
