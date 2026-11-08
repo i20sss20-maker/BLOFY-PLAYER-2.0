@@ -43,8 +43,8 @@ export function xtreamEpisodePlaybackCandidates(payload, limit=3, {withPositions
   const pick=(row,season,index)=>{
     const id=String(row?.id??'').trim();
     if(!IDS.test(id)||seen.has(id))return;
-    const extension=String(row.container_extension||'mp4').replace(/^\\./,'').toLowerCase();
-    const seasonNumber=/^\\d{1,3}$/.test(season)?Number(season):null;
+    const extension=String(row.container_extension||'mp4').replace(/^\./,'').toLowerCase();
+    const seasonNumber=/^\d{1,3}$/.test(season)?Number(season):null;
     const explicitEpisode=Number(row.episode_num);
     const episodeNumber=Number.isSafeInteger(explicitEpisode)&&explicitEpisode>=1&&explicitEpisode<=9999?
       explicitEpisode:index+1;
