@@ -179,7 +179,7 @@ test('episode IDs from get_series_info are compared to exact official M3U URLs w
  const playlist=['#EXTM3U',
   'http://provider.example/series/u/privatePASS/e1.mp4',
   'http://provider.example/series/u/privatePASS/e2.mkv',
-  'http://provider.example/series/u/privatePASS/other.ts'].join('\\n');
+  'http://provider.example/series/u/privatePASS/other.ts'].join('\n');
  const result=await reconcileXtreamM3uWithImportedCatalog({...setup,pool},{
   checkPublic:async()=>{},
   sameEpisodeSamples:[
@@ -196,7 +196,8 @@ test('episode IDs from get_series_info are compared to exact official M3U URLs w
   {index:3,found:false,canonicalUrlSeen:false,seriesRouteSeen:false,extensionMatches:false}
  ]);
  assert.equal(result.mediaRequests,0);
- assert.doesNotMatch(JSON.stringify(result),/privatePASS|provider\\.example|\\/series\\/|e1|e2|e3/);
+ for(const secret of ['privatePASS','provider.example','/series/','e1','e2','e3'])
+  assert.equal(JSON.stringify(result).includes(secret),false);
 });
 test('episode sample comparison rejects unsafe IDs without disclosing source URLs',async()=>{
  const result=await reconcileXtreamM3uWithImportedCatalog({...setup,pool},{
