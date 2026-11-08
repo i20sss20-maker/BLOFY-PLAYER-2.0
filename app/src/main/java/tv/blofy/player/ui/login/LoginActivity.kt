@@ -21,6 +21,7 @@ import com.google.zxing.qrcode.QRCodeWriter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
@@ -30,6 +31,7 @@ import kotlinx.coroutines.withContext
 import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
+import tv.blofy.player.core.identity.ActivationConnectionDiagnostics
 import tv.blofy.player.core.identity.ActivationCheckResponse
 import tv.blofy.player.core.identity.ActivationDisplayState
 import tv.blofy.player.core.identity.ActivationManager
@@ -72,6 +74,7 @@ class LoginActivity : AppCompatActivity() {
     private var connectJob: Job? = null
     private var playlistJob: Job? = null
     private var identityJob: Job? = null
+    private var autoPairJob: Job? = null
     private var resolvedIdentity = false
     private var identityRendered = false
     private var lastQrUrl: String? = null
@@ -800,9 +803,113 @@ class LoginActivity : AppCompatActivity() {
 
     private fun openHome() { startActivity(Intent(this, HomeActivity::class.java)); finish() }
 
+    /**
+     * TV pairing should complete without asking the customer to press Refresh or Enter.
+     * The QR and six-digit code are generated locally before any network call. While
+     * Login is visible, a bounded, cancellable check watches for server-approved
+     * activation. Once approved, only the server's playlists are pulled and the
+     * selected provider opens automatically. No entitlement is granted locally.
+     *
+     * Uses coroutine delays (monotonic scheduling), not the TV wall clock, and does
+     * not require changing the device language, clock or TLS trust configuration.
+     */
+    private fun startAutoPairing() {
+        val endpoint = activationEndpoint
+        if (endpoint.isBlank()) return
+        autoPairJob?.cancel()
+        autoPairJob = lifecycleScope.launch {
+            delay(2_500L)
+            val dao = try {
+                withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao() }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { return@launch }
+            val manager = ActivationManager(applicationContext, dao)
+            val api = ActivationRemoteClient.create(endpoint)
+            var failures = 0
+            var lastIssue: ActivationConnectionDiagnostics.Issue? = null
+            while (isActive && !isFinishing && !isDestroyed) {
+                var stage = ActivationConnectionDiagnostics.Stage.VERIFICATION
+                var retryIssue: ActivationConnectionDiagnostics.Issue? = null
+                // Do not race an explicit refresh, provider selection or connect action.
+                if (identityJob?.isActive == true || connectJob?.isActive == true || playlistJob?.isActive == true) {
+                    delay(1_500L)
+                    continue
+                }
+                try {
+                    val remote = withContext(Dispatchers.IO) {
+                        // Optional legacy-device migration may take a separate bounded call.
+                        withTimeout(60_000L) { manager.refresh(api, BuildConfig.VERSION_NAME) }
+                    }
+                    val identity = withContext(Dispatchers.IO) { manager.ensureIdentity() }
+                    renderIdentity(identity.deviceId, identity.activationCode)
+                    bindTrialStatus(identity)
+                    if (remote.canUse()) {
+                        // Paid and trial devices both use the same server-approved pairing flow.
+                        status.text = activationLabel(remote)
+                        // PULL_ONLY avoids uploading or removing customers' local playlists.
+                        stage = ActivationConnectionDiagnostics.Stage.PLAYLIST_SYNC
+                        val synced = withContext(Dispatchers.IO) {
+                            withTimeout(24_000L) {
+                                PortalPlaylistClient.sync(
+                                    applicationContext, endpoint, dao, PortalPlaylistClient.SyncMode.PULL_ONLY
+                                )
+                            }
+                        }
+                        renderPortalPlaylists(synced.providers)
+                        failures = 0
+                        lastIssue = null
+                        val provider = synced.activeProvider
+                        if (provider != null && !isFinishing && !isDestroyed) {
+                            if (hasCachedCatalog(dao, provider.id)) openHome()
+                            else openCatalogLoading(provider.id)
+                            return@launch
+                        }
+                        status.setText(R.string.login_waiting_for_playlist)
+                    } else {
+                        // A server response is authoritative, including waiting, blocked or expired.
+                        failures = 0
+                        lastIssue = null
+                        if (remote.state() == ActivationCheckResponse.State.EXPIRED ||
+                            remote.state() == ActivationCheckResponse.State.BLOCKED) {
+                            status.text = activationLabel(remote)
+                        }
+                    }
+                } catch (timeout: TimeoutCancellationException) {
+                    failures++
+                    retryIssue = if (stage == ActivationConnectionDiagnostics.Stage.PLAYLIST_SYNC)
+                        ActivationConnectionDiagnostics.Issue.PLAYLIST
+                    else ActivationConnectionDiagnostics.Issue.TIMEOUT
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    // No URL, code, token, server message or credential is sent to diagnostics.
+                    // A failed check never changes the cached activation or hides the QR.
+                    failures++
+                    retryIssue = ActivationConnectionDiagnostics.classify(error, stage)
+                }
+                if (retryIssue != null) {
+                    val issue = retryIssue
+                    if (failures == 1 || issue != lastIssue) {
+                        status.text = getString(
+                            if (stage == ActivationConnectionDiagnostics.Stage.PLAYLIST_SYNC)
+                                R.string.login_auto_retry_playlists
+                            else R.string.login_auto_retry_verification,
+                            issue.code
+                        )
+                    }
+                    lastIssue = issue
+                }
+                delay(ActivationConnectionDiagnostics.retryDelayMs(failures, retryIssue))
+            }
+        }
+    }
+
     override fun onResume() {
         super.onResume()
-        if (::status.isInitialized) requestIdentityRefresh()
+        if (::status.isInitialized) {
+            requestIdentityRefresh()
+            startAutoPairing()
+        }
         trialTicker?.cancel()
         trialTicker = lifecycleScope.launch {
             while (true) {
@@ -813,6 +920,8 @@ class LoginActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
+        autoPairJob?.cancel()
+        autoPairJob = null
         identityJob?.cancel()
         trialTicker?.cancel()
         super.onPause()

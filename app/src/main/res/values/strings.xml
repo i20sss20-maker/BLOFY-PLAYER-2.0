@@ -160,4 +160,6 @@
     <string name="details_metadata_loading">Loading cast and description…</string>
     <string name="details_metadata_retry">Could not update details · Try again</string>
     <string name="setting_cycle_hint">Press to change</string>
+    <string name="login_auto_retry_verification">Cannot reach activation right now. Retrying automatically (%1$s)</string>
+    <string name="login_auto_retry_playlists">Playlists are temporarily unavailable. Retrying automatically (%1$s)</string>
 </resources>

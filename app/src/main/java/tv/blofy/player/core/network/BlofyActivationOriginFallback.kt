@@ -4,7 +4,7 @@ import okhttp3.HttpUrl
 import okhttp3.Interceptor
 import okhttp3.Response
 import java.net.UnknownHostException
-import javax.net.ssl.SSLHandshakeException
+import javax.net.ssl.SSLException
 
 /**
  * The custom BLOFY API name and the Railway-managed hostname route to the SAME
@@ -22,8 +22,8 @@ internal class BlofyActivationOriginFallback : Interceptor {
             return chain.proceed(original)
         } catch (error: UnknownHostException) {
             android.util.Log.w("BlofyNetwork", "Primary activation DNS unavailable; retrying trusted Railway origin")
-        } catch (error: SSLHandshakeException) {
-            android.util.Log.w("BlofyNetwork", "Primary activation TLS handshake failed; retrying trusted Railway origin")
+        } catch (error: SSLException) {
+            android.util.Log.w("BlofyNetwork", "Primary activation TLS failed; retrying trusted Railway origin")
         }
         // This request is still authenticated by the *same* activation backend.
         // No API secrets, pairing code, URL or request body are logged.

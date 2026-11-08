@@ -91,6 +91,7 @@ class ActivationManager(
         if (response.canUse()) rotatePendingCode(api, current)
         val updated = applyRemoteStatus(response.canUse(), response.expiresAt)
         ActivationDisplayState.record(context, updated, response)
+        VerifiedActivationLease.record(context, updated, response)
         return response
     }
 
@@ -129,6 +130,6 @@ class ActivationManager(
     }
 
     fun cachedCanUse(state: ActivationEntity, nowMs: Long = System.currentTimeMillis()): Boolean {
-        return ActivationLease.allows(state, nowMs)
+        return VerifiedActivationLease.allows(context, state) ?: ActivationLease.allows(state, nowMs)
     }
 }

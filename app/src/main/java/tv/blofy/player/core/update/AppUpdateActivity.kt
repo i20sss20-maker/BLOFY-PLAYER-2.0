@@ -68,10 +68,6 @@ class AppUpdateActivity : AppCompatActivity() {
             setOnClickListener { if (ready) install() else download(ExistingWorkPolicy.REPLACE) }
         }
         page.addView(action, LinearLayout.LayoutParams(-1, dp(52)))
-        page.addView(Button(this).apply {
-            text = getString(R.string.update_cancel); CinemaStyle.styleButton(this)
-            setOnClickListener { manager.cancelUniqueWork(AppUpdateWorker.workName(version)); finish() }
-        }, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(12) })
         page.addView(text(getString(R.string.update_leave_hint), 12f))
         setContentView(ScrollView(this).apply { isFillViewport = true; addView(page) })
         manager.getWorkInfosForUniqueWorkLiveData(AppUpdateWorker.workName(version)).observe(this) { items ->
