@@ -899,6 +899,9 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
   // This is an in-memory guard against repeat viewer requests, not a way
   // around the provider's permissions. Only verified 403/456 trigger it.
   const cooldownKey=String(row.server_id)+':'+kind+':'+String(gatewayId);
+  // The account and catalog item have already passed authorization.
+  // Track only verified upstream media failures, never local auth/catalog 404.
+  const unavailableKey=mediaRegistryKey(row,kind,sourceId);
   const observe=(phase,details={})=>{
     if(req.method!=='HEAD')recordXtreamPlayback({kind,itemId:gatewayId,phase,...details});
   };
@@ -1077,6 +1080,10 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
               ?'upstream_http_'+response.status:'upstream_http_other'),
             providerHint,attempts:attempt
           });
+          // Only final, verified provider-file 404 after safe range/extension
+          // handling. No row is created for 502 transport errors or HTTP HEAD.
+          if(req.method==='GET'&&(confirmedMissing||response.status===404))
+            asyncNoteMissing(unavailableKey);
           return text(res,clientStatus,
             clientStatus===404?'Media unavailable':'Upstream unavailable');
         }
@@ -1107,6 +1114,9 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
         }
         // Only announce a successful response once the provider really sent media bytes.
         mediaDenialCooldown.clear(cooldownKey);
+        // First validated media bytes clear any existing unavailable state.
+        // No content is deleted or returned to the viewer by this DB update.
+        if(req.method==='GET')asyncNoteRecovered(unavailableKey);
         observe('started',{upstreamStatus:response.status,startupMs:Date.now()-startedAt,attempts:attempt});
         res.writeHead(response.status, outputHeaders);
         const stream = Readable.from((async function* () {
@@ -1422,6 +1432,20 @@ http.createServer = function withBlofyXtreamGateway(listener) {
       }
       if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream-gateway/playback-health') {
         return json(res,200,{ok:true,metrics:xtreamPlaybackSnapshot()});
+      }
+      // Operator-only aggregate view: no media URLs, credentials, content
+      // names, gateway account identities or subscriber permissions.
+      if(req.method==='GET'&&url.pathname==='/api/v1/admin/xtream-gateway/unavailable-media'){
+        const sourceId=url.searchParams.get('sourceId')||null;
+        const result=await unavailableMediaSummary(pool,sourceId);
+        return json(res,result.ok?200:400,result);
+      }
+      if(req.method==='POST'&&url.pathname==='/api/v1/admin/xtream-gateway/unavailable-media/recheck'){
+        if(!recoveryEnabled())
+          return json(res,409,{ok:false,error:'unavailable_recheck_disabled'});
+        // Recheck only DB-leased records already due. No client playback.
+        await runDueUnavailableMedia();
+        return json(res,200,await unavailableMediaSummary(pool));
       }
       if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream-gateway') {
         const items = await listAccounts();
