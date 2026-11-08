@@ -47,7 +47,8 @@ import { createXtreamHealthSnapshot } from './xtream-health-snapshot.mjs';
 import {relayEligible,issueStreamRelayGrant} from './xtream-stream-relay-bridge.mjs';
 import {shouldUseIndependentSourceMedia} from './xtream-independent-source-media-policy.mjs';
 import {readSanitizedXtreamRelayFailure} from './xtream-relay-diagnostic.mjs';
-import {mayRefreshMovieExtension,correctedMovieExtension} from './xtream-vod-extension-recovery.mjs';
+import {mayRefreshMovieExtension,correctedMovieExtension,
+  mayRefreshEpisodeExtension,correctedEpisodeExtension} from './xtream-vod-extension-recovery.mjs';
 import {shouldUseIndependentXtreamSource,fetchIndependentXtreamSource} from './xtream-independent-catalog-relay.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
@@ -656,7 +657,7 @@ async function seriesInfo(gatewayId, sourceId=null) {
 async function episodeByGatewayId(gatewayId,sourceId=null) {
   const id = Number(gatewayId);
   if (!Number.isSafeInteger(id) || id < 1) return null;
-  return (await pool.query(`SELECT e.gateway_id,e.server_id,e.source_episode_id,e.container_extension,
+  return (await pool.query(`SELECT e.gateway_id,e.server_id,e.series_source_id,e.source_episode_id,e.container_extension,
       s.base_url,s.username_secret,s.password_secret,s.enabled AS server_enabled
     FROM blofy_xtream_gateway_episode_map e JOIN blofy_xtream_servers s ON s.id=e.server_id
     WHERE e.gateway_id=$1 AND s.enabled=TRUE AND s.publish_catalog=TRUE
@@ -698,6 +699,51 @@ async function freshAdvertisedMovieExtension(row,sourceId,previousExtension) {
     }
     const payload=JSON.parse(Buffer.concat(chunks).toString('utf8'));
     return correctedMovieExtension(payload,sourceId,previousExtension);
+  }catch{return null;}
+  finally{
+    if(reader){try{await reader.cancel()}catch{}try{reader.releaseLock()}catch{}}
+    else await response?.body?.cancel().catch(()=>{});
+  }
+}
+
+// Optional same-episode recovery: the episode remains bound to its existing
+// series and source. No rewritten IDs, alternate credentials or DB updates.
+async function freshAdvertisedEpisodeExtension(row,sourceId,previousExtension) {
+  if(!row.series_source_id)return null;
+  const creds=decryptServerCredentials(row);
+  const url=xtreamApiUrl(row.base_url,creds.username,creds.password,
+    'get_series_info',{series_id:String(row.series_source_id)});
+  let response,reader;
+  try{
+    const signal=AbortSignal.timeout(7500);
+    response=shouldUseIndependentXtreamSource(row.server_id)
+      ?await fetchIndependentXtreamSource(url.href,{timeoutMs:6000})
+      :await checkedFetch(url,{timeoutMs:6000,signal,
+        headers:{accept:'application/json','user-agent':'BLOFY-Xtream-Gateway/1.0'}});
+    if(response.status!==200||!response.body)return null;
+    const size=Number(response.headers.get('content-length')||0);
+    if(size>1500000)return null;
+    reader=response.body.getReader();
+    const chunks=[];let count=0;
+    while(true){
+      // A relay response's stream can stall after headers. Bound the body too.
+      let timer;
+      let step;
+      try{
+        step=await Promise.race([
+          reader.read(),
+          new Promise((_,reject)=>{
+            timer=setTimeout(()=>reject(Error('episode_metadata_timeout')),7500);
+          })
+        ]);
+      }finally{clearTimeout(timer);}
+      if(step.done)break;
+      count+=step.value?.byteLength||0;
+      if(count>1500000)return null;
+      chunks.push(Buffer.from(step.value));
+    }
+    const payload=JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    return correctedEpisodeExtension(payload,row.series_source_id,sourceId,previousExtension);
   }catch{return null;}
   finally{
     if(reader){try{await reader.cancel()}catch{}try{reader.releaseLock()}catch{}}
@@ -799,8 +845,10 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
   const initialRange=firstByteXtreamRange(headers.range)&&req.method==='GET';
   const movieRefreshAllowed=kind==='movie'&&req.method==='GET'&&
     mayRefreshMovieExtension(row.server_id);
+  const episodeRefreshAllowed=kind==='series'&&req.method==='GET'&&
+    mayRefreshEpisodeExtension(row.server_id);
   const maxAttempts=req.method==='HEAD'?1:
-    (initialRange?3:2)+(movieRefreshAllowed?1:0);
+    (initialRange?3:2)+(movieRefreshAllowed||episodeRefreshAllowed?1:0);
   let noRangeRetried=false, transientRetried=false,extensionRefreshTried=false;
   try {
     for (let attempt=1;attempt<=maxAttempts;attempt++) {
@@ -833,24 +881,26 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
             retryWithoutRange,relayFailure});
           // Never expose upstream bodies; store only a fixed, allowlisted hint
           // if the provider itself explained a denied request.
-          const shouldRefresh=movieRefreshAllowed&&!extensionRefreshTried&&
-            !retryWithoutRange&&(response.status===404||confirmedMissing)&&attempt<maxAttempts&&
-            movieRefreshDue(String(row.server_id)+':'+String(sourceId));
+          const shouldRefresh=(movieRefreshAllowed||episodeRefreshAllowed)&&
+            !extensionRefreshTried&&!retryWithoutRange&&
+            (response.status===404||confirmedMissing)&&attempt<maxAttempts&&
+            movieRefreshDue(String(row.server_id)+':'+kind+':'+String(sourceId));
           if(shouldRefresh){
             extensionRefreshTried=true;
             await response.body?.cancel().catch(()=>{});
-            const freshExtension=await freshAdvertisedMovieExtension(
-              row,sourceId,mediaExtension);
+            const freshExtension=episodeRefreshAllowed?
+              await freshAdvertisedEpisodeExtension(row,sourceId,mediaExtension):
+              await freshAdvertisedMovieExtension(row,sourceId,mediaExtension);
             if(freshExtension){
-              const corrected=mediaUpstreamUrl(row,'movie',sourceId,freshExtension);
+              const corrected=mediaUpstreamUrl(row,kind,sourceId,freshExtension);
               try{
                 mediaFetchTarget=usingIndependentRelay?
                   new URL(await issueStreamRelayGrant({
-                    sourceUrl:corrected.href,kind:'movie'})):corrected;
-                // The provider advertised this extension for the SAME item.
-                // Never persist a correction until actual media bytes are read.
-                console.info('BLOFY_MOVIE_EXTENSION_RECOVERY',{
-                  state:'provider_extension_changed',sourceId:row.server_id});
+                    sourceUrl:corrected.href,kind})):corrected;
+                // The provider advertised an extension for the SAME movie or
+                // episode. The mapping and catalog remain untouched.
+                console.info('BLOFY_VOD_EXTENSION_RECOVERY',{
+                  kind,state:'provider_extension_changed',sourceId:row.server_id});
                 continue;
               }catch{}
             }

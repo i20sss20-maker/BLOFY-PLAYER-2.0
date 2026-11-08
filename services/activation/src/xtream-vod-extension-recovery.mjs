@@ -22,3 +22,31 @@ export function correctedMovieExtension(payload,sourceId,oldExtension){
   if(!EXT.test(extension)||extension===String(oldExtension||'').toLowerCase())return null;
   return extension;
 }
+
+export function mayRefreshEpisodeExtension(sourceId,env=process.env){
+  if(env.BLOFY_XTREAM_EPISODE_EXTENSION_REFRESH_ENABLED!=='1')return false;
+  const ids=String(env.BLOFY_XTREAM_EPISODE_EXTENSION_REFRESH_SOURCE_IDS||'')
+    .split(',').map(x=>x.trim().toLowerCase()).filter(x=>UUID.test(x));
+  return ids.includes(String(sourceId||'').toLowerCase());
+}
+// A series may contain multiple seasons and hundreds of entries. Verify the
+// exact existing episode ID from its parent series; never substitute an ID
+// from another episode, or guess an extension not advertised by the provider.
+export function correctedEpisodeExtension(payload,seriesId,episodeId,oldExtension){
+  if(!IDS.test(String(seriesId||''))||!IDS.test(String(episodeId||''))||
+     !payload||typeof payload!=='object'||Array.isArray(payload))return null;
+  const data=payload.episodes;
+  if(!data||typeof data!=='object')return null;
+  const seasons=Array.isArray(data)?[data]:Object.values(data).slice(0,200);
+  let seen=0;
+  for(const season of seasons){
+    if(!Array.isArray(season))continue;
+    for(const item of season){
+      if(++seen>12000)return null;
+      if(!item||typeof item!=='object'||String(item.id??'')!==String(episodeId))continue;
+      const ext=String(item.container_extension||'').trim().replace(/^\./,'').toLowerCase();
+      return EXT.test(ext)&&ext!==String(oldExtension||'').toLowerCase()?ext:null;
+    }
+  }
+  return null;
+}
