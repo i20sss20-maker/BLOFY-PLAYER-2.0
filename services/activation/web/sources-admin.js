@@ -646,7 +646,7 @@ async function runXtreamBatchProbe(){
   const summary=el('xtBatchProbeSummary'),progress=el('xtBatchProbeProgress');
   panel.hidden=false;list.replaceChildren();
   progress.value=0;progress.max=total;
-  const session={cancelled:false,controller:null,finished:0,passed:0,failed:0};
+  const session={cancelled:false,controller:null,finished:0,passed:0,failed:0,partial:0,failedSamples:0};
   sourceBatchProbe=session;
   el('xtProbeAllBtn').disabled=true;
   summary.textContent='بدء فحص '+sources.length+' مصادر · '+total+' عيّنة'+
@@ -668,13 +668,14 @@ async function runXtreamBatchProbe(){
           });
           if(result.ok){
             session.passed++;
-            status.className='status passed';
             const sample=(result.checks||[]).find(x=>x.ok);
             const failedSamples=(result.checks||[]).filter(x=>x&&!x.ok).length;
+            if(failedSamples){session.partial++;session.failedSamples+=failedSamples;}
+            status.className=failedSamples?'status partial':'status passed';
             const formats=kind==='live'?(result.checks||[])
               .filter(x=>['ts','m3u8'].includes(x.outputFormat))
               .map(x=>x.outputFormat.toUpperCase()+' '+(x.httpStatus?'HTTP '+x.httpStatus:(x.error||'تعذر الاتصال'))):[];
-            status.textContent='✓ وصلت البيانات'+(sample?.episodeCount?' · '+sample.episodeCount+' حلقة':'')+
+            status.textContent=(failedSamples?'⚠ نجاح جزئي للعينة':'✓ وصلت البيانات')+(sample?.episodeCount?' · '+sample.episodeCount+' حلقة':'')+
               (sample?.httpStatus?' · HTTP '+sample.httpStatus:'')+
               (failedSamples?' · نجحت عينة بعد '+failedSamples+' عينة فاشلة':'')+
               (formats.length?' · '+formats.join(' / '):'');
@@ -746,7 +747,7 @@ async function runXtreamBatchProbe(){
           clearTimeout(timeout);session.controller=null;
           session.finished++;progress.value=session.finished;
           summary.textContent='المكتمل: '+session.finished+'/'+total+
-            ' · ناجح: '+session.passed+' · تعذر: '+session.failed;
+            ' · ناجح: '+session.passed+' (منها '+session.partial+' نجاح جزئي) · تعذر: '+session.failed;
         }
       }
     }
@@ -755,7 +756,8 @@ async function runXtreamBatchProbe(){
     el('xtProbeAllBtn').disabled=false;
     summary.textContent=(session.cancelled?'أُلغي الفحص. ':'انتهى فحص العينات. ')+
       'نجح '+session.passed+' من '+session.finished+' اختبار؛ '+
-      'فشل '+session.failed+'. النتائج تخص العينات ولا تثبت تشغيل جميع العناصر.';
+      'فشل '+session.failed+'؛ نجاح جزئي '+session.partial+' اختبار مع '+session.failedSamples+
+      ' عينة فرعية فاشلة. النتائج تخص العينات ولا تثبت تشغيل جميع العناصر.';
     // Probes persist sanitized media status per source. Refresh cards now so
     // operators immediately see API ONLINE vs rejected media samples.
     try{await loadXtream(true)}catch(error){
