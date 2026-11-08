@@ -566,8 +566,11 @@ async function probeXtreamSeries(id,mediaType){
         // A 404 for one stale episode must not condemn the entire source.
         for(const episode of xtreamEpisodePlaybackCandidates(payload,3)){
           const playback=await probeXtreamEpisodeMedia(source,creds,episode);
+          const position=' · '+(episode.seasonNumber===null?'موسم غير مرقم':'موسم '+episode.seasonNumber)+
+            ' · حلقة '+episode.episodeNumber;
           checks.push({
-            title:cleanText(series.name,150),mediaType,
+            // Display episode position, never the provider's stream ID or URL.
+            title:cleanText(series.name,120)+position,mediaType,
             seriesHttpStatus:httpStatus,seasonCount:details.seasonCount,
             episodeCount:details.episodeCount,
             ...playback
