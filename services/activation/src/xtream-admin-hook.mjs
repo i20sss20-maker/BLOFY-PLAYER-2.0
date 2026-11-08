@@ -745,7 +745,11 @@ async function probeXtreamPlayback(id,mediaType='live',{forcePortalDirect=false}
     // Respect access denials. A 456 is never treated as permission to try
     // other endpoints, identities or formats after an upstream rejection.
     if(shouldStopXtreamFormatComparison(httpStatus))break outer;
-    if(ok&&!livePolicy)break outer;
+    // Once a provider-advertised format delivers actual media bytes, stop.
+    // Testing HLS after valid TS previously caused a false partial failure
+    // when this particular provider resets HLS despite serving TS correctly.
+    // Continue to the next declared format only if the current one failed.
+    if(ok)break outer;
     }
     // Compare each advertised output format for one item before moving on;
     // stop as soon as any of this item's declared formats serves media.
