@@ -2,6 +2,7 @@ const el = id => document.getElementById(id);
 const state = {
   xtreamServers: [],
   xtreamTotals: {},
+  unavailableBySource: new Map(),
   xtreamLoadSequence: 0,
   nativeCsrfToken: '',
   sourceFeedback: new Map(),
@@ -122,6 +123,57 @@ function xtreamSourceErrorText(value){
   return error;
 }
 
+function updateUnavailableSourceRows(rows){
+  const summary=new Map();
+  for(const row of (Array.isArray(rows)?rows:[]).slice(0,100)){
+    const id=String(row?.sourceId||'').toLowerCase();
+    if(!/^[a-f0-9-]{36}$/.test(id)||
+       !['movie','series'].includes(row?.kind)||
+       !['missing','recovered'].includes(row?.state))continue;
+    const count=Number(row.count)||0, due=Number(row.due)||0;
+    if(!Number.isSafeInteger(count)||count<0||!Number.isSafeInteger(due)||due<0)
+      continue;
+    const current=summary.get(id)||{missingMovies:0,missingEpisodes:0,
+      recovered:0,due:0};
+    if(row.state==='missing'){
+      if(row.kind==='movie')current.missingMovies+=count;
+      else current.missingEpisodes+=count;
+      current.due+=Math.min(count,due);
+    }else current.recovered+=count;
+    summary.set(id,current);
+  }
+  state.unavailableBySource=summary;
+}
+function recoveryCounts(sourceId){
+  return state.unavailableBySource.get(String(sourceId||'').toLowerCase())||null;
+}
+function updateRecoveryIndicator(container,item){
+  if(!container)return;
+  container.querySelectorAll('.recovery-health-pill').forEach(node=>node.remove());
+  const values=recoveryCounts(item.id);
+  if(!values)return;
+  const indicators=[
+    ['الأفلام المتعطلة',values.missingMovies],
+    ['الحلقات المتعطلة',values.missingEpisodes],
+    ['عاد أول جزء فيديو',values.recovered]
+  ];
+  for(const [label,count] of indicators){
+    if(count<1)continue;
+    const cls=label==='عاد أول جزء فيديو'?'on':'off';
+    const pill=make('span','source-state-pill recovery-health-pill '+cls,
+      label+': '+count.toLocaleString('en-US'));
+    pill.title='نتيجة فحص أول بايتات الفيديو فقط، لا تثبت استمرار الصوت والصورة.';
+    container.append(pill);
+  }
+}
+function refreshRecoveryButton(card,item){
+  const button=card?.querySelector('button[data-action="retry-unavailable"]');
+  if(!button)return;
+  const summary=recoveryCounts(item.id);
+  const missing=(summary?.missingMovies||0)+(summary?.missingEpisodes||0);
+  button.hidden=!item.enabled||missing===0;
+  button.title='إعادة فحص ملفين مسجلين ومؤهلين فقط من نفس المصدر؛ لا يعيد الفهرسة ولا يحذف المحتوى.';
+}
 function updateSourceMediaIndicators(container,item){
   container.querySelectorAll('.media-health-pill').forEach(node=>node.remove());
   for(const row of (Array.isArray(item.mediaSummary)?item.mediaSummary:[]).slice(0,4)){
@@ -204,12 +256,19 @@ function serverCard(item) {
     ['اختبار تشغيل فيلم', 'probe-movie', 'button ghost'],
     ['اختبار بيانات مسلسل', 'probe-series', 'button ghost'],
     ['اختبار تشغيل حلقة', 'probe-episode', 'button ghost'],
+    ['إعادة فحص المتعطل الآن', 'retry-unavailable', 'button ghost'],
     ['حذف المصدر', 'delete', 'button danger']
   ];
   if(item.syncing||item.status==='syncing'){
     buttons.splice(2,0,['⏹ إلغاء المزامنة','cancel-sync','button ghost']);
   }
   buttons.forEach(([text, action, cls]) => {
+    if(action==='retry-unavailable'){
+      const button=make('button',cls,text);
+      button.type='button';button.dataset.action=action;
+      actions.append(button);
+      return;
+    }
     if(action==='smart-connection'){
       const button=make('button',cls,text);
       button.type='button';button.dataset.action=action;
@@ -268,7 +327,9 @@ function serverCard(item) {
     make('span', item.enabled && item.publishCatalog ? 'source-state-pill published' : 'source-state-pill hidden', item.enabled && item.publishCatalog ? '● منشور للمشتركين' : '○ غير ظاهر للمشتركين')
   );
   updateSourceMediaIndicators(indicators,item);
+  updateRecoveryIndicator(indicators,item);
   card.append(header, indicators, metrics, actions, settings, info);
+  refreshRecoveryButton(card,item);
   return card;
 }
 
@@ -303,6 +364,8 @@ function refreshSourceCard(card, item) {
     pills[1].textContent=item.enabled&&item.publishCatalog?'● منشور للمشتركين':'○ غير ظاهر للمشتركين';
   }
   updateSourceMediaIndicators(card.querySelector('.source-quick-status'),item);
+  updateRecoveryIndicator(card.querySelector('.source-quick-status'),item);
+  refreshRecoveryButton(card,item);
   const enabledButton=card.querySelector('button[data-action="toggle-enabled"]');
   if(enabledButton){
     enabledButton.textContent=item.enabled?'⏸ إيقاف المصدر':'▶ تفعيل المصدر';
@@ -419,7 +482,7 @@ function renderXtream() {
   const filter=String(el('xtSourceFilter')?.value||'all');
   const visible=state.xtreamServers.filter(item=>
     (!query||String(item.name+' '+item.baseUrl+' '+item.id).toLowerCase().includes(query)) &&
-    (filter==='all'||(filter==='enabled'&&item.enabled)||(filter==='disabled'&&!item.enabled)||(filter==='published'&&item.enabled&&item.publishCatalog)||(filter==='issues'&&item.enabled&&Boolean(item.lastError||item.status==='offline'||item.status==='error')))
+    (filter==='all'||(filter==='enabled'&&item.enabled)||(filter==='disabled'&&!item.enabled)||(filter==='published'&&item.enabled&&item.publishCatalog)||(filter==='issues'&&item.enabled&&Boolean(item.lastError||item.status==='offline'||item.status==='error'||((recoveryCounts(item.id)?.missingMovies||0)+(recoveryCounts(item.id)?.missingEpisodes||0)>0))))
   );
   const countEnabled=state.xtreamServers.filter(x=>x.enabled).length;
   const countPublished=state.xtreamServers.filter(x=>x.enabled&&x.publishCatalog).length;
@@ -509,7 +572,10 @@ async function loadXtream(silent = false, strict = false) {
   const seq=++state.xtreamLoadSequence;
   if (!silent) el('xtreamLoading').hidden = false;
   try {
-    const data = await api('/api/v1/admin/xtream/servers');
+    const [data,unavailable]=await Promise.all([
+      api('/api/v1/admin/xtream/servers'),
+      api('/api/v1/admin/xtream/unavailable-media').catch(()=>null)
+    ]);
     // Ignore stale requests started before a later refresh or mutation.
     if(seq!==state.xtreamLoadSequence) {
       if(strict)throw new Error('xtream_readback_superseded');
@@ -518,6 +584,7 @@ async function loadXtream(silent = false, strict = false) {
     state.nativeCsrfToken=String(data.csrfToken||'');
     state.xtreamServers = Array.isArray(data.items) ? data.items : [];
     state.xtreamTotals = data.totals || {};
+    if(unavailable?.ok===true)updateUnavailableSourceRows(unavailable.entries);
     renderXtream();
     smartSources();
     scheduleXtreamPoll();
@@ -946,6 +1013,25 @@ async function handleServerAction(item, card, button) {
       showMessage(isEnable
         ?(`تم حفظ ${next?'تفعيل':'إيقاف'} المصدر «${item.name}» في قاعدة البيانات، وسيبقى كذلك بعد تحديث الصفحة.`)
         :(`تم حفظ ${next?'نشر':'إخفاء'} محتوى «${item.name}» ${next?'للعملاء':'عن العملاء'}.`));
+    } else if (action === 'retry-unavailable') {
+      writeFeedback('جارٍ إعادة فحص الملفات المسجلة والمتاحة لإعادة الفحص في هذا المصدر فقط…');
+      const result=await api('/api/v1/admin/xtream/unavailable-media/recheck-now',{
+        method:'POST',body:JSON.stringify({sourceId:item.id})
+      });
+      await loadXtream(true);
+      const checked=Number(result.checked)||0;
+      const recovered=Number(result.recovered)||0;
+      const missing=Number(result.stillMissing)||0;
+      const busy=result.busy===true;
+      const message=busy
+        ?'يوجد فحص آخر قيد التشغيل؛ لم نبدأ فحصًا مكررًا.'
+        :checked===0
+          ?'لا توجد ملفات مؤهلة لإعادة الفحص الآن؛ يحتفظ النظام بمواعيد التهدئة لحماية المصدر.'
+          :'اكتمل فحص '+checked+' ملف: '+recovered+
+            ' عادت له بيانات فيديو أولية، و'+missing+' ما زالت غير متاحة من المزود.'+
+            ' لا يثبت ذلك تشغيل الصوت والصورة كاملًا.';
+      writeFeedback(message);
+      showMessage(message);
     } else if (action === 'cancel-sync') {
       const result=await api('/api/v1/admin/xtream/servers/'+item.id+'/cancel-sync',{
         method:'POST',body:'{}'
