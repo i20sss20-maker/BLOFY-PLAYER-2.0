@@ -80,3 +80,17 @@ test('stream handles UTF-8 Arabic characters split between chunks',async()=>{
  assert.equal(result.records.live[0].name,'قناة عربية');
  assert.equal(result.records.movie[0].sourceId,'film1');
 });
+
+
+test('retains 60005 official live/movie records before downstream deduplication',async()=>{
+ const header='#EXTM3U\n';
+ const item='#EXTINF:-1 group-title="Live",Repeated\n'+
+  'http://example.test/live/u/privatePASS/101.ts\n';
+ const body=header+item.repeat(60005);
+ const result=await downloadXtreamM3uCatalog(source,{
+  checkPublic:async()=>{},fetchImpl:async()=>new Response(body,{status:200})
+ });
+ assert.equal(result.records.live.length,60005);
+ assert.equal(result.records.movie.length,0);
+ assert.equal(result.categories.live.length,1);
+});
