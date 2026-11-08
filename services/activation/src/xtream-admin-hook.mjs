@@ -629,7 +629,7 @@ async function persistSourceMediaProbe(id,kind,result){
 // Short, explicit playback probe: checks the actual upstream media endpoint,
 // not just player_api.php authentication. Credentials and source URLs never
 // appear in the response; the request is initiated by the administrator only.
-async function probeXtreamPlayback(id,mediaType='live') {
+async function probeXtreamPlayback(id,mediaType='live',{forcePortalDirect=false}={}) {
   if(mediaType==='series'||mediaType==='episode')return probeXtreamSeries(id,mediaType);
   if(!['live','movie'].includes(mediaType))
     throw Object.assign(new Error('xtream_probe_type_invalid'),{status:400});
@@ -662,9 +662,9 @@ async function probeXtreamPlayback(id,mediaType='live') {
     let usingIndependentRelay=false;
     // Admin playback checks must use the SAME egress that serves selected
     // client TS streams; otherwise the old portal falsely reports resets.
-    if(shouldUseIndependentSourceMedia({
+    if(!forcePortalDirect&&(shouldUseIndependentSourceMedia({
       sourceId:source.id,kind:mediaType,extension:ext
-    })||(mediaType==='movie'&&shouldUseIndependentXtreamSource(source.id))){
+    })||(mediaType==='movie'&&shouldUseIndependentXtreamSource(source.id)))){
       try{
         target=new URL(await issueStreamRelayGrant({
           sourceUrl:target.href,kind:mediaType
@@ -856,6 +856,38 @@ if(process.env.BLOFY_XTREAM_MEDIA_CLIENT_PROFILES_ON_BOOT==='1'){
    console.warn('BLOFY_XTREAM_MEDIA_CLIENT_PROFILE_PROOF',JSON.stringify({
     ok:false,code:'profile_diagnostic_unavailable',
     catalogMutation:false,sourceCredentialsLogged:false
+   }));
+  });
+ },25000);
+ timer.unref?.();
+}
+
+// Read-only parity check from the original PLAYER egress for the SAME
+// alphabetically first movie IDs checked over isolated STREAM earlier.
+if(process.env.BLOFY_XTREAM_DIRECT_MEDIA_PROBE_ON_BOOT==='1'){
+ const timer=setTimeout(()=>{
+  void(async()=>{
+   const id=String(process.env.BLOFY_XTREAM_EGRESS_SOURCE_ID||'').trim();
+   if(!validUuid(id))return;
+   const result=await probeXtreamPlayback(id,'movie',{forcePortalDirect:true});
+   console.info('BLOFY_XTREAM_DIRECT_MEDIA_PROOF',JSON.stringify({
+    sourceId:id,ok:result.ok===true,
+    checks:(result.checks||[]).slice(0,4).map(row=>({
+      status:Number.isInteger(row.httpStatus)?row.httpStatus:null,
+      ok:row.ok===true,
+      error:['timeout','upstream_unreachable','empty_media',
+        'upstream_non_media_response','xtream_transport_connection_reset',
+        'xtream_host_unresolved','xtream_private_host_blocked',
+        'redirect_invalid'].includes(row.error)?row.error:row.error?'other':null,
+      rangeFallbackUsed:row.rangeFallbackUsed===true
+    })),
+    catalogMutation:false,customerCutover:false,
+    mediaPlayed:false,credentialsLogged:false
+   }));
+  })().catch(()=>{
+   console.warn('BLOFY_XTREAM_DIRECT_MEDIA_PROOF',JSON.stringify({
+    ok:false,code:'direct_probe_unavailable',
+    catalogMutation:false,credentialsLogged:false
    }));
   });
  },25000);
