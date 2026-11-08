@@ -125,3 +125,20 @@ test('live customer routes, subscription, and response authentication remain unc
  assert.doesNotMatch(c.slice(c.indexOf('async function probeUnavailableMediaOnSameSource('),
    c.indexOf('async function proxyMedia(')),/proxyMedia\(|\b(?:INSERT|UPDATE|DELETE)\b/);
 });
+
+test('operator one-shot initial missing movie samples cannot scan or mutate catalog',async()=>{
+ const c=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
+ const start=c.indexOf("async function seedUnavailableMediaOnce(){");
+ const end=c.indexOf('async function proxyMedia(',start);
+ assert.ok(start>0&&end>start);
+ const probe=c.slice(start,end);
+ assert.match(probe,/BLOFY_XTREAM_UNAVAILABLE_SEED_ON_BOOT==='1'/);
+ assert.match(probe,/for\(const serverId of recoverySources\(\)\)/);
+ assert.match(probe,/AND publish_catalog=TRUE/);
+ assert.match(probe,/ORDER BY name ASC LIMIT 3/);
+ assert.match(probe,/validUnavailableKey\(\{serverId,kind:'movie',itemId:item\.source_id\}\)/);
+ assert.match(probe,/if\(result==='provider404'\)\{/);
+ assert.match(probe,/await registerProvider404\(pool,key\)/);
+ assert.match(probe,/BLOFY_UNAVAILABLE_MEDIA_SEED/);
+ assert.doesNotMatch(probe,/\b(?:UPDATE|DELETE|TRUNCATE)\b|creds\.|console\.info\([^)]*item\.source_id|JSON\.stringify\(items\)/);
+});
