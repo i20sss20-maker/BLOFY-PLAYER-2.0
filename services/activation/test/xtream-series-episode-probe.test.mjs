@@ -88,12 +88,12 @@ test('failed episode candidates carry safe season/episode positions, never a med
        {id:'103',episode_num:3,container_extension:'mp4'}],
   '2':[{id:'201',episode_num:1,container_extension:'mp4'}]
  }};
- const found=xtreamEpisodePlaybackCandidates(source,3);
+ const found=xtreamEpisodePlaybackCandidates(source,3,{withPositions:true});
  assert.deepEqual(found.map(x=>[x.id,x.seasonNumber,x.episodeNumber]),
    [['101',1,1],['201',2,1],['103',1,3]]);
  assert.ok(found.every(x=>!('sourceUrl' in x)&&!('password' in x)));
  assert.equal(xtreamEpisodePlaybackCandidates({episodes:{
-  'Season one':[{id:'7',episode_num:0}] }},1)[0].seasonNumber,null);
+  'Season one':[{id:'7',episode_num:0}] }},1,{withPositions:true})[0].seasonNumber,null);
 });
 test('admin episode sample title adds position without exposing provider identifiers',async()=>{
  const s=await read('src/xtream-admin-hook.mjs');
