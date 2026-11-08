@@ -66,3 +66,27 @@ test('operator gateway sample uses the same source-only independent live TS rout
  assert.match(probe,/const upstream=mediaUpstreamUrl/);
 });
 
+
+test('movie and episode transfer is separately disabled by default and source-scoped',()=>{
+ const vod={...cfg,
+   BLOFY_XTREAM_INDEPENDENT_VOD_PROXY_ENABLED:'1',
+   BLOFY_XTREAM_INDEPENDENT_VOD_PROXY_SOURCE_IDS:affected};
+ for(const kind of ['movie','series']){
+   const media={sourceId:affected,kind,extension:'mp4'};
+   assert.equal(shouldUseIndependentSourceMedia(media,cfg),false);
+   assert.equal(shouldUseIndependentSourceMedia(media,vod),true);
+   assert.equal(shouldUseIndependentSourceMedia(media,{...vod,
+      BLOFY_XTREAM_INDEPENDENT_VOD_PROXY_ENABLED:'0'}),false);
+   assert.equal(shouldUseIndependentSourceMedia({...media,sourceId:healthy},vod),false);
+   assert.equal(shouldUseIndependentSourceMedia(media,{...vod,
+      BLOFY_XTREAM_INDEPENDENT_VOD_PROXY_SOURCE_IDS:''}),false);
+ }
+ assert.equal(shouldUseIndependentSourceMedia(
+   {sourceId:affected,kind:'live',extension:'m3u8'},vod),false);
+ assert.equal(shouldUseIndependentSourceMedia(
+   {sourceId:healthy,kind:'live',extension:'ts'},vod),false);
+ assert.equal(shouldUseIndependentSourceMedia(
+   {sourceId:affected,kind:'series',extension:'../hack'},vod),false);
+ assert.equal(shouldUseIndependentSourceMedia(
+   {sourceId:affected,kind:'movie',extension:'mp4'},vod),true);
+});

@@ -721,8 +721,9 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
     }
   }
   let mediaFetchTarget=upstream;
-  // Use independent Railway egress for ONE operator-allowed source and TS
-  // only. Keep the original BLOFY Xtream URL, login and response behavior.
+  // Use independent Railway egress only for explicitly allowed source/kind:
+  // live TS, or separately enabled VOD (movie/episode). All source, catalog,
+  // subscriber and expiry checks have already completed above.
   // If the protected service cannot issue a ticket, fall back immediately.
   if(shouldUseIndependentSourceMedia({
     sourceId:row.server_id,kind,extension:mediaExtension
