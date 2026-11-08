@@ -535,15 +535,20 @@ async function probeXtreamEpisodeMedia(source,creds,episode) {
     rangeFallbackUsed:!useFirstByteRange};
 }
 
-async function probeXtreamSeries(id,mediaType){
+async function probeXtreamSeries(id,mediaType,{sampleOffset=0,probeAllCandidates=false}={}){
   const source=await serverById(id);
   if(!source)throw Object.assign(new Error('xtream_server_not_found'),{status:404});
   if(!source.enabled)throw Object.assign(new Error('xtream_source_paused'),{status:409});
   // An episode probe needs only one series to bound upstream request time.
+  const offset=mediaType==='episode'&&probeAllCandidates&&
+    Number.isSafeInteger(sampleOffset)&&sampleOffset>=0&&sampleOffset<=100000
+      ?sampleOffset:0;
+  // Ordinary admin episode checks remain 2 series with early success stop.
+  // Only the one-shot operator audit may sample one series at a new offset.
   const candidates=(await pool.query(`SELECT source_id,name
     FROM blofy_xtream_items
     WHERE server_id=$1 AND media_type='series' AND enabled=TRUE
-    ORDER BY name ASC LIMIT $2`,[id,2])).rows;
+    ORDER BY name ASC LIMIT $2 OFFSET $3`,[id,probeAllCandidates?1:2,offset])).rows;
   if(!candidates.length)return{ok:false,mediaType,reason:'no_imported_items',checks:[]};
   const creds=decryptCredentials(source),checks=[];
   for(const series of candidates){
@@ -572,7 +577,7 @@ async function probeXtreamSeries(id,mediaType){
       if(mediaType==='episode'){
         // Try different seasons/positions, not merely the first episode.
         // A 404 for one stale episode must not condemn the entire source.
-        for(const episode of xtreamEpisodePlaybackCandidates(payload,3,{withPositions:true})){
+        for(const episode of xtreamEpisodePlaybackCandidates(payload,probeAllCandidates?2:3,{withPositions:true})){
           const playback=await probeXtreamEpisodeMedia(source,creds,episode);
           const position=' · '+(episode.seasonNumber===null?'موسم غير مرقم':'موسم '+episode.seasonNumber)+
             ' · حلقة '+episode.episodeNumber;
@@ -586,7 +591,8 @@ async function probeXtreamSeries(id,mediaType){
           });
           // Provider-level access restrictions should never be bypassed by
           // probing different IDs, filenames, headers or extra accounts.
-          if(playback.ok||[401,403,456].includes(playback.httpStatus))break;
+          if([401,403,456].includes(playback.httpStatus))break;
+          if(!probeAllCandidates&&playback.ok)break;
         }
       }else{
         checks.push({
@@ -608,7 +614,8 @@ async function probeXtreamSeries(id,mediaType){
         latencyMs:Date.now()-started,ok:false,error:errorCode
       });
     }
-    if(checks.at(-1)?.ok||[401,403,456].includes(checks.at(-1)?.httpStatus))break;
+    if([401,403,456].includes(checks.at(-1)?.httpStatus))break;
+    if(!probeAllCandidates&&checks.at(-1)?.ok)break;
   }
   return{ok:checks.some(check=>check.ok),mediaType,checks,
     note:'مسلسلات: فحص API والحلقات. الحلقات: قراءة أول بايتات الفيديو فقط؛ لا يثبت استمرار الصوت والصورة.'};
@@ -635,7 +642,7 @@ async function persistSourceMediaProbe(id,kind,result){
 // appear in the response; the request is initiated by the administrator only.
 async function probeXtreamPlayback(id,mediaType='live',{forcePortalDirect=false,
   sampleOffset=0,probeAllCandidates=false}={}) {
-  if(mediaType==='series'||mediaType==='episode')return probeXtreamSeries(id,mediaType);
+  if(mediaType==='series'||mediaType==='episode')return probeXtreamSeries(id,mediaType,{sampleOffset,probeAllCandidates});
   if(!['live','movie'].includes(mediaType))
     throw Object.assign(new Error('xtream_probe_type_invalid'),{status:400});
   const source=await serverById(id);
@@ -2840,4 +2847,56 @@ if(process.env.BLOFY_XTREAM_DISTRIBUTED_MOVIE_AUDIT_ON_BOOT==='1'){
 }
 
 // END BLOFY DISTRIBUTED MOVIE AUDIT
+// One-shot source-specific series/episode sample, intentionally spread across
+// the imported series catalog. Does not fetch whole media or change the
+// customer's source binding; only reads metadata and tiny media first bytes.
+if(process.env.BLOFY_XTREAM_DISTRIBUTED_EPISODE_AUDIT_ON_BOOT==='1'){
+ const timer=setTimeout(()=>{
+  void(async()=>{
+   const id=String(process.env.BLOFY_XTREAM_EGRESS_SOURCE_ID||'').trim();
+   if(!validUuid(id)||!shouldUseIndependentXtreamSource(id))return;
+   const source=await serverById(id);
+   if(!source?.enabled)return;
+   const total=Number((await pool.query(
+    "SELECT COUNT(*)::int AS n FROM blofy_xtream_items "+
+    "WHERE server_id=$1 AND media_type='series' AND enabled=TRUE",
+    [id])).rows[0]?.n)||0;
+   const offsets=distributedMovieOffsets(total,{groups:3,perGroup:1});
+   const groups=[];
+   for(const offset of offsets){
+    try{
+     const probe=await probeXtreamPlayback(id,'episode',{
+      sampleOffset:offset,probeAllCandidates:true
+     });
+     groups.push(summarizeDistributedMovieProbe(probe));
+    }catch{
+     groups.push({checked:0,mediaSamples:0,missingFiles:0,
+       otherFailures:0,results:[],probeUnavailable:true});
+    }
+    if(groups.length<offsets.length)
+     await new Promise(resolve=>setTimeout(resolve,1000));
+   }
+   console.info('BLOFY_XTREAM_DISTRIBUTED_EPISODE_AUDIT',JSON.stringify({
+    sourceId:id,groups:groups.map((x,i)=>({
+      group:i+1,checked:x.checked,
+      mediaSamples:x.mediaSamples,missingFiles:x.missingFiles,
+      otherFailures:x.otherFailures,results:x.results,
+      probeUnavailable:x.probeUnavailable===true
+    })),
+    checked:groups.reduce((sum,x)=>sum+x.checked,0),
+    mediaSamples:groups.reduce((sum,x)=>sum+x.mediaSamples,0),
+    provider404:groups.reduce((sum,x)=>sum+x.missingFiles,0),
+    otherFailures:groups.reduce((sum,x)=>sum+x.otherFailures,0),
+    scope:'three_stratified_series_up_to_six_episodes_not_global_health',
+    firstMediaBytesOnly:true,videoDecoded:false,
+    sourceMutation:false,subscriberCutover:false,credentialsLogged:false
+   }));
+  })().catch(()=>console.warn('BLOFY_XTREAM_DISTRIBUTED_EPISODE_AUDIT',
+   JSON.stringify({ok:false,code:'episode_sample_audit_unavailable',
+    sourceMutation:false,subscriberCutover:false,credentialsLogged:false})));
+ },26000);
+ timer.unref?.();
+}
+// END BLOFY DISTRIBUTED EPISODE AUDIT
+
 
