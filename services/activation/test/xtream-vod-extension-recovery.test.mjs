@@ -95,3 +95,14 @@ test('episode media recovery reads its parent series but never changes source id
  assert.match(playback,/sourceUrl:corrected.href,kind/);
  assert.doesNotMatch(s,/UPDATE|INSERT|DELETE/);
 });
+
+test('additive 404-only metadata recheck allows only explicitly named sources',()=>{
+ const env={BLOFY_XTREAM_MISSING_MEDIA_RECHECK_SOURCE_IDS:source};
+ assert.equal(mayRefreshMovieExtension(source,env),true);
+ assert.equal(mayRefreshEpisodeExtension(source,env),true);
+ assert.equal(mayRefreshMovieExtension(different,env),false);
+ assert.equal(mayRefreshEpisodeExtension(different,env),false);
+ assert.equal(mayRefreshMovieExtension(source,
+  {BLOFY_XTREAM_MISSING_MEDIA_RECHECK_SOURCE_IDS:'not-a-uuid'}),false);
+ assert.equal(mayRefreshEpisodeExtension(source,{}),false);
+});
