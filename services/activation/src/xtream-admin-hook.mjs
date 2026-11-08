@@ -2627,6 +2627,40 @@ async function unifiedStreamBridge(req,res,url){
     return json(res,200,{ok:true,source:'blofy-activation-primary',
       totals,sources:items,subscribers:{devices,gateway},updatedAt:Date.now()});
   }
+  // Produce one verified, server-side source route for an operator-owned live
+  // channel. No public route, client playback access or credential persistence.
+  if(req.method==='POST'&&p==='/internal/blofy-stream/live-channel'){
+    const body=await readJson(req);
+    const sourceId=String(body.sourceId||'');
+    const channelId=String(body.channelId||'');
+    if(body.rightsConfirmed!==true)
+      return json(res,403,{ok:false,code:'stream_rights_confirmation_required'});
+    if(!validUuid(sourceId)||!/^[a-zA-Z0-9._-]{1,100}$/.test(channelId))
+      return json(res,400,{ok:false,code:'stream_invalid_channel'});
+    const source=await serverById(sourceId);
+    if(!source?.enabled)
+      return json(res,409,{ok:false,code:'stream_source_not_enabled'});
+    const media=(await pool.query(`SELECT source_id,name,container_extension FROM blofy_xtream_items
+       WHERE server_id=$1 AND media_type='live' AND source_id=$2
+       AND enabled=TRUE LIMIT 1`,[sourceId,channelId])).rows[0];
+    if(!media)
+      return json(res,404,{ok:false,code:'stream_channel_not_found'});
+    const policy=xtreamAllowedLiveFormats(source.account_info);
+    if(!policy.formats.includes('ts'))
+      return json(res,409,{ok:false,code:'stream_mpegts_not_permitted'});
+    const creds=decryptCredentials(source);
+    const path=['live',creds.username,creds.password,media.source_id]
+      .map(part=>encodeURIComponent(String(part))).join('/')+'.ts';
+    const base=normalizeXtreamBaseUrl(source.base_url);
+    const url=new URL(path,base+'/');
+    if(url.origin!==new URL(base).origin)
+      return json(res,409,{ok:false,code:'stream_source_origin_mismatch'});
+    // This URL contains upstream credentials and must only traverse the
+    // authenticated internal HTTPS connection to the independent STREAM API.
+    return json(res,200,{ok:true,kind:'live',sourceUrl:url.href,
+      sourceId,channelId,name:String(media.name||'').slice(0,160),
+      extension:'ts',customerTrafficChanged:false});
+  }
   if(req.method==='GET'&&p==='/internal/blofy-stream/catalog'){
     const type=url.searchParams.get('type');
     if(!['live','movie','series'].includes(type))
