@@ -15,7 +15,8 @@ import {shouldUseIndependentSourceMedia} from './xtream-independent-source-media
 import {probeOfficialXtreamPlaylistRoute} from './xtream-official-m3u-probe.mjs';
 import {readSanitizedXtreamRelayFailure} from './xtream-relay-diagnostic.mjs';
 import {ensureUnavailableMediaTable,recoverySources,validUnavailableKey,
-  registerProvider404,noteMediaRestored} from './xtream-unavailable-media-registry.mjs';
+  registerProvider404,noteMediaRestored,
+  unavailableMediaSummary} from './xtream-unavailable-media-registry.mjs';
 import {operatorMediaRegistryOutcome} from './xtream-operator-media-recovery.mjs';
 import {probeXtreamM3uAvailability} from './xtream-m3u-availability.mjs';
 import {compareXtreamAdvertisedOrigin} from './xtream-advertised-origin-diagnostic.mjs';
@@ -2670,6 +2671,47 @@ http.createServer = function withBlofyXtream(listener) {
       if(url.pathname==='/api/v1/admin/xtream/studio/logo'){
         if(req.method==='PUT')return json(res,200,await storeStudioLogo(req));
         if(req.method==='DELETE')return json(res,200,await removeStudioLogo());
+      }
+      // Session-authenticated source-admin view of the same private recovery
+      // registry as the gateway operator API. Per-source counts only.
+      if(req.method==='GET'&&url.pathname==='/api/v1/admin/xtream/unavailable-media'){
+        const result=await unavailableMediaSummary(pool);
+        return json(res,200,result);
+      }
+      // The browser never receives BLOFY_ADMIN_TOKEN. Relay this one bounded
+      // command inside the container to the gateway's existing Bearer-protected
+      // route, after authenticating the operator's normal admin session.
+      if(req.method==='POST'&&url.pathname==='/api/v1/admin/xtream/unavailable-media/recheck-now'){
+        const body=await readJson(req);
+        const sourceId=String(body.sourceId||'').trim().toLowerCase();
+        if(!validUuid(sourceId)||!recoverySources().has(sourceId))
+          return json(res,400,{ok:false,error:'unavailable_source_not_allowed'});
+        const port=Number(process.env.PORT||3000);
+        if(!Number.isInteger(port)||port<1||port>65535||!ADMIN_TOKEN)
+          return json(res,503,{ok:false,error:'recovery_admin_unavailable'});
+        try{
+          const upstream=await fetch('http://127.0.0.1:'+port+
+            '/api/v1/admin/xtream-gateway/unavailable-media/recheck-now',{
+            method:'POST',redirect:'error',signal:AbortSignal.timeout(55000),
+            headers:{authorization:'Bearer '+ADMIN_TOKEN,
+              'content-type':'application/json'},
+            body:JSON.stringify({sourceId})
+          });
+          const raw=await upstream.text();
+          if(raw.length>4096)throw Error('recovery_response_invalid');
+          const result=JSON.parse(raw);
+          if(!upstream.ok||result?.ok!==true)
+            return json(res,503,{ok:false,error:'recovery_probe_unavailable'});
+          const count=x=>Number.isSafeInteger(x)&&x>=0&&x<=5?x:0;
+          return json(res,200,{ok:true,sourceId,
+            expedited:count(result.expedited),
+            checked:count(result.checked),recovered:count(result.recovered),
+            stillMissing:count(result.stillMissing),transient:count(result.transient),
+            busy:result.busy===true,firstMediaBytesOnly:true,
+            catalogMutation:false,subscriberCutover:false});
+        }catch{
+          return json(res,503,{ok:false,error:'recovery_probe_unavailable'});
+        }
       }
       if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream/servers') {
         const items = (await serverRows()).map(adminServer);
