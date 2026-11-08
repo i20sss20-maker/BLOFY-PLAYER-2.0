@@ -32,7 +32,9 @@ test('main gateway only drops initial 0-byte Range after a 404/416, keeps stable
   assert.match(media,/\[408,500,502,503,504\]/);
   assert.match(media,/!transientRetried/);
   assert.match(media,/transientRetried=true/);
-  assert.match(media,/return text\(res, 502, 'Upstream unavailable'\)/);
+  assert.match(media,/return text\(res,clientStatus,/);
+  assert.match(media,/retryable=!confirmedMissing/);
+  assert.ok(media.includes("clientStatus===404?'Media unavailable':'Upstream unavailable'"));
 });
 
 test('source-native and episode probes also retry 404/416 as GET without range',async()=>{
