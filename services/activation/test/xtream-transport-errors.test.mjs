@@ -70,7 +70,10 @@ test('source admin only categorizes network failures without retrying denied cre
  assert.ok(admin.includes('await response.body?.cancel().catch(()=>{});'));
  assert.ok(admin.includes('throw new Error(`xtream_http_${status}`)'));
  assert.match(gateway,/const networkReason=safeXtreamTransportCategory\(error\)/);
- assert.match(gateway,/return text\(res, 502, 'Upstream unavailable'\)/);
+ // True network failures still return transient 502/504, unlike
+ // an authenticated relay's confirmed terminal provider 404.
+ assert.ok(gateway.includes("safeReason==='headers_timeout'||safeReason==='media_read_timeout'?504:502, 'Upstream unavailable'"));
+ assert.match(gateway,/return text\(res,clientStatus,/);
  for(const phrase of ['xtream_transport_dns_failed','xtream_transport_connection_reset',
    'xtream_transport_timeout','xtream_transport_tls_invalid','xtream_transport_connection_refused'])
    assert.ok(ui.includes(phrase),phrase);

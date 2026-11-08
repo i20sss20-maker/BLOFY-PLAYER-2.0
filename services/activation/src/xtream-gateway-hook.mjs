@@ -47,6 +47,7 @@ import { createXtreamHealthSnapshot } from './xtream-health-snapshot.mjs';
 import {relayEligible,issueStreamRelayGrant} from './xtream-stream-relay-bridge.mjs';
 import {shouldUseIndependentSourceMedia,shouldFallbackIndependentVod} from './xtream-independent-source-media-policy.mjs';
 import {readSanitizedXtreamRelayFailure} from './xtream-relay-diagnostic.mjs';
+import {customerMediaFailureStatus} from './xtream-customer-media-failure.mjs';
 import {mayRefreshMovieExtension,correctedMovieExtension,
   mayRefreshEpisodeExtension,correctedEpisodeExtension} from './xtream-vod-extension-recovery.mjs';
 import {shouldUseIndependentXtreamSource,fetchIndependentXtreamSource} from './xtream-independent-catalog-relay.mjs';
@@ -951,13 +952,21 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
             await new Promise(resolve=>setTimeout(resolve, 200*attempt));
             continue;
           }
+          // The authenticated STREAM relay may envelope a provider 404 as
+          // 502. Return terminal 404 ONLY when its fixed diagnostic verified
+          // that original upstream status. Do not induce client retry storms
+          // or falsely blame BLOFY for a file the provider did not serve.
+          const clientStatus=customerMediaFailureStatus({
+            usingIndependentRelay,relayStatus:response.status,relayFailure
+          });
           observe('failed',{
-            upstreamStatus:response.status,
+            upstreamStatus:confirmedMissing?404:response.status,
             reason:relayFailure||(['403','404','408','429','456','500','502','503','504'].includes(String(response.status))
               ?'upstream_http_'+response.status:'upstream_http_other'),
             providerHint,attempts:attempt
           });
-          return text(res, 502, 'Upstream unavailable');
+          return text(res,clientStatus,
+            clientStatus===404?'Media unavailable':'Upstream unavailable');
         }
         const outputHeaders = {};
         for (const name of ['content-type','content-length','content-range','accept-ranges','cache-control','last-modified','etag']) {
