@@ -144,4 +144,6 @@
     <string name="login_qr_description">رمز QR لربط الجهاز</string>
     <string name="login_qr_loading">جاري إعداد رمز الربط…</string>
     <string name="login_qr_unavailable">ربط الجهاز غير متاح في هذه النسخة. يمكنك إضافة قائمة مباشرة.</string>
+    <string name="login_auto_retry_verification">تعذّر الاتصال بالتفعيل مؤقتًا. بنعيد المحاولة تلقائيًا (%1$s)</string>
+    <string name="login_auto_retry_playlists">القوائم غير متاحة مؤقتًا. بنعيد المحاولة تلقائيًا (%1$s)</string>
 </resources>

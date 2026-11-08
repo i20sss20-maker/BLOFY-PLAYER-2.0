@@ -825,7 +825,10 @@ class LoginActivity : AppCompatActivity() {
             val manager = ActivationManager(applicationContext, dao)
             val api = ActivationRemoteClient.create(endpoint)
             var failures = 0
+            var lastIssue: ActivationConnectionDiagnostics.Issue? = null
             while (isActive && !isFinishing && !isDestroyed) {
+                var stage = ActivationConnectionDiagnostics.Stage.VERIFICATION
+                var retryIssue: ActivationConnectionDiagnostics.Issue? = null
                 // Do not race an explicit refresh, provider selection or connect action.
                 if (identityJob?.isActive == true || connectJob?.isActive == true || playlistJob?.isActive == true) {
                     delay(1_500L)
@@ -836,7 +839,6 @@ class LoginActivity : AppCompatActivity() {
                         // Optional legacy-device migration may take a separate bounded call.
                         withTimeout(60_000L) { manager.refresh(api, BuildConfig.VERSION_NAME) }
                     }
-                    failures = 0
                     val identity = withContext(Dispatchers.IO) { manager.ensureIdentity() }
                     renderIdentity(identity.deviceId, identity.activationCode)
                     bindTrialStatus(identity)
@@ -844,6 +846,7 @@ class LoginActivity : AppCompatActivity() {
                         // Paid and trial devices both use the same server-approved pairing flow.
                         status.text = activationLabel(remote)
                         // PULL_ONLY avoids uploading or removing customers' local playlists.
+                        stage = ActivationConnectionDiagnostics.Stage.PLAYLIST_SYNC
                         val synced = withContext(Dispatchers.IO) {
                             withTimeout(24_000L) {
                                 PortalPlaylistClient.sync(
@@ -852,6 +855,8 @@ class LoginActivity : AppCompatActivity() {
                             }
                         }
                         renderPortalPlaylists(synced.providers)
+                        failures = 0
+                        lastIssue = null
                         val provider = synced.activeProvider
                         if (provider != null && !isFinishing && !isDestroyed) {
                             if (hasCachedCatalog(dao, provider.id)) openHome()
@@ -859,21 +864,41 @@ class LoginActivity : AppCompatActivity() {
                             return@launch
                         }
                         status.setText(R.string.login_waiting_for_playlist)
-                    } else if (remote.state() == ActivationCheckResponse.State.EXPIRED ||
-                        remote.state() == ActivationCheckResponse.State.BLOCKED) {
-                        status.text = activationLabel(remote)
+                    } else {
+                        // A server response is authoritative, including waiting, blocked or expired.
+                        failures = 0
+                        lastIssue = null
+                        if (remote.state() == ActivationCheckResponse.State.EXPIRED ||
+                            remote.state() == ActivationCheckResponse.State.BLOCKED) {
+                            status.text = activationLabel(remote)
+                        }
                     }
-                } catch (_: TimeoutCancellationException) {
-                    // One network attempt timed out; keep checking while Login stays visible.
+                } catch (timeout: TimeoutCancellationException) {
                     failures++
+                    retryIssue = if (stage == ActivationConnectionDiagnostics.Stage.PLAYLIST_SYNC)
+                        ActivationConnectionDiagnostics.Issue.PLAYLIST
+                    else ActivationConnectionDiagnostics.Issue.TIMEOUT
                 } catch (cancelled: CancellationException) {
                     throw cancelled
-                } catch (_: Exception) {
-                    // Keep the QR and code visible. Transient DNS/TLS/service failures
-                    // never clear the identity and never make up a valid subscription.
+                } catch (error: Exception) {
+                    // No URL, code, token, server message or credential is sent to diagnostics.
+                    // A failed check never changes the cached activation or hides the QR.
                     failures++
+                    retryIssue = ActivationConnectionDiagnostics.classify(error, stage)
                 }
-                delay(if (failures >= 3) 25_000L else 8_000L)
+                if (retryIssue != null) {
+                    val issue = retryIssue
+                    if (failures == 1 || issue != lastIssue) {
+                        status.text = getString(
+                            if (stage == ActivationConnectionDiagnostics.Stage.PLAYLIST_SYNC)
+                                R.string.login_auto_retry_playlists
+                            else R.string.login_auto_retry_verification,
+                            issue.code
+                        )
+                    }
+                    lastIssue = issue
+                }
+                delay(ActivationConnectionDiagnostics.retryDelayMs(failures, retryIssue))
             }
         }
     }
