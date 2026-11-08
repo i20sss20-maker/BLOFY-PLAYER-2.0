@@ -5,6 +5,19 @@
 import {
  claimDueMedia,finishUnavailableRecheck,validUnavailableKey
 } from './xtream-unavailable-media-registry.mjs';
+import {shouldRetryXtreamWithoutRange} from './xtream-media-range.mjs';
+
+// A trusted BLOFY STREAM relay wraps the provider's real HTTP 404 in HTTP
+// 502 with this allowlisted code. Its GET+Range result must be normalized
+// before deciding whether one unchanged-file plain GET can recover it.
+export function shouldRetryUnavailableWithoutRange({status,relayFailure,
+  range='bytes=0-1023',alreadyRetried=false,method='GET'}={}){
+ const upstreamStatus=status===502&&relayFailure==='relay_provider_not_found'
+  ?404:status;
+ return shouldRetryXtreamWithoutRange({status:upstreamStatus,range,
+  alreadyRetried,method});
+}
+
 
 export async function runUnavailableRecheckBatch({
  pool,sourceId,probe,limit=3
