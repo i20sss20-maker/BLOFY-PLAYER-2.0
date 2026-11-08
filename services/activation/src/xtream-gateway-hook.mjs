@@ -727,10 +727,16 @@ async function freshAdvertisedEpisodeExtension(row,sourceId,previousExtension) {
     const chunks=[];let count=0;
     while(true){
       // A relay response's stream can stall after headers. Bound the body too.
-      const step=await Promise.race([
-        reader.read(),
-        new Promise((_,reject)=>setTimeout(()=>reject(Error('episode_metadata_timeout')),7500))
-      ]);
+      let timer;
+      let step;
+      try{
+        step=await Promise.race([
+          reader.read(),
+          new Promise((_,reject)=>{
+            timer=setTimeout(()=>reject(Error('episode_metadata_timeout')),7500);
+          })
+        ]);
+      }finally{clearTimeout(timer);}
       if(step.done)break;
       count+=step.value?.byteLength||0;
       if(count>1500000)return null;
