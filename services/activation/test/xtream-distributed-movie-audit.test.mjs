@@ -31,11 +31,11 @@ test('diagnostic preserves real 404 classification and hides filenames',()=>{
 test('diagnostic only runs for opted-in source and keeps normal checks unchanged',async()=>{
  const c=await readFile(new URL('../src/xtream-admin-hook.mjs',import.meta.url),'utf8');
  const start=c.indexOf("if(process.env.BLOFY_XTREAM_DISTRIBUTED_MOVIE_AUDIT_ON_BOOT==='1')");
- const end=c.indexOf('// Full local audit scans every imported item',start);
+ const end=c.indexOf('// END BLOFY DISTRIBUTED MOVIE AUDIT',start);
  assert.ok(start>0&&end>start);
  const audit=c.slice(start,end);
  assert.match(audit,/shouldUseIndependentXtreamSource\(id\)/);
- assert.match(audit,/probeXtreamPlayback\(id,'movie',\{sampleOffset:offset,probeAllCandidates:true\}\)/);
+ assert.match(audit,/probeXtreamPlayback\(id,'movie',\{\s*sampleOffset:offset,probeAllCandidates:true\s*\}\)/);
  assert.match(audit,/summarizeDistributedMovieProbe/);
  assert.match(audit,/BLOFY_XTREAM_DISTRIBUTED_MOVIE_AUDIT/);
  assert.match(audit,/sourceMutation:false,subscriberCutover:false/);
