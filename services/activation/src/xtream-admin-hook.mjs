@@ -983,10 +983,16 @@ if(process.env.BLOFY_XTREAM_M3U_FULL_ID_COMPARE_ON_BOOT==='1'){
    const source=await serverById(id);
    if(!source?.enabled)return;
    const creds=decryptCredentials(source);
+   const sameMovieSamples=(await pool.query(
+     "SELECT source_id,container_extension FROM blofy_xtream_items "+
+     "WHERE server_id=$1 AND media_type='movie' AND enabled=TRUE "+
+     "ORDER BY name ASC LIMIT 3",[id])).rows;
    const report=await reconcileXtreamM3uWithImportedCatalog({
     pool,sourceId:id,baseUrl:source.base_url,
     username:creds.username,password:creds.password
    },{
+    // Same imported movie IDs, read-only, no per-media request.
+    sameMovieSamples,
     // Source-specific protected egress; never used for a different Xtream
     // source or any customer playback route.
     independentImpl:shouldUseIndependentXtreamSource(id)?
