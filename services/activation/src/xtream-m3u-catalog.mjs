@@ -174,8 +174,11 @@ export async function downloadXtreamM3uCatalog({baseUrl,username,password},{
    await response.body?.cancel().catch(()=>{});
    throw error;
   }
+  // The provider lists ~79k movie/live URLs (including duplicates), not
+  // just 34k unique IDs. Do not cut the official export after 60k rows;
+  // the downstream import deduplicates source IDs per media type.
   return parseXtreamM3uCatalog(retained.join('\n'),{
-   baseUrl,username,password
+   baseUrl,username,password,maxItems:120000
   });
  }finally{
   clearTimeout(timer);
