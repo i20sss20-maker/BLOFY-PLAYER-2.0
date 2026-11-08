@@ -139,7 +139,7 @@ test('independent M3U path is gated to explicit source selection before any requ
  assert.match(block,/fetchIndependentXtreamManifest\(manifest.href\)/);
 });
 
-test('same imported movie's official canonical and shorthand M3U route are distinguished safely',async()=>{
+test("same imported movie canonical and shorthand M3U routes are distinguished safely",async()=>{
  const playlist=['#EXTM3U',
  '#EXTINF:-1,Canonical',
  'http://provider.example/movie/u/privatePASS/m1.mkv',
