@@ -32,24 +32,32 @@ export function xtreamEpisodeSamples(payload, limit = 2) {
 export function xtreamEpisodePlaybackCandidates(payload, limit=3) {
   const groups=payload&&typeof payload==='object'?payload.episodes:null;
   if(!groups||typeof groups!=='object')return[];
-  const seasons=(Array.isArray(groups)?[groups]:Object.values(groups))
-    .filter(Array.isArray).slice(0,200);
+  // Episode names and source IDs are never exposed to clients. The admin
+  // check receives only the bounded season and episode position, allowing
+  // the operator to identify a broken entry without guessing file URLs.
+  const seasons=(Array.isArray(groups)?[['1',groups]]:Object.entries(groups))
+    .filter(([,rows])=>Array.isArray(rows)).slice(0,200);
   const max=Math.max(0,Math.min(6,Number(limit)||0));
   if(!max)return[];
   const seen=new Set(),selected=[];
-  const pick=row=>{
+  const pick=(row,season,index)=>{
     const id=String(row?.id??'').trim();
     if(!IDS.test(id)||seen.has(id))return;
-    const extension=String(row.container_extension||'mp4').replace(/^\./,'').toLowerCase();
+    const extension=String(row.container_extension||'mp4').replace(/^\\./,'').toLowerCase();
+    const seasonNumber=/^\\d{1,3}$/.test(season)?Number(season):null;
+    const explicitEpisode=Number(row.episode_num);
+    const episodeNumber=Number.isSafeInteger(explicitEpisode)&&explicitEpisode>=1&&explicitEpisode<=9999?
+      explicitEpisode:index+1;
     seen.add(id);
-    selected.push({id,extension:EXTS.test(extension)?extension:'mp4'});
+    selected.push({id,extension:EXTS.test(extension)?extension:'mp4',
+      seasonNumber,episodeNumber});
   };
   for(const position of [0,-1,0.5]){
-    for(const season of seasons){
-      const rows=season.slice(0,3000);
-      if(!rows.length)continue;
-      const index=position===0.5?Math.floor(rows.length/2):position===-1?rows.length-1:0;
-      pick(rows[index]);
+    for(const [season,rows] of seasons){
+      const limited=rows.slice(0,3000);
+      if(!limited.length)continue;
+      const index=position===0.5?Math.floor(limited.length/2):position===-1?limited.length-1:0;
+      pick(limited[index],season,index);
       if(selected.length>=max)return selected;
     }
   }
