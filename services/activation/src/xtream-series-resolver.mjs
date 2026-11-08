@@ -4,10 +4,21 @@ const validSourceId = value => (typeof value === 'string' || (typeof value === '
 const validGatewayId = value => Number.isSafeInteger(Number(value)) && Number(value) > 0;
 const safeExtension = value => /^(mp4|mkv|avi|mov|webm|ts)$/i.test(String(value || '')) ? String(value).toLowerCase() : 'mp4';
 
+// Xtream implementations may return episode seasons as an object or a flat
+// episode array. Normalize a flat list to season "1" to match the admin
+// diagnostic and preserve the original episode objects without mutation.
+function episodeSeasons(seasons) {
+  if (Array.isArray(seasons)) return {'1': seasons};
+  if (!seasons || typeof seasons !== 'object') return null;
+  return seasons;
+}
+
 export function collectSourceEpisodes(seasons) {
   const records = new Map();
-  if (!seasons || typeof seasons !== 'object' || Array.isArray(seasons)) return [];
-  for (const list of Object.values(seasons)) {
+  const groups=episodeSeasons(seasons);
+  if (!groups) return [];
+  for (const [season,list] of Object.entries(groups)) {
+    if (['__proto__','prototype','constructor'].includes(season)) continue;
     if (!Array.isArray(list)) continue;
     for (const episode of list) {
       if (!episode || typeof episode !== 'object' || !validSourceId(episode.id)) continue;
@@ -20,8 +31,9 @@ export function collectSourceEpisodes(seasons) {
 
 export function mapSeriesEpisodes(seasons, mappings, sanitize) {
   const result = {};
-  if (!seasons || typeof seasons !== 'object' || Array.isArray(seasons)) return result;
-  for (const [season, list] of Object.entries(seasons)) {
+  const groups=episodeSeasons(seasons);
+  if (!groups) return result;
+  for (const [season, list] of Object.entries(groups)) {
     if (!Array.isArray(list) || ['__proto__', 'prototype', 'constructor'].includes(season)) continue;
     result[season] = list.flatMap(episode => {
       if (!episode || typeof episode !== 'object' || !validSourceId(episode.id)) return [];

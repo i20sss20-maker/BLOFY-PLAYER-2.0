@@ -42,3 +42,28 @@ test('never exposes provider episode ID via missing gateway mapping',()=>{
  const result=mapSeriesEpisodes({'4':[raw]},new Map(),sanitize);
  assert.deepEqual(result,{'4':[]});
 });
+
+
+test('flat provider episode arrays map to season 1 with stable gateway IDs',()=>{
+ const raw=[
+  {id:55,title:'Pilot',container_extension:'mkv',direct_source:'https://private.invalid/raw'},
+  {id:'56',title:'Second',container_extension:'mp4',direct_source:'secret'}
+ ];
+ assert.deepEqual(collectSourceEpisodes(raw),[
+  {sourceId:'55',extension:'mkv'},
+  {sourceId:'56',extension:'mp4'}
+ ]);
+ const mapped=mapSeriesEpisodes(raw,new Map([
+  ['55',{id:2001,extension:'mkv'}],['56',{id:2002,extension:'mp4'}]
+ ]),sanitize);
+ assert.deepEqual(Object.keys(mapped),['1']);
+ assert.deepEqual(mapped['1'].map(x=>x.id),[2001,2002]);
+ assert.deepEqual(mapped['1'].map(x=>x.direct_source),['','']);
+ assert.equal(raw[0].id,55);
+ assert.equal(raw[0].direct_source,'https://private.invalid/raw');
+});
+test('flat list rejects invalid episodes and never leaks unmapped source IDs',()=>{
+ const raw=[{id:'../invalid',title:'unsafe'},null,{id:'44',title:'Unmapped'}];
+ assert.deepEqual(collectSourceEpisodes(raw),[{sourceId:'44',extension:'mp4'}]);
+ assert.deepEqual(mapSeriesEpisodes(raw,new Map(),sanitize),{'1':[]});
+});
