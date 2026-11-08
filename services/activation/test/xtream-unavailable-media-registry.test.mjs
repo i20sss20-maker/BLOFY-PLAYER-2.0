@@ -116,7 +116,7 @@ test('live customer routes, subscription, and response authentication remain unc
  assert.match(c,/if\(!unavailableRecoveryTimerStarted&&recoveryEnabled\(\)\)/);
  assert.match(c,/const timer=setInterval\(\(\)=>\{void runDueUnavailableMedia\(\)\.catch\(\(\)=>\{\}\);\},3600000\)/);
  assert.match(c,/await runUnavailableRecheckBatch\(/);
- assert.match(c,/requireAdmin\(req,res\)/);
+ assert.match(c,/requireAdmin\(req,\s*res\)/);
  assert.match(c,/\/api\/v1\/admin\/xtream-gateway\/unavailable-media/);
  assert.match(c,/const original=mediaUpstreamUrl\(row,key\.kind,key\.itemId,ext\)/);
  assert.match(c,/shouldUseIndependentSourceMedia\(\{/);
