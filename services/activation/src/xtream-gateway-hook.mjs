@@ -47,6 +47,8 @@ import { createXtreamHealthSnapshot } from './xtream-health-snapshot.mjs';
 import {relayEligible,issueStreamRelayGrant} from './xtream-stream-relay-bridge.mjs';
 import {shouldUseIndependentSourceMedia} from './xtream-independent-source-media-policy.mjs';
 import {readSanitizedXtreamRelayFailure} from './xtream-relay-diagnostic.mjs';
+import {mayRefreshMovieExtension,correctedMovieExtension} from './xtream-vod-extension-recovery.mjs';
+import {shouldUseIndependentXtreamSource,fetchIndependentXtreamSource} from './xtream-independent-catalog-relay.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
@@ -657,6 +659,40 @@ function mediaUpstreamUrl(row, kind, sourceId, extension) {
   return new URL(path, base);
 }
 
+// One authorized source lookup, bounded to 4.5 seconds and 24 KiB. Source
+// metadata never reaches the player or logs. No catalog writes.
+async function freshAdvertisedMovieExtension(row,sourceId,previousExtension) {
+  const creds=decryptServerCredentials(row);
+  const url=xtreamApiUrl(row.base_url,creds.username,creds.password,
+    'get_vod_info',{vod_id:String(sourceId)});
+  let response,reader;
+  try{
+    const timeout=AbortSignal.timeout(4500);
+    response=shouldUseIndependentXtreamSource(row.server_id)
+      ?await fetchIndependentXtreamSource(url.href,{timeoutMs:4000})
+      :await checkedFetch(url,{timeoutMs:4000,signal:timeout,
+        headers:{accept:'application/json','user-agent':'BLOFY-Xtream-Gateway/1.0'}});
+    if(response.status!==200||!response.body)return null;
+    const size=Number(response.headers.get('content-length')||0);
+    if(size>24576)return null;
+    reader=response.body.getReader();
+    const chunks=[];let count=0;
+    while(true){
+      const part=await reader.read();
+      if(part.done)break;
+      count+=part.value?.byteLength||0;
+      if(count>24576)return null;
+      chunks.push(Buffer.from(part.value));
+    }
+    const payload=JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    return correctedMovieExtension(payload,sourceId,previousExtension);
+  }catch{return null;}
+  finally{
+    if(reader){try{await reader.cancel()}catch{}try{reader.releaseLock()}catch{}}
+    else await response?.body?.cancel().catch(()=>{});
+  }
+}
+
 async function proxyMedia(req, res, kind, username, password, gatewayId, requestedExtension) {
   if (!requirePublicBudget(req, res)) return;
   const account = await authenticate(username, password, { touch: false });
@@ -749,8 +785,11 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
   // A provider returning 404/416 only for "Range: bytes=0-..." can be
   // rechecked once with plain GET. Never discard a nonzero seek request.
   const initialRange=firstByteXtreamRange(headers.range)&&req.method==='GET';
-  const maxAttempts = req.method === 'HEAD' ? 1 : initialRange ? 3 : 2;
-  let noRangeRetried=false, transientRetried=false;
+  const movieRefreshAllowed=kind==='movie'&&req.method==='GET'&&
+    mayRefreshMovieExtension(row.server_id);
+  const maxAttempts=req.method==='HEAD'?1:
+    (initialRange?3:2)+(movieRefreshAllowed?1:0);
+  let noRangeRetried=false, transientRetried=false,extensionRefreshTried=false;
   try {
     for (let attempt=1;attempt<=maxAttempts;attempt++) {
       if (client.signal.aborted) return;
@@ -782,6 +821,27 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
             retryWithoutRange,relayFailure});
           // Never expose upstream bodies; store only a fixed, allowlisted hint
           // if the provider itself explained a denied request.
+          const shouldRefresh=movieRefreshAllowed&&!extensionRefreshTried&&
+            (response.status===404||confirmedMissing)&&attempt<maxAttempts;
+          if(shouldRefresh){
+            extensionRefreshTried=true;
+            await response.body?.cancel().catch(()=>{});
+            const freshExtension=await freshAdvertisedMovieExtension(
+              row,sourceId,mediaExtension);
+            if(freshExtension){
+              const corrected=mediaUpstreamUrl(row,'movie',sourceId,freshExtension);
+              try{
+                mediaFetchTarget=usingIndependentRelay?
+                  new URL(await issueStreamRelayGrant({
+                    sourceUrl:corrected.href,kind:'movie'})):corrected;
+                // The provider advertised this extension for the SAME item.
+                // Never persist a correction until actual media bytes are read.
+                console.info('BLOFY_MOVIE_EXTENSION_RECOVERY',{
+                  state:'provider_extension_changed',sourceId:row.server_id});
+                continue;
+              }catch{}
+            }
+          }
           const providerHint=retryWithoutRange||usingIndependentRelay?null:
             await readXtreamProviderDenialHint(response);
           // Respect provider refusals, and cool down this channel only.
