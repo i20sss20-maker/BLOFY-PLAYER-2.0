@@ -4,7 +4,7 @@ import {readFile} from 'node:fs/promises';
 
 test('direct source probe uses the SAME imported movie IDs as isolated probe',async()=>{
  const js=await readFile(new URL('../src/xtream-admin-hook.mjs',import.meta.url),'utf8');
- const fn=js.indexOf("async function probeXtreamPlayback(id,mediaType='live',{forcePortalDirect=false}={})");
+ const fn=js.indexOf("async function probeXtreamPlayback(id,mediaType='live',{forcePortalDirect=false,");
  assert.ok(fn>0);
  const s=js.slice(fn,js.indexOf('async function fetchAccount(',fn));
  assert.match(s,/ORDER BY name ASC LIMIT 4/);
