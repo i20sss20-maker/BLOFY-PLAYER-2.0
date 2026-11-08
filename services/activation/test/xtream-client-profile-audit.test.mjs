@@ -16,6 +16,7 @@ test('operator same-item comparison proxy enforces shared token and returns sani
    n++;
    assert.equal(options.method,'POST');
    assert.equal(options.redirect,'manual');
+   assert.equal(JSON.parse(options.body).compareHttp11,true);
    assert.match(input,/\/internal\/xtream-media-client-profiles$/);
    assert.match(options.headers.authorization,/Bearer /);
    return new Response(JSON.stringify({ok:true,samples:[{
@@ -52,4 +53,18 @@ test('one-shot source-only boot comparison selects existing IDs, not guessed med
  assert.match(section,/probeIndependentXtreamClientProfiles\(samples\)/);
  assert.match(section,/catalogMutation:false/);
  assert.doesNotMatch(section,/\bUPDATE\b|\bDELETE\b|\bINSERT\b|syncServer\(/);
+});
+
+test('operator logs only allowlisted HTTP11 comparison fields from source bridge',async()=>{
+ const report=await probeIndependentXtreamClientProfiles([{
+  kind:'movie',sourceUrl:'http://provider.example/movie/u/HIDDEN/15.mkv'
+ }],{env,fetchImpl:async()=>new Response(JSON.stringify({
+  ok:true,samples:[{index:1,kind:'movie',checks:[
+   {profile:'http11_plain',status:200,mediaBytes:true,code:'media_checked',
+    sourceUrl:'http://provider.example/movie/u/HIDDEN/15.mkv',secret:'HIDDEN'}
+  ]}]
+ }),{status:200})});
+ assert.equal(report.samples[0].checks[0].profile,'http11_plain');
+ assert.equal(report.samples[0].checks[0].mediaBytes,true);
+ assert.doesNotMatch(JSON.stringify(report),/HIDDEN|sourceUrl|provider.example/);
 });
