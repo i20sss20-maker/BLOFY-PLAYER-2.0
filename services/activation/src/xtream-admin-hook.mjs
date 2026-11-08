@@ -2898,5 +2898,50 @@ if(process.env.BLOFY_XTREAM_DISTRIBUTED_EPISODE_AUDIT_ON_BOOT==='1'){
  timer.unref?.();
 }
 // END BLOFY DISTRIBUTED EPISODE AUDIT
+// One-shot alternate-path eligibility check entirely within the SAME saved
+// source. It does not assume that an identical title is the same edition
+// or that a duplicate has playable bytes. No source IDs or names are logged.
+if(process.env.BLOFY_XTREAM_SAME_SOURCE_DUPLICATES_ON_BOOT==='1'){
+ const timer=setTimeout(()=>{
+  void(async()=>{
+   const id=String(process.env.BLOFY_XTREAM_EGRESS_SOURCE_ID||'').trim();
+   if(!validUuid(id))return;
+   const source=await serverById(id);
+   if(!source?.enabled||!source.publish_catalog)return;
+   const originals=(await pool.query(
+    "SELECT source_id,name,metadata FROM blofy_xtream_items "+
+    "WHERE server_id=$1 AND media_type='movie' AND enabled=TRUE "+
+    "ORDER BY name ASC LIMIT 2",[id]
+   )).rows;
+   const rows=[];
+   for(const item of originals){
+    const m=item.metadata&&typeof item.metadata==='object'?item.metadata:{};
+    const tmdb=String(m.tmdb||'').trim(),imdb=String(m.imdb||'').trim();
+    const candidates=(await pool.query(
+     "SELECT name,metadata FROM blofy_xtream_items "+
+     "WHERE server_id=$1 AND media_type='movie' AND enabled=TRUE "+
+     "AND source_id<>$2 AND "+
+     "(lower(btrim(name))=lower(btrim($3::text)) "+
+     "OR ($4::text<>'' AND metadata->>'tmdb'=$4::text) "+
+     "OR ($5::text<>'' AND metadata->>'imdb'=$5::text)) "+
+     "LIMIT 20",[id,item.source_id,item.name,tmdb,imdb]
+    )).rows;
+    rows.push(summarizeSameMovieCandidates(item,candidates));
+   }
+   console.info('BLOFY_XTREAM_SAME_SOURCE_DUPLICATES',JSON.stringify({
+    sourceId:id,checked:rows.length,movies:rows,
+    playableAlternativeVerified:false,
+    mediaRequests:0,sourceMutation:false,
+    customerRerouting:false,subscriberPermissionsChanged:false,
+    credentialsLogged:false
+   }));
+  })().catch(()=>console.warn('BLOFY_XTREAM_SAME_SOURCE_DUPLICATES',
+   JSON.stringify({ok:false,code:'source_duplicates_unavailable',
+    sourceMutation:false,customerRerouting:false,credentialsLogged:false})));
+ },18000);
+ timer.unref?.();
+}
+// END BLOFY SAME SOURCE DUPLICATES AUDIT
+
 
 
