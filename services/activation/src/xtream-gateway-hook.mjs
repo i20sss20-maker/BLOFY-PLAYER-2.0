@@ -35,6 +35,7 @@ import { validateBulkAccountRequest } from './xtream-bulk-policy.mjs';
 import { gatewayItemsPageQuery } from './xtream-gateway-query.mjs';
 import { mergeXtreamPlayerRequest } from './xtream-player-post.mjs';
 import { inspectXtreamMediaChunk } from './xtream-media-inspector.mjs';
+import { verifiedXtreamMediaContentType } from './xtream-media-response-type.mjs';
 import { readXtreamProviderDenialHint } from './xtream-provider-denial.mjs';
 import { normalizeXtreamEpg } from './xtream-epg.mjs';
 import { acceptsXtreamGzip } from './xtream-catalog-compression.mjs';
@@ -1222,6 +1223,12 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
         if (first.done || !first.value?.byteLength) throw new Error('upstream_empty_media');
         const inspection=inspectXtreamMediaChunk(first.value,response.headers.get('content-type'));
         if(!inspection.valid)throw new Error(inspection.reason);
+        // Some providers label MP4/MKV as octet-stream. Use the verified
+        // container type only when the source supplied no meaningful MIME.
+        // Preserve bytes, range headers, codec and existing explicit types.
+        const verifiedType=verifiedXtreamMediaContentType(
+          response.headers.get('content-type'),inspection);
+        if(verifiedType)outputHeaders['content-type']=verifiedType;
         // Confirm fallback only after validated media bytes; a ticket is not success.
         if(fallbackTried&&usingIndependentRelay){
           console.info('BLOFY_VOD_EGRESS_FALLBACK',{
