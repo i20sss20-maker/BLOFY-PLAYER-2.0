@@ -54,7 +54,7 @@ test('mixed sample results are clearly labelled partial despite an overall passi
   assert.match(block,/xtream_transport_connection_reset:'انقطاع الاتصال'/);
   assert.match(block,/failedCheck/);
   assert.match(block,/partialReason/);
-  assert.match(block,/عينة فرعية فاشلة/);
+  assert.match(block,/عينات فرعية فاشلة/);
   assert.match(css,/\.xt-batch-probe-row \.status\.partial/);
 });
 
