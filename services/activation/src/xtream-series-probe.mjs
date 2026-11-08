@@ -50,7 +50,10 @@ export function xtreamEpisodePlaybackCandidates(payload, limit=3, {withPositions
       explicitEpisode:index+1;
     seen.add(id);
     selected.push({id,extension:EXTS.test(extension)?extension:'mp4',
-      ...(withPositions?{seasonNumber,episodeNumber}:{})});
+      // A boolean only: never return the provider's signed direct_source URL.
+      ...(withPositions?{seasonNumber,episodeNumber,
+        directSourceAdvertised:typeof row.direct_source==='string'&&
+          /^https?:\/\//i.test(row.direct_source.trim())}:{})});
   };
   for(const position of [0,-1,0.5]){
     for(const [season,rows] of seasons){
