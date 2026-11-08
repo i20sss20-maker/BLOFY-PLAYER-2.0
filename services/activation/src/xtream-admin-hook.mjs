@@ -2661,6 +2661,13 @@ async function unifiedStreamBridge(req,res,url){
       sourceId,channelId,name:String(media.name||'').slice(0,160),
       extension:'ts',customerTrafficChanged:false});
   }
+  if(req.method==='GET'&&p==='/internal/blofy-stream/media-failures'){
+    const sourceId=String(url.searchParams.get('sourceId')||'').trim();
+    if(sourceId&&!validUuid(sourceId))
+      return json(res,400,{ok:false,code:'stream_invalid_source_id'});
+    const result=await unavailableMediaSummary(pool,sourceId||null);
+    return json(res,result.ok?200:400,result);
+  }
   if(req.method==='GET'&&p==='/internal/blofy-stream/episodes'){
     const sourceId=String(url.searchParams.get('sourceId')||'');
     const seriesId=String(url.searchParams.get('seriesId')||'');
