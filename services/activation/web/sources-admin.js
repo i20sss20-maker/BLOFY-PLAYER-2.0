@@ -649,8 +649,10 @@ function appendXtreamFailedSampleDetails(row,checks){
   for(const [index,item] of failed.entries()){
     const http=Number(item.httpStatus);
     const code=String(item.error||'');
-    const status=[401,403,404,416,429,456,500,502,503,504].includes(http)?
-      'HTTP '+http:'';
+    const status=code==='relay_provider_not_found'&&http===502
+      ?'المزود HTTP 404'
+      :[401,403,404,416,429,456,500,502,503,504].includes(http)?
+        'HTTP '+http:'';
     // Titles are ordinary text nodes, never HTML; do not show IDs or URLs.
     const title=String(item.title||'عينة '+(index+1)).slice(0,100);
     const reason=known[code]||([401,403,404,416,429,456].includes(http)?
@@ -772,8 +774,13 @@ async function runXtreamBatchProbe(){
               429:'تجاوز حد الطلبات أو الاتصالات',
               456:'رمز غير قياسي من المصدر؛ راجع السماح بتشغيل الفيديو لدى المزود'
             };
-            status.textContent='✕ '+(http>=400&&http<=599?'HTTP '+http+' · ':'')+
-              (statuses[http]||known[reason]||'المصدر لم يؤكد تشغيل العينة')+
+            // A confirmed provider 404 is wrapped in relay HTTP 502;
+            // never suggest the BLOFY service itself failed here.
+            const confirmedMissing=reason==='relay_provider_not_found'&&http===502;
+            status.textContent='✕ '+(confirmedMissing?'المزود HTTP 404 · ':
+                http>=400&&http<=599?'HTTP '+http+' · ':'')+
+              (confirmedMissing?known[reason]:statuses[http]||known[reason]||
+                'المصدر لم يؤكد تشغيل العينة')+
               (xtreamProviderHintText(sample?.providerHint)?' · '+xtreamProviderHintText(sample?.providerHint):'')+
               (kind==='live'&&['ts','m3u8'].includes(sample?.outputFormat)?' · '+sample.outputFormat.toUpperCase():'');
             appendXtreamFailedSampleDetails(row,result.checks);
