@@ -47,3 +47,16 @@ test('boot VOD proof never calls mixed successes all healthy or hides failed fou
  assert.doesNotMatch(s,/report\.checks\?\.slice\(0,3\)/);
  assert.doesNotMatch(s,/credentials:\s*creds|base_url|username_secret|password_secret/);
 });
+
+test('boot VOD proof records only boolean evidence for direct source, never URL',async()=>{
+ const admin=await readFile(new URL('../src/xtream-admin-hook.mjs',import.meta.url),'utf8');
+ const a=admin.indexOf("if(process.env.BLOFY_XTREAM_INDEPENDENT_VOD_SERIES_PROBE_ON_BOOT==='1')");
+ const b=admin.indexOf('async function cancelSourceSync(',a);
+ const block=admin.slice(a,b);
+ assert.ok(a>=0&&b>a);
+ assert.match(block,/failedWithAdvertisedDirectSource:/);
+ assert.match(block,/x.directSourceAdvertised===true/);
+ assert.match(admin,/metadata->>'directSourcePresent' AS advertised_direct_source/);
+ assert.match(admin,/directSourceAdvertised:episode.directSourceAdvertised===true/);
+ assert.doesNotMatch(block,/direct_source\s*:\s*row|sourceUrl|source\.base_url/);
+});
