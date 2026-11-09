@@ -109,7 +109,13 @@ jobs:
           grep -Fq 'href="/d/blofy"' /tmp/downloads.html
           # Main card, visible TV-v74 QA, and separate standalone Xiaomi test card.
           # Production with BLOFY_SINGLE_RELEASE_75=true hides both extra cards.
-          test "$(grep -o 'class="official-card"' /tmp/downloads.html | wc -l | tr -d '[:space:]')" = 3
+          # PLAYER + separately signed STREAM + cinema QA + Xiaomi QA.
+          test "$(grep -o 'class="official-card"' /tmp/downloads.html | wc -l | tr -d '[:space:]')" = 4
+          grep -Fq 'id="blofy-stream"' /tmp/downloads.html
+          grep -Fq 'href="/d/blofy-stream"' /tmp/downloads.html
+          grep -Fq 'BLOFY STREAM' /tmp/downloads.html
+          curl -fsS --max-time 10 http://127.0.0.1:3100/apps/blofy-stream >/tmp/stream-app.html
+          grep -Fq '/d/blofy-stream' /tmp/stream-app.html
           ! grep -Fq 'data-cinematic-v74="true"' /tmp/downloads.html
           ! grep -Fq 'data-cinematic-v74-patch="true"' /tmp/downloads.html
           ! grep -Fq 'data-v74-remote-qa="true"' /tmp/downloads.html
