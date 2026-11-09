@@ -145,6 +145,7 @@ class LoginActivity : AppCompatActivity() {
         addPlaylist = primaryActionButton("＋  إضافة / إدارة") { startActivity(Intent(this@LoginActivity, PlaylistActivity::class.java)) }
         connectButton = actionButton("▶  اتصال بالنشطة") { startOrCancelConnect() }
         actions.addView(addPlaylist, LinearLayout.LayoutParams(0, dp(56), 1f).apply { marginStart = dp(8) })
+        actions.addView(actionButton("▶  تشغيل مجاني") { connectLocalPlaylist() }, LinearLayout.LayoutParams(0, dp(56), 1f).apply { marginStart = dp(8) })
         actions.addView(connectButton, LinearLayout.LayoutParams(0, dp(56), 1f))
         playlistsPanel.addView(actions)
 
@@ -187,6 +188,7 @@ class LoginActivity : AppCompatActivity() {
         connectButton = actionButton("تشغيل القائمة النشطة") { startOrCancelConnect() }
         refreshCodeButton = actionButton("تحديث") { lifecycleScope.launch { refreshIdentityAndProvider() } }
         root.addView(addPlaylist, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,dp(64)))
+        root.addView(actionButton("▶  تشغيل مجاني لقائمتي") { connectLocalPlaylist() }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,dp(60)).apply { topMargin = dp(8) })
         root.addView(connectButton, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,dp(60)).apply { topMargin = dp(8) })
         root.addView(refreshCodeButton, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,dp(56)).apply { topMargin = dp(8) })
         root.addView(TextView(this).apply {
@@ -216,6 +218,34 @@ class LoginActivity : AppCompatActivity() {
             elevation = dp(6).toFloat()
         }
         status = TextView(this).apply { textSize = 14f; setTextColor(BlofyTvDesign.TextMuted); gravity = Gravity.CENTER; setPadding(0,dp(8),0,dp(8)) }
+    }
+
+    /** Free mode opens the user's own saved provider without contacting the BLOFY activation service.
+     * Legacy device activation remains available through the existing connect action.
+     */
+    private fun connectLocalPlaylist() {
+        if (connectJob?.isActive == true) return
+        connectJob = lifecycleScope.launch {
+            try {
+                val dao = BlofyDatabase.get(applicationContext).dao()
+                val providers = withContext(Dispatchers.IO) { dao.providers().first() }
+                // BLOFY-managed subscriber entries remain on the original activation path.
+                val local = providers.firstOrNull { !it.name.equals("مشتركين BLOFY", ignoreCase = true) }
+                if (local == null) {
+                    status.text = "أضف قائمة Xtream أو M3U الخاصة بك أولاً"
+                    addPlaylist.requestFocus()
+                    return@launch
+                }
+                withContext(Dispatchers.IO) { dao.saveAndActivateProvider(local) }
+                if (hasCachedCatalog(dao, local.id)) openHome() else openCatalogLoading(local.id)
+            } catch (_: CancellationException) {
+                throw CancellationException()
+            } catch (_: Exception) {
+                status.text = "تعذر فتح القائمة المحلية، تحقق من بيانات المصدر"
+            } finally {
+                connectJob = null
+            }
+        }
     }
 
     private fun startOrCancelConnect() {
