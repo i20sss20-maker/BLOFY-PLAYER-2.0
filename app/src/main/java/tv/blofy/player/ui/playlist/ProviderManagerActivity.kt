@@ -55,6 +55,11 @@ class ProviderManagerActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (BuildConfig.CODE_ONLY_LOGIN) {
+            startActivity(Intent(this, tv.blofy.player.ui.login.CodeOnlyLoginActivity::class.java))
+            finish()
+            return
+        }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutDirection = resources.configuration.layoutDirection
