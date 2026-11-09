@@ -6,6 +6,7 @@ import {normalizePrivateRestreamOrigin, publicRestreamState} from './restream-en
 import {verifyRestreamSmoke} from './restream-smoke.mjs';
 import {DEMO_PREFIX,serveRestreamDemo} from './restream-demo-hls.mjs';
 import {checkDemoProxy} from './restream-demo-e2e.mjs';
+import {publicHealthSummary,checkRestreamHealth,verifySyntheticConcurrency} from './restream-auto-health.mjs';
 
 const ENGINE = normalizePrivateRestreamOrigin(process.env.BLOFY_RESTREAM_ENGINE_URL || '');
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
@@ -82,6 +83,18 @@ if(process.env.BLOFY_RESTREAM_SMOKE_ON_BOOT==='1'){
   },22000);
   timer.unref?.();
 }
+// Disabled by default. Only probes the already configured synthetic 'smoke' path.
+if(process.env.BLOFY_RESTREAM_AUTO_HEALTH==='1'){
+  const interval=setInterval(()=>{
+    void checkRestreamHealth({probe:()=>verifyRestreamSmoke(ENGINE)}).then(report=>{
+      if(!report.ok && report.consecutiveFailures>=3)
+        console.warn('BLOFY_RESTREAM_SYNTHETIC_ALERT',JSON.stringify({
+          code:report.lastResult?.code,consecutiveFailures:report.consecutiveFailures
+        }));
+    }).catch(()=>{});
+  },120_000);
+  interval.unref?.();
+}
 const previousCreateServer=http.createServer.bind(http);
 http.createServer=function withBlofyRestreamHealth(listener){
   if(typeof listener!=='function')return previousCreateServer(listener);
@@ -102,6 +115,23 @@ http.createServer=function withBlofyRestreamHealth(listener){
     if(req.method==='GET'&&req.url?.split('?')[0]==='/api/v1/admin/restream-engine/smoke'){
       if(!authorized(req.headers.authorization))return write(res,401,{ok:false,error:'unauthorized'});
       void runSmoke(res);
+      return;
+    }
+    if(req.method==='GET'&&req.url?.split('?')[0]==='/api/v1/admin/restream-engine/auto-health'){
+      if(!authorized(req.headers.authorization))return write(res,401,{ok:false,error:'unauthorized'});
+      return write(res,200,publicHealthSummary());
+    }
+    if(req.method==='POST'&&req.url?.split('?')[0]==='/api/v1/admin/restream-engine/auto-health/check'){
+      if(!authorized(req.headers.authorization))return write(res,401,{ok:false,error:'unauthorized'});
+      void checkRestreamHealth({probe:()=>verifyRestreamSmoke(ENGINE)}).then(report=>
+        write(res,report.ok?200:report.code==='health_check_busy'||report.code==='health_check_cooldown'?429:503,report));
+      return;
+    }
+    if(req.method==='POST'&&req.url?.split('?')[0]==='/api/v1/admin/restream-engine/concurrency/check'){
+      if(!authorized(req.headers.authorization))return write(res,401,{ok:false,error:'unauthorized'});
+      // Fixed at two synthetic readers to avoid disrupting a real provider.
+      void verifySyntheticConcurrency({probe:()=>verifyRestreamSmoke(ENGINE),concurrency:2})
+        .then(report=>write(res,report.ok?200:503,report));
       return;
     }
     if(req.method==='GET'&&req.url?.split('?')[0]==='/api/v1/admin/restream-engine/health'){
