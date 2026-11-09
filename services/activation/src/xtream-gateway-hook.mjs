@@ -44,6 +44,8 @@ import { recordXtreamPlayback,xtreamPlaybackSnapshot } from './xtream-playback-m
 import { XtreamDenialCooldown } from './xtream-denial-cooldown.mjs';
 import { createGatewayUsageThrottle } from './xtream-gateway-usage-throttle.mjs';
 import {createStreamDurationCodes,ensureStreamCodeTable} from './xtream-duration-codes.mjs';
+import {parseStreamAppToken,verifyStreamAppToken,bearerFromRequest}
+  from './xtream-code-app-token.mjs';
 import {encryptGatewayAccountPassword,decryptGatewayAccountPassword} from './xtream-account-vault.mjs';
 import { readXtreamGatewayJsonResponse } from './xtream-gateway-response.mjs';
 import { createXtreamHealthSnapshot } from './xtream-health-snapshot.mjs';
@@ -407,6 +409,21 @@ async function revealAccountCredentials(id,req){
   const params=new URLSearchParams({username:row.username,password,type:'m3u_plus',output:'ts'});
   return {credentials:{serverUrl,username:row.username,password,
     m3uUrl:serverUrl+'/get.php?'+params.toString()}};
+}
+
+async function authenticateAppBearer(req){
+  const token=bearerFromRequest(req),parsed=parseStreamAppToken(token);
+  if(!parsed)return null;
+  await ensureReady();
+  const row=(await pool.query(`SELECT a.*,c.account_id,c.code_hash,c.redeemed_device_hash
+    FROM blofy_xtream_gateway_accounts a
+    JOIN blofy_xtream_gateway_duration_codes c ON c.account_id=a.id
+    WHERE a.id=$1 AND a.enabled=TRUE AND c.redeemed_at IS NOT NULL
+      AND c.revoked_at IS NULL AND c.redeemed_device_hash IS NOT NULL
+      AND (a.expires_at IS NULL OR a.expires_at>NOW())
+    LIMIT 1`,[parsed.accountId])).rows[0];
+  if(!row||!verifyStreamAppToken(token,row,KEY_HEX))return null;
+  return row;
 }
 
 async function authenticate(usernameInput, passwordInput, { touch = false } = {}) {
@@ -1008,9 +1025,9 @@ if(process.env.BLOFY_XTREAM_UNAVAILABLE_SEED_ON_BOOT==='1'){
  timer.unref?.();
 }
 
-async function proxyMedia(req, res, kind, username, password, gatewayId, requestedExtension) {
+async function proxyMedia(req, res, kind, username, password, gatewayId, requestedExtension, authorizedAccount=null) {
   if (!requirePublicBudget(req, res)) return;
-  const account = await authenticate(username, password, { touch: false });
+  const account = authorizedAccount||await authenticate(username, password, { touch: false });
   if (!account) {
     // A rejected BLOFY account is not an upstream media 403/404.
     if(req.method!=='HEAD')recordXtreamPlayback({kind,phase:'failed',itemId:gatewayId,reason:'gateway_auth_denied'});
@@ -1486,12 +1503,13 @@ async function handlePlayerApi(req, res, url) {
   url = await mergeXtreamPlayerRequest(req, url);
   const username = url.searchParams.get('username') || '';
   const password = url.searchParams.get('password') || '';
-  const account = await authenticate(username, password, { touch: true });
+  const bearerAccount=bearerFromRequest(req)?await authenticateAppBearer(req):null;
+  const account = bearerAccount||await authenticate(username, password, { touch: true });
   if (!account) return json(res, 200, { user_info: { auth: 0, status: 'Disabled' }, server_info: playerServerInfo(req) });
   const action = String(url.searchParams.get('action') || '');
   if (!action) {
     const studio=await getXtreamStudioBranding();
-    const user=accountInfo(account,username,password);
+    const user=accountInfo(account,bearerAccount?'':username,bearerAccount?'':password);
     user.message=studio.name;
     return json(res,200,{user_info:user,server_info:{
       ...playerServerInfo(req),server_name:studio.name,
@@ -1600,7 +1618,8 @@ http.createServer = function withBlofyXtreamGateway(listener) {
           'cache-control':'no-store','x-content-type-options':'nosniff'});
         return res.end(asset);
       }
-      if (req.method === 'POST' && url.pathname === '/api/v1/stream/redeem') {
+      if (req.method === 'POST' && (url.pathname === '/api/v1/stream/redeem' ||
+          url.pathname === '/api/v1/stream/app/redeem')) {
         const rate=streamCodeLimiter.consume(requestClientKey(req));
         if(!rate.allowed)return json(res,429,{ok:false,code:'stream_code_rate_limited'},
           {'retry-after':String(rate.retryAfterSeconds)});
@@ -1610,8 +1629,25 @@ http.createServer = function withBlofyXtreamGateway(listener) {
         await ensureReady();
         const data=await readJson(req);
         const result=await streamCodes.redeem(data.code,'https://blofyplayer.com',
-          {deviceKey:data.deviceKey??null});
+          {deviceKey:data.deviceKey??null,
+           appOnly:url.pathname==='/api/v1/stream/app/redeem'});
         return json(res,201,result,{'referrer-policy':'no-referrer'});
+      }
+      if(req.method==='GET'&&url.pathname==='/api/v1/stream/app/session'){
+        const account=await authenticateAppBearer(req);
+        if(!account)return json(res,401,{ok:false,error:'stream_app_session_invalid'},
+          {'cache-control':'no-store'});
+        return json(res,200,{ok:true,active:true,
+          expiresAt:account.expires_at?new Date(account.expires_at).getTime():null},
+          {'cache-control':'no-store'});
+      }
+      const tokenMedia=url.pathname.match(
+        /^\/api\/v1\/stream\/media\/(live|movie|series)\/([0-9]+)(?:\.([A-Za-z0-9]{1,8}))?$/i);
+      if(tokenMedia&&(req.method==='GET'||req.method==='HEAD')){
+        const account=await authenticateAppBearer(req);
+        if(!account)return text(res,401,'Unauthorized');
+        return proxyMedia(req,res,tokenMedia[1].toLowerCase(),'','',
+          tokenMedia[2],tokenMedia[3],account);
       }
       if (req.method === 'GET' && url.pathname === '/xtream/health') return json(res, 200, await gatewayHealth());
       if ((req.method === 'GET' || req.method === 'POST') && (url.pathname === '/player_api.php' || url.pathname === '/panel_api.php')) return await handlePlayerApi(req, res, url);
