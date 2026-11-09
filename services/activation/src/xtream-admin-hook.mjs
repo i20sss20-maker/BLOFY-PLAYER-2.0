@@ -59,6 +59,7 @@ import {suggestCatalogWithAI} from './stream-ai-catalog-suggestions.mjs';
 import {suggestCatalogWithGemini} from './stream-gemini-catalog-suggestions.mjs';
 import {proposeCatalogCommand} from './stream-ai-command-planner.mjs';
 import {proposeExistingCategoryAssignments} from './stream-ai-item-organizer.mjs';
+import {ensureAiJournalSchema,recordAiPublish,readAiPublishState,revertAiClassification} from './stream-ai-publish-journal.mjs';
 import {fullCatalogCategoryOrder,summarizeFullCatalogCoverage} from './stream-ai-full-sort.mjs';
 import { normalizeXtreamDetails,mergedXtreamMetadata } from './xtream-item-details.mjs';
 import { tmdbConfigured,validatedTmdbId,fetchTmdbDetails } from './xtream-tmdb.mjs';
@@ -282,6 +283,7 @@ async function ensureReady() {
       // Publisher controls survive every Xtream re-import.
       await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS custom_name TEXT');
       await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS custom_category_id TEXT');
+      await ensureAiJournalSchema(client);
       await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS custom_icon_url TEXT');
       await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS featured BOOLEAN NOT NULL DEFAULT FALSE');
       await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS channel_number INTEGER');
@@ -2292,7 +2294,7 @@ async function chatWithLibraryAI(body){
      ORDER BY sort_order,name,source_category_id LIMIT 1001`,[sourceId,type])).rows;
    if(allCategories.length>1000)return {ok:false,code:'stream_ai_category_choices_exceeded'};
    if(!allCategories.length)return {ok:false,code:'stream_ai_categories_missing'};
-   const rows=(await pool.query(`SELECT source_id,category_id,
+   const rows=(await pool.query(`SELECT source_id,category_id,custom_category_id,
      COALESCE(NULLIF(custom_name,''),name) AS name FROM blofy_xtream_items
      WHERE server_id=$1 AND media_type=$2 AND enabled=TRUE
      ORDER BY source_id LIMIT 12 OFFSET $3`,[sourceId,type,offset])).rows;
@@ -2309,6 +2311,7 @@ async function chatWithLibraryAI(body){
      const original=allowed.get(x.id);
      if(!original||String(original.category_id||'')===x.categoryId)return [];
      return [{id:x.id,expectedCategoryId:original.category_id??null,
+       expectedOverride:original.custom_category_id??null,
        expectedName:String(original.name),categoryId:x.categoryId,
        categoryName:x.categoryName,reason:x.reason,title:x.title}];
    });
@@ -2411,6 +2414,7 @@ async function approveLibraryAICommand(body){
  const source=await serverById(plan.sourceId);
  if(!source)return {ok:false,code:'stream_library_source_missing'};
  let result,changedItems=0;
+ let publishRevision=null;
  if(plan.action==='classify_items'){
    const changes=Array.isArray(plan.assignments)?plan.assignments:[];
    if(!changes.length||changes.length>12)
@@ -2436,6 +2440,13 @@ async function approveLibraryAICommand(body){
          throw Object.assign(new Error('stream_ai_plan_conflict'),{status:409});
        changedItems++;
      }
+     publishRevision=await recordAiPublish(client,{
+       planId:token,sourceId:plan.sourceId,mediaType:plan.type,
+       operation:'classify_items',changes:changes.map(x=>({
+         id:x.id,title:x.expectedName,fromCategory:x.expectedCategoryId,
+         fromOverride:x.expectedOverride,toCategory:x.categoryId
+       }))
+     });
      await client.query('COMMIT');
    }catch(error){
      await client.query('ROLLBACK').catch(()=>{});
@@ -2527,6 +2538,9 @@ async function approveLibraryAICommand(body){
  libraryAuditCache.delete(plan.sourceId+':'+plan.type);
  return {ok:true,applied:true,action:plan.action,mode:plan.mode,
   sourceId:plan.sourceId,type:plan.type,
+  catalogRevision:publishRevision,
+  rollbackSupported:plan.action==='classify_items',
+  publishedPlanId:plan.action==='classify_items'?token:null,
   updatedCategories:result.updated,
   changedTitles:plan.action==='titles_cleanup'?changedItems:0,
   movedItems:plan.action==='classify_items'?changedItems:0,unchanged:result.unchanged,
@@ -3157,6 +3171,23 @@ async function unifiedStreamBridge(req,res,url){
       suggestionsReturned:result.suggestions?.length||0,
       modelUsed:result.modelUsed===true
     });
+  }
+  if(req.method==='GET'&&p==='/internal/blofy-stream/library-ai/publish-status'){
+    const sourceId=String(url.searchParams.get('sourceId')||'');
+    const result=await readAiPublishState(pool,sourceId);
+    return json(res,result.ok?200:400,result);
+  }
+  if(req.method==='POST'&&p==='/internal/blofy-stream/library-ai/rollback'){
+    const body=await readJson(req);
+    const result=await revertAiClassification(pool,{
+      sourceId:String(body?.sourceId||''),planId:String(body?.planId||'')
+    });
+    if(result.ok){
+      libraryAuditCache.delete(result.sourceId+':live');
+      libraryAuditCache.delete(result.sourceId+':movie');
+      libraryAuditCache.delete(result.sourceId+':series');
+    }
+    return json(res,result.ok?200:409,result);
   }
   if(req.method==='POST'&&p==='/internal/blofy-stream/library-ai/chat'){
     const result=await chatWithLibraryAI(await readJson(req));
