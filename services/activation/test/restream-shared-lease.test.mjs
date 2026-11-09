@@ -32,3 +32,26 @@ test('one failed publisher does not leave stale ref counts',async()=>{
  assert.equal(c.snapshot().activeViewers,0);
  assert.equal(starts,1);
 });
+
+test('stop failure quarantines source and prevents duplicate upstream connections',async()=>{
+ let startCount=0,stopCount=0;
+ const s=createSharedStreamCoordinator({start:async()=>{startCount++;return {x:1};},
+  stop:async()=>{stopCount++;throw Error('unknown_stream_shutdown');},idleMs:4});
+ const session=await s.acquire(KEY,{authorized:true});
+ session.release();
+ await delay(30);
+ assert.equal(stopCount,1);
+ assert.equal(s.snapshot().quarantined,1);
+ await assert.rejects(s.acquire(KEY,{authorized:true}),/shared_stream_stop_failed/);
+ assert.equal(startCount,1);
+});
+test('concurrent acquisition respects per-key capacity even before startup completes',async()=>{
+ let starts=0;
+ const s=createSharedStreamCoordinator({start:async()=>{starts++;await delay(5);return {x:1};},
+  stop:async()=>{},maxViewersPerKey:2,idleMs:5});
+ const a=s.acquire(KEY,{authorized:true}),b=s.acquire(KEY,{authorized:true});
+ await assert.rejects(s.acquire(KEY,{authorized:true}),/shared_stream_viewer_limit/);
+ const sessions=await Promise.all([a,b]);
+ assert.equal(starts,1);
+ sessions.forEach(x=>x.release());
+});
