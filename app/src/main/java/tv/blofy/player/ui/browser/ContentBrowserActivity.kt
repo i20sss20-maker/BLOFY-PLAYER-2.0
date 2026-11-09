@@ -17,6 +17,7 @@ import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.PlayerView
+import androidx.media3.common.Player
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.Job
@@ -60,6 +61,7 @@ class ContentBrowserActivity : AppCompatActivity() {
     private var previewSession: BlofyPlaybackSession? = null
     private var previewView: PlayerView? = null
     private var previewTitle: TextView? = null
+    private var previewStatus: TextView? = null
     private var currentCategoryId: String? = null
     private var catalogRepairAttempted = false
     private var originalCategories: List<CategoryEntity> = emptyList()
@@ -247,6 +249,13 @@ class ContentBrowserActivity : AppCompatActivity() {
             setShutterBackgroundColor(Color.BLACK)
         }
         addView(previewView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        previewStatus = TextView(this@ContentBrowserActivity).apply {
+            text = "اختر قناة لبدء المعاينة"
+            textSize = 13f
+            setTextColor(BLOFY_PURPLE_SOFT)
+            setPadding(dp(4), dp(8), 0, 0)
+        }
+        addView(previewStatus)
         addView(TextView(this@ContentBrowserActivity).apply {
             text = "OK: ملء الشاشة   •   ضغط مطوّل: الأرشيف ⏱   •   ↑↓: القنوات"
             textSize = 14f
@@ -386,12 +395,25 @@ class ContentBrowserActivity : AppCompatActivity() {
         val profile = profile(provider)
         val url = ContentUrlResolver.live(provider, profile, stream)
         if (previewSession == null) {
-            previewSession = BlofyPlaybackSession(this, profile, "live_preview")
+            previewSession = BlofyPlaybackSession(this, profile, "live_preview") {
+                previewStatus?.text = "تعذرت المعاينة بعد المحاولات التلقائية • اضغط OK لفتح المشغل أو اختر قناة أخرى"
+            }
+            previewSession?.player?.addListener(object : Player.Listener {
+                override fun onRenderedFirstFrame() {
+                    previewStatus?.text = "البث مباشر • الفيديو يعمل"
+                }
+                override fun onPlaybackStateChanged(state: Int) {
+                    if (state == Player.STATE_BUFFERING) {
+                        previewStatus?.text = "جار تحميل البث..."
+                    }
+                }
+            })
             previewView?.player = previewSession?.player
         }
         lastPreviewKey = stream.key
         rememberStream(stream)
         previewTitle?.text = CategoryPresentation.cleanTitle(stream.name)
+        previewStatus?.text = "جار بدء معاينة القناة..."
         previewSession?.play(url)
         refreshShortEpg(stream)
     }
@@ -414,6 +436,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         previewView?.player = null
         previewSession?.release()
         previewSession = null
+        previewStatus?.text = "اختر قناة لبدء المعاينة"
     }
 
     private fun openStream(stream: StreamEntity) {
