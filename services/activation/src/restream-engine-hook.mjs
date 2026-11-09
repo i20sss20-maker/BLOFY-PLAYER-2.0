@@ -7,6 +7,7 @@ import {verifyRestreamSmoke} from './restream-smoke.mjs';
 import {DEMO_PREFIX,serveRestreamDemo} from './restream-demo-hls.mjs';
 import {checkDemoProxy} from './restream-demo-e2e.mjs';
 import {publicHealthSummary,checkRestreamHealth,verifySyntheticConcurrency} from './restream-auto-health.mjs';
+import {getRestreamMetrics} from './restream-observability.mjs';
 
 const ENGINE = normalizePrivateRestreamOrigin(process.env.BLOFY_RESTREAM_ENGINE_URL || '');
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
@@ -117,6 +118,14 @@ http.createServer=function withBlofyRestreamHealth(listener){
     if(req.method==='GET'&&req.url?.split('?')[0]==='/api/v1/admin/restream-engine/smoke'){
       if(!authorized(req.headers.authorization))return write(res,401,{ok:false,error:'unauthorized'});
       void runSmoke(res);
+      return;
+    }
+    if(req.method==='GET'&&req.url?.split('?')[0]==='/api/v1/admin/restream-engine/metrics'){
+      if(!authorized(req.headers.authorization))return write(res,401,{ok:false,error:'unauthorized'});
+      if(process.env.BLOFY_RESTREAM_METRICS_READ!=='1')
+        return write(res,503,{ok:false,code:'restream_metrics_not_enabled'});
+      void getRestreamMetrics(ENGINE,{key:ADMIN_TOKEN}).then(report=>
+        write(res,report.ok?200:503,report));
       return;
     }
     if(req.method==='GET'&&req.url?.split('?')[0]==='/api/v1/admin/restream-engine/auto-health'){
