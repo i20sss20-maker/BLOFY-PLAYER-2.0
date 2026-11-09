@@ -31,6 +31,8 @@ import tv.blofy.player.R
 import tv.blofy.player.core.identity.StreamCodeSession
 import tv.blofy.player.core.identity.StreamCodeClient
 import tv.blofy.player.core.device.DeviceClass
+import tv.blofy.player.core.device.StreamDeviceCompatibility
+import tv.blofy.player.core.diagnostics.StreamConnectionDiagnostics
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.CatalogRefreshWorker
 import tv.blofy.player.data.LocalStorageManager
@@ -254,6 +256,10 @@ class SettingsActivity : AppCompatActivity() {
         })
 
         addSection(page, copy("حول التطبيق", "About app"))
+        if (BuildConfig.CODE_ONLY_LOGIN) addCard(actionCard(
+            copy("فحص توافق الجهاز والاتصال", "Device and connection compatibility"),
+            copy("Android وذاكرة الجهاز ومحرك الفيديو وشهادة HTTPS", "Android, memory, video engine and HTTPS certificate")
+        ) { showStreamCompatibility() })
         addCard(actionCard(copy("تشخيص BLOFY", "BLOFY diagnostics"), copy("الجهاز والشبكة والمكتبة وتقرير الدعم", "Device, network, library and support report")) {
             startActivity(Intent(this, SystemStatusActivity::class.java))
         })
@@ -372,6 +378,36 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun copy(arabic: String, english: String) =
         if (androidx.core.os.ConfigurationCompat.getLocales(resources.configuration)[0]?.language == "ar") arabic else english
+
+    /**
+     * Credential-free live self-check. No redeem request is sent here and no code,
+     * bearer, source host or subscriber details enter this dialog.
+     */
+    private fun showStreamCompatibility() {
+        val device = StreamDeviceCompatibility.current(this)
+        val kind = if (device.television) "Android TV / TV Box" else "هاتف أو جهاز لوحي"
+        val memory = if (device.lowMemory) "اقتصادي (وضع خفيف تلقائي)" else "طبيعي"
+        val info = "Android SDK ${device.sdk} • $kind\\n" +
+            "الذاكرة: $memory\\n" +
+            "المحرك: Media3 مع بدائل Decoder\\n" +
+            "تحميل المكتبة: ${device.maxCatalogRequestsPerHost} اتصالات لكل مضيف\\n" +
+            "التنقل: ريموت D-pad / لوحة المفاتيح\\n"
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("توافق BLOFY STREAM")
+            .setMessage(info + "\\nجارِ اختبار HTTPS مع سيرفر BLOFY...")
+            .setPositiveButton("إغلاق", null)
+            .show()
+        lifecycleScope.launch {
+            val result = StreamConnectionDiagnostics.probe()
+            if (isFinishing || isDestroyed || !dialog.isShowing) return@launch
+            val connection = if (result.reachable)
+                "اتصال HTTPS ناجح (الخادم متاح)"
+            else StreamConnectionDiagnostics.guidance(
+                result.cause ?: StreamConnectionDiagnostics.Cause.OTHER)
+            dialog.setMessage(info + "\\n" + connection +
+                "\\n\\nهذا الفحص لا يؤكد صلاحية كود الاشتراك أو توفر قنوات المصدر.")
+        }
+    }
 
     private fun showStreamSubscription() {
         val token=StreamCodeSession.token(applicationContext)
