@@ -238,7 +238,14 @@ class HomeActivity : AppCompatActivity() {
             ) { actionViews }
         }
         restoreFocus()
-        warmCatalogArtwork()
+        if (BuildConfig.CODE_ONLY_LOGIN && deviceKind == DeviceClass.Kind.TV) {
+            root.postDelayed({
+                if (!isFinishing && root.findFocus() == null) {
+                    (actionViews["side_live"] ?: firstAction)?.requestFocus()
+                }
+            }, 150L)
+        }
+        if (!BuildConfig.CODE_ONLY_LOGIN) warmCatalogArtwork()
         renderSkeleton()
         loadHomeExperience()
         if (homeResumed) {
@@ -860,7 +867,9 @@ class HomeActivity : AppCompatActivity() {
         val item = heroItem
         val providerId = heroProviderId
         if (item == null || providerId.isNullOrBlank()) { startActivity(contentIntent("live")); return }
-        openDetails(providerId, item)
+        if (BuildConfig.CODE_ONLY_LOGIN && item.kind == "live") {
+            startActivity(contentIntent("live"))
+        } else openDetails(providerId, item)
     }
 
     private fun openDetails(providerId: String, item: StreamEntity) {
