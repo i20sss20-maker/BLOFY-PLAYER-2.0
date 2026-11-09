@@ -43,6 +43,7 @@ import { shouldRetryXtreamWithoutRange,firstByteXtreamRange } from './xtream-med
 import { recordXtreamPlayback,xtreamPlaybackSnapshot } from './xtream-playback-metrics.mjs';
 import { XtreamDenialCooldown } from './xtream-denial-cooldown.mjs';
 import { createGatewayUsageThrottle } from './xtream-gateway-usage-throttle.mjs';
+import {createStreamDurationCodes,ensureStreamCodeTable} from './xtream-duration-codes.mjs';
 import { readXtreamGatewayJsonResponse } from './xtream-gateway-response.mjs';
 import { createXtreamHealthSnapshot } from './xtream-health-snapshot.mjs';
 import {relayEligible,issueStreamRelayGrant} from './xtream-stream-relay-bridge.mjs';
@@ -88,6 +89,8 @@ function movieRefreshDue(key,now=Date.now()){
   return true;
 }
 const accountUsageThrottle = createGatewayUsageThrottle();
+const streamCodes=createStreamDurationCodes({pool,keyHex:KEY_HEX});
+const streamCodeLimiter=createFixedWindowLimiter({limit:6,windowMs:15*60_000});
 let readyPromise;
 const unavailableWriteGuard=createRegistryWriteGuard();
 let unavailableRecoveryTimerStarted=false,unavailableRecoveryBusy=false;
@@ -225,6 +228,7 @@ async function ensureReady() {
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_gateway_item_lookup ON blofy_xtream_gateway_item_map(server_id,media_type,source_id)');
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_gateway_episode_lookup ON blofy_xtream_gateway_episode_map(server_id,source_episode_id)');
       await ensureUnavailableMediaTable(client);
+      await ensureStreamCodeTable(client);
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK').catch(() => {});
@@ -1560,6 +1564,29 @@ http.createServer = function withBlofyXtreamGateway(listener) {
         res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'content-length': body.length, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
         return res.end(body);
       }
+      if (req.method === 'GET' && url.pathname === '/stream/activate') {
+        const page=await readFile(new URL('../web/stream-activate.html',import.meta.url));
+        res.writeHead(200,{'content-type':'text/html; charset=utf-8','content-length':page.length,
+          'cache-control':'no-store','referrer-policy':'no-referrer',
+          'content-security-policy':"default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+          'x-content-type-options':'nosniff'});
+        return res.end(page);
+      }
+      if (req.method === 'GET' && url.pathname === '/stream/activate.js') {
+        const asset=await readFile(new URL('../web/stream-activate.js',import.meta.url));
+        res.writeHead(200,{'content-type':'text/javascript; charset=utf-8','content-length':asset.length,
+          'cache-control':'no-store','x-content-type-options':'nosniff'});
+        return res.end(asset);
+      }
+      if (req.method === 'POST' && url.pathname === '/api/v1/stream/redeem') {
+        const rate=streamCodeLimiter.consume(requestClientKey(req));
+        if(!rate.allowed)return json(res,429,{ok:false,code:'stream_code_rate_limited'},
+          {'retry-after':String(rate.retryAfterSeconds)});
+        await ensureReady();
+        const data=await readJson(req);
+        const result=await streamCodes.redeem(data.code,'https://blofyplayer.com');
+        return json(res,201,result,{'referrer-policy':'no-referrer'});
+      }
       if (req.method === 'GET' && url.pathname === '/xtream/health') return json(res, 200, await gatewayHealth());
       if ((req.method === 'GET' || req.method === 'POST') && (url.pathname === '/player_api.php' || url.pathname === '/panel_api.php')) return await handlePlayerApi(req, res, url);
       if (req.method === 'GET' && url.pathname === '/get.php') return await handleM3u(req, res, url);
@@ -1615,6 +1642,18 @@ http.createServer = function withBlofyXtreamGateway(listener) {
           scope:'verified_unavailable_media_only',subscriberCutover:false,
           catalogMutation:false});
       }
+      if(req.method==='GET'&&url.pathname==='/api/v1/admin/xtream-gateway/codes') {
+        return json(res,200,await streamCodes.list({
+          limit:Number(url.searchParams.get('limit')||40),
+          offset:Number(url.searchParams.get('offset')||0)
+        }));
+      }
+      if(req.method==='POST'&&url.pathname==='/api/v1/admin/xtream-gateway/codes') {
+        return json(res,201,await streamCodes.issue(await readJson(req)));
+      }
+      const codeRevoke=url.pathname.match(/^\/api\/v1\/admin\/xtream-gateway\/codes\/([0-9a-f-]{36})\/revoke$/i);
+      if(req.method==='POST'&&codeRevoke)
+        return json(res,200,await streamCodes.revoke(codeRevoke[1]));
       if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream-gateway') {
         const items = await listAccounts();
         return json(res, 200, { serverUrl: origin(req), items });
