@@ -17,6 +17,7 @@ export function createSharedStreamCoordinator({start,stop,clock=Date.now,
    entry={key,viewers:0,lastUsedAt:clock(),timer:null,pending:null,handle:null,generation:0};
    entries.set(key,entry);
   }
+  if(entry.quarantined)throw new Error('shared_stream_stop_failed');
   if(entry.stopping)throw new Error('shared_stream_recycling');
   if(entry.viewers>=maxViewersPerKey)throw new Error('shared_stream_viewer_limit');
   if(entry.timer){clearTimeout(entry.timer);entry.timer=null;}
@@ -48,8 +49,13 @@ export function createSharedStreamCoordinator({start,stop,clock=Date.now,
       if(current.viewers!==0||entries.get(key)!==current)return;
       // Keep the entry locked until stop finishes to prevent overlapping publishers.
       current.stopping=true;
-      try{if(current.handle!=null)await stop(current.handle,key);}catch{}
-      finally{if(entries.get(key)===current)entries.delete(key);current.stopping=false;}
+      try{
+       if(current.handle!=null)await stop(current.handle,key);
+       if(entries.get(key)===current)entries.delete(key);
+      }catch{
+       // Fail closed: unknown publisher state. A new source must NOT start.
+       current.quarantined=true;
+      }finally{current.stopping=false;}
      },Math.max(0,idleMs));
      current.timer.unref?.();
     }
@@ -65,7 +71,8 @@ export function createSharedStreamCoordinator({start,stop,clock=Date.now,
  function snapshot(){
   return {scope:'single_process_experimental',productionEnabled:false,
     keys:entries.size,activeViewers:[...entries.values()].reduce((n,x)=>n+x.viewers,0),
-    activePublishers:[...entries.values()].filter(x=>x.handle!=null).length};
+    activePublishers:[...entries.values()].filter(x=>x.handle!=null).length,
+    quarantined:[...entries.values()].filter(x=>x.quarantined).length};
  }
  return {acquire,snapshot};
 }
