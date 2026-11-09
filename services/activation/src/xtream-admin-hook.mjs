@@ -2457,7 +2457,7 @@ async function patchCategory(serverId, mediaType, categoryId, enabled) {
 // Operator-triggered, transactional reordering only. No catalog rows,
 // visibility, subscriber entitlements or upstream credentials are touched.
 async function autoSortCategories(serverId,mediaType,mode){
-  if(!validUuid(serverId)||!validType(mediaType)||!['popular','alphabetical','smart'].includes(mode))
+  if(!validUuid(serverId)||!validType(mediaType)||!['popular','alphabetical','smart','sports_first','news_first','kids_first'].includes(mode))
     throw Object.assign(new Error('xtream_category_sort_invalid'),{status:400});
   const client=await pool.connect();
   try{
