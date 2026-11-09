@@ -80,6 +80,11 @@ class LoginActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (BuildConfig.CODE_ONLY_LOGIN) {
+            startActivity(Intent(this, tv.blofy.player.ui.login.CodeOnlyLoginActivity::class.java))
+            finish()
+            return
+        }
         deviceKind = DeviceClass.detect(this)
         setContentView(if (deviceKind == DeviceClass.Kind.TV) buildTvLogin() else buildPhoneLogin())
         if (deviceKind == DeviceClass.Kind.TV) addPlaylist.requestFocus()
