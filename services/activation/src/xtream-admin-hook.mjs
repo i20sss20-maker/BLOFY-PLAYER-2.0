@@ -2394,6 +2394,47 @@ async function approveLibraryAICommand(body){
      throw error;
    }finally{client.release();}
    result={updated:0,mode:null,unchanged:false};
+ }else if(plan.action==='full_catalog_sort'){
+   const sections=Array.isArray(plan.sections)?plan.sections:[];
+   if(sections.length!==3||sections.some(s=>!['live','movie','series'].includes(s.type)||
+     !Array.isArray(s.order)||s.order.length>1000))
+     return {ok:false,code:'stream_ai_plan_invalid'};
+   const client=await pool.connect();
+   let totalChanged=0;
+   try{
+     await client.query('BEGIN');
+     await client.query("SET LOCAL lock_timeout='1300ms'");
+     await client.query("SET LOCAL statement_timeout='12000ms'");
+     for(const section of sections){
+       const rows=(await client.query(`SELECT source_category_id,name,item_count,sort_order
+         FROM blofy_xtream_categories WHERE server_id=$1 AND media_type=$2
+         ORDER BY sort_order,name,source_category_id LIMIT 1001 FOR UPDATE`,
+         [plan.sourceId,section.type])).rows;
+       const current=rows.map(x=>[String(x.source_category_id),String(x.name),
+         Number(x.item_count)||0,Number(x.sort_order)||0]);
+       if(JSON.stringify(current)!==JSON.stringify(section.original))
+         throw Object.assign(new Error('stream_ai_plan_conflict'),{status:409});
+       if(!rows.length)continue;
+       const existing=rows.map(x=>String(x.source_category_id));
+       if(existing.every((id,index)=>id===section.order[index]))continue;
+       await client.query(`UPDATE blofy_xtream_categories AS c
+         SET sort_order=rank.pos::int,updated_at=NOW()
+         FROM unnest($3::text[]) WITH ORDINALITY AS rank(category_id,pos)
+         WHERE c.server_id=$1 AND c.media_type=$2 AND c.source_category_id=rank.category_id`,
+         [plan.sourceId,section.type,section.order]);
+       totalChanged+=rows.length;
+     }
+     await client.query('COMMIT');
+   }catch(error){
+     await client.query('ROLLBACK').catch(()=>{});
+     if(error?.message==='stream_ai_plan_conflict')
+       return {ok:false,code:'stream_ai_plan_conflict'};
+     if(['55P03','57014'].includes(String(error?.code||'')))
+       return {ok:false,code:'xtream_category_busy_retry'};
+     throw error;
+   }finally{client.release();}
+   result={updated:totalChanged,mode:'full_catalog_sort',unchanged:totalChanged===0};
+   for(const t of ['live','movie','series'])libraryAuditCache.delete(plan.sourceId+':'+t);
  }else if(plan.action==='category_sort'){
    // Check for changes since the operator previewed this category order.
    const rows=(await pool.query(`SELECT source_category_id
