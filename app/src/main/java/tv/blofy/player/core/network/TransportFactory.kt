@@ -8,6 +8,10 @@ import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.cronet.CronetDataSource
+import androidx.media3.datasource.okhttp.OkHttpDataSource
+import okhttp3.OkHttpClient
+import tv.blofy.player.BuildConfig
+import tv.blofy.player.core.identity.StreamCodeSession
 import org.chromium.net.CronetEngine
 import tv.blofy.player.core.provider.ProviderProfile
 import tv.blofy.player.core.provider.TransportPreference
@@ -21,7 +25,9 @@ object TransportFactory {
 
     fun create(context: Context, profile: ProviderProfile): DataSource.Factory {
         val appContext = context.applicationContext
-        val upstreamHttp: HttpDataSource.Factory = when (profile.transport) {
+        val upstreamHttp: HttpDataSource.Factory =
+            if (BuildConfig.CODE_ONLY_LOGIN) secureStreamHttp(appContext)
+            else when (profile.transport) {
             TransportPreference.CRONET_FIRST -> createCronet(appContext, profile)?.let { cronet ->
                 if (profile.allowHttpFallback) HttpOpenFallbackFactory(cronet, createHttp(profile)) else cronet
             } ?: createHttp(profile)
@@ -29,6 +35,27 @@ object TransportFactory {
         }
         val upstream = DefaultDataSource.Factory(appContext, upstreamHttp)
         return PlaybackCache.readOnly(appContext, upstream)
+    }
+
+    private fun secureStreamHttp(context: Context): HttpDataSource.Factory {
+        val client=OkHttpClient.Builder()
+            .followRedirects(true).followSslRedirects(false)
+            .connectTimeout(12,java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(35,java.util.concurrent.TimeUnit.SECONDS)
+            .addNetworkInterceptor { chain ->
+                val request=chain.request()
+                val url=request.url
+                val trusted=url.scheme=="https" && url.host=="blofyplayer.com" &&
+                    url.encodedPath.startsWith("/api/v1/stream/media/")
+                val next=request.newBuilder().removeHeader("Authorization")
+                if (trusted) {
+                    StreamCodeSession.authorization(context)?.let {
+                        next.header("Authorization",it)
+                    }
+                }
+                chain.proceed(next.build())
+            }.build()
+        return OkHttpDataSource.Factory(client).setUserAgent("BLOFY STREAM/55.8.7")
     }
 
     private fun createCronet(context: Context, profile: ProviderProfile): HttpDataSource.Factory? {
