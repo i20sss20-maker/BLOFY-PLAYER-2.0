@@ -2589,7 +2589,7 @@ async function callLocalGateway(method,path,body){
   const port=Number(process.env.PORT||3000);
   if(!Number.isSafeInteger(port)||port<1024||port>65535)
     throw Object.assign(new Error('gateway_port_invalid'),{status:503});
-  const match=/^\/api\/v1\/admin\/xtream-gateway\/accounts(?:\/[0-9a-f-]{36})?$/.exec(path);
+  const match=/^\/api\/v1\/admin\/xtream-gateway\/(?:accounts(?:\/[0-9a-f-]{36}(?:\/reset)?)?|codes(?:\/[0-9a-f-]{36}\/revoke)?)$/.exec(path);
   if(!match)throw Object.assign(new Error('gateway_route_denied'),{status:400});
   const response=await fetch('http://127.0.0.1:'+port+path,{
     method,redirect:'manual',signal:AbortSignal.timeout(9000),
@@ -2741,10 +2741,49 @@ async function unifiedStreamBridge(req,res,url){
       nextOffset:rows.length===40?offset+40:null});
   }
   if(req.method==='GET'&&p==='/internal/blofy-stream/accounts'){
-    const rows=(await pool.query(
-      'SELECT id,label,username,source_id,enabled,max_connections,expires_at,last_used_at FROM blofy_xtream_gateway_accounts ORDER BY created_at DESC LIMIT 200'
-    )).rows.map(streamSafeAccount);
-    return json(res,200,{ok:true,items:rows});
+    const limit=100,offset=Math.max(0,Math.min(100000,Number(url.searchParams.get('offset'))||0));
+    const rows=(await pool.query(`SELECT a.id,a.label,a.username,a.source_id,
+      a.enabled,a.max_connections,a.expires_at,a.last_used_at,a.created_at,
+      s.name AS source_name,c.code_hint,c.redeemed_at AS activated_at,
+      c.duration_days,c.revoked_at
+      FROM blofy_xtream_gateway_accounts a
+      LEFT JOIN blofy_xtream_servers s ON s.id=a.source_id
+      LEFT JOIN blofy_xtream_gateway_duration_codes c ON c.account_id=a.id
+      ORDER BY a.created_at DESC LIMIT $1 OFFSET $2`,[limit,offset])).rows.map(streamSafeAccount);
+    const total=Number((await pool.query(
+      'SELECT COUNT(*)::int AS count FROM blofy_xtream_gateway_accounts'
+    )).rows[0]?.count||0);
+    return json(res,200,{ok:true,items:rows,total,
+      nextOffset:offset+rows.length<total?offset+rows.length:null,
+      serverUrl:'https://blofyplayer.com',passwordStorage:'one_way_proofs'});
+  }
+  if(req.method==='GET'&&p==='/internal/blofy-stream/codes'){
+    const offset=Math.max(0,Math.min(100000,Number(url.searchParams.get('offset'))||0));
+    const result=await callLocalGateway('GET','/api/v1/admin/xtream-gateway/codes');
+    return json(res,result.status,{ok:result.status===200,...result.data});
+  }
+  if(req.method==='POST'&&p==='/internal/blofy-stream/codes'){
+    const body=await readJson(req);
+    const result=await callLocalGateway('POST','/api/v1/admin/xtream-gateway/codes',{
+      label:String(body.label||'BLOFY STREAM').slice(0,100),
+      durationDays:body.durationDays,quantity:body.quantity||1,
+      maxConnections:body.maxConnections||1,sourceId:body.sourceId||null
+    });
+    return json(res,result.status,{ok:result.status===201,...result.data});
+  }
+  const codeRevoke=p.match(/^\/internal\/blofy-stream\/codes\/([0-9a-f-]{36})\/revoke$/i);
+  if(req.method==='POST'&&codeRevoke){
+    const result=await callLocalGateway('POST',
+      '/api/v1/admin/xtream-gateway/codes/'+codeRevoke[1]+'/revoke',{});
+    return json(res,result.status,{ok:result.status===200,...result.data});
+  }
+  const passwordReset=p.match(/^\/internal\/blofy-stream\/accounts\/([0-9a-f-]{36})\/reset$/i);
+  if(req.method==='POST'&&passwordReset){
+    const result=await callLocalGateway('POST',
+      '/api/v1/admin/xtream-gateway/accounts/'+passwordReset[1]+'/reset',{});
+    if(result.status===200&&result.data?.credentials)
+      result.data.credentials.serverUrl='https://blofyplayer.com';
+    return json(res,result.status,{ok:result.status===200,...result.data});
   }
   if(req.method==='POST'&&p==='/internal/blofy-stream/sources'){
     const b=await readJson(req);
