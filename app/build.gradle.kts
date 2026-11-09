@@ -70,6 +70,14 @@ android {
             buildConfigField("boolean", "CODE_ONLY_LOGIN", "true")
             matchingFallbacks += listOf("release")
         }
+        // Testable APK signed only with the Android debug key.
+        create("codeDemo") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".code"
+            versionNameSuffix = "-code-test"
+            buildConfigField("boolean", "CODE_ONLY_LOGIN", "true")
+            matchingFallbacks += listOf("debug")
+        }
     }
     buildFeatures { viewBinding = true; buildConfig = true }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
