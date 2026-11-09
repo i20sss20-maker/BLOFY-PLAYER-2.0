@@ -15,6 +15,8 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import tv.blofy.player.BuildConfig
+import tv.blofy.player.core.identity.StreamCodeSession
+import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.R
 import tv.blofy.player.ui.home.HomeActivity
 import tv.blofy.player.ui.common.BlofyTvDesign
@@ -60,7 +62,12 @@ class SplashActivity : AppCompatActivity() {
             delay(MINIMUM_SPLASH_MS)
             if (isFinishing || isDestroyed) return@launch
             val destination = if (BuildConfig.CODE_ONLY_LOGIN) {
-                CodeOnlyLoginActivity::class.java
+                // Warm start uses only two local SharedPreferences flags, no Room
+                // queries, server fetch or backend sorting. Home asynchronously
+                // revalidates the bearer; invalid/expired sessions still redirect.
+                if (StreamCodeSession.isClaimed(this@SplashActivity) &&
+                    CatalogSyncState.isReady(this@SplashActivity, StreamCodeSession.providerId))
+                    HomeActivity::class.java else CodeOnlyLoginActivity::class.java
             } else if (StartupEntryState.shouldOpenHome(this@SplashActivity)) {
                 HomeActivity::class.java
             } else {
