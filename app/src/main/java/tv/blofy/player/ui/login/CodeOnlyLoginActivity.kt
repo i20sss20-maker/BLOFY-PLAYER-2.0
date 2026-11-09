@@ -71,8 +71,14 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
                 dp(if (small) 20 else 38), dp(32))
             background = BlofyTvDesign.elevatedSurface(26f, emphasis = true)
         }
+        // On narrow tablets and portrait TV boxes, never position a
+        // 630dp panel outside the visible viewport.
+        val maxPanelWidthDp =
+            (resources.configuration.screenWidthDp - if (small) 40 else 90)
+                .coerceAtLeast(240)
         root.addView(panel, LinearLayout.LayoutParams(
-            if (small) LinearLayout.LayoutParams.MATCH_PARENT else dp(630),
+            if (small) LinearLayout.LayoutParams.MATCH_PARENT
+            else dp(minOf(630, maxPanelWidthDp)),
             LinearLayout.LayoutParams.WRAP_CONTENT))
         panel.addView(ImageView(this).apply {
             setImageResource(R.drawable.blofy_logo)
