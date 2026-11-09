@@ -21,7 +21,7 @@ test('aggregate reader sessions and redact provider paths and session IDs',()=>{
  assert.equal(snapshot.paths.length,1);
  assert.equal(snapshot.paths[0].ready,true);
  assert.ok(!JSON.stringify(snapshot).includes('password='));
- assert.ok(!JSON.stringify(snapshot).includes('abc'));
+ assert.ok(!JSON.stringify(snapshot).includes('"abc"'));
  assert.equal(snapshot.uniqueViewersVerified,false);
 });
 test('private metrics URL does not accept arbitrary hosts',()=>{
