@@ -373,6 +373,12 @@ http.createServer = function withBlofySources(listener) {
       if (req.method === 'GET' && url.pathname === '/stream-premium.css') {
         return asset(res, await readFile(new URL('../web/stream-premium.css', import.meta.url)), 'text/css; charset=utf-8');
       }
+      if (req.method === 'GET' && url.pathname === '/stream-live-monitor.js') {
+        return asset(res, await readFile(new URL('../web/stream-live-monitor.js', import.meta.url)), 'text/javascript; charset=utf-8');
+      }
+      if (req.method === 'GET' && url.pathname === '/stream-live-monitor.css') {
+        return asset(res, await readFile(new URL('../web/stream-live-monitor.css', import.meta.url)), 'text/css; charset=utf-8');
+      }
       if (req.method === 'GET' && url.pathname === '/stream-premium.js') {
         return asset(res, await readFile(new URL('../web/stream-premium.js', import.meta.url)), 'text/javascript; charset=utf-8');
       }
