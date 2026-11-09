@@ -752,7 +752,7 @@ class HomeActivity : AppCompatActivity() {
             addView(View(this@HomeActivity).apply { background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xF5181021.toInt(), 0xB52A1738.toInt(), 0x4017101F)) }, FrameLayout.LayoutParams(-1, -1))
             val copy = LinearLayout(this@HomeActivity).apply {
                 orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL or Gravity.START; layoutDirection = uiDirection; setPadding(dp(28), dp(18), dp(28), dp(18))
-                addView(TextView(this@HomeActivity).apply { text = "BLOFY FEATURED"; textSize = 11.5f; typeface = BlofyTvDesign.preferredTypeface(this, bold = true); setTextColor(PURPLE_BRIGHT); gravity = Gravity.START })
+                addView(TextView(this@HomeActivity).apply { text = if (BuildConfig.CODE_ONLY_LOGIN) "STREAM FEATURED" else "BLOFY FEATURED"; textSize = 11.5f; typeface = BlofyTvDesign.preferredTypeface(this, bold = true); setTextColor(PURPLE_BRIGHT); gravity = Gravity.START })
                 addView(TextView(this@HomeActivity).apply { text = ContentPresentation.of(item).title; textSize = 27f; typeface = BlofyTvDesign.preferredTypeface(this, bold = true); setTextColor(Color.WHITE); gravity = Gravity.START; maxLines = 1 })
                 addView(TextView(this@HomeActivity).apply { text = buildList { item.year?.let(::add); item.rating?.let { add("★ $it") }; item.genre?.substringBefore(',')?.let(::add) }.joinToString("   •   "); textSize = 12.5f; setTextColor(TEXT_SECONDARY); gravity = Gravity.START })
                 addView(TextView(this@HomeActivity).apply { text = item.plot?.take(150) ?: getString(R.string.home_featured_fallback); textSize = 13f; setTextColor(TEXT_SECONDARY); gravity = Gravity.START; maxLines = 2; setPadding(0, dp(5), 0, 0) })
@@ -784,7 +784,7 @@ class HomeActivity : AppCompatActivity() {
             }
             addView(LinearLayout(this@HomeActivity).apply {
                 orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL or Gravity.START; layoutDirection = uiDirection; setPadding(dp(26), dp(14), dp(26), dp(14))
-                addView(TextView(this@HomeActivity).apply { text = "BLOFY SPOTLIGHT"; textSize = 10.5f; typeface = BlofyTvDesign.preferredTypeface(this, bold = true); setTextColor(PURPLE_BRIGHT); gravity = Gravity.START })
+                addView(TextView(this@HomeActivity).apply { text = if (BuildConfig.CODE_ONLY_LOGIN) "STREAM PICKS" else "BLOFY SPOTLIGHT"; textSize = 10.5f; typeface = BlofyTvDesign.preferredTypeface(this, bold = true); setTextColor(PURPLE_BRIGHT); gravity = Gravity.START })
                 addView(TextView(this@HomeActivity).apply { text = headline; textSize = 22f; typeface = BlofyTvDesign.preferredTypeface(this, bold = true); setTextColor(Color.WHITE); gravity = Gravity.START })
                 addView(TextView(this@HomeActivity).apply { text = subtitle; textSize = 12.5f; maxLines = 2; setTextColor(TEXT_SECONDARY); gravity = Gravity.START })
             }, FrameLayout.LayoutParams(-1, -1))
@@ -865,7 +865,7 @@ class HomeActivity : AppCompatActivity() {
         }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(4) })
         header.addView(welcome, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(18) })
         serverLabel = TextView(this).apply {
-            text = "BLOFY"; textSize = 11f; setTextColor(TEXT_MUTED)
+            text = if (BuildConfig.CODE_ONLY_LOGIN) "STREAM" else "BLOFY"; textSize = 11f; setTextColor(TEXT_MUTED)
             isSingleLine = true; ellipsize = TextUtils.TruncateAt.END
         }
         header.addView(serverLabel, LinearLayout.LayoutParams(0, -2, 1f))
@@ -1353,7 +1353,9 @@ class HomeActivity : AppCompatActivity() {
     private fun transparentSurface(focused: Boolean) = if (focused) {
         GradientDrawable(
             GradientDrawable.Orientation.LEFT_RIGHT,
-            intArrayOf(0xFF51306F.toInt(), 0xFF2B1A3D.toInt(), 0xFF1B1226.toInt())
+            if (BuildConfig.CODE_ONLY_LOGIN)
+                intArrayOf(0xFF1A5C65.toInt(), 0xFF103A49.toInt(), 0xFF09252F.toInt())
+            else intArrayOf(0xFF51306F.toInt(), 0xFF2B1A3D.toInt(), 0xFF1B1226.toInt())
         ).apply {
             cornerRadius = dp(10).toFloat()
             setStroke(dp(1), BlofyTvDesign.FocusStroke)
@@ -1370,7 +1372,12 @@ class HomeActivity : AppCompatActivity() {
     private fun posterSurface(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 8)
     private fun storySurface(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 14)
     private fun compactTile(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 16)
-    private fun skeletonSurface() = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(0xFF2B2137.toInt(), 0xFF18131F.toInt())).apply { cornerRadius = dp(16).toFloat(); setStroke(dp(1), 0xFF43344F.toInt()) }
+    private fun skeletonSurface() = GradientDrawable(GradientDrawable.Orientation.TL_BR,
+        if (BuildConfig.CODE_ONLY_LOGIN) intArrayOf(0xFF173744.toInt(), 0xFF0C2530.toInt())
+        else intArrayOf(0xFF2B2137.toInt(), 0xFF18131F.toInt())).apply {
+        cornerRadius = dp(16).toFloat()
+        setStroke(dp(1), if (BuildConfig.CODE_ONLY_LOGIN) 0xFF2C6270.toInt() else 0xFF43344F.toInt())
+    }
     private fun title(value: String, size: Float) = TextView(this).apply { text = value; textSize = size; typeface = BlofyTvDesign.preferredTypeface(this, bold = true); setTextColor(TEXT_PRIMARY); gravity = Gravity.START }
     private fun subtitle(value: String, bottom: Int) = TextView(this).apply { text = value; textSize = 15f; setTextColor(PURPLE_BRIGHT); gravity = Gravity.START; setPadding(0, dp(4), 0, bottom) }
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
@@ -1378,9 +1385,9 @@ class HomeActivity : AppCompatActivity() {
     companion object {
         private const val SCREEN_KEY = "home"
         private const val HERO_ROTATION_MS = 8_000L
-        private val PURPLE_BRIGHT = Color.rgb(184, 160, 237)
-        private val TEXT_PRIMARY = Color.rgb(249, 247, 252)
-        private val TEXT_SECONDARY = Color.rgb(224, 216, 232)
-        private val TEXT_MUTED = Color.rgb(154, 162, 177)
+        private val PURPLE_BRIGHT = if (BuildConfig.CODE_ONLY_LOGIN) 0xFF46E4D0.toInt() else Color.rgb(184, 160, 237)
+        private val TEXT_PRIMARY = if (BuildConfig.CODE_ONLY_LOGIN) 0xFFF1FFFB.toInt() else Color.rgb(249, 247, 252)
+        private val TEXT_SECONDARY = if (BuildConfig.CODE_ONLY_LOGIN) 0xFFD6F2F1.toInt() else Color.rgb(224, 216, 232)
+        private val TEXT_MUTED = if (BuildConfig.CODE_ONLY_LOGIN) 0xFFA6C5CB.toInt() else Color.rgb(154, 162, 177)
     }
 }
