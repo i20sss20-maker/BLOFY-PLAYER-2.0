@@ -41,3 +41,10 @@ test('upstream order is persisted on sync and used by catalog listing',async()=>
  assert.match(code,/xtreamProviderOrder\(raw,accepted\+1,'item'\)/);
  assert.match(code,/ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS source_sort_order INTEGER/);
 });
+
+test('Gemini library chat never publishes category ordering over Xtream authority',async()=>{
+ const code=await readFile(new URL('../src/xtream-admin-hook.mjs',import.meta.url),'utf8');
+ assert.match(code,/action:'xtream_order_authority'/);
+ assert.match(code,/stream_order_managed_by_xtream/);
+ assert.match(code,/رتّبها هناك، ثم زامن مصدر Xtream/);
+});
