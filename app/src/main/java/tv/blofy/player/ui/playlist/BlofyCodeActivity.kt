@@ -35,6 +35,11 @@ import tv.blofy.player.ui.common.BlofyTvDesign
 class BlofyCodeActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (BuildConfig.CODE_ONLY_LOGIN) {
+            startActivity(Intent(this, tv.blofy.player.ui.login.CodeOnlyLoginActivity::class.java))
+            finish()
+            return
+        }
         val isTv = DeviceClass.isTv(this)
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
