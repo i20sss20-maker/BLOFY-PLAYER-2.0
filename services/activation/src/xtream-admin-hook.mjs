@@ -62,6 +62,8 @@ import {normalizeXtreamEpg} from './xtream-epg.mjs';
 import {normalizeStudioName,normalizeStudioItemEdit,readStudioLogoRequest} from './xtream-studio-policy.mjs';
 import { nativeXtreamCsrfToken } from './xtream-native-csrf.mjs';
 import {streamBridgeAuthorized,streamSafeSource,streamSafeCatalog,streamSafeAccount} from './stream-unified-safe.mjs';
+import {ensureStreamCodeTable} from './xtream-duration-codes.mjs';
+import {ensureStreamCommercialSchema} from './xtream-code-commercial.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
@@ -2583,13 +2585,24 @@ async function handleControlAction(req,res,id,action) {
 const STREAM_BRIDGE_KEY=String(process.env.BLOFY_STREAM_UNIFIED_BRIDGE_KEY||'');
 const bridgeLimiter=createFixedWindowLimiter({limit:90,windowMs:60_000});
 const streamActions=new Map();
+let streamCodeSchemaReady;
+function ensureStreamCodeSchema(){
+  if(!streamCodeSchemaReady)streamCodeSchemaReady=(async()=>{
+    // The STREAM operator may load subscribers before the first Xtream
+    // playback request initialized gateway migrations.
+    await pool.query('ALTER TABLE IF EXISTS blofy_xtream_gateway_accounts ADD COLUMN IF NOT EXISTS credential_vault TEXT');
+    await ensureStreamCodeTable(pool);
+    await ensureStreamCommercialSchema(pool);
+  })().catch(error=>{streamCodeSchemaReady=null;throw error});
+  return streamCodeSchemaReady;
+}
 async function callLocalGateway(method,path,body){
   // The gateway owns account proofs; never reproduce its cryptography here.
   if(!ADMIN_TOKEN)throw Object.assign(new Error('gateway_not_configured'),{status:503});
   const port=Number(process.env.PORT||3000);
   if(!Number.isSafeInteger(port)||port<1024||port>65535)
     throw Object.assign(new Error('gateway_port_invalid'),{status:503});
-  const match=/^\/api\/v1\/admin\/xtream-gateway\/accounts(?:\/[0-9a-f-]{36})?$/.exec(path);
+  const match=/^\/api\/v1\/admin\/xtream-gateway\/(?:accounts(?:\/[0-9a-f-]{36}(?:\/(?:reset|credentials))?)?|codes(?:\/[0-9a-f-]{36}\/(?:revoke|sell|extend|transfer)|\/sales-summary|\?limit=30&offset=[0-9]{1,6})?)$/.exec(path);
   if(!match)throw Object.assign(new Error('gateway_route_denied'),{status:400});
   const response=await fetch('http://127.0.0.1:'+port+path,{
     method,redirect:'manual',signal:AbortSignal.timeout(9000),
@@ -2627,6 +2640,106 @@ async function unifiedStreamBridge(req,res,url){
     return json(res,200,{ok:true,source:'blofy-activation-primary',
       totals,sources:items,subscribers:{devices,gateway},updatedAt:Date.now()});
   }
+  // Produce one verified, server-side source route for an operator-owned live
+  // channel. No public route, client playback access or credential persistence.
+  if(req.method==='POST'&&p==='/internal/blofy-stream/live-channel'){
+    const body=await readJson(req);
+    const sourceId=String(body.sourceId||'');
+    const channelId=String(body.channelId||'');
+    if(body.rightsConfirmed!==true)
+      return json(res,403,{ok:false,code:'stream_rights_confirmation_required'});
+    if(!validUuid(sourceId)||!/^[a-zA-Z0-9._-]{1,100}$/.test(channelId))
+      return json(res,400,{ok:false,code:'stream_invalid_channel'});
+    const source=await serverById(sourceId);
+    if(!source?.enabled)
+      return json(res,409,{ok:false,code:'stream_source_not_enabled'});
+    const media=(await pool.query(`SELECT source_id,name,container_extension FROM blofy_xtream_items
+       WHERE server_id=$1 AND media_type='live' AND source_id=$2
+       AND enabled=TRUE LIMIT 1`,[sourceId,channelId])).rows[0];
+    if(!media)
+      return json(res,404,{ok:false,code:'stream_channel_not_found'});
+    const policy=xtreamAllowedLiveFormats(source.account_info);
+    if(!policy.formats.includes('ts'))
+      return json(res,409,{ok:false,code:'stream_mpegts_not_permitted'});
+    const creds=decryptCredentials(source);
+    const path=['live',creds.username,creds.password,media.source_id]
+      .map(part=>encodeURIComponent(String(part))).join('/')+'.ts';
+    const base=normalizeXtreamBaseUrl(source.base_url);
+    const url=new URL(path,base+'/');
+    if(url.origin!==new URL(base).origin)
+      return json(res,409,{ok:false,code:'stream_source_origin_mismatch'});
+    // This URL contains upstream credentials and must only traverse the
+    // authenticated internal HTTPS connection to the independent STREAM API.
+    return json(res,200,{ok:true,kind:'live',sourceUrl:url.href,
+      sourceId,channelId,name:String(media.name||'').slice(0,160),
+      extension:'ts',customerTrafficChanged:false});
+  }
+  if(req.method==='GET'&&p==='/internal/blofy-stream/media-failures'){
+    const sourceId=String(url.searchParams.get('sourceId')||'').trim();
+    if(sourceId&&!validUuid(sourceId))
+      return json(res,400,{ok:false,code:'stream_invalid_source_id'});
+    const result=await unavailableMediaSummary(pool,sourceId||null);
+    return json(res,result.ok?200:400,result);
+  }
+  if(req.method==='GET'&&p==='/internal/blofy-stream/episodes'){
+    const sourceId=String(url.searchParams.get('sourceId')||'');
+    const seriesId=String(url.searchParams.get('seriesId')||'');
+    if(!validUuid(sourceId)||!/^[a-zA-Z0-9._-]{1,100}$/.test(seriesId))
+      return json(res,400,{ok:false,code:'stream_invalid_series'});
+    const series=(await pool.query(`SELECT source_id FROM blofy_xtream_items
+      WHERE server_id=$1 AND media_type='series' AND source_id=$2
+      AND enabled=TRUE LIMIT 1`,[sourceId,seriesId])).rows[0];
+    if(!series)return json(res,404,{ok:false,code:'stream_series_not_found'});
+    const episodes=(await pool.query(`SELECT source_episode_id,container_extension
+      FROM blofy_xtream_gateway_episode_map
+      WHERE server_id=$1 AND series_source_id=$2
+      ORDER BY source_episode_id LIMIT 120`,[sourceId,seriesId])).rows;
+    return json(res,200,{ok:true,items:episodes.map(row=>({
+      id:String(row.source_episode_id).slice(0,110),
+      extension:String(row.container_extension||'mp4').slice(0,10)
+    })),limit:120});
+  }
+  if(req.method==='POST'&&p==='/internal/blofy-stream/vod-item'){
+    const body=await readJson(req);
+    const sourceId=String(body.sourceId||''),itemId=String(body.itemId||'');
+    const type=String(body.type||'');
+    if(body.rightsConfirmed!==true)
+      return json(res,403,{ok:false,code:'stream_rights_confirmation_required'});
+    if(!validUuid(sourceId)||!/^[a-zA-Z0-9._-]{1,110}$/.test(itemId)||
+        !['movie','episode'].includes(type))
+      return json(res,400,{ok:false,code:'stream_vod_selection_invalid'});
+    const source=await serverById(sourceId);
+    if(!source?.enabled)
+      return json(res,409,{ok:false,code:'stream_source_not_enabled'});
+    let result;
+    if(type==='movie'){
+      result=(await pool.query(`SELECT source_id,name,container_extension FROM blofy_xtream_items
+        WHERE server_id=$1 AND media_type='movie' AND source_id=$2
+        AND enabled=TRUE LIMIT 1`,[sourceId,itemId])).rows[0];
+    }else{
+      result=(await pool.query(`SELECT e.source_episode_id AS source_id,
+          i.name AS name,e.container_extension
+        FROM blofy_xtream_gateway_episode_map e
+        JOIN blofy_xtream_items i ON i.server_id=e.server_id
+          AND i.media_type='series' AND i.source_id=e.series_source_id
+        WHERE e.server_id=$1 AND e.source_episode_id=$2
+          AND i.enabled=TRUE LIMIT 1`,[sourceId,itemId])).rows[0];
+    }
+    if(!result)return json(res,404,{ok:false,code:'stream_media_item_not_found'});
+    const extension=String(result.container_extension||'mp4').replace(/^\./,'').toLowerCase();
+    if(!['mp4','mkv','avi','mov','ts','m4v','webm'].includes(extension))
+      return json(res,409,{ok:false,code:'stream_vod_format_unavailable'});
+    const creds=decryptCredentials(source);
+    const path=[type==='movie'?'movie':'series',creds.username,creds.password,result.source_id]
+      .map(part=>encodeURIComponent(String(part))).join('/')+'.'+extension;
+    const base=normalizeXtreamBaseUrl(source.base_url);
+    const target=new URL(path,base+'/');
+    if(target.origin!==new URL(base).origin)
+      return json(res,409,{ok:false,code:'stream_source_origin_mismatch'});
+    return json(res,200,{ok:true,type,sourceUrl:target.href,
+      extension,sourceId,itemId,title:String(result.name||'').slice(0,170),
+      customerTrafficChanged:false});
+  }
   if(req.method==='GET'&&p==='/internal/blofy-stream/catalog'){
     const type=url.searchParams.get('type');
     if(!['live','movie','series'].includes(type))
@@ -2641,10 +2754,83 @@ async function unifiedStreamBridge(req,res,url){
       nextOffset:rows.length===40?offset+40:null});
   }
   if(req.method==='GET'&&p==='/internal/blofy-stream/accounts'){
-    const rows=(await pool.query(
-      'SELECT id,label,username,source_id,enabled,max_connections,expires_at,last_used_at FROM blofy_xtream_gateway_accounts ORDER BY created_at DESC LIMIT 200'
-    )).rows.map(streamSafeAccount);
-    return json(res,200,{ok:true,items:rows});
+    await ensureStreamCodeSchema();
+    const limit=100,offset=Math.max(0,Math.min(100000,Number(url.searchParams.get('offset'))||0));
+    const rows=(await pool.query(`SELECT a.id,a.label,a.username,a.source_id,
+      a.enabled,a.max_connections,a.expires_at,a.last_used_at,a.created_at,
+      (a.credential_vault IS NOT NULL) AS password_available,
+      s.name AS source_name,c.code_hint,c.redeemed_at AS activated_at,
+      c.duration_days,c.revoked_at
+      FROM blofy_xtream_gateway_accounts a
+      LEFT JOIN blofy_xtream_servers s ON s.id=a.source_id
+      LEFT JOIN blofy_xtream_gateway_duration_codes c ON c.account_id=a.id
+      ORDER BY a.created_at DESC LIMIT $1 OFFSET $2`,[limit,offset])).rows.map(streamSafeAccount);
+    const total=Number((await pool.query(
+      'SELECT COUNT(*)::int AS count FROM blofy_xtream_gateway_accounts'
+    )).rows[0]?.count||0);
+    return json(res,200,{ok:true,items:rows,total,
+      nextOffset:offset+rows.length<total?offset+rows.length:null,
+      serverUrl:'https://blofyplayer.com',passwordStorage:'one_way_proofs'});
+  }
+  const revealPath=p.match(/^\/internal\/blofy-stream\/accounts\/([0-9a-f-]{36})\/credentials$/i);
+  if(req.method==='GET'&&revealPath&&validUuid(revealPath[1])){
+    const result=await callLocalGateway('GET',
+      '/api/v1/admin/xtream-gateway/accounts/'+revealPath[1]+'/credentials');
+    const creds=result.data?.credentials;
+    if(result.status===200&&creds){
+      creds.serverUrl='https://blofyplayer.com';
+      creds.m3uUrl='https://blofyplayer.com/get.php?'+
+        new URLSearchParams({username:creds.username,password:creds.password,
+          type:'m3u_plus',output:'ts'});
+    }
+    return json(res,result.status,{ok:result.status===200,...result.data});
+  }
+  if(req.method==='GET'&&p==='/internal/blofy-stream/codes'){
+    const offset=Math.max(0,Math.min(100000,Number(url.searchParams.get('offset'))||0));
+    const result=await callLocalGateway('GET','/api/v1/admin/xtream-gateway/codes?limit=30&offset='+offset);
+    return json(res,result.status,{ok:result.status===200,...result.data});
+  }
+  if(req.method==='POST'&&p==='/internal/blofy-stream/codes'){
+    const body=await readJson(req);
+    const result=await callLocalGateway('POST','/api/v1/admin/xtream-gateway/codes',{
+      label:String(body.label||'BLOFY STREAM').slice(0,100),
+      durationDays:body.durationDays,quantity:body.quantity||1,
+      maxConnections:body.maxConnections||1,sourceId:body.sourceId||null,
+      channel:body.channel==='xtream'?'xtream':'app'
+    });
+    return json(res,result.status,{ok:result.status===201,...result.data});
+  }
+  if(req.method==='GET'&&p==='/internal/blofy-stream/codes/sales-summary'){
+    const result=await callLocalGateway('GET',
+      '/api/v1/admin/xtream-gateway/codes/sales-summary');
+    return json(res,result.status,{ok:result.status===200,...result.data});
+  }
+  const commercialAction=p.match(
+    /^\/internal\/blofy-stream\/codes\/([0-9a-f-]{36})\/(sell|extend|transfer)$/i);
+  if(req.method==='POST'&&commercialAction){
+    const data=commercialAction[2]==='transfer'?{}:await readJson(req);
+    const result=await callLocalGateway('POST',
+      '/api/v1/admin/xtream-gateway/codes/'+commercialAction[1]+'/'+commercialAction[2],data);
+    return json(res,result.status,{ok:result.status===200,...result.data});
+  }
+  const codeRevoke=p.match(/^\/internal\/blofy-stream\/codes\/([0-9a-f-]{36})\/revoke$/i);
+  if(req.method==='POST'&&codeRevoke){
+    const result=await callLocalGateway('POST',
+      '/api/v1/admin/xtream-gateway/codes/'+codeRevoke[1]+'/revoke',{});
+    return json(res,result.status,{ok:result.status===200,...result.data});
+  }
+  const passwordReset=p.match(/^\/internal\/blofy-stream\/accounts\/([0-9a-f-]{36})\/reset$/i);
+  if(req.method==='POST'&&passwordReset){
+    const result=await callLocalGateway('POST',
+      '/api/v1/admin/xtream-gateway/accounts/'+passwordReset[1]+'/reset',{});
+    if(result.status===200&&result.data?.credentials){
+      const creds=result.data.credentials;
+      creds.serverUrl='https://blofyplayer.com';
+      creds.m3uUrl=creds.serverUrl+'/get.php?'+
+        new URLSearchParams({username:creds.username,password:creds.password,
+          type:'m3u_plus',output:'ts'});
+    }
+    return json(res,result.status,{ok:result.status===200,...result.data});
   }
   if(req.method==='POST'&&p==='/internal/blofy-stream/sources'){
     const b=await readJson(req);
@@ -2665,8 +2851,13 @@ async function unifiedStreamBridge(req,res,url){
     };
     const response=await callLocalGateway('POST','/api/v1/admin/xtream-gateway/accounts',account);
     // Loopback origin is never a valid end-user Xtream address.
-    if(response.status===201&&response.data?.credentials)
-      response.data.credentials.serverUrl='https://blofyplayer.com';
+    if(response.status===201&&response.data?.credentials){
+      const creds=response.data.credentials;
+      creds.serverUrl='https://blofyplayer.com';
+      creds.m3uUrl=creds.serverUrl+'/get.php?'+
+        new URLSearchParams({username:creds.username,password:creds.password,
+          type:'m3u_plus',output:'ts'});
+    }
     return json(res,response.status,{ok:response.status===201,...response.data});
   }
   const accountPath=p.match(/^\/internal\/blofy-stream\/accounts\/([0-9a-f-]{36})\/(enable|disable)$/i);

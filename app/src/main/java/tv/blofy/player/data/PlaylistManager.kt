@@ -16,6 +16,8 @@ import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.data.m3u.M3uPlaylistLoader
 import tv.blofy.player.data.remote.XtreamApi
 import tv.blofy.player.data.remote.XtreamIdentifier
+import tv.blofy.player.BuildConfig
+import tv.blofy.player.core.identity.StreamCodeSession
 import java.io.FilterInputStream
 import java.io.InputStream
 import java.io.InputStreamReader
@@ -347,6 +349,8 @@ class PlaylistManager(
     private fun actionUrl(provider: ProviderEntity, action: String, extra: Map<String, String> = emptyMap()): String {
         val base = provider.baseUrl.trim().trimEnd('/')
         val tail = extra.entries.joinToString("") { "&${enc(it.key)}=${enc(it.value)}" }
+        if(BuildConfig.CODE_ONLY_LOGIN&&provider.id==StreamCodeSession.providerId)
+            return "$base/player_api.php?action=${enc(action)}$tail"
         return "$base/player_api.php?username=${enc(provider.username)}&password=${enc(provider.password)}&action=${enc(action)}$tail"
     }
 
