@@ -93,6 +93,7 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
             setPadding(0, dp(8), 0, dp(24))
         })
         codeField = EditText(this).apply {
+            id = View.generateViewId()
             hint = "كود التفعيل"
             inputType = InputType.TYPE_CLASS_NUMBER
             filters = arrayOf(InputFilter.LengthFilter(12))
@@ -111,6 +112,7 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
         panel.addView(codeField, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, dp(70)))
         activateButton = Button(this).apply {
+            id = View.generateViewId()
             text = "تفعيل الاشتراك"
             isAllCaps = false
             textSize = 19f
