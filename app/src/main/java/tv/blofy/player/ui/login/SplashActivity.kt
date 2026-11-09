@@ -25,7 +25,7 @@ class SplashActivity : AppCompatActivity() {
         val statusView = TextView(this).apply {
             text = if (BuildConfig.CODE_ONLY_LOGIN) "جارِ فتح BLOFY STREAM..." else getString(R.string.splash_opening)
             textSize = 13.5f
-            setTextColor(0xFFB8ABC7.toInt())
+            setTextColor(BlofyTvDesign.TextSecondary)
             gravity = Gravity.CENTER
         }
         val root = LinearLayout(this).apply {
@@ -35,7 +35,7 @@ class SplashActivity : AppCompatActivity() {
             setPadding(dp(32), dp(32), dp(32), dp(32))
         }
         root.addView(ImageView(this).apply {
-            setImageResource(R.drawable.blofy_logo)
+            setImageResource(if (BuildConfig.CODE_ONLY_LOGIN) R.drawable.stream_logo else R.drawable.blofy_logo)
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             adjustViewBounds = true
         }, LinearLayout.LayoutParams(dp(220), dp(132)))
@@ -49,7 +49,7 @@ class SplashActivity : AppCompatActivity() {
         }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(54)))
         root.addView(ProgressBar(this).apply {
             isIndeterminate = true
-            indeterminateTintList = android.content.res.ColorStateList.valueOf(0xFFB96CFF.toInt())
+            indeterminateTintList = android.content.res.ColorStateList.valueOf(BlofyTvDesign.PurpleBright)
         }, LinearLayout.LayoutParams(dp(44), dp(44)).apply { topMargin = dp(14) })
         root.addView(statusView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(42)).apply { topMargin = dp(8) })
         setContentView(root)
