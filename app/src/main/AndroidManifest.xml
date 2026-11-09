@@ -22,6 +22,7 @@
         <activity android:name=".ui.playlist.ProviderManagerActivity" android:exported="false" />
         <activity android:name=".ui.playlist.BlofySubscriberActivity" android:exported="false" />
         <activity android:name=".ui.playlist.PlaylistActivity" android:exported="false" />
+        <activity android:name=".ui.login.CodeOnlyLoginActivity" android:exported="false" />
         <activity android:name=".ui.login.CatalogLoadingActivity" android:exported="false" />
         <activity android:name=".ui.player.PlayerActivity" android:exported="false" android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize" />
         <activity android:name=".ui.home.HomeActivity" android:exported="false" />
