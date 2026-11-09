@@ -29,6 +29,7 @@ import kotlinx.coroutines.ensureActive
 import tv.blofy.player.data.preparation.CatalogLoadAttempt
 import tv.blofy.player.data.preparation.CatalogLoadPersistence
 import tv.blofy.player.R
+import tv.blofy.player.BuildConfig
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.data.CatalogSyncState
@@ -188,7 +189,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
             elevation = u(6).toFloat()
         }
         panel.addView(ImageView(this).apply {
-            setImageResource(R.drawable.blofy_logo)
+            setImageResource(if (BuildConfig.CODE_ONLY_LOGIN) R.drawable.stream_logo else R.drawable.blofy_logo)
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             adjustViewBounds = true
         }, LinearLayout.LayoutParams(u(if (compact) 128 else if (shortTv) 154 else 196), u(if (compact) 70 else if (shortTv) 82 else 108)))
