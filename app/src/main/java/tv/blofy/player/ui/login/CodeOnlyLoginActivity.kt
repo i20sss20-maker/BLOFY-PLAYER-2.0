@@ -4,6 +4,7 @@ import android.content.Intent
 import android.graphics.Typeface
 import android.os.Bundle
 import android.text.InputType
+import android.text.InputFilter
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
@@ -94,6 +95,7 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
         codeField = EditText(this).apply {
             hint = "كود التفعيل"
             inputType = InputType.TYPE_CLASS_NUMBER
+            filters = arrayOf(InputFilter.LengthFilter(12))
             imeOptions = EditorInfo.IME_ACTION_DONE
             isSingleLine = true
             textSize = if (small) 23f else 27f
@@ -137,6 +139,12 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
                 activateButton.performClick(); true
             } else false
         }
+        activateButton.isFocusable = true
+        activateButton.isFocusableInTouchMode = true
+        codeField.isFocusable = true
+        codeField.isFocusableInTouchMode = true
+        codeField.nextFocusDownId = activateButton.id
+        activateButton.nextFocusUpId = codeField.id
         setContentView(scroll)
     }
 
