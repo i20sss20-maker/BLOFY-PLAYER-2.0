@@ -45,7 +45,8 @@ export function parseRestreamMetrics(payload,{key=''}={}){
    case 'paths_inbound_bytes':row.inboundBytes+=n;totals.sourceInboundBytes+=n;break;
    case 'paths_outbound_bytes':row.outboundBytes+=n;totals.sourceOutboundBytes+=n;break;
    case 'hls_sessions':row.hlsSessions+=n;totals.hlsSessions+=n;break;
-   case 'hls_muxers_outbound_bytes':row.hlsBytes+=n;totals.hlsBytes+=n;break;
+   case 'hls_sessions_outbound_bytes':row.hlsBytes+=n;totals.hlsBytes+=n;break;
+   case 'hls_muxers_outbound_bytes':break; // Muxer counters overlap session egress; never double count.
    case 'hls_muxers_outbound_frames_discarded':
     row.discardedFrames+=n;totals.discardedFrames+=n;break;
   }
