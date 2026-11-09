@@ -52,6 +52,8 @@ android {
         versionCode = 2000084
         versionName = "2.0.0-rc07.55.8.7" // Exact BLOFY PLAYER display version; no Xiaomi suffix in any build
         manifestPlaceholders["blofyApplicationLabel"] = "@string/app_name"
+        manifestPlaceholders["blofyAppIconRes"] = "@drawable/blofy_logo"
+        manifestPlaceholders["blofyBannerRes"] = "@drawable/blofy_tv_banner"
         buildConfigField("boolean", "CODE_ONLY_LOGIN", "false")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "ACTIVATION_BASE_URL", "\"$activationBaseUrlEscaped\"")
@@ -94,6 +96,9 @@ android {
             applicationIdSuffix = ".stream"
             versionNameSuffix = "-STREAM"
             manifestPlaceholders["blofyApplicationLabel"] = "BLOFY STREAM"
+            manifestPlaceholders["blofyAppIconRes"] = "@drawable/blofy_stream_app_icon"
+            manifestPlaceholders["blofyBannerRes"] = "@drawable/blofy_stream_tv_banner"
+            versionCode = 2000085
             buildConfigField("boolean", "CODE_ONLY_LOGIN", "true")
             matchingFallbacks += listOf("release")
         }
@@ -102,9 +107,18 @@ android {
             applicationIdSuffix = ".stream"
             versionNameSuffix = "-STREAM-QA"
             manifestPlaceholders["blofyApplicationLabel"] = "BLOFY STREAM (QA)"
+            manifestPlaceholders["blofyAppIconRes"] = "@drawable/blofy_stream_app_icon"
+            manifestPlaceholders["blofyBannerRes"] = "@drawable/blofy_stream_tv_banner"
+            versionCode = 2000085
             buildConfigField("boolean", "CODE_ONLY_LOGIN", "true")
             matchingFallbacks += listOf("debug")
         }
+    }
+    // Both independent STREAM build types share the same generated artwork.
+    // The original BLOFY PLAYER resources remain untouched.
+    sourceSets {
+        getByName("streamCodeOnly").res.srcDir(layout.buildDirectory.dir("generated/streamBrand/res"))
+        getByName("streamCodeDemo").res.srcDir(layout.buildDirectory.dir("generated/streamBrand/res"))
     }
     buildFeatures { viewBinding = true; buildConfig = true }
     compileOptions {
@@ -122,6 +136,23 @@ android {
 
 baselineProfile {
     automaticGenerationDuringBuild = false
+}
+
+// Generate distinct STREAM-only raster branding during the build, including
+// the Android TV xhdpi 320x180 banner and 512x512 app launcher icon.
+val generateStreamBrandArtwork = tasks.register<Exec>("generateStreamBrandArtwork") {
+    val out = layout.buildDirectory.dir("generated/streamBrand/res")
+    inputs.file("tools/generate_stream_brand.py")
+    inputs.files("src/main/assets/fonts/IBMPlexSansArabic-SemiBold.ttf",
+        "src/main/assets/fonts/IBMPlexSansArabic-Regular.ttf")
+    outputs.dir(out)
+    commandLine("python3", "tools/generate_stream_brand.py",
+        "--out", out.get().asFile.absolutePath)
+}
+tasks.configureEach {
+    if (name.startsWith("mergeStreamCode") && name.endsWith("Resources")) {
+        dependsOn(generateStreamBrandArtwork)
+    }
 }
 
 if (securityR8Enabled) {
