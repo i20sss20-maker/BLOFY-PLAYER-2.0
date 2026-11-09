@@ -20,6 +20,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
+import androidx.core.os.ConfigurationCompat
 import tv.blofy.player.ui.settings.RuntimeSettings
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
@@ -196,7 +197,7 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
         val languageButton = Button(this).apply {
             id = View.generateViewId()
             text = getString(R.string.stream_ui_language) + "  •  " +
-                if (resources.configuration.locales[0]?.language == "ar") "العربية" else "English"
+                (if (ConfigurationCompat.getLocales(resources.configuration)[0]?.language == "ar") "العربية" else "English")
             isAllCaps = false
             textSize = if (isTv) 16f else 14f
             typeface = BlofyTvDesign.preferredTypeface(this)
@@ -247,7 +248,7 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle(getString(R.string.stream_ui_language))
             .setSingleChoiceItems(languages,
-                if (resources.configuration.locales[0]?.language == "ar") 0 else 1) { dialog, which ->
+                if (ConfigurationCompat.getLocales(resources.configuration)[0]?.language == "ar") 0 else 1) { dialog, which ->
                 val tag = if (which == 0) "ar" else "en"
                 val saved = getSharedPreferences(RuntimeSettings.PREFS, MODE_PRIVATE).edit()
                     .putString("app_language_tag", tag)
