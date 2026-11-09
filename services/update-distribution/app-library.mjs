@@ -19,7 +19,7 @@ const pool = new Pool({
 const CATEGORIES = new Set(['media', 'files', 'downloads', 'launcher', 'screensaver', 'tools', 'network', 'store']);
 const MODES = new Set(['official', 'direct']);
 // Version 7 inserts the independent BLOFY STREAM app into already-seeded production databases.
-const SEED_VERSION = 7;
+const SEED_VERSION = 8;
 
 const GITHUB_UPDATE_RULES = Object.freeze({
   'just-player': { repo:'moneytoo/Player', asset:'Just.Player.*.apk' },
@@ -96,9 +96,9 @@ const DEFAULT_APPS = Object.freeze([
     slug:'vlc', name:'VLC', category:'media', symbol:'VLC',
     iconUrl:'https://raw.githubusercontent.com/videolan/vlc-android/master/application/resources/src/main/res/drawable-xxxhdpi/icon.png',
     description:'مشغل فيديو وصوت خفيف وموثوق للشاشات والرسيفرات.',
-    devices:'Android TV · Box · ARM64', version:'3.7.0',
-    architecture:'ARM64', apkSizeBytes:49960882,
-    downloadUrl:'https://mirror.math.princeton.edu/pub/vlc/vlc-android/3.7.0/VLC-Android-3.7.0-arm64-v8a.apk',
+    devices:'Android TV · Box · ARM64', version:'3.7.1',
+    architecture:'ARM64', apkSizeBytes:47990842,
+    downloadUrl:'https://download.videolan.org/pub/videolan/vlc-android/3.7.1/VLC-Android-3.7.1-arm64-v8a.apk',
     downloadMode:'direct', sortOrder:10, enabled:true, featured:true
   },
   {
@@ -130,7 +130,7 @@ const DEFAULT_APPS = Object.freeze([
   },
   {
     slug:'tv-bro', name:'TV Bro', category:'downloads', symbol:'TB',
-    iconUrl:'https://raw.githubusercontent.com/truefedex/tv-bro/master/app/src/main/res/drawable-xhdpi/ic_launcher.png',
+    iconUrl:'https://raw.githubusercontent.com/truefedex/tv-bro/master/metadata/en-US/images/icon.png',
     description:'متصفح مصمم للريموت على Android TV مع تنزيل ملفات وروابط بسهولة.',
     devices:'Android TV · Box', version:'2.1.6',
     architecture:'Universal', apkSizeBytes:6790605,
@@ -331,13 +331,13 @@ const DEFAULT_APPS = Object.freeze([
 const DEFAULT_VARIANTS = Object.freeze([
   {
     slug:'vlc', key:'arm64', label:'ARM64', architecture:'ARM64',
-    downloadUrl:'https://mirror.math.princeton.edu/pub/vlc/vlc-android/3.7.0/VLC-Android-3.7.0-arm64-v8a.apk',
-    apkSizeBytes:49960882, sortOrder:10, enabled:true
+    downloadUrl:'https://download.videolan.org/pub/videolan/vlc-android/3.7.1/VLC-Android-3.7.1-arm64-v8a.apk',
+    apkSizeBytes:47990842, sortOrder:10, enabled:true
   },
   {
     slug:'vlc', key:'armv7', label:'ARMv7 · 32-bit', architecture:'ARMv7',
-    downloadUrl:'https://mirror.math.princeton.edu/pub/vlc/vlc-android/3.7.0/VLC-Android-3.7.0-armeabi-v7a.apk',
-    apkSizeBytes:47208378, sortOrder:20, enabled:true
+    downloadUrl:'https://download.videolan.org/pub/videolan/vlc-android/3.7.1/VLC-Android-3.7.1-armeabi-v7a.apk',
+    apkSizeBytes:47073346, sortOrder:20, enabled:true
   },
   {
     slug:'kodi', key:'arm64', label:'ARM64', architecture:'ARM64',
@@ -823,10 +823,14 @@ export async function initAppLibrary() {
       for (const seed of DEFAULT_APPS) {
         const item = cleanApp(seed);
         await insertSeed(client, item);
-        await client.query(
-          'update blofy_app_catalog set architecture=$2, apk_size_bytes=$3, auto_update=$4 where slug=$1',
-          [item.slug, item.architecture, item.apkSizeBytes, item.autoUpdate]
-        );
+        // Do not overwrite accurate production APK sizes, app architecture or
+        // admin-controlled auto-update preferences when a later seed is added.
+        if (version < 7) {
+          await client.query(
+            'update blofy_app_catalog set architecture=$2, apk_size_bytes=$3, auto_update=$4 where slug=$1',
+            [item.slug, item.architecture, item.apkSizeBytes, item.autoUpdate]
+          );
+        }
       }
 
       if (version < 6) {
@@ -852,6 +856,44 @@ export async function initAppLibrary() {
           );
         }
         await client.query('delete from blofy_app_health where slug=$1', [vlc.slug]);
+      }
+
+      if (version < 8) {
+        // The VideoLAN official stable directory now lists 3.7.1. Only
+        // migrate our unmodified 3.7.0 defaults; preserve admin overrides.
+        const vlc = cleanApp(DEFAULT_APPS.find(item => item.slug === 'vlc'));
+        await client.query(
+          `update blofy_app_catalog
+           set previous_version=version, previous_download_url=download_url,
+               previous_apk_size_bytes=apk_size_bytes, previous_saved_at=now(),
+               version=$2, download_url=$3, apk_size_bytes=$4,
+               version_updated_at=now(), updated_at=now()
+           where slug=$1 and version='3.7.0'
+             and download_url like '%/vlc-android/3.7.0/%'`,
+          [vlc.slug, vlc.version, vlc.downloadUrl, vlc.apkSizeBytes]
+        );
+        for (const raw of DEFAULT_VARIANTS.filter(item => item.slug === 'vlc')) {
+          const variant = cleanVariant(raw);
+          await client.query(
+            `update blofy_app_variants
+             set download_url=$3, apk_size_bytes=$4, updated_at=now()
+             where slug=$1 and variant_key=$2
+               and download_url like '%/vlc-android/3.7.0/%'`,
+            [variant.slug, variant.key, variant.downloadUrl, variant.apkSizeBytes]
+          );
+        }
+        // Verified from the TV Bro project's current source tree. The old
+        // drawable-xhdpi icon path no longer exists in that repository.
+        await client.query(
+          `update blofy_app_catalog set icon_url=$2, updated_at=now()
+           where slug='tv-bro' and icon_url=$1`,
+          ['https://raw.githubusercontent.com/truefedex/tv-bro/master/app/src/main/res/drawable-xhdpi/ic_launcher.png',
+           'https://raw.githubusercontent.com/truefedex/tv-bro/master/metadata/en-US/images/icon.png']
+        );
+        await client.query("delete from blofy_app_health where slug='vlc'");
+        // Run the normal backup-protected upstream release & APK health
+        // audit after deployment, even if the last sweep was recent.
+        await client.query('update blofy_app_catalog_meta set last_refresh_at=null,last_health_at=null where id=1');
       }
 
       await client.query('update blofy_app_catalog_meta set seed_version=$1 where id=1', [SEED_VERSION]);
