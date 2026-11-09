@@ -204,3 +204,51 @@ jobs:
           path: stream-signed/
           if-no-files-found: error
           retention-days: 30
+
+  publish-stream-download:
+    name: Publish owner-signed STREAM APK to stable public release
+    if: github.ref == 'refs/heads/feat/stream-arabic-default-language-switch-20261110'
+    needs: owner-signed
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified owner-signed artifact from this run
+        uses: actions/download-artifact@v4
+        with:
+          name: BLOFY-STREAM-55.8.7-PREMIUM-OWNER-SIGNED-${{ github.sha }}
+          path: signed-stream
+      - name: Verify APK and publish stable downloadable release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: blofy-stream-55.8.7-ar-en-20261110
+        run: |
+          set -euo pipefail
+          apk="signed-stream/BLOFY-STREAM-55.8.7-PREMIUM-CODE-SIGNED.apk"
+          test -s "$apk"
+          (cd signed-stream && sha256sum -c SHA256SUMS)
+          cp "$apk" signed-stream/BLOFY-STREAM-55.8.7-AR-EN-OWNER-SIGNED.apk
+          printf '%s\n' \
+            "BLOFY STREAM 55.8.7 - Arabic / English" \
+            "" \
+            "Signed Android TV / TV Box / phone APK. Code-only activation." \
+            "Arabic is the default. Change language from login or settings." \
+            "Includes the 27 percent catalog loading improvements and the independent cyan UI." \
+            "This is a sideload APK, NOT the BLOFY PLAYER Google Play release." > signed-stream/RELEASE-NOTES.txt
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            # Never silently overwrite an unrelated public release tag.
+            actual_sha="$(gh api "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG" --jq '.object.sha')"
+            test "$actual_sha" = "$GITHUB_SHA"
+            gh release upload "$RELEASE_TAG" signed-stream/BLOFY-STREAM-55.8.7-AR-EN-OWNER-SIGNED.apk --clobber
+          else
+            gh release create "$RELEASE_TAG" \
+              signed-stream/BLOFY-STREAM-55.8.7-AR-EN-OWNER-SIGNED.apk \
+              signed-stream/SHA256SUMS \
+              --title "BLOFY STREAM 55.8.7 | Arabic / English" \
+              --notes-file signed-stream/RELEASE-NOTES.txt \
+              --target "$GITHUB_SHA" \
+              --latest=false
+          fi
+          gh release view "$RELEASE_TAG" --json assets,url --jq '{url:.url,assets:[.assets[].name]}'
