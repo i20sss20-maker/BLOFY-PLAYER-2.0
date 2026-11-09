@@ -73,10 +73,10 @@ object StreamCodeClient {
             }
         }
 
-    suspend fun redeem(rawCode: String): Activated = withContext(Dispatchers.IO) {
+    suspend fun redeem(rawCode: String, deviceKey: String): Activated = withContext(Dispatchers.IO) {
         val code = normalizeCode(rawCode)
         require(code.isNotEmpty()) { "أدخل كود التفعيل الصحيح" }
-        val body = JSONObject().put("code", code).toString()
+        val body = JSONObject().put("code", code).put("deviceKey", deviceKey).toString()
         val request = Request.Builder()
             .url("${StreamCodeSession.HOST}/api/v1/stream/redeem")
             .post(body.toRequestBody(jsonType))
