@@ -62,7 +62,7 @@ class ProviderManagerActivity : AppCompatActivity() {
             setPadding(0, dp(6), 0, 0)
         })
         status = TextView(this).apply {
-            text = "مشتركين BLOFY يحتاج اسم المستخدم وكلمة المرور فقط"
+            text = "تشغيل قوائمك الشخصية مجاني • ربط BLOFY اختياري"
             textSize = 13.5f
             typeface = BlofyTvDesign.BodyTypeface
             gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
@@ -80,10 +80,10 @@ class ProviderManagerActivity : AppCompatActivity() {
             gravity = Gravity.RIGHT
             clipChildren = false
         }
-        val subscriberButton = actionButton("subscriber", "+  مشتركين BLOFY", primary = true) {
+        val subscriberButton = actionButton("subscriber", "+  ربط اشتراك BLOFY") {
             startActivity(Intent(this, BlofySubscriberActivity::class.java))
         }
-        addButton = actionButton("add", "+  Xtream / M3U") {
+        addButton = actionButton("add", "+  Xtream / M3U مجاني", primary = true) {
             startActivity(Intent(this, PlaylistActivity::class.java).putExtra(PlaylistActivity.EXTRA_DIRECT_FORM, true))
         }
         if (isPhone) {
@@ -146,7 +146,7 @@ class ProviderManagerActivity : AppCompatActivity() {
         list.removeAllViews()
         if (items.isEmpty()) {
             list.addView(TextView(this).apply {
-                text = "ما عندك قوائم محفوظة حتى الآن\nأضف مشترك BLOFY أو Xtream / M3U"
+                text = "ما عندك قوائم محفوظة حتى الآن\nأضف قائمة Xtream / M3U مجانًا أو اربط اشتراك BLOFY"
                 setTextColor(BlofyTvDesign.TextSecondary)
                 textSize = 18f
                 typeface = BlofyTvDesign.BodyTypeface
