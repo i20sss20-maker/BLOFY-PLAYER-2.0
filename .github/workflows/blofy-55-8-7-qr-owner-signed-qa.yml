@@ -2,7 +2,7 @@ name: BLOFY 55.8.7 QR owner signed QA APK
 on:
   push:
     branches:
-      - qa/55-8-7-free-pro-barcode-signed-20261109
+      - fix/55-8-7-tv-plan-focus-localized-20261110
     paths:
       - app/**
       - .github/workflows/blofy-55-8-7-qr-owner-signed-qa.yml
