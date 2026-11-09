@@ -6,7 +6,7 @@
 import crypto from 'node:crypto';
 import {gatewayCredentialProof,generateGatewayUsername,
   generateGatewayPassword} from './xtream-gateway-core.mjs';
-import {encryptGatewayAccountPassword} from './xtream-account-vault.mjs';
+import {encryptGatewayAccountPassword,decryptGatewayAccountPassword} from './xtream-account-vault.mjs';
 
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const MAX_DAYS=730;
@@ -86,11 +86,13 @@ export async function ensureStreamCodeTable(client){
     account_id UUID UNIQUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     redeemed_at TIMESTAMPTZ,
+    redeemed_device_hash TEXT,
     expires_at TIMESTAMPTZ,
     revoked_at TIMESTAMPTZ,
     CHECK (redeemed_at IS NULL OR (account_id IS NOT NULL AND expires_at IS NOT NULL)),
     CHECK (NOT (revoked_at IS NOT NULL AND redeemed_at IS NOT NULL))
   )`);
+  await client.query('ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS redeemed_device_hash TEXT');
   await client.query(`CREATE INDEX IF NOT EXISTS idx_blofy_stream_codes_created
     ON blofy_xtream_gateway_duration_codes(created_at DESC)`);
 }
@@ -164,17 +166,51 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
       throw Object.assign(Error('stream_code_used_or_missing'),{status:409});
     return {ok:true,item:safeCodeRecord(result.rows[0])};
   }
-  async function redeem(value,host){
+  // An installation-local high-entropy token makes a lost HTTP response
+  // retryable by that same installation without moving a redeemed code.
+  function makeResponse({host,row,username,password,accountId,activatedAt,expiresAt,recovered=false}){
+    const serverUrl=host==='https://blofyplayer.com'?'https://blofyplayer.com':host;
+    const params=new URLSearchParams({username,password,type:'m3u_plus',output:'ts'});
+    return {ok:true,recovered,account:{id:accountId,label:row.label,
+      sourceId:row.source_id||null,expiresAt:expiresAt.getTime(),
+      activatedAt:activatedAt.getTime(),durationDays:Number(row.duration_days)},
+      credentials:{serverUrl,username,password,
+        m3uUrl:serverUrl+'/get.php?'+params.toString()}};
+  }
+  async function redeem(value,host,{deviceKey=null}={}){
     const proof=streamCodeProof(value,keyHex);
     if(!proof)throw Object.assign(Error('stream_code_invalid'),{status:400});
+    if(deviceKey!==null&&!/^[0-9a-f]{64}$/i.test(String(deviceKey)))
+      throw Object.assign(Error('stream_code_device_invalid'),{status:400});
+    const deviceProof=deviceKey?crypto.createHmac('sha256',Buffer.from(keyHex,'hex'))
+      .update('blofy-stream-activation-device:v1:').update(String(deviceKey).toLowerCase())
+      .digest('hex'):null;
     const client=await pool.connect();
     try{
       await client.query('BEGIN');
       // Row lock makes simultaneous redemption across Railway instances safe.
       const row=(await client.query(`SELECT * FROM blofy_xtream_gateway_duration_codes
         WHERE code_hash=$1 FOR UPDATE`,[proof])).rows[0];
-      if(!row||row.revoked_at||row.redeemed_at)
+      if(!row||row.revoked_at)
         throw Object.assign(Error('stream_code_unavailable'),{status:409});
+      // Existing activation is immutable. Only the same installation
+      // can retrieve its already-issued credentials after an interrupted
+      // first response. Web redemptions without device binding stay single-use.
+      if(row.redeemed_at){
+        if(!deviceProof||row.redeemed_device_hash!==deviceProof)
+          throw Object.assign(Error('stream_code_unavailable'),{status:409});
+        const existing=(await client.query(`SELECT id,username,credential_vault,enabled,expires_at
+          FROM blofy_xtream_gateway_accounts WHERE id=$1`,[row.account_id])).rows[0];
+        const password=existing?decryptGatewayAccountPassword(existing.id,
+          existing.credential_vault,keyHex):null;
+        if(!existing||!password||!existing.enabled||
+           new Date(existing.expires_at).getTime()<=clock())
+          throw Object.assign(Error('stream_code_unavailable'),{status:409});
+        await client.query('COMMIT');
+        return makeResponse({host,row,username:existing.username,password,
+          accountId:existing.id,activatedAt:new Date(row.redeemed_at),
+          expiresAt:new Date(row.expires_at),recovered:true});
+      }
       await checkedSource(client,row.source_id);
       const redeemedAt=new Date(clock());
       const expiresAt=new Date(redeemedAt.getTime()+Number(row.duration_days)*86400000);
@@ -192,18 +228,10 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
         Number(row.max_connections),expiresAt,row.source_id,vault
       ]);
       await client.query(`UPDATE blofy_xtream_gateway_duration_codes
-        SET redeemed_at=$2,expires_at=$3,account_id=$4 WHERE id=$1`,
-        [row.id,redeemedAt,expiresAt,accountId]);
+        SET redeemed_at=$2,expires_at=$3,account_id=$4,redeemed_device_hash=$5 WHERE id=$1`,
+        [row.id,redeemedAt,expiresAt,accountId,deviceProof]);
       await client.query('COMMIT');
-      const serverUrl=host==='https://blofyplayer.com'?'https://blofyplayer.com':host;
-      const params=new URLSearchParams({
-        username,password,type:'m3u_plus',output:'ts'
-      });
-      return {ok:true,account:{id:accountId,label:row.label,
-          sourceId:row.source_id||null,expiresAt:expiresAt.getTime(),
-          activatedAt:redeemedAt.getTime(),durationDays:Number(row.duration_days)},
-        credentials:{serverUrl,username,password,
-          m3uUrl:serverUrl+'/get.php?'+params.toString()}};
+      return makeResponse({host,row,username,password,accountId,activatedAt:redeemedAt,expiresAt});
     }catch(error){await client.query('ROLLBACK').catch(()=>{});throw error}
     finally{client.release()}
   }
