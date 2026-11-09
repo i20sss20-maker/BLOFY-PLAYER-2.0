@@ -38,6 +38,11 @@ import java.util.UUID
 class BlofySubscriberActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (BuildConfig.CODE_ONLY_LOGIN) {
+            startActivity(Intent(this, tv.blofy.player.ui.login.CodeOnlyLoginActivity::class.java))
+            finish()
+            return
+        }
 
         val kind = DeviceClass.detect(this)
         val phone = kind == DeviceClass.Kind.PHONE
