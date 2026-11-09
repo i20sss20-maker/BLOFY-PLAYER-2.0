@@ -33,6 +33,7 @@ import { pipeline } from 'node:stream/promises';
 import pg from 'pg';
 import { validateBulkAccountRequest } from './xtream-bulk-policy.mjs';
 import { gatewayItemsPageQuery,gatewayOrderedItemsPageQuery,gatewayOrderCursor } from './xtream-gateway-query.mjs';
+import {xtreamCatalogVersionForAccount} from './xtream-catalog-revision.mjs';
 import { mergeXtreamPlayerRequest } from './xtream-player-post.mjs';
 import { inspectXtreamMediaChunk } from './xtream-media-inspector.mjs';
 import { verifiedXtreamMediaContentType } from './xtream-media-response-type.mjs';
@@ -1534,6 +1535,15 @@ async function handlePlayerApi(req, res, url) {
       ...playerServerInfo(req),server_name:studio.name,
       server_logo:studio.logoUrl?origin(req)+studio.logoUrl:''
     }});
+  }
+  // BLOFY-specific extension: device may check revision before explicitly
+  // refreshing standard Xtream lists. Authentication and source scope are
+  // identical to every other player_api action; no per-user state changes.
+  if(action==='get_blofy_catalog_version'){
+    res.setHeader('cache-control','private, no-store');
+    const status=await xtreamCatalogVersionForAccount(
+      pool,account.source_id||null,url.searchParams.get('since'));
+    return json(res,status.ok?200:409,status);
   }
   if (action === 'get_live_categories') return json(res, 200, await gatewayCategories('live',account.source_id||null));
   if (action === 'get_vod_categories') return json(res, 200, await gatewayCategories('movie',account.source_id||null));
