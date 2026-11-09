@@ -46,8 +46,14 @@ export async function suggestCatalogWithGemini(rows,{
     })
    });
   if(!response.ok){
+   // Fixed error categories only; do not return provider body, key or URL.
    await response.body?.cancel().catch(()=>{});
-   return {ok:false,code:'stream_ai_provider_unavailable'};
+   const status=response.status;
+   const code=status===401||status===403?'stream_ai_provider_auth_failed':
+    status===429?'stream_ai_provider_quota':
+    status===404?'stream_ai_provider_model_missing':
+    status===400?'stream_ai_provider_bad_request':'stream_ai_provider_unavailable';
+   return {ok:false,code};
   }
   if(Number(response.headers.get('content-length')||0)>55000){
    await response.body?.cancel().catch(()=>{});

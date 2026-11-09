@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="/sources-admin.css?v=20261107-stream2-v2">
   <link rel="stylesheet" href="/site-polish.css?v=20261025-lux-final">
   <link rel="stylesheet" href="/stream-console.css?v=20261107-pro-v2">
+  <link rel="stylesheet" href="/blofy-gemini-ui.css?v=20261109-fix">
   <link rel="stylesheet" href="/stream-premium.css?v=20261107-smart-v1">
   <link rel="stylesheet" href="/stream-simple-mode.css?v=20261108-simple-1">
 </head>
@@ -631,6 +632,23 @@
             <div id="categoryManagerSummary" class="category-manager-summary" role="status">اختر مصدرًا ونوع المحتوى لعرض الفئات.</div>
             <div id="categoryManagerRows" class="category-manager-rows"></div>
           </div>
+          <section class="catalog-enrich-panel" id="blofyGeminiBox" aria-label="مساعد Gemini لتنظيم المكتبة">
+            <div class="catalog-enrich-toolbar">
+              <div>
+                <strong>✦ BLOFY AI — مساعد تنظيم المكتبة</strong>
+                <small>يصنّف عينة من 12 عنوانًا من المصدر المحدد. اقتراحات فقط، لا يغيّر المحتوى أو روابط التشغيل.</small>
+              </div>
+              <button type="button" class="button ghost" id="blofyGeminiTest">فحص الاتصال بـ Gemini</button>
+              <button type="button" class="button primary" id="blofyGeminiSuggest">اقتراح ترتيب 12 عنصرًا</button>
+            </div>
+            <p id="blofyGeminiConnection" role="status" aria-live="polite">اضغط فحص الاتصال للتأكد من عمل AI.</p>
+            <div class="catalog-pagination">
+              <button type="button" class="button ghost" id="blofyGeminiPrev" disabled>الدفعة السابقة</button>
+              <span id="blofyGeminiPage">الدفعة 1</span>
+              <button type="button" class="button ghost" id="blofyGeminiNext">الدفعة التالية</button>
+            </div>
+            <div id="blofyGeminiSuggestions" class="catalog-list" role="region" aria-label="اقتراحات الذكاء الاصطناعي"></div>
+          </section>
           <section class="catalog-enrich-panel" aria-label="تحديث معلومات محتوى Xtream">
             <div class="catalog-enrich-toolbar">
               <div><strong>✨ تحسين تفاصيل الأفلام والمسلسلات</strong>
@@ -679,6 +697,7 @@
   </dialog>
   <script src="/blofy-smart-commands.js?v=20261106-v1" defer></script>
   <script src="/sources-admin.js?v=20261107-smart-v1" defer></script>
+  <script src="/blofy-gemini-ui.js?v=20261109-fix" defer></script>
   <script src="/blofy-studio-pro.js?v=20261106-pro-v1" defer></script>
   <script src="/xtream-gateway-admin.js?v=20261106-account-visibility-v2" defer></script>
   <script src="/stream-premium.js?v=20261107-queue-v2" defer></script>

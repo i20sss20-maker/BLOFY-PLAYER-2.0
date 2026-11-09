@@ -2246,6 +2246,7 @@ async function reviewStreamLibrary(sourceId,type){
   return report;
 }
 const aiCatalogRequestTimes=[];
+const geminiTestTimes=[];
 async function suggestStreamLibraryAI(body){
   const sourceId=String(body?.sourceId||''),type=String(body?.type||'');
   const offset=Number(body?.offset||0);
@@ -3076,6 +3077,44 @@ http.createServer = function withBlofyXtream(listener) {
       if (!url.pathname.startsWith('/api/v1/admin/xtream')) return listener(req, res);
       if (!requireAdmin(req, res)) return;
       await ensureReady();
+
+      // Browser-facing, session-protected AI controls. The bridge-only
+      // /internal/blofy-stream/* routes cannot be called from the admin UI.
+      // The existing admin session hook injects a verified Bearer after cookie
+      // validation and enforces a same-origin policy for POST requests.
+      if(url.pathname==='/api/v1/admin/xtream/library-ai/status'&&req.method==='GET'){
+        const provider=String(process.env.BLOFY_LIBRARY_AI_PROVIDER||'openai').trim().toLowerCase();
+        const configured=provider==='gemini'
+          ?String(process.env.BLOFY_LIBRARY_GEMINI_API_KEY||'').trim().length>=32
+          :String(process.env.BLOFY_LIBRARY_AI_API_KEY||'').trim().length>=32;
+        return json(res,200,{ok:true,provider,configured,
+          model:provider==='gemini'?'gemini-3.5-flash-lite':'openai',
+          maxItemsPerRequest:12,hourlyLimit:24});
+      }
+      if(url.pathname==='/api/v1/admin/xtream/library-ai/suggest'&&req.method==='POST'){
+        const result=await suggestStreamLibraryAI(await readJson(req));
+        return json(res,result.ok?200:result.code==='stream_ai_not_configured'?503:409,result);
+      }
+      if(url.pathname==='/api/v1/admin/xtream/library-ai/connection-test'&&req.method==='POST'){
+        const provider=String(process.env.BLOFY_LIBRARY_AI_PROVIDER||'openai').trim().toLowerCase();
+        if(provider!=='gemini')return json(res,409,{ok:false,code:'gemini_not_selected'});
+        const key=String(process.env.BLOFY_LIBRARY_GEMINI_API_KEY||'').trim();
+        if(key.length<32)return json(res,503,{ok:false,code:'stream_ai_not_configured'});
+        const now=Date.now();
+        while(geminiTestTimes.length&&geminiTestTimes[0]<now-3600000)geminiTestTimes.shift();
+        if(geminiTestTimes.length>=5||
+           (geminiTestTimes.length&&now-geminiTestTimes[geminiTestTimes.length-1]<60000))
+          return json(res,429,{ok:false,code:'gemini_connection_test_cooldown'});
+        geminiTestTimes.push(now);
+        const result=await suggestCatalogWithGemini(
+          [{id:'demo-1',name:'Football Sports',categoryName:'Sport'}],
+          {apiKey:key,model:process.env.BLOFY_LIBRARY_AI_MODEL||'gemini-3.5-flash-lite'});
+        // Return only fixed codes; do not expose Google response or user keys.
+        return json(res,result.ok?200:502,{
+          ok:result.ok===true,code:result.ok?'gemini_connection_verified':result.code,
+          model:process.env.BLOFY_LIBRARY_AI_MODEL||'gemini-3.5-flash-lite',
+          suggestionsReturned:result.suggestions?.length||0});
+      }
 
       // All Studio Pro calls inherit the existing admin authentication and
       // rate limit. Saved presentations do not expose upstream secrets.

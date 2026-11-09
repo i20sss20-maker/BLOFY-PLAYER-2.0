@@ -1,0 +1,7 @@
+#blofyGeminiBox{border:1px solid #436590;border-radius:18px;padding:18px;margin:22px 0;background:linear-gradient(120deg,#10213b,#101522)}
+#blofyGeminiBox .catalog-enrich-toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+#blofyGeminiBox .catalog-enrich-toolbar>div{margin-inline-end:auto}
+#blofyGeminiConnection{padding:12px;background:rgba(100,140,180,.10);border-radius:10px;color:#e1edff}
+#blofyGeminiSuggestions{display:grid;grid-template-columns:repeat(auto-fit,minmax(235px,1fr));gap:12px}
+.blofy-ai-suggestion{border:1px solid #38506b;border-radius:14px;background:#131e31;padding:14px;overflow-wrap:anywhere}
+.blofy-ai-suggestion strong{color:#e2f2ff}.blofy-ai-suggestion p{margin:8px 0}.blofy-ai-suggestion small{color:#bdccdf}
