@@ -159,7 +159,10 @@ val generateStreamBrandArtwork = tasks.register<Exec>("generateStreamBrandArtwor
         "--out", out.get().asFile.absolutePath)
 }
 tasks.configureEach {
-    if (name.startsWith("mergeStreamCode") && name.endsWith("Resources")) {
+    // Resource validation happens in several Android plugin tasks before
+    // mergeResources. Declare the producer for every STREAM consumer so
+    // Gradle 8/AGP won't observe undeclared generated files.
+    if (name.contains("StreamCode")) {
         dependsOn(generateStreamBrandArtwork)
     }
 }
