@@ -1643,8 +1643,11 @@ http.createServer = function withBlofyXtreamGateway(listener) {
         const account=await authenticateAppBearer(req);
         if(!account)return json(res,401,{ok:false,error:'stream_app_session_invalid'},
           {'cache-control':'no-store'});
+        const expiry=account.expires_at?new Date(account.expires_at).getTime():null;
+        const now=Date.now();
         return json(res,200,{ok:true,active:true,
-          expiresAt:account.expires_at?new Date(account.expires_at).getTime():null},
+          serverNow:now,expiresAt:expiry,
+          daysRemaining:expiry==null?null:Math.max(0,Math.ceil((expiry-now)/86400000))},
           {'cache-control':'no-store'});
       }
       const tokenMedia=url.pathname.match(
