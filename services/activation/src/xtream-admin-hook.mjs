@@ -2296,6 +2296,12 @@ async function chatWithLibraryAI(body){
  if(!result.ok||!result.allowed)
   return {...result,serverName:String(server.name||'').slice(0,120),
    sourceId,type,requiresApproval:false};
+ // Category order is owned by Xtream: AI may advise about library contents,
+ // but must not override category sorting managed from the source panel.
+ if(['category_sort','full_catalog_sort'].includes(result.action))
+  return {ok:true,allowed:false,previewOnly:true,
+    action:'xtream_order_authority',sourceId,type,requiresApproval:false,
+    reply:'ترتيب أقسام القنوات والأفلام والمسلسلات أصبح من لوحة Xtream مباشرة. رتّبها هناك، ثم زامن مصدر Xtream في BLOFY وحدّث المكتبة في التطبيق. أقدر أساعدك في فحص الأسماء والتصنيفات دون تغيير ترتيب Xtream.'};
  const planId=crypto.randomBytes(24).toString('hex');
  const proposal={createdAt:now,sourceId,type,action:result.action,
    mode:result.sortMode,sourceName:String(server.name||'').slice(0,120)};
@@ -2430,6 +2436,8 @@ async function approveLibraryAICommand(body){
   return {ok:false,code:'stream_ai_plan_expired'};
  const source=await serverById(plan.sourceId);
  if(!source)return {ok:false,code:'stream_library_source_missing'};
+ if(['category_sort','full_catalog_sort'].includes(plan.action))
+  return {ok:false,code:'stream_order_managed_by_xtream'};
  let result,changedItems=0;
  let publishRevision=null;
  if(plan.action==='classify_items'){
