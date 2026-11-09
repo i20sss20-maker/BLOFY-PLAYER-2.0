@@ -19,6 +19,7 @@ import tv.blofy.player.data.CatalogPlaybackLifecycle
 import tv.blofy.player.data.ContentRepository
 import tv.blofy.player.data.ResumeStateWriter
 import tv.blofy.player.data.local.BlofyDatabase
+import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.catalog.CatalogPageMemory
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.LegacyScreenLocalizationLifecycle
@@ -54,29 +55,34 @@ class BlofyApp : Application() {
     override fun onCreate() {
         super.onCreate()
         current = this
+        XtreamClient.initialize(this)
 
         // SettingsActivity stores the user's explicit language choice here. Reconcile AppCompat's
         // process locale from that durable value on every cold start instead of treating an empty
         // locale list as English and accidentally resetting a previously selected language.
         val settings = getSharedPreferences("blofy_player_settings", MODE_PRIVATE)
         val storedTag = settings.getString("app_language_tag", null)?.trim().orEmpty()
-        val resolvedTag = storedTag.ifBlank { "en" }
+        val resolvedTag = storedTag.ifBlank { if (BuildConfig.CODE_ONLY_LOGIN) "ar" else "en" }
         val currentTags = AppCompatDelegate.getApplicationLocales().toLanguageTags()
         if (currentTags != resolvedTag) {
             AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(resolvedTag))
         }
         if (storedTag.isBlank()) {
             settings.edit()
-                .putString("app_language_tag", "en")
-                .putString("app_language", "English")
+                .putString("app_language_tag", resolvedTag)
+                .putString("app_language", if (BuildConfig.CODE_ONLY_LOGIN) "العربية" else "English")
                 .apply()
         }
 
         CrashRecovery.install(this)
         registerActivityLifecycleCallbacks(QuickMenuInterceptor())
-        registerActivityLifecycleCallbacks(AppUpdateLifecycle())
-        registerActivityLifecycleCallbacks(tv.blofy.player.core.identity.ActivationLeaseLifecycle())
-        registerActivityLifecycleCallbacks(StartupEntryLifecycle())
+        if (!BuildConfig.CODE_ONLY_LOGIN) {
+            // Legacy pairing and existing BLOFY PLAYER auto-update must never
+            // interrupt the code-only STREAM product or redirect to QR login.
+            registerActivityLifecycleCallbacks(AppUpdateLifecycle())
+            registerActivityLifecycleCallbacks(tv.blofy.player.core.identity.ActivationLeaseLifecycle())
+            registerActivityLifecycleCallbacks(StartupEntryLifecycle())
+        }
         registerActivityLifecycleCallbacks(CatalogPlaybackLifecycle())
         // Record the source screen before the Live overlay wraps the Player window. Playback keeps
         // its existing BACK/HUD handling; this callback only restores the recorded source on finish.
@@ -90,21 +96,21 @@ class BlofyApp : Application() {
         registerActivityLifecycleCallbacks(ScopedSearchRedirectLifecycle())
         registerActivityLifecycleCallbacks(CatalogSearchLifecycle())
         registerActivityLifecycleCallbacks(ProfileCloudLifecycle())
-        registerActivityLifecycleCallbacks(SubscriptionEntryLifecycle())
+        if (!BuildConfig.CODE_ONLY_LOGIN) registerActivityLifecycleCallbacks(SubscriptionEntryLifecycle())
         registerActivityLifecycleCallbacks(RuntimeSettingsLifecycle())
         registerActivityLifecycleCallbacks(LegacyScreenLocalizationLifecycle())
 
         // Startup network work stays asynchronous. A fresh identity is registered immediately so
         // the Device ID / pairing code shown on Login is already known by the server. Existing
         // entitlement states do not re-register here.
-        applicationScope.launch {
+        if (!BuildConfig.CODE_ONLY_LOGIN) applicationScope.launch {
             ActivationStartupRegistration.registerIfNeeded(this@BlofyApp)
         }
 
         // Stability rule: Application-level callbacks must never own Login controls or start
         // catalog/database maintenance on Activity resume. Login remains self-contained, while
         // catalog refresh/preparation stays explicit (first import / user refresh / worker).
-        applicationScope.launch {
+        if (!BuildConfig.CODE_ONLY_LOGIN) applicationScope.launch {
             runCatching { CommercialConfigRepository.refresh(this@BlofyApp) }
         }
     }
