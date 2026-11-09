@@ -172,7 +172,7 @@ class ContentBrowserActivity : AppCompatActivity() {
             dao.categories(provider.id, kind).collect { items ->
                 originalCategories = items
                 val displayed = if (kind == KIND_LIVE)
-                    CategoryPresentation.order(items, smartCategoryOrder) { it.name }
+                    listOf(allCategory()) + CategoryPresentation.order(items, smartCategoryOrder) { it.name }
                 else listOf(allCategory()) + items
                 categoryAdapter.submit(displayed)
                 if (kind != KIND_LIVE) {
@@ -198,7 +198,8 @@ class ContentBrowserActivity : AppCompatActivity() {
 
     private fun refreshCategoryOrder() {
         if (kind != KIND_LIVE) return
-        val rows = CategoryPresentation.order(originalCategories, smartCategoryOrder) { it.name }
+        val rows = listOf(allCategory()) +
+            CategoryPresentation.order(originalCategories, smartCategoryOrder) { it.name }
         categoryAdapter.submit(rows)
         updateCategorySortCaption()
     }
@@ -375,7 +376,11 @@ class ContentBrowserActivity : AppCompatActivity() {
         providerId = if (::provider.isInitialized) provider.id else "catalog",
         remoteId = ALL_CATEGORY_ID,
         kind = kind,
-        name = if (kind == KIND_MOVIE) "كل الأفلام" else "كل المسلسلات",
+        name = when (kind) {
+            KIND_LIVE -> "جميع القنوات"
+            KIND_MOVIE -> "كل الأفلام"
+            else -> "كل المسلسلات"
+        },
         orderIndex = -1
     )
 
