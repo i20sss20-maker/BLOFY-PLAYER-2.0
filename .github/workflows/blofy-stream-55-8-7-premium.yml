@@ -1,7 +1,7 @@
 name: BLOFY STREAM 55.8.7 Premium Code-Only APK
 on:
   push:
-    branches: [feat/blofy-stream-55-8-7-premium-code-only-20261109, fix/stream-android9-trusted-ca-20261109, feat/stream-device-compatibility-20261109, fix/stream-catalog-stall-27-percent-20261109]
+    branches: [feat/blofy-stream-55-8-7-premium-code-only-20261109, fix/stream-android9-trusted-ca-20261109, feat/stream-device-compatibility-20261109, fix/stream-catalog-stall-27-percent-20261109, feat/stream-independent-cyan-ui-logout-mobile-tv-20261109]
   workflow_dispatch:
 permissions:
   contents: read
@@ -85,6 +85,7 @@ jobs:
               --tests tv.blofy.player.core.device.StreamDeviceCompatibilityTest \
               --tests tv.blofy.player.core.diagnostics.StreamConnectionDiagnosticsTest \
               --tests tv.blofy.player.data.remote.StreamCatalogGzipTest \
+              --tests tv.blofy.player.core.identity.StreamCodeSessionLogoutTest \
               2>&1 | tee -a gradle-stream.log
           gradle --no-daemon --max-workers=2 \
             -PBLOFY_ACTIVATION_BASE_URL=https://api.blofyplayer.com \

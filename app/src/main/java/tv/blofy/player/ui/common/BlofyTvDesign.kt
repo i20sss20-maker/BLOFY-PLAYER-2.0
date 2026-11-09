@@ -1,6 +1,7 @@
 package tv.blofy.player.ui.common
 
 import android.graphics.Color
+import tv.blofy.player.BuildConfig
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.view.View
@@ -13,23 +14,25 @@ import androidx.core.os.ConfigurationCompat
  */
 object BlofyTvDesign {
     val Background = CinemaStyle.Background
-    val BackgroundRaised = Color.rgb(22, 13, 34)
+    val BackgroundRaised = if (BuildConfig.CODE_ONLY_LOGIN) 0xFF0B232D.toInt() else Color.rgb(22, 13, 34)
     val Surface = CinemaStyle.Surface
-    val SurfaceRaised = Color.rgb(50, 30, 72)
-    val SurfaceFocused = Color.rgb(112, 69, 161)
-    val FocusStroke = Color.rgb(242, 230, 255)
-    val FocusGlow = Color.rgb(188, 140, 244)
+    val SurfaceRaised = if (BuildConfig.CODE_ONLY_LOGIN) 0xFF154250.toInt() else Color.rgb(50, 30, 72)
+    val SurfaceFocused = if (BuildConfig.CODE_ONLY_LOGIN) 0xFF126C73.toInt() else Color.rgb(112, 69, 161)
+    val FocusStroke = if (BuildConfig.CODE_ONLY_LOGIN) 0xFFE8FFF9.toInt() else Color.rgb(242, 230, 255)
+    val FocusGlow = if (BuildConfig.CODE_ONLY_LOGIN) 0xFF5DFFE4.toInt() else Color.rgb(188, 140, 244)
 
-    val Purple = Color.rgb(127, 73, 209)
+    // Legacy public token names remain API-compatible with all existing screens,
+    // but render ocean/cyan ONLY inside CODE_ONLY_LOGIN app builds.
+    val Purple = if (BuildConfig.CODE_ONLY_LOGIN) 0xFF1BAEAE.toInt() else Color.rgb(127, 73, 209)
     val PurpleBright = CinemaStyle.Accent
-    val PurpleDeep = Color.rgb(53, 28, 80)
-    val PurpleSoft = Color.rgb(210, 187, 238)
-    val Lavender = Color.rgb(232, 220, 246)
-    val Mint = Color.rgb(91, 220, 187)
+    val PurpleDeep = if (BuildConfig.CODE_ONLY_LOGIN) 0xFF0A3340.toInt() else Color.rgb(53, 28, 80)
+    val PurpleSoft = if (BuildConfig.CODE_ONLY_LOGIN) 0xFFB2F2E7.toInt() else Color.rgb(210, 187, 238)
+    val Lavender = if (BuildConfig.CODE_ONLY_LOGIN) 0xFFE7FFFA.toInt() else Color.rgb(232, 220, 246)
+    val Mint = if (BuildConfig.CODE_ONLY_LOGIN) 0xFF44F1C2.toInt() else Color.rgb(91, 220, 187)
     val Error = Color.rgb(255, 118, 140)
 
     val TextPrimary = CinemaStyle.White
-    val TextSecondary = Color.rgb(218, 213, 225)
+    val TextSecondary = if (BuildConfig.CODE_ONLY_LOGIN) 0xFFDAF6F4.toInt() else Color.rgb(218, 213, 225)
     val TextMuted = CinemaStyle.Muted
     val Divider = 0x62FFFFFF
 
@@ -121,13 +124,19 @@ object BlofyTvDesign {
     fun primaryButton(radius: Float = ButtonRadius.toFloat(), focused: Boolean = false) = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
         if (focused) {
-            intArrayOf(0xFFB979F4.toInt(), 0xFF8750D7.toInt(), 0xFF6232AA.toInt())
+            if (BuildConfig.CODE_ONLY_LOGIN)
+                intArrayOf(0xFFDAFFF6.toInt(), 0xFF60EBD6.toInt(), 0xFF139EAB.toInt())
+            else intArrayOf(0xFFB979F4.toInt(), 0xFF8750D7.toInt(), 0xFF6232AA.toInt())
         } else {
-            intArrayOf(0xFF874CD5.toInt(), 0xFF6B36B5.toInt(), 0xFF51288F.toInt())
+            if (BuildConfig.CODE_ONLY_LOGIN)
+                intArrayOf(0xFF36D9CD.toInt(), 0xFF1CAAAA.toInt(), 0xFF12788A.toInt())
+            else intArrayOf(0xFF874CD5.toInt(), 0xFF6B36B5.toInt(), 0xFF51288F.toInt())
         }
     ).apply {
         cornerRadius = radius
-        setStroke(if (focused) 2 else 1, if (focused) 0xFFF0E1FC.toInt() else 0xFF8964AE.toInt())
+        setStroke(if (focused) 2 else 1,
+            if (BuildConfig.CODE_ONLY_LOGIN) (if (focused) 0xFFF0FFFA.toInt() else 0xFF317C83.toInt())
+            else (if (focused) 0xFFF0E1FC.toInt() else 0xFF8964AE.toInt()))
     }
 
     fun secondaryButton(radius: Float = ButtonRadius.toFloat(), focused: Boolean = false) =
@@ -135,10 +144,12 @@ object BlofyTvDesign {
 
     fun badge(radius: Float = BadgeRadius.toFloat()) = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
-        intArrayOf(0xD421182D.toInt(), 0xD617121E.toInt())
+        if (BuildConfig.CODE_ONLY_LOGIN)
+            intArrayOf(0xE0133945.toInt(), 0xE0092632.toInt())
+        else intArrayOf(0xD421182D.toInt(), 0xD617121E.toInt())
     ).apply {
         cornerRadius = radius
-        setStroke(1, 0xFF584768.toInt())
+        setStroke(1, if (BuildConfig.CODE_ONLY_LOGIN) 0xFF356D75.toInt() else 0xFF584768.toInt())
     }
 
     fun applyTitle(t: TextView) = t.apply {

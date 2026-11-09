@@ -42,6 +42,8 @@ import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.DeviceLocalTime
 import tv.blofy.player.ui.playlist.ProviderManagerActivity
 import tv.blofy.player.ui.profile.HomePersonalizationActivity
+import tv.blofy.player.ui.login.CodeOnlyLoginActivity
+import tv.blofy.player.ui.login.StartupEntryState
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -66,7 +68,7 @@ class SettingsActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        buildPage()
+        if (BuildConfig.CODE_ONLY_LOGIN) buildStreamPage() else buildPage()
         lifecycleScope.launch {
             provider = withContext(Dispatchers.IO) {
                 val dao = BlofyDatabase.get(applicationContext).dao()
@@ -103,6 +105,145 @@ class SettingsActivity : AppCompatActivity() {
             }
             if (::status.isInitialized) updateSyncStatus()
         }
+    }
+
+    /**
+     * Separate STREAM UI: the player offers many specialist settings, but a code-based
+     * viewer only needs their subscription, playback preferences and support.
+     * Uses the same focusable cards on remote and a one-column stack on phones.
+     */
+    private fun buildStreamPage() {
+        cardRows.clear()
+        sections.clear()
+        val screen = ScrollView(this).apply {
+            isFillViewport = true
+            layoutDirection = uiDirection
+            overScrollMode = View.OVER_SCROLL_NEVER
+            background = AppCompatResources.getDrawable(this@SettingsActivity, R.drawable.blofy_home_background)
+        }
+        val page = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutDirection = uiDirection
+            clipChildren = false
+            clipToPadding = false
+            setPadding(dp(if (isTv()) 44 else 20), dp(22), dp(if (isTv()) 44 else 20), dp(28))
+        }
+        val header = LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            orientation = LinearLayout.HORIZONTAL
+        }
+        header.addView(android.widget.ImageView(this).apply {
+            setImageResource(R.drawable.stream_logo)
+            contentDescription = "BLOFY STREAM"
+        }, LinearLayout.LayoutParams(dp(56), dp(56)).apply { marginEnd = dp(14) })
+        header.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(TextView(this@SettingsActivity).apply {
+                text = "BLOFY STREAM"
+                BlofyTvDesign.applyHeading(this)
+                textSize = if (isTv()) 26f else 22f
+                letterSpacing = .06f
+            })
+            addView(TextView(this@SettingsActivity).apply {
+                text = copy("إعدادات بسيطة لمشاهدة أفضل", "Simple settings. Better streaming.")
+                BlofyTvDesign.applyCaption(this)
+                textSize = 13f
+            })
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        val back = settingButton(copy("رجوع", "Back"), true) { finish() }.apply {
+            id = View.generateViewId()
+            contentDescription = copy("العودة للرئيسية", "Back to home")
+        }
+        header.addView(back, LinearLayout.LayoutParams(dp(82), dp(48)))
+        page.addView(header, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(18) })
+
+        status = TextView(this).apply {
+            textSize = 12.5f
+            typeface = BlofyTvDesign.preferredTypeface(this)
+            setTextColor(BlofyTvDesign.TextSecondary)
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            setPadding(dp(18), dp(12), dp(18), dp(12))
+            background = CinemaStyle.surface(this@SettingsActivity, radiusDp = 18)
+        }
+        updateSyncStatus()
+        page.addView(status, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) })
+
+        addSection(page, copy("اشتراكي والمكتبة", "Subscription & library"))
+        addCard(actionCard(copy("اشتراكي", "My subscription"),
+            copy("حالة الكود وتاريخ انتهاء الاشتراك", "Status and subscription expiry")) { showStreamSubscription() })
+        refreshCard = actionCard(copy("تحديث المحتوى", "Refresh content"),
+            copy("تحديث القنوات والأفلام والمسلسلات دون حذف المكتبة", "Refresh live, movies and series safely")) { refreshLibrary() }
+        addCard(refreshCard)
+
+        addSection(page, copy("المشاهدة", "Playback"))
+        addCard(cycleSetting(copy("حجم الصورة", "Picture fit"), RuntimeSettings.KEY_ASPECT,
+            arrayOf("fit", "zoom", "fill"),
+            arrayOf(copy("ملاءمة", "Fit"), copy("تكبير", "Zoom"), copy("ملء", "Fill"))))
+        addCard(cycleSetting(copy("الترجمة", "Subtitles"), RuntimeSettings.KEY_SUBTITLE_LANGUAGE,
+            arrayOf("ar", "auto", "off"),
+            arrayOf(copy("العربية أولًا", "Arabic first"), copy("تلقائي", "Automatic"), copy("إيقاف", "Off"))))
+        addCard(cycleSetting(copy("الحلقة التالية", "Next episode"), RuntimeSettings.KEY_AUTO_NEXT,
+            arrayOf("ask", "on", "off"),
+            arrayOf(copy("اسألني", "Ask me"), copy("تلقائي", "Auto"), copy("إيقاف", "Off"))))
+        addCard(actionCard(copy("حماية الأطفال", "Parental controls"),
+            copy("إدارة رمز PIN والمحتوى المقفل", "PIN and locked content")) {
+            startActivity(Intent(this, ParentalSettingsActivity::class.java))
+        })
+
+        addSection(page, copy("الحساب والمساعدة", "Account & help"))
+        addCard(actionCard(copy("فحص الجهاز والاتصال", "Device & connection"),
+            copy("اختبار HTTPS ومعرفة وضع تشغيل الجهاز", "HTTPS check and device compatibility")) {
+            showStreamCompatibility()
+        })
+        addCard(actionCard(copy("معلومات التطبيق", "App information"),
+            copy("إصدار التطبيق وتقرير الدعم", "Version and support diagnostics")) {
+            startActivity(Intent(this, SystemStatusActivity::class.java))
+        })
+        addCard(actionCard(copy("تسجيل الخروج", "Sign out"),
+            copy("الخروج من الحساب على هذا الجهاز فقط", "Sign out on this device only")) {
+            confirmStreamSignOut()
+        }.apply { tag = "stream_sign_out" })
+
+        linkFocus(back)
+        page.addView(TextView(this).apply {
+            text = "BLOFY STREAM  •  " + BuildConfig.VERSION_NAME
+            BlofyTvDesign.applyCaption(this)
+            gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(-1, dp(46)).apply { topMargin = dp(12) })
+        screen.addView(page)
+        setContentView(screen)
+        screen.post { sections.firstOrNull()?.getChildAt(0)?.requestFocus() }
+    }
+
+    private fun confirmStreamSignOut() {
+        if (!BuildConfig.CODE_ONLY_LOGIN) return
+        AlertDialog.Builder(this)
+            .setTitle(copy("تسجيل الخروج", "Sign out"))
+            .setMessage(copy(
+                "راح نزيل جلسة الدخول من هذا الجهاز فقط. اشتراكك في السيرفر ما ينلغي، وقد تحتاج كودًا صالحًا عند الدخول مرة ثانية.",
+                "Only this device's local session is cleared. Your server subscription stays active; a valid code may be needed to sign in again."
+            ))
+            .setNegativeButton(copy("إلغاء", "Cancel"), null)
+            .setPositiveButton(copy("تسجيل الخروج", "Sign out")) { _, _ ->
+                // Keep installationKey intact: a redeemed code can be rebound to its
+                // original installation; removing it would incorrectly create a new device.
+                try {
+                    // Invalidate only local readiness markers, not the installation binding.
+                    // Otherwise a different redeemed code might re-open the previous code's
+                    // cached catalog without downloading its own authorized content.
+                    StreamCodeSession.clearClaim(applicationContext)
+                    CatalogSyncState.clear(applicationContext, StreamCodeSession.providerId)
+                    StartupEntryState.clear(applicationContext)
+                    startActivity(Intent(this, CodeOnlyLoginActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+                    finish()
+                } catch (_: Exception) {
+                    android.widget.Toast.makeText(this,
+                        copy("تعذر تسجيل الخروج. حاول مجددًا.", "Could not sign out. Try again."),
+                        android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
+            .show()
     }
 
     private fun buildPage() {

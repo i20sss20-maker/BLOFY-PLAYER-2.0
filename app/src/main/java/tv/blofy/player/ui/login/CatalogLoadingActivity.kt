@@ -29,6 +29,7 @@ import kotlinx.coroutines.ensureActive
 import tv.blofy.player.data.preparation.CatalogLoadAttempt
 import tv.blofy.player.data.preparation.CatalogLoadPersistence
 import tv.blofy.player.R
+import tv.blofy.player.BuildConfig
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.data.CatalogSyncState
@@ -188,7 +189,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
             elevation = u(6).toFloat()
         }
         panel.addView(ImageView(this).apply {
-            setImageResource(R.drawable.blofy_logo)
+            setImageResource(if (BuildConfig.CODE_ONLY_LOGIN) R.drawable.stream_logo else R.drawable.blofy_logo)
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             adjustViewBounds = true
         }, LinearLayout.LayoutParams(u(if (compact) 128 else if (shortTv) 154 else 196), u(if (compact) 70 else if (shortTv) 82 else 108)))
@@ -558,15 +559,20 @@ class CatalogLoadingActivity : AppCompatActivity() {
 
     private fun progressCardBackground() = GradientDrawable(
         GradientDrawable.Orientation.LEFT_RIGHT,
-        intArrayOf(0xE5251735.toInt(), 0xE3181025.toInt(), 0xE50D0A12.toInt())
+        if (BuildConfig.CODE_ONLY_LOGIN)
+            intArrayOf(0xE5184855.toInt(), 0xE30D2A3A.toInt(), 0xE5061D29.toInt())
+        else intArrayOf(0xE5251735.toInt(), 0xE3181025.toInt(), 0xE50D0A12.toInt())
     ).apply {
         cornerRadius = TvUiTuning.dp(this@CatalogLoadingActivity, 18).toFloat()
-        setStroke(TvUiTuning.dp(this@CatalogLoadingActivity, 1), 0xFF674A84.toInt())
+        setStroke(TvUiTuning.dp(this@CatalogLoadingActivity, 1),
+            if (BuildConfig.CODE_ONLY_LOGIN) 0xFF327C85.toInt() else 0xFF674A84.toInt())
     }
 
     private fun percentBadgeBackground() = GradientDrawable(
         GradientDrawable.Orientation.TL_BR,
-        intArrayOf(0xFF7F4AC6.toInt(), 0xFF4C2A73.toInt())
+        if (BuildConfig.CODE_ONLY_LOGIN)
+            intArrayOf(0xFF177D84.toInt(), 0xFF104858.toInt())
+        else intArrayOf(0xFF7F4AC6.toInt(), 0xFF4C2A73.toInt())
     ).apply {
         cornerRadius = TvUiTuning.dp(this@CatalogLoadingActivity, 16).toFloat()
         setStroke(TvUiTuning.dp(this@CatalogLoadingActivity, 1), BlofyTvDesign.FocusStroke)
@@ -576,7 +582,9 @@ class CatalogLoadingActivity : AppCompatActivity() {
         GradientDrawable.Orientation.LEFT_RIGHT,
         when {
             done -> intArrayOf(0x5538CFA4, 0x33217E67)
+            active && BuildConfig.CODE_ONLY_LOGIN -> intArrayOf(0x6634BFB0, 0x33144C58)
             active -> intArrayOf(0x665F3890, 0x33351F50)
+            BuildConfig.CODE_ONLY_LOGIN -> intArrayOf(0x331A414B, 0x220B2530)
             else -> intArrayOf(0x331B1424, 0x22110D17)
         }
     ).apply {
@@ -585,7 +593,9 @@ class CatalogLoadingActivity : AppCompatActivity() {
             TvUiTuning.dp(this@CatalogLoadingActivity, 1),
             when {
                 done -> 0x995BDEBB.toInt()
+                active && BuildConfig.CODE_ONLY_LOGIN -> 0x9946E4D0.toInt()
                 active -> 0x998C65B6.toInt()
+                BuildConfig.CODE_ONLY_LOGIN -> 0x333E7880
                 else -> 0x334E3A60
             }
         )

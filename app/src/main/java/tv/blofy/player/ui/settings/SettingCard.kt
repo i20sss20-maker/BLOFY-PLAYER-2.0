@@ -10,6 +10,7 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import tv.blofy.player.R
+import tv.blofy.player.BuildConfig
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.CinemaStyle
@@ -92,11 +93,16 @@ internal class SettingCard(context: Context) : LinearLayout(context) {
 
     private fun valueBackground(focused: Boolean) = android.graphics.drawable.GradientDrawable(
         android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
-        if (focused) intArrayOf(0xFF5A377D.toInt(), 0xFF3A2452.toInt())
-        else intArrayOf(0xFF261936.toInt(), 0xFF1C1228.toInt())
+        when {
+            BuildConfig.CODE_ONLY_LOGIN && focused -> intArrayOf(0xFF1C6872.toInt(), 0xFF0F4854.toInt())
+            BuildConfig.CODE_ONLY_LOGIN -> intArrayOf(0xFF123641.toInt(), 0xFF0A2833.toInt())
+            focused -> intArrayOf(0xFF5A377D.toInt(), 0xFF3A2452.toInt())
+            else -> intArrayOf(0xFF261936.toInt(), 0xFF1C1228.toInt())
+        }
     ).apply {
         cornerRadius = dp(8).toFloat()
-        setStroke(dp(1), if (focused) BlofyTvDesign.FocusStroke else 0xFF4C365F.toInt())
+        setStroke(dp(1), if (focused) BlofyTvDesign.FocusStroke
+            else if (BuildConfig.CODE_ONLY_LOGIN) 0xFF31636D.toInt() else 0xFF4C365F.toInt())
     }
 
     private fun label(size: Float, bold: Boolean) = TextView(context).apply {
