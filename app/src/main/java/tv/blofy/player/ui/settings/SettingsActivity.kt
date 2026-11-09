@@ -40,6 +40,7 @@ import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.DeviceLocalTime
 import tv.blofy.player.ui.playlist.ProviderManagerActivity
 import tv.blofy.player.ui.profile.HomePersonalizationActivity
+import tv.blofy.player.ui.pro.ProPreviewActivity
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -175,6 +176,9 @@ class SettingsActivity : AppCompatActivity() {
         ) {
             startActivity(Intent(this, HomePersonalizationActivity::class.java))
         })
+        if (!BuildConfig.CODE_ONLY_LOGIN) addCard(actionCard(copy("BLOFY FREE / PRO", "BLOFY FREE / PRO"), copy("المزايا المجانية والاحترافية القادمة", "Free features and upcoming PRO tools")) {
+            startActivity(Intent(this, ProPreviewActivity::class.java))
+        }.apply { tag = "blofy_pro_preview_entry" })
         if (!BuildConfig.CODE_ONLY_LOGIN) addCard(actionCard(copy("باقتي", "My plan"), copy("مدة التفعيل والأجهزة المسموحة", "Activation period and allowed devices")) {
             startActivity(Intent(this, tv.blofy.player.ui.subscription.SubscriptionActivity::class.java))
         }.apply { tag = "blofy_subscription_entry" })

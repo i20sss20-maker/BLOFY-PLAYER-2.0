@@ -125,10 +125,19 @@ class LoginActivity : AppCompatActivity() {
             textSize = 12f
             id = View.generateViewId()
         }
-        header.addView(refreshCodeButton, LinearLayout.LayoutParams(dp(196), dp(44)).apply { marginStart = dp(16) })
+        header.addView(refreshCodeButton, LinearLayout.LayoutParams(dp(170), dp(44)).apply { marginStart = dp(12) })
+        // Re-open the optional welcome tour without hiding the QR or linking flow.
+        val tourButton = actionButton(if (isArabic()) "✦ المزايا" else "✦ Features") {
+            WelcomeTourDialog.show(this@LoginActivity)
+        }.apply {
+            textSize = 12f
+            id = View.generateViewId()
+            tag = "blofy_login_features_tour"
+        }
+        header.addView(tourButton, LinearLayout.LayoutParams(dp(118), dp(44)).apply { marginStart = dp(8) })
         val privacyButton = accountButton().apply { id = View.generateViewId() }
         tvPrivacyButton = privacyButton
-        header.addView(privacyButton, LinearLayout.LayoutParams(dp(176), dp(44)).apply { marginStart = dp(8) })
+        header.addView(privacyButton, LinearLayout.LayoutParams(dp(150), dp(44)).apply { marginStart = dp(8) })
         root.addView(header, LinearLayout.LayoutParams(-1, dp(72)))
 
         val shortTv = resources.configuration.screenHeightDp <= 600
@@ -262,17 +271,22 @@ class LoginActivity : AppCompatActivity() {
         // Explicitly connect the header and first action row in both directions.
         val rtl = direction == View.LAYOUT_DIRECTION_RTL
         refreshCodeButton.nextFocusDownId = addPlaylist.id
+        tourButton.nextFocusDownId = addPlaylist.id
         privacyButton.nextFocusDownId = connectButton.id
         addPlaylist.nextFocusUpId = refreshCodeButton.id
         connectButton.nextFocusUpId = privacyButton.id
         if (rtl) {
-            refreshCodeButton.nextFocusLeftId = privacyButton.id
-            privacyButton.nextFocusRightId = refreshCodeButton.id
+            refreshCodeButton.nextFocusLeftId = tourButton.id
+            tourButton.nextFocusRightId = refreshCodeButton.id
+            tourButton.nextFocusLeftId = privacyButton.id
+            privacyButton.nextFocusRightId = tourButton.id
             addPlaylist.nextFocusLeftId = connectButton.id
             connectButton.nextFocusRightId = addPlaylist.id
         } else {
-            refreshCodeButton.nextFocusRightId = privacyButton.id
-            privacyButton.nextFocusLeftId = refreshCodeButton.id
+            refreshCodeButton.nextFocusRightId = tourButton.id
+            tourButton.nextFocusLeftId = refreshCodeButton.id
+            tourButton.nextFocusRightId = privacyButton.id
+            privacyButton.nextFocusLeftId = tourButton.id
             addPlaylist.nextFocusRightId = connectButton.id
             connectButton.nextFocusLeftId = addPlaylist.id
         }
@@ -300,8 +314,10 @@ class LoginActivity : AppCompatActivity() {
     private fun qrPanel() = FrameLayout(this).apply {
         tag = "blofy_login_qr_panel"
         background = qrFrameBackground()
-        setPadding(dp(6), dp(6), dp(6), dp(6))
-        elevation = dp(8).toFloat()
+        // White quiet zone keeps the QR reliably scannable on low-contrast TV panels.
+        setPadding(dp(10), dp(10), dp(10), dp(10))
+        elevation = dp(4).toFloat()
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         addView(qrView, FrameLayout.LayoutParams(-1, -1))
         addView(qrMessage, FrameLayout.LayoutParams(-1, -1))
     }
@@ -317,6 +333,10 @@ class LoginActivity : AppCompatActivity() {
         root.addView(ImageView(this).apply { setImageResource(R.drawable.blofy_logo); scaleType = ImageView.ScaleType.CENTER_INSIDE }, LinearLayout.LayoutParams(dp(150), dp(82)))
         root.addView(title("BLOFY PLAYER", 29f))
         root.addView(subtitle(getString(R.string.login_phone_subtitle)))
+        root.addView(actionButton(if (isArabic()) "✦ اكتشف المزايا" else "✦ Explore features") {
+            WelcomeTourDialog.show(this@LoginActivity)
+        }.apply { tag = "blofy_login_features_tour" },
+            LinearLayout.LayoutParams(-1, dp(48)).apply { bottomMargin = dp(10) })
         deviceView.background = fieldBackground(); root.addView(deviceView, LinearLayout.LayoutParams(-1, dp(54)))
         codeView.background = premiumFieldBackground(true); root.addView(codeView, LinearLayout.LayoutParams(-1, dp(58)).apply { topMargin = dp(8) })
         val phoneQr = LoginLayoutSpec.phoneQrSizeDp(resources.configuration.screenWidthDp)
@@ -367,7 +387,7 @@ class LoginActivity : AppCompatActivity() {
             visibility = View.INVISIBLE
             scaleType = ImageView.ScaleType.FIT_CENTER
             background = qrBackground()
-            setPadding(dp(6), dp(6), dp(6), dp(6))
+            setPadding(dp(4), dp(4), dp(4), dp(4))
         }
         qrMessage = loginText(R.string.login_qr_loading, 12.5f).apply {
             gravity = Gravity.CENTER
@@ -807,6 +827,11 @@ class LoginActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        // Skippable introduction only on the first visit to the QR page.
+        // Does not delay activation, pairing, playlist loading or code refresh.
+        if (::status.isInitialized) window.decorView.post {
+            if (!isFinishing && !isDestroyed) WelcomeTourDialog.showOnce(this@LoginActivity)
+        }
         if (::status.isInitialized) requestIdentityRefresh()
         trialTicker?.cancel()
         trialTicker = lifecycleScope.launch {
@@ -907,7 +932,7 @@ class LoginActivity : AppCompatActivity() {
 
     private fun qrFrameBackground() = GradientDrawable(
         GradientDrawable.Orientation.TL_BR,
-        intArrayOf(0xFFB987F3.toInt(), 0xFF7041B4.toInt(), 0xFF2B193E.toInt())
+        intArrayOf(0xFFF9F6FF.toInt(), 0xFFECE4F9.toInt(), 0xFFBEA5DA.toInt())
     ).apply {
         cornerRadius = dp(BlofyTvDesign.PanelRadius).toFloat()
         setStroke(dp(1), BlofyTvDesign.FocusStroke)
@@ -943,6 +968,8 @@ class LoginActivity : AppCompatActivity() {
         cornerRadius = dp(BlofyTvDesign.CardRadius).toFloat()
         setStroke(if (focused) dp(2) else dp(1), when { focused -> BlofyTvDesign.FocusStroke; active -> 0xFF715A89.toInt(); else -> 0xFF49375E.toInt() })
     }
+
+    private fun isArabic() = androidx.core.os.ConfigurationCompat.getLocales(resources.configuration).get(0)?.language == "ar"
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 }
