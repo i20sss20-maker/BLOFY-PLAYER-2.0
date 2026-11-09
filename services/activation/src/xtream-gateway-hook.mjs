@@ -89,7 +89,7 @@ function movieRefreshDue(key,now=Date.now()){
   return true;
 }
 const accountUsageThrottle = createGatewayUsageThrottle();
-const streamCodes=createStreamDurationCodes({pool,keyHex:KEY_HEX});
+let streamCodes=null;
 const streamCodeLimiter=createFixedWindowLimiter({limit:6,windowMs:15*60_000});
 let readyPromise;
 const unavailableWriteGuard=createRegistryWriteGuard();
@@ -236,6 +236,7 @@ async function ensureReady() {
     } finally { client.release(); }
   })().catch(error => { readyPromise = null; throw error; });
   const ready=await readyPromise;
+  if(!streamCodes)streamCodes=createStreamDurationCodes({pool,keyHex:KEY_HEX});
   // Opt-in, source-allowlisted, lease-based recovery. Normal requests do not
   // wait for health probes. Timers are unref'd and are never enabled by default.
   if(!unavailableRecoveryTimerStarted&&recoveryEnabled()){
