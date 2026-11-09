@@ -32,7 +32,7 @@ import { createGzip } from 'node:zlib';
 import { pipeline } from 'node:stream/promises';
 import pg from 'pg';
 import { validateBulkAccountRequest } from './xtream-bulk-policy.mjs';
-import { gatewayItemsPageQuery } from './xtream-gateway-query.mjs';
+import { gatewayItemsPageQuery,gatewayOrderedItemsPageQuery,gatewayOrderCursor } from './xtream-gateway-query.mjs';
 import { mergeXtreamPlayerRequest } from './xtream-player-post.mjs';
 import { inspectXtreamMediaChunk } from './xtream-media-inspector.mjs';
 import { verifiedXtreamMediaContentType } from './xtream-media-response-type.mjs';
@@ -513,13 +513,13 @@ async function categoryFilter(mediaType, gatewayId, sourceId=null) {
 async function walkGatewayItems(mediaType, filter, onRow, sourceId=null) {
   await ensureCategoryMaps(mediaType,sourceId);
   await ensureItemMaps(mediaType,sourceId);
-  let lastId = 0;
+  let cursor=null;
   for (;;) {
-    const page=gatewayItemsPageQuery(mediaType,lastId,{filter,sourceId});
+    const page=gatewayOrderedItemsPageQuery(mediaType,cursor,{filter,sourceId});
     const rows=(await pool.query(page)).rows;
     if (!rows.length) break;
     for (const row of rows) await onRow(row);
-    lastId = Number(rows[rows.length - 1].gateway_id);
+    cursor=gatewayOrderCursor(rows[rows.length-1]);
     if (rows.length < 2000) break;
   }
 }
@@ -1581,7 +1581,7 @@ async function handleM3u(req, res, url) {
     await walkGatewayItems(mediaType, null, async row => {
       // M3U uses only the already-selected source fields; formatting a full
       // Xtream API object per entry was unused work on huge playlist exports.
-      const group = escapeM3uAttribute(row.metadata?.genre || (mediaType === 'live' ? 'Live' : 'Movies'));
+      const group = escapeM3uAttribute(row.category_name || row.metadata?.genre || (mediaType === 'live' ? 'Live' : 'Movies'));
       const name = escapeM3uAttribute(row.name);
       const logo = escapeM3uAttribute(row.icon_url || '');
       const ext = mediaType === 'live' ? 'ts' : safeGatewayExtension(row.container_extension, 'mp4');
