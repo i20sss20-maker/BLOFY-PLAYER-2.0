@@ -2246,6 +2246,7 @@ async function reviewStreamLibrary(sourceId,type){
   return report;
 }
 const aiCatalogRequestTimes=[];
+const geminiTestTimes=[];
 async function suggestStreamLibraryAI(body){
   const sourceId=String(body?.sourceId||''),type=String(body?.type||'');
   const offset=Number(body?.offset||0);
@@ -3099,6 +3100,12 @@ http.createServer = function withBlofyXtream(listener) {
         if(provider!=='gemini')return json(res,409,{ok:false,code:'gemini_not_selected'});
         const key=String(process.env.BLOFY_LIBRARY_GEMINI_API_KEY||'').trim();
         if(key.length<32)return json(res,503,{ok:false,code:'stream_ai_not_configured'});
+        const now=Date.now();
+        while(geminiTestTimes.length&&geminiTestTimes[0]<now-3600000)geminiTestTimes.shift();
+        if(geminiTestTimes.length>=5||
+           (geminiTestTimes.length&&now-geminiTestTimes[geminiTestTimes.length-1]<60000))
+          return json(res,429,{ok:false,code:'gemini_connection_test_cooldown'});
+        geminiTestTimes.push(now);
         const result=await suggestCatalogWithGemini(
           [{id:'demo-1',name:'Football Sports',categoryName:'Sport'}],
           {apiKey:key,model:process.env.BLOFY_LIBRARY_AI_MODEL||'gemini-3.5-flash-lite'});
