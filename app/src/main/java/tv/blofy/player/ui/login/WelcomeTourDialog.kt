@@ -92,7 +92,7 @@ internal object WelcomeTourDialog {
         }
         val scroll = ScrollView(activity).apply {
             isVerticalScrollBarEnabled = false
-            addView(body, ScrollView.LayoutParams(-1, -2))
+            addView(body, android.widget.FrameLayout.LayoutParams(-1, -2))
         }
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         val actions = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
