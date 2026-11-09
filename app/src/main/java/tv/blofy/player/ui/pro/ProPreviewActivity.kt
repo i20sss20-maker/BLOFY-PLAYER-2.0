@@ -10,6 +10,9 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
 import tv.blofy.player.R
+import tv.blofy.player.BuildConfig
+import tv.blofy.player.core.pro.SubscriptionCheckoutPolicy
+import tv.blofy.player.core.pro.PaymentChannel
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.pro.ProAccess
 import tv.blofy.player.core.pro.PlayerPlan
@@ -84,6 +87,24 @@ class ProPreviewActivity : AppCompatActivity() {
                 LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply { bottomMargin = dp(12) })
         }
+        val paymentChannel = SubscriptionCheckoutPolicy.channel(BuildConfig.IS_GOOGLE_PLAY)
+        column.addView(TextView(this).apply {
+            text = when (paymentChannel) {
+                PaymentChannel.GOOGLE_PLAY -> "نسخة Google Play • الاشتراكات ستكون عبر Google Play فقط"
+                PaymentChannel.BLOFY_WEBSITE -> "نسخة BLOFY الخارجية • الاشتراكات ستكون عبر بوابة BLOFY الآمنة"
+            }
+            textSize = if (tv) 17f else 14f
+            gravity = Gravity.CENTER
+            setTextColor(BlofyTvDesign.PurpleBright)
+            setPadding(dp(8), dp(12), dp(8), dp(6))
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        column.addView(TextView(this).apply {
+            text = "الشراء غير متاح حاليًا حتى اكتمال ربط الدفع والتحقق من الاشتراكات."
+            textSize = 13f
+            gravity = Gravity.CENTER
+            setTextColor(BlofyTvDesign.TextMuted)
+            setPadding(dp(8), 0, dp(8), dp(4))
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         column.addView(TextView(this).apply {
             text = "الأسعار السنوية المعروضة هي أسعار مقترحة ولم تُفعّل في Google Play. لا يوجد زر شراء حتى يكتمل التحقق الآمن من الاشتراكات. باقة VIP لا تتضمن محتوى إلا عند توفر حقوق توزيعه، ولا تتغير اشتراكات BLOFY الحالية."
             textSize = 14f
