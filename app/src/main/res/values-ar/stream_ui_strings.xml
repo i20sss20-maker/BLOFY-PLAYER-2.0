@@ -61,4 +61,5 @@
     <string name="stream_ui_server_error">السيرفر لم يستجب بشكل صحيح. جرّب لاحقًا</string>
     <string name="stream_ui_decoder_error">صيغة الفيديو غير مدعومة على هذا الجهاز؛ جرّب جودة أقل أو قناة أخرى</string>
     <string name="stream_ui_generic_error">تعذر إكمال الاتصال. جرّب تحديث التطبيق أو افحص الشبكة</string>
+    <string name="stream_ui_opening">جارِ فتح BLOFY STREAM…</string>
 </resources>
