@@ -13,6 +13,8 @@ const failures={
  stream_ai_provider_unavailable:'Gemini رفض الطلب. افحص صلاحيات المفتاح، الرصيد، وحدود الاستخدام.',
  stream_ai_provider_auth_failed:'مفتاح Gemini غير صالح أو لا يملك الصلاحية.',
  stream_ai_provider_quota:'تم تجاوز حصة Gemini أو حد الاستخدام.',
+ gemini_connection_test_cooldown:'فحص الاتصال محدود إلى مرة كل دقيقة و5 مرات في الساعة. جرّب لاحقًا.',
+ gemini_not_selected:'Gemini ليس المزود المختار في Railway.',
  stream_ai_provider_model_missing:'نموذج Gemini غير متاح لهذا المفتاح أو المشروع.',
  stream_ai_provider_bad_request:'تعذّر قبول إعدادات الطلب من Gemini.',
  stream_ai_request_failed:'تعذر اتصال السيرفر بـ Gemini أو انتهت مهلة الاتصال.',
