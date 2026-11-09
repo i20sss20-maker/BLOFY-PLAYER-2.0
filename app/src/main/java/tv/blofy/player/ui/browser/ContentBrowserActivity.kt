@@ -62,6 +62,9 @@ class ContentBrowserActivity : AppCompatActivity() {
     private var previewTitle: TextView? = null
     private var currentCategoryId: String? = null
     private var catalogRepairAttempted = false
+    private var originalCategories: List<CategoryEntity> = emptyList()
+    private var smartCategoryOrder = true
+    private lateinit var categorySortButton: Button
     private lateinit var categoryList: RecyclerView
     private lateinit var streamList: RecyclerView
     private var catalogStatus: TextView? = null
@@ -77,6 +80,7 @@ class ContentBrowserActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        smartCategoryOrder = statePrefs.getBoolean("smart_category_order", true)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(if (phoneMode) 16 else 30), dp(if (phoneMode) 14 else 22), dp(if (phoneMode) 16 else 30), dp(if (phoneMode) 14 else 22))
@@ -93,6 +97,23 @@ class ContentBrowserActivity : AppCompatActivity() {
             setPadding(dp(8), 0, 0, dp(if (phoneMode) 10 else 18))
         })
 
+        if (kind == KIND_LIVE) {
+            categorySortButton = Button(this).apply {
+                textSize = 13f
+                setTextColor(BlofyTvDesign.TextPrimary)
+                background = BlofyTvDesign.surface(dp(12).toFloat(), false)
+                isFocusable = true
+                setOnClickListener {
+                    smartCategoryOrder = !smartCategoryOrder
+                    statePrefs.edit().putBoolean("smart_category_order", smartCategoryOrder).apply()
+                    refreshCategoryOrder()
+                }
+            }
+            updateCategorySortCaption()
+            root.addView(categorySortButton, LinearLayout.LayoutParams(
+                if (phoneMode) LinearLayout.LayoutParams.MATCH_PARENT else dp(270),
+                dp(if (phoneMode) 44 else 48)).apply { bottomMargin = dp(8) })
+        }
         val body = LinearLayout(this).apply { orientation = if (phoneMode) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL }
         categoryList = RecyclerView(this).apply {
             layoutManager = if (phoneMode) LinearLayoutManager(this@ContentBrowserActivity, RecyclerView.HORIZONTAL, false)
@@ -122,7 +143,8 @@ class ContentBrowserActivity : AppCompatActivity() {
         setContentView(root)
 
         streamAdapter = FocusTextAdapter(
-            label = { (if (it.locked) "🔒 " else "") + it.name + if (kind == KIND_LIVE && it.archiveEnabled) "  ⏱" else "" },
+            label = { (if (it.locked) "🔒 " else "") + CategoryPresentation.cleanTitle(it.name) +
+                if (kind == KIND_LIVE && it.archiveEnabled) "  ⏱" else "" },
             onClick = ::openStream,
             onFocus = {
                 if (previewEnabled && !it.locked) {
@@ -134,7 +156,7 @@ class ContentBrowserActivity : AppCompatActivity() {
             itemKey = { it.key }
         )
         categoryAdapter = FocusTextAdapter(
-            label = { it.name },
+            label = { CategoryPresentation.cleanTitle(it.name) },
             onClick = { loadStreams(categoryId(it)) },
             onFocus = { if (!phoneMode) loadStreams(categoryId(it)) },
             itemKey = { it.key }
@@ -146,7 +168,10 @@ class ContentBrowserActivity : AppCompatActivity() {
             val dao = BlofyDatabase.get(applicationContext).dao()
             provider = dao.providers().first().firstOrNull() ?: run { finish(); return@launch }
             dao.categories(provider.id, kind).collect { items ->
-                val displayed = if (kind == KIND_LIVE) items else listOf(allCategory()) + items
+                originalCategories = items
+                val displayed = if (kind == KIND_LIVE)
+                    CategoryPresentation.order(items, smartCategoryOrder) { it.name }
+                else listOf(allCategory()) + items
                 categoryAdapter.submit(displayed)
                 if (kind != KIND_LIVE) {
                     loadStreams(null)
@@ -160,6 +185,20 @@ class ContentBrowserActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    private fun updateCategorySortCaption() {
+        if (::categorySortButton.isInitialized)
+            categorySortButton.text = if (smartCategoryOrder)
+                "ترتيب الفئات: ذكي  ·  اضغط لترتيب المصدر"
+            else "ترتيب الفئات: المصدر  ·  اضغط للترتيب الذكي"
+    }
+
+    private fun refreshCategoryOrder() {
+        if (kind != KIND_LIVE) return
+        val rows = CategoryPresentation.order(originalCategories, smartCategoryOrder) { it.name }
+        categoryAdapter.submit(rows)
+        updateCategorySortCaption()
     }
 
     private fun createCatalogStatusRow() = LinearLayout(this).apply {
@@ -352,7 +391,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         }
         lastPreviewKey = stream.key
         rememberStream(stream)
-        previewTitle?.text = stream.name
+        previewTitle?.text = CategoryPresentation.cleanTitle(stream.name)
         previewSession?.play(url)
         refreshShortEpg(stream)
     }
