@@ -54,6 +54,7 @@ import { readXtreamProviderDenialHint } from './xtream-provider-denial.mjs';
 import { xtreamAllowedLiveFormats,shouldStopXtreamFormatComparison,outputFormatDescription } from './xtream-live-output-policy.mjs';
 import {liveDiagnosticTimeoutMs} from './xtream-live-probe-budget.mjs';
 import { auditXtreamCatalogSample } from './xtream-library-insights.mjs';
+import {auditFullStreamCatalog} from './stream-full-library-audit.mjs';
 import { normalizeXtreamDetails,mergedXtreamMetadata } from './xtream-item-details.mjs';
 import { tmdbConfigured,validatedTmdbId,fetchTmdbDetails } from './xtream-tmdb.mjs';
 import { sortXtreamCategories } from './xtream-category-sort.mjs';
@@ -2209,6 +2210,65 @@ async function previewAdminChannelEpg(serverId,sourceId){
   return {serverId,sourceId,...normalizeXtreamEpg(payload,12)};
 }
 
+// Full, bounded source/type analysis. No upstream calls, no writes, no AI API.
+const libraryAuditCache=new Map();
+async function reviewStreamLibrary(sourceId,type){
+  if(!validUuid(sourceId)||!validType(type))
+    throw Object.assign(new Error('stream_library_selection_invalid'),{status:400});
+  const key=sourceId+':'+type,previous=libraryAuditCache.get(key);
+  if(previous&&Date.now()-previous.at<90000)return previous.report;
+  await ensureReady();
+  const exists=await serverById(sourceId);
+  if(!exists)throw Object.assign(new Error('stream_library_source_missing'),{status:404});
+  const total=Number((await pool.query(`SELECT COUNT(*)::int AS count
+    FROM blofy_xtream_items WHERE server_id=$1 AND media_type=$2`,
+    [sourceId,type])).rows[0]?.count||0);
+  // Bounded to avoid a large index taking over subscriber-side DB queries.
+  const rows=(await pool.query(`SELECT i.source_id,
+    COALESCE(NULLIF(i.custom_name,''),i.name) AS name,
+    COALESCE(c.name,'') AS category_name,i.category_id,
+    (COALESCE(NULLIF(i.custom_icon_url,''),i.icon_url,'')<>'') AS has_artwork,
+    (COALESCE(i.metadata->>'plot','')<>'') AS has_plot,
+    i.metadata->>'year' AS year,i.enabled
+    FROM blofy_xtream_items i
+    LEFT JOIN blofy_xtream_categories c ON c.server_id=i.server_id
+      AND c.media_type=i.media_type AND c.source_category_id=i.category_id
+    WHERE i.server_id=$1 AND i.media_type=$2
+    ORDER BY i.source_id LIMIT 40001`,[sourceId,type])).rows;
+  const report=auditFullStreamCatalog(rows.slice(0,40000),{
+    total,sourceId,type,maxSuggestions:80,maxDuplicates:40
+  });
+  if(total>40000)report.warning='الفهرس تجاوز 40,000 عنصر؛ التحليل جزئي ويحتاج تقسيم المصدر. لا توجد تعديلات تلقائية.';
+  libraryAuditCache.set(key,{at:Date.now(),report});
+  if(libraryAuditCache.size>30)libraryAuditCache.delete(libraryAuditCache.keys().next().value);
+  return report;
+}
+async function approveLibraryTitle(body){
+  const serverId=String(body?.sourceId||''),type=String(body?.type||'');
+  const sourceId=String(body?.itemId||'');
+  const proposed=String(body?.proposedName||'').trim();
+  const expected=String(body?.currentName||'');
+  if(!validUuid(serverId)||!validType(type)||
+      !/^[A-Za-z0-9._-]{1,128}$/.test(sourceId)||
+      !proposed||proposed.length>180||/[\x00-\x1f\x7f]/.test(proposed)||
+      !expected||expected.length>220)
+    throw Object.assign(new Error('stream_library_title_invalid'),{status:400});
+  // Only accept safe cleanup of repeated decorative hashes and spacing;
+  // never accept a fabricated title or duplicate merge from a suggestion.
+  const safe=proposed===expected.replace(/#{3,}/g,' ').replace(/\s{2,}/g,' ').trim();
+  if(!safe||proposed===expected)
+    throw Object.assign(new Error('stream_library_title_requires_review'),{status:400});
+  const updated=await sourceMutation(`UPDATE blofy_xtream_items
+    SET custom_name=$4,updated_at=NOW()
+    WHERE server_id=$1 AND media_type=$2 AND source_id=$3
+      AND COALESCE(NULLIF(custom_name,''),name)=$5
+    RETURNING source_id`,[serverId,type,sourceId,proposed,expected]);
+  if(!updated.rowCount)
+    throw Object.assign(new Error('stream_library_item_changed_or_missing'),{status:409});
+  libraryAuditCache.delete(serverId+':'+type);
+  return {ok:true,updated:true,itemId:sourceId,proposedName:proposed};
+}
+
 async function previewCatalogInsights(serverId,mediaType){
   if(!validUuid(serverId)||!['movie','series','live'].includes(mediaType))
     throw Object.assign(new Error('xtream_insights_selection_invalid'),{status:400});
@@ -2739,6 +2799,16 @@ async function unifiedStreamBridge(req,res,url){
     return json(res,200,{ok:true,type,sourceUrl:target.href,
       extension,sourceId,itemId,title:String(result.name||'').slice(0,170),
       customerTrafficChanged:false});
+  }
+  if(req.method==='GET'&&p==='/internal/blofy-stream/library-review'){
+    const report=await reviewStreamLibrary(
+      String(url.searchParams.get('sourceId')||''),
+      String(url.searchParams.get('type')||''));
+    return json(res,200,report);
+  }
+  if(req.method==='POST'&&p==='/internal/blofy-stream/library-title'){
+    const result=await approveLibraryTitle(await readJson(req));
+    return json(res,200,result);
   }
   if(req.method==='GET'&&p==='/internal/blofy-stream/catalog'){
     const type=url.searchParams.get('type');
