@@ -40,7 +40,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
+import tv.blofy.player.core.identity.StreamCodeSession
+import tv.blofy.player.core.identity.StreamCodeClient
+import tv.blofy.player.ui.login.CodeOnlyLoginActivity
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.remote.FocusMemory
 import tv.blofy.player.data.CatalogSyncState
@@ -143,6 +147,11 @@ class HomeActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (BuildConfig.CODE_ONLY_LOGIN && !StreamCodeSession.isClaimed(this)) {
+            startActivity(Intent(this, CodeOnlyLoginActivity::class.java))
+            finish()
+            return
+        }
         deviceKind = DeviceClass.detect(this)
         // A direct intent must not bypass the same readiness check as the login screen.
         setContentView(LinearLayout(this).apply {
@@ -189,7 +198,9 @@ class HomeActivity : AppCompatActivity() {
     private fun returnToLogin() {
         if (isFinishing || isDestroyed) return
         StartupEntryState.clear(applicationContext)
-        startActivity(Intent(this, LoginActivity::class.java))
+        startActivity(Intent(this,
+            if (BuildConfig.CODE_ONLY_LOGIN) CodeOnlyLoginActivity::class.java
+            else LoginActivity::class.java))
         finish()
     }
 
@@ -223,8 +234,30 @@ class HomeActivity : AppCompatActivity() {
         }
     }
 
+    private var codeSessionCheckMs = 0L
+    private var codeSessionChecking = false
+
     override fun onResume() {
         super.onResume()
+        if (BuildConfig.CODE_ONLY_LOGIN && StreamCodeSession.isClaimed(this) && !codeSessionChecking) {
+            val now=SystemClock.elapsedRealtime()
+            if (codeSessionCheckMs==0L||now-codeSessionCheckMs>=120_000L) {
+                codeSessionCheckMs=now
+                codeSessionChecking=true
+                lifecycleScope.launch {
+                    try {
+                        val token=StreamCodeSession.token(applicationContext)
+                        val allowed=token?.let { StreamCodeClient.verifySession(it) }
+                        if (token==null||allowed==false) {
+                            StreamCodeSession.clearClaim(applicationContext)
+                            startActivity(Intent(this@HomeActivity,CodeOnlyLoginActivity::class.java)
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+                            finish()
+                        }
+                    } finally { codeSessionChecking=false }
+                }
+            }
+        }
         homeResumed = true
         if (homeFeed != null) {
             refreshScheduler.start()
@@ -822,7 +855,7 @@ class HomeActivity : AppCompatActivity() {
         }
         val welcome = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         welcome.addView(TextView(this).apply {
-            text = "BLOFY PLAYER"; textSize = 10f; letterSpacing = .12f
+            text = if(BuildConfig.CODE_ONLY_LOGIN) "BLOFY STREAM" else "BLOFY PLAYER"; textSize = 10f; letterSpacing = .12f
             setTextColor(PURPLE_BRIGHT); includeFontPadding = false
         })
         welcome.addView(TextView(this).apply {
@@ -1064,7 +1097,7 @@ class HomeActivity : AppCompatActivity() {
         addView(ImageView(this@HomeActivity).apply {
             setImageResource(R.drawable.blofy_logo)
             scaleType = ImageView.ScaleType.CENTER_INSIDE
-            contentDescription = "BLOFY PLAYER"
+            contentDescription = if(BuildConfig.CODE_ONLY_LOGIN) "BLOFY STREAM" else "BLOFY PLAYER"
         }, LinearLayout.LayoutParams(dp(72), dp(44)).apply { bottomMargin = dp(18) })
         addView(sideSelected(R.drawable.cinema_home, getString(R.string.home_home)))
         addView(sideAction("side_live", R.drawable.cinema_live, getString(R.string.home_live), contentIntent("live")))
@@ -1139,7 +1172,7 @@ class HomeActivity : AppCompatActivity() {
         }
         heroContent = content
         heroKicker = TextView(this@HomeActivity).apply {
-            text = "BLOFY PLAYER"; textSize = 10f
+            text = if(BuildConfig.CODE_ONLY_LOGIN) "BLOFY STREAM" else "BLOFY PLAYER"; textSize = 10f
             typeface = BlofyTvDesign.preferredTypeface(this, bold = true); setTextColor(PURPLE_BRIGHT)
             gravity = Gravity.START; includeFontPadding = false
         }.also { content.addView(it) }
@@ -1217,10 +1250,10 @@ class HomeActivity : AppCompatActivity() {
         }
         header.addView(ImageView(this).apply {
             setImageResource(R.drawable.blofy_logo); scaleType = ImageView.ScaleType.CENTER_INSIDE
-            contentDescription = "BLOFY PLAYER"
+            contentDescription = if(BuildConfig.CODE_ONLY_LOGIN) "BLOFY STREAM" else "BLOFY PLAYER"
         }, LinearLayout.LayoutParams(dp(48), dp(44)))
         header.addView(TextView(this).apply {
-            text = "BLOFY PLAYER"; textSize = 12f; setTextColor(TEXT_PRIMARY)
+            text = if(BuildConfig.CODE_ONLY_LOGIN) "BLOFY STREAM" else "BLOFY PLAYER"; textSize = 12f; setTextColor(TEXT_PRIMARY)
             typeface = BlofyTvDesign.preferredTypeface(this)
         }, LinearLayout.LayoutParams(0, -2, 1f))
         header.addView(buildRefreshControl(compact = true), LinearLayout.LayoutParams(dp(44), dp(48)).apply { marginEnd = dp(4) })
