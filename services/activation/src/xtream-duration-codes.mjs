@@ -5,6 +5,7 @@
 import crypto from 'node:crypto';
 import {gatewayCredentialProof,generateGatewayUsername,
   generateGatewayPassword} from './xtream-gateway-core.mjs';
+import {encryptGatewayAccountPassword} from './xtream-account-vault.mjs';
 
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const MAX_DAYS=730;
@@ -142,11 +143,12 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
       const password=generateGatewayPassword(randomBytes);
       const accountId=uuid();
       const credentialProof=gatewayCredentialProof(username,password,keyHex);
+      const vault=encryptGatewayAccountPassword(accountId,password,keyHex);
       await client.query(`INSERT INTO blofy_xtream_gateway_accounts
-        (id,label,username,password_proof,enabled,max_connections,expires_at,source_id)
-        VALUES($1,$2,$3,$4,TRUE,$5,$6,$7)`,[
+        (id,label,username,password_proof,enabled,max_connections,expires_at,source_id,credential_vault)
+        VALUES($1,$2,$3,$4,TRUE,$5,$6,$7,$8)`,[
         accountId,row.label,username,credentialProof,
-        Number(row.max_connections),expiresAt,row.source_id
+        Number(row.max_connections),expiresAt,row.source_id,vault
       ]);
       await client.query(`UPDATE blofy_xtream_gateway_duration_codes
         SET redeemed_at=$2,expires_at=$3,account_id=$4 WHERE id=$1`,
