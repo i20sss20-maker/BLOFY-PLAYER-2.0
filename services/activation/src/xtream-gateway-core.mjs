@@ -64,10 +64,17 @@ export function stripUpstreamSecrets(value) {
   return out;
 }
 
+// Presentation-only cleanup: provider names sometimes contain long # runs
+// around a useful channel number. Preserve the stored source title unchanged.
+export function cleanGatewayDisplayName(value) {
+  const original=String(value||'').trim();
+  const cleaned=original.replace(/#{3,}/g,' ').replace(/\\s{2,}/g,' ').trim();
+  return cleaned||original;
+}
 export function formatGatewayCategory(row) {
   return {
     category_id: String(row.gateway_id),
-    category_name: String(row.name || ''),
+    category_name: cleanGatewayDisplayName(row.name),
     parent_id: 0
   };
 }
@@ -76,7 +83,7 @@ export function formatGatewayItem(mediaType, row) {
   const meta = mergedXtreamMetadata(row.metadata);
   const categoryId = row.category_gateway_id == null ? '0' : String(row.category_gateway_id);
   const base = {
-    name: String(row.name || ''),
+    name: cleanGatewayDisplayName(row.name),
     stream_icon: row.icon_url || '',
     category_id: categoryId,
     added: meta.added == null ? '' : String(meta.added)
@@ -111,7 +118,7 @@ export function formatGatewayItem(mediaType, row) {
   return {
     num: meta.num ?? null,
     series_id: Number(row.gateway_id),
-    name: String(row.name || ''),
+    name: cleanGatewayDisplayName(row.name),
     cover: row.icon_url || '',
     plot: meta.plot || '',
     cast: meta.cast || '',
