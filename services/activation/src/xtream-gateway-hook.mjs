@@ -1027,7 +1027,7 @@ if(process.env.BLOFY_XTREAM_UNAVAILABLE_SEED_ON_BOOT==='1'){
 
 async function proxyMedia(req, res, kind, username, password, gatewayId, requestedExtension, authorizedAccount=null) {
   if (!requirePublicBudget(req, res)) return;
-  const account = authorizedAccount||await authenticate(username, password, { touch: false });
+  const account = await authenticate(username, password, { touch: false }) || authorizedAccount;
   if (!account) {
     // A rejected BLOFY account is not an upstream media 403/404.
     if(req.method!=='HEAD')recordXtreamPlayback({kind,phase:'failed',itemId:gatewayId,reason:'gateway_auth_denied'});
@@ -1503,8 +1503,9 @@ async function handlePlayerApi(req, res, url) {
   url = await mergeXtreamPlayerRequest(req, url);
   const username = url.searchParams.get('username') || '';
   const password = url.searchParams.get('password') || '';
-  const bearerAccount=bearerFromRequest(req)?await authenticateAppBearer(req):null;
-  const account = bearerAccount||await authenticate(username, password, { touch: true });
+  const bearerAccount=(!username&&!password&&bearerFromRequest(req))?
+    await authenticateAppBearer(req):null;
+  const account = await authenticate(username, password, { touch: true }) || bearerAccount;
   if (!account) return json(res, 200, { user_info: { auth: 0, status: 'Disabled' }, server_info: playerServerInfo(req) });
   const action = String(url.searchParams.get('action') || '');
   if (!action) {
