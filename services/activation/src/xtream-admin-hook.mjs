@@ -2377,7 +2377,8 @@ async function approveLibraryAICommand(body){
   sourceId:plan.sourceId,type:plan.type,
   updatedCategories:result.updated,changedTitles:changedItems,unchanged:result.unchanged,
   changedOnServer:plan.action==='titles_cleanup'||result.unchanged!==true,
-  customerCatalogUpdated:source.enabled&&source.publish_catalog===true,
+  sourcePublished:Boolean(source.enabled&&source.publish_catalog===true),
+  customerCatalogUpdated:false,
   clientsNeedRefresh:true,automaticDevicePush:false,
   note:'تم حفظ التغييرات في فهرس BLOFY. ظهورها في تطبيقات العملاء يعتمد على إعادة جلب الفهرس والتخزين المؤقت.'};
 }
