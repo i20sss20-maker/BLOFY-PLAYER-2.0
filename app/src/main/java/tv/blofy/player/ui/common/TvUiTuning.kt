@@ -6,6 +6,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.LinearSnapHelper
 import androidx.recyclerview.widget.RecyclerView
+import tv.blofy.player.BuildConfig
 import tv.blofy.player.core.device.DeviceClass
 import java.util.WeakHashMap
 import kotlin.math.roundToInt
@@ -46,8 +47,9 @@ object TvUiTuning {
     fun sp(context: Context, value: Float): Float = value * scale(context)
 
     fun reducedMotion(context: Context): Boolean =
-        context.applicationContext.getSharedPreferences(UI_PREFS, Context.MODE_PRIVATE)
-            .getString(MOTION_KEY, "smooth") == "reduced"
+        (BuildConfig.CODE_ONLY_LOGIN && DeviceClass.isLowMemory(context)) ||
+            context.applicationContext.getSharedPreferences(UI_PREFS, Context.MODE_PRIVATE)
+                .getString(MOTION_KEY, "smooth") == "reduced"
 
     fun focusScale(context: Context, requested: Float): Float =
         if (reducedMotion(context)) 1f else requested
