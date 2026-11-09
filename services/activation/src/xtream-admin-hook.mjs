@@ -2272,7 +2272,8 @@ async function chatWithLibraryAI(body){
   return {ok:false,code:'stream_ai_hourly_budget_exhausted'};
  commandTimes.push(now);
  const result=await proposeCatalogCommand(body?.message,{
-  apiKey:key,model:process.env.BLOFY_LIBRARY_AI_MODEL||'gemini-3.5-flash-lite'});
+  apiKey:key,model:process.env.BLOFY_LIBRARY_AI_MODEL||'gemini-3.5-flash-lite',
+  history:Array.isArray(body?.history)?body.history.slice(-4):[]});
  if(!result.ok||!result.allowed)
   return {...result,serverName:String(server.name||'').slice(0,120),
    sourceId,type,requiresApproval:false};
