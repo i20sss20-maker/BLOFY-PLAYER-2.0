@@ -58,6 +58,22 @@ jobs:
             -PBLOFY_ACTIVATION_BASE_URL=https://api.blofyplayer.com \
             -PBLOFY_UPDATE_BASE_URL=https://updates.blofyplayer.com \
             lintDebug assembleDebug 2>&1 | tee -a gradle-ci.log
+      - name: Build independently installable code-only test APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon \
+            -PBLOFY_ACTIVATION_BASE_URL=https://api.blofyplayer.com \
+            -PBLOFY_UPDATE_BASE_URL=https://updates.blofyplayer.com \
+            testCodeDemoUnitTest lintCodeDemo assembleCodeDemo 2>&1 | tee -a gradle-ci.log
+          test -s app/build/outputs/apk/codeDemo/app-codeDemo.apk
+      - name: Upload code-only APK for private QA
+        uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-STREAM-code-only-QA-${{ github.sha }}
+          path: app/build/outputs/apk/codeDemo/app-codeDemo.apk
+          if-no-files-found: error
+          retention-days: 14
       - name: Upload Gradle diagnostics
         if: always()
         uses: actions/upload-artifact@v4
