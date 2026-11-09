@@ -532,68 +532,68 @@ class SettingsActivity : AppCompatActivity() {
      */
     private fun showStreamCompatibility() {
         val device = StreamDeviceCompatibility.current(this)
-        val kind = if (device.television) "Android TV / TV Box" else "هاتف أو جهاز لوحي"
-        val memory = if (device.lowMemory) "اقتصادي (وضع خفيف تلقائي)" else "طبيعي"
-        val info = "Android SDK ${device.sdk} • $kind\n" +
-            "الذاكرة: $memory\n" +
-            "المحرك: Media3 مع بدائل Decoder\n" +
-            "تحميل المكتبة: ${device.maxCatalogRequestsPerHost} اتصالات لكل مضيف\n" +
-            "التنقل: ريموت D-pad / لوحة المفاتيح\n"
+        val kind = getString(if (device.television) R.string.stream_ui_device_tv
+            else R.string.stream_ui_device_mobile)
+        val memory = getString(if (device.lowMemory) R.string.stream_ui_memory_low
+            else R.string.stream_ui_memory_normal)
+        val info = getString(R.string.stream_ui_compat_details, device.sdk,
+            kind, memory, device.maxCatalogRequestsPerHost)
         val dialog = AlertDialog.Builder(this)
-            .setTitle("توافق BLOFY STREAM")
-            .setMessage(info + "\nجارِ اختبار HTTPS مع سيرفر BLOFY...")
-            .setPositiveButton("إغلاق", null)
+            .setTitle(getString(R.string.stream_ui_compat_title))
+            .setMessage(info + "\n" + getString(R.string.stream_ui_compat_checking))
+            .setPositiveButton(getString(R.string.stream_ui_close), null)
             .show()
         lifecycleScope.launch {
             val result = StreamConnectionDiagnostics.probe()
             if (isFinishing || isDestroyed || !dialog.isShowing) return@launch
-            val connection = if (result.reachable)
-                "اتصال HTTPS ناجح (الخادم متاح)"
-            else StreamConnectionDiagnostics.guidance(
-                result.cause ?: StreamConnectionDiagnostics.Cause.OTHER)
-            dialog.setMessage(info + "\n" + connection +
-                "\n\nهذا الفحص لا يؤكد صلاحية كود الاشتراك أو توفر قنوات المصدر.")
+            val connection = if (result.reachable) getString(R.string.stream_ui_compat_success)
+                else StreamConnectionDiagnostics.guidance(this@SettingsActivity,
+                    result.cause ?: StreamConnectionDiagnostics.Cause.OTHER)
+            dialog.setMessage(info + "\n" + connection + "\n\n" +
+                getString(R.string.stream_ui_compat_note))
         }
     }
 
     private fun showStreamSubscription() {
-        val token=StreamCodeSession.token(applicationContext)
-        if(token==null){
-            AlertDialog.Builder(this).setTitle("اشتراك BLOFY STREAM")
-                .setMessage("لا يوجد اشتراك مفعّل على هذا الجهاز.")
-                .setPositiveButton("حسنًا",null).show()
+        val token = StreamCodeSession.token(applicationContext)
+        if (token == null) {
+            AlertDialog.Builder(this)
+                .setTitle(getString(R.string.stream_ui_subscription_title))
+                .setMessage(getString(R.string.stream_ui_no_subscription))
+                .setPositiveButton(getString(R.string.stream_ui_ok), null).show()
             return
         }
         lifecycleScope.launch {
-            val current=StreamCodeClient.sessionStatus(token)
-            if (isFinishing||isDestroyed) return@launch
+            val current = StreamCodeClient.sessionStatus(token)
+            if (isFinishing || isDestroyed) return@launch
             when {
-                current==null -> AlertDialog.Builder(this@SettingsActivity)
-                    .setTitle("حالة الاشتراك")
-                    .setMessage("تعذر الاتصال بالسيرفر الآن. اشتراكك محفوظ ولم يتم حذفه.")
-                    .setPositiveButton("حسنًا",null).show()
+                current == null -> AlertDialog.Builder(this@SettingsActivity)
+                    .setTitle(getString(R.string.stream_ui_subscription_status))
+                    .setMessage(getString(R.string.stream_ui_subscription_connection_failed))
+                    .setPositiveButton(getString(R.string.stream_ui_ok), null).show()
                 !current.active -> AlertDialog.Builder(this@SettingsActivity)
-                    .setTitle("اشتراك منتهي أو موقوف")
-                    .setMessage("أدخل كودًا جديدًا أو تواصل مع الدعم لإعادة التفعيل.")
-                    .setNegativeButton("إلغاء",null)
-                    .setPositiveButton("إدخال كود") { _,_ ->
+                    .setTitle(getString(R.string.stream_ui_subscription_stopped))
+                    .setMessage(getString(R.string.stream_ui_subscription_stopped_hint))
+                    .setNegativeButton(getString(R.string.stream_ui_cancel), null)
+                    .setPositiveButton(getString(R.string.stream_ui_enter_code)) { _, _ ->
                         StreamCodeSession.clearClaim(applicationContext)
-                        startActivity(Intent(this@SettingsActivity,
-                            tv.blofy.player.ui.login.CodeOnlyLoginActivity::class.java)
+                        startActivity(Intent(this@SettingsActivity, CodeOnlyLoginActivity::class.java)
                             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
                         finish()
                     }.show()
                 else -> {
-                    val expiry=current.expiresAt?.let {
-                        SimpleDateFormat("dd/MM/yyyy HH:mm",Locale.ENGLISH).apply {
-                            timeZone=java.util.TimeZone.getTimeZone("Asia/Riyadh")
+                    val expiry = current.expiresAt?.let {
+                        SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.ENGLISH).apply {
+                            timeZone = java.util.TimeZone.getTimeZone("Asia/Riyadh")
                         }.format(Date(it))
-                    } ?: "غير محدد"
-                    val remaining=current.daysRemaining?.let { "$it يوم" } ?: "ساري"
+                    } ?: getString(R.string.stream_ui_subscription_unknown)
+                    val remaining = current.daysRemaining?.let {
+                        getString(R.string.stream_ui_subscription_days, it)
+                    } ?: getString(R.string.stream_ui_subscription_valid)
                     AlertDialog.Builder(this@SettingsActivity)
-                        .setTitle("اشتراكي في BLOFY STREAM ✓")
-                        .setMessage("الحالة: ساري\nالمدة المتبقية: $remaining\nانتهاء الاشتراك: $expiry\nبتوقيت السعودية\n\nيتم التحقق من المدة عبر السيرفر وليس ساعة الجهاز.")
-                        .setPositiveButton("حسنًا",null).show()
+                        .setTitle(getString(R.string.stream_ui_subscription_active))
+                        .setMessage(getString(R.string.stream_ui_subscription_details, remaining, expiry))
+                        .setPositiveButton(getString(R.string.stream_ui_ok), null).show()
                 }
             }
         }
