@@ -2796,7 +2796,7 @@ async function unifiedStreamBridge(req,res,url){
       label:String(body.label||'BLOFY STREAM').slice(0,100),
       durationDays:body.durationDays,quantity:body.quantity||1,
       maxConnections:body.maxConnections||1,sourceId:body.sourceId||null,
-      channel:body.channel==='app'?'app':'xtream'
+      channel:body.channel==='xtream'?'xtream':'app'
     });
     return json(res,result.status,{ok:result.status===201,...result.data});
   }
