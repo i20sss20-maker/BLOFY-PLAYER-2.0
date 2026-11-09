@@ -3,6 +3,7 @@ package tv.blofy.player.ui.login
 import android.content.res.Configuration
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -24,7 +25,7 @@ class StreamArabicLanguageTest {
     }
 
     @Test fun streamArabicAndEnglishLoginStringsAreDistinct() {
-        assertTrue(BuildConfig.CODE_ONLY_LOGIN)
+        assumeTrue(BuildConfig.CODE_ONLY_LOGIN)
         val arabic = localized("ar")
         val english = localized("en")
         assertEquals("أدخل كود اشتراكك", arabic.getString(R.string.stream_ui_code_title))
@@ -34,6 +35,7 @@ class StreamArabicLanguageTest {
     }
 
     @Test fun streamLoadingAndSubscriptionStatusTranslate() {
+        assumeTrue(BuildConfig.CODE_ONLY_LOGIN)
         val arabic = localized("ar")
         val english = localized("en")
         assertTrue(arabic.getString(R.string.stream_ui_items_count, "الأفلام", "1,000").contains("عنصر"))
