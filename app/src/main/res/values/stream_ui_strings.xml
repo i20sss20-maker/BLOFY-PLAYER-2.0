@@ -1,5 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<!--
+  STREAM ships dedicated Arabic and English copy. Other legacy PLAYER locales
+  intentionally fall back to the English base resources; Android's normal
+  resource resolution continues unchanged. Suppress only MissingTranslation
+  for this file, not other lint checks or the rest of the application.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:ignore="MissingTranslation">
     <string name="stream_ui_tagline">Your channels and movies in one place</string>
     <string name="stream_ui_code_title">Enter your subscription code</string>
     <string name="stream_ui_code_description">Numeric activation code</string>
