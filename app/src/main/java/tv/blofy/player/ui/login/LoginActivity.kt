@@ -85,7 +85,7 @@ class LoginActivity : AppCompatActivity() {
         val headerText = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT; layoutDirection = View.LAYOUT_DIRECTION_RTL }
         headerText.addView(TextView(this).apply { text = "BLOFY PLAYER"; textSize = 13f; letterSpacing = .12f; setTextColor(BlofyTvDesign.PurpleBright); gravity = Gravity.RIGHT })
         headerText.addView(TextView(this).apply { text = "جاهز للمشاهدة"; textSize = 30f; typeface = BlofyTvDesign.HeadingTypeface; setTextColor(BlofyTvDesign.TextPrimary); gravity = Gravity.RIGHT; includeFontPadding = false })
-        headerText.addView(TextView(this).apply { text = "فعّل الجهاز من اليسار، وأدر قوائمك واتصل بها من اليمين"; textSize = 14.5f; setTextColor(BlofyTvDesign.TextMuted); gravity = Gravity.RIGHT })
+        headerText.addView(TextView(this).apply { text = "شغّل قوائم Xtream / M3U الخاصة بك مجانًا • ربط جهاز BLOFY اختياري"; textSize = 14.5f; setTextColor(BlofyTvDesign.TextMuted); gravity = Gravity.RIGHT })
         header.addView(headerText, LinearLayout.LayoutParams(0, dp(76), 1f).apply { marginEnd = dp(12) })
         root.addView(header, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(80)))
 
@@ -103,7 +103,7 @@ class LoginActivity : AppCompatActivity() {
             setPadding(dp(24), dp(18), dp(24), dp(18))
             background = panelBackground()
         }
-        activation.addView(TextView(this).apply { text = "تفعيل الجهاز"; textSize = 21f; typeface = BlofyTvDesign.HeadingTypeface; setTextColor(BlofyTvDesign.TextPrimary); gravity = Gravity.CENTER })
+        activation.addView(TextView(this).apply { text = "ربط جهاز BLOFY (اختياري)"; textSize = 21f; typeface = BlofyTvDesign.HeadingTypeface; setTextColor(BlofyTvDesign.TextPrimary); gravity = Gravity.CENTER })
         activation.addView(TextView(this).apply { text = "امسح QR بالجوال — الربط يتحدث تلقائيًا على هذه الشاشة"; textSize = 12.5f; setTextColor(BlofyTvDesign.TextMuted); gravity = Gravity.CENTER; setPadding(0, dp(4), 0, dp(10)) })
         activation.addView(qrView, LinearLayout.LayoutParams(dp(216), dp(216)))
         activation.addView(pairingLinkHint(), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(30)).apply { topMargin = dp(6) })
@@ -167,7 +167,7 @@ class LoginActivity : AppCompatActivity() {
             background = AppCompatResources.getDrawable(this@LoginActivity, R.drawable.blofy_home_background)
         }
         root.addView(ImageView(this).apply { setImageResource(R.drawable.blofy_logo); scaleType = ImageView.ScaleType.CENTER_INSIDE }, LinearLayout.LayoutParams(dp(150),dp(82)))
-        root.addView(title("BLOFY PLAYER",29f)); root.addView(subtitle("اربط جهازك ثم اختر قائمة التشغيل"))
+        root.addView(title("BLOFY PLAYER",29f)); root.addView(subtitle("شغّل قوائمك مجانًا، وربط جهاز BLOFY اختياري"))
         root.addView(label("رقم الجهاز"), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(28)))
         deviceView.apply { background = fieldBackground(); setPadding(dp(12),0,dp(12),0) }
         root.addView(deviceView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(54)))
@@ -228,9 +228,10 @@ class LoginActivity : AppCompatActivity() {
         connectJob = lifecycleScope.launch {
             try {
                 val dao = BlofyDatabase.get(applicationContext).dao()
-                val providers = withContext(Dispatchers.IO) { dao.providers().first() }
+                val providers = withContext(Dispatchers.IO) { dao.allProviders().first() }
                 // BLOFY-managed subscriber entries remain on the original activation path.
-                val local = providers.firstOrNull { !it.name.equals("مشتركين BLOFY", ignoreCase = true) }
+                val local = providers.firstOrNull { it.enabled && !it.name.equals("مشتركين BLOFY", ignoreCase = true) }
+                    ?: providers.firstOrNull { !it.name.equals("مشتركين BLOFY", ignoreCase = true) }
                 if (local == null) {
                     status.text = "أضف قائمة Xtream أو M3U الخاصة بك أولاً"
                     addPlaylist.requestFocus()
