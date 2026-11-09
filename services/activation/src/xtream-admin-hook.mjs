@@ -2294,6 +2294,20 @@ async function chatWithLibraryAI(body){
      return {ok:true,previewOnly:true,allowed:false,action:'titles_cleanup',
        requiresApproval:false,reply:'راجعت أول 12 عنوانًا، ولا توجد زخارف واضحة تحتاج تنظيفًا. لم أغيّر أي شيء.',
        sourceId,type};
+ }else{
+   const rows=(await pool.query(`SELECT source_category_id,name,item_count
+     FROM blofy_xtream_categories
+     WHERE server_id=$1 AND media_type=$2
+     ORDER BY sort_order,name,source_category_id LIMIT 1001`,[sourceId,type])).rows;
+   if(rows.length>1000)return {ok:false,code:'stream_ai_catalog_too_large'};
+   if(!rows.length)return {ok:true,previewOnly:true,allowed:false,
+     requiresApproval:false,reply:'لا توجد أقسام في المصدر المحدد لترتيبها.'};
+   const sorted=sortXtreamCategories(rows,result.sortMode);
+   proposal.originalCategoryOrder=rows.map(x=>String(x.source_category_id));
+   proposal.expectedCategoryOrder=sorted;
+   proposal.previewCategories=sorted.slice(0,12).map(id=>({
+     name:String(rows.find(x=>String(x.source_category_id)===id)?.name||'').slice(0,140)
+   }));
  }
  commandProposals.set(planId,proposal);
  const summary=result.action==='titles_cleanup'
@@ -2303,6 +2317,7 @@ async function chatWithLibraryAI(body){
  return {...result,planId,sourceId,type,
   serverName:proposal.sourceName,requiresApproval:true,summary,
   proposedChanges:(proposal.changes||[]).map(x=>({before:x.before,after:x.after})),
+  categoryPreview:proposal.previewCategories||[],
   customersRefreshAutomatically:false,customerCatalogUpdated:false};
 }
 async function approveLibraryAICommand(body){
@@ -2346,13 +2361,22 @@ async function approveLibraryAICommand(body){
    }finally{client.release();}
    result={updated:0,mode:null,unchanged:false};
  }else if(plan.action==='category_sort'){
+   // Check for changes since the operator previewed this category order.
+   const rows=(await pool.query(`SELECT source_category_id
+     FROM blofy_xtream_categories WHERE server_id=$1 AND media_type=$2
+     ORDER BY sort_order,name,source_category_id LIMIT 1001`,
+     [plan.sourceId,plan.type])).rows;
+   if(rows.length>1000||JSON.stringify(rows.map(x=>String(x.source_category_id)))!==
+      JSON.stringify(plan.originalCategoryOrder))
+     return {ok:false,code:'stream_ai_plan_conflict'};
    result=await autoSortCategories(plan.sourceId,plan.type,plan.mode);
  }else return {ok:false,code:'stream_ai_plan_invalid'};
  libraryAuditCache.delete(plan.sourceId+':'+plan.type);
  return {ok:true,applied:true,action:plan.action,mode:plan.mode,
   sourceId:plan.sourceId,type:plan.type,
   updatedCategories:result.updated,changedTitles:changedItems,unchanged:result.unchanged,
-  changedOnServer:true,customerCatalogUpdated:source.enabled&&source.publish_catalog===true,
+  changedOnServer:plan.action==='titles_cleanup'||result.unchanged!==true,
+  customerCatalogUpdated:source.enabled&&source.publish_catalog===true,
   clientsNeedRefresh:true,automaticDevicePush:false,
   note:'تم حفظ التغييرات في فهرس BLOFY. ظهورها في تطبيقات العملاء يعتمد على إعادة جلب الفهرس والتخزين المؤقت.'};
 }
