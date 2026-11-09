@@ -2210,27 +2210,6 @@ async function previewAdminChannelEpg(serverId,sourceId){
   return {serverId,sourceId,...normalizeXtreamEpg(payload,12)};
 }
 
-async function previewCatalogInsights(serverId,mediaType){
-  if(!validUuid(serverId)||!['movie','series','live'].includes(mediaType))
-    throw Object.assign(new Error('xtream_insights_selection_invalid'),{status:400});
-  await ensureReady();
-  const existing=await serverById(serverId);
-  if(!existing)throw Object.assign(new Error('xtream_server_not_found'),{status:404});
-  const [primary,alternates]=await Promise.all([
-    pool.query(`SELECT server_id::text,source_id,name,icon_url,metadata,enabled
-      FROM blofy_xtream_items WHERE server_id=$1 AND media_type=$2
-      ORDER BY source_id LIMIT 1200`,[serverId,mediaType]),
-    pool.query(`SELECT i.server_id::text,i.source_id,i.name,i.icon_url,i.metadata,
-        i.enabled,s.name AS server_name
-      FROM blofy_xtream_items i JOIN blofy_xtream_servers s ON s.id=i.server_id
-      WHERE i.media_type=$1 AND i.server_id<>$2 AND i.enabled=TRUE
-        AND s.enabled=TRUE AND s.publish_catalog=TRUE
-      LIMIT 1800`,[mediaType,serverId])
-  ]);
-  return {sourceName:existing.name,mediaType,
-    ...auditXtreamCatalogSample(primary.rows,alternates.rows)};
-}
-
 // Full, bounded source/type analysis. No upstream calls, no writes, no AI API.
 const libraryAuditCache=new Map();
 async function reviewStreamLibrary(sourceId,type){
@@ -2288,6 +2267,27 @@ async function approveLibraryTitle(body){
     throw Object.assign(new Error('stream_library_item_changed_or_missing'),{status:409});
   libraryAuditCache.delete(serverId+':'+type);
   return {ok:true,updated:true,itemId:sourceId,proposedName:proposed};
+}
+
+async function previewCatalogInsights(serverId,mediaType){
+  if(!validUuid(serverId)||!['movie','series','live'].includes(mediaType))
+    throw Object.assign(new Error('xtream_insights_selection_invalid'),{status:400});
+  await ensureReady();
+  const existing=await serverById(serverId);
+  if(!existing)throw Object.assign(new Error('xtream_server_not_found'),{status:404});
+  const [primary,alternates]=await Promise.all([
+    pool.query(`SELECT server_id::text,source_id,name,icon_url,metadata,enabled
+      FROM blofy_xtream_items WHERE server_id=$1 AND media_type=$2
+      ORDER BY source_id LIMIT 1200`,[serverId,mediaType]),
+    pool.query(`SELECT i.server_id::text,i.source_id,i.name,i.icon_url,i.metadata,
+        i.enabled,s.name AS server_name
+      FROM blofy_xtream_items i JOIN blofy_xtream_servers s ON s.id=i.server_id
+      WHERE i.media_type=$1 AND i.server_id<>$2 AND i.enabled=TRUE
+        AND s.enabled=TRUE AND s.publish_catalog=TRUE
+      LIMIT 1800`,[mediaType,serverId])
+  ]);
+  return {sourceName:existing.name,mediaType,
+    ...auditXtreamCatalogSample(primary.rows,alternates.rows)};
 }
 
 async function patchCategory(serverId, mediaType, categoryId, enabled) {
