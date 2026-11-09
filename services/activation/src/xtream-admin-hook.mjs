@@ -2846,6 +2846,28 @@ async function unifiedStreamBridge(req,res,url){
       extension,sourceId,itemId,title:String(result.name||'').slice(0,170),
       customerTrafficChanged:false});
   }
+  if(req.method==='POST'&&p==='/internal/blofy-stream/library-ai/connection-test'){
+    const provider=String(process.env.BLOFY_LIBRARY_AI_PROVIDER||'openai').trim().toLowerCase();
+    if(provider!=='gemini')return json(res,409,{ok:false,code:'gemini_not_selected'});
+    const key=String(process.env.BLOFY_LIBRARY_GEMINI_API_KEY||'').trim();
+    if(key.length<32)return json(res,503,{ok:false,code:'stream_ai_not_configured'});
+    const now=Date.now();
+    while(geminiTestTimes.length&&geminiTestTimes[0]<now-3600000)geminiTestTimes.shift();
+    if(geminiTestTimes.length>=5||
+       (geminiTestTimes.length&&now-geminiTestTimes[geminiTestTimes.length-1]<60000))
+      return json(res,429,{ok:false,code:'gemini_connection_test_cooldown'});
+    geminiTestTimes.push(now);
+    const model=process.env.BLOFY_LIBRARY_AI_MODEL||'gemini-3.5-flash-lite';
+    const result=await suggestCatalogWithGemini([
+      {id:'demo-1',name:'Football Sports',categoryName:'Sport'}
+    ],{apiKey:key,model});
+    return json(res,result.ok?200:502,{
+      ok:result.ok===true,
+      code:result.ok?'gemini_connection_verified':result.code,
+      suggestionsReturned:result.suggestions?.length||0,
+      modelUsed:result.modelUsed===true
+    });
+  }
   if(req.method==='GET'&&p==='/internal/blofy-stream/library-ai/status'){
     const provider=String(process.env.BLOFY_LIBRARY_AI_PROVIDER||'openai').trim().toLowerCase();
     const configured=provider==='gemini'
