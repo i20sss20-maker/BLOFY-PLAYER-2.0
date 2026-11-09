@@ -61,4 +61,5 @@
     <string name="stream_ui_server_error">The server returned an error. Try again later.</string>
     <string name="stream_ui_decoder_error">This video format is not supported on this device. Try another channel or quality.</string>
     <string name="stream_ui_generic_error">Could not connect. Try updating the app or check your network.</string>
+    <string name="stream_ui_opening">Opening BLOFY STREAM…</string>
 </resources>
