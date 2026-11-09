@@ -2589,7 +2589,7 @@ async function callLocalGateway(method,path,body){
   const port=Number(process.env.PORT||3000);
   if(!Number.isSafeInteger(port)||port<1024||port>65535)
     throw Object.assign(new Error('gateway_port_invalid'),{status:503});
-  const match=/^\/api\/v1\/admin\/xtream-gateway\/(?:accounts(?:\/[0-9a-f-]{36}(?:\/reset)?)?|codes(?:\/[0-9a-f-]{36}\/revoke|\?offset=[0-9]{1,6})?)$/.exec(path);
+  const match=/^\/api\/v1\/admin\/xtream-gateway\/(?:accounts(?:\/[0-9a-f-]{36}(?:\/reset)?)?|codes(?:\/[0-9a-f-]{36}\/revoke|\?limit=30&offset=[0-9]{1,6})?)$/.exec(path);
   if(!match)throw Object.assign(new Error('gateway_route_denied'),{status:400});
   const response=await fetch('http://127.0.0.1:'+port+path,{
     method,redirect:'manual',signal:AbortSignal.timeout(9000),
@@ -2759,7 +2759,7 @@ async function unifiedStreamBridge(req,res,url){
   }
   if(req.method==='GET'&&p==='/internal/blofy-stream/codes'){
     const offset=Math.max(0,Math.min(100000,Number(url.searchParams.get('offset'))||0));
-    const result=await callLocalGateway('GET','/api/v1/admin/xtream-gateway/codes?offset='+offset);
+    const result=await callLocalGateway('GET','/api/v1/admin/xtream-gateway/codes?limit=30&offset='+offset);
     return json(res,result.status,{ok:result.status===200,...result.data});
   }
   if(req.method==='POST'&&p==='/internal/blofy-stream/codes'){
