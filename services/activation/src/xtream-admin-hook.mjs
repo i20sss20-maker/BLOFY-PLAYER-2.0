@@ -2271,12 +2271,12 @@ async function approveLibraryTitle(body){
   const expected=String(body?.currentName||'');
   if(!validUuid(serverId)||!validType(type)||
       !/^[A-Za-z0-9._-]{1,128}$/.test(sourceId)||
-      !proposed||proposed.length>180||/[\\x00-\\x1f\\x7f]/.test(proposed)||
+      !proposed||proposed.length>180||/[\x00-\x1f\x7f]/.test(proposed)||
       !expected||expected.length>220)
     throw Object.assign(new Error('stream_library_title_invalid'),{status:400});
   // Only accept safe cleanup of repeated decorative hashes and spacing;
   // never accept a fabricated title or duplicate merge from a suggestion.
-  const safe=proposed===expected.replace(/#{3,}/g,' ').replace(/\\s{2,}/g,' ').trim();
+  const safe=proposed===expected.replace(/#{3,}/g,' ').replace(/\s{2,}/g,' ').trim();
   if(!safe||proposed===expected)
     throw Object.assign(new Error('stream_library_title_requires_review'),{status:400});
   const updated=await sourceMutation(`UPDATE blofy_xtream_items
