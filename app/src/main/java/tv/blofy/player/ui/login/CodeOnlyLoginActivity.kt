@@ -18,6 +18,9 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.os.LocaleListCompat
+import tv.blofy.player.ui.settings.RuntimeSettings
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CancellationException
@@ -56,13 +59,12 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
     private fun buildPremiumScreen() {
         val isTv = DeviceClass.isTv(this)
         val narrow = resources.configuration.screenWidthDp < 510
-        val density = resources.displayMetrics.density
         val widthDp = resources.configuration.screenWidthDp
         val horizontalPad = if (narrow) 18 else if (isTv) 45 else 25
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = resources.configuration.layoutDirection
             setPadding(dp(horizontalPad), dp(32), dp(horizontalPad), dp(32))
         }
         val baseDrawable = AppCompatResources.getDrawable(this, R.drawable.blofy_home_background)
@@ -76,7 +78,7 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = resources.configuration.layoutDirection
             background = GradientDrawable(GradientDrawable.Orientation.TL_BR,
                 intArrayOf(0xFF143E4C.toInt(), 0xFF0B2A36.toInt(), 0xFF071C26.toInt())
             ).apply {
@@ -94,7 +96,7 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
         panel.addView(ImageView(this).apply {
             setImageResource(R.drawable.stream_logo)
             scaleType = ImageView.ScaleType.FIT_CENTER
-            contentDescription = "شعار BLOFY STREAM"
+            contentDescription = getString(R.string.stream_ui_brand_description)
         }, LinearLayout.LayoutParams(dp(172), dp(108)).apply { bottomMargin = dp(6) })
 
         panel.addView(TextView(this).apply {
@@ -107,7 +109,7 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
             includeFontPadding = false
         })
         panel.addView(TextView(this).apply {
-            text = "قنواتك وأفلامك في مكان واحد"
+            text = getString(R.string.stream_ui_tagline)
             textSize = if (isTv) 17f else 15f
             setTextColor(BlofyTvDesign.PurpleSoft)
             typeface = BlofyTvDesign.preferredTypeface(this)
@@ -121,7 +123,7 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
         }, LinearLayout.LayoutParams(dp(215), dp(1)).apply { bottomMargin = dp(23) })
 
         panel.addView(TextView(this).apply {
-            text = "أدخل كود اشتراكك"
+            text = getString(R.string.stream_ui_code_title)
             textSize = if (isTv) 20f else 18f
             setTextColor(BlofyTvDesign.TextPrimary)
             typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
@@ -146,14 +148,14 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
             setOnFocusChangeListener { v, focused -> v.background = inputBackground(focused) }
             isFocusable = true
             isFocusableInTouchMode = true
-            contentDescription = "كود التفعيل الرقمي"
+            contentDescription = getString(R.string.stream_ui_code_description)
         }
         panel.addView(codeInput, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, dp(if (isTv) 75 else 68)))
 
         submitButton = Button(this).apply {
             id = View.generateViewId()
-            text = "ابدأ المشاهدة"
+            text = getString(R.string.stream_ui_start)
             isAllCaps = false
             textSize = if (isTv) 20f else 18f
             typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
@@ -174,7 +176,7 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
             LinearLayout.LayoutParams.MATCH_PARENT, dp(64)).apply { topMargin = dp(17) })
 
         statusText = TextView(this).apply {
-            text = "مدة الاشتراك تبدأ من أول تفعيل ناجح"
+            text = getString(R.string.stream_ui_subscription_notice)
             textSize = 13.5f
             setTextColor(BlofyTvDesign.TextMuted)
             typeface = BlofyTvDesign.preferredTypeface(this)
@@ -183,12 +185,37 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
         }
         panel.addView(statusText)
         panel.addView(TextView(this).apply {
-            text = "تفعيل آمن • كود واحد • تجربة موحّدة"
+            text = getString(R.string.stream_ui_secure_notice)
             textSize = 11.5f
             setTextColor(BlofyTvDesign.PurpleSoft)
             typeface = BlofyTvDesign.preferredTypeface(this)
             gravity = Gravity.CENTER
         })
+
+        // Language is reachable before entering a code, including on a TV remote.
+        val languageButton = Button(this).apply {
+            id = View.generateViewId()
+            text = getString(R.string.stream_ui_language) + "  •  " +
+                if (resources.configuration.locales[0]?.language == "ar") "العربية" else "English"
+            isAllCaps = false
+            textSize = if (isTv) 16f else 14f
+            typeface = BlofyTvDesign.preferredTypeface(this)
+            setTextColor(BlofyTvDesign.TextPrimary)
+            backgroundTintList = null
+            background = BlofyTvDesign.secondaryButton(dp(14).toFloat())
+            stateListAnimator = null
+            isFocusable = true
+            setOnFocusChangeListener { view, focused ->
+                view.background = BlofyTvDesign.secondaryButton(dp(14).toFloat(), focused)
+            }
+            setOnClickListener { chooseStreamLanguage() }
+        }
+        panel.addView(languageButton, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(if (isTv) 50 else 46)).apply {
+                topMargin = dp(18)
+            })
+        submitButton.nextFocusDownId = languageButton.id
+        languageButton.nextFocusUpId = submitButton.id
 
         codeInput.nextFocusDownId = submitButton.id
         submitButton.nextFocusUpId = codeInput.id
@@ -214,6 +241,28 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
         return super.dispatchKeyEvent(event)
     }
 
+    private fun chooseStreamLanguage() {
+        val languages = arrayOf(getString(R.string.stream_ui_arabic),
+            getString(R.string.stream_ui_english))
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(getString(R.string.stream_ui_language))
+            .setSingleChoiceItems(languages,
+                if (resources.configuration.locales[0]?.language == "ar") 0 else 1) { dialog, which ->
+                val tag = if (which == 0) "ar" else "en"
+                val saved = getSharedPreferences(RuntimeSettings.PREFS, MODE_PRIVATE).edit()
+                    .putString("app_language_tag", tag)
+                    .putString("app_language", if (which == 0) "العربية" else "English")
+                    .putBoolean("stream_language_choice_made", true)
+                    .commit()
+                if (saved) {
+                    dialog.dismiss()
+                    AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(tag))
+                }
+            }
+            .setNegativeButton(getString(R.string.stream_ui_cancel), null)
+            .show()
+    }
+
     private fun inputBackground(focused: Boolean) = GradientDrawable().apply {
         setColor(0xFF0A2633.toInt())
         cornerRadius = dp(16).toFloat()
@@ -237,12 +286,12 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
         if (busy) return
         val code = StreamCodeClient.normalizeCode(codeInput.text.toString())
         if (code.isEmpty()) {
-            statusText.text = "الكود مكوّن من 8 إلى 12 رقمًا"
+            statusText.text = getString(R.string.stream_ui_code_length)
             codeInput.requestFocus()
             return
         }
         setBusy(true)
-        statusText.text = "جارِ تفعيل الاشتراك بأمان..."
+        statusText.text = getString(R.string.stream_ui_activating)
         lifecycleScope.launch {
             try {
                 // Generate the installation binding BEFORE redeeming, allowing
@@ -271,7 +320,7 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
                     CatalogSyncState.markPending(applicationContext,StreamCodeSession.providerId)
                 }
                 codeInput.text?.clear()
-                statusText.text = "تم التفعيل! جارِ تجهيز مكتبة BLOFY STREAM..."
+                statusText.text = getString(R.string.stream_ui_activated)
                 startActivity(Intent(this@CodeOnlyLoginActivity,
                     CatalogLoadingActivity::class.java)
                     .putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, StreamCodeSession.providerId))
@@ -283,14 +332,16 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
                 val message = error.message.orEmpty()
                 statusText.text = when {
                     classified != StreamConnectionDiagnostics.Cause.OTHER ->
-                        StreamConnectionDiagnostics.guidance(classified)
-                    message in setOf(
-                        "الكود مستخدم أو غير متاح. تواصل مع المسؤول",
-                        "محاولات كثيرة، أعد المحاولة لاحقًا",
-                        "كود غير صحيح",
-                        "تعذر تفعيل الكود. تحقق من الاتصال"
-                    ) -> message
-                    else -> "تعذر التفعيل. تحقق من الشبكة أو تواصل مع الدعم"
+                        StreamConnectionDiagnostics.guidance(this@CodeOnlyLoginActivity, classified)
+                    message == "الكود مستخدم أو غير متاح. تواصل مع المسؤول" ->
+                        getString(R.string.stream_ui_code_used)
+                    message == "محاولات كثيرة، أعد المحاولة لاحقًا" ->
+                        getString(R.string.stream_ui_too_many_attempts)
+                    message == "كود غير صحيح" ->
+                        getString(R.string.stream_ui_invalid_code)
+                    message == "تعذر تفعيل الكود. تحقق من الاتصال" ->
+                        getString(R.string.stream_ui_activation_connection)
+                    else -> getString(R.string.stream_ui_activation_failed)
                 }
                 setBusy(false)
                 codeInput.requestFocus()
@@ -301,7 +352,7 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
     private fun restoreSession() {
         if (busy) return
         setBusy(true)
-        statusText.text = "جارِ التحقق من اشتراكك المحفوظ..."
+        statusText.text = getString(R.string.stream_ui_restoring)
         lifecycleScope.launch {
             try {
                 val saved = withContext(Dispatchers.IO) {
@@ -311,7 +362,7 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
                 val token=StreamCodeSession.token(applicationContext)
                 if (saved == null || token == null) {
                     StreamCodeSession.clearClaim(applicationContext)
-                    statusText.text = "تعذر استعادة الاشتراك. تواصل مع الدعم"
+                    statusText.text = getString(R.string.stream_ui_restore_failed)
                 } else when (StreamCodeClient.verifySession(token)) {
                     true -> {
                         val dao=BlofyDatabase.get(applicationContext).dao()
@@ -334,19 +385,20 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
                     }
                     false -> {
                         StreamCodeSession.clearClaim(applicationContext)
-                        statusText.text = "الاشتراك منتهي أو موقوف. أدخل كودًا جديدًا"
+                        statusText.text = getString(R.string.stream_ui_subscription_inactive)
                     }
                     null -> {
                         val check = StreamConnectionDiagnostics.probe()
                         statusText.text = if (check.reachable)
-                            "تعذر التحقق من الاشتراك الآن. اشتراكك محفوظ؛ أعد المحاولة"
-                        else "اشتراكك محفوظ. " + StreamConnectionDiagnostics.guidance(
-                            check.cause ?: StreamConnectionDiagnostics.Cause.OTHER)
+                            getString(R.string.stream_ui_check_retry)
+                        else getString(R.string.stream_ui_saved_offline,
+                            StreamConnectionDiagnostics.guidance(this@CodeOnlyLoginActivity,
+                                check.cause ?: StreamConnectionDiagnostics.Cause.OTHER))
                     }
                 }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) {
-                statusText.text = "تعذر التحقق من الاشتراك. تأكد من الاتصال"
+                statusText.text = getString(R.string.stream_ui_verify_failed)
             } finally {
                 setBusy(false)
                 if (!isFinishing) focusFirst()
