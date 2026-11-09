@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  cleanGatewayDisplayName,
   escapeM3uAttribute,
   formatGatewayCategory,
   formatGatewayItem,
@@ -75,4 +76,13 @@ test('extension and M3U sanitizers are bounded', () => {
   assert.equal(safeGatewayExtension('.TS', 'mp4'), 'ts');
   assert.equal(safeGatewayExtension('../bad', 'mp4'), 'mp4');
   assert.equal(escapeM3uAttribute('A\n"B"'), "A 'B'");
+});
+
+test('decorative hashes are removed without changing original catalog names',()=>{
+  assert.equal(cleanGatewayDisplayName('####### 1001 #######'),'1001');
+  assert.equal(cleanGatewayDisplayName('AR: LA LIGA 1 • HD'),'AR: LA LIGA 1 • HD');
+  assert.equal(cleanGatewayDisplayName('###'),'###');
+  assert.equal(formatGatewayCategory({gateway_id:1,name:'### SPORTS ###'}).category_name,'SPORTS');
+  assert.equal(formatGatewayItem('live',{gateway_id:42,name:'#### 1001 ####',
+    metadata:{}}).name,'1001');
 });
