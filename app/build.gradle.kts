@@ -51,12 +51,24 @@ android {
         }
     }
     buildTypes {
+        getByName("debug") {
+            buildConfigField("boolean", "CODE_ONLY_LOGIN", "false")
+        }
         getByName("release") {
+            buildConfigField("boolean", "CODE_ONLY_LOGIN", "false")
             isDebuggable = false
             isJniDebuggable = false
             isMinifyEnabled = false
             isShrinkResources = false
             signingConfig = signingConfigs.getByName("release")
+        }
+        // Separate installable app. The existing release and store package stay intact.
+        create("codeOnly") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".code"
+            versionNameSuffix = "-code"
+            buildConfigField("boolean", "CODE_ONLY_LOGIN", "true")
+            matchingFallbacks += listOf("release")
         }
     }
     buildFeatures { viewBinding = true; buildConfig = true }
