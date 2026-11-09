@@ -66,11 +66,15 @@ jobs:
           const allApps = await listApps(true);
           const before = allApps.length;
           const vlc = allApps.find(app => app.slug === 'vlc');
-          if (!vlc?.downloadUrl.includes('mirror.math.princeton.edu/pub/vlc/')) {
+          if (!vlc || vlc.version !== '3.7.1' || !vlc.downloadUrl.includes('download.videolan.org/pub/videolan/vlc-android/3.7.1/')) {
             throw new Error('vlc_direct_source_not_migrated');
           }
+          const tvBro = allApps.find(app => app.slug === 'tv-bro');
+          if (!tvBro?.iconUrl.endsWith('/metadata/en-US/images/icon.png')) {
+            throw new Error('tv_bro_official_icon_not_migrated');
+          }
           const vlcVariants = (await listAppVariants()).filter(item => item.slug === 'vlc');
-          if (vlcVariants.length < 2 || vlcVariants.some(item => !item.downloadUrl.includes('mirror.math.princeton.edu/pub/vlc/'))) {
+          if (vlcVariants.length < 2 || vlcVariants.some(item => !item.downloadUrl.includes('download.videolan.org/pub/videolan/vlc-android/3.7.1/'))) {
             throw new Error('vlc_variant_sources_not_migrated');
           }
           const backups = await listCatalogBackups(30);
