@@ -58,9 +58,15 @@ class PlaylistManager(
                 },
                 suspend {
                     onProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3))
-                    freshItemCount += if ("movie" in completedSections) dao.catalogCountAll(provider.id, "movie") else syncVod(provider, onProgress = { percent ->
-                        onProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3, percent))
-                    })
+                    freshItemCount += if ("movie" in completedSections) dao.catalogCountAll(provider.id, "movie") else syncVod(
+                        provider,
+                        onProcessed = { count ->
+                            onProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3, processedItems = count))
+                        },
+                        onProgress = { percent ->
+                            onProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3, percent))
+                        }
+                    )
                     onSectionComplete("movie")
                 },
                 suspend {
@@ -91,7 +97,11 @@ class PlaylistManager(
                         }
                         1 -> {
                             onProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3, retryAttempt = 3))
-                            freshItemCount += syncVod(provider, recoverByCategory = true) { percent ->
+                            freshItemCount += syncVod(provider, recoverByCategory = true,
+                                onProcessed = { count ->
+                                    onProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3, processedItems = count))
+                                }
+                            ) { percent ->
                                 onProgress(PlaylistSyncProgress(PlaylistSyncStage.MOVIES, 2, 3, percent))
                             }
                             onSectionComplete("movie")
@@ -173,6 +183,7 @@ class PlaylistManager(
     suspend fun syncVod(
         provider: ProviderEntity,
         recoverByCategory: Boolean = false,
+        onProcessed: suspend (Int) -> Unit = {},
         onProgress: suspend (Int) -> Unit = {}
     ): Int {
         val categories = api.list(actionUrl(provider, "get_vod_categories"))
@@ -190,7 +201,8 @@ class PlaylistManager(
                 actionUrl(provider, "get_vod_streams"), 60, 88, onProgress,
                 retainItems = !direct,
                 onBatch = directBatchSink(direct),
-                recoverCategoryIds = if (recoverByCategory) categoryRows.map { it.remoteId } else null
+                recoverCategoryIds = if (recoverByCategory) categoryRows.map { it.remoteId } else null,
+                onProcessed = onProcessed
             ) { row -> vodEntity(provider, row)?.let(previousFlags::applyTo) }
         } catch (failure: Throwable) {
             if (direct) clearDirectSection(provider.id, "movie")
@@ -353,11 +365,12 @@ class PlaylistManager(
         retainItems: Boolean = true,
         onBatch: suspend (List<T>) -> Unit = {},
         recoverCategoryIds: List<String>? = null,
+        onProcessed: suspend (Int) -> Unit = {},
         map: (Map<String, Any?>) -> T?,
     ): StreamingParseResult<T> {
         if (recoverCategoryIds != null) {
             return parseSegmentedArray(url, recoverCategoryIds, progressStart, progressEnd,
-                onProgress, retainItems, onBatch, map)
+                onProgress, retainItems, onBatch, onProcessed, map)
         }
         val coroutineContext = currentCoroutineContext()
         val items = if (retainItems) ArrayList<T>(4096) else null
@@ -395,12 +408,14 @@ class PlaylistManager(
                             (sourceCount.toDouble() / (sourceCount + 2000.0)).coerceIn(0.0, 0.96)
                         }
                         onProgress(progressStart + (fraction * span).toInt())
+                        onProcessed(sourceCount)
                     }
                 }
                 reader.endArray()
             }
         }
         if (!retainItems && batch.isNotEmpty()) onBatch(batch.toList())
+        if (sourceCount % 256 != 0) onProcessed(sourceCount)
         return StreamingParseResult(sourceCount, itemCount, items ?: emptyList())
     }
 
@@ -419,6 +434,7 @@ class PlaylistManager(
         onProgress: suspend (Int) -> Unit,
         retainItems: Boolean,
         onBatch: suspend (List<T>) -> Unit,
+        onProcessed: suspend (Int) -> Unit,
         map: (Map<String, Any?>) -> T?
     ): StreamingParseResult<T> {
         val categories = (categoryIds.filter { it.isNotBlank() } + "0").distinct()
@@ -436,7 +452,8 @@ class PlaylistManager(
             val chunk = CatalogSectionRetry.run {
                 parseStreamingArray(
                     "$url&category_id=${enc(categoryId)}",
-                    start, end, onProgress, retainItems, onBatch
+                    start, end, onProgress, retainItems, onBatch,
+                    onProcessed = { categoryCount -> onProcessed(sourceCount + categoryCount) }
                 ) { row ->
                     val actualCategory = row.id("category_id") ?: if (categoryId == "0") "0" else null
                     check(actualCategory == categoryId) {
