@@ -75,7 +75,7 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 
 class HomeActivity : AppCompatActivity() {
-    internal var savedEntryDeadlineMillis = 8_000L
+    internal var savedEntryDeadlineMillis = if (BuildConfig.CODE_ONLY_LOGIN) 20_000L else 8_000L
     private lateinit var deviceKind: DeviceClass.Kind
     private val uiDirection get() = resources.configuration.layoutDirection
     private val remote get() = !::deviceKind.isInitialized || deviceKind == DeviceClass.Kind.TV
@@ -177,7 +177,20 @@ class HomeActivity : AppCompatActivity() {
             }
             try {
                 val provider = withContext(Dispatchers.IO) { BlofyDatabase.get(applicationContext).dao().providersStored().first().firstOrNull() }
-                if (provider != null && !CatalogSyncState.isEntryReady(applicationContext, provider.id)) {
+                if (provider == null) {
+                    returnToLogin()
+                    return@launch
+                }
+                // For STREAM the durable server rows are the whole entry contract.
+                // Derived home/artwork/search caches must never send a saved subscriber
+                // back through the network-loading gate on every app start.
+                val savedCatalogReady = if (BuildConfig.CODE_ONLY_LOGIN) {
+                    CatalogSyncState.isReady(applicationContext, provider.id) &&
+                        withContext(Dispatchers.IO) {
+                            BlofyDatabase.get(applicationContext).dao().hasCatalog(provider.id)
+                        }
+                } else CatalogSyncState.isEntryReady(applicationContext, provider.id)
+                if (!savedCatalogReady) {
                     startActivity(Intent(this@HomeActivity, CatalogLoadingActivity::class.java).putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, provider.id))
                     finish()
                     return@launch
@@ -351,46 +364,72 @@ class HomeActivity : AppCompatActivity() {
         val topTen: List<StreamEntity>,
         val arabic: List<StreamEntity>,
         val ultraHd: List<StreamEntity>,
-        val featured: StreamEntity?
+        val featured: StreamEntity?,
+        val sourceMovies: List<StreamEntity> = emptyList(),
+        val sourceSeries: List<StreamEntity> = emptyList()
     )
 
     private fun loadHomeExperience() {
         lifecycleScope.launch {
-            val data = withContext(Dispatchers.IO) {
+            val data = try {
+                withContext(Dispatchers.IO) {
                 val dao = BlofyDatabase.get(applicationContext).dao()
                 // Home uses identity/name only; displaying local rows must not wait for Keystore.
                 val provider = dao.providersStored().first().firstOrNull() ?: return@withContext null
-                val latest = dao.latestHomeStreams(provider.id, 100)
+                // In STREAM use the exact order in which the server delivered the
+                // original Xtream rows (stable Room rowid). No local name/rating/date
+                // sort, no artificial Top 10, favorites or rearranged category shelves.
+                val sourceMovies = if (BuildConfig.CODE_ONLY_LOGIN)
+                    dao.catalogPageAfterAll(provider.id, "movie", 0L, 22) else emptyList()
+                val sourceSeries = if (BuildConfig.CODE_ONLY_LOGIN)
+                    dao.catalogPageAfterAll(provider.id, "series", 0L, 22) else emptyList()
+                val sourceLive = if (BuildConfig.CODE_ONLY_LOGIN && sourceMovies.isEmpty() && sourceSeries.isEmpty())
+                    dao.catalogPageAfterAll(provider.id, "live", 0L, 6) else emptyList()
+                val latest = if (BuildConfig.CODE_ONLY_LOGIN)
+                    sourceMovies.ifEmpty { sourceSeries.ifEmpty { sourceLive } }
+                else dao.latestHomeStreams(provider.id, 100)
                 if (latest.isEmpty()) return@withContext null
-                val snapshot = HomeSnapshotStore.read(applicationContext, provider.id)
-                val all = snapshot?.candidateKeys?.mapNotNull { dao.stream(it) }?.takeIf { it.isNotEmpty() }
-                    ?: dao.latestHomeStreams(provider.id, 320)
-                val history = HomeWatchHistory.load(dao, provider.id)
-                val rated = all.sortedByDescending { ratingValue(it.rating) }
+                val all = if (BuildConfig.CODE_ONLY_LOGIN) latest else {
+                    val snapshot = HomeSnapshotStore.read(applicationContext, provider.id)
+                    snapshot?.candidateKeys?.mapNotNull { dao.stream(it) }?.takeIf { it.isNotEmpty() }
+                        ?: dao.latestHomeStreams(provider.id, 320)
+                }
+                val history = if (BuildConfig.CODE_ONLY_LOGIN) null else HomeWatchHistory.load(dao, provider.id)
+                val rated = if (BuildConfig.CODE_ONLY_LOGIN) emptyList() else all.sortedByDescending { ratingValue(it.rating) }
                     .filter { ratingValue(it.rating) > 0.0 }.take(24)
-                val arabic = all.filter { hasArabic(it.name) || hasArabic(it.genre.orEmpty()) || it.genre.orEmpty().contains("arab", true) }.take(20)
-                val ultra = all.filter { qualityBadges(it).any { badge -> badge in setOf("4K", "HDR") } }.take(20)
-                val heroes = latest.filter { !it.backdrop.isNullOrBlank() }.take(6).ifEmpty { latest.take(6) }
+                val arabic = if (BuildConfig.CODE_ONLY_LOGIN) emptyList() else all.filter { hasArabic(it.name) || hasArabic(it.genre.orEmpty()) || it.genre.orEmpty().contains("arab", true) }.take(20)
+                val ultra = if (BuildConfig.CODE_ONLY_LOGIN) emptyList() else all.filter { qualityBadges(it).any { badge -> badge in setOf("4K", "HDR") } }.take(20)
+                val heroes = if (BuildConfig.CODE_ONLY_LOGIN) latest.take(1)
+                    else latest.filter { !it.backdrop.isNullOrBlank() }.take(6).ifEmpty { latest.take(6) }
                 HomeData(
                     providerId = provider.id,
                     providerName = provider.name,
                     heroItems = heroes,
-                    continueWatching = history.continueItems,
-                    recentlyWatched = history.recentItems,
-                    watchStates = history.watchStates,
+                    continueWatching = history?.continueItems ?: emptyList(),
+                    recentlyWatched = history?.recentItems ?: emptyList(),
+                    watchStates = history?.watchStates ?: emptyMap(),
                     latest = latest.take(22),
                     topRated = rated,
                     topTen = rated.take(10).ifEmpty { latest.take(10) },
                     arabic = arabic,
                     ultraHd = ultra,
-                    featured = rated.firstOrNull { !it.backdrop.isNullOrBlank() }
-                        ?: latest.firstOrNull { !it.backdrop.isNullOrBlank() }
+                    featured = if (BuildConfig.CODE_ONLY_LOGIN) null else rated.firstOrNull { !it.backdrop.isNullOrBlank() }
+                        ?: if (BuildConfig.CODE_ONLY_LOGIN) null else latest.firstOrNull { !it.backdrop.isNullOrBlank() },
+                    sourceMovies = sourceMovies,
+                    sourceSeries = sourceSeries
                 )
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                android.util.Log.w("BlofyStreamHome", "Saved catalog view unavailable: ${failure.javaClass.simpleName}")
+                null
             }
 
             if (data == null) {
                 displayedHomeData = null
                 renderNoCatalogState()
+                restoreFocus()
                 return@launch
             }
 
@@ -534,6 +573,18 @@ class HomeActivity : AppCompatActivity() {
         val feed = homeFeed ?: return
         actionViews.keys.filter { it.startsWith("poster_") || it.startsWith("top10_") || it.endsWith("_story") || it.startsWith("stats_") || it == "featured" }.toList().forEach { actionViews.remove(it) }
         while (feed.childCount > 1) feed.removeViewAt(1)
+        if (BuildConfig.CODE_ONLY_LOGIN) {
+            // Display stored source order, not BLOFY's generated rankings, dates or
+            // regional picks. The category browser reads all original server categories.
+            if (data.sourceMovies.isNotEmpty()) {
+                addShelf(feed, getString(R.string.home_movies), getString(R.string.home_movies_subtitle),
+                    "movie", data.providerId, data.sourceMovies)
+            }
+            if (data.sourceSeries.isNotEmpty()) {
+                addShelf(feed, getString(R.string.home_series), getString(R.string.home_series_subtitle),
+                    "series", data.providerId, data.sourceSeries)
+            }
+        } else {
         if (data.continueWatching.isNotEmpty()) {
             addShelf(feed, getString(R.string.home_continue_watching), getString(R.string.home_continue_subtitle), "continue", data.providerId, data.continueWatching, data.watchStates)
         }
@@ -549,6 +600,7 @@ class HomeActivity : AppCompatActivity() {
         if (data.arabic.isNotEmpty()) addShelf(feed, getString(R.string.home_arabic_picks), getString(R.string.home_arabic_picks_subtitle), "arabic", data.providerId, data.arabic)
 
         if (data.ultraHd.isNotEmpty()) addShelf(feed, "4K • UHD", getString(R.string.home_4k_subtitle), "4k", data.providerId, data.ultraHd)
+        } // No automatic rankings or reordered shelves in STREAM.
 
         feed.addView(sectionTitle(getString(R.string.home_quick_links), getString(R.string.home_quick_links_subtitle)).also { HomeRowOrder.mark(it, HomeRowOrder.QUICK_SHORTCUTS) })
         val quick = LinearLayout(this).apply {
