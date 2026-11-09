@@ -104,6 +104,10 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun buildPage() {
+        if (BuildConfig.CODE_ONLY_LOGIN) {
+            buildStreamPage()
+            return
+        }
         cardRows.clear()
         sections.clear()
         val scroll = ScrollView(this).apply {
@@ -275,6 +279,125 @@ class SettingsActivity : AppCompatActivity() {
         setContentView(scroll)
         updateStorageCard()
         scroll.post { sections.firstOrNull()?.getChildAt(0)?.requestFocus() }
+    }
+
+    /**
+     * BLOFY STREAM retail edition: compact consumer settings only. The full
+     * BLOFY PLAYER operator panels are unavailable in the code-only package.
+     */
+    private fun buildStreamPage() {
+        cardRows.clear()
+        sections.clear()
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            layoutDirection = uiDirection
+            background = AppCompatResources.getDrawable(this@SettingsActivity,
+                R.drawable.blofy_home_background)
+            overScrollMode = View.OVER_SCROLL_NEVER
+        }
+        val page = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutDirection = uiDirection
+            setPadding(dp(if (isTv()) 40 else 18),dp(22),
+                dp(if (isTv()) 40 else 18),dp(24))
+        }
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutDirection = uiDirection
+        }
+        val titles = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        titles.addView(TextView(this).apply {
+            text = "إعدادات BLOFY STREAM"
+            BlofyTvDesign.applyTitle(this)
+            textSize = 26f
+        })
+        titles.addView(TextView(this).apply {
+            text = "كل ما تحتاجه في مكان واحد"
+            BlofyTvDesign.applyCaption(this)
+            setPadding(0,dp(4),0,0)
+        })
+        header.addView(titles,LinearLayout.LayoutParams(0,-2,1f))
+        val back = settingButton(getString(R.string.back),true) { finish() }
+            .apply { id=View.generateViewId() }
+        header.addView(back,LinearLayout.LayoutParams(dp(100),dp(48)))
+        page.addView(header,LinearLayout.LayoutParams(-1,-2).apply {
+            bottomMargin=dp(14)
+        })
+        status=TextView(this).apply {
+            textSize=12f
+            typeface=BlofyTvDesign.BodyTypeface
+            setTextColor(CinemaStyle.Muted)
+            gravity=Gravity.START or Gravity.CENTER_VERTICAL
+            setPadding(dp(14),0,dp(14),0)
+            background=CinemaStyle.surface(this@SettingsActivity)
+        }
+        page.addView(status,LinearLayout.LayoutParams(-1,dp(45)).apply {
+            bottomMargin=dp(12)
+        })
+        updateSyncStatus()
+
+        addSection(page,"اشتراكي")
+        addCard(actionCard("مدة الاشتراك","عرض حالة اشتراكك والأيام المتبقية") {
+            showStreamSubscription()
+        })
+        refreshCard=actionCard("تحديث المحتوى","تحديث القنوات والأفلام والمسلسلات") {
+            refreshLibrary()
+        }
+        addCard(refreshCard)
+
+        addSection(page,"المشاهدة")
+        addCard(cycleSetting("حجم الصورة",RuntimeSettings.KEY_ASPECT,
+            arrayOf("fit","zoom","fill"),
+            arrayOf("مناسب للشاشة","تكبير","ملء الشاشة")))
+        addCard(cycleSetting("الترجمة",RuntimeSettings.KEY_SUBTITLE_LANGUAGE,
+            arrayOf("ar","auto","off"),
+            arrayOf("العربية أولًا","تلقائي","إيقاف")))
+        addCard(cycleSetting("الحلقة التالية",RuntimeSettings.KEY_AUTO_NEXT,
+            arrayOf("ask","on","off"),
+            arrayOf("اسألني","تلقائي","إيقاف")))
+
+        addSection(page,"التطبيق")
+        addCard(actionCard("لغة التطبيق",currentLanguageLabel()) { chooseLanguage() })
+        addCard(actionCard("تسجيل الخروج","إدخال كود آخر أو تغيير الاشتراك") {
+            confirmStreamLogout()
+        })
+        page.addView(TextView(this).apply {
+            text = "BLOFY STREAM  •  55.8.7"
+            BlofyTvDesign.applyCaption(this)
+            gravity=Gravity.CENTER
+            setPadding(0,dp(22),0,dp(10))
+        })
+        linkFocus(back)
+        scroll.addView(page)
+        setContentView(scroll)
+        updateSyncStatus()
+        scroll.post { sections.firstOrNull()?.getChildAt(0)?.requestFocus() }
+    }
+
+    private fun confirmStreamLogout() {
+        if (!BuildConfig.CODE_ONLY_LOGIN) return
+        AlertDialog.Builder(this)
+            .setTitle("تسجيل الخروج من BLOFY STREAM")
+            .setMessage("سيتم تسجيل الخروج من هذا الجهاز فقط وإظهار شاشة إدخال الكود. " +
+                "مدة الاشتراك لن تتوقف أو تبدأ من جديد. " +
+                "يمكنك إدخال نفس الكود مجددًا على هذا الجهاز طالما الاشتراك سارٍ. " +
+                "لا يغيّر هذا الخيار الجهاز المرتبط بالكود.")
+            .setNegativeButton("إلغاء",null)
+            .setPositiveButton("تسجيل الخروج") { _,_ ->
+                // Preserve the installation binding so an already redeemed
+                // code can be recovered on this SAME installation.
+                StreamCodeSession.clearClaim(applicationContext)
+                startActivity(Intent(this,
+                    tv.blofy.player.ui.login.CodeOnlyLoginActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_CLEAR_TASK))
+                finish()
+            }
+            .show()
     }
 
     private fun cycleSetting(title: String, key: String, values: Array<String>, labels: Array<String>): SettingCard {
