@@ -137,10 +137,13 @@ class CatalogLoadingActivity : AppCompatActivity() {
                     }
                     preflight = false
                     val catalogReady = CatalogSyncState.isReady(applicationContext, providerId)
-                    if (!forceRefresh && CatalogSyncState.isEntryReady(applicationContext, providerId) && hasCachedCatalog) {
+                    if (!forceRefresh && hasCachedCatalog &&
+                        (BuildConfig.CODE_ONLY_LOGIN || CatalogSyncState.isEntryReady(applicationContext, providerId))) {
                         openHome(providerId)
                     } else if (!forceRefresh && catalogReady && hasCachedCatalog) {
-                        awaitEntryReadyCache(providerId)
+                        // Non-STREAM apps may need the optional prepared Home cache;
+                        // STREAM always enters from the saved server catalogue immediately.
+                        if (!BuildConfig.CODE_ONLY_LOGIN) awaitEntryReadyCache(providerId)
                         openHome(providerId)
                     } else {
                         // A manual refresh stages a replacement. Keep the old entry state until commit.
@@ -424,7 +427,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
             // Base catalog is already durable. A damaged or slow secondary Home/search
             // cache must not trap Android TV viewers after a successful DB commit.
             try {
-                withTimeout(45_000L) { awaitEntryReadyCache(providerId) }
+                if (!BuildConfig.CODE_ONLY_LOGIN) withTimeout(45_000L) { awaitEntryReadyCache(providerId) }
             } catch (secondary: Exception) {
                 currentCoroutineContext().ensureActive()
                 val baseReady = withContext(Dispatchers.IO) {
