@@ -43,6 +43,8 @@ import { shouldRetryXtreamWithoutRange,firstByteXtreamRange } from './xtream-med
 import { recordXtreamPlayback,xtreamPlaybackSnapshot } from './xtream-playback-metrics.mjs';
 import { XtreamDenialCooldown } from './xtream-denial-cooldown.mjs';
 import { createGatewayUsageThrottle } from './xtream-gateway-usage-throttle.mjs';
+import {createStreamDurationCodes,ensureStreamCodeTable} from './xtream-duration-codes.mjs';
+import {encryptGatewayAccountPassword,decryptGatewayAccountPassword} from './xtream-account-vault.mjs';
 import { readXtreamGatewayJsonResponse } from './xtream-gateway-response.mjs';
 import { createXtreamHealthSnapshot } from './xtream-health-snapshot.mjs';
 import {relayEligible,issueStreamRelayGrant} from './xtream-stream-relay-bridge.mjs';
@@ -88,6 +90,8 @@ function movieRefreshDue(key,now=Date.now()){
   return true;
 }
 const accountUsageThrottle = createGatewayUsageThrottle();
+let streamCodes=null;
+const streamCodeLimiter=createFixedWindowLimiter({limit:6,windowMs:15*60_000});
 let readyPromise;
 const unavailableWriteGuard=createRegistryWriteGuard();
 let unavailableRecoveryTimerStarted=false,unavailableRecoveryBusy=false;
@@ -199,6 +203,7 @@ async function ensureReady() {
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`);
       await client.query('ALTER TABLE blofy_xtream_gateway_accounts ADD COLUMN IF NOT EXISTS source_id UUID');
+      await client.query('ALTER TABLE blofy_xtream_gateway_accounts ADD COLUMN IF NOT EXISTS credential_vault TEXT');
       await client.query(`CREATE TABLE IF NOT EXISTS blofy_xtream_gateway_category_map (
         gateway_id BIGSERIAL PRIMARY KEY,
         server_id UUID NOT NULL REFERENCES blofy_xtream_servers(id) ON DELETE CASCADE,
@@ -225,6 +230,7 @@ async function ensureReady() {
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_gateway_item_lookup ON blofy_xtream_gateway_item_map(server_id,media_type,source_id)');
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_gateway_episode_lookup ON blofy_xtream_gateway_episode_map(server_id,source_episode_id)');
       await ensureUnavailableMediaTable(client);
+      await ensureStreamCodeTable(client);
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK').catch(() => {});
@@ -232,6 +238,7 @@ async function ensureReady() {
     } finally { client.release(); }
   })().catch(error => { readyPromise = null; throw error; });
   const ready=await readyPromise;
+  if(!streamCodes)streamCodes=createStreamDurationCodes({pool,keyHex:KEY_HEX});
   // Opt-in, source-allowlisted, lease-based recovery. Normal requests do not
   // wait for health probes. Timers are unref'd and are never enabled by default.
   if(!unavailableRecoveryTimerStarted&&recoveryEnabled()){
@@ -294,9 +301,10 @@ async function createAccount(body, req) {
     if (!username) username = generateGatewayUsername();
     const id = crypto.randomUUID();
     const proof = gatewayCredentialProof(username, password, KEY_HEX);
+    const vault=encryptGatewayAccountPassword(id,password,KEY_HEX);
     try {
-      const row = (await pool.query(`INSERT INTO blofy_xtream_gateway_accounts(id,label,username,password_proof,enabled,max_connections,expires_at,source_id)
-        VALUES($1,$2,$3,$4,TRUE,$5,$6,$7) RETURNING *`, [id,label,username,proof,maxConnections,expiresAt,sourceId])).rows[0];
+      const row = (await pool.query(`INSERT INTO blofy_xtream_gateway_accounts(id,label,username,password_proof,enabled,max_connections,expires_at,source_id,credential_vault)
+        VALUES($1,$2,$3,$4,TRUE,$5,$6,$7,$8) RETURNING *`, [id,label,username,proof,maxConnections,expiresAt,sourceId,vault])).rows[0];
       return {
         item: adminAccount(row),
         credentials: { serverUrl: origin(req), username, password }
@@ -326,10 +334,11 @@ async function createAccountsBulk(body, req) {
       issued.add(username);
       const password=generateGatewayPassword();
       const id=crypto.randomUUID(),proof=gatewayCredentialProof(username,password,KEY_HEX);
+      const vault=encryptGatewayAccountPassword(id,password,KEY_HEX);
       const accountLabel=count===1?label:`${label} ${String(i+1).padStart(2,'0')}`;
-      const row=(await connection.query(`INSERT INTO blofy_xtream_gateway_accounts(id,label,username,password_proof,enabled,max_connections,expires_at,source_id)
-        VALUES($1,$2,$3,$4,TRUE,$5,$6,$7) RETURNING *`,[
-        id,accountLabel,username,proof,maxConnections,expiresAt,sourceId
+      const row=(await connection.query(`INSERT INTO blofy_xtream_gateway_accounts(id,label,username,password_proof,enabled,max_connections,expires_at,source_id,credential_vault)
+        VALUES($1,$2,$3,$4,TRUE,$5,$6,$7,$8) RETURNING *`,[
+        id,accountLabel,username,proof,maxConnections,expiresAt,sourceId,vault
       ])).rows[0];
       created.push({item:adminAccount(row),username,password});
     }
@@ -379,8 +388,22 @@ async function resetAccountPassword(id, req) {
   if (!existing) throw Object.assign(new Error('xtream_gateway_account_not_found'), { status: 404 });
   const password = generateGatewayPassword();
   const proof = gatewayCredentialProof(existing.username, password, KEY_HEX);
-  const row = (await pool.query('UPDATE blofy_xtream_gateway_accounts SET password_proof=$2,updated_at=NOW() WHERE id=$1 RETURNING *', [id, proof])).rows[0];
+  const vault=encryptGatewayAccountPassword(id,password,KEY_HEX);
+  const row = (await pool.query('UPDATE blofy_xtream_gateway_accounts SET password_proof=$2,credential_vault=$3,updated_at=NOW() WHERE id=$1 RETURNING *', [id, proof,vault])).rows[0];
   return { item: adminAccount(row), credentials: { serverUrl: origin(req), username: row.username, password } };
+}
+
+async function revealAccountCredentials(id,req){
+  await ensureReady();
+  if(!validUuid(id))throw Object.assign(new Error('xtream_gateway_account_invalid'),{status:400});
+  const row=(await pool.query('SELECT id,username,credential_vault FROM blofy_xtream_gateway_accounts WHERE id=$1',[id])).rows[0];
+  if(!row)throw Object.assign(new Error('xtream_gateway_account_not_found'),{status:404});
+  const password=decryptGatewayAccountPassword(id,row.credential_vault,KEY_HEX);
+  if(!password)throw Object.assign(new Error('xtream_gateway_password_not_recoverable'),{status:409});
+  const serverUrl=origin(req);
+  const params=new URLSearchParams({username:row.username,password,type:'m3u_plus',output:'ts'});
+  return {credentials:{serverUrl,username:row.username,password,
+    m3uUrl:serverUrl+'/get.php?'+params.toString()}};
 }
 
 async function authenticate(usernameInput, passwordInput, { touch = false } = {}) {
@@ -1560,6 +1583,29 @@ http.createServer = function withBlofyXtreamGateway(listener) {
         res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'content-length': body.length, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
         return res.end(body);
       }
+      if (req.method === 'GET' && url.pathname === '/stream/activate') {
+        const page=await readFile(new URL('../web/stream-activate.html',import.meta.url));
+        res.writeHead(200,{'content-type':'text/html; charset=utf-8','content-length':page.length,
+          'cache-control':'no-store','referrer-policy':'no-referrer',
+          'content-security-policy':"default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+          'x-content-type-options':'nosniff'});
+        return res.end(page);
+      }
+      if (req.method === 'GET' && url.pathname === '/stream/activate.js') {
+        const asset=await readFile(new URL('../web/stream-activate.js',import.meta.url));
+        res.writeHead(200,{'content-type':'text/javascript; charset=utf-8','content-length':asset.length,
+          'cache-control':'no-store','x-content-type-options':'nosniff'});
+        return res.end(asset);
+      }
+      if (req.method === 'POST' && url.pathname === '/api/v1/stream/redeem') {
+        const rate=streamCodeLimiter.consume(requestClientKey(req));
+        if(!rate.allowed)return json(res,429,{ok:false,code:'stream_code_rate_limited'},
+          {'retry-after':String(rate.retryAfterSeconds)});
+        await ensureReady();
+        const data=await readJson(req);
+        const result=await streamCodes.redeem(data.code,'https://blofyplayer.com');
+        return json(res,201,result,{'referrer-policy':'no-referrer'});
+      }
       if (req.method === 'GET' && url.pathname === '/xtream/health') return json(res, 200, await gatewayHealth());
       if ((req.method === 'GET' || req.method === 'POST') && (url.pathname === '/player_api.php' || url.pathname === '/panel_api.php')) return await handlePlayerApi(req, res, url);
       if (req.method === 'GET' && url.pathname === '/get.php') return await handleM3u(req, res, url);
@@ -1615,6 +1661,18 @@ http.createServer = function withBlofyXtreamGateway(listener) {
           scope:'verified_unavailable_media_only',subscriberCutover:false,
           catalogMutation:false});
       }
+      if(req.method==='GET'&&url.pathname==='/api/v1/admin/xtream-gateway/codes') {
+        return json(res,200,await streamCodes.list({
+          limit:Number(url.searchParams.get('limit')||40),
+          offset:Number(url.searchParams.get('offset')||0)
+        }));
+      }
+      if(req.method==='POST'&&url.pathname==='/api/v1/admin/xtream-gateway/codes') {
+        return json(res,201,await streamCodes.issue(await readJson(req)));
+      }
+      const codeRevoke=url.pathname.match(/^\/api\/v1\/admin\/xtream-gateway\/codes\/([0-9a-f-]{36})\/revoke$/i);
+      if(req.method==='POST'&&codeRevoke)
+        return json(res,200,await streamCodes.revoke(codeRevoke[1]));
       if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream-gateway') {
         const items = await listAccounts();
         return json(res, 200, { serverUrl: origin(req), items });
@@ -1625,11 +1683,12 @@ http.createServer = function withBlofyXtreamGateway(listener) {
       if (req.method === 'POST' && url.pathname === '/api/v1/admin/xtream-gateway/accounts/bulk') {
         return json(res, 201, await createAccountsBulk(await readJson(req), req));
       }
-      const match = url.pathname.match(/^\/api\/v1\/admin\/xtream-gateway\/accounts\/([0-9a-f-]+)(?:\/(reset))?$/i);
+      const match = url.pathname.match(/^\/api\/v1\/admin\/xtream-gateway\/accounts\/([0-9a-f-]+)(?:\/(reset|credentials))?$/i);
       if (match) {
         const id = match[1];
         if (!validUuid(id)) return json(res, 400, { error: 'xtream_gateway_account_invalid' });
         if (match[2] === 'reset' && req.method === 'POST') return json(res, 200, await resetAccountPassword(id, req));
+        if (match[2] === 'credentials' && req.method === 'GET') return json(res,200,await revealAccountCredentials(id,req));
         if (!match[2] && req.method === 'PATCH') return json(res, 200, { item: await patchAccount(id, await readJson(req)) });
         if (!match[2] && req.method === 'DELETE') {
           const result = await pool.query('DELETE FROM blofy_xtream_gateway_accounts WHERE id=$1', [id]);

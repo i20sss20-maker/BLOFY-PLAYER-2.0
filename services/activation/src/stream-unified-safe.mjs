@@ -36,10 +36,19 @@ export function streamSafeCatalog(item){
   };
 }
 export function streamSafeAccount(row){
+  const expiresAt=row?.expires_at?new Date(row.expires_at).getTime():null;
+  const now=Date.now();
+  const status=row?.enabled!==true?'disabled':
+    expiresAt!==null&&expiresAt<=now?'expired':'active';
   return {id:String(row?.id||''),label:String(row?.label||'').slice(0,160),
     username:String(row?.username||'').slice(0,128),sourceId:row?.source_id||null,
-    enabled:row?.enabled===true,maxConnections:count(row?.max_connections),
-    expiresAt:row?.expires_at?new Date(row.expires_at).getTime():null,
-    lastUsedAt:row?.last_used_at?new Date(row.last_used_at).getTime():null
+    sourceName:String(row?.source_name||'').slice(0,160),
+    enabled:row?.enabled===true,maxConnections:count(row?.max_connections),status,
+    expiresAt,createdAt:row?.created_at?new Date(row.created_at).getTime():null,
+    lastUsedAt:row?.last_used_at?new Date(row.last_used_at).getTime():null,
+    activatedAt:row?.activated_at?new Date(row.activated_at).getTime():null,
+    durationDays:row?.duration_days?Number(row.duration_days):null,
+    codeHint:String(row?.code_hint||'').slice(0,20),
+    passwordAvailable:row?.password_available===true,serverUrl:'https://blofyplayer.com'
   };
 }

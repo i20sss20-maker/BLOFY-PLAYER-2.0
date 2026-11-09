@@ -1,0 +1,31 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>تفعيل اشتراك BLOFY STREAM</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#080d19;color:#f3f6ff}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 80% 0,#26326c77,transparent 45%),linear-gradient(150deg,#090c17,#101a32 70%,#090c17);display:flex;align-items:center;justify-content:center;padding:24px}
+.card{width:min(100%,620px);background:#111b30f2;border:1px solid #334668;border-radius:23px;padding:clamp(22px,5vw,42px);box-shadow:0 26px 100px #0009}
+.brand{font-size:14px;font-weight:800;letter-spacing:.14em;color:#b9a7ff}.mark{display:inline-block;width:10px;height:10px;border-radius:50%;background:#8b5cf6;margin-left:7px}
+h1{font-size:clamp(25px,4.4vw,33px);margin:20px 0 12px}p{line-height:1.9;color:#aab9d1;margin:0 0 22px}label{display:block;margin:16px 0 10px;color:#dce7ff;font-weight:700}
+input{direction:ltr;text-align:center;letter-spacing:.1em;font-size:19px;width:100%;height:59px;color:#fff;background:#080f21;border:1px solid #4e6086;border-radius:13px;outline:none}
+input:focus{border-color:#9978ff;box-shadow:0 0 0 3px #8a60ff33}
+button{min-height:52px;border:0;border-radius:12px;padding:10px 19px;cursor:pointer;background:linear-gradient(120deg,#7c4dff,#5c84f6);color:white;font:inherit;font-weight:800}
+button[disabled]{opacity:.55;cursor:wait}.submit{margin-top:18px;width:100%}
+.status{border-radius:10px;padding:12px 15px;margin-top:16px;background:#432339;color:#ffd6e5;line-height:1.7}
+.ok{background:#113d35;color:#c8ffed}
+.result{margin-top:19px;border-top:1px solid #344461;padding-top:18px}.row{border:1px solid #2b3b59;border-radius:11px;padding:12px;margin:9px 0;background:#091429}
+.row small{display:block;color:#96aacc;margin-bottom:6px}.row strong{direction:ltr;display:block;overflow-wrap:anywhere;text-align:left;font-size:14px;user-select:all}
+.copy{background:#253652;margin-top:10px;min-height:36px;padding:6px 12px}.fine{margin-top:20px;font-size:12px;color:#8a9ebd}.hide{display:none}
+</style></head><body><main class="card">
+<div class="brand"><span class="mark"></span>BLOFY STREAM</div>
+<h1>فعّل اشتراكك بسهولة</h1>
+<p>أدخل كود الاشتراك الذي حصلت عليه. <b>مدة الاشتراك تبدأ عند التفعيل الناجح فقط</b>، وليس عند إصدار الكود.</p>
+<form id="form" autocomplete="off"><label for="code">كود التفعيل</label>
+<input id="code" name="code" type="text" spellcheck="false" autocapitalize="characters" maxlength="32" minlength="24" required placeholder="XXXX XXXX XXXX XXXX XXXX XXXX" aria-describedby="hint">
+<button id="submit" class="submit" type="submit">تفعيل الاشتراك</button></form>
+<div id="message" class="status hide" role="status" aria-live="polite"></div>
+<section id="result" class="result hide" aria-live="polite"><h2>تم تفعيل اشتراكك بنجاح ✓</h2>
+<p>احتفظ بالبيانات التالية الآن. كلمة المرور تظهر مرة واحدة فقط، ويمكنك استخدامها في تطبيقات Xtream.</p><div id="fields"></div></section>
+<p class="fine" id="hint">لا تشارك الكود أو بيانات الدخول مع الآخرين. إذا أغلقت الصفحة قبل حفظ البيانات تواصل مع مسؤول الاشتراك لإعادة ضبط كلمة المرور.</p>
+</main><script src="/stream/activate.js" defer></script></body></html>
