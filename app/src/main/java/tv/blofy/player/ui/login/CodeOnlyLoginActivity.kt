@@ -157,7 +157,7 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
             isAllCaps = false
             textSize = if (isTv) 20f else 18f
             typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
-            setTextColor(Color.WHITE)
+            setTextColor(0xFF052933.toInt())
             background = BlofyTvDesign.primaryButton(dp(16).toFloat(), false)
             stateListAnimator = null
             isFocusable = true
