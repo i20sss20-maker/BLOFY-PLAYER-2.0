@@ -1,12 +1,18 @@
 package tv.blofy.player.core.pro
 
 /**
- * BLOFY PLAYER app-only PRO access contract. This is intentionally independent
- * from legacy device activation or any BLOFY STREAM media subscription.
- *
- * Until purchases are verified by a backend, [current] always returns FREE.
- * No locally stored flag, pairing code or purchase callback can grant PRO.
+ * BLOFY PLAYER app-only annual plans. Commercial prices are informational:
+ * Google Play remains the sole authority for localized checkout prices.
+ * This is separate from BLOFY STREAM media subscriptions and legacy activation.
  */
+enum class PlayerPlan(val annualPriceSar: Int, val productId: String?) {
+    FREE(0, null),
+    PRO(19, "blofy_player_pro"),
+    VIP(49, "blofy_player_vip");
+
+    val isAnnualPaidPlan: Boolean get() = this != FREE
+}
+
 enum class ProFeature {
     MULTIPLE_PLAYLISTS,
     CLOUD_FAVORITES,
@@ -23,18 +29,22 @@ data class ProEntitlement(
 )
 
 object ProAccess {
-    private const val PRODUCT = "blofy_player_pro"
     val FREE = ProEntitlement(false, false, null, null)
 
+    /** Until server-side Google Play verification exists, this stays FREE. */
     fun current(): ProEntitlement = FREE
 
+    fun verifiedPlan(entitlement: ProEntitlement, nowMs: Long): PlayerPlan {
+        if (!entitlement.verifiedByServer || !entitlement.active ||
+            (entitlement.expiresAtMs != null && entitlement.expiresAtMs <= nowMs)) return PlayerPlan.FREE
+        return PlayerPlan.values().firstOrNull {
+            it.isAnnualPaidPlan && it.productId == entitlement.productId
+        } ?: PlayerPlan.FREE
+    }
+
     fun canUse(feature: ProFeature, entitlement: ProEntitlement, nowMs: Long): Boolean {
-        // A feature enum here represents only *planned* app premium features.
-        // It does not gate existing free playback, Xtream/M3U, search or favorites.
-        return feature in ProFeature.values() &&
-            entitlement.verifiedByServer &&
-            entitlement.active &&
-            entitlement.productId == PRODUCT &&
-            (entitlement.expiresAtMs == null || entitlement.expiresAtMs > nowMs)
+        // Only future premium features should consult this policy.
+        // Existing Xtream/M3U playback, search, favorites and legacy subscriber access remain unchanged.
+        return feature in ProFeature.values() && verifiedPlan(entitlement, nowMs) != PlayerPlan.FREE
     }
 }
