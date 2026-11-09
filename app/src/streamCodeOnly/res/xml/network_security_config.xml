@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  BLOFY STREAM-only Android 9 compatibility:
+  accept the platform trust store plus the public ISRG roots used by
+  Railway/Let's Encrypt. Keep hostname and full certificate validation.
+  Do not extend these additional trust anchors to arbitrary IPTV hosts.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">blofyplayer.com</domain>
+        <domain includeSubdomains="false">blofy-activation-portal-production.up.railway.app</domain>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="@raw/blofy_stream_isrg_roots" />
+        </trust-anchors>
+    </domain-config>
+</network-security-config>

@@ -1,7 +1,7 @@
 name: BLOFY STREAM 55.8.7 Premium Code-Only APK
 on:
   push:
-    branches: [feat/blofy-stream-55-8-7-premium-code-only-20261109]
+    branches: [feat/blofy-stream-55-8-7-premium-code-only-20261109, fix/stream-android9-trusted-ca-20261109]
   workflow_dispatch:
 permissions:
   contents: read
@@ -40,6 +40,29 @@ jobs:
           grep -Fq 'api/v1/stream/media/' app/src/main/java/tv/blofy/player/core/playback/ContentUrlResolver.kt
           test -s app/src/main/assets/fonts/IBMPlexSansArabic-SemiBold.ttf
           test -s app/src/main/assets/fonts/IBMPlexSansArabic-Regular.ttf
+      - name: Verify STREAM-only Android 9 certificate trust anchors
+        shell: bash
+        run: |
+          set -euo pipefail
+          for variant in streamCodeOnly streamCodeDemo; do
+            xml="app/src/$variant/res/xml/network_security_config.xml"
+            roots="app/src/$variant/res/raw/blofy_stream_isrg_roots.pem"
+            test -s "$xml" && test -s "$roots"
+            grep -Fq '<certificates src="system" />' "$xml"
+            grep -Fq '<certificates src="@raw/blofy_stream_isrg_roots" />' "$xml"
+            grep -Fq '<domain includeSubdomains="true">blofyplayer.com</domain>' "$xml"
+            test "$(grep -c -- '-----BEGIN CERTIFICATE-----' "$roots")" = 2
+            openssl crl2pkcs7 -nocrl -certfile "$roots" | openssl pkcs7 -print_certs -noout > "$RUNNER_TEMP/isrg-subjects.txt"
+            grep -Fq 'ISRG Root X1' "$RUNNER_TEMP/isrg-subjects.txt"
+            grep -Fq 'ISRG Root X2' "$RUNNER_TEMP/isrg-subjects.txt"
+            awk 'BEGIN{n=0} /-----BEGIN CERTIFICATE-----/{n++} n==2 {print}' "$roots" > "$RUNNER_TEMP/isrg-x2.pem"
+            x1="$(openssl x509 -in "$roots" -noout -fingerprint -sha256 | cut -d= -f2 | tr -d ':' | tr '[:lower:]' '[:upper:]')"
+            x2="$(openssl x509 -in "$RUNNER_TEMP/isrg-x2.pem" -noout -fingerprint -sha256 | cut -d= -f2 | tr -d ':' | tr '[:lower:]' '[:upper:]')"
+            test "$x1" = "96BCEC06264976F37460779ACF28C5A7CFE8A3C0AAE11A8FFCEE05C0BDDF08C6"
+            test "$x2" = "69729B8E15A86EFC177A57AFB7171DFC64ADD28C2FCA8CF1507E34453CCB1470"
+          done
+          cmp app/src/streamCodeOnly/res/xml/network_security_config.xml app/src/streamCodeDemo/res/xml/network_security_config.xml
+          cmp app/src/streamCodeOnly/res/raw/blofy_stream_isrg_roots.pem app/src/streamCodeDemo/res/raw/blofy_stream_isrg_roots.pem
       - name: Test code-only and build the original premium Android package
         shell: bash
         env:
