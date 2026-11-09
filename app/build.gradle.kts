@@ -33,6 +33,7 @@ android {
         targetSdk = 36
         versionCode = 2000007
         versionName = "2.0.0-rc06"
+        manifestPlaceholders["blofyApplicationLabel"] = "@string/app_name"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "ACTIVATION_BASE_URL", "\"$activationBaseUrlEscaped\"")
         buildConfigField("String", "UPDATE_BASE_URL", "\"$updateBaseUrlEscaped\"")
@@ -67,6 +68,7 @@ android {
             initWith(getByName("release"))
             applicationIdSuffix = ".code"
             versionNameSuffix = "-code"
+            manifestPlaceholders["blofyApplicationLabel"] = "BLOFY STREAM"
             buildConfigField("boolean", "CODE_ONLY_LOGIN", "true")
             matchingFallbacks += listOf("release")
         }
@@ -75,6 +77,7 @@ android {
             initWith(getByName("debug"))
             applicationIdSuffix = ".code"
             versionNameSuffix = "-code-test"
+            manifestPlaceholders["blofyApplicationLabel"] = "BLOFY STREAM (Test)"
             buildConfigField("boolean", "CODE_ONLY_LOGIN", "true")
             matchingFallbacks += listOf("debug")
         }
