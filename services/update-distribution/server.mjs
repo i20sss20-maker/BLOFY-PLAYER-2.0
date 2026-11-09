@@ -64,7 +64,7 @@ function sendHtml(req, res, status, body) {
     'content-type': 'text/html; charset=utf-8',
     'content-length': Buffer.byteLength(body),
     'cache-control': 'no-store, max-age=0',
-    'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data: https://raw.githubusercontent.com; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
+    'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data: https://raw.githubusercontent.com https://cdn.aptoide.com https://cdn6.aptoide.com; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
   });
   res.end(req.method === 'HEAD' ? undefined : body);
 }
