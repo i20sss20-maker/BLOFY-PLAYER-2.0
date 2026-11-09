@@ -1095,7 +1095,7 @@ class HomeActivity : AppCompatActivity() {
         setPadding(dp(8), dp(12), dp(8), dp(12))
         clipChildren = false
         addView(ImageView(this@HomeActivity).apply {
-            setImageResource(R.drawable.blofy_logo)
+            setImageResource(if (BuildConfig.CODE_ONLY_LOGIN) R.drawable.stream_logo else R.drawable.blofy_logo)
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             contentDescription = if(BuildConfig.CODE_ONLY_LOGIN) "BLOFY STREAM" else "BLOFY PLAYER"
         }, LinearLayout.LayoutParams(dp(72), dp(44)).apply { bottomMargin = dp(18) })
@@ -1249,7 +1249,7 @@ class HomeActivity : AppCompatActivity() {
             setPadding(dp(16), 0, dp(12), 0)
         }
         header.addView(ImageView(this).apply {
-            setImageResource(R.drawable.blofy_logo); scaleType = ImageView.ScaleType.CENTER_INSIDE
+            setImageResource(if (BuildConfig.CODE_ONLY_LOGIN) R.drawable.stream_logo else R.drawable.blofy_logo); scaleType = ImageView.ScaleType.CENTER_INSIDE
             contentDescription = if(BuildConfig.CODE_ONLY_LOGIN) "BLOFY STREAM" else "BLOFY PLAYER"
         }, LinearLayout.LayoutParams(dp(48), dp(44)))
         header.addView(TextView(this).apply {
@@ -1344,7 +1344,12 @@ class HomeActivity : AppCompatActivity() {
 
     private fun roundedColor(color: Int, radius: Int, stroke: Int? = null) = GradientDrawable().apply { cornerRadius = dp(radius).toFloat(); setColor(color); stroke?.let { setStroke(dp(1), it) } }
     private fun surface(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 14)
-    private fun selectedSurface() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF8D4AE2.toInt(), 0xFF502779.toInt())).apply { cornerRadius = dp(15).toFloat(); setStroke(dp(1), 0xFFC9A1F4.toInt()) }
+    private fun selectedSurface() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+        if (BuildConfig.CODE_ONLY_LOGIN) intArrayOf(0xFF177F86.toInt(), 0xFF104A59.toInt())
+        else intArrayOf(0xFF8D4AE2.toInt(), 0xFF502779.toInt())).apply {
+        cornerRadius = dp(15).toFloat()
+        setStroke(dp(1), if (BuildConfig.CODE_ONLY_LOGIN) 0xFF7FF3DE.toInt() else 0xFFC9A1F4.toInt())
+    }
     private fun transparentSurface(focused: Boolean) = if (focused) {
         GradientDrawable(
             GradientDrawable.Orientation.LEFT_RIGHT,
@@ -1355,7 +1360,12 @@ class HomeActivity : AppCompatActivity() {
         }
     } else roundedColor(Color.TRANSPARENT, 10)
     private fun heroSurface() = CinemaStyle.surface(this, radiusDp = 16)
-    private fun promoSurface() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFF4B276A.toInt(), 0xFF20142E.toInt(), 0xFF121019.toInt())).apply { cornerRadius = dp(20).toFloat(); setStroke(dp(1), 0xFF7F56A0.toInt()) }
+    private fun promoSurface() = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+        if (BuildConfig.CODE_ONLY_LOGIN) intArrayOf(0xFF164A54.toInt(), 0xFF0B2935.toInt(), 0xFF071B25.toInt())
+        else intArrayOf(0xFF4B276A.toInt(), 0xFF20142E.toInt(), 0xFF121019.toInt())).apply {
+        cornerRadius = dp(20).toFloat()
+        setStroke(dp(1), if (BuildConfig.CODE_ONLY_LOGIN) 0xFF287D84.toInt() else 0xFF7F56A0.toInt())
+    }
     private fun featuredSurface(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 18)
     private fun posterSurface(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 8)
     private fun storySurface(focused: Boolean) = CinemaStyle.surface(this, focused, radiusDp = 14)
