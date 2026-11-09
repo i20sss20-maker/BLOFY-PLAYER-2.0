@@ -160,7 +160,13 @@ class ContentBrowserActivity : AppCompatActivity() {
         categoryAdapter = FocusTextAdapter(
             label = { CategoryPresentation.cleanTitle(it.name) },
             onClick = { loadStreams(categoryId(it)) },
-            onFocus = { if (!phoneMode) loadStreams(categoryId(it)) },
+            // Loading every live channel can be expensive on older Android TVs.
+            // Keep the "all" shelf opt-in via OK rather than opening it on
+            // incidental D-pad focus during initial navigation.
+            onFocus = {
+                if (!phoneMode && (kind != KIND_LIVE || it.remoteId != ALL_CATEGORY_ID))
+                    loadStreams(categoryId(it))
+            },
             itemKey = { it.key }
         )
         categoryList.adapter = categoryAdapter
