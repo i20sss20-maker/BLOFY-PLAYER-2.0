@@ -262,10 +262,19 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
                 finish()
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (error: Exception) {
-                // Never display a full URL, credentials or bearer token.
-                val message=error.message.orEmpty()
-                statusText.text = if (message.length in 1..130) message
-                    else "تعذر التفعيل. تحقق من الشبكة أو تواصل مع الدعم"
+                // Never display a full URL, credentials, bearer token, or Java TLS exception.
+                val certificateError = generateSequence<Throwable>(error) { it.cause }
+                    .take(8).any { cause ->
+                        cause is javax.net.ssl.SSLHandshakeException ||
+                            cause is java.security.cert.CertPathValidatorException
+                    }
+                val message = error.message.orEmpty()
+                statusText.text = when {
+                    certificateError ->
+                        "تعذر التحقق من شهادة الاتصال. اضبط تاريخ التلفزيون وحدّث BLOFY STREAM"
+                    message.length in 1..130 -> message
+                    else -> "تعذر التفعيل. تحقق من الشبكة أو تواصل مع الدعم"
+                }
                 setBusy(false)
                 codeInput.requestFocus()
             }
