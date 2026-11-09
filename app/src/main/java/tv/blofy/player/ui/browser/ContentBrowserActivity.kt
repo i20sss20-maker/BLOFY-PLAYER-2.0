@@ -66,7 +66,9 @@ class ContentBrowserActivity : AppCompatActivity() {
     private var catalogRepairAttempted = false
     private var originalCategories: List<CategoryEntity> = emptyList()
     private var smartCategoryOrder = true
+    private var autoPreviewEnabled = true
     private lateinit var categorySortButton: Button
+    private lateinit var previewToggleButton: Button
     private lateinit var categoryList: RecyclerView
     private lateinit var streamList: RecyclerView
     private var catalogStatus: TextView? = null
@@ -77,12 +79,14 @@ class ContentBrowserActivity : AppCompatActivity() {
     private val kind by lazy { intent.getStringExtra(EXTRA_KIND) ?: KIND_LIVE }
     private val deviceKind by lazy { DeviceClass.detect(this) }
     private val phoneMode get() = deviceKind == DeviceClass.Kind.PHONE
-    private val previewEnabled get() = kind == KIND_LIVE && !phoneMode
+    private val previewPanelVisible get() = kind == KIND_LIVE && !phoneMode
+    private val previewEnabled get() = previewPanelVisible && autoPreviewEnabled
     private val statePrefs by lazy { getSharedPreferences("blofy_browser_state", MODE_PRIVATE) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         smartCategoryOrder = statePrefs.getBoolean("smart_category_order", true)
+        autoPreviewEnabled = statePrefs.getBoolean("auto_preview_live", true)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(if (phoneMode) 16 else 30), dp(if (phoneMode) 14 else 22), dp(if (phoneMode) 16 else 30), dp(if (phoneMode) 14 else 22))
@@ -115,6 +119,27 @@ class ContentBrowserActivity : AppCompatActivity() {
             root.addView(categorySortButton, LinearLayout.LayoutParams(
                 if (phoneMode) LinearLayout.LayoutParams.MATCH_PARENT else dp(270),
                 dp(if (phoneMode) 44 else 48)).apply { bottomMargin = dp(8) })
+            if (!phoneMode) {
+                previewToggleButton = Button(this).apply {
+                    textSize = 13f
+                    setTextColor(BlofyTvDesign.TextPrimary)
+                    background = BlofyTvDesign.surface(dp(12).toFloat(), false)
+                    isFocusable = true
+                    setOnClickListener {
+                        autoPreviewEnabled = !autoPreviewEnabled
+                        statePrefs.edit().putBoolean("auto_preview_live", autoPreviewEnabled).apply()
+                        updatePreviewToggleCaption()
+                        if (autoPreviewEnabled && ::provider.isInitialized) {
+                            restartSavedPreview()
+                        } else {
+                            stopPreview()
+                        }
+                    }
+                }
+                updatePreviewToggleCaption()
+                root.addView(previewToggleButton, LinearLayout.LayoutParams(
+                    dp(270), dp(44)).apply { bottomMargin = dp(10) })
+            }
         }
         val body = LinearLayout(this).apply { orientation = if (phoneMode) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL }
         categoryList = RecyclerView(this).apply {
@@ -134,7 +159,7 @@ class ContentBrowserActivity : AppCompatActivity() {
             body.addView(streamList, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         } else {
             body.addView(categoryList, LinearLayout.LayoutParams(dp(280), LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = dp(18) })
-            if (previewEnabled) {
+            if (previewPanelVisible) {
                 body.addView(streamList, LinearLayout.LayoutParams(dp(360), LinearLayout.LayoutParams.MATCH_PARENT).apply { marginEnd = dp(22) })
                 body.addView(createPreviewPanel(), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
             } else {
@@ -192,6 +217,14 @@ class ContentBrowserActivity : AppCompatActivity() {
                     if (currentCategoryId != initial) loadStreams(initial)
                 }
             }
+        }
+    }
+
+    private fun updatePreviewToggleCaption() {
+        if (::previewToggleButton.isInitialized) {
+            previewToggleButton.text = if (autoPreviewEnabled)
+                "المعاينة التلقائية: تعمل • اضغط للإيقاف"
+            else "المعاينة التلقائية: متوقفة • اضغط للتشغيل"
         }
     }
 
@@ -257,7 +290,8 @@ class ContentBrowserActivity : AppCompatActivity() {
         }
         addView(previewView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         previewStatus = TextView(this@ContentBrowserActivity).apply {
-            text = "اختر قناة لبدء المعاينة"
+            text = if (autoPreviewEnabled) "اختر قناة لبدء المعاينة"
+                   else "المعاينة التلقائية متوقفة • اضغط OK لتشغيل القناة"
             textSize = 13f
             setTextColor(BLOFY_PURPLE_SOFT)
             setPadding(dp(4), dp(8), 0, 0)
@@ -294,7 +328,7 @@ class ContentBrowserActivity : AppCompatActivity() {
                 if (kind != KIND_LIVE) updateCatalogState(items, categoryId)
                 if (previewEnabled && items.isNotEmpty() && previewSession == null) {
                     val target = items.firstOrNull { it.key == savedStreamKey() && !it.locked } ?: items.firstOrNull { !it.locked }
-                    if (target != null) schedulePreview(target, immediate = true)
+                    if (target != null) schedulePreview(target)
                 }
             }
         }
@@ -392,12 +426,14 @@ class ContentBrowserActivity : AppCompatActivity() {
 
     private fun catalogLabel(): String = if (kind == KIND_MOVIE) "أفلام" else "مسلسلات"
 
-    private fun schedulePreview(stream: StreamEntity, immediate: Boolean = false) {
+    private fun schedulePreview(stream: StreamEntity) {
         if (!previewEnabled || !::provider.isInitialized || stream.locked || stream.key == lastPreviewKey) return
         previewJob?.cancel()
         previewJob = lifecycleScope.launch {
-            if (!immediate) delay(220)
-            startPreview(stream)
+            // Opening a provider stream on each rapid D-pad move can consume
+            // multiple licensed connections. Require a stable selection.
+            delay(1100)
+            if (previewEnabled) startPreview(stream)
         }
     }
 
@@ -447,7 +483,8 @@ class ContentBrowserActivity : AppCompatActivity() {
         previewView?.player = null
         previewSession?.release()
         previewSession = null
-        previewStatus?.text = "اختر قناة لبدء المعاينة"
+        previewStatus?.text = if (autoPreviewEnabled) "اختر قناة لبدء المعاينة"
+            else "المعاينة التلقائية متوقفة • اضغط OK لتشغيل القناة"
     }
 
     private fun openStream(stream: StreamEntity) {
@@ -520,7 +557,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val items = BlofyDatabase.get(applicationContext).dao().streams(provider.id, KIND_LIVE, currentCategoryId).first()
             val target = items.firstOrNull { it.key == savedStreamKey() && !it.locked } ?: items.firstOrNull { !it.locked }
-            if (target != null) schedulePreview(target, true)
+            if (target != null) schedulePreview(target)
         }
     }
 
@@ -536,6 +573,13 @@ class ContentBrowserActivity : AppCompatActivity() {
     private fun savedStreamKey(): String? = if (::provider.isInitialized && kind == KIND_LIVE) statePrefs.getString(streamKey(), null) else null
     private fun categoryKey() = "${provider.id}:live:last_category"
     private fun streamKey() = "${provider.id}:live:last_stream"
+
+    override fun onPause() {
+        // Release the live provider connection when the screen loses focus.
+        // A paused preview should never compete with full-screen playback.
+        stopPreview()
+        super.onPause()
+    }
 
     override fun onDestroy() {
         streamsJob?.cancel()
