@@ -35,7 +35,10 @@ class SplashActivity : AppCompatActivity() {
             setPadding(dp(32), dp(32), dp(32), dp(32))
         }
         root.addView(ImageView(this).apply {
-            setImageResource(R.drawable.blofy_logo)
+            setImageResource(if (BuildConfig.CODE_ONLY_LOGIN) {
+                resources.getIdentifier("blofy_stream_brand","drawable",packageName)
+                    .takeIf { it!=0 } ?: R.drawable.blofy_logo
+            } else R.drawable.blofy_logo)
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             adjustViewBounds = true
         }, LinearLayout.LayoutParams(dp(220), dp(132)))
