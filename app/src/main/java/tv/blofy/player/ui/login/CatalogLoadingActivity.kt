@@ -94,8 +94,11 @@ class CatalogLoadingActivity : AppCompatActivity() {
                 onFailure = { fail(preparationMessage(it)) }
             ) {
                 CatalogLoadPersistence.withProviderLock(providerId) {
-                    PortalPlaylistClient.ensureSubscriberConnection(applicationContext, tv.blofy.player.BuildConfig.ACTIVATION_BASE_URL,
-                        BlofyDatabase.get(applicationContext).dao(), providerId)
+                    if (!tv.blofy.player.BuildConfig.CODE_ONLY_LOGIN) {
+                        PortalPlaylistClient.ensureSubscriberConnection(applicationContext,
+                            tv.blofy.player.BuildConfig.ACTIVATION_BASE_URL,
+                            BlofyDatabase.get(applicationContext).dao(), providerId)
+                    }
                     val hasCachedCatalog = withTimeout(20_000L) {
                         withContext(Dispatchers.IO) {
                             CatalogLoadPersistence.hasCommittedCatalog(applicationContext, BlofyDatabase.get(applicationContext).dao(), providerId)
