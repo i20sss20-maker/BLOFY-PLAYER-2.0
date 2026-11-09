@@ -66,8 +66,10 @@ object ContentUrlResolver {
         return "${StreamCodeSession.HOST}/api/v1/stream/media/$kind/$id.$safeExtension"
     }
 
-    fun directFallback(stream: StreamEntity): String? = stream.directSource.validHttpUrl()
-    fun directFallback(episode: EpisodeEntity): String? = episode.directSource.validHttpUrl()
+    fun directFallback(stream: StreamEntity): String? =
+        if (BuildConfig.CODE_ONLY_LOGIN) null else stream.directSource.validHttpUrl()
+    fun directFallback(episode: EpisodeEntity): String? =
+        if (BuildConfig.CODE_ONLY_LOGIN) null else episode.directSource.validHttpUrl()
 
     /**
      * Xtream installations do not all accept the same live output suffix. If the
