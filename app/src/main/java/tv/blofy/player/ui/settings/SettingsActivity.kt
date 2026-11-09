@@ -23,7 +23,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.BuildConfig
-import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
 import tv.blofy.player.core.update.BlofyUpdateClient
 import tv.blofy.player.data.LocalStorageManager
