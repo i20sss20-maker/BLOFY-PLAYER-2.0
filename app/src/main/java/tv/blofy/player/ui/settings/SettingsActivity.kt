@@ -227,11 +227,21 @@ class SettingsActivity : AppCompatActivity() {
             .setPositiveButton(copy("تسجيل الخروج", "Sign out")) { _, _ ->
                 // Keep installationKey intact: a redeemed code can be rebound to its
                 // original installation; removing it would incorrectly create a new device.
-                StreamCodeSession.clearClaim(applicationContext)
-                StartupEntryState.clear(applicationContext)
-                startActivity(Intent(this, CodeOnlyLoginActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
-                finish()
+                try {
+                    // Invalidate only local readiness markers, not the installation binding.
+                    // Otherwise a different redeemed code might re-open the previous code's
+                    // cached catalog without downloading its own authorized content.
+                    StreamCodeSession.clearClaim(applicationContext)
+                    CatalogSyncState.clear(applicationContext, StreamCodeSession.providerId)
+                    StartupEntryState.clear(applicationContext)
+                    startActivity(Intent(this, CodeOnlyLoginActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+                    finish()
+                } catch (_: Exception) {
+                    android.widget.Toast.makeText(this,
+                        copy("تعذر تسجيل الخروج. حاول مجددًا.", "Could not sign out. Try again."),
+                        android.widget.Toast.LENGTH_LONG).show()
+                }
             }
             .show()
     }
