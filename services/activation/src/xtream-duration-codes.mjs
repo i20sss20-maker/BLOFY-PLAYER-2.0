@@ -76,7 +76,15 @@ export function safeCodeRecord(row){
     createdAt:row.created_at?new Date(row.created_at).getTime():null,
     redeemedAt:row.redeemed_at?new Date(row.redeemed_at).getTime():null,
     expiresAt:row.expires_at?new Date(row.expires_at).getTime():null,
-    accountId:row.account_id||null,codeHint:row.code_hint||''
+    accountId:row.account_id||null,codeHint:row.code_hint||'',
+    buyerName:String(row.buyer_name||'').slice(0,80),
+    buyerPhone:String(row.buyer_phone||'').slice(0,22),
+    salePriceHalalas:row.sale_price_halalas==null?null:Number(row.sale_price_halalas),
+    soldAt:row.sold_at?new Date(row.sold_at).getTime():null,
+    salesChannel:String(row.sales_channel||'').slice(0,24),
+    transferCount:Number(row.transfer_count||0),
+    extendedDays:Number(row.extended_days||0),
+    deviceTransferPending:row.code_channel==='app'&&Boolean(row.redeemed_at)&&!row.redeemed_device_hash
   };
 }
 export async function ensureStreamCodeTable(client){
@@ -218,8 +226,18 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
       // can retrieve its already-issued credentials after an interrupted
       // first response. Web redemptions without device binding stay single-use.
       if(row.redeemed_at){
-        if(!deviceProof||row.redeemed_device_hash!==deviceProof)
+        if(!deviceProof)throw Object.assign(Error('stream_code_unavailable'),{status:409});
+        // An operator reissues a new recovery code for an existing subscription
+        // and clears the old binding. Its original clock and expiry do not reset.
+        const transferPending=appOnly&&row.code_channel==='app'&&
+          !row.redeemed_device_hash;
+        if(!transferPending&&row.redeemed_device_hash!==deviceProof)
           throw Object.assign(Error('stream_code_unavailable'),{status:409});
+        if(transferPending){
+          await client.query(`UPDATE blofy_xtream_gateway_duration_codes
+            SET redeemed_device_hash=$2 WHERE id=$1 AND redeemed_device_hash IS NULL`,
+            [row.id,deviceProof]);
+        }
         const existing=(await client.query(`SELECT id,username,credential_vault,enabled,expires_at
           FROM blofy_xtream_gateway_accounts WHERE id=$1`,[row.account_id])).rows[0];
         const password=existing?decryptGatewayAccountPassword(existing.id,
