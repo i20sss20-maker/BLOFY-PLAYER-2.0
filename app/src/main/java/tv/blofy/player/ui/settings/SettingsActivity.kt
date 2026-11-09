@@ -32,6 +32,7 @@ import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.login.CatalogLoadingActivity
 import tv.blofy.player.ui.login.LoginActivity
 import tv.blofy.player.ui.playlist.ProviderManagerActivity
+import tv.blofy.player.ui.pro.ProActivity
 
 class SettingsActivity : AppCompatActivity() {
     private var provider: ProviderEntity? = null
@@ -132,6 +133,7 @@ class SettingsActivity : AppCompatActivity() {
         addCard(cycleSetting("▶  الحلقة التالية", KEY_AUTO_NEXT, arrayOf("ask", "on", "off"), arrayOf("اسألني", "تلقائي", "إيقاف")))
         addCard(cycleSetting("✦  حركة الواجهة", KEY_MOTION, arrayOf("smooth", "reduced"), arrayOf("سلسة", "خفيفة")))
         addCard(actionCard("🌐  لغة التطبيق", currentLanguageLabel()) { chooseLanguage() })
+        addCard(actionCard("✦  BLOFY PRO", "استكشف المزايا القادمة — لا يوجد شراء حاليًا") { startActivity(Intent(this, ProActivity::class.java)) })
         addCard(actionCard("▣  ربط الجهاز", "QR ورقم الجهاز ورمز الربط") { startActivity(Intent(this, LoginActivity::class.java)) })
         addCard(actionCard("⇧  فحص التحديث", "تحقق من آخر إصدار رسمي") { checkForUpdate() })
         addCard(actionCard("▤  قوائم التشغيل", "إدارة القوائم المحفوظة") { startActivity(Intent(this, ProviderManagerActivity::class.java)) })
