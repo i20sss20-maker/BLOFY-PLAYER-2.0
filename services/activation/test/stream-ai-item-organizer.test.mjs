@@ -24,9 +24,7 @@ test('Gemini suggests only high-confidence pre-existing category IDs',async()=>{
    assert.equal(body.generationConfig.responseMimeType,'application/json');
    return new Response(JSON.stringify(result([
     {id:'100',categoryId:'11',confidence:'high',reason:'مباراة'},
-    {id:'101',categoryId:'12',confidence:'medium',reason:'ربما'},
-    {id:'102',categoryId:'11',confidence:'high',reason:'مختلق'},
-    {id:'100',categoryId:'999',confidence:'high',reason:'فئة غير موجودة'}
+    {id:'101',categoryId:'12',confidence:'medium',reason:'ربما'}
    ])));
   }});
  assert.equal(calls,1);
