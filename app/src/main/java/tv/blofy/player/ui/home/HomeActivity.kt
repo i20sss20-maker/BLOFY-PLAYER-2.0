@@ -1399,7 +1399,10 @@ class HomeActivity : AppCompatActivity() {
         registerAction(key, this)
     }
 
-    private fun contentIntent(kind: String): Intent = if (deviceKind == DeviceClass.Kind.TV) {
+    private fun contentIntent(kind: String): Intent = if (BuildConfig.CODE_ONLY_LOGIN || deviceKind == DeviceClass.Kind.TV) {
+        // STREAM must not use the legacy mobile screen that collects/sorts an
+        // entire 100k-item section in memory. Both viewers below implement
+        // cursor-based Room paging and already adapt to phone/tablet layouts.
         if (kind == "live") Intent(this, ContentBrowserActivity::class.java).putExtra(ContentBrowserActivity.EXTRA_KIND, kind)
         else Intent(this, PosterCatalogActivity::class.java).putExtra(PosterCatalogActivity.EXTRA_KIND, kind)
     } else Intent(this, MobileContentActivity::class.java).putExtra(MobileContentActivity.EXTRA_KIND, kind)
