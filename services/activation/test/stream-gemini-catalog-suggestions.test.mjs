@@ -46,7 +46,7 @@ test('Gemini fails closed on provider errors, malformed or stopped generation',a
  const key='x'.repeat(40);
  const fail=await suggestCatalogWithGemini(sample,{apiKey:key,
   fetchImpl:async()=>new Response('secret provider error',{status:429})});
- assert.equal(fail.code,'stream_ai_provider_unavailable');
+ assert.equal(fail.code,'stream_ai_provider_quota');
  const incomplete=await suggestCatalogWithGemini(sample,{apiKey:key,
   fetchImpl:async()=>new Response(JSON.stringify({candidates:[{finishReason:'MAX_TOKENS',content:{parts:[]}}]}))});
  assert.equal(incomplete.code,'stream_ai_incomplete');
@@ -59,4 +59,20 @@ test('Gemini model allowlist prevents URL injection',async()=>{
  const r=await suggestCatalogWithGemini(sample,{apiKey:'x'.repeat(40),
   model:'gemini-3.5-flash-lite/../../etc',fetchImpl:async()=>{calls++}});
  assert.equal(r.code,'stream_ai_model_not_allowed');assert.equal(calls,0);
+});
+
+test('Gemini exposes safe diagnostic error codes with no provider response leaks',async()=>{
+ const key='x'.repeat(40);
+ for(const [status,code] of [
+  [401,'stream_ai_provider_auth_failed'],
+  [403,'stream_ai_provider_auth_failed'],
+  [404,'stream_ai_provider_model_missing'],
+  [400,'stream_ai_provider_bad_request'],
+  [503,'stream_ai_provider_unavailable']
+ ]){
+  const result=await suggestCatalogWithGemini(sample,{apiKey:key,
+   fetchImpl:async()=>new Response('key is PRIVATE and should not leak',{status})});
+  assert.equal(result.code,code);
+  assert.ok(!JSON.stringify(result).includes('PRIVATE'));
+ }
 });
