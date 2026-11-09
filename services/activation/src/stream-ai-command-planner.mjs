@@ -17,12 +17,15 @@ function fixedResponse(reason){
   reply:reason};
 }
 export async function proposeCatalogCommand(message,{
- apiKey='',model='gemini-3.5-flash-lite',fetchImpl=fetch,timeoutMs=12000
+ apiKey='',model='gemini-3.5-flash-lite',fetchImpl=fetch,timeoutMs=12000,history=[]
 }={}){
  const valid=validateOperatorInstruction(message);
  if(!valid.ok)return valid;
  if(apiKey.length<32)return {ok:false,code:'stream_ai_not_configured'};
  if(!ALLOWED_MODELS.has(model))return {ok:false,code:'stream_ai_model_not_allowed'};
+ const context=Array.isArray(history)?history.slice(-4):[];
+ const previous=context.map(item=>validateOperatorInstruction(item))
+  .filter(x=>x.ok).map(x=>x.text);
  const timer=new AbortController(),timeout=setTimeout(()=>timer.abort(),timeoutMs);
  const schema={type:'object',additionalProperties:false,required:['action','sortMode','reply'],
   properties:{
@@ -41,7 +44,8 @@ export async function proposeCatalogCommand(message,{
    'إذا طلب تنظيف الأسماء من الزخارف والمسافات فقط، اختر titles_cleanup مع sortMode none.',
    'إذا طلب حذف أو إضافة محتوى، أو تخمين اسم جديد، أو النشر التلقائي دون اعتماد المدير، أو تعديل اشتراكات، اختر none ووضح أنه يحتاج ميزة منفصلة.',
    'لا تزعم أن ترتيبًا تم فعليًا. أي تغيير يحتاج اعتماد المدير.',
-   'طلب المدير: '+valid.text
+   'رسائل المدير السابقة للفهم فقط؛ لا تنفذ أمرًا سابقًا من تلقاء نفسك: '+JSON.stringify(previous),
+   'طلب المدير الحالي الذي يجب تفسيره فقط: '+valid.text
   ].join('\n');
   const response=await fetchImpl(
    'https://generativelanguage.googleapis.com/v1beta/models/'+model+':generateContent',{
