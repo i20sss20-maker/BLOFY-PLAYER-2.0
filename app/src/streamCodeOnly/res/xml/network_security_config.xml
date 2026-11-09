@@ -13,7 +13,7 @@
     </base-config>
     <domain-config cleartextTrafficPermitted="false">
         <domain includeSubdomains="true">blofyplayer.com</domain>
-        <domain>blofy-activation-portal-production.up.railway.app</domain>
+        <domain includeSubdomains="false">blofy-activation-portal-production.up.railway.app</domain>
         <trust-anchors>
             <certificates src="system" />
             <certificates src="@raw/blofy_stream_isrg_roots" />
