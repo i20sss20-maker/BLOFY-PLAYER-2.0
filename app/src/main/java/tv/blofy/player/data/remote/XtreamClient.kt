@@ -38,9 +38,13 @@ object XtreamClient {
                 .header("User-Agent", original.header("User-Agent") ?: "BLOFY PLAYER/2.0 (Android TV)")
                 .header("Accept", original.header("Accept") ?: "application/json,text/plain,*/*")
                 .apply {
-                    // Keep bulk-catalog compatibility; allow OkHttp's transparent gzip for
-                    // the small, user-selected series detail request.
-                    if (original.url.queryParameter("action") != "get_series_info") {
+                    // STREAM's first-party catalog gateway explicitly supports gzip for
+                    // bulk JSON responses. Omitting this header lets OkHttp advertise gzip
+                    // and transparently decompress before Gson's streaming parser reads it.
+                    // For PLAYER's arbitrary third-party providers retain the old identity
+                    // policy; some Xtream panels serve malformed compressed responses.
+                    if (!BuildConfig.CODE_ONLY_LOGIN &&
+                        original.url.queryParameter("action") != "get_series_info") {
                         header("Accept-Encoding", original.header("Accept-Encoding") ?: "identity")
                     }
                 }
