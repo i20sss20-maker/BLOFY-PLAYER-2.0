@@ -15,7 +15,10 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
+import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
+import tv.blofy.player.core.identity.StreamCodeSession
+import tv.blofy.player.ui.login.CodeOnlyLoginActivity
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.remote.FocusMemory
@@ -37,6 +40,11 @@ class HomeActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (BuildConfig.CODE_ONLY_LOGIN && !StreamCodeSession.isClaimed(this)) {
+            startActivity(Intent(this, CodeOnlyLoginActivity::class.java))
+            finish()
+            return
+        }
         theme = ThemeManager.current(this)
         deviceKind = DeviceClass.detect(this)
         setContentView(if (deviceKind == DeviceClass.Kind.TV) buildApprovedTvHome() else buildCompactHome())
