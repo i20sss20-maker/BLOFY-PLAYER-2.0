@@ -60,6 +60,7 @@ import {suggestCatalogWithGemini} from './stream-gemini-catalog-suggestions.mjs'
 import {proposeCatalogCommand} from './stream-ai-command-planner.mjs';
 import {proposeExistingCategoryAssignments} from './stream-ai-item-organizer.mjs';
 import {ensureAiJournalSchema,recordAiPublish,readAiPublishState,revertAiClassification} from './stream-ai-publish-journal.mjs';
+import {ensureAiScanSchema,recordAiAnalyzedBatch,getAiScanProgress} from './stream-ai-scan-progress.mjs';
 import {fullCatalogCategoryOrder,summarizeFullCatalogCoverage} from './stream-ai-full-sort.mjs';
 import { normalizeXtreamDetails,mergedXtreamMetadata } from './xtream-item-details.mjs';
 import { tmdbConfigured,validatedTmdbId,fetchTmdbDetails } from './xtream-tmdb.mjs';
@@ -284,6 +285,7 @@ async function ensureReady() {
       await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS custom_name TEXT');
       await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS custom_category_id TEXT');
       await ensureAiJournalSchema(client);
+      await ensureAiScanSchema(client);
       await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS custom_icon_url TEXT');
       await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS featured BOOLEAN NOT NULL DEFAULT FALSE');
       await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS channel_number INTEGER');
@@ -2306,6 +2308,9 @@ async function chatWithLibraryAI(body){
      categories,{apiKey:key,
        model:process.env.BLOFY_LIBRARY_AI_MODEL||'gemini-3.5-flash-lite'});
    if(!suggested.ok)return suggested;
+   await recordAiAnalyzedBatch(pool,{
+     sourceId,type,offset,seen:rows.length,proposed:suggested.assignments.length
+   });
    const allowed=new Map(rows.map(x=>[String(x.source_id),x]));
    proposal.assignments=suggested.assignments.flatMap(x=>{
      const original=allowed.get(x.id);
@@ -3171,6 +3176,12 @@ async function unifiedStreamBridge(req,res,url){
       suggestionsReturned:result.suggestions?.length||0,
       modelUsed:result.modelUsed===true
     });
+  }
+  if(req.method==='GET'&&p==='/internal/blofy-stream/library-ai/scan-progress'){
+    const sourceId=String(url.searchParams.get('sourceId')||'');
+    const type=String(url.searchParams.get('type')||'');
+    const result=await getAiScanProgress(pool,{sourceId,type});
+    return json(res,result.ok?200:400,result);
   }
   if(req.method==='GET'&&p==='/internal/blofy-stream/library-ai/publish-status'){
     const sourceId=String(url.searchParams.get('sourceId')||'');
