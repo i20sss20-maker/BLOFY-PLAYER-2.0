@@ -350,7 +350,22 @@ class LoginActivity : AppCompatActivity() {
     private fun openCatalogLoading(providerId: String) { CatalogSyncState.markPending(applicationContext,providerId); startActivity(Intent(this,CatalogLoadingActivity::class.java).putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID,providerId)) }
 
     private suspend fun refreshIdentityAndProvider() {
-        val dao = BlofyDatabase.get(applicationContext).dao(); val identity = withContext(Dispatchers.IO) { ActivationManager(applicationContext,dao).ensureIdentity() }; renderIdentity(identity.deviceId,identity.activationCode); refreshProviderStatus(); renderPortalPlaylists(loadPortalProviders(BuildConfig.ACTIVATION_BASE_URL.trim(),dao))
+        val dao = BlofyDatabase.get(applicationContext).dao()
+        val manager = ActivationManager(applicationContext, dao)
+        val identity = withContext(Dispatchers.IO) { manager.ensureIdentity() }
+        renderIdentity(identity.deviceId, identity.activationCode)
+        refreshProviderStatus()
+        // FREE onboarding must not upload or fetch user playlist credentials through
+        // the activation portal just because the pairing screen is visible.
+        val endpoint = BuildConfig.ACTIVATION_BASE_URL.trim()
+        val activated = withContext(Dispatchers.IO) {
+            dao.activation()?.let { manager.cachedCanUse(it) } == true
+        }
+        if (activated && endpoint.isNotBlank()) {
+            renderPortalPlaylists(loadPortalProviders(endpoint, dao))
+        } else {
+            renderPortalPlaylists(withContext(Dispatchers.IO) { dao.allProviders().first() })
+        }
     }
     private suspend fun hasCachedCatalog(dao: BlofyDao, providerId: String): Boolean = withContext(Dispatchers.IO) { CatalogSyncState.isReady(applicationContext,providerId) && dao.hasStreamsForProvider(providerId) }
     private suspend fun <T> runSuspendCatching(block: suspend () -> T): Result<T> = try { Result.success(block()) } catch (c: CancellationException) { throw c } catch (e: Throwable) { Result.failure(e) }
