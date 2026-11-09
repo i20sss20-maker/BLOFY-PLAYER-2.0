@@ -226,3 +226,26 @@ test('historic HMAC-only codes are never presented as recoverable',async()=>{
  const result=await issuer.reveal(issued.items[0].id);
  assert.equal(result.code,'stream_code_legacy_unrecoverable');
 });
+
+test('ten distinct customer codes create independent subscriptions without terminating previous accounts',async()=>{
+ const state=fakeDb(),started=Date.parse('2026-11-09T09:00:00Z');
+ const issuer=createStreamDurationCodes({pool:state.pool,keyHex,clock:()=>started});
+ const issued=await issuer.issue({durationDays:365,quantity:10,sourceId:source});
+ assert.equal(issued.items.length,10);
+ assert.equal(new Set(issued.items.map(x=>x.code)).size,10);
+ const activations=[];
+ for(const item of issued.items){
+   const response=await issuer.redeem(item.code,'https://blofyplayer.com');
+   assert.equal(response.ok,true);
+   activations.push(response);
+ }
+ assert.equal(state.accounts.length,10);
+ assert.equal(new Set(activations.map(x=>x.account.id)).size,10);
+ assert.equal(new Set(activations.map(x=>x.account.expiresAt)).size,1);
+ assert.equal(state.codes.filter(x=>x.redeemed_at&&!x.revoked_at).length,10);
+ const ledger=await issuer.list();
+ assert.equal(ledger.totals.redeemed,10);
+ assert.equal(ledger.items.filter(x=>x.status==='redeemed').length,10);
+ // A new unrelated subscriber's activation never mutates the first account.
+ assert.equal(state.codes[0].account_id,activations[0].account.id);
+});
