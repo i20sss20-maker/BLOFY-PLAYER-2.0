@@ -2813,6 +2813,12 @@ async function unifiedStreamBridge(req,res,url){
       '/api/v1/admin/xtream-gateway/codes/'+commercialAction[1]+'/'+commercialAction[2],data);
     return json(res,result.status,{ok:result.status===200,...result.data});
   }
+  const codeReveal=p.match(/^\/internal\/blofy-stream\/codes\/([0-9a-f-]{36})\/reveal$/i);
+  if(req.method==='GET'&&codeReveal){
+    const result=await callLocalGateway('GET',
+      '/api/v1/admin/xtream-gateway/codes/'+codeReveal[1]+'/reveal');
+    return json(res,result.status,{ok:result.status===200,...result.data});
+  }
   const codeRevoke=p.match(/^\/internal\/blofy-stream\/codes\/([0-9a-f-]{36})\/revoke$/i);
   if(req.method==='POST'&&codeRevoke){
     const result=await callLocalGateway('POST',
