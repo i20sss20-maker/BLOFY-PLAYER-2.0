@@ -58,6 +58,7 @@ import {auditFullStreamCatalog} from './stream-full-library-audit.mjs';
 import {suggestCatalogWithAI} from './stream-ai-catalog-suggestions.mjs';
 import {suggestCatalogWithGemini} from './stream-gemini-catalog-suggestions.mjs';
 import {proposeCatalogCommand} from './stream-ai-command-planner.mjs';
+import {fullCatalogCategoryOrder,summarizeFullCatalogCoverage} from './stream-ai-full-sort.mjs';
 import { normalizeXtreamDetails,mergedXtreamMetadata } from './xtream-item-details.mjs';
 import { tmdbConfigured,validatedTmdbId,fetchTmdbDetails } from './xtream-tmdb.mjs';
 import { sortXtreamCategories } from './xtream-category-sort.mjs';
@@ -2280,7 +2281,30 @@ async function chatWithLibraryAI(body){
  const planId=crypto.randomBytes(24).toString('hex');
  const proposal={createdAt:now,sourceId,type,action:result.action,
    mode:result.sortMode,sourceName:String(server.name||'').slice(0,120)};
- if(result.action==='titles_cleanup'){
+ if(result.action==='full_catalog_sort'){
+   const scopedTypes=['live','movie','series'];
+   proposal.sections=[];
+   for(const mediaType of scopedTypes){
+     const rows=(await pool.query(`SELECT source_category_id,name,item_count,sort_order
+       FROM blofy_xtream_categories WHERE server_id=$1 AND media_type=$2
+       ORDER BY sort_order,name,source_category_id LIMIT 1001`,
+       [sourceId,mediaType])).rows;
+     if(rows.length>1000)return {ok:false,code:'stream_ai_catalog_too_large'};
+     const order=fullCatalogCategoryOrder(rows,mediaType);
+     proposal.sections.push({
+       type:mediaType,
+       // Fingerprint all columns used by the sorting decision.
+       original:rows.map(x=>[String(x.source_category_id),String(x.name),
+         Number(x.item_count)||0,Number(x.sort_order)||0]),
+       order,coverage:summarizeFullCatalogCoverage(rows,mediaType),
+       preview:order.slice(0,8).map(id=>String(
+         rows.find(r=>String(r.source_category_id)===id)?.name||'').slice(0,130))
+     });
+   }
+   const total=proposal.sections.reduce((sum,x)=>sum+x.order.length,0);
+   if(!total)return {ok:true,previewOnly:true,allowed:false,action:'full_catalog_sort',
+     requiresApproval:false,reply:'فحصت فئات المصدر الثلاث ولم أجد أقسامًا مسجلة لترتيبها.'};
+ }else if(result.action==='titles_cleanup'){
    const rows=(await pool.query(`SELECT source_id,
      COALESCE(NULLIF(custom_name,''),name) AS name
      FROM blofy_xtream_items WHERE server_id=$1 AND media_type=$2
@@ -2311,14 +2335,23 @@ async function chatWithLibraryAI(body){
    }));
  }
  commandProposals.set(planId,proposal);
- const summary=result.action==='titles_cleanup'
-   ?'تنظيف زخارف ومسافات '+proposal.changes.length+' عنوانًا في مصدر '+proposal.sourceName
-   :'ترتيب فئات '+(type==='live'?'القنوات':type==='movie'?'الأفلام':'المسلسلات')+
-    ' في مصدر '+proposal.sourceName+' بنمط '+proposal.mode;
+ const summary=result.action==='full_catalog_sort'
+   ?'إعادة ترتيب الأقسام الحالية للقنوات والأفلام والمسلسلات في مصدر '+proposal.sourceName+
+     '؛ مع أولوية BEIN وALWAN وTHMANEA وSTARZPLAY وSHASHA والعربية والسنوات المسجلة 2026 فما فوق.'
+   :result.action==='titles_cleanup'
+    ?'تنظيف زخارف ومسافات '+proposal.changes.length+' عنوانًا في مصدر '+proposal.sourceName
+    :'ترتيب فئات '+(type==='live'?'القنوات':type==='movie'?'الأفلام':'المسلسلات')+
+     ' في مصدر '+proposal.sourceName+' بنمط '+proposal.mode;
  return {...result,planId,sourceId,type,
   serverName:proposal.sourceName,requiresApproval:true,summary,
   proposedChanges:(proposal.changes||[]).map(x=>({before:x.before,after:x.after})),
   categoryPreview:proposal.previewCategories||[],
+  fullCatalogPreview:(proposal.sections||[]).map(s=>({
+    type:s.type,coverage:s.coverage,categoriesFirst:s.preview
+  })),
+  note:result.action==='full_catalog_sort'
+   ?'المعاينة ترتب أقسام المصدر الموجودة، لكنها لا تنشئ سنوات أو أقسامًا جديدة ولا تغيّر تصنيف كل عنوان. التغييرات تحتاج اعتمادك.'
+   :'بانتظار موافقتك',
   customersRefreshAutomatically:false,customerCatalogUpdated:false};
 }
 async function approveLibraryAICommand(body){
@@ -2361,6 +2394,47 @@ async function approveLibraryAICommand(body){
      throw error;
    }finally{client.release();}
    result={updated:0,mode:null,unchanged:false};
+ }else if(plan.action==='full_catalog_sort'){
+   const sections=Array.isArray(plan.sections)?plan.sections:[];
+   if(sections.length!==3||sections.some(s=>!['live','movie','series'].includes(s.type)||
+     !Array.isArray(s.order)||s.order.length>1000))
+     return {ok:false,code:'stream_ai_plan_invalid'};
+   const client=await pool.connect();
+   let totalChanged=0;
+   try{
+     await client.query('BEGIN');
+     await client.query("SET LOCAL lock_timeout='1300ms'");
+     await client.query("SET LOCAL statement_timeout='12000ms'");
+     for(const section of sections){
+       const rows=(await client.query(`SELECT source_category_id,name,item_count,sort_order
+         FROM blofy_xtream_categories WHERE server_id=$1 AND media_type=$2
+         ORDER BY sort_order,name,source_category_id LIMIT 1001 FOR UPDATE`,
+         [plan.sourceId,section.type])).rows;
+       const current=rows.map(x=>[String(x.source_category_id),String(x.name),
+         Number(x.item_count)||0,Number(x.sort_order)||0]);
+       if(JSON.stringify(current)!==JSON.stringify(section.original))
+         throw Object.assign(new Error('stream_ai_plan_conflict'),{status:409});
+       if(!rows.length)continue;
+       const existing=rows.map(x=>String(x.source_category_id));
+       if(existing.every((id,index)=>id===section.order[index]))continue;
+       await client.query(`UPDATE blofy_xtream_categories AS c
+         SET sort_order=rank.pos::int,updated_at=NOW()
+         FROM unnest($3::text[]) WITH ORDINALITY AS rank(category_id,pos)
+         WHERE c.server_id=$1 AND c.media_type=$2 AND c.source_category_id=rank.category_id`,
+         [plan.sourceId,section.type,section.order]);
+       totalChanged+=rows.length;
+     }
+     await client.query('COMMIT');
+   }catch(error){
+     await client.query('ROLLBACK').catch(()=>{});
+     if(error?.message==='stream_ai_plan_conflict')
+       return {ok:false,code:'stream_ai_plan_conflict'};
+     if(['55P03','57014'].includes(String(error?.code||'')))
+       return {ok:false,code:'xtream_category_busy_retry'};
+     throw error;
+   }finally{client.release();}
+   result={updated:totalChanged,mode:'full_catalog_sort',unchanged:totalChanged===0};
+   for(const t of ['live','movie','series'])libraryAuditCache.delete(plan.sourceId+':'+t);
  }else if(plan.action==='category_sort'){
    // Check for changes since the operator previewed this category order.
    const rows=(await pool.query(`SELECT source_category_id
