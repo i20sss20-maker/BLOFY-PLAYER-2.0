@@ -7,6 +7,7 @@ import crypto from 'node:crypto';
 import {gatewayCredentialProof,generateGatewayUsername,
   generateGatewayPassword} from './xtream-gateway-core.mjs';
 import {encryptGatewayAccountPassword,decryptGatewayAccountPassword} from './xtream-account-vault.mjs';
+import {createStreamAppToken} from './xtream-code-app-token.mjs';
 
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const MAX_DAYS=730;
@@ -168,7 +169,17 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
   }
   // An installation-local high-entropy token makes a lost HTTP response
   // retryable by that same installation without moving a redeemed code.
-  function makeResponse({host,row,username,password,accountId,activatedAt,expiresAt,recovered=false}){
+  function makeResponse({host,row,username,password,accountId,activatedAt,expiresAt,recovered=false,appOnly=false,deviceProof=null}){
+    if(appOnly){
+      if(!deviceProof)throw Object.assign(Error('stream_code_device_required'),{status:400});
+      const token=createStreamAppToken({
+        account_id:accountId,code_hash:row.code_hash,
+        redeemed_device_hash:deviceProof
+      },keyHex);
+      return {ok:true,recovered,accessToken:token,tokenType:'Bearer',
+        account:{id:accountId,activatedAt:activatedAt.getTime(),
+          expiresAt:expiresAt.getTime(),durationDays:Number(row.duration_days)}};
+    }
     const serverUrl=host==='https://blofyplayer.com'?'https://blofyplayer.com':host;
     const params=new URLSearchParams({username,password,type:'m3u_plus',output:'ts'});
     return {ok:true,recovered,account:{id:accountId,label:row.label,
@@ -177,7 +188,9 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
       credentials:{serverUrl,username,password,
         m3uUrl:serverUrl+'/get.php?'+params.toString()}};
   }
-  async function redeem(value,host,{deviceKey=null}={}){
+  async function redeem(value,host,{deviceKey=null,appOnly=false}={}){
+    if(appOnly&&!deviceKey)
+      throw Object.assign(Error('stream_code_device_required'),{status:400});
     const proof=streamCodeProof(value,keyHex);
     if(!proof)throw Object.assign(Error('stream_code_invalid'),{status:400});
     if(deviceKey!==null&&!/^[0-9a-f]{64}$/i.test(String(deviceKey)))
@@ -209,7 +222,7 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
         await client.query('COMMIT');
         return makeResponse({host,row,username:existing.username,password,
           accountId:existing.id,activatedAt:new Date(row.redeemed_at),
-          expiresAt:new Date(row.expires_at),recovered:true});
+          expiresAt:new Date(row.expires_at),recovered:true,appOnly,deviceProof});
       }
       await checkedSource(client,row.source_id);
       const redeemedAt=new Date(clock());
@@ -231,7 +244,7 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
         SET redeemed_at=$2,expires_at=$3,account_id=$4,redeemed_device_hash=$5 WHERE id=$1`,
         [row.id,redeemedAt,expiresAt,accountId,deviceProof]);
       await client.query('COMMIT');
-      return makeResponse({host,row,username,password,accountId,activatedAt:redeemedAt,expiresAt});
+      return makeResponse({host,row,username,password,accountId,activatedAt:redeemedAt,expiresAt,appOnly,deviceProof});
     }catch(error){await client.query('ROLLBACK').catch(()=>{});throw error}
     finally{client.release()}
   }
