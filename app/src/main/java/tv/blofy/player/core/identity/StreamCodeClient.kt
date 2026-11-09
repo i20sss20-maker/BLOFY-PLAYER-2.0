@@ -50,22 +50,37 @@ object StreamCodeClient {
 
     // Do not use the device wall clock to decide whether a code is expired:
     // Android 9 TV boxes can have incorrect time. The server owns expiry.
-    suspend fun verifySession(accessToken: String): Boolean? =
+    data class SessionStatus(
+        val active: Boolean,
+        val daysRemaining: Int? = null,
+        val expiresAt: Long? = null
+    )
+
+    suspend fun sessionStatus(accessToken: String): SessionStatus? =
         withContext(Dispatchers.IO) {
-            val request = Request.Builder()
+            val request=Request.Builder()
                 .url("${StreamCodeSession.HOST}/api/v1/stream/app/session")
                 .get().header("Authorization","Bearer $accessToken")
                 .header("Cache-Control","no-store").build()
             try {
                 client.newCall(request).awaitResponse().use { response ->
-                    if (response.code==401||response.code==403) return@withContext false
-                    if (!response.isSuccessful) return@withContext null
-                    JSONObject(response.body?.string().orEmpty()).optBoolean("active")
+                    if(response.code==401||response.code==403)
+                        return@withContext SessionStatus(false)
+                    if(!response.isSuccessful)return@withContext null
+                    val body=JSONObject(response.body?.string().orEmpty())
+                    if(!body.optBoolean("ok")||!body.optBoolean("active"))
+                        return@withContext SessionStatus(false)
+                    SessionStatus(active=true,
+                        daysRemaining=body.optInt("daysRemaining",-1)
+                            .takeIf { it>=0 },
+                        expiresAt=body.optLong("expiresAt",0)
+                            .takeIf { it>0 })
                 }
-            } catch (_: Exception) {
-                null
-            }
+            } catch (_: Exception) { null }
         }
+
+    suspend fun verifySession(accessToken: String): Boolean? =
+        sessionStatus(accessToken)?.active
 
     suspend fun redeem(rawCode: String, deviceKey: String): Activated = withContext(Dispatchers.IO) {
         val code = normalizeCode(rawCode)
