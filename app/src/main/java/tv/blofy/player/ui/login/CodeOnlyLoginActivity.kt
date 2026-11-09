@@ -36,8 +36,8 @@ import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.home.HomeActivity
 
 /**
- * Standalone BLOFY STREAM login on the exact 55.8.7 PLAYER visual baseline.
- * Premium dark violet, bundled IBM Plex Sans Arabic, full TV D-pad support.
+ * Dedicated BLOFY STREAM ocean/cyan identity with readable mobile layout,
+ * bundled Arabic font and TV D-pad access; no PLAYER sign-in options.
  * Only a numeric code is shown. Host, M3U, usernames and passwords are hidden.
  */
 class CodeOnlyLoginActivity : AppCompatActivity() {
@@ -78,10 +78,10 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
             gravity = Gravity.CENTER_HORIZONTAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             background = GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                intArrayOf(0xFA251735.toInt(), 0xF3191229.toInt(), 0xF0100C1D.toInt())
+                intArrayOf(0xFF143E4C.toInt(), 0xFF0B2A36.toInt(), 0xFF071C26.toInt())
             ).apply {
                 cornerRadius = dp(26).toFloat()
-                setStroke(dp(1), 0xFF7B559A.toInt())
+                setStroke(dp(1), 0xFF327F89.toInt())
             }
             setPadding(dp(if (narrow) 22 else 38), dp(26),
                 dp(if (narrow) 22 else 38), dp(30))
@@ -92,7 +92,7 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
             LinearLayout.LayoutParams.WRAP_CONTENT))
 
         panel.addView(ImageView(this).apply {
-            setImageResource(R.drawable.blofy_logo)
+            setImageResource(R.drawable.stream_logo)
             scaleType = ImageView.ScaleType.FIT_CENTER
             contentDescription = "شعار BLOFY STREAM"
         }, LinearLayout.LayoutParams(dp(172), dp(108)).apply { bottomMargin = dp(6) })
@@ -107,7 +107,7 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
             includeFontPadding = false
         })
         panel.addView(TextView(this).apply {
-            text = "عالم الترفيه يبدأ بكود واحد"
+            text = "قنواتك وأفلامك في مكان واحد"
             textSize = if (isTv) 17f else 15f
             setTextColor(BlofyTvDesign.PurpleSoft)
             typeface = BlofyTvDesign.preferredTypeface(this)
@@ -116,7 +116,7 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
         })
         panel.addView(View(this).apply {
             background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-                intArrayOf(0x00794EBE, 0xFFB47BEE.toInt(), 0x00794EBE)
+                intArrayOf(0x0046E4D0, 0xFF46E4D0.toInt(), 0x0046E4D0)
             )
         }, LinearLayout.LayoutParams(dp(215), dp(1)).apply { bottomMargin = dp(23) })
 
@@ -141,7 +141,7 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
             textDirection = View.TEXT_DIRECTION_LTR
             gravity = Gravity.CENTER
             setTextColor(BlofyTvDesign.TextPrimary)
-            setHintTextColor(0xFF9284A9.toInt())
+            setHintTextColor(0xFF8CB7BD.toInt())
             background = inputBackground(false)
             setOnFocusChangeListener { v, focused -> v.background = inputBackground(focused) }
             isFocusable = true
@@ -153,7 +153,7 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
 
         submitButton = Button(this).apply {
             id = View.generateViewId()
-            text = "تفعيل الاشتراك"
+            text = "ابدأ المشاهدة"
             isAllCaps = false
             textSize = if (isTv) 20f else 18f
             typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
@@ -183,7 +183,7 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
         }
         panel.addView(statusText)
         panel.addView(TextView(this).apply {
-            text = "اتصال آمن  •  بدون إدخال هوست أو حساب"
+            text = "تفعيل آمن • كود واحد • تجربة موحّدة"
             textSize = 11.5f
             setTextColor(BlofyTvDesign.PurpleSoft)
             typeface = BlofyTvDesign.preferredTypeface(this)
@@ -215,10 +215,10 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
     }
 
     private fun inputBackground(focused: Boolean) = GradientDrawable().apply {
-        setColor(0xFF100D1C.toInt())
+        setColor(0xFF0A2633.toInt())
         cornerRadius = dp(16).toFloat()
         setStroke(dp(if (focused) 2 else 1),
-            if (focused) BlofyTvDesign.FocusStroke else 0xFF544067.toInt())
+            if (focused) BlofyTvDesign.FocusStroke else 0xFF376671.toInt())
     }
 
     private fun focusFirst() {
