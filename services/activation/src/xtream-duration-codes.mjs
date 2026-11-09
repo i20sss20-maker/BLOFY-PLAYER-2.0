@@ -1,5 +1,6 @@
 // BLOFY STREAM subscriptions: duration begins ONLY at first successful
-// redemption. Codes are high-entropy, stored as HMAC proofs, and cannot be
+// redemption. New codes are numeric and grow gradually with issuance volume;
+// all codes are stored as HMAC proofs, and existing 24-hex codes remain valid.
 // redeemed twice. Passwords for resulting Xtream accounts remain one-way
 // proofs; new credentials are shown once to the redeemer, never in lists.
 import crypto from 'node:crypto';
@@ -10,8 +11,34 @@ import {encryptGatewayAccountPassword} from './xtream-account-vault.mjs';
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const MAX_DAYS=730;
 export function normalizeStreamCode(value){
-  const code=String(value||'').trim().toUpperCase().replace(/[\s-]+/g,'');
-  return /^[A-F0-9]{24}$/.test(code)?code:null;
+  // Accept Arabic-Indic keyboards and preserve any pre-existing 24-hex codes.
+  const code=String(value||'').trim().toUpperCase()
+    .replace(/[٠-٩]/g,char=>String(char.charCodeAt(0)-0x660))
+    .replace(/[۰-۹]/g,char=>String(char.charCodeAt(0)-0x6f0))
+    .replace(/[\s-]+/g,'');
+  return /^(?:[0-9]{8,12}|[A-F0-9]{24})$/.test(code)?code:null;
+}
+// Start short, grow automatically when the number of issued codes grows;
+// issuance count includes redeemed/revoked codes so length never shrinks.
+export function streamNumericCodeLength(totalIssued){
+  const n=Math.max(0,Number(totalIssued)||0);
+  if(n<100)return 8;
+  if(n<1000)return 9;
+  if(n<10000)return 10;
+  if(n<100000)return 11;
+  return 12;
+}
+export function randomNumericStreamCode(length,randomBytes=crypto.randomBytes){
+  if(!Number.isInteger(length)||length<8||length>12)throw Error('stream_code_length_invalid');
+  let out='';
+  // Rejection sampling eliminates modulo bias (0..249 is divisible by 10).
+  for(let attempts=0;out.length<length&&attempts<12;attempts++){
+    for(const byte of randomBytes(length*2)){
+      if(byte<250){out+=String(byte%10);if(out.length===length)break;}
+    }
+  }
+  if(out.length!==length)throw Error('stream_code_random_unavailable');
+  return out;
 }
 export function streamCodeProof(value,keyHex){
   const code=normalizeStreamCode(value);
@@ -85,16 +112,30 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
     try{
       await client.query('BEGIN');
       await checkedSource(client,opts.sourceId);
+      // Serialize code batches across instances so digit-length thresholds
+      // follow actual issuance volume, not a potentially stale counter.
+      await client.query('SELECT pg_advisory_xact_lock(718420682)');
+      const countRow=(await client.query(
+        'SELECT COUNT(*)::int AS count FROM blofy_xtream_gateway_duration_codes'
+      )).rows[0];
+      let issued=Number(countRow?.count)||0;
       for(let i=0;i<opts.quantity;i++){
-        const code=randomBytes(12).toString('hex').toUpperCase();
-        const hash=streamCodeProof(code,keyHex),id=uuid();
-        const row=(await client.query(`INSERT INTO blofy_xtream_gateway_duration_codes
-          (id,code_hash,code_hint,label,source_id,duration_days,max_connections)
-          VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`,[
-          id,hash,code.slice(0,4)+'••••'+code.slice(-4),opts.label,
-          opts.sourceId,opts.durationDays,opts.maxConnections
-        ])).rows[0];
-        items.push({...safeCodeRecord(row),code});
+        let inserted=false;
+        for(let attempt=0;attempt<12;attempt++){
+          const code=randomNumericStreamCode(streamNumericCodeLength(issued),randomBytes);
+          const hash=streamCodeProof(code,keyHex),id=uuid();
+          const result=await client.query(`INSERT INTO blofy_xtream_gateway_duration_codes
+            (id,code_hash,code_hint,label,source_id,duration_days,max_connections)
+            VALUES($1,$2,$3,$4,$5,$6,$7)
+            ON CONFLICT (code_hash) DO NOTHING RETURNING *`,[
+            id,hash,code.slice(0,2)+'••••'+code.slice(-2),opts.label,
+            opts.sourceId,opts.durationDays,opts.maxConnections
+          ]);
+          if(!result.rows?.length)continue;
+          items.push({...safeCodeRecord(result.rows[0]),code});
+          issued++;inserted=true;break;
+        }
+        if(!inserted)throw Object.assign(Error('stream_code_generation_unavailable'),{status:503});
       }
       await client.query('COMMIT');
       return {ok:true,items,count:items.length,redeemUrl:'https://blofyplayer.com/stream/activate'};
