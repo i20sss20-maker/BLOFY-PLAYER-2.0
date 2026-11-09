@@ -230,7 +230,7 @@ class HomeActivity : AppCompatActivity() {
         setPadding(dp(38), dp(20), dp(38), dp(20))
         background = heroBackground()
         addView(TextView(this@HomeActivity).apply {
-            text = "BLOFY PLAYER"
+            text = if (BuildConfig.CODE_ONLY_LOGIN) "BLOFY STREAM" else "BLOFY PLAYER"
             textSize = 13f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(BlofyTvDesign.Mint)
@@ -327,7 +327,7 @@ class HomeActivity : AppCompatActivity() {
             setBackgroundColor(theme.background)
             layoutDirection = View.LAYOUT_DIRECTION_RTL
         }
-        root.addView(title("BLOFY PLAYER", if (phone) 26f else 32f))
+        root.addView(title(if (BuildConfig.CODE_ONLY_LOGIN) "BLOFY STREAM" else "BLOFY PLAYER", if (phone) 26f else 32f))
         root.addView(subtitle("كل محتواك. أسرع. أبسط.", if (phone) dp(20) else dp(30)))
         val primary = actionRow(phone)
         addCompactAction(primary, "live", "شاهد مباشرة", contentIntent("live"))
