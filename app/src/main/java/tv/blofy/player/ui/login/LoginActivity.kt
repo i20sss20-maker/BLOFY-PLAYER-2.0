@@ -66,6 +66,11 @@ class LoginActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (BuildConfig.CODE_ONLY_LOGIN) {
+            startActivity(Intent(this, CodeOnlyLoginActivity::class.java))
+            finish()
+            return
+        }
         theme = ThemeManager.current(this)
         deviceKind = DeviceClass.detect(this)
         setContentView(if (deviceKind == DeviceClass.Kind.TV) buildApprovedTvLogin() else buildPhoneLogin())
