@@ -1,6 +1,7 @@
 package tv.blofy.player.data.preparation
 
 import android.content.Context
+import tv.blofy.player.BuildConfig
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
@@ -25,6 +26,9 @@ class FullLibrarySyncWorker(
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
+        // STREAM displays the server's catalogue without background metadata,
+        // artwork, classification or other reorganization workloads.
+        if (BuildConfig.CODE_ONLY_LOGIN) return Result.success()
         val providerId = inputData.getString(KEY_PROVIDER_ID).orEmpty()
         if (providerId.isBlank()) return Result.success()
         if (!CatalogSyncState.isReady(applicationContext, providerId)) return Result.success()
@@ -73,7 +77,7 @@ class FullLibrarySyncWorker(
                 .build()
 
         fun enqueue(context: Context, providerId: String) {
-            if (providerId.isBlank()) return
+            if (providerId.isBlank() || BuildConfig.CODE_ONLY_LOGIN) return
             WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(
                 workName(providerId),
                 ExistingWorkPolicy.KEEP,
