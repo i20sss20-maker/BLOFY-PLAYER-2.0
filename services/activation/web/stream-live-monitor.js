@@ -4,7 +4,8 @@ if(root){
  const $=id=>document.getElementById(id);
  const message=$('blofyLiveMonitorMessage');
  const fields={sessions:$('blofyLiveSessions'),readers:$('blofyLiveReaders'),
-  paths:$('blofyLivePaths'),bytes:$('blofyLiveBytes'),alert:$('blofyLiveAlert')};
+  paths:$('blofyLivePaths'),bytes:$('blofyLiveBytes'),alert:$('blofyLiveAlert'),
+  starts:$('blofyRealStarts'),failures:$('blofyRealFailures'),p95:$('blofyRealP95')};
  const fmt=n=>Number.isFinite(n)?new Intl.NumberFormat('ar-SA',{maximumFractionDigits:0}).format(n):'—';
  async function load(path){
   const response=await fetch(path,{credentials:'same-origin',cache:'no-store',
@@ -18,9 +19,10 @@ if(root){
   $('blofyLiveRefresh').disabled=true;
   message.textContent='جاري قراءة مقاييس المحرك…';
   try{
-   const [metrics,health]=await Promise.allSettled([
+   const [metrics,health,gateway]=await Promise.allSettled([
     load('/api/v1/admin/restream-engine/metrics'),
-    load('/api/v1/admin/restream-engine/auto-health')
+    load('/api/v1/admin/restream-engine/auto-health'),
+    load('/api/v1/admin/xtream-gateway/playback-health')
    ]);
    if(metrics.status==='fulfilled'){
     const x=metrics.value;
@@ -46,6 +48,12 @@ if(root){
       restream_metrics_unreachable:'المحرك لا يستجيب على منفذ المراقبة الداخلي',
       restream_metrics_no_samples:'استجابة المحرك لا تحتوي عينات معروفة',
       unauthorized:'يرجى تسجيل الدخول للإدارة'}[code]||'الاتصال أو الإعدادات غير متاحة');
+   }
+   if(gateway.status==='fulfilled'){
+    const m=gateway.value.metrics||{};
+    fields.starts.textContent=fmt(m.started);
+    fields.failures.textContent=fmt(m.failed);
+    fields.p95.textContent=Number.isFinite(m.p95StartMs)?fmt(m.p95StartMs)+' ms':'—';
    }
    fields.alert.textContent=health.status==='fulfilled'
      ?(health.value.alert?'تنبيه: تكرر فشل الاختبار التجريبي':'لا توجد تنبيهات تجريبية متكررة')
