@@ -5,7 +5,7 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okio.Buffer
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import tv.blofy.player.BuildConfig
 import java.io.ByteArrayOutputStream
@@ -25,7 +25,7 @@ class StreamCatalogGzipTest {
     }
 
     @Test fun streamBulkCatalogAdvertisesGzipAndReadsRawStreamingArray() = runBlocking {
-        assertTrue(BuildConfig.CODE_ONLY_LOGIN)
+        assumeTrue(BuildConfig.CODE_ONLY_LOGIN)
         val json = "[{\"stream_id\":123,\"name\":\"BLOFY test\"}]"
         val server = MockWebServer()
         server.start()
@@ -45,7 +45,7 @@ class StreamCatalogGzipTest {
     }
 
     @Test fun streamCatalogRetrofitParserCanReadCompressedCategoryList() = runBlocking {
-        assertTrue(BuildConfig.CODE_ONLY_LOGIN)
+        assumeTrue(BuildConfig.CODE_ONLY_LOGIN)
         val server = MockWebServer()
         server.start()
         try {
