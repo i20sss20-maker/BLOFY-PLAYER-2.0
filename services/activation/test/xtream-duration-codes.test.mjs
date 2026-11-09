@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createStreamDurationCodes,ensureStreamCodeTable,
- normalizeStreamCode,streamCodeProof,validateStreamCodeBatch}
+ normalizeStreamCode,streamCodeProof,validateStreamCodeBatch,
+ streamNumericCodeLength,randomNumericStreamCode}
  from '../src/xtream-duration-codes.mjs';
 
 const keyHex='a'.repeat(64);
@@ -10,6 +11,10 @@ const source='d9b0fcf1-0b7e-4209-b281-2b5cf1cef09a';
 test('code format is normalized and only a hashed proof is stored',()=>{
  assert.equal(normalizeStreamCode('ab12-ab12-ab12-ab12-ab12-ab12'),'AB12AB12AB12AB12AB12AB12');
  assert.equal(normalizeStreamCode('1234'),null);
+ assert.equal(normalizeStreamCode('۱۲٣٤٥٦٧٨'),'12345678');
+ assert.equal(normalizeStreamCode('00012345'),'00012345');
+ assert.equal(normalizeStreamCode('1234567'),null);
+ assert.equal(normalizeStreamCode('ABCD1234'),null);
  assert.equal(streamCodeProof('1234',keyHex),null);
  const a=streamCodeProof('AB12AB12AB12AB12AB12AB12',keyHex);
  assert.match(a,/^[a-f0-9]{64}$/);
@@ -32,6 +37,9 @@ function fakeDb(){
  async function query(sql,args=[]){
   statements.push({sql,args});
   if(/^(BEGIN|COMMIT|ROLLBACK)$/.test(sql))return {rows:[]};
+  if(sql.includes('SELECT pg_advisory_xact_lock'))return {rows:[{}]};
+  if(sql.includes('SELECT COUNT(*)::int AS count FROM blofy_xtream_gateway_duration_codes'))
+   return {rows:[{count:codes.length}]};
   if(sql.includes('FROM blofy_xtream_servers'))
    return {rows:args[0]===source?[{id:source}]:[]};
   if(sql.includes('INSERT INTO blofy_xtream_gateway_duration_codes')){
@@ -75,7 +83,7 @@ test('no subscriber is created on issuance; duration begins only when redeemed',
  assert.equal(state.accounts.length,0);
  assert.equal(state.codes[0].expires_at,null);
  assert.equal(state.codes[0].redeemed_at,null);
- assert.match(issued.items[0].code,/^[A-F0-9]{24}$/);
+ assert.match(issued.items[0].code,/^[0-9]{8}$/);
  const listed=await system.list();
  assert.equal(listed.items[0].code,undefined,'plaintext codes never in list');
  assert.equal(listed.items[0].status,'unused');
@@ -113,4 +121,36 @@ test('schema and API code avoid retaining cleartext subscription secrets',async(
  await ensureStreamCodeTable(stub);
  assert.match(stub.queries[0],/code_hash TEXT NOT NULL UNIQUE/);
  assert.doesNotMatch(stub.queries.join(' '),/plaintext_password|code_plaintext/);
+});
+
+test('numeric code length grows automatically with issued volume',()=>{
+ for(const [count,digits] of [[0,8],[99,8],[100,9],[999,9],
+   [1000,10],[9999,10],[10000,11],[100000,12],[1000000,12]]){
+   assert.equal(streamNumericCodeLength(count),digits);
+ }
+ for(let digits=8;digits<=12;digits++){
+   const code=randomNumericStreamCode(digits);
+   assert.match(code,new RegExp('^[0-9]{'+digits+'}$'));
+ }
+ assert.throws(()=>randomNumericStreamCode(6),/length_invalid/);
+});
+test('issue batch crosses digit thresholds without breaking redemption',async()=>{
+ const state=fakeDb();
+ const system=createStreamDurationCodes({pool:state.pool,keyHex});
+ // Simulate 99 prior issued codes by inserting rows directly in fixture.
+ for(let n=0;n<99;n++)state.codes.push({id:String(n),code_hash:'old'+n,
+   code_hint:'xxxx',label:'older',source_id:null,duration_days:30,
+   max_connections:1,created_at:new Date(),redeemed_at:null,
+   expires_at:null,revoked_at:null,account_id:null});
+ const result=await system.issue({durationDays:14,quantity:2});
+ assert.match(result.items[0].code,/^[0-9]{8}$/);
+ assert.match(result.items[1].code,/^[0-9]{9}$/);
+ await system.redeem(result.items[1].code,'https://blofyplayer.com');
+ assert.equal(state.accounts.length,1);
+});
+test('legacy 24-character hexadecimal codes continue to redeem',()=>{
+ const old='AB12AB12AB12AB12AB12AB12';
+ assert.equal(normalizeStreamCode(old),old);
+ assert.match(streamCodeProof(old,keyHex),/^[a-f0-9]{64}$/);
+ assert.equal(normalizeStreamCode('000000000000000000000000'), '000000000000000000000000');
 });

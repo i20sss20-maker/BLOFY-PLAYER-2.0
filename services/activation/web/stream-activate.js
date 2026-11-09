@@ -15,8 +15,14 @@
  }
  form.addEventListener('submit',async function(e){
    e.preventDefault();button.disabled=true;message.className='status hide';section.classList.add('hide');
-   const code=input.value.trim().toUpperCase().replace(/[\s-]+/g,'');
-   if(!/^[A-F0-9]{24}$/.test(code)){show('تحقق من الكود: يتكون من 24 حرفًا أو رقمًا.',false);button.disabled=false;return;}
+   const code=input.value.trim().toUpperCase()
+     .replace(/[٠-٩]/g,c=>String(c.charCodeAt(0)-0x660))
+     .replace(/[۰-۹]/g,c=>String(c.charCodeAt(0)-0x6f0))
+     .replace(/[\s-]+/g,'');
+   if(!/^(?:[0-9]{8,12}|[A-F0-9]{24})$/.test(code)){
+     show('تحقق من الكود: الأكواد الجديدة أرقام فقط (من 8 إلى 12 خانة).',false);
+     button.disabled=false;return;
+   }
    try{
      const r=await fetch('/api/v1/stream/redeem',{method:'POST',credentials:'omit',
        headers:{'content-type':'application/json','accept':'application/json'},

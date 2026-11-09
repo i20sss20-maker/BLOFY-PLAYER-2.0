@@ -92,6 +92,9 @@ function movieRefreshDue(key,now=Date.now()){
 const accountUsageThrottle = createGatewayUsageThrottle();
 let streamCodes=null;
 const streamCodeLimiter=createFixedWindowLimiter({limit:6,windowMs:15*60_000});
+// Short numeric vouchers are more susceptible to distributed guessing.
+// Bound all public redemption attempts as well as each client IP.
+const streamCodeGlobalLimiter=createFixedWindowLimiter({limit:120,windowMs:60*60_000});
 let readyPromise;
 const unavailableWriteGuard=createRegistryWriteGuard();
 let unavailableRecoveryTimerStarted=false,unavailableRecoveryBusy=false;
@@ -1601,6 +1604,9 @@ http.createServer = function withBlofyXtreamGateway(listener) {
         const rate=streamCodeLimiter.consume(requestClientKey(req));
         if(!rate.allowed)return json(res,429,{ok:false,code:'stream_code_rate_limited'},
           {'retry-after':String(rate.retryAfterSeconds)});
+        const overall=streamCodeGlobalLimiter.consume('all_redemptions');
+        if(!overall.allowed)return json(res,429,{ok:false,code:'stream_code_rate_limited'},
+          {'retry-after':String(overall.retryAfterSeconds)});
         await ensureReady();
         const data=await readJson(req);
         const result=await streamCodes.redeem(data.code,'https://blofyplayer.com');
