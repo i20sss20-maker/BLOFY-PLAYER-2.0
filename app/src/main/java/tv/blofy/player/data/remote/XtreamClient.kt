@@ -3,6 +3,7 @@ package tv.blofy.player.data.remote
 import android.content.Context
 import tv.blofy.player.BuildConfig
 import tv.blofy.player.core.identity.StreamCodeSession
+import tv.blofy.player.core.device.StreamDeviceCompatibility
 import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
@@ -11,7 +12,16 @@ import java.util.concurrent.TimeUnit
 
 object XtreamClient {
     @Volatile private var application: Context? = null
-    fun initialize(context: Context) { application = context.applicationContext }
+    fun initialize(context: Context) {
+        application = context.applicationContext
+        if (BuildConfig.CODE_ONLY_LOGIN) {
+            // Bound catalog requests only; playback uses a separate transport. This prevents
+            // slow metadata endpoints from exhausting memory/sockets on inexpensive TV boxes.
+            val device = StreamDeviceCompatibility.current(context)
+            okHttp.dispatcher.maxRequestsPerHost = device.maxCatalogRequestsPerHost
+            okHttp.dispatcher.maxRequests = maxOf(8, device.maxCatalogRequestsPerHost * 2)
+        }
+    }
 
     private val okHttp = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
