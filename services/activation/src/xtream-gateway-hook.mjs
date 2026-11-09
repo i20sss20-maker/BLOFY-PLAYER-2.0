@@ -1295,6 +1295,16 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
         if (first.done || !first.value?.byteLength) throw new Error('upstream_empty_media');
         const inspection=inspectXtreamMediaChunk(first.value,response.headers.get('content-type'));
         if(!inspection.valid)throw new Error(inspection.reason);
+        // The app-only product promises that upstream Xtream URLs and
+        // passwords never leave BLOFY. Raw HLS playlists may contain absolute
+        // provider URLs or credential-bearing relative segment paths. Refuse
+        // those bytes until a segment-rewriting authorized HLS gateway exists.
+        // Legacy Xtream accounts remain unchanged.
+        if(authorizedAccount&&inspection.format==='hls'){
+          await response.body?.cancel().catch(()=>{});
+          observe('failed',{reason:'app_hls_secure_proxy_required',attempts:attempt});
+          return text(res,415,'Protected HLS proxy not configured');
+        }
         // Some providers label MP4/MKV as octet-stream. Use the verified
         // container type only when the source supplied no meaningful MIME.
         // Preserve bytes, range headers, codec and existing explicit types.
@@ -1655,6 +1665,8 @@ http.createServer = function withBlofyXtreamGateway(listener) {
       if(tokenMedia&&(req.method==='GET'||req.method==='HEAD')){
         const account=await authenticateAppBearer(req);
         if(!account)return text(res,401,'Unauthorized');
+        if(tokenMedia[3]?.toLowerCase()==='m3u8')
+          return text(res,415,'Protected HLS proxy not configured');
         return proxyMedia(req,res,tokenMedia[1].toLowerCase(),'','',
           tokenMedia[2],tokenMedia[3],account);
       }
