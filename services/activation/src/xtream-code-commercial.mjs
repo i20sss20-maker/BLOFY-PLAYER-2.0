@@ -4,6 +4,7 @@
 import crypto from 'node:crypto';
 import {randomNumericStreamCode,streamNumericCodeLength,streamCodeProof,safeCodeRecord}
   from './xtream-duration-codes.mjs';
+import {encryptStreamCode} from './xtream-code-vault.mjs';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function problem(message,status=400){
@@ -138,9 +139,10 @@ export function createStreamCommercial({pool,keyHex,clock=Date.now,
           WHERE code_hash=$1 LIMIT 1`,[hash])).rows.length>0;
         if(exists)continue;
         const updated=(await db.query(`UPDATE blofy_xtream_gateway_duration_codes
-          SET code_hash=$2,code_hint=$3,redeemed_device_hash=NULL,
+          SET code_hash=$2,code_hint=$3,code_vault=$4,redeemed_device_hash=NULL,
               transfer_count=transfer_count+1,last_transfer_at=NOW()
-          WHERE id=$1 RETURNING *`,[id,hash,code.slice(0,2)+'••••'+code.slice(-2)])).rows[0];
+          WHERE id=$1 RETURNING *`,[id,hash,code.slice(0,2)+'••••'+code.slice(-2),
+            encryptStreamCode(id,code,keyHex)])).rows[0];
         await event(db,id,'device_transfer_code_reissued',
           {transferCount:Number(updated.transfer_count)});
         // The old HMAC bearer is invalidated by the changed code_hash.
