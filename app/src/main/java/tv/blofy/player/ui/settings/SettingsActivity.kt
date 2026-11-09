@@ -168,6 +168,12 @@ class SettingsActivity : AppCompatActivity() {
         updateSyncStatus()
         page.addView(status, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) })
 
+        addSection(page, copy("التطبيق", "App"))
+        addCard(actionCard(getString(R.string.stream_ui_language),
+            currentLanguageLabel() + " • " + getString(R.string.stream_ui_language_hint)) {
+            chooseLanguage()
+        }.apply { tag = "stream_language_picker" })
+
         addSection(page, copy("اشتراكي والمكتبة", "Subscription & library"))
         addCard(actionCard(copy("اشتراكي", "My subscription"),
             copy("حالة الكود وتاريخ انتهاء الاشتراك", "Status and subscription expiry")) { showStreamSubscription() })
@@ -772,23 +778,43 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun chooseLanguage() {
-        val labels = LANGUAGES.map { it.first }.toTypedArray()
+        // STREAM intentionally offers the two fully localized user interfaces;
+        // PLAYER retains its own larger language list without behavior changes.
+        val options = if (BuildConfig.CODE_ONLY_LOGIN)
+            listOf(getString(R.string.stream_ui_arabic) to "ar",
+                getString(R.string.stream_ui_english) to "en")
+        else LANGUAGES
+        val labels = options.map { it.first }.toTypedArray()
         AlertDialog.Builder(this)
             .setTitle(getString(R.string.language_app))
-            .setItems(labels) { dialog, which ->
-                val (label, tag) = LANGUAGES[which]
-                prefs.edit().putString(KEY_LANGUAGE, label).putString(KEY_LANGUAGE_TAG, tag).apply()
-                AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(tag))
+            .setSingleChoiceItems(labels, options.indexOfFirst {
+                it.second.equals(currentLanguageTag(), ignoreCase = true)
+            }) { dialog, which ->
+                val (label, tag) = options[which]
+                val editor = prefs.edit()
+                    .putString(KEY_LANGUAGE, label)
+                    .putString(KEY_LANGUAGE_TAG, tag)
+                if (BuildConfig.CODE_ONLY_LOGIN) editor.putBoolean("stream_language_choice_made", true)
+                if (!editor.commit()) return@setSingleChoiceItems
                 dialog.dismiss()
+                AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(tag))
             }
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
 
+    private fun currentLanguageTag(): String =
+        AppCompatDelegate.getApplicationLocales().toLanguageTags().substringBefore(',')
+            .ifBlank {
+                prefs.getString(KEY_LANGUAGE_TAG, if (BuildConfig.CODE_ONLY_LOGIN) "ar" else "en")
+                    ?: if (BuildConfig.CODE_ONLY_LOGIN) "ar" else "en"
+            }
+
     private fun currentLanguageLabel(): String {
-        val selected = AppCompatDelegate.getApplicationLocales().toLanguageTags()
-            .substringBefore(',')
-            .ifBlank { prefs.getString(KEY_LANGUAGE_TAG, "en") ?: "en" }
-        return LANGUAGES.firstOrNull { it.second.equals(selected, ignoreCase = true) }?.first ?: "English"
+        val tag = currentLanguageTag()
+        return if (BuildConfig.CODE_ONLY_LOGIN) {
+            if (tag.equals("ar", ignoreCase = true)) "العربية" else "English"
+        } else LANGUAGES.firstOrNull { it.second.equals(tag, ignoreCase = true) }?.first ?: "English"
     }
 
     private fun isTv() = DeviceClass.isTv(this)
