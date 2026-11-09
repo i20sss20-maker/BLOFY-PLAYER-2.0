@@ -1632,7 +1632,8 @@ http.createServer = function withBlofyXtreamGateway(listener) {
         const result=await streamCodes.redeem(data.code,'https://blofyplayer.com',
           {deviceKey:data.deviceKey??null,
            appOnly:url.pathname==='/api/v1/stream/app/redeem'});
-        return json(res,201,result,{'referrer-policy':'no-referrer'});
+        return json(res,201,result,{'referrer-policy':'no-referrer',
+          'cache-control':'no-store, private','pragma':'no-cache'});
       }
       if(req.method==='GET'&&url.pathname==='/api/v1/stream/app/session'){
         const account=await authenticateAppBearer(req);
