@@ -1738,6 +1738,12 @@ http.createServer = function withBlofyXtreamGateway(listener) {
       if(req.method==='POST'&&url.pathname==='/api/v1/admin/xtream-gateway/codes') {
         return json(res,201,await streamCodes.issue(await readJson(req)));
       }
+      const codeReveal=url.pathname.match(/^\/api\/v1\/admin\/xtream-gateway\/codes\/([0-9a-f-]{36})\/reveal$/i);
+      if(req.method==='GET'&&codeReveal){
+        const result=await streamCodes.reveal(codeReveal[1]);
+        return json(res,result.ok?200:result.code==='stream_code_not_found'?404:409,
+          result,{'cache-control':'no-store','referrer-policy':'no-referrer'});
+      }
       const codeRevoke=url.pathname.match(/^\/api\/v1\/admin\/xtream-gateway\/codes\/([0-9a-f-]{36})\/revoke$/i);
       if(req.method==='POST'&&codeRevoke)
         return json(res,200,await streamCodes.revoke(codeRevoke[1]));
