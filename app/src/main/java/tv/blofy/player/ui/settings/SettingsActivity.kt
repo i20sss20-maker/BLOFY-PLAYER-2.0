@@ -387,14 +387,14 @@ class SettingsActivity : AppCompatActivity() {
         val device = StreamDeviceCompatibility.current(this)
         val kind = if (device.television) "Android TV / TV Box" else "هاتف أو جهاز لوحي"
         val memory = if (device.lowMemory) "اقتصادي (وضع خفيف تلقائي)" else "طبيعي"
-        val info = "Android SDK ${device.sdk} • $kind\\n" +
-            "الذاكرة: $memory\\n" +
-            "المحرك: Media3 مع بدائل Decoder\\n" +
-            "تحميل المكتبة: ${device.maxCatalogRequestsPerHost} اتصالات لكل مضيف\\n" +
-            "التنقل: ريموت D-pad / لوحة المفاتيح\\n"
+        val info = "Android SDK ${device.sdk} • $kind\n" +
+            "الذاكرة: $memory\n" +
+            "المحرك: Media3 مع بدائل Decoder\n" +
+            "تحميل المكتبة: ${device.maxCatalogRequestsPerHost} اتصالات لكل مضيف\n" +
+            "التنقل: ريموت D-pad / لوحة المفاتيح\n"
         val dialog = AlertDialog.Builder(this)
             .setTitle("توافق BLOFY STREAM")
-            .setMessage(info + "\\nجارِ اختبار HTTPS مع سيرفر BLOFY...")
+            .setMessage(info + "\nجارِ اختبار HTTPS مع سيرفر BLOFY...")
             .setPositiveButton("إغلاق", null)
             .show()
         lifecycleScope.launch {
@@ -404,8 +404,8 @@ class SettingsActivity : AppCompatActivity() {
                 "اتصال HTTPS ناجح (الخادم متاح)"
             else StreamConnectionDiagnostics.guidance(
                 result.cause ?: StreamConnectionDiagnostics.Cause.OTHER)
-            dialog.setMessage(info + "\\n" + connection +
-                "\\n\\nهذا الفحص لا يؤكد صلاحية كود الاشتراك أو توفر قنوات المصدر.")
+            dialog.setMessage(info + "\n" + connection +
+                "\n\nهذا الفحص لا يؤكد صلاحية كود الاشتراك أو توفر قنوات المصدر.")
         }
     }
 
