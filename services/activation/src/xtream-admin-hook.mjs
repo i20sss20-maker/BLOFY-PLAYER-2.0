@@ -63,6 +63,7 @@ import {normalizeStudioName,normalizeStudioItemEdit,readStudioLogoRequest} from 
 import { nativeXtreamCsrfToken } from './xtream-native-csrf.mjs';
 import {streamBridgeAuthorized,streamSafeSource,streamSafeCatalog,streamSafeAccount} from './stream-unified-safe.mjs';
 import {ensureStreamCodeTable} from './xtream-duration-codes.mjs';
+import {ensureStreamCommercialSchema} from './xtream-code-commercial.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
@@ -2591,6 +2592,7 @@ function ensureStreamCodeSchema(){
     // playback request initialized gateway migrations.
     await pool.query('ALTER TABLE IF EXISTS blofy_xtream_gateway_accounts ADD COLUMN IF NOT EXISTS credential_vault TEXT');
     await ensureStreamCodeTable(pool);
+    await ensureStreamCommercialSchema(pool);
   })().catch(error=>{streamCodeSchemaReady=null;throw error});
   return streamCodeSchemaReady;
 }
@@ -2600,7 +2602,7 @@ async function callLocalGateway(method,path,body){
   const port=Number(process.env.PORT||3000);
   if(!Number.isSafeInteger(port)||port<1024||port>65535)
     throw Object.assign(new Error('gateway_port_invalid'),{status:503});
-  const match=/^\/api\/v1\/admin\/xtream-gateway\/(?:accounts(?:\/[0-9a-f-]{36}(?:\/(?:reset|credentials))?)?|codes(?:\/[0-9a-f-]{36}\/revoke|\?limit=30&offset=[0-9]{1,6})?)$/.exec(path);
+  const match=/^\/api\/v1\/admin\/xtream-gateway\/(?:accounts(?:\/[0-9a-f-]{36}(?:\/(?:reset|credentials))?)?|codes(?:\/[0-9a-f-]{36}\/(?:revoke|sell|extend|transfer)|\/sales-summary|\?limit=30&offset=[0-9]{1,6})?)$/.exec(path);
   if(!match)throw Object.assign(new Error('gateway_route_denied'),{status:400});
   const response=await fetch('http://127.0.0.1:'+port+path,{
     method,redirect:'manual',signal:AbortSignal.timeout(9000),
@@ -2793,9 +2795,23 @@ async function unifiedStreamBridge(req,res,url){
     const result=await callLocalGateway('POST','/api/v1/admin/xtream-gateway/codes',{
       label:String(body.label||'BLOFY STREAM').slice(0,100),
       durationDays:body.durationDays,quantity:body.quantity||1,
-      maxConnections:body.maxConnections||1,sourceId:body.sourceId||null
+      maxConnections:body.maxConnections||1,sourceId:body.sourceId||null,
+      channel:body.channel==='app'?'app':'xtream'
     });
     return json(res,result.status,{ok:result.status===201,...result.data});
+  }
+  if(req.method==='GET'&&p==='/internal/blofy-stream/codes/sales-summary'){
+    const result=await callLocalGateway('GET',
+      '/api/v1/admin/xtream-gateway/codes/sales-summary');
+    return json(res,result.status,{ok:result.status===200,...result.data});
+  }
+  const commercialAction=p.match(
+    /^\/internal\/blofy-stream\/codes\/([0-9a-f-]{36})\/(sell|extend|transfer)$/i);
+  if(req.method==='POST'&&commercialAction){
+    const data=commercialAction[2]==='transfer'?{}:await readJson(req);
+    const result=await callLocalGateway('POST',
+      '/api/v1/admin/xtream-gateway/codes/'+commercialAction[1]+'/'+commercialAction[2],data);
+    return json(res,result.status,{ok:result.status===200,...result.data});
   }
   const codeRevoke=p.match(/^\/internal\/blofy-stream\/codes\/([0-9a-f-]{36})\/revoke$/i);
   if(req.method==='POST'&&codeRevoke){

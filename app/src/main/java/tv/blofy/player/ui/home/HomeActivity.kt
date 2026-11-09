@@ -14,8 +14,15 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+import android.os.SystemClock
+import tv.blofy.player.core.identity.StreamCodeClient
 import androidx.appcompat.content.res.AppCompatResources
+import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
+import tv.blofy.player.core.identity.StreamCodeSession
+import tv.blofy.player.ui.login.CodeOnlyLoginActivity
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.remote.FocusMemory
@@ -34,9 +41,43 @@ class HomeActivity : AppCompatActivity() {
     private lateinit var deviceKind: DeviceClass.Kind
     private var firstAction: View? = null
     private val actionViews = linkedMapOf<String, View>()
+    private var lastSessionCheckElapsed = 0L
+    private var sessionCheckInFlight = false
+
+    override fun onResume() {
+        super.onResume()
+        if (!BuildConfig.CODE_ONLY_LOGIN || !StreamCodeSession.isClaimed(this) ||
+            sessionCheckInFlight) return
+        val now = SystemClock.elapsedRealtime()
+        if (lastSessionCheckElapsed > 0 &&
+            now - lastSessionCheckElapsed < 120_000L) return
+        lastSessionCheckElapsed = now
+        sessionCheckInFlight = true
+        lifecycleScope.launch {
+            try {
+                val token = StreamCodeSession.token(applicationContext)
+                // Network errors are inconclusive. Never expire a paying
+                // subscriber merely because mobile data is temporarily down.
+                val valid = token?.let { StreamCodeClient.verifySession(it) }
+                if (token == null || valid == false) {
+                    StreamCodeSession.clearClaim(applicationContext)
+                    startActivity(Intent(this@HomeActivity,
+                        CodeOnlyLoginActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
+                            Intent.FLAG_ACTIVITY_CLEAR_TASK))
+                    finish()
+                }
+            } finally { sessionCheckInFlight = false }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (BuildConfig.CODE_ONLY_LOGIN && !StreamCodeSession.isClaimed(this)) {
+            startActivity(Intent(this, CodeOnlyLoginActivity::class.java))
+            finish()
+            return
+        }
         theme = ThemeManager.current(this)
         deviceKind = DeviceClass.detect(this)
         setContentView(if (deviceKind == DeviceClass.Kind.TV) buildApprovedTvHome() else buildCompactHome())
@@ -189,7 +230,7 @@ class HomeActivity : AppCompatActivity() {
         setPadding(dp(38), dp(20), dp(38), dp(20))
         background = heroBackground()
         addView(TextView(this@HomeActivity).apply {
-            text = "BLOFY PLAYER"
+            text = if (BuildConfig.CODE_ONLY_LOGIN) "BLOFY STREAM" else "BLOFY PLAYER"
             textSize = 13f
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(BlofyTvDesign.Mint)
@@ -286,7 +327,7 @@ class HomeActivity : AppCompatActivity() {
             setBackgroundColor(theme.background)
             layoutDirection = View.LAYOUT_DIRECTION_RTL
         }
-        root.addView(title("BLOFY PLAYER", if (phone) 26f else 32f))
+        root.addView(title(if (BuildConfig.CODE_ONLY_LOGIN) "BLOFY STREAM" else "BLOFY PLAYER", if (phone) 26f else 32f))
         root.addView(subtitle("كل محتواك. أسرع. أبسط.", if (phone) dp(20) else dp(30)))
         val primary = actionRow(phone)
         addCompactAction(primary, "live", "شاهد مباشرة", contentIntent("live"))

@@ -33,6 +33,7 @@ android {
         targetSdk = 36
         versionCode = 2000007
         versionName = "2.0.0-rc06"
+        manifestPlaceholders["blofyApplicationLabel"] = "@string/app_name"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "ACTIVATION_BASE_URL", "\"$activationBaseUrlEscaped\"")
         buildConfigField("String", "UPDATE_BASE_URL", "\"$updateBaseUrlEscaped\"")
@@ -51,12 +52,34 @@ android {
         }
     }
     buildTypes {
+        getByName("debug") {
+            buildConfigField("boolean", "CODE_ONLY_LOGIN", "false")
+        }
         getByName("release") {
+            buildConfigField("boolean", "CODE_ONLY_LOGIN", "false")
             isDebuggable = false
             isJniDebuggable = false
             isMinifyEnabled = false
             isShrinkResources = false
             signingConfig = signingConfigs.getByName("release")
+        }
+        // Separate installable app. The existing release and store package stay intact.
+        create("codeOnly") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".code"
+            versionNameSuffix = "-code"
+            manifestPlaceholders["blofyApplicationLabel"] = "BLOFY STREAM"
+            buildConfigField("boolean", "CODE_ONLY_LOGIN", "true")
+            matchingFallbacks += listOf("release")
+        }
+        // Testable APK signed only with the Android debug key.
+        create("codeDemo") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".code"
+            versionNameSuffix = "-code-test"
+            manifestPlaceholders["blofyApplicationLabel"] = "BLOFY STREAM (Test)"
+            buildConfigField("boolean", "CODE_ONLY_LOGIN", "true")
+            matchingFallbacks += listOf("debug")
         }
     }
     buildFeatures { viewBinding = true; buildConfig = true }
@@ -75,6 +98,7 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer-hls:1.6.1")
     implementation("androidx.media3:media3-ui:1.6.1")
     implementation("androidx.media3:media3-datasource-cronet:1.6.1")
+    implementation("androidx.media3:media3-datasource-okhttp:1.6.1")
     implementation("androidx.media3:media3-database:1.6.1")
     implementation("com.google.android.gms:play-services-cronet:18.1.0")
     if (ffmpegAar != null) implementation(files(ffmpegAar))

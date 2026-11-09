@@ -23,6 +23,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.BuildConfig
+import tv.blofy.player.core.identity.StreamCodeSession
+import tv.blofy.player.core.identity.StreamCodeClient
 import tv.blofy.player.R
 import tv.blofy.player.core.update.BlofyUpdateClient
 import tv.blofy.player.data.LocalStorageManager
@@ -132,9 +134,10 @@ class SettingsActivity : AppCompatActivity() {
         addCard(cycleSetting("▶  الحلقة التالية", KEY_AUTO_NEXT, arrayOf("ask", "on", "off"), arrayOf("اسألني", "تلقائي", "إيقاف")))
         addCard(cycleSetting("✦  حركة الواجهة", KEY_MOTION, arrayOf("smooth", "reduced"), arrayOf("سلسة", "خفيفة")))
         addCard(actionCard("🌐  لغة التطبيق", currentLanguageLabel()) { chooseLanguage() })
-        addCard(actionCard("▣  ربط الجهاز", "QR ورقم الجهاز ورمز الربط") { startActivity(Intent(this, LoginActivity::class.java)) })
-        addCard(actionCard("⇧  فحص التحديث", "تحقق من آخر إصدار رسمي") { checkForUpdate() })
-        addCard(actionCard("▤  قوائم التشغيل", "إدارة القوائم المحفوظة") { startActivity(Intent(this, ProviderManagerActivity::class.java)) })
+        if (BuildConfig.CODE_ONLY_LOGIN) addCard(actionCard("◷  اشتراكي في BLOFY STREAM", "مدة الاشتراك وحالته من السيرفر") { showStreamSubscription() })
+        if (!BuildConfig.CODE_ONLY_LOGIN) addCard(actionCard("▣  ربط الجهاز", "QR ورقم الجهاز ورمز الربط") { startActivity(Intent(this, LoginActivity::class.java)) })
+        if (!BuildConfig.CODE_ONLY_LOGIN) addCard(actionCard("⇧  فحص التحديث", "تحقق من آخر إصدار رسمي") { checkForUpdate() })
+        if (!BuildConfig.CODE_ONLY_LOGIN) addCard(actionCard("▤  قوائم التشغيل", "إدارة القوائم المحفوظة") { startActivity(Intent(this, ProviderManagerActivity::class.java)) })
         addCard(actionCard("↻  تحديث المحتوى", "يدوي عند الحاجة فقط") { refreshLibrary() })
         storageCard = actionCard("💾  التخزين المحلي", "جارٍ حساب المساحة...") { showStorageManager() }
         addCard(storageCard)
@@ -144,7 +147,7 @@ class SettingsActivity : AppCompatActivity() {
         linkFocus(back)
         page.addView(grid, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         page.addView(TextView(this).apply {
-            text = "BLOFY PLAYER 2.0"
+            text = if (BuildConfig.CODE_ONLY_LOGIN) "BLOFY STREAM" else "BLOFY PLAYER 2.0"
             BlofyTvDesign.applyCaption(this)
             gravity = Gravity.CENTER
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(54)).apply { topMargin = dp(16) })
@@ -152,6 +155,63 @@ class SettingsActivity : AppCompatActivity() {
         setContentView(scroll)
         updateStorageCard()
         grid.post { if (grid.childCount > 0) grid.getChildAt(0).requestFocus() }
+    }
+
+    private fun showStreamSubscription() {
+        if (!BuildConfig.CODE_ONLY_LOGIN) return
+        val accessToken = StreamCodeSession.token(applicationContext)
+        if (accessToken == null) {
+            AlertDialog.Builder(this).setTitle("اشتراك BLOFY STREAM")
+                .setMessage("لا يوجد اشتراك مفعّل على هذا الجهاز.")
+                .setPositiveButton("حسنًا", null).show()
+            return
+        }
+        // The TV clock can be wrong. Remaining time comes from the
+        // authoritative BLOFY server; no local expiry calculation.
+        status.text = "جارِ جلب حالة الاشتراك من السيرفر..."
+        lifecycleScope.launch {
+            val result = StreamCodeClient.sessionStatus(accessToken)
+            if (isFinishing || isDestroyed) return@launch
+            when {
+                result == null -> {
+                    status.text = "تعذر تحديث الاشتراك؛ تحقق من اتصال الإنترنت"
+                    AlertDialog.Builder(this@SettingsActivity)
+                        .setTitle("حالة الاشتراك")
+                        .setMessage("تعذر الاتصال بالسيرفر. لم يتم إيقاف اشتراكك أو حذف بيانات التفعيل.")
+                        .setPositiveButton("حسنًا", null).show()
+                }
+                !result.active -> {
+                    status.text = "الاشتراك منتهي أو موقوف"
+                    AlertDialog.Builder(this@SettingsActivity)
+                        .setTitle("اشتراك BLOFY STREAM")
+                        .setMessage("الاشتراك منتهي أو موقوف. يمكنك إدخال كود اشتراك جديد.")
+                        .setNegativeButton("إغلاق", null)
+                        .setPositiveButton("إدخال كود جديد") { _, _ ->
+                            StreamCodeSession.clearClaim(applicationContext)
+                            startActivity(Intent(this@SettingsActivity,
+                                tv.blofy.player.ui.login.CodeOnlyLoginActivity::class.java)
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
+                                    Intent.FLAG_ACTIVITY_CLEAR_TASK))
+                            finish()
+                        }.show()
+                }
+                else -> {
+                    val days = result.daysRemaining
+                    val remaining = days?.let { "المتبقي من الاشتراك: $it يوم" } ?: "الاشتراك نشط"
+                    val end = result.expiresAt?.let {
+                        java.text.SimpleDateFormat("dd/MM/yyyy · HH:mm",
+                            java.util.Locale.ENGLISH).apply {
+                            timeZone = java.util.TimeZone.getTimeZone("Asia/Riyadh")
+                        }.format(java.util.Date(it))
+                    } ?: "غير محدد"
+                    status.text = "✓  اشتراك BLOFY STREAM سارٍ"
+                    AlertDialog.Builder(this@SettingsActivity)
+                        .setTitle("اشتراكي في BLOFY STREAM")
+                        .setMessage("الحالة: ساري ✓\n$remaining\nانتهاء الاشتراك: $end (بتوقيت السعودية)\n\nيتم احتساب المدة من لحظة تفعيل الكود، ولا تتأثر بإعدادات ساعة الجهاز.")
+                        .setPositiveButton("حسنًا", null).show()
+                }
+            }
+        }
     }
 
     private fun cycleSetting(title: String, key: String, values: Array<String>, labels: Array<String>): Button {
