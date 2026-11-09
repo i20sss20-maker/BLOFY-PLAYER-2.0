@@ -17,6 +17,7 @@ import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.PlayerView
+import androidx.media3.common.Player
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.Job
@@ -60,8 +61,12 @@ class ContentBrowserActivity : AppCompatActivity() {
     private var previewSession: BlofyPlaybackSession? = null
     private var previewView: PlayerView? = null
     private var previewTitle: TextView? = null
+    private var previewStatus: TextView? = null
     private var currentCategoryId: String? = null
     private var catalogRepairAttempted = false
+    private var originalCategories: List<CategoryEntity> = emptyList()
+    private var smartCategoryOrder = true
+    private lateinit var categorySortButton: Button
     private lateinit var categoryList: RecyclerView
     private lateinit var streamList: RecyclerView
     private var catalogStatus: TextView? = null
@@ -77,6 +82,7 @@ class ContentBrowserActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        smartCategoryOrder = statePrefs.getBoolean("smart_category_order", true)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(if (phoneMode) 16 else 30), dp(if (phoneMode) 14 else 22), dp(if (phoneMode) 16 else 30), dp(if (phoneMode) 14 else 22))
@@ -93,6 +99,23 @@ class ContentBrowserActivity : AppCompatActivity() {
             setPadding(dp(8), 0, 0, dp(if (phoneMode) 10 else 18))
         })
 
+        if (kind == KIND_LIVE) {
+            categorySortButton = Button(this).apply {
+                textSize = 13f
+                setTextColor(BlofyTvDesign.TextPrimary)
+                background = BlofyTvDesign.surface(dp(12).toFloat(), false)
+                isFocusable = true
+                setOnClickListener {
+                    smartCategoryOrder = !smartCategoryOrder
+                    statePrefs.edit().putBoolean("smart_category_order", smartCategoryOrder).apply()
+                    refreshCategoryOrder()
+                }
+            }
+            updateCategorySortCaption()
+            root.addView(categorySortButton, LinearLayout.LayoutParams(
+                if (phoneMode) LinearLayout.LayoutParams.MATCH_PARENT else dp(270),
+                dp(if (phoneMode) 44 else 48)).apply { bottomMargin = dp(8) })
+        }
         val body = LinearLayout(this).apply { orientation = if (phoneMode) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL }
         categoryList = RecyclerView(this).apply {
             layoutManager = if (phoneMode) LinearLayoutManager(this@ContentBrowserActivity, RecyclerView.HORIZONTAL, false)
@@ -122,7 +145,8 @@ class ContentBrowserActivity : AppCompatActivity() {
         setContentView(root)
 
         streamAdapter = FocusTextAdapter(
-            label = { (if (it.locked) "🔒 " else "") + it.name + if (kind == KIND_LIVE && it.archiveEnabled) "  ⏱" else "" },
+            label = { (if (it.locked) "🔒 " else "") + CategoryPresentation.cleanTitle(it.name) +
+                if (kind == KIND_LIVE && it.archiveEnabled) "  ⏱" else "" },
             onClick = ::openStream,
             onFocus = {
                 if (previewEnabled && !it.locked) {
@@ -134,9 +158,15 @@ class ContentBrowserActivity : AppCompatActivity() {
             itemKey = { it.key }
         )
         categoryAdapter = FocusTextAdapter(
-            label = { it.name },
+            label = { CategoryPresentation.cleanTitle(it.name) },
             onClick = { loadStreams(categoryId(it)) },
-            onFocus = { if (!phoneMode) loadStreams(categoryId(it)) },
+            // Loading every live channel can be expensive on older Android TVs.
+            // Keep the "all" shelf opt-in via OK rather than opening it on
+            // incidental D-pad focus during initial navigation.
+            onFocus = {
+                if (!phoneMode && (kind != KIND_LIVE || it.remoteId != ALL_CATEGORY_ID))
+                    loadStreams(categoryId(it))
+            },
             itemKey = { it.key }
         )
         categoryList.adapter = categoryAdapter
@@ -146,7 +176,10 @@ class ContentBrowserActivity : AppCompatActivity() {
             val dao = BlofyDatabase.get(applicationContext).dao()
             provider = dao.providers().first().firstOrNull() ?: run { finish(); return@launch }
             dao.categories(provider.id, kind).collect { items ->
-                val displayed = if (kind == KIND_LIVE) items else listOf(allCategory()) + items
+                originalCategories = items
+                val displayed = if (kind == KIND_LIVE)
+                    listOf(allCategory()) + CategoryPresentation.order(items, smartCategoryOrder) { it.name }
+                else listOf(allCategory()) + items
                 categoryAdapter.submit(displayed)
                 if (kind != KIND_LIVE) {
                     loadStreams(null)
@@ -160,6 +193,21 @@ class ContentBrowserActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    private fun updateCategorySortCaption() {
+        if (::categorySortButton.isInitialized)
+            categorySortButton.text = if (smartCategoryOrder)
+                "ترتيب الفئات: ذكي  ·  اضغط لترتيب المصدر"
+            else "ترتيب الفئات: المصدر  ·  اضغط للترتيب الذكي"
+    }
+
+    private fun refreshCategoryOrder() {
+        if (kind != KIND_LIVE) return
+        val rows = listOf(allCategory()) +
+            CategoryPresentation.order(originalCategories, smartCategoryOrder) { it.name }
+        categoryAdapter.submit(rows)
+        updateCategorySortCaption()
     }
 
     private fun createCatalogStatusRow() = LinearLayout(this).apply {
@@ -208,6 +256,13 @@ class ContentBrowserActivity : AppCompatActivity() {
             setShutterBackgroundColor(Color.BLACK)
         }
         addView(previewView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        previewStatus = TextView(this@ContentBrowserActivity).apply {
+            text = "اختر قناة لبدء المعاينة"
+            textSize = 13f
+            setTextColor(BLOFY_PURPLE_SOFT)
+            setPadding(dp(4), dp(8), 0, 0)
+        }
+        addView(previewStatus)
         addView(TextView(this@ContentBrowserActivity).apply {
             text = "OK: ملء الشاشة   •   ضغط مطوّل: الأرشيف ⏱   •   ↑↓: القنوات"
             textSize = 14f
@@ -327,7 +382,11 @@ class ContentBrowserActivity : AppCompatActivity() {
         providerId = if (::provider.isInitialized) provider.id else "catalog",
         remoteId = ALL_CATEGORY_ID,
         kind = kind,
-        name = if (kind == KIND_MOVIE) "كل الأفلام" else "كل المسلسلات",
+        name = when (kind) {
+            KIND_LIVE -> "جميع القنوات"
+            KIND_MOVIE -> "كل الأفلام"
+            else -> "كل المسلسلات"
+        },
         orderIndex = -1
     )
 
@@ -347,12 +406,25 @@ class ContentBrowserActivity : AppCompatActivity() {
         val profile = profile(provider)
         val url = ContentUrlResolver.live(provider, profile, stream)
         if (previewSession == null) {
-            previewSession = BlofyPlaybackSession(this, profile, "live_preview")
+            previewSession = BlofyPlaybackSession(this, profile, "live_preview") {
+                previewStatus?.text = "تعذرت المعاينة بعد المحاولات التلقائية • اضغط OK لفتح المشغل أو اختر قناة أخرى"
+            }
+            previewSession?.player?.addListener(object : Player.Listener {
+                override fun onRenderedFirstFrame() {
+                    previewStatus?.text = "البث مباشر • الفيديو يعمل"
+                }
+                override fun onPlaybackStateChanged(state: Int) {
+                    if (state == Player.STATE_BUFFERING) {
+                        previewStatus?.text = "جار تحميل البث..."
+                    }
+                }
+            })
             previewView?.player = previewSession?.player
         }
         lastPreviewKey = stream.key
         rememberStream(stream)
-        previewTitle?.text = stream.name
+        previewTitle?.text = CategoryPresentation.cleanTitle(stream.name)
+        previewStatus?.text = "جار بدء معاينة القناة..."
         previewSession?.play(url)
         refreshShortEpg(stream)
     }
@@ -375,6 +447,7 @@ class ContentBrowserActivity : AppCompatActivity() {
         previewView?.player = null
         previewSession?.release()
         previewSession = null
+        previewStatus?.text = "اختر قناة لبدء المعاينة"
     }
 
     private fun openStream(stream: StreamEntity) {
