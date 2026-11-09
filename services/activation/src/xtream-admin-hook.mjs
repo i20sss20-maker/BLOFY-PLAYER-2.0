@@ -45,6 +45,7 @@ import pg from 'pg';
 import { downloadXtreamM3uCatalog } from './xtream-m3u-catalog.mjs';
 import { distinctXtreamRecords } from './xtream-import-dedup.mjs';
 import {xtreamProviderOrder,withXtreamProviderPosition} from './xtream-provider-order.mjs';
+import {ensureXtreamCatalogRevisionSchema,bumpXtreamCatalogRevision} from './xtream-catalog-revision.mjs';
 import { assessXtreamSync } from './xtream-sync-guard.mjs';
 import { CONTROL_PATH, controlPage, deleteConfirmationPage, readControlForm } from './xtream-native-controls.mjs';
 import { xtreamEpisodeSamples, xtreamEpisodePlaybackCandidates, xtreamProbeMessage } from './xtream-series-probe.mjs';
@@ -288,6 +289,7 @@ async function ensureReady() {
       await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS source_sort_order INTEGER');
       await ensureAiJournalSchema(client);
       await ensureAiScanSchema(client);
+      await ensureXtreamCatalogRevisionSchema(client);
       await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS custom_icon_url TEXT');
       await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS featured BOOLEAN NOT NULL DEFAULT FALSE');
       await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS channel_number INTEGER');
@@ -1738,7 +1740,8 @@ async function syncServer(id, requestedTypes = ['live','movie','series']) {
     const partialWarning=failures.length?'بعض الأنواع لم تُستورد: '+failures.join('; ').slice(0,250):null;
     await pool.query(`UPDATE blofy_xtream_servers SET status='online',account_info=$2::jsonb,counts=$3::jsonb,last_error=$4,last_test_at=NOW(),last_sync_at=NOW(),updated_at=NOW() WHERE id=$1 AND enabled=TRUE AND deletion_requested_at IS NULL`,
       [id, JSON.stringify(accountInfo), JSON.stringify(counts),partialWarning]);
-    return { id, counts, details, partialWarning };
+    const catalogRevision=await bumpXtreamCatalogRevision(pool,id,'sync');
+    return { id, counts, details, partialWarning,catalogRevision };
   } catch (error) {
     const message = redactXtreamError(error);
     const cancelled=message==='xtream_sync_cancelled';
@@ -3108,6 +3111,72 @@ async function unifiedStreamBridge(req,res,url){
     return json(res,200,{ok:true,kind:'live',sourceUrl:url.href,
       sourceId,channelId,name:String(media.name||'').slice(0,160),
       extension:'ts',customerTrafficChanged:false});
+  }
+  // The pre-existing Studio scheduler runs every five minutes. These routes
+  // merely expose source-scoped opt-in controls through the authenticated
+  // STREAM bridge; no schedule is silently enabled by a deploy.
+  if(req.method==='GET'&&p==='/internal/blofy-stream/ops/schedule'){
+    const sourceId=String(url.searchParams.get('sourceId')||'');
+    if(!validUuid(sourceId))return json(res,400,{ok:false,code:'stream_invalid_source_id'});
+    const schedule=await studioPro.schedule(sourceId);
+    return json(res,200,{ok:true,sourceId,...schedule});
+  }
+  if(req.method==='POST'&&p==='/internal/blofy-stream/ops/schedule'){
+    const body=await readJson(req);
+    const sourceId=String(body?.sourceId||'');
+    if(!validUuid(sourceId)||typeof body?.enabled!=='boolean')
+      return json(res,400,{ok:false,code:'stream_invalid_schedule'});
+    const source=await serverById(sourceId);
+    if(!source||!source.enabled||!source.publish_catalog)
+      return json(res,409,{ok:false,code:'stream_source_not_published'});
+    const schedule=await studioPro.setSchedule(sourceId,{
+      enabled:body.enabled,intervalHours:body.intervalHours,
+      types:['live','movie','series']
+    });
+    return json(res,200,{ok:true,sourceId,...schedule,
+      firstRunImmediately:false,sourceCredentialsChanged:false});
+  }
+  if(req.method==='GET'&&p==='/internal/blofy-stream/ops/snapshots'){
+    const sourceId=String(url.searchParams.get('sourceId')||'');
+    if(!validUuid(sourceId))return json(res,400,{ok:false,code:'stream_invalid_source_id'});
+    const snapshots=await studioPro.listSnapshots(sourceId);
+    return json(res,200,{ok:true,sourceId,snapshots,
+      scope:'publisher_overrides_only_not_full_database_backup',
+      maxCategories:2000,maxCustomItems:2000});
+  }
+  if(req.method==='POST'&&p==='/internal/blofy-stream/ops/snapshot'){
+    const body=await readJson(req);
+    const sourceId=String(body?.sourceId||''),label=String(body?.label||'');
+    if(!validUuid(sourceId)||body?.confirmed!==true||label.length<4||label.length>60)
+      return json(res,400,{ok:false,code:'stream_snapshot_confirmation_required'});
+    const result=await studioPro.snapshot(sourceId,label);
+    return json(res,200,{ok:true,sourceId,...result,
+      scope:'publisher_overrides_only_not_full_database_backup'});
+  }
+  if(req.method==='GET'&&p==='/internal/blofy-stream/ops/source-stats'){
+    const sourceId=String(url.searchParams.get('sourceId')||'');
+    if(!validUuid(sourceId))return json(res,400,{ok:false,code:'stream_invalid_source_id'});
+    const source=await serverById(sourceId);
+    if(!source)return json(res,404,{ok:false,code:'stream_source_missing'});
+    const [accounts,codes,revision]=await Promise.all([
+      pool.query(`SELECT COUNT(*)::int AS total,
+       COUNT(*) FILTER (WHERE enabled=TRUE AND (expires_at IS NULL OR expires_at>NOW()))::int AS active
+       FROM blofy_xtream_gateway_accounts WHERE source_id=$1`,[sourceId]),
+      pool.query(`SELECT COUNT(*)::int AS total,
+       COUNT(*) FILTER(WHERE c.redeemed_at IS NOT NULL AND c.revoked_at IS NULL)::int AS redeemed
+       FROM blofy_xtream_gateway_duration_codes c JOIN blofy_xtream_gateway_accounts a ON a.id=c.account_id
+       WHERE a.source_id=$1`,[sourceId]),
+      pool.query(`SELECT revision,updated_at FROM blofy_xtream_catalog_revisions WHERE source_id=$1`,[sourceId])
+    ]);
+    return json(res,200,{ok:true,sourceId,
+      enabled:source.enabled,published:source.publish_catalog,status:source.status,
+      lastSyncAt:source.last_sync_at||null,
+      lastErrorCode:source.last_error?'xtream_sync_warning_or_error':null,
+      accounts:{total:accounts.rows[0].total,active:accounts.rows[0].active},
+      codes:{total:codes.rows[0].total,redeemed:codes.rows[0].redeemed},
+      catalogRevision:Number(revision.rows[0]?.revision||0),
+      catalogUpdatedAt:revision.rows[0]?.updated_at||null,
+      concurrentLiveViewers:null,concurrentViewersMeasured:false});
   }
   if(req.method==='GET'&&p==='/internal/blofy-stream/media-failures'){
     const sourceId=String(url.searchParams.get('sourceId')||'').trim();
