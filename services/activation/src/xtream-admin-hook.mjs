@@ -58,6 +58,7 @@ import {auditFullStreamCatalog} from './stream-full-library-audit.mjs';
 import {suggestCatalogWithAI} from './stream-ai-catalog-suggestions.mjs';
 import {suggestCatalogWithGemini} from './stream-gemini-catalog-suggestions.mjs';
 import {proposeCatalogCommand} from './stream-ai-command-planner.mjs';
+import {proposeExistingCategoryAssignments} from './stream-ai-item-organizer.mjs';
 import {fullCatalogCategoryOrder,summarizeFullCatalogCoverage} from './stream-ai-full-sort.mjs';
 import { normalizeXtreamDetails,mergedXtreamMetadata } from './xtream-item-details.mjs';
 import { tmdbConfigured,validatedTmdbId,fetchTmdbDetails } from './xtream-tmdb.mjs';
@@ -280,6 +281,7 @@ async function ensureReady() {
       )`);
       // Publisher controls survive every Xtream re-import.
       await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS custom_name TEXT');
+      await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS custom_category_id TEXT');
       await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS custom_icon_url TEXT');
       await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS featured BOOLEAN NOT NULL DEFAULT FALSE');
       await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS channel_number INTEGER');
@@ -1527,7 +1529,7 @@ async function flushItemBatch(serverId, mediaType, syncToken, batch) {
     SELECT $1::uuid,$2::text,x.source_id,x.category_id,x.name,x.icon_url,x.container_extension,TRUE,COALESCE(x.metadata,'{}'::jsonb),x.sync_token,NOW()
     FROM jsonb_to_recordset($3::jsonb) AS x(source_id text,category_id text,name text,icon_url text,container_extension text,metadata jsonb,sync_token text)
     ON CONFLICT(server_id,media_type,source_id) DO UPDATE SET
-      category_id=EXCLUDED.category_id,name=EXCLUDED.name,
+      category_id=COALESCE(blofy_xtream_items.custom_category_id,EXCLUDED.category_id),name=EXCLUDED.name,
       container_extension=EXCLUDED.container_extension,
       icon_url=COALESCE(NULLIF(EXCLUDED.icon_url,''),blofy_xtream_items.icon_url),
       metadata=EXCLUDED.metadata ||
@@ -2281,7 +2283,42 @@ async function chatWithLibraryAI(body){
  const planId=crypto.randomBytes(24).toString('hex');
  const proposal={createdAt:now,sourceId,type,action:result.action,
    mode:result.sortMode,sourceName:String(server.name||'').slice(0,120)};
- if(result.action==='full_catalog_sort'){
+ if(result.action==='classify_items'){
+   const offset=Number(body?.offset||0);
+   if(!Number.isInteger(offset)||offset<0||offset>39996||offset%12!==0)
+     return {ok:false,code:'stream_ai_batch_offset_invalid'};
+   const allCategories=(await pool.query(`SELECT source_category_id,name,item_count FROM blofy_xtream_categories
+     WHERE server_id=$1 AND media_type=$2 AND enabled=TRUE
+     ORDER BY sort_order,name,source_category_id LIMIT 1001`,[sourceId,type])).rows;
+   if(allCategories.length>1000)return {ok:false,code:'stream_ai_category_choices_exceeded'};
+   if(!allCategories.length)return {ok:false,code:'stream_ai_categories_missing'};
+   const rows=(await pool.query(`SELECT source_id,category_id,
+     COALESCE(NULLIF(custom_name,''),name) AS name FROM blofy_xtream_items
+     WHERE server_id=$1 AND media_type=$2 AND enabled=TRUE
+     ORDER BY source_id LIMIT 12 OFFSET $3`,[sourceId,type,offset])).rows;
+   if(!rows.length)return {ok:false,code:'stream_ai_end_of_catalog'};
+   const categories=shortlistExistingCategories(allCategories,rows,80);
+   const suggested=await proposeExistingCategoryAssignments(
+     rows.map(x=>({id:String(x.source_id),name:x.name,
+       categoryName:categories.find(v=>String(v.source_category_id)===String(x.category_id))?.name||''})),
+     categories,{apiKey:key,
+       model:process.env.BLOFY_LIBRARY_AI_MODEL||'gemini-3.5-flash-lite'});
+   if(!suggested.ok)return suggested;
+   const allowed=new Map(rows.map(x=>[String(x.source_id),x]));
+   proposal.assignments=suggested.assignments.flatMap(x=>{
+     const original=allowed.get(x.id);
+     if(!original||String(original.category_id||'')===x.categoryId)return [];
+     return [{id:x.id,expectedCategoryId:original.category_id??null,
+       expectedName:String(original.name),categoryId:x.categoryId,
+       categoryName:x.categoryName,reason:x.reason,title:x.title}];
+   });
+   proposal.offset=offset;
+   proposal.hasMore=rows.length===12;
+   if(!proposal.assignments.length)return {ok:true,previewOnly:true,allowed:false,
+     action:'classify_items',requiresApproval:false,sourceId,type,offset,
+     nextOffset:proposal.hasMore?offset+12:null,
+     reply:'راجعت هذه الدفعة ولم أجد نقلًا عالي الثقة إلى فئة موجودة. انتقل للدفعة التالية.'};
+ }else if(result.action==='full_catalog_sort'){
    const scopedTypes=['live','movie','series'];
    proposal.sections=[];
    for(const mediaType of scopedTypes){
@@ -2335,7 +2372,9 @@ async function chatWithLibraryAI(body){
    }));
  }
  commandProposals.set(planId,proposal);
- const summary=result.action==='full_catalog_sort'
+ const summary=result.action==='classify_items'
+   ?'اقتراح نقل '+proposal.assignments.length+' عنصرًا إلى فئات موجودة ضمن دفعة '+(proposal.offset/12+1)
+   :result.action==='full_catalog_sort'
    ?'إعادة ترتيب الأقسام الحالية للقنوات والأفلام والمسلسلات في مصدر '+proposal.sourceName+
      '؛ مع أولوية BEIN وALWAN وTHMANEA وSTARZPLAY وSHASHA والعربية والسنوات المسجلة 2026 فما فوق.'
    :result.action==='titles_cleanup'
@@ -2344,6 +2383,11 @@ async function chatWithLibraryAI(body){
      ' في مصدر '+proposal.sourceName+' بنمط '+proposal.mode;
  return {...result,planId,sourceId,type,
   serverName:proposal.sourceName,requiresApproval:true,summary,
+  itemAssignments:(proposal.assignments||[]).map(x=>({
+    title:x.title,oldCategoryId:String(x.expectedCategoryId??''),
+    newCategoryName:x.categoryName,reason:x.reason
+  })),
+  nextOffset:proposal.hasMore?proposal.offset+12:null,
   proposedChanges:(proposal.changes||[]).map(x=>({before:x.before,after:x.after})),
   categoryPreview:proposal.previewCategories||[],
   fullCatalogPreview:(proposal.sections||[]).map(s=>({
@@ -2367,7 +2411,41 @@ async function approveLibraryAICommand(body){
  const source=await serverById(plan.sourceId);
  if(!source)return {ok:false,code:'stream_library_source_missing'};
  let result,changedItems=0;
- if(plan.action==='titles_cleanup'){
+ if(plan.action==='classify_items'){
+   const changes=Array.isArray(plan.assignments)?plan.assignments:[];
+   if(!changes.length||changes.length>12)
+     return {ok:false,code:'stream_ai_plan_invalid'};
+   const client=await pool.connect();
+   try{
+     await client.query('BEGIN');
+     await client.query("SET LOCAL lock_timeout='1300ms'");
+     await client.query("SET LOCAL statement_timeout='12000ms'");
+     for(const move of changes){
+       const updated=await client.query(`UPDATE blofy_xtream_items i
+         SET category_id=$4,custom_category_id=$4,updated_at=NOW()
+         WHERE i.server_id=$1 AND i.media_type=$2 AND i.source_id=$3
+          AND i.category_id IS NOT DISTINCT FROM $5
+          AND COALESCE(NULLIF(i.custom_name,''),i.name)=$6
+          AND EXISTS(SELECT 1 FROM blofy_xtream_categories c
+            WHERE c.server_id=i.server_id AND c.media_type=i.media_type
+              AND c.source_category_id=$4 AND c.enabled=TRUE)
+         RETURNING i.source_id`,
+         [plan.sourceId,plan.type,move.id,move.categoryId,
+          move.expectedCategoryId,move.expectedName]);
+       if(updated.rowCount!==1)
+         throw Object.assign(new Error('stream_ai_plan_conflict'),{status:409});
+       changedItems++;
+     }
+     await client.query('COMMIT');
+   }catch(error){
+     await client.query('ROLLBACK').catch(()=>{});
+     if(error?.message==='stream_ai_plan_conflict')return {ok:false,code:'stream_ai_plan_conflict'};
+     if(['55P03','57014'].includes(String(error?.code||'')))
+       return {ok:false,code:'xtream_category_busy_retry'};
+     throw error;
+   }finally{client.release();}
+   result={updated:0,mode:null,unchanged:false};
+ }else if(plan.action==='titles_cleanup'){
    const changes=Array.isArray(plan.changes)?plan.changes:[];
    if(!changes.length||changes.length>12)
      return {ok:false,code:'stream_ai_plan_invalid'};
@@ -2449,8 +2527,10 @@ async function approveLibraryAICommand(body){
  libraryAuditCache.delete(plan.sourceId+':'+plan.type);
  return {ok:true,applied:true,action:plan.action,mode:plan.mode,
   sourceId:plan.sourceId,type:plan.type,
-  updatedCategories:result.updated,changedTitles:changedItems,unchanged:result.unchanged,
-  changedOnServer:plan.action==='titles_cleanup'||result.unchanged!==true,
+  updatedCategories:result.updated,
+  changedTitles:plan.action==='titles_cleanup'?changedItems:0,
+  movedItems:plan.action==='classify_items'?changedItems:0,unchanged:result.unchanged,
+  changedOnServer:['titles_cleanup','classify_items'].includes(plan.action)||result.unchanged!==true,
   sourcePublished:Boolean(source.enabled&&source.publish_catalog===true),
   customerCatalogUpdated:false,
   clientsNeedRefresh:true,automaticDevicePush:false,
