@@ -969,7 +969,7 @@ class LoginActivity : AppCompatActivity() {
         setStroke(if (focused) dp(2) else dp(1), when { focused -> BlofyTvDesign.FocusStroke; active -> 0xFF715A89.toInt(); else -> 0xFF49375E.toInt() })
     }
 
-    private fun isArabic() = resources.configuration.locales.get(0).language == "ar"
+    private fun isArabic() = androidx.core.os.ConfigurationCompat.getLocales(resources.configuration).get(0)?.language == "ar"
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 }
