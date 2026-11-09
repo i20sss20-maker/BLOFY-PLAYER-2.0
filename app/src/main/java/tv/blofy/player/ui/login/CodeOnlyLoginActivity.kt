@@ -90,7 +90,11 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
             LinearLayout.LayoutParams.WRAP_CONTENT))
 
         panel.addView(ImageView(this).apply {
-            setImageResource(R.drawable.blofy_logo)
+            // Only code-only variants include this brand asset. The normal
+            // BLOFY PLAYER APK keeps its own original launcher/splash logo.
+            val streamLogo = resources.getIdentifier("blofy_stream_brand",
+                "drawable",packageName)
+            setImageResource(if (streamLogo!=0) streamLogo else R.drawable.blofy_logo)
             scaleType = ImageView.ScaleType.FIT_CENTER
             contentDescription = "شعار BLOFY STREAM"
         }, LinearLayout.LayoutParams(dp(172), dp(108)).apply { bottomMargin = dp(6) })

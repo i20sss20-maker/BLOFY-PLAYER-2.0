@@ -93,8 +93,16 @@ object StreamCodeSession {
     }
 
     fun clearClaim(context: Context) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().remove(PROVIDER_ID_KEY).remove(ENCRYPTED_TOKEN).apply()
+        // Logout is local only; preserve INSTALL_KEY so the SAME device can
+        // re-enter its previously redeemed code without resetting the term.
+        // Clear timestamps too, to avoid residual subscription metadata.
+        val saved=context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .remove(PROVIDER_ID_KEY)
+            .remove(ENCRYPTED_TOKEN)
+            .remove(ACTIVATED_AT)
+            .remove(EXPIRES_AT)
+            .commit()
+        check(saved) { "تعذر تسجيل الخروج من هذا الجهاز" }
     }
 
     suspend fun hasSavedProvider(context: Context): Boolean =

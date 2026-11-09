@@ -1095,7 +1095,10 @@ class HomeActivity : AppCompatActivity() {
         setPadding(dp(8), dp(12), dp(8), dp(12))
         clipChildren = false
         addView(ImageView(this@HomeActivity).apply {
-            setImageResource(R.drawable.blofy_logo)
+            setImageResource(if (BuildConfig.CODE_ONLY_LOGIN) {
+                resources.getIdentifier("blofy_stream_app_icon","drawable",packageName)
+                    .takeIf { it!=0 } ?: R.drawable.blofy_logo
+            } else R.drawable.blofy_logo)
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             contentDescription = if(BuildConfig.CODE_ONLY_LOGIN) "BLOFY STREAM" else "BLOFY PLAYER"
         }, LinearLayout.LayoutParams(dp(72), dp(44)).apply { bottomMargin = dp(18) })
@@ -1249,7 +1252,10 @@ class HomeActivity : AppCompatActivity() {
             setPadding(dp(16), 0, dp(12), 0)
         }
         header.addView(ImageView(this).apply {
-            setImageResource(R.drawable.blofy_logo); scaleType = ImageView.ScaleType.CENTER_INSIDE
+            setImageResource(if (BuildConfig.CODE_ONLY_LOGIN) {
+                resources.getIdentifier("blofy_stream_app_icon","drawable",packageName)
+                    .takeIf { it!=0 } ?: R.drawable.blofy_logo
+            } else R.drawable.blofy_logo); scaleType = ImageView.ScaleType.CENTER_INSIDE
             contentDescription = if(BuildConfig.CODE_ONLY_LOGIN) "BLOFY STREAM" else "BLOFY PLAYER"
         }, LinearLayout.LayoutParams(dp(48), dp(44)))
         header.addView(TextView(this).apply {
