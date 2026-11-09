@@ -11,11 +11,14 @@ import java.net.UnknownHostException
 import java.security.cert.CertPathValidatorException
 import java.util.concurrent.TimeUnit
 import javax.net.ssl.SSLException
+import androidx.annotation.OptIn
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.common.PlaybackException
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.mediacodec.MediaCodecDecoderException
 
 /** Fixed-origin self-check and safe user-facing error categories; no tokens or stream URLs. */
+@OptIn(markerClass = [UnstableApi::class])
 object StreamConnectionDiagnostics {
     enum class Cause { CERTIFICATE, DNS, TIMEOUT, OFFLINE_OR_REFUSED, UNAUTHORIZED, SERVER_ERROR, DECODER, OTHER }
 
