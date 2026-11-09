@@ -1,7 +1,7 @@
 // BLOFY category organizer. Changes only the display order of existing
 // categories; it does not invent content years or touch hidden categories.
 const arCollator = new Intl.Collator('ar', {numeric:true,sensitivity:'base'});
-export const XTREAM_CATEGORY_SORT_MODES = Object.freeze(['popular','alphabetical','smart']);
+export const XTREAM_CATEGORY_SORT_MODES = Object.freeze(['popular','alphabetical','smart','sports_first','news_first','kids_first']);
 const LANGUAGES=Object.freeze([
   ['arabic',/(?:عرب(?:ي|ية|ى)?|عربيه|arabic|عربيات)/iu,'عربي',0],
   ['foreign',/(?:أجنبي|اجنبي|اجنبية|انجليزي|إنجليزي|english|foreign|hollywood|american|أمريكي|امريكي)/iu,'أجنبي',1],
@@ -35,6 +35,16 @@ export function sortXtreamCategories(rows,mode){
     const countA=Math.max(0,Number(a.item_count)||0);
     const countB=Math.max(0,Number(b.item_count)||0);
     if(mode==='popular'&&countA!==countB)return countB-countA;
+    if(['sports_first','news_first','kids_first'].includes(mode)){
+      const match=mode==='sports_first'?/(?:sport|sports|ssc|bein|رياض|مباراة|كرة|football)/iu:
+        mode==='news_first'?/(?:news|أخبار|اخبار|إخبار|عاجل)/iu:
+        /(?:kids|children|cartoon|أطفال|اطفال|كرتون|anime|أنمي)/iu;
+      const ap=match.test(String(a.name||''))?0:1;
+      const bp=match.test(String(b.name||''))?0:1;
+      if(ap!==bp)return ap-bp;
+      // Keep non-target categories in their previous relative order.
+      return a._originalIndex-b._originalIndex;
+    }
     if(mode==='smart'){
       if(a._smart.priority!==b._smart.priority)return a._smart.priority-b._smart.priority;
       // Newest known year first, then undated shelves within the same language.

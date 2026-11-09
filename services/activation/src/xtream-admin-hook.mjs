@@ -57,6 +57,7 @@ import { auditXtreamCatalogSample } from './xtream-library-insights.mjs';
 import {auditFullStreamCatalog} from './stream-full-library-audit.mjs';
 import {suggestCatalogWithAI} from './stream-ai-catalog-suggestions.mjs';
 import {suggestCatalogWithGemini} from './stream-gemini-catalog-suggestions.mjs';
+import {proposeCatalogCommand} from './stream-ai-command-planner.mjs';
 import { normalizeXtreamDetails,mergedXtreamMetadata } from './xtream-item-details.mjs';
 import { tmdbConfigured,validatedTmdbId,fetchTmdbDetails } from './xtream-tmdb.mjs';
 import { sortXtreamCategories } from './xtream-category-sort.mjs';
@@ -2247,6 +2248,141 @@ async function reviewStreamLibrary(sourceId,type){
 }
 const aiCatalogRequestTimes=[];
 const geminiTestTimes=[];
+const commandProposals=new Map();
+const commandTimes=[];
+const COMMAND_TTL=5*60*1000;
+function trimCommandProposals(now){
+ for(const [id,entry] of commandProposals)
+  if(now-entry.createdAt>COMMAND_TTL)commandProposals.delete(id);
+ if(commandProposals.size>60)commandProposals.delete(commandProposals.keys().next().value);
+ while(commandTimes.length&&commandTimes[0]<now-3600000)commandTimes.shift();
+}
+async function chatWithLibraryAI(body){
+ const sourceId=String(body?.sourceId||''),type=String(body?.type||'');
+ if(!validUuid(sourceId)||!validType(type))
+  return {ok:false,code:'stream_ai_selection_invalid'};
+ const server=await serverById(sourceId);
+ if(!server)return {ok:false,code:'stream_library_source_missing'};
+ if(String(process.env.BLOFY_LIBRARY_AI_PROVIDER||'openai').toLowerCase()!=='gemini')
+  return {ok:false,code:'gemini_not_selected'};
+ const key=String(process.env.BLOFY_LIBRARY_GEMINI_API_KEY||'').trim();
+ if(key.length<32)return {ok:false,code:'stream_ai_not_configured'};
+ const now=Date.now();trimCommandProposals(now);
+ if(commandTimes.length>=12)
+  return {ok:false,code:'stream_ai_hourly_budget_exhausted'};
+ commandTimes.push(now);
+ const result=await proposeCatalogCommand(body?.message,{
+  apiKey:key,model:process.env.BLOFY_LIBRARY_AI_MODEL||'gemini-3.5-flash-lite',
+  history:Array.isArray(body?.history)?body.history.slice(-4):[]});
+ if(!result.ok||!result.allowed)
+  return {...result,serverName:String(server.name||'').slice(0,120),
+   sourceId,type,requiresApproval:false};
+ const planId=crypto.randomBytes(24).toString('hex');
+ const proposal={createdAt:now,sourceId,type,action:result.action,
+   mode:result.sortMode,sourceName:String(server.name||'').slice(0,120)};
+ if(result.action==='titles_cleanup'){
+   const rows=(await pool.query(`SELECT source_id,
+     COALESCE(NULLIF(custom_name,''),name) AS name
+     FROM blofy_xtream_items WHERE server_id=$1 AND media_type=$2
+     ORDER BY source_id LIMIT 12`,[sourceId,type])).rows;
+   proposal.changes=rows.map(row=>{
+     const before=String(row.name||'');
+     const after=before.replace(/#{3,}/g,' ').replace(/\\s{2,}/g,' ').trim();
+     return {id:String(row.source_id),before,after};
+   }).filter(x=>x.after&&x.after!==x.before&&x.after.length<=180&&
+     /^[a-zA-Z0-9._-]{1,128}$/.test(x.id));
+   if(!proposal.changes.length)
+     return {ok:true,previewOnly:true,allowed:false,action:'titles_cleanup',
+       requiresApproval:false,reply:'راجعت أول 12 عنوانًا، ولا توجد زخارف واضحة تحتاج تنظيفًا. لم أغيّر أي شيء.',
+       sourceId,type};
+ }else{
+   const rows=(await pool.query(`SELECT source_category_id,name,item_count
+     FROM blofy_xtream_categories
+     WHERE server_id=$1 AND media_type=$2
+     ORDER BY sort_order,name,source_category_id LIMIT 1001`,[sourceId,type])).rows;
+   if(rows.length>1000)return {ok:false,code:'stream_ai_catalog_too_large'};
+   if(!rows.length)return {ok:true,previewOnly:true,allowed:false,
+     requiresApproval:false,reply:'لا توجد أقسام في المصدر المحدد لترتيبها.'};
+   const sorted=sortXtreamCategories(rows,result.sortMode);
+   proposal.originalCategoryOrder=rows.map(x=>String(x.source_category_id));
+   proposal.expectedCategoryOrder=sorted;
+   proposal.previewCategories=sorted.slice(0,12).map(id=>({
+     name:String(rows.find(x=>String(x.source_category_id)===id)?.name||'').slice(0,140)
+   }));
+ }
+ commandProposals.set(planId,proposal);
+ const summary=result.action==='titles_cleanup'
+   ?'تنظيف زخارف ومسافات '+proposal.changes.length+' عنوانًا في مصدر '+proposal.sourceName
+   :'ترتيب فئات '+(type==='live'?'القنوات':type==='movie'?'الأفلام':'المسلسلات')+
+    ' في مصدر '+proposal.sourceName+' بنمط '+proposal.mode;
+ return {...result,planId,sourceId,type,
+  serverName:proposal.sourceName,requiresApproval:true,summary,
+  proposedChanges:(proposal.changes||[]).map(x=>({before:x.before,after:x.after})),
+  categoryPreview:proposal.previewCategories||[],
+  customersRefreshAutomatically:false,customerCatalogUpdated:false};
+}
+async function approveLibraryAICommand(body){
+ const token=String(body?.planId||'');
+ if(!/^[a-f0-9]{48}$/.test(token)||body?.approve!==true)
+  return {ok:false,code:'stream_ai_approval_invalid'};
+ const plan=commandProposals.get(token);
+ if(!plan)return {ok:false,code:'stream_ai_plan_expired'};
+ // Consume before DB mutation to prohibit double submission.
+ commandProposals.delete(token);
+ if(Date.now()-plan.createdAt>COMMAND_TTL)
+  return {ok:false,code:'stream_ai_plan_expired'};
+ const source=await serverById(plan.sourceId);
+ if(!source)return {ok:false,code:'stream_library_source_missing'};
+ let result,changedItems=0;
+ if(plan.action==='titles_cleanup'){
+   const changes=Array.isArray(plan.changes)?plan.changes:[];
+   if(!changes.length||changes.length>12)
+     return {ok:false,code:'stream_ai_plan_invalid'};
+   const client=await pool.connect();
+   try{
+     await client.query('BEGIN');
+     await client.query("SET LOCAL lock_timeout='1300ms'");
+     await client.query("SET LOCAL statement_timeout='12000ms'");
+     for(const item of changes){
+       const updated=await client.query(`UPDATE blofy_xtream_items
+         SET custom_name=$4,updated_at=NOW()
+         WHERE server_id=$1 AND media_type=$2 AND source_id=$3
+          AND COALESCE(NULLIF(custom_name,''),name)=$5
+         RETURNING source_id`,[plan.sourceId,plan.type,item.id,item.after,item.before]);
+       if(updated.rowCount!==1)
+         throw Object.assign(new Error('stream_ai_plan_conflict'),{status:409});
+       changedItems++;
+     }
+     await client.query('COMMIT');
+   }catch(error){
+     await client.query('ROLLBACK').catch(()=>{});
+     if(error?.message==='stream_ai_plan_conflict')
+       return {ok:false,code:'stream_ai_plan_conflict'};
+     throw error;
+   }finally{client.release();}
+   result={updated:0,mode:null,unchanged:false};
+ }else if(plan.action==='category_sort'){
+   // Check for changes since the operator previewed this category order.
+   const rows=(await pool.query(`SELECT source_category_id
+     FROM blofy_xtream_categories WHERE server_id=$1 AND media_type=$2
+     ORDER BY sort_order,name,source_category_id LIMIT 1001`,
+     [plan.sourceId,plan.type])).rows;
+   if(rows.length>1000||JSON.stringify(rows.map(x=>String(x.source_category_id)))!==
+      JSON.stringify(plan.originalCategoryOrder))
+     return {ok:false,code:'stream_ai_plan_conflict'};
+   result=await autoSortCategories(plan.sourceId,plan.type,plan.mode);
+ }else return {ok:false,code:'stream_ai_plan_invalid'};
+ libraryAuditCache.delete(plan.sourceId+':'+plan.type);
+ return {ok:true,applied:true,action:plan.action,mode:plan.mode,
+  sourceId:plan.sourceId,type:plan.type,
+  updatedCategories:result.updated,changedTitles:changedItems,unchanged:result.unchanged,
+  changedOnServer:plan.action==='titles_cleanup'||result.unchanged!==true,
+  sourcePublished:Boolean(source.enabled&&source.publish_catalog===true),
+  customerCatalogUpdated:false,
+  clientsNeedRefresh:true,automaticDevicePush:false,
+  note:'تم حفظ التغييرات في فهرس BLOFY. ظهورها في تطبيقات العملاء يعتمد على إعادة جلب الفهرس والتخزين المؤقت.'};
+}
+
 async function suggestStreamLibraryAI(body){
   const sourceId=String(body?.sourceId||''),type=String(body?.type||'');
   const offset=Number(body?.offset||0);
@@ -2347,7 +2483,7 @@ async function patchCategory(serverId, mediaType, categoryId, enabled) {
 // Operator-triggered, transactional reordering only. No catalog rows,
 // visibility, subscriber entitlements or upstream credentials are touched.
 async function autoSortCategories(serverId,mediaType,mode){
-  if(!validUuid(serverId)||!validType(mediaType)||!['popular','alphabetical','smart'].includes(mode))
+  if(!validUuid(serverId)||!validType(mediaType)||!['popular','alphabetical','smart','sports_first','news_first','kids_first'].includes(mode))
     throw Object.assign(new Error('xtream_category_sort_invalid'),{status:400});
   const client=await pool.connect();
   try{
@@ -2867,6 +3003,14 @@ async function unifiedStreamBridge(req,res,url){
       suggestionsReturned:result.suggestions?.length||0,
       modelUsed:result.modelUsed===true
     });
+  }
+  if(req.method==='POST'&&p==='/internal/blofy-stream/library-ai/chat'){
+    const result=await chatWithLibraryAI(await readJson(req));
+    return json(res,result.ok?200:409,result);
+  }
+  if(req.method==='POST'&&p==='/internal/blofy-stream/library-ai/apply'){
+    const result=await approveLibraryAICommand(await readJson(req));
+    return json(res,result.ok?200:409,result);
   }
   if(req.method==='GET'&&p==='/internal/blofy-stream/library-ai/status'){
     const provider=String(process.env.BLOFY_LIBRARY_AI_PROVIDER||'openai').trim().toLowerCase();
