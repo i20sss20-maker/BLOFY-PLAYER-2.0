@@ -13,8 +13,8 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 /**
- * Code-only APK bookkeeping. Credentials stay in the existing private Room
- * provider database, not in preferences, intents, logs, or UI.
+ * Code-only APK bookkeeping. Only an encrypted app bearer session is retained
+ * on the device. No Xtream host credentials or exported M3U are stored.
  * The server is authoritative for expiry; do not trust Android TV wall clocks.
  */
 object StreamCodeSession {
