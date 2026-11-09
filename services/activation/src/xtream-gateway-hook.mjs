@@ -41,6 +41,7 @@ import { normalizeXtreamEpg } from './xtream-epg.mjs';
 import { acceptsXtreamGzip } from './xtream-catalog-compression.mjs';
 import { shouldRetryXtreamWithoutRange,firstByteXtreamRange } from './xtream-media-range.mjs';
 import { recordXtreamPlayback,xtreamPlaybackSnapshot } from './xtream-playback-metrics.mjs';
+import {summarizeRecoveryAdvice} from './restream-recovery-advice.mjs';
 import { XtreamDenialCooldown } from './xtream-denial-cooldown.mjs';
 import { createGatewayUsageThrottle } from './xtream-gateway-usage-throttle.mjs';
 import {createStreamDurationCodes,ensureStreamCodeTable} from './xtream-duration-codes.mjs';
@@ -1698,7 +1699,8 @@ http.createServer = function withBlofyXtreamGateway(listener) {
         return json(res,200,result);
       }
       if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream-gateway/playback-health') {
-        return json(res,200,{ok:true,metrics:xtreamPlaybackSnapshot()});
+        const metrics=xtreamPlaybackSnapshot();
+        return json(res,200,{ok:true,metrics,recoveryAdvice:summarizeRecoveryAdvice(metrics.recentIssues)});
       }
       // Operator-only aggregate view: no media URLs, credentials, content
       // names, gateway account identities or subscriber permissions.

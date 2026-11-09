@@ -1,0 +1,10 @@
+.blofy-monitor{margin:18px 0;padding:20px;border:1px solid rgba(126,161,210,.24);border-radius:18px;background:#101723;color:#e9f2ff}
+.blofy-monitor header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.blofy-monitor h2{font-size:1.2rem;margin:0}.blofy-monitor p{color:#b8c8d9}
+.blofy-monitor-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(138px,1fr));gap:10px;margin:18px 0}
+.blofy-monitor-grid>div{padding:14px;border:1px solid #304055;border-radius:12px}
+.blofy-monitor-grid strong{display:block;font-size:1.4rem;margin-top:8px;color:#eff6ff}
+.blofy-monitor-grid span{color:#b8c8d9;font-size:.85rem}
+.blofy-monitor table{width:100%;border-collapse:collapse;text-align:right}
+.blofy-monitor th,.blofy-monitor td{padding:9px;border-bottom:1px solid #304055;overflow-wrap:anywhere;font-size:.85rem}
+.blofy-monitor .monitor-scroll{overflow-x:auto}

@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="/sources-admin.css?v=20261107-stream2-v2">
   <link rel="stylesheet" href="/site-polish.css?v=20261025-lux-final">
   <link rel="stylesheet" href="/stream-console.css?v=20261107-pro-v2">
+  <link rel="stylesheet" href="/stream-live-monitor.css?v=20261109">
   <link rel="stylesheet" href="/stream-premium.css?v=20261107-smart-v1">
   <link rel="stylesheet" href="/stream-simple-mode.css?v=20261108-simple-1">
 </head>
@@ -88,6 +89,25 @@
             <p id="blofyRestreamEngineStatus" role="status" aria-live="polite">جاري فحص اتصال المحرك...</p>
             <div class="stream-horizon-engine-foot">الاتصال بالمحرك لا يؤكد تشغيل المحتوى. مشاهدة العملاء ما زالت على المسار الحالي.</div>
           </div>
+        </section>
+
+        <section class="blofy-monitor" id="blofyLiveMonitor" aria-label="مركز مراقبة البث">
+          <header><div><h2>◉ مركز مراقبة البث</h2><p>قراءة مباشرة لبيانات MediaMTX التجريبية والفعلية عند توفرها. بدون تشغيل أو فحص للقنوات.</p></div><button class="button ghost" type="button" id="blofyLiveRefresh">تحديث المراقبة</button></header>
+          <div class="blofy-monitor-grid">
+            <div><span>جلسات HLS</span><strong id="blofyLiveSessions">—</strong></div>
+            <div><span>جلسات القراءة</span><strong id="blofyLiveReaders">—</strong></div>
+            <div><span>المسارات المرصودة</span><strong id="blofyLivePaths">—</strong></div>
+            <div><span>بايتات HLS المرسلة (عداد)</span><strong id="blofyLiveBytes">—</strong></div>
+            <div><span>معدل إرسال HLS المرصود</span><strong id="blofyLiveRate">—</strong></div>
+            <div><span>بدايات التشغيل الحقيقية (آخر ساعة)</span><strong id="blofyRealStarts">—</strong></div>
+            <div><span>أخطاء بدء التشغيل الحقيقية</span><strong id="blofyRealFailures">—</strong></div>
+            <div><span>زمن بدء التشغيل P95</span><strong id="blofyRealP95">—</strong></div>
+          </div>
+          <p id="blofyLiveAlert" role="status">حالة التنبيهات غير محمّلة</p>
+          <p id="blofyLiveMonitorMessage" role="status" aria-live="polite">اضغط تحديث المراقبة لقراءة الإحصاءات.</p>
+          <div class="monitor-scroll"><table><thead><tr><th>معرّف القناة الآمن</th><th>حالة المسار</th><th>جلسات HLS</th><th>قراء</th></tr></thead><tbody id="blofyLiveMonitorRows"></tbody></table></div>
+          <h3>تشخيص مشكلات التشغيل الحديثة</h3><ul id="blofyRecoveryAdvice" aria-label="توصيات التشخيص"> <li>اضغط تحديث المراقبة لعرض نتائج الأعطال.</li></ul>
+          <p>تنبيه: جلسات التشغيل لا تساوي عدد الأجهزة أو المشتركين الفريدين، ونجاح الاختبار التجريبي لا يثبت سلامة القنوات الفعلية.</p>
         </section>
 
         <section class="console-summary" aria-label="ملخص المكتبة">
@@ -682,5 +702,6 @@
   <script src="/blofy-studio-pro.js?v=20261106-pro-v1" defer></script>
   <script src="/xtream-gateway-admin.js?v=20261106-account-visibility-v2" defer></script>
   <script src="/stream-premium.js?v=20261107-queue-v2" defer></script>
+  <script src="/stream-live-monitor.js?v=20261109" defer></script>
 </body>
 </html>
