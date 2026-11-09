@@ -66,8 +66,8 @@ export async function issueStreamRelayGrant({sourceUrl,kind,sharedLive=false},{
     throw new Error('stream_bridge_invalid_media');
   const result=await remoteRelayRequest('/internal/relay-grants',{
     method:'POST',body:{kind,sourceUrl,
-      sharedLive:kind==='live'&&sharedLive===true&&
-        env.BLOFY_STREAM_SHARED_LIVE_CANARY==='1'},env,fetchImpl
+      ...(kind==='live'&&sharedLive===true&&
+        env.BLOFY_STREAM_SHARED_LIVE_CANARY==='1'?{sharedLive:true}:{})},env,fetchImpl
   });
   if(!result?.ok||typeof result.path!=='string'||!RESOURCE.test(result.path)||
       result.expiresInSeconds!==45)
