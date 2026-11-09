@@ -12,6 +12,7 @@ import androidx.media3.datasource.okhttp.OkHttpDataSource
 import okhttp3.OkHttpClient
 import tv.blofy.player.BuildConfig
 import tv.blofy.player.core.identity.StreamCodeSession
+import tv.blofy.player.core.device.StreamDeviceCompatibility
 import org.chromium.net.CronetEngine
 import tv.blofy.player.core.provider.ProviderProfile
 import tv.blofy.player.core.provider.TransportPreference
@@ -38,10 +39,11 @@ object TransportFactory {
     }
 
     private fun secureStreamHttp(context: Context): HttpDataSource.Factory {
+        val device = StreamDeviceCompatibility.current(context)
         val client=OkHttpClient.Builder()
             .followRedirects(true).followSslRedirects(false)
-            .connectTimeout(12,java.util.concurrent.TimeUnit.SECONDS)
-            .readTimeout(35,java.util.concurrent.TimeUnit.SECONDS)
+            .connectTimeout(device.connectTimeoutSeconds,java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(device.readTimeoutSeconds,java.util.concurrent.TimeUnit.SECONDS)
             .addNetworkInterceptor { chain ->
                 val request=chain.request()
                 val url=request.url

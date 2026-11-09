@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.text.InputFilter
 import android.text.InputType
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
@@ -25,6 +26,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
+import tv.blofy.player.core.diagnostics.StreamConnectionDiagnostics
 import tv.blofy.player.core.identity.StreamCodeClient
 import tv.blofy.player.core.identity.StreamCodeSession
 import tv.blofy.player.data.CatalogSyncState
@@ -198,6 +200,20 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
         setContentView(scroll)
     }
 
+    // Some TV boxes use a numpad Enter or gamepad A instead of DPAD_CENTER.
+    // Handle only submit focus; retain normal EditText cursor/IME behavior.
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN && !busy && ::submitButton.isInitialized &&
+            submitButton.hasFocus() && event.keyCode in listOf(
+                KeyEvent.KEYCODE_NUMPAD_ENTER, KeyEvent.KEYCODE_BUTTON_A
+            )
+        ) {
+            submitButton.performClick()
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
     private fun inputBackground(focused: Boolean) = GradientDrawable().apply {
         setColor(0xFF100D1C.toInt())
         cornerRadius = dp(16).toFloat()
@@ -262,17 +278,18 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
                 finish()
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (error: Exception) {
-                // Never display a full URL, credentials, bearer token, or Java TLS exception.
-                val certificateError = generateSequence<Throwable>(error) { it.cause }
-                    .take(8).any { cause ->
-                        cause is javax.net.ssl.SSLHandshakeException ||
-                            cause is java.security.cert.CertPathValidatorException
-                    }
+                // Preserve explicit redemption errors but never print raw TLS/URL or Java messages.
+                val classified = StreamConnectionDiagnostics.classify(error)
                 val message = error.message.orEmpty()
                 statusText.text = when {
-                    certificateError ->
-                        "تعذر التحقق من شهادة الاتصال. اضبط تاريخ التلفزيون وحدّث BLOFY STREAM"
-                    message.length in 1..130 -> message
+                    classified != StreamConnectionDiagnostics.Cause.OTHER ->
+                        StreamConnectionDiagnostics.guidance(classified)
+                    message in setOf(
+                        "الكود مستخدم أو غير متاح. تواصل مع المسؤول",
+                        "محاولات كثيرة، أعد المحاولة لاحقًا",
+                        "كود غير صحيح",
+                        "تعذر تفعيل الكود. تحقق من الاتصال"
+                    ) -> message
                     else -> "تعذر التفعيل. تحقق من الشبكة أو تواصل مع الدعم"
                 }
                 setBusy(false)
@@ -320,7 +337,11 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
                         statusText.text = "الاشتراك منتهي أو موقوف. أدخل كودًا جديدًا"
                     }
                     null -> {
-                        statusText.text = "تعذر الاتصال الآن. الاشتراك محفوظ ولم يُحذف؛ أعد المحاولة عند عودة الإنترنت"
+                        val check = StreamConnectionDiagnostics.probe()
+                        statusText.text = if (check.reachable)
+                            "تعذر التحقق من الاشتراك الآن. اشتراكك محفوظ؛ أعد المحاولة"
+                        else "اشتراكك محفوظ. " + StreamConnectionDiagnostics.guidance(
+                            check.cause ?: StreamConnectionDiagnostics.Cause.OTHER)
                     }
                 }
             } catch (cancelled: CancellationException) { throw cancelled }

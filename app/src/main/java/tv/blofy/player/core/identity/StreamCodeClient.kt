@@ -1,5 +1,6 @@
 package tv.blofy.player.core.identity
 
+import android.os.Build
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -21,10 +22,12 @@ object StreamCodeClient {
         val expiresAt: Long
     )
 
+    // Allow a slower TLS handshake on Android 7–9 without changing certificate checks.
+    // Server-issued expiry remains authoritative even if the TV clock is wrong.
     private val client = OkHttpClient.Builder()
-        .callTimeout(25, TimeUnit.SECONDS)
-        .connectTimeout(8, TimeUnit.SECONDS)
-        .readTimeout(20, TimeUnit.SECONDS)
+        .callTimeout(if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) 40 else 25, TimeUnit.SECONDS)
+        .connectTimeout(if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) 15 else 8, TimeUnit.SECONDS)
+        .readTimeout(if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) 30 else 20, TimeUnit.SECONDS)
         .followRedirects(false)
         .followSslRedirects(false)
         .build()

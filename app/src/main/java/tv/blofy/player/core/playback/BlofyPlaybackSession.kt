@@ -11,6 +11,7 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -18,6 +19,8 @@ import tv.blofy.player.core.diagnostics.PlaybackDiagnostics
 import tv.blofy.player.core.diagnostics.PlaybackDiagnosticsUploader
 import tv.blofy.player.core.diagnostics.PlaybackMetric
 import tv.blofy.player.core.diagnostics.PlaybackFailureDetails
+import tv.blofy.player.BuildConfig
+import tv.blofy.player.core.device.StreamDeviceCompatibility
 import tv.blofy.player.core.network.TransportFactory
 import tv.blofy.player.core.provider.ProviderProfile
 
@@ -340,15 +343,28 @@ class BlofyPlaybackSession(
 }
 
 @OptIn(markerClass = [UnstableApi::class])
-private fun createPlaybackPlayer(context: Context, profile: ProviderProfile): ExoPlayer =
-    ExoPlayer.Builder(context)
+private fun createPlaybackPlayer(context: Context, profile: ProviderProfile): ExoPlayer {
+    val builder = ExoPlayer.Builder(context)
         .setRenderersFactory(
             DefaultRenderersFactory(context)
                 .setEnableDecoderFallback(true)
                 .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
         )
         .setMediaSourceFactory(DefaultMediaSourceFactory(TransportFactory.create(context, profile)))
-        .build()
+    if (BuildConfig.CODE_ONLY_LOGIN) {
+        val device = StreamDeviceCompatibility.current(context)
+        builder.setLoadControl(DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                device.playerMinBufferMs,
+                device.playerMaxBufferMs,
+                1_500,
+                3_000
+            )
+            .setTargetBufferBytes(device.playerTargetBufferBytes)
+            .build())
+    }
+    return builder.build()
+}
 
 @OptIn(markerClass = [UnstableApi::class])
 internal fun prepareFallbackItem(player: Player, item: MediaItem, live: Boolean) {
