@@ -62,6 +62,7 @@ class ContentBrowserActivity : AppCompatActivity() {
     private var previewView: PlayerView? = null
     private var previewTitle: TextView? = null
     private var previewStatus: TextView? = null
+    private var categorySummary: TextView? = null
     private var currentCategoryId: String? = null
     private var catalogRepairAttempted = false
     private var originalCategories: List<CategoryEntity> = emptyList()
@@ -92,23 +93,67 @@ class ContentBrowserActivity : AppCompatActivity() {
             setPadding(dp(if (phoneMode) 16 else 30), dp(if (phoneMode) 14 else 22), dp(if (phoneMode) 16 else 30), dp(if (phoneMode) 14 else 22))
             background = AppCompatResources.getDrawable(this@ContentBrowserActivity, R.drawable.blofy_home_background)
         }
-        root.addView(TextView(this).apply {
-            val section = when (kind) { KIND_MOVIE -> "الأفلام"; KIND_SERIES -> "المسلسلات"; else -> "البث المباشر" }
-            text = "BLOFY  •  $section"
-            textSize = if (phoneMode) 24f else 28f
-            typeface = BlofyTvDesign.HeadingTypeface
-            setTextColor(BlofyTvDesign.TextPrimary)
-            setShadowLayer(18f, 0f, 3f, BlofyTvDesign.Purple)
-            gravity = Gravity.START
-            setPadding(dp(8), 0, 0, dp(if (phoneMode) 10 else 18))
-        })
+        // Native cinematic catalogue header: no downloaded fonts or
+        // image decoding, so it stays lightweight on Android 9 TV devices.
+        val sectionName = when (kind) {
+            KIND_MOVIE -> "الأفلام"
+            KIND_SERIES -> "المسلسلات"
+            else -> "البث المباشر"
+        }
+        val headerCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20),dp(if (phoneMode) 15 else 18),dp(20),dp(if (phoneMode) 16 else 20))
+            background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(
+                Color.rgb(42,27,78), Color.rgb(21,34,59), Color.rgb(12,23,42)
+            )).apply {
+                cornerRadius = dp(22).toFloat()
+                setStroke(dp(1),Color.rgb(91,77,132))
+            }
+            addView(TextView(this@ContentBrowserActivity).apply {
+                text = "BLOFY  STREAM  /  ${kind.uppercase()}"
+                textSize = 12f
+                typeface = Typeface.DEFAULT_BOLD
+                letterSpacing = 0.13f
+                setTextColor(Color.rgb(209,181,253))
+            })
+            addView(TextView(this@ContentBrowserActivity).apply {
+                text = sectionName
+                textSize = if (phoneMode) 23f else 30f
+                typeface = BlofyTvDesign.HeadingTypeface
+                setTextColor(Color.WHITE)
+                setPadding(0,dp(3),0,dp(1))
+            })
+            categorySummary = TextView(this@ContentBrowserActivity).apply {
+                text = "جار قراءة الأقسام المحفوظة..."
+                textSize = 13f
+                setTextColor(Color.rgb(177,193,225))
+            }
+            addView(categorySummary)
+        }
+        root.addView(headerCard, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { bottomMargin = dp(if (phoneMode) 10 else 14) })
 
         if (kind == KIND_LIVE) {
+            val controlsRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            root.addView(controlsRow, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,dp(if (phoneMode) 43 else 48)
+            ).apply { bottomMargin = dp(12) })
             categorySortButton = Button(this).apply {
                 textSize = 13f
+                isAllCaps = false
                 setTextColor(BlofyTvDesign.TextPrimary)
-                background = BlofyTvDesign.surface(dp(12).toFloat(), false)
+                background = BlofyTvDesign.secondaryButton(dp(12).toFloat(), false)
                 isFocusable = true
+                setOnFocusChangeListener { view, focused ->
+                    view.background = BlofyTvDesign.secondaryButton(dp(12).toFloat(),focused)
+                    view.animate().scaleX(if (focused) 1.025f else 1f)
+                        .scaleY(if (focused) 1.025f else 1f).setDuration(110L).start()
+                }
                 setOnClickListener {
                     smartCategoryOrder = !smartCategoryOrder
                     statePrefs.edit().putBoolean("smart_category_order", smartCategoryOrder).apply()
@@ -116,15 +161,22 @@ class ContentBrowserActivity : AppCompatActivity() {
                 }
             }
             updateCategorySortCaption()
-            root.addView(categorySortButton, LinearLayout.LayoutParams(
+            controlsRow.addView(categorySortButton, LinearLayout.LayoutParams(
                 if (phoneMode) LinearLayout.LayoutParams.MATCH_PARENT else dp(270),
-                dp(if (phoneMode) 44 else 48)).apply { bottomMargin = dp(8) })
+                LinearLayout.LayoutParams.MATCH_PARENT
+            ).apply { marginEnd = if (phoneMode) 0 else dp(10) })
             if (!phoneMode) {
                 previewToggleButton = Button(this).apply {
                     textSize = 13f
+                    isAllCaps = false
                     setTextColor(BlofyTvDesign.TextPrimary)
-                    background = BlofyTvDesign.surface(dp(12).toFloat(), false)
+                    background = BlofyTvDesign.secondaryButton(dp(12).toFloat(), false)
                     isFocusable = true
+                    setOnFocusChangeListener { view, focused ->
+                        view.background = BlofyTvDesign.secondaryButton(dp(12).toFloat(),focused)
+                        view.animate().scaleX(if (focused) 1.025f else 1f)
+                            .scaleY(if (focused) 1.025f else 1f).setDuration(110L).start()
+                    }
                     setOnClickListener {
                         autoPreviewEnabled = !autoPreviewEnabled
                         statePrefs.edit().putBoolean("auto_preview_live", autoPreviewEnabled).apply()
@@ -137,8 +189,8 @@ class ContentBrowserActivity : AppCompatActivity() {
                     }
                 }
                 updatePreviewToggleCaption()
-                root.addView(previewToggleButton, LinearLayout.LayoutParams(
-                    dp(270), dp(44)).apply { bottomMargin = dp(10) })
+                controlsRow.addView(previewToggleButton, LinearLayout.LayoutParams(
+                    dp(270), LinearLayout.LayoutParams.MATCH_PARENT))
             }
         }
         val body = LinearLayout(this).apply { orientation = if (phoneMode) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL }
@@ -202,6 +254,8 @@ class ContentBrowserActivity : AppCompatActivity() {
             provider = dao.providers().first().firstOrNull() ?: run { finish(); return@launch }
             dao.categories(provider.id, kind).collect { items ->
                 originalCategories = items
+                categorySummary?.text = if (items.isEmpty()) "لا توجد أقسام محفوظة بعد"
+                    else "${items.size} قسمًا • اختر فئة لعرض المحتوى"
                 val displayed = if (kind == KIND_LIVE)
                     listOf(allCategory()) + CategoryPresentation.order(items, smartCategoryOrder) { it.name }
                 else listOf(allCategory()) + items
