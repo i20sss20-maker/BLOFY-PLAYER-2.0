@@ -160,7 +160,7 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
                     val dao = BlofyDatabase.get(applicationContext).dao()
                     val profile = ProviderEntity(StreamCodeSession.providerId,
                         "BLOFY STREAM", StreamCodeSession.HOST,
-                        active.username, active.password,
+                        "", "",
                         "xtream", "ts", "http", "media3",
                         true, true, System.currentTimeMillis())
                     // Persist the authenticated session before catalog sync.
@@ -168,7 +168,8 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
                     dao.upsertProvider(profile)
                     dao.disableAllProviders()
                     dao.activateProvider(profile.id)
-                    StreamCodeSession.save(applicationContext,active.activatedAt,active.expiresAt)
+                    StreamCodeSession.save(applicationContext,active.accessToken,
+                        active.activatedAt,active.expiresAt)
                     CatalogSyncState.markPending(applicationContext,profile.id)
                 }
                 codeField.text?.clear()
@@ -201,7 +202,8 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
                     StreamCodeSession.clearClaim(applicationContext)
                     statusView.text = "لم يُعثر على بيانات الاشتراك؛ تواصل مع المسؤول"
                 } else {
-                    val valid = StreamCodeClient.verifySubscriber(saved.username,saved.password)
+                    val token=StreamCodeSession.token(applicationContext)
+                    val valid=if(token==null)false else StreamCodeClient.verifySession(token)
                     when (valid) {
                         true -> {
                             withContext(Dispatchers.IO) {
