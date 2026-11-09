@@ -1,0 +1,27 @@
+name: BLOFY STREAM encrypted PostgreSQL backup (manual)
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: blofy-backup
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PostgreSQL and AWS clients
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client awscli
+      - name: Create encrypted off-site database dump
+        env:
+          DATABASE_URL: ${{ secrets.BLOFY_BACKUP_DATABASE_URL }}
+          BLOFY_BACKUP_S3_BUCKET: ${{ secrets.BLOFY_BACKUP_S3_BUCKET }}
+          BLOFY_BACKUP_KMS_KEY_ID: ${{ secrets.BLOFY_BACKUP_KMS_KEY_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.BLOFY_BACKUP_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.BLOFY_BACKUP_AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ vars.BLOFY_BACKUP_AWS_REGION }}
+        run: bash services/activation/scripts/backup-to-s3.sh
