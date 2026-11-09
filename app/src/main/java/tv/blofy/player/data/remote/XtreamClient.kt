@@ -1,5 +1,8 @@
 package tv.blofy.player.data.remote
 
+import android.content.Context
+import tv.blofy.player.BuildConfig
+import tv.blofy.player.core.identity.StreamCodeSession
 import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
@@ -7,6 +10,9 @@ import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 
 object XtreamClient {
+    @Volatile private var application: Context? = null
+    fun initialize(context: Context) { application = context.applicationContext }
+
     private val okHttp = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         // Large Xtream lists are streamed and may pause between chunks on overloaded panels.
@@ -45,6 +51,23 @@ object XtreamClient {
             } else {
                 response
             }
+        }
+        // Network interceptors run separately for every redirect. Remove
+        // authorization from any untrusted hostname or path before it leaves
+        // the device; inject the app session ONLY at BLOFY's HTTPS catalog API.
+        .addNetworkInterceptor { chain ->
+            val original=chain.request()
+            if (!BuildConfig.CODE_ONLY_LOGIN) return@addNetworkInterceptor chain.proceed(original)
+            val url=original.url
+            val trusted=url.scheme=="https" && url.host=="blofyplayer.com" &&
+                url.encodedPath=="/player_api.php"
+            val next=original.newBuilder().removeHeader("Authorization")
+            if (trusted) {
+                application?.let { StreamCodeSession.authorization(it) }?.let {
+                    next.header("Authorization",it)
+                }
+            }
+            chain.proceed(next.build())
         }
         .build()
 
