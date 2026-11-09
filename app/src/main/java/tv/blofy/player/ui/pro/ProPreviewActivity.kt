@@ -47,7 +47,7 @@ class ProPreviewActivity : AppCompatActivity() {
             layoutDirection = direction
             setPadding(dp(if (tv) 42 else 18), dp(18), dp(if (tv) 42 else 18), dp(26))
         }
-        scroll.addView(page, ScrollView.LayoutParams(-1, -2))
+        scroll.addView(page, android.widget.FrameLayout.LayoutParams(-1, -2))
 
         val top = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
