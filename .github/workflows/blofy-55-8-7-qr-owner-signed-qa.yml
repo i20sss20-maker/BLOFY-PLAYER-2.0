@@ -1,0 +1,104 @@
+name: BLOFY 55.8.7 QR owner signed QA APK
+on:
+  push:
+    branches:
+      - qa/55-8-7-free-pro-barcode-signed-20261109
+    paths:
+      - app/**
+      - .github/workflows/blofy-55-8-7-qr-owner-signed-qa.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: blofy-55-8-7-qr-owner-signed-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  signed-qa:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 120
+    env:
+      EXPECTED_CERT: C3B98CCCD2F0C86809014ACD9368BF61C7004CFD419CD867B71FEF10BFA6255E
+      EXPECTED_PACKAGE: tv.blofy.player.v2
+      EXPECTED_VERSION: 2.0.0-rc07.55.8.7
+      EXPECTED_CODE: '2000084'
+      ACTIVATION_URL: https://api.blofyplayer.com
+      UPDATE_URL: https://updates.blofyplayer.com
+      KEYSTORE_B64: ${{ secrets.BLOFY_ANDROID_KEYSTORE_BASE64 }}
+      BLOFY_RELEASE_STORE_PASSWORD: ${{ secrets.BLOFY_ANDROID_KEYSTORE_PASSWORD }}
+      BLOFY_RELEASE_KEY_ALIAS: ${{ secrets.BLOFY_ANDROID_KEY_ALIAS }}
+      BLOFY_RELEASE_KEY_PASSWORD: ${{ secrets.BLOFY_ANDROID_KEY_PASSWORD }}
+      GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx3g
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Guard exact original BLOFY 55.8.7 identity
+        run: |
+          set -euo pipefail
+          grep -Fq 'versionCode = 2000084' app/build.gradle.kts
+          grep -Fq 'versionName = "2.0.0-rc07.55.8.7"' app/build.gradle.kts
+          test -n "$KEYSTORE_B64" && test -n "$BLOFY_RELEASE_STORE_PASSWORD"
+          test -n "$BLOFY_RELEASE_KEY_ALIAS" && test -n "$BLOFY_RELEASE_KEY_PASSWORD"
+      - name: Install Android tools
+        run: |
+          set -euo pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36' 'build-tools;35.0.0'
+      - name: Fetch verified existing FFmpeg extension
+        run: |
+          set -euo pipefail
+          mkdir -p build/ffmpeg-native
+          gh run download 41481513423 --repo "$GITHUB_REPOSITORY" --name media3-ffmpeg-1.6.1-aar-214371372b8e82cfa53ebd89e90569c7e5903177 --dir build/ffmpeg-native
+          aar="$(find build/ffmpeg-native -name 'media3-decoder-ffmpeg-1.6.1.aar' -type f -print -quit)"
+          sums="$(find build/ffmpeg-native -name 'media3-decoder-ffmpeg-1.6.1.aar.sha256' -type f -print -quit)"
+          test -s "$aar" && test -s "$sums"
+          expected="$(head -1 "$sums" | awk '{print $1}')"
+          test "$(sha256sum "$aar" | awk '{print $1}')" = "$expected"
+          cp "$aar" build/ffmpeg-native/blofy-qa.aar
+      - name: Run 55.8.7 tests and lint
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --max-workers=2 -PBLOFY_ACTIVATION_BASE_URL=http://127.0.0.1:9 -PBLOFY_UPDATE_BASE_URL=http://127.0.0.1:9 testDebugUnitTest
+          gradle --no-daemon --max-workers=2 -PBLOFY_ACTIVATION_BASE_URL="$ACTIVATION_URL" -PBLOFY_UPDATE_BASE_URL="$UPDATE_URL" -PBLOFY_FFMPEG_AAR="$GITHUB_WORKSPACE/build/ffmpeg-native/blofy-qa.aar" lintDebug
+      - name: Restore production signing certificate safely
+        run: |
+          set -euo pipefail
+          umask 077
+          key="$RUNNER_TEMP/blofy-55-8-7.p12"
+          printf '%s' "$KEYSTORE_B64" | tr -cd 'A-Za-z0-9+/=' | base64 --decode > "$key"
+          actual="$(keytool -exportcert -keystore "$key" -storepass:env BLOFY_RELEASE_STORE_PASSWORD -alias "$BLOFY_RELEASE_KEY_ALIAS" | sha256sum | awk '{print toupper($1)}')"
+          test "$actual" = "$EXPECTED_CERT"
+          echo "BLOFY_RELEASE_KEYSTORE_PATH=$key" >> "$GITHUB_ENV"
+      - name: Assemble production-signed QA install without publishing
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --max-workers=2 -PBLOFY_ACTIVATION_BASE_URL="$ACTIVATION_URL" -PBLOFY_UPDATE_BASE_URL="$UPDATE_URL" -PBLOFY_BUILD_SHA="$GITHUB_SHA" -PBLOFY_FFMPEG_AAR="$GITHUB_WORKSPACE/build/ffmpeg-native/blofy-qa.aar" assembleRelease
+      - name: Verify original package and signer
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          apk=app/build/outputs/apk/release/app-release.apk
+          test -s "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" > output/badging.txt
+          grep -Fq "name='$EXPECTED_PACKAGE' versionCode='$EXPECTED_CODE' versionName='$EXPECTED_VERSION'" output/badging.txt
+          ! grep -Fq application-debuggable output/badging.txt
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$apk" > output/signature.txt
+          actual="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' output/signature.txt | head -n 1 | tr -d '[:space:]-:' | tr '[:lower:]' '[:upper:]')"
+          test "$actual" = "$EXPECTED_CERT"
+          unzip -Z1 "$apk" | grep -Fq 'lib/arm64-v8a/libvlc.so'
+          cp "$apk" output/BLOFY-PLAYER-55.8.7-QR-OWNER-SIGNED-TEST.apk
+          (cd output && sha256sum *.apk > SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-55.8.7-QR-OWNER-SIGNED-TEST-${{ github.sha }}
+          path: output/
+          if-no-files-found: error
+          retention-days: 30
