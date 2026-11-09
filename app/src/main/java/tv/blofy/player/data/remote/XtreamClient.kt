@@ -13,15 +13,22 @@ object XtreamClient {
     fun initialize(context: Context) { appContext=context.applicationContext }
 
     private val okHttp = OkHttpClient.Builder()
-        .addInterceptor { chain ->
-            val request=chain.request()
-            val host=request.url.host
-            val path=request.url.encodedPath
-            val authorization=appContext?.let { StreamCodeSession.authorization(it) }
-            if(BuildConfig.CODE_ONLY_LOGIN&&host=="blofyplayer.com" &&
-                request.url.scheme=="https" && path=="/player_api.php" && authorization!=null) {
-                chain.proceed(request.newBuilder().header("Authorization",authorization).build())
-            } else chain.proceed(request)
+        .addNetworkInterceptor { chain ->
+            val request = chain.request()
+            if (!BuildConfig.CODE_ONLY_LOGIN) return@addNetworkInterceptor chain.proceed(request)
+            // The network interceptor runs once per redirect, so a session
+            // bearer never travels to outside hosts, non-HTTPS addresses or
+            // paths other than the authenticated BLOFY catalog endpoint.
+            val trusted = request.url.scheme == "https" &&
+                request.url.host == "blofyplayer.com" &&
+                request.url.encodedPath == "/player_api.php"
+            val next = request.newBuilder().removeHeader("Authorization")
+            if (trusted) {
+                appContext?.let { StreamCodeSession.authorization(it) }?.let {
+                    next.header("Authorization", it)
+                }
+            }
+            chain.proceed(next.build())
         }
         .connectTimeout(12, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
