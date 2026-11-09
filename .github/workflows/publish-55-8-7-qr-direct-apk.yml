@@ -1,0 +1,66 @@
+name: Owner direct APK download — BLOFY 55.8.7 QR QA
+on:
+  push:
+    branches:
+      - publish/55-8-7-qr-owner-apk-direct-20261110
+    paths:
+      - .github/workflows/publish-55-8-7-qr-direct-apk.yml
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: blofy-55-8-7-qr-owner-direct
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_RUN: '42697375311'
+      SOURCE_SHA: '9197cfbe890285c0910eca02cbad15b96fb65852'
+      SOURCE_ARTIFACT: 'BLOFY-55.8.7-QR-OWNER-SIGNED-TEST-9197cfbe890285c0910eca02cbad15b96fb65852'
+      APK_NAME: 'BLOFY-PLAYER-55.8.7-QR-OWNER-SIGNED-TEST.apk'
+      EXPECTED_CERT: 'C3B98CCCD2F0C86809014ACD9368BF61C7004CFD419CD867B71FEF10BFA6255E'
+      TAG: 'blofy-player-55-8-7-qr-owner-qa-20261110'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify source signed build was successful and exact SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" > source.json
+          jq -e --arg sha "$SOURCE_SHA" '.status=="completed" and .conclusion=="success" and .head_sha==$sha' source.json
+          ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1
+      - name: Download signed APK and verify SHA-256
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p received
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name "$SOURCE_ARTIFACT" --dir received
+          test -s "received/$APK_NAME"
+          test -s received/SHA256SUMS
+          (cd received && sha256sum -c SHA256SUMS)
+          cp "received/$APK_NAME" "$APK_NAME"
+          sha256sum "$APK_NAME" > SHA256SUMS
+      - name: Verify app ID version and original signing identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk="$APK_NAME"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" > badging.txt
+          grep -Fq "name='tv.blofy.player.v2' versionCode='2000084' versionName='2.0.0-rc07.55.8.7'" badging.txt
+          ! grep -Fq application-debuggable badging.txt
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$apk" > signature.txt
+          actual="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' signature.txt | head -1 | tr -d '[:space:]-:' | tr '[:lower:]' '[:upper:]')"
+          test "$actual" = "$EXPECTED_CERT"
+      - name: Publish direct APK as test-only prerelease (not website updater)
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" "$APK_NAME" SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" \
+            --prerelease --latest=false \
+            --title 'BLOFY PLAYER 55.8.7 — signed QR owner test APK' \
+            --notes 'Owner test build only. Original BLOFY signature and same package/version as 55.8.7. QR readability and subscription tier UI preview. No Google Play or BLOFY website rollout; no payment processing. This binary predates the latest experimental checkout-channel UI. Install only if you trust the file after your browser and device security checks. Keep a backup. General CI still has a legacy manifest guard failure; signed QA build passed.'
