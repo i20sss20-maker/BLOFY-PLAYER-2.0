@@ -98,7 +98,6 @@ android {
             manifestPlaceholders["blofyApplicationLabel"] = "BLOFY STREAM"
             manifestPlaceholders["blofyAppIconRes"] = "@drawable/blofy_stream_app_icon"
             manifestPlaceholders["blofyBannerRes"] = "@drawable/blofy_stream_tv_banner"
-            versionCode = 2000085
             buildConfigField("boolean", "CODE_ONLY_LOGIN", "true")
             matchingFallbacks += listOf("release")
         }
@@ -109,7 +108,6 @@ android {
             manifestPlaceholders["blofyApplicationLabel"] = "BLOFY STREAM (QA)"
             manifestPlaceholders["blofyAppIconRes"] = "@drawable/blofy_stream_app_icon"
             manifestPlaceholders["blofyBannerRes"] = "@drawable/blofy_stream_tv_banner"
-            versionCode = 2000085
             buildConfigField("boolean", "CODE_ONLY_LOGIN", "true")
             matchingFallbacks += listOf("debug")
         }
@@ -131,6 +129,17 @@ android {
     testOptions {
         unitTests.isIncludeAndroidResources = true
         unitTests.all { it.testLogging.exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
+    }
+}
+
+// Only BLOFY STREAM carries a higher package update code. The normal
+// BLOFY PLAYER 55.8.7 versionCode stays exactly as it was.
+androidComponents {
+    onVariants(selector().withBuildType("streamCodeOnly")) { variant ->
+        variant.outputs.forEach { it.versionCode.set(2000085) }
+    }
+    onVariants(selector().withBuildType("streamCodeDemo")) { variant ->
+        variant.outputs.forEach { it.versionCode.set(2000085) }
     }
 }
 
