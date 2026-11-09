@@ -33,6 +33,6 @@ test('analysis explicitly marks oversized scan incomplete without mutating',()=>
 test('safe title cleanup preserves meaningful names and avoids fabricating titles',()=>{
   assert.equal(suggestedStreamTitle('#### 1001 ####'),'1001');
   assert.equal(suggestedStreamTitle('La Liga HD'),null);
-  assert.equal(suggestedStreamTitle('###'),'###');
+  assert.equal(suggestedStreamTitle('###'),null);
   assert.equal(suggestLibraryGroup('BBC News'),'أخبار');
 });
