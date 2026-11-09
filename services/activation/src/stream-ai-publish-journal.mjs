@@ -63,15 +63,18 @@ export async function revertAiClassification(pool,{sourceId,planId}){
     FROM blofy_library_ai_publish_log
     WHERE plan_id=$1 AND source_id=$2 FOR UPDATE`,[planId,sourceId]);
   const row=record.rows[0];
-  if(!row||row.reverted_at)return {ok:false,code:'stream_ai_rollback_not_available'};
-  if(row.operation!=='classify_items')return {ok:false,code:'stream_ai_rollback_unsupported'};
+  if(!row||row.reverted_at){await client.query('ROLLBACK');return {ok:false,code:'stream_ai_rollback_not_available'};}
+  if(row.operation!=='classify_items'){await client.query('ROLLBACK');return {ok:false,code:'stream_ai_rollback_unsupported'};}
   const changes=row.changes;
-  if(!Array.isArray(changes)||changes.length<1||changes.length>12)
-   return {ok:false,code:'stream_ai_rollback_invalid'};
+  if(!Array.isArray(changes)||changes.length<1||changes.length>12){
+   await client.query('ROLLBACK');return {ok:false,code:'stream_ai_rollback_invalid'};
+  }
   let restored=0;
   for(const x of changes){
    if(typeof x.id!=='string'||typeof x.toCategory!=='string'||
-      typeof x.title!=='string')return {ok:false,code:'stream_ai_rollback_invalid'};
+      typeof x.title!=='string'){
+     await client.query('ROLLBACK');return {ok:false,code:'stream_ai_rollback_invalid'};
+   }
    const r=await client.query(`UPDATE blofy_xtream_items SET
     category_id=$4,custom_category_id=$5,updated_at=NOW()
     WHERE server_id=$1 AND media_type=$2 AND source_id=$3
