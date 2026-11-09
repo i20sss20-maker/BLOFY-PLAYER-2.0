@@ -44,6 +44,7 @@ import crypto from 'node:crypto';
 import pg from 'pg';
 import { downloadXtreamM3uCatalog } from './xtream-m3u-catalog.mjs';
 import { distinctXtreamRecords } from './xtream-import-dedup.mjs';
+import {xtreamProviderOrder,withXtreamProviderPosition} from './xtream-provider-order.mjs';
 import { assessXtreamSync } from './xtream-sync-guard.mjs';
 import { CONTROL_PATH, controlPage, deleteConfirmationPage, readControlForm } from './xtream-native-controls.mjs';
 import { xtreamEpisodeSamples, xtreamEpisodePlaybackCandidates, xtreamProbeMessage } from './xtream-series-probe.mjs';
@@ -284,6 +285,7 @@ async function ensureReady() {
       // Publisher controls survive every Xtream re-import.
       await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS custom_name TEXT');
       await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS custom_category_id TEXT');
+      await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS source_sort_order INTEGER');
       await ensureAiJournalSchema(client);
       await ensureAiScanSchema(client);
       await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS custom_icon_url TEXT');
@@ -1506,13 +1508,16 @@ async function flushCategoryBatch(serverId, mediaType, syncToken, batch) {
     source_category_id: item.sourceCategoryId,
     name: item.name,
     parent_id: item.parentId,
+    sort_order: item.sourceSortOrder??null,
     sync_token: syncToken
   }));
-  await pool.query(`INSERT INTO blofy_xtream_categories(server_id,media_type,source_category_id,name,parent_id,enabled,item_count,sync_token,updated_at)
-    SELECT $1::uuid,$2::text,x.source_category_id,x.name,x.parent_id,TRUE,0,x.sync_token,NOW()
-    FROM jsonb_to_recordset($3::jsonb) AS x(source_category_id text,name text,parent_id text,sync_token text)
+  await pool.query(`INSERT INTO blofy_xtream_categories(server_id,media_type,source_category_id,name,parent_id,enabled,item_count,sort_order,sync_token,updated_at)
+    SELECT $1::uuid,$2::text,x.source_category_id,x.name,x.parent_id,TRUE,0,
+      COALESCE(x.sort_order,100000),x.sync_token,NOW()
+    FROM jsonb_to_recordset($3::jsonb) AS x(source_category_id text,name text,parent_id text,sort_order int,sync_token text)
     ON CONFLICT(server_id,media_type,source_category_id) DO UPDATE SET
-      name=EXCLUDED.name,parent_id=EXCLUDED.parent_id,sync_token=EXCLUDED.sync_token,updated_at=NOW()`,
+      name=EXCLUDED.name,parent_id=EXCLUDED.parent_id,
+      sort_order=EXCLUDED.sort_order,sync_token=EXCLUDED.sync_token,updated_at=NOW()`,
     [serverId, mediaType, JSON.stringify(payload)]);
   batch.length = 0;
 }
@@ -1526,13 +1531,16 @@ async function flushItemBatch(serverId, mediaType, syncToken, batch) {
     name: item.name,
     icon_url: item.iconUrl,
     container_extension: item.containerExtension,
+    source_sort_order: item.sourceSortOrder??null,
     metadata: item.metadata,
     sync_token: syncToken
   }));
-  await pool.query(`INSERT INTO blofy_xtream_items(server_id,media_type,source_id,category_id,name,icon_url,container_extension,enabled,metadata,sync_token,updated_at)
-    SELECT $1::uuid,$2::text,x.source_id,x.category_id,x.name,x.icon_url,x.container_extension,TRUE,COALESCE(x.metadata,'{}'::jsonb),x.sync_token,NOW()
-    FROM jsonb_to_recordset($3::jsonb) AS x(source_id text,category_id text,name text,icon_url text,container_extension text,metadata jsonb,sync_token text)
+  await pool.query(`INSERT INTO blofy_xtream_items(server_id,media_type,source_id,category_id,name,icon_url,container_extension,enabled,source_sort_order,metadata,sync_token,updated_at)
+    SELECT $1::uuid,$2::text,x.source_id,x.category_id,x.name,x.icon_url,x.container_extension,TRUE,
+      x.source_sort_order,COALESCE(x.metadata,'{}'::jsonb),x.sync_token,NOW()
+    FROM jsonb_to_recordset($3::jsonb) AS x(source_id text,category_id text,name text,icon_url text,container_extension text,source_sort_order int,metadata jsonb,sync_token text)
     ON CONFLICT(server_id,media_type,source_id) DO UPDATE SET
+      source_sort_order=EXCLUDED.source_sort_order,
       category_id=COALESCE(blofy_xtream_items.custom_category_id,EXCLUDED.category_id),name=EXCLUDED.name,
       container_extension=EXCLUDED.container_extension,
       icon_url=COALESCE(NULLIF(EXCLUDED.icon_url,''),blofy_xtream_items.icon_url),
@@ -1559,7 +1567,7 @@ async function syncCategories(row, mediaType, creds, syncToken, getM3u) {
     const fallback=await getM3u();
     const batch=[];let total=0;
     for(const item of fallback.categories[mediaType]){
-      batch.push({...item,syncToken});total++;
+      batch.push({...withXtreamProviderPosition(item,total+1),syncToken});total++;
       if(batch.length>=500)await flushCategoryBatch(row.id,mediaType,syncToken,batch);
     }
     await flushCategoryBatch(row.id,mediaType,syncToken,batch);
@@ -1569,7 +1577,7 @@ async function syncCategories(row, mediaType, creds, syncToken, getM3u) {
   await parseTopLevelJsonArray(response.body,async raw=>{
     const item=normalizeXtreamCategory(mediaType,raw,syncToken);
     if(!item)return;
-    batch.push(item);accepted++;
+    batch.push(withXtreamProviderPosition(item,xtreamProviderOrder(raw,accepted+1,'category')));accepted++;
     if(batch.length>=500)await flushCategoryBatch(row.id,mediaType,syncToken,batch);
   });
   await flushCategoryBatch(row.id,mediaType,syncToken,batch);
@@ -1585,13 +1593,15 @@ async function syncItems(row, mediaType, creds, syncToken, getM3u) {
     if(error.message!=='xtream_http_404')throw error;
     if(mediaType==='series')throw new Error('xtream_series_listing_api_unavailable');
     const fallback=await getM3u(),batch=[];let total=0;
-    const categories=fallback.categories[mediaType].map(item=>({...item,syncToken}));
+    const categories=fallback.categories[mediaType].map((item,index)=>({
+      ...withXtreamProviderPosition(item,index+1),syncToken
+    }));
     for(let i=0;i<categories.length;i+=500){
       const page=categories.slice(i,i+500);
       await flushCategoryBatch(row.id,mediaType,syncToken,page);
     }
     for(const item of fallback.records[mediaType]){
-      batch.push({...item,syncToken});total++;
+      batch.push({...withXtreamProviderPosition(item,total+1),syncToken});total++;
       if(batch.length>=500)await flushItemBatch(row.id,mediaType,syncToken,batch);
     }
     await flushItemBatch(row.id,mediaType,syncToken,batch);
@@ -1602,7 +1612,7 @@ async function syncItems(row, mediaType, creds, syncToken, getM3u) {
   await parseTopLevelJsonArray(response.body,async raw=>{
     const item=normalizeXtreamItem(mediaType,raw,syncToken);
     if(!item)return;
-    batch.push(item);accepted++;
+    batch.push(withXtreamProviderPosition(item,xtreamProviderOrder(raw,accepted+1,'item')));accepted++;
     if(batch.length>=500)await flushItemBatch(row.id,mediaType,syncToken,batch);
   });
   await flushItemBatch(row.id,mediaType,syncToken,batch);
@@ -2157,16 +2167,17 @@ async function listCatalog(query, publishedOnly = false) {
   values.push(limit, offset);
   const rows = (await pool.query(`SELECT i.server_id,i.media_type,i.source_id,i.category_id,
       COALESCE(NULLIF(i.custom_name,''),i.name) AS name,COALESCE(NULLIF(i.custom_icon_url,''),i.icon_url) AS icon_url,
-      i.name AS original_name,i.icon_url AS original_icon_url,i.custom_name,i.custom_icon_url,i.featured,i.channel_number,
+      i.name AS original_name,i.icon_url AS original_icon_url,i.custom_name,i.custom_icon_url,i.featured,i.channel_number,i.source_sort_order,
       i.container_extension,i.enabled,i.metadata,i.updated_at,
       s.name AS server_name,s.priority,c.name AS category_name,c.enabled AS category_enabled
     FROM blofy_xtream_items i
     JOIN blofy_xtream_servers s ON s.id=i.server_id
     LEFT JOIN blofy_xtream_categories c ON c.server_id=i.server_id AND c.media_type=i.media_type AND c.source_category_id=i.category_id
     WHERE ${where.join(' AND ')}
-    ORDER BY (CASE WHEN i.media_type='live' AND i.featured THEN 0 ELSE 1 END),
-      CASE WHEN i.media_type='live' THEN COALESCE(i.channel_number,999999) ELSE 999999 END,
-      s.priority ASC,COALESCE(NULLIF(i.custom_name,''),i.name) ASC,i.source_id ASC
+    ORDER BY s.priority ASC,
+      COALESCE(c.sort_order,2147483647) ASC,
+      COALESCE(i.source_sort_order,2147483647) ASC,
+      COALESCE(NULLIF(i.custom_name,''),i.name) ASC,i.source_id ASC
     LIMIT $${values.length-1} OFFSET $${values.length}`, values)).rows;
   return rows.map(row => ({
     serverId: row.server_id,
@@ -2183,6 +2194,7 @@ async function listCatalog(query, publishedOnly = false) {
     customIconUrl:row.custom_icon_url,
     featured:Boolean(row.featured),
     channelNumber:row.channel_number==null?null:Number(row.channel_number),
+    sourceSortOrder:row.source_sort_order==null?null:Number(row.source_sort_order),
     containerExtension: row.container_extension,
     enabled: Boolean(row.enabled),
     categoryEnabled: row.category_enabled == null ? true : Boolean(row.category_enabled),
