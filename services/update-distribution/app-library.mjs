@@ -18,7 +18,8 @@ const pool = new Pool({
 
 const CATEGORIES = new Set(['media', 'files', 'downloads', 'launcher', 'screensaver', 'tools', 'network', 'store']);
 const MODES = new Set(['official', 'direct']);
-const SEED_VERSION = 6;
+// Version 7 inserts the independent BLOFY STREAM app into already-seeded production databases.
+const SEED_VERSION = 7;
 
 const GITHUB_UPDATE_RULES = Object.freeze({
   'just-player': { repo:'moneytoo/Player', asset:'Just.Player.*.apk' },
