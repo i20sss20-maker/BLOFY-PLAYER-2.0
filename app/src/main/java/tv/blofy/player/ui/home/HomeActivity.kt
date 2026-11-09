@@ -250,7 +250,7 @@ class HomeActivity : AppCompatActivity() {
         loadHomeExperience()
         if (homeResumed) {
             refreshScheduler.start()
-            historyObserver.start()
+            if (!BuildConfig.CODE_ONLY_LOGIN) historyObserver.start()
         }
     }
 
@@ -281,7 +281,7 @@ class HomeActivity : AppCompatActivity() {
         homeResumed = true
         if (homeFeed != null) {
             refreshScheduler.start()
-            historyObserver.start()
+            if (!BuildConfig.CODE_ONLY_LOGIN) historyObserver.start()
             lifecycleScope.launch {
                 val activeId = try {
                     withContext(Dispatchers.IO) {
@@ -456,6 +456,7 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private suspend fun refreshHomeHistory() {
+        if (BuildConfig.CODE_ONLY_LOGIN) return
         val previous = displayedHomeData ?: return
         val history = withContext(Dispatchers.IO) {
             HomeWatchHistory.load(BlofyDatabase.get(applicationContext).dao(), previous.providerId)
