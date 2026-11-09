@@ -62,6 +62,7 @@ import {normalizeXtreamEpg} from './xtream-epg.mjs';
 import {normalizeStudioName,normalizeStudioItemEdit,readStudioLogoRequest} from './xtream-studio-policy.mjs';
 import { nativeXtreamCsrfToken } from './xtream-native-csrf.mjs';
 import {streamBridgeAuthorized,streamSafeSource,streamSafeCatalog,streamSafeAccount} from './stream-unified-safe.mjs';
+import {ensureStreamCodeTable} from './xtream-duration-codes.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
@@ -2583,13 +2584,19 @@ async function handleControlAction(req,res,id,action) {
 const STREAM_BRIDGE_KEY=String(process.env.BLOFY_STREAM_UNIFIED_BRIDGE_KEY||'');
 const bridgeLimiter=createFixedWindowLimiter({limit:90,windowMs:60_000});
 const streamActions=new Map();
+let streamCodeSchemaReady;
+function ensureStreamCodeSchema(){
+  if(!streamCodeSchemaReady)streamCodeSchemaReady=ensureStreamCodeTable(pool)
+    .catch(error=>{streamCodeSchemaReady=null;throw error});
+  return streamCodeSchemaReady;
+}
 async function callLocalGateway(method,path,body){
   // The gateway owns account proofs; never reproduce its cryptography here.
   if(!ADMIN_TOKEN)throw Object.assign(new Error('gateway_not_configured'),{status:503});
   const port=Number(process.env.PORT||3000);
   if(!Number.isSafeInteger(port)||port<1024||port>65535)
     throw Object.assign(new Error('gateway_port_invalid'),{status:503});
-  const match=/^\/api\/v1\/admin\/xtream-gateway\/(?:accounts(?:\/[0-9a-f-]{36}(?:\/reset)?)?|codes(?:\/[0-9a-f-]{36}\/revoke|\?limit=30&offset=[0-9]{1,6})?)$/.exec(path);
+  const match=/^\/api\/v1\/admin\/xtream-gateway\/(?:accounts(?:\/[0-9a-f-]{36}(?:\/(?:reset|credentials))?)?|codes(?:\/[0-9a-f-]{36}\/revoke|\?limit=30&offset=[0-9]{1,6})?)$/.exec(path);
   if(!match)throw Object.assign(new Error('gateway_route_denied'),{status:400});
   const response=await fetch('http://127.0.0.1:'+port+path,{
     method,redirect:'manual',signal:AbortSignal.timeout(9000),
@@ -2741,9 +2748,11 @@ async function unifiedStreamBridge(req,res,url){
       nextOffset:rows.length===40?offset+40:null});
   }
   if(req.method==='GET'&&p==='/internal/blofy-stream/accounts'){
+    await ensureStreamCodeSchema();
     const limit=100,offset=Math.max(0,Math.min(100000,Number(url.searchParams.get('offset'))||0));
     const rows=(await pool.query(`SELECT a.id,a.label,a.username,a.source_id,
       a.enabled,a.max_connections,a.expires_at,a.last_used_at,a.created_at,
+      (a.credential_vault IS NOT NULL) AS password_available,
       s.name AS source_name,c.code_hint,c.redeemed_at AS activated_at,
       c.duration_days,c.revoked_at
       FROM blofy_xtream_gateway_accounts a
@@ -2756,6 +2765,19 @@ async function unifiedStreamBridge(req,res,url){
     return json(res,200,{ok:true,items:rows,total,
       nextOffset:offset+rows.length<total?offset+rows.length:null,
       serverUrl:'https://blofyplayer.com',passwordStorage:'one_way_proofs'});
+  }
+  const revealPath=p.match(/^\/internal\/blofy-stream\/accounts\/([0-9a-f-]{36})\/credentials$/i);
+  if(req.method==='GET'&&revealPath&&validUuid(revealPath[1])){
+    const result=await callLocalGateway('GET',
+      '/api/v1/admin/xtream-gateway/accounts/'+revealPath[1]+'/credentials');
+    const creds=result.data?.credentials;
+    if(result.status===200&&creds){
+      creds.serverUrl='https://blofyplayer.com';
+      creds.m3uUrl='https://blofyplayer.com/get.php?'+
+        new URLSearchParams({username:creds.username,password:creds.password,
+          type:'m3u_plus',output:'ts'});
+    }
+    return json(res,result.status,{ok:result.status===200,...result.data});
   }
   if(req.method==='GET'&&p==='/internal/blofy-stream/codes'){
     const offset=Math.max(0,Math.min(100000,Number(url.searchParams.get('offset'))||0));
@@ -2781,8 +2803,13 @@ async function unifiedStreamBridge(req,res,url){
   if(req.method==='POST'&&passwordReset){
     const result=await callLocalGateway('POST',
       '/api/v1/admin/xtream-gateway/accounts/'+passwordReset[1]+'/reset',{});
-    if(result.status===200&&result.data?.credentials)
-      result.data.credentials.serverUrl='https://blofyplayer.com';
+    if(result.status===200&&result.data?.credentials){
+      const creds=result.data.credentials;
+      creds.serverUrl='https://blofyplayer.com';
+      creds.m3uUrl=creds.serverUrl+'/get.php?'+
+        new URLSearchParams({username:creds.username,password:creds.password,
+          type:'m3u_plus',output:'ts'});
+    }
     return json(res,result.status,{ok:result.status===200,...result.data});
   }
   if(req.method==='POST'&&p==='/internal/blofy-stream/sources'){
@@ -2804,8 +2831,13 @@ async function unifiedStreamBridge(req,res,url){
     };
     const response=await callLocalGateway('POST','/api/v1/admin/xtream-gateway/accounts',account);
     // Loopback origin is never a valid end-user Xtream address.
-    if(response.status===201&&response.data?.credentials)
-      response.data.credentials.serverUrl='https://blofyplayer.com';
+    if(response.status===201&&response.data?.credentials){
+      const creds=response.data.credentials;
+      creds.serverUrl='https://blofyplayer.com';
+      creds.m3uUrl=creds.serverUrl+'/get.php?'+
+        new URLSearchParams({username:creds.username,password:creds.password,
+          type:'m3u_plus',output:'ts'});
+    }
     return json(res,response.status,{ok:response.status===201,...response.data});
   }
   const accountPath=p.match(/^\/internal\/blofy-stream\/accounts\/([0-9a-f-]{36})\/(enable|disable)$/i);
