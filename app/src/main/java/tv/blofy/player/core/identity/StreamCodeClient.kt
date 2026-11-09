@@ -16,8 +16,7 @@ import tv.blofy.player.core.network.awaitResponse
  */
 object StreamCodeClient {
     data class Activated(
-        val username: String,
-        val password: String,
+        val accessToken: String,
         val activatedAt: Long,
         val expiresAt: Long
     )
@@ -51,25 +50,20 @@ object StreamCodeClient {
 
     // Do not use the device wall clock to decide whether a code is expired:
     // Android 9 TV boxes can have incorrect time. The server owns expiry.
-    suspend fun verifySubscriber(username: String, password: String): Boolean? =
+    suspend fun verifySession(accessToken: String): Boolean? =
         withContext(Dispatchers.IO) {
-            val url = okhttp3.HttpUrl.Builder()
-                .scheme("https")
-                .host("blofyplayer.com")
-                .addPathSegment("player_api.php")
-                .addQueryParameter("username", username)
-                .addQueryParameter("password", password)
-                .build()
-            val request = Request.Builder().url(url).get()
-                .header("Cache-Control", "no-store").build()
+            val request = Request.Builder()
+                .url("${StreamCodeSession.HOST}/api/v1/stream/app/session")
+                .get().header("Authorization","Bearer $accessToken")
+                .header("Cache-Control","no-store").build()
             try {
                 client.newCall(request).awaitResponse().use { response ->
+                    if (response.code==401||response.code==403) return@withContext false
                     if (!response.isSuccessful) return@withContext null
-                    val data = JSONObject(response.body?.string().orEmpty())
-                    data.optJSONObject("user_info")?.optInt("auth") == 1
+                    JSONObject(response.body?.string().orEmpty()).optBoolean("active")
                 }
             } catch (_: Exception) {
-                null // network is unavailable, not proof of expiry
+                null
             }
         }
 
@@ -78,7 +72,7 @@ object StreamCodeClient {
         require(code.isNotEmpty()) { "أدخل كود التفعيل الصحيح" }
         val body = JSONObject().put("code", code).put("deviceKey", deviceKey).toString()
         val request = Request.Builder()
-            .url("${StreamCodeSession.HOST}/api/v1/stream/redeem")
+            .url("${StreamCodeSession.HOST}/api/v1/stream/app/redeem")
             .post(body.toRequestBody(jsonType))
             .header("Accept", "application/json")
             .header("Cache-Control", "no-store")
@@ -95,21 +89,15 @@ object StreamCodeClient {
                 })
             }
             val account = root.optJSONObject("account") ?: error("استجابة التفعيل غير مكتملة")
-            val credentials = root.optJSONObject("credentials") ?: error("بيانات الاشتراك غير مكتملة")
-            // Fail closed if a proxy responds with a provider-controlled host.
-            require(credentials.optString("serverUrl").trimEnd('/') == StreamCodeSession.HOST) {
-                "خدمة التفعيل غير متوافقة"
-            }
-            val username = credentials.optString("username").trim()
-            val password = credentials.optString("password")
-            require(username.matches(Regex("[A-Za-z0-9_]{4,32}")) &&
-                password.matches(Regex("[A-Za-z0-9_-]{8,64}"))) {
-                "بيانات الاشتراك غير صالحة"
+            val token=root.optString("accessToken")
+            require(root.optString("tokenType")=="Bearer" &&
+                token.matches(Regex("v1\\.[0-9a-f-]{36}\\.[A-Za-z0-9_-]{43}"))) {
+                "جلسة التفعيل غير صالحة"
             }
             val activatedAt = account.optLong("activatedAt")
             val expiresAt = account.optLong("expiresAt")
             require(activatedAt > 0 && expiresAt > activatedAt) { "مدة الاشتراك غير صالحة" }
-            Activated(username, password, activatedAt, expiresAt)
+            Activated(token,activatedAt,expiresAt)
         }
     }
 }
