@@ -63,11 +63,11 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             setPadding(dp(horizontalPad), dp(32), dp(horizontalPad), dp(32))
         }
-        val background = AppCompatResources.getDrawable(this, R.drawable.blofy_home_background)
+        val baseDrawable = AppCompatResources.getDrawable(this, R.drawable.blofy_home_background)
         val scroll = ScrollView(this).apply {
             isFillViewport = true
             isVerticalScrollBarEnabled = false
-            this.background = background
+            this.background = baseDrawable
             addView(container)
         }
 
