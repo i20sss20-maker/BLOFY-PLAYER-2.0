@@ -95,6 +95,8 @@ if(process.env.BLOFY_RESTREAM_AUTO_HEALTH==='1'){
   },120_000);
   interval.unref?.();
 }
+let concurrencyRunning=false;
+let concurrencyLastAt=0;
 const previousCreateServer=http.createServer.bind(http);
 http.createServer=function withBlofyRestreamHealth(listener){
   if(typeof listener!=='function')return previousCreateServer(listener);
@@ -129,9 +131,15 @@ http.createServer=function withBlofyRestreamHealth(listener){
     }
     if(req.method==='POST'&&req.url?.split('?')[0]==='/api/v1/admin/restream-engine/concurrency/check'){
       if(!authorized(req.headers.authorization))return write(res,401,{ok:false,error:'unauthorized'});
-      // Fixed at two synthetic readers to avoid disrupting a real provider.
+      // Fixed at two synthetic readers with a five-minute global cooldown.
+      const now=Date.now();
+      if(concurrencyRunning || (concurrencyLastAt && now-concurrencyLastAt<300000))
+        return write(res,429,{ok:false,code:'synthetic_concurrency_rate_limited'});
+      concurrencyRunning=true;concurrencyLastAt=now;
       void verifySyntheticConcurrency({probe:()=>verifyRestreamSmoke(ENGINE),concurrency:2})
-        .then(report=>write(res,report.ok?200:503,report));
+        .then(report=>write(res,report.ok?200:503,report))
+        .catch(()=>write(res,503,{ok:false,code:'synthetic_concurrency_failed'}))
+        .finally(()=>{concurrencyRunning=false;});
       return;
     }
     if(req.method==='GET'&&req.url?.split('?')[0]==='/api/v1/admin/restream-engine/health'){
