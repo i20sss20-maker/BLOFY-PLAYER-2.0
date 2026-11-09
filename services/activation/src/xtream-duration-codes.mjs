@@ -8,6 +8,7 @@ import {gatewayCredentialProof,generateGatewayUsername,
   generateGatewayPassword} from './xtream-gateway-core.mjs';
 import {encryptGatewayAccountPassword,decryptGatewayAccountPassword} from './xtream-account-vault.mjs';
 import {createStreamAppToken} from './xtream-code-app-token.mjs';
+import {encryptStreamCode,decryptStreamCode} from './xtream-code-vault.mjs';
 
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const MAX_DAYS=730;
@@ -77,6 +78,7 @@ export function safeCodeRecord(row){
     redeemedAt:row.redeemed_at?new Date(row.redeemed_at).getTime():null,
     expiresAt:row.expires_at?new Date(row.expires_at).getTime():null,
     accountId:row.account_id||null,codeHint:row.code_hint||'',
+    copyAvailable:Boolean(row.code_vault),
     buyerName:String(row.buyer_name||'').slice(0,80),
     buyerPhone:String(row.buyer_phone||'').slice(0,22),
     salePriceHalalas:row.sale_price_halalas==null?null:Number(row.sale_price_halalas),
@@ -107,6 +109,7 @@ export async function ensureStreamCodeTable(client){
     CHECK (NOT (revoked_at IS NOT NULL AND redeemed_at IS NOT NULL))
   )`);
   await client.query('ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS redeemed_device_hash TEXT');
+  await client.query('ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS code_vault TEXT');
   await client.query("ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS code_channel TEXT NOT NULL DEFAULT 'xtream'");
   await client.query(`CREATE INDEX IF NOT EXISTS idx_blofy_stream_codes_created
     ON blofy_xtream_gateway_duration_codes(created_at DESC)`);
@@ -142,11 +145,12 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
           const code=randomNumericStreamCode(streamNumericCodeLength(issued),randomBytes);
           const hash=streamCodeProof(code,keyHex),id=uuid();
           const result=await client.query(`INSERT INTO blofy_xtream_gateway_duration_codes
-            (id,code_hash,code_hint,label,source_id,duration_days,max_connections,code_channel)
-            VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+            (id,code_hash,code_hint,label,source_id,duration_days,max_connections,code_channel,code_vault)
+            VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
             ON CONFLICT (code_hash) DO NOTHING RETURNING *`,[
             id,hash,code.slice(0,2)+'••••'+code.slice(-2),opts.label,
-            opts.sourceId,opts.durationDays,opts.maxConnections,opts.channel
+            opts.sourceId,opts.durationDays,opts.maxConnections,opts.channel,
+            encryptStreamCode(id,code,keyHex)
           ]);
           if(!result.rows?.length)continue;
           items.push({...safeCodeRecord(result.rows[0]),code});
@@ -171,6 +175,19 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
       FROM blofy_xtream_gateway_duration_codes`);
     return {ok:true,items:result.rows.map(safeCodeRecord),totals:totals.rows[0],
       nextOffset:result.rows.length===n?start+n:null};
+  }
+  async function reveal(id){
+    if(!UUID.test(String(id||'')))
+      throw Object.assign(Error('stream_code_invalid'),{status:400});
+    const item=(await pool.query(`SELECT id,code_hash,code_vault,code_channel,revoked_at
+      FROM blofy_xtream_gateway_duration_codes WHERE id=$1 LIMIT 1`,[id])).rows[0];
+    if(!item)return {ok:false,code:'stream_code_not_found'};
+    if(!item.code_vault)return {ok:false,code:'stream_code_legacy_unrecoverable'};
+    if(item.revoked_at)return {ok:false,code:'stream_code_revoked'};
+    const code=decryptStreamCode(id,item.code_vault,keyHex);
+    if(!code||streamCodeProof(code,keyHex)!==item.code_hash)
+      return {ok:false,code:'stream_code_vault_integrity_failed'};
+    return {ok:true,code,id:item.id,channel:item.code_channel};
   }
   async function revoke(id){
     if(!UUID.test(String(id||'')))throw Object.assign(Error('stream_code_invalid'),{status:400});
@@ -292,5 +309,5 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
     }catch(error){await client.query('ROLLBACK').catch(()=>{});throw error}
     finally{client.release()}
   }
-  return {issue,list,revoke,redeem};
+  return {issue,list,reveal,revoke,redeem};
 }
