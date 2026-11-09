@@ -220,6 +220,24 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
         WHERE code_hash=$1 FOR UPDATE`,[proof])).rows[0];
       if(!row||row.revoked_at)
         throw Object.assign(Error('stream_code_unavailable'),{status:409});
+      // Compatibility with freshly issued BLOFY STREAM numeric vouchers
+      // minted from an older/cached operator screen without an app channel.
+      // The code is not consumed at issuance. A first app redemption may
+      // safely claim an *unsold, never-used* STREAM-labelled numeric voucher.
+      // Do not convert old hexadecimal codes, pre-app vouchers, sold Xtream
+      // products, revoked codes, or any existing subscription.
+      if(appOnly && (row.code_channel||'xtream')==='xtream' &&
+         !row.redeemed_at && !row.sold_at &&
+         String(row.label||'').trim().toUpperCase()==='BLOFY STREAM' &&
+         /^[0-9]{8,12}$/.test(normalizeStreamCode(value)||'') &&
+         new Date(row.created_at).getTime()>=Date.parse('2026-11-09T00:00:00Z')){
+        const converted=(await client.query(`UPDATE blofy_xtream_gateway_duration_codes
+          SET code_channel='app'
+          WHERE id=$1 AND code_channel='xtream' AND redeemed_at IS NULL
+            AND revoked_at IS NULL AND sold_at IS NULL
+          RETURNING code_channel`,[row.id])).rows[0];
+        if(converted?.code_channel==='app')row.code_channel='app';
+      }
       if((row.code_channel||'xtream')!==(appOnly?'app':'xtream'))
         throw Object.assign(Error('stream_code_wrong_product'),{status:409});
       // Existing activation is immutable. Only the same installation
