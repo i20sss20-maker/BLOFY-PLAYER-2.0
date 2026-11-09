@@ -2586,8 +2586,12 @@ const bridgeLimiter=createFixedWindowLimiter({limit:90,windowMs:60_000});
 const streamActions=new Map();
 let streamCodeSchemaReady;
 function ensureStreamCodeSchema(){
-  if(!streamCodeSchemaReady)streamCodeSchemaReady=ensureStreamCodeTable(pool)
-    .catch(error=>{streamCodeSchemaReady=null;throw error});
+  if(!streamCodeSchemaReady)streamCodeSchemaReady=(async()=>{
+    // The STREAM operator may load subscribers before the first Xtream
+    // playback request initialized gateway migrations.
+    await pool.query('ALTER TABLE IF EXISTS blofy_xtream_gateway_accounts ADD COLUMN IF NOT EXISTS credential_vault TEXT');
+    await ensureStreamCodeTable(pool);
+  })().catch(error=>{streamCodeSchemaReady=null;throw error});
   return streamCodeSchemaReady;
 }
 async function callLocalGateway(method,path,body){
