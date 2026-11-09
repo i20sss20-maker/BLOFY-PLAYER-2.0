@@ -68,7 +68,7 @@ export function stripUpstreamSecrets(value) {
 // around a useful channel number. Preserve the stored source title unchanged.
 export function cleanGatewayDisplayName(value) {
   const original=String(value||'').trim();
-  const cleaned=original.replace(/#{3,}/g,' ').replace(/\\s{2,}/g,' ').trim();
+  const cleaned=original.replace(/#{3,}/g,' ').replace(/\s{2,}/g,' ').trim();
   return cleaned||original;
 }
 export function formatGatewayCategory(row) {
