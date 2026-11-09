@@ -28,6 +28,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
+import tv.blofy.player.core.identity.StreamCodeSession
+import tv.blofy.player.core.identity.StreamCodeClient
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.CatalogRefreshWorker
@@ -169,16 +171,20 @@ class SettingsActivity : AppCompatActivity() {
         ) {
             startActivity(Intent(this, HomePersonalizationActivity::class.java))
         })
-        addCard(actionCard(copy("باقتي", "My plan"), copy("مدة التفعيل والأجهزة المسموحة", "Activation period and allowed devices")) {
+        if (!BuildConfig.CODE_ONLY_LOGIN) addCard(actionCard(copy("باقتي", "My plan"), copy("مدة التفعيل والأجهزة المسموحة", "Activation period and allowed devices")) {
             startActivity(Intent(this, tv.blofy.player.ui.subscription.SubscriptionActivity::class.java))
         }.apply { tag = "blofy_subscription_entry" })
-        addCard(actionCard(copy("حالة الاشتراك", "Subscription status"), copy("صلاحية المحتوى والاتصالات الحالية", "Content validity and active connections")) {
+        if (BuildConfig.CODE_ONLY_LOGIN) addCard(actionCard(copy("اشتراكي في BLOFY STREAM", "My BLOFY STREAM subscription"),
+            copy("حالة الاشتراك والأيام المتبقية وتاريخ الانتهاء", "Subscription status, remaining days, expiry")) {
+            showStreamSubscription()
+        })
+        if (!BuildConfig.CODE_ONLY_LOGIN) addCard(actionCard(copy("حالة الاشتراك", "Subscription status"), copy("صلاحية المحتوى والاتصالات الحالية", "Content validity and active connections")) {
             startActivity(Intent(this, tv.blofy.player.ui.subscription.ConnectionStatusActivity::class.java))
         })
-        addCard(actionCard(getString(R.string.account_title), getString(R.string.privacy_policy)) {
+        if (!BuildConfig.CODE_ONLY_LOGIN) addCard(actionCard(getString(R.string.account_title), getString(R.string.privacy_policy)) {
             startActivity(Intent(this, tv.blofy.player.ui.account.AccountActivity::class.java))
         })
-        addCard(actionCard(
+        if (!BuildConfig.CODE_ONLY_LOGIN) addCard(actionCard(
             copy("بيانات الجهاز والباركود", "Device & barcode"),
             copy("عرض رقم الجهاز ورمز التفعيل والباركود", "View device ID, activation code and barcode")
         ) {
@@ -224,7 +230,7 @@ class SettingsActivity : AppCompatActivity() {
             arrayOf(getString(R.string.setting_small), getString(R.string.setting_medium), getString(R.string.setting_large))))
 
         addSection(page, copy("القوائم والسيرفرات", "Playlists and servers"))
-        addCard(actionCard(copy("إدارة السيرفرات والقوائم", "Manage servers and playlists"), copy("تبديل، تعديل، مزامنة وحالة كل سيرفر", "Switch, edit, refresh and view each server status")) {
+        if (!BuildConfig.CODE_ONLY_LOGIN) addCard(actionCard(copy("إدارة السيرفرات والقوائم", "Manage servers and playlists"), copy("تبديل، تعديل، مزامنة وحالة كل سيرفر", "Switch, edit, refresh and view each server status")) {
             startActivity(Intent(this, ProviderManagerActivity::class.java))
         })
         addCard(actionCard(copy("ترتيب وإخفاء الفئات", "Category order and visibility"), copy("البث والأفلام والمسلسلات لكل سيرفر", "Live, movies and series categories for the active server")) {
@@ -243,7 +249,7 @@ class SettingsActivity : AppCompatActivity() {
         })
 
         addSection(page, copy("التحديث", "Updates"))
-        addCard(actionCard(getString(R.string.update_check), getString(R.string.update_check_hint)) {
+        if (!BuildConfig.CODE_ONLY_LOGIN) addCard(actionCard(getString(R.string.update_check), getString(R.string.update_check_hint)) {
             tv.blofy.player.core.update.AppUpdatePrompt.check(this, force = true)
         })
 
@@ -260,7 +266,7 @@ class SettingsActivity : AppCompatActivity() {
 
         linkFocus(back)
         page.addView(TextView(this).apply {
-            text = "BLOFY PLAYER ${BuildConfig.VERSION_NAME}"
+            text = if (BuildConfig.CODE_ONLY_LOGIN) "BLOFY STREAM • 55.8.7" else "BLOFY PLAYER ${BuildConfig.VERSION_NAME}"
             BlofyTvDesign.applyCaption(this)
             letterSpacing = .08f
             gravity = Gravity.CENTER
@@ -366,6 +372,49 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun copy(arabic: String, english: String) =
         if (androidx.core.os.ConfigurationCompat.getLocales(resources.configuration)[0]?.language == "ar") arabic else english
+
+    private fun showStreamSubscription() {
+        val token=StreamCodeSession.token(applicationContext)
+        if(token==null){
+            AlertDialog.Builder(this).setTitle("اشتراك BLOFY STREAM")
+                .setMessage("لا يوجد اشتراك مفعّل على هذا الجهاز.")
+                .setPositiveButton("حسنًا",null).show()
+            return
+        }
+        lifecycleScope.launch {
+            val current=StreamCodeClient.sessionStatus(token)
+            if (isFinishing||isDestroyed) return@launch
+            when {
+                current==null -> AlertDialog.Builder(this@SettingsActivity)
+                    .setTitle("حالة الاشتراك")
+                    .setMessage("تعذر الاتصال بالسيرفر الآن. اشتراكك محفوظ ولم يتم حذفه.")
+                    .setPositiveButton("حسنًا",null).show()
+                !current.active -> AlertDialog.Builder(this@SettingsActivity)
+                    .setTitle("اشتراك منتهي أو موقوف")
+                    .setMessage("أدخل كودًا جديدًا أو تواصل مع الدعم لإعادة التفعيل.")
+                    .setNegativeButton("إلغاء",null)
+                    .setPositiveButton("إدخال كود") { _,_ ->
+                        StreamCodeSession.clearClaim(applicationContext)
+                        startActivity(Intent(this@SettingsActivity,
+                            tv.blofy.player.ui.login.CodeOnlyLoginActivity::class.java)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+                        finish()
+                    }.show()
+                else -> {
+                    val expiry=current.expiresAt?.let {
+                        SimpleDateFormat("dd/MM/yyyy HH:mm",Locale.ENGLISH).apply {
+                            timeZone=java.util.TimeZone.getTimeZone("Asia/Riyadh")
+                        }.format(Date(it))
+                    } ?: "غير محدد"
+                    val remaining=current.daysRemaining?.let { "$it يوم" } ?: "ساري"
+                    AlertDialog.Builder(this@SettingsActivity)
+                        .setTitle("اشتراكي في BLOFY STREAM ✓")
+                        .setMessage("الحالة: ساري\nالمدة المتبقية: $remaining\nانتهاء الاشتراك: $expiry\nبتوقيت السعودية\n\nيتم التحقق من المدة عبر السيرفر وليس ساعة الجهاز.")
+                        .setPositiveButton("حسنًا",null).show()
+                }
+            }
+        }
+    }
 
     private fun restoreDefaults() {
         prefs.edit().clear().apply()
