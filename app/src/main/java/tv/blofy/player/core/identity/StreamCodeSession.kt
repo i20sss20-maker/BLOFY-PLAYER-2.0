@@ -15,6 +15,23 @@ object StreamCodeSession {
     private const val ACTIVATED_AT = "activated_at"
     private const val EXPIRES_AT = "expires_at"
     const val HOST = "https://blofyplayer.com"
+    private const val INSTALL_KEY = "code_installation_key"
+
+    // Generated BEFORE first redemption; survives failed network responses
+    // for this installation. Do not derive it from TV date, clock or IP.
+    fun installationKey(context: Context): String {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        prefs.getString(INSTALL_KEY,null)?.takeIf {
+            it.matches(Regex("[a-f0-9]{64}"))
+        }?.let { return it }
+        val random=ByteArray(32)
+        java.security.SecureRandom().nextBytes(random)
+        val key=random.joinToString("") { "%02x".format(it.toInt() and 0xff) }
+        check(prefs.edit().putString(INSTALL_KEY,key).commit()) {
+            "تعذر حفظ تعريف التفعيل على الجهاز"
+        }
+        return key
+    }
     val providerId: String = UUID.nameUUIDFromBytes("blofy-stream-code-provider-v1".toByteArray()).toString()
 
     fun isClaimed(context: Context): Boolean =
