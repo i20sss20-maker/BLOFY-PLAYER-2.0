@@ -230,6 +230,8 @@ jobs:
           test -s "$apk"
           (cd signed-stream && sha256sum -c SHA256SUMS)
           cp "$apk" signed-stream/BLOFY-STREAM-55.8.7-OFFLINE-AR-EN-OWNER-SIGNED.apk
+          # Publish a checksum that matches the public APK filename, not the internal artifact name.
+          (cd signed-stream && sha256sum BLOFY-STREAM-55.8.7-OFFLINE-AR-EN-OWNER-SIGNED.apk > SHA256SUMS)
           printf '%s\n' \
             "BLOFY STREAM 55.8.7 - Arabic / English" \
             "" \
