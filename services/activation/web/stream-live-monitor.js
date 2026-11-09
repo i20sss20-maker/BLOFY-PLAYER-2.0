@@ -54,6 +54,15 @@ if(root){
     fields.starts.textContent=fmt(m.started);
     fields.failures.textContent=fmt(m.failed);
     fields.p95.textContent=Number.isFinite(m.p95StartMs)?fmt(m.p95StartMs)+' ms':'—';
+    const labels={provider_or_auth_denial:'رفض المصدر أو المصادقة',missing_media:'محتوى غير متاح',transient_network:'خطأ شبكة مؤقت',invalid_media:'صيغة أو استجابة غير صالحة',unknown:'بحاجة إلى تشخيص'};
+    const issues=gateway.value.recoveryAdvice?.issues||[];
+    const box=$('blofyRecoveryAdvice');box.replaceChildren();
+    if(!issues.length)box.textContent='لا توجد مشكلات حديثة مصنفة.';
+    for(const issue of issues.slice(0,8)){
+     const line=document.createElement('li');
+     line.textContent=(labels[issue.class]||labels.unknown)+' · '+(issue.action==='cooldown'?'تجنب إعادة المحاولة المتكررة':issue.action==='operator_review'?'تحتاج مراجعة الإدارة':'المصدر يحتاج متابعة')+' · لا يوجد إصلاح تلقائي';
+     box.append(line);
+    }
    }
    fields.alert.textContent=health.status==='fulfilled'
      ?(health.value.alert?'تنبيه: تكرر فشل الاختبار التجريبي':'لا توجد تنبيهات تجريبية متكررة')
