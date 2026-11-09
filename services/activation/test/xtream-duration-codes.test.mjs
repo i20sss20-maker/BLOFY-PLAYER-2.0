@@ -54,9 +54,15 @@ function fakeDb(){
   if(sql.includes('INSERT INTO blofy_xtream_gateway_accounts')){
    accounts.push(args);return {rows:[]};
   }
+  if(sql.includes('FROM blofy_xtream_gateway_accounts WHERE id=$1')){
+   return {rows:accounts.filter(a=>a[0]===args[0]).map(a=>({
+     id:a[0],username:a[2],credential_vault:a[8],
+     enabled:true,expires_at:a[6]
+   }))};
+  }
   if(sql.includes('UPDATE blofy_xtream_gateway_duration_codes')&&sql.includes('SET redeemed_at')){
    const row=codes.find(x=>x.id===args[0]);Object.assign(row,{
-     redeemed_at:args[1],expires_at:args[2],account_id:args[3]});
+     redeemed_at:args[1],expires_at:args[2],account_id:args[3],redeemed_device_hash:args[4]});
    return {rows:[row]};
   }
   if(sql.includes('SET revoked_at=NOW()')){
@@ -120,6 +126,7 @@ test('schema and API code avoid retaining cleartext subscription secrets',async(
  const stub={queries:[],async query(sql){this.queries.push(sql);return {rows:[]}}};
  await ensureStreamCodeTable(stub);
  assert.match(stub.queries[0],/code_hash TEXT NOT NULL UNIQUE/);
+ assert.match(stub.queries.join(' '),/redeemed_device_hash TEXT/);
  assert.doesNotMatch(stub.queries.join(' '),/plaintext_password|code_plaintext/);
 });
 
@@ -153,4 +160,35 @@ test('legacy 24-character hexadecimal codes continue to redeem',()=>{
  assert.equal(normalizeStreamCode(old),old);
  assert.match(streamCodeProof(old,keyHex),/^[a-f0-9]{64}$/);
  assert.equal(normalizeStreamCode('000000000000000000000000'), '000000000000000000000000');
+});
+
+test('app retry recovers same credentials without extending duration',async()=>{
+ const state=fakeDb(),clock=Date.parse('2026-11-09T03:00:00Z');
+ const system=createStreamDurationCodes({pool:state.pool,keyHex,clock:()=>clock});
+ const {items}=await system.issue({durationDays:7,sourceId:source});
+ const code=items[0].code,deviceKey='a'.repeat(64);
+ const first=await system.redeem(code,'https://blofyplayer.com',{deviceKey});
+ const second=await system.redeem(code,'https://blofyplayer.com',{deviceKey});
+ assert.equal(first.recovered,false);
+ assert.equal(second.recovered,true);
+ assert.deepEqual(second.credentials,first.credentials);
+ assert.equal(first.account.activatedAt,second.account.activatedAt);
+ assert.equal(first.account.expiresAt,second.account.expiresAt);
+ assert.equal(state.accounts.length,1);
+ await assert.rejects(
+   system.redeem(code,'https://blofyplayer.com',{deviceKey:'b'.repeat(64)}),
+   /stream_code_unavailable/);
+ await assert.rejects(
+   system.redeem(code,'https://blofyplayer.com'),
+   /stream_code_unavailable/);
+ assert.equal(state.accounts.length,1);
+});
+test('invalid installation binding cannot consume a subscription code',async()=>{
+ const state=fakeDb(),system=createStreamDurationCodes({pool:state.pool,keyHex});
+ const {items}=await system.issue({durationDays:1});
+ await assert.rejects(
+   system.redeem(items[0].code,'https://blofyplayer.com',{deviceKey:'123'}),
+   /stream_code_device_invalid/);
+ assert.equal(state.accounts.length,0);
+ assert.equal(state.codes[0].redeemed_at,null);
 });
