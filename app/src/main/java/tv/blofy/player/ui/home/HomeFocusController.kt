@@ -57,7 +57,9 @@ internal class HomeFocusController(
         val currentView = root.findFocus()
         if (currentView != null && entries.none { it.view === currentView }) rebuild()
         val usable = entries.filter { attachedAndFocusable(it.view) }
-        if (usable.isEmpty()) return true
+        // No focusable views during asynchronous catalog rendering: let Android
+        // fall back to native focus search instead of swallowing every D-pad key.
+        if (usable.isEmpty()) return false
         if (!repeatGate.accept(event.keyCode, event.deviceId, event.downTime, event.eventTime, event.repeatCount)) return true
 
         val rowOrder = IdentityHashMap<View, Int>()
