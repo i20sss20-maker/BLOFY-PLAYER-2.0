@@ -49,6 +49,30 @@ object StreamCodeClient {
         } ?: ""
     }
 
+    // Do not use the device wall clock to decide whether a code is expired:
+    // Android 9 TV boxes can have incorrect time. The server owns expiry.
+    suspend fun verifySubscriber(username: String, password: String): Boolean? =
+        withContext(Dispatchers.IO) {
+            val url = okhttp3.HttpUrl.Builder()
+                .scheme("https")
+                .host("blofyplayer.com")
+                .addPathSegment("player_api.php")
+                .addQueryParameter("username", username)
+                .addQueryParameter("password", password)
+                .build()
+            val request = Request.Builder().url(url).get()
+                .header("Cache-Control", "no-store").build()
+            try {
+                client.newCall(request).awaitResponse().use { response ->
+                    if (!response.isSuccessful) return@withContext null
+                    val data = JSONObject(response.body?.string().orEmpty())
+                    data.optJSONObject("user_info")?.optInt("auth") == 1
+                }
+            } catch (_: Exception) {
+                null // network is unavailable, not proof of expiry
+            }
+        }
+
     suspend fun redeem(rawCode: String): Activated = withContext(Dispatchers.IO) {
         val code = normalizeCode(rawCode)
         require(code.isNotEmpty()) { "أدخل كود التفعيل الصحيح" }
