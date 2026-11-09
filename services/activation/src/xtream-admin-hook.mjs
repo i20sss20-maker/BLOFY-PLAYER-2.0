@@ -57,6 +57,7 @@ import { auditXtreamCatalogSample } from './xtream-library-insights.mjs';
 import {auditFullStreamCatalog} from './stream-full-library-audit.mjs';
 import {suggestCatalogWithAI} from './stream-ai-catalog-suggestions.mjs';
 import {suggestCatalogWithGemini} from './stream-gemini-catalog-suggestions.mjs';
+import {proposeCatalogCommand} from './stream-ai-command-planner.mjs';
 import { normalizeXtreamDetails,mergedXtreamMetadata } from './xtream-item-details.mjs';
 import { tmdbConfigured,validatedTmdbId,fetchTmdbDetails } from './xtream-tmdb.mjs';
 import { sortXtreamCategories } from './xtream-category-sort.mjs';
@@ -2247,6 +2248,65 @@ async function reviewStreamLibrary(sourceId,type){
 }
 const aiCatalogRequestTimes=[];
 const geminiTestTimes=[];
+const commandProposals=new Map();
+const commandTimes=[];
+const COMMAND_TTL=5*60*1000;
+function trimCommandProposals(now){
+ for(const [id,entry] of commandProposals)
+  if(now-entry.createdAt>COMMAND_TTL)commandProposals.delete(id);
+ if(commandProposals.size>60)commandProposals.delete(commandProposals.keys().next().value);
+ while(commandTimes.length&&commandTimes[0]<now-3600000)commandTimes.shift();
+}
+async function chatWithLibraryAI(body){
+ const sourceId=String(body?.sourceId||''),type=String(body?.type||'');
+ if(!validUuid(sourceId)||!validType(type))
+  return {ok:false,code:'stream_ai_selection_invalid'};
+ const server=await serverById(sourceId);
+ if(!server)return {ok:false,code:'stream_library_source_missing'};
+ if(String(process.env.BLOFY_LIBRARY_AI_PROVIDER||'openai').toLowerCase()!=='gemini')
+  return {ok:false,code:'gemini_not_selected'};
+ const key=String(process.env.BLOFY_LIBRARY_GEMINI_API_KEY||'').trim();
+ if(key.length<32)return {ok:false,code:'stream_ai_not_configured'};
+ const now=Date.now();trimCommandProposals(now);
+ if(commandTimes.length>=12)
+  return {ok:false,code:'stream_ai_hourly_budget_exhausted'};
+ commandTimes.push(now);
+ const result=await proposeCatalogCommand(body?.message,{
+  apiKey:key,model:process.env.BLOFY_LIBRARY_AI_MODEL||'gemini-3.5-flash-lite'});
+ if(!result.ok||!result.allowed)
+  return {...result,serverName:String(server.name||'').slice(0,120),
+   sourceId,type,requiresApproval:false};
+ const planId=crypto.randomBytes(24).toString('hex');
+ const proposal={createdAt:now,sourceId,type,mode:result.sortMode,
+   sourceName:String(server.name||'').slice(0,120)};
+ commandProposals.set(planId,proposal);
+ return {...result,planId,sourceId,type,
+  serverName:proposal.sourceName,requiresApproval:true,
+  summary:'ترتيب فئات '+(type==='live'?'القنوات':type==='movie'?'الأفلام':'المسلسلات')+
+   ' في مصدر '+proposal.sourceName+' بنمط '+proposal.mode,
+  customersRefreshAutomatically:false,customerCatalogUpdated:false};
+}
+async function approveLibraryAICommand(body){
+ const token=String(body?.planId||'');
+ if(!/^[a-f0-9]{48}$/.test(token)||body?.approve!==true)
+  return {ok:false,code:'stream_ai_approval_invalid'};
+ const plan=commandProposals.get(token);
+ if(!plan)return {ok:false,code:'stream_ai_plan_expired'};
+ // Consume before DB mutation to prohibit double submission.
+ commandProposals.delete(token);
+ if(Date.now()-plan.createdAt>COMMAND_TTL)
+  return {ok:false,code:'stream_ai_plan_expired'};
+ const source=await serverById(plan.sourceId);
+ if(!source)return {ok:false,code:'stream_library_source_missing'};
+ const result=await autoSortCategories(plan.sourceId,plan.type,plan.mode);
+ libraryAuditCache.delete(plan.sourceId+':'+plan.type);
+ return {ok:true,applied:true,mode:plan.mode,sourceId:plan.sourceId,type:plan.type,
+  updatedCategories:result.updated,unchanged:result.unchanged,
+  changedOnServer:true,customerCatalogUpdated:source.enabled&&source.publish_catalog===true,
+  clientsNeedRefresh:true,automaticDevicePush:false,
+  note:'تم تعديل ترتيب الفئات في قاعدة BLOFY. ظهورها في تطبيقات العملاء يعتمد على إعادة جلب الفهرس والتخزين المؤقت.'};
+}
+
 async function suggestStreamLibraryAI(body){
   const sourceId=String(body?.sourceId||''),type=String(body?.type||'');
   const offset=Number(body?.offset||0);
@@ -2867,6 +2927,14 @@ async function unifiedStreamBridge(req,res,url){
       suggestionsReturned:result.suggestions?.length||0,
       modelUsed:result.modelUsed===true
     });
+  }
+  if(req.method==='POST'&&p==='/internal/blofy-stream/library-ai/chat'){
+    const result=await chatWithLibraryAI(await readJson(req));
+    return json(res,result.ok?200:409,result);
+  }
+  if(req.method==='POST'&&p==='/internal/blofy-stream/library-ai/apply'){
+    const result=await approveLibraryAICommand(await readJson(req));
+    return json(res,result.ok?200:409,result);
   }
   if(req.method==='GET'&&p==='/internal/blofy-stream/library-ai/status'){
     const provider=String(process.env.BLOFY_LIBRARY_AI_PROVIDER||'openai').trim().toLowerCase();
