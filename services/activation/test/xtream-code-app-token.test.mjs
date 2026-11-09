@@ -93,5 +93,5 @@ test('app bearer authorization routes are separate from Xtream login',async()=>{
  assert.match(server,/api\/v1\/stream\/app\/session/);
  assert.match(server,/const tokenMedia=url\.pathname\.match/);
  assert.match(server,/verifyStreamAppToken/);
- assert.match(server,/const account = await authenticate\(username, password, \{ touch: false \} \) \|\| authorizedAccount/);
+ assert.ok(server.includes("const account = await authenticate(username, password, { touch: false }) || authorizedAccount"));
 });
