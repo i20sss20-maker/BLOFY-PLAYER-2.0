@@ -24,3 +24,17 @@
 - Subscription settings and compliant Google Play review access.
 
 Do not market or publish PRO as an active paid plan before these are implemented and tested.
+
+## Phase 2 groundwork added (not a paid release)
+- The `ProAccessPolicy` feature matrix keeps free playback, search and favorites available without PRO.
+- All premium features default to DENIED unless a verified, active, unexpired app-PRO entitlement is supplied.
+- Added JVM unit tests for free access, expiry, inactive status, unverified state, and invalid product.
+- PRO preview now shows the current FREE status and explicitly does not offer purchases.
+
+### Required before billing rollout
+- Configure Play Console subscription product IDs and base plans.
+- Integrate Play Billing only after choosing products; validate purchase tokens server-side with Google Play Developer API.
+- Secure account/device ownership and server-to-server entitlement checks; never trust a self-asserted client boolean.
+- Acknowledge purchases, support restore, cancellation, refunds and pending purchases.
+- Add device migration compatibility for existing legacy subscribers and approved store-review access.
+- Add feature gating to each real premium feature only after the feature is built and tested.
