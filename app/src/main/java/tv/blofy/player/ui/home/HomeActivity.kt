@@ -752,7 +752,7 @@ class HomeActivity : AppCompatActivity() {
             addView(View(this@HomeActivity).apply { background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xF5181021.toInt(), 0xB52A1738.toInt(), 0x4017101F)) }, FrameLayout.LayoutParams(-1, -1))
             val copy = LinearLayout(this@HomeActivity).apply {
                 orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL or Gravity.START; layoutDirection = uiDirection; setPadding(dp(28), dp(18), dp(28), dp(18))
-                addView(TextView(this@HomeActivity).apply { text = if (BuildConfig.CODE_ONLY_LOGIN) "STREAM FEATURED" else "BLOFY FEATURED"; textSize = 11.5f; typeface = BlofyTvDesign.preferredTypeface(this, bold = true); setTextColor(PURPLE_BRIGHT); gravity = Gravity.START })
+                addView(TextView(this@HomeActivity).apply { text = if (BuildConfig.CODE_ONLY_LOGIN) getString(R.string.stream_ui_featured) else "BLOFY FEATURED"; textSize = 11.5f; typeface = BlofyTvDesign.preferredTypeface(this, bold = true); setTextColor(PURPLE_BRIGHT); gravity = Gravity.START })
                 addView(TextView(this@HomeActivity).apply { text = ContentPresentation.of(item).title; textSize = 27f; typeface = BlofyTvDesign.preferredTypeface(this, bold = true); setTextColor(Color.WHITE); gravity = Gravity.START; maxLines = 1 })
                 addView(TextView(this@HomeActivity).apply { text = buildList { item.year?.let(::add); item.rating?.let { add("★ $it") }; item.genre?.substringBefore(',')?.let(::add) }.joinToString("   •   "); textSize = 12.5f; setTextColor(TEXT_SECONDARY); gravity = Gravity.START })
                 addView(TextView(this@HomeActivity).apply { text = item.plot?.take(150) ?: getString(R.string.home_featured_fallback); textSize = 13f; setTextColor(TEXT_SECONDARY); gravity = Gravity.START; maxLines = 2; setPadding(0, dp(5), 0, 0) })
@@ -784,7 +784,7 @@ class HomeActivity : AppCompatActivity() {
             }
             addView(LinearLayout(this@HomeActivity).apply {
                 orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL or Gravity.START; layoutDirection = uiDirection; setPadding(dp(26), dp(14), dp(26), dp(14))
-                addView(TextView(this@HomeActivity).apply { text = if (BuildConfig.CODE_ONLY_LOGIN) "STREAM PICKS" else "BLOFY SPOTLIGHT"; textSize = 10.5f; typeface = BlofyTvDesign.preferredTypeface(this, bold = true); setTextColor(PURPLE_BRIGHT); gravity = Gravity.START })
+                addView(TextView(this@HomeActivity).apply { text = if (BuildConfig.CODE_ONLY_LOGIN) getString(R.string.stream_ui_spotlight) else "BLOFY SPOTLIGHT"; textSize = 10.5f; typeface = BlofyTvDesign.preferredTypeface(this, bold = true); setTextColor(PURPLE_BRIGHT); gravity = Gravity.START })
                 addView(TextView(this@HomeActivity).apply { text = headline; textSize = 22f; typeface = BlofyTvDesign.preferredTypeface(this, bold = true); setTextColor(Color.WHITE); gravity = Gravity.START })
                 addView(TextView(this@HomeActivity).apply { text = subtitle; textSize = 12.5f; maxLines = 2; setTextColor(TEXT_SECONDARY); gravity = Gravity.START })
             }, FrameLayout.LayoutParams(-1, -1))
