@@ -9,8 +9,10 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
+@Config(sdk = [35]) // Robolectric 4.14.1 only provides shadows up to API 35
 class StreamCodeSessionLogoutTest {
     @Test
     fun logoutClearsLocalSessionButPreservesSameInstallationBinding() {
