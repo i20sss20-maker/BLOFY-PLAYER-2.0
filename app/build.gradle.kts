@@ -52,6 +52,8 @@ android {
         versionCode = 2000084
         versionName = "2.0.0-rc07.55.8.7" // Exact BLOFY PLAYER display version; no Xiaomi suffix in any build
         manifestPlaceholders["blofyApplicationLabel"] = "@string/app_name"
+        manifestPlaceholders["blofyApplicationIcon"] = "@drawable/blofy_logo"
+        manifestPlaceholders["blofyApplicationBanner"] = "@drawable/blofy_tv_banner"
         buildConfigField("boolean", "CODE_ONLY_LOGIN", "false")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "ACTIVATION_BASE_URL", "\"$activationBaseUrlEscaped\"")
@@ -94,6 +96,8 @@ android {
             applicationIdSuffix = ".stream"
             versionNameSuffix = "-STREAM"
             manifestPlaceholders["blofyApplicationLabel"] = "BLOFY STREAM"
+            manifestPlaceholders["blofyApplicationIcon"] = "@drawable/stream_app_icon"
+            manifestPlaceholders["blofyApplicationBanner"] = "@drawable/stream_tv_banner"
             buildConfigField("boolean", "CODE_ONLY_LOGIN", "true")
             matchingFallbacks += listOf("release")
         }
@@ -102,6 +106,8 @@ android {
             applicationIdSuffix = ".stream"
             versionNameSuffix = "-STREAM-QA"
             manifestPlaceholders["blofyApplicationLabel"] = "BLOFY STREAM (QA)"
+            manifestPlaceholders["blofyApplicationIcon"] = "@drawable/stream_app_icon"
+            manifestPlaceholders["blofyApplicationBanner"] = "@drawable/stream_tv_banner"
             buildConfigField("boolean", "CODE_ONLY_LOGIN", "true")
             matchingFallbacks += listOf("debug")
         }
