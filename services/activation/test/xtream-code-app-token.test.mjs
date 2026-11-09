@@ -89,7 +89,7 @@ test('app bearer authorization routes are separate from Xtream login',async()=>{
  const server=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
  assert.match(server,/api\/v1\/stream\/app\/redeem/);
  assert.match(server,/api\/v1\/stream\/app\/session/);
- assert.match(server,/api\/v1\/stream\\/media/);
+ assert.match(server,/const tokenMedia=url\.pathname\.match/);
  assert.match(server,/verifyStreamAppToken/);
  assert.match(server,/const account = authorizedAccount\|\|await authenticate/);
 });
