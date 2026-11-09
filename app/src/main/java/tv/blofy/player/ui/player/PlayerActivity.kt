@@ -66,6 +66,9 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var qualityButton: Button
     private lateinit var favoriteButton: Button
     private lateinit var playPauseButton: Button
+    private var failurePanel: LinearLayout? = null
+    private var failureText: TextView? = null
+    private var failureRetry: Button? = null
     private var progressBar: ProgressBar? = null
     private var positionView: TextView? = null
     private var durationView: TextView? = null
@@ -105,10 +108,13 @@ class PlayerActivity : AppCompatActivity() {
 
         val profile = profileFromIntent()
         session = BlofyPlaybackSession(context = this, profile = profile, contentKind = kind.ifBlank { "unknown" }) {
-            Toast.makeText(this, if (kind == "live") "تعذر تشغيل هذه القناة داخل BLOFY • جرّب قناة أخرى" else "تعذر تشغيل هذا المحتوى داخل BLOFY", Toast.LENGTH_LONG).show()
+            // The terminal callback is only reached after the player's built-in
+            // retry and configured fallbacks have been exhausted.
+            showTerminalFailure()
         }
         session.player.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_READY) hideTerminalFailure()
                 if (playbackState == Player.STATE_ENDED && kind == "episode" && !autoNextTriggered) {
                     autoNextTriggered = true
                     playAdjacentEpisode(1, automatic = true)
@@ -277,9 +283,70 @@ class PlayerActivity : AppCompatActivity() {
             hud.addView(options)
         }
         root.addView(hud, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
+        failurePanel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(dp(25),dp(24),dp(25),dp(24))
+            background = BlofyTvDesign.elevatedSurface(dp(22).toFloat(),emphasis=true)
+            visibility = View.GONE
+            isFocusable = false
+            addView(TextView(this@PlayerActivity).apply {
+                text = "تعذّر تشغيل الفيديو"
+                textSize = if (compactHud) 21f else 26f
+                typeface = BlofyTvDesign.HeadingTypeface
+                setTextColor(BlofyTvDesign.TextPrimary)
+                gravity = Gravity.CENTER
+            })
+            failureText = TextView(this@PlayerActivity).apply {
+                text = "يمكنك إعادة المحاولة أو الرجوع للقنوات"
+                textSize = if (compactHud) 14f else 17f
+                setTextColor(BlofyTvDesign.TextSecondary)
+                gravity = Gravity.CENTER
+                setPadding(0,dp(11),0,dp(22))
+            }
+            addView(failureText)
+            val actions = LinearLayout(this@PlayerActivity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+                layoutDirection = View.LAYOUT_DIRECTION_RTL
+            }
+            failureRetry = controlButton("↻ إعادة المحاولة") {
+                failureRetry?.isEnabled = false
+                failureText?.text = "جار إعادة الاتصال بالمصدر..."
+                session.retrySameUrl()
+            }
+            actions.addView(failureRetry, LinearLayout.LayoutParams(0,dp(52),1f).apply {
+                marginEnd = dp(9)
+            })
+            actions.addView(controlButton("العودة للقائمة") { finish() },
+                LinearLayout.LayoutParams(0,dp(52),1f))
+            addView(actions,LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT))
+        }
+        root.addView(failurePanel,FrameLayout.LayoutParams(
+            if (compactHud) ViewGroup.LayoutParams.MATCH_PARENT else dp(620),
+            ViewGroup.LayoutParams.WRAP_CONTENT,Gravity.CENTER).apply {
+            marginStart=dp(if(compactHud) 12 else 0)
+            marginEnd=dp(if(compactHud) 12 else 0)
+        })
         setContentView(root)
         playerView.requestFocus()
         if (kind != "live") hud.post(progressRunnable)
+    }
+
+    private fun showTerminalFailure() {
+        if (isFinishing || !::session.isInitialized) return
+        failureText?.text = session.failureHint()
+        failureRetry?.isEnabled = true
+        failurePanel?.visibility = View.VISIBLE
+        failureRetry?.requestFocus()
+    }
+
+    private fun hideTerminalFailure() {
+        if (failurePanel?.visibility != View.VISIBLE) return
+        failurePanel?.visibility = View.GONE
+        failureRetry?.isEnabled = true
+        playerView.requestFocus()
     }
 
     private fun controlButton(label: String, action: () -> Unit) = Button(this).apply {
