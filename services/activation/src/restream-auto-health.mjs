@@ -10,7 +10,7 @@ const ALLOWED=new Set(['synthetic_hls_ts_verified','restream_not_configured',
  'restream_smoke_manifest_invalid','restream_smoke_not_mpegts','restream_smoke_redirect_invalid',
  'restream_smoke_response_too_large','restream_smoke_empty_body','restream_smoke_variant_missing']);
 export function publicHealthSummary(){
- return {enabled:true,scope:'synthetic_only',realSourceVerified:false,
+ return {enabled:process.env.BLOFY_RESTREAM_AUTO_HEALTH==='1',scope:'synthetic_only',realSourceVerified:false,
   running:state.running,lastCheckAt:state.lastCheckAt?new Date(state.lastCheckAt).toISOString():null,
   lastResult:state.lastResult,consecutiveFailures:state.consecutiveFailures,
   alert:state.consecutiveFailures>=3?'synthetic_restream_repeated_failure':null,
