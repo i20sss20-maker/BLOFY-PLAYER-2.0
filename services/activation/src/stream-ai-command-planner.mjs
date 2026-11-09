@@ -92,6 +92,13 @@ export async function proposeCatalogCommand(message,{
   // Common full-library requests are mapped to a bounded, reviewable
   // existing-category operation even if the model misclassifies the intent.
   const fullRequest=/(?:فرز|رتب|تنظيم|نظم|رتّب).{0,80}(?:كامل|كل|جميع).{0,120}(?:قنوات|أفلام|افلام|مسلسلات)|(?:قنوات|أفلام|افلام|مسلسلات).{0,120}(?:كامل|كل|جميع).{0,80}(?:فرز|ترتيب|تنظيم)|(?:BEIN|ALWAN|THMANEA|STARZPLAY|SHASHA).{0,160}(?:قنوات|أفلام|افلام|مسلسلات)/iu.test(valid.text);
+  // Item classification is distinct from rearranging category shelves.
+  // If the model explicitly selected individual item classification, honor it
+  // even when the operator used "كل/كامل" to describe a broad task.
+  if(parsed.action==='classify_items'&&parsed.sortMode==='none'){
+    return {ok:true,previewOnly:true,allowed:true,action:'classify_items',
+      sortMode:null,reply:'سأقترح نقل العناصر الواضحة لفئات موجودة على دفعات 12 عنصرًا. كل دفعة تحتاج مراجعة منفصلة.'};
+  }
   if(parsed.action==='full_catalog_sort'||fullRequest){
     return {ok:true,previewOnly:true,allowed:true,action:'full_catalog_sort',
       sortMode:null,reply:'أجهز معاينة لترتيب الأقسام الحالية للقنوات والأفلام والمسلسلات، مع تقديم العلامات والقنوات العربية والسنوات المعروفة. لن أنشئ أقسامًا جديدة أو أنقل العناصر بين الفئات دون مراجعتك.'};
@@ -99,10 +106,6 @@ export async function proposeCatalogCommand(message,{
   if(parsed.action==='category_sort'&&SORT_MODES.has(parsed.sortMode)){
    return {ok:true,previewOnly:true,allowed:true,action:'category_sort',
     sortMode:parsed.sortMode,reply:reply||'أقترح ترتيب أقسام المصدر بعد مراجعتك.'};
-  }
-  if(parsed.action==='classify_items'&&parsed.sortMode==='none'){
-   return {ok:true,previewOnly:true,allowed:true,action:'classify_items',sortMode:null,
-    reply:'سأراجع 12 عنوانًا وأقترح نقل الواضح منها فقط إلى فئات موجودة. يجب اعتماد أي تغيير قبل نشره.'};
   }
   if(parsed.action==='titles_cleanup'&&parsed.sortMode==='none'){
    return {ok:true,previewOnly:true,allowed:true,action:'titles_cleanup',
