@@ -44,6 +44,7 @@ import { recordXtreamPlayback,xtreamPlaybackSnapshot } from './xtream-playback-m
 import { XtreamDenialCooldown } from './xtream-denial-cooldown.mjs';
 import { createGatewayUsageThrottle } from './xtream-gateway-usage-throttle.mjs';
 import {createStreamDurationCodes,ensureStreamCodeTable} from './xtream-duration-codes.mjs';
+import {createStreamCommercial,ensureStreamCommercialSchema} from './xtream-code-commercial.mjs';
 import {parseStreamAppToken,verifyStreamAppToken,bearerFromRequest}
   from './xtream-code-app-token.mjs';
 import {encryptGatewayAccountPassword,decryptGatewayAccountPassword} from './xtream-account-vault.mjs';
@@ -93,6 +94,7 @@ function movieRefreshDue(key,now=Date.now()){
 }
 const accountUsageThrottle = createGatewayUsageThrottle();
 let streamCodes=null;
+let streamCommercial=null;
 const streamCodeLimiter=createFixedWindowLimiter({limit:6,windowMs:15*60_000});
 // Short numeric vouchers are more susceptible to distributed guessing.
 // Bound all public redemption attempts as well as each client IP.
@@ -236,6 +238,7 @@ async function ensureReady() {
       await client.query('CREATE INDEX IF NOT EXISTS idx_blofy_xtream_gateway_episode_lookup ON blofy_xtream_gateway_episode_map(server_id,source_episode_id)');
       await ensureUnavailableMediaTable(client);
       await ensureStreamCodeTable(client);
+      await ensureStreamCommercialSchema(client);
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK').catch(() => {});
@@ -244,6 +247,7 @@ async function ensureReady() {
   })().catch(error => { readyPromise = null; throw error; });
   const ready=await readyPromise;
   if(!streamCodes)streamCodes=createStreamDurationCodes({pool,keyHex:KEY_HEX});
+  if(!streamCommercial)streamCommercial=createStreamCommercial({pool,keyHex:KEY_HEX});
   // Opt-in, source-allowlisted, lease-based recovery. Normal requests do not
   // wait for health probes. Timers are unref'd and are never enabled by default.
   if(!unavailableRecoveryTimerStarted&&recoveryEnabled()){
@@ -1718,6 +1722,17 @@ http.createServer = function withBlofyXtreamGateway(listener) {
       const codeRevoke=url.pathname.match(/^\/api\/v1\/admin\/xtream-gateway\/codes\/([0-9a-f-]{36})\/revoke$/i);
       if(req.method==='POST'&&codeRevoke)
         return json(res,200,await streamCodes.revoke(codeRevoke[1]));
+      if(req.method==='GET'&&url.pathname==='/api/v1/admin/xtream-gateway/codes/sales-summary')
+        return json(res,200,await streamCommercial.salesSummary());
+      const commercialAction=url.pathname.match(/^\/api\/v1\/admin\/xtream-gateway\/codes\/([0-9a-f-]{36})\/(sell|extend|transfer)$/i);
+      if(req.method==='POST'&&commercialAction){
+        const id=commercialAction[1],kind=commercialAction[2];
+        if(kind==='transfer')return json(res,200,
+          await streamCommercial.reissueForDeviceTransfer(id),{'cache-control':'no-store'});
+        const body=await readJson(req);
+        if(kind==='extend')return json(res,200,await streamCommercial.extend(id,body));
+        if(kind==='sell')return json(res,200,await streamCommercial.markSold(id,body));
+      }
       if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream-gateway') {
         const items = await listAccounts();
         return json(res, 200, { serverUrl: origin(req), items });
