@@ -4,7 +4,7 @@
 const ALLOWED_MODELS=new Set(['gemini-2.5-flash','gemini-3.5-flash-lite','gemini-3.8-flash']);
 const REJECT_SENSITIVE=/(?:https?:\/\/|(?:password|passwd|token|secret|api[_-]?key|username)\s*[:=]|[\w.+-]+@[\w.-]+\.[a-z]{2,})/i;
 const SORT_MODES=new Set(['smart','popular','alphabetical','sports_first','news_first','kids_first']);
-const SAFE=/^[\p{L}\p{N}\p{P}\p{Zs}\n\r\t]{4,480}$/u;
+const SAFE=/^[\p{L}\p{M}\p{N}\p{P}\p{S}\p{Zs}\n\r\t]{4,480}$/u;
 export function validateOperatorInstruction(message){
  if(typeof message!=='string'||!SAFE.test(message)||REJECT_SENSITIVE.test(message))
   return {ok:false,code:'ai_instruction_invalid'};
