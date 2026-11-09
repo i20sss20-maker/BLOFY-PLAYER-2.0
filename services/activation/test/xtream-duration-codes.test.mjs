@@ -56,8 +56,8 @@ function fakeDb(){
   }
   if(sql.includes('FROM blofy_xtream_gateway_accounts WHERE id=$1')){
    return {rows:accounts.filter(a=>a[0]===args[0]).map(a=>({
-     id:a[0],username:a[2],credential_vault:a[8],
-     enabled:true,expires_at:a[6]
+     id:a[0],username:a[2],credential_vault:a[7],
+     enabled:true,expires_at:a[5]
    }))};
   }
   if(sql.includes('UPDATE blofy_xtream_gateway_duration_codes')&&sql.includes('SET redeemed_at')){
