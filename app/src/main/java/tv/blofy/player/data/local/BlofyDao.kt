@@ -470,7 +470,10 @@ interface BlofyDao {
         val oldCategories = oldCategoriesList.associateBy { it.key }
         val preservedCategories = categories.map { incoming ->
             oldCategories[incoming.key]?.let { old ->
-                incoming.copy(orderIndex = old.orderIndex, hidden = old.hidden)
+                // STREAM follows the source order after an explicit user refresh.
+                // The PLAYER edition still retains its user-selected category ordering.
+                incoming.copy(orderIndex = if (tv.blofy.player.BuildConfig.CODE_ONLY_LOGIN)
+                    incoming.orderIndex else old.orderIndex, hidden = old.hidden)
             } ?: incoming
         }
         val oldStreams = streamSnapshot(providerId, kind).associateBy { it.key }
