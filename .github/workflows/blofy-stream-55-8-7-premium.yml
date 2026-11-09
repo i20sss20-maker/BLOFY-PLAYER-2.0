@@ -241,10 +241,10 @@ jobs:
             # Never silently overwrite an unrelated public release tag.
             actual_sha="$(gh api "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG" --jq '.object.sha')"
             test "$actual_sha" = "$GITHUB_SHA"
-            gh release upload "$RELEASE_TAG" signed-stream/BLOFY-STREAM-55.8.7-AR-EN-OWNER-SIGNED.apk --clobber
+            gh release upload "$RELEASE_TAG" signed-stream/BLOFY-STREAM-55.8.7-OFFLINE-AR-EN-OWNER-SIGNED.apk --clobber
           else
             gh release create "$RELEASE_TAG" \
-              signed-stream/BLOFY-STREAM-55.8.7-AR-EN-OWNER-SIGNED.apk \
+              signed-stream/BLOFY-STREAM-55.8.7-OFFLINE-AR-EN-OWNER-SIGNED.apk \
               signed-stream/SHA256SUMS \
               --title "BLOFY STREAM 55.8.7 | Offline-first + Arabic / English" \
               --notes-file signed-stream/RELEASE-NOTES.txt \
