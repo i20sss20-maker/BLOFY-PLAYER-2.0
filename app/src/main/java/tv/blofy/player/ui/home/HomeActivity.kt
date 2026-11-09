@@ -153,6 +153,17 @@ class HomeActivity : AppCompatActivity() {
             return
         }
         deviceKind = DeviceClass.detect(this)
+        // An already committed STREAM library does not need a second Room read to
+        // paint the remote-focusable Home. An in-flight manual refresh may hold a
+        // large SQLite transaction: show the sidebar immediately, then load its
+        // durable source rows asynchronously. Auth is verified in onResume().
+        if (BuildConfig.CODE_ONLY_LOGIN &&
+            CatalogSyncState.isReady(applicationContext, StreamCodeSession.providerId)) {
+            scheduledProviderId = StreamCodeSession.providerId
+            CatalogRefreshWorker.scheduleAutomatic(applicationContext, StreamCodeSession.providerId)
+            showReadyHome()
+            return
+        }
         // A direct intent must not bypass the same readiness check as the login screen.
         setContentView(LinearLayout(this).apply {
             tag = "blofy_home_opening"
