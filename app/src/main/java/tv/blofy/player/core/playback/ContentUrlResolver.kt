@@ -78,6 +78,11 @@ object ContentUrlResolver {
      */
     fun alternateLiveFormat(url: String, profile: ProviderProfile): String? {
         if (profile.providerKind != ProviderKind.XTREAM) return null
+        // HLS variant playlists from third-party providers can embed
+        // credential-bearing segment URLs. BLOFY STREAM must not request
+        // those playlists until all segments can be routed through BLOFY.
+        if (BuildConfig.CODE_ONLY_LOGIN &&
+            url.startsWith("${StreamCodeSession.HOST}/api/v1/stream/media/")) return null
 
         val suffixStart = listOf(url.indexOf('?'), url.indexOf('#'))
             .filter { it >= 0 }
