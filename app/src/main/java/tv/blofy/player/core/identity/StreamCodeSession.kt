@@ -29,6 +29,11 @@ object StreamCodeSession {
             .commit()) { "تعذر حفظ الاشتراك على الجهاز" }
     }
 
+    fun clearClaim(context: Context) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().remove(PROVIDER_ID_KEY).apply()
+    }
+
     suspend fun hasSavedProvider(context: Context): Boolean =
         isClaimed(context) &&
             BlofyDatabase.get(context.applicationContext).dao().provider(providerId) != null
