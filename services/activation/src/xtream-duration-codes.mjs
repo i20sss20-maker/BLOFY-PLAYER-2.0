@@ -51,6 +51,9 @@ export function validateStreamCodeBatch(data={}){
   const durationDays=Number(data.durationDays);
   const quantity=Number(data.quantity??1);
   const maxConnections=Number(data.maxConnections??1);
+  const channel=String(data.channel??'xtream').trim().toLowerCase();
+  if(!['app','xtream'].includes(channel))
+    throw Object.assign(Error('stream_code_channel_invalid'),{status:400});
   if(!Number.isSafeInteger(durationDays)||durationDays<1||durationDays>MAX_DAYS)
     throw Object.assign(Error('stream_code_duration_invalid'),{status:400});
   if(!Number.isSafeInteger(quantity)||quantity<1||quantity>20)
@@ -61,11 +64,12 @@ export function validateStreamCodeBatch(data={}){
   if(sourceId&&!UUID.test(sourceId))
     throw Object.assign(Error('stream_code_source_invalid'),{status:400});
   const label=String(data.label||'BLOFY STREAM').trim().replace(/[\x00-\x1f\x7f]/g,' ').slice(0,100)||'BLOFY STREAM';
-  return {durationDays,quantity,maxConnections,sourceId,label};
+  return {durationDays,quantity,maxConnections,sourceId,label,channel};
 }
 export function safeCodeRecord(row){
   return {
     id:row.id,label:String(row.label||'').slice(0,100),
+    channel:row.code_channel||'xtream',
     sourceId:row.source_id||null,durationDays:Number(row.duration_days),
     maxConnections:Number(row.max_connections),
     status:row.revoked_at?'revoked':row.redeemed_at?'redeemed':'unused',
@@ -80,6 +84,7 @@ export async function ensureStreamCodeTable(client){
     id UUID PRIMARY KEY,
     code_hash TEXT NOT NULL UNIQUE,
     code_hint TEXT NOT NULL,
+    code_channel TEXT NOT NULL DEFAULT 'xtream' CHECK(code_channel IN ('xtream','app')),
     label TEXT NOT NULL,
     source_id UUID,
     duration_days INTEGER NOT NULL CHECK(duration_days BETWEEN 1 AND 730),
@@ -94,6 +99,7 @@ export async function ensureStreamCodeTable(client){
     CHECK (NOT (revoked_at IS NOT NULL AND redeemed_at IS NOT NULL))
   )`);
   await client.query('ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS redeemed_device_hash TEXT');
+  await client.query("ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS code_channel TEXT NOT NULL DEFAULT 'xtream'");
   await client.query(`CREATE INDEX IF NOT EXISTS idx_blofy_stream_codes_created
     ON blofy_xtream_gateway_duration_codes(created_at DESC)`);
 }
@@ -128,11 +134,11 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
           const code=randomNumericStreamCode(streamNumericCodeLength(issued),randomBytes);
           const hash=streamCodeProof(code,keyHex),id=uuid();
           const result=await client.query(`INSERT INTO blofy_xtream_gateway_duration_codes
-            (id,code_hash,code_hint,label,source_id,duration_days,max_connections)
-            VALUES($1,$2,$3,$4,$5,$6,$7)
+            (id,code_hash,code_hint,label,source_id,duration_days,max_connections,code_channel)
+            VALUES($1,$2,$3,$4,$5,$6,$7,$8)
             ON CONFLICT (code_hash) DO NOTHING RETURNING *`,[
             id,hash,code.slice(0,2)+'••••'+code.slice(-2),opts.label,
-            opts.sourceId,opts.durationDays,opts.maxConnections
+            opts.sourceId,opts.durationDays,opts.maxConnections,opts.channel
           ]);
           if(!result.rows?.length)continue;
           items.push({...safeCodeRecord(result.rows[0]),code});
@@ -206,6 +212,8 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
         WHERE code_hash=$1 FOR UPDATE`,[proof])).rows[0];
       if(!row||row.revoked_at)
         throw Object.assign(Error('stream_code_unavailable'),{status:409});
+      if((row.code_channel||'xtream')!==(appOnly?'app':'xtream'))
+        throw Object.assign(Error('stream_code_wrong_product'),{status:409});
       // Existing activation is immutable. Only the same installation
       // can retrieve its already-issued credentials after an interrupted
       // first response. Web redemptions without device binding stay single-use.
