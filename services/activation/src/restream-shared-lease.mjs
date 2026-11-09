@@ -17,6 +17,7 @@ export function createSharedStreamCoordinator({start,stop,clock=Date.now,
    entry={key,viewers:0,lastUsedAt:clock(),timer:null,pending:null,handle:null,generation:0};
    entries.set(key,entry);
   }
+  if(entry.stopping)throw new Error('shared_stream_recycling');
   if(entry.viewers>=maxViewersPerKey)throw new Error('shared_stream_viewer_limit');
   if(entry.timer){clearTimeout(entry.timer);entry.timer=null;}
   entry.viewers++;entry.lastUsedAt=clock();
@@ -45,9 +46,10 @@ export function createSharedStreamCoordinator({start,stop,clock=Date.now,
      current.timer=setTimeout(async()=>{
       current.timer=null;
       if(current.viewers!==0||entries.get(key)!==current)return;
-      // Do not admit a second publisher until the old publisher is stopped.
-      entries.delete(key);
-      if(current.handle!=null)try{await stop(current.handle,key);}catch{}
+      // Keep the entry locked until stop finishes to prevent overlapping publishers.
+      current.stopping=true;
+      try{if(current.handle!=null)await stop(current.handle,key);}catch{}
+      finally{if(entries.get(key)===current)entries.delete(key);current.stopping=false;}
      },Math.max(0,idleMs));
      current.timer.unref?.();
     }
