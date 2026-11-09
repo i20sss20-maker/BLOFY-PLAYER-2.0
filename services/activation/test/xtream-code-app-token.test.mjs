@@ -38,8 +38,8 @@ test('app-only duration code redemption returns token but no username/pass/m3u',
      if(sql.includes('COUNT(*)::int AS count FROM blofy_xtream_gateway_duration_codes'))
        return {rows:[{count:values.size}]};
      if(sql.includes('INSERT INTO blofy_xtream_gateway_duration_codes')){
-       const [id,code_hash,code_hint,label,source_id,duration_days,max_connections]=args;
-       const row={id,code_hash,code_hint,label,source_id,duration_days,max_connections};
+       const [id,code_hash,code_hint,label,source_id,duration_days,max_connections,code_channel]=args;
+       const row={id,code_hash,code_hint,label,source_id,duration_days,max_connections,code_channel};
        values.set(code_hash,row);return {rows:[row]};
      }
      if(sql.includes('FOR UPDATE'))return {rows:values.has(args[0])?[values.get(args[0])]:[]};
@@ -61,7 +61,7 @@ test('app-only duration code redemption returns token but no username/pass/m3u',
  };
  const system=createStreamDurationCodes({pool,keyHex:key,
   clock:()=>Date.parse('2026-11-09T04:00:00Z')});
- const issued=await system.issue({durationDays:30});
+ const issued=await system.issue({durationDays:30,channel:'app'});
  const data=await system.redeem(issued.items[0].code,'https://blofyplayer.com',{
    deviceKey:'d'.repeat(64),appOnly:true
  });
@@ -74,6 +74,8 @@ test('app-only duration code redemption returns token but no username/pass/m3u',
  assert.equal(data.m3uUrl,undefined);
  assert.doesNotMatch(JSON.stringify(data),/username|password|m3u|serverUrl/);
  assert.equal(accounts.length,1);
+ await assert.rejects(system.redeem(issued.items[0].code,'https://blofyplayer.com'),
+   /stream_code_wrong_product/);
  const retry=await system.redeem(issued.items[0].code,'https://blofyplayer.com',{
    deviceKey:'d'.repeat(64),appOnly:true
  });
