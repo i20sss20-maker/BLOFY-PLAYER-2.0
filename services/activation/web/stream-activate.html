@@ -22,10 +22,10 @@ button[disabled]{opacity:.55;cursor:wait}.submit{margin-top:18px;width:100%}
 <h1>فعّل اشتراكك بسهولة</h1>
 <p>أدخل كود الاشتراك الذي حصلت عليه. <b>مدة الاشتراك تبدأ عند التفعيل الناجح فقط</b>، وليس عند إصدار الكود.</p>
 <form id="form" autocomplete="off"><label for="code">كود التفعيل</label>
-<input id="code" name="code" type="text" spellcheck="false" autocapitalize="characters" maxlength="32" minlength="24" required placeholder="XXXX XXXX XXXX XXXX XXXX XXXX" aria-describedby="hint">
+<input id="code" name="code" type="text" inputmode="numeric" pattern="[0-9٠-٩۰-۹A-Fa-f\\s-]{8,32}" spellcheck="false" autocapitalize="characters" maxlength="32" minlength="8" required placeholder="مثال: 83914527" aria-describedby="hint">
 <button id="submit" class="submit" type="submit">تفعيل الاشتراك</button></form>
 <div id="message" class="status hide" role="status" aria-live="polite"></div>
 <section id="result" class="result hide" aria-live="polite"><h2>تم تفعيل اشتراكك بنجاح ✓</h2>
 <p>احتفظ بالبيانات التالية الآن. كلمة المرور تظهر مرة واحدة فقط، ويمكنك استخدامها في تطبيقات Xtream.</p><div id="fields"></div></section>
-<p class="fine" id="hint">لا تشارك الكود أو بيانات الدخول مع الآخرين. إذا أغلقت الصفحة قبل حفظ البيانات تواصل مع مسؤول الاشتراك لإعادة ضبط كلمة المرور.</p>
+<p class="fine" id="hint">الأكواد الجديدة أرقام فقط، تبدأ بـ8 خانات وتزداد تدريجيًا حسب عدد الأكواد الصادرة. لا تشارك الكود أو بيانات الدخول مع الآخرين. إذا أغلقت الصفحة قبل حفظ البيانات تواصل مع مسؤول الاشتراك لإعادة ضبط كلمة المرور.</p>
 </main><script src="/stream/activate.js" defer></script></body></html>
