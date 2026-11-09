@@ -427,13 +427,16 @@ class ContentBrowserActivity : AppCompatActivity() {
     private fun catalogLabel(): String = if (kind == KIND_MOVIE) "أفلام" else "مسلسلات"
 
     private fun schedulePreview(stream: StreamEntity) {
-        if (!previewEnabled || !::provider.isInitialized || stream.locked || stream.key == lastPreviewKey) return
+        if (!::provider.isInitialized ||
+            !LivePreviewPolicy.shouldSchedule(previewEnabled,stream.locked,
+                stream.key == lastPreviewKey)) return
         previewJob?.cancel()
         previewJob = lifecycleScope.launch {
             // Opening a provider stream on each rapid D-pad move can consume
             // multiple licensed connections. Require a stable selection.
-            delay(1100)
-            if (previewEnabled) startPreview(stream)
+            delay(LivePreviewPolicy.FOCUS_DEBOUNCE_MS)
+            if (LivePreviewPolicy.shouldSchedule(previewEnabled,stream.locked,
+                    stream.key == lastPreviewKey)) startPreview(stream)
         }
     }
 
