@@ -34,11 +34,11 @@ test('catalog page without a selected source retains all published sources',()=>
 });
 test('gateway mapping only refreshed as one bounded single-flight task',async()=>{
   const gateway=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
-  assert.match(gateway,/import \{ gatewayItemsPageQuery \}/);
+  assert.match(gateway,/import \{ gatewayItemsPageQuery,gatewayOrderedItemsPageQuery,gatewayOrderCursor \}/);
   assert.match(gateway,/oncePerMediaMap\(itemMapJobs/);
   assert.match(gateway,/oncePerMediaMap\(categoryMapJobs/);
   assert.match(gateway,/!old\.settled/);
-  assert.match(gateway,/gatewayItemsPageQuery\(mediaType,lastId,\{filter,sourceId\}\)/);
+  assert.match(gateway,/gatewayOrderedItemsPageQuery\(mediaType,cursor,\{filter,sourceId\}\)/);
 });
 test('protected Live and VOD diagnostics check real upstream media and report no credentials',async()=>{
   const server=await readFile(new URL('../src/xtream-admin-hook.mjs',import.meta.url),'utf8');
