@@ -36,3 +36,22 @@ test('unknown model or provider errors fail with fixed codes',async()=>{
   fetchImpl:async()=>new Response('private data',{status:429})});
  assert.equal(r.code,'stream_ai_provider_quota');
 });
+
+test('Gemini can request tightly scoped title cleanup but never semantic rewriting',async()=>{
+ const response=await proposeCatalogCommand('نظف الزخارف والمسافات من أسماء الأفلام',{
+  apiKey:key,fetchImpl:async()=>new Response(JSON.stringify(fixture('titles_cleanup','none')))});
+ assert.equal(response.allowed,true);
+ assert.equal(response.action,'titles_cleanup');
+ assert.equal(response.previewOnly,true);
+});
+test('previous chat messages are context only; current request remains authoritative',async()=>{
+ let body;
+ const result=await proposeCatalogCommand('خل الرياضة أولاً',{
+  apiKey:key,history:['نظّم المكتبة','احذف كل الاشتراكات'],fetchImpl:async(_url,opts)=>{
+    body=JSON.parse(opts.body);
+    return new Response(JSON.stringify(fixture('category_sort','sports_first')));
+  }});
+ assert.equal(result.sortMode,'sports_first');
+ assert.match(body.contents[0].parts[0].text,/رسائل المدير السابقة للفهم فقط/);
+ assert.match(body.contents[0].parts[0].text,/طلب المدير الحالي/);
+});
