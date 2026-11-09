@@ -118,3 +118,25 @@ test('unavailable transport proof does not misreport playable media',async()=>{
   assert.equal(result.realSourceVerified,false);
   assert.equal(result.audioVideoDecoded,false);
 });
+
+test('shared live canary requires separate flag and leaves movies/ordinary grants unchanged',async()=>{
+  const sent=[];
+  const fetchImpl=async(_uri,options)=>{
+    sent.push(JSON.parse(options.body));
+    return new Response(JSON.stringify({ok:true,path:'/relay/'+('e'.repeat(48)),
+      expiresInSeconds:45}),{status:201});
+  };
+  const sourceUrl='https://licensed.example/live/a/b/88.ts';
+  for(const [kind,sharedLive,env] of [
+    ['live',true,enabled],
+    ['live',false,{...enabled,BLOFY_STREAM_SHARED_LIVE_CANARY:'1'}],
+    ['movie',true,{...enabled,BLOFY_STREAM_SHARED_LIVE_CANARY:'1'}],
+    ['live',true,{...enabled,BLOFY_STREAM_SHARED_LIVE_CANARY:'1'}]
+  ]){
+    await issueStreamRelayGrant({kind,sourceUrl,sharedLive},{env,fetchImpl});
+  }
+  assert.equal(sent[0].sharedLive,undefined);
+  assert.equal(sent[1].sharedLive,undefined);
+  assert.equal(sent[2].sharedLive,undefined);
+  assert.equal(sent[3].sharedLive,true);
+});
