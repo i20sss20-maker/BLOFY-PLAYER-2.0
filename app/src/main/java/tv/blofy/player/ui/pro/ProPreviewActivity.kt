@@ -12,6 +12,7 @@ import androidx.appcompat.content.res.AppCompatResources
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.pro.ProAccess
+import tv.blofy.player.core.pro.PlayerPlan
 import tv.blofy.player.ui.common.BlofyTvDesign
 
 /** App-only PRO preview: no billing or fake activation; legacy subscriptions stay unchanged. */
@@ -31,14 +32,14 @@ class ProPreviewActivity : AppCompatActivity() {
         }
         scroll.addView(column)
         column.addView(TextView(this).apply {
-            text = "BLOFY PRO"
+            text = "باقات BLOFY PLAYER"
             textSize = if (tv) 40f else 32f
             gravity = Gravity.CENTER
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(BlofyTvDesign.PurpleBright)
         })
         column.addView(TextView(this).apply {
-            text = if (ProAccess.current().verifiedByServer) "PRO" else "BLOFY FREE • مجاني"
+            text = "باقتك الحالية: " + ProAccess.verifiedPlan(ProAccess.current(), System.currentTimeMillis()).name
             textSize = 18f
             gravity = Gravity.CENTER
             setTextColor(BlofyTvDesign.Mint)
@@ -51,27 +52,40 @@ class ProPreviewActivity : AppCompatActivity() {
             setTextColor(BlofyTvDesign.TextPrimary)
             setPadding(0, dp(8), 0, dp(18))
         })
-        val features = listOf(
-            "✦  قوائم تشغيل متعددة",
-            "✦  مزامنة المفضلة بين الأجهزة",
-            "✦  نسخ احتياطي سحابي",
-            "✦  تخصيص متقدم للواجهة",
-            "✦  مكتبة ذكية"
+        val plans = listOf(
+            Triple(PlayerPlan.FREE, "تشغيل قوائمك الشخصية والبحث والمفضلة", "مجاني دائمًا"),
+            Triple(PlayerPlan.PRO, "المزايا الاحترافية القادمة وتنظيم المكتبة", "19 ريال / سنة"),
+            Triple(PlayerPlan.VIP, "مزايا PRO وإضافات مرخصة عند توفرها", "49 ريال / سنة")
         )
-        features.forEach { item ->
-            column.addView(TextView(this).apply {
-                text = item
-                textSize = if (tv) 19f else 16f
-                setTextColor(BlofyTvDesign.TextPrimary)
-                gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
-                setPadding(dp(18), dp(12), dp(18), dp(12))
-                background = BlofyTvDesign.elevatedSurface(dp(18).toFloat())
-            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (tv) 66 else 58)).apply {
-                bottomMargin = dp(8)
+        plans.forEach { (plan, description, price) ->
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutDirection = View.LAYOUT_DIRECTION_RTL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(20), dp(14), dp(20), dp(14))
+                background = BlofyTvDesign.elevatedSurface(dp(18).toFloat(), emphasis = plan == PlayerPlan.VIP)
+            }
+            card.addView(TextView(this).apply {
+                text = "BLOFY ${plan.name}   •   $price"
+                textSize = if (tv) 21f else 18f
+                typeface = BlofyTvDesign.HeadingTypeface
+                setTextColor(if (plan == PlayerPlan.VIP) BlofyTvDesign.PurpleBright else BlofyTvDesign.TextPrimary)
+                gravity = Gravity.RIGHT
             })
+            card.addView(TextView(this).apply {
+                text = description
+                textSize = if (tv) 16f else 14f
+                setTextColor(BlofyTvDesign.TextMuted)
+                gravity = Gravity.RIGHT
+                setPadding(0, dp(8), 0, 0)
+            })
+            column.addView(card, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { bottomMargin = dp(12) })
         }
         column.addView(TextView(this).apply {
-            text = "المزايا الاحترافية قيد التطوير. لا يتوفر شراء أو اشتراك PRO الآن. هذه الباقة لا تتضمن قنوات أو أفلامًا أو مصادر محتوى، ولا تغيّر تفعيل BLOFY الحالي."
+            text = "الأسعار السنوية المعروضة هي أسعار مقترحة ولم تُفعّل في Google Play. لا يوجد زر شراء حتى يكتمل التحقق الآمن من الاشتراكات. باقة VIP لا تتضمن محتوى إلا عند توفر حقوق توزيعه، ولا تتغير اشتراكات BLOFY الحالية."
             textSize = 14f
             gravity = Gravity.CENTER
             setTextColor(BlofyTvDesign.TextMuted)
