@@ -30,6 +30,7 @@ class BlofyPlaybackSession(
     private var metric: PlaybackMetric? = null
     private var firstFrameRecorded = false
     private var automaticRetries = 0
+    private var lastPlaybackErrorCode = ""
     private var alternateLiveFormatAttempted = false
     private var lastObservedLivePositionMs = Long.MIN_VALUE
     private var liveStallStartedAtMs = 0L
@@ -78,6 +79,7 @@ class BlofyPlaybackSession(
                 }
 
                 override fun onPlayerError(error: PlaybackException) {
+                    lastPlaybackErrorCode = error.errorCodeName
                     metric?.let {
                         val updated = PlaybackDiagnostics.error(it, error.errorCodeName, error.message)
                         metric = updated
@@ -119,6 +121,7 @@ class BlofyPlaybackSession(
         // A channel switch supersedes any queued retry/fallback/watchdog work from the old URL.
         retryHandler.removeCallbacksAndMessages(null)
         automaticRetries = 0
+        lastPlaybackErrorCode = ""
         alternateLiveFormatAttempted = false
         liveStallRecoveries = 0
         lastLiveStallRecoveryAtMs = 0L
@@ -212,6 +215,8 @@ class BlofyPlaybackSession(
             }
         }
         .build()
+
+    fun failureHint(): String = PlaybackFailureHint.message(lastPlaybackErrorCode)
 
     fun isStarted(): Boolean = player.playbackState == Player.STATE_READY && player.playWhenReady
 
