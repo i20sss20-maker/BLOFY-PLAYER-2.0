@@ -34,7 +34,7 @@ class SplashActivity : AppCompatActivity() {
             adjustViewBounds = true
         }, LinearLayout.LayoutParams(dp(if (compact) 170 else 220), dp(if (compact) 102 else 132)))
         root.addView(TextView(this).apply {
-            text = "BLOFY PLAYER"
+            text = if (BuildConfig.CODE_ONLY_LOGIN) "BLOFY STREAM" else "BLOFY PLAYER"
             textSize = if (compact) 21f else 24f
             typeface = BlofyTvDesign.HeadingTypeface
             letterSpacing = 0.08f
@@ -46,7 +46,7 @@ class SplashActivity : AppCompatActivity() {
             indeterminateTintList = android.content.res.ColorStateList.valueOf(BlofyTvDesign.PurpleBright)
         }, LinearLayout.LayoutParams(dp(if (compact) 38 else 44), dp(if (compact) 38 else 44)).apply { topMargin = dp(if (compact) 10 else 14) })
         root.addView(TextView(this).apply {
-            text = "جاري تجهيز BLOFY..."
+            text = if (BuildConfig.CODE_ONLY_LOGIN) "جاري التحقق من اشتراك BLOFY STREAM..." else "جاري تجهيز BLOFY..."
             textSize = 13.5f
             setTextColor(BlofyTvDesign.TextMuted)
             gravity = Gravity.CENTER
