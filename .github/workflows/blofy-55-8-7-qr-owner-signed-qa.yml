@@ -11,7 +11,7 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: blofy-55-8-7-qr-owner-signed-${{ github.ref }}
+  group: blofy-55-8-7-qr-owner-signed-${{ github.sha }}
   cancel-in-progress: false
 jobs:
   signed-qa:
