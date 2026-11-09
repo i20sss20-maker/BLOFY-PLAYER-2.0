@@ -18,6 +18,7 @@ function labels(raw){
 export function parseRestreamMetrics(payload,{key=''}={}){
  if(typeof payload!=='string'||Buffer.byteLength(payload)>MAX_BYTES)
   throw new Error('restream_metrics_too_large');
+ let recognized=0;
  const perPath=new Map(),totals={hlsSessions:0,readers:0,hlsBytes:0,
   sourceInboundBytes:0,sourceOutboundBytes:0,discardedFrames:0};
  const safeId=p=>crypto.createHmac('sha256',key||'no-identity-secret')
@@ -32,6 +33,7 @@ export function parseRestreamMetrics(payload,{key=''}={}){
   const match=/^([a-z_]+)(?:\{([^\r\n]{0,1024})\})?\s+([0-9]+(?:\.[0-9]+)?)(?:\s|$)/.exec(line);
   if(!match||!ALLOWED.has(match[1]))continue;
   const n=Number(match[3]);if(!Number.isFinite(n)||n<0)continue;
+  recognized++;
   const l=labels(match[2]||'');
   // No raw path, IP, MediaMTX session ID or provider metadata returned.
   const p=l.path||l.name;
@@ -48,6 +50,7 @@ export function parseRestreamMetrics(payload,{key=''}={}){
     row.discardedFrames+=n;totals.discardedFrames+=n;break;
   }
  }
+ if(recognized===0)return {ok:false,code:'restream_metrics_no_samples'};
  const paths=[...perPath.values()].sort((a,b)=>b.hlsSessions-a.hlsSessions)
   .slice(0,100);
  return {ok:true,scope:'mediamtx_instance',uniqueViewersVerified:false,
