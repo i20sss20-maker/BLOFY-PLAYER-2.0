@@ -55,6 +55,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import tv.blofy.player.R
 import tv.blofy.player.BlofyApp
+import tv.blofy.player.BuildConfig
+import tv.blofy.player.core.diagnostics.StreamConnectionDiagnostics
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.playback.PlaybackResumeState
 import tv.blofy.player.core.playback.BlofyPlaybackSession
@@ -256,14 +258,21 @@ open class PlayerActivity : ContentAccessActivity() {
         onTerminalError = { failedUrl ->
             saveResume()
             pendingNetworkRecovery = !online()
-            if (!pendingNetworkRecovery &&
+            if (!BuildConfig.CODE_ONLY_LOGIN &&
+                !pendingNetworkRecovery &&
                 kind != KIND_LIVE &&
                 session.usedUltraHdCompatibilityFallback()
             ) {
+                // Only non-session media may enter VLC: the independent VLC client cannot
+                // attach our secured STREAM bearer without risking cross-origin leaks.
                 launchVlcCompatibilityFallback(failedUrl)
             } else {
-                val message = if (pendingNetworkRecovery) R.string.player_offline else R.string.player_retry_error
-                showConnectionNotice(getString(message))
+                val cause = session.player.playerError?.let(StreamConnectionDiagnostics::classify)
+                val detail = if (BuildConfig.CODE_ONLY_LOGIN &&
+                    cause != null && cause != StreamConnectionDiagnostics.Cause.OTHER)
+                    StreamConnectionDiagnostics.guidance(cause)
+                else getString(if (pendingNetworkRecovery) R.string.player_offline else R.string.player_retry_error)
+                showConnectionNotice(detail)
             }
         }
     )
