@@ -1,5 +1,7 @@
 package tv.blofy.player.core.playback
 
+import tv.blofy.player.BuildConfig
+import tv.blofy.player.core.identity.StreamCodeSession
 import tv.blofy.player.core.provider.ProviderProfile
 import tv.blofy.player.core.provider.ProviderKind
 import tv.blofy.player.core.url.XtreamUrlBuilder
@@ -14,6 +16,7 @@ object ContentUrlResolver {
         if (provider.providerType.equals("m3u", true)) {
             return stream.directSource.validHttpUrl() ?: error("Missing M3U live URL")
         }
+        if(isCodeOnly(provider)) return tokenMedia("live",stream.remoteId,profile.liveFormat.extension)
         return XtreamUrlBuilder.live(
             provider.baseUrl,
             provider.username,
@@ -27,6 +30,7 @@ object ContentUrlResolver {
         if (provider.providerType.equals("m3u", true)) {
             return stream.directSource.validHttpUrl() ?: error("Missing M3U movie URL")
         }
+        if(isCodeOnly(provider)) return tokenMedia("movie",stream.remoteId,stream.extension ?: "mp4")
         return XtreamUrlBuilder.movie(
             provider.baseUrl,
             provider.username,
@@ -40,6 +44,7 @@ object ContentUrlResolver {
         if (provider.providerType.equals("m3u", true)) {
             return episode.directSource.validHttpUrl() ?: error("Missing M3U episode URL")
         }
+        if(isCodeOnly(provider)) return tokenMedia("series",episode.remoteId,episode.extension)
         return XtreamUrlBuilder.episode(
             provider.baseUrl,
             provider.username,
@@ -47,6 +52,18 @@ object ContentUrlResolver {
             episode.remoteId,
             episode.extension
         )
+    }
+
+    private fun isCodeOnly(provider: ProviderEntity) =
+        BuildConfig.CODE_ONLY_LOGIN && provider.id==StreamCodeSession.providerId
+
+    private fun tokenMedia(kind:String,id:String,extension:String):String {
+        require(id.matches(Regex("[0-9]{1,15}"))) { "Invalid stream ID" }
+        val safeExtension=extension.trim().trimStart('.')
+        require(safeExtension.matches(Regex("[A-Za-z0-9]{1,8}"))) {
+            "Invalid stream format"
+        }
+        return "${StreamCodeSession.HOST}/api/v1/stream/media/$kind/$id.$safeExtension"
     }
 
     fun directFallback(stream: StreamEntity): String? = stream.directSource.validHttpUrl()
@@ -79,7 +96,10 @@ object ContentUrlResolver {
         if (uri.scheme?.lowercase() !in setOf("http", "https") || uri.rawAuthority.isNullOrBlank()) return false
         val segments = uri.rawPath.orEmpty().split('/').filter { it.isNotBlank() }
         val liveIndex = segments.indexOfLast { it.equals("live", ignoreCase = true) }
-        return liveIndex >= 0 && segments.size == liveIndex + 4 &&
+        return liveIndex >= 0 &&
+            (segments.size == liveIndex+4 ||
+                (BuildConfig.CODE_ONLY_LOGIN && segments.size == liveIndex+2 &&
+                    segments.take(liveIndex)==listOf("api","v1","stream","media"))) &&
             segments.subList(liveIndex + 1, segments.size).all { it.isNotBlank() }
     }
 
