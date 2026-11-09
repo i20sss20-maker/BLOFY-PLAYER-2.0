@@ -51,6 +51,8 @@ android {
         // this code is higher than every previously uploaded Play artifact.
         versionCode = 2000084
         versionName = "2.0.0-rc07.55.8.7" // Exact BLOFY PLAYER display version; no Xiaomi suffix in any build
+        manifestPlaceholders["blofyApplicationLabel"] = "@string/app_name"
+        buildConfigField("boolean", "CODE_ONLY_LOGIN", "false")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "ACTIVATION_BASE_URL", "\"$activationBaseUrlEscaped\"")
         buildConfigField("String", "UPDATE_BASE_URL", "\"$updateBaseUrlEscaped\"")
@@ -85,6 +87,23 @@ android {
             }
             isShrinkResources = false
             signingConfig = signingConfigs.getByName("release")
+        }
+        // Full BLOFY PLAYER 55.8.7 visual/player baseline, different installable app.
+        create("streamCodeOnly") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".stream"
+            versionNameSuffix = "-STREAM"
+            manifestPlaceholders["blofyApplicationLabel"] = "BLOFY STREAM"
+            buildConfigField("boolean", "CODE_ONLY_LOGIN", "true")
+            matchingFallbacks += listOf("release")
+        }
+        create("streamCodeDemo") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".stream"
+            versionNameSuffix = "-STREAM-QA"
+            manifestPlaceholders["blofyApplicationLabel"] = "BLOFY STREAM (QA)"
+            buildConfigField("boolean", "CODE_ONLY_LOGIN", "true")
+            matchingFallbacks += listOf("debug")
         }
     }
     buildFeatures { viewBinding = true; buildConfig = true }
@@ -128,6 +147,7 @@ dependencies {
     implementation("androidx.media3:media3-ui:1.6.1")
     implementation("androidx.media3:media3-session:1.6.1")
     implementation("androidx.media3:media3-datasource-cronet:1.6.1")
+    implementation("androidx.media3:media3-datasource-okhttp:1.6.1")
     implementation("androidx.media3:media3-database:1.6.1")
     // 4K/HEVC compatibility fallback only. Media3 remains the primary player.
     // 3.7.x carries VideoLAN's 16 KB page-alignment support required by modern Android/Play.
