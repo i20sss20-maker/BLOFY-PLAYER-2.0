@@ -14,14 +14,16 @@ import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
 import tv.blofy.player.ui.home.HomeActivity
+import tv.blofy.player.ui.common.BlofyTvDesign
 
 class SplashActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val statusView = TextView(this).apply {
-            text = getString(R.string.splash_opening)
+            text = if (BuildConfig.CODE_ONLY_LOGIN) "جارِ فتح BLOFY STREAM..." else getString(R.string.splash_opening)
             textSize = 13.5f
             setTextColor(0xFFB8ABC7.toInt())
             gravity = Gravity.CENTER
@@ -38,9 +40,9 @@ class SplashActivity : AppCompatActivity() {
             adjustViewBounds = true
         }, LinearLayout.LayoutParams(dp(220), dp(132)))
         root.addView(TextView(this).apply {
-            text = getString(R.string.brand_player)
+            text = if (BuildConfig.CODE_ONLY_LOGIN) "BLOFY STREAM" else getString(R.string.brand_player)
             textSize = 24f
-            typeface = Typeface.create("sans-serif", Typeface.BOLD)
+            typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
             letterSpacing = 0.08f
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
@@ -57,7 +59,9 @@ class SplashActivity : AppCompatActivity() {
         lifecycleScope.launch {
             delay(MINIMUM_SPLASH_MS)
             if (isFinishing || isDestroyed) return@launch
-            val destination = if (StartupEntryState.shouldOpenHome(this@SplashActivity)) {
+            val destination = if (BuildConfig.CODE_ONLY_LOGIN) {
+                CodeOnlyLoginActivity::class.java
+            } else if (StartupEntryState.shouldOpenHome(this@SplashActivity)) {
                 HomeActivity::class.java
             } else {
                 LoginActivity::class.java
