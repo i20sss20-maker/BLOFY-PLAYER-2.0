@@ -8,7 +8,9 @@ const example=[
  'paths_inbound_bytes{name="'+source+'",state="ready"} 12345',
  'hls_sessions{id="abc",path="'+source+'"} 1',
  'hls_sessions{id="def",path="'+source+'"} 1',
- 'hls_muxers_outbound_bytes{name="'+source+'"} 9876',
+ 'hls_sessions_outbound_bytes{id="abc",path="'+source+'"} 5432',
+ 'hls_sessions_outbound_bytes{id="def",path="'+source+'"} 4444',
+ 'hls_muxers_outbound_bytes{name="'+source+'"} 9999',
  'hls_muxers_outbound_frames_discarded{name="'+source+'"} 3'
 ].join('\n');
 test('aggregate reader sessions and redact provider paths and session IDs',()=>{
