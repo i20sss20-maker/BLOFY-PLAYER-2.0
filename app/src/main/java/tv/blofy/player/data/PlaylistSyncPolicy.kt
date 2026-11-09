@@ -9,7 +9,9 @@ data class PlaylistSyncProgress(
     val step: Int,
     val totalSteps: Int,
     val percentOverride: Int? = null,
-    val retryAttempt: Int = 0
+    val retryAttempt: Int = 0,
+    // Real rows parsed from the current response; not an estimated percentage.
+    val processedItems: Int? = null
 ) {
     /** Overall progress for the first full catalog download. */
     val percent: Int
