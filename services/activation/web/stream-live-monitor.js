@@ -4,7 +4,7 @@ if(root){
  const $=id=>document.getElementById(id);
  const message=$('blofyLiveMonitorMessage');
  const fields={sessions:$('blofyLiveSessions'),readers:$('blofyLiveReaders'),
-  paths:$('blofyLivePaths'),bytes:$('blofyLiveBytes'),alert:$('blofyLiveAlert'),
+  paths:$('blofyLivePaths'),bytes:$('blofyLiveBytes'),rate:$('blofyLiveRate'),alert:$('blofyLiveAlert'),
   starts:$('blofyRealStarts'),failures:$('blofyRealFailures'),p95:$('blofyRealP95')};
  const fmt=n=>Number.isFinite(n)?new Intl.NumberFormat('ar-SA',{maximumFractionDigits:0}).format(n):'—';
  async function load(path){
@@ -30,6 +30,7 @@ if(root){
     fields.readers.textContent=fmt(x.totals.readers);
     fields.paths.textContent=fmt(x.pathCount);
     fields.bytes.textContent=fmt(x.totals.hlsBytes);
+    fields.rate.textContent=x.rate?.measured?String(x.rate.hlsEgressMbps)+' Mbps':'—';
     const rows=$('blofyLiveMonitorRows');
     rows.replaceChildren();
     for(const p of (x.paths||[]).slice(0,12)){
