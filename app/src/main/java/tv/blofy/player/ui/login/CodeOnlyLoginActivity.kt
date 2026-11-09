@@ -372,7 +372,7 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
                             dao.activateProvider(StreamCodeSession.providerId)
                         }
                         val ready=withContext(Dispatchers.IO) {
-                            CatalogSyncState.isEntryReady(applicationContext,StreamCodeSession.providerId) &&
+                            CatalogSyncState.isReady(applicationContext,StreamCodeSession.providerId) &&
                                 dao.hasCatalog(StreamCodeSession.providerId)
                         }
                         startActivity(Intent(this@CodeOnlyLoginActivity,

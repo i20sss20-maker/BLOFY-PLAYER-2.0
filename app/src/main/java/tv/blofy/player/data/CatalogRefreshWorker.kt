@@ -1,6 +1,7 @@
 package tv.blofy.player.data
 
 import android.content.Context
+import tv.blofy.player.BuildConfig
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
@@ -48,6 +49,10 @@ class CatalogRefreshWorker(
             dao.provider(providerId)
         } ?: return Result.success()
         val manual = inputData.getBoolean(KEY_MANUAL, false)
+        // STREAM is an offline-first viewer. Opening Home never silently
+        // downloads or replaces the subscriber's saved source catalogue.
+        // Even legacy WorkManager auto-jobs from an older installed APK exit.
+        if (BuildConfig.CODE_ONLY_LOGIN && !manual) return Result.success()
         // A pending periodic job for a previously selected account must not
         // consume data or disk on a different active playlist.
         if (!manual && dao.activeProviderId() != provider.id) return Result.success()
@@ -242,6 +247,14 @@ class CatalogRefreshWorker(
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
 
+        /** Cancel pre-upgrade STREAM auto jobs without touching explicit user updates. */
+        private fun cancelStreamAutomatic(context: Context, providerId: String) {
+            val work = WorkManager.getInstance(context.applicationContext)
+            work.cancelUniqueWork(LEGACY_PERIODIC_NAME)
+            work.cancelUniqueWork(AUTO_PERIODIC_NAME)
+            work.cancelUniqueWork(NOW_NAME_PREFIX + providerId)
+        }
+
         fun cancelLegacyAutomatic(context: Context) {
             WorkManager.getInstance(context.applicationContext).cancelUniqueWork(LEGACY_PERIODIC_NAME)
         }
@@ -252,6 +265,10 @@ class CatalogRefreshWorker(
          */
         fun scheduleAutomatic(context: Context, providerId: String) {
             if (providerId.isBlank()) return
+            if (BuildConfig.CODE_ONLY_LOGIN) {
+                cancelStreamAutomatic(context, providerId)
+                return
+            }
             val request = PeriodicWorkRequestBuilder<CatalogRefreshWorker>(
                 CatalogAutoRefreshPolicy.INTERVAL_MINUTES, TimeUnit.MINUTES
             )
@@ -265,6 +282,7 @@ class CatalogRefreshWorker(
         }
 
         fun enqueueIfStale(context: Context, providerId: String) {
+            if (BuildConfig.CODE_ONLY_LOGIN) return
             if (CatalogAutoRefreshPolicy.isDue(
                     CatalogSyncState.lastSyncedAt(context, providerId), System.currentTimeMillis()
                 )
@@ -272,7 +290,7 @@ class CatalogRefreshWorker(
         }
 
         fun enqueueNow(context: Context, providerId: String, manual: Boolean = true) {
-            if (providerId.isBlank()) return
+            if (providerId.isBlank() || (BuildConfig.CODE_ONLY_LOGIN && !manual)) return
             val request = OneTimeWorkRequestBuilder<CatalogRefreshWorker>()
                 .setConstraints(if (manual) manualConstraints else constraints)
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 20, TimeUnit.SECONDS)
@@ -280,7 +298,7 @@ class CatalogRefreshWorker(
                 .build()
             WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(
                 if (manual) manualWorkName(providerId) else NOW_NAME_PREFIX + providerId,
-                if (manual) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP,
+                if (manual && !BuildConfig.CODE_ONLY_LOGIN) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP,
                 request
             )
         }

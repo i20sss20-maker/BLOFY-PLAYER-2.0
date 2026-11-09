@@ -34,6 +34,20 @@ class PlaylistManagerPersistenceTest {
 
     @After fun cleanup() = db.close()
 
+    @Test fun sourceCatalogPagingRetainsReceivedOrderInsteadOfSortingByName(): Unit = runBlocking(Dispatchers.IO) {
+        val received = listOf("Zeta", "Alpha", "Middle")
+        val streams = received.mapIndexed { index, name ->
+            StreamEntity("source:movie:${index + 1}", "source", "${index + 1}", null, "movie", name)
+        }
+        db.dao().insertCatalogBatch(streams, streams.map {
+            StreamSearchFtsEntity(it.key, it.providerId, it.kind, it.name)
+        })
+        val saved = db.dao().catalogPageAfterAll("source", "movie", 0L, 10).map { it.name }
+        assertEquals(received, saved)
+        // A restart reads the same durable rows, without redownloading the source.
+        assertEquals(saved, db.dao().catalogPageAfterAll("source", "movie", 0L, 10).map { it.name })
+    }
+
     @Test fun failedSearchWriteCannotLeaveAHalfSavedCatalogBatch(): Unit = runBlocking(Dispatchers.IO) {
         val stream = StreamEntity("batch:movie:1", "batch", "1", null, "movie", "Fixture")
         db.openHelper.writableDatabase.execSQL("DROP TABLE streams_fts")

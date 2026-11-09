@@ -1,7 +1,7 @@
 name: BLOFY STREAM 55.8.7 Premium Code-Only APK
 on:
   push:
-    branches: [feat/blofy-stream-55-8-7-premium-code-only-20261109, fix/stream-android9-trusted-ca-20261109, feat/stream-device-compatibility-20261109, fix/stream-catalog-stall-27-percent-20261109, feat/stream-independent-cyan-ui-logout-mobile-tv-20261109, feat/stream-arabic-default-language-switch-20261110]
+    branches: [feat/blofy-stream-55-8-7-premium-code-only-20261109, fix/stream-android9-trusted-ca-20261109, feat/stream-device-compatibility-20261109, fix/stream-catalog-stall-27-percent-20261109, feat/stream-independent-cyan-ui-logout-mobile-tv-20261109, feat/stream-arabic-default-language-switch-20261110, fix/stream-cache-once-source-order-tv-focus-20261110]
   workflow_dispatch:
 permissions:
   contents: read
@@ -207,7 +207,7 @@ jobs:
 
   publish-stream-download:
     name: Publish owner-signed STREAM APK to stable public release
-    if: github.ref == 'refs/heads/feat/stream-arabic-default-language-switch-20261110'
+    if: github.ref == 'refs/heads/fix/stream-cache-once-source-order-tv-focus-20261110'
     needs: owner-signed
     runs-on: ubuntu-latest
     permissions:
@@ -223,30 +223,32 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: blofy-stream-55.8.7-ar-en-20261110
+          RELEASE_TAG: blofy-stream-55.8.7-offline-cache-20261110
         run: |
           set -euo pipefail
           apk="signed-stream/BLOFY-STREAM-55.8.7-PREMIUM-CODE-SIGNED.apk"
           test -s "$apk"
           (cd signed-stream && sha256sum -c SHA256SUMS)
-          cp "$apk" signed-stream/BLOFY-STREAM-55.8.7-AR-EN-OWNER-SIGNED.apk
+          cp "$apk" signed-stream/BLOFY-STREAM-55.8.7-OFFLINE-AR-EN-OWNER-SIGNED.apk
+          # Publish a checksum that matches the public APK filename, not the internal artifact name.
+          (cd signed-stream && sha256sum BLOFY-STREAM-55.8.7-OFFLINE-AR-EN-OWNER-SIGNED.apk > SHA256SUMS)
           printf '%s\n' \
             "BLOFY STREAM 55.8.7 - Arabic / English" \
             "" \
             "Signed Android TV / TV Box / phone APK. Code-only activation." \
             "Arabic is the default. Change language from login or settings." \
-            "Includes the 27 percent catalog loading improvements and the independent cyan UI." \
+            "Includes stable offline-first catalog: cached once, no auto-refresh, original server ordering, and Android TV remote focus recovery." \
             "This is a sideload APK, NOT the BLOFY PLAYER Google Play release." > signed-stream/RELEASE-NOTES.txt
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             # Never silently overwrite an unrelated public release tag.
             actual_sha="$(gh api "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG" --jq '.object.sha')"
             test "$actual_sha" = "$GITHUB_SHA"
-            gh release upload "$RELEASE_TAG" signed-stream/BLOFY-STREAM-55.8.7-AR-EN-OWNER-SIGNED.apk --clobber
+            gh release upload "$RELEASE_TAG" signed-stream/BLOFY-STREAM-55.8.7-OFFLINE-AR-EN-OWNER-SIGNED.apk --clobber
           else
             gh release create "$RELEASE_TAG" \
-              signed-stream/BLOFY-STREAM-55.8.7-AR-EN-OWNER-SIGNED.apk \
+              signed-stream/BLOFY-STREAM-55.8.7-OFFLINE-AR-EN-OWNER-SIGNED.apk \
               signed-stream/SHA256SUMS \
-              --title "BLOFY STREAM 55.8.7 | Arabic / English" \
+              --title "BLOFY STREAM 55.8.7 | Offline-first + Arabic / English" \
               --notes-file signed-stream/RELEASE-NOTES.txt \
               --target "$GITHUB_SHA" \
               --latest=false
