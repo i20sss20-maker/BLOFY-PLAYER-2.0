@@ -56,6 +56,7 @@ import {liveDiagnosticTimeoutMs} from './xtream-live-probe-budget.mjs';
 import { auditXtreamCatalogSample } from './xtream-library-insights.mjs';
 import {auditFullStreamCatalog} from './stream-full-library-audit.mjs';
 import {suggestCatalogWithAI} from './stream-ai-catalog-suggestions.mjs';
+import {suggestCatalogWithGemini} from './stream-gemini-catalog-suggestions.mjs';
 import { normalizeXtreamDetails,mergedXtreamMetadata } from './xtream-item-details.mjs';
 import { tmdbConfigured,validatedTmdbId,fetchTmdbDetails } from './xtream-tmdb.mjs';
 import { sortXtreamCategories } from './xtream-category-sort.mjs';
@@ -2251,7 +2252,12 @@ async function suggestStreamLibraryAI(body){
   if(!validUuid(sourceId)||!validType(type)||
     !Number.isInteger(offset)||offset<0||offset>40000||offset%12!==0)
     throw Object.assign(new Error('stream_ai_selection_invalid'),{status:400});
-  const key=String(process.env.BLOFY_LIBRARY_AI_API_KEY||'').trim();
+  const provider=String(process.env.BLOFY_LIBRARY_AI_PROVIDER||'openai').trim().toLowerCase();
+  if(provider!=='openai'&&provider!=='gemini')
+    return {ok:false,code:'stream_ai_provider_not_allowed',modelUsed:false};
+  const key=String(provider==='gemini'
+    ?process.env.BLOFY_LIBRARY_GEMINI_API_KEY||''
+    :process.env.BLOFY_LIBRARY_AI_API_KEY||'').trim();
   if(key.length<32)
     return {ok:false,code:'stream_ai_not_configured',modelUsed:false};
   const now=Date.now();
@@ -2271,11 +2277,13 @@ async function suggestStreamLibraryAI(body){
     [sourceId,type,offset])).rows;
   if(!rows.length)return {ok:false,code:'stream_ai_end_of_catalog',modelUsed:false};
   aiCatalogRequestTimes.push(now);
-  const result=await suggestCatalogWithAI(rows.map(x=>({
+  const classify=provider==='gemini'?suggestCatalogWithGemini:suggestCatalogWithAI;
+  const result=await classify(rows.map(x=>({
     id:String(x.source_id),name:String(x.name),
     categoryName:String(x.category_name||'')
   })),{apiKey:key,
-    model:process.env.BLOFY_LIBRARY_AI_MODEL||'gpt-6-luna'});
+    model:process.env.BLOFY_LIBRARY_AI_MODEL||
+      (provider==='gemini'?'gemini-3.5-flash-lite':'gpt-6-luna')});
   if(!result.ok)return result;
   return {...result,sourceId,type,offset,
     nextOffset:rows.length===12?offset+12:null};
@@ -2838,8 +2846,11 @@ async function unifiedStreamBridge(req,res,url){
       customerTrafficChanged:false});
   }
   if(req.method==='GET'&&p==='/internal/blofy-stream/library-ai/status'){
-    return json(res,200,{ok:true,configured:
-      String(process.env.BLOFY_LIBRARY_AI_API_KEY||'').trim().length>=32,
+    const provider=String(process.env.BLOFY_LIBRARY_AI_PROVIDER||'openai').trim().toLowerCase();
+    const configured=provider==='gemini'
+      ?String(process.env.BLOFY_LIBRARY_GEMINI_API_KEY||'').trim().length>=32
+      :String(process.env.BLOFY_LIBRARY_AI_API_KEY||'').trim().length>=32;
+    return json(res,200,{ok:true,configured,provider,
       modelUsed:false,maxItemsPerRequest:12,hourlyLimit:24});
   }
   if(req.method==='POST'&&p==='/internal/blofy-stream/library-ai'){
