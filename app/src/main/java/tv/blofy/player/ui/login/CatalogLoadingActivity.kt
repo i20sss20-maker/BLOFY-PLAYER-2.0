@@ -4,6 +4,7 @@ import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
@@ -46,6 +47,7 @@ import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.TvUiTuning
 import tv.blofy.player.ui.home.HomeActivity
 import java.util.UUID
+import java.util.Locale
 
 class CatalogLoadingActivity : AppCompatActivity() {
     private lateinit var retryButton: Button
@@ -53,6 +55,9 @@ class CatalogLoadingActivity : AppCompatActivity() {
     private var forceRefreshOnRetry = false
     private var displayedPercent = 0
     private var lastContentStage: PlaylistSyncStage? = null
+    private var progressPulseJob: Job? = null
+    private var lastCatalogActivityAtMs = 0L
+    private var catalogRowsRead = 0
     private lateinit var percent: TextView
     private lateinit var stage: TextView
     private lateinit var progressMeta: TextView
@@ -86,6 +91,30 @@ class CatalogLoadingActivity : AppCompatActivity() {
         stage.setTextColor(BlofyTvDesign.TextPrimary)
         displayedPercent = 0 // A retry is a new attempt; monotonicity holds within each attempt.
         lastContentStage = null
+        lastCatalogActivityAtMs = SystemClock.elapsedRealtime()
+        catalogRowsRead = 0
+        progressPulseJob?.cancel()
+        if (tv.blofy.player.BuildConfig.CODE_ONLY_LOGIN) {
+            progressPulseJob = lifecycleScope.launch {
+                while (true) {
+                    delay(10_000L)
+                    val currentStage = lastContentStage ?: continue
+                    if (displayedPercent !in 1..29) continue
+                    val idleSeconds = (SystemClock.elapsedRealtime() - lastCatalogActivityAtMs) / 1000L
+                    if (idleSeconds < 30L) continue
+                    // The percentage represents completed work. Don't fake percentage advances:
+                    // tell viewers a large response is still pending and preserve all saved sections.
+                    val sectionLabel = when (currentStage) {
+                        PlaylistSyncStage.MOVIES -> getString(R.string.catalog_stage_movies)
+                        PlaylistSyncStage.LIVE -> getString(R.string.catalog_stage_live)
+                        PlaylistSyncStage.SERIES -> getString(R.string.catalog_stage_series)
+                        else -> getString(R.string.catalog_preflight)
+                    }
+                    progressMeta.text = "$sectionLabel • ${String.format(Locale.US, "%,d", catalogRowsRead)} عنصر • انتظار بيانات جديدة (${idleSeconds} ث)"
+                    progressMeta.visibility = View.VISIBLE
+                }
+            }
+        }
         render(1, getString(R.string.catalog_preflight))
         loadJob = lifecycleScope.launch {
             var preflight = true
@@ -462,7 +491,18 @@ class CatalogLoadingActivity : AppCompatActivity() {
     }
 
     private fun renderProgress(p: PlaylistSyncProgress) {
+        if (p.stage != lastContentStage) {
+            catalogRowsRead = 0
+            lastCatalogActivityAtMs = SystemClock.elapsedRealtime()
+        }
         lastContentStage = p.stage
+        if (p.processedItems != null && p.processedItems != catalogRowsRead) {
+            catalogRowsRead = p.processedItems
+            lastCatalogActivityAtMs = SystemClock.elapsedRealtime()
+        }
+        if (p.processedItems == null && p.percent > 0 && p.percent * 30 / 95 > displayedPercent) {
+            lastCatalogActivityAtMs = SystemClock.elapsedRealtime()
+        }
         val label = when (p.stage) {
             PlaylistSyncStage.M3U -> getString(R.string.catalog_stage_m3u)
             PlaylistSyncStage.LIVE -> getString(R.string.catalog_stage_live)
@@ -471,7 +511,10 @@ class CatalogLoadingActivity : AppCompatActivity() {
         }
         val status = if (p.retryAttempt > 0) "$label • ${getString(R.string.catalog_retry)} (${p.retryAttempt}/3)" else label
         render((p.percent.coerceIn(0, 95) * 30 / 95), status)
-        progressMeta.text = getString(R.string.catalog_progress_steps, p.step.coerceAtLeast(1), p.totalSteps.coerceAtLeast(1))
+        val stepInfo = getString(R.string.catalog_progress_steps, p.step.coerceAtLeast(1), p.totalSteps.coerceAtLeast(1))
+        progressMeta.text = if (tv.blofy.player.BuildConfig.CODE_ONLY_LOGIN && catalogRowsRead > 0)
+            "$stepInfo • ${String.format(Locale.US, "%,d", catalogRowsRead)} عنصر"
+        else stepInfo
         progressMeta.visibility = View.VISIBLE
     }
 
@@ -502,6 +545,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
     }
 
     private suspend fun openHome(providerId: String) {
+        progressPulseJob?.cancel()
         withContext(Dispatchers.IO) {
             BlofyDatabase.get(applicationContext).dao().activateExistingProvider(providerId)
         }
@@ -548,6 +592,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
     }
 
     private fun fail(message: String) {
+        progressPulseJob?.cancel()
         progress.isIndeterminate = false
         progressMeta.visibility = View.GONE
         stage.text = message
