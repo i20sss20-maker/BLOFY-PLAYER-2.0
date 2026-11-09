@@ -1609,7 +1609,8 @@ http.createServer = function withBlofyXtreamGateway(listener) {
           {'retry-after':String(overall.retryAfterSeconds)});
         await ensureReady();
         const data=await readJson(req);
-        const result=await streamCodes.redeem(data.code,'https://blofyplayer.com');
+        const result=await streamCodes.redeem(data.code,'https://blofyplayer.com',
+          {deviceKey:data.deviceKey??null});
         return json(res,201,result,{'referrer-policy':'no-referrer'});
       }
       if (req.method === 'GET' && url.pathname === '/xtream/health') return json(res, 200, await gatewayHealth());
