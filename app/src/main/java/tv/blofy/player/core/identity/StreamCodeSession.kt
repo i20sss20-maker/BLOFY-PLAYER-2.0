@@ -92,9 +92,19 @@ object StreamCodeSession {
             .commit()) { "تعذر حفظ الاشتراك على الجهاز" }
     }
 
+    /**
+     * Local sign-out removes the bearer synchronously before navigating to login.
+     * Do not remove INSTALL_KEY: that would silently change this TV's activation
+     * binding and can cause an already-redeemed code to appear used elsewhere.
+     */
     fun clearClaim(context: Context) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().remove(PROVIDER_ID_KEY).remove(ENCRYPTED_TOKEN).apply()
+        check(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .remove(PROVIDER_ID_KEY)
+            .remove(ENCRYPTED_TOKEN)
+            .remove(ACTIVATED_AT)
+            .remove(EXPIRES_AT)
+            .commit()) { "تعذر تسجيل الخروج من هذا الجهاز" }
     }
 
     suspend fun hasSavedProvider(context: Context): Boolean =
