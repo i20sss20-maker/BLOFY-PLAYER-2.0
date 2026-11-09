@@ -1,5 +1,7 @@
 package tv.blofy.player.core.diagnostics
 
+import android.content.Context
+import tv.blofy.player.R
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -66,6 +68,18 @@ object StreamConnectionDiagnostics {
         Cause.DECODER -> "صيغة الفيديو غير مدعومة على هذا الجهاز؛ جرّب جودة أقل أو قناة أخرى"
         Cause.OTHER -> "تعذر إكمال الاتصال. جرّب تحديث التطبيق أو افحص الشبكة"
     }
+
+    /** Localized user-facing messages for the independent STREAM interface. */
+    fun guidance(context: Context, cause: Cause): String = context.getString(when (cause) {
+        Cause.CERTIFICATE -> R.string.stream_ui_cert_error
+        Cause.DNS -> R.string.stream_ui_dns_error
+        Cause.TIMEOUT -> R.string.stream_ui_timeout_error
+        Cause.OFFLINE_OR_REFUSED -> R.string.stream_ui_network_error
+        Cause.UNAUTHORIZED -> R.string.stream_ui_unauthorized_error
+        Cause.SERVER_ERROR -> R.string.stream_ui_server_error
+        Cause.DECODER -> R.string.stream_ui_decoder_error
+        Cause.OTHER -> R.string.stream_ui_generic_error
+    })
 
     /**
      * GET /health has no device ID, subscriber code, bearer token or media credentials.
