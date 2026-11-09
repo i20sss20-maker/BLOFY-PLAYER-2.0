@@ -125,6 +125,7 @@ class HomeActivity : AppCompatActivity() {
     private var lastHomeInputAtMs = SystemClock.elapsedRealtime()
     private var displayedCatalogEpoch = 0L
     private var requestedCatalogEpoch = 0L
+    private var streamHomeCacheRetries = 0
     private val historyObserver by lazy {
         HomeHistoryObserver(lifecycleScope, changes = {
             BlofyDatabase.get(applicationContext).invalidationTracker.createFlow("watch_state")
@@ -445,12 +446,21 @@ class HomeActivity : AppCompatActivity() {
             }
 
             if (data == null) {
-                displayedHomeData = null
-                renderNoCatalogState()
+                // Never make a previously visible catalog vanish if a manual
+                // refresh temporarily monopolizes the DB. Keep existing views
+                // and their focus; on a cold launch show usable sidebar buttons.
+                if (displayedHomeData == null) renderNoCatalogState()
                 restoreFocus()
+                if (BuildConfig.CODE_ONLY_LOGIN && streamHomeCacheRetries < 3 &&
+                    !isFinishing && !isDestroyed) {
+                    streamHomeCacheRetries += 1
+                    delay(6_000L)
+                    if (homeResumed && !isFinishing) loadHomeExperience()
+                }
                 return@launch
             }
 
+            streamHomeCacheRetries = 0
             displayedHomeData = data
             displayedCatalogEpoch = CatalogSyncState.lastSyncedAt(applicationContext, data.providerId)
             serverLabel?.text = data.providerName.ifBlank { "BLOFY" }
