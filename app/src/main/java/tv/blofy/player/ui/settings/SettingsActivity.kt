@@ -23,6 +23,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.BuildConfig
+import tv.blofy.player.core.identity.StreamCodeSession
+import tv.blofy.player.core.identity.StreamCodeClient
 import tv.blofy.player.R
 import tv.blofy.player.core.update.BlofyUpdateClient
 import tv.blofy.player.data.LocalStorageManager
@@ -132,6 +134,7 @@ class SettingsActivity : AppCompatActivity() {
         addCard(cycleSetting("▶  الحلقة التالية", KEY_AUTO_NEXT, arrayOf("ask", "on", "off"), arrayOf("اسألني", "تلقائي", "إيقاف")))
         addCard(cycleSetting("✦  حركة الواجهة", KEY_MOTION, arrayOf("smooth", "reduced"), arrayOf("سلسة", "خفيفة")))
         addCard(actionCard("🌐  لغة التطبيق", currentLanguageLabel()) { chooseLanguage() })
+        if (BuildConfig.CODE_ONLY_LOGIN) addCard(actionCard("◷  اشتراكي في BLOFY STREAM", "مدة الاشتراك وحالته من السيرفر") { showStreamSubscription() })
         if (!BuildConfig.CODE_ONLY_LOGIN) addCard(actionCard("▣  ربط الجهاز", "QR ورقم الجهاز ورمز الربط") { startActivity(Intent(this, LoginActivity::class.java)) })
         addCard(actionCard("⇧  فحص التحديث", "تحقق من آخر إصدار رسمي") { checkForUpdate() })
         if (!BuildConfig.CODE_ONLY_LOGIN) addCard(actionCard("▤  قوائم التشغيل", "إدارة القوائم المحفوظة") { startActivity(Intent(this, ProviderManagerActivity::class.java)) })
@@ -144,7 +147,7 @@ class SettingsActivity : AppCompatActivity() {
         linkFocus(back)
         page.addView(grid, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         page.addView(TextView(this).apply {
-            text = "BLOFY PLAYER 2.0"
+            text = if (BuildConfig.CODE_ONLY_LOGIN) "BLOFY STREAM" else "BLOFY PLAYER 2.0"
             BlofyTvDesign.applyCaption(this)
             gravity = Gravity.CENTER
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(54)).apply { topMargin = dp(16) })
