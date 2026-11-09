@@ -2286,16 +2286,17 @@ async function chatWithLibraryAI(body){
    const offset=Number(body?.offset||0);
    if(!Number.isInteger(offset)||offset<0||offset>39996||offset%12!==0)
      return {ok:false,code:'stream_ai_batch_offset_invalid'};
-   const categories=(await pool.query(`SELECT source_category_id,name FROM blofy_xtream_categories
+   const allCategories=(await pool.query(`SELECT source_category_id,name,item_count FROM blofy_xtream_categories
      WHERE server_id=$1 AND media_type=$2 AND enabled=TRUE
-     ORDER BY sort_order,name,source_category_id LIMIT 81`,[sourceId,type])).rows;
-   if(categories.length>80)return {ok:false,code:'stream_ai_category_choices_exceeded'};
-   if(!categories.length)return {ok:false,code:'stream_ai_categories_missing'};
+     ORDER BY sort_order,name,source_category_id LIMIT 1001`,[sourceId,type])).rows;
+   if(allCategories.length>1000)return {ok:false,code:'stream_ai_category_choices_exceeded'};
+   if(!allCategories.length)return {ok:false,code:'stream_ai_categories_missing'};
    const rows=(await pool.query(`SELECT source_id,category_id,
      COALESCE(NULLIF(custom_name,''),name) AS name FROM blofy_xtream_items
      WHERE server_id=$1 AND media_type=$2 AND enabled=TRUE
      ORDER BY source_id LIMIT 12 OFFSET $3`,[sourceId,type,offset])).rows;
    if(!rows.length)return {ok:false,code:'stream_ai_end_of_catalog'};
+   const categories=shortlistExistingCategories(allCategories,rows,80);
    const suggested=await proposeExistingCategoryAssignments(
      rows.map(x=>({id:String(x.source_id),name:x.name,
        categoryName:categories.find(v=>String(v.source_category_id)===String(x.category_id))?.name||''})),
