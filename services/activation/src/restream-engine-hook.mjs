@@ -8,6 +8,8 @@ import {DEMO_PREFIX,serveRestreamDemo} from './restream-demo-hls.mjs';
 import {checkDemoProxy} from './restream-demo-e2e.mjs';
 import {publicHealthSummary,checkRestreamHealth,verifySyntheticConcurrency} from './restream-auto-health.mjs';
 import {getRestreamMetrics} from './restream-observability.mjs';
+import {createRestreamRateSampler} from './restream-rate-sampler.mjs';
+const sampleHlsRate=createRestreamRateSampler();
 
 const ENGINE = normalizePrivateRestreamOrigin(process.env.BLOFY_RESTREAM_ENGINE_URL || '');
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
@@ -125,7 +127,7 @@ http.createServer=function withBlofyRestreamHealth(listener){
       if(process.env.BLOFY_RESTREAM_METRICS_READ!=='1')
         return write(res,503,{ok:false,code:'restream_metrics_not_enabled'});
       void getRestreamMetrics(ENGINE,{key:ADMIN_TOKEN}).then(report=>
-        write(res,report.ok?200:503,report));
+        write(res,report.ok?200:503,report.ok?{...report,rate:sampleHlsRate(report)}:report));
       return;
     }
     if(req.method==='GET'&&req.url?.split('?')[0]==='/api/v1/admin/restream-engine/auto-health'){
