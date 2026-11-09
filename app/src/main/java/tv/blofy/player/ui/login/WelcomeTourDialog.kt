@@ -32,7 +32,7 @@ internal object WelcomeTourDialog {
     fun show(activity: AppCompatActivity) {
         if (activity.isFinishing || activity.isDestroyed) return
         val tv = DeviceClass.isTv(activity)
-        val ar = activity.resources.configuration.locales.get(0).language == "ar"
+        val ar = androidx.core.os.ConfigurationCompat.getLocales(activity.resources.configuration).get(0)?.language == "ar"
         val pages = if (ar) listOf(
             Page("✦", "أهلًا بك في BLOFY", "تجربة مشاهدة أنيقة وسهلة على الجوال والتلفزيون. تقدر تتخطى العرض وتبدأ فورًا."),
             Page("▣", "اربط جهازك بسهولة", "امسح QR أو استخدم رمز الربط الظاهر على شاشة الباركود. العرض اختياري تمامًا."),
