@@ -12,6 +12,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
+import tv.blofy.player.core.pro.ProAccessPolicy
 import tv.blofy.player.ui.common.BlofyTvDesign
 
 /**
@@ -39,6 +40,13 @@ class ProActivity : AppCompatActivity() {
             typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(BlofyTvDesign.PurpleBright)
             gravity = Gravity.CENTER
+        })
+        root.addView(TextView(this).apply {
+            text = if (ProAccessPolicy.currentSnapshot().isAppPro) "BLOFY PRO" else "باقتك الحالية: BLOFY FREE"
+            textSize = if (phone) 15f else 18f
+            setTextColor(BlofyTvDesign.Mint)
+            gravity = Gravity.CENTER
+            setPadding(0, dp(8), 0, dp(6))
         })
         root.addView(TextView(this).apply {
             text = "قريبًا — مزايا إضافية لتجربة المشاهدة"
