@@ -66,7 +66,7 @@ class ProPreviewActivity : AppCompatActivity() {
                 layoutDirection = View.LAYOUT_DIRECTION_RTL
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(dp(20), dp(14), dp(20), dp(14))
-                background = BlofyTvDesign.elevatedSurface(dp(18).toFloat(), emphasis = plan == PlayerPlan.VIP)
+                background = BlofyTvDesign.elevatedSurface(dp(18).toFloat())
             }
             card.addView(TextView(this).apply {
                 text = "BLOFY ${plan.name}   •   $price"
