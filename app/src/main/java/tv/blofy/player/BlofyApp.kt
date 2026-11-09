@@ -62,16 +62,26 @@ class BlofyApp : Application() {
         // locale list as English and accidentally resetting a previously selected language.
         val settings = getSharedPreferences("blofy_player_settings", MODE_PRIVATE)
         val storedTag = settings.getString("app_language_tag", null)?.trim().orEmpty()
-        val resolvedTag = storedTag.ifBlank { if (BuildConfig.CODE_ONLY_LOGIN) "ar" else "en" }
+        val streamChoiceMade = settings.getBoolean("stream_language_choice_made", false)
+        // A previous STREAM package could remember the old English auto-default
+        // even though it did not expose a language picker. Upgrade that implicit
+        // value to Arabic exactly once; never override an explicit choice made in
+        // the new STREAM language picker. PLAYER maintains its existing behavior.
+        val resolvedTag = when {
+            BuildConfig.CODE_ONLY_LOGIN && !streamChoiceMade -> "ar"
+            storedTag.isNotBlank() -> storedTag
+            BuildConfig.CODE_ONLY_LOGIN -> "ar"
+            else -> "en"
+        }
         val currentTags = AppCompatDelegate.getApplicationLocales().toLanguageTags()
         if (currentTags != resolvedTag) {
             AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(resolvedTag))
         }
-        if (storedTag.isBlank()) {
+        if (storedTag != resolvedTag) {
             settings.edit()
                 .putString("app_language_tag", resolvedTag)
-                .putString("app_language", if (BuildConfig.CODE_ONLY_LOGIN) "العربية" else "English")
-                .apply()
+                .putString("app_language", if (resolvedTag == "ar") "العربية" else "English")
+                .commit()
         }
 
         CrashRecovery.install(this)

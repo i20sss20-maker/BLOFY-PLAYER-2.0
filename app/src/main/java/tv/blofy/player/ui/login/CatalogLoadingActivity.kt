@@ -111,7 +111,8 @@ class CatalogLoadingActivity : AppCompatActivity() {
                         PlaylistSyncStage.SERIES -> getString(R.string.catalog_stage_series)
                         else -> getString(R.string.catalog_preflight)
                     }
-                    progressMeta.text = "$sectionLabel • ${String.format(Locale.US, "%,d", catalogRowsRead)} عنصر • انتظار بيانات جديدة (${idleSeconds} ث)"
+                    progressMeta.text = getString(R.string.stream_ui_items_waiting, sectionLabel,
+                        String.format(Locale.US, "%,d", catalogRowsRead), idleSeconds)
                     progressMeta.visibility = View.VISIBLE
                 }
             }
@@ -514,7 +515,8 @@ class CatalogLoadingActivity : AppCompatActivity() {
         render((p.percent.coerceIn(0, 95) * 30 / 95), status)
         val stepInfo = getString(R.string.catalog_progress_steps, p.step.coerceAtLeast(1), p.totalSteps.coerceAtLeast(1))
         progressMeta.text = if (tv.blofy.player.BuildConfig.CODE_ONLY_LOGIN && catalogRowsRead > 0)
-            "$stepInfo • ${String.format(Locale.US, "%,d", catalogRowsRead)} عنصر"
+            getString(R.string.stream_ui_items_count, stepInfo,
+                String.format(Locale.US, "%,d", catalogRowsRead))
         else stepInfo
         progressMeta.visibility = View.VISIBLE
     }
