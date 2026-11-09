@@ -10,6 +10,8 @@ import tv.blofy.player.core.text.ArabicSearchNormalizer
 import tv.blofy.player.data.local.BlofyDao
 import tv.blofy.player.data.local.CategoryEntity
 import tv.blofy.player.data.local.EpgEntity
+import tv.blofy.player.BuildConfig
+import tv.blofy.player.core.identity.StreamCodeSession
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.data.local.StreamSearchFtsEntity
@@ -39,7 +41,10 @@ class PlaylistManager(
         onProgress: suspend (PlaylistSyncProgress) -> Unit = {}
     ): PlaylistSyncResult {
         require(provider.providerType.equals("xtream", true)) { "Xtream provider required" }
-        require(provider.username.isNotBlank() && provider.password.isNotBlank()) { "Xtream credentials required" }
+        require((BuildConfig.CODE_ONLY_LOGIN && provider.baseUrl.trimEnd('/')==StreamCodeSession.HOST) ||
+            (provider.username.isNotBlank() && provider.password.isNotBlank())) {
+            "Xtream credentials required"
+        }
 
         var freshItemCount = 0
         val sectionResult = runXtreamSections(
@@ -496,6 +501,8 @@ class PlaylistManager(
     private fun actionUrl(provider: ProviderEntity, action: String, extra: Map<String, String> = emptyMap()): String {
         val base = provider.baseUrl.trim().trimEnd('/')
         val tail = extra.entries.joinToString("") { "&${enc(it.key)}=${enc(it.value)}" }
+        if (BuildConfig.CODE_ONLY_LOGIN && base==StreamCodeSession.HOST)
+            return "$base/player_api.php?action=${enc(action)}$tail"
         return "$base/player_api.php?username=${enc(provider.username)}&password=${enc(provider.password)}&action=${enc(action)}$tail"
     }
 
