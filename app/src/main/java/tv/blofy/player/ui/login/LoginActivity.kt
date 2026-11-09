@@ -300,8 +300,10 @@ class LoginActivity : AppCompatActivity() {
     private fun qrPanel() = FrameLayout(this).apply {
         tag = "blofy_login_qr_panel"
         background = qrFrameBackground()
-        setPadding(dp(6), dp(6), dp(6), dp(6))
-        elevation = dp(8).toFloat()
+        // White quiet zone keeps the QR reliably scannable on low-contrast TV panels.
+        setPadding(dp(10), dp(10), dp(10), dp(10))
+        elevation = dp(4).toFloat()
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         addView(qrView, FrameLayout.LayoutParams(-1, -1))
         addView(qrMessage, FrameLayout.LayoutParams(-1, -1))
     }
@@ -367,7 +369,7 @@ class LoginActivity : AppCompatActivity() {
             visibility = View.INVISIBLE
             scaleType = ImageView.ScaleType.FIT_CENTER
             background = qrBackground()
-            setPadding(dp(6), dp(6), dp(6), dp(6))
+            setPadding(dp(4), dp(4), dp(4), dp(4))
         }
         qrMessage = loginText(R.string.login_qr_loading, 12.5f).apply {
             gravity = Gravity.CENTER
@@ -907,7 +909,7 @@ class LoginActivity : AppCompatActivity() {
 
     private fun qrFrameBackground() = GradientDrawable(
         GradientDrawable.Orientation.TL_BR,
-        intArrayOf(0xFFB987F3.toInt(), 0xFF7041B4.toInt(), 0xFF2B193E.toInt())
+        intArrayOf(0xFFF9F6FF.toInt(), 0xFFECE4F9.toInt(), 0xFFBEA5DA.toInt())
     ).apply {
         cornerRadius = dp(BlofyTvDesign.PanelRadius).toFloat()
         setStroke(dp(1), BlofyTvDesign.FocusStroke)
