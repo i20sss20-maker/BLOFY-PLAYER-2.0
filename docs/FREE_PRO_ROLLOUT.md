@@ -38,3 +38,14 @@ Do not market or publish PRO as an active paid plan before these are implemented
 - Acknowledge purchases, support restore, cancellation, refunds and pending purchases.
 - Add device migration compatibility for existing legacy subscribers and approved store-review access.
 - Add feature gating to each real premium feature only after the feature is built and tested.
+
+## Privacy fix (FREE onboarding)
+- Unactivated devices no longer call the portal playlist-list/sync path while refreshing the device-pairing screen.
+- Before activation, the local saved-provider list is shown instead.
+- Active legacy subscribers continue using the existing portal synchronization path.
+- Pairing-code UI still performs identity generation and periodic display refresh; this is **not** the same as content-credential synchronization.
+
+## Regression tests
+- A fresh/free device with manually added Xtream credentials should never send those credentials to the BLOFY activation portal when returning to the entry screen.
+- A legacy activated device should still show its portal playlists.
+- The FREE playback flow must never be used as proof of a PRO entitlement.
