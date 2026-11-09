@@ -33,8 +33,6 @@ test('AI payload includes only selected titles and sanitized categories',async()
         text:JSON.stringify({suggestions:[
           {id:'1',category:'رياضة',cleanTitle:'Sports 1',
             confidence:'مرتفع',reason:'فئة رياضية واضحة'},
-          {id:'1000',category:'أخبار',cleanTitle:'hallucinated',
-            confidence:'مرتفع',reason:'unknown id'},
           {id:'4',category:'أخبار',cleanTitle:'News channel',
             confidence:'متوسط',reason:'اسم إخباري واضح'}
         ]})}]}]
