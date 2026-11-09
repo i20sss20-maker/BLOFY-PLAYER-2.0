@@ -281,6 +281,7 @@ async function ensureReady() {
       )`);
       // Publisher controls survive every Xtream re-import.
       await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS custom_name TEXT');
+      await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS custom_category_id TEXT');
       await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS custom_icon_url TEXT');
       await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS featured BOOLEAN NOT NULL DEFAULT FALSE');
       await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS channel_number INTEGER');
@@ -1528,7 +1529,7 @@ async function flushItemBatch(serverId, mediaType, syncToken, batch) {
     SELECT $1::uuid,$2::text,x.source_id,x.category_id,x.name,x.icon_url,x.container_extension,TRUE,COALESCE(x.metadata,'{}'::jsonb),x.sync_token,NOW()
     FROM jsonb_to_recordset($3::jsonb) AS x(source_id text,category_id text,name text,icon_url text,container_extension text,metadata jsonb,sync_token text)
     ON CONFLICT(server_id,media_type,source_id) DO UPDATE SET
-      category_id=EXCLUDED.category_id,name=EXCLUDED.name,
+      category_id=COALESCE(blofy_xtream_items.custom_category_id,EXCLUDED.category_id),name=EXCLUDED.name,
       container_extension=EXCLUDED.container_extension,
       icon_url=COALESCE(NULLIF(EXCLUDED.icon_url,''),blofy_xtream_items.icon_url),
       metadata=EXCLUDED.metadata ||
@@ -2421,7 +2422,7 @@ async function approveLibraryAICommand(body){
      await client.query("SET LOCAL statement_timeout='12000ms'");
      for(const move of changes){
        const updated=await client.query(`UPDATE blofy_xtream_items i
-         SET category_id=$4,updated_at=NOW()
+         SET category_id=$4,custom_category_id=$4,updated_at=NOW()
          WHERE i.server_id=$1 AND i.media_type=$2 AND i.source_id=$3
           AND i.category_id IS NOT DISTINCT FROM $5
           AND COALESCE(NULLIF(i.custom_name,''),i.name)=$6
