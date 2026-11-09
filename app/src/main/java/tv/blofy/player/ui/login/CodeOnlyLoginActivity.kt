@@ -154,7 +154,8 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
         statusView.text = "جارِ التفعيل عبر BLOFY..."
         lifecycleScope.launch {
             try {
-                val active = StreamCodeClient.redeem(code)
+                val deviceKey = StreamCodeSession.installationKey(applicationContext)
+                val active = StreamCodeClient.redeem(code, deviceKey)
                 withContext(Dispatchers.IO) {
                     val dao = BlofyDatabase.get(applicationContext).dao()
                     val profile = ProviderEntity(StreamCodeSession.providerId,
