@@ -18,7 +18,8 @@ const pool = new Pool({
 
 const CATEGORIES = new Set(['media', 'files', 'downloads', 'launcher', 'screensaver', 'tools', 'network', 'store']);
 const MODES = new Set(['official', 'direct']);
-const SEED_VERSION = 6;
+// Version 7 inserts the independent BLOFY STREAM app into already-seeded production databases.
+const SEED_VERSION = 7;
 
 const GITHUB_UPDATE_RULES = Object.freeze({
   'just-player': { repo:'moneytoo/Player', asset:'Just.Player.*.apk' },
@@ -82,6 +83,15 @@ const AUTO_REFRESH_MS = 6 * 60 * 60 * 1000;
 const HEALTH_REFRESH_MS = 6 * 60 * 60 * 1000;
 
 const DEFAULT_APPS = Object.freeze([
+  {
+    slug:'blofy-stream', name:'BLOFY STREAM', category:'media', symbol:'BS',
+    iconUrl:'https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/services/update-distribution/public/blofy-stream.svg',
+    description:'تطبيق BLOFY STREAM المستقل. تشغيل القنوات والأفلام والمسلسلات بكود اشتراك فقط، واجهة عربية افتراضيًا مع تغيير اللغة للإنجليزية. يدعم التلفزيون والريموت والجوال وأجهزة Android TV.',
+    devices:'Android TV · TV Box · Android Mobile', version:'55.8.7',
+    architecture:'Android (multi-device)', apkSizeBytes:0,
+    downloadUrl:'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/blofy-stream-55.8.7-offline-cache-20261110/BLOFY-STREAM-55.8.7-OFFLINE-AR-EN-OWNER-SIGNED.apk',
+    downloadMode:'direct', sortOrder:0, enabled:true, featured:true
+  },
   {
     slug:'vlc', name:'VLC', category:'media', symbol:'VLC',
     iconUrl:'https://raw.githubusercontent.com/videolan/vlc-android/master/application/resources/src/main/res/drawable-xxxhdpi/icon.png',
