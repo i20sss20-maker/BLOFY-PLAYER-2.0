@@ -23,7 +23,7 @@ class SplashActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val statusView = TextView(this).apply {
-            text = if (BuildConfig.CODE_ONLY_LOGIN) "جارِ فتح BLOFY STREAM..." else getString(R.string.splash_opening)
+            text = if (BuildConfig.CODE_ONLY_LOGIN) getString(R.string.stream_ui_opening) else getString(R.string.splash_opening)
             textSize = 13.5f
             setTextColor(BlofyTvDesign.TextSecondary)
             gravity = Gravity.CENTER
