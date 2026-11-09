@@ -1105,7 +1105,7 @@ class HomeActivity : AppCompatActivity() {
             progress = refreshPercent.coerceIn(0, 95)
         }
         refreshButton?.apply {
-            isEnabled = !working
+            isEnabled = if (BuildConfig.CODE_ONLY_LOGIN) !active else !working
             text = if (waiting) {
                 if (deviceKind == DeviceClass.Kind.PHONE) "↻ ${refreshPercent}%"
                 else "استئناف التحديث ${refreshPercent}%"
