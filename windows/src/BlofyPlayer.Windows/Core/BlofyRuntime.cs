@@ -585,7 +585,8 @@ public sealed class XtreamService : IDisposable
     {
         var handler = new HttpClientHandler
         {
-            AllowAutoRedirect = true,
+            // STREAM bearers must never follow redirects to an untrusted host.
+            AllowAutoRedirect = false,
             AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
         };
         _http = new HttpClient(handler)
@@ -598,6 +599,8 @@ public sealed class XtreamService : IDisposable
 
     public async Task<bool> AuthenticateAsync(ProviderAccount provider, CancellationToken ct = default)
     {
+        if (StreamCodeAccess.IsStreamProvider(provider))
+            return await StreamCodeAccess.VerifyAsync(ct) == true;
         using var doc = await GetJsonAsync(ApiUrl(provider), ct);
         if (doc.RootElement.ValueKind != JsonValueKind.Object) return false;
         if (!TryGet(doc.RootElement, "user_info", out var info) || info.ValueKind != JsonValueKind.Object)
@@ -808,6 +811,9 @@ public sealed class XtreamService : IDisposable
 
     public string StreamUrl(ProviderAccount provider, StreamItem item, string liveFormat = "ts")
     {
+        if (StreamCodeAccess.IsStreamProvider(provider))
+            return StreamRuntime.MediaUrl(item.Kind == "live" ? "live" : "movie", item.RemoteId,
+                item.Kind == "live" ? "ts" : (string.IsNullOrWhiteSpace(item.Extension) ? "mp4" : item.Extension));
         if (!string.IsNullOrWhiteSpace(item.DirectSource))
             return item.DirectSource;
         var root = NormalizeBase(provider.BaseUrl);
@@ -823,6 +829,9 @@ public sealed class XtreamService : IDisposable
 
     public string EpisodeUrl(ProviderAccount provider, EpisodeItem episode)
     {
+        if (StreamCodeAccess.IsStreamProvider(provider))
+            return StreamRuntime.MediaUrl("series", episode.RemoteId,
+                string.IsNullOrWhiteSpace(episode.Extension) ? "mp4" : episode.Extension);
         if (!string.IsNullOrWhiteSpace(episode.DirectSource))
             return episode.DirectSource;
         var root = NormalizeBase(provider.BaseUrl);
@@ -921,6 +930,7 @@ public sealed class XtreamService : IDisposable
         using var inactivity = CancellationTokenSource.CreateLinkedTokenSource(ct);
         inactivity.CancelAfter(TimeSpan.FromSeconds(90));
         using var req = new HttpRequestMessage(HttpMethod.Get, url);
+        StreamCodeAccess.AuthorizeCatalog(req);
         HttpResponseMessage response;
         try
         {
@@ -961,6 +971,7 @@ public sealed class XtreamService : IDisposable
     private async Task<JsonDocument> GetJsonAsync(string url, CancellationToken ct)
     {
         using var req = new HttpRequestMessage(HttpMethod.Get, url);
+        StreamCodeAccess.AuthorizeCatalog(req);
         using var response = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
         var status = (int)response.StatusCode;
         if (!response.IsSuccessStatusCode && status != 884)
