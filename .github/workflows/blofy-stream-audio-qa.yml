@@ -66,6 +66,35 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/streamCodeDemo/app-streamCodeDemo.apk > "$BADGING"
           grep -Fq "name='tv.blofy.player.v2.stream.qa'" "$BADGING"
           grep -Fq "versionName='2.0.0-rc07.55.8.7-STREAM-QA'" "$BADGING"
+          # The stock package must not silently include the FFmpeg extension.
+          if unzip -Z1 app/build/outputs/apk/streamCodeDemo/app-streamCodeDemo.apk | grep -Eq '^lib/[^/]+/libffmpegJNI[.]so
+      - name: Upload QA APK and test results (never production signed)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-STREAM-55.8.7-AUDIO-QA-${{ github.sha }}
+          path: |
+            app/build/outputs/apk/streamCodeDemo/*.apk
+            app/build/test-results/testDebugUnitTest/
+            app/build/test-results/testStreamCodeDemoUnitTest/
+            build/stream-qa/
+          if-no-files-found: warn
+          retention-days: 7
+; then
+            echo 'Unexpected FFmpeg extension inside stock audio QA APK' >&2
+            exit 1
+          fi
+          mkdir -p build/stream-qa
+          {
+            echo 'variant=stock-media3-audio'
+            echo 'version=55.8.7'
+            echo 'package=tv.blofy.player.v2.stream.qa'
+            echo "source_commit=$GITHUB_SHA"
+            echo 'production_release=no'
+          } > build/stream-qa/BUILD-IDENTITY.txt
+          sha256sum app/build/outputs/apk/streamCodeDemo/app-streamCodeDemo.apk > build/stream-qa/SHA256SUMS.txt
+          cat build/stream-qa/BUILD-IDENTITY.txt >> "$GITHUB_STEP_SUMMARY"
+          cat build/stream-qa/SHA256SUMS.txt >> "$GITHUB_STEP_SUMMARY"
       - name: Upload QA APK and test results (never production signed)
         if: always()
         uses: actions/upload-artifact@v4
