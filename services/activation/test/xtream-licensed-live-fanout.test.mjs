@@ -144,7 +144,7 @@ test('public CDN scope requires an explicitly licensed shared-live ticket',async
  await issueStreamRelayGrant({...details,requireSharedLive:false},
   {env,fetchImpl:fakeFetch});
  assert.equal(sent[1].licensedCdnRedirect,undefined);
- await issueStreamRelayGrant({...details,sharedLive:false},
+ await issueStreamRelayGrant({...details,sharedLive:false,requireSharedLive:false},
   {env,fetchImpl:fakeFetch});
  assert.equal(sent[2].sharedLive,undefined);
  assert.equal(sent[2].licensedCdnRedirect,undefined);
