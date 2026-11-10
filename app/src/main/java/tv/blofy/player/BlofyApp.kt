@@ -86,10 +86,10 @@ class BlofyApp : Application() {
 
         CrashRecovery.install(this)
         registerActivityLifecycleCallbacks(QuickMenuInterceptor())
+        if (!BuildConfig.IS_GOOGLE_PLAY) registerActivityLifecycleCallbacks(AppUpdateLifecycle())
         if (!BuildConfig.CODE_ONLY_LOGIN) {
             // Legacy pairing and existing BLOFY PLAYER auto-update must never
             // interrupt the code-only STREAM product or redirect to QR login.
-            registerActivityLifecycleCallbacks(AppUpdateLifecycle())
             registerActivityLifecycleCallbacks(tv.blofy.player.core.identity.ActivationLeaseLifecycle())
             registerActivityLifecycleCallbacks(StartupEntryLifecycle())
         }
