@@ -65,6 +65,34 @@ jobs:
           await initAppLibrary();
           const allApps = await listApps(true);
           const before = allApps.length;
+          const featured = ['projectivy-launcher', 'adb-tv', 'flauncher'];
+          for (const slug of featured) {
+            const app = allApps.find(item => item.slug === slug);
+            if (!app?.featured || !app.iconUrl.startsWith('https://')) {
+              throw new Error('featured_tv_app_missing:' + slug);
+            }
+          }
+          const projectivy = allApps.find(app => app.slug === 'projectivy-launcher');
+          const adbTv = allApps.find(app => app.slug === 'adb-tv');
+          const flauncher = allApps.find(app => app.slug === 'flauncher');
+          if (!projectivy?.autoUpdate ||
+              !projectivy?.downloadUrl.includes('github.com/spocky/miproja1/releases/download/4.73/')) {
+            throw new Error('projectivy_official_release_missing');
+          }
+          if (adbTv?.autoUpdate || adbTv?.downloadMode !== 'official' ||
+              !adbTv?.downloadUrl.includes('adbappcontrol.com/en/tv/')) {
+            throw new Error('adb_tv_official_source_missing');
+          }
+          if (!flauncher?.autoUpdate ||
+              !flauncher?.downloadUrl.includes('github.com/osrosal/flauncher/releases/download/')) {
+            throw new Error('flauncher_community_release_missing');
+          }
+          const flauncherVariants = (await listAppVariants()).filter(app => app.slug === 'flauncher');
+          if (flauncherVariants.length !== 3 ||
+              !flauncherVariants.some(app => app.key === 'armv7') ||
+              !flauncherVariants.some(app => app.key === 'arm64')) {
+            throw new Error('flauncher_arch_variants_missing');
+          }
           const vlc = allApps.find(app => app.slug === 'vlc');
           if (!vlc || vlc.version !== '3.7.1' || !vlc.downloadUrl.includes('download.videolan.org/pub/videolan/vlc-android/3.7.1/')) {
             throw new Error('vlc_direct_source_not_migrated');
@@ -118,6 +146,13 @@ jobs:
           grep -Fq 'id="blofy-stream"' /tmp/downloads.html
           grep -Fq 'href="/d/blofy-stream"' /tmp/downloads.html
           grep -Fq 'BLOFY STREAM' /tmp/downloads.html
+          for slug in projectivy-launcher adb-tv flauncher; do
+            grep -Fq "app-$slug" /tmp/downloads.html
+            curl -fsS --max-time 10 "http://127.0.0.1:3100/apps/$slug" >"/tmp/app-$slug.html"
+            grep -Fq "/download/apps/$slug" "/tmp/app-$slug.html"
+          done
+          grep -Fq 'cdn6.aptoide.com' /tmp/downloads.html
+          grep -Fq 'cdn.aptoide.com' /tmp/downloads.html
           curl -fsS --max-time 10 http://127.0.0.1:3100/apps/blofy-stream >/tmp/stream-app.html
           grep -Fq '/d/blofy-stream' /tmp/stream-app.html
           ! grep -Fq 'data-cinematic-v74="true"' /tmp/downloads.html

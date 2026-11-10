@@ -19,9 +19,18 @@ const pool = new Pool({
 const CATEGORIES = new Set(['media', 'files', 'downloads', 'launcher', 'screensaver', 'tools', 'network', 'store']);
 const MODES = new Set(['official', 'direct']);
 // Version 7 inserts the independent BLOFY STREAM app into already-seeded production databases.
-const SEED_VERSION = 8;
+const SEED_VERSION = 9;
 
 const GITHUB_UPDATE_RULES = Object.freeze({
+  'projectivy-launcher': { repo:'spocky/miproja1', asset:'ProjectivyLauncher-*-xda-release.apk' },
+  'flauncher': {
+    repo:'osrosal/flauncher', asset:'flauncher-universal-release.apk',
+    variants:[
+      {key:'universal',label:'Universal',architecture:'Universal',asset:'flauncher-universal-release.apk',sortOrder:10},
+      {key:'arm64',label:'ARM64',architecture:'ARM64',asset:'flauncher-arm64-v8a-release.apk',sortOrder:20},
+      {key:'armv7',label:'ARMv7 · 32-bit',architecture:'ARMv7',asset:'flauncher-armeabi-v7a-release.apk',sortOrder:30}
+    ]
+  },
   'just-player': { repo:'moneytoo/Player', asset:'Just.Player.*.apk' },
   'nova-player': { repo:'nova-video-player/aos-AVP', asset:'*universal-release.apk' },
   'tv-bro': { repo:'truefedex/tv-bro', asset:'*generic-geckoExcluded.apk' },
@@ -83,6 +92,33 @@ const AUTO_REFRESH_MS = 6 * 60 * 60 * 1000;
 const HEALTH_REFRESH_MS = 6 * 60 * 60 * 1000;
 
 const DEFAULT_APPS = Object.freeze([
+  {
+    slug:'projectivy-launcher', name:'Projectivy Launcher', category:'launcher', symbol:'PL',
+    iconUrl:'https://cdn6.aptoide.com/imgs/7/3/c/73c97c8bd79144c304a7809f08f0ebd0_icon.png',
+    description:'واجهة تلفزيون أنيقة بلا إعلانات، تدعم ترتيب التطبيقات والأقسام وتخصيص الخلفيات. ملف APK من إصدارات المطور Spocky الرسمية.',
+    devices:'Android TV · Google TV · TV Box', version:'4.73',
+    architecture:'Universal', apkSizeBytes:11437133,
+    downloadUrl:'https://github.com/spocky/miproja1/releases/download/4.73/ProjectivyLauncher-4.73-c98-xda-release.apk',
+    downloadMode:'direct', sortOrder:2, enabled:true, featured:true
+  },
+  {
+    slug:'adb-tv', name:'ADB TV: App Manager', category:'tools', symbol:'ADB',
+    iconUrl:'https://cdn.aptoide.com/imgs/a/8/5/a857dc7280ee7f864e9b262008d58615_icon.jpg',
+    description:'مدير تطبيقات للتلفزيون يدعم تعطيل وإدارة التطبيقات من الريموت بعد إعداد ADB. رابط إلى صفحة التحميل الرسمية للمطور؛ Android TV 8 فأعلى.',
+    devices:'Android TV 8+ · Google TV · TV Box', version:'1.12',
+    architecture:'Android TV', apkSizeBytes:0,
+    downloadUrl:'https://adbappcontrol.com/en/tv/',
+    downloadMode:'official', sortOrder:3, enabled:true, featured:true
+  },
+  {
+    slug:'flauncher', name:'FLauncher', category:'launcher', symbol:'FL',
+    iconUrl:'https://raw.githubusercontent.com/osrosal/flauncher/master/assets/logo.png',
+    description:'واجهة تلفزيون خفيفة ومفتوحة المصدر لتنظيم التطبيقات والأقسام والخلفيات. نسخة مجتمعية من FLauncher مع خيارات ARM64 وARMv7.',
+    devices:'Android TV · Google TV · TV Box', version:'2025.07.001',
+    architecture:'Universal', apkSizeBytes:27374591,
+    downloadUrl:'https://github.com/osrosal/flauncher/releases/download/v2025.07.001/flauncher-universal-release.apk',
+    downloadMode:'direct', sortOrder:4, enabled:true, featured:true
+  },
   {
     slug:'blofy-stream', name:'BLOFY STREAM', category:'media', symbol:'BS',
     iconUrl:'https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/services/update-distribution/public/blofy-stream.svg',
@@ -329,6 +365,21 @@ const DEFAULT_APPS = Object.freeze([
 ]);
 
 const DEFAULT_VARIANTS = Object.freeze([
+  {
+    slug:'flauncher', key:'universal', label:'Universal', architecture:'Universal',
+    downloadUrl:'https://github.com/osrosal/flauncher/releases/download/v2025.07.001/flauncher-universal-release.apk',
+    apkSizeBytes:27374591, sortOrder:10, enabled:true
+  },
+  {
+    slug:'flauncher', key:'arm64', label:'ARM64', architecture:'ARM64',
+    downloadUrl:'https://github.com/osrosal/flauncher/releases/download/v2025.07.001/flauncher-arm64-v8a-release.apk',
+    apkSizeBytes:10990590, sortOrder:20, enabled:true
+  },
+  {
+    slug:'flauncher', key:'armv7', label:'ARMv7 · 32-bit', architecture:'ARMv7',
+    downloadUrl:'https://github.com/osrosal/flauncher/releases/download/v2025.07.001/flauncher-armeabi-v7a-release.apk',
+    apkSizeBytes:10581743, sortOrder:30, enabled:true
+  },
   {
     slug:'vlc', key:'arm64', label:'ARM64', architecture:'ARM64',
     downloadUrl:'https://download.videolan.org/pub/videolan/vlc-android/3.7.1/VLC-Android-3.7.1-arm64-v8a.apk',
@@ -896,6 +947,11 @@ export async function initAppLibrary() {
         await client.query('update blofy_app_catalog_meta set last_refresh_at=null,last_health_at=null where id=1');
       }
 
+      if (version < 9) {
+        // Seed only three new featured apps; keep any existing admin choices.
+        // Recheck official APK sources after migration without deleting old catalog rows.
+        await client.query('update blofy_app_catalog_meta set last_refresh_at=null,last_health_at=null where id=1');
+      }
       await client.query('update blofy_app_catalog_meta set seed_version=$1 where id=1', [SEED_VERSION]);
     } else {
       for (const seed of DEFAULT_APPS) await insertSeed(client, cleanApp(seed));
@@ -931,7 +987,7 @@ export async function listApps(includeDisabled = false) {
          left join blofy_app_health h on h.slug=c.slug
          left join blofy_download_stats s on s.key=('app:' || c.slug)
          where c.enabled=true and coalesce(h.consecutive_failures,0) < 2
-         order by c.featured desc, coalesce(s.download_count,0) desc, c.sort_order asc, c.name asc
+         order by c.featured desc, c.sort_order asc, coalesce(s.download_count,0) desc, c.name asc
          limit 200`
       );
   return result.rows.map(mapRow);
