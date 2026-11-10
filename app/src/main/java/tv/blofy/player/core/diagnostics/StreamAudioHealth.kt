@@ -46,6 +46,19 @@ object StreamAudioHealth {
             State.AUDIO_TRACK_SELECTED ->
                 "مسار الصوت محدد ويدعمه الجهاز بحسب Media3. إذا استمر الصمت، افحص مخرج الصوت أو إعدادات التلفزيون."
         }
+
+        fun explanationEn(): String = when (state) {
+            State.NOT_YET_DISCOVERED -> "Checking audio tracks. Try again after video starts."
+            State.NO_AUDIO_TRACK -> "No audio track was detected in this channel. The source may not carry audio."
+            State.UNSUPPORTED_AUDIO_CODEC -> "The channel has audio, but this device cannot decode the detected format. Try a build with a compatible audio decoder."
+            State.SUPPORTED_NOT_SELECTED -> "An audio track is supported but not selected. Choose it from the audio track list."
+            State.PLAYER_VOLUME_MUTED -> "Player volume is muted. Check the app and TV volume."
+            State.AUDIO_TRACK_SELECTED -> "A supported audio track is selected, but audible output is not confirmed. Check TV audio output if it is still silent."
+        }
+
+        fun explanationFor(language: String): String =
+            if (language.equals("ar", ignoreCase = true) || language.startsWith("ar-", ignoreCase = true))
+                explanationAr() else explanationEn()
     }
 
     /** Pure classification for deterministic unit testing without live media. */
