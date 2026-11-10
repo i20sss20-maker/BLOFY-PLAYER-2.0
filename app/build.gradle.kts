@@ -103,7 +103,8 @@ android {
         }
         create("streamCodeDemo") {
             initWith(getByName("debug"))
-            applicationIdSuffix = ".stream"
+            // Separate QA installation; never replace the owner's stable 55.8.7 STREAM app.
+            applicationIdSuffix = ".stream.qa"
             versionNameSuffix = "-STREAM-QA"
             manifestPlaceholders["blofyApplicationLabel"] = "BLOFY STREAM (QA)"
             manifestPlaceholders["blofyApplicationIcon"] = "@drawable/stream_app_icon"

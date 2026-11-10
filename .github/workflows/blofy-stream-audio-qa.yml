@@ -1,0 +1,60 @@
+name: BLOFY STREAM 55.8.7 Audio & Reliability QA
+
+on:
+  push:
+    branches:
+      - feature/blofy-stream-55-8-7-audio-intelligence-20261110
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-stream-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Install Android 36
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;35.0.0"
+      - name: Test playback and audio diagnostics; build isolated QA APK
+        shell: bash
+        run: |
+          set -euxo pipefail
+          gradle --no-daemon --max-workers=2 \
+            -PBLOFY_ACTIVATION_BASE_URL=http://127.0.0.1:9 \
+            -PBLOFY_UPDATE_BASE_URL=http://127.0.0.1:9 \
+            testDebugUnitTest testStreamCodeDemoUnitTest
+          gradle --no-daemon --max-workers=2 \
+            -PBLOFY_ACTIVATION_BASE_URL=https://api.blofyplayer.com \
+            -PBLOFY_UPDATE_BASE_URL=https://updates.blofyplayer.com \
+            assembleStreamCodeDemo
+      - name: Check QA package is not production STREAM
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f app/build/outputs/apk/streamCodeDemo/app-streamCodeDemo.apk
+          grep -Fq 'applicationIdSuffix = ".stream.qa"' app/build.gradle.kts
+          grep -Fq 'buildConfigField("boolean", "CODE_ONLY_LOGIN", "true")' app/build.gradle.kts
+      - name: Upload QA APK and test results (never production signed)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-STREAM-55.8.7-AUDIO-QA-${{ github.sha }}
+          path: |
+            app/build/outputs/apk/streamCodeDemo/*.apk
+            app/build/test-results/testDebugUnitTest/
+            app/build/test-results/testStreamCodeDemoUnitTest/
+          if-no-files-found: warn
+          retention-days: 7
