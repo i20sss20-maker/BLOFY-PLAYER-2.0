@@ -6,6 +6,11 @@ on:
       - qa/stream-55-8-7-android-validation-20261111
     paths:
       - '.github/workflows/blofy-stream-owner-signed-ffmpeg-qa.yml'
+  pull_request:
+    branches:
+      - feature/blofy-stream-55-8-7-audio-intelligence-20261110
+    paths:
+      - '.github/workflows/blofy-stream-owner-signed-ffmpeg-qa.yml'
   workflow_dispatch:
 
 permissions:
