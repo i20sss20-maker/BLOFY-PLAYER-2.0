@@ -10,7 +10,7 @@ import {probeXtreamHttp11} from './xtream-http-compat-probe.mjs';
 import {compareXtreamFromIndependentRailway} from './xtream-independent-probe.mjs';
 import {shouldUseIndependentXtreamSource,fetchIndependentXtreamSource,
   fetchIndependentXtreamManifest,probeIndependentXtreamClientProfiles} from './xtream-independent-catalog-relay.mjs';
-import {issueStreamRelayGrant} from './xtream-stream-relay-bridge.mjs';
+import {issueStreamRelayGrant,licensedLiveFanoutHealth} from './xtream-stream-relay-bridge.mjs';
 import {shouldUseIndependentSourceMedia} from './xtream-independent-source-media-policy.mjs';
 import {probeOfficialXtreamPlaylistRoute} from './xtream-official-m3u-probe.mjs';
 import {readSanitizedXtreamRelayFailure} from './xtream-relay-diagnostic.mjs';
@@ -3171,6 +3171,13 @@ async function unifiedStreamBridge(req,res,url){
        WHERE a.source_id=$1`,[sourceId]),
       pool.query(`SELECT revision,updated_at FROM blofy_xtream_catalog_revisions WHERE source_id=$1`,[sourceId])
     ]);
+    const fanoutEnabled=permittedLicensedLiveFanout({
+      sourceId,kind:'live',extension:'ts',
+      upstreamRestreamer:source.account_info?.isRestreamer===true
+    });
+    const fanoutHealth=fanoutEnabled
+      ?await licensedLiveFanoutHealth()
+      :{ok:false,code:'licensed_live_fanout_not_enabled'};
     return json(res,200,{ok:true,sourceId,
       enabled:source.enabled,published:source.publish_catalog,status:source.status,
       lastSyncAt:source.last_sync_at||null,
@@ -3193,6 +3200,7 @@ async function unifiedStreamBridge(req,res,url){
         otherChannelsConsumeOtherSourceConnections:true
       },
       livePlayback:xtreamPlaybackSnapshot(Date.now(),sourceId),
+      sharedMediaHealth:fanoutHealth,
       concurrentLiveViewers:null,concurrentViewersMeasured:false});
   }
   if(req.method==='GET'&&p==='/internal/blofy-stream/media-failures'){
