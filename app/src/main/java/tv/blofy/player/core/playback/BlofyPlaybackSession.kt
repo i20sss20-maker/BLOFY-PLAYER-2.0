@@ -10,6 +10,9 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.Tracks
+import android.util.Log
+import tv.blofy.player.BuildConfig
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
@@ -48,6 +51,11 @@ class BlofyPlaybackSession(
     }
 
     private val renderersFactory = DefaultRenderersFactory(appContext)
+        // On some Android 9 TV boxes the first advertised hardware codec
+        // cannot initialize for high-bitrate 4K/HD AC3/EAC3 tracks. Try a
+        // second suitable decoder already installed on the device.
+        // Does NOT claim FFmpeg exists or decode an unsupported codec.
+        .setEnableDecoderFallback(true)
         .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
 
     val player: ExoPlayer = ExoPlayer.Builder(appContext)
@@ -60,6 +68,36 @@ class BlofyPlaybackSession(
                 true
             )
             addListener(object : Player.Listener {
+                override fun onTracksChanged(tracks: Tracks) {
+                    if (!contentKind.isLiveContent()) return
+                    val audioGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
+                    if (audioGroups.isNotEmpty() &&
+                        audioGroups.none { group ->
+                            (0 until group.length).any { group.isTrackSupported(it) }
+                        }
+                    ) {
+                        // Codec MIME is public metadata; never log a source URL,
+                        // channel name, subscriber token, or provider secret.
+                        val codecKinds = audioGroups.flatMap { group ->
+                            (0 until group.length).mapNotNull { index ->
+                                group.getTrackFormat(index).sampleMimeType
+                            }
+                        }.distinct().take(6).map { mime ->
+                            when (mime) {
+                                MimeTypes.AUDIO_AC3 -> "ac3"
+                                MimeTypes.AUDIO_E_AC3 -> "eac3"
+                                MimeTypes.AUDIO_DTS -> "dts"
+                                MimeTypes.AUDIO_DTS_HD -> "dts_hd"
+                                MimeTypes.AUDIO_AAC -> "aac"
+                                else -> "other_audio"
+                            }
+                        }
+                        Log.w("BLOFY_AUDIO_CODEC", "live_no_supported_audio_decoder codecs=" +
+                            codecKinds.joinToString(",") +
+                            " ffmpegBundled=" + BuildConfig.FFMPEG_EXTENSION_BUNDLED)
+                    }
+                }
+
                 override fun onPlaybackStateChanged(playbackState: Int) {
                     if (playbackState == Player.STATE_BUFFERING) metric?.let { metric = PlaybackDiagnostics.buffering(it) }
                     if (playbackState == Player.STATE_READY) resetLiveStallTimer(keepPosition = true)
