@@ -60,7 +60,7 @@ async function remoteRelayRequest(path,{method='GET',body,env=process.env,
     reader.releaseLock();
   }
 }
-export async function issueStreamRelayGrant({sourceUrl,kind,sharedLive=false},{
+export async function issueStreamRelayGrant({sourceUrl,kind,sharedLive=false,requireSharedLive=false},{
   env=process.env,fetchImpl=fetch}={}){
   if(!['live','movie','series'].includes(kind)||typeof sourceUrl!=='string')
     throw new Error('stream_bridge_invalid_media');
@@ -72,6 +72,10 @@ export async function issueStreamRelayGrant({sourceUrl,kind,sharedLive=false},{
   if(!result?.ok||typeof result.path!=='string'||!RESOURCE.test(result.path)||
       result.expiresInSeconds!==45)
     throw new Error('stream_bridge_bad_response');
+  // Never silently turn a licensed shared feed into one source connection
+  // PER viewer when the isolated media plane has fanout disabled.
+  if(requireSharedLive===true&&(sharedLive!==true||result.sharedLiveGranted!==true))
+    throw new Error('stream_shared_live_not_granted');
   return 'https://'+HOST+result.path;
 }
 export async function checkStreamRelayBridge({env=process.env,fetchImpl=fetch}={}){
