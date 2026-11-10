@@ -355,6 +355,18 @@ public partial class MainWindow : Window
 
     private async Task CheckActivationAsync()
     {
+        if (StreamRuntime.IsStreamEdition)
+        {
+            var valid = await StreamCodeAccess.VerifyAsync();
+            _activationState = valid == true ? new ActivationCheckResponse("active") : null;
+            ActivationStatusText.Text = valid switch
+            {
+                true => "BLOFY STREAM • نشط",
+                false => "انتهى الاشتراك أو تم إيقافه",
+                _ => "تعذر الاتصال بالخادم"
+            };
+            return;
+        }
         ActivationStatusText.Text = "جاري التحقق من التفعيل…";
         try
         {
@@ -391,6 +403,8 @@ public partial class MainWindow : Window
 
     private async Task SyncPortalAsync()
     {
+        // STREAM owns one code-bound source. Never import PLAYER portal playlists.
+        if (StreamRuntime.IsStreamEdition) return;
         if (_activationState?.CanUse() != true) return;
         try
         {
@@ -436,6 +450,17 @@ public partial class MainWindow : Window
         {
             if (userRequested) ShowActivation();
             return;
+        }
+        if (StreamRuntime.IsStreamEdition)
+        {
+            var active = await StreamCodeAccess.VerifyAsync();
+            if (active != true)
+            {
+                ProgressText.Text = active == false
+                    ? "انتهى اشتراك STREAM أو تم إيقافه"
+                    : "تعذر التحقق الآن • المكتبة المحفوظة لم تُحذف";
+                return;
+            }
         }
 
         // Keep each refresh tied to its own provider/token. A second refresh
@@ -924,8 +949,28 @@ public partial class MainWindow : Window
         return card;
     }
 
+    private async void StreamLogout_Click(object sender, RoutedEventArgs e)
+    {
+        if (MessageBox.Show(this, "تسجيل الخروج من BLOFY STREAM؟", "BLOFY STREAM",
+                MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+            return;
+        StreamCodeAccess.Logout(); // Keep device key stable for retry/renewal.
+        try { await StreamRuntime.StopAsync(); } catch { }
+        var login = new StreamStartupWindow();
+        Application.Current.MainWindow = login;
+        login.Show();
+        Close();
+    }
+
     private void ShowActivation()
     {
+        if (StreamRuntime.IsStreamEdition)
+        {
+            PageTitle.Text = "BLOFY STREAM";
+            ContentHost.Content = EmptyState("اشتراك BLOFY STREAM",
+                "يتم التحقق من الكود عن طريق خادم BLOFY. استخدم تسجيل الخروج لتبديل الكود.");
+            return;
+        }
         PageTitle.Text = "التفعيل والاشتراك";
         var root = Vertical();
         root.Children.Add(ActivationCard());
@@ -2322,6 +2367,9 @@ public partial class MainWindow : Window
 
     private static string BuildXtreamMediaUrl(ProviderAccount provider, string kind, string remoteId, string extension)
     {
+        if (StreamCodeAccess.IsStreamProvider(provider))
+            return StreamRuntime.MediaUrl(kind, remoteId,
+                string.IsNullOrWhiteSpace(extension) ? (kind == "live" ? "ts" : "mp4") : extension);
         // The Xtream API's direct_source field is frequently blank, "0", or
         // a temporary expired URL. Always preserve a generated endpoint as a
         // fallback instead of having StreamUrl() return direct_source twice.
@@ -2338,6 +2386,18 @@ public partial class MainWindow : Window
     private IReadOnlyList<string> BuildStreamCandidates(StreamItem item)
     {
         if (_activeProvider is null || _catalog is null) return Array.Empty<string>();
+        if (StreamCodeAccess.IsStreamProvider(_activeProvider))
+        {
+            // Never expose the provider's direct_source (or credentials) in STREAM.
+            // VLC gets an unguessable local URL served through the HTTPS bearer bridge.
+            try
+            {
+                var ext = item.Kind == "live" ? "ts" :
+                    (string.IsNullOrWhiteSpace(item.Extension) ? "mp4" : item.Extension);
+                return [StreamRuntime.MediaUrl(item.Kind == "live" ? "live" : "movie", item.RemoteId, ext)];
+            }
+            catch { return Array.Empty<string>(); }
+        }
 
         var urls = new List<string>();
         void Add(string? value)
@@ -2391,6 +2451,15 @@ public partial class MainWindow : Window
     private IReadOnlyList<string> BuildEpisodeCandidates(EpisodeItem episode)
     {
         if (_activeProvider is null || _catalog is null) return Array.Empty<string>();
+        if (StreamCodeAccess.IsStreamProvider(_activeProvider))
+        {
+            try
+            {
+                return [StreamRuntime.MediaUrl("series", episode.RemoteId,
+                    string.IsNullOrWhiteSpace(episode.Extension) ? "mp4" : episode.Extension)];
+            }
+            catch { return Array.Empty<string>(); }
+        }
         var urls = new List<string>();
         void Add(string? value)
         {
@@ -3032,6 +3101,14 @@ public partial class MainWindow : Window
 
     private void ShowProviders()
     {
+        if (StreamRuntime.IsStreamEdition)
+        {
+            DisposePreview();
+            PageTitle.Text = "BLOFY STREAM";
+            ContentHost.Content = EmptyState("المصدر موحّد",
+                "قوائم STREAM تُحمّل تلقائيًا بالكود. لا تحتاج إلى إدخال هوست أو بيانات مصدر.");
+            return;
+        }
         DisposePreview();
         PageTitle.Text = "القوائم والسيرفرات";
         var root = new Grid();
