@@ -99,6 +99,18 @@ jobs:
           grep -Fq "versionName='2.0.0-rc07.55.8.7-STREAM-QA'" "$BADGING"
           "$ANDROID_HOME/build-tools/$ANDROID_BUILD_TOOLS_VERSION/zipalign" \
             -c -P 16 -v 4 "$APK"
+          mkdir -p build/stream-qa
+          {
+            echo 'variant=ffmpeg-media3-extension'
+            echo 'version=55.8.7'
+            echo 'package=tv.blofy.player.v2.stream.qa'
+            echo "source_commit=$GITHUB_SHA"
+            echo 'production_release=no'
+            echo 'decoders=ac3,eac3,dca,truehd,aac,mp3,opus,vorbis,flac'
+          } > build/stream-qa/BUILD-IDENTITY.txt
+          sha256sum "$APK" "$AAR" > build/stream-qa/SHA256SUMS.txt
+          cat build/stream-qa/BUILD-IDENTITY.txt >> "$GITHUB_STEP_SUMMARY"
+          cat build/stream-qa/SHA256SUMS.txt >> "$GITHUB_STEP_SUMMARY"
       - name: Upload isolated Native Audio QA APK and native license metadata
         if: always()
         uses: actions/upload-artifact@v4
@@ -108,5 +120,6 @@ jobs:
             app/build/outputs/apk/streamCodeDemo/*.apk
             app/build/test-results/testStreamCodeDemoUnitTest/
             build/ffmpeg-native/build-apk-info.txt
+            build/stream-qa/
           if-no-files-found: warn
           retention-days: 7
