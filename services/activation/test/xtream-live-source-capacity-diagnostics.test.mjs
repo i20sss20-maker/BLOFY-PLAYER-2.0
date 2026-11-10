@@ -55,7 +55,9 @@ test('gateway stream terminal metadata is safe and never auto-activates sharing'
  assert.match(proxy,/observe\('ended',\{reason:'upstream_stream_ended'/);
  assert.match(proxy,/observe\('client_closed',\{reason:'client_or_proxy_closed'/);
  assert.match(proxy,/sourceId:row.server_id/);
- assert.match(proxy,/BLOFY_STREAM_SHARED_LIVE_CANARY==='1'/);
+ // Licensed source branch checks rights; legacy canary must never share.
+ assert.match(proxy,/permittedLicensedLiveFanout\(/);
+ assert.match(proxy,/sharedLive:false/);
  const hook=await readFile(new URL('../src/xtream-admin-hook.mjs',import.meta.url),'utf8');
  assert.match(hook,/liveSourceCapacity:sourceLiveCapacity\(source.account_info\)/);
  assert.match(hook,/livePlayback:xtreamPlaybackSnapshot\(Date.now\(\),sourceId\)/);
