@@ -57,6 +57,7 @@ import tv.blofy.player.R
 import tv.blofy.player.BlofyApp
 import tv.blofy.player.BuildConfig
 import tv.blofy.player.core.diagnostics.StreamConnectionDiagnostics
+import tv.blofy.player.core.diagnostics.StreamAudioHealth
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.playback.PlaybackResumeState
 import tv.blofy.player.core.playback.BlofyPlaybackSession
@@ -100,6 +101,7 @@ open class PlayerActivity : ContentAccessActivity() {
     private var defaultTextDisabled = false
     private var pendingNetworkRecovery = false
     private var vlcFallbackLaunched = false
+    private var lastStreamAudioHealth = ""
     private lateinit var connectionNotice: TextView
     private lateinit var controlHint: TextView
     private var networkRegistered = false
@@ -286,6 +288,7 @@ open class PlayerActivity : ContentAccessActivity() {
                 if (playbackState == Player.STATE_READY && ::connectionNotice.isInitialized) {
                     connectionNotice.visibility = View.GONE
                 }
+                if (playbackState == Player.STATE_READY) reportStreamAudioHealth()
                 if (playbackState == Player.STATE_ENDED) saveResume()
                 if (playbackState == Player.STATE_ENDED && kind == KIND_EPISODE && !autoNextTriggered) {
                     autoNextTriggered = true
@@ -301,7 +304,11 @@ open class PlayerActivity : ContentAccessActivity() {
                 if (!sessionReleased) { updatePlayPauseLabel(); if (!isPlaying) saveResume() }
             }
             override fun onTracksChanged(tracks: Tracks) {
-                if (sessionReleased || kind == KIND_LIVE) return
+                if (sessionReleased) return
+                if (kind == KIND_LIVE) {
+                    reportStreamAudioHealth()
+                    return
+                }
                 val audio = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
                     .firstNotNullOfOrNull { group -> (0 until group.length).firstOrNull { group.isTrackSelected(it) }?.let { group.getTrackFormat(it).language } }
                 val disabled = subtitlePolicy.textDisabled(audio) ?: return
@@ -312,6 +319,21 @@ open class PlayerActivity : ContentAccessActivity() {
                 }
             }
         })
+    }
+
+    // Diagnostic only: never retry a working video session just because
+    // audio is missing, and never include the Xtream URL or code in logs.
+    private fun reportStreamAudioHealth() {
+        if (!BuildConfig.CODE_ONLY_LOGIN || kind != KIND_LIVE || sessionReleased) return
+        val status = StreamAudioHealth.inspect(
+            session.player.currentTracks,
+            session.player.volume,
+            known = session.player.playbackState == Player.STATE_READY
+        ).safeLogCode()
+        if (status != lastStreamAudioHealth) {
+            lastStreamAudioHealth = status
+            android.util.Log.i("BLOFY_AUDIO_HEALTH", status)
+        }
     }
 
     private fun restorePlaybackSession() {
@@ -1333,6 +1355,11 @@ open class PlayerActivity : ContentAccessActivity() {
                 .setMessage(
                     if (isText) {
                         "لا توجد ترجمات متاحة"
+                    } else if (BuildConfig.CODE_ONLY_LOGIN) {
+                        StreamAudioHealth.inspect(
+                            session.player.currentTracks, session.player.volume,
+                            known = session.player.playbackState == Player.STATE_READY
+                        ).explanationAr()
                     } else {
                         "لا توجد مسارات صوت إضافية"
                     }
@@ -1366,6 +1393,25 @@ open class PlayerActivity : ContentAccessActivity() {
                             .build()
                 }
                 dialog.dismiss()
+            }
+            .apply {
+                if (!isText && BuildConfig.CODE_ONLY_LOGIN) {
+                    setNeutralButton("تشخيص الصوت") { _, _ ->
+                        val result = StreamAudioHealth.inspect(
+                            session.player.currentTracks, session.player.volume,
+                            known = session.player.playbackState == Player.STATE_READY
+                        )
+                        AlertDialog.Builder(this@PlayerActivity)
+                            .setTitle("حالة صوت القناة")
+                            .setMessage(result.explanationAr() +
+                                "\n\nالمسارات: " + result.available +
+                                " · مدعومة: " + result.supported +
+                                " · محددة: " + result.selected +
+                                "\nالترميز: " + (result.selectedMimeType ?: "غير معروف"))
+                            .setPositiveButton("حسنًا", null)
+                            .show()
+                    }
+                }
             }
             .show()
     }
