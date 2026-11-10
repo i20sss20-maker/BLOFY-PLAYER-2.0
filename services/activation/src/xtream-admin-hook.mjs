@@ -45,6 +45,8 @@ import pg from 'pg';
 import { downloadXtreamM3uCatalog } from './xtream-m3u-catalog.mjs';
 import { distinctXtreamRecords } from './xtream-import-dedup.mjs';
 import {xtreamProviderOrder,withXtreamProviderPosition} from './xtream-provider-order.mjs';
+import {sourceLiveCapacity} from './xtream-live-source-capacity.mjs';
+import {xtreamPlaybackSnapshot} from './xtream-playback-metrics.mjs';
 import {ensureXtreamCatalogRevisionSchema,bumpXtreamCatalogRevision} from './xtream-catalog-revision.mjs';
 import { assessXtreamSync } from './xtream-sync-guard.mjs';
 import { CONTROL_PATH, controlPage, deleteConfirmationPage, readControlForm } from './xtream-native-controls.mjs';
@@ -3176,6 +3178,8 @@ async function unifiedStreamBridge(req,res,url){
       codes:{total:codes.rows[0].total,redeemed:codes.rows[0].redeemed},
       catalogRevision:Number(revision.rows[0]?.revision||0),
       catalogUpdatedAt:revision.rows[0]?.updated_at||null,
+      liveSourceCapacity:sourceLiveCapacity(source.account_info),
+      livePlayback:xtreamPlaybackSnapshot(Date.now(),sourceId),
       concurrentLiveViewers:null,concurrentViewersMeasured:false});
   }
   if(req.method==='GET'&&p==='/internal/blofy-stream/media-failures'){
