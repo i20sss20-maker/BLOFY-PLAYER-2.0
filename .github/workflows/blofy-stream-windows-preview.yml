@@ -1,0 +1,100 @@
+name: BLOFY STREAM Windows — code-only preview
+on:
+  push:
+    branches:
+      - feature/blofy-stream-windows-code-edition-20261110
+    paths:
+      - 'windows/**'
+      - '.github/workflows/blofy-stream-windows-preview.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: blofy-stream-windows-preview-${{ github.sha }}
+  cancel-in-progress: false
+jobs:
+  windows-x64:
+    runs-on: windows-latest
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Verify STREAM isolation and Android-compatible API routes
+        shell: pwsh
+        run: |
+          $project = Get-Content -Raw windows/src/BlofyPlayer.Windows/BlofyPlayer.Windows.csproj
+          $startup = Get-Content -Raw windows/src/BlofyPlayer.Windows/App.xaml
+          $access = Get-Content -Raw windows/src/BlofyPlayer.Windows/Core/StreamCodeAccess.cs
+          if ($project -notmatch '<AssemblyName>BLOFY STREAM</AssemblyName>' -or
+              $startup -notmatch 'StartupUri="StreamStartupWindow.xaml"' -or
+              $access -notmatch '/api/v1/stream/app/redeem' -or
+              $access -notmatch '/api/v1/stream/app/session' -or
+              $access -notmatch '/api/v1/stream/media/' -or
+              $access -notmatch 'DataProtectionScope.CurrentUser') {
+            throw 'STREAM Windows isolation or API contract is not configured'
+          }
+      - name: Produce Windows launcher icon from BLOFY brand
+        shell: pwsh
+        run: |
+          python -m pip install 'Pillow>=10,<12' --disable-pip-version-check --quiet
+          New-Item -ItemType Directory -Force windows/src/BlofyPlayer.Windows/Assets | Out-Null
+          @'
+          from PIL import Image
+          source = Image.open('app/src/main/res/drawable-nodpi/blofy_logo.png').convert('RGBA')
+          source.save('windows/src/BlofyPlayer.Windows/Assets/blofy.ico',
+                      format='ICO', sizes=[(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)])
+          '@ | Set-Content -Encoding UTF8 stream_icon.py
+          python stream_icon.py
+      - name: Restore and compile WPF
+        shell: pwsh
+        run: |
+          dotnet restore windows/src/BlofyPlayer.Windows/BlofyPlayer.Windows.csproj
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet build windows/src/BlofyPlayer.Windows/BlofyPlayer.Windows.csproj -c Release --no-restore
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Create portable Windows x64 package
+        shell: pwsh
+        run: |
+          dotnet publish windows/src/BlofyPlayer.Windows/BlofyPlayer.Windows.csproj -c Release -r win-x64 --self-contained true -p:PublishReadyToRun=false -o windows/publish
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (!(Test-Path 'windows/publish/BLOFY STREAM.exe')) { throw 'Missing STREAM desktop EXE' }
+          New-Item -ItemType Directory -Force windows/out | Out-Null
+          Compress-Archive -Path windows/publish/* -DestinationPath windows/out/BLOFY-STREAM-Windows-0.1.0-Portable-x64.zip -CompressionLevel Optimal
+      - name: Build standalone Windows installer (unsigned QA)
+        shell: pwsh
+        run: |
+          $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          if (!(Test-Path $iscc)) {
+            choco install innosetup --yes --no-progress
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          & $iscc windows/installer/BlofyStream.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item windows/installer/output/*.exe windows/out/ -Force
+      - name: Emit SHA256 and release notes
+        shell: pwsh
+        run: |
+          Push-Location windows/out
+          Get-ChildItem -File | Where-Object { $_.Name -match '\.(exe|zip)$' } | ForEach-Object {
+            (Get-FileHash -Algorithm SHA256 $_.FullName).Hash.ToLower() + '  ' + $_.Name
+          } | Set-Content -Encoding UTF8 SHA256SUMS.txt
+          @'
+          BLOFY STREAM Windows 0.1.0 — Owner QA build
+          Original source: BLOFY Windows desktop port 0.4.21; Android STREAM code-only API.
+          Windows 10/11 x64. New application, separate BLOFY PLAYER app data.
+          Account redemption and session verification are server-side; only DPAPI-encrypted
+          installation keys and bearer sessions are stored under LocalAppData/BLOFY STREAM.
+          Catalog and media use BLOFY HTTPS only. VLC media uses a secret localhost bridge.
+          This is NOT code-signed, malware certified, device tested, or production published.
+          Preview build: validate Windows Defender, connectivity, playback and UI on a PC.
+          Current limitation: HLS variant playlists and DRM are not fully validated.
+          '@ | Set-Content -Encoding UTF8 BUILD_INFO.txt
+          Pop-Location
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-STREAM-WINDOWS-0.1.0-OWNER-UNSIGNED-QA-${{ github.sha }}
+          path: windows/out/
+          retention-days: 30
+          if-no-files-found: error
