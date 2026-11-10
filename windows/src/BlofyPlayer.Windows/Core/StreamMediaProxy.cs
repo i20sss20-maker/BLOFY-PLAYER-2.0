@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.Extensions.DependencyInjection;
 using System.Net;
+using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
@@ -136,7 +137,8 @@ public sealed class StreamMediaProxy : IAsyncDisposable
     {
         if (_app is not null)
         {
-            await _app.StopAsync(TimeSpan.FromSeconds(3));
+            using var shutdown = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            await _app.StopAsync(shutdown.Token);
             await _app.DisposeAsync();
             _app = null;
         }
