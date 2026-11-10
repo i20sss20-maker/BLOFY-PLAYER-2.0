@@ -54,6 +54,8 @@ import { createXtreamHealthSnapshot } from './xtream-health-snapshot.mjs';
 import {relayEligible,issueStreamRelayGrant} from './xtream-stream-relay-bridge.mjs';
 import {permittedLicensedLiveFanout,permittedSharedLivePilot,
   createFirstAccountSharedLiveTestPilot} from './xtream-licensed-live-fanout-policy.mjs';
+import {claimDurableSharedLiveTrial,durableSharedLiveTrialEnabled}
+  from './xtream-shared-pilot-registry.mjs';
 const firstAccountSharedLiveTestPilot=createFirstAccountSharedLiveTestPilot();
 import {shouldUseIndependentSourceMedia,shouldFallbackIndependentVod} from './xtream-independent-source-media-policy.mjs';
 import {shouldCompareRelay404Direct} from './xtream-relay-404-direct-recovery.mjs';
@@ -1102,9 +1104,13 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
       upstreamRestreamer:row.source_restreamer_allowed===true
     })&&(permittedSharedLivePilot({
       accountId:account.id,gatewayId
-    })||firstAccountSharedLiveTestPilot({
-      accountId:account.id,gatewayId,sourceName:row.source_name
-    }))){
+    })||(durableSharedLiveTrialEnabled()?
+      await claimDurableSharedLiveTrial(pool,{
+        sourceId:row.server_id,accountId:account.id,sourceName:row.source_name
+      }):
+      firstAccountSharedLiveTestPilot({
+        accountId:account.id,gatewayId,sourceName:row.source_name
+      })))){
     try{
       const destination=await issueStreamRelayGrant({
         sourceUrl:upstream.href,kind,sharedLive:true,
