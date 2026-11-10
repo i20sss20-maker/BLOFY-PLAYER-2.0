@@ -53,13 +53,14 @@ export function permittedSharedLivePilot({accountId,gatewayId}={},env=process.en
 }
 
 
-// One-account owner test: lets an operator with a single real subscriber
-// exercise the licensed saleh source WITHOUT knowing that subscriber's UUID.
-// The first successfully authorized viewer becomes the only permitted test
-// account in this process. It cannot select another source or bypass auth.
-// This short-term testing flag is OFF by default and is not a rollout flag.
+// Bounded owner trial for one or two authenticated codes on licensed saleh.
+// An opt-in TWO_ACCOUNT flag raises the per-process cap from 1 to 2, never
+// opens every subscriber. Account selection is provisional until restart;
+// on multi-replica deployments an explicit persistent allowlist is required.
+// The gateway applies customer entitlement and provider authorization BEFORE
+// calling this guard. Both feature flags are OFF by default.
 export function createFirstAccountSharedLiveTestPilot(){
- let selectedAccountId=null;
+ const selectedAccounts=new Set();
  return function({accountId,gatewayId,sourceName}={},env=process.env){
   if(env.BLOFY_STREAM_SHARED_LIVE_FIRST_ACCOUNT_TEST_ENABLED!=='1')
    return false;
@@ -70,7 +71,10 @@ export function createFirstAccountSharedLiveTestPilot(){
   const id=String(accountId||'').trim().toLowerCase();
   if(!UUID.test(id)||!/^[1-9][0-9]{0,14}$/.test(String(gatewayId||'')))
    return false;
-  if(selectedAccountId===null)selectedAccountId=id;
-  return id===selectedAccountId;
+  if(selectedAccounts.has(id))return true;
+  const cap=env.BLOFY_STREAM_SHARED_LIVE_TWO_ACCOUNT_TEST_ENABLED==='1'?2:1;
+  if(selectedAccounts.size>=cap)return false;
+  selectedAccounts.add(id);
+  return true;
  };
 }
