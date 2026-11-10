@@ -28,3 +28,13 @@ PLAYER code version. The stable production APK is unchanged.
 The new diagnostic does not by itself add new codecs to devices that lack
 them. The existing FFmpeg extension is optional at build time and must be
 verified as bundled before claiming those codecs work on Android.
+
+## Existing STREAM-vs-PLAYER regression test split
+The baseline Android `testDebugUnitTest` suite is run in full. An initial run
+of `testStreamCodeDemoUnitTest` reported **735 tests, 35 failures** mostly in
+old player login, provider-manager, URL-routing and profile-UI tests. Those
+tests assume the old login flow and must be reviewed/adapted for code-only
+STREAM before claiming whole-variant parity. This is a known outstanding
+quality gate, not a release success. The QA workflow instead explicitly gates
+the relevant STREAM audio, voucher/session and playback/network tests.
+No signed production APK is published by this workflow.
