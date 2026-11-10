@@ -46,6 +46,7 @@ import { downloadXtreamM3uCatalog } from './xtream-m3u-catalog.mjs';
 import { distinctXtreamRecords } from './xtream-import-dedup.mjs';
 import {xtreamProviderOrder,withXtreamProviderPosition} from './xtream-provider-order.mjs';
 import {sourceLiveCapacity} from './xtream-live-source-capacity.mjs';
+import {permittedLicensedLiveFanout} from './xtream-licensed-live-fanout-policy.mjs';
 import {xtreamPlaybackSnapshot} from './xtream-playback-metrics.mjs';
 import {ensureXtreamCatalogRevisionSchema,bumpXtreamCatalogRevision} from './xtream-catalog-revision.mjs';
 import { assessXtreamSync } from './xtream-sync-guard.mjs';
@@ -3179,6 +3180,18 @@ async function unifiedStreamBridge(req,res,url){
       catalogRevision:Number(revision.rows[0]?.revision||0),
       catalogUpdatedAt:revision.rows[0]?.updated_at||null,
       liveSourceCapacity:sourceLiveCapacity(source.account_info),
+      licensedLiveFanout:{
+        enabledForSource:permittedLicensedLiveFanout({
+          sourceId,kind:'live',extension:'ts',
+          upstreamRestreamer:source.account_info?.isRestreamer===true
+        }),
+        upstreamRestreamerPermitted:source.account_info?.isRestreamer===true,
+        maxSharedViewersPerChannelDesign:128,
+        real100ViewerLoadTestPassed:false,
+        sourceConnectionsPerSharedChannelDesign:1,
+        scope:'same_channel_same_upstream_account_only',
+        otherChannelsConsumeOtherSourceConnections:true
+      },
       livePlayback:xtreamPlaybackSnapshot(Date.now(),sourceId),
       concurrentLiveViewers:null,concurrentViewersMeasured:false});
   }
