@@ -1665,6 +1665,35 @@ async function collectGatewayHealth() {
 // for every polling device. Never cache authentication or playback decisions.
 const cachedGatewayHealth = createXtreamHealthSnapshot(collectGatewayHealth);
 async function gatewayHealth(){ return cachedGatewayHealth(); }
+ 
+// Operator-approved exact-name source readiness, once per service boot.
+// Logs only aggregate booleans/counts, never provider IDs, names or secrets.
+if(process.env.BLOFY_XTREAM_SHARED_LIVE_SOURCE_NAME){
+  const readiness=setTimeout(()=>{
+    void ensureReady().then(async()=>{
+      const allowedName=String(process.env.BLOFY_XTREAM_SHARED_LIVE_SOURCE_NAME||'').trim().toLowerCase();
+      const result=await pool.query(`SELECT COUNT(*)::int AS matches,
+        COUNT(*) FILTER (WHERE enabled=TRUE AND publish_catalog=TRUE)::int AS active,
+        COUNT(*) FILTER (WHERE account_info->>'isRestreamer'='true')::int AS restreamers
+        FROM blofy_xtream_servers
+        WHERE lower(btrim(name))=$1 AND deletion_requested_at IS NULL`,[allowedName]);
+      const summary=result.rows[0]||{};
+      console.info('BLOFY_STREAM_NAMED_SOURCE_READINESS',JSON.stringify({
+        matchCount:Number(summary.matches||0),active:Number(summary.active||0),
+        restreamAuthorized:Number(summary.restreamers||0),
+        exactSourceReady:Number(summary.matches)===1&&Number(summary.active)===1&&
+          Number(summary.restreamers)===1,
+        codeSharedFanoutOptIn:process.env.BLOFY_STREAM_SHARED_LIVE_CANARY==='1'
+      }));
+    }).catch(()=>{
+      console.warn('BLOFY_STREAM_NAMED_SOURCE_READINESS',JSON.stringify({
+        ok:false,reason:'source_readiness_query_unavailable'
+      }));
+    });
+  },14000);
+  readiness.unref?.();
+}
+
 
 const previousCreateServer = http.createServer.bind(http);
 http.createServer = function withBlofyXtreamGateway(listener) {
