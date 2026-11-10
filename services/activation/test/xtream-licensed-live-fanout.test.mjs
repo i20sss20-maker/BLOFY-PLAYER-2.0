@@ -179,3 +179,28 @@ test('gateway authorizes licensed source before claiming single-account owner sl
  assert.match(scoped,/accountId:account\.id,gatewayId,sourceName:row\.source_name/);
  assert.match(scoped,/licensedCdnRedirect:true/);
 });
+
+test('explicit two-code pilot shares saleh for exactly two authenticated accounts',()=>{
+ const guard=createFirstAccountSharedLiveTestPilot();
+ const third='33333333-3333-4333-8333-333333333333';
+ const cfg={BLOFY_STREAM_SHARED_LIVE_FIRST_ACCOUNT_TEST_ENABLED:'1',
+  BLOFY_STREAM_SHARED_LIVE_TWO_ACCOUNT_TEST_ENABLED:'1',
+  BLOFY_XTREAM_SHARED_LIVE_SOURCE_NAME:'saleh'};
+ const check=(accountId,sourceName='saleh',gatewayId='1312445')=>
+  guard({accountId,sourceName,gatewayId},cfg);
+ assert.equal(check(source),true);
+ assert.equal(check(other),true);
+ assert.equal(check(source),true);
+ assert.equal(check(other,'saleh','1312446'),true);
+ assert.equal(check(third),false,'third account must use previous playback path');
+ assert.equal(check(source,'another-source'),false);
+ assert.equal(check(third,'saleh','*'),false);
+ assert.equal(check(third),false);
+});
+test('two-code mode cannot enable without first-account operator gate',()=>{
+ const guard=createFirstAccountSharedLiveTestPilot();
+ const cfg={BLOFY_STREAM_SHARED_LIVE_FIRST_ACCOUNT_TEST_ENABLED:'0',
+  BLOFY_STREAM_SHARED_LIVE_TWO_ACCOUNT_TEST_ENABLED:'1',
+  BLOFY_XTREAM_SHARED_LIVE_SOURCE_NAME:'saleh'};
+ assert.equal(guard({accountId:source,gatewayId:'1312446',sourceName:'saleh'},cfg),false);
+});
