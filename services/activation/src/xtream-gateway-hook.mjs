@@ -1681,8 +1681,12 @@ if(process.env.BLOFY_XTREAM_SHARED_LIVE_SOURCE_NAME){
       console.info('BLOFY_STREAM_NAMED_SOURCE_READINESS',JSON.stringify({
         matchCount:Number(summary.matches||0),active:Number(summary.active||0),
         restreamAuthorized:Number(summary.restreamers||0),
+        manuallyApproved:process.env.BLOFY_XTREAM_SHARED_LIVE_MANUAL_PROVIDER_APPROVED==='1'&&
+          allowedName===String(process.env.BLOFY_XTREAM_SHARED_LIVE_MANUAL_GRANT_SOURCE_NAME||'').trim().toLowerCase(),
         exactSourceReady:Number(summary.matches)===1&&Number(summary.active)===1&&
-          Number(summary.restreamers)===1,
+          (Number(summary.restreamers)===1||
+            (process.env.BLOFY_XTREAM_SHARED_LIVE_MANUAL_PROVIDER_APPROVED==='1'&&
+              allowedName===String(process.env.BLOFY_XTREAM_SHARED_LIVE_MANUAL_GRANT_SOURCE_NAME||'').trim().toLowerCase())),
         codeSharedFanoutOptIn:process.env.BLOFY_STREAM_SHARED_LIVE_CANARY==='1'
       }));
     }).catch(()=>{

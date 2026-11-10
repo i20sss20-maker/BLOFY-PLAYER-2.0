@@ -42,6 +42,34 @@ test('name-based authorization is limited to uniquely named provider-restreamer 
  assert.equal(permittedLicensedLiveFanout(candidate,{...grant,
   BLOFY_STREAM_SHARED_LIVE_CANARY:'0'}),false);
 });
+test('manual provider approval for saleh works only for one unique named source',()=>{
+ const manual={...env,BLOFY_XTREAM_SHARED_LIVE_SOURCE_IDS:'',
+  BLOFY_XTREAM_SHARED_LIVE_SOURCE_NAME:'saleh',
+  BLOFY_XTREAM_SHARED_LIVE_MANUAL_GRANT_SOURCE_NAME:'saleh',
+  BLOFY_XTREAM_SHARED_LIVE_MANUAL_PROVIDER_APPROVED:'1'};
+ const row={sourceId:source,sourceName:'saleh',sourceNameMatches:1,
+  kind:'live',extension:'ts',upstreamRestreamer:false};
+ assert.equal(permittedLicensedLiveFanout(row,manual),true);
+ assert.equal(permittedLicensedLiveFanout({...row,upstreamRestreamer:null},manual),true);
+ assert.equal(permittedLicensedLiveFanout({...row,sourceNameMatches:2},manual),false);
+ assert.equal(permittedLicensedLiveFanout({...row,sourceNameMatches:0},manual),false);
+ assert.equal(permittedLicensedLiveFanout({...row,sourceName:'OTHER'},manual),false);
+ assert.equal(permittedLicensedLiveFanout({...row,kind:'movie'},manual),false);
+ assert.equal(permittedLicensedLiveFanout({...row,extension:'m3u8'},manual),false);
+ assert.equal(permittedLicensedLiveFanout(row,{...manual,
+  BLOFY_XTREAM_SHARED_LIVE_MANUAL_PROVIDER_APPROVED:'0'}),false);
+ assert.equal(permittedLicensedLiveFanout(row,{...manual,
+  BLOFY_XTREAM_SHARED_LIVE_MANUAL_GRANT_SOURCE_NAME:'other'}),false);
+ assert.equal(permittedLicensedLiveFanout(row,{...manual,
+  BLOFY_XTREAM_SHARED_LIVE_RIGHTS_CONFIRMED:'0'}),false);
+ assert.equal(permittedLicensedLiveFanout(row,{...manual,
+  BLOFY_STREAM_SHARED_LIVE_CANARY:'0'}),false);
+ assert.equal(permittedLicensedLiveFanout(row,{...manual,
+  BLOFY_XTREAM_SHARED_LIVE_SOURCE_NAME:'*'}),false);
+ assert.equal(permittedLicensedLiveFanout(row,{...manual,
+  BLOFY_XTREAM_SHARED_LIVE_SOURCE_IDS:source,
+  BLOFY_XTREAM_SHARED_LIVE_MANUAL_PROVIDER_APPROVED:'0'}),false);
+});
 test('licensing gateway requires confirmed shared ticket or fails before customer redirect',async()=>{
  const base={sourceUrl:'https://provider.example/live/user/credential/3.ts',
   kind:'live',sharedLive:true,requireSharedLive:true};
