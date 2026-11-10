@@ -43,12 +43,15 @@ function fakeDb(){
   if(sql.includes('FROM blofy_xtream_servers'))
    return {rows:args[0]===source?[{id:source}]:[]};
   if(sql.includes('INSERT INTO blofy_xtream_gateway_duration_codes')){
-   const [id,code_hash,code_hint,label,source_id,duration_days,max_connections]=args;
+   const [id,code_hash,code_hint,label,source_id,duration_days,max_connections,code_channel,code_vault]=args;
    const row={id,code_hash,code_hint,label,source_id,duration_days,max_connections,
-     created_at:new Date(clockValue),redeemed_at:null,expires_at:null,
+     code_channel,code_vault,created_at:new Date(clockValue),redeemed_at:null,expires_at:null,
      revoked_at:null,account_id:null};
    codes.push(row);return {rows:[row]};
   }
+  if(sql.includes('SELECT id,code_hash,code_vault,code_channel,revoked_at')&&
+     sql.includes('FROM blofy_xtream_gateway_duration_codes WHERE id=$1 LIMIT 1'))
+   return {rows:codes.filter(x=>x.id===args[0]).slice(0,1)};
   if(sql.includes('FROM blofy_xtream_gateway_duration_codes')&&sql.includes('FOR UPDATE'))
    return {rows:codes.filter(x=>x.code_hash===args[0])};
   if(sql.includes('INSERT INTO blofy_xtream_gateway_accounts')){
@@ -191,4 +194,58 @@ test('invalid installation binding cannot consume a subscription code',async()=>
    /stream_code_device_invalid/);
  assert.equal(state.accounts.length,0);
  assert.equal(state.codes[0].redeemed_at,null);
+});
+
+test('issued code stays securely copyable after loading a fresh operator session',async()=>{
+ const state=fakeDb();
+ const issuer=createStreamDurationCodes({pool:state.pool,keyHex});
+ const result=await issuer.issue({durationDays:365,quantity:2,channel:'app'});
+ const [first,second]=result.items;
+ assert.equal(state.codes.length,2);
+ assert.ok(state.codes[0].code_vault.startsWith('v1:'));
+ assert.notEqual(state.codes[0].code_vault,state.codes[1].code_vault);
+ assert.equal(state.codes[0].code_vault.includes(first.code),false);
+ const refreshed=createStreamDurationCodes({pool:state.pool,keyHex});
+ const listed=await refreshed.list();
+ assert.equal(listed.items[0].copyAvailable,true);
+ assert.equal(listed.items[0].code,undefined);
+ assert.equal((await refreshed.reveal(first.id)).code,first.code);
+ assert.equal((await refreshed.reveal(second.id)).code,second.code);
+ assert.equal(state.statements.filter(x=>
+   /SELECT \* FROM blofy_xtream_gateway_duration_codes/.test(x.sql)).length,1);
+ await refreshed.revoke(first.id);
+ assert.equal((await refreshed.reveal(first.id)).code,'stream_code_revoked');
+});
+test('historic HMAC-only codes are never presented as recoverable',async()=>{
+ const state=fakeDb();
+ const issuer=createStreamDurationCodes({pool:state.pool,keyHex});
+ const issued=await issuer.issue({durationDays:30});
+ state.codes[0].code_vault=null;
+ const ledger=await issuer.list();
+ assert.equal(ledger.items[0].copyAvailable,false);
+ const result=await issuer.reveal(issued.items[0].id);
+ assert.equal(result.code,'stream_code_legacy_unrecoverable');
+});
+
+test('ten distinct customer codes create independent subscriptions without terminating previous accounts',async()=>{
+ const state=fakeDb(),started=Date.parse('2026-11-09T09:00:00Z');
+ const issuer=createStreamDurationCodes({pool:state.pool,keyHex,clock:()=>started});
+ const issued=await issuer.issue({durationDays:365,quantity:10,sourceId:source});
+ assert.equal(issued.items.length,10);
+ assert.equal(new Set(issued.items.map(x=>x.code)).size,10);
+ const activations=[];
+ for(const item of issued.items){
+   const response=await issuer.redeem(item.code,'https://blofyplayer.com');
+   assert.equal(response.ok,true);
+   activations.push(response);
+ }
+ assert.equal(state.accounts.length,10);
+ assert.equal(new Set(activations.map(x=>x.account.id)).size,10);
+ assert.equal(new Set(activations.map(x=>x.account.expiresAt)).size,1);
+ assert.equal(state.codes.filter(x=>x.redeemed_at&&!x.revoked_at).length,10);
+ const ledger=await issuer.list();
+ assert.equal(ledger.totals.redeemed,10);
+ assert.equal(ledger.items.filter(x=>x.status==='redeemed').length,10);
+ // A new unrelated subscriber's activation never mutates the first account.
+ assert.equal(state.codes[0].account_id,activations[0].account.id);
 });
