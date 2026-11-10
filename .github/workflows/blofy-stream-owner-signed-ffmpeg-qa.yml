@@ -1,9 +1,9 @@
-name: BLOFY STREAM 55.8.7 FFmpeg owner-signed private QA
+name: BLOFY STREAM 55.8.8 FFmpeg owner-signed release candidate
 
 on:
   push:
     branches:
-      - qa/stream-55-8-7-android-validation-20261111
+      - release/stream-55-8-8-signed-inapp-20261111
     paths:
       - '.github/workflows/blofy-stream-owner-signed-ffmpeg-qa.yml'
   pull_request:
@@ -46,8 +46,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          grep -Fq 'versionCode = 2000084' app/build.gradle.kts
-          grep -Fq 'versionName = "2.0.0-rc07.55.8.7"' app/build.gradle.kts
+          grep -Fq 'versionCode = 2000085' app/build.gradle.kts
+          grep -Fq 'versionName = "2.0.0-rc07.55.8.8"' app/build.gradle.kts
           grep -Fq 'applicationIdSuffix = ".stream"' app/build.gradle.kts
           grep -Fq 'buildConfigField("boolean", "CODE_ONLY_LOGIN", "true")' app/build.gradle.kts
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
@@ -128,7 +128,7 @@ jobs:
           mkdir -p build/qa-owner-signed
           TOOLS="$ANDROID_HOME/build-tools/$ANDROID_BUILD_TOOLS_VERSION"
           "$TOOLS/aapt" dump badging "$APK" > "$RUNNER_TEMP/owner-stream-badging.txt"
-          grep -Fq "name='tv.blofy.player.v2.stream' versionCode='2000084' versionName='2.0.0-rc07.55.8.7-STREAM'" "$RUNNER_TEMP/owner-stream-badging.txt"
+          grep -Fq "name='tv.blofy.player.v2.stream' versionCode='2000085' versionName='2.0.0-rc07.55.8.8-STREAM'" "$RUNNER_TEMP/owner-stream-badging.txt"
           ! grep -Fq 'application-debuggable' "$RUNNER_TEMP/owner-stream-badging.txt"
           "$TOOLS/apksigner" verify --verbose --print-certs "$APK" > "$RUNNER_TEMP/owner-signing-evidence.txt"
           actual="$("$TOOLS/apksigner" verify --print-certs "$APK" |
@@ -146,18 +146,18 @@ jobs:
             assets/open_source/THIRD_PARTY_NOTICES.txt; do
             grep -Fxq "$license" "$RUNNER_TEMP/owner-stream-entries.txt"
           done
-          cp "$APK" build/qa-owner-signed/BLOFY-STREAM-55.8.7-FFMPEG-OWNER-SIGNED-PRIVATE-QA.apk
+          cp "$APK" build/qa-owner-signed/BLOFY-STREAM-55.8.8-FFMPEG-OWNER-SIGNED.apk
           (
             cd build/qa-owner-signed
-            sha256sum BLOFY-STREAM-55.8.7-FFMPEG-OWNER-SIGNED-PRIVATE-QA.apk > SHA256SUMS
+            sha256sum BLOFY-STREAM-55.8.8-FFMPEG-OWNER-SIGNED.apk > SHA256SUMS
             sha256sum -c SHA256SUMS
-            printf 'status=private-owner-signed-qa\napp_id=tv.blofy.player.v2.stream\nversion_code=2000084\nversion_name=2.0.0-rc07.55.8.7-STREAM\nffmpeg=1.6.1-n6.0\nsource_commit=%s\n' "$GITHUB_SHA" > BUILD-IDENTITY.txt
+            printf 'status=release-candidate-owner-signed\napp_id=tv.blofy.player.v2.stream\nversion_code=2000085\nversion_name=2.0.0-rc07.55.8.8-STREAM\nffmpeg=1.6.1-n6.0\nsource_commit=%s\n' "$GITHUB_SHA" > BUILD-IDENTITY.txt
           )
-          echo 'Verified a complete owner-signed APK. NOT deployed to customers.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Verified an owner-signed APK candidate. Not automatically distributed to customers.' >> "$GITHUB_STEP_SUMMARY"
       - name: Upload full signed FFmpeg STREAM APK (private QA, not public release)
         uses: actions/upload-artifact@v4
         with:
-          name: BLOFY-STREAM-55.8.7-FFMPEG-OWNER-SIGNED-PRIVATE-QA-${{ github.sha }}
+          name: BLOFY-STREAM-55.8.8-FFMPEG-OWNER-SIGNED-${{ github.sha }}
           path: |
             build/qa-owner-signed/
             build/ffmpeg-native/compliance/BUILD-AND-RELINK.txt
