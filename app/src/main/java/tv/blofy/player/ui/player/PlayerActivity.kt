@@ -1328,6 +1328,39 @@ open class PlayerActivity : ContentAccessActivity() {
         )
     }
 
+    @Suppress("DEPRECATION")
+    private fun streamUiLanguage(): String {
+        val config = resources.configuration
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && config.locales.size() > 0) {
+            config.locales[0].language
+        } else {
+            config.locale.language
+        }
+    }
+
+    private fun showStreamAudioDiagnostic() {
+        if (!BuildConfig.CODE_ONLY_LOGIN || sessionReleased) return
+        val language = streamUiLanguage()
+        val isArabic = language.startsWith("ar", ignoreCase = true)
+        val result = StreamAudioHealth.inspect(
+            session.player.currentTracks,
+            session.player.volume,
+            known = session.player.playbackState == Player.STATE_READY
+        )
+        val stats = if (isArabic) {
+            "\n\nالمسارات: ${result.available} · مدعومة: ${result.supported} · محددة: ${result.selected}" +
+                "\nالترميز: ${result.selectedMimeType ?: "غير معروف"}"
+        } else {
+            "\n\nTracks: ${result.available} · Supported: ${result.supported} · Selected: ${result.selected}" +
+                "\nCodec: ${result.selectedMimeType ?: "Unknown"}"
+        }
+        AlertDialog.Builder(this)
+            .setTitle(if (isArabic) "حالة صوت القناة" else "Channel audio status")
+            .setMessage(result.explanationFor(language) + stats)
+            .setPositiveButton(if (isArabic) "حسنًا" else "OK", null)
+            .show()
+    }
+
     private fun showTrackDialog(trackType: Int) {
         val groups = session.player.currentTracks.groups.filter {
             it.type == trackType && it.length > 0
@@ -1346,31 +1379,44 @@ open class PlayerActivity : ContentAccessActivity() {
         }
 
         val isText = trackType == C.TRACK_TYPE_TEXT
+        val englishStreamUi = BuildConfig.CODE_ONLY_LOGIN && !streamUiLanguage().startsWith("ar", ignoreCase = true)
         val labels = buildList {
-            if (isText) add("إيقاف الترجمة")
+            if (isText) add(if (englishStreamUi) "Subtitles off" else "إيقاف الترجمة")
             addAll(entries.map { it.label })
         }
         if (labels.isEmpty()) {
-            AlertDialog.Builder(this)
+            val dialog = AlertDialog.Builder(this)
                 .setMessage(
                     if (isText) {
-                        "لا توجد ترجمات متاحة"
+                        if (englishStreamUi) "No subtitles available" else "لا توجد ترجمات متاحة"
                     } else if (BuildConfig.CODE_ONLY_LOGIN) {
                         StreamAudioHealth.inspect(
                             session.player.currentTracks, session.player.volume,
                             known = session.player.playbackState == Player.STATE_READY
-                        ).explanationAr()
+                        ).explanationFor(streamUiLanguage())
                     } else {
                         "لا توجد مسارات صوت إضافية"
                     }
                 )
-                .setPositiveButton("حسنًا", null)
-                .show()
+                .setPositiveButton(if (englishStreamUi) "OK" else "حسنًا", null)
+            // A channel with zero supported tracks must still expose diagnosis.
+            if (!isText && BuildConfig.CODE_ONLY_LOGIN) {
+                dialog.setNeutralButton(if (englishStreamUi) "Diagnose audio" else "تشخيص الصوت") { _, _ ->
+                    showStreamAudioDiagnostic()
+                }
+            }
+            dialog.show()
             return
         }
 
         AlertDialog.Builder(this)
-            .setTitle(if (isText) "الترجمة" else "المسار الصوتي")
+            .setTitle(
+                if (isText) {
+                    if (englishStreamUi) "Subtitles" else "الترجمة"
+                } else {
+                    if (englishStreamUi) "Audio track" else "المسار الصوتي"
+                }
+            )
             .setItems(labels.toTypedArray()) { dialog, which ->
                 if (isText) subtitlePolicy.manual = true
                 if (isText && which == 0) {
@@ -1396,20 +1442,8 @@ open class PlayerActivity : ContentAccessActivity() {
             }
             .apply {
                 if (!isText && BuildConfig.CODE_ONLY_LOGIN) {
-                    setNeutralButton("تشخيص الصوت") { _, _ ->
-                        val result = StreamAudioHealth.inspect(
-                            session.player.currentTracks, session.player.volume,
-                            known = session.player.playbackState == Player.STATE_READY
-                        )
-                        AlertDialog.Builder(this@PlayerActivity)
-                            .setTitle("حالة صوت القناة")
-                            .setMessage(result.explanationAr() +
-                                "\n\nالمسارات: " + result.available +
-                                " · مدعومة: " + result.supported +
-                                " · محددة: " + result.selected +
-                                "\nالترميز: " + (result.selectedMimeType ?: "غير معروف"))
-                            .setPositiveButton("حسنًا", null)
-                            .show()
+                    setNeutralButton(if (englishStreamUi) "Diagnose audio" else "تشخيص الصوت") { _, _ ->
+                        showStreamAudioDiagnostic()
                     }
                 }
             }
