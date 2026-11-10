@@ -84,6 +84,7 @@ jobs:
             testStreamCodeDemoUnitTest \
               --tests 'tv.blofy.player.core.diagnostics.StreamAudioHealthTest' \
               --tests 'tv.blofy.player.core.identity.StreamCodeClientTest' \
+              --tests 'tv.blofy.player.core.update.StreamReleaseIsolationTest' \
               --tests 'tv.blofy.player.core.identity.StreamCodeSessionLogoutTest' \
               --tests 'tv.blofy.player.core.playback.PlaybackSessionReleaseTest' \
               --tests 'tv.blofy.player.ui.player.PlayerNetworkPolicyTest'
