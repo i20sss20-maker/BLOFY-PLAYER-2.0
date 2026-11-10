@@ -52,7 +52,9 @@ import {encryptGatewayAccountPassword,decryptGatewayAccountPassword} from './xtr
 import { readXtreamGatewayJsonResponse } from './xtream-gateway-response.mjs';
 import { createXtreamHealthSnapshot } from './xtream-health-snapshot.mjs';
 import {relayEligible,issueStreamRelayGrant} from './xtream-stream-relay-bridge.mjs';
-import {permittedLicensedLiveFanout,permittedSharedLivePilot} from './xtream-licensed-live-fanout-policy.mjs';
+import {permittedLicensedLiveFanout,permittedSharedLivePilot,
+  createFirstAccountSharedLiveTestPilot} from './xtream-licensed-live-fanout-policy.mjs';
+const firstAccountSharedLiveTestPilot=createFirstAccountSharedLiveTestPilot();
 import {shouldUseIndependentSourceMedia,shouldFallbackIndependentVod} from './xtream-independent-source-media-policy.mjs';
 import {shouldCompareRelay404Direct} from './xtream-relay-404-direct-recovery.mjs';
 import {readSanitizedXtreamRelayFailure} from './xtream-relay-diagnostic.mjs';
@@ -1090,15 +1092,19 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
   // Licensed live delivery can use one upstream TS feed with fanout to
   // independently authorized BLOFY viewers. The exact named source has
   // explicit distributor permission; accounts and catalog items passed ACL.
-  // ONLY selected pilot accounts/channels are routed here until validation.
-  if(req.method==='GET'&&permittedSharedLivePilot({
-      accountId:account.id,gatewayId
-    })&&permittedLicensedLiveFanout({
+  // A single-account operator trial is also allowed when expressly
+  // enabled. Authenticate and check source rights FIRST, then assign the
+  // first valid account as the only trial viewer for this process.
+  if(req.method==='GET'&&permittedLicensedLiveFanout({
       sourceId:row.server_id,sourceName:row.source_name,
       sourceNameMatches:row.source_name_matches,
       kind,extension:mediaExtension,
       upstreamRestreamer:row.source_restreamer_allowed===true
-    })){
+    })&&(permittedSharedLivePilot({
+      accountId:account.id,gatewayId
+    })||firstAccountSharedLiveTestPilot({
+      accountId:account.id,gatewayId,sourceName:row.source_name
+    }))){
     try{
       const destination=await issueStreamRelayGrant({
         sourceUrl:upstream.href,kind,sharedLive:true,

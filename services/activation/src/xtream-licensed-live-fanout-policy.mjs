@@ -51,3 +51,26 @@ export function permittedSharedLivePilot({accountId,gatewayId}={},env=process.en
   .split(',').map(x=>x.trim()).filter(x=>/^[1-9][0-9]{0,14}$/.test(x)).slice(0,4);
  return allowedChannels.includes(String(gatewayId||''));
 }
+
+
+// One-account owner test: lets an operator with a single real subscriber
+// exercise the licensed saleh source WITHOUT knowing that subscriber's UUID.
+// The first successfully authorized viewer becomes the only permitted test
+// account in this process. It cannot select another source or bypass auth.
+// This short-term testing flag is OFF by default and is not a rollout flag.
+export function createFirstAccountSharedLiveTestPilot(){
+ let selectedAccountId=null;
+ return function({accountId,gatewayId,sourceName}={},env=process.env){
+  if(env.BLOFY_STREAM_SHARED_LIVE_FIRST_ACCOUNT_TEST_ENABLED!=='1')
+   return false;
+  const configured=String(env.BLOFY_XTREAM_SHARED_LIVE_SOURCE_NAME||'')
+    .trim().toLowerCase();
+  if(configured!=='saleh'||String(sourceName||'').trim().toLowerCase()!==configured)
+   return false;
+  const id=String(accountId||'').trim().toLowerCase();
+  if(!UUID.test(id)||!/^[1-9][0-9]{0,14}$/.test(String(gatewayId||'')))
+   return false;
+  if(selectedAccountId===null)selectedAccountId=id;
+  return id===selectedAccountId;
+ };
+}

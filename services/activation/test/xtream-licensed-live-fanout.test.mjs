@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {permittedLicensedLiveFanout,permittedSharedLivePilot} from '../src/xtream-licensed-live-fanout-policy.mjs';
+import {permittedLicensedLiveFanout,permittedSharedLivePilot,
+  createFirstAccountSharedLiveTestPilot} from '../src/xtream-licensed-live-fanout-policy.mjs';
 import {issueStreamRelayGrant} from '../src/xtream-stream-relay-bridge.mjs';
 const source='11111111-1111-4111-8111-111111111111';
 const other='22222222-2222-4222-8222-222222222222';
@@ -148,4 +149,33 @@ test('public CDN scope requires an explicitly licensed shared-live ticket',async
  assert.equal(sent[2].sharedLive,undefined);
  assert.equal(sent[2].licensedCdnRedirect,undefined);
  assert.ok(sent.every(x=>typeof x.sourceUrl==='string'));
+});
+
+
+test('owner trial is off by default and selects only the first verified account on saleh',()=>{
+ const owner=createFirstAccountSharedLiveTestPilot();
+ const accountA=source,accountB=other,channel='123456';
+ const cfg={BLOFY_STREAM_SHARED_LIVE_FIRST_ACCOUNT_TEST_ENABLED:'1',
+  BLOFY_XTREAM_SHARED_LIVE_SOURCE_NAME:'saleh'};
+ const A={accountId:accountA,gatewayId:channel,sourceName:'saleh'};
+ assert.equal(owner(A,{}),false);
+ assert.equal(owner({...A,sourceName:'other'},cfg),false);
+ assert.equal(owner({...A,accountId:'*'},cfg),false);
+ assert.equal(owner({...A,gatewayId:'*'},cfg),false);
+ assert.equal(owner(A,cfg),true);
+ assert.equal(owner({...A,accountId:accountB},cfg),false);
+ assert.equal(owner({...A,gatewayId:'123457'},cfg),true);
+ assert.equal(owner(A,{...cfg,BLOFY_STREAM_SHARED_LIVE_FIRST_ACCOUNT_TEST_ENABLED:'0'}),false);
+ assert.equal(owner({...A,sourceName:'sAleH'},cfg),true);
+ assert.equal(owner(A,{...cfg,BLOFY_XTREAM_SHARED_LIVE_SOURCE_NAME:'other'}),false);
+});
+test('gateway authorizes licensed source before claiming single-account owner slot',async()=>{
+ const gateway=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
+ const begin=gateway.indexOf('async function proxyMedia(');
+ const scoped=gateway.slice(begin,gateway.indexOf('// Optional one-account canary:',begin));
+ assert.ok(scoped.indexOf('permittedLicensedLiveFanout({')>=0);
+ assert.ok(scoped.indexOf('permittedLicensedLiveFanout({')<
+   scoped.indexOf('firstAccountSharedLiveTestPilot({'));
+ assert.match(scoped,/accountId:account\.id,gatewayId,sourceName:row\.source_name/);
+ assert.match(scoped,/licensedCdnRedirect:true/);
 });
