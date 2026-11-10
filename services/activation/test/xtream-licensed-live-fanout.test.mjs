@@ -58,4 +58,6 @@ test('source ACL is checked before redirect and shared fanout failures never spa
  assert.match(scoped,/source_restreamer_allowed===true/);
  assert.match(scoped,/return text\(res,503,'Live distribution temporarily unavailable'/);
  assert.match(gateway,/s\.account_info->>'isRestreamer' = 'true'/);
+ assert.match(scoped,/sharedLive:false/);
+ assert.equal((scoped.match(/sharedLive:true/g)||[]).length,1);
 });
