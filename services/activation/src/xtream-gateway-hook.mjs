@@ -52,6 +52,7 @@ import {encryptGatewayAccountPassword,decryptGatewayAccountPassword} from './xtr
 import { readXtreamGatewayJsonResponse } from './xtream-gateway-response.mjs';
 import { createXtreamHealthSnapshot } from './xtream-health-snapshot.mjs';
 import {relayEligible,issueStreamRelayGrant} from './xtream-stream-relay-bridge.mjs';
+import {permittedLicensedLiveFanout} from './xtream-licensed-live-fanout-policy.mjs';
 import {shouldUseIndependentSourceMedia,shouldFallbackIndependentVod} from './xtream-independent-source-media-policy.mjs';
 import {shouldCompareRelay404Direct} from './xtream-relay-404-direct-recovery.mjs';
 import {readSanitizedXtreamRelayFailure} from './xtream-relay-diagnostic.mjs';
@@ -585,7 +586,8 @@ async function gatewayItemById(mediaType, gatewayId, sourceId=null) {
       COALESCE(NULLIF(i.custom_name,''),i.name) AS name,
       COALESCE(NULLIF(i.custom_icon_url,''),i.icon_url) AS icon_url,
       i.featured,i.channel_number,i.container_extension,i.metadata,
-      cm.gateway_id AS category_gateway_id,s.base_url,s.username_secret,s.password_secret,s.enabled AS server_enabled
+      cm.gateway_id AS category_gateway_id,s.base_url,s.username_secret,s.password_secret,s.enabled AS server_enabled,
+      (s.account_info->>'isRestreamer' = 'true') AS source_restreamer_allowed
     FROM blofy_xtream_gateway_item_map m
     JOIN blofy_xtream_items i ON i.server_id=m.server_id AND i.media_type=m.media_type AND i.source_id=m.source_id
     JOIN blofy_xtream_servers s ON s.id=i.server_id
@@ -1081,6 +1083,28 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
     }
   }
   const upstream = mediaUpstreamUrl(row, kind, sourceId, mediaExtension);
+  // Licensed live delivery can use one upstream TS feed with fanout to
+  // independently authorized BLOFY viewers. Distributor permissions are
+  // verified from the SOURCE's Xtream user_info; each subscriber is
+  // validated above. Hard fail if shared-mode confirmation is missing;
+  // never create 100 separate upstream requests as an accidental fallback.
+  if(req.method==='GET'&&permittedLicensedLiveFanout({
+      sourceId:row.server_id,kind,extension:mediaExtension,
+      upstreamRestreamer:row.source_restreamer_allowed===true
+    })){
+    try{
+      const destination=await issueStreamRelayGrant({
+        sourceUrl:upstream.href,kind,sharedLive:true,requireSharedLive:true
+      });
+      res.writeHead(307,{'location':destination,'cache-control':'no-store',
+        'referrer-policy':'no-referrer','x-content-type-options':'nosniff'});
+      return res.end();
+    }catch{
+      observe('failed',{reason:'licensed_fanout_unavailable'});
+      return text(res,503,'Live distribution temporarily unavailable',
+        'text/plain; charset=utf-8',{'retry-after':'4'});
+    }
+  }
   // Optional one-account canary: transfer the data plane to the isolated
   // Railway project. Authentication, catalog restrictions, source selection
   // and subscriber expiry stay checked here first. Disabled by default.
@@ -1088,10 +1112,10 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
     try{
       const destination=await issueStreamRelayGrant({
         sourceUrl:upstream.href,kind,
-        // Both the existing account UUID allowlist and this separate flag are
-        // required. All subscription, device and catalog checks happen above.
-        sharedLive:kind==='live'&&mediaExtension==='ts'&&
-          process.env.BLOFY_STREAM_SHARED_LIVE_CANARY==='1'
+        // Legacy account canary remains per-viewer only. Shared fanout
+        // is exclusively available through the source-scoped licensed
+        // branch above, which requires actual upstream restream rights.
+        sharedLive:false
       });
       res.writeHead(307,{'location':destination,'cache-control':'no-store',
         'referrer-policy':'no-referrer','x-content-type-options':'nosniff'});
