@@ -67,8 +67,11 @@ object StreamAudioHealth {
         for (group in groups) {
             for (index in 0 until group.length) {
                 available++
-                if (group.isTrackSupported(index)) supported++
-                if (group.isTrackSelected(index)) {
+                val isSupported = group.isTrackSupported(index)
+                if (isSupported) supported++
+                // Selected-but-unsupported must not be reported as usable audio.
+                // A different supported track can still be chosen by the viewer.
+                if (group.isTrackSelected(index) && isSupported) {
                     selected++
                     if (selectedMime == null) {
                         selectedMime = group.getTrackFormat(index).sampleMimeType
