@@ -15,6 +15,21 @@ import org.junit.Test
 @OptIn(markerClass = [UnstableApi::class])
 class StreamAudioHealthTest {
     @Test
+    fun diagnosesAudioInSelectedApplicationLanguage() {
+        val unsupported = StreamAudioHealth.Summary(
+            StreamAudioHealth.State.UNSUPPORTED_AUDIO_CODEC, 1, 0, 0, null
+        )
+        assertTrue(unsupported.explanationFor("ar-SA").contains("لا يدعم"))
+        assertTrue(unsupported.explanationFor("en-US").contains("cannot decode"))
+        assertFalse(unsupported.explanationFor("en").contains("لا يدعم"))
+        val selected = StreamAudioHealth.Summary(
+            StreamAudioHealth.State.AUDIO_TRACK_SELECTED, 1, 1, 1, MimeTypes.AUDIO_E_AC3
+        )
+        assertTrue(selected.explanationFor("en").contains("not confirmed"))
+        assertTrue(selected.explanationFor("ar").contains("إذا استمر الصمت"))
+    }
+
+    @Test
     fun selectedUnsupportedAudioIsNotMistakenForPlayableAudio() {
         // Reproduce devices with an unsupported AC3 track selected while an
         // alternate AAC track is supported but not selected.
