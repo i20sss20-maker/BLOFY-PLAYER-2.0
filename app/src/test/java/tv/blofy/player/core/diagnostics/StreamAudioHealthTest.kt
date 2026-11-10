@@ -9,12 +9,12 @@ class StreamAudioHealthTest {
     @Test
     fun distinguishesMissingUnsupportedUnselectedMutedAndSelectedAudio() {
         val s = StreamAudioHealth
-        assertEquals(s.State.NOT_YET_DISCOVERED,s.classify(0,0,0,1f,false))
-        assertEquals(s.State.NO_AUDIO_TRACK,s.classify(0,0,0,1f,true))
-        assertEquals(s.State.UNSUPPORTED_AUDIO_CODEC,s.classify(2,0,0,1f,true))
-        assertEquals(s.State.SUPPORTED_NOT_SELECTED,s.classify(2,1,0,1f,true))
-        assertEquals(s.State.PLAYER_VOLUME_MUTED,s.classify(2,1,1,0f,true))
-        assertEquals(s.State.AUDIO_TRACK_SELECTED,s.classify(2,1,1,1f,true))
+        assertEquals(StreamAudioHealth.State.NOT_YET_DISCOVERED,s.classify(0,0,0,1f,false))
+        assertEquals(StreamAudioHealth.State.NO_AUDIO_TRACK,s.classify(0,0,0,1f,true))
+        assertEquals(StreamAudioHealth.State.UNSUPPORTED_AUDIO_CODEC,s.classify(2,0,0,1f,true))
+        assertEquals(StreamAudioHealth.State.SUPPORTED_NOT_SELECTED,s.classify(2,1,0,1f,true))
+        assertEquals(StreamAudioHealth.State.PLAYER_VOLUME_MUTED,s.classify(2,1,1,0f,true))
+        assertEquals(StreamAudioHealth.State.AUDIO_TRACK_SELECTED,s.classify(2,1,1,1f,true))
     }
 
     @Test
