@@ -123,7 +123,7 @@ public sealed class AppSettings
     public string CatalogDensity { get; set; } = "comfortable";
     public string Motion { get; set; } = "smooth";
     public string LastPage { get; set; } = "home";
-    public string UserAgent { get; set; } = "BLOFY PLAYER/2.0 (Windows)";
+    public string UserAgent { get; set; } = "BLOFY STREAM/55.8.7 (Windows)";
 }
 
 public sealed class PersistentState
@@ -168,7 +168,7 @@ public sealed class LocalStore
 
     private readonly string _root = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "BLOFY PLAYER"
+        "BLOFY STREAM"
     );
 
     public PersistentState State { get; private set; } = new();
