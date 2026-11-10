@@ -15,10 +15,10 @@ const flags={BLOFY_STREAM_SHARED_LIVE_DURABLE_PILOT:'1',
  BLOFY_STREAM_SHARED_LIVE_TWO_ACCOUNT_TEST_ENABLED:'1',
  BLOFY_STREAM_SHARED_LIVE_CANARY:'1',
  BLOFY_XTREAM_SHARED_LIVE_SOURCE_NAME:'saleh'};
-function fakePool({broken=false}={}){
- const stored=[];let nextLock=Promise.resolve(),released=0,rollbacks=0;
+function fakePool({broken=false,inactive=[]}={}){
+ const stored=[];const inactiveIds=new Set(inactive);let nextLock=Promise.resolve(),released=0,rollbacks=0;
  const pool={
-  stored,get released(){return released},get rollbacks(){return rollbacks},
+  stored,inactiveIds,get released(){return released},get rollbacks(){return rollbacks},
   async query(sql){
    if(broken)throw Error('database unavailable with credentials!');
    if(sql.includes('CREATE TABLE'))return {rows:[]};
@@ -43,6 +43,13 @@ function fakePool({broken=false}={}){
      if(sql.includes('SELECT account_id')){
       return {rows:stored.filter(x=>x.source_id===values[0])
        .map(x=>({account_id:x.account_id}))};
+     }
+     if(sql.includes('DELETE FROM blofy_stream_shared_trial_accounts')){
+      for(let i=stored.length-1;i>=0;i--){
+       if(stored[i].source_id===values[0]&&inactiveIds.has(stored[i].account_id))
+        stored.splice(i,1);
+      }
+      return {rows:[]};
      }
      if(sql.includes('INSERT INTO')){
       if(!stored.some(x=>x.source_id===values[0]&&x.account_id===values[1]))
@@ -97,4 +104,19 @@ test('provider account database failures never bypass trial allowlist or leak cr
  assert.equal(admitted,false);
  assert.equal(pool.stored.length,0);
  assert.equal((await durableSharedLiveTrialStatus(pool,flags)).persistent,false);
+});
+
+test('expired or disabled previously selected accounts free trial slots safely',async()=>{
+ const pool=fakePool();
+ const allow=id=>claimDurableSharedLiveTrial(pool,{
+  sourceId:sid,accountId:id,sourceName:'saleh'},flags);
+ assert.equal(await allow(codes[0]),true);
+ assert.equal(await allow(codes[1]),true);
+ assert.equal(await allow(codes[2]),false);
+ pool.inactiveIds.add(codes[0]);
+ assert.equal(await allow(codes[2]),true);
+ assert.equal(await allow(codes[0]),false,'disabled account must not reclaim the trial');
+ assert.equal(pool.stored.length,2);
+ assert.ok(pool.stored.some(x=>x.account_id===codes[2]));
+ assert.ok(!pool.stored.some(x=>x.account_id===codes[0]));
 });

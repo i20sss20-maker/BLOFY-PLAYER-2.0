@@ -40,18 +40,34 @@ export async function claimDurableSharedLiveTrial(pool,{
   // Fixed advisory lock protects the small trial registry even if two
   // separate portal replicas receive the first customer requests together.
   await client.query('SELECT pg_advisory_xact_lock(11122983, 20261110)');
-  const records=await client.query(`SELECT account_id
+  const membershipSql=`SELECT account_id
     FROM blofy_stream_shared_trial_accounts
-    WHERE source_id=$1 ORDER BY claimed_at,account_id LIMIT 3`,[sourceId]);
-  const admitted=records.rows.slice(0,maxAccounts).some(r=>
+    WHERE source_id=$1 ORDER BY claimed_at,account_id LIMIT 3`;
+  let records=await client.query(membershipSql,[sourceId]);
+  let admitted=records.rows.slice(0,maxAccounts).some(r=>
     String(r.account_id).toLowerCase()===String(accountId).toLowerCase());
-  if(!admitted&&records.rows.length<maxAccounts){
+  // The trial must not remain permanently blocked by deleted, disabled or
+  // expired accounts. Clean up ONLY when an otherwise valid new code requests
+  // a full slot, under the same transaction lock that serializes admission.
+  if(!admitted&&records.rows.length>=maxAccounts){
+   await client.query(`DELETE FROM blofy_stream_shared_trial_accounts t
+      WHERE t.source_id=$1 AND NOT EXISTS (
+        SELECT 1 FROM blofy_xtream_gateway_accounts a
+        WHERE a.id=t.account_id AND a.enabled=TRUE
+          AND (a.expires_at IS NULL OR a.expires_at>NOW())
+      )`,[sourceId]);
+   records=await client.query(membershipSql,[sourceId]);
+   admitted=records.rows.slice(0,maxAccounts).some(r=>
+     String(r.account_id).toLowerCase()===String(accountId).toLowerCase());
+  }
+  const mayAdmit=!admitted&&records.rows.length<maxAccounts;
+  if(mayAdmit){
    await client.query(`INSERT INTO blofy_stream_shared_trial_accounts
       (source_id,account_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
      [sourceId,accountId]);
   }
   await client.query('COMMIT');inTransaction=false;
-  return admitted||records.rows.length<maxAccounts;
+  return admitted||mayAdmit;
  }catch{
   if(inTransaction)try{await client.query('ROLLBACK')}catch{}
   // Do not silently broaden pilot to an in-memory allowlist if database
