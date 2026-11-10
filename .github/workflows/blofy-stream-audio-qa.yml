@@ -61,6 +61,11 @@ jobs:
           test -f app/build/outputs/apk/streamCodeDemo/app-streamCodeDemo.apk
           grep -Fq 'applicationIdSuffix = ".stream.qa"' app/build.gradle.kts
           grep -Fq 'buildConfigField("boolean", "CODE_ONLY_LOGIN", "true")' app/build.gradle.kts
+          # Assert the actual built APK, not only the Gradle source configuration.
+          BADGING="$RUNNER_TEMP/stream-qa-badging.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/streamCodeDemo/app-streamCodeDemo.apk > "$BADGING"
+          grep -Fq "name='tv.blofy.player.v2.stream.qa'" "$BADGING"
+          grep -Fq "versionName='2.0.0-rc07.55.8.7-STREAM-QA'" "$BADGING"
       - name: Upload QA APK and test results (never production signed)
         if: always()
         uses: actions/upload-artifact@v4
