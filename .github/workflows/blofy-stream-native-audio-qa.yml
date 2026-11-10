@@ -93,6 +93,10 @@ jobs:
             grep -Fxq "lib/$abi/libffmpegJNI.so" "$RUNNER_TEMP/stream-apk.txt"
           done
           grep -Fq 'applicationIdSuffix = ".stream.qa"' app/build.gradle.kts
+          BADGING="$RUNNER_TEMP/native-qa-badging.txt"
+          "$ANDROID_HOME/build-tools/$ANDROID_BUILD_TOOLS_VERSION/aapt" dump badging "$APK" > "$BADGING"
+          grep -Fq "name='tv.blofy.player.v2.stream.qa'" "$BADGING"
+          grep -Fq "versionName='2.0.0-rc07.55.8.7-STREAM-QA'" "$BADGING"
           "$ANDROID_HOME/build-tools/$ANDROID_BUILD_TOOLS_VERSION/zipalign" \
             -c -P 16 -v 4 "$APK"
       - name: Upload isolated Native Audio QA APK and native license metadata
