@@ -1,5 +1,7 @@
 package tv.blofy.player.core.diagnostics
 
+import androidx.annotation.OptIn
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
@@ -10,6 +12,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+@OptIn(markerClass = [UnstableApi::class])
 class StreamAudioHealthTest {
     @Test
     fun selectedUnsupportedAudioIsNotMistakenForPlayableAudio() {
