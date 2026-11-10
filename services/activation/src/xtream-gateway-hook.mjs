@@ -587,6 +587,10 @@ async function gatewayItemById(mediaType, gatewayId, sourceId=null) {
       COALESCE(NULLIF(i.custom_icon_url,''),i.icon_url) AS icon_url,
       i.featured,i.channel_number,i.container_extension,i.metadata,
       cm.gateway_id AS category_gateway_id,s.base_url,s.username_secret,s.password_secret,s.enabled AS server_enabled,
+      s.name AS source_name,
+      (SELECT COUNT(*)::int FROM blofy_xtream_servers sx
+        WHERE lower(btrim(sx.name))=lower(btrim(s.name))
+          AND sx.deletion_requested_at IS NULL) AS source_name_matches,
       (s.account_info->>'isRestreamer' = 'true') AS source_restreamer_allowed
     FROM blofy_xtream_gateway_item_map m
     JOIN blofy_xtream_items i ON i.server_id=m.server_id AND i.media_type=m.media_type AND i.source_id=m.source_id
@@ -1089,7 +1093,9 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
   // validated above. Hard fail if shared-mode confirmation is missing;
   // never create 100 separate upstream requests as an accidental fallback.
   if(req.method==='GET'&&permittedLicensedLiveFanout({
-      sourceId:row.server_id,kind,extension:mediaExtension,
+      sourceId:row.server_id,sourceName:row.source_name,
+      sourceNameMatches:row.source_name_matches,
+      kind,extension:mediaExtension,
       upstreamRestreamer:row.source_restreamer_allowed===true
     })){
     try{

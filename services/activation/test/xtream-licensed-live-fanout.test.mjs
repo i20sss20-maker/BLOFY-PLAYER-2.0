@@ -25,6 +25,23 @@ test('fanout requires provider restreamer authorization AND explicit source righ
  assert.equal(permittedLicensedLiveFanout(args,{...env,BLOFY_XTREAM_SHARED_LIVE_SOURCE_IDS:''}),false);
  assert.equal(permittedLicensedLiveFanout(args,{...env,BLOFY_XTREAM_SHARED_LIVE_SOURCE_IDS:'*'}),false);
 });
+test('name-based authorization is limited to uniquely named provider-restreamer sources',()=>{
+ const grant={...env,BLOFY_XTREAM_SHARED_LIVE_SOURCE_IDS:'',
+  BLOFY_XTREAM_SHARED_LIVE_SOURCE_NAME:'saleh'};
+ const candidate={sourceId:source,sourceName:'saleh',
+  sourceNameMatches:1,kind:'live',extension:'ts',upstreamRestreamer:true};
+ assert.equal(permittedLicensedLiveFanout(candidate,grant),true);
+ assert.equal(permittedLicensedLiveFanout({...candidate,sourceName:'SALEH'},grant),true);
+ assert.equal(permittedLicensedLiveFanout({...candidate,sourceNameMatches:2},grant),false);
+ assert.equal(permittedLicensedLiveFanout({...candidate,sourceNameMatches:null},grant),false);
+ assert.equal(permittedLicensedLiveFanout({...candidate,sourceName:'other'},grant),false);
+ assert.equal(permittedLicensedLiveFanout({...candidate,upstreamRestreamer:false},grant),false);
+ assert.equal(permittedLicensedLiveFanout({...candidate,sourceId:other},grant),true);
+ assert.equal(permittedLicensedLiveFanout(candidate,{...grant,
+  BLOFY_XTREAM_SHARED_LIVE_SOURCE_NAME:'*'}),false);
+ assert.equal(permittedLicensedLiveFanout(candidate,{...grant,
+  BLOFY_STREAM_SHARED_LIVE_CANARY:'0'}),false);
+});
 test('licensing gateway requires confirmed shared ticket or fails before customer redirect',async()=>{
  const base={sourceUrl:'https://provider.example/live/user/credential/3.ts',
   kind:'live',sharedLive:true,requireSharedLive:true};
@@ -58,6 +75,8 @@ test('source ACL is checked before redirect and shared fanout failures never spa
  assert.match(scoped,/source_restreamer_allowed===true/);
  assert.match(scoped,/return text\(res,503,'Live distribution temporarily unavailable'/);
  assert.match(gateway,/s\.account_info->>'isRestreamer' = 'true'/);
+ assert.match(gateway,/s\.name AS source_name/);
+ assert.match(scoped,/sourceName:row\.source_name/);
  assert.match(scoped,/sharedLive:false/);
  assert.equal((scoped.match(/sharedLive:true/g)||[]).length,1);
 });
