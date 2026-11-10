@@ -398,7 +398,10 @@ class SettingsActivity : AppCompatActivity() {
         })
 
         addSection(page, copy("التحديث", "Updates"))
-        if (!BuildConfig.CODE_ONLY_LOGIN) addCard(actionCard(getString(R.string.update_check), getString(R.string.update_check_hint)) {
+        if (!BuildConfig.IS_GOOGLE_PLAY) addCard(actionCard(
+            if (BuildConfig.CODE_ONLY_LOGIN) copy("فحص تحديث BLOFY STREAM", "Check BLOFY STREAM updates") else getString(R.string.update_check),
+            if (BuildConfig.CODE_ONLY_LOGIN) copy("تحميل وتثبيت النسخة الرسمية دون حذف اشتراكك أو بياناتك", "Install verified STREAM updates without removing your subscription or data") else getString(R.string.update_check_hint)
+        ) {
             tv.blofy.player.core.update.AppUpdatePrompt.check(this, force = true)
         })
 
@@ -419,7 +422,7 @@ class SettingsActivity : AppCompatActivity() {
 
         linkFocus(back)
         page.addView(TextView(this).apply {
-            text = if (BuildConfig.CODE_ONLY_LOGIN) "BLOFY STREAM • 55.8.7" else "BLOFY PLAYER ${BuildConfig.VERSION_NAME}"
+            text = if (BuildConfig.CODE_ONLY_LOGIN) "BLOFY STREAM • ${BuildConfig.VERSION_NAME}" else "BLOFY PLAYER ${BuildConfig.VERSION_NAME}"
             BlofyTvDesign.applyCaption(this)
             letterSpacing = .08f
             gravity = Gravity.CENTER
