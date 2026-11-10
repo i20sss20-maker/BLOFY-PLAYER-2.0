@@ -18,9 +18,9 @@ public partial class App : Application
         {
             LogCrash("DispatcherUnhandledException", args.Exception);
             MessageBox.Show(
-                "حدث خطأ غير متوقع في BLOFY PLAYER.\nتم حفظ تقرير الخطأ في مجلد التطبيق المحلي.\n\n" +
+                "حدث خطأ غير متوقع في BLOFY STREAM.\nتم حفظ تقرير الخطأ في مجلد التطبيق المحلي.\n\n" +
                 SensitiveTextRedactor.Redact(args.Exception.Message),
-                "BLOFY PLAYER",
+                "BLOFY STREAM",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
             args.Handled = true;
@@ -45,7 +45,7 @@ public partial class App : Application
         {
             var root = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "BLOFY PLAYER");
+                "BLOFY STREAM");
             Directory.CreateDirectory(root);
             var path = Path.Combine(root, "crash.log");
 
