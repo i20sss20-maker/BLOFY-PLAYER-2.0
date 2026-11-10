@@ -122,9 +122,12 @@ object AppReleaseRepository {
         context.applicationContext
             .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getLong(KEY_LAST_CHECK, 0L)
-    internal fun endpointCandidates(base: String): List<String> {
+    internal fun endpointCandidates(base: String, stream: Boolean = BuildConfig.CODE_ONLY_LOGIN): List<String> {
         val normalized = base.trim().trimEnd('/')
-        return listOf("$normalized/release.json", "$normalized/health")
+        // STREAM never consumes the PLAYER release feed, including its legacy /health fallback.
+        // Different app IDs require completely isolated release catalogs.
+        return if (stream) listOf("$normalized/stream/release.json")
+            else listOf("$normalized/release.json", "$normalized/health")
     }
 
     private fun validate(remote: RemoteAppRelease): Release? {
