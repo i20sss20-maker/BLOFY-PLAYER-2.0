@@ -71,7 +71,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        DeviceIdText.Text = _identity.DeviceId;
+        DeviceIdText.Text = "Windows";
         _clockTimer.Tick += (_, _) => UpdateHeaderClock();
         _epgReminderTimer.Tick += async (_, _) => await CheckEpgRemindersAsync();
         _heroTimer.Tick += (_, _) =>
@@ -101,9 +101,9 @@ public partial class MainWindow : Window
                 App.LogCrash("Startup initialization", ex);
                 ProgressText.Text = "تعذر إكمال التهيئة";
                 MessageBox.Show(this,
-                    "تعذر إكمال تشغيل BLOFY PLAYER. تم حفظ تقرير الخطأ تلقائيًا.\n\n" +
+                    "تعذر إكمال تشغيل BLOFY STREAM. تم حفظ تقرير الخطأ تلقائيًا.\n\n" +
                     SensitiveTextRedactor.Redact(ex.Message),
-                    "BLOFY PLAYER", MessageBoxButton.OK, MessageBoxImage.Error);
+                    "BLOFY STREAM", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         };
         Closed += (_, _) =>
@@ -498,7 +498,7 @@ public partial class MainWindow : Window
             if (!ReferenceEquals(_syncCts, sync)) return;
             ProgressText.Text = "تعذر التحديث • المكتبة السابقة محفوظة";
             if (userRequested)
-                MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY PLAYER");
+                MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY STREAM");
         }
         finally
         {
@@ -535,7 +535,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (UiDialogs.Confirm(this, "الخروج من BLOFY", "هل تريد إغلاق BLOFY PLAYER؟"))
+        if (UiDialogs.Confirm(this, "الخروج من BLOFY", "هل تريد إغلاق BLOFY STREAM؟"))
             Close();
     }
 
@@ -608,7 +608,7 @@ public partial class MainWindow : Window
     private void ShowHome()
     {
         DisposePreview();
-        PageTitle.Text = "BLOFY PLAYER";
+        PageTitle.Text = "BLOFY STREAM";
         PageSubtitle.Text = "اليوم";
         HeaderServerText.Text = _activeProvider?.Name ?? "BLOFY";
 
@@ -800,7 +800,7 @@ public partial class MainWindow : Window
         content.Children.Add(metaText);
 
         var plot = Txt(string.IsNullOrWhiteSpace(item.Plot)
-            ? (item.Kind == "series" ? "اكتشف تفاصيل المسلسل والحلقات." : "شاهد الفيلم الآن على BLOFY PLAYER.")
+            ? (item.Kind == "series" ? "اكتشف تفاصيل المسلسل والحلقات." : "شاهد الفيلم الآن على BLOFY STREAM.")
             : item.Plot, 12, Brush("#DAD5E1"), marginTop: 8, marginBottom: 10);
         plot.MaxWidth = 590;
         plot.MaxHeight = 48;
@@ -918,7 +918,7 @@ public partial class MainWindow : Window
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(230) });
 
         var info = Vertical();
-        info.Children.Add(Txt("تفعيل BLOFY PLAYER", 26, Text, FontWeights.Bold));
+        info.Children.Add(Txt("تفعيل BLOFY STREAM", 26, Text, FontWeights.Bold));
         info.Children.Add(Txt("امسح الباركود أو افتح موقع التفعيل ثم أدخل رقم الجهاز وكود التفعيل.", 13, Muted, FontWeights.Normal, 0, 8, 0, 18));
         info.Children.Add(Txt("رقم الجهاز", 11, Muted));
         info.Children.Add(Txt(_identity.DeviceId, 20, Accent, FontWeights.Bold, 0, 2, 0, 10, FlowDirection.LeftToRight));
@@ -2093,7 +2093,7 @@ public partial class MainWindow : Window
                         "عيّن PIN من 4 إلى 8 أرقام قبل قفل المحتوى", password: true);
                     if (string.IsNullOrWhiteSpace(newPin)) return;
                     try { await _store.SetParentalPinAsync(newPin); }
-                    catch (Exception ex) { MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY PLAYER"); return; }
+                    catch (Exception ex) { MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY STREAM"); return; }
                 }
                 await _store.SetLockedAsync(item.Key, true);
             }
@@ -2145,7 +2145,7 @@ public partial class MainWindow : Window
     {
         if (_activeProvider is null || _catalog is null || _activeProvider.ProviderType != "xtream")
         {
-            MessageBox.Show(this, "الحلقات متاحة لقوائم Xtream فقط.", "BLOFY PLAYER");
+            MessageBox.Show(this, "الحلقات متاحة لقوائم Xtream فقط.", "BLOFY STREAM");
             return;
         }
 
@@ -2220,7 +2220,7 @@ public partial class MainWindow : Window
         {
             var state = itemState;
             if (!_store.State.Settings.ResumePrompt ||
-                MessageBox.Show(this, "متابعة من " + TimeSpan.FromMilliseconds(state.PositionMs).ToString(@"hh\:mm\:ss") + "؟", "BLOFY PLAYER",
+                MessageBox.Show(this, "متابعة من " + TimeSpan.FromMilliseconds(state.PositionMs).ToString(@"hh\:mm\:ss") + "؟", "BLOFY STREAM",
                     MessageBoxButton.YesNo) == MessageBoxResult.Yes)
                 resume = state.PositionMs;
         }
@@ -2317,7 +2317,7 @@ public partial class MainWindow : Window
                 {
                     var yes = MessageBox.Show(this,
                         "تشغيل الحلقة التالية؟\nS" + nextEpisode.Season + "E" + nextEpisode.Episode + " • " + nextEpisode.Title,
-                        "BLOFY PLAYER", MessageBoxButton.YesNo) == MessageBoxResult.Yes;
+                        "BLOFY STREAM", MessageBoxButton.YesNo) == MessageBoxResult.Yes;
                     if (!yes) return;
                 }
                 await PlayEpisodeAsync(series, nextEpisode, episodes);
@@ -3036,7 +3036,7 @@ public partial class MainWindow : Window
                 }
                 if (!await _store.SelectProfileAsync(profile.Id, pin))
                 {
-                    MessageBox.Show(this, "رمز PIN غير صحيح.", "BLOFY PLAYER");
+                    MessageBox.Show(this, "رمز PIN غير صحيح.", "BLOFY STREAM");
                     return;
                 }
 
@@ -3056,7 +3056,7 @@ public partial class MainWindow : Window
                     await _store.SetProfilePinAsync(profile.Id, string.IsNullOrWhiteSpace(pin) ? null : pin);
                     ShowProfiles();
                 }
-                catch (Exception ex) { MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY PLAYER"); }
+                catch (Exception ex) { MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY STREAM"); }
             }, 8));
 
             if (_store.State.Profiles.Count > 1)
@@ -3080,19 +3080,19 @@ public partial class MainWindow : Window
             var name = UiDialogs.Prompt(this, "ملف جديد", "اسم الملف");
             if (string.IsNullOrWhiteSpace(name)) return;
             try { await _store.CreateProfileAsync(name); ShowProfiles(); }
-            catch (Exception ex) { MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY PLAYER"); }
+            catch (Exception ex) { MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY STREAM"); }
         }));
         create.Children.Add(Action("+ أطفال", false, async (_, _) =>
         {
             var name = UiDialogs.Prompt(this, "ملف أطفال", "اسم ملف الأطفال", initial: "أطفال");
             if (string.IsNullOrWhiteSpace(name)) return;
             try { await _store.CreateProfileAsync(name, kids: true); ShowProfiles(); }
-            catch (Exception ex) { MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY PLAYER"); }
+            catch (Exception ex) { MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY STREAM"); }
         }, 8));
         create.Children.Add(Action("+ ضيف", false, async (_, _) =>
         {
             try { await _store.CreateProfileAsync("ضيف", guest: true); ShowProfiles(); }
-            catch (Exception ex) { MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY PLAYER"); }
+            catch (Exception ex) { MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY STREAM"); }
         }, 8));
         root.Children.Add(create);
 
@@ -3206,12 +3206,12 @@ public partial class MainWindow : Window
             {
                 if (_activationState?.CanUse() != true)
                 {
-                    MessageBox.Show(this, "فعّل جهاز BLOFY أولًا قبل تسجيل مشترك BLOFY.", "BLOFY PLAYER");
+                    MessageBox.Show(this, "فعّل جهاز BLOFY أولًا قبل تسجيل مشترك BLOFY.", "BLOFY STREAM");
                     return;
                 }
                 if (string.IsNullOrWhiteSpace(username.Text) || string.IsNullOrWhiteSpace(password.Password))
                 {
-                    MessageBox.Show(this, "أدخل اسم المستخدم وكلمة المرور لمشترك BLOFY.", "BLOFY PLAYER");
+                    MessageBox.Show(this, "أدخل اسم المستخدم وكلمة المرور لمشترك BLOFY.", "BLOFY STREAM");
                     return;
                 }
 
@@ -3235,7 +3235,7 @@ public partial class MainWindow : Window
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY PLAYER");
+                    MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY STREAM");
                     return;
                 }
             }
@@ -3252,7 +3252,7 @@ public partial class MainWindow : Window
                 if (!Uri.TryCreate(provider.BaseUrl, UriKind.Absolute, out _) ||
                     string.IsNullOrWhiteSpace(provider.Username) || string.IsNullOrWhiteSpace(provider.Password))
                 {
-                    MessageBox.Show(this, "أدخل رابط السيرفر واسم المستخدم وكلمة المرور.", "BLOFY PLAYER");
+                    MessageBox.Show(this, "أدخل رابط السيرفر واسم المستخدم وكلمة المرور.", "BLOFY STREAM");
                     return;
                 }
                 try
@@ -3260,13 +3260,13 @@ public partial class MainWindow : Window
                     using var xtream = new XtreamService(_store.State.Settings.UserAgent);
                     if (!await xtream.AuthenticateAsync(provider))
                     {
-                        MessageBox.Show(this, "بيانات Xtream غير صحيحة أو الحساب غير نشط.", "BLOFY PLAYER");
+                        MessageBox.Show(this, "بيانات Xtream غير صحيحة أو الحساب غير نشط.", "BLOFY STREAM");
                         return;
                     }
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show(this, "تعذر الاتصال بالسيرفر: " + SensitiveTextRedactor.Redact(ex.Message), "BLOFY PLAYER");
+                    MessageBox.Show(this, "تعذر الاتصال بالسيرفر: " + SensitiveTextRedactor.Redact(ex.Message), "BLOFY STREAM");
                     return;
                 }
             }
@@ -3281,7 +3281,7 @@ public partial class MainWindow : Window
                 provider.M3uUrl = m3u.Text.Trim();
                 if (string.IsNullOrWhiteSpace(provider.M3uUrl))
                 {
-                    MessageBox.Show(this, "أدخل رابط أو مسار M3U.", "BLOFY PLAYER");
+                    MessageBox.Show(this, "أدخل رابط أو مسار M3U.", "BLOFY STREAM");
                     return;
                 }
             }
@@ -3304,7 +3304,7 @@ public partial class MainWindow : Window
         {
             if (editing is null) return;
             var delete = editing;
-            if (MessageBox.Show(this, "حذف القائمة «" + delete.Name + "»؟", "BLOFY PLAYER",
+            if (MessageBox.Show(this, "حذف القائمة «" + delete.Name + "»؟", "BLOFY STREAM",
                 MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
             _store.State.Providers.RemoveAll(p => p.Id == delete.Id);
             if (_store.State.ActiveProviderId == delete.Id)
@@ -3492,7 +3492,7 @@ public partial class MainWindow : Window
             "الحالة: " + status + Environment.NewLine +
             "الصلاحية حتى: " + expiry + Environment.NewLine +
             "رقم الجهاز: " + _identity.DeviceId,
-            "باقتي • BLOFY PLAYER");
+            "باقتي • BLOFY STREAM");
     }
 
     private async Task ShowConnectionSummaryAsync()
@@ -3563,7 +3563,7 @@ public partial class MainWindow : Window
             "الأفلام المخزنة: " + movies.ToString("N0") + Environment.NewLine +
             "المسلسلات المخزنة: " + series.ToString("N0") + Environment.NewLine +
             Environment.NewLine + "فحص خادم BLOFY لا يضمن توفر بث مصدر الاشتراك.",
-            "فحص الاتصال • BLOFY PLAYER");
+            "فحص الاتصال • BLOFY STREAM");
     }
 
     private async Task RestoreDefaultSettingsAsync()
@@ -3612,7 +3612,7 @@ public partial class MainWindow : Window
     {
         DisposePreview();
         PageTitle.Text = "الإعدادات";
-        PageSubtitle.Text = "BLOFY PLAYER";
+        PageSubtitle.Text = "BLOFY STREAM";
 
         var root = Vertical();
         var status = Txt("يتم حفظ الإعدادات عند الضغط على «حفظ التغييرات».", 11, Muted, marginBottom: 8);
@@ -3645,7 +3645,7 @@ public partial class MainWindow : Window
         };
 
         root.Children.Add(SettingsSection("عام",
-            SettingTile("لغة التطبيق", "لغة واجهة BLOFY PLAYER", language.Control),
+            SettingTile("لغة التطبيق", "لغة واجهة BLOFY STREAM", language.Control),
             SettingTile("حركة الواجهة", "حركة الفوكس والانتقال بين العناصر", motion.Control),
             SettingActionTile("ترتيب وإخفاء أقسام الرئيسية", "رتّب صفوف Home وأخفِ ما لا تحتاجه", (_, _) => OpenSubpage(ShowHomePersonalization)),
             SettingActionTile("باقتي", "مدة التفعيل وحالة الجهاز الحالية", (_, _) => ShowSubscriptionSummary()),
@@ -3703,7 +3703,7 @@ public partial class MainWindow : Window
             SettingActionTile("استعادة نسخة محلية", "استرجاع النسخة الاحتياطية من ملف", async (_, _) => await RestoreBackupAsync())));
 
         root.Children.Add(SettingsSection("التحديث وحول التطبيق",
-            SettingActionTile("فحص تحديث Windows", "البحث عن إصدار BLOFY PLAYER جديد", async (_, _) => await CheckWindowsUpdateAsync()),
+            SettingActionTile("فحص تحديث Windows", "البحث عن إصدار BLOFY STREAM جديد", async (_, _) => await CheckWindowsUpdateAsync()),
             SettingActionTile("تشخيص BLOFY", "الجهاز والمكتبة وتقرير الدعم", (_, _) => OpenSubpage(ShowDiagnostics)),
             SettingActionTile("تنظيف التخزين المؤقت", "يحذف الكاش فقط ولا يحذف بياناتك", (_, _) => CleanStorage()),
             SettingActionTile("استعادة الإعدادات الافتراضية", "إرجاع خيارات التشغيل والواجهة للوضع الافتراضي", async (_, _) => await RestoreDefaultSettingsAsync())));
@@ -3734,7 +3734,7 @@ public partial class MainWindow : Window
         }, 0, 18, 0, 8);
         save.Width = 170;
         root.Children.Add(save);
-        root.Children.Add(Txt("BLOFY PLAYER Windows • Android UI parity", 10, Muted, marginBottom: 20));
+        root.Children.Add(Txt("BLOFY STREAM Windows • Android UI parity", 10, Muted, marginBottom: 20));
 
         ContentHost.Content = new ScrollViewer
         {
@@ -3872,7 +3872,7 @@ public partial class MainWindow : Window
         var pin = UiDialogs.Prompt(this, "الرقابة الأبوية", "أدخل PIN الأبوي", password: true);
         if (pin is null) return false;
         if (_store.VerifyParentalPin(pin)) return true;
-        MessageBox.Show(this, "PIN غير صحيح.", "BLOFY PLAYER");
+        MessageBox.Show(this, "PIN غير صحيح.", "BLOFY STREAM");
         return false;
     }
 
@@ -3887,9 +3887,9 @@ public partial class MainWindow : Window
             await _store.SetParentalPinAsync(string.IsNullOrWhiteSpace(pin) ? null : pin);
             MessageBox.Show(this,
                 string.IsNullOrWhiteSpace(pin) ? "تمت إزالة PIN الأبوي." : "تم حفظ PIN الأبوي.",
-                "BLOFY PLAYER");
+                "BLOFY STREAM");
         }
-        catch (Exception ex) { MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY PLAYER"); }
+        catch (Exception ex) { MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY STREAM"); }
     }
 
     private void UpdateHeaderClock()
@@ -3981,9 +3981,9 @@ public partial class MainWindow : Window
             };
             if (dialog.ShowDialog(this) != true) return;
             await File.WriteAllTextAsync(dialog.FileName, BackupService.Export(_store));
-            MessageBox.Show(this, "تم حفظ النسخة الاحتياطية بدون بيانات الدخول.", "BLOFY PLAYER");
+            MessageBox.Show(this, "تم حفظ النسخة الاحتياطية بدون بيانات الدخول.", "BLOFY STREAM");
         }
-        catch (Exception ex) { MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY PLAYER"); }
+        catch (Exception ex) { MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY STREAM"); }
     }
 
     private async Task RestoreBackupAsync()
@@ -4000,16 +4000,16 @@ public partial class MainWindow : Window
             await BackupService.RestoreAsync(_store, json);
             ApplyTheme();
             if (_catalog is not null) _store.ApplyFavoriteState(_catalog.Snapshot.Streams);
-            MessageBox.Show(this, "تمت الاستعادة.", "BLOFY PLAYER");
+            MessageBox.Show(this, "تمت الاستعادة.", "BLOFY STREAM");
             ShowSettings();
         }
-        catch (Exception ex) { MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY PLAYER"); }
+        catch (Exception ex) { MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY STREAM"); }
     }
 
     private bool CloudReady()
     {
         if (_activationState?.CanUse() == true) return true;
-        MessageBox.Show(this, "يجب أن يكون الجهاز مفعّلًا لاستخدام BLOFY Cloud.", "BLOFY PLAYER");
+        MessageBox.Show(this, "يجب أن يكون الجهاز مفعّلًا لاستخدام BLOFY Cloud.", "BLOFY STREAM");
         return false;
     }
 
@@ -4021,9 +4021,9 @@ public partial class MainWindow : Window
         {
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(18));
             var result = await ProfileCloudService.BackupAsync(_store, _identity, timeout.Token);
-            MessageBox.Show(this, "تم حفظ الملف في السحابة. Revision " + result.Revision, "BLOFY PLAYER");
+            MessageBox.Show(this, "تم حفظ الملف في السحابة. Revision " + result.Revision, "BLOFY STREAM");
         }
-        catch (Exception ex) { MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY PLAYER"); }
+        catch (Exception ex) { MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY STREAM"); }
         finally { ProgressText.Text = ""; }
     }
 
@@ -4038,15 +4038,15 @@ public partial class MainWindow : Window
             var result = await ProfileCloudService.RestoreAsync(_store, _identity, timeout.Token);
             if (result.Action == "no_backup")
             {
-                MessageBox.Show(this, "لا توجد نسخة سحابية لهذا الملف.", "BLOFY PLAYER");
+                MessageBox.Show(this, "لا توجد نسخة سحابية لهذا الملف.", "BLOFY STREAM");
                 return;
             }
             ApplyTheme();
             if (_catalog is not null) _store.ApplyFavoriteState(_catalog.Snapshot.Streams);
-            MessageBox.Show(this, "تمت استعادة BLOFY Cloud.", "BLOFY PLAYER");
+            MessageBox.Show(this, "تمت استعادة BLOFY Cloud.", "BLOFY STREAM");
             ShowSettings();
         }
-        catch (Exception ex) { MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY PLAYER"); }
+        catch (Exception ex) { MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY STREAM"); }
         finally { ProgressText.Text = ""; }
     }
 
@@ -4067,7 +4067,7 @@ public partial class MainWindow : Window
                 "تم نسخ الكود للحافظة.",
                 "BLOFY Cloud");
         }
-        catch (Exception ex) { MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY PLAYER"); }
+        catch (Exception ex) { MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY STREAM"); }
     }
 
     private async Task RestorePairCodeAsync()
@@ -4081,10 +4081,10 @@ public partial class MainWindow : Window
             await ProfileCloudService.RestorePairCodeAsync(_store, _identity, code, timeout.Token);
             ApplyTheme();
             if (_catalog is not null) _store.ApplyFavoriteState(_catalog.Snapshot.Streams);
-            MessageBox.Show(this, "تم نقل بيانات الملف من كود الربط.", "BLOFY PLAYER");
+            MessageBox.Show(this, "تم نقل بيانات الملف من كود الربط.", "BLOFY STREAM");
             ShowSettings();
         }
-        catch (Exception ex) { MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY PLAYER"); }
+        catch (Exception ex) { MessageBox.Show(this, SensitiveTextRedactor.Redact(ex.Message), "BLOFY STREAM"); }
     }
 
     private async Task CheckWindowsUpdateAsync()
@@ -4096,18 +4096,18 @@ public partial class MainWindow : Window
             var update = await WindowsUpdateService.CheckAsync(timeout.Token);
             if (update is null)
             {
-                MessageBox.Show(this, "لا يوجد إصدار Windows منشور أحدث حاليًا.", "BLOFY PLAYER");
+                MessageBox.Show(this, "لا يوجد إصدار Windows منشور أحدث حاليًا.", "BLOFY STREAM");
                 return;
             }
             var result = MessageBox.Show(this,
                 "الإصدار المنشور: " + update.Version + Environment.NewLine +
                 (string.IsNullOrWhiteSpace(update.Notes) ? "" : update.Notes + Environment.NewLine) +
                 "فتح صفحة التحميل؟",
-                "تحديث BLOFY PLAYER", MessageBoxButton.YesNo);
+                "تحديث BLOFY STREAM", MessageBoxButton.YesNo);
             if (result == MessageBoxResult.Yes)
                 Process.Start(new ProcessStartInfo(update.DownloadUrl) { UseShellExecute = true });
         }
-        catch (Exception ex) { MessageBox.Show(this, "تعذر فحص التحديث: " + SensitiveTextRedactor.Redact(ex.Message), "BLOFY PLAYER"); }
+        catch (Exception ex) { MessageBox.Show(this, "تعذر فحص التحديث: " + SensitiveTextRedactor.Redact(ex.Message), "BLOFY STREAM"); }
         finally { ProgressText.Text = ""; }
     }
 
@@ -4116,7 +4116,7 @@ public partial class MainWindow : Window
         var report = DiagnosticService.Build(_store, _identity, ActivationStatusText.Text, _catalog?.Snapshot);
         Clipboard.SetText(report);
         MessageBox.Show(this, report + Environment.NewLine + Environment.NewLine + "تم نسخ التقرير للحافظة.",
-            "تشخيص BLOFY PLAYER");
+            "تشخيص BLOFY STREAM");
     }
 
     private void CleanStorage()
@@ -4129,7 +4129,7 @@ public partial class MainWindow : Window
             "تم حذف " + removed + " ملفات كتالوج مؤقتة و" + artworkRemoved + " صور مخزنة." + Environment.NewLine +
             "المساحة المحررة: " + DiagnosticService.FormatBytes(Math.Max(0, before - after)) +
             Environment.NewLine + "بيانات الدخول والمفضلة والسجل لم تُحذف.",
-            "BLOFY PLAYER");
+            "BLOFY STREAM");
     }
 
     private async Task TryPlayLivePreviewCandidatesAsync(
