@@ -4,6 +4,14 @@ on:
   push:
     branches:
       - feature/blofy-stream-55-8-7-audio-intelligence-20261110
+  pull_request:
+    branches:
+      - feature/blofy-stream-55-8-7-audio-intelligence-20261110
+    paths:
+      - 'app/**'
+      - 'tools/build_media3_ffmpeg.sh'
+      - '.github/workflows/blofy-stream-audio-qa.yml'
+      - '.github/workflows/blofy-stream-native-audio-qa.yml'
   workflow_dispatch:
 
 permissions:
