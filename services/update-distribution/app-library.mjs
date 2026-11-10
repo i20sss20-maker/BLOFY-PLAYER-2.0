@@ -107,7 +107,7 @@ const DEFAULT_APPS = Object.freeze([
     description:'مدير تطبيقات للتلفزيون يدعم تعطيل وإدارة التطبيقات من الريموت بعد إعداد ADB. رابط إلى صفحة التحميل الرسمية للمطور؛ Android TV 8 فأعلى.',
     devices:'Android TV 8+ · Google TV · TV Box', version:'1.12',
     architecture:'Android TV', apkSizeBytes:0,
-    downloadUrl:'https://adb.cybercat.dev/en/tv/',
+    downloadUrl:'https://adbappcontrol.com/en/tv/',
     downloadMode:'official', sortOrder:3, enabled:true, featured:true
   },
   {
