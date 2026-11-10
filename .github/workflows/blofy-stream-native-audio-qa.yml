@@ -83,6 +83,15 @@ jobs:
           AAR=build/ffmpeg-native/media3-decoder-ffmpeg-1.6.1.aar
           test -s "$APK"
           test -s "$AAR"
+          # Read native build's actual manifest, not only its requested env vars.
+          NATIVE_INFO=build/ffmpeg-native/build-info.txt
+          test -s "$NATIVE_INFO"
+          grep -Fxq 'decoders=ac3 eac3 dca truehd aac mp3 opus vorbis flac' "$NATIVE_INFO"
+          grep -Fxq 'config_gpl=0' "$NATIVE_INFO"
+          grep -Fxq 'config_nonfree=0' "$NATIVE_INFO"
+          grep -Fxq 'config_version3=0' "$NATIVE_INFO"
+          grep -Fxq 'page_size_compatible=16384' "$NATIVE_INFO"
+          sha256sum --check "$AAR.sha256"
           unzip -Z1 "$AAR" > "$RUNNER_TEMP/ffmpeg-aar.txt"
           unzip -Z1 "$APK" > "$RUNNER_TEMP/stream-apk.txt"
           grep -Fxq 'assets/open_source/ffmpeg/LICENSE.md' "$RUNNER_TEMP/stream-apk.txt"
@@ -119,7 +128,9 @@ jobs:
           path: |
             app/build/outputs/apk/streamCodeDemo/*.apk
             app/build/test-results/testStreamCodeDemoUnitTest/
-            build/ffmpeg-native/build-apk-info.txt
+            build/ffmpeg-native/build-info.txt
             build/stream-qa/
+            build/ffmpeg-native/media3-decoder-ffmpeg-1.6.1.aar.sha256
+            build/ffmpeg-native/compliance/BUILD-AND-RELINK.txt
           if-no-files-found: warn
           retention-days: 7
