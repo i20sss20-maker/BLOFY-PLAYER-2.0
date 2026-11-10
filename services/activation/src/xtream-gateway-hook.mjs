@@ -1112,10 +1112,10 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
     try{
       const destination=await issueStreamRelayGrant({
         sourceUrl:upstream.href,kind,
-        // Both the existing account UUID allowlist and this separate flag are
-        // required. All subscription, device and catalog checks happen above.
-        sharedLive:kind==='live'&&mediaExtension==='ts'&&
-          process.env.BLOFY_STREAM_SHARED_LIVE_CANARY==='1'
+        // Legacy account canary remains per-viewer only. Shared fanout
+        // is exclusively available through the source-scoped licensed
+        // branch above, which requires actual upstream restream rights.
+        sharedLive:false
       });
       res.writeHead(307,{'location':destination,'cache-control':'no-store',
         'referrer-policy':'no-referrer','x-content-type-options':'nosniff'});
