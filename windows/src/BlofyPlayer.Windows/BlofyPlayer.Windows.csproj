@@ -7,16 +7,16 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <PlatformTarget>x64</PlatformTarget>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-    <AssemblyName>BLOFY PLAYER</AssemblyName>
+    <AssemblyName>BLOFY STREAM</AssemblyName>
     <RootNamespace>BlofyPlayer.Windows</RootNamespace>
     <LangVersion>latest</LangVersion>
-    <Version>0.4.21</Version>
-    <AssemblyVersion>0.4.21.0</AssemblyVersion>
-    <FileVersion>0.4.21.0</FileVersion>
-    <Product>BLOFY PLAYER</Product>
+    <Version>0.1.0</Version>
+    <AssemblyVersion>0.1.0.0</AssemblyVersion>
+    <FileVersion>0.1.0.0</FileVersion>
+    <Product>BLOFY STREAM</Product>
     <Company>BLOFY</Company>
     <Authors>BLOFY</Authors>
-    <Description>BLOFY PLAYER for Windows</Description>
+    <Description>BLOFY STREAM code-only desktop application for Windows</Description>
     <ApplicationIcon Condition="Exists('Assets\blofy.ico')">Assets\blofy.ico</ApplicationIcon>
   </PropertyGroup>
 
@@ -27,6 +27,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
     <PackageReference Include="LibVLCSharp.WPF" Version="3.10.1" />
     <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.24" />
     <PackageReference Include="QRCoder" Version="1.8.0" />
