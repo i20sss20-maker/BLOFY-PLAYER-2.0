@@ -1061,6 +1061,7 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
   // Live streams may choose TS or HLS when the source supports those formats.
   const mediaExtension=kind==='live'?(requestedExtension||extension):(extension||requestedExtension);
   const startedAt=Date.now();
+  let actualStreamStartedAt=0,closedTelemetryRecorded=false,feedEndedNormally=false;
   // A rejected individual channel cannot block another channel or source.
   // This is an in-memory guard against repeat viewer requests, not a way
   // around the provider's permissions. Only verified 403/456 trigger it.
@@ -1069,7 +1070,7 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
   // Track only verified upstream media failures, never local auth/catalog 404.
   const unavailableKey=mediaRegistryKey(row,kind,sourceId);
   const observe=(phase,details={})=>{
-    if(req.method!=='HEAD')recordXtreamPlayback({kind,itemId:gatewayId,phase,...details});
+    if(req.method!=='HEAD')recordXtreamPlayback({kind,itemId:gatewayId,sourceId:row.server_id,phase,...details});
   };
   if(req.method!=='HEAD'){
     const rejection=mediaDenialCooldown.active(cooldownKey);
@@ -1122,7 +1123,16 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
   // Keep each viewer's stream independent. Only retry failures before video bytes reach them.
   const client = new AbortController();
   const abort = () => { if (!client.signal.aborted) client.abort(); };
-  const onClose = () => { if (!res.writableEnded) abort(); };
+  const onClose = () => {
+    if (!res.writableEnded) {
+      if(kind==='live'&&actualStreamStartedAt>0&&!closedTelemetryRecorded&&!feedEndedNormally){
+        closedTelemetryRecorded=true;
+        observe('client_closed',{reason:'client_or_proxy_closed',
+          durationMs:Date.now()-actualStreamStartedAt});
+      }
+      abort();
+    }
+  };
   req.once('aborted', abort);
   res.once('close', onClose);
   const headers = { 'user-agent': String(req.headers['user-agent'] || 'BLOFY-Xtream-Gateway/1.0') };
@@ -1333,6 +1343,7 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
         // No content is deleted or returned to the viewer by this DB update.
         if(req.method==='GET')asyncNoteRecovered(unavailableKey);
         observe('started',{upstreamStatus:response.status,startupMs:Date.now()-startedAt,attempts:attempt});
+        actualStreamStartedAt=Date.now();
         res.writeHead(response.status, outputHeaders);
         const stream = Readable.from((async function* () {
           yield first.value;
@@ -1343,6 +1354,10 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
           }
         })());
         await pipeline(stream, res);
+        feedEndedNormally=true;
+        if(kind==='live'&&actualStreamStartedAt>0){
+          observe('ended',{reason:'upstream_stream_ended',durationMs:Date.now()-actualStreamStartedAt});
+        }
         return;
       } catch (error) {
         if (client.signal.aborted) return;
@@ -1380,7 +1395,9 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
           await new Promise(resolve=>setTimeout(resolve,200*attempt));
           continue;
         }
-        observe(res.headersSent?'interrupted':'failed',{reason:safeReason,attempts:attempt});
+        if(res.headersSent)closedTelemetryRecorded=true;
+        observe(res.headersSent?'interrupted':'failed',{reason:safeReason,attempts:attempt,
+          durationMs:actualStreamStartedAt>0?Date.now()-actualStreamStartedAt:null});
         if (!res.headersSent) return text(res, safeReason==='headers_timeout'||safeReason==='media_read_timeout'?504:502, 'Upstream unavailable');
         if (!res.destroyed) res.destroy();
         return;
