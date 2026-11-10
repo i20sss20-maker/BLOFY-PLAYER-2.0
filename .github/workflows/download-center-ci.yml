@@ -144,6 +144,10 @@ jobs:
           # PLAYER + separately signed STREAM + cinema QA + Xiaomi QA.
           test "$(grep -o 'class="official-card"' /tmp/downloads.html | wc -l | tr -d '[:space:]')" = 4
           grep -Fq 'id="blofy-stream"' /tmp/downloads.html
+          # STREAM has one dedicated official card, never a second generic app.
+          test "$(grep -o 'id="blofy-stream"' /tmp/downloads.html | wc -l | tr -d '[:space:]')" = 1
+          ! grep -Fq 'id="app-blofy-stream"' /tmp/downloads.html
+          grep -Fq 'href="/d/blofy-stream"' /tmp/downloads.html
           grep -Fq 'href="/d/blofy-stream"' /tmp/downloads.html
           grep -Fq 'BLOFY STREAM' /tmp/downloads.html
           for slug in projectivy-launcher adb-tv flauncher; do
