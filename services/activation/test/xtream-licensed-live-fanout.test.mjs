@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {permittedLicensedLiveFanout} from '../src/xtream-licensed-live-fanout-policy.mjs';
+import {permittedLicensedLiveFanout,permittedSharedLivePilot} from '../src/xtream-licensed-live-fanout-policy.mjs';
 import {issueStreamRelayGrant} from '../src/xtream-stream-relay-bridge.mjs';
 const source='11111111-1111-4111-8111-111111111111';
 const other='22222222-2222-4222-8222-222222222222';
@@ -101,10 +101,26 @@ test('source ACL is checked before redirect and shared fanout failures never spa
  assert.ok(acl>=0&&acl<upstream&&upstream<fanout&&fanout<next);
  assert.match(scoped,/requireSharedLive:true/);
  assert.match(scoped,/source_restreamer_allowed===true/);
- assert.match(scoped,/return text\(res,503,'Live distribution temporarily unavailable'/);
+ assert.match(scoped,/permittedSharedLivePilot/);
+ assert.doesNotMatch(scoped,/return text\(res,503,'Live distribution temporarily unavailable'/);
  assert.match(gateway,/s\.account_info->>'isRestreamer' = 'true'/);
  assert.match(gateway,/s\.name AS source_name/);
  assert.match(scoped,/sourceName:row\.source_name/);
  assert.match(scoped,/sharedLive:false/);
  assert.equal((scoped.match(/sharedLive:true/g)||[]).length,1);
+});
+
+test('shared-live subscriber cutover fails closed without explicit account AND channel pilot',()=>{
+ const args={accountId:source,gatewayId:'1312446'};
+ const env={BLOFY_STREAM_SHARED_LIVE_PILOT_ENABLED:'1',
+  BLOFY_STREAM_SHARED_LIVE_PILOT_ACCOUNT_IDS:source,
+  BLOFY_STREAM_SHARED_LIVE_PILOT_CHANNEL_IDS:'1312446'};
+ assert.equal(permittedSharedLivePilot(args,env),true);
+ assert.equal(permittedSharedLivePilot(args,{...env,BLOFY_STREAM_SHARED_LIVE_PILOT_ENABLED:'0'}),false);
+ assert.equal(permittedSharedLivePilot(args,{...env,BLOFY_STREAM_SHARED_LIVE_PILOT_ACCOUNT_IDS:''}),false);
+ assert.equal(permittedSharedLivePilot(args,{...env,BLOFY_STREAM_SHARED_LIVE_PILOT_CHANNEL_IDS:''}),false);
+ assert.equal(permittedSharedLivePilot({...args,accountId:other},env),false);
+ assert.equal(permittedSharedLivePilot({...args,gatewayId:'1312447'},env),false);
+ assert.equal(permittedSharedLivePilot(args,{...env,BLOFY_STREAM_SHARED_LIVE_PILOT_ACCOUNT_IDS:'*'}),false);
+ assert.equal(permittedSharedLivePilot(args,{...env,BLOFY_STREAM_SHARED_LIVE_PILOT_CHANNEL_IDS:'*'}),false);
 });

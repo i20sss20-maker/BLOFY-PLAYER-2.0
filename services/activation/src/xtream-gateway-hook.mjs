@@ -52,7 +52,7 @@ import {encryptGatewayAccountPassword,decryptGatewayAccountPassword} from './xtr
 import { readXtreamGatewayJsonResponse } from './xtream-gateway-response.mjs';
 import { createXtreamHealthSnapshot } from './xtream-health-snapshot.mjs';
 import {relayEligible,issueStreamRelayGrant} from './xtream-stream-relay-bridge.mjs';
-import {permittedLicensedLiveFanout} from './xtream-licensed-live-fanout-policy.mjs';
+import {permittedLicensedLiveFanout,permittedSharedLivePilot} from './xtream-licensed-live-fanout-policy.mjs';
 import {shouldUseIndependentSourceMedia,shouldFallbackIndependentVod} from './xtream-independent-source-media-policy.mjs';
 import {shouldCompareRelay404Direct} from './xtream-relay-404-direct-recovery.mjs';
 import {readSanitizedXtreamRelayFailure} from './xtream-relay-diagnostic.mjs';
@@ -1088,11 +1088,12 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
   }
   const upstream = mediaUpstreamUrl(row, kind, sourceId, mediaExtension);
   // Licensed live delivery can use one upstream TS feed with fanout to
-  // independently authorized BLOFY viewers. Distributor permissions are
-  // verified from the SOURCE's Xtream user_info; each subscriber is
-  // validated above. Hard fail if shared-mode confirmation is missing;
-  // never create 100 separate upstream requests as an accidental fallback.
-  if(req.method==='GET'&&permittedLicensedLiveFanout({
+  // independently authorized BLOFY viewers. The exact named source has
+  // explicit distributor permission; accounts and catalog items passed ACL.
+  // ONLY selected pilot accounts/channels are routed here until validation.
+  if(req.method==='GET'&&permittedSharedLivePilot({
+      accountId:account.id,gatewayId
+    })&&permittedLicensedLiveFanout({
       sourceId:row.server_id,sourceName:row.source_name,
       sourceNameMatches:row.source_name_matches,
       kind,extension:mediaExtension,
@@ -1106,9 +1107,9 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
         'referrer-policy':'no-referrer','x-content-type-options':'nosniff'});
       return res.end();
     }catch{
+      // In a <=2-account, <=4-channel pilot only, a broker grant failure
+      // fails back to the existing playback path, not a global outage.
       observe('failed',{reason:'licensed_fanout_unavailable'});
-      return text(res,503,'Live distribution temporarily unavailable',
-        'text/plain; charset=utf-8',{'retry-after':'4'});
     }
   }
   // Optional one-account canary: transfer the data plane to the isolated

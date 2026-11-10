@@ -36,3 +36,18 @@ export function permittedLicensedLiveFanout({
    manualName===actualName;
  return upstreamRestreamer===true||manualGrant;
 }
+
+ 
+// No broad rollout merely by enabling the source-level rights flag.
+// Subscriber canary must explicitly select both the BLOFY account and channel.
+// This prevents accidental fanout cutover of every customer on one source.
+export function permittedSharedLivePilot({accountId,gatewayId}={},env=process.env){
+ if(env.BLOFY_STREAM_SHARED_LIVE_PILOT_ENABLED!=='1'||!UUID.test(String(accountId||'')))
+  return false;
+ const allowedAccounts=String(env.BLOFY_STREAM_SHARED_LIVE_PILOT_ACCOUNT_IDS||'')
+  .split(',').map(x=>x.trim().toLowerCase()).filter(x=>UUID.test(x)).slice(0,2);
+ if(!allowedAccounts.includes(String(accountId).toLowerCase()))return false;
+ const allowedChannels=String(env.BLOFY_STREAM_SHARED_LIVE_PILOT_CHANNEL_IDS||'')
+  .split(',').map(x=>x.trim()).filter(x=>/^[1-9][0-9]{0,14}$/.test(x)).slice(0,4);
+ return allowedChannels.includes(String(gatewayId||''));
+}
