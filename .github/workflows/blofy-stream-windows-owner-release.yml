@@ -1,0 +1,55 @@
+name: Publish owner QA BLOFY STREAM Windows installer directly
+on:
+  push:
+    branches: [feature/blofy-stream-windows-code-edition-20261110]
+    paths: [.github/workflows/blofy-stream-windows-owner-release.yml]
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: blofy-stream-windows-0-1-0-qa-release
+  cancel-in-progress: false
+jobs:
+  publish-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_RUN: '42747937424'
+      SOURCE_SHA: 'd5005b4cdc67b88c652d90454617fcefd08e431b'
+      SOURCE_ARTIFACT: 'BLOFY-STREAM-WINDOWS-0.1.0-OWNER-UNSIGNED-QA-d5005b4cdc67b88c652d90454617fcefd08e431b'
+      TAG: 'blofy-stream-windows-0.1.0-owner-qa-20261110'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify exact successful Windows build
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" > source.json
+          jq -e --arg sha "$SOURCE_SHA" '.status=="completed" and .conclusion=="success" and .head_sha==$sha' source.json
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "QA version already published; refuse replacement"; exit 1
+          fi
+      - name: Download portable ZIP and standalone installer
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p staging
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name "$SOURCE_ARTIFACT" --dir staging
+          test -s staging/BLOFY-STREAM-Windows-0.1.0-Setup-x64-UNSIGNED-TEST.exe
+          test -s staging/BLOFY-STREAM-Windows-0.1.0-Portable-x64.zip
+          test -s staging/SHA256SUMS.txt
+          (cd staging && sha256sum -c SHA256SUMS.txt)
+      - name: Publish direct owner-preview download links; leave production unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" \
+            staging/BLOFY-STREAM-Windows-0.1.0-Setup-x64-UNSIGNED-TEST.exe \
+            staging/BLOFY-STREAM-Windows-0.1.0-Portable-x64.zip \
+            staging/SHA256SUMS.txt staging/BUILD_INFO.txt \
+            --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" \
+            --prerelease --latest=false \
+            --title 'BLOFY STREAM Windows 0.1.0 — code-only owner QA preview' \
+            --notes 'Windows 10/11 x64, native WPF + LibVLC, STREAM numeric-code activation, bearer session stored with Windows DPAPI, code-only catalog, secure loopback media bridge, isolated from BLOFY PLAYER. UNSIGNED OWNER TEST, not security-certified or user-device tested. Do not disable Windows Defender/SmartScreen; verify SHA256. HLS and media playback across all sources still need real-device verification. This does NOT change Android, production website, or Google Play.'
