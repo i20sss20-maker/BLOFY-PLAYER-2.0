@@ -126,9 +126,9 @@ jobs:
           fi
       - name: Verify actual catalog queries on 200k rows
         run: python3 tools/check_catalog_queries.py
-      - name: Verify Play Xiaomi-design UX / internal 2000084 manifest and TV routes
+      - name: Verify Play Xiaomi-design UX / internal 2000085 manifest and TV routes
         env:
-          BLOFY_EXPECTED_PLAY_VERSION_CODE: "2000084"
+          BLOFY_EXPECTED_PLAY_VERSION_CODE: "2000085"
         run: python3 tools/verify_play_2000073.py
       - name: Test lint and assemble
         shell: bash
@@ -183,7 +183,7 @@ jobs:
             app/build/outputs/apk/debug/build-info.txt
           if-no-files-found: error
           retention-days: 30
-      - name: Build Google Play 2000084 debug manifest variant
+      - name: Build Google Play 2000085 debug manifest variant
         shell: bash
         run: |
           set -euxo pipefail
@@ -204,19 +204,19 @@ jobs:
           for route in VlcFallbackActivity LibraryDownloadActivity SectionSearchActivity; do
             grep -Fq "$route" "$RUNNER_TEMP/play-apk-manifest.txt"
           done
-          cp "$APK" app/build/outputs/apk/debug/blofy-play-2000084-test-only.apk
-      - name: Save Google Play 2000084 debug artifact
+          cp "$APK" app/build/outputs/apk/debug/blofy-play-2000085-test-only.apk
+      - name: Save Google Play 2000085 debug artifact
         uses: actions/upload-artifact@v4
         with:
-          name: BLOFY-PLAY-2000084-TEST-ONLY-${{ github.sha }}
-          path: app/build/outputs/apk/debug/blofy-play-2000084-test-only.apk
+          name: BLOFY-PLAY-2000085-TEST-ONLY-${{ github.sha }}
+          path: app/build/outputs/apk/debug/blofy-play-2000085-test-only.apk
           if-no-files-found: error
           retention-days: 14
 
   qa-stream-stock:
     # The full legacy Player CI keeps running separately; do not treat these
     # STREAM-specific checks as passing all Player UI regression tests.
-    if: github.event_name == 'pull_request' && github.head_ref == 'qa/stream-55-8-7-android-validation-20261111'
+    if: github.event_name == 'pull_request' && github.head_ref == 'release/stream-55-8-8-signed-inapp-20261111'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -257,19 +257,19 @@ jobs:
           test -s "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" > "$RUNNER_TEMP/stock-badging.txt"
           grep -Fq "name='tv.blofy.player.v2.stream.qa'" "$RUNNER_TEMP/stock-badging.txt"
-          grep -Fq "versionName='2.0.0-rc07.55.8.7-STREAM-QA'" "$RUNNER_TEMP/stock-badging.txt"
+          grep -Fq "versionName='2.0.0-rc07.55.8.8-STREAM-QA'" "$RUNNER_TEMP/stock-badging.txt"
           if unzip -Z1 "$APK" | grep -Eq '^lib/[^/]+/libffmpegJNI[.]so$'; then
             echo "The non-FFmpeg APK unexpectedly includes FFmpeg JNI." >&2
             exit 1
           fi
           mkdir -p build/qa-stock
           sha256sum "$APK" > build/qa-stock/SHA256SUMS.txt
-          printf 'build=stock-55.8.7-qa\\npackage=tv.blofy.player.v2.stream.qa\\ncommit=%s\\n' "$GITHUB_SHA" > build/qa-stock/IDENTITY.txt
+          printf 'build=stock-55.8.8-qa\\npackage=tv.blofy.player.v2.stream.qa\\ncommit=%s\\n' "$GITHUB_SHA" > build/qa-stock/IDENTITY.txt
       - name: Upload stock QA APK and test evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: BLOFY-STREAM-55.8.7-STOCK-QA-${{ github.sha }}
+          name: BLOFY-STREAM-55.8.8-STOCK-QA-${{ github.sha }}
           path: |
             app/build/outputs/apk/streamCodeDemo/*.apk
             app/build/test-results/testStreamCodeDemoUnitTest/
