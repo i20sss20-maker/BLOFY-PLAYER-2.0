@@ -60,14 +60,21 @@ async function remoteRelayRequest(path,{method='GET',body,env=process.env,
     reader.releaseLock();
   }
 }
-export async function issueStreamRelayGrant({sourceUrl,kind,sharedLive=false,requireSharedLive=false},{
+export async function issueStreamRelayGrant({sourceUrl,kind,sharedLive=false,
+  requireSharedLive=false,licensedCdnRedirect=false},{
   env=process.env,fetchImpl=fetch}={}){
   if(!['live','movie','series'].includes(kind)||typeof sourceUrl!=='string')
     throw new Error('stream_bridge_invalid_media');
   const result=await remoteRelayRequest('/internal/relay-grants',{
     method:'POST',body:{kind,sourceUrl,
       ...(kind==='live'&&sharedLive===true&&
-        env.BLOFY_STREAM_SHARED_LIVE_CANARY==='1'?{sharedLive:true}:{})},env,fetchImpl
+        env.BLOFY_STREAM_SHARED_LIVE_CANARY==='1'?{
+          sharedLive:true,
+          // Per-channel rights and per-account subscriber pilot were
+          // checked by the upstream gateway BEFORE granting this scope.
+          ...(licensedCdnRedirect===true&&requireSharedLive===true?
+            {licensedCdnRedirect:true}:{})
+        }:{})},env,fetchImpl
   });
   if(!result?.ok||typeof result.path!=='string'||!RESOURCE.test(result.path)||
       result.expiresInSeconds!==45)

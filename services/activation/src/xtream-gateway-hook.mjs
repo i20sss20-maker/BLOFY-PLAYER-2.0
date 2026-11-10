@@ -1101,7 +1101,8 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
     })){
     try{
       const destination=await issueStreamRelayGrant({
-        sourceUrl:upstream.href,kind,sharedLive:true,requireSharedLive:true
+        sourceUrl:upstream.href,kind,sharedLive:true,
+        requireSharedLive:true,licensedCdnRedirect:true
       });
       res.writeHead(307,{'location':destination,'cache-control':'no-store',
         'referrer-policy':'no-referrer','x-content-type-options':'nosniff'});

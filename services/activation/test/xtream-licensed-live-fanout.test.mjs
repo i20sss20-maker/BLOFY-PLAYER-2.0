@@ -124,3 +124,28 @@ test('shared-live subscriber cutover fails closed without explicit account AND c
  assert.equal(permittedSharedLivePilot(args,{...env,BLOFY_STREAM_SHARED_LIVE_PILOT_ACCOUNT_IDS:'*'}),false);
  assert.equal(permittedSharedLivePilot(args,{...env,BLOFY_STREAM_SHARED_LIVE_PILOT_CHANNEL_IDS:'*'}),false);
 });
+
+test('public CDN scope requires an explicitly licensed shared-live ticket',async()=>{
+ const sent=[];
+ const response={ok:true,path:'/relay/'+'f'.repeat(48),
+   expiresInSeconds:45,sharedLiveGranted:true};
+ const fakeFetch=async(url,args)=>{
+  sent.push(JSON.parse(args.body));
+  return new Response(JSON.stringify(response),{
+   status:201,headers:{'content-type':'application/json'}});
+ };
+ const details={sourceUrl:'https://provider.example/live/user/secret/1.ts',
+  kind:'live',sharedLive:true,requireSharedLive:true,licensedCdnRedirect:true};
+ await issueStreamRelayGrant(details,{env,fetchImpl:fakeFetch});
+ assert.equal(sent[0].sharedLive,true);
+ assert.equal(sent[0].licensedCdnRedirect,true);
+ assert.equal(JSON.stringify(sent[0]).includes('provider.example'),true);
+ await issueStreamRelayGrant({...details,requireSharedLive:false},
+  {env,fetchImpl:fakeFetch});
+ assert.equal(sent[1].licensedCdnRedirect,undefined);
+ await issueStreamRelayGrant({...details,sharedLive:false},
+  {env,fetchImpl:fakeFetch});
+ assert.equal(sent[2].sharedLive,undefined);
+ assert.equal(sent[2].licensedCdnRedirect,undefined);
+ assert.ok(sent.every(x=>typeof x.sourceUrl==='string'));
+});
