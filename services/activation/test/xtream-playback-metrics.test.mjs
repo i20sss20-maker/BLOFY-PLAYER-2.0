@@ -98,3 +98,21 @@ test('actual gateway denies unauthorized media before fetching upstream or discl
   assert.match(ui,/gatewayAuthDenied/);
   assert.match(ui,/upstreamFailed/);
 });
+
+test('shared ticket issue and safe fallback do not falsify player health',()=>{
+ resetXtreamPlaybackMetricsForTest();
+ const at=Date.now();
+ recordXtreamPlayback({kind:'live',phase:'shared_grant',itemId:1234,
+  username:'secret',sourceUrl:'https://provider.example/private'},at);
+ recordXtreamPlayback({kind:'live',phase:'shared_fallback',itemId:1234,
+  reason:'licensed_fanout_unavailable',password:'secret'},at+1);
+ const m=xtreamPlaybackSnapshot(at+2);
+ assert.equal(m.sharedTicketsIssued,1);
+ assert.equal(m.sharedGrantFallbacks,1);
+ assert.equal(m.started,0);
+ assert.equal(m.failed,0);
+ assert.equal(m.byKind.live.sharedTicketsIssued,1);
+ assert.equal(m.byKind.live.sharedGrantFallbacks,1);
+ assert.doesNotMatch(JSON.stringify(m),/secret|provider.example|password|username/);
+ resetXtreamPlaybackMetricsForTest();
+});

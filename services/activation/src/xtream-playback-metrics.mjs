@@ -6,13 +6,13 @@ const samples=[];
 const WINDOW_MS=60*60*1000;
 const MAX_SAMPLES=400;
 const KINDS=new Set(['live','movie','series']);
-const PHASES=new Set(['started','failed','interrupted','ended','client_closed']);
+const PHASES=new Set(['started','failed','interrupted','ended','client_closed','shared_grant','shared_fallback']);
 const REASONS=new Set([
   'upstream_http_403','upstream_http_404','upstream_http_408','upstream_http_429','upstream_http_456',
   'upstream_http_500','upstream_http_502','upstream_http_503','upstream_http_504',
   'upstream_http_other','headers_timeout','media_read_timeout','upstream_empty_media',
   'upstream_non_media_response','upstream_unreachable','upstream_denial_cooldown',
-  'gateway_auth_denied','catalog_item_unavailable',
+  'gateway_auth_denied','catalog_item_unavailable','licensed_fanout_unavailable',
   'upstream_stream_ended','client_or_proxy_closed','xtream_transport_connection_reset'
 ]);
 
@@ -46,6 +46,9 @@ export function xtreamPlaybackSnapshot(now=Date.now(),sourceId=null){
   const interrupted=events.filter(row=>row.phase==='interrupted');
   const ended=events.filter(row=>row.phase==='ended');
   const clientClosed=events.filter(row=>row.phase==='client_closed');
+  // Ticket issuance does not prove decoded playback.
+  const sharedGranted=events.filter(row=>row.phase==='shared_grant');
+  const sharedFallback=events.filter(row=>row.phase==='shared_fallback');
   const times=started.map(row=>row.startupMs).filter(Number.isFinite).sort((a,b)=>a-b);
   const percentile=percent=>times.length?times[Math.ceil(percent*times.length)-1]:null;
   const kindSummary=Object.fromEntries([...KINDS].map(kind=>[kind,{
@@ -53,7 +56,9 @@ export function xtreamPlaybackSnapshot(now=Date.now(),sourceId=null){
     failed:failed.filter(row=>row.kind===kind).length,
     interrupted:interrupted.filter(row=>row.kind===kind).length,
     ended:ended.filter(row=>row.kind===kind).length,
-    clientClosed:clientClosed.filter(row=>row.kind===kind).length
+    clientClosed:clientClosed.filter(row=>row.kind===kind).length,
+    sharedTicketsIssued:sharedGranted.filter(row=>row.kind===kind).length,
+    sharedGrantFallbacks:sharedFallback.filter(row=>row.kind===kind).length
   }]));
   const upstreamCodes={};
   for(const event of [...failed,...interrupted]){
@@ -70,6 +75,8 @@ export function xtreamPlaybackSnapshot(now=Date.now(),sourceId=null){
     interrupted:interrupted.length,
     upstreamEnded:ended.length,
     clientOrProxyClosed:clientClosed.length,
+    sharedTicketsIssued:sharedGranted.length,
+    sharedGrantFallbacks:sharedFallback.length,
     shortLiveUpstreamEnds:[...ended,...interrupted].filter(row=>row.kind==='live'&&
       row.durationMs!==null&&row.durationMs>=5000&&row.durationMs<=35000).length,
     gatewayAuthDenied:failed.filter(row=>row.reason==='gateway_auth_denied').length,

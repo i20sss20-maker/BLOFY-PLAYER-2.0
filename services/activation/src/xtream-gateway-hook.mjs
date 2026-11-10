@@ -1116,13 +1116,13 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
         sourceUrl:upstream.href,kind,sharedLive:true,
         requireSharedLive:true,licensedCdnRedirect:true
       });
+      observe('shared_grant'); // capability issued, not proven playback
       res.writeHead(307,{'location':destination,'cache-control':'no-store',
         'referrer-policy':'no-referrer','x-content-type-options':'nosniff'});
       return res.end();
     }catch{
-      // In a <=2-account, <=4-channel pilot only, a broker grant failure
-      // fails back to the existing playback path, not a global outage.
-      observe('failed',{reason:'licensed_fanout_unavailable'});
+      // Shared grant failure does not imply the legacy video is down.
+      observe('shared_fallback',{reason:'licensed_fanout_unavailable'});
     }
   }
   // Optional one-account canary: transfer the data plane to the isolated
