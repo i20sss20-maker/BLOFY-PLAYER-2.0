@@ -10,7 +10,12 @@ test('new codes are encrypted with unique nonce and bound to code ID',()=>{
   assert.equal(decryptStreamCode(id,first,key),'12345678');
   assert.equal(decryptStreamCode(other,first,key),null);
   assert.equal(decryptStreamCode(id,first,'ef'.repeat(32)),null);
-  assert.equal(decryptStreamCode(id,first.replace(/.$/,'A'),key),null);
+  // Mutating the final character could change only unused base64url bits.
+  // Change a guaranteed interior byte to validate the authenticated tag.
+  const position=3+Math.floor((first.length-3)/2);
+  const corrupted=first.slice(0,position)+(first[position]==='A'?'B':'A')+first.slice(position+1);
+  assert.equal(decryptStreamCode(id,corrupted,key),null);
+  assert.equal(decryptStreamCode(id,first+'=',key),null);
   assert.doesNotMatch(first,/12345678/);
 });
 test('historic nonexistent code vault is not recoverable and invalid IDs are rejected',()=>{
