@@ -47,7 +47,12 @@ export async function ensureStreamCommercialSchema(pool){
     'ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS sales_channel TEXT',
     'ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS transfer_count INTEGER NOT NULL DEFAULT 0',
     'ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS last_transfer_at TIMESTAMPTZ',
-    'ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS extended_days INTEGER NOT NULL DEFAULT 0'
+    'ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS extended_days INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS relogin_device_hash TEXT',
+    'ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS relogin_request_hash TEXT',
+    'ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS relogin_requested_at TIMESTAMPTZ',
+    'ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS relogin_approved_at TIMESTAMPTZ',
+    'ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS relogin_expires_at TIMESTAMPTZ'
   ])await pool.query(ddl);
   await pool.query(`CREATE TABLE IF NOT EXISTS blofy_xtream_gateway_code_events(
     id UUID PRIMARY KEY, code_id UUID NOT NULL REFERENCES blofy_xtream_gateway_duration_codes(id),
