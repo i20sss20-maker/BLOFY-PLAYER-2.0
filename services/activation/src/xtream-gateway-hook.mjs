@@ -1,4 +1,4 @@
-import { collectSourceEpisodes, mapSeriesEpisodes } from './xtream-series-resolver.mjs';
+import { collectSourceEpisodes, mapSeriesEpisodes, normalizePlayableSeriesInfo } from './xtream-series-resolver.mjs';
 import { databaseOptions } from './database-options.mjs';
 import { safeErrorSummary } from './diagnostics-sanitizer.mjs';
 import {safeXtreamTransportCategory} from './xtream-transport-errors.mjs';
@@ -793,7 +793,10 @@ async function seriesInfo(gatewayId, sourceId=null) {
   const sourceEpisodes = collectSourceEpisodes(raw?.episodes);
   const mapped = await ensureEpisodeMaps(row.server_id, row.source_id, sourceEpisodes);
   const episodes = mapSeriesEpisodes(raw?.episodes, mapped, stripUpstreamSecrets);
-  return { ...payload, episodes };
+  // The client's series picker and episode-play URL must use the same gateway
+  // IDs. Some players read stream_id instead of id; the resolver supplies both.
+  // The provider's seasons can include placeholder/metadata-only seasons.
+  return normalizePlayableSeriesInfo(payload,episodes,row.gateway_id,row.category_gateway_id);
 }
 
 async function episodeByGatewayId(gatewayId,sourceId=null) {
