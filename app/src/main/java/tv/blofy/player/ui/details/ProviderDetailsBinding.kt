@@ -59,7 +59,6 @@ internal class ProviderDetailsBinding(
     }
 
     private fun render(metadata: ProviderMetadata.Metadata?) {
-        onMetadata(metadata)
         overview.tag = "blofy_details_overview"
         overview.text = metadata?.overview?.takeIf(String::isNotBlank) ?: stream.plot?.takeIf(String::isNotBlank)
             ?: activity.getString(if (stream.kind == "series") R.string.details_series_no_description else R.string.details_movie_no_description)
@@ -85,6 +84,9 @@ internal class ProviderDetailsBinding(
             cast.addView(feedback, LinearLayout.LayoutParams(-1, dp(40)).apply { topMargin = dp(6) })
             if (focusedTag != null) cast.findViewWithTag<View>(focusedTag)?.requestFocus()
         }
+        // Apply language selection after the raw provider overview is assigned.
+        // Otherwise async refresh would overwrite Arabic with English again.
+        onMetadata(metadata)
     }
     private fun dp(value: Int) = (value * activity.resources.displayMetrics.density).toInt()
 }
