@@ -1,10 +1,11 @@
-name: BLOFY STREAM 55.8.12 device compatibility and in-app updater QA
+name: BLOFY STREAM 55.8.13 device compatibility and in-app updater QA
 on:
   push:
     branches:
-      - release/stream-55-8-12-updater-device-20261111
+      - release/stream-55-8-13-updater-device-20261111
       - feature/stream-quality-recovery-20261111
       - feature/stream-55-8-13-qoe-diagnostics-20261111
+      - release/stream-55-8-13-qoe-owner-qa-20261111
   workflow_dispatch:
 permissions:
   contents: read
@@ -66,19 +67,19 @@ jobs:
           APK=app/build/outputs/apk/streamCodeDemo/app-streamCodeDemo.apk
           test -s "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" > "$RUNNER_TEMP/badging.txt"
-          grep -Fq "name='tv.blofy.player.v2.stream.qa' versionCode='2000089' versionName='2.0.0-rc07.55.8.12-STREAM-QA'" "$RUNNER_TEMP/badging.txt"
+          grep -Fq "name='tv.blofy.player.v2.stream.qa' versionCode='2000090' versionName='2.0.0-rc07.55.8.13-STREAM-QA'" "$RUNNER_TEMP/badging.txt"
           grep -Fq "sdkVersion:'23'" "$RUNNER_TEMP/badging.txt"
           unzip -Z1 "$APK" | grep -Fxq 'classes.dex'
-          mkdir -p build/stream-55-8-12
-          printf 'package=tv.blofy.player.v2.stream.qa\nversion_code=2000089\nsigned_owner=no\n' > build/stream-55-8-12/IDENTITY.txt
-          sha256sum "$APK" > build/stream-55-8-12/SHA256SUMS.txt
+          mkdir -p build/stream-55-8-13
+          printf 'package=tv.blofy.player.v2.stream.qa\nversion_code=2000090\nsigned_owner=no\n' > build/stream-55-8-13/IDENTITY.txt
+          sha256sum "$APK" > build/stream-55-8-13/SHA256SUMS.txt
       - name: Upload independent test APK (never replaces customer installation)
         uses: actions/upload-artifact@v4
         with:
-          name: BLOFY-STREAM-55.8.12-DEVICE-QA-${{ github.sha }}
+          name: BLOFY-STREAM-55.8.13-DEVICE-QA-${{ github.sha }}
           path: |
             app/build/outputs/apk/streamCodeDemo/app-streamCodeDemo.apk
             app/build/test-results/testStreamCodeDemoUnitTest/
-            build/stream-55-8-12/
+            build/stream-55-8-13/
           if-no-files-found: error
           retention-days: 14
