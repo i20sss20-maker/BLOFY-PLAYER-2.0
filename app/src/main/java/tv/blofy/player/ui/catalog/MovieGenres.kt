@@ -1,6 +1,7 @@
 package tv.blofy.player.ui.catalog
 
 import java.util.Locale
+import androidx.sqlite.db.SimpleSQLiteQuery
 
 /**
  * Display-only film genre classification. Uses the provider's actual genre and
@@ -58,5 +59,53 @@ internal object MovieGenres {
         val keys = identify(raw)
         if (keys.size != 1) return raw
         return genres.firstOrNull { it.key in keys }?.arabic ?: raw
+    }
+
+    /**
+     * SQL keyset paging: never load 24,000 films into RAM just to select a genre.
+     * Aliases are hard-coded above; user/provider strings are bound arguments.
+     * Includes provider category labels when the imported film lacks a genre.
+     */
+    fun catalogQuery(
+        providerId: String,
+        categoryId: String?,
+        genreKey: String,
+        afterRowId: Long = 0L,
+        limit: Int = 64,
+        countOnly: Boolean = false
+    ): SimpleSQLiteQuery {
+        val genre = genres.firstOrNull { it.key == genreKey }
+            ?: throw IllegalArgumentException("Unknown movie genre")
+        val args = ArrayList<Any>()
+        val sql = StringBuilder(
+            if (countOnly) "SELECT COUNT(*) FROM streams s " else "SELECT s.* FROM streams s "
+        )
+        sql.append("WHERE s.providerId = ? AND s.kind = 'movie' ")
+        args += providerId
+        if (categoryId != null) {
+            sql.append("AND s.categoryId = ? ")
+            args += categoryId
+        }
+        if (!countOnly) {
+            sql.append("AND s.rowid > ? ")
+            args += afterRowId
+        }
+        sql.append("AND (")
+        genre.aliases.forEachIndexed { index, alias ->
+            if (index > 0) sql.append(" OR ")
+            sql.append("(s.genre LIKE ? COLLATE NOCASE OR EXISTS (")
+            sql.append("SELECT 1 FROM categories c WHERE c.providerId=s.providerId ")
+            sql.append("AND c.kind='movie' AND c.remoteId=s.categoryId ")
+            sql.append("AND c.name LIKE ? COLLATE NOCASE))")
+            val pattern = "%" + alias.replace("%", "\\%").replace("_", "\\_") + "%"
+            args += pattern
+            args += pattern
+        }
+        sql.append(") ")
+        if (!countOnly) {
+            sql.append("ORDER BY s.rowid LIMIT ?")
+            args += limit.coerceIn(1, 128)
+        }
+        return SimpleSQLiteQuery(sql.toString(), args.toArray())
     }
 }
