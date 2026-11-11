@@ -19,7 +19,9 @@ internal object MovieCardMeta {
         val providerText = item.genre.orEmpty().trim()
         val cachedText = cachedDetailGenres.filter(String::isNotBlank).joinToString(" / ").trim()
         val value = providerText.ifBlank { cachedText }
-        val ids = MovieGenres.identify(value.ifBlank { null }, categoryName)
+        val ids = MovieGenres.identify(value.ifBlank { null }).ifEmpty {
+            if (value.isBlank()) MovieGenres.identify(null, categoryName) else emptySet()
+        }
         if (ids.isNotEmpty()) {
             return MovieGenres.genres.asSequence()
                 .filter { it.key in ids }.take(2)
