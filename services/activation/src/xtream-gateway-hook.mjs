@@ -1641,6 +1641,11 @@ if(process.env.BLOFY_XTREAM_SERIES_SAFE_AUDIT_ON_BOOT==='1'){
           const payload=await fetchUpstreamApi(row,'get_series_info',
             {series_id:row.source_id});
           report.rawType=Array.isArray(payload)?'array':typeof payload;
+          report.topLevelKinds=payload&&typeof payload==='object'?
+            ['info','episodes','seasons','data','series','episode','status','error'].filter(key=>Object.hasOwn(payload,key)):[];
+          report.nestedData=payload?.data&&typeof payload.data==='object'?
+            ['info','episodes','seasons','series'].filter(key=>Object.hasOwn(payload.data,key)):[];
+          report.seasonsType=Array.isArray(payload?.seasons)?'array':typeof payload?.seasons;
           const groups=payload?.episodes;
           report.hasEpisodes=groups!=null;
           report.seriesArray=Array.isArray(groups);
