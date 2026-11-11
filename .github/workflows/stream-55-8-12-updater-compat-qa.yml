@@ -4,6 +4,7 @@ on:
     branches:
       - release/stream-55-8-12-updater-device-20261111
       - feature/stream-quality-recovery-20261111
+      - feature/stream-55-8-13-qoe-diagnostics-20261111
   workflow_dispatch:
 permissions:
   contents: read
@@ -49,6 +50,9 @@ jobs:
               --tests 'tv.blofy.player.core.identity.StreamCodeSessionLogoutTest' \
               --tests 'tv.blofy.player.core.playback.PlaybackSessionReleaseTest' \
               --tests 'tv.blofy.player.core.playback.PlaybackRecoveryPolicyTest' \
+              --tests 'tv.blofy.player.core.diagnostics.PlaybackQualityAssessmentTest' \
+              --tests 'tv.blofy.player.core.diagnostics.PlaybackDiagnosticsRetentionTest' \
+              --tests 'tv.blofy.player.core.diagnostics.StreamAudioHealthTest' \
               --tests 'tv.blofy.player.ui.player.PlayerNetworkPolicyTest'
           gradle --no-daemon --max-workers=2 \
             -Dorg.gradle.jvmargs="-Xmx2048m -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8" \
