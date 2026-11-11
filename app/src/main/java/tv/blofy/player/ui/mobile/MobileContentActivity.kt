@@ -268,6 +268,7 @@ class MobileContentActivity : AppCompatActivity() {
         const val KIND_LIVE = "live"
         const val KIND_MOVIE = "movie"
         const val KIND_SERIES = "series"
+        private const val ALL_CATEGORY_ID = "__all__"
     }
 }
 
