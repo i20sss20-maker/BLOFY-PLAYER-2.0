@@ -96,6 +96,8 @@ object AppUpdatePrompt {
                 activity.startActivity(Intent(activity, AppUpdateActivity::class.java)
                     .putExtra(AppUpdateWorker.VERSION, release.versionCode)
                     .putExtra(AppUpdateWorker.URL, release.downloadUrl)
+                    .putExtra(AppUpdateWorker.SHA256, release.sha256)
+                    .putExtra(AppUpdateWorker.APK_SIZE, release.apkSizeBytes ?: 0L)
                     .putExtra("name", release.versionName)
                     .putExtra("notes", release.releaseNotes))
             }
