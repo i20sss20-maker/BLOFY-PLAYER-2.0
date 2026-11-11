@@ -21,9 +21,9 @@ jobs:
     timeout-minutes: 100
     env:
       GH_TOKEN: ${{ github.token }}
-      SOURCE_RUN: '42939034723'
+      SOURCE_RUN: '42938987725'
       SOURCE_BRANCH: 'feature/stream-55-8-10-arabic-details-movie-genres-20261111'
-      SOURCE_PR: '535'
+      QA_RUN: '42939034809'
       SOURCE_SHA: '259527f26bf1009150da0a462b53acb56ea9a35d'
       TAG: 'blofy-stream-55.8.10-owner-signed-20261111'
       APK_NAME: 'BLOFY-STREAM-55.8.10-FFMPEG-OWNER-SIGNED.apk'
@@ -51,9 +51,13 @@ jobs:
             sleep 30
           done
           test "$success" = 1 || { echo "::error::Signed run did not finish"; exit 1; }
-          jq -e --arg branch "$SOURCE_BRANCH" --arg sha "$SOURCE_SHA" --argjson pr "$SOURCE_PR" \
-            '.head_branch==$branch and .head_sha==$sha and .event=="pull_request" and
-             (.pull_requests | any(.number==$pr))' "$RUNNER_TEMP/source.json"
+          jq -e --arg branch "$SOURCE_BRANCH" --arg sha "$SOURCE_SHA" \
+            '.head_branch==$branch and .head_sha==$sha and .event=="push"' "$RUNNER_TEMP/source.json"
+          # Require the independent Arabic/movie-card Android QA build to pass
+          # for this exact signed commit before any public release is created.
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$QA_RUN" > "$RUNNER_TEMP/qa.json"
+          jq -e --arg sha "$SOURCE_SHA" \
+            '.head_sha==$sha and .status=="completed" and .conclusion=="success"' "$RUNNER_TEMP/qa.json"
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN/artifacts" > "$RUNNER_TEMP/artifacts.json"
           count="$(jq '[.artifacts[] | select(.name | startswith("BLOFY-STREAM-55.8.10-FFMPEG-OWNER-SIGNED-"))] | length' "$RUNNER_TEMP/artifacts.json")"
           test "$count" = 1 || { echo "::error::Expected one verified signed APK artifact"; exit 1; }
