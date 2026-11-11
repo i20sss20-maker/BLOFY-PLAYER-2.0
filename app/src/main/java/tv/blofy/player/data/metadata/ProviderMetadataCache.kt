@@ -29,6 +29,43 @@ object ProviderMetadataCache {
         }
     }
 
+    /**
+     * Read a whole catalog page from one consistent local SQLite snapshot.
+     * This is intentionally offline: a category switch or scroll must not
+     * start a network request and change genre labels after a card is drawn.
+     * SQLite bind-argument chunks also support large in-process page restores.
+     * Call from Dispatchers.IO, never on the UI thread.
+     */
+    fun readGenresForPage(context: Context, contentKeys: List<String>): Map<String, List<String>> {
+        if (contentKeys.isEmpty()) return emptyMap()
+        val uniqueKeys = contentKeys.asSequence().filter(String::isNotBlank).distinct().toList()
+        if (uniqueKeys.isEmpty()) return emptyMap()
+        val results = LinkedHashMap<String, List<String>>()
+        val db = helper(context).readableDatabase
+        for (keys in uniqueKeys.chunked(128)) {
+            val binds = List(keys.size) { "?" }.joinToString(",")
+            db.query(
+                TABLE,
+                arrayOf("content_key", "payload_json"),
+                "content_key IN ($binds)",
+                keys.toTypedArray(),
+                null, null, null
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    val key = cursor.getString(0) ?: continue
+                    val raw = cursor.getString(1).orEmpty()
+                    if (raw.isBlank()) continue
+                    val genres = runCatching {
+                        gson.fromJson(raw, ProviderMetadata.Metadata::class.java)?.genres.orEmpty()
+                    }.getOrDefault(emptyList())
+                        .filter { it.isNotBlank() }
+                    if (genres.isNotEmpty()) results[key] = genres
+                }
+            }
+        }
+        return results
+    }
+
     fun contains(context: Context, contentKey: String): Boolean {
         if (contentKey.isBlank()) return false
         helper(context).readableDatabase.rawQuery(
