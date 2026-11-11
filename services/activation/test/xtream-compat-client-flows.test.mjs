@@ -22,7 +22,7 @@ function fakeClient({failedAction=null,noCatalog=false,postDenied=false}={}){
     }
     assert.equal(url.searchParams.get('username'),'testUser');
     assert.equal(url.searchParams.get('password'),'testPass');
-    if(action===failedAction)return json({error:'error'},503);
+    if(failedAction!==null&&action===failedAction)return json({error:'error'},503);
     if(action?.includes('categories'))return json(noCatalog?[]:[{category_id:'1'}]);
     return json(account);
   };
