@@ -1,0 +1,51 @@
+name: Verify published BLOFY STREAM 55.8.11 website and in-app update
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-stream-55-8-11-live.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Verify STREAM-only release metadata and preserve PLAYER update feed
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=https://updates.blofyplayer.com
+          curl -fsSL --connect-timeout 8 --max-time 30 --retry 3 --retry-delay 3 \
+            "$base/stream/release.json" -o "$RUNNER_TEMP/stream-release.json"
+          jq -e '.release.app.versionCode==2000088 and
+            .release.app.versionName=="2.0.0-rc07.55.8.11-STREAM" and
+            .release.app.downloadUrl=="https://updates.blofyplayer.com/d/blofy-stream" and
+            .release.app.minSupportedVersionCode==1' "$RUNNER_TEMP/stream-release.json"
+          curl -fsSL --connect-timeout 8 --max-time 30 --retry 3 --retry-delay 3 \
+            "$base/release.json" -o "$RUNNER_TEMP/player-release.json"
+          jq -e '.release.app.versionCode!=2000088' "$RUNNER_TEMP/player-release.json"
+          echo 'STREAM versionCode 2000088 is isolated from PLAYER feed.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Verify public website and downloadable APK without downloading the 292 MB APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=https://updates.blofyplayer.com
+          curl -fsSLI --connect-timeout 8 --max-time 30 --retry 3 --retry-delay 3 \
+            "$base/downloads" > "$RUNNER_TEMP/downloads-headers.txt"
+          curl -fsSLI --connect-timeout 8 --max-time 45 --retry 3 --retry-delay 3 \
+            "$base/d/blofy-stream" > "$RUNNER_TEMP/apk-headers.txt"
+          grep -Eiq '^content-type: *application/vnd.android.package-archive' "$RUNNER_TEMP/apk-headers.txt"
+          echo 'STREAM APK endpoint returns 200 and Android archive media type.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Verify production source APK release asset and SHA256 metadata
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api 'repos/i20sss20-maker/BLOFY-PLAYER-2.0/releases/tags/blofy-stream-55.8.11-owner-signed-20261111' \
+            --jq '.assets[] | select(.name=="BLOFY-STREAM-55.8.11-FFMPEG-OWNER-SIGNED.apk") | select(.size>200000000) | .digest' \
+            > "$RUNNER_TEMP/digest.txt"
+          grep -Fxq 'sha256:f29333559ed510050e3dd08347f0ae4d6d1193141484080e1d47e56fba6ba17e' "$RUNNER_TEMP/digest.txt"
+          echo 'Published original owner-signed APK digest verified.' >> "$GITHUB_STEP_SUMMARY"
