@@ -1610,6 +1610,83 @@ async function handleAuthorizedXtreamHls(req,res,match){
   }
 }
 
+
+// One-time series metadata integrity audit. Never logs titles, IDs, URLs,
+// credentials, episode objects or direct-source values. Opt-in by Railway var.
+if(process.env.BLOFY_XTREAM_SERIES_SAFE_AUDIT_ON_BOOT==='1'){
+  const auditTimer=setTimeout(async()=>{
+    const summary={attempted:0,found:0,providerErrors:0,
+      emptyRawEpisodes:0,extractedEpisodes:0,mappedEpisodes:0,
+      sourceKeys:[],idShapeCounts:{},samples:[]};
+    try {
+      await ensureReady();
+      const sample=(await pool.query(
+        "SELECT m.gateway_id FROM blofy_xtream_gateway_item_map m "+
+        "JOIN blofy_xtream_items i ON i.server_id=m.server_id "+
+        "AND i.media_type=m.media_type AND i.source_id=m.source_id "+
+        "JOIN blofy_xtream_servers s ON s.id=i.server_id "+
+        "WHERE m.media_type='series' AND i.enabled=TRUE "+
+        "AND s.enabled=TRUE AND s.publish_catalog=TRUE "+
+        "ORDER BY m.gateway_id DESC LIMIT 6"
+      )).rows;
+      for(const sampleRow of sample) {
+        const report={stage:'init',hasEpisodes:false,seriesArray:false,
+          groupCount:0,sourceCount:0,mappedCount:0,episodeKeyKinds:[],
+          rawType:'none'};
+        summary.attempted++;
+        try{
+          const row=await gatewayItemById('series',sampleRow.gateway_id);
+          if(!row)continue;
+          summary.found++;
+          const payload=await fetchUpstreamApi(row,'get_series_info',
+            {series_id:row.source_id});
+          report.rawType=Array.isArray(payload)?'array':typeof payload;
+          const groups=payload?.episodes;
+          report.hasEpisodes=groups!=null;
+          report.seriesArray=Array.isArray(groups);
+          report.groupCount=groups&&typeof groups==='object'?
+            Object.keys(groups).length:0;
+          const rawEpisodes=[];
+          if(Array.isArray(groups))rawEpisodes.push(...groups.slice(0,20));
+          else if(groups&&typeof groups==='object'){
+            for(const value of Object.values(groups).slice(0,10)){
+              const arr=Array.isArray(value)?value:value&&Array.isArray(value.episodes)?value.episodes:[];
+              rawEpisodes.push(...arr.slice(0,20));
+            }
+          }
+          const keys=new Set();
+          for(const ep of rawEpisodes)if(ep&&typeof ep==='object'){
+            for(const key of ['id','episode_id','stream_id','episode_num','season','container_extension']){
+              if(Object.hasOwn(ep,key))keys.add(key);
+            }
+          }
+          report.episodeKeyKinds=[...keys].sort();
+          const extracted=collectSourceEpisodes(groups);
+          report.sourceCount=extracted.length;
+          summary.extractedEpisodes+=extracted.length;
+          if(!extracted.length)summary.emptyRawEpisodes++;
+          const ids=await ensureEpisodeMaps(row.server_id,row.source_id,extracted);
+          report.mappedCount=ids.size;
+          summary.mappedEpisodes+=ids.size;
+          report.stage='complete';
+        }catch{
+          summary.providerErrors++;
+          report.stage='provider_or_mapping_failed';
+        }
+        summary.samples.push(report);
+      }
+      summary.sourceKeys=undefined;
+      summary.idShapeCounts=undefined;
+      console.info('BLOFY_XTREAM_SERIES_SAFE_AUDIT',JSON.stringify(summary));
+    }catch{
+      console.warn('BLOFY_XTREAM_SERIES_SAFE_AUDIT',JSON.stringify({
+        ok:false,reason:'audit_unavailable',attempted:summary.attempted
+      }));
+    }
+  },15000);
+  auditTimer.unref?.();
+}
+
 // Explicit operator-only probe. Check first bytes, never return upstream URLs,
 // source IDs, provider passwords, client IPs or full media payloads.
 let itemProbeAt=0;
