@@ -3,7 +3,7 @@ name: BLOFY STREAM 55.8.10 Movie Card Genres Below Posters QA
 on:
   push:
     branches:
-      - feature/stream-55-8-10-arabic-details-movie-genres-20261111
+      - fix/stream-55-8-10-movie-card-meta-20261111
   pull_request:
     branches:
       - feature/stream-55-8-9-arabic-details-movie-genres-20261111
