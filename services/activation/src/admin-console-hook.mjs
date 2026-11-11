@@ -70,6 +70,7 @@ const assets = new Map([
   ['/admin-code-ops.css', ['admin-code-ops.css', 'text/css']],
   ['/xtream-code-import.js', ['xtream-code-import.js', 'text/javascript']],
   ['/admin-performance.js', ['admin-performance.js', 'text/javascript']],
+  ['/admin-stream-quality.js', ['admin-stream-quality.js', 'text/javascript']],
   ['/admin-usage.js', ['admin-usage.js', 'text/javascript']],
   ['/admin-service-health.js', ['admin-service-health.js', 'text/javascript']],
   ['/device-admin.css', ['device-admin.css', 'text/css']],

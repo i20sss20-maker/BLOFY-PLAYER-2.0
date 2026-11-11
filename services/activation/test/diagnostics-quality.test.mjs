@@ -50,4 +50,6 @@ test('aggregate route is admin gated and does not expose device IDs in aggregate
   const page=await readFile(new URL('../web/admin.html',import.meta.url),'utf8');
   assert.match(page,/id="stream-qoe-summary"/);
   assert.match(page,/admin-stream-quality\.js/);
+  const hook=await readFile(new URL('../src/admin-console-hook.mjs',import.meta.url),'utf8');
+  assert.match(hook,/\['\/admin-stream-quality\.js',\s*\['admin-stream-quality\.js',\s*'text\/javascript'\]\]/);
 });
