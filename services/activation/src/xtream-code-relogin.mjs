@@ -4,6 +4,7 @@
 // No raw voucher, device key or recovery PIN is stored or logged.
 import crypto from 'node:crypto';
 import {streamCodeProof} from './xtream-duration-codes.mjs';
+import {streamDeviceProof} from './xtream-code-device-binding.mjs';
 
 const CODE_KEY=/^[a-f0-9]{64}$/i;
 const DEVICE_KEY=/^[a-f0-9]{64}$/i;
@@ -15,26 +16,12 @@ const problem=(message,status=409)=>Object.assign(Error(message),{status});
 const asMs=value=>value?new Date(value).getTime():0;
 const hmac=(key,description)=>crypto.createHmac('sha256',key).update(description).digest('hex');
 
-export function streamDeviceProof(deviceKey,keyHex) {
-  if(!DEVICE_KEY.test(String(deviceKey||''))||!CODE_KEY.test(String(keyHex||'')))
-    return null;
-  return hmac(Buffer.from(keyHex,'hex'),
-    'blofy-stream-activation-device:v1:'+String(deviceKey).toLowerCase());
-}
 export function recoveryCodeProof(rowId,deviceProof,pin,keyHex) {
   if(!SIX_DIGITS.test(String(pin||''))||!CODE_KEY.test(String(keyHex||''))||
      !CODE_KEY.test(String(deviceProof||'')))
     return null;
   return hmac(Buffer.from(keyHex,'hex'),
     'blofy-stream-relogin-approval:v1:'+rowId+':'+deviceProof+':'+pin);
-}
-export function hasApprovedRelogin(row,deviceProof,now=Date.now()) {
-  return Boolean(row && deviceProof &&
-    row.code_channel==='app' &&
-    row.relogin_device_hash===deviceProof &&
-    row.relogin_request_hash &&
-    asMs(row.relogin_approved_at)>0 &&
-    asMs(row.relogin_expires_at)>now);
 }
 export function createStreamRelogin({pool,keyHex,clock=Date.now,
   randomInt=crypto.randomInt,uuid=crypto.randomUUID}={}) {
