@@ -126,9 +126,9 @@ jobs:
           fi
       - name: Verify actual catalog queries on 200k rows
         run: python3 tools/check_catalog_queries.py
-      - name: Verify Play Xiaomi-design UX / internal 2000086 manifest and TV routes
+      - name: Verify Play Xiaomi-design UX / STREAM candidate 2000088 manifest and TV routes
         env:
-          BLOFY_EXPECTED_PLAY_VERSION_CODE: "2000086"
+          BLOFY_EXPECTED_PLAY_VERSION_CODE: "2000088"
         run: python3 tools/verify_play_2000073.py
       - name: Test lint and assemble
         shell: bash
