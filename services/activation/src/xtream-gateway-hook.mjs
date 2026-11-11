@@ -52,6 +52,8 @@ import {parseStreamAppToken,verifyStreamAppToken,bearerFromRequest}
 import {encryptGatewayAccountPassword,decryptGatewayAccountPassword} from './xtream-account-vault.mjs';
 import {createGatewayCredentialRotator} from './xtream-account-credential-rotation.mjs';
 import { readXtreamGatewayJsonResponse } from './xtream-gateway-response.mjs';
+import {configuredXtreamPublicOrigin} from './xtream-public-origin.mjs';
+import {probeXtreamLogin} from './xtream-compatibility-probe.mjs';
 import { createXtreamHealthSnapshot } from './xtream-health-snapshot.mjs';
 import {relayEligible,issueStreamRelayGrant} from './xtream-stream-relay-bridge.mjs';
 import {permittedLicensedLiveFanout,permittedSharedLivePilot,
@@ -186,6 +188,10 @@ function origin(req) {
   const forwarded = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase();
   const protocol = forwarded === 'http' || forwarded === 'https' ? forwarded : 'https';
   return host ? `${protocol}://${host}` : '';
+}
+
+function xtreamOrigin(req) {
+  return configuredXtreamPublicOrigin(origin(req));
 }
 
 function cleanLabel(value, fallback = 'BLOFY') {
@@ -326,7 +332,7 @@ async function createAccount(body, req) {
         VALUES($1,$2,$3,$4,TRUE,$5,$6,$7,$8) RETURNING *`, [id,label,username,proof,maxConnections,expiresAt,sourceId,vault])).rows[0];
       return {
         item: adminAccount(row),
-        credentials: { serverUrl: origin(req), username, password }
+        credentials: { serverUrl: xtreamOrigin(req), username, password }
       };
     } catch (error) {
       if (error?.code === '23505' && !body.username) { username = null; continue; }
@@ -366,7 +372,7 @@ async function createAccountsBulk(body, req) {
     await connection.query('ROLLBACK').catch(()=>{});
     throw error;
   }finally{connection.release();}
-  const host=origin(req);
+  const host=xtreamOrigin(req);
   return {serverUrl:host,count:created.length,items:created.map(x=>x.item),
     credentials:created.map(x=>({serverUrl:host,username:x.username,password:x.password}))};
 }
@@ -408,7 +414,7 @@ async function rotateAccountCredentials(id,req,body) {
   const result=await rotate(id,{
     acknowledgeDisconnect:body?.acknowledgeDisconnect===true
   });
-  const serverUrl=origin(req);
+  const serverUrl=xtreamOrigin(req);
   const params=new URLSearchParams({
     username:result.username,password:result.password,
     type:'m3u_plus',output:'ts'
@@ -433,7 +439,7 @@ async function resetAccountPassword(id, req) {
   const proof = gatewayCredentialProof(existing.username, password, KEY_HEX);
   const vault=encryptGatewayAccountPassword(id,password,KEY_HEX);
   const row = (await pool.query('UPDATE blofy_xtream_gateway_accounts SET password_proof=$2,credential_vault=$3,updated_at=NOW() WHERE id=$1 RETURNING *', [id, proof,vault])).rows[0];
-  return { item: adminAccount(row), credentials: { serverUrl: origin(req), username: row.username, password } };
+  return { item: adminAccount(row), credentials: { serverUrl: xtreamOrigin(req), username: row.username, password } };
 }
 
 async function revealAccountCredentials(id,req){
@@ -443,10 +449,27 @@ async function revealAccountCredentials(id,req){
   if(!row)throw Object.assign(new Error('xtream_gateway_account_not_found'),{status:404});
   const password=decryptGatewayAccountPassword(id,row.credential_vault,KEY_HEX);
   if(!password)throw Object.assign(new Error('xtream_gateway_password_not_recoverable'),{status:409});
-  const serverUrl=origin(req);
+  const serverUrl=xtreamOrigin(req);
   const params=new URLSearchParams({username:row.username,password,type:'m3u_plus',output:'ts'});
   return {credentials:{serverUrl,username:row.username,password,
     m3uUrl:serverUrl+'/get.php?'+params.toString()}};
+}
+
+// Admin-only, read-only test using the account's own encrypted credential vault.
+async function checkAccountXtreamCompatibility(id) {
+  await ensureReady();
+  const result=await pool.query(`SELECT id,username,credential_vault,enabled,expires_at
+    FROM blofy_xtream_gateway_accounts WHERE id=$1 LIMIT 1`,[id]);
+  const row=result.rows[0];
+  if(!row)return {ok:false,code:'account_not_found'};
+  if(!row.enabled)return {ok:false,code:'account_disabled'};
+  if(row.expires_at&&new Date(row.expires_at).getTime()<=Date.now())
+    return {ok:false,code:'account_expired'};
+  const password=decryptGatewayAccountPassword(row.id,row.credential_vault,KEY_HEX);
+  if(!password)return {ok:false,code:'account_password_not_recoverable'};
+  return probeXtreamLogin({
+    baseUrl:configuredXtreamPublicOrigin(),username:row.username,password
+  });
 }
 
 async function authenticateAppBearer(req){
@@ -1584,7 +1607,7 @@ async function probeGatewayMedia(kind,itemId){
 }
 
 function playerServerInfo(req) {
-  const base = new URL(origin(req) || 'https://localhost');
+  const base = new URL(xtreamOrigin(req) || 'https://localhost');
   const secure = base.protocol === 'https:';
   return {
     url: base.hostname,
@@ -1631,7 +1654,7 @@ async function handlePlayerApi(req, res, url) {
     user.message=studio.name;
     return json(res,200,{user_info:user,server_info:{
       ...playerServerInfo(req),server_name:studio.name,
-      server_logo:studio.logoUrl?origin(req)+studio.logoUrl:''
+      server_logo:studio.logoUrl?xtreamOrigin(req)+studio.logoUrl:''
     }});
   }
   // BLOFY-specific extension: device may check revision before explicitly
@@ -1671,7 +1694,7 @@ async function handleM3u(req, res, url) {
   const password = url.searchParams.get('password') || '';
   const account = await authenticate(username, password, { touch: true });
   if (!account) return text(res, 401, 'Unauthorized');
-  const base = origin(req);
+  const base = xtreamOrigin(req);
   // These credentials are identical for every entry in this authorized M3U
   // export. Encode them once rather than hundreds of thousands of times.
   const encodedAccount = encodeURIComponent(username)+'/'+encodeURIComponent(password);
@@ -1788,7 +1811,7 @@ http.createServer = function withBlofyXtreamGateway(listener) {
           {'retry-after':String(overall.retryAfterSeconds)});
         await ensureReady();
         const data=await readJson(req);
-        const result=await streamCodes.redeem(data.code,'https://blofyplayer.com',
+        const result=await streamCodes.redeem(data.code,xtreamOrigin(req),
           {deviceKey:data.deviceKey??null,
            appOnly:url.pathname==='/api/v1/stream/app/redeem'});
         return json(res,201,result,{'referrer-policy':'no-referrer',
@@ -1922,7 +1945,7 @@ http.createServer = function withBlofyXtreamGateway(listener) {
       }
       if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream-gateway') {
         const items = await listAccounts();
-        return json(res, 200, { serverUrl: origin(req), items });
+        return json(res, 200, { serverUrl: xtreamOrigin(req), items });
       }
       if (req.method === 'POST' && url.pathname === '/api/v1/admin/xtream-gateway/accounts') {
         return json(res, 201, await createAccount(await readJson(req), req));
@@ -1930,7 +1953,7 @@ http.createServer = function withBlofyXtreamGateway(listener) {
       if (req.method === 'POST' && url.pathname === '/api/v1/admin/xtream-gateway/accounts/bulk') {
         return json(res, 201, await createAccountsBulk(await readJson(req), req));
       }
-      const match = url.pathname.match(/^\/api\/v1\/admin\/xtream-gateway\/accounts\/([0-9a-f-]+)(?:\/(reset|credentials|rotate-credentials))?$/i);
+      const match = url.pathname.match(/^\/api\/v1\/admin\/xtream-gateway\/accounts\/([0-9a-f-]+)(?:\/(reset|credentials|rotate-credentials|compatibility))?$/i);
       if (match) {
         const id = match[1];
         if (!validUuid(id)) return json(res, 400, { error: 'xtream_gateway_account_invalid' });
@@ -1941,6 +1964,8 @@ http.createServer = function withBlofyXtreamGateway(listener) {
             'referrer-policy':'no-referrer'
           });
         if (match[2] === 'credentials' && req.method === 'GET') return json(res,200,await revealAccountCredentials(id,req));
+        if (match[2] === 'compatibility' && req.method === 'GET')
+          return json(res,200,await checkAccountXtreamCompatibility(id));
         if (!match[2] && req.method === 'PATCH') return json(res, 200, { item: await patchAccount(id, await readJson(req)) });
         if (!match[2] && req.method === 'DELETE') {
           const result = await pool.query('DELETE FROM blofy_xtream_gateway_accounts WHERE id=$1', [id]);
