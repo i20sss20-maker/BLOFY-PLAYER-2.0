@@ -250,42 +250,40 @@ jobs:
 
           echo "DOWNLOAD_CENTER_RUNTIME_SMOKE=PASS"
 
-      - name: Verify cinematic 74 reached live Railway updates domain
+      - name: Verify current live BLOFY STREAM in-app feed and signed APK endpoint
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: bash
         run: |
           set -euo pipefail
-          page="$RUNNER_TEMP/live-railway-updates.html"
           ready=0
-          for attempt in $(seq 1 36); do
-            if curl --fail --silent --show-error --location --max-time 20 https://updates.blofyplayer.com/downloads > "$page" 2>/dev/null \
-              && grep -Fq 'data-v74-display-qa="true"' "$page" \
-              && grep -Fq 'href="/download/v74-display74.apk"' "$page" \
-              && grep -Fq 'v74-display74-remote-qa-20261025/BLOFY-PLAYER-Android-TV-v74-DISPLAY74-SIGNED.apk.sha256' "$page" \
-              && grep -Fq 'href="/d/blofy"' "$page" \
-              && [ "$(grep -o 'class="official-card"' "$page" | wc -l | tr -d '[:space:]')" = 2 ] \
-              && ! grep -Fq 'data-cinematic-v74="true"' "$page" \
-              && ! grep -Fq 'data-cinematic-v74-patch="true"' "$page" \
-              && ! grep -Fq 'data-v74-remote-qa="true"' "$page"; then
-              ready=1
-              break
+          for attempt in $(seq 1 18); do
+            if curl --fail --silent --show-error --max-time 20 \
+              https://updates.blofyplayer.com/stream/release.json \
+              -o "$RUNNER_TEMP/stream-live.json" 2>/dev/null \
+              && jq -e '
+                 .release.app.versionCode >= 2000089 and
+                 .release.app.packageName == "tv.blofy.player.v2.stream" and
+                 .release.app.apkSizeBytes > 10000000 and
+                 .release.app.apkSizeBytes < 268435456 and
+                 (.release.app.sha256 | test("^[a-f0-9]{64}$")) and
+                 .release.app.downloadUrl == "https://updates.blofyplayer.com/d/blofy-stream"
+               ' "$RUNNER_TEMP/stream-live.json" >/dev/null; then
+              ready=1; break
             fi
-            sleep 5
+            sleep 4
           done
-          test "$ready" = "1"
-          curl --fail --silent --show-error --head --location --max-time 90 \
-            https://updates.blofyplayer.com/download/v74-cinematic.apk > "$RUNNER_TEMP/cinematic-head.txt"
-          grep -iq '^content-type: application/vnd.android.package-archive' "$RUNNER_TEMP/cinematic-head.txt"
-          grep -iq '^content-disposition: attachment;' "$RUNNER_TEMP/cinematic-head.txt"
-          curl --fail --silent --show-error --head --location --max-time 90 \
-            https://updates.blofyplayer.com/download/v74-cinema-fix.apk > "$RUNNER_TEMP/cinematic-v74-patch-head.txt"
-          grep -iq '^content-type: application/vnd.android.package-archive' "$RUNNER_TEMP/cinematic-v74-patch-head.txt"
-          grep -iq '^content-disposition: attachment;' "$RUNNER_TEMP/cinematic-v74-patch-head.txt"
-          curl --fail --silent --show-error --head --location --max-time 90 \
-            https://updates.blofyplayer.com/download/v74-display74.apk > "$RUNNER_TEMP/display-v74-head.txt"
-          grep -iq '^content-type: application/vnd.android.package-archive' "$RUNNER_TEMP/display-v74-head.txt"
-          grep -iq '^content-disposition: attachment;' "$RUNNER_TEMP/display-v74-head.txt"
-          echo "BLOFY_OFFICIAL_PLUS_V74_ONLY_RAILWAY_LIVE=PASS"
-          echo "BLOFY_V74_VISIBLE_NAME_RAILWAY_LIVE=PASS"
-          echo "BLOFY_V74_PATCH_CINEMATIC_RAILWAY_LIVE=PASS"
-          echo "BLOFY_V74_CINEMATIC_RAILWAY_LIVE=PASS"
+          test "$ready" = "1" || { echo "::error::BLOFY STREAM release metadata is missing or unsafe"; exit 1; }
+          curl --fail --silent --show-error --max-time 20 \
+            https://updates.blofyplayer.com/release.json -o "$RUNNER_TEMP/player-live.json"
+          jq -e '.release.app.downloadUrl != "https://updates.blofyplayer.com/d/blofy-stream"' \
+            "$RUNNER_TEMP/player-live.json" >/dev/null
+          curl --fail --silent --show-error --max-time 20 \
+            https://updates.blofyplayer.com/downloads -o "$RUNNER_TEMP/live-downloads.html"
+          grep -Fq 'id="blofy-stream"' "$RUNNER_TEMP/live-downloads.html"
+          grep -Fq 'href="/d/blofy-stream"' "$RUNNER_TEMP/live-downloads.html"
+          grep -Fq 'href="/d/blofy"' "$RUNNER_TEMP/live-downloads.html"
+          curl --fail --silent --show-error --head --max-time 90 \
+            https://updates.blofyplayer.com/d/blofy-stream > "$RUNNER_TEMP/stream-apk-head.txt"
+          grep -iq '^content-type: application/vnd.android.package-archive' "$RUNNER_TEMP/stream-apk-head.txt"
+          echo "BLOFY_STREAM_SIGNED_OTA_LIVE=PASS"
+          echo "BLOFY_PLAYER_RELEASE_ISOLATION_LIVE=PASS"
