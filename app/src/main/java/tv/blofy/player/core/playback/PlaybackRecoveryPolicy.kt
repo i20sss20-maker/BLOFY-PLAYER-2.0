@@ -1,6 +1,8 @@
 package tv.blofy.player.core.playback
 
 import androidx.media3.common.PlaybackException
+import androidx.media3.datasource.HttpDataSource
+import retrofit2.HttpException
 
 /**
  * Final-stage recovery after Media3's own load-error policy has run.
@@ -17,6 +19,15 @@ internal object PlaybackRecoveryPolicy {
     private const val MAX_DELAY_MS = 2_000L
     private const val MAX_REPEATED_ERRORS_PER_WINDOW = 4
     const val ERROR_WINDOW_MS = 60_000L
+
+    fun httpStatus(error: Throwable): Int? =
+        generateSequence(error) { it.cause }.take(6).firstNotNullOfOrNull { cause ->
+            when (cause) {
+                is HttpDataSource.InvalidResponseCodeException -> cause.responseCode
+                is HttpException -> cause.code()
+                else -> null
+            }
+        }
 
     fun delayForSameUrlRetry(
         playbackErrorCode: Int,
