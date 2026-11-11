@@ -27,4 +27,13 @@ class DeviceClassTest {
     @Test fun phoneRemainsPhone() {
         assertEquals(DeviceClass.Kind.PHONE, DeviceClass.classify(false, false, false, false, 411))
     }
+    @Test fun smallLegacyDpadReceiverWithoutTouchscreenOpensTvUi() {
+        assertEquals(true, DeviceClass.remoteBoxFallback(false, 360, true))
+        assertEquals(DeviceClass.Kind.TV, DeviceClass.classify(false, false, false,
+            DeviceClass.remoteBoxFallback(false, 360, true), 360))
+        assertEquals(false, DeviceClass.remoteBoxFallback(true, 360, true))
+        assertEquals(false, DeviceClass.remoteBoxFallback(false, 360, false))
+    }
+
+
 }
