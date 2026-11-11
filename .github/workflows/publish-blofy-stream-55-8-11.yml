@@ -22,7 +22,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       SOURCE_RUN: '42946706370'
-      SOURCE_BRANCH: 'fix/stream-55-8-11-movie-card-meta-20261111'
+      SOURCE_BRANCH: 'fix/stream-55-8-11-stable-film-genres-20261111'
       QA_RUN: '42946706352'
       SOURCE_SHA: 'a26fe70cb311adf777c3a0abd0c71442235bbb4d'
       TAG: 'blofy-stream-55.8.11-owner-signed-20261111'
