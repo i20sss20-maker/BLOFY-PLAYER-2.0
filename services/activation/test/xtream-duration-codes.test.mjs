@@ -43,8 +43,9 @@ function fakeDb(){
   if(sql.includes('FROM blofy_xtream_servers'))
    return {rows:args[0]===source?[{id:source}]:[]};
   if(sql.includes('INSERT INTO blofy_xtream_gateway_duration_codes')){
-   const [id,code_hash,code_hint,label,source_id,duration_days,max_connections]=args;
+   const [id,code_hash,code_hint,label,source_id,duration_days,max_connections,code_channel]=args;
    const row={id,code_hash,code_hint,label,source_id,duration_days,max_connections,
+     code_channel:code_channel||'xtream',
      created_at:new Date(clockValue),redeemed_at:null,expires_at:null,
      revoked_at:null,account_id:null};
    codes.push(row);return {rows:[row]};
@@ -64,6 +65,19 @@ function fakeDb(){
    const row=codes.find(x=>x.id===args[0]);Object.assign(row,{
      redeemed_at:args[1],expires_at:args[2],account_id:args[3],redeemed_device_hash:args[4]});
    return {rows:[row]};
+  }
+  if(sql.includes('SET redeemed_device_hash=$2,')&&
+     sql.includes('relogin_device_hash=NULL')){
+    const row=codes.find(x=>x.id===args[0]);
+    if(!row||row.relogin_device_hash!==args[1]||!row.relogin_approved_at)
+      return {rowCount:0,rows:[]};
+    row.redeemed_device_hash=args[1];
+    row.relogin_request_hash=null;
+    row.relogin_device_hash=null;
+    row.relogin_approved_at=null;
+    row.relogin_expires_at=null;
+    row.transfer_count=(row.transfer_count||0)+1;
+    return {rowCount:1,rows:[]};
   }
   if(sql.includes('SET revoked_at=NOW()')){
    const row=codes.find(x=>x.id===args[0]&&!x.redeemed_at&&!x.revoked_at);
@@ -191,4 +205,33 @@ test('invalid installation binding cannot consume a subscription code',async()=>
    /stream_code_device_invalid/);
  assert.equal(state.accounts.length,0);
  assert.equal(state.codes[0].redeemed_at,null);
+});
+
+test('approved new installation reuses the original app voucher without renewing or sharing access',async()=>{
+ const {streamDeviceProof}=await import('../src/xtream-code-device-binding.mjs');
+ const {verifyStreamAppToken}=await import('../src/xtream-code-app-token.mjs');
+ const state=fakeDb(),clock=Date.parse('2026-11-09T03:00:00Z');
+ const system=createStreamDurationCodes({pool:state.pool,keyHex,clock:()=>clock});
+ const issued=await system.issue({durationDays:7,channel:'app',label:'BLOFY STREAM'});
+ const item=issued.items[0],oldKey='c'.repeat(64),newKey='d'.repeat(64);
+ const first=await system.redeem(item.code,'https://blofyplayer.com',
+   {appOnly:true,deviceKey:oldKey});
+ await assert.rejects(system.redeem(item.code,'https://blofyplayer.com',
+   {appOnly:true,deviceKey:newKey}),/stream_code_unavailable/);
+ const row=state.codes[0],initialExpiry=row.expires_at.getTime();
+ row.relogin_device_hash=streamDeviceProof(newKey,keyHex);
+ row.relogin_request_hash='b'.repeat(64);
+ row.relogin_approved_at=new Date(clock-1000);
+ row.relogin_expires_at=new Date(clock+600000);
+ const newSession=await system.redeem(item.code,'https://blofyplayer.com',
+   {appOnly:true,deviceKey:newKey});
+ assert.equal(newSession.recovered,true);
+ assert.equal(newSession.account.id,first.account.id);
+ assert.equal(newSession.account.activatedAt,first.account.activatedAt);
+ assert.equal(newSession.account.expiresAt,initialExpiry);
+ assert.equal(row.relogin_device_hash,null);
+ assert.equal(state.accounts.length,1);
+ assert.equal(verifyStreamAppToken(first.accessToken,row,keyHex),false);
+ await assert.rejects(system.redeem(item.code,'https://blofyplayer.com',
+   {appOnly:true,deviceKey:oldKey}),/stream_code_unavailable/);
 });
