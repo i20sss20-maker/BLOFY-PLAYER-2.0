@@ -170,7 +170,7 @@ test('strict string-only Xtream parser does not construct /series/.../0.mkv',()=
  assert.equal(typeof entry.id,'string');
  assert.equal(typeof entry.episode_id,'string');
  assert.equal(typeof entry.stream_id,'number');
- const parseOnlyStringId=typeof entry.id==='string'&&/^\\d+$/.test(entry.id)?
+ const parseOnlyStringId=typeof entry.id==='string'&&/^\d+$/.test(entry.id)?
    Number(entry.id):0;
  assert.equal(parseOnlyStringId,2250199);
  assert.equal(entry.episode_num,1);
