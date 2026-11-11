@@ -33,4 +33,21 @@ class UpdateSafetyTest {
         )
     }
 
+    @Test fun largeStreamApkFitsBoundedStreamingDownloadAndChecksumIsVerified() {
+        assertTrue(AppUpdateWorker.MAX_BYTES > 292310844L)
+        val data = "signed-archive-for-test"
+        val expected = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(data.toByteArray()).joinToString("") { "%02x".format(it) }
+        val file = kotlin.io.path.createTempFile("blofy-stream-update-", ".apk").toFile()
+        try {
+            file.writeText(data)
+            assertTrue(UpdatePackageVerifier.hasSha256(file, expected))
+            assertFalse(UpdatePackageVerifier.hasSha256(file, "0".repeat(64)))
+            assertFalse(UpdatePackageVerifier.hasSha256(file, "bad"))
+            file.appendText("-corrupt")
+            assertFalse(UpdatePackageVerifier.hasSha256(file, expected))
+        } finally { file.delete() }
+    }
+
+
 }
