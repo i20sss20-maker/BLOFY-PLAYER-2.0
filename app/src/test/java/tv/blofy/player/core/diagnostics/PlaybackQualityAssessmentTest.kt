@@ -54,7 +54,7 @@ class PlaybackQualityAssessmentTest {
             PlaybackQualityAssessment.classify(metric()).cause)
         assertEquals(PlaybackQualityAssessment.Cause.NOT_READY,
             PlaybackQualityAssessment.classify(metric(null)).cause)
-        assertEquals(2500L, PlaybackQualityAssessment.medianStartMs(listOf(
+        assertEquals(1500L, PlaybackQualityAssessment.medianStartMs(listOf(
             metric(firstFrameMs = 1500), metric(firstFrameMs=2500), metric(firstFrameMs=5500)
         )))
     }
