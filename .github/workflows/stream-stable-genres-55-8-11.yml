@@ -1,0 +1,79 @@
+name: BLOFY STREAM 55.8.11 Stable Film Genre Snapshot QA
+
+on:
+  push:
+    branches:
+      - fix/stream-55-8-11-movie-card-meta-20261111
+  pull_request:
+    branches:
+      - fix/stream-55-8-10-movie-card-meta-20261111
+
+permissions:
+  contents: read
+
+jobs:
+  arabic-details-movie-genres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Install Android 36 and build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36' 'build-tools;35.0.0'
+      - name: Verify Arabic detail preference, movie genres and full QA packaging
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --max-workers=2 \
+            -Dorg.gradle.jvmargs="-Xmx2048m -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8" \
+            -PBLOFY_ACTIVATION_BASE_URL=http://127.0.0.1:9 \
+            -PBLOFY_UPDATE_BASE_URL=http://127.0.0.1:9 \
+            testStreamCodeDemoUnitTest \
+              --tests 'tv.blofy.player.ui.details.ArabicDetailsPolicyTest' \
+              --tests 'tv.blofy.player.ui.catalog.MovieGenresTest' \
+              --tests 'tv.blofy.player.ui.catalog.MovieCardMetaTest' \
+              --tests 'tv.blofy.player.data.metadata.ProviderMetadataGenreSnapshotTest'
+          gradle --no-daemon --max-workers=2 \
+            -Dorg.gradle.jvmargs="-Xmx2048m -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8" \
+            -PBLOFY_ACTIVATION_BASE_URL=https://api.blofyplayer.com \
+            -PBLOFY_UPDATE_BASE_URL=https://updates.blofyplayer.com \
+            assembleStreamCodeDemo
+      - name: Ensure no per-viewport live genre requests can reorder labels
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -Fq 'scheduleVisibleGenreEnrichment' app/src/main/java/tv/blofy/player/ui/catalog/PosterCatalogActivity.kt
+          ! grep -Fq 'ProviderDetailsRepository.refresh' app/src/main/java/tv/blofy/player/ui/catalog/PosterCatalogActivity.kt
+          grep -Fq 'readGenresForPage' app/src/main/java/tv/blofy/player/ui/catalog/PosterCatalogActivity.kt
+      - name: Verify exact QA identity (never replace customer APK)
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/streamCodeDemo/app-streamCodeDemo.apk
+          test -s "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" > "$RUNNER_TEMP/badging.txt"
+          grep -Fq "name='tv.blofy.player.v2.stream.qa' versionCode='2000088' versionName='2.0.0-rc07.55.8.11-STREAM-QA'" "$RUNNER_TEMP/badging.txt"
+          mkdir -p build/stream-arabic-qa
+          printf 'version=55.8.11\npackage=tv.blofy.player.v2.stream.qa\nsigned_production=no\n' > build/stream-arabic-qa/IDENTITY.txt
+          sha256sum "$apk" > build/stream-arabic-qa/SHA256SUMS.txt
+      - name: Attach test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-STREAM-55.8.11-ARABIC-GENRES-QA-${{ github.sha }}
+          path: |
+            app/build/outputs/apk/streamCodeDemo/*.apk
+            app/build/test-results/testStreamCodeDemoUnitTest/
+            build/stream-arabic-qa/
+          if-no-files-found: warn
+          retention-days: 7
