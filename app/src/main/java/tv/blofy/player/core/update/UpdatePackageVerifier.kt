@@ -14,6 +14,31 @@ object UpdatePackageVerifier {
     ): Boolean = packageName == installedPackage && version == expectedVersion.toLong() &&
         version > installedVersion && certificates.isNotEmpty() && certificates == installedCertificates
 
+    /**
+     * Check the exact owner-published APK bytes without ever buffering the
+     * archive in memory. APK signatures alone are necessary but are not a
+     * substitute for pinning the release artifact to its feed checksum.
+     */
+    fun hasSha256(file: File, expectedHex: String?): Boolean {
+        val expected = expectedHex?.trim()?.lowercase()
+            ?.takeIf { it.matches(Regex("[a-f0-9]{64}")) } ?: return false
+        if (!file.isFile) return false
+        return runCatching {
+            val digest = MessageDigest.getInstance("SHA-256")
+            file.inputStream().buffered(64 * 1024).use { input ->
+                val bytes = ByteArray(64 * 1024)
+                while (true) {
+                    val count = input.read(bytes)
+                    if (count == -1) break
+                    digest.update(bytes, 0, count)
+                }
+            }
+            val actual = digest.digest()
+            val published = expected.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+            MessageDigest.isEqual(actual, published)
+        }.getOrDefault(false)
+    }
+
     @Suppress("DEPRECATION")
     fun verify(context: Context, file: File, expectedVersion: Int): Boolean = runCatching {
         if (!file.isFile || !file.name.endsWith(".apk", ignoreCase = true)) return false
