@@ -20,6 +20,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
 import tv.blofy.player.core.provider.ProviderProfile
 import java.lang.reflect.Proxy
+import java.util.concurrent.TimeUnit
 
 @OptIn(markerClass = [UnstableApi::class])
 @RunWith(RobolectricTestRunner::class)
@@ -93,7 +94,8 @@ class PlaybackSessionReleaseTest {
         val session = session(fake)
         try {
             fake.timeout(ExoTimeoutException.TIMEOUT_OPERATION_DETACH_SURFACE)
-            shadowOf(Looper.getMainLooper()).idle()
+            // Transient source errors wait 550ms instead of hammering the origin.
+            shadowOf(Looper.getMainLooper()).idleFor(600, TimeUnit.MILLISECONDS)
             assertEquals(1, fake.prepares)
         } finally { session.release() }
     }
