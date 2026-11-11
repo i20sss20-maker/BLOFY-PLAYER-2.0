@@ -89,8 +89,9 @@ object PlaybackDiagnostics {
     fun error(metric: PlaybackMetric, code: String?, message: String?): PlaybackMetric {
         val safeCode = DiagnosticsSanitizer.sanitizeErrorCode(code)
         val safeMessage = DiagnosticsSanitizer.sanitizeMessage(message)
-        val updated = finish(metric).copy(errorCode = safeCode, errorMessage = safeMessage)
-        replace(metric, updated)
+        val finished = finish(metric)
+        val updated = finished.copy(errorCode = safeCode, errorMessage = safeMessage)
+        replace(finished, updated)
         Log.e(TAG, "error provider=${metric.providerKey} kind=${metric.contentKind} code=$safeCode message=$safeMessage")
         return updated
     }
