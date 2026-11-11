@@ -48,6 +48,8 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
     private lateinit var codeInput: EditText
     private lateinit var submitButton: Button
     private lateinit var statusText: TextView
+    private lateinit var reloginButton: Button
+    private lateinit var reloginCodeText: TextView
     private var busy = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -185,6 +187,35 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
             setPadding(dp(8), dp(19), dp(8), dp(7))
         }
         panel.addView(statusText)
+        reloginButton = Button(this).apply {
+            id = View.generateViewId()
+            text = getString(R.string.stream_ui_relogin_action)
+            isAllCaps = false
+            textSize = if (isTv) 17f else 15f
+            setTextColor(BlofyTvDesign.TextPrimary)
+            background = BlofyTvDesign.secondaryButton(dp(14).toFloat())
+            isFocusable = true
+            visibility = View.GONE
+            setOnFocusChangeListener { view, focused ->
+                view.background = BlofyTvDesign.secondaryButton(dp(14).toFloat(), focused)
+            }
+            setOnClickListener { requestSameCodeRelogin() }
+        }
+        panel.addView(reloginButton, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(50)).apply {
+            topMargin = dp(8)
+        })
+        reloginCodeText = TextView(this).apply {
+            textSize = if (isTv) 27f else 23f
+            setTextColor(BlofyTvDesign.PurpleSoft)
+            typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
+            letterSpacing = 0.17f
+            textDirection = View.TEXT_DIRECTION_LTR
+            gravity = Gravity.CENTER
+            visibility = View.GONE
+            if (!isTv) setTextIsSelectable(true)
+        }
+        panel.addView(reloginCodeText)
         panel.addView(TextView(this).apply {
             text = getString(R.string.stream_ui_secure_notice)
             textSize = 11.5f
@@ -215,8 +246,11 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
             LinearLayout.LayoutParams.MATCH_PARENT, dp(if (isTv) 50 else 46)).apply {
                 topMargin = dp(18)
             })
+        languageButtonId = languageButton.id
         submitButton.nextFocusDownId = languageButton.id
         languageButton.nextFocusUpId = submitButton.id
+        reloginButton.nextFocusUpId = submitButton.id
+        reloginButton.nextFocusDownId = languageButton.id
 
         codeInput.nextFocusDownId = submitButton.id
         submitButton.nextFocusUpId = codeInput.id
@@ -281,6 +315,7 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
         busy = working
         codeInput.isEnabled = !working
         submitButton.isEnabled = !working
+        reloginButton.isEnabled = !working
     }
 
     private fun activate() {
@@ -291,6 +326,7 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
             codeInput.requestFocus()
             return
         }
+        setReloginVisible(false)
         setBusy(true)
         statusText.text = getString(R.string.stream_ui_activating)
         lifecycleScope.launch {
@@ -321,6 +357,7 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
                     CatalogSyncState.markPending(applicationContext,StreamCodeSession.providerId)
                 }
                 codeInput.text?.clear()
+                setReloginVisible(false)
                 statusText.text = getString(R.string.stream_ui_activated)
                 startActivity(Intent(this@CodeOnlyLoginActivity,
                     CatalogLoadingActivity::class.java)
@@ -344,8 +381,69 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
                         getString(R.string.stream_ui_activation_connection)
                     else -> getString(R.string.stream_ui_activation_failed)
                 }
+                if (error is StreamCodeClient.ReloginApprovalRequired) {
+                    statusText.text = getString(R.string.stream_ui_relogin_help)
+                    setReloginVisible(true)
+                }
                 setBusy(false)
-                codeInput.requestFocus()
+                if (error is StreamCodeClient.ReloginApprovalRequired)
+                    reloginButton.requestFocus()
+                else codeInput.requestFocus()
+            }
+        }
+    }
+
+    private fun setReloginVisible(visible: Boolean) {
+        if (!::reloginButton.isInitialized) return
+        reloginButton.visibility = if (visible) View.VISIBLE else View.GONE
+        submitButton.nextFocusDownId = if (visible) reloginButton.id
+                                       else languageFocusTargetId()
+        if (!visible && ::reloginCodeText.isInitialized) {
+            reloginCodeText.text = ""
+            reloginCodeText.visibility = View.GONE
+        }
+    }
+
+    private var languageButtonId: Int = View.NO_ID
+    private fun languageFocusTargetId(): Int =
+        languageButtonId.takeIf { it != View.NO_ID } ?: submitButton.id
+
+    private fun requestSameCodeRelogin() {
+        if (busy) return
+        val original = StreamCodeClient.normalizeCode(codeInput.text.toString())
+        if (original.isEmpty()) {
+            statusText.text = getString(R.string.stream_ui_code_length)
+            codeInput.requestFocus()
+            return
+        }
+        setBusy(true)
+        statusText.text = getString(R.string.stream_ui_relogin_requesting)
+        lifecycleScope.launch {
+            try {
+                val installKey = StreamCodeSession.installationKey(applicationContext)
+                val result = StreamCodeClient.requestRelogin(original, installKey)
+                if (result.alreadyAuthorized) {
+                    statusText.text = getString(R.string.stream_ui_relogin_retry)
+                } else {
+                    reloginCodeText.text = result.requestCode
+                    reloginCodeText.visibility = View.VISIBLE
+                    statusText.text = getString(R.string.stream_ui_relogin_send_pin)
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                statusText.text = when (error.message) {
+                    "stream_code_relogin_already_pending" ->
+                        getString(R.string.stream_ui_relogin_pending)
+                    "stream_code_relogin_unavailable" ->
+                        getString(R.string.stream_ui_relogin_unavailable)
+                    "stream_code_rate_limited" ->
+                        getString(R.string.stream_ui_too_many_attempts)
+                    else -> getString(R.string.stream_ui_relogin_failed)
+                }
+            } finally {
+                setBusy(false)
+                if (!isFinishing) reloginButton.requestFocus()
             }
         }
     }
