@@ -38,6 +38,10 @@ class BlofyPlaybackSession(
     private var firstFrameRecorded = false
     private var playStartedAtMs = 0L
     private var automaticRetries = 0
+    // Cap repeated reconnects even if a stream briefly renders a first frame
+    // between disconnects. Reset only when switching content or after 60 sec.
+    private var repeatedPlayerErrors = 0
+    private var playerErrorWindowStartMs = 0L
     private var alternateLiveFormatAttempted = false
     private var ultraHdCompatibilityFallbackAttempted = false
     private var compatibilityTrackParameters: androidx.media3.common.TrackSelectionParameters? = null
@@ -138,9 +142,19 @@ class BlofyPlaybackSession(
                     if (failedUrl.isNotBlank()) {
                         PlaybackIntelligence.recordFailure(appContext, profile.providerKey, contentKind, failedUrl)
                     }
-                    if (automaticRetries < MAX_AUTOMATIC_RETRIES) {
+                    val now = SystemClock.elapsedRealtime()
+                    val (windowStart, failures) = PlaybackRecoveryPolicy.failureWindowCount(
+                        now, playerErrorWindowStartMs, repeatedPlayerErrors
+                    )
+                    playerErrorWindowStartMs = windowStart
+                    repeatedPlayerErrors = failures
+                    val delay = PlaybackRecoveryPolicy.delayForSameUrlRetry(
+                        error.errorCode, PlaybackRecoveryPolicy.httpStatus(error),
+                        automaticRetries, repeatedPlayerErrors
+                    )
+                    if (automaticRetries < MAX_AUTOMATIC_RETRIES && delay != null) {
                         automaticRetries++
-                        retryHandler.post { retrySameUrl() }
+                        retryHandler.postDelayed({ if (!closing) retrySameUrl() }, delay)
                     } else if (failedUrl.isNotBlank()) {
                         retryHandler.post {
                             if (closing) return@post
@@ -180,6 +194,8 @@ class BlofyPlaybackSession(
             compatibilityTrackParameters = null
         }
         automaticRetries = 0
+        repeatedPlayerErrors = 0
+        playerErrorWindowStartMs = 0L
         alternateLiveFormatAttempted = false
         ultraHdCompatibilityFallbackAttempted = false
         liveStallRecoveries = 0
