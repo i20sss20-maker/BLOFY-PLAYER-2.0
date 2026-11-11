@@ -22,7 +22,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       SOURCE_RUN: '42938987725'
-      SOURCE_BRANCH: 'feature/stream-55-8-10-arabic-details-movie-genres-20261111'
+      SOURCE_BRANCH: 'fix/stream-55-8-10-movie-card-meta-20261111'
       QA_RUN: '42939034809'
       SOURCE_SHA: '259527f26bf1009150da0a462b53acb56ea9a35d'
       TAG: 'blofy-stream-55.8.10-owner-signed-20261111'
