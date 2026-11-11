@@ -373,7 +373,7 @@ class PosterCatalogActivity : AppCompatActivity() {
                 }
                 val cachedGenres = if (kind == KIND_MOVIE) page.mapNotNull { item ->
                     ProviderMetadataCache.read(applicationContext, item.key)?.genres
-                        ?.takeIf(List<String>::isNotEmpty)?.let { item.key to it }
+                        ?.takeIf { it.isNotEmpty() }?.let { item.key to it }
                 }.toMap() else emptyMap()
                 Triple(page, page.lastOrNull()?.let { dao.streamRowId(it.key) } ?: cursor, cachedGenres)
             }
