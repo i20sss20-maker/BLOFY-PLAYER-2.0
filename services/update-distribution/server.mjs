@@ -11,6 +11,7 @@ import { CINEMATIC_V74_PATCH, CINEMATIC_V74_PATCH_APK_URL } from './cinematic-v7
 import { CINEMATIC_V74_REMOTE, CINEMATIC_V74_REMOTE_APK_URL } from './cinematic-v74-remote.mjs';
 import { CINEMATIC_V74_DISPLAY, CINEMATIC_V74_DISPLAY_APK_URL, renderCinematicV74DisplayCard } from './cinematic-v74-display.mjs';
 import { requireAdmin, sameOrigin, readForm, renderAdmin, handleAdminAction } from './admin-panel.mjs';
+import { streamReleasePayload } from './stream-release.mjs';
 import { initAppLibrary, listApps, getApp, listAppVariants, getAppVariant, refreshManagedApps, refreshAppHealth, recordDownload, openRemoteApk } from './app-library.mjs';
 import { appDownloadAction } from './app-download-policy.mjs';
 import { observeDownloadCompletion } from './download-metrics.mjs';
@@ -1021,6 +1022,7 @@ const server = http.createServer(async (req, res) => {
       return res.end(method === 'HEAD' ? undefined : body);
     }
 
+    if (pathname === '/stream/release.json') return sendJson(req, res, 200, streamReleasePayload());
     if (pathname === '/health' || pathname === '/release.json') return sendJson(req, res, 200, healthPayload());
 
     if (pathname === '/tv' || pathname === '/tv/') {
