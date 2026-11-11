@@ -46,6 +46,7 @@ class PosterCatalogActivity : AppCompatActivity() {
     private lateinit var searchBar: TextView
     private var genreStrip: LinearLayout? = null
     private var selectedGenre: String? = null
+    private var catalogRoot: View? = null
     private var pageJob: Job? = null
     private var countJob: Job? = null
     private var exactCount: Int? = null
@@ -286,6 +287,7 @@ class PosterCatalogActivity : AppCompatActivity() {
         content.addView(posterGrid, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         body.addView(content, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
         root.addView(body, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        catalogRoot = root
         setContentView(root)
         if (deviceKind == DeviceClass.Kind.TV) root.requestFocus()
 
@@ -301,7 +303,8 @@ class PosterCatalogActivity : AppCompatActivity() {
             itemKey = { it.key }
         )
         categoryList.adapter = categoryAdapter
-        TwoPaneFocusGuard.registerTopTarget(root, searchBar)
+        TwoPaneFocusGuard.registerTopTarget(root,
+            if (kind == KIND_MOVIE) genreStrip?.getChildAt(0) ?: searchBar else searchBar)
 
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
@@ -414,6 +417,9 @@ class PosterCatalogActivity : AppCompatActivity() {
         addChip(null, if (ar) "كل الأنواع" else "All genres")
         MovieGenres.genres.forEach { addChip(it.key, if (ar) it.arabic else it.english) }
         val focused = active
+        if (::posterGrid.isInitialized && ::categoryList.isInitialized) {
+            catalogRoot?.let { TwoPaneFocusGuard.registerTopTarget(it, focused ?: searchBar) }
+        }
         if (hadFocus) focused?.post { focused.requestFocus() }
     }
 
