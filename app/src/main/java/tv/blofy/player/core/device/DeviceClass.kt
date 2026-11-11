@@ -22,11 +22,14 @@ object DeviceClass {
         // Several older Android TV/Box firmwares advertise a normal UI with
         // smallestWidth <480dp. A D-pad-only device with no touchscreen must
         // still reach the remote-first layout, not the phone-only touchscreen UI.
-        val dpadOnly = configuration.navigation == Configuration.NAVIGATION_DPAD && !touchscreen
-        val remoteFirstBox = !touchscreen && (smallest >= 480 || dpadOnly)
+        val dpadOnly = configuration.navigation == Configuration.NAVIGATION_DPAD
+        val remoteFirstBox = remoteBoxFallback(touchscreen, smallest, dpadOnly)
 
         return classify(tvUiMode, leanback, television, remoteFirstBox, smallest)
     }
+
+    internal fun remoteBoxFallback(touchscreen: Boolean, smallestWidthDp: Int, dpad: Boolean): Boolean =
+        !touchscreen && (smallestWidthDp >= 480 || dpad)
 
     internal fun classify(
         tvUiMode: Boolean,
