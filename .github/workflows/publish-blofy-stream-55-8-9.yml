@@ -5,14 +5,14 @@ on:
     branches:
       - main
     paths:
-      - '.github/workflows/publish-blofy-stream-55-8-8.yml'
+      - '.github/workflows/publish-blofy-stream-55-8-9.yml'
 
 permissions:
   contents: write
   actions: read
 
 concurrency:
-  group: publish-blofy-stream-55-8-8-signed
+  group: publish-blofy-stream-55-8-9-signed
   cancel-in-progress: false
 
 jobs:
@@ -24,6 +24,7 @@ jobs:
       SOURCE_RUN: '42933876846'
       SOURCE_BRANCH: 'feature/stream-55-8-9-arabic-details-movie-genres-20261111'
       SOURCE_PR: '530'
+      SOURCE_SHA: '5b979b0e6c212c1e4fd540c1289bb78d8834952b'
       TAG: 'blofy-stream-55.8.9-owner-signed-20261111'
       APK_NAME: 'BLOFY-STREAM-55.8.9-FFMPEG-OWNER-SIGNED.apk'
       EXPECTED_CERT: 'C3B98CCCD2F0C86809014ACD9368BF61C7004CFD419CD867B71FEF10BFA6255E'
@@ -50,8 +51,8 @@ jobs:
             sleep 30
           done
           test "$success" = 1 || { echo "::error::Signed run did not finish"; exit 1; }
-          jq -e --arg branch "$SOURCE_BRANCH" --argjson pr "$SOURCE_PR" \
-            '.head_branch==$branch and .event=="pull_request" and
+          jq -e --arg branch "$SOURCE_BRANCH" --arg sha "$SOURCE_SHA" --argjson pr "$SOURCE_PR" \
+            '.head_branch==$branch and .head_sha==$sha and .event=="pull_request" and
              (.pull_requests | any(.number==$pr))' "$RUNNER_TEMP/source.json"
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN/artifacts" > "$RUNNER_TEMP/artifacts.json"
           count="$(jq '[.artifacts[] | select(.name | startswith("BLOFY-STREAM-55.8.9-FFMPEG-OWNER-SIGNED-"))] | length' "$RUNNER_TEMP/artifacts.json")"
