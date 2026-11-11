@@ -120,7 +120,14 @@ android {
         isCoreLibraryDesugaringEnabled = true
     }
     kotlinOptions { jvmTarget = "17" }
-    packaging { resources.excludes += setOf("META-INF/DEPENDENCIES", "META-INF/LICENSE*", "META-INF/NOTICE*") }
+    packaging {
+        // Ship a universal 32/64-bit, x86/x86_64 STREAM APK small enough for
+        // the already-installed 55.8.11 updater's 256 MiB ceiling.
+        // Extracting native libs works on legacy Android TV while keeping all
+        // FFmpeg decoders/ABIs; original ELF files remain 16KiB-page compatible.
+        jniLibs.useLegacyPackaging = true
+        resources.excludes += setOf("META-INF/DEPENDENCIES", "META-INF/LICENSE*", "META-INF/NOTICE*")
+    }
     testOptions {
         unitTests.isIncludeAndroidResources = true
         unitTests.all { it.testLogging.exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
