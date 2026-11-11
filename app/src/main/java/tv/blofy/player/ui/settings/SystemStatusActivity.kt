@@ -27,6 +27,8 @@ import kotlinx.coroutines.withContext
 import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
+import tv.blofy.player.core.diagnostics.PlaybackDiagnostics
+import tv.blofy.player.core.diagnostics.PlaybackQualityAssessment
 import tv.blofy.player.data.CatalogManifestStore
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.LocalStorageManager
@@ -144,6 +146,30 @@ class SystemStatusActivity : AppCompatActivity() {
                 getString(R.string.system_status_last_refresh) to formatTime(status.updatedAt)
             )
         })
+
+        // Local only; playback diagnostics honor the user's telemetry consent
+        // before any upload. The UI never contains source links or logins.
+        val recent = PlaybackDiagnostics.snapshot().takeLast(20)
+        val median = PlaybackQualityAssessment.medianStartMs(recent)
+        val last = recent.lastOrNull()
+        val assessment = last?.let { PlaybackQualityAssessment.classify(it) }
+        addSection("جودة التشغيل • الجلسة الحالية", listOf(
+            "عدد محاولات التشغيل" to recent.size.toString(),
+            "وسيط وقت ظهور الصورة" to (median?.let { "${it} ms" } ?: "—"),
+            "مرات التخزين بعد بدء الفيديو" to recent.sumOf { it.rebufferCount }.toString(),
+            "التوقفات بعد التشغيل" to "${recent.sumOf { it.rebufferDurationMs } / 1_000} ثانية",
+            "محاولات استعادة الاتصال" to recent.sumOf { it.recoveryCount }.toString(),
+            "آخر نتيجة" to (assessment?.titleAr ?: "لم تبدأ تجربة تشغيل")
+        ))
+        assessment?.let {
+            content.addView(TextView(this).apply {
+                text = it.adviceAr
+                textSize = 13f
+                typeface = BlofyTvDesign.preferredTypeface(this)
+                setTextColor(BlofyTvDesign.TextSecondary)
+                setPadding(dp(8), 0, dp(8), dp(18))
+            })
+        }
 
         addSection(getString(R.string.system_status_section_storage), listOf(
             getString(R.string.system_status_temp_files) to LocalStorageManager.format(this, status.storage.temporaryBytes),
@@ -282,6 +308,13 @@ class SystemStatusActivity : AppCompatActivity() {
             appendLine("Catalog ready: ${status.ready}; fullyReady=${status.fullyReady}; metadataReady=${status.metadataReady}; episodesReady=${status.episodesReady}")
             appendLine("Last successful refresh: ${formatTime(status.updatedAt)}")
             appendLine("Storage: ${LocalStorageManager.format(this@SystemStatusActivity, status.storage.totalBytes)}")
+            val recent = PlaybackDiagnostics.snapshot().takeLast(20)
+            appendLine("Playback attempts: ${recent.size}")
+            appendLine("First frame median ms: ${PlaybackQualityAssessment.medianStartMs(recent) ?: "not-measured"}")
+            appendLine("Rebuffer count: ${recent.sumOf { it.rebufferCount }}")
+            appendLine("Rebuffer total ms: ${recent.sumOf { it.rebufferDurationMs }}")
+            appendLine("Playback recovery attempts: ${recent.sumOf { it.recoveryCount }}")
+            appendLine("Last observed category: ${recent.lastOrNull()?.let { PlaybackQualityAssessment.classify(it).cause.name } ?: "NOT_READY"}")
         }.trim()
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText("BLOFY diagnostics", report))

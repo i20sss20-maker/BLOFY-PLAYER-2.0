@@ -73,6 +73,7 @@ class BlofyPlaybackSession(
                     if (closing) return
                     if (playbackState == Player.STATE_BUFFERING) metric?.let { metric = PlaybackDiagnostics.buffering(it) }
                     if (playbackState == Player.STATE_READY) {
+                        metric?.let { metric = PlaybackDiagnostics.ready(it) }
                         resetLiveStallTimer(keepPosition = true)
                         if (!contentKind.isLiveContent()) seekRecoveryGeneration++
                     }
@@ -114,6 +115,8 @@ class BlofyPlaybackSession(
                 }
 
                 override fun onPlayerError(error: PlaybackException) {
+                    // Never attribute a surface-release error to the source.
+                    if (closing) return
                     metric?.let {
                         val details = PlaybackFailureDetails.describe(error,
                             phase = if (closing) "release" else "playback",
@@ -122,9 +125,6 @@ class BlofyPlaybackSession(
                         metric = updated
                         PlaybackDiagnosticsUploader.enqueue(appContext, updated)
                     }
-                    // Media3 can synchronously report a timeout while detaching a surface or
-                    // releasing. It must never restart this session or penalize the provider.
-                    if (closing) return
                     if (!contentKind.isLiveContent() &&
                         !ultraHdCompatibilityFallbackAttempted &&
                         PlaybackFailureDetails.isUltraHdDecoderFailure(error, videoFormat)
@@ -221,6 +221,7 @@ class BlofyPlaybackSession(
         val position = player.currentPosition.coerceAtLeast(0L)
         resetLiveStallTimer(keepPosition = false)
         playStartedAtMs = SystemClock.elapsedRealtime()
+        metric?.let { metric = PlaybackDiagnostics.recovered(it) }
         player.stop()
         player.setMediaItem(item)
         player.prepare()
@@ -305,7 +306,10 @@ class BlofyPlaybackSession(
         firstFrameRecorded = false
         playStartedAtMs = SystemClock.elapsedRealtime()
         resetLiveStallTimer(keepPosition = false)
-        metric = PlaybackDiagnostics.begin(profile.providerKey, contentKind, url)
+        metric?.let { PlaybackDiagnostics.finish(it) }
+        metric = PlaybackDiagnostics.recovered(
+            PlaybackDiagnostics.begin(profile.providerKey, contentKind, url)
+        )
         prepareFallbackItem(player, mediaItem(url), contentKind.isLiveContent())
     }
 
@@ -334,6 +338,16 @@ class BlofyPlaybackSession(
     fun release(detachOutput: () -> Unit = {}) {
         if (closing) return
         closing = true
+        metric?.let { current ->
+            val completed = PlaybackDiagnostics.finish(current)
+            metric = completed
+            // An opted-in final snapshot records interruptions that occur
+            // after first frame, without continuously uploading while watching.
+            if (completed.firstFrameElapsedMs != null &&
+                (completed.rebufferCount > 0 || completed.recoveryCount > 0)) {
+                PlaybackDiagnosticsUploader.enqueue(appContext, completed)
+            }
+        }
         seekRecoveryGeneration++
         retryHandler.removeCallbacksAndMessages(null)
         try {
