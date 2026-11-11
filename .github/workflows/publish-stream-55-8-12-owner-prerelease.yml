@@ -38,14 +38,20 @@ jobs:
           set -euo pipefail
           mkdir -p signed
           gh run download "$SOURCE_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$SOURCE_ARTIFACT" --dir signed
-          test -s "signed/$APK_NAME"
-          test -s signed/SHA256SUMS
-          test -s signed/BUILD-IDENTITY.txt
-          grep -Fxq "source_commit=$SOURCE_COMMIT" signed/BUILD-IDENTITY.txt
-          grep -Fxq 'app_id=tv.blofy.player.v2.stream' signed/BUILD-IDENTITY.txt
-          grep -Fxq 'version_code=2000089' signed/BUILD-IDENTITY.txt
-          (cd signed && sha256sum -c SHA256SUMS)
-          size="$(stat -c%s "signed/$APK_NAME")"
+          # Composite artifact paths are nested by actions/upload-artifact.
+          APK_FILE="$(find signed -type f -name "$APK_NAME" -print -quit)"
+          test -n "$APK_FILE" && test -s "$APK_FILE" || {
+            echo 'Signed APK missing from CI artifact'; find signed -maxdepth 4 -type f; exit 1;
+          }
+          SIGNED_DIR="$(dirname "$APK_FILE")"
+          echo "SIGNED_DIR=$SIGNED_DIR" >> "$GITHUB_ENV"
+          test -s "$SIGNED_DIR/SHA256SUMS"
+          test -s "$SIGNED_DIR/BUILD-IDENTITY.txt"
+          grep -Fxq "source_commit=$SOURCE_COMMIT" "$SIGNED_DIR/BUILD-IDENTITY.txt"
+          grep -Fxq 'app_id=tv.blofy.player.v2.stream' "$SIGNED_DIR/BUILD-IDENTITY.txt"
+          grep -Fxq 'version_code=2000089' "$SIGNED_DIR/BUILD-IDENTITY.txt"
+          (cd "$SIGNED_DIR" && sha256sum -c SHA256SUMS)
+          size="$(stat -c%s "$APK_FILE")"
           test "$size" -gt 10000000
           test "$size" -lt 268435456 || { echo "APK too large for original installed updater: $size"; exit 1; }
           echo "Signed archive size: $size bytes" >> "$GITHUB_STEP_SUMMARY"
@@ -57,14 +63,14 @@ jobs:
           if [ ! -x "$SDK/apksigner" ]; then
             yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "build-tools;35.0.0" >/dev/null || true
           fi
-          "$SDK/aapt" dump badging "signed/$APK_NAME" > "$RUNNER_TEMP/stream-badging.txt"
+          "$SDK/aapt" dump badging ""$SIGNED_DIR/$APK_NAME"" > "$RUNNER_TEMP/stream-badging.txt"
           grep -Fq "name='tv.blofy.player.v2.stream' versionCode='2000089' versionName='2.0.0-rc07.55.8.12-STREAM'" "$RUNNER_TEMP/stream-badging.txt"
           grep -Fq "sdkVersion:'23'" "$RUNNER_TEMP/stream-badging.txt"
-          "$SDK/apksigner" verify --print-certs "signed/$APK_NAME" > "$RUNNER_TEMP/stream-cert.txt"
+          "$SDK/apksigner" verify --print-certs ""$SIGNED_DIR/$APK_NAME"" > "$RUNNER_TEMP/stream-cert.txt"
           actual="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/stream-cert.txt" | head -1 | tr -d '[:space:]-:' | tr '[:lower:]' '[:upper:]')"
           test "$actual" = "$OWNER_CERT" || { echo 'APK signing certificate mismatch'; exit 1; }
           for abi in armeabi-v7a arm64-v8a x86 x86_64; do
-            unzip -Z1 "signed/$APK_NAME" | grep -Fxq "lib/$abi/libffmpegJNI.so"
+            unzip -Z1 ""$SIGNED_DIR/$APK_NAME"" | grep -Fxq "lib/$abi/libffmpegJNI.so"
           done
       - name: Publish owner-only QA pre-release, never the live update feed
         shell: bash
@@ -74,7 +80,7 @@ jobs:
             echo 'An owner test pre-release already exists; refusing overwrite.'
             exit 1
           fi
-          gh release create "$TAG" "signed/$APK_NAME" signed/SHA256SUMS \
+          gh release create "$TAG" ""$SIGNED_DIR/$APK_NAME"" "$SIGNED_DIR/SHA256SUMS" \
             --repo "$GITHUB_REPOSITORY" \
             --target "$SOURCE_COMMIT" \
             --prerelease \
