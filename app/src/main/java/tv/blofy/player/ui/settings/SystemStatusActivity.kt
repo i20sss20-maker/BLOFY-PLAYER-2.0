@@ -165,7 +165,7 @@ class SystemStatusActivity : AppCompatActivity() {
             content.addView(TextView(this).apply {
                 text = it.adviceAr
                 textSize = 13f
-                typeface = BlofyTvDesign.preferredTypeface(this@SystemStatusActivity)
+                typeface = BlofyTvDesign.preferredTypeface(this)
                 setTextColor(BlofyTvDesign.TextSecondary)
                 setPadding(dp(8), 0, dp(8), dp(18))
             })
