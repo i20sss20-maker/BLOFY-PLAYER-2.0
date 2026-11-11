@@ -89,11 +89,11 @@ class MobileContentActivity : AppCompatActivity() {
             setPadding(dp(14), 0, dp(14), 0)
             // Show the category control immediately, before Room's first
             // update, instead of a blank row until returning from details.
-            adapter = ArrayAdapter(
-                this@MobileContentActivity,
-                android.R.layout.simple_spinner_item,
-                listOf(if (kind == KIND_SERIES) "كل المسلسلات" else if (kind == KIND_MOVIE) "كل الأفلام" else "كل القنوات")
-            ).apply { setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+            adapter = categoryLabels(listOf(
+                if (kind == KIND_SERIES) "كل المسلسلات"
+                else if (kind == KIND_MOVIE) "كل الأفلام"
+                else "كل القنوات"
+            ))
         }
         root.addView(categorySpinner, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (compact) 48 else 52)).apply {
             bottomMargin = dp(if (compact) 8 else 10)
@@ -146,10 +146,7 @@ class MobileContentActivity : AppCompatActivity() {
                     items.any { it.remoteId == selected }
                 }
                 categories = displayed
-                categorySpinner.adapter = ArrayAdapter(
-                    this@MobileContentActivity,
-                    android.R.layout.simple_spinner_item, displayed.map { it.name }
-                ).apply { setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+                categorySpinner.adapter = categoryLabels(displayed.map { it.name })
                 categorySpinner.setSelection(
                     displayed.indexOfFirst { it.remoteId == retained }.takeIf { it >= 0 } ?: 0,
                     false
@@ -172,6 +169,26 @@ class MobileContentActivity : AppCompatActivity() {
             } else false
         }
     }
+
+    private fun categoryLabels(labels: List<String>): ArrayAdapter<String> =
+        object : ArrayAdapter<String>(
+            this, android.R.layout.simple_spinner_item, labels
+        ) {
+            override fun getView(
+                position: Int, convertView: View?, parent: ViewGroup
+            ): View = super.getView(position, convertView, parent).also { view ->
+                (view as? TextView)?.setTextColor(BlofyTvDesign.TextPrimary)
+            }
+
+            override fun getDropDownView(
+                position: Int, convertView: View?, parent: ViewGroup
+            ): View = super.getDropDownView(position, convertView, parent).also { view ->
+                (view as? TextView)?.apply {
+                    setTextColor(BlofyTvDesign.TextPrimary)
+                    setBackgroundColor(BlofyTvDesign.Surface)
+                }
+            }
+        }.apply { setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
 
     private fun allCategory(): CategoryEntity = CategoryEntity(
         key = "${provider.id}:$kind:$ALL_CATEGORY_ID",
