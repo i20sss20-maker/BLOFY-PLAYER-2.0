@@ -54,6 +54,8 @@ import {createGatewayCredentialRotator} from './xtream-account-credential-rotati
 import { readXtreamGatewayJsonResponse } from './xtream-gateway-response.mjs';
 import {configuredXtreamPublicOrigin} from './xtream-public-origin.mjs';
 import {probeXtreamAccountCompatibility} from './xtream-compatibility-probe.mjs';
+import {rewriteXtreamHlsManifest,readXtreamHlsManifest,
+  unsealXtreamHlsTicket} from './xtream-hls-playback.mjs';
 import { createXtreamHealthSnapshot } from './xtream-health-snapshot.mjs';
 import {relayEligible,issueStreamRelayGrant} from './xtream-stream-relay-bridge.mjs';
 import {permittedLicensedLiveFanout,permittedSharedLivePilot,
@@ -1424,6 +1426,27 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
           observe('failed',{reason:'app_hls_secure_proxy_required',attempts:attempt});
           return text(res,415,'Protected HLS proxy not configured');
         }
+        if(kind==='live' && !authorizedAccount && inspection.format==='hls'){
+          // Xtream players fetch these segment URLs directly from our public
+          // edge. Preserve provider auth without exposing any provider URL.
+          // Bearer-app HLS remains blocked by the existing dedicated guard.
+          const manifest=await readXtreamHlsManifest(reader,{firstChunk:first.value});
+          const rewritten=rewriteXtreamHlsManifest({
+            manifest,playlistUrl:usingIndependentRelay?upstream.href:
+              (response.url||upstream.href),
+            publicOrigin:xtreamOrigin(req),username,password,
+            accountId:account.id,gatewayId,sourceId:row.server_id,
+            keyHex:KEY_HEX
+          });
+          const payload=Buffer.from(rewritten,'utf8');
+          observe('started',{upstreamStatus:response.status,
+            startupMs:Date.now()-startedAt,attempts:attempt,transport:'secured_hls'});
+          res.writeHead(200,{'content-type':'application/vnd.apple.mpegurl; charset=utf-8',
+            'content-length':payload.length,'cache-control':'no-store, private',
+            'referrer-policy':'no-referrer','x-content-type-options':'nosniff'});
+          res.end(payload);
+          return;
+        }
         // Some providers label MP4/MKV as octet-stream. Use the verified
         // container type only when the source supplied no meaningful MIME.
         // Preserve bytes, range headers, codec and existing explicit types.
@@ -1517,6 +1540,73 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
   } finally {
     req.off('aborted',abort);
     res.off('close',onClose);
+  }
+}
+
+// Per-request ACL on every HLS segment/key/variant. Expiring tickets hide
+// origin URLs but do NOT bypass the account's expiry or catalog scope.
+async function handleAuthorizedXtreamHls(req,res,match){
+  if(!requirePublicBudget(req,res))return;
+  const [,_whole,username,password,gatewayId,ticket]=match;
+  const account=await authenticate(username,password,{touch:false});
+  if(!account)return text(res,401,'Unauthorized');
+  const token=unsealXtreamHlsTicket(ticket,{keyHex:KEY_HEX});
+  if(!token||token.a!==String(account.id)||token.g!==String(gatewayId))
+    return text(res,403,'Invalid HLS ticket');
+  const row=await gatewayItemById('live',gatewayId,account.source_id||null);
+  if(!row||!row.server_enabled||String(row.server_id)!==token.s)
+    return text(res,404,'Stream not found');
+  let response;
+  try{
+    const target=new URL(token.u);
+    await assertPublicXtreamUrl(target.origin);
+    const headers={'user-agent':String(req.headers['user-agent']||'BLOFY-Xtream-HLS/1.0').slice(0,250)};
+    if(req.headers.range)headers.range=String(req.headers.range).slice(0,150);
+    response=await checkedFetch(target,{
+      method:req.method,headers,timeoutMs:16000,
+      signal:AbortSignal.timeout(35000)
+    });
+    if(![200,206].includes(response.status)){
+      await response.body?.cancel().catch(()=>{});
+      return text(res,[401,403,404,410,416,429].includes(response.status)?
+        response.status:502,'HLS media unavailable');
+    }
+    const mime=String(response.headers.get('content-type')||'');
+    const isManifest=req.method==='GET'&&(/mpegurl|x-mpegurl/i.test(mime)||
+      /\.m3u8$/i.test(target.pathname));
+    if(isManifest){
+      if(!response.body)throw Error('hls_manifest_missing');
+      const reader=response.body.getReader();
+      let manifest;
+      try{manifest=await readXtreamHlsManifest(reader)}
+      finally{await reader.cancel().catch(()=>{});reader.releaseLock();}
+      const rewritten=rewriteXtreamHlsManifest({
+        manifest,playlistUrl:response.url||target.href,
+        publicOrigin:configuredXtreamPublicOrigin(xtreamOrigin(req)),
+        username,password,accountId:account.id,gatewayId,
+        sourceId:row.server_id,depth:token.d,keyHex:KEY_HEX
+      });
+      const body=Buffer.from(rewritten,'utf8');
+      res.writeHead(200,{'content-type':'application/vnd.apple.mpegurl; charset=utf-8',
+        'content-length':body.length,'cache-control':'no-store, private',
+        'referrer-policy':'no-referrer','x-content-type-options':'nosniff'});
+      return res.end(body);
+    }
+    const output={'cache-control':'no-store, private','referrer-policy':'no-referrer',
+      'x-content-type-options':'nosniff'};
+    for(const name of ['content-type','content-length','content-range','accept-ranges']){
+      const value=response.headers.get(name);
+      if(value)output[name]=value;
+    }
+    res.writeHead(response.status,output);
+    if(req.method==='HEAD'||!response.body)return res.end();
+    await pipeline(Readable.fromWeb(response.body),res);
+  }catch{
+    // The encrypted URL and token must never appear in logs or error bodies.
+    if(!res.headersSent)return text(res,502,'HLS segment unavailable');
+    if(!res.destroyed)res.destroy();
+  }finally{
+    if(req.method==='HEAD'&&response?.body)await response.body.cancel().catch(()=>{});
   }
 }
 
@@ -1633,7 +1723,7 @@ function accountInfo(row, username, password) {
     active_cons: '0',
     created_at: row.created_at ? String(Math.floor(new Date(row.created_at).getTime() / 1000)) : String(Math.floor(Date.now()/1000)),
     max_connections: String(row.max_connections || 1),
-    allowed_output_formats: ['ts']
+    allowed_output_formats: ['ts', 'm3u8']
   };
 }
 
@@ -1860,6 +1950,9 @@ http.createServer = function withBlofyXtreamGateway(listener) {
         const account = await authenticate(url.searchParams.get('username') || '', url.searchParams.get('password') || '');
         return account ? text(res, 200, '<?xml version="1.0" encoding="UTF-8"?><tv></tv>\n', 'application/xml; charset=utf-8') : text(res, 401, 'Unauthorized');
       }
+      const hlsMatch=url.pathname.match(/^\/(hls)\/([A-Za-z0-9_]{4,32})\/([A-Za-z0-9_-]{8,64})\/([1-9][0-9]{0,15})\/([A-Za-z0-9_-]{50,6000})$/);
+      if(hlsMatch && (req.method==='GET'||req.method==='HEAD'))
+        return handleAuthorizedXtreamHls(req,res,hlsMatch);
       const mediaMatch = url.pathname.match(/^\/(live|movie|series)\/([^/]+)\/([^/]+)\/([0-9]+)(?:\.([A-Za-z0-9]{1,8}))?$/i);
       if (mediaMatch && (req.method === 'GET' || req.method === 'HEAD')) {
         return await proxyMedia(req, res, mediaMatch[1].toLowerCase(), decodeURIComponent(mediaMatch[2]), decodeURIComponent(mediaMatch[3]), mediaMatch[4], mediaMatch[5]);

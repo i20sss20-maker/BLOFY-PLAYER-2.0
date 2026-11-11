@@ -67,3 +67,45 @@ test('flat list rejects invalid episodes and never leaks unmapped source IDs',()
  assert.deepEqual(collectSourceEpisodes(raw),[{sourceId:'44',extension:'mp4'}]);
  assert.deepEqual(mapSeriesEpisodes(raw,new Map(),sanitize),{'1':[]});
 });
+
+
+test('provider episode_id and stream_id variants yield valid gateway episode links',()=>{
+ const raw={'1':[{id:0,episode_id:'5441',container_extension:'mkv',direct_source:'secret'},
+    {episode_id:'5442',title:'Episode 2',container_extension:'mp4'},
+    {id:null,stream_id:5443,container_extension:'mkv'}]};
+ assert.deepEqual(collectSourceEpisodes(raw),[
+  {sourceId:'5441',extension:'mkv'},
+  {sourceId:'5442',extension:'mp4'},
+  {sourceId:'5443',extension:'mkv'}
+ ]);
+ const mapped=mapSeriesEpisodes(raw,new Map([
+  ['5441',{id:201001,extension:'mkv'}],
+  ['5442',{id:201002,extension:'mp4'}],
+  ['5443',{id:201003,extension:'mkv'}]
+ ]),sanitize);
+ assert.deepEqual(mapped['1'].map(x=>x.id),[201001,201002,201003]);
+ assert.equal(mapped['1'][0].direct_source,'');
+ assert.equal(raw['1'][0].id,0);
+});
+test('nested season arrays and flat season numbers remain playable',()=>{
+ const nested={'1':{episodes:[{id:'777',container_extension:'mkv'}]},
+   '2':{episodes:[{stream_id:'888'}]}};
+ const refs=collectSourceEpisodes(nested);
+ assert.deepEqual(refs,[{sourceId:'777',extension:'mkv'},{sourceId:'888',extension:'mp4'}]);
+ const mapped=mapSeriesEpisodes(nested,new Map([
+   ['777',{id:5011,extension:'mkv'}],['888',{id:5012,extension:'mp4'}]
+ ]),sanitize);
+ assert.equal(mapped['1'][0].id,5011);
+ assert.equal(mapped['2'][0].id,5012);
+ const flat=mapSeriesEpisodes([
+  {id:'900',season:1},{id:'901',season:2}
+ ],new Map([['900',{id:7001,extension:'mp4'}],
+   ['901',{id:7002,extension:'mkv'}]]),sanitize);
+ assert.deepEqual(Object.keys(flat),['1','2']);
+});
+test('never invents playable media IDs from zero or malformed alternatives',()=>{
+ const raw={'1':[{id:0,stream_id:0},{id:null,stream_id:'../../unsafe'},
+  {id:'../../unsafe',episode_id:'7/8'}]};
+ assert.deepEqual(collectSourceEpisodes(raw),[]);
+ assert.deepEqual(mapSeriesEpisodes(raw,new Map(),sanitize),{'1':[]});
+});
