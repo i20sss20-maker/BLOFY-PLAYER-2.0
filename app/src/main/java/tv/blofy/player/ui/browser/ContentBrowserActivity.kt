@@ -148,8 +148,19 @@ class ContentBrowserActivity : AppCompatActivity() {
             dao.categories(provider.id, kind).collect { items ->
                 val displayed = if (kind == KIND_LIVE) items else listOf(allCategory()) + items
                 categoryAdapter.submit(displayed)
+                categoryList.post {
+                    if (!isFinishing && !isDestroyed) categoryList.requestLayout()
+                }
                 if (kind != KIND_LIVE) {
-                    loadStreams(null)
+                    // Do not reset the chosen category to All on every Room
+                    // emission. An async sync or details round-trip must not
+                    // hide the current filter.
+                    val retained = currentCategoryId?.takeIf { selected ->
+                        items.any { it.remoteId == selected }
+                    }
+                    if (currentCategoryId != retained || streamsJob?.isActive != true) {
+                        loadStreams(retained)
+                    }
                     requestInitialCatalogFocus()
                 } else if (items.isEmpty()) {
                     loadStreams(null)
