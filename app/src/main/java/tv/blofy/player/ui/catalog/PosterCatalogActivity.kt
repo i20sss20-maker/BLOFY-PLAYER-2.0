@@ -250,7 +250,7 @@ class PosterCatalogActivity : AppCompatActivity() {
                 isFocusable = false
                 clipChildren = false
                 clipToPadding = false
-                addView(genreRow, HorizontalScrollView.LayoutParams(-2, -1))
+                addView(genreRow, android.widget.FrameLayout.LayoutParams(-2, -1))
             }, LinearLayout.LayoutParams(-1, dp(52)).apply {
                 bottomMargin = dp(6)
             })
