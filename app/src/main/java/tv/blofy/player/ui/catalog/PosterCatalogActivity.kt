@@ -45,7 +45,8 @@ class PosterCatalogActivity : AppCompatActivity() {
     private lateinit var posterGrid: RecyclerView
     private lateinit var countView: TextView
     private lateinit var searchBar: TextView
-    private var focusedGenreJob: Job? = null
+    private var visibleGenreJob: Job? = null
+    private val attemptedGenreKeys = LinkedHashSet<String>()
     private var pageJob: Job? = null
     private var countJob: Job? = null
     private var exactCount: Int? = null
@@ -260,6 +261,10 @@ class PosterCatalogActivity : AppCompatActivity() {
                     if (dy <= 0 || loadingPage || !hasMore) return
                     if (manager.findLastVisibleItemPosition() >= loadedItems.size - PREFETCH_THRESHOLD) loadNextPage()
                 }
+                override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
+                    if (newState == RecyclerView.SCROLL_STATE_IDLE) scheduleVisibleGenreEnrichment()
+                    else visibleGenreJob?.cancel()
+                }
             })
         }
         content.addView(posterGrid, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
@@ -271,26 +276,9 @@ class PosterCatalogActivity : AppCompatActivity() {
         posterAdapter = PosterStreamAdapter(::openItem) { item, index ->
             focusedPosterKeys[memoryKey(displayedCategoryId)] = item.key
             if (index >= loadedItems.size - PREFETCH_THRESHOLD) loadNextPage()
-            // A movie in an unclassified category may not have genre metadata
-            // until its details are requested. Resolve only the focused item,
-            // after focus settles, never scan the entire source catalog.
-            focusedGenreJob?.cancel()
             if (kind == KIND_MOVIE && item.genre.isNullOrBlank() &&
-                !posterAdapter.hasMovieGenres(item.key) && providerId.isNotBlank()) {
-                val expectedGeneration = generation
-                focusedGenreJob = lifecycleScope.launch {
-                    delay(700)
-                    if (expectedGeneration != generation || !posterGrid.hasFocus()) return@launch
-                    val details = withContext(Dispatchers.IO) {
-                        val provider = BlofyDatabase.get(applicationContext).dao().provider(providerId)
-                        if (provider == null) null else
-                            ProviderDetailsRepository.refresh(applicationContext, provider, item).metadata
-                    }
-                    if (expectedGeneration == generation &&
-                        details != null && details.genres.isNotEmpty()) {
-                        posterAdapter.updateMovieGenres(item.key, details.genres)
-                    }
-                }
+                !posterAdapter.hasMovieGenres(item.key)) {
+                scheduleVisibleGenreEnrichment(item.key)
             }
         }
         posterGrid.adapter = posterAdapter
@@ -331,7 +319,7 @@ class PosterCatalogActivity : AppCompatActivity() {
         }
 
         selectedCategoryId = id
-        focusedGenreJob?.cancel()
+        visibleGenreJob?.cancel()
         generation++
         refreshExactCount()
         pageJob?.cancel()
@@ -347,6 +335,7 @@ class PosterCatalogActivity : AppCompatActivity() {
             lastRowId = cached.lastRowId
             hasMore = cached.items.size >= PAGE_SIZE
             posterAdapter.replace(cached.items)
+            posterGrid.post { scheduleVisibleGenreEnrichment() }
             cached.focusedKey?.let { focusedPosterKeys.putIfAbsent(memoryKey(id), it) }
             updateCount()
             requestInitialContentFocus()
@@ -392,12 +381,64 @@ class PosterCatalogActivity : AppCompatActivity() {
                 posterAdapter.append(result.first)
             }
             updateCount()
+            if (kind == KIND_MOVIE) posterGrid.post { scheduleVisibleGenreEnrichment() }
             ArtworkLoader.prefetch(this@PosterCatalogActivity, result.first.take(6).map { it.icon?.takeIf(String::isNotBlank) ?: it.backdrop })
             loadingPage = false
             saveMemorySnapshot()
             requestInitialContentFocus()
         }.also { job ->
             job.invokeOnCompletion { if (requestGeneration == generation) runOnUiThread { loadingPage = false } }
+        }
+    }
+
+
+    /**
+     * Metadata is absent from many Xtream get_vod_streams responses. Instead of
+     * indexing 184k+ films (which can overload a provider), enrich at most five
+     * currently visible, unclassified movies per settled TV viewport.
+     * Fetches are sequential and cancel as soon as the viewer scrolls.
+     */
+    private fun scheduleVisibleGenreEnrichment(focusedKey: String? = null) {
+        if (kind != KIND_MOVIE || providerId.isBlank() || !::posterGrid.isInitialized) return
+        visibleGenreJob?.cancel()
+        val layout = posterGrid.layoutManager as? GridLayoutManager ?: return
+        val first = layout.findFirstVisibleItemPosition().coerceAtLeast(0)
+        val last = layout.findLastVisibleItemPosition().coerceAtMost(loadedItems.lastIndex)
+        if (last < first) return
+        val selected = focusedKey?.let { key -> loadedItems.firstOrNull { it.key == key } }
+        val visible = loadedItems.subList(first, last + 1)
+        val categoryNames = categoryRows.associate { it.remoteId to it.name }
+        val targets = (listOfNotNull(selected) + visible)
+            .distinctBy(StreamEntity::key)
+            .filter { item ->
+                item.genre.isNullOrBlank() && !posterAdapter.hasMovieGenres(item.key) &&
+                    MovieGenres.identify(null, categoryNames[item.categoryId]).isEmpty() &&
+                    item.key !in attemptedGenreKeys
+            }
+            .take(5)
+        if (targets.isEmpty()) return
+        val revision = generation
+        val providerKey = providerId
+        visibleGenreJob = lifecycleScope.launch {
+            delay(650)
+            if (revision != generation || providerKey != providerId) return@launch
+            val provider = withContext(Dispatchers.IO) {
+                BlofyDatabase.get(applicationContext).dao().provider(providerKey)
+            } ?: return@launch
+            if (!provider.providerType.equals("xtream", ignoreCase = true)) return@launch
+            for (item in targets) {
+                if (revision != generation || providerKey != providerId) break
+                if (attemptedGenreKeys.size > 500) attemptedGenreKeys.clear()
+                if (!attemptedGenreKeys.add(item.key)) continue
+                val data = withContext(Dispatchers.IO) {
+                    ProviderDetailsRepository.refresh(applicationContext, provider, item).metadata
+                }
+                if (revision != generation || providerKey != providerId) break
+                if (!data?.genres.isNullOrEmpty()) {
+                    posterAdapter.updateMovieGenres(item.key, data!!.genres)
+                }
+                delay(300)
+            }
         }
     }
 
