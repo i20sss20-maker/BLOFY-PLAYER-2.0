@@ -89,7 +89,7 @@ class MovieDetailsActivity : ContentAccessActivity() {
 
             val initialArabic = if (android.os.Build.VERSION.SDK_INT >= 24)
                 resources.configuration.locales[0].language == "ar"
-            else @Suppress("DEPRECATION") resources.configuration.locale.language == "ar"
+            else resources.configuration.locale.language == "ar"
             val title = ContentPresentation.title(
                 ArabicDetailsPolicy.preferredTitle(stream.name, metadata?.title, initialArabic),
                 stream.kind
