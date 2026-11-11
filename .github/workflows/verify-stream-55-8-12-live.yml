@@ -1,0 +1,52 @@
+name: Verify BLOFY STREAM 55.8.12 live update and PLAYER isolation
+on:
+  push:
+    branches:
+      - test/stream-55-8-12-live-endpoint-20261111
+permissions:
+  contents: read
+jobs:
+  live-update-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Verify real public STREAM release feed and exact owner artifact identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          ok=0
+          for attempt in $(seq 1 15); do
+            if curl --fail --silent --show-error --max-time 20 \
+              'https://updates.blofyplayer.com/stream/release.json' \
+              -o /tmp/stream-release.json \
+              && jq -e '
+                .release.app.versionCode == 2000089 and
+                .release.app.versionName == "2.0.0-rc07.55.8.12-STREAM" and
+                .release.app.packageName == "tv.blofy.player.v2.stream" and
+                .release.app.apkSizeBytes == 135509813 and
+                .release.app.sha256 == "91655f8953aaf621ede08ab248995ecc8d42bc7571b444a6f36355cd09376573" and
+                .release.app.downloadUrl == "https://updates.blofyplayer.com/d/blofy-stream"
+              ' /tmp/stream-release.json >/dev/null; then
+              ok=1; break
+            fi
+            sleep 4
+          done
+          test "$ok" = 1 || { echo "::error::STREAM release feed not promoted to 55.8.12"; exit 1; }
+          echo 'STREAM owner-signed release feed: 55.8.12 with verified size/SHA-256' >> "$GITHUB_STEP_SUMMARY"
+      - name: Verify existing BLOFY PLAYER release remains separate
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 25 \
+            'https://updates.blofyplayer.com/release.json' -o /tmp/player-release.json
+          jq -e '.release.app.versionCode != 2000089 and (.release.app.downloadUrl | contains("blofy-stream") | not)' /tmp/player-release.json >/dev/null
+          echo 'BLOFY PLAYER release feed is still isolated' >> "$GITHUB_STEP_SUMMARY"
+      - name: Probe actual STREAM download response headers without downloading 135MB
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 120 --head \
+            'https://updates.blofyplayer.com/d/blofy-stream' \
+            -o /tmp/stream-head.txt
+          grep -Eiq '^content-type: application/vnd.android.package-archive' /tmp/stream-head.txt
+          echo 'STREAM APK endpoint serves a direct signed APK download.' >> "$GITHUB_STEP_SUMMARY"
