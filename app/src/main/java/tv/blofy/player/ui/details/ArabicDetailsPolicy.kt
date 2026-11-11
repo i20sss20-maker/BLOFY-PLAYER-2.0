@@ -11,7 +11,7 @@ internal object ArabicDetailsPolicy {
     }
 
     fun needsTranslation(text: String?): Boolean =
-        !text.isNullOrBlank() && !hasArabic(text) && text.any { it in 'A'..'Z' || it in 'a'..'z' }
+        !text.isNullOrBlank() && !hasArabic(text) && Regex("[A-Za-z]{3,}").containsMatchIn(text)
 
     fun preferredTitle(streamTitle: String, providerTitle: String?, arabic: Boolean): String {
         if (arabic) {
