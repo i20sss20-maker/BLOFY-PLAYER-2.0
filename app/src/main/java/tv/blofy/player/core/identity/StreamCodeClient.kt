@@ -16,6 +16,11 @@ import tv.blofy.player.core.network.awaitResponse
  * These credentials are issued by the trusted BLOFY server, over HTTPS.
  */
 object StreamCodeClient {
+    class ReloginApprovalRequired : IllegalStateException("stream_code_relogin_required")
+    data class ReloginRequest(
+        val requestCode: String? = null,
+        val alreadyAuthorized: Boolean = false
+    )
     data class Activated(
         val accessToken: String,
         val activatedAt: Long,
@@ -85,6 +90,44 @@ object StreamCodeClient {
     suspend fun verifySession(accessToken: String): Boolean? =
         sessionStatus(accessToken)?.active
 
+    /**
+     * A device whose installation key changed may request a six-digit,
+     * operator-approved re-login. This does NOT create a new subscription,
+     * grant two devices or expose the Xtream source credentials.
+     */
+    suspend fun requestRelogin(rawCode: String, deviceKey: String): ReloginRequest =
+        withContext(Dispatchers.IO) {
+            val code = normalizeCode(rawCode)
+            require(code.isNotEmpty()) { "invalid_code" }
+            require(deviceKey.matches(Regex("[a-f0-9]{64}"))) { "invalid_installation" }
+            val body = JSONObject().put("code", code).put("deviceKey", deviceKey).toString()
+            val request = Request.Builder()
+                .url("${StreamCodeSession.HOST}/api/v1/stream/app/relogin-request")
+                .post(body.toRequestBody(jsonType))
+                .header("Accept", "application/json")
+                .header("Cache-Control", "no-store")
+                .build()
+            client.newCall(request).awaitResponse().use { response ->
+                val data = runCatching { JSONObject(response.body?.string().orEmpty()) }
+                    .getOrElse { JSONObject() }
+                if (!response.isSuccessful || !data.optBoolean("ok")) {
+                    error(when (data.optString("error")) {
+                        "stream_code_relogin_already_pending" ->
+                            "stream_code_relogin_already_pending"
+                        "stream_code_relogin_unavailable" ->
+                            "stream_code_relogin_unavailable"
+                        "stream_code_rate_limited" -> "stream_code_rate_limited"
+                        else -> "stream_code_relogin_failed"
+                    })
+                }
+                if (data.optBoolean("alreadyAuthorized"))
+                    return@withContext ReloginRequest(alreadyAuthorized = true)
+                val pin = data.optString("requestCode")
+                require(pin.matches(Regex("[0-9]{6}"))) { "stream_code_relogin_failed" }
+                ReloginRequest(requestCode = pin)
+            }
+        }
+
     suspend fun redeem(rawCode: String, deviceKey: String): Activated = withContext(Dispatchers.IO) {
         val code = normalizeCode(rawCode)
         require(code.isNotEmpty()) { "أدخل كود التفعيل الصحيح" }
@@ -99,6 +142,8 @@ object StreamCodeClient {
             val root = runCatching { JSONObject(response.body?.string().orEmpty()) }
                 .getOrElse { JSONObject() }
             if (!response.isSuccessful || !root.optBoolean("ok")) {
+                if (response.code == 409 && root.optString("error") == "stream_code_unavailable")
+                    throw ReloginApprovalRequired()
                 error(when (response.code) {
                     409 -> "الكود مستخدم أو غير متاح. تواصل مع المسؤول"
                     429 -> "محاولات كثيرة، أعد المحاولة لاحقًا"

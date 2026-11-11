@@ -69,4 +69,12 @@
     <string name="stream_ui_decoder_error">This video format is not supported on this device. Try another channel or quality.</string>
     <string name="stream_ui_generic_error">Could not connect. Try updating the app or check your network.</string>
     <string name="stream_ui_opening">Opening BLOFY STREAM…</string>
+    <string name="stream_ui_relogin_action">Request login again using the same code</string>
+    <string name="stream_ui_relogin_help">This code is linked to a previous installation. If you changed devices or reinstalled, request approval to reuse the SAME code.</string>
+    <string name="stream_ui_relogin_requesting">Creating a secure login recovery request…</string>
+    <string name="stream_ui_relogin_send_pin">Send this six-digit request to your BLOFY administrator. After approval, enter your original subscription code again within 10 minutes. No new subscription needed.</string>
+    <string name="stream_ui_relogin_retry">This installation is already linked. Retry with your original code.</string>
+    <string name="stream_ui_relogin_pending">A recovery request is already pending. Use its previous six-digit number or try again after the request expires.</string>
+    <string name="stream_ui_relogin_unavailable">This voucher cannot be recovered. The subscription may have expired or been revoked; contact support.</string>
+    <string name="stream_ui_relogin_failed">Could not request re-login. Check your connection and try again.</string>
 </resources>

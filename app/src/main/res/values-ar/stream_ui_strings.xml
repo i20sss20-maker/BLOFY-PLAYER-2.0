@@ -62,4 +62,12 @@
     <string name="stream_ui_decoder_error">صيغة الفيديو غير مدعومة على هذا الجهاز؛ جرّب جودة أقل أو قناة أخرى</string>
     <string name="stream_ui_generic_error">تعذر إكمال الاتصال. جرّب تحديث التطبيق أو افحص الشبكة</string>
     <string name="stream_ui_opening">جارِ فتح BLOFY STREAM…</string>
+    <string name="stream_ui_relogin_action">طلب إعادة الدخول بنفس الكود</string>
+    <string name="stream_ui_relogin_help">الكود مرتبط بتفعيل سابق. إذا غيّرت الجهاز أو أعدت تثبيت التطبيق، اطلب موافقة المسؤول لإعادة الدخول بنفس الكود.</string>
+    <string name="stream_ui_relogin_requesting">جارٍ إنشاء طلب آمن لإعادة الدخول…</string>
+    <string name="stream_ui_relogin_send_pin">أرسل الرقم المكون من 6 خانات إلى مسؤول BLOFY ليوافق على جهازك، ثم أدخل كود اشتراكك الأصلي مرة أخرى خلال 10 دقائق من الموافقة. لا تحتاج اشتراكًا جديدًا.</string>
+    <string name="stream_ui_relogin_retry">هذا الجهاز مرتبط بالفعل. أعد المحاولة بكود اشتراكك نفسه.</string>
+    <string name="stream_ui_relogin_pending">يوجد طلب إعادة دخول مفتوح. أرسل رقم الطلب المعروض سابقًا، أو أعد المحاولة بعد انتهاء المهلة.</string>
+    <string name="stream_ui_relogin_unavailable">لا يمكن استعادة هذا الكود؛ ربما انتهى الاشتراك أو أُلغي. تواصل مع المسؤول.</string>
+    <string name="stream_ui_relogin_failed">تعذر تقديم طلب إعادة الدخول. تحقق من الاتصال ثم أعد المحاولة.</string>
 </resources>
