@@ -116,15 +116,39 @@ class PosterCatalogActivity : AppCompatActivity() {
             val dao = BlofyDatabase.get(applicationContext).dao()
             val provider = dao.providers().first().firstOrNull() ?: run { finish(); return@launch }
             providerId = provider.id
+            // Never leave the category rail blank while Room or a large
+            // Xtream library is loading; expose All immediately.
+            categoryRows = listOf(allCategory())
+            categoryAdapter.submit(categoryRows)
+            countView.text = "جاري تحميل المحتوى..."
+            loadStreams(null)
             dao.categories(provider.id, kind).collect { categories ->
                 // Room rows already carry Xtream orderIndex. Never sort client-side.
                 categoryRows = listOf(allCategory()) + categories
                 categoryAdapter.submit(categoryRows)
-                if (selectedCategoryId == null && streamsJob == null) loadStreams(null)
-                if (!initialFocusRequested) {
-                    initialFocusRequested = true
-                    categoryList.post { requestCategoryFocus(0) }
+                // Some Android TV renderers defer the first RecyclerView
+                // layout until returning from details. Explicitly schedule it
+                // after new rows arrive, without restarting the catalog.
+                categoryList.post {
+                    if (!isFinishing && !isDestroyed) {
+                        categoryList.requestLayout()
+                        if (!initialFocusRequested) {
+                            initialFocusRequested = true
+                            requestCategoryFocus(0)
+                        }
+                    }
                 }
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Keep category buttons visible after a Details Activity briefly
+        // replaces this window; this does not re-fetch the whole library.
+        if (::categoryList.isInitialized && categoryRows.isNotEmpty()) {
+            categoryList.post {
+                if (!isFinishing && !isDestroyed) categoryList.requestLayout()
             }
         }
     }

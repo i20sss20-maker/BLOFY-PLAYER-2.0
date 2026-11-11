@@ -164,6 +164,13 @@ class PlaylistManager(
             CategoryEntity("${provider.id}:movie:$id", provider.id, id, "movie", row.string("category_name") ?: "Movies", index)
         }
 
+        // On first import the movie list can take tens of seconds to parse.
+        // Make validated categories visible immediately while streaming items,
+        // but keep established catalogs atomic on refresh.
+        if (previousCount == 0 && categoryRows.isNotEmpty()) {
+            dao.upsertCategories(categoryRows)
+        }
+
         val streamRows = ArrayList<StreamEntity>(4096)
         var sourceStreamCount = 0
         val body = api.streamingResponse(actionUrl(provider, "get_vod_streams"))
@@ -239,7 +246,6 @@ class PlaylistManager(
     suspend fun syncSeries(provider: ProviderEntity): Int {
         if (provider.providerType.equals("m3u", true)) return 0
         val categories = api.list(actionUrl(provider, "get_series_categories"))
-        val series = api.list(actionUrl(provider, "get_series"))
         val previous = dao.streams(provider.id, "series", null).first()
         val previousFlags = PreviousStreamFlags(previous)
         val coroutineContext = currentCoroutineContext()
@@ -248,6 +254,12 @@ class PlaylistManager(
             val id = row.id("category_id") ?: return@mapIndexedNotNull null
             CategoryEntity("${provider.id}:series:$id", provider.id, id, "series", row.string("category_name") ?: "Series", index)
         }
+        // Publish the category rail before downloading the full series list
+        // on initial setup; existing synchronized libraries stay transactional.
+        if (previous.isEmpty() && categoryRows.isNotEmpty()) {
+            dao.upsertCategories(categoryRows)
+        }
+        val series = api.list(actionUrl(provider, "get_series"))
         val streamRows = series.mapIndexedNotNull { index, row ->
             if (index % 256 == 0) coroutineContext.ensureActive()
             val id = row.id("series_id") ?: return@mapIndexedNotNull null

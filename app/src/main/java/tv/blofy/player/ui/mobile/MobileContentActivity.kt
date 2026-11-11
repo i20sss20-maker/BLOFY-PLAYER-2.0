@@ -50,6 +50,7 @@ class MobileContentActivity : AppCompatActivity() {
     private var categories: List<CategoryEntity> = emptyList()
     private var streams: List<StreamEntity> = emptyList()
     private var streamJob: Job? = null
+    private var selectedCategoryId: String? = null
     private val kind by lazy { intent.getStringExtra(EXTRA_KIND) ?: KIND_LIVE }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -86,6 +87,13 @@ class MobileContentActivity : AppCompatActivity() {
         categorySpinner = Spinner(this).apply {
             background = BlofyTvDesign.inputField(dp(14).toFloat(), false)
             setPadding(dp(14), 0, dp(14), 0)
+            // Show the category control immediately, before Room's first
+            // update, instead of a blank row until returning from details.
+            adapter = categoryLabels(listOf(
+                if (kind == KIND_SERIES) "كل المسلسلات"
+                else if (kind == KIND_MOVIE) "كل الأفلام"
+                else "كل القنوات"
+            ))
         }
         root.addView(categorySpinner, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(if (compact) 48 else 52)).apply {
             bottomMargin = dp(if (compact) 8 else 10)
@@ -131,17 +139,26 @@ class MobileContentActivity : AppCompatActivity() {
             val dao = BlofyDatabase.get(applicationContext).dao()
             provider = dao.providers().first().firstOrNull() ?: run { finish(); return@launch }
             dao.categories(provider.id, kind).collect { items ->
-                categories = items
-                val adapter = ArrayAdapter(this@MobileContentActivity, android.R.layout.simple_spinner_item, items.map { it.name }).apply {
-                    setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+                // Preserve the selected category on Room invalidations instead
+                // of resetting the spinner to the first category on each sync.
+                val displayed = listOf(allCategory()) + items
+                val retained = selectedCategoryId?.takeIf { selected ->
+                    items.any { it.remoteId == selected }
                 }
-                categorySpinner.adapter = adapter
-                if (items.isEmpty()) loadStreams(null) else loadStreams(items.first().remoteId)
+                categories = displayed
+                categorySpinner.adapter = categoryLabels(displayed.map { it.name })
+                categorySpinner.setSelection(
+                    displayed.indexOfFirst { it.remoteId == retained }.takeIf { it >= 0 } ?: 0,
+                    false
+                )
+                loadStreams(retained)
             }
         }
 
         categorySpinner.setOnItemSelectedListener(SimpleItemSelectedListener { position ->
-            categories.getOrNull(position)?.let { loadStreams(it.remoteId) }
+            categories.getOrNull(position)?.let {
+                loadStreams(it.remoteId.takeUnless { id -> id == ALL_CATEGORY_ID })
+            }
         })
         list?.setOnItemClickListener { _, _, position, _ -> streams.getOrNull(position)?.let(::openStream) }
         list?.setOnItemLongClickListener { _, _, position, _ ->
@@ -153,8 +170,43 @@ class MobileContentActivity : AppCompatActivity() {
         }
     }
 
+    private fun categoryLabels(labels: List<String>): ArrayAdapter<String> =
+        object : ArrayAdapter<String>(
+            this, android.R.layout.simple_spinner_item, labels
+        ) {
+            override fun getView(
+                position: Int, convertView: View?, parent: ViewGroup
+            ): View = super.getView(position, convertView, parent).also { view ->
+                (view as? TextView)?.setTextColor(BlofyTvDesign.TextPrimary)
+            }
+
+            override fun getDropDownView(
+                position: Int, convertView: View?, parent: ViewGroup
+            ): View = super.getDropDownView(position, convertView, parent).also { view ->
+                (view as? TextView)?.apply {
+                    setTextColor(BlofyTvDesign.TextPrimary)
+                    setBackgroundColor(BlofyTvDesign.Surface)
+                }
+            }
+        }.apply { setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+
+    private fun allCategory(): CategoryEntity = CategoryEntity(
+        key = "${provider.id}:$kind:$ALL_CATEGORY_ID",
+        providerId = provider.id,
+        remoteId = ALL_CATEGORY_ID,
+        kind = kind,
+        name = when (kind) {
+            KIND_MOVIE -> "كل الأفلام"
+            KIND_SERIES -> "كل المسلسلات"
+            else -> "كل القنوات"
+        },
+        orderIndex = -1
+    )
+
     private fun loadStreams(categoryId: String?) {
         if (!::provider.isInitialized) return
+        if (selectedCategoryId == categoryId && streamJob?.isActive == true) return
+        selectedCategoryId = categoryId
         streamJob?.cancel()
         streamJob = lifecycleScope.launch {
             BlofyDatabase.get(applicationContext).dao().streams(provider.id, kind, categoryId).collect { items ->
@@ -233,6 +285,7 @@ class MobileContentActivity : AppCompatActivity() {
         const val KIND_LIVE = "live"
         const val KIND_MOVIE = "movie"
         const val KIND_SERIES = "series"
+        private const val ALL_CATEGORY_ID = "__all__"
     }
 }
 
