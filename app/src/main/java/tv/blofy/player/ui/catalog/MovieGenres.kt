@@ -12,15 +12,15 @@ internal object MovieGenres {
     data class Genre(val key: String, val arabic: String, val english: String, val aliases: List<String>)
 
     val genres = listOf(
-        Genre("action", "أكشن", "Action", listOf("action", "اكشن", "حركه", "حركة")),
+        Genre("action", "أكشن", "Action", listOf("action", "اكشن", "أكشن", "حركه", "حركة")),
         Genre("comedy", "كوميديا", "Comedy", listOf("comedy", "كوميدي", "كوميديا")),
         Genre("drama", "دراما", "Drama", listOf("drama", "دراما")),
         Genre("adventure", "مغامرات", "Adventure", listOf("adventure", "مغامرة", "مغامرات")),
-        Genre("thriller", "إثارة وتشويق", "Thriller", listOf("thriller", "suspense", "اثارة", "تشويق")),
+        Genre("thriller", "إثارة وتشويق", "Thriller", listOf("thriller", "suspense", "اثارة", "إثارة", "تشويق")),
         Genre("horror", "رعب", "Horror", listOf("horror", "رعب")),
         Genre("scifi", "خيال علمي", "Sci-Fi", listOf("sci-fi", "sci fi", "science fiction", "scifi", "خيال علمي")),
         Genre("romance", "رومانسي", "Romance", listOf("romance", "romantic", "رومانسي", "رومانسية")),
-        Genre("animation", "أنيميشن", "Animation", listOf("animation", "animated", "anime", "cartoon", "انيمي", "انمي", "رسوم متحركة")),
+        Genre("animation", "أنيميشن", "Animation", listOf("animation", "animated", "anime", "cartoon", "انيمي", "أنيمي", "انمي", "رسوم متحركة")),
         Genre("family", "عائلي", "Family", listOf("family", "عائلي", "عائلة")),
         Genre("crime", "جريمة", "Crime", listOf("crime", "جريمة", "جرائم")),
         Genre("mystery", "غموض", "Mystery", listOf("mystery", "غموض")),
