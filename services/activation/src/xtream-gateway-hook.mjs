@@ -46,6 +46,7 @@ import { XtreamDenialCooldown } from './xtream-denial-cooldown.mjs';
 import { createGatewayUsageThrottle } from './xtream-gateway-usage-throttle.mjs';
 import {createStreamDurationCodes,ensureStreamCodeTable} from './xtream-duration-codes.mjs';
 import {createStreamCommercial,ensureStreamCommercialSchema} from './xtream-code-commercial.mjs';
+import {createStreamRelogin} from './xtream-code-relogin.mjs';
 import {parseStreamAppToken,verifyStreamAppToken,bearerFromRequest}
   from './xtream-code-app-token.mjs';
 import {encryptGatewayAccountPassword,decryptGatewayAccountPassword} from './xtream-account-vault.mjs';
@@ -101,6 +102,7 @@ function movieRefreshDue(key,now=Date.now()){
 const accountUsageThrottle = createGatewayUsageThrottle();
 let streamCodes=null;
 let streamCommercial=null;
+let streamRelogin=null;
 const streamCodeLimiter=createFixedWindowLimiter({limit:6,windowMs:15*60_000});
 // Short numeric vouchers are more susceptible to distributed guessing.
 // Bound all public redemption attempts as well as each client IP.
@@ -254,6 +256,7 @@ async function ensureReady() {
   const ready=await readyPromise;
   if(!streamCodes)streamCodes=createStreamDurationCodes({pool,keyHex:KEY_HEX});
   if(!streamCommercial)streamCommercial=createStreamCommercial({pool,keyHex:KEY_HEX});
+  if(!streamRelogin)streamRelogin=createStreamRelogin({pool,keyHex:KEY_HEX});
   // Opt-in, source-allowlisted, lease-based recovery. Normal requests do not
   // wait for health probes. Timers are unref'd and are never enabled by default.
   if(!unavailableRecoveryTimerStarted&&recoveryEnabled()){
@@ -1757,6 +1760,21 @@ http.createServer = function withBlofyXtreamGateway(listener) {
         return json(res,201,result,{'referrer-policy':'no-referrer',
           'cache-control':'no-store, private','pragma':'no-cache'});
       }
+      if (req.method === 'POST' && url.pathname === '/api/v1/stream/app/relogin-request') {
+        // Public request needs both the original voucher and an installation-
+        // local high-entropy device key. Approval requires admin auth separately.
+        const rate=streamCodeLimiter.consume(requestClientKey(req));
+        if(!rate.allowed)return json(res,429,{ok:false,error:'stream_code_rate_limited'},
+          {'retry-after':String(rate.retryAfterSeconds)});
+        const overall=streamCodeGlobalLimiter.consume('all_redemptions');
+        if(!overall.allowed)return json(res,429,{ok:false,error:'stream_code_rate_limited'},
+          {'retry-after':String(overall.retryAfterSeconds)});
+        await ensureReady();
+        const data=await readJson(req);
+        return json(res,200,await streamRelogin.request({
+          code:data.code,deviceKey:data.deviceKey
+        }),{'cache-control':'no-store, private','referrer-policy':'no-referrer'});
+      }
       if(req.method==='GET'&&url.pathname==='/api/v1/stream/app/session'){
         const account=await authenticateAppBearer(req);
         if(!account)return json(res,401,{ok:false,error:'stream_app_session_invalid'},
@@ -1851,6 +1869,12 @@ http.createServer = function withBlofyXtreamGateway(listener) {
       const codeRevoke=url.pathname.match(/^\/api\/v1\/admin\/xtream-gateway\/codes\/([0-9a-f-]{36})\/revoke$/i);
       if(req.method==='POST'&&codeRevoke)
         return json(res,200,await streamCodes.revoke(codeRevoke[1]));
+      if(req.method==='POST'&&url.pathname==='/api/v1/admin/xtream-gateway/code-relogin/approve'){
+        const payload=await readJson(req);
+        return json(res,200,await streamRelogin.approve({
+          code:payload.code,requestCode:payload.requestCode
+        }),{'cache-control':'no-store, private','referrer-policy':'no-referrer'});
+      }
       if(req.method==='GET'&&url.pathname==='/api/v1/admin/xtream-gateway/codes/sales-summary')
         return json(res,200,await streamCommercial.salesSummary());
       const commercialAction=url.pathname.match(/^\/api\/v1\/admin\/xtream-gateway\/codes\/([0-9a-f-]{36})\/(sell|extend|transfer)$/i);
