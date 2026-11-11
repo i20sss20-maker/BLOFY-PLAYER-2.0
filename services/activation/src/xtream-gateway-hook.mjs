@@ -53,7 +53,7 @@ import {encryptGatewayAccountPassword,decryptGatewayAccountPassword} from './xtr
 import {createGatewayCredentialRotator} from './xtream-account-credential-rotation.mjs';
 import { readXtreamGatewayJsonResponse } from './xtream-gateway-response.mjs';
 import {configuredXtreamPublicOrigin} from './xtream-public-origin.mjs';
-import {probeXtreamLogin} from './xtream-compatibility-probe.mjs';
+import {probeXtreamAccountCompatibility} from './xtream-compatibility-probe.mjs';
 import { createXtreamHealthSnapshot } from './xtream-health-snapshot.mjs';
 import {relayEligible,issueStreamRelayGrant} from './xtream-stream-relay-bridge.mjs';
 import {permittedLicensedLiveFanout,permittedSharedLivePilot,
@@ -467,7 +467,7 @@ async function checkAccountXtreamCompatibility(id) {
     return {ok:false,code:'account_expired'};
   const password=decryptGatewayAccountPassword(row.id,row.credential_vault,KEY_HEX);
   if(!password)return {ok:false,code:'account_password_not_recoverable'};
-  return probeXtreamLogin({
+  return probeXtreamAccountCompatibility({
     baseUrl:configuredXtreamPublicOrigin(),username:row.username,password
   });
 }
