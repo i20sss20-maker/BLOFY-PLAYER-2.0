@@ -622,7 +622,7 @@ async function adminDiagnostics(req, res, requestUrl) {
   const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
   const result = await pool.query(
     `SELECT id,device_id,provider_key,content_kind,redacted_url,ttff_ms,buffering_count,rebuffer_count,rebuffer_ms,recovery_count,error_code,error_message,app_version,created_at
-     FROM playback_diagnostics ${where} ORDER BY created_at DESC LIMIT ${values.length}`,
+     FROM playback_diagnostics ${where} ORDER BY created_at DESC LIMIT $${values.length}`,
     values
   );
   return json(res, 200, {
