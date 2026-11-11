@@ -49,6 +49,16 @@ function showCredentials(credentials) {
   gx('gatewayCredHost').textContent = credentials.serverUrl || '—';
   gx('gatewayCredUser').textContent = credentials.username || '—';
   gx('gatewayCredPass').textContent = credentials.password || '—';
+  // Show a one-time copy action only after an explicit credential rotation.
+  // The server never includes plaintext passwords in normal account lists.
+  gx('gatewayM3uCopyOneTime')?.remove();
+  if(credentials.m3uUrl){
+    const action=gatewayNode('button','button ghost','نسخ رابط M3U الجديد');
+    action.type='button';action.id='gatewayM3uCopyOneTime';
+    action.addEventListener('click',()=>copyText(credentials.m3uUrl,
+      'تم نسخ رابط M3U الجديد. حدّث الأجهزة المرتبطة بالحساب.'));
+    gx('gatewayCredentials').append(action);
+  }
   gx('gatewayCredentials').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
@@ -116,6 +126,7 @@ function hideIssuedCredentials(){
   gx('gatewayCredentials').hidden=true;
   gx('gatewayBatchRows').replaceChildren();
   gx('gatewayCredPass').textContent='—';
+  gx('gatewayM3uCopyOneTime')?.remove();
 }
 
 function accountExpiresAt(value){
@@ -281,6 +292,33 @@ function renderGatewayAccounts() {
       finally { reset.disabled = false; }
     });
 
+    // Explicit rotation for OLD long BLOFY credentials. Reading an existing
+    // M3U URL never alters a customer's entitlement or login identity.
+    const rotate = gatewayNode('button', 'button ghost', 'توليد يوزر وباسورد مختصرين');
+    rotate.type = 'button';
+    rotate.title = '8 أحرف للاسم و12 كلمة للمرور، مع بقاء الاشتراك وتاريخ الانتهاء';
+    rotate.addEventListener('click', async () => {
+      if (!window.confirm(
+        'تغيير بيانات Xtream لهذا الحساب فقط؟\\n' +
+        'سيصبح اسم المستخدم 8 أحرف وكلمة المرور 12 حرفًا/رقمًا.\\n' +
+        'لن يتغير كود الاشتراك ولا تاريخ انتهائه، لكن جميع روابط Xtream القديمة ستتوقف فورًا، ويجب تحديث الأجهزة.'
+      )) return;
+      const phrase=window.prompt('لتأكيد قطع اتصال بيانات الدخول القديمة، اكتب كلمة: تغيير');
+      if(phrase?.trim()!=='تغيير')return;
+      rotate.disabled=true;
+      try {
+        const data=await gatewayApi(
+          '/api/v1/admin/xtream-gateway/accounts/'+encodeURIComponent(item.id)+'/rotate-credentials',{
+            method:'POST',body:JSON.stringify({acknowledgeDisconnect:true})
+          });
+        showCredentials(data.credentials);
+        gatewayMessage('تم اختصار بيانات الحساب، دون تجديد أو تغيير تاريخ الانتهاء. حدّث رابط العميل.');
+        await loadGateway();
+      } catch(error) {
+        gatewayMessage('تعذر تغيير بيانات Xtream: '+error.message,'error');
+      } finally { rotate.disabled=false; }
+    });
+
     const remove = gatewayNode('button', 'button danger', 'حذف');
     remove.type = 'button';
     remove.addEventListener('click', async () => {
@@ -315,7 +353,7 @@ function renderGatewayAccounts() {
       finally{renew.disabled=false}
     });
 
-    actions.append(copy, renew, toggle, reset, remove);
+    actions.append(copy, renew, toggle, reset, rotate, remove);
     card.append(main, actions);
     list.append(card);
   }
