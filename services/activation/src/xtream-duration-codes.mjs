@@ -274,7 +274,7 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
         if(reloginApproved){
           // Atomic one-time binding rotation; prior bearer stops verifying
           // immediately. The original subscription clock/expiry is unchanged.
-          await client.query(`UPDATE blofy_xtream_gateway_duration_codes
+          const rebound=await client.query(`UPDATE blofy_xtream_gateway_duration_codes
             SET redeemed_device_hash=$2,
                 relogin_device_hash=NULL,relogin_request_hash=NULL,
                 relogin_requested_at=NULL,relogin_approved_at=NULL,
@@ -283,6 +283,8 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
             WHERE id=$1 AND relogin_device_hash=$2
               AND relogin_approved_at IS NOT NULL AND relogin_expires_at>NOW()`,
             [row.id,deviceProof]);
+          if(rebound.rowCount!==1)
+            throw Object.assign(Error('stream_code_relogin_approval_expired'),{status:409});
           row.redeemed_device_hash=deviceProof;
         } else if(transferPending){
           await client.query(`UPDATE blofy_xtream_gateway_duration_codes
