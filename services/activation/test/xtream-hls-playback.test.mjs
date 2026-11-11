@@ -40,7 +40,8 @@ test('HLS tickets reject tampering and expire without revealing provider address
     url:'https://cdn.example.com/s/video.ts?signature=topsecret'});
   assert.doesNotMatch(ticket,/topsecret|cdn\.example/);
   assert.equal(unsealXtreamHlsTicket(ticket,{keyHex,now:now+1000}).g,gatewayId);
-  const altered=ticket.slice(0,-1)+(ticket.at(-1)==='A'?'B':'A');
+  const offset=Math.floor(ticket.length/2);
+  const altered=ticket.slice(0,offset)+(ticket[offset]==='A'?'B':'A')+ticket.slice(offset+1);
   assert.equal(unsealXtreamHlsTicket(altered,{keyHex,now}),null);
   assert.equal(unsealXtreamHlsTicket(ticket,{keyHex,now:now+13*60*1000}),null);
 });
