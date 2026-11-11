@@ -428,4 +428,67 @@ function openGatewayHashTab() {
 
 window.addEventListener('hashchange', openGatewayHashTab);
 setTimeout(openGatewayHashTab, 0);
+// Same-voucher login recovery. A customer who reinstalled BLOFY STREAM
+// supplies the original voucher and the 6-digit approval number displayed on
+// their TV. This form is admin-only; it does not generate another subscription.
+function initStreamReloginControls() {
+  const anchor=gx('gatewayAccountSearch') || gx('gatewayCreateBtn');
+  if(!anchor || gx('stream-relogin-controls'))return;
+  const section=gatewayNode('section','card');
+  section.id='stream-relogin-controls';
+  section.setAttribute('aria-label','استعادة الدخول بكود BLOFY STREAM نفسه');
+  section.style.marginTop='16px';
+  section.append(gatewayNode('h3','', '🔐 السماح بإعادة الدخول بنفس الكود'));
+  section.append(gatewayNode('p','caption',
+    'لعميل سجّل خروجًا أو أعاد تثبيت التطبيق. نفس الكود ونفس تاريخ الانتهاء؛ الجهاز السابق يُفصل عند دخول الجهاز الموافق عليه، ولا يُنشأ اشتراك جديد.'));
+  const form=document.createElement('form');
+  form.style.display='flex';form.style.flexWrap='wrap';
+  form.style.gap='10px';form.style.alignItems='end';
+  const add=(label,placeholder,length)=>{
+    const wrapper=gatewayNode('label','');
+    wrapper.style.display='grid';wrapper.style.gap='5px';
+    wrapper.append(document.createTextNode(label));
+    const input=document.createElement('input');
+    input.type='text';input.inputMode='numeric';input.maxLength=length;
+    input.required=true;input.autocomplete='off';
+    input.placeholder=placeholder;input.setAttribute('aria-label',label);
+    wrapper.append(input);form.append(wrapper);return input;
+  };
+  const voucher=add('كود اشتراك العميل','8 إلى 12 رقمًا',24);
+  const approval=add('رقم طلب إعادة الدخول من جهاز العميل','6 أرقام',6);
+  const submit=gatewayNode('button','button','السماح بدخول إضافي');
+  submit.type='submit';form.append(submit);
+  const status=gatewayNode('p','caption','');
+  status.setAttribute('role','status');status.setAttribute('aria-live','polite');
+  section.append(form,status);
+  form.addEventListener('submit',async e=>{
+    e.preventDefault();
+    const code=String(voucher.value||'').trim();
+    const requestCode=String(approval.value||'').trim();
+    if(!/^(?:[0-9]{8,12}|[A-Fa-f0-9]{24})$/.test(code.replace(/[\\s-]/g,''))||
+       !/^[0-9]{6}$/.test(requestCode)){
+      status.textContent='راجع كود الاشتراك ورقم الطلب ذي الست خانات.';
+      return;
+    }
+    if(!confirm('تأكيد السماح لجهاز العميل الجديد؟ يبقى تاريخ الانتهاء كما هو، وستتوقف جلسة الجهاز القديم بعد دخوله.'))return;
+    submit.disabled=true;status.textContent='جارٍ التحقق من طلب العميل…';
+    try{
+      await gatewayApi('/api/v1/admin/xtream-gateway/code-relogin/approve',{
+        method:'POST',body:JSON.stringify({code,requestCode})
+      });
+      status.textContent='تمت الموافقة. اطلب من العميل إدخال كوده الأصلي خلال 10 دقائق. لا يحتاج كودًا جديدًا.';
+      approval.value='';voucher.value='';
+    }catch(error){
+      const why=String(error.message||'');
+      status.textContent=({
+        stream_code_relogin_pin_incorrect:'رمز طلب الدخول غير صحيح.',
+        stream_code_relogin_request_unavailable:'طلب الدخول منتهي أو تمت الموافقة عليه سابقًا. اطلب من العميل إنشاء طلب جديد.',
+        stream_code_relogin_unavailable:'الاشتراك غير نشط أو منتهي أو غير مخصص لتطبيق STREAM.'
+      })[why]||'تعذرت الموافقة: '+why;
+    }finally{submit.disabled=false}
+  });
+  const slot=anchor.closest('section')||anchor.parentElement;
+  slot?.parentElement?.insertBefore(section,slot.nextSibling);
+}
+initStreamReloginControls();
 loadGateway();
