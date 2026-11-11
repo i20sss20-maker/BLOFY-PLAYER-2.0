@@ -30,6 +30,11 @@ class MovieCardMetaTest {
             MovieCardMeta.subtitle(film(), listOf("4K"), "IN - NEW RELEASE"))
     }
 
+    @Test fun providerGenreBeatsConflictingCategoryLabel() {
+        assertEquals("Drama  •  4K",
+            MovieCardMeta.subtitle(film("Drama"), listOf("4K"), "HORROR MOVIES"))
+    }
+
     @Test fun oldSeriesBadgeLineIsPreserved() {
         val series = film("Comedy").copy(kind="series",year=null)
         assertEquals("Comedy  •  4K  •  AR",
