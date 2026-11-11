@@ -50,6 +50,7 @@ import {createStreamRelogin} from './xtream-code-relogin.mjs';
 import {parseStreamAppToken,verifyStreamAppToken,bearerFromRequest}
   from './xtream-code-app-token.mjs';
 import {encryptGatewayAccountPassword,decryptGatewayAccountPassword} from './xtream-account-vault.mjs';
+import {createGatewayCredentialRotator} from './xtream-account-credential-rotation.mjs';
 import { readXtreamGatewayJsonResponse } from './xtream-gateway-response.mjs';
 import { createXtreamHealthSnapshot } from './xtream-health-snapshot.mjs';
 import {relayEligible,issueStreamRelayGrant} from './xtream-stream-relay-bridge.mjs';
@@ -397,6 +398,30 @@ async function patchAccount(id, body) {
   const row = (await pool.query(`UPDATE blofy_xtream_gateway_accounts SET ${updates.join(',')},updated_at=NOW() WHERE id=$${values.length} RETURNING *`, values)).rows[0];
   if (!row) throw Object.assign(new Error('xtream_gateway_account_not_found'), { status: 404 });
   return adminAccount(row);
+}
+
+async function rotateAccountCredentials(id,req,body) {
+  await ensureReady();
+  if(!validUuid(id))
+    throw Object.assign(new Error('xtream_gateway_account_invalid'),{status:400});
+  const rotate=createGatewayCredentialRotator({pool,keyHex:KEY_HEX});
+  const result=await rotate(id,{
+    acknowledgeDisconnect:body?.acknowledgeDisconnect===true
+  });
+  const serverUrl=origin(req);
+  const params=new URLSearchParams({
+    username:result.username,password:result.password,
+    type:'m3u_plus',output:'ts'
+  });
+  return {
+    item:adminAccount(result.item),
+    credentials:{
+      serverUrl,username:result.username,password:result.password,
+      m3uUrl:serverUrl+'/get.php?'+params.toString()
+    },
+    subscriptionUnchanged:true,
+    oldCredentialsDisabled:true
+  };
 }
 
 async function resetAccountPassword(id, req) {
@@ -1905,11 +1930,16 @@ http.createServer = function withBlofyXtreamGateway(listener) {
       if (req.method === 'POST' && url.pathname === '/api/v1/admin/xtream-gateway/accounts/bulk') {
         return json(res, 201, await createAccountsBulk(await readJson(req), req));
       }
-      const match = url.pathname.match(/^\/api\/v1\/admin\/xtream-gateway\/accounts\/([0-9a-f-]+)(?:\/(reset|credentials))?$/i);
+      const match = url.pathname.match(/^\/api\/v1\/admin\/xtream-gateway\/accounts\/([0-9a-f-]+)(?:\/(reset|credentials|rotate-credentials))?$/i);
       if (match) {
         const id = match[1];
         if (!validUuid(id)) return json(res, 400, { error: 'xtream_gateway_account_invalid' });
         if (match[2] === 'reset' && req.method === 'POST') return json(res, 200, await resetAccountPassword(id, req));
+        if(match[2]==='rotate-credentials'&&req.method==='POST')
+          return json(res,200,await rotateAccountCredentials(id,req,await readJson(req)),{
+            'cache-control':'no-store, private',
+            'referrer-policy':'no-referrer'
+          });
         if (match[2] === 'credentials' && req.method === 'GET') return json(res,200,await revealAccountCredentials(id,req));
         if (!match[2] && req.method === 'PATCH') return json(res, 200, { item: await patchAccount(id, await readJson(req)) });
         if (!match[2] && req.method === 'DELETE') {
