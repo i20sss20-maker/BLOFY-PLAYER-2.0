@@ -99,7 +99,7 @@ export function normalizePlayableSeriesInfo(clean,episodes,gatewayId,categoryGat
     return null;
   const seriesId=Number(gatewayId);
   const active=Object.entries(episodes||{}).filter(([key,list])=>
-    /^\\d{1,3}$/.test(key)&&Number(key)<=999&&Array.isArray(list)&&list.length>0);
+    /^\d{1,3}$/.test(key)&&Number(key)<=999&&Array.isArray(list)&&list.length>0);
   const bySeason=new Map(active.map(([key,list])=>[String(Number(key)),list.length]));
   const present=new Set();
   const seasons=[];
