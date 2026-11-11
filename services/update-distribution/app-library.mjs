@@ -124,7 +124,7 @@ const DEFAULT_APPS = Object.freeze([
     iconUrl:'https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/services/update-distribution/public/blofy-stream.svg',
     description:'تطبيق BLOFY STREAM المستقل. تشغيل القنوات والأفلام والمسلسلات بكود اشتراك فقط، واجهة عربية افتراضيًا مع تغيير اللغة للإنجليزية. يدعم التلفزيون والريموت والجوال وأجهزة Android TV.',
     devices:'Android TV · TV Box · Android Phone · Tablet', version:'55.8.12',
-    architecture:'Universal ARMv7 · ARM64 · x86 · x86_64', apkSizeBytes:135509813,
+    architecture:'Universal (ARM + x86)', apkSizeBytes:135509813,
     downloadUrl:'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/blofy-stream-55.8.12-owner-qa-20261111/BLOFY-STREAM-55.8.12-FFMPEG-OWNER-SIGNED.apk',
     downloadMode:'direct', sortOrder:0, enabled:true, featured:true
   },
