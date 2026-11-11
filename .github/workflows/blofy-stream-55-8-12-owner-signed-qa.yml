@@ -1,4 +1,5 @@
 name: BLOFY STREAM 55.8.12 FFmpeg owner-signed release candidate
+# Owner-signed private QA only: no public release or website promotion before approval.
 
 on:
   push:
