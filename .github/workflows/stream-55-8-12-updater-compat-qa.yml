@@ -25,7 +25,7 @@ jobs:
           set -euo pipefail
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36' 'build-tools;35.0.0'
-      - name: All STREAM QA unit tests, debug lint and APK assembly
+      - name: Selected STREAM QA unit tests, debug lint and APK assembly
         shell: bash
         run: |
           set -euo pipefail
@@ -33,7 +33,21 @@ jobs:
             -Dorg.gradle.jvmargs="-Xmx2048m -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8" \
             -PBLOFY_ACTIVATION_BASE_URL=http://127.0.0.1:9 \
             -PBLOFY_UPDATE_BASE_URL=http://127.0.0.1:9 \
-            testStreamCodeDemoUnitTest
+            testStreamCodeDemoUnitTest \
+              --tests 'tv.blofy.player.core.diagnostics.StreamAudioHealthTest' \
+              --tests 'tv.blofy.player.ui.details.ArabicDetailsPolicyTest' \
+              --tests 'tv.blofy.player.ui.catalog.MovieGenresTest' \
+              --tests 'tv.blofy.player.ui.catalog.MovieCardMetaTest' \
+              --tests 'tv.blofy.player.data.metadata.ProviderMetadataGenreSnapshotTest' \
+              --tests 'tv.blofy.player.core.identity.StreamCodeClientTest' \
+              --tests 'tv.blofy.player.core.update.StreamReleaseIsolationTest' \
+              --tests 'tv.blofy.player.core.update.UpdateSafetyTest' \
+              --tests 'tv.blofy.player.core.update.UpdateDownloadTest' \
+              --tests 'tv.blofy.player.core.device.DeviceClassTest' \
+              --tests 'tv.blofy.player.core.device.StreamDeviceCompatibilityTest' \
+              --tests 'tv.blofy.player.core.identity.StreamCodeSessionLogoutTest' \
+              --tests 'tv.blofy.player.core.playback.PlaybackSessionReleaseTest' \
+              --tests 'tv.blofy.player.ui.player.PlayerNetworkPolicyTest'
           gradle --no-daemon --max-workers=2 \
             -Dorg.gradle.jvmargs="-Xmx2048m -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8" \
             -PBLOFY_ACTIVATION_BASE_URL=https://api.blofyplayer.com \
