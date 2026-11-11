@@ -171,6 +171,8 @@ dependencies {
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     implementation("com.google.zxing:core:3.5.3")
+    // Local movie/series text translation (one-time language models over Wi-Fi).
+    implementation("com.google.mlkit:translate:17.0.3")
     baselineProfile(project(":benchmark"))
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.14.1")
