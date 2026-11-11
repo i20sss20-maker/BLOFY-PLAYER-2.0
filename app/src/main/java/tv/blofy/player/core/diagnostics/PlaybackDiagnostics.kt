@@ -10,6 +10,10 @@ data class PlaybackMetric(
     val startedAtElapsedMs: Long,
     val firstFrameElapsedMs: Long? = null,
     val bufferingCount: Int = 0,
+    val rebufferCount: Int = 0,
+    val rebufferDurationMs: Long = 0,
+    val bufferStartedAtElapsedMs: Long? = null,
+    val recoveryCount: Int = 0,
     val errorCode: String? = null,
     val errorMessage: String? = null
 ) {
@@ -45,16 +49,47 @@ object PlaybackDiagnostics {
     }
 
     fun buffering(metric: PlaybackMetric): PlaybackMetric {
-        val updated = metric.copy(bufferingCount = metric.bufferingCount + 1)
+        if (metric.bufferStartedAtElapsedMs != null) return metric
+        val updated = metric.copy(
+            bufferingCount = metric.bufferingCount + 1,
+            rebufferCount = metric.rebufferCount +
+                if (metric.firstFrameElapsedMs != null) 1 else 0,
+            bufferStartedAtElapsedMs = SystemClock.elapsedRealtime()
+        )
         replace(metric, updated)
-        Log.i(TAG, "buffering provider=${metric.providerKey} kind=${metric.contentKind} count=${updated.bufferingCount}")
+        Log.i(TAG, "buffering kind=${metric.contentKind} count=${updated.bufferingCount}")
+        return updated
+    }
+
+    /** Finalize buffer intervals only after a first frame. Initial loading is
+     * measured by TTFF, not double counted as an interruption.
+     */
+    fun ready(metric: PlaybackMetric): PlaybackMetric = closeBuffer(metric, SystemClock.elapsedRealtime())
+
+    fun recovered(metric: PlaybackMetric): PlaybackMetric {
+        val updated = metric.copy(recoveryCount = (metric.recoveryCount + 1).coerceAtMost(1000))
+        replace(metric, updated)
+        return updated
+    }
+
+    fun finish(metric: PlaybackMetric): PlaybackMetric = closeBuffer(metric, SystemClock.elapsedRealtime())
+
+    private fun closeBuffer(metric: PlaybackMetric, now: Long): PlaybackMetric {
+        val since = metric.bufferStartedAtElapsedMs ?: return metric
+        val increment = if (metric.firstFrameElapsedMs == null) 0L else
+            (now - since).coerceIn(0L, 600_000L)
+        val updated = metric.copy(
+            rebufferDurationMs = (metric.rebufferDurationMs + increment).coerceAtMost(3_600_000L),
+            bufferStartedAtElapsedMs = null
+        )
+        replace(metric, updated)
         return updated
     }
 
     fun error(metric: PlaybackMetric, code: String?, message: String?): PlaybackMetric {
         val safeCode = DiagnosticsSanitizer.sanitizeErrorCode(code)
         val safeMessage = DiagnosticsSanitizer.sanitizeMessage(message)
-        val updated = metric.copy(errorCode = safeCode, errorMessage = safeMessage)
+        val updated = finish(metric).copy(errorCode = safeCode, errorMessage = safeMessage)
         replace(metric, updated)
         Log.e(TAG, "error provider=${metric.providerKey} kind=${metric.contentKind} code=$safeCode message=$safeMessage")
         return updated
