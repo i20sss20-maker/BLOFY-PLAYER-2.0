@@ -18,7 +18,11 @@ object AppReleaseRepository {
         val minSupportedVersionCode: Int,
         val downloadUrl: String?,
         val releaseNotes: String?,
-        val fetchedAt: Long = System.currentTimeMillis()
+        val fetchedAt: Long = System.currentTimeMillis(),
+        // Mandatory on the independent STREAM channel; optional on legacy PLAYER.
+        val packageName: String? = null,
+        val sha256: String? = null,
+        val apkSizeBytes: Long? = null
     ) {
         fun updateAvailable(currentVersionCode: Int = BuildConfig.VERSION_CODE): Boolean =
             versionCode > currentVersionCode
@@ -40,7 +44,10 @@ object AppReleaseRepository {
         val versionName: String? = null,
         val minSupportedVersionCode: Int = 0,
         val downloadUrl: String? = null,
-        val releaseNotes: String? = null
+        val releaseNotes: String? = null,
+        val packageName: String? = null,
+        val sha256: String? = null,
+        val apkSizeBytes: Long? = null
     )
 
     private const val PREFS = "blofy_app_release"
@@ -48,6 +55,7 @@ object AppReleaseRepository {
     private const val KEY_LAST_CHECK = "last_check"
     private const val CACHE_TTL_MS = 6L * 60L * 60L * 1000L
     private const val MAX_STALE_CACHE_MS = 7L * 24L * 60L * 60L * 1000L
+    private const val MAX_STREAM_APK_BYTES = 768L * 1024L * 1024L
 
     private val gson = Gson()
     private val client = OkHttpClient.Builder()
@@ -135,6 +143,16 @@ object AppReleaseRepository {
             it.isNotEmpty() && it.length <= 64
         } ?: return null
         if (remote.versionCode <= 0) return null
+        val packageName = remote.packageName?.trim()
+        val digest = remote.sha256?.trim()?.lowercase()
+        val size = remote.apkSizeBytes
+        // STREAM has its own package identity. Never trust the PLAYER feed or
+        // metadata missing the signed APK digest/size: sideloading the wrong
+        // app would lose the subscriber's access and cannot install in place.
+        if (BuildConfig.CODE_ONLY_LOGIN &&
+            (packageName != BuildConfig.APPLICATION_ID ||
+                digest?.matches(Regex("[a-f0-9]{64}")) != true ||
+                size == null || size !in 1..MAX_STREAM_APK_BYTES)) return null
 
         val minimum = remote.minSupportedVersionCode
             .coerceAtLeast(1)
@@ -153,7 +171,10 @@ object AppReleaseRepository {
             versionName = name,
             minSupportedVersionCode = minimum,
             downloadUrl = url,
-            releaseNotes = notes
+            releaseNotes = notes,
+            packageName = packageName,
+            sha256 = digest,
+            apkSizeBytes = size
         )
     }
 
@@ -172,7 +193,11 @@ object AppReleaseRepository {
             release.versionName.isNotBlank() &&
             release.versionName.length <= 64 &&
             release.minSupportedVersionCode in 1..release.versionCode &&
-            (release.downloadUrl == null || isSafeDownloadUrl(release.downloadUrl))
+            (release.downloadUrl == null || isSafeDownloadUrl(release.downloadUrl)) &&
+            (!BuildConfig.CODE_ONLY_LOGIN ||
+                (release.packageName == BuildConfig.APPLICATION_ID &&
+                    release.sha256?.matches(Regex("[a-f0-9]{64}")) == true &&
+                    release.apkSizeBytes?.let { it in 1..MAX_STREAM_APK_BYTES } == true))
 
     private fun isSafeBaseUrl(value: String): Boolean {
         if (value.isBlank()) return false
