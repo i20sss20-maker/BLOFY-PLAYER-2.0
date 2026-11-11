@@ -16,6 +16,7 @@ import { appDownloadAction } from './app-download-policy.mjs';
 import { observeDownloadCompletion } from './download-metrics.mjs';
 import { recordDownloadCompletion, getDownloadStats } from './app-library.mjs';
 import { publicSiteRedirect } from './public-site-redirect.mjs';
+import { streamReleaseMetadata } from './stream-release.mjs';
 import { UPDATE_SITE_CANONICAL, updateRobotsTxt, updateSitemapXml, renderMissingPublicPage, isPublicHtmlRequest } from './public-search-pages.mjs';
 
 const PORT = Number(process.env.PORT || 3000);
@@ -1030,6 +1031,19 @@ const server = http.createServer(async (req, res) => {
         'cache-control': 'public, max-age=600'
       });
       return res.end(method === 'HEAD' ? undefined : body);
+    }
+
+    if (pathname === '/stream/release.json') {
+      // A separate application ID and original owner certificate are required
+      // for this updater. Never fall back to BLOFY PLAYER's /release.json.
+      if (!['GET', 'HEAD'].includes(method)) {
+        res.writeHead(405, { ...securityHeaders, allow: 'GET, HEAD', 'cache-control': 'no-store' });
+        return res.end();
+      }
+      const metadata = streamReleaseMetadata(await getApp('blofy-stream'));
+      return metadata
+        ? sendJson(req, res, 200, metadata)
+        : sendJson(req, res, 404, { ok: false, error: 'stream_release_not_published' });
     }
 
     if (pathname === '/health' || pathname === '/release.json') return sendJson(req, res, 200, healthPayload());
