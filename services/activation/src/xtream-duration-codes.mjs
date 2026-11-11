@@ -9,6 +9,7 @@ import {gatewayCredentialProof,generateGatewayUsername,
 import {encryptGatewayAccountPassword,decryptGatewayAccountPassword} from './xtream-account-vault.mjs';
 import {createStreamAppToken} from './xtream-code-app-token.mjs';
 import {encryptStreamCode,decryptStreamCode} from './xtream-code-vault.mjs';
+import {streamDeviceProof,hasApprovedRelogin} from './xtream-code-device-binding.mjs';
 
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const MAX_DAYS=730;
@@ -226,9 +227,7 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
     if(!proof)throw Object.assign(Error('stream_code_invalid'),{status:400});
     if(deviceKey!==null&&!/^[0-9a-f]{64}$/i.test(String(deviceKey)))
       throw Object.assign(Error('stream_code_device_invalid'),{status:400});
-    const deviceProof=deviceKey?crypto.createHmac('sha256',Buffer.from(keyHex,'hex'))
-      .update('blofy-stream-activation-device:v1:').update(String(deviceKey).toLowerCase())
-      .digest('hex'):null;
+    const deviceProof=deviceKey?streamDeviceProof(deviceKey,keyHex):null;
     const client=await pool.connect();
     try{
       await client.query('BEGIN');
@@ -266,9 +265,26 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
         // and clears the old binding. Its original clock and expiry do not reset.
         const transferPending=appOnly&&row.code_channel==='app'&&
           !row.redeemed_device_hash;
-        if(!transferPending&&row.redeemed_device_hash!==deviceProof)
+        // A normal logout on the original installation already succeeds.
+        // New installations can reuse the SAME voucher only after admin
+        // approval of the 6-digit request originating from that installation.
+        const reloginApproved=appOnly&&hasApprovedRelogin(row,deviceProof,clock());
+        if(!transferPending&&!reloginApproved&&row.redeemed_device_hash!==deviceProof)
           throw Object.assign(Error('stream_code_unavailable'),{status:409});
-        if(transferPending){
+        if(reloginApproved){
+          // Atomic one-time binding rotation; prior bearer stops verifying
+          // immediately. The original subscription clock/expiry is unchanged.
+          await client.query(`UPDATE blofy_xtream_gateway_duration_codes
+            SET redeemed_device_hash=$2,
+                relogin_device_hash=NULL,relogin_request_hash=NULL,
+                relogin_requested_at=NULL,relogin_approved_at=NULL,
+                relogin_expires_at=NULL,transfer_count=transfer_count+1,
+                last_transfer_at=NOW()
+            WHERE id=$1 AND relogin_device_hash=$2
+              AND relogin_approved_at IS NOT NULL AND relogin_expires_at>NOW()`,
+            [row.id,deviceProof]);
+          row.redeemed_device_hash=deviceProof;
+        } else if(transferPending){
           await client.query(`UPDATE blofy_xtream_gateway_duration_codes
             SET redeemed_device_hash=$2 WHERE id=$1 AND redeemed_device_hash IS NULL`,
             [row.id,deviceProof]);
