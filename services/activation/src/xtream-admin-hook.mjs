@@ -3385,7 +3385,7 @@ async function unifiedStreamBridge(req,res,url){
     const creds=result.data?.credentials;
     if(result.status===200&&creds){
       creds.serverUrl=XTREAM_CUSTOMER_HOST;
-      creds.m3uUrl='https://blofyplayer.com/get.php?'+
+      creds.m3uUrl=creds.serverUrl+'/get.php?'+
         new URLSearchParams({username:creds.username,password:creds.password,
           type:'m3u_plus',output:'ts'});
     }
