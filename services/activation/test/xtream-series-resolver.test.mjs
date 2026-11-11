@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { collectSourceEpisodes, mapSeriesEpisodes } from '../src/xtream-series-resolver.mjs';
+import { collectSourceEpisodes, mapSeriesEpisodes, normalizePlayableSeriesInfo } from '../src/xtream-series-resolver.mjs';
 const sanitize = episode => ({...episode, direct_source:''});
 
 test('unique source episode IDs across seasons retain trusted extensions',()=>{
@@ -9,7 +9,7 @@ test('unique source episode IDs across seasons retain trusted extensions',()=>{
 });
 test('missing or invalid mappings never leak raw source episode IDs',()=>{
  const r=mapSeriesEpisodes({'1':[{id:'900',title:'Mapped',direct_source:'secret'},{id:'901',title:'Missing'},{id:'902',title:'Invalid'}]},new Map([['900',{id:1200,extension:'mkv'}],['902',{id:0,extension:'mp4'}]]),sanitize);
- assert.deepEqual(r['1'],[{id:1200,title:'Mapped',container_extension:'mkv',direct_source:''}]);
+ assert.deepEqual(r['1'],[{id:1200,title:'Mapped',stream_id:1200,episode_id:1200,episode_num:1,season:1,season_number:1,container_extension:'mkv',direct_source:''}]);
 });
 test('preserves season keys and safe empty seasons',()=>{
  const r=mapSeriesEpisodes({'0':[],'2':[{id:'1'}]},new Map(),sanitize);
@@ -108,4 +108,54 @@ test('never invents playable media IDs from zero or malformed alternatives',()=>
   {id:'../../unsafe',episode_id:'7/8'}]};
  assert.deepEqual(collectSourceEpisodes(raw),[]);
  assert.deepEqual(mapSeriesEpisodes(raw,new Map(),sanitize),{'1':[]});
+});
+
+
+test('Xtream episodes expose stable nonzero IDs in id, stream_id and episode_id',()=>{
+ const raw={'1':[
+  {id:'88111',episode_num:'1',season:2,container_extension:'mkv',direct_source:'https://provider.invalid/secret'},
+  {id:'88112',episode_num:0,container_extension:'mp4'}
+ ]};
+ const mapped=mapSeriesEpisodes(raw,new Map([
+  ['88111',{id:104001,extension:'mkv'}],
+  ['88112',{id:104002,extension:'mp4'}]
+ ]),sanitize);
+ assert.deepEqual(mapped['1'].map(x=>[x.id,x.stream_id,x.episode_id]),
+  [[104001,104001,104001],[104002,104002,104002]]);
+ assert.deepEqual(mapped['1'].map(x=>x.episode_num),[1,2]);
+ assert.deepEqual(mapped['1'].map(x=>x.season),[1,1]);
+ assert.equal(JSON.stringify(mapped).includes('88111'),false);
+ assert.equal(JSON.stringify(mapped).includes('provider.invalid'),false);
+ assert.equal(raw['1'][0].season,2,'upstream input must never mutate');
+});
+test('series info does not advertise metadata-only placeholder seasons',()=>{
+ const raw={seasons:[
+  {id:2321,season_number:1,episode_count:30,name:'Season One'},
+  {id:9912,season_number:2,episode_count:25,name:'Season Two'}
+ ],info:{series_id:'321',category_id:'11',name:'Example'}};
+ const episodes={'1':[{id:1001},{id:1002}],'2':[]};
+ const result=normalizePlayableSeriesInfo(raw,episodes,50042,'8899');
+ assert.deepEqual(result.seasons,[
+  {id:1,season_number:1,episode_count:2,name:'Season One'}
+ ]);
+ assert.equal(result.info.series_id,50042);
+ assert.equal(result.info.category_id,'8899');
+ assert.deepEqual(result.episodes,episodes);
+ assert.equal(raw.seasons[0].id,2321);
+ assert.equal(raw.info.series_id,'321');
+});
+test('missing upstream season metadata is reconstructed only for mapped episode groups',()=>{
+ const info=normalizePlayableSeriesInfo({info:{name:'Some Show'}},{
+  '1':[{id:60001}], '3':[{id:70001},{id:70002}],
+  '2':[]},25001);
+ assert.deepEqual(info.seasons.map(x=>[x.season_number,x.episode_count]),[[1,1],[3,2]]);
+ assert.equal(info.info.series_id,25001);
+ assert.equal(normalizePlayableSeriesInfo(null,{},5),null);
+});
+test('series with no genuine episodes never shows phantom seasons',()=>{
+ const result=normalizePlayableSeriesInfo({
+  info:{name:'Unknown'},seasons:[{id:1,season_number:1,episode_count:24}]
+ },{},35001);
+ assert.deepEqual(result.seasons,[]);
+ assert.deepEqual(result.episodes,{});
 });
