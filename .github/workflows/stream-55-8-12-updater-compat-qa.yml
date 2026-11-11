@@ -1,0 +1,64 @@
+name: BLOFY STREAM 55.8.12 device compatibility and in-app updater QA
+on:
+  push:
+    branches:
+      - release/stream-55-8-12-updater-device-20261111
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  stream-devices-updater:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Install API 36 and build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36' 'build-tools;35.0.0'
+      - name: All STREAM QA unit tests, debug lint and APK assembly
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --max-workers=2 \
+            -Dorg.gradle.jvmargs="-Xmx2048m -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8" \
+            -PBLOFY_ACTIVATION_BASE_URL=http://127.0.0.1:9 \
+            -PBLOFY_UPDATE_BASE_URL=http://127.0.0.1:9 \
+            testStreamCodeDemoUnitTest
+          gradle --no-daemon --max-workers=2 \
+            -Dorg.gradle.jvmargs="-Xmx2048m -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8" \
+            -PBLOFY_ACTIVATION_BASE_URL=https://api.blofyplayer.com \
+            -PBLOFY_UPDATE_BASE_URL=https://updates.blofyplayer.com \
+            lintStreamCodeDemo assembleStreamCodeDemo
+      - name: Verify Android 6+ TV, phone and tablet side-by-side QA identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/streamCodeDemo/app-streamCodeDemo.apk
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" > "$RUNNER_TEMP/badging.txt"
+          grep -Fq "name='tv.blofy.player.v2.stream.qa' versionCode='2000089' versionName='2.0.0-rc07.55.8.12-STREAM-QA'" "$RUNNER_TEMP/badging.txt"
+          grep -Fq "sdkVersion:'23'" "$RUNNER_TEMP/badging.txt"
+          unzip -Z1 "$APK" | grep -Fxq 'classes.dex'
+          mkdir -p build/stream-55-8-12
+          printf 'package=tv.blofy.player.v2.stream.qa\nversion_code=2000089\nsigned_owner=no\n' > build/stream-55-8-12/IDENTITY.txt
+          sha256sum "$APK" > build/stream-55-8-12/SHA256SUMS.txt
+      - name: Upload independent test APK (never replaces customer installation)
+        uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-STREAM-55.8.12-DEVICE-QA-${{ github.sha }}
+          path: |
+            app/build/outputs/apk/streamCodeDemo/app-streamCodeDemo.apk
+            app/build/test-results/testStreamCodeDemoUnitTest/
+            build/stream-55-8-12/
+          if-no-files-found: error
+          retention-days: 14
