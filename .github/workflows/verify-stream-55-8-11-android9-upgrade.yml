@@ -1,0 +1,93 @@
+name: Verify signed BLOFY STREAM 55.8.10 to 55.8.11 in-place update on Android 9
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-stream-55-8-11-android9-upgrade.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  original-signer-and-android9-upgrade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      OLD: BLOFY-STREAM-55.8.10-FFMPEG-OWNER-SIGNED.apk
+      NEW: BLOFY-STREAM-55.8.11-FFMPEG-OWNER-SIGNED.apk
+      PKG: tv.blofy.player.v2.stream
+      CERT: C3B98CCCD2F0C86809014ACD9368BF61C7004CFD419CD867B71FEF10BFA6255E
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Retrieve both verified, public, original-signed releases
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/upgrade-qa
+          gh release download blofy-stream-55.8.10-owner-signed-20261111 --repo "$GITHUB_REPOSITORY" --pattern "$OLD" --dir build/upgrade-qa
+          gh release download blofy-stream-55.8.11-owner-signed-20261111 --repo "$GITHUB_REPOSITORY" --pattern "$NEW" --dir build/upgrade-qa
+          printf '%s  %s\n' \
+            f3eef0ecf499fca140a2bf1f11df306e54cd65f588fe0807f2e6560b5994be73 "build/upgrade-qa/$OLD" \
+            f29333559ed510050e3dd08347f0ae4d6d1193141484080e1d47e56fba6ba17e "build/upgrade-qa/$NEW" > build/upgrade-qa/SHA256SUMS
+          sha256sum --check build/upgrade-qa/SHA256SUMS
+      - name: Verify Android identity, versionCode and original owner certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'build-tools;35.0.0'
+          tool="$ANDROID_HOME/build-tools/35.0.0"
+          for rev in OLD NEW; do
+            file="build/upgrade-qa/${!rev}"
+            "$tool/apksigner" verify --print-certs "$file" > "build/upgrade-qa/$rev-cert.txt"
+            cert="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "build/upgrade-qa/$rev-cert.txt" | head -n1 | tr -d '[:space:]-:' | tr '[:lower:]' '[:upper:]')"
+            test "$cert" = "$CERT" || { echo "::error::$rev is not signed by original owner"; exit 1; }
+            "$tool/aapt" dump badging "$file" > "build/upgrade-qa/$rev-badging.txt"
+            grep -Fq "name='$PKG'" "build/upgrade-qa/$rev-badging.txt"
+          done
+          grep -Fq "versionCode='2000087'" build/upgrade-qa/OLD-badging.txt
+          grep -Fq "versionCode='2000088'" build/upgrade-qa/NEW-badging.txt
+          echo 'Both APKs are signed by the identical original owner key with monotonically increasing version codes.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Install old version, then update in place on real Android 9 emulator package manager
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 28
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          ram-size: 3072M
+          disk-size: 6144M
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          script: |
+            set -euo pipefail
+            adb wait-for-device
+            adb install -r "build/upgrade-qa/$OLD"
+            adb shell pm path "$PKG" | grep -Fq 'package:'
+            adb shell dumpsys package "$PKG" | grep -Fq 'versionCode=2000087'
+            # Never uninstall or clear: validate the Android package manager's
+            # actual in-place update behavior (same signature, shared data).
+            adb install -r "build/upgrade-qa/$NEW"
+            adb shell pm path "$PKG" | grep -Fq 'package:'
+            adb shell dumpsys package "$PKG" | grep -Fq 'versionCode=2000088'
+            echo 'Android 9 accepted signed in-place upgrade without uninstalling.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Store Android 9 diagnostic metadata, not APKs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stream-55-8-11-android9-install-compatibility
+          path: |
+            build/upgrade-qa/OLD-badging.txt
+            build/upgrade-qa/NEW-badging.txt
+            build/upgrade-qa/OLD-cert.txt
+            build/upgrade-qa/NEW-cert.txt
+            build/upgrade-qa/SHA256SUMS
+          if-no-files-found: warn
+          retention-days: 7
