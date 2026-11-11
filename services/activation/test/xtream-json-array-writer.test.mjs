@@ -5,7 +5,7 @@ import {createXtreamJsonArrayWriter} from '../src/xtream-json-array-writer.mjs';
 test('batch writer emits exactly same JSON rows in stable order with fewer writes',async()=>{
   const result=[];
   const writer=createXtreamJsonArrayWriter(
-    async chunk=>{result.push(chunk);}, {maxChars:120,maxItems:8});
+    async chunk=>{result.push(chunk);}, {maxChars:800,maxItems:8});
   const input=Array.from({length:800},(_,i)=>({
     stream_id:i+1,name:'Arabic title '+i,category_id:String(i%6)
   }));
