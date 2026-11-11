@@ -37,6 +37,7 @@ import tv.blofy.player.ui.series.EpisodesActivity
 
 class SeriesDetailsActivity : ContentAccessActivity() {
     private lateinit var favoriteButton: Button
+    private var arabicPresenter: ArabicDetailsPresenter? = null
 
     override fun onContentReady(savedInstanceState: Bundle?) {
         val providerId = intent.getStringExtra(EXTRA_PROVIDER_ID).orEmpty()
@@ -95,7 +96,13 @@ class SeriesDetailsActivity : ContentAccessActivity() {
                 setPadding(0, dp(2), 0, dp(4))
             }, LinearLayout.LayoutParams(-2, -2).apply { bottomMargin = dp(6) })
 
-            val title = ContentPresentation.title(metadata?.title?.takeIf(String::isNotBlank) ?: stream.name, stream.kind)
+            val initialArabic = if (android.os.Build.VERSION.SDK_INT >= 24)
+                resources.configuration.locales[0].language == "ar"
+            else resources.configuration.locale.language == "ar"
+            val title = ContentPresentation.title(
+                ArabicDetailsPolicy.preferredTitle(stream.name, metadata?.title, initialArabic),
+                stream.kind
+            )
             val logo = ImageView(this@SeriesDetailsActivity).apply {
                 scaleType = ImageView.ScaleType.FIT_END
                 adjustViewBounds = true
@@ -114,6 +121,17 @@ class SeriesDetailsActivity : ContentAccessActivity() {
                 alpha = if (metadata?.logoUrl.isNullOrBlank()) 1f else .9f
             }
             panel.addView(titleView, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(7) })
+            val originalTitleView = TextView(this@SeriesDetailsActivity).apply {
+                textSize = 12.5f
+                typeface = BlofyTvDesign.preferredTypeface(this)
+                setTextColor(BlofyTvDesign.TextMuted)
+                gravity = Gravity.START
+                maxLines = 2
+                visibility = View.GONE
+            }
+            panel.addView(originalTitleView, LinearLayout.LayoutParams(-1, -2).apply {
+                bottomMargin = dp(6)
+            })
 
             fun metadataStats(metadata: tv.blofy.player.data.metadata.ProviderMetadata.Metadata?) = buildList {
                     add(getString(R.string.details_series_type))
@@ -124,9 +142,15 @@ class SeriesDetailsActivity : ContentAccessActivity() {
                     metadata?.runtimeMinutes?.takeIf { it > 0 }?.let { add(getString(R.string.details_minutes, it)) }
                     metadata?.rating?.let { add("★ %.1f/10".format(java.util.Locale.US, it)) }
                         ?: stream.rating?.takeIf(String::isNotBlank)?.let { add("★ $it") }
-                    val genres = metadata?.genres?.filter(String::isNotBlank).orEmpty()
+                    val genres = metadata?.genres?.filter(String::isNotBlank).orEmpty().map {
+                        tv.blofy.player.ui.catalog.MovieGenres.label(it, initialArabic)
+                    }
                     if (genres.isNotEmpty()) add(genres.take(3).joinToString(" / "))
-                    else stream.genre?.takeIf(String::isNotBlank)?.let(::add)
+                    else stream.genre?.takeIf(String::isNotBlank)?.let {
+                        add(it.split(Regex("[,/|]")).joinToString(" / ") { part ->
+                            tv.blofy.player.ui.catalog.MovieGenres.label(part.trim(), initialArabic)
+                        })
+                    }
                     metadata?.countries?.takeIf { it.isNotEmpty() }?.let { add(getString(R.string.details_country, it.take(2).joinToString(" / "))) }
                     metadata?.originalLanguage?.takeIf(String::isNotBlank)?.let { add(it.uppercase()) }
                 }
@@ -152,6 +176,13 @@ class SeriesDetailsActivity : ContentAccessActivity() {
                 setPadding(0, dp(8), 0, dp(10))
             }
             panel.addView(overviewView, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
+            val presenter = ArabicDetailsPresenter(
+                this@SeriesDetailsActivity, stream, titleView, overviewView, originalTitleView
+            )
+            arabicPresenter = presenter
+            panel.addView(presenter.button, LinearLayout.LayoutParams(-2, dp(42)).apply {
+                bottomMargin = dp(10)
+            })
             val crewView = TextView(this@SeriesDetailsActivity).apply {
                 textSize = 11.5f
                 typeface = BlofyTvDesign.preferredTypeface(this)
@@ -240,7 +271,7 @@ class SeriesDetailsActivity : ContentAccessActivity() {
             ProviderDetailsBinding(this@SeriesDetailsActivity, overviewView, crewView,
                 castContainer, provider, stream) { updated ->
                     DetailsMetadataChips.update(statsView, metadataStats(updated))
-                    titleView.text = ContentPresentation.title(updated?.title?.takeIf(String::isNotBlank) ?: stream.name, stream.kind)
+                    presenter.render(updated)
                     ArtworkLoader.loadPriority(backdrop, listOf(updated?.backdropUrl, stream.backdrop, stream.icon))
                     ArtworkLoader.loadPriority(poster, listOf(updated?.posterUrl, stream.icon, stream.backdrop))
                     val logoUrl = updated?.logoUrl
@@ -286,6 +317,11 @@ class SeriesDetailsActivity : ContentAccessActivity() {
         ContentScreenStyle.styleAction(this, primary)
         minimumWidth = dp(if (primary) 132 else 108)
         setOnClickListener { action() }
+    }
+
+    override fun onDestroy() {
+        arabicPresenter?.close()
+        super.onDestroy()
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()

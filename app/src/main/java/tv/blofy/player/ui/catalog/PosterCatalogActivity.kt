@@ -8,6 +8,8 @@ import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
 import android.widget.LinearLayout
+import android.widget.Button
+import android.widget.HorizontalScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
@@ -42,6 +44,9 @@ class PosterCatalogActivity : AppCompatActivity() {
     private lateinit var posterGrid: RecyclerView
     private lateinit var countView: TextView
     private lateinit var searchBar: TextView
+    private var genreStrip: LinearLayout? = null
+    private var selectedGenre: String? = null
+    private var catalogRoot: View? = null
     private var pageJob: Job? = null
     private var countJob: Job? = null
     private var exactCount: Int? = null
@@ -232,6 +237,27 @@ class PosterCatalogActivity : AppCompatActivity() {
         header.addView(countView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(28)))
         content.addView(header)
 
+        if (kind == KIND_MOVIE) {
+            val genreRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutDirection = resources.configuration.layoutDirection
+                gravity = Gravity.CENTER_VERTICAL
+                clipChildren = false
+                clipToPadding = false
+            }
+            genreStrip = genreRow
+            content.addView(HorizontalScrollView(this).apply {
+                isHorizontalScrollBarEnabled = false
+                isFocusable = false
+                clipChildren = false
+                clipToPadding = false
+                addView(genreRow, android.widget.FrameLayout.LayoutParams(-2, -1))
+            }, LinearLayout.LayoutParams(-1, dp(52)).apply {
+                bottomMargin = dp(6)
+            })
+            renderMovieGenres()
+        }
+
         val manager = GridLayoutManager(this, gridColumns)
         posterGrid = RecyclerView(this).apply {
             layoutManager = manager
@@ -261,6 +287,7 @@ class PosterCatalogActivity : AppCompatActivity() {
         content.addView(posterGrid, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         body.addView(content, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
         root.addView(body, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        catalogRoot = root
         setContentView(root)
         if (deviceKind == DeviceClass.Kind.TV) root.requestFocus()
 
@@ -276,7 +303,8 @@ class PosterCatalogActivity : AppCompatActivity() {
             itemKey = { it.key }
         )
         categoryList.adapter = categoryAdapter
-        TwoPaneFocusGuard.registerTopTarget(root, searchBar)
+        TwoPaneFocusGuard.registerTopTarget(root,
+            if (kind == KIND_MOVIE) genreStrip?.getChildAt(0) ?: searchBar else searchBar)
 
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
@@ -299,12 +327,14 @@ class PosterCatalogActivity : AppCompatActivity() {
 
     private fun loadStreams(id: String?) {
         if (providerId.isBlank()) return
-        if (selectedCategoryId == id) {
+        if (selectedCategoryId == id && selectedGenre == null) {
             if (displayedCategoryId == id && loadedItems.isNotEmpty()) return
             if (loadingPage) return
         }
 
         selectedCategoryId = id
+        selectedGenre = null
+        renderMovieGenres()
         generation++
         refreshExactCount()
         pageJob?.cancel()
@@ -330,23 +360,91 @@ class PosterCatalogActivity : AppCompatActivity() {
         loadNextPage(true)
     }
 
+    /** Film genre changes are independently paginated, so large libraries stay fast. */
+    private fun loadMovieGenre(key: String?) {
+        if (kind != KIND_MOVIE || selectedGenre == key || providerId.isBlank()) return
+        selectedGenre = key
+        generation++
+        pageJob?.cancel()
+        countJob?.cancel()
+        hasMore = true
+        lastRowId = 0L
+        loadingPage = false
+        loadedItems.clear()
+        displayedCategoryId = selectedCategoryId
+        posterAdapter.replace(emptyList())
+        countView.text = "…"
+        renderMovieGenres()
+        refreshExactCount()
+        loadNextPage(true)
+    }
+
+    @Suppress("DEPRECATION")
+    private fun isArabicUi(): Boolean =
+        if (android.os.Build.VERSION.SDK_INT >= 24) resources.configuration.locales[0].language == "ar"
+        else resources.configuration.locale.language == "ar"
+
+    private fun renderMovieGenres() {
+        val strip = genreStrip ?: return
+        val ar = isArabicUi()
+        val hadFocus = strip.findFocus() != null
+        strip.removeAllViews()
+        var active: Button? = null
+        fun addChip(key: String?, label: String) {
+            val selected = selectedGenre == key
+            val button = Button(this).apply {
+                text = label
+                isAllCaps = false
+                textSize = 12.5f
+                minWidth = dp(76)
+                minHeight = dp(42)
+                isFocusable = true
+                isFocusableInTouchMode = DeviceClass.isTv(this@PosterCatalogActivity)
+                setPadding(dp(16), 0, dp(16), 0)
+                setTextColor(if (selected) android.graphics.Color.WHITE else BlofyTvDesign.TextPrimary)
+                background = CinemaStyle.surface(this@PosterCatalogActivity, selected, filledFocus = selected)
+                setOnFocusChangeListener { view, focus ->
+                    view.background = CinemaStyle.surface(this@PosterCatalogActivity, selected || focus,
+                        filledFocus = selected || focus)
+                }
+                setOnClickListener { loadMovieGenre(key) }
+            }
+            strip.addView(button, LinearLayout.LayoutParams(-2, dp(44)).apply {
+                marginEnd = dp(8)
+            })
+            if (selected) active = button
+        }
+        addChip(null, if (ar) "كل الأنواع" else "All genres")
+        MovieGenres.genres.forEach { addChip(it.key, if (ar) it.arabic else it.english) }
+        val focused = active
+        if (::posterGrid.isInitialized && ::categoryList.isInitialized) {
+            catalogRoot?.let { TwoPaneFocusGuard.registerTopTarget(it, focused ?: searchBar) }
+        }
+        if (hadFocus) focused?.post { focused.requestFocus() }
+    }
+
     private fun loadNextPage(reset: Boolean = false) {
         if (providerId.isBlank() || loadingPage || (!reset && !hasMore)) return
         val requestGeneration = generation
         val requestCategoryId = selectedCategoryId
+        val requestGenre = selectedGenre
         val cursor = if (reset) 0L else lastRowId
         loadingPage = true
         pageJob = lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
             val result = withContext(Dispatchers.IO) {
-                val page = if (requestCategoryId == null) {
+                val page = if (kind == KIND_MOVIE && requestGenre != null) {
+                    dao.catalogPageForMovieGenre(
+                        MovieGenres.catalogQuery(providerId, requestCategoryId, requestGenre, cursor, PAGE_SIZE)
+                    )
+                } else if (requestCategoryId == null) {
                     dao.catalogPageAfterAll(providerId, kind, cursor, PAGE_SIZE)
                 } else {
                     dao.catalogPageAfterInCategory(providerId, kind, requestCategoryId, cursor, PAGE_SIZE)
                 }
                 page to (page.lastOrNull()?.let { dao.streamRowId(it.key) } ?: cursor)
             }
-            if (requestGeneration != generation || requestCategoryId != selectedCategoryId) return@launch
+            if (requestGeneration != generation || requestCategoryId != selectedCategoryId || requestGenre != selectedGenre) return@launch
             lastRowId = result.second
             hasMore = result.first.size >= PAGE_SIZE
             if (reset) {
@@ -375,15 +473,20 @@ class PosterCatalogActivity : AppCompatActivity() {
         if (providerId.isBlank()) return
         val owner = providerId
         val categoryId = selectedCategoryId
+        val genre = selectedGenre
         val requestGeneration = generation
         countJob = lifecycleScope.launch {
             try {
                 val total = withContext(Dispatchers.IO) {
                     val dao = BlofyDatabase.get(applicationContext).dao()
-                    if (categoryId == null) dao.catalogCountAll(owner, kind)
+                    if (kind == KIND_MOVIE && genre != null) {
+                        dao.catalogCountForMovieGenre(
+                            MovieGenres.catalogQuery(owner, categoryId, genre, countOnly = true)
+                        )
+                    } else if (categoryId == null) dao.catalogCountAll(owner, kind)
                     else dao.catalogCountInCategory(owner, kind, categoryId)
                 }
-                if (providerId == owner && selectedCategoryId == categoryId && generation == requestGeneration) {
+                if (providerId == owner && selectedCategoryId == categoryId && selectedGenre == genre && generation == requestGeneration) {
                     exactCount = total
                     updateCount()
                 }
@@ -414,7 +517,8 @@ class PosterCatalogActivity : AppCompatActivity() {
         CatalogPageMemory.put(memoryKey(displayedCategoryId), loadedItems, if (hasMore) Int.MAX_VALUE else loadedItems.size, lastRowId, focusedPosterKeys[memoryKey(displayedCategoryId)])
     }
 
-    private fun memoryKey(categoryId: String? = selectedCategoryId) = "$providerId:$kind:${categoryId ?: ALL_CATEGORY_ID}"
+    private fun memoryKey(categoryId: String? = selectedCategoryId) =
+        "$providerId:$kind:${categoryId ?: ALL_CATEGORY_ID}:${selectedGenre ?: "all"}"
 
     private fun requestPosterFocus(): Boolean {
         if (displayedCategoryId != selectedCategoryId || (loadingPage && lastRowId == 0L)) return false

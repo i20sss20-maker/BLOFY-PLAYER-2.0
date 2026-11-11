@@ -49,8 +49,8 @@ android {
         targetSdk = 36
         // Owner QA UI update over versionCode 2000077. Before production Play upload, confirm
         // this code is higher than every previously uploaded Play artifact.
-        versionCode = 2000085
-        versionName = "2.0.0-rc07.55.8.8" // Exact BLOFY PLAYER display version; no Xiaomi suffix in any build
+        versionCode = 2000086
+        versionName = "2.0.0-rc07.55.8.9" // Exact BLOFY PLAYER display version; no Xiaomi suffix in any build
         manifestPlaceholders["blofyApplicationLabel"] = "@string/app_name"
         manifestPlaceholders["blofyApplicationIcon"] = "@drawable/blofy_logo"
         manifestPlaceholders["blofyApplicationBanner"] = "@drawable/blofy_tv_banner"
@@ -171,6 +171,8 @@ dependencies {
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     implementation("com.google.zxing:core:3.5.3")
+    // Local movie/series text translation (one-time language models over Wi-Fi).
+    implementation("com.google.mlkit:translate:17.0.3")
     baselineProfile(project(":benchmark"))
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.14.1")

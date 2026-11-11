@@ -4,6 +4,8 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.RawQuery
+import androidx.sqlite.db.SupportSQLiteQuery
 import androidx.room.Transaction
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.Dispatchers
@@ -184,6 +186,13 @@ interface BlofyDao {
 
     @Query("SELECT * FROM streams INDEXED BY index_streams_providerId_kind_categoryId WHERE providerId = :providerId AND kind = :kind AND categoryId = :categoryId AND rowid > :afterRowId ORDER BY rowid LIMIT :limit")
     suspend fun catalogPageAfterInCategory(providerId: String, kind: String, categoryId: String, afterRowId: Long, limit: Int): List<StreamEntity>
+
+    /** Bounded genre filter with parameterized category fallback for movie shelves. */
+    @RawQuery
+    suspend fun catalogPageForMovieGenre(query: SupportSQLiteQuery): List<StreamEntity>
+
+    @RawQuery
+    suspend fun catalogCountForMovieGenre(query: SupportSQLiteQuery): Int
 
     @Query("SELECT rowid FROM streams WHERE `key` = :contentKey LIMIT 1")
     suspend fun streamRowId(contentKey: String): Long?
