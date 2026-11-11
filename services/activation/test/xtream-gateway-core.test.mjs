@@ -34,6 +34,39 @@ test('generated gateway credentials are URL path safe', () => {
   assert.match(password, /^[A-Za-z0-9_-]+$/);
 });
 
+test('new Xtream credentials are short alphanumeric only, never branded or padded', () => {
+  const username=generateGatewayUsername(size=>Buffer.alloc(size,0x12));
+  const password=generateGatewayPassword(size=>Buffer.alloc(size,0x34));
+  assert.equal(username.length,8);
+  assert.equal(password.length,12);
+  assert.match(username,/^[A-Za-z0-9]{8}$/);
+  assert.match(password,/^[A-Za-z0-9]{12}$/);
+  assert.doesNotMatch(username,/blofy/i);
+  assert.doesNotMatch(password,/[_/+=-]/);
+  assert.equal(normalizeGatewayUsername(username),username);
+  assert.equal(normalizeGatewayPassword(password),password);
+  const proof=gatewayCredentialProof(username,password,key);
+  assert.equal(verifyGatewayCredential(proof,username,password,key),true);
+});
+
+test('new credentials vary with random bytes and legacy long credentials still authenticate', () => {
+  const a=generateGatewayUsername(size=>Buffer.alloc(size,0x20));
+  const b=generateGatewayUsername(size=>Buffer.alloc(size,0x21));
+  const p1=generateGatewayPassword(size=>Buffer.alloc(size,0x30));
+  const p2=generateGatewayPassword(size=>Buffer.alloc(size,0x31));
+  assert.notEqual(a,b);
+  assert.notEqual(p1,p2);
+  const oldUser='blofy1234567890';
+  const oldPass='veryLongStablePassword0123';
+  const originalProof=gatewayCredentialProof(oldUser,oldPass,key);
+  assert.equal(verifyGatewayCredential(originalProof,oldUser,oldPass,key),true);
+});
+
+test('new generator fails closed when a random byte source is biased or broken', () => {
+  assert.throws(() => generateGatewayPassword(size=>Buffer.alloc(size,0xff)),
+    /xtream_gateway_secure_random_unavailable/);
+});
+
 test('gateway credential validation rejects path separators and short secrets', () => {
   assert.throws(() => normalizeGatewayUsername('bad/user'), /username_invalid/);
   assert.throws(() => normalizeGatewayPassword('short'), /password_invalid/);
