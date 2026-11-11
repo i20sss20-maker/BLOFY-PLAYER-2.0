@@ -283,11 +283,24 @@ class PosterCatalogActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
             providerId = dao.activeProviderId() ?: run { finish(); return@launch }
+            // Always display the All category on the very first frame.
+            // Big Xtream imports can still be populating individual genres.
+            categoryRows = listOf(allCategory())
+            categoryAdapter.submit(categoryRows)
+            if (loadedItems.isEmpty() && pageJob == null) loadStreams(null)
             dao.categories(providerId, kind).collect { categories ->
                 categoryRows = listOf(allCategory()) + categories
                 categoryAdapter.submit(categoryRows)
                 posterAdapter.updateCategoryNames(categoryRows)
-                if (loadedItems.isEmpty() && pageJob == null) loadStreams(null)
+                // Some Android TV firmwares defer the category RecyclerView's
+                // first measure until returning from MovieDetailsActivity.
+                categoryList.post {
+                    if (!isFinishing && !isDestroyed) {
+                        categoryList.requestLayout()
+                        if (loadedItems.isEmpty() && DeviceClass.isTv(this@PosterCatalogActivity))
+                            requestSelectedCategoryFocus()
+                    }
+                }
                 requestInitialContentFocus()
             }
         }
@@ -501,6 +514,9 @@ class PosterCatalogActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (::categoryList.isInitialized && categoryRows.isNotEmpty()) {
+            categoryList.post { if (!isFinishing && !isDestroyed) categoryList.requestLayout() }
+        }
         if (providerId.isNotBlank()) refreshExactCount()
         if (kind != KIND_MOVIE || loadedItems.isEmpty() || !::posterAdapter.isInitialized) return
         genreRefreshJob?.cancel()
