@@ -24,6 +24,7 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import tv.blofy.player.ui.settings.RuntimeSettings
 import tv.blofy.player.core.playback.ArabicSubtitlePolicy
 import tv.blofy.player.core.playback.ResumeCheckpoint
 import android.widget.FrameLayout
@@ -202,6 +203,21 @@ open class PlayerActivity : ContentAccessActivity() {
         subtitlePolicy.manual = savedInstanceState?.getBoolean("subtitle_manual") ?: false
         subtitlePolicy.disabledAutomatically = savedInstanceState?.getBoolean("subtitle_auto_disabled") ?: false
         initializePlaybackSession()
+        // Apply saved subtitle preference BEFORE the first media prepare.
+        // Applying it only from onActivityCreated after playback starts can
+        // make embedded MKV captions appear late on slower Android TV boxes.
+        val subtitleSelection = session.player.trackSelectionParameters.buildUpon()
+        when (RuntimeSettings.subtitleLanguage(this)) {
+            RuntimeSettings.SubtitleLanguage.OFF ->
+                subtitleSelection.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+            RuntimeSettings.SubtitleLanguage.AUTO ->
+                subtitleSelection.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                    .setPreferredTextLanguage(null)
+            RuntimeSettings.SubtitleLanguage.ARABIC_FIRST ->
+                subtitleSelection.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                    .setPreferredTextLanguage("ar")
+        }
+        session.player.trackSelectionParameters = subtitleSelection.build()
         defaultTextDisabled = session.player.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)
         savedInstanceState?.getBundle("track_parameters")?.let {
             session.player.trackSelectionParameters = androidx.media3.common.TrackSelectionParameters.fromBundle(it)
