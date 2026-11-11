@@ -41,12 +41,19 @@ class AppUpdateActivity : AppCompatActivity() {
     private var checkingPackage = false
     private var awaitingInstallPermission = false
     private val version by lazy { intent.getIntExtra(AppUpdateWorker.VERSION, 0) }
+    private val checksum by lazy { intent.getStringExtra(AppUpdateWorker.SHA256) }
+    private val expectedSize by lazy { intent.getLongExtra(AppUpdateWorker.APK_SIZE, 0L) }
     private val manager by lazy { WorkManager.getInstance(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val url = intent.getStringExtra(AppUpdateWorker.URL).orEmpty()
-        if (version <= BuildConfig.VERSION_CODE || !AppUpdateWorker.safeUrl(url)) { finish(); return }
+        if (version <= BuildConfig.VERSION_CODE || !AppUpdateWorker.safeUrl(url) ||
+            (BuildConfig.CODE_ONLY_LOGIN &&
+                (checksum?.matches(Regex("[a-fA-F0-9]{64}")) != true ||
+                    expectedSize !in 1..AppUpdateWorker.MAX_BYTES))) {
+            finish(); return
+        }
         val page = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL
             setPadding(dp(30), dp(36), dp(30), dp(30)); setBackgroundColor(0xFF08080B.toInt())
@@ -85,15 +92,27 @@ class AppUpdateActivity : AppCompatActivity() {
                 }
                 work.state.isFinished -> {
                     progress.isIndeterminate = false
-                    status.text = getString(if (work.outputData.getString(AppUpdateWorker.ERROR) == "invalid_package") R.string.update_invalid else R.string.update_failed)
+                    status.text = when (work.outputData.getString(AppUpdateWorker.ERROR)) {
+                        "invalid_package", "invalid_release" -> getString(R.string.update_invalid)
+                        "insufficient_storage" -> "المساحة غير كافية للتحديث • حرر مساحة ثم أعد المحاولة"
+                        else -> getString(R.string.update_failed)
+                    }
                     action.text = getString(R.string.update_retry); action.isEnabled = true
                 }
                 else -> {
                     val total = work.progress.getLong(AppUpdateWorker.TOTAL, -1)
                     val bytes = work.progress.getLong(AppUpdateWorker.BYTES, 0)
                     progress.isIndeterminate = total <= 0
-                    progress.progress = if (total > 0) (bytes * 100 / total).toInt() else 0
-                    status.text = if (total > 0) getString(R.string.update_progress, progress.progress) else getString(R.string.update_downloading)
+                    progress.progress = if (total > 0)
+                        ((bytes.coerceAtMost(total) * 100) / total).toInt() else 0
+                    val downloadedMb = bytes.coerceAtLeast(0L) / (1024 * 1024)
+                    val totalMb = if (total > 0) (total + 1024 * 1024 - 1) / (1024 * 1024)
+                        else if (expectedSize > 0) (expectedSize + 1024 * 1024 - 1) / (1024 * 1024)
+                        else 0L
+                    status.text = if (totalMb > 0)
+                        getString(R.string.update_progress, progress.progress) +
+                            " • $downloadedMb / $totalMb MB"
+                    else getString(R.string.update_downloading) + " • $downloadedMb MB"
                     action.text = getString(R.string.update_downloading); action.isEnabled = false
                 }
             }
@@ -113,7 +132,10 @@ class AppUpdateActivity : AppCompatActivity() {
         ready = false
         val request = OneTimeWorkRequestBuilder<AppUpdateWorker>()
             .setInputData(workDataOf(
-                AppUpdateWorker.VERSION to version, AppUpdateWorker.URL to intent.getStringExtra(AppUpdateWorker.URL)
+                AppUpdateWorker.VERSION to version,
+                AppUpdateWorker.URL to intent.getStringExtra(AppUpdateWorker.URL),
+                AppUpdateWorker.SHA256 to checksum,
+                AppUpdateWorker.APK_SIZE to expectedSize
             ))
             // Let WorkManager hold the download until the network is back instead of failing right away,
             // and space out automatic retries so a flaky connection doesn't hammer the server.
@@ -133,7 +155,12 @@ class AppUpdateActivity : AppCompatActivity() {
         checkingPackage = true
         lifecycleScope.launch {
             val file = AppUpdateWorker.file(this@AppUpdateActivity, version)
-            val valid = withContext(Dispatchers.IO) { UpdatePackageVerifier.verify(this@AppUpdateActivity, file, version) }
+            val valid = withContext(Dispatchers.IO) {
+                (!BuildConfig.CODE_ONLY_LOGIN ||
+                    (file.length() == expectedSize &&
+                        UpdatePackageVerifier.hasSha256(file, checksum))) &&
+                    UpdatePackageVerifier.verify(this@AppUpdateActivity, file, version)
+            }
             checkingPackage = false
             if (!valid) {
                 ready = false; status.text = getString(R.string.update_invalid); action.text = getString(R.string.update_retry)
@@ -141,8 +168,17 @@ class AppUpdateActivity : AppCompatActivity() {
             }
             val uri = FileProvider.getUriForFile(this@AppUpdateActivity, "$packageName.updates", file)
             try {
-                startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
-                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+                // ACTION_INSTALL_PACKAGE is supported by the platform installer
+                // on Android TV 7+, while some vendor boxes only register VIEW.
+                val installIntent = Intent(Intent.ACTION_INSTALL_PACKAGE).setData(uri)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                if (installIntent.resolveActivity(packageManager) != null) {
+                    startActivity(installIntent)
+                } else {
+                    startActivity(Intent(Intent.ACTION_VIEW)
+                        .setDataAndType(uri, "application/vnd.android.package-archive")
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+                }
             } catch (_: ActivityNotFoundException) { status.text = getString(R.string.update_installer_missing) }
             catch (_: SecurityException) {
                 status.text = getString(R.string.update_allow_installs)
