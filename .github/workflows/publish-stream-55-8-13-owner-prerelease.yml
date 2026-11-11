@@ -2,7 +2,7 @@ name: Publish BLOFY STREAM 55.8.13 owner-signed pre-release for manual device QA
 on:
   push:
     branches:
-      - release/stream-55-8-13-updater-device-20261111
+      - release/stream-55-8-13-qoe-owner-qa-20261111
     paths:
       - '.github/workflows/publish-stream-55-8-13-owner-prerelease.yml'
 permissions:
