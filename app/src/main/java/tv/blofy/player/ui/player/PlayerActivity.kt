@@ -107,7 +107,26 @@ class PlayerActivity : AppCompatActivity() {
         session = BlofyPlaybackSession(context = this, profile = profile, contentKind = kind.ifBlank { "unknown" }) {
             Toast.makeText(this, if (kind == "live") "تعذر تشغيل هذه القناة داخل BLOFY • جرّب قناة أخرى" else "تعذر تشغيل هذا المحتوى داخل BLOFY", Toast.LENGTH_LONG).show()
         }
+        // Select subtitles as soon as Media3 discovers a playable text track,
+        // including late-discovered embedded MKV captions. Do this *before*
+        // prepare(), so viewers do not need to re-open the CC menu. Manual
+        // subtitles-off / track choices still take precedence afterwards.
+        session.player.trackSelectionParameters =
+            session.player.trackSelectionParameters.buildUpon()
+                .setPreferredTextLanguages("ar", "en")
+                .setSelectUndeterminedTextLanguage(true)
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                .build()
         session.player.addListener(object : Player.Listener {
+            override fun onTracksChanged(tracks: Tracks) {
+                if (!::subtitleButton.isInitialized) return
+                val available = tracks.groups.any { group ->
+                    group.type == C.TRACK_TYPE_TEXT &&
+                        (0 until group.length).any { index -> group.isTrackSupported(index) }
+                }
+                subtitleButton.text = if (available) "CC  الترجمة ✓" else "CC  الترجمة"
+            }
+
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playbackState == Player.STATE_ENDED && kind == "episode" && !autoNextTriggered) {
                     autoNextTriggered = true
