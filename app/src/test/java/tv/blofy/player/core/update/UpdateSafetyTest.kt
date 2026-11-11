@@ -29,7 +29,7 @@ class UpdateSafetyTest {
                 "https://updates.example/release.json",
                 "https://updates.example/health"
             ),
-            AppReleaseRepository.endpointCandidates("https://updates.example/")
+            AppReleaseRepository.endpointCandidates("https://updates.example/", stream = false)
         )
     }
 
