@@ -16,6 +16,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import tv.blofy.player.data.local.StreamEntity
+import tv.blofy.player.data.local.CategoryEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.core.device.DeviceClass
 
@@ -24,6 +25,33 @@ class PosterStreamAdapter(
     private val onFocus: (StreamEntity, Int) -> Unit = { _, _ -> }
 ) : RecyclerView.Adapter<PosterStreamAdapter.Holder>() {
     private val items = ArrayList<StreamEntity>(256)
+
+    private var categoryNames: Map<String, String> = emptyMap()
+    private val cachedMovieGenres: MutableMap<String, List<String>> = HashMap()
+
+    /** Source categories are already in the local DB; use them as optional genre evidence. */
+    fun updateCategoryNames(categories: List<CategoryEntity>) {
+        val next = categories.associate { it.remoteId to it.name }
+        if (categoryNames == next) return
+        categoryNames = next
+        if (items.isNotEmpty()) notifyItemRangeChanged(0, items.size)
+    }
+
+    /** Called before new page adapter insertion; no UI thread database queries. */
+    fun rememberMovieGenres(genres: Map<String, List<String>>, reset: Boolean = false) {
+        if (reset) cachedMovieGenres.clear()
+        if (genres.isNotEmpty()) cachedMovieGenres.putAll(genres)
+    }
+
+    fun hasMovieGenres(key: String): Boolean = cachedMovieGenres[key]?.isNotEmpty() == true
+
+    fun updateMovieGenres(key: String, genres: List<String>) {
+        if (genres.isEmpty()) return
+        if (cachedMovieGenres[key] == genres) return
+        cachedMovieGenres[key] = genres
+        val position = items.indexOfFirst { it.key == key }
+        if (position >= 0) notifyItemChanged(position)
+    }
 
     init { setHasStableIds(true) }
 
@@ -115,10 +143,12 @@ class PosterStreamAdapter(
         val presentation = ContentPresentation.of(item)
         holder.title.text = presentation.title
         holder.itemView.contentDescription = presentation.title
-        holder.meta.text = listOfNotNull(
-            item.year?.takeIf(String::isNotBlank),
-            item.genre?.takeIf(String::isNotBlank)?.substringBefore(',')
-        ).plus(presentation.badges).distinct().joinToString("  •  ")
+        holder.meta.text = MovieCardMeta.subtitle(
+            item = item,
+            badges = presentation.badges,
+            categoryName = categoryNames[item.categoryId],
+            cachedDetailGenres = cachedMovieGenres[item.key].orEmpty()
+        )
         holder.rating.text = item.rating?.takeIf(String::isNotBlank)?.let { "★ $it" }.orEmpty()
         holder.rating.visibility = if (holder.rating.text.isNotBlank()) View.VISIBLE else View.GONE
         renderFocus(holder, holder.itemView.hasFocus())
