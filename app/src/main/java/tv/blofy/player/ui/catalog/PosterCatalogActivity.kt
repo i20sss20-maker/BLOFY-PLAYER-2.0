@@ -400,28 +400,6 @@ class PosterCatalogActivity : AppCompatActivity() {
     }
 
 
-    /**
-     * Refresh the persisted metadata snapshot ONLY when returning to the
-     * catalog (e.g. after inspecting movie details). Never start per-poster
-     * network enrichment while the user scrolls or focuses other cards.
-     * Redraw all affected one-line captions atomically with metadata payloads.
-     */
-    override fun onResume() {
-        super.onResume()
-        if (kind != KIND_MOVIE || loadedItems.isEmpty() || !::posterAdapter.isInitialized) return
-        genreRefreshJob?.cancel()
-        val expectedGeneration = generation
-        val owner = providerId
-        val keys = loadedItems.map { it.key }
-        genreRefreshJob = lifecycleScope.launch {
-            val snapshot = withContext(Dispatchers.IO) {
-                ProviderMetadataCache.readGenresForPage(applicationContext, keys)
-            }
-            if (generation != expectedGeneration || providerId != owner) return@launch
-            posterAdapter.rememberMovieGenres(snapshot, reset = true, notifyExisting = true)
-        }
-    }
-
     private fun refreshExactCount() {
         countJob?.cancel()
         exactCount = null
@@ -524,9 +502,21 @@ class PosterCatalogActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         if (providerId.isNotBlank()) refreshExactCount()
+        if (kind != KIND_MOVIE || loadedItems.isEmpty() || !::posterAdapter.isInitialized) return
+        genreRefreshJob?.cancel()
+        val expectedGeneration = generation
+        val owner = providerId
+        val keys = loadedItems.map { it.key }
+        genreRefreshJob = lifecycleScope.launch {
+            val snapshot = withContext(Dispatchers.IO) {
+                ProviderMetadataCache.readGenresForPage(applicationContext, keys)
+            }
+            if (generation != expectedGeneration || providerId != owner) return@launch
+            posterAdapter.rememberMovieGenres(snapshot, reset = true, notifyExisting = true)
+        }
     }
     override fun onPause() { saveMemorySnapshot(); super.onPause() }
-    override fun onDestroy() { pageJob?.cancel(); countJob?.cancel(); generation++; super.onDestroy() }
+    override fun onDestroy() { pageJob?.cancel(); countJob?.cancel(); genreRefreshJob?.cancel(); generation++; super.onDestroy() }
 
     companion object {
         const val EXTRA_KIND = "kind"
