@@ -3,7 +3,7 @@ name: BLOFY STREAM 55.8.11 Stable Film Genre Snapshot QA
 on:
   push:
     branches:
-      - fix/stream-55-8-11-movie-card-meta-20261111
+      - fix/stream-55-8-11-stable-film-genres-20261111
   pull_request:
     branches:
       - fix/stream-55-8-10-movie-card-meta-20261111
