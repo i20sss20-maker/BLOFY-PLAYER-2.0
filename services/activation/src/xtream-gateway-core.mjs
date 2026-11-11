@@ -39,12 +39,32 @@ export function verifyGatewayCredential(storedProof, username, password, keyHex)
   return left.length === 32 && right.length === 32 && crypto.timingSafeEqual(left, right);
 }
 
+// Easy to type on a remote control: no confusing O/0, I/l/1, and no
+// punctuation or branded prefixes. Uses crypto.randomBytes (not Math.random)
+// and rejection sampling to avoid modulo bias for the 57-character alphabet.
+// Change only automatically generated NEW account credentials; existing
+// username/password proofs, session tokens and upstream credentials are intact.
+const GATEWAY_ALPHABET='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+function randomGatewayCredential(length, randomBytes = crypto.randomBytes) {
+  const max=256-(256%GATEWAY_ALPHABET.length);
+  let result='';
+  for(let attempt=0;result.length<length&&attempt<16;attempt++){
+    for(const byte of randomBytes((length-result.length)*2)){
+      if(byte<max){
+        result+=GATEWAY_ALPHABET[byte%GATEWAY_ALPHABET.length];
+        if(result.length===length)break;
+      }
+    }
+  }
+  if(result.length!==length)throw Error('xtream_gateway_secure_random_unavailable');
+  return result;
+}
 export function generateGatewayUsername(randomBytes = crypto.randomBytes) {
-  return `blofy${randomBytes(5).toString('hex')}`;
+  return randomGatewayCredential(8, randomBytes);
 }
 
 export function generateGatewayPassword(randomBytes = crypto.randomBytes) {
-  return randomBytes(18).toString('base64url');
+  return randomGatewayCredential(12, randomBytes);
 }
 
 export function safeGatewayExtension(value, fallback = 'ts') {
