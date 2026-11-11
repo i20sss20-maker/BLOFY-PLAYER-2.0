@@ -129,6 +129,14 @@ jobs:
           set -euo pipefail
           APK=app/build/outputs/apk/streamCodeOnly/app-streamCodeOnly.apk
           test -s "$APK"
+          # 55.8.11's built-in updater accepts a maximum of 256 MiB.
+          # Do not ship 55.8.12 until the owner-signed full FFmpeg universal
+          # APK fits that ceiling, or old customers would fail mid-download.
+          APK_BYTES=$(stat -c%s "$APK")
+          if [ "$APK_BYTES" -ge 268435456 ]; then
+            echo "::error::STREAM APK exceeds old updater's 256 MiB ceiling: $APK_BYTES"
+            exit 1
+          fi
           mkdir -p build/qa-owner-signed
           TOOLS="$ANDROID_HOME/build-tools/$ANDROID_BUILD_TOOLS_VERSION"
           "$TOOLS/aapt" dump badging "$APK" > "$RUNNER_TEMP/owner-stream-badging.txt"
