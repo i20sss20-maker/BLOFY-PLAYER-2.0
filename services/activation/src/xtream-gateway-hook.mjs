@@ -34,6 +34,8 @@ import pg from 'pg';
 import { validateBulkAccountRequest } from './xtream-bulk-policy.mjs';
 import { gatewayItemsPageQuery,gatewayOrderedItemsPageQuery,gatewayOrderCursor } from './xtream-gateway-query.mjs';
 import {xtreamCatalogVersionForAccount} from './xtream-catalog-revision.mjs';
+import {createXtreamJsonArrayWriter} from './xtream-json-array-writer.mjs';
+import {createXtreamPublicInfoCache} from './xtream-public-info-cache.mjs';
 import { mergeXtreamPlayerRequest } from './xtream-player-post.mjs';
 import { inspectXtreamMediaChunk } from './xtream-media-inspector.mjs';
 import { verifiedXtreamMediaContentType } from './xtream-media-response-type.mjs';
@@ -520,7 +522,10 @@ async function authenticate(usernameInput, passwordInput, { touch = false } = {}
 // heavyweight map INSERTs while still detecting newly imported items.
 const categoryMapJobs=new Map();
 const itemMapJobs=new Map();
-const MAP_FRESHNESS_MS=20000;
+// Bound expensive catalog map scans to once per minute while still noticing
+// imports without requiring application restarts.
+const MAP_FRESHNESS_MS=60000;
+const publicInfoCache=createXtreamPublicInfoCache();
 async function oncePerMediaMap(cache,key,task){
   const old=cache.get(key),now=Date.now();
   if(old && (!old.settled || now-old.startedAt<MAP_FRESHNESS_MS))return old.promise;
@@ -586,7 +591,10 @@ async function walkGatewayItems(mediaType, filter, onRow, sourceId=null) {
     const page=gatewayOrderedItemsPageQuery(mediaType,cursor,{filter,sourceId});
     const rows=(await pool.query(page)).rows;
     if (!rows.length) break;
-    for (const row of rows) await onRow(row);
+    for (const row of rows) {
+      const pending=onRow(row);
+      if(pending&&typeof pending.then==='function')await pending;
+    }
     cursor=gatewayOrderCursor(rows[rows.length-1]);
     if (rows.length < 2000) break;
   }
@@ -630,14 +638,11 @@ async function streamGatewayItems(req,res,mediaType,categoryId,sourceId=null) {
   res.writeHead(200,headers);
   if(gzip)gzip.pipe(res);
   try{
-    await writeStreamChunk(output,'[');
-    let first=true;
-    await walkGatewayItems(mediaType,filter,async row=>{
-      const prefix=first?'':',';
-      first=false;
-      await writeStreamChunk(output,prefix+JSON.stringify(formatGatewayItem(mediaType,row)));
-    },sourceId);
-    await writeStreamChunk(output,']');
+    const writer=createXtreamJsonArrayWriter(
+      chunk=>writeStreamChunk(output,chunk));
+    await walkGatewayItems(mediaType,filter,
+      row=>writer.append(formatGatewayItem(mediaType,row)),sourceId);
+    await writer.finish();
     output.end();
   }catch(error){
     if(gzip&&!gzip.destroyed)gzip.destroy();
@@ -751,19 +756,23 @@ async function liveEpg(gatewayId, sourceId=null, action='get_short_epg', limit=2
 async function vodInfo(gatewayId, sourceId=null) {
   const row = await gatewayItemById('movie', gatewayId, sourceId);
   if (!row || !row.server_enabled) return null;
-  const payload = stripUpstreamSecrets(await fetchUpstreamApi(row, 'get_vod_info', { vod_id: row.source_id }));
-  const movieData = payload?.movie_data && typeof payload.movie_data === 'object' ? payload.movie_data : {};
-  return {
-    ...payload,
-    movie_data: {
-      ...movieData,
-      stream_id: Number(row.gateway_id),
-      name: movieData.name || row.name,
-      category_id: row.category_gateway_id == null ? '0' : String(row.category_gateway_id),
-      container_extension: safeGatewayExtension(movieData.container_extension || row.container_extension, 'mp4'),
-      direct_source: ''
-    }
-  };
+  return publicInfoCache.get('movie:'+row.server_id+':'+row.gateway_id,async()=>{
+    const payload=stripUpstreamSecrets(await fetchUpstreamApi(row,'get_vod_info',
+      {vod_id:row.source_id}));
+    const movieData=payload?.movie_data&&typeof payload.movie_data==='object'?
+      payload.movie_data:{};
+    return {
+      ...payload,
+      movie_data:{
+        ...movieData,
+        stream_id:Number(row.gateway_id),
+        name:movieData.name||row.name,
+        category_id:row.category_gateway_id==null?'0':String(row.category_gateway_id),
+        container_extension:safeGatewayExtension(movieData.container_extension||
+          row.container_extension,'mp4'),direct_source:''
+      }
+    };
+  });
 }
 
 async function ensureEpisodeMaps(serverId, seriesSourceId, episodes) {
@@ -785,18 +794,17 @@ async function ensureEpisodeMaps(serverId, seriesSourceId, episodes) {
 async function seriesInfo(gatewayId, sourceId=null) {
   const row = await gatewayItemById('series', gatewayId, sourceId);
   if (!row || !row.server_enabled) return null;
-  const raw = await fetchUpstreamApi(row, 'get_series_info', { series_id: row.source_id });
-  const payload = stripUpstreamSecrets(raw);
-  // Only hand out stable IDs that exist in the episode map for this series.
-  // Missing mappings are deliberately omitted; raw provider IDs would point
-  // to unrelated BLOFY gateway IDs and cause false 404/502 playback errors.
-  const sourceEpisodes = collectSourceEpisodes(raw?.episodes);
-  const mapped = await ensureEpisodeMaps(row.server_id, row.source_id, sourceEpisodes);
-  const episodes = mapSeriesEpisodes(raw?.episodes, mapped, stripUpstreamSecrets);
-  // The client's series picker and episode-play URL must use the same gateway
-  // IDs. Some players read stream_id instead of id; the resolver supplies both.
-  // The provider's seasons can include placeholder/metadata-only seasons.
-  return normalizePlayableSeriesInfo(payload,episodes,row.gateway_id,row.category_gateway_id);
+  // Confirm the exact source and account's catalog scope on each cache hit.
+  // Only sanitized metadata is retained, never files, passwords or tokens.
+  return publicInfoCache.get('series:'+row.server_id+':'+row.gateway_id,async()=>{
+    const raw=await fetchUpstreamApi(row,'get_series_info',{series_id:row.source_id});
+    const payload=stripUpstreamSecrets(raw);
+    const sourceEpisodes=collectSourceEpisodes(raw?.episodes);
+    const mapped=await ensureEpisodeMaps(row.server_id,row.source_id,sourceEpisodes);
+    const episodes=mapSeriesEpisodes(raw?.episodes,mapped,stripUpstreamSecrets);
+    return normalizePlayableSeriesInfo(payload,episodes,row.gateway_id,
+      row.category_gateway_id);
+  });
 }
 
 async function episodeByGatewayId(gatewayId,sourceId=null) {
