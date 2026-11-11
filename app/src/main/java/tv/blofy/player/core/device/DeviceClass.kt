@@ -19,7 +19,11 @@ object DeviceClass {
         val television = pm.hasSystemFeature(PackageManager.FEATURE_TELEVISION)
         val touchscreen = pm.hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN)
         val smallest = configuration.smallestScreenWidthDp
-        val remoteFirstBox = !touchscreen && smallest >= 480
+        // Several older Android TV/Box firmwares advertise a normal UI with
+        // smallestWidth <480dp. A D-pad-only device with no touchscreen must
+        // still reach the remote-first layout, not the phone-only touchscreen UI.
+        val dpadOnly = configuration.navigation == Configuration.NAVIGATION_DPAD && !touchscreen
+        val remoteFirstBox = !touchscreen && (smallest >= 480 || dpadOnly)
 
         return classify(tvUiMode, leanback, television, remoteFirstBox, smallest)
     }
