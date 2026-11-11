@@ -260,6 +260,8 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
       // can retrieve its already-issued credentials after an interrupted
       // first response. Web redemptions without device binding stay single-use.
       if(row.redeemed_at){
+        if(!row.account_id||!row.expires_at)
+          throw Object.assign(Error('stream_subscription_state_inconsistent'),{status:409});
         if(!deviceProof)throw Object.assign(Error('stream_code_unavailable'),{status:409});
         // An operator reissues a new recovery code for an existing subscription
         // and clears the old binding. Its original clock and expiry do not reset.
@@ -295,14 +297,28 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
           FROM blofy_xtream_gateway_accounts WHERE id=$1`,[row.account_id])).rows[0];
         const password=existing?decryptGatewayAccountPassword(existing.id,
           existing.credential_vault,keyHex):null;
+        // The voucher is the billing source of truth: re-login can NEVER add
+        // 365 days, even if a different account write mistakenly increased the
+        // account expiry. Honor whichever persisted deadline is earlier.
+        const codeExpiry=new Date(row.expires_at).getTime();
+        const accountExpiry=new Date(existing?.expires_at).getTime();
         if(!existing||!password||!existing.enabled||
-           new Date(existing.expires_at).getTime()<=clock())
+           !Number.isFinite(codeExpiry)||!Number.isFinite(accountExpiry)||
+           Math.min(codeExpiry,accountExpiry)<=clock())
           throw Object.assign(Error('stream_code_unavailable'),{status:409});
         await client.query('COMMIT');
         return makeResponse({host,row,username:existing.username,password,
           accountId:existing.id,activatedAt:new Date(row.redeemed_at),
-          expiresAt:new Date(row.expires_at),recovered:true,appOnly,deviceProof});
+          expiresAt:new Date(Math.min(codeExpiry,accountExpiry)),
+          recovered:true,appOnly,deviceProof});
       }
+      // A voucher may start its clock exactly ONCE. Even if a legacy or
+      // partially failed transfer cleared redeemed_at, other persisted
+      // activation markers must block new-year issuance, not start over.
+      // New subscriptions require a separately issued *new* voucher.
+      if(row.account_id||row.expires_at||row.redeemed_device_hash||
+         Number(row.transfer_count||0)>0||Number(row.extended_days||0)>0)
+        throw Object.assign(Error('stream_subscription_already_started'),{status:409});
       await checkedSource(client,row.source_id);
       const redeemedAt=new Date(clock());
       const expiresAt=new Date(redeemedAt.getTime()+Number(row.duration_days)*86400000);
@@ -319,9 +335,14 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
         accountId,row.label,username,credentialProof,
         Number(row.max_connections),expiresAt,row.source_id,vault
       ]);
-      await client.query(`UPDATE blofy_xtream_gateway_duration_codes
-        SET redeemed_at=$2,expires_at=$3,account_id=$4,redeemed_device_hash=$5 WHERE id=$1`,
+      const claimed=await client.query(`UPDATE blofy_xtream_gateway_duration_codes
+        SET redeemed_at=$2,expires_at=$3,account_id=$4,redeemed_device_hash=$5
+        WHERE id=$1 AND redeemed_at IS NULL AND account_id IS NULL
+          AND expires_at IS NULL AND revoked_at IS NULL
+        RETURNING id`,
         [row.id,redeemedAt,expiresAt,accountId,deviceProof]);
+      if(!claimed.rows?.[0])
+        throw Object.assign(Error('stream_subscription_already_started'),{status:409});
       await client.query('COMMIT');
       return makeResponse({host,row,username,password,accountId,activatedAt:redeemedAt,expiresAt,appOnly,deviceProof});
     }catch(error){await client.query('ROLLBACK').catch(()=>{});throw error}

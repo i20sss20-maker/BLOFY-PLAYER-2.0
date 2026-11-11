@@ -235,3 +235,59 @@ test('approved new installation reuses the original app voucher without renewing
  await assert.rejects(system.redeem(item.code,'https://blofyplayer.com',
    {appOnly:true,deviceKey:oldKey}),/stream_code_unavailable/);
 });
+
+
+test('CRITICAL: same original code on day 180 MUST NOT start another year',async()=>{
+ const state=fakeDb();
+ let now=Date.parse('2026-11-09T02:00:00Z');
+ const system=createStreamDurationCodes({pool:state.pool,keyHex,clock:()=>now});
+ const issued=await system.issue({durationDays:365,channel:'app',
+   quantity:1,label:'BLOFY STREAM'});
+ const code=issued.items[0].code,device='a'.repeat(64);
+ const first=await system.redeem(code,'https://blofyplayer.com',
+   {appOnly:true,deviceKey:device});
+ assert.equal(state.accounts.length,1);
+ const activation=first.account.activatedAt,originalExpiry=first.account.expiresAt;
+ now+=180*86400000;
+ const second=await system.redeem(code,'https://blofyplayer.com',
+   {appOnly:true,deviceKey:device});
+ assert.equal(second.recovered,true);
+ assert.equal(second.account.activatedAt,activation);
+ assert.equal(second.account.expiresAt,originalExpiry,
+   're-login must NOT be clock()+365 days');
+ assert.equal(state.accounts.length,1,'re-login must not create another subscriber');
+ assert.equal(state.statements.filter(x=>x.sql.includes('SET redeemed_at=')).length,1,
+   'redemption timestamp must be written exactly once');
+});
+test('CRITICAL: partial legacy activation cannot get a new year',async()=>{
+ const state=fakeDb();
+ let now=Date.parse('2026-11-09T02:00:00Z');
+ const system=createStreamDurationCodes({pool:state.pool,keyHex,clock:()=>now});
+ const {items}=await system.issue({durationDays:365,channel:'app'});
+ const device='b'.repeat(64);
+ await system.redeem(items[0].code,'https://blofyplayer.com',
+   {appOnly:true,deviceKey:device});
+ const codeRow=state.codes[0],originalExpiry=codeRow.expires_at.getTime();
+ codeRow.redeemed_at=null; // Simulate bad legacy/import/admin repair
+ now+=30*86400000;
+ await assert.rejects(system.redeem(items[0].code,'https://blofyplayer.com',
+   {appOnly:true,deviceKey:device}),/stream_subscription_already_started/);
+ assert.equal(codeRow.expires_at.getTime(),originalExpiry);
+ assert.equal(state.accounts.length,1);
+});
+test('CRITICAL: inflated account expiry cannot extend existing voucher on login',async()=>{
+ const state=fakeDb();
+ let now=Date.parse('2026-11-09T02:00:00Z');
+ const system=createStreamDurationCodes({pool:state.pool,keyHex,clock:()=>now});
+ const {items}=await system.issue({durationDays:365,channel:'app'});
+ const device='c'.repeat(64);
+ const first=await system.redeem(items[0].code,'https://blofyplayer.com',
+   {appOnly:true,deviceKey:device});
+ state.accounts[0][5]=new Date(first.account.expiresAt+365*86400000);
+ now+=5*86400000;
+ const relogin=await system.redeem(items[0].code,'https://blofyplayer.com',
+   {appOnly:true,deviceKey:device});
+ assert.equal(relogin.account.expiresAt,first.account.expiresAt);
+ assert.equal(relogin.account.activatedAt,first.account.activatedAt);
+ assert.equal(state.accounts.length,1);
+});

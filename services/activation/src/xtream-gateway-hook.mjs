@@ -428,15 +428,24 @@ async function authenticateAppBearer(req){
   const token=bearerFromRequest(req),parsed=parseStreamAppToken(token);
   if(!parsed)return null;
   await ensureReady();
-  const row=(await pool.query(`SELECT a.*,c.account_id,c.code_hash,c.redeemed_device_hash
+  const row=(await pool.query(`SELECT a.*,c.account_id,c.code_hash,c.redeemed_device_hash,
+      c.expires_at AS voucher_expires_at
     FROM blofy_xtream_gateway_accounts a
     JOIN blofy_xtream_gateway_duration_codes c ON c.account_id=a.id
     WHERE a.id=$1 AND a.enabled=TRUE AND c.redeemed_at IS NOT NULL
       AND c.revoked_at IS NULL AND c.redeemed_device_hash IS NOT NULL
-      AND (a.expires_at IS NULL OR a.expires_at>NOW())
+      AND a.expires_at IS NOT NULL AND a.expires_at>NOW()
+      AND c.expires_at IS NOT NULL AND c.expires_at>NOW()
     LIMIT 1`,[parsed.accountId])).rows[0];
   if(!row||!verifyStreamAppToken(token,row,KEY_HEX))return null;
-  return row;
+  // Never authorize a session beyond the original voucher deadline. Admin
+  // extensions still work because they explicitly extend voucher + account
+  // together. This cap applies even if the account deadline was mistakenly
+  // increased by a different code path.
+  const actualExpiry=Math.min(new Date(row.expires_at).getTime(),
+    new Date(row.voucher_expires_at).getTime());
+  if(!Number.isFinite(actualExpiry)||actualExpiry<=Date.now())return null;
+  return {...row,expires_at:new Date(actualExpiry)};
 }
 
 async function authenticate(usernameInput, passwordInput, { touch = false } = {}) {

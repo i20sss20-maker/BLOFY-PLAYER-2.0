@@ -1,0 +1,46 @@
+name: BLOFY STREAM subscription-expiry financial safeguard QA
+on:
+  push:
+    branches:
+      - hotfix/stream-subscriber-expiry-immutable-20261111
+  pull_request:
+    branches:
+      - feature/stream-optional-ai-classifier-20261109
+permissions:
+  contents: read
+jobs:
+  no-renewal-on-login:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: services/activation/package-lock.json
+      - name: Check runtime syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check services/activation/src/xtream-duration-codes.mjs
+          node --check services/activation/src/xtream-gateway-hook.mjs
+          node --check services/activation/src/xtream-code-commercial.mjs
+      - name: Verify one-year subscriptions never renew on re-login
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test \
+            services/activation/test/xtream-duration-codes.test.mjs \
+            services/activation/test/xtream-code-relogin.test.mjs \
+            services/activation/test/xtream-code-commercial.test.mjs \
+            services/activation/test/xtream-code-app-compatibility.test.mjs \
+            services/activation/test/xtream-code-app-token.test.mjs
+      - name: Check gateway subscriber expiry and session compatibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --prefix services/activation --ignore-scripts --no-audit
+          node --test \
+            services/activation/test/stream-gateway.test.mjs \
+            services/activation/test/xtream-gateway.test.mjs
