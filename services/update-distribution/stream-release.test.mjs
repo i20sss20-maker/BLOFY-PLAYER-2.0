@@ -16,6 +16,10 @@ test('STREAM release serves code 2000088 and own website URL, never PLAYER updat
   assert.equal(release?.versionName,'2.0.0-rc07.55.8.11-STREAM');
   assert.equal(release?.downloadUrl,STREAM_PUBLIC_DOWNLOAD);
   assert.equal(release?.minSupportedVersionCode,1);
+  assert.equal(release?.packageName,'tv.blofy.player.v2.stream');
+  assert.equal(release?.apkSizeBytes,292310844);
+  assert.match(release?.sha256,/^[0-9a-f]{64}$/);
+
   assert.ok(release?.downloadUrl.endsWith('/d/blofy-stream'));
   assert.ok(!release?.downloadUrl.endsWith('/d/blofy'));
   assert.ok(!release?.downloadUrl.endsWith('/download/latest.apk'));
