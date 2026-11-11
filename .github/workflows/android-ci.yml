@@ -126,9 +126,9 @@ jobs:
           fi
       - name: Verify actual catalog queries on 200k rows
         run: python3 tools/check_catalog_queries.py
-      - name: Verify Play Xiaomi-design UX / internal 2000085 manifest and TV routes
+      - name: Verify Play Xiaomi-design UX / internal 2000086 manifest and TV routes
         env:
-          BLOFY_EXPECTED_PLAY_VERSION_CODE: "2000085"
+          BLOFY_EXPECTED_PLAY_VERSION_CODE: "2000086"
         run: python3 tools/verify_play_2000073.py
       - name: Test lint and assemble
         shell: bash
@@ -183,7 +183,7 @@ jobs:
             app/build/outputs/apk/debug/build-info.txt
           if-no-files-found: error
           retention-days: 30
-      - name: Build Google Play 2000085 debug manifest variant
+      - name: Build Google Play 2000086 debug manifest variant
         shell: bash
         run: |
           set -euxo pipefail
@@ -204,12 +204,12 @@ jobs:
           for route in VlcFallbackActivity LibraryDownloadActivity SectionSearchActivity; do
             grep -Fq "$route" "$RUNNER_TEMP/play-apk-manifest.txt"
           done
-          cp "$APK" app/build/outputs/apk/debug/blofy-play-2000085-test-only.apk
-      - name: Save Google Play 2000085 debug artifact
+          cp "$APK" app/build/outputs/apk/debug/blofy-play-2000086-test-only.apk
+      - name: Save Google Play 2000086 debug artifact
         uses: actions/upload-artifact@v4
         with:
-          name: BLOFY-PLAY-2000085-TEST-ONLY-${{ github.sha }}
-          path: app/build/outputs/apk/debug/blofy-play-2000085-test-only.apk
+          name: BLOFY-PLAY-2000086-TEST-ONLY-${{ github.sha }}
+          path: app/build/outputs/apk/debug/blofy-play-2000086-test-only.apk
           if-no-files-found: error
           retention-days: 14
 
