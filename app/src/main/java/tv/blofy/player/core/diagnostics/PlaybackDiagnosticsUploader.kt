@@ -49,6 +49,11 @@ object PlaybackDiagnosticsUploader {
                     put("redactedUrl", DiagnosticsSanitizer.sanitizeUrl(metric.url, 1024))
                     metric.ttffMs?.let { put("ttffMs", it) }
                     put("bufferingCount", metric.bufferingCount)
+                    // Non-identifying counters only; the server strictly bounds
+                    // values and aggregates opted-in devices for admin QoE.
+                    put("rebufferCount", metric.rebufferCount)
+                    put("rebufferMs", metric.rebufferDurationMs)
+                    put("recoveryCount", metric.recoveryCount)
                     DiagnosticsSanitizer.sanitizeErrorCode(metric.errorCode)?.let { put("errorCode", it) }
                     DiagnosticsSanitizer.sanitizeMessage(metric.errorMessage, 512)
                         ?.let { put("errorMessage", it) }
