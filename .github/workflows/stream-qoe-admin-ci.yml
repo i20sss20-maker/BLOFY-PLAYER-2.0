@@ -1,0 +1,71 @@
+name: BLOFY STREAM opt-in QoE dashboard and migration QA
+on:
+  push:
+    branches:
+      - feature/stream-qoe-admin-20261111
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  qoe-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: blofy_qoe_qa
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d blofy_qoe_qa"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: blofy_qoe_qa
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/blofy_qoe_qa
+    defaults:
+      run:
+        working-directory: services/activation
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Syntax and no-client-secrets regression
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          node --check src/diagnostics-quality.mjs
+          node --check src/server.mjs
+          node --check web/admin-stream-quality.js
+          node --test test/diagnostics-quality.test.mjs test/diagnostics-sanitizer.test.mjs
+      - name: PostgreSQL idempotent schema and quality aggregation smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -f schema.sql > /tmp/qoe-schema-first.log
+          psql -X -v ON_ERROR_STOP=1 -f schema.sql > /tmp/qoe-schema-second.log
+          psql -X -v ON_ERROR_STOP=1 <<'SQL'
+          INSERT INTO devices(device_id,activation_code,status) VALUES
+            ('BLOFY-QOE-QA1234','123456','active')
+          ON CONFLICT (device_id) DO NOTHING;
+          SQL
+          psql -X -v ON_ERROR_STOP=1 <<'SQL'
+          INSERT INTO playback_diagnostics
+            (device_id,provider_key,content_kind,ttff_ms,buffering_count,rebuffer_count,rebuffer_ms,recovery_count)
+          VALUES ('BLOFY-QOE-QA1234','provider-test','movie',2500,2,1,1100,1);
+          DO $$
+          DECLARE got integer;
+          BEGIN
+            SELECT COUNT(*) INTO got FROM playback_diagnostics
+            WHERE rebuffer_count=1 AND rebuffer_ms=1100 AND recovery_count=1;
+            IF got<>1 THEN RAISE EXCEPTION 'quality migration regression'; END IF;
+          END $$;
+          SQL
