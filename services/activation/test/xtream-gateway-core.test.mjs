@@ -24,13 +24,36 @@ test('gateway credentials use a keyed non-reversible proof', () => {
   assert.equal(verifyGatewayCredential(proof, 'blofy1234', 'wrong-pass-123', key), false);
 });
 
-test('generated gateway credentials are URL path safe', () => {
+test('generated gateway credentials are short, strong and URL path safe', () => {
   const username = generateGatewayUsername(size => Buffer.alloc(size, 0x12));
   const password = generateGatewayPassword(size => Buffer.alloc(size, 0x34));
   assert.equal(normalizeGatewayUsername(username), username);
   assert.equal(normalizeGatewayPassword(password), password);
-  assert.match(username, /^[A-Za-z0-9_]+$/);
-  assert.match(password, /^[A-Za-z0-9_-]+$/);
+  assert.match(username, /^[A-Za-z0-9]{10}$/);
+  assert.match(password, /^[A-Za-z0-9]{12}$/);
+  assert.ok(!username.startsWith('blofy'));
+  assert.equal(verifyGatewayCredential(gatewayCredentialProof(username, password, key), username, password, key), true);
+});
+
+test('gateway credentials avoid modulo bias and generate unique random pairs', () => {
+  let generatedBytes = 0;
+  const randomBytes = size => {
+    generatedBytes += size;
+    return Buffer.from([255, ...Array.from({ length: size - 1 }, (_, i) => 62 + i % 180)]);
+  };
+  assert.match(generateGatewayUsername(randomBytes), /^[A-Za-z0-9]{10}$/);
+  assert.ok(generatedBytes >= 16);
+  const names = new Set(Array.from({ length: 100 }, () => generateGatewayUsername()));
+  const passwords = new Set(Array.from({ length: 100 }, () => generateGatewayPassword()));
+  assert.equal(names.size, 100);
+  assert.equal(passwords.size, 100);
+});
+
+test('existing Xtream credentials remain valid without forced rotation', () => {
+  const existingUsername = 'blofy03cd508344';
+  const existingPassword = 'Legacy_pass-12345';
+  const proof = gatewayCredentialProof(existingUsername, existingPassword, key);
+  assert.ok(verifyGatewayCredential(proof, existingUsername, existingPassword, key));
 });
 
 test('gateway credential validation rejects path separators and short secrets', () => {
