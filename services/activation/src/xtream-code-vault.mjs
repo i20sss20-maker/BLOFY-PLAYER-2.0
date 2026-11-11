@@ -22,8 +22,11 @@ export function decryptStreamCode(id,payload,keyHex){
   if(!ID.test(String(id||''))||typeof payload!=='string'||
       !/^v1:[A-Za-z0-9_-]{40,140}$/.test(payload))return null;
   try{
-    const buf=Buffer.from(payload.slice(3),'base64url');
-    if(buf.length<36)return null;
+    const encoded=payload.slice(3);
+    const buf=Buffer.from(encoded,'base64url');
+    // Reject non-canonical base64url spellings of the same ciphertext.
+    // Trailing unused bits can otherwise change without changing decoded bytes.
+    if(buf.length<36||buf.toString('base64url')!==encoded)return null;
     const dec=crypto.createDecipheriv('aes-256-gcm',key(keyHex),buf.subarray(0,12));
     dec.setAAD(Buffer.from(String(id).toLowerCase(),'utf8'));
     dec.setAuthTag(buf.subarray(12,28));
