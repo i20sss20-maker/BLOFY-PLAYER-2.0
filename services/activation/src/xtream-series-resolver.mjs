@@ -81,7 +81,12 @@ export function mapSeriesEpisodes(seasons, mappings, sanitize) {
       // Xtream apps differ: one reads 'id', another 'stream_id' or
       // 'episode_id'. All must identify the same authorized gateway episode.
       // Never forward any provider/source media ID in these fields.
-      return [{...clean,id,stream_id:id,episode_id:id,
+      // Xtream Codes get_series_info declares episode "id" as a STRING.
+      // Some strict IPTV parsers treat a JSON number as a missing ID and
+      // create /series/USER/PASS/0.mkv. Preserve an integer stream_id alias
+      // for clients that use a numeric episode stream identifier.
+      const publicEpisodeId=String(id);
+      return [{...clean,id:publicEpisodeId,stream_id:id,episode_id:publicEpisodeId,
         episode_num:episodeNum,
         ...(validSeason?{season:seasonId,season_number:seasonId}:{}),
         container_extension:safeExtension(mapping.extension),direct_source:''}];
