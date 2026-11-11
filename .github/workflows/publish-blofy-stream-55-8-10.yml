@@ -1,0 +1,114 @@
+name: Publish verified BLOFY STREAM 55.8.10 signed FFmpeg APK
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/publish-blofy-stream-55-8-10.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: publish-blofy-stream-55-8-10-signed
+  cancel-in-progress: false
+
+jobs:
+  publish-verified-stream:
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_RUN: '42938987725'
+      SOURCE_BRANCH: 'feature/stream-55-8-10-arabic-details-movie-genres-20261111'
+      QA_RUN: '42939034809'
+      SOURCE_SHA: '259527f26bf1009150da0a462b53acb56ea9a35d'
+      TAG: 'blofy-stream-55.8.10-owner-signed-20261111'
+      APK_NAME: 'BLOFY-STREAM-55.8.10-FFMPEG-OWNER-SIGNED.apk'
+      EXPECTED_CERT: 'C3B98CCCD2F0C86809014ACD9368BF61C7004CFD419CD867B71FEF10BFA6255E'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check pinned owner-signed build completed successfully
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Wait only on a pinned, unchangeable workflow run ID. An error or an
+          # unreviewed run cannot publish a customer update.
+          success=0
+          for attempt in $(seq 1 130); do
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" > "$RUNNER_TEMP/source.json"
+            status="$(jq -r '.status' "$RUNNER_TEMP/source.json")"
+            conclusion="$(jq -r '.conclusion // ""' "$RUNNER_TEMP/source.json")"
+            if [ "$status" = completed ]; then
+              if [ "$conclusion" != success ]; then
+                echo "::error::Signed build failed: $conclusion"; exit 1
+              fi
+              success=1
+              break
+            fi
+            sleep 30
+          done
+          test "$success" = 1 || { echo "::error::Signed run did not finish"; exit 1; }
+          jq -e --arg branch "$SOURCE_BRANCH" --arg sha "$SOURCE_SHA" \
+            '.head_branch==$branch and .head_sha==$sha and .event=="push"' "$RUNNER_TEMP/source.json"
+          # Require the independent Arabic/movie-card Android QA build to pass
+          # for this exact signed commit before any public release is created.
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$QA_RUN" > "$RUNNER_TEMP/qa.json"
+          jq -e --arg sha "$SOURCE_SHA" \
+            '.head_sha==$sha and .status=="completed" and .conclusion=="success"' "$RUNNER_TEMP/qa.json"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN/artifacts" > "$RUNNER_TEMP/artifacts.json"
+          count="$(jq '[.artifacts[] | select(.name | startswith("BLOFY-STREAM-55.8.10-FFMPEG-OWNER-SIGNED-"))] | length' "$RUNNER_TEMP/artifacts.json")"
+          test "$count" = 1 || { echo "::error::Expected one verified signed APK artifact"; exit 1; }
+          jq -r '.artifacts[] | select(.name | startswith("BLOFY-STREAM-55.8.10-FFMPEG-OWNER-SIGNED-")) | .name' \
+            "$RUNNER_TEMP/artifacts.json" > "$RUNNER_TEMP/artifact-name.txt"
+      - name: Download and verify owner-signed APK without accessing keystore
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact="$(cat "$RUNNER_TEMP/artifact-name.txt")"
+          mkdir -p staging public
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name "$artifact" --dir staging
+          apk="$(find staging -name "$APK_NAME" -type f -print -quit)"
+          sums="$(find staging -name SHA256SUMS -type f -print -quit)"
+          identity="$(find staging -name BUILD-IDENTITY.txt -type f -print -quit)"
+          test -s "$apk" && test -s "$sums" && test -s "$identity"
+          grep -Fxq 'version_code=2000087' "$identity"
+          grep -Fxq 'app_id=tv.blofy.player.v2.stream' "$identity"
+          grep -Fxq 'version_name=2.0.0-rc07.55.8.10-STREAM' "$identity"
+          expected="$(awk -v name="$APK_NAME" '$2==name{print $1}' "$sums")"
+          actual="$(sha256sum "$apk" | awk '{print $1}')"
+          test "${#expected}" -eq 64 && test "$expected" = "$actual"
+          apktool="$ANDROID_HOME/build-tools/35.0.0"
+          if [ ! -x "$apktool/apksigner" ]; then
+            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'build-tools;35.0.0'
+          fi
+          "$apktool/aapt" dump badging "$apk" > public/apk-badging.txt
+          grep -Fq "name='tv.blofy.player.v2.stream' versionCode='2000087' versionName='2.0.0-rc07.55.8.10-STREAM'" public/apk-badging.txt
+          ! grep -Fq 'application-debuggable' public/apk-badging.txt
+          "$apktool/apksigner" verify --print-certs "$apk" > public/apk-certificate.txt
+          cert="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' public/apk-certificate.txt |
+            head -n1 | tr -d '[:space:]-:' | tr '[:lower:]' '[:upper:]')"
+          test "$cert" = "$EXPECTED_CERT" || { echo "::error::Wrong signing key"; exit 1; }
+          "$apktool/zipalign" -c -P 16 -v 4 "$apk"
+          unzip -Z1 "$apk" > "$RUNNER_TEMP/stream-file-list.txt"
+          for abi in armeabi-v7a arm64-v8a x86 x86_64; do
+            grep -Fxq "lib/$abi/libffmpegJNI.so" "$RUNNER_TEMP/stream-file-list.txt"
+          done
+          cp "$apk" "public/$APK_NAME"
+          (cd public && sha256sum "$APK_NAME" > SHA256SUMS && sha256sum -c SHA256SUMS)
+      - name: Publish immutable standalone STREAM GitHub Release
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Release tag already exists. Refusing overwrite."; exit 1
+          fi
+          gh release create "$TAG" "public/$APK_NAME" "public/SHA256SUMS" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target 259527f26bf1009150da0a462b53acb56ea9a35d \
+            --title 'BLOFY STREAM 55.8.10 | FFmpeg | Owner signed' \
+            --notes 'Full standalone BLOFY STREAM for Android TV/Box/Phone. Original owner key, versionCode 2000087, package tv.blofy.player.v2.stream. AC3, E-AC3, DTS audio via FFmpeg extension. Arabic original titles, on-device optional synopsis translation and movie genre filters. Supports safe in-app update from 55.8.8 to 55.8.10. Does not change BLOFY PLAYER or Google Play builds.'
+          echo "Published signed APK: https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/$APK_NAME" >> "$GITHUB_STEP_SUMMARY"
