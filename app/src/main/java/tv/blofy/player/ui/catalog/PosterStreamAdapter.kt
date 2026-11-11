@@ -34,23 +34,30 @@ class PosterStreamAdapter(
         val next = categories.associate { it.remoteId to it.name }
         if (categoryNames == next) return
         categoryNames = next
-        if (items.isNotEmpty()) notifyItemRangeChanged(0, items.size)
+        if (items.isNotEmpty()) notifyItemRangeChanged(0, items.size, GENRE_META_PAYLOAD)
     }
 
-    /** Called before new page adapter insertion; no UI thread database queries. */
-    fun rememberMovieGenres(genres: Map<String, List<String>>, reset: Boolean = false) {
-        if (reset) cachedMovieGenres.clear()
-        if (genres.isNotEmpty()) cachedMovieGenres.putAll(genres)
+    /**
+     * Atomic metadata snapshot. A warm page, a category, and the unfiltered
+     * grid must resolve identical content keys to identical genres.
+     * No incremental per-item changes while a poster row is on-screen.
+     */
+    fun rememberMovieGenres(
+        genres: Map<String, List<String>>,
+        reset: Boolean = false,
+        notifyExisting: Boolean = false
+    ) {
+        val merged = if (reset) HashMap(genres) else HashMap(cachedMovieGenres).apply { putAll(genres) }
+        if (cachedMovieGenres == merged) return
+        cachedMovieGenres.clear()
+        cachedMovieGenres.putAll(merged)
+        if (notifyExisting && items.isNotEmpty()) {
+            notifyItemRangeChanged(0, items.size, GENRE_META_PAYLOAD)
+        }
     }
 
-    fun hasMovieGenres(key: String): Boolean = cachedMovieGenres[key]?.isNotEmpty() == true
-
-    fun updateMovieGenres(key: String, genres: List<String>) {
-        if (genres.isEmpty()) return
-        if (cachedMovieGenres[key] == genres) return
-        cachedMovieGenres[key] = genres
-        val position = items.indexOfFirst { it.key == key }
-        if (position >= 0) notifyItemChanged(position)
+    private companion object {
+        const val GENRE_META_PAYLOAD = "movie_genre_line_only"
     }
 
     init { setHasStableIds(true) }
@@ -137,18 +144,31 @@ class PosterStreamAdapter(
         return Holder(root, image, title, meta, rating, dp(12).toFloat(), dp(1))
     }
 
+    private fun bindGenreLine(holder: Holder, item: StreamEntity, badges: List<String>) {
+        holder.meta.text = MovieCardMeta.subtitle(
+            item = item,
+            badges = badges,
+            categoryName = categoryNames[item.categoryId],
+            cachedDetailGenres = cachedMovieGenres[item.key].orEmpty()
+        )
+    }
+
+    override fun onBindViewHolder(holder: Holder, position: Int, payloads: MutableList<Any>) {
+        if (payloads.isNotEmpty() && payloads.all { it == GENRE_META_PAYLOAD }) {
+            val item = items[position]
+            bindGenreLine(holder, item, ContentPresentation.of(item).badges)
+            return
+        }
+        super.onBindViewHolder(holder, position, payloads)
+    }
+
     override fun onBindViewHolder(holder: Holder, position: Int) {
         val item = items[position]
         holder.itemView.tag = item.key
         val presentation = ContentPresentation.of(item)
         holder.title.text = presentation.title
         holder.itemView.contentDescription = presentation.title
-        holder.meta.text = MovieCardMeta.subtitle(
-            item = item,
-            badges = presentation.badges,
-            categoryName = categoryNames[item.categoryId],
-            cachedDetailGenres = cachedMovieGenres[item.key].orEmpty()
-        )
+        bindGenreLine(holder, item, presentation.badges)
         holder.rating.text = item.rating?.takeIf(String::isNotBlank)?.let { "★ $it" }.orEmpty()
         holder.rating.visibility = if (holder.rating.text.isNotBlank()) View.VISIBLE else View.GONE
         renderFocus(holder, holder.itemView.hasFocus())
