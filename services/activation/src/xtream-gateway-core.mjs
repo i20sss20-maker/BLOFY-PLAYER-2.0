@@ -39,12 +39,30 @@ export function verifyGatewayCredential(storedProof, username, password, keyHex)
   return left.length === 32 && right.length === 32 && crypto.timingSafeEqual(left, right);
 }
 
+// Keep newly issued account details short and easy to enter on TV remotes.
+// Rejection sampling avoids modulo bias while preserving cryptographic entropy.
+const GATEWAY_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+const GATEWAY_SAMPLE_LIMIT = 256 - (256 % GATEWAY_ALPHABET.length);
+
+function randomGatewayAlphanumeric(length, randomBytes) {
+  let result = '';
+  while (result.length < length) {
+    const bytes = randomBytes(Math.max(16, (length - result.length) * 2));
+    for (const byte of bytes) {
+      if (byte >= GATEWAY_SAMPLE_LIMIT) continue;
+      result += GATEWAY_ALPHABET[byte % GATEWAY_ALPHABET.length];
+      if (result.length === length) break;
+    }
+  }
+  return result;
+}
+
 export function generateGatewayUsername(randomBytes = crypto.randomBytes) {
-  return `blofy${randomBytes(5).toString('hex')}`;
+  return randomGatewayAlphanumeric(10, randomBytes);
 }
 
 export function generateGatewayPassword(randomBytes = crypto.randomBytes) {
-  return randomBytes(18).toString('base64url');
+  return randomGatewayAlphanumeric(12, randomBytes);
 }
 
 export function safeGatewayExtension(value, fallback = 'ts') {
