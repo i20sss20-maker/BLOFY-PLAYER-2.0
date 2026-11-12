@@ -58,6 +58,8 @@
     <string name="stream_ui_timeout_error">انتهت مهلة الاتصال بالسيرفر. تحقق من سرعة الشبكة وأعد المحاولة</string>
     <string name="stream_ui_network_error">الاتصال غير متاح. تحقق من الإنترنت أو إعدادات الراوتر</string>
     <string name="stream_ui_unauthorized_error">الجلسة غير مخوّلة. افتح حالة الاشتراك أو تواصل مع الدعم</string>
+    <string name="stream_ui_content_missing_error">العنصر المطلوب غير متوفر لدى المصدر (404/410). تحقق من القناة أو الحلقة قبل إعادة المحاولة</string>
+    <string name="stream_ui_rate_limited_error">المصدر يقيّد عدد الطلبات (429). انتظر قبل المحاولة وتجنب الفحص المتكرر</string>
     <string name="stream_ui_server_error">السيرفر لم يستجب بشكل صحيح. جرّب لاحقًا</string>
     <string name="stream_ui_decoder_error">صيغة الفيديو غير مدعومة على هذا الجهاز؛ جرّب جودة أقل أو قناة أخرى</string>
     <string name="stream_ui_generic_error">تعذر إكمال الاتصال. جرّب تحديث التطبيق أو افحص الشبكة</string>
