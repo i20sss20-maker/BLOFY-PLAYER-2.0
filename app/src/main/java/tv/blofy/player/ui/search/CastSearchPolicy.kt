@@ -28,10 +28,8 @@ internal object CastSearchPolicy {
     fun actorTerm(input: String): String {
         var value = normalize(input.take(100))
         for (pattern in prefixes) value = value.replace(pattern, "").trim()
-        return value.removePrefix("لـ").removePrefix("ل").takeIf {
-            // Do not drop the letter L from ordinary Latin actor names.
-            it.length >= 2 && !value.firstOrNull().let { c -> c?.isLetter() == true && c in 'a'..'z' }
-        } ?: value
+        // Preserve original names such as "ليوناردو" and "Liam".
+        return value
     }
 
     fun matches(metadata: ProviderMetadata.Metadata, input: String): Boolean {
