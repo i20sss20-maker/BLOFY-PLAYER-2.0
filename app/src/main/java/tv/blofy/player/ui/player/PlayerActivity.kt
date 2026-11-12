@@ -44,6 +44,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.C
 import androidx.media3.common.Format
+import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
@@ -59,6 +60,7 @@ import tv.blofy.player.BlofyApp
 import tv.blofy.player.BuildConfig
 import tv.blofy.player.core.diagnostics.StreamConnectionDiagnostics
 import tv.blofy.player.core.diagnostics.StreamAudioHealth
+import tv.blofy.player.core.diagnostics.StreamAudioRecoveryPolicy
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.playback.PlaybackResumeState
 import tv.blofy.player.core.playback.BlofyPlaybackSession
@@ -103,6 +105,7 @@ open class PlayerActivity : ContentAccessActivity() {
     private var pendingNetworkRecovery = false
     private var vlcFallbackLaunched = false
     private var lastStreamAudioHealth = ""
+    private var audioRecoveryForItem: MediaItem? = null
     private lateinit var connectionNotice: TextView
     private lateinit var controlHint: TextView
     private var networkRegistered = false
@@ -298,13 +301,17 @@ open class PlayerActivity : ContentAccessActivity() {
     private fun initializePlaybackSession() {
         session = createPlaybackSession()
         sessionReleased = false
+        audioRecoveryForItem = null
         session.player.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (sessionReleased) return
                 if (playbackState == Player.STATE_READY && ::connectionNotice.isInitialized) {
                     connectionNotice.visibility = View.GONE
                 }
-                if (playbackState == Player.STATE_READY) reportStreamAudioHealth()
+                if (playbackState == Player.STATE_READY) {
+                    attemptSupportedAudioTrackRecovery()
+                    reportStreamAudioHealth()
+                }
                 if (playbackState == Player.STATE_ENDED) saveResume()
                 if (playbackState == Player.STATE_ENDED && kind == KIND_EPISODE && !autoNextTriggered) {
                     autoNextTriggered = true
@@ -322,6 +329,7 @@ open class PlayerActivity : ContentAccessActivity() {
             override fun onTracksChanged(tracks: Tracks) {
                 if (sessionReleased) return
                 if (kind == KIND_LIVE) {
+                    attemptSupportedAudioTrackRecovery()
                     reportStreamAudioHealth()
                     return
                 }
@@ -335,6 +343,42 @@ open class PlayerActivity : ContentAccessActivity() {
                 }
             }
         })
+    }
+
+    private fun attemptSupportedAudioTrackRecovery() {
+        // This changes only the currently selected decoder track. It does
+        // not reload the player, change URLs, invoke VLC or touch the server.
+        if (!BuildConfig.CODE_ONLY_LOGIN || kind != KIND_LIVE || sessionReleased) return
+        val player = session.player
+        val item = player.currentMediaItem ?: return
+        val tracks = player.currentTracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
+        val hasSelected = tracks.any { group ->
+            (0 until group.length).any { group.isTrackSelected(it) }
+        }
+        val params = player.trackSelectionParameters
+        val status = StreamAudioHealth.inspect(
+            player.currentTracks, player.volume,
+            known = player.playbackState == Player.STATE_READY
+        )
+        if (!StreamAudioRecoveryPolicy.shouldAttempt(
+                state = status.state,
+                ready = player.playbackState == Player.STATE_READY,
+                volume = player.volume,
+                audioDisabled = params.disabledTrackTypes.contains(C.TRACK_TYPE_AUDIO),
+                anySelected = hasSelected,
+                alreadyTried = audioRecoveryForItem === item
+            )) return
+        val supported = tracks.firstNotNullOfOrNull { group ->
+            (0 until group.length).firstOrNull { group.isTrackSupported(it) }?.let { group to it }
+        } ?: return
+        audioRecoveryForItem = item
+        player.trackSelectionParameters = params.buildUpon()
+            .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+            .setOverrideForType(
+                TrackSelectionOverride(supported.first.mediaTrackGroup, listOf(supported.second))
+            )
+            .build()
+        android.util.Log.i("BLOFY_AUDIO_RECOVERY", "supported_audio_selected_once")
     }
 
     // Diagnostic only: never retry a working video session just because
