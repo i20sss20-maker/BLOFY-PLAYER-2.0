@@ -1241,6 +1241,9 @@ open class PlayerActivity : ContentAccessActivity() {
 
         val profile = providerProfile(provider)
         // Manual audio tracks belong only to the channel on which chosen.
+        // Prevent an old channel's tracks-changed callback from triggering
+        // recovery while its override is being cleared during channel zapping.
+        audioRecoveryForItem = session.player.currentMediaItem
         // Keep an explicit audio disable/mute, but discard stale track-group
         // overrides before selecting a different live channel.
         manualAudioContentKey = null
