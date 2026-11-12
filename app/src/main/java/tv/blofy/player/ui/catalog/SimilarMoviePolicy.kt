@@ -22,15 +22,19 @@ internal object SimilarMoviePolicy {
         metadataGenres: List<String>,
         candidates: List<StreamEntity>,
         categoryNames: Map<String, String>,
-        limit: Int = 10
+        limit: Int = 10,
+        cachedGenres: Map<String, List<String>> = emptyMap()
     ): List<StreamEntity> {
         val source = genreKeys(film, metadataGenres, categoryNames[film.categoryId])
         if (source.isEmpty()) return emptyList()
         return candidates.asSequence()
             .filter { it.kind == "movie" && it.key != film.key && !it.locked }
             .map { entry ->
-                val shared = source.intersect(
-                    MovieGenres.identify(entry.genre, categoryNames[entry.categoryId]))
+                val localDetailGenres = cachedGenres[entry.key].orEmpty().joinToString(", ")
+                val shared = source.intersect(MovieGenres.identify(
+                    listOfNotNull(entry.genre, localDetailGenres).joinToString(", "),
+                    categoryNames[entry.categoryId]
+                ))
                 entry to shared.size
             }
             .filter { it.second > 0 }
