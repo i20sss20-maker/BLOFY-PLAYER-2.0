@@ -378,7 +378,9 @@ function downloadCategoryLabel(category) {
 }
 
 function renderAppLibrary(apps, variants = [], rootUrl = '', counts = {}, ownCards = '') {
-  if (!apps.length) return '';
+  // BLOFY first-party downloads must remain visible even if the external app
+  // registry is empty or temporarily unavailable.
+  if (!apps.length && !ownCards) return '';
   const variantsBySlug = new Map();
   for (const variant of variants) {
     if (!variantsBySlug.has(variant.slug)) variantsBySlug.set(variant.slug, []);
@@ -414,6 +416,8 @@ function renderAppLibrary(apps, variants = [], rootUrl = '', counts = {}, ownCar
     const appVariants = variantsBySlug.get(app.slug) || [];
     const appAction = appDownloadAction(app);
     const stableDownloadUrl = `${String(rootUrl || '').replace(/\/$/, '')}/d/${encodeURIComponent(app.slug)}`;
+    const copyButton = appAction.kind === 'unavailable' ? '' :
+      `<button class="app-copy-short" type="button" data-copy-url="${escapeHtml(stableDownloadUrl)}" aria-label="نسخ رابط Downloader لتطبيق ${escapeHtml(app.name)}">نسخ رابط Downloader</button>`;
     const variantButtons = appVariants.length > 1
       ? `<div class="variant-options"><strong>نسخ التحميل</strong>${appVariants.map(variant => {
           const size = formatApkSize(variant.apkSizeBytes);
@@ -431,6 +435,7 @@ function renderAppLibrary(apps, variants = [], rootUrl = '', counts = {}, ownCar
         ${appAction.kind === 'unavailable'
           ? '<span class="app-more" role="status">رابط التحميل يحتاج تحديثًا</span>'
           : `<a class="app-download" href="/download/apps/${encodeURIComponent(app.slug)}">${appAction.kind === 'official' ? 'فتح المصدر الرسمي ↗' : 'تحميل APK ↓'}</a>`}
+        ${copyButton}
         <button class="app-more" type="button" data-details-toggle data-default-label="${appVariants.length > 1 ? 'نسخ / تفاصيل' : 'تفاصيل'}" aria-expanded="false" aria-controls="${detailsId}">${appVariants.length > 1 ? 'نسخ / تفاصيل' : 'تفاصيل'}</button>
       </div>
       <div class="app-details" id="${detailsId}" hidden>
@@ -446,7 +451,7 @@ ${appAction.kind === 'unavailable' ? '<div class="stable-download-link"><strong>
     </article>`;
   }).join('');
 
-  return `<section class="apps-section">\n    <style>.apps-feature{margin:18px 0;padding:18px;border:1px solid rgba(167,120,255,.25);border-radius:18px;background:rgba(25,17,42,.65)}.apps-feature h3{margin:0 0 12px}.apps-feature-items{display:flex;gap:10px;overflow-x:auto;padding-bottom:5px}.feature-item{flex:1;min-width:155px;text-decoration:none;color:inherit;border:1px solid rgba(167,120,255,.22);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:7px}.feature-item:hover,.feature-item:focus-visible{border-color:#a878ff;background:rgba(167,120,255,.12)}.feature-item small{opacity:.8}</style>\n    <div class="apps-head"><div><p class="apps-eyebrow">BLOFY APPS · DOWNLOAD CENTER</p><h2>التطبيقات</h2></div><span class="apps-count" id="visible-count">${apps.length}</span></div>
+  return `<section class="apps-section">\n    <style>.apps-feature{margin:18px 0;padding:18px;border:1px solid rgba(167,120,255,.25);border-radius:18px;background:rgba(25,17,42,.65)}.apps-feature h3{margin:0 0 12px}.apps-feature-items{display:flex;gap:10px;overflow-x:auto;padding-bottom:5px}.feature-item{flex:1;min-width:155px;text-decoration:none;color:inherit;border:1px solid rgba(167,120,255,.22);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:7px}.feature-item:hover,.feature-item:focus-visible{border-color:#a878ff;background:rgba(167,120,255,.12)}.feature-item small{opacity:.8}</style>\n    <div class="apps-head"><div><p class="apps-eyebrow">BLOFY APPS · DOWNLOAD CENTER</p><h2>التطبيقات</h2></div><span class="apps-count" id="visible-count" aria-live="polite" title="عدد التطبيقات الإضافية الظاهرة">${apps.length}</span></div>
     <div class="app-controls">
       <label class="search-box" for="app-search"><span>⌕</span><input id="app-search" type="search" placeholder="بحث" autocomplete="off" spellcheck="false"><button class="search-clear" id="search-clear" type="button" aria-label="مسح البحث" hidden>×</button></label>
       <div class="filter-bar" aria-label="تصنيف التطبيقات">${filterButtons}</div>
@@ -454,7 +459,7 @@ ${appAction.kind === 'unavailable' ? '<div class="stable-download-link"><strong>
     
     <div class="app-list">${ownCards}${rows}</div>
     ${featuredSections}
-    <div class="empty-state" id="empty-state" hidden>ما لقينا تطبيق مطابق للبحث.</div>
+    <div class="empty-state" id="empty-state" hidden>ما لقينا تطبيقًا إضافيًا مطابقًا للبحث. تطبيقات BLOFY الرسمية معروضة بالأعلى دائمًا.</div>
   </section>`;
 }
 
@@ -487,8 +492,8 @@ async function downloadPage(req) {
   // This app has its own official card already. Hide only the duplicate
   // generic listing; retain the database row and all public download routes.
   const displayedApps = streamApp ? apps.filter(app => app.slug !== 'blofy-stream') : apps;
-  const streamCard = streamApp ? `<section class="official-card" id="blofy-stream" aria-label="BLOFY STREAM"><div class="official-icon"><img src="${escapeHtml(streamApp.iconUrl)}" alt="BLOFY STREAM"></div><div class="official-copy"><div class="official-title"><h2>BLOFY STREAM</h2><span class="badge">تطبيق مستقل</span></div><div class="official-desc">تطبيق BLOFY STREAM لمشاهدة القنوات والأفلام والمسلسلات. تفعيل بكود فقط، باللغة العربية افتراضيًا مع إمكانية التغيير للإنجليزية. يدعم التلفزيون والريموت وأجهزة Android والجوال.</div><div class="official-meta">الإصدار ${escapeHtml(streamApp.version)} · Android TV / Box / Mobile</div><div class="official-meta">⬇ ${Number(stats.byKey['app:blofy-stream']?.downloadCount || 0).toLocaleString("en-US")} طلب تحميل عبر الموقع</div><div class="direct-url">${escapeHtml(rootUrl)}/d/blofy-stream</div></div><a class="official-download" href="/d/blofy-stream">تحميل BLOFY STREAM APK ↓</a></section>` : '';
-  const ownCards = `<section class="official-card"><div class="official-icon"><img src="https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/app/src/main/res/drawable-nodpi/blofy_logo.png" alt="BLOFY PLAYER"></div><div class="official-copy"><div class="official-title"><h1>BLOFY PLAYER</h1><span class="badge">معتمد</span></div><div class="official-desc">مشغل وسائط احترافي للشاشات والرسيفرات، مصمم لتجربة سريعة وسلسة لتصفح وتشغيل القنوات المباشرة والأفلام والمسلسلات مع دعم كامل للريموت.</div><div class="official-meta">${escapeHtml(release.versionName)} · Version Code ${release.versionCode}</div><div class="official-meta">⬇ ${Number(stats.byKey.blofy?.downloadCount || 0).toLocaleString("en-US")} طلب تحميل عبر الموقع</div><div class="direct-url">${escapeHtml(directUrl)}</div></div><a class="official-download" href="/d/blofy">تحميل BLOFY APK ↓</a></section>${streamCard}${BLOFY_ONLY_CURRENT ? '' : renderCinematicV74DisplayCard()}${BLOFY_ONLY_CURRENT ? '' : `<section class="official-card" id="xiaomi-v74" aria-label="نسخة شاومي التجريبية"><div class="official-icon"><img src="https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/app/src/main/res/drawable-nodpi/blofy_logo.png" alt="BLOFY PLAYER Xiaomi"></div><div class="official-copy"><div class="official-title"><h2>BLOFY PLAYER Xiaomi 74</h2><span class="badge">تجريبي · Android TV 9</span></div><div class="official-desc">نسخة مستقلة مخصصة لتجربة التثبيت على Xiaomi MiTV-AESP0. لا تستبدل التطبيق الرسمي، ولم تُختبر بعد على الجهاز الفعلي.</div><div class="official-meta">Version Code 2000074 · APK 229 MB</div><div class="official-meta">⬇ ${Number(stats.byKey["blofy-xiaomi-v74-test"]?.downloadCount || 0).toLocaleString("en-US")} طلب تحميل مسجل منذ تفعيل العداد</div><div class="direct-url">updates.blofyplayer.com/download/xiaomi-v74.apk</div></div><a class="official-download" href="/download/xiaomi-v74.apk">تحميل نسخة شاومي APK ↓</a></section>`}`;
+  const streamCard = streamApp ? `<section class="official-card" id="blofy-stream" aria-label="BLOFY STREAM"><div class="official-icon"><img src="${escapeHtml(streamApp.iconUrl)}" alt="BLOFY STREAM"></div><div class="official-copy"><div class="official-title"><h2>BLOFY STREAM</h2><span class="badge">تطبيق مستقل</span></div><div class="official-desc">تطبيق BLOFY STREAM لمشاهدة القنوات والأفلام والمسلسلات. تفعيل بكود فقط، باللغة العربية افتراضيًا مع إمكانية التغيير للإنجليزية. يدعم التلفزيون والريموت وأجهزة Android والجوال.</div><div class="official-meta">الإصدار ${escapeHtml(streamApp.version)} · Android TV / Box / Mobile</div><div class="official-meta">⬇ ${Number(stats.byKey['app:blofy-stream']?.downloadCount || 0).toLocaleString("en-US")} طلب تحميل عبر الموقع</div><div class="direct-url">${escapeHtml(rootUrl)}/d/blofy-stream</div></div><a class="official-download" href="/d/blofy-stream">تحميل BLOFY STREAM APK ↓</a><button class="official-copy-link" type="button" data-copy-url="${escapeHtml(rootUrl)}/d/blofy-stream" aria-label="نسخ رابط BLOFY STREAM للـ Downloader">نسخ رابط Downloader</button></section>` : '';
+  const ownCards = `<section class="official-card"><div class="official-icon"><img src="https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/app/src/main/res/drawable-nodpi/blofy_logo.png" alt="BLOFY PLAYER"></div><div class="official-copy"><div class="official-title"><h1>BLOFY PLAYER</h1><span class="badge">معتمد</span></div><div class="official-desc">مشغل وسائط احترافي للشاشات والرسيفرات، مصمم لتجربة سريعة وسلسة لتصفح وتشغيل القنوات المباشرة والأفلام والمسلسلات مع دعم كامل للريموت.</div><div class="official-meta">${escapeHtml(release.versionName)} · Version Code ${release.versionCode}</div><div class="official-meta">⬇ ${Number(stats.byKey.blofy?.downloadCount || 0).toLocaleString("en-US")} طلب تحميل عبر الموقع</div><div class="direct-url">${escapeHtml(directUrl)}</div></div><a class="official-download" href="/d/blofy">تحميل BLOFY APK ↓</a><button class="official-copy-link" type="button" data-copy-url="${escapeHtml(directUrl)}" aria-label="نسخ رابط BLOFY PLAYER للـ Downloader">نسخ رابط Downloader</button></section>${streamCard}${BLOFY_ONLY_CURRENT ? '' : renderCinematicV74DisplayCard()}${BLOFY_ONLY_CURRENT ? '' : `<section class="official-card" id="xiaomi-v74" aria-label="نسخة شاومي التجريبية"><div class="official-icon"><img src="https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/app/src/main/res/drawable-nodpi/blofy_logo.png" alt="BLOFY PLAYER Xiaomi"></div><div class="official-copy"><div class="official-title"><h2>BLOFY PLAYER Xiaomi 74</h2><span class="badge">تجريبي · Android TV 9</span></div><div class="official-desc">نسخة مستقلة مخصصة لتجربة التثبيت على Xiaomi MiTV-AESP0. لا تستبدل التطبيق الرسمي، ولم تُختبر بعد على الجهاز الفعلي.</div><div class="official-meta">Version Code 2000074 · APK 229 MB</div><div class="official-meta">⬇ ${Number(stats.byKey["blofy-xiaomi-v74-test"]?.downloadCount || 0).toLocaleString("en-US")} طلب تحميل مسجل منذ تفعيل العداد</div><div class="direct-url">updates.blofyplayer.com/download/xiaomi-v74.apk</div></div><a class="official-download" href="/download/xiaomi-v74.apk">تحميل نسخة شاومي APK ↓</a></section>`}`;
   return `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#08070e"><meta name="description" content="مركز تحميل BLOFY PLAYER الرسمي لإصدارات أندرويد وملفات APK."><link rel="canonical" href="${UPDATE_SITE_CANONICAL}"><meta property="og:site_name" content="BLOFY PLAYER"><meta property="og:title" content="BLOFY PLAYER | مركز الإصدارات"><meta property="og:url" content="${UPDATE_SITE_CANONICAL}"><title>BLOFY PLAYER | التحميل</title><style>
 /* Responsive touch and remote usability: final cascade layer */
 @media(max-width:620px){
@@ -661,6 +666,11 @@ a:focus-visible,button:focus-visible,input:focus-visible{outline:3px solid #f8e9
 @media(min-width:1150px){.app-list{grid-template-columns:repeat(4,minmax(0,1fr))}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.app-list>.app-row,.app-list>.official-card{transition:none}}
 .apps-head{align-items:flex-start}.apps-head>div{min-width:0}.apps-eyebrow{margin:0 0 8px;color:#c69aff;font-size:11px;font-weight:800;letter-spacing:.12em;direction:ltr;text-align:right}.apps-intro{margin:9px 0 0;color:#bcb0ce;font-size:13px;line-height:1.75;max-width:650px}.apps-count{flex-shrink:0}.app-list>.official-card:first-child{border-color:#a46aef;background:linear-gradient(145deg,#35204f,#181024 78%)}.app-list>.official-card:first-child .official-download{box-shadow:0 5px 18px #8545e344}.app-list>.app-row .app-title-line{justify-content:center}.app-list>.app-row .app-meta{overflow-wrap:anywhere}.app-list>.app-row .app-details{overflow-wrap:anywhere}.app-list>.app-row .app-actions a,.app-list>.app-row .app-actions button{max-width:100%}@media(max-width:560px){.apps-eyebrow{font-size:10px}.apps-intro{font-size:12px}.apps-head h2{font-size:19px}.app-list>.official-card .official-meta{overflow-wrap:anywhere}}
+.app-copy-short,.official-copy-link{border:1px solid var(--blofy-border);background:rgba(192,150,255,.08);color:#e7d4ff;font:inherit;font-size:12px;font-weight:750;border-radius:12px;min-height:44px;cursor:pointer;padding:8px 12px;display:flex;align-items:center;justify-content:center}
+.app-copy-short:hover,.official-copy-link:hover{border-color:#b68cff;background:rgba(192,150,255,.16)}
+.official-copy-link{width:100%;grid-column:1/-1;margin-top:8px}
+.app-copy-short:focus-visible,.official-copy-link:focus-visible{outline:3px solid #f8e9ff;outline-offset:3px}
+@media(max-width:560px){.app-copy-short,.official-copy-link{font-size:11px;min-height:44px}}
 </style></head><body><div class="shell"><header class="topbar"><div class="brand"><div class="mark"><img src="https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/app/src/main/res/drawable-nodpi/blofy_logo.png" alt="BLOFY PLAYER"></div><span class="brand-copy"><strong>BLOFY PLAYER</strong><small>DOWNLOAD CENTER</small></span></div><nav class="top-links" aria-label="روابط BLOFY"><a href="https://blofyplayer.com/">بوابة الجهاز</a><a href="https://blofyplayer.com/privacy">الخصوصية</a><a href="https://blofyplayer.com/status">حالة الخدمات</a></nav><div class="top-status">BLOFY APPS</div></header><main>${renderAppLibrary(displayedApps, variants, rootUrl, stats.byKey, ownCards)}</main><footer class="foot"><span>BLOFY PLAYER · blofyplayer.com</span><nav aria-label="روابط BLOFY"><a href="https://blofyplayer.com/">بوابة الجهاز</a><a href="https://blofyplayer.com/privacy">الخصوصية</a><a href="https://blofyplayer.com/status">حالة الخدمات</a></nav></footer></div><script>
 (() => {
   const rows = [...document.querySelectorAll('[data-app-row]')];
@@ -683,7 +693,7 @@ a:focus-visible,button:focus-visible,input:focus-visible{outline:3px solid #f8e9
     activeFilter = sessionStorage.getItem('blofy-app-filter') || 'all';
     if (search) search.value = sessionStorage.getItem('blofy-app-search') || '';
   } catch {}
-  const normalize = value => String(value || '').toLocaleLowerCase('ar');
+  const normalize = value => String(value || '').toLocaleLowerCase('ar').normalize('NFKC').replace(/[\u064B-\u065F\u0640]/g,'').replace(/\s+/g,' ').trim();
 
   function applyFilters() {
     const query = normalize(search?.value).trim();
