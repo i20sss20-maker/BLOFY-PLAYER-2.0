@@ -80,4 +80,8 @@
     <string name="stream_home_drama">Drama movies</string>
     <string name="stream_home_genre_hint">Based on available source genres</string>
     <string name="stream_details_similar">More like this</string>
+    <string name="stream_catalog_sort_source">Sort: Source</string>
+    <string name="stream_catalog_sort_newest">Sort: Newest</string>
+    <string name="stream_catalog_sort_rating">Sort: Rating</string>
+    <string name="stream_catalog_sort_year">Sort: Year</string>
 </resources>
