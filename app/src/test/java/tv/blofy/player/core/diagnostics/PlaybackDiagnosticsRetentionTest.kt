@@ -2,6 +2,8 @@ package tv.blofy.player.core.diagnostics
 
 import android.app.Application
 import java.util.concurrent.CountDownLatch
+import java.time.Duration
+import org.robolectric.shadows.ShadowSystemClock
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import org.junit.After
@@ -15,6 +17,18 @@ import org.robolectric.annotation.Config
 @Config(sdk = [28], application = Application::class)
 class PlaybackDiagnosticsRetentionTest {
     @After fun cleanup() = PlaybackDiagnostics.clear()
+
+    @Test fun duplicateFirstFrameEventDoesNotInflateStartupLatency() {
+        PlaybackDiagnostics.clear()
+        val started = PlaybackDiagnostics.begin("provider", "live", "https://example.test/live/42")
+        ShadowSystemClock.advanceBy(Duration.ofMillis(1000))
+        val firstFrame = PlaybackDiagnostics.firstFrame(started)
+        ShadowSystemClock.advanceBy(Duration.ofSeconds(20))
+        val secondFrameCallback = PlaybackDiagnostics.firstFrame(firstFrame)
+        assertSame(firstFrame, secondFrameCallback)
+        assertEquals(firstFrame.ttffMs, secondFrameCallback.ttffMs)
+        assertEquals(firstFrame, PlaybackDiagnostics.snapshot().single())
+    }
 
     @Test fun longViewingSessionRetainsOnlyTheLatestHundredStarts() {
         PlaybackDiagnostics.clear()
