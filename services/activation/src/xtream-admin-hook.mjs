@@ -48,6 +48,7 @@ import {xtreamProviderOrder,withXtreamProviderPosition} from './xtream-provider-
 import {sourceLiveCapacity} from './xtream-live-source-capacity.mjs';
 import {permittedLicensedLiveFanout} from './xtream-licensed-live-fanout-policy.mjs';
 import {xtreamPlaybackSnapshot} from './xtream-playback-metrics.mjs';
+import {summarizeStreamMediaQuality} from './stream-media-quality.mjs';
 import {ensureXtreamCatalogRevisionSchema,bumpXtreamCatalogRevision} from './xtream-catalog-revision.mjs';
 import { assessXtreamSync } from './xtream-sync-guard.mjs';
 import { CONTROL_PATH, controlPage, deleteConfirmationPage, readControlForm } from './xtream-native-controls.mjs';
@@ -3305,6 +3306,11 @@ async function unifiedStreamBridge(req,res,url){
       livePlayback:xtreamPlaybackSnapshot(Date.now(),sourceId),
       sharedMediaHealth:fanoutHealth,
       concurrentLiveViewers:null,concurrentViewersMeasured:false});
+  }
+  if(req.method==='GET'&&p==='/internal/blofy-stream/media-quality'){
+    // Only aggregate known-enum metrics from this instance. This does not
+    // decode video or trigger upstream requests.
+    return json(res,200,summarizeStreamMediaQuality(xtreamPlaybackSnapshot()));
   }
   if(req.method==='GET'&&p==='/internal/blofy-stream/media-failures'){
     const sourceId=String(url.searchParams.get('sourceId')||'').trim();
