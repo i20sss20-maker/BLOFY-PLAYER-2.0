@@ -52,17 +52,7 @@ jobs:
           grep -Fq "versionName='2.0.0-rc07.55.8.12-STREAM'" "$RUNNER_TEMP/apk-badging.txt"
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -P 16 -v 4 "$APK"
           unzip -Z1 "$APK" > "$RUNNER_TEMP/stream-files.txt"
-          grep -Eq '^lib/(arm64-v8a|armeabi-v7a)/libffmpegJNI[.]so
-          {
-            echo '### Published STREAM 55.8.12 APK provenance'
-            echo "- Package: tv.blofy.player.v2.stream"
-            echo "- VersionCode: 2000089"
-            echo "- Size: $actual_size"
-            echo "- SHA-256: $actual_hash"
-            echo "- Owner certificate: matched pinned fingerprint"
-            echo '- This does **not** test actual playback on a physical Android TV.'
-          } >> "$GITHUB_STEP_SUMMARY"
- "$RUNNER_TEMP/stream-files.txt"
+          grep -Eq '^lib/(arm64-v8a|armeabi-v7a)/libffmpegJNI[.]so$' "$RUNNER_TEMP/stream-files.txt"
           {
             echo '### Published STREAM 55.8.12 APK provenance'
             echo "- Package: tv.blofy.player.v2.stream"
