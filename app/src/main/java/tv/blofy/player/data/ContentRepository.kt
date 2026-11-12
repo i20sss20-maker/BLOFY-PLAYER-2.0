@@ -63,14 +63,16 @@ class ContentRepository(private val dao: BlofyDao) {
             }.getOrDefault(emptyList())
         } else emptyList()
 
-        // When FTS already supplied a healthy page, avoid the slower LIKE scan entirely.
-        if (indexed.size >= minOf(limit, 24)) return indexed
+        // Any indexed matches are already relevant. The old implementation
+        // additionally ran a full (non-indexed) LIKE scan on EVERY keystroke
+        // whenever FTS returned fewer than 24 hits; that made 20k+ title
+        // catalogs feel frozen, especially on Android 9 TV boxes.
+        if (indexed.isNotEmpty()) return indexed
 
-        val fallback = dao.searchCatalog(providerId, kind, trimmed, limit)
-        return (indexed.asSequence() + fallback.asSequence())
-            .distinctBy { it.key }
-            .take(limit)
-            .toList()
+        // Only run a bounded fallback if indexing is rebuilding / incomplete.
+        // One-character keys should never force an unindexed whole-table scan.
+        if (trimmed.length < 2) return emptyList()
+        return dao.searchCatalog(providerId, kind, trimmed, limit.coerceAtMost(80))
     }
 
     suspend fun setFavorite(contentKey: String, favorite: Boolean) = dao.setFavorite(contentKey, favorite)
