@@ -2129,9 +2129,12 @@ http.createServer = function withBlofyXtreamGateway(listener) {
       }
       if(req.method==='GET'&&url.pathname==='/api/v1/admin/xtream-gateway/codes/sales-summary')
         return json(res,200,await streamCommercial.salesSummary());
-      const commercialAction=url.pathname.match(/^\/api\/v1\/admin\/xtream-gateway\/codes\/([0-9a-f-]{36})\/(sell|extend|transfer|recover-xtream)$/i);
+      const commercialAction=url.pathname.match(/^\/api\/v1\/admin\/xtream-gateway\/codes\/([0-9a-f-]{36})\/(sell|extend|transfer|relogin|recover-xtream)$/i);
       if(req.method==='POST'&&commercialAction){
         const id=commercialAction[1],kind=commercialAction[2];
+        if(kind==='relogin')return json(res,200,
+          await streamCommercial.allowSameCodeRelogin(id),
+          {'cache-control':'no-store, private','referrer-policy':'no-referrer'});
         if(kind==='transfer')return json(res,200,
           await streamCommercial.reissueForDeviceTransfer(id),{'cache-control':'no-store'});
         if(kind==='recover-xtream')return json(res,200,
