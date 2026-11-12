@@ -106,6 +106,8 @@ open class PlayerActivity : ContentAccessActivity() {
     private var vlcFallbackLaunched = false
     private var lastStreamAudioHealth = ""
     private var audioRecoveryForItem: MediaItem? = null
+    // In-memory only. A manual audio track choice is respected on this channel.
+    private var manualAudioContentKey: String? = null
     private lateinit var connectionNotice: TextView
     private lateinit var controlHint: TextView
     private var networkRegistered = false
@@ -354,6 +356,11 @@ open class PlayerActivity : ContentAccessActivity() {
         val hasSelected = groups.any { group ->
             (0 until group.length).any { group.isTrackSelected(it) }
         }
+        // A broken Android 9 decoder may select EAC3 even though Media3
+        // reports it unsupported and an alternate AAC track is available.
+        val selectedUnsupported = groups.any { group ->
+            (0 until group.length).any { group.isTrackSelected(it) && !group.isTrackSupported(it) }
+        }
         val params = player.trackSelectionParameters
         val summary = StreamAudioHealth.inspect(player.currentTracks, player.volume,
             known = player.playbackState == Player.STATE_READY)
@@ -363,7 +370,9 @@ open class PlayerActivity : ContentAccessActivity() {
                 volume = player.volume,
                 audioDisabled = params.disabledTrackTypes.contains(C.TRACK_TYPE_AUDIO),
                 anySelected = hasSelected,
-                alreadyTried = audioRecoveryForItem === item
+                alreadyTried = audioRecoveryForItem === item,
+                selectedUnsupported = selectedUnsupported,
+                manualSelection = manualAudioContentKey == currentContentKey
             )) return
         val supported = groups.firstNotNullOfOrNull { group ->
             (0 until group.length).firstOrNull { group.isTrackSupported(it) }?.let { group to it }
@@ -1231,6 +1240,12 @@ open class PlayerActivity : ContentAccessActivity() {
         }
 
         val profile = providerProfile(provider)
+        // Manual audio tracks belong only to the channel on which chosen.
+        // Keep an explicit audio disable/mute, but discard stale track-group
+        // overrides before selecting a different live channel.
+        manualAudioContentKey = null
+        session.player.trackSelectionParameters = session.player.trackSelectionParameters
+            .buildUpon().clearOverridesOfType(C.TRACK_TYPE_AUDIO).build()
         liveProvider = provider
         currentStreamId = stream.remoteId
         currentContentKey = stream.key
@@ -1486,6 +1501,7 @@ open class PlayerActivity : ContentAccessActivity() {
                             .buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build()
                     }
                     AudioTrackChoicePolicy.Choice.AUTO -> {
+                        if (isAudio) manualAudioContentKey = null
                         // Restore Media3's supported-track auto selection. Do not
                         // restart the video, clear other track choices, or force
                         // unsupported AC3/EAC3/DTS on Android 9 devices.
@@ -1499,6 +1515,7 @@ open class PlayerActivity : ContentAccessActivity() {
                         val index = AudioTrackChoicePolicy.trackIndex(isAudio, isText, which, entries.size)
                             ?: return@setItems
                         val entry = entries[index]
+                        if (isAudio) manualAudioContentKey = currentContentKey
                         val override = TrackSelectionOverride(entry.group.mediaTrackGroup, listOf(entry.index))
                         session.player.trackSelectionParameters = session.player.trackSelectionParameters
                             .buildUpon().setTrackTypeDisabled(trackType, false)
