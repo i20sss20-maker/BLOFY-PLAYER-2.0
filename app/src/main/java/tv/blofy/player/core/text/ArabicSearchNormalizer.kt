@@ -14,6 +14,15 @@ object ArabicSearchNormalizer {
     fun normalize(value: String?): String {
         if (value.isNullOrBlank()) return ""
         return Normalizer.normalize(value, Normalizer.Form.NFKC)
+            // Android Arabic keyboards enter ٢٠٢٦ / ۲۰۲۶, while Xtream's
+            // catalog years use ASCII 2026. Normalize both before FTS.
+            .map { digit ->
+                when (digit) {
+                    in '٠'..'٩' -> ('0'.code + digit.code - '٠'.code).toChar()
+                    in '۰'..'۹' -> ('0'.code + digit.code - '۰'.code).toChar()
+                    else -> digit
+                }
+            }.joinToString("")
             .replace("ـ", "")
             .replace(diacritics, "")
             .replace('أ', 'ا')
