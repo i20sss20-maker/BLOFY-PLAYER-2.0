@@ -160,12 +160,37 @@ async function interpret(text: string, language: string): Promise<AiResult> {
   if (!content || content.length > 16000) throw Error("empty_model_content");
   return clean(JSON.parse(content),text);
 }
+// One-shot opt-in provider smoke test for a fresh API key. It never uses
+// subscriber data, never logs the key or any response text, and is disabled
+// by default so future deploys don't spend model tokens at boot.
+let bootProbeStatus = "not_requested";
+if (Bun.env.BLOFY_AI_BOOT_PROBE === "1") {
+  bootProbeStatus = "pending";
+  void (async () => {
+    try {
+      const probe = await interpret("movies starring Tom Cruise", "en");
+      bootProbeStatus = probe.intent === "actor" && probe.person.length > 2
+        ? "passed" : "invalid_intent";
+      console.info("BLOFY_AI_BOOT_PROBE", "provider=" + activeProvider(),
+        "status=" + bootProbeStatus);
+    } catch (error) {
+      bootProbeStatus = "provider_error";
+      const msg = error instanceof Error ? error.message : "";
+      const safe = /^model_http_[0-9]{3}$/.test(msg) ? msg :
+        msg === "gateway_not_configured" ? msg : "request_or_parse_error";
+      console.warn("BLOFY_AI_BOOT_PROBE", "provider=" + activeProvider(),
+        "status=" + bootProbeStatus, "reason=" + safe);
+    }
+  })();
+}
+
 Bun.serve({
   port:Number(Bun.env.PORT)||3000,
   async fetch(req:Request): Promise<Response> {
     const url = new URL(req.url);
     if (req.method === "GET" && url.pathname === "/health") return json({
-      ok:true, service:"blofy-ai", version:2, provider:activeProvider()
+      ok:true, service:"blofy-ai", version:2, provider:activeProvider(),
+      modelProbe:bootProbeStatus
     });
     if (url.pathname !== "/v1/search/interpret") return json({ok:false,error:"not_found"},404);
     if (req.method !== "POST") return json({ok:false,error:"method_not_allowed"},405);
