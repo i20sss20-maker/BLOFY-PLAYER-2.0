@@ -119,6 +119,7 @@ class PlayerActivity : AppCompatActivity() {
                 .build()
         session.player.addListener(object : Player.Listener {
             override fun onTracksChanged(tracks: Tracks) {
+                refreshAudioTrackIndicator(tracks)
                 if (!::subtitleButton.isInitialized) return
                 val available = tracks.groups.any { group ->
                     group.type == C.TRACK_TYPE_TEXT &&
@@ -128,6 +129,7 @@ class PlayerActivity : AppCompatActivity() {
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_READY) refreshAudioTrackIndicator(session.player.currentTracks)
                 if (playbackState == Player.STATE_ENDED && kind == "episode" && !autoNextTriggered) {
                     autoNextTriggered = true
                     playAdjacentEpisode(1, automatic = true)
@@ -225,6 +227,10 @@ class PlayerActivity : AppCompatActivity() {
                 gravity = Gravity.CENTER_VERTICAL
             }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(if (compactHud) 48 else 58)))
             hud.addView(liveHint)
+            // Live streams can contain multiple audio languages or unsupported codecs.
+            // Keep the audio control reachable by a TV remote on Android 9.
+            audioButton = controlButton("🔊  الصوت") { showTrackDialog(C.TRACK_TYPE_AUDIO) }
+            hud.addView(audioButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(if (compactHud) 50 else 58)).apply { topMargin = dp(6) })
         } else {
             val playbackControls = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -429,7 +435,7 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun showHud() {
         keepHudVisible(); hud.visibility = View.VISIBLE; if (kind != "live") updateProgressUi()
-        if (kind == "live") playerView.requestFocus() else playPauseButton.requestFocus()
+        if (kind == "live") audioButton.requestFocus() else playPauseButton.requestFocus()
     }
     private fun hideHud() { keepHudVisible(); hud.visibility = View.GONE; playerView.requestFocus() }
     private fun keepHudVisible() { if (::hud.isInitialized) hud.removeCallbacks(hideHudRunnable) }
@@ -509,13 +515,40 @@ class PlayerActivity : AppCompatActivity() {
         hud.postDelayed(hideHudRunnable, if (kind == "live") 2200L else 3200L)
     }
 
+    private fun refreshAudioTrackIndicator(tracks: Tracks) {
+        if (!::audioButton.isInitialized) return
+        val audioGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
+        val total = audioGroups.sumOf { it.length }
+        val supported = audioGroups.sumOf { group ->
+            (0 until group.length).count { group.isTrackSupported(it) }
+        }
+        audioButton.text = AudioTrackUiPolicy.buttonLabel(
+            playerReady = session.player.playbackState == Player.STATE_READY,
+            totalTracks = total,
+            supportedTracks = supported
+        )
+    }
+
     private fun showTrackDialog(trackType: Int) {
         val groups = session.player.currentTracks.groups.filter { it.type == trackType && it.length > 0 }
         val entries = mutableListOf<TrackEntry>()
         groups.forEach { group -> for (index in 0 until group.length) if (group.isTrackSupported(index)) entries += TrackEntry(group, index, trackLabel(group.getTrackFormat(index), trackType)) }
         val isText = trackType == C.TRACK_TYPE_TEXT
         val labels = buildList { if (isText) add("إيقاف الترجمة"); addAll(entries.map { it.label }) }
-        if (labels.isEmpty()) { AlertDialog.Builder(this).setMessage(if (isText) "لا توجد ترجمات متاحة" else "لا توجد مسارات صوت إضافية").setPositiveButton("حسنًا", null).show(); return }
+        if (labels.isEmpty()) {
+            val message = if (isText) "لا توجد ترجمات متاحة" else {
+                val codecSummary = groups.flatMap { group ->
+                    (0 until group.length).mapNotNull { index -> group.getTrackFormat(index).sampleMimeType?.substringAfter('/') }
+                }.distinct().take(3).joinToString(", ")
+                AudioTrackUiPolicy.unavailableMessage(
+                    playerReady = session.player.playbackState == Player.STATE_READY,
+                    totalTracks = groups.sumOf { it.length },
+                    codecSummary = codecSummary
+                )
+            }
+            AlertDialog.Builder(this).setMessage(message).setPositiveButton("حسنًا", null).show()
+            return
+        }
         AlertDialog.Builder(this).setTitle(if (isText) "الترجمة" else "المسار الصوتي").setItems(labels.toTypedArray()) { dialog, which ->
             if (isText && which == 0) session.player.trackSelectionParameters = session.player.trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build()
             else {
