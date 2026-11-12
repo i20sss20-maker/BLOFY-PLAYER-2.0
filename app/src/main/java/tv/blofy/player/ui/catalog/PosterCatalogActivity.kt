@@ -57,7 +57,11 @@ class PosterCatalogActivity : AppCompatActivity() {
     // A bounded session-local backoff prevents repeated detail probes for titles
     // that a provider has not classified yet. No credentials enter these keys.
     private val genreWarmAttempts = LinkedHashMap<String, Long>()
-    private var sessionGenreRequestCount = 0
+    // A short rolling quota avoids overloading Xtream while allowing later
+    // categories to continue filling in. The old 24-per-screen-LIFETIME cap
+    // left every subsequently viewed poster stuck at generic 'فيلم'.
+    private var genreQuotaCount = 0
+    private var genreQuotaWindowStartedMs = 0L
     private var lastGenreBatchAtMs = 0L
     private val genreWarmRequest = Runnable { warmVisibleGenres() }
     private var pageJob: Job? = null
@@ -494,12 +498,11 @@ class PosterCatalogActivity : AppCompatActivity() {
         if (!::posterGrid.isInitialized || providerId.isBlank()) return
         posterGrid.removeCallbacks(genreWarmRequest)
         // Avoid competing with fast TV scrolling and the first poster paint.
-        posterGrid.postDelayed(genreWarmRequest, 800L)
+        posterGrid.postDelayed(genreWarmRequest, 360L)
     }
 
     private fun warmVisibleGenres() {
         if ((kind != KIND_MOVIE && kind != KIND_SERIES) || loadedItems.isEmpty() || genreWarmJob?.isActive == true ||
-            sessionGenreRequestCount >= MAX_GENRE_LOOKUPS_PER_SCREEN ||
             posterGrid.scrollState != RecyclerView.SCROLL_STATE_IDLE ||
             !::posterGrid.isInitialized || isFinishing || isDestroyed) return
         val manager = posterGrid.layoutManager as? GridLayoutManager ?: return
@@ -529,8 +532,17 @@ class PosterCatalogActivity : AppCompatActivity() {
                     selectedCategoryId != category) return@launch
                 snapshot.forEach { (key, genres) -> posterAdapter.rememberMovieGenre(key, genres) }
                 val now = SystemClock.elapsedRealtime()
-                if (lastGenreBatchAtMs != 0L && now - lastGenreBatchAtMs < GENRE_BATCH_COOLDOWN_MS) return@launch
-                val remaining = (MAX_GENRE_LOOKUPS_PER_SCREEN - sessionGenreRequestCount).coerceAtLeast(0)
+                if (genreQuotaWindowStartedMs == 0L || now - genreQuotaWindowStartedMs >= GENRE_QUOTA_WINDOW_MS) {
+                    genreQuotaWindowStartedMs = now
+                    genreQuotaCount = 0
+                }
+                val remaining = (MAX_GENRE_REQUESTS_PER_WINDOW - genreQuotaCount).coerceAtLeast(0)
+                if (remaining == 0) return@launch
+                if (lastGenreBatchAtMs != 0L && now - lastGenreBatchAtMs < GENRE_BATCH_COOLDOWN_MS) {
+                    posterGrid.removeCallbacks(genreWarmRequest)
+                    posterGrid.postDelayed(genreWarmRequest, GENRE_BATCH_COOLDOWN_MS - (now - lastGenreBatchAtMs))
+                    return@launch
+                }
                 val candidates = MovieGenrePrefetchPolicy.candidates(
                     visible, names, snapshot, recent, limit = minOf(3, remaining)
                 )
@@ -540,7 +552,7 @@ class PosterCatalogActivity : AppCompatActivity() {
                 } ?: return@launch
                 if (!provider.providerType.equals("xtream", true)) return@launch
                 fetchedBatch = true
-                sessionGenreRequestCount += candidates.size
+                genreQuotaCount += candidates.size
                 lastGenreBatchAtMs = SystemClock.elapsedRealtime()
                 val slots = Semaphore(1)
                 coroutineScope {
@@ -731,7 +743,8 @@ class PosterCatalogActivity : AppCompatActivity() {
         private const val PREFETCH_THRESHOLD = 20
         private const val GENRE_ATTEMPT_BACKOFF_MS = 10 * 60_000L
         private const val GENRE_BATCH_COOLDOWN_MS = 2_500L
-        private const val MAX_GENRE_LOOKUPS_PER_SCREEN = 24
+        private const val MAX_GENRE_REQUESTS_PER_WINDOW = 36
+        private const val GENRE_QUOTA_WINDOW_MS = 5 * 60_000L
         private const val ALL_CATEGORY_ID = "__all__"
     }
 }
