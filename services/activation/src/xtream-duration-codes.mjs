@@ -86,6 +86,8 @@ export function safeCodeRecord(row){
     soldAt:row.sold_at?new Date(row.sold_at).getTime():null,
     salesChannel:String(row.sales_channel||'').slice(0,24),
     transferCount:Number(row.transfer_count||0),
+    adminReloginCount:Number(row.admin_relogin_count||0),
+    adminReloginUntil:row.admin_relogin_until?new Date(row.admin_relogin_until).getTime():null,
     extendedDays:Number(row.extended_days||0),
     deviceTransferPending:row.code_channel==='app'&&Boolean(row.redeemed_at)&&!row.redeemed_device_hash,
     xtreamRecoveryPending:row.code_channel==='xtream'&&Boolean(row.xtream_recovery_until)&&
@@ -346,9 +348,37 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
         // New installations can reuse the SAME voucher only after admin
         // approval of the 6-digit request originating from that installation.
         const reloginApproved=appOnly&&hasApprovedRelogin(row,deviceProof,clock());
-        if(!transferPending&&!reloginApproved&&row.redeemed_device_hash!==deviceProof)
+        // The administrator can also open a short one-time window for the
+        // original code without knowing the new device identifier. The FIRST
+        // different installation that redeems within 10 minutes claims it.
+        const adminReloginApproved=appOnly&&row.code_channel==='app'&&
+          row.redeemed_device_hash&&row.redeemed_device_hash!==deviceProof&&
+          row.admin_relogin_until&&
+          new Date(row.admin_relogin_until).getTime()>clock();
+        if(!transferPending&&!reloginApproved&&!adminReloginApproved&&
+           row.redeemed_device_hash!==deviceProof)
           throw Object.assign(Error('stream_code_unavailable'),{status:409});
-        if(reloginApproved){
+        if(adminReloginApproved){
+          // Rotate the binding once, atomically. Existing signed app tokens
+          // are bound to the OLD device proof and fail immediately afterward.
+          // The voucher hash, account, redeemed_at and expiry never change.
+          const claimed=await client.query(`UPDATE blofy_xtream_gateway_duration_codes
+            SET redeemed_device_hash=$2,admin_relogin_until=NULL,
+                admin_relogin_count=admin_relogin_count+1,
+                relogin_device_hash=NULL,relogin_request_hash=NULL,
+                relogin_requested_at=NULL,relogin_approved_at=NULL,
+                relogin_expires_at=NULL
+            WHERE id=$1 AND redeemed_device_hash IS NOT NULL AND
+              redeemed_device_hash<>$2 AND admin_relogin_until>$3
+            RETURNING id`,[row.id,deviceProof,new Date(clock())]);
+          if(claimed.rowCount!==1)
+            throw Object.assign(Error('stream_code_relogin_approval_expired'),{status:409});
+          row.redeemed_device_hash=deviceProof;
+          await client.query(`INSERT INTO blofy_xtream_gateway_code_events
+            (id,code_id,event_type,details) VALUES($1,$2,$3,$4::jsonb)`,
+            [uuid(),row.id,'same_code_admin_relogin_used',
+              JSON.stringify({oneTime:true,subscriptionUnchanged:true})]);
+        }else if(reloginApproved){
           // Atomic one-time binding rotation; prior bearer stops verifying
           // immediately. The original subscription clock/expiry is unchanged.
           const rebound=await client.query(`UPDATE blofy_xtream_gateway_duration_codes
