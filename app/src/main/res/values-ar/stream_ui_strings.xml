@@ -79,4 +79,6 @@
     <string name="stream_catalog_sort_year">الترتيب: السنة</string>
     <string name="stream_home_recent">شاهدته مؤخرًا</string>
     <string name="stream_home_recent_hint">آخر الأفلام والمسلسلات التي شاهدتها</string>
+    <string name="stream_search_actors_hint">ابحث باسم الفيلم أو المسلسل أو الممثل أو المخرج. نتائج الممثلين تعتمد على بيانات المصدر المتاحة.</string>
+    <string name="stream_search_cast_results">نتائج تطابق الممثل أو المخرج: %1$d</string>
 </resources>
