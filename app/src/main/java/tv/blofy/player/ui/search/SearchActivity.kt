@@ -65,6 +65,7 @@ class SearchActivity : AppCompatActivity() {
         intent.getStringExtra(EXTRA_KIND)?.lowercase()?.takeIf { it in SEARCH_ORDER }
     }
     private var activeKind: String? = null
+    private var referenceTitleSearch: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -373,6 +374,7 @@ class SearchActivity : AppCompatActivity() {
         if (input.text?.toString()?.trim() != q || activeKind != selectedKind) return
         renderSections(sections, selectedKind, provider.id, provider.liveFormat, castCount, moveFocus)
         if (!BuildConfig.CODE_ONLY_LOGIN || selectedKind == KIND_LIVE ||
+            q == referenceTitleSearch ||
             !AiCatalogMatchPolicy.worthwhile(q, sections.sumOf { it.second.size }, moveFocus)) return
         // Local FTS results appear instantly. A remote AI round trip can only
         // enhance them once typing has settled; it never blocks this screen.
@@ -540,6 +542,9 @@ class SearchActivity : AppCompatActivity() {
                 isAllCaps = false
                 gravity = Gravity.CENTER_VERTICAL or Gravity.START
                 setOnClickListener {
+                    // Searching a model-suggested title is a LOCAL lookup,
+                    // not a second Groq request loop on every button press.
+                    referenceTitleSearch = name
                     input.setText(name)
                     input.setSelection(input.length())
                     searchRunner.submit(name, false)
