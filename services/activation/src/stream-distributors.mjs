@@ -298,8 +298,8 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
 
  async function clients(token,{q=''}={}){
   const actor=await session(token),term=clean(q,80);
-  const rows=(await pool.query(`SELECT customer_phone,
-    MAX(customer_name) AS customer_name,
+  const rows=(await pool.query(`SELECT (ARRAY_AGG(customer_phone ORDER BY created_at DESC))[1] AS customer_phone,
+    (ARRAY_AGG(customer_name ORDER BY created_at DESC))[1] AS customer_name,
     COUNT(*)::int AS subscriptions,
     MAX(created_at) AS latest
     FROM blofy_stream_distributor_issues
@@ -307,7 +307,7 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
       AND (customer_phone<>'' OR customer_name<>'')
       AND ($2::text='' OR customer_phone ILIKE '%'||$2||'%'
         OR customer_name ILIKE '%'||$2||'%')
-    GROUP BY customer_phone,COALESCE(NULLIF(customer_name,''),customer_phone)
+    GROUP BY COALESCE(NULLIF(customer_phone,''),'name:'||lower(customer_name))
     ORDER BY MAX(created_at) DESC LIMIT 100`,[actor.id,term])).rows;
   return {ok:true,items:rows.map(x=>({
     name:String(x.customer_name||'').slice(0,80),
