@@ -12,6 +12,8 @@ permissions:
   contents: write
   actions: read
 
+# Final QA gate: only sign after the same commit passes local AI tests and
+# isolated gateway HTTP-auth smoke tests; never publish to the customer updater.
 concurrency:
   group: blofy-stream-55-8-16-private-owner-signing
   cancel-in-progress: false
