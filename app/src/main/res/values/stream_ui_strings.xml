@@ -86,4 +86,6 @@
     <string name="stream_catalog_sort_year">Sort: Year</string>
     <string name="stream_home_recent">Recently watched</string>
     <string name="stream_home_recent_hint">Titles you opened recently</string>
+    <string name="stream_search_actors_hint">Search by movie, series, actor or director name. Cast results appear when provider credits are available.</string>
+    <string name="stream_search_cast_results">Matches for cast or director: %1$d</string>
 </resources>
