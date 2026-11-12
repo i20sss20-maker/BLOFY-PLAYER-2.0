@@ -212,6 +212,8 @@ test('resellers have dedicated hashed passwords, isolated sessions and limited s
  assert.equal(f.distributors[0].credits,3);
  assert.equal(f.distributors[0].issued_count,1);
  assert.equal(f.calls[0].data.quantity,1);
+ assert.equal(f.calls[0].data.maxConnections,1,'distributor always issues a single connection');
+ assert.equal(f.issues[0].max_connections,1,'ledger records actual connection count');
  assert.equal(f.calls[0].data.channel,'app');
  assert.equal(f.calls[0].data.sourceId,f.salehId);
  const repeat=await f.manager.issue(session.token,{kind:'app',durationDays:30,
@@ -244,16 +246,18 @@ test('definitive issuance rejection refunds stock; credentials cannot change sou
  assert.equal(f.distributors[0].credits,1);
  assert.equal(f.issues[0].status,'failed');
  await assert.rejects(f.manager.issue(login.token,{kind:'app',durationDays:30,
-   maxConnections:10,requestId:crypto.randomUUID()}),/distributor_connections_invalid/);
+   maxConnections:10,requestId:crypto.randomUUID()}),/distributor_issuance_rejected/);
+ assert.equal(f.calls.at(-1).data.maxConnections,1,
+   'even a forged ten-connection request is restricted to one');
  await assert.rejects(f.manager.issue(login.token,{kind:'app',durationDays:0,
    maxConnections:1,requestId:crypto.randomUUID()}),/distributor_days_invalid/);
 });
 
 
 test('month-unit credits are charged for the chosen term; a free day costs zero',()=>{
- const cases=[[1,0],[30,1],[90,3],[180,6],[365,12],[730,24]];
+ const cases=[[1,0],[30,1],[90,3],[180,6],[365,12]];
  for(const [days,credits] of cases)assert.equal(distributorPlanCost(days),credits);
- for(const duration of [0,2,7,60,366,731,Infinity,-1,null])
+ for(const duration of [0,2,7,60,366,730,731,Infinity,-1,null])
   assert.throws(()=>distributorPlanCost(duration),/distributor_plan_invalid/);
 });
 test('annual code deducts exactly twelve month credits and is locked to saleh',async()=>{
@@ -388,4 +392,19 @@ test('re-entry is free, one-use and repeatable by owner only, tied to saleh',asy
  f.setSource(false);
  await assert.rejects(f.manager.relogin(t,{issueId:one.issue.id,
   requestId:crypto.randomUUID()}),/distributor_saleh_source_unavailable/);
+});
+
+test('distributor never issues or renews for two years', async()=>{
+ const f=fixture();
+ const admin=await f.manager.createAdmin({name:'Year Limit Store',username:'year-limit-store',credits:100});
+ const session=await f.manager.login({username:'year-limit-store',password:admin.password});
+ await assert.rejects(f.manager.issue(session.token,{kind:'xtream',durationDays:730,
+  requestId:crypto.randomUUID()}),/(distributor_days_invalid|distributor_plan_invalid)/);
+ const existing=await f.manager.issue(session.token,{kind:'app',durationDays:30,
+  requestId:crypto.randomUUID(),maxConnections:8});
+ assert.equal(f.calls[0].data.maxConnections,1);
+ assert.equal(f.distributors[0].credits,99);
+ await assert.rejects(f.manager.renew(session.token,{issueId:existing.issue.id,
+  days:730,requestId:crypto.randomUUID()}),/distributor_plan_invalid/);
+ assert.equal(f.distributors[0].credits,99);
 });
