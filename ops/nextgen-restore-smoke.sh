@@ -12,6 +12,15 @@ fi
 for tool in psql pg_dump pg_restore createdb dropdb; do
   command -v "$tool" >/dev/null || { echo "Missing PostgreSQL client: $tool" >&2; exit 21; }
 done
+# A newer pg_dump emits SET commands that an older server cannot restore.
+# Require the same major version for this fixture so the proof is meaningful.
+client_major="$(pg_dump --version | sed -nE 's/^.*\) ([0-9]+)\.[0-9]+.*$/\1/p')"
+server_num="$(psql -X -At -d postgres -c 'SHOW server_version_num')"
+server_major="$((server_num / 10000))"
+if [[ -z "$client_major" || "$client_major" != "$server_major" ]]; then
+  echo "Refusing restore drill: pg_dump major ${client_major:-unknown} differs from isolated server major $server_major" >&2
+  exit 24
+fi
 suffix="${RANDOM}${RANDOM}"
 source="blofy_nextgen_source_${suffix}"
 target="blofy_nextgen_restore_${suffix}"
