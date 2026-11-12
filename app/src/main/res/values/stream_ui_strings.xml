@@ -67,6 +67,7 @@
     <string name="stream_ui_unauthorized_error">Session unauthorized. Check subscription status or contact support.</string>
     <string name="stream_ui_content_missing_error">The requested item is unavailable at the source (404/410). Check the channel or episode before retrying.</string>
     <string name="stream_ui_rate_limited_error">The source is limiting requests (429). Wait before retrying; avoid repeated checks.</string>
+    <string name="stream_ui_source_restricted_error">The source denied this connection (456). Check provider entitlement and connection limits; do not repeatedly retry.</string>
     <string name="stream_ui_server_error">The server returned an error. Try again later.</string>
     <string name="stream_ui_decoder_error">This video format is not supported on this device. Try another channel or quality.</string>
     <string name="stream_ui_generic_error">Could not connect. Try updating the app or check your network.</string>
