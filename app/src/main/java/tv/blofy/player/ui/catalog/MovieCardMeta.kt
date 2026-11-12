@@ -39,16 +39,19 @@ internal object MovieCardMeta {
         cachedDetailGenres: List<String> = emptyList(),
         arabic: Boolean = false
     ): String {
-        if (item.kind != "movie") {
-            return listOfNotNull(
-                item.year?.takeIf(String::isNotBlank),
-                item.genre?.takeIf(String::isNotBlank)?.substringBefore(',')
-            ).plus(badges).distinct().joinToString("  •  ")
+        if (item.kind != "movie" && item.kind != "series") {
+            return listOfNotNull(item.year?.takeIf(String::isNotBlank))
+                .plus(badges).distinct().joinToString("  •  ")
         }
-        // A neutral "Movie" only when the content provider has no genre yet,
-        // so film cards never have an unexplained blank metadata line.
-        val first = genre(item, categoryName, cachedDetailGenres, arabic) ?: if (arabic) "فيلم" else "Movie"
-        return (listOf(first) + badges)
-            .filter(String::isNotBlank).distinct().joinToString("  •  ")
+        // Series and movies use the same authoritative category/detail fallback.
+        // Do not translate arbitrary provider strings or guess genres from titles.
+        val first = genre(item, categoryName, cachedDetailGenres, arabic)
+            ?: if (item.kind == "series") (if (arabic) "مسلسل" else "Series")
+            else (if (arabic) "فيلم" else "Movie")
+        val fields = if (item.kind == "series") {
+            listOfNotNull(first, item.year?.takeIf(String::isNotBlank))
+        } else listOf(first)
+        return (fields + badges).filter(String::isNotBlank)
+            .distinct().joinToString("  •  ")
     }
 }
