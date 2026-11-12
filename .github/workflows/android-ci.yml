@@ -127,9 +127,25 @@ jobs:
       - name: Verify actual catalog queries on 200k rows
         run: python3 tools/check_catalog_queries.py
       - name: Verify Play Xiaomi-design UX / STREAM candidate 2000088 manifest and TV routes
+        # Keep the Play release gate for normal main branch PRs.
+        # For STREAM 55.8.13, verify the correct code-only package instead.
+        if: ${{ github.base_ref != 'release/stream-55-8-13-qoe-owner-qa-20261111' }}
         env:
           BLOFY_EXPECTED_PLAY_VERSION_CODE: "2000088"
         run: python3 tools/verify_play_2000073.py
+      - name: Verify STREAM 55.8.13 identity and no unwanted player fallback
+        if: ${{ github.event_name == 'pull_request' && github.base_ref == 'release/stream-55-8-13-qoe-owner-qa-20261111' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'versionCode = 2000090' app/build.gradle.kts
+          grep -Fq 'versionName = "2.0.0-rc07.55.8.13"' app/build.gradle.kts
+          grep -Fq 'applicationIdSuffix = ".stream"' app/build.gradle.kts
+          grep -Fq 'buildConfigField("boolean", "CODE_ONLY_LOGIN", "true")' app/build.gradle.kts
+          grep -Fq 'audioRecoveryForItem' app/src/main/java/tv/blofy/player/ui/player/PlayerActivity.kt
+          grep -Fq 'StreamAudioRecoveryPolicy.shouldAttempt(' app/src/main/java/tv/blofy/player/ui/player/PlayerActivity.kt
+          grep -Fq 'audioDisabled' app/src/main/java/tv/blofy/player/core/diagnostics/StreamAudioRecoveryPolicy.kt
+          test -s app/src/test/java/tv/blofy/player/core/diagnostics/StreamAudioRecoveryPolicyTest.kt
       - name: Test lint and assemble
         shell: bash
         run: |
