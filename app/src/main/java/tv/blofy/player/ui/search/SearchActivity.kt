@@ -401,7 +401,11 @@ class SearchActivity : AppCompatActivity() {
         }
         if (input.text?.toString()?.trim() != q || activeKind != selectedKind) return
         if (expanded.isEmpty()) {
+            // The gateway DID respond: this is a catalog-coverage problem,
+            // not a Groq/network failure. Surface its suggestions separately
+            // so the user can tell that AI works, without implying availability.
             showAiStatus(getString(R.string.stream_ai_no_catalog_match))
+            showAiReferenceSuggestions(ai)
             return
         }
         val merged = sections.map { (kind, local) ->
@@ -413,6 +417,9 @@ class SearchActivity : AppCompatActivity() {
         renderSections(merged, selectedKind, provider.id, provider.liveFormat,
             castCount = castCount, moveFocus = false, aiCount = expanded.size)
         showAiStatus(getString(R.string.stream_ai_found, expanded.size))
+        // Verified playable titles are above. Unmatched AI filmography names
+        // are only informational and never rendered as playable posters.
+        showAiReferenceSuggestions(ai, matched = expanded.map { it.name })
     }
 
     /** Bound LLM suggestions to ACTUAL Xtream catalog items. No generated titles
@@ -461,15 +468,27 @@ class SearchActivity : AppCompatActivity() {
                 collected.addAll(matches.filter { !it.locked })
             }
         }
-        if (intent.year != null && collected.isEmpty() && intent.genre.isBlank() &&
-            intent.suggestedTitles.isEmpty()) {
+        if (intent.year != null && collected.size < 12 && intent.person.isBlank()) {
             // "أفلام ٢٠٢٦" on Arabic TV keyboards should find actual 2026
             // catalog rows, even when there is no title or genre filter.
             for (kind in kinds) {
-                collected.addAll(
-                    repository.searchKind(providerId, kind, intent.year.toString(), 60)
-                        .filter { it.year?.toIntOrNull() == intent.year && !it.locked }
-                )
+                val yearText = intent.year.toString()
+                val exact = repository.searchKind(providerId, kind, yearText, 90)
+                val found = exact.filter {
+                    !it.locked && (it.year?.toIntOrNull() == intent.year ||
+                        it.name.contains(yearText))
+                }
+                collected.addAll(found)
+                // A provider may omit the year from its FTS index during a
+                // catalog migration; permit one bounded SQL fallback on an
+                // explicit AI action, never on every keyboard keystroke.
+                if (found.isEmpty()) {
+                    collected.addAll(dao.searchCatalog(providerId, kind, yearText, 40)
+                        .filter {
+                            !it.locked && (it.year?.toIntOrNull() == intent.year ||
+                                it.name.contains(yearText))
+                        })
+                }
             }
         }
         if (intent.title.isNotBlank() && intent.person.isBlank() && collected.isEmpty()) {
@@ -479,8 +498,58 @@ class SearchActivity : AppCompatActivity() {
         }
         return collected.asSequence()
             .filter { it.providerId == providerId && !it.locked }
-            .filter { intent.year == null || it.year?.toIntOrNull() == intent.year }
+            .filter {
+                intent.year == null || intent.person.isNotBlank() ||
+                    it.year?.toIntOrNull() == intent.year || it.name.contains(intent.year.toString())
+            }
             .distinctBy { it.key }.take(24).toList()
+    }
+
+    /**
+     * Model titles do NOT establish provider availability. Clearly separate
+     * them from verified playable titles and let D-pad users look up an
+     * individual name without opening a fake/nonexistent video.
+     */
+    private fun showAiReferenceSuggestions(
+        interpretation: StreamAiSearchClient.Intent,
+        matched: List<String> = emptyList()
+    ) {
+        if (interpretation.suggestedTitles.isEmpty()) return
+        val alreadyPlayable = matched.map(ArabicSearchNormalizer::normalize).toSet()
+        val suggestions = interpretation.suggestedTitles.asSequence()
+            .filter { name ->
+                name.length >= 3 && ArabicSearchNormalizer.normalize(name) !in alreadyPlayable
+            }
+            .distinctBy(ArabicSearchNormalizer::normalize).take(10).toList()
+        if (suggestions.isEmpty()) return
+        val section = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+            background = BlofyTvDesign.glassSurface(dp(18).toFloat())
+        }
+        section.addView(TextView(this).apply {
+            text = getString(R.string.stream_ai_reference_suggestions)
+            textSize = 17f
+            setTextColor(Color.WHITE)
+            typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
+            setPadding(dp(6), dp(4), dp(6), dp(10))
+        })
+        suggestions.forEach { name ->
+            section.addView(Button(this).apply {
+                text = name
+                textSize = 13f
+                isAllCaps = false
+                gravity = Gravity.CENTER_VERTICAL or Gravity.START
+                setOnClickListener {
+                    input.setText(name)
+                    input.setSelection(input.length())
+                    searchRunner.submit(name, false)
+                }
+            }, LinearLayout.LayoutParams(-1, dp(48)).apply { bottomMargin = dp(5) })
+        }
+        results.addView(section, LinearLayout.LayoutParams(-1, -2).apply {
+            topMargin = dp(10)
+        })
     }
 
     private fun renderSections(
