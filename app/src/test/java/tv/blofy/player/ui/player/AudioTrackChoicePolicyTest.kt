@@ -6,7 +6,7 @@ import org.junit.Test
 class AudioTrackChoicePolicyTest {
     @Test fun audioDialogStartsWithAutomaticAndNeverOffsetsTrackSelection() {
         val p = AudioTrackChoicePolicy
-        assertEquals(p.Choice.AUTO, p.choice(audio = true, subtitles = false,
+        assertEquals(AudioTrackChoicePolicy.Choice.AUTO, p.choice(audio = true, subtitles = false,
             option = 0, availableTracks = 2))
         assertEquals(0, p.trackIndex(true, false, 1, 2))
         assertEquals(1, p.trackIndex(true, false, 2, 2))
@@ -15,7 +15,7 @@ class AudioTrackChoicePolicyTest {
 
     @Test fun subtitleOffRemainsFirstAndDoesNotChangeExistingTrackMapping() {
         val p = AudioTrackChoicePolicy
-        assertEquals(p.Choice.OFF, p.choice(false, true, 0, 1))
+        assertEquals(AudioTrackChoicePolicy.Choice.OFF, p.choice(false, true, 0, 1))
         assertEquals(0, p.trackIndex(false, true, 1, 1))
     }
 
