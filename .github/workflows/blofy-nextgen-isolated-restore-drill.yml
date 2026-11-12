@@ -1,0 +1,47 @@
+name: BLOFY STREAM NextGen - isolated PostgreSQL restore drill
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/blofy-nextgen-integrated-diagnostics-20261112
+    paths:
+      - 'ops/nextgen-restore-smoke.sh'
+      - '.github/workflows/blofy-nextgen-isolated-restore-drill.yml'
+permissions:
+  contents: read
+jobs:
+  isolated-restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ephemeral-synthetic-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: ephemeral-synthetic-only
+      BLOFY_RESTORE_SMOKE_ISOLATED: 'YES'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PostgreSQL command-line utilities
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+      - name: Restore synthetic subscription ledger into a fresh isolated database
+        shell: bash
+        run: bash ops/nextgen-restore-smoke.sh
+      - name: Clarify scope
+        run: |
+          echo 'Synthetic restore pipeline passed only if the prior step succeeded.'
+          echo 'Live Railway Postgres backup/PITR/restore remains unverified.'
