@@ -26,10 +26,7 @@ internal object HomeWatchHistory {
         val recent = linkedMapOf<String, StreamEntity>()
         val resumeStates = linkedMapOf<String, WatchStateEntity>()
         val parents = mutableMapOf<String, StreamEntity?>()
-        val states = dao.watchStates(providerId).asSequence()
-            .filter { it.providerId == providerId && it.positionMs > 0L && it.kind != "live" }
-            .sortedByDescending { it.updatedAt }
-            .take(MAX_STATE_LOOKUPS)
+        val states = dao.recentWatchStates(providerId, MAX_STATE_LOOKUPS).asSequence()
 
         for (state in states) {
             var stream = if (state.kind == "episode") null else dao.stream(state.contentKey)
