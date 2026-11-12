@@ -15,7 +15,8 @@ function safeLabel(value,index){
   return label;
 }
 export function summarizeStreamSourceCapacity(
-  sources=[],accountsBySource=null,{now=Date.now(),maxAgeMs=3600000}={}
+  sources=[],accountsBySource=null,{now=Date.now(),maxAgeMs=3600000,
+    gatewayDirectMedia=null}={}
 ){
   if(!Array.isArray(sources)||!Number.isSafeInteger(now)||now<0||
       !Number.isInteger(maxAgeMs)||maxAgeMs<60000||maxAgeMs>86400000)
@@ -29,6 +30,19 @@ export function summarizeStreamSourceCapacity(
       const v={total:safeCount(item?.total),active:safeCount(item?.active)};
       if(key==='')unboundActiveAccounts+=v.active;
       else if(UUID.test(key))accounts.set(key,v);
+    }
+  }
+  // Gauges are for the current portal process only; active HTTP transfers
+  // are not unique viewers, provider upstream sessions, edge or HLS requests.
+  const gaugeAvailable=gatewayDirectMedia?.ok===true;
+  const gaugeBySource=new Map();
+  if(gaugeAvailable&&Array.isArray(gatewayDirectMedia.bySource)){
+    for(const row of gatewayDirectMedia.bySource.slice(0,64)){
+      const id=String(row?.sourceId||'').toLowerCase();
+      if(UUID.test(id))gaugeBySource.set(id,{
+        total:safeCount(row.activeDirectHttpTransfers),
+        live:safeCount(row.activeDirectLiveHttpTransfers)
+      });
     }
   }
   const seen=new Set(),items=[];
@@ -71,6 +85,7 @@ export function summarizeStreamSourceCapacity(
     else if(level==='unknown')unknown++;
     else if(level==='snapshot_only')okSnapshot++;
     const assigned=accounts.get(id);
+    const measured=gaugeBySource.get(id.toLowerCase());
     items.push({
       id,name:safeLabel(source.name,items.length+1),
       enabled:source.enabled===true,status,level,flags:flags.slice(0,8),
@@ -80,6 +95,12 @@ export function summarizeStreamSourceCapacity(
       sourceReportsRestreamer:details.restreamer,
       activeGatewayAccounts:countsAvailable?(assigned?.active??0):null,
       totalGatewayAccounts:countsAvailable?(assigned?.total??0):null,
+      activeDirectHttpMediaTransfers:gaugeAvailable?(measured?.total??0):null,
+      activeDirectLiveHttpTransfers:gaugeAvailable?(measured?.live??0):null,
+      // Counts are from accepted direct gateway responses only.
+      directTransferSampleScope:'this_portal_process_direct_http_media_only',
+      directTransferCountsReliable:gaugeAvailable?
+        gatewayDirectMedia.countsReliable===true:null,
       // These fields explicitly guard against treating accounts as viewers.
       accountsAreNotConcurrentSessions:true,
       providerConnectionsAreSnapshotOnly:true,
@@ -95,9 +116,16 @@ export function summarizeStreamSourceCapacity(
     metricsFreshnessWindowMs:maxAgeMs,
     sourceCount:items.length,truncated:sources.length>items.length,
     accountCountsAvailable:countsAvailable,
+    directHttpTransferMeasurementAvailable:gaugeAvailable,
+    directHttpTransferCountsReliable:gaugeAvailable?
+      gatewayDirectMedia.countsReliable===true:null,
+    activeDirectHttpMediaTransfers:gaugeAvailable?
+      safeCount(gatewayDirectMedia.activeDirectHttpTransfers):null,
+    activeDirectLiveHttpTransfers:gaugeAvailable?
+      safeCount(gatewayDirectMedia.activeDirectLiveHttpTransfers):null,
     unboundActiveGatewayAccounts:unboundActiveAccounts,
     summary:{restricted,warning,unknown,providerSnapshotsWithinWindow:okSnapshot,
       monitoredSources:items.length},
     sources:items,
-    warning:'Gateway subscriptions are not simultaneous player streams. Upstream limits are provider-reported cached data, not measured or a redistribution license.'};
+    warning:'Gateway subscriptions are not simultaneous player streams. Current direct HTTP transfers include only this portal process, not redirects/fanout, edge, HLS segments, other replicas or distinct viewers. Provider limits are cached, not a redistribution license.'};
 }
