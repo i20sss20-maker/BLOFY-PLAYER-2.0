@@ -3123,12 +3123,13 @@ async function unifiedStreamBridge(req,res,url){
     return json(res,201,await streamDistributors.createAdmin(await readJson(req)),
       {'cache-control':'no-store'});
   const distributorAdminAction=p.match(
-    /^\/internal\/blofy-stream\/distributors\/([0-9a-f-]{36})\/(credits|status|reset)$/i);
+    /^\/internal\/blofy-stream\/distributors\/([0-9a-f-]{36})\/(credits|status|reset|limits)$/i);
   if(req.method==='POST'&&distributorAdminAction){
     const id=distributorAdminAction[1],cmd=distributorAdminAction[2];
     const payload=await readJson(req);
     const settings=cmd==='credits'?{credits:payload.credits}:
-      cmd==='status'?{enabled:payload.enabled===true}:{resetPassword:true};
+      cmd==='status'?{enabled:payload.enabled===true}:
+      cmd==='limits'?{dailyLimit:payload.dailyLimit}:{resetPassword:true};
     return json(res,200,await streamDistributors.setAdmin(id,settings),
       {'cache-control':'no-store'});
   }
@@ -3143,6 +3144,12 @@ async function unifiedStreamBridge(req,res,url){
     if(command==='logout')return json(res,200,await streamDistributors.logout(token));
     if(command==='list')return json(res,200,
       await streamDistributors.issued(token,payload),{'cache-control':'no-store'});
+    if(command==='analytics')return json(res,200,
+      await streamDistributors.analytics(token),{'cache-control':'no-store'});
+    if(command==='activity')return json(res,200,
+      await streamDistributors.activity(token,payload),{'cache-control':'no-store'});
+    if(command==='export')return json(res,200,
+      await streamDistributors.exportIssues(token),{'cache-control':'no-store'});
     if(command==='clients')return json(res,200,
       await streamDistributors.clients(token,payload),{'cache-control':'no-store'});
     if(command==='customer')return json(res,200,
