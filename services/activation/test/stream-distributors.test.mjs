@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import {createStreamDistributors,distributorPlanCost} from '../src/stream-distributors.mjs';
 
 function fixture(){
- const distributors=[],sessions=[],issues=[],calls=[],statements=[],actions=[];
+ const distributors=[],sessions=[],issues=[],calls=[],statements=[],actions=[],creditEvents=[];
  const accounts=[],codes=[],events=[];
  const now=new Date('2026-11-12T04:00:00Z');
  const accountId=crypto.randomUUID(),codeId=crypto.randomUUID();
@@ -28,8 +28,62 @@ function fixture(){
   if(sql.includes('INSERT INTO blofy_stream_distributors')){
    const row={id:args[0],display_name:args[1],username:args[2],
      password_hash:args[3],credits:args[4],issued_count:0,
-     enabled:true,created_at:now};
+     enabled:true,daily_issue_limit:100,created_at:now};
    distributors.push(row);return {rows:[row]};
+  }
+
+  if(sql.includes('INSERT INTO blofy_stream_distributor_credit_events')){
+   const type=(sql.match(/'(opening|adjustment|issue|refund|renew)'/)||[])[1];
+   if(!type)throw Error('Credit event missing type: '+sql);
+   const issueId=['opening','adjustment'].includes(type)?null:args[2];
+   const delta=type==='opening'?args[2]:type==='adjustment'?args[2]:args[3];
+   const balance=type==='opening'?args[2]:type==='adjustment'?args[3]:args[4];
+   creditEvents.push({id:args[0],distributor_id:args[1],issue_id:issueId,
+    type,delta,balance_after:balance,details:{},created_at:now});
+   return {rows:[]};
+  }
+  if(sql.includes('FROM blofy_stream_distributor_credit_events')&&sql.includes('ORDER BY')){
+   return {rows:creditEvents.filter(x=>x.distributor_id===args[0]).reverse()};
+  }
+  if(sql.includes('SET daily_issue_limit=$2')){
+   const row=distributors.find(x=>x.id===args[0]);
+   if(!row)return {rows:[]};row.daily_issue_limit=args[1];return {rows:[row]};
+  }
+  if(sql.includes('FROM blofy_stream_distributor_issues')&&
+    sql.includes("INTERVAL '24 hours'")&&
+    sql.includes("status IN ('pending','done','review')")){
+   return {rows:[{count:issues.filter(x=>x.distributor_id===args[0]&&
+     ['pending','done','review'].includes(x.status)).length}]};
+  }
+  if(sql.includes('AS trials_today')&&sql.includes('FROM blofy_stream_distributor_issues')){
+   const items=issues.filter(x=>x.distributor_id===args[0]);
+   return {rows:[{today:items.filter(x=>x.status==='done').length,
+     month:items.filter(x=>x.status==='done').length,
+     trials_today:items.filter(x=>x.duration_days===1&&x.status==='done').length,
+     trials_total:items.filter(x=>x.duration_days===1&&x.status==='done').length,
+     paid_total:items.filter(x=>x.duration_days>1&&x.status==='done').length,
+     spent_month:items.filter(x=>x.status==='done').reduce((sum,x)=>sum+x.credit_cost,0),
+     under_review:items.filter(x=>['pending','review'].includes(x.status)).length}]};
+  }
+  if(sql.includes("action='renew'")&&sql.includes('SUM(credit_cost)')){
+   const items=actions.filter(x=>x.distributor_id===args[0]&&x.action==='renew');
+   return {rows:[{renewals:items.length,credits:items.reduce((n,x)=>n+(x.credit_cost||0),0)}]};
+  }
+  if(sql.includes('COUNT(DISTINCT i.id)')&&sql.includes('JOIN blofy_stream_distributor_actions')){
+   const ids=new Set(actions.filter(x=>x.distributor_id===args[0]&&x.action==='renew')
+      .map(x=>x.issue_id));
+   return {rows:[{converted:issues.filter(x=>x.distributor_id===args[0]&&
+      x.duration_days===1&&ids.has(x.id)).length}]};
+  }
+  if(sql.includes('LEFT JOIN blofy_xtream_gateway_duration_codes')&&sql.includes('LIMIT 2001')){
+   const rows=issues.filter(x=>x.distributor_id===args[0]).map(x=>({
+     ...x,code_hint:x.kind==='app'?'59••••29':null,
+     code_activated_at:x.kind==='app'?codes[0].redeemed_at:null,
+     code_revoked_at:null,code_bound:x.kind==='app',
+     admin_relogin_count:0,account_enabled:true,
+     subscription_expires_at:accounts[0].expires_at
+   }));
+   return {rows};
   }
   if(sql.includes("FROM blofy_xtream_servers")&&sql.includes("lower(btrim(name))='saleh'"))
    return {rows:sourceReady?[{id:salehId,name:'saleh'}]:[]};
@@ -190,7 +244,7 @@ function fixture(){
    revealCode:async id=>({status:id===codeId?200:404,body:{ok:true,code:issuedToken}}),
    revealXtream:async id=>({status:id===accountId?200:404,body:{ok:true,credentials:credential}})
  });
- return {manager,distributors,issues,accounts,codes,actions,events,calls,sessions,statements,libraryRows,salehId,
+ return {manager,distributors,issues,accounts,codes,actions,events,creditEvents,calls,sessions,statements,libraryRows,salehId,
   setFail:v=>{failCode=v},setSource:v=>{sourceReady=v}};
 }
 test('resellers have dedicated hashed passwords, isolated sessions and limited stock',async()=>{
