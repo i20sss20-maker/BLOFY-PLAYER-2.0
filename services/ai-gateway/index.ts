@@ -283,9 +283,9 @@ if (Bun.env.BLOFY_AI_BOOT_PROBE === "translation") {
       const result = await translateDetails(
         "The Secret Garden", "A young girl discovers a neglected garden."
       );
-      bootProbeStatus = /[\\u0600-\\u06FF]/.test(
-        result.translatedTitle + result.translatedOverview
-      ) ? "translation_passed" : "translation_not_arabic";
+      const containsArabic = (result.translatedTitle + result.translatedOverview)
+        .split("").some(char => char.charCodeAt(0) >= 0x0600 && char.charCodeAt(0) <= 0x06FF);
+      bootProbeStatus = containsArabic ? "translation_passed" : "translation_not_arabic";
       console.info("BLOFY_AI_BOOT_PROBE", "provider=" + activeProvider(),
         "status=" + bootProbeStatus);
     } catch (error) {
