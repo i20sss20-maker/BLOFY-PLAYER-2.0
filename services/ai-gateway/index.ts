@@ -103,6 +103,8 @@ async function interpret(text: string, language: string): Promise<AiResult> {
     "film or series ORIGINAL TITLES where you are confident the person participated.",
     "Never invent titles. For less-known names or ambiguous queries use empty suggestedTitles.",
     "For short bare personal full names e.g. 'Tom Cruise', prefer actor intent.",
+    "For Arabic actor names, resolve transliterations carefully to known English spelling.",
+    "Recommend well-known ORIGINAL ENGLISH film titles for a named actor; no fabricated movies.",
     "For generic movie titles use title intent. For 'افلام توم كروز' prefer actor.",
     "Do not output commentary, markdown, web URLs, PII or streaming links.",
     "JSON fields: intent one of actor/director/title/genre/mixed;",
@@ -130,7 +132,8 @@ async function interpret(text: string, language: string): Promise<AiResult> {
           {role: "user", content: text}
         ],
         temperature: 0.1,
-        max_completion_tokens: 1024,
+        reasoning_effort: "low",
+        max_completion_tokens: 1350,
         response_format: {type: "json_object"},
         stream: false
       })
