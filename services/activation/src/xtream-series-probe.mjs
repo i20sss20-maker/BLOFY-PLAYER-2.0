@@ -1,25 +1,30 @@
 // Admin-only Xtream diagnostics. No upstream URLs, passwords or video bytes
 // leave the probe. These helpers describe results without provider secrets.
 import { XTREAM_DENIAL_MESSAGES,validXtreamDenialHint } from './xtream-provider-denial.mjs';
+import {normalizeProviderEpisodeSeasons,sourceEpisodeId} from './xtream-series-resolver.mjs';
 const EXTS = /^[a-z0-9]{2,8}$/;
-const IDS = /^[A-Za-z0-9._-]{1,128}$/;
+// Use the same safe IDs as the player-side mapping, including provider
+// episode_id and stream_id alternatives (never a TMDB/series metadata ID).
+const safeId=row=>sourceEpisodeId(row);
+const episodeGroups=payload=>{
+ const normalized=normalizeProviderEpisodeSeasons(payload?.episodes);
+ return normalized?Object.entries(normalized).slice(0,200):[];
+};
 
 export function xtreamEpisodeSamples(payload, limit = 2) {
-  const groups = payload && typeof payload === 'object' ? payload.episodes : null;
-  if (!groups || typeof groups !== 'object') return {seasonCount:0,episodeCount:0,samples:[]};
-  const seasons = Array.isArray(groups) ? [['1',groups]] : Object.entries(groups);
-  let seasonCount=0, episodeCount=0;
-  const samples=[];
-  for (const [,rows] of seasons.slice(0,200)) {
+  const seasons=episodeGroups(payload);
+  let seasonCount=0,episodeCount=0;
+  const samples=[],seen=new Set();
+  const budget=Number.isSafeInteger(Number(limit))?Math.max(0,Math.min(6,Number(limit))):2;
+  for (const [,rows] of seasons) {
     if (!Array.isArray(rows)) continue;
     seasonCount++;
     for (const row of rows.slice(0,3000)) {
-      if (!row || typeof row !== 'object') continue;
-      const id=String(row.id??'').trim();
-      if (!IDS.test(id)) continue;
-      episodeCount++;
-      if (samples.length<limit) {
-        const extension=String(row.container_extension||'mp4').replace(/^\./,'').toLowerCase();
+      const id=safeId(row);
+      if(!id||seen.has(id))continue;
+      seen.add(id);episodeCount++;
+      if(samples.length<budget){
+        const extension=String(row.container_extension||'mp4').replace(/^\\./,'').toLowerCase();
         samples.push({id,extension:EXTS.test(extension)?extension:'mp4'});
       }
     }
@@ -30,19 +35,16 @@ export function xtreamEpisodeSamples(payload, limit = 2) {
 // A healthy series can contain a missing first episode. Probe only a few
 // distinct seasons/positions before judging the entire series unavailable.
 export function xtreamEpisodePlaybackCandidates(payload, limit=3, {withPositions=false}={}) {
-  const groups=payload&&typeof payload==='object'?payload.episodes:null;
-  if(!groups||typeof groups!=='object')return[];
-  // Episode names and source IDs are never exposed to clients. The admin
-  // check receives only the bounded season and episode position, allowing
-  // the operator to identify a broken entry without guessing file URLs.
-  const seasons=(Array.isArray(groups)?[['1',groups]]:Object.entries(groups))
-    .filter(([,rows])=>Array.isArray(rows)).slice(0,200);
+  // Normalize wrapped season objects, flat arrays with season numbers, and
+  // alternate episode IDs exactly like the playback gateway.
+  const seasons=episodeGroups(payload).filter(([,rows])=>Array.isArray(rows));
+  // Episode names and source IDs are never returned to public clients.
   const max=Math.max(0,Math.min(6,Number(limit)||0));
   if(!max)return[];
   const seen=new Set(),selected=[];
   const pick=(row,season,index)=>{
-    const id=String(row?.id??'').trim();
-    if(!IDS.test(id)||seen.has(id))return;
+    const id=safeId(row);
+    if(!id||seen.has(id))return;
     const extension=String(row.container_extension||'mp4').replace(/^\./,'').toLowerCase();
     const seasonNumber=/^\d{1,3}$/.test(season)?Number(season):null;
     const explicitEpisode=Number(row.episode_num);
