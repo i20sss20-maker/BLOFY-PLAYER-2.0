@@ -292,6 +292,9 @@ class HomeActivity : AppCompatActivity() {
         }
         homeResumed = true
         if (homeFeed != null) {
+            // The user may have finished a film or added a favorite in Details.
+            // STREAM used to skip the playback-history refresh entirely.
+            if (BuildConfig.CODE_ONLY_LOGIN && displayedHomeData != null) loadHomeExperience()
             refreshScheduler.start()
             if (!BuildConfig.CODE_ONLY_LOGIN) historyObserver.start()
             lifecycleScope.launch {
@@ -384,6 +387,11 @@ class HomeActivity : AppCompatActivity() {
         val arabic: List<StreamEntity>,
         val ultraHd: List<StreamEntity>,
         val featured: StreamEntity?,
+        val recommended: List<StreamEntity> = emptyList(),
+        val genreAction: List<StreamEntity> = emptyList(),
+        val genreComedy: List<StreamEntity> = emptyList(),
+        val genreDrama: List<StreamEntity> = emptyList(),
+        val continueStates: Map<String, WatchStateEntity> = emptyMap(),
         val sourceMovies: List<StreamEntity> = emptyList(),
         val sourceSeries: List<StreamEntity> = emptyList()
     )
@@ -395,9 +403,8 @@ class HomeActivity : AppCompatActivity() {
                 val dao = BlofyDatabase.get(applicationContext).dao()
                 // Home uses identity/name only; displaying local rows must not wait for Keystore.
                 val provider = dao.providersStored().first().firstOrNull() ?: return@withContext null
-                // In STREAM use the exact order in which the server delivered the
-                // original Xtream rows (stable Room rowid). No local name/rating/date
-                // sort, no artificial Top 10, favorites or rearranged category shelves.
+                // Preserve the original Xtream order for primary movie/series rows.
+                // Smart shelves below are additional, optional recommendations.
                 val sourceMovies = if (BuildConfig.CODE_ONLY_LOGIN)
                     dao.catalogPageAfterAll(provider.id, "movie", 0L, 22) else emptyList()
                 val sourceSeries = if (BuildConfig.CODE_ONLY_LOGIN)
@@ -413,7 +420,21 @@ class HomeActivity : AppCompatActivity() {
                     snapshot?.candidateKeys?.mapNotNull { dao.stream(it) }?.takeIf { it.isNotEmpty() }
                         ?: dao.latestHomeStreams(provider.id, 320)
                 }
-                val history = if (BuildConfig.CODE_ONLY_LOGIN) null else HomeWatchHistory.load(dao, provider.id)
+                val history = HomeWatchHistory.load(dao, provider.id)
+                val smartCandidates = if (BuildConfig.CODE_ONLY_LOGIN)
+                    dao.latestHomeStreams(provider.id, 240) else emptyList()
+                val smartGenres = if (BuildConfig.CODE_ONLY_LOGIN) {
+                    dao.categories(provider.id, "movie").first().associate { it.remoteId to it.name }
+                } else emptyMap()
+                val recommended = if (BuildConfig.CODE_ONLY_LOGIN)
+                    SmartHomeEngine.recommend(history.recentItems, smartCandidates, history.continueItems)
+                else emptyList()
+                val actionMovies = if (BuildConfig.CODE_ONLY_LOGIN)
+                    SmartHomeEngine.byGenre(smartCandidates, smartGenres, "action") else emptyList()
+                val comedyMovies = if (BuildConfig.CODE_ONLY_LOGIN)
+                    SmartHomeEngine.byGenre(smartCandidates, smartGenres, "comedy") else emptyList()
+                val dramaMovies = if (BuildConfig.CODE_ONLY_LOGIN)
+                    SmartHomeEngine.byGenre(smartCandidates, smartGenres, "drama") else emptyList()
                 val rated = if (BuildConfig.CODE_ONLY_LOGIN) emptyList() else all.sortedByDescending { ratingValue(it.rating) }
                     .filter { ratingValue(it.rating) > 0.0 }.take(24)
                 val arabic = if (BuildConfig.CODE_ONLY_LOGIN) emptyList() else all.filter { hasArabic(it.name) || hasArabic(it.genre.orEmpty()) || it.genre.orEmpty().contains("arab", true) }.take(20)
@@ -424,9 +445,9 @@ class HomeActivity : AppCompatActivity() {
                     providerId = provider.id,
                     providerName = provider.name,
                     heroItems = heroes,
-                    continueWatching = history?.continueItems ?: emptyList(),
-                    recentlyWatched = history?.recentItems ?: emptyList(),
-                    watchStates = history?.watchStates ?: emptyMap(),
+                    continueWatching = history.continueItems,
+                    recentlyWatched = history.recentItems,
+                    watchStates = history.watchStates,
                     latest = latest.take(22),
                     topRated = rated,
                     topTen = rated.take(10).ifEmpty { latest.take(10) },
@@ -434,6 +455,10 @@ class HomeActivity : AppCompatActivity() {
                     ultraHd = ultra,
                     featured = if (BuildConfig.CODE_ONLY_LOGIN) null else rated.firstOrNull { !it.backdrop.isNullOrBlank() }
                         ?: if (BuildConfig.CODE_ONLY_LOGIN) null else latest.firstOrNull { !it.backdrop.isNullOrBlank() },
+                    recommended = recommended,
+                    genreAction = actionMovies,
+                    genreComedy = comedyMovies,
+                    genreDrama = dramaMovies,
                     sourceMovies = sourceMovies,
                     sourceSeries = sourceSeries
                 )
@@ -603,8 +628,17 @@ class HomeActivity : AppCompatActivity() {
         actionViews.keys.filter { it.startsWith("poster_") || it.startsWith("top10_") || it.endsWith("_story") || it.startsWith("stats_") || it == "featured" }.toList().forEach { actionViews.remove(it) }
         while (feed.childCount > 1) feed.removeViewAt(1)
         if (BuildConfig.CODE_ONLY_LOGIN) {
-            // Display stored source order, not BLOFY's generated rankings, dates or
-            // regional picks. The category browser reads all original server categories.
+            // Keep the original movie/series shelves unchanged in source order.
+            // Personal sections use local playback history and source genre only.
+            if (data.continueWatching.isNotEmpty()) {
+                addShelf(feed, getString(R.string.stream_home_continue),
+                    getString(R.string.stream_home_continue_hint), "continue", data.providerId,
+                    data.continueWatching, data.watchStates)
+            }
+            if (data.recommended.isNotEmpty()) {
+                addShelf(feed, getString(R.string.stream_home_for_you),
+                    getString(R.string.stream_home_for_you_hint), "recommended", data.providerId, data.recommended)
+            }
             if (data.sourceMovies.isNotEmpty()) {
                 addShelf(feed, getString(R.string.home_movies), getString(R.string.home_movies_subtitle),
                     "movie", data.providerId, data.sourceMovies)
@@ -613,6 +647,12 @@ class HomeActivity : AppCompatActivity() {
                 addShelf(feed, getString(R.string.home_series), getString(R.string.home_series_subtitle),
                     "series", data.providerId, data.sourceSeries)
             }
+            if (data.genreAction.isNotEmpty()) addShelf(feed, getString(R.string.stream_home_action),
+                getString(R.string.stream_home_genre_hint), "action", data.providerId, data.genreAction)
+            if (data.genreComedy.isNotEmpty()) addShelf(feed, getString(R.string.stream_home_comedy),
+                getString(R.string.stream_home_genre_hint), "comedy", data.providerId, data.genreComedy)
+            if (data.genreDrama.isNotEmpty()) addShelf(feed, getString(R.string.stream_home_drama),
+                getString(R.string.stream_home_genre_hint), "drama", data.providerId, data.genreDrama)
         } else {
         if (data.continueWatching.isNotEmpty()) {
             addShelf(feed, getString(R.string.home_continue_watching), getString(R.string.home_continue_subtitle), "continue", data.providerId, data.continueWatching, data.watchStates)
