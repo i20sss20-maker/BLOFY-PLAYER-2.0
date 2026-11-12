@@ -49,10 +49,10 @@ android {
         targetSdk = 36
         // Owner QA UI update over versionCode 2000077. Before production Play upload, confirm
         // this code is higher than every previously uploaded Play artifact.
-        versionCode = 2000095
+        versionCode = 2000096
         // Candidate in the isolated STREAM 55.8.14 QA branch only.
         // Main/Play and the public internal updater are not changed by this branch.
-        versionName = "2.0.0-rc07.55.8.18" // STREAM build type appends -STREAM
+        versionName = "2.0.0-rc07.55.8.19" // STREAM build type appends -STREAM
         manifestPlaceholders["blofyApplicationLabel"] = "@string/app_name"
         manifestPlaceholders["blofyApplicationIcon"] = "@drawable/blofy_logo"
         manifestPlaceholders["blofyApplicationBanner"] = "@drawable/blofy_tv_banner"
