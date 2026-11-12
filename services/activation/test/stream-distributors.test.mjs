@@ -43,7 +43,11 @@ function fixture(){
    return {rows:[]};
   }
   if(sql.includes('FROM blofy_stream_distributor_credit_events')&&sql.includes('ORDER BY')){
-   return {rows:creditEvents.filter(x=>x.distributor_id===args[0]).reverse()};
+   const credits=creditEvents.filter(x=>x.distributor_id===args[0]);
+   const relogins=actions.filter(x=>x.distributor_id===args[0]&&x.action==='relogin')
+    .map(x=>({...x,type:'relogin',delta:0,balance_after:null,
+      issue_id:x.issue_id,details:x.result||{},created_at:now}));
+   return {rows:credits.concat(relogins).reverse()};
   }
   if(sql.includes('SET daily_issue_limit=$2')){
    const row=distributors.find(x=>x.id===args[0]);
@@ -54,6 +58,11 @@ function fixture(){
     sql.includes("status IN ('pending','done','review')")){
    return {rows:[{count:issues.filter(x=>x.distributor_id===args[0]&&
      ['pending','done','review'].includes(x.status)).length}]};
+  }
+  if(sql.includes('AS sold_count')&&sql.includes('FROM blofy_stream_distributor_issues')){
+   const rows=issues.filter(x=>x.distributor_id===args[0]&&x.status==='done');
+   const first=rows[0];
+   return {rows:first?[{duration_days:first.duration_days,sold_count:rows.length}]:[]};
   }
   if(sql.includes('AS trials_today')&&sql.includes('FROM blofy_stream_distributor_issues')){
    const items=issues.filter(x=>x.distributor_id===args[0]);
@@ -502,6 +511,7 @@ test('audited month credits include opening, issue, refund, renewal and owner to
  assert.equal(report.renewedCreditsMonth,12);
  assert.equal(report.issued24h,1);
  assert.equal(report.dailyLimit,100);
+ assert.equal(report.topPlanDays,30);
  assert.equal((await f.manager.exportIssues(token)).items.length,1);
  f.setFail(true);
  await assert.rejects(f.manager.issue(token,{kind:'app',durationDays:30,
