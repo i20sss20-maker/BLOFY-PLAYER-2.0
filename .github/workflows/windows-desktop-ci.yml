@@ -15,6 +15,9 @@ on:
 
 jobs:
   build-windows:
+    # The historical BLOFY PLAYER 0.4.21 parity check has hardcoded version
+    # assertions. STREAM 0.1.x has a separate, edition-aware Windows QA gate.
+    if: ${{ github.event_name != 'pull_request' || github.base_ref != 'feature/blofy-stream-windows-code-edition-20261110' }}
     runs-on: windows-latest
     timeout-minutes: 40
 
