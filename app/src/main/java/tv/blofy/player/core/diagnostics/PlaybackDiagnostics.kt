@@ -42,6 +42,9 @@ object PlaybackDiagnostics {
     }
 
     fun firstFrame(metric: PlaybackMetric): PlaybackMetric {
+        // Media3 may send another rendered-first-frame event after a surface
+        // change. Do not overwrite the true startup timing with that later event.
+        if (metric.firstFrameElapsedMs != null) return metric
         val updated = metric.copy(firstFrameElapsedMs = SystemClock.elapsedRealtime())
         replace(metric, updated)
         Log.i(TAG, "first_frame provider=${metric.providerKey} kind=${metric.contentKind} ttff=${updated.ttffMs}ms")
