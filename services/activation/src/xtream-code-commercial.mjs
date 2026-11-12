@@ -54,6 +54,9 @@ export async function ensureStreamCommercialSchema(pool){
     'ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS relogin_requested_at TIMESTAMPTZ',
     'ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS relogin_approved_at TIMESTAMPTZ',
     'ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS relogin_expires_at TIMESTAMPTZ',
+    // An administrator can allow a short one-time re-login for the ORIGINAL code.
+    'ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS admin_relogin_until TIMESTAMPTZ',
+    'ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS admin_relogin_count INTEGER NOT NULL DEFAULT 0',
     'ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS xtream_recovery_until TIMESTAMPTZ'
   ])await pool.query(ddl);
   await pool.query(`CREATE TABLE IF NOT EXISTS blofy_xtream_gateway_code_events(
@@ -160,6 +163,38 @@ export function createStreamCommercial({pool,keyHex,clock=Date.now,
       throw problem('stream_transfer_code_generation_unavailable',503);
     });
   }
+
+  // Admin permits the ORIGINAL app code for one new device during 10 minutes.
+  // No reset to the subscription clock, no new voucher, no new account.
+  // Repeated support approvals are allowed while the subscription is active.
+  async function allowSameCodeRelogin(id){
+    validId(id);
+    return run(async db=>{
+      const code=(await db.query(`SELECT * FROM blofy_xtream_gateway_duration_codes
+        WHERE id=$1 FOR UPDATE`,[id])).rows[0];
+      if(!code||code.code_channel!=='app'||!code.redeemed_at||
+        !code.account_id||!code.redeemed_device_hash||code.revoked_at||
+        new Date(code.expires_at).getTime()<=clock())
+        throw problem('stream_relogin_unavailable',409);
+      const account=(await db.query(`SELECT enabled,expires_at
+        FROM blofy_xtream_gateway_accounts WHERE id=$1 FOR UPDATE`,
+        [code.account_id])).rows[0];
+      if(!account?.enabled||new Date(account.expires_at).getTime()<=clock())
+        throw problem('stream_relogin_unavailable',409);
+      const until=new Date(clock()+10*60_000);
+      const updated=(await db.query(`UPDATE blofy_xtream_gateway_duration_codes
+        SET admin_relogin_until=$2,
+            relogin_device_hash=NULL,relogin_request_hash=NULL,
+            relogin_requested_at=NULL,relogin_approved_at=NULL,
+            relogin_expires_at=NULL
+        WHERE id=$1 RETURNING *`,[id,until])).rows[0];
+      await event(db,id,'same_code_admin_relogin_granted',
+        {oneTime:true,validMinutes:10,subscriptionUnchanged:true});
+      return {ok:true,item:safeCodeRecord(updated),
+        allowedUntil:until.getTime(),sameCode:true,oneTime:true,
+        subscriptionUnchanged:true};
+    });
+  }
   // The original Xtream redemption is single-use. If the customer loses the
   // original credentials, an authenticated operator can issue a DIFFERENT
   // one-time recovery voucher for the SAME subscription. Unlike a new sale,
@@ -229,5 +264,5 @@ export function createStreamCommercial({pool,keyHex,clock=Date.now,
       FROM blofy_xtream_gateway_duration_codes`);
     return {ok:true,currency:'SAR',...(r.rows?.[0]||{})};
   }
-  return {markSold,extend,reissueForDeviceTransfer,reissueXtreamForRecovery,salesSummary};
+  return {markSold,extend,allowSameCodeRelogin,reissueForDeviceTransfer,reissueXtreamForRecovery,salesSummary};
 }
