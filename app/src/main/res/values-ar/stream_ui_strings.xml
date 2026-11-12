@@ -73,4 +73,8 @@
     <string name="stream_home_drama">أفلام دراما</string>
     <string name="stream_home_genre_hint">حسب التصنيفات المتوفرة من المصدر</string>
     <string name="stream_details_similar">أفلام مشابهة</string>
+    <string name="stream_catalog_sort_source">الترتيب: المصدر</string>
+    <string name="stream_catalog_sort_newest">الترتيب: الأحدث</string>
+    <string name="stream_catalog_sort_rating">الترتيب: التقييم</string>
+    <string name="stream_catalog_sort_year">الترتيب: السنة</string>
 </resources>
