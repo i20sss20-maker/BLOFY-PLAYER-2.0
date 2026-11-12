@@ -232,7 +232,14 @@ class PosterStreamAdapter(
 
     override fun onViewAttachedToWindow(holder: Holder) {
         super.onViewAttachedToWindow(holder)
-        // RecyclerView may reattach a cached holder without binding it again.
+        // RecyclerView may reattach a cached holder without a fresh bind.
+        // This is why some genres previously appeared only after scrolling and
+        // seemed to disappear again on returning from film details.
+        val position = holder.bindingAdapterPosition
+        if (position != RecyclerView.NO_POSITION) {
+            val item = items.getOrNull(position)
+            if (item != null) bindGenreLine(holder, item, ContentPresentation.of(item).badges)
+        }
         if (holder.image.tag == null && holder.artworkCandidates.isNotEmpty()) {
             ArtworkLoader.load(holder.image, holder.artworkCandidates)
         }
