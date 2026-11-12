@@ -77,9 +77,12 @@ test('authorization and account source constraints precede optional relay handof
   const auth=segment.indexOf('const account = await authenticate(');
   const filter=segment.indexOf('gatewayItemById(');
   const check=segment.indexOf('if(relayEligible({accountId:account.id');
-  const issue=segment.indexOf('issueStreamRelayGrant(');
+  // A separately authorized, provider-permitted licensed shared route can
+  // precede the legacy per-account canary, while both must follow ACLs.
+  const licensed=segment.indexOf('permittedLicensedLiveFanout(');
+  const issue=segment.indexOf('issueStreamRelayGrant(',check);
   const oldPath=segment.indexOf('checkedFetch(mediaFetchTarget');
-  assert.ok(auth>=0&&filter>auth&&check>filter&&issue>check&&oldPath>issue);
+  assert.ok(auth>=0&&filter>auth&&licensed>filter&&check>licensed&&issue>check&&oldPath>issue);
   assert.match(segment,/reason:'relay_unavailable'/);
   assert.match(segment,/res\.writeHead\(307/);
   assert.doesNotMatch(segment,/BLOFY_STREAM_RELAY_CANARY_FALLBACK'.*upstream/);

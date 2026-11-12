@@ -29,6 +29,7 @@ import {
   sanitizeDiagnosticMessage,
   sanitizeDiagnosticUrl
 } from './diagnostics-sanitizer.mjs';
+import { qualitySample, qualityHours, publicQualitySummary } from './diagnostics-quality.mjs';
 import { activationReleaseMetadata, appReleaseMetadata } from './release-metadata.mjs';
 
 const { Pool } = pg;
@@ -522,14 +523,15 @@ async function playbackDiagnostic(req, res) {
   const ttffMs = Number.isFinite(ttffRaw) && ttffRaw >= 0 && ttffRaw <= 600_000 ? Math.round(ttffRaw) : null;
   const bufferingRaw = Number(body.bufferingCount || 0);
   const bufferingCount = Number.isFinite(bufferingRaw) ? Math.max(0, Math.min(10_000, Math.round(bufferingRaw))) : 0;
+  const quality = qualitySample(body);
   const errorCode = sanitizeDiagnosticErrorCode(body.errorCode);
   const errorMessage = sanitizeDiagnosticMessage(body.errorMessage, 512);
   const appVersion = sanitizeDiagnosticAppVersion(body.appVersion);
 
   await pool.query(
-    `INSERT INTO playback_diagnostics(device_id,provider_key,content_kind,redacted_url,ttff_ms,buffering_count,error_code,error_message,app_version)
-     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-    [deviceId, providerKey, contentKind, redactedUrl, ttffMs, bufferingCount, errorCode, errorMessage, appVersion]
+    `INSERT INTO playback_diagnostics(device_id,provider_key,content_kind,redacted_url,ttff_ms,buffering_count,error_code,error_message,app_version,rebuffer_count,rebuffer_ms,recovery_count)
+     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+    [deviceId, providerKey, contentKind, redactedUrl, ttffMs, bufferingCount, errorCode, errorMessage, appVersion, quality.rebufferCount, quality.rebufferMs, quality.recoveryCount]
   );
   return json(res, 202, { accepted: true });
 }
@@ -619,7 +621,7 @@ async function adminDiagnostics(req, res, requestUrl) {
   values.push(limit);
   const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
   const result = await pool.query(
-    `SELECT id,device_id,provider_key,content_kind,redacted_url,ttff_ms,buffering_count,error_code,error_message,app_version,created_at
+    `SELECT id,device_id,provider_key,content_kind,redacted_url,ttff_ms,buffering_count,rebuffer_count,rebuffer_ms,recovery_count,error_code,error_message,app_version,created_at
      FROM playback_diagnostics ${where} ORDER BY created_at DESC LIMIT $${values.length}`,
     values
   );
@@ -632,11 +634,44 @@ async function adminDiagnostics(req, res, requestUrl) {
       redactedUrl: item.redacted_url == null ? null : sanitizeDiagnosticUrl(item.redacted_url, 1024),
       ttffMs: item.ttff_ms == null ? null : Number(item.ttff_ms),
       bufferingCount: Number(item.buffering_count),
+      rebufferCount: Number(item.rebuffer_count),
+      rebufferMs: Number(item.rebuffer_ms),
+      recoveryCount: Number(item.recovery_count),
       errorCode: sanitizeDiagnosticErrorCode(item.error_code),
       errorMessage: sanitizeDiagnosticMessage(item.error_message, 512),
       appVersion: sanitizeDiagnosticAppVersion(item.app_version),
       createdAt: new Date(item.created_at).getTime()
     }))
+  });
+}
+
+async function adminQualitySummary(req, res, requestUrl) {
+  if (!requireAdmin(req, res)) return;
+  const hours = qualityHours(requestUrl.searchParams.get('hours'));
+  // Aggregate ONLY opted-in samples. Neither credentials nor device-level IDs
+  // are part of this response; 4xx are counted as symptoms, not root causes.
+  const result = await pool.query(
+    `SELECT content_kind,
+       COUNT(*)::int AS observations,
+       COUNT(ttff_ms)::int AS starts,
+       percentile_cont(0.5) WITHIN GROUP (ORDER BY ttff_ms)
+         FILTER (WHERE ttff_ms IS NOT NULL) AS p50_ms,
+       percentile_cont(0.9) WITHIN GROUP (ORDER BY ttff_ms)
+         FILTER (WHERE ttff_ms IS NOT NULL) AS p90_ms,
+       COUNT(*) FILTER (WHERE error_code IS NOT NULL)::int AS errors,
+       COALESCE(SUM(rebuffer_count),0) AS rebuffer_count,
+       COALESCE(SUM(rebuffer_ms),0) AS rebuffer_ms,
+       COALESCE(SUM(recovery_count),0) AS recovery_count
+     FROM playback_diagnostics
+     WHERE created_at >= NOW() - ($1::int * INTERVAL '1 hour')
+     GROUP BY content_kind ORDER BY content_kind`,
+    [hours]
+  );
+  return json(res,200,{
+    hours,
+    // These are telemetry OBSERVATIONS, not unique streams or user counts.
+    note:'opt_in_device_samples_not_provider_availability',
+    groups:publicQualitySummary(result.rows)
   });
 }
 
@@ -831,6 +866,7 @@ const server = http.createServer(async (req, res) => {
     const portalPlaylistMatch = requestUrl.pathname.match(/^\/api\/v1\/portal\/playlists\/([^/?]+)$/);
     if (portalPlaylistMatch && req.method === 'DELETE') return await portal.remove(req, res, decodeURIComponent(portalPlaylistMatch[1]));
 
+    if (req.method === 'GET' && requestUrl.pathname === '/api/v1/admin/diagnostics/quality') return await adminQualitySummary(req, res, requestUrl);
     if (req.method === 'GET' && requestUrl.pathname === '/api/v1/admin/diagnostics') return await adminDiagnostics(req, res, requestUrl);
     const profileMatch = requestUrl.pathname.match(/^\/api\/v1\/admin\/provider-profiles\/([^/?]+)$/);
     if (profileMatch && req.method === 'GET') return await adminProviderProfileGet(req, res, decodeURIComponent(profileMatch[1]));

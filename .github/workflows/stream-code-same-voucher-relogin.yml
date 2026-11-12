@@ -1,0 +1,45 @@
+name: BLOFY STREAM same-code re-login security QA
+on:
+  push:
+    branches:
+      - fix/stream-same-code-secure-relogin-20261111
+  pull_request:
+    branches:
+      - feature/stream-optional-ai-classifier-20261109
+permissions:
+  contents: read
+jobs:
+  same-voucher-relogin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: services/activation/package-lock.json
+      - name: Parse and syntax check secure code recovery routes and admin panel
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in services/activation/src/{xtream-duration-codes,xtream-code-device-binding,xtream-code-relogin,xtream-code-commercial,xtream-gateway-hook}.mjs; do
+            node --check "$file"
+          done
+          node --check services/activation/web/xtream-gateway-admin.js
+      - name: Same-code recovery and legacy transfer regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test \
+            services/activation/test/xtream-code-relogin.test.mjs \
+            services/activation/test/xtream-duration-codes.test.mjs \
+            services/activation/test/xtream-code-commercial.test.mjs \
+            services/activation/test/xtream-code-app-compatibility.test.mjs \
+            services/activation/test/xtream-code-app-token.test.mjs
+      - name: Test isolated stream gateway route compatibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --prefix services/activation --ignore-scripts --no-audit
+          node --test services/activation/test/stream-gateway.test.mjs

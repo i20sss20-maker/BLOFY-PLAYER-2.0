@@ -376,6 +376,14 @@ http.createServer = function withBlofySources(listener) {
       if (req.method === 'GET' && url.pathname === '/stream-premium.js') {
         return asset(res, await readFile(new URL('../web/stream-premium.js', import.meta.url)), 'text/javascript; charset=utf-8');
       }
+      if (req.method === 'GET' && url.pathname === '/blofy-gemini-ui.js') {
+        return asset(res,await readFile(new URL('../web/blofy-gemini-ui.js',import.meta.url)),
+          'text/javascript; charset=utf-8');
+      }
+      if (req.method === 'GET' && url.pathname === '/blofy-gemini-ui.css') {
+        return asset(res,await readFile(new URL('../web/blofy-gemini-ui.css',import.meta.url)),
+          'text/css; charset=utf-8');
+      }
       if (req.method === 'GET' && url.pathname === '/sources-admin.js') {
         return asset(res, await readFile(new URL('../web/sources-admin.js', import.meta.url)), 'text/javascript; charset=utf-8');
       }

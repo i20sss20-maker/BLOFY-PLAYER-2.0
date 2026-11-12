@@ -1,3 +1,4 @@
+import {configuredXtreamPublicOrigin} from './xtream-public-origin.mjs';
 // Minimal, tightly scoped bridge contracts shared only by the source admin API.
 // Never serializes source credentials, provider account secrets or raw URLs.
 import {timingSafeEqual} from 'node:crypto';
@@ -49,6 +50,6 @@ export function streamSafeAccount(row){
     activatedAt:row?.activated_at?new Date(row.activated_at).getTime():null,
     durationDays:row?.duration_days?Number(row.duration_days):null,
     codeHint:String(row?.code_hint||'').slice(0,20),
-    passwordAvailable:row?.password_available===true,serverUrl:'https://blofyplayer.com'
+    passwordAvailable:row?.password_available===true,serverUrl:configuredXtreamPublicOrigin('https://blofyplayer.com')
   };
 }

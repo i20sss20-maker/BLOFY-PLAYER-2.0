@@ -10,7 +10,7 @@ import {probeXtreamHttp11} from './xtream-http-compat-probe.mjs';
 import {compareXtreamFromIndependentRailway} from './xtream-independent-probe.mjs';
 import {shouldUseIndependentXtreamSource,fetchIndependentXtreamSource,
   fetchIndependentXtreamManifest,probeIndependentXtreamClientProfiles} from './xtream-independent-catalog-relay.mjs';
-import {issueStreamRelayGrant} from './xtream-stream-relay-bridge.mjs';
+import {issueStreamRelayGrant,licensedLiveFanoutHealth} from './xtream-stream-relay-bridge.mjs';
 import {shouldUseIndependentSourceMedia} from './xtream-independent-source-media-policy.mjs';
 import {probeOfficialXtreamPlaylistRoute} from './xtream-official-m3u-probe.mjs';
 import {readSanitizedXtreamRelayFailure} from './xtream-relay-diagnostic.mjs';
@@ -44,6 +44,11 @@ import crypto from 'node:crypto';
 import pg from 'pg';
 import { downloadXtreamM3uCatalog } from './xtream-m3u-catalog.mjs';
 import { distinctXtreamRecords } from './xtream-import-dedup.mjs';
+import {xtreamProviderOrder,withXtreamProviderPosition} from './xtream-provider-order.mjs';
+import {sourceLiveCapacity} from './xtream-live-source-capacity.mjs';
+import {permittedLicensedLiveFanout} from './xtream-licensed-live-fanout-policy.mjs';
+import {xtreamPlaybackSnapshot} from './xtream-playback-metrics.mjs';
+import {ensureXtreamCatalogRevisionSchema,bumpXtreamCatalogRevision} from './xtream-catalog-revision.mjs';
 import { assessXtreamSync } from './xtream-sync-guard.mjs';
 import { CONTROL_PATH, controlPage, deleteConfirmationPage, readControlForm } from './xtream-native-controls.mjs';
 import { xtreamEpisodeSamples, xtreamEpisodePlaybackCandidates, xtreamProbeMessage } from './xtream-series-probe.mjs';
@@ -55,6 +60,13 @@ import { xtreamAllowedLiveFormats,shouldStopXtreamFormatComparison,outputFormatD
 import {liveDiagnosticTimeoutMs} from './xtream-live-probe-budget.mjs';
 import { auditXtreamCatalogSample } from './xtream-library-insights.mjs';
 import {auditFullStreamCatalog} from './stream-full-library-audit.mjs';
+import {suggestCatalogWithAI} from './stream-ai-catalog-suggestions.mjs';
+import {suggestCatalogWithGemini} from './stream-gemini-catalog-suggestions.mjs';
+import {proposeCatalogCommand} from './stream-ai-command-planner.mjs';
+import {proposeExistingCategoryAssignments} from './stream-ai-item-organizer.mjs';
+import {ensureAiJournalSchema,recordAiPublish,readAiPublishState,revertAiClassification} from './stream-ai-publish-journal.mjs';
+import {ensureAiScanSchema,recordAiAnalyzedBatch,getAiScanProgress} from './stream-ai-scan-progress.mjs';
+import {fullCatalogCategoryOrder,summarizeFullCatalogCoverage} from './stream-ai-full-sort.mjs';
 import { normalizeXtreamDetails,mergedXtreamMetadata } from './xtream-item-details.mjs';
 import { tmdbConfigured,validatedTmdbId,fetchTmdbDetails } from './xtream-tmdb.mjs';
 import { sortXtreamCategories } from './xtream-category-sort.mjs';
@@ -63,6 +75,7 @@ import {normalizeXtreamEpg} from './xtream-epg.mjs';
 import {normalizeStudioName,normalizeStudioItemEdit,readStudioLogoRequest} from './xtream-studio-policy.mjs';
 import { nativeXtreamCsrfToken } from './xtream-native-csrf.mjs';
 import {streamBridgeAuthorized,streamSafeSource,streamSafeCatalog,streamSafeAccount} from './stream-unified-safe.mjs';
+import {configuredXtreamPublicOrigin} from './xtream-public-origin.mjs';
 import {ensureStreamCodeTable} from './xtream-duration-codes.mjs';
 import {ensureStreamCommercialSchema} from './xtream-code-commercial.mjs';
 
@@ -276,6 +289,11 @@ async function ensureReady() {
       )`);
       // Publisher controls survive every Xtream re-import.
       await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS custom_name TEXT');
+      await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS custom_category_id TEXT');
+      await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS source_sort_order INTEGER');
+      await ensureAiJournalSchema(client);
+      await ensureAiScanSchema(client);
+      await ensureXtreamCatalogRevisionSchema(client);
       await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS custom_icon_url TEXT');
       await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS featured BOOLEAN NOT NULL DEFAULT FALSE');
       await client.query('ALTER TABLE blofy_xtream_items ADD COLUMN IF NOT EXISTS channel_number INTEGER');
@@ -1496,13 +1514,16 @@ async function flushCategoryBatch(serverId, mediaType, syncToken, batch) {
     source_category_id: item.sourceCategoryId,
     name: item.name,
     parent_id: item.parentId,
+    sort_order: item.sourceSortOrder??null,
     sync_token: syncToken
   }));
-  await pool.query(`INSERT INTO blofy_xtream_categories(server_id,media_type,source_category_id,name,parent_id,enabled,item_count,sync_token,updated_at)
-    SELECT $1::uuid,$2::text,x.source_category_id,x.name,x.parent_id,TRUE,0,x.sync_token,NOW()
-    FROM jsonb_to_recordset($3::jsonb) AS x(source_category_id text,name text,parent_id text,sync_token text)
+  await pool.query(`INSERT INTO blofy_xtream_categories(server_id,media_type,source_category_id,name,parent_id,enabled,item_count,sort_order,sync_token,updated_at)
+    SELECT $1::uuid,$2::text,x.source_category_id,x.name,x.parent_id,TRUE,0,
+      COALESCE(x.sort_order,100000),x.sync_token,NOW()
+    FROM jsonb_to_recordset($3::jsonb) AS x(source_category_id text,name text,parent_id text,sort_order int,sync_token text)
     ON CONFLICT(server_id,media_type,source_category_id) DO UPDATE SET
-      name=EXCLUDED.name,parent_id=EXCLUDED.parent_id,sync_token=EXCLUDED.sync_token,updated_at=NOW()`,
+      name=EXCLUDED.name,parent_id=EXCLUDED.parent_id,
+      sort_order=EXCLUDED.sort_order,sync_token=EXCLUDED.sync_token,updated_at=NOW()`,
     [serverId, mediaType, JSON.stringify(payload)]);
   batch.length = 0;
 }
@@ -1516,14 +1537,17 @@ async function flushItemBatch(serverId, mediaType, syncToken, batch) {
     name: item.name,
     icon_url: item.iconUrl,
     container_extension: item.containerExtension,
+    source_sort_order: item.sourceSortOrder??null,
     metadata: item.metadata,
     sync_token: syncToken
   }));
-  await pool.query(`INSERT INTO blofy_xtream_items(server_id,media_type,source_id,category_id,name,icon_url,container_extension,enabled,metadata,sync_token,updated_at)
-    SELECT $1::uuid,$2::text,x.source_id,x.category_id,x.name,x.icon_url,x.container_extension,TRUE,COALESCE(x.metadata,'{}'::jsonb),x.sync_token,NOW()
-    FROM jsonb_to_recordset($3::jsonb) AS x(source_id text,category_id text,name text,icon_url text,container_extension text,metadata jsonb,sync_token text)
+  await pool.query(`INSERT INTO blofy_xtream_items(server_id,media_type,source_id,category_id,name,icon_url,container_extension,enabled,source_sort_order,metadata,sync_token,updated_at)
+    SELECT $1::uuid,$2::text,x.source_id,x.category_id,x.name,x.icon_url,x.container_extension,TRUE,
+      x.source_sort_order,COALESCE(x.metadata,'{}'::jsonb),x.sync_token,NOW()
+    FROM jsonb_to_recordset($3::jsonb) AS x(source_id text,category_id text,name text,icon_url text,container_extension text,source_sort_order int,metadata jsonb,sync_token text)
     ON CONFLICT(server_id,media_type,source_id) DO UPDATE SET
-      category_id=EXCLUDED.category_id,name=EXCLUDED.name,
+      source_sort_order=EXCLUDED.source_sort_order,
+      category_id=COALESCE(blofy_xtream_items.custom_category_id,EXCLUDED.category_id),name=EXCLUDED.name,
       container_extension=EXCLUDED.container_extension,
       icon_url=COALESCE(NULLIF(EXCLUDED.icon_url,''),blofy_xtream_items.icon_url),
       metadata=EXCLUDED.metadata ||
@@ -1549,7 +1573,7 @@ async function syncCategories(row, mediaType, creds, syncToken, getM3u) {
     const fallback=await getM3u();
     const batch=[];let total=0;
     for(const item of fallback.categories[mediaType]){
-      batch.push({...item,syncToken});total++;
+      batch.push({...withXtreamProviderPosition(item,total+1),syncToken});total++;
       if(batch.length>=500)await flushCategoryBatch(row.id,mediaType,syncToken,batch);
     }
     await flushCategoryBatch(row.id,mediaType,syncToken,batch);
@@ -1559,7 +1583,7 @@ async function syncCategories(row, mediaType, creds, syncToken, getM3u) {
   await parseTopLevelJsonArray(response.body,async raw=>{
     const item=normalizeXtreamCategory(mediaType,raw,syncToken);
     if(!item)return;
-    batch.push(item);accepted++;
+    batch.push(withXtreamProviderPosition(item,xtreamProviderOrder(raw,accepted+1,'category')));accepted++;
     if(batch.length>=500)await flushCategoryBatch(row.id,mediaType,syncToken,batch);
   });
   await flushCategoryBatch(row.id,mediaType,syncToken,batch);
@@ -1575,13 +1599,15 @@ async function syncItems(row, mediaType, creds, syncToken, getM3u) {
     if(error.message!=='xtream_http_404')throw error;
     if(mediaType==='series')throw new Error('xtream_series_listing_api_unavailable');
     const fallback=await getM3u(),batch=[];let total=0;
-    const categories=fallback.categories[mediaType].map(item=>({...item,syncToken}));
+    const categories=fallback.categories[mediaType].map((item,index)=>({
+      ...withXtreamProviderPosition(item,index+1),syncToken
+    }));
     for(let i=0;i<categories.length;i+=500){
       const page=categories.slice(i,i+500);
       await flushCategoryBatch(row.id,mediaType,syncToken,page);
     }
     for(const item of fallback.records[mediaType]){
-      batch.push({...item,syncToken});total++;
+      batch.push({...withXtreamProviderPosition(item,total+1),syncToken});total++;
       if(batch.length>=500)await flushItemBatch(row.id,mediaType,syncToken,batch);
     }
     await flushItemBatch(row.id,mediaType,syncToken,batch);
@@ -1592,7 +1618,7 @@ async function syncItems(row, mediaType, creds, syncToken, getM3u) {
   await parseTopLevelJsonArray(response.body,async raw=>{
     const item=normalizeXtreamItem(mediaType,raw,syncToken);
     if(!item)return;
-    batch.push(item);accepted++;
+    batch.push(withXtreamProviderPosition(item,xtreamProviderOrder(raw,accepted+1,'item')));accepted++;
     if(batch.length>=500)await flushItemBatch(row.id,mediaType,syncToken,batch);
   });
   await flushItemBatch(row.id,mediaType,syncToken,batch);
@@ -1718,7 +1744,8 @@ async function syncServer(id, requestedTypes = ['live','movie','series']) {
     const partialWarning=failures.length?'بعض الأنواع لم تُستورد: '+failures.join('; ').slice(0,250):null;
     await pool.query(`UPDATE blofy_xtream_servers SET status='online',account_info=$2::jsonb,counts=$3::jsonb,last_error=$4,last_test_at=NOW(),last_sync_at=NOW(),updated_at=NOW() WHERE id=$1 AND enabled=TRUE AND deletion_requested_at IS NULL`,
       [id, JSON.stringify(accountInfo), JSON.stringify(counts),partialWarning]);
-    return { id, counts, details, partialWarning };
+    const catalogRevision=await bumpXtreamCatalogRevision(pool,id,'sync');
+    return { id, counts, details, partialWarning,catalogRevision };
   } catch (error) {
     const message = redactXtreamError(error);
     const cancelled=message==='xtream_sync_cancelled';
@@ -2147,16 +2174,17 @@ async function listCatalog(query, publishedOnly = false) {
   values.push(limit, offset);
   const rows = (await pool.query(`SELECT i.server_id,i.media_type,i.source_id,i.category_id,
       COALESCE(NULLIF(i.custom_name,''),i.name) AS name,COALESCE(NULLIF(i.custom_icon_url,''),i.icon_url) AS icon_url,
-      i.name AS original_name,i.icon_url AS original_icon_url,i.custom_name,i.custom_icon_url,i.featured,i.channel_number,
+      i.name AS original_name,i.icon_url AS original_icon_url,i.custom_name,i.custom_icon_url,i.featured,i.channel_number,i.source_sort_order,
       i.container_extension,i.enabled,i.metadata,i.updated_at,
       s.name AS server_name,s.priority,c.name AS category_name,c.enabled AS category_enabled
     FROM blofy_xtream_items i
     JOIN blofy_xtream_servers s ON s.id=i.server_id
     LEFT JOIN blofy_xtream_categories c ON c.server_id=i.server_id AND c.media_type=i.media_type AND c.source_category_id=i.category_id
     WHERE ${where.join(' AND ')}
-    ORDER BY (CASE WHEN i.media_type='live' AND i.featured THEN 0 ELSE 1 END),
-      CASE WHEN i.media_type='live' THEN COALESCE(i.channel_number,999999) ELSE 999999 END,
-      s.priority ASC,COALESCE(NULLIF(i.custom_name,''),i.name) ASC,i.source_id ASC
+    ORDER BY s.priority ASC,
+      COALESCE(c.sort_order,2147483647) ASC,
+      COALESCE(i.source_sort_order,2147483647) ASC,
+      COALESCE(NULLIF(i.custom_name,''),i.name) ASC,i.source_id ASC
     LIMIT $${values.length-1} OFFSET $${values.length}`, values)).rows;
   return rows.map(row => ({
     serverId: row.server_id,
@@ -2173,6 +2201,7 @@ async function listCatalog(query, publishedOnly = false) {
     customIconUrl:row.custom_icon_url,
     featured:Boolean(row.featured),
     channelNumber:row.channel_number==null?null:Number(row.channel_number),
+    sourceSortOrder:row.source_sort_order==null?null:Number(row.source_sort_order),
     containerExtension: row.container_extension,
     enabled: Boolean(row.enabled),
     categoryEnabled: row.category_enabled == null ? true : Boolean(row.category_enabled),
@@ -2243,6 +2272,359 @@ async function reviewStreamLibrary(sourceId,type){
   if(libraryAuditCache.size>30)libraryAuditCache.delete(libraryAuditCache.keys().next().value);
   return report;
 }
+const aiCatalogRequestTimes=[];
+const geminiTestTimes=[];
+const commandProposals=new Map();
+const commandTimes=[];
+const COMMAND_TTL=5*60*1000;
+function trimCommandProposals(now){
+ for(const [id,entry] of commandProposals)
+  if(now-entry.createdAt>COMMAND_TTL)commandProposals.delete(id);
+ if(commandProposals.size>60)commandProposals.delete(commandProposals.keys().next().value);
+ while(commandTimes.length&&commandTimes[0]<now-3600000)commandTimes.shift();
+}
+async function chatWithLibraryAI(body){
+ const sourceId=String(body?.sourceId||''),type=String(body?.type||'');
+ if(!validUuid(sourceId)||!validType(type))
+  return {ok:false,code:'stream_ai_selection_invalid'};
+ const server=await serverById(sourceId);
+ if(!server)return {ok:false,code:'stream_library_source_missing'};
+ if(String(process.env.BLOFY_LIBRARY_AI_PROVIDER||'openai').toLowerCase()!=='gemini')
+  return {ok:false,code:'gemini_not_selected'};
+ const key=String(process.env.BLOFY_LIBRARY_GEMINI_API_KEY||'').trim();
+ if(key.length<32)return {ok:false,code:'stream_ai_not_configured'};
+ const now=Date.now();trimCommandProposals(now);
+ if(commandTimes.length>=12)
+  return {ok:false,code:'stream_ai_hourly_budget_exhausted'};
+ commandTimes.push(now);
+ const result=await proposeCatalogCommand(body?.message,{
+  apiKey:key,model:process.env.BLOFY_LIBRARY_AI_MODEL||'gemini-3.5-flash-lite',
+  history:Array.isArray(body?.history)?body.history.slice(-4):[]});
+ if(!result.ok||!result.allowed)
+  return {...result,serverName:String(server.name||'').slice(0,120),
+   sourceId,type,requiresApproval:false};
+ // Category order is owned by Xtream: AI may advise about library contents,
+ // but must not override category sorting managed from the source panel.
+ if(['category_sort','full_catalog_sort'].includes(result.action))
+  return {ok:true,allowed:false,previewOnly:true,
+    action:'xtream_order_authority',sourceId,type,requiresApproval:false,
+    reply:'ترتيب أقسام القنوات والأفلام والمسلسلات أصبح من لوحة Xtream مباشرة. رتّبها هناك، ثم زامن مصدر Xtream في BLOFY وحدّث المكتبة في التطبيق. أقدر أساعدك في فحص الأسماء والتصنيفات دون تغيير ترتيب Xtream.'};
+ const planId=crypto.randomBytes(24).toString('hex');
+ const proposal={createdAt:now,sourceId,type,action:result.action,
+   mode:result.sortMode,sourceName:String(server.name||'').slice(0,120)};
+ if(result.action==='classify_items'){
+   const offset=Number(body?.offset||0);
+   if(!Number.isInteger(offset)||offset<0||offset>39996||offset%12!==0)
+     return {ok:false,code:'stream_ai_batch_offset_invalid'};
+   const allCategories=(await pool.query(`SELECT source_category_id,name,item_count FROM blofy_xtream_categories
+     WHERE server_id=$1 AND media_type=$2 AND enabled=TRUE
+     ORDER BY sort_order,name,source_category_id LIMIT 1001`,[sourceId,type])).rows;
+   if(allCategories.length>1000)return {ok:false,code:'stream_ai_category_choices_exceeded'};
+   if(!allCategories.length)return {ok:false,code:'stream_ai_categories_missing'};
+   const rows=(await pool.query(`SELECT source_id,category_id,custom_category_id,
+     COALESCE(NULLIF(custom_name,''),name) AS name FROM blofy_xtream_items
+     WHERE server_id=$1 AND media_type=$2 AND enabled=TRUE
+     ORDER BY source_id LIMIT 12 OFFSET $3`,[sourceId,type,offset])).rows;
+   if(!rows.length)return {ok:false,code:'stream_ai_end_of_catalog'};
+   const categories=shortlistExistingCategories(allCategories,rows,80);
+   const suggested=await proposeExistingCategoryAssignments(
+     rows.map(x=>({id:String(x.source_id),name:x.name,
+       categoryName:categories.find(v=>String(v.source_category_id)===String(x.category_id))?.name||''})),
+     categories,{apiKey:key,
+       model:process.env.BLOFY_LIBRARY_AI_MODEL||'gemini-3.5-flash-lite'});
+   if(!suggested.ok)return suggested;
+   await recordAiAnalyzedBatch(pool,{
+     sourceId,type,offset,seen:rows.length,proposed:suggested.assignments.length
+   });
+   const allowed=new Map(rows.map(x=>[String(x.source_id),x]));
+   proposal.assignments=suggested.assignments.flatMap(x=>{
+     const original=allowed.get(x.id);
+     if(!original||String(original.category_id||'')===x.categoryId)return [];
+     return [{id:x.id,expectedCategoryId:original.category_id??null,
+       expectedOverride:original.custom_category_id??null,
+       expectedName:String(original.name),categoryId:x.categoryId,
+       categoryName:x.categoryName,reason:x.reason,title:x.title}];
+   });
+   proposal.offset=offset;
+   proposal.hasMore=rows.length===12;
+   if(!proposal.assignments.length)return {ok:true,previewOnly:true,allowed:false,
+     action:'classify_items',requiresApproval:false,sourceId,type,offset,
+     nextOffset:proposal.hasMore?offset+12:null,
+     reply:'راجعت هذه الدفعة ولم أجد نقلًا عالي الثقة إلى فئة موجودة. انتقل للدفعة التالية.'};
+ }else if(result.action==='full_catalog_sort'){
+   const scopedTypes=['live','movie','series'];
+   proposal.sections=[];
+   for(const mediaType of scopedTypes){
+     const rows=(await pool.query(`SELECT source_category_id,name,item_count,sort_order
+       FROM blofy_xtream_categories WHERE server_id=$1 AND media_type=$2
+       ORDER BY sort_order,name,source_category_id LIMIT 1001`,
+       [sourceId,mediaType])).rows;
+     if(rows.length>1000)return {ok:false,code:'stream_ai_catalog_too_large'};
+     const order=fullCatalogCategoryOrder(rows,mediaType);
+     proposal.sections.push({
+       type:mediaType,
+       // Fingerprint all columns used by the sorting decision.
+       original:rows.map(x=>[String(x.source_category_id),String(x.name),
+         Number(x.item_count)||0,Number(x.sort_order)||0]),
+       order,coverage:summarizeFullCatalogCoverage(rows,mediaType),
+       preview:order.slice(0,8).map(id=>String(
+         rows.find(r=>String(r.source_category_id)===id)?.name||'').slice(0,130))
+     });
+   }
+   const total=proposal.sections.reduce((sum,x)=>sum+x.order.length,0);
+   if(!total)return {ok:true,previewOnly:true,allowed:false,action:'full_catalog_sort',
+     requiresApproval:false,reply:'فحصت فئات المصدر الثلاث ولم أجد أقسامًا مسجلة لترتيبها.'};
+ }else if(result.action==='titles_cleanup'){
+   const rows=(await pool.query(`SELECT source_id,
+     COALESCE(NULLIF(custom_name,''),name) AS name
+     FROM blofy_xtream_items WHERE server_id=$1 AND media_type=$2
+     ORDER BY source_id LIMIT 12`,[sourceId,type])).rows;
+   proposal.changes=rows.map(row=>{
+     const before=String(row.name||'');
+     const after=before.replace(/#{3,}/g,' ').replace(/\\s{2,}/g,' ').trim();
+     return {id:String(row.source_id),before,after};
+   }).filter(x=>x.after&&x.after!==x.before&&x.after.length<=180&&
+     /^[a-zA-Z0-9._-]{1,128}$/.test(x.id));
+   if(!proposal.changes.length)
+     return {ok:true,previewOnly:true,allowed:false,action:'titles_cleanup',
+       requiresApproval:false,reply:'راجعت أول 12 عنوانًا، ولا توجد زخارف واضحة تحتاج تنظيفًا. لم أغيّر أي شيء.',
+       sourceId,type};
+ }else{
+   const rows=(await pool.query(`SELECT source_category_id,name,item_count
+     FROM blofy_xtream_categories
+     WHERE server_id=$1 AND media_type=$2
+     ORDER BY sort_order,name,source_category_id LIMIT 1001`,[sourceId,type])).rows;
+   if(rows.length>1000)return {ok:false,code:'stream_ai_catalog_too_large'};
+   if(!rows.length)return {ok:true,previewOnly:true,allowed:false,
+     requiresApproval:false,reply:'لا توجد أقسام في المصدر المحدد لترتيبها.'};
+   const sorted=sortXtreamCategories(rows,result.sortMode);
+   proposal.originalCategoryOrder=rows.map(x=>String(x.source_category_id));
+   proposal.expectedCategoryOrder=sorted;
+   proposal.previewCategories=sorted.slice(0,12).map(id=>({
+     name:String(rows.find(x=>String(x.source_category_id)===id)?.name||'').slice(0,140)
+   }));
+ }
+ commandProposals.set(planId,proposal);
+ const summary=result.action==='classify_items'
+   ?'اقتراح نقل '+proposal.assignments.length+' عنصرًا إلى فئات موجودة ضمن دفعة '+(proposal.offset/12+1)
+   :result.action==='full_catalog_sort'
+   ?'إعادة ترتيب الأقسام الحالية للقنوات والأفلام والمسلسلات في مصدر '+proposal.sourceName+
+     '؛ مع أولوية BEIN وALWAN وTHMANEA وSTARZPLAY وSHASHA والعربية والسنوات المسجلة 2026 فما فوق.'
+   :result.action==='titles_cleanup'
+    ?'تنظيف زخارف ومسافات '+proposal.changes.length+' عنوانًا في مصدر '+proposal.sourceName
+    :'ترتيب فئات '+(type==='live'?'القنوات':type==='movie'?'الأفلام':'المسلسلات')+
+     ' في مصدر '+proposal.sourceName+' بنمط '+proposal.mode;
+ return {...result,planId,sourceId,type,
+  serverName:proposal.sourceName,requiresApproval:true,summary,
+  itemAssignments:(proposal.assignments||[]).map(x=>({
+    title:x.title,oldCategoryId:String(x.expectedCategoryId??''),
+    newCategoryName:x.categoryName,reason:x.reason
+  })),
+  nextOffset:proposal.hasMore?proposal.offset+12:null,
+  proposedChanges:(proposal.changes||[]).map(x=>({before:x.before,after:x.after})),
+  categoryPreview:proposal.previewCategories||[],
+  fullCatalogPreview:(proposal.sections||[]).map(s=>({
+    type:s.type,coverage:s.coverage,categoriesFirst:s.preview
+  })),
+  note:result.action==='full_catalog_sort'
+   ?'المعاينة ترتب أقسام المصدر الموجودة، لكنها لا تنشئ سنوات أو أقسامًا جديدة ولا تغيّر تصنيف كل عنوان. التغييرات تحتاج اعتمادك.'
+   :'بانتظار موافقتك',
+  customersRefreshAutomatically:false,customerCatalogUpdated:false};
+}
+async function approveLibraryAICommand(body){
+ const token=String(body?.planId||'');
+ if(!/^[a-f0-9]{48}$/.test(token)||body?.approve!==true)
+  return {ok:false,code:'stream_ai_approval_invalid'};
+ const plan=commandProposals.get(token);
+ if(!plan)return {ok:false,code:'stream_ai_plan_expired'};
+ // Consume before DB mutation to prohibit double submission.
+ commandProposals.delete(token);
+ if(Date.now()-plan.createdAt>COMMAND_TTL)
+  return {ok:false,code:'stream_ai_plan_expired'};
+ const source=await serverById(plan.sourceId);
+ if(!source)return {ok:false,code:'stream_library_source_missing'};
+ if(['category_sort','full_catalog_sort'].includes(plan.action))
+  return {ok:false,code:'stream_order_managed_by_xtream'};
+ let result,changedItems=0;
+ let publishRevision=null;
+ if(plan.action==='classify_items'){
+   const changes=Array.isArray(plan.assignments)?plan.assignments:[];
+   if(!changes.length||changes.length>12)
+     return {ok:false,code:'stream_ai_plan_invalid'};
+   const client=await pool.connect();
+   try{
+     await client.query('BEGIN');
+     await client.query("SET LOCAL lock_timeout='1300ms'");
+     await client.query("SET LOCAL statement_timeout='12000ms'");
+     for(const move of changes){
+       const updated=await client.query(`UPDATE blofy_xtream_items i
+         SET category_id=$4,custom_category_id=$4,updated_at=NOW()
+         WHERE i.server_id=$1 AND i.media_type=$2 AND i.source_id=$3
+          AND i.category_id IS NOT DISTINCT FROM $5
+          AND COALESCE(NULLIF(i.custom_name,''),i.name)=$6
+          AND EXISTS(SELECT 1 FROM blofy_xtream_categories c
+            WHERE c.server_id=i.server_id AND c.media_type=i.media_type
+              AND c.source_category_id=$4 AND c.enabled=TRUE)
+         RETURNING i.source_id`,
+         [plan.sourceId,plan.type,move.id,move.categoryId,
+          move.expectedCategoryId,move.expectedName]);
+       if(updated.rowCount!==1)
+         throw Object.assign(new Error('stream_ai_plan_conflict'),{status:409});
+       changedItems++;
+     }
+     publishRevision=await recordAiPublish(client,{
+       planId:token,sourceId:plan.sourceId,mediaType:plan.type,
+       operation:'classify_items',changes:changes.map(x=>({
+         id:x.id,title:x.expectedName,fromCategory:x.expectedCategoryId,
+         fromOverride:x.expectedOverride,toCategory:x.categoryId
+       }))
+     });
+     await client.query('COMMIT');
+   }catch(error){
+     await client.query('ROLLBACK').catch(()=>{});
+     if(error?.message==='stream_ai_plan_conflict')return {ok:false,code:'stream_ai_plan_conflict'};
+     if(['55P03','57014'].includes(String(error?.code||'')))
+       return {ok:false,code:'xtream_category_busy_retry'};
+     throw error;
+   }finally{client.release();}
+   result={updated:0,mode:null,unchanged:false};
+ }else if(plan.action==='titles_cleanup'){
+   const changes=Array.isArray(plan.changes)?plan.changes:[];
+   if(!changes.length||changes.length>12)
+     return {ok:false,code:'stream_ai_plan_invalid'};
+   const client=await pool.connect();
+   try{
+     await client.query('BEGIN');
+     await client.query("SET LOCAL lock_timeout='1300ms'");
+     await client.query("SET LOCAL statement_timeout='12000ms'");
+     for(const item of changes){
+       const updated=await client.query(`UPDATE blofy_xtream_items
+         SET custom_name=$4,updated_at=NOW()
+         WHERE server_id=$1 AND media_type=$2 AND source_id=$3
+          AND COALESCE(NULLIF(custom_name,''),name)=$5
+         RETURNING source_id`,[plan.sourceId,plan.type,item.id,item.after,item.before]);
+       if(updated.rowCount!==1)
+         throw Object.assign(new Error('stream_ai_plan_conflict'),{status:409});
+       changedItems++;
+     }
+     await client.query('COMMIT');
+   }catch(error){
+     await client.query('ROLLBACK').catch(()=>{});
+     if(error?.message==='stream_ai_plan_conflict')
+       return {ok:false,code:'stream_ai_plan_conflict'};
+     throw error;
+   }finally{client.release();}
+   result={updated:0,mode:null,unchanged:false};
+ }else if(plan.action==='full_catalog_sort'){
+   const sections=Array.isArray(plan.sections)?plan.sections:[];
+   if(sections.length!==3||sections.some(s=>!['live','movie','series'].includes(s.type)||
+     !Array.isArray(s.order)||s.order.length>1000))
+     return {ok:false,code:'stream_ai_plan_invalid'};
+   const client=await pool.connect();
+   let totalChanged=0;
+   try{
+     await client.query('BEGIN');
+     await client.query("SET LOCAL lock_timeout='1300ms'");
+     await client.query("SET LOCAL statement_timeout='12000ms'");
+     for(const section of sections){
+       const rows=(await client.query(`SELECT source_category_id,name,item_count,sort_order
+         FROM blofy_xtream_categories WHERE server_id=$1 AND media_type=$2
+         ORDER BY sort_order,name,source_category_id LIMIT 1001 FOR UPDATE`,
+         [plan.sourceId,section.type])).rows;
+       const current=rows.map(x=>[String(x.source_category_id),String(x.name),
+         Number(x.item_count)||0,Number(x.sort_order)||0]);
+       if(JSON.stringify(current)!==JSON.stringify(section.original))
+         throw Object.assign(new Error('stream_ai_plan_conflict'),{status:409});
+       if(!rows.length)continue;
+       const existing=rows.map(x=>String(x.source_category_id));
+       if(existing.every((id,index)=>id===section.order[index]))continue;
+       await client.query(`UPDATE blofy_xtream_categories AS c
+         SET sort_order=rank.pos::int,updated_at=NOW()
+         FROM unnest($3::text[]) WITH ORDINALITY AS rank(category_id,pos)
+         WHERE c.server_id=$1 AND c.media_type=$2 AND c.source_category_id=rank.category_id`,
+         [plan.sourceId,section.type,section.order]);
+       totalChanged+=rows.length;
+     }
+     await client.query('COMMIT');
+   }catch(error){
+     await client.query('ROLLBACK').catch(()=>{});
+     if(error?.message==='stream_ai_plan_conflict')
+       return {ok:false,code:'stream_ai_plan_conflict'};
+     if(['55P03','57014'].includes(String(error?.code||'')))
+       return {ok:false,code:'xtream_category_busy_retry'};
+     throw error;
+   }finally{client.release();}
+   result={updated:totalChanged,mode:'full_catalog_sort',unchanged:totalChanged===0};
+   for(const t of ['live','movie','series'])libraryAuditCache.delete(plan.sourceId+':'+t);
+ }else if(plan.action==='category_sort'){
+   // Check for changes since the operator previewed this category order.
+   const rows=(await pool.query(`SELECT source_category_id
+     FROM blofy_xtream_categories WHERE server_id=$1 AND media_type=$2
+     ORDER BY sort_order,name,source_category_id LIMIT 1001`,
+     [plan.sourceId,plan.type])).rows;
+   if(rows.length>1000||JSON.stringify(rows.map(x=>String(x.source_category_id)))!==
+      JSON.stringify(plan.originalCategoryOrder))
+     return {ok:false,code:'stream_ai_plan_conflict'};
+   result=await autoSortCategories(plan.sourceId,plan.type,plan.mode);
+ }else return {ok:false,code:'stream_ai_plan_invalid'};
+ libraryAuditCache.delete(plan.sourceId+':'+plan.type);
+ return {ok:true,applied:true,action:plan.action,mode:plan.mode,
+  sourceId:plan.sourceId,type:plan.type,
+  catalogRevision:publishRevision,
+  rollbackSupported:plan.action==='classify_items',
+  publishedPlanId:plan.action==='classify_items'?token:null,
+  updatedCategories:result.updated,
+  changedTitles:plan.action==='titles_cleanup'?changedItems:0,
+  movedItems:plan.action==='classify_items'?changedItems:0,unchanged:result.unchanged,
+  changedOnServer:['titles_cleanup','classify_items'].includes(plan.action)||result.unchanged!==true,
+  sourcePublished:Boolean(source.enabled&&source.publish_catalog===true),
+  customerCatalogUpdated:false,
+  clientsNeedRefresh:true,automaticDevicePush:false,
+  note:'تم حفظ التغييرات في فهرس BLOFY. ظهورها في تطبيقات العملاء يعتمد على إعادة جلب الفهرس والتخزين المؤقت.'};
+}
+
+async function suggestStreamLibraryAI(body){
+  const sourceId=String(body?.sourceId||''),type=String(body?.type||'');
+  const offset=Number(body?.offset||0);
+  if(!validUuid(sourceId)||!validType(type)||
+    !Number.isInteger(offset)||offset<0||offset>40000||offset%12!==0)
+    throw Object.assign(new Error('stream_ai_selection_invalid'),{status:400});
+  const provider=String(process.env.BLOFY_LIBRARY_AI_PROVIDER||'openai').trim().toLowerCase();
+  if(provider!=='openai'&&provider!=='gemini')
+    return {ok:false,code:'stream_ai_provider_not_allowed',modelUsed:false};
+  const key=String(provider==='gemini'
+    ?process.env.BLOFY_LIBRARY_GEMINI_API_KEY||''
+    :process.env.BLOFY_LIBRARY_AI_API_KEY||'').trim();
+  if(key.length<32)
+    return {ok:false,code:'stream_ai_not_configured',modelUsed:false};
+  const now=Date.now();
+  while(aiCatalogRequestTimes.length&&aiCatalogRequestTimes[0]<now-3600000)
+    aiCatalogRequestTimes.shift();
+  if(aiCatalogRequestTimes.length>=24)
+    return {ok:false,code:'stream_ai_hourly_budget_exhausted',modelUsed:false};
+  const selected=await serverById(sourceId);
+  if(!selected)return {ok:false,code:'stream_library_source_missing',modelUsed:false};
+  const rows=(await pool.query(`SELECT i.source_id,i.name,
+    COALESCE(c.name,'') AS category_name
+    FROM blofy_xtream_items i
+    LEFT JOIN blofy_xtream_categories c ON c.server_id=i.server_id
+      AND c.media_type=i.media_type AND c.source_category_id=i.category_id
+    WHERE i.server_id=$1 AND i.media_type=$2
+    ORDER BY i.source_id LIMIT 12 OFFSET $3`,
+    [sourceId,type,offset])).rows;
+  if(!rows.length)return {ok:false,code:'stream_ai_end_of_catalog',modelUsed:false};
+  aiCatalogRequestTimes.push(now);
+  const classify=provider==='gemini'?suggestCatalogWithGemini:suggestCatalogWithAI;
+  const result=await classify(rows.map(x=>({
+    id:String(x.source_id),name:String(x.name),
+    categoryName:String(x.category_name||'')
+  })),{apiKey:key,
+    model:process.env.BLOFY_LIBRARY_AI_MODEL||
+      (provider==='gemini'?'gemini-3.5-flash-lite':'gpt-6-luna')});
+  if(!result.ok)return result;
+  return {...result,sourceId,type,offset,
+    nextOffset:rows.length===12?offset+12:null};
+}
 async function approveLibraryTitle(body){
   const serverId=String(body?.sourceId||''),type=String(body?.type||'');
   const sourceId=String(body?.itemId||'');
@@ -2301,7 +2683,7 @@ async function patchCategory(serverId, mediaType, categoryId, enabled) {
 // Operator-triggered, transactional reordering only. No catalog rows,
 // visibility, subscriber entitlements or upstream credentials are touched.
 async function autoSortCategories(serverId,mediaType,mode){
-  if(!validUuid(serverId)||!validType(mediaType)||!['popular','alphabetical','smart'].includes(mode))
+  if(!validUuid(serverId)||!validType(mediaType)||!['popular','alphabetical','smart','sports_first','news_first','kids_first'].includes(mode))
     throw Object.assign(new Error('xtream_category_sort_invalid'),{status:400});
   const client=await pool.connect();
   try{
@@ -2643,6 +3025,7 @@ async function handleControlAction(req,res,id,action) {
 // manage the existing authoritative sources and accounts without redirecting
 // the browser, copying database encryption keys or storing provider passwords.
 const STREAM_BRIDGE_KEY=String(process.env.BLOFY_STREAM_UNIFIED_BRIDGE_KEY||'');
+const XTREAM_CUSTOMER_HOST=configuredXtreamPublicOrigin('https://blofyplayer.com');
 const bridgeLimiter=createFixedWindowLimiter({limit:90,windowMs:60_000});
 const streamActions=new Map();
 let streamCodeSchemaReady;
@@ -2662,7 +3045,7 @@ async function callLocalGateway(method,path,body){
   const port=Number(process.env.PORT||3000);
   if(!Number.isSafeInteger(port)||port<1024||port>65535)
     throw Object.assign(new Error('gateway_port_invalid'),{status:503});
-  const match=/^\/api\/v1\/admin\/xtream-gateway\/(?:accounts(?:\/[0-9a-f-]{36}(?:\/(?:reset|credentials))?)?|codes(?:\/[0-9a-f-]{36}\/(?:revoke|sell|extend|transfer|reveal)|\/sales-summary|\?limit=30&offset=[0-9]{1,6})?)$/.exec(path);
+  const match=/^\/api\/v1\/admin\/xtream-gateway\/(?:accounts(?:\/[0-9a-f-]{36}(?:\/(?:reset|credentials|compatibility))?)?|codes(?:\/[0-9a-f-]{36}\/(?:revoke|sell|extend|transfer|reveal)|\/sales-summary|\?limit=(?:[1-9]|[12][0-9]|30)&offset=[0-9]{1,6})?)$/.exec(path);
   if(!match)throw Object.assign(new Error('gateway_route_denied'),{status:400});
   const response=await fetch('http://127.0.0.1:'+port+path,{
     method,redirect:'manual',signal:AbortSignal.timeout(9000),
@@ -2670,10 +3053,15 @@ async function callLocalGateway(method,path,body){
       'content-type':'application/json',accept:'application/json'},
     ...(body!==undefined?{body:JSON.stringify(body)}:{})
   });
-  if(Number(response.headers.get('content-length')||0)>16384)
+  // 30 safe commercial code summaries with optional buyer metadata can exceed
+  // 16 KiB. Reject genuinely oversized responses, not legitimate operator pages.
+  // The response contains only safeCodeRecord() fields; never credentials.
+  const MAX_BRIDGE_JSON_BYTES=96*1024;
+  if(Number(response.headers.get('content-length')||0)>MAX_BRIDGE_JSON_BYTES)
     throw Object.assign(new Error('gateway_response_too_large'),{status:503});
   const raw=await response.text();
-  if(raw.length>16384)throw Object.assign(new Error('gateway_response_too_large'),{status:503});
+  if(Buffer.byteLength(raw,'utf8')>MAX_BRIDGE_JSON_BYTES)
+    throw Object.assign(new Error('gateway_response_too_large'),{status:503});
   const data=JSON.parse(raw);
   if(!response.ok)return {status:response.status,data:{ok:false,code:String(data?.error||'gateway_failed').slice(0,64)}};
   return {status:response.status,data};
@@ -2733,6 +3121,94 @@ async function unifiedStreamBridge(req,res,url){
     return json(res,200,{ok:true,kind:'live',sourceUrl:url.href,
       sourceId,channelId,name:String(media.name||'').slice(0,160),
       extension:'ts',customerTrafficChanged:false});
+  }
+  // The pre-existing Studio scheduler runs every five minutes. These routes
+  // merely expose source-scoped opt-in controls through the authenticated
+  // STREAM bridge; no schedule is silently enabled by a deploy.
+  if(req.method==='GET'&&p==='/internal/blofy-stream/ops/schedule'){
+    const sourceId=String(url.searchParams.get('sourceId')||'');
+    if(!validUuid(sourceId))return json(res,400,{ok:false,code:'stream_invalid_source_id'});
+    const schedule=await studioPro.schedule(sourceId);
+    return json(res,200,{ok:true,sourceId,...schedule});
+  }
+  if(req.method==='POST'&&p==='/internal/blofy-stream/ops/schedule'){
+    const body=await readJson(req);
+    const sourceId=String(body?.sourceId||'');
+    if(!validUuid(sourceId)||typeof body?.enabled!=='boolean')
+      return json(res,400,{ok:false,code:'stream_invalid_schedule'});
+    const source=await serverById(sourceId);
+    if(!source||!source.enabled||!source.publish_catalog)
+      return json(res,409,{ok:false,code:'stream_source_not_published'});
+    const schedule=await studioPro.setSchedule(sourceId,{
+      enabled:body.enabled,intervalHours:body.intervalHours,
+      types:['live','movie','series']
+    });
+    return json(res,200,{ok:true,sourceId,...schedule,
+      firstRunImmediately:false,sourceCredentialsChanged:false});
+  }
+  if(req.method==='GET'&&p==='/internal/blofy-stream/ops/snapshots'){
+    const sourceId=String(url.searchParams.get('sourceId')||'');
+    if(!validUuid(sourceId))return json(res,400,{ok:false,code:'stream_invalid_source_id'});
+    const snapshots=await studioPro.listSnapshots(sourceId);
+    return json(res,200,{ok:true,sourceId,snapshots,
+      scope:'publisher_overrides_only_not_full_database_backup',
+      maxCategories:2000,maxCustomItems:2000});
+  }
+  if(req.method==='POST'&&p==='/internal/blofy-stream/ops/snapshot'){
+    const body=await readJson(req);
+    const sourceId=String(body?.sourceId||''),label=String(body?.label||'');
+    if(!validUuid(sourceId)||body?.confirmed!==true||label.length<4||label.length>60)
+      return json(res,400,{ok:false,code:'stream_snapshot_confirmation_required'});
+    const result=await studioPro.snapshot(sourceId,label);
+    return json(res,200,{ok:true,sourceId,...result,
+      scope:'publisher_overrides_only_not_full_database_backup'});
+  }
+  if(req.method==='GET'&&p==='/internal/blofy-stream/ops/source-stats'){
+    const sourceId=String(url.searchParams.get('sourceId')||'');
+    if(!validUuid(sourceId))return json(res,400,{ok:false,code:'stream_invalid_source_id'});
+    const source=await serverById(sourceId);
+    if(!source)return json(res,404,{ok:false,code:'stream_source_missing'});
+    const [accounts,codes,revision]=await Promise.all([
+      pool.query(`SELECT COUNT(*)::int AS total,
+       COUNT(*) FILTER (WHERE enabled=TRUE AND (expires_at IS NULL OR expires_at>NOW()))::int AS active
+       FROM blofy_xtream_gateway_accounts WHERE source_id=$1`,[sourceId]),
+      pool.query(`SELECT COUNT(*)::int AS total,
+       COUNT(*) FILTER(WHERE c.redeemed_at IS NOT NULL AND c.revoked_at IS NULL)::int AS redeemed
+       FROM blofy_xtream_gateway_duration_codes c JOIN blofy_xtream_gateway_accounts a ON a.id=c.account_id
+       WHERE a.source_id=$1`,[sourceId]),
+      pool.query(`SELECT revision,updated_at FROM blofy_xtream_catalog_revisions WHERE source_id=$1`,[sourceId])
+    ]);
+    const fanoutEnabled=permittedLicensedLiveFanout({
+      sourceId,kind:'live',extension:'ts',
+      upstreamRestreamer:source.account_info?.isRestreamer===true
+    });
+    const fanoutHealth=fanoutEnabled
+      ?await licensedLiveFanoutHealth()
+      :{ok:false,code:'licensed_live_fanout_not_enabled'};
+    return json(res,200,{ok:true,sourceId,
+      enabled:source.enabled,published:source.publish_catalog,status:source.status,
+      lastSyncAt:source.last_sync_at||null,
+      lastErrorCode:source.last_error?'xtream_sync_warning_or_error':null,
+      accounts:{total:accounts.rows[0].total,active:accounts.rows[0].active},
+      codes:{total:codes.rows[0].total,redeemed:codes.rows[0].redeemed},
+      catalogRevision:Number(revision.rows[0]?.revision||0),
+      catalogUpdatedAt:revision.rows[0]?.updated_at||null,
+      liveSourceCapacity:sourceLiveCapacity(source.account_info),
+      licensedLiveFanout:{
+        enabledForSource:permittedLicensedLiveFanout({
+          sourceId,kind:'live',extension:'ts',
+          upstreamRestreamer:source.account_info?.isRestreamer===true
+        }),
+        upstreamRestreamerPermitted:source.account_info?.isRestreamer===true,
+        maxSharedViewersPerChannelDesign:128,
+        real100ViewerLoadTestPassed:false,
+        sourceConnectionsPerSharedChannelDesign:1,
+        scope:'same_channel_same_upstream_account_only',
+        otherChannelsConsumeOtherSourceConnections:true
+      },
+      livePlayback:xtreamPlaybackSnapshot(Date.now(),sourceId),
+      sharedMediaHealth:fanoutHealth,
+      concurrentLiveViewers:null,concurrentViewersMeasured:false});
   }
   if(req.method==='GET'&&p==='/internal/blofy-stream/media-failures'){
     const sourceId=String(url.searchParams.get('sourceId')||'').trim();
@@ -2800,6 +3276,71 @@ async function unifiedStreamBridge(req,res,url){
       extension,sourceId,itemId,title:String(result.name||'').slice(0,170),
       customerTrafficChanged:false});
   }
+  if(req.method==='POST'&&p==='/internal/blofy-stream/library-ai/connection-test'){
+    const provider=String(process.env.BLOFY_LIBRARY_AI_PROVIDER||'openai').trim().toLowerCase();
+    if(provider!=='gemini')return json(res,409,{ok:false,code:'gemini_not_selected'});
+    const key=String(process.env.BLOFY_LIBRARY_GEMINI_API_KEY||'').trim();
+    if(key.length<32)return json(res,503,{ok:false,code:'stream_ai_not_configured'});
+    const now=Date.now();
+    while(geminiTestTimes.length&&geminiTestTimes[0]<now-3600000)geminiTestTimes.shift();
+    if(geminiTestTimes.length>=5||
+       (geminiTestTimes.length&&now-geminiTestTimes[geminiTestTimes.length-1]<60000))
+      return json(res,429,{ok:false,code:'gemini_connection_test_cooldown'});
+    geminiTestTimes.push(now);
+    const model=process.env.BLOFY_LIBRARY_AI_MODEL||'gemini-3.5-flash-lite';
+    const result=await suggestCatalogWithGemini([
+      {id:'demo-1',name:'Football Sports',categoryName:'Sport'}
+    ],{apiKey:key,model});
+    return json(res,result.ok?200:502,{
+      ok:result.ok===true,
+      code:result.ok?'gemini_connection_verified':result.code,
+      suggestionsReturned:result.suggestions?.length||0,
+      modelUsed:result.modelUsed===true
+    });
+  }
+  if(req.method==='GET'&&p==='/internal/blofy-stream/library-ai/scan-progress'){
+    const sourceId=String(url.searchParams.get('sourceId')||'');
+    const type=String(url.searchParams.get('type')||'');
+    const result=await getAiScanProgress(pool,{sourceId,type});
+    return json(res,result.ok?200:400,result);
+  }
+  if(req.method==='GET'&&p==='/internal/blofy-stream/library-ai/publish-status'){
+    const sourceId=String(url.searchParams.get('sourceId')||'');
+    const result=await readAiPublishState(pool,sourceId);
+    return json(res,result.ok?200:400,result);
+  }
+  if(req.method==='POST'&&p==='/internal/blofy-stream/library-ai/rollback'){
+    const body=await readJson(req);
+    const result=await revertAiClassification(pool,{
+      sourceId:String(body?.sourceId||''),planId:String(body?.planId||'')
+    });
+    if(result.ok){
+      libraryAuditCache.delete(result.sourceId+':live');
+      libraryAuditCache.delete(result.sourceId+':movie');
+      libraryAuditCache.delete(result.sourceId+':series');
+    }
+    return json(res,result.ok?200:409,result);
+  }
+  if(req.method==='POST'&&p==='/internal/blofy-stream/library-ai/chat'){
+    const result=await chatWithLibraryAI(await readJson(req));
+    return json(res,result.ok?200:409,result);
+  }
+  if(req.method==='POST'&&p==='/internal/blofy-stream/library-ai/apply'){
+    const result=await approveLibraryAICommand(await readJson(req));
+    return json(res,result.ok?200:409,result);
+  }
+  if(req.method==='GET'&&p==='/internal/blofy-stream/library-ai/status'){
+    const provider=String(process.env.BLOFY_LIBRARY_AI_PROVIDER||'openai').trim().toLowerCase();
+    const configured=provider==='gemini'
+      ?String(process.env.BLOFY_LIBRARY_GEMINI_API_KEY||'').trim().length>=32
+      :String(process.env.BLOFY_LIBRARY_AI_API_KEY||'').trim().length>=32;
+    return json(res,200,{ok:true,configured,provider,
+      modelUsed:false,maxItemsPerRequest:12,hourlyLimit:24});
+  }
+  if(req.method==='POST'&&p==='/internal/blofy-stream/library-ai'){
+    const result=await suggestStreamLibraryAI(await readJson(req));
+    return json(res,result.ok?200:result.code==='stream_ai_not_configured'?503:409,result);
+  }
   if(req.method==='GET'&&p==='/internal/blofy-stream/library-review'){
     const report=await reviewStreamLibrary(
       String(url.searchParams.get('sourceId')||''),
@@ -2840,7 +3381,7 @@ async function unifiedStreamBridge(req,res,url){
     )).rows[0]?.count||0);
     return json(res,200,{ok:true,items:rows,total,
       nextOffset:offset+rows.length<total?offset+rows.length:null,
-      serverUrl:'https://blofyplayer.com',passwordStorage:'one_way_proofs'});
+      serverUrl:XTREAM_CUSTOMER_HOST,passwordStorage:'one_way_proofs'});
   }
   const revealPath=p.match(/^\/internal\/blofy-stream\/accounts\/([0-9a-f-]{36})\/credentials$/i);
   if(req.method==='GET'&&revealPath&&validUuid(revealPath[1])){
@@ -2848,16 +3389,22 @@ async function unifiedStreamBridge(req,res,url){
       '/api/v1/admin/xtream-gateway/accounts/'+revealPath[1]+'/credentials');
     const creds=result.data?.credentials;
     if(result.status===200&&creds){
-      creds.serverUrl='https://blofyplayer.com';
-      creds.m3uUrl='https://blofyplayer.com/get.php?'+
+      creds.serverUrl=XTREAM_CUSTOMER_HOST;
+      creds.m3uUrl=creds.serverUrl+'/get.php?'+
         new URLSearchParams({username:creds.username,password:creds.password,
           type:'m3u_plus',output:'ts'});
     }
     return json(res,result.status,{ok:result.status===200,...result.data});
   }
+  const compatPath=p.match(/^\/internal\/blofy-stream\/accounts\/([0-9a-f-]{36})\/compatibility$/i);
+  if(req.method==='GET'&&compatPath&&validUuid(compatPath[1])){
+    const result=await callLocalGateway('GET',
+      '/api/v1/admin/xtream-gateway/accounts/'+compatPath[1]+'/compatibility');
+    return json(res,result.status,result.data);
+  }
   if(req.method==='GET'&&p==='/internal/blofy-stream/codes'){
     const offset=Math.max(0,Math.min(100000,Number(url.searchParams.get('offset'))||0));
-    const result=await callLocalGateway('GET','/api/v1/admin/xtream-gateway/codes?limit=30&offset='+offset);
+    const result=await callLocalGateway('GET','/api/v1/admin/xtream-gateway/codes?limit=20&offset='+offset);
     return json(res,result.status,{ok:result.status===200,...result.data});
   }
   if(req.method==='POST'&&p==='/internal/blofy-stream/codes'){
@@ -2901,7 +3448,7 @@ async function unifiedStreamBridge(req,res,url){
       '/api/v1/admin/xtream-gateway/accounts/'+passwordReset[1]+'/reset',{});
     if(result.status===200&&result.data?.credentials){
       const creds=result.data.credentials;
-      creds.serverUrl='https://blofyplayer.com';
+      creds.serverUrl=XTREAM_CUSTOMER_HOST;
       creds.m3uUrl=creds.serverUrl+'/get.php?'+
         new URLSearchParams({username:creds.username,password:creds.password,
           type:'m3u_plus',output:'ts'});
@@ -2929,7 +3476,7 @@ async function unifiedStreamBridge(req,res,url){
     // Loopback origin is never a valid end-user Xtream address.
     if(response.status===201&&response.data?.credentials){
       const creds=response.data.credentials;
-      creds.serverUrl='https://blofyplayer.com';
+      creds.serverUrl=XTREAM_CUSTOMER_HOST;
       creds.m3uUrl=creds.serverUrl+'/get.php?'+
         new URLSearchParams({username:creds.username,password:creds.password,
           type:'m3u_plus',output:'ts'});
@@ -3001,6 +3548,14 @@ http.createServer = function withBlofyXtream(listener) {
       if(url.pathname.startsWith('/internal/blofy-stream/')) {
         try{return await unifiedStreamBridge(req,res,url)}
         catch(error){
+          // Safe categorical logs for operator troubleshooting. Never log
+          // a code, URL, buyer identity, request body or exception text.
+          const category=error?.message==='gateway_response_too_large'?'bridge_response_too_large':
+            error?.message==='gateway_route_denied'?'bridge_route_denied':
+            error?.message==='gateway_not_configured'?'bridge_admin_config_missing':
+            error?.message==='gateway_port_invalid'?'bridge_port_invalid':
+            'bridge_internal_failure';
+          console.warn('BLOFY_STREAM_OPERATOR_BRIDGE_FAILURE',category);
           const validStatus=[400,404,409,413,429,503].includes(Number(error?.status))?
             Number(error.status):503;
           // No raw URLs, tokens, source credentials or provider error messages.
@@ -3019,6 +3574,44 @@ http.createServer = function withBlofyXtream(listener) {
       if (!url.pathname.startsWith('/api/v1/admin/xtream')) return listener(req, res);
       if (!requireAdmin(req, res)) return;
       await ensureReady();
+
+      // Browser-facing, session-protected AI controls. The bridge-only
+      // /internal/blofy-stream/* routes cannot be called from the admin UI.
+      // The existing admin session hook injects a verified Bearer after cookie
+      // validation and enforces a same-origin policy for POST requests.
+      if(url.pathname==='/api/v1/admin/xtream/library-ai/status'&&req.method==='GET'){
+        const provider=String(process.env.BLOFY_LIBRARY_AI_PROVIDER||'openai').trim().toLowerCase();
+        const configured=provider==='gemini'
+          ?String(process.env.BLOFY_LIBRARY_GEMINI_API_KEY||'').trim().length>=32
+          :String(process.env.BLOFY_LIBRARY_AI_API_KEY||'').trim().length>=32;
+        return json(res,200,{ok:true,provider,configured,
+          model:provider==='gemini'?'gemini-3.5-flash-lite':'openai',
+          maxItemsPerRequest:12,hourlyLimit:24});
+      }
+      if(url.pathname==='/api/v1/admin/xtream/library-ai/suggest'&&req.method==='POST'){
+        const result=await suggestStreamLibraryAI(await readJson(req));
+        return json(res,result.ok?200:result.code==='stream_ai_not_configured'?503:409,result);
+      }
+      if(url.pathname==='/api/v1/admin/xtream/library-ai/connection-test'&&req.method==='POST'){
+        const provider=String(process.env.BLOFY_LIBRARY_AI_PROVIDER||'openai').trim().toLowerCase();
+        if(provider!=='gemini')return json(res,409,{ok:false,code:'gemini_not_selected'});
+        const key=String(process.env.BLOFY_LIBRARY_GEMINI_API_KEY||'').trim();
+        if(key.length<32)return json(res,503,{ok:false,code:'stream_ai_not_configured'});
+        const now=Date.now();
+        while(geminiTestTimes.length&&geminiTestTimes[0]<now-3600000)geminiTestTimes.shift();
+        if(geminiTestTimes.length>=5||
+           (geminiTestTimes.length&&now-geminiTestTimes[geminiTestTimes.length-1]<60000))
+          return json(res,429,{ok:false,code:'gemini_connection_test_cooldown'});
+        geminiTestTimes.push(now);
+        const result=await suggestCatalogWithGemini(
+          [{id:'demo-1',name:'Football Sports',categoryName:'Sport'}],
+          {apiKey:key,model:process.env.BLOFY_LIBRARY_AI_MODEL||'gemini-3.5-flash-lite'});
+        // Return only fixed codes; do not expose Google response or user keys.
+        return json(res,result.ok?200:502,{
+          ok:result.ok===true,code:result.ok?'gemini_connection_verified':result.code,
+          model:process.env.BLOFY_LIBRARY_AI_MODEL||'gemini-3.5-flash-lite',
+          suggestionsReturned:result.suggestions?.length||0});
+      }
 
       // All Studio Pro calls inherit the existing admin authentication and
       // rate limit. Saved presentations do not expose upstream secrets.

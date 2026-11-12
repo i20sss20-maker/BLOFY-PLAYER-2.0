@@ -1839,6 +1839,8 @@ async function loadBlofyPlaybackHealth(){
     const asMs=value=>value===null||value===undefined?'—':Number(value).toLocaleString('en-US')+' ms';
     const stats=[
       ['بدأ التشغيل',m.started??0],
+      ['تصاريح مشاركة أُصدرت',m.sharedTicketsIssued??0],
+      ['رجوع للمسار السابق عند تعذر التصريح',m.sharedGrantFallbacks??0],
       ['فشل بدء البث',m.failed??0],
       ['رفض دخول BLOFY',m.gatewayAuthDenied??0],
       ['محتوى غير متاح',m.unavailableItems??0],
@@ -1900,7 +1902,7 @@ async function loadBlofyPlaybackHealth(){
       issues.append(make('p','muted','لا توجد أخطاء تشغيل مسجلة خلال الساعة الماضية على هذه النسخة.'));
     }
     const upstreamCodes=Object.entries(m.upstreamCodes||{});
-    note.textContent='الأرقام لآخر ساعة على هذا السيرفر فقط. رفض حساب BLOFY (401) يختلف عن رفض المصدر (403)، ولا يعني حدوث عطل بالمصدر. نجاح بدء البث لا يضمن استمراره طوال المشاهدة.'+
+    note.textContent='الأرقام لآخر ساعة على هذا السيرفر فقط. إصدار تصريح المشاركة لا يؤكد وصول الفيديو أو الصوت. رفض حساب BLOFY (401) يختلف عن رفض المصدر (403)، ولا يعني حدوث عطل بالمصدر. نجاح بدء البث لا يضمن استمراره طوال المشاهدة.'+
       (upstreamCodes.length?' · أخطاء المصدر: '+upstreamCodes.map(([code,n])=>'HTTP '+code+' ('+n+')').join('، '):'');
   }catch(error){
     note.textContent='تعذر تحديث مراقبة إعادة البث: '+error.message;
@@ -2268,6 +2270,15 @@ document.querySelectorAll('[data-open-workspace]').forEach(button=>{
 });
 document.querySelectorAll('[data-open-tab]').forEach(button=>{
   button.addEventListener('click',()=>void switchTab(button.dataset.openTab).then(()=>window.scrollTo({top:0,behavior:'smooth'})));
+});
+document.getElementById('streamCodeRenewShortcut')?.addEventListener('click',event=>{
+  event.preventDefault();
+  selectWorkspaceMode('accounts');
+  void switchTab('xtream').then(()=>{
+    document.getElementById('stream-code-management')?.scrollIntoView({
+      behavior:'smooth',block:'start'
+    });
+  });
 });
 selectWorkspaceMode('sources');
 

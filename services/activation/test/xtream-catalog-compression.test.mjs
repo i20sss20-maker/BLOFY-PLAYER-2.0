@@ -30,8 +30,9 @@ test('production gateway sends compressed lists only on accepted GET and preserv
   assert.match(block,/'vary':'Accept-Encoding'/);
   assert.match(block,/headers\['content-encoding'\]='gzip'/);
   assert.match(block,/gzip\.pipe\(res\)/);
-  assert.match(block,/writeStreamChunk\(output,'\['\)/);
-  assert.match(block,/writeStreamChunk\(output,'\]'\)/);
+  assert.match(block,/createXtreamJsonArrayWriter\(/);
+  assert.match(block,/await writer\.finish\(\)/);
+  assert.match(block,/row=>writer\.append\(formatGatewayItem/);
   assert.match(block,/output\.end\(\)/);
   assert.match(block,/walkGatewayItems\(mediaType,filter/);
   assert.match(block,/gzip\.destroy\(\)/);

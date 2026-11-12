@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import {randomNumericStreamCode,streamNumericCodeLength,streamCodeProof,safeCodeRecord}
   from './xtream-duration-codes.mjs';
 import {encryptStreamCode} from './xtream-code-vault.mjs';
+import {decryptGatewayAccountPassword} from './xtream-account-vault.mjs';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function problem(message,status=400){
@@ -47,7 +48,13 @@ export async function ensureStreamCommercialSchema(pool){
     'ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS sales_channel TEXT',
     'ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS transfer_count INTEGER NOT NULL DEFAULT 0',
     'ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS last_transfer_at TIMESTAMPTZ',
-    'ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS extended_days INTEGER NOT NULL DEFAULT 0'
+    'ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS extended_days INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS relogin_device_hash TEXT',
+    'ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS relogin_request_hash TEXT',
+    'ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS relogin_requested_at TIMESTAMPTZ',
+    'ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS relogin_approved_at TIMESTAMPTZ',
+    'ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS relogin_expires_at TIMESTAMPTZ',
+    'ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS xtream_recovery_until TIMESTAMPTZ'
   ])await pool.query(ddl);
   await pool.query(`CREATE TABLE IF NOT EXISTS blofy_xtream_gateway_code_events(
     id UUID PRIMARY KEY, code_id UUID NOT NULL REFERENCES blofy_xtream_gateway_duration_codes(id),
@@ -153,6 +160,60 @@ export function createStreamCommercial({pool,keyHex,clock=Date.now,
       throw problem('stream_transfer_code_generation_unavailable',503);
     });
   }
+  // The original Xtream redemption is single-use. If the customer loses the
+  // original credentials, an authenticated operator can issue a DIFFERENT
+  // one-time recovery voucher for the SAME subscription. Unlike a new sale,
+  // this cannot create an account, restore an expired subscription, or reset
+  // any activation clock. Old voucher immediately stops matching its HMAC.
+  async function reissueXtreamForRecovery(id){
+    validId(id);
+    return run(async db=>{
+      await db.query('SELECT pg_advisory_xact_lock(718420682)');
+      const row=(await db.query(`SELECT * FROM blofy_xtream_gateway_duration_codes
+        WHERE id=$1 FOR UPDATE`,[id])).rows[0];
+      if(!row||row.code_channel!=='xtream'||!row.redeemed_at||
+         !row.account_id||row.revoked_at||!row.code_hash||
+         new Date(row.expires_at).getTime()<=clock())
+        throw problem('stream_xtream_recovery_unavailable',409);
+      const account=(await db.query(`SELECT id,enabled,expires_at,credential_vault
+        FROM blofy_xtream_gateway_accounts WHERE id=$1 FOR UPDATE`,
+        [row.account_id])).rows[0];
+      if(!account||!account.enabled||
+         new Date(account.expires_at).getTime()<=clock()||
+         !decryptGatewayAccountPassword(account.id,account.credential_vault,keyHex))
+        throw problem('stream_xtream_recovery_unavailable',409);
+      const total=Number((await db.query(
+        'SELECT COUNT(*)::int AS count FROM blofy_xtream_gateway_duration_codes'
+      )).rows[0]?.count)||0;
+      const length=streamNumericCodeLength(total);
+      for(let attempt=0;attempt<12;attempt++){
+        const code=randomNumericStreamCode(length,randomBytes);
+        const hash=streamCodeProof(code,keyHex);
+        const collision=(await db.query(`SELECT 1 FROM blofy_xtream_gateway_duration_codes
+          WHERE code_hash=$1 LIMIT 1`,[hash])).rows.length>0;
+        if(collision)continue;
+        const deadline=new Date(clock()+24*60*60*1000);
+        const updated=(await db.query(`UPDATE blofy_xtream_gateway_duration_codes
+          SET code_hash=$2,code_hint=$3,code_vault=$4,
+              xtream_recovery_until=$5,transfer_count=transfer_count+1,
+              last_transfer_at=NOW()
+          WHERE id=$1 AND revoked_at IS NULL
+          RETURNING *`,[id,hash,code.slice(0,2)+'••••'+code.slice(-2),
+          encryptStreamCode(id,code,keyHex),deadline])).rows[0];
+        if(!updated)throw problem('stream_xtream_recovery_unavailable',409);
+        await event(db,id,'xtream_single_use_recovery_issued',
+          {originalExpiryPreserved:true,oldCodeInvalidated:true,
+           oneTime:true,deadline:deadline.toISOString()});
+        return {ok:true,item:safeCodeRecord(updated),code,
+          recoverBefore:deadline.getTime(),
+          expiresAt:Math.min(new Date(updated.expires_at).getTime(),
+            new Date(account.expires_at).getTime()),
+          subscriptionUnchanged:true};
+      }
+      throw problem('stream_xtream_recovery_code_unavailable',503);
+    });
+  }
+
   async function salesSummary(){
     const r=await pool.query(`SELECT
       COUNT(*)::int AS total,
@@ -168,5 +229,5 @@ export function createStreamCommercial({pool,keyHex,clock=Date.now,
       FROM blofy_xtream_gateway_duration_codes`);
     return {ok:true,currency:'SAR',...(r.rows?.[0]||{})};
   }
-  return {markSold,extend,reissueForDeviceTransfer,salesSummary};
+  return {markSold,extend,reissueForDeviceTransfer,reissueXtreamForRecovery,salesSummary};
 }

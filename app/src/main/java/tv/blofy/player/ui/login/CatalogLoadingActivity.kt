@@ -24,6 +24,8 @@ import kotlinx.coroutines.withContext
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.data.CatalogSyncState
+import tv.blofy.player.BuildConfig
+import tv.blofy.player.core.identity.StreamCatalogRevision
 import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.PlaylistSyncPolicy
 import tv.blofy.player.data.PlaylistSyncProgress
@@ -246,6 +248,11 @@ class CatalogLoadingActivity : AppCompatActivity() {
             target.copy(id = UUID.randomUUID().toString(), enabled = false)
         }
 
+        // Capture revision before downloading. Never mark a newer revision
+        // as installed if it appeared partway through the staged sync.
+        val sourceRevision = if (BuildConfig.CODE_ONLY_LOGIN)
+            StreamCatalogRevision.fetchCurrent(applicationContext) else null
+
         try {
             render(5, if (firstLoad) "بدء التحميل السريع للباقة..." else "بدء تحديث الباقة...")
             val result = PlaylistSyncPolicy.run {
@@ -271,6 +278,10 @@ class CatalogLoadingActivity : AppCompatActivity() {
             }
 
             CatalogSyncState.markReady(applicationContext, providerId)
+            if (BuildConfig.CODE_ONLY_LOGIN && providerId ==
+                tv.blofy.player.core.identity.StreamCodeSession.providerId) {
+                StreamCatalogRevision.markSuccessfulSync(applicationContext, sourceRevision)
+            }
             render(100, "المكتبة جاهزة")
             startActivity(Intent(this, HomeActivity::class.java))
             finish()

@@ -13,6 +13,9 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
+import tv.blofy.player.data.CatalogSyncState
+import tv.blofy.player.core.identity.StreamCatalogRevision
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
@@ -59,6 +62,23 @@ class HomeActivity : AppCompatActivity() {
                 // Network errors are inconclusive. Never expire a paying
                 // subscriber merely because mobile data is temporarily down.
                 val valid = token?.let { StreamCodeClient.verifySession(it) }
+                if (valid == true && !isFinishing && !isDestroyed) {
+                    val cacheReady = CatalogSyncState.isReady(
+                        applicationContext, StreamCodeSession.providerId)
+                    if (cacheReady) {
+                        // Merely notify; never interrupt a playing program
+                        // or force network downloads from the Home screen.
+                        val remote = StreamCatalogRevision.fetchCurrent(applicationContext)
+                        if (StreamCatalogRevision.updateAvailable(
+                            remote, StreamCatalogRevision.saved(applicationContext),
+                            hasLocalCatalog = true
+                        )) {
+                            Toast.makeText(this@HomeActivity,
+                                "تحديث جديد للمكتبة متاح • الإعدادات ← تحديث المحتوى",
+                                Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }
                 if (token == null || valid == false) {
                     StreamCodeSession.clearClaim(applicationContext)
                     startActivity(Intent(this@HomeActivity,

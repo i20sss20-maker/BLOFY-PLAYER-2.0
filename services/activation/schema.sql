@@ -41,6 +41,12 @@ CREATE TABLE IF NOT EXISTS playback_diagnostics (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Older installations keep their diagnostics; this additive migration is idempotent.
+ALTER TABLE playback_diagnostics ADD COLUMN IF NOT EXISTS rebuffer_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE playback_diagnostics ADD COLUMN IF NOT EXISTS rebuffer_ms BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE playback_diagnostics ADD COLUMN IF NOT EXISTS recovery_count INTEGER NOT NULL DEFAULT 0;
+CREATE INDEX IF NOT EXISTS idx_playback_diag_created ON playback_diagnostics(created_at DESC);
+
 CREATE INDEX IF NOT EXISTS idx_playback_diag_device_created ON playback_diagnostics(device_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_playback_diag_provider_created ON playback_diagnostics(provider_key, created_at DESC);
 

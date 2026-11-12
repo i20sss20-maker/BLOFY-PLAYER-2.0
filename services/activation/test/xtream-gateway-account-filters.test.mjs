@@ -30,6 +30,11 @@ test('customer account renewal remains an explicit administrator action, passwor
   assert.match(render,/renew\.disabled=accountExpiryMs\(item\.expiresAt\)===null/);
   assert.match(render,/window\.confirm\('تجديد اشتراك '/);
   assert.match(render,/method:'PATCH',body:JSON\.stringify\(\{expiresAt:/);
-  assert.match(render,/actions\.append\(copy, renew, toggle, reset, remove\)/);
+  assert.match(render,/actions\.append\(copy, renew, toggle, reset, rotate, remove\)/);
+  assert.match(render,/rotate\.addEventListener\('click'/);
+  assert.match(render,/acknowledgeDisconnect:true/);
+  assert.match(render,/rotate-credentials/);
+  // Rotating an old M3U login is not the same as renewing a subscription.
+  assert.match(render,/window\.prompt\('لتأكيد قطع اتصال بيانات الدخول القديمة/);
   assert.doesNotMatch(render,/\bdeleteAccountAutomatically\(/);
 });

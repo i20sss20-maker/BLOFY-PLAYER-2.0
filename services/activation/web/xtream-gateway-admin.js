@@ -49,6 +49,16 @@ function showCredentials(credentials) {
   gx('gatewayCredHost').textContent = credentials.serverUrl || '—';
   gx('gatewayCredUser').textContent = credentials.username || '—';
   gx('gatewayCredPass').textContent = credentials.password || '—';
+  // Show a one-time copy action only after an explicit credential rotation.
+  // The server never includes plaintext passwords in normal account lists.
+  gx('gatewayM3uCopyOneTime')?.remove();
+  if(credentials.m3uUrl){
+    const action=gatewayNode('button','button ghost','نسخ رابط M3U الجديد');
+    action.type='button';action.id='gatewayM3uCopyOneTime';
+    action.addEventListener('click',()=>copyText(credentials.m3uUrl,
+      'تم نسخ رابط M3U الجديد. حدّث الأجهزة المرتبطة بالحساب.'));
+    gx('gatewayCredentials').append(action);
+  }
   gx('gatewayCredentials').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
@@ -116,6 +126,7 @@ function hideIssuedCredentials(){
   gx('gatewayCredentials').hidden=true;
   gx('gatewayBatchRows').replaceChildren();
   gx('gatewayCredPass').textContent='—';
+  gx('gatewayM3uCopyOneTime')?.remove();
 }
 
 function accountExpiresAt(value){
@@ -281,6 +292,33 @@ function renderGatewayAccounts() {
       finally { reset.disabled = false; }
     });
 
+    // Explicit rotation for OLD long BLOFY credentials. Reading an existing
+    // M3U URL never alters a customer's entitlement or login identity.
+    const rotate = gatewayNode('button', 'button ghost', 'توليد يوزر وباسورد مختصرين');
+    rotate.type = 'button';
+    rotate.title = '8 أحرف للاسم و12 كلمة للمرور، مع بقاء الاشتراك وتاريخ الانتهاء';
+    rotate.addEventListener('click', async () => {
+      if (!window.confirm(
+        'تغيير بيانات Xtream لهذا الحساب فقط؟\\n' +
+        'سيصبح اسم المستخدم 8 أحرف وكلمة المرور 12 حرفًا/رقمًا.\\n' +
+        'لن يتغير كود الاشتراك ولا تاريخ انتهائه، لكن جميع روابط Xtream القديمة ستتوقف فورًا، ويجب تحديث الأجهزة.'
+      )) return;
+      const phrase=window.prompt('لتأكيد قطع اتصال بيانات الدخول القديمة، اكتب كلمة: تغيير');
+      if(phrase?.trim()!=='تغيير')return;
+      rotate.disabled=true;
+      try {
+        const data=await gatewayApi(
+          '/api/v1/admin/xtream-gateway/accounts/'+encodeURIComponent(item.id)+'/rotate-credentials',{
+            method:'POST',body:JSON.stringify({acknowledgeDisconnect:true})
+          });
+        showCredentials(data.credentials);
+        gatewayMessage('تم اختصار بيانات الحساب، دون تجديد أو تغيير تاريخ الانتهاء. حدّث رابط العميل.');
+        await loadGateway();
+      } catch(error) {
+        gatewayMessage('تعذر تغيير بيانات Xtream: '+error.message,'error');
+      } finally { rotate.disabled=false; }
+    });
+
     const remove = gatewayNode('button', 'button danger', 'حذف');
     remove.type = 'button';
     remove.addEventListener('click', async () => {
@@ -315,7 +353,7 @@ function renderGatewayAccounts() {
       finally{renew.disabled=false}
     });
 
-    actions.append(copy, renew, toggle, reset, remove);
+    actions.append(copy, renew, toggle, reset, rotate, remove);
     card.append(main, actions);
     list.append(card);
   }
@@ -428,4 +466,216 @@ function openGatewayHashTab() {
 
 window.addEventListener('hashchange', openGatewayHashTab);
 setTimeout(openGatewayHashTab, 0);
+// Same-voucher login recovery. A customer who reinstalled BLOFY STREAM
+// supplies the original voucher and the 6-digit approval number displayed on
+// their TV. This form is admin-only; it does not generate another subscription.
+function initStreamReloginControls() {
+  const anchor=gx('gatewayAccountSearch') || gx('gatewayCreateBtn');
+  if(!anchor || gx('stream-relogin-controls'))return;
+  const section=gatewayNode('section','card');
+  section.id='stream-relogin-controls';
+  section.setAttribute('aria-label','استعادة الدخول بكود BLOFY STREAM نفسه');
+  section.style.marginTop='16px';
+  section.append(gatewayNode('h3','', '🔐 السماح بإعادة الدخول بنفس الكود'));
+  section.append(gatewayNode('p','caption',
+    'لعميل سجّل خروجًا أو أعاد تثبيت التطبيق. نفس الكود ونفس تاريخ الانتهاء؛ الجهاز السابق يُفصل عند دخول الجهاز الموافق عليه، ولا يُنشأ اشتراك جديد.'));
+  const form=document.createElement('form');
+  form.style.display='flex';form.style.flexWrap='wrap';
+  form.style.gap='10px';form.style.alignItems='end';
+  const add=(label,placeholder,length)=>{
+    const wrapper=gatewayNode('label','');
+    wrapper.style.display='grid';wrapper.style.gap='5px';
+    wrapper.append(document.createTextNode(label));
+    const input=document.createElement('input');
+    input.type='text';input.inputMode='numeric';input.maxLength=length;
+    input.required=true;input.autocomplete='off';
+    input.placeholder=placeholder;input.setAttribute('aria-label',label);
+    wrapper.append(input);form.append(wrapper);return input;
+  };
+  const voucher=add('كود اشتراك العميل','8 إلى 12 رقمًا',24);
+  const approval=add('رقم طلب إعادة الدخول من جهاز العميل','6 أرقام',6);
+  const submit=gatewayNode('button','button','السماح بدخول إضافي');
+  submit.type='submit';form.append(submit);
+  const status=gatewayNode('p','caption','');
+  status.setAttribute('role','status');status.setAttribute('aria-live','polite');
+  section.append(form,status);
+  form.addEventListener('submit',async e=>{
+    e.preventDefault();
+    const code=String(voucher.value||'').trim();
+    const requestCode=String(approval.value||'').trim();
+    if(!/^(?:[0-9]{8,12}|[A-Fa-f0-9]{24})$/.test(code.replace(/[\\s-]/g,''))||
+       !/^[0-9]{6}$/.test(requestCode)){
+      status.textContent='راجع كود الاشتراك ورقم الطلب ذي الست خانات.';
+      return;
+    }
+    if(!confirm('تأكيد السماح لجهاز العميل الجديد؟ يبقى تاريخ الانتهاء كما هو، وستتوقف جلسة الجهاز القديم بعد دخوله.'))return;
+    submit.disabled=true;status.textContent='جارٍ التحقق من طلب العميل…';
+    try{
+      await gatewayApi('/api/v1/admin/xtream-gateway/code-relogin/approve',{
+        method:'POST',body:JSON.stringify({code,requestCode})
+      });
+      status.textContent='تمت الموافقة. اطلب من العميل إدخال كوده الأصلي خلال 10 دقائق. لا يحتاج كودًا جديدًا.';
+      approval.value='';voucher.value='';
+    }catch(error){
+      const why=String(error.message||'');
+      status.textContent=({
+        stream_code_relogin_pin_incorrect:'رمز طلب الدخول غير صحيح.',
+        stream_code_relogin_request_unavailable:'طلب الدخول منتهي أو تمت الموافقة عليه سابقًا. اطلب من العميل إنشاء طلب جديد.',
+        stream_code_relogin_unavailable:'الاشتراك غير نشط أو منتهي أو غير مخصص لتطبيق STREAM.'
+      })[why]||'تعذرت الموافقة: '+why;
+    }finally{submit.disabled=false}
+  });
+  const slot=anchor.closest('section')||anchor.parentElement;
+  slot?.parentElement?.insertBefore(section,slot.nextSibling);
+}
+initStreamReloginControls();
 loadGateway();
+
+/**
+ * Admin support for redeemed STREAM vouchers. Critical: never send a voucher
+ * in a GET URL or automatically extend a subscription when looking one up.
+ * A consumed voucher is not an unredeemed voucher, even after extending its
+ * deadline. App-only codes can be transferred via an explicit, audited action.
+ */
+function initStreamCodeManagement(){
+  const form=gx('streamCodeLookupForm'),entry=gx('streamCodeLookupInput');
+  const status=gx('streamCodeLookupStatus'),panel=gx('streamCodeLookupResult');
+  const details=gx('streamCodeLookupDetails'),help=gx('streamCodeRecoveryHelp');
+  const renew=gx('streamCodeRenewButton'),transfer=gx('streamCodeTransferButton');
+  const transferred=gx('streamCodeTransferred'),transferValue=gx('streamCodeTransferredValue');
+  if(!form||!entry||!status||!panel||!details||!renew||!transfer)return;
+  let current=null;
+  const normalize=v=>String(v||'').trim().toUpperCase()
+    .replace(/[٠-٩]/g,c=>String(c.charCodeAt(0)-0x660))
+    .replace(/[۰-۹]/g,c=>String(c.charCodeAt(0)-0x6f0))
+    .replace(/[\\s-]+/g,'');
+  const mask=item=>item?.codeHint||'••••';
+  const date=ms=>ms?new Date(ms).toLocaleString('ar-SA'):'غير محدد';
+  function reset(){
+    current=null;panel.hidden=true;renew.disabled=true;
+    transfer.hidden=true;transfer.disabled=true;
+    transferred.hidden=true;
+    if(transferValue)transferValue.textContent='';
+  }
+  function row(label,value){
+    const el=gatewayNode('div','');
+    el.append(gatewayNode('strong','',label+': '),gatewayNode('span','',String(value)));
+    return el;
+  }
+  function describe(record){
+    const item=record.item,sub=record.subscription;
+    details.replaceChildren(
+      row('الكود',mask(item)),
+      row('النوع',item.channel==='app'?'تفعيل تطبيق STREAM':'بيانات Xtream'),
+      row('الحالة',item.status==='revoked'?'ملغي':!sub.redeemed?'جديد ولم يُستخدم':
+        sub.active?'مفعّل وصالح':sub.expired?'منتهي المدة':!sub.accountEnabled?'الحساب موقوف':'يحتاج مراجعة'),
+      row('تاريخ التفعيل',date(item.redeemedAt)),
+      row('انتهاء الاشتراك',date(sub.expiresAt)),
+      row('إجمالي الأيام المضافة سابقًا',Number(item.extendedDays||0)),
+      row('الحساب المرتبط',sub.accountExists?'موجود':'لا يوجد')
+    );
+    renew.disabled=!sub.canExtend;
+    transfer.hidden=!sub.redeemed;
+    transfer.textContent=item.channel==='app'?
+      'إصدار كود بديل لنقل الجهاز':'إصدار كود استرداد بيانات Xtream';
+    transfer.disabled=!sub.active||(item.channel==='app'&&item.deviceTransferPending);
+    const note= !sub.redeemed ?
+      'هذا الكود جديد. لا يحتاج تجديدًا قبل أول استخدام؛ تبدأ مدته عند التفعيل الأول.' :
+      !sub.accountExists ?
+      'الاشتراك المرتبط غير موجود. لا يمكن تجديده تلقائيًا؛ يلزم فحص المسؤول.' :
+      !sub.accountEnabled ?
+      'الحساب موقوف إداريًا. زيادة المدة لا ترفع الإيقاف؛ راجع سبب الإيقاف أولًا.' :
+      item.channel==='app' ?
+      'الكود مستعمل: تجديد المدة لا يمسح ارتباطه بالجهاز. الجهاز الجديد يحتاج موافقة استعادة دخول برمز 6 خانات، أو إصدار كود بديل صراحةً من المسؤول (يفصل الكود القديم).' :
+      'الكود مستعمل: تجديد المدة وحده لا يسمح بإدخاله مرة ثانية. إذا فقد العميل بيانات Xtream، استخدم زر إصدار كود استرداد جديد (لمرة واحدة خلال 24 ساعة) بعد التحقق من صاحب الاشتراك؛ يبقى نفس الحساب وتاريخ الانتهاء.';
+    help.textContent=note;
+    panel.hidden=false;
+  }
+  async function lookup(){
+    const code=normalize(entry.value);
+    reset();
+    if(!/^(?:[0-9]{8,12}|[A-F0-9]{24})$/.test(code)){
+      status.textContent='أدخل كود STREAM صحيحًا: 8 إلى 12 رقمًا أو الكود القديم المكوّن من 24 حرفًا.';
+      return;
+    }
+    const submit=gx('streamCodeLookupButton');
+    if(submit)submit.disabled=true;
+    status.textContent='جارٍ فحص حالة الكود دون تفعيله أو تغييره…';
+    try{
+      const record=await gatewayApi('/api/v1/admin/xtream-gateway/codes/lookup',{
+        method:'POST',cache:'no-store',body:JSON.stringify({code})
+      });
+      if(!record.ok||!record.item)throw new Error('stream_code_not_found');
+      current=record;
+      describe(record);
+      status.textContent='اكتمل الفحص. التجديد ونقل الجهاز إجراءان منفصلان ولا يحدثان إلا بتأكيدك.';
+    }catch(error){
+      status.textContent=error.message==='HTTP 404'||error.message==='stream_code_not_found'?
+        'هذا الكود غير موجود في قاعدة أكواد BLOFY STREAM الحالية. تأكد أنه ليس كود BLOFY PLAYER المنفصل.':
+        'تعذر فحص الكود: '+String(error.message||'خطأ غير معروف').slice(0,90);
+    }finally{if(submit)submit.disabled=false}
+  }
+  form.addEventListener('submit',e=>{e.preventDefault();void lookup();});
+  renew.addEventListener('click',async()=>{
+    const record=current;
+    if(!record?.subscription?.canExtend)return;
+    const days=Number(gx('streamCodeRenewDays')?.value);
+    if(![30,90,180,365].includes(days))return;
+    if(!confirm('تجديد الاشتراك المرتبط بالكود '+mask(record.item)+' لمدة '+days+
+      ' يومًا؟ سيُمدد تاريخ الانتهاء فقط، ولن يُعاد تفعيل كود مستهلك أو يُنقل إلى جهاز آخر.'))return;
+    renew.disabled=true;transfer.disabled=true;
+    try{
+      await gatewayApi('/api/v1/admin/xtream-gateway/codes/'+encodeURIComponent(record.item.id)+'/extend',{
+        method:'POST',body:JSON.stringify({days})
+      });
+      await lookup(); // Read-only refresh; do not redeem the code.
+      status.textContent='تم تجديد صلاحية الاشتراك لمدة '+days+' يومًا؛ تاريخ التفعيل والكود لم يتغيرا.';
+    }catch(error){
+      status.textContent='تعذر تجديد المدة: '+String(error.message||'حدث خطأ').slice(0,100);
+    }finally{if(current){
+      renew.disabled=!current.subscription.canExtend;
+      transfer.disabled=!current.subscription.active||
+        (current.item.channel==='app'&&current.item.deviceTransferPending);
+    }}
+  });
+  transfer.addEventListener('click',async()=>{
+    const record=current;
+    if(!record?.subscription?.active||
+       (record.item.channel==='app'&&record.item.deviceTransferPending))return;
+    const appCode=record.item.channel==='app';
+    if(!confirm(appCode?
+      'إصدار كود بديل لنقل نفس اشتراك STREAM إلى جهاز آخر؟\\n'+
+      'سيُبطل الكود القديم ويفصل جهازه، دون إضافة أيام. تأكد من ملكية العميل.':
+      'إصدار كود استرداد لبيانات Xtream لنفس الاشتراك؟\\n'+
+      'سيُبطل الكود السابق، وسيعمل الجديد مرة واحدة خلال 24 ساعة فقط.\\n'+
+      'لا يضيف اشتراكًا أو أيامًا. تأكد من هوية العميل قبل المتابعة.'))return;
+    transfer.disabled=true;renew.disabled=true;
+    try{
+      const response=await gatewayApi('/api/v1/admin/xtream-gateway/codes/'+
+        encodeURIComponent(record.item.id)+(appCode?'/transfer':'/recover-xtream'),{
+        method:'POST',body:'{}'
+      });
+      if(!/^[0-9]{8,12}$/.test(String(response.code||'')))throw new Error('invalid_transfer_response');
+      // The new code is shown only once, never persisted to storage or a URL.
+      reset();
+      entry.value='';
+      transferValue.textContent=response.code;
+      transferred.hidden=false;
+      status.textContent=appCode?
+        'تم إصدار كود نقل الجهاز دون تجديد المدة. انسخه وأخفه بعد تسليمه.':
+        'تم إصدار كود لاستعادة بيانات Xtream مرة واحدة خلال 24 ساعة؛ أُلغي الكود القديم وبقي تاريخ الانتهاء كما هو.';
+    }catch(error){
+      status.textContent='تعذر نقل الكود: '+String(error.message||'حدث خطأ').slice(0,100);
+      transfer.disabled=false;renew.disabled=false;
+    }
+  });
+  gx('streamCodeTransferCopy')?.addEventListener('click',()=>{
+    if(!transferred.hidden&&transferValue?.textContent)
+      void copyText(transferValue.textContent,'تم نسخ الكود البديل. سلّمه لصاحب الاشتراك فقط.');
+  });
+  gx('streamCodeTransferHide')?.addEventListener('click',()=>{
+    if(transferValue)transferValue.textContent='';
+    transferred.hidden=true;
+  });
+}
+initStreamCodeManagement();

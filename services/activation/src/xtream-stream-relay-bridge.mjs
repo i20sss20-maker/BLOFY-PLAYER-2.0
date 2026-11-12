@@ -60,19 +60,47 @@ async function remoteRelayRequest(path,{method='GET',body,env=process.env,
     reader.releaseLock();
   }
 }
-export async function issueStreamRelayGrant({sourceUrl,kind,sharedLive=false},{
+export async function issueStreamRelayGrant({sourceUrl,kind,sharedLive=false,
+  requireSharedLive=false,licensedCdnRedirect=false},{
   env=process.env,fetchImpl=fetch}={}){
   if(!['live','movie','series'].includes(kind)||typeof sourceUrl!=='string')
     throw new Error('stream_bridge_invalid_media');
   const result=await remoteRelayRequest('/internal/relay-grants',{
     method:'POST',body:{kind,sourceUrl,
       ...(kind==='live'&&sharedLive===true&&
-        env.BLOFY_STREAM_SHARED_LIVE_CANARY==='1'?{sharedLive:true}:{})},env,fetchImpl
+        env.BLOFY_STREAM_SHARED_LIVE_CANARY==='1'?{
+          sharedLive:true,
+          // Per-channel rights and per-account subscriber pilot were
+          // checked by the upstream gateway BEFORE granting this scope.
+          ...(licensedCdnRedirect===true&&requireSharedLive===true?
+            {licensedCdnRedirect:true}:{})
+        }:{})},env,fetchImpl
   });
   if(!result?.ok||typeof result.path!=='string'||!RESOURCE.test(result.path)||
       result.expiresInSeconds!==45)
     throw new Error('stream_bridge_bad_response');
+  // Never silently turn a licensed shared feed into one source connection
+  // PER viewer when the isolated media plane has fanout disabled.
+  if(requireSharedLive===true&&(sharedLive!==true||result.sharedLiveGranted!==true))
+    throw new Error('stream_shared_live_not_granted');
   return 'https://'+HOST+result.path;
+}
+export async function licensedLiveFanoutHealth({env=process.env,fetchImpl=fetch}={}){
+  try{
+    const data=await remoteRelayRequest('/internal/relay-health',{env,fetchImpl});
+    if(data?.ok!==true||data?.service!=='BLOFY-STREAM'||
+       data?.role!=='media_plane')throw Error('stream_bridge_bad_response');
+    const f=data.fanout||{};
+    const count=x=>Number.isSafeInteger(x)&&x>=0&&x<=1000000?x:0;
+    return {ok:true,scope:'all_shared_channels_on_this_media_instance',
+      sharedLiveConfigured:data.sharedLiveConfigured===true,
+      activeSharedChannels:count(f.activeFeeds),activeSharedViewers:count(f.viewers),
+      maxViewersPerChannelDesign:count(f.maxViewersPerFeed),
+      upstreamReconnects:count(f.upstreamReconnects),
+      reconnectExhaustions:count(f.reconnectExhaustions),
+      slowViewerDisconnects:count(f.slowViewerDisconnects),
+      real100ViewerValidationComplete:false};
+  }catch{return {ok:false,code:'stream_relay_fanout_status_unavailable'};}
 }
 export async function checkStreamRelayBridge({env=process.env,fetchImpl=fetch}={}){
   try{

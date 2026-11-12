@@ -1,0 +1,80 @@
+// Subscriber-authorized redistribution can reduce a channel to ONE source
+// connection only when the actual provider grants rebroadcast rights.
+// This does not bypass Xtream network access controls, connection limits or
+// any upstream 403/456. A documented MANUAL provider grant may be used when
+// the Xtream user_info restreamer flag is stale or not exposed. Default OFF.
+const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+export function permittedLicensedLiveFanout({
+ sourceId,sourceName,sourceNameMatches,kind,extension,upstreamRestreamer
+}={},env=process.env){
+ if(kind!=='live'||String(extension||'').toLowerCase()!=='ts'||
+    !UUID.test(String(sourceId||'')))
+  return false;
+ // Operator-controlled, source-specific authorization; no account or global
+ // all-sources shortcut. A signed provider grant must be checked outside code.
+ if(env.BLOFY_XTREAM_SHARED_LIVE_RIGHTS_CONFIRMED!=='1'||
+    env.BLOFY_STREAM_SHARED_LIVE_CANARY!=='1')
+  return false;
+ const allowlist=new Set(String(env.BLOFY_XTREAM_SHARED_LIVE_SOURCE_IDS||'')
+   .split(',').map(s=>s.trim().toLowerCase()).filter(s=>UUID.test(s)));
+ // Explicit provider-restreamer accounts retain the existing scoped UUID
+ // and unique-name allowlist. A manual provider grant NEVER broadens a UUID
+ // allowlist: it is confined to one exact, unique source name.
+ if(upstreamRestreamer===true&&allowlist.has(String(sourceId).toLowerCase()))
+   return true;
+ const configuredName=String(env.BLOFY_XTREAM_SHARED_LIVE_SOURCE_NAME||'')
+   .trim().toLowerCase();
+ const actualName=String(sourceName||'').trim().toLowerCase();
+ const uniqueNamedSource=/^[a-z0-9][a-z0-9 _-]{0,63}$/.test(configuredName)&&
+   actualName===configuredName&&sourceNameMatches===1;
+ if(!uniqueNamedSource)return false;
+ // The provider's out-of-band consent is confirmed by the operator. The
+ // flag is NOT a substitute for provider consent or a way around 403/456.
+ const manualName=String(env.BLOFY_XTREAM_SHARED_LIVE_MANUAL_GRANT_SOURCE_NAME||'')
+   .trim().toLowerCase();
+ const manualGrant=env.BLOFY_XTREAM_SHARED_LIVE_MANUAL_PROVIDER_APPROVED==='1'&&
+   manualName===actualName;
+ return upstreamRestreamer===true||manualGrant;
+}
+
+ 
+// No broad rollout merely by enabling the source-level rights flag.
+// Subscriber canary must explicitly select both the BLOFY account and channel.
+// This prevents accidental fanout cutover of every customer on one source.
+export function permittedSharedLivePilot({accountId,gatewayId}={},env=process.env){
+ if(env.BLOFY_STREAM_SHARED_LIVE_PILOT_ENABLED!=='1'||!UUID.test(String(accountId||'')))
+  return false;
+ const allowedAccounts=String(env.BLOFY_STREAM_SHARED_LIVE_PILOT_ACCOUNT_IDS||'')
+  .split(',').map(x=>x.trim().toLowerCase()).filter(x=>UUID.test(x)).slice(0,2);
+ if(!allowedAccounts.includes(String(accountId).toLowerCase()))return false;
+ const allowedChannels=String(env.BLOFY_STREAM_SHARED_LIVE_PILOT_CHANNEL_IDS||'')
+  .split(',').map(x=>x.trim()).filter(x=>/^[1-9][0-9]{0,14}$/.test(x)).slice(0,4);
+ return allowedChannels.includes(String(gatewayId||''));
+}
+
+
+// Bounded owner trial for one or two authenticated codes on licensed saleh.
+// An opt-in TWO_ACCOUNT flag raises the per-process cap from 1 to 2, never
+// opens every subscriber. Account selection is provisional until restart;
+// on multi-replica deployments an explicit persistent allowlist is required.
+// The gateway applies customer entitlement and provider authorization BEFORE
+// calling this guard. Both feature flags are OFF by default.
+export function createFirstAccountSharedLiveTestPilot(){
+ const selectedAccounts=new Set();
+ return function({accountId,gatewayId,sourceName}={},env=process.env){
+  if(env.BLOFY_STREAM_SHARED_LIVE_FIRST_ACCOUNT_TEST_ENABLED!=='1')
+   return false;
+  const configured=String(env.BLOFY_XTREAM_SHARED_LIVE_SOURCE_NAME||'')
+    .trim().toLowerCase();
+  if(configured!=='saleh'||String(sourceName||'').trim().toLowerCase()!==configured)
+   return false;
+  const id=String(accountId||'').trim().toLowerCase();
+  if(!UUID.test(id)||!/^[1-9][0-9]{0,14}$/.test(String(gatewayId||'')))
+   return false;
+  if(selectedAccounts.has(id))return true;
+  const cap=env.BLOFY_STREAM_SHARED_LIVE_TWO_ACCOUNT_TEST_ENABLED==='1'?2:1;
+  if(selectedAccounts.size>=cap)return false;
+  selectedAccounts.add(id);
+  return true;
+ };
+}
