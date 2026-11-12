@@ -229,6 +229,12 @@ test('one-day trials are free, phone-fingerprinted, limited, and repeat denied',
  await assert.rejects(f.manager.issue(login.token,{kind:'app',durationDays:1,
   maxConnections:1,requestId:crypto.randomUUID(),trialPhone:'0555555555'}),
   /distributor_trial_already_used/);
+ await assert.rejects(f.manager.issue(login.token,{kind:'app',durationDays:1,
+  maxConnections:1,requestId:crypto.randomUUID(),trialPhone:'+966555555555'}),
+  /distributor_trial_already_used/);
+ await assert.rejects(f.manager.issue(login.token,{kind:'app',durationDays:1,
+  maxConnections:1,requestId:crypto.randomUUID(),trialPhone:'00966555555555'}),
+  /distributor_trial_already_used/);
  for(let n=0;n<4;n++)
   await f.manager.issue(login.token,{kind:'app',durationDays:1,
    maxConnections:1,requestId:crypto.randomUUID(),trialPhone:'055555555'+n});
