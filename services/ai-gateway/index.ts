@@ -19,6 +19,10 @@ const json = (o: unknown, status = 200) => new Response(JSON.stringify(o), {
 });
 const usage = new Map<string, {started: number, n: number}>();
 const memo = new Map<string, {exp: number, value: AiResult}>();
+// Service-wide ceiling in addition to per-session limits; keeps usage
+// predictable even if many valid subscriptions query simultaneously.
+let globalWindow = Date.now();
+let globalQueries = 0;
 const MAX_BODY_BYTES = 1200;
 const MODEL = (Bun.env.BLOFY_AI_MODEL || "gemini-2.5-flash").trim();
 const GEMINI_KEY = Bun.env.BLOFY_LIBRARY_GEMINI_API_KEY || "";
@@ -137,8 +141,9 @@ Bun.serve({
     if(cached && cached.exp>now) return json({ok:true,source:"cache",...cached.value});
     const count=usage.get(id);
     const rate = count && now-count.started<600000 ? count : {started:now,n:0};
-    if(rate.n>=18) return json({ok:false,error:"rate_limited"},429);
-    rate.n++;usage.set(id,rate);sweep(now);
+    if (now - globalWindow >= 600000) { globalWindow=now; globalQueries=0; }
+    if(rate.n>=18 || globalQueries>=120) return json({ok:false,error:"rate_limited"},429);
+    rate.n++;globalQueries++;usage.set(id,rate);sweep(now);
     try {
       const result = await interpret(text,locale);
       memo.set(key,{exp:now+15*60*1000,value:result});
