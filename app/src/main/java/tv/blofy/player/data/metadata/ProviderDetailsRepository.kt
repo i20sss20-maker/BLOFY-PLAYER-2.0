@@ -8,7 +8,11 @@ import kotlinx.coroutines.sync.withLock
 import tv.blofy.player.data.local.ProviderEntity
 import tv.blofy.player.data.local.StreamEntity
 
-/** Called only for the title being viewed. Reopening details uses the persistent cache. */
+/**
+ * Refreshes metadata for opened details or a small visible-poster warm-up.
+ * Per-title cache/locks and the 12-hour freshness window prevent duplicate
+ * network calls. The catalog caller separately bounds overall concurrency.
+ */
 internal object ProviderDetailsRepository {
     data class Result(val metadata: ProviderMetadata.Metadata?, val failed: Boolean = false)
     private val locks = Array(16) { Mutex() }
