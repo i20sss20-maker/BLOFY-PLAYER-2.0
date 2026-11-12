@@ -38,6 +38,9 @@ internal object PlaybackRecoveryPolicy {
         if (attempt !in 0..1 || recentFailures > MAX_REPEATED_ERRORS_PER_WINDOW) return null
         // Never hammer missing episodes or 401/403 subscription errors.
         if (httpStatus != null) {
+            // HTTP 408 is transient. A single bounded retry may recover a
+            // channel without treating it like permanent 401/403/404 errors.
+            if (httpStatus == 408) return BASE_NETWORK_DELAY_MS * (attempt + 1)
             if (httpStatus in 400..428 || httpStatus in 430..499) return null
             if (httpStatus == 429 || httpStatus in 500..599) {
                 val base = if (httpStatus == 429) 1_500L else BASE_SERVER_DELAY_MS
