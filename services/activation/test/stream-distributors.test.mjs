@@ -16,7 +16,7 @@ function fixture(){
  let failCode=false;
  async function query(sql,args=[]){
   statements.push(sql);
-  if(['BEGIN','COMMIT','ROLLBACK'].includes(sql)||/^\s*(CREATE TABLE|CREATE INDEX|ALTER TABLE)/.test(sql))
+  if(['BEGIN','COMMIT','ROLLBACK'].includes(sql)||/^\s*(CREATE TABLE|CREATE (?:UNIQUE )?INDEX|ALTER TABLE)/.test(sql))
    return {rows:[]};
   if(sql.includes('INSERT INTO blofy_stream_distributors')){
    const row={id:args[0],display_name:args[1],username:args[2],
