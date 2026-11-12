@@ -24,7 +24,7 @@ export function xtreamEpisodeSamples(payload, limit = 2) {
       if(!id||seen.has(id))continue;
       seen.add(id);episodeCount++;
       if(samples.length<budget){
-        const extension=String(row.container_extension||'mp4').replace(/^\\./,'').toLowerCase();
+        const extension=String(row.container_extension||'mp4').replace(/^\./,'').toLowerCase();
         samples.push({id,extension:EXTS.test(extension)?extension:'mp4'});
       }
     }
