@@ -1,0 +1,58 @@
+name: BLOFY - unified public systems status QA
+on:
+  push:
+    branches: [qa/system-wide-public-status-20261112]
+    paths:
+      - 'services/activation/src/public-system-health.mjs'
+      - 'services/activation/src/admin-console-hook.mjs'
+      - 'services/activation/web/status.html'
+      - 'services/activation/test/public-system-health.test.mjs'
+      - '.github/workflows/blofy-system-status-ci.yml'
+  pull_request:
+    paths:
+      - 'services/activation/src/public-system-health.mjs'
+      - 'services/activation/src/admin-console-hook.mjs'
+      - 'services/activation/web/status.html'
+      - 'services/activation/test/public-system-health.test.mjs'
+      - '.github/workflows/blofy-system-status-ci.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  safe-status:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    defaults:
+      run:
+        working-directory: services/activation
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Compile request hook and monitor module
+        run: |
+          node --check src/public-system-health.mjs
+          node --check src/admin-console-hook.mjs
+      - name: Validate no-secret, two-fixed-source cached probe behavior
+        run: node --test test/public-system-health.test.mjs
+      - name: Parse actual status page script and verify three-system controls
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import {readFileSync} from 'node:fs';
+          import vm from 'node:vm';
+          const html=readFileSync('web/status.html','utf8');
+          for(const phrase of [
+            'id="apiState"','id="dbState"','id="cryptoState"',
+            'id="downloadsState"','id="streamState"',
+            '/api/v1/public/system-health',
+            "var allHealthy=healthy&&downloadsOk&&streamOk"
+          ])assert.ok(html.includes(phrase),'Missing status contract: '+phrase);
+          const scripts=[...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)];
+          assert.ok(scripts.length>0,'Status script missing');
+          scripts.forEach(([_,source])=>new vm.Script(source));
+          const hook=readFileSync('src/admin-console-hook.mjs','utf8');
+          assert.ok(hook.includes("url.pathname === '/api/v1/public/system-health'"));
+          console.log('Public status site/route contract PASS');
+          NODE
