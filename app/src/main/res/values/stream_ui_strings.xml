@@ -71,4 +71,12 @@
     <string name="stream_ui_decoder_error">This video format is not supported on this device. Try another channel or quality.</string>
     <string name="stream_ui_generic_error">Could not connect. Try updating the app or check your network.</string>
     <string name="stream_ui_opening">Opening BLOFY STREAM…</string>
+    <string name="stream_home_continue">Continue watching</string>
+    <string name="stream_home_continue_hint">Pick up where you stopped</string>
+    <string name="stream_home_for_you">Recommended for you</string>
+    <string name="stream_home_for_you_hint">Based on your viewing history, stored on this device</string>
+    <string name="stream_home_action">Action movies</string>
+    <string name="stream_home_comedy">Comedy movies</string>
+    <string name="stream_home_drama">Drama movies</string>
+    <string name="stream_home_genre_hint">Based on available source genres</string>
 </resources>
