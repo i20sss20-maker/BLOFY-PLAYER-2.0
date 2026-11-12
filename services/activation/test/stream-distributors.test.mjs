@@ -323,3 +323,69 @@ test('organization is private to distributor; only actual saleh titles are edita
  assert.equal(other.items[0].group,undefined,'second distributor has no access to customization');
  assert.equal(f.statements.some(sql=>/UPDATE blofy_xtream_items|DELETE FROM blofy_xtream_items/.test(sql)),false);
 });
+
+test('distributor can manage only own contacts, searchable ledger and customer directory',async()=>{
+ const f=fixture();
+ const a=await f.manager.createAdmin({name:'Store A',username:'store-customer-a',credits:12});
+ const b=await f.manager.createAdmin({name:'Store B',username:'store-customer-b',credits:12});
+ const t1=(await f.manager.login({username:'store-customer-a',password:a.password})).token;
+ const t2=(await f.manager.login({username:'store-customer-b',password:b.password})).token;
+ const one=await f.manager.issue(t1,{kind:'app',durationDays:30,maxConnections:1,
+  requestId:crypto.randomUUID(),customerName:'Customer',customerPhone:'0559999999'});
+ assert.equal(f.issues[0].customer_phone,'966559999999');
+ const listed=await f.manager.issued(t1,{q:'559999',status:'all'});
+ assert.equal(listed.items.length,1);
+ assert.equal(listed.items[0].customerName,'Customer');
+ assert.equal(listed.stats.active,1);
+ assert.equal((await f.manager.clients(t2)).items.length,0);
+ assert.equal((await f.manager.clients(t1)).items[0].phone,'966559999999');
+ await assert.rejects(f.manager.customer(t2,{issueId:one.issue.id,name:'Other',
+  phone:'0550000000'}),/distributor_issue_missing/);
+ await f.manager.customer(t1,{issueId:one.issue.id,name:'Updated',
+  phone:'0558888888'});
+ assert.equal(f.issues[0].customer_name,'Updated');
+ assert.equal(f.issues[0].customer_phone,'966558888888');
+});
+test('renewal costs twelve credits, extends expiration atomically and does not double-charge retries',async()=>{
+ const f=fixture();
+ const a=await f.manager.createAdmin({name:'Store A',username:'renew-a',credits:15});
+ const t=(await f.manager.login({username:'renew-a',password:a.password})).token;
+ const one=await f.manager.issue(t,{kind:'app',durationDays:30,maxConnections:1,
+  requestId:crypto.randomUUID()});
+ const start=f.accounts[0].expires_at.getTime(),rid=crypto.randomUUID();
+ const result=await f.manager.renew(t,{issueId:one.issue.id,days:365,requestId:rid});
+ assert.equal(result.chargedCredits,12);
+ assert.equal(f.distributors[0].credits,2);
+ assert.equal(f.accounts[0].expires_at.getTime(),start+365*86400000);
+ assert.equal(f.codes[0].expires_at.getTime(),start+365*86400000);
+ const again=await f.manager.renew(t,{issueId:one.issue.id,days:365,requestId:rid});
+ assert.equal(again.repeated,true);
+ assert.equal(f.distributors[0].credits,2);
+ assert.equal(f.actions.length,1);
+ assert.equal(f.events.length,1);
+ await assert.rejects(f.manager.renew(t,{issueId:one.issue.id,days:1,
+  requestId:crypto.randomUUID()}),/distributor_renew_trial_denied/);
+});
+test('re-entry is free, one-use and repeatable by owner only, tied to saleh',async()=>{
+ const f=fixture();
+ const a=await f.manager.createAdmin({name:'Store A',username:'relogin-a',credits:1});
+ const b=await f.manager.createAdmin({name:'Store B',username:'relogin-b',credits:1});
+ const t=(await f.manager.login({username:'relogin-a',password:a.password})).token;
+ const other=(await f.manager.login({username:'relogin-b',password:b.password})).token;
+ const one=await f.manager.issue(t,{kind:'app',durationDays:30,maxConnections:1,
+  requestId:crypto.randomUUID()});
+ await assert.rejects(f.manager.relogin(other,{issueId:one.issue.id,
+  requestId:crypto.randomUUID()}),/distributor_issue_missing/);
+ const result=await f.manager.relogin(t,{issueId:one.issue.id,requestId:crypto.randomUUID()});
+ assert.equal(result.sameCode,true);
+ assert.equal(result.oneTime,true);
+ assert.equal(result.allowedUntil,f.codes[0].admin_relogin_until.getTime());
+ assert.equal(f.distributors[0].credits,0);
+ assert.equal(f.events[0].event,'same_code_admin_relogin_granted');
+ const again=await f.manager.relogin(t,{issueId:one.issue.id,requestId:crypto.randomUUID()});
+ assert.equal(again.sameCode,true);
+ assert.equal(f.actions.length,2);
+ f.setSource(false);
+ await assert.rejects(f.manager.relogin(t,{issueId:one.issue.id,
+  requestId:crypto.randomUUID()}),/distributor_saleh_source_unavailable/);
+});
