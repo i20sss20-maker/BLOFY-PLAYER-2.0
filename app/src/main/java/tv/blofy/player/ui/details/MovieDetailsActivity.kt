@@ -11,13 +11,17 @@ import android.view.View
 import android.view.Gravity
 import android.widget.Button
 import android.widget.ImageView
+import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import tv.blofy.player.core.security.ContentAccessActivity
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.BuildConfig
@@ -29,6 +33,8 @@ import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.data.metadata.XtreamMetadataFallback
 import tv.blofy.player.ui.catalog.ArtworkLoader
+import tv.blofy.player.ui.catalog.MovieGenres
+import tv.blofy.player.ui.catalog.SimilarMoviePolicy
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.ContentScreenStyle
 import tv.blofy.player.ui.player.PlayerActivity
@@ -36,6 +42,9 @@ import tv.blofy.player.ui.player.PlayerActivity
 class MovieDetailsActivity : ContentAccessActivity() {
     private lateinit var favoriteButton: Button
     private var arabicPresenter: ArabicDetailsPresenter? = null
+    private var similarMoviesJob: Job? = null
+    private var lastSimilarGenres = ""
+    private var lastSimilarKeys: List<String> = emptyList()
 
     override fun onContentReady(savedInstanceState: Bundle?) {
         val providerId = intent.getStringExtra(EXTRA_PROVIDER_ID).orEmpty()
@@ -241,8 +250,15 @@ class MovieDetailsActivity : ContentAccessActivity() {
                 setPadding(0, 0, 0, dp(22))
             }
             info.addView(castContainer, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
+            val similarContainer = LinearLayout(this@MovieDetailsActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                tag = "blofy_similar_movies"
+            }
+            info.addView(similarContainer, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+            showSimilarMovies(dao, provider.id, stream, metadata?.genres.orEmpty(), similarContainer)
             ProviderDetailsBinding(this@MovieDetailsActivity, overviewView, crewView,
                 castContainer, provider, stream) { updated ->
+                    showSimilarMovies(dao, provider.id, stream, updated?.genres.orEmpty(), similarContainer)
                     DetailsMetadataChips.update(statsView, metadataStats(updated))
                     presenter.render(updated)
                     ArtworkLoader.loadPriority(backdrop, listOf(updated?.backdropUrl, stream.backdrop, stream.icon))
@@ -254,6 +270,95 @@ class MovieDetailsActivity : ContentAccessActivity() {
                 }.start(metadata)
 
             if (layout.isTv) play.requestFocus()
+        }
+    }
+
+    /**
+     * Fetch at most two local, bounded genre pages. Nothing is downloaded from
+     * the provider to populate the recommendations, and missing genre metadata
+     * never delays Details or playback. Never show fabricated similar titles.
+     */
+    private fun showSimilarMovies(
+        dao: tv.blofy.player.data.local.BlofyDao,
+        providerId: String,
+        film: StreamEntity,
+        detailGenres: List<String>,
+        container: LinearLayout
+    ) {
+        similarMoviesJob?.cancel()
+        similarMoviesJob = lifecycleScope.launch {
+            val result = try {
+                withContext(Dispatchers.IO) {
+                    val categoryNames = dao.categories(providerId, "movie").first()
+                        .associate { it.remoteId to it.name }
+                    val genres = SimilarMoviePolicy.genreKeys(film, detailGenres, categoryNames[film.categoryId])
+                    if (genres.isEmpty()) return@withContext emptyList<StreamEntity>()
+                    val related = genres.take(2).flatMap { key ->
+                        dao.catalogPageForMovieGenre(
+                            MovieGenres.catalogQuery(providerId, null, key, limit = 64)
+                        )
+                    }.distinctBy { it.key }
+                    SimilarMoviePolicy.rank(film, detailGenres, related, categoryNames, 10)
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                emptyList()
+            }
+            if (isFinishing || isDestroyed || result.map { it.key } == lastSimilarKeys) return@launch
+            lastSimilarKeys = result.map { it.key }
+            container.removeAllViews()
+            if (result.isEmpty()) return@launch
+            container.addView(TextView(this@MovieDetailsActivity).apply {
+                text = getString(R.string.stream_details_similar)
+                textSize = 18f
+                typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
+                setTextColor(Color.WHITE)
+                gravity = Gravity.START
+                setPadding(0, dp(12), 0, dp(10))
+            })
+            val row = LinearLayout(this@MovieDetailsActivity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(dp(3), 0, dp(3), dp(9))
+            }
+            result.forEach { similar ->
+                val card = LinearLayout(this@MovieDetailsActivity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    isFocusable = true
+                    isClickable = true
+                    contentDescription = similar.name
+                    setOnClickListener {
+                        startActivity(Intent(this@MovieDetailsActivity, MovieDetailsActivity::class.java).apply {
+                            putExtra(EXTRA_PROVIDER_ID, providerId)
+                            putExtra(EXTRA_CONTENT_KEY, similar.key)
+                        })
+                    }
+                }
+                BlofyTvDesign.installTvFocus(card)
+                val cover = ImageView(this@MovieDetailsActivity).apply {
+                    scaleType = ImageView.ScaleType.CENTER_CROP
+                    contentDescription = similar.name
+                    clipToOutline = true
+                }
+                card.addView(cover, LinearLayout.LayoutParams(-1, dp(155)))
+                ArtworkLoader.load(cover, listOf(similar.icon, similar.backdrop))
+                card.addView(TextView(this@MovieDetailsActivity).apply {
+                    text = similar.name
+                    maxLines = 2
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                    textSize = 12f
+                    setTextColor(BlofyTvDesign.TextSecondary)
+                    setPadding(dp(3), dp(6), dp(3), 0)
+                }, LinearLayout.LayoutParams(-1, dp(42)))
+                row.addView(card, LinearLayout.LayoutParams(dp(118), dp(202)).apply {
+                    marginEnd = dp(12)
+                })
+            }
+            container.addView(HorizontalScrollView(this@MovieDetailsActivity).apply {
+                isHorizontalScrollBarEnabled = false
+                clipToPadding = false
+                addView(row)
+            }, LinearLayout.LayoutParams(-1, dp(218)))
         }
     }
 
@@ -290,6 +395,7 @@ class MovieDetailsActivity : ContentAccessActivity() {
     }
 
     override fun onDestroy() {
+        similarMoviesJob?.cancel()
         arabicPresenter?.close()
         super.onDestroy()
     }
