@@ -87,7 +87,9 @@ export function safeCodeRecord(row){
     salesChannel:String(row.sales_channel||'').slice(0,24),
     transferCount:Number(row.transfer_count||0),
     extendedDays:Number(row.extended_days||0),
-    deviceTransferPending:row.code_channel==='app'&&Boolean(row.redeemed_at)&&!row.redeemed_device_hash
+    deviceTransferPending:row.code_channel==='app'&&Boolean(row.redeemed_at)&&!row.redeemed_device_hash,
+    xtreamRecoveryPending:row.code_channel==='xtream'&&Boolean(row.xtream_recovery_until)&&
+      new Date(row.xtream_recovery_until).getTime()>Date.now()
   };
 }
 export async function ensureStreamCodeTable(client){
@@ -111,6 +113,9 @@ export async function ensureStreamCodeTable(client){
   )`);
   await client.query('ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS redeemed_device_hash TEXT');
   await client.query('ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS code_vault TEXT');
+  // One-time operator-authorized credential recovery for consumed Xtream vouchers.
+  // Never resets redeemed_at or subscription expiry.
+  await client.query('ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS xtream_recovery_until TIMESTAMPTZ');
   await client.query("ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS code_channel TEXT NOT NULL DEFAULT 'xtream'");
   await client.query(`CREATE INDEX IF NOT EXISTS idx_blofy_stream_codes_created
     ON blofy_xtream_gateway_duration_codes(created_at DESC)`);
@@ -176,6 +181,47 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
       FROM blofy_xtream_gateway_duration_codes`);
     return {ok:true,items:result.rows.map(safeCodeRecord),totals:totals.rows[0],
       nextOffset:result.rows.length===n?start+n:null};
+  }
+  // Operator-only *read* of a voucher by its HMAC proof. Unlike redemption,
+  // this never consumes a code, resets a clock, or exposes account credentials.
+  // The caller MUST be guarded by the existing admin session.
+  async function lookup(value){
+    const proof=streamCodeProof(value,keyHex);
+    if(!proof)throw Object.assign(Error('stream_code_invalid'),{status:400});
+    const result=await pool.query(`SELECT c.*,
+        a.enabled AS linked_account_enabled,
+        a.expires_at AS linked_account_expires_at,
+        (a.id IS NOT NULL) AS linked_account_exists
+      FROM blofy_xtream_gateway_duration_codes c
+      LEFT JOIN blofy_xtream_gateway_accounts a ON a.id=c.account_id
+      WHERE c.code_hash=$1 LIMIT 1`,[proof]);
+    const row=result.rows?.[0];
+    if(!row)return {ok:false,code:'stream_code_not_found'};
+    const info=safeCodeRecord(row);
+    const now=clock();
+    const validDate=value=>{
+      if(!value)return null;
+      const ms=new Date(value).getTime();
+      return Number.isFinite(ms)?ms:null;
+    };
+    const accountExpiry=validDate(row.linked_account_expires_at);
+    const codeExpiry=validDate(row.expires_at);
+    const effectiveExpiry=codeExpiry==null?accountExpiry:
+      accountExpiry==null?codeExpiry:Math.min(codeExpiry,accountExpiry);
+    const redeemed=Boolean(row.redeemed_at);
+    const accountExists=Boolean(row.linked_account_exists);
+    const active=redeemed&&!row.revoked_at&&accountExists&&
+      row.linked_account_enabled===true&&effectiveExpiry!==null&&effectiveExpiry>now;
+    return {ok:true,item:info,
+      subscription:{
+        redeemed,active,expired:redeemed&&effectiveExpiry!==null&&effectiveExpiry<=now,
+        accountExists,accountEnabled:accountExists?row.linked_account_enabled===true:false,
+        expiresAt:effectiveExpiry,
+        canExtend:redeemed&&!row.revoked_at&&accountExists,
+        // App re-login requires a separate 6-digit challenge from the new device.
+        requiresDeviceApproval:redeemed&&info.channel==='app'
+      }
+    };
   }
   async function reveal(id){
     if(!UUID.test(String(id||'')))
@@ -262,6 +308,35 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
       if(row.redeemed_at){
         if(!row.account_id||!row.expires_at)
           throw Object.assign(Error('stream_subscription_state_inconsistent'),{status:409});
+        // The Xtream web redeem page is deliberately single-use. Only an
+        // explicit administrator-issued replacement voucher permits ONE
+        // recovery of the same existing account, within a 24-hour window.
+        // Old vouchers are invalidated at issuance and no new account or
+        // subscription time can be created by this recovery path.
+        if(!deviceProof && row.code_channel==='xtream' &&
+           row.xtream_recovery_until &&
+           new Date(row.xtream_recovery_until).getTime()>clock()){
+          const existing=(await client.query(`SELECT id,username,credential_vault,enabled,expires_at
+            FROM blofy_xtream_gateway_accounts WHERE id=$1 FOR UPDATE`,
+            [row.account_id])).rows[0];
+          const password=existing?decryptGatewayAccountPassword(existing.id,
+            existing.credential_vault,keyHex):null;
+          const codeExpiry=new Date(row.expires_at).getTime();
+          const accountExpiry=new Date(existing?.expires_at).getTime();
+          if(!existing||!password||!existing.enabled||
+             !Number.isFinite(codeExpiry)||!Number.isFinite(accountExpiry)||
+             Math.min(codeExpiry,accountExpiry)<=clock())
+            throw Object.assign(Error('stream_code_unavailable'),{status:409});
+          const consumed=await client.query(`UPDATE blofy_xtream_gateway_duration_codes
+            SET xtream_recovery_until=NULL WHERE id=$1
+              AND xtream_recovery_until>NOW() RETURNING id`,[row.id]);
+          if(consumed.rowCount!==1)
+            throw Object.assign(Error('stream_code_unavailable'),{status:409});
+          await client.query('COMMIT');
+          return makeResponse({host,row,username:existing.username,password,
+            accountId:existing.id,activatedAt:new Date(row.redeemed_at),
+            expiresAt:new Date(Math.min(codeExpiry,accountExpiry)),recovered:true});
+        }
         if(!deviceProof)throw Object.assign(Error('stream_code_unavailable'),{status:409});
         // An operator reissues a new recovery code for an existing subscription
         // and clears the old binding. Its original clock and expiry do not reset.
@@ -348,5 +423,5 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
     }catch(error){await client.query('ROLLBACK').catch(()=>{});throw error}
     finally{client.release()}
   }
-  return {issue,list,reveal,revoke,redeem};
+  return {issue,list,lookup,reveal,revoke,redeem};
 }

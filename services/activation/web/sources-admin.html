@@ -22,6 +22,7 @@
         <a href="/admin"><span>▣</span>الأجهزة والاشتراكات</a>
         <a class="active" href="#home" data-sidebar-tab="home"><span>◈</span>الرئيسية</a>
         <a href="#xtream" data-sidebar-tab="xtream"><span>▤</span>المصادر والمشتركون</a>
+        <a href="#xtream" id="streamCodeRenewShortcut"><span>↻</span>فحص وتجديد كود STREAM</a>
         <a href="#catalog" data-sidebar-tab="catalog"><span>▦</span>المكتبة</a>
         <a href="https://blofy-stream-api-production.up.railway.app/operator" target="_blank" rel="noopener noreferrer"><span>◉</span>لوحة إعادة البث ↗</a>
         <a href="#studio" data-sidebar-tab="studio"><span>⚙</span>التحكم المتقدم</a>
@@ -277,6 +278,47 @@
           <div id="gatewayLoading" class="loading">جارٍ تحميل بيانات الدخول…</div>
           <div id="gatewayAccounts" class="gateway-accounts"></div>
           <p class="security-note">بيانات Host وUsername وPassword تصدر بشكل مستقل، لكن مدة الحساب وعدد الاتصالات لا يتجاوزان قيود وحقوق المصادر الأصلية. كلمات المرور تظهر مرة واحدة فقط.</p>
+        </section>
+
+        <!-- BLOFY STREAM app codes are separate from generic BLOFY PLAYER activation codes.
+             Read-only lookup never redeems a used voucher. -->
+        <section class="panel gateway-panel" id="stream-code-management" aria-labelledby="streamCodeManagementTitle">
+          <div class="panel-head gateway-title-row">
+            <div>
+              <span class="panel-kicker">BLOFY STREAM · SUBSCRIPTION SUPPORT</span>
+              <h2 id="streamCodeManagementTitle">فحص كود الاشتراك وتجديد صلاحيته</h2>
+              <p>أدخل كود العميل لمعرفة هل استُخدم أو انتهت مدته. الفحص لا يستهلك الكود، والتجديد لا يغيّر الجهاز أو يلغي تاريخ التفعيل.</p>
+            </div>
+          </div>
+          <form id="streamCodeLookupForm" class="gateway-subscription-form" autocomplete="off">
+            <label><span>كود اشتراك BLOFY STREAM</span>
+              <input id="streamCodeLookupInput" type="text" inputmode="numeric" minlength="8" maxlength="32"
+                autocomplete="off" spellcheck="false" placeholder="8–12 رقمًا" aria-label="ابحث بالكود الكامل دون عرضه للزوار">
+            </label>
+            <button id="streamCodeLookupButton" class="button primary" type="submit">بحث عن الكود</button>
+          </form>
+          <p id="streamCodeLookupStatus" class="security-note" role="status" aria-live="polite">هذه الأداة لمسؤول BLOFY فقط. لا تُظهر الكود أو بيانات الدخول في رابط الصفحة.</p>
+          <div id="streamCodeLookupResult" hidden>
+            <div id="streamCodeLookupDetails" class="gateway-accounts-summary" aria-live="polite"></div>
+            <div class="gateway-subscription-form">
+              <label><span>مدة التجديد اليدوي</span><select id="streamCodeRenewDays">
+                <option value="30">30 يومًا</option>
+                <option value="90">90 يومًا</option>
+                <option value="180">180 يومًا</option>
+                <option value="365">سنة كاملة</option>
+              </select></label>
+              <button id="streamCodeRenewButton" class="button primary" type="button" disabled>تجديد الاشتراك الموجود</button>
+              <button id="streamCodeTransferButton" class="button ghost" type="button" disabled hidden>إصدار كود بديل لنقل الجهاز</button>
+            </div>
+            <p id="streamCodeRecoveryHelp" class="security-note" role="note"></p>
+          </div>
+          <div id="streamCodeTransferred" class="gateway-credentials" hidden>
+            <strong>كود بديل لنفس الاشتراك — انسخه الآن</strong>
+            <p class="security-note">الكود القديم توقف. لم تُضف مدة جديدة تلقائيًا. أعطِ الكود الجديد لصاحب الاشتراك فقط.</p>
+            <code id="streamCodeTransferredValue" dir="ltr" style="user-select:all;font-size:1.4em"></code>
+            <button id="streamCodeTransferCopy" class="button ghost" type="button">نسخ الكود الجديد</button>
+            <button id="streamCodeTransferHide" class="button ghost" type="button">إخفاء الكود</button>
+          </div>
         </section>
 
         <section class="stats five" aria-label="إحصائيات Xtream">
