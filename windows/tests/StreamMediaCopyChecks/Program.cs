@@ -67,7 +67,7 @@ internal sealed class DelayedChunkStream : Stream
     {
         if (_remaining == 0) return 0;
         await Task.Delay(_delay, cancellationToken);
-        _chunk.CopyTo(buffer);
+        _chunk.AsSpan().CopyTo(buffer.Span);
         _remaining--;
         return _chunk.Length;
     }
