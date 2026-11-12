@@ -144,6 +144,12 @@ internal class ArabicDetailsPresenter(
         (!ArabicDetailsPolicy.needsTranslation(currentTitle) || aiCached(currentTitle) != null) &&
             (!ArabicDetailsPolicy.needsTranslation(currentOverview) || aiCached(currentOverview) != null)
 
+    private fun hasChangedCloudText(): Boolean =
+        (aiCached(currentTitle)?.let { it != currentTitle } ?: false) ||
+            (aiCached(currentOverview)?.let { it != currentOverview } ?: false)
+
+
+
     private fun translated(original: String): String? {
         if (!ArabicDetailsPolicy.needsTranslation(original)) return null
         return (if (cloudEnabled && BuildConfig.CODE_ONLY_LOGIN) aiCached(original) else null)
@@ -172,11 +178,13 @@ internal class ArabicDetailsPresenter(
                 cloudJob?.isActive == true -> "جاري الترجمة الذكية…"
                 cloudFailed -> "تعذر اتصال BLOFY AI • إعادة المحاولة"
                 !cloudEnabled -> "ترجمة AI للعربية • عبر الإنترنت"
+                allCloudFieldsReady() && !hasChangedCloudText() -> "الاسم محفوظ كما هو"
                 hasCloudTranslation() && showingOriginal -> "عرض الترجمة العربية"
                 hasCloudTranslation() -> "عرض النص الأصلي"
                 else -> "ترجمة AI للعربية"
             }
-            button.isEnabled = cloudJob?.isActive != true
+            button.isEnabled = cloudJob?.isActive != true &&
+                !(allCloudFieldsReady() && !hasChangedCloudText())
         } else {
             button.text = when {
                 localTranslator != null -> "جاري تجهيز الترجمة المحلية…"
@@ -211,10 +219,13 @@ internal class ArabicDetailsPresenter(
             if (output == null) {
                 cloudFailed = true
             } else {
-                if (output.title.isNotBlank() && title.isNotBlank() && output.title != title) {
+                // A short English proper noun can legitimately remain unchanged
+                // (e.g. "Sigma"). Cache that *decision* too; previously it
+                // caused an infinite "AI connection failed" retry loop.
+                if (output.title.isNotBlank() && title.isNotBlank()) {
                     cache("groq_v1_", title, output.title)
                 }
-                if (output.overview.isNotBlank() && overview.isNotBlank() && output.overview != overview) {
+                if (output.overview.isNotBlank() && overview.isNotBlank()) {
                     cache("groq_v1_", overview, output.overview)
                 }
                 if (!allCloudFieldsReady()) cloudFailed = true
