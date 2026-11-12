@@ -100,7 +100,7 @@ function fixture(){
    }));
    return {rows};
   }
-  if(sql.includes('MAX(customer_name)')&&sql.includes('FROM blofy_stream_distributor_issues')){
+  if(sql.includes('ARRAY_AGG(customer_name')&&sql.includes('FROM blofy_stream_distributor_issues')){
    return {rows:issues.filter(x=>x.distributor_id===args[0]&&x.customer_phone)
      .map(x=>({customer_phone:x.customer_phone,customer_name:x.customer_name,
        subscriptions:1,latest:x.created_at}))};
