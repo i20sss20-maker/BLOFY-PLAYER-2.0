@@ -11,6 +11,7 @@ import { safeErrorSummary } from './diagnostics-sanitizer.mjs';
 import { ADMIN_CONSOLE_SCHEMA } from './admin-console-schema.mjs';
 import { servePublicDownloads } from './public-downloads.mjs';
 import { createDeviceAdmin } from './device-admin.mjs';
+import { createPublicSystemHealth } from './public-system-health.mjs';
 
 const pool = new pg.Pool({ ...databaseOptions(process.env.DATABASE_URL),
   max: 2, connectionTimeoutMillis: 4000, idleTimeoutMillis: 10000, statement_timeout: 10000 });
@@ -18,6 +19,7 @@ pool.on('error', error => console.error('admin database error:', safeErrorSummar
 const token = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
 const limiter = createFixedWindowLimiter({ limit: 60, windowMs: 60000 });
 const catalog = createReleaseCatalog(pool, appReleaseMetadata());
+const publicSystemHealth = createPublicSystemHealth();
 const PUBLIC_2000078 = String(process.env.BLOFY_PUBLIC_RELEASE_2000078 || '').toLowerCase() === 'true';
 const PUBLIC_2000079 = String(process.env.BLOFY_PUBLIC_RELEASE_2000079 || '').toLowerCase() === 'true';
 const PUBLIC_APPROVED = PUBLIC_2000079 || PUBLIC_2000078;
@@ -86,6 +88,12 @@ http.createServer = function withAdminConsole(listener) {
     if (res.writableEnded || res.destroyed) return;
     let url; try { url = new URL(req.url || '/', 'http://localhost'); } catch { return listener(req, res); }
     try {
+      // Cached read-only cross-service health: no secrets, no media probes,
+      // and no redirects followed to any untrusted destination.
+      if (req.method === 'GET' && url.pathname === '/api/v1/public/system-health') {
+        json(res, 200, await publicSystemHealth.snapshot());
+        return;
+      }
       // Only the exact owner's test paths are handled ahead of legacy download redirects.
       // Production release catalog and admin/session endpoints remain untouched.
       if (req.method === 'GET' && [
