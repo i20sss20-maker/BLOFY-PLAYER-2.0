@@ -88,4 +88,5 @@
     <string name="stream_home_recent_hint">Titles you opened recently</string>
     <string name="stream_search_actors_hint">Search by movie, series, actor or director name. Cast results appear when provider credits are available.</string>
     <string name="stream_search_cast_results">Matches for cast or director: %1$d</string>
+    <string name="stream_search_ai_suggestions">BLOFY AI • %1$d possible titles found in your catalog (verify cast in details)</string>
 </resources>
