@@ -177,6 +177,47 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
     return {ok:true,items:result.rows.map(safeCodeRecord),totals:totals.rows[0],
       nextOffset:result.rows.length===n?start+n:null};
   }
+  // Operator-only *read* of a voucher by its HMAC proof. Unlike redemption,
+  // this never consumes a code, resets a clock, or exposes account credentials.
+  // The caller MUST be guarded by the existing admin session.
+  async function lookup(value){
+    const proof=streamCodeProof(value,keyHex);
+    if(!proof)throw Object.assign(Error('stream_code_invalid'),{status:400});
+    const result=await pool.query(`SELECT c.*,
+        a.enabled AS linked_account_enabled,
+        a.expires_at AS linked_account_expires_at,
+        (a.id IS NOT NULL) AS linked_account_exists
+      FROM blofy_xtream_gateway_duration_codes c
+      LEFT JOIN blofy_xtream_gateway_accounts a ON a.id=c.account_id
+      WHERE c.code_hash=$1 LIMIT 1`,[proof]);
+    const row=result.rows?.[0];
+    if(!row)return {ok:false,code:'stream_code_not_found'};
+    const info=safeCodeRecord(row);
+    const now=clock();
+    const validDate=value=>{
+      if(!value)return null;
+      const ms=new Date(value).getTime();
+      return Number.isFinite(ms)?ms:null;
+    };
+    const accountExpiry=validDate(row.linked_account_expires_at);
+    const codeExpiry=validDate(row.expires_at);
+    const effectiveExpiry=codeExpiry==null?accountExpiry:
+      accountExpiry==null?codeExpiry:Math.min(codeExpiry,accountExpiry);
+    const redeemed=Boolean(row.redeemed_at);
+    const accountExists=Boolean(row.linked_account_exists);
+    const active=redeemed&&!row.revoked_at&&accountExists&&
+      row.linked_account_enabled===true&&effectiveExpiry!==null&&effectiveExpiry>now;
+    return {ok:true,item:info,
+      subscription:{
+        redeemed,active,expired:redeemed&&effectiveExpiry!==null&&effectiveExpiry<=now,
+        accountExists,accountEnabled:accountExists?row.linked_account_enabled===true:false,
+        expiresAt:effectiveExpiry,
+        canExtend:redeemed&&!row.revoked_at&&accountExists,
+        // App re-login requires a separate 6-digit challenge from the new device.
+        requiresDeviceApproval:redeemed&&info.channel==='app'
+      }
+    };
+  }
   async function reveal(id){
     if(!UUID.test(String(id||'')))
       throw Object.assign(Error('stream_code_invalid'),{status:400});
@@ -348,5 +389,5 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
     }catch(error){await client.query('ROLLBACK').catch(()=>{});throw error}
     finally{client.release()}
   }
-  return {issue,list,reveal,revoke,redeem};
+  return {issue,list,lookup,reveal,revoke,redeem};
 }
