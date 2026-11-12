@@ -90,4 +90,5 @@
     <string name="stream_ai_connection_error">تعذر الوصول إلى BLOFY AI. البحث العادي يعمل؛ حاول مرة ثانية.</string>
     <string name="stream_ai_no_catalog_match">فهم AI طلبك، لكن لم يجد عناوين مطابقة مؤكدة في مكتبتك الحالية.</string>
     <string name="stream_ai_found">وجد BLOFY AI ‏%1$d اقتراحًا مطابقًا لمكتبتك.</string>
+    <string name="stream_ai_reference_suggestions">تعرّف AI على طلبك واقترح هذه العناوين، لكن وجودها في مكتبتك غير مؤكد. اختر عنوانًا للبحث عنه.</string>
 </resources>
