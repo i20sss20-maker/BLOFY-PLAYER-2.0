@@ -3045,7 +3045,7 @@ async function callLocalGateway(method,path,body){
   const port=Number(process.env.PORT||3000);
   if(!Number.isSafeInteger(port)||port<1024||port>65535)
     throw Object.assign(new Error('gateway_port_invalid'),{status:503});
-  const match=/^\/api\/v1\/admin\/xtream-gateway\/(?:accounts(?:\/[0-9a-f-]{36}(?:\/(?:reset|credentials|compatibility))?)?|codes(?:\/[0-9a-f-]{36}\/(?:revoke|sell|extend|transfer|reveal)|\/sales-summary|\?limit=30&offset=[0-9]{1,6})?)$/.exec(path);
+  const match=/^\/api\/v1\/admin\/xtream-gateway\/(?:accounts(?:\/[0-9a-f-]{36}(?:\/(?:reset|credentials|compatibility))?)?|codes(?:\/[0-9a-f-]{36}\/(?:revoke|sell|extend|transfer|reveal)|\/sales-summary|\?limit=(?:[1-9]|[12][0-9]|30)&offset=[0-9]{1,6})?)$/.exec(path);
   if(!match)throw Object.assign(new Error('gateway_route_denied'),{status:400});
   const response=await fetch('http://127.0.0.1:'+port+path,{
     method,redirect:'manual',signal:AbortSignal.timeout(9000),
@@ -3053,10 +3053,15 @@ async function callLocalGateway(method,path,body){
       'content-type':'application/json',accept:'application/json'},
     ...(body!==undefined?{body:JSON.stringify(body)}:{})
   });
-  if(Number(response.headers.get('content-length')||0)>16384)
+  // 30 safe commercial code summaries with optional buyer metadata can exceed
+  // 16 KiB. Reject genuinely oversized responses, not legitimate operator pages.
+  // The response contains only safeCodeRecord() fields; never credentials.
+  const MAX_BRIDGE_JSON_BYTES=96*1024;
+  if(Number(response.headers.get('content-length')||0)>MAX_BRIDGE_JSON_BYTES)
     throw Object.assign(new Error('gateway_response_too_large'),{status:503});
   const raw=await response.text();
-  if(raw.length>16384)throw Object.assign(new Error('gateway_response_too_large'),{status:503});
+  if(Buffer.byteLength(raw,'utf8')>MAX_BRIDGE_JSON_BYTES)
+    throw Object.assign(new Error('gateway_response_too_large'),{status:503});
   const data=JSON.parse(raw);
   if(!response.ok)return {status:response.status,data:{ok:false,code:String(data?.error||'gateway_failed').slice(0,64)}};
   return {status:response.status,data};
@@ -3399,7 +3404,7 @@ async function unifiedStreamBridge(req,res,url){
   }
   if(req.method==='GET'&&p==='/internal/blofy-stream/codes'){
     const offset=Math.max(0,Math.min(100000,Number(url.searchParams.get('offset'))||0));
-    const result=await callLocalGateway('GET','/api/v1/admin/xtream-gateway/codes?limit=30&offset='+offset);
+    const result=await callLocalGateway('GET','/api/v1/admin/xtream-gateway/codes?limit=20&offset='+offset);
     return json(res,result.status,{ok:result.status===200,...result.data});
   }
   if(req.method==='POST'&&p==='/internal/blofy-stream/codes'){
@@ -3543,6 +3548,14 @@ http.createServer = function withBlofyXtream(listener) {
       if(url.pathname.startsWith('/internal/blofy-stream/')) {
         try{return await unifiedStreamBridge(req,res,url)}
         catch(error){
+          // Safe categorical logs for operator troubleshooting. Never log
+          // a code, URL, buyer identity, request body or exception text.
+          const category=error?.message==='gateway_response_too_large'?'bridge_response_too_large':
+            error?.message==='gateway_route_denied'?'bridge_route_denied':
+            error?.message==='gateway_not_configured'?'bridge_admin_config_missing':
+            error?.message==='gateway_port_invalid'?'bridge_port_invalid':
+            'bridge_internal_failure';
+          console.warn('BLOFY_STREAM_OPERATOR_BRIDGE_FAILURE',category);
           const validStatus=[400,404,409,413,429,503].includes(Number(error?.status))?
             Number(error.status):503;
           // No raw URLs, tokens, source credentials or provider error messages.
