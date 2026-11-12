@@ -23,7 +23,7 @@ import androidx.media3.exoplayer.mediacodec.MediaCodecDecoderException
 /** Fixed-origin self-check and safe user-facing error categories; no tokens or stream URLs. */
 @OptIn(markerClass = [UnstableApi::class])
 object StreamConnectionDiagnostics {
-    enum class Cause { CERTIFICATE, DNS, TIMEOUT, OFFLINE_OR_REFUSED, UNAUTHORIZED, CONTENT_MISSING, RATE_LIMITED, SERVER_ERROR, DECODER, OTHER }
+    enum class Cause { CERTIFICATE, DNS, TIMEOUT, OFFLINE_OR_REFUSED, UNAUTHORIZED, CONTENT_MISSING, RATE_LIMITED, SOURCE_RESTRICTED, SERVER_ERROR, DECODER, OTHER }
 
     data class Probe(val reachable: Boolean, val cause: Cause?, val status: Int?)
 
@@ -53,6 +53,7 @@ object StreamConnectionDiagnostics {
             httpStatus == 401 || httpStatus == 403 -> Cause.UNAUTHORIZED
             httpStatus == 404 || httpStatus == 410 -> Cause.CONTENT_MISSING
             httpStatus == 429 -> Cause.RATE_LIMITED
+            httpStatus == 456 -> Cause.SOURCE_RESTRICTED
             httpStatus != null && httpStatus in 500..599 -> Cause.SERVER_ERROR
             causes.any { it is ConnectException } -> Cause.OFFLINE_OR_REFUSED
             else -> Cause.OTHER
@@ -68,6 +69,7 @@ object StreamConnectionDiagnostics {
         Cause.UNAUTHORIZED -> "الجلسة غير مخوّلة. افتح حالة الاشتراك أو تواصل مع الدعم"
         Cause.CONTENT_MISSING -> "الملف أو الرابط المطلوب غير موجود لدى المصدر (404/410). تحقق من العنصر قبل إعادة المحاولة"
         Cause.RATE_LIMITED -> "المصدر يقيّد عدد الطلبات (429). انتظر قبل إعادة المحاولة ولا تكرر الفحص بسرعة"
+        Cause.SOURCE_RESTRICTED -> "المصدر رفض الاتصال (456). راجع صلاحيات اشتراك المصدر وحدود الاتصالات، ولا تكرر المحاولة بسرعة"
         Cause.SERVER_ERROR -> "السيرفر لم يستجب بشكل صحيح. جرّب لاحقًا"
         Cause.DECODER -> "صيغة الفيديو غير مدعومة على هذا الجهاز؛ جرّب جودة أقل أو قناة أخرى"
         Cause.OTHER -> "تعذر إكمال الاتصال. جرّب تحديث التطبيق أو افحص الشبكة"
@@ -82,6 +84,7 @@ object StreamConnectionDiagnostics {
         Cause.UNAUTHORIZED -> R.string.stream_ui_unauthorized_error
         Cause.CONTENT_MISSING -> R.string.stream_ui_content_missing_error
         Cause.RATE_LIMITED -> R.string.stream_ui_rate_limited_error
+        Cause.SOURCE_RESTRICTED -> R.string.stream_ui_source_restricted_error
         Cause.SERVER_ERROR -> R.string.stream_ui_server_error
         Cause.DECODER -> R.string.stream_ui_decoder_error
         Cause.OTHER -> R.string.stream_ui_generic_error

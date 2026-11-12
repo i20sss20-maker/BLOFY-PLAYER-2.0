@@ -41,6 +41,8 @@ class StreamConnectionDiagnosticsTest {
         }
         assertEquals(StreamConnectionDiagnostics.Cause.RATE_LIMITED,
             StreamConnectionDiagnostics.classify(apiError(429)))
+        assertEquals(StreamConnectionDiagnostics.Cause.SOURCE_RESTRICTED,
+            StreamConnectionDiagnostics.classify(apiError(456)))
         assertEquals(StreamConnectionDiagnostics.Cause.UNAUTHORIZED,
             StreamConnectionDiagnostics.classify(apiError(401)))
         assertEquals(StreamConnectionDiagnostics.Cause.TIMEOUT,
@@ -48,7 +50,8 @@ class StreamConnectionDiagnosticsTest {
         assertEquals(StreamConnectionDiagnostics.Cause.SERVER_ERROR,
             StreamConnectionDiagnostics.classify(apiError(503)))
         for (cause in listOf(StreamConnectionDiagnostics.Cause.CONTENT_MISSING,
-            StreamConnectionDiagnostics.Cause.RATE_LIMITED)) {
+            StreamConnectionDiagnostics.Cause.RATE_LIMITED,
+            StreamConnectionDiagnostics.Cause.SOURCE_RESTRICTED)) {
             assertFalse(StreamConnectionDiagnostics.guidance(cause).contains("secret"))
             assertFalse(StreamConnectionDiagnostics.guidance(cause).contains("http://"))
         }

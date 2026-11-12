@@ -19,6 +19,8 @@ permissions:
   contents: read
 jobs:
   android9-audio:
+    # Historical 55.8.14 QA identity check only: do not reject 55.8.15 PR.
+    if: ${{ github.event_name != 'pull_request' || github.base_ref == 'qa/stream-55-8-14-signed-base-20261112' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:

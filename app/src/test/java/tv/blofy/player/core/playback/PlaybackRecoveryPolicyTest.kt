@@ -15,7 +15,7 @@ class PlaybackRecoveryPolicyTest {
     @Test fun overloadedSourceWaitsBrieflyBeforeOneRetryInsteadOfInstantReconnect() {
         assertEquals(900L,PlaybackRecoveryPolicy.delayForSameUrlRetry(
             PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS,502,0,1))
-        assertEquals(1500L,PlaybackRecoveryPolicy.delayForSameUrlRetry(
+        assertNull(PlaybackRecoveryPolicy.delayForSameUrlRetry(
             PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS,429,0,1))
         assertEquals(550L,PlaybackRecoveryPolicy.delayForSameUrlRetry(
             PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS,408,0,1))
@@ -25,6 +25,18 @@ class PlaybackRecoveryPolicyTest {
             PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,null,0,1))
         assertEquals(550L,PlaybackRecoveryPolicy.delayForSameUrlRetry(
             PlaybackException.ERROR_CODE_TIMEOUT,null,0,1))
+    }
+
+    @Test fun providerAdmissionDenialsNeverTriggerExtraSourceConnections() {
+        for (status in listOf(401, 403, 429, 456)) {
+            assertTrue(PlaybackRecoveryPolicy.isSourceAdmissionRefusal(status))
+            assertNull(PlaybackRecoveryPolicy.delayForSameUrlRetry(
+                PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS, status, 0, 1))
+            assertNull(PlaybackRecoveryPolicy.delayForSameUrlRetry(
+                PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS, status, 1, 1))
+        }
+        for (status in listOf(408, 500, 502, 503))
+            assertFalse(PlaybackRecoveryPolicy.isSourceAdmissionRefusal(status))
     }
 
     @Test fun decoderAndUnsupportedFormatDoNotTriggerRepeatedNetworkRetries() {

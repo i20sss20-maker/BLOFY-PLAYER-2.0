@@ -142,6 +142,15 @@ class BlofyPlaybackSession(
                     if (failedUrl.isNotBlank()) {
                         PlaybackIntelligence.recordFailure(appContext, profile.providerKey, contentKind, failedUrl)
                     }
+                    val responseStatus = PlaybackRecoveryPolicy.httpStatus(error)
+                    if (PlaybackRecoveryPolicy.isSourceAdmissionRefusal(responseStatus)) {
+                        // Cancel all queued same-URL retries and the live watchdog.
+                        // Never turn a provider 401/403/429/456 refusal into
+                        // extra upstream requests, alternate formats or aliases.
+                        retryHandler.removeCallbacksAndMessages(null)
+                        onTerminalError?.invoke(failedUrl)
+                        return
+                    }
                     val now = SystemClock.elapsedRealtime()
                     val (windowStart, failures) = PlaybackRecoveryPolicy.failureWindowCount(
                         now, playerErrorWindowStartMs, repeatedPlayerErrors
@@ -149,7 +158,7 @@ class BlofyPlaybackSession(
                     playerErrorWindowStartMs = windowStart
                     repeatedPlayerErrors = failures
                     val delay = PlaybackRecoveryPolicy.delayForSameUrlRetry(
-                        error.errorCode, PlaybackRecoveryPolicy.httpStatus(error),
+                        error.errorCode, responseStatus,
                         automaticRetries, repeatedPlayerErrors
                     )
                     if (automaticRetries < MAX_AUTOMATIC_RETRIES && delay != null) {
