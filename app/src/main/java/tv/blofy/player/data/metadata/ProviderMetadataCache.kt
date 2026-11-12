@@ -66,6 +66,42 @@ object ProviderMetadataCache {
         return results
     }
 
+    /**
+     * Bounded, entirely offline lookup in saved provider cast/crew metadata.
+     * Uses a bound literal token with instr(), never user-generated SQL/LIKE
+     * wildcards. Caller MUST verify people names after decoding: overview,
+     * title and other JSON fields are not actor-search evidence.
+     *
+     * Source providers do not always send cast in their catalog lists, so a
+     * film/series not yet enriched will not be discovered here.
+     */
+    fun searchPeopleCandidates(
+        context: Context,
+        providerId: String,
+        token: String,
+        limit: Int = 96
+    ): Map<String, ProviderMetadata.Metadata> {
+        if (providerId.isBlank() || token.trim().length < 2) return emptyMap()
+        val result = LinkedHashMap<String, ProviderMetadata.Metadata>()
+        val db = helper(context).readableDatabase
+        db.rawQuery(
+            "SELECT content_key, payload_json FROM $TABLE WHERE provider_id = ? " +
+                "AND instr(lower(payload_json), lower(?)) > 0 " +
+                "ORDER BY updated_at DESC LIMIT ?",
+            arrayOf(providerId, token.trim().take(48), limit.coerceIn(1, 128).toString())
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                val key = cursor.getString(0) ?: continue
+                if (!key.startsWith("$providerId:")) continue
+                val metadata = runCatching {
+                    gson.fromJson(cursor.getString(1), ProviderMetadata.Metadata::class.java)
+                }.getOrNull() ?: continue
+                result[key] = metadata
+            }
+        }
+        return result
+    }
+
     fun contains(context: Context, contentKey: String): Boolean {
         if (contentKey.isBlank()) return false
         helper(context).readableDatabase.rawQuery(
