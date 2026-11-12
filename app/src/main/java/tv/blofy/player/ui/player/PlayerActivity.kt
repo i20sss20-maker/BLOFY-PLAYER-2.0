@@ -1395,9 +1395,11 @@ open class PlayerActivity : ContentAccessActivity() {
         }
 
         val isText = trackType == C.TRACK_TYPE_TEXT
+        val isAudio = trackType == C.TRACK_TYPE_AUDIO
         val englishStreamUi = BuildConfig.CODE_ONLY_LOGIN && !streamUiLanguage().startsWith("ar", ignoreCase = true)
         val labels = buildList {
-            if (isText) add(if (englishStreamUi) "Subtitles off" else "إيقاف الترجمة")
+            if (isText && entries.isNotEmpty()) add(if (englishStreamUi) "Subtitles off" else "إيقاف الترجمة")
+            if (isAudio && entries.isNotEmpty()) add(if (englishStreamUi) "Automatic audio" else "الصوت التلقائي")
             addAll(entries.map { it.label })
         }
         if (labels.isEmpty()) {
@@ -1435,24 +1437,31 @@ open class PlayerActivity : ContentAccessActivity() {
             )
             .setItems(labels.toTypedArray()) { dialog, which ->
                 if (isText) subtitlePolicy.manual = true
-                if (isText && which == 0) {
-                    session.player.trackSelectionParameters =
-                        session.player.trackSelectionParameters
+                when (AudioTrackChoicePolicy.choice(isAudio, isText, which, entries.size)) {
+                    AudioTrackChoicePolicy.Choice.OFF -> {
+                        session.player.trackSelectionParameters = session.player.trackSelectionParameters
+                            .buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build()
+                    }
+                    AudioTrackChoicePolicy.Choice.AUTO -> {
+                        // Restore Media3's supported-track auto selection. Do not
+                        // restart the video, clear other track choices, or force
+                        // unsupported AC3/EAC3/DTS on Android 9 devices.
+                        session.player.trackSelectionParameters = session.player.trackSelectionParameters
                             .buildUpon()
-                            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                            .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+                            .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
                             .build()
-                } else {
-                    val entry = entries[which - if (isText) 1 else 0]
-                    val override = TrackSelectionOverride(
-                        entry.group.mediaTrackGroup,
-                        listOf(entry.index)
-                    )
-                    session.player.trackSelectionParameters =
-                        session.player.trackSelectionParameters
-                            .buildUpon()
-                            .setTrackTypeDisabled(trackType, false)
-                            .setOverrideForType(override)
-                            .build()
+                    }
+                    AudioTrackChoicePolicy.Choice.TRACK -> {
+                        val index = AudioTrackChoicePolicy.trackIndex(isAudio, isText, which, entries.size)
+                            ?: return@setItems
+                        val entry = entries[index]
+                        val override = TrackSelectionOverride(entry.group.mediaTrackGroup, listOf(entry.index))
+                        session.player.trackSelectionParameters = session.player.trackSelectionParameters
+                            .buildUpon().setTrackTypeDisabled(trackType, false)
+                            .setOverrideForType(override).build()
+                    }
+                    null -> Unit
                 }
                 dialog.dismiss()
             }
