@@ -46,6 +46,7 @@ import { downloadXtreamM3uCatalog } from './xtream-m3u-catalog.mjs';
 import { distinctXtreamRecords } from './xtream-import-dedup.mjs';
 import {xtreamProviderOrder,withXtreamProviderPosition} from './xtream-provider-order.mjs';
 import {sourceLiveCapacity} from './xtream-live-source-capacity.mjs';
+import {xtreamDirectMediaGauge} from './xtream-direct-media-gauge.mjs';
 import {summarizeStreamSourceCapacity} from './stream-source-capacity-report.mjs';
 import {permittedLicensedLiveFanout} from './xtream-licensed-live-fanout-policy.mjs';
 import {xtreamPlaybackSnapshot} from './xtream-playback-metrics.mjs';
@@ -3183,7 +3184,8 @@ async function unifiedStreamBridge(req,res,url){
         .then(result=>result.rows).catch(()=>null)
     ]);
     return json(res,200,summarizeStreamSourceCapacity(
-      sources.map(adminServer),counts
+      sources.map(adminServer),counts,
+      {gatewayDirectMedia:xtreamDirectMediaGauge.snapshot()}
     ),{'cache-control':'no-store'});
   }
   if(req.method==='GET'&&p==='/internal/blofy-stream/overview'){
