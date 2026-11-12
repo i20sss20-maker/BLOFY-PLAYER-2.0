@@ -11,5 +11,10 @@ COPY test/xtream-licensed-live-fanout.test.mjs ./test/xtream-licensed-live-fanou
 COPY test/xtream-shared-pilot-registry.test.mjs ./test/xtream-shared-pilot-registry.test.mjs
 COPY test/xtream-playback-metrics.test.mjs ./test/xtream-playback-metrics.test.mjs
 RUN node --test test/xtream-licensed-live-fanout.test.mjs test/xtream-shared-pilot-registry.test.mjs test/xtream-playback-metrics.test.mjs
+# Same-code device re-entry must not create new accounts or extend expiry.
+COPY test/xtream-code-commercial.test.mjs ./test/xtream-code-commercial.test.mjs
+COPY test/xtream-duration-codes.test.mjs ./test/xtream-duration-codes.test.mjs
+COPY test/xtream-code-relogin.test.mjs ./test/xtream-code-relogin.test.mjs
+RUN node --test test/xtream-code-commercial.test.mjs test/xtream-duration-codes.test.mjs test/xtream-code-relogin.test.mjs
 EXPOSE 8080
 CMD ["npm","start"]
