@@ -156,7 +156,7 @@ class PosterStreamAdapter(
     private fun bindGenreLine(holder: Holder, item: StreamEntity, badges: List<String>) {
         val configuration = holder.itemView.resources.configuration
         val language = if (Build.VERSION.SDK_INT >= 24) configuration.locales[0].language
-            else @Suppress("DEPRECATION") configuration.locale.language
+            else configuration.locale.language
         holder.meta.text = MovieCardMeta.subtitle(
             item = item,
             badges = badges,
