@@ -12,6 +12,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -465,6 +466,7 @@ class PosterCatalogActivity : AppCompatActivity() {
         }.keys.toSet()
 
         genreWarmJob = lifecycleScope.launch {
+            var fetchedBatch = false
             try {
                 // Batch-read locally first. A cached detail should never
                 // trigger another network round-trip just to paint its genre.
@@ -480,6 +482,7 @@ class PosterCatalogActivity : AppCompatActivity() {
                     BlofyDatabase.get(applicationContext).dao().provider(owner)
                 } ?: return@launch
                 if (!provider.providerType.equals("xtream", true)) return@launch
+                fetchedBatch = true
                 val slots = Semaphore(2)
                 coroutineScope {
                     candidates.map { movie ->
@@ -508,8 +511,9 @@ class PosterCatalogActivity : AppCompatActivity() {
                 // Missing or rate-limited provider metadata must never prevent
                 // browsing, cause an activation failure, or reset the catalog.
             } finally {
-                if (generation == currentGeneration && providerId == owner &&
-                    selectedCategoryId == category && !isFinishing && !isDestroyed) {
+                if (fetchedBatch && generation == currentGeneration && providerId == owner &&
+                    selectedCategoryId == category && !isFinishing && !isDestroyed &&
+                    lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
                     // If the user scrolled while this small batch was loading,
                     // refresh the viewport after it settles.
                     posterGrid.post { requestVisibleGenreWarmup() }
