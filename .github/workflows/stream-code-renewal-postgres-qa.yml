@@ -1,0 +1,54 @@
+name: BLOFY STREAM used-code renewal and secure recovery QA
+on:
+  push:
+    branches:
+      - fix/stream-code-renewal-lookup-20261112
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  code-recovery-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: blofy_stream_code_qa
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d blofy_stream_code_qa"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/blofy_stream_code_qa
+      BLOFY_STREAM_EPHEMERAL_DB_QA: 'true'
+    defaults:
+      run:
+        working-directory: services/activation
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Validate source and run STREAM voucher lifecycle tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts --no-audit --no-fund
+          node --check src/xtream-duration-codes.mjs
+          node --check src/xtream-code-commercial.mjs
+          node --check src/xtream-gateway-hook.mjs
+          node --check web/xtream-gateway-admin.js
+          node --check web/sources-admin.js
+          node --test test/xtream-code-lookup-admin.test.mjs \
+            test/xtream-code-recovery-once.test.mjs \
+            test/xtream-code-relogin.test.mjs \
+            test/xtream-code-commercial.test.mjs \
+            test/xtream-duration-codes.test.mjs
+      - name: Verify real PostgreSQL atomic renewal and one-time recovery
+        run: node test/xtream-code-renewal-postgres.smoke.mjs
