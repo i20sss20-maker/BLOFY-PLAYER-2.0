@@ -43,7 +43,9 @@ jobs:
             --tests tv.blofy.player.core.playback.PlaybackRecoveryPolicyTest \
             --tests tv.blofy.player.ui.catalog.MovieCardMetaTest \
             --tests tv.blofy.player.ui.catalog.MovieGenrePrefetchPolicyTest \
-            --tests tv.blofy.player.ui.catalog.MovieGenresTest
+            --tests tv.blofy.player.ui.catalog.MovieGenresTest \
+            --tests tv.blofy.player.ui.catalog.SimilarMoviePolicyTest \
+            --tests tv.blofy.player.ui.home.SmartHomeEngineTest
       - name: Save test evidence only — not a customer release
         if: always()
         uses: actions/upload-artifact@v4
