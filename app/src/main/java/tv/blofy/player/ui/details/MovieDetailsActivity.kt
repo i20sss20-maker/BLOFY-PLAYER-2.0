@@ -35,6 +35,7 @@ import tv.blofy.player.data.metadata.XtreamMetadataFallback
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.catalog.MovieGenres
 import tv.blofy.player.ui.catalog.SimilarMoviePolicy
+import tv.blofy.player.data.metadata.ProviderMetadataCache
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.ContentScreenStyle
 import tv.blofy.player.ui.player.PlayerActivity
@@ -292,12 +293,23 @@ class MovieDetailsActivity : ContentAccessActivity() {
                         .associate { it.remoteId to it.name }
                     val genres = SimilarMoviePolicy.genreKeys(film, detailGenres, categoryNames[film.categoryId])
                     if (genres.isEmpty()) return@withContext emptyList<StreamEntity>()
-                    val related = genres.take(2).flatMap { key ->
+                    val explicitGenreMatches = genres.take(2).flatMap { key ->
                         dao.catalogPageForMovieGenre(
                             MovieGenres.catalogQuery(providerId, null, key, limit = 64)
                         )
-                    }.distinctBy { it.key }
-                    SimilarMoviePolicy.rank(film, detailGenres, related, categoryNames, 10)
+                    }
+                    // Many Xtream list endpoints omit genre even when detail
+                    // metadata was previously cached. Check one small source
+                    // page locally as fallback, never the full 24k+ catalog.
+                    val fallbackPage = if (explicitGenreMatches.size < 10)
+                        dao.catalogPageAfterAll(providerId, "movie", 0L, 96)
+                    else emptyList()
+                    val related = (explicitGenreMatches + fallbackPage).distinctBy { it.key }
+                    val detailCache = ProviderMetadataCache.readGenresForPage(
+                        applicationContext, related.map { it.key })
+                    SimilarMoviePolicy.rank(
+                        film, detailGenres, related, categoryNames, 10, cachedGenres = detailCache
+                    )
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
