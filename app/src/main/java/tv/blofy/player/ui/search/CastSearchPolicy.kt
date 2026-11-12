@@ -39,8 +39,12 @@ internal object CastSearchPolicy {
             || metadata.crew.orEmpty().any { it.name.isNotBlank() && normalize(it.name).contains(term) }
     }
 
+    // SQLite lower() does not fold Arabic hamza, so querying the first
+    // word 'احمد' misses cached credits written as 'أحمد حلمي'. Prefer
+    // the last distinctive name (حلمي, كروز, Cruise), then verify the
+    // FULL normalized cast name in matches() so we never present false hits.
     fun candidateToken(input: String): String = actorTerm(input)
-        .split(" ").firstOrNull().orEmpty().take(40)
+        .split(" ").filter(String::isNotBlank).lastOrNull().orEmpty().take(40)
 
     fun searchable(input: String): Boolean = actorTerm(input).length in 2..80
 }
