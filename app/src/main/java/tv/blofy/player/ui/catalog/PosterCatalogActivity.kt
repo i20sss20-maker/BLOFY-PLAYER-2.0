@@ -387,6 +387,9 @@ class PosterCatalogActivity : AppCompatActivity() {
             posterAdapter.replace(emptyList())
         }
         generation++
+        posterGrid.removeCallbacks(genreWarmRequest)
+        genreWarmJob?.cancel()
+        genreWarmJob = null
         refreshExactCount()
         pageJob?.cancel()
         hasMore = true
@@ -585,8 +588,15 @@ class PosterCatalogActivity : AppCompatActivity() {
                 if (fetchedBatch && generation == currentGeneration && providerId == owner &&
                     selectedCategoryId == category && !isFinishing && !isDestroyed &&
                     lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
-                    // No fetch feedback loop: a later settled viewport or resume
-                    // can request another small batch after the cooldown.
+                    // Revisit the current viewport after the bounded cooldown
+                    // so genres fill in without needing the user to scroll.
+                    // The 5-minute rolling quota and recently-attempted filter
+                    // prevent request storms and repeated missing-title fetches.
+                    if (posterGrid.scrollState == RecyclerView.SCROLL_STATE_IDLE &&
+                        genreQuotaCount < MAX_GENRE_REQUESTS_PER_WINDOW) {
+                        posterGrid.removeCallbacks(genreWarmRequest)
+                        posterGrid.postDelayed(genreWarmRequest, GENRE_BATCH_COOLDOWN_MS)
+                    }
                 }
             }
         }
