@@ -43,7 +43,6 @@ class MovieDetailsActivity : ContentAccessActivity() {
     private lateinit var favoriteButton: Button
     private var arabicPresenter: ArabicDetailsPresenter? = null
     private var similarMoviesJob: Job? = null
-    private var lastSimilarGenres = ""
     private var lastSimilarKeys: List<String> = emptyList()
 
     override fun onContentReady(savedInstanceState: Bundle?) {
