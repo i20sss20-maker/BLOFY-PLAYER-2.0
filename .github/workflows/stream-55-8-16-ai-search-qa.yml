@@ -72,6 +72,18 @@ jobs:
             --tests tv.blofy.player.ui.catalog.MovieGenrePrefetchPolicyTest \
             --tests tv.blofy.player.ui.search.CastSearchPolicyTest \
             --tests tv.blofy.player.ui.search.AiCatalogMatchPolicyTest
+      - name: Smoke-test isolated first-party AI Gateway without tokens or Gemini cost
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://blofy-ai-gateway-production.up.railway.app"
+          curl --fail --silent --show-error --retry 3 --retry-delay 2 \
+            --connect-timeout 6 --max-time 12 "$BASE/health" | jq -e '.ok == true and .service == "blofy-ai"'
+          code="$(curl --silent --show-error --max-time 12 -o "$RUNNER_TEMP/ai-unauthorized.json" \
+            -w '%{http_code}' -X POST -H 'content-type: application/json' \
+            --data '{"text":"Tom Cruise","locale":"en"}' "$BASE/v1/search/interpret")"
+          test "$code" = 401
+          jq -e '.ok == false and .error == "unauthorized"' "$RUNNER_TEMP/ai-unauthorized.json"
       - name: Save test evidence only — not a customer release
         if: always()
         uses: actions/upload-artifact@v4
