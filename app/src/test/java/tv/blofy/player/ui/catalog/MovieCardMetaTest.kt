@@ -44,10 +44,22 @@ class MovieCardMetaTest {
             MovieCardMeta.subtitle(film(), listOf("4K"), "New Releases", arabic = true))
     }
 
-    @Test fun oldSeriesBadgeLineIsPreserved() {
-        val series = film("Comedy").copy(kind="series",year=null)
-        assertEquals("Comedy  •  4K  •  AR",
-            MovieCardMeta.subtitle(series,listOf("4K","AR"),null))
+    @Test fun seriesGenresHaveSameLocalizedPosterSubtitlesAsFilms() {
+        val series = film("Comedy").copy(kind = "series", year = "2025")
+        assertEquals("Comedy  •  2025  •  4K  •  AR",
+            MovieCardMeta.subtitle(series, listOf("4K", "AR"), null))
+        assertEquals("كوميديا  •  2025  •  4K",
+            MovieCardMeta.subtitle(series, listOf("4K"), null, arabic = true))
+    }
+
+    @Test fun cachedSeriesGenresAndCategoryFallbackShowWithoutEnteringDetails() {
+        val series = film().copy(kind = "series", year = null)
+        assertEquals("Crime  •  4K",
+            MovieCardMeta.subtitle(series, listOf("4K"), "Latest Series", listOf("Crime")))
+        assertEquals("رعب  •  4K",
+            MovieCardMeta.subtitle(series, listOf("4K"), "Horror Series", arabic = true))
+        assertEquals("مسلسل  •  4K",
+            MovieCardMeta.subtitle(series, listOf("4K"), "Latest Series", arabic = true))
     }
 
     @Test fun noDuplicateVideoQualityBadges() {
