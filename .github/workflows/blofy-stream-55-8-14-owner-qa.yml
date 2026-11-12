@@ -3,7 +3,7 @@ name: BLOFY STREAM 55.8.14 FFmpeg owner-signed release candidate
 on:
   push:
     branches:
-      - fix/stream-55-8-14-stable-film-genres-20261111
+      - feat/stream-55-8-13-qoe-stability-20261112
     paths:
       - '.github/workflows/blofy-stream-55-8-14-owner-qa.yml'
   workflow_dispatch:
