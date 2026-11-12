@@ -44,6 +44,7 @@ import { normalizeXtreamEpg } from './xtream-epg.mjs';
 import { acceptsXtreamGzip } from './xtream-catalog-compression.mjs';
 import { shouldRetryXtreamWithoutRange,firstByteXtreamRange } from './xtream-media-range.mjs';
 import { recordXtreamPlayback,xtreamPlaybackSnapshot } from './xtream-playback-metrics.mjs';
+import {xtreamDirectMediaGauge} from './xtream-direct-media-gauge.mjs';
 import { XtreamDenialCooldown } from './xtream-denial-cooldown.mjs';
 import { createGatewayUsageThrottle } from './xtream-gateway-usage-throttle.mjs';
 import {createStreamDurationCodes,ensureStreamCodeTable} from './xtream-duration-codes.mjs';
@@ -1145,6 +1146,8 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
   const mediaExtension=kind==='live'?(requestedExtension||extension):(extension||requestedExtension);
   const startedAt=Date.now();
   let actualStreamStartedAt=0,closedTelemetryRecorded=false,feedEndedNormally=false;
+  // Idempotent local gauge cleanup on every client close or response completion.
+  let releaseActiveDirectTransfer=()=>{};
   // A rejected individual channel cannot block another channel or source.
   // This is an in-memory guard against repeat viewer requests, not a way
   // around the provider's permissions. Only verified 403/456 trigger it.
@@ -1241,6 +1244,7 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
   const client = new AbortController();
   const abort = () => { if (!client.signal.aborted) client.abort(); };
   const onClose = () => {
+    releaseActiveDirectTransfer();
     if (!res.writableEnded) {
       if(kind==='live'&&actualStreamStartedAt>0&&!closedTelemetryRecorded&&!feedEndedNormally){
         closedTelemetryRecorded=true;
@@ -1482,6 +1486,10 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
         if(req.method==='GET')asyncNoteRecovered(unavailableKey);
         observe('started',{upstreamStatus:response.status,startupMs:Date.now()-startedAt,attempts:attempt});
         actualStreamStartedAt=Date.now();
+        // Count only a REAL, authenticated, validated direct HTTP response.
+        // A 307 ticket, HLS manifest and failed source do not count as viewers.
+        releaseActiveDirectTransfer=xtreamDirectMediaGauge.begin({kind,
+          sourceId:String(row.server_id||'')});
         res.writeHead(response.status, outputHeaders);
         const stream = Readable.from((async function* () {
           yield first.value;
@@ -1549,6 +1557,7 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
       }
     }
   } finally {
+    releaseActiveDirectTransfer();
     req.off('aborted',abort);
     res.off('close',onClose);
   }
