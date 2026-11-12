@@ -1,4 +1,6 @@
 name: BLOFY STREAM 55.8.18 FFmpeg owner-signed release candidate
+# Final immutable QA package: Groq actor-Arabic and Sigma/title translation
+# canaries passed on Railway; the app regression must pass at this exact SHA.
 
 on:
   push:
