@@ -49,6 +49,8 @@ class PosterCatalogActivity : AppCompatActivity() {
     private lateinit var categoryList: RecyclerView
     private lateinit var posterGrid: RecyclerView
     private lateinit var countView: TextView
+    private lateinit var sortControl: TextView
+    private var sortMode = CatalogSortPolicy.Mode.SOURCE
     private lateinit var searchBar: TextView
     private var genreRefreshJob: Job? = null
     private var genreWarmJob: Job? = null
@@ -75,6 +77,12 @@ class PosterCatalogActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        sortMode = runCatching {
+            CatalogSortPolicy.Mode.valueOf(
+                getSharedPreferences("stream_catalog_sort_v1", MODE_PRIVATE)
+                    .getString(kind, CatalogSortPolicy.Mode.SOURCE.name).orEmpty()
+            )
+        }.getOrDefault(CatalogSortPolicy.Mode.SOURCE)
         val deviceKind = DeviceClass.detect(this)
         val widthDp = resources.configuration.screenWidthDp.takeIf { it > 0 } ?: resources.configuration.smallestScreenWidthDp
         val compactCatalog = RuntimeSettings.catalogDensity(this) == RuntimeSettings.CatalogDensity.COMPACT
@@ -243,6 +251,33 @@ class PosterCatalogActivity : AppCompatActivity() {
             setPadding(dp(if (deviceKind == DeviceClass.Kind.PHONE) 8 else 12), 0, dp(if (deviceKind == DeviceClass.Kind.PHONE) 8 else 12), 0)
             background = BlofyTvDesign.badge(dp(BlofyTvDesign.BadgeRadius).toFloat())
         }
+        sortControl = TextView(this).apply {
+            text = sortModeLabel()
+            textSize = if (deviceKind == DeviceClass.Kind.PHONE) 10f else 12f
+            typeface = BlofyTvDesign.preferredTypeface(this, bold = true)
+            setTextColor(BlofyTvDesign.TextSecondary)
+            gravity = Gravity.CENTER
+            setPadding(dp(8), 0, dp(8), 0)
+            background = CinemaStyle.surface(this@PosterCatalogActivity)
+            isFocusable = true
+            isClickable = true
+            contentDescription = text
+            setOnClickListener {
+                sortMode = sortMode.next()
+                text = sortModeLabel()
+                contentDescription = text
+                getSharedPreferences("stream_catalog_sort_v1", MODE_PRIVATE).edit()
+                    .putString(kind, sortMode.name).apply()
+                loadStreams(selectedCategoryId, force = true)
+            }
+            setOnFocusChangeListener { _, focused ->
+                background = CinemaStyle.surface(this@PosterCatalogActivity, focused)
+                setTextColor(if (focused) CinemaStyle.White else BlofyTvDesign.TextSecondary)
+            }
+        }
+        header.addView(sortControl, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(30)).apply {
+            marginEnd = dp(8)
+        })
         header.addView(countView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(28)))
         content.addView(header)
 
@@ -329,9 +364,9 @@ class PosterCatalogActivity : AppCompatActivity() {
         return super.dispatchKeyEvent(event)
     }
 
-    private fun loadStreams(id: String?) {
+    private fun loadStreams(id: String?, force: Boolean = false) {
         if (providerId.isBlank()) return
-        if (selectedCategoryId == id) {
+        if (!force && selectedCategoryId == id) {
             if (displayedCategoryId == id && loadedItems.isNotEmpty()) return
             if (loadingPage) return
         }
@@ -340,6 +375,11 @@ class PosterCatalogActivity : AppCompatActivity() {
         genreRefreshJob?.cancel()
         genreWarmJob?.cancel()
         posterGrid.removeCallbacks(genreWarmRequest)
+        if (force) {
+            loadedItems.clear()
+            displayedCategoryId = null
+            posterAdapter.replace(emptyList())
+        }
         generation++
         refreshExactCount()
         pageJob?.cancel()
@@ -366,7 +406,7 @@ class PosterCatalogActivity : AppCompatActivity() {
                 loadedItems.addAll(snapshot)
                 displayedCategoryId = id
                 lastRowId = cached.lastRowId
-                hasMore = cached.items.size >= PAGE_SIZE
+                hasMore = cached.total == Int.MAX_VALUE
                 posterAdapter.rememberMovieGenres(genreSnapshot, reset = true)
                 posterAdapter.replace(snapshot)
                 cached.focusedKey?.let { focusedPosterKeys.putIfAbsent(memoryKey(id), it) }
@@ -391,14 +431,20 @@ class PosterCatalogActivity : AppCompatActivity() {
         val requestGeneration = generation
         val requestCategoryId = selectedCategoryId
         val cursor = if (reset) 0L else lastRowId
+        val offset = if (reset) 0 else loadedItems.size
+        val requestedSort = sortMode
         loadingPage = true
         pageJob = lifecycleScope.launch {
             val dao = BlofyDatabase.get(applicationContext).dao()
             val result = withContext(Dispatchers.IO) {
-                val page = if (requestCategoryId == null) {
-                    dao.catalogPageAfterAll(providerId, kind, cursor, PAGE_SIZE)
-                } else {
-                    dao.catalogPageAfterInCategory(providerId, kind, requestCategoryId, cursor, PAGE_SIZE)
+                val page = when {
+                    requestedSort != CatalogSortPolicy.Mode.SOURCE ->
+                        dao.catalogSortedPage(CatalogSortPolicy.query(
+                            providerId, kind, requestCategoryId, requestedSort, offset, PAGE_SIZE))
+                    requestCategoryId == null ->
+                        dao.catalogPageAfterAll(providerId, kind, cursor, PAGE_SIZE)
+                    else ->
+                        dao.catalogPageAfterInCategory(providerId, kind, requestCategoryId, cursor, PAGE_SIZE)
                 }
                 val cachedGenres = if (kind == KIND_MOVIE) {
                     ProviderMetadataCache.readGenresForPage(
@@ -569,7 +615,7 @@ class PosterCatalogActivity : AppCompatActivity() {
     }
 
     private fun memoryKey(categoryId: String? = selectedCategoryId) =
-        "$providerId:$kind:${categoryId ?: ALL_CATEGORY_ID}"
+        "$providerId:$kind:${categoryId ?: ALL_CATEGORY_ID}:${sortMode.name}"
 
     private fun requestPosterFocus(): Boolean {
         if (displayedCategoryId != selectedCategoryId || (loadingPage && lastRowId == 0L)) return false
@@ -599,6 +645,13 @@ class PosterCatalogActivity : AppCompatActivity() {
             putExtra("content_key", stream.key)
         })
     }
+
+    private fun sortModeLabel(): String = getString(when (sortMode) {
+        CatalogSortPolicy.Mode.SOURCE -> R.string.stream_catalog_sort_source
+        CatalogSortPolicy.Mode.NEWEST -> R.string.stream_catalog_sort_newest
+        CatalogSortPolicy.Mode.RATING -> R.string.stream_catalog_sort_rating
+        CatalogSortPolicy.Mode.YEAR -> R.string.stream_catalog_sort_year
+    })
 
     private fun displayCategoryName(raw: String): String {
         val cleaned = raw
