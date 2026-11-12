@@ -3070,7 +3070,12 @@ async function callLocalGateway(method,path,body){
 
 // Distributor accounts have *no* database or admin token access from STREAM.
 // Every operation below is reached only through the authenticated fixed bridge.
-const streamDistributors=createStreamDistributors({pool,
+const streamDistributors=createStreamDistributors({pool,trialKeyHex:KEY_HEX,
+  // Read-only, active/published catalog for the precisely pinned saleh source.
+  listCatalog:async args=>(await listCatalog({
+    type:args.type,serverId:args.sourceId,q:args.q,
+    offset:args.offset,limit:args.limit
+  },true)).map(streamSafeCatalog),
   issueCode:async body=>{
     const result=await callLocalGateway('POST','/api/v1/admin/xtream-gateway/codes',body);
     return {status:result.status,body:result.data};
@@ -3141,6 +3146,10 @@ async function unifiedStreamBridge(req,res,url){
       {'cache-control':'no-store'});
     if(command==='reveal')return json(res,200,
       await streamDistributors.reveal(token,payload.issueId),{'cache-control':'no-store'});
+    if(command==='library')return json(res,200,
+      await streamDistributors.library(token,payload),{'cache-control':'no-store'});
+    if(command==='organize')return json(res,200,
+      await streamDistributors.organize(token,payload),{'cache-control':'no-store'});
     return json(res,404,{ok:false,code:'route_not_found'});
   }
   if(req.method==='GET'&&p==='/internal/blofy-stream/overview'){
