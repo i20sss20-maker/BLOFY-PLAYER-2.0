@@ -2,7 +2,12 @@
 // advertised BLOFY code maxConnections (which is a different contract).
 // Each code bound to one source currently resolves back to this one
 // upstream account. Do NOT silently clone credentials or bypass limits.
-const safeCount=n=>Number.isInteger(Number(n))&&Number(n)>=0&&Number(n)<=1000000?Number(n):null;
+const safeCount=n=>{
+ if(n===null||n===undefined||n===''||typeof n==='boolean')return null;
+ if(typeof n!=='number'&&typeof n!=='string')return null;
+ const v=Number(n);
+ return Number.isSafeInteger(v)&&v>=0&&v<=1000000?v:null;
+};
 export function sourceLiveCapacity(accountInfo){
  const account=accountInfo&&typeof accountInfo==='object'?accountInfo:{};
  const maxConnections=safeCount(account.maxConnections);
