@@ -3141,7 +3141,14 @@ async function unifiedStreamBridge(req,res,url){
     const token=String(payload.sessionToken||'');
     if(command==='me')return json(res,200,await streamDistributors.me(token));
     if(command==='logout')return json(res,200,await streamDistributors.logout(token));
-    if(command==='list')return json(res,200,await streamDistributors.issued(token));
+    if(command==='list')return json(res,200,
+      await streamDistributors.issued(token,payload),{'cache-control':'no-store'});
+    if(command==='customer')return json(res,200,
+      await streamDistributors.customer(token,payload),{'cache-control':'no-store'});
+    if(command==='renew')return json(res,200,
+      await streamDistributors.renew(token,payload),{'cache-control':'no-store'});
+    if(command==='relogin')return json(res,200,
+      await streamDistributors.relogin(token,payload),{'cache-control':'no-store'});
     if(command==='issue')return json(res,200,await streamDistributors.issue(token,payload),
       {'cache-control':'no-store'});
     if(command==='reveal')return json(res,200,
