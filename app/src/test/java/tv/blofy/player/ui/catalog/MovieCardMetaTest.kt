@@ -35,6 +35,15 @@ class MovieCardMetaTest {
             MovieCardMeta.subtitle(film("Drama"), listOf("4K"), "HORROR MOVIES"))
     }
 
+    @Test fun movieCategoryDisplaysArabicGenresWhenAppIsArabic() {
+        assertEquals("أكشن / كوميديا  •  4K",
+            MovieCardMeta.subtitle(film("Action, Comedy"), listOf("4K"), null, arabic = true))
+        assertEquals("رعب  •  4K",
+            MovieCardMeta.subtitle(film(), listOf("4K"), "Horror Movies", arabic = true))
+        assertEquals("فيلم  •  4K",
+            MovieCardMeta.subtitle(film(), listOf("4K"), "New Releases", arabic = true))
+    }
+
     @Test fun oldSeriesBadgeLineIsPreserved() {
         val series = film("Comedy").copy(kind="series",year=null)
         assertEquals("Comedy  •  4K  •  AR",
