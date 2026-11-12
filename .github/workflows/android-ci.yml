@@ -127,6 +127,10 @@ jobs:
       - name: Verify actual catalog queries on 200k rows
         run: python3 tools/check_catalog_queries.py
       - name: Verify Play Xiaomi-design UX / STREAM candidate 2000088 manifest and TV routes
+        # Play's historical 2000088 identity gate must remain on main/Play PRs.
+        # Separate STREAM 55.8.14 side-by-side QA has an edition-aware gate
+        # in stream-55-8-14-audio-qa.yml instead.
+        if: ${{ github.event_name != 'pull_request' || github.base_ref != 'qa/stream-55-8-14-signed-base-20261112' }}
         env:
           BLOFY_EXPECTED_PLAY_VERSION_CODE: "2000088"
         run: python3 tools/verify_play_2000073.py

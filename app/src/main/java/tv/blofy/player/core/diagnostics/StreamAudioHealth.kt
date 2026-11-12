@@ -26,7 +26,8 @@ object StreamAudioHealth {
         val available: Int,
         val supported: Int,
         val selected: Int,
-        val selectedMimeType: String?
+        val selectedMimeType: String?,
+        val detectedMimeTypes: List<String> = emptyList()
     ) {
         fun safeLogCode(): String =
             "state=${state.name};available=$available;supported=$supported;" +
@@ -77,9 +78,15 @@ object StreamAudioHealth {
         var supported = 0
         var selected = 0
         var selectedMime: String? = null
+        val detectedMimeTypes = linkedSetOf<String>()
         for (group in groups) {
             for (index in 0 until group.length) {
                 available++
+                // A codec is still discoverable even when no installed decoder supports it.
+                // Never admit arbitrary provider text into the diagnostic UI.
+                val mime = group.getTrackFormat(index).sampleMimeType
+                    ?.take(48)?.takeIf { it.matches(Regex("audio/[A-Za-z0-9._+-]+")) }
+                if (mime != null && detectedMimeTypes.size < 4) detectedMimeTypes += mime
                 val isSupported = group.isTrackSupported(index)
                 if (isSupported) supported++
                 // Selected-but-unsupported must not be reported as usable audio.
@@ -87,16 +94,14 @@ object StreamAudioHealth {
                 if (group.isTrackSelected(index) && isSupported) {
                     selected++
                     if (selectedMime == null) {
-                        selectedMime = group.getTrackFormat(index).sampleMimeType
-                            ?.take(48)
-                            ?.takeIf { it.matches(Regex("[A-Za-z0-9._/+-]+")) }
+                        selectedMime = mime
                     }
                 }
             }
         }
         return Summary(
             classify(available, supported, selected, volume, known),
-            available, supported, selected, selectedMime
+            available, supported, selected, selectedMime, detectedMimeTypes.toList()
         )
     }
 }

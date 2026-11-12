@@ -1,0 +1,61 @@
+name: BLOFY STREAM 55.8.14 - verify exact owner-signed APK
+on:
+  push:
+    branches:
+      - qa/stream-55-8-14-audio-recovery-20261112
+    paths:
+      - '.github/workflows/blofy-stream-55-8-14-apk-proof.yml'
+  pull_request:
+    paths:
+      - '.github/workflows/blofy-stream-55-8-14-apk-proof.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  published-release-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TAG: blofy-stream-55.8.14-owner-qa-20261112
+      APK_FILE: BLOFY-STREAM-55.8.14-FFMPEG-OWNER-SIGNED.apk
+      EXPECTED_SHA: eb18f66b666a62fce264e1e57120a19998a2dd8a9ef758b5f80f432b099f0006
+      EXPECTED_CERT: C3B98CCCD2F0C86809014ACD9368BF61C7004CFD419CD867B71FEF10BFA6255E
+      EXPECTED_SIZE: '135543341'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download and independently validate exact owner-signed published asset
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "build-tools;35.0.0"
+          mkdir -p "$RUNNER_TEMP/apk-check"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+            -p "$APK_FILE" -D "$RUNNER_TEMP/apk-check" --clobber
+          APK="$RUNNER_TEMP/apk-check/$APK_FILE"
+          test -s "$APK"
+          actual_size="$(stat -c '%s' "$APK")"
+          test "$actual_size" = "$EXPECTED_SIZE"
+          actual_hash="$(sha256sum "$APK" | awk '{print $1}')"
+          test "$actual_hash" = "$EXPECTED_SHA"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify \
+            --verbose --print-certs "$APK" > "$RUNNER_TEMP/signature.txt"
+          grep -Fq 'Verified using v2 scheme (APK Signature Scheme v2): true' "$RUNNER_TEMP/signature.txt"
+          actual_cert="$(grep -m1 'Signer #1 certificate SHA-256 digest:' "$RUNNER_TEMP/signature.txt" |
+            sed -E 's/.*digest: //' | tr '[:lower:]' '[:upper:]' | tr -d ':')"
+          test "$actual_cert" = "$EXPECTED_CERT"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" > "$RUNNER_TEMP/badging.txt"
+          grep -Fq "name='tv.blofy.player.v2.stream'" "$RUNNER_TEMP/badging.txt"
+          grep -Fq "versionCode='2000091'" "$RUNNER_TEMP/badging.txt"
+          grep -Fq "versionName='2.0.0-rc07.55.8.14-STREAM'" "$RUNNER_TEMP/badging.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -P 16 -v 4 "$APK"
+          unzip -Z1 "$APK" > "$RUNNER_TEMP/package-list.txt"
+          grep -Eq '^lib/(arm64-v8a|armeabi-v7a)/libffmpegJNI[.]so$' "$RUNNER_TEMP/package-list.txt"
+          {
+            echo '### BLOFY STREAM 55.8.14 owner-signed artifact'
+            echo '- Exact APK byte SHA-256, size, signer certificate, package and version verified.'
+            echo '- Android 16KiB ZIP alignment and FFmpeg decoder JNI verified.'
+            echo '- Not a new release, not installed or tested on physical Android 9.'
+            echo '- This job NEVER uploads or replaces customer packages.'
+          } >> "$GITHUB_STEP_SUMMARY"
