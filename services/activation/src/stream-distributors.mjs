@@ -52,6 +52,7 @@ const publicIssue=row=>{
    expiry!==null&&expiry<=now+7*DAY?'expiring':'active';
  return {
  id:row.id,type:row.kind,label:row.label,days:Number(row.duration_days),
+ converted:Number(row.duration_days)===1&&row.has_renewal===true,
  chargedCredits:Number(row.credit_cost??(Number(row.duration_days)===730?24:distributorPlanCost(row.duration_days))),
  maxConnections:Number(row.max_connections),
  status:row.status,subscriptionStatus:status,
@@ -258,6 +259,9 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
  }
 
  const issueProjection=`SELECT i.*,
+   EXISTS(SELECT 1 FROM blofy_stream_distributor_actions da
+     WHERE da.distributor_id=i.distributor_id AND da.issue_id=i.id
+     AND da.action='renew') AS has_renewal,
    c.code_hint,
    c.redeemed_at AS code_activated_at,
    c.revoked_at AS code_revoked_at,
@@ -345,10 +349,10 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
  async function analytics(token){
   const actor=await session(token);
   const row=(await pool.query(`SELECT
-    COUNT(*) FILTER (WHERE status='done' AND created_at>=CURRENT_DATE)::int AS today,
+    COUNT(*) FILTER (WHERE status='done' AND created_at>=((NOW() AT TIME ZONE 'Asia/Riyadh')::date AT TIME ZONE 'Asia/Riyadh'))::int AS today,
     COUNT(*) FILTER (WHERE status='done' AND created_at>=DATE_TRUNC('month',NOW()))::int AS month,
     COUNT(*) FILTER (WHERE duration_days=1 AND status='done'
-      AND created_at>=CURRENT_DATE)::int AS trials_today,
+      AND created_at>=((NOW() AT TIME ZONE 'Asia/Riyadh')::date AT TIME ZONE 'Asia/Riyadh'))::int AS trials_today,
     COUNT(*) FILTER (WHERE duration_days=1 AND status='done')::int AS trials_total,
     COUNT(*) FILTER (WHERE duration_days>1 AND status='done')::int AS paid_total,
     COALESCE(SUM(credit_cost) FILTER (WHERE status='done'
