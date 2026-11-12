@@ -57,7 +57,7 @@ class PosterCatalogActivity : AppCompatActivity() {
     // A bounded session-local backoff prevents repeated detail probes for titles
     // that a provider has not classified yet. No credentials enter these keys.
     private val genreWarmAttempts = LinkedHashMap<String, Long>()
-    private val genreWarmRequest = Runnable { warmVisibleMovieGenres() }
+    private val genreWarmRequest = Runnable { warmVisibleGenres() }
     private var pageJob: Job? = null
     private var countJob: Job? = null
     private var exactCount: Int? = null
@@ -398,7 +398,7 @@ class PosterCatalogActivity : AppCompatActivity() {
             posterAdapter.replace(emptyList())
             countView.text = "…"
             pageJob = lifecycleScope.launch {
-                val genreSnapshot = if (kind == KIND_MOVIE) withContext(Dispatchers.IO) {
+                val genreSnapshot = if (kind == KIND_MOVIE || kind == KIND_SERIES) withContext(Dispatchers.IO) {
                     ProviderMetadataCache.readGenresForPage(applicationContext, snapshot.map { it.key })
                 } else emptyMap()
                 if (generation != expectedGeneration || selectedCategoryId != id) return@launch
@@ -446,7 +446,7 @@ class PosterCatalogActivity : AppCompatActivity() {
                     else ->
                         dao.catalogPageAfterInCategory(providerId, kind, requestCategoryId, cursor, PAGE_SIZE)
                 }
-                val cachedGenres = if (kind == KIND_MOVIE) {
+                val cachedGenres = if (kind == KIND_MOVIE || kind == KIND_SERIES) {
                     ProviderMetadataCache.readGenresForPage(
                         applicationContext, page.map { it.key }
                     )
@@ -480,7 +480,7 @@ class PosterCatalogActivity : AppCompatActivity() {
 
 
     /**
-     * Xtream's movie list frequently omits genre even though get_vod_info has
+     * Xtream's VOD and series list frequently omit genre even when detail API has
      * the real Action/Drama/etc. The detail screen previously populated this
      * cache only after opening a movie. Enrich *visible posters* instead, using
      * at most two requests in flight and twelve attempts per settled viewport.
@@ -488,13 +488,14 @@ class PosterCatalogActivity : AppCompatActivity() {
      * poster's first display. Cached genres appear immediately next time.
      */
     private fun requestVisibleGenreWarmup() {
-        if (kind != KIND_MOVIE || !::posterGrid.isInitialized || providerId.isBlank()) return
+        if (kind != KIND_MOVIE && kind != KIND_SERIES) return
+        if (!::posterGrid.isInitialized || providerId.isBlank()) return
         posterGrid.removeCallbacks(genreWarmRequest)
         posterGrid.postDelayed(genreWarmRequest, 250L)
     }
 
-    private fun warmVisibleMovieGenres() {
-        if (kind != KIND_MOVIE || loadedItems.isEmpty() || genreWarmJob?.isActive == true ||
+    private fun warmVisibleGenres() {
+        if ((kind != KIND_MOVIE && kind != KIND_SERIES) || loadedItems.isEmpty() || genreWarmJob?.isActive == true ||
             !::posterGrid.isInitialized || isFinishing || isDestroyed) return
         val manager = posterGrid.layoutManager as? GridLayoutManager ?: return
         val first = manager.findFirstVisibleItemPosition().takeIf { it >= 0 } ?: return
@@ -680,7 +681,7 @@ class PosterCatalogActivity : AppCompatActivity() {
             categoryList.post { if (!isFinishing && !isDestroyed) categoryList.requestLayout() }
         }
         if (providerId.isNotBlank()) refreshExactCount()
-        if (kind != KIND_MOVIE || loadedItems.isEmpty() || !::posterAdapter.isInitialized) return
+        if ((kind != KIND_MOVIE && kind != KIND_SERIES) || loadedItems.isEmpty() || !::posterAdapter.isInitialized) return
         requestVisibleGenreWarmup()
         genreRefreshJob?.cancel()
         val expectedGeneration = generation
