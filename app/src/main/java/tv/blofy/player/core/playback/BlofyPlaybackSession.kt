@@ -49,6 +49,10 @@ class BlofyPlaybackSession(
 
     private val renderersFactory = DefaultRenderersFactory(appContext)
         .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+        // Android 9 boxes often expose a broken first-choice hardware decoder.
+        // Try a lower-priority installed decoder before failing the channel.
+        // This does NOT add support for codecs absent from the APK/device.
+        .setEnableDecoderFallback(true)
 
     val player: ExoPlayer = ExoPlayer.Builder(appContext)
         .setRenderersFactory(renderersFactory)
