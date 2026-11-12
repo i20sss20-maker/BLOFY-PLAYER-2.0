@@ -1,0 +1,32 @@
+name: BLOFY STREAM - sanitized Android TV audio report QA
+on:
+  push:
+    branches:
+      - feature/stream-nextgen-supported-audio-recovery-qa-20261112
+    paths:
+      - 'tools/stream-audio-device-qa.py'
+      - 'tools/test_stream_audio_device_qa.py'
+      - '.github/workflows/stream-device-audio-report-qa.yml'
+  pull_request:
+    paths:
+      - 'tools/stream-audio-device-qa.py'
+      - 'tools/test_stream_audio_device_qa.py'
+      - '.github/workflows/stream-device-audio-report-qa.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  sanitized-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify no Android serial, stream URL or credentials leak into report
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tools/stream-audio-device-qa.py
+          python3 tools/test_stream_audio_device_qa.py
+      - name: Clarify test limitations
+        run: |
+          echo 'Parsing and redaction tests passed.'
+          echo 'No ADB device was connected; this does not prove real audio on Android 9.'
