@@ -33,6 +33,8 @@
         <activity android:name=".ui.library.ProfileWatchlistActivity" android:exported="false" />
         <activity android:name=".ui.library.RecentChannelsActivity" android:exported="false" />
         <activity android:name=".ui.library.LibraryActivity" android:exported="false" />
+        <activity android:name=".ui.library.MyLibraryActivity" android:exported="false" />
+        <activity android:name=".ui.library.DownloadsActivity" android:exported="false" />
         <activity android:name=".ui.search.SectionSearchActivity" android:exported="false" />
         <activity android:name=".ui.search.SearchActivity" android:exported="false" />
         <activity android:name=".ui.settings.CommercialSettingsActivity" android:exported="false" />
