@@ -101,7 +101,7 @@ jobs:
             testStreamCodeDemoUnitTest \
               --tests 'tv.blofy.player.core.diagnostics.StreamAudioHealthTest' \
               --tests 'tv.blofy.player.ui.details.ArabicDetailsPolicyTest' \
-              --tests 'tv.blofy.player.ui.details.CloudTranslationPolicyTest' \\
+              --tests 'tv.blofy.player.ui.details.CloudTranslationPolicyTest' \
               --tests 'tv.blofy.player.ui.catalog.MovieGenresTest' \
               --tests 'tv.blofy.player.ui.catalog.MovieCardMetaTest' \
               --tests 'tv.blofy.player.data.metadata.ProviderMetadataGenreSnapshotTest' \
