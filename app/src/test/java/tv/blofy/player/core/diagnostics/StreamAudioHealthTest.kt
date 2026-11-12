@@ -54,6 +54,35 @@ class StreamAudioHealthTest {
         assertEquals(1, result.supported)
         assertEquals(0, result.selected)
         assertEquals(null, result.selectedMimeType)
+        assertEquals(listOf(MimeTypes.AUDIO_AC3, MimeTypes.AUDIO_AAC), result.detectedMimeTypes)
+    }
+
+    @Test
+    fun unsupportedCodecIsIdentifiedEvenWithoutSelectedTrack() {
+        val tracks = Tracks(listOf(Tracks.Group(
+            TrackGroup(Format.Builder().setSampleMimeType(MimeTypes.AUDIO_E_AC3).build()),
+            false,
+            intArrayOf(C.FORMAT_UNSUPPORTED_SUBTYPE),
+            booleanArrayOf(false)
+        )))
+        val result = StreamAudioHealth.inspect(tracks, volume = 1f)
+        assertEquals(StreamAudioHealth.State.UNSUPPORTED_AUDIO_CODEC, result.state)
+        assertEquals(null, result.selectedMimeType)
+        assertEquals(listOf(MimeTypes.AUDIO_E_AC3), result.detectedMimeTypes)
+        assertTrue(result.safeLogCode().contains("mime=none"))
+    }
+
+    @Test
+    fun rejectsUnsafeOrUnboundedCodecMetadataFromDeviceDiagnostics() {
+        val tracks = Tracks(listOf(Tracks.Group(
+            TrackGroup(Format.Builder().setSampleMimeType("audio/ac3?user=secret").build()),
+            false,
+            intArrayOf(C.FORMAT_UNSUPPORTED_SUBTYPE),
+            booleanArrayOf(false)
+        )))
+        val result = StreamAudioHealth.inspect(tracks, volume = 1f)
+        assertTrue(result.detectedMimeTypes.isEmpty())
+        assertFalse(result.toString().contains("secret"))
     }
 
     @Test
