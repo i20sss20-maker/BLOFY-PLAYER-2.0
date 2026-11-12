@@ -4,7 +4,8 @@ import crypto from 'node:crypto';
 import {createStreamDistributors,distributorPlanCost} from '../src/stream-distributors.mjs';
 
 function fixture(){
- const distributors=[],sessions=[],issues=[],calls=[],statements=[];
+ const distributors=[],sessions=[],issues=[],calls=[],statements=[],actions=[];
+ const accounts=[],codes=[],events=[];
  const now=new Date('2026-11-12T04:00:00Z');
  const accountId=crypto.randomUUID(),codeId=crypto.randomUUID();
  const salehId='9adc6472-5d4e-4359-83e4-0298cc038ae3';
@@ -14,6 +15,12 @@ function fixture(){
  const issuedToken='59374629',credential={serverUrl:'https://blofyplayer.com',
    username:'reseller_generated',password:'protected-password',m3uUrl:'https://blofyplayer.com/get.php'};
  let failCode=false;
+ accounts.push({id:accountId,source_id:salehId,enabled:true,
+   expires_at:new Date(now.getTime()+30*86400000)});
+ codes.push({id:codeId,code_channel:'app',account_id:accountId,
+   redeemed_at:new Date(now),expires_at:new Date(now.getTime()+30*86400000),
+   redeemed_device_hash:'a'.repeat(64),revoked_at:null,
+   code_hint:'59••••29',admin_relogin_count:0});
  async function query(sql,args=[]){
   statements.push(sql);
   if(['BEGIN','COMMIT','ROLLBACK'].includes(sql)||/^\s*(CREATE TABLE|CREATE (?:UNIQUE )?INDEX|ALTER TABLE)/.test(sql))
@@ -48,6 +55,56 @@ function fixture(){
    if(found)Object.assign(found,fields);else libraryRows.push(fields);
    return {rows:[]};
   }
+
+  if(sql.includes('FROM blofy_stream_distributor_actions')&&sql.includes('request_id=$2'))
+   return {rows:actions.filter(x=>x.distributor_id===args[0]&&x.request_id===args[1])};
+  if(sql.includes('INSERT INTO blofy_stream_distributor_actions')){
+   actions.push({id:args[0],distributor_id:args[1],issue_id:args[2],
+    request_id:args[3],action:sql.includes("'renew'")?'renew':'relogin',
+    result:JSON.parse(sql.includes("'renew'")?args[5]:args[4])});
+   return {rows:[]};
+  }
+  if(sql.includes('FROM blofy_xtream_gateway_duration_codes')&&sql.includes('WHERE id=$1 FOR UPDATE'))
+   return {rows:codes.filter(x=>x.id===args[0])};
+  if(sql.includes('FROM blofy_xtream_gateway_accounts')&&sql.includes('WHERE id=$1 FOR UPDATE'))
+   return {rows:accounts.filter(x=>x.id===args[0])};
+  if(sql.includes('UPDATE blofy_xtream_gateway_accounts')&&sql.includes('SET expires_at=$2')){
+   const a=accounts.find(x=>x.id===args[0]);a.expires_at=args[1];return {rows:[]};
+  }
+  if(sql.includes('UPDATE blofy_xtream_gateway_duration_codes')&&sql.includes('SET expires_at=$2')){
+   const c=codes.find(x=>x.id===args[0]);c.expires_at=args[1];return {rows:[]};
+  }
+  if(sql.includes('UPDATE blofy_xtream_gateway_duration_codes')&&sql.includes('SET admin_relogin_until=$2')){
+   const c=codes.find(x=>x.id===args[0]);c.admin_relogin_until=args[1];return {rows:[]};
+  }
+  if(sql.includes('INSERT INTO blofy_xtream_gateway_code_events')){
+   events.push({codeId:args[1],event:args[2],details:args[3]});return {rows:[]};
+  }
+  if(sql.includes('UPDATE blofy_stream_distributor_issues')&&sql.includes('SET customer_name=$3')){
+   const item=issues.find(x=>x.id===args[0]&&x.distributor_id===args[1]);
+   item.customer_name=args[2];item.customer_phone=args[3];return {rows:[item]};
+  }
+  if(sql.includes('COUNT(*) FILTER')&&sql.includes('FROM blofy_stream_distributor_issues')){
+   return {rows:[{total:issues.filter(x=>x.distributor_id===args[0]&&x.status==='done').length,
+     active:issues.filter(x=>x.distributor_id===args[0]&&x.status==='done').length,
+     expiring:0,expired:0,customers:new Set(issues.filter(x=>x.distributor_id===args[0])
+      .map(x=>x.customer_phone).filter(Boolean)).size}]};
+  }
+  if(sql.includes('LEFT JOIN blofy_xtream_gateway_duration_codes')&&sql.includes('LIMIT 101')){
+   const rows=issues.filter(x=>x.distributor_id===args[0]).map(x=>({
+     ...x,code_hint:x.kind==='app'?'59••••29':null,
+     code_activated_at:x.kind==='app'?codes[0].redeemed_at:null,
+     code_revoked_at:null,code_bound:x.kind==='app',
+     admin_relogin_count:0,account_enabled:true,
+     subscription_expires_at:accounts[0].expires_at
+   }));
+   return {rows};
+  }
+  if(sql.includes('MAX(customer_name)')&&sql.includes('FROM blofy_stream_distributor_issues')){
+   return {rows:issues.filter(x=>x.distributor_id===args[0]&&x.customer_phone)
+     .map(x=>({customer_phone:x.customer_phone,customer_name:x.customer_name,
+       subscriptions:1,latest:x.created_at}))};
+  }
   if(sql.includes('FROM blofy_stream_distributors')&&sql.includes('WHERE username='))
    return {rows:distributors.filter(x=>x.username===args[0])};
   if(sql.includes('FROM blofy_stream_distributors')&&sql.includes('ORDER BY created_at'))
@@ -73,7 +130,8 @@ function fixture(){
    const row={id:args[0],distributor_id:args[1],request_id:args[2],kind:args[3],
     label:args[4],duration_days:args[5],max_connections:args[6],
     subject_id:null,status:'pending',created_at:now,
-    credit_cost:args[7],trial_customer_hash:args[8]};
+    credit_cost:args[7],trial_customer_hash:args[8],
+     customer_name:args[9]||'',customer_phone:args[10]||''};
    issues.push(row);return {rows:[row]};
   }
   if(sql.includes('SET credits=credits-$2 WHERE id=$1')){
@@ -132,7 +190,7 @@ function fixture(){
    revealCode:async id=>({status:id===codeId?200:404,body:{ok:true,code:issuedToken}}),
    revealXtream:async id=>({status:id===accountId?200:404,body:{ok:true,credentials:credential}})
  });
- return {manager,distributors,issues,calls,sessions,statements,libraryRows,salehId,
+ return {manager,distributors,issues,accounts,codes,actions,events,calls,sessions,statements,libraryRows,salehId,
   setFail:v=>{failCode=v},setSource:v=>{sourceReady=v}};
 }
 test('resellers have dedicated hashed passwords, isolated sessions and limited stock',async()=>{
