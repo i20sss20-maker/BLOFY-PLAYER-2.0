@@ -13,7 +13,7 @@ class MovieGenrePrefetchPolicyTest {
 
     @Test fun loadsOnlyVisibleMoviesThatStillHaveNoTrustworthyGenre() {
         val visible = listOf(movie(1), movie(2, "horror"), movie(3, genre = "Comedy"),
-            movie(4), movie(5).copy(kind = "series"))
+            movie(4), movie(5).copy(key = "provider:series:5", kind = "series", genre = "Drama"))
         val selected = MovieGenrePrefetchPolicy.candidates(
             visible,
             categoryNames = mapOf("new" to "New Releases", "horror" to "Horror Movies"),
@@ -21,6 +21,20 @@ class MovieGenrePrefetchPolicyTest {
             recentlyAttemptedKeys = emptySet()
         )
         assertEquals(listOf("provider:movie:1"), selected.map { it.key })
+    }
+
+    @Test fun prefetchesVisibleSeriesOnlyWhenProviderGenreIsUnknown() {
+        val series = listOf(
+            movie(1).copy(key = "provider:series:1", kind = "series"),
+            movie(2).copy(key = "provider:series:2", kind = "series", genre = "Action"),
+            movie(3).copy(key = "provider:series:3", kind = "series"),
+            movie(4).copy(key = "provider:series:4", kind = "series", remoteId = "")
+        )
+        val selected = MovieGenrePrefetchPolicy.candidates(
+            series, mapOf("new" to "New Series"), emptyMap(),
+            setOf("provider:series:3")
+        )
+        assertEquals(listOf("provider:series:1"), selected.map { it.key })
     }
 
     @Test fun skipsRecentFailuresAndBoundsRequestsForLargeCatalogs() {
