@@ -18,6 +18,10 @@ class PlaybackRecoveryPolicyTest {
         assertEquals(1500L,PlaybackRecoveryPolicy.delayForSameUrlRetry(
             PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS,429,0,1))
         assertEquals(550L,PlaybackRecoveryPolicy.delayForSameUrlRetry(
+            PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS,408,0,1))
+        assertNull(PlaybackRecoveryPolicy.delayForSameUrlRetry(
+            PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS,408,2,1))
+        assertEquals(550L,PlaybackRecoveryPolicy.delayForSameUrlRetry(
             PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,null,0,1))
         assertEquals(550L,PlaybackRecoveryPolicy.delayForSameUrlRetry(
             PlaybackException.ERROR_CODE_TIMEOUT,null,0,1))
