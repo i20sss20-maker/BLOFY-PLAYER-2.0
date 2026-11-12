@@ -75,7 +75,7 @@ internal object StreamAiSearchClient {
                     val suggestions = root.optJSONArray("suggestedTitles")
                     val titles = ArrayList<String>()
                     if (suggestions != null) {
-                        for (index in 0 until minOf(suggestions.length(), 12)) {
+                        for (index in 0 until minOf(suggestions.length(), 24)) {
                             suggestions.optString(index).takeIf { it.length in 3..105 }?.let(titles::add)
                         }
                     }
