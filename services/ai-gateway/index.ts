@@ -315,12 +315,15 @@ if (Bun.env.BLOFY_AI_BOOT_PROBE === "translation") {
   bootProbeStatus = "translation_pending";
   void (async () => {
     try {
+      const short = await translateDetails("Sigma","");
       const result = await translateDetails(
         "The Secret Garden", "A young girl discovers a neglected garden."
       );
       const containsArabic = (result.translatedTitle + result.translatedOverview)
         .split("").some(char => char.charCodeAt(0) >= 0x0600 && char.charCodeAt(0) <= 0x06FF);
-      bootProbeStatus = containsArabic ? "translation_passed" : "translation_not_arabic";
+      // Short proper names can remain Sigma or be transliterated as سيغما.
+      bootProbeStatus = short.translatedTitle.length > 0 && containsArabic
+        ? "translation_passed" : "translation_incomplete";
       console.info("BLOFY_AI_BOOT_PROBE", "provider=" + activeProvider(),
         "status=" + bootProbeStatus);
     } catch (error) {
