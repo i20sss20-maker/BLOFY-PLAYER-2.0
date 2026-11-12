@@ -117,7 +117,7 @@ function fixture(){
    const user=distributors.find(x=>x.id===session?.id&&x.enabled);
    return {rows:user?[user]:[]};
   }
-  if(sql.includes('FROM blofy_stream_distributors WHERE id=$1 FOR UPDATE'))
+  if(sql.includes('FROM blofy_stream_distributors')&&sql.includes('WHERE id=$1 FOR UPDATE'))
    return {rows:distributors.filter(x=>x.id===args[0])};
   if(sql.includes('FROM blofy_stream_distributor_issues')&&
      sql.includes('request_id=$2'))
