@@ -239,8 +239,8 @@ test('one-day trials are free, phone-fingerprinted, limited, and repeat denied',
 });
 test('organization is private to distributor; only actual saleh titles are editable',async()=>{
  const f=fixture();
- const a=await f.manager.createAdmin({name:'A',username:'store-one',credits:0});
- const b=await f.manager.createAdmin({name:'B',username:'store-two',credits:0});
+ const a=await f.manager.createAdmin({name:'Distributor A',username:'store-one',credits:0});
+ const b=await f.manager.createAdmin({name:'Distributor B',username:'store-two',credits:0});
  const loginA=await f.manager.login({username:'store-one',password:a.password});
  const loginB=await f.manager.login({username:'store-two',password:b.password});
  const before=await f.manager.library(loginA.token,{type:'movie'});
