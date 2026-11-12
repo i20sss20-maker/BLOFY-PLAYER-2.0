@@ -14,7 +14,8 @@ internal object MovieCardMeta {
     fun genre(
         item: StreamEntity,
         categoryName: String?,
-        cachedDetailGenres: List<String> = emptyList()
+        cachedDetailGenres: List<String> = emptyList(),
+        arabic: Boolean = false
     ): String? {
         val providerText = item.genre.orEmpty().trim()
         val cachedText = cachedDetailGenres.filter(String::isNotBlank).joinToString(" / ").trim()
@@ -25,7 +26,7 @@ internal object MovieCardMeta {
         if (ids.isNotEmpty()) {
             return MovieGenres.genres.asSequence()
                 .filter { it.key in ids }.take(2)
-                .map { it.english }.joinToString(" / ")
+                .map { if (arabic) it.arabic else it.english }.joinToString(" / ")
         }
         // Unrecognised provider-supplied genre should still be displayed as-is.
         return value.takeIf(String::isNotBlank)?.take(64)
@@ -35,7 +36,8 @@ internal object MovieCardMeta {
         item: StreamEntity,
         badges: List<String>,
         categoryName: String?,
-        cachedDetailGenres: List<String> = emptyList()
+        cachedDetailGenres: List<String> = emptyList(),
+        arabic: Boolean = false
     ): String {
         if (item.kind != "movie") {
             return listOfNotNull(
@@ -45,7 +47,7 @@ internal object MovieCardMeta {
         }
         // A neutral "Movie" only when the content provider has no genre yet,
         // so film cards never have an unexplained blank metadata line.
-        val first = genre(item, categoryName, cachedDetailGenres) ?: "Movie"
+        val first = genre(item, categoryName, cachedDetailGenres, arabic) ?: if (arabic) "فيلم" else "Movie"
         return (listOf(first) + badges)
             .filter(String::isNotBlank).distinct().joinToString("  •  ")
     }
