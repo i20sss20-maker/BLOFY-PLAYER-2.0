@@ -3071,7 +3071,10 @@ async function callLocalGateway(method,path,body){
 // Distributor accounts have *no* database or admin token access from STREAM.
 // Every operation below is reached only through the authenticated fixed bridge.
 const streamDistributors=createStreamDistributors({pool,
-  issueCode:body=>callLocalGateway('POST','/api/v1/admin/xtream-gateway/codes',body),
+  issueCode:async body=>{
+    const result=await callLocalGateway('POST','/api/v1/admin/xtream-gateway/codes',body);
+    return {status:result.status,body:result.data};
+  },
   issueXtream:async body=>{
     const result=await callLocalGateway('POST','/api/v1/admin/xtream-gateway/accounts',body);
     if(result.status===201&&result.data?.credentials){
