@@ -35,8 +35,8 @@ internal object CastSearchPolicy {
     fun matches(metadata: ProviderMetadata.Metadata, input: String): Boolean {
         val term = actorTerm(input)
         if (term.length < 2) return false
-        return metadata.cast.any { it.name.isNotBlank() && normalize(it.name).contains(term) }
-            || metadata.crew.any { it.name.isNotBlank() && normalize(it.name).contains(term) }
+        return metadata.cast.orEmpty().any { it.name.isNotBlank() && normalize(it.name).contains(term) }
+            || metadata.crew.orEmpty().any { it.name.isNotBlank() && normalize(it.name).contains(term) }
     }
 
     fun candidateToken(input: String): String = actorTerm(input)
