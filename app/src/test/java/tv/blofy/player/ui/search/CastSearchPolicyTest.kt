@@ -23,7 +23,14 @@ class CastSearchPolicyTest {
     @Test fun englishQueriesCanSearchActorOrDirectlyTypedNames() {
         assertTrue(CastSearchPolicy.matches(details("Tom Cruise"), "movies with Tom Cruise"))
         assertTrue(CastSearchPolicy.matches(details("Tom Cruise"), "Tom Cruise"))
-        assertEquals("tom", CastSearchPolicy.candidateToken("actor: Tom Cruise"))
+        assertEquals("cruise", CastSearchPolicy.candidateToken("actor: Tom Cruise"))
+    }
+
+    @Test fun cachedArabicCastLookupUsesLastNameToAvoidHamzaMismatch() {
+        assertEquals("حلمي", CastSearchPolicy.candidateToken("أفلام أحمد حلمي"))
+        assertEquals("كروز", CastSearchPolicy.candidateToken("أفلام توم كروز"))
+        assertTrue(CastSearchPolicy.matches(details("أحمد حلمي"), "أفلام احمد حلمي"))
+        assertFalse(CastSearchPolicy.matches(details("أحمد السقا"), "أفلام أحمد حلمي"))
     }
 
     @Test fun twoLetterMinimumPreventsExpensiveBroadScans() {
