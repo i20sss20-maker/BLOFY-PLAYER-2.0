@@ -16,5 +16,8 @@ COPY test/xtream-code-commercial.test.mjs ./test/xtream-code-commercial.test.mjs
 COPY test/xtream-duration-codes.test.mjs ./test/xtream-duration-codes.test.mjs
 COPY test/xtream-code-relogin.test.mjs ./test/xtream-code-relogin.test.mjs
 RUN node --test test/xtream-code-commercial.test.mjs test/xtream-duration-codes.test.mjs test/xtream-code-relogin.test.mjs
+# No distributor deployment unless credit, auth and ownership tests pass.
+COPY test/stream-distributors.test.mjs ./test/stream-distributors.test.mjs
+RUN node --check src/stream-distributors.mjs && node --check src/xtream-admin-hook.mjs && node --test test/stream-distributors.test.mjs
 EXPOSE 8080
 CMD ["npm","start"]
