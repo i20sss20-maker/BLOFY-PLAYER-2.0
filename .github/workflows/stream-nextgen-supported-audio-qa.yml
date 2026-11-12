@@ -1,0 +1,60 @@
+name: BLOFY STREAM NextGen - safe audio recovery QA
+on:
+  push:
+    branches:
+      - feature/stream-nextgen-supported-audio-recovery-qa-20261112
+    paths:
+      - 'app/**'
+      - '.github/workflows/stream-nextgen-supported-audio-qa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qa-audio:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;35.0.0"
+      - name: Run isolated STREAM audio-recovery unit tests (no production API)
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --max-workers=2 \
+            -PBLOFY_ACTIVATION_BASE_URL=http://127.0.0.1:9 \
+            -PBLOFY_UPDATE_BASE_URL=http://127.0.0.1:9 \
+            testStreamCodeDemoUnitTest \
+              --tests 'tv.blofy.player.core.diagnostics.StreamAudioRecoveryPolicyTest' \
+              --tests 'tv.blofy.player.core.diagnostics.StreamAudioHealthTest'
+      - name: Compile STREAM QA app without signing customer release
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --max-workers=2 \
+            -PBLOFY_ACTIVATION_BASE_URL=http://127.0.0.1:9 \
+            -PBLOFY_UPDATE_BASE_URL=http://127.0.0.1:9 \
+            assembleStreamCodeDemo
+      - name: Upload test evidence, do not publish or promote
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextgen-stream-audio-safe-qa-${{ github.sha }}
+          path: |
+            app/build/test-results/testStreamCodeDemoUnitTest/*.xml
+            app/build/outputs/apk/streamCodeDemo/*.apk
+          if-no-files-found: warn
+          retention-days: 7
