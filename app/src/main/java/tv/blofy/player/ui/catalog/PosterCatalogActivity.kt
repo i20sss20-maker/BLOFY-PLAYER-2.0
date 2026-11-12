@@ -379,8 +379,6 @@ class PosterCatalogActivity : AppCompatActivity() {
 
         selectedCategoryId = id
         genreRefreshJob?.cancel()
-        genreWarmJob?.cancel()
-        posterGrid.removeCallbacks(genreWarmRequest)
         if (force) {
             loadedItems.clear()
             displayedCategoryId = null
@@ -416,7 +414,7 @@ class PosterCatalogActivity : AppCompatActivity() {
                 displayedCategoryId = id
                 lastRowId = cached.lastRowId
                 hasMore = cached.total == Int.MAX_VALUE
-                posterAdapter.rememberMovieGenres(genreSnapshot, reset = true)
+                posterAdapter.rememberMovieGenres(genreSnapshot, reset = true, notifyExisting = true)
                 posterAdapter.replace(snapshot)
                 cached.focusedKey?.let { focusedPosterKeys.putIfAbsent(memoryKey(id), it) }
                 loadingPage = false
@@ -469,7 +467,7 @@ class PosterCatalogActivity : AppCompatActivity() {
                 loadedItems.clear()
                 loadedItems.addAll(result.first)
                 displayedCategoryId = requestCategoryId
-                posterAdapter.rememberMovieGenres(result.third, reset = true)
+                posterAdapter.rememberMovieGenres(result.third, reset = true, notifyExisting = true)
                 posterAdapter.replace(result.first)
             } else {
                 loadedItems.addAll(result.first)
