@@ -82,4 +82,12 @@
     <string name="stream_search_actors_hint">ابحث باسم الفيلم أو المسلسل أو الممثل أو المخرج. نتائج الممثلين تعتمد على بيانات المصدر المتاحة.</string>
     <string name="stream_search_cast_results">نتائج تطابق الممثل أو المخرج: %1$d</string>
     <string name="stream_search_ai_suggestions">BLOFY AI • ‏%1$d عنوان مقترح موجود في مكتبتك (تحقق من الممثل في التفاصيل)</string>
+    <string name="stream_ai_search_button">✦ BLOFY AI</string>
+    <string name="stream_ai_enter_query">اكتب اسم فيلم أو مسلسل أو ممثل أو تصنيف أولاً.</string>
+    <string name="stream_ai_searching">BLOFY AI يفهم طلبك ويبحث في مكتبتك…</string>
+    <string name="stream_ai_session_error">البحث الذكي يحتاج تفعيل BLOFY STREAM صالحًا. تحقق من التفعيل وحاول مجددًا.</string>
+    <string name="stream_ai_rate_error">وصلت إلى الحد المؤقت للبحث الذكي، جرّب لاحقًا.</string>
+    <string name="stream_ai_connection_error">تعذر الوصول إلى BLOFY AI. البحث العادي يعمل؛ حاول مرة ثانية.</string>
+    <string name="stream_ai_no_catalog_match">فهم AI طلبك، لكن لم يجد عناوين مطابقة مؤكدة في مكتبتك الحالية.</string>
+    <string name="stream_ai_found">وجد BLOFY AI ‏%1$d اقتراحًا مطابقًا لمكتبتك.</string>
 </resources>
