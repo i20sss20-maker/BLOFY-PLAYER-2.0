@@ -31,8 +31,8 @@ object ProviderMetadataCache {
 
     /**
      * Read a whole catalog page from one consistent local SQLite snapshot.
-     * This is intentionally offline: a category switch or scroll must not
-     * start a network request and change genre labels after a card is drawn.
+     * This read itself is entirely offline. A separate, bounded visible-card
+     * prefetch may populate missing labels later without blocking first paint.
      * SQLite bind-argument chunks also support large in-process page restores.
      * Call from Dispatchers.IO, never on the UI thread.
      */
