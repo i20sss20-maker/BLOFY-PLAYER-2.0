@@ -89,7 +89,7 @@ test('server route is admin-gated and code input travels only in POST body',asyn
   const panel=await readFile(new URL('../web/sources-admin.html',import.meta.url),'utf8');
   assert.match(script,/method:'POST',cache:'no-store',body:JSON\.stringify\(\{code\}\)/);
   assert.match(script,/codes\/'\+encodeURIComponent\(record\.item\.id\)\+'\/extend'/);
-  assert.match(script,/codes\/'\+encodeURIComponent\(record\.item\.id\)\+'\/transfer'/);
+  assert.match(script,/appCode\\?'\\/transfer':'\\/recover-xtream'/);
   assert.match(panel,/id="stream-code-management"/);
   assert.match(panel,/id="streamCodeRenewButton"/);
 });
