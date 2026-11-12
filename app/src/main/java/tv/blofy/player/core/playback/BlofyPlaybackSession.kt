@@ -144,8 +144,10 @@ class BlofyPlaybackSession(
                     }
                     val responseStatus = PlaybackRecoveryPolicy.httpStatus(error)
                     if (PlaybackRecoveryPolicy.isSourceAdmissionRefusal(responseStatus)) {
-                        // Do not escalate upstream concurrency by trying extra
-                        // provider URLs/formats after explicit access/rate denial.
+                        // Cancel all queued same-URL retries and the live watchdog.
+                        // Never turn a provider 401/403/429/456 refusal into
+                        // extra upstream requests, alternate formats or aliases.
+                        retryHandler.removeCallbacksAndMessages(null)
                         onTerminalError?.invoke(failedUrl)
                         return
                     }
