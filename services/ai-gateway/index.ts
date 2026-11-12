@@ -243,6 +243,27 @@ async function translateDetails(title: string, overview: string): Promise<Transl
 // subscriber data, never logs the key or any response text, and is disabled
 // by default so future deploys don't spend model tokens at boot.
 let bootProbeStatus = "not_requested";
+if (Bun.env.BLOFY_AI_BOOT_PROBE === "translation") {
+  bootProbeStatus = "translation_pending";
+  void (async () => {
+    try {
+      const result = await translateDetails(
+        "The Secret Garden", "A young girl discovers a neglected garden."
+      );
+      bootProbeStatus = /[\\u0600-\\u06FF]/.test(
+        result.translatedTitle + result.translatedOverview
+      ) ? "translation_passed" : "translation_not_arabic";
+      console.info("BLOFY_AI_BOOT_PROBE", "provider=" + activeProvider(),
+        "status=" + bootProbeStatus);
+    } catch (error) {
+      const safe = error instanceof Error && /^model_http_[0-9]{3}$/.test(error.message)
+        ? error.message : "provider_or_parse_error";
+      bootProbeStatus = "translation_failed";
+      console.warn("BLOFY_AI_BOOT_PROBE", "provider=" + activeProvider(),
+        "status=" + bootProbeStatus, "reason=" + safe);
+    }
+  })();
+}
 if (Bun.env.BLOFY_AI_BOOT_PROBE === "1") {
   bootProbeStatus = "pending";
   void (async () => {
