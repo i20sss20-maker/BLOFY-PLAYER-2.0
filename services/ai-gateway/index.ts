@@ -56,7 +56,7 @@ function clean(data: any, userText: string): AiResult {
   const intent = kinds.includes(data?.intent) ? data.intent : "title";
   const rawTitles = Array.isArray(data?.suggestedTitles) ? data.suggestedTitles : [];
   const titles = Array.from(new Set(rawTitles.map((x: unknown) => textField(x, 105))
-    .filter((x: string) => x.length > 2 && x.length < 106))).slice(0, 12) as string[];
+    .filter((x: string) => x.length > 2 && x.length < 106))).slice(0, 24) as string[];
   const year = Number.isInteger(data?.year) && data.year >= 1900 && data.year <= 2035
     ? Number(data.year) : null;
   return {
@@ -99,11 +99,16 @@ async function interpret(text: string, language: string): Promise<AiResult> {
     "You are BLOFY catalog search intent parser. Output JSON only.",
     "You DO NOT have access to the user's catalog, cannot claim an item is available.",
     "Extract one user intent, person name, broad genre, optional year and title.",
-    "For queries by a well-known actor/director, supply up to 12 widely known real",
+    "For queries by a well-known actor/director, supply up to 24 well-known real",
     "film or series ORIGINAL TITLES where you are confident the person participated.",
     "Never invent titles. For less-known names or ambiguous queries use empty suggestedTitles.",
     "For short bare personal full names e.g. 'Tom Cruise', prefer actor intent.",
     "For Arabic actor names, resolve transliterations carefully to known English spelling.",
+    "VERY IMPORTANT for Egyptian and Arabic actors: output films' official Arabic titles",
+    "FIRST (e.g. for أحمد حلمي: عسل أسود, زكي شان, مطب صناعي) when factually known,",
+    "and optionally include Latin/English or alternate catalog spellings as separate titles.",
+    "Prefer movies over translated actor name as a search result.",
+    "For non-Arab actors include original-language titles plus known Arabic releases if confident.",
     "Recommend well-known ORIGINAL ENGLISH film titles for a named actor; no fabricated movies.",
     "For generic movie titles use title intent. For 'افلام توم كروز' prefer actor.",
     "Do not output commentary, markdown, web URLs, PII or streaming links.",
@@ -133,7 +138,7 @@ async function interpret(text: string, language: string): Promise<AiResult> {
         ],
         temperature: 0.1,
         reasoning_effort: "low",
-        max_completion_tokens: 1350,
+        max_completion_tokens: 1600,
         response_format: (GROQ_MODEL === "openai/gpt-oss-20b" || GROQ_MODEL === "openai/gpt-oss-120b")
           ? {
               type:"json_schema",
@@ -214,12 +219,12 @@ async function translateDetails(title: string, overview: string): Promise<Transl
     if (!GROQ_KEY.trim() || !/^[a-z0-9_./-]{5,90}$/i.test(GROQ_MODEL))
       throw Error("gateway_not_configured");
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST", redirect: "manual", signal: timeout(10000),
+      method: "POST", redirect: "manual", signal: timeout(14000),
       headers: {"content-type":"application/json","authorization":`Bearer ${GROQ_KEY}`},
       body: JSON.stringify({
         model:GROQ_MODEL,
         messages:[{role:"system",content:system},{role:"user",content:source}],
-        temperature:0.1, reasoning_effort:"low", max_completion_tokens:1450,
+        temperature:0.1, reasoning_effort:"low", max_completion_tokens:2300,
         response_format: (GROQ_MODEL === "openai/gpt-oss-20b" || GROQ_MODEL === "openai/gpt-oss-120b")
           ? {
               type:"json_schema",
@@ -249,11 +254,11 @@ async function translateDetails(title: string, overview: string): Promise<Transl
       throw Error("gateway_not_configured");
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_MODEL)}:generateContent`, {
-      method:"POST", redirect:"manual", signal:timeout(10000),
+      method:"POST", redirect:"manual", signal:timeout(14000),
       headers:{"content-type":"application/json","x-goog-api-key":GEMINI_KEY},
       body:JSON.stringify({
         contents:[{role:"user",parts:[{text:system+"\nSource JSON: "+source}]}],
-        generationConfig:{temperature:0.1,maxOutputTokens:1450,responseMimeType:"application/json"}
+        generationConfig:{temperature:0.1,maxOutputTokens:2300,responseMimeType:"application/json"}
       })
     });
     if (!response.ok) throw Error(`model_http_${response.status}`);
@@ -276,6 +281,29 @@ async function translateDetails(title: string, overview: string): Promise<Transl
 // subscriber data, never logs the key or any response text, and is disabled
 // by default so future deploys don't spend model tokens at boot.
 let bootProbeStatus = "not_requested";
+// One-time public-figure prompt diagnostic: log aggregate counts only.
+if (Bun.env.BLOFY_AI_BOOT_PROBE === "actor-ar") {
+  bootProbeStatus = "actor_pending";
+  void (async () => {
+    try {
+      const result = await interpret("أفلام أحمد حلمي","ar");
+      const arabicTitles = result.suggestedTitles.filter(x => [...x].some(
+        c => c.charCodeAt(0)>=0x0600 && c.charCodeAt(0)<=0x06FF
+      )).length;
+      bootProbeStatus = result.intent === "actor" && arabicTitles > 0
+        ? "actor_passed" : "actor_missing_arabic_titles";
+      console.info("BLOFY_AI_BOOT_PROBE", "provider="+activeProvider(),
+        "status="+bootProbeStatus, "titles="+result.suggestedTitles.length,
+        "arabicTitles="+arabicTitles);
+    } catch (e) {
+      bootProbeStatus="actor_failed";
+      const msg=e instanceof Error ? e.message : "";
+      const reason=/^model_http_[0-9]{3}$/.test(msg) ? msg : "request_or_parse_error";
+      console.warn("BLOFY_AI_BOOT_PROBE","provider="+activeProvider(),
+        "status="+bootProbeStatus,"reason="+reason);
+    }
+  })();
+}
 if (Bun.env.BLOFY_AI_BOOT_PROBE === "translation") {
   bootProbeStatus = "translation_pending";
   void (async () => {
@@ -283,9 +311,9 @@ if (Bun.env.BLOFY_AI_BOOT_PROBE === "translation") {
       const result = await translateDetails(
         "The Secret Garden", "A young girl discovers a neglected garden."
       );
-      bootProbeStatus = /[\\u0600-\\u06FF]/.test(
-        result.translatedTitle + result.translatedOverview
-      ) ? "translation_passed" : "translation_not_arabic";
+      const containsArabic = (result.translatedTitle + result.translatedOverview)
+        .split("").some(char => char.charCodeAt(0) >= 0x0600 && char.charCodeAt(0) <= 0x06FF);
+      bootProbeStatus = containsArabic ? "translation_passed" : "translation_not_arabic";
       console.info("BLOFY_AI_BOOT_PROBE", "provider=" + activeProvider(),
         "status=" + bootProbeStatus);
     } catch (error) {
