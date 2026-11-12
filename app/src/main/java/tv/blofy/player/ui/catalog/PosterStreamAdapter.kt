@@ -5,6 +5,7 @@ import tv.blofy.player.ui.common.TvUiTuning
 
 import tv.blofy.player.ui.common.ContentPresentation
 
+import android.os.Build
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
@@ -144,12 +145,24 @@ class PosterStreamAdapter(
         return Holder(root, image, title, meta, rating, dp(12).toFloat(), dp(1))
     }
 
+    /** Refresh one metadata line without resetting images, scroll, or remote focus. */
+    fun rememberMovieGenre(key: String, genres: List<String>) {
+        if (genres.isEmpty() || cachedMovieGenres[key] == genres) return
+        cachedMovieGenres[key] = genres
+        val index = items.indexOfFirst { it.key == key }
+        if (index >= 0) notifyItemChanged(index, GENRE_META_PAYLOAD)
+    }
+
     private fun bindGenreLine(holder: Holder, item: StreamEntity, badges: List<String>) {
+        val configuration = holder.itemView.resources.configuration
+        val language = if (Build.VERSION.SDK_INT >= 24) configuration.locales[0].language
+            else @Suppress("DEPRECATION") configuration.locale.language
         holder.meta.text = MovieCardMeta.subtitle(
             item = item,
             badges = badges,
             categoryName = categoryNames[item.categoryId],
-            cachedDetailGenres = cachedMovieGenres[item.key].orEmpty()
+            cachedDetailGenres = cachedMovieGenres[item.key].orEmpty(),
+            arabic = language == "ar"
         )
     }
 
