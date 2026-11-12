@@ -75,7 +75,7 @@ function fixture(){
    return {rows:[{converted:issues.filter(x=>x.distributor_id===args[0]&&
       x.duration_days===1&&ids.has(x.id)).length}]};
   }
-  if(sql.includes('LEFT JOIN blofy_xtream_gateway_duration_codes')&&sql.includes('LIMIT 2001')){
+  if(sql.includes('LEFT JOIN blofy_xtream_gateway_duration_codes')&&sql.includes('LIMIT 101 OFFSET $2')){
    const rows=issues.filter(x=>x.distributor_id===args[0]).map(x=>({
      ...x,code_hint:x.kind==='app'?'59••••29':null,
      code_activated_at:x.kind==='app'?codes[0].redeemed_at:null,
