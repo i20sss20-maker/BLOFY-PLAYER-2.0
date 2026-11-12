@@ -72,4 +72,5 @@
     <string name="stream_home_comedy">أفلام كوميديا</string>
     <string name="stream_home_drama">أفلام دراما</string>
     <string name="stream_home_genre_hint">حسب التصنيفات المتوفرة من المصدر</string>
+    <string name="stream_details_similar">أفلام مشابهة</string>
 </resources>
