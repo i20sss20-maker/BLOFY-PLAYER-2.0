@@ -397,7 +397,7 @@ class SearchActivity : AppCompatActivity() {
             }
         }
         val expanded = withContext(Dispatchers.IO) {
-            resolveAiSuggestions(ai, repository, dao, provider.id, selectedKind)
+            resolveAiSuggestions(ai, repository, dao, provider.id, selectedKind, q)
         }
         if (input.text?.toString()?.trim() != q || activeKind != selectedKind) return
         if (expanded.isEmpty()) {
@@ -429,8 +429,12 @@ class SearchActivity : AppCompatActivity() {
         repository: ContentRepository,
         dao: tv.blofy.player.data.local.BlofyDao,
         providerId: String,
-        selectedKind: String?
+        selectedKind: String?,
+        userQuery: String
     ): List<StreamEntity> {
+        // AI is a recall assistant, not the authority for strict filters.
+        // Only a year the subscriber typed is allowed to filter results.
+        val requestedYear = AiCatalogQueryPolicy.explicitYear(userQuery)
         val kinds = listOf(KIND_MOVIE, KIND_SERIES).filter { selectedKind == null || it == selectedKind }
         val collected = ArrayList<StreamEntity>(30)
         // At most sixteen Arabic/Latin filmography variants. Indexed FTS only.
@@ -468,15 +472,14 @@ class SearchActivity : AppCompatActivity() {
                 collected.addAll(matches.filter { !it.locked })
             }
         }
-        if (intent.year != null && collected.size < 12 && intent.person.isBlank()) {
+        if (requestedYear != null && collected.size < 12 && intent.person.isBlank()) {
             // "أفلام ٢٠٢٦" on Arabic TV keyboards should find actual 2026
             // catalog rows, even when there is no title or genre filter.
             for (kind in kinds) {
-                val yearText = intent.year.toString()
+                val yearText = requestedYear.toString()
                 val exact = repository.searchKind(providerId, kind, yearText, 90)
                 val found = exact.filter {
-                    !it.locked && (it.year?.toIntOrNull() == intent.year ||
-                        it.name.contains(yearText))
+                    !it.locked && AiCatalogQueryPolicy.matchesYear(it.year, it.name, requestedYear)
                 }
                 collected.addAll(found)
                 // A provider may omit the year from its FTS index during a
@@ -485,8 +488,7 @@ class SearchActivity : AppCompatActivity() {
                 if (found.isEmpty()) {
                     collected.addAll(dao.searchCatalog(providerId, kind, yearText, 40)
                         .filter {
-                            !it.locked && (it.year?.toIntOrNull() == intent.year ||
-                                it.name.contains(yearText))
+                            !it.locked && AiCatalogQueryPolicy.matchesYear(it.year, it.name, requestedYear)
                         })
                 }
             }
@@ -498,10 +500,7 @@ class SearchActivity : AppCompatActivity() {
         }
         return collected.asSequence()
             .filter { it.providerId == providerId && !it.locked }
-            .filter {
-                intent.year == null || intent.person.isNotBlank() ||
-                    it.year?.toIntOrNull() == intent.year || it.name.contains(intent.year.toString())
-            }
+            .filter { AiCatalogQueryPolicy.matchesYear(it.year, it.name, requestedYear) }
             .distinctBy { it.key }.take(24).toList()
     }
 
