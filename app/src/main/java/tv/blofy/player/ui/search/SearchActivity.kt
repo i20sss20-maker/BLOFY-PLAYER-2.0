@@ -299,13 +299,18 @@ class SearchActivity : AppCompatActivity() {
             // Only local cached metadata; actors absent from Xtream's cast fields
             // cannot be invented. The Android device never calls an AI vendor.
             val castMatches = if (selectedKind != KIND_LIVE && CastSearchPolicy.searchable(q)) {
-                ProviderMetadataCache.searchPeopleCandidates(
+                val candidateKeys = ProviderMetadataCache.searchPeopleCandidates(
                     applicationContext, provider.id, CastSearchPolicy.candidateToken(q), 96
                 ).asSequence()
                     .filter { (_, metadata) -> CastSearchPolicy.matches(metadata, q) }
-                    .mapNotNull { (key, _) -> dao.stream(key) }
-                    .filter { it.providerId == provider.id && it.kind in setOf(KIND_MOVIE, KIND_SERIES) }
-                    .distinctBy { it.key }.take(32).toList()
+                    .map { (key, _) -> key }.take(32).toList()
+                val resolved = ArrayList<StreamEntity>(candidateKeys.size)
+                for (key in candidateKeys) {
+                    val stream = dao.stream(key) ?: continue
+                    if (stream.providerId == provider.id &&
+                        stream.kind in setOf(KIND_MOVIE, KIND_SERIES)) resolved.add(stream)
+                }
+                resolved.distinctBy { it.key }
             } else emptyList()
             val sections = coroutineScope {
                 wantedKinds.map { kind ->
