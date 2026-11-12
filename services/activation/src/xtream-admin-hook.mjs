@@ -3553,7 +3553,7 @@ http.createServer = function withBlofyXtream(listener) {
           const category=error?.message==='gateway_response_too_large'?'bridge_response_too_large':
             error?.message==='gateway_route_denied'?'bridge_route_denied':
             error?.message==='gateway_not_configured'?'bridge_admin_config_missing':
-            error?.message==='gateway_response_too_large'?'bridge_size':
+            error?.message==='gateway_port_invalid'?'bridge_port_invalid':
             'bridge_internal_failure';
           console.warn('BLOFY_STREAM_OPERATOR_BRIDGE_FAILURE',category);
           const validStatus=[400,404,409,413,429,503].includes(Number(error?.status))?
