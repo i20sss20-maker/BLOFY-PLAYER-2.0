@@ -134,7 +134,25 @@ async function interpret(text: string, language: string): Promise<AiResult> {
         temperature: 0.1,
         reasoning_effort: "low",
         max_completion_tokens: 1350,
-        response_format: {type: "json_object"},
+        response_format: /^openai\\/gpt-oss-(20b|120b)$/.test(GROQ_MODEL)
+          ? {
+              type:"json_schema",
+              json_schema:{
+                name:"blofy_search_intent",strict:true,
+                schema:{
+                  type:"object",additionalProperties:false,
+                  properties:{
+                    intent:{type:"string",enum:["actor","director","title","genre","mixed"]},
+                    person:{type:"string"},genre:{type:"string"},title:{type:"string"},
+                    year:{type:["integer","null"]},
+                    suggestedTitles:{type:"array",items:{type:"string"}},
+                    confidence:{type:"string",enum:["low","medium","high"]}
+                  },
+                  required:["intent","person","genre","title","year","suggestedTitles","confidence"]
+                }
+              }
+            }
+          : {type:"json_object"},
         stream: false
       })
     });
@@ -202,7 +220,22 @@ async function translateDetails(title: string, overview: string): Promise<Transl
         model:GROQ_MODEL,
         messages:[{role:"system",content:system},{role:"user",content:source}],
         temperature:0.1, reasoning_effort:"low", max_completion_tokens:1450,
-        response_format:{type:"json_object"}, stream:false
+        response_format: /^openai\\/gpt-oss-(20b|120b)$/.test(GROQ_MODEL)
+          ? {
+              type:"json_schema",
+              json_schema:{
+                name:"blofy_arabic_translation",strict:true,
+                schema:{
+                  type:"object",additionalProperties:false,
+                  properties:{
+                    translatedTitle:{type:"string"},
+                    translatedOverview:{type:"string"}
+                  },
+                  required:["translatedTitle","translatedOverview"]
+                }
+              }
+            }
+          : {type:"json_object"}, stream:false
       })
     });
     if (!response.ok) throw Error(`model_http_${response.status}`);
