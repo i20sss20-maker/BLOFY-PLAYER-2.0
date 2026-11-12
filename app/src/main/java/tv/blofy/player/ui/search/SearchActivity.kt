@@ -298,15 +298,23 @@ class SearchActivity : AppCompatActivity() {
 
         val (sections, castCount) = withContext(Dispatchers.IO) {
             val wantedKinds = selectedKind?.let(::listOf) ?: SEARCH_ORDER
-            // Verified local cast hits first. Missing credits can later be
-            // supplemented by an optional first-party AI title suggestion.
-            val scanCredits = moveFocus || (q.length >= 6 && q.contains(' '))
-            val castMatches = if (selectedKind != KIND_LIVE && scanCredits && CastSearchPolicy.searchable(q)) {
+            // Fast indexed catalog search always gets priority over slow
+            // JSON credit lookup (which is naturally a cold-cache fallback).
+            val indexed = coroutineScope {
+                wantedKinds.map { kind ->
+                    kind to async { repository.searchKind(provider.id, kind, q, SECTION_LIMIT) }
+                }.map { (kind, deferred) -> kind to deferred.await().distinctBy { it.key } }
+            }
+            val matchedTitles = indexed.sumOf { it.second.size }
+            val scanCredits = moveFocus ||
+                (q.length >= 8 && q.contains(' ') && matchedTitles < 8)
+            val castMatches = if (selectedKind != KIND_LIVE && scanCredits &&
+                CastSearchPolicy.searchable(q)) {
                 val candidateKeys = ProviderMetadataCache.searchPeopleCandidates(
-                    applicationContext, provider.id, CastSearchPolicy.candidateToken(q), 96
+                    applicationContext, provider.id, CastSearchPolicy.candidateToken(q), 64
                 ).asSequence()
                     .filter { (_, metadata) -> CastSearchPolicy.matches(metadata, q) }
-                    .map { (key, _) -> key }.take(32).toList()
+                    .map { (key, _) -> key }.take(24).toList()
                 val resolved = ArrayList<StreamEntity>(candidateKeys.size)
                 for (key in candidateKeys) {
                     val stream = dao.stream(key) ?: continue
@@ -315,16 +323,11 @@ class SearchActivity : AppCompatActivity() {
                 }
                 resolved.distinctBy { it.key }
             } else emptyList()
-            val sections = coroutineScope {
-                wantedKinds.map { kind ->
-                    kind to async {
-                        val found = repository.searchKind(provider.id, kind, q, SECTION_LIMIT)
-                        (castMatches.asSequence().filter { it.kind == kind } + found.asSequence())
-                            .distinctBy { it.key }.take(SECTION_LIMIT).toList()
-                    }
-                }.map { (kind, deferred) -> kind to deferred.await() }
+            val merged = indexed.map { (kind, found) ->
+                kind to (castMatches.asSequence().filter { it.kind == kind } + found.asSequence())
+                    .distinctBy { it.key }.take(SECTION_LIMIT).toList()
             }
-            sections to castMatches.size
+            merged to castMatches.size
         }
 
         if (input.text?.toString()?.trim() != q || activeKind != selectedKind) return
