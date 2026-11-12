@@ -223,7 +223,12 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
   const days=number(durationDays,1,730,'distributor_days_invalid');
   const cost=distributorPlanCost(days);
   // One free trial per customer across resellers; no raw customer phone stored.
-  const phone=String(trialPhone||'').replace(/[^0-9]/g,'');
+  // Normalize Saudi local/international forms to the same anonymous proof.
+  // Otherwise 05... and +9665... would bypass one-trial-per-customer.
+  let phone=String(trialPhone||'').replace(/[^0-9]/g,'');
+  if(phone.startsWith('00'))phone=phone.slice(2);
+  if(/^05[0-9]{8}$/.test(phone))phone='966'+phone.slice(1);
+  else if(/^5[0-9]{8}$/.test(phone))phone='966'+phone;
   if(cost===0&&!/^[0-9]{8,15}$/.test(phone))throw fail('distributor_trial_phone_required');
   const trialHash=cost===0?crypto.createHmac('sha256',Buffer.from(trialKeyHex,'hex'))
     .update('blofy-stream-distributor-trial-phone:v1:'+phone).digest('hex'):null;
