@@ -163,11 +163,16 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
   const password=crypto.randomBytes(18).toString('base64url');
   const hash=await passwordDigest(password);
   try{
-   const row=(await pool.query(`INSERT INTO blofy_stream_distributors
-     (id,display_name,username,password_hash,credits)
-     VALUES($1,$2,$3,$4,$5) RETURNING *`,
-     [crypto.randomUUID(),cleanName,login,hash,initial])).rows[0];
-   return {ok:true,item:publicDistributor(row),password};
+   return await transaction(async db=>{
+    const row=(await db.query(`INSERT INTO blofy_stream_distributors
+      (id,display_name,username,password_hash,credits)
+      VALUES($1,$2,$3,$4,$5) RETURNING *`,
+      [crypto.randomUUID(),cleanName,login,hash,initial])).rows[0];
+    await db.query(`INSERT INTO blofy_stream_distributor_credit_events
+      (id,distributor_id,type,delta,balance_after)
+      VALUES($1,$2,'opening',$3,$3)`,[crypto.randomUUID(),row.id,initial]);
+    return {ok:true,item:publicDistributor(row),password};
+   });
   }catch(e){if(e.code==='23505')throw fail('distributor_username_taken',409);throw e}
  }
  async function setAdmin(id,{credits,enabled,resetPassword,dailyLimit}={}){
@@ -175,10 +180,16 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
   if(credits!==undefined){
    const increment=number(credits,-10000,10000,'distributor_credits_invalid');
    if(increment===0)throw fail('distributor_credits_invalid');
-   const row=(await pool.query(`UPDATE blofy_stream_distributors SET credits=credits+$2
-     WHERE id=$1 AND credits+$2 BETWEEN 0 AND 100000 RETURNING *`,[id,increment])).rows[0];
-   if(!row)throw fail('distributor_missing_or_insufficient_credits',409);
-   return {ok:true,item:publicDistributor(row)};
+   return transaction(async db=>{
+    const row=(await db.query(`UPDATE blofy_stream_distributors SET credits=credits+$2
+      WHERE id=$1 AND credits+$2 BETWEEN 0 AND 100000 RETURNING *`,[id,increment])).rows[0];
+    if(!row)throw fail('distributor_missing_or_insufficient_credits',409);
+    await db.query(`INSERT INTO blofy_stream_distributor_credit_events
+      (id,distributor_id,type,delta,balance_after)
+      VALUES($1,$2,'adjustment',$3,$4)`,
+      [crypto.randomUUID(),id,increment,Number(row.credits)]);
+    return {ok:true,item:publicDistributor(row)};
+   });
   }
   if(dailyLimit!==undefined){
    const limit=number(dailyLimit,1,10000,'distributor_limit_invalid');
@@ -317,6 +328,69 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
       customers:Number(stats.customers||0)}};
  }
 
+
+ async function activity(token,{offset=0}={}){
+  const actor=await session(token);
+  const page=number(offset,0,10000,'distributor_offset_invalid');
+  const rows=(await pool.query(`SELECT id,issue_id,type,delta,balance_after,details,created_at
+    FROM blofy_stream_distributor_credit_events WHERE distributor_id=$1
+    ORDER BY created_at DESC,id DESC LIMIT 101 OFFSET $2`,
+    [actor.id,page])).rows;
+  return {ok:true,items:rows.slice(0,100).map(x=>({
+    id:x.id,issueId:x.issue_id,type:x.type,delta:Number(x.delta),
+    balanceAfter:Number(x.balance_after),details:x.details||{},
+    date:new Date(x.created_at).getTime()
+  })),nextOffset:rows.length>100?page+100:null};
+ }
+ async function analytics(token){
+  const actor=await session(token);
+  const row=(await pool.query(`SELECT
+    COUNT(*) FILTER (WHERE status='done' AND created_at>=CURRENT_DATE)::int AS today,
+    COUNT(*) FILTER (WHERE status='done' AND created_at>=DATE_TRUNC('month',NOW()))::int AS month,
+    COUNT(*) FILTER (WHERE duration_days=1 AND status='done'
+      AND created_at>=CURRENT_DATE)::int AS trials_today,
+    COUNT(*) FILTER (WHERE duration_days=1 AND status='done')::int AS trials_total,
+    COUNT(*) FILTER (WHERE duration_days>1 AND status='done')::int AS paid_total,
+    COALESCE(SUM(credit_cost) FILTER (WHERE status='done'
+      AND created_at>=DATE_TRUNC('month',NOW())),0)::int AS spent_month,
+    COUNT(*) FILTER (WHERE status IN ('pending','review'))::int AS under_review
+    FROM blofy_stream_distributor_issues WHERE distributor_id=$1`,
+    [actor.id])).rows[0]||{};
+  const extended=(await pool.query(`SELECT COUNT(*)::int AS renewals,
+    COALESCE(SUM(credit_cost),0)::int AS credits
+    FROM blofy_stream_distributor_actions
+    WHERE distributor_id=$1 AND action='renew'
+      AND created_at>=DATE_TRUNC('month',NOW())`,
+    [actor.id])).rows[0]||{};
+  const converted=(await pool.query(`SELECT COUNT(DISTINCT i.id)::int AS converted
+    FROM blofy_stream_distributor_issues i
+    JOIN blofy_stream_distributor_actions a
+      ON a.issue_id=i.id AND a.distributor_id=i.distributor_id AND a.action='renew'
+    WHERE i.distributor_id=$1 AND i.duration_days=1`,[actor.id])).rows[0]||{};
+  const issued24h=(await pool.query(`SELECT COUNT(*)::int AS count
+    FROM blofy_stream_distributor_issues WHERE distributor_id=$1
+      AND created_at>NOW()-INTERVAL '24 hours'
+      AND status IN ('pending','done','review')`,[actor.id])).rows[0]||{};
+  return {ok:true,stats:{
+    today:Number(row.today||0),month:Number(row.month||0),
+    trialsToday:Number(row.trials_today||0),trialsTotal:Number(row.trials_total||0),
+    paidTotal:Number(row.paid_total||0),spentMonth:Number(row.spent_month||0),
+    pendingReview:Number(row.under_review||0),
+    renewalsMonth:Number(extended.renewals||0),
+    renewedCreditsMonth:Number(extended.credits||0),
+    convertedTrials:Number(converted.converted||0),
+    issued24h:Number(issued24h.count||0),
+    dailyLimit:Number(actor.daily_issue_limit||100)
+  }};
+ }
+ async function exportIssues(token){
+  const actor=await session(token);
+  const records=(await pool.query(issueProjection+`
+    WHERE i.distributor_id=$1 ORDER BY i.created_at DESC LIMIT 2001`,
+    [actor.id])).rows;
+  if(records.length>2000)throw fail('distributor_export_too_large',409);
+  return {ok:true,items:records.map(publicIssue)};
+ }
  async function clients(token,{q=''}={}){
   const actor=await session(token),term=clean(q,80);
   const rows=(await pool.query(`SELECT (ARRAY_AGG(customer_phone ORDER BY created_at DESC))[1] AS customer_phone,
@@ -687,5 +761,5 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
   return {ok:true,id,type:kind,group:category,title:customTitle,
     sortOrder:sort,hidden,scope:'distributor_only_not_global'};
  }
- return {ensureSchema,listAdmin,createAdmin,setAdmin,login,me,logout,issued,reveal,issue,library,organize,customer,renew,relogin,clients};
+ return {ensureSchema,listAdmin,createAdmin,setAdmin,login,me,logout,issued,reveal,issue,library,organize,customer,renew,relogin,clients,activity,analytics,exportIssues};
 }
