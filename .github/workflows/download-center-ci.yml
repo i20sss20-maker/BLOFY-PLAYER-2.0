@@ -139,6 +139,10 @@ jobs:
           grep -Fq 'href="/download/v74-display74.apk"' /tmp/downloads.html
           grep -Fq 'v74-display74-remote-qa-20261025/BLOFY-PLAYER-Android-TV-v74-DISPLAY74-SIGNED.apk.sha256' /tmp/downloads.html
           grep -Fq 'href="/d/blofy"' /tmp/downloads.html
+          # The site must offer direct Downloader link-copy actions without a details detour.
+          grep -Fq 'class="official-copy-link"' /tmp/downloads.html
+          grep -Fq 'data-copy-url="http://127.0.0.1:3100/d/blofy"' /tmp/downloads.html
+          grep -Fq 'class="app-copy-short"' /tmp/downloads.html
           # Main card, visible TV-v74 QA, and separate standalone Xiaomi test card.
           # Production with BLOFY_SINGLE_RELEASE_75=true hides both extra cards.
           # PLAYER + separately signed STREAM + cinema QA + Xiaomi QA.
