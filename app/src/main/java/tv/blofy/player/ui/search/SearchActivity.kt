@@ -54,6 +54,8 @@ class SearchActivity : AppCompatActivity() {
     private lateinit var input: EditText
     private lateinit var results: LinearLayout
     private lateinit var hint: TextView
+    private lateinit var aiStatus: TextView
+    private lateinit var aiButton: Button
     private lateinit var recentStrip: LinearLayout
     private lateinit var recentScroll: HorizontalScrollView
     private lateinit var filterStrip: LinearLayout
@@ -97,8 +99,8 @@ class SearchActivity : AppCompatActivity() {
             setPadding(0, 0, 0, dp(8))
         }
         root.addView(hint)
-        // Search cast names locally where the source has supplied credits.
-        // No external AI API, subscription keys or viewing history is sent.
+        // Cast metadata is searched locally. The separate BLOFY AI button
+        // sends ONLY the typed phrase to our authenticated first-party gateway.
         root.addView(TextView(this).apply {
             text = getString(R.string.stream_search_actors_hint)
             textSize = 11.5f
@@ -179,6 +181,7 @@ class SearchActivity : AppCompatActivity() {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
                 override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                     val q = s?.toString().orEmpty()
+                    if (::aiStatus.isInitialized) showAiStatus("")
                     searchRunner.submit(q, false)
                     if (q.isBlank()) {
                         results.removeAllViews()
@@ -205,8 +208,43 @@ class SearchActivity : AppCompatActivity() {
             isFocusable = false
             addView(results, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
         }
-        root.addView(input, LinearLayout.LayoutParams(-1, dp(64)))
-        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = dp(14) })
+        val queryRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        queryRow.addView(input, LinearLayout.LayoutParams(0, dp(64), 1f))
+        aiButton = Button(this).apply {
+            text = getString(R.string.stream_ai_search_button)
+            isAllCaps = false
+            textSize = 13f
+            minWidth = 0
+            minimumWidth = 0
+            visibility = if (BuildConfig.CODE_ONLY_LOGIN) View.VISIBLE else View.GONE
+            setOnClickListener {
+                val phrase = input.text?.toString().orEmpty().trim()
+                if (phrase.isBlank()) {
+                    showAiStatus(getString(R.string.stream_ai_enter_query))
+                } else {
+                    RecentSearchStore.record(this@SearchActivity, phrase)
+                    searchRunner.submit(phrase, true)
+                }
+            }
+        }
+        if (BuildConfig.CODE_ONLY_LOGIN) {
+            queryRow.addView(aiButton, LinearLayout.LayoutParams(dp(138), dp(56)).apply {
+                marginStart = dp(9)
+            })
+        }
+        aiStatus = TextView(this).apply {
+            textSize = 12f
+            maxLines = 2
+            setTextColor(BlofyTvDesign.TextMuted)
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            visibility = View.GONE
+        }
+        root.addView(queryRow, LinearLayout.LayoutParams(-1, dp(64)))
+        root.addView(aiStatus, LinearLayout.LayoutParams(-1, dp(34)))
+        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = dp(5) })
         setContentView(root)
         renderRecentSearches()
         input.requestFocus()
@@ -215,6 +253,8 @@ class SearchActivity : AppCompatActivity() {
     private fun selectFilter(key: String) {
         activeKind = key.takeUnless { it == FILTER_ALL }
         refreshFilterStyle()
+        if (::aiButton.isInitialized) aiButton.isEnabled = activeKind != KIND_LIVE
+        if (::aiStatus.isInitialized) showAiStatus("")
         if (::input.isInitialized) {
             input.hint = inputHint()
             val query = input.text?.toString().orEmpty()
@@ -339,18 +379,38 @@ class SearchActivity : AppCompatActivity() {
         if (!moveFocus) delay(750)
         if (input.text?.toString()?.trim() != q || activeKind != selectedKind) return
         val locale = if (resources.configuration.locales[0].language == "ar") "ar" else "en"
-        val ai = StreamAiSearchClient.interpret(applicationContext, q, locale) ?: return
+        showAiStatus(getString(R.string.stream_ai_searching))
+        val aiResponse = StreamAiSearchClient.lookup(applicationContext, q, locale)
+        if (input.text?.toString()?.trim() != q || activeKind != selectedKind) return
+        val ai = when (aiResponse) {
+            is StreamAiSearchClient.Outcome.Ready -> aiResponse.intent
+            is StreamAiSearchClient.Outcome.Unavailable -> {
+                showAiStatus(when (aiResponse.reason) {
+                    StreamAiSearchClient.Problem.NOT_ACTIVATED,
+                    StreamAiSearchClient.Problem.EXPIRED_SESSION ->
+                        getString(R.string.stream_ai_session_error)
+                    StreamAiSearchClient.Problem.RATE_LIMIT ->
+                        getString(R.string.stream_ai_rate_error)
+                    else -> getString(R.string.stream_ai_connection_error)
+                })
+                return
+            }
+        }
         val expanded = withContext(Dispatchers.IO) {
             resolveAiSuggestions(ai, repository, dao, provider.id, selectedKind)
         }
         if (input.text?.toString()?.trim() != q || activeKind != selectedKind) return
-        if (expanded.isEmpty()) return
+        if (expanded.isEmpty()) {
+            showAiStatus(getString(R.string.stream_ai_no_catalog_match))
+            return
+        }
         val merged = sections.map { (kind, local) ->
             kind to (local.asSequence() + expanded.asSequence().filter { it.kind == kind })
                 .distinctBy { it.key }.take(SECTION_LIMIT).toList()
         }
         renderSections(merged, selectedKind, provider.id, provider.liveFormat,
             castCount = castCount, moveFocus = false, aiCount = expanded.size)
+        showAiStatus(getString(R.string.stream_ai_found, expanded.size))
     }
 
     /** Bound LLM suggestions to ACTUAL Xtream catalog items. No generated titles
@@ -577,6 +637,12 @@ class SearchActivity : AppCompatActivity() {
 
     private fun searchField(focused: Boolean) = CinemaStyle.surface(this, focused)
     private fun rowBackground(focused: Boolean) = CinemaStyle.surface(this, focused)
+
+    private fun showAiStatus(message: String) {
+        if (!::aiStatus.isInitialized) return
+        aiStatus.text = message
+        aiStatus.visibility = if (message.isBlank()) View.GONE else View.VISIBLE
+    }
 
     private fun showMessage(message: String) {
         results.removeAllViews()
