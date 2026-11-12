@@ -306,6 +306,17 @@ class PosterCatalogActivity : AppCompatActivity() {
             setItemViewCacheSize(14)
             descendantFocusability = 0x40000
             preserveFocusAfterLayout = true
+            // Some slow Android 9 TV boxes measure the first poster row AFTER
+            // the page callback; without a child-attach trigger the initial
+            // genre prefetch never starts until the user scrolls.
+            addOnChildAttachStateChangeListener(object : RecyclerView.OnChildAttachStateChangeListener {
+                override fun onChildViewAttachedToWindow(view: View) {
+                    if (loadedItems.isNotEmpty() && scrollState == RecyclerView.SCROLL_STATE_IDLE) {
+                        requestVisibleGenreWarmup()
+                    }
+                }
+                override fun onChildViewDetachedFromWindow(view: View) = Unit
+            })
             addOnScrollListener(object : RecyclerView.OnScrollListener() {
                 override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
                     if (newState == RecyclerView.SCROLL_STATE_IDLE) requestVisibleGenreWarmup()
@@ -499,7 +510,7 @@ class PosterCatalogActivity : AppCompatActivity() {
         if (!::posterGrid.isInitialized || providerId.isBlank()) return
         posterGrid.removeCallbacks(genreWarmRequest)
         // Avoid competing with fast TV scrolling and the first poster paint.
-        posterGrid.postDelayed(genreWarmRequest, 360L)
+        posterGrid.postDelayed(genreWarmRequest, 260L)
     }
 
     private fun warmVisibleGenres() {
@@ -507,7 +518,11 @@ class PosterCatalogActivity : AppCompatActivity() {
             posterGrid.scrollState != RecyclerView.SCROLL_STATE_IDLE ||
             !::posterGrid.isInitialized || isFinishing || isDestroyed) return
         val manager = posterGrid.layoutManager as? GridLayoutManager ?: return
-        val first = manager.findFirstVisibleItemPosition().takeIf { it >= 0 } ?: return
+        val first = manager.findFirstVisibleItemPosition().takeIf { it >= 0 } ?: run {
+            // First layout can be delayed on 1-2 GB Android TV devices.
+            // Child attach will also reschedule the first warmup.
+            return
+        }
         val last = manager.findLastVisibleItemPosition().takeIf { it >= first } ?: return
         val visible = loadedItems.subList(first.coerceAtMost(loadedItems.size),
             (last + gridColumns + 1).coerceAtMost(loadedItems.size)).toList()
@@ -545,7 +560,7 @@ class PosterCatalogActivity : AppCompatActivity() {
                     return@launch
                 }
                 val candidates = MovieGenrePrefetchPolicy.candidates(
-                    visible, names, snapshot, recent, limit = minOf(3, remaining)
+                    visible, names, snapshot, recent, limit = minOf(4, remaining)
                 )
                 if (candidates.isEmpty()) return@launch
                 val provider = withContext(Dispatchers.IO) {
@@ -555,7 +570,7 @@ class PosterCatalogActivity : AppCompatActivity() {
                 fetchedBatch = true
                 genreQuotaCount += candidates.size
                 lastGenreBatchAtMs = SystemClock.elapsedRealtime()
-                val slots = Semaphore(1)
+                val slots = Semaphore(2)
                 coroutineScope {
                     candidates.map { movie ->
                         launch(Dispatchers.IO) {
@@ -750,7 +765,7 @@ class PosterCatalogActivity : AppCompatActivity() {
         private const val PAGE_SIZE = 64
         private const val PREFETCH_THRESHOLD = 20
         private const val GENRE_ATTEMPT_BACKOFF_MS = 10 * 60_000L
-        private const val GENRE_BATCH_COOLDOWN_MS = 2_500L
+        private const val GENRE_BATCH_COOLDOWN_MS = 1_200L
         private const val MAX_GENRE_REQUESTS_PER_WINDOW = 36
         private const val GENRE_QUOTA_WINDOW_MS = 5 * 60_000L
         private const val ALL_CATEGORY_ID = "__all__"
