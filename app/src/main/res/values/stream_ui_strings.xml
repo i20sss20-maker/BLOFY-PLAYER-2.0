@@ -79,4 +79,5 @@
     <string name="stream_home_comedy">Comedy movies</string>
     <string name="stream_home_drama">Drama movies</string>
     <string name="stream_home_genre_hint">Based on available source genres</string>
+    <string name="stream_details_similar">More like this</string>
 </resources>
