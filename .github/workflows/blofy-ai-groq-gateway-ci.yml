@@ -1,0 +1,57 @@
+name: BLOFY AI Groq gateway checks
+
+on:
+  push:
+    branches:
+      - feat/blofy-ai-groq-gateway-20261112
+    paths:
+      - 'services/ai-gateway/**'
+      - '.github/workflows/blofy-ai-groq-gateway-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blofy-ai-groq-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gateway:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Compile TypeScript gateway
+        run: bun build services/ai-gateway/index.ts --target=bun --outfile=/tmp/blofy-ai-groq.js
+      - name: Validate authenticated boundaries and provider selection without real API keys
+        shell: bash
+        run: |
+          set -euo pipefail
+          function probe {
+            local expected="$1"
+            local pid="$2"
+            for attempt in $(seq 1 18); do
+              if curl --silent --show-error --connect-timeout 1 --max-time 2 "http://127.0.0.1:$PORT/health" > /tmp/ai-health.json 2>/dev/null; then break; fi
+              sleep 1
+            done
+            jq -e --arg provider "$expected" '.ok == true and .service == "blofy-ai" and .provider == $provider' /tmp/ai-health.json
+            code="$(curl --silent --show-error --max-time 5 -o /tmp/ai-unauthorized.json -w '%{http_code}' \
+              -X POST -H 'content-type: application/json' --data '{"text":"Tom Cruise","locale":"en"}' \
+              "http://127.0.0.1:$PORT/v1/search/interpret")"
+            test "$code" = 401
+            jq -e '.ok == false and .error == "unauthorized"' /tmp/ai-unauthorized.json
+            kill "$pid" && wait "$pid" || true
+          }
+          PORT=18241 BLOFY_AI_PROVIDER=auto bun /tmp/blofy-ai-groq.js >/tmp/ai-gateway-1.log 2>&1 &
+          pid1="$!"
+          PORT=18241
+          probe "gemini" "$pid1"
+          PORT=18242 GROQ_API_KEY=gsk_local_ci_dummy BLOFY_AI_PROVIDER=auto bun /tmp/blofy-ai-groq.js >/tmp/ai-gateway-2.log 2>&1 &
+          pid2="$!"
+          PORT=18242
+          probe "groq" "$pid2"
+          echo 'PASS: Gemini compatibility, Groq auto selection, invalid bearer denied'
