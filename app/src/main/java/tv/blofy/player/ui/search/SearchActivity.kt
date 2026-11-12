@@ -405,7 +405,9 @@ class SearchActivity : AppCompatActivity() {
             return
         }
         val merged = sections.map { (kind, local) ->
-            kind to (local.asSequence() + expanded.asSequence().filter { it.kind == kind })
+            // AI-assisted verified catalog matches should not disappear below
+            // an already full 120-title FTS section.
+            kind to (expanded.asSequence().filter { it.kind == kind } + local.asSequence())
                 .distinctBy { it.key }.take(SECTION_LIMIT).toList()
         }
         renderSections(merged, selectedKind, provider.id, provider.liveFormat,
@@ -424,21 +426,37 @@ class SearchActivity : AppCompatActivity() {
     ): List<StreamEntity> {
         val kinds = listOf(KIND_MOVIE, KIND_SERIES).filter { selectedKind == null || it == selectedKind }
         val collected = ArrayList<StreamEntity>(30)
-        // At most 8 original titles, 2 content kinds and 16 FTS queries.
+        // At most eight likely filmography titles. Try the exact phrase first,
+        // then an indexed two-word prefix when the provider has suffixes,
+        // translated metadata or multiple edition labels. Never scan all rows.
         for (title in intent.suggestedTitles.take(8)) {
-            val query = ArabicSearchNormalizer.ftsQuery(title)
-            if (query.isBlank()) continue
+            val phrase = ArabicSearchNormalizer.normalize(title).take(100)
+            val exact = ArabicSearchNormalizer.ftsQuery(phrase)
+            if (exact.isBlank()) continue
+            val firstTwo = phrase.split(" ").take(2).joinToString(" ")
+            val prefix = ArabicSearchNormalizer.ftsQuery(firstTwo)
             for (kind in kinds) {
-                val matches = runCatching { dao.searchStreamsFtsByKind(providerId, kind, query, 18) }
-                    .getOrDefault(emptyList())
-                collected.addAll(AiCatalogMatchPolicy.filterVerified(listOf(title), matches, 6))
+                val exactResults = runCatching {
+                    dao.searchStreamsFtsByKind(providerId, kind, exact, 25)
+                }.getOrDefault(emptyList())
+                val exactMatches = AiCatalogMatchPolicy.filterVerified(listOf(title), exactResults, 6)
+                if (exactMatches.isNotEmpty()) {
+                    collected.addAll(exactMatches)
+                    continue
+                }
+                if (prefix != exact && prefix.isNotBlank()) {
+                    val prefixResults = runCatching {
+                        dao.searchStreamsFtsByKind(providerId, kind, prefix, 35)
+                    }.getOrDefault(emptyList())
+                    collected.addAll(AiCatalogMatchPolicy.filterVerified(listOf(title), prefixResults, 6))
+                }
             }
         }
         // Genre/year requests work even when Arabic natural phrasing did not
         // match Xtream's English genre fields. Still only source catalog rows.
         if (intent.genre.isNotBlank() && collected.size < 12) {
             for (kind in kinds) {
-                val matches = dao.searchCatalog(providerId, kind, intent.genre, 40)
+                val matches = repository.searchKind(providerId, kind, intent.genre, 40)
                 collected.addAll(matches.filter { !it.locked })
             }
         }
