@@ -15,57 +15,63 @@ import tv.blofy.player.core.network.awaitResponse
 import java.util.concurrent.TimeUnit
 
 /**
- * App-side adapter for the reusable first-party BLOFY AI gateway.
- *
- * Only the entered search phrase and language are sent; the subscriber's
- * encrypted session bearer is used solely for server-side verification and is
- * never forwarded to the model. No playlist URLs, Xtream credentials, viewing
- * history, movie library or account profile leave this app.
- *
- * Every result is intersected with the on-device provider catalog by caller.
+ * First-party BLOFY AI intent parser. Only the typed search text and locale
+ * reach Groq; the temporary subscription bearer is verified at the gateway,
+ * never forwarded to the LLM. Android clients contain NO model API keys.
  */
 internal object StreamAiSearchClient {
     data class Intent(
-        val kind: String,
-        val person: String,
-        val genre: String,
-        val title: String,
-        val year: Int?,
-        val suggestedTitles: List<String>
+        val kind: String, val person: String, val genre: String, val title: String,
+        val year: Int?, val suggestedTitles: List<String>
     )
+    enum class Problem { NOT_ACTIVATED, EXPIRED_SESSION, RATE_LIMIT, SERVICE, CONNECTION, BAD_RESPONSE }
+    sealed class Outcome {
+        data class Ready(val intent: Intent, val cached: Boolean = false) : Outcome()
+        data class Unavailable(val reason: Problem) : Outcome()
+    }
 
     private const val ENDPOINT =
         "https://blofy-ai-gateway-production.up.railway.app/v1/search/interpret"
+    // First-party session verification can take 5.5s and Groq inference can
+    // take up to 8.5s. The old 13-second callTimeout killed valid responses.
     private val client = OkHttpClient.Builder()
-        .callTimeout(13, TimeUnit.SECONDS)
-        .connectTimeout(5, TimeUnit.SECONDS)
-        .readTimeout(11, TimeUnit.SECONDS)
+        .callTimeout(21, TimeUnit.SECONDS)
+        .connectTimeout(7, TimeUnit.SECONDS)
+        .readTimeout(19, TimeUnit.SECONDS)
         .followRedirects(false).followSslRedirects(false)
         .build()
-    private val type = "application/json; charset=utf-8".toMediaType()
-    // Session-only phrases, never auth tokens, with fixed 32-entry cap.
-    private val cached = object : LinkedHashMap<String, Intent>(32, .75f, true) {
+    private val jsonType = "application/json; charset=utf-8".toMediaType()
+    private val cache = object : LinkedHashMap<String, Intent>(32, .75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Intent>?) = size > 32
     }
 
-    suspend fun interpret(context: Context, phrase: String, locale: String): Intent? {
-        if (!BuildConfig.CODE_ONLY_LOGIN || phrase.length !in 3..160) return null
-        val access = StreamCodeSession.authorization(context) ?: return null
-        val key = locale + ":" + phrase.lowercase()
-        synchronized(cached) { cached[key]?.let { return it } }
+    suspend fun lookup(context: Context, phrase: String, locale: String): Outcome {
+        val clean = phrase.trim().take(160)
+        if (!BuildConfig.CODE_ONLY_LOGIN || clean.length !in 3..160)
+            return Outcome.Unavailable(Problem.NOT_ACTIVATED)
+        val access = StreamCodeSession.authorization(context)
+            ?: return Outcome.Unavailable(Problem.NOT_ACTIVATED)
+        val key = access.hashCode().toString() + ":" + locale + ":" + clean.lowercase()
+        synchronized(cache) { cache[key]?.let { return Outcome.Ready(it, cached = true) } }
         return withContext(Dispatchers.IO) {
             try {
-                val payload = JSONObject().put("text", phrase).put("locale", locale).toString()
+                val payload = JSONObject().put("text", clean)
+                    .put("locale", if (locale == "en") "en" else "ar").toString()
                 val request = Request.Builder().url(ENDPOINT)
-                    .post(payload.toRequestBody(type))
+                    .post(payload.toRequestBody(jsonType))
                     .header("Authorization", access)
                     .header("Accept", "application/json")
                     .header("Cache-Control", "no-store")
                     .build()
                 client.newCall(request).awaitResponse().use { response ->
-                    if (!response.isSuccessful) return@withContext null
+                    if (!response.isSuccessful) return@withContext Outcome.Unavailable(when (response.code) {
+                        401, 403 -> Problem.EXPIRED_SESSION
+                        429 -> Problem.RATE_LIMIT
+                        in 500..599 -> Problem.SERVICE
+                        else -> Problem.BAD_RESPONSE
+                    })
                     val root = JSONObject(response.body?.string().orEmpty())
-                    if (!root.optBoolean("ok")) return@withContext null
+                    if (!root.optBoolean("ok")) return@withContext Outcome.Unavailable(Problem.BAD_RESPONSE)
                     val suggestions = root.optJSONArray("suggestedTitles")
                     val titles = ArrayList<String>()
                     if (suggestions != null) {
@@ -79,17 +85,15 @@ internal object StreamAiSearchClient {
                         person = root.optString("person").take(90),
                         genre = root.optString("genre").take(35),
                         title = root.optString("title").take(110),
-                        year = year,
-                        suggestedTitles = titles.distinct()
+                        year = year, suggestedTitles = titles.distinct()
                     )
-                    synchronized(cached) { cached[key] = output }
-                    output
+                    synchronized(cache) { cache[key] = output }
+                    Outcome.Ready(output)
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                // AI is optional. Offline search and content playback stay available.
-                null
+                Outcome.Unavailable(Problem.CONNECTION)
             }
         }
     }
