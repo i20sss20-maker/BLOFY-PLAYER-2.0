@@ -575,8 +575,10 @@ function initStreamCodeManagement(){
       row('الحساب المرتبط',sub.accountExists?'موجود':'لا يوجد')
     );
     renew.disabled=!sub.canExtend;
-    transfer.hidden=!(item.channel==='app'&&sub.redeemed);
-    transfer.disabled=!(item.channel==='app'&&sub.active&&!item.deviceTransferPending);
+    transfer.hidden=!sub.redeemed;
+    transfer.textContent=item.channel==='app'?
+      'إصدار كود بديل لنقل الجهاز':'إصدار كود استرداد بيانات Xtream';
+    transfer.disabled=!sub.active||(item.channel==='app'&&item.deviceTransferPending);
     const note= !sub.redeemed ?
       'هذا الكود جديد. لا يحتاج تجديدًا قبل أول استخدام؛ تبدأ مدته عند التفعيل الأول.' :
       !sub.accountExists ?
@@ -585,7 +587,7 @@ function initStreamCodeManagement(){
       'الحساب موقوف إداريًا. زيادة المدة لا ترفع الإيقاف؛ راجع سبب الإيقاف أولًا.' :
       item.channel==='app' ?
       'الكود مستعمل: تجديد المدة لا يمسح ارتباطه بالجهاز. الجهاز الجديد يحتاج موافقة استعادة دخول برمز 6 خانات، أو إصدار كود بديل صراحةً من المسؤول (يفصل الكود القديم).' :
-      'الكود مستعمل: تجديد المدة لا يجعله صالحًا للاستخدام مرة ثانية في صفحة التفعيل. العميل الحالي يستخدم بيانات Xtream التي حصل عليها عند التفعيل الأول؛ لاستعادة البيانات تواصل مع الإدارة.';
+      'الكود مستعمل: تجديد المدة وحده لا يسمح بإدخاله مرة ثانية. إذا فقد العميل بيانات Xtream، استخدم زر إصدار كود استرداد جديد (لمرة واحدة خلال 24 ساعة) بعد التحقق من صاحب الاشتراك؛ يبقى نفس الحساب وتاريخ الانتهاء.';
     help.textContent=note;
     panel.hidden=false;
   }
@@ -630,18 +632,27 @@ function initStreamCodeManagement(){
       status.textContent='تم تجديد صلاحية الاشتراك لمدة '+days+' يومًا؛ تاريخ التفعيل والكود لم يتغيرا.';
     }catch(error){
       status.textContent='تعذر تجديد المدة: '+String(error.message||'حدث خطأ').slice(0,100);
-    }finally{if(current){renew.disabled=!current.subscription.canExtend;transfer.disabled=!current.subscription.active}}
+    }finally{if(current){
+      renew.disabled=!current.subscription.canExtend;
+      transfer.disabled=!current.subscription.active||
+        (current.item.channel==='app'&&current.item.deviceTransferPending);
+    }}
   });
   transfer.addEventListener('click',async()=>{
     const record=current;
-    if(record?.item?.channel!=='app'||!record.subscription?.active||
-       record.item.deviceTransferPending)return;
-    if(!confirm('إصدار كود بديل لنفس اشتراك STREAM؟\n'+
-      'سيُبطل الكود القديم فورًا وسيفصل جهازه.\n'+
-      'لن تُضاف أي مدة اشتراك جديدة. لا تنفذ النقل إلا بعد التحقق من صاحب الاشتراك.'))return;
+    if(!record?.subscription?.active||
+       (record.item.channel==='app'&&record.item.deviceTransferPending))return;
+    const appCode=record.item.channel==='app';
+    if(!confirm(appCode?
+      'إصدار كود بديل لنقل نفس اشتراك STREAM إلى جهاز آخر؟\\n'+
+      'سيُبطل الكود القديم ويفصل جهازه، دون إضافة أيام. تأكد من ملكية العميل.':
+      'إصدار كود استرداد لبيانات Xtream لنفس الاشتراك؟\\n'+
+      'سيُبطل الكود السابق، وسيعمل الجديد مرة واحدة خلال 24 ساعة فقط.\\n'+
+      'لا يضيف اشتراكًا أو أيامًا. تأكد من هوية العميل قبل المتابعة.'))return;
     transfer.disabled=true;renew.disabled=true;
     try{
-      const response=await gatewayApi('/api/v1/admin/xtream-gateway/codes/'+encodeURIComponent(record.item.id)+'/transfer',{
+      const response=await gatewayApi('/api/v1/admin/xtream-gateway/codes/'+
+        encodeURIComponent(record.item.id)+(appCode?'/transfer':'/recover-xtream'),{
         method:'POST',body:'{}'
       });
       if(!/^[0-9]{8,12}$/.test(String(response.code||'')))throw new Error('invalid_transfer_response');
@@ -650,7 +661,9 @@ function initStreamCodeManagement(){
       entry.value='';
       transferValue.textContent=response.code;
       transferred.hidden=false;
-      status.textContent='تم إصدار كود بديل للعميل دون تجديد المدة. انسخه وأخفه بعد تسليمه.';
+      status.textContent=appCode?
+        'تم إصدار كود نقل الجهاز دون تجديد المدة. انسخه وأخفه بعد تسليمه.':
+        'تم إصدار كود لاستعادة بيانات Xtream مرة واحدة خلال 24 ساعة؛ أُلغي الكود القديم وبقي تاريخ الانتهاء كما هو.';
     }catch(error){
       status.textContent='تعذر نقل الكود: '+String(error.message||'حدث خطأ').slice(0,100);
       transfer.disabled=false;renew.disabled=false;
