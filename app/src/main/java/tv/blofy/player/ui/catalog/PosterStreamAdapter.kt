@@ -50,10 +50,19 @@ class PosterStreamAdapter(
     ) {
         val merged = if (reset) HashMap(genres) else HashMap(cachedMovieGenres).apply { putAll(genres) }
         if (cachedMovieGenres == merged) return
+        // Rebinding every card on a 1800-poster snapshot causes TV frame
+        // stalls and apparent labels disappearing during small cache updates.
+        // Only refresh rows whose genre line actually changed.
+        val changedKeys = if (notifyExisting) {
+            (cachedMovieGenres.keys + merged.keys)
+                .filterTo(HashSet()) { cachedMovieGenres[it] != merged[it] }
+        } else emptySet()
         cachedMovieGenres.clear()
         cachedMovieGenres.putAll(merged)
-        if (notifyExisting && items.isNotEmpty()) {
-            notifyItemRangeChanged(0, items.size, GENRE_META_PAYLOAD)
+        if (changedKeys.isNotEmpty()) {
+            items.forEachIndexed { index, item ->
+                if (item.key in changedKeys) notifyItemChanged(index, GENRE_META_PAYLOAD)
+            }
         }
     }
 
