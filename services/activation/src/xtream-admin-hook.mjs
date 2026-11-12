@@ -46,6 +46,7 @@ import { downloadXtreamM3uCatalog } from './xtream-m3u-catalog.mjs';
 import { distinctXtreamRecords } from './xtream-import-dedup.mjs';
 import {xtreamProviderOrder,withXtreamProviderPosition} from './xtream-provider-order.mjs';
 import {sourceLiveCapacity} from './xtream-live-source-capacity.mjs';
+import {summarizeStreamSourceCapacity} from './stream-source-capacity-report.mjs';
 import {permittedLicensedLiveFanout} from './xtream-licensed-live-fanout-policy.mjs';
 import {xtreamPlaybackSnapshot} from './xtream-playback-metrics.mjs';
 import {summarizeStreamMediaQuality} from './stream-media-quality.mjs';
@@ -3168,6 +3169,22 @@ async function unifiedStreamBridge(req,res,url){
     if(command==='organize')return json(res,200,
       await streamDistributors.organize(token,payload),{'cache-control':'no-store'});
     return json(res,404,{ok:false,code:'route_not_found'});
+  }
+  if(req.method==='GET'&&p==='/internal/blofy-stream/source-capacity'){
+    // The STREAM operator's fixed Bearer bridge is validated above.
+    // One local DB aggregate and provider metadata from the last SOURCE
+    // account check; NO new provider login, test stream, or customer session.
+    const [sources,counts]=await Promise.all([
+      serverRows(),
+      pool.query(`SELECT source_id,COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE enabled=TRUE AND
+          (expires_at IS NULL OR expires_at>NOW()))::int AS active
+        FROM blofy_xtream_gateway_accounts GROUP BY source_id`)
+        .then(result=>result.rows).catch(()=>null)
+    ]);
+    return json(res,200,summarizeStreamSourceCapacity(
+      sources.map(adminServer),counts
+    ),{'cache-control':'no-store'});
   }
   if(req.method==='GET'&&p==='/internal/blofy-stream/overview'){
     const items=(await serverRows()).map(adminServer).map(streamSafeSource);
