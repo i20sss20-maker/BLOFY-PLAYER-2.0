@@ -44,6 +44,11 @@ function episodeSourceId(episode){
   return null;
 }
 
+// Share the exact episode/season normalization with operator diagnostics,
+// so the admin health check matches the episodes that clients can resolve.
+export {episodeSeasons as normalizeProviderEpisodeSeasons,
+  episodeSourceId as sourceEpisodeId};
+
 export function collectSourceEpisodes(seasons) {
   const records = new Map();
   const groups=episodeSeasons(seasons);
