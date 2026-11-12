@@ -9,7 +9,8 @@ const TOKEN=/^[A-Za-z0-9_-]{43}$/;
 const USER=/^[a-z][a-z0-9_.-]{3,31}$/;
 const DAY=86400000;
 const SESSION_MS=12*60*60*1000;
-const PLANS=new Map([[1,0],[30,1],[90,3],[180,6],[365,12],[730,24]]);
+// Distributor panel offers up to one year. Existing historic 2-year subscriptions stay valid.
+const PLANS=new Map([[1,0],[30,1],[90,3],[180,6],[365,12]]);
 const TRIALS_PER_24H=5;
 export function distributorPlanCost(durationDays){
  const plan=Number(durationDays);
@@ -50,7 +51,7 @@ const publicIssue=row=>{
    expiry!==null&&expiry<=now+7*DAY?'expiring':'active';
  return {
  id:row.id,type:row.kind,label:row.label,days:Number(row.duration_days),
- chargedCredits:Number(row.credit_cost??distributorPlanCost(row.duration_days)),
+ chargedCredits:Number(row.credit_cost??(Number(row.duration_days)===730?24:distributorPlanCost(row.duration_days))),
  maxConnections:Number(row.max_connections),
  status:row.status,subscriptionStatus:status,
  activatedAt:activated,expiresAt:expiry,
@@ -334,11 +335,11 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
   return {ok:true,issue:publicIssue(item),
     ...(item.kind==='app'?{code:result.body.code}:{credentials:result.body.credentials})};
  }
- async function issue(token,{kind,label,durationDays,maxConnections,requestId,trialPhone,customerName,customerPhone}={}){
+ async function issue(token,{kind,label,durationDays,requestId,trialPhone,customerName,customerPhone}={}){
   const actor=await session(token);
   const type=String(kind||'');
   if(!['app','xtream'].includes(type))throw fail('distributor_type_invalid');
-  const days=number(durationDays,1,730,'distributor_days_invalid');
+  const days=number(durationDays,1,365,'distributor_days_invalid');
   const cost=distributorPlanCost(days);
   // One free trial per customer across resellers; no raw customer phone stored.
   // Normalize Saudi local/international forms to the same anonymous proof.
@@ -350,7 +351,8 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
   if(cost===0&&!/^[0-9]{8,15}$/.test(phone))throw fail('distributor_trial_phone_required');
   const trialHash=cost===0?crypto.createHmac('sha256',Buffer.from(trialKeyHex,'hex'))
     .update('blofy-stream-distributor-trial-phone:v1:'+phone).digest('hex'):null;
-  const connections=number(maxConnections,1,3,'distributor_connections_invalid');
+  // Distributors always issue one connection. A stale/forged client cannot override it.
+  const connections=1;
   const request=String(requestId||'').toLowerCase();
   if(!UUID.test(request))throw fail('distributor_request_id_invalid');
   const safeLabel=clean(label,80)||'BLOFY STREAM';
