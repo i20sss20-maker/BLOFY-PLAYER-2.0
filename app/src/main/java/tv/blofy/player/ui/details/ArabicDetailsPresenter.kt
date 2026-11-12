@@ -59,7 +59,7 @@ internal class ArabicDetailsPresenter(
         setOnClickListener {
             if (!isArabicUi()) return@setOnClickListener
             if (BuildConfig.CODE_ONLY_LOGIN) {
-                if (cloudEnabled && hasCloudTranslation() && cloudJob?.isActive != true) {
+                if (cloudEnabled && allCloudFieldsReady() && cloudJob?.isActive != true) {
                     showingOriginal = !showingOriginal
                     renderVisible()
                 } else {
@@ -120,7 +120,7 @@ internal class ArabicDetailsPresenter(
             // Only accounts that opted in on this device request AI.
             if (CloudTranslationPolicy.shouldRequest(
                     codeOnly = true, arabicUi = true, optedIn = cloudEnabled,
-                    needsTranslation = needs, cached = hasCloudTranslation()
+                    needsTranslation = needs, cached = allCloudFieldsReady()
                 ) && lastCloudAttemptVersion != version) {
                 requestCloud()
             }
@@ -139,6 +139,10 @@ internal class ArabicDetailsPresenter(
     private fun hasCloudTranslation(): Boolean =
         (ArabicDetailsPolicy.needsTranslation(currentTitle) && aiCached(currentTitle) != null) ||
             (ArabicDetailsPolicy.needsTranslation(currentOverview) && aiCached(currentOverview) != null)
+
+    private fun allCloudFieldsReady(): Boolean =
+        (!ArabicDetailsPolicy.needsTranslation(currentTitle) || aiCached(currentTitle) != null) &&
+            (!ArabicDetailsPolicy.needsTranslation(currentOverview) || aiCached(currentOverview) != null)
 
     private fun translated(original: String): String? {
         if (!ArabicDetailsPolicy.needsTranslation(original)) return null
@@ -188,7 +192,7 @@ internal class ArabicDetailsPresenter(
         if (!CloudTranslationPolicy.shouldRequest(
                 codeOnly = BuildConfig.CODE_ONLY_LOGIN, arabicUi = isArabicUi(),
                 optedIn = cloudEnabled, needsTranslation = needsCloudTranslation(),
-                cached = hasCloudTranslation() && !force
+                cached = allCloudFieldsReady() && !force
             ) || cloudJob?.isActive == true) return
         cloudJob?.cancel()
         lastCloudAttemptVersion = version
@@ -213,7 +217,7 @@ internal class ArabicDetailsPresenter(
                 if (output.overview.isNotBlank() && overview.isNotBlank() && output.overview != overview) {
                     cache("groq_v1_", overview, output.overview)
                 }
-                if (!hasCloudTranslation()) cloudFailed = true
+                if (!allCloudFieldsReady()) cloudFailed = true
             }
             renderVisible()
         }
