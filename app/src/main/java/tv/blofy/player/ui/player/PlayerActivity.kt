@@ -1407,12 +1407,15 @@ open class PlayerActivity : ContentAccessActivity() {
             session.player.volume,
             known = session.player.playbackState == Player.STATE_READY
         )
+        val detectedCodecs = result.detectedMimeTypes.joinToString(", ")
         val stats = if (isArabic) {
             "\n\nالمسارات: ${result.available} · مدعومة: ${result.supported} · محددة: ${result.selected}" +
-                "\nالترميز: ${result.selectedMimeType ?: "غير معروف"}"
+                "\nالترميز المحدد: ${result.selectedMimeType ?: "لا يوجد"}" +
+                "\nالترميزات المكتشفة: ${detectedCodecs.ifBlank { "غير معروفة" }}"
         } else {
             "\n\nTracks: ${result.available} · Supported: ${result.supported} · Selected: ${result.selected}" +
-                "\nCodec: ${result.selectedMimeType ?: "Unknown"}"
+                "\nSelected codec: ${result.selectedMimeType ?: "None"}" +
+                "\nDetected codecs: ${detectedCodecs.ifBlank { "Unknown" }}"
         }
         AlertDialog.Builder(this)
             .setTitle(if (isArabic) "حالة صوت القناة" else "Channel audio status")
