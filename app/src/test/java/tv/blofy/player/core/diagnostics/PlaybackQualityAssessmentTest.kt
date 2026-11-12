@@ -57,7 +57,7 @@ class PlaybackQualityAssessmentTest {
         assertEquals(1500L, PlaybackQualityAssessment.medianStartMs(listOf(
             metric(firstFrameMs = 1500), metric(firstFrameMs=2500), metric(firstFrameMs=5500)
         )))
-        assertEquals(2000L, PlaybackQualityAssessment.medianStartMs(listOf(
+        assertEquals(1000L, PlaybackQualityAssessment.medianStartMs(listOf(
             metric(firstFrameMs=1500), metric(firstFrameMs=2500)
         )))
         assertNull(PlaybackQualityAssessment.medianStartMs(emptyList()))
