@@ -21,6 +21,14 @@ class SimilarMoviePolicyTest {
             SimilarMoviePolicy.rank(source, listOf("Action"), rows, categories).map { it.key })
     }
 
+    @Test fun cachedMovieDetailsCanSupplyGenreMissingFromXtreamList() {
+        val source = film(1, "Action")
+        val candidates = listOf(film(2), film(3))
+        assertEquals(listOf("provider:movie:2"),
+            SimilarMoviePolicy.rank(source, emptyList(), candidates, emptyMap(),
+                cachedGenres = mapOf("provider:movie:2" to listOf("Action"))).map { it.key })
+    }
+
     @Test fun neverInventsSimilarityFromGenericCategoryOrTitle() {
         assertTrue(SimilarMoviePolicy.rank(film(1, category = "latest"),
             emptyList(), listOf(film(2, category = "latest")),
