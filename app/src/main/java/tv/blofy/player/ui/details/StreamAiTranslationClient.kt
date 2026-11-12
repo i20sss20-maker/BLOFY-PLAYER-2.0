@@ -25,9 +25,9 @@ internal object StreamAiTranslationClient {
     private const val URL = "https://blofy-ai-gateway-production.up.railway.app/v1/translate"
     private val jsonType = "application/json; charset=utf-8".toMediaType()
     private val client = OkHttpClient.Builder()
-        .callTimeout(16, TimeUnit.SECONDS)
+        .callTimeout(22, TimeUnit.SECONDS)
         .connectTimeout(6, TimeUnit.SECONDS)
-        .readTimeout(13, TimeUnit.SECONDS)
+        .readTimeout(19, TimeUnit.SECONDS)
         .followRedirects(false).followSslRedirects(false)
         .build()
 
