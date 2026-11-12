@@ -4,6 +4,7 @@ import tv.blofy.player.ui.common.CinemaStyle
 
 import android.content.Intent
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
@@ -18,6 +19,10 @@ import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.R
@@ -32,6 +37,7 @@ import tv.blofy.player.ui.common.TwoPaneFocusGuard
 import tv.blofy.player.ui.common.TvUiTuning
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
+import tv.blofy.player.data.metadata.ProviderDetailsRepository
 import tv.blofy.player.data.metadata.ProviderMetadataCache
 import tv.blofy.player.ui.search.SearchActivity
 import tv.blofy.player.ui.settings.RuntimeSettings
@@ -44,6 +50,11 @@ class PosterCatalogActivity : AppCompatActivity() {
     private lateinit var countView: TextView
     private lateinit var searchBar: TextView
     private var genreRefreshJob: Job? = null
+    private var genreWarmJob: Job? = null
+    // A bounded session-local backoff prevents repeated detail probes for titles
+    // that a provider has not classified yet. No credentials enter these keys.
+    private val genreWarmAttempts = LinkedHashMap<String, Long>()
+    private val genreWarmRequest = Runnable { warmVisibleMovieGenres() }
     private var pageJob: Job? = null
     private var countJob: Job? = null
     private var exactCount: Int? = null
@@ -254,6 +265,9 @@ class PosterCatalogActivity : AppCompatActivity() {
             descendantFocusability = 0x40000
             preserveFocusAfterLayout = true
             addOnScrollListener(object : RecyclerView.OnScrollListener() {
+                override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
+                    if (newState == RecyclerView.SCROLL_STATE_IDLE) requestVisibleGenreWarmup()
+                }
                 override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
                     if (dy <= 0 || loadingPage || !hasMore) return
                     if (manager.findLastVisibleItemPosition() >= loadedItems.size - PREFETCH_THRESHOLD) loadNextPage()
@@ -292,6 +306,7 @@ class PosterCatalogActivity : AppCompatActivity() {
                 categoryRows = listOf(allCategory()) + categories
                 categoryAdapter.submit(categoryRows)
                 posterAdapter.updateCategoryNames(categoryRows)
+                requestVisibleGenreWarmup()
                 // Some Android TV firmwares defer the category RecyclerView's
                 // first measure until returning from MovieDetailsActivity.
                 categoryList.post {
@@ -322,6 +337,8 @@ class PosterCatalogActivity : AppCompatActivity() {
 
         selectedCategoryId = id
         genreRefreshJob?.cancel()
+        genreWarmJob?.cancel()
+        posterGrid.removeCallbacks(genreWarmRequest)
         generation++
         refreshExactCount()
         pageJob?.cancel()
@@ -355,6 +372,7 @@ class PosterCatalogActivity : AppCompatActivity() {
                 loadingPage = false
                 updateCount()
                 requestInitialContentFocus()
+                requestVisibleGenreWarmup()
             }.also { job ->
                 job.invokeOnCompletion {
                     if (expectedGeneration == generation) runOnUiThread { loadingPage = false }
@@ -407,11 +425,98 @@ class PosterCatalogActivity : AppCompatActivity() {
             loadingPage = false
             saveMemorySnapshot()
             requestInitialContentFocus()
+            requestVisibleGenreWarmup()
         }.also { job ->
             job.invokeOnCompletion { if (requestGeneration == generation) runOnUiThread { loadingPage = false } }
         }
     }
 
+
+    /**
+     * Xtream's movie list frequently omits genre even though get_vod_info has
+     * the real Action/Drama/etc. The detail screen previously populated this
+     * cache only after opening a movie. Enrich *visible posters* instead, using
+     * at most two requests in flight and twelve attempts per settled viewport.
+     * We never scan/fetch the whole catalog, touch playback URLs, or block a
+     * poster's first display. Cached genres appear immediately next time.
+     */
+    private fun requestVisibleGenreWarmup() {
+        if (kind != KIND_MOVIE || !::posterGrid.isInitialized || providerId.isBlank()) return
+        posterGrid.removeCallbacks(genreWarmRequest)
+        posterGrid.postDelayed(genreWarmRequest, 250L)
+    }
+
+    private fun warmVisibleMovieGenres() {
+        if (kind != KIND_MOVIE || loadedItems.isEmpty() || genreWarmJob?.isActive == true ||
+            !::posterGrid.isInitialized || isFinishing || isDestroyed) return
+        val manager = posterGrid.layoutManager as? GridLayoutManager ?: return
+        val first = manager.findFirstVisibleItemPosition().takeIf { it >= 0 } ?: return
+        val last = manager.findLastVisibleItemPosition().takeIf { it >= first } ?: return
+        val visible = loadedItems.subList(first.coerceAtMost(loadedItems.size),
+            (last + gridColumns + 1).coerceAtMost(loadedItems.size)).toList()
+        if (visible.isEmpty()) return
+        val currentGeneration = generation
+        val owner = providerId
+        val category = selectedCategoryId
+        val names = categoryRows.associate { it.remoteId to it.name }
+        val now = SystemClock.elapsedRealtime()
+        val recent = genreWarmAttempts.filterValues { time ->
+            now >= time && now - time < GENRE_ATTEMPT_BACKOFF_MS
+        }.keys.toSet()
+
+        genreWarmJob = lifecycleScope.launch {
+            try {
+                // Batch-read locally first. A cached detail should never
+                // trigger another network round-trip just to paint its genre.
+                val snapshot = withContext(Dispatchers.IO) {
+                    ProviderMetadataCache.readGenresForPage(applicationContext, visible.map { it.key })
+                }
+                if (generation != currentGeneration || providerId != owner ||
+                    selectedCategoryId != category) return@launch
+                snapshot.forEach { (key, genres) -> posterAdapter.rememberMovieGenre(key, genres) }
+                val candidates = MovieGenrePrefetchPolicy.candidates(visible, names, snapshot, recent)
+                if (candidates.isEmpty()) return@launch
+                val provider = withContext(Dispatchers.IO) {
+                    BlofyDatabase.get(applicationContext).dao().provider(owner)
+                } ?: return@launch
+                if (!provider.providerType.equals("xtream", true)) return@launch
+                val slots = Semaphore(2)
+                coroutineScope {
+                    candidates.map { movie ->
+                        launch(Dispatchers.IO) {
+                            val result = slots.withPermit {
+                                ProviderDetailsRepository.refresh(applicationContext, provider, movie)
+                            }
+                            withContext(Dispatchers.Main) {
+                                genreWarmAttempts[movie.key] = SystemClock.elapsedRealtime()
+                                while (genreWarmAttempts.size > 256) {
+                                    genreWarmAttempts.remove(genreWarmAttempts.keys.first())
+                                }
+                                if (generation == currentGeneration && providerId == owner &&
+                                    selectedCategoryId == category) {
+                                    result.metadata?.genres?.filter(String::isNotBlank)
+                                        ?.takeIf { it.isNotEmpty() }
+                                        ?.let { posterAdapter.rememberMovieGenre(movie.key, it) }
+                                }
+                            }
+                        }
+                    }.joinAll()
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // Missing or rate-limited provider metadata must never prevent
+                // browsing, cause an activation failure, or reset the catalog.
+            } finally {
+                if (generation == currentGeneration && providerId == owner &&
+                    selectedCategoryId == category && !isFinishing && !isDestroyed) {
+                    // If the user scrolled while this small batch was loading,
+                    // refresh the viewport after it settles.
+                    posterGrid.post { requestVisibleGenreWarmup() }
+                }
+            }
+        }
+    }
 
     private fun refreshExactCount() {
         countJob?.cancel()
@@ -519,6 +624,7 @@ class PosterCatalogActivity : AppCompatActivity() {
         }
         if (providerId.isNotBlank()) refreshExactCount()
         if (kind != KIND_MOVIE || loadedItems.isEmpty() || !::posterAdapter.isInitialized) return
+        requestVisibleGenreWarmup()
         genreRefreshJob?.cancel()
         val expectedGeneration = generation
         val owner = providerId
@@ -531,8 +637,19 @@ class PosterCatalogActivity : AppCompatActivity() {
             posterAdapter.rememberMovieGenres(snapshot, reset = true, notifyExisting = true)
         }
     }
-    override fun onPause() { saveMemorySnapshot(); super.onPause() }
-    override fun onDestroy() { pageJob?.cancel(); countJob?.cancel(); genreRefreshJob?.cancel(); generation++; super.onDestroy() }
+    override fun onPause() {
+        posterGrid.removeCallbacks(genreWarmRequest)
+        genreWarmJob?.cancel()
+        saveMemorySnapshot()
+        super.onPause()
+    }
+    override fun onDestroy() {
+        posterGrid.removeCallbacks(genreWarmRequest)
+        genreWarmJob?.cancel()
+        pageJob?.cancel(); countJob?.cancel(); genreRefreshJob?.cancel()
+        generation++
+        super.onDestroy()
+    }
 
     companion object {
         const val EXTRA_KIND = "kind"
@@ -540,6 +657,7 @@ class PosterCatalogActivity : AppCompatActivity() {
         const val KIND_SERIES = "series"
         private const val PAGE_SIZE = 64
         private const val PREFETCH_THRESHOLD = 20
+        private const val GENRE_ATTEMPT_BACKOFF_MS = 10 * 60_000L
         private const val ALL_CATEGORY_ID = "__all__"
     }
 }
