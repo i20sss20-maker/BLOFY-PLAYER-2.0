@@ -270,6 +270,9 @@ interface BlofyDao {
     suspend fun watchStatesForSeries(providerId: String, seriesId: String): List<WatchStateEntity>
 
     @Query("SELECT * FROM watch_state WHERE providerId = :providerId") suspend fun watchStates(providerId: String): List<WatchStateEntity>
+    /** Limit Room allocations on Android 9 devices with years of playback history. */
+    @Query("SELECT * FROM watch_state WHERE providerId = :providerId AND positionMs > 0 AND kind != 'live' ORDER BY updatedAt DESC LIMIT :limit")
+    suspend fun recentWatchStates(providerId: String, limit: Int = 240): List<WatchStateEntity>
     @Query("SELECT * FROM watch_state WHERE providerId = :providerId AND completed = 0 AND positionMs > 0 ORDER BY updatedAt DESC LIMIT :limit") fun continueWatching(providerId: String, limit: Int = 30): Flow<List<WatchStateEntity>>
 
     @Query("DELETE FROM categories WHERE providerId = :providerId AND kind = :kind") suspend fun clearCategories(providerId: String, kind: String)
