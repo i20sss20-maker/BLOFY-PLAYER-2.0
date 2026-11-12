@@ -59,6 +59,7 @@ const publicIssue=row=>{
  activatedAt:activated,expiresAt:expiry,
  canRelogin:status==='active'||status==='expiring'?row.kind==='app'&&row.code_bound===true:false,
  reloginCount:Number(row.admin_relogin_count||0),
+ lastReloginAt:row.last_relogin_at?new Date(row.last_relogin_at).getTime():null,
  reloginUntil:row.admin_relogin_until?new Date(row.admin_relogin_until).getTime():null,
  codeHint:String(row.code_hint||'').slice(0,25),
  customerName:String(row.customer_name||'').slice(0,80),
@@ -263,6 +264,9 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
      WHERE da.distributor_id=i.distributor_id AND da.issue_id=i.id
      AND da.action='renew') AS has_renewal,
    c.code_hint,
+   (SELECT MAX(da.created_at) FROM blofy_stream_distributor_actions da
+     WHERE da.issue_id=i.id AND da.distributor_id=i.distributor_id
+       AND da.action='relogin') AS last_relogin_at,
    c.redeemed_at AS code_activated_at,
    c.revoked_at AS code_revoked_at,
    (c.redeemed_device_hash IS NOT NULL) AS code_bound,
@@ -338,11 +342,17 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
   const page=number(offset,0,10000,'distributor_offset_invalid');
   const rows=(await pool.query(`SELECT id,issue_id,type,delta,balance_after,details,created_at
     FROM blofy_stream_distributor_credit_events WHERE distributor_id=$1
+    UNION ALL
+    SELECT id,issue_id,'relogin'::text AS type,0::integer AS delta,
+      NULL::integer AS balance_after,result AS details,created_at
+    FROM blofy_stream_distributor_actions
+    WHERE distributor_id=$1 AND action='relogin'
     ORDER BY created_at DESC,id DESC LIMIT 101 OFFSET $2`,
     [actor.id,page])).rows;
   return {ok:true,items:rows.slice(0,100).map(x=>({
     id:x.id,issueId:x.issue_id,type:x.type,delta:Number(x.delta),
-    balanceAfter:Number(x.balance_after),details:x.details||{},
+    balanceAfter:x.balance_after==null?null:Number(x.balance_after),
+    details:x.details||{},
     date:new Date(x.created_at).getTime()
   })),nextOffset:rows.length>100?page+100:null};
  }
@@ -371,6 +381,11 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
     JOIN blofy_stream_distributor_actions a
       ON a.issue_id=i.id AND a.distributor_id=i.distributor_id AND a.action='renew'
     WHERE i.distributor_id=$1 AND i.duration_days=1`,[actor.id])).rows[0]||{};
+  const topPlan=(await pool.query(`SELECT duration_days,COUNT(*)::int AS sold_count
+    FROM blofy_stream_distributor_issues
+    WHERE distributor_id=$1 AND status='done'
+    GROUP BY duration_days ORDER BY sold_count DESC,duration_days ASC LIMIT 1`,
+    [actor.id])).rows[0]||{};
   const issued24h=(await pool.query(`SELECT COUNT(*)::int AS count
     FROM blofy_stream_distributor_issues WHERE distributor_id=$1
       AND created_at>NOW()-INTERVAL '24 hours'
@@ -384,7 +399,8 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
     renewedCreditsMonth:Number(extended.credits||0),
     convertedTrials:Number(converted.converted||0),
     issued24h:Number(issued24h.count||0),
-    dailyLimit:Number(actor.daily_issue_limit||100)
+    dailyLimit:Number(actor.daily_issue_limit||100),
+    topPlanDays:topPlan.duration_days==null?null:Number(topPlan.duration_days)
   }};
  }
  async function exportIssues(token,{offset=0}={}){
