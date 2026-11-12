@@ -21,7 +21,12 @@ internal object AiCatalogMatchPolicy {
         if (normalizedTitle.length < 3 || local.isBlank()) return false
         if (normalizedTitle == local) return true
         if (local.startsWith("$normalizedTitle ") || local.endsWith(" $normalizedTitle")) return true
-        return ArabicSearchNormalizer.similarity(title, item.name) >= 0.80
+        // Tagged/dated provider titles can contain the exact film name in
+        // the middle, e.g. "AR 2024 عسل أسود مترجم". Require a sufficiently
+        // descriptive phrase to avoid matching generic short words.
+        if (normalizedTitle.length >= 6 &&
+            (" $local ").contains(" $normalizedTitle ")) return true
+        return ArabicSearchNormalizer.similarity(title, displayed) >= 0.80
     }
 
     fun filterVerified(
