@@ -435,10 +435,13 @@ class HomeActivity : AppCompatActivity() {
                     SmartHomeEngine.byGenre(smartCandidates, smartGenres, "comedy") else emptyList()
                 val dramaMovies = if (BuildConfig.CODE_ONLY_LOGIN)
                     SmartHomeEngine.byGenre(smartCandidates, smartGenres, "drama") else emptyList()
-                val rated = if (BuildConfig.CODE_ONLY_LOGIN) emptyList() else all.sortedByDescending { ratingValue(it.rating) }
-                    .filter { ratingValue(it.rating) > 0.0 }.take(24)
+                val rated = (if (BuildConfig.CODE_ONLY_LOGIN) smartCandidates else all)
+                    .asSequence().filter { ratingValue(it.rating) > 0.0 }
+                    .sortedByDescending { ratingValue(it.rating) }.take(24).toList()
                 val arabic = if (BuildConfig.CODE_ONLY_LOGIN) emptyList() else all.filter { hasArabic(it.name) || hasArabic(it.genre.orEmpty()) || it.genre.orEmpty().contains("arab", true) }.take(20)
-                val ultra = if (BuildConfig.CODE_ONLY_LOGIN) emptyList() else all.filter { qualityBadges(it).any { badge -> badge in setOf("4K", "HDR") } }.take(20)
+                val ultra = (if (BuildConfig.CODE_ONLY_LOGIN) smartCandidates else all)
+                    .asSequence().filter { qualityBadges(it).any { badge -> badge in setOf("4K", "HDR") } }
+                    .take(20).toList()
                 val heroes = if (BuildConfig.CODE_ONLY_LOGIN) latest.take(1)
                     else latest.filter { !it.backdrop.isNullOrBlank() }.take(6).ifEmpty { latest.take(6) }
                 HomeData(
@@ -653,6 +656,12 @@ class HomeActivity : AppCompatActivity() {
                 getString(R.string.stream_home_genre_hint), "comedy", data.providerId, data.genreComedy)
             if (data.genreDrama.isNotEmpty()) addShelf(feed, getString(R.string.stream_home_drama),
                 getString(R.string.stream_home_genre_hint), "drama", data.providerId, data.genreDrama)
+            if (data.recentlyWatched.isNotEmpty()) addShelf(feed, getString(R.string.stream_home_recent),
+                getString(R.string.stream_home_recent_hint), "recent", data.providerId, data.recentlyWatched)
+            if (data.topRated.isNotEmpty()) addShelf(feed, getString(R.string.home_top_rated),
+                getString(R.string.home_top_rated_subtitle), "top", data.providerId, data.topRated)
+            if (data.ultraHd.isNotEmpty()) addShelf(feed, "4K • UHD",
+                getString(R.string.home_4k_subtitle), "4k", data.providerId, data.ultraHd)
         } else {
         if (data.continueWatching.isNotEmpty()) {
             addShelf(feed, getString(R.string.home_continue_watching), getString(R.string.home_continue_subtitle), "continue", data.providerId, data.continueWatching, data.watchStates)
