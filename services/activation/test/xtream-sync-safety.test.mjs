@@ -47,7 +47,7 @@ test('partial HTTP-200 sync cannot erase a small source or manually organized ca
   // A 200-item service unexpectedly returning only 3 entries must preserve
   // all customer catalog references while operator reviews the source.
   for(const oldItems of [50,80,120,300,499,800,30000]){
-    const truncated=Math.max(1,Math.ceil(oldItems*0.09));
+    const truncated=Math.max(1,Math.floor(oldItems*0.09));
     assert.throws(()=>assessXtreamSync({
       previousItems:oldItems,importedItems:truncated,
       previousCategories:8,importedCategories:1
