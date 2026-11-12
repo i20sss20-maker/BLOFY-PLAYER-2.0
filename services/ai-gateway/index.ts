@@ -1,8 +1,9 @@
 /**
  * BLOFY AI Gateway v1: isolated shared backend for future BLOFY apps.
  * Authentication: first-party STREAM bearer verified with activation service.
- * Only the entered search phrase reaches Gemini; NEVER subscriber credentials,
- * server URLs, film playlists or watch-history data.
+ * Only the entered search phrase reaches the selected AI provider (Groq or
+ * Gemini); NEVER subscriber credentials, server URLs, film playlists or
+ * watch-history data. The backend owns keys; Android clients never receive them.
  */
 type AiResult = {
   intent: "actor" | "director" | "title" | "genre" | "mixed";
@@ -24,8 +25,20 @@ const memo = new Map<string, {exp: number, value: AiResult}>();
 let globalWindow = Date.now();
 let globalQueries = 0;
 const MAX_BODY_BYTES = 1200;
-const MODEL = (Bun.env.BLOFY_AI_MODEL || "gemini-2.5-flash").trim();
+const GEMINI_MODEL = (Bun.env.BLOFY_AI_MODEL || "gemini-2.5-flash").trim();
 const GEMINI_KEY = Bun.env.BLOFY_LIBRARY_GEMINI_API_KEY || "";
+// GROQ_API_KEY is set securely on the Railway function, never in the APK.
+// Auto mode uses Groq as soon as the key is provisioned and retains the
+// currently working Gemini backend until then; no outage during migration.
+const GROQ_KEY = Bun.env.GROQ_API_KEY || "";
+const GROQ_MODEL = (Bun.env.BLOFY_GROQ_MODEL || "openai/gpt-oss-20b").trim();
+const PREFERRED_PROVIDER = (Bun.env.BLOFY_AI_PROVIDER || "auto").trim().toLowerCase();
+type AiProvider = "groq" | "gemini";
+function activeProvider(): AiProvider {
+  if (PREFERRED_PROVIDER === "groq") return "groq";
+  if (PREFERRED_PROVIDER === "gemini") return "gemini";
+  return GROQ_KEY.trim() ? "groq" : "gemini";
+}
 const SESSION_URL = "https://blofyplayer.com/api/v1/stream/app/session";
 const empty = (text = ""): AiResult => ({
   intent: "title", person: "", genre: "", title: text,
@@ -70,8 +83,7 @@ async function verifiedSession(token: string): Promise<boolean> {
   return body?.ok === true && body?.active === true;
 }
 async function interpret(text: string, language: string): Promise<AiResult> {
-  if (!GEMINI_KEY || !/^[a-z0-9_.-]{5,70}$/i.test(MODEL))
-    throw Error("gateway_not_configured");
+  const provider = activeProvider();
   const prompt = [
     "You are BLOFY catalog search intent parser. Output JSON only.",
     "You DO NOT have access to the user's catalog, cannot claim an item is available.",
@@ -85,14 +97,49 @@ async function interpret(text: string, language: string): Promise<AiResult> {
     "JSON fields: intent one of actor/director/title/genre/mixed;",
     "person string, genre string, title string, year integer or null;",
     "suggestedTitles array of strings, confidence low/medium/high.",
-    `Language: ${language}. Search: ${text}`
+    `Language: ${language}.`
   ].join("\n");
+
+  if (provider === "groq") {
+    if (!GROQ_KEY.trim() || !/^[a-z0-9_./-]{5,90}$/i.test(GROQ_MODEL))
+      throw Error("gateway_not_configured");
+    // Groq OpenAI-compatible Chat Completions API. JSON object mode is
+    // supported by GPT-OSS 20B and remains compatible with other Groq models.
+    // Parse and enforce output types regardless of LLM claims.
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST", redirect: "manual", signal: timeout(8500),
+      headers: {
+        "content-type": "application/json",
+        "authorization": `Bearer ${GROQ_KEY}`
+      },
+      body: JSON.stringify({
+        model: GROQ_MODEL,
+        messages: [
+          {role: "system", content: prompt},
+          {role: "user", content: text}
+        ],
+        temperature: 0.1,
+        max_completion_tokens: 1024,
+        response_format: {type: "json_object"},
+        stream: false
+      })
+    });
+    if (!response.ok) throw Error(`model_http_${response.status}`);
+    const body = await response.json() as any;
+    const content = body?.choices?.[0]?.message?.content;
+    if (typeof content !== "string" || !content.trim() || content.length > 16000)
+      throw Error("empty_model_content");
+    return clean(JSON.parse(content), text);
+  }
+
+  if (!GEMINI_KEY || !/^[a-z0-9_.-]{5,70}$/i.test(GEMINI_MODEL))
+    throw Error("gateway_not_configured");
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(MODEL)}:generateContent`, {
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_MODEL)}:generateContent`, {
     method:"POST", redirect:"manual",signal:timeout(9000),
     headers:{"content-type":"application/json","x-goog-api-key":GEMINI_KEY},
     body:JSON.stringify({
-      contents:[{role:"user",parts:[{text:prompt}]}],
+      contents:[{role:"user",parts:[{text:`${prompt}\nSearch: ${text}`}]}],
       generationConfig:{
         temperature:0.1,maxOutputTokens:1150,responseMimeType:"application/json",
         responseJsonSchema:{
@@ -117,7 +164,9 @@ Bun.serve({
   port:Number(Bun.env.PORT)||3000,
   async fetch(req:Request): Promise<Response> {
     const url = new URL(req.url);
-    if (req.method === "GET" && url.pathname === "/health") return json({ok:true,service:"blofy-ai",version:1});
+    if (req.method === "GET" && url.pathname === "/health") return json({
+      ok:true, service:"blofy-ai", version:2, provider:activeProvider()
+    });
     if (url.pathname !== "/v1/search/interpret") return json({ok:false,error:"not_found"},404);
     if (req.method !== "POST") return json({ok:false,error:"method_not_allowed"},405);
     const ct = req.headers.get("content-type") || "";
@@ -147,7 +196,7 @@ Bun.serve({
     try {
       const result = await interpret(text,locale);
       memo.set(key,{exp:now+15*60*1000,value:result});
-      return json({ok:true,source:"gemini",...result});
+      return json({ok:true,source:activeProvider(),...result});
     } catch(e) {
       // No provider request/response body, token, search or key in logs.
       const category = e instanceof Error && e.message==="gateway_not_configured" ? "not_configured" : "model_unavailable";
