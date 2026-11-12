@@ -29,6 +29,17 @@ class AiCatalogMatchPolicyTest {
         assertTrue(AiCatalogMatchPolicy.worthwhile("movies with Tom Cruise", 2, false))
     }
 
+    @Test fun egyptianActorFilmsMatchArabicTitlesWithProviderPrefixes() {
+        val original = film("AR 2024 - عسل أسود مترجم")
+        assertTrue(AiCatalogMatchPolicy.isTitleMatch("عسل أسود", original))
+        assertTrue(AiCatalogMatchPolicy.isTitleMatch("زكي شان", film("AR - زكي شان (2005)")))
+        assertFalse(AiCatalogMatchPolicy.isTitleMatch("عسل أسود", film("شيء آخر")))
+    }
+
+    @Test fun latinProperNounsDoNotMatchRandomArabicMovies() {
+        assertFalse(AiCatalogMatchPolicy.isTitleMatch("Sigma", film("الضيف 2024")))
+    }
+
     @Test fun neverRecommendsLockedOrLiveStreams() {
         val available = listOf(film("Top Gun", locked = true), film("Top Gun", "live"))
         assertTrue(AiCatalogMatchPolicy.filterVerified(listOf("Top Gun"), available).isEmpty())
