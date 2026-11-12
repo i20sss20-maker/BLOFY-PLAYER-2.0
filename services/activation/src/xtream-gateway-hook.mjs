@@ -2118,6 +2118,15 @@ http.createServer = function withBlofyXtreamGateway(listener) {
           code:payload.code,requestCode:payload.requestCode
         }),{'cache-control':'no-store, private','referrer-policy':'no-referrer'});
       }
+      // Exact-code operator lookup is a read-only POST: the raw voucher never
+      // enters browser history, a server URL, analytics or gateway logs.
+      if(req.method==='POST'&&url.pathname==='/api/v1/admin/xtream-gateway/codes/lookup'){
+        const payload=await readJson(req);
+        const result=await streamCodes.lookup(payload.code);
+        return json(res,result.ok?200:404,result,{
+          'cache-control':'no-store, private','referrer-policy':'no-referrer'
+        });
+      }
       if(req.method==='GET'&&url.pathname==='/api/v1/admin/xtream-gateway/codes/sales-summary')
         return json(res,200,await streamCommercial.salesSummary());
       const commercialAction=url.pathname.match(/^\/api\/v1\/admin\/xtream-gateway\/codes\/([0-9a-f-]{36})\/(sell|extend|transfer)$/i);
