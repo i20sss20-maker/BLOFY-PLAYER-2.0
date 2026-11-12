@@ -383,13 +383,15 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
     dailyLimit:Number(actor.daily_issue_limit||100)
   }};
  }
- async function exportIssues(token){
+ async function exportIssues(token,{offset=0}={}){
   const actor=await session(token);
+  const page=number(offset,0,1900,'distributor_offset_invalid');
   const records=(await pool.query(issueProjection+`
-    WHERE i.distributor_id=$1 ORDER BY i.created_at DESC LIMIT 2001`,
-    [actor.id])).rows;
-  if(records.length>2000)throw fail('distributor_export_too_large',409);
-  return {ok:true,items:records.map(publicIssue)};
+    WHERE i.distributor_id=$1 ORDER BY i.created_at DESC LIMIT 101 OFFSET $2`,
+    [actor.id,page])).rows;
+  return {ok:true,items:records.slice(0,100).map(publicIssue),
+    nextOffset:records.length>100&&page+100<2000?page+100:null,
+    capped:records.length>100&&page+100>=2000};
  }
  async function clients(token,{q=''}={}){
   const actor=await session(token),term=clean(q,80);
