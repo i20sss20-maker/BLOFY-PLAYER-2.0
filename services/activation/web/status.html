@@ -53,7 +53,7 @@
       <section class="hero">
         <span class="eyebrow">BLOFY · SERVICE STATUS</span>
         <h1>حالة الخدمات</h1>
-        <p>فحص مباشر للبوابة وقاعدة البيانات والتشفير، مع عرض الإصدار الحالي للتطبيق.</p>
+        <p>فحص مباشر لبوابة BLOFY وقاعدة البيانات والتشفير ومركز التحميل وواجهة STREAM. فحص HTTP لا يثبت تشغيل القنوات أو صوت الأجهزة.</p>
         <div id="overall" class="overall"><span class="dot"></span><strong id="overallText">جارٍ الفحص…</strong></div>
       </section>
 
@@ -61,6 +61,8 @@
         <article class="card"><span>بوابة BLOFY / API</span><strong id="apiState">جارٍ الفحص…</strong><div class="muted">الاتصال بالخدمة الرئيسية ودخول البوابة.</div></article>
         <article class="card"><span>قاعدة البيانات</span><strong id="dbState">جارٍ الفحص…</strong><div class="muted">PostgreSQL الإنتاجية الخاصة بالتفعيل وإدارة الأجهزة.</div></article>
         <article class="card"><span>تشفير القوائم</span><strong id="cryptoState">جارٍ الفحص…</strong><div class="muted">حالة طبقة تشفير بيانات القوائم المحفوظة.</div></article>
+        <article class="card"><span>مركز تحميل التطبيقات</span><strong id="downloadsState">جارٍ الفحص…</strong><div class="muted">التأكد من استجابة خدمة التحميل فقط، وليس نجاح تثبيت APK على كل جهاز.</div></article>
+        <article class="card"><span>واجهة BLOFY STREAM</span><strong id="streamState">جارٍ الفحص…</strong><div class="muted">اتصال الخدمة عبر HTTP، وليس فحص تشغيل القنوات أو حدود المصدر.</div></article>
         <article class="card"><span>الإصدار الحالي</span><strong id="releaseState" dir="ltr">—</strong><div class="muted" id="releaseMeta">يتم جلب الإصدار من الخدمة.</div></article>
       </section>
 
@@ -106,30 +108,49 @@
       function check(){
         resetOverall();
         setBusy(true);
-        return fetch('/health',{cache:'no-store',headers:{accept:'application/json'}})
-          .then(function(r){if(!r.ok) throw new Error('health_'+r.status);return r.json();})
-          .then(function(p){
+        return Promise.all([
+          fetch('/health',{cache:'no-store',headers:{accept:'application/json'}})
+            .then(function(r){if(!r.ok) throw new Error('health_'+r.status);return r.json();}),
+          fetch('/api/v1/public/system-health',{cache:'no-store',headers:{accept:'application/json'}})
+            .then(function(r){if(!r.ok) throw new Error('systems_'+r.status);return r.json();})
+            .catch(function(){return null;})
+        ]).then(function(results){
+            var p=results[0],external=results[1];
             var healthy=p && p.ok===true && p.database==='ready' && p.playlistEncryption==='ready';
             set('apiState',p.ok===true?'متصل':'غير متاح',p.ok===true);
             set('dbState',p.database==='ready'?'جاهزة':'غير متاحة',p.database==='ready');
             set('cryptoState',p.playlistEncryption==='ready'?'جاهز':'غير متاح',p.playlistEncryption==='ready');
+            var services=external&&external.services||{};
+            function showRemote(id,record){
+              var status=record&&record.status||'unknown';
+              var label=status==='healthy'?'يستجيب':status==='degraded'?'استجابة غير سليمة':'تعذر التحقق';
+              set(id,label,status==='healthy'?true:status==='degraded'?false:null);
+              return status==='healthy';
+            }
+            var downloadsOk=showRemote('downloadsState',services.downloads);
+            var streamOk=showRemote('streamState',services.stream);
             var app=(p.release&&p.release.app)||p.release||{};
             var version=app.versionName||'—';
             var code=app.versionCode;
             document.getElementById('releaseState').textContent=version;
             document.getElementById('releaseMeta').textContent=code?'Version Code '+code:'آخر إصدار معلن من BLOFY';
-            overall.classList.add(healthy?'ok':'bad');
-            overallText.textContent=healthy?'جميع الخدمات الأساسية تعمل بشكل طبيعي':'يوجد خلل في إحدى الخدمات الأساسية';
+            var allHealthy=healthy&&downloadsOk&&streamOk;
+            overall.classList.add(allHealthy?'ok':'bad');
+            overallText.textContent=allHealthy
+              ?'الخدمات الرئيسية تستجيب بشكل طبيعي (فحص HTTP)'
+              :healthy?'البوابة تعمل، لكن بعض الخدمات الأخرى غير مؤكدة':'يوجد خلل في بوابة BLOFY أو أحد أنظمتها';
             var ts=p.time?new Date(p.time):new Date();
-            document.getElementById('checkedAt').textContent='آخر فحص: '+ts.toLocaleString('ar-SA');
+            document.getElementById('checkedAt').textContent='آخر فحص: '+ts.toLocaleString('ar-SA-u-nu-latn');
           })
           .catch(function(){
             set('apiState','تعذر الاتصال',false);
             set('dbState','غير معروف',false);
             set('cryptoState','غير معروف',false);
+            set('downloadsState','تعذر التحقق',null);
+            set('streamState','تعذر التحقق',null);
             overall.classList.add('bad');
             overallText.textContent='تعذر الوصول إلى خدمة الحالة';
-            document.getElementById('checkedAt').textContent='آخر محاولة: '+new Date().toLocaleString('ar-SA');
+            document.getElementById('checkedAt').textContent='آخر محاولة: '+new Date().toLocaleString('ar-SA-u-nu-latn');
           })
           .finally(function(){
             setBusy(false);
