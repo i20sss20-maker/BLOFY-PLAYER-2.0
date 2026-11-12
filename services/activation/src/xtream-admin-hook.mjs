@@ -78,6 +78,7 @@ import {streamBridgeAuthorized,streamSafeSource,streamSafeCatalog,streamSafeAcco
 import {configuredXtreamPublicOrigin} from './xtream-public-origin.mjs';
 import {ensureStreamCodeTable} from './xtream-duration-codes.mjs';
 import {ensureStreamCommercialSchema} from './xtream-code-commercial.mjs';
+import {createStreamDistributors} from './stream-distributors.mjs';
 
 const DATABASE_URL = String(process.env.DATABASE_URL || '').trim();
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
@@ -3066,12 +3067,79 @@ async function callLocalGateway(method,path,body){
   if(!response.ok)return {status:response.status,data:{ok:false,code:String(data?.error||'gateway_failed').slice(0,64)}};
   return {status:response.status,data};
 }
+
+// Distributor accounts have *no* database or admin token access from STREAM.
+// Every operation below is reached only through the authenticated fixed bridge.
+const streamDistributors=createStreamDistributors({pool,
+  issueCode:body=>callLocalGateway('POST','/api/v1/admin/xtream-gateway/codes',body),
+  issueXtream:async body=>{
+    const result=await callLocalGateway('POST','/api/v1/admin/xtream-gateway/accounts',body);
+    if(result.status===201&&result.data?.credentials){
+      const c=result.data.credentials;
+      c.serverUrl=XTREAM_CUSTOMER_HOST;
+      c.m3uUrl=c.serverUrl+'/get.php?'+new URLSearchParams({
+        username:c.username,password:c.password,type:'m3u_plus',output:'ts'
+      });
+    }
+    return {status:result.status,body:result.data};
+  },
+  revealCode:async id=>{
+    const result=await callLocalGateway('GET','/api/v1/admin/xtream-gateway/codes/'+id+'/reveal');
+    return {status:result.status,body:result.data};
+  },
+  revealXtream:async id=>{
+    const result=await callLocalGateway('GET','/api/v1/admin/xtream-gateway/accounts/'+id+'/credentials');
+    if(result.status===200&&result.data?.credentials){
+      const c=result.data.credentials;
+      c.serverUrl=XTREAM_CUSTOMER_HOST;
+      c.m3uUrl=c.serverUrl+'/get.php?'+new URLSearchParams({
+        username:c.username,password:c.password,type:'m3u_plus',output:'ts'
+      });
+    }
+    return {status:result.status,body:result.data};
+  }
+});
+
 async function unifiedStreamBridge(req,res,url){
   if(!streamBridgeAuthorized(req.headers.authorization,STREAM_BRIDGE_KEY))
     return json(res,401,{ok:false,code:'stream_bridge_unauthorized'});
   const limit=bridgeLimiter.consume(requestClientKey(req));
   if(!limit.allowed)return json(res,429,{ok:false,code:'stream_bridge_rate_limited'});
   const p=url.pathname;
+
+  // Reseller management is admin-only. Reseller browser actions use a separate
+  // scoped session created at /distributor; never hand this bridge key to them.
+  if(req.method==='GET'&&p==='/internal/blofy-stream/distributors')
+    return json(res,200,await streamDistributors.listAdmin());
+  if(req.method==='POST'&&p==='/internal/blofy-stream/distributors')
+    return json(res,201,await streamDistributors.createAdmin(await readJson(req)),
+      {'cache-control':'no-store'});
+  const distributorAdminAction=p.match(
+    /^\/internal\/blofy-stream\/distributors\/([0-9a-f-]{36})\/(credits|status|reset)$/i);
+  if(req.method==='POST'&&distributorAdminAction){
+    const id=distributorAdminAction[1],cmd=distributorAdminAction[2];
+    const payload=await readJson(req);
+    const settings=cmd==='credits'?{credits:payload.credits}:
+      cmd==='status'?{enabled:payload.enabled===true}:{resetPassword:true};
+    return json(res,200,await streamDistributors.setAdmin(id,settings),
+      {'cache-control':'no-store'});
+  }
+  if(p.startsWith('/internal/blofy-stream/distributor/')){
+    if(req.method!=='POST')return json(res,405,{ok:false,code:'method_not_allowed'});
+    const command=p.slice('/internal/blofy-stream/distributor/'.length);
+    const payload=await readJson(req);
+    if(command==='login')return json(res,200,
+      await streamDistributors.login(payload),{'cache-control':'no-store'});
+    const token=String(payload.sessionToken||'');
+    if(command==='me')return json(res,200,await streamDistributors.me(token));
+    if(command==='logout')return json(res,200,await streamDistributors.logout(token));
+    if(command==='list')return json(res,200,await streamDistributors.issued(token));
+    if(command==='issue')return json(res,200,await streamDistributors.issue(token,payload),
+      {'cache-control':'no-store'});
+    if(command==='reveal')return json(res,200,
+      await streamDistributors.reveal(token,payload.issueId),{'cache-control':'no-store'});
+    return json(res,404,{ok:false,code:'route_not_found'});
+  }
   if(req.method==='GET'&&p==='/internal/blofy-stream/overview'){
     const items=(await serverRows()).map(adminServer).map(streamSafeSource);
     const totals=items.reduce((v,item)=>{
