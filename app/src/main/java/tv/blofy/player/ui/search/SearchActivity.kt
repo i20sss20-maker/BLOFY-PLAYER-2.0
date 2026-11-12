@@ -426,10 +426,11 @@ class SearchActivity : AppCompatActivity() {
     ): List<StreamEntity> {
         val kinds = listOf(KIND_MOVIE, KIND_SERIES).filter { selectedKind == null || it == selectedKind }
         val collected = ArrayList<StreamEntity>(30)
-        // At most eight likely filmography titles. Try the exact phrase first,
+        // At most sixteen Arabic/Latin filmography variants. Indexed FTS only.
+        // Try the exact phrase first,
         // then an indexed two-word prefix when the provider has suffixes,
         // translated metadata or multiple edition labels. Never scan all rows.
-        for (title in intent.suggestedTitles.take(8)) {
+        for (title in intent.suggestedTitles.take(16)) {
             val phrase = ArabicSearchNormalizer.normalize(title).take(100)
             val exact = ArabicSearchNormalizer.ftsQuery(phrase)
             if (exact.isBlank()) continue
@@ -458,6 +459,17 @@ class SearchActivity : AppCompatActivity() {
             for (kind in kinds) {
                 val matches = repository.searchKind(providerId, kind, intent.genre, 40)
                 collected.addAll(matches.filter { !it.locked })
+            }
+        }
+        if (intent.year != null && collected.isEmpty() && intent.genre.isBlank() &&
+            intent.suggestedTitles.isEmpty()) {
+            // "أفلام ٢٠٢٦" on Arabic TV keyboards should find actual 2026
+            // catalog rows, even when there is no title or genre filter.
+            for (kind in kinds) {
+                collected.addAll(
+                    repository.searchKind(providerId, kind, intent.year.toString(), 60)
+                        .filter { it.year?.toIntOrNull() == intent.year && !it.locked }
+                )
             }
         }
         if (intent.title.isNotBlank() && intent.person.isBlank() && collected.isEmpty()) {
