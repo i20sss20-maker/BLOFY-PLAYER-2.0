@@ -187,6 +187,10 @@ interface BlofyDao {
     @Query("SELECT * FROM streams INDEXED BY index_streams_providerId_kind_categoryId WHERE providerId = :providerId AND kind = :kind AND categoryId = :categoryId AND rowid > :afterRowId ORDER BY rowid LIMIT :limit")
     suspend fun catalogPageAfterInCategory(providerId: String, kind: String, categoryId: String, afterRowId: Long, limit: Int): List<StreamEntity>
 
+    /** Optional user-selected sort, bounded to a single 64-poster page. */
+    @RawQuery
+    suspend fun catalogSortedPage(query: SupportSQLiteQuery): List<StreamEntity>
+
     /** Bounded genre filter with parameterized category fallback for movie shelves. */
     @RawQuery
     suspend fun catalogPageForMovieGenre(query: SupportSQLiteQuery): List<StreamEntity>
