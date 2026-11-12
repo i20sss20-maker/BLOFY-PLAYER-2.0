@@ -134,7 +134,7 @@ async function interpret(text: string, language: string): Promise<AiResult> {
         temperature: 0.1,
         reasoning_effort: "low",
         max_completion_tokens: 1350,
-        response_format: /^openai\\/gpt-oss-(20b|120b)$/.test(GROQ_MODEL)
+        response_format: (GROQ_MODEL === "openai/gpt-oss-20b" || GROQ_MODEL === "openai/gpt-oss-120b")
           ? {
               type:"json_schema",
               json_schema:{
@@ -220,7 +220,7 @@ async function translateDetails(title: string, overview: string): Promise<Transl
         model:GROQ_MODEL,
         messages:[{role:"system",content:system},{role:"user",content:source}],
         temperature:0.1, reasoning_effort:"low", max_completion_tokens:1450,
-        response_format: /^openai\\/gpt-oss-(20b|120b)$/.test(GROQ_MODEL)
+        response_format: (GROQ_MODEL === "openai/gpt-oss-20b" || GROQ_MODEL === "openai/gpt-oss-120b")
           ? {
               type:"json_schema",
               json_schema:{
