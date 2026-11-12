@@ -7,6 +7,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import retrofit2.HttpException
 import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
@@ -22,7 +23,7 @@ import androidx.media3.exoplayer.mediacodec.MediaCodecDecoderException
 /** Fixed-origin self-check and safe user-facing error categories; no tokens or stream URLs. */
 @OptIn(markerClass = [UnstableApi::class])
 object StreamConnectionDiagnostics {
-    enum class Cause { CERTIFICATE, DNS, TIMEOUT, OFFLINE_OR_REFUSED, UNAUTHORIZED, SERVER_ERROR, DECODER, OTHER }
+    enum class Cause { CERTIFICATE, DNS, TIMEOUT, OFFLINE_OR_REFUSED, UNAUTHORIZED, CONTENT_MISSING, RATE_LIMITED, SERVER_ERROR, DECODER, OTHER }
 
     data class Probe(val reachable: Boolean, val cause: Cause?, val status: Int?)
 
@@ -36,22 +37,23 @@ object StreamConnectionDiagnostics {
 
     fun classify(failure: Throwable): Cause {
         val causes = generateSequence(failure) { it.cause }.take(8).toList()
+        val httpStatus = causes.firstNotNullOfOrNull { cause -> when (cause) {
+            is HttpDataSource.InvalidResponseCodeException -> cause.responseCode
+            is HttpException -> cause.code()
+            else -> null
+        } }
         return when {
             causes.any { it is CertPathValidatorException || it is SSLException } -> Cause.CERTIFICATE
             causes.any { it is UnknownHostException } -> Cause.DNS
-            causes.any { it is SocketTimeoutException } -> Cause.TIMEOUT
+            causes.any { it is SocketTimeoutException } || httpStatus == 408 -> Cause.TIMEOUT
             causes.any {
                 it is MediaCodecDecoderException ||
                     (it is PlaybackException && it.errorCode in 4000..4999)
             } -> Cause.DECODER
-            causes.any {
-                it is HttpDataSource.InvalidResponseCodeException &&
-                    (it.responseCode == 401 || it.responseCode == 403)
-            } -> Cause.UNAUTHORIZED
-            causes.any {
-                it is HttpDataSource.InvalidResponseCodeException &&
-                    it.responseCode in 500..599
-            } -> Cause.SERVER_ERROR
+            httpStatus == 401 || httpStatus == 403 -> Cause.UNAUTHORIZED
+            httpStatus == 404 || httpStatus == 410 -> Cause.CONTENT_MISSING
+            httpStatus == 429 -> Cause.RATE_LIMITED
+            httpStatus != null && httpStatus in 500..599 -> Cause.SERVER_ERROR
             causes.any { it is ConnectException } -> Cause.OFFLINE_OR_REFUSED
             else -> Cause.OTHER
         }
@@ -64,6 +66,8 @@ object StreamConnectionDiagnostics {
         Cause.TIMEOUT -> "انتهت مهلة الاتصال بالسيرفر. تحقق من سرعة الشبكة وأعد المحاولة"
         Cause.OFFLINE_OR_REFUSED -> "الاتصال غير متاح. تحقق من الإنترنت أو إعدادات الراوتر"
         Cause.UNAUTHORIZED -> "الجلسة غير مخوّلة. افتح حالة الاشتراك أو تواصل مع الدعم"
+        Cause.CONTENT_MISSING -> "الملف أو الرابط المطلوب غير موجود لدى المصدر (404/410). تحقق من العنصر قبل إعادة المحاولة"
+        Cause.RATE_LIMITED -> "المصدر يقيّد عدد الطلبات (429). انتظر قبل إعادة المحاولة ولا تكرر الفحص بسرعة"
         Cause.SERVER_ERROR -> "السيرفر لم يستجب بشكل صحيح. جرّب لاحقًا"
         Cause.DECODER -> "صيغة الفيديو غير مدعومة على هذا الجهاز؛ جرّب جودة أقل أو قناة أخرى"
         Cause.OTHER -> "تعذر إكمال الاتصال. جرّب تحديث التطبيق أو افحص الشبكة"
@@ -76,6 +80,8 @@ object StreamConnectionDiagnostics {
         Cause.TIMEOUT -> R.string.stream_ui_timeout_error
         Cause.OFFLINE_OR_REFUSED -> R.string.stream_ui_network_error
         Cause.UNAUTHORIZED -> R.string.stream_ui_unauthorized_error
+        Cause.CONTENT_MISSING -> R.string.stream_ui_content_missing_error
+        Cause.RATE_LIMITED -> R.string.stream_ui_rate_limited_error
         Cause.SERVER_ERROR -> R.string.stream_ui_server_error
         Cause.DECODER -> R.string.stream_ui_decoder_error
         Cause.OTHER -> R.string.stream_ui_generic_error
