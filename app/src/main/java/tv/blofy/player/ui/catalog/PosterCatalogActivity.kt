@@ -57,6 +57,8 @@ class PosterCatalogActivity : AppCompatActivity() {
     // A bounded session-local backoff prevents repeated detail probes for titles
     // that a provider has not classified yet. No credentials enter these keys.
     private val genreWarmAttempts = LinkedHashMap<String, Long>()
+    private var sessionGenreRequestCount = 0
+    private var lastGenreBatchAtMs = 0L
     private val genreWarmRequest = Runnable { warmVisibleGenres() }
     private var pageJob: Job? = null
     private var countJob: Job? = null
@@ -491,11 +493,14 @@ class PosterCatalogActivity : AppCompatActivity() {
         if (kind != KIND_MOVIE && kind != KIND_SERIES) return
         if (!::posterGrid.isInitialized || providerId.isBlank()) return
         posterGrid.removeCallbacks(genreWarmRequest)
-        posterGrid.postDelayed(genreWarmRequest, 250L)
+        // Avoid competing with fast TV scrolling and the first poster paint.
+        posterGrid.postDelayed(genreWarmRequest, 800L)
     }
 
     private fun warmVisibleGenres() {
         if ((kind != KIND_MOVIE && kind != KIND_SERIES) || loadedItems.isEmpty() || genreWarmJob?.isActive == true ||
+            sessionGenreRequestCount >= MAX_GENRE_LOOKUPS_PER_SCREEN ||
+            posterGrid.scrollState != RecyclerView.SCROLL_STATE_IDLE ||
             !::posterGrid.isInitialized || isFinishing || isDestroyed) return
         val manager = posterGrid.layoutManager as? GridLayoutManager ?: return
         val first = manager.findFirstVisibleItemPosition().takeIf { it >= 0 } ?: return
@@ -523,14 +528,21 @@ class PosterCatalogActivity : AppCompatActivity() {
                 if (generation != currentGeneration || providerId != owner ||
                     selectedCategoryId != category) return@launch
                 snapshot.forEach { (key, genres) -> posterAdapter.rememberMovieGenre(key, genres) }
-                val candidates = MovieGenrePrefetchPolicy.candidates(visible, names, snapshot, recent)
+                val now = SystemClock.elapsedRealtime()
+                if (lastGenreBatchAtMs != 0L && now - lastGenreBatchAtMs < GENRE_BATCH_COOLDOWN_MS) return@launch
+                val remaining = (MAX_GENRE_LOOKUPS_PER_SCREEN - sessionGenreRequestCount).coerceAtLeast(0)
+                val candidates = MovieGenrePrefetchPolicy.candidates(
+                    visible, names, snapshot, recent, limit = minOf(3, remaining)
+                )
                 if (candidates.isEmpty()) return@launch
                 val provider = withContext(Dispatchers.IO) {
                     BlofyDatabase.get(applicationContext).dao().provider(owner)
                 } ?: return@launch
                 if (!provider.providerType.equals("xtream", true)) return@launch
                 fetchedBatch = true
-                val slots = Semaphore(2)
+                sessionGenreRequestCount += candidates.size
+                lastGenreBatchAtMs = SystemClock.elapsedRealtime()
+                val slots = Semaphore(1)
                 coroutineScope {
                     candidates.map { movie ->
                         launch(Dispatchers.IO) {
@@ -561,9 +573,8 @@ class PosterCatalogActivity : AppCompatActivity() {
                 if (fetchedBatch && generation == currentGeneration && providerId == owner &&
                     selectedCategoryId == category && !isFinishing && !isDestroyed &&
                     lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
-                    // If the user scrolled while this small batch was loading,
-                    // refresh the viewport after it settles.
-                    posterGrid.post { requestVisibleGenreWarmup() }
+                    // No fetch feedback loop: a later settled viewport or resume
+                    // can request another small batch after the cooldown.
                 }
             }
         }
@@ -686,13 +697,16 @@ class PosterCatalogActivity : AppCompatActivity() {
         genreRefreshJob?.cancel()
         val expectedGeneration = generation
         val owner = providerId
-        val keys = loadedItems.map { it.key }
+        val manager = posterGrid.layoutManager as? GridLayoutManager
+        val first = manager?.findFirstVisibleItemPosition()?.coerceAtLeast(0) ?: 0
+        val last = manager?.findLastVisibleItemPosition()?.coerceAtLeast(first) ?: minOf(first + 12, loadedItems.lastIndex)
+        val keys = loadedItems.drop(first).take((last - first + gridColumns + 1).coerceAtMost(32)).map { it.key }
         genreRefreshJob = lifecycleScope.launch {
             val snapshot = withContext(Dispatchers.IO) {
                 ProviderMetadataCache.readGenresForPage(applicationContext, keys)
             }
             if (generation != expectedGeneration || providerId != owner) return@launch
-            posterAdapter.rememberMovieGenres(snapshot, reset = true, notifyExisting = true)
+            posterAdapter.rememberMovieGenres(snapshot, reset = false, notifyExisting = true)
         }
     }
     override fun onPause() {
@@ -716,6 +730,8 @@ class PosterCatalogActivity : AppCompatActivity() {
         private const val PAGE_SIZE = 64
         private const val PREFETCH_THRESHOLD = 20
         private const val GENRE_ATTEMPT_BACKOFF_MS = 10 * 60_000L
+        private const val GENRE_BATCH_COOLDOWN_MS = 2_500L
+        private const val MAX_GENRE_LOOKUPS_PER_SCREEN = 24
         private const val ALL_CATEGORY_ID = "__all__"
     }
 }
