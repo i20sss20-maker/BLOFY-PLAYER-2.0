@@ -26,6 +26,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
@@ -38,6 +39,7 @@ import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.core.provider.LiveFormat
 import tv.blofy.player.core.provider.ProviderProfile
 import tv.blofy.player.data.ContentRepository
+import tv.blofy.player.core.text.ArabicSearchNormalizer
 import tv.blofy.player.data.metadata.ProviderMetadataCache
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.StreamEntity
@@ -296,9 +298,10 @@ class SearchActivity : AppCompatActivity() {
 
         val (sections, castCount) = withContext(Dispatchers.IO) {
             val wantedKinds = selectedKind?.let(::listOf) ?: SEARCH_ORDER
-            // Only local cached metadata; actors absent from Xtream's cast fields
-            // cannot be invented. The Android device never calls an AI vendor.
-            val castMatches = if (selectedKind != KIND_LIVE && CastSearchPolicy.searchable(q)) {
+            // Verified local cast hits first. Missing credits can later be
+            // supplemented by an optional first-party AI title suggestion.
+            val scanCredits = moveFocus || (q.length >= 6 && q.contains(' '))
+            val castMatches = if (selectedKind != KIND_LIVE && scanCredits && CastSearchPolicy.searchable(q)) {
                 val candidateKeys = ProviderMetadataCache.searchPeopleCandidates(
                     applicationContext, provider.id, CastSearchPolicy.candidateToken(q), 96
                 ).asSequence()
@@ -325,17 +328,92 @@ class SearchActivity : AppCompatActivity() {
         }
 
         if (input.text?.toString()?.trim() != q || activeKind != selectedKind) return
+        renderSections(sections, selectedKind, provider.id, provider.liveFormat, castCount, moveFocus)
+        if (!BuildConfig.CODE_ONLY_LOGIN || selectedKind == KIND_LIVE ||
+            !AiCatalogMatchPolicy.worthwhile(q, sections.sumOf { it.second.size }, moveFocus)) return
+        // Local FTS results appear instantly. A remote AI round trip can only
+        // enhance them once typing has settled; it never blocks this screen.
+        if (!moveFocus) delay(750)
+        if (input.text?.toString()?.trim() != q || activeKind != selectedKind) return
+        val locale = if (resources.configuration.locales[0].language == "ar") "ar" else "en"
+        val ai = StreamAiSearchClient.interpret(applicationContext, q, locale) ?: return
+        val expanded = withContext(Dispatchers.IO) {
+            resolveAiSuggestions(ai, repository, dao, provider.id, selectedKind)
+        }
+        if (input.text?.toString()?.trim() != q || activeKind != selectedKind) return
+        if (expanded.isEmpty()) return
+        val merged = sections.map { (kind, local) ->
+            kind to (local.asSequence() + expanded.asSequence().filter { it.kind == kind })
+                .distinctBy { it.key }.take(SECTION_LIMIT).toList()
+        }
+        renderSections(merged, selectedKind, provider.id, provider.liveFormat,
+            castCount = castCount, moveFocus = false, aiCount = expanded.size)
+    }
+
+    /** Bound LLM suggestions to ACTUAL Xtream catalog items. No generated titles
+     * or actor attributions are presented unless a catalog entry exists. */
+    private suspend fun resolveAiSuggestions(
+        intent: StreamAiSearchClient.Intent,
+        repository: ContentRepository,
+        dao: tv.blofy.player.data.local.BlofyDao,
+        providerId: String,
+        selectedKind: String?
+    ): List<StreamEntity> {
+        val kinds = listOf(KIND_MOVIE, KIND_SERIES).filter { selectedKind == null || it == selectedKind }
+        val collected = ArrayList<StreamEntity>(30)
+        // At most 8 original titles, 2 content kinds and 16 FTS queries.
+        for (title in intent.suggestedTitles.take(8)) {
+            val query = ArabicSearchNormalizer.ftsQuery(title)
+            if (query.isBlank()) continue
+            for (kind in kinds) {
+                val matches = runCatching { dao.searchStreamsFtsByKind(providerId, kind, query, 18) }
+                    .getOrDefault(emptyList())
+                collected.addAll(AiCatalogMatchPolicy.filterVerified(listOf(title), matches, 6))
+            }
+        }
+        // Genre/year requests work even when Arabic natural phrasing did not
+        // match Xtream's English genre fields. Still only source catalog rows.
+        if (intent.genre.isNotBlank() && collected.size < 12) {
+            for (kind in kinds) {
+                val matches = dao.searchCatalog(providerId, kind, intent.genre, 40)
+                collected.addAll(matches.filter { !it.locked })
+            }
+        }
+        if (intent.title.isNotBlank() && intent.person.isBlank() && collected.isEmpty()) {
+            for (kind in kinds) {
+                collected.addAll(repository.searchKind(providerId, kind, intent.title, 24).filter { !it.locked })
+            }
+        }
+        return collected.asSequence()
+            .filter { it.providerId == providerId && !it.locked }
+            .filter { intent.year == null || it.year?.toIntOrNull() == intent.year }
+            .distinctBy { it.key }.take(24).toList()
+    }
+
+    private fun renderSections(
+        sections: List<Pair<String, List<StreamEntity>>>,
+        selectedKind: String?,
+        providerId: String,
+        liveFormat: String,
+        castCount: Int,
+        moveFocus: Boolean,
+        aiCount: Int = 0
+    ) {
         results.removeAllViews()
         val total = sections.sumOf { it.second.size }
-        hint.text = if (castCount > 0) {
-            getString(R.string.stream_search_cast_results, castCount)
-        } else if (selectedKind == null) getString(R.string.search_results_all, total)
-        else getString(R.string.search_results_kind, total, sectionTitle(selectedKind))
-        if (total == 0) { showMessage(getString(R.string.search_no_matches)); return }
-
+        hint.text = when {
+            aiCount > 0 -> getString(R.string.stream_search_ai_suggestions, aiCount)
+            castCount > 0 -> getString(R.string.stream_search_cast_results, castCount)
+            selectedKind == null -> getString(R.string.search_results_all, total)
+            else -> getString(R.string.search_results_kind, total, sectionTitle(selectedKind))
+        }
+        if (total == 0) {
+            showMessage(getString(R.string.search_no_matches))
+            return
+        }
         var firstFocusable: View? = null
         sections.forEach { (kind, items) ->
-            val section = resultSection(kind, items, provider.id, provider.liveFormat) { view ->
+            val section = resultSection(kind, items, providerId, liveFormat) { view ->
                 if (firstFocusable == null) firstFocusable = view
             }
             results.addView(section, LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
