@@ -51,6 +51,9 @@ object PlaybackQualityAssessment {
 
     fun medianStartMs(metrics: List<PlaybackMetric>): Long? {
         val values = metrics.mapNotNull { it.ttffMs?.takeIf { v -> v in 0..600_000L } }.sorted()
-        return values.takeIf { it.isNotEmpty() }?.get(values.size / 2)
+        if (values.isEmpty()) return null
+        // Use the midpoint for an even sample rather than the upper observation;
+        // values are bounded to 600,000ms, so their sum cannot overflow Long.
+        return (values[(values.size - 1) / 2] + values[values.size / 2]) / 2L
     }
 }
