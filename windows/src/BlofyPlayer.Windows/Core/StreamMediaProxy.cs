@@ -77,10 +77,14 @@ public sealed class StreamMediaProxy : IAsyncDisposable
                         if (ctx.Request.Headers.TryGetValue("Range", out var range) &&
                             Regex.IsMatch(range.ToString(), @"^bytes=\d+-\d*$"))
                             message.Headers.TryAddWithoutValidation("Range", range.ToString());
-                        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ctx.RequestAborted);
-                        timeout.CancelAfter(TimeSpan.FromMinutes(20)); // live sessions may reconnect.
+                        // Limit upstream connection/header latency, not the viewer's watch time.
+                        // The old absolute 20-minute token cut off healthy long-running
+                        // live channels and full-length movies regardless of activity.
+                        using var headerTimeout = CancellationTokenSource.CreateLinkedTokenSource(ctx.RequestAborted);
+                        headerTimeout.CancelAfter(StreamMediaCopyPolicy.ResponseHeaderTimeout);
                         using var response = await _http.SendAsync(message,
-                            HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+                            HttpCompletionOption.ResponseHeadersRead, headerTimeout.Token);
+                        headerTimeout.CancelAfter(Timeout.InfiniteTimeSpan);
                         ctx.Response.StatusCode = (int)response.StatusCode;
                         if ((int)response.StatusCode is >= 300 and < 400) return; // never follow redirect
                         if (response.Content.Headers.ContentType is not null)
@@ -89,12 +93,17 @@ public sealed class StreamMediaProxy : IAsyncDisposable
                             ctx.Response.ContentLength = length;
                         if (response.Content.Headers.ContentRange is not null)
                             ctx.Response.Headers.ContentRange = response.Content.Headers.ContentRange.ToString();
+                        if (response.Headers.AcceptRanges.Count > 0)
+                            ctx.Response.Headers["Accept-Ranges"] = string.Join(", ", response.Headers.AcceptRanges);
                         ctx.Response.Headers.CacheControl = "no-store";
                         ctx.Response.Headers.XContentTypeOptions = "nosniff";
                         if (ctx.Request.Method != "HEAD")
                         {
-                            await using var stream = await response.Content.ReadAsStreamAsync(timeout.Token);
-                            await stream.CopyToAsync(ctx.Response.Body, timeout.Token);
+                            await using var stream = await response.Content.ReadAsStreamAsync(ctx.RequestAborted);
+                            await StreamMediaCopyPolicy.CopyAsync(
+                                stream, ctx.Response.Body, ctx.RequestAborted,
+                                kind == "live" ? StreamMediaCopyPolicy.LiveInactivityTimeout :
+                                    StreamMediaCopyPolicy.VodInactivityTimeout);
                         }
                     }
                     catch (OperationCanceledException) when (ctx.RequestAborted.IsCancellationRequested) { }
