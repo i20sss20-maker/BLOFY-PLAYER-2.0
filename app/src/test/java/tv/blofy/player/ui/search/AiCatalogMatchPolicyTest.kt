@@ -18,6 +18,17 @@ class AiCatalogMatchPolicyTest {
         assertTrue(found.none { it.name.contains("Unrelated") })
     }
 
+    @Test fun providerTagsAndOriginalTitleWithYearDoNotHideAiHits() {
+        val item = film("EN - Mission: Impossible (1996)")
+        assertTrue(AiCatalogMatchPolicy.isTitleMatch("Mission: Impossible", item))
+        assertTrue(AiCatalogMatchPolicy.isTitleMatch("Top Gun", film("[4K] Top Gun (1986)")))
+    }
+
+    @Test fun actorPhraseTriggersAiEvenIfLocalSearchFoundUnrelatedTitles() {
+        assertTrue(AiCatalogMatchPolicy.worthwhile("أفلام توم كروز", 8, false))
+        assertTrue(AiCatalogMatchPolicy.worthwhile("movies with Tom Cruise", 2, false))
+    }
+
     @Test fun neverRecommendsLockedOrLiveStreams() {
         val available = listOf(film("Top Gun", locked = true), film("Top Gun", "live"))
         assertTrue(AiCatalogMatchPolicy.filterVerified(listOf("Top Gun"), available).isEmpty())
