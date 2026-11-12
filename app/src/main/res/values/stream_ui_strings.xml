@@ -84,4 +84,6 @@
     <string name="stream_catalog_sort_newest">Sort: Newest</string>
     <string name="stream_catalog_sort_rating">Sort: Rating</string>
     <string name="stream_catalog_sort_year">Sort: Year</string>
+    <string name="stream_home_recent">Recently watched</string>
+    <string name="stream_home_recent_hint">Titles you opened recently</string>
 </resources>
