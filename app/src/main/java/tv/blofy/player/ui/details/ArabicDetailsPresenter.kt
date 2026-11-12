@@ -62,14 +62,24 @@ internal class ArabicDetailsPresenter(
     }
 
     fun render(metadata: ProviderMetadata.Metadata?) {
+        val arabicUi = isArabicUi()
+        val newTitle = ArabicDetailsPolicy.preferredTitle(stream.name, metadata?.title, arabicUi)
+        val newOverview = ArabicDetailsPolicy.preferredOverview(stream.plot, metadata?.overview, arabicUi)
+            ?: "لا يتوفر وصف لهذا المحتوى."
+        // Xtream often triggers the initial render, a cached render and a
+        // network-detail render with identical text. Previously every callback
+        // cancelled the translator, downloaded/verified the model again, and
+        // restarted all translation work. Keep any in-flight translation alive.
+        if (currentTitle == newTitle && currentOverview == newOverview) {
+            renderVisible()
+            return
+        }
         version++
         translator?.close()
         translator = null
         showingOriginal = false
-        val arabicUi = isArabicUi()
-        currentTitle = ArabicDetailsPolicy.preferredTitle(stream.name, metadata?.title, arabicUi)
-        currentOverview = ArabicDetailsPolicy.preferredOverview(stream.plot, metadata?.overview, arabicUi)
-            ?: "لا يتوفر وصف لهذا المحتوى."
+        currentTitle = newTitle
+        currentOverview = newOverview
         originalTitleView.visibility = View.GONE
         if (!arabicUi) {
             titleView.text = ContentPresentation.title(currentTitle, stream.kind)
@@ -158,6 +168,9 @@ internal class ArabicDetailsPresenter(
             .addOnSuccessListener { result ->
                 if (token == version && result.isNotBlank() && result != original) {
                     cache(original, result)
+                    // Make the first translated title visible immediately
+                    // instead of waiting for the entire plot on older TVs.
+                    renderVisible()
                 }
                 translateNext(client, pending, index + 1, token)
             }
