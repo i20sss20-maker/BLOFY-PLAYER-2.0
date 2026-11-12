@@ -66,6 +66,19 @@ function fakeDb(){
      redeemed_at:args[1],expires_at:args[2],account_id:args[3],redeemed_device_hash:args[4]});
    return {rows:[row]};
   }
+  if(sql.includes('SET redeemed_device_hash=$2,admin_relogin_until=NULL')){
+    const row=codes.find(x=>x.id===args[0]);
+    if(!row||!row.redeemed_device_hash||row.redeemed_device_hash===args[1]||
+       !row.admin_relogin_until||
+       row.admin_relogin_until.getTime()<=args[2].getTime())return {rowCount:0,rows:[]};
+    row.redeemed_device_hash=args[1];
+    row.admin_relogin_until=null;
+    row.admin_relogin_count=(row.admin_relogin_count||0)+1;
+    row.relogin_device_hash=null;row.relogin_request_hash=null;
+    return {rowCount:1,rows:[{id:row.id}]};
+  }
+  if(sql.includes('INSERT INTO blofy_xtream_gateway_code_events'))
+    return {rows:[{}]};
   if(sql.includes('SET redeemed_device_hash=$2,')&&
      sql.includes('relogin_device_hash=NULL')){
     const row=codes.find(x=>x.id===args[0]);
@@ -290,4 +303,48 @@ test('CRITICAL: inflated account expiry cannot extend existing voucher on login'
  assert.equal(relogin.account.expiresAt,first.account.expiresAt);
  assert.equal(relogin.account.activatedAt,first.account.activatedAt);
  assert.equal(state.accounts.length,1);
+});
+
+test('admin relogin window is one-use, keeps voucher, and may be enabled again later',async()=>{
+ const {verifyStreamAppToken}=await import('../src/xtream-code-app-token.mjs');
+ const state=fakeDb();
+ let now=Date.parse('2026-11-09T03:00:00Z');
+ const svc=createStreamDurationCodes({pool:state.pool,keyHex,clock:()=>now});
+ const {items}=await svc.issue({durationDays:30,channel:'app'});
+ const code=items[0].code,firstKey='f'.repeat(64),secondKey='1'.repeat(64),thirdKey='2'.repeat(64);
+ const first=await svc.redeem(code,'https://blofyplayer.com',{appOnly:true,deviceKey:firstKey});
+ const row=state.codes[0],expires=row.expires_at.getTime(),activated=row.redeemed_at.getTime();
+ await assert.rejects(svc.redeem(code,'https://blofyplayer.com',
+   {appOnly:true,deviceKey:secondKey}),/stream_code_unavailable/);
+ row.admin_relogin_until=new Date(now+10*60*1000);
+ const second=await svc.redeem(code,'https://blofyplayer.com',
+   {appOnly:true,deviceKey:secondKey});
+ assert.equal(second.recovered,true);
+ assert.equal(second.account.id,first.account.id);
+ assert.equal(second.account.expiresAt,expires);
+ assert.equal(row.redeemed_at.getTime(),activated);
+ assert.equal(row.expires_at.getTime(),expires);
+ assert.equal(row.code_hash,streamCodeProof(code,keyHex));
+ assert.equal(row.admin_relogin_until,null,'window is consumed');
+ assert.equal(row.admin_relogin_count,1);
+ assert.equal(verifyStreamAppToken(first.accessToken,row,keyHex),false,'old device session revoked');
+ await assert.rejects(svc.redeem(code,'https://blofyplayer.com',
+   {appOnly:true,deviceKey:thirdKey}),/stream_code_unavailable/);
+ now+=2*60*1000;
+ row.admin_relogin_until=new Date(now+10*60*1000);
+ await svc.redeem(code,'https://blofyplayer.com',{appOnly:true,deviceKey:thirdKey});
+ assert.equal(row.admin_relogin_count,2);
+ assert.equal(row.expires_at.getTime(),expires);
+ assert.equal(state.accounts.length,1);
+});
+test('expired administrator relogin grant never allows a replacement device',async()=>{
+ const state=fakeDb(),now=Date.parse('2026-11-09T03:00:00Z');
+ const svc=createStreamDurationCodes({pool:state.pool,keyHex,clock:()=>now});
+ const item=(await svc.issue({durationDays:10,channel:'app'})).items[0];
+ await svc.redeem(item.code,'https://blofyplayer.com',
+   {appOnly:true,deviceKey:'c'.repeat(64)});
+ state.codes[0].admin_relogin_until=new Date(now-1);
+ await assert.rejects(svc.redeem(item.code,'https://blofyplayer.com',
+   {appOnly:true,deviceKey:'d'.repeat(64)}),/stream_code_unavailable/);
+ assert.equal(state.codes[0].admin_relogin_count,undefined);
 });
