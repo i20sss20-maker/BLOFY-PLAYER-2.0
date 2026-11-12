@@ -115,7 +115,8 @@ function fixture(){
   if(sql.includes('INSERT INTO blofy_stream_distributor_actions')){
    actions.push({id:args[0],distributor_id:args[1],issue_id:args[2],
     request_id:args[3],action:sql.includes("'renew'")?'renew':'relogin',
-    result:JSON.parse(sql.includes("'renew'")?args[5]:args[4])});
+    result:JSON.parse(sql.includes("'renew'")?args[5]:args[4]),
+     credit_cost:sql.includes("'renew'")?args[4]:0});
    return {rows:[]};
   }
   if(sql.includes('FROM blofy_xtream_gateway_duration_codes')&&sql.includes('WHERE id=$1 FOR UPDATE'))
@@ -461,4 +462,66 @@ test('distributor never issues or renews for two years', async()=>{
  await assert.rejects(f.manager.renew(session.token,{issueId:existing.issue.id,
   days:730,requestId:crypto.randomUUID()}),/distributor_plan_invalid/);
  assert.equal(f.distributors[0].credits,99);
+});
+
+test('owner sets a daily issuance limit, with server-side block and no accidental charge',async()=>{
+ const f=fixture(),a=await f.manager.createAdmin({name:'Daily Store',username:'limit-test',credits:20});
+ const token=(await f.manager.login({username:'limit-test',password:a.password})).token;
+ assert.equal((await f.manager.setAdmin(a.item.id,{dailyLimit:2})).item.dailyLimit,2);
+ await f.manager.issue(token,{kind:'app',durationDays:30,requestId:crypto.randomUUID()});
+ await f.manager.issue(token,{kind:'xtream',durationDays:30,requestId:crypto.randomUUID()});
+ const after=f.distributors[0].credits;
+ await assert.rejects(f.manager.issue(token,{kind:'app',durationDays:30,
+  requestId:crypto.randomUUID()}),/distributor_issue_daily_limit/);
+ assert.equal(f.distributors[0].credits,after);
+ assert.equal(f.calls.length,2);
+ await assert.rejects(f.manager.setAdmin(a.item.id,{dailyLimit:0}),/distributor_limit_invalid/);
+});
+test('audited month credits include opening, issue, refund, renewal and owner top-up',async()=>{
+ const f=fixture(),created=await f.manager.createAdmin({
+  name:'Audit Store',username:'audit-test',credits:15});
+ const token=(await f.manager.login({username:'audit-test',password:created.password})).token;
+ assert.equal(f.creditEvents[0].type,'opening');
+ assert.equal(f.creditEvents[0].balance_after,15);
+ await f.manager.issue(token,{kind:'app',durationDays:30,requestId:crypto.randomUUID()});
+ assert.equal(f.creditEvents.at(-1).type,'issue');
+ assert.equal(f.creditEvents.at(-1).delta,-1);
+ const issue=f.issues.at(-1);
+ await f.manager.renew(token,{issueId:issue.id,days:365,requestId:crypto.randomUUID()});
+ assert.equal(f.creditEvents.at(-1).type,'renew');
+ assert.equal(f.creditEvents.at(-1).delta,-12);
+ assert.equal(f.distributors[0].credits,2);
+ await f.manager.setAdmin(created.item.id,{credits:5});
+ assert.equal(f.creditEvents.at(-1).type,'adjustment');
+ assert.equal(f.creditEvents.at(-1).balance_after,7);
+ assert.equal((await f.manager.activity(token)).items.length,4);
+ const report=(await f.manager.analytics(token)).stats;
+ assert.equal(report.today,1);
+ assert.equal(report.month,1);
+ assert.equal(report.renewalsMonth,1);
+ assert.equal(report.renewedCreditsMonth,12);
+ assert.equal(report.issued24h,1);
+ assert.equal(report.dailyLimit,100);
+ assert.equal((await f.manager.exportIssues(token)).items.length,1);
+ f.setFail(true);
+ await assert.rejects(f.manager.issue(token,{kind:'app',durationDays:30,
+  requestId:crypto.randomUUID()}),/distributor_issuance_rejected/);
+ assert.equal(f.creditEvents.at(-1).type,'refund');
+ assert.equal(f.distributors[0].credits,7);
+ const last=(await f.manager.activity(token)).items[0];
+ assert.equal(last.type,'refund');
+});
+test('owner-private audit and CSV output never include other distributor customers',async()=>{
+ const f=fixture();
+ const a=await f.manager.createAdmin({name:'Shop One',username:'own-audit-one',credits:3});
+ const b=await f.manager.createAdmin({name:'Shop Two',username:'own-audit-two',credits:3});
+ const tokenA=(await f.manager.login({username:'own-audit-one',password:a.password})).token;
+ const tokenB=(await f.manager.login({username:'own-audit-two',password:b.password})).token;
+ await f.manager.issue(tokenA,{kind:'xtream',durationDays:30,
+  requestId:crypto.randomUUID(),customerName:'Private A',customerPhone:'0557777777'});
+ const own=await f.manager.exportIssues(tokenA);
+ const other=await f.manager.exportIssues(tokenB);
+ assert.equal(own.items.length,1);
+ assert.equal(other.items.length,0);
+ assert.equal((await f.manager.activity(tokenB)).items.filter(x=>x.type==='issue').length,0);
 });
