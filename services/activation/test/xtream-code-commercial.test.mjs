@@ -49,6 +49,10 @@ function mock(){
       code.expires_at=args[1];code.extended_days+=args[2];
       return {rows:[code]};
     }
+    if(sql.includes('SET admin_relogin_until=$2')){
+      code.admin_relogin_until=args[1];
+      return {rows:[code]};
+    }
     if(sql.includes('SET code_hash=$2')){
       code.code_hash=args[1];code.code_hint=args[2];
       code.redeemed_device_hash=null;code.transfer_count++;
@@ -133,4 +137,26 @@ test('commercial schema is additive and audit-log-only',async()=>{
   assert.ok(d.queries.some(x=>x.sql.includes('blofy_xtream_gateway_code_events')));
   assert.ok(d.queries.some(x=>x.sql.includes('transfer_count INTEGER')));
   assert.equal(d.queries.filter(x=>x.sql.startsWith('DROP ')).length,0);
+});
+
+test('admin one-click relogin permits same code repeatedly without rotating or extending it',async()=>{
+  const d=mock(),manager=createStreamCommercial({pool:d.pool,keyHex,clock:()=>current});
+  const codeHash=d.code.code_hash,oldDevice=d.code.redeemed_device_hash;
+  const activated=d.code.redeemed_at.getTime(),expiry=d.code.expires_at.getTime();
+  const first=await manager.allowSameCodeRelogin(id);
+  assert.equal(first.sameCode,true);
+  assert.equal(first.oneTime,true);
+  assert.equal(first.allowedUntil,current+600000);
+  assert.equal(first.item.adminReloginUntil,current+600000);
+  assert.equal(d.code.code_hash,codeHash,'original code is preserved');
+  assert.equal(d.code.redeemed_device_hash,oldDevice,'existing device remains until new login');
+  assert.equal(d.code.redeemed_at.getTime(),activated);
+  assert.equal(d.code.expires_at.getTime(),expiry);
+  // Every request may be approved again by the admin. No reissue or renewal.
+  const again=await manager.allowSameCodeRelogin(id);
+  assert.equal(again.allowedUntil,first.allowedUntil);
+  assert.equal(d.events.length,2);
+  assert.ok(d.events.every(e=>e[2]==='same_code_admin_relogin_granted'));
+  d.code.expires_at=new Date(current-1);
+  await assert.rejects(manager.allowSameCodeRelogin(id),/stream_relogin_unavailable/);
 });
