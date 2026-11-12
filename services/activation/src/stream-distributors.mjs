@@ -39,13 +39,30 @@ const publicDistributor=row=>({
  enabled:row.enabled,credits:Number(row.credits||0),
  used:Number(row.issued_count||0),createdAt:new Date(row.created_at).getTime()
 });
-const publicIssue=row=>({
+const publicIssue=row=>{
+ const expiry=row.subscription_expires_at?new Date(row.subscription_expires_at).getTime():null;
+ const activated=row.code_activated_at?new Date(row.code_activated_at).getTime():null;
+ const now=Date.now();
+ const status=row.status!=='done'?row.status:
+   row.kind==='app'&&!activated?'unused':
+   row.code_revoked_at||row.account_enabled===false?'disabled':
+   expiry!==null&&expiry<=now?'expired':
+   expiry!==null&&expiry<=now+7*DAY?'expiring':'active';
+ return {
  id:row.id,type:row.kind,label:row.label,days:Number(row.duration_days),
  chargedCredits:Number(row.credit_cost??distributorPlanCost(row.duration_days)),
  maxConnections:Number(row.max_connections),
- status:row.status,createdAt:new Date(row.created_at).getTime(),
+ status:row.status,subscriptionStatus:status,
+ activatedAt:activated,expiresAt:expiry,
+ canRelogin:status==='active'||status==='expiring'?row.kind==='app'&&row.code_bound===true:false,
+ reloginCount:Number(row.admin_relogin_count||0),
+ reloginUntil:row.admin_relogin_until?new Date(row.admin_relogin_until).getTime():null,
+ customerName:String(row.customer_name||'').slice(0,80),
+ customerPhone:String(row.customer_phone||'').slice(0,22),
+ createdAt:new Date(row.created_at).getTime(),
  accountId:row.status==='done'?row.subject_id:null
-});
+ };
+};
 export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,revealXtream,
   listCatalog,trialKeyHex,clock=Date.now}={}){
  if(typeof listCatalog!=='function'||!/^[0-9a-f]{64}$/i.test(String(trialKeyHex||'')))
@@ -78,6 +95,20 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
      UNIQUE(distributor_id,request_id))`);
    await pool.query('ALTER TABLE blofy_stream_distributor_issues ADD COLUMN IF NOT EXISTS credit_cost INTEGER NOT NULL DEFAULT 1');
    await pool.query('ALTER TABLE blofy_stream_distributor_issues ADD COLUMN IF NOT EXISTS trial_customer_hash TEXT');
+   await pool.query('ALTER TABLE blofy_stream_distributor_issues ADD COLUMN IF NOT EXISTS customer_name TEXT NOT NULL DEFAULT \'\'');
+   await pool.query('ALTER TABLE blofy_stream_distributor_issues ADD COLUMN IF NOT EXISTS customer_phone TEXT NOT NULL DEFAULT \'\'');
+   await pool.query(`CREATE TABLE IF NOT EXISTS blofy_stream_distributor_actions(
+     id UUID PRIMARY KEY,
+     distributor_id UUID NOT NULL REFERENCES blofy_stream_distributors(id),
+     issue_id UUID NOT NULL REFERENCES blofy_stream_distributor_issues(id),
+     request_id UUID NOT NULL,
+     action TEXT NOT NULL CHECK(action IN ('renew','relogin')),
+     credit_cost INTEGER NOT NULL DEFAULT 0,
+     result JSONB NOT NULL DEFAULT '{}'::jsonb,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     UNIQUE(distributor_id,request_id))`);
+   await pool.query(`CREATE INDEX IF NOT EXISTS idx_blofy_dist_issue_customers
+     ON blofy_stream_distributor_issues(distributor_id,customer_phone,created_at DESC)`);
    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_blofy_stream_trial_once
      ON blofy_stream_distributor_issues(trial_customer_hash)
      WHERE duration_days=1 AND trial_customer_hash IS NOT NULL
@@ -192,11 +223,57 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
    await pool.query('DELETE FROM blofy_stream_distributor_sessions WHERE session_hash=$1',[digest(token)]);
   return {ok:true};
  }
- async function issued(token){
-  const row=await session(token);
-  const results=(await pool.query(`SELECT * FROM blofy_stream_distributor_issues
-    WHERE distributor_id=$1 ORDER BY created_at DESC LIMIT 60`,[row.id])).rows;
-  return {ok:true,items:results.map(publicIssue)};
+
+ const issueProjection=`SELECT i.*,
+   c.redeemed_at AS code_activated_at,
+   c.revoked_at AS code_revoked_at,
+   (c.redeemed_device_hash IS NOT NULL) AS code_bound,
+   c.admin_relogin_count,
+   c.admin_relogin_until,
+   a.enabled AS account_enabled,
+   COALESCE(c.expires_at,a.expires_at) AS subscription_expires_at
+   FROM blofy_stream_distributor_issues i
+   LEFT JOIN blofy_xtream_gateway_duration_codes c
+     ON i.kind='app' AND c.id=i.subject_id
+   LEFT JOIN blofy_xtream_gateway_accounts a
+     ON a.id=CASE WHEN i.kind='app' THEN c.account_id ELSE i.subject_id END`;
+ async function issued(token,{q='',offset=0}={}){
+  const actor=await session(token);
+  const term=clean(q,80).toLowerCase();
+  const page=number(offset,0,10000,'distributor_offset_invalid');
+  const rows=(await pool.query(issueProjection+`
+   WHERE i.distributor_id=$1 AND (
+     $2::text='' OR i.label ILIKE '%'||$2||'%' OR
+     i.customer_name ILIKE '%'||$2||'%' OR
+     i.customer_phone ILIKE '%'||$2||'%' OR
+     c.code_hint ILIKE '%'||$2||'%')
+   ORDER BY i.created_at DESC LIMIT 101 OFFSET $3`,
+   [actor.id,term,page])).rows;
+  const stats=(await pool.query(`
+   SELECT COUNT(*) FILTER (WHERE i.status='done')::int AS total,
+    COUNT(*) FILTER (WHERE i.status='done'
+      AND a.enabled=TRUE AND
+      (i.kind='xtream' OR c.redeemed_at IS NOT NULL)
+      AND a.expires_at>NOW() AND
+      (c.revoked_at IS NULL))::int AS active,
+    COUNT(*) FILTER (WHERE i.status='done'
+      AND a.enabled=TRUE AND a.expires_at>NOW() AND
+      a.expires_at<=NOW()+INTERVAL '7 days'
+      AND (i.kind='xtream' OR c.redeemed_at IS NOT NULL))::int AS expiring,
+    COUNT(*) FILTER (WHERE i.status='done'
+      AND a.expires_at<=NOW())::int AS expired,
+    COUNT(DISTINCT NULLIF(i.customer_phone,''))::int AS customers
+   FROM blofy_stream_distributor_issues i
+   LEFT JOIN blofy_xtream_gateway_duration_codes c
+     ON i.kind='app' AND c.id=i.subject_id
+   LEFT JOIN blofy_xtream_gateway_accounts a
+     ON a.id=CASE WHEN i.kind='app' THEN c.account_id ELSE i.subject_id END
+   WHERE i.distributor_id=$1`,[actor.id])).rows[0]||{};
+  return {ok:true,items:rows.slice(0,100).map(publicIssue),
+    nextOffset:rows.length>100?page+100:null,
+    stats:{total:Number(stats.total||0),active:Number(stats.active||0),
+      expiring:Number(stats.expiring||0),expired:Number(stats.expired||0),
+      customers:Number(stats.customers||0)}};
  }
  async function showOwned(distributorId,issueId){
   if(!UUID.test(String(issueId||'')))throw fail('distributor_issue_id_invalid');
@@ -216,7 +293,7 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
   return {ok:true,issue:publicIssue(item),
     ...(item.kind==='app'?{code:result.body.code}:{credentials:result.body.credentials})};
  }
- async function issue(token,{kind,label,durationDays,maxConnections,requestId,trialPhone}={}){
+ async function issue(token,{kind,label,durationDays,maxConnections,requestId,trialPhone,customerName,customerPhone}={}){
   const actor=await session(token);
   const type=String(kind||'');
   if(!['app','xtream'].includes(type))throw fail('distributor_type_invalid');
@@ -236,6 +313,9 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
   const request=String(requestId||'').toLowerCase();
   if(!UUID.test(request))throw fail('distributor_request_id_invalid');
   const safeLabel=clean(label,80)||'BLOFY STREAM';
+  const contactName=clean(customerName,80);
+  const contactPhone=normalizedPhone(customerPhone|| (cost===0?phone:''));
+  if(cost===0&&contactPhone!==phone)throw fail('distributor_trial_phone_locked',409);
   // Resolve by exact name at issuance; never silently switch to XTREAM 2.
   const saleh=await salehSource();
   const reservation=await transaction(async db=>{
@@ -262,9 +342,10 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
      'UPDATE blofy_stream_distributors SET credits=credits-$2 WHERE id=$1',[actor.id,cost]);
    const created=(await db.query(`INSERT INTO blofy_stream_distributor_issues
      (id,distributor_id,request_id,kind,label,duration_days,max_connections,
-       credit_cost,trial_customer_hash)
-     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-     [crypto.randomUUID(),actor.id,request,type,safeLabel,days,connections,cost,trialHash])).rows[0];
+       credit_cost,trial_customer_hash,customer_name,customer_phone)
+     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+     [crypto.randomUUID(),actor.id,request,type,safeLabel,days,connections,cost,
+       trialHash,contactName,contactPhone])).rows[0];
    return {created};
   });
   if(reservation.existing){
@@ -306,6 +387,152 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
     definite?409:503);
  }
 
+
+ function normalizedPhone(value){
+  let s=String(value||'').replace(/[^0-9]/g,'');
+  if(s.startsWith('00'))s=s.slice(2);
+  if(/^05[0-9]{8}$/.test(s))s='966'+s.slice(1);
+  else if(/^5[0-9]{8}$/.test(s))s='966'+s;
+  if(s&&!/^[0-9]{8,15}$/.test(s))throw fail('distributor_customer_phone_invalid');
+  return s;
+ }
+ // Update contacts only for an issuance owned by the logged-in distributor.
+ // Trial fingerprint remains fixed so editing clients cannot bypass limits.
+ async function customer(token,{issueId,name='',phone=''}={}){
+  const actor=await session(token);
+  if(!UUID.test(String(issueId||'')))throw fail('distributor_issue_id_invalid');
+  const newName=clean(name,80),newPhone=normalizedPhone(phone);
+  return transaction(async db=>{
+   const issue=(await db.query(`SELECT * FROM blofy_stream_distributor_issues
+     WHERE id=$1 AND distributor_id=$2 FOR UPDATE`,[issueId,actor.id])).rows[0];
+   if(!issue)throw fail('distributor_issue_missing',404);
+   if(issue.duration_days===1&&issue.trial_customer_hash){
+    const hash=crypto.createHmac('sha256',Buffer.from(trialKeyHex,'hex'))
+      .update('blofy-stream-distributor-trial-phone:v1:'+newPhone).digest('hex');
+    if(hash!==issue.trial_customer_hash)throw fail('distributor_trial_phone_locked',409);
+   }
+   const updated=(await db.query(`UPDATE blofy_stream_distributor_issues
+     SET customer_name=$3,customer_phone=$4 WHERE id=$1 AND distributor_id=$2
+     RETURNING *`,[issueId,actor.id,newName,newPhone])).rows[0];
+   return {ok:true,issueId:updated.id,customerName:updated.customer_name,
+     customerPhone:updated.customer_phone};
+  });
+ }
+ // Renew a redeemed code or direct Xtream account, debiting months atomically
+ // with the expiry update. Ownership and the original saleh binding are checked
+ // on the server, never trusted from the browser.
+ async function renew(token,{issueId,days,requestId}={}){
+  const actor=await session(token),cost=distributorPlanCost(days);
+  if(cost<=0)throw fail('distributor_renew_trial_denied',400);
+  if(!UUID.test(String(issueId||''))||!UUID.test(String(requestId||'')))
+    throw fail('distributor_request_id_invalid');
+  const saleh=await salehSource();
+  return transaction(async db=>{
+   const distributor=(await db.query(`SELECT * FROM blofy_stream_distributors
+     WHERE id=$1 FOR UPDATE`,[actor.id])).rows[0];
+   if(!distributor?.enabled)throw fail('distributor_disabled',403);
+   const existing=(await db.query(`SELECT * FROM blofy_stream_distributor_actions
+     WHERE distributor_id=$1 AND request_id=$2`,[actor.id,requestId])).rows[0];
+   if(existing){
+    if(existing.issue_id!==issueId||existing.action!=='renew')
+      throw fail('distributor_request_conflict',409);
+    return {ok:true,...existing.result,repeated:true};
+   }
+   if(Number(distributor.credits)<cost)throw fail('distributor_no_credits',409);
+   const owned=(await db.query(`SELECT * FROM blofy_stream_distributor_issues
+     WHERE id=$1 AND distributor_id=$2 AND status='done' FOR UPDATE`,
+     [issueId,actor.id])).rows[0];
+   if(!owned||!UUID.test(String(owned.subject_id||'')))
+     throw fail('distributor_issue_missing',404);
+   let code=null;
+   if(owned.kind==='app'){
+    code=(await db.query(`SELECT * FROM blofy_xtream_gateway_duration_codes
+      WHERE id=$1 FOR UPDATE`,[owned.subject_id])).rows[0];
+    if(!code||!code.redeemed_at||!code.account_id||code.revoked_at)
+      throw fail('distributor_renew_code_not_active',409);
+   }
+   const accountId=code?.account_id||owned.subject_id;
+   const account=(await db.query(`SELECT * FROM blofy_xtream_gateway_accounts
+     WHERE id=$1 FOR UPDATE`,[accountId])).rows[0];
+   if(!account||account.enabled!==true||account.source_id!==saleh.id)
+     throw fail('distributor_renew_account_unavailable',409);
+   const baseline=Math.max(clock(),new Date(account.expires_at).getTime(),
+     code?new Date(code.expires_at).getTime():0);
+   const next=new Date(baseline+Number(days)*DAY);
+   if(!Number.isFinite(next.getTime()))throw fail('distributor_renew_invalid',409);
+   await db.query(`UPDATE blofy_xtream_gateway_accounts
+     SET expires_at=$2,updated_at=NOW() WHERE id=$1`,[accountId,next]);
+   if(code){
+    await db.query(`UPDATE blofy_xtream_gateway_duration_codes
+     SET expires_at=$2,extended_days=extended_days+$3 WHERE id=$1`,
+     [code.id,next,days]);
+    await db.query(`INSERT INTO blofy_xtream_gateway_code_events
+      (id,code_id,event_type,details) VALUES($1,$2,'extended',$3::jsonb)`,
+      [crypto.randomUUID(),code.id,JSON.stringify({
+        days,via:'distributor',distributorId:actor.id})]);
+   }
+   await db.query(`UPDATE blofy_stream_distributors
+     SET credits=credits-$2 WHERE id=$1`,[actor.id,cost]);
+   const result={issueId,expiresAt:next.getTime(),chargedCredits:cost};
+   await db.query(`INSERT INTO blofy_stream_distributor_actions
+     (id,distributor_id,issue_id,request_id,action,credit_cost,result)
+     VALUES($1,$2,$3,$4,'renew',$5,$6::jsonb)`,
+     [crypto.randomUUID(),actor.id,issueId,requestId,cost,JSON.stringify(result)]);
+   return {ok:true,...result};
+  });
+ }
+ // Admin-approved re-entry for an owned active app code only, without
+ // rotating the voucher or changing the subscription expiry. The next
+ // different device has ten minutes to claim a single new binding.
+ async function relogin(token,{issueId,requestId}={}){
+  const actor=await session(token);
+  if(!UUID.test(String(issueId||''))||!UUID.test(String(requestId||'')))
+    throw fail('distributor_request_id_invalid');
+  const saleh=await salehSource();
+  return transaction(async db=>{
+   const distributor=(await db.query(`SELECT * FROM blofy_stream_distributors
+     WHERE id=$1 FOR UPDATE`,[actor.id])).rows[0];
+   if(!distributor?.enabled)throw fail('distributor_disabled',403);
+   const existing=(await db.query(`SELECT * FROM blofy_stream_distributor_actions
+     WHERE distributor_id=$1 AND request_id=$2`,[actor.id,requestId])).rows[0];
+   if(existing){
+    if(existing.issue_id!==issueId||existing.action!=='relogin')
+      throw fail('distributor_request_conflict',409);
+    return {ok:true,...existing.result,repeated:true};
+   }
+   const owned=(await db.query(`SELECT * FROM blofy_stream_distributor_issues
+     WHERE id=$1 AND distributor_id=$2 AND kind='app' AND status='done'
+       FOR UPDATE`,[issueId,actor.id])).rows[0];
+   if(!owned)throw fail('distributor_issue_missing',404);
+   const code=(await db.query(`SELECT * FROM blofy_xtream_gateway_duration_codes
+     WHERE id=$1 FOR UPDATE`,[owned.subject_id])).rows[0];
+   if(!code||code.code_channel!=='app'||!code.redeemed_at||!code.account_id||
+      !code.redeemed_device_hash||code.revoked_at||
+      new Date(code.expires_at).getTime()<=clock())
+      throw fail('distributor_relogin_unavailable',409);
+   const account=(await db.query(`SELECT * FROM blofy_xtream_gateway_accounts
+      WHERE id=$1 FOR UPDATE`,[code.account_id])).rows[0];
+   if(!account||!account.enabled||account.source_id!==saleh.id||
+      new Date(account.expires_at).getTime()<=clock())
+      throw fail('distributor_relogin_unavailable',409);
+   const until=new Date(clock()+10*60*1000);
+   await db.query(`UPDATE blofy_xtream_gateway_duration_codes
+     SET admin_relogin_until=$2,
+       relogin_device_hash=NULL,relogin_request_hash=NULL,
+       relogin_requested_at=NULL,relogin_approved_at=NULL,
+       relogin_expires_at=NULL WHERE id=$1`,[code.id,until]);
+   await db.query(`INSERT INTO blofy_xtream_gateway_code_events
+     (id,code_id,event_type,details) VALUES($1,$2,$3,$4::jsonb)`,
+     [crypto.randomUUID(),code.id,'same_code_admin_relogin_granted',
+      JSON.stringify({via:'distributor',distributorId:actor.id,oneTime:true,validMinutes:10})]);
+   const result={issueId,allowedUntil:until.getTime(),sameCode:true,oneTime:true};
+   await db.query(`INSERT INTO blofy_stream_distributor_actions
+     (id,distributor_id,issue_id,request_id,action,credit_cost,result)
+     VALUES($1,$2,$3,$4,'relogin',0,$5::jsonb)`,
+     [crypto.randomUUID(),actor.id,issueId,requestId,JSON.stringify(result)]);
+   return {ok:true,...result};
+  });
+ }
  // Fail closed. The source must be exactly 'saleh', enabled, published and
  // unique. Never issue on XTREAM 2 or fallback to all sources.
  async function salehSource(){
@@ -375,5 +602,5 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
   return {ok:true,id,type:kind,group:category,title:customTitle,
     sortOrder:sort,hidden,scope:'distributor_only_not_global'};
  }
- return {ensureSchema,listAdmin,createAdmin,setAdmin,login,me,logout,issued,reveal,issue,library,organize};
+ return {ensureSchema,listAdmin,createAdmin,setAdmin,login,me,logout,issued,reveal,issue,library,organize,customer,renew,relogin};
 }
