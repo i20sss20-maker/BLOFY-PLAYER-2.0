@@ -38,6 +38,7 @@ import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.core.provider.LiveFormat
 import tv.blofy.player.core.provider.ProviderProfile
 import tv.blofy.player.data.ContentRepository
+import tv.blofy.player.data.metadata.ProviderMetadataCache
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.catalog.ArtworkLoader
@@ -94,6 +95,15 @@ class SearchActivity : AppCompatActivity() {
             setPadding(0, 0, 0, dp(8))
         }
         root.addView(hint)
+        // Search cast names locally where the source has supplied credits.
+        // No external AI API, subscription keys or viewing history is sent.
+        root.addView(TextView(this).apply {
+            text = getString(R.string.stream_search_actors_hint)
+            textSize = 11.5f
+            setTextColor(BlofyTvDesign.TextMuted)
+            gravity = Gravity.START
+            setPadding(0, 0, 0, dp(8))
+        })
 
         filterStrip = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -284,19 +294,38 @@ class SearchActivity : AppCompatActivity() {
         val repository = ContentRepository(dao)
         val selectedKind = activeKind
 
-        val sections = withContext(Dispatchers.IO) {
+        val (sections, castCount) = withContext(Dispatchers.IO) {
             val wantedKinds = selectedKind?.let(::listOf) ?: SEARCH_ORDER
-            coroutineScope {
+            // Only local cached metadata; actors absent from Xtream's cast fields
+            // cannot be invented. The Android device never calls an AI vendor.
+            val castMatches = if (selectedKind != KIND_LIVE && CastSearchPolicy.searchable(q)) {
+                ProviderMetadataCache.searchPeopleCandidates(
+                    applicationContext, provider.id, CastSearchPolicy.candidateToken(q), 96
+                ).asSequence()
+                    .filter { (_, metadata) -> CastSearchPolicy.matches(metadata, q) }
+                    .mapNotNull { (key, _) -> dao.stream(key) }
+                    .filter { it.providerId == provider.id && it.kind in setOf(KIND_MOVIE, KIND_SERIES) }
+                    .distinctBy { it.key }.take(32).toList()
+            } else emptyList()
+            val sections = coroutineScope {
                 wantedKinds.map { kind ->
-                    kind to async { repository.searchKind(provider.id, kind, q, SECTION_LIMIT) }
-                }.map { (kind, deferred) -> kind to deferred.await().distinctBy { it.key } }
+                    kind to async {
+                        val found = repository.searchKind(provider.id, kind, q, SECTION_LIMIT)
+                        (castMatches.asSequence().filter { it.kind == kind } + found.asSequence())
+                            .distinctBy { it.key }.take(SECTION_LIMIT).toList()
+                    }
+                }.map { (kind, deferred) -> kind to deferred.await() }
             }
+            sections to castMatches.size
         }
 
         if (input.text?.toString()?.trim() != q || activeKind != selectedKind) return
         results.removeAllViews()
         val total = sections.sumOf { it.second.size }
-        hint.text = if (selectedKind == null) getString(R.string.search_results_all, total) else getString(R.string.search_results_kind, total, sectionTitle(selectedKind))
+        hint.text = if (castCount > 0) {
+            getString(R.string.stream_search_cast_results, castCount)
+        } else if (selectedKind == null) getString(R.string.search_results_all, total)
+        else getString(R.string.search_results_kind, total, sectionTitle(selectedKind))
         if (total == 0) { showMessage(getString(R.string.search_no_matches)); return }
 
         var firstFocusable: View? = null
