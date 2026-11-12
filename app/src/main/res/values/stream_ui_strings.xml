@@ -89,4 +89,12 @@
     <string name="stream_search_actors_hint">Search by movie, series, actor or director name. Cast results appear when provider credits are available.</string>
     <string name="stream_search_cast_results">Matches for cast or director: %1$d</string>
     <string name="stream_search_ai_suggestions">BLOFY AI • %1$d possible titles found in your catalog (verify cast in details)</string>
+    <string name="stream_ai_search_button">✦ BLOFY AI</string>
+    <string name="stream_ai_enter_query">Enter a movie, actor, series, or genre first.</string>
+    <string name="stream_ai_searching">BLOFY AI is interpreting your request…</string>
+    <string name="stream_ai_session_error">AI needs a valid BLOFY STREAM activation. Open activation and retry.</string>
+    <string name="stream_ai_rate_error">AI limit reached temporarily. Please try again later.</string>
+    <string name="stream_ai_connection_error">Could not reach BLOFY AI. Your regular search still works; retry.</string>
+    <string name="stream_ai_no_catalog_match">AI understood the query, but no matching titles were confirmed in this playlist.</string>
+    <string name="stream_ai_found">BLOFY AI found %1$d matching title suggestions in your playlist.</string>
 </resources>
