@@ -26,7 +26,10 @@ object StreamAudioHealth {
         val available: Int,
         val supported: Int,
         val selected: Int,
-        val selectedMimeType: String?
+        val selectedMimeType: String?,
+        // Audio codec declarations are useful even when no decoder can select them.
+        // Only small, strictly allowlisted MIME tokens are included; never stream metadata.
+        val detectedMimeTypes: List<String> = emptyList()
     ) {
         fun safeLogCode(): String =
             "state=${state.name};available=$available;supported=$supported;" +
@@ -77,9 +80,14 @@ object StreamAudioHealth {
         var supported = 0
         var selected = 0
         var selectedMime: String? = null
+        val detectedMimeTypes = linkedSetOf<String>()
         for (group in groups) {
             for (index in 0 until group.length) {
                 available++
+                val mimeType = group.getTrackFormat(index).sampleMimeType
+                    ?.take(48)
+                    ?.takeIf { it.matches(Regex("[A-Za-z0-9._/+-]+")) }
+                if (mimeType != null && detectedMimeTypes.size < 4) detectedMimeTypes += mimeType
                 val isSupported = group.isTrackSupported(index)
                 if (isSupported) supported++
                 // Selected-but-unsupported must not be reported as usable audio.
@@ -87,16 +95,15 @@ object StreamAudioHealth {
                 if (group.isTrackSelected(index) && isSupported) {
                     selected++
                     if (selectedMime == null) {
-                        selectedMime = group.getTrackFormat(index).sampleMimeType
-                            ?.take(48)
-                            ?.takeIf { it.matches(Regex("[A-Za-z0-9._/+-]+")) }
+                        selectedMime = mimeType
                     }
                 }
             }
         }
         return Summary(
             classify(available, supported, selected, volume, known),
-            available, supported, selected, selectedMime
+            available, supported, selected, selectedMime,
+            detectedMimeTypes.toList()
         )
     }
 }
