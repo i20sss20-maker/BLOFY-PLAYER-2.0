@@ -1,4 +1,6 @@
 name: BLOFY STREAM 55.8.19 FFmpeg owner-signed release candidate
+# Final protected owner-signed QA: actors resolved only to verified catalog titles;
+# unverified AI suggestions are never playable and source metadata stays authoritative.
 # Final immutable QA package: Groq actor-Arabic and Sigma/title translation
 # canaries passed on Railway; the app regression must pass at this exact SHA.
 
