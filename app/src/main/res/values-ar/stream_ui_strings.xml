@@ -81,4 +81,5 @@
     <string name="stream_home_recent_hint">آخر الأفلام والمسلسلات التي شاهدتها</string>
     <string name="stream_search_actors_hint">ابحث باسم الفيلم أو المسلسل أو الممثل أو المخرج. نتائج الممثلين تعتمد على بيانات المصدر المتاحة.</string>
     <string name="stream_search_cast_results">نتائج تطابق الممثل أو المخرج: %1$d</string>
+    <string name="stream_search_ai_suggestions">BLOFY AI • ‏%1$d عنوان مقترح موجود في مكتبتك (تحقق من الممثل في التفاصيل)</string>
 </resources>
