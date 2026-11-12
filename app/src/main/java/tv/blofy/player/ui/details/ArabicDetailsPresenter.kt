@@ -44,6 +44,7 @@ internal class ArabicDetailsPresenter(
     private var localTranslator: Translator? = null
     private var cloudJob: Job? = null
     private var cloudFailed = false
+    private var cloudErrorLabel = "تعذر اتصال BLOFY AI • إعادة المحاولة"
     private var lastCloudAttemptVersion = -1
     private var showingOriginal = false
     private var localAutoEnabled = preferences.getBoolean("enabled", false)
@@ -104,6 +105,7 @@ internal class ArabicDetailsPresenter(
         cloudJob = null
         showingOriginal = false
         cloudFailed = false
+        cloudErrorLabel = "تعذر اتصال BLOFY AI • إعادة المحاولة"
         currentTitle = newTitle
         currentOverview = newOverview
         originalTitleView.visibility = View.GONE
@@ -176,7 +178,7 @@ internal class ArabicDetailsPresenter(
         if (BuildConfig.CODE_ONLY_LOGIN) {
             button.text = when {
                 cloudJob?.isActive == true -> "جاري الترجمة الذكية…"
-                cloudFailed -> "تعذر اتصال BLOFY AI • إعادة المحاولة"
+                cloudFailed -> cloudErrorLabel
                 !cloudEnabled -> "ترجمة AI للعربية • عبر الإنترنت"
                 allCloudFieldsReady() && !hasChangedCloudText() -> "الاسم محفوظ كما هو"
                 hasCloudTranslation() && showingOriginal -> "عرض الترجمة العربية"
@@ -209,26 +211,44 @@ internal class ArabicDetailsPresenter(
         val overview = currentOverview
         cloudFailed = false
         cloudJob = activity.lifecycleScope.launch {
-            val output = StreamAiTranslationClient.translate(
+            val response = StreamAiTranslationClient.translate(
                 activity.applicationContext,
                 if (ArabicDetailsPolicy.needsTranslation(title)) title else "",
                 if (ArabicDetailsPolicy.needsTranslation(overview)) overview else ""
             )
             if (version != captured || activity.isFinishing || activity.isDestroyed) return@launch
             cloudJob = null
-            if (output == null) {
-                cloudFailed = true
-            } else {
-                // A short English proper noun can legitimately remain unchanged
-                // (e.g. "Sigma"). Cache that *decision* too; previously it
-                // caused an infinite "AI connection failed" retry loop.
-                if (output.title.isNotBlank() && title.isNotBlank()) {
-                    cache("groq_v1_", title, output.title)
+            when (response) {
+                is StreamAiTranslationClient.Outcome.Unavailable -> {
+                    cloudFailed = true
+                    cloudErrorLabel = when (response.reason) {
+                        StreamAiTranslationClient.Problem.SESSION ->
+                            "جلسة BLOFY منتهية • افتح التفعيل"
+                        StreamAiTranslationClient.Problem.RATE_LIMIT ->
+                            "الترجمة مشغولة مؤقتًا • جرّب لاحقًا"
+                        StreamAiTranslationClient.Problem.SERVICE ->
+                            "خدمة Groq غير متاحة • إعادة المحاولة"
+                        StreamAiTranslationClient.Problem.CONNECTION ->
+                            "انقطع الاتصال أثناء الترجمة • إعادة المحاولة"
+                        StreamAiTranslationClient.Problem.INVALID ->
+                            "استجابة الترجمة غير مكتملة • إعادة المحاولة"
+                    }
                 }
-                if (output.overview.isNotBlank() && overview.isNotBlank()) {
-                    cache("groq_v1_", overview, output.overview)
+                is StreamAiTranslationClient.Outcome.Ready -> {
+                    val output = response.value
+                    // A legitimate proper-name translation can leave its
+                    // original spelling unchanged. Cache this decision too.
+                    if (output.title.isNotBlank() && title.isNotBlank()) {
+                        cache("groq_v1_", title, output.title)
+                    }
+                    if (output.overview.isNotBlank() && overview.isNotBlank()) {
+                        cache("groq_v1_", overview, output.overview)
+                    }
+                    if (!allCloudFieldsReady()) {
+                        cloudFailed = true
+                        cloudErrorLabel = "الترجمة غير مكتملة • إعادة المحاولة"
+                    }
                 }
-                if (!allCloudFieldsReady()) cloudFailed = true
             }
             renderVisible()
         }
