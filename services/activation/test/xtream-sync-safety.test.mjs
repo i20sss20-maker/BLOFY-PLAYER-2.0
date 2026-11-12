@@ -43,6 +43,47 @@ test('source without category API keeps manually hidden and ordered categories',
   }),/xtream_catalog_count_invalid/);
 });
 
+test('partial HTTP-200 sync cannot erase a small source or manually organized categories',()=>{
+  // A 200-item service unexpectedly returning only 3 entries must preserve
+  // all customer catalog references while operator reviews the source.
+  for(const oldItems of [50,80,120,300,499,800,30000]){
+    const truncated=Math.max(1,Math.floor(oldItems*0.09));
+    assert.throws(()=>assessXtreamSync({
+      previousItems:oldItems,importedItems:truncated,
+      previousCategories:8,importedCategories:1
+    }),/xtream_catalog_suspicious_drop_preserved/);
+  }
+  // Provider can legitimately remove modest subsets; old IDs and categories
+  // need no extra source calls or reindex if the response is plausible.
+  assert.deepEqual(assessXtreamSync({
+    previousItems:120,importedItems:91,
+    previousCategories:10,importedCategories:9
+  }),{preserveCategories:false,items:91,categories:9});
+  // An implausibly small category list may be a provider bug even when the
+  // media list itself is complete: keep the previous ordering/visibility.
+  assert.equal(assessXtreamSync({
+    previousItems:400,importedItems:395,
+    previousCategories:20,importedCategories:2
+  }).preserveCategories,true);
+  assert.equal(assessXtreamSync({
+    previousItems:75,importedItems:75,
+    previousCategories:8,importedCategories:1
+  }).preserveCategories,true);
+});
+
+test('initial sparse imports remain allowed and bad counts fail closed',()=>{
+  const fresh=assessXtreamSync({
+    previousItems:0,importedItems:2,
+    previousCategories:0,importedCategories:0
+  });
+  assert.equal(fresh.items,2);
+  assert.equal(fresh.preserveCategories,false);
+  assert.throws(()=>assessXtreamSync({
+    previousItems:100,importedItems:Number.MAX_VALUE,
+    previousCategories:8,importedCategories:8
+  }),/xtream_catalog_count_invalid/);
+});
+
 test('source sync checks unique inserted token counts BEFORE any stale-record pruning',async()=>{
   const source=await readFile(new URL('../src/xtream-admin-hook.mjs',import.meta.url),'utf8');
   const start=source.indexOf("async function syncServer(");
