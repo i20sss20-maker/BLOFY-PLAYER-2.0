@@ -3143,6 +3143,8 @@ async function unifiedStreamBridge(req,res,url){
     if(command==='logout')return json(res,200,await streamDistributors.logout(token));
     if(command==='list')return json(res,200,
       await streamDistributors.issued(token,payload),{'cache-control':'no-store'});
+    if(command==='clients')return json(res,200,
+      await streamDistributors.clients(token,payload),{'cache-control':'no-store'});
     if(command==='customer')return json(res,200,
       await streamDistributors.customer(token,payload),{'cache-control':'no-store'});
     if(command==='renew')return json(res,200,
