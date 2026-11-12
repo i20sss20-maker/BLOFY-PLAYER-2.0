@@ -64,4 +64,12 @@
     <string name="stream_ui_decoder_error">صيغة الفيديو غير مدعومة على هذا الجهاز؛ جرّب جودة أقل أو قناة أخرى</string>
     <string name="stream_ui_generic_error">تعذر إكمال الاتصال. جرّب تحديث التطبيق أو افحص الشبكة</string>
     <string name="stream_ui_opening">جارِ فتح BLOFY STREAM…</string>
+    <string name="stream_home_continue">أكمل مشاهدتك</string>
+    <string name="stream_home_continue_hint">تابع من آخر مكان وصلت له</string>
+    <string name="stream_home_for_you">مقترح لك</string>
+    <string name="stream_home_for_you_hint">حسب مشاهداتك المحفوظة على الجهاز</string>
+    <string name="stream_home_action">أفلام أكشن</string>
+    <string name="stream_home_comedy">أفلام كوميديا</string>
+    <string name="stream_home_drama">أفلام دراما</string>
+    <string name="stream_home_genre_hint">حسب التصنيفات المتوفرة من المصدر</string>
 </resources>
