@@ -57,6 +57,7 @@ const publicIssue=row=>{
  canRelogin:status==='active'||status==='expiring'?row.kind==='app'&&row.code_bound===true:false,
  reloginCount:Number(row.admin_relogin_count||0),
  reloginUntil:row.admin_relogin_until?new Date(row.admin_relogin_until).getTime():null,
+ codeHint:String(row.code_hint||'').slice(0,25),
  customerName:String(row.customer_name||'').slice(0,80),
  customerPhone:String(row.customer_phone||'').slice(0,22),
  createdAt:new Date(row.created_at).getTime(),
@@ -225,6 +226,7 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
  }
 
  const issueProjection=`SELECT i.*,
+   c.code_hint,
    c.redeemed_at AS code_activated_at,
    c.revoked_at AS code_revoked_at,
    (c.redeemed_device_hash IS NOT NULL) AS code_bound,
@@ -237,18 +239,36 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
      ON i.kind='app' AND c.id=i.subject_id
    LEFT JOIN blofy_xtream_gateway_accounts a
      ON a.id=CASE WHEN i.kind='app' THEN c.account_id ELSE i.subject_id END`;
- async function issued(token,{q='',offset=0}={}){
+ async function issued(token,{q='',offset=0,status='all'}={}){
   const actor=await session(token);
   const term=clean(q,80).toLowerCase();
   const page=number(offset,0,10000,'distributor_offset_invalid');
+  const filter=['all','active','expiring','expired','unused','disabled'].includes(status)
+    ?status:'all';
   const rows=(await pool.query(issueProjection+`
    WHERE i.distributor_id=$1 AND (
      $2::text='' OR i.label ILIKE '%'||$2||'%' OR
      i.customer_name ILIKE '%'||$2||'%' OR
      i.customer_phone ILIKE '%'||$2||'%' OR
      c.code_hint ILIKE '%'||$2||'%')
+   AND (
+     $4::text='all' OR
+     ($4='active' AND i.status='done' AND a.enabled=TRUE
+       AND (i.kind='xtream' OR c.redeemed_at IS NOT NULL)
+       AND a.expires_at>NOW()+INTERVAL '7 days'
+       AND c.revoked_at IS NULL) OR
+     ($4='expiring' AND i.status='done' AND a.enabled=TRUE
+       AND (i.kind='xtream' OR c.redeemed_at IS NOT NULL)
+       AND a.expires_at>NOW() AND a.expires_at<=NOW()+INTERVAL '7 days'
+       AND c.revoked_at IS NULL) OR
+     ($4='expired' AND i.status='done' AND a.expires_at<=NOW()) OR
+     ($4='unused' AND i.status='done' AND i.kind='app'
+       AND c.redeemed_at IS NULL AND c.revoked_at IS NULL) OR
+     ($4='disabled' AND i.status='done'
+       AND (a.enabled=FALSE OR c.revoked_at IS NOT NULL))
+   )
    ORDER BY i.created_at DESC LIMIT 101 OFFSET $3`,
-   [actor.id,term,page])).rows;
+   [actor.id,term,page,filter])).rows;
   const stats=(await pool.query(`
    SELECT COUNT(*) FILTER (WHERE i.status='done')::int AS total,
     COUNT(*) FILTER (WHERE i.status='done'
@@ -274,6 +294,27 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
     stats:{total:Number(stats.total||0),active:Number(stats.active||0),
       expiring:Number(stats.expiring||0),expired:Number(stats.expired||0),
       customers:Number(stats.customers||0)}};
+ }
+
+ async function clients(token,{q=''}={}){
+  const actor=await session(token),term=clean(q,80);
+  const rows=(await pool.query(`SELECT customer_phone,
+    MAX(customer_name) AS customer_name,
+    COUNT(*)::int AS subscriptions,
+    MAX(created_at) AS latest
+    FROM blofy_stream_distributor_issues
+    WHERE distributor_id=$1 AND status='done'
+      AND (customer_phone<>'' OR customer_name<>'')
+      AND ($2::text='' OR customer_phone ILIKE '%'||$2||'%'
+        OR customer_name ILIKE '%'||$2||'%')
+    GROUP BY customer_phone,COALESCE(NULLIF(customer_name,''),customer_phone)
+    ORDER BY MAX(created_at) DESC LIMIT 100`,[actor.id,term])).rows;
+  return {ok:true,items:rows.map(x=>({
+    name:String(x.customer_name||'').slice(0,80),
+    phone:String(x.customer_phone||'').slice(0,22),
+    subscriptions:Number(x.subscriptions||0),
+    latest:new Date(x.latest).getTime()
+  }))};
  }
  async function showOwned(distributorId,issueId){
   if(!UUID.test(String(issueId||'')))throw fail('distributor_issue_id_invalid');
@@ -602,5 +643,5 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
   return {ok:true,id,type:kind,group:category,title:customTitle,
     sortOrder:sort,hidden,scope:'distributor_only_not_global'};
  }
- return {ensureSchema,listAdmin,createAdmin,setAdmin,login,me,logout,issued,reveal,issue,library,organize,customer,renew,relogin};
+ return {ensureSchema,listAdmin,createAdmin,setAdmin,login,me,logout,issued,reveal,issue,library,organize,customer,renew,relogin,clients};
 }
