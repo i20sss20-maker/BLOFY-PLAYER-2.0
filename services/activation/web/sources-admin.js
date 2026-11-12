@@ -2271,6 +2271,15 @@ document.querySelectorAll('[data-open-workspace]').forEach(button=>{
 document.querySelectorAll('[data-open-tab]').forEach(button=>{
   button.addEventListener('click',()=>void switchTab(button.dataset.openTab).then(()=>window.scrollTo({top:0,behavior:'smooth'})));
 });
+document.getElementById('streamCodeRenewShortcut')?.addEventListener('click',event=>{
+  event.preventDefault();
+  selectWorkspaceMode('accounts');
+  void switchTab('xtream').then(()=>{
+    document.getElementById('stream-code-management')?.scrollIntoView({
+      behavior:'smooth',block:'start'
+    });
+  });
+});
 selectWorkspaceMode('sources');
 
 document.querySelectorAll('.tab').forEach(button => button.addEventListener('click', () => switchTab(button.dataset.tab)));
