@@ -77,4 +77,6 @@
     <string name="stream_catalog_sort_newest">الترتيب: الأحدث</string>
     <string name="stream_catalog_sort_rating">الترتيب: التقييم</string>
     <string name="stream_catalog_sort_year">الترتيب: السنة</string>
+    <string name="stream_home_recent">شاهدته مؤخرًا</string>
+    <string name="stream_home_recent_hint">آخر الأفلام والمسلسلات التي شاهدتها</string>
 </resources>
