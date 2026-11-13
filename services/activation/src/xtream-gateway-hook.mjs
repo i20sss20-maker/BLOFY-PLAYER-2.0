@@ -96,6 +96,7 @@ pool.on('error', error => console.error('xtream gateway database error:', safeEr
 const distributorCatalog=createDistributorCustomerCatalog({
   pool,enabled:process.env.BLOFY_STREAM_DISTRIBUTOR_CATALOG_CANARY==='1',
   distributorAllowlist:process.env.BLOFY_STREAM_DISTRIBUTOR_CATALOG_CANARY_IDS||'',
+  accountAllowlist:process.env.BLOFY_STREAM_DISTRIBUTOR_CATALOG_CANARY_ACCOUNT_IDS||'',
   onError:code=>console.warn('BLOFY_DISTRIBUTOR_CATALOG_CANARY',code)
 });
 
