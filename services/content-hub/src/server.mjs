@@ -1,4 +1,5 @@
 import http from 'node:http';
+import {once} from 'node:events';
 import {randomUUID,randomBytes,createHash,timingSafeEqual} from 'node:crypto';
 import {createPrivateS3Adapter} from './private-s3.mjs';
 import {createSourceLease} from './source-lease.mjs';
@@ -73,8 +74,62 @@ export function createContentHubServer({storage,lease,
     ok:bucket&&database,privateBucketAvailable:bucket,
     databaseAvailable:database,downloadQueueEnabled:false,
     syntheticTestEnabled:allowSynthetic,
-    lastSynthetic,pilotRunning,lastPilot,customerCutover:false,
+    lastSynthetic,pilotRunning,lastPilot,
+    durablePilot:await lease.getPilotStatus?.(
+      String(process.env.BLOFY_CONTENT_HUB_PILOT_RUN_ID||'')
+    ).catch(()=>null)||null,customerCutover:false,
     licensedRightsRequired:true});
+  }
+  // Admin-only and private-network-only canary. No customer cutover.
+  const playback=/^\/internal\/pilot\/playback\/([A-Za-z0-9_-]{8,80})$/.exec(path);
+  if(playback&&req.method==='GET'){
+   if(String(req.url||'').includes('?'))
+    return json(res,400,{ok:false,code:'pilot_private_query_denied'});
+   const saved=await lease.getVerifiedPilotObject?.(playback[1]).catch(()=>null);
+   if(!saved||!Number.isSafeInteger(saved.bytes)||saved.bytes<=0)
+    return json(res,404,{ok:false,code:'pilot_verified_media_unavailable'});
+   const m=/^bytes=(0|[1-9][0-9]*)-(0|[1-9][0-9]*)$/.exec(
+    String(req.headers.range||''));
+   const from=Number(m?.[1]),to=Number(m?.[2]);
+   if(!m||!Number.isSafeInteger(from)||!Number.isSafeInteger(to)||
+      to<from||to>=saved.bytes||to-from+1>8*1024*1024)
+    return json(res,416,{ok:false,code:'pilot_bounded_range_required'});
+   const type=saved.key.endsWith('.mkv')?'video/x-matroska':
+    saved.key.endsWith('.mp4')?'video/mp4':
+    saved.key.endsWith('.ts')?'video/mp2t':'video/x-msvideo';
+   const abort=new AbortController();
+   const timer=setTimeout(()=>abort.abort(),90000);timer.unref?.();
+   const onDisconnect=()=>abort.abort();
+   res.once('close',onDisconnect);
+   let body=null;
+   try{
+    body=await storage.readVerifiedRange({
+      key:saved.key,from,to,expectedBytes:saved.bytes,signal:abort.signal
+    });
+    res.writeHead(206,{
+      'content-type':type,'content-length':String(to-from+1),
+      'content-range':`bytes ${from}-${to}/${saved.bytes}`,
+      'accept-ranges':'bytes','cache-control':'private,no-store',
+      'x-content-type-options':'nosniff','referrer-policy':'no-referrer'
+    });
+    let count=0;
+    for await(const chunk of body){
+      count+=chunk.byteLength;
+      if(count>to-from+1)throw Error('pilot_media_range_overrun');
+      if(!res.write(chunk))await once(res,'drain',{signal:abort.signal});
+    }
+    if(count!==to-from+1)throw Error('pilot_media_range_short');
+    res.end();
+   }catch{
+    if(res.headersSent){if(!res.destroyed)res.destroy()}
+    else if(!res.destroyed)json(res,503,{
+      ok:false,code:'pilot_private_media_read_failed'});
+   }finally{
+    clearTimeout(timer);
+    res.off('close',onDisconnect);
+    body?.destroy?.();
+   }
+   return;
   }
   if(path==='/internal/storage/synthetic-check'&&req.method==='POST'){
    if(!allowSynthetic)return json(res,409,{
