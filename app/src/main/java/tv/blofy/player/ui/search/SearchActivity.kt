@@ -248,7 +248,13 @@ class SearchActivity : AppCompatActivity() {
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = dp(5) })
         setContentView(root)
         renderRecentSearches()
-        input.requestFocus()
+        val initialQuery=intent.getStringExtra(EXTRA_INITIAL_QUERY)
+            ?.trim()?.take(120).orEmpty()
+        if(initialQuery.isNotEmpty()) {
+            input.setText(initialQuery)
+            input.setSelection(input.length())
+            searchRunner.submit(initialQuery, true)
+        } else input.requestFocus()
     }
 
     private fun selectFilter(key: String) {
@@ -757,6 +763,7 @@ class SearchActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_KIND = "kind"
+        const val EXTRA_INITIAL_QUERY = "initial_query"
         const val KIND_LIVE = "live"
         const val KIND_SERIES = "series"
         const val KIND_MOVIE = "movie"
