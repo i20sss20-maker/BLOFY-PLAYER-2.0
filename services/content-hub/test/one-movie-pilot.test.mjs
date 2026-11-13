@@ -79,7 +79,7 @@ test('one licensed movie is copied in sequential private ranges, then verified',
    mediaId:'314',gatewayId:123,extension:'mkv'
   });
   counts.reads++;
-  const match=/^bytes=(\\d+)-(\\d+)$/.exec(init.headers.range);
+  const match=/^bytes=(\d+)-(\d+)$/.exec(init.headers.range);
   assert.ok(match);
   const from=Number(match[1]),to=Number(match[2]);
   const length=to-from+1;
