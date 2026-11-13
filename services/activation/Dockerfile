@@ -26,5 +26,9 @@ RUN node --test test/xtream-series-resolver.test.mjs test/xtream-series-probe-no
 # No distributor deployment unless credit, auth and ownership tests pass.
 COPY test/stream-distributors.test.mjs ./test/stream-distributors.test.mjs
 RUN node --check src/stream-distributors.mjs && node --check src/xtream-admin-hook.mjs && node --test test/stream-distributors.test.mjs
+# Ship no experimental catalog enforcement without scoped auth, bounded
+# hidden selections, and backward-compatible disabled-by-default checks.
+COPY test/xtream-distributor-customer-catalog.test.mjs ./test/xtream-distributor-customer-catalog.test.mjs
+RUN node --check src/xtream-distributor-customer-catalog.mjs && node --check src/xtream-gateway-hook.mjs && node --test test/xtream-distributor-customer-catalog.test.mjs
 EXPOSE 8080
 CMD ["npm","start"]
