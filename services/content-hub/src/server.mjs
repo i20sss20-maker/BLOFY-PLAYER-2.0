@@ -23,7 +23,7 @@ export async function runSyntheticPrivateStorageCheck({storage}){
  const key='saleh/movie/'+FIXTURE_SOURCE+'/fixture'+randomUUID().replaceAll('-','')+'.mp4';
  const data=randomBytes(FIXTURE_SIZE);
  const digest=createHash('sha256').update(data).digest('hex');
- let uploadId=null,completed=false;
+ let uploadId=null,complete=false,verified=false,cleanup=false;
  try{
   const o=await storage.begin({key,private:true,
    contentType:'application/octet-stream',
@@ -31,26 +31,23 @@ export async function runSyntheticPrivateStorageCheck({storage}){
   uploadId=o.uploadId;
   const p=await storage.part({key,uploadId,partNumber:1,body:data});
   await storage.complete({key,uploadId,parts:[{partNumber:1,etag:p.etag}]});
-  completed=true;uploadId=null;
+  complete=true;uploadId=null;
   const proof=await storage.verify({key,expectedBytes:data.length,
    expectedSha256:digest});
-  return {ok:proof?.ok===true&&proof.bytes===data.length,
-   code:proof?.ok===true?'private_s3_roundtrip_verified':
-     'private_s3_digest_mismatch',
-   fixtureBytes:data.length,privateOnly:true,providerRequests:0,
-   customerTrafficChanged:false};
+  verified=proof?.ok===true&&proof.bytes===data.length;
  }catch{
-  return {ok:false,code:'private_s3_roundtrip_failed',privateOnly:true,
-   providerRequests:0,customerTrafficChanged:false};
+  verified=false;
  }finally{
   if(uploadId)await storage.abort({key,uploadId}).catch(()=>{});
-  // This fixture is never a customer file and is always deleted, regardless
-  // of whether storage verification passed or failed.
-  await storage.remove({key}).catch(()=>{});
+  try{await storage.remove({key});cleanup=true}catch{}
   data.fill(0);
  }
+ return {ok:verified&&cleanup,
+   code:!cleanup?'private_s3_fixture_cleanup_failed':verified?
+     'private_s3_roundtrip_verified':'private_s3_roundtrip_failed',
+   fixtureBytes:FIXTURE_SIZE,privateOnly:true,providerRequests:0,
+   customerTrafficChanged:false,fixtureRemoved:cleanup};
 }
-
 export function createContentHubServer({storage,lease,
  token='',allowSynthetic=false,logger=()=>{}}={}){
  if(!storage||!lease)throw Error('content_hub_private_dependencies_required');
