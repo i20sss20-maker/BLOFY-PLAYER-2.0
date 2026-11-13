@@ -57,7 +57,11 @@ test('one manual batch is admin-token protected, confirmation-gated and disabled
   BLOFY_CONTENT_HUB_UPLOAD_ENABLED:'1',
   BLOFY_CONTENT_HUB_STORAGE_RIGHTS_CONFIRMED:'1',
   BLOFY_CONTENT_HUB_SOURCE_QUIET_WINDOW_CONFIRMED:'1',
-  BLOFY_CONTENT_HUB_SOURCE_IDLE_CONFIRMED:'1'
+  BLOFY_CONTENT_HUB_SOURCE_IDLE_CONFIRMED:'1',
+  BLOFY_CONTENT_HUB_BATCH_RUN_ID:'safe_chunk_test',
+  BLOFY_CONTENT_HUB_BRIDGE_TOKEN:'x'.repeat(40),
+  BLOFY_CONTENT_HUB_EXPECTED_BYTES:String(CHUNK_BYTES*2),
+  BLOFY_CONTENT_HUB_APPROVED_GATEWAY_ID:'123'
  };
  const hub=createContentHubServer({storage,lease,token,pilotEnv,
    batchRunner:async()=>{calls++;return {
