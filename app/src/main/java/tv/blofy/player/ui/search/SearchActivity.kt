@@ -111,75 +111,14 @@ class SearchActivity : AppCompatActivity() {
         // Cast metadata is searched locally. The separate BLOFY AI button
         // sends ONLY the typed phrase to our authenticated first-party gateway.
         root.addView(TextView(this).apply {
-            text = getString(R.string.stream_search_actors_hint)
+            text = getString(if (BuildConfig.CODE_ONLY_LOGIN)
+                R.string.stream_search_local_only else R.string.stream_search_actors_hint)
             textSize = 11.5f
             setTextColor(BlofyTvDesign.TextMuted)
             gravity = Gravity.START
             setPadding(0, 0, 0, dp(8))
         })
 
-        if (BuildConfig.CODE_ONLY_LOGIN) {
-            val modeBar = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                layoutDirection = resources.configuration.layoutDirection
-            }
-            localModeButton = Button(this).apply {
-                text = getString(R.string.stream_ai_mode_local)
-                isAllCaps = false
-                textSize = 14f
-                CinemaStyle.styleButton(this, true)
-                setOnClickListener { setAiMode(false) }
-            }
-            aiModeButton = Button(this).apply {
-                text = getString(R.string.stream_ai_mode_chat)
-                isAllCaps = false
-                textSize = 14f
-                CinemaStyle.styleButton(this, false)
-                setOnClickListener { setAiMode(true) }
-            }
-            modeBar.addView(localModeButton, LinearLayout.LayoutParams(0, dp(50), 1f).apply {
-                marginEnd = dp(8)
-            })
-            modeBar.addView(aiModeButton, LinearLayout.LayoutParams(0, dp(50), 1f))
-            root.addView(modeBar, LinearLayout.LayoutParams(-1, dp(58)).apply {
-                bottomMargin = dp(7)
-            })
-        }
-        if (BuildConfig.CODE_ONLY_LOGIN) {
-            val suggestions = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                layoutDirection = resources.configuration.layoutDirection
-            }
-            listOf(
-                R.string.stream_ai_quick_action to "رشح لي فيلم أكشن جديد وتقييمه مرتفع",
-                R.string.stream_ai_quick_comedy to "رشح لي فيلم كوميدي خفيف وتقييمه مرتفع",
-                R.string.stream_ai_quick_series to "رشح لي مسلسل جريمة حديث"
-            ).forEach { (label, question) ->
-                suggestions.addView(Button(this).apply {
-                    text = getString(label)
-                    isAllCaps = false
-                    textSize = 12f
-                    CinemaStyle.styleButton(this)
-                    setOnClickListener {
-                        if (!aiMode) setAiMode(true)
-                        input.setText(question)
-                        input.setSelection(input.length())
-                        sendAiQuestion()
-                    }
-                }, LinearLayout.LayoutParams(dp(172), dp(44)).apply { marginEnd = dp(9) })
-            }
-            aiQuickStrip = HorizontalScrollView(this).apply {
-                isHorizontalScrollBarEnabled = false
-                isFocusable = false
-                visibility = View.GONE
-                addView(suggestions)
-            }
-            root.addView(aiQuickStrip, LinearLayout.LayoutParams(-1, dp(50)).apply {
-                bottomMargin = dp(7)
-            })
-        }
         filterStrip = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutDirection = resources.configuration.layoutDirection
@@ -283,40 +222,11 @@ class SearchActivity : AppCompatActivity() {
             isFocusable = false
             addView(results, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
         }
-        chatTranscript = TextView(this).apply {
-            text = getString(R.string.stream_ai_chat_start)
-            textSize = 13f
-            maxLines = 7
-            setTextColor(BlofyTvDesign.TextSecondary)
-            setPadding(dp(17), dp(13), dp(17), dp(13))
-            gravity = Gravity.START
-            background = BlofyTvDesign.glassSurface(dp(18).toFloat())
-            visibility = View.GONE
-        }
-        if (BuildConfig.CODE_ONLY_LOGIN) {
-            root.addView(chatTranscript, LinearLayout.LayoutParams(-1, -2).apply {
-                bottomMargin = dp(9)
-            })
-        }
         val queryRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
         queryRow.addView(input, LinearLayout.LayoutParams(0, dp(64), 1f))
-        aiButton = Button(this).apply {
-            text = getString(R.string.stream_ai_search_button)
-            isAllCaps = false
-            textSize = 13f
-            minWidth = 0
-            minimumWidth = 0
-            visibility = View.GONE
-            setOnClickListener { sendAiQuestion() }
-        }
-        if (BuildConfig.CODE_ONLY_LOGIN) {
-            queryRow.addView(aiButton, LinearLayout.LayoutParams(dp(138), dp(56)).apply {
-                marginStart = dp(9)
-            })
-        }
         aiStatus = TextView(this).apply {
             textSize = 12f
             maxLines = 2
