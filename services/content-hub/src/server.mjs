@@ -340,6 +340,38 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
    },3000);
    timer.unref?.();
   }
+  // User-authorized transfer of exactly ONE 8MiB chunk. This startup
+  // control never repeats after a restart because PostgreSQL claims
+  // the boot event before the first upstream media request.
+  if(process.env.BLOFY_CONTENT_HUB_CHUNKED_ON_BOOT==='1'){
+   const timer=setTimeout(()=>{
+    void (async()=>{
+     const env=process.env;
+     const runId=String(env.BLOFY_CONTENT_HUB_BATCH_RUN_ID||'');
+     const eventToken=String(env.BLOFY_CONTENT_HUB_BATCH_BOOT_TOKEN||'');
+     const ready=chunkedBatchReadiness(env);
+     if(!ready.ready)return {ok:false,code:'batch_safety_gates_off',
+       blockedBy:ready.blockedBy,customerCutover:false};
+     const claimed=await lease.claimBatchBootOnce(eventToken,runId);
+     if(!claimed)return {ok:false,code:'batch_boot_already_claimed',
+       customerCutover:false};
+     const signal=hub.startPilot();
+     try{
+      return await runChunkedMovieBatch({storage,lease,env,signal,
+       logger:(name,payload)=>console.info(name,JSON.stringify(payload))});
+     }finally{hub.recordPilot({ok:false,code:'batch_boot_completed',
+       stored:false})}
+    })().then(result=>{
+     console.info('BLOFY_CONTENT_HUB_BATCH_BOOT',JSON.stringify({
+      ok:result.ok===true,code:result.code,blockedBy:result.blockedBy,
+      bytesCopied:result.bytesCopied||0,chunksSaved:result.chunksSaved||0,
+      completed:result.completed===true,customerCutover:false
+     }));
+    }).catch(()=>console.warn('BLOFY_CONTENT_HUB_BATCH_BOOT',
+     JSON.stringify({ok:false,code:'batch_boot_unavailable',
+      customerCutover:false})));
+   },6500);timer.unref?.();
+  }
   // Operator-only one-shot full movie pilot; all switches default OFF.
   // Never run alongside the existing small real-source sample.
   if(process.env.BLOFY_CONTENT_HUB_ONE_MOVIE_ON_BOOT==='1'&&
