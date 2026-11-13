@@ -3139,15 +3139,18 @@ async function unifiedStreamBridge(req,res,url){
   const batchBridgePaths={
     '/internal/blofy-stream/content-hub/status':'/internal/pilots',
     '/internal/blofy-stream/content-hub/preflight':'/internal/pilot/preflight',
-    '/internal/blofy-stream/content-hub/batch/next':'/internal/batch/next'
+    '/internal/blofy-stream/content-hub/batch/next':'/internal/batch/next',
+    '/internal/blofy-stream/content-hub/batch/start':'/internal/batch/start',
+    '/internal/blofy-stream/content-hub/batch/pause':'/internal/batch/pause'
   };
   if(Object.hasOwn(batchBridgePaths,p)){
-    const isNext=p.endsWith('/batch/next');
-    if((isNext&&req.method!=='POST')||(!isNext&&req.method!=='GET'))
+    const write=p.includes('/batch/');
+    const confirmed=write&&!p.endsWith('/batch/pause');
+    if((write&&req.method!=='POST')||(!write&&req.method!=='GET'))
       return json(res,405,{ok:false,code:'hub_bridge_method_denied'});
-    if(isNext){
+    if(write){
       const body=await readJson(req);
-      if(body.confirmed!==true)return json(res,400,{
+      if(confirmed&&body.confirmed!==true)return json(res,400,{
         ok:false,code:'hub_batch_explicit_confirmation_required'});
     }
     const operatorToken=String(process.env.BLOFY_CONTENT_HUB_OPERATOR_TOKEN||'');
@@ -3158,7 +3161,7 @@ async function unifiedStreamBridge(req,res,url){
         batchBridgePaths[p],{
         method:req.method,redirect:'manual',signal:AbortSignal.timeout(8500),
         headers:{authorization:'Bearer '+operatorToken,
-          ...(isNext?{'x-blofy-batch-confirm':'approved-8mib-batch'}:{})}
+          ...(confirmed?{'x-blofy-batch-confirm':'approved-8mib-batch'}:{})}
       });
       if(![200,202,400,409,503].includes(response.status))
         return json(res,503,{ok:false,code:'hub_private_response_invalid'});
