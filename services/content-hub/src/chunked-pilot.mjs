@@ -131,6 +131,13 @@ export async function runChunkedMovieBatch({
      signal:signal?AbortSignal.any([signal,AbortSignal.timeout(90000)]):
       AbortSignal.timeout(90000)
    });
+   if(response?.status!==206||!parseMirrorContentRange(
+     response.headers?.get?.('content-range'),{
+       from,to,expectedBytes:cfg.expectedBytes
+     })){
+     await response?.body?.cancel().catch(()=>{});
+     throw Error('source_range_retryable');
+   }
    const validator=String(response.headers?.get?.('etag')||
      response.headers?.get?.('last-modified')||'').trim();
    if(!validator||validator.length>140||
