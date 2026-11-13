@@ -570,7 +570,9 @@ class SearchActivity : AppCompatActivity() {
         if (input.text?.toString()?.trim() != q || activeKind != selectedKind || !aiMode) return
         if (expanded.isEmpty()) {
             // Never display model-invented media as if it were on the server.
-            appendChatTurn(q, getString(R.string.stream_ai_chat_none))
+            appendChatTurn(q,
+                listOf(AiReplyPolicy.safe(ai.reply), getString(R.string.stream_ai_chat_none))
+                    .filter(String::isNotBlank).joinToString("\n"))
             showAiStatus("")
             showMessage(getString(R.string.stream_ai_chat_none))
             return
@@ -595,8 +597,11 @@ class SearchActivity : AppCompatActivity() {
                 " (" + year + ")"
             } ?: "")
         }
-        appendChatTurn(q, getString(R.string.stream_ai_chat_matches, total) +
-            if (examples.isNotBlank()) "\n" + examples else "")
+        appendChatTurn(q, listOfNotNull(
+            AiReplyPolicy.safe(ai.reply).takeIf(String::isNotBlank),
+            getString(R.string.stream_ai_chat_matches, total),
+            examples.takeIf(String::isNotBlank)
+        ).joinToString("\n"))
         showAiStatus(getString(R.string.stream_ai_found, total))
     }
 
