@@ -86,7 +86,7 @@ internal object OfflineDownloadUi {
             .setTitle(activity.getString(R.string.stream_downloads_confirm_title,allowed.size))
             .setMessage(activity.getString(R.string.stream_downloads_consent) +
                 (estimatedBytes?.let {
-                    "\\n\\n" + activity.getString(R.string.stream_downloads_estimated_size,
+                    "\n\n" + activity.getString(R.string.stream_downloads_estimated_size,
                         OfflineDownloadStore.formatSize(it))
                 } ?: ""))
             .setPositiveButton(R.string.stream_downloads_confirm) { _, _ ->
