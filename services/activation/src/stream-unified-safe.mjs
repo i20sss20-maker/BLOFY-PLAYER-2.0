@@ -31,6 +31,7 @@ export function streamSafeCatalog(item){
     id:String(item?.id||'').slice(0,140),serverId:String(item?.serverId||''),
     name:String(item?.name||'').slice(0,220),
     type:['live','movie','series'].includes(item?.type)?item.type:'unknown',
+    categoryId:String(item?.categoryId||'').slice(0,128),
     categoryName:String(item?.categoryName||'').slice(0,90),
     enabled:item?.enabled===true,
     containerExtension:String(item?.containerExtension||'').slice(0,12)
