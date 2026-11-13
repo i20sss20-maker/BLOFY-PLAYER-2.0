@@ -542,7 +542,7 @@ class SearchActivity : AppCompatActivity() {
             return
         }
         showMessage(getString(R.string.stream_ai_searching))
-        val locale = if (resources.configuration.locales[0].language == "ar") "ar" else "en"
+        val locale = if (androidx.core.os.ConfigurationCompat.getLocales(resources.configuration).get(0)?.language == "ar") "ar" else "en"
         showAiStatus(getString(R.string.stream_ai_searching))
         val prompt = AiConversationPolicy.prompt(lastAiQuestion, q)
         val aiResponse = StreamAiSearchClient.lookup(applicationContext, prompt, locale)
