@@ -123,4 +123,5 @@
     <string name="stream_cast_available">أعمال هذا الممثل المتوفرة في مكتبتك</string>
     <string name="stream_cast_none">لا توجد أعمال مؤكدة محفوظة في بيانات طاقم التمثيل حاليًا. فتح تفاصيل أعمال أكثر قد يحسّن النتائج.</string>
     <string name="stream_cast_search">بحث BLOFY AI عن هذا الممثل</string>
+    <string name="stream_cast_loading">جاري البحث عن أعمال الممثل المحفوظة في مكتبتك…</string>
 </resources>
