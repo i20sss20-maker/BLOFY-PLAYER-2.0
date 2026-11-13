@@ -1,9 +1,9 @@
-name: BLOFY STREAM 55.8.20 AI Catalog Genre QA
+name: BLOFY STREAM 55.8.20 Library Downloads Cast QA
 
 on:
   push:
     branches:
-      - fix/stream-55-8-20-ai-library-search-fast-genres-20261113
+      - feat/stream-55-8-20-smart-library-downloads-cast-20261113
   workflow_dispatch:
 
 permissions:
