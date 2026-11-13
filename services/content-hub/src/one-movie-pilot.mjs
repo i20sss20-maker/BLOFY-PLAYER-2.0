@@ -1,0 +1,107 @@
+// One-movie licensed copy pilot. Disabled by default, private-only.
+// Never touches customer playback routes or downloads the entire catalog.
+import {runLicensedMirrorPilot} from './mirror-pilot.mjs';
+import {MIN_PART_BYTES} from './mirror-policy.mjs';
+
+const ORIGIN='http://blofy-activation-portal.railway.internal:3000';
+const MAX_PILOT_BYTES=4*1024*1024*1024;
+const ID=/^[A-Za-z0-9_-]{1,128}$/;
+const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
+const SAFE_RUN=/^[A-Za-z0-9_-]{8,80}$/;
+const BASE={privateOnly:true,customerCutover:false,customerTrafficChanged:false,automaticCatalogDownload:false};
+
+function isEnabled(env){
+ return env.BLOFY_CONTENT_HUB_ONE_MOVIE_ON_BOOT==='1'&&
+  env.BLOFY_CONTENT_HUB_UPLOAD_ENABLED==='1'&&
+  env.BLOFY_CONTENT_HUB_STORAGE_RIGHTS_CONFIRMED==='1'&&
+  env.BLOFY_CONTENT_HUB_SOURCE_QUIET_WINDOW_CONFIRMED==='1'&&
+  env.BLOFY_CONTENT_HUB_SOURCE_IDLE_CONFIRMED==='1';
+}
+function timeoutSignal(signal){
+ const timeout=AbortSignal.timeout(90000);
+ return signal?AbortSignal.any([signal,timeout]):timeout;
+}
+function cleanMetadata(item){
+ return item?.sourceName==='saleh'&&item?.mediaKind==='movie'&&
+  UUID.test(String(item.sourceId||''))&&ID.test(String(item.mediaId||''))&&
+  Number.isSafeInteger(item.gatewayId)&&item.gatewayId>0&&
+  ['mp4','mkv','ts','avi'].includes(item.extension);
+}
+async function getMetadata(fetchImpl,token,signal){
+ const response=await fetchImpl(ORIGIN+'/internal/blofy-content-hub/describe',{
+  method:'GET',redirect:'manual',headers:{authorization:'Bearer '+token},
+  signal:timeoutSignal(signal)
+ });
+ if(response.status!==200)throw Error('pilot_private_bridge_unavailable');
+ const data=await response.json();
+ if(!cleanMetadata(data))throw Error('pilot_movie_scope_invalid');
+ return data;
+}
+
+// Only run this from a private operator-controlled process. No public route.
+export async function runOneMoviePilot({
+ env=process.env,storage,lease,fetchImpl=fetch,signal,logger=()=>{}
+}={}){
+ if(!isEnabled(env))return {...BASE,ok:false,code:'pilot_not_enabled',stored:false};
+ const runId=String(env.BLOFY_CONTENT_HUB_PILOT_RUN_ID||'');
+ const token=String(env.BLOFY_CONTENT_HUB_BRIDGE_TOKEN||'');
+ const expectedBytes=Number(env.BLOFY_CONTENT_HUB_EXPECTED_BYTES);
+ if(!SAFE_RUN.test(runId)||token.length<32||
+  !Number.isSafeInteger(expectedBytes)||expectedBytes<MIN_PART_BYTES||
+  expectedBytes>MAX_PILOT_BYTES)
+  return {...BASE,ok:false,code:'pilot_operator_configuration_missing',stored:false};
+ if(!storage||!lease||typeof lease.claimPilotRun!=='function'||
+   typeof lease.finishPilotRun!=='function'||typeof storage.health!=='function')
+  return {...BASE,ok:false,code:'pilot_private_dependencies_missing',stored:false};
+ const bucket=await storage.health().catch(()=>({ok:false}));
+ if(bucket?.ok!==true)
+  return {...BASE,ok:false,code:'pilot_private_bucket_unavailable',stored:false};
+ // Durable one-shot claim: a container restart can never repeat the same run ID.
+ const claimed=await lease.claimPilotRun(runId);
+ if(!claimed)return {...BASE,ok:false,code:'pilot_run_already_claimed',stored:false};
+ const deadline=AbortSignal.timeout(2*60*60*1000);
+ const combined=signal?AbortSignal.any([signal,deadline]):deadline;
+ let result={...BASE,ok:false,code:'pilot_failed',stored:false};
+ try{
+  const meta=await getMetadata(fetchImpl,token,combined);
+  if(env.BLOFY_CONTENT_HUB_APPROVED_GATEWAY_ID&&
+    Number(env.BLOFY_CONTENT_HUB_APPROVED_GATEWAY_ID)!==meta.gatewayId)
+   throw Error('pilot_movie_not_approved');
+  const approved={
+   sourceName:meta.sourceName,sourceId:meta.sourceId,
+   mediaKind:'movie',mediaId:meta.mediaId,extension:meta.extension,
+   expectedBytes,activeUpstreamFeeds:0,
+   // Per-run explicit approval, not derived from the upstream restreamer flag.
+   licenseEvidence:{storagePermitted:true,scope:'saleh-vod-persistent-copy'}
+  };
+  const readRange=async({from,to,signal:chunkSignal})=>{
+   // Range bridge validates the upstream URL, response length and redirects.
+   const headers={
+    authorization:'Bearer '+token,
+    range:`bytes=${from}-${to}`,'accept-encoding':'identity'
+   };
+   return fetchImpl(ORIGIN+
+    '/internal/blofy-content-hub/source/movie/'+meta.gatewayId,{
+    method:'GET',redirect:'manual',headers,
+    signal:timeoutSignal(chunkSignal||combined)
+   });
+  };
+  const work=await runLicensedMirrorPilot({
+   env,job:approved,privateBucket:{private:true,configured:true},
+   readRange,storage,lease,verifyStoredObject:args=>storage.verify(args),
+   signal:combined,partBytes:MIN_PART_BYTES
+  });
+  result={...BASE,...work};
+  logger('BLOFY_CONTENT_HUB_ONE_MOVIE_PILOT',{
+   ok:result.ok,code:result.code,stored:result.stored===true,
+   bytes:result.ok?result.bytes:undefined,parts:result.ok?result.parts:undefined,
+   customerCutover:false
+  });
+ }catch{
+  result={...BASE,ok:false,code:'pilot_source_or_job_failed',stored:false};
+ }
+ await lease.finishPilotRun(runId,{
+  status:result.ok?'verified':'failed',code:result.code
+ }).catch(()=>{});
+ return result;
+}
