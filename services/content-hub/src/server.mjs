@@ -364,6 +364,7 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
     })().then(result=>{
      console.info('BLOFY_CONTENT_HUB_BATCH_BOOT',JSON.stringify({
       ok:result.ok===true,code:result.code,blockedBy:result.blockedBy,
+      errorStage:result.errorStage||null,
       bytesCopied:result.bytesCopied||0,chunksSaved:result.chunksSaved||0,
       completed:result.completed===true,customerCutover:false
      }));
