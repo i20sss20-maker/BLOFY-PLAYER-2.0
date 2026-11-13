@@ -22,6 +22,9 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.R
+import tv.blofy.player.BuildConfig
+import tv.blofy.player.core.identity.StreamCodeSession
+import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.CinemaStyle
 import tv.blofy.player.ui.player.PlayerActivity
@@ -34,6 +37,11 @@ class DownloadsActivity : AppCompatActivity() {
     private var rowKeys: List<Long> = emptyList()
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Never expose previously saved files from a signed-out device.
+        if (BuildConfig.CODE_ONLY_LOGIN && StreamCodeSession.authorization(this) == null) {
+            finish()
+            return
+        }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(36), dp(24), dp(36), dp(32))
@@ -79,7 +87,8 @@ class DownloadsActivity : AppCompatActivity() {
     }
     private suspend fun refresh() {
         val states = withContext(Dispatchers.IO) {
-            OfflineDownloadStore.records(applicationContext).mapNotNull { record ->
+            val activeProvider = BlofyDatabase.get(applicationContext).dao().activeProviderId()
+            OfflineDownloadStore.records(applicationContext,activeProvider ?: "__none__").mapNotNull { record ->
                 OfflineDownloadStore.progress(applicationContext,record)
                     ?: OfflineDownloadStore.Progress(record,-1,0L,-1L,0,null)
             }
