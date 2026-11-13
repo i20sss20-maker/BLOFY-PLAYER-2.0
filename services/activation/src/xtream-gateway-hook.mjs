@@ -58,6 +58,9 @@ import {encryptGatewayAccountPassword,decryptGatewayAccountPassword} from './xtr
 import {createGatewayCredentialRotator} from './xtream-account-credential-rotation.mjs';
 import {diagnoseSalehCatalogCopy} from './xtream-saleh-copy-capability.mjs';
 import {probeSalehRangedMovie} from './xtream-content-hub-range-pilot.mjs';
+import {contentHubBridgeAuth,parseContentHubClientRange,
+  validContentHubResponse,approvedContentHubMedia}
+  from './xtream-content-hub-private-range.mjs';
 import { readXtreamGatewayJsonResponse } from './xtream-gateway-response.mjs';
 import {configuredXtreamPublicOrigin} from './xtream-public-origin.mjs';
 import {probeXtreamAccountCompatibility} from './xtream-compatibility-probe.mjs';
@@ -1825,6 +1828,108 @@ async function readSalehMovieRangePart({sourceId,gatewayId,from,to}){
   else if(response?.body){try{await response.body.cancel()}catch{}}
  }
 }
+// Exact-source, never-publicized Data Plane for one licensed sample movie.
+// The private Content Hub has no upstream provider passwords.
+let hubActiveRange=false,hubPilotMovieId=null;
+async function hubApprovedMovieId(){
+ if(Number.isSafeInteger(hubPilotMovieId)&&hubPilotMovieId>0)return hubPilotMovieId;
+ const selected=Number(process.env.BLOFY_CONTENT_HUB_ALLOWED_MOVIE_GATEWAY_ID);
+ if(Number.isSafeInteger(selected)&&selected>0){
+  hubPilotMovieId=selected;return selected;
+ }
+ const result=await pool.query(`SELECT m.gateway_id FROM blofy_xtream_gateway_item_map m
+   JOIN blofy_xtream_items i ON i.server_id=m.server_id
+     AND i.media_type=m.media_type AND i.source_id=m.source_id
+   JOIN blofy_xtream_servers s ON s.id=m.server_id
+   WHERE s.enabled=TRUE AND s.publish_catalog=TRUE
+     AND s.deletion_requested_at IS NULL
+     AND lower(btrim(s.name))='saleh'
+     AND m.media_type='movie' AND i.enabled=TRUE
+     AND i.container_extension IN ('mp4','mkv','ts','avi')
+   ORDER BY m.gateway_id ASC LIMIT 1`);
+ const candidate=Number(result.rows?.[0]?.gateway_id);
+ if(!Number.isSafeInteger(candidate)||candidate<1)
+  throw Object.assign(Error('content_hub_movie_missing'),{status:404});
+ hubPilotMovieId=candidate;return candidate;
+}
+async function handlePrivateContentHubSource(req,res,url){
+ if(process.env.BLOFY_CONTENT_HUB_BRIDGE_ENABLED!=='1')
+  return json(res,404,{ok:false,code:'content_hub_source_disabled'});
+ const token=String(process.env.BLOFY_CONTENT_HUB_BRIDGE_TOKEN||'');
+ if(!contentHubBridgeAuth(req.headers.authorization,token))
+  return json(res,401,{ok:false,code:'content_hub_source_unauthorized'});
+ if(req.method!=='GET')
+  return json(res,405,{ok:false,code:'content_hub_method_denied'});
+ const id=await hubApprovedMovieId();
+ const row=await gatewayItemById('movie',id);
+ if(!approvedContentHubMedia(row))
+  return json(res,409,{ok:false,code:'content_hub_source_not_ready'});
+ if(url.pathname==='/internal/blofy-content-hub/describe'){
+  return json(res,200,{ok:true,sourceName:'saleh',
+   sourceId:row.server_id,mediaId:row.source_id,
+   gatewayId:id,mediaKind:'movie',
+   extension:String(row.container_extension).toLowerCase(),
+   automaticDownload:false,customerTrafficChanged:false});
+ }
+ if(url.pathname!==`/internal/blofy-content-hub/source/movie/${id}`||url.search)
+  return json(res,404,{ok:false,code:'content_hub_source_not_found'});
+ const range=parseContentHubClientRange(req.headers.range);
+ if(!range)return json(res,416,{ok:false,code:'content_hub_range_required'});
+ if(hubActiveRange)return json(res,429,{ok:false,code:'content_hub_upstream_busy'},
+    {'retry-after':'3'});
+ hubActiveRange=true;
+ const abort=new AbortController();
+ const timeout=setTimeout(()=>abort.abort(),75000);timeout.unref?.();
+ const onClose=()=>abort.abort();
+ req.once('aborted',onClose);
+ res.once('close',()=>{if(!res.writableEnded)abort.abort()});
+ let upstream;
+ try{
+  const upstreamUrl=mediaUpstreamUrl(row,'movie',row.source_id,
+    String(row.container_extension).toLowerCase());
+  upstream=await checkedFetch(upstreamUrl,{method:'GET',
+   headers:{range:`bytes=${range.from}-${range.to}`,
+    'accept-encoding':'identity','user-agent':'BLOFY-ContentHub-SourceBridge/1.0'},
+   timeoutMs:75000,signal:abort.signal});
+  const ok=validContentHubResponse(upstream,range);
+  if(!ok||!upstream.body){
+   await upstream.body?.cancel().catch(()=>{});
+   return json(res,502,{ok:false,code:'content_hub_provider_range_invalid'});
+  }
+  // Never reveal the origin URL, credentials, customer metadata or redirects.
+  const headers={
+   'content-type':'application/octet-stream',
+   'content-length':String(range.length),
+   'content-range':ok.contentRange,
+   'cache-control':'private, no-store',
+   'x-content-type-options':'nosniff',
+   'referrer-policy':'no-referrer'
+  };
+  if(ok.etag)headers.etag=ok.etag;
+  if(ok.lastModified)headers['last-modified']=ok.lastModified;
+  res.writeHead(206,headers);
+  let written=0;
+  for await(const bytes of upstream.body){
+   if(abort.signal.aborted)throw Error('content_hub_client_closed');
+   written+=bytes.byteLength;
+   if(written>range.length)throw Error('content_hub_range_oversized');
+   await writeStreamChunk(res,bytes);
+  }
+  if(written!==range.length)throw Error('content_hub_range_short');
+  res.end();
+ }catch{
+  if(res.headersSent){if(!res.destroyed)res.destroy()}
+  else if(!res.destroyed)return json(res,503,{
+   ok:false,code:'content_hub_source_temporarily_unavailable'});
+ }finally{
+  clearTimeout(timeout);abort.abort();
+  req.off('aborted',onClose);
+  if(upstream?.body&&!upstream.body.locked)
+   await upstream.body.cancel().catch(()=>{});
+  hubActiveRange=false;
+ }
+}
+
 async function probeGatewayMedia(kind,itemId){
   if(!['live','movie','series'].includes(kind)||!Number.isSafeInteger(itemId)||itemId<1)
     throw Object.assign(new Error('xtream_media_probe_invalid'),{status:400});
@@ -2109,6 +2214,10 @@ http.createServer = function withBlofyXtreamGateway(listener) {
     try { url = new URL(req.url || '/', 'http://localhost'); }
     catch { return listener(req, res); }
     try {
+      if(url.pathname.startsWith('/internal/blofy-content-hub/')){
+        await ensureReady();
+        return handlePrivateContentHubSource(req,res,url);
+      }
       if (req.method === 'GET' && url.pathname === '/xtream-gateway-admin.js') {
         const body = await readFile(new URL('../web/xtream-gateway-admin.js', import.meta.url));
         res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'content-length': body.length, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
