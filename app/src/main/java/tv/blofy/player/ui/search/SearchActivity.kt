@@ -587,6 +587,33 @@ class SearchActivity : AppCompatActivity() {
         }
         if (input.text?.toString()?.trim() != q || activeKind != selectedKind || !aiMode) return
         if (expanded.isEmpty()) {
+            // Providers sometimes omit ALL action/comedy genre tags. Never
+            // present other films as exact matches; offer a clearly labeled
+            // alternative list made from actual unlocked provider entries.
+            val recommendation = listOf("رشح", "اقترح", "ابي", "أبي",
+                "recommend", "suggest", "watch").any { q.contains(it, true) }
+            if (recommendation && ai.person.isBlank()) {
+                val verifiedAlternatives = withContext(Dispatchers.IO) {
+                    providers.flatMap { source ->
+                        dao.latestHomeStreams(source.id, 250)
+                            .filter { it.kind in listOf(KIND_MOVIE, KIND_SERIES) &&
+                                (selectedKind == null || it.kind == selectedKind) && !it.locked }
+                    }.distinctBy { it.key }
+                }.let { AiRecommendationRanker.rank(it, AiConversationPolicy.wantsRecent(q)) }
+                    .take(18)
+                if (verifiedAlternatives.isNotEmpty()) {
+                    val byKind = listOf(KIND_MOVIE, KIND_SERIES)
+                        .filter { selectedKind == null || selectedKind == it }
+                        .map { kind -> kind to verifiedAlternatives.filter { it.kind == kind } }
+                    renderSections(byKind, selectedKind, provider.id, provider.liveFormat,
+                        castCount = 0, moveFocus = false)
+                    val message = getString(R.string.stream_ai_verified_alternatives) +
+                        "\n" + verifiedAlternatives.take(3).joinToString(" • ") { it.name.take(50) }
+                    appendChatTurn(q, message)
+                    showAiStatus(getString(R.string.stream_ai_verified_alternatives))
+                    return
+                }
+            }
             // Never display model-invented media as if it were on the server.
             appendChatTurn(q,
                 listOf(AiReplyPolicy.safe(ai.reply), getString(R.string.stream_ai_chat_none))
