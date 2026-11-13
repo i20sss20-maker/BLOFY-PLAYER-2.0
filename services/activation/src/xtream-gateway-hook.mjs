@@ -1198,7 +1198,10 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
         sourceUrl:upstream.href,kind,sharedLive:true,
         requireSharedLive:true,licensedCdnRedirect:true,
         licensedSourceId:row.server_id,
-        providerMaxConcurrentFeeds:row.source_reported_max_connections===1?1:null
+        providerMaxConcurrentFeeds:
+          Number.isSafeInteger(row.source_reported_max_connections)&&
+          row.source_reported_max_connections>=1&&row.source_reported_max_connections<=64
+            ?row.source_reported_max_connections:null
       });
       observe('shared_grant'); // capability issued, not proven playback
       res.writeHead(307,{'location':destination,'cache-control':'no-store',
