@@ -104,7 +104,7 @@ export async function runOneMoviePilot({
      await lease.progressPilotRun(runId,{bytesUploaded,partsUploaded});
    }
   });
-  result=combined.aborted?{...BASE,ok:false,stored:false,
+  result=!work.ok&&combined.aborted?{...BASE,ok:false,stored:false,
     code:'pilot_cancelled'}:{...BASE,...work};
   logger('BLOFY_CONTENT_HUB_ONE_MOVIE_PILOT',{
    ok:result.ok,code:result.code,stored:result.stored===true,
