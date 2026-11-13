@@ -34,5 +34,9 @@ RUN node --check src/xtream-distributor-customer-catalog.mjs && node --check src
 # this never fetches provider data during Docker build.
 COPY test/xtream-saleh-copy-capability.test.mjs ./test/xtream-saleh-copy-capability.test.mjs
 RUN node --check src/xtream-saleh-copy-capability.mjs && node --check src/xtream-gateway-hook.mjs && node --test test/xtream-saleh-copy-capability.test.mjs
+# Verify the strictly bounded two-part resume test before production build.
+# No real provider media is accessed in this test.
+COPY test/xtream-content-hub-range-pilot.test.mjs ./test/xtream-content-hub-range-pilot.test.mjs
+RUN node --check src/xtream-content-hub-range-pilot.mjs && node --check src/xtream-gateway-hook.mjs && node --test test/xtream-content-hub-range-pilot.test.mjs
 EXPOSE 8080
 CMD ["npm","start"]
