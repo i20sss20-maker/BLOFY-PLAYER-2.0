@@ -568,3 +568,83 @@ test('owner-private audit and CSV output never include other distributor custome
  assert.equal(other.items.length,0);
  assert.equal((await f.manager.activity(tokenB)).items.filter(x=>x.type==='issue').length,0);
 });
+
+test('a merchant changes own hashed dashboard password and keeps only this session',async()=>{
+ const f=fixture();
+ const admin=await f.manager.createAdmin({name:'Secure Store',username:'secure-store',credits:4});
+ const one=(await f.manager.login({username:'secure-store',password:admin.password})).token;
+ const other=(await f.manager.login({username:'secure-store',password:admin.password})).token;
+ await assert.rejects(f.manager.changePassword(one,{currentPassword:'wrong',
+   newPassword:'NewPasswordStrong2026!'}),/distributor_password_current_invalid/);
+ await assert.rejects(f.manager.changePassword(one,{currentPassword:admin.password,
+   newPassword:'weak123'}),/distributor_password_strength_invalid/);
+ assert.equal(f.sessions.length,2);
+ const changed=await f.manager.changePassword(one,{currentPassword:admin.password,
+   newPassword:'NewPasswordStrong2026!'});
+ assert.equal(changed.otherSessionsRevoked,true);
+ assert.equal(f.sessions.length,1);
+ assert.equal((await f.manager.me(one)).ok,true);
+ await assert.rejects(f.manager.me(other),/distributor_session_expired/);
+ await assert.rejects(f.manager.login({username:'secure-store',password:admin.password}),
+   /distributor_login_failed/);
+ assert.equal((await f.manager.login({username:'secure-store',
+   password:'NewPasswordStrong2026!'})).ok,true);
+ assert.doesNotMatch(f.distributors[0].password_hash,/NewPasswordStrong2026/);
+});
+
+test('Xtream rotation is only for own issued account, explicit, rate-limited, and idempotent',async()=>{
+ const f=fixture();
+ const a=await f.manager.createAdmin({name:'Store A',username:'rotate-store-a',credits:4});
+ const b=await f.manager.createAdmin({name:'Store B',username:'rotate-store-b',credits:4});
+ const ta=(await f.manager.login({username:'rotate-store-a',password:a.password})).token;
+ const tb=(await f.manager.login({username:'rotate-store-b',password:b.password})).token;
+ const issued=await f.manager.issue(ta,{kind:'xtream',durationDays:30,
+   requestId:crypto.randomUUID()});
+ const issueId=issued.issue.id,requestId=crypto.randomUUID();
+ await assert.rejects(f.manager.rotateOwnedXtream(tb,{issueId,requestId,
+   acknowledgeDisconnect:true}),/distributor_issue_missing/);
+ await assert.rejects(f.manager.rotateOwnedXtream(ta,{issueId,requestId}),
+   /distributor_rotation_requires_confirmation/);
+ const result=await f.manager.rotateOwnedXtream(ta,{issueId,requestId,
+   acknowledgeDisconnect:true});
+ assert.equal(result.ok,true);
+ assert.equal(result.credentials.username,'newUser12');
+ assert.equal(result.subscriptionUnchanged,true);
+ assert.equal(f.calls.filter(x=>x.type==='rotation').length,1);
+ const repeated=await f.manager.rotateOwnedXtream(ta,{issueId,requestId,
+   acknowledgeDisconnect:true});
+ assert.equal(repeated.repeated,true);
+ assert.equal(f.calls.filter(x=>x.type==='rotation').length,1);
+ await assert.rejects(f.manager.rotateOwnedXtream(ta,{issueId,
+   requestId:crypto.randomUUID(),acknowledgeDisconnect:true}),
+   /distributor_rotation_cooldown/);
+ const code=await f.manager.issue(ta,{kind:'app',durationDays:30,
+   requestId:crypto.randomUUID()});
+ await assert.rejects(f.manager.rotateOwnedXtream(ta,{issueId:code.issue.id,
+   requestId:crypto.randomUUID(),acknowledgeDisconnect:true}),
+   /distributor_rotation_not_eligible/);
+});
+
+test('merchant can browse full saleh categories and apply safe selected-only overlays',async()=>{
+ const f=fixture();
+ const a=await f.manager.createAdmin({name:'Store A',username:'bulk-library-a',credits:1});
+ const b=await f.manager.createAdmin({name:'Store B',username:'bulk-library-b',credits:1});
+ const ta=(await f.manager.login({username:'bulk-library-a',password:a.password})).token;
+ const tb=(await f.manager.login({username:'bulk-library-b',password:b.password})).token;
+ const cats=await f.manager.libraryCategories(ta,{type:'movie'});
+ assert.equal(cats.total,1);
+ assert.equal(cats.categories[0].name,'Movies');
+ const page=await f.manager.library(ta,{type:'movie',categoryId:'10'});
+ assert.equal(page.items[0].id,'42');
+ const result=await f.manager.organizeBulk(ta,{type:'movie',itemIds:['42','99'],
+   group:'مختارات',hidden:true});
+ assert.equal(result.updated,1);
+ assert.equal(result.skipped,1);
+ assert.equal((await f.manager.library(ta,{type:'movie'})).items[0].hidden,true);
+ assert.equal((await f.manager.library(tb,{type:'movie'})).items[0].hidden,undefined);
+ await assert.rejects(f.manager.organizeBulk(tb,{type:'movie',itemIds:[],
+   hidden:true}),/distributor_bulk_selection_invalid/);
+ await assert.rejects(f.manager.organizeBulk(tb,{type:'movie',itemIds:['42'],
+   hidden:'yes'}),/distributor_library_hidden_invalid/);
+ assert.equal(f.statements.some(sql=>/UPDATE blofy_xtream_items|DELETE FROM blofy_xtream_items/.test(sql)),false);
+});
