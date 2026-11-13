@@ -85,7 +85,8 @@ export function createContentHubServer({storage,lease,
   if(playback&&req.method==='GET'){
    if(String(req.url||'').includes('?'))
     return json(res,400,{ok:false,code:'pilot_private_query_denied'});
-   const saved=await lease.getVerifiedPilotObject?.(playback[1]).catch(()=>null);
+   let saved=null;
+   try{saved=await lease.getVerifiedPilotObject?.(playback[1])}catch{}
    if(!saved||!Number.isSafeInteger(saved.bytes)||saved.bytes<=0)
     return json(res,404,{ok:false,code:'pilot_verified_media_unavailable'});
    const m=/^bytes=(0|[1-9][0-9]*)-(0|[1-9][0-9]*)$/.exec(
