@@ -4,7 +4,7 @@ import {randomUUID,randomBytes,createHash,timingSafeEqual} from 'node:crypto';
 import {createPrivateS3Adapter} from './private-s3.mjs';
 import {createSourceLease} from './source-lease.mjs';
 import {runPrivateSalehSample} from './real-source-sample.mjs';
-import {runOneMoviePilot} from './one-movie-pilot.mjs';
+import {runOneMoviePilot,inspectOneMoviePilot} from './one-movie-pilot.mjs';
 
 const FIXTURE_SOURCE='00000000-0000-4000-8000-000000000000';
 const FIXTURE_SIZE=8*1024*1024;
@@ -52,7 +52,8 @@ export async function runSyntheticPrivateStorageCheck({storage}){
    customerTrafficChanged:false,fixtureRemoved:cleanup};
 }
 export function createContentHubServer({storage,lease,
- token='',allowSynthetic=false,logger=()=>{}}={}){
+ token='',allowSynthetic=false,logger=()=>{},
+ pilotPreflight=inspectOneMoviePilot,pilotEnv=process.env}={}){
  if(!storage||!lease)throw Error('content_hub_private_dependencies_required');
  const started=Date.now();
  let syntheticRunning=false,lastSynthetic=null;
@@ -79,6 +80,15 @@ export function createContentHubServer({storage,lease,
     lastSynthetic,pilotRunning,lastPilot,
     durablePilot,customerCutover:false,
     licensedRightsRequired:true});
+  }
+  if(path==='/internal/pilot/preflight'&&req.method==='GET'){
+   try{
+    const result=await pilotPreflight({env:pilotEnv});
+    return json(res,result.ok?200:503,result);
+   }catch{
+    return json(res,503,{ok:false,code:'pilot_preflight_unavailable',
+     providerMediaRequests:0,downloadStarted:false});
+   }
   }
   if(path==='/internal/pilots'&&req.method==='GET'){
    if(String(req.url||'').includes('?'))
