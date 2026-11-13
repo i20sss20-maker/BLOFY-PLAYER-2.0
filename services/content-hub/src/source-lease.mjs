@@ -119,6 +119,33 @@ export function createSourceLease({connectionString,
    return row?{key:row.object_key,bytes:Number(row.expected_bytes),
      sha256:row.verified_sha256}:null;
   },
+  // Admin-only storage accounting from verified pilot records. This is not
+  // an S3 invoice or a scan of other private bucket objects.
+  async storageAccounting(){
+   const r=await pool.query(`SELECT
+      COUNT(*) FILTER (WHERE state='verified')::int AS verified_count,
+      COALESCE(SUM(expected_bytes) FILTER (WHERE state='verified'),0)::text AS verified_bytes,
+      COUNT(*) FILTER (WHERE state='started')::int AS active_count,
+      COUNT(*) FILTER (WHERE state='failed')::int AS failed_count
+     FROM blofy_content_hub_pilot_runs`);
+   const row=r.rows?.[0]||{};
+   return {verifiedCount:Number(row.verified_count||0),
+    verifiedBytes:Number(row.verified_bytes||0),
+    activeCount:Number(row.active_count||0),
+    failedCount:Number(row.failed_count||0),
+    scope:'verified_pilot_records_only'};
+  },
+  async listPilotRuns({limit=20}={}){
+   const safeLimit=Math.max(1,Math.min(50,Number(limit)||20));
+   const r=await pool.query(`SELECT run_id FROM blofy_content_hub_pilot_runs
+     ORDER BY started_at DESC LIMIT $1`,[safeLimit]);
+   const list=[];
+   for(const row of r.rows||[]){
+     const entry=await this.getPilotStatus(row.run_id);
+     if(entry)list.push({...entry,runId:row.run_id});
+   }
+   return list;
+  },
   async close(){await pool.end()}
  };
 }
