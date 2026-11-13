@@ -268,7 +268,7 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
   const actor=await session(token);
   const current=String(currentPassword||''),next=String(newPassword||'');
   if(next.length<14||next.length>128||
-    !/^[\\x21-\\x7e]+$/.test(next)||
+    !/^[!-~]+$/.test(next)||
     !/[a-z]/.test(next)||!/[A-Z]/.test(next)||!/[0-9]/.test(next))
     throw fail('distributor_password_strength_invalid',400);
   if(current===next)throw fail('distributor_password_reused',400);
@@ -795,18 +795,38 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
    throw fail('distributor_library_item_invalid');
   return String(x);
  };
+
+ async function libraryCategories(token,{type='movie'}={}){
+  await session(token);const source=await salehSource(),kind=mediaType(type);
+  const [categories,count]=await Promise.all([
+   pool.query(`SELECT source_category_id,name FROM blofy_xtream_categories
+     WHERE server_id=$1 AND media_type=$2 AND enabled=TRUE
+     ORDER BY sort_order NULLS LAST,name ASC LIMIT 500`,[source.id,kind]),
+   pool.query(`SELECT COUNT(*)::int AS total FROM blofy_xtream_items
+     WHERE server_id=$1 AND media_type=$2 AND enabled=TRUE`,[source.id,kind])
+  ]);
+  return {ok:true,sourceName:'saleh',type:kind,
+   total:Number(count.rows?.[0]?.total||0),
+   categories:(categories.rows||[]).map(row=>({
+     id:String(row.source_category_id||'').slice(0,128),
+     name:clean(row.name,100)})),
+   scope:'distributor_only'};
+ }
  // Catalog organization is a reseller-specific overlay, not a mutation of
  // the shared source or of what other resellers/customers see.
- async function library(token,{type='movie',q='',offset=0}={}){
+ async function library(token,{type='movie',q='',offset=0,categoryId=''}={}){
   const actor=await session(token),source=await salehSource(),kind=mediaType(type);
-  const page=number(offset,0,100000,'distributor_library_offset_invalid');
+  const page=number(offset,0,500000,'distributor_library_offset_invalid');
+  const selectedCategory=categoryId?mediaId(categoryId):'';
   const query=String(q||'').trim().slice(0,85);
   const result=await listCatalog({
-    sourceId:source.id,type:kind,q:query,offset:page,limit:24
+    sourceId:source.id,type:kind,q:query,offset:page,limit:48,
+    ...(selectedCategory?{categoryId:selectedCategory}:{})
   });
   const items=Array.isArray(result)?result:[];
   const safe=items.map(i=>({
     id:mediaId(i.id),type:kind,name:clean(i.name,220),
+    categoryId:String(i.categoryId||'').slice(0,128),
     categoryName:clean(i.categoryName,100),enabled:i.enabled===true
   }));
   const ids=safe.map(x=>x.id);
@@ -823,7 +843,7 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
    }
   }
   return {ok:true,sourceName:'saleh',type:kind,items:safe,
-    nextOffset:items.length===24?page+24:null,
+    nextOffset:items.length===48?page+48:null,
     scope:'distributor_only_not_global'};
  }
  async function organize(token,{type,itemId,group,title,sortOrder=0,hidden=false}={}){
@@ -846,5 +866,47 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
   return {ok:true,id,type:kind,group:category,title:customTitle,
     sortOrder:sort,hidden,scope:'distributor_only_not_global'};
  }
- return {ensureSchema,listAdmin,createAdmin,setAdmin,login,me,logout,changePassword,rotateOwnedXtream,issued,reveal,issue,library,organize,customer,renew,relogin,clients,activity,analytics,exportIssues};
+ 
+ // Atomic bounded merchant-specific batch. Validates every eligible item
+ // belongs to the active saleh catalog before overlay creation.
+ async function organizeBulk(token,{type,itemIds,group,hidden}={}){
+  const actor=await session(token),source=await salehSource(),kind=mediaType(type);
+  if(!Array.isArray(itemIds)||itemIds.length===0||itemIds.length>100)
+   throw fail('distributor_bulk_selection_invalid',400);
+  const ids=[...new Set(itemIds.map(mediaId))];
+  const setGroup=group!==undefined,setHidden=hidden!==undefined;
+  if(!setGroup&&!setHidden)throw fail('distributor_bulk_action_required',400);
+  if(setHidden&&typeof hidden!=='boolean')
+   throw fail('distributor_library_hidden_invalid',400);
+  if(setGroup&&String(group||'').trim().length>60)
+   throw fail('distributor_bulk_group_too_long',400);
+  const result=await pool.query(`
+   WITH eligible AS (
+     SELECT DISTINCT source_id FROM blofy_xtream_items
+     WHERE server_id=$1 AND media_type=$2 AND enabled=TRUE
+       AND source_id=ANY($4::text[])
+   )
+   INSERT INTO blofy_stream_distributor_library
+     (distributor_id,media_type,source_item_id,custom_group,custom_title,sort_order,hidden)
+   SELECT $3,$2,e.source_id,
+     CASE WHEN $5::boolean THEN $6::text ELSE COALESCE(o.custom_group,'') END,
+     COALESCE(o.custom_title,''),COALESCE(o.sort_order,0),
+     CASE WHEN $7::boolean THEN $8::boolean ELSE COALESCE(o.hidden,FALSE) END
+   FROM eligible e
+   LEFT JOIN blofy_stream_distributor_library o
+     ON o.distributor_id=$3 AND o.media_type=$2 AND o.source_item_id=e.source_id
+   ON CONFLICT(distributor_id,media_type,source_item_id) DO UPDATE
+   SET custom_group=CASE WHEN $5::boolean THEN EXCLUDED.custom_group
+                        ELSE blofy_stream_distributor_library.custom_group END,
+       hidden=CASE WHEN $7::boolean THEN EXCLUDED.hidden
+                   ELSE blofy_stream_distributor_library.hidden END,
+       updated_at=NOW()
+   RETURNING source_item_id
+  `,[source.id,kind,actor.id,ids,setGroup,setGroup?clean(group,60):'',
+    setHidden,hidden===true]);
+  const updated=result.rows?.length||0;
+  return {ok:true,updated,requested:ids.length,skipped:ids.length-updated,
+   scope:'distributor_only_not_global'};
+ }
+ return {ensureSchema,listAdmin,createAdmin,setAdmin,login,me,logout,changePassword,rotateOwnedXtream,issued,reveal,issue,library,libraryCategories,organize,organizeBulk,customer,renew,relogin,clients,activity,analytics,exportIssues};
 }
