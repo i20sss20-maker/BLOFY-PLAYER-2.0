@@ -24,7 +24,10 @@ test('verified movie canary serves only admin-authenticated, bounded private byt
   storageAccounting:async()=>({verifiedCount:0,verifiedBytes:0,
     activeCount:0,failedCount:0,scope:'verified_pilot_records_only'})
  };
- const hub=createContentHubServer({storage,lease,token});
+ const hub=createContentHubServer({storage,lease,token,
+  pilotPreflight:async()=>({ok:true,code:'pilot_metadata_only',
+   sourceName:'saleh',gatewayId:123,providerMediaRequests:0,
+   downloadStarted:false,approvedMovieMatches:false})});
  hub.server.listen(0,'127.0.0.1');
  try{
   await new Promise(resolve=>hub.server.once('listening',resolve));
@@ -55,6 +58,13 @@ test('verified movie canary serves only admin-authenticated, bounded private byt
   const status=await fetch(base+'/internal/status',{headers});
   assert.equal(status.status,200);
   assert.equal((await status.json()).customerCutover,false);
+  const preflightUnauthorized=await fetch(base+'/internal/pilot/preflight');
+  assert.equal(preflightUnauthorized.status,401);
+  const preflight=await fetch(base+'/internal/pilot/preflight',{headers});
+  assert.equal(preflight.status,200);
+  const pilotMetadata=await preflight.json();
+  assert.equal(pilotMetadata.downloadStarted,false);
+  assert.equal(pilotMetadata.providerMediaRequests,0);
   const pilots=await fetch(base+'/internal/pilots',{headers});
   assert.equal(pilots.status,200);
   assert.equal((await pilots.json()).accounting.verifiedCount,0);
