@@ -72,6 +72,58 @@ export async function inspectOneMoviePilot({
  }catch{return {...base,code:'pilot_source_metadata_unavailable'}}
 }
 
+// One exact 4KiB source range identifies current total size and validator.
+// Explicit operator opt-in only. No private S3 storage or subscriber cutover.
+export async function probeApprovedMovieRange({
+ env=process.env,fetchImpl=fetch,signal
+}={}){
+ const base={ok:false,customerTrafficChanged:false,customerCutover:false,
+   fullFilmDownloaded:false,stored:false,probeBytes:0,providerRequests:0};
+ const token=String(env.BLOFY_CONTENT_HUB_BRIDGE_TOKEN||'');
+ if(token.length<32)return {...base,code:'source_bridge_not_configured'};
+ let response=null;
+ try{
+  const metadata=await getMetadata(fetchImpl,token,signal);
+  const requestSignal=signal?AbortSignal.any([signal,AbortSignal.timeout(45000)]):
+   AbortSignal.timeout(45000);
+  response=await fetchImpl(ORIGIN+
+   '/internal/blofy-content-hub/source/movie/'+metadata.gatewayId,{
+    method:'GET',redirect:'manual',
+    headers:{authorization:'Bearer '+token,range:'bytes=0-4095',
+      'accept-encoding':'identity'},
+    signal:requestSignal
+   });
+  const m=/^bytes 0-4095\/([1-9][0-9]*)$/.exec(
+   String(response.headers.get('content-range')||'').trim());
+  const total=Number(m?.[1]);
+  if(response.status!==206||!Number.isSafeInteger(total)||
+   total<MIN_PART_BYTES||total>MAX_PILOT_BYTES||
+   !response.body||Number(response.headers.get('content-length'))!==4096)
+   return {...base,code:'provider_range_invalid',providerRequests:1};
+  const reader=response.body.getReader();let count=0;
+  try{
+   while(count<4096){
+    const next=await reader.read();
+    if(next.done||!next.value||count+next.value.byteLength>4096)
+     return {...base,code:'provider_range_short',providerRequests:1};
+    count+=next.value.byteLength;
+   }
+  }finally{await reader.cancel().catch(()=>{});reader.releaseLock()}
+  const validator=String(response.headers.get('etag')||
+    response.headers.get('last-modified')||'');
+  return {...base,ok:true,code:'source_range_4k_verified',
+   providerRequests:1,probeBytes:4096,
+   gatewayId:metadata.gatewayId,extension:metadata.extension,
+   expectedBytes:total,validatorPresent:validator.length>0&&
+    validator.length<=140&&!/[\r\n]/.test(validator)};
+ }catch{
+  return {...base,code:'provider_range_unavailable'};
+ }finally{
+  if(response?.body&&!response.body.locked)
+   await response.body.cancel().catch(()=>{});
+ }
+}
+
 // Only run this from a private operator-controlled process. No public route.
 export async function runOneMoviePilot({
  env=process.env,storage,lease,fetchImpl=fetch,signal,logger=()=>{}
