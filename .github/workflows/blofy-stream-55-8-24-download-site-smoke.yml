@@ -1,0 +1,46 @@
+name: BLOFY STREAM 55.8.24 Public Download Smoke
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/blofy-stream-55-8-24-download-site-smoke.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  public-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Confirm live download center and isolated updater
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            if curl -fsSL --connect-timeout 8 --max-time 20 https://updates.blofyplayer.com/stream/release.json -o /tmp/stream.json &&
+               jq -e --arg sum 'a5af6253ad816d325af9a1f32bc5b03cef9a6cd0f5dc6e8ca3f861dd1325b00d' '
+                 .release.app.packageName == "tv.blofy.player.v2.stream" and
+                 .release.app.versionCode == 2000101 and
+                 .release.app.versionName == "2.0.0-rc07.55.8.24-STREAM" and
+                 .release.app.apkSizeBytes == 135682806 and
+                 .release.app.sha256 == $sum and
+                 .release.app.downloadUrl == "https://updates.blofyplayer.com/d/blofy-stream"
+               ' /tmp/stream.json >/dev/null; then
+              break
+            fi
+            if [ "$attempt" = 5 ]; then
+              echo 'STREAM live website did not publish the signed 55.8.24 release feed' >&2
+              exit 1
+            fi
+            sleep 8
+          done
+          curl -fsSL --connect-timeout 8 --max-time 20 https://updates.blofyplayer.com/downloads > /tmp/downloads.html
+          grep -Fq 'BLOFY STREAM' /tmp/downloads.html
+          grep -Fq '55.8.24' /tmp/downloads.html
+          grep -Fq '/d/blofy-stream' /tmp/downloads.html
+          curl -fsSL --connect-timeout 8 --max-time 20 https://updates.blofyplayer.com/health -o /tmp/health.json
+          # HEAD only: avoid any 135MB transfer or artificial download count.
+          curl -sSIL --connect-timeout 8 --max-time 30 https://updates.blofyplayer.com/d/blofy-stream -o /tmp/headers.txt
+          grep -Eiq '^HTTP/[0-9.]+ (200|206)' /tmp/headers.txt
+          echo "✅ Downloads page, STREAM updater and APK HEAD verified live" >> "$GITHUB_STEP_SUMMARY"
+          echo "BLOFY STREAM v55.8.24 (2000101), 135682806 bytes, pinned SHA256" >> "$GITHUB_STEP_SUMMARY"
