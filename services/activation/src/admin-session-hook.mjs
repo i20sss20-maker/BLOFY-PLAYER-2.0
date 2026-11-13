@@ -139,6 +139,11 @@ http.createServer = function patchedAdminSessionCreateServer(listener) {
     if (req.method==='GET' && ['/Admin','/Admin/','/admin/'].includes(url.pathname)) { res.writeHead(302,{'location':'/admin','cache-control':'no-store'}); res.end(); return; }
     if (req.method==='GET' && url.pathname==='/releases-admin') { res.writeHead(302,{'location':'/admin#releases','cache-control':'no-store'}); res.end(); return; }
     if (req.method==='GET' && url.pathname==='/admin') return html(res, await validSession(req)?await dashboardPage():await loginPage());
+    // The private Content Hub dashboard is an admin subpage, not a public
+    // route. Reuse exactly the same signed admin session as /admin.
+    if (req.method==='GET' && url.pathname==='/admin/content-hub')
+      return html(res,await validSession(req)?await contentHubPage():await loginPage());
+
     // BLOFY ONE uses the existing signed admin cookie and login page.
     // No separate admin users, tokens, customer store or session model.
     if (req.method==='GET' && url.pathname==='/one') return html(res, await validSession(req)?await blofyOnePage():await loginPage());
