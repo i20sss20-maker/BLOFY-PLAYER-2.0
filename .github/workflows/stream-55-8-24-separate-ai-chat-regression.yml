@@ -53,6 +53,7 @@ jobs:
             --tests tv.blofy.player.ui.catalog.RelatedSeriesPolicyTest \
             --tests tv.blofy.player.ui.library.OfflineDownloadPolicyTest \
             --tests tv.blofy.player.ui.search.AiConversationPolicyTest \
+            --tests tv.blofy.player.ui.search.AiChatRoutingPolicyTest \
             --tests tv.blofy.player.ui.search.AiRecommendationRankerTest \
             --tests tv.blofy.player.ui.search.AiReplyPolicyTest \
             --tests tv.blofy.player.ui.settings.StreamLanguageSwitcherTest \
