@@ -62,6 +62,7 @@ const publicIssue=row=>{
  lastReloginAt:row.last_relogin_at?new Date(row.last_relogin_at).getTime():null,
  reloginUntil:row.admin_relogin_until?new Date(row.admin_relogin_until).getTime():null,
  codeHint:String(row.code_hint||'').slice(0,25),
+  accountUsername:String(row.account_username||'').slice(0,48),
  customerName:String(row.customer_name||'').slice(0,80),
  customerPhone:String(row.customer_phone||'').slice(0,22),
  createdAt:new Date(row.created_at).getTime(),
@@ -336,6 +337,7 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
    c.admin_relogin_count,
    c.admin_relogin_until,
    a.enabled AS account_enabled,
+   a.username AS account_username,
    COALESCE(c.expires_at,a.expires_at) AS subscription_expires_at
    FROM blofy_stream_distributor_issues i
    LEFT JOIN blofy_xtream_gateway_duration_codes c
@@ -353,7 +355,8 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
      $2::text='' OR i.label ILIKE '%'||$2||'%' OR
      i.customer_name ILIKE '%'||$2||'%' OR
      i.customer_phone ILIKE '%'||$2||'%' OR
-     c.code_hint ILIKE '%'||$2||'%')
+     c.code_hint ILIKE '%'||$2||'%' OR
+     a.username ILIKE '%'||$2||'%')
    AND (
      $4::text='all' OR
      ($4='active' AND i.status='done' AND a.enabled=TRUE
