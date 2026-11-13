@@ -5,7 +5,10 @@ import android.graphics.Color
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.widget.LinearLayout
+import android.widget.HorizontalScrollView
+import android.widget.ImageView
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
@@ -18,6 +21,7 @@ import kotlinx.coroutines.withContext
 import tv.blofy.player.R
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.StreamEntity
+import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.TvUiTuning
 import tv.blofy.player.ui.details.MovieDetailsActivity
@@ -84,49 +88,85 @@ class ForYouActivity : AppCompatActivity() {
         }
     }
 
+    /** Cinematic poster rails keep titles visible while focusing by D-pad. */
     private fun addSection(parent: LinearLayout, label: String, items: List<StreamEntity>, providerId: String) {
         if (items.isEmpty()) return
         parent.addView(TextView(this).apply {
             text = label
-            textSize = 19f
-            typeface = BlofyTvDesign.LabelTypeface
+            textSize = 20f
+            typeface = BlofyTvDesign.HeadingTypeface
             setTextColor(Color.WHITE)
             gravity = Gravity.START
-            setPadding(0, dp(14), 0, dp(8))
+            setPadding(dp(5), dp(16), 0, dp(11))
         })
-        items.take(24).forEach { item ->
-            val row = TextView(this).apply {
-                text = buildString {
-                    append(item.name)
-                    item.year?.takeIf { it.isNotBlank() }?.let { append("   •   ").append(it) }
-                    item.rating?.takeIf { it.isNotBlank() }?.let { append("   •   ★ ").append(it) }
-                    if (item.favorite) append("   •   ★ ").append(getString(R.string.home_favorites))
-                }
-                textSize = 15f
-                typeface = BlofyTvDesign.MediumTypeface
-                setTextColor(BlofyTvDesign.TextSecondary)
-                gravity = Gravity.CENTER_VERTICAL or Gravity.START
-                setPadding(dp(18), 0, dp(18), 0)
-                isFocusable = true
-                isFocusableInTouchMode = true
-                isClickable = true
-                background = BlofyTvDesign.glassSurface(dp(14).toFloat())
-                setOnFocusChangeListener { view, focused ->
-                    setTextColor(if (focused) Color.WHITE else BlofyTvDesign.TextSecondary)
-                    view.background = BlofyTvDesign.glassSurface(dp(14).toFloat(), focused)
-                    view.animate().cancel()
-                    val targetScale = if (focused) TvUiTuning.focusScale(view.context, 1.012f) else 1f
-                    view.animate()
-                        .scaleX(targetScale)
-                        .scaleY(targetScale)
-                        .translationZ(if (focused) TvUiTuning.focusElevation(view.context, dp(8).toFloat()) else 0f)
-                        .setDuration(TvUiTuning.focusDuration(view.context, focused))
-                        .start()
-                }
-                setOnClickListener { open(providerId, item) }
-            }
-            parent.addView(row, LinearLayout.LayoutParams(-1, dp(58)).apply { bottomMargin = dp(6) })
+        val rail = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.TOP
+            clipChildren = false
+            clipToPadding = false
+            layoutDirection = resources.configuration.layoutDirection
         }
+        items.distinctBy { it.key }.take(14).forEach { item ->
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_HORIZONTAL
+                isFocusable = true
+                isClickable = true
+                clipChildren = false
+                background = BlofyTvDesign.glassSurface(dp(16).toFloat())
+                setPadding(dp(5), dp(5), dp(5), dp(9))
+                setOnFocusChangeListener { view, focused ->
+                    view.background = BlofyTvDesign.glassSurface(dp(16).toFloat(), focused)
+                    view.animate().cancel()
+                    view.animate()
+                        .scaleX(TvUiTuning.focusScale(view.context, if (focused) 1.035f else 1f))
+                        .scaleY(TvUiTuning.focusScale(view.context, if (focused) 1.035f else 1f))
+                        .setDuration(TvUiTuning.focusDuration(view.context, focused)).start()
+                }
+                contentDescription = item.name
+                setOnClickListener { open(item.providerId, item) }
+            }
+            val art = ImageView(this).apply {
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                clipToOutline = true
+                background = BlofyTvDesign.glassSurface(dp(12).toFloat())
+                isFocusable = false
+            }
+            card.addView(art, LinearLayout.LayoutParams(-1, dp(179)))
+            ArtworkLoader.load(art, listOf(item.icon, item.backdrop))
+            card.addView(TextView(this).apply {
+                text = item.name
+                maxLines = 2
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                textSize = 13f
+                typeface = BlofyTvDesign.MediumTypeface
+                setTextColor(Color.WHITE)
+                gravity = Gravity.START
+                setPadding(dp(5), dp(5), dp(5), 0)
+            }, LinearLayout.LayoutParams(-1, dp(43)))
+            card.addView(TextView(this).apply {
+                text = listOfNotNull(
+                    item.year?.takeIf(String::isNotBlank),
+                    item.rating?.takeIf(String::isNotBlank)?.let { "★ $it" }
+                ).joinToString("  •  ")
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                textSize = 11f
+                setTextColor(BlofyTvDesign.TextMuted)
+                gravity = Gravity.START
+                setPadding(dp(5), 0, dp(5), 0)
+            }, LinearLayout.LayoutParams(-1, dp(22)))
+            rail.addView(card, LinearLayout.LayoutParams(dp(150), dp(260)).apply {
+                marginEnd = dp(10); bottomMargin = dp(4)
+            })
+        }
+        parent.addView(HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            clipChildren = false
+            clipToPadding = false
+            isFocusable = false
+            addView(rail)
+        }, LinearLayout.LayoutParams(-1, dp(280)))
     }
 
     private fun open(providerId: String, item: StreamEntity) {
@@ -141,8 +181,12 @@ class ForYouActivity : AppCompatActivity() {
         text = value; textSize = 17f; setTextColor(BlofyTvDesign.TextSecondary); gravity = Gravity.CENTER; setPadding(0, dp(40), 0, 0)
     }
 
-    private fun firstFocusable(root: LinearLayout): View? {
-        for (i in 0 until root.childCount) if (root.getChildAt(i).isFocusable) return root.getChildAt(i)
+    private fun firstFocusable(root: ViewGroup): View? {
+        for (index in 0 until root.childCount) {
+            val child = root.getChildAt(index)
+            if (child.isFocusable) return child
+            if (child is ViewGroup) firstFocusable(child)?.let { return it }
+        }
         return null
     }
 

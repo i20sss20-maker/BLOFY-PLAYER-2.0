@@ -30,6 +30,8 @@ import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.CinemaStyle
 import tv.blofy.player.ui.player.PlayerActivity
+import tv.blofy.player.ui.details.MovieDetailsActivity
+import tv.blofy.player.ui.series.EpisodesActivity
 
 /** One screen for queued, active, completed and failed user-owned transfers. */
 class DownloadsActivity : AppCompatActivity() {
@@ -40,6 +42,7 @@ class DownloadsActivity : AppCompatActivity() {
     private var rowKeys: List<Long> = emptyList()
     private var currentFilter = "all"
     private val filterButtons = linkedMapOf<String, Button>()
+    private val progressSamples = mutableMapOf<Long, Pair<Long, Long>>()
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Never expose previously saved files from a signed-out device.
@@ -72,6 +75,25 @@ class DownloadsActivity : AppCompatActivity() {
             setPadding(0,0,0,dp(9))
         }
         root.addView(space)
+        // New transfers only: Android DownloadManager is responsible for
+        // auto-suspending on metered networks and resuming when Wi-Fi returns.
+        root.addView(Button(this).apply {
+            isAllCaps = false
+            textSize = 13f
+            CinemaStyle.styleButton(this)
+            fun updateLabel() {
+                text = getString(R.string.stream_downloads_network_policy) + ": " +
+                    getString(if (OfflineDownloadSettings.wifiOnly(this@DownloadsActivity))
+                        R.string.stream_downloads_wifi_only
+                    else R.string.stream_downloads_any_network)
+            }
+            updateLabel()
+            setOnClickListener {
+                OfflineDownloadSettings.setWifiOnly(
+                    applicationContext, !OfflineDownloadSettings.wifiOnly(applicationContext))
+                updateLabel()
+            }
+        }, LinearLayout.LayoutParams(-1, dp(44)).apply { bottomMargin = dp(10) })
         val filters = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutDirection = resources.configuration.layoutDirection
@@ -155,14 +177,34 @@ class DownloadsActivity : AppCompatActivity() {
             "ready" -> p.status == DownloadManager.STATUS_SUCCESSFUL
             "failed" -> p.status == DownloadManager.STATUS_FAILED
             else -> true
-        }}
+        }}.sortedWith(compareBy<OfflineDownloadStore.Progress>(
+            { if (it.record.kind == "movie") 0 else 1 },
+            { if (it.record.kind == "episode")
+                it.record.title.substringBefore(" • S").lowercase() else "" },
+            { -it.record.createdAt }
+        ))
         empty.visibility = if(visible.isEmpty()) View.VISIBLE else View.GONE
         val ids=visible.map { it.record.id }
         if(ids!=rowKeys) {
             rowKeys=ids
             buttons.clear()
             rows.removeAllViews()
+            var lastGroup: String? = null
             visible.forEach { p ->
+                val group = if (p.record.kind == "movie")
+                    getString(R.string.stream_downloads_group_movies)
+                else p.record.title.substringBefore(" • S").takeIf { it != p.record.title }
+                    ?: getString(R.string.stream_downloads_group_episodes)
+                if (group != lastGroup) {
+                    rows.addView(TextView(this).apply {
+                        text = group
+                        textSize = 17f
+                        typeface = BlofyTvDesign.HeadingTypeface
+                        setTextColor(Color.WHITE)
+                        setPadding(dp(4), dp(13), 0, dp(7))
+                    })
+                    lastGroup = group
+                }
                 val button = Button(this).apply {
                     isAllCaps=false
                     textSize=13.5f
@@ -202,7 +244,13 @@ class DownloadsActivity : AppCompatActivity() {
                 rows.addView(button, LinearLayout.LayoutParams(-1,dp(80)).apply {bottomMargin=dp(8)})
             }
         }
+        val nowMs = android.os.SystemClock.elapsedRealtime()
         visible.forEach { p ->
+            val sample = progressSamples[p.record.id]
+            val speed = if (sample == null || p.status != DownloadManager.STATUS_RUNNING)
+                0L else DownloadTransferPolicy.bytesPerSecond(
+                    sample.first, p.downloaded, nowMs - sample.second)
+            progressSamples[p.record.id] = p.downloaded to nowMs
             buttons[p.record.id]?.apply {
                 text=buildString {
                     append(p.record.title)
@@ -221,7 +269,29 @@ class DownloadsActivity : AppCompatActivity() {
                         append(OfflineDownloadStore.formatSize(p.downloaded))
                         if(p.total>0) {append(" / ");append(OfflineDownloadStore.formatSize(p.total))}
                     }
-                    if(p.status==DownloadManager.STATUS_FAILED) append("  •  " + if (p.reason == DownloadManager.ERROR_INSUFFICIENT_SPACE) getString(R.string.stream_downloads_failure_space).substringBefore('.') else p.reason.toString())
+                    if (p.status == OfflineDownloadStore.STATUS_MISSING) {
+                        append("  •  " + getString(R.string.stream_downloads_unavailable_file))
+                    }
+                    if (p.status == DownloadManager.STATUS_RUNNING && speed > 0L) {
+                        val eta = DownloadTransferPolicy.secondsRemaining(
+                            p.total, p.downloaded, speed)
+                        append("  •  ")
+                        if (eta != null) append(getString(
+                            R.string.stream_downloads_speed_eta,
+                            OfflineDownloadStore.formatSize(speed),
+                            if (eta >= 3600L) "${eta / 3600}h ${(eta % 3600) / 60}m"
+                            else if (eta >= 60L) "${eta / 60}m ${eta % 60}s"
+                            else "${eta}s"
+                        ))
+                        else append(getString(R.string.stream_downloads_speed_only,
+                            OfflineDownloadStore.formatSize(speed)))
+                    }
+                    if (p.status == DownloadManager.STATUS_FAILED) {
+                        append("  •  ")
+                        append(if (p.reason == DownloadManager.ERROR_INSUFFICIENT_SPACE)
+                            getString(R.string.stream_downloads_failure_space).substringBefore('.')
+                        else p.reason.toString())
+                    }
                 }
                 // Update click handler with CURRENT status, not the captured
                 // status when a row was first built.
@@ -253,7 +323,14 @@ class DownloadsActivity : AppCompatActivity() {
             DownloadManager.ERROR_FILE_ALREADY_EXISTS -> R.string.stream_downloads_failure_file
             else -> null
         }
-        val message = reasonText?.let(::getString) ?:
+        val networkMessage = when (progress.reason) {
+            401, 403 -> getString(R.string.stream_downloads_failure_http_access)
+            404, 410 -> getString(R.string.stream_downloads_failure_http_missing)
+            429 -> getString(R.string.stream_downloads_failure_http_busy)
+            in 500..599 -> getString(R.string.stream_downloads_failure_http_server)
+            else -> null
+        }
+        val message = networkMessage ?: reasonText?.let(::getString) ?:
             getString(R.string.stream_downloads_failure_generic, progress.reason)
         val dialog = AlertDialog.Builder(this)
             .setTitle(R.string.stream_downloads_failure_title)
@@ -269,8 +346,34 @@ class DownloadsActivity : AppCompatActivity() {
                 runCatching { startActivity(Intent(Settings.ACTION_INTERNAL_STORAGE_SETTINGS)) }
                     .onFailure { runCatching { startActivity(Intent(Settings.ACTION_SETTINGS)) } }
             }
+        } else {
+            dialog.setPositiveButton(R.string.stream_downloads_retry_from_details) { _, _ ->
+                openDownloadSource(progress.record)
+            }
         }
         dialog.show()
+    }
+
+    /** Never persist a fresh URL/credential to retry an expired download. */
+    private fun openDownloadSource(record: OfflineDownloadStore.Record) {
+        if (record.kind == "movie") {
+            startActivity(Intent(this, MovieDetailsActivity::class.java).apply {
+                putExtra(MovieDetailsActivity.EXTRA_PROVIDER_ID, record.providerId)
+                putExtra(MovieDetailsActivity.EXTRA_CONTENT_KEY, record.contentKey)
+            })
+        } else {
+            lifecycleScope.launch {
+                val episode = withContext(Dispatchers.IO) {
+                    BlofyDatabase.get(applicationContext).dao().episode(record.contentKey)
+                } ?: return@launch
+                startActivity(Intent(this@DownloadsActivity, EpisodesActivity::class.java).apply {
+                    putExtra(EpisodesActivity.EXTRA_PROVIDER_ID, record.providerId)
+                    putExtra(EpisodesActivity.EXTRA_SERIES_ID, episode.seriesId)
+                    putExtra(EpisodesActivity.EXTRA_SERIES_NAME,
+                        record.title.substringBefore(" • S"))
+                })
+            }
+        }
     }
 
     private fun play(progress: OfflineDownloadStore.Progress) {

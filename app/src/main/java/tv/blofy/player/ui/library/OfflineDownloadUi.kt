@@ -36,28 +36,59 @@ internal object OfflineDownloadUi {
                 .setPositiveButton(android.R.string.ok,null).show()
             return
         }
-        val remaining = activity.getExternalFilesDir(android.os.Environment.DIRECTORY_MOVIES)?.usableSpace ?: -1L
-        if (remaining in 0L until 536_870_912L) {
-            AlertDialog.Builder(activity)
-                .setTitle(R.string.stream_downloads_failure_title)
-                .setMessage(activity.getString(
-                    R.string.stream_downloads_low_space_confirm,
-                    OfflineDownloadStore.formatSize(remaining)
-                ))
-                .setPositiveButton(R.string.stream_downloads_continue_anyway) { _, _ ->
-                    confirmDownloads(activity, allowed)
-                }
-                .setNegativeButton(android.R.string.cancel, null)
-                .show()
-            return
+        // A HEAD probe only reads response headers: it does not download media
+        // or trust that a playback URL gives the subscriber download rights.
+        activity.lifecycleScope.launch {
+            val size = if (allowed.size == 1)
+                DownloadFileProbe.sizeIfKnown(activity.applicationContext, allowed.first().url)
+            else null
+            val remaining = withContext(Dispatchers.IO) {
+                activity.getExternalFilesDir(android.os.Environment.DIRECTORY_MOVIES)?.usableSpace ?: -1L
+            }
+            if (activity.isFinishing || activity.isDestroyed) return@launch
+            if (size != null && !DownloadTransferPolicy.enoughSpace(remaining, size)) {
+                AlertDialog.Builder(activity)
+                    .setTitle(R.string.stream_downloads_failure_title)
+                    .setMessage(activity.getString(
+                        R.string.stream_downloads_not_enough_space_estimated,
+                        OfflineDownloadStore.formatSize(size),
+                        OfflineDownloadStore.formatSize(remaining)
+                    ))
+                    .setPositiveButton(R.string.stream_downloads_storage_settings) { _, _ ->
+                        runCatching {
+                            activity.startActivity(android.content.Intent(
+                                android.provider.Settings.ACTION_INTERNAL_STORAGE_SETTINGS))
+                        }
+                    }
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show()
+                return@launch
+            }
+            if (remaining in 0L until 536_870_912L && size == null) {
+                AlertDialog.Builder(activity)
+                    .setTitle(R.string.stream_downloads_failure_title)
+                    .setMessage(activity.getString(
+                        R.string.stream_downloads_low_space_confirm,
+                        OfflineDownloadStore.formatSize(remaining)
+                    ))
+                    .setPositiveButton(R.string.stream_downloads_continue_anyway) { _, _ ->
+                        confirmDownloads(activity, allowed, null)
+                    }
+                    .setNegativeButton(android.R.string.cancel, null).show()
+                return@launch
+            }
+            confirmDownloads(activity, allowed, size)
         }
-        confirmDownloads(activity, allowed)
     }
 
-    private fun confirmDownloads(activity: AppCompatActivity, allowed: List<Plan>) {
+    private fun confirmDownloads(activity: AppCompatActivity, allowed: List<Plan>, estimatedBytes: Long?) {
         AlertDialog.Builder(activity)
             .setTitle(activity.getString(R.string.stream_downloads_confirm_title,allowed.size))
-            .setMessage(R.string.stream_downloads_consent)
+            .setMessage(activity.getString(R.string.stream_downloads_consent) +
+                (estimatedBytes?.let {
+                    "\n\n" + activity.getString(R.string.stream_downloads_estimated_size,
+                        OfflineDownloadStore.formatSize(it))
+                } ?: ""))
             .setPositiveButton(R.string.stream_downloads_confirm) { _, _ ->
                 activity.lifecycleScope.launch {
                     val outcome=withContext(Dispatchers.IO) {

@@ -23,6 +23,7 @@ internal object OfflineDownloadStore {
     private const val PREFIX = "d_"
     private const val MAX_RECORDS = 140
     private const val TRUSTED_STREAM_HOST = "blofyplayer.com"
+    const val STATUS_MISSING = -2
 
     data class Record(
         val contentKey: String,
@@ -112,6 +113,7 @@ internal object OfflineDownloadStore {
             .setDescription("BLOFY • user-requested offline video")
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
             .setAllowedOverRoaming(false)
+            .setAllowedOverMetered(!OfflineDownloadSettings.wifiOnly(context))
             .setMimeType(when(extension.lowercase()) {
                 "mkv" -> "video/x-matroska"
                 "webm" -> "video/webm"
@@ -124,7 +126,9 @@ internal object OfflineDownloadStore {
             )
         // STREAM media endpoints validate the same encrypted session as the
         // player. Only attach that bearer to our exact HTTPS first-party host.
-        if (BuildConfig.CODE_ONLY_LOGIN && host.equals(TRUSTED_STREAM_HOST, ignoreCase = true)) {
+        if (BuildConfig.CODE_ONLY_LOGIN &&
+            host.equals(TRUSTED_STREAM_HOST, ignoreCase = true) &&
+            Uri.parse(url).path.orEmpty().startsWith("/api/v1/stream/media/")) {
             val auth = StreamCodeSession.authorization(context)
                 ?: throw IllegalStateException("BLOFY activation is required")
             request.addRequestHeader("Authorization", auth)
@@ -152,10 +156,14 @@ internal object OfflineDownloadStore {
             val total = num(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)
             val done = num(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)
             val reason = num(DownloadManager.COLUMN_REASON).toInt()
-            val uri = if(status==DownloadManager.STATUS_SUCCESSFUL) {
-                dm.getUriForDownloadedFile(record.id)
-            } else null
-            return Progress(record,status,done,total,reason,uri)
+            val uri = if (status == DownloadManager.STATUS_SUCCESSFUL)
+                runCatching { dm.getUriForDownloadedFile(record.id) }.getOrNull()
+            else null
+            // A stale or deleted file is not a valid completed download.
+            val actualStatus = if (status == DownloadManager.STATUS_SUCCESSFUL &&
+                !DownloadTransferPolicy.isValidDownloadedFile(status, done, uri != null))
+                STATUS_MISSING else status
+            return Progress(record,actualStatus,done,total,reason,uri)
         }
         return null
     }
@@ -169,6 +177,7 @@ internal object OfflineDownloadStore {
     fun formatSize(bytes: Long): String = when {
         bytes < 0 -> "—"
         bytes < 1_048_576 -> "${(bytes/1024L).coerceAtLeast(0)} KB"
-        else -> String.format(java.util.Locale.US,"%.1f MB",bytes.toDouble()/1_048_576)
+        bytes < 1_073_741_824L -> String.format(java.util.Locale.US,"%.1f MB",bytes.toDouble()/1_048_576)
+        else -> String.format(java.util.Locale.US,"%.2f GB",bytes.toDouble()/1_073_741_824)
     }
 }

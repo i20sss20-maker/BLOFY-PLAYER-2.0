@@ -217,6 +217,11 @@ open class PlayerActivity : ContentAccessActivity() {
                 subtitleSelection.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
                     .setPreferredTextLanguage("ar")
         }
+        if (BuildConfig.CODE_ONLY_LOGIN) {
+            StreamAudioPreferences.preferred(this)?.let { language ->
+                subtitleSelection.setPreferredAudioLanguage(language)
+            }
+        }
         session.player.trackSelectionParameters = subtitleSelection.build()
         defaultTextDisabled = session.player.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)
         savedInstanceState?.getBundle("track_parameters")?.let {
@@ -1003,7 +1008,14 @@ open class PlayerActivity : ContentAccessActivity() {
                 checkpoint.reset()
                 subtitlePolicy.reset()
                 session.player.trackSelectionParameters = session.player.trackSelectionParameters.buildUpon()
-                    .clearOverridesOfType(C.TRACK_TYPE_TEXT).setTrackTypeDisabled(C.TRACK_TYPE_TEXT, defaultTextDisabled).build()
+                    .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                    .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
+                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, defaultTextDisabled)
+                    .apply {
+                        if (BuildConfig.CODE_ONLY_LOGIN) {
+                            setPreferredAudioLanguage(StreamAudioPreferences.preferred(this@PlayerActivity))
+                        }
+                    }.build()
                 currentContentKey = target.key
                 currentTitle = target.title
                 currentSeason = target.season
@@ -1443,6 +1455,9 @@ open class PlayerActivity : ContentAccessActivity() {
                             .buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build()
                     }
                     AudioTrackChoicePolicy.Choice.AUTO -> {
+                        if (BuildConfig.CODE_ONLY_LOGIN && isAudio) {
+                            StreamAudioPreferences.save(applicationContext, null)
+                        }
                         // Restore Media3's supported-track auto selection. Do not
                         // restart the video, clear other track choices, or force
                         // unsupported AC3/EAC3/DTS on Android 9 devices.
@@ -1450,12 +1465,17 @@ open class PlayerActivity : ContentAccessActivity() {
                             .buildUpon()
                             .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
                             .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
+                            .setPreferredAudioLanguage(null)
                             .build()
                     }
                     AudioTrackChoicePolicy.Choice.TRACK -> {
                         val index = AudioTrackChoicePolicy.trackIndex(isAudio, isText, which, entries.size)
                             ?: return@setItems
                         val entry = entries[index]
+                        if (BuildConfig.CODE_ONLY_LOGIN && isAudio) {
+                            StreamAudioPreferences.save(
+                                applicationContext, entry.group.getTrackFormat(entry.index).language)
+                        }
                         val override = TrackSelectionOverride(entry.group.mediaTrackGroup, listOf(entry.index))
                         session.player.trackSelectionParameters = session.player.trackSelectionParameters
                             .buildUpon().setTrackTypeDisabled(trackType, false)

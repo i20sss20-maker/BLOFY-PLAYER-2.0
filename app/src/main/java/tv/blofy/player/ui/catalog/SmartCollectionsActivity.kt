@@ -74,13 +74,19 @@ class SmartCollectionsActivity : AppCompatActivity() {
         root.addView(header)
 
         val grid = RecyclerView(this).apply {
-            layoutManager = GridLayoutManager(this@SmartCollectionsActivity, 5)
+            val widthDp = resources.displayMetrics.widthPixels / resources.displayMetrics.density
+            val columns = when {
+                widthDp < 650f -> 3
+                widthDp < 960f -> 4
+                else -> 5
+            }
+            layoutManager = GridLayoutManager(this@SmartCollectionsActivity, columns)
             setPadding(dp(4), dp(8), dp(4), dp(24))
             clipChildren = false
             clipToPadding = false
             itemAnimator = null
             setHasFixedSize(true)
-            setItemViewCacheSize(20)
+            setItemViewCacheSize(8)
         }
         adapter = PosterStreamAdapter(::openItem)
         grid.adapter = adapter
