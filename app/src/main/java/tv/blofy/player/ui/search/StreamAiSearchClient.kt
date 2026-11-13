@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit
 internal object StreamAiSearchClient {
     data class Intent(
         val kind: String, val person: String, val genre: String, val title: String,
-        val year: Int?, val suggestedTitles: List<String>
+        val year: Int?, val suggestedTitles: List<String>, val reply: String = ""
     )
     enum class Problem { NOT_ACTIVATED, EXPIRED_SESSION, RATE_LIMIT, SERVICE, CONNECTION, BAD_RESPONSE }
     sealed class Outcome {
@@ -85,7 +85,8 @@ internal object StreamAiSearchClient {
                         person = root.optString("person").take(90),
                         genre = root.optString("genre").take(35),
                         title = root.optString("title").take(110),
-                        year = year, suggestedTitles = titles.distinct()
+                        year = year, suggestedTitles = titles.distinct(),
+                        reply = root.optString("reply").take(240)
                     )
                     synchronized(cache) { cache[key] = output }
                     Outcome.Ready(output)
