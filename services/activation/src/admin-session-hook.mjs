@@ -126,6 +126,7 @@ function cookie(value,maxAgeSeconds) {
 }
 async function loginPage() { return readFile(new URL('../web/admin-login.html',import.meta.url),'utf8'); }
 async function dashboardPage() { return readFile(new URL('../web/admin.html',import.meta.url),'utf8'); }
+async function contentHubPage() { return readFile(new URL('../web/admin-content-hub.html',import.meta.url),'utf8'); }
 async function blofyOnePage() { return readFile(new URL('../web/blofy-one.html',import.meta.url),'utf8'); }
 async function blofyOnePreviewPage() { return readFile(new URL('../web/blofy-one-preview.html',import.meta.url),'utf8'); }
 
