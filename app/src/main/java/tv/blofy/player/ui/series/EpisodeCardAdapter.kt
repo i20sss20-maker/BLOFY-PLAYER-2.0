@@ -11,6 +11,7 @@ import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -29,7 +30,8 @@ internal class EpisodeCardAdapter(
     private val seriesName: String?,
     private val seriesArt: String?,
     private val onClick: (EpisodeEntity) -> Unit,
-    private val onFocus: (EpisodeEntity) -> Unit
+    private val onFocus: (EpisodeEntity) -> Unit,
+    private val onDownload: ((EpisodeEntity) -> Unit)? = null
 ) : RecyclerView.Adapter<EpisodeCardAdapter.Holder>() {
     private val items = mutableListOf<EpisodeEntity>()
     private var progress = emptyMap<String, Int>()
@@ -161,7 +163,21 @@ internal class EpisodeCardAdapter(
             gravity = Gravity.CENTER
         }
         row.addView(state, LinearLayout.LayoutParams(dp(100), dp(32)))
-        return Holder(row, image, number, title, meta, progressBar, state)
+        val downloadButton = onDownload?.let {
+            Button(context).apply {
+                text = "↓"
+                textSize = TvUiTuning.sp(context, 16f)
+                isAllCaps = false
+                minWidth = 0
+                minimumWidth = 0
+                background = ContentScreenStyle.chip(context)
+                setTextColor(Color.WHITE)
+                contentDescription = context.getString(R.string.stream_download_episode)
+            }.also {
+                row.addView(it, LinearLayout.LayoutParams(dp(49),dp(46)).apply {marginStart=dp(6)})
+            }
+        }
+        return Holder(row, image, number, title, meta, progressBar, state,downloadButton)
     }
 
     override fun onBindViewHolder(holder: Holder, position: Int) {
@@ -186,6 +202,11 @@ internal class EpisodeCardAdapter(
         renderFocus(holder, holder.itemView.hasFocus())
         holder.itemView.contentDescription = listOf(holder.title.text, holder.meta.text, holder.state.text).joinToString(". ")
         holder.itemView.setOnClickListener { onClick(episode) }
+        holder.itemView.setOnLongClickListener {
+            onDownload?.invoke(episode)
+            onDownload != null
+        }
+        holder.downloadButton?.setOnClickListener { onDownload?.invoke(episode) }
         holder.itemView.setOnFocusChangeListener { view, focused ->
             if (focused) focusedKey = episode.key
             renderFocus(holder, focused)
@@ -227,7 +248,8 @@ internal class EpisodeCardAdapter(
         val title: TextView,
         val meta: TextView,
         val progressBar: ProgressBar,
-        val state: TextView
+        val state: TextView,
+        val downloadButton: Button?
     ) : RecyclerView.ViewHolder(item)
 
     private fun renderFocus(holder: Holder, focused: Boolean) {
