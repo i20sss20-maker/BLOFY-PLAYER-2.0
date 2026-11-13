@@ -78,7 +78,8 @@ export async function runLicensedMirrorPilot({env={},job,privateBucket,
      mediaKind:job.mediaKind,mediaId:job.mediaId,
      extension:job.extension,from:segment.from,to:segment.to,signal});
    try{
-    if(!parseMirrorContentRange(response?.headers?.get?.('content-range'),
+    if(response?.status!==206||
+       !parseMirrorContentRange(response?.headers?.get?.('content-range'),
        {from:segment.from,to:segment.to,expectedBytes:permit.expectedBytes}))
       throw Error('content_hub_range_mismatch');
     const etag=String(response.headers.get('etag')||'').trim();
