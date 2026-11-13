@@ -104,14 +104,16 @@ export async function runOneMoviePilot({
      await lease.progressPilotRun(runId,{bytesUploaded,partsUploaded});
    }
   });
-  result={...BASE,...work};
+  result=combined.aborted?{...BASE,ok:false,stored:false,
+    code:'pilot_cancelled'}:{...BASE,...work};
   logger('BLOFY_CONTENT_HUB_ONE_MOVIE_PILOT',{
    ok:result.ok,code:result.code,stored:result.stored===true,
    bytes:result.ok?result.bytes:undefined,parts:result.ok?result.parts:undefined,
    customerCutover:false
   });
  }catch{
-  result={...BASE,ok:false,code:'pilot_source_or_job_failed',stored:false};
+  result={...BASE,ok:false,code:combined.aborted?'pilot_cancelled':
+    'pilot_source_or_job_failed',stored:false};
  }
  // Never claim success if the object cannot be recorded durably.
  try{
