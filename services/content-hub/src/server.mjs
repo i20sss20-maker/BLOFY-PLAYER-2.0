@@ -103,22 +103,30 @@ export function createContentHubServer({storage,lease,
   }
   // Admin-only and private-network-only canary. No customer cutover.
   const playback=/^\/internal\/pilot\/playback\/([A-Za-z0-9_-]{8,80})$/.exec(path);
-  if(playback&&req.method==='GET'){
+  if(playback&&['GET','HEAD'].includes(req.method)){
    if(String(req.url||'').includes('?'))
     return json(res,400,{ok:false,code:'pilot_private_query_denied'});
    let saved=null;
    try{saved=await lease.getVerifiedPilotObject?.(playback[1])}catch{}
    if(!saved||!Number.isSafeInteger(saved.bytes)||saved.bytes<=0)
     return json(res,404,{ok:false,code:'pilot_verified_media_unavailable'});
+   const type=saved.key.endsWith('.mkv')?'video/x-matroska':
+    saved.key.endsWith('.mp4')?'video/mp4':
+    saved.key.endsWith('.ts')?'video/mp2t':'video/x-msvideo';
+   if(req.method==='HEAD'){
+    res.writeHead(200,{
+      'content-type':type,'content-length':String(saved.bytes),
+      'accept-ranges':'bytes','cache-control':'private,no-store',
+      'x-content-type-options':'nosniff','referrer-policy':'no-referrer'
+    });
+    return res.end();
+   }
    const m=/^bytes=(0|[1-9][0-9]*)-(0|[1-9][0-9]*)$/.exec(
     String(req.headers.range||''));
    const from=Number(m?.[1]),to=Number(m?.[2]);
    if(!m||!Number.isSafeInteger(from)||!Number.isSafeInteger(to)||
       to<from||to>=saved.bytes||to-from+1>8*1024*1024)
     return json(res,416,{ok:false,code:'pilot_bounded_range_required'});
-   const type=saved.key.endsWith('.mkv')?'video/x-matroska':
-    saved.key.endsWith('.mp4')?'video/mp4':
-    saved.key.endsWith('.ts')?'video/mp2t':'video/x-msvideo';
    const abort=new AbortController();
    const timer=setTimeout(()=>abort.abort(),90000);timer.unref?.();
    const onDisconnect=()=>abort.abort();
