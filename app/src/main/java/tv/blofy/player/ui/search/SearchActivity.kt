@@ -56,6 +56,12 @@ class SearchActivity : AppCompatActivity() {
     private lateinit var hint: TextView
     private lateinit var aiStatus: TextView
     private lateinit var aiButton: Button
+    private lateinit var localModeButton: Button
+    private lateinit var aiModeButton: Button
+    private lateinit var chatTranscript: TextView
+    private var aiMode = false
+    private var lastAiQuestion: String? = null
+    private val chatTurns = mutableListOf<Pair<String, String>>()
     private lateinit var recentStrip: LinearLayout
     private lateinit var recentScroll: HorizontalScrollView
     private lateinit var filterStrip: LinearLayout
@@ -110,6 +116,34 @@ class SearchActivity : AppCompatActivity() {
             setPadding(0, 0, 0, dp(8))
         })
 
+        if (BuildConfig.CODE_ONLY_LOGIN) {
+            val modeBar = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                layoutDirection = resources.configuration.layoutDirection
+            }
+            localModeButton = Button(this).apply {
+                text = getString(R.string.stream_ai_mode_local)
+                isAllCaps = false
+                textSize = 14f
+                CinemaStyle.styleButton(this, true)
+                setOnClickListener { setAiMode(false) }
+            }
+            aiModeButton = Button(this).apply {
+                text = getString(R.string.stream_ai_mode_chat)
+                isAllCaps = false
+                textSize = 14f
+                CinemaStyle.styleButton(this, false)
+                setOnClickListener { setAiMode(true) }
+            }
+            modeBar.addView(localModeButton, LinearLayout.LayoutParams(0, dp(50), 1f).apply {
+                marginEnd = dp(8)
+            })
+            modeBar.addView(aiModeButton, LinearLayout.LayoutParams(0, dp(50), 1f))
+            root.addView(modeBar, LinearLayout.LayoutParams(-1, dp(58)).apply {
+                bottomMargin = dp(7)
+            })
+        }
         filterStrip = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutDirection = resources.configuration.layoutDirection
@@ -172,10 +206,12 @@ class SearchActivity : AppCompatActivity() {
                     .start()
             }
             setOnEditorActionListener { _, _, _ ->
-                val q = text?.toString().orEmpty()
-                RecentSearchStore.record(this@SearchActivity, q)
-                renderRecentSearches()
-                searchRunner.submit(q, true)
+                if (aiMode) sendAiQuestion() else {
+                    val q = text?.toString().orEmpty()
+                    RecentSearchStore.record(this@SearchActivity, q)
+                    renderRecentSearches()
+                    searchRunner.submit(q, true)
+                }
                 true
             }
             addTextChangedListener(object : TextWatcher {
@@ -183,14 +219,16 @@ class SearchActivity : AppCompatActivity() {
                 override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                     val q = s?.toString().orEmpty()
                     if (::aiStatus.isInitialized) showAiStatus("")
-                    searchRunner.submit(q, false)
-                    if (q.isBlank()) {
-                        results.removeAllViews()
-                        this@SearchActivity.hint.text = emptyHint()
-                        renderRecentSearches()
-                        return
+                    if (!aiMode) {
+                        searchRunner.submit(q, false)
+                        if (q.isBlank()) {
+                            results.removeAllViews()
+                            this@SearchActivity.hint.text = emptyHint()
+                            renderRecentSearches()
+                            return
+                        }
+                        recentScroll.visibility = View.GONE
                     }
-                    recentScroll.visibility = View.GONE
                 }
                 override fun afterTextChanged(s: Editable?) = Unit
             })
@@ -209,6 +247,21 @@ class SearchActivity : AppCompatActivity() {
             isFocusable = false
             addView(results, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
         }
+        chatTranscript = TextView(this).apply {
+            text = getString(R.string.stream_ai_chat_start)
+            textSize = 13f
+            maxLines = 7
+            setTextColor(BlofyTvDesign.TextSecondary)
+            setPadding(dp(17), dp(13), dp(17), dp(13))
+            gravity = Gravity.START
+            background = BlofyTvDesign.glassSurface(dp(18).toFloat())
+            visibility = View.GONE
+        }
+        if (BuildConfig.CODE_ONLY_LOGIN) {
+            root.addView(chatTranscript, LinearLayout.LayoutParams(-1, -2).apply {
+                bottomMargin = dp(9)
+            })
+        }
         val queryRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -220,16 +273,8 @@ class SearchActivity : AppCompatActivity() {
             textSize = 13f
             minWidth = 0
             minimumWidth = 0
-            visibility = if (BuildConfig.CODE_ONLY_LOGIN) View.VISIBLE else View.GONE
-            setOnClickListener {
-                val phrase = input.text?.toString().orEmpty().trim()
-                if (phrase.isBlank()) {
-                    showAiStatus(getString(R.string.stream_ai_enter_query))
-                } else {
-                    RecentSearchStore.record(this@SearchActivity, phrase)
-                    searchRunner.submit(phrase, true)
-                }
-            }
+            visibility = View.GONE
+            setOnClickListener { sendAiQuestion() }
         }
         if (BuildConfig.CODE_ONLY_LOGIN) {
             queryRow.addView(aiButton, LinearLayout.LayoutParams(dp(138), dp(56)).apply {
@@ -244,7 +289,7 @@ class SearchActivity : AppCompatActivity() {
             visibility = View.GONE
         }
         root.addView(queryRow, LinearLayout.LayoutParams(-1, dp(64)))
-        root.addView(aiStatus, LinearLayout.LayoutParams(-1, dp(34)))
+        root.addView(aiStatus, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(5) })
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = dp(5) })
         setContentView(root)
         renderRecentSearches()
@@ -260,13 +305,69 @@ class SearchActivity : AppCompatActivity() {
     private fun selectFilter(key: String) {
         activeKind = key.takeUnless { it == FILTER_ALL }
         refreshFilterStyle()
+        if (aiMode && activeKind == KIND_LIVE) {
+            activeKind = null // AI recommendations are for catalog VOD/series, not live TV.
+            refreshFilterStyle()
+        }
         if (::aiButton.isInitialized) aiButton.isEnabled = activeKind != KIND_LIVE
         if (::aiStatus.isInitialized) showAiStatus("")
         if (::input.isInitialized) {
-            input.hint = inputHint()
+            input.hint = if (aiMode) getString(R.string.stream_ai_chat_hint) else inputHint()
             val query = input.text?.toString().orEmpty()
-            hint.text = emptyHint()
-            if (query.isNotBlank()) searchRunner.submit(query, false)
+            hint.text = if (aiMode) getString(R.string.stream_ai_chat_try) else emptyHint()
+            if (!aiMode && query.isNotBlank()) searchRunner.submit(query, false)
+        }
+    }
+
+    /** Local search never contacts the LLM; the AI assistant runs only on Send. */
+    private fun setAiMode(enabled: Boolean) {
+        if (!BuildConfig.CODE_ONLY_LOGIN) return
+        aiMode = enabled
+        searchRunner.cancel()
+        CinemaStyle.styleButton(localModeButton, !enabled)
+        CinemaStyle.styleButton(aiModeButton, enabled)
+        if (enabled && activeKind == KIND_LIVE) {
+            activeKind = null
+            refreshFilterStyle()
+        }
+        aiButton.visibility = if (enabled) View.VISIBLE else View.GONE
+        aiButton.text = getString(R.string.stream_ai_chat_send)
+        chatTranscript.visibility = if (enabled) View.VISIBLE else View.GONE
+        recentScroll.visibility = View.GONE
+        input.hint = if (enabled) getString(R.string.stream_ai_chat_hint) else inputHint()
+        hint.text = if (enabled) getString(R.string.stream_ai_chat_try) else emptyHint()
+        showAiStatus("")
+        results.removeAllViews()
+        if (enabled) {
+            if (chatTurns.isEmpty()) chatTranscript.text = getString(R.string.stream_ai_chat_start)
+            else renderChatTurns()
+        } else {
+            renderRecentSearches()
+            input.text?.toString()?.takeIf { it.isNotBlank() }?.let { searchRunner.submit(it, false) }
+        }
+    }
+
+    private fun sendAiQuestion() {
+        if (!aiMode) return
+        val question = input.text?.toString().orEmpty().trim().take(160)
+        if (question.isBlank()) {
+            showAiStatus(getString(R.string.stream_ai_enter_query))
+            return
+        }
+        searchRunner.submit(question, true)
+    }
+
+    private fun appendChatTurn(question: String, reply: String) {
+        chatTurns.add(question.take(140) to reply.take(220))
+        if (chatTurns.size > 4) chatTurns.removeAt(0)
+        lastAiQuestion = question.take(140)
+        renderChatTurns()
+    }
+
+    private fun renderChatTurns() {
+        chatTranscript.text = chatTurns.takeLast(3).joinToString("\n\n") { (question, reply) ->
+            getString(R.string.stream_ai_chat_you) + ": " + question + "\n" +
+                getString(R.string.stream_ai_chat_assistant) + ": " + reply
         }
     }
 
@@ -287,6 +388,7 @@ class SearchActivity : AppCompatActivity() {
     private fun renderRecentSearches() {
         if (!::recentStrip.isInitialized) return
         recentStrip.removeAllViews()
+        if (aiMode) { recentScroll.visibility = View.GONE; return }
         if (::input.isInitialized && input.text?.isNotBlank() == true) {
             recentScroll.visibility = View.GONE
             return
@@ -336,6 +438,7 @@ class SearchActivity : AppCompatActivity() {
 
     private suspend fun runSearch(query: String, moveFocus: Boolean) {
         val q = query.trim()
+        val requestedAsAi = aiMode
         if (q.isEmpty()) { results.removeAllViews(); return }
         val dao = BlofyDatabase.get(applicationContext).dao()
         val provider = withContext(Dispatchers.IO) { dao.providers().first().firstOrNull() }
@@ -377,22 +480,27 @@ class SearchActivity : AppCompatActivity() {
             merged to castMatches.size
         }
 
-        if (input.text?.toString()?.trim() != q || activeKind != selectedKind) return
-        renderSections(sections, selectedKind, provider.id, provider.liveFormat, castCount, moveFocus)
-        if (!BuildConfig.CODE_ONLY_LOGIN || selectedKind == KIND_LIVE ||
-            q == referenceTitleSearch ||
-            !AiCatalogMatchPolicy.worthwhile(q, sections.sumOf { it.second.size }, moveFocus)) return
-        // Local FTS results appear instantly. A remote AI round trip can only
-        // enhance them once typing has settled; it never blocks this screen.
-        if (!moveFocus) delay(750)
-        if (input.text?.toString()?.trim() != q || activeKind != selectedKind) return
+        if (input.text?.toString()?.trim() != q || activeKind != selectedKind ||
+            aiMode != requestedAsAi) return
+        if (!requestedAsAi) {
+            renderSections(sections, selectedKind, provider.id, provider.liveFormat,
+                castCount, moveFocus)
+            return
+        }
+        if (!BuildConfig.CODE_ONLY_LOGIN || selectedKind == KIND_LIVE) {
+            showAiStatus(getString(R.string.stream_ai_chat_error))
+            return
+        }
+        showMessage(getString(R.string.stream_ai_searching))
         val locale = if (resources.configuration.locales[0].language == "ar") "ar" else "en"
         showAiStatus(getString(R.string.stream_ai_searching))
-        val aiResponse = StreamAiSearchClient.lookup(applicationContext, q, locale)
-        if (input.text?.toString()?.trim() != q || activeKind != selectedKind) return
+        val prompt = AiConversationPolicy.prompt(lastAiQuestion, q)
+        val aiResponse = StreamAiSearchClient.lookup(applicationContext, prompt, locale)
+        if (input.text?.toString()?.trim() != q || activeKind != selectedKind || !aiMode) return
         val ai = when (aiResponse) {
             is StreamAiSearchClient.Outcome.Ready -> aiResponse.intent
             is StreamAiSearchClient.Outcome.Unavailable -> {
+                appendChatTurn(q, getString(R.string.stream_ai_chat_error))
                 showAiStatus(when (aiResponse.reason) {
                     StreamAiSearchClient.Problem.NOT_ACTIVATED,
                     StreamAiSearchClient.Problem.EXPIRED_SESSION ->
@@ -407,27 +515,26 @@ class SearchActivity : AppCompatActivity() {
         val expanded = withContext(Dispatchers.IO) {
             resolveAiSuggestions(ai, repository, dao, provider.id, selectedKind, q)
         }
-        if (input.text?.toString()?.trim() != q || activeKind != selectedKind) return
+        if (input.text?.toString()?.trim() != q || activeKind != selectedKind || !aiMode) return
         if (expanded.isEmpty()) {
-            // The gateway DID respond: this is a catalog-coverage problem,
-            // not a Groq/network failure. Surface its suggestions separately
-            // so the user can tell that AI works, without implying availability.
-            showAiStatus(getString(R.string.stream_ai_no_catalog_match))
-            showAiReferenceSuggestions(ai)
+            // Never display model-invented media as if it were on the server.
+            appendChatTurn(q, getString(R.string.stream_ai_chat_none))
+            showAiStatus("")
+            showMessage(getString(R.string.stream_ai_chat_none))
             return
         }
-        val merged = sections.map { (kind, local) ->
-            // AI-assisted verified catalog matches should not disappear below
-            // an already full 120-title FTS section.
-            kind to (expanded.asSequence().filter { it.kind == kind } + local.asSequence())
-                .distinctBy { it.key }.take(SECTION_LIMIT).toList()
-        }
+        val merged = listOf(KIND_MOVIE, KIND_SERIES)
+            .filter { selectedKind == null || selectedKind == it }
+            .map { kind ->
+                val local = sections.firstOrNull { it.first == kind }?.second.orEmpty()
+                kind to (expanded.asSequence().filter { it.kind == kind } + local.asSequence())
+                    .filter { !it.locked }.distinctBy { it.key }.take(SECTION_LIMIT).toList()
+            }
+        val total = merged.sumOf { it.second.size }
         renderSections(merged, selectedKind, provider.id, provider.liveFormat,
-            castCount = castCount, moveFocus = false, aiCount = expanded.size)
-        showAiStatus(getString(R.string.stream_ai_found, expanded.size))
-        // Verified playable titles are above. Unmatched AI filmography names
-        // are only informational and never rendered as playable posters.
-        showAiReferenceSuggestions(ai, matched = expanded.map { it.name })
+            castCount = castCount, moveFocus = false, aiCount = total)
+        appendChatTurn(q, getString(R.string.stream_ai_chat_matches, total))
+        showAiStatus(getString(R.string.stream_ai_found, total))
     }
 
     /** Bound LLM suggestions to ACTUAL Xtream catalog items. No generated titles
@@ -472,6 +579,21 @@ class SearchActivity : AppCompatActivity() {
                 }
             }
         }
+        // Search verified cached cast credit metadata for actor/director prompts,
+        // not just model-suggested film titles. No extra source scrape is made.
+        if (intent.person.isNotBlank() && CastSearchPolicy.searchable(intent.person)) {
+            val candidates = ProviderMetadataCache.searchPeopleCandidates(
+                applicationContext, providerId,
+                CastSearchPolicy.candidateToken(intent.person), 64
+            )
+            candidates.asSequence()
+                .filter { (_, metadata) -> CastSearchPolicy.matches(metadata, intent.person) }
+                .take(24).forEach { (key, _) ->
+                    val stream = dao.stream(key)
+                    if (stream != null && stream.providerId == providerId &&
+                        stream.kind in kinds && !stream.locked) collected.add(stream)
+                }
+        }
         // Genre/year requests work even when Arabic natural phrasing did not
         // match Xtream's English genre fields. Still only source catalog rows.
         if (intent.genre.isNotBlank() && collected.size < 12) {
@@ -506,10 +628,13 @@ class SearchActivity : AppCompatActivity() {
                 collected.addAll(repository.searchKind(providerId, kind, intent.title, 24).filter { !it.locked })
             }
         }
-        return collected.asSequence()
+        val matched = collected.asSequence()
             .filter { it.providerId == providerId && !it.locked }
             .filter { AiCatalogQueryPolicy.matchesYear(it.year, it.name, requestedYear) }
-            .distinctBy { it.key }.take(24).toList()
+            .distinctBy { it.key }.toList()
+        return (if (AiConversationPolicy.wantsRecent(userQuery))
+            matched.sortedByDescending { it.year?.toIntOrNull() ?: 0 }
+        else matched).take(24)
     }
 
     /**
@@ -551,6 +676,7 @@ class SearchActivity : AppCompatActivity() {
                     // Searching a model-suggested title is a LOCAL lookup,
                     // not a second Groq request loop on every button press.
                     referenceTitleSearch = name
+                    if (aiMode) setAiMode(false)
                     input.setText(name)
                     input.setSelection(input.length())
                     searchRunner.submit(name, false)
