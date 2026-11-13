@@ -1,6 +1,29 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {runOneMoviePilot} from '../src/one-movie-pilot.mjs';
+import {runOneMoviePilot,inspectOneMoviePilot} from '../src/one-movie-pilot.mjs';
+
+
+test('candidate preflight reads mapped movie metadata only and does not download video',async()=>{
+ const urls=[];
+ const fetchImpl=async(url)=>{
+  urls.push(url);
+  if(!url.endsWith('/describe'))throw Error('unexpected media request');
+  return Response.json({ok:true,sourceName:'saleh',mediaKind:'movie',
+    sourceId:'9adc6472-5d4e-4359-83e4-0298cc038ae3',
+    mediaId:'314',gatewayId:123,extension:'mkv'});
+ };
+ const info=await inspectOneMoviePilot({
+   env:{BLOFY_CONTENT_HUB_BRIDGE_TOKEN:'x'.repeat(40)},
+   fetchImpl
+ });
+ assert.equal(info.ok,true);
+ assert.equal(info.gatewayId,123);
+ assert.equal(info.approvedMovieMatches,false);
+ assert.equal(info.automaticPilotEnabled,false);
+ assert.equal(info.providerMediaRequests,0);
+ assert.equal(info.downloadStarted,false);
+ assert.equal(urls.length,1);
+});
 
 test('one-movie pilot is off by default and does not request upstream media',async()=>{
  let operations=0;
