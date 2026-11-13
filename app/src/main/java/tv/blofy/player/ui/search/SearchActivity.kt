@@ -44,6 +44,7 @@ import tv.blofy.player.data.metadata.ProviderMetadataCache
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.catalog.ArtworkLoader
+import tv.blofy.player.ui.catalog.MovieGenres
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.TvUiTuning
 import tv.blofy.player.ui.details.MovieDetailsActivity
@@ -562,13 +563,57 @@ class SearchActivity : AppCompatActivity() {
                 return
             }
         }
-        val expanded = withContext(Dispatchers.IO) {
-            AiRecommendationRanker.rank(providers.flatMap { source ->
-                resolveAiSuggestions(ai, repository, dao, source.id, selectedKind, q)
-            }.distinctBy { it.key }, AiConversationPolicy.wantsRecent(q)).take(48)
+        val (expanded, categoryNamesByProvider) = withContext(Dispatchers.IO) {
+            // Xtream providers commonly omit StreamEntity.genre and store
+            // the actual genre only on its category. This must be consulted
+            // BEFORE filtering model suggestions, or AI always finds zero.
+            val names = providers.associate { source ->
+                source.id to buildMap<Pair<String, String>, String> {
+                    listOf(KIND_MOVIE, KIND_SERIES).forEach { kind ->
+                        dao.categorySnapshot(source.id, kind).forEach { category ->
+                            put(kind to category.remoteId, category.name)
+                            if (category.remoteId.toLongOrNull() != null)
+                                put(kind to "${category.remoteId}.0", category.name)
+                        }
+                    }
+                }
+            }
+            val matches = providers.flatMap { source ->
+                resolveAiSuggestions(ai, repository, dao, source.id, selectedKind, q,
+                    names[source.id].orEmpty())
+            }.distinctBy { it.key }
+            AiRecommendationRanker.rank(matches, AiConversationPolicy.wantsRecent(q))
+                .take(48) to names
         }
         if (input.text?.toString()?.trim() != q || activeKind != selectedKind || !aiMode) return
         if (expanded.isEmpty()) {
+            // Providers sometimes omit ALL action/comedy genre tags. Never
+            // present other films as exact matches; offer a clearly labeled
+            // alternative list made from actual unlocked provider entries.
+            val recommendation = listOf("رشح", "اقترح", "ابي", "أبي",
+                "recommend", "suggest", "watch").any { q.contains(it, true) }
+            if (recommendation && ai.person.isBlank()) {
+                val verifiedAlternatives = withContext(Dispatchers.IO) {
+                    providers.flatMap { source ->
+                        dao.latestHomeStreams(source.id, 250)
+                            .filter { it.kind in listOf(KIND_MOVIE, KIND_SERIES) &&
+                                (selectedKind == null || it.kind == selectedKind) && !it.locked }
+                    }.distinctBy { it.key }
+                }.let { AiRecommendationRanker.rank(it, AiConversationPolicy.wantsRecent(q)) }
+                    .take(18)
+                if (verifiedAlternatives.isNotEmpty()) {
+                    val byKind = listOf(KIND_MOVIE, KIND_SERIES)
+                        .filter { selectedKind == null || selectedKind == it }
+                        .map { kind -> kind to verifiedAlternatives.filter { it.kind == kind } }
+                    renderSections(byKind, selectedKind, provider.id, provider.liveFormat,
+                        castCount = 0, moveFocus = false)
+                    val message = getString(R.string.stream_ai_verified_alternatives) +
+                        "\n" + verifiedAlternatives.take(3).joinToString(" • ") { it.name.take(50) }
+                    appendChatTurn(q, message)
+                    showAiStatus(getString(R.string.stream_ai_verified_alternatives))
+                    return
+                }
+            }
             // Never display model-invented media as if it were on the server.
             appendChatTurn(q,
                 listOf(AiReplyPolicy.safe(ai.reply), getString(R.string.stream_ai_chat_none))
@@ -584,7 +629,11 @@ class SearchActivity : AppCompatActivity() {
                 val local = sections.firstOrNull { it.first == kind }?.second.orEmpty()
                 val verified = (expanded.asSequence().filter { it.kind == kind } +
                     local.asSequence()).filter { !it.locked && 
-                        AiRecommendationRanker.matchesGenre(it.genre, expectedGenre) }
+                        AiRecommendationRanker.matchesGenre(
+                            it.genre, expectedGenre,
+                            it.categoryId?.let { id ->
+                                categoryNamesByProvider[it.providerId]?.get(it.kind to id)
+                            }) }
                     .distinctBy { it.key }.take(SECTION_LIMIT).toList()
                 kind to AiRecommendationRanker.rank(verified,
                     AiConversationPolicy.wantsRecent(q))
@@ -613,7 +662,8 @@ class SearchActivity : AppCompatActivity() {
         dao: tv.blofy.player.data.local.BlofyDao,
         providerId: String,
         selectedKind: String?,
-        userQuery: String
+        userQuery: String,
+        categoryNames: Map<Pair<String, String>, String>
     ): List<StreamEntity> {
         // AI is a recall assistant, not the authority for strict filters.
         // Only a year the subscriber typed is allowed to filter results.
@@ -666,6 +716,17 @@ class SearchActivity : AppCompatActivity() {
         // match Xtream's English genre fields. Still only source catalog rows.
         val genre = AiRecommendationRanker.requestedGenre(userQuery, intent.genre)
         if (genre != null && collected.size < 12) {
+            // Genre search via title FTS misses most Xtream playlists because
+            // genre/category is not indexed as part of the film's title.
+            // Use the catalog's bounded, source-owned category/genre SQL.
+            if (KIND_MOVIE in kinds) {
+                val genreKey = if (genre == "science fiction") "scifi" else genre
+                val matchedByCategory = runCatching {
+                    dao.catalogPageForMovieGenre(MovieGenres.catalogQuery(
+                        providerId, null, genreKey, limit = 128))
+                }.getOrDefault(emptyList())
+                collected.addAll(matchedByCategory.filter { !it.locked }.take(60))
+            }
             for (kind in kinds) {
                 val matches = repository.searchKind(providerId, kind, genre, 40)
                 collected.addAll(matches.filter { !it.locked })
@@ -682,7 +743,8 @@ class SearchActivity : AppCompatActivity() {
             (genre != null || (asksForRecommendations && intent.title.isBlank()))) {
             collected.addAll(dao.latestHomeStreams(providerId, 1200).asSequence()
                 .filter { it.kind in kinds && !it.locked }
-                .filter { AiRecommendationRanker.matchesGenre(it.genre, genre) }
+                .filter { AiRecommendationRanker.matchesGenre(it.genre, genre,
+                    it.categoryId?.let { id -> categoryNames[it.kind to id] }) }
                 .filter { AiCatalogQueryPolicy.matchesYear(it.year, it.name, requestedYear) }
                 .take(32).toList())
         }
@@ -715,6 +777,9 @@ class SearchActivity : AppCompatActivity() {
         val matched = collected.asSequence()
             .filter { it.providerId == providerId && !it.locked }
             .filter { AiCatalogQueryPolicy.matchesYear(it.year, it.name, requestedYear) }
+            .filter { AiRecommendationRanker.matchesGenre(it.genre, genre,
+                it.categoryId?.let { id -> categoryNames[it.kind to id] }) || 
+                (genre == null) || intent.person.isNotBlank() || intent.title.isNotBlank() }
             .distinctBy { it.key }.toList()
         return AiRecommendationRanker.rank(matched,
             AiConversationPolicy.wantsRecent(userQuery)).take(24)

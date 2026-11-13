@@ -181,4 +181,5 @@
     <string name="stream_downloads_failure_http_busy">Provider is throttling requests (429). Avoid rapid retries.</string>
     <string name="stream_downloads_failure_http_server">Provider is temporarily unavailable (5xx). Try again later.</string>
     <string name="stream_downloads_retry_from_details">Open content to retry</string>
+    <string name="stream_ai_verified_alternatives">No confirmed genre matches in this source. Here are other verified titles from your library (not necessarily the genre you requested).</string>
 </resources>

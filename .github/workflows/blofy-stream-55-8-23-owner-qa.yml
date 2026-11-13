@@ -1,0 +1,235 @@
+name: BLOFY STREAM 55.8.23 FFmpeg owner-signed AI and Locale Stability QA
+# Final QA gate enabled only after Android debug/code-only build passed at prior commit.
+# This signing run re-verifies successful tests at the exact signed source SHA.
+# Final QA also disables the legacy whole-Home-tree translation observer for STREAM.
+# Final protected owner-signed QA: actors resolved only to verified catalog titles;
+# unverified AI suggestions are never playable and source metadata stays authoritative.
+# Final immutable QA package: Groq actor-Arabic and Sigma/title translation
+# canaries passed on Railway; the app regression must pass at this exact SHA.
+
+on:
+  push:
+    branches:
+      - fix/stream-55-8-23-ai-language-home-20261113
+    paths:
+      - '.github/workflows/blofy-stream-55-8-23-owner-qa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+# Final QA gate: only sign after the same commit passes local AI tests and
+# isolated gateway HTTP-auth smoke tests; never publish to the customer updater.
+concurrency:
+  group: blofy-stream-55-8-23-private-owner-signing
+  cancel-in-progress: false
+
+jobs:
+  owner-signed-private-qa:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 150
+    env:
+      MEDIA3_VERSION: '1.6.1'
+      FFMPEG_VERSION: 'n6.0'
+      ENABLED_DECODERS: 'ac3 eac3 dca truehd aac mp3 opus vorbis flac'
+      ANDROID_NDK_VERSION: '28.0.13004108'
+      ANDROID_BUILD_TOOLS_VERSION: '35.0.0'
+      ANDROID_ABI: '21'
+      EXPECTED_CERT: 'C3B98CCCD2F0C86809014ACD9368BF61C7004CFD419CD867B71FEF10BFA6255E'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require successful exact-commit STREAM regression before signing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          passed=0
+          for attempt in $(seq 1 45); do
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$GITHUB_SHA&per_page=100" > "$RUNNER_TEMP/stream-qoe-runs.json"
+            status="$(jq -r '[.workflow_runs[] | select(.head_sha == env.GITHUB_SHA and .name == "BLOFY STREAM 55.8.23 AI Language Stability QA")][0].status // ""' "$RUNNER_TEMP/stream-qoe-runs.json")"
+            conclusion="$(jq -r '[.workflow_runs[] | select(.head_sha == env.GITHUB_SHA and .name == "BLOFY STREAM 55.8.23 AI Language Stability QA")][0].conclusion // ""' "$RUNNER_TEMP/stream-qoe-runs.json")"
+            if [ "$status" = completed ]; then
+              test "$conclusion" = success || { echo "::error::STREAM regression failed: $conclusion"; exit 1; }
+              passed=1
+              break
+            fi
+            sleep 12
+          done
+          test "$passed" = 1 || { echo "::error::Exact-commit regression did not pass"; exit 1; }
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Verify source identity and install Android native tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'versionCode = 2000100' app/build.gradle.kts
+          grep -Fq 'versionName = "2.0.0-rc07.55.8.23"' app/build.gradle.kts
+          grep -Fq 'applicationIdSuffix = ".stream"' app/build.gradle.kts
+          grep -Fq 'buildConfigField("boolean", "CODE_ONLY_LOGIN", "true")' app/build.gradle.kts
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            'platforms;android-36' \
+            "build-tools;$ANDROID_BUILD_TOOLS_VERSION" \
+            "ndk;$ANDROID_NDK_VERSION" \
+            'cmake;3.22.1'
+          if ! command -v ninja >/dev/null; then
+            sudo apt-get update && sudo apt-get install -y ninja-build
+          fi
+      - name: Build pinned, licensed Media3 FFmpeg extension (without signing secrets)
+        shell: bash
+        run: |
+          set -euo pipefail
+          export NDK_PATH="$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION"
+          export PATH="$ANDROID_HOME/cmake/3.22.1/bin:$PATH"
+          chmod +x tools/build_media3_ffmpeg.sh
+          tools/build_media3_ffmpeg.sh
+          test -s build/ffmpeg-native/media3-decoder-ffmpeg-1.6.1.aar
+          grep -Fxq 'config_gpl=0' build/ffmpeg-native/build-info.txt
+          grep -Fxq 'config_nonfree=0' build/ffmpeg-native/build-info.txt
+          grep -Fxq 'config_version3=0' build/ffmpeg-native/build-info.txt
+          grep -Fxq 'page_size_compatible=16384' build/ffmpeg-native/build-info.txt
+      - name: Run code-only audio, session and playback tests without secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --max-workers=2 \
+            -Dorg.gradle.jvmargs="-Xmx2048m -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8" \
+            -PBLOFY_FFMPEG_AAR="$GITHUB_WORKSPACE/build/ffmpeg-native/media3-decoder-ffmpeg-1.6.1.aar" \
+            -PBLOFY_ACTIVATION_BASE_URL=http://127.0.0.1:9 \
+            -PBLOFY_UPDATE_BASE_URL=http://127.0.0.1:9 \
+            testStreamCodeDemoUnitTest \
+              --tests 'tv.blofy.player.core.diagnostics.StreamAudioHealthTest' \
+              --tests 'tv.blofy.player.ui.details.ArabicDetailsPolicyTest' \
+              --tests 'tv.blofy.player.ui.details.CloudTranslationPolicyTest' \
+              --tests 'tv.blofy.player.ui.catalog.MovieGenresTest' \
+              --tests 'tv.blofy.player.ui.catalog.MovieCardMetaTest' \
+              --tests 'tv.blofy.player.data.metadata.ProviderMetadataGenreSnapshotTest' \
+              --tests 'tv.blofy.player.core.identity.StreamCodeClientTest' \
+              --tests 'tv.blofy.player.core.update.StreamReleaseIsolationTest' \
+              --tests 'tv.blofy.player.core.identity.StreamCodeSessionLogoutTest' \
+              --tests 'tv.blofy.player.core.playback.PlaybackSessionReleaseTest' \
+              --tests 'tv.blofy.player.ui.player.PlayerNetworkPolicyTest' \
+              --tests 'tv.blofy.player.ui.catalog.CatalogSortPolicyTest' \
+              --tests 'tv.blofy.player.ui.catalog.SimilarMoviePolicyTest' \
+              --tests 'tv.blofy.player.ui.catalog.MovieGenrePrefetchPolicyTest' \
+              --tests 'tv.blofy.player.ui.catalog.RelatedSeriesPolicyTest' \
+              --tests 'tv.blofy.player.ui.library.OfflineDownloadPolicyTest' \
+              --tests 'tv.blofy.player.ui.home.SmartHomeEngineTest' \
+              --tests 'tv.blofy.player.ui.player.AudioTrackChoicePolicyTest' \
+              --tests 'tv.blofy.player.ui.search.CastSearchPolicyTest' \
+              --tests 'tv.blofy.player.ui.search.AiCatalogMatchPolicyTest' \
+              --tests 'tv.blofy.player.core.text.ArabicSearchNormalizerDigitsTest' \
+              --tests 'tv.blofy.player.ui.search.AiCatalogQueryPolicyTest' \
+              --tests 'tv.blofy.player.ui.search.AiConversationPolicyTest' \
+              --tests 'tv.blofy.player.ui.search.AiRecommendationRankerTest' \
+              --tests 'tv.blofy.player.ui.settings.StreamLanguageSwitcherTest' \
+              --tests 'tv.blofy.player.ui.search.AiReplyPolicyTest' \
+              --tests 'tv.blofy.player.ui.library.DownloadTransferPolicyTest'
+      - name: Verify protected original-owner key and assemble production-signed full STREAM APK
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.BLOFY_ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.BLOFY_ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.BLOFY_ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.BLOFY_ANDROID_KEY_PASSWORD }}
+          BLOFY_RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/blofy-production.keystore
+          BLOFY_RELEASE_STORE_PASSWORD: ${{ secrets.BLOFY_ANDROID_KEYSTORE_PASSWORD }}
+          BLOFY_RELEASE_KEY_ALIAS: ${{ secrets.BLOFY_ANDROID_KEY_ALIAS }}
+          BLOFY_RELEASE_KEY_PASSWORD: ${{ secrets.BLOFY_ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for required in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            test -n "${!required:-}" || { echo "::error::Production signing secret unavailable: $required"; exit 1; }
+          done
+          umask 077
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -cd 'A-Za-z0-9+/=' > "$RUNNER_TEMP/stream-production.b64"
+          base64 -d "$RUNNER_TEMP/stream-production.b64" > "$BLOFY_RELEASE_KEYSTORE_PATH"
+          test -s "$BLOFY_RELEASE_KEYSTORE_PATH"
+          keytool -list -keystore "$BLOFY_RELEASE_KEYSTORE_PATH" \
+            -storepass:env ANDROID_KEYSTORE_PASSWORD -alias "$ANDROID_KEY_ALIAS" > /dev/null
+          actual="$(keytool -exportcert -keystore "$BLOFY_RELEASE_KEYSTORE_PATH" \
+            -storepass:env ANDROID_KEYSTORE_PASSWORD -alias "$ANDROID_KEY_ALIAS" |
+            sha256sum | awk '{print toupper($1)}')"
+          test "$actual" = "$EXPECTED_CERT" || { echo "::error::Original owner signing certificate mismatch"; exit 1; }
+          gradle --no-daemon --max-workers=2 \
+            -Dorg.gradle.jvmargs="-Xmx2048m -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8" \
+            -PBLOFY_FFMPEG_AAR="$GITHUB_WORKSPACE/build/ffmpeg-native/media3-decoder-ffmpeg-1.6.1.aar" \
+            -PBLOFY_ACTIVATION_BASE_URL=https://api.blofyplayer.com \
+            -PBLOFY_UPDATE_BASE_URL=https://updates.blofyplayer.com \
+            validateReleaseConfiguration assembleStreamCodeOnly
+      - name: Verify actual signer, full STREAM package, FFmpeg libraries and checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/streamCodeOnly/app-streamCodeOnly.apk
+          test -s "$APK"
+          mkdir -p build/qa-owner-signed
+          TOOLS="$ANDROID_HOME/build-tools/$ANDROID_BUILD_TOOLS_VERSION"
+          "$TOOLS/aapt" dump badging "$APK" > "$RUNNER_TEMP/owner-stream-badging.txt"
+          grep -Fq "name='tv.blofy.player.v2.stream' versionCode='2000100' versionName='2.0.0-rc07.55.8.23-STREAM'" "$RUNNER_TEMP/owner-stream-badging.txt"
+          ! grep -Fq 'application-debuggable' "$RUNNER_TEMP/owner-stream-badging.txt"
+          "$TOOLS/apksigner" verify --verbose --print-certs "$APK" > "$RUNNER_TEMP/owner-signing-evidence.txt"
+          actual="$("$TOOLS/apksigner" verify --print-certs "$APK" |
+            sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n1 |
+            tr -d '[:space:]-:' | tr '[:lower:]' '[:upper:]')"
+          test "$actual" = "$EXPECTED_CERT" || { echo "::error::Signed APK has wrong owner certificate"; exit 1; }
+          "$TOOLS/zipalign" -c -P 16 -v 4 "$APK"
+          unzip -Z1 "$APK" > "$RUNNER_TEMP/owner-stream-entries.txt"
+          for abi in armeabi-v7a arm64-v8a x86 x86_64; do
+            grep -Fxq "lib/$abi/libffmpegJNI.so" "$RUNNER_TEMP/owner-stream-entries.txt"
+          done
+          for license in \
+            assets/open_source/ffmpeg/LICENSE.md \
+            assets/open_source/ffmpeg/SOURCE_OFFER.txt \
+            assets/open_source/THIRD_PARTY_NOTICES.txt; do
+            grep -Fxq "$license" "$RUNNER_TEMP/owner-stream-entries.txt"
+          done
+          cp "$APK" build/qa-owner-signed/BLOFY-STREAM-55.8.23-FFMPEG-OWNER-SIGNED.apk
+          (
+            cd build/qa-owner-signed
+            sha256sum BLOFY-STREAM-55.8.23-FFMPEG-OWNER-SIGNED.apk > SHA256SUMS
+            sha256sum -c SHA256SUMS
+            printf 'status=release-candidate-owner-signed\napp_id=tv.blofy.player.v2.stream\nversion_code=2000100\nversion_name=2.0.0-rc07.55.8.23-STREAM\nffmpeg=1.6.1-n6.0\nsource_commit=%s\n' "$GITHUB_SHA" > BUILD-IDENTITY.txt
+          )
+          echo 'Verified an owner-signed APK candidate. Not automatically distributed to customers.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload full signed FFmpeg STREAM APK (private QA, not public release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-STREAM-55.8.23-FFMPEG-OWNER-SIGNED-${{ github.sha }}
+          path: |
+            build/qa-owner-signed/
+            build/ffmpeg-native/compliance/BUILD-AND-RELINK.txt
+            build/ffmpeg-native/build-info.txt
+          if-no-files-found: error
+          retention-days: 7
+      - name: Publish owner-signed 55.8.23 as optional QA download (no customer updater)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="blofy-stream-55.8.23-owner-qa-20261113"
+          APK="build/qa-owner-signed/BLOFY-STREAM-55.8.23-FFMPEG-OWNER-SIGNED.apk"
+          test -s "$APK"
+          (cd build/qa-owner-signed && sha256sum -c SHA256SUMS)
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Version already released; cannot silently replace"; exit 1
+          fi
+          gh release create "$TAG" "$APK" build/qa-owner-signed/SHA256SUMS build/qa-owner-signed/BUILD-IDENTITY.txt \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title "BLOFY STREAM 55.8.23 | AI, Locale and Home Stability | Signed QA" \
+            --notes "Optional original-owner signed 55.8.23 QA. Fixes: AI suggestions now check actual Xtream category names for Action/Comedy/Crime, with transparent verified alternatives when provider metadata is missing; one clean screen stack when changing Arabic/English to avoid black frames; Home avoids duplicate re-renders and skeleton flashes. First-party conversational AI replies require v4 backend. Preserves all 55.8.22 playback and download features. No customer auto-update. Physical Android TV and download tests still needed."
+          echo "Signed opt-in APK: https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/BLOFY-STREAM-55.8.23-FFMPEG-OWNER-SIGNED.apk" >> "$GITHUB_STEP_SUMMARY"
+      - name: Always remove original-key material
+        if: always()
+        shell: bash
+        run: |
+          rm -f "$RUNNER_TEMP/blofy-production.keystore" "$RUNNER_TEMP/stream-production.b64"

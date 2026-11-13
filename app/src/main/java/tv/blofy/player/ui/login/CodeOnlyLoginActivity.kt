@@ -250,15 +250,10 @@ class CodeOnlyLoginActivity : AppCompatActivity() {
             .setSingleChoiceItems(languages,
                 if (ConfigurationCompat.getLocales(resources.configuration)[0]?.language == "ar") 0 else 1) { dialog, which ->
                 val tag = if (which == 0) "ar" else "en"
-                val saved = getSharedPreferences(RuntimeSettings.PREFS, MODE_PRIVATE).edit()
-                    .putString("app_language_tag", tag)
-                    .putString("app_language", if (which == 0) "العربية" else "English")
-                    .putBoolean("stream_language_choice_made", true)
-                    .commit()
-                if (saved) {
-                    dialog.dismiss()
-                    AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(tag))
-                }
+                dialog.dismiss()
+                // A second locale recreation during pairing can leave a black
+                // Activity surface on some Android TV firmware versions.
+                tv.blofy.player.ui.settings.StreamLanguageSwitcher.change(this, tag)
             }
             .setNegativeButton(getString(R.string.stream_ui_cancel), null)
             .show()

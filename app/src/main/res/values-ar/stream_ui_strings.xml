@@ -174,4 +174,5 @@
     <string name="stream_downloads_failure_http_busy">المصدر يقيّد عدد الطلبات مؤقتًا (429). تجنب التكرار المتواصل.</string>
     <string name="stream_downloads_failure_http_server">المصدر يواجه عطلًا مؤقتًا (5xx). حاول لاحقًا.</string>
     <string name="stream_downloads_retry_from_details">العودة للمحتوى والمحاولة</string>
+    <string name="stream_ai_verified_alternatives">ما وجدت أعمالًا مؤكدة بنفس التصنيف في بيانات مصدرك. هذه أعمال أخرى موجودة فعلًا في مكتبتك، وقد لا تكون من التصنيف المطلوب.</string>
 </resources>

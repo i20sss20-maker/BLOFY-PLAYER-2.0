@@ -108,7 +108,13 @@ class BlofyApp : Application() {
         registerActivityLifecycleCallbacks(ProfileCloudLifecycle())
         if (!BuildConfig.CODE_ONLY_LOGIN) registerActivityLifecycleCallbacks(SubscriptionEntryLifecycle())
         registerActivityLifecycleCallbacks(RuntimeSettingsLifecycle())
-        registerActivityLifecycleCallbacks(LegacyScreenLocalizationLifecycle())
+        // STREAM is localized with resources. The legacy bridge walks the
+        // ENTIRE Home view tree on each global layout event and can trigger
+        // cascading relayouts/black flicker on low-end Android TV firmware.
+        // Keep it unchanged for older BLOFY PLAYER, not STREAM.
+        if (!BuildConfig.CODE_ONLY_LOGIN) {
+            registerActivityLifecycleCallbacks(LegacyScreenLocalizationLifecycle())
+        }
 
         // Startup network work stays asynchronous. A fresh identity is registered immediately so
         // the Device ID / pairing code shown on Login is already known by the server. Existing
