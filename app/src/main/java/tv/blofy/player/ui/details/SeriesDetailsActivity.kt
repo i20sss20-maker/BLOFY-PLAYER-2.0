@@ -350,7 +350,7 @@ class SeriesDetailsActivity : ContentAccessActivity() {
                     val categories=dao.categories(providerId,"series").first()
                         .associate { it.remoteId to it.name }
                     val sample=(dao.catalogPageAfterInCategory(
-                        providerId,"series",current.categoryId,0L,140
+                        providerId,"series",current.categoryId.orEmpty(),0L,140
                     ) + dao.catalogPageAfterAll(providerId,"series",0L,110))
                         .distinctBy { it.key }
                     val cached=ProviderMetadataCache.readGenresForPage(
