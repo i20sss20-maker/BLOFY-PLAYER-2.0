@@ -27,6 +27,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.R
+import tv.blofy.player.BuildConfig
+import tv.blofy.player.ui.library.OfflineDownloadUi
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.diagnostics.PlaybackDiagnostics
 import tv.blofy.player.core.diagnostics.PlaybackDiagnosticsUploader
@@ -53,6 +55,7 @@ class EpisodesActivity : ContentAccessActivity() {
     private lateinit var episodeBody: LinearLayout
     private lateinit var status: TextView
     private lateinit var retryButton: Button
+    private var seasonDownloadButton: Button? = null
     private var allEpisodes: List<EpisodeEntity> = emptyList()
     private var selectedSeason: Int? = null
     private var providerId = ""
@@ -150,6 +153,28 @@ class EpisodesActivity : ContentAccessActivity() {
             gravity = Gravity.START
         })
 
+        if (BuildConfig.CODE_ONLY_LOGIN) {
+            seasonDownloadButton = actionButton(getString(R.string.stream_download_season)) {
+                lifecycleScope.launch {
+                    val season = selectedSeason ?: return@launch
+                    val provider = runCatching { currentProvider() }.getOrNull() ?: return@launch
+                    val plans = allEpisodes.filter { it.season == season }.sortedBy { it.episode }
+                        .take(20).map { episode ->
+                            OfflineDownloadUi.plan(provider.id,episode.key,"episode",
+                                "$seriesName • S$season E${episode.episode} • ${episode.title}",
+                                ContentUrlResolver.episode(provider,episode),episode.extension)
+                        }
+                    OfflineDownloadUi.show(this@EpisodesActivity, plans)
+                }
+            }.also { button ->
+                button.isEnabled = false
+                root.addView(button,LinearLayout.LayoutParams(
+                    if(compact) -1 else dp(320),
+                    dp(if(compact) 46 else CinemaStyle.ActionHeight)
+                ).apply {bottomMargin=dp(10);gravity=Gravity.START})
+            }
+        }
+
         episodeBody = LinearLayout(this).apply {
             orientation = if (compact) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
             layoutDirection = if (compact) uiDirection else View.LAYOUT_DIRECTION_LTR
@@ -196,7 +221,16 @@ class EpisodesActivity : ContentAccessActivity() {
                 seriesName = seriesName,
                 seriesArt = seriesArt,
                 onClick = { episode -> rememberEpisode(episode); openEpisode(provider, episode) },
-                onFocus = ::rememberEpisode
+                onFocus = ::rememberEpisode,
+                onDownload = if (BuildConfig.CODE_ONLY_LOGIN) ({ episode: EpisodeEntity ->
+                    OfflineDownloadUi.show(this@EpisodesActivity, listOf(
+                        OfflineDownloadUi.plan(
+                            provider.id,episode.key,"episode",
+                            "$seriesName • S${episode.season} E${episode.episode} • ${episode.title}",
+                            ContentUrlResolver.episode(provider,episode),episode.extension
+                        )
+                    ))
+                }) else null
             )
             seasonAdapter = FocusTextAdapter(
                 label = { season -> getString(R.string.episodes_season, season) },
@@ -310,6 +344,7 @@ class EpisodesActivity : ContentAccessActivity() {
 
     private fun renderEpisodes(items: List<EpisodeEntity>) {
         allEpisodes = items.sortedWith(compareBy<EpisodeEntity> { it.season }.thenBy { it.episode })
+        seasonDownloadButton?.isEnabled = allEpisodes.isNotEmpty()
         lifecycleScope.launch {
             refreshWatchProgress()
             val seasons = allEpisodes.map { it.season }.distinct().sorted()
