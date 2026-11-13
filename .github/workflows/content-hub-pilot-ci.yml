@@ -13,6 +13,12 @@ on:
   pull_request:
     paths:
       - 'services/content-hub/**'
+      - 'services/activation/src/content-hub-admin*'
+      - 'services/activation/src/admin-session-hook.mjs'
+      - 'services/activation/src/bootstrap.mjs'
+      - 'services/activation/web/admin-content-hub*'
+      - 'services/activation/web/admin.html'
+      - 'services/activation/test/content-hub-admin*'
       - '.github/workflows/content-hub-pilot-ci.yml'
 
 permissions:
