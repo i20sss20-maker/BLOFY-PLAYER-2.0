@@ -30,6 +30,37 @@ function configFromEnv(env){
   Number.isInteger(perBatch)&&perBatch>=1&&perBatch<=2?
   {runId,expectedBytes,gatewayId,token,perBatch}:null;
 }
+// Operator-visible, read-only readiness. Reason codes are intentionally
+// bounded and contain no source credentials, media URLs or private S3 keys.
+export function chunkedBatchReadiness(env={}){
+ const reasons=[];
+ if(env.BLOFY_CONTENT_HUB_CHUNKED_ENABLED!=='1')
+  reasons.push('batch_not_enabled');
+ if(env.BLOFY_CONTENT_HUB_UPLOAD_ENABLED!=='1')
+  reasons.push('storage_upload_disabled');
+ if(env.BLOFY_CONTENT_HUB_STORAGE_RIGHTS_CONFIRMED!=='1')
+  reasons.push('storage_rights_unconfirmed');
+ if(env.BLOFY_CONTENT_HUB_SOURCE_QUIET_WINDOW_CONFIRMED!=='1')
+  reasons.push('source_quiet_window_unconfirmed');
+ if(env.BLOFY_CONTENT_HUB_SOURCE_IDLE_CONFIRMED!=='1')
+  reasons.push('source_idle_unconfirmed');
+ if(!ID.test(String(env.BLOFY_CONTENT_HUB_BATCH_RUN_ID||'')))
+  reasons.push('batch_run_id_missing');
+ const exact=Number(env.BLOFY_CONTENT_HUB_EXPECTED_BYTES);
+ if(!Number.isSafeInteger(exact)||exact<CHUNK_BYTES||exact>MAX_BYTES)
+  reasons.push('movie_size_unconfirmed');
+ const movie=Number(env.BLOFY_CONTENT_HUB_APPROVED_GATEWAY_ID);
+ if(!Number.isSafeInteger(movie)||movie<1)
+  reasons.push('approved_movie_not_selected');
+ if(String(env.BLOFY_CONTENT_HUB_BRIDGE_TOKEN||'').length<32)
+  reasons.push('source_bridge_not_configured');
+ const perBatch=Number(env.BLOFY_CONTENT_HUB_CHUNKS_PER_BATCH||1);
+ if(!Number.isInteger(perBatch)||perBatch<1||perBatch>2)
+  reasons.push('invalid_batch_limit');
+ return {ready:reasons.length===0,blockedBy:reasons,
+  movieTrafficChanged:false,providerMediaRequests:0};
+}
+
 async function rangeBuffer(response,{from,to,total}){
  const bytes=to-from+1;
  if(response?.status!==206||!response.body||
