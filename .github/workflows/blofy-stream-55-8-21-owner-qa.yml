@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   actions: read
 
 # Final QA gate: only sign after the same commit passes local AI tests and
@@ -205,6 +205,24 @@ jobs:
             build/ffmpeg-native/build-info.txt
           if-no-files-found: error
           retention-days: 7
+      - name: Publish owner-signed 55.8.21 as optional QA download (no customer updater)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="blofy-stream-55.8.21-owner-qa-20261113"
+          APK="build/qa-owner-signed/BLOFY-STREAM-55.8.21-FFMPEG-OWNER-SIGNED.apk"
+          test -s "$APK"
+          (cd build/qa-owner-signed && sha256sum -c SHA256SUMS)
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Version already released; cannot silently replace"; exit 1
+          fi
+          gh release create "$TAG" "$APK" build/qa-owner-signed/SHA256SUMS build/qa-owner-signed/BUILD-IDENTITY.txt \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title "BLOFY STREAM 55.8.21 | Downloads and AI | Signed QA" \
+            --notes "Optional owner-signed QA APK. New: downloads-only library, clearer no-storage 1006 errors and filters; bigger Android TV episode download control; local catalog search and explicit AI chat mode; suggestions verified against authorized source catalogs. Playback engines, activation, Google Play and customer auto-updater unchanged. Downloads only for permitted direct HTTPS progressive files. Requires device testing before rollout."
+          echo "Signed opt-in APK: https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/BLOFY-STREAM-55.8.21-FFMPEG-OWNER-SIGNED.apk" >> "$GITHUB_STEP_SUMMARY"
       - name: Always remove original-key material
         if: always()
         shell: bash
