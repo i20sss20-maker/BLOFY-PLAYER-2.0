@@ -104,6 +104,23 @@ function fixture(){
    return {rows:[{count:issues.filter(x=>x.distributor_id===args[0]&&
       x.duration_days===1&&['pending','done','review'].includes(x.status)).length}]};
   }
+  if(sql.includes('SELECT source_category_id,name FROM blofy_xtream_categories'))
+   return {rows:[{source_category_id:'10',name:'Movies'}]};
+  if(sql.includes('COUNT(*)::int AS total FROM blofy_xtream_items'))
+   return {rows:[{total:catalogRecords.length}]};
+  if(sql.includes('WITH eligible AS')&&sql.includes('INSERT INTO blofy_stream_distributor_library')){
+   const eligible=catalogRecords.filter(x=>x.type===args[1]&&args[3].includes(x.id));
+   for(const item of eligible){
+     let row=libraryRows.find(x=>x.distributor_id===args[2]&&
+       x.media_type===args[1]&&x.source_item_id===item.id);
+     if(!row){row={distributor_id:args[2],media_type:args[1],
+       source_item_id:item.id,custom_group:'',custom_title:'',sort_order:0,hidden:false};
+       libraryRows.push(row);}
+     if(args[4])row.custom_group=args[5];
+     if(args[6])row.hidden=args[7];
+   }
+   return {rows:eligible.map(x=>({source_item_id:x.id}))};
+  }
   if(sql.includes('FROM blofy_stream_distributor_library')&&sql.includes('ANY('))
    return {rows:libraryRows.filter(x=>x.distributor_id===args[0]&&
      x.media_type===args[1]&&args[2].includes(x.source_item_id))};
@@ -225,6 +242,16 @@ function fixture(){
   if(sql.includes('SET password_hash=$2')){
    const row=distributors.find(x=>x.id===args[0]);row.password_hash=args[1];return {rows:[row]};
   }
+  if(sql.includes('SET last_credential_rotation_at=NOW()')){
+   const row=issues.find(x=>x.id===args[0]&&x.distributor_id===args[1]);
+   row.last_credential_rotation_at=now;
+   row.credential_rotation_request_id=args[2];return {rows:[]};
+  }
+  if(sql.includes('DELETE FROM blofy_stream_distributor_sessions WHERE distributor_id=$1 AND session_hash<>$2')){
+   for(let i=sessions.length-1;i>=0;i--)
+     if(sessions[i].id===args[0]&&sessions[i].hash!==args[1])sessions.splice(i,1);
+   return {rows:[]};
+  }
   if(sql.includes('DELETE FROM blofy_stream_distributor_sessions WHERE distributor_id=$1')){
    for(let i=sessions.length-1;i>=0;i--)if(sessions[i].id===args[0])sessions.splice(i,1);
    return {rows:[]};
@@ -238,7 +265,13 @@ function fixture(){
  const pool={query,async connect(){return {query,release(){}}}};
  const manager=createStreamDistributors({pool,clock:()=>now.getTime(),
    trialKeyHex:'9'.repeat(64),
-   listCatalog:async args=>{
+   rotateXtream:async id=>{
+      calls.push({type:'rotation',id});
+      if(id!==accountId)return {status:404,body:{ok:false}};
+      credential.username='newUser12';credential.password='NewPassSecure1';
+      return {status:200,body:{ok:true,credentials:{...credential}}};
+    },
+    listCatalog:async args=>{
      calls.push({type:'catalog',data:args});
      return catalogRecords.filter(x=>x.type===args.type);
    },
