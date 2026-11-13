@@ -11,19 +11,22 @@ import {authorizeMirrorJob,parseMirrorContentRange,rangeParts}
 async function exactResponseBytes(response,length){
  if(!response||response.status!==206||!response.body)
   throw Error('content_hub_range_rejected');
+ const declared=response.headers.get('content-length');
+ if(declared!=null&&declared!==''&&Number(declared)!==length)
+  throw Error('content_hub_range_mismatch');
  const reader=response.body.getReader();
  const chunks=[];let size=0;
  try{
   while(size<length){
    const part=await reader.read();
    if(part.done)throw Error('content_hub_body_incomplete');
+   const bytes=part.value?.byteLength||0;
+   if(bytes>length-size)throw Error('content_hub_overlong_range');
    const data=Buffer.from(part.value||[]);
-   if(data.length>length-size)
-    throw Error('content_hub_overlong_range');
-   size+=data.length;chunks.push(data);
+   size+=bytes;chunks.push(data);
   }
-  const extra=await reader.read();
-  if(!extra.done)throw Error('content_hub_overlong_range');
+  // A server may hold the connection open after a complete Range. Abort at
+  // exactly the advertised Content-Range length, never wait for another read.
   return Buffer.concat(chunks,size);
  }finally{
   try{await reader.cancel()}catch{}
@@ -48,7 +51,8 @@ export async function runLicensedMirrorPilot({env={},job,privateBucket,
  if(typeof readRange!=='function'||typeof verifyStoredObject!=='function'||
    !storage||!lease||typeof lease.acquire!=='function'||
    typeof storage.begin!=='function'||typeof storage.part!=='function'||
-   typeof storage.complete!=='function'||typeof storage.abort!=='function')
+   typeof storage.complete!=='function'||typeof storage.abort!=='function'||
+   typeof storage.remove!=='function')
    return {ok:false,code:'content_hub_missing_private_adapters',
      customerCutover:false,stored:false};
  const segments=rangeParts(permit.expectedBytes,{partBytes});
@@ -56,7 +60,7 @@ export async function runLicensedMirrorPilot({env={},job,privateBucket,
  if(!exclusive||typeof exclusive.release!=='function')
    return {ok:false,code:'content_hub_source_busy',
      customerCutover:false,stored:false};
- let activeUploadId=null,partsUploaded=0,sourceValidator=null;
+ let activeUploadId=null,completedObject=false,partsUploaded=0,sourceValidator=null;
  const digest=createHash('sha256');
  try{
   const opened=await storage.begin({
@@ -105,7 +109,7 @@ export async function runLicensedMirrorPilot({env={},job,privateBucket,
   const hash=digest.digest('hex');
   await storage.complete({uploadId:activeUploadId,
     key:permit.objectKey,parts:receipt});
-  activeUploadId=null;
+  activeUploadId=null;completedObject=true;
   // Independent verification reads the private stored object and MUST
   // recompute sha256 itself; S3 multipart ETag is NOT a content checksum.
   const verified=await verifyStoredObject({key:permit.objectKey,
@@ -120,6 +124,9 @@ export async function runLicensedMirrorPilot({env={},job,privateBucket,
  }catch(error){
   if(activeUploadId){
    try{await storage.abort({uploadId:activeUploadId,key:permit.objectKey})}catch{}
+  }
+  if(completedObject){
+   try{await storage.remove({key:permit.objectKey})}catch{}
   }
   return {ok:false,code:safeErrorCode(error),
    partsUploaded,privateOnly:true,customerCutover:false,
