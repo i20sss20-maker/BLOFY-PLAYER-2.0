@@ -47,6 +47,8 @@ import { recordXtreamPlayback,xtreamPlaybackSnapshot } from './xtream-playback-m
 import {xtreamDirectMediaGauge} from './xtream-direct-media-gauge.mjs';
 import { XtreamDenialCooldown } from './xtream-denial-cooldown.mjs';
 import { createGatewayUsageThrottle } from './xtream-gateway-usage-throttle.mjs';
+import {createDistributorCustomerCatalog}
+  from './xtream-distributor-customer-catalog.mjs';
 import {createStreamDurationCodes,ensureStreamCodeTable} from './xtream-duration-codes.mjs';
 import {createStreamCommercial,ensureStreamCommercialSchema} from './xtream-code-commercial.mjs';
 import {createStreamRelogin} from './xtream-code-relogin.mjs';
@@ -91,6 +93,11 @@ const pool = new pg.Pool({
   statement_timeout: 30000
 });
 pool.on('error', error => console.error('xtream gateway database error:', safeErrorSummary(error)));
+const distributorCatalog=createDistributorCustomerCatalog({
+  pool,enabled:process.env.BLOFY_STREAM_DISTRIBUTOR_CATALOG_CANARY==='1',
+  distributorAllowlist:process.env.BLOFY_STREAM_DISTRIBUTOR_CATALOG_CANARY_IDS||'',
+  onError:code=>console.warn('BLOFY_DISTRIBUTOR_CATALOG_CANARY',code)
+});
 
 const adminLimiter = createFixedWindowLimiter({ limit: 120, windowMs: 60_000 });
 const publicLimiter = createFixedWindowLimiter({ limit: 1200, windowMs: 60_000 });
@@ -614,8 +621,9 @@ async function writeStreamChunk(res,chunk) {
   });
 }
 
-async function streamGatewayItems(req,res,mediaType,categoryId,sourceId=null) {
+async function streamGatewayItems(req,res,mediaType,categoryId,sourceId=null,distributorScope=null) {
   const filter=await categoryFilter(mediaType,categoryId,sourceId);
+  const hidden=await distributorCatalog.hiddenIds(distributorScope,mediaType);
   // Prepare source mappings before committing a successful response.
   await ensureCategoryMaps(mediaType,sourceId);
   await ensureItemMaps(mediaType,sourceId);
@@ -643,7 +651,8 @@ async function streamGatewayItems(req,res,mediaType,categoryId,sourceId=null) {
     const writer=createXtreamJsonArrayWriter(
       chunk=>writeStreamChunk(output,chunk));
     await walkGatewayItems(mediaType,filter,
-      row=>writer.append(formatGatewayItem(mediaType,row)),sourceId);
+      row=>hidden?.has(String(row.source_id))?undefined:
+        writer.append(formatGatewayItem(mediaType,row)),sourceId);
     await writer.finish();
     output.end();
   }catch(error){
@@ -1146,6 +1155,13 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
     }
     sourceId = row.source_id;
     extension = row.container_extension;
+  }
+  const distributorScope=await distributorCatalog.forAccount(account);
+  const catalogItemId=kind==='series'?row.series_source_id:row.source_id;
+  if(await distributorCatalog.isHidden(distributorScope,kind,catalogItemId)){
+    if(req.method!=='HEAD')recordXtreamPlayback({
+      kind,phase:'failed',itemId:gatewayId,reason:'merchant_catalog_hidden'});
+    return text(res,404,'Stream not found');
   }
   // A media client's requested filename extension might be guessed. Movies and
   // episodes use the authoritative extension stored at import time, not a guess.
@@ -1852,6 +1868,7 @@ async function handlePlayerApi(req, res, url) {
   const account = await authenticate(username, password, { touch: true }) || bearerAccount;
   if (!account) return json(res, 200, { user_info: { auth: 0, status: 'Disabled' }, server_info: playerServerInfo(req) });
   const action = String(url.searchParams.get('action') || '');
+  const distributorScope=await distributorCatalog.forAccount(account);
   if (!action) {
     const studio=await getXtreamStudioBranding();
     const user=accountInfo(account,bearerAccount?'':username,bearerAccount?'':password);
@@ -1873,18 +1890,33 @@ async function handlePlayerApi(req, res, url) {
   if (action === 'get_live_categories') return json(res, 200, await gatewayCategories('live',account.source_id||null));
   if (action === 'get_vod_categories') return json(res, 200, await gatewayCategories('movie',account.source_id||null));
   if (action === 'get_series_categories') return json(res, 200, await gatewayCategories('series',account.source_id||null));
-  if (action === 'get_live_streams') return streamGatewayItems(req,res, 'live', url.searchParams.get('category_id'),account.source_id||null);
-  if (action === 'get_vod_streams') return streamGatewayItems(req,res, 'movie', url.searchParams.get('category_id'),account.source_id||null);
-  if (action === 'get_series') return streamGatewayItems(req,res, 'series', url.searchParams.get('category_id'),account.source_id||null);
+  if (action === 'get_live_streams') return streamGatewayItems(req,res, 'live', url.searchParams.get('category_id'),account.source_id||null,distributorScope);
+  if (action === 'get_vod_streams') return streamGatewayItems(req,res, 'movie', url.searchParams.get('category_id'),account.source_id||null,distributorScope);
+  if (action === 'get_series') return streamGatewayItems(req,res, 'series', url.searchParams.get('category_id'),account.source_id||null,distributorScope);
   if (action === 'get_vod_info') {
+    if(distributorScope){
+      const target=await gatewayItemById('movie',url.searchParams.get('vod_id'),account.source_id||null);
+      if(target&&await distributorCatalog.isHidden(distributorScope,'movie',target.source_id))
+        return json(res,404,{error:'vod_not_found'});
+    }
     const value = await vodInfo(url.searchParams.get('vod_id'),account.source_id||null);
     return json(res, value ? 200 : 404, value || { error: 'vod_not_found' });
   }
   if (action === 'get_series_info') {
+    if(distributorScope){
+      const target=await gatewayItemById('series',url.searchParams.get('series_id'),account.source_id||null);
+      if(target&&await distributorCatalog.isHidden(distributorScope,'series',target.source_id))
+        return json(res,404,{error:'series_not_found'});
+    }
     const value = await seriesInfo(url.searchParams.get('series_id'),account.source_id||null);
     return json(res, value ? 200 : 404, value || { error: 'series_not_found' });
   }
   if (action === 'get_short_epg' || action === 'get_simple_data_table') {
+    if(distributorScope){
+      const target=await gatewayItemById('live',url.searchParams.get('stream_id'),account.source_id||null);
+      if(target&&await distributorCatalog.isHidden(distributorScope,'live',target.source_id))
+        return json(res,404,{error:'stream_not_found'});
+    }
     const data=await liveEpg(url.searchParams.get('stream_id'),account.source_id||null,
       action,url.searchParams.get('limit'));
     return json(res,200,data);
@@ -1899,6 +1931,11 @@ async function handleM3u(req, res, url) {
   const account = await authenticate(username, password, { touch: true });
   if (!account) return text(res, 401, 'Unauthorized');
   const base = xtreamOrigin(req);
+  const distributorScope=await distributorCatalog.forAccount(account);
+  const hiddenM3u={
+    live:await distributorCatalog.hiddenIds(distributorScope,'live'),
+    movie:await distributorCatalog.hiddenIds(distributorScope,'movie')
+  };
   // These credentials are identical for every entry in this authorized M3U
   // export. Encode them once rather than hundreds of thousands of times.
   const encodedAccount = encodeURIComponent(username)+'/'+encodeURIComponent(password);
@@ -1914,6 +1951,7 @@ async function handleM3u(req, res, url) {
   await writeStreamChunk(res,'#EXTM3U\n');
   for (const mediaType of ['live','movie']) {
     await walkGatewayItems(mediaType, null, async row => {
+      if(hiddenM3u[mediaType]?.has(String(row.source_id)))return;
       // M3U uses only the already-selected source fields; formatting a full
       // Xtream API object per entry was unused work on huge playlist exports.
       const group = escapeM3uAttribute(row.category_name || row.metadata?.genre || (mediaType === 'live' ? 'Live' : 'Movies'));
