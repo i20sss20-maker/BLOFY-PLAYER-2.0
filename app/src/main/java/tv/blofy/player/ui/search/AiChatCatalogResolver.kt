@@ -22,17 +22,7 @@ internal object AiChatCatalogResolver {
     ): Results {
         val genre = AiRecommendationRanker.requestedGenre(question, parsed.genre)
         val expectedYear = AiCatalogQueryPolicy.explicitYear(question)
-        val wantsSeries = listOf("مسلسل", "مسلسلات", "series", "tv show", "shows").any {
-            question.contains(it, true)
-        }
-        val wantsMovies = listOf("فيلم", "أفلام", "افلام", "movie", "film").any {
-            question.contains(it, true)
-        }
-        val kinds = when {
-            wantsSeries && !wantsMovies -> listOf("series")
-            wantsMovies && !wantsSeries -> listOf("movie")
-            else -> listOf("movie", "series")
-        }
+        val kinds = AiChatRoutingPolicy.kinds(question)
         val collected = ArrayList<StreamEntity>(48)
         for (sourceId in providerIds.take(4)) {
             val names = buildMap<Pair<String, String>, String> {
@@ -102,11 +92,8 @@ internal object AiChatCatalogResolver {
             .take(12)
         if (verified.isNotEmpty()) return Results(verified, false)
 
-        val recommending = listOf("رشح", "اقترح", "اعطني", "عطني", "أبي", "ابي",
-            "ابغى", "recommend", "suggest", "show me", "watch").any {
-            question.contains(it, true)
-        }
-        if (!recommending || parsed.person.isNotBlank()) return Results(emptyList(), false)
+        if (!AiChatRoutingPolicy.maySuggestAlternatives(question, parsed.person))
+            return Results(emptyList(), false)
 
         // If source metadata has no requested genre, offer real but explicitly
         // NON-MATCHING alternatives rather than silently hallucinating a match.
