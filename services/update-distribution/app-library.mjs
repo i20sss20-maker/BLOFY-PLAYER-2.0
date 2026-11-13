@@ -19,7 +19,7 @@ const pool = new Pool({
 const CATEGORIES = new Set(['media', 'files', 'downloads', 'launcher', 'screensaver', 'tools', 'network', 'store']);
 const MODES = new Set(['official', 'direct']);
 // Version 7 inserts the independent BLOFY STREAM app into already-seeded production databases.
-const SEED_VERSION = 14;
+const SEED_VERSION = 15;
 
 const GITHUB_UPDATE_RULES = Object.freeze({
   'projectivy-launcher': { repo:'spocky/miproja1', asset:'ProjectivyLauncher-*-xda-release.apk' },
@@ -122,10 +122,10 @@ const DEFAULT_APPS = Object.freeze([
   {
     slug:'blofy-stream', name:'BLOFY STREAM', category:'media', symbol:'BS',
     iconUrl:'https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/services/update-distribution/public/blofy-stream.svg',
-    description:'تطبيق BLOFY STREAM المستقل. تشغيل القنوات والأفلام والمسلسلات بكود اشتراك فقط، واجهة عربية افتراضيًا مع تغيير اللغة للإنجليزية. يدعم التلفزيون والريموت والجوال وأجهزة Android TV.',
-    devices:'Android TV · TV Box · Android Phone · Tablet', version:'55.8.12',
-    architecture:'Universal (ARM + x86)', apkSizeBytes:135509813,
-    downloadUrl:'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/blofy-stream-55.8.12-owner-qa-20261111/BLOFY-STREAM-55.8.12-FFMPEG-OWNER-SIGNED.apk',
+    description:'BLOFY STREAM 55.8.24 بتفعيل عبر الكود: محادثة BLOFY AI مستقلة بأسماء أعمال قابلة للضغط، وبحث محلي منفصل. تشغيل الأفلام والمسلسلات والقنوات، ومفضلة وتحميل، مع دعم Android TV والريموت واللغة العربية والإنجليزية.',
+    devices:'Android TV · TV Box · Android Phone · Tablet', version:'55.8.24',
+    architecture:'Universal (ARM + x86)', apkSizeBytes:135682806,
+    downloadUrl:'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/blofy-stream-55.8.24-owner-qa-20261113/BLOFY-STREAM-55.8.24-FFMPEG-OWNER-SIGNED.apk',
     downloadMode:'direct', sortOrder:0, enabled:true, featured:true
   },
   {
@@ -1037,6 +1037,31 @@ export async function initAppLibrary() {
           [stream.slug, stream.version, stream.downloadUrl, stream.apkSizeBytes,
            'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/blofy-stream-55.8.11-owner-signed-20261111/BLOFY-STREAM-55.8.11-FFMPEG-OWNER-SIGNED.apk']
         );
+        await client.query("delete from blofy_app_health where slug='blofy-stream'");
+        await client.query('update blofy_app_catalog_meta set last_health_at=null where id=1');
+      }
+      if (version < 15) {
+        // Upgrade only prior owner-signed BLOFY STREAM release URLs, without
+        // clobbering customized administrator records or newer versions.
+        const stream = cleanApp(DEFAULT_APPS.find(item => item.slug === 'blofy-stream'));
+        await client.query(
+          `update blofy_app_catalog
+           set previous_version=version, previous_download_url=download_url,
+               previous_apk_size_bytes=apk_size_bytes, previous_saved_at=now(),
+               version=$2, download_url=$3, apk_size_bytes=$4,
+               description=$5, enabled=true, featured=true,
+               download_mode='direct', version_updated_at=now(), updated_at=now()
+           where slug=$1
+             and version ~ '^55[.]8[.][0-9]+$'
+             and split_part(version,'.',3)::integer < 24
+             and download_url like $6
+             and download_url like $7`,
+          [stream.slug, stream.version, stream.downloadUrl, stream.apkSizeBytes,
+           stream.description,
+           'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/blofy-stream-55.8.%',
+           '%/BLOFY-STREAM-55.8.%-OWNER-SIGNED.apk']
+        );
+        // Ignore stale source-health failures after owner APK promotion.
         await client.query("delete from blofy_app_health where slug='blofy-stream'");
         await client.query('update blofy_app_catalog_meta set last_health_at=null where id=1');
       }
