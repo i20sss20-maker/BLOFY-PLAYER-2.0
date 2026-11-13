@@ -11,7 +11,7 @@ on:
     branches:
       - fix/stream-55-8-20-downloads-ai-ux-20261113
     paths:
-      - '.github/workflows/blofy-stream-55-8-20-owner-qa.yml'
+      - '.github/workflows/blofy-stream-55-8-21-owner-qa.yml'
   workflow_dispatch:
 
 permissions:
@@ -21,7 +21,7 @@ permissions:
 # Final QA gate: only sign after the same commit passes local AI tests and
 # isolated gateway HTTP-auth smoke tests; never publish to the customer updater.
 concurrency:
-  group: blofy-stream-55-8-20-private-owner-signing
+  group: blofy-stream-55-8-21-private-owner-signing
   cancel-in-progress: false
 
 jobs:
@@ -49,7 +49,7 @@ jobs:
           for attempt in $(seq 1 45); do
             gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$GITHUB_SHA&per_page=100" > "$RUNNER_TEMP/stream-qoe-runs.json"
             status="$(jq -r '[.workflow_runs[] | select(.head_sha == env.GITHUB_SHA and .name == "BLOFY STREAM 55.8.20 Downloads + AI UX regression")][0].status // ""' "$RUNNER_TEMP/stream-qoe-runs.json")"
-            conclusion="$(jq -r '[.workflow_runs[] | select(.head_sha == env.GITHUB_SHA and .name == "BLOFY STREAM 55.8.21 Library Downloads Cast QA")][0].conclusion // ""' "$RUNNER_TEMP/stream-qoe-runs.json")"
+            conclusion="$(jq -r '[.workflow_runs[] | select(.head_sha == env.GITHUB_SHA and .name == "BLOFY STREAM 55.8.20 Downloads + AI UX regression")][0].conclusion // ""' "$RUNNER_TEMP/stream-qoe-runs.json")"
             if [ "$status" = completed ]; then
               test "$conclusion" = success || { echo "::error::STREAM regression failed: $conclusion"; exit 1; }
               passed=1
