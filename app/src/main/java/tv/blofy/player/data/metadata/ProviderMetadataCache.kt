@@ -5,6 +5,7 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import com.google.gson.Gson
+import tv.blofy.player.ui.search.CastSearchPolicy
 
 /**
  * Small persistent metadata store separate from the main catalog DB.
@@ -13,8 +14,9 @@ import com.google.gson.Gson
  */
 object ProviderMetadataCache {
     private const val DB_NAME = "blofy-provider-metadata.db"
-    private const val DB_VERSION = 2
+    private const val DB_VERSION = 3
     private const val TABLE = "content_metadata"
+    private const val PEOPLE = "content_people_tokens"
     private val gson = Gson()
     @Volatile private var helper: Helper? = null
 
@@ -84,12 +86,18 @@ object ProviderMetadataCache {
         if (providerId.isBlank() || token.trim().length < 2) return emptyMap()
         val result = LinkedHashMap<String, ProviderMetadata.Metadata>()
         val db = helper(context).readableDatabase
-        db.rawQuery(
-            "SELECT content_key, payload_json FROM $TABLE WHERE provider_id = ? " +
-                "AND instr(lower(payload_json), lower(?)) > 0 " +
-                "ORDER BY updated_at DESC LIMIT ?",
-            arrayOf(providerId, token.trim().take(48), limit.coerceIn(1, 128).toString())
-        ).use { cursor ->
+        val normalized = CastSearchPolicy.normalize(token).take(48)
+        // Newly fetched credits use an exact, indexed person-token lookup
+        // (not a full JSON scan). Legacy pre-v3 metadata still has a safe
+        // bounded compatibility fallback when the token table has no rows.
+        val indexed = db.rawQuery(
+            "SELECT m.content_key, m.payload_json FROM $TABLE m " +
+                "INNER JOIN $PEOPLE p ON m.content_key = p.content_key " +
+                "WHERE p.provider_id = ? AND p.token = ? " +
+                "ORDER BY m.updated_at DESC LIMIT ?",
+            arrayOf(providerId, normalized, limit.coerceIn(1, 128).toString())
+        )
+        indexed.use { cursor ->
             while (cursor.moveToNext()) {
                 val key = cursor.getString(0) ?: continue
                 if (!key.startsWith("$providerId:")) continue
@@ -97,6 +105,26 @@ object ProviderMetadataCache {
                     gson.fromJson(cursor.getString(1), ProviderMetadata.Metadata::class.java)
                 }.getOrNull() ?: continue
                 result[key] = metadata
+            }
+        }
+        if (result.isEmpty()) {
+            // Read compatibility for v2 installations: existing metadata is
+            // retained at migration and indexed on subsequent provider fetches.
+            db.rawQuery(
+                "SELECT content_key, payload_json FROM $TABLE WHERE provider_id = ? " +
+                    "AND instr(lower(payload_json), lower(?)) > 0 ORDER BY updated_at DESC LIMIT ?",
+                arrayOf(providerId, token.trim().take(48), limit.coerceIn(1,128).toString())
+            ).use { cursor ->
+                while(cursor.moveToNext()) {
+                    val key=cursor.getString(0) ?: continue
+                    val value=runCatching {
+                        gson.fromJson(cursor.getString(1),ProviderMetadata.Metadata::class.java)
+                    }.getOrNull() ?: continue
+                    if (key.startsWith("$providerId:") && (value.cast.orEmpty() + value.crew.orEmpty())
+                        .any { CastSearchPolicy.normalize(it.name).contains(normalized) }) {
+                        result[key]=value
+                    }
+                }
             }
         }
         return result
@@ -118,7 +146,27 @@ object ProviderMetadataCache {
             put("payload_json", metadata?.let(gson::toJson).orEmpty())
             put("updated_at", System.currentTimeMillis())
         }
-        check(helper(context).writableDatabase.insertWithOnConflict(TABLE, null, values, SQLiteDatabase.CONFLICT_REPLACE) != -1L) { "Unable to persist metadata" }
+        val db=helper(context).writableDatabase
+        db.beginTransaction()
+        try {
+            check(db.insertWithOnConflict(TABLE,null,values,SQLiteDatabase.CONFLICT_REPLACE)!=-1L) {
+                "Unable to persist metadata"
+            }
+            db.delete(PEOPLE,"content_key = ?",arrayOf(contentKey))
+            val tokens=(metadata?.cast.orEmpty() + metadata?.crew.orEmpty())
+                .asSequence().map { CastSearchPolicy.normalize(it.name) }
+                .flatMap { it.split(" ").asSequence() }
+                .filter { it.length in 2..48 }
+                .distinct().take(120).toList()
+            for(token in tokens) {
+                db.insertWithOnConflict(PEOPLE,null,ContentValues().apply {
+                    put("provider_id",providerId)
+                    put("content_key",contentKey)
+                    put("token",token)
+                },SQLiteDatabase.CONFLICT_IGNORE)
+            }
+            db.setTransactionSuccessful()
+        } finally {db.endTransaction()}
     }
 
     fun count(context: Context, providerId: String): Int {
@@ -131,6 +179,7 @@ object ProviderMetadataCache {
     fun clearProvider(context: Context, providerId: String) {
         if (providerId.isBlank()) return
         helper(context).writableDatabase.delete(TABLE, "provider_id = ?", arrayOf(providerId))
+        helper(context).writableDatabase.delete(PEOPLE, "provider_id = ?", arrayOf(providerId))
         helper(context).writableDatabase.delete("detail_fetches", "provider_id = ?", arrayOf(providerId))
     }
 
@@ -162,6 +211,14 @@ object ProviderMetadataCache {
             )
             db.execSQL("CREATE INDEX IF NOT EXISTS index_content_metadata_provider_id ON $TABLE(provider_id)")
             createFetchTable(db)
+            createPeopleTable(db)
+        }
+
+        private fun createPeopleTable(db: SQLiteDatabase) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS $PEOPLE (" +
+                "provider_id TEXT NOT NULL, content_key TEXT NOT NULL, token TEXT NOT NULL," +
+                "PRIMARY KEY(provider_id, content_key, token))")
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_people_search ON $PEOPLE(provider_id, token)")
         }
 
         private fun createFetchTable(db: SQLiteDatabase) {
@@ -170,6 +227,7 @@ object ProviderMetadataCache {
 
         override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
             if (oldVersion < 2) createFetchTable(db)
+            if (oldVersion < 3) createPeopleTable(db) // Never drop subscriber metadata
         }
     }
 }
