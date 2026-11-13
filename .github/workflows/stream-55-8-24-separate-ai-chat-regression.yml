@@ -1,0 +1,139 @@
+name: BLOFY STREAM 55.8.24 Separate Chat and Search QA
+
+on:
+  push:
+    branches:
+      - feat/stream-55-8-24-separate-ai-chat-20261113
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Keep one active regression run; repeated source pushes must not waste runner time.
+concurrency:
+  group: stream-downloads-ai-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  stream-qoe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;35.0.0"
+      - name: Test connection diagnosis, startup timing, recovery and audio
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --max-workers=2 \
+            -PBLOFY_ACTIVATION_BASE_URL=http://127.0.0.1:9 \
+            -PBLOFY_UPDATE_BASE_URL=http://127.0.0.1:9 \
+            testDebugUnitTest \
+            --tests tv.blofy.player.core.diagnostics.StreamConnectionDiagnosticsTest \
+            --tests tv.blofy.player.core.diagnostics.PlaybackDiagnosticsRetentionTest \
+            --tests tv.blofy.player.core.diagnostics.PlaybackQualityAssessmentTest \
+            --tests tv.blofy.player.core.diagnostics.StreamAudioHealthTest \
+            --tests tv.blofy.player.core.playback.PlaybackRecoveryPolicyTest \
+            --tests tv.blofy.player.ui.catalog.MovieCardMetaTest \
+            --tests tv.blofy.player.ui.catalog.MovieGenrePrefetchPolicyTest \
+            --tests tv.blofy.player.ui.catalog.MovieGenresTest \
+            --tests tv.blofy.player.ui.catalog.SimilarMoviePolicyTest \
+            --tests tv.blofy.player.ui.catalog.RelatedSeriesPolicyTest \
+            --tests tv.blofy.player.ui.library.OfflineDownloadPolicyTest \
+            --tests tv.blofy.player.ui.search.AiConversationPolicyTest \
+            --tests tv.blofy.player.ui.search.AiRecommendationRankerTest \
+            --tests tv.blofy.player.ui.search.AiReplyPolicyTest \
+            --tests tv.blofy.player.ui.settings.StreamLanguageSwitcherTest \
+            --tests tv.blofy.player.ui.library.DownloadTransferPolicyTest \
+            --tests tv.blofy.player.ui.home.SmartHomeEngineTest \
+            --tests tv.blofy.player.ui.search.CastSearchPolicyTest \
+            --tests tv.blofy.player.ui.search.AiCatalogMatchPolicyTest \
+            --tests tv.blofy.player.core.text.ArabicSearchNormalizerDigitsTest \
+            --tests tv.blofy.player.ui.search.AiCatalogQueryPolicyTest \
+            --tests tv.blofy.player.ui.details.CloudTranslationPolicyTest \
+            --tests tv.blofy.player.ui.catalog.CatalogSortPolicyTest \
+            --tests tv.blofy.player.ui.player.AudioTrackChoicePolicyTest
+      - name: Compile and test dedicated code-only STREAM flavor
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --max-workers=2 \
+            -PBLOFY_ACTIVATION_BASE_URL=http://127.0.0.1:9 \
+            -PBLOFY_UPDATE_BASE_URL=http://127.0.0.1:9 \
+            testStreamCodeDemoUnitTest \
+            --tests tv.blofy.player.ui.catalog.CatalogSortPolicyTest \
+            --tests tv.blofy.player.ui.home.SmartHomeEngineTest \
+            --tests tv.blofy.player.ui.search.CastSearchPolicyTest \
+            --tests tv.blofy.player.ui.search.AiCatalogMatchPolicyTest \
+            --tests tv.blofy.player.core.text.ArabicSearchNormalizerDigitsTest \
+            --tests tv.blofy.player.ui.search.AiCatalogQueryPolicyTest \
+            --tests tv.blofy.player.ui.details.CloudTranslationPolicyTest \
+            --tests tv.blofy.player.ui.catalog.SimilarMoviePolicyTest \
+            --tests tv.blofy.player.ui.catalog.RelatedSeriesPolicyTest \
+            --tests tv.blofy.player.ui.library.OfflineDownloadPolicyTest \
+            --tests tv.blofy.player.ui.search.AiConversationPolicyTest \
+            --tests tv.blofy.player.ui.search.AiRecommendationRankerTest \
+            --tests tv.blofy.player.ui.search.AiReplyPolicyTest \
+            --tests tv.blofy.player.ui.settings.StreamLanguageSwitcherTest \
+            --tests tv.blofy.player.ui.library.DownloadTransferPolicyTest \
+            --tests tv.blofy.player.ui.player.AudioTrackChoicePolicyTest \
+            --tests tv.blofy.player.ui.catalog.MovieGenrePrefetchPolicyTest \
+            --tests tv.blofy.player.ui.search.CastSearchPolicyTest \
+            --tests tv.blofy.player.ui.search.AiCatalogMatchPolicyTest \
+            --tests tv.blofy.player.core.text.ArabicSearchNormalizerDigitsTest \
+            --tests tv.blofy.player.ui.search.AiCatalogQueryPolicyTest \
+            --tests tv.blofy.player.ui.details.CloudTranslationPolicyTest
+      - name: Android minSdk compatibility and locale Lint (API 23)
+        shell: bash
+        run: |
+          gradle --no-daemon --max-workers=2 -PBLOFY_ACTIVATION_BASE_URL=http://127.0.0.1:9 -PBLOFY_UPDATE_BASE_URL=http://127.0.0.1:9 lintDebug
+      - name: Compile STREAM code-only debug variant without production signing
+        run: gradle --no-daemon --max-workers=2 -PBLOFY_ACTIVATION_BASE_URL=http://127.0.0.1:9 -PBLOFY_UPDATE_BASE_URL=http://127.0.0.1:9 assembleStreamCodeDemo
+      - name: Upload isolated Android emulator QA APK (debug only)
+        uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-STREAM-55.8.24-EMULATOR-QA-${{ github.sha }}
+          path: app/build/outputs/apk/streamCodeDemo/*.apk
+          if-no-files-found: error
+          retention-days: 7
+      - uses: oven-sh/setup-bun@v2
+      - name: Compile shared BLOFY AI Groq search and translation gateway (no model requests)
+        run: |
+          bun build services/ai-gateway/index.ts --target=bun --outfile=/tmp/blofy-ai-gateway.js
+          test -s /tmp/blofy-ai-gateway.js
+      - name: Smoke-test isolated first-party AI Gateway without tokens or Gemini cost
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://blofy-ai-gateway-production.up.railway.app"
+          curl --fail --silent --show-error --retry 3 --retry-delay 2 \
+            --connect-timeout 6 --max-time 12 "$BASE/health" | jq -e '.ok == true and .service == "blofy-ai"'
+          code="$(curl --silent --show-error --max-time 12 -o "$RUNNER_TEMP/ai-unauthorized.json" \
+            -w '%{http_code}' -X POST -H 'content-type: application/json' \
+            --data '{"text":"Tom Cruise","locale":"en"}' "$BASE/v1/search/interpret")"
+          test "$code" = 401
+          jq -e '.ok == false and .error == "unauthorized"' "$RUNNER_TEMP/ai-unauthorized.json"
+      - name: Save test evidence only — not a customer release
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stream-55-8-24-chat-tests-${{ github.sha }}
+          path: |
+            app/build/test-results/testDebugUnitTest/
+            app/build/reports/tests/testDebugUnitTest/
+            app/build/test-results/testStreamCodeDemoUnitTest/
+            app/build/reports/tests/testStreamCodeDemoUnitTest/
+          if-no-files-found: ignore
+          retention-days: 14
