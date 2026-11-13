@@ -108,6 +108,16 @@ function fixture(){
    return {rows:[{source_category_id:'10',name:'Movies'}]};
   if(sql.includes('COUNT(*)::int AS total FROM blofy_xtream_items'))
    return {rows:[{total:catalogRecords.length}]};
+  if(sql.includes('AS would_hide')&&sql.includes('FROM blofy_stream_distributor_library o')){
+   const rows=libraryRows.filter(x=>x.distributor_id===args[0]&&x.media_type===args[1]);
+   return {rows:[{would_hide:rows.filter(x=>x.hidden===true).length,
+     explicitly_shown:rows.filter(x=>x.hidden===false).length,
+     renamed:rows.filter(x=>x.custom_title).length,
+     grouped:rows.filter(x=>x.custom_group).length}]};
+  }
+  if(sql.includes('FROM blofy_stream_distributor_issues')&&sql.includes("status='done'")){
+   return {rows:[{total:issues.filter(x=>x.distributor_id===args[0]&&x.status==='done').length}]};
+  }
   if(sql.includes('WITH eligible AS')&&sql.includes('INSERT INTO blofy_stream_distributor_library')){
    const eligible=catalogRecords.filter(x=>x.type===args[1]&&args[3].includes(x.id));
    for(const item of eligible){
@@ -646,5 +656,30 @@ test('merchant can browse full saleh categories and apply safe selected-only ove
    hidden:true}),/distributor_bulk_selection_invalid/);
  await assert.rejects(f.manager.organizeBulk(tb,{type:'movie',itemIds:['42'],
    hidden:'yes'}),/distributor_library_hidden_invalid/);
+ assert.equal(f.statements.some(sql=>/UPDATE blofy_xtream_items|DELETE FROM blofy_xtream_items/.test(sql)),false);
+});
+
+test('merchant delivery preview is source-scoped, exact and read-only',async()=>{
+ const f=fixture();
+ const a=await f.manager.createAdmin({name:'Merchant A',username:'preview-merchant-a',credits:1});
+ const b=await f.manager.createAdmin({name:'Merchant B',username:'preview-merchant-b',credits:1});
+ const ta=(await f.manager.login({username:'preview-merchant-a',password:a.password})).token;
+ const tb=(await f.manager.login({username:'preview-merchant-b',password:b.password})).token;
+ const before=await f.manager.libraryDeliveryPreview(ta,{type:'movie'});
+ assert.equal(before.total,1);
+ assert.equal(before.wouldShow,1);
+ assert.equal(before.wouldHide,0);
+ assert.equal(before.customerTrafficChanged,false);
+ assert.equal(before.customerCatalogFilteringEnabled,false);
+ await f.manager.organizeBulk(ta,{type:'movie',itemIds:['42'],hidden:true,group:'معروض لاحقًا'});
+ const after=await f.manager.libraryDeliveryPreview(ta,{type:'movie'});
+ assert.equal(after.wouldHide,1);
+ assert.equal(after.wouldShow,0);
+ assert.equal(after.grouped,1);
+ const unrelated=await f.manager.libraryDeliveryPreview(tb,{type:'movie'});
+ assert.equal(unrelated.wouldShow,1);
+ assert.equal(unrelated.wouldHide,0);
+ await assert.rejects(f.manager.libraryDeliveryPreview(ta,{type:'invalid'}),
+   /distributor_library_type_invalid/);
  assert.equal(f.statements.some(sql=>/UPDATE blofy_xtream_items|DELETE FROM blofy_xtream_items/.test(sql)),false);
 });
