@@ -63,7 +63,8 @@ test('huge Xtream playlists obey HTTP backpressure and validate maps before succ
   assert.match(gateway,/res\.once\('drain',ok\)/);
   assert.ok(output.indexOf('await ensureItemMaps') < output.indexOf('res.writeHead(200'));
   assert.match(output,/createXtreamJsonArrayWriter\(/);
-  assert.match(output,/row=>writer\.append\(formatGatewayItem/);
+  assert.match(output,/hidden\?\.has\(String\(row\.source_id\)\)/);
+  assert.match(output,/writer\.append\(formatGatewayItem\(mediaType,row\)\)/);
   assert.match(output,/await writer\.finish\(\)/);
   assert.match(output,/gzipEnabled=acceptsXtreamGzip/);
   assert.match(m3u,/await writeStreamChunk\(res,'#EXTM3U/);
