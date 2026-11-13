@@ -3133,6 +3133,50 @@ async function unifiedStreamBridge(req,res,url){
   if(!limit.allowed)return json(res,429,{ok:false,code:'stream_bridge_rate_limited'});
   const p=url.pathname;
 
+  // Private Content Hub: STREAM operator Basic -> authenticated unified
+  // bridge -> this portal -> private Hub token. No S3/media credentials
+  // reach the STREAM service or a browser, and no subscriber playback route.
+  const batchBridgePaths={
+    '/internal/blofy-stream/content-hub/status':'/internal/pilots',
+    '/internal/blofy-stream/content-hub/preflight':'/internal/pilot/preflight',
+    '/internal/blofy-stream/content-hub/batch/next':'/internal/batch/next'
+  };
+  if(Object.hasOwn(batchBridgePaths,p)){
+    const isNext=p.endsWith('/batch/next');
+    if((isNext&&req.method!=='POST')||(!isNext&&req.method!=='GET'))
+      return json(res,405,{ok:false,code:'hub_bridge_method_denied'});
+    if(isNext){
+      const body=await readJson(req);
+      if(body.confirmed!==true)return json(res,400,{
+        ok:false,code:'hub_batch_explicit_confirmation_required'});
+    }
+    const operatorToken=String(process.env.BLOFY_CONTENT_HUB_OPERATOR_TOKEN||'');
+    if(operatorToken.length<32)return json(res,503,{
+      ok:false,code:'hub_private_token_missing'});
+    try{
+      const response=await fetch('http://blofy-content-hub.railway.internal:3000'+
+        batchBridgePaths[p],{
+        method:req.method,redirect:'manual',signal:AbortSignal.timeout(8500),
+        headers:{authorization:'Bearer '+operatorToken,
+          ...(isNext?{'x-blofy-batch-confirm':'approved-8mib-batch'}:{})}
+      });
+      if(![200,202,400,409,503].includes(response.status))
+        return json(res,503,{ok:false,code:'hub_private_response_invalid'});
+      const raw=await response.text();
+      if(Buffer.byteLength(raw)>256000)
+        return json(res,503,{ok:false,code:'hub_private_payload_too_large'});
+      let data;try{data=JSON.parse(raw)}catch{
+        return json(res,503,{ok:false,code:'hub_private_not_json'});
+      }
+      if(!data||typeof data!=='object'||Array.isArray(data))
+        return json(res,503,{ok:false,code:'hub_private_payload_invalid'});
+      // The private hub only returns non-secret run IDs/counts, never
+      // source URLs/passwords or private object names in these paths.
+      return json(res,response.status,data,{'cache-control':'no-store'});
+    }catch{return json(res,503,{
+      ok:false,code:'hub_private_temporarily_unavailable'})}
+  }
+
   // Reseller management is admin-only. Reseller browser actions use a separate
   // scoped session created at /distributor; never hand this bridge key to them.
   if(req.method==='GET'&&p==='/internal/blofy-stream/distributors')
