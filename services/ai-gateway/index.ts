@@ -13,6 +13,7 @@ type AiResult = {
   year: number | null;
   suggestedTitles: string[];
   confidence: "low" | "medium" | "high";
+  reply: string;
 };
 const json = (o: unknown, status = 200) => new Response(JSON.stringify(o), {
   status,
@@ -45,7 +46,7 @@ function activeProvider(): AiProvider {
 const SESSION_URL = "https://blofyplayer.com/api/v1/stream/app/session";
 const empty = (text = ""): AiResult => ({
   intent: "title", person: "", genre: "", title: text,
-  year: null, suggestedTitles: [], confidence: "low"
+  year: null, suggestedTitles: [], confidence: "low", reply: ""
 });
 const timeout = (ms: number) => AbortSignal.timeout(ms);
 function textField(v: unknown, max = 90): string {
@@ -63,7 +64,8 @@ function clean(data: any, userText: string): AiResult {
     intent, person: textField(data?.person), genre: textField(data?.genre,35),
     title: textField(data?.title,110) || (intent === "title" ? userText : ""),
     year, suggestedTitles: titles,
-    confidence: ["low","medium","high"].includes(data?.confidence) ? data.confidence : "low"
+    confidence: ["low","medium","high"].includes(data?.confidence) ? data.confidence : "low",
+    reply: textField(data?.reply, 240)
   };
 }
 function sweep(now: number) {
@@ -99,6 +101,11 @@ async function interpret(text: string, language: string): Promise<AiResult> {
     "You are BLOFY catalog search intent parser. Output JSON only.",
     "You DO NOT have access to the user's catalog, cannot claim an item is available.",
     "Extract one user intent, person name, broad genre, optional year and title.",
+    "If the text mentions Previous request and follow-up, combine them; the most recent request wins.",
+    "For general recommendations, extract genre, new/recent, rating and movie-versus-series clues.",
+    "reply is one short friendly sentence in the requested language, referencing the user's requested genre or mood.",
+    "You do NOT have access to BLOFY catalog; reply must NEVER say any movie is on the server,",
+    "available to play/download, or that you searched or verified results. The Android client verifies separately.",
     "For queries by a well-known actor/director, supply up to 24 well-known real",
     "film or series ORIGINAL TITLES where you are confident the person participated.",
     "Never invent titles. For less-known names or ambiguous queries use empty suggestedTitles.",
@@ -114,7 +121,7 @@ async function interpret(text: string, language: string): Promise<AiResult> {
     "Do not output commentary, markdown, web URLs, PII or streaming links.",
     "JSON fields: intent one of actor/director/title/genre/mixed;",
     "person string, genre string, title string, year integer or null;",
-    "suggestedTitles array of strings, confidence low/medium/high.",
+    "suggestedTitles array of strings, confidence low/medium/high, reply string.",
     `Language: ${language}.`
   ].join("\n");
 
@@ -151,9 +158,10 @@ async function interpret(text: string, language: string): Promise<AiResult> {
                     person:{type:"string"},genre:{type:"string"},title:{type:"string"},
                     year:{type:["integer","null"]},
                     suggestedTitles:{type:"array",items:{type:"string"}},
-                    confidence:{type:"string",enum:["low","medium","high"]}
+                    confidence:{type:"string",enum:["low","medium","high"]},
+                    reply:{type:"string"}
                   },
-                  required:["intent","person","genre","title","year","suggestedTitles","confidence"]
+                  required:["intent","person","genre","title","year","suggestedTitles","confidence","reply"]
                 }
               }
             }
@@ -184,8 +192,8 @@ async function interpret(text: string, language: string): Promise<AiResult> {
             intent:{type:"string"},person:{type:"string"},genre:{type:"string"},
             title:{type:"string"},year:{type:["integer","null"]},
             suggestedTitles:{type:"array",items:{type:"string"}},
-            confidence:{type:"string"}
-          },required:["intent","person","genre","title","year","suggestedTitles","confidence"]
+            confidence:{type:"string"},reply:{type:"string"}
+          },required:["intent","person","genre","title","year","suggestedTitles","confidence","reply"]
         }
       }
     })
