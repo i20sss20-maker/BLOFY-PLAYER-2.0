@@ -85,6 +85,41 @@ async function reload(){
    'لم نتمكن من الاتصال بحالة التخزين الخاص.'));
  }finally{busy=false}
 }
+$('preflight').addEventListener('click',async()=>{
+ const btn=$('preflight'),result=$('preflightResult');
+ btn.disabled=true;result.className='source-check';
+ result.textContent='جارٍ التحقق من تعريف الفيلم في المصدر…';
+ try{
+  const response=await fetch('/api/v1/admin/content-hub/preflight',{
+   cache:'no-store',credentials:'same-origin'});
+  if(response.status===401){location.assign('/admin');return}
+  const data=await response.json();
+  if(!response.ok||!data.ok){
+   result.className='source-check warning';
+   result.textContent='تعذر فحص تعريف المصدر. لا يمكن بدء نقل فيلم حتى يصبح الاتصال الخاص جاهزًا.';
+   return;
+  }
+  const matches=data.approvedMovieMatches===true;
+  result.className='source-check '+(matches?'ok':'warning');
+  const yes=value=>value?'✅ مؤكد بالإعدادات':'⛔ غير مفعّل';
+  result.textContent=[
+   'المصدر: '+(data.sourceName||'غير معروف'),
+   'معرّف الفيلم: '+(data.gatewayId||'غير متوفر'),
+   'صيغة الفيلم: '+(data.extension||'غير معروفة'),
+   'حجم النسخة المستهدفة: '+(data.expectedBytes?formatBytes(data.expectedBytes):'غير محدد'),
+   'تطابق الفيلم المعتمد: '+yes(matches),
+   'صلاحية التخزين المعلنة: '+yes(data.storageRightsDeclared),
+   'فترة الخمول المعلنة: '+yes(data.sourceQuietDeclared),
+   'المصدر غير مستخدم (إقرار): '+yes(data.sourceIdleDeclared),
+   'نقل الملفات: '+yes(data.uploadFeatureEnabled),
+   'تنزيل الفيديو بسبب هذا الفحص: لا',
+   'تنبيه: هذا الفحص لا يؤكد فعليًا خمول المصدر أو حقوق تخزين الفيلم.'
+  ].join('\n');
+ }catch{
+  result.className='source-check warning';
+  result.textContent='حدث خطأ في فحص المصدر. لم يبدأ أي تنزيل.';
+ }finally{btn.disabled=false}
+});
 $('refresh').addEventListener('click',reload);
 $('cancel').addEventListener('click',async()=>{
  if(!pilotActive||!window.confirm('إيقاف النسخ الجاري؟ لن يؤثر ذلك على القنوات، لكن عملية النسخ الحالية ستُلغى.'))return;
