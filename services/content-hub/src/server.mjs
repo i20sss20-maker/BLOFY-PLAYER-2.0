@@ -5,6 +5,7 @@ import {createPrivateS3Adapter} from './private-s3.mjs';
 import {createSourceLease} from './source-lease.mjs';
 import {runPrivateSalehSample} from './real-source-sample.mjs';
 import {runOneMoviePilot,inspectOneMoviePilot} from './one-movie-pilot.mjs';
+import {runChunkedMovieBatch,chunkedPilotEnabled,CHUNK_BYTES} from './chunked-pilot.mjs';
 
 const FIXTURE_SOURCE='00000000-0000-4000-8000-000000000000';
 const FIXTURE_SIZE=8*1024*1024;
@@ -53,7 +54,8 @@ export async function runSyntheticPrivateStorageCheck({storage}){
 }
 export function createContentHubServer({storage,lease,
  token='',allowSynthetic=false,logger=()=>{},
- pilotPreflight=inspectOneMoviePilot,pilotEnv=process.env}={}){
+ pilotPreflight=inspectOneMoviePilot,pilotEnv=process.env,
+ batchRunner=runChunkedMovieBatch}={}){
  if(!storage||!lease)throw Error('content_hub_private_dependencies_required');
  const started=Date.now();
  let syntheticRunning=false,lastSynthetic=null;
@@ -78,7 +80,8 @@ export function createContentHubServer({storage,lease,
     databaseAvailable:database,downloadQueueEnabled:false,
     syntheticTestEnabled:allowSynthetic,
     lastSynthetic,pilotRunning,lastPilot,
-    durablePilot,customerCutover:false,
+    durablePilot,chunkedBatchEnabled:chunkedPilotEnabled(pilotEnv),
+    customerCutover:false,
     licensedRightsRequired:true});
   }
   if(path==='/internal/pilot/preflight'&&req.method==='GET'){
@@ -94,15 +97,61 @@ export function createContentHubServer({storage,lease,
    if(String(req.url||'').includes('?'))
     return json(res,400,{ok:false,code:'content_hub_query_not_allowed'});
    try{
-    const [runs,accounting]=await Promise.all([
+    const [legacyRuns,legacyAccounting,batches,batchAccounting]=await Promise.all([
       lease.listPilotRuns?.({limit:20})||[],
-      lease.storageAccounting?.()||null
+      lease.storageAccounting?.()||null,
+      lease.listChunkedRuns?.({limit:20})||[],
+      lease.chunkedStorageAccounting?.()||null
     ]);
+    const runs=[...batches,...legacyRuns].sort((a,b)=>
+      String(b.startedAt||'').localeCompare(String(a.startedAt||''))).slice(0,25);
+    const accounting={
+      verifiedCount:(legacyAccounting?.verifiedCount||0)+
+        (batchAccounting?.verifiedCount||0),
+      verifiedBytes:(legacyAccounting?.verifiedBytes||0)+
+        (batchAccounting?.verifiedBytes||0),
+      activeCount:(legacyAccounting?.activeCount||0)+
+        (batchAccounting?.activeCount||0),
+      failedCount:(legacyAccounting?.failedCount||0)+
+        (batchAccounting?.failedCount||0),
+      stagedChunkBytes:batchAccounting?.storedBytes||0,
+      scope:'private_pilot_objects_only'
+    };
     return json(res,200,{ok:true,privateOnly:true,customerCutover:false,
-       accounting,runs,pilotRunning,downloadQueueEnabled:false});
+       accounting,runs,pilotRunning,downloadQueueEnabled:false,
+       chunkedBatchEnabled:chunkedPilotEnabled(pilotEnv)});
    }catch{
     return json(res,503,{ok:false,code:'content_hub_pilot_records_unavailable'});
    }
+  }
+  if(path==='/internal/batch/next'&&req.method==='POST'){
+   // Explicit per-batch admin operation, never an automatic source retry.
+   if(String(req.headers['x-blofy-batch-confirm']||'')!=='approved-8mib-batch')
+    return json(res,400,{ok:false,code:'batch_operator_confirmation_required'});
+   if(pilotRunning)return json(res,409,{
+    ok:false,code:'batch_writer_busy'});
+   if(!chunkedPilotEnabled(pilotEnv))return json(res,409,{
+    ok:false,code:'batch_safety_gates_off'});
+   const signal=pilotAbort=new AbortController();
+   pilotRunning=true;
+   void batchRunner({storage,lease,env:pilotEnv,signal:signal.signal,
+      logger
+    }).then(result=>{
+      pilotRunning=false;pilotAbort=null;
+      lastPilot={ok:result.ok,code:result.code,stored:result.completed===true,
+        bytes:result.bytesCopied||result.bytes||0,
+        checkedAt:new Date().toISOString()};
+      logger('BLOFY_CONTENT_HUB_BATCH_RESULT',{ok:result.ok,
+        code:result.code,bytes:result.bytesCopied||result.bytes||0,
+        completed:result.completed===true,customerCutover:false});
+    }).catch(()=>{
+      pilotRunning=false;pilotAbort=null;
+      lastPilot={ok:false,code:'batch_worker_unavailable',
+        checkedAt:new Date().toISOString()};
+    });
+   return json(res,202,{ok:true,code:'batch_accepted',
+     maxSourceRangeBytes:CHUNK_BYTES,automaticDownload:false,
+     customerCutover:false});
   }
   if(path==='/internal/pilot/cancel'&&req.method==='POST'){
    if(!pilotRunning||!pilotAbort)
@@ -118,11 +167,15 @@ export function createContentHubServer({storage,lease,
     return json(res,400,{ok:false,code:'pilot_private_query_denied'});
    let saved=null;
    try{saved=await lease.getVerifiedPilotObject?.(playback[1])}catch{}
+   if(!saved)try{saved=await lease.getVerifiedChunkedObject?.(
+     playback[1])}catch{}
    if(!saved||!Number.isSafeInteger(saved.bytes)||saved.bytes<=0)
     return json(res,404,{ok:false,code:'pilot_verified_media_unavailable'});
-   const type=saved.key.endsWith('.mkv')?'video/x-matroska':
-    saved.key.endsWith('.mp4')?'video/mp4':
-    saved.key.endsWith('.ts')?'video/mp2t':'video/x-msvideo';
+   const ext=saved.kind==='chunked'?saved.extension:
+      String(saved.key||'').split('.').pop();
+   const type=ext==='mkv'?'video/x-matroska':
+    ext==='mp4'?'video/mp4':
+    ext==='ts'?'video/mp2t':'video/x-msvideo';
    if(req.method==='HEAD'){
     res.writeHead(200,{
       'content-type':type,'content-length':String(saved.bytes),
@@ -143,7 +196,14 @@ export function createContentHubServer({storage,lease,
    res.once('close',onDisconnect);
    let body=null;
    try{
-    body=await storage.readVerifiedRange({
+    if(saved.kind==='chunked'){
+      const part=saved.parts[Math.floor(from/CHUNK_BYTES)];
+      const start=from%CHUNK_BYTES;
+      const firstTo=Math.min(part.bytes-1,start+to-from);
+      body=await storage.readVerifiedRange({
+        key:part.key,from:start,to:firstTo,
+        expectedBytes:part.bytes,signal:abort.signal});
+    }else body=await storage.readVerifiedRange({
       key:saved.key,from,to,expectedBytes:saved.bytes,signal:abort.signal
     });
     res.writeHead(206,{
@@ -153,11 +213,33 @@ export function createContentHubServer({storage,lease,
       'x-content-type-options':'nosniff','referrer-policy':'no-referrer'
     });
     let count=0;
-    for await(const chunk of body){
-      count+=chunk.byteLength;
-      if(count>to-from+1)throw Error('pilot_media_range_overrun');
-      if(!res.write(chunk))await once(res,'drain',{signal:abort.signal});
-    }
+    const streamPart=async(stream,expected)=>{
+      let local=0;
+      for await(const chunk of stream){
+        local+=chunk.byteLength;
+        if(local>expected)throw Error('pilot_media_range_overrun');
+        if(!res.write(chunk))await once(res,'drain',{signal:abort.signal});
+      }
+      if(local!==expected)throw Error('pilot_media_range_short');
+      count+=local;
+    };
+    if(saved.kind==='chunked'){
+      let position=from;
+      while(position<=to){
+        const index=Math.floor(position/CHUNK_BYTES);
+        const part=saved.parts[index];
+        if(!part)throw Error('pilot_chunk_missing');
+        const offset=position%CHUNK_BYTES;
+        const right=Math.min(part.bytes-1,offset+to-position);
+        if(position!==from){
+          body=await storage.readVerifiedRange({key:part.key,
+            from:offset,to:right,expectedBytes:part.bytes,signal:abort.signal});
+        }
+        await streamPart(body,right-offset+1);
+        body.destroy?.();
+        position+=right-offset+1;
+      }
+    }else await streamPart(body,to-from+1);
     if(count!==to-from+1)throw Error('pilot_media_range_short');
     res.end();
    }catch{
