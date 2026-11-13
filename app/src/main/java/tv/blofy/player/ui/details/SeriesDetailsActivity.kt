@@ -11,13 +11,16 @@ import android.view.View
 import android.view.Gravity
 import android.widget.Button
 import android.widget.ImageView
+import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import tv.blofy.player.core.security.ContentAccessActivity
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -27,6 +30,9 @@ import tv.blofy.player.core.playback.ContentUrlResolver
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.EpisodeEntity
 import tv.blofy.player.data.local.ProviderEntity
+import tv.blofy.player.data.local.StreamEntity
+import tv.blofy.player.data.metadata.ProviderMetadataCache
+import tv.blofy.player.ui.catalog.RelatedSeriesPolicy
 import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.data.metadata.XtreamMetadataFallback
 import tv.blofy.player.ui.catalog.ArtworkLoader
@@ -40,6 +46,8 @@ import tv.blofy.player.ui.library.MyLibraryActivity
 class SeriesDetailsActivity : ContentAccessActivity() {
     private lateinit var favoriteButton: Button
     private var arabicPresenter: ArabicDetailsPresenter? = null
+    private var relatedSeriesJob: Job? = null
+    private var lastRelatedKeys: List<String> = emptyList()
 
     override fun onContentReady(savedInstanceState: Bundle?) {
         val providerId = intent.getStringExtra(EXTRA_PROVIDER_ID).orEmpty()
@@ -304,8 +312,15 @@ class SeriesDetailsActivity : ContentAccessActivity() {
                 setPadding(0, 0, 0, dp(22))
             }
             panel.addView(castContainer, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
+            val relatedContainer = LinearLayout(this@SeriesDetailsActivity).apply {
+                orientation=LinearLayout.VERTICAL
+                tag="blofy_related_series"
+            }
+            panel.addView(relatedContainer,LinearLayout.LayoutParams(-1,-2).apply {topMargin=dp(12)})
+            showRelatedSeries(dao,provider.id,stream,metadata?.genres.orEmpty(),relatedContainer)
             ProviderDetailsBinding(this@SeriesDetailsActivity, overviewView, crewView,
                 castContainer, provider, stream) { updated ->
+                    showRelatedSeries(dao,provider.id,stream,updated?.genres.orEmpty(),relatedContainer)
                     DetailsMetadataChips.update(statsView, metadataStats(updated))
                     presenter.render(updated)
                     ArtworkLoader.loadPriority(backdrop, listOf(updated?.backdropUrl, stream.backdrop, stream.icon))
@@ -317,6 +332,86 @@ class SeriesDetailsActivity : ContentAccessActivity() {
                 }.start(metadata)
 
             if (layout.isTv) primary?.requestFocus()
+        }
+    }
+
+    /** Related series are verified local provider titles only; no LLM guesses. */
+    private fun showRelatedSeries(
+        dao: tv.blofy.player.data.local.BlofyDao,
+        providerId: String,
+        current: StreamEntity,
+        genres: List<String>,
+        container: LinearLayout
+    ) {
+        relatedSeriesJob?.cancel()
+        relatedSeriesJob=lifecycleScope.launch {
+            val related=try {
+                withContext(Dispatchers.IO) {
+                    val categories=dao.categories(providerId,"series").first()
+                        .associate { it.remoteId to it.name }
+                    val sample=(dao.catalogPageAfterInCategory(
+                        providerId,"series",current.categoryId,0L,140
+                    ) + dao.catalogPageAfterAll(providerId,"series",0L,110))
+                        .distinctBy { it.key }
+                    val cached=ProviderMetadataCache.readGenresForPage(
+                        applicationContext,sample.map {it.key})
+                    RelatedSeriesPolicy.rank(current,genres,sample,categories,cached,10)
+                }
+            } catch(cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {emptyList()}
+            if(isFinishing||isDestroyed||related.map{it.key}==lastRelatedKeys)return@launch
+            lastRelatedKeys=related.map {it.key}
+            container.removeAllViews()
+            if(related.isEmpty())return@launch
+            container.addView(TextView(this@SeriesDetailsActivity).apply {
+                text=getString(R.string.stream_details_similar)
+                textSize=18f
+                setTextColor(Color.WHITE)
+                typeface=BlofyTvDesign.preferredTypeface(this,bold=true)
+                gravity=Gravity.START
+                setPadding(0,dp(12),0,dp(10))
+            })
+            val row=LinearLayout(this@SeriesDetailsActivity).apply {
+                orientation=LinearLayout.HORIZONTAL
+            }
+            related.forEach { item ->
+                val card=LinearLayout(this@SeriesDetailsActivity).apply {
+                    orientation=LinearLayout.VERTICAL
+                    isFocusable=true
+                    isClickable=true
+                    contentDescription=item.name
+                    setOnClickListener {
+                        startActivity(Intent(this@SeriesDetailsActivity,SeriesDetailsActivity::class.java)
+                            .putExtra(EXTRA_PROVIDER_ID,providerId)
+                            .putExtra(EXTRA_CONTENT_KEY,item.key))
+                    }
+                }
+                BlofyTvDesign.installTvFocus(card)
+                val image=ImageView(this@SeriesDetailsActivity).apply {
+                    scaleType=ImageView.ScaleType.CENTER_CROP
+                    clipToOutline=true
+                    contentDescription=item.name
+                }
+                card.addView(image,LinearLayout.LayoutParams(-1,dp(155)))
+                ArtworkLoader.load(image,listOf(item.icon,item.backdrop))
+                card.addView(TextView(this@SeriesDetailsActivity).apply {
+                    text=ContentPresentation.title(item.name,"series")
+                    maxLines=2
+                    ellipsize=android.text.TextUtils.TruncateAt.END
+                    textSize=12f
+                    setTextColor(BlofyTvDesign.TextSecondary)
+                    setPadding(dp(3),dp(6),dp(3),0)
+                },LinearLayout.LayoutParams(-1,dp(42)))
+                row.addView(card,LinearLayout.LayoutParams(dp(118),dp(202)).apply {
+                    marginEnd=dp(12)
+                })
+            }
+            container.addView(HorizontalScrollView(this@SeriesDetailsActivity).apply {
+                isHorizontalScrollBarEnabled=false
+                clipToPadding=false
+                addView(row)
+            },LinearLayout.LayoutParams(-1,dp(218)))
         }
     }
 
@@ -356,6 +451,7 @@ class SeriesDetailsActivity : ContentAccessActivity() {
     }
 
     override fun onDestroy() {
+        relatedSeriesJob?.cancel()
         arabicPresenter?.close()
         super.onDestroy()
     }
