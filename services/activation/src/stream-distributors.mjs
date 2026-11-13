@@ -799,6 +799,50 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
   return String(x);
  };
 
+ // Read-only dry run: how merchant choices would affect its own
+ // downstream customer library. No customer routes, source media, or codes
+ // are altered by requesting this analysis.
+ async function libraryDeliveryPreview(token,{type='movie'}={}){
+  const actor=await session(token),source=await salehSource(),kind=mediaType(type);
+  const [totals,impacts,issued]=await Promise.all([
+   pool.query(`SELECT COUNT(*)::int AS total FROM blofy_xtream_items i
+     LEFT JOIN blofy_xtream_categories c
+       ON c.server_id=i.server_id AND c.media_type=i.media_type
+       AND c.source_category_id=i.category_id
+     WHERE i.server_id=$1 AND i.media_type=$2 AND i.enabled=TRUE
+       AND (c.enabled IS NULL OR c.enabled=TRUE)`,[source.id,kind]),
+   pool.query(`SELECT
+       COUNT(*) FILTER (WHERE o.hidden=TRUE)::int AS would_hide,
+       COUNT(*) FILTER (WHERE o.hidden=FALSE)::int AS explicitly_shown,
+       COUNT(*) FILTER (WHERE o.custom_title<>'')::int AS renamed,
+       COUNT(*) FILTER (WHERE o.custom_group<>'')::int AS grouped
+     FROM blofy_stream_distributor_library o
+     JOIN blofy_xtream_items i ON i.server_id=$3 AND i.media_type=$2
+       AND i.source_id=o.source_item_id AND i.enabled=TRUE
+     LEFT JOIN blofy_xtream_categories c
+       ON c.server_id=i.server_id AND c.media_type=i.media_type
+       AND c.source_category_id=i.category_id
+     WHERE o.distributor_id=$1 AND o.media_type=$2
+       AND (c.enabled IS NULL OR c.enabled=TRUE)`,
+     [actor.id,kind,source.id]),
+   pool.query(`SELECT COUNT(*)::int AS total
+     FROM blofy_stream_distributor_issues
+     WHERE distributor_id=$1 AND status='done'`,[actor.id])
+  ]);
+  const total=Math.max(0,Number(totals.rows?.[0]?.total)||0);
+  const row=impacts.rows?.[0]||{},wouldHide=Math.min(total,
+    Math.max(0,Number(row.would_hide)||0));
+  return {ok:true,sourceName:'saleh',type:kind,total,
+   wouldHide,wouldShow:total-wouldHide,
+   explicitlyShown:Math.max(0,Number(row.explicitly_shown)||0),
+   renamed:Math.max(0,Number(row.renamed)||0),
+   grouped:Math.max(0,Number(row.grouped)||0),
+   merchantIssuedSubscriptions:Math.max(0,Number(issued.rows?.[0]?.total)||0),
+   scope:'merchant_preview_only',
+   customerCatalogFilteringEnabled:false,
+   customerTrafficChanged:false,providerRequests:0};
+ }
+
  async function libraryCategories(token,{type='movie'}={}){
   await session(token);const source=await salehSource(),kind=mediaType(type);
   const [categories,count]=await Promise.all([
@@ -911,5 +955,5 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
   return {ok:true,updated,requested:ids.length,skipped:ids.length-updated,
    scope:'distributor_only_not_global'};
  }
- return {ensureSchema,listAdmin,createAdmin,setAdmin,login,me,logout,changePassword,rotateOwnedXtream,issued,reveal,issue,library,libraryCategories,organize,organizeBulk,customer,renew,relogin,clients,activity,analytics,exportIssues};
+ return {ensureSchema,listAdmin,createAdmin,setAdmin,login,me,logout,changePassword,rotateOwnedXtream,issued,reveal,issue,library,libraryCategories,libraryDeliveryPreview,organize,organizeBulk,customer,renew,relogin,clients,activity,analytics,exportIssues};
 }
