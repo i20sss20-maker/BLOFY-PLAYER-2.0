@@ -1,4 +1,6 @@
 name: BLOFY STREAM 55.8.20 FFmpeg owner-signed library QA
+# Final QA gate enabled only after Android debug/code-only build passed at prior commit.
+# This signing run re-verifies successful tests at the exact signed source SHA.
 # Final protected owner-signed QA: actors resolved only to verified catalog titles;
 # unverified AI suggestions are never playable and source metadata stays authoritative.
 # Final immutable QA package: Groq actor-Arabic and Sigma/title translation
