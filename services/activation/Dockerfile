@@ -38,5 +38,9 @@ RUN node --check src/xtream-saleh-copy-capability.mjs && node --check src/xtream
 # No real provider media is accessed in this test.
 COPY test/xtream-content-hub-range-pilot.test.mjs ./test/xtream-content-hub-range-pilot.test.mjs
 RUN node --check src/xtream-content-hub-range-pilot.mjs && node --check src/xtream-gateway-hook.mjs && node --test test/xtream-content-hub-range-pilot.test.mjs
+# Keep private content-hub bridge strict: no public source credentials,
+# no unbounded HTTP Range requests, and no cross-source content.
+COPY test/xtream-content-hub-private-range.test.mjs ./test/xtream-content-hub-private-range.test.mjs
+RUN node --check src/xtream-content-hub-private-range.mjs && node --check src/xtream-gateway-hook.mjs && node --test test/xtream-content-hub-private-range.test.mjs
 EXPOSE 8080
 CMD ["npm","start"]
