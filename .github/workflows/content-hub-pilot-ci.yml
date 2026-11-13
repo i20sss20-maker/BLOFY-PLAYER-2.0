@@ -25,5 +25,10 @@ jobs:
         run: |
           node --check services/content-hub/src/mirror-policy.mjs
           node --check services/content-hub/src/mirror-pilot.mjs
+          node --check services/content-hub/src/one-movie-pilot.mjs
+          node --check services/content-hub/src/server.mjs
+          node --check services/content-hub/src/source-lease.mjs
+      - name: Install test-only dependencies (no install scripts)
+        run: npm install --prefix services/content-hub --ignore-scripts --no-audit --no-fund --package-lock=false
       - name: Test S3 multipart fixtures (no source or cloud access)
         run: node --test services/content-hub/test/*.test.mjs
