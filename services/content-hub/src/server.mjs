@@ -5,7 +5,7 @@ import {createPrivateS3Adapter} from './private-s3.mjs';
 import {createSourceLease} from './source-lease.mjs';
 import {runPrivateSalehSample} from './real-source-sample.mjs';
 import {runOneMoviePilot,inspectOneMoviePilot} from './one-movie-pilot.mjs';
-import {runChunkedMovieBatch,chunkedPilotEnabled,CHUNK_BYTES} from './chunked-pilot.mjs';
+import {runChunkedMovieBatch,chunkedPilotEnabled,chunkedBatchReadiness,CHUNK_BYTES} from './chunked-pilot.mjs';
 
 const FIXTURE_SOURCE='00000000-0000-4000-8000-000000000000';
 const FIXTURE_SIZE=8*1024*1024;
@@ -80,7 +80,7 @@ export function createContentHubServer({storage,lease,
     databaseAvailable:database,downloadQueueEnabled:false,
     syntheticTestEnabled:allowSynthetic,
     lastSynthetic,pilotRunning,lastPilot,
-    durablePilot,chunkedBatchEnabled:chunkedPilotEnabled(pilotEnv),
+    durablePilot,chunkedBatchEnabled:chunkedBatchReadiness(pilotEnv).ready,
     customerCutover:false,
     licensedRightsRequired:true});
   }
@@ -119,7 +119,8 @@ export function createContentHubServer({storage,lease,
     };
     return json(res,200,{ok:true,privateOnly:true,customerCutover:false,
        accounting,runs,pilotRunning,downloadQueueEnabled:false,
-       chunkedBatchEnabled:chunkedPilotEnabled(pilotEnv)});
+       chunkedBatchEnabled:chunkedBatchReadiness(pilotEnv).ready,
+       batchReadiness:chunkedBatchReadiness(pilotEnv)});
    }catch{
     return json(res,503,{ok:false,code:'content_hub_pilot_records_unavailable'});
    }
@@ -130,8 +131,10 @@ export function createContentHubServer({storage,lease,
     return json(res,400,{ok:false,code:'batch_operator_confirmation_required'});
    if(pilotRunning)return json(res,409,{
     ok:false,code:'batch_writer_busy'});
-   if(!chunkedPilotEnabled(pilotEnv))return json(res,409,{
-    ok:false,code:'batch_safety_gates_off'});
+   const readiness=chunkedBatchReadiness(pilotEnv);
+   if(!readiness.ready)return json(res,409,{
+    ok:false,code:'batch_safety_gates_off',
+    batchReadiness:readiness});
    const signal=pilotAbort=new AbortController();
    pilotRunning=true;
    void batchRunner({storage,lease,env:pilotEnv,signal:signal.signal,
