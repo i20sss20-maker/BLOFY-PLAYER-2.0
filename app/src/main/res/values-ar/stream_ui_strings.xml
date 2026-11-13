@@ -124,4 +124,5 @@
     <string name="stream_cast_none">لا توجد أعمال مؤكدة محفوظة في بيانات طاقم التمثيل حاليًا. فتح تفاصيل أعمال أكثر قد يحسّن النتائج.</string>
     <string name="stream_cast_search">بحث BLOFY AI عن هذا الممثل</string>
     <string name="stream_cast_loading">جاري البحث عن أعمال الممثل المحفوظة في مكتبتك…</string>
+    <string name="stream_downloads_space">الملفات المحفوظة: %1$s • المساحة المتاحة: %2$s</string>
 </resources>
