@@ -7,7 +7,13 @@ function count(value){return Number.isSafeInteger(Number(value))?
   Math.max(0,Math.min(10000000,Number(value))):0;}
 function status(value){return Number.isInteger(value)&&value>=100&&value<=599?value:null;}
 export function safeSalehCopySample(result){
- const code=String(result?.reason||result?.note||'').slice(0,55);
+ const reason=String(result?.reason||'');
+ const safeReason=['timeout','source_unreachable','upstream_empty_media',
+   'catalog_item_not_found','bounded_media_test_unavailable',
+   'unsupported_media','source_denied'].includes(reason)||
+   /^upstream_http_[1-5][0-9]{2}$/.test(reason)
+     ?reason:'probe_media_unverified';
+ const code=result?.ok===true?'first_media_bytes_only':safeReason;
  const rangeSupported=result?.httpStatus===206||result?.rangeApplied===true;
  return {
   mediaSampleReadable:result?.ok===true,
