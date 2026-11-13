@@ -37,6 +37,32 @@ export function createSourceLease({connectionString,
     client.release(error);throw Error('content_hub_lock_unavailable');
    }
   },
+  // A unique, durable operator run ID prevents accidental re-downloads
+  // on restart. Only invoked after every operator safety gate passes.
+  async claimPilotRun(runId){
+   if(!/^[A-Za-z0-9_-]{8,80}$/.test(String(runId||'')))
+    throw Error('content_hub_invalid_pilot_run');
+   await pool.query(`CREATE TABLE IF NOT EXISTS blofy_content_hub_pilot_runs (
+     run_id TEXT PRIMARY KEY,
+     state TEXT NOT NULL CHECK(state IN ('started','verified','failed')),
+     result_code TEXT,
+     started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     finished_at TIMESTAMPTZ
+   )`);
+   const result=await pool.query(`INSERT INTO blofy_content_hub_pilot_runs
+     (run_id,state) VALUES ($1,'started') ON CONFLICT DO NOTHING
+     RETURNING run_id`,[runId]);
+   return result.rowCount===1;
+  },
+  async finishPilotRun(runId,{status,code}={}){
+   if(!/^[A-Za-z0-9_-]{8,80}$/.test(String(runId||''))||
+     !['verified','failed'].includes(status)||
+     !/^[a-z0-9_]{1,80}$/.test(String(code||'')))
+    throw Error('content_hub_invalid_pilot_result');
+   await pool.query(`UPDATE blofy_content_hub_pilot_runs
+     SET state=$2,result_code=$3,finished_at=NOW()
+     WHERE run_id=$1 AND state='started'`,[runId,status,code]);
+  },
   async close(){await pool.end()}
  };
 }
