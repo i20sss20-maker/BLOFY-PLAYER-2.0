@@ -161,6 +161,29 @@ http.createServer=function withContentHubAdmin(listener){
   try{
    if(canary&&['GET','HEAD'].includes(req.method))
     return await handleCanary(req,res,canary[1]);
+   if(path==='/api/v1/admin/content-hub/preflight'&&req.method==='GET'){
+    const response=await request('/internal/pilot/preflight',{
+      signal:AbortSignal.timeout(8000)});
+    if(response.status!==200)return json(res,503,{
+      ok:false,code:'movie_preflight_not_available',downloadStarted:false});
+    const preflight=await safeReadJson(response);
+    return json(res,200,{
+      ok:true,code:'movie_metadata_checked',downloadStarted:false,
+      providerMediaRequests:0,
+      sourceName:preflight.sourceName==='saleh'?'saleh':null,
+      gatewayId:Number.isSafeInteger(preflight.gatewayId)?
+        preflight.gatewayId:null,
+      extension:String(preflight.extension||'').slice(0,12),
+      approvedMovieMatches:preflight.approvedMovieMatches===true,
+      expectedBytes:Number.isSafeInteger(preflight.expectedBytes)?
+        preflight.expectedBytes:null,
+      storageRightsDeclared:preflight.storageRightsDeclared===true,
+      sourceQuietDeclared:preflight.sourceQuietDeclared===true,
+      sourceIdleDeclared:preflight.sourceIdleDeclared===true,
+      uploadFeatureEnabled:preflight.uploadFeatureEnabled===true,
+      automaticPilotEnabled:preflight.automaticPilotEnabled===true
+    });
+   }
    if(path==='/api/v1/admin/content-hub/status'&&req.method==='GET')
     return await handleStatus(res);
    if(path==='/api/v1/admin/content-hub/cancel'&&req.method==='POST'){
