@@ -22,7 +22,10 @@ function fixture({changeValidator=false,failSecond=false,
  const db={state:'staged',parts:[],validator:null,sha:null};
  const stats={metadata:0,reads:0,probes:0,aborts:0,locks:0};
  const storage={
-  begin:async()=>({uploadId:'safe_upload'}),
+  begin:async({key})=>{
+   assert.match(key,/^saleh\/movie\/[a-f0-9-]{36}\/batch_[a-f0-9]{24}_part_[0-9]{6}\.(?:mp4|mkv|ts|avi)$/);
+   return {uploadId:'safe_upload'};
+  },
   part:async({key,body})=>{
    objects.set(key,Buffer.from(body));return {etag:'"part"'};
   },
