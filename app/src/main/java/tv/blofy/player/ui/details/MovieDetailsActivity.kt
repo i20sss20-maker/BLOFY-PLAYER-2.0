@@ -39,9 +39,13 @@ import tv.blofy.player.data.metadata.ProviderMetadataCache
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.ContentScreenStyle
 import tv.blofy.player.ui.player.PlayerActivity
+import tv.blofy.player.data.profile.ProfileLibraryStore
+import tv.blofy.player.ui.library.OfflineDownloadUi
+import tv.blofy.player.ui.library.MyLibraryActivity
 
 class MovieDetailsActivity : ContentAccessActivity() {
     private lateinit var favoriteButton: Button
+    private var watchlistActionLabel: Button? = null
     private var arabicPresenter: ArabicDetailsPresenter? = null
     private var similarMoviesJob: Job? = null
     private var lastSimilarKeys: List<String> = emptyList()
@@ -244,6 +248,43 @@ class MovieDetailsActivity : ContentAccessActivity() {
             }
             actions.addView(favoriteButton, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(CinemaStyle.ActionHeight)))
             layout.attachActions(actions)
+            if (BuildConfig.CODE_ONLY_LOGIN) {
+                val libraryActions = LinearLayout(this@MovieDetailsActivity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    layoutDirection = uiDirection
+                    gravity = contentGravity
+                }
+                val watchlist = actionButton(getString(
+                    if (ProfileLibraryStore.isWatchlisted(applicationContext, stream.key))
+                        R.string.stream_remove_watchlist else R.string.stream_add_watchlist
+                )) {
+                    lifecycleScope.launch {
+                        val next = withContext(Dispatchers.IO) {
+                            val saved = ProfileLibraryStore.isWatchlisted(applicationContext, stream.key)
+                            ProfileLibraryStore.setWatchlisted(applicationContext, stream.key, !saved)
+                            !saved
+                        }
+                        watchlistActionLabel?.let { view ->
+                            view.text = getString(
+                                if (next) R.string.stream_remove_watchlist else R.string.stream_add_watchlist
+                            )
+                        }
+                    }
+                }
+                watchlistActionLabel = watchlist
+                libraryActions.addView(watchlist, LinearLayout.LayoutParams(-2, dp(CinemaStyle.ActionHeight)).apply { marginEnd = dp(9) })
+                libraryActions.addView(actionButton(getString(R.string.stream_download_movie)) {
+                    OfflineDownloadUi.show(this@MovieDetailsActivity, listOf(
+                        OfflineDownloadUi.plan(provider.id,stream.key,"movie",stream.name,url,stream.extension)
+                    ))
+                }, LinearLayout.LayoutParams(-2, dp(CinemaStyle.ActionHeight)).apply {marginEnd=dp(9)})
+                libraryActions.addView(actionButton(getString(R.string.stream_library_title)) {
+                    startActivity(Intent(this@MovieDetailsActivity, MyLibraryActivity::class.java))
+                }, LinearLayout.LayoutParams(-2, dp(CinemaStyle.ActionHeight)))
+                info.addView(libraryActions, LinearLayout.LayoutParams(-1, -2).apply {
+                    bottomMargin = dp(10)
+                })
+            }
 
             val castContainer = LinearLayout(this@MovieDetailsActivity).apply {
                 orientation = LinearLayout.VERTICAL
