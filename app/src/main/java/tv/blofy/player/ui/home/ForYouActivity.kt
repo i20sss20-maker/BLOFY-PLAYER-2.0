@@ -5,6 +5,7 @@ import android.graphics.Color
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.HorizontalScrollView
 import android.widget.ImageView
@@ -180,8 +181,12 @@ class ForYouActivity : AppCompatActivity() {
         text = value; textSize = 17f; setTextColor(BlofyTvDesign.TextSecondary); gravity = Gravity.CENTER; setPadding(0, dp(40), 0, 0)
     }
 
-    private fun firstFocusable(root: LinearLayout): View? {
-        for (i in 0 until root.childCount) if (root.getChildAt(i).isFocusable) return root.getChildAt(i)
+    private fun firstFocusable(root: ViewGroup): View? {
+        for (index in 0 until root.childCount) {
+            val child = root.getChildAt(index)
+            if (child.isFocusable) return child
+            if (child is ViewGroup) firstFocusable(child)?.let { return it }
+        }
         return null
     }
 
