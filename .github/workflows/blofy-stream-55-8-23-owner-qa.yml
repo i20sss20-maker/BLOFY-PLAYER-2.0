@@ -9,7 +9,7 @@ name: BLOFY STREAM 55.8.23 FFmpeg owner-signed AI and Locale Stability QA
 on:
   push:
     branches:
-      - feat/stream-55-8-23-cinema-qoe-20261113
+      - fix/stream-55-8-23-ai-language-home-20261113
     paths:
       - '.github/workflows/blofy-stream-55-8-23-owner-qa.yml'
   workflow_dispatch:
@@ -225,7 +225,7 @@ jobs:
           gh release create "$TAG" "$APK" build/qa-owner-signed/SHA256SUMS build/qa-owner-signed/BUILD-IDENTITY.txt \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
             --title "BLOFY STREAM 55.8.23 | AI, Locale and Home Stability | Signed QA" \
-            --notes "Optional owner-signed QA APK. New: downloads-only library, clearer no-storage 1006 errors and filters; bigger Android TV episode download control; local catalog search and explicit AI chat mode; suggestions verified against authorized source catalogs. Playback engines, activation, Google Play and customer auto-updater unchanged. Downloads only for permitted direct HTTPS progressive files. Requires device testing before rollout."
+            --notes "Optional original-owner signed 55.8.23 QA. Fixes: AI suggestions now check actual Xtream category names for Action/Comedy/Crime, with transparent verified alternatives when provider metadata is missing; one clean screen stack when changing Arabic/English to avoid black frames; Home avoids duplicate re-renders and skeleton flashes. First-party conversational AI replies require v4 backend. Preserves all 55.8.22 playback and download features. No customer auto-update. Physical Android TV and download tests still needed."
           echo "Signed opt-in APK: https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/BLOFY-STREAM-55.8.23-FFMPEG-OWNER-SIGNED.apk" >> "$GITHUB_STEP_SUMMARY"
       - name: Always remove original-key material
         if: always()
