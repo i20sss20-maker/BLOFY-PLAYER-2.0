@@ -99,7 +99,7 @@ internal class EpisodeCardAdapter(
             setPadding(dp(8), dp(7), dp(10), dp(7))
             isFocusable = true
             isFocusableInTouchMode = false
-            descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+            descendantFocusability = ViewGroup.FOCUS_BEFORE_DESCENDANTS
             isClickable = true
             background = ContentScreenStyle.softSurface(context, false, 18)
         }
