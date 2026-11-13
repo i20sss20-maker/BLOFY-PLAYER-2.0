@@ -352,19 +352,33 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
      const ready=chunkedBatchReadiness(env);
      if(!ready.ready)return {ok:false,code:'batch_safety_gates_off',
        blockedBy:ready.blockedBy,customerCutover:false};
+     const burst=Number(env.BLOFY_CONTENT_HUB_BATCH_BOOT_BURST||1);
+     if(!Number.isSafeInteger(burst)||burst<1||burst>4||
+       String(env.BLOFY_CONTENT_HUB_CHUNKS_PER_BATCH||1)!=='1')
+      return {ok:false,code:'batch_boot_burst_limit_invalid',
+        customerCutover:false};
      const claimed=await lease.claimBatchBootOnce(eventToken,runId);
      if(!claimed)return {ok:false,code:'batch_boot_already_claimed',
        customerCutover:false};
      const signal=hub.startPilot();
+     let output={ok:false,code:'batch_not_run',customerCutover:false};
+     let executed=0;
      try{
-      return await runChunkedMovieBatch({storage,lease,env,signal,
-       logger:(name,payload)=>console.info(name,JSON.stringify(payload))});
-     }finally{hub.recordPilot({ok:false,code:'batch_boot_completed',
-       stored:false})}
+      for(let i=0;i<burst;i++){
+       if(signal.aborted)break;
+       output=await runChunkedMovieBatch({storage,lease,env,signal,
+        logger:(name,payload)=>console.info(name,JSON.stringify(payload))});
+       executed++;
+       if(!output.ok||output.completed===true)break;
+      }
+      return {...output,executedBatches:executed};
+     }finally{hub.recordPilot({ok:output.ok,code:output.code,
+       stored:output.completed===true,bytes:output.bytesCopied||0})}
     })().then(result=>{
      console.info('BLOFY_CONTENT_HUB_BATCH_BOOT',JSON.stringify({
       ok:result.ok===true,code:result.code,blockedBy:result.blockedBy,
       errorStage:result.errorStage||null,
+      executedBatches:result.executedBatches||0,
       bytesCopied:result.bytesCopied||0,chunksSaved:result.chunksSaved||0,
       completed:result.completed===true,customerCutover:false
      }));
