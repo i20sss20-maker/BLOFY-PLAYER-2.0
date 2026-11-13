@@ -1,7 +1,48 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {runOneMoviePilot,inspectOneMoviePilot} from '../src/one-movie-pilot.mjs';
+import {runOneMoviePilot,inspectOneMoviePilot,probeApprovedMovieRange} from '../src/one-movie-pilot.mjs';
 
+
+test('safe live range probe checks 4KiB and exact source bytes without storage',async()=>{
+ let count=0;
+ const read=await probeApprovedMovieRange({
+  env:{BLOFY_CONTENT_HUB_BRIDGE_TOKEN:'x'.repeat(40)},
+  fetchImpl:async(url,init)=>{
+   if(url.endsWith('/describe'))
+    return Response.json({ok:true,sourceName:'saleh',mediaKind:'movie',
+     sourceId:'9adc6472-5d4e-4359-83e4-0298cc038ae3',mediaId:'314',
+     gatewayId:123,extension:'mkv'});
+   count++;
+   assert.equal(init.headers.range,'bytes=0-4095');
+   return new Response(Buffer.alloc(4096),{
+    status:206,headers:{'content-range':'bytes 0-4095/2934023949',
+     'content-length':'4096',etag:'"stable"'}});
+  }
+ });
+ assert.equal(read.ok,true,read.code);
+ assert.equal(read.expectedBytes,2934023949);
+ assert.equal(read.validatorPresent,true);
+ assert.equal(read.probeBytes,4096);
+ assert.equal(read.stored,false);
+ assert.equal(count,1);
+});
+test('4KiB source probe fails closed without version/size/protocol compliance',async()=>{
+ const make=async(headers,status=206)=>probeApprovedMovieRange({
+  env:{BLOFY_CONTENT_HUB_BRIDGE_TOKEN:'x'.repeat(40)},
+  fetchImpl:async url=>url.endsWith('/describe')?
+   Response.json({ok:true,sourceName:'saleh',mediaKind:'movie',
+    sourceId:'9adc6472-5d4e-4359-83e4-0298cc038ae3',mediaId:'314',
+    gatewayId:123,extension:'mkv'}):
+   new Response(Buffer.alloc(4096),{status,headers})
+ });
+ const bad=await make({'content-range':'bytes 10-4105/2934023949',
+  'content-length':'4096'});
+ assert.equal(bad.ok,false);
+ const noVersion=await make({'content-range':'bytes 0-4095/2934023949',
+  'content-length':'4096'});
+ assert.equal(noVersion.ok,true);
+ assert.equal(noVersion.validatorPresent,false);
+});
 
 test('candidate preflight reads mapped movie metadata only and does not download video',async()=>{
  const urls=[];
