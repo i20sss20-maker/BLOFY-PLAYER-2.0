@@ -37,6 +37,10 @@ test('verified movie canary serves only admin-authenticated, bounded private byt
   assert.equal(noRange.status,416);
   const wrong=await fetch(base+route,{headers:{...headers,range:'bytes=0-99'}});
   assert.equal(wrong.status,416);
+  const head=await fetch(base+route,{method:'HEAD',headers});
+  assert.equal(head.status,200);
+  assert.equal(head.headers.get('content-length'),'16');
+  assert.equal(head.headers.get('accept-ranges'),'bytes');
   const valid=await fetch(base+route,{headers:{...headers,range:'bytes=0-3'}});
   assert.equal(valid.status,206);
   assert.equal(valid.headers.get('content-range'),'bytes 0-3/16');
