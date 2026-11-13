@@ -7,20 +7,23 @@ const MEDIA_TYPES=new Set(['live','movie','series']);
 const MAX_HIDDEN_IDS=10000;
 
 export function createDistributorCustomerCatalog({
- pool,enabled=false,distributorAllowlist='',onError=()=>{}
+ pool,enabled=false,distributorAllowlist='',accountAllowlist='',onError=()=>{}
 }={}){
  if(!pool||typeof pool.query!=='function')
    throw Error('distributor_catalog_database_required');
  const allowed=new Set(String(distributorAllowlist||'').split(',')
    .map(x=>x.trim().toLowerCase()).filter(x=>UUID.test(x)));
- const active=enabled===true&&allowed.size>0;
+ const allowedAccounts=new Set(String(accountAllowlist||'').split(',')
+   .map(x=>x.trim().toLowerCase()).filter(x=>UUID.test(x)));
+ const active=enabled===true&&allowed.size>0&&allowedAccounts.size>0;
  const validateKind=kind=>{
    if(!MEDIA_TYPES.has(kind))throw Error('distributor_catalog_kind_invalid');
    return kind;
  };
  async function forAccount(account){
    if(!active||!UUID.test(String(account?.id||''))||
-     !UUID.test(String(account?.source_id||'')))return null;
+     !UUID.test(String(account?.source_id||''))||
+     !allowedAccounts.has(String(account.id).toLowerCase()))return null;
    try{
      // Account ownership is established from the existing merchant issuance
      // ledger (including codes redeemed into an account), never client params.
@@ -43,9 +46,11 @@ export function createDistributorCustomerCatalog({
      if(!allowed.has(distributorId))return null;
      return Object.freeze({distributorId,sourceId:String(account.source_id).toLowerCase()});
    }catch(e){
-     // An outage of this optional feature must not break legacy subscribers.
+     // For this explicitly allowlisted test subscriber, fail closed rather
+     // than inadvertently showing the hidden catalog when the DB is down.
+     // Ordinary accounts are never queried and remain unaffected.
      try{onError('distributor_catalog_scope_lookup_unavailable')}catch{}
-     return null;
+     throw Error('distributor_catalog_scope_unavailable');
    }
  }
  async function hiddenIds(scope,type){
