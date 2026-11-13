@@ -159,4 +159,21 @@
     <string name="stream_ai_chat_error">I could not complete that request. Local search is still available.</string>
     <string name="stream_ai_chat_try">Try: recommend a 2025 action movie</string>
     <string name="stream_download_episode_short">↓ Save</string>
+    <string name="stream_downloads_estimated_size">Estimated file size: %1$s</string>
+    <string name="stream_downloads_not_enough_space_estimated">The file is about %1$s, but only %2$s is free. Free up space before downloading.</string>
+    <string name="stream_downloads_wifi_only">Wi-Fi only</string>
+    <string name="stream_downloads_any_network">Wi-Fi or mobile data</string>
+    <string name="stream_downloads_network_policy">Network for new downloads</string>
+    <string name="stream_downloads_speed_eta">%1$s/s • approximately %2$s remaining</string>
+    <string name="stream_downloads_speed_only">%1$s/s</string>
+    <string name="stream_downloads_group_movies">Movies</string>
+    <string name="stream_downloads_group_episodes">Episodes and series</string>
+    <string name="stream_downloads_unavailable_file">Saved file is not accessible. Remove and download again from the content details.</string>
+    <string name="stream_ai_quick_action">New action</string>
+    <string name="stream_ai_quick_comedy">Light comedy</string>
+    <string name="stream_ai_quick_series">Crime series</string>
+    <string name="stream_ai_sort_year">Newest</string>
+    <string name="stream_ai_sort_rating">Top rated</string>
+    <string name="stream_ai_explain_local">Local search never contacts AI.</string>
+    <string name="stream_player_next_episode">Next episode</string>
 </resources>
