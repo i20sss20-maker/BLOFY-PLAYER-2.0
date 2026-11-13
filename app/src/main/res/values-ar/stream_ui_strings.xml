@@ -175,4 +175,15 @@
     <string name="stream_downloads_failure_http_server">المصدر يواجه عطلًا مؤقتًا (5xx). حاول لاحقًا.</string>
     <string name="stream_downloads_retry_from_details">العودة للمحتوى والمحاولة</string>
     <string name="stream_ai_verified_alternatives">ما وجدت أعمالًا مؤكدة بنفس التصنيف في بيانات مصدرك. هذه أعمال أخرى موجودة فعلًا في مكتبتك، وقد لا تكون من التصنيف المطلوب.</string>
+    <string name="stream_chat_heading">✦ BLOFY AI</string>
+    <string name="stream_chat_subheading">مساعدك السينمائي • اضغط على اسم العمل للبحث عنه في مكتبتك</string>
+    <string name="stream_chat_welcome">هلا! اسألني كأننا نتكلم: «رشح لي فيلم أكشن جديد»، «أبي مسلسل مضحك»، أو «عطني شيء مشابه». بساعدك باقتراحات وأتحقق من محتوى مصادرك. اضغط اسم الفيلم أو المسلسل تحت الرد عشان يفتح البحث عنه.</string>
+    <string name="stream_chat_verified_count">لقيت %1$d عملًا مطابقًا وموجودًا في مكتبتك. اضغط على الاسم عشان تبحث عنه.</string>
+    <string name="stream_chat_tap_to_search">أعمال موجودة في مكتبتك • اضغط للاطلاع على البحث</string>
+    <string name="stream_chat_search_title">ابحث عن %1$s</string>
+    <string name="stream_chat_action_prompt">رشح لي فيلم أكشن جديد وتقييمه مرتفع</string>
+    <string name="stream_chat_comedy_prompt">رشح لي فيلم كوميدي خفيف</string>
+    <string name="stream_chat_series_prompt">رشح لي مسلسل جريمة حديث</string>
+    <string name="stream_chat_shortcut">تحدث مع BLOFY AI</string>
+    <string name="stream_search_local_only">البحث هنا محلي للأفلام والمسلسلات والقنوات والممثلين. للتوصيات والمحادثة افتح BLOFY AI من القائمة الرئيسية.</string>
 </resources>
