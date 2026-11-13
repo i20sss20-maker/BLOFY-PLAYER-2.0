@@ -56,6 +56,7 @@ import {parseStreamAppToken,verifyStreamAppToken,bearerFromRequest}
   from './xtream-code-app-token.mjs';
 import {encryptGatewayAccountPassword,decryptGatewayAccountPassword} from './xtream-account-vault.mjs';
 import {createGatewayCredentialRotator} from './xtream-account-credential-rotation.mjs';
+import {diagnoseSalehCatalogCopy} from './xtream-saleh-copy-capability.mjs';
 import { readXtreamGatewayJsonResponse } from './xtream-gateway-response.mjs';
 import {configuredXtreamPublicOrigin} from './xtream-public-origin.mjs';
 import {probeXtreamAccountCompatibility} from './xtream-compatibility-probe.mjs';
@@ -278,6 +279,19 @@ async function ensureReady() {
     salehOnlyNewCodes:process.env.BLOFY_STREAM_SALEH_NEW_CODES_ONLY==='1'});
   if(!streamCommercial)streamCommercial=createStreamCommercial({pool,keyHex:KEY_HEX});
   if(!streamRelogin)streamRelogin=createStreamRelogin({pool,keyHex:KEY_HEX});
+  // Explicitly opted-in, one-shot lightweight check: one movie, at most
+  // first bytes; never copies media or issues new customer credentials.
+  if(process.env.BLOFY_SALEH_COPY_DIAGNOSTIC_ON_BOOT==='1'&&!salehCopyProbeScheduled){
+    salehCopyProbeScheduled=true;
+    const timer=setTimeout(()=>{
+      void diagnoseSalehCatalogCopy({query:(...args)=>pool.query(...args),
+        probeMovie:id=>probeGatewayMedia('movie',id)})
+        .then(value=>console.info('BLOFY_SALEH_COPY_CAPABILITY',JSON.stringify(value)))
+        .catch(()=>console.warn('BLOFY_SALEH_COPY_CAPABILITY',
+          JSON.stringify({ok:false,code:'probe_failed_safely',
+            customerTrafficChanged:false,mediaRequestCount:0})));
+    },15000);timer.unref?.();
+  }
   // Opt-in, source-allowlisted, lease-based recovery. Normal requests do not
   // wait for health probes. Timers are unref'd and are never enabled by default.
   if(!unavailableRecoveryTimerStarted&&recoveryEnabled()){
@@ -1743,6 +1757,7 @@ if(process.env.BLOFY_XTREAM_SERIES_SAFE_AUDIT_ON_BOOT==='1'){
 
 // Explicit operator-only probe. Check first bytes, never return upstream URLs,
 // source IDs, provider passwords, client IPs or full media payloads.
+let salehCopyProbeScheduled=false;
 let itemProbeAt=0;
 let itemProbeRunning=false;
 async function probeGatewayMedia(kind,itemId){
@@ -1813,8 +1828,12 @@ async function probeGatewayMedia(kind,itemId){
     const inspection=inspectXtreamMediaChunk(first.value,response.headers.get('content-type'));
     if(!inspection.valid)
       return{ok:false,kind,itemId,httpStatus:status,reason:inspection.reason,elapsedMs:Date.now()-started};
-    return{ok:true,kind,itemId,httpStatus:status,format:inspection.format,rangeFallbackUsed,elapsedMs:Date.now()-started,
-      note:'first_media_bytes_only'};
+    return{ok:true,kind,itemId,httpStatus:status,format:inspection.format,
+      rangeFallbackUsed,rangeApplied:status===206&&
+        /^bytes 0-\d+\/(?:\d+|\*)$/.test(String(response.headers.get('content-range')||'').trim()),
+      rangeAdvertised:/\bbytes\b/i.test(String(response.headers.get('accept-ranges')||'')),
+      contentLengthKnown:Number(response.headers.get('content-length'))>0,
+      elapsedMs:Date.now()-started,note:'first_media_bytes_only'};
   }catch(error){
     return{ok:false,kind,itemId,httpStatus:null,
       reason:controller.signal.aborted?'timeout':'source_unreachable',elapsedMs:Date.now()-started};
