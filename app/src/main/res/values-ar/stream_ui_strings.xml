@@ -152,4 +152,21 @@
     <string name="stream_ai_chat_error">ما قدرت أكمل الطلب الآن. البحث المحلي ما زال متاحًا.</string>
     <string name="stream_ai_chat_try">مثال: رشح لي فيلم أكشن من 2025</string>
     <string name="stream_download_episode_short">↓ تنزيل</string>
+    <string name="stream_downloads_estimated_size">الحجم المتوقع للملف: %1$s</string>
+    <string name="stream_downloads_not_enough_space_estimated">حجم الملف حوالي %1$s، بينما المساحة المتاحة %2$s فقط. يجب توفير مساحة إضافية قبل التحميل.</string>
+    <string name="stream_downloads_wifi_only">واي فاي فقط</string>
+    <string name="stream_downloads_any_network">واي فاي أو بيانات الجوال</string>
+    <string name="stream_downloads_network_policy">شبكة التنزيلات الجديدة</string>
+    <string name="stream_downloads_speed_eta">%1$s/ث • المتبقي نحو %2$s</string>
+    <string name="stream_downloads_speed_only">%1$s/ث</string>
+    <string name="stream_downloads_group_movies">الأفلام</string>
+    <string name="stream_downloads_group_episodes">الحلقات والمسلسلات</string>
+    <string name="stream_downloads_unavailable_file">الملف المحفوظ غير متاح. يمكنك حذفه وإعادة تنزيله من صفحة المحتوى.</string>
+    <string name="stream_ai_quick_action">أكشن جديد</string>
+    <string name="stream_ai_quick_comedy">كوميديا خفيفة</string>
+    <string name="stream_ai_quick_series">مسلسلات جريمة</string>
+    <string name="stream_ai_sort_year">الأحدث</string>
+    <string name="stream_ai_sort_rating">الأعلى تقييمًا</string>
+    <string name="stream_ai_explain_local">البحث المحلي لا يتصل بالذكاء الاصطناعي.</string>
+    <string name="stream_player_next_episode">الحلقة التالية</string>
 </resources>
