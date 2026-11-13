@@ -115,7 +115,8 @@ function fixture(){
      renamed:rows.filter(x=>x.custom_title).length,
      grouped:rows.filter(x=>x.custom_group).length}]};
   }
-  if(sql.includes('FROM blofy_stream_distributor_issues')&&sql.includes("status='done'")){
+  if(sql.includes('SELECT COUNT(*)::int AS total')&&
+     sql.includes('FROM blofy_stream_distributor_issues')&&sql.includes("status='done'")){
    return {rows:[{total:issues.filter(x=>x.distributor_id===args[0]&&x.status==='done').length}]};
   }
   if(sql.includes('WITH eligible AS')&&sql.includes('INSERT INTO blofy_stream_distributor_library')){
