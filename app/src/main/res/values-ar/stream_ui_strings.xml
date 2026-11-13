@@ -151,4 +151,5 @@
     <string name="stream_ai_chat_none">فهمت طلبك، لكن ما لقيت عملًا مطابقًا ومؤكدًا في فهرس المصدر الحالي. غيّر التصنيف أو السنة وجرب مرة ثانية.</string>
     <string name="stream_ai_chat_error">ما قدرت أكمل الطلب الآن. البحث المحلي ما زال متاحًا.</string>
     <string name="stream_ai_chat_try">مثال: رشح لي فيلم أكشن من 2025</string>
+    <string name="stream_download_episode_short">↓ تنزيل</string>
 </resources>
