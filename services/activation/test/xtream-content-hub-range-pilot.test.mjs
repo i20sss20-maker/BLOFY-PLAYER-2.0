@@ -49,7 +49,9 @@ test('two RANGE parts are sequential, bounded, same total, no file storage',asyn
  assert.equal(result.customerTrafficChanged,false);
  assert.deepEqual(calls.map(x=>[x.from,x.to]),[[0,4095],[4096,8191]]);
  assert.ok(d.queries.every(x=>!x.sql.includes('password')));
- assert.doesNotMatch(JSON.stringify(result),/9adc6472|123456|gatewayId|username|password|\.mkv/);
+ assert.equal(result.firstPart.totalSize,123456);
+ assert.equal(result.secondPart.totalSize,123456);
+ assert.doesNotMatch(JSON.stringify(result),/9adc6472|gatewayId|username|password|\.mkv/);
 });
 test('unauthorized or missing catalog never makes a source network request',async()=>{
  for(const options of [{sources:0},{sources:2},{withMovie:false}]){
