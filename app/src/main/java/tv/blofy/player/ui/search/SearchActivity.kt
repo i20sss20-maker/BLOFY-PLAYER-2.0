@@ -441,7 +441,11 @@ class SearchActivity : AppCompatActivity() {
         val requestedAsAi = aiMode
         if (q.isEmpty()) { results.removeAllViews(); return }
         val dao = BlofyDatabase.get(applicationContext).dao()
-        val provider = withContext(Dispatchers.IO) { dao.providers().first().firstOrNull() }
+        // The code may activate multiple independent Xtream/M3U sources.
+        // Search only their locally authorized indexes; never query one
+        // provider with another provider’s credential.
+        val providers = withContext(Dispatchers.IO) { dao.providers().first().take(4) }
+        val provider = providers.firstOrNull()
         if (provider == null) { showMessage(getString(R.string.login_add_playlist_first)); return }
         val repository = ContentRepository(dao)
         val selectedKind = activeKind
@@ -452,26 +456,36 @@ class SearchActivity : AppCompatActivity() {
             // JSON credit lookup (which is naturally a cold-cache fallback).
             val indexed = coroutineScope {
                 wantedKinds.map { kind ->
-                    kind to async { repository.searchKind(provider.id, kind, q, SECTION_LIMIT) }
-                }.map { (kind, deferred) -> kind to deferred.await().distinctBy { it.key } }
+                    kind to async {
+                        providers.flatMap { source ->
+                            repository.searchKind(source.id, kind, q,
+                                (SECTION_LIMIT / providers.size).coerceAtLeast(20))
+                        }
+                    }
+                }.map { (kind, deferred) -> kind to deferred.await()
+                    .distinctBy { it.key }.take(SECTION_LIMIT) }
             }
             val matchedTitles = indexed.sumOf { it.second.size }
             val scanCredits = moveFocus ||
                 (q.length >= 8 && q.contains(' ') && matchedTitles < 8)
             val castMatches = if (selectedKind != KIND_LIVE && scanCredits &&
                 CastSearchPolicy.searchable(q)) {
-                val candidateKeys = ProviderMetadataCache.searchPeopleCandidates(
-                    applicationContext, provider.id, CastSearchPolicy.candidateToken(q), 64
-                ).asSequence()
-                    .filter { (_, metadata) -> CastSearchPolicy.matches(metadata, q) }
-                    .map { (key, _) -> key }.take(24).toList()
-                val resolved = ArrayList<StreamEntity>(candidateKeys.size)
-                for (key in candidateKeys) {
-                    val stream = dao.stream(key) ?: continue
-                    if (stream.providerId == provider.id &&
-                        stream.kind in setOf(KIND_MOVIE, KIND_SERIES)) resolved.add(stream)
+                val resolved = ArrayList<StreamEntity>(24)
+                providers.forEach { source ->
+                    ProviderMetadataCache.searchPeopleCandidates(
+                        applicationContext, source.id, CastSearchPolicy.candidateToken(q), 40
+                    ).asSequence()
+                        .filter { (_, metadata) -> CastSearchPolicy.matches(metadata, q) }
+                        .map { (key, _) -> key }.take(12)
+                        .forEach { key ->
+                            val stream = dao.stream(key)
+                            if (stream != null && stream.providerId == source.id &&
+                                stream.kind in setOf(KIND_MOVIE, KIND_SERIES) && !stream.locked) {
+                                resolved.add(stream)
+                            }
+                        }
                 }
-                resolved.distinctBy { it.key }
+                resolved.distinctBy { it.key }.take(24)
             } else emptyList()
             val merged = indexed.map { (kind, found) ->
                 kind to (castMatches.asSequence().filter { it.kind == kind } + found.asSequence())
@@ -513,7 +527,14 @@ class SearchActivity : AppCompatActivity() {
             }
         }
         val expanded = withContext(Dispatchers.IO) {
-            resolveAiSuggestions(ai, repository, dao, provider.id, selectedKind, q)
+            providers.flatMap { source ->
+                resolveAiSuggestions(ai, repository, dao, source.id, selectedKind, q)
+            }.distinctBy { it.key }
+                .let { items ->
+                    if (AiConversationPolicy.wantsRecent(q))
+                        items.sortedByDescending { it.year?.toIntOrNull() ?: 0 }
+                    else items
+                }.take(48)
         }
         if (input.text?.toString()?.trim() != q || activeKind != selectedKind || !aiMode) return
         if (expanded.isEmpty()) {
@@ -533,7 +554,13 @@ class SearchActivity : AppCompatActivity() {
         val total = merged.sumOf { it.second.size }
         renderSections(merged, selectedKind, provider.id, provider.liveFormat,
             castCount = castCount, moveFocus = false, aiCount = total)
-        appendChatTurn(q, getString(R.string.stream_ai_chat_matches, total))
+        val examples = merged.flatMap { it.second }.take(3).joinToString(" • ") {
+            it.name.take(55) + (it.year?.takeIf(String::isNotBlank)?.let { year ->
+                " (" + year + ")"
+            } ?: "")
+        }
+        appendChatTurn(q, getString(R.string.stream_ai_chat_matches, total) +
+            if (examples.isNotBlank()) "\n" + examples else "")
         showAiStatus(getString(R.string.stream_ai_found, total))
     }
 
@@ -753,7 +780,7 @@ class SearchActivity : AppCompatActivity() {
             })
         } else {
             items.forEachIndexed { index, stream ->
-                val card = resultCard(stream) { guardedOpen(providerId, liveFormat, stream) }
+                val card = resultCard(stream) { guardedOpen(stream.providerId, liveFormat, stream) }
                 if (index == 0) onFirstFocusable(card)
                 addView(card, LinearLayout.LayoutParams(-1, dp(84)).apply { bottomMargin = dp(7) })
             }
@@ -842,7 +869,7 @@ class SearchActivity : AppCompatActivity() {
                     Toast.makeText(this@SearchActivity, "تعذر تحديث اتصال مشترك BLOFY. أعد فتح القائمة.", Toast.LENGTH_LONG).show()
                     return@launch
                 } ?: return@launch
-                val profile = ProviderProfile(providerKey = provider.id, liveFormat = if (format.equals("m3u8", true)) LiveFormat.HLS else LiveFormat.TS)
+                val profile = ProviderProfile(providerKey = provider.id, liveFormat = if (provider.liveFormat.equals("m3u8", true)) LiveFormat.HLS else LiveFormat.TS)
                 startActivity(Intent(this@SearchActivity, PlayerActivity::class.java).apply {
                     putExtra(PlayerActivity.EXTRA_URL, ContentUrlResolver.live(provider, profile, stream)); putExtra(PlayerActivity.EXTRA_CONTENT_KEY, stream.key)
                     putExtra(PlayerActivity.EXTRA_PROVIDER_ID, provider.id); putExtra(PlayerActivity.EXTRA_KIND, KIND_LIVE); putExtra(PlayerActivity.EXTRA_LIVE_FORMAT, provider.liveFormat)
