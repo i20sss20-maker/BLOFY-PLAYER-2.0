@@ -72,7 +72,7 @@ internal object AiChatCatalogResolver {
                     dao.catalogPageAfterAll(sourceId, "series", 0L, 128)
                         .filter { item ->
                             AiRecommendationRanker.matchesGenre(item.genre, genre,
-                                names["series" to item.categoryId])
+                                item.categoryId?.let { names["series" to it] })
                         }
                 )
             }
@@ -93,7 +93,7 @@ internal object AiChatCatalogResolver {
             collected.addAll(candidates.filter { item ->
                 !item.locked && item.kind in kinds &&
                     AiRecommendationRanker.matchesGenre(item.genre, genre,
-                        names[item.kind to item.categoryId]) &&
+                        item.categoryId?.let { names[item.kind to it] }) &&
                     AiCatalogQueryPolicy.matchesYear(item.year, item.name, expectedYear)
             }.distinctBy { it.key }.take(40))
         }
