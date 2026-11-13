@@ -46,9 +46,11 @@ export async function runOneMoviePilot({
  const runId=String(env.BLOFY_CONTENT_HUB_PILOT_RUN_ID||'');
  const token=String(env.BLOFY_CONTENT_HUB_BRIDGE_TOKEN||'');
  const expectedBytes=Number(env.BLOFY_CONTENT_HUB_EXPECTED_BYTES);
+ const approvedGatewayId=Number(env.BLOFY_CONTENT_HUB_APPROVED_GATEWAY_ID);
  if(!SAFE_RUN.test(runId)||token.length<32||
   !Number.isSafeInteger(expectedBytes)||expectedBytes<MIN_PART_BYTES||
-  expectedBytes>MAX_PILOT_BYTES)
+  expectedBytes>MAX_PILOT_BYTES||!Number.isSafeInteger(approvedGatewayId)||
+  approvedGatewayId<1)
   return {...BASE,ok:false,code:'pilot_operator_configuration_missing',stored:false};
  if(!storage||!lease||typeof lease.claimPilotRun!=='function'||
    typeof lease.finishPilotRun!=='function'||typeof storage.health!=='function')
@@ -64,8 +66,7 @@ export async function runOneMoviePilot({
  let result={...BASE,ok:false,code:'pilot_failed',stored:false};
  try{
   const meta=await getMetadata(fetchImpl,token,combined);
-  if(env.BLOFY_CONTENT_HUB_APPROVED_GATEWAY_ID&&
-    Number(env.BLOFY_CONTENT_HUB_APPROVED_GATEWAY_ID)!==meta.gatewayId)
+  if(approvedGatewayId!==meta.gatewayId)
    throw Error('pilot_movie_not_approved');
   const approved={
    sourceName:meta.sourceName,sourceId:meta.sourceId,
