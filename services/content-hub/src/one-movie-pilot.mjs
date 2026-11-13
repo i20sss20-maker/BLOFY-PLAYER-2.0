@@ -39,6 +39,39 @@ async function getMetadata(fetchImpl,token,signal){
  return data;
 }
 
+// Read-only metadata check. Does not request even one video byte, cannot
+// reserve an upstream feed, never turns on copying or changes customer routes.
+export async function inspectOneMoviePilot({
+ env=process.env,fetchImpl=fetch,signal
+}={}){
+ const base={ok:false,privateOnly:true,providerMediaRequests:0,
+   customerCutover:false,downloadStarted:false};
+ const token=String(env.BLOFY_CONTENT_HUB_BRIDGE_TOKEN||'');
+ if(token.length<32)return {...base,code:'pilot_bridge_not_configured'};
+ try{
+  const scoped=signal?AbortSignal.any([signal,AbortSignal.timeout(6000)]):
+   AbortSignal.timeout(6000);
+  const media=await getMetadata(fetchImpl,token,scoped);
+  const approved=Number(env.BLOFY_CONTENT_HUB_APPROVED_GATEWAY_ID);
+  const bytes=Number(env.BLOFY_CONTENT_HUB_EXPECTED_BYTES);
+  const exactMovie=Number.isSafeInteger(approved)&&approved>0&&
+   approved===media.gatewayId;
+  const validSize=Number.isSafeInteger(bytes)&&bytes>=MIN_PART_BYTES&&
+   bytes<=MAX_PILOT_BYTES;
+  return {...base,ok:true,code:'pilot_metadata_only',sourceName:'saleh',
+   sourceId:media.sourceId,mediaId:media.mediaId,
+   gatewayId:media.gatewayId,extension:media.extension,
+   approvedMovieMatches:exactMovie,
+   expectedBytes:validSize?bytes:null,
+   storageRightsDeclared:env.BLOFY_CONTENT_HUB_STORAGE_RIGHTS_CONFIRMED==='1',
+   sourceQuietDeclared:env.BLOFY_CONTENT_HUB_SOURCE_QUIET_WINDOW_CONFIRMED==='1',
+   sourceIdleDeclared:env.BLOFY_CONTENT_HUB_SOURCE_IDLE_CONFIRMED==='1',
+   uploadFeatureEnabled:env.BLOFY_CONTENT_HUB_UPLOAD_ENABLED==='1',
+   automaticPilotEnabled:env.BLOFY_CONTENT_HUB_ONE_MOVIE_ON_BOOT==='1',
+   note:'provider_idle_and_storage_rights_not_independently_verified'};
+ }catch{return {...base,code:'pilot_source_metadata_unavailable'}}
+}
+
 // Only run this from a private operator-controlled process. No public route.
 export async function runOneMoviePilot({
  env=process.env,storage,lease,fetchImpl=fetch,signal,logger=()=>{}
