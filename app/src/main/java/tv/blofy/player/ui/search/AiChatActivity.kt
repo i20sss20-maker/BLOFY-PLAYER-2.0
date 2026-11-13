@@ -9,6 +9,7 @@ import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -77,11 +78,11 @@ class AiChatActivity : AppCompatActivity() {
             setPadding(dp(6), dp(6), dp(6), dp(22))
         }
         conversationScroll = ScrollView(this).apply {
-            fillViewport = true
+            isFillViewport = true
             isVerticalScrollBarEnabled = false
             isFocusable = false
             clipToPadding = false
-            addView(transcript, ScrollView.LayoutParams(-1, -2))
+            addView(transcript, FrameLayout.LayoutParams(-1, -2))
         }
         root.addView(conversationScroll, LinearLayout.LayoutParams(-1, 0, 1f))
 
