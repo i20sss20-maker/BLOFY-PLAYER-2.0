@@ -3049,7 +3049,7 @@ async function callLocalGateway(method,path,body){
   const port=Number(process.env.PORT||3000);
   if(!Number.isSafeInteger(port)||port<1024||port>65535)
     throw Object.assign(new Error('gateway_port_invalid'),{status:503});
-  const match=/^\/api\/v1\/admin\/xtream-gateway\/(?:accounts(?:\/[0-9a-f-]{36}(?:\/(?:reset|credentials|compatibility))?)?|codes(?:\/[0-9a-f-]{36}\/(?:revoke|sell|extend|transfer|relogin|reveal)|\/sales-summary|\?limit=(?:[1-9]|[12][0-9]|30)&offset=[0-9]{1,6})?)$/.exec(path);
+  const match=/^\/api\/v1\/admin\/xtream-gateway\/(?:accounts(?:\/[0-9a-f-]{36}(?:\/(?:reset|credentials|rotate-credentials|compatibility))?)?|codes(?:\/[0-9a-f-]{36}\/(?:revoke|sell|extend|transfer|relogin|reveal)|\/sales-summary|\?limit=(?:[1-9]|[12][0-9]|30)&offset=[0-9]{1,6})?)$/.exec(path);
   if(!match)throw Object.assign(new Error('gateway_route_denied'),{status:400});
   const response=await fetch('http://127.0.0.1:'+port+path,{
     method,redirect:'manual',signal:AbortSignal.timeout(9000),
@@ -3077,7 +3077,7 @@ const streamDistributors=createStreamDistributors({pool,trialKeyHex:KEY_HEX,
   // Read-only, active/published catalog for the precisely pinned saleh source.
   listCatalog:async args=>(await listCatalog({
     type:args.type,serverId:args.sourceId,q:args.q,
-    offset:args.offset,limit:args.limit
+    categoryId:args.categoryId,offset:args.offset,limit:args.limit
   },true)).map(streamSafeCatalog),
   issueCode:async body=>{
     const result=await callLocalGateway('POST','/api/v1/admin/xtream-gateway/codes',body);
