@@ -54,6 +54,7 @@ jobs:
             --tests tv.blofy.player.ui.library.OfflineDownloadPolicyTest \
             --tests tv.blofy.player.ui.search.AiConversationPolicyTest \
             --tests tv.blofy.player.ui.search.AiRecommendationRankerTest \
+            --tests tv.blofy.player.ui.search.AiReplyPolicyTest \
             --tests tv.blofy.player.ui.library.DownloadTransferPolicyTest \
             --tests tv.blofy.player.ui.home.SmartHomeEngineTest \
             --tests tv.blofy.player.ui.search.CastSearchPolicyTest \
@@ -83,6 +84,7 @@ jobs:
             --tests tv.blofy.player.ui.library.OfflineDownloadPolicyTest \
             --tests tv.blofy.player.ui.search.AiConversationPolicyTest \
             --tests tv.blofy.player.ui.search.AiRecommendationRankerTest \
+            --tests tv.blofy.player.ui.search.AiReplyPolicyTest \
             --tests tv.blofy.player.ui.library.DownloadTransferPolicyTest \
             --tests tv.blofy.player.ui.player.AudioTrackChoicePolicyTest \
             --tests tv.blofy.player.ui.catalog.MovieGenrePrefetchPolicyTest \
