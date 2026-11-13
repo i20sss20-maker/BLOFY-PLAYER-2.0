@@ -3098,6 +3098,21 @@ const streamDistributors=createStreamDistributors({pool,trialKeyHex:KEY_HEX,
     const result=await callLocalGateway('GET','/api/v1/admin/xtream-gateway/codes/'+id+'/reveal');
     return {status:result.status,body:result.data};
   },
+  rotateXtream:async id=>{
+    // This callback is reachable only after verifying a merchant session
+    // and ownership of the exact purchased Xtream account.
+    const r=await callLocalGateway('POST',
+      '/api/v1/admin/xtream-gateway/accounts/'+id+'/rotate-credentials',
+      {acknowledgeDisconnect:true});
+    if(r.status===200&&r.data?.credentials){
+      const c=r.data.credentials;
+      c.serverUrl=XTREAM_CUSTOMER_HOST;
+      c.m3uUrl=c.serverUrl+'/get.php?'+new URLSearchParams({
+        username:c.username,password:c.password,type:'m3u_plus',output:'ts'
+      });
+    }
+    return {status:r.status,body:r.data};
+  },
   revealXtream:async id=>{
     const result=await callLocalGateway('GET','/api/v1/admin/xtream-gateway/accounts/'+id+'/credentials');
     if(result.status===200&&result.data?.credentials){
@@ -3161,12 +3176,21 @@ async function unifiedStreamBridge(req,res,url){
       await streamDistributors.renew(token,payload),{'cache-control':'no-store'});
     if(command==='relogin')return json(res,200,
       await streamDistributors.relogin(token,payload),{'cache-control':'no-store'});
+    if(command==='change-password')return json(res,200,
+      await streamDistributors.changePassword(token,payload),{'cache-control':'no-store'});
+    if(command==='rotate-xtream')return json(res,200,
+      await streamDistributors.rotateOwnedXtream(token,payload),
+      {'cache-control':'no-store, private','referrer-policy':'no-referrer'});
     if(command==='issue')return json(res,200,await streamDistributors.issue(token,payload),
       {'cache-control':'no-store'});
     if(command==='reveal')return json(res,200,
       await streamDistributors.reveal(token,payload.issueId),{'cache-control':'no-store'});
     if(command==='library')return json(res,200,
       await streamDistributors.library(token,payload),{'cache-control':'no-store'});
+    if(command==='library-categories')return json(res,200,
+      await streamDistributors.libraryCategories(token,payload),{'cache-control':'no-store'});
+    if(command==='organize-bulk')return json(res,200,
+      await streamDistributors.organizeBulk(token,payload),{'cache-control':'no-store'});
     if(command==='organize')return json(res,200,
       await streamDistributors.organize(token,payload),{'cache-control':'no-store'});
     return json(res,404,{ok:false,code:'route_not_found'});
