@@ -169,4 +169,9 @@
     <string name="stream_ai_sort_rating">الأعلى تقييمًا</string>
     <string name="stream_ai_explain_local">البحث المحلي لا يتصل بالذكاء الاصطناعي.</string>
     <string name="stream_player_next_episode">الحلقة التالية</string>
+    <string name="stream_downloads_failure_http_access">المصدر رفض تنزيل الملف (401/403). تحقق من صلاحية اشتراكك والسماح بالتحميل.</string>
+    <string name="stream_downloads_failure_http_missing">الملف غير موجود في المصدر أو تغيّر مساره (404/410). حدّث المحتوى وأعد المحاولة.</string>
+    <string name="stream_downloads_failure_http_busy">المصدر يقيّد عدد الطلبات مؤقتًا (429). تجنب التكرار المتواصل.</string>
+    <string name="stream_downloads_failure_http_server">المصدر يواجه عطلًا مؤقتًا (5xx). حاول لاحقًا.</string>
+    <string name="stream_downloads_retry_from_details">العودة للمحتوى والمحاولة</string>
 </resources>
