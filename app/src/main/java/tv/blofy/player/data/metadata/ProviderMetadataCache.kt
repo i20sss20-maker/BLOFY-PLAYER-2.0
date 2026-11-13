@@ -120,8 +120,8 @@ object ProviderMetadataCache {
                     val value=runCatching {
                         gson.fromJson(cursor.getString(1),ProviderMetadata.Metadata::class.java)
                     }.getOrNull() ?: continue
-                    if (key.startsWith("$providerId:") && (value.cast.orEmpty() + value.crew.orEmpty())
-                        .any { CastSearchPolicy.normalize(it.name).contains(normalized) }) {
+                    if (key.startsWith("$providerId:") && (value.cast.orEmpty().map { it.name } + value.crew.orEmpty().map { it.name })
+                        .any { CastSearchPolicy.normalize(it).contains(normalized) }) {
                         result[key]=value
                     }
                 }
@@ -153,8 +153,9 @@ object ProviderMetadataCache {
                 "Unable to persist metadata"
             }
             db.delete(PEOPLE,"content_key = ?",arrayOf(contentKey))
-            val tokens=(metadata?.cast.orEmpty() + metadata?.crew.orEmpty())
-                .asSequence().map { CastSearchPolicy.normalize(it.name) }
+            val tokens=(metadata?.cast.orEmpty().map { it.name } +
+                metadata?.crew.orEmpty().map { it.name })
+                .asSequence().map(CastSearchPolicy::normalize)
                 .flatMap { it.split(" ").asSequence() }
                 .filter { it.length in 2..48 }
                 .distinct().take(120).toList()
