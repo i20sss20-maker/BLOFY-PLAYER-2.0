@@ -191,3 +191,34 @@ customer rollout have **not** been performed. Before allowing public
 customers to use it, add a separate signed, scoped device playback proxy
 that hides private object keys and verify image and audio on supported
 devices. Stop immediately if source streaming quality degrades.
+
+
+### Admin dashboard (portal code ready; portal deployment independent)
+
+New admin-only page: `/admin/content-hub`, reachable only through the
+existing signed admin session. It reports durable pilot copy progress,
+failed/completed counts, and *accounted verified* private storage size.
+It can request cancellation of an active pilot and proxy verified-only
+8-MiB video byte ranges through the private Content Hub for an operator
+image/audio canary. It does **not** enable a subscriber media route.
+
+This integration requires the activation portal service variable
+`BLOFY_CONTENT_HUB_OPERATOR_TOKEN` to reference the Content Hub's existing
+`BLOFY_CONTENT_HUB_ADMIN_TOKEN` (do not copy a plaintext token to GitHub).
+No public Content Hub domain should be configured. The source bridge token
+and these operator tokens are independent. The private site proxy never
+returns credentials or private S3 object keys to the browser.
+
+Keep `ONE_MOVIE_ON_BOOT=0` until a movie/source is explicitly approved,
+quiet/no-subscriber-impact can be confirmed, and operator checks all size,
+format, storage cost, and source rights. The admin video canary reports
+transport success, **not proof of audible audio/image**, which must be
+observed manually on real devices. Browsers may not support MKV/AVI audio;
+that is a format limitation, not evidence the stored file is damaged.
+
+Production Content Hub and its database are separate from subscriber
+playback. Deploy the portal admin UI only after regression testing and
+under an approved low-risk rollout so established live channels are not
+disrupted. Before the first real copy, verify the provider exposes a
+stable ETag or Last-Modified validator for each Range; otherwise the
+worker intentionally rejects the transfer.
