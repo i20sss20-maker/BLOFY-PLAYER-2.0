@@ -1,0 +1,50 @@
+name: BLOFY STREAM 55.8.24 Downloads Site QA
+on:
+  push:
+    branches:
+      - release/blofy-stream-55-8-24-downloads-20261113
+    paths:
+      - 'services/update-distribution/**'
+      - '.github/workflows/blofy-stream-55-8-24-download-site-qa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  approve-stream-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: services/update-distribution
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Static syntax checks (no production changes)
+        run: npm run check:syntax
+      - name: Verify release metadata and fail-closed app gating
+        run: node --test stream-release.test.mjs app-download-policy.test.mjs
+      - name: Verify update-site suite and catalog render
+        run: npm run check
+      - name: Guard original signed package, asset and safe seeded promotion
+        shell: bash
+        run: |
+          grep -Fq 'SEED_VERSION = 15' app-library.mjs
+          grep -Fq "version:'55.8.24'" app-library.mjs
+          grep -Fq 'sha256:' stream-release.mjs
+          grep -Fq '2000101' stream-release.mjs
+          grep -Fq 'a5af6253ad816d325af9a1f32bc5b03cef9a6cd0f5dc6e8ca3f861dd1325b00d' stream-release.mjs
+          grep -Fq 'where slug=$1' app-library.mjs
+          grep -Fq 'split_part(version' app-library.mjs
+          grep -Fq 'previous_download_url=download_url' app-library.mjs
+          if grep -Fq 'tv.blofy.player.v2"' stream-release.mjs; then
+            echo 'STREAM release may not share PLAYER app ID' >&2
+            exit 1
+          fi
+      - name: Publish verification summary
+        run: |
+          echo "STREAM-only update catalog: 55.8.24 / 2000101" >> "$GITHUB_STEP_SUMMARY"
+          echo "Original owner signed APK pinned by SHA256; no PLAYER route or activation changes." >> "$GITHUB_STEP_SUMMARY"
