@@ -122,8 +122,27 @@ export async function ensureStreamCodeTable(client){
   await client.query(`CREATE INDEX IF NOT EXISTS idx_blofy_stream_codes_created
     ON blofy_xtream_gateway_duration_codes(created_at DESC)`);
 }
+// Applies ONLY to newly issued codes when the owner opts into the saleh
+// policy. Redeemed codes, existing accounts and provider credentials stay
+// untouched. No external Xtream request is made by this check.
+export async function assertSalehNewCodeSource(db,sourceId){
+ if(!sourceId)throw Object.assign(Error('stream_saleh_source_required'),{status:409});
+ const result=await db.query(`SELECT id,name FROM blofy_xtream_servers
+   WHERE id=$1 AND enabled=TRUE AND publish_catalog=TRUE
+     AND deletion_requested_at IS NULL LIMIT 1`,[sourceId]);
+ const row=result.rows?.[0];
+ if(!row||String(row.name||'').trim().toLowerCase()!=='saleh')
+   throw Object.assign(Error('stream_saleh_only_new_codes'),{status:409});
+ const all=await db.query(`SELECT COUNT(*)::int AS total FROM blofy_xtream_servers
+   WHERE lower(btrim(name))='saleh' AND deletion_requested_at IS NULL`);
+ if(Number(all.rows?.[0]?.total)!==1)
+   throw Object.assign(Error('stream_saleh_source_not_unique'),{status:409});
+ return true;
+}
+
 export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
-  randomBytes=crypto.randomBytes,uuid=crypto.randomUUID}={}){
+  randomBytes=crypto.randomBytes,uuid=crypto.randomUUID,
+  salehOnlyNewCodes=false}={}){
   if(!pool||!/^[a-fA-F0-9]{64}$/.test(String(keyHex||'')))
     throw Error('stream_code_storage_not_ready');
   const checkedSource=async(db,sourceId)=>{
@@ -140,6 +159,8 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
     try{
       await client.query('BEGIN');
       await checkedSource(client,opts.sourceId);
+      if(salehOnlyNewCodes===true)
+        await assertSalehNewCodeSource(client,opts.sourceId);
       // Serialize code batches across instances so digit-length thresholds
       // follow actual issuance volume, not a potentially stale counter.
       await client.query('SELECT pg_advisory_xact_lock(718420682)');
