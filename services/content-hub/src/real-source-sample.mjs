@@ -22,6 +22,7 @@ export async function runPrivateSalehSample({
  const lock=await lease.acquire('saleh');
  if(!lock)return {...base,ok:false,code:'content_hub_source_busy'};
  let res,uploadId=null,key=null,stored=false,requests=0,removed=false;
+ let outcome=null;
  try{
   const bearer='Bearer '+bridgeToken;
   const metadata=await fetchImpl(ORIGIN+'/internal/blofy-content-hub/describe',{
@@ -75,11 +76,11 @@ export async function runPrivateSalehSample({
   const proof=await storage.verify({key,expectedBytes:S,expectedSha256:sha});
   if(!proof?.ok||proof.bytes!==S||proof.sha256!==sha)
    throw Error('bridge_storage_digest_invalid');
-  return {...base,ok:true,code:'licensed_source_to_private_s3_verified',
+  outcome={...base,ok:true,code:'licensed_source_to_private_s3_verified',
    providerRequests:requests,sourceTotalBytes:metadataRange.totalSize,
    sampleBytesVerified:S};
  }catch{
-  return {...base,ok:false,code:'real_source_sample_failed',
+  outcome={...base,ok:false,code:'real_source_sample_failed',
    providerRequests:requests};
  }finally{
   if(res?.body&&!res.body.locked)await res.body.cancel().catch(()=>{});
@@ -87,4 +88,8 @@ export async function runPrivateSalehSample({
   if(key)try{await storage.remove({key});removed=true}catch{}
   await lock.release().catch(()=>{});
  }
+ return {...outcome,ok:outcome.ok&&removed,
+  code:!removed&&key?'private_fixture_cleanup_failed':outcome.code,
+  sourceMediaRetained:Boolean(key)&&!removed,
+  privateFixtureRemoved:removed};
 }
