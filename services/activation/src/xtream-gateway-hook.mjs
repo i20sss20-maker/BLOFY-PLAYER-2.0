@@ -57,6 +57,7 @@ import {parseStreamAppToken,verifyStreamAppToken,bearerFromRequest}
 import {encryptGatewayAccountPassword,decryptGatewayAccountPassword} from './xtream-account-vault.mjs';
 import {createGatewayCredentialRotator} from './xtream-account-credential-rotation.mjs';
 import {diagnoseSalehCatalogCopy} from './xtream-saleh-copy-capability.mjs';
+import {probeSalehRangedMovie} from './xtream-content-hub-range-pilot.mjs';
 import { readXtreamGatewayJsonResponse } from './xtream-gateway-response.mjs';
 import {configuredXtreamPublicOrigin} from './xtream-public-origin.mjs';
 import {probeXtreamAccountCompatibility} from './xtream-compatibility-probe.mjs';
@@ -279,6 +280,19 @@ async function ensureReady() {
     salehOnlyNewCodes:process.env.BLOFY_STREAM_SALEH_NEW_CODES_ONLY==='1'});
   if(!streamCommercial)streamCommercial=createStreamCommercial({pool,keyHex:KEY_HEX});
   if(!streamRelogin)streamRelogin=createStreamRelogin({pool,keyHex:KEY_HEX});
+  // Only activated for a one-shot, no-storage operator test. All requests
+  // are sequential, cap the first 8 KiB of ONE indexed authorized movie.
+  if(process.env.BLOFY_SALEH_RANGE_PROBE_ON_BOOT==='1'&&!salehRangeProbeScheduled){
+    salehRangeProbeScheduled=true;
+    const timer=setTimeout(()=>{
+      void probeSalehRangedMovie({query:(...args)=>pool.query(...args),
+        readPart:readSalehMovieRangePart})
+        .then(result=>console.info('BLOFY_CONTENT_HUB_RANGE_PROOF',JSON.stringify(result)))
+        .catch(()=>console.warn('BLOFY_CONTENT_HUB_RANGE_PROOF',
+          JSON.stringify({ok:false,code:'probe_unavailable',
+            customerTrafficChanged:false,completeFileCopied:false})));
+    },20000);timer.unref?.();
+  }
   // Explicitly opted-in, one-shot lightweight check: one movie, at most
   // first bytes; never copies media or issues new customer credentials.
   if(process.env.BLOFY_SALEH_COPY_DIAGNOSTIC_ON_BOOT==='1'&&!salehCopyProbeScheduled){
@@ -1758,8 +1772,59 @@ if(process.env.BLOFY_XTREAM_SERIES_SAFE_AUDIT_ON_BOOT==='1'){
 // Explicit operator-only probe. Check first bytes, never return upstream URLs,
 // source IDs, provider passwords, client IPs or full media payloads.
 let salehCopyProbeScheduled=false;
+let salehRangeProbeScheduled=false;
 let itemProbeAt=0;
 let itemProbeRunning=false;
+// A bounded sequential range fetch. NO disk, blob uploads or media copies.
+// Only the source's existing mapped movie can be touched. Ignore 200 responses
+// to a Range request and NEVER retry with a full GET.
+async function readSalehMovieRangePart({sourceId,gatewayId,from,to}){
+ const cap=4096;
+ if(!Number.isSafeInteger(from)||!Number.isSafeInteger(to)||to-from+1!==cap||
+   (from!==0&&from!==cap))
+   throw Error('content_hub_range_out_of_bounds');
+ const row=await gatewayItemById('movie',gatewayId,sourceId);
+ if(!row||row.server_enabled!==true||
+    String(row.source_name||'').trim().toLowerCase()!=='saleh'||
+    Number(row.source_name_matches)!==1||String(row.server_id)!==String(sourceId))
+   return {httpStatus:null,contentRange:'',bytesRead:0,transportOk:false};
+ const extension=safeGatewayExtension(row.container_extension,'mp4');
+ if(!['mp4','mkv','ts','avi'].includes(extension))
+   return {httpStatus:null,contentRange:'',bytesRead:0,transportOk:false};
+ const url=mediaUpstreamUrl(row,'movie',row.source_id,extension);
+ const abort=new AbortController();
+ const timeout=setTimeout(()=>abort.abort(),8500);timeout.unref?.();
+ let response,reader,bytesRead=0,transportOk=false;
+ try{
+  response=await checkedFetch(url,{method:'GET',
+    headers:{'range':`bytes=${from}-${to}`,
+      'accept-encoding':'identity','user-agent':'BLOFY-ContentHub-RangeProbe/1.0'},
+    signal:abort.signal,timeoutMs:8500});
+  const httpStatus=response.status;
+  if(httpStatus!==206||!response.body)
+    return {httpStatus,contentRange:'',bytesRead:0,transportOk:false};
+  const contentRange=String(response.headers.get('content-range')||'').slice(0,90);
+  reader=response.body.getReader();transportOk=true;
+  while(bytesRead<cap){
+    const part=await reader.read();
+    if(part.done){transportOk=false;break}
+    const len=part.value?.byteLength||0;
+    if(len>cap-bytesRead){transportOk=false;break}
+    if(!bytesRead&&from===0&&len){
+      const inspection=inspectXtreamMediaChunk(part.value,response.headers.get('content-type'));
+      if(!inspection.valid)transportOk=false;
+    }
+    bytesRead+=len;
+    if(!transportOk)break;
+  }
+  return {httpStatus,contentRange,bytesRead,transportOk};
+ }catch{return {httpStatus:null,contentRange:'',bytesRead:0,transportOk:false}}
+ finally{
+  clearTimeout(timeout);abort.abort();
+  if(reader){try{await reader.cancel()}catch{}try{reader.releaseLock()}catch{}}
+  else if(response?.body){try{await response.body.cancel()}catch{}}
+ }
+}
 async function probeGatewayMedia(kind,itemId){
   if(!['live','movie','series'].includes(kind)||!Number.isSafeInteger(itemId)||itemId<1)
     throw Object.assign(new Error('xtream_media_probe_invalid'),{status:400});
