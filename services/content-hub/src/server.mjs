@@ -296,7 +296,11 @@ export function createContentHubServer({storage,lease,
   }
   return json(res,404,{ok:false,code:'content_hub_not_found'});
  });
- return {server,recordPilot:(result)=>{pilotRunning=false;pilotAbort=null;lastPilot={
+ return {server,
+  startContinuousCopy:()=>pilotRunning?
+    {ok:false,code:'batch_writer_busy'}:copy.start(),
+  stopContinuousCopy:()=>copy.stop(),
+  recordPilot:(result)=>{pilotRunning=false;pilotAbort=null;lastPilot={
   ok:result?.ok===true,code:String(result?.code||'pilot_failed'),
   stored:result?.stored===true,bytes:result?.ok?result.bytes:undefined,
   checkedAt:new Date().toISOString()};},
@@ -412,6 +416,31 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
       customerCutover:false})));
    },6500);timer.unref?.();
   }
+  // One explicit, durable operator-authorized CONTINUOUS copy attempt.
+  // No restart loop: the PostgreSQL event token is claimed once before
+  // contacting the provider. Manual start/stop remains available from STREAM.
+  if(process.env.BLOFY_CONTENT_HUB_CONTINUOUS_ON_BOOT==='1'&&
+     process.env.BLOFY_CONTENT_HUB_CHUNKED_ON_BOOT!=='1'){
+   const timer=setTimeout(()=>{
+    void (async()=>{
+     const env=process.env;
+     const runId=String(env.BLOFY_CONTENT_HUB_BATCH_RUN_ID||'');
+     const token=String(env.BLOFY_CONTENT_HUB_CONTINUOUS_BOOT_TOKEN||'');
+     if(!/^[A-Za-z0-9_-]{8,80}$/.test(token))
+      return {ok:false,code:'continuous_boot_token_invalid'};
+     const ready=chunkedBatchReadiness(env);
+     if(!ready.ready)return {ok:false,code:'continuous_safety_gates_off',
+       blockedBy:ready.blockedBy};
+     const claimed=await lease.claimBatchBootOnce(token,runId);
+     if(!claimed)return {ok:false,code:'continuous_boot_already_claimed'};
+     return hub.startContinuousCopy();
+    })().then(result=>console.info('BLOFY_CONTENT_HUB_CONTINUOUS_BOOT',
+     JSON.stringify({ok:result.ok,code:result.code,
+      customerCutover:false,privateOnly:true}))).catch(()=>
+     console.warn('BLOFY_CONTENT_HUB_CONTINUOUS_BOOT',JSON.stringify({
+      ok:false,code:'continuous_boot_failed',customerCutover:false})));
+   },8500);timer.unref?.();
+  }
   // Operator-only one-shot full movie pilot; all switches default OFF.
   // Never run alongside the existing small real-source sample.
   if(process.env.BLOFY_CONTENT_HUB_ONE_MOVIE_ON_BOOT==='1'&&
@@ -452,6 +481,9 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
    timer.unref?.();
   }
  });
- const shutdown=()=>hub.server.close(()=>void lease.close());
+ const shutdown=()=>{
+  hub.stopContinuousCopy();
+  hub.server.close(()=>void lease.close());
+ };
  process.once('SIGTERM',shutdown);process.once('SIGINT',shutdown);
 }
