@@ -152,16 +152,18 @@ export async function runChunkedMovieBatch({
   typeof storage.readVerifiedRange!=='function')
   return {...base,ok:false,code:'batch_adapters_unavailable'};
  let exclusive=null,run=null,activeKey=null,uploadId=null,complete=false;
- let lastFailure='batch_failed',irrecoverable=false;
+ let lastFailure='batch_failed',irrecoverable=false,stage='lock';
  try{
   exclusive=await lease.acquire('saleh');
   if(!exclusive)return {...base,ok:false,code:'batch_source_busy'};
+  stage='metadata';
   const info=await inspectOneMoviePilot({env,fetchImpl,signal});
   if(!info.ok||info.sourceName!=='saleh'||info.gatewayId!==cfg.gatewayId)
    return {...base,ok:false,code:'batch_movie_mapping_mismatch'};
   const privateRunKey=createHash('sha256')
    .update(cfg.runId+'|'+info.sourceId+'|'+info.mediaId+'|'+info.gatewayId)
    .digest('hex').slice(0,24);
+  stage='manifest';
   run=await lease.loadChunkedRun({
    runId:cfg.runId,sourceId:info.sourceId,mediaId:info.mediaId,
    gatewayId:info.gatewayId,extension:info.extension,
@@ -180,6 +182,7 @@ export async function runChunkedMovieBatch({
    const to=Math.min(from+CHUNK_BYTES,cfg.expectedBytes)-1;
    // Always check sampled source boundaries before a new piece. Unlike
    // an ETag this is only a sampled consistency guard, not a full proof.
+   stage='boundary_precheck';
    const fingerprint=await sampleBoundaryFingerprint({
     cfg,fetchImpl,signal});
    if(run.validator?.startsWith('boundary-sha256:')&&
@@ -187,6 +190,7 @@ export async function runChunkedMovieBatch({
     irrecoverable=true;lastFailure='batch_source_fingerprint_changed';
     throw Error('source_boundary_changed');
    }
+   stage='source_chunk';
    const response=await fetchImpl(ORIGIN+
       '/internal/blofy-content-hub/source/movie/'+cfg.gatewayId,{
      method:'GET',redirect:'manual',
@@ -214,6 +218,7 @@ export async function runChunkedMovieBatch({
    // With no provider ETag/Last-Modified, verify that sampled boundaries
    // have not changed during the actual 8MiB source read.
    if(!providerValidator){
+    stage='boundary_postcheck';
     const after=await sampleBoundaryFingerprint({cfg,fetchImpl,signal});
     if(after!==fingerprint){
      irrecoverable=true;lastFailure='batch_source_fingerprint_changed';
@@ -223,21 +228,26 @@ export async function runChunkedMovieBatch({
    const sha256=createHash('sha256').update(bytes).digest('hex');
    activeKey='saleh/movie/'+info.sourceId+'/batch_'+privateRunKey+
      '_part_'+String(no).padStart(6,'0')+'.'+info.extension;
+   stage='s3_begin';
    const opened=await storage.begin({key:activeKey,private:true,
     contentType:'application/octet-stream',
     metadata:{kind:'licensed-batch',part:String(no)}});
    uploadId=opened.uploadId;
+   stage='s3_upload';
    const uploaded=await storage.part({key:activeKey,uploadId,
     partNumber:1,body:bytes});
+   stage='s3_complete';
    await storage.complete({key:activeKey,uploadId,
     parts:[{partNumber:1,etag:uploaded.etag}]});
    uploadId=null;complete=true;
+   stage='s3_verify';
    const proof=await storage.verify({
     key:activeKey,expectedBytes:bytes.length,expectedSha256:sha256,signal});
    if(!proof?.ok||proof.bytes!==bytes.length||proof.sha256!==sha256){
     irrecoverable=true;lastFailure='batch_storage_hash_mismatch';
     throw Error('private_chunk_verification_failed');
    }
+   stage='checkpoint';
    const persisted=await lease.recordChunk(cfg.runId,{
     partNumber:no,key:activeKey,bytes:bytes.length,sha256,validator
    });
@@ -273,7 +283,7 @@ export async function runChunkedMovieBatch({
    await lease.failChunkedRun(cfg.runId,{code:lastFailure}).catch(()=>{});
   return {...base,ok:false,code:irrecoverable?lastFailure:
    signal?.aborted?'batch_cancelled':'batch_retryable_error',
-   checkpointsRetained:run?.parts?.length||0};
+   checkpointsRetained:run?.parts?.length||0,errorStage:stage};
  }finally{
   await exclusive?.release().catch(()=>{});
  }
