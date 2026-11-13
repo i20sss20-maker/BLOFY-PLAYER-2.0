@@ -16,7 +16,7 @@ import {probeOfficialXtreamPlaylistRoute} from './xtream-official-m3u-probe.mjs'
 import {readSanitizedXtreamRelayFailure} from './xtream-relay-diagnostic.mjs';
 import {ensureUnavailableMediaTable,recoverySources,validUnavailableKey,
   registerProvider404,noteMediaRestored,
-  unavailableMediaSummary} from './xtream-unavailable-media-registry.mjs';
+  unavailableMediaSummary,unavailableMediaDetails} from './xtream-unavailable-media-registry.mjs';
 import {operatorMediaRegistryOutcome} from './xtream-operator-media-recovery.mjs';
 import {probeXtreamM3uAvailability} from './xtream-m3u-availability.mjs';
 import {compareXtreamAdvertisedOrigin} from './xtream-advertised-origin-diagnostic.mjs';
@@ -3336,6 +3336,15 @@ async function unifiedStreamBridge(req,res,url){
     if(sourceId&&!validUuid(sourceId))
       return json(res,400,{ok:false,code:'stream_invalid_source_id'});
     const result=await unavailableMediaSummary(pool,sourceId||null);
+    return json(res,result.ok?200:400,result);
+  }
+  if(req.method==='GET'&&p==='/internal/blofy-stream/media-failure-items'){
+    const sourceId=String(url.searchParams.get('sourceId')||'').trim();
+    if(sourceId&&!validUuid(sourceId))
+      return json(res,400,{ok:false,code:'stream_invalid_source_id'});
+    // Only trusted private authenticated STREAM bridge. The detail registry
+    // is read-only and never accesses another source's provider credentials.
+    const result=await unavailableMediaDetails(pool,sourceId||null,{limit:40});
     return json(res,result.ok?200:400,result);
   }
   if(req.method==='GET'&&p==='/internal/blofy-stream/episodes'){
