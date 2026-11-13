@@ -368,7 +368,7 @@ Bun.serve({
   async fetch(req:Request): Promise<Response> {
     const url = new URL(req.url);
     if (req.method === "GET" && url.pathname === "/health") return json({
-      ok:true, service:"blofy-ai", version:3, provider:activeProvider(),
+      ok:true, service:"blofy-ai", version:4, provider:activeProvider(),
       modelProbe:bootProbeStatus
     });
     const isSearch = url.pathname === "/v1/search/interpret";
