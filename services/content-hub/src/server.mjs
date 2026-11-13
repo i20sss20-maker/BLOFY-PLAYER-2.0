@@ -4,7 +4,7 @@ import {randomUUID,randomBytes,createHash,timingSafeEqual} from 'node:crypto';
 import {createPrivateS3Adapter} from './private-s3.mjs';
 import {createSourceLease} from './source-lease.mjs';
 import {runPrivateSalehSample} from './real-source-sample.mjs';
-import {runOneMoviePilot,inspectOneMoviePilot} from './one-movie-pilot.mjs';
+import {runOneMoviePilot,inspectOneMoviePilot,probeApprovedMovieRange} from './one-movie-pilot.mjs';
 import {runChunkedMovieBatch,chunkedPilotEnabled,chunkedBatchReadiness,CHUNK_BYTES} from './chunked-pilot.mjs';
 
 const FIXTURE_SOURCE='00000000-0000-4000-8000-000000000000';
@@ -313,6 +313,23 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
     }).catch(()=>console.warn('BLOFY_CONTENT_HUB_PREFLIGHT',
      JSON.stringify({ok:false,code:'metadata_unavailable',providerMediaRequests:0})));
    },2500);timer.unref?.();
+  }
+  if(process.env.BLOFY_CONTENT_HUB_PROBE_ON_BOOT==='1'){
+   const timer=setTimeout(()=>{
+    void probeApprovedMovieRange().then(result=>{
+      console.info('BLOFY_CONTENT_HUB_RANGE_PREFLIGHT',JSON.stringify({
+       ok:result.ok,code:result.code,providerRequests:result.providerRequests,
+       probeBytes:result.probeBytes,
+       gatewayId:result.ok?result.gatewayId:null,
+       expectedBytes:result.ok?result.expectedBytes:null,
+       extension:result.ok?result.extension:null,
+       validatorPresent:result.ok?result.validatorPresent:false,
+       customerCutover:false,stored:false
+      }));
+    }).catch(()=>console.warn('BLOFY_CONTENT_HUB_RANGE_PREFLIGHT',
+      JSON.stringify({ok:false,code:'range_probe_failed',
+       stored:false,customerCutover:false})));
+   },3500);timer.unref?.();
   }
   if(process.env.BLOFY_CONTENT_HUB_SYNTHETIC_ON_BOOT==='1'){
    const timer=setTimeout(()=>{
