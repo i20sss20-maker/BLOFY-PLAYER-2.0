@@ -16,10 +16,11 @@ const env={
  BLOFY_CONTENT_HUB_APPROVED_GATEWAY_ID:'123',
  BLOFY_CONTENT_HUB_CHUNKS_PER_BATCH:'1'
 };
-function fixture({changeValidator=false,failSecond=false}={}){
+function fixture({changeValidator=false,failSecond=false,
+ noValidator=false,alterBoundary=false}={}){
  const objects=new Map();
  const db={state:'staged',parts:[],validator:null,sha:null};
- const stats={metadata:0,reads:0,aborts:0,locks:0};
+ const stats={metadata:0,reads:0,probes:0,aborts:0,locks:0};
  const storage={
   begin:async()=>({uploadId:'safe_upload'}),
   part:async({key,body})=>{
@@ -65,18 +66,24 @@ function fixture({changeValidator=false,failSecond=false}={}){
     sourceId:'9adc6472-5d4e-4359-83e4-0298cc038ae3',
     mediaId:'314',gatewayId:123,extension:'mp4'});
   }
-  stats.reads++;
-  if(failSecond&&stats.reads===2)throw Error('simulated source disconnect');
   assert.ok(url.endsWith('/source/movie/123'));
   const [start,end]=init.headers.range.slice('bytes='.length)
     .split('-').map(Number);
-  assert.ok(end-start+1<=CHUNK_BYTES);
-  return new Response(Buffer.alloc(end-start+1,start?99:49),{
-   status:206,headers:{
+  const size=end-start+1;
+  assert.ok(size<=CHUNK_BYTES);
+  if(size===4096)stats.probes++;
+  else stats.reads++;
+  if(failSecond&&stats.reads===2&&size>4096)
+    throw Error('simulated source disconnect');
+  const headers={
     'content-range':'bytes '+start+'-'+end+'/'+(CHUNK_BYTES*2),
-    'content-length':String(end-start+1),
-    etag:changeValidator&&stats.reads>=2?'"changed"':'"same"'
-   }
+    'content-length':String(size)
+  };
+  if(!noValidator)headers.etag=changeValidator&&stats.reads>=2?
+    '"changed"':'"same"';
+  return new Response(Buffer.alloc(size,alterBoundary&&stats.reads>=1&&
+    size===4096?21:start?99:49),{
+   status:206,headers
   });
  };
  return {storage,lease,fetchImpl,db,objects,stats};
@@ -132,4 +139,35 @@ test('transient range failure keeps verified chunks and retries later',async()=>
  const done=await runChunkedMovieBatch({...f,env});
  assert.equal(done.code,'batch_movie_fully_verified');
  assert.equal(f.stats.reads,3);
+});
+
+test('origin without provider ETag resumes via double boundary SHA256 sampling',async()=>{
+ const f=fixture({noValidator:true});
+ const first=await runChunkedMovieBatch({...f,env});
+ assert.equal(first.ok,true,JSON.stringify(first));
+ assert.equal(first.code,'batch_checkpoint_saved');
+ assert.match(f.db.validator,/^boundary-sha256:[a-f0-9]{64}$/);
+ const second=await runChunkedMovieBatch({...f,env});
+ assert.equal(second.code,'batch_movie_fully_verified',JSON.stringify(second));
+ assert.equal(f.stats.reads,2);
+ assert.equal(f.stats.probes,8);
+ assert.equal(f.db.state,'verified');
+});
+test('source boundary changes before next chunk are rejected without mixed film',async()=>{
+ const f=fixture({noValidator:true});
+ assert.equal((await runChunkedMovieBatch({...f,env})).ok,true);
+ // Version drift occurs between batches: mutate source boundary samples.
+ const old=f.fetchImpl;
+ f.fetchImpl=async(url,opts)=>{
+  const response=await old(url,opts);
+  if(opts?.headers?.range?.startsWith('bytes=0-4095')&&
+     response.status===206)return new Response(Buffer.alloc(4096,77),{
+     status:206,headers:response.headers});
+  return response;
+ };
+ const failed=await runChunkedMovieBatch({...f,env});
+ assert.equal(failed.ok,false);
+ assert.equal(failed.code,'batch_source_fingerprint_changed');
+ assert.equal(f.db.parts.length,1);
+ assert.equal(f.db.state,'failed');
 });
