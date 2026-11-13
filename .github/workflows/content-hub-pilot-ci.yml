@@ -1,0 +1,29 @@
+name: Content Hub licensed pilot (offline tests)
+on:
+  push:
+    paths:
+      - 'services/content-hub/**'
+      - '.github/workflows/content-hub-pilot-ci.yml'
+  pull_request:
+    paths:
+      - 'services/content-hub/**'
+      - '.github/workflows/content-hub-pilot-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  guarded-mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check isolated policy and worker syntax
+        run: |
+          node --check services/content-hub/src/mirror-policy.mjs
+          node --check services/content-hub/src/mirror-pilot.mjs
+      - name: Test S3 multipart fixtures (no source or cloud access)
+        run: node --test services/content-hub/test/*.test.mjs
