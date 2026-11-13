@@ -6,6 +6,7 @@ import {createSourceLease} from './source-lease.mjs';
 import {runPrivateSalehSample} from './real-source-sample.mjs';
 import {runOneMoviePilot,inspectOneMoviePilot,probeApprovedMovieRange} from './one-movie-pilot.mjs';
 import {runChunkedMovieBatch,chunkedPilotEnabled,chunkedBatchReadiness,CHUNK_BYTES} from './chunked-pilot.mjs';
+import {createContinuousCopyController} from './continuous-copy.mjs';
 
 const FIXTURE_SOURCE='00000000-0000-4000-8000-000000000000';
 const FIXTURE_SIZE=8*1024*1024;
@@ -60,6 +61,10 @@ export function createContentHubServer({storage,lease,
  const started=Date.now();
  let syntheticRunning=false,lastSynthetic=null;
  let pilotRunning=false,lastPilot=null,pilotAbort=null;
+ const copy=createContinuousCopyController({
+  runBatch:({signal})=>batchRunner({storage,lease,env:pilotEnv,signal,logger}),
+  readiness:()=>chunkedBatchReadiness(pilotEnv),logger
+ });
  const server=http.createServer(async(req,res)=>{
   const path=String(req.url||'').split('?')[0];
   if(path==='/health'&&req.method==='GET')
@@ -79,8 +84,8 @@ export function createContentHubServer({storage,lease,
     ok:bucket&&database,privateBucketAvailable:bucket,
     databaseAvailable:database,downloadQueueEnabled:false,
     syntheticTestEnabled:allowSynthetic,
-    lastSynthetic,pilotRunning,lastPilot,
-    durablePilot,chunkedBatchEnabled:chunkedBatchReadiness(pilotEnv).ready,
+    lastSynthetic,pilotRunning:pilotRunning||copy.isRunning(),lastPilot,
+    continuousCopy:copy.status(),durablePilot,chunkedBatchEnabled:chunkedBatchReadiness(pilotEnv).ready,
     customerCutover:false,
     licensedRightsRequired:true});
   }
@@ -118,18 +123,34 @@ export function createContentHubServer({storage,lease,
       scope:'private_pilot_objects_only'
     };
     return json(res,200,{ok:true,privateOnly:true,customerCutover:false,
-       accounting,runs,pilotRunning,downloadQueueEnabled:false,
+       accounting,runs,pilotRunning:pilotRunning||copy.isRunning(),
+       continuousCopy:copy.status(),downloadQueueEnabled:false,
        chunkedBatchEnabled:chunkedBatchReadiness(pilotEnv).ready,
        batchReadiness:chunkedBatchReadiness(pilotEnv)});
    }catch{
     return json(res,503,{ok:false,code:'content_hub_pilot_records_unavailable'});
    }
   }
+  if(path==='/internal/batch/start'&&req.method==='POST'){
+   if(String(req.headers['x-blofy-batch-confirm']||'')!=='approved-8mib-batch')
+    return json(res,400,{ok:false,code:'batch_operator_confirmation_required'});
+   if(pilotRunning||copy.isRunning())
+    return json(res,409,{ok:false,code:'batch_writer_busy'});
+   const result=copy.start();
+   return json(res,result.ok?202:409,{
+    ...result,privateOnly:true,customerCutover:false,
+    downloadQueueEnabled:false});
+  }
+  if(path==='/internal/batch/pause'&&req.method==='POST'){
+   const result=copy.stop();
+   return json(res,result.ok?202:409,{
+    ...result,privateOnly:true,customerCutover:false});
+  }
   if(path==='/internal/batch/next'&&req.method==='POST'){
    // Explicit per-batch admin operation, never an automatic source retry.
    if(String(req.headers['x-blofy-batch-confirm']||'')!=='approved-8mib-batch')
     return json(res,400,{ok:false,code:'batch_operator_confirmation_required'});
-   if(pilotRunning)return json(res,409,{
+   if(pilotRunning||copy.isRunning())return json(res,409,{
     ok:false,code:'batch_writer_busy'});
    const readiness=chunkedBatchReadiness(pilotEnv);
    if(!readiness.ready)return json(res,409,{
@@ -157,6 +178,10 @@ export function createContentHubServer({storage,lease,
      customerCutover:false});
   }
   if(path==='/internal/pilot/cancel'&&req.method==='POST'){
+   if(copy.isRunning()){
+    const result=copy.stop();
+    return json(res,202,{...result,privateOnly:true,customerCutover:false});
+   }
    if(!pilotRunning||!pilotAbort)
     return json(res,409,{ok:false,code:'content_hub_pilot_not_running'});
    pilotAbort.abort();
