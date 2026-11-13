@@ -59,6 +59,7 @@ class SearchActivity : AppCompatActivity() {
     private lateinit var localModeButton: Button
     private lateinit var aiModeButton: Button
     private lateinit var chatTranscript: TextView
+    private lateinit var aiQuickStrip: HorizontalScrollView
     private var aiMode = false
     private var lastAiQuestion: String? = null
     private val chatTurns = mutableListOf<Pair<String, String>>()
@@ -141,6 +142,40 @@ class SearchActivity : AppCompatActivity() {
             })
             modeBar.addView(aiModeButton, LinearLayout.LayoutParams(0, dp(50), 1f))
             root.addView(modeBar, LinearLayout.LayoutParams(-1, dp(58)).apply {
+                bottomMargin = dp(7)
+            })
+        }
+        if (BuildConfig.CODE_ONLY_LOGIN) {
+            val suggestions = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                layoutDirection = resources.configuration.layoutDirection
+            }
+            listOf(
+                R.string.stream_ai_quick_action to "رشح لي فيلم أكشن جديد وتقييمه مرتفع",
+                R.string.stream_ai_quick_comedy to "رشح لي فيلم كوميدي خفيف وتقييمه مرتفع",
+                R.string.stream_ai_quick_series to "رشح لي مسلسل جريمة حديث"
+            ).forEach { (label, question) ->
+                suggestions.addView(Button(this).apply {
+                    text = getString(label)
+                    isAllCaps = false
+                    textSize = 12f
+                    CinemaStyle.styleButton(this)
+                    setOnClickListener {
+                        if (!aiMode) setAiMode(true)
+                        input.setText(question)
+                        input.setSelection(input.length())
+                        sendAiQuestion()
+                    }
+                }, LinearLayout.LayoutParams(dp(172), dp(44)).apply { marginEnd = dp(9) })
+            }
+            aiQuickStrip = HorizontalScrollView(this).apply {
+                isHorizontalScrollBarEnabled = false
+                isFocusable = false
+                visibility = View.GONE
+                addView(suggestions)
+            }
+            root.addView(aiQuickStrip, LinearLayout.LayoutParams(-1, dp(50)).apply {
                 bottomMargin = dp(7)
             })
         }
@@ -333,6 +368,7 @@ class SearchActivity : AppCompatActivity() {
         aiButton.visibility = if (enabled) View.VISIBLE else View.GONE
         aiButton.text = getString(R.string.stream_ai_chat_send)
         chatTranscript.visibility = if (enabled) View.VISIBLE else View.GONE
+        aiQuickStrip.visibility = if (enabled) View.VISIBLE else View.GONE
         recentScroll.visibility = View.GONE
         input.hint = if (enabled) getString(R.string.stream_ai_chat_hint) else inputHint()
         hint.text = if (enabled) getString(R.string.stream_ai_chat_try) else emptyHint()
@@ -527,14 +563,9 @@ class SearchActivity : AppCompatActivity() {
             }
         }
         val expanded = withContext(Dispatchers.IO) {
-            providers.flatMap { source ->
+            AiRecommendationRanker.rank(providers.flatMap { source ->
                 resolveAiSuggestions(ai, repository, dao, source.id, selectedKind, q)
-            }.distinctBy { it.key }
-                .let { items ->
-                    if (AiConversationPolicy.wantsRecent(q))
-                        items.sortedByDescending { it.year?.toIntOrNull() ?: 0 }
-                    else items
-                }.take(48)
+            }.distinctBy { it.key }, AiConversationPolicy.wantsRecent(q)).take(48)
         }
         if (input.text?.toString()?.trim() != q || activeKind != selectedKind || !aiMode) return
         if (expanded.isEmpty()) {
@@ -544,12 +575,17 @@ class SearchActivity : AppCompatActivity() {
             showMessage(getString(R.string.stream_ai_chat_none))
             return
         }
+        val expectedGenre = AiRecommendationRanker.requestedGenre(q, ai.genre)
         val merged = listOf(KIND_MOVIE, KIND_SERIES)
             .filter { selectedKind == null || selectedKind == it }
             .map { kind ->
                 val local = sections.firstOrNull { it.first == kind }?.second.orEmpty()
-                kind to (expanded.asSequence().filter { it.kind == kind } + local.asSequence())
-                    .filter { !it.locked }.distinctBy { it.key }.take(SECTION_LIMIT).toList()
+                val verified = (expanded.asSequence().filter { it.kind == kind } +
+                    local.asSequence()).filter { !it.locked && 
+                        AiRecommendationRanker.matchesGenre(it.genre, expectedGenre) }
+                    .distinctBy { it.key }.take(SECTION_LIMIT).toList()
+                kind to AiRecommendationRanker.rank(verified,
+                    AiConversationPolicy.wantsRecent(q))
             }
         val total = merged.sumOf { it.second.size }
         renderSections(merged, selectedKind, provider.id, provider.liveFormat,
@@ -623,11 +659,27 @@ class SearchActivity : AppCompatActivity() {
         }
         // Genre/year requests work even when Arabic natural phrasing did not
         // match Xtream's English genre fields. Still only source catalog rows.
-        if (intent.genre.isNotBlank() && collected.size < 12) {
+        val genre = AiRecommendationRanker.requestedGenre(userQuery, intent.genre)
+        if (genre != null && collected.size < 12) {
             for (kind in kinds) {
-                val matches = repository.searchKind(providerId, kind, intent.genre, 40)
+                val matches = repository.searchKind(providerId, kind, genre, 40)
                 collected.addAll(matches.filter { !it.locked })
             }
+        }
+        // Explicit AI request only: bounded fallback to recent locally indexed
+        // authorized VOD titles when the provider's FTS omitted English genre
+        // metadata and model-suggested names aren't in this specific catalog.
+        val asksForRecommendations = listOf("رشح", "اقترح", "أنصح", "أبغى",
+            "ابي", "recommend", "suggest", "show me").any {
+                userQuery.contains(it, ignoreCase = true)
+            }
+        if (collected.size < 8 && intent.person.isBlank() &&
+            (genre != null || (asksForRecommendations && intent.title.isBlank()))) {
+            collected.addAll(dao.latestHomeStreams(providerId, 1200).asSequence()
+                .filter { it.kind in kinds && !it.locked }
+                .filter { AiRecommendationRanker.matchesGenre(it.genre, genre) }
+                .filter { AiCatalogQueryPolicy.matchesYear(it.year, it.name, requestedYear) }
+                .take(32).toList())
         }
         if (requestedYear != null && collected.size < 12 && intent.person.isBlank()) {
             // "أفلام ٢٠٢٦" on Arabic TV keyboards should find actual 2026
@@ -659,9 +711,8 @@ class SearchActivity : AppCompatActivity() {
             .filter { it.providerId == providerId && !it.locked }
             .filter { AiCatalogQueryPolicy.matchesYear(it.year, it.name, requestedYear) }
             .distinctBy { it.key }.toList()
-        return (if (AiConversationPolicy.wantsRecent(userQuery))
-            matched.sortedByDescending { it.year?.toIntOrNull() ?: 0 }
-        else matched).take(24)
+        return AiRecommendationRanker.rank(matched,
+            AiConversationPolicy.wantsRecent(userQuery)).take(24)
     }
 
     /**
