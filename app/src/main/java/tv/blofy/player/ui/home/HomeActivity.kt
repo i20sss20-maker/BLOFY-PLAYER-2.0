@@ -67,7 +67,7 @@ import tv.blofy.player.ui.common.DeviceLocalTime
 import tv.blofy.player.ui.details.MovieDetailsActivity
 import tv.blofy.player.ui.details.SeriesDetailsActivity
 import tv.blofy.player.ui.library.LibraryActivity
-import tv.blofy.player.ui.library.MyLibraryActivity
+import tv.blofy.player.ui.library.DownloadsActivity
 import tv.blofy.player.ui.mobile.MobileContentActivity
 import tv.blofy.player.ui.search.SearchActivity
 import tv.blofy.player.ui.settings.SettingsActivity
@@ -695,7 +695,7 @@ class HomeActivity : AppCompatActivity() {
         addStory(quick, "favorite_story",
             getString(if (BuildConfig.CODE_ONLY_LOGIN) R.string.stream_library_title else R.string.home_favorites),
             getString(if (BuildConfig.CODE_ONLY_LOGIN) R.string.stream_library_subtitle else R.string.home_favorites_subtitle),
-            if (BuildConfig.CODE_ONLY_LOGIN) Intent(this, MyLibraryActivity::class.java)
+            if (BuildConfig.CODE_ONLY_LOGIN) Intent(this, DownloadsActivity::class.java)
             else Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_FAVORITES))
         addStory(quick, "search_story", getString(R.string.home_search), getString(R.string.home_search_subtitle), Intent(this, SearchActivity::class.java))
         if (layoutSpec.compact) {
@@ -1243,7 +1243,7 @@ class HomeActivity : AppCompatActivity() {
         addView(sideAction("side_collections", R.drawable.cinema_collections, getString(R.string.home_collections), collectionIntent(SmartCollectionsActivity.MODE_TOP_RATED)))
         if (BuildConfig.CODE_ONLY_LOGIN) {
             addView(sideAction("side_library", R.drawable.cinema_favorite,
-                getString(R.string.stream_library_title), Intent(this@HomeActivity, MyLibraryActivity::class.java)))
+                getString(R.string.stream_library_title), Intent(this@HomeActivity, DownloadsActivity::class.java)))
         } else addView(sideAction("side_favorites", R.drawable.cinema_favorite,
             getString(R.string.home_favorites), Intent(this@HomeActivity, LibraryActivity::class.java)
                 .putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_FAVORITES)))
@@ -1433,7 +1433,7 @@ class HomeActivity : AppCompatActivity() {
         bottom.addView(touchNav("mobile_live", R.drawable.cinema_live, getString(R.string.home_live), contentIntent("live")), LinearLayout.LayoutParams(0, -1, 1f))
         bottom.addView(touchNav("mobile_library", R.drawable.cinema_favorite,
             getString(if (BuildConfig.CODE_ONLY_LOGIN) R.string.stream_library_title else R.string.home_favorites),
-            if (BuildConfig.CODE_ONLY_LOGIN) Intent(this, MyLibraryActivity::class.java)
+            if (BuildConfig.CODE_ONLY_LOGIN) Intent(this, DownloadsActivity::class.java)
             else Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_FAVORITES)),
             LinearLayout.LayoutParams(0, -1, 1f))
         bottom.addView(touchNav("mobile_collections", R.drawable.cinema_collections, getString(R.string.home_collections),
