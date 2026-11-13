@@ -794,13 +794,17 @@ class SettingsActivity : AppCompatActivity() {
                 it.second.equals(currentLanguageTag(), ignoreCase = true)
             }) { dialog, which ->
                 val (label, tag) = options[which]
-                val editor = prefs.edit()
-                    .putString(KEY_LANGUAGE, label)
-                    .putString(KEY_LANGUAGE_TAG, tag)
-                if (BuildConfig.CODE_ONLY_LOGIN) editor.putBoolean("stream_language_choice_made", true)
-                if (!editor.commit()) return@setSingleChoiceItems
                 dialog.dismiss()
-                AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(tag))
+                if (BuildConfig.CODE_ONLY_LOGIN) {
+                    // Do not recreate the old Home underneath Settings: Android
+                    // TV may keep both alive and flicker/blank on every render.
+                    StreamLanguageSwitcher.change(this@SettingsActivity, tag)
+                } else {
+                    if (!prefs.edit()
+                            .putString(KEY_LANGUAGE, label)
+                            .putString(KEY_LANGUAGE_TAG, tag).commit()) return@setSingleChoiceItems
+                    AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(tag))
+                }
             }
             .setNegativeButton(getString(R.string.cancel), null)
             .show()
