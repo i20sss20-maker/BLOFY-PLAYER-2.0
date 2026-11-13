@@ -491,7 +491,12 @@ class HomeActivity : AppCompatActivity() {
                     !isFinishing && !isDestroyed) {
                     streamHomeCacheRetries += 1
                     delay(6_000L)
-                    if (homeResumed && !isFinishing) loadHomeExperience()
+                    if (homeResumed && !isFinishing) {
+                        // Relaunch after this load has completed; otherwise
+                        // single-flight protection would suppress the retry.
+                        homeLoadJob = null
+                        loadHomeExperience()
+                    }
                 }
                 return@launch
             }
