@@ -58,14 +58,32 @@ The one-shot Railway probe was disabled after completion:
 
 ## Not wired to production
 
-No Content Hub worker service, S3/Railway Bucket, credentials, upload
-schedule, distributed lease implementation, source range adapter, or
-stored-file playback route is active. There is no auto-import or full
-movie copy. This is deliberate: redistribution authorization is not
-automatically storage/reproduction authorization.
+### Updated infrastructure status (2026-11-13)
 
-Production currently has NO bucket in the BLOFY activation project.
-The only volumes are service data and Postgres.
+The owner confirmed that the provider's permission includes persistent
+storage and redistribution. BLOFY has now provisioned:
+
+- Private Railway object storage bucket `blofy-content-hub-private`, AMS.
+- Dedicated private-only Railway service `blofy-content-hub`, Node 22,
+  same AMS region, one replica, /health, PostgreSQL-backed lease adapter.
+- Service uses Railway bucket variable references; no S3 credentials stored
+  in GitHub. No public HTTP domain was added.
+- A private S3 multipart write + independent SHA-256 read-back + DELETE
+  of **8,388,608 synthetic bytes** completed successfully; live proof
+  `private_s3_roundtrip_verified`, `fixtureRemoved=true`, providerRequests=0.
+- Private portal endpoint for one exact mapped saleh movie, constrained
+  to max 8 MiB Range, time-bounded, bearer-protected and single-request
+  admission. The operator credential is separate from subscriber passwords.
+- A second optional real-source-to-private-S3 8MiB sample is implemented
+  behind both `BLOFY_CONTENT_HUB_REAL_SAMPLE_ON_BOOT` and
+  `BLOFY_CONTENT_HUB_SOURCE_QUIET_WINDOW_CONFIRMED`. It has not been
+  activated; no live source-to-bucket transfer has been claimed.
+
+There is still **no automatic customer playback cutover, no completed real
+movie upload and no public media store**. The full mirror worker has
+isolated policy, lease and S3 adapter code but is not connected to an
+operator production job queue. High-load and multi-channel capacity
+remains unproven.
 
 Before a live file download, the operator must explicitly verify that
 the provider's rights include **permanent copying/storage** of this
@@ -102,4 +120,6 @@ require very large paid storage. Start with a measured pilot and quotas.
 - A private, configured bucket and empty exclusive source lease.
 - Verified byte size, mapped media ID and private adapters.
 
-**Neither flag is configured in Railway production.**
+**`BLOFY_CONTENT_HUB_UPLOAD_ENABLED=0` remains enforced in Railway.
+The separate persistent-storage permission flag reflects the owner's
+confirmation; it does not activate uploading automatically.**
