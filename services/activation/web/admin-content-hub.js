@@ -12,7 +12,7 @@ const formatBytes=n=>{
 };
 function stateLabel(s){
  return {verified:'مكتمل ومتحقق منه',started:'جارٍ النقل',
-  failed:'لم يكتمل'}[s]||'غير معروف';
+  staged:'محفوظ جزئيًا - قابل للاستكمال',failed:'لم يكتمل'}[s]||'غير معروف';
 }
 function div(className,text){
  const el=document.createElement('div');
@@ -73,10 +73,13 @@ async function reload(){
   $('failed').textContent=Number(accounting.failedCount||0).toLocaleString('en-US');
   pilotActive=data.pilotRunning===true;
   $('cancel').disabled=!pilotActive;
+  $('nextBatch').disabled=pilotActive||data.chunkedBatchEnabled!==true;
   const entries=Array.isArray(data.runs)?data.runs:[];
   $('runs').replaceChildren(...(entries.length?
     entries.map(jobCard):[div('placeholder','لا توجد عمليات نقل مسجلة حتى الآن.')]));
-  $('notice').textContent=pilotActive?'يوجد نقل جارٍ على الخادم.':'لم يتم تفعيل التنزيل الجماعي.';
+  $('notice').textContent=pilotActive?'يوجد نقل جارٍ على الخادم.':
+   data.chunkedBatchEnabled?'تستطيع نقل دفعة واحدة بعد التحقق من خمول المصدر.':
+   'التنزيل الجزئي غير مفعّل حتى تأكيد خمول المصدر وصلاحية التخزين.';
   loaded=true;
  }catch{
   $('health').textContent='تعذر جلب حالة الخادم';
@@ -119,6 +122,22 @@ $('preflight').addEventListener('click',async()=>{
   result.className='source-check warning';
   result.textContent='حدث خطأ في فحص المصدر. لم يبدأ أي تنزيل.';
  }finally{btn.disabled=false}
+});
+$('nextBatch').addEventListener('click',async()=>{
+ if($('nextBatch').disabled)return;
+ if(!window.confirm('تأكيد نقل 8 ميجابايت من الفيلم المحدد؟ يجب التأكد أن المصدر لا يستخدمه المشتركين وأن حقوق حفظ الفيلم متاحة.'))return;
+ $('nextBatch').disabled=true;
+ try{
+  const response=await fetch('/api/v1/admin/content-hub/batch/next',{
+   method:'POST',credentials:'same-origin',
+   headers:{'content-type':'application/json'},body:'{}'});
+  if(response.status===401){location.assign('/admin');return}
+  const data=await response.json();
+  $('notice').textContent=response.status===202?
+   'تم قبول دفعة واحدة. تابع نسبة الإنجاز أدناه.':
+   'لا يمكن بدء الدفعة. راجع تطابق الفيلم وخمول المصدر وإعدادات التخزين.';
+ }catch{$('notice').textContent='تعذر إرسال طلب الدفعة.'}
+ await reload();
 });
 $('refresh').addEventListener('click',reload);
 $('cancel').addEventListener('click',async()=>{
