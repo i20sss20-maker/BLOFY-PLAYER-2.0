@@ -36,6 +36,7 @@
         <activity android:name=".ui.library.MyLibraryActivity" android:exported="false" />
         <activity android:name=".ui.library.DownloadsActivity" android:exported="false" />
         <activity android:name=".ui.search.SectionSearchActivity" android:exported="false" />
+        <activity android:name=".ui.search.AiChatActivity" android:exported="false" />
         <activity android:name=".ui.search.SearchActivity" android:exported="false" />
         <activity android:name=".ui.settings.CommercialSettingsActivity" android:exported="false" />
         <activity android:name=".ui.settings.BackupRestoreActivity" android:exported="false" />
