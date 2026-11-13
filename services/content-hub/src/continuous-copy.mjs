@@ -17,16 +17,16 @@ export function createContinuousCopyController({
    bytesCopied:null,startedAt:null,finishedAt:null,customerCutover:false};
  const snapshot=()=>({...status,active:controller!==null});
  function stop(){
-  if(!controller)return {ok:false,code:'copy_not_running',...snapshot()};
+  if(!controller)return {...snapshot(),ok:false,code:'copy_not_running'};
   controller.abort();
   status={...status,state:'stopping',code:'copy_stop_requested'};
-  return {ok:true,code:'copy_stop_requested',...snapshot()};
+  return {...snapshot(),ok:true,code:'copy_stop_requested'};
  }
  function start(){
-  if(controller)return {ok:false,code:'copy_already_running',...snapshot()};
+  if(controller)return {...snapshot(),ok:false,code:'copy_already_running'};
   const ready=readiness();
-  if(!ready?.ready)return {ok:false,code:'copy_safety_gates_off',
-    blockedBy:ready?.blockedBy||[],...snapshot()};
+  if(!ready?.ready)return {...snapshot(),ok:false,
+    code:'copy_safety_gates_off',blockedBy:ready?.blockedBy||[]};
   const abort=new AbortController();
   controller=abort;
   const began=Date.now();
@@ -76,7 +76,7 @@ export function createContinuousCopyController({
    if(controller===abort)controller=null;
    logger('BLOFY_CONTENT_HUB_CONTINUOUS_COPY',snapshot());
   });
-  return {ok:true,code:'copy_started',...snapshot()};
+  return {...snapshot(),ok:true,code:'copy_started'};
  }
  return {start,stop,status:snapshot,isRunning:()=>controller!==null};
 }
