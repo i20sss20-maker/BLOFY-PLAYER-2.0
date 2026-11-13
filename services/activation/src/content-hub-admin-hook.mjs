@@ -1,0 +1,180 @@
+// BLOFY admin-only private Content Hub bridge. No provider credentials here.
+// The admin-session hook runs first and replaces valid session authentication
+// with the existing BLOFY_ADMIN_TOKEN. Client traffic never sees Hub tokens.
+import http from 'node:http';
+import crypto from 'node:crypto';
+import {readFile} from 'node:fs/promises';
+import {createFixedWindowLimiter,requestClientKey} from './auth-protection.mjs';
+import {adminCanaryRange,HUB_PILOT_RUN} from './content-hub-admin-core.mjs';
+
+const HUB='http://blofy-content-hub.railway.internal:3000';
+const ADMIN=String(process.env.BLOFY_ADMIN_TOKEN||'').trim();
+const HUB_TOKEN=String(process.env.BLOFY_CONTENT_HUB_OPERATOR_TOKEN||'').trim();
+const limiter=createFixedWindowLimiter({limit:180,windowMs:60000});
+const runRoute=/^\/api\/v1\/admin\/content-hub\/canary\/([A-Za-z0-9_-]{8,80})$/;
+const mimeAllowed=new Set(['video/mp4','video/x-matroska','video/mp2t','video/x-msvideo']);
+const json=(res,status,body)=>{
+ const data=Buffer.from(JSON.stringify(body));
+ res.writeHead(status,{'content-type':'application/json; charset=utf-8',
+  'content-length':data.length,'cache-control':'no-store',
+  'x-content-type-options':'nosniff','referrer-policy':'no-referrer'});
+ res.end(data);
+};
+function equal(a,b){
+ const x=Buffer.from(String(a||'')),y=Buffer.from(String(b||''));
+ return x.length===y.length&&crypto.timingSafeEqual(x,y);
+}
+function authorized(req,res){
+ if(!ADMIN||!equal(req.headers.authorization,'Bearer '+ADMIN)){
+  json(res,401,{ok:false,code:'admin_required'});return false;
+ }
+ if(!limiter.consume(requestClientKey(req)).allowed){
+  json(res,429,{ok:false,code:'admin_rate_limited'});return false;
+ }
+ if(HUB_TOKEN.length<32){
+  json(res,503,{ok:false,code:'private_hub_bridge_not_configured'});return false;
+ }
+ return true;
+}
+function request(path,{method='GET',range,signal}={}){
+ const headers={authorization:'Bearer '+HUB_TOKEN};
+ if(range)headers.range=range;
+ return fetch(HUB+path,{method,headers,redirect:'manual',
+  signal:signal||AbortSignal.timeout(8000)});
+}
+async function safeReadJson(response){
+ if(response.status!==200||!String(response.headers.get('content-type')||'')
+   .includes('application/json'))throw Error('hub_private_response_unavailable');
+ return response.json();
+}
+async function handleStatus(res){
+ const [a,b]=await Promise.all([
+  request('/internal/status',{signal:AbortSignal.timeout(8000)}),
+  request('/internal/pilots',{signal:AbortSignal.timeout(8000)})
+ ]);
+ const [state,history]=await Promise.all([safeReadJson(a),safeReadJson(b)]);
+ json(res,200,{ok:true,service:state.ok?'online':'degraded',
+  privateBucketAvailable:state.privateBucketAvailable===true,
+  databaseAvailable:state.databaseAvailable===true,
+  pilotRunning:state.pilotRunning===true,
+  customerCutover:false,downloadQueueEnabled:false,
+  latest:state.durablePilot||state.lastPilot||null,
+  accounting:history.accounting||null,
+  runs:Array.isArray(history.runs)?history.runs:[]});
+}
+async function handleCanary(req,res,id){
+ if(!HUB_PILOT_RUN.test(id))return json(res,404,{ok:false});
+ const ctrl=new AbortController();
+ const onClosed=()=>ctrl.abort();
+ res.once('close',onClosed);
+ const timer=setTimeout(()=>ctrl.abort(),90000);
+ timer.unref?.();
+ let body=null;
+ try{
+  const meta=await request('/internal/pilot/playback/'+id,{
+   method:'HEAD',signal:ctrl.signal});
+  if(meta.status!==200)
+   return json(res,404,{ok:false,code:'verified_movie_not_available'});
+  const bytes=Number(meta.headers.get('content-length'));
+  const type=String(meta.headers.get('content-type')||'');
+  if(!Number.isSafeInteger(bytes)||bytes<1||bytes>4*1024**3||
+    !mimeAllowed.has(type))
+   throw Error('invalid_private_movie_metadata');
+  const ctype=type;
+  if(req.method==='HEAD'){
+   res.writeHead(200,{'content-length':String(bytes),
+    'content-type':ctype,'accept-ranges':'bytes',
+    'cache-control':'private,no-store','x-content-type-options':'nosniff'});
+   return res.end();
+  }
+  const range=adminCanaryRange(req.headers.range,bytes);
+  if(!range)return json(res,416,{ok:false,code:'invalid_media_range'});
+  const header='bytes='+range.from+'-'+range.to;
+  const response=await request('/internal/pilot/playback/'+id,{
+   range:header,signal:ctrl.signal});
+  const size=range.to-range.from+1;
+  if(response.status!==206||!response.body||
+     response.headers.get('content-range')!==
+       `bytes ${range.from}-${range.to}/${bytes}`||
+     Number(response.headers.get('content-length'))!==size)
+   throw Error('private_movie_range_invalid');
+  body=response.body;
+  res.writeHead(206,{
+   'content-type':ctype,'content-length':String(size),
+   'content-range':`bytes ${range.from}-${range.to}/${bytes}`,
+   'accept-ranges':'bytes','cache-control':'private,no-store',
+   'x-content-type-options':'nosniff','referrer-policy':'no-referrer'
+  });
+  let sent=0;
+  for await(const chunk of body){
+   if(ctrl.signal.aborted)throw Error('client_closed');
+   sent+=chunk.byteLength;
+   if(sent>size)throw Error('private_movie_overrun');
+   if(!res.write(chunk)){
+    await new Promise((resolve,reject)=>{
+     const done=()=>{clean();resolve()};
+     const error=()=>{clean();reject(Error('client_closed'))};
+     const clean=()=>{
+      res.off('drain',done);res.off('close',error);
+     };
+     res.once('drain',done);res.once('close',error);
+    });
+   }
+  }
+  if(sent!==size)throw Error('private_movie_short');
+  res.end();
+ }catch{
+  if(res.headersSent){if(!res.destroyed)res.destroy()}
+  else if(!res.destroyed)json(res,503,{
+   ok:false,code:'private_movie_canary_unavailable'});
+ }finally{
+  clearTimeout(timer);
+  res.off('close',onClosed);
+  try{await body?.cancel?.()}catch{}
+ }
+}
+const old=http.createServer.bind(http);
+http.createServer=function withContentHubAdmin(listener){
+ if(typeof listener!=='function')return old(listener);
+ return old(async(req,res)=>{
+  let url;
+  try{url=new URL(req.url||'/','http://localhost')}
+  catch{return listener(req,res)}
+  const path=url.pathname;
+  if(req.method==='GET'&&['/admin-content-hub.css',
+    '/admin-content-hub.js'].includes(path)){
+   try{
+    const file=path.endsWith('.css')?'admin-content-hub.css':'admin-content-hub.js';
+    const data=await readFile(new URL('../web/'+file,import.meta.url));
+    res.writeHead(200,{
+      'content-type':file.endsWith('.css')?'text/css':'text/javascript',
+      'content-length':data.length,'cache-control':'no-store',
+      'x-content-type-options':'nosniff'
+    });
+    return res.end(data);
+   }catch{return json(res,503,{ok:false,code:'admin_asset_unavailable'})}
+  }
+  const canary=runRoute.exec(path);
+  if(!path.startsWith('/api/v1/admin/content-hub/'))return listener(req,res);
+  if(!authorized(req,res))return;
+  if(url.search)return json(res,400,{ok:false,code:'query_forbidden'});
+  try{
+   if(canary&&['GET','HEAD'].includes(req.method))
+    return await handleCanary(req,res,canary[1]);
+   if(path==='/api/v1/admin/content-hub/status'&&req.method==='GET')
+    return await handleStatus(res);
+   if(path==='/api/v1/admin/content-hub/cancel'&&req.method==='POST'){
+    const response=await request('/internal/pilot/cancel',{
+      method:'POST',signal:AbortSignal.timeout(8000)});
+    return json(res,response.status===202?202:409,{
+      ok:response.status===202,code:response.status===202?
+       'cancellation_requested':'pilot_not_running'});
+   }
+   return json(res,404,{ok:false,code:'not_found'});
+  }catch{
+   if(!res.headersSent&&!res.destroyed)
+    return json(res,503,{ok:false,code:'content_hub_temporarily_unavailable'});
+   if(!res.destroyed)res.destroy();
+  }
+ });
+};
