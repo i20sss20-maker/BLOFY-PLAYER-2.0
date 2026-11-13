@@ -1020,7 +1020,7 @@ async function probeUnavailableMediaOnSameSource(key){
   else {try{await response?.body?.cancel()}catch{}}
  }
 }
-async function runDueUnavailableMedia(){
+async function runDueUnavailableMedia({sourceId=null}={}){
  const totals={checked:0,recovered:0,stillMissing:0,transient:0,
   busy:false};
  if(unavailableRecoveryBusy||!recoveryEnabled())
@@ -1029,7 +1029,10 @@ async function runDueUnavailableMedia(){
  try{
   // Each source has its own DB lease, which prevents duplicate probes across
   // replicas and keeps traffic below three first-byte attempts per hour.
-  for(const id of recoverySources()){
+  const eligible=recoverySources();
+  // Manual one-source requests never probe any other source.
+  const ids=sourceId===null?[...eligible]:eligible.has(sourceId)?[sourceId]:[];
+  for(const id of ids){
    const result=await runUnavailableRecheckBatch({
     pool,sourceId:id,probe:probeUnavailableMediaOnSameSource,limit:3
    });
@@ -2098,7 +2101,7 @@ http.createServer = function withBlofyXtreamGateway(listener) {
         // Source-specific manual button cannot override other source grants.
         // SQL excludes leased and recently rechecked items automatically.
         const expedited=await expediteUnavailableRecheck(pool,sourceId,{limit:2});
-        const result=await runDueUnavailableMedia();
+        const result=await runDueUnavailableMedia({sourceId});
         return json(res,200,{ok:true,expedited,...result,
           scope:'verified_unavailable_media_only',subscriberCutover:false,
           catalogMutation:false});
