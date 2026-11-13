@@ -65,7 +65,7 @@ test('one source Range copied to PRIVATE 8 MiB temporary object, SHA256 verified
  assert.equal(result.fullFilmDownloaded,false);
  assert.equal(result.customerTrafficChanged,false);
  assert.equal(result.sourceTotalBytes,2934023949);
- assert.equal(f.calls.filter(x=>x.url.endsWith('source/movie/21')).length,1);
+ assert.equal(f.calls.filter(x=>x.url?.endsWith('source/movie/21')).length,1);
  assert.deepEqual(f.getState(),{locked:1,done:1,removed:1});
 });
 test('private S3 failure or failed deletion is NOT claimed a success',async()=>{
