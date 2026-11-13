@@ -297,6 +297,22 @@ export function createSourceLease({connectionString,
     failedCount:Number(row.failed_count||0),
     storedBytes:Number(row.stored_bytes||0)};
   },
+  // One operator-approved startup request can never be replayed on
+  // container restart or a deploy. A fresh token needs explicit approval.
+  async claimBatchBootOnce(token,runId){
+   if(!/^[A-Za-z0-9_-]{8,80}$/.test(String(token||''))||
+     !/^[A-Za-z0-9_-]{8,80}$/.test(String(runId||'')))
+    throw Error('invalid_one_time_batch_token');
+   await pool.query(`CREATE TABLE IF NOT EXISTS blofy_content_hub_batch_boot_claims (
+      event_token TEXT PRIMARY KEY,
+      run_id TEXT NOT NULL,
+      claimed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   )`);
+   const claimed=await pool.query(`INSERT INTO blofy_content_hub_batch_boot_claims
+      (event_token,run_id) VALUES ($1,$2) ON CONFLICT DO NOTHING
+      RETURNING event_token`,[token,runId]);
+   return claimed.rowCount===1;
+  },
   async close(){await pool.end()}
  };
 }
