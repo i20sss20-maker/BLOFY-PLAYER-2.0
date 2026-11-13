@@ -154,3 +154,57 @@ export async function unavailableMediaSummary(pool,sourceId=null){
   due:Number(x.due)||0
  })),catalogMutation:false,subscriberCutover:false};
 }
+
+/**
+ * Operator-only detail view of verified provider 404 records. Read-only and
+ * bounded; joins only the same source catalog (no provider requests). A missing
+ * catalog title stays unknown, never resolves from a different source.
+ */
+export async function unavailableMediaDetails(pool,sourceId=null,{limit=40}={}){
+ if(sourceId!==null&&!UUID.test(String(sourceId)))return {ok:false,code:'invalid_source'};
+ if(!Number.isInteger(limit)||limit<1||limit>40)return {ok:false,code:'invalid_limit'};
+ const result=await pool.query(`WITH recent AS (
+   SELECT server_id,kind,item_id,series_id,state,first_missing_at,
+    last_missing_at,last_checked_at,next_check_at,recovered_at,
+    failure_count,recheck_count
+   FROM blofy_xtream_unavailable_media
+   WHERE ($1::uuid IS NULL OR server_id=$1::uuid)
+   ORDER BY CASE WHEN state='missing' THEN 0 ELSE 1 END,
+    last_missing_at DESC LIMIT $2
+  )
+  SELECT r.server_id::text AS server_id,r.kind,r.item_id,r.series_id,r.state,
+   r.last_missing_at,r.last_checked_at,r.next_check_at,r.recovered_at,
+   r.failure_count,r.recheck_count,
+   COALESCE(NULLIF(i.custom_name,''),i.name) AS catalog_name
+  FROM recent r LEFT JOIN blofy_xtream_items i ON
+    i.server_id=r.server_id
+    AND i.media_type=CASE WHEN r.kind='movie' THEN 'movie' ELSE 'series' END
+    AND i.source_id=CASE WHEN r.kind='movie' THEN r.item_id ELSE r.series_id END
+  ORDER BY CASE WHEN r.state='missing' THEN 0 ELSE 1 END,
+   r.last_missing_at DESC`,
+  [sourceId,limit]);
+ const validTime=value=>{
+  if(value instanceof Date && Number.isFinite(value.valueOf()))return value.toISOString();
+  return null;
+ };
+ const safeName=value=>{
+   const label=typeof value==='string'?value.trim():'';
+   if(!label||label.length>130||/(?:https?:|ftp:|@|password|api.?key|token|secret|[\\/?#])/i.test(label))
+     return null;
+   return label;
+ };
+ return {ok:true,readOnly:true,scope:'verified_upstream_404_registry',
+  generatedAt:new Date().toISOString(),items:(result.rows||[]).map(row=>({
+   sourceId:String(row.server_id),kind:row.kind,
+   itemId:String(row.item_id||'').slice(0,128),
+   seriesId:String(row.series_id||'').slice(0,128),
+   name:safeName(row.catalog_name),state:row.state,
+   lastMissingAt:validTime(row.last_missing_at),
+   lastCheckedAt:validTime(row.last_checked_at),
+   nextCheckAt:validTime(row.next_check_at),
+   recoveredAt:validTime(row.recovered_at),
+   failureCount:Number(row.failure_count)||0,
+   recheckCount:Number(row.recheck_count)||0
+  })),
+  limitedTo:limit,providerRequests:0,catalogMutation:false,subscriberCutover:false};
+}
