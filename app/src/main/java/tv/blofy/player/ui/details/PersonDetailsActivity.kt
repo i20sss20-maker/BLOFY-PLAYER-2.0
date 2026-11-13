@@ -120,7 +120,7 @@ class PersonDetailsActivity : AppCompatActivity() {
             setPadding(0,dp(8),0,dp(14))
         })
         val castStatus = TextView(this).apply {
-            text=getString(R.string.search_loading)
+            text=getString(R.string.stream_cast_loading)
             textSize=13f
             setTextColor(BlofyTvDesign.TextMuted)
         }
