@@ -3189,6 +3189,8 @@ async function unifiedStreamBridge(req,res,url){
       await streamDistributors.library(token,payload),{'cache-control':'no-store'});
     if(command==='library-categories')return json(res,200,
       await streamDistributors.libraryCategories(token,payload),{'cache-control':'no-store'});
+    if(command==='library-preview')return json(res,200,
+      await streamDistributors.libraryDeliveryPreview(token,payload),{'cache-control':'no-store'});
     if(command==='organize-bulk')return json(res,200,
       await streamDistributors.organizeBulk(token,payload),{'cache-control':'no-store'});
     if(command==='organize')return json(res,200,
