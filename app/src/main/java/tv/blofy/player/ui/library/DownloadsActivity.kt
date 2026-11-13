@@ -6,6 +6,7 @@ import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import android.os.Environment
+import android.provider.Settings
 import android.view.Gravity
 import android.view.View
 import android.widget.Button
@@ -37,6 +38,8 @@ class DownloadsActivity : AppCompatActivity() {
     private lateinit var space: TextView
     private val buttons = LinkedHashMap<Long, Button>()
     private var rowKeys: List<Long> = emptyList()
+    private var currentFilter = "all"
+    private val filterButtons = linkedMapOf<String, Button>()
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Never expose previously saved files from a signed-out device.
@@ -69,6 +72,38 @@ class DownloadsActivity : AppCompatActivity() {
             setPadding(0,0,0,dp(9))
         }
         root.addView(space)
+        val filters = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutDirection = resources.configuration.layoutDirection
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        listOf(
+            "all" to R.string.stream_downloads_filter_all,
+            "active" to R.string.stream_downloads_filter_active,
+            "ready" to R.string.stream_downloads_filter_ready,
+            "failed" to R.string.stream_downloads_filter_failed
+        ).forEach { (key, label) ->
+            filters.addView(Button(this).apply {
+                text = getString(label)
+                isAllCaps = false
+                minWidth = 0
+                minimumWidth = 0
+                textSize = 12f
+                setOnClickListener {
+                    currentFilter = key
+                    rowKeys = emptyList()
+                    filterButtons.forEach { (name, button) ->
+                        CinemaStyle.styleButton(button, name == currentFilter)
+                    }
+                    lifecycleScope.launch { refresh() }
+                }
+                filterButtons[key] = this
+                CinemaStyle.styleButton(this, key == currentFilter)
+            }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { marginEnd = dp(6) })
+        }
+        root.addView(filters, LinearLayout.LayoutParams(-1, dp(56)).apply {
+            bottomMargin = dp(8)
+        })
         empty = TextView(this).apply {
             text = getString(R.string.stream_downloads_empty)
             setTextColor(BlofyTvDesign.TextMuted)
@@ -110,13 +145,24 @@ class DownloadsActivity : AppCompatActivity() {
         space.text=getString(R.string.stream_downloads_space,
             OfflineDownloadStore.formatSize(downloadedBytes),
             if(free>=0) OfflineDownloadStore.formatSize(free) else "—")
-        empty.visibility = if(states.isEmpty()) View.VISIBLE else View.GONE
-        val ids=states.map { it.record.id }
+        if (free in 0 until 536_870_912L) {
+            space.append("\n" + getString(R.string.stream_downloads_low_space))
+        }
+        val visible = states.filter { p -> when(currentFilter) {
+            "active" -> p.status in setOf(
+                DownloadManager.STATUS_PENDING, DownloadManager.STATUS_RUNNING,
+                DownloadManager.STATUS_PAUSED)
+            "ready" -> p.status == DownloadManager.STATUS_SUCCESSFUL
+            "failed" -> p.status == DownloadManager.STATUS_FAILED
+            else -> true
+        }}
+        empty.visibility = if(visible.isEmpty()) View.VISIBLE else View.GONE
+        val ids=visible.map { it.record.id }
         if(ids!=rowKeys) {
             rowKeys=ids
             buttons.clear()
             rows.removeAllViews()
-            states.forEach { p ->
+            visible.forEach { p ->
                 val button = Button(this).apply {
                     isAllCaps=false
                     textSize=13.5f
@@ -126,6 +172,8 @@ class DownloadsActivity : AppCompatActivity() {
                     setOnClickListener {
                         if(p.status==DownloadManager.STATUS_SUCCESSFUL && p.readyUri!=null) {
                             play(p)
+                        } else if (p.status == DownloadManager.STATUS_FAILED) {
+                            showFailure(p)
                         } else {
                             AlertDialog.Builder(this@DownloadsActivity)
                                 .setTitle(p.record.title)
@@ -154,7 +202,7 @@ class DownloadsActivity : AppCompatActivity() {
                 rows.addView(button, LinearLayout.LayoutParams(-1,dp(80)).apply {bottomMargin=dp(8)})
             }
         }
-        states.forEach { p ->
+        visible.forEach { p ->
             buttons[p.record.id]?.apply {
                 text=buildString {
                     append(p.record.title)
@@ -173,12 +221,13 @@ class DownloadsActivity : AppCompatActivity() {
                         append(OfflineDownloadStore.formatSize(p.downloaded))
                         if(p.total>0) {append(" / ");append(OfflineDownloadStore.formatSize(p.total))}
                     }
-                    if(p.status==DownloadManager.STATUS_FAILED) append("  •  ${p.reason}")
+                    if(p.status==DownloadManager.STATUS_FAILED) append("  •  " + if (p.reason == DownloadManager.ERROR_INSUFFICIENT_SPACE) getString(R.string.stream_downloads_failure_space).substringBefore('.') else p.reason.toString())
                 }
                 // Update click handler with CURRENT status, not the captured
                 // status when a row was first built.
                 setOnClickListener {
                     if(p.status==DownloadManager.STATUS_SUCCESSFUL && p.readyUri!=null) play(p)
+                    else if(p.status==DownloadManager.STATUS_FAILED) showFailure(p)
                     else AlertDialog.Builder(this@DownloadsActivity)
                         .setTitle(p.record.title)
                         .setMessage(getString(R.string.stream_downloads_remove_note))
@@ -190,6 +239,38 @@ class DownloadsActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    /** Android DownloadManager error codes are actionable, not just numbers. */
+    private fun showFailure(progress: OfflineDownloadStore.Progress) {
+        val reasonText = when (progress.reason) {
+            DownloadManager.ERROR_INSUFFICIENT_SPACE -> R.string.stream_downloads_failure_space
+            DownloadManager.ERROR_UNHANDLED_HTTP_CODE, DownloadManager.ERROR_TOO_MANY_REDIRECTS ->
+                R.string.stream_downloads_failure_http
+            DownloadManager.ERROR_HTTP_DATA_ERROR -> R.string.stream_downloads_failure_network
+            DownloadManager.ERROR_CANNOT_RESUME -> R.string.stream_downloads_failure_resume
+            DownloadManager.ERROR_FILE_ERROR, DownloadManager.ERROR_DEVICE_NOT_FOUND,
+            DownloadManager.ERROR_FILE_ALREADY_EXISTS -> R.string.stream_downloads_failure_file
+            else -> null
+        }
+        val message = reasonText?.let(::getString) ?:
+            getString(R.string.stream_downloads_failure_generic, progress.reason)
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(R.string.stream_downloads_failure_title)
+            .setMessage(message)
+            .setNeutralButton(R.string.stream_downloads_remove) { _, _ ->
+                lifecycleScope.launch(Dispatchers.IO) {
+                    OfflineDownloadStore.remove(applicationContext, progress.record)
+                }
+            }
+            .setNegativeButton(R.string.stream_ui_close, null)
+        if (progress.reason == DownloadManager.ERROR_INSUFFICIENT_SPACE) {
+            dialog.setPositiveButton(R.string.stream_downloads_storage_settings) { _, _ ->
+                runCatching { startActivity(Intent(Settings.ACTION_INTERNAL_STORAGE_SETTINGS)) }
+                    .onFailure { runCatching { startActivity(Intent(Settings.ACTION_SETTINGS)) } }
+            }
+        }
+        dialog.show()
     }
 
     private fun play(progress: OfflineDownloadStore.Progress) {
