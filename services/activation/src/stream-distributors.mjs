@@ -261,6 +261,67 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
   return {ok:true};
  }
 
+
+ // Merchant login passwords are salted scrypt hashes; never recoverable.
+ // A change revokes OTHER active sessions, not the current verified session.
+ async function changePassword(token,{currentPassword,newPassword}={}){
+  const actor=await session(token);
+  const current=String(currentPassword||''),next=String(newPassword||'');
+  if(next.length<14||next.length>128||
+    !/^[\\x21-\\x7e]+$/.test(next)||
+    !/[a-z]/.test(next)||!/[A-Z]/.test(next)||!/[0-9]/.test(next))
+    throw fail('distributor_password_strength_invalid',400);
+  if(current===next)throw fail('distributor_password_reused',400);
+  return transaction(async db=>{
+    const row=(await db.query('SELECT * FROM blofy_stream_distributors WHERE id=$1 FOR UPDATE',
+      [actor.id])).rows?.[0];
+    if(!row||row.enabled!==true||
+       !await passwordMatches(current,row.password_hash))
+      throw fail('distributor_password_current_invalid',403);
+    const hash=await passwordDigest(next);
+    await db.query('UPDATE blofy_stream_distributors SET password_hash=$2 WHERE id=$1',
+      [actor.id,hash]);
+    await db.query('DELETE FROM blofy_stream_distributor_sessions WHERE distributor_id=$1 AND session_hash<>$2',
+      [actor.id,digest(token)]);
+    return {ok:true,changed:true,otherSessionsRevoked:true};
+  });
+ }
+ // Generates fresh secure Xtream username/password for a purchased OWNED
+ // account only, never the upstream provider credentials. Existing expiry,
+ // account ID and channel rights remain untouched; old login becomes invalid.
+ async function rotateOwnedXtream(token,{issueId,requestId,acknowledgeDisconnect}={}){
+  const actor=await session(token);
+  if(!UUID.test(String(issueId||''))||!UUID.test(String(requestId||'')))
+    throw fail('distributor_rotation_id_invalid',400);
+  if(acknowledgeDisconnect!==true)
+    throw fail('distributor_rotation_requires_confirmation',400);
+  if(typeof rotateXtream!=='function')throw fail('distributor_rotation_unavailable',503);
+  return transaction(async db=>{
+    const row=(await db.query(`SELECT * FROM blofy_stream_distributor_issues
+      WHERE id=$1 AND distributor_id=$2 FOR UPDATE`,[issueId,actor.id])).rows?.[0];
+    if(!row)throw fail('distributor_issue_missing',404);
+    if(row.kind!=='xtream'||row.status!=='done'||!UUID.test(String(row.subject_id||'')))
+      throw fail('distributor_rotation_not_eligible',409);
+    if(String(row.credential_rotation_request_id||'')===requestId){
+      const existing=await revealXtream(row.subject_id);
+      if(existing.status!==200||!existing.body?.credentials)
+        throw fail('distributor_reveal_unavailable',503);
+      return {ok:true,credentials:existing.body.credentials,
+        repeated:true,subscriptionUnchanged:true,oldCredentialsDisabled:true};
+    }
+    if(row.last_credential_rotation_at&&
+      clock()-new Date(row.last_credential_rotation_at).getTime()<15*60*1000)
+      throw fail('distributor_rotation_cooldown',429);
+    const rotated=await rotateXtream(row.subject_id);
+    if(rotated.status!==200||!rotated.body?.credentials)
+      throw fail('distributor_rotation_unavailable',503);
+    await db.query(`UPDATE blofy_stream_distributor_issues
+      SET last_credential_rotation_at=NOW(),credential_rotation_request_id=$3
+      WHERE id=$1 AND distributor_id=$2`,[row.id,actor.id,requestId]);
+    return {ok:true,credentials:rotated.body.credentials,
+      subscriptionUnchanged:true,oldCredentialsDisabled:true,repeated:false};
+  });
+ }
  const issueProjection=`SELECT i.*,
    EXISTS(SELECT 1 FROM blofy_stream_distributor_actions da
      WHERE da.distributor_id=i.distributor_id AND da.issue_id=i.id
@@ -785,5 +846,5 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
   return {ok:true,id,type:kind,group:category,title:customTitle,
     sortOrder:sort,hidden,scope:'distributor_only_not_global'};
  }
- return {ensureSchema,listAdmin,createAdmin,setAdmin,login,me,logout,issued,reveal,issue,library,organize,customer,renew,relogin,clients,activity,analytics,exportIssues};
+ return {ensureSchema,listAdmin,createAdmin,setAdmin,login,me,logout,changePassword,rotateOwnedXtream,issued,reveal,issue,library,organize,customer,renew,relogin,clients,activity,analytics,exportIssues};
 }
