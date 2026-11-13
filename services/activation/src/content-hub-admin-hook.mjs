@@ -36,9 +36,10 @@ function authorized(req,res){
  }
  return true;
 }
-function request(path,{method='GET',range,signal}={}){
+function request(path,{method='GET',range,signal,confirmBatch=false}={}){
  const headers={authorization:'Bearer '+HUB_TOKEN};
  if(range)headers.range=range;
+ if(confirmBatch)headers['x-blofy-batch-confirm']='approved-8mib-batch';
  return fetch(HUB+path,{method,headers,redirect:'manual',
   signal:signal||AbortSignal.timeout(8000)});
 }
@@ -58,6 +59,7 @@ async function handleStatus(res){
   databaseAvailable:state.databaseAvailable===true,
   pilotRunning:state.pilotRunning===true,
   customerCutover:false,downloadQueueEnabled:false,
+  chunkedBatchEnabled:history.chunkedBatchEnabled===true,
   latest:state.durablePilot||state.lastPilot||null,
   accounting:history.accounting||null,
   runs:Array.isArray(history.runs)?history.runs:[]});
@@ -186,6 +188,15 @@ http.createServer=function withContentHubAdmin(listener){
    }
    if(path==='/api/v1/admin/content-hub/status'&&req.method==='GET')
     return await handleStatus(res);
+   if(path==='/api/v1/admin/content-hub/batch/next'&&req.method==='POST'){
+    // Strictly one approved operator request; no background polling/retries.
+    const response=await request('/internal/batch/next',{
+      method:'POST',confirmBatch:true,signal:AbortSignal.timeout(8000)});
+    return json(res,response.status===202?202:409,{
+      ok:response.status===202,code:response.status===202?
+       'batch_accepted':'batch_not_ready_or_source_busy',
+      automaticDownload:false,customerCutover:false});
+   }
    if(path==='/api/v1/admin/content-hub/cancel'&&req.method==='POST'){
     const response=await request('/internal/pilot/cancel',{
       method:'POST',signal:AbortSignal.timeout(8000)});
