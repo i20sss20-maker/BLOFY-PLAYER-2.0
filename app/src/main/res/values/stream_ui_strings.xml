@@ -158,4 +158,5 @@
     <string name="stream_ai_chat_none">I understood your request, but could not confirm a matching title in this source. Try a different genre or year.</string>
     <string name="stream_ai_chat_error">I could not complete that request. Local search is still available.</string>
     <string name="stream_ai_chat_try">Try: recommend a 2025 action movie</string>
+    <string name="stream_download_episode_short">↓ Save</string>
 </resources>
