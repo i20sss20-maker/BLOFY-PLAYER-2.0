@@ -176,4 +176,9 @@
     <string name="stream_ai_sort_rating">Top rated</string>
     <string name="stream_ai_explain_local">Local search never contacts AI.</string>
     <string name="stream_player_next_episode">Next episode</string>
+    <string name="stream_downloads_failure_http_access">Provider denied file download (401/403). Check subscription and download permissions.</string>
+    <string name="stream_downloads_failure_http_missing">File is missing or moved at the source (404/410). Refresh your catalog and retry.</string>
+    <string name="stream_downloads_failure_http_busy">Provider is throttling requests (429). Avoid rapid retries.</string>
+    <string name="stream_downloads_failure_http_server">Provider is temporarily unavailable (5xx). Try again later.</string>
+    <string name="stream_downloads_retry_from_details">Open content to retry</string>
 </resources>
