@@ -3,6 +3,7 @@ import {randomUUID,randomBytes,createHash,timingSafeEqual} from 'node:crypto';
 import {createPrivateS3Adapter} from './private-s3.mjs';
 import {createSourceLease} from './source-lease.mjs';
 import {runPrivateSalehSample} from './real-source-sample.mjs';
+import {runOneMoviePilot} from './one-movie-pilot.mjs';
 
 const FIXTURE_SOURCE='00000000-0000-4000-8000-000000000000';
 const FIXTURE_SIZE=8*1024*1024;
@@ -54,6 +55,7 @@ export function createContentHubServer({storage,lease,
  if(!storage||!lease)throw Error('content_hub_private_dependencies_required');
  const started=Date.now();
  let syntheticRunning=false,lastSynthetic=null;
+ let pilotRunning=false,lastPilot=null;
  const server=http.createServer(async(req,res)=>{
   const path=String(req.url||'').split('?')[0];
   if(path==='/health'&&req.method==='GET')
@@ -71,7 +73,7 @@ export function createContentHubServer({storage,lease,
     ok:bucket&&database,privateBucketAvailable:bucket,
     databaseAvailable:database,downloadQueueEnabled:false,
     syntheticTestEnabled:allowSynthetic,
-    lastSynthetic,customerCutover:false,
+    lastSynthetic,pilotRunning,lastPilot,customerCutover:false,
     licensedRightsRequired:true});
   }
   if(path==='/internal/storage/synthetic-check'&&req.method==='POST'){
@@ -89,7 +91,11 @@ export function createContentHubServer({storage,lease,
   }
   return json(res,404,{ok:false,code:'content_hub_not_found'});
  });
- return {server,runSynthetic:async()=>{
+ return {server,recordPilot:(result)=>{pilotRunning=false;lastPilot={
+  ok:result?.ok===true,code:String(result?.code||'pilot_failed'),
+  stored:result?.stored===true,bytes:result?.ok?result.bytes:undefined,
+  checkedAt:new Date().toISOString()};},
+  startPilot:()=>{pilotRunning=true;},runSynthetic:async()=>{
   if(syntheticRunning)return {ok:false,code:'synthetic_storage_test_busy'};
   syntheticRunning=true;
   try{
@@ -119,6 +125,29 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
       JSON.stringify({ok:false,code:'synthetic_test_unavailable'}));
     });
    },3000);
+   timer.unref?.();
+  }
+  // Operator-only one-shot full movie pilot; all switches default OFF.
+  // Never run alongside the existing small real-source sample.
+  if(process.env.BLOFY_CONTENT_HUB_ONE_MOVIE_ON_BOOT==='1'&&
+     process.env.BLOFY_CONTENT_HUB_REAL_SAMPLE_ON_BOOT!=='1'){
+   const timer=setTimeout(()=>{
+    hub.startPilot();
+    void runOneMoviePilot({storage,lease,
+      logger:(name,payload)=>console.info(name,JSON.stringify(payload))
+    }).then(result=>{
+      hub.recordPilot(result);
+      console.info('BLOFY_CONTENT_HUB_ONE_MOVIE_RESULT',JSON.stringify({
+       ok:result.ok,code:result.code,stored:result.stored===true,
+       bytes:result.ok?result.bytes:undefined,customerCutover:false
+      }));
+    }).catch(()=>{
+      hub.recordPilot({ok:false,code:'pilot_runner_failed',stored:false});
+      console.warn('BLOFY_CONTENT_HUB_ONE_MOVIE_RESULT',JSON.stringify({
+       ok:false,code:'pilot_runner_failed',stored:false,customerCutover:false
+      }));
+    });
+   },9000);
    timer.unref?.();
   }
   if(process.env.BLOFY_CONTENT_HUB_REAL_SAMPLE_ON_BOOT==='1'){
