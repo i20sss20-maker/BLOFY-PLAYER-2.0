@@ -86,6 +86,30 @@ async function rangeBuffer(response,{from,to,total}){
   reader.releaseLock();
  }
 }
+// Some licensed Xtream origins provide exact 206 byte ranges but no
+// ETag/Last-Modified. Double-probe fixed 4KiB boundary blocks before AND
+// after each real chunk. This is a sampled change detector (not as strong
+// as a provider-supplied full-file version ID). Never use as customer proof.
+async function sampleBoundaryFingerprint({cfg,fetchImpl,signal}){
+ const digest=createHash('sha256');
+ const pairs=[[0,4095],[cfg.expectedBytes-4096,cfg.expectedBytes-1]];
+ for(const [from,to] of pairs){
+  const r=await fetchImpl(ORIGIN+
+    '/internal/blofy-content-hub/source/movie/'+cfg.gatewayId,{
+    method:'GET',redirect:'manual',
+    headers:{authorization:'Bearer '+cfg.token,
+      range:`bytes=${from}-${to}`,'accept-encoding':'identity'},
+    signal:signal?AbortSignal.any([signal,AbortSignal.timeout(45000)]):
+      AbortSignal.timeout(45000)
+   });
+  try{
+   const bytes=await rangeBuffer(r,{from,to,total:cfg.expectedBytes});
+   digest.update(bytes);
+  }finally{await r.body?.cancel().catch(()=>{})}
+ }
+ return 'boundary-sha256:'+digest.digest('hex');
+}
+
 async function checkStoredChunks({storage,parts,expectedBytes,signal}){
  const sha=createHash('sha256');
  let offset=0;
@@ -154,6 +178,15 @@ export async function runChunkedMovieBatch({
    if(signal?.aborted)throw Error('batch_cancelled');
    const from=(no-1)*CHUNK_BYTES;
    const to=Math.min(from+CHUNK_BYTES,cfg.expectedBytes)-1;
+   // Always check sampled source boundaries before a new piece. Unlike
+   // an ETag this is only a sampled consistency guard, not a full proof.
+   const fingerprint=await sampleBoundaryFingerprint({
+    cfg,fetchImpl,signal});
+   if(run.validator?.startsWith('boundary-sha256:')&&
+      run.validator!==fingerprint){
+    irrecoverable=true;lastFailure='batch_source_fingerprint_changed';
+    throw Error('source_boundary_changed');
+   }
    const response=await fetchImpl(ORIGIN+
       '/internal/blofy-content-hub/source/movie/'+cfg.gatewayId,{
      method:'GET',redirect:'manual',
@@ -169,15 +202,24 @@ export async function runChunkedMovieBatch({
      await response?.body?.cancel().catch(()=>{});
      throw Error('source_range_retryable');
    }
-   const validator=String(response.headers?.get?.('etag')||
+   const providerValidator=String(response.headers?.get?.('etag')||
      response.headers?.get?.('last-modified')||'').trim();
-   if(!validator||validator.length>140||
-     run.validator&&run.validator!==validator){
+   const validator=providerValidator||fingerprint;
+   if(validator.length>140||run.validator&&run.validator!==validator){
     irrecoverable=true;lastFailure='batch_source_version_changed';
     await response.body?.cancel().catch(()=>{});
     throw Error('source_version_changed');
    }
    const bytes=await rangeBuffer(response,{from,to,total:cfg.expectedBytes});
+   // With no provider ETag/Last-Modified, verify that sampled boundaries
+   // have not changed during the actual 8MiB source read.
+   if(!providerValidator){
+    const after=await sampleBoundaryFingerprint({cfg,fetchImpl,signal});
+    if(after!==fingerprint){
+     irrecoverable=true;lastFailure='batch_source_fingerprint_changed';
+     throw Error('source_boundary_changed_during_chunk');
+    }
+   }
    const sha256=createHash('sha256').update(bytes).digest('hex');
    activeKey='saleh/movie/'+info.sourceId+'/batch_'+fingerprint+
      '_part_'+String(no).padStart(6,'0')+'.'+info.extension;
