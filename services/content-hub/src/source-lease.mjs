@@ -127,7 +127,12 @@ export function createSourceLease({connectionString,
       COALESCE(SUM(expected_bytes) FILTER (WHERE state='verified'),0)::text AS verified_bytes,
       COUNT(*) FILTER (WHERE state='started')::int AS active_count,
       COUNT(*) FILTER (WHERE state='failed')::int AS failed_count
-     FROM blofy_content_hub_pilot_runs`);
+     FROM blofy_content_hub_pilot_runs`).catch(error=>{
+      if(error?.code==='42P01')return {rows:[{
+       verified_count:0,verified_bytes:'0',active_count:0,failed_count:0
+      }]};
+      throw error;
+     });
    const row=r.rows?.[0]||{};
    return {verifiedCount:Number(row.verified_count||0),
     verifiedBytes:Number(row.verified_bytes||0),
@@ -138,7 +143,10 @@ export function createSourceLease({connectionString,
   async listPilotRuns({limit=20}={}){
    const safeLimit=Math.max(1,Math.min(50,Number(limit)||20));
    const r=await pool.query(`SELECT run_id FROM blofy_content_hub_pilot_runs
-     ORDER BY started_at DESC LIMIT $1`,[safeLimit]);
+     ORDER BY started_at DESC LIMIT $1`,[safeLimit]).catch(error=>{
+      if(error?.code==='42P01')return {rows:[]};
+      throw error;
+     });
    const list=[];
    for(const row of r.rows||[]){
      const entry=await this.getPilotStatus(row.run_id);
