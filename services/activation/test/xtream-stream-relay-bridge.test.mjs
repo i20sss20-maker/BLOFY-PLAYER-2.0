@@ -143,3 +143,25 @@ test('shared live canary requires separate flag and leaves movies/ordinary grant
   assert.equal(sent[2].sharedLive,undefined);
   assert.equal(sent[3].sharedLive,true);
 });
+
+test('licensed channel quota is relayed only on authenticated shared TS grants',async()=>{
+ const sourceId='d9b0fcf1-0b7e-4209-b281-2b5cf1cef09a';
+ const base={sourceUrl:'https://licensed.example/live/user/key/42.ts',
+  kind:'live',sharedLive:true,requireSharedLive:true,
+  licensedSourceId:sourceId,providerMaxConcurrentFeeds:2};
+ const payloads=[];
+ const licensedEnv={...enabled,BLOFY_STREAM_SHARED_LIVE_CANARY:'1'};
+ const fetchImpl=async(_url,options)=>{
+  payloads.push(JSON.parse(options.body));
+  return new Response(JSON.stringify({ok:true,path:'/relay/'+'f'.repeat(48),
+   expiresInSeconds:45,sharedLiveGranted:true}),{status:201});
+ };
+ await issueStreamRelayGrant(base,{env:licensedEnv,fetchImpl});
+ assert.equal(payloads[0].licensedSourceId,sourceId);
+ assert.equal(payloads[0].providerMaxConcurrentFeeds,2);
+ await issueStreamRelayGrant({...base,providerMaxConcurrentFeeds:65},{env:licensedEnv,fetchImpl});
+ assert.equal(payloads[1].licensedSourceId,undefined);
+ assert.equal(payloads[1].providerMaxConcurrentFeeds,undefined);
+ await issueStreamRelayGrant({...base,sharedLive:false,requireSharedLive:false},{env:licensedEnv,fetchImpl});
+ assert.equal(payloads[2].licensedSourceId,undefined);
+});
