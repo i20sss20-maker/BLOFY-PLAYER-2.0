@@ -266,7 +266,8 @@ async function ensureReady() {
     } finally { client.release(); }
   })().catch(error => { readyPromise = null; throw error; });
   const ready=await readyPromise;
-  if(!streamCodes)streamCodes=createStreamDurationCodes({pool,keyHex:KEY_HEX});
+  if(!streamCodes)streamCodes=createStreamDurationCodes({pool,keyHex:KEY_HEX,
+    salehOnlyNewCodes:process.env.BLOFY_STREAM_SALEH_NEW_CODES_ONLY==='1'});
   if(!streamCommercial)streamCommercial=createStreamCommercial({pool,keyHex:KEY_HEX});
   if(!streamRelogin)streamRelogin=createStreamRelogin({pool,keyHex:KEY_HEX});
   // Opt-in, source-allowlisted, lease-based recovery. Normal requests do not
