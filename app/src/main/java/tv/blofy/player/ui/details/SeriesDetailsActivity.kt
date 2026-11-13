@@ -41,7 +41,6 @@ import tv.blofy.player.ui.common.ContentScreenStyle
 import tv.blofy.player.ui.player.PlayerActivity
 import tv.blofy.player.ui.series.EpisodesActivity
 import tv.blofy.player.data.profile.ProfileLibraryStore
-import tv.blofy.player.ui.library.MyLibraryActivity
 
 class SeriesDetailsActivity : ContentAccessActivity() {
     private lateinit var favoriteButton: Button
@@ -301,9 +300,6 @@ class SeriesDetailsActivity : ContentAccessActivity() {
                         putExtra(EpisodesActivity.EXTRA_SERIES_ART,metadata?.backdropUrl ?: stream.backdrop ?: stream.icon)
                     })
                 }, LinearLayout.LayoutParams(-2,dp(CinemaStyle.ActionHeight)).apply { marginEnd=dp(9) })
-                libraryActions.addView(actionButton(getString(R.string.stream_library_title)) {
-                    startActivity(Intent(this@SeriesDetailsActivity,MyLibraryActivity::class.java))
-                },LinearLayout.LayoutParams(-2,dp(CinemaStyle.ActionHeight)))
                 panel.addView(libraryActions,LinearLayout.LayoutParams(-1,-2).apply {bottomMargin=dp(10)})
             }
 
