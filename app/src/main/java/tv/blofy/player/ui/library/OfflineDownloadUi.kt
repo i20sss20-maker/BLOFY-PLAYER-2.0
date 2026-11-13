@@ -36,6 +36,25 @@ internal object OfflineDownloadUi {
                 .setPositiveButton(android.R.string.ok,null).show()
             return
         }
+        val remaining = activity.getExternalFilesDir(android.os.Environment.DIRECTORY_MOVIES)?.usableSpace ?: -1L
+        if (remaining in 0L until 536_870_912L) {
+            AlertDialog.Builder(activity)
+                .setTitle(R.string.stream_downloads_failure_title)
+                .setMessage(activity.getString(
+                    R.string.stream_downloads_low_space_confirm,
+                    OfflineDownloadStore.formatSize(remaining)
+                ))
+                .setPositiveButton(R.string.stream_downloads_continue_anyway) { _, _ ->
+                    confirmDownloads(activity, allowed)
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+            return
+        }
+        confirmDownloads(activity, allowed)
+    }
+
+    private fun confirmDownloads(activity: AppCompatActivity, allowed: List<Plan>) {
         AlertDialog.Builder(activity)
             .setTitle(activity.getString(R.string.stream_downloads_confirm_title,allowed.size))
             .setMessage(R.string.stream_downloads_consent)

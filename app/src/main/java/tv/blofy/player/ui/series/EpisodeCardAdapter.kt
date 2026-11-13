@@ -98,7 +98,8 @@ internal class EpisodeCardAdapter(
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(8), dp(7), dp(10), dp(7))
             isFocusable = true
-            isFocusableInTouchMode = true
+            isFocusableInTouchMode = false
+            descendantFocusability = ViewGroup.FOCUS_BEFORE_DESCENDANTS
             isClickable = true
             background = ContentScreenStyle.softSurface(context, false, 18)
         }
@@ -165,16 +166,20 @@ internal class EpisodeCardAdapter(
         row.addView(state, LinearLayout.LayoutParams(dp(100), dp(32)))
         val downloadButton = onDownload?.let {
             Button(context).apply {
-                text = "↓"
-                textSize = TvUiTuning.sp(context, 16f)
+                text = context.getString(R.string.stream_download_episode_short)
+                textSize = TvUiTuning.sp(context, 12f)
                 isAllCaps = false
                 minWidth = 0
                 minimumWidth = 0
                 background = ContentScreenStyle.chip(context)
                 setTextColor(Color.WHITE)
                 contentDescription = context.getString(R.string.stream_download_episode)
+                isFocusable = true
+                isFocusableInTouchMode = false
+                isClickable = true
+                elevation = dp(3).toFloat()
             }.also {
-                row.addView(it, LinearLayout.LayoutParams(dp(49),dp(46)).apply {marginStart=dp(6)})
+                row.addView(it, LinearLayout.LayoutParams(dp(92),dp(50)).apply {marginStart=dp(6)})
             }
         }
         return Holder(row, image, number, title, meta, progressBar, state,downloadButton)
@@ -206,7 +211,18 @@ internal class EpisodeCardAdapter(
             onDownload?.invoke(episode)
             onDownload != null
         }
-        holder.downloadButton?.setOnClickListener { onDownload?.invoke(episode) }
+        holder.downloadButton?.apply {
+            // Make the separate download action independently operable by
+            // both touch and D-pad; row selection must never swallow its click.
+            isEnabled = onDownload != null
+            setOnClickListener { onDownload?.invoke(episode) }
+            setOnFocusChangeListener { _, focused ->
+                background = if (focused)
+                    ContentScreenStyle.actionBackground(context, true, true)
+                else ContentScreenStyle.chip(context)
+                setTextColor(if (focused) 0xFF130B1D.toInt() else Color.WHITE)
+            }
+        }
         holder.itemView.setOnFocusChangeListener { view, focused ->
             if (focused) focusedKey = episode.key
             renderFocus(holder, focused)

@@ -41,7 +41,6 @@ import tv.blofy.player.ui.common.ContentScreenStyle
 import tv.blofy.player.ui.player.PlayerActivity
 import tv.blofy.player.data.profile.ProfileLibraryStore
 import tv.blofy.player.ui.library.OfflineDownloadUi
-import tv.blofy.player.ui.library.MyLibraryActivity
 
 class MovieDetailsActivity : ContentAccessActivity() {
     private lateinit var favoriteButton: Button
@@ -278,9 +277,6 @@ class MovieDetailsActivity : ContentAccessActivity() {
                         OfflineDownloadUi.plan(provider.id,stream.key,"movie",stream.name,url,stream.extension)
                     ))
                 }, LinearLayout.LayoutParams(-2, dp(CinemaStyle.ActionHeight)).apply {marginEnd=dp(9)})
-                libraryActions.addView(actionButton(getString(R.string.stream_library_title)) {
-                    startActivity(Intent(this@MovieDetailsActivity, MyLibraryActivity::class.java))
-                }, LinearLayout.LayoutParams(-2, dp(CinemaStyle.ActionHeight)))
                 info.addView(libraryActions, LinearLayout.LayoutParams(-1, -2).apply {
                     bottomMargin = dp(10)
                 })
