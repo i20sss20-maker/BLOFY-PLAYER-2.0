@@ -5,6 +5,7 @@ import android.app.DownloadManager
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
+import android.os.Environment
 import android.view.Gravity
 import android.view.View
 import android.widget.Button
@@ -33,6 +34,7 @@ import tv.blofy.player.ui.player.PlayerActivity
 class DownloadsActivity : AppCompatActivity() {
     private lateinit var rows: LinearLayout
     private lateinit var empty: TextView
+    private lateinit var space: TextView
     private val buttons = LinkedHashMap<Long, Button>()
     private var rowKeys: List<Long> = emptyList()
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -61,6 +63,12 @@ class DownloadsActivity : AppCompatActivity() {
             setTextColor(BlofyTvDesign.TextMuted)
             gravity = Gravity.START
         }, LinearLayout.LayoutParams(-1,-2).apply { bottomMargin = dp(12) })
+        space = TextView(this).apply {
+            textSize=12f
+            setTextColor(BlofyTvDesign.TextSecondary)
+            setPadding(0,0,0,dp(9))
+        }
+        root.addView(space)
         empty = TextView(this).apply {
             text = getString(R.string.stream_downloads_empty)
             setTextColor(BlofyTvDesign.TextMuted)
@@ -93,6 +101,15 @@ class DownloadsActivity : AppCompatActivity() {
                     ?: OfflineDownloadStore.Progress(record,-1,0L,-1L,0,null)
             }
         }
+        val downloadedBytes=states.asSequence()
+            .filter { it.status==DownloadManager.STATUS_SUCCESSFUL }
+            .sumOf { it.downloaded.coerceAtLeast(0L) }
+        val free=withContext(Dispatchers.IO) {
+            getExternalFilesDir(Environment.DIRECTORY_MOVIES)?.usableSpace ?: -1L
+        }
+        space.text=getString(R.string.stream_downloads_space,
+            OfflineDownloadStore.formatSize(downloadedBytes),
+            if(free>=0) OfflineDownloadStore.formatSize(free) else "—")
         empty.visibility = if(states.isEmpty()) View.VISIBLE else View.GONE
         val ids=states.map { it.record.id }
         if(ids!=rowKeys) {
