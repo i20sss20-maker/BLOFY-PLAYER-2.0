@@ -122,6 +122,9 @@ class HomeActivity : AppCompatActivity() {
 
     private var homeResumed = false
     private var displayedHomeData: HomeData? = null
+    // Locale change and Settings return previously queued overlapping DB renders.
+    // Keep one in-flight home snapshot so old views cannot flash over new ones.
+    private var homeLoadJob: Job? = null
     private var scheduledProviderId: String? = null
     private var lastHomeInputAtMs = SystemClock.elapsedRealtime()
     private var displayedCatalogEpoch = 0L
@@ -259,7 +262,9 @@ class HomeActivity : AppCompatActivity() {
             }, 150L)
         }
         if (!BuildConfig.CODE_ONLY_LOGIN) warmCatalogArtwork()
-        renderSkeleton()
+        // A loaded STREAM catalog already has a real home shell. Painting a
+        // full skeleton before every locale recreation causes black flashes.
+        if (!BuildConfig.CODE_ONLY_LOGIN) renderSkeleton()
         loadHomeExperience()
         if (homeResumed) {
             refreshScheduler.start()
@@ -341,6 +346,7 @@ class HomeActivity : AppCompatActivity() {
         refreshWork?.removeObservers(this)
         refreshWork = null
         uiHandler.removeCallbacksAndMessages(null)
+        homeLoadJob?.cancel()
         super.onDestroy()
     }
 
@@ -398,7 +404,8 @@ class HomeActivity : AppCompatActivity() {
     )
 
     private fun loadHomeExperience() {
-        lifecycleScope.launch {
+        if (isFinishing || isDestroyed || homeLoadJob?.isActive == true) return
+        homeLoadJob = lifecycleScope.launch {
             val data = try {
                 withContext(Dispatchers.IO) {
                 val dao = BlofyDatabase.get(applicationContext).dao()
@@ -490,8 +497,13 @@ class HomeActivity : AppCompatActivity() {
             }
 
             streamHomeCacheRetries = 0
-            displayedHomeData = data
             displayedCatalogEpoch = CatalogSyncState.lastSyncedAt(applicationContext, data.providerId)
+            // On returning from Settings or after a periodic sync, the same
+            // content must NOT remove/recreate 100+ focused poster views.
+            if (isFinishing || isDestroyed ||
+                (displayedHomeData != null && !homeResumed)) return@launch
+            if (displayedHomeData == data) return@launch
+            displayedHomeData = data
             serverLabel?.text = data.providerName.ifBlank { "BLOFY" }
             heroProviderId = data.providerId
             heroCandidates = data.heroItems
