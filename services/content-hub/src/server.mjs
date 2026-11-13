@@ -2,6 +2,7 @@ import http from 'node:http';
 import {randomUUID,randomBytes,createHash,timingSafeEqual} from 'node:crypto';
 import {createPrivateS3Adapter} from './private-s3.mjs';
 import {createSourceLease} from './source-lease.mjs';
+import {runPrivateSalehSample} from './real-source-sample.mjs';
 
 const FIXTURE_SOURCE='00000000-0000-4000-8000-000000000000';
 const FIXTURE_SIZE=8*1024*1024;
@@ -118,6 +119,22 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
       JSON.stringify({ok:false,code:'synthetic_test_unavailable'}));
     });
    },3000);
+   timer.unref?.();
+  }
+  if(process.env.BLOFY_CONTENT_HUB_REAL_SAMPLE_ON_BOOT==='1'){
+   const timer=setTimeout(()=>{
+    void runPrivateSalehSample({
+      storage,lease,
+      bridgeOrigin:process.env.BLOFY_CONTENT_HUB_BRIDGE_URL||'',
+      bridgeToken:process.env.BLOFY_CONTENT_HUB_BRIDGE_TOKEN||'',
+      enabled:process.env.BLOFY_CONTENT_HUB_STORAGE_RIGHTS_CONFIRMED==='1',
+      quietWindowConfirmed:process.env.BLOFY_CONTENT_HUB_SOURCE_QUIET_WINDOW_CONFIRMED==='1'
+    }).then(result=>console.info('BLOFY_CONTENT_HUB_REAL_SOURCE_S3_PROOF',
+       JSON.stringify(result))).catch(()=>console.warn(
+         'BLOFY_CONTENT_HUB_REAL_SOURCE_S3_PROOF',
+         JSON.stringify({ok:false,code:'source_proof_unavailable',
+           customerTrafficChanged:false,fullFilmDownloaded:false})));
+   },6000);
    timer.unref?.();
   }
  });
