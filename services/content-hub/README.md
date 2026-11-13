@@ -123,3 +123,48 @@ require very large paid storage. Start with a measured pilot and quotas.
 **`BLOFY_CONTENT_HUB_UPLOAD_ENABLED=0` remains enforced in Railway.
 The separate persistent-storage permission flag reflects the owner's
 confirmation; it does not activate uploading automatically.**
+
+
+## One-film operator runner (proposed, NOT production-enabled)
+
+The isolated one-film pilot adds `one-movie-pilot.mjs` and an opt-in
+startup hook. No movie has been copied as part of this change; until an
+authorized operator chooses a **quiet window**, the existing live sources
+and consumer playback routes remain unchanged.
+
+To run **one exact approved movie only**, all the following must be
+configured on the private `blofy-content-hub` service:
+
+- `BLOFY_CONTENT_HUB_ONE_MOVIE_ON_BOOT=1`
+- `BLOFY_CONTENT_HUB_UPLOAD_ENABLED=1`
+- `BLOFY_CONTENT_HUB_STORAGE_RIGHTS_CONFIRMED=1`
+- `BLOFY_CONTENT_HUB_SOURCE_QUIET_WINDOW_CONFIRMED=1`
+- `BLOFY_CONTENT_HUB_SOURCE_IDLE_CONFIRMED=1`
+- `BLOFY_CONTENT_HUB_PILOT_RUN_ID`: a unique 8–80 character run identifier.
+  Re-using a run ID will **not** download again, even after restarts.
+- `BLOFY_CONTENT_HUB_EXPECTED_BYTES`: exact file size from the earlier
+  consistent HTTP Range probe for the same approved movie. The pilot
+  rejects unexpected sizes. The prior 2026-11-13 test observed
+  `2934023949` bytes, but the operator must reconfirm the same mapping.
+- `BLOFY_CONTENT_HUB_APPROVED_GATEWAY_ID`: **mandatory** numeric ID of
+  that single movie, confirmed to match the private bridge's mapping.
+- The existing private bridge credentials and bucket must remain wired.
+
+All these switches default to **off**. The run refuses media redirects,
+full-GET fallbacks, missing source-version validators, source size changes,
+unverified file hashes, shared/public object access and files above 4 GiB.
+The source lease prevents concurrent hub writers but cannot block unrelated
+player sessions elsewhere. The quiet/idle confirmations must reflect actual
+operator observation; do **not** blindly set them while channels are playing.
+
+An attempt is claimed durably in PostgreSQL before contacting the source.
+A failed run requires a new explicit run ID after diagnosis; it does not
+retry endlessly. Inspect the private status or the sanitized
+`BLOFY_CONTENT_HUB_ONE_MOVIE_RESULT` log. A success means the object
+bytes and SHA-256 were independently verified in private storage. It does
+**not** yet mean image/audio playback was tested from a BLOFY client.
+A separate canary playback route and real-device video/audio verification
+are required before switching any customer to the stored copy.
+
+This isolated change intentionally adds **no** public media endpoint,
+automatic downloads, bulk sync or customer playback cutover.
