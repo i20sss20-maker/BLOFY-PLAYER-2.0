@@ -19,7 +19,10 @@ test('verified movie canary serves only admin-authenticated, bounded private byt
  const lease={
   health:async()=>true,
   getVerifiedPilotObject:async(id)=>id===runId?{key,bytes:16}:null,
-  getPilotStatus:async()=>null
+  getPilotStatus:async()=>null,
+  listPilotRuns:async()=>[],
+  storageAccounting:async()=>({verifiedCount:0,verifiedBytes:0,
+    activeCount:0,failedCount:0,scope:'verified_pilot_records_only'})
  };
  const hub=createContentHubServer({storage,lease,token});
  hub.server.listen(0,'127.0.0.1');
@@ -48,6 +51,19 @@ test('verified movie canary serves only admin-authenticated, bounded private byt
   const status=await fetch(base+'/internal/status',{headers});
   assert.equal(status.status,200);
   assert.equal((await status.json()).customerCutover,false);
+  const pilots=await fetch(base+'/internal/pilots',{headers});
+  assert.equal(pilots.status,200);
+  assert.equal((await pilots.json()).accounting.verifiedCount,0);
+  const stopped=await fetch(base+'/internal/pilot/cancel',{
+    method:'POST',headers});
+  assert.equal(stopped.status,409);
+  const signal=hub.startPilot();
+  assert.equal(signal.aborted,false);
+  const cancellation=await fetch(base+'/internal/pilot/cancel',{
+    method:'POST',headers});
+  assert.equal(cancellation.status,202);
+  assert.equal(signal.aborted,true);
+  hub.recordPilot({ok:false,code:'pilot_cancelled',stored:false});
  }finally{
   await new Promise(resolve=>hub.server.close(resolve));
  }
