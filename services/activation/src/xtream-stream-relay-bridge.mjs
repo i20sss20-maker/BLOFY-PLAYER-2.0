@@ -61,7 +61,8 @@ async function remoteRelayRequest(path,{method='GET',body,env=process.env,
   }
 }
 export async function issueStreamRelayGrant({sourceUrl,kind,sharedLive=false,
-  requireSharedLive=false,licensedCdnRedirect=false},{
+  requireSharedLive=false,licensedCdnRedirect=false,
+  licensedSourceId='',providerMaxConcurrentFeeds=null},{
   env=process.env,fetchImpl=fetch}={}){
   if(!['live','movie','series'].includes(kind)||typeof sourceUrl!=='string')
     throw new Error('stream_bridge_invalid_media');
@@ -73,7 +74,14 @@ export async function issueStreamRelayGrant({sourceUrl,kind,sharedLive=false,
           // Per-channel rights and per-account subscriber pilot were
           // checked by the upstream gateway BEFORE granting this scope.
           ...(licensedCdnRedirect===true&&requireSharedLive===true?
-            {licensedCdnRedirect:true}:{})
+            {licensedCdnRedirect:true}:{}),
+          // No provider/source grouping for non-shared or unverified feeds.
+          // This private request is authenticated by the bridge bearer.
+          ...(requireSharedLive===true&&UUID.test(String(licensedSourceId))&&
+            providerMaxConcurrentFeeds===1?{
+              licensedSourceId:String(licensedSourceId).toLowerCase(),
+              providerMaxConcurrentFeeds:1
+            }:{})
         }:{})},env,fetchImpl
   });
   if(!result?.ok||typeof result.path!=='string'||!RESOURCE.test(result.path)||
