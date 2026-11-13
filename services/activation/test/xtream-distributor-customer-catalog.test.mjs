@@ -36,7 +36,7 @@ test('canary requires both explicit opt-in and one account-owning merchant allow
  assert.equal(disabled.enabled,false);
  assert.equal((await disabled.forAccount({id:account,source_id:saleh})),null);
  const catalog=createDistributorCustomerCatalog({pool:db,enabled:true,
-   distributorAllowlist:merchant});
+   distributorAllowlist:merchant,accountAllowlist:account});
  const scope=await catalog.forAccount({id:account,source_id:saleh});
  assert.equal(scope.distributorId,merchant);
  assert.equal(scope.sourceId,saleh);
@@ -54,12 +54,12 @@ test('unknown, ambiguous and other merchants never acquire a cross-merchant visi
  for(const matches of [[],[merchant,other],[other]]){
    const db=pool({matches});
    const catalog=createDistributorCustomerCatalog({pool:db,enabled:true,
-     distributorAllowlist:merchant});
+     distributorAllowlist:merchant,accountAllowlist:account});
    assert.equal(await catalog.forAccount({id:account,source_id:saleh}),null);
  }
  const db=pool();
  const catalog=createDistributorCustomerCatalog({pool:db,enabled:true,
-   distributorAllowlist:merchant});
+   distributorAllowlist:merchant,accountAllowlist:account});
  assert.equal(await catalog.forAccount({id:'not-a-uuid',source_id:saleh}),null);
  assert.equal(await catalog.forAccount({id:account}),null);
  assert.equal(db.calls.length,0);
@@ -68,7 +68,7 @@ test('bounded catalog reads forbid unbounded hidden-item allocations and invalid
  const many=Array.from({length:10001},(_,i)=>String(i+1000));
  const db=pool({hidden:many});
  const catalog=createDistributorCustomerCatalog({pool:db,enabled:true,
-   distributorAllowlist:merchant});
+   distributorAllowlist:merchant,accountAllowlist:account});
  const scope=await catalog.forAccount({id:account,source_id:saleh});
  await assert.rejects(catalog.hiddenIds(scope,'movie'),/distributor_catalog_hidden_over_cap/);
  await assert.rejects(catalog.hiddenIds(scope,'invalid'),/distributor_catalog_kind_invalid/);
@@ -78,10 +78,12 @@ test('bounded catalog reads forbid unbounded hidden-item allocations and invalid
 test('network/DB failure does not disrupt ordinary subscribers or reveal account details',async()=>{
  const errors=[];
  const db=pool({error:true}),catalog=createDistributorCustomerCatalog({
-   pool:db,enabled:true,distributorAllowlist:merchant,
+   pool:db,enabled:true,distributorAllowlist:merchant,accountAllowlist:account,
    onError:code=>errors.push(code)
  });
- assert.equal(await catalog.forAccount({id:account,source_id:saleh}),null);
+ await assert.rejects(catalog.forAccount({id:account,source_id:saleh}),
+   /distributor_catalog_scope_unavailable/);
+ assert.equal(await catalog.forAccount({id:other,source_id:saleh}),null);
  assert.deepEqual(errors,['distributor_catalog_scope_lookup_unavailable']);
  assert.equal(db.calls.length,1);
 });
