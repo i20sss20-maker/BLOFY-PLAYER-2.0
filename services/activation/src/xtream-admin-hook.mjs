@@ -15,7 +15,7 @@ import {shouldUseIndependentSourceMedia} from './xtream-independent-source-media
 import {probeOfficialXtreamPlaylistRoute} from './xtream-official-m3u-probe.mjs';
 import {readSanitizedXtreamRelayFailure} from './xtream-relay-diagnostic.mjs';
 import {ensureUnavailableMediaTable,recoverySources,validUnavailableKey,
-  registerProvider404,noteMediaRestored,
+  registerProvider404,noteMediaRestored,recoveryEnabled,
   unavailableMediaSummary,unavailableMediaDetails} from './xtream-unavailable-media-registry.mjs';
 import {operatorMediaRegistryOutcome} from './xtream-operator-media-recovery.mjs';
 import {probeXtreamM3uAvailability} from './xtream-m3u-availability.mjs';
@@ -3346,6 +3346,40 @@ async function unifiedStreamBridge(req,res,url){
     // is read-only and never accesses another source's provider credentials.
     const result=await unavailableMediaDetails(pool,sourceId||null,{limit:40});
     return json(res,result.ok?200:400,result);
+  }
+  if(req.method==='POST'&&p==='/internal/blofy-stream/media-failures/recheck-now'){
+    // Protected by the verified STREAM bridge gate. No source URL, raw title,
+    // credential, or unapproved item ID enters this request.
+    if(!recoveryEnabled())return json(res,409,{ok:false,code:'unavailable_recheck_disabled'});
+    const body=await readJson(req);
+    const sourceId=String(body?.sourceId||'').trim().toLowerCase();
+    if(!validUuid(sourceId)||!recoverySources().has(sourceId)||body?.confirmed!==true)
+      return json(res,403,{ok:false,code:'unavailable_source_not_allowed'});
+    if(!ADMIN_TOKEN)return json(res,503,{ok:false,code:'recovery_admin_unavailable'});
+    const port=Number(process.env.PORT||3000);
+    if(!Number.isInteger(port)||port<1||port>65535)
+      return json(res,503,{ok:false,code:'recovery_admin_unavailable'});
+    try{
+      const upstream=await fetch('http://127.0.0.1:'+port+
+        '/api/v1/admin/xtream-gateway/unavailable-media/recheck-now',{
+          method:'POST',redirect:'error',signal:AbortSignal.timeout(55000),
+          headers:{authorization:'Bearer '+ADMIN_TOKEN,'content-type':'application/json'},
+          body:JSON.stringify({sourceId})
+        });
+      if(upstream.status!==200)
+        return json(res,upstream.status===409?409:503,
+          {ok:false,code:upstream.status===409?'unavailable_recheck_disabled':'unavailable_recheck_unavailable'});
+      const raw=await upstream.text();
+      if(raw.length>4096)throw Error('invalid_response');
+      const reply=JSON.parse(raw);
+      if(reply?.ok!==true)throw Error('invalid_response');
+      const safeCount=value=>Number.isSafeInteger(value)&&value>=0&&value<=5?value:0;
+      return json(res,200,{ok:true,sourceId,expedited:safeCount(reply.expedited),
+        checked:safeCount(reply.checked),recovered:safeCount(reply.recovered),
+        stillMissing:safeCount(reply.stillMissing),transient:safeCount(reply.transient),
+        busy:reply.busy===true,readOnlyMediaSample:true,
+        catalogMutation:false,subscriberCutover:false});
+    }catch{return json(res,503,{ok:false,code:'unavailable_recheck_unavailable'});}
   }
   if(req.method==='GET'&&p==='/internal/blofy-stream/episodes'){
     const sourceId=String(url.searchParams.get('sourceId')||'');
