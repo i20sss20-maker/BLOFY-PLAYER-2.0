@@ -182,4 +182,15 @@
     <string name="stream_downloads_failure_http_server">Provider is temporarily unavailable (5xx). Try again later.</string>
     <string name="stream_downloads_retry_from_details">Open content to retry</string>
     <string name="stream_ai_verified_alternatives">No confirmed genre matches in this source. Here are other verified titles from your library (not necessarily the genre you requested).</string>
+    <string name="stream_chat_heading">✦ BLOFY AI</string>
+    <string name="stream_chat_subheading">Your personal film assistant • Tap any verified title to search your library</string>
+    <string name="stream_chat_welcome">Hi! Ask me naturally: “Recommend a new action movie”, “Show me a funny series”, or “More like that”. I can suggest names and check your connected catalog. Tap a title below my answer to open local search.</string>
+    <string name="stream_chat_verified_count">%1$d matching title(s) confirmed in your library. Tap a title below to search for it.</string>
+    <string name="stream_chat_tap_to_search">Titles in your catalog • Select to search</string>
+    <string name="stream_chat_search_title">Search for %1$s</string>
+    <string name="stream_chat_action_prompt">Recommend a new action movie with a high rating</string>
+    <string name="stream_chat_comedy_prompt">Recommend a light comedy movie</string>
+    <string name="stream_chat_series_prompt">Recommend a recent crime series</string>
+    <string name="stream_chat_shortcut">Chat with BLOFY AI</string>
+    <string name="stream_search_local_only">Search films, series, channels and cast locally. For recommendations, open BLOFY AI from the main menu.</string>
 </resources>

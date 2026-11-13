@@ -40,7 +40,6 @@ import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.ContentScreenStyle
 import tv.blofy.player.ui.player.PlayerActivity
 import tv.blofy.player.ui.series.EpisodesActivity
-import tv.blofy.player.data.profile.ProfileLibraryStore
 
 class SeriesDetailsActivity : ContentAccessActivity() {
     private lateinit var favoriteButton: Button
@@ -277,21 +276,6 @@ class SeriesDetailsActivity : ContentAccessActivity() {
                     layoutDirection=resources.configuration.layoutDirection
                     gravity=Gravity.START
                 }
-                val watchlist=actionButton(getString(
-                    if (ProfileLibraryStore.isWatchlisted(applicationContext,stream.key))
-                        R.string.stream_remove_watchlist else R.string.stream_add_watchlist
-                )) {}
-                watchlist.setOnClickListener {
-                    lifecycleScope.launch {
-                        val next=withContext(Dispatchers.IO) {
-                            val saved=ProfileLibraryStore.isWatchlisted(applicationContext,stream.key)
-                            ProfileLibraryStore.setWatchlisted(applicationContext,stream.key,!saved)
-                            !saved
-                        }
-                        watchlist.text=getString(if(next) R.string.stream_remove_watchlist else R.string.stream_add_watchlist)
-                    }
-                }
-                libraryActions.addView(watchlist, LinearLayout.LayoutParams(-2,dp(CinemaStyle.ActionHeight)).apply { marginEnd=dp(9) })
                 libraryActions.addView(actionButton(getString(R.string.stream_download_episode)) {
                     startActivity(Intent(this@SeriesDetailsActivity,EpisodesActivity::class.java).apply {
                         putExtra(EpisodesActivity.EXTRA_PROVIDER_ID,providerId)

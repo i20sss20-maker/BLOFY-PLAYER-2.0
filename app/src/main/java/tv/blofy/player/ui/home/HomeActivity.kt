@@ -70,6 +70,7 @@ import tv.blofy.player.ui.library.LibraryActivity
 import tv.blofy.player.ui.library.DownloadsActivity
 import tv.blofy.player.ui.mobile.MobileContentActivity
 import tv.blofy.player.ui.search.SearchActivity
+import tv.blofy.player.ui.search.AiChatActivity
 import tv.blofy.player.ui.settings.SettingsActivity
 import androidx.lifecycle.LiveData
 import androidx.work.WorkInfo
@@ -714,7 +715,12 @@ class HomeActivity : AppCompatActivity() {
             getString(if (BuildConfig.CODE_ONLY_LOGIN) R.string.stream_library_subtitle else R.string.home_favorites_subtitle),
             if (BuildConfig.CODE_ONLY_LOGIN) Intent(this, DownloadsActivity::class.java)
             else Intent(this, LibraryActivity::class.java).putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_FAVORITES))
-        addStory(quick, "search_story", getString(R.string.home_search), getString(R.string.home_search_subtitle), Intent(this, SearchActivity::class.java))
+        addStory(quick, "search_story", getString(R.string.home_search),
+            getString(R.string.home_search_subtitle), Intent(this, SearchActivity::class.java))
+        if (BuildConfig.CODE_ONLY_LOGIN) {
+            addStory(quick, "ai_story", getString(R.string.stream_chat_heading),
+                getString(R.string.stream_chat_shortcut), Intent(this, AiChatActivity::class.java))
+        }
         if (layoutSpec.compact) {
             feed.addView(CinemaStyle.actionStrip(this, quick), LinearLayout.LayoutParams(-1, dp(100)))
         } else feed.addView(quick, LinearLayout.LayoutParams(-1, dp(100)))
@@ -1264,7 +1270,13 @@ class HomeActivity : AppCompatActivity() {
         } else addView(sideAction("side_favorites", R.drawable.cinema_favorite,
             getString(R.string.home_favorites), Intent(this@HomeActivity, LibraryActivity::class.java)
                 .putExtra(LibraryActivity.EXTRA_MODE, LibraryActivity.MODE_FAVORITES)))
-        addView(sideAction("side_search", R.drawable.cinema_search, getString(R.string.home_search), Intent(this@HomeActivity, SearchActivity::class.java)))
+        addView(sideAction("side_search", R.drawable.cinema_search, getString(R.string.home_search),
+            Intent(this@HomeActivity, SearchActivity::class.java)))
+        if (BuildConfig.CODE_ONLY_LOGIN) {
+            addView(sideAction("side_ai", R.drawable.stream_ai_chat,
+                getString(R.string.stream_chat_heading),
+                Intent(this@HomeActivity, AiChatActivity::class.java)))
+        }
         addView(sideAction("side_settings", R.drawable.cinema_settings, getString(R.string.home_settings), Intent(this@HomeActivity, SettingsActivity::class.java)))
     }
 
@@ -1417,7 +1429,14 @@ class HomeActivity : AppCompatActivity() {
         }, LinearLayout.LayoutParams(0, -2, 1f))
         header.addView(buildRefreshControl(compact = true), LinearLayout.LayoutParams(dp(44), dp(48)).apply { marginEnd = dp(4) })
         header.addView(touchNav("mobile_search", R.drawable.cinema_search, getString(R.string.home_search),
-            Intent(this, SearchActivity::class.java), iconOnly = true), LinearLayout.LayoutParams(dp(48), dp(48)))
+            Intent(this, SearchActivity::class.java), iconOnly = true),
+            LinearLayout.LayoutParams(dp(48), dp(48)))
+        if (BuildConfig.CODE_ONLY_LOGIN) {
+            header.addView(touchNav("mobile_ai", R.drawable.stream_ai_chat,
+                getString(R.string.stream_chat_heading),
+                Intent(this, AiChatActivity::class.java), iconOnly = true),
+                LinearLayout.LayoutParams(dp(48), dp(48)))
+        }
         header.addView(touchNav("mobile_settings", R.drawable.cinema_settings, getString(R.string.home_settings),
             Intent(this, SettingsActivity::class.java), iconOnly = true), LinearLayout.LayoutParams(dp(48), dp(48)))
         root.addView(header, LinearLayout.LayoutParams(-1, dp(52)))
