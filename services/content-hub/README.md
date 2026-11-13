@@ -168,3 +168,26 @@ are required before switching any customer to the stored copy.
 
 This isolated change intentionally adds **no** public media endpoint,
 automatic downloads, bulk sync or customer playback cutover.
+
+
+### Durable pilot progress + private playback canary (code ready)
+
+The pilot now records `started / verified / failed` and cumulative
+`bytes_copied`, `expected_bytes`, and `parts_copied` in PostgreSQL.
+A unique versioned S3 key is generated per run to prevent overwriting
+the previous verified file. A successful private S3 object is registered
+with its independently verified SHA-256; if final registration fails, the
+new object is deleted rather than presented as available.
+
+The existing **bearer-protected private-only** `GET /internal/status`
+reports `durablePilot` progress for the configured run. The
+`GET /internal/pilot/playback/:runId` endpoint serves only a *verified*
+private movie, requires the separate operator Bearer token and a strict
+HTTP Range of at most 8 MiB, and never publishes a public URL.
+
+These are operator canary endpoints, not subscriber APIs. The private
+service has no public domain. Actual client audiovisual verification and
+customer rollout have **not** been performed. Before allowing public
+customers to use it, add a separate signed, scoped device playback proxy
+that hides private object keys and verify image and audio on supported
+devices. Stop immediately if source streaming quality degrades.
