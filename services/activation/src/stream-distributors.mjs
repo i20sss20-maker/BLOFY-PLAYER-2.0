@@ -69,7 +69,7 @@ const publicIssue=row=>{
  };
 };
 export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,revealXtream,
-  listCatalog,trialKeyHex,clock=Date.now}={}){
+  rotateXtream=null,listCatalog,trialKeyHex,clock=Date.now}={}){
  if(typeof listCatalog!=='function'||!/^[0-9a-f]{64}$/i.test(String(trialKeyHex||'')))
    throw Error('stream_distributor_catalog_or_key_unconfigured');
  if(!pool||![issueCode,issueXtream,revealCode,revealXtream].every(x=>typeof x==='function'))
@@ -104,6 +104,8 @@ export function createStreamDistributors({pool,issueCode,issueXtream,revealCode,
    await pool.query('ALTER TABLE blofy_stream_distributor_issues ADD COLUMN IF NOT EXISTS trial_customer_hash TEXT');
    await pool.query('ALTER TABLE blofy_stream_distributor_issues ADD COLUMN IF NOT EXISTS customer_name TEXT NOT NULL DEFAULT \'\'');
    await pool.query('ALTER TABLE blofy_stream_distributor_issues ADD COLUMN IF NOT EXISTS customer_phone TEXT NOT NULL DEFAULT \'\'');
+   await pool.query('ALTER TABLE blofy_stream_distributor_issues ADD COLUMN IF NOT EXISTS last_credential_rotation_at TIMESTAMPTZ');
+   await pool.query('ALTER TABLE blofy_stream_distributor_issues ADD COLUMN IF NOT EXISTS credential_rotation_request_id UUID');
    await pool.query(`CREATE TABLE IF NOT EXISTS blofy_stream_distributor_actions(
      id UUID PRIMARY KEY,
      distributor_id UUID NOT NULL REFERENCES blofy_stream_distributors(id),
