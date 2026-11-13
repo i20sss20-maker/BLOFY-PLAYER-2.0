@@ -30,5 +30,9 @@ RUN node --check src/stream-distributors.mjs && node --check src/xtream-admin-ho
 # hidden selections, and backward-compatible disabled-by-default checks.
 COPY test/xtream-distributor-customer-catalog.test.mjs ./test/xtream-distributor-customer-catalog.test.mjs
 RUN node --check src/xtream-distributor-customer-catalog.mjs && node --check src/xtream-gateway-hook.mjs && node --test test/xtream-distributor-customer-catalog.test.mjs
+# Bounded one-shot saleh media feasibility diagnostic must pass safety tests;
+# this never fetches provider data during Docker build.
+COPY test/xtream-saleh-copy-capability.test.mjs ./test/xtream-saleh-copy-capability.test.mjs
+RUN node --check src/xtream-saleh-copy-capability.mjs && node --check src/xtream-gateway-hook.mjs && node --test test/xtream-saleh-copy-capability.test.mjs
 EXPOSE 8080
 CMD ["npm","start"]
