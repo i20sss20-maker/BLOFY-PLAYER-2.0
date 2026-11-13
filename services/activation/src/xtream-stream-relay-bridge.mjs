@@ -78,9 +78,10 @@ export async function issueStreamRelayGrant({sourceUrl,kind,sharedLive=false,
           // No provider/source grouping for non-shared or unverified feeds.
           // This private request is authenticated by the bridge bearer.
           ...(requireSharedLive===true&&UUID.test(String(licensedSourceId))&&
-            providerMaxConcurrentFeeds===1?{
+            Number.isSafeInteger(providerMaxConcurrentFeeds)&&
+            providerMaxConcurrentFeeds>=1&&providerMaxConcurrentFeeds<=64?{
               licensedSourceId:String(licensedSourceId).toLowerCase(),
-              providerMaxConcurrentFeeds:1
+              providerMaxConcurrentFeeds
             }:{})
         }:{})},env,fetchImpl
   });
