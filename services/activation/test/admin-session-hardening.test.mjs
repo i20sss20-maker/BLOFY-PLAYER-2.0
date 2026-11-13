@@ -39,7 +39,8 @@ function makeRuntime(env={}, database=memoryDatabase()) {
         }
       };
     },
-    readFile:async path=>path.pathname.endsWith('admin-login.html')?'LOGIN':'DASHBOARD'});
+    readFile:async path=>path.pathname.endsWith('admin-login.html')?'LOGIN':
+      path.pathname.endsWith('admin-content-hub.html')?'CONTENT_HUB_DASHBOARD':'DASHBOARD'});
   const script=source.replace(/^import .+;\n/gm,'').replaceAll('import.meta.url',JSON.stringify('file:///test/src/admin-session-hook.mjs'));
   vm.runInContext(script+'\n;globalThis.probes={makeSession,validSession,sessionClaims,clientKey,sign,cookie,rate:ip=>sessionStore.consumeLogin(ip)};',context,{timeout:1000});
   const handler=http.createServer((req,res)=>{
@@ -61,6 +62,21 @@ function makeRuntime(env={}, database=memoryDatabase()) {
     login:()=>request({method:'POST',url:'/api/v1/admin/session/login',headers:{origin},
       body:JSON.stringify({username:testEnv.BLOFY_ADMIN_USERNAME,password:testEnv.BLOFY_ADMIN_PASSWORD})})};
 }
+
+test('Content Hub admin subpage uses signed session, returns login to anonymous browser instead of 404',async()=>{
+  const a=makeRuntime();
+  const unauth=await a.request({url:'/admin/content-hub'});
+  assert.equal(unauth.status,200);
+  assert.equal(unauth.body,'LOGIN');
+  const cookie=a.sessionCookie(await a.makeSession());
+  const authed=await a.request({url:'/admin/content-hub',headers:{cookie}});
+  assert.equal(authed.status,200);
+  assert.equal(authed.body,'CONTENT_HUB_DASHBOARD');
+  assert.match(authed.headers['content-security-policy'],/frame-ancestors 'none'/);
+  const other=await a.request({url:'/admin',headers:{cookie}});
+  assert.equal(other.status,200);
+  assert.equal(other.body,'DASHBOARD');
+});
 
 test('same configured credentials recognize a session across independent instances',async()=>{
   const database=memoryDatabase(),a=makeRuntime({},database),b=makeRuntime({},database);assert.equal(await b.valid(await a.makeSession()),true);
