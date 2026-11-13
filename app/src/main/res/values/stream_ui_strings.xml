@@ -130,4 +130,5 @@
     <string name="stream_cast_available">Available titles from this performer</string>
     <string name="stream_cast_none">No locally verified filmography is cached yet. Browse more movie/series details to enrich cast data.</string>
     <string name="stream_cast_search">Search BLOFY AI for this performer</string>
+    <string name="stream_cast_loading">Finding cast credits already saved in your library…</string>
 </resources>
