@@ -56,7 +56,7 @@ export function createContentHubServer({storage,lease,
  if(!storage||!lease)throw Error('content_hub_private_dependencies_required');
  const started=Date.now();
  let syntheticRunning=false,lastSynthetic=null;
- let pilotRunning=false,lastPilot=null;
+ let pilotRunning=false,lastPilot=null,pilotAbort=null;
  const server=http.createServer(async(req,res)=>{
   const path=String(req.url||'').split('?')[0];
   if(path==='/health'&&req.method==='GET')
@@ -79,6 +79,27 @@ export function createContentHubServer({storage,lease,
     lastSynthetic,pilotRunning,lastPilot,
     durablePilot,customerCutover:false,
     licensedRightsRequired:true});
+  }
+  if(path==='/internal/pilots'&&req.method==='GET'){
+   if(String(req.url||'').includes('?'))
+    return json(res,400,{ok:false,code:'content_hub_query_not_allowed'});
+   try{
+    const [runs,accounting]=await Promise.all([
+      lease.listPilotRuns?.({limit:20})||[],
+      lease.storageAccounting?.()||null
+    ]);
+    return json(res,200,{ok:true,privateOnly:true,customerCutover:false,
+       accounting,runs,pilotRunning,downloadQueueEnabled:false});
+   }catch{
+    return json(res,503,{ok:false,code:'content_hub_pilot_records_unavailable'});
+   }
+  }
+  if(path==='/internal/pilot/cancel'&&req.method==='POST'){
+   if(!pilotRunning||!pilotAbort)
+    return json(res,409,{ok:false,code:'content_hub_pilot_not_running'});
+   pilotAbort.abort();
+   return json(res,202,{ok:true,code:'content_hub_pilot_cancellation_requested',
+      privateOnly:true,customerCutover:false});
   }
   // Admin-only and private-network-only canary. No customer cutover.
   const playback=/^\/internal\/pilot\/playback\/([A-Za-z0-9_-]{8,80})$/.exec(path);
@@ -147,11 +168,12 @@ export function createContentHubServer({storage,lease,
   }
   return json(res,404,{ok:false,code:'content_hub_not_found'});
  });
- return {server,recordPilot:(result)=>{pilotRunning=false;lastPilot={
+ return {server,recordPilot:(result)=>{pilotRunning=false;pilotAbort=null;lastPilot={
   ok:result?.ok===true,code:String(result?.code||'pilot_failed'),
   stored:result?.stored===true,bytes:result?.ok?result.bytes:undefined,
   checkedAt:new Date().toISOString()};},
-  startPilot:()=>{pilotRunning=true;},runSynthetic:async()=>{
+  startPilot:()=>{pilotAbort=new AbortController();pilotRunning=true;
+    return pilotAbort.signal;},runSynthetic:async()=>{
   if(syntheticRunning)return {ok:false,code:'synthetic_storage_test_busy'};
   syntheticRunning=true;
   try{
@@ -188,8 +210,8 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
   if(process.env.BLOFY_CONTENT_HUB_ONE_MOVIE_ON_BOOT==='1'&&
      process.env.BLOFY_CONTENT_HUB_REAL_SAMPLE_ON_BOOT!=='1'){
    const timer=setTimeout(()=>{
-    hub.startPilot();
-    void runOneMoviePilot({storage,lease,
+    const signal=hub.startPilot();
+    void runOneMoviePilot({storage,lease,signal,
       logger:(name,payload)=>console.info(name,JSON.stringify(payload))
     }).then(result=>{
       hub.recordPilot(result);
