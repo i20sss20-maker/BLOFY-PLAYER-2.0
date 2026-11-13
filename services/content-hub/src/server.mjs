@@ -299,6 +299,21 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
  hub.server.listen(port,'0.0.0.0',()=>{
   console.info('BLOFY_CONTENT_HUB_READY',JSON.stringify({port,
    privateOnly:true,downloadQueueEnabled:false,customerCutover:false}));
+  // One-off read-only mapping discovery. No source media is fetched and no
+  // customer path is modified; only sanitized gateway ID and extension log.
+  if(process.env.BLOFY_CONTENT_HUB_PREFLIGHT_ON_BOOT==='1'){
+   const timer=setTimeout(()=>{
+    void inspectOneMoviePilot().then(info=>{
+      console.info('BLOFY_CONTENT_HUB_PREFLIGHT',JSON.stringify({
+       ok:info.ok===true,code:info.code,
+       gatewayId:info.ok?info.gatewayId:null,
+       extension:info.ok?info.extension:null,
+       providerMediaRequests:0,customerCutover:false
+      }));
+    }).catch(()=>console.warn('BLOFY_CONTENT_HUB_PREFLIGHT',
+     JSON.stringify({ok:false,code:'metadata_unavailable',providerMediaRequests:0})));
+   },2500);timer.unref?.();
+  }
   if(process.env.BLOFY_CONTENT_HUB_SYNTHETIC_ON_BOOT==='1'){
    const timer=setTimeout(()=>{
     void hub.runSynthetic().catch(()=>{
