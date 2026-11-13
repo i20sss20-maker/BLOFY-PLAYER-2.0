@@ -159,7 +159,7 @@ export async function runChunkedMovieBatch({
   const info=await inspectOneMoviePilot({env,fetchImpl,signal});
   if(!info.ok||info.sourceName!=='saleh'||info.gatewayId!==cfg.gatewayId)
    return {...base,ok:false,code:'batch_movie_mapping_mismatch'};
-  const fingerprint=createHash('sha256')
+  const privateRunKey=createHash('sha256')
    .update(cfg.runId+'|'+info.sourceId+'|'+info.mediaId+'|'+info.gatewayId)
    .digest('hex').slice(0,24);
   run=await lease.loadChunkedRun({
@@ -221,7 +221,7 @@ export async function runChunkedMovieBatch({
     }
    }
    const sha256=createHash('sha256').update(bytes).digest('hex');
-   activeKey='saleh/movie/'+info.sourceId+'/batch_'+fingerprint+
+   activeKey='saleh/movie/'+info.sourceId+'/batch_'+privateRunKey+
      '_part_'+String(no).padStart(6,'0')+'.'+info.extension;
    const opened=await storage.begin({key:activeKey,private:true,
     contentType:'application/octet-stream',
@@ -244,7 +244,7 @@ export async function runChunkedMovieBatch({
    if(!persisted)throw Error('chunk_checkpoint_not_persisted');
    activeKey=null;complete=false;
    run.parts.push({partNumber:no,key:persisted.key||'saleh/movie/'+info.sourceId+
-     '/batch_'+fingerprint+'_part_'+String(no).padStart(6,'0')+'.'+info.extension,
+     '/batch_'+privateRunKey+'_part_'+String(no).padStart(6,'0')+'.'+info.extension,
      bytes:bytes.length,sha256});
    run.validator=validator;
    logger('BLOFY_CONTENT_HUB_CHUNK_SAVED',{
