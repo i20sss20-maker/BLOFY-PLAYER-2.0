@@ -67,17 +67,17 @@ export function createContentHubServer({storage,lease,
   if(!safeAuth(req.headers.authorization,token))
    return json(res,401,{ok:false,code:'content_hub_auth_required'});
   if(path==='/internal/status'&&req.method==='GET'){
-   let bucket=false,database=false;
+   let bucket=false,database=false,durablePilot=null;
    try{bucket=(await storage.health()).ok===true}catch{}
    try{database=await lease.health()}catch{}
+   try{durablePilot=await lease.getPilotStatus?.(
+     String(process.env.BLOFY_CONTENT_HUB_PILOT_RUN_ID||''))}catch{}
    return json(res,bucket&&database?200:503,{
     ok:bucket&&database,privateBucketAvailable:bucket,
     databaseAvailable:database,downloadQueueEnabled:false,
     syntheticTestEnabled:allowSynthetic,
     lastSynthetic,pilotRunning,lastPilot,
-    durablePilot:await lease.getPilotStatus?.(
-      String(process.env.BLOFY_CONTENT_HUB_PILOT_RUN_ID||'')
-    ).catch(()=>null)||null,customerCutover:false,
+    durablePilot,customerCutover:false,
     licensedRightsRequired:true});
   }
   // Admin-only and private-network-only canary. No customer cutover.
