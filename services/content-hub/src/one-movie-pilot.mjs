@@ -1,6 +1,7 @@
 // One-movie licensed copy pilot. Disabled by default, private-only.
 // Never touches customer playback routes or downloads the entire catalog.
 import {runLicensedMirrorPilot} from './mirror-pilot.mjs';
+import {createHash} from 'node:crypto';
 import {MIN_PART_BYTES} from './mirror-policy.mjs';
 
 const ORIGIN='http://blofy-activation-portal.railway.internal:3000';
@@ -59,18 +60,25 @@ export async function runOneMoviePilot({
  if(bucket?.ok!==true)
   return {...BASE,ok:false,code:'pilot_private_bucket_unavailable',stored:false};
  // Durable one-shot claim: a container restart can never repeat the same run ID.
- const claimed=await lease.claimPilotRun(runId);
+ const claimed=await lease.claimPilotRun(runId,{expectedBytes});
  if(!claimed)return {...BASE,ok:false,code:'pilot_run_already_claimed',stored:false};
  const deadline=AbortSignal.timeout(2*60*60*1000);
  const combined=signal?AbortSignal.any([signal,deadline]):deadline;
  let result={...BASE,ok:false,code:'pilot_failed',stored:false};
+ let objectKey=null;
  try{
   const meta=await getMetadata(fetchImpl,token,combined);
   if(approvedGatewayId!==meta.gatewayId)
    throw Error('pilot_movie_not_approved');
+  // Versioned private object key: never overwrite a previous verified copy.
+  const objectName='pilot_'+createHash('sha256')
+    .update(runId+'\\0'+meta.sourceId+'\\0'+meta.mediaId)
+    .digest('hex').slice(0,32);
+  objectKey=`saleh/movie/${meta.sourceId}/${objectName}.${meta.extension}`;
   const approved={
    sourceName:meta.sourceName,sourceId:meta.sourceId,
    mediaKind:'movie',mediaId:meta.mediaId,extension:meta.extension,
+   privateObjectName:objectName,
    expectedBytes,activeUpstreamFeeds:0,
    // Per-run explicit approval, not derived from the upstream restreamer flag.
    licenseEvidence:{storagePermitted:true,scope:'saleh-vod-persistent-copy'}
@@ -90,7 +98,11 @@ export async function runOneMoviePilot({
   const work=await runLicensedMirrorPilot({
    env,job:approved,privateBucket:{private:true,configured:true},
    readRange,storage,lease,verifyStoredObject:args=>storage.verify(args),
-   signal:combined,partBytes:MIN_PART_BYTES
+   signal:combined,partBytes:MIN_PART_BYTES,
+   onProgress:async({bytesUploaded,partsUploaded})=>{
+    if(typeof lease.progressPilotRun==='function')
+     await lease.progressPilotRun(runId,{bytesUploaded,partsUploaded});
+   }
   });
   result={...BASE,...work};
   logger('BLOFY_CONTENT_HUB_ONE_MOVIE_PILOT',{
@@ -101,8 +113,17 @@ export async function runOneMoviePilot({
  }catch{
   result={...BASE,ok:false,code:'pilot_source_or_job_failed',stored:false};
  }
- await lease.finishPilotRun(runId,{
-  status:result.ok?'verified':'failed',code:result.code
- }).catch(()=>{});
+ // Never claim success if the object cannot be recorded durably.
+ try{
+  await lease.finishPilotRun(runId,{
+   status:result.ok?'verified':'failed',code:result.code,
+   bytes:result.ok?result.bytes:undefined,
+   sha256:result.ok?result.sha256:undefined,
+   objectKey:result.ok?objectKey:undefined
+  });
+ }catch{
+  if(result.ok&&objectKey)await storage.remove({key:objectKey}).catch(()=>{});
+  return {...BASE,ok:false,code:'pilot_finalize_failed',stored:false};
+ }
  return result;
 }
