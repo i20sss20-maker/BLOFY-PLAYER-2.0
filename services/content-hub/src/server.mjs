@@ -13,6 +13,7 @@ import {buildPrivateBrowserPreview} from './private-preview.mjs';
 import {inspectEpisodeCandidates} from './episode-candidates.mjs';
 import {inspectEpisodeSize} from './episode-probe.mjs';
 import {runOneEpisodeChunk,episodeCopyReadiness} from './episode-chunk-pilot.mjs';
+import {createContentCatalogStore,validateCuratedMetadata} from './curated-metadata.mjs';
 import {createSeasonQueueStore,createSeasonQueueController,seasonQueueReadiness,validateSeasonSelection,seasonQueueSummary} from './season-queue.mjs';
 import {inspectLicensedSeries,inspectLicensedSeriesEpisodes,inspectLicensedPilotSeries} from './series-catalog.mjs';
 import {summarizeSeasonHealth,auditSeasonEpisodeSample} from './season-health.mjs';
@@ -84,7 +85,7 @@ export function createContentHubServer({storage,lease,
  batchRunner=runChunkedMovieBatch,previewBuilder=buildPrivateBrowserPreview,
  episodeCandidateInspector=inspectEpisodeCandidates,
  episodeSizeInspector=inspectEpisodeSize,
- episodeChunkRunner=runOneEpisodeChunk,seasonQueueStore=null,
+ episodeChunkRunner=runOneEpisodeChunk,seasonQueueStore=null,catalogStore=null,
  seriesCatalogInspector=inspectLicensedSeries,
  pilotSeriesInspector=inspectLicensedPilotSeries,
  seriesEpisodesInspector=inspectLicensedSeriesEpisodes}={}){
@@ -333,6 +334,21 @@ export function createContentHubServer({storage,lease,
    }catch{return json(res,503,{ok:false,
     code:'season_attention_database_unavailable'})}
   }
+  // Manually curated labels and posters, completely separate from media runs.
+  if(path==='/internal/library/metadata'&&req.method==='POST'){
+   if(String(req.url||'').includes('?')||
+      req.headers['x-blofy-owner-action']!=='curate-private-metadata')
+    return json(res,403,{ok:false,code:'curated_owner_confirmation_required'});
+   if(!catalogStore?.save)
+    return json(res,503,{ok:false,code:'curated_metadata_unavailable'});
+   let input;
+   try{input=await readSeasonJson(req);validateCuratedMetadata(input)}
+   catch{return json(res,400,{ok:false,code:'curated_metadata_invalid'})}
+   try{
+    const result=await catalogStore.save(input);
+    return json(res,result.ok?200:404,result);
+   }catch{return json(res,503,{ok:false,code:'curated_metadata_database_unavailable'})}
+  }
   // Read-only library search. Owner token and explicit action assertion
   // are required even though this POST never mutates content.
   if(path==='/internal/library/search'&&req.method==='POST'){
@@ -350,9 +366,13 @@ export function createContentHubServer({storage,lease,
       !Number.isSafeInteger(body.page)||body.page<1||body.page>20000)
     return json(res,400,{ok:false,code:'library_search_invalid'});
    try{
+    const seriesMatches=body.query.trim()&&catalogStore?.searchSeriesIds?
+     await catalogStore.searchSeriesIds(body.query).catch(()=>({ids:[],limited:true})):
+     {ids:[],limited:false};
     const [data,a,b]=await Promise.all([
      seasonQueueStore.librarySearch({
-      query:body.query,state:body.state,page:body.page}),
+      query:body.query,state:body.state,page:body.page,
+      seriesIds:seriesMatches.ids}),
      Promise.resolve().then(()=>lease.listPilotRuns?.({limit:50})||[]),
      Promise.resolve().then(()=>lease.listChunkedRuns?.({limit:50})||[])
     ].map((p,i)=>i===0?p:Promise.resolve(p).catch(()=>null)));
@@ -368,14 +388,47 @@ export function createContentHubServer({storage,lease,
       code:/^[a-z0-9_]{1,80}$/.test(String(x.code||''))?x.code:null};
     }).filter(x=>/^[A-Za-z0-9_-]{8,80}$/.test(x.runId)):[];
     const allMovies=[...norm(a,'legacy'),...norm(b,'chunked')];
+    const seriesKey=seasonKey=>{
+     const match=/^series_([1-9][0-9]{0,14})_s[0-9]+$/.exec(
+      String(seasonKey||''));
+     return match?'series:'+match[1]:null;
+    };
+    const keys=[...new Set([
+     ...allMovies.map(m=>'movie:'+m.runId),
+     ...(data.seasons||[]).map(s=>seriesKey(s.seasonKey)),
+     ...(data.episodes||[]).map(e=>seriesKey(e.seasonKey))
+    ].filter(Boolean))];
+    let metadataAvailable=Boolean(catalogStore?.find);
+    const curated=[];
+    if(metadataAvailable){
+     try{
+      for(let i=0;i<keys.length;i+=150){
+       curated.push(...await catalogStore.find(keys.slice(i,i+150)));
+      }
+     }catch{metadataAvailable=false}
+    }
+    const byKey=new Map(curated.map(x=>[x.key,x]));
+    const seasons=(data.seasons||[]).map(x=>({
+     ...x,metadata:byKey.get(seriesKey(x.seasonKey))||null
+    }));
+    const episodes=(data.episodes||[]).map(x=>({
+     ...x,seriesMetadata:byKey.get(seriesKey(x.seasonKey))||null
+    }));
+    const enrichedMovies=allMovies.map(x=>({
+     ...x,metadata:byKey.get('movie:'+x.runId)||null
+    }));
     const query=body.query.trim().toLocaleLowerCase();
-    const matches=allMovies.filter(x=>
-     (!query||x.runId.toLocaleLowerCase().includes(query))&&
+    const matches=enrichedMovies.filter(x=>
+     (!query||x.runId.toLocaleLowerCase().includes(query)||
+       x.metadata?.title?.toLocaleLowerCase().includes(query))&&
      (body.state==='all'||x.state===body.state));
     matches.sort((x,y)=>String(y.date||'').localeCompare(String(x.date||'')));
     return json(res,200,{ok:true,privateOnly:true,readOnly:true,
      customerCutover:false,automaticStart:false,automaticRetry:false,
      providerMediaRequests:0,storageRequests:0,...data,
+     seasons,episodes,metadataAvailable,curatedOnly:true,
+     curatedTitleMatchesLimited:seriesMatches.limited===true,
+     artworkProvider:'tmdb_manually_selected_poster_path',
      movies:matches.slice((body.page-1)*40,body.page*40),
      movieHistoryAvailable:a!==null&&b!==null,
      movieHistoryMaybeLimited:(Array.isArray(a)&&a.length>=50)||
@@ -1231,7 +1284,8 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
  const storage=createPrivateS3Adapter();
  const lease=createSourceLease({connectionString:process.env.DATABASE_URL});
  const seasonQueueStore=createSeasonQueueStore({connectionString:process.env.DATABASE_URL});
- const hub=createContentHubServer({storage,lease,seasonQueueStore,
+ const catalogStore=createContentCatalogStore({connectionString:process.env.DATABASE_URL});
+ const hub=createContentHubServer({storage,lease,seasonQueueStore,catalogStore,
   token:process.env.BLOFY_CONTENT_HUB_ADMIN_TOKEN||'',
   allowSynthetic:process.env.BLOFY_CONTENT_HUB_SYNTHETIC_TEST_ENABLED==='1',
   logger:(name,payload)=>console.info(name,JSON.stringify(payload))});
