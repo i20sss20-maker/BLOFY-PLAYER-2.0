@@ -12,7 +12,9 @@ const formatBytes=n=>{
 };
 function stateLabel(s){
  return {verified:'مكتمل ومتحقق منه',started:'جارٍ النقل',
-  staged:'محفوظ جزئيًا - قابل للاستكمال',failed:'لم يكتمل'}[s]||'غير معروف';
+  staged:'محفوظ جزئيًا - قابل للاستكمال',queued:'في الانتظار',
+  running:'جارٍ النقل',paused:'موقوف وقابل للاستكمال',
+  failed:'لم يكتمل'}[s]||'غير معروف';
 }
 function div(className,text){
  const el=document.createElement('div');
