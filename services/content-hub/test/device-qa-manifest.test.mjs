@@ -100,7 +100,7 @@ test('owner-only QA route checks bearer token, signed action and querystring',as
   assert.equal(seen.length,0);
   const response=await fetch(url,{headers:ok});
   assert.equal(response.status,200);
-  assert.match(response.headers.get('cache-control'),'no-store');
+  assert.equal(response.headers.get('cache-control'),'no-store');
   const data=await response.json();
   assert.equal(data.platform,'android_tv');
   assert.equal(data.candidateCount,1);
