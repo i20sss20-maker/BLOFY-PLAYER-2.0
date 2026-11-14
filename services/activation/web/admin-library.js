@@ -232,6 +232,11 @@ function render(){
   (data.movieHistoryMaybeLimited?' وقد يكون هناك أفلام أقدم خارج العينة.':
    '، ولا يمثل ذلك بالضرورة المكتبة الكاملة.')+
   ' معيار اكتمال الموسم = اكتمال الحلقات المدرجة فقط، وليس كل حلقات المصدر.';
+ // The separate cinema surface is a consumer of this already-authenticated,
+ // page-scoped snapshot. No additional network call or new catalog endpoint.
+ document.dispatchEvent(new CustomEvent('blofy:library-page-ready',{
+  detail:{data,kind:category}
+ }));
 }
 async function search(pageNumber=1){
  if(busy||document.hidden)return;
