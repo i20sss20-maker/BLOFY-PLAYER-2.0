@@ -3,17 +3,19 @@
 const SAFE_RUN=/^[A-Za-z0-9_-]{8,80}$/;
 const CHUNK=8*1024*1024;
 export async function verifyPrivateSeekRanges({
- runId,bytes,port,token,fetchImpl=fetch
+ runId,bytes,port,token,fetchImpl=fetch,mediaKind='movie'
 }={}){
  const baseline={ok:false,code:'private_seek_unavailable',
    privateOnly:true,customerCutover:false,providerRequests:0,
    seeksVerified:0,rangeTests:4,unauthorizedDenied:false};
- if(!SAFE_RUN.test(String(runId||''))||
+ if(!['movie','episode'].includes(mediaKind)||
+   !SAFE_RUN.test(String(runId||''))||
    !Number.isSafeInteger(bytes)||bytes<CHUNK+4096||
    !Number.isSafeInteger(port)||port<1||port>65535||
    typeof token!=='string'||token.length<32)return baseline;
  const base='http://127.0.0.1:'+port+
-   '/internal/pilot/playback/'+runId;
+   (mediaKind==='episode'?'/internal/episodes/playback/':
+    '/internal/pilot/playback/')+runId;
  const headers={authorization:'Bearer '+token};
  const opts={redirect:'manual',cache:'no-store'};
  let passed=0,authDenied=false;
