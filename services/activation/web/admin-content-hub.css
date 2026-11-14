@@ -628,3 +628,22 @@
  color:#f2e3bf;font-size:12px;line-height:1.6}
 @media(max-width:580px){.season-readiness-top-actions{width:100%}
  .season-readiness-top-actions button{flex:1}}
+
+
+/* Private per-platform QA worksheet — never a published app library. */
+.season-device-qa{display:grid;gap:12px;padding:15px;
+ border:1px solid #46728a;border-radius:12px;background:#0e2c40}
+.season-device-qa h3{font-size:16px;margin:0 0 7px;color:#e6f6fe}
+.season-device-qa .muted{font-size:13px;line-height:1.85;margin:0}
+.season-device-qa .hint{margin:0}
+.season-device-qa-controls{display:grid;grid-template-columns:1fr 1fr;
+ gap:13px;align-items:end;max-width:650px}
+.season-device-qa-controls label{display:grid;gap:7px;font-size:13px}
+.season-device-qa-controls input,.season-device-qa-controls select{
+ min-height:41px;background:#10243c;border:1px solid #5282a0;
+ border-radius:8px;color:#eefaff;padding:8px 11px;font-size:13px;
+ font-family:inherit}
+.season-device-qa-button{background:#1b5a75;border-color:#5796ac}
+#seasonDeviceQaStatus{font-size:12px;margin:0;line-height:1.8}
+@media(max-width:650px){.season-device-qa-controls{
+ grid-template-columns:1fr}.season-device-qa{padding:11px}}
