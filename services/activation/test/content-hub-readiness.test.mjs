@@ -6,7 +6,8 @@ const base=new URL('../web/',import.meta.url);
 const read=name=>readFile(new URL(name,base),'utf8');
 const ids=['seasonReadinessRefresh','seasonReadinessPrev','seasonReadinessNext',
  'seasonReadinessStatus','seasonReadinessKpis','seasonReadinessWarnings',
- 'seasonReadinessRows','seasonReadinessScope','seasonReadinessPage'];
+ 'seasonReadinessRows','seasonReadinessScope','seasonReadinessPage',
+ 'seasonReadinessExport','seasonReadinessDecision'];
 class MiniNode{
  constructor(tag='div'){
   this.tagName=tag.toUpperCase();this.textContent='';this.className='';
@@ -18,6 +19,7 @@ class MiniNode{
  addEventListener(type,cb){(this.handlers[type]??=[]).push(cb)}
  click(){for(const f of this.handlers.click||[])f({type:'click'})}
  setAttribute(k,v){this.attrs[k]=String(v)}
+ remove(){}
 }
 const walk=(root,pred,out=[])=>{
  if(pred(root))out.push(root);
@@ -38,6 +40,8 @@ test('owner readiness page has clearly scoped registered-queue-only labels',asyn
  assert.match(html,/للحلقات المدرجة في قائمة النقل الخاصة فقط/);
  assert.match(html,/لا تقيس تلقائيًا جودة الصوت أو الفيديو/);
  assert.match(html,/admin-season-readiness\.js/);
+ assert.match(html,/مرشح لاختبار خاص/);
+ assert.match(html,/تصدير تقرير الصفحة CSV/);
  assert.match(hook,/admin-season-readiness\.js/);
  assert.match(hook,/review-private-seasons/);
  assert.match(hub,/review-private-seasons/);
@@ -50,18 +54,25 @@ test('owner readiness page has clearly scoped registered-queue-only labels',asyn
 });
 test('owner dashboard shows global counts and season report links, without media requests',async()=>{
  const references=Object.fromEntries(ids.map(id=>[id,new MiniNode()]));
- const actions=[],requests=[];
+ const actions=[],requests=[],downloads=[];
+ let capturedBlob=null,revoked=false;
  const data={
   ok:true,readOnly:true,privateOnly:true,databaseSnapshotOnly:true,
   scope:'all_registered_private_season_queue_episodes_only',
   page:1,perPage:20,hasPrevious:false,hasNext:true,
+  privateDeviceTestingOnly:true,customerReleaseApproved:false,
+  snapshotAt:'2026-11-14T11:15:00Z',
   automaticStart:false,providerMediaRequests:0,storageRequests:0,
   manifestStateAvailable:true,ownerReviewSchemaAvailable:true,
   global:{
    registeredSeasons:4,registeredEpisodes:15,
    storageVerifiedEpisodes:8,ownerAvReviewedEpisodes:3,
    verifiedAwaitingOwnerAv:5,failedEpisodes:2,
-   inconsistentVerifiedQueueEpisodes:0
+   inconsistentVerifiedQueueEpisodes:0,
+   privateDeviceTestGate:{
+    canConsiderPrivateDeviceTest:false,customerReleaseApproved:false,
+    publishToSubscribers:false,
+    blockingReasons:['registered_episode_failures','owner_av_review_incomplete']}
   },
   seasons:[{
    seasonKey:'series_42_s01',registeredEpisodes:10,
@@ -69,18 +80,28 @@ test('owner dashboard shows global counts and season report links, without media
    verifiedAwaitingOwnerAv:5,failedEpisodes:1,
    queuedEpisodes:1,pausedEpisodes:1,runningEpisodes:0,
    inconsistentVerifiedQueueEpisodes:0,
-   storageVerificationPercent:70
+   storageVerificationPercent:70,
+   privateDeviceTestGate:{
+    canConsiderPrivateDeviceTest:false,customerReleaseApproved:false,
+    publishToSubscribers:false,
+    blockingReasons:['registered_episode_failures']}
   }]
  };
  const doc={
   getElementById:id=>references[id],
   createElement:tag=>new MiniNode(tag),
   dispatchEvent:e=>actions.push(e),
-  addEventListener(){}
+  addEventListener(){},
+  body:{append:node=>downloads.push(node)}
  };
  class CE{constructor(type,{detail}={}){this.type=type;this.detail=detail}}
  const context={
-  document:doc,CustomEvent:CE,AbortSignal,
+  document:doc,CustomEvent:CE,AbortSignal,Blob,
+  setTimeout:(fn,ms)=>{assert.equal(ms,2000);fn()},
+  URL:{
+   createObjectURL(blob){capturedBlob=blob;return 'blob:test-csv'},
+   revokeObjectURL(url){assert.equal(url,'blob:test-csv');revoked=true}
+  },
   fetch:async(url,options)=>{
    requests.push({url,options});
    return {ok:true,status:200,json:async()=>data};
@@ -97,7 +118,9 @@ test('owner dashboard shows global counts and season report links, without media
  assert.equal(references.seasonReadinessRows.children.length,1);
  assert.equal(references.seasonReadinessNext.disabled,false);
  assert.equal(references.seasonReadinessPrev.disabled,true);
- assert.match(references.seasonReadinessStatus.textContent,/لا يعني جاهزية/);
+ assert.match(references.seasonReadinessStatus.textContent,/لا يمثل موافقة للنشر/);
+ assert.match(references.seasonReadinessDecision.textContent,/يحتاج مراجعات/);
+ assert.equal(references.seasonReadinessExport.disabled,false);
  const reportButtons=walk(references.seasonReadinessRows,
   n=>n.tagName==='BUTTON');
  assert.equal(reportButtons.length,1);
@@ -106,4 +129,17 @@ test('owner dashboard shows global counts and season report links, without media
  assert.equal(actions[0].detail.seasonKey,'series_42_s01');
  assert.equal(requests.every(x=>x.url.includes(
   '/api/v1/admin/content-hub/seasons/readiness/page/')),true);
+ references.seasonReadinessExport.click();
+ assert.equal(downloads.length,1);
+ assert.equal(downloads[0].download,'BLOFY-private-readiness-page-1.csv');
+ assert.equal(revoked,true);
+ assert.ok(capturedBlob);
+ const csv=await capturedBlob.text();
+ assert.match(csv,/registered_private_queue_only/);
+ assert.match(csv,/all_registered_seasons/);
+ assert.match(csv,/series_42_s01/);
+ assert.match(csv,/customer_release_approved/);
+ assert.match(csv,/"no"/);
+ assert.doesNotMatch(csv,/approved_to_publish/);
+ assert.match(references.seasonReadinessStatus.textContent,/صفحة/);
 });

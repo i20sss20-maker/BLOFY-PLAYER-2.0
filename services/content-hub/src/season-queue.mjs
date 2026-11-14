@@ -4,6 +4,7 @@
 import pg from 'pg';
 import {randomBytes} from 'node:crypto';
 import {episodeCopyReadiness,runOneEpisodeChunk} from './episode-chunk-pilot.mjs';
+import {evaluatePrivateAppTestGate} from './private-test-gate.mjs';
 
 const RUN=/^[A-Za-z0-9_-]{8,80}$/;
 const SEASON=/^[a-z0-9][a-z0-9_-]{2,63}$/;
@@ -1014,6 +1015,15 @@ export function createSeasonQueueStore({
     };
    };
    const rows=pages.rows||[];
+   const gateFlags={
+    manifestStateAvailable:hasRuns,
+    ownerReviewSchemaAvailable:hasRuns&&hasAv
+   };
+   const withGate=row=>{
+    const numbers=normalized(row);
+    return {...numbers,
+     privateDeviceTestGate:evaluatePrivateAppTestGate(numbers,gateFlags)};
+   };
    return {
     ok:true,privateOnly:true,readOnly:true,
     scope:'all_registered_private_season_queue_episodes_only',
@@ -1022,10 +1032,15 @@ export function createSeasonQueueStore({
     mediaBytesInspected:false,mediaCodecScanned:false,
     allSourceEpisodesCountKnown:false,
     manifestStateAvailable:hasRuns,ownerReviewSchemaAvailable:hasRuns&&hasAv,
-    global:normalized(summary),
+    global:withGate(summary),
     seasons:rows.slice(0,size).map(row=>({
-     seasonKey:row.season_key,...normalized(row)
+     seasonKey:row.season_key,...withGate(row)
     })),
+    privateDeviceTestingOnly:true,
+    customerReleaseApproved:false,
+    distributionRightsUnverified:true,
+    snapshotAt:new Date().toISOString(),
+    snapshotConsistency:'two_bounded_read_only_database_queries',
     page,perPage:size,hasNext:rows.length>size,hasPrevious:page>1,
     databaseSnapshotOnly:true,automaticStart:false,
     providerMediaRequests:0,storageRequests:0
