@@ -914,7 +914,6 @@ export function createSeasonQueueStore({
    await ensure();
    const size=20,offset=(page-1)*size;
    let hasRuns=true,hasAv=true;
-   const validState=(row,alias)=>row;
    const expression=()=>{
     const verified=hasRuns?
      "q.state='verified' AND r.state='verified'":"FALSE";
@@ -928,6 +927,7 @@ export function createSeasonQueueStore({
     const {verified,checked}=expression();
     return [
      'COUNT(*)::text AS episode_count,',
+     'COUNT(DISTINCT q.season_key)::text AS registered_season_count,'
      "COUNT(*) FILTER (WHERE q.state='queued')::text AS queued_count,",
      "COUNT(*) FILTER (WHERE q.state='paused')::text AS paused_count,",
      "COUNT(*) FILTER (WHERE q.state='running')::text AS running_count,",
@@ -957,7 +957,7 @@ export function createSeasonQueueStore({
      'SELECT',withSeason?'q.season_key,':'',...columns(),joins(),
      withSeason?'GROUP BY q.season_key':'',
      withSeason?
-      'ORDER BY failed_count DESC, (verified_count::int - av_reviewed_count::int) DESC, q.season_key LIMIT $1 OFFSET $2':
+      'ORDER BY failed_count::int DESC, (verified_count::int - av_reviewed_count::int) DESC, q.season_key LIMIT $1 OFFSET $2':
       ''
     ].filter(Boolean).join(' ');
     const args=withSeason?[size+1,offset]:[];
@@ -969,7 +969,7 @@ export function createSeasonQueueStore({
       ...columns(),joins(),
       withSeason?'GROUP BY q.season_key':'',
       withSeason?
-       'ORDER BY failed_count DESC, (verified_count::int - av_reviewed_count::int) DESC, q.season_key LIMIT $1 OFFSET $2':''
+       'ORDER BY failed_count::int DESC, (verified_count::int - av_reviewed_count::int) DESC, q.season_key LIMIT $1 OFFSET $2':''
      ].filter(Boolean).join(' '),args).catch(async second=>{
       if(second?.code!=='42P01')throw second;
       hasRuns=false;
@@ -978,14 +978,14 @@ export function createSeasonQueueStore({
        ...columns(),joins(),
        withSeason?'GROUP BY q.season_key':'',
        withSeason?
-        'ORDER BY failed_count DESC, (verified_count::int - av_reviewed_count::int) DESC, q.season_key LIMIT $1 OFFSET $2':''
+        'ORDER BY failed_count::int DESC, (verified_count::int - av_reviewed_count::int) DESC, q.season_key LIMIT $1 OFFSET $2':''
       ].filter(Boolean).join(' '),args);
      })}
      if(hasRuns){hasRuns=false;return pool.query([
       'SELECT',withSeason?'q.season_key,':'',...columns(),joins(),
       withSeason?'GROUP BY q.season_key':'',
       withSeason?
-       'ORDER BY failed_count DESC, (verified_count::int - av_reviewed_count::int) DESC, q.season_key LIMIT $1 OFFSET $2':''
+       'ORDER BY failed_count::int DESC, (verified_count::int - av_reviewed_count::int) DESC, q.season_key LIMIT $1 OFFSET $2':''
      ].filter(Boolean).join(' '),args)}
      throw error;
     }
@@ -997,7 +997,9 @@ export function createSeasonQueueStore({
     const registered=n(row.episode_count),verified=n(row.verified_count);
     const reviewed=Math.min(verified,n(row.av_reviewed_count));
     return {
-     registeredEpisodes:registered,storageVerifiedEpisodes:verified,
+     registeredEpisodes:registered,
+     registeredSeasons:n(row.registered_season_count),
+     storageVerifiedEpisodes:verified,
      ownerAvReviewedEpisodes:reviewed,
      verifiedAwaitingOwnerAv:Math.max(0,verified-reviewed),
      failedEpisodes:n(row.failed_count),queuedEpisodes:n(row.queued_count),
@@ -1081,7 +1083,17 @@ export function createSeasonQueueStore({
     'FROM blofy_content_hub_season_queue q',
     'INNER JOIN blofy_content_hub_episode_runs r ON r.run_id=q.run_id',
     "WHERE q.run_id=$1 AND q.state='verified' AND r.state='verified'",
-    'ON CONFLICT(run_id) DO NOTHING',
+    // Old owner proof must not survive a later source re-verification.
+    // The owner can repeat both manual checks after the new manifest.
+    'ON CONFLICT(run_id) DO UPDATE SET',
+    'video_owner_confirmed=TRUE,audio_owner_confirmed=TRUE,',
+    'confirmed_at=NOW()',
+    'WHERE blofy_content_hub_episode_av_reviews.confirmed_at <',
+    '(SELECT GREATEST(q.updated_at,r.updated_at)',
+    'FROM blofy_content_hub_season_queue q',
+    'INNER JOIN blofy_content_hub_episode_runs r ON r.run_id=q.run_id',
+    "WHERE q.run_id=EXCLUDED.run_id AND q.state='verified'",
+    "AND r.state='verified')",
     'RETURNING confirmed_at'
    ].join(' '),[runId]);
    if(!result.rows?.length){
