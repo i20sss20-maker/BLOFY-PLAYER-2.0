@@ -3136,10 +3136,12 @@ async function unifiedStreamBridge(req,res,url){
 
   // Owner-only, 12-second MP4 stream from verified private S3.
   // This bridge authorization was checked above. Never proxy arbitrary paths.
-  if(p==='/internal/blofy-stream/content-hub/preview'){
+  if(p==='/internal/blofy-stream/content-hub/preview'||
+     p==='/internal/blofy-stream/content-hub/episodes/preview'){
     if(req.method!=='GET')return json(res,405,{
       ok:false,code:'owner_preview_method_denied'});
     return forwardPrivatePreview({req,res,
+      mediaKind:p.endsWith('/episodes/preview')?'episode':'movie',
       hubToken:String(process.env.BLOFY_CONTENT_HUB_OPERATOR_TOKEN||'')});
   }
 
