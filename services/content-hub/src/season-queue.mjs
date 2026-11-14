@@ -146,21 +146,44 @@ export function createSeasonQueueStore({
    const client=await pool.connect();
    try{
     await client.query('BEGIN');
-    let added=0;
+    const exists=await client.query(
+      "SELECT to_regclass('blofy_content_hub_episode_runs') AS table_name");
+    const hasEpisodeRecords=Boolean(exists.rows?.[0]?.table_name);
+    let added=0,reused=0;
     for(const e of entries){
+     let previous=null;
+     if(hasEpisodeRecords){
+      const row=await client.query([
+       'SELECT run_id,state,source_id,media_id,extension,expected_bytes',
+       'FROM blofy_content_hub_episode_runs',
+       "WHERE gateway_id=$1 AND state IN ('staged','verified')",
+       'ORDER BY updated_at DESC LIMIT 1'
+      ].join(' '),[e.gatewayId]);
+      previous=row.rows?.[0]||null;
+      if(previous&&(String(previous.source_id)!==e.sourceId||
+        previous.media_id!==e.mediaId||
+        previous.extension!==e.extension||
+        Number(previous.expected_bytes)!==e.expectedBytes))
+       throw Error('season_existing_episode_scope_conflict');
+     }
+     // Adopt an exact already-verified or partial licensed pilot instead of
+     // downloading identical media bytes into a second set of S3 objects.
+     const runId=previous?.run_id||e.runId;
+     const state=previous?.state==='verified'?'verified':'queued';
      const result=await client.query([
       'INSERT INTO blofy_content_hub_season_queue',
       '(run_id,season_key,episode_number,title,gateway_id,source_id,',
-      'media_id,extension,expected_bytes) VALUES',
-      '($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+      'media_id,extension,expected_bytes,state) VALUES',
+      '($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
       'ON CONFLICT (season_key,episode_number) DO NOTHING',
       'RETURNING run_id'
-     ].join(' '),[e.runId,e.seasonKey,e.episodeNumber,e.title,
-      e.gatewayId,e.sourceId,e.mediaId,e.extension,e.expectedBytes]);
+     ].join(' '),[runId,e.seasonKey,e.episodeNumber,e.title,
+      e.gatewayId,e.sourceId,e.mediaId,e.extension,e.expectedBytes,state]);
      added+=result.rowCount;
+     if(result.rowCount&&previous)reused++;
     }
     await client.query('COMMIT');
-    return {added,skipped:entries.length-added};
+    return {added,reusedExisting:reused,skipped:entries.length-added};
    }catch(e){await client.query('ROLLBACK').catch(()=>{});throw e}
    finally{client.release()}
   },
