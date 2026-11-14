@@ -30,7 +30,8 @@ async function until(predicate,limit=1000){
 }
 function fakeQueue(){
  const rows=[];
- return {rows,
+ return {rows,auditAlerts:[],
+  async recentAudits(){return this.auditAlerts},
   async list(){return rows.map(r=>({...r,
     state:r.state,bytesCopied:r.bytesCopied||0,
     expectedBytes:r.expectedBytes,percent:r.bytesCopied?
@@ -229,6 +230,14 @@ test('owner route rejects unauthenticated enqueue and queues only catalog matche
   const proof=await fetch(base+'/internal/episodes/playback/confirmation',{
    headers:{authorization:'Bearer '+token}});
   assert.equal((await proof.json()).confirmed,true);
+  store.auditAlerts=[{code:'season_storage_checksum_mismatch'}];
+  const integrityBlocked=await fetch(base+'/internal/seasons/start',{
+   method:'POST',headers:startHeaders});
+  assert.equal(integrityBlocked.status,409);
+  assert.equal((await integrityBlocked.json()).code,
+   'season_storage_integrity_review_required');
+  assert.equal(copies,0);
+  store.auditAlerts=[];
   const started=await fetch(base+'/internal/seasons/start',{
    method:'POST',headers:startHeaders});
   assert.equal(started.status,202);
