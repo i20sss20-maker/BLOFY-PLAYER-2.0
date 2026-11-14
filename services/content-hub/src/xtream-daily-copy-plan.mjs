@@ -24,7 +24,8 @@ export function planDailyLicensedXtreamCopies({
      !ID.test(p?.mediaId))continue;
   if(p.verified===true)previous.set(keyFor(p),p);
  }
- const seen=new Set(),queue=[],blocked={},unchanged=0;
+ const seen=new Set(),queue=[],blocked={};
+ let unchanged=0;
  let bytes=0,metaOnly=0;
  const block=code=>{blocked[code]=(blocked[code]||0)+1};
  for(const item of catalog){
