@@ -9,6 +9,7 @@ const shortError=(code,status=400)=>({status,data:{ok:false,code}});
 export function isStreamSeasonBridgePath(path){
  return path===NS+'/series'||path===NS+'/pilot'||
   path===NS+'/queue'||path===NS+'/confirmation'||
+  path===NS+'/health'||path===NS+'/audit'||
   path===NS+'/probe'||path===NS+'/enqueue'||
   path===NS+'/start'||path===NS+'/pause'||path===NS+'/confirm'||
   /^\/internal\/blofy-stream\/content-hub\/seasons\/series\/[1-9][0-9]{0,14}$/.test(path);
@@ -17,7 +18,7 @@ const boundedId=n=>Number.isSafeInteger(Number(n))&&Number(n)>0&&
  Number(n)<=Number.MAX_SAFE_INTEGER;
 const validatedBody=(path,method,raw)=>{
  if(method==='GET'){
-  if(!['series','pilot','queue','confirmation'].some(k=>path===NS+'/'+k)&&
+  if(!['series','pilot','queue','confirmation','health'].some(k=>path===NS+'/'+k)&&
     !/^\/internal\/blofy-stream\/content-hub\/seasons\/series\/[1-9][0-9]{0,14}$/.test(path))
    throw Error('season_bridge_method_denied');
   return null;
@@ -58,6 +59,12 @@ const validatedBody=(path,method,raw)=>{
   if(b.confirmed!==true)throw Error('season_pause_confirmation_required');
   return {};
  }
+ if(path===NS+'/audit'){
+  if(b.confirmed!==true||
+     !/^[A-Za-z0-9_-]{8,80}$/.test(String(b.runId||'')))
+   throw Error('season_audit_owner_confirmation_required');
+  return {confirmed:true,runId:b.runId};
+ }
  if(path===NS+'/confirm'){
   if(b.confirmed!==true||b.videoConfirmed!==true||b.audioConfirmed!==true)
    throw Error('season_browser_av_confirmation_required');
@@ -78,6 +85,8 @@ export async function requestStreamSeasonBridge({path,method='GET',body,
   series:'/internal/series/candidates',
   pilot:'/internal/series/pilot',
   queue:'/internal/seasons/queue',
+  health:'/internal/seasons/health',
+  audit:'/internal/seasons/audit',
   confirmation:'/internal/episodes/playback/confirmation',
   probe:'/internal/episodes/probe',
   enqueue:'/internal/seasons/enqueue',
@@ -99,6 +108,9 @@ export async function requestStreamSeasonBridge({path,method='GET',body,
   'x-blofy-season-confirm':'licensed-private-episodes',
   'x-blofy-storage-rights-confirm':'licensed-persistent-copy'});
  if(action==='start')headers['x-blofy-season-confirm']='start-private-sequential';
+ if(action==='audit')Object.assign(headers,{
+  'x-blofy-season-confirm':'audit-private-verified-chunks',
+  'content-type':'application/json'});
  if(action==='pause')headers['x-blofy-season-confirm']='pause-private-sequential';
  if(action==='confirm')Object.assign(headers,{
   'x-blofy-browser-confirm':'owner-saw-and-heard',
@@ -108,8 +120,8 @@ export async function requestStreamSeasonBridge({path,method='GET',body,
   const response=await fetchImpl(HUB+target,{
    method,headers,redirect:'manual',cache:'no-store',
    signal:AbortSignal.timeout(action.startsWith('series/')?65000:
-      action==='probe'?55000:11000),
-   ...(action==='enqueue'?{body:JSON.stringify(input)}:{})
+      action==='audit'?73000:action==='probe'?55000:11000),
+   ...(['enqueue','audit'].includes(action)?{body:JSON.stringify(input)}:{})
   });
   if(![200,201,202,400,403,409,429,503].includes(response.status))
    return shortError('season_bridge_private_status_unexpected',503);
