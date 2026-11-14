@@ -8,6 +8,7 @@ import {listIndexedXtreamMirrorPage} from './xtream-mirror-inventory.mjs';
 import {readXtreamPrivateMirrorCoverage} from './xtream-mirror-coverage.mjs';
 import {createXtreamMirrorDiscoveryStore,riyadhMirrorDay} from './xtream-mirror-discovery-queue.mjs';
 import {readMirrorSeriesEnumerationProgress} from './xtream-mirror-series-enumeration.mjs';
+import {attestMirrorStorageRights} from './xtream-mirror-rights-attestation.mjs';
 import {classifyDailyXtreamOutcome,recordDailyXtreamCatalogOutcome,readDailyXtreamCatalogReceipts} from './xtream-daily-sync-receipts.mjs';
 import {xtreamConnectionReport} from './xtream-smart-connection.mjs';
 import {runXtreamBootDiagnostics} from './xtream-boot-diagnostics.mjs';
@@ -4131,6 +4132,29 @@ http.createServer = function withBlofyXtream(listener) {
       // Admin-only read of the indexed catalog, not private-file storage.
       // Useful for safely inspecting the size and episode-map coverage of
       // the requested Xtream daily mirror without contacting the provider.
+      if(req.method==='POST'&&url.pathname==='/api/v1/admin/xtream/mirror/rights-review'){
+        // Explicit one-item attestation. Never accepts a blanket source grant.
+        // Legal verification remains an external owner responsibility.
+        if(req.headers['x-blofy-owner-action']!=='review-one-mirror-storage-right')
+          return json(res,403,{ok:false,code:'mirror_rights_owner_action_required'});
+        if(process.env.BLOFY_XTREAM_MIRROR_RIGHTS_REVIEW_ENABLED!=='1')
+          return json(res,409,{ok:false,code:'mirror_rights_review_disabled'});
+        try{
+          const input=await readJson(req);
+          if(String(input.sourceId||'')!==
+             String(process.env.BLOFY_XTREAM_DAILY_CATALOG_SOURCE_ID||''))
+            return json(res,403,{ok:false,code:'mirror_rights_source_not_approved'});
+          await mirrorDiscoveryStore.ensure();
+          const result=await attestMirrorStorageRights(controlPool,input);
+          return json(res,result.ok?200:409,result);
+        }catch(error){
+          const invalid=error?.message==='mirror_rights_review_invalid';
+          return json(res,invalid?400:503,{ok:false,
+            code:invalid?'mirror_rights_review_invalid':
+              'mirror_rights_review_unavailable',
+            copied:false,mediaBytesTransferred:0,customerCutover:false});
+        }
+      }
       if(req.method==='GET'&&url.pathname==='/api/v1/admin/xtream/mirror/queue/items'){
         const sourceId=String(url.searchParams.get('sourceId')||'');
         const mediaKind=String(url.searchParams.get('mediaKind')||'movie');
