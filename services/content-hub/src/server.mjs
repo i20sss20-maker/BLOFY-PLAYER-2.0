@@ -376,12 +376,12 @@ export function createContentHubServer({storage,lease,
     return json(res,200,{ok:true,privateOnly:true,readOnly:true,
      customerCutover:false,automaticStart:false,automaticRetry:false,
      providerMediaRequests:0,storageRequests:0,...data,
-     movies:body.page===1?matches.slice(0,40):[],
+     movies:matches.slice((body.page-1)*40,body.page*40),
      movieHistoryAvailable:a!==null&&b!==null,
      movieHistoryMaybeLimited:(Array.isArray(a)&&a.length>=50)||
        (Array.isArray(b)&&b.length>=50),
      movieScope:'most_recent_50_legacy_and_50_chunked_runs_not_global_search',
-     movieHasMore:body.page===1&&matches.length>40,
+     movieHasMore:matches.length>body.page*40,
      searchablePersistedSeasons:true});
    }catch{return json(res,503,{ok:false,code:'library_search_database_unavailable'})}
   }
