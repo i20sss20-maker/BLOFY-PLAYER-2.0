@@ -52,6 +52,33 @@ test('saved episode title hints are marked unverified, bounded and do not fetch'
  assert.equal(hints[0].verifiedTitle,false);
  assert.equal(JSON.stringify(hints).includes('secret.example'),false);
 });
+test('local series hint extraction works for Arabic numerals, codecs and mixed releases',()=>{
+ const titles=[
+  'رحلة النجوم - الموسم ١ الحلقة ٢ - البداية.mkv',
+  'رحلة النجوم - الموسم ١ الحلقة ٣ - النهاية',
+  'Solar Mission S01E02 - The Start 1080p WEB-DL.mkv',
+  'Solar Mission 1x03 - The Next',
+  'Episode 4 - One-Off Individual Episode',
+  'الحلقة ٥ - اسم الحلقة فقط',
+  'Random Show password=private123 S01E01',
+  'Random Show token=private_token S01E02',
+  'https://secret.example/path/series_name',
+  '1080p WEBRip'
+ ];
+ const hints=deriveEpisodeTitleHints(titles);
+ const ar=hints.find(x=>x.title==='رحلة النجوم');
+ const en=hints.find(x=>x.title==='Solar Mission');
+ assert.ok(ar,'Arabic title extracted');
+ assert.ok(en,'English S01E and 1x episode title extracted');
+ assert.equal(ar.count,2);
+ assert.equal(en.count,2);
+ assert.equal(ar.confidenceLabel,'repeated_saved_heading');
+ assert.equal(ar.manualReviewOnly,true);
+ assert.equal(hints.some(x=>/password|token|secret/i.test(x.title)),false);
+ assert.equal(hints.some(x=>x.title.includes('One-Off')),false);
+ assert.equal(hints.every(x=>x.autoSelected===false&&x.verifiedTitle===false),true);
+});
+
 test('commercial license and token are mandatory before external request',async()=>{
  let requests=0;
  const fetchImpl=async()=>{requests++;throw Error('should never call')};

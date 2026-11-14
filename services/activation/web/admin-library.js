@@ -75,6 +75,64 @@ function entryCard(title,kind,description,progress,seasonKey=null,extra=null,
  }
  return card;
 }
+function renderMetadataReview(data){
+ const metrics=$('libraryReviewMetrics'),board=$('libraryReviewItems');
+ const review=data?.metadataReview;
+ if(data?.metadataAvailable!==true||review?.readOnly!==true||
+    review?.sampleOnly!==true){
+  metrics.replaceChildren(make('p','muted',
+   'بيانات فهرس العناوين غير متاحة حاليًا؛ لا يمكن تحديد الأسماء أو البوسترات الناقصة.'));
+  board.replaceChildren(make('p','muted','لا توجد نتائج مراجعة موثوقة.'));
+  $('libraryReviewScope').textContent=
+   'حالة بيانات العرض غير معروفة؛ لا نعتبر الملفات ناقصة لمجرد تعذر قراءة الفهرس.';
+  return;
+ }
+ const c=review.counts||{},total=Number(c.movies||0)+Number(c.series||0);
+ metrics.replaceChildren(
+  summaryBadge('سجلات ظاهرة',num(total)),
+  summaryBadge('بعنوان محفوظ',num(c.titled)),
+  summaryBadge('تحتاج اسمًا',num(c.missingTitle)),
+  summaryBadge('بصورة مسجلة',num(c.withPoster)));
+ const rows=Array.isArray(review.reviewItems)?review.reviewItems.slice(0,16):[];
+ const lookups=new Map();
+ for(const m of Array.isArray(data.movies)?data.movies:[]){
+  lookups.set('movie:'+m.runId,m.metadata||null);
+ }
+ for(const season of Array.isArray(data.seasons)?data.seasons:[]){
+  const hit=/^series_([1-9][0-9]{0,14})_s[0-9]{1,3}$/.exec(
+   String(season.seasonKey||''));
+  if(hit)lookups.set('series:'+hit[1],season.metadata||null);
+ }
+ const items=rows.map(row=>{
+  const box=make('article','library-review-item');
+  const title=make('strong','',
+   row.title||((row.kind==='movie'?'فيلم · ':'مسلسل · ')+row.key));
+  const status=row.missingTitle?
+   'الاسم غير مسجل بعد':
+   row.missingPoster?
+    'العنوان موجود، والصورة اختيارية وتتطلب تصريحًا':
+    'تفاصيل التصنيف أو السنة أو الوصف اختيارية';
+  box.append(title,make('p','muted',status));
+  if(/^(?:movie:[A-Za-z0-9_-]{8,80}|series:[1-9][0-9]{0,14})$/.test(
+   row.key)&&lookups.has(row.key)){
+   const edit=make('button','','مراجعة البيانات');
+   edit.type='button';
+   edit.addEventListener('click',()=>document.dispatchEvent(
+    new CustomEvent('blofy:edit-library-metadata',
+     {detail:{key:row.key,metadata:lookups.get(row.key)}})));
+   box.append(edit);
+  }
+  return box;
+ });
+ board.replaceChildren(...(items.length?items:[
+  make('p','muted','كل العناصر الظاهرة لديها عنوان وصورة وتفاصيل وصفية محفوظة، أو لا توجد سجلات في الصفحة.')]));
+ if(review.reviewItemsLimited)board.append(make('p','hint',
+  'توجد عناصر أخرى بحاجة للمراجعة في الصفحة الحالية؛ عرضنا أول 16 فقط.'));
+ $('libraryReviewScope').textContent=
+  'مراجعة '+num(total)+' فيلم أو مسلسل مميز ضمن الصفحة '+num(review.page)+
+  ' فقط. قد توجد سجلات أخرى خارج الصفحة أو عينة الأفلام الأخيرة؛ ليست نسبة اكتمال عامة للمكتبة.';
+}
+
 function render(){
  if(!current)return;
  const data=current,category=options.kind;
@@ -152,6 +210,7 @@ function render(){
   summaryBadge('مواسم في الصفحة',num(seasons.length)),
   summaryBadge('حلقات في الصفحة',num(episodes.length)),
   summaryBadge('حالة فشل ضمن الحلقات',num(episodes.filter(e=>e.state==='failed').length)));
+ renderMetadataReview(data);
  const more=category==='movie'?data.movieHasMore:
   category==='series'||category==='season'?data.seasonsHasMore:
   category==='episode'?data.episodesHasMore:

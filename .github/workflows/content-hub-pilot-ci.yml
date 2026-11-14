@@ -14,6 +14,7 @@ on:
       - 'services/activation/web/admin-library*'
       - 'services/activation/web/admin.html'
       - 'services/activation/test/content-hub-admin*'
+      - 'services/activation/test/content-hub-library.test.mjs'
       - 'services/activation/test/season-forecast-ui.test.mjs'
       - '.github/workflows/content-hub-pilot-ci.yml'
   pull_request:
@@ -30,6 +31,7 @@ on:
       - 'services/activation/web/admin-library*'
       - 'services/activation/web/admin.html'
       - 'services/activation/test/content-hub-admin*'
+      - 'services/activation/test/content-hub-library.test.mjs'
       - 'services/activation/test/season-forecast-ui.test.mjs'
       - '.github/workflows/content-hub-pilot-ci.yml'
 
@@ -81,6 +83,7 @@ jobs:
           node --check services/content-hub/src/season-queue.mjs
           node --check services/content-hub/src/curated-metadata.mjs
           node --check services/content-hub/src/metadata-matcher.mjs
+          node --check services/content-hub/src/metadata-review.mjs
           node --check services/content-hub/src/episode-chunk-pilot.mjs
           node --check services/content-hub/src/source-lease.mjs
       - name: Install test-only dependencies (no install scripts)

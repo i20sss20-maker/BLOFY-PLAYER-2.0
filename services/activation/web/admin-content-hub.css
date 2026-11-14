@@ -337,3 +337,27 @@
 @media(max-width:600px){.library-match-controls{grid-template-columns:1fr}
  .library-match-card img{width:60px;height:88px}
  .library-match-review{padding:10px}}
+
+
+/* Page-scoped human-review checklist for existing private catalog labels. */
+.library-review{border:1px solid #36698a;border-radius:13px;
+ background:#10263b;padding:16px;margin:17px 0 22px}
+.library-review .cardhead{align-items:start}
+.library-review h3{font-size:18px;margin:0 0 7px}
+.library-review-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));
+ gap:10px;margin:13px 0}
+.library-review-details{border:1px solid #416a82;border-radius:10px;padding:11px}
+.library-review-details summary{cursor:pointer;font-size:14px;font-weight:700;
+ color:#bbdcef;padding:4px}
+.library-review-items{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+ gap:9px;margin-top:12px}
+.library-review-item{border:1px solid #3d627b;border-inline-start:4px solid #e3a955;
+ background:#112c42;border-radius:9px;padding:12px;min-width:0;
+ display:flex;flex-direction:column;align-items:start;gap:8px}
+.library-review-item strong{font-size:14px;overflow-wrap:anywhere}
+.library-review-item .muted{margin:0;font-size:12px}
+.library-review-item button{padding:8px 11px;font-size:12px;margin-top:auto}
+.library-review button:focus-visible{outline:2px solid #91dcff;outline-offset:2px}
+@media(max-width:800px){.library-review-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:590px){.library-review-items{grid-template-columns:1fr}
+ .library-review{padding:11px}}

@@ -99,14 +99,26 @@ $('libraryMatchSearch').addEventListener('click',async()=>{
   for(const hint of hints){
    const line=createText('div','', 'library-match-hint');
    const label=createText('span',
-    hint.title+' · ورد في '+Number(hint.count||0)+' حلقة مسجلة');
+    hint.title+' · ظهر في '+Number(hint.count||0)+' عنوان حلقة محفوظ'+
+    (hint.confidenceLabel==='repeated_saved_heading'?' · متكرر':' · غير متكرر')+
+    ' · غير مؤكد');
    const button=createText('button','البحث بهذا الاسم');
    button.type='button';
    button.addEventListener('click',()=>{
     $('libraryMatchQuery').value=hint.title;
     $('libraryMatchQuery').focus();
    });
-   line.append(label,button);
+   const use=createText('button','استخدام الاسم للمراجعة');
+   use.type='button';
+   use.addEventListener('click',()=>{
+    if(!dialog.open||$('libraryMetaKey').value!==key)return;
+    $('libraryMetaName').value=String(hint.title||'').slice(0,140);
+    $('libraryMetaRights').checked=false;
+    $('libraryMetaStatus').textContent=
+     'تم نقل الاسم من سجلات الحلقات للمعاينة فقط. لم نتحقق من هوية المسلسل ولم نحفظ شيئًا؛ راجع الاسم ثم أكد حقوق الاستخدام.';
+    $('libraryMetaName').focus();
+   });
+   line.append(label,button,use);
    $('libraryMatchHints').append(line);
   }
   for(const candidate of suggestions){

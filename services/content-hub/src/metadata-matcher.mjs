@@ -68,26 +68,51 @@ export function normalizeTmdbCandidates(payload,{kind,query,year}){
   a.tmdbId-b.tmdbId);
  return candidates.slice(0,8);
 }
+// Conservative name hints from *stored* episode headings, not a source
+// catalog. Strip common episode/codec markers, reject likely credential
+// strings, group repeated candidates; never call a suggestion "verified".
 export function deriveEpisodeTitleHints(titles=[]){
- const ranks=new Map();
+ const counts=new Map();
+ const digits=s=>s.replace(/[\u0660-\u0669\u06f0-\u06f9]/g,ch=>{
+  const v=ch.charCodeAt(0);
+  return String(v>=0x6f0?v-0x6f0:v-0x660);
+ });
+ const marker=/(?:^|[\s\-:])(?:s[ ._-]?\d{1,2}[ ._-]*e[ ._-]?\d{1,3}|\d{1,2}x\d{1,3}|season\s*\d{1,2}(?:\s*episode\s*\d{1,3})?|episode\s*\d{1,3}|ep\s*\d{1,3}|الموسم\s*\d{1,2}(?:\s*الحلقة\s*\d{1,3})?|الحلقة\s*\d{1,3})(?=$|[\s\-:_.])/i;
  for(const raw of Array.isArray(titles)?titles.slice(0,25):[]){
-  if(typeof raw!=='string')continue;
-  let name=strip(raw).replace(/\b(?:s\d{1,2}\s*e\d{1,3}|season\s*\d+|episode\s*\d+|ep\s*\d+)\b/gi,' ')
-   .replace(/(?:الموسم|الحلقة|جزء)\s*[\d٠-٩]+/g,' ')
-   .replace(/[\[\]{}()\d_]+/g,' ')
-   .replace(/\s*[-–:]\s*$/,'').replace(/\s+/g,' ').trim();
-  if(name.length<3||name.length>100)continue;
-  const norm=canonical(name);
-  if(!norm||/^(?:episode|season|الحلقة|الموسم|الجزء)$/i.test(norm))
+  if(typeof raw!=='string'||raw.length>250||
+     /(?:user(?:name)?|pass(?:word)?|token|api[_ -]?key|secret|auth)\s*[=:]/i.test(raw))
    continue;
-  const entry=ranks.get(norm)||{title:name,count:0};
-  entry.count++;ranks.set(norm,entry);
+  let name=digits(strip(raw))
+   .replace(/\.(?:mkv|mp4|avi|ts|mov|m3u8)$/i,'')
+   .replace(/\[(?:720p|1080p|2160p|4k|webrip|web.?dl|bluray|x26[45]|h\.?264|hevc)\]/gi,' ')
+   .replace(/[._]+/g,' ').replace(/\s+/g,' ').trim();
+  const hit=marker.exec(name);
+  if(hit){
+   // A title beginning with "episode 1" could be an *episode title*
+   // itself. Reject it rather than guessing the series from its suffix.
+   if(hit.index===0)continue;
+   name=name.slice(0,hit.index);
+  }
+  name=name.replace(/\b(?:720p|1080p|2160p|4k|webrip|web.?dl|bluray|x26[45]|h264|hevc)\b/gi,' ')
+   .replace(/[\s\-–:()\[\],]+$/g,'').replace(/^[\s\-–:()\[\],]+/g,'')
+   .replace(/\s+/g,' ').trim();
+  if(name.length<3||name.length>100||
+     /^(?:episode|season|ep|الحلقة|الموسم|الجزء|test|sample)\s*\d*$/i.test(name)||
+     !/[\p{L}]/u.test(name))continue;
+  const normalized=canonical(name);
+  if(!normalized)continue;
+  const found=counts.get(normalized)||{title:name,count:0};
+  if(name.length<found.title.length)found.title=name;
+  found.count++;counts.set(normalized,found);
  }
- return [...ranks.values()].sort((a,b)=>b.count-a.count||
-  a.title.localeCompare(b.title)).slice(0,5)
-  .map(x=>({title:x.title,count:x.count,source:'saved_episode_title',
-   verifiedTitle:false}));
+ return [...counts.values()].sort((a,b)=>b.count-a.count||
+  a.title.localeCompare(b.title)).slice(0,5).map(x=>({
+   title:x.title,count:x.count,source:'saved_episode_title',
+   confidenceLabel:x.count>=2?'repeated_saved_heading':'single_saved_heading',
+   manualReviewOnly:true,verifiedTitle:false,autoSelected:false
+  }));
 }
+
 export function createMetadataMatcher({
  token='',commercialLicenseConfirmed=false,fetchImpl=globalThis.fetch,
  now=()=>Date.now()

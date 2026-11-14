@@ -89,9 +89,31 @@ test('metadata matching review is only on explicit owner action and cannot auto-
  assert.match(js,/x-blofy-owner-action':'match-private-metadata'/);
  assert.match(js,/result\.automaticSave!==false/);
  assert.match(js,/libraryMetaRights'\)\.checked=false/);
+ assert.match(js,/استخدام الاسم للمراجعة/);
+ assert.match(js,/لم نتحقق من هوية المسلسل/);
  assert.match(js,/textContent/);
  assert.doesNotMatch(js,/innerHTML\s*=/);
  assert.match(hookSource,/\/api\/v1\/admin\/content-hub\/library\/matches/);
  assert.match(hookSource,/match-private-metadata/);
  assert.match(cssText,/\.library-match-review/);
+});
+
+test('metadata readiness is explicitly page-scoped and only offers manual owner edit',async()=>{
+ const [html,library,styles]=await Promise.all([
+  readFile(web,'utf8'),readFile(js,'utf8'),readFile(css,'utf8')
+ ]);
+ for(const id of ['libraryReviewTitle','libraryReviewScope',
+  'libraryReviewMetrics','libraryReviewDetails','libraryReviewItems']){
+  assert.equal((html.match(new RegExp('id="'+id+'"','g'))||[]).length,1,id);
+ }
+ assert.match(html,/صفحة النتائج الحالية فقط/);
+ assert.match(html,/إضافة الصور اختيارية/);
+ assert.match(library,/review\?\.sampleOnly!==true/);
+ assert.match(library,/metadataAvailable!==true/);
+ assert.match(library,/blofy:edit-library-metadata/);
+ assert.match(library,/lookups\.has\(row\.key\)/);
+ assert.match(library,/reviewItems\.slice\(0,16\)/);
+ assert.doesNotMatch(library,/innerHTML\s*=/);
+ assert.match(styles,/\.library-review-metrics/);
+ assert.match(styles,/max-width:590px/);
 });

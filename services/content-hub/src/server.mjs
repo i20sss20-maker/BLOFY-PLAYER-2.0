@@ -15,6 +15,7 @@ import {inspectEpisodeSize} from './episode-probe.mjs';
 import {runOneEpisodeChunk,episodeCopyReadiness} from './episode-chunk-pilot.mjs';
 import {createContentCatalogStore,validateCuratedMetadata} from './curated-metadata.mjs';
 import {createMetadataMatcher,validateMatchRequest,deriveEpisodeTitleHints} from './metadata-matcher.mjs';
+import {buildMetadataReview} from './metadata-review.mjs';
 import {createSeasonQueueStore,createSeasonQueueController,seasonQueueReadiness,validateSeasonSelection,seasonQueueSummary} from './season-queue.mjs';
 import {inspectLicensedSeries,inspectLicensedSeriesEpisodes,inspectLicensedPilotSeries} from './series-catalog.mjs';
 import {summarizeSeasonHealth,auditSeasonEpisodeSample} from './season-health.mjs';
@@ -468,13 +469,20 @@ export function createContentHubServer({storage,lease,
        x.metadata?.title?.toLocaleLowerCase().includes(query))&&
      (body.state==='all'||x.state===body.state));
     matches.sort((x,y)=>String(y.date||'').localeCompare(String(x.date||'')));
+    const visibleMovies=matches.slice((body.page-1)*40,body.page*40);
+    const metadataReview=metadataAvailable?buildMetadataReview({
+     movies:visibleMovies,seasons,
+     moviesSampleLimited:(Array.isArray(a)&&a.length>=50)||
+      (Array.isArray(b)&&b.length>=50),
+     seasonsHasMore:data.seasonsHasMore===true,page:body.page
+    }):null;
     return json(res,200,{ok:true,privateOnly:true,readOnly:true,
      customerCutover:false,automaticStart:false,automaticRetry:false,
      providerMediaRequests:0,storageRequests:0,...data,
-     seasons,episodes,metadataAvailable,curatedOnly:true,
+     seasons,episodes,metadataAvailable,curatedOnly:true,metadataReview,
      curatedTitleMatchesLimited:seriesMatches.limited===true,
      artworkProvider:'tmdb_manually_selected_poster_path',
-     movies:matches.slice((body.page-1)*40,body.page*40),
+     movies:visibleMovies,
      movieHistoryAvailable:a!==null&&b!==null,
      movieHistoryMaybeLimited:(Array.isArray(a)&&a.length>=50)||
        (Array.isArray(b)&&b.length>=50),
