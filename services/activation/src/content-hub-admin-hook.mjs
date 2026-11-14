@@ -308,6 +308,14 @@ http.createServer=function withContentHubAdmin(listener){
      ok:false,code:'season_report_unavailable'});
     return json(res,200,await safeReadJson(response));
    }
+   if(path==='/api/v1/admin/content-hub/seasons/resume/preview'&&
+      req.method==='GET'){
+    const response=await request('/internal/seasons/resume/preview',{
+     signal:AbortSignal.timeout(8000)});
+    if(response.status!==200)return json(res,503,{
+     ok:false,code:'season_resume_preview_unavailable'});
+    return json(res,200,await safeReadJson(response));
+   }
    if(path==='/api/v1/admin/content-hub/seasons/analytics'&&req.method==='GET'){
     // Owner session already authenticated; do not leak private Hub token.
     const response=await request('/internal/seasons/analytics',{
@@ -330,6 +338,21 @@ http.createServer=function withContentHubAdmin(listener){
       req.method==='POST'){
     if(req.headers['x-blofy-owner-action']!=='season-library')
      return json(res,403,{ok:false,code:'season_owner_action_required'});
+    if(path==='/api/v1/admin/content-hub/seasons/priority'){
+     const input=await readSeasonAdminBody(req);
+     if(input?.confirmed!==true||
+        !/^[A-Za-z0-9_-]{8,80}$/.test(String(input.runId||''))||
+        ![0,1,2].includes(input.priority))
+      return json(res,400,{ok:false,code:'season_priority_invalid'});
+     const response=await request('/internal/seasons/priority',{
+      method:'POST',signal:AbortSignal.timeout(12000),
+      extraHeaders:{
+       'content-type':'application/json',
+       'x-blofy-season-confirm':'owner-reorder-pending'},
+      body:JSON.stringify({confirmed:true,runId:input.runId,
+       priority:input.priority})});
+     return json(res,response.status,await response.json());
+    }
     if(path==='/api/v1/admin/content-hub/seasons/probe'){
      const input=await readSeasonAdminBody(req);
      const id=Number(input?.gatewayId);
