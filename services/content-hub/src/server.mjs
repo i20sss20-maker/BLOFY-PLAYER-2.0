@@ -466,9 +466,10 @@ export function createContentHubServer({storage,lease,
   }
   // Short MP4 preview exclusively for an authenticated owner in STREAM.
   // Never a public link, signed URL, or subscriber route. No provider call.
+  const approvedQueuePreview=/^\/internal\/seasons\/episodes\/([A-Za-z0-9_-]{8,80})\/preview$/.exec(path);
   if((path==='/internal/playback/preview'||
-     path==='/internal/episodes/playback/preview')&&req.method==='GET'){
-   const mediaKind=path.startsWith('/internal/episodes/')?
+     path==='/internal/episodes/playback/preview'||approvedQueuePreview)&&req.method==='GET'){
+   const mediaKind=approvedQueuePreview||path.startsWith('/internal/episodes/')?
     'episode':'movie';
    const expectedHeader=mediaKind==='episode'?
      'operator-episode-only':'operator-only';
@@ -481,9 +482,18 @@ export function createContentHubServer({storage,lease,
     return json(res,409,{ok:false,code:'owner_preview_disabled'});
    if(previewBuilding)return json(res,429,{
     ok:false,code:'owner_preview_busy'});
-   const runId=String(mediaKind==='episode'?
+   const runId=String(approvedQueuePreview?
+      approvedQueuePreview[1]:mediaKind==='episode'?
       pilotEnv.BLOFY_CONTENT_HUB_EPISODE_RUN_ID||'':
       pilotEnv.BLOFY_CONTENT_HUB_BATCH_RUN_ID||'');
+   if(approvedQueuePreview){
+    if(!seasonQueueStore?.ownsVerifiedRun)return json(res,503,{
+     ok:false,code:'season_verified_episode_catalog_unavailable'});
+    try{
+     if(!await seasonQueueStore.ownsVerifiedRun(runId))
+      return json(res,409,{ok:false,code:'season_episode_not_verified'});
+    }catch{return json(res,503,{ok:false,code:'season_verified_episode_lookup_failed'})}
+   }
    const cacheHit=previewCache?.runId===runId&&
        previewCache?.mediaKind===mediaKind&&
        previewCache.expiresAt>Date.now();
