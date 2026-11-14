@@ -175,8 +175,10 @@ async function handleEpisodePreview(req,res){
    sent+=chunk.byteLength;
    if(sent>length)throw Error('preview_overlong');
    if(!res.write(chunk))await new Promise((resolve,reject)=>{
-    res.once('drain',resolve);
-    res.once('close',()=>reject(Error('preview_closed')));
+    const clean=()=>{res.off('drain',onDrain);res.off('close',onClose)};
+    const onDrain=()=>{clean();resolve()};
+    const onClose=()=>{clean();reject(Error('preview_closed'))};
+    res.once('drain',onDrain);res.once('close',onClose);
    });
   }
   if(sent!==length)throw Error('preview_short');
