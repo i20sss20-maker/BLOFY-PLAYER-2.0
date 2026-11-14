@@ -11,7 +11,83 @@ const create=(tag,className,text)=>{
 };
 const fmt=value=>Number(value||0).toLocaleString('ar-SA');
 const seasonValid=/^[a-z0-9][a-z0-9_-]{2,63}$/;
-let page=1,working=false,revision=0;
+let page=1,working=false,revision=0,lastSnapshot=null;
+const reasonNames={
+ no_registered_episodes:'لا توجد حلقات مدرجة',
+ manifest_status_unavailable:'بيانات إثبات التخزين غير متاحة',
+ owner_av_reviews_unavailable:'سجل مراجعة الصورة والصوت غير متاح',
+ registered_episode_failures:'توجد حلقات فشلت',
+ registered_episodes_not_finished:'يوجد نقل أو انتظار لم يكتمل',
+ storage_state_inconsistent:'تعارض بين حالة الملف وقائمة النقل',
+ not_all_registered_episodes_storage_verified:'لم يتحقق تخزين جميع الحلقات المدرجة',
+ owner_av_review_incomplete:'توجد حلقات لم تراجع صورتها وصوتها يدويًا',
+ invalid_database_accounting:'أرقام قاعدة البيانات غير متطابقة'
+};
+function gateLabel(gate){
+ return gate?.canConsiderPrivateDeviceTest===true&&
+  gate.customerReleaseApproved===false&&
+  gate.publishToSubscribers===false?
+  '✅ مرشح لاختبار الأجهزة الخاص فقط (وليس للإطلاق)':
+  '⛔ يحتاج مراجعات قبل اختبار الأجهزة';
+}
+function renderDecision(data){
+ const gate=data.global?.privateDeviceTestGate;
+ const label=gateLabel(gate);
+ const reasons=Array.isArray(gate?.blockingReasons)?
+  gate.blockingReasons.slice(0,12).map(x=>
+   reasonNames[x]||'سبب آخر يتطلب المراجعة'):['بيانات قرار الاختبار غير متاحة'];
+ $('seasonReadinessDecision').textContent=label+' — '+
+  (reasons.length?reasons.join('، '):
+   'الملفات المدرجة راجعها المالك يدويًا وفق السجلات، لكن يلزم اختبار الأجهزة وحقوق العرض.');
+}
+// Exports only the already-loaded, owner-only current page. Never tries to
+// fetch the provider catalog or claim that the CSV covers every season.
+function csvCell(value){
+ const raw=String(value??'').replace(/[\r\n\t]/g,' ');
+ const safe=/^\s*[=+\-@]/u.test(raw)?"'"+raw:raw;
+ return '"'+safe.replace(/"/g,'""')+'"';
+}
+function exportCurrentPage(){
+ if(working||!lastSnapshot)return;
+ const data=lastSnapshot;
+ if(data.readOnly!==true||data.customerReleaseApproved!==false||
+    data.privateDeviceTestingOnly!==true)return;
+ const cols=['record_type','season_key','registered_episodes',
+  'storage_verified','owner_av_manual_reviewed',
+  'awaiting_manual_av_review','failed','queued','paused','running',
+  'inconsistent_storage_state','private_device_test_candidate',
+  'customer_release_approved','review_reasons','report_page',
+  'more_season_pages_exist','coverage_scope','snapshot_at'];
+ const format=(row,type,key)=>[
+  type,key,row.registeredEpisodes,row.storageVerifiedEpisodes,
+  row.ownerAvReviewedEpisodes,row.verifiedAwaitingOwnerAv,
+  row.failedEpisodes,row.queuedEpisodes,row.pausedEpisodes,
+  row.runningEpisodes,row.inconsistentVerifiedQueueEpisodes,
+  row.privateDeviceTestGate?.canConsiderPrivateDeviceTest===true?'yes':'no',
+  'no',(row.privateDeviceTestGate?.blockingReasons||[]).join(';'),
+  data.page,data.hasNext?'yes':'no',
+  'registered_private_queue_only',data.snapshotAt||'unknown'
+ ];
+ const entries=[format(data.global,'global_totals','all_registered_seasons'),
+  ...data.seasons.slice(0,20).map(row=>
+   format(row,'season',row.seasonKey))];
+ const csv='\ufeff'+[cols,...entries].map(
+  row=>row.map(csvCell).join(',')).join('\r\n')+'\r\n';
+ const objectUrl=URL.createObjectURL(new Blob([csv],{
+  type:'text/csv;charset=utf-8'
+ }));
+ try{
+  const a=create('a');
+  a.href=objectUrl;
+  a.download='BLOFY-private-readiness-page-'+data.page+'.csv';
+  document.body.append(a);
+  a.click();
+  a.remove();
+ }finally{URL.revokeObjectURL(objectUrl)}
+ $('seasonReadinessStatus').textContent=
+  'تم تجهيز CSV لصفحة '+fmt(data.page)+
+  ' فقط، إضافة إلى الإجماليات المسجلة. التقرير لا يمنح موافقة نشر.';
+}
 function tile(label,value,attention=false){
  const box=create('article','season-readiness-tile'+
   (attention?' season-readiness-attention':''));
@@ -78,6 +154,9 @@ function seasonTile(row){
    detail:{seasonKey:row.seasonKey}}));
  });
  actions.append(report);
+ const decision=create('span','season-readiness-gate-label',
+  gateLabel(row.privateDeviceTestGate));
+ actions.append(decision);
  if(row.verifiedAwaitingOwnerAv>0){
   actions.append(create('span','season-readiness-review-hint',
    'افتح تفاصيل الحلقة المكتملة لمراجعة الصورة والصوت يدويًا.'));
@@ -112,11 +191,15 @@ async function load(targetPage=page){
      data.scope!=='all_registered_private_season_queue_episodes_only'||
      !data.global||!Array.isArray(data.seasons)||data.page!==targetPage||
      data.automaticStart!==false||data.providerMediaRequests!==0||
-     data.storageRequests!==0||data.seasons.length>20)
+     data.storageRequests!==0||data.seasons.length>20||
+     data.privateDeviceTestingOnly!==true||
+     data.customerReleaseApproved!==false)
    throw Error('بيانات الجاهزية ناقصة أو خارج نطاق المكتبة الخاصة.');
   if(serial!==revision)return;
   page=targetPage;
+  lastSnapshot=data;
   const g=data.global;
+  renderDecision(data);
   $('seasonReadinessKpis').replaceChildren(
    tile('المواسم المسجلة',g.registeredSeasons),
    tile('الحلقات المدرجة',g.registeredEpisodes),
@@ -141,7 +224,7 @@ async function load(targetPage=page){
   $('seasonReadinessPrev').disabled=!data.hasPrevious;
   $('seasonReadinessNext').disabled=!data.hasNext;
   $('seasonReadinessStatus').textContent=
-   'تقرير جاهزية قاعدة البيانات مُحدّث. التقييم لا يشمل فحص ملفات الصوت والفيديو آليًا ولا يعني جاهزية نشرها في التطبيقات.';
+   'تقرير جاهزية قاعدة البيانات مُحدّث. أي ترشيح لاختبار الأجهزة خاص فقط، ولا يمثل موافقة للنشر أو تحقق حقوق التوزيع.';
  }catch(error){
   if(serial!==revision)return;
   $('seasonReadinessStatus').textContent=error.message||
@@ -149,8 +232,10 @@ async function load(targetPage=page){
  }finally{
   working=false;
   $('seasonReadinessRefresh').disabled=false;
+  $('seasonReadinessExport').disabled=working||!lastSnapshot;
  }
 }
+$('seasonReadinessExport').addEventListener('click',exportCurrentPage);
 $('seasonReadinessRefresh').addEventListener('click',()=>load(page));
 $('seasonReadinessPrev').addEventListener('click',()=>load(page-1));
 $('seasonReadinessNext').addEventListener('click',()=>load(page+1));
