@@ -264,6 +264,21 @@ http.createServer=function withContentHubAdmin(listener){
      }});
     return json(res,response.status,await response.json());
    }
+   if(path==='/api/v1/admin/content-hub/seasons/series'&&req.method==='GET'){
+    const result=await request('/internal/series/candidates',{
+     signal:AbortSignal.timeout(10000)});
+    if(result.status!==200)return json(res,503,{
+     ok:false,code:'licensed_series_catalog_unavailable'});
+    return json(res,200,await safeReadJson(result));
+   }
+   const seasonSeries=/^\/api\/v1\/admin\/content-hub\/seasons\/series\/([1-9][0-9]{0,14})$/.exec(path);
+   if(seasonSeries&&req.method==='GET'){
+    const result=await request('/internal/series/episodes/'+seasonSeries[1],{
+     signal:AbortSignal.timeout(65000)});
+    if(result.status!==200)return json(res,503,{
+     ok:false,code:'licensed_series_seasons_unavailable'});
+    return json(res,200,await safeReadJson(result));
+   }
    if(path==='/api/v1/admin/content-hub/seasons/queue'&&req.method==='GET'){
     const response=await request('/internal/seasons/queue',{
      signal:AbortSignal.timeout(8000)});
