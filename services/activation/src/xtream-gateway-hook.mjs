@@ -61,7 +61,8 @@ import {probeSalehRangedMovie} from './xtream-content-hub-range-pilot.mjs';
 import {contentHubBridgeAuth,parseContentHubClientRange,
   validContentHubResponse,approvedContentHubMedia}
   from './xtream-content-hub-private-range.mjs';
-import {findLicensedEpisodeCandidates} from './xtream-content-hub-episode-candidates.mjs';
+import {findLicensedEpisodeCandidates,findLicensedEpisodeCandidateById} from './xtream-content-hub-episode-candidates.mjs';
+import {listLicensedSeries,mappedLicensedSeriesEpisodes,buildLicensedSeriesSeasons} from './xtream-content-hub-series.mjs';
 import {findRunningApprovedSeasonEpisode} from './xtream-content-hub-season-approval.mjs';
 import {probePrivateEpisodeRange} from './xtream-content-hub-episode-probe.mjs';
 import { readXtreamGatewayJsonResponse } from './xtream-gateway-response.mjs';
@@ -1863,6 +1864,44 @@ async function handlePrivateContentHubSource(req,res,url){
   return json(res,401,{ok:false,code:'content_hub_source_unauthorized'});
  if(req.method!=='GET')
   return json(res,405,{ok:false,code:'content_hub_method_denied'});
+ // Only operator-selected *saleh* series with an indexed mapped ID.
+ // Series metadata lookup may perform one provider API request, but NO
+ // media transfer or customer playback route is affected.
+ if(url.pathname==='/internal/blofy-content-hub/series/candidates'){
+  if(url.search)return json(res,400,{ok:false,
+   code:'content_hub_series_query_denied'});
+  try{
+   const series=await listLicensedSeries(pool,{limit:30});
+   return json(res,200,{ok:true,series,readOnly:true,privateOnly:true,
+    sourceMediaRequests:0,customerCutover:false});
+  }catch{return json(res,503,{ok:false,
+   code:'content_hub_series_catalog_unavailable',sourceMediaRequests:0,
+   customerCutover:false})}
+ }
+ const approvedSeries=/^\/internal\/blofy-content-hub\/series\/([1-9][0-9]{0,14})$/.exec(url.pathname);
+ if(approvedSeries){
+  if(url.search)return json(res,400,{ok:false,
+   code:'content_hub_series_query_denied'});
+  const seriesGatewayId=Number(approvedSeries[1]);
+  if(!Number.isSafeInteger(seriesGatewayId))
+   return json(res,400,{ok:false,code:'content_hub_series_id_invalid'});
+  try{
+   const row=await gatewayItemById('series',seriesGatewayId);
+   if(!row||String(row.source_name||'').trim().toLowerCase()!=='saleh'||
+      row.server_enabled!==true||Number(row.source_name_matches)!==1)
+    return json(res,403,{ok:false,code:'content_hub_series_not_approved'});
+   const info=await seriesInfo(seriesGatewayId,row.server_id);
+   if(!info)return json(res,404,{ok:false,
+    code:'content_hub_series_not_mapped'});
+   const candidates=await mappedLicensedSeriesEpisodes(pool,{
+    serverId:row.server_id,sourceSeriesId:row.source_id});
+   const result=buildLicensedSeriesSeasons({info,candidates,
+    title:row.name,seriesGatewayId});
+   return json(res,200,result);
+  }catch{return json(res,503,{ok:false,
+   code:'content_hub_series_metadata_unavailable',
+   sourceMediaRequests:0,customerCutover:false})}
+ }
  // Deliberate low-impact 4KiB range probe for one of the 8
  // operator-reviewed episode candidates only. No automatic transfer.
  const episodeProbe=/^\/internal\/blofy-content-hub\/episodes\/probe\/([1-9][0-9]{0,14})$/.exec(url.pathname);
