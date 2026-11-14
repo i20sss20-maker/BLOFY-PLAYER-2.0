@@ -197,5 +197,34 @@ export function createXtreamMirrorDiscoveryStore(db){
    episodesOnlyMappedSubset:true,readOnly:true,
    providerRequests:0,mediaBytesTransferred:0,customerCutover:false};
  }
- return {scanPage,summary,ensure};
+ async function listQueue({sourceId,mediaKind,state='all',
+  afterGatewayId=0,limit=50}={}){
+  if(!UUID.test(String(sourceId||''))||!TYPES.has(mediaKind)||
+     !['all','needs_review','approved','copying','verified','failed'].includes(state)||
+     !Number.isSafeInteger(afterGatewayId)||afterGatewayId<0||
+     !Number.isInteger(limit)||limit<1||limit>100)
+   throw Error('mirror_discovery_queue_query_invalid');
+  await ensure();
+  const result=await db.query(`SELECT gateway_id,media_id,extension,title,
+    state,expected_bytes,first_seen_at,last_seen_at
+    FROM blofy_xtream_mirror_items
+    WHERE source_id=$1 AND media_kind=$2 AND gateway_id>$3
+      AND ($4::text='all' OR state=$4)
+    ORDER BY gateway_id ASC LIMIT $5`,
+    [sourceId,mediaKind,afterGatewayId,state,limit+1]);
+  const raw=result.rows||[],hasMore=raw.length>limit;
+  const items=raw.slice(0,limit).map(x=>({
+    gatewayId:Number(x.gateway_id),mediaId:String(x.media_id).slice(0,128),
+    extension:String(x.extension),title:String(x.title||'').slice(0,220),
+    state:String(x.state),sizeVerified:false,
+    expectedBytes:Number.isSafeInteger(Number(x.expected_bytes))&&
+      x.expected_bytes!==null?Number(x.expected_bytes):null,
+    discoveredAt:x.first_seen_at||null,lastSeenAt:x.last_seen_at||null
+  }));
+  return {ok:true,sourceId,mediaKind,state,items,hasMore,
+    nextCursor:hasMore?items.at(-1)?.gatewayId:null,
+    copyStarted:false,readOnly:true,providerRequests:0,
+    mediaBytesTransferred:0,customerCutover:false};
+ }
+ return {scanPage,summary,listQueue,ensure};
 }
