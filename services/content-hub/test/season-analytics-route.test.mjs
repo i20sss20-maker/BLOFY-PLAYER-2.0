@@ -65,7 +65,7 @@ test('metric writes are bounded, parameterized and never include source URLs',as
   runId,bytes:8388608,durationMs:5000,code:'episode_checkpoint_saved'});
  const inserted=statements.find(s=>s.sql.includes('INSERT INTO blofy_content_hub_season_transfer_metrics'));
  assert.deepEqual(inserted.params,[runId,8388608,5000,
-  'episode_checkpoint_saved',null]);
+  'episode_checkpoint_saved',null,'{}']);
  assert.doesNotMatch(inserted.sql,/season_0123456789/);
  await store.close();
 });
