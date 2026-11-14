@@ -87,3 +87,33 @@ test('private episode preview uses separate fixed path and episode-only owner as
   assert.equal(requests[0].init.headers.authorization,'Bearer '+token);
  }finally{await new Promise(resolve=>server.close(resolve))}
 });
+
+
+test('verified season episode preview uses a pinned queue run, never an arbitrary URL',async()=>{
+ const runId='season_0123456789abcdef01234567';
+ let calls=0;
+ const mp4=Buffer.concat([Buffer.alloc(4),Buffer.from('ftyp'),Buffer.alloc(3000)]);
+ const server=http.createServer((req,res)=>void forwardPrivatePreview({
+  req,res,hubToken:token,mediaKind:'episode',runId,
+  fetchImpl:async(url,opts)=>{
+   calls++;
+   assert.equal(url,'http://blofy-content-hub.railway.internal:3000'+
+    '/internal/seasons/episodes/'+runId+'/preview');
+   assert.equal(opts.headers.authorization,'Bearer '+token);
+   assert.equal(opts.headers['x-blofy-owner-preview'],'operator-episode-only');
+   return new Response(mp4,{status:200,headers:{
+    'content-type':'video/mp4','content-length':String(mp4.length)}});
+  }
+ }));
+ server.listen(0,'127.0.0.1');await once(server,'listening');
+ try{
+  let result=await fetch('http://127.0.0.1:'+
+    server.address().port+'/operator/api/seasons/preview');
+  assert.equal(result.status,200);
+  assert.equal((await result.arrayBuffer()).byteLength,mp4.length);
+  result=await fetch('http://127.0.0.1:'+
+    server.address().port+'/operator/api/seasons/preview?target=https://evil.test');
+  assert.equal(result.status,400);
+  assert.equal(calls,1);
+ }finally{await new Promise(resolve=>server.close(resolve))}
+});

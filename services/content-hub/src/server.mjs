@@ -13,6 +13,17 @@ import {buildPrivateBrowserPreview} from './private-preview.mjs';
 import {inspectEpisodeCandidates} from './episode-candidates.mjs';
 import {inspectEpisodeSize} from './episode-probe.mjs';
 import {runOneEpisodeChunk,episodeCopyReadiness} from './episode-chunk-pilot.mjs';
+import {createContentCatalogStore,validateCuratedMetadata} from './curated-metadata.mjs';
+import {createMetadataMatcher,validateMatchRequest,deriveEpisodeTitleHints} from './metadata-matcher.mjs';
+import {buildMetadataReview} from './metadata-review.mjs';
+import {createSeasonQueueStore,createSeasonQueueController,seasonQueueReadiness,validateSeasonSelection,seasonQueueSummary} from './season-queue.mjs';
+import {inspectLicensedSeries,inspectLicensedSeriesEpisodes,inspectLicensedPilotSeries} from './series-catalog.mjs';
+import {summarizeSeasonHealth,auditSeasonEpisodeSample} from './season-health.mjs';
+import {buildSeasonAnalytics} from './season-analytics.mjs';
+import {buildSeasonReport} from './season-report.mjs';
+import {buildPrivateDeviceQaManifest} from './device-qa-manifest.mjs';
+import {buildSeasonAttention} from './season-attention.mjs';
+import {checkPrivateReadConcurrency,validateConcurrentReadIds} from './concurrent-private-read.mjs';
 
 const FIXTURE_SOURCE='00000000-0000-4000-8000-000000000000';
 const FIXTURE_SIZE=8*1024*1024;
@@ -23,6 +34,18 @@ const json=(res,status,payload)=>{
   'x-content-type-options':'nosniff','referrer-policy':'no-referrer'});
  res.end(body);
 };
+async function readSeasonJson(req){
+ if(!/^application\/json(?:\s*;|$)/i.test(String(req.headers['content-type']||'')))
+  throw Error('season_json_required');
+ const chunks=[];let bytes=0;
+ for await(const chunk of req){
+  bytes+=chunk.length;
+  if(bytes>8192)throw Error('season_json_too_large');
+  chunks.push(chunk);
+ }
+ try{return JSON.parse(Buffer.concat(chunks).toString('utf8'))}
+ catch{throw Error('season_json_invalid')}
+}
 const safeAuth=(header,token)=>{
  if(typeof header!=='string'||!header.startsWith('Bearer ')||
    typeof token!=='string'||token.length<32)return false;
@@ -65,7 +88,14 @@ export function createContentHubServer({storage,lease,
  batchRunner=runChunkedMovieBatch,previewBuilder=buildPrivateBrowserPreview,
  episodeCandidateInspector=inspectEpisodeCandidates,
  episodeSizeInspector=inspectEpisodeSize,
- episodeChunkRunner=runOneEpisodeChunk}={}){
+ episodeChunkRunner=runOneEpisodeChunk,seasonQueueStore=null,catalogStore=null,
+ metadataMatcher=createMetadataMatcher({
+  token:process.env.BLOFY_TMDB_READ_TOKEN||'',
+  commercialLicenseConfirmed:process.env.BLOFY_TMDB_COMMERCIAL_LICENSE_CONFIRMED==='1'
+ }),
+ seriesCatalogInspector=inspectLicensedSeries,
+ pilotSeriesInspector=inspectLicensedPilotSeries,
+ seriesEpisodesInspector=inspectLicensedSeriesEpisodes}={}){
  if(!storage||!lease)throw Error('content_hub_private_dependencies_required');
  const started=Date.now();
  let syntheticRunning=false,lastSynthetic=null;
@@ -75,6 +105,8 @@ export function createContentHubServer({storage,lease,
  let previewBuilding=false,previewCache=null,previewThrottleUntil=0;
  let episodeProbeBusy=false,episodeProbeAt=0,lastEpisodeProbe=null;
  let episodeCopyBusy=false,episodeCopyAbort=null,lastEpisodeCopy=null;
+ let seasonStorageAuditBusy=false,seasonStorageAuditAt=0;
+ let seasonConcurrentReadBusy=false,seasonConcurrentReadAt=0,lastSeasonConcurrentRead=null;
  const copy=createContinuousCopyController({
   runBatch:({signal})=>batchRunner({storage,lease,env:pilotEnv,signal,logger}),
   readiness:()=>chunkedBatchReadiness(pilotEnv),logger
@@ -87,6 +119,12 @@ export function createContentHubServer({storage,lease,
   readiness:()=>episodeCopyReadiness(pilotEnv),logger,
   delayMs:2200,maxBatches:180,maxDurationMs:45*60*1000
  });
+ const seasonQueue=seasonQueueStore?createSeasonQueueController({
+  store:seasonQueueStore,storage,lease,env:pilotEnv,
+  runner:episodeChunkRunner,logger,
+  isSourceBusy:()=>episodeCopyBusy||episodeCopy.isRunning()||
+   pilotRunning||copy.isRunning()
+ }):null;
  async function runFullPlaybackCanary(runId,mediaKind='movie'){
   const diag=await diagnoseVerifiedMovie({runId,storage,lease,mediaKind});
   if(!diag.ok)return {...diag,seekVerified:false,seeksVerified:0};
@@ -114,13 +152,18 @@ export function createContentHubServer({storage,lease,
    return json(res,401,{ok:false,code:'content_hub_auth_required'});
   if(path==='/internal/status'&&req.method==='GET'){
    let bucket=false,database=false,durablePilot=null;
+   let ownerBrowserCheck={confirmed:false,videoConfirmed:false,audioConfirmed:false};
    try{bucket=(await storage.health()).ok===true}catch{}
    try{database=await lease.health()}catch{}
    try{durablePilot=await lease.getPilotStatus?.(
      String(process.env.BLOFY_CONTENT_HUB_PILOT_RUN_ID||''))}catch{}
+   try{ownerBrowserCheck=await lease.getEpisodeBrowserPlaybackStatus?.(
+     String(pilotEnv.BLOFY_CONTENT_HUB_EPISODE_RUN_ID||''))||ownerBrowserCheck}catch{}
    return json(res,bucket&&database?200:503,{
     ok:bucket&&database,privateBucketAvailable:bucket,
-    databaseAvailable:database,downloadQueueEnabled:false,
+    databaseAvailable:database,downloadQueueEnabled:Boolean(seasonQueue)&&seasonQueueReadiness(pilotEnv).ready,
+    seasonQueue:seasonQueue?.status()||null,
+    ownerEpisodeBrowserCheck:ownerBrowserCheck,
     syntheticTestEnabled:allowSynthetic,
     lastSynthetic,pilotRunning:pilotRunning||copy.isRunning(),lastPilot,
     lastEpisodeProbe,episodeCopyBusy:episodeCopyBusy||episodeCopy.isRunning(),
@@ -133,6 +176,682 @@ export function createContentHubServer({storage,lease,
     continuousCopy:copy.status(),durablePilot,chunkedBatchEnabled:chunkedBatchReadiness(pilotEnv).ready,
     customerCutover:false,
     licensedRightsRequired:true});
+  }
+  if(path==='/internal/episodes/playback/confirmation'&&
+     req.method==='GET'){
+   if(String(req.url||'').includes('?'))
+    return json(res,400,{ok:false,code:'episode_browser_query_not_allowed'});
+   const runId=String(pilotEnv.BLOFY_CONTENT_HUB_EPISODE_RUN_ID||'');
+   try{
+    const state=await lease.getEpisodeBrowserPlaybackStatus?.(runId);
+    return json(res,200,{ok:true,privateOnly:true,customerCutover:false,
+     ...(state||{confirmed:false,videoConfirmed:false,
+      audioConfirmed:false})});
+   }catch{return json(res,503,{
+    ok:false,code:'episode_browser_confirmation_read_failed'})}
+  }
+  if(path==='/internal/episodes/playback/confirm'&&
+     req.method==='POST'){
+   if(String(req.url||'').includes('?')||
+     req.headers['x-blofy-browser-confirm']!=='owner-saw-and-heard'||
+     req.headers['x-blofy-video-confirmed']!=='yes'||
+     req.headers['x-blofy-audio-confirmed']!=='yes')
+    return json(res,403,{ok:false,code:'episode_browser_manual_confirmation_required'});
+   if(pilotEnv.BLOFY_CONTENT_HUB_OWNER_PREVIEW_ENABLED!=='1'||
+      pilotEnv.BLOFY_CONTENT_HUB_EPISODE_OWNER_PREVIEW_ENABLED!=='1')
+    return json(res,409,{ok:false,code:'episode_owner_preview_disabled'});
+   const runId=String(pilotEnv.BLOFY_CONTENT_HUB_EPISODE_RUN_ID||'');
+   try{
+    const verified=await lease.getVerifiedEpisodeObject?.(runId);
+    if(!verified)return json(res,409,{
+     ok:false,code:'episode_not_storage_verified'});
+    const proof=await lease.confirmEpisodeBrowserPlayback?.(runId);
+    if(proof?.confirmed!==true)throw Error('missing_browser_proof');
+    return json(res,200,{ok:true,code:'owner_browser_av_confirmed',
+     privateOnly:true,customerCutover:false,
+     confirmedAt:proof.confirmedAt,runId});
+   }catch{return json(res,503,{
+    ok:false,code:'episode_browser_confirmation_failed'})}
+  }
+  if(path==='/internal/series/pilot'&&req.method==='GET'){
+   if(String(req.url||'').includes('?'))
+    return json(res,400,{ok:false,code:'pilot_series_query_not_allowed'});
+   const data=await pilotSeriesInspector({env:pilotEnv});
+   return json(res,data.ok?200:503,data);
+  }
+  if(path==='/internal/series/candidates'&&req.method==='GET'){
+   if(String(req.url||'').includes('?'))
+    return json(res,400,{ok:false,code:'series_query_not_allowed'});
+   const data=await seriesCatalogInspector({env:pilotEnv});
+   return json(res,data.ok?200:503,data);
+  }
+  const seriesInfoRoute=/^\/internal\/series\/episodes\/([1-9][0-9]{0,14})$/.exec(path);
+  if(seriesInfoRoute&&req.method==='GET'){
+   if(String(req.url||'').includes('?'))
+    return json(res,400,{ok:false,code:'series_query_not_allowed'});
+   const data=await seriesEpisodesInspector({
+    seriesGatewayId:Number(seriesInfoRoute[1]),env:pilotEnv});
+   return json(res,data.ok?200:503,data);
+  }
+  // Exact read-only pagination. Fixed route, no query parameters.
+  // Each response only includes 50 individually licensed episode rows;
+  // page summaries describe visible rows, while health has global counts.
+  const seasonFilteredPageRoute=/^\/internal\/seasons\/queue\/status\/(all|pending|queued|running|paused|verified|failed)\/page\/([1-9][0-9]{0,4})$/.exec(path);
+  const seasonPageRoute=/^\/internal\/seasons\/queue\/page\/([1-9][0-9]{0,4})$/.exec(path);
+  if((seasonPageRoute||seasonFilteredPageRoute)&&req.method==='GET'){
+   if(String(req.url||'').includes('?'))
+    return json(res,400,{ok:false,code:'season_queue_page_query_denied'});
+   if(!seasonQueueStore?.listPage||!seasonQueue)
+    return json(res,503,{ok:false,code:'season_queue_pagination_unavailable'});
+   const number=Number(seasonPageRoute?.[1]||seasonFilteredPageRoute?.[2]);
+   const state=seasonFilteredPageRoute?.[1]||'all';
+   if(number>20000)return json(res,400,{
+    ok:false,code:'season_queue_page_out_of_range'});
+   try{
+    const result=await seasonQueueStore.listPage({page:number,state});
+    return json(res,200,{ok:true,privateOnly:true,
+     customerCutover:false,readOnly:true,
+     readiness:seasonQueueReadiness(pilotEnv),
+     worker:seasonQueue.status(),
+     page:result.page,seasons:seasonQueueSummary(result.episodes),
+     episodes:result.episodes});
+   }catch{return json(res,503,{ok:false,
+    code:'season_queue_page_unavailable'})}
+  }
+  // Owner-only queue. It accepts listed, individually licensed episodes
+  // and cannot alter customer routes or expose the private bucket.
+  if(path==='/internal/seasons/queue'&&req.method==='GET'){
+   if(String(req.url||'').includes('?'))
+    return json(res,400,{ok:false,code:'season_query_not_allowed'});
+   if(!seasonQueueStore)return json(res,503,{
+    ok:false,code:'season_queue_unavailable'});
+   try{
+    const episodes=await seasonQueueStore.list();
+    return json(res,200,{ok:true,privateOnly:true,customerCutover:false,
+     downloadQueueEnabled:seasonQueueReadiness(pilotEnv).ready,
+     readiness:seasonQueueReadiness(pilotEnv),
+     worker:seasonQueue.status(),seasons:seasonQueueSummary(episodes),
+     episodes});
+   }catch{return json(res,503,{ok:false,code:'season_queue_read_failed'})}
+  }
+  // Read-only exact accounting, no S3 list and no upstream source calls.
+  if(path==='/internal/seasons/health'&&req.method==='GET'){
+   if(String(req.url||'').includes('?'))
+    return json(res,400,{ok:false,code:'season_health_query_not_allowed'});
+   if(!seasonQueueStore?.healthStats||!seasonQueueStore?.recentAudits)
+    return json(res,503,{ok:false,code:'season_health_unavailable'});
+   try{
+    const [stats,audits,unresolvedAudits]=await Promise.all([
+     seasonQueueStore.healthStats(),seasonQueueStore.recentAudits(),
+     seasonQueueStore.unresolvedAuditCounts?.()||{mismatch:0,unavailable:0}]);
+    const worker=seasonQueue?.status()||{};
+    const currentCheckpoint=worker.active===true&&worker.currentRunId&&
+      seasonQueueStore?.currentCheckpoint?
+      await seasonQueueStore.currentCheckpoint(worker.currentRunId):null;
+    const pilotRunId=String(pilotEnv.BLOFY_CONTENT_HUB_EPISODE_RUN_ID||'');
+    let verifiedPilotRunId=null;
+    if(/^[A-Za-z0-9_-]{8,80}$/.test(pilotRunId)){
+     try{
+      if(await lease.getVerifiedEpisodeObject?.(pilotRunId))
+       verifiedPilotRunId=pilotRunId;
+     }catch{}
+    }
+    return json(res,200,{
+     ...summarizeSeasonHealth({
+      stats,audits,unresolvedAudits,worker,currentCheckpoint,
+      storageSoftLimitBytes:pilotEnv.BLOFY_CONTENT_HUB_STORAGE_SOFT_LIMIT_BYTES
+     }),verifiedPilotRunId,lastConcurrentRead:lastSeasonConcurrentRead});
+
+   }catch{return json(res,503,{ok:false,code:'season_health_database_unavailable'})}
+  }
+  // Globally aggregated private queue A/V readiness, with a strictly
+  // bounded season page. No provider, S3, media or subscriber lookups.
+  const readinessRoute=
+   /^\/internal\/seasons\/readiness\/page\/([1-9][0-9]{0,3})$/.exec(path);
+  if(readinessRoute&&req.method==='GET'){
+   if(String(req.url||'').includes('?')||
+      req.headers['x-blofy-owner-action']!=='review-private-seasons')
+    return json(res,403,{ok:false,code:'season_readiness_owner_only'});
+   if(!seasonQueueStore?.readinessAudit)
+    return json(res,503,{ok:false,code:'season_readiness_unavailable'});
+   try{
+    const data=await seasonQueueStore.readinessAudit({
+     page:Number(readinessRoute[1])});
+    return json(res,200,data);
+   }catch{return json(res,503,{ok:false,code:'season_readiness_database_unavailable'})}
+  }
+  // Owner-selected, DB-only test worksheet for Android/Android TV/Windows.
+  // No public app API and no stream URLs; the existing private preview route
+  // continues to require a separate authenticated owner session.
+  const qaRoute=/^\/internal\/seasons\/device-qa\/(android|android_tv|windows)\/(series_[1-9][0-9]{0,14}_s[0-9]{1,3})\/page\/([1-9][0-9]{0,4})$/.exec(path);
+  if(qaRoute&&req.method==='GET'){
+   if(String(req.url||'').includes('?')||
+      req.headers['x-blofy-owner-action']!=='prepare-private-device-qa')
+    return json(res,403,{ok:false,code:'private_device_qa_owner_only'});
+   if(!seasonQueueStore?.seasonDetailPage)
+    return json(res,503,{ok:false,code:'private_device_qa_unavailable'});
+   const page=Number(qaRoute[3]);
+   if(page>20000)return json(res,400,{ok:false,code:'private_device_qa_page_invalid'});
+   try{
+    const detail=await seasonQueueStore.seasonDetailPage({
+     seasonKey:qaRoute[2],page});
+    if(!detail)return json(res,404,{ok:false,code:'private_device_qa_season_missing'});
+    return json(res,200,buildPrivateDeviceQaManifest({
+     platform:qaRoute[1],seasonKey:qaRoute[2],page,detail
+    }));
+   }catch{return json(res,503,{ok:false,code:'private_device_qa_database_unavailable'})}
+  }
+  // Owner-only, read-only season detail; no media or S3 access.
+  const detailRoute=/^\/internal\/seasons\/report\/([a-z0-9][a-z0-9_-]{2,63})\/page\/([1-9][0-9]{0,4})$/.exec(path);
+  if(detailRoute&&req.method==='GET'){
+   if(String(req.url||'').includes('?'))
+    return json(res,400,{ok:false,code:'season_report_query_denied'});
+   if(!seasonQueueStore?.seasonDetailPage||
+      !seasonQueueStore?.seasonTransferEvents)
+    return json(res,503,{ok:false,code:'season_report_unavailable'});
+   const seasonKey=detailRoute[1],page=Number(detailRoute[2]);
+   if(page>20000)return json(res,400,{
+    ok:false,code:'season_report_page_invalid'});
+   try{
+    const [data,events,timing]=await Promise.all([
+     seasonQueueStore.seasonDetailPage({seasonKey,page}),
+     seasonQueueStore.seasonTransferEvents({seasonKey}),
+     seasonQueueStore.seasonTimingStats?.({seasonKey})||{}
+    ]);
+    if(!data)return json(res,404,{ok:false,code:'season_report_not_found'});
+    return json(res,200,buildSeasonReport({
+     ...data,events,timing,worker:seasonQueue?.status()||{}
+    }));
+   }catch{return json(res,503,{ok:false,code:'season_report_database_unavailable'})}
+  }
+  // Explicit owner human video AND audio check for one storage-verified
+  // episode. Neither a video analyzer nor subscriber playback approval.
+  if(path==='/internal/seasons/episodes/av/confirm'&&req.method==='POST'){
+   if(String(req.url||'').includes('?')||
+      req.headers['x-blofy-owner-action']!=='confirm-manual-episode-av'||
+      req.headers['x-blofy-video-confirmed']!=='yes'||
+      req.headers['x-blofy-audio-confirmed']!=='yes')
+    return json(res,403,{ok:false,code:'episode_av_manual_owner_confirmation_required'});
+   if(!seasonQueueStore?.confirmEpisodeAv)return json(res,503,{
+    ok:false,code:'episode_av_review_unavailable'});
+   let body;
+   try{body=await readSeasonJson(req)}
+   catch{return json(res,400,{ok:false,code:'episode_av_request_invalid'})}
+   if(!body||body.confirmed!==true||
+      body.videoConfirmed!==true||body.audioConfirmed!==true||
+      typeof body.runId!=='string'||
+      !/^[A-Za-z0-9_-]{8,80}$/.test(body.runId))
+    return json(res,400,{ok:false,code:'episode_av_request_invalid'});
+   try{
+    const result=await seasonQueueStore.confirmEpisodeAv({
+     runId:body.runId});
+    return json(res,result.ok?200:409,{
+     ...result,privateOnly:true,manualOnly:true,
+     customerCutover:false,automaticStart:false,storageRequests:0,
+     providerMediaRequests:0});
+   }catch{return json(res,503,{ok:false,code:'episode_av_review_database_unavailable'})}
+  }
+  // Private owner alert triage. The caller gets database snapshots only.
+  if(path==='/internal/seasons/attention'&&req.method==='GET'){
+   if(String(req.url||'').includes('?'))
+    return json(res,400,{ok:false,code:'season_attention_query_forbidden'});
+   if(!seasonQueueStore?.attentionRows)
+    return json(res,503,{ok:false,code:'season_attention_unavailable'});
+   try{
+    const rows=await seasonQueueStore.attentionRows({limit:51});
+    return json(res,200,buildSeasonAttention({
+     rows,limited:rows.length>50,worker:seasonQueue?.status()||{}
+    }));
+   }catch{return json(res,503,{ok:false,
+    code:'season_attention_database_unavailable'})}
+  }
+  // Manually curated labels and posters, completely separate from media runs.
+  if(path==='/internal/library/metadata'&&req.method==='POST'){
+   if(String(req.url||'').includes('?')||
+      req.headers['x-blofy-owner-action']!=='curate-private-metadata')
+    return json(res,403,{ok:false,code:'curated_owner_confirmation_required'});
+   if(!catalogStore?.save)
+    return json(res,503,{ok:false,code:'curated_metadata_unavailable'});
+   let input;
+   try{input=await readSeasonJson(req);validateCuratedMetadata(input)}
+   catch{return json(res,400,{ok:false,code:'curated_metadata_invalid'})}
+   try{
+    const result=await catalogStore.save(input);
+    return json(res,result.ok?200:404,result);
+   }catch{return json(res,503,{ok:false,code:'curated_metadata_database_unavailable'})}
+  }
+  // Private, strictly owner-clicked match review. A registered media key
+  // is mandatory. Local episode title hints work even without TMDB access.
+  if(path==='/internal/library/matches'&&req.method==='POST'){
+   if(String(req.url||'').includes('?')||
+      req.headers['x-blofy-owner-action']!=='match-private-metadata')
+    return json(res,403,{ok:false,code:'metadata_match_owner_only'});
+   if(!catalogStore?.hasRegisteredKey||!catalogStore?.episodeTitleHints)
+    return json(res,503,{ok:false,code:'metadata_match_unavailable'});
+   let input;
+   try{input=validateMatchRequest(await readSeasonJson(req))}
+   catch{return json(res,400,{ok:false,code:'metadata_match_invalid'})}
+   let registered=false,hints=[];
+   try{
+    registered=await catalogStore.hasRegisteredKey(input.key);
+    if(registered&&input.kind==='series'){
+     hints=deriveEpisodeTitleHints(
+      await catalogStore.episodeTitleHints(input.key));
+    }
+   }catch{return json(res,503,{ok:false,code:'metadata_match_database_unavailable'})}
+   if(!registered)return json(res,404,{ok:false,
+    code:'metadata_match_media_not_registered'});
+   const lookup=await metadataMatcher.suggest(input).catch(()=>({
+    ok:false,code:'tmdb_lookup_unavailable',candidates:[]}));
+   return json(res,200,{
+    ok:true,readOnly:true,privateOnly:true,
+    key:input.key,kind:input.kind,query:input.query,
+    localHints:hints.slice(0,5),candidates:Array.isArray(lookup.candidates)?
+     lookup.candidates.slice(0,8):[],
+    tmdbEnabled:metadataMatcher.enabled===true,
+    tmdbLookupStatus:lookup.ok===true?
+     (lookup.configured===false?'commercial_license_not_configured':'ready'):
+     String(lookup.code||'tmdb_lookup_unavailable'),
+    tmdbRequests:Number(lookup.tmdbRequests||0),
+    providerMediaRequests:0,storageRequests:0,automaticSave:false,
+    needsOwnerReview:true,
+    tmdbAttribution:'This product uses the TMDB API but is not endorsed or certified by TMDB.',
+    commercialLicenseRequired:true,
+    artworkUseRequiresRights:true
+   });
+  }
+  // Bounded series details from registered private queue entries only.
+  const registeredSeriesRoute=/^\/internal\/library\/series\/([1-9][0-9]{0,14})$/.exec(path);
+  if(registeredSeriesRoute&&req.method==='GET'){
+   if(String(req.url||'').includes('?')||
+      req.headers['x-blofy-owner-action']!=='view-private-series')
+    return json(res,403,{ok:false,code:'series_detail_owner_read_required'});
+   if(!seasonQueueStore?.registeredSeriesSummary)
+    return json(res,503,{ok:false,code:'series_detail_unavailable'});
+   try{
+    const detail=await seasonQueueStore.registeredSeriesSummary({
+     seriesId:registeredSeriesRoute[1]});
+    return json(res,200,{ok:true,privateOnly:true,readOnly:true,
+     customerCutover:false,...detail});
+   }catch{return json(res,503,{ok:false,code:'series_detail_database_unavailable'})}
+  }
+  // Read-only library search. Owner token and explicit action assertion
+  // are required even though this POST never mutates content.
+  if(path==='/internal/library/search'&&req.method==='POST'){
+   if(String(req.url||'').includes('?')||
+      req.headers['x-blofy-owner-action']!=='library-read-only')
+    return json(res,403,{ok:false,code:'library_owner_read_required'});
+   if(!seasonQueueStore?.librarySearch)
+    return json(res,503,{ok:false,code:'library_search_unavailable'});
+   let body;
+   try{body=await readSeasonJson(req)}
+   catch{return json(res,400,{ok:false,code:'library_search_bad_json'})}
+   if(!body||typeof body.query!=='string'||body.query.length>80||
+      /[\x00-\x1f\x7f]/.test(body.query)||
+      !['all','queued','paused','running','verified','failed'].includes(body.state)||
+      !Number.isSafeInteger(body.page)||body.page<1||body.page>20000)
+    return json(res,400,{ok:false,code:'library_search_invalid'});
+   try{
+    const seriesMatches=body.query.trim()&&catalogStore?.searchSeriesIds?
+     await catalogStore.searchSeriesIds(body.query).catch(()=>({ids:[],limited:true})):
+     {ids:[],limited:false};
+    const [data,a,b]=await Promise.all([
+     seasonQueueStore.librarySearch({
+      query:body.query,state:body.state,page:body.page,
+      seriesIds:seriesMatches.ids}),
+     Promise.resolve().then(()=>lease.listPilotRuns?.({limit:50})||[]),
+     Promise.resolve().then(()=>lease.listChunkedRuns?.({limit:50})||[])
+    ].map((p,i)=>i===0?p:Promise.resolve(p).catch(()=>null)));
+    const norm=(raw,format)=>Array.isArray(raw)?raw.slice(0,50).map(x=>{
+     const state=['verified','failed'].includes(x.state)?x.state:
+      ['started','staged','running'].includes(x.state)?'running':'unknown';
+     const expected=Math.max(0,Number(x.expectedBytes)||0);
+     const stored=Math.min(expected,Math.max(0,Number(x.bytesCopied)||0));
+     return {runId:String(x.runId||''),format,state,
+      expectedBytes:expected,storedBytes:stored,
+      percent:expected?Math.min(100,Math.floor(stored*100/expected)):0,
+      verified:state==='verified',date:x.finishedAt||x.startedAt||null,
+      code:/^[a-z0-9_]{1,80}$/.test(String(x.code||''))?x.code:null};
+    }).filter(x=>/^[A-Za-z0-9_-]{8,80}$/.test(x.runId)):[];
+    const allMovies=[...norm(a,'legacy'),...norm(b,'chunked')];
+    const seriesKey=seasonKey=>{
+     const match=/^series_([1-9][0-9]{0,14})_s[0-9]+$/.exec(
+      String(seasonKey||''));
+     return match?'series:'+match[1]:null;
+    };
+    const keys=[...new Set([
+     ...allMovies.map(m=>'movie:'+m.runId),
+     ...(data.seasons||[]).map(s=>seriesKey(s.seasonKey)),
+     ...(data.episodes||[]).map(e=>seriesKey(e.seasonKey))
+    ].filter(Boolean))];
+    let metadataAvailable=Boolean(catalogStore?.find);
+    const curated=[];
+    if(metadataAvailable){
+     try{
+      for(let i=0;i<keys.length;i+=150){
+       curated.push(...await catalogStore.find(keys.slice(i,i+150)));
+      }
+     }catch{metadataAvailable=false}
+    }
+    const byKey=new Map(curated.map(x=>[x.key,x]));
+    const seasons=(data.seasons||[]).map(x=>({
+     ...x,metadata:byKey.get(seriesKey(x.seasonKey))||null
+    }));
+    const episodes=(data.episodes||[]).map(x=>({
+     ...x,seriesMetadata:byKey.get(seriesKey(x.seasonKey))||null
+    }));
+    const enrichedMovies=allMovies.map(x=>({
+     ...x,metadata:byKey.get('movie:'+x.runId)||null
+    }));
+    const query=body.query.trim().toLocaleLowerCase();
+    const matches=enrichedMovies.filter(x=>
+     (!query||x.runId.toLocaleLowerCase().includes(query)||
+       x.metadata?.title?.toLocaleLowerCase().includes(query))&&
+     (body.state==='all'||x.state===body.state));
+    matches.sort((x,y)=>String(y.date||'').localeCompare(String(x.date||'')));
+    const visibleMovies=matches.slice((body.page-1)*40,body.page*40);
+    const metadataReview=metadataAvailable?buildMetadataReview({
+     movies:visibleMovies,seasons,
+     moviesSampleLimited:(Array.isArray(a)&&a.length>=50)||
+      (Array.isArray(b)&&b.length>=50),
+     seasonsHasMore:data.seasonsHasMore===true,page:body.page
+    }):null;
+    return json(res,200,{ok:true,privateOnly:true,readOnly:true,
+     customerCutover:false,automaticStart:false,automaticRetry:false,
+     providerMediaRequests:0,storageRequests:0,...data,
+     seasons,episodes,metadataAvailable,curatedOnly:true,metadataReview,
+     curatedTitleMatchesLimited:seriesMatches.limited===true,
+     artworkProvider:'tmdb_manually_selected_poster_path',
+     movies:visibleMovies,
+     movieHistoryAvailable:a!==null&&b!==null,
+     movieHistoryMaybeLimited:(Array.isArray(a)&&a.length>=50)||
+       (Array.isArray(b)&&b.length>=50),
+     movieScope:'most_recent_50_legacy_and_50_chunked_runs_not_global_search',
+     movieHasMore:matches.length>body.page*40,
+     searchablePersistedSeasons:true});
+   }catch{return json(res,503,{ok:false,code:'library_search_database_unavailable'})}
+  }
+  // Bounded operator analytics. No source requests, no S3 listing,
+  // no control actions and no customer/player-facing routes.
+  if(path==='/internal/seasons/analytics'&&req.method==='GET'){
+   if(String(req.url||'').includes('?'))
+    return json(res,400,{ok:false,code:'season_analytics_query_not_allowed'});
+   if(!seasonQueueStore?.analyticsStats||
+      !seasonQueueStore?.seasonAnalyticsSummary)
+    return json(res,503,{ok:false,code:'season_analytics_unavailable'});
+   try{
+    const [stats,metrics,seasons,failures,events,audits,unresolved,
+     episodeStates]=await Promise.all([
+      seasonQueueStore.healthStats(),seasonQueueStore.analyticsStats(),
+      seasonQueueStore.seasonAnalyticsSummary(),seasonQueueStore.failureReasons(),
+      seasonQueueStore.recentTransferEvents(),seasonQueueStore.recentAudits(),
+      seasonQueueStore.unresolvedAuditCounts?.()||{mismatch:0,unavailable:0},
+      seasonQueueStore.recentEpisodeStates?.()||[]
+     ]);
+    const worker=seasonQueue?.status()||{};
+    const currentCheckpoint=worker.active&&worker.currentRunId?
+     await seasonQueueStore.currentCheckpoint?.(worker.currentRunId):null;
+    const health=summarizeSeasonHealth({
+     stats,audits,unresolvedAudits:unresolved,worker,currentCheckpoint,
+     storageSoftLimitBytes:pilotEnv.BLOFY_CONTENT_HUB_STORAGE_SOFT_LIMIT_BYTES
+    });
+    return json(res,200,buildSeasonAnalytics({
+     health,metrics,seasons,failures,events,worker,episodeStates
+    }));
+   }catch{
+    return json(res,503,{ok:false,code:'season_analytics_database_unavailable'});
+   }
+  }
+  // Explicit operator action only: <=3 S3 objects (<=24MiB total).
+  // Verifies against recorded SHA-256, not a generic HEAD or assumed S3
+  // capacity. Never reads source Xtream or starts copying content.
+  if(path==='/internal/seasons/audit'&&req.method==='POST'){
+   if(req.headers['x-blofy-season-confirm']!=='audit-private-verified-chunks'||
+      String(req.url||'').includes('?'))
+    return json(res,403,{ok:false,code:'season_audit_owner_confirmation_required'});
+   if(!seasonQueueStore?.ownsVerifiedRun||!seasonQueueStore?.saveAudit)
+    return json(res,503,{ok:false,code:'season_audit_unavailable'});
+   if(seasonStorageAuditBusy)return json(res,429,{
+    ok:false,code:'season_storage_audit_busy'});
+   if(Date.now()-seasonStorageAuditAt<60000)return json(res,429,{
+    ok:false,code:'season_storage_audit_cooldown'});
+   let payload;
+   try{payload=await readSeasonJson(req)}
+   catch{return json(res,400,{ok:false,code:'season_storage_audit_bad_json'})}
+   const runId=String(payload?.runId||'');
+   if(payload?.confirmed!==true||
+      !/^[A-Za-z0-9_-]{8,80}$/.test(runId))
+    return json(res,400,{ok:false,code:'season_storage_audit_invalid_selection'});
+   const pilotRunId=String(pilotEnv.BLOFY_CONTENT_HUB_EPISODE_RUN_ID||'');
+   let allowed=false;
+   try{
+    allowed=(runId===pilotRunId&&pilotRunId.length>=8)||
+      await seasonQueueStore.ownsVerifiedRun(runId);
+   }catch{return json(res,503,{ok:false,code:'season_storage_audit_lookup_failed'})}
+   if(!allowed)return json(res,403,{ok:false,
+    code:'season_storage_audit_run_not_approved'});
+   seasonStorageAuditBusy=true;seasonStorageAuditAt=Date.now();
+   try{
+    const result=await auditSeasonEpisodeSample({
+     runId,lease,storage,signal:AbortSignal.timeout(65000),logger});
+    if([
+     'season_storage_sample_verified','season_storage_checksum_mismatch',
+     'season_storage_read_unavailable','season_storage_manifest_unavailable'
+    ].includes(result.code)){
+     await seasonQueueStore.saveAudit(runId,{
+      code:result.code,checkedParts:result.checkedParts||0,
+      totalParts:result.totalParts||0,checkedBytes:result.checkedBytes||0
+     });
+    }
+    return json(res,result.ok?200:409,{
+     ...result,privateOnly:true,customerCutover:false,
+     runId,operatorRequested:true});
+   }catch{return json(res,503,{
+    ok:false,code:'season_storage_audit_unavailable'})}
+   finally{seasonStorageAuditBusy=false}
+  }
+  // Two distinct, fully verified episode manifests, requested explicitly.
+  // This measures concurrent PRIVATE S3 reads (not real viewer playback).
+  if(path==='/internal/seasons/concurrent-read'&&req.method==='POST'){
+   if(String(req.url||'').includes('?')||
+      req.headers['x-blofy-season-confirm']!=='two-verified-private-s3-reads')
+    return json(res,403,{ok:false,code:'private_read_canary_owner_confirmation_required'});
+   if(!seasonQueueStore?.ownsVerifiedRun)return json(res,503,{
+    ok:false,code:'private_read_canary_queue_unavailable'});
+   if(seasonConcurrentReadBusy)return json(res,429,{
+    ok:false,code:'private_read_canary_busy'});
+   if(Date.now()-seasonConcurrentReadAt<120000)return json(res,429,{
+    ok:false,code:'private_read_canary_cooldown'});
+   if(seasonQueue?.isRunning()||copy.isRunning()||
+      episodeCopy.isRunning()||episodeCopyBusy||pilotRunning)
+    return json(res,409,{ok:false,code:'private_read_canary_source_priority'});
+   let runIds;
+   try{
+    const input=await readSeasonJson(req);
+    if(input?.confirmed!==true)throw Error('not_confirmed');
+    runIds=validateConcurrentReadIds(input.runIds);
+   }catch{return json(res,400,{ok:false,
+    code:'private_read_canary_selection_invalid'})}
+   const pilotRunId=String(pilotEnv.BLOFY_CONTENT_HUB_EPISODE_RUN_ID||'');
+   try{
+    for(const runId of runIds){
+     const queueVerified=await seasonQueueStore.ownsVerifiedRun(runId);
+     if(!queueVerified&&(runId!==pilotRunId||
+        !await lease.getVerifiedEpisodeObject(runId)))
+       return json(res,403,{ok:false,
+        code:'private_read_canary_episode_not_verified'});
+    }
+   }catch{return json(res,503,{
+    ok:false,code:'private_read_canary_validation_unavailable'})}
+   seasonConcurrentReadBusy=true;seasonConcurrentReadAt=Date.now();
+   try{
+    const result=await checkPrivateReadConcurrency({
+     runIds,lease,storage,signal:AbortSignal.timeout(45000),logger
+    });
+    lastSeasonConcurrentRead={code:result.code,ok:result.ok,
+     checkedAt:new Date().toISOString(),concurrentReads:2,
+     checkedChunks:result.checkedChunks||0};
+    return json(res,result.ok?200:409,{...result,
+     operatorRequested:true});
+   }catch{return json(res,503,{ok:false,
+    code:'private_read_canary_unavailable'})}
+   finally{seasonConcurrentReadBusy=false}
+  }
+  // Owner GET: inspect durable checkpoints without reading source/S3
+  // or automatically launching any resumed episode transfer.
+  if(path==='/internal/seasons/resume/preview'&&req.method==='GET'){
+   if(String(req.url||'').includes('?'))
+    return json(res,400,{ok:false,code:'season_resume_query_forbidden'});
+   if(!seasonQueueStore?.resumePreview)
+    return json(res,503,{ok:false,code:'season_resume_unavailable'});
+   try{
+    const data=await seasonQueueStore.resumePreview();
+    return json(res,200,{ok:true,privateOnly:true,readOnly:true,
+     customerCutover:false,providerMediaRequests:0,
+     ...data,worker:seasonQueue?.status()||{}});
+   }catch{return json(res,503,{ok:false,code:'season_resume_database_unavailable'})}
+  }
+  // Reordering may only change pending episode metadata while the
+  // global scheduler is completely idle. It NEVER initiates transfer.
+  if(path==='/internal/seasons/priority'&&req.method==='POST'){
+   if(String(req.url||'').includes('?')||
+      req.headers['x-blofy-season-confirm']!=='owner-reorder-pending')
+    return json(res,403,{ok:false,code:'season_priority_confirmation_required'});
+   if(!seasonQueueStore?.setPriority)
+    return json(res,503,{ok:false,code:'season_priority_unavailable'});
+   if(seasonQueue?.isRunning())
+    return json(res,409,{ok:false,code:'season_priority_worker_active'});
+   let body;
+   try{body=await readSeasonJson(req)}
+   catch{return json(res,400,{ok:false,code:'season_priority_invalid_body'})}
+   if(body?.confirmed!==true||
+      !/^[A-Za-z0-9_-]{8,80}$/.test(String(body.runId||''))||
+      ![0,1,2].includes(body.priority))
+    return json(res,400,{ok:false,code:'season_priority_invalid'});
+   try{
+    const result=await seasonQueueStore.setPriority({
+     runId:body.runId,priority:body.priority});
+    return json(res,result.ok?200:409,{
+     ...result,readOnly:false,automaticStart:false,
+     customerCutover:false});
+   }catch{return json(res,503,{ok:false,code:'season_priority_database_unavailable'})}
+  }
+  // Resubmit ONLY transient failed queue rows. The row's exact source,
+  // episode ID and saved checkpoint remain pinned. This never starts a job.
+  if(path==='/internal/seasons/retry'&&req.method==='POST'){
+   if(String(req.url||'').includes('?')||
+      req.headers['x-blofy-season-confirm']!=='manual-review-transient-failure')
+    return json(res,403,{ok:false,code:'season_retry_owner_confirmation_required'});
+   if(!seasonQueueStore?.retryFailed)return json(res,503,{
+    ok:false,code:'season_retry_storage_unavailable'});
+   const readiness=seasonQueueReadiness(pilotEnv);
+   if(!readiness.ready)return json(res,409,{ok:false,
+    code:'season_queue_safety_gates_off',blockedBy:readiness.blockedBy});
+   if(seasonQueue?.isRunning()||episodeCopyBusy||
+       episodeCopy.isRunning()||copy.isRunning()||pilotRunning)
+    return json(res,409,{ok:false,code:'season_retry_worker_active'});
+   let request;
+   try{request=await readSeasonJson(req)}
+   catch{return json(res,400,{ok:false,code:'season_retry_invalid_request'})}
+   const runId=String(request?.runId||'');
+   if(request?.confirmed!==true||
+      request?.licensedStorage!==true||
+      request?.sourceIdle!==true||
+      !/^[A-Za-z0-9_-]{8,80}$/.test(runId))
+    return json(res,400,{ok:false,code:'season_retry_manual_review_required'});
+   try{
+    const result=await seasonQueueStore.retryFailed(runId);
+    return json(res,result.ok?200:409,{...result,
+     operatorRequested:true,automaticStart:false,
+     customerCutover:false});
+   }catch{return json(res,503,{
+    ok:false,code:'season_retry_database_unavailable'})}
+  }
+  if(path==='/internal/seasons/enqueue'&&req.method==='POST'){
+   if(!seasonQueueStore)return json(res,503,{
+    ok:false,code:'season_queue_unavailable'});
+   if(String(req.url||'').includes('?')||
+     req.headers['x-blofy-season-confirm']!=='licensed-private-episodes'||
+     req.headers['x-blofy-storage-rights-confirm']!=='licensed-persistent-copy')
+    return json(res,403,{ok:false,code:'season_queue_owner_confirmation_required'});
+   const readiness=seasonQueueReadiness(pilotEnv);
+   if(!readiness.ready)return json(res,409,{ok:false,
+    code:'season_queue_safety_gates_off',blockedBy:readiness.blockedBy});
+   if(seasonQueue.isRunning())return json(res,409,{
+    ok:false,code:'season_queue_running'});
+   try{
+    const request=await readSeasonJson(req);
+    let candidates,seasonKey;
+    const seriesId=Number(request?.seriesGatewayId);
+    if(Number.isSafeInteger(seriesId)&&seriesId>0){
+     const seasonNumber=Number(request?.seasonNumber);
+     const catalog=await seriesEpisodesInspector({
+      seriesGatewayId:seriesId,env:pilotEnv});
+     const selected=catalog.seasons?.find(x=>x.seasonNumber===seasonNumber);
+     if(!catalog.ok||!selected||!Array.isArray(selected.episodes))
+      return json(res,403,{ok:false,code:'season_not_licensed_or_mapped'});
+     candidates=selected.episodes;
+     seasonKey='series_'+seriesId+'_s'+seasonNumber;
+     if(request.episodes?.some?.(e=>{
+      const exact=candidates.find(x=>x.gatewayId===Number(e.gatewayId));
+      return !exact||Number(e.episodeNumber)!==exact.episodeNumber;
+     }))return json(res,403,{ok:false,code:'season_episode_number_mismatch'});
+    }else{
+     const catalog=await episodeCandidateInspector({env:pilotEnv});
+     if(!catalog?.ok||!Array.isArray(catalog.candidates))
+      return json(res,503,{ok:false,code:'season_candidate_catalog_unavailable'});
+     candidates=catalog.candidates;seasonKey=request?.seasonKey;
+    }
+    const entries=validateSeasonSelection({
+     seasonKey,episodes:request?.episodes,candidates});
+    const saved=await seasonQueueStore.enqueue(entries);
+    return json(res,201,{ok:true,code:'season_episodes_queued',
+     ...saved,seasonKey,privateOnly:true,
+     sourceMediaRequests:0,customerCutover:false});
+   }catch{return json(res,400,{ok:false,
+    code:'season_selection_invalid_or_conflicting',
+    customerCutover:false})}
+  }
+  if(path==='/internal/seasons/start'&&req.method==='POST'){
+   if(!seasonQueue)return json(res,503,{ok:false,code:'season_queue_unavailable'});
+   if(String(req.url||'').includes('?')||
+     req.headers['x-blofy-season-confirm']!=='start-private-sequential')
+    return json(res,403,{ok:false,code:'season_start_confirmation_required'});
+   if(episodeCopyBusy||episodeCopy.isRunning()||pilotRunning||copy.isRunning())
+    return json(res,409,{ok:false,code:'source_writer_busy'});
+   let observed=false;
+   try{const proof=await lease.getEpisodeBrowserPlaybackStatus?.(
+    String(pilotEnv.BLOFY_CONTENT_HUB_EPISODE_RUN_ID||''));
+    observed=proof?.confirmed===true}catch{}
+   if(!observed)return json(res,409,{ok:false,
+    code:'owner_episode_browser_playback_not_confirmed'});
+   if(!seasonQueueStore?.unresolvedAuditCounts)return json(res,503,{
+    ok:false,code:'season_storage_audit_state_unavailable'});
+   try{
+    const counts=await seasonQueueStore.unresolvedAuditCounts();
+    if(Number(counts.mismatch)>0||Number(counts.unavailable)>0)
+     return json(res,409,{ok:false,
+      code:'season_storage_integrity_review_required'});
+   }catch{return json(res,503,{
+    ok:false,code:'season_storage_audit_state_unavailable'})}
+   const requestedBudget=req.headers['x-blofy-season-batch-budget'];
+   const sessionMaxBatches=requestedBudget===undefined?null:
+    Number(requestedBudget);
+   if(sessionMaxBatches!==null&&
+      ![12,60,120].includes(sessionMaxBatches))
+    return json(res,400,{ok:false,code:'season_batch_budget_invalid'});
+   const result=seasonQueue.start({sessionMaxBatches});
+   return json(res,result.ok?202:409,{...result,privateOnly:true,
+    customerCutover:false,maxSourceRangeBytes:CHUNK_BYTES});
+  }
+  if(path==='/internal/seasons/pause'&&req.method==='POST'){
+   if(!seasonQueue)return json(res,503,{ok:false,code:'season_queue_unavailable'});
+   if(String(req.url||'').includes('?')||
+     req.headers['x-blofy-season-confirm']!=='pause-private-sequential')
+    return json(res,403,{ok:false,code:'season_pause_confirmation_required'});
+   const result=seasonQueue.stop();
+   return json(res,result.ok?202:409,{...result,privateOnly:true,
+    customerCutover:false});
   }
   if(path==='/internal/pilot/preflight'&&req.method==='GET'){
    try{
@@ -165,7 +884,7 @@ export function createContentHubServer({storage,lease,
      approved=Number(pilotEnv.BLOFY_CONTENT_HUB_EPISODE_APPROVED_GATEWAY_ID);
    if(!Number.isSafeInteger(gatewayId)||gatewayId!==approved)
     return json(res,403,{ok:false,code:'episode_start_id_not_approved'});
-   if(episodeCopyBusy||pilotRunning||copy.isRunning()||episodeCopy.isRunning())
+   if(episodeCopyBusy||pilotRunning||copy.isRunning()||episodeCopy.isRunning()||seasonQueue?.isRunning())
     return json(res,409,{ok:false,code:'episode_source_writer_busy'});
    const result=episodeCopy.start();
    return json(res,result.ok?202:409,{
@@ -192,7 +911,7 @@ export function createContentHubServer({storage,lease,
    if(!Number.isSafeInteger(gatewayId)||gatewayId<1||
      gatewayId!==approved)return json(res,403,{
        ok:false,code:'episode_copy_id_not_selected'});
-   if(episodeCopyBusy||episodeCopy.isRunning()||pilotRunning||copy.isRunning())
+   if(episodeCopyBusy||episodeCopy.isRunning()||pilotRunning||copy.isRunning()||seasonQueue?.isRunning())
     return json(res,409,{ok:false,code:'content_hub_source_writer_busy'});
    const readiness=episodeCopyReadiness(pilotEnv);
    if(!readiness.ready)return json(res,409,{ok:false,
@@ -284,6 +1003,9 @@ export function createContentHubServer({storage,lease,
     ownerEpisodePreviewEnabled:pilotEnv.BLOFY_CONTENT_HUB_OWNER_PREVIEW_ENABLED==='1'&&
       pilotEnv.BLOFY_CONTENT_HUB_EPISODE_OWNER_PREVIEW_ENABLED==='1',
        continuousCopy:copy.status(),downloadQueueEnabled:false,
+       seasonQueueReady:Boolean(seasonQueue)&&seasonQueueReadiness(pilotEnv).ready,
+       seasonQueueReadiness:seasonQueueReadiness(pilotEnv),
+       seasonQueueStatus:seasonQueue?.status()||null,
        chunkedBatchEnabled:chunkedBatchReadiness(pilotEnv).ready,
        batchReadiness:chunkedBatchReadiness(pilotEnv)});
    }catch{
@@ -292,9 +1014,10 @@ export function createContentHubServer({storage,lease,
   }
   // Short MP4 preview exclusively for an authenticated owner in STREAM.
   // Never a public link, signed URL, or subscriber route. No provider call.
+  const approvedQueuePreview=/^\/internal\/seasons\/episodes\/([A-Za-z0-9_-]{8,80})\/preview$/.exec(path);
   if((path==='/internal/playback/preview'||
-     path==='/internal/episodes/playback/preview')&&req.method==='GET'){
-   const mediaKind=path.startsWith('/internal/episodes/')?
+     path==='/internal/episodes/playback/preview'||approvedQueuePreview)&&req.method==='GET'){
+   const mediaKind=approvedQueuePreview||path.startsWith('/internal/episodes/')?
     'episode':'movie';
    const expectedHeader=mediaKind==='episode'?
      'operator-episode-only':'operator-only';
@@ -307,9 +1030,18 @@ export function createContentHubServer({storage,lease,
     return json(res,409,{ok:false,code:'owner_preview_disabled'});
    if(previewBuilding)return json(res,429,{
     ok:false,code:'owner_preview_busy'});
-   const runId=String(mediaKind==='episode'?
+   const runId=String(approvedQueuePreview?
+      approvedQueuePreview[1]:mediaKind==='episode'?
       pilotEnv.BLOFY_CONTENT_HUB_EPISODE_RUN_ID||'':
       pilotEnv.BLOFY_CONTENT_HUB_BATCH_RUN_ID||'');
+   if(approvedQueuePreview){
+    if(!seasonQueueStore?.ownsVerifiedRun)return json(res,503,{
+     ok:false,code:'season_verified_episode_catalog_unavailable'});
+    try{
+     if(!await seasonQueueStore.ownsVerifiedRun(runId))
+      return json(res,409,{ok:false,code:'season_episode_not_verified'});
+    }catch{return json(res,503,{ok:false,code:'season_verified_episode_lookup_failed'})}
+   }
    const cacheHit=previewCache?.runId===runId&&
        previewCache?.mediaKind===mediaKind&&
        previewCache.expiresAt>Date.now();
@@ -410,7 +1142,7 @@ export function createContentHubServer({storage,lease,
   if(path==='/internal/batch/start'&&req.method==='POST'){
    if(String(req.headers['x-blofy-batch-confirm']||'')!=='approved-8mib-batch')
     return json(res,400,{ok:false,code:'batch_operator_confirmation_required'});
-   if(pilotRunning||copy.isRunning())
+   if(pilotRunning||copy.isRunning()||seasonQueue?.isRunning())
     return json(res,409,{ok:false,code:'batch_writer_busy'});
    const result=copy.start();
    return json(res,result.ok?202:409,{
@@ -426,7 +1158,7 @@ export function createContentHubServer({storage,lease,
    // Explicit per-batch admin operation, never an automatic source retry.
    if(String(req.headers['x-blofy-batch-confirm']||'')!=='approved-8mib-batch')
     return json(res,400,{ok:false,code:'batch_operator_confirmation_required'});
-   if(pilotRunning||copy.isRunning())return json(res,409,{
+   if(pilotRunning||copy.isRunning()||seasonQueue?.isRunning())return json(res,409,{
     ok:false,code:'batch_writer_busy'});
    const readiness=chunkedBatchReadiness(pilotEnv);
    if(!readiness.ready)return json(res,409,{
@@ -684,14 +1416,21 @@ export function createContentHubServer({storage,lease,
 if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
  const storage=createPrivateS3Adapter();
  const lease=createSourceLease({connectionString:process.env.DATABASE_URL});
- const hub=createContentHubServer({storage,lease,
+ const seasonQueueStore=createSeasonQueueStore({connectionString:process.env.DATABASE_URL});
+ const catalogStore=createContentCatalogStore({connectionString:process.env.DATABASE_URL});
+ const hub=createContentHubServer({storage,lease,seasonQueueStore,catalogStore,
   token:process.env.BLOFY_CONTENT_HUB_ADMIN_TOKEN||'',
   allowSynthetic:process.env.BLOFY_CONTENT_HUB_SYNTHETIC_TEST_ENABLED==='1',
   logger:(name,payload)=>console.info(name,JSON.stringify(payload))});
  const port=Number(process.env.PORT||3000);
  hub.server.listen(port,'0.0.0.0',()=>{
+  const seasonsReady=seasonQueueReadiness(process.env);
   console.info('BLOFY_CONTENT_HUB_READY',JSON.stringify({port,
-   privateOnly:true,downloadQueueEnabled:false,customerCutover:false}));
+   privateOnly:true,downloadQueueEnabled:false,
+   seasonQueueConfigured:Boolean(seasonQueueStore),
+   seasonQueueReady:Boolean(seasonQueueStore)&&seasonsReady.ready,
+   seasonQueueBlockedBy:seasonsReady.blockedBy,
+   automaticSeasonStartup:false,customerCutover:false}));
   // One-off read-only mapping discovery. No source media is fetched and no
   // customer path is modified; only sanitized gateway ID and extension log.
   if(process.env.BLOFY_CONTENT_HUB_PREFLIGHT_ON_BOOT==='1'){

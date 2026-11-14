@@ -27,6 +27,7 @@ import {summarizeSameMovieCandidates} from './xtream-cross-source-coverage-audit
 import {distributedMovieOffsets,summarizeDistributedMovieProbe} from './xtream-distributed-movie-audit.mjs';
 import { createFixedWindowLimiter, requestClientKey } from './auth-protection.mjs';
 import {forwardPrivatePreview} from './content-hub-private-preview-bridge.mjs';
+import {isStreamSeasonBridgePath,requestStreamSeasonBridge} from './stream-season-bridge.mjs';
 import {
   assertPublicXtreamUrl,
   decryptXtreamSecret,
@@ -3133,6 +3134,29 @@ async function unifiedStreamBridge(req,res,url){
   const limit=bridgeLimiter.consume(requestClientKey(req));
   if(!limit.allowed)return json(res,429,{ok:false,code:'stream_bridge_rate_limited'});
   const p=url.pathname;
+
+  // Same authenticated bridge as every STREAM operator control.
+  // All season URLs and content types are hardcoded in the helper. No
+  // arbitrary origin, token or storage URL reaches operator browsers.
+  if(isStreamSeasonBridgePath(p)){
+   const write=req.method==='POST';
+   if(write&&req.headers['content-type']?.split(';')[0]?.trim()!=='application/json')
+    return json(res,415,{ok:false,code:'season_json_required'});
+   const data=write?await readJson(req):undefined;
+   const result=await requestStreamSeasonBridge({
+    path:p,method:req.method,body:data,
+    operatorToken:process.env.BLOFY_CONTENT_HUB_OPERATOR_TOKEN||''});
+   return json(res,result.status,result.data,{'cache-control':'no-store'});
+  }
+
+  const selectedSeasonPreview=/^\/internal\/blofy-stream\/content-hub\/seasons\/episodes\/([A-Za-z0-9_-]{8,80})\/preview$/.exec(p);
+  if(selectedSeasonPreview){
+   if(req.method!=='GET'||url.search)return json(res,405,{
+    ok:false,code:'season_episode_preview_method_or_query_denied'});
+   return forwardPrivatePreview({req,res,
+    mediaKind:'episode',runId:selectedSeasonPreview[1],
+    hubToken:String(process.env.BLOFY_CONTENT_HUB_OPERATOR_TOKEN||'')});
+  }
 
   // Owner-only, 12-second MP4 stream from verified private S3.
   // This bridge authorization was checked above. Never proxy arbitrary paths.

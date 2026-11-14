@@ -6,6 +6,7 @@ import {pipeline} from 'node:stream/promises';
 
 const HUB='http://blofy-content-hub.railway.internal:3000';
 const MAX_PREVIEW=12*1024*1024;
+const RUN=/^[A-Za-z0-9_-]{8,80}$/;
 function fail(res,status,code){
  if(res.headersSent){if(!res.destroyed)res.destroy();return}
  const body=Buffer.from(JSON.stringify({ok:false,code}));
@@ -15,10 +16,12 @@ function fail(res,status,code){
  res.end(body);
 }
 export async function forwardPrivatePreview({
- req,res,hubToken,fetchImpl=fetch,mediaKind='movie'
+ req,res,hubToken,fetchImpl=fetch,mediaKind='movie',runId=null
 }={}){
  if(!['movie','episode'].includes(mediaKind))
   return fail(res,400,'owner_preview_media_kind_invalid');
+ if(runId!==null&&(mediaKind!=='episode'||!RUN.test(String(runId))))
+  return fail(res,400,'owner_preview_run_invalid');
  if(req.method!=='GET')return fail(res,405,'owner_preview_method_denied');
  if(String(req.url||'').includes('?'))
   return fail(res,400,'owner_preview_query_denied');
@@ -32,7 +35,8 @@ export async function forwardPrivatePreview({
  try{
   const episode=mediaKind==='episode';
   const upstream=await fetchImpl(HUB+
-    (episode?'/internal/episodes/playback/preview':
+    (runId?'/internal/seasons/episodes/'+runId+'/preview':
+      episode?'/internal/episodes/playback/preview':
       '/internal/playback/preview'),{
     method:'GET',redirect:'manual',signal:abort.signal,
     headers:{authorization:'Bearer '+hubToken,

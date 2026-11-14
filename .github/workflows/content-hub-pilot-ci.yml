@@ -4,21 +4,41 @@ on:
     paths:
       - 'services/content-hub/**'
       - 'services/activation/src/content-hub-admin*'
+      - 'services/activation/src/stream-season-bridge.mjs'
+      - 'services/activation/src/xtream-admin-hook.mjs'
+      - 'services/activation/test/stream-season-bridge.test.mjs'
       - 'services/activation/src/admin-session-hook.mjs'
       - 'services/activation/src/bootstrap.mjs'
       - 'services/activation/web/admin-content-hub*'
+      - 'services/activation/web/admin-season-*'
+      - 'services/activation/web/admin-library*'
       - 'services/activation/web/admin.html'
       - 'services/activation/test/content-hub-admin*'
+      - 'services/activation/test/content-hub-library.test.mjs'
+      - 'services/activation/test/content-hub-cinema.test.mjs'
+      - 'services/activation/test/content-hub-detail.test.mjs'
+      - 'services/activation/test/content-hub-readiness.test.mjs'
+      - 'services/activation/test/season-forecast-ui.test.mjs'
       - '.github/workflows/content-hub-pilot-ci.yml'
   pull_request:
     paths:
       - 'services/content-hub/**'
       - 'services/activation/src/content-hub-admin*'
+      - 'services/activation/src/stream-season-bridge.mjs'
+      - 'services/activation/src/xtream-admin-hook.mjs'
+      - 'services/activation/test/stream-season-bridge.test.mjs'
       - 'services/activation/src/admin-session-hook.mjs'
       - 'services/activation/src/bootstrap.mjs'
       - 'services/activation/web/admin-content-hub*'
+      - 'services/activation/web/admin-season-*'
+      - 'services/activation/web/admin-library*'
       - 'services/activation/web/admin.html'
       - 'services/activation/test/content-hub-admin*'
+      - 'services/activation/test/content-hub-library.test.mjs'
+      - 'services/activation/test/content-hub-cinema.test.mjs'
+      - 'services/activation/test/content-hub-detail.test.mjs'
+      - 'services/activation/test/content-hub-readiness.test.mjs'
+      - 'services/activation/test/season-forecast-ui.test.mjs'
       - '.github/workflows/content-hub-pilot-ci.yml'
 
 permissions:
@@ -37,18 +57,77 @@ jobs:
         run: |
           node --check services/activation/src/content-hub-admin-core.mjs
           node --check services/activation/src/content-hub-admin-hook.mjs
+          node --check services/activation/src/content-hub-overview.mjs
+          node --check services/activation/src/stream-season-bridge.mjs
           node --check services/activation/src/bootstrap.mjs
           node --check services/activation/src/admin-session-hook.mjs
           node --check services/activation/web/admin-content-hub.js
+          node --check services/activation/web/admin-season-analytics.js
+          node --check services/activation/web/admin-season-detail.js
+          node --check services/activation/web/admin-season-attention.js
+          node --check services/activation/web/admin-ops-overview.js
+          node --check services/activation/web/admin-library.js
+          node --check services/activation/web/admin-library-metadata.js
+          node --check services/activation/web/admin-library-cinema.js
+          node --check services/activation/web/admin-library-detail.js
+          node --check services/activation/web/admin-season-readiness.js
           node --test services/activation/test/content-hub-admin-core.test.mjs
+          node --test services/activation/test/content-hub-overview.test.mjs
+          node --test services/activation/test/content-hub-library.test.mjs
+          node --test services/activation/test/content-hub-cinema.test.mjs
+          node --test services/activation/test/content-hub-detail.test.mjs
+          node --test services/activation/test/content-hub-readiness.test.mjs
+          node --test services/activation/test/stream-season-bridge.test.mjs
+          node --test services/activation/test/season-forecast-ui.test.mjs
+          node --test services/activation/test/content-hub-private-preview-bridge.test.mjs
+          node --test services/activation/test/xtream-content-hub-season-approval.test.mjs
+          node --test services/activation/test/xtream-content-hub-series.test.mjs
       - name: Check isolated policy and worker syntax
         run: |
           node --check services/content-hub/src/mirror-policy.mjs
           node --check services/content-hub/src/mirror-pilot.mjs
           node --check services/content-hub/src/one-movie-pilot.mjs
           node --check services/content-hub/src/server.mjs
+          node --check services/content-hub/src/season-analytics.mjs
+          node --check services/content-hub/src/season-report.mjs
+          node --check services/content-hub/src/season-forecast.mjs
+          node --check services/content-hub/src/season-attention.mjs
+          node --check services/content-hub/src/season-queue.mjs
+          node --check services/content-hub/src/private-test-gate.mjs
+          node --check services/content-hub/src/device-qa-manifest.mjs
+          node --check services/content-hub/src/curated-metadata.mjs
+          node --check services/content-hub/src/metadata-matcher.mjs
+          node --check services/content-hub/src/metadata-review.mjs
+          node --check services/content-hub/src/episode-chunk-pilot.mjs
           node --check services/content-hub/src/source-lease.mjs
       - name: Install test-only dependencies (no install scripts)
         run: npm install --prefix services/content-hub --ignore-scripts --no-audit --no-fund --package-lock=false
       - name: Test S3 multipart fixtures (no source or cloud access)
         run: node --test services/content-hub/test/*.test.mjs
+
+  postgres-season-analytics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: analytics_test
+          POSTGRES_PASSWORD: local_test_only
+          POSTGRES_DB: analytics_fixture
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U analytics_test -d analytics_fixture"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install test dependencies (no scripts)
+        run: npm install --prefix services/content-hub --ignore-scripts --no-audit --no-fund --package-lock=false
+      - name: Exercise SQL and analytics with disposable PostgreSQL
+        env:
+          BLOFY_TEST_PG_URL: postgresql://analytics_test:local_test_only@127.0.0.1:5432/analytics_fixture
+        run: node --test services/content-hub/test/season-analytics-postgres.test.mjs

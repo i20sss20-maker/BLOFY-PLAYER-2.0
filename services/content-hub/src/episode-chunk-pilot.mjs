@@ -139,10 +139,22 @@ export async function runOneEpisodeChunk({
   return {...base,ok:false,code:'episode_storage_adapters_missing'};
  let lock=null,run=null,key=null,uploadId=null,s3Complete=false;
  let hardFailure=false,errorCode='episode_transfer_failed',stage='lock';
+ // Timings are observation only and cannot alter any checkpoints.
+ let stageSince=Date.now();const stageTimes=Object.create(null);
+ const markStage=next=>{
+  const now=Date.now();
+  stageTimes[stage]=(stageTimes[stage]||0)+Math.max(0,now-stageSince);
+  stage=next;stageSince=now;
+ };
+ const timings=()=>{
+  const out={...stageTimes};
+  out[stage]=(out[stage]||0)+Math.max(0,Date.now()-stageSince);
+  return out;
+ };
  try{
   lock=await lease.acquire('saleh');
   if(!lock)return {...base,ok:false,code:'episode_source_busy'};
-  stage='metadata';
+  markStage('metadata');
   const candidates=await candidateInspector({env,fetchImpl,signal});
   const item=candidates.ok===true&&Array.isArray(candidates.candidates)?
     candidates.candidates.find(x=>x.gatewayId===cfg.gatewayId):null;
@@ -151,7 +163,7 @@ export async function runOneEpisodeChunk({
   const fingerprintKey=createHash('sha256').update(
     cfg.runId+'|'+item.sourceId+'|'+item.mediaId+'|'+cfg.gatewayId
    ).digest('hex').slice(0,24);
-  stage='manifest';
+  markStage('manifest');
   run=await lease.loadEpisodeRun({runId:cfg.runId,
    sourceId:item.sourceId,mediaId:item.mediaId,
    gatewayId:cfg.gatewayId,extension:item.extension,
@@ -166,13 +178,13 @@ export async function runOneEpisodeChunk({
    code:'episode_final_verification_pending'};
   const from=(no-1)*CHUNK,to=Math.min(cfg.expectedBytes,from+CHUNK)-1;
   if(signal?.aborted)throw Error('episode_cancelled');
-  stage='boundary_precheck';
+  markStage('boundary_precheck');
   const boundary=await boundaryFingerprint({cfg,fetchImpl,signal});
   if(run.validator?.startsWith('boundary-sha256:')&&run.validator!==boundary){
    hardFailure=true;errorCode='episode_source_fingerprint_changed';
    throw Error('episode_source_changed');
   }
-  stage='source_chunk';
+  markStage('source_chunk');
   const result=await sourceRange({cfg,fetchImpl,from,to,signal});
   const validator=result.providerValidator||boundary;
   if(run.validator&&run.validator!==validator){
@@ -180,7 +192,7 @@ export async function runOneEpisodeChunk({
    throw Error('episode_source_version_changed');
   }
   if(!result.providerValidator){
-   stage='boundary_postcheck';
+   markStage('boundary_postcheck');
    const after=await boundaryFingerprint({cfg,fetchImpl,signal});
    if(after!==boundary){
     hardFailure=true;errorCode='episode_source_fingerprint_changed';
@@ -190,26 +202,26 @@ export async function runOneEpisodeChunk({
   const sha256=createHash('sha256').update(result.buffer).digest('hex');
   key='saleh/episode/'+item.sourceId+'/batch_'+fingerprintKey+
     '_part_'+String(no).padStart(6,'0')+'.'+item.extension;
-  stage='s3_begin';
+  markStage('s3_begin');
   const started=await storage.begin({key,private:true,
     contentType:'application/octet-stream',
     metadata:{kind:'licensed-episode-part',part:String(no)}});
   uploadId=started.uploadId;
-  stage='s3_upload';
+  markStage('s3_upload');
   const uploaded=await storage.part({key,uploadId,
     partNumber:1,body:result.buffer});
-  stage='s3_complete';
+  markStage('s3_complete');
   await storage.complete({key,uploadId,
     parts:[{partNumber:1,etag:uploaded.etag}]});
   uploadId=null;s3Complete=true;
-  stage='s3_verify';
+  markStage('s3_verify');
   const proof=await storage.verify({key,expectedBytes:result.buffer.length,
     expectedSha256:sha256,signal});
   if(!proof?.ok||proof.bytes!==result.buffer.length||proof.sha256!==sha256){
    hardFailure=true;errorCode='episode_private_sha256_mismatch';
    throw Error('episode_private_chunk_corrupted');
   }
-  stage='checkpoint';
+  markStage('checkpoint');
   await lease.recordEpisodeChunk(cfg.runId,{partNumber:no,key,
     bytes:result.buffer.length,sha256,validator});
   run.parts.push({partNumber:no,key,bytes:result.buffer.length,sha256});
@@ -221,13 +233,14 @@ export async function runOneEpisodeChunk({
   if(no!==totalParts)return {...base,ok:true,
    code:'episode_checkpoint_saved',completed:false,
    bytesCopied:to+1,totalParts,chunksSaved:no,
-   expectedBytes:cfg.expectedBytes};
-  stage='verify_full_file';
+   expectedBytes:cfg.expectedBytes,stageTimingsMs:timings()};
+  markStage('verify_full_file');
   const fullSha=await verifyStoredEpisode({storage,parts:run.parts,
     total:cfg.expectedBytes,signal});
   await lease.verifyEpisodeRun(cfg.runId,{sha256:fullSha});
   return {...base,ok:true,code:'episode_fully_verified',completed:true,
-   bytes:cfg.expectedBytes,sha256:fullSha,chunksSaved:no,totalParts};
+   bytes:cfg.expectedBytes,sha256:fullSha,chunksSaved:no,totalParts,
+   stageTimingsMs:timings()};
  }catch{
   if(uploadId&&key)await storage.abort({key,uploadId}).catch(()=>{});
   if(key&&s3Complete)await storage.remove({key}).catch(()=>{});
@@ -235,6 +248,7 @@ export async function runOneEpisodeChunk({
    await lease.failEpisodeRun(cfg.runId,{code:errorCode}).catch(()=>{});
   return {...base,ok:false,code:hardFailure?errorCode:
     signal?.aborted?'episode_cancelled':'episode_retryable_error',
-    errorStage:stage,checkpointsRetained:run?.parts?.length||0};
+    errorStage:stage,stageTimingsMs:timings(),
+    checkpointsRetained:run?.parts?.length||0};
  }finally{await lock?.release().catch(()=>{})}
 }

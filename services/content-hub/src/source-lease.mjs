@@ -235,6 +235,48 @@ export function createSourceLease({connectionString,
      SET state='failed',error_code=$2,updated_at=NOW()
      WHERE run_id=$1 AND state='staged'`,[runId,code]);
   },
+  // Owner confirmation of audible audio and visible video, not an automated
+  // decoder assertion. Scoped to a completed private episode manifest.
+  async confirmEpisodeBrowserPlayback(runId){
+   if(!/^[A-Za-z0-9_-]{8,80}$/.test(String(runId||'')))
+    throw Error('episode_browser_run_invalid');
+   await pool.query([
+    'CREATE TABLE IF NOT EXISTS blofy_content_hub_episode_browser_checks (',
+    'run_id TEXT PRIMARY KEY REFERENCES blofy_content_hub_episode_runs(run_id),',
+    'audio_confirmed BOOLEAN NOT NULL DEFAULT FALSE,',
+    'video_confirmed BOOLEAN NOT NULL DEFAULT FALSE,',
+    'confirmed_at TIMESTAMPTZ NOT NULL DEFAULT NOW())'
+   ].join(' '));
+   const result=await pool.query([
+    'INSERT INTO blofy_content_hub_episode_browser_checks',
+    '(run_id,audio_confirmed,video_confirmed)',
+    'SELECT run_id,TRUE,TRUE FROM blofy_content_hub_episode_runs',
+    "WHERE run_id=$1 AND state='verified'",
+    'ON CONFLICT (run_id) DO UPDATE SET audio_confirmed=TRUE,',
+    'video_confirmed=TRUE,confirmed_at=NOW() RETURNING confirmed_at'
+   ].join(' '),[runId]);
+   if(result.rowCount!==1)throw Error('episode_browser_unverified_run');
+   return {confirmed:true,runId,videoConfirmed:true,
+    audioConfirmed:true,confirmedAt:result.rows[0].confirmed_at};
+  },
+  async getEpisodeBrowserPlaybackStatus(runId){
+   if(!/^[A-Za-z0-9_-]{8,80}$/.test(String(runId||'')))
+    return {confirmed:false,videoConfirmed:false,audioConfirmed:false};
+   const result=await pool.query([
+    'SELECT c.audio_confirmed,c.video_confirmed,c.confirmed_at',
+    'FROM blofy_content_hub_episode_browser_checks c',
+    'INNER JOIN blofy_content_hub_episode_runs r ON r.run_id=c.run_id',
+    "WHERE c.run_id=$1 AND r.state='verified'"
+   ].join(' '),[runId]).catch(error=>{
+    if(error?.code==='42P01')return {rows:[]};
+    throw error;
+   });
+   const row=result.rows?.[0];
+   return {confirmed:row?.audio_confirmed===true&&row?.video_confirmed===true,
+    audioConfirmed:row?.audio_confirmed===true,
+    videoConfirmed:row?.video_confirmed===true,
+    confirmedAt:row?.confirmed_at||null};
+  },
   async listEpisodeRuns({limit=15}={}){
    const n=Math.max(1,Math.min(25,Number(limit)||15));
    const result=await pool.query(`SELECT run_id,state,expected_bytes,

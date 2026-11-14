@@ -7,6 +7,15 @@
   <title>BLOFY · مركز المحتوى</title>
   <link rel="stylesheet" href="/admin-content-hub.css">
   <script src="/admin-content-hub.js" defer></script>
+  <script src="/admin-season-analytics.js" defer></script>
+  <script src="/admin-season-detail.js" defer></script>
+  <script src="/admin-season-attention.js" defer></script>
+  <script src="/admin-ops-overview.js" defer></script>
+  <script src="/admin-library.js" defer></script>
+  <script src="/admin-library-metadata.js" defer></script>
+  <script src="/admin-library-cinema.js" defer></script>
+  <script src="/admin-library-detail.js" defer></script>
+  <script src="/admin-season-readiness.js" defer></script>
 </head>
 <body>
 <main class="shell">
@@ -22,11 +31,553 @@
     </div>
     <span id="health" class="badge pending" role="status">جارٍ الفحص…</span>
   </section>
+  <section class="card ops-overview" id="opsOverview" aria-labelledby="opsOverviewTitle">
+    <div class="cardhead">
+      <div>
+        <p class="eyebrow">BLOFY · OPERATIONS CENTER</p>
+        <h2 id="opsOverviewTitle">لوحة متابعة المحتوى الموحدة</h2>
+        <p class="muted">ملخص الأفلام والمسلسلات والمواسم والتنبيهات وحجم النسخ المسجل، من بيانات خاصة محفوظة دون إعادة قراءة المحتوى من المصدر.</p>
+      </div>
+      <button id="opsRefresh" type="button">تحديث الآن</button>
+    </div>
+    <p id="opsStatus" class="muted" role="status">جارٍ جمع الحالة من الخدمات الخاصة…</p>
+    <div class="ops-kpis" aria-label="المؤشرات الرئيسية">
+      <article><small>الأفلام المتحقق منها</small><strong id="opsMoviesVerified">—</strong></article>
+      <article><small>الحلقات المكتملة</small><strong id="opsEpisodesVerified">—</strong></article>
+      <article><small>المواسم المسجلة</small><strong id="opsSeasonsCount">—</strong></article>
+      <article><small>المسلسلات الظاهرة</small><strong id="opsSeriesCount">—</strong></article>
+      <article><small>الحلقات الفاشلة</small><strong id="opsFailedEpisodes">—</strong></article>
+      <article><small>النسخ المحفوظة المسجلة</small><strong id="opsKnownStorage">—</strong></article>
+    </div>
+    <div class="ops-service-state" aria-live="polite">
+      <span id="opsPrivateStore" class="badge pending">سلامة التخزين: جارٍ التحقق</span>
+      <span id="opsDatabase" class="badge pending">قاعدة البيانات: جارٍ التحقق</span>
+      <span id="opsMovieWorker" class="badge pending">نقل الأفلام: —</span>
+      <span id="opsSeasonWorker" class="badge pending">نقل المواسم: —</span>
+    </div>
+    <div class="ops-panels">
+      <div class="ops-panel">
+        <h3>تفصيل الحجم المسجل</h3>
+        <div id="opsStorageBreakdown" class="ops-breakdown">
+          <p class="muted">لم تتوفر البيانات بعد.</p>
+        </div>
+        <p class="hint">المجموع المنطقي للأفلام المتحقق منها وأجزاء الحلقات المسجلة في قاعدة البيانات فقط؛ لا يمثل سعة S3 الفعلية أو المساحة المتبقية.</p>
+      </div>
+      <div class="ops-panel">
+        <h3>تنبيهات تحتاج المتابعة</h3>
+        <div id="opsTopAlerts" class="ops-alerts" aria-live="polite">
+          <p class="muted">جارٍ تحميل التنبيهات…</p>
+        </div>
+      </div>
+    </div>
+    <div class="ops-panel ops-season-panel">
+      <h3>ملخص المواسم الحديثة المعروضة</h3>
+      <div id="opsSeasons" class="ops-seasons" aria-live="polite">
+        <p class="muted">جارٍ قراءة المواسم…</p>
+      </div>
+      <p class="hint" id="opsScope">قد يكون عرض المسلسلات والمواسم محدودًا في الاستعلام، ويعرض العدد الظاهر فقط عند عدم اكتمال التغطية.</p>
+    </div>
+    <nav class="ops-links" aria-label="الانتقال السريع">
+      <a href="#season-title">إدارة المواسم</a>
+      <a href="#analyticsTitle">التقارير التفصيلية</a>
+      <a href="#seasonReadinessTitle">جاهزية الصورة والصوت</a>
+      <a href="#attentionTitle">التنبيهات</a>
+      <a href="#runs">عمليات الأفلام</a>
+    </nav>
+  </section>
+  <section class="card season-readiness" id="seasonReadiness"
+    aria-labelledby="seasonReadinessTitle">
+    <div class="cardhead">
+      <div>
+        <p class="eyebrow">BLOFY · OWNER PLAYBACK REVIEW</p>
+        <h2 id="seasonReadinessTitle">جاهزية الحلقات واختبار الصورة والصوت</h2>
+        <p class="muted">إحصائية شاملة للحلقات المدرجة في قائمة النقل الخاصة فقط، وليس لكل محتوى المصدر. تؤكد سجلات التخزين سلامة الملف المسجلة، بينما مراجعة الصورة والصوت تأكيد يدوي مستقل من المالك.</p>
+      </div>
+      <div class="season-readiness-top-actions">
+        <button id="seasonReadinessRefresh" type="button">تحديث الفحص</button>
+        <button id="seasonReadinessExport" type="button" disabled>
+          تصدير تقرير الصفحة CSV
+        </button>
+      </div>
+    </div>
+    <p id="seasonReadinessStatus" class="muted" role="status">
+      اختر «تحديث الفحص» لقراءة الحالة من PostgreSQL دون تشغيل أي ملف.
+    </p>
+    <div id="seasonReadinessKpis" class="season-readiness-kpis" aria-live="polite">
+      <p class="muted">لا توجد إحصائية محسوبة بعد.</p>
+    </div>
+    <div class="season-readiness-approval" aria-labelledby="seasonReadinessApprovalTitle">
+      <h3 id="seasonReadinessApprovalTitle">تقييم أهلية الاختبار داخل الأجهزة</h3>
+      <p id="seasonReadinessDecision" role="status" class="muted">
+        بانتظار تقييم جاهزية الحلقات المدرجة.
+      </p>
+      <p class="hint">
+        «مرشح لاختبار خاص» لا يعني الموافقة على نشر العمل للمشتركين.
+        يجب التحقق من حقوق العرض والتوزيع، وتجربة التشغيل في Android وWindows وTV،
+        والتأكد من الصوت والترجمة والتنقل قبل أي اعتماد مستقل.
+      </p>
+    </div>
+    <div class="season-device-qa" aria-labelledby="seasonDeviceQaTitle">
+      <div>
+        <h3 id="seasonDeviceQaTitle">خطة اختبار الأجهزة الخاصة</h3>
+        <p class="muted">اختر الجهاز ورقم صفحة الحلقات، ثم اضغط «تجهيز ملف اختبار الجهاز» في الموسم الذي تريد اختباره. الملف JSON للمالك فقط، ولا يحتوي روابط فيديو أو أكواد أو صلاحيات دخول، ولا يربط التطبيق فعليًا.</p>
+      </div>
+      <div class="season-device-qa-controls">
+        <label for="seasonDeviceQaPlatform">نوع الجهاز
+          <select id="seasonDeviceQaPlatform">
+            <option value="android">Android جوال</option>
+            <option value="android_tv">Android TV</option>
+            <option value="windows">Windows</option>
+          </select>
+        </label>
+        <label for="seasonDeviceQaPage">صفحة الحلقات
+          <input id="seasonDeviceQaPage" type="number" min="1" max="20000" step="1" value="1" inputmode="numeric">
+        </label>
+      </div>
+      <p class="hint">كل ملف يغطي حتى 50 حلقة مدرجة في الصفحة المحددة. يتطلب اختبارًا فعليًا على جهازك والتحقق من حقوق عرض العمل قبل أي تكامل أو إتاحة للمشتركين.</p>
+      <p id="seasonDeviceQaStatus" class="muted" role="status">لم يتم إنشاء خطة اختبار للأجهزة بعد.</p>
+    </div>
+    <div id="seasonReadinessWarnings" class="season-readiness-warnings"></div>
+    <div class="season-readiness-head">
+      <h3>المواسم المسجلة وترتيب ما يحتاج مراجعة</h3>
+      <span id="seasonReadinessScope" class="muted"></span>
+    </div>
+    <div id="seasonReadinessRows" class="season-readiness-rows" aria-live="polite">
+      <p class="muted">لا توجد نتائج بعد.</p>
+    </div>
+    <div class="season-readiness-pagination">
+      <button id="seasonReadinessPrev" type="button" disabled>المواسم السابقة</button>
+      <span id="seasonReadinessPage" class="muted">الصفحة 1</span>
+      <button id="seasonReadinessNext" type="button" disabled>المواسم التالية</button>
+    </div>
+    <p class="hint">هذه قراءة للقيود المسجلة في قاعدة البيانات فقط. لا تقيس تلقائيًا جودة الصوت أو الفيديو ولا تقرأ ملفات S3 ولا تشغّل تنزيلات أو تغيّر بث العملاء. لن تُعد الحلقات مناسبة للتطبيقات قبل فحصها النهائي ومراجعة حقوق عرضها.</p>
+  </section>
+  <section class="card library-browser" id="libraryBrowser" aria-labelledby="libraryBrowserTitle">
+    <div class="cardhead">
+      <div>
+        <p class="eyebrow">PRIVATE LIBRARY · SEARCH</p>
+        <h2 id="libraryBrowserTitle">مكتبة المحتوى المحفوظ</h2>
+        <p class="muted">بحث في الأفلام المسجلة وحلقات ومسلسلات ومواسم قائمة النقل، مع معرفة الحالة والناقص منها. ليس فهرس محتوى المصدر الكامل.</p>
+      </div>
+      <button type="button" id="libraryRefresh">تحديث المكتبة</button>
+    </div>
+    <div class="library-search-controls">
+      <label for="libraryText">ابحث باسم الحلقة أو معرّف الفيلم أو الموسم
+        <input type="search" id="libraryText" maxlength="80"
+          placeholder="عنوان الحلقة، رقمها، الموسم، أو معرّف النسخة" autocomplete="off">
+      </label>
+      <label for="libraryKind">نوع المحتوى
+        <select id="libraryKind">
+          <option value="all">الكل</option>
+          <option value="movie">أفلام</option>
+          <option value="series">مسلسلات</option>
+          <option value="season">مواسم</option>
+          <option value="episode">حلقات</option>
+        </select>
+      </label>
+      <label for="libraryState">حالة النقل
+        <select id="libraryState">
+          <option value="all">جميع الحالات</option>
+          <option value="verified">مكتملة</option>
+          <option value="failed">فاشلة</option>
+          <option value="queued">تنتظر</option>
+          <option value="running">جارٍ نقلها</option>
+          <option value="paused">متوقفة</option>
+        </select>
+      </label>
+      <button id="librarySearch" type="button">بحث</button>
+    </div>
+    <p class="muted" id="libraryStatus" role="status">جارٍ قراءة سجلات المكتبة…</p>
+    <div class="library-summary" id="librarySummary" aria-live="polite"></div>
+    <section class="library-review" aria-labelledby="libraryReviewTitle">
+      <div class="cardhead">
+        <div>
+          <h3 id="libraryReviewTitle">جاهزية بيانات المكتبة</h3>
+          <p class="muted" id="libraryReviewScope">الفحص يخص الأفلام والمسلسلات الظاهرة في صفحة النتائج الحالية فقط.</p>
+        </div>
+      </div>
+      <div class="library-review-metrics" id="libraryReviewMetrics" aria-live="polite">
+        <p class="muted">جارٍ فحص أسماء المحتوى المحفوظة…</p>
+      </div>
+      <details class="library-review-details" id="libraryReviewDetails" open>
+        <summary>عناصر تحتاج استكمال بيانات العرض</summary>
+        <div id="libraryReviewItems" class="library-review-items">
+          <p class="muted">جارٍ قراءة معلومات الفهرس الخاص…</p>
+        </div>
+      </details>
+      <p class="hint">إضافة الصور اختيارية وتتطلب تصريح استخدامها. لا يتم جلب صور أو أسماء تلقائيًا؛ قائمة المراجعة لا تشمل المحتوى خارج الصفحة الحالية أو كامل كتالوج المصدر.</p>
+    </section>
+    <section class="library-cinema-mode" aria-labelledby="cinemaTitle">
+      <div class="library-cinema-header">
+        <div>
+          <p class="eyebrow">BLOFY · PRIVATE CINEMA</p>
+          <h3 id="cinemaTitle">استعراض المكتبة السينمائي</h3>
+          <p class="muted">واجهة بصرية خاصة بالمالك لنتائج الصفحة الحالية. المحتوى والصور يظهران فقط إذا كانت بياناتهما محفوظة ومصرحًا باستخدامها.</p>
+        </div>
+        <div class="cinema-mode-switch" role="group" aria-label="طريقة عرض المكتبة">
+          <button type="button" id="cinemaGridButton" aria-pressed="true">🎞️ عرض سينمائي</button>
+          <button type="button" id="cinemaDetailsButton" aria-pressed="false">☷ العرض التفصيلي</button>
+        </div>
+      </div>
+      <div class="cinema-genre-toolbar" id="cinemaGenreToolbar" aria-label="تصفية التصنيف الظاهر" role="group"></div>
+      <p class="hint" id="cinemaScope">تعرض البطاقات العناصر المسجلة في الصفحة الحالية فقط، وليس كتالوج المصدر الكامل.</p>
+      <div id="libraryCinema" class="library-cinema-content" aria-live="polite">
+        <p class="muted">جارٍ تجهيز البطاقات من سجلات المكتبة الخاصة…</p>
+      </div>
+    </section>
+    <div class="library-results" id="libraryResults" aria-live="polite">
+      <p class="muted">لا توجد نتائج بعد.</p>
+    </div>
+    <div class="library-pagination">
+      <button id="libraryPrev" type="button" disabled>السابق</button>
+      <span id="libraryPage" aria-live="polite">الصفحة 1</span>
+      <button id="libraryNext" type="button" disabled>التالي</button>
+    </div>
+    <dialog id="libraryDetailDialog" class="library-detail-dialog" aria-labelledby="libraryDetailTitle">
+      <div class="library-detail-shell">
+        <div class="library-detail-topbar">
+          <span class="eyebrow">BLOFY · PRIVATE CONTENT DETAILS</span>
+          <button id="libraryDetailClose" type="button" aria-label="إغلاق تفاصيل المحتوى">✕ إغلاق</button>
+        </div>
+        <div class="library-detail-hero">
+          <div id="libraryDetailArt" class="library-detail-art" aria-label="صورة العمل المحفوظة">
+            <span class="muted">صورة خاصة معتمدة أو بطاقة BLOFY</span>
+          </div>
+          <div class="library-detail-copy">
+            <p id="libraryDetailKind" class="eyebrow"></p>
+            <h3 id="libraryDetailTitle">تفاصيل المحتوى</h3>
+            <p id="libraryDetailMeta" class="library-detail-meta"></p>
+            <p id="libraryDetailDescription" class="library-detail-description"></p>
+            <p id="libraryDetailFacts" class="library-detail-facts"></p>
+            <div class="library-detail-actions">
+              <button id="libraryDetailPlay" type="button" hidden>▶ معاينة النسخة المتحقق منها</button>
+              <button id="libraryDetailEdit" type="button" hidden>تعديل الاسم والصورة</button>
+              <button id="libraryDetailReport" type="button" hidden>فتح تقرير الموسم</button>
+            </div>
+          </div>
+        </div>
+        <div id="libraryDetailPlayerWrap" class="library-detail-player-wrap" hidden>
+          <div class="cardhead">
+            <h4>معاينة خاصة للتأكد من الصورة والصوت</h4>
+            <button id="libraryDetailStop" type="button">إيقاف المعاينة</button>
+          </div>
+          <video id="libraryDetailPlayer" controls preload="none" playsinline
+            controlslist="nodownload" aria-label="معاينة النسخة الخاصة المتحقق منها"></video>
+          <div class="library-detail-preview-navigation" role="group"
+            aria-label="التنقل بين الحلقات المتحقق منها في الصفحة الحالية">
+            <button id="libraryDetailPrevVerified" type="button" disabled>← الحلقة المكتملة السابقة</button>
+            <span id="libraryDetailPreviewPosition" class="muted">اختر حلقة مكتملة لمعاينتها</span>
+            <button id="libraryDetailNextVerified" type="button" disabled>الحلقة المكتملة التالية →</button>
+          </div>
+          <section id="libraryDetailAvReview" class="library-detail-av-review"
+            aria-labelledby="libraryDetailAvTitle" hidden>
+            <h5 id="libraryDetailAvTitle">توثيق مشاهدة الصورة والصوت يدويًا</h5>
+            <p class="hint">التحقق من التخزين لا يعني تأكيد الصورة أو الصوت. بعد تشغيل المقطع ومراجعته بنفسك فقط، اختر ما لاحظته فعلاً. لا يوجد تحليل صوت أو صورة تلقائي.</p>
+            <label><input type="checkbox" id="libraryDetailAvVideoCheck">
+              شاهدت صورة فيديو سليمة بنفسي</label>
+            <label><input type="checkbox" id="libraryDetailAvAudioCheck">
+              سمعت صوت المقطع بوضوح بنفسي</label>
+            <button id="libraryDetailAvConfirm" type="button" disabled>
+              اعتماد فحص الصورة والصوت لهذه الحلقة فقط</button>
+            <p id="libraryDetailAvStatus" class="muted" role="status"></p>
+          </section>
+          <p class="hint">المعاينة لمالك النظام فقط، وبطلب صريح منك. لا تعني اعتماد عرض الملف للعملاء.</p>
+        </div>
+        <section class="library-detail-registered" aria-labelledby="libraryDetailSeasonsHeading">
+          <h4 id="libraryDetailSeasonsHeading">المواسم المسجلة</h4>
+          <div id="libraryDetailSeasons" class="library-detail-seasons" aria-live="polite"></div>
+          <p id="libraryDetailSeriesScope" class="hint"></p>
+        </section>
+        <section class="library-detail-registered" aria-labelledby="libraryDetailEpisodesHeading">
+          <h4 id="libraryDetailEpisodesHeading">الحلقات المحفوظة في الموسم</h4>
+          <div id="libraryDetailEpisodes" class="library-detail-episodes" aria-live="polite"></div>
+          <div class="library-detail-pagination">
+            <button id="libraryDetailPrev" type="button" disabled>الحلقات السابقة</button>
+            <span id="libraryDetailPageLabel" class="muted">—</span>
+            <button id="libraryDetailNext" type="button" disabled>الحلقات التالية</button>
+          </div>
+        </section>
+        <p id="libraryDetailStatus" role="status" class="muted"></p>
+        <p class="hint">التفاصيل من سجلات نسخ BLOFY الخاصة فقط. عدد الحلقات المكتملة يعني الحلقات المدرجة، وليس كل الحلقات المتوفرة لدى المصدر. لا يوجد تنزيل أو نشر للمشتركين من هذه الصفحة.</p>
+      </div>
+    </dialog>
+    <dialog id="libraryMetaDialog" class="library-meta-dialog" aria-labelledby="libraryMetaTitle">
+      <form id="libraryMetaForm">
+        <div class="cardhead">
+          <h3 id="libraryMetaTitle">تعديل بيانات المحتوى</h3>
+          <button type="button" id="libraryMetaClose" aria-label="إغلاق محرر المحتوى">✕</button>
+        </div>
+        <p class="muted">البيانات من إدخالك فقط، ولا يتم جلب أسماء أو صور تلقائيًا من المصدر أو مواقع خارجية.</p>
+        <label>معرّف السجل
+          <input id="libraryMetaKey" type="text" readonly>
+        </label>
+        <section class="library-match-review" aria-labelledby="libraryMatchTitle">
+          <h4 id="libraryMatchTitle">مساعد مطابقة الاسم والصورة</h4>
+          <p class="muted">ابحث عن العمل بالاسم للمراجعة. قد يعرض النظام تلميحات من أسماء الحلقات المحفوظة. اقتراحات TMDB الخارجية لا تعمل إلا بترخيص تجاري ومفتاح API؛ لا يتم اعتماد أي نتيجة تلقائيًا.</p>
+          <div class="library-match-controls">
+            <label>اسم العمل للبحث
+              <input id="libraryMatchQuery" type="search" maxlength="100"
+                placeholder="اكتب اسم الفيلم أو المسلسل" autocomplete="off">
+            </label>
+            <label>لغة النتائج
+              <select id="libraryMatchLanguage">
+                <option value="ar-SA">العربية</option>
+                <option value="en-US">English</option>
+              </select>
+            </label>
+            <button id="libraryMatchSearch" type="button">البحث عن مطابقات</button>
+          </div>
+          <p id="libraryMatchStatus" class="muted" role="status">البحث يعمل عند طلبك فقط، ولا يغيّر بيانات المكتبة.</p>
+          <div id="libraryMatchHints" class="library-match-hints"></div>
+          <div id="libraryMatchResults" class="library-match-results" aria-live="polite"></div>
+          <p class="hint">تأكد من العمل والسنة والبوستر قبل اختيار الاقتراح. حتى بعد الاختيار لن يُحفظ شيء إلا عند ضغط «حفظ البيانات» وتأكيد حقوق الاستخدام.</p>
+          <p class="hint">This product uses the TMDB API but is not endorsed or certified by TMDB. <a href="https://www.themoviedb.org" target="_blank" rel="noopener noreferrer">The Movie Database (TMDB)</a></p>
+        </section>
+        <label>العنوان المعروض
+          <input id="libraryMetaName" type="text" required minlength="2" maxlength="140"
+            placeholder="اسم الفيلم أو المسلسل">
+        </label>
+        <div class="library-meta-fields">
+          <label>سنة الإنتاج (اختياري)
+            <input id="libraryMetaYear" type="number" min="1888" max="2100" placeholder="2024">
+          </label>
+          <label>التصنيف
+            <select id="libraryMetaGenre">
+              <option value="unspecified">بدون تصنيف</option>
+              <option value="action">أكشن</option>
+              <option value="drama">دراما</option>
+              <option value="comedy">كوميديا</option>
+              <option value="thriller">تشويق</option>
+              <option value="romance">رومانسي</option>
+              <option value="family">عائلي</option>
+              <option value="animation">رسوم متحركة</option>
+              <option value="documentary">وثائقي</option>
+              <option value="horror">رعب</option>
+              <option value="science_fiction">خيال علمي</option>
+              <option value="fantasy">فانتازيا</option>
+              <option value="crime">جريمة</option>
+              <option value="adventure">مغامرة</option>
+              <option value="other">أخرى</option>
+            </select>
+          </label>
+        </div>
+        <label>وصف مختصر
+          <textarea id="libraryMetaOverview" maxlength="700" rows="3"
+            placeholder="وصف مختصر بدون روابط أو بيانات دخول"></textarea>
+        </label>
+        <label>مسار صورة TMDb المصرح باستخدامها (اختياري)
+          <input id="libraryMetaPoster" type="text" maxlength="96" dir="ltr"
+            placeholder="/AbCdEf12345.jpg">
+        </label>
+        <p class="hint">أدخل مسار الصورة فقط كما يظهر بعد /t/p/w500 في image.tmdb.org، وليس رابطًا كاملًا. سيعرض المتصفح الصورة من TMDb بعد إدخالك؛ لن يحملها الخادم.</p>
+        <div class="library-meta-preview" id="libraryMetaPreview" aria-live="polite">بدون صورة بعد</div>
+        <label class="library-rights">
+          <input id="libraryMetaRights" type="checkbox" required>
+          أؤكد أن بيانات العنوان والصورة مصرح لي باستخدامها وأنني أراجع ارتباطها بالمحتوى الصحيح.
+        </label>
+        <div class="library-meta-actions">
+          <button type="submit" id="libraryMetaSave">حفظ البيانات</button>
+          <button type="button" id="libraryMetaCancel">إلغاء</button>
+        </div>
+        <p id="libraryMetaStatus" class="muted" role="status"></p>
+      </form>
+    </dialog>
+    <p class="hint" id="libraryScope">البحث في جميع سجلات حلقات المواسم المحفوظة في PostgreSQL مع 40 نتيجة لكل صفحة. الأفلام تُعرض من أحدث 50 سجلًا تقليديًا و50 سجلًا مجزأً فقط؛ البحث بالأفلام ليس شاملًا، وقد يكون عدد الحلقات المدرجة أقل من إجمالي حلقات المسلسل في المصدر.</p>
+  </section>
   <section class="stats" aria-label="ملخص التخزين">
     <article class="tile"><small>أفلام محفوظة ومتحقق منها</small><b id="verified">—</b></article>
     <article class="tile"><small>حجم الملفات المؤكدة</small><b id="used">—</b><span>لا يشمل الملفات من خارج النظام التجريبي</span></article>
     <article class="tile"><small>عمليات نقل جارية</small><b id="active">—</b></article>
     <article class="tile"><small>عمليات لم تكتمل</small><b id="failed">—</b></article>
+  </section>
+  <section class="card seasons" aria-labelledby="season-title">
+    <div class="cardhead">
+      <div><h2 id="season-title">مكتبة المواسم والحلقات</h2>
+        <p class="muted">نقل منظم إلى التخزين الخاص، بحفظ نسبة كل حلقة وموسم. لا يؤثر على تشغيل العملاء.</p></div>
+      <span id="seasonState" class="badge pending">غير مفعّل</span>
+    </div>
+    <div class="season-layout">
+      <div>
+        <div class="cardhead"><h3>قائمة انتظار المواسم</h3>
+          <button id="refreshSeasons" type="button">تحديث القائمة</button></div>
+        <div id="seasonSummary" class="jobs" aria-live="polite">
+          <p class="placeholder">جارٍ جلب معلومات المواسم…</p>
+        </div>
+        <div class="actions">
+          <button id="startSeasons" type="button" disabled>▶ استكمال النقل المتسلسل</button>
+          <button id="pauseSeasons" class="danger" type="button" disabled>⏸ إيقاف آمن</button>
+        </div>
+        <p id="seasonNotice" class="muted" role="status"></p>
+      </div>
+      <div>
+        <div class="cardhead"><h3>إضافة حلقات مصرّح بتخزينها</h3>
+          <div class="actions">
+            <button id="openPilotSeries" type="button">مسلسل الحلقة المحفوظة</button>
+            <button id="loadSeries" type="button">عرض المسلسلات</button>
+          </div></div>
+        <label class="season-label" for="seriesSelect">المسلسل</label>
+        <select class="season-input" id="seriesSelect"><option value="">اختر مسلسلًا بعد تحميل القائمة</option></select>
+        <div class="actions">
+          <input id="seriesLookupId" class="season-input" type="number" min="1" step="1"
+            placeholder="أو أدخل رقم المسلسل من مكتبتك" aria-label="معرف المسلسل الدقيق">
+          <button id="openSeriesId" type="button">فتح بالمعرّف</button>
+        </div>
+        <div class="actions"><button id="loadSeriesSeasons" type="button" disabled>عرض المواسم والحلقات</button></div>
+        <label class="season-label" for="seasonSelect">الموسم</label>
+        <select class="season-input" id="seasonSelect" disabled><option value="">اختر الموسم</option></select>
+        <p class="muted">اختر الموسم والحلقات، ثم افحص الحجم الدقيق قبل إضافتها. الفحص يقرأ 4 كيلوبايت فقط من المصدر.</p>
+        <details class="legacy-candidates">
+          <summary>إضافة حلقة يدويًا (الطريقة السابقة)</summary>
+          <label class="season-label" for="seasonKey">معرّف الموسم اليدوي</label>
+          <input id="seasonKey" class="season-input" maxlength="64"
+            placeholder="example_series_s01" autocomplete="off">
+          <button id="loadCandidates" type="button">عرض الحلقات المعتمدة المحدودة</button>
+        </details>
+        <div class="actions"><button id="selectSeasonBatch" type="button">تحديد أول 12 حلقة</button></div>
+        <div id="seasonCandidates" class="candidate-list">
+          <p class="placeholder">اضغط «عرض الحلقات المتاحة» لاختيار المحتوى.</p>
+        </div>
+        <div class="actions">
+          <button id="enqueueSeason" type="button" disabled>＋ إضافة المحدد إلى الانتظار</button>
+        </div>
+      </div>
+    </div>
+    <p class="hint">التخزين مرهون بحقوق نسخ وتخزين المحتوى، وخمول المصدر قبل النقل. الاستئناف تلقائي بين الأجزاء أثناء جلسة تشغيل معتمدة فقط؛ بعد إعادة تشغيل الخادم يلزم اعتماد جلسة جديدة.</p>
+  </section>
+  <section class="card season-analytics" aria-labelledby="analyticsTitle">
+    <div class="cardhead">
+      <div><p class="eyebrow">REPORTING · READ ONLY</p>
+        <h2 id="analyticsTitle">إحصائيات نقل المواسم</h2>
+        <p class="muted">إحصائيات قاعدة البيانات الخاصة بالمواسم، دون بدء أي نقل أو التأثير على عملاء BLOFY STREAM.</p></div>
+      <button id="analyticsRefresh" type="button">تحديث الإحصائيات</button>
+    </div>
+    <p id="analyticsStatus" class="muted" role="status">جارٍ قراءة الإحصائيات…</p>
+    <div class="analytics-kpis">
+      <article><small>إجمالي الحلقات</small><strong id="analyticsEpisodes">—</strong></article>
+      <article><small>حلقات مكتملة</small><strong id="analyticsVerified">—</strong></article>
+      <article><small>حلقات فاشلة</small><strong id="analyticsFailed">—</strong></article>
+      <article><small>في الانتظار</small><strong id="analyticsQueued">—</strong></article>
+      <article><small>الحجم المسجل</small><strong id="analyticsStorage">—</strong></article>
+      <article><small>متوسط السرعة المقاسة</small><strong id="analyticsSpeed">—</strong></article>
+    </div>
+    <p id="analyticsScope" class="hint">حجم التخزين من سجلات الملفات، وليس المساحة الفعلية المتبقية في S3. السرعة تقاس من الأجزاء الجديدة بعد تحديث النظام.</p>
+    <div class="analytics-grid">
+      <div><h3>ملخص كل موسم</h3><div id="analyticsSeasons" class="analytics-list" aria-live="polite"></div></div>
+      <div><h3>توزيع وقت النقل المقاس</h3>
+        <div id="analyticsStages" class="analytics-list" aria-live="polite"></div>
+        <h3 class="analytics-subtitle">مؤشرات البطء والأعطال</h3><div id="analyticsDiagnostics" class="analytics-list" aria-live="polite"></div>
+        <h3>أسباب فشل الحلقات</h3><div id="analyticsFailures" class="analytics-list"></div></div>
+    </div>
+    <section class="season-attention" aria-labelledby="attentionTitle">
+      <div class="cardhead">
+        <div>
+          <p class="eyebrow">SEASON ATTENTION · OWNER ONLY</p>
+          <h3 id="attentionTitle">مركز تنبيهات الحلقات المتعثرة</h3>
+          <p class="muted">تنبيهات مستنتجة من حالات PostgreSQL فقط. لا تثبت أن المصدر متوقف، ولا تفحص الملفات أو تبدأ نقلًا تلقائيًا.</p>
+        </div>
+        <button type="button" id="attentionRefresh">تحديث التنبيهات</button>
+      </div>
+      <div class="season-attention-summary" id="attentionSummary" aria-live="polite"></div>
+      <div class="season-attention-controls">
+        <label for="attentionLevel">عرض التنبيهات
+          <select id="attentionLevel">
+            <option value="all">كل المستويات</option>
+            <option value="critical">تحتاج مراجعة مهمة</option>
+            <option value="warning">تحتاج انتباهًا</option>
+            <option value="notice">توقف للمراجعة</option>
+            <option value="info">معلومات</option>
+          </select>
+        </label>
+      </div>
+      <p class="muted" id="attentionStatus" role="status">جارٍ فحص حالة الحلقات المحفوظة…</p>
+      <div class="season-attention-list" id="attentionList" aria-live="polite"></div>
+      <p class="hint">إعادة المحاولة اليدوية متاحة فقط للأخطاء المؤقتة وبحد مرتين؛ تتطلب تأكيد صلاحية التخزين وخمول المصدر، ولا تشغّل النقل. الأخطاء المتعلقة بالسلامة والترخيص لا يمكن تجاوزها بهذا الإجراء.</p>
+    </section>
+    <section class="season-resume-panel analytics-record" aria-labelledby="analyticsResumeTitle">
+      <div class="cardhead">
+        <div>
+          <h3 id="analyticsResumeTitle">فحص الاستكمال الآمن بعد الانقطاع</h3>
+          <p class="muted">معاينة حالة السجل المحفوظ في PostgreSQL فقط؛ لا تفحص المصدر أو S3، ولا تؤكد سلامة الملف ولا تبدأ نقلًا تلقائيًا.</p>
+        </div>
+        <button type="button" id="analyticsResumePreview">فحص الحلقات القابلة للمراجعة</button>
+      </div>
+      <p class="hint" id="analyticsResumeStatus" role="status">الاستكمال لا يبدأ إلا من زر بدء النقل المعتاد بعد تأكيد خمول المصدر والتصريح بالتخزين.</p>
+      <div id="analyticsResumeItems" class="analytics-list" aria-live="polite"></div>
+    </section>
+    <section class="season-report" id="analyticsReportPanel" hidden aria-labelledby="analyticsReportTitle">
+      <div class="cardhead">
+        <div><p class="eyebrow">SEASON REPORT · MANUAL PRIORITY</p>
+          <h3 id="analyticsReportTitle">تقرير الموسم</h3>
+          <p class="muted">حالة الحلقات المحفوظة، 50 حلقة في الصفحة، ومخططات من القياسات الفعلية. يمكن تغيير أولوية الحلقة المنتظرة يدويًا دون بدء النقل.</p></div>
+        <div class="season-report-actions">
+          <button id="analyticsExportSeason" type="button" disabled>تصدير تقرير CSV</button>
+          <button id="analyticsCloseReport" type="button">إغلاق التقرير</button>
+        </div>
+      </div>
+      <p id="analyticsReportStatus" class="muted" role="status">اختر موسمًا لعرض تقريره.</p>
+      <div class="season-report-totals" id="analyticsReportTotals" aria-label="ملخص تقدم الموسم"></div>
+      <div class="season-forecast" aria-labelledby="analyticsForecastTitle">
+        <div class="jobtop"><h4 id="analyticsForecastTitle">تقدير مدة النقل المتبقية</h4>
+          <span class="chip">تقديري · وقت النقل النشط فقط</span></div>
+        <strong id="analyticsForecastValue">بانتظار القياسات</strong>
+        <p id="analyticsForecastDescription" class="muted">لا يمكن حساب توقع موثوق حتى تتوفر أجزاء حديثة مقاسة.</p>
+      </div>
+      <div id="analyticsReportAlerts" class="analytics-list" aria-live="polite"></div>
+      <div class="season-report-charts">
+        <div><h4>نسبة النقل حسب الحلقة في الصفحة الحالية</h4>
+          <div class="season-report-bars" id="analyticsReportBars" aria-label="مخطط تقدم الحلقات"></div></div>
+        <div><h4>سرعة آخر 18 جزءًا مقاسًا من آخر 60 حدثًا</h4>
+          <div class="season-report-speed" id="analyticsReportSpeed" aria-label="مخطط قياسات سرعة الأجزاء"></div>
+          <p class="hint">القياس يشمل قراءة المصدر والرفع والتحقق والحفظ؛ لا يمثل سرعة الإنترنت اللحظية.</p></div>
+      </div>
+      <div class="season-report-controls" aria-label="تصفية حلقات الصفحة الحالية">
+        <label for="analyticsReportSearch">بحث في الحلقات المعروضة
+          <input type="search" id="analyticsReportSearch" autocomplete="off" placeholder="رقم الحلقة أو عنوانها">
+        </label>
+        <label for="analyticsReportFilter">فلترة حسب الحالة
+          <select id="analyticsReportFilter">
+            <option value="all">جميع الحالات</option>
+            <option value="queued">بانتظار النقل</option>
+            <option value="running">جارٍ النقل</option>
+            <option value="paused">متوقفة</option>
+            <option value="verified">مكتملة</option>
+            <option value="failed">فاشلة</option>
+          </select>
+        </label>
+        <button id="analyticsReportRefresh" type="button">تحديث التقرير الآن</button>
+      </div>
+      <p class="hint" id="analyticsReportFilterScope">البحث والفلترة للحلقات الخمسين المعروضة في الصفحة الحالية فقط، وليس جميع حلقات المسلسل.</p>
+      <div class="analytics-scroll">
+        <table class="analytics-table">
+          <thead><tr><th>الحلقة</th><th>الحالة</th><th>الإنجاز</th><th>المحفوظ</th><th>آخر تحديث</th><th>الخطأ</th><th>الأولوية</th></tr></thead>
+          <tbody id="analyticsReportRows"><tr><td colspan="7">لا توجد بيانات بعد.</td></tr></tbody>
+        </table>
+      </div>
+      <div class="season-report-pagination">
+        <button id="analyticsReportPrev" type="button" disabled>السابق</button>
+        <span id="analyticsReportPage" aria-live="polite">—</span>
+        <button id="analyticsReportNext" type="button" disabled>التالي</button>
+      </div>
+    </section>
+    <div class="cardhead analytics-history-title">
+      <div><h3>آخر حالات الحلقات المسجلة</h3>
+      <p class="muted">يشمل الحلقات السابقة لتفعيل قياس السرعة. هذه آخر حالة محفوظة لكل حلقة وليست سجلًا كاملًا لكل تغيير.</p></div>
+    </div>
+    <div class="analytics-scroll">
+      <table class="analytics-table">
+        <thead><tr><th>آخر تحديث</th><th>الموسم / الحلقة</th><th>الحالة</th><th>النسبة</th><th>الحجم المسجل</th><th>سبب الفشل</th></tr></thead>
+        <tbody id="analyticsEpisodeStates"><tr><td colspan="6">جارٍ قراءة الحالات…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="cardhead analytics-history-title">
+      <div><h3>سجل النقل</h3><p class="muted">آخر 30 قياسًا مع مدة كل جزء ومرحلة الفشل؛ السجل لا يعيد قراءة محتوى المصدر.</p></div>
+    </div>
+    <div class="analytics-scroll">
+      <table class="analytics-table">
+        <thead><tr><th>الوقت</th><th>الموسم / الحلقة</th><th>النتيجة</th><th>الحجم</th><th>المدة</th><th>المرحلة</th></tr></thead>
+        <tbody id="analyticsHistory"><tr><td colspan="6">لا توجد بيانات بعد.</td></tr></tbody>
+      </table>
+    </div>
   </section>
   <div class="columns">
     <section class="card">
@@ -47,6 +598,20 @@
       </div>
       <p class="muted">هذا الفحص يقرأ تعريف الفيلم المحدد فقط، ولا يشغل الفيلم أو يستهلك اتصال بث من المصدر.</p>
       <div id="preflightResult" class="source-check" role="status">لم يُنفذ الفحص بعد.</div>
+    </section>
+    <section class="card playback">
+      <div class="cardhead"><h2>اختبار الحلقة المحفوظة في المتصفح</h2>
+        <button id="loadEpisodePreview" type="button">تشغيل عينة الحلقة</button></div>
+      <p class="muted">عينة قصيرة MP4 من الحلقة التي اجتازت التحقق، لا تتصل بمصدر البث أثناء المشاهدة.</p>
+      <div class="screen"><video id="episodePlayer" controls preload="none" playsinline></video></div>
+      <p id="episodePlayerNote" class="muted">اضغط «تشغيل عينة الحلقة»، ثم تأكد بنفسك من الصورة والصوت.</p>
+      <div class="owner-confirmation">
+        <p class="muted">بعد تشغيل العينة، أكد ملاحظتك بنفسك. نجاح فحص الخادم لا يُغني عن هذا الاختبار.</p>
+        <label><input id="ownerSawPicture" type="checkbox"> شاهدت صورة الحلقة بوضوح</label>
+        <label><input id="ownerHeardAudio" type="checkbox"> سمعت صوت الحلقة بشكل صحيح</label>
+        <button id="confirmEpisodeAV" type="button" disabled>✓ اعتماد اختبار الصورة والصوت</button>
+        <p id="episodeAVStatus" class="muted" role="status">لم يتم تسجيل تأكيد تشغيل من المتصفح.</p>
+      </div>
     </section>
     <section class="card playback">
       <h2>اختبار الفيلم من التخزين</h2>

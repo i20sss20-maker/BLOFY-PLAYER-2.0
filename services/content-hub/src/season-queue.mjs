@@ -1,0 +1,1386 @@
+// Private, opt-in season transfer queue. No subscriber/media endpoints.
+// One operator-approved episode chunk (8 MiB) per worker iteration.
+// PostgreSQL checkpoints + the underlying episode manifest allow safe resume.
+import pg from 'pg';
+import {randomBytes} from 'node:crypto';
+import {episodeCopyReadiness,runOneEpisodeChunk} from './episode-chunk-pilot.mjs';
+import {evaluatePrivateAppTestGate} from './private-test-gate.mjs';
+
+const RUN=/^[A-Za-z0-9_-]{8,80}$/;
+const SEASON=/^[a-z0-9][a-z0-9_-]{2,63}$/;
+const MAX_BYTES=4*1024**3, MIN_BYTES=8*1024*1024;
+const MODES=new Set(['queued','running','paused','verified','failed']);
+const PRIORITIES=new Set([0,1,2]);
+export function validateSeasonPriority(value){
+ if(!Number.isInteger(value)||!PRIORITIES.has(value))
+  throw Error('season_priority_invalid');
+ return value;
+}
+const VIEW_STATES=new Set(['all','pending',...MODES]);
+export function validateSeasonQueueFilter(state){
+ if(typeof state!=='string'||!VIEW_STATES.has(state))
+  throw Error('season_queue_filter_invalid');
+ return state;
+}
+const safeCode=value=>/^[a-z0-9_]{1,80}$/.test(String(value||''))?
+  String(value):'season_copy_failed';
+const safeStatus=row=>{
+ const total=Number(row.expected_bytes||0);
+ const bytes=Math.max(0,Math.min(total,Number(row.bytes_copied||0)));
+ const state=row.episode_state==='verified'?'verified':row.state;
+ const checkpointAgeSeconds=row.checkpoint_age_seconds===null||
+   row.checkpoint_age_seconds===undefined?NaN:
+   Number(row.checkpoint_age_seconds);
+ const age=Number.isFinite(checkpointAgeSeconds)?
+  Math.max(0,Math.floor(checkpointAgeSeconds)):null;
+ return {runId:row.run_id,seasonKey:row.season_key,
+  episodeNumber:Number(row.episode_number),title:row.title,
+  gatewayId:Number(row.gateway_id),state,expectedBytes:total,
+  bytesCopied:bytes,percent:total?Math.floor(100*bytes/total):0,
+  retries:Number(row.retries||0),manualRetries:Number(row.manual_retries||0),
+  priority:Number(row.priority||0),
+  retryable:row.state==='failed'&&Number(row.manual_retries||0)<2&&
+    ['episode_retryable_error','episode_source_busy'].includes(row.code),
+  code:row.code||null,
+  createdAt:row.created_at,updatedAt:row.updated_at,
+  checkpointAt:row.checkpoint_at||null,checkpointAgeSeconds:age,
+  checkpointSource:'postgres_verified_chunk'};
+};
+export function seasonQueueSummary(rows){
+ const seasons=new Map();
+ for(const row of rows){
+  const s=seasons.get(row.seasonKey)||{seasonKey:row.seasonKey,
+   episodeCount:0,verifiedCount:0,failedCount:0,bytesCopied:0,
+   expectedBytes:0,percent:0};
+  s.episodeCount++;
+  s.verifiedCount+=Number(row.state==='verified');
+  s.failedCount+=Number(row.state==='failed');
+  s.bytesCopied+=row.bytesCopied;
+  s.expectedBytes+=row.expectedBytes;
+  seasons.set(row.seasonKey,s);
+ }
+ return [...seasons.values()].map(s=>({...s,
+  percent:s.expectedBytes?Math.floor(100*s.bytesCopied/s.expectedBytes):0}));
+}
+export function seasonQueueReadiness(env={}){
+ const blockedBy=[];
+ if(env.BLOFY_CONTENT_HUB_SEASON_QUEUE_ENABLED!=='1')
+  blockedBy.push('season_queue_disabled');
+ for(const [key,code] of [
+  ['BLOFY_CONTENT_HUB_UPLOAD_ENABLED','storage_upload_disabled'],
+  ['BLOFY_CONTENT_HUB_STORAGE_RIGHTS_CONFIRMED','storage_rights_unconfirmed'],
+  ['BLOFY_CONTENT_HUB_EPISODE_RIGHTS_CONFIRMED','episode_rights_unconfirmed'],
+  ['BLOFY_CONTENT_HUB_EPISODE_COPY_ENABLED','episode_copy_disabled'],
+  ['BLOFY_CONTENT_HUB_SOURCE_IDLE_CONFIRMED','source_idle_unconfirmed'],
+  ['BLOFY_CONTENT_HUB_SOURCE_QUIET_WINDOW_CONFIRMED','quiet_window_unconfirmed']
+ ])if(env[key]!=='1')blockedBy.push(code);
+ if(String(env.BLOFY_CONTENT_HUB_BRIDGE_TOKEN||'').length<32)
+  blockedBy.push('source_bridge_not_configured');
+ return {ready:blockedBy.length===0,blockedBy,privateOnly:true,
+  customerCutover:false,automaticStartup:false};
+}
+export function validateSeasonSelection({seasonKey,episodes,candidates}={}){
+ if(!SEASON.test(String(seasonKey||''))||
+   !Array.isArray(episodes)||episodes.length<1||episodes.length>12||
+   !Array.isArray(candidates))
+  throw Error('season_selection_invalid');
+ const usedIds=new Set(),usedPositions=new Set();
+ return episodes.map(row=>{
+  const gatewayId=Number(row?.gatewayId);
+  const episodeNumber=Number(row?.episodeNumber);
+  const expectedBytes=Number(row?.expectedBytes);
+  const matched=candidates.find(c=>c.gatewayId===gatewayId);
+  if(!Number.isSafeInteger(gatewayId)||gatewayId<1||
+    !Number.isSafeInteger(episodeNumber)||episodeNumber<1||
+    episodeNumber>500||
+    !Number.isSafeInteger(expectedBytes)||expectedBytes<MIN_BYTES||
+    expectedBytes>MAX_BYTES||usedIds.has(gatewayId)||
+    usedPositions.has(episodeNumber)||
+    matched?.sourceName!=='saleh'||matched?.mediaKind!=='episode'||
+    !/^[a-f0-9-]{36}$/i.test(String(matched?.sourceId||''))||
+    !/^[A-Za-z0-9._-]{1,128}$/.test(String(matched?.mediaId||''))||
+    !['mp4','mkv','avi','ts'].includes(matched?.extension))
+   throw Error('season_episode_not_approved');
+  usedIds.add(gatewayId);usedPositions.add(episodeNumber);
+  return {runId:'season_'+randomBytes(12).toString('hex'),
+   seasonKey,gatewayId,episodeNumber,expectedBytes,
+   sourceId:matched.sourceId,mediaId:matched.mediaId,
+   extension:matched.extension,title:String(matched.title||'').slice(0,220)};
+ });
+}
+export function createSeasonQueueStore({
+ connectionString,Pool=pg.Pool}={}){
+ if(!connectionString)throw Error('season_queue_database_required');
+ const pool=new Pool({connectionString,max:2,connectionTimeoutMillis:5000,
+  idleTimeoutMillis:10000,application_name:'blofy-season-queue'});
+ let initPromise,metricTablePromise;
+ async function ensure(){
+  if(!initPromise){
+   initPromise=(async()=>{
+    await pool.query([
+     'CREATE TABLE IF NOT EXISTS blofy_content_hub_season_queue (',
+     'run_id TEXT PRIMARY KEY,',
+     'season_key TEXT NOT NULL,',
+     'episode_number INTEGER NOT NULL CHECK (episode_number BETWEEN 1 AND 500),',
+     'title TEXT NOT NULL, gateway_id INTEGER NOT NULL UNIQUE,',
+     'source_id UUID NOT NULL, media_id TEXT NOT NULL,',
+     'extension TEXT NOT NULL,',
+     'expected_bytes BIGINT NOT NULL CHECK(expected_bytes BETWEEN 8388608 AND 4294967296),',
+     "state TEXT NOT NULL DEFAULT 'queued' CHECK (state IN ('queued','running','paused','verified','failed')),",
+     'retries INTEGER NOT NULL DEFAULT 0, code TEXT,',
+      'priority SMALLINT NOT NULL DEFAULT 0 CHECK(priority BETWEEN 0 AND 2),',
+     'created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),',
+     'updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),',
+     'UNIQUE (season_key, episode_number))'
+    ].join(' '));
+   })().catch(e=>{initPromise=null;throw e});
+  }
+  await initPromise;
+ }
+ return {
+  ensure,
+  // Global scheduler lock is distinct from the per-chunk source lock.
+  // Prevents a second replica from resetting an active worker's state.
+  async acquireWorker(){
+   await ensure();
+   const client=await pool.connect();
+   try{
+    const row=await client.query([
+     'SELECT pg_try_advisory_lock(',
+     "hashtext('blofy_season_scheduler'),hashtext('saleh')) AS held"
+    ].join(' '));
+    if(row.rows?.[0]?.held!==true){client.release();return null}
+    let released=false;
+    return {release:async()=>{
+     if(released)return;
+     released=true;
+     try{
+      await client.query([
+       'SELECT pg_advisory_unlock(',
+       "hashtext('blofy_season_scheduler'),hashtext('saleh'))"
+      ].join(' '));
+     }finally{client.release()}
+    }};
+   }catch(e){client.release(e);throw e}
+  },
+  async enqueue(entries){
+   await ensure();
+   if(!Array.isArray(entries)||entries.length<1||entries.length>12||
+     entries.some(e=>!RUN.test(e.runId)||!SEASON.test(e.seasonKey)))
+    throw Error('season_queue_entries_invalid');
+   const client=await pool.connect();
+   try{
+    await client.query('BEGIN');
+    const exists=await client.query(
+      "SELECT to_regclass('blofy_content_hub_episode_runs') AS table_name");
+    const hasEpisodeRecords=Boolean(exists.rows?.[0]?.table_name);
+    let added=0,reused=0;
+    for(const e of entries){
+     let previous=null;
+     if(hasEpisodeRecords){
+      const row=await client.query([
+       'SELECT run_id,state,source_id,media_id,extension,expected_bytes',
+       'FROM blofy_content_hub_episode_runs',
+       "WHERE gateway_id=$1 AND state IN ('staged','verified')",
+       'ORDER BY updated_at DESC LIMIT 1'
+      ].join(' '),[e.gatewayId]);
+      previous=row.rows?.[0]||null;
+      if(previous&&(String(previous.source_id)!==e.sourceId||
+        previous.media_id!==e.mediaId||
+        previous.extension!==e.extension||
+        Number(previous.expected_bytes)!==e.expectedBytes))
+       throw Error('season_existing_episode_scope_conflict');
+     }
+     // Adopt an exact already-verified or partial licensed pilot instead of
+     // downloading identical media bytes into a second set of S3 objects.
+     const runId=previous?.run_id||e.runId;
+     const state=previous?.state==='verified'?'verified':'queued';
+     const result=await client.query([
+      'INSERT INTO blofy_content_hub_season_queue',
+      '(run_id,season_key,episode_number,title,gateway_id,source_id,',
+      'media_id,extension,expected_bytes,state) VALUES',
+      '($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
+      'ON CONFLICT (season_key,episode_number) DO NOTHING',
+      'RETURNING run_id'
+     ].join(' '),[runId,e.seasonKey,e.episodeNumber,e.title,
+      e.gatewayId,e.sourceId,e.mediaId,e.extension,e.expectedBytes,state]);
+     added+=result.rowCount;
+     if(result.rowCount&&previous)reused++;
+    }
+    await client.query('COMMIT');
+    return {added,reusedExisting:reused,skipped:entries.length-added};
+   }catch(e){await client.query('ROLLBACK').catch(()=>{});throw e}
+   finally{client.release()}
+  },
+  // Manual, capped retry of *transient* failure only. Never repairs
+  // source-fingerprint mismatches, lost checksums or rights failures.
+  // A transactional advisory lock prevents a second replica's scheduler
+  // from picking this row before the current operator confirms Start.
+
+  // Strictly manual priority editing. Never starts a transfer or touches
+  // checkpoints. The scheduler advisory lock makes ordering changes safe
+  // even if another replica is running.
+  async setPriority({runId,priority}={}){
+   if(!RUN.test(String(runId||''))||
+      !Number.isInteger(priority)||!PRIORITIES.has(priority))
+    return {ok:false,code:'season_priority_invalid'};
+   await ensure();
+   const client=await pool.connect();
+   try{
+    await client.query('BEGIN');
+    const acquired=await client.query([
+     'SELECT pg_try_advisory_xact_lock(',
+     "hashtext('blofy_season_scheduler'),hashtext('saleh')) AS held"
+    ].join(' '));
+    if(acquired.rows?.[0]?.held!==true){
+     await client.query('ROLLBACK');
+     return {ok:false,code:'season_priority_worker_active'};
+    }
+    // Lazy migration only while scheduler is idle: never lock a moving queue.
+    await client.query([
+     'ALTER TABLE blofy_content_hub_season_queue',
+     'ADD COLUMN IF NOT EXISTS priority SMALLINT NOT NULL DEFAULT 0',
+     'CHECK (priority BETWEEN 0 AND 2)'
+    ].join(' '));
+    const updated=await client.query([
+     'UPDATE blofy_content_hub_season_queue SET priority=$2',
+     "WHERE run_id=$1 AND state IN ('queued','paused')",
+     'RETURNING run_id,priority'
+    ].join(' '),[runId,priority]);
+    await client.query('COMMIT');
+    if(updated.rowCount!==1)
+     return {ok:false,code:'season_priority_not_pending'};
+    return {ok:true,code:'season_priority_saved',runId,
+     priority,automaticStart:false,checkpointUnchanged:true,
+     customerCutover:false};
+   }catch(error){
+    await client.query('ROLLBACK').catch(()=>{});
+    throw error;
+   }finally{client.release()}
+  },
+  async retryFailed(runId){
+   if(!RUN.test(String(runId||'')))return {ok:false,
+    code:'season_retry_run_invalid'};
+   await ensure();
+   const client=await pool.connect();
+   try{
+    await client.query('BEGIN');
+    const lock=await client.query([
+     'SELECT pg_try_advisory_xact_lock(',
+     "hashtext('blofy_season_scheduler'),hashtext('saleh')) AS held"
+    ].join(' '));
+    if(lock.rows?.[0]?.held!==true){
+     await client.query('ROLLBACK');
+     return {ok:false,code:'season_retry_worker_active'};
+    }
+    // Migrate only after acquiring the global scheduler lock, so DDL
+    // cannot delay an active transfer running on another Railway replica.
+    await client.query([
+     'ALTER TABLE blofy_content_hub_season_queue',
+     'ADD COLUMN IF NOT EXISTS manual_retries SMALLINT NOT NULL DEFAULT 0'
+    ].join(' '));
+    const updated=await client.query([
+     'UPDATE blofy_content_hub_season_queue',
+     "SET state='queued',code='manual_retry_approved',",
+     'manual_retries=manual_retries+1,updated_at=NOW()',
+     'WHERE run_id=$1 AND state=\'failed\'',
+     "AND code IN ('episode_retryable_error','episode_source_busy')",
+     'AND manual_retries<2',
+     'RETURNING run_id,manual_retries'
+    ].join(' '),[runId]);
+    await client.query('COMMIT');
+    if(updated.rowCount!==1)return {ok:false,
+     code:'season_retry_not_eligible'};
+    return {ok:true,code:'season_retry_queued',
+     runId,manualRetries:Number(updated.rows[0].manual_retries),
+     automaticStart:false,privateOnly:true};
+   }catch(error){
+    await client.query('ROLLBACK').catch(()=>{});
+    throw error;
+   }finally{client.release()}
+  },
+  // Read-only DB time since the last durable chunk checkpoint.
+  // A stale checkpoint is only an operator warning; it cannot prove
+  // the provider failed or authorize restarting an active job.
+  async currentCheckpoint(runId){
+   if(!RUN.test(String(runId||'')))return null;
+   await ensure();
+   const sql=[
+    'SELECT EXTRACT(EPOCH FROM (NOW()-GREATEST(q.updated_at,',
+    'COALESCE(r.updated_at,q.updated_at)))) AS age_seconds',
+    'FROM blofy_content_hub_season_queue q',
+    'LEFT JOIN blofy_content_hub_episode_runs r ON r.run_id=q.run_id',
+    "WHERE q.run_id=$1 AND q.state='running' LIMIT 1"
+   ].join(' ');
+   let response;
+   try{response=await pool.query(sql,[runId])}
+   catch(error){
+    if(error?.code!=='42P01')throw error;
+    response=await pool.query([
+     'SELECT EXTRACT(EPOCH FROM (NOW()-updated_at)) AS age_seconds',
+     'FROM blofy_content_hub_season_queue',
+     "WHERE run_id=$1 AND state='running' LIMIT 1"
+    ].join(' '),[runId]);
+   }
+   const age=response.rows?.[0]?.age_seconds;
+   return age===null||age===undefined||!Number.isFinite(Number(age))?
+    null:{runId,ageSeconds:Math.max(0,Math.floor(Number(age)))};
+  },
+  async healthStats(){
+   await ensure();
+   const exists=await pool.query(
+    "SELECT to_regclass('blofy_content_hub_episode_runs') AS table_name");
+   const hasEpisodeTable=Boolean(exists.rows?.[0]?.table_name);
+   const from=hasEpisodeTable?
+    'FROM blofy_content_hub_season_queue q LEFT JOIN blofy_content_hub_episode_runs r ON r.run_id=q.run_id':
+    'FROM blofy_content_hub_season_queue q';
+   const stored=hasEpisodeTable?
+    'COALESCE(r.bytes_copied,0)':'0';
+   const verified=hasEpisodeTable?
+    "q.state='verified' AND r.state='verified'":'FALSE';
+   const rows=await pool.query([
+    'SELECT COUNT(*)::text AS episode_count,',
+    "COUNT(*) FILTER (WHERE q.state='queued')::text AS queued_count,",
+    "COUNT(*) FILTER (WHERE q.state='running')::text AS running_count,",
+    "COUNT(*) FILTER (WHERE q.state='paused')::text AS paused_count,",
+    "COUNT(*) FILTER (WHERE q.state='failed')::text AS failed_count,",
+    "COUNT(*) FILTER (WHERE "+verified+")::text AS verified_count,",
+    'COUNT(DISTINCT q.season_key)::text AS season_count,',
+    'COALESCE(SUM(q.expected_bytes),0)::text AS expected_bytes,',
+    'COALESCE(SUM('+stored+'),0)::text AS stored_bytes,',
+    'COALESCE(SUM(CASE WHEN '+verified+' THEN q.expected_bytes ELSE 0 END),0)::text AS verified_bytes',
+    from
+   ].join(' '));
+   return rows.rows?.[0]||{};
+  },
+  // A separate, append-only table: no changes to checkpoints or player reads.
+  // Telemetry failure must never make the active transfer fail.
+  async recordTransferMetric({runId,bytes=0,durationMs,code,stage=null,stageTimingsMs={}}={}){
+   const size=Number(bytes),duration=Number(durationMs);
+   if(!RUN.test(String(runId||''))||
+      !Number.isSafeInteger(size)||size<0||size>8*1024*1024||
+      !Number.isSafeInteger(duration)||duration<1||duration>3600000||
+      !/^[a-z0-9_]{1,80}$/.test(String(code||''))||
+      (stage!==null&&!/^[a-z0-9_]{1,80}$/.test(String(stage))))
+    throw Error('season_transfer_metric_invalid');
+   const allowed=new Set(['lock','metadata','manifest','boundary_precheck',
+    'boundary_postcheck','source_chunk','s3_begin','s3_upload',
+    's3_complete','s3_verify','checkpoint','verify_full_file']);
+   const stages={};
+   if(stageTimingsMs&&typeof stageTimingsMs==='object'&&
+      !Array.isArray(stageTimingsMs)){
+    for(const [key,value] of Object.entries(stageTimingsMs)){
+     if(allowed.has(key)&&Number.isSafeInteger(value)&&
+        value>=0&&value<=3600000)stages[key]=value;
+    }
+   }
+   await ensure();
+   if(!metricTablePromise){
+    metricTablePromise=pool.query([
+     'CREATE TABLE IF NOT EXISTS blofy_content_hub_season_transfer_metrics (',
+     'id BIGSERIAL PRIMARY KEY, run_id TEXT NOT NULL,',
+     'bytes BIGINT NOT NULL CHECK(bytes BETWEEN 0 AND 8388608),',
+     'duration_ms INTEGER NOT NULL CHECK(duration_ms BETWEEN 1 AND 3600000),',
+     'code TEXT NOT NULL, stage TEXT,',
+     "stage_timings JSONB NOT NULL DEFAULT '{}'::jsonb,",
+     'recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW())'
+    ].join(' ')).catch(e=>{metricTablePromise=null;throw e});
+   }
+   await metricTablePromise;
+   await pool.query([
+    'INSERT INTO blofy_content_hub_season_transfer_metrics',
+    '(run_id,bytes,duration_ms,code,stage,stage_timings)',
+    'VALUES ($1,$2,$3,$4,$5,$6::jsonb)'
+   ].join(' '),[runId,size,duration,code,stage,JSON.stringify(stages)]);
+  },
+  async analyticsStats(){
+   await ensure();
+   const result=await pool.query([
+    'SELECT COUNT(*)::text AS event_count,',
+    'COUNT(*) FILTER (WHERE bytes>0)::text AS sample_count,',
+    'COALESCE(SUM(bytes) FILTER (WHERE bytes>0),0)::text AS transfer_bytes,',
+    'COALESCE(SUM(duration_ms) FILTER (WHERE bytes>0),0)::text AS active_ms,',
+    "COUNT(*) FILTER (WHERE bytes>0 AND stage_timings <> '{}'::jsonb)::text AS stage_sample_count,",
+    "COALESCE(SUM((stage_timings->>'source_chunk')::bigint) FILTER (WHERE bytes>0),0)::text AS source_ms,",
+    "COALESCE(SUM(COALESCE((stage_timings->>'boundary_precheck')::bigint,0) +",
+    "COALESCE((stage_timings->>'boundary_postcheck')::bigint,0)) FILTER (WHERE bytes>0),0)::text AS boundary_ms,",
+    "COALESCE(SUM(COALESCE((stage_timings->>'s3_begin')::bigint,0)+",
+    "COALESCE((stage_timings->>'s3_upload')::bigint,0)+",
+    "COALESCE((stage_timings->>'s3_complete')::bigint,0)) FILTER (WHERE bytes>0),0)::text AS upload_ms,",
+    "COALESCE(SUM(COALESCE((stage_timings->>'s3_verify')::bigint,0)+",
+    "COALESCE((stage_timings->>'verify_full_file')::bigint,0)) FILTER (WHERE bytes>0),0)::text AS verification_ms,",
+    'MIN(recorded_at) AS first_recorded_at,',
+    'MAX(recorded_at) AS last_recorded_at',
+    'FROM blofy_content_hub_season_transfer_metrics'
+   ].join(' ')).catch(e=>{
+    if(e?.code==='42P01')return {rows:[]};
+    throw e;
+   });
+   return result.rows?.[0]||{};
+  },
+  async recentTransferEvents({limit=30}={}){
+   await ensure();
+   const n=Math.max(1,Math.min(30,Math.floor(Number(limit)||30)));
+   const result=await pool.query([
+    'SELECT e.run_id,e.bytes,e.duration_ms,e.code,e.stage,e.recorded_at,',
+    'q.season_key,q.episode_number',
+    'FROM blofy_content_hub_season_transfer_metrics e',
+    'INNER JOIN blofy_content_hub_season_queue q ON q.run_id=e.run_id',
+    'ORDER BY e.id DESC LIMIT $1'
+   ].join(' '),[n]).catch(e=>{
+    if(e?.code==='42P01')return {rows:[]};
+    throw e;
+   });
+   return (result.rows||[]).map(row=>({
+    runId:row.run_id,seasonKey:row.season_key,
+    episodeNumber:Number(row.episode_number),bytes:Number(row.bytes),
+    durationMs:Number(row.duration_ms),code:row.code,stage:row.stage,
+    recordedAt:row.recorded_at
+   }));
+  },
+  async failureReasons(){
+   await ensure();
+   const result=await pool.query([
+    'SELECT COALESCE(code,\'unknown\') AS code,COUNT(*)::text AS total',
+    'FROM blofy_content_hub_season_queue',
+    "WHERE state='failed' GROUP BY COALESCE(code,'unknown')",
+    'ORDER BY COUNT(*) DESC LIMIT 15'
+   ].join(' '));
+   return result.rows||[];
+  },
+  async seasonAnalyticsSummary(){
+   await ensure();
+   const grouped=(hasEpisodeTable)=>[
+    'SELECT q.season_key,COUNT(*)::text AS episode_count,',
+    "COUNT(*) FILTER (WHERE q.state='queued')::text AS queued_count,",
+    "COUNT(*) FILTER (WHERE q.state='running')::text AS running_count,",
+    "COUNT(*) FILTER (WHERE q.state='paused')::text AS paused_count,",
+    "COUNT(*) FILTER (WHERE q.state='failed')::text AS failed_count,",
+    hasEpisodeTable?
+     "COUNT(*) FILTER (WHERE q.state='verified' AND r.state='verified')::text AS verified_count,":
+     "'0' AS verified_count,",
+    'COALESCE(SUM(q.expected_bytes),0)::text AS expected_bytes,',
+    hasEpisodeTable?'COALESCE(SUM(r.bytes_copied),0)::text AS stored_bytes':
+     "'0' AS stored_bytes",
+    'FROM blofy_content_hub_season_queue q',
+    hasEpisodeTable?
+     'LEFT JOIN blofy_content_hub_episode_runs r ON r.run_id=q.run_id':'',
+    'GROUP BY q.season_key ORDER BY q.season_key LIMIT 101'
+   ].filter(Boolean).join(' ');
+   const result=await pool.query(grouped(true)).catch(e=>{
+    if(e?.code==='42P01')return pool.query(grouped(false));
+    throw e;
+   });
+   return result.rows||[];
+  },
+  // Owner-only searchable persisted library. These are DB snapshots only:
+  // no calls to provider APIs, player endpoints or object-storage listings.
+  // Pagination is independent for episode hits and season summaries.
+  async librarySearch({query='',state='all',page=1,seriesIds=[]}={}){
+   if(!Array.isArray(seriesIds)||seriesIds.length>120||
+      seriesIds.some(x=>typeof x!=='string'||!/^[1-9][0-9]{0,14}$/.test(x)))
+    throw Error('season_library_series_filter_invalid');
+   if(typeof query!=='string'||query.length>80||/[\x00-\x1f\x7f]/.test(query)||
+      typeof state!=='string'||!['all','queued','paused','running',
+       'verified','failed'].includes(state)||
+      !Number.isSafeInteger(page)||page<1||page>20000)
+    throw Error('season_library_search_invalid');
+   await ensure();
+   const term=query.trim(),n=40,offset=(page-1)*n,
+    values=[term,state,n+1,offset];
+   if(seriesIds.length)values.push(seriesIds.map(x=>'series_'+x));
+   const episodeSql=withRuns=>[
+    'SELECT q.*,',
+    withRuns?'COALESCE(r.bytes_copied,0) AS bytes_copied, r.state AS verified_state':
+      '0 AS bytes_copied, NULL AS verified_state',
+    'FROM blofy_content_hub_season_queue q',
+    withRuns?'LEFT JOIN blofy_content_hub_episode_runs r ON r.run_id=q.run_id':'',
+    'WHERE ($1=\'\' OR POSITION(LOWER($1) IN LOWER(q.title))>0',
+    'OR POSITION(LOWER($1) IN LOWER(q.season_key))>0',
+    seriesIds.length?
+     'OR regexp_replace(q.season_key,\'_s[0-9]+$\',\'\')=ANY($5::text[])': '',
+    'OR q.episode_number::text=$1)',
+    "AND ($2='all' OR q.state=$2)",
+    'ORDER BY q.updated_at DESC,q.run_id DESC LIMIT $3 OFFSET $4'
+   ].filter(Boolean).join(' ');
+   let hits=await pool.query(episodeSql(true),values).catch(error=>{
+    if(error?.code==='42P01')return pool.query(episodeSql(false),values);
+    throw error;
+   });
+   const episodes=(hits.rows||[]).slice(0,n).map(row=>{
+    const expected=Math.max(0,Number(row.expected_bytes)||0),
+     stored=Math.min(expected,Math.max(0,Number(row.bytes_copied)||0));
+    const verified=row.state==='verified'&&row.verified_state==='verified';
+    return {runId:row.run_id,seasonKey:row.season_key,
+     episodeNumber:Number(row.episode_number),
+     title:String(row.title||'').slice(0,200).replace(/https?:\/\/\S+/gi,'[رابط مخفي]'),
+     state:row.state,verified,
+     code:row.code||null,expectedBytes:expected,storedBytes:stored,
+     percent:expected?Math.min(100,Math.floor(stored*100/expected)):0,
+     updatedAt:row.updated_at};
+   });
+   // Match by whole season key, or the presence of a matching episode title.
+   // Full-season counts must NOT be reduced to only matching episode titles.
+   const seasonSql=withRuns=>[
+    'SELECT q.season_key, COUNT(*)::text AS episode_count,',
+    "COUNT(*) FILTER (WHERE q.state='failed')::text AS failed_count,",
+    "COUNT(*) FILTER (WHERE q.state='queued')::text AS queued_count,",
+    "COUNT(*) FILTER (WHERE q.state='running')::text AS running_count,",
+    "COUNT(*) FILTER (WHERE q.state='paused')::text AS paused_count,",
+    withRuns?
+     "COUNT(*) FILTER (WHERE q.state='verified' AND r.state='verified')::text AS verified_count,":
+     "'0'::text AS verified_count,",
+    'COALESCE(SUM(q.expected_bytes),0)::text AS expected_bytes,',
+    withRuns?'COALESCE(SUM(r.bytes_copied),0)::text AS stored_bytes':
+     "'0'::text AS stored_bytes",
+    'FROM blofy_content_hub_season_queue q',
+    withRuns?'LEFT JOIN blofy_content_hub_episode_runs r ON r.run_id=q.run_id':'',
+    "WHERE ($1='' OR POSITION(LOWER($1) IN LOWER(q.season_key))>0 OR",
+    'EXISTS (SELECT 1 FROM blofy_content_hub_season_queue match_ep',
+    'WHERE match_ep.season_key=q.season_key',
+    'AND POSITION(LOWER($1) IN LOWER(match_ep.title))>0)',
+    seriesIds.length?
+     'OR regexp_replace(q.season_key,\'_s[0-9]+$\',\'\')=ANY($5::text[])':'',
+    ')',
+    "AND ($2='all' OR EXISTS(SELECT 1 FROM blofy_content_hub_season_queue state_ep",
+    'WHERE state_ep.season_key=q.season_key AND state_ep.state=$2))',
+    'GROUP BY q.season_key ORDER BY q.season_key LIMIT $3 OFFSET $4'
+   ].filter(Boolean).join(' ');
+   const groups=await pool.query(seasonSql(true),values).catch(error=>{
+    if(error?.code==='42P01')return pool.query(seasonSql(false),values);
+    throw error;
+   });
+   const seasons=(groups.rows||[]).slice(0,n).map(row=>{
+    const expected=Math.max(0,Number(row.expected_bytes)||0),
+     stored=Math.min(expected,Math.max(0,Number(row.stored_bytes)||0)),
+     count=Number(row.episode_count||0),
+     verified=Number(row.verified_count||0);
+    return {seasonKey:row.season_key,episodeCount:count,
+     verifiedCount:verified,failedCount:Number(row.failed_count||0),
+     queuedCount:Number(row.queued_count||0),
+     runningCount:Number(row.running_count||0),
+     pausedCount:Number(row.paused_count||0),
+     expectedBytes:expected,storedBytes:stored,
+     percent:expected?Math.min(100,Math.floor(stored*100/expected)):0,
+     fullyVerifiedInQueue:count>0&&verified===count,
+     scope:'persisted_episodes_for_this_season_only'};
+   });
+   return {query:term,state,page,pageSize:n,
+    episodes,episodesHasMore:(hits.rows||[]).length>n,
+    seasons,seasonsHasMore:(groups.rows||[]).length>n,
+    readOnly:true,automaticStart:false,
+    providerMediaRequests:0,storageRequests:0,
+    searchedAllPersistedEpisodes:true,
+    seasonCompletenessScope:'queued_season_episodes_only'};
+  },
+  // Recent queue *states* include rows created before telemetry.
+  // Snapshots are not a full transfer-event history.
+  async recentEpisodeStates({limit=30}={}){
+   await ensure();
+   const n=Math.max(1,Math.min(30,Math.floor(Number(limit)||30)));
+   const select=(hasRuns)=>[
+    'SELECT q.*,',
+    'q.expected_bytes,q.updated_at,',
+    hasRuns?'COALESCE(r.bytes_copied,0) AS bytes_copied':
+     '0 AS bytes_copied',
+    'FROM blofy_content_hub_season_queue q',
+    hasRuns?
+     'LEFT JOIN blofy_content_hub_episode_runs r ON r.run_id=q.run_id':'',
+    'ORDER BY q.updated_at DESC,q.run_id DESC LIMIT $1'
+   ].filter(Boolean).join(' ');
+   const response=await pool.query(select(true),[n]).catch(e=>{
+    if(e?.code==='42P01')return pool.query(select(false),[n]);
+    throw e;
+   });
+   return (response.rows||[]).map(row=>{
+    const expected=Math.max(0,Number(row.expected_bytes)||0);
+    const copied=Math.min(expected,Math.max(0,Number(row.bytes_copied)||0));
+    return {runId:row.run_id,seasonKey:row.season_key,
+     episodeNumber:Number(row.episode_number),title:String(row.title||'').slice(0,200),
+     state:row.state,code:row.code||null,
+     priority:Number(row.priority||0),
+     expectedBytes:expected,storedBytes:copied,
+     percent:expected?Math.min(100,Math.floor(copied*100/expected)):0,
+     updatedAt:row.updated_at,snapshotOnly:true};
+   });
+  },
+  // Entire registered series snapshot, up to 50 seasons per request.
+  // Data is taken from persisted private episode queue rows, not provider
+  // listings. One extra row establishes the "more" flag without guessing.
+  async registeredSeriesSummary({seriesId}={}){
+   const id=String(seriesId||'');
+   if(!/^[1-9][0-9]{0,14}$/.test(id))
+    throw Error('series_detail_invalid_id');
+   await ensure();
+   const params=['series_'+id+'_s',51];
+   const query=hasRuns=>[
+    'SELECT q.season_key,COUNT(*)::text AS episode_count,',
+    "COUNT(*) FILTER (WHERE q.state='queued')::text AS queued_count,",
+    "COUNT(*) FILTER (WHERE q.state='running')::text AS running_count,",
+    "COUNT(*) FILTER (WHERE q.state='paused')::text AS paused_count,",
+    "COUNT(*) FILTER (WHERE q.state='failed')::text AS failed_count,",
+    hasRuns?
+     "COUNT(*) FILTER (WHERE q.state='verified' AND r.state='verified')::text AS verified_count,":
+     "'0'::text AS verified_count,",
+    'COALESCE(SUM(q.expected_bytes),0)::text AS expected_bytes,',
+    hasRuns?'COALESCE(SUM(r.bytes_copied),0)::text AS stored_bytes':
+     "'0'::text AS stored_bytes",
+    'FROM blofy_content_hub_season_queue q',
+    hasRuns?'LEFT JOIN blofy_content_hub_episode_runs r ON r.run_id=q.run_id':'',
+    "WHERE q.season_key LIKE $1 || '%' AND",
+    "q.season_key ~ ('^' || $1 || '[0-9]{1,3}$')",
+    'GROUP BY q.season_key ORDER BY q.season_key LIMIT $2'
+   ].filter(Boolean).join(' ');
+   let rows;
+   try{rows=await pool.query(query(true),params)}
+   catch(error){
+    if(error?.code!=='42P01')throw error;
+    rows=await pool.query(query(false),params);
+   }
+   const items=rows.rows||[];
+   const summaries=items.slice(0,50).map(row=>{
+    const expected=Math.max(0,Number(row.expected_bytes)||0);
+    const stored=Math.min(expected,Math.max(0,Number(row.stored_bytes)||0));
+    const total=Math.max(0,Number(row.episode_count)||0);
+    const verified=Math.min(total,Math.max(0,Number(row.verified_count)||0));
+    return {seasonKey:row.season_key,episodeCount:total,
+     verifiedCount:verified,
+     failedCount:Math.max(0,Number(row.failed_count)||0),
+     queuedCount:Math.max(0,Number(row.queued_count)||0),
+     runningCount:Math.max(0,Number(row.running_count)||0),
+     pausedCount:Math.max(0,Number(row.paused_count)||0),
+     expectedBytes:expected,storedBytes:stored,
+     percent:expected?Math.min(100,Math.floor(stored*100/expected)):0,
+     fullyVerifiedInQueue:total>0&&verified===total};
+   });
+   return {seriesId:id,seasonSummaries:summaries,
+    hasMoreSeasons:items.length>50,
+    registeredSeasonCountInResponse:summaries.length,
+    completenessScope:'registered_episodes_in_private_season_queue_only',
+    neverRepresentsUpstreamSeriesCompleteness:true,
+    readOnly:true,privateOnly:true,automaticStart:false,
+    storageRequests:0,providerMediaRequests:0};
+  },
+  // Each request returns up to 50 persisted episode snapshots.
+  // No provider, S3 or media URLs are ever fetched by this report.
+  async seasonDetailPage({seasonKey,page=1}={}){
+   if(!SEASON.test(String(seasonKey||''))||
+      !Number.isSafeInteger(page)||page<1||page>20000)
+    throw Error('season_report_selection_invalid');
+   await ensure();
+   const summary=(hasRuns)=>[
+    'SELECT COUNT(*)::text AS episode_count,',
+    "COUNT(*) FILTER (WHERE q.state='queued')::text AS queued_count,",
+    "COUNT(*) FILTER (WHERE q.state='running')::text AS running_count,",
+    "COUNT(*) FILTER (WHERE q.state='paused')::text AS paused_count,",
+    "COUNT(*) FILTER (WHERE q.state='failed')::text AS failed_count,",
+    hasRuns?
+     "COUNT(*) FILTER (WHERE q.state='verified' AND r.state='verified')::text AS verified_count,":
+     "'0'::text AS verified_count,",
+    'COALESCE(SUM(q.expected_bytes),0)::text AS expected_bytes,',
+    hasRuns?'COALESCE(SUM(r.bytes_copied),0)::text AS stored_bytes':
+     "'0'::text AS stored_bytes",
+    'FROM blofy_content_hub_season_queue q',
+    hasRuns?
+     'LEFT JOIN blofy_content_hub_episode_runs r ON r.run_id=q.run_id':'',
+    'WHERE q.season_key=$1'
+   ].filter(Boolean).join(' ');
+   let hasRuns=true,result;
+   try{result=await pool.query(summary(true),[seasonKey])}
+   catch(error){
+    if(error?.code!=='42P01')throw error;
+    hasRuns=false;result=await pool.query(summary(false),[seasonKey]);
+   }
+   const totals=result.rows?.[0]||{};
+   const totalEpisodes=Number(totals.episode_count||0);
+   if(!totalEpisodes)return null;
+   const pageSize=50;
+   const pages=Math.ceil(totalEpisodes/pageSize);
+   const rows=(withRuns)=>[
+    'SELECT q.*,',
+    withRuns?
+     'COALESCE(r.bytes_copied,0) AS bytes_copied,r.state AS episode_state':
+     '0 AS bytes_copied,NULL AS episode_state',
+    'FROM blofy_content_hub_season_queue q',
+    withRuns?
+     'LEFT JOIN blofy_content_hub_episode_runs r ON r.run_id=q.run_id':'',
+    'WHERE q.season_key=$1',
+    'ORDER BY q.episode_number,q.run_id LIMIT $2 OFFSET $3'
+   ].filter(Boolean).join(' ');
+   const params=[seasonKey,pageSize,(page-1)*pageSize];
+   const items=await pool.query(rows(hasRuns),params);
+   const av=await this.episodeAvReviews({
+    runIds:(items.rows||[]).map(row=>String(row.run_id))});
+   const ownerReviews=new Map(av.map(entry=>[entry.runId,entry]));
+   return {page:{number:page,seasonKey,pages,hasPrevious:page>1,
+     hasNext:page<pages},totals,
+    episodes:(items.rows||[]).map(row=>{
+     const expected=Number(row.expected_bytes||0);
+     const copied=Math.min(expected,Math.max(0,Number(row.bytes_copied||0)));
+     return {runId:row.run_id,episodeNumber:Number(row.episode_number),
+      title:row.title,state:row.state,priority:Number(row.priority||0),
+      verified:row.state==='verified'&&
+       row.episode_state==='verified',
+      ownerAvConfirmedAt:row.state==='verified'&&
+       row.episode_state==='verified'?
+        ownerReviews.get(row.run_id)?.confirmedAt||null:null,
+      code:row.code,expectedBytes:expected,storedBytes:copied,
+      updatedAt:row.updated_at};
+    })};
+  },
+  async seasonTransferEvents({seasonKey,limit=61}={}){
+   if(!SEASON.test(String(seasonKey||'')))
+    throw Error('season_report_selection_invalid');
+   await ensure();
+   const n=Math.max(1,Math.min(61,Math.floor(Number(limit)||61)));
+   const response=await pool.query([
+    'SELECT e.bytes,e.duration_ms,e.code,e.stage,e.recorded_at,',
+    'q.episode_number',
+    'FROM blofy_content_hub_season_transfer_metrics e',
+    'INNER JOIN blofy_content_hub_season_queue q ON q.run_id=e.run_id',
+    'WHERE q.season_key=$1',
+    'ORDER BY e.id DESC LIMIT $2'
+   ].join(' '),[seasonKey,n]).catch(error=>{
+    if(error?.code==='42P01')return {rows:[]};
+    throw error;
+   });
+   return (response.rows||[]).map(row=>({
+    episodeNumber:Number(row.episode_number),bytes:Number(row.bytes),
+    durationMs:Number(row.duration_ms),code:row.code,stage:row.stage,
+    recordedAt:row.recorded_at
+   }));
+  },
+  // Read-only bounded attention index, with no upstream media requests.
+  async attentionRows({limit=51}={}){
+   await ensure();
+   const n=Math.max(1,Math.min(51,Math.floor(Number(limit)||51)));
+   const query=withRuns=>[
+    'SELECT q.*,',
+    withRuns?'COALESCE(r.bytes_copied,0) AS bytes_copied':
+      '0 AS bytes_copied',
+    'FROM blofy_content_hub_season_queue q',
+    withRuns?'LEFT JOIN blofy_content_hub_episode_runs r ON r.run_id=q.run_id':'',
+    withRuns?
+     "WHERE q.state IN ('failed','running','paused') OR":
+     "WHERE q.state IN ('failed','running','paused')",
+    withRuns?
+     "(q.state='queued' AND COALESCE(r.bytes_copied,0)>0)":"",
+    "ORDER BY CASE q.state WHEN 'failed' THEN 0",
+    "WHEN 'running' THEN 1 WHEN 'paused' THEN 2 ELSE 3 END,",
+    'q.updated_at DESC,q.run_id DESC LIMIT $1'
+   ].filter(Boolean).join(' ');
+   const response=await pool.query(query(true),[n]).catch(error=>{
+    if(error?.code==='42P01')return pool.query(query(false),[n]);
+    throw error;
+   });
+   return (response.rows||[]).map(row=>({
+    runId:row.run_id,seasonKey:row.season_key,
+    episodeNumber:Number(row.episode_number),
+    state:row.state,code:row.code||null,
+    expectedBytes:Number(row.expected_bytes||0),
+    storedBytes:Number(row.bytes_copied||0),
+    manualRetries:Number(row.manual_retries||0),
+    updatedAt:row.updated_at
+   }));
+  },
+  // Full measured wall-clock *chunk* time, not time between season dates.
+  // Older chunks without telemetry are explicitly excluded.
+  async seasonTimingStats({seasonKey}={}){
+   if(!SEASON.test(String(seasonKey||'')))
+    throw Error('season_timing_selection_invalid');
+   await ensure();
+   const response=await pool.query([
+    'SELECT COUNT(*) FILTER (WHERE e.bytes>0)::text AS sample_count,',
+    'COALESCE(SUM(e.bytes) FILTER (WHERE e.bytes>0),0)::text AS measured_bytes,',
+    'COALESCE(SUM(e.duration_ms) FILTER (WHERE e.bytes>0),0)::text AS active_ms,',
+    'MIN(e.recorded_at) FILTER (WHERE e.bytes>0) AS first_measured_at,',
+    'MAX(e.recorded_at) FILTER (WHERE e.bytes>0) AS last_measured_at',
+    'FROM blofy_content_hub_season_transfer_metrics e',
+    'INNER JOIN blofy_content_hub_season_queue q ON q.run_id=e.run_id',
+    'WHERE q.season_key=$1'
+   ].join(' '),[seasonKey]).catch(error=>{
+    if(error?.code==='42P01')return {rows:[]};
+    throw error;
+   });
+   return response.rows?.[0]||{};
+  },
+  // Non-destructive restart inspection. Reports only durable DB snapshots,
+  // not proof that a source remains available or source content is unchanged.
+  async resumePreview({limit=50}={}){
+   await ensure();
+   const n=Math.max(1,Math.min(50,Math.floor(Number(limit)||50)));
+   const sql=withRuns=>[
+    'SELECT q.run_id,q.season_key,q.episode_number,q.state,q.code,',
+    'q.expected_bytes,q.updated_at,',
+    withRuns?
+     'COALESCE(r.bytes_copied,0) AS bytes_copied':
+     '0 AS bytes_copied',
+    'FROM blofy_content_hub_season_queue q',
+    withRuns?
+     'LEFT JOIN blofy_content_hub_episode_runs r ON r.run_id=q.run_id':'',
+    withRuns?
+     "WHERE q.state IN ('paused','running') OR (q.state='queued' AND COALESCE(r.bytes_copied,0)>0)":
+     "WHERE q.state IN ('paused','running')",
+    'ORDER BY q.updated_at DESC,q.run_id DESC LIMIT $1'
+   ].filter(Boolean).join(' ');
+   const response=await pool.query(sql(true),[n+1]).catch(error=>{
+    if(error?.code==='42P01')return pool.query(sql(false),[n+1]);
+    throw error;
+   });
+   const rows=response.rows||[];
+   return {items:rows.slice(0,n).map(row=>({
+    runId:row.run_id,seasonKey:row.season_key,
+    episodeNumber:Number(row.episode_number),
+    state:row.state,code:row.code||null,
+    expectedBytes:Number(row.expected_bytes||0),
+    storedBytes:Math.max(0,Number(row.bytes_copied||0)),
+    lastStateUpdatedAt:row.updated_at,
+    databaseSnapshotOnly:true
+   })),limited:rows.length>n,requiresOperatorStart:true,
+    automaticStart:false,sourceProbePerformed:false,
+    needsFreshMappingValidation:true};
+  },
+  async saveAudit(runId,result){
+   if(!RUN.test(String(runId||''))||
+      !['season_storage_sample_verified',
+        'season_storage_checksum_mismatch',
+        'season_storage_read_unavailable',
+        'season_storage_manifest_unavailable'].includes(result?.code)||
+      !Number.isSafeInteger(result.checkedParts)||result.checkedParts<0||
+      !Number.isSafeInteger(result.totalParts)||result.totalParts<0||
+      !Number.isSafeInteger(result.checkedBytes)||result.checkedBytes<0)
+    throw Error('season_storage_audit_invalid');
+   await pool.query([
+    'CREATE TABLE IF NOT EXISTS blofy_content_hub_season_audits (',
+    'run_id TEXT PRIMARY KEY, code TEXT NOT NULL,',
+    'checked_parts INTEGER NOT NULL, total_parts INTEGER NOT NULL,',
+    'checked_bytes BIGINT NOT NULL,',
+    'checked_at TIMESTAMPTZ NOT NULL DEFAULT NOW())'
+   ].join(' '));
+   await pool.query([
+    'INSERT INTO blofy_content_hub_season_audits',
+    '(run_id,code,checked_parts,total_parts,checked_bytes)',
+    'VALUES ($1,$2,$3,$4,$5) ON CONFLICT (run_id)',
+    'DO UPDATE SET code=$2,checked_parts=$3,total_parts=$4,',
+    'checked_bytes=$5,checked_at=NOW()'
+   ].join(' '),[runId,result.code,result.checkedParts,
+    result.totalParts,result.checkedBytes]);
+  },
+  // Never derive safety authorization from the 20 most recent rows alone:
+  // older unresolved damaged runs must still block new transfer sessions.
+  async unresolvedAuditCounts(){
+   await ensure();
+   const result=await pool.query([
+    'SELECT code,COUNT(*)::text AS total',
+    'FROM blofy_content_hub_season_audits',
+    "WHERE code IN ('season_storage_checksum_mismatch',",
+    "'season_storage_read_unavailable')",
+    'GROUP BY code'
+   ].join(' ')).catch(error=>{
+    if(error?.code==='42P01')return {rows:[]};
+    throw error;
+   });
+   return {
+    mismatch:Number(result.rows.find(x=>
+     x.code==='season_storage_checksum_mismatch')?.total||0),
+    unavailable:Number(result.rows.find(x=>
+     x.code==='season_storage_read_unavailable')?.total||0)
+   };
+  },
+  async recentAudits({limit=20}={}){
+   const n=Math.max(1,Math.min(20,Number(limit)||20));
+   const response=await pool.query([
+    'SELECT run_id,code,checked_parts,total_parts,checked_bytes,',
+    'checked_at FROM blofy_content_hub_season_audits',
+    'ORDER BY checked_at DESC LIMIT $1'
+   ].join(' '),[n]).catch(error=>{
+    if(error?.code==='42P01')return {rows:[]};
+    throw error;
+   });
+   return (response.rows||[]).map(row=>({
+    runId:row.run_id,code:row.code,
+    checkedParts:Number(row.checked_parts),
+    totalParts:Number(row.total_parts),
+    checkedBytes:Number(row.checked_bytes),
+    checkedAt:row.checked_at
+   }));
+  },
+  // Complete register-of-record accounting for all queued seasons.
+  // Only PostgreSQL is read: neither source listings, media objects, nor
+  // bucket capacity are inspected. The totals NEVER cover unregistered
+  // provider episodes. Each page is a capped set of season summaries.
+  async readinessAudit({page=1}={}){
+   if(!Number.isSafeInteger(page)||page<1||page>10000)
+    throw Error('season_readiness_page_invalid');
+   await ensure();
+   const size=20,offset=(page-1)*size;
+   let hasRuns=true,hasAv=true;
+   const expression=()=>{
+    const verified=hasRuns?
+     "q.state='verified' AND r.state='verified'":"FALSE";
+    const checked=hasRuns&&hasAv?
+     verified+" AND v.video_owner_confirmed IS TRUE AND"+
+      " v.audio_owner_confirmed IS TRUE AND"+
+      " v.confirmed_at >= GREATEST(q.updated_at,r.updated_at)":"FALSE";
+    return {verified,checked};
+   };
+   const columns=()=>{
+    const {verified,checked}=expression();
+    return [
+     'COUNT(*)::text AS episode_count,',
+     'COUNT(DISTINCT q.season_key)::text AS registered_season_count,',
+     "COUNT(*) FILTER (WHERE q.state='queued')::text AS queued_count,",
+     "COUNT(*) FILTER (WHERE q.state='paused')::text AS paused_count,",
+     "COUNT(*) FILTER (WHERE q.state='running')::text AS running_count,",
+     "COUNT(*) FILTER (WHERE q.state='failed')::text AS failed_count,",
+     `COUNT(*) FILTER (WHERE (${verified}))::text AS verified_count,`,
+     `COUNT(*) FILTER (WHERE (${checked}))::text AS av_reviewed_count,`,
+     hasRuns?`COUNT(*) FILTER (WHERE q.state='verified' AND r.state IS DISTINCT FROM 'verified')::text AS inconsistent_count,`:
+      "'0'::text AS inconsistent_count,",
+     'COALESCE(SUM(q.expected_bytes),0)::text AS expected_bytes,',
+     hasRuns?'COALESCE(SUM(LEAST(q.expected_bytes, GREATEST(0,COALESCE(r.bytes_copied,0)))),0)::text AS stored_bytes,':
+      "'0'::text AS stored_bytes,",
+     hasAv&&hasRuns?
+      `MAX(v.confirmed_at) FILTER (WHERE (${checked})) AS last_reviewed_at`:
+      'NULL::timestamptz AS last_reviewed_at'
+    ];
+   };
+   const joins=()=>[
+    'FROM blofy_content_hub_season_queue q',
+    hasRuns?'LEFT JOIN blofy_content_hub_episode_runs r ON r.run_id=q.run_id':'',
+    hasRuns&&hasAv?
+     'LEFT JOIN blofy_content_hub_episode_av_reviews v ON v.run_id=q.run_id':''
+   ].filter(Boolean).join(' ');
+   // Fall back only for absent optional private tables; do not mistake a
+   // genuine SQL/configuration error for an empty successful audit.
+   async function select(withSeason){
+    const sql=[
+     'SELECT',withSeason?'q.season_key,':'',...columns(),joins(),
+     withSeason?'GROUP BY q.season_key':'',
+     withSeason?
+      "ORDER BY COUNT(*) FILTER (WHERE q.state='failed') DESC, q.season_key LIMIT $1 OFFSET $2":
+      ''
+    ].filter(Boolean).join(' ');
+    const args=withSeason?[size+1,offset]:[];
+    try{return await pool.query(sql,args)}
+    catch(error){
+     if(error?.code!=='42P01')throw error;
+     if(hasAv){hasAv=false;return pool.query([
+      'SELECT',withSeason?'q.season_key,':'',
+      ...columns(),joins(),
+      withSeason?'GROUP BY q.season_key':'',
+      withSeason?
+       "ORDER BY COUNT(*) FILTER (WHERE q.state='failed') DESC, q.season_key LIMIT $1 OFFSET $2":''
+     ].filter(Boolean).join(' '),args).catch(async second=>{
+      if(second?.code!=='42P01')throw second;
+      hasRuns=false;
+      return pool.query([
+       'SELECT',withSeason?'q.season_key,':'',
+       ...columns(),joins(),
+       withSeason?'GROUP BY q.season_key':'',
+       withSeason?
+        "ORDER BY COUNT(*) FILTER (WHERE q.state='failed') DESC, q.season_key LIMIT $1 OFFSET $2":''
+      ].filter(Boolean).join(' '),args);
+     })}
+     if(hasRuns){hasRuns=false;return pool.query([
+      'SELECT',withSeason?'q.season_key,':'',...columns(),joins(),
+      withSeason?'GROUP BY q.season_key':'',
+      withSeason?
+       "ORDER BY COUNT(*) FILTER (WHERE q.state='failed') DESC, q.season_key LIMIT $1 OFFSET $2":''
+     ].filter(Boolean).join(' '),args)}
+     throw error;
+    }
+   }
+   const summary=(await select(false)).rows?.[0]||{};
+   const pages=await select(true);
+   const n=value=>Math.max(0,Number(value)||0);
+   const normalized=row=>{
+    const registered=n(row.episode_count),verified=n(row.verified_count);
+    const reviewed=Math.min(verified,n(row.av_reviewed_count));
+    return {
+     registeredEpisodes:registered,
+     registeredSeasons:n(row.registered_season_count),
+     storageVerifiedEpisodes:verified,
+     ownerAvReviewedEpisodes:reviewed,
+     verifiedAwaitingOwnerAv:Math.max(0,verified-reviewed),
+     failedEpisodes:n(row.failed_count),queuedEpisodes:n(row.queued_count),
+     pausedEpisodes:n(row.paused_count),runningEpisodes:n(row.running_count),
+     inconsistentVerifiedQueueEpisodes:n(row.inconsistent_count),
+     expectedBytes:n(row.expected_bytes),durableCheckpointBytes:n(row.stored_bytes),
+     lastOwnerAvReviewedAt:row.last_reviewed_at||null,
+     storageVerificationPercent:registered?
+      Math.min(100,Math.floor(100*verified/registered)):0,
+     ownerAvReviewPercentOfVerified:verified?
+      Math.min(100,Math.floor(100*reviewed/verified)):0
+    };
+   };
+   const rows=pages.rows||[];
+   const gateFlags={
+    manifestStateAvailable:hasRuns,
+    ownerReviewSchemaAvailable:hasRuns&&hasAv
+   };
+   const withGate=row=>{
+    const numbers=normalized(row);
+    return {...numbers,
+     privateDeviceTestGate:evaluatePrivateAppTestGate(numbers,gateFlags)};
+   };
+   return {
+    ok:true,privateOnly:true,readOnly:true,
+    scope:'all_registered_private_season_queue_episodes_only',
+    upstreamContentEnumerated:false,
+    subscriberPlaybackReady:false,
+    mediaBytesInspected:false,mediaCodecScanned:false,
+    allSourceEpisodesCountKnown:false,
+    manifestStateAvailable:hasRuns,ownerReviewSchemaAvailable:hasRuns&&hasAv,
+    global:withGate(summary),
+    seasons:rows.slice(0,size).map(row=>({
+     seasonKey:row.season_key,...withGate(row)
+    })),
+    privateDeviceTestingOnly:true,
+    customerReleaseApproved:false,
+    distributionRightsUnverified:true,
+    snapshotAt:new Date().toISOString(),
+    snapshotConsistency:'two_bounded_read_only_database_queries',
+    page,perPage:size,hasNext:rows.length>size,hasPrevious:page>1,
+    databaseSnapshotOnly:true,automaticStart:false,
+    providerMediaRequests:0,storageRequests:0
+   };
+  },
+  // This table records a human owner's explicit browser A/V observation.
+  // It does not constitute a codec scan, a new storage verification, or
+  // approval to display content to subscribers. Reads never create tables.
+  async episodeAvReviews({runIds=[]}={}){
+   if(!Array.isArray(runIds)||runIds.length>50||
+      runIds.some(id=>!RUN.test(String(id||''))))
+    throw Error('episode_av_review_selection_invalid');
+   if(!runIds.length)return [];
+   await ensure();
+   const result=await pool.query([
+    'SELECT v.run_id,v.confirmed_at',
+    'FROM blofy_content_hub_episode_av_reviews v',
+    'INNER JOIN blofy_content_hub_season_queue q ON q.run_id=v.run_id',
+    'INNER JOIN blofy_content_hub_episode_runs r ON r.run_id=q.run_id',
+    "WHERE v.run_id=ANY($1::text[]) AND q.state='verified'",
+    "AND r.state='verified' AND v.video_owner_confirmed IS TRUE",
+    "AND v.audio_owner_confirmed IS TRUE",
+    "AND v.confirmed_at >= GREATEST(q.updated_at,r.updated_at)",
+    'ORDER BY v.run_id LIMIT 50'
+   ].join(' '),[[...new Set(runIds)]]).catch(error=>{
+    if(error?.code==='42P01')return {rows:[]};
+    throw error;
+   });
+   return (result.rows||[]).map(row=>({runId:row.run_id,
+    videoOwnerConfirmed:true,audioOwnerConfirmed:true,
+    confirmedAt:row.confirmed_at,
+    reviewMethod:'owner_explicit_browser_visual_and_audio_check',
+    automaticVerification:false}));
+  },
+  async confirmEpisodeAv({runId}={}){
+   if(!RUN.test(String(runId||'')))
+    return {ok:false,code:'episode_av_review_id_invalid'};
+   // Don't create the table or issue any write until durable queue and
+   // episode run state are both verified.
+   if(!await this.ownsVerifiedRun(runId))
+    return {ok:false,code:'episode_av_not_storage_verified'};
+   await pool.query([
+    'CREATE TABLE IF NOT EXISTS blofy_content_hub_episode_av_reviews (',
+    'run_id TEXT PRIMARY KEY,',
+    'video_owner_confirmed BOOLEAN NOT NULL DEFAULT TRUE,',
+    'audio_owner_confirmed BOOLEAN NOT NULL DEFAULT TRUE,',
+    'confirmed_at TIMESTAMPTZ NOT NULL DEFAULT NOW())'
+   ].join(' '));
+   // Recheck verified status in the INSERT itself; a stale UI can never
+   // attach a human playback review to an unverified queue run.
+   const result=await pool.query([
+    'INSERT INTO blofy_content_hub_episode_av_reviews',
+    '(run_id,video_owner_confirmed,audio_owner_confirmed,confirmed_at)',
+    'SELECT q.run_id,TRUE,TRUE,NOW()',
+    'FROM blofy_content_hub_season_queue q',
+    'INNER JOIN blofy_content_hub_episode_runs r ON r.run_id=q.run_id',
+    "WHERE q.run_id=$1 AND q.state='verified' AND r.state='verified'",
+    // Old owner proof must not survive a later source re-verification.
+    // The owner can repeat both manual checks after the new manifest.
+    'ON CONFLICT(run_id) DO UPDATE SET',
+    'video_owner_confirmed=TRUE,audio_owner_confirmed=TRUE,',
+    'confirmed_at=NOW()',
+    'WHERE blofy_content_hub_episode_av_reviews.confirmed_at <',
+    '(SELECT GREATEST(q.updated_at,r.updated_at)',
+    'FROM blofy_content_hub_season_queue q',
+    'INNER JOIN blofy_content_hub_episode_runs r ON r.run_id=q.run_id',
+    "WHERE q.run_id=EXCLUDED.run_id AND q.state='verified'",
+    "AND r.state='verified')",
+    'RETURNING confirmed_at'
+   ].join(' '),[runId]);
+   if(!result.rows?.length){
+    const verified=await this.ownsVerifiedRun(runId);
+    if(!verified)return {ok:false,code:'episode_av_not_storage_verified'};
+   }
+   const current=await this.episodeAvReviews({runIds:[runId]});
+   const review=current.find(row=>row.runId===runId);
+   if(!review)return {ok:false,code:'episode_av_review_not_persisted'};
+   return {ok:true,code:result.rows?.length?
+     'episode_av_owner_review_saved':'episode_av_owner_review_already_saved',
+    ...review,automaticVerification:false,
+    customerCutover:false,providerMediaRequests:0,storageRequests:0};
+  },
+  async ownsVerifiedRun(runId){
+   if(!RUN.test(String(runId||'')))return false;
+   await ensure();
+   const result=await pool.query([
+    'SELECT 1 FROM blofy_content_hub_season_queue q',
+    'INNER JOIN blofy_content_hub_episode_runs r ON r.run_id=q.run_id',
+    "WHERE q.run_id=$1 AND q.state='verified' AND r.state='verified'",
+    'LIMIT 1'
+   ].join(' '),[runId]).catch(error=>{
+    if(error?.code==='42P01')return {rows:[]};
+    throw error;
+   });
+   return result.rows?.length===1;
+  },
+  async list({limit=100,offset=0,state='all'}={}){
+   await ensure();
+   const n=Math.max(1,Math.min(200,Number(limit)||100));
+   if(!Number.isSafeInteger(offset)||offset<0||offset>1000000)
+    throw Error('season_queue_offset_invalid');
+   validateSeasonQueueFilter(state);
+   const condition=state==='all'?'':state==='pending'?
+    "WHERE q.state IN ('queued','paused','running')":"WHERE q.state=$3";
+   const args=state==='all'||state==='pending'?[n,offset]:[n,offset,state];
+   const result=await pool.query([
+    'SELECT q.*,COALESCE(r.bytes_copied,0) AS bytes_copied,',
+    'GREATEST(q.updated_at,COALESCE(r.updated_at,q.updated_at)) AS checkpoint_at,',
+    'EXTRACT(EPOCH FROM (NOW()-GREATEST(q.updated_at,',
+    'COALESCE(r.updated_at,q.updated_at)))) AS checkpoint_age_seconds,',
+    'r.state AS episode_state FROM blofy_content_hub_season_queue q',
+    'LEFT JOIN blofy_content_hub_episode_runs r ON r.run_id=q.run_id',
+    condition,
+    'ORDER BY q.created_at,q.run_id LIMIT $1 OFFSET $2'
+   ].filter(Boolean).join(' '),args).catch(async e=>{
+    // The episode table is created lazily by the original pilot.
+    if(e?.code!=='42P01')throw e;
+    const fallback=state==='all'?'':state==='pending'?
+      "WHERE state IN ('queued','paused','running')":"WHERE state=$3";
+    const q=await pool.query([
+      'SELECT * FROM blofy_content_hub_season_queue',fallback,
+      'ORDER BY created_at,run_id LIMIT $1 OFFSET $2'
+     ].filter(Boolean).join(' '),args);
+    return {rows:q.rows.map(row=>({...row,bytes_copied:0,
+      checkpoint_at:row.updated_at,checkpoint_age_seconds:null,
+      episode_state:null}))};
+   });
+   return (result.rows||[]).map(safeStatus);
+  },
+  // Exact page counts, not the truncated 100-row default list.
+  // Pagination allows operators to inspect large series backlogs without
+  // ever pulling more than 50 rows of private metadata into the browser.
+  async listPage({page=1,state='all'}={}){
+   if(!Number.isSafeInteger(page)||page<1||page>20000)
+    throw Error('season_queue_page_invalid');
+   validateSeasonQueueFilter(state);
+   await ensure();
+   const pageSize=50;
+   const filter=state==='all'?'':state==='pending'?
+     "WHERE state IN ('queued','paused','running')":"WHERE state=$1";
+   const countArgs=['all','pending'].includes(state)?[]:[state];
+   const total=await pool.query([
+    '(SELECT COUNT(*)::text FROM blofy_content_hub_season_queue',
+    filter,') AS total,',
+    "(SELECT COUNT(*)::text FROM blofy_content_hub_season_queue WHERE state IN ('queued','paused','running')) AS pending"
+   ].filter(Boolean).join(' ').replace(/^/,'SELECT '),countArgs);
+   const totalEpisodes=Number(total.rows?.[0]?.total||0);
+   const pendingEpisodes=Number(total.rows?.[0]?.pending||0);
+   const pages=Math.max(1,Math.ceil(totalEpisodes/pageSize));
+   if(page>pages)return {episodes:[],page:{
+    number:page,state,pageSize,totalEpisodes,pendingEpisodes,pages,hasPrevious:page>1,
+    hasNext:false,outOfRange:true}};
+   const episodes=await this.list({limit:pageSize,offset:(page-1)*pageSize,state});
+   return {episodes,page:{number:page,state,pageSize,totalEpisodes,pendingEpisodes,pages,
+    hasPrevious:page>1,hasNext:page<pages,outOfRange:false}};
+  },
+  async recoverInterrupted(){
+   await ensure();
+   // Call ONLY on an explicit operator start with a single queue replica.
+   await pool.query([
+    'UPDATE blofy_content_hub_season_queue SET state=$1,code=$2,',
+    'updated_at=NOW() WHERE state=$3'
+   ].join(' '),['queued','resuming_after_interruption','running']);
+   await pool.query([
+    'UPDATE blofy_content_hub_season_queue SET state=$1,code=NULL,',
+    'updated_at=NOW() WHERE state=$2'
+   ].join(' '),['queued','paused']);
+  },
+  async claimNext(){
+   await ensure();
+   const statement=withPriority=>[
+    'WITH picked AS (SELECT run_id FROM blofy_content_hub_season_queue',
+    withPriority?
+     "WHERE state='queued' ORDER BY priority DESC,created_at,episode_number":
+     "WHERE state='queued' ORDER BY created_at,episode_number",
+    'FOR UPDATE SKIP LOCKED LIMIT 1)',
+    'UPDATE blofy_content_hub_season_queue q SET',
+    "state='running',updated_at=NOW() FROM picked",
+    'WHERE q.run_id=picked.run_id RETURNING q.*'
+   ].join(' ');
+   const r=await pool.query(statement(true)).catch(error=>{
+    // Older queues without the lazily added priority column retain FIFO.
+    if(error?.code==='42703')return pool.query(statement(false));
+    throw error;
+   });
+   const row=r.rows?.[0];
+   return row?{runId:row.run_id,seasonKey:row.season_key,
+    episodeNumber:row.episode_number,gatewayId:Number(row.gateway_id),
+    expectedBytes:Number(row.expected_bytes),sourceId:row.source_id,
+    mediaId:row.media_id,extension:row.extension,retries:Number(row.retries),
+    priority:Number(row.priority||0)}:null;
+  },
+  async update(runId,state,{code=null,retry=false}={}){
+   if(!RUN.test(runId)||!MODES.has(state)||
+      (code!==null&&!/^[a-z0-9_]{1,80}$/.test(code)))
+    throw Error('season_queue_status_invalid');
+   await ensure();
+   const r=await pool.query([
+    'UPDATE blofy_content_hub_season_queue SET state=$2,code=$3,',
+    'retries=retries+CASE WHEN $4 THEN 1 ELSE 0 END,',
+    "updated_at=NOW() WHERE run_id=$1 AND state='running'",
+    'RETURNING run_id'
+   ].join(' '),[runId,state,code,retry]);
+   if(r.rowCount!==1)throw Error('season_queue_state_conflict');
+  },
+  async close(){await pool.end()}
+ };
+}
+export function createSeasonQueueController({
+ store,lease,storage,env=process.env,
+ runner=runOneEpisodeChunk,logger=()=>{},isSourceBusy=()=>false,
+ delayMs=2200,maxBatches=5000,maxDurationMs=45*60*1000,
+ pause=ms=>new Promise(resolve=>setTimeout(resolve,ms))
+}={}){
+ if(!store||!lease||!storage)throw Error('season_queue_dependencies_missing');
+ let active=null;
+ let status={state:'idle',code:null,batches:0,currentRunId:null,
+  customerCutover:false};
+ const snapshot=()=>({...status,active:active!==null});
+ const stop=()=>{
+  if(!active)return {...snapshot(),ok:false,code:'season_queue_not_running'};
+  active.abort();
+  status={...status,state:'stopping',code:'season_queue_pause_requested'};
+  return {...snapshot(),ok:true,code:'season_queue_pause_requested'};
+ };
+ const start=({sessionMaxBatches=null}={})=>{
+  if(active)return {...snapshot(),ok:false,code:'season_queue_running'};
+  if(sessionMaxBatches!==null&&![12,60,120].includes(sessionMaxBatches))
+   return {...snapshot(),ok:false,code:'season_batch_budget_invalid'};
+  const batchBudget=sessionMaxBatches??maxBatches;
+  const ready=seasonQueueReadiness(env);
+  if(!ready.ready)return {...snapshot(),ok:false,
+   code:'season_queue_safety_gates_off',blockedBy:ready.blockedBy};
+  if(isSourceBusy())return {...snapshot(),ok:false,code:'source_writer_busy'};
+  const abort=new AbortController();active=abort;
+  status={state:'running',code:'season_queue_started',batches:0,
+   maxBatches:batchBudget,currentRunId:null,customerCutover:false};
+  const since=Date.now();
+  void (async()=>{
+   const workerLock=typeof store.acquireWorker==='function'?
+    await store.acquireWorker():{release:async()=>{}};
+   if(!workerLock){
+    status={...status,state:'paused',
+     code:'season_queue_other_worker_running'};
+    return;
+   }
+   try{
+   await store.recoverInterrupted();
+   for(let n=0;n<batchBudget&&Date.now()-since<maxDurationMs;n++){
+    if(abort.signal.aborted){status={...status,state:'paused',
+     code:'season_queue_paused'};break}
+    if(!seasonQueueReadiness(env).ready||isSourceBusy()){
+     status={...status,state:'paused',code:'season_safety_gates_changed'};break;
+    }
+    const job=await store.claimNext();
+    if(!job){status={...status,state:'completed',
+      code:'season_queue_empty',currentRunId:null};break}
+    status={...status,currentRunId:job.runId};
+    const perEpisodeEnv={...env,
+     BLOFY_CONTENT_HUB_EPISODE_APPROVED_GATEWAY_ID:String(job.gatewayId),
+     BLOFY_CONTENT_HUB_EPISODE_EXPECTED_BYTES:String(job.expectedBytes),
+     BLOFY_CONTENT_HUB_EPISODE_RUN_ID:job.runId};
+    if(!episodeCopyReadiness(perEpisodeEnv).ready){
+     await store.update(job.runId,'paused',{code:'episode_safety_gates_off'});
+     status={...status,state:'paused',code:'episode_safety_gates_off'};break;
+    }
+    let result;
+    const metricStartedAt=Date.now();
+    try{
+     // This candidate was authenticated, selected by the operator,
+     // and pinned to the queue row at enqueue time. The activation
+     // source bridge rechecks its exact live mapping on EVERY Range.
+     const jobCandidate={gatewayId:job.gatewayId,
+      sourceId:job.sourceId,mediaId:job.mediaId,
+      extension:job.extension,sourceName:'saleh',mediaKind:'episode',
+      title:'Approved episode '+job.episodeNumber};
+     result=await runner({env:perEpisodeEnv,storage,lease,
+      signal:abort.signal,logger,
+      candidateInspector:async()=>({ok:true,candidates:[jobCandidate]})});
+    }catch{result={ok:false,code:'episode_retryable_error'}}
+    const code=safeCode(result?.code);
+    // Measure only verified durable chunks. A repeated "already verified"
+    // response has zero bytes and is never double-counted as transfer speed.
+    const partNo=Number(result?.chunksSaved);
+    const measurable=result?.ok===true&&
+      ['episode_checkpoint_saved','episode_fully_verified'].includes(code)&&
+      Number.isSafeInteger(partNo)&&partNo>=1&&partNo<=1024;
+    const chunkBytes=measurable?
+      Math.min(8*1024*1024,Math.max(0,
+       job.expectedBytes-(partNo-1)*8*1024*1024)):0;
+    if(typeof store.recordTransferMetric==='function'&&
+       (chunkBytes>0||result?.ok===false)){
+      const stage=/^[a-z0-9_]{1,80}$/.test(String(result?.errorStage||''))?
+       result.errorStage:null;
+      // Non-blocking observation. Logging failure cannot interrupt playback
+      // or the licensed transfer/checkpoint state machine.
+      void store.recordTransferMetric({
+       runId:job.runId,bytes:chunkBytes,
+       durationMs:Math.max(1,Math.min(3600000,Date.now()-metricStartedAt)),
+       code,stage,stageTimingsMs:result?.stageTimingsMs
+      }).catch(()=>{
+       try{logger('BLOFY_SEASON_METRIC_UNAVAILABLE',{
+        code:'telemetry_write_failed',customerCutover:false})}catch{}
+      });
+    }
+    if(abort.signal.aborted){
+     await store.update(job.runId,'paused',{code:'season_queue_paused'});
+     status={...status,state:'paused',code:'season_queue_paused'};break;
+    }
+    if(result?.ok===true&&(result.completed===true||
+      code==='episode_already_verified')){
+     await store.update(job.runId,'verified',{code});
+    }else if(result?.ok===true&&code==='episode_checkpoint_saved'){
+     await store.update(job.runId,'queued',{code:null});
+    }else if(['episode_retryable_error','episode_source_busy'].includes(code)
+      &&job.retries<2){
+     await store.update(job.runId,'queued',{code,retry:true});
+     await pause(3000*(job.retries+1));
+    }else{
+     await store.update(job.runId,'failed',{code});
+     // A failed episode is not silently retried; continue to next
+     // only after explicit operator review on a later session.
+     status={...status,state:'paused',code:'season_job_failed'};break;
+    }
+    status={...status,batches:status.batches+1};
+    if(delayMs)await pause(delayMs);
+   }
+   if(status.state==='running')status={...status,state:'paused',
+    code:'season_session_limit',currentRunId:null};
+   }finally{await workerLock.release()}
+  })().catch(()=>{
+   status={...status,state:'failed',code:'season_queue_controller_failed'};
+  }).finally(()=>{
+   if(active===abort)active=null;
+   if(abort.signal.aborted&&status.state==='stopping')status={
+    ...status,state:'paused',code:'season_queue_paused'};
+   status={...status,currentRunId:null};
+   logger('BLOFY_CONTENT_HUB_SEASON_QUEUE',snapshot());
+  });
+  return {...snapshot(),ok:true,code:'season_queue_started'};
+ };
+ return {start,stop,status:snapshot,isRunning:()=>active!==null};
+}
