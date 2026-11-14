@@ -372,3 +372,90 @@ test('manual per-session budget stops at 12 verified chunks and does not restart
  assert.equal(controller.status().state,'completed');
  assert.equal(chunks,15);
 });
+
+
+test('retryFailed changes only transient failed row once per confirmed operator request',async()=>{
+ let row={state:'failed',code:'episode_retryable_error',
+  manual_retries:0,run_id:'season_0123456789abcdef01234567'};
+ let busy=false,updates=0,rollbacks=0;
+ class MockPool{
+  async query(sql){
+   if(sql.includes('CREATE TABLE')||sql.includes('ALTER TABLE'))return {rows:[]};
+   throw Error('unexpected_pool_query');
+  }
+  async connect(){return {release:()=>{},query:async(sql,args=[])=>{
+   if(sql==='BEGIN'||sql==='COMMIT')return {rows:[]};
+   if(sql==='ROLLBACK'){rollbacks++;return {rows:[]}}
+   if(sql.includes('pg_try_advisory_xact_lock'))
+    return {rows:[{held:!busy}]};
+   if(sql.includes('UPDATE blofy_content_hub_season_queue')){
+    updates++;
+    assert.match(sql,/manual_retries<2/);
+    assert.match(sql,/episode_source_busy/);
+    assert.equal(args[0],row.run_id);
+    if(row.state==='failed'&&
+       ['episode_retryable_error','episode_source_busy'].includes(row.code)&&
+       row.manual_retries<2){
+     row.state='queued';row.manual_retries++;
+     return {rowCount:1,rows:[{run_id:row.run_id,
+      manual_retries:row.manual_retries}]};
+    }
+    return {rowCount:0,rows:[]};
+   }
+   throw Error('unexpected_client_query');
+  }}}
+  async end(){}
+ }
+ const store=createSeasonQueueStore({connectionString:'mock',Pool:MockPool});
+ assert.equal((await store.retryFailed('bad'))?.code,'season_retry_run_invalid');
+ busy=true;
+ assert.equal((await store.retryFailed(row.run_id)).code,'season_retry_worker_active');
+ assert.equal(updates,0);
+ busy=false;
+ const one=await store.retryFailed(row.run_id);
+ assert.equal(one.ok,true);
+ assert.equal(one.automaticStart,false);
+ assert.equal(one.manualRetries,1);
+ assert.equal(row.state,'queued');
+ assert.equal((await store.retryFailed(row.run_id)).code,'season_retry_not_eligible');
+ row.state='failed';row.code='episode_source_busy';
+ assert.equal((await store.retryFailed(row.run_id)).manualRetries,2);
+ row.state='failed';row.code='episode_retryable_error';
+ assert.equal((await store.retryFailed(row.run_id)).code,'season_retry_not_eligible');
+ row.manual_retries=0;row.code='episode_private_sha256_mismatch';
+ assert.equal((await store.retryFailed(row.run_id)).code,'season_retry_not_eligible');
+ assert.ok(rollbacks>=1);
+ await store.close();
+});
+test('owner endpoint rejects unsigned manual retry; accepting it never starts copying',async()=>{
+ const id='season_0123456789abcdef01234567',recorded=[];
+ const hub=createContentHubServer({token,pilotEnv:env,
+  seasonQueueStore:{retryFailed:async runId=>{
+   recorded.push(runId);return {ok:true,runId,code:'season_retry_queued',
+    manualRetries:1,automaticStart:false}
+  }},storage:{},lease:{}});
+ hub.server.listen(0,'127.0.0.1');
+ await new Promise(resolve=>hub.server.once('listening',resolve));
+ const url='http://127.0.0.1:'+hub.server.address().port+
+  '/internal/seasons/retry';
+ const headers={authorization:'Bearer '+token,'content-type':'application/json',
+  'x-blofy-season-confirm':'manual-review-transient-failure'};
+ try{
+  const body=JSON.stringify({runId:id,confirmed:true,licensedStorage:true,
+   sourceIdle:true});
+  assert.equal((await fetch(url,{method:'POST',headers:{
+   'content-type':'application/json'},body})).status,401);
+  assert.equal((await fetch(url,{method:'POST',headers:{
+   authorization:'Bearer '+token,'content-type':'application/json'},body})).status,403);
+  assert.equal((await fetch(url,{method:'POST',headers,
+   body:JSON.stringify({runId:id,confirmed:true,
+    licensedStorage:true,sourceIdle:false})})).status,400);
+  assert.equal(recorded.length,0);
+  const approved=await fetch(url,{method:'POST',headers,body});
+  assert.equal(approved.status,200);
+  const data=await approved.json();
+  assert.equal(data.automaticStart,false);
+  assert.equal(data.manualRetries,1);
+  assert.deepEqual(recorded,[id]);
+ }finally{await new Promise(resolve=>hub.server.close(resolve))}
+});
