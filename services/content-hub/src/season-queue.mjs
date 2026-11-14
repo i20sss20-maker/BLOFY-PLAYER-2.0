@@ -340,21 +340,42 @@ export function createSeasonQueueStore({
    });
    return result.rows?.length===1;
   },
-  async list({limit=100}={}){
+  async list({limit=100,offset=0}={}){
    await ensure();
    const n=Math.max(1,Math.min(200,Number(limit)||100));
+   if(!Number.isSafeInteger(offset)||offset<0||offset>1000000)
+    throw Error('season_queue_offset_invalid');
    const result=await pool.query([
     'SELECT q.*,COALESCE(r.bytes_copied,0) AS bytes_copied,',
     'r.state AS episode_state FROM blofy_content_hub_season_queue q',
     'LEFT JOIN blofy_content_hub_episode_runs r ON r.run_id=q.run_id',
-    'ORDER BY q.created_at,q.episode_number LIMIT $1'
-   ].join(' '),[n]).catch(async e=>{
+    'ORDER BY q.created_at,q.run_id LIMIT $1 OFFSET $2'
+   ].join(' '),[n,offset]).catch(async e=>{
     // The episode table is created lazily by the original pilot.
     if(e?.code!=='42P01')throw e;
-    const q=await pool.query('SELECT * FROM blofy_content_hub_season_queue ORDER BY created_at,episode_number LIMIT $1',[n]);
+    const q=await pool.query('SELECT * FROM blofy_content_hub_season_queue ORDER BY created_at,run_id LIMIT $1 OFFSET $2',[n,offset]);
     return {rows:q.rows.map(row=>({...row,bytes_copied:0,episode_state:null}))};
    });
    return (result.rows||[]).map(safeStatus);
+  },
+  // Exact page counts, not the truncated 100-row default list.
+  // Pagination allows operators to inspect large series backlogs without
+  // ever pulling more than 50 rows of private metadata into the browser.
+  async listPage({page=1}={}){
+   if(!Number.isSafeInteger(page)||page<1||page>20000)
+    throw Error('season_queue_page_invalid');
+   await ensure();
+   const pageSize=50;
+   const total=await pool.query(
+    'SELECT COUNT(*)::text AS total FROM blofy_content_hub_season_queue');
+   const totalEpisodes=Number(total.rows?.[0]?.total||0);
+   const pages=Math.max(1,Math.ceil(totalEpisodes/pageSize));
+   if(page>pages)return {episodes:[],page:{
+    number:page,pageSize,totalEpisodes,pages,hasPrevious:page>1,
+    hasNext:false,outOfRange:true}};
+   const episodes=await this.list({limit:pageSize,offset:(page-1)*pageSize});
+   return {episodes,page:{number:page,pageSize,totalEpisodes,pages,
+    hasPrevious:page>1,hasNext:page<pages,outOfRange:false}};
   },
   async recoverInterrupted(){
    await ensure();
