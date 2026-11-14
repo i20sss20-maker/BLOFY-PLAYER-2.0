@@ -3148,6 +3148,7 @@ async function unifiedStreamBridge(req,res,url){
   // reach the STREAM service or a browser, and no subscriber playback route.
   const batchBridgePaths={
     '/internal/blofy-stream/content-hub/status':'/internal/pilots',
+    '/internal/blofy-stream/content-hub/episodes/candidates':'/internal/episodes/candidates',
     '/internal/blofy-stream/content-hub/preflight':'/internal/pilot/preflight',
     '/internal/blofy-stream/content-hub/batch/next':'/internal/batch/next',
     '/internal/blofy-stream/content-hub/batch/start':'/internal/batch/start',
