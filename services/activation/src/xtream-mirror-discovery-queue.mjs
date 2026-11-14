@@ -5,6 +5,8 @@ const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]
 const TYPES=new Set(['movie','episode']);
 const ALLOWED_EXT=new Set(['mp4','mkv','avi','ts']);
 const DAY=/^20[0-9]{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])$/;
+const isoDay=v=>v instanceof Date?v.toISOString().slice(0,10):
+ String(v||'').slice(0,10);
 
 export function riyadhMirrorDay(now=new Date()){
  const date=new Date(now);
@@ -94,7 +96,7 @@ export function createXtreamMirrorDiscoveryStore(db){
     WHERE source_id=$1 AND media_kind=$2 FOR UPDATE`,[sourceId,mediaKind]);
    const state=lock.rows?.[0]||{};
    const finishedDay=state.completed_local_day?
-    String(state.completed_local_day).slice(0,10):null;
+    isoDay(state.completed_local_day):null;
    if(finishedDay===localDay){
     await client.query('COMMIT');active=false;
     return {ok:true,code:'mirror_scan_already_complete_today',
@@ -140,7 +142,11 @@ export function createXtreamMirrorDiscoveryStore(db){
         last_seen_at=NOW(),title=EXCLUDED.title
       WHERE blofy_xtream_mirror_items.media_id=EXCLUDED.media_id
         AND blofy_xtream_mirror_items.extension=EXCLUDED.extension`,
-     [sourceId,mediaKind,JSON.stringify(valid)]);
+     [sourceId,mediaKind,JSON.stringify(valid.map(x=>({
+        gateway_id:x.gatewayId,media_id:x.mediaId,
+        series_media_id:x.seriesMediaId,
+        extension:x.extension,title:x.title
+      })))]);
    }
    const last=records.length?Number(records.at(-1).gateway_id):cursor;
    if(!Number.isSafeInteger(last)||last<cursor)throw Error('mirror_discovery_page_invalid');
