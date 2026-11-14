@@ -28,13 +28,13 @@ const stamp=s=>{
 const labels={queued:'بانتظار النقل',paused:'متوقفة',
  running:'جارٍ النقل',verified:'مكتملة',failed:'فشلت',unknown:'غير معروف'};
 let currentKey=null,currentPage=1,data=null,loading=false,exporting=false,
- requestSerial=0;
+ requestSerial=0,priorityBusy=false;
 const setMessage=s=>{$('analyticsReportStatus').textContent=s};
 const updateButtons=()=>{
- $('analyticsExportSeason').disabled=!data||loading||exporting;
- $('analyticsReportPrev').disabled=!data||loading||exporting||
+ $('analyticsExportSeason').disabled=!data||loading||exporting||priorityBusy;
+ $('analyticsReportPrev').disabled=!data||loading||exporting||priorityBusy||
   !data.page.hasPrevious;
- $('analyticsReportNext').disabled=!data||loading||exporting||
+ $('analyticsReportNext').disabled=!data||loading||exporting||priorityBusy||
   !data.page.hasNext;
 };
 async function getReport(key,page){
@@ -50,7 +50,14 @@ async function getReport(key,page){
   throw Error('بيانات التقرير غير مكتملة.');
  return out;
 }
-function showTotals(t){
+const timeText=ms=>{
+ if(ms===null)return 'لم يُقَس';
+ const sec=Math.floor(ms/1000),hours=Math.floor(sec/3600),
+  minutes=Math.floor(sec%3600/60),seconds=sec%60;
+ return (hours?num(hours)+' س ':'')+(minutes?num(minutes)+' د ':'')+
+  num(seconds)+' ث';
+};
+function showTotals(t,timing={}){
  const fields=[
   ['الحلقات',num(t.episodeCount)],
   ['مكتملة',num(t.verifiedCount)],
@@ -59,7 +66,12 @@ function showTotals(t){
   ['بانتظار النقل',num(t.queuedCount)],
   ['منجزة من الحجم المعلن',num(t.percent)+'%'],
   ['محفوظ في قاعدة البيانات',amount(t.storedBytes)],
-  ['الحجم المعلن',amount(t.expectedBytes)]
+  ['الحجم المعلن',amount(t.expectedBytes)],
+  ['وقت نقل الأجزاء المقاس',timeText(timing.measuredActiveMs)],
+  ['الحجم المقاس',amount(timing.measuredBytes)],
+  ['عدد الأجزاء المقاسة',num(timing.measuredChunkCount)],
+  ['متوسط النقل المقاس',timing.averageBytesPerSecond===null?
+   'لم يُقَس':amount(timing.averageBytesPerSecond)+'/ث']
  ];
  $('analyticsReportTotals').replaceChildren(...fields.map(([label,value])=>{
   const box=make('div','season-report-tile');
@@ -112,11 +124,45 @@ function showSpeedChart(events){
   return bar;
  }));
 }
+const priorityLabel={0:'عادية',1:'مرتفعة',2:'عاجلة'};
+async function updatePriority(item,select){
+ if(priorityBusy||loading||exporting){select.value=String(item.priority);return}
+ const chosen=Number(select.value);
+ if(!Number.isInteger(chosen)||![0,1,2].includes(chosen)){
+  select.value=String(item.priority);return;
+ }
+ if(chosen===item.priority)return;
+ const accepted=confirm('تغيير أولوية الحلقة '+item.episodeNumber+
+  ' إلى '+priorityLabel[chosen]+'؟ لا يبدأ هذا الإجراء أي نقل.');
+ if(!accepted){select.value=String(item.priority);return}
+ priorityBusy=true;select.disabled=true;updateButtons();
+ try{
+  const response=await fetch('/api/v1/admin/content-hub/seasons/priority',{
+   method:'POST',credentials:'same-origin',
+   headers:{'content-type':'application/json',
+    'x-blofy-owner-action':'season-library'},
+   body:JSON.stringify({confirmed:true,runId:item.runId,priority:chosen})
+  });
+  if(response.status===401){location.assign('/admin');return}
+  const result=await response.json();
+  if(!response.ok||result.ok!==true)
+   throw Error(result.code==='season_priority_worker_active'?
+    'النقل قيد التشغيل؛ أوقفه أولًا قبل تغيير الأولوية.':
+    'تعذر تغيير الأولوية؛ تحقق من حالة الحلقة والمحاولة.');
+  item.priority=chosen;
+  $('analyticsRefresh').click();
+  $('refreshSeasons').click();
+  setMessage('حُفظت أولوية الحلقة '+num(item.episodeNumber)+
+   ' دون تغيير نقاط الاستكمال أو بدء النقل.');
+ }catch(e){select.value=String(item.priority);
+  setMessage(e.message||'فشل تحديث الأولوية.')}
+ finally{priorityBusy=false;updateButtons();select.disabled=false}
+}
 function showRows(episodes){
  const body=$('analyticsReportRows');
  if(!episodes.length){
   const tr=make('tr'),td=make('td','','لا توجد حلقات في هذه الصفحة.');
-  td.colSpan=6;tr.append(td);body.replaceChildren(tr);return;
+  td.colSpan=7;tr.append(td);body.replaceChildren(tr);return;
  }
  body.replaceChildren(...episodes.map(e=>{
   const tr=make('tr');
@@ -126,12 +172,25 @@ function showRows(episodes){
    amount(e.storedBytes)+' / '+amount(e.expectedBytes),
    stamp(e.updatedAt),e.state==='failed'?(e.code||'غير محدد'):'—'
   ])tr.append(make('td','',v));
+  const cell=make('td','');
+  if(e.priorityEditable){
+   const select=make('select','season-priority-select');
+   for(const value of [0,1,2]){
+    const option=make('option','',priorityLabel[value]);
+    option.value=String(value);select.append(option);
+   }
+   select.value=String(e.priority);
+   select.setAttribute('aria-label','أولوية الحلقة '+e.episodeNumber);
+   select.addEventListener('change',()=>void updatePriority(e,select));
+   cell.append(select);
+  }else cell.textContent=priorityLabel[e.priority]||'عادية';
+  tr.append(cell);
   return tr;
  }));
 }
 function display(report){
  data=report;currentPage=report.page.number;
- showTotals(report.totals);
+ showTotals(report.totals,report.transferTiming);
  showAlerts(report.alerts);
  showEpisodeChart(report.episodes);
  showSpeedChart(report.recentEvents);
@@ -144,7 +203,7 @@ function display(report){
   ' · دون أي تنزيل من المصدر');
 }
 async function load(page=1){
- if(!currentKey||!valid.test(currentKey)||loading||exporting)return;
+ if(!currentKey||!valid.test(currentKey)||loading||exporting||priorityBusy)return;
  const key=currentKey,serial=++requestSerial;
  loading=true;updateButtons();setMessage('جارٍ قراءة تقرير الموسم…');
  try{
@@ -161,7 +220,7 @@ function exportCell(value){
  return '"'+v.replace(/"/g,'""')+'"';
 }
 async function exportCsv(){
- if(!currentKey||!data||loading||exporting)return;
+ if(!currentKey||!data||loading||exporting||priorityBusy)return;
  const key=currentKey,numberOfPages=Number(data.page.pages);
  if(!Number.isInteger(numberOfPages)||numberOfPages<1||
     numberOfPages>10){
@@ -180,10 +239,10 @@ async function exportCsv(){
   if(all.length!==data.page.totalEpisodes)
    throw Error('البيانات غير مكتملة؛ لم يتم تصدير ملف ناقص.');
   const headers=['الموسم','الحلقة','عنوان الحلقة','الحالة','نسبة النقل',
-   'الحجم المسجل بالبايت','الحجم المتوقع بالبايت','التحقق مكتمل','آخر تحديث','رمز الخطأ'];
+   'الحجم المسجل بالبايت','الحجم المتوقع بالبايت','التحقق مكتمل','آخر تحديث','رمز الخطأ','الأولوية'];
   const rows=all.map(e=>[key,e.episodeNumber,e.title,e.state,e.percent,
    e.storedBytes,e.expectedBytes,e.sourceVerified?'نعم':'لا',
-   e.updatedAt,e.code||'']);
+   e.updatedAt,e.code||'',priorityLabel[e.priority]||'عادية']);
   const csv='\uFEFF'+[headers,...rows]
    .map(row=>row.map(exportCell).join(',')).join('\r\n');
   const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
@@ -197,7 +256,7 @@ async function exportCsv(){
  finally{exporting=false;updateButtons()}
 }
 document.addEventListener('blofy:open-season-report',event=>{
- if(exporting){setMessage('التصدير جارٍ؛ أكمله قبل فتح موسم آخر.');return}
+ if(exporting||priorityBusy){setMessage('أكمل الإجراء الجاري أولًا.');return}
  const key=event?.detail?.seasonKey;
  if(!valid.test(String(key||'')))return;
  currentKey=key;currentPage=1;data=null;loading=false;
@@ -212,11 +271,45 @@ document.addEventListener('blofy:open-season-report',event=>{
  $('analyticsReportPanel').scrollIntoView({block:'start',behavior:'smooth'});
 });
 $('analyticsCloseReport').addEventListener('click',()=>{
- if(exporting)return;
+ if(exporting||priorityBusy)return;
  currentKey=null;data=null;requestSerial++;loading=false;
  $('analyticsReportPanel').hidden=true;updateButtons();
 });
 $('analyticsReportPrev').addEventListener('click',()=>void load(currentPage-1));
 $('analyticsReportNext').addEventListener('click',()=>void load(currentPage+1));
+$('analyticsResumePreview').addEventListener('click',async()=>{
+ const button=$('analyticsResumePreview'),box=$('analyticsResumeItems');
+ button.disabled=true;
+ $('analyticsResumeStatus').textContent='جارٍ قراءة السجل المحفوظ دون الاتصال بمصدر الفيديو…';
+ try{
+  const response=await fetch(
+   '/api/v1/admin/content-hub/seasons/resume/preview',{
+    credentials:'same-origin',cache:'no-store'});
+  if(response.status===401){location.assign('/admin');return}
+  if(!response.ok)throw Error('فشل فحص السجل الحالي.');
+  const result=await response.json();
+  if(result.ok!==true||result.readOnly!==true||
+     result.requiresOperatorStart!==true)
+   throw Error('بيانات الاستكمال غير مكتملة.');
+  const items=Array.isArray(result.items)?result.items:[];
+  box.replaceChildren(...(items.length?items.map(e=>{
+   const card=make('div','analytics-record');
+   const stored=amount(e.storedBytes),expected=amount(e.expectedBytes);
+   card.append(make('strong','',
+    e.seasonKey+' · الحلقة '+num(e.episodeNumber)),
+    make('p','muted',labels[e.state]||'غير معروف'),
+    make('p','muted','آخر تغيير حالة '+stamp(e.lastStateUpdatedAt)+
+     ' · المسجل '+stored+' / '+expected),
+    make('p','hint','سجل قاعدة البيانات فقط؛ يلزم التحقق من المصدر والتخزين عند الاستكمال.'));
+   return card;
+  }):[make('p','muted','لا توجد حلقات متوقفة أو جزئية ظاهرة في السجل.')]));
+  $('analyticsResumeStatus').textContent=
+   'معاينة فقط · '+num(items.length)+' حلقات · '+
+   (result.limited?'المعروض أول 50 سجلًا · ':'')+
+   'لم يبدأ أي نقل، والاستئناف يتطلب تأكيدك الصريح من لوحة عمليات المواسم.';
+ }catch(e){
+  $('analyticsResumeStatus').textContent=e.message||'تعذرت المعاينة.';
+ }finally{button.disabled=false}
+});
 $('analyticsExportSeason').addEventListener('click',()=>void exportCsv());
 })();
