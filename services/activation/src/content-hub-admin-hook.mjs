@@ -242,6 +242,28 @@ http.createServer=function withContentHubAdmin(listener){
       automaticPilotEnabled:preflight.automaticPilotEnabled===true
     });
    }
+   if(path==='/api/v1/admin/content-hub/episodes/confirmation'&&
+      req.method==='GET'){
+    const response=await request('/internal/episodes/playback/confirmation',{
+     signal:AbortSignal.timeout(8000)});
+    if(response.status!==200)return json(res,503,{
+     ok:false,code:'episode_confirmation_unavailable'});
+    return json(res,200,await safeReadJson(response));
+   }
+   if(path==='/api/v1/admin/content-hub/episodes/confirm'&&
+      req.method==='POST'){
+    if(req.headers['x-blofy-owner-action']!=='browser-av-tested')
+     return json(res,403,{ok:false,code:'owner_playback_confirmation_required'});
+    const input=await readSeasonAdminBody(req);
+    if(input?.videoConfirmed!==true||input?.audioConfirmed!==true)
+     return json(res,403,{ok:false,code:'owner_audio_and_video_required'});
+    const response=await request('/internal/episodes/playback/confirm',{
+     method:'POST',signal:AbortSignal.timeout(8000),extraHeaders:{
+      'x-blofy-browser-confirm':'owner-saw-and-heard',
+      'x-blofy-video-confirmed':'yes','x-blofy-audio-confirmed':'yes'
+     }});
+    return json(res,response.status,await response.json());
+   }
    if(path==='/api/v1/admin/content-hub/seasons/queue'&&req.method==='GET'){
     const response=await request('/internal/seasons/queue',{
      signal:AbortSignal.timeout(8000)});
