@@ -94,6 +94,7 @@ jobs:
           node --check services/content-hub/src/season-attention.mjs
           node --check services/content-hub/src/season-queue.mjs
           node --check services/content-hub/src/private-test-gate.mjs
+          node --check services/content-hub/src/device-qa-manifest.mjs
           node --check services/content-hub/src/curated-metadata.mjs
           node --check services/content-hub/src/metadata-matcher.mjs
           node --check services/content-hub/src/metadata-review.mjs
