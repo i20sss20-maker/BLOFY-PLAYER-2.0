@@ -142,6 +142,9 @@ class SettingsActivity : AppCompatActivity() {
         storageCard = actionCard("💾  التخزين المحلي", "جارٍ حساب المساحة...") { showStorageManager() }
         addCard(storageCard)
         addCard(actionCard("✓  حالة النظام", "معلومات النسخة والجهاز") { startActivity(Intent(this, SystemStatusActivity::class.java)) })
+        if (BuildConfig.DEBUG) addCard(actionCard("🧪  مختبر الفيديو الخاص", "اختبار محلي دون تغيير بث العملاء") {
+            startActivity(Intent(this, PrivateMediaQaActivity::class.java))
+        })
         addCard(actionCard("⟲  استعادة الإعدادات", "العودة للوضع الافتراضي") { confirmRestoreDefaults() })
 
         linkFocus(back)
