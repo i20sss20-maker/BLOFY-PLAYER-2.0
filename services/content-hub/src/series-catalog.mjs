@@ -73,3 +73,17 @@ export async function inspectLicensedSeriesEpisodes({
  }catch{return {...base,code:'licensed_series_episodes_unavailable',
    seriesGatewayId:id,seasons:[]}}
 }
+
+export async function inspectLicensedPilotSeries({
+ env=process.env,fetchImpl=fetch,signal
+}={}){
+ try{
+  const data=await bridge('/internal/blofy-content-hub/series/pilot',
+   {env,fetchImpl,signal});
+  if(data?.ok!==true||data.readOnly!==true||
+    !isId(data.seriesGatewayId)||!isId(data.episodeGatewayId))
+   throw Error('pilot_series_result_invalid');
+  return {...base,ok:true,seriesGatewayId:Number(data.seriesGatewayId),
+   episodeGatewayId:Number(data.episodeGatewayId)};
+ }catch{return {...base,code:'pilot_series_not_available'}}
+}
