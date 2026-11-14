@@ -4130,6 +4130,23 @@ http.createServer = function withBlofyXtream(listener) {
       // Admin-only read of the indexed catalog, not private-file storage.
       // Useful for safely inspecting the size and episode-map coverage of
       // the requested Xtream daily mirror without contacting the provider.
+      if(req.method==='GET'&&url.pathname==='/api/v1/admin/xtream/mirror/queue/items'){
+        const sourceId=String(url.searchParams.get('sourceId')||'');
+        const mediaKind=String(url.searchParams.get('mediaKind')||'movie');
+        const state=String(url.searchParams.get('state')||'all');
+        const afterGatewayId=Number(url.searchParams.get('afterGatewayId')||0);
+        const limit=Number(url.searchParams.get('limit')||50);
+        try{
+          const result=await mirrorDiscoveryStore.listQueue({
+            sourceId,mediaKind,state,afterGatewayId,limit});
+          return json(res,200,result);
+        }catch(error){
+          const invalid=error?.message==='mirror_discovery_queue_query_invalid';
+          return json(res,invalid?400:503,{ok:false,
+            code:invalid?'mirror_discovery_query_invalid':'mirror_discovery_items_unavailable',
+            readOnly:true,mediaBytesTransferred:0,customerCutover:false});
+        }
+      }
       if(req.method==='GET'&&url.pathname==='/api/v1/admin/xtream/mirror/queue/status'){
         const sourceId=String(url.searchParams.get('sourceId')||'').trim();
         try{
