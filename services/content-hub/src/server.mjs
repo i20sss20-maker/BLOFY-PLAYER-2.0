@@ -133,14 +133,18 @@ export function createContentHubServer({storage,lease,
    return json(res,401,{ok:false,code:'content_hub_auth_required'});
   if(path==='/internal/status'&&req.method==='GET'){
    let bucket=false,database=false,durablePilot=null;
+   let ownerBrowserCheck={confirmed:false,videoConfirmed:false,audioConfirmed:false};
    try{bucket=(await storage.health()).ok===true}catch{}
    try{database=await lease.health()}catch{}
    try{durablePilot=await lease.getPilotStatus?.(
      String(process.env.BLOFY_CONTENT_HUB_PILOT_RUN_ID||''))}catch{}
+   try{ownerBrowserCheck=await lease.getEpisodeBrowserPlaybackStatus?.(
+     String(pilotEnv.BLOFY_CONTENT_HUB_EPISODE_RUN_ID||''))||ownerBrowserCheck}catch{}
    return json(res,bucket&&database?200:503,{
     ok:bucket&&database,privateBucketAvailable:bucket,
     databaseAvailable:database,downloadQueueEnabled:Boolean(seasonQueue)&&seasonQueueReadiness(pilotEnv).ready,
     seasonQueue:seasonQueue?.status()||null,
+    ownerEpisodeBrowserCheck:ownerBrowserCheck,
     syntheticTestEnabled:allowSynthetic,
     lastSynthetic,pilotRunning:pilotRunning||copy.isRunning(),lastPilot,
     lastEpisodeProbe,episodeCopyBusy:episodeCopyBusy||episodeCopy.isRunning(),
@@ -153,6 +157,42 @@ export function createContentHubServer({storage,lease,
     continuousCopy:copy.status(),durablePilot,chunkedBatchEnabled:chunkedBatchReadiness(pilotEnv).ready,
     customerCutover:false,
     licensedRightsRequired:true});
+  }
+  if(path==='/internal/episodes/playback/confirmation'&&
+     req.method==='GET'){
+   if(String(req.url||'').includes('?'))
+    return json(res,400,{ok:false,code:'episode_browser_query_not_allowed'});
+   const runId=String(pilotEnv.BLOFY_CONTENT_HUB_EPISODE_RUN_ID||'');
+   try{
+    const state=await lease.getEpisodeBrowserPlaybackStatus?.(runId);
+    return json(res,200,{ok:true,privateOnly:true,customerCutover:false,
+     ...(state||{confirmed:false,videoConfirmed:false,
+      audioConfirmed:false})});
+   }catch{return json(res,503,{
+    ok:false,code:'episode_browser_confirmation_read_failed'})}
+  }
+  if(path==='/internal/episodes/playback/confirm'&&
+     req.method==='POST'){
+   if(String(req.url||'').includes('?')||
+     req.headers['x-blofy-browser-confirm']!=='owner-saw-and-heard'||
+     req.headers['x-blofy-video-confirmed']!=='yes'||
+     req.headers['x-blofy-audio-confirmed']!=='yes')
+    return json(res,403,{ok:false,code:'episode_browser_manual_confirmation_required'});
+   if(pilotEnv.BLOFY_CONTENT_HUB_OWNER_PREVIEW_ENABLED!=='1'||
+      pilotEnv.BLOFY_CONTENT_HUB_EPISODE_OWNER_PREVIEW_ENABLED!=='1')
+    return json(res,409,{ok:false,code:'episode_owner_preview_disabled'});
+   const runId=String(pilotEnv.BLOFY_CONTENT_HUB_EPISODE_RUN_ID||'');
+   try{
+    const verified=await lease.getVerifiedEpisodeObject?.(runId);
+    if(!verified)return json(res,409,{
+     ok:false,code:'episode_not_storage_verified'});
+    const proof=await lease.confirmEpisodeBrowserPlayback?.(runId);
+    if(proof?.confirmed!==true)throw Error('missing_browser_proof');
+    return json(res,200,{ok:true,code:'owner_browser_av_confirmed',
+     privateOnly:true,customerCutover:false,
+     confirmedAt:proof.confirmedAt,runId});
+   }catch{return json(res,503,{
+    ok:false,code:'episode_browser_confirmation_failed'})}
   }
   // Owner-only queue. It accepts listed, individually licensed episodes
   // and cannot alter customer routes or expose the private bucket.
@@ -205,6 +245,12 @@ export function createContentHubServer({storage,lease,
     return json(res,403,{ok:false,code:'season_start_confirmation_required'});
    if(episodeCopyBusy||episodeCopy.isRunning()||pilotRunning||copy.isRunning())
     return json(res,409,{ok:false,code:'source_writer_busy'});
+   let observed=false;
+   try{const proof=await lease.getEpisodeBrowserPlaybackStatus?.(
+    String(pilotEnv.BLOFY_CONTENT_HUB_EPISODE_RUN_ID||''));
+    observed=proof?.confirmed===true}catch{}
+   if(!observed)return json(res,409,{ok:false,
+    code:'owner_episode_browser_playback_not_confirmed'});
    const result=seasonQueue.start();
    return json(res,result.ok?202:409,{...result,privateOnly:true,
     customerCutover:false,maxSourceRangeBytes:CHUNK_BYTES});
