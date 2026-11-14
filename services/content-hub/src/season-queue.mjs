@@ -637,8 +637,8 @@ export function createSeasonQueueStore({
     state:row.state,code:row.code||null,
     expectedBytes:Number(row.expected_bytes||0),
     storedBytes:Math.max(0,Number(row.bytes_copied||0)),
-    checkpointAt:row.updated_at,
-    verifiedCheckpointOnly:true
+    lastStateUpdatedAt:row.updated_at,
+    databaseSnapshotOnly:true
    })),limited:rows.length>n,requiresOperatorStart:true,
     automaticStart:false,sourceProbePerformed:false,
     needsFreshMappingValidation:true};
