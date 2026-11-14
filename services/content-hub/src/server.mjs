@@ -402,6 +402,30 @@ export function createContentHubServer({storage,lease,
   return json(res,404,{ok:false,code:'content_hub_not_found'});
  });
  return {server,
+  runPreviewSelfCheck:async()=>{
+   if(pilotEnv.BLOFY_CONTENT_HUB_OWNER_PREVIEW_ENABLED!=='1')
+    return {ok:false,code:'owner_preview_disabled',providerRequests:0};
+   if(previewBuilding)return {ok:false,code:'owner_preview_busy',
+    providerRequests:0};
+   const runId=String(pilotEnv.BLOFY_CONTENT_HUB_BATCH_RUN_ID||'');
+   if(!/^[A-Za-z0-9_-]{8,80}$/.test(runId))
+    return {ok:false,code:'owner_preview_movie_not_selected',
+     providerRequests:0};
+   previewBuilding=true;
+   try{
+    const result=await previewBuilder({runId,storage,lease});
+    if(result.ok&&Buffer.isBuffer(result.bytes)){
+     previewCache={runId,result,expiresAt:Date.now()+120000};
+    }
+    return {ok:result.ok===true,code:result.code,
+     mp4Bytes:Buffer.isBuffer(result.bytes)?result.bytes.length:0,
+     durationSeconds:result.durationSeconds||0,
+     sourceSampleBytes:result.sourceSampleBytes||0,providerRequests:0,
+     customerCutover:false};
+   }catch{return {ok:false,code:'owner_preview_self_check_failed',
+    providerRequests:0,customerCutover:false}}
+   finally{previewBuilding=false}
+  },
   runPlaybackCanary:async()=>{
     if(canaryRunning)return {ok:false,code:'playback_canary_already_running'};
     canaryRunning=true;
@@ -556,6 +580,25 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
      console.warn('BLOFY_CONTENT_HUB_CONTINUOUS_BOOT',JSON.stringify({
       ok:false,code:'continuous_boot_failed',customerCutover:false})));
    },8500);timer.unref?.();
+  }
+  // One-time real browser MP4 transcode smoke check. Only S3 bytes,
+  // no Xtream/requests to customers. Durable token prevents boot replays.
+  if(process.env.BLOFY_CONTENT_HUB_PREVIEW_TEST_ON_BOOT==='1'){
+   const timer=setTimeout(()=>{
+    void (async()=>{
+     const runId=String(process.env.BLOFY_CONTENT_HUB_BATCH_RUN_ID||''),
+       event=String(process.env.BLOFY_CONTENT_HUB_PREVIEW_BOOT_TOKEN||'');
+     if(!/^[A-Za-z0-9_-]{8,80}$/.test(event))
+      return {ok:false,code:'owner_preview_event_invalid'};
+     if(!await lease.claimBatchBootOnce(event,runId))
+      return {ok:false,code:'owner_preview_event_already_claimed'};
+     return hub.runPreviewSelfCheck();
+    })().then(result=>console.info('BLOFY_CONTENT_HUB_PRIVATE_PREVIEW',
+      JSON.stringify(result))).catch(()=>console.warn(
+       'BLOFY_CONTENT_HUB_PRIVATE_PREVIEW',
+       JSON.stringify({ok:false,code:'owner_preview_boot_unavailable',
+        providerRequests:0,customerCutover:false})));
+   },5000);timer.unref?.();
   }
   // Independently decode a verified PRIVATE movie sample with FFprobe
   // and FFmpeg once. This NEVER touches the Xtream source or subscriber.
