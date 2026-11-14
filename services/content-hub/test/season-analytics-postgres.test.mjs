@@ -93,7 +93,7 @@ test('real PostgreSQL executes reporting and chunk-timing queries safely',{
    'SELECT updated_at FROM blofy_content_hub_season_queue WHERE run_id=$1',
    [high]);
   const saved=await store.setPriority({runId:high,priority:2});
-  assert.equal(saved.ok,true);
+  assert.equal(curatedSaved.ok,true);
   assert.equal(saved.automaticStart,false);
   const after=await pool.query(
    'SELECT updated_at,priority FROM blofy_content_hub_season_queue WHERE run_id=$1',
@@ -198,10 +198,10 @@ test('real PostgreSQL executes reporting and chunk-timing queries safely',{
    year:2025,genre:'drama',overview:'Test-only catalog information',
    posterPath:'/ValidCover1234.jpg',confirmed:true,
    artworkRightsConfirmed:true};
-  const saved=await catalog.save(metadata);
+  const curatedSaved=await catalog.save(metadata);
   assert.equal(saved.ok,true);
-  assert.equal(saved.metadata.source,'owner_curated');
-  assert.equal(saved.metadata.posterPath,metadata.posterPath);
+  assert.equal(curatedSaved.metadata.source,'owner_curated');
+  assert.equal(curatedSaved.metadata.posterPath,metadata.posterPath);
   const names=await catalog.searchSeriesIds('Neon Voyage');
   assert.deepEqual(names.ids,['987654321']);
   const full=await store.librarySearch({
