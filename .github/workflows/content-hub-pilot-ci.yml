@@ -53,6 +53,7 @@ jobs:
           node --check services/activation/web/admin-content-hub.js
           node --check services/activation/web/admin-season-analytics.js
           node --check services/activation/web/admin-season-detail.js
+          node --check services/activation/web/admin-season-attention.js
           node --test services/activation/test/content-hub-admin-core.test.mjs
           node --test services/activation/test/stream-season-bridge.test.mjs
           node --test services/activation/test/season-forecast-ui.test.mjs
@@ -68,6 +69,7 @@ jobs:
           node --check services/content-hub/src/season-analytics.mjs
           node --check services/content-hub/src/season-report.mjs
           node --check services/content-hub/src/season-forecast.mjs
+          node --check services/content-hub/src/season-attention.mjs
           node --check services/content-hub/src/episode-chunk-pilot.mjs
           node --check services/content-hub/src/source-lease.mjs
       - name: Install test-only dependencies (no install scripts)
