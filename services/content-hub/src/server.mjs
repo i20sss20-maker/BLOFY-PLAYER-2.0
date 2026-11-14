@@ -307,13 +307,14 @@ export function createContentHubServer({storage,lease,
    if(page>20000)return json(res,400,{
     ok:false,code:'season_report_page_invalid'});
    try{
-    const [data,events]=await Promise.all([
+    const [data,events,timing]=await Promise.all([
      seasonQueueStore.seasonDetailPage({seasonKey,page}),
-     seasonQueueStore.seasonTransferEvents({seasonKey})
+     seasonQueueStore.seasonTransferEvents({seasonKey}),
+     seasonQueueStore.seasonTimingStats?.({seasonKey})||{}
     ]);
     if(!data)return json(res,404,{ok:false,code:'season_report_not_found'});
     return json(res,200,buildSeasonReport({
-     ...data,events,worker:seasonQueue?.status()||{}
+     ...data,events,timing,worker:seasonQueue?.status()||{}
     }));
    }catch{return json(res,503,{ok:false,code:'season_report_database_unavailable'})}
   }
@@ -442,6 +443,45 @@ export function createContentHubServer({storage,lease,
    }catch{return json(res,503,{ok:false,
     code:'private_read_canary_unavailable'})}
    finally{seasonConcurrentReadBusy=false}
+  }
+  // Owner GET: inspect durable checkpoints without reading source/S3
+  // or automatically launching any resumed episode transfer.
+  if(path==='/internal/seasons/resume/preview'&&req.method==='GET'){
+   if(String(req.url||'').includes('?'))
+    return json(res,400,{ok:false,code:'season_resume_query_forbidden'});
+   if(!seasonQueueStore?.resumePreview)
+    return json(res,503,{ok:false,code:'season_resume_unavailable'});
+   try{
+    const data=await seasonQueueStore.resumePreview();
+    return json(res,200,{ok:true,privateOnly:true,readOnly:true,
+     customerCutover:false,providerMediaRequests:0,
+     ...data,worker:seasonQueue?.status()||{}});
+   }catch{return json(res,503,{ok:false,code:'season_resume_database_unavailable'})}
+  }
+  // Reordering may only change pending episode metadata while the
+  // global scheduler is completely idle. It NEVER initiates transfer.
+  if(path==='/internal/seasons/priority'&&req.method==='POST'){
+   if(String(req.url||'').includes('?')||
+      req.headers['x-blofy-season-confirm']!=='owner-reorder-pending')
+    return json(res,403,{ok:false,code:'season_priority_confirmation_required'});
+   if(!seasonQueueStore?.setPriority)
+    return json(res,503,{ok:false,code:'season_priority_unavailable'});
+   if(seasonQueue?.isRunning())
+    return json(res,409,{ok:false,code:'season_priority_worker_active'});
+   let body;
+   try{body=await readSeasonJson(req)}
+   catch{return json(res,400,{ok:false,code:'season_priority_invalid_body'})}
+   if(body?.confirmed!==true||
+      !/^[A-Za-z0-9_-]{8,80}$/.test(String(body.runId||''))||
+      ![0,1,2].includes(body.priority))
+    return json(res,400,{ok:false,code:'season_priority_invalid'});
+   try{
+    const result=await seasonQueueStore.setPriority({
+     runId:body.runId,priority:body.priority});
+    return json(res,result.ok?200:409,{
+     ...result,readOnly:false,automaticStart:false,
+     customerCutover:false});
+   }catch{return json(res,503,{ok:false,code:'season_priority_database_unavailable'})}
   }
   // Resubmit ONLY transient failed queue rows. The row's exact source,
   // episode ID and saved checkpoint remain pinned. This never starts a job.
