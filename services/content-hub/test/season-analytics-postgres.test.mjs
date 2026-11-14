@@ -226,6 +226,59 @@ test('real PostgreSQL executes reporting and chunk-timing queries safely',{
   const notRegistered=await store.registeredSeriesSummary({seriesId:'987654322'});
   assert.equal(notRegistered.seasonSummaries.length,0);
 
+  // Durable owner A/V review is separate from media verification and
+  // exists only for rows confirmed in BOTH private queue and episode run.
+  const avRun='season_av_pg_123456789';
+  await pool.query([
+   'INSERT INTO blofy_content_hub_season_queue',
+   '(run_id,season_key,episode_number,title,gateway_id,source_id,',
+   'media_id,extension,expected_bytes,state)',
+   "VALUES($1,'series_987654321_s02',1,'Test episode for AV',98675346,",
+   "'00000000-0000-4000-8000-000000000001'::uuid,",
+   "'fixture','mp4',8388608,'verified')"
+  ].join(' '),[avRun]);
+  await pool.query([
+   'CREATE TABLE IF NOT EXISTS blofy_content_hub_episode_runs (',
+   'run_id TEXT PRIMARY KEY,state TEXT NOT NULL,',
+   'source_id UUID NOT NULL,media_id TEXT NOT NULL,',
+   'gateway_id INTEGER NOT NULL,extension TEXT NOT NULL,',
+   'expected_bytes BIGINT NOT NULL,bytes_copied BIGINT NOT NULL DEFAULT 0,',
+   "parts JSONB NOT NULL DEFAULT '[]'::jsonb,",
+   'updated_at TIMESTAMPTZ DEFAULT NOW())'
+  ].join(' '));
+  await pool.query([
+   'INSERT INTO blofy_content_hub_episode_runs',
+   '(run_id,state,source_id,media_id,gateway_id,extension,',
+   'expected_bytes,bytes_copied)',
+   "VALUES($1,'verified','00000000-0000-4000-8000-000000000001'::uuid,",
+   "'fixture',98675346,'mp4',8388608,8388608)"
+  ].join(' '),[avRun]);
+  assert.equal(await store.ownsVerifiedRun(avRun),true);
+  assert.equal((await store.episodeAvReviews({runIds:[avRun]})).length,0);
+  assert.equal((await store.confirmEpisodeAv({runId:curatedRun})).code,
+   'episode_av_not_storage_verified');
+  const confirmedAv=await store.confirmEpisodeAv({runId:avRun});
+  assert.equal(confirmedAv.ok,true);
+  assert.equal(confirmedAv.videoOwnerConfirmed,true);
+  assert.equal(confirmedAv.audioOwnerConfirmed,true);
+  assert.equal(confirmedAv.automaticVerification,false);
+  const repeatedAv=await store.confirmEpisodeAv({runId:avRun});
+  assert.equal(repeatedAv.code,'episode_av_owner_review_already_saved');
+  assert.equal(String(repeatedAv.confirmedAt),String(confirmedAv.confirmedAt));
+  const avPage=await store.seasonDetailPage({
+   seasonKey:'series_987654321_s02',page:1});
+  assert.equal(avPage.episodes.length,1);
+  assert.equal(avPage.episodes[0].verified,true);
+  assert.ok(avPage.episodes[0].ownerAvConfirmedAt);
+  assert.equal((await pool.query(
+   "SELECT state FROM blofy_content_hub_season_queue WHERE run_id=$1",
+   [avRun])).rows[0].state,'verified');
+  // If an episode ever stops being verified, stored human proof is not
+  // shown as current verified media playback proof.
+  await pool.query(
+   "UPDATE blofy_content_hub_season_queue SET state='paused' WHERE run_id=$1",
+   [avRun]);
+  assert.equal((await store.episodeAvReviews({runIds:[avRun]})).length,0);
   assert.equal((await catalog.find(['series:987654321']))[0].title,
    'Curated Neon Voyage');
   assert.equal((await catalog.save({...metadata,
