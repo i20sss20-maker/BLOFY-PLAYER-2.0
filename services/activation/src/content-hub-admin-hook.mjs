@@ -6,6 +6,7 @@ import crypto from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import {createFixedWindowLimiter,requestClientKey} from './auth-protection.mjs';
 import {adminCanaryRange,HUB_PILOT_RUN} from './content-hub-admin-core.mjs';
+import {buildUnifiedOpsOverview} from './content-hub-overview.mjs';
 
 const HUB='http://blofy-content-hub.railway.internal:3000';
 const ADMIN=String(process.env.BLOFY_ADMIN_TOKEN||'').trim();
@@ -60,6 +61,20 @@ async function safeReadJson(response){
  if(response.status!==200||!String(response.headers.get('content-type')||'')
    .includes('application/json'))throw Error('hub_private_response_unavailable');
  return response.json();
+}
+async function handleOverview(res){
+ const paths=['/internal/status','/internal/pilots',
+  '/internal/seasons/analytics','/internal/seasons/attention'];
+ const responses=await Promise.allSettled(paths.map(async path=>{
+  const response=await request(path,{signal:AbortSignal.timeout(12000)});
+  return safeReadJson(response);
+ }));
+ const [status,pilots,analytics,attention]=responses.map(value=>
+  value.status==='fulfilled'?value.value:null);
+ const overview=buildUnifiedOpsOverview({status,pilots,analytics,attention});
+ return json(res,overview.ok?200:503,overview.ok?overview:{
+  ...overview,code:'unified_overview_temporarily_unavailable'
+ });
 }
 async function handleStatus(res){
  const [a,b]=await Promise.all([
@@ -198,7 +213,7 @@ http.createServer=function withContentHubAdmin(listener){
   catch{return listener(req,res)}
   const path=url.pathname;
   if(req.method==='GET'&&['/admin-content-hub.css',
-    '/admin-content-hub.js','/admin-season-analytics.js',
+    '/admin-content-hub.js','/admin-ops-overview.js','/admin-season-analytics.js',
      '/admin-season-detail.js','/admin-season-attention.js'].includes(path)){
    try{
     const file=path.slice(1);
@@ -423,6 +438,8 @@ http.createServer=function withContentHubAdmin(listener){
      return json(res,response.status,await response.json());
     }
    }
+   if(path==='/api/v1/admin/content-hub/overview'&&req.method==='GET')
+    return await handleOverview(res);
    if(path==='/api/v1/admin/content-hub/status'&&req.method==='GET')
     return await handleStatus(res);
    if(path==='/api/v1/admin/content-hub/batch/next'&&req.method==='POST'){
