@@ -459,3 +459,79 @@
  .library-cinema-mode{padding-top:12px}}
 @media(prefers-reduced-motion:reduce){.cinema-card{transition:none}
  .cinema-card:hover,.cinema-card:focus-within{transform:none}}
+
+
+/* Owner-only cinematic detail surface. No background video fetches. */
+.library-detail-dialog{width:min(1000px,calc(100vw - 22px));max-width:1000px;
+ max-height:min(92vh,950px);overflow-y:auto;padding:0;border-radius:17px;
+ border:1px solid #497c97;background:#081829;color:#eff8ff;
+ box-shadow:0 25px 80px #000b}
+.library-detail-dialog::backdrop{background:#020811d9;backdrop-filter:blur(7px)}
+.library-detail-dialog[open]{display:block}
+.library-detail-shell{padding:clamp(12px,2.7vw,27px);display:grid;gap:17px}
+.library-detail-topbar{display:flex;justify-content:space-between;
+ align-items:center;gap:10px;border-bottom:1px solid #2d516b;padding-bottom:12px}
+.library-detail-topbar button{font-size:12px;padding:8px 12px}
+.library-detail-hero{display:grid;grid-template-columns:minmax(145px,230px) minmax(0,1fr);
+ gap:clamp(15px,3vw,28px);align-items:start}
+.library-detail-art{aspect-ratio:2/3;max-width:230px;display:flex;
+ flex-direction:column;justify-content:center;align-items:center;gap:14px;
+ background:radial-gradient(circle at center,#205477,#0b2032 75%);
+ overflow:hidden;border-radius:13px;border:1px solid #45718e;color:#a1cbdf;
+ text-align:center;font-size:12px}
+.library-detail-art img{width:100%;height:100%;object-fit:cover}
+.library-detail-cover-fallback{color:#64adca;font-weight:800;font-size:35px;
+ letter-spacing:3px}
+.library-detail-copy{min-width:0;display:flex;flex-direction:column;gap:10px;
+ align-items:flex-start}
+.library-detail-copy h3{font-size:clamp(21px,3.6vw,35px);line-height:1.3;
+ overflow-wrap:anywhere;margin:0}
+.library-detail-description{font-size:14px;line-height:2;color:#d2e4f0;
+ white-space:pre-line;overflow-wrap:anywhere;margin:0;max-width:68ch}
+.library-detail-meta{font-size:14px;color:#82d6d2;margin:0;line-height:1.8}
+.library-detail-facts{font-size:13px;color:#99bed5;line-height:1.8;margin:0}
+.library-detail-actions,.library-detail-pagination{display:flex;align-items:center;
+ gap:9px;flex-wrap:wrap;margin-top:5px}
+.library-detail-actions button{border-color:#448cb1}
+.library-detail-actions #libraryDetailPlay{background:#1a726a;border-color:#30b7a7}
+.library-detail-player-wrap{background:#020b13;border:1px solid #38617c;
+ border-radius:13px;padding:13px;display:grid;gap:11px}
+.library-detail-player-wrap[hidden],#libraryDetailPlay[hidden],
+#libraryDetailEdit[hidden],#libraryDetailReport[hidden],
+.library-detail-registered[hidden]{display:none!important}
+.library-detail-player-wrap h4{font-size:14px;margin:0}
+.library-detail-player-wrap video{display:block;background:#000;
+ width:100%;max-height:430px;border-radius:9px;aspect-ratio:16/9;object-fit:contain}
+.library-detail-registered{display:grid;gap:12px;padding-top:15px;
+ border-top:1px solid #2f5772;min-width:0}
+.library-detail-registered h4{margin:0;font-size:18px}
+.library-detail-seasons{display:flex;gap:9px;flex-wrap:wrap;max-height:190px;
+ overflow:auto;align-items:start}
+.library-detail-season-button{padding:10px 12px;text-align:right;
+ line-height:1.7;font-size:12px;background:#112c42}
+.library-detail-season-button.selected{background:#1a615e;border-color:#6fe1c8}
+.library-detail-episodes{display:grid;gap:9px;max-height:520px;overflow-y:auto}
+.library-detail-episode{border:1px solid #355b76;background:#0c253b;
+ border-radius:11px;padding:13px;min-width:0}
+.library-detail-episode-top{display:flex;align-items:center;
+ justify-content:space-between;gap:10px;flex-wrap:wrap}
+.library-detail-episode-top strong{font-size:13px;overflow-wrap:anywhere}
+.library-detail-episode .muted{margin:7px 0 5px;font-size:12px}
+.library-detail-episode-play{font-size:12px;background:#144b46;
+ border-color:#308f86;margin-top:8px;padding:8px 12px}
+.library-detail-pagination{justify-content:space-between;gap:8px}
+.library-detail-pagination button{font-size:12px}
+.library-detail-dialog button:focus-visible{outline:2px solid #9be5f6;
+ outline-offset:2px}
+@media(max-width:660px){.library-detail-hero{grid-template-columns:105px minmax(0,1fr)}
+ .library-detail-art{width:105px}
+ .library-detail-copy h3{font-size:22px}
+ .library-detail-copy{gap:7px}
+ .library-detail-actions button{font-size:12px;padding:8px 9px}}
+@media(max-width:430px){.library-detail-hero{grid-template-columns:1fr}
+ .library-detail-art{height:176px;width:118px;aspect-ratio:2/3}
+ .library-detail-topbar .eyebrow{font-size:10px}
+ .library-detail-dialog{width:calc(100vw - 10px)}
+ .library-detail-shell{padding:11px}}
+@media(prefers-reduced-motion:reduce){
+ .library-detail-dialog *{scroll-behavior:auto!important}}
