@@ -16,6 +16,7 @@ import {runOneEpisodeChunk,episodeCopyReadiness} from './episode-chunk-pilot.mjs
 import {createSeasonQueueStore,createSeasonQueueController,seasonQueueReadiness,validateSeasonSelection,seasonQueueSummary} from './season-queue.mjs';
 import {inspectLicensedSeries,inspectLicensedSeriesEpisodes,inspectLicensedPilotSeries} from './series-catalog.mjs';
 import {summarizeSeasonHealth,auditSeasonEpisodeSample} from './season-health.mjs';
+import {buildSeasonAnalytics} from './season-analytics.mjs';
 import {checkPrivateReadConcurrency,validateConcurrentReadIds} from './concurrent-private-read.mjs';
 
 const FIXTURE_SOURCE='00000000-0000-4000-8000-000000000000';
@@ -292,6 +293,36 @@ export function createContentHubServer({storage,lease,
      }),verifiedPilotRunId,lastConcurrentRead:lastSeasonConcurrentRead});
 
    }catch{return json(res,503,{ok:false,code:'season_health_database_unavailable'})}
+  }
+  // Bounded operator analytics. No source requests, no S3 listing,
+  // no control actions and no customer/player-facing routes.
+  if(path==='/internal/seasons/analytics'&&req.method==='GET'){
+   if(String(req.url||'').includes('?'))
+    return json(res,400,{ok:false,code:'season_analytics_query_not_allowed'});
+   if(!seasonQueueStore?.analyticsStats||
+      !seasonQueueStore?.seasonAnalyticsSummary)
+    return json(res,503,{ok:false,code:'season_analytics_unavailable'});
+   try{
+    const [stats,metrics,seasons,failures,events,audits,unresolved]=
+     await Promise.all([
+      seasonQueueStore.healthStats(),seasonQueueStore.analyticsStats(),
+      seasonQueueStore.seasonAnalyticsSummary(),seasonQueueStore.failureReasons(),
+      seasonQueueStore.recentTransferEvents(),seasonQueueStore.recentAudits(),
+      seasonQueueStore.unresolvedAuditCounts?.()||{mismatch:0,unavailable:0}
+     ]);
+    const worker=seasonQueue?.status()||{};
+    const currentCheckpoint=worker.active&&worker.currentRunId?
+     await seasonQueueStore.currentCheckpoint?.(worker.currentRunId):null;
+    const health=summarizeSeasonHealth({
+     stats,audits,unresolvedAudits:unresolved,worker,currentCheckpoint,
+     storageSoftLimitBytes:pilotEnv.BLOFY_CONTENT_HUB_STORAGE_SOFT_LIMIT_BYTES
+    });
+    return json(res,200,buildSeasonAnalytics({
+     health,metrics,seasons,failures,events,worker
+    }));
+   }catch{
+    return json(res,503,{ok:false,code:'season_analytics_database_unavailable'});
+   }
   }
   // Explicit operator action only: <=3 S3 objects (<=24MiB total).
   // Verifies against recorded SHA-256, not a generic HEAD or assumed S3
