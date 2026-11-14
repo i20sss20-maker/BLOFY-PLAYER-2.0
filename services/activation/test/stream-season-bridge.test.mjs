@@ -19,7 +19,7 @@ function stub(expectedPath,{status=200,data={ok:true}}={}){
 test('season bridge permits only explicit finite authenticated actions',async()=>{
  for(const name of ['series','pilot','queue','confirmation','probe',
   'enqueue','start','pause','confirm','health','audit',
-  'concurrent-read','series/31']){
+  'concurrent-read','retry','series/31']){
   assert.equal(isStreamSeasonBridgePath(NS+'/'+name),true,name);
  }
  for(const bad of ['..','series/../../../xx','series/0','arbitrary',
@@ -173,4 +173,26 @@ test('manual season copy budget forwarded as fixed header, not arbitrary user JS
  assert.equal(target.received.init.headers['x-blofy-season-batch-budget'],'12');
  assert.equal(target.received.init.headers['x-blofy-season-confirm'],
   'start-private-sequential');
+});
+
+test('signed transient retry request keeps rights and source-idle confirmation',async()=>{
+ const runId='season_0123456789abcdef01234567';
+ const bridge=stub('/internal/seasons/retry',{status:200,data:{
+  ok:true,code:'season_retry_queued',automaticStart:false}});
+ const denied=await requestStreamSeasonBridge({
+  path:NS+'/retry',method:'POST',operatorToken:secret,
+  body:{runId,confirmed:true,licensedStorage:true,sourceIdle:false},
+  fetchImpl:bridge.fetchImpl});
+ assert.equal(denied.status,400);
+ assert.equal(bridge.calls,0);
+ const good=await requestStreamSeasonBridge({
+  path:NS+'/retry',method:'POST',operatorToken:secret,
+  body:{runId,confirmed:true,licensedStorage:true,sourceIdle:true},
+  fetchImpl:bridge.fetchImpl});
+ assert.equal(good.status,200);
+ assert.equal(good.data.automaticStart,false);
+ assert.equal(bridge.received.init.headers['x-blofy-season-confirm'],
+  'manual-review-transient-failure');
+ assert.deepEqual(JSON.parse(bridge.received.init.body),{
+  runId,confirmed:true,licensedStorage:true,sourceIdle:true});
 });
