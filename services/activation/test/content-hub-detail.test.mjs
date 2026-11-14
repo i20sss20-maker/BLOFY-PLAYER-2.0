@@ -91,7 +91,7 @@ test('movie canary is set only on explicit click with verified snapshot; close r
  const fake=env();
  vm.runInNewContext(await web('admin-library-detail.js'),fake.context,{timeout:1000});
  fake.dispatch('blofy:open-library-detail',{item:{
-  kind:'movie',key:'movie_movie_1234567890',state:'queued',
+  kind:'movie',key:'movie:movie_1234567890',state:'queued',
   title:'Work <script>bad</script>',
   meta:{title:'Work',posterPath:'/LicensedPoster999.jpg',
    artworkRightsConfirmed:false,overview:'Safe'},
