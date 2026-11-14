@@ -158,8 +158,19 @@ test('controller pauses on aborted batch and resumes only on explicit start',asy
 });
 test('owner route rejects unauthenticated enqueue and queues only catalog matches',async()=>{
  const store=fakeQueue();
- let copies=0;
- const hub=createContentHubServer({token,pilotEnv:env,storage:{},lease:{},
+ let copies=0,browserConfirmed=false;
+ const lease={
+  getEpisodeBrowserPlaybackStatus:async()=>({confirmed:browserConfirmed}),
+  getVerifiedEpisodeObject:async()=>({bytes:8388608}),
+  confirmEpisodeBrowserPlayback:async()=>{
+   browserConfirmed=true;
+   return {confirmed:true,confirmedAt:'2026-11-14T00:00:00Z'};
+  }
+ };
+ const hub=createContentHubServer({token,pilotEnv:{...env,
+  BLOFY_CONTENT_HUB_EPISODE_RUN_ID:'saleh_episode_127434_20261114',
+  BLOFY_CONTENT_HUB_OWNER_PREVIEW_ENABLED:'1',
+  BLOFY_CONTENT_HUB_EPISODE_OWNER_PREVIEW_ENABLED:'1'},storage:{},lease,
   seasonQueueStore:store,episodeCandidateInspector:async()=>({
    ok:true,candidates:[candidate(123),candidate(456)]}),
   episodeChunkRunner:async()=>{copies++;
@@ -195,9 +206,26 @@ test('owner route rejects unauthenticated enqueue and queues only catalog matche
   assert.equal(copies,0);
   assert.equal((await fetch(base+'/internal/seasons/start',{method:'POST',
    headers:{authorization:'Bearer '+token}})).status,403);
-  const started=await fetch(base+'/internal/seasons/start',{
+  const startHeaders={authorization:'Bearer '+token,
+   'x-blofy-season-confirm':'start-private-sequential'};
+  const blocked=await fetch(base+'/internal/seasons/start',{
+   method:'POST',headers:startHeaders});
+  assert.equal(blocked.status,409);
+  assert.equal((await blocked.json()).code,
+   'owner_episode_browser_playback_not_confirmed');
+  const deniedProof=await fetch(base+'/internal/episodes/playback/confirm',{
+   method:'POST',headers:{authorization:'Bearer '+token}});
+  assert.equal(deniedProof.status,403);
+  const accepted=await fetch(base+'/internal/episodes/playback/confirm',{
    method:'POST',headers:{authorization:'Bearer '+token,
-    'x-blofy-season-confirm':'start-private-sequential'}});
+   'x-blofy-browser-confirm':'owner-saw-and-heard',
+   'x-blofy-video-confirmed':'yes','x-blofy-audio-confirmed':'yes'}});
+  assert.equal(accepted.status,200);
+  const proof=await fetch(base+'/internal/episodes/playback/confirmation',{
+   headers:{authorization:'Bearer '+token}});
+  assert.equal((await proof.json()).confirmed,true);
+  const started=await fetch(base+'/internal/seasons/start',{
+   method:'POST',headers:startHeaders});
   assert.equal(started.status,202);
   await until(()=>copies===1);
   assert.equal(store.rows[0].state,'verified');
