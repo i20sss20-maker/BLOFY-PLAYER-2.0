@@ -123,3 +123,102 @@ require very large paid storage. Start with a measured pilot and quotas.
 **`BLOFY_CONTENT_HUB_UPLOAD_ENABLED=0` remains enforced in Railway.
 The separate persistent-storage permission flag reflects the owner's
 confirmation; it does not activate uploading automatically.**
+
+
+## One-film operator runner (proposed, NOT production-enabled)
+
+The isolated one-film pilot adds `one-movie-pilot.mjs` and an opt-in
+startup hook. No movie has been copied as part of this change; until an
+authorized operator chooses a **quiet window**, the existing live sources
+and consumer playback routes remain unchanged.
+
+To run **one exact approved movie only**, all the following must be
+configured on the private `blofy-content-hub` service:
+
+- `BLOFY_CONTENT_HUB_ONE_MOVIE_ON_BOOT=1`
+- `BLOFY_CONTENT_HUB_UPLOAD_ENABLED=1`
+- `BLOFY_CONTENT_HUB_STORAGE_RIGHTS_CONFIRMED=1`
+- `BLOFY_CONTENT_HUB_SOURCE_QUIET_WINDOW_CONFIRMED=1`
+- `BLOFY_CONTENT_HUB_SOURCE_IDLE_CONFIRMED=1`
+- `BLOFY_CONTENT_HUB_PILOT_RUN_ID`: a unique 8–80 character run identifier.
+  Re-using a run ID will **not** download again, even after restarts.
+- `BLOFY_CONTENT_HUB_EXPECTED_BYTES`: exact file size from the earlier
+  consistent HTTP Range probe for the same approved movie. The pilot
+  rejects unexpected sizes. The prior 2026-11-13 test observed
+  `2934023949` bytes, but the operator must reconfirm the same mapping.
+- `BLOFY_CONTENT_HUB_APPROVED_GATEWAY_ID`: **mandatory** numeric ID of
+  that single movie, confirmed to match the private bridge's mapping.
+- The existing private bridge credentials and bucket must remain wired.
+
+All these switches default to **off**. The run refuses media redirects,
+full-GET fallbacks, missing source-version validators, source size changes,
+unverified file hashes, shared/public object access and files above 4 GiB.
+The source lease prevents concurrent hub writers but cannot block unrelated
+player sessions elsewhere. The quiet/idle confirmations must reflect actual
+operator observation; do **not** blindly set them while channels are playing.
+
+An attempt is claimed durably in PostgreSQL before contacting the source.
+A failed run requires a new explicit run ID after diagnosis; it does not
+retry endlessly. Inspect the private status or the sanitized
+`BLOFY_CONTENT_HUB_ONE_MOVIE_RESULT` log. A success means the object
+bytes and SHA-256 were independently verified in private storage. It does
+**not** yet mean image/audio playback was tested from a BLOFY client.
+A separate canary playback route and real-device video/audio verification
+are required before switching any customer to the stored copy.
+
+This isolated change intentionally adds **no** public media endpoint,
+automatic downloads, bulk sync or customer playback cutover.
+
+
+### Durable pilot progress + private playback canary (code ready)
+
+The pilot now records `started / verified / failed` and cumulative
+`bytes_copied`, `expected_bytes`, and `parts_copied` in PostgreSQL.
+A unique versioned S3 key is generated per run to prevent overwriting
+the previous verified file. A successful private S3 object is registered
+with its independently verified SHA-256; if final registration fails, the
+new object is deleted rather than presented as available.
+
+The existing **bearer-protected private-only** `GET /internal/status`
+reports `durablePilot` progress for the configured run. The
+`GET /internal/pilot/playback/:runId` endpoint serves only a *verified*
+private movie, requires the separate operator Bearer token and a strict
+HTTP Range of at most 8 MiB, and never publishes a public URL.
+
+These are operator canary endpoints, not subscriber APIs. The private
+service has no public domain. Actual client audiovisual verification and
+customer rollout have **not** been performed. Before allowing public
+customers to use it, add a separate signed, scoped device playback proxy
+that hides private object keys and verify image and audio on supported
+devices. Stop immediately if source streaming quality degrades.
+
+
+### Admin dashboard (portal code ready; portal deployment independent)
+
+New admin-only page: `/admin/content-hub`, reachable only through the
+existing signed admin session. It reports durable pilot copy progress,
+failed/completed counts, and *accounted verified* private storage size.
+It can request cancellation of an active pilot and proxy verified-only
+8-MiB video byte ranges through the private Content Hub for an operator
+image/audio canary. It does **not** enable a subscriber media route.
+
+This integration requires the activation portal service variable
+`BLOFY_CONTENT_HUB_OPERATOR_TOKEN` to reference the Content Hub's existing
+`BLOFY_CONTENT_HUB_ADMIN_TOKEN` (do not copy a plaintext token to GitHub).
+No public Content Hub domain should be configured. The source bridge token
+and these operator tokens are independent. The private site proxy never
+returns credentials or private S3 object keys to the browser.
+
+Keep `ONE_MOVIE_ON_BOOT=0` until a movie/source is explicitly approved,
+quiet/no-subscriber-impact can be confirmed, and operator checks all size,
+format, storage cost, and source rights. The admin video canary reports
+transport success, **not proof of audible audio/image**, which must be
+observed manually on real devices. Browsers may not support MKV/AVI audio;
+that is a format limitation, not evidence the stored file is damaged.
+
+Production Content Hub and its database are separate from subscriber
+playback. Deploy the portal admin UI only after regression testing and
+under an approved low-risk rollout so established live channels are not
+disrupted. Before the first real copy, verify the provider exposes a
+stable ETag or Last-Modified validator for each Range; otherwise the
+worker intentionally rejects the transfer.

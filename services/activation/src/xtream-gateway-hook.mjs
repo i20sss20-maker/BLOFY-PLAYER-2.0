@@ -61,6 +61,8 @@ import {probeSalehRangedMovie} from './xtream-content-hub-range-pilot.mjs';
 import {contentHubBridgeAuth,parseContentHubClientRange,
   validContentHubResponse,approvedContentHubMedia}
   from './xtream-content-hub-private-range.mjs';
+import {findLicensedEpisodeCandidates} from './xtream-content-hub-episode-candidates.mjs';
+import {probePrivateEpisodeRange} from './xtream-content-hub-episode-probe.mjs';
 import { readXtreamGatewayJsonResponse } from './xtream-gateway-response.mjs';
 import {configuredXtreamPublicOrigin} from './xtream-public-origin.mjs';
 import {probeXtreamAccountCompatibility} from './xtream-compatibility-probe.mjs';
@@ -1860,18 +1862,100 @@ async function handlePrivateContentHubSource(req,res,url){
   return json(res,401,{ok:false,code:'content_hub_source_unauthorized'});
  if(req.method!=='GET')
   return json(res,405,{ok:false,code:'content_hub_method_denied'});
- const id=await hubApprovedMovieId();
- const row=await gatewayItemById('movie',id);
- if(!approvedContentHubMedia(row))
-  return json(res,409,{ok:false,code:'content_hub_source_not_ready'});
- if(url.pathname==='/internal/blofy-content-hub/describe'){
+ // Deliberate low-impact 4KiB range probe for one of the 8
+ // operator-reviewed episode candidates only. No automatic transfer.
+ const episodeProbe=/^\/internal\/blofy-content-hub\/episodes\/probe\/([1-9][0-9]{0,14})$/.exec(url.pathname);
+ if(episodeProbe){
+  if(url.search||req.headers['x-blofy-episode-probe']!=='operator-confirmed')
+   return json(res,403,{ok:false,code:'content_hub_episode_probe_not_approved'});
+  if(hubActiveRange)return json(res,429,{ok:false,
+   code:'content_hub_source_range_busy'});
+  hubActiveRange=true;
+  try{
+   const gatewayId=Number(episodeProbe[1]);
+   if(!Number.isSafeInteger(gatewayId))return json(res,400,{
+    ok:false,code:'content_hub_episode_id_invalid'});
+   const allowed=await findLicensedEpisodeCandidates(pool,{limit:8});
+   const candidate=allowed.find(x=>x.gatewayId===gatewayId);
+   if(!candidate)return json(res,403,{
+    ok:false,code:'content_hub_episode_not_in_review_list'});
+   const row=await episodeByGatewayId(gatewayId,candidate.sourceId);
+   if(!row||String(row.source_episode_id)!==candidate.mediaId||
+      String(row.series_source_id||'').length<1||
+      String(row.container_extension||'').toLowerCase()!==candidate.extension)
+    return json(res,409,{ok:false,code:'content_hub_episode_source_changed'});
+   const urlSource=mediaUpstreamUrl(row,'series',row.source_episode_id,
+     candidate.extension);
+   const result=await probePrivateEpisodeRange({
+    url:urlSource,fetchImpl:(target,options)=>
+     checkedFetch(target,{...options,timeoutMs:45000})});
+   return json(res,result.ok?200:503,{
+    ...result,gatewayId,sourceName:'saleh',extension:candidate.extension
+   });
+  }catch{return json(res,503,{ok:false,
+   code:'content_hub_episode_probe_unavailable',
+   providerMediaRequests:0,automaticDownload:false,
+   stored:false,customerCutover:false})}
+  finally{hubActiveRange=false}
+ }
+ if(url.pathname==='/internal/blofy-content-hub/episodes/candidates'){
+  if(url.search)return json(res,400,{ok:false,
+    code:'content_hub_episode_query_denied'});
+  try{
+   const items=await findLicensedEpisodeCandidates(pool,{limit:8});
+   return json(res,200,{ok:true,sourceName:'saleh',mediaKind:'episode',
+     candidates:items,readOnly:true,selectionRequired:true,
+     automaticDownload:false,providerMediaRequests:0,
+     customerCutover:false});
+  }catch{return json(res,503,{ok:false,
+    code:'content_hub_episode_catalog_unavailable',
+    providerMediaRequests:0,customerCutover:false})}
+ }
+ const episodeRange=/^\/internal\/blofy-content-hub\/source\/episode\/([1-9][0-9]{0,14})$/.exec(url.pathname);
+ const episodeDescribe=/^\/internal\/blofy-content-hub\/episodes\/describe\/([1-9][0-9]{0,14})$/.exec(url.pathname);
+ const isEpisode=Boolean(episodeRange||episodeDescribe);
+ let id,row,episodeCandidate=null;
+ if(isEpisode){
+  id=Number((episodeRange||episodeDescribe)[1]);
+  const permitted=Number(process.env.BLOFY_CONTENT_HUB_ALLOWED_EPISODE_GATEWAY_ID);
+  if(!Number.isSafeInteger(id)||!Number.isSafeInteger(permitted)||id!==permitted||
+    url.search)return json(res,403,{ok:false,
+    code:'content_hub_episode_not_approved'});
+  const candidates=await findLicensedEpisodeCandidates(pool,{limit:8});
+  episodeCandidate=candidates.find(item=>item.gatewayId===id)||null;
+  if(!episodeCandidate)return json(res,403,{ok:false,
+   code:'content_hub_episode_not_in_review_list'});
+  row=await episodeByGatewayId(id,episodeCandidate.sourceId);
+  if(!row||row.server_enabled!==true||
+    row.server_id!==episodeCandidate.sourceId||
+    String(row.source_episode_id)!==episodeCandidate.mediaId||
+    String(row.container_extension).toLowerCase()!==episodeCandidate.extension)
+   return json(res,409,{ok:false,code:'content_hub_episode_source_changed'});
+ }else{
+  id=await hubApprovedMovieId();
+  row=await gatewayItemById('movie',id);
+  if(!approvedContentHubMedia(row))
+   return json(res,409,{ok:false,code:'content_hub_source_not_ready'});
+ }
+ if(isEpisode&&episodeDescribe){
+  return json(res,200,{ok:true,sourceName:'saleh',
+   sourceId:row.server_id,mediaId:row.source_episode_id,
+   gatewayId:id,mediaKind:'episode',
+   extension:episodeCandidate.extension,
+   automaticDownload:false,customerTrafficChanged:false});
+ }
+ if(!isEpisode&&url.pathname==='/internal/blofy-content-hub/describe'){
   return json(res,200,{ok:true,sourceName:'saleh',
    sourceId:row.server_id,mediaId:row.source_id,
    gatewayId:id,mediaKind:'movie',
    extension:String(row.container_extension).toLowerCase(),
    automaticDownload:false,customerTrafficChanged:false});
  }
- if(url.pathname!==`/internal/blofy-content-hub/source/movie/${id}`||url.search)
+ if(isEpisode&&(
+   process.env.BLOFY_CONTENT_HUB_EPISODE_RANGE_ENABLED!=='1'||
+   req.headers['x-blofy-episode-transfer']!=='operator-authorized'))
+  return json(res,403,{ok:false,code:'content_hub_episode_transfer_disabled'});
+ if(url.pathname!==`/internal/blofy-content-hub/source/${isEpisode?'episode':'movie'}/${id}`||url.search)
   return json(res,404,{ok:false,code:'content_hub_source_not_found'});
  const range=parseContentHubClientRange(req.headers.range);
  if(!range)return json(res,416,{ok:false,code:'content_hub_range_required'});
@@ -1885,7 +1969,8 @@ async function handlePrivateContentHubSource(req,res,url){
  res.once('close',()=>{if(!res.writableEnded)abort.abort()});
  let upstream;
  try{
-  const upstreamUrl=mediaUpstreamUrl(row,'movie',row.source_id,
+  const upstreamUrl=mediaUpstreamUrl(row,isEpisode?'series':'movie',
+    isEpisode?row.source_episode_id:row.source_id,
     String(row.container_extension).toLowerCase());
   upstream=await checkedFetch(upstreamUrl,{method:'GET',
    headers:{range:`bytes=${range.from}-${range.to}`,

@@ -26,6 +26,7 @@ import {inspectSameXtreamVodInfo} from './xtream-vod-info-direct-source-audit.mj
 import {summarizeSameMovieCandidates} from './xtream-cross-source-coverage-audit.mjs';
 import {distributedMovieOffsets,summarizeDistributedMovieProbe} from './xtream-distributed-movie-audit.mjs';
 import { createFixedWindowLimiter, requestClientKey } from './auth-protection.mjs';
+import {forwardPrivatePreview} from './content-hub-private-preview-bridge.mjs';
 import {
   assertPublicXtreamUrl,
   decryptXtreamSecret,
@@ -3132,6 +3133,95 @@ async function unifiedStreamBridge(req,res,url){
   const limit=bridgeLimiter.consume(requestClientKey(req));
   if(!limit.allowed)return json(res,429,{ok:false,code:'stream_bridge_rate_limited'});
   const p=url.pathname;
+
+  // Owner-only, 12-second MP4 stream from verified private S3.
+  // This bridge authorization was checked above. Never proxy arbitrary paths.
+  if(p==='/internal/blofy-stream/content-hub/preview'||
+     p==='/internal/blofy-stream/content-hub/episodes/preview'){
+    if(req.method!=='GET')return json(res,405,{
+      ok:false,code:'owner_preview_method_denied'});
+    return forwardPrivatePreview({req,res,
+      mediaKind:p.endsWith('/episodes/preview')?'episode':'movie',
+      hubToken:String(process.env.BLOFY_CONTENT_HUB_OPERATOR_TOKEN||'')});
+  }
+
+  // Private Content Hub: STREAM operator Basic -> authenticated unified
+  // bridge -> this portal -> private Hub token. No S3/media credentials
+  // reach the STREAM service or a browser, and no subscriber playback route.
+  const batchBridgePaths={
+    '/internal/blofy-stream/content-hub/status':'/internal/pilots',
+    '/internal/blofy-stream/content-hub/episodes/candidates':'/internal/episodes/candidates',
+    '/internal/blofy-stream/content-hub/episodes/probe':'/internal/episodes/probe',
+    '/internal/blofy-stream/content-hub/episodes/next':'/internal/episodes/next',
+    '/internal/blofy-stream/content-hub/episodes/start':'/internal/episodes/start',
+    '/internal/blofy-stream/content-hub/episodes/pause':'/internal/episodes/pause',
+    '/internal/blofy-stream/content-hub/preflight':'/internal/pilot/preflight',
+    '/internal/blofy-stream/content-hub/batch/next':'/internal/batch/next',
+    '/internal/blofy-stream/content-hub/batch/start':'/internal/batch/start',
+    '/internal/blofy-stream/content-hub/batch/pause':'/internal/batch/pause',
+    '/internal/blofy-stream/content-hub/playback/diagnose':'/internal/playback/diagnose',
+    '/internal/blofy-stream/content-hub/episodes/playback/diagnose':'/internal/episodes/playback/diagnose'
+  };
+  if(Object.hasOwn(batchBridgePaths,p)){
+    const canary=p.endsWith('/playback/diagnose');
+    const episodeCanary=p.endsWith('/episodes/playback/diagnose');
+    const episodeProbe=p.endsWith('/episodes/probe');
+    const episodeCopy=p.endsWith('/episodes/next');
+    const episodeStart=p.endsWith('/episodes/start');
+    const episodePause=p.endsWith('/episodes/pause');
+    const write=p.includes('/batch/')||canary||episodeProbe||
+      episodeCopy||episodeStart||episodePause;
+    const confirmed=write&&!p.endsWith('/batch/pause')&&!episodePause;
+    let episodeGatewayId=null;
+    if((write&&req.method!=='POST')||(!write&&req.method!=='GET'))
+      return json(res,405,{ok:false,code:'hub_bridge_method_denied'});
+    if(write){
+      const body=await readJson(req);
+      if(confirmed&&body.confirmed!==true)return json(res,400,{
+        ok:false,code:'hub_batch_explicit_confirmation_required'});
+      if(episodeProbe||episodeCopy||episodeStart){
+       episodeGatewayId=Number(body.gatewayId);
+       if(!Number.isSafeInteger(episodeGatewayId)||episodeGatewayId<1)
+        return json(res,400,{ok:false,code:'hub_episode_id_invalid'});
+      }
+    }
+    const operatorToken=String(process.env.BLOFY_CONTENT_HUB_OPERATOR_TOKEN||'');
+    if(operatorToken.length<32)return json(res,503,{
+      ok:false,code:'hub_private_token_missing'});
+    try{
+      const response=await fetch('http://blofy-content-hub.railway.internal:3000'+
+        batchBridgePaths[p],{
+        method:req.method,redirect:'manual',
+        signal:AbortSignal.timeout(episodeProbe?55000:8500),
+        headers:{authorization:'Bearer '+operatorToken,
+          ...(episodeStart?{'x-blofy-episode-copy-confirm':'approved-sequential-8mib',
+            'x-blofy-episode-gateway-id':String(episodeGatewayId)}:
+            episodePause?{'x-blofy-episode-copy-confirm':'pause-sequential'}:
+            episodeCopy?{'x-blofy-episode-copy-confirm':'approved-single-8mib',
+            'x-blofy-episode-gateway-id':String(episodeGatewayId)}:
+            episodeProbe?{'x-blofy-episode-probe-confirm':'operator-approved-probe',
+            'x-blofy-episode-gateway-id':String(episodeGatewayId)}:
+            confirmed?canary?
+            {'x-blofy-canary-confirm':episodeCanary?
+              'verified-private-episode':'verified-private'}:
+            {'x-blofy-batch-confirm':'approved-8mib-batch'}:{})}
+      });
+      if(![200,202,400,409,429,503].includes(response.status))
+        return json(res,503,{ok:false,code:'hub_private_response_invalid'});
+      const raw=await response.text();
+      if(Buffer.byteLength(raw)>256000)
+        return json(res,503,{ok:false,code:'hub_private_payload_too_large'});
+      let data;try{data=JSON.parse(raw)}catch{
+        return json(res,503,{ok:false,code:'hub_private_not_json'});
+      }
+      if(!data||typeof data!=='object'||Array.isArray(data))
+        return json(res,503,{ok:false,code:'hub_private_payload_invalid'});
+      // The private hub only returns non-secret run IDs/counts, never
+      // source URLs/passwords or private object names in these paths.
+      return json(res,response.status,data,{'cache-control':'no-store'});
+    }catch{return json(res,503,{
+      ok:false,code:'hub_private_temporarily_unavailable'})}
+  }
 
   // Reseller management is admin-only. Reseller browser actions use a separate
   // scoped session created at /distributor; never hand this bridge key to them.

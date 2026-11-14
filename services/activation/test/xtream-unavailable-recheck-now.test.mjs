@@ -44,7 +44,7 @@ test('manual endpoint is inside existing authenticated admin route and source al
  assert.match(body,/const body=await readJson\(req\)/);
  assert.match(body,/if\(!validUuid\(sourceId\)\|\|!recoverySources\(\)\.has\(sourceId\)\)/);
  assert.match(body,/const expedited=await expediteUnavailableRecheck\(pool,sourceId,\{limit:2\}\)/);
- assert.match(body,/const result=await runDueUnavailableMedia\(\)/);
+ assert.match(body,/const result=await runDueUnavailableMedia\(\{sourceId\}\)/);
  assert.doesNotMatch(body,/sourceUrl|providerPassword|username_secret|password_secret/);
 });
 test('one-shot production source probe is disabled by default and never scans catalog',async()=>{

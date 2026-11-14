@@ -3,10 +3,22 @@ on:
   push:
     paths:
       - 'services/content-hub/**'
+      - 'services/activation/src/content-hub-admin*'
+      - 'services/activation/src/admin-session-hook.mjs'
+      - 'services/activation/src/bootstrap.mjs'
+      - 'services/activation/web/admin-content-hub*'
+      - 'services/activation/web/admin.html'
+      - 'services/activation/test/content-hub-admin*'
       - '.github/workflows/content-hub-pilot-ci.yml'
   pull_request:
     paths:
       - 'services/content-hub/**'
+      - 'services/activation/src/content-hub-admin*'
+      - 'services/activation/src/admin-session-hook.mjs'
+      - 'services/activation/src/bootstrap.mjs'
+      - 'services/activation/web/admin-content-hub*'
+      - 'services/activation/web/admin.html'
+      - 'services/activation/test/content-hub-admin*'
       - '.github/workflows/content-hub-pilot-ci.yml'
 
 permissions:
@@ -21,9 +33,22 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Check private admin proxy and dashboard syntax
+        run: |
+          node --check services/activation/src/content-hub-admin-core.mjs
+          node --check services/activation/src/content-hub-admin-hook.mjs
+          node --check services/activation/src/bootstrap.mjs
+          node --check services/activation/src/admin-session-hook.mjs
+          node --check services/activation/web/admin-content-hub.js
+          node --test services/activation/test/content-hub-admin-core.test.mjs
       - name: Check isolated policy and worker syntax
         run: |
           node --check services/content-hub/src/mirror-policy.mjs
           node --check services/content-hub/src/mirror-pilot.mjs
+          node --check services/content-hub/src/one-movie-pilot.mjs
+          node --check services/content-hub/src/server.mjs
+          node --check services/content-hub/src/source-lease.mjs
+      - name: Install test-only dependencies (no install scripts)
+        run: npm install --prefix services/content-hub --ignore-scripts --no-audit --no-fund --package-lock=false
       - name: Test S3 multipart fixtures (no source or cloud access)
         run: node --test services/content-hub/test/*.test.mjs

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>BLOFY · مركز المحتوى</title>
+  <link rel="stylesheet" href="/admin-content-hub.css">
+  <script src="/admin-content-hub.js" defer></script>
+</head>
+<body>
+<main class="shell">
+  <header class="top">
+    <a class="brand" href="/admin"><strong>BLOFY</strong><span>CONTENT HUB</span></a>
+    <a class="back" href="/admin">العودة للوحة الإدارة ←</a>
+  </header>
+  <section class="hero">
+    <div>
+      <p class="eyebrow">إدارة التخزين • نسخة خاصة</p>
+      <h1>مركز محتوى BLOFY</h1>
+      <p class="sub">راقب نقل الأفلام، مساحة النسخ المؤكدة، وجرّب التشغيل من التخزين الخاص دون تغيير القنوات أو اشتراكات العملاء.</p>
+    </div>
+    <span id="health" class="badge pending" role="status">جارٍ الفحص…</span>
+  </section>
+  <section class="stats" aria-label="ملخص التخزين">
+    <article class="tile"><small>أفلام محفوظة ومتحقق منها</small><b id="verified">—</b></article>
+    <article class="tile"><small>حجم الملفات المؤكدة</small><b id="used">—</b><span>لا يشمل الملفات من خارج النظام التجريبي</span></article>
+    <article class="tile"><small>عمليات نقل جارية</small><b id="active">—</b></article>
+    <article class="tile"><small>عمليات لم تكتمل</small><b id="failed">—</b></article>
+  </section>
+  <div class="columns">
+    <section class="card">
+      <div class="cardhead"><h2>عمليات النسخ</h2>
+        <button id="refresh" type="button">تحديث</button></div>
+      <p class="muted">تُحدّث البيانات تلقائيًا كل 10 ثوانٍ. لن يبدأ أي تنزيل جديد من هذه الصفحة.</p>
+      <div id="runs" class="jobs" aria-live="polite"><p class="placeholder">يتم تحميل السجل…</p></div>
+      <div class="actions">
+        <button id="nextBatch" type="button" disabled>⬇ نقل الدفعة التالية (8 MB)</button>
+        <button id="cancel" class="danger" type="button" disabled>إيقاف العملية الجارية</button>
+        <span id="notice" class="muted" role="status"></span>
+      </div>
+    </section>
+    <section class="card playback">
+      <div class="cardhead">
+        <h2>فحص مصدر الفيلم</h2>
+        <button id="preflight" type="button">فحص بدون تنزيل</button>
+      </div>
+      <p class="muted">هذا الفحص يقرأ تعريف الفيلم المحدد فقط، ولا يشغل الفيلم أو يستهلك اتصال بث من المصدر.</p>
+      <div id="preflightResult" class="source-check" role="status">لم يُنفذ الفحص بعد.</div>
+    </section>
+    <section class="card playback">
+      <h2>اختبار الفيلم من التخزين</h2>
+      <p class="muted">متاح للمسؤول فقط، بعد التحقق الكامل من الملف. لتقييم الصورة والصوت تأكد من تشغيل فيلم يدعم المتصفح.</p>
+      <div class="screen"><video id="player" controls preload="none" playsinline></video></div>
+      <p id="playerNote" class="muted">اختر عملية مكتملة من القائمة لتجربة التشغيل.</p>
+      <p class="hint">تظل النسخة خاصة؛ هذا الاختبار لا يفعّل التشغيل للمشتركين.</p>
+    </section>
+  </div>
+  <footer>النسخ التلقائي للمكتبة غير مفعّل · تشغيل القنوات مستقل عن اختبارات التخزين.</footer>
+</main>
+</body></html>

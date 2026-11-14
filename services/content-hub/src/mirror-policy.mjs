@@ -11,7 +11,7 @@ const EXT=new Set(['mp4','mkv','ts','avi','mov']);
 const KIND=new Set(['movie','episode']);
 
 export function authorizeMirrorJob({env={},sourceName,sourceId,mediaKind,
-  mediaId,extension,expectedBytes,licenseEvidence,privateBucket,
+  mediaId,extension,privateObjectName,expectedBytes,licenseEvidence,privateBucket,
   activeUpstreamFeeds=0}={}){
  const errors=[];
  if(env.BLOFY_CONTENT_HUB_UPLOAD_ENABLED!=='1')
@@ -26,6 +26,8 @@ export function authorizeMirrorJob({env={},sourceName,sourceId,mediaKind,
  if(!KIND.has(mediaKind)||!ID.test(String(mediaId||''))||
    !EXT.has(String(extension||'').toLowerCase()))
   errors.push('media_item_invalid');
+ if(privateObjectName!==undefined&&!ID.test(String(privateObjectName)))
+  errors.push('private_object_name_invalid');
  if(!Number.isSafeInteger(expectedBytes)||expectedBytes<8192||
    expectedBytes>MAX_MOVIE_BYTES)
   errors.push('file_size_unverified_or_excessive');
@@ -34,7 +36,7 @@ export function authorizeMirrorJob({env={},sourceName,sourceId,mediaKind,
  if(!Number.isInteger(activeUpstreamFeeds)||activeUpstreamFeeds!==0)
   errors.push('source_connection_in_use');
  if(errors.length)return {allowed:false,codes:errors,customerCutover:false};
- const objectKey=`saleh/${mediaKind}/${sourceId}/${mediaId}.${extension.toLowerCase()}`;
+ const objectKey=`saleh/${mediaKind}/${sourceId}/${privateObjectName||mediaId}.${extension.toLowerCase()}`;
  return {allowed:true,objectKey,expectedBytes,sourceName:'saleh',
   upstreamConnectionBudget:1,customerCutover:false,
   requiresIndependentFileVerification:true};

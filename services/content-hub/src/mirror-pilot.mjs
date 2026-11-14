@@ -44,7 +44,7 @@ const safeErrorCode=error=>{
 
 export async function runLicensedMirrorPilot({env={},job,privateBucket,
   readRange,storage,lease,verifyStoredObject,
-  signal,partBytes}={}){
+  signal,partBytes,onProgress=async()=>{}}={}){
  const permit=authorizeMirrorJob({...job,env,privateBucket});
  if(!permit.allowed)return {ok:false,code:'content_hub_not_authorized',
   reasons:permit.codes,customerCutover:false,stored:false};
@@ -60,7 +60,7 @@ export async function runLicensedMirrorPilot({env={},job,privateBucket,
  if(!exclusive||typeof exclusive.release!=='function')
    return {ok:false,code:'content_hub_source_busy',
      customerCutover:false,stored:false};
- let activeUploadId=null,completedObject=false,partsUploaded=0,sourceValidator=null;
+ let activeUploadId=null,completedObject=false,partsUploaded=0,bytesUploaded=0,sourceValidator=null;
  const digest=createHash('sha256');
  try{
   const opened=await storage.begin({
@@ -102,6 +102,11 @@ export async function runLicensedMirrorPilot({env={},job,privateBucket,
      throw Error('content_hub_upload_invalid');
     receipt.push({partNumber:segment.partNumber,etag:uploaded.etag});
     partsUploaded++;
+    bytesUploaded+=chunk.length;
+    if(typeof onProgress==='function')await onProgress({
+      bytesUploaded,expectedBytes:permit.expectedBytes,partsUploaded,
+      partsTotal:segments.length
+    });
    }finally{
     if(response?.body&&!response.body.locked)
      await response.body.cancel().catch(()=>{});
@@ -119,7 +124,7 @@ export async function runLicensedMirrorPilot({env={},job,privateBucket,
     verified.sha256!==hash)
    throw Error('content_hub_storage_verification_failed');
   return {ok:true,code:'private_movie_mirror_verified',
-    bytes:permit.expectedBytes,parts:partsUploaded,
+    bytes:permit.expectedBytes,sha256:hash,parts:partsUploaded,
     stored:true,privateOnly:true,customerCutover:false,
     accessURLCreated:false,externalSourceConnections:1};
  }catch(error){

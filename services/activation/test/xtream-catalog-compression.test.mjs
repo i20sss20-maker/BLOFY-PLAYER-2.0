@@ -32,7 +32,9 @@ test('production gateway sends compressed lists only on accepted GET and preserv
   assert.match(block,/gzip\.pipe\(res\)/);
   assert.match(block,/createXtreamJsonArrayWriter\(/);
   assert.match(block,/await writer\.finish\(\)/);
-  assert.match(block,/row=>writer\.append\(formatGatewayItem/);
+  // Distributor-hidden items are filtered before streaming JSON chunks.
+  assert.match(block,/hidden\?\.has\(String\(row\.source_id\)\)/);
+  assert.match(block,/writer\.append\(formatGatewayItem\(mediaType,row\)\)/);
   assert.match(block,/output\.end\(\)/);
   assert.match(block,/walkGatewayItems\(mediaType,filter/);
   assert.match(block,/gzip\.destroy\(\)/);

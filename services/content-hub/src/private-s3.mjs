@@ -80,6 +80,24 @@ export function createPrivateS3Adapter({config=process.env,client=null}={}){
    safeObjectKey(key);
    await s3.send(new DeleteObjectCommand({...headers,Key:key}));
   },
+  async readVerifiedRange({key,from,to,expectedBytes,signal}){
+   safeObjectKey(key);
+   if(!Number.isSafeInteger(expectedBytes)||expectedBytes<1||
+     expectedBytes>MAX_OBJECT_BYTES||!Number.isSafeInteger(from)||
+     !Number.isSafeInteger(to)||from<0||to<from||to>=expectedBytes||
+     to-from+1>8*1024*1024)
+    throw Error('content_hub_private_range_invalid');
+   const obj=await s3.send(new GetObjectCommand({
+    ...headers,Key:key,Range:`bytes=${from}-${to}`
+   }),{abortSignal:signal});
+   const range=String(obj.ContentRange||'');
+   if(range!==`bytes ${from}-${to}/${expectedBytes}`||
+      Number(obj.ContentLength)!==to-from+1||!obj.Body){
+    obj.Body?.destroy?.();
+    throw Error('content_hub_private_range_mismatch');
+   }
+   return obj.Body;
+  },
   async verify({key,expectedBytes,expectedSha256,signal}){
    safeObjectKey(key);
    if(!Number.isSafeInteger(expectedBytes)||expectedBytes<1||
