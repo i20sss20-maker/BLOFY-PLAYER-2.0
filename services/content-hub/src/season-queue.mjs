@@ -198,10 +198,6 @@ export function createSeasonQueueStore({
    if(!RUN.test(String(runId||'')))return {ok:false,
     code:'season_retry_run_invalid'};
    await ensure();
-   await pool.query([
-    'ALTER TABLE blofy_content_hub_season_queue',
-    'ADD COLUMN IF NOT EXISTS manual_retries SMALLINT NOT NULL DEFAULT 0'
-   ].join(' '));
    const client=await pool.connect();
    try{
     await client.query('BEGIN');
@@ -213,6 +209,12 @@ export function createSeasonQueueStore({
      await client.query('ROLLBACK');
      return {ok:false,code:'season_retry_worker_active'};
     }
+    // Migrate only after acquiring the global scheduler lock, so DDL
+    // cannot delay an active transfer running on another Railway replica.
+    await client.query([
+     'ALTER TABLE blofy_content_hub_season_queue',
+     'ADD COLUMN IF NOT EXISTS manual_retries SMALLINT NOT NULL DEFAULT 0'
+    ].join(' '));
     const updated=await client.query([
      'UPDATE blofy_content_hub_season_queue',
      "SET state='queued',code='manual_retry_approved',",
