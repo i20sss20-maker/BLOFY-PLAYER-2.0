@@ -10,6 +10,7 @@
   <script src="/admin-season-analytics.js" defer></script>
   <script src="/admin-season-detail.js" defer></script>
   <script src="/admin-season-attention.js" defer></script>
+  <script src="/admin-ops-overview.js" defer></script>
 </head>
 <body>
 <main class="shell">
@@ -24,6 +25,59 @@
       <p class="sub">راقب نقل الأفلام، مساحة النسخ المؤكدة، وجرّب التشغيل من التخزين الخاص دون تغيير القنوات أو اشتراكات العملاء.</p>
     </div>
     <span id="health" class="badge pending" role="status">جارٍ الفحص…</span>
+  </section>
+  <section class="card ops-overview" id="opsOverview" aria-labelledby="opsOverviewTitle">
+    <div class="cardhead">
+      <div>
+        <p class="eyebrow">BLOFY · OPERATIONS CENTER</p>
+        <h2 id="opsOverviewTitle">لوحة متابعة المحتوى الموحدة</h2>
+        <p class="muted">ملخص الأفلام والمسلسلات والمواسم والتنبيهات وحجم النسخ المسجل، من بيانات خاصة محفوظة دون إعادة قراءة المحتوى من المصدر.</p>
+      </div>
+      <button id="opsRefresh" type="button">تحديث الآن</button>
+    </div>
+    <p id="opsStatus" class="muted" role="status">جارٍ جمع الحالة من الخدمات الخاصة…</p>
+    <div class="ops-kpis" aria-label="المؤشرات الرئيسية">
+      <article><small>الأفلام المتحقق منها</small><strong id="opsMoviesVerified">—</strong></article>
+      <article><small>الحلقات المكتملة</small><strong id="opsEpisodesVerified">—</strong></article>
+      <article><small>المواسم المسجلة</small><strong id="opsSeasonsCount">—</strong></article>
+      <article><small>المسلسلات الظاهرة</small><strong id="opsSeriesCount">—</strong></article>
+      <article><small>الحلقات الفاشلة</small><strong id="opsFailedEpisodes">—</strong></article>
+      <article><small>النسخ المحفوظة المسجلة</small><strong id="opsKnownStorage">—</strong></article>
+    </div>
+    <div class="ops-service-state" aria-live="polite">
+      <span id="opsPrivateStore" class="badge pending">سلامة التخزين: جارٍ التحقق</span>
+      <span id="opsDatabase" class="badge pending">قاعدة البيانات: جارٍ التحقق</span>
+      <span id="opsMovieWorker" class="badge pending">نقل الأفلام: —</span>
+      <span id="opsSeasonWorker" class="badge pending">نقل المواسم: —</span>
+    </div>
+    <div class="ops-panels">
+      <div class="ops-panel">
+        <h3>تفصيل الحجم المسجل</h3>
+        <div id="opsStorageBreakdown" class="ops-breakdown">
+          <p class="muted">لم تتوفر البيانات بعد.</p>
+        </div>
+        <p class="hint">المجموع المنطقي للأفلام المتحقق منها وأجزاء الحلقات المسجلة في قاعدة البيانات فقط؛ لا يمثل سعة S3 الفعلية أو المساحة المتبقية.</p>
+      </div>
+      <div class="ops-panel">
+        <h3>تنبيهات تحتاج المتابعة</h3>
+        <div id="opsTopAlerts" class="ops-alerts" aria-live="polite">
+          <p class="muted">جارٍ تحميل التنبيهات…</p>
+        </div>
+      </div>
+    </div>
+    <div class="ops-panel ops-season-panel">
+      <h3>ملخص المواسم الحديثة المعروضة</h3>
+      <div id="opsSeasons" class="ops-seasons" aria-live="polite">
+        <p class="muted">جارٍ قراءة المواسم…</p>
+      </div>
+      <p class="hint" id="opsScope">قد يكون عرض المسلسلات والمواسم محدودًا في الاستعلام، ويعرض العدد الظاهر فقط عند عدم اكتمال التغطية.</p>
+    </div>
+    <nav class="ops-links" aria-label="الانتقال السريع">
+      <a href="#season-title">إدارة المواسم</a>
+      <a href="#analyticsTitle">التقارير التفصيلية</a>
+      <a href="#attentionTitle">التنبيهات</a>
+      <a href="#runs">عمليات الأفلام</a>
+    </nav>
   </section>
   <section class="stats" aria-label="ملخص التخزين">
     <article class="tile"><small>أفلام محفوظة ومتحقق منها</small><b id="verified">—</b></article>
