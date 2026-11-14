@@ -18,7 +18,8 @@ function stub(expectedPath,{status=200,data={ok:true}}={}){
 }
 test('season bridge permits only explicit finite authenticated actions',async()=>{
  for(const name of ['series','pilot','queue','confirmation','probe',
-  'enqueue','start','pause','confirm','health','audit','series/31']){
+  'enqueue','start','pause','confirm','health','audit',
+  'concurrent-read','series/31']){
   assert.equal(isStreamSeasonBridgePath(NS+'/'+name),true,name);
  }
  for(const bad of ['..','series/../../../xx','series/0','arbitrary',
@@ -129,4 +130,28 @@ test('manual private storage SHA audit requires exact owner permission and run I
   'audit-private-verified-chunks');
  assert.equal(audit.received.init.headers['content-type'],'application/json');
  assert.deepEqual(JSON.parse(audit.received.init.body),body);
+});
+
+test('two signed verified run IDs are necessary for an explicit concurrent S3 test',async()=>{
+ const ids=['saleh_episode_127434_20261114',
+   'season_0123456789abcdef01234567'];
+ const target=stub('/internal/seasons/concurrent-read',{
+  data:{ok:true,concurrentReads:2,playbackVerified:false}});
+ const denied=await requestStreamSeasonBridge({
+  path:NS+'/concurrent-read',method:'POST',
+  body:{confirmed:false,runIds:ids},operatorToken:secret,
+  fetchImpl:target.fetchImpl});
+ assert.equal(denied.status,400);
+ assert.equal(target.calls,0);
+ const result=await requestStreamSeasonBridge({
+  path:NS+'/concurrent-read',method:'POST',
+  body:{confirmed:true,runIds:ids},operatorToken:secret,
+  fetchImpl:target.fetchImpl});
+ assert.equal(result.status,200);
+ assert.equal(result.data.playbackVerified,false);
+ assert.equal(target.calls,1);
+ assert.equal(target.received.init.headers['x-blofy-season-confirm'],
+  'two-verified-private-s3-reads');
+ assert.deepEqual(JSON.parse(target.received.init.body),{
+  confirmed:true,runIds:ids});
 });
