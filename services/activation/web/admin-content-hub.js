@@ -287,7 +287,7 @@ function resetSeasonSelection(){
 }
 $('seriesSelect').addEventListener('change',()=>{
  resetSeasonSelection();
- $('loadSeriesSeasons').disabled=!/^\\d+$/.test($('seriesSelect').value);
+ $('loadSeriesSeasons').disabled=!/^[0-9]+$/.test($('seriesSelect').value);
 });
 $('loadSeries').addEventListener('click',async()=>{
  const button=$('loadSeries');button.disabled=true;
@@ -367,7 +367,7 @@ $('loadCandidates').addEventListener('click',async()=>{
 $('enqueueSeason').addEventListener('click',async()=>{
  const seriesId=Number($('seriesSelect').value);
  const selectedSeason=Number($('seasonSelect').value);
- const seriesMode=selectedSeriesData&&
+ const seriesMode=$('seasonSelect').value!==''&&selectedSeriesData&&
   selectedSeriesData.seriesGatewayId===seriesId&&
   selectedSeriesData.seasons.some(s=>s.seasonNumber===selectedSeason);
  const seasonKey=$('seasonKey').value.trim();
