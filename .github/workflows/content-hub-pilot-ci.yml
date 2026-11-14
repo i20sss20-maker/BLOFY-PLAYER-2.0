@@ -47,6 +47,7 @@ jobs:
           node --check services/activation/src/bootstrap.mjs
           node --check services/activation/src/admin-session-hook.mjs
           node --check services/activation/web/admin-content-hub.js
+          node --check services/activation/web/admin-season-analytics.js
           node --test services/activation/test/content-hub-admin-core.test.mjs
           node --test services/activation/test/stream-season-bridge.test.mjs
           node --test services/activation/test/content-hub-private-preview-bridge.test.mjs
@@ -58,8 +59,37 @@ jobs:
           node --check services/content-hub/src/mirror-pilot.mjs
           node --check services/content-hub/src/one-movie-pilot.mjs
           node --check services/content-hub/src/server.mjs
+          node --check services/content-hub/src/season-analytics.mjs
+          node --check services/content-hub/src/episode-chunk-pilot.mjs
           node --check services/content-hub/src/source-lease.mjs
       - name: Install test-only dependencies (no install scripts)
         run: npm install --prefix services/content-hub --ignore-scripts --no-audit --no-fund --package-lock=false
       - name: Test S3 multipart fixtures (no source or cloud access)
         run: node --test services/content-hub/test/*.test.mjs
+
+  postgres-season-analytics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: analytics_test
+          POSTGRES_PASSWORD: local_test_only
+          POSTGRES_DB: analytics_fixture
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U analytics_test -d analytics_fixture"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install test dependencies (no scripts)
+        run: npm install --prefix services/content-hub --ignore-scripts --no-audit --no-fund --package-lock=false
+      - name: Exercise SQL and analytics with disposable PostgreSQL
+        env:
+          BLOFY_TEST_PG_URL: postgresql://analytics_test:local_test_only@127.0.0.1:5432/analytics_fixture
+        run: node --test services/content-hub/test/season-analytics-postgres.test.mjs

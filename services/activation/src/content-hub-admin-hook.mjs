@@ -198,9 +198,9 @@ http.createServer=function withContentHubAdmin(listener){
   catch{return listener(req,res)}
   const path=url.pathname;
   if(req.method==='GET'&&['/admin-content-hub.css',
-    '/admin-content-hub.js'].includes(path)){
+    '/admin-content-hub.js','/admin-season-analytics.js'].includes(path)){
    try{
-    const file=path.endsWith('.css')?'admin-content-hub.css':'admin-content-hub.js';
+    const file=path.slice(1);
     const data=await readFile(new URL('../web/'+file,import.meta.url));
     res.writeHead(200,{
       'content-type':file.endsWith('.css')?'text/css':'text/javascript',
@@ -291,6 +291,14 @@ http.createServer=function withContentHubAdmin(listener){
      signal:AbortSignal.timeout(8000)});
     if(response.status!==200)return json(res,503,{
      ok:false,code:'season_queue_unavailable'});
+    return json(res,200,await safeReadJson(response));
+   }
+   if(path==='/api/v1/admin/content-hub/seasons/analytics'&&req.method==='GET'){
+    // Owner session already authenticated; do not leak private Hub token.
+    const response=await request('/internal/seasons/analytics',{
+     signal:AbortSignal.timeout(12000)});
+    if(response.status!==200)return json(res,503,{
+     ok:false,code:'season_analytics_unavailable'});
     return json(res,200,await safeReadJson(response));
    }
    if(path==='/api/v1/admin/content-hub/seasons/candidates'&&req.method==='GET'){

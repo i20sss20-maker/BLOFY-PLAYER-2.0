@@ -12,7 +12,7 @@ const shortError=(code,status=400)=>({status,data:{ok:false,code}});
 export function isStreamSeasonBridgePath(path){
  return path===NS+'/series'||path===NS+'/pilot'||
   path===NS+'/queue'||path===NS+'/confirmation'||
-  path===NS+'/health'||path===NS+'/audit'||
+  path===NS+'/health'||path===NS+'/analytics'||path===NS+'/audit'||
   path===NS+'/concurrent-read'||path===NS+'/retry'||
   path===NS+'/probe'||path===NS+'/enqueue'||
   path===NS+'/start'||path===NS+'/pause'||path===NS+'/confirm'||
@@ -24,7 +24,7 @@ const boundedId=n=>Number.isSafeInteger(Number(n))&&Number(n)>0&&
  Number(n)<=Number.MAX_SAFE_INTEGER;
 const validatedBody=(path,method,raw)=>{
  if(method==='GET'){
-  if(!['series','pilot','queue','confirmation','health'].some(k=>path===NS+'/'+k)&&
+  if(!['series','pilot','queue','confirmation','health','analytics'].some(k=>path===NS+'/'+k)&&
     !(PAGE_ROUTE.test(path)&&Number(path.match(PAGE_ROUTE)?.[1])<=20000)&&
     !(FILTERED_PAGE_ROUTE.test(path)&&Number(path.match(FILTERED_PAGE_ROUTE)?.[2])<=20000)&&
     !/^\/internal\/blofy-stream\/content-hub\/seasons\/series\/[1-9][0-9]{0,14}$/.test(path))
@@ -113,6 +113,7 @@ export async function requestStreamSeasonBridge({path,method='GET',body,
   pilot:'/internal/series/pilot',
   queue:'/internal/seasons/queue',
   health:'/internal/seasons/health',
+  analytics:'/internal/seasons/analytics',
   audit:'/internal/seasons/audit',
   'concurrent-read':'/internal/seasons/concurrent-read',
   confirmation:'/internal/episodes/playback/confirmation',

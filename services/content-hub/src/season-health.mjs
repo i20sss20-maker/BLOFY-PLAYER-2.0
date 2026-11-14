@@ -75,6 +75,7 @@ export function summarizeSeasonHealth({
   providerMediaRequests:0,checkedAt:new Date(now).toISOString(),
   accountingScope:'postgres_episode_manifests',
   bucketFreeBytes:null,bucketCapacityKnown:false,
+  seasonCount:count(stats.season_count),
   episodeCount:episodes,verifiedCount:verified,
   failedCount:failed,queuedCount:queued,runningCount:running,
   pausedCount:paused,storedBytes:stored,verifiedBytes,
