@@ -904,6 +904,131 @@ export function createSeasonQueueStore({
     checkedAt:row.checked_at
    }));
   },
+  // Complete register-of-record accounting for all queued seasons.
+  // Only PostgreSQL is read: neither source listings, media objects, nor
+  // bucket capacity are inspected. The totals NEVER cover unregistered
+  // provider episodes. Each page is a capped set of season summaries.
+  async readinessAudit({page=1}={}){
+   if(!Number.isSafeInteger(page)||page<1||page>10000)
+    throw Error('season_readiness_page_invalid');
+   await ensure();
+   const size=20,offset=(page-1)*size;
+   let hasRuns=true,hasAv=true;
+   const validState=(row,alias)=>row;
+   const expression=()=>{
+    const verified=hasRuns?
+     "q.state='verified' AND r.state='verified'":"FALSE";
+    const checked=hasRuns&&hasAv?
+     verified+" AND v.video_owner_confirmed IS TRUE AND"+
+      " v.audio_owner_confirmed IS TRUE AND"+
+      " v.confirmed_at >= GREATEST(q.updated_at,r.updated_at)":"FALSE";
+    return {verified,checked};
+   };
+   const columns=()=>{
+    const {verified,checked}=expression();
+    return [
+     'COUNT(*)::text AS episode_count,',
+     "COUNT(*) FILTER (WHERE q.state='queued')::text AS queued_count,",
+     "COUNT(*) FILTER (WHERE q.state='paused')::text AS paused_count,",
+     "COUNT(*) FILTER (WHERE q.state='running')::text AS running_count,",
+     "COUNT(*) FILTER (WHERE q.state='failed')::text AS failed_count,",
+     `COUNT(*) FILTER (WHERE (${verified}))::text AS verified_count,`,
+     `COUNT(*) FILTER (WHERE (${checked}))::text AS av_reviewed_count,`,
+     hasRuns?`COUNT(*) FILTER (WHERE q.state='verified' AND r.state IS DISTINCT FROM 'verified')::text AS inconsistent_count,`:
+      "'0'::text AS inconsistent_count,",
+     'COALESCE(SUM(q.expected_bytes),0)::text AS expected_bytes,',
+     hasRuns?'COALESCE(SUM(LEAST(q.expected_bytes, GREATEST(0,COALESCE(r.bytes_copied,0)))),0)::text AS stored_bytes,':
+      "'0'::text AS stored_bytes,",
+     hasAv&&hasRuns?
+      `MAX(v.confirmed_at) FILTER (WHERE (${checked})) AS last_reviewed_at`:
+      'NULL::timestamptz AS last_reviewed_at'
+    ];
+   };
+   const joins=()=>[
+    'FROM blofy_content_hub_season_queue q',
+    hasRuns?'LEFT JOIN blofy_content_hub_episode_runs r ON r.run_id=q.run_id':'',
+    hasRuns&&hasAv?
+     'LEFT JOIN blofy_content_hub_episode_av_reviews v ON v.run_id=q.run_id':''
+   ].filter(Boolean).join(' ');
+   // Fall back only for absent optional private tables; do not mistake a
+   // genuine SQL/configuration error for an empty successful audit.
+   async function select(withSeason){
+    const sql=[
+     'SELECT',withSeason?'q.season_key,':'',...columns(),joins(),
+     withSeason?'GROUP BY q.season_key':'',
+     withSeason?
+      'ORDER BY failed_count DESC, (verified_count::int - av_reviewed_count::int) DESC, q.season_key LIMIT $1 OFFSET $2':
+      ''
+    ].filter(Boolean).join(' ');
+    const args=withSeason?[size+1,offset]:[];
+    try{return await pool.query(sql,args)}
+    catch(error){
+     if(error?.code!=='42P01')throw error;
+     if(hasAv){hasAv=false;return pool.query([
+      'SELECT',withSeason?'q.season_key,':'',
+      ...columns(),joins(),
+      withSeason?'GROUP BY q.season_key':'',
+      withSeason?
+       'ORDER BY failed_count DESC, (verified_count::int - av_reviewed_count::int) DESC, q.season_key LIMIT $1 OFFSET $2':''
+     ].filter(Boolean).join(' '),args).catch(async second=>{
+      if(second?.code!=='42P01')throw second;
+      hasRuns=false;
+      return pool.query([
+       'SELECT',withSeason?'q.season_key,':'',
+       ...columns(),joins(),
+       withSeason?'GROUP BY q.season_key':'',
+       withSeason?
+        'ORDER BY failed_count DESC, (verified_count::int - av_reviewed_count::int) DESC, q.season_key LIMIT $1 OFFSET $2':''
+      ].filter(Boolean).join(' '),args);
+     })}
+     if(hasRuns){hasRuns=false;return pool.query([
+      'SELECT',withSeason?'q.season_key,':'',...columns(),joins(),
+      withSeason?'GROUP BY q.season_key':'',
+      withSeason?
+       'ORDER BY failed_count DESC, (verified_count::int - av_reviewed_count::int) DESC, q.season_key LIMIT $1 OFFSET $2':''
+     ].filter(Boolean).join(' '),args)}
+     throw error;
+    }
+   }
+   const summary=(await select(false)).rows?.[0]||{};
+   const pages=await select(true);
+   const n=value=>Math.max(0,Number(value)||0);
+   const normalized=row=>{
+    const registered=n(row.episode_count),verified=n(row.verified_count);
+    const reviewed=Math.min(verified,n(row.av_reviewed_count));
+    return {
+     registeredEpisodes:registered,storageVerifiedEpisodes:verified,
+     ownerAvReviewedEpisodes:reviewed,
+     verifiedAwaitingOwnerAv:Math.max(0,verified-reviewed),
+     failedEpisodes:n(row.failed_count),queuedEpisodes:n(row.queued_count),
+     pausedEpisodes:n(row.paused_count),runningEpisodes:n(row.running_count),
+     inconsistentVerifiedQueueEpisodes:n(row.inconsistent_count),
+     expectedBytes:n(row.expected_bytes),durableCheckpointBytes:n(row.stored_bytes),
+     lastOwnerAvReviewedAt:row.last_reviewed_at||null,
+     storageVerificationPercent:registered?
+      Math.min(100,Math.floor(100*verified/registered)):0,
+     ownerAvReviewPercentOfVerified:verified?
+      Math.min(100,Math.floor(100*reviewed/verified)):0
+    };
+   };
+   const rows=pages.rows||[];
+   return {
+    ok:true,privateOnly:true,readOnly:true,
+    scope:'all_registered_private_season_queue_episodes_only',
+    upstreamContentEnumerated:false,
+    subscriberPlaybackReady:false,
+    mediaBytesInspected:false,mediaCodecScanned:false,
+    allSourceEpisodesCountKnown:false,
+    manifestStateAvailable:hasRuns,ownerReviewSchemaAvailable:hasRuns&&hasAv,
+    global:normalized(summary),
+    seasons:rows.slice(0,size).map(row=>({
+     seasonKey:row.season_key,...normalized(row)
+    })),
+    page,perPage:size,hasNext:rows.length>size,hasPrevious:page>1,
+    databaseSnapshotOnly:true,automaticStart:false,
+    providerMediaRequests:0,storageRequests:0
+   };
+  },
   // This table records a human owner's explicit browser A/V observation.
   // It does not constitute a codec scan, a new storage verification, or
   // approval to display content to subscribers. Reads never create tables.
@@ -919,7 +1044,10 @@ export function createSeasonQueueStore({
     'INNER JOIN blofy_content_hub_season_queue q ON q.run_id=v.run_id',
     'INNER JOIN blofy_content_hub_episode_runs r ON r.run_id=q.run_id',
     "WHERE v.run_id=ANY($1::text[]) AND q.state='verified'",
-    "AND r.state='verified' ORDER BY v.run_id LIMIT 50"
+    "AND r.state='verified' AND v.video_owner_confirmed IS TRUE",
+    "AND v.audio_owner_confirmed IS TRUE",
+    "AND v.confirmed_at >= GREATEST(q.updated_at,r.updated_at)",
+    'ORDER BY v.run_id LIMIT 50'
    ].join(' '),[[...new Set(runIds)]]).catch(error=>{
     if(error?.code==='42P01')return {rows:[]};
     throw error;
