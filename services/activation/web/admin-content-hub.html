@@ -49,11 +49,20 @@
       </div>
       <div>
         <div class="cardhead"><h3>إضافة حلقات مصرّح بتخزينها</h3>
-          <button id="loadCandidates" type="button">عرض الحلقات المتاحة</button></div>
-        <label class="season-label" for="seasonKey">معرّف الموسم (حروف إنجليزية صغيرة وأرقام)</label>
-        <input id="seasonKey" class="season-input" maxlength="64"
-          placeholder="example_series_s01" autocomplete="off">
-        <p class="muted">حدد الحلقات، رقم كل حلقة، ثم افحص حجمها أولًا قبل إضافتها. فحص الحجم يقرأ 4 كيلوبايت فقط من المصدر.</p>
+          <button id="loadSeries" type="button">عرض المسلسلات</button></div>
+        <label class="season-label" for="seriesSelect">المسلسل</label>
+        <select class="season-input" id="seriesSelect"><option value="">اختر مسلسلًا بعد تحميل القائمة</option></select>
+        <div class="actions"><button id="loadSeriesSeasons" type="button" disabled>عرض المواسم والحلقات</button></div>
+        <label class="season-label" for="seasonSelect">الموسم</label>
+        <select class="season-input" id="seasonSelect" disabled><option value="">اختر الموسم</option></select>
+        <p class="muted">اختر الموسم والحلقات، ثم افحص الحجم الدقيق قبل إضافتها. الفحص يقرأ 4 كيلوبايت فقط من المصدر.</p>
+        <details class="legacy-candidates">
+          <summary>إضافة حلقة يدويًا (الطريقة السابقة)</summary>
+          <label class="season-label" for="seasonKey">معرّف الموسم اليدوي</label>
+          <input id="seasonKey" class="season-input" maxlength="64"
+            placeholder="example_series_s01" autocomplete="off">
+          <button id="loadCandidates" type="button">عرض الحلقات المعتمدة المحدودة</button>
+        </details>
         <div id="seasonCandidates" class="candidate-list">
           <p class="placeholder">اضغط «عرض الحلقات المتاحة» لاختيار المحتوى.</p>
         </div>
