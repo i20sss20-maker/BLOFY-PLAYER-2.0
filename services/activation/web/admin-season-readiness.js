@@ -69,7 +69,8 @@ function exportCurrentPage(){
   'registered_private_queue_only',data.snapshotAt||'unknown'
  ];
  const entries=[format(data.global,'global_totals','all_registered_seasons'),
-  ...data.seasons.slice(0,20).map(row=>
+  ...data.seasons.filter(row=>seasonValid.test(
+   String(row?.seasonKey||''))).slice(0,20).map(row=>
    format(row,'season',row.seasonKey))];
  const csv='\ufeff'+[cols,...entries].map(
   row=>row.map(csvCell).join(',')).join('\r\n')+'\r\n';
@@ -171,10 +172,11 @@ function seasonTile(row){
 async function load(targetPage=page){
  if(working||!Number.isSafeInteger(targetPage)||targetPage<1||
     targetPage>10000)return;
- working=true;const serial=++revision;
+ working=true;lastSnapshot=null;const serial=++revision;
  const buttons=['seasonReadinessRefresh','seasonReadinessPrev',
   'seasonReadinessNext'];
  for(const id of buttons)$(id).disabled=true;
+ $('seasonReadinessExport').disabled=true;
  $('seasonReadinessStatus').textContent='جارٍ جمع إحصائية الحلقات المدرجة من PostgreSQL…';
  try{
   const response=await fetch(
