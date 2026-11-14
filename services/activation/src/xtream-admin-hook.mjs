@@ -3,6 +3,13 @@ import { safeErrorSummary } from './diagnostics-sanitizer.mjs';
 import {safeXtreamTransportCategory} from './xtream-transport-errors.mjs';
 import {withXtreamAccountReconnect} from './xtream-api-resilience.mjs';
 import {createXtreamSyncQueue} from './xtream-sync-queue.mjs';
+import {requestDailyXtreamCatalogSync} from './xtream-daily-catalog-sync.mjs';
+import {listIndexedXtreamMirrorPage} from './xtream-mirror-inventory.mjs';
+import {readXtreamPrivateMirrorCoverage} from './xtream-mirror-coverage.mjs';
+import {createXtreamMirrorDiscoveryStore,riyadhMirrorDay} from './xtream-mirror-discovery-queue.mjs';
+import {readMirrorSeriesEnumerationProgress} from './xtream-mirror-series-enumeration.mjs';
+import {attestMirrorStorageRights} from './xtream-mirror-rights-attestation.mjs';
+import {classifyDailyXtreamOutcome,recordDailyXtreamCatalogOutcome,readDailyXtreamCatalogReceipts} from './xtream-daily-sync-receipts.mjs';
 import {xtreamConnectionReport} from './xtream-smart-connection.mjs';
 import {runXtreamBootDiagnostics} from './xtream-boot-diagnostics.mjs';
 import {observeRailwayEgress,probeXtreamSocket} from './xtream-egress-inspector.mjs';
@@ -112,6 +119,7 @@ const controlPool = new pg.Pool({
   statement_timeout: 6500
 });
 controlPool.on('error', error => console.error('xtream admin database error:',safeErrorSummary(error)));
+const mirrorDiscoveryStore=createXtreamMirrorDiscoveryStore(controlPool);
 
 async function sourceMutation(sql, values) {
   for (let attempt=0;attempt<3;attempt++) {
@@ -1751,12 +1759,24 @@ async function syncServer(id, requestedTypes = ['live','movie','series']) {
     await pool.query(`UPDATE blofy_xtream_servers SET status='online',account_info=$2::jsonb,counts=$3::jsonb,last_error=$4,last_test_at=NOW(),last_sync_at=NOW(),updated_at=NOW() WHERE id=$1 AND enabled=TRUE AND deletion_requested_at IS NULL`,
       [id, JSON.stringify(accountInfo), JSON.stringify(counts),partialWarning]);
     const catalogRevision=await bumpXtreamCatalogRevision(pool,id,'sync');
+    if(process.env.BLOFY_XTREAM_DAILY_CATALOG_SYNC_ENABLED==='1'&&
+       process.env.BLOFY_XTREAM_DAILY_CATALOG_SOURCE_ID===id){
+      await recordDailyXtreamCatalogOutcome(controlPool,{
+        sourceId:id,state:classifyDailyXtreamOutcome({ok:true,partialWarning})
+      }).catch(()=>{});
+    }
     return { id, counts, details, partialWarning,catalogRevision };
   } catch (error) {
     const message = redactXtreamError(error);
     const cancelled=message==='xtream_sync_cancelled';
     await pool.query(`UPDATE blofy_xtream_servers SET status='${cancelled?'unknown':'error'}',last_error=$2,updated_at=NOW()
       WHERE id=$1 AND enabled=TRUE AND deletion_requested_at IS NULL`, [id, message]).catch(() => {});
+    if(process.env.BLOFY_XTREAM_DAILY_CATALOG_SYNC_ENABLED==='1'&&
+       process.env.BLOFY_XTREAM_DAILY_CATALOG_SOURCE_ID===id){
+      await recordDailyXtreamCatalogOutcome(controlPool,{
+        sourceId:id,state:'failed'
+      }).catch(()=>{});
+    }
     throw error;
   } finally {
     syncLocks.delete(id);
@@ -2035,6 +2055,67 @@ function startSync(id, types) {
     throw error;
   }
 }
+// Owner-only daily catalog metadata refresh. OFF unless the exact saleh
+// source ID and opt-in are set; never downloads media or reroutes customers.
+// The database claim makes it once per Riyadh local day across replicas.
+const dailyXtreamCatalogTimer=setInterval(()=>{
+  void requestDailyXtreamCatalogSync({
+    env:process.env,now:new Date(),db:controlPool,
+    getSource:serverById,startSync,
+    isBusy:id=>syncQueue.has(id)||syncLocks.has(id)
+  }).then(result=>{
+    if(result.requested)
+      console.info('BLOFY_XTREAM_DAILY_CATALOG',
+        JSON.stringify({status:'queued',mediaFilesCopied:0,customerCutover:false}));
+  }).catch(error=>console.warn('BLOFY_XTREAM_DAILY_CATALOG',
+    JSON.stringify({status:'not_queued',
+      reason:redactXtreamError(error),mediaFilesCopied:0,customerCutover:false})));
+},5*60*1000);
+dailyXtreamCatalogTimer.unref?.();
+const dailyXtreamStartupTimer=setTimeout(()=>{
+  void requestDailyXtreamCatalogSync({
+    env:process.env,now:new Date(),db:controlPool,
+    getSource:serverById,startSync,
+    isBusy:id=>syncQueue.has(id)||syncLocks.has(id)
+  }).catch(()=>{});
+},60*1000);
+dailyXtreamStartupTimer.unref?.();
+
+// Incremental full indexed VOD discovery. Operator-only and opt-in.
+// One bounded metadata-only DB page per type/tick, no media downloads.
+let mirrorDiscoveryBusy=false;
+const mirrorDiscoveryTick=async()=>{
+ if(process.env.BLOFY_XTREAM_MIRROR_DISCOVERY_ENABLED!=='1'||
+    mirrorDiscoveryBusy)return;
+ const sourceId=String(process.env.BLOFY_XTREAM_DAILY_CATALOG_SOURCE_ID||'').trim();
+ if(!validUuid(sourceId))return;
+ mirrorDiscoveryBusy=true;
+ try{
+  await ensureReady();
+  const localDay=riyadhMirrorDay();
+  for(const mediaKind of ['movie','episode']){
+   const result=await mirrorDiscoveryStore.scanPage({
+    sourceId,mediaKind,localDay,limit:250});
+   if(result?.code==='mirror_scan_page_saved'||
+      result?.code==='mirror_scan_pass_completed'){
+    console.info('BLOFY_XTREAM_MIRROR_DISCOVERY',JSON.stringify({
+     mediaKind,scanned:result.scanned,eligibleMetadata:result.discoverable,
+     hasMore:result.hasMore,copyStarted:false,mediaBytesTransferred:0,
+     customerCutover:false
+    }));
+   }
+  }
+ }catch(error){
+  console.warn('BLOFY_XTREAM_MIRROR_DISCOVERY',
+   JSON.stringify({code:'mirror_discovery_tick_failed',
+    mediaBytesTransferred:0,customerCutover:false}));
+ }finally{mirrorDiscoveryBusy=false}
+};
+const mirrorDiscoveryTimer=setInterval(()=>void mirrorDiscoveryTick(),60*1000);
+mirrorDiscoveryTimer.unref?.();
+const mirrorDiscoveryStartupTimer=setTimeout(()=>void mirrorDiscoveryTick(),45*1000);
+mirrorDiscoveryStartupTimer.unref?.();
+
 const studioPro=createStudioPro({pool,ensureXtreamReady:ensureReady,startSync});
 const studioTimer=setInterval(()=>{
   void studioPro.tick().catch(error=>console.warn('BLOFY Studio schedule check failed:',String(error?.code||'unavailable').slice(0,30)));
@@ -4031,6 +4112,143 @@ http.createServer = function withBlofyXtream(listener) {
             catalogMutation:false,subscriberCutover:false});
         }catch{
           return json(res,503,{ok:false,error:'recovery_probe_unavailable'});
+        }
+      }
+      if(req.method==='GET'&&url.pathname==='/api/v1/admin/xtream/daily-sync/receipts'){
+        const sourceId=String(url.searchParams.get('sourceId')||'');
+        try{
+          const receipts=await readDailyXtreamCatalogReceipts(
+            controlPool,{sourceId,limit:7});
+          return json(res,200,receipts);
+        }catch(error){
+          const badInput=error?.message==='daily_xtream_receipts_invalid';
+          return json(res,badInput?400:503,{
+            ok:false,code:badInput?'daily_receipts_query_invalid':
+              'daily_receipts_unavailable',
+            readOnly:true,mediaFilesCopied:0,customerCutover:false
+          });
+        }
+      }
+      // Admin-only read of the indexed catalog, not private-file storage.
+      // Useful for safely inspecting the size and episode-map coverage of
+      // the requested Xtream daily mirror without contacting the provider.
+      if(req.method==='POST'&&url.pathname==='/api/v1/admin/xtream/mirror/rights-review'){
+        // Explicit one-item attestation. Never accepts a blanket source grant.
+        // Legal verification remains an external owner responsibility.
+        if(req.headers['x-blofy-owner-action']!=='review-one-mirror-storage-right')
+          return json(res,403,{ok:false,code:'mirror_rights_owner_action_required'});
+        if(process.env.BLOFY_XTREAM_MIRROR_RIGHTS_REVIEW_ENABLED!=='1')
+          return json(res,409,{ok:false,code:'mirror_rights_review_disabled'});
+        try{
+          const input=await readJson(req);
+          if(String(input.sourceId||'')!==
+             String(process.env.BLOFY_XTREAM_DAILY_CATALOG_SOURCE_ID||''))
+            return json(res,403,{ok:false,code:'mirror_rights_source_not_approved'});
+          await mirrorDiscoveryStore.ensure();
+          const result=await attestMirrorStorageRights(controlPool,input);
+          return json(res,result.ok?200:409,result);
+        }catch(error){
+          const invalid=error?.message==='mirror_rights_review_invalid';
+          return json(res,invalid?400:503,{ok:false,
+            code:invalid?'mirror_rights_review_invalid':
+              'mirror_rights_review_unavailable',
+            copied:false,mediaBytesTransferred:0,customerCutover:false});
+        }
+      }
+      if(req.method==='GET'&&url.pathname==='/api/v1/admin/xtream/mirror/queue/items'){
+        const sourceId=String(url.searchParams.get('sourceId')||'');
+        const mediaKind=String(url.searchParams.get('mediaKind')||'movie');
+        const state=String(url.searchParams.get('state')||'all');
+        const afterGatewayId=Number(url.searchParams.get('afterGatewayId')||0);
+        const limit=Number(url.searchParams.get('limit')||50);
+        try{
+          const result=await mirrorDiscoveryStore.listQueue({
+            sourceId,mediaKind,state,afterGatewayId,limit});
+          return json(res,200,result);
+        }catch(error){
+          const invalid=error?.message==='mirror_discovery_queue_query_invalid';
+          return json(res,invalid?400:503,{ok:false,
+            code:invalid?'mirror_discovery_query_invalid':'mirror_discovery_items_unavailable',
+            readOnly:true,mediaBytesTransferred:0,customerCutover:false});
+        }
+      }
+      if(req.method==='GET'&&url.pathname==='/api/v1/admin/xtream/mirror/series-status'){
+        const sourceId=String(url.searchParams.get('sourceId')||'').trim();
+        try{
+          const status=await readMirrorSeriesEnumerationProgress(
+            controlPool,{sourceId});
+          return json(res,200,status);
+        }catch(error){
+          const bad=error?.message==='mirror_series_status_request_invalid';
+          return json(res,bad?400:503,{ok:false,
+            code:bad?'mirror_series_status_query_invalid':
+              'mirror_series_status_unavailable',readOnly:true,
+            mediaBytesTransferred:0,customerCutover:false});
+        }
+      }
+      if(req.method==='GET'&&url.pathname==='/api/v1/admin/xtream/mirror/queue/status'){
+        const sourceId=String(url.searchParams.get('sourceId')||'').trim();
+        try{
+          const result=await mirrorDiscoveryStore.summary({sourceId});
+          return json(res,200,result);
+        }catch(error){
+          const invalid=error?.message==='mirror_discovery_source_invalid';
+          return json(res,invalid?400:503,{
+            ok:false,code:invalid?'mirror_discovery_source_invalid':
+              'mirror_discovery_status_unavailable',readOnly:true,
+            providerRequests:0,mediaBytesTransferred:0,customerCutover:false});
+        }
+      }
+      if(req.method==='POST'&&url.pathname==='/api/v1/admin/xtream/mirror/queue/discover'){
+        if(req.headers['x-blofy-owner-action']!=='discover-private-mirror-metadata')
+          return json(res,403,{ok:false,code:'mirror_discovery_owner_action_required'});
+        if(process.env.BLOFY_XTREAM_MIRROR_DISCOVERY_ENABLED!=='1')
+          return json(res,409,{ok:false,code:'mirror_discovery_disabled'});
+        const body=await readJson(req);
+        const sourceId=String(body?.sourceId||'').trim();
+        if(sourceId!==String(process.env.BLOFY_XTREAM_DAILY_CATALOG_SOURCE_ID||'').trim()||
+           !validUuid(sourceId)||!['movie','episode'].includes(body?.mediaKind))
+          return json(res,403,{ok:false,code:'mirror_discovery_source_not_approved'});
+        try{
+          const result=await mirrorDiscoveryStore.scanPage({
+            sourceId,mediaKind:body.mediaKind,
+            localDay:riyadhMirrorDay(),limit:Math.min(250,Math.max(1,
+              Number(body?.limit)||100))});
+          return json(res,result.ok?200:409,result);
+        }catch{
+          return json(res,503,{ok:false,code:'mirror_discovery_unavailable',
+            mediaBytesTransferred:0,customerCutover:false});
+        }
+      }
+      if(req.method==='GET'&&url.pathname==='/api/v1/admin/xtream/mirror/coverage'){
+        const sourceId=String(url.searchParams.get('sourceId')||'');
+        try{
+          const report=await readXtreamPrivateMirrorCoverage(
+            controlPool,{sourceId});
+          return json(res,report.ok?200:404,report);
+        }catch(error){
+          const bad=error?.message==='xtream_mirror_coverage_invalid_request';
+          return json(res,bad?400:503,{ok:false,
+            code:bad?'mirror_coverage_invalid_request':'mirror_coverage_unavailable',
+            readOnly:true,providerRequests:0,customerCutover:false});
+        }
+      }
+      if(req.method==='GET'&&url.pathname==='/api/v1/admin/xtream/mirror/inventory'){
+        const sourceId=String(url.searchParams.get('sourceId')||'');
+        const mediaType=String(url.searchParams.get('mediaType')||'movie');
+        const cursor=String(url.searchParams.get('cursor')||'');
+        const pageSize=Number(url.searchParams.get('pageSize')||50);
+        try{
+          const report=await listIndexedXtreamMirrorPage(controlPool,{
+            sourceId,mediaType,cursor,pageSize
+          });
+          return json(res,report.ok?200:404,report);
+        }catch(error){
+          const badInput=error?.message==='xtream_mirror_inventory_query_invalid';
+          return json(res,badInput?400:503,{
+            ok:false,code:badInput?'inventory_query_invalid':'inventory_unavailable',
+            providerRequests:0,mediaBytesTransferred:0,customerCutover:false
+          });
         }
       }
       if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream/servers') {
