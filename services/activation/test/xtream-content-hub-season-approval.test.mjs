@@ -13,7 +13,7 @@ test('source permit requires explicit opt-in and indexed running queue row',asyn
   assert.deepEqual(params,[gatewayId]);
   assert.match(sql,/q.state='running'/);
   assert.match(sql,/q.updated_at > NOW\(\) - INTERVAL '3 minutes'/);
-  assert.match(sql,/q.gateway_id=e.gateway_id/);
+  assert.match(sql,/e.gateway_id=q.gateway_id/);
   assert.match(sql,/e.source_episode_id=q.media_id/);
   assert.match(sql,/e.server_id=q.source_id/);
   assert.match(sql,/lower\(btrim\(s.name\)\)='saleh'/);
