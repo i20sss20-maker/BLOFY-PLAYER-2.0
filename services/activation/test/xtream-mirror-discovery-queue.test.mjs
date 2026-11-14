@@ -53,7 +53,7 @@ function fixture(movieRows=[{gateway_id:1,media_id:'film01',extension:'mp4',
  const db={
   connect:async()=>client,
   query:async(sql,args=[])=>{
-   if(sql.startsWith('CREATE'))return {rowCount:0};
+   if(sql.startsWith('CREATE')||sql.startsWith('ALTER'))return {rowCount:0};
    if(sql.includes('SELECT gateway_id,media_id,extension,title')){
     return {rows:posted.filter(x=>x.gateway_id>args[2]).slice(0,args[4])
       .map(x=>({...x,state:'needs_review',
