@@ -8,6 +8,7 @@ import {runOneMoviePilot,inspectOneMoviePilot,probeApprovedMovieRange} from './o
 import {runChunkedMovieBatch,chunkedPilotEnabled,chunkedBatchReadiness,CHUNK_BYTES} from './chunked-pilot.mjs';
 import {createContinuousCopyController} from './continuous-copy.mjs';
 import {planDailyLicensedXtreamCopies} from './xtream-daily-copy-plan.mjs';
+import {createDailyMediaSessionStore,startApprovedDailyMediaSession} from './xtream-daily-media-worker.mjs';
 import {diagnoseVerifiedMovie} from './playback-diagnostics.mjs';
 import {verifyPrivateSeekRanges} from './seek-diagnostics.mjs';
 import {buildPrivateBrowserPreview} from './private-preview.mjs';
@@ -90,6 +91,7 @@ export function createContentHubServer({storage,lease,
  episodeCandidateInspector=inspectEpisodeCandidates,
  episodeSizeInspector=inspectEpisodeSize,
  episodeChunkRunner=runOneEpisodeChunk,seasonQueueStore=null,catalogStore=null,
+ dailyMediaSessionStore=null,
  metadataMatcher=createMetadataMatcher({
   token:process.env.BLOFY_TMDB_READ_TOKEN||'',
   commercialLicenseConfirmed:process.env.BLOFY_TMDB_COMMERCIAL_LICENSE_CONFIRMED==='1'
@@ -183,6 +185,17 @@ export function createContentHubServer({storage,lease,
    }catch{return json(res,400,{ok:false,
       code:'mirror_preview_catalog_invalid',providerRequests:0,
       bytesTransferred:0,customerCutover:false})}
+  }
+  if(path==='/internal/mirror/daily/sessions'&&req.method==='GET'){
+   if(String(req.url||'').includes('?')||
+      !dailyMediaSessionStore?.recent)
+    return json(res,404,{ok:false,code:'daily_media_sessions_unavailable'});
+   try{
+    const sessions=await dailyMediaSessionStore.recent();
+    return json(res,200,{ok:true,sessions,privateOnly:true,
+      readOnly:true,customerCutover:false,mediaFilesCopied:0});
+   }catch{return json(res,503,{ok:false,
+    code:'daily_media_sessions_read_failed'})}
   }
   if(path==='/internal/status'&&req.method==='GET'){
    let bucket=false,database=false,durablePilot=null;
@@ -1345,6 +1358,19 @@ export function createContentHubServer({storage,lease,
   return json(res,404,{ok:false,code:'content_hub_not_found'});
  });
  return {server,
+  runScheduledDailyMediaCopy:async(now=new Date())=>{
+   if(!dailyMediaSessionStore)return {ok:false,started:false,
+    code:'daily_media_copy_disabled'};
+   const safeStorage=await storage.health().catch(()=>({ok:false}));
+   return startApprovedDailyMediaSession({
+    now,env:pilotEnv,store:dailyMediaSessionStore,
+    movie:copy,episodes:seasonQueue,lease,seasonStore:seasonQueueStore,
+    storageReady:()=>safeStorage?.ok===true,
+    sourceBusy:()=>pilotRunning||episodeCopyBusy||
+      episodeCopy.isRunning()||copy.isRunning()||
+      Boolean(seasonQueue?.isRunning())
+   });
+  },
   startEpisodeCopy:()=>episodeCopy.start(),
   stopEpisodeCopy:()=>episodeCopy.stop(),
   validateVerifiedEpisode:async()=>{
@@ -1452,13 +1478,41 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
  const lease=createSourceLease({connectionString:process.env.DATABASE_URL});
  const seasonQueueStore=createSeasonQueueStore({connectionString:process.env.DATABASE_URL});
  const catalogStore=createContentCatalogStore({connectionString:process.env.DATABASE_URL});
+ const dailyMediaSessionStore=process.env.BLOFY_CONTENT_HUB_DAILY_COPY_ENABLED==='1'?
+  createDailyMediaSessionStore({connectionString:process.env.DATABASE_URL}):null;
  const hub=createContentHubServer({storage,lease,seasonQueueStore,catalogStore,
+  dailyMediaSessionStore,
   token:process.env.BLOFY_CONTENT_HUB_ADMIN_TOKEN||'',
   allowSynthetic:process.env.BLOFY_CONTENT_HUB_SYNTHETIC_TEST_ENABLED==='1',
   logger:(name,payload)=>console.info(name,JSON.stringify(payload))});
  const port=Number(process.env.PORT||3000);
  hub.server.listen(port,'0.0.0.0',()=>{
   const seasonsReady=seasonQueueReadiness(process.env);
+  // Explicit opt-in only. One brief window each Riyadh day, selected
+  // approved movie OR already-enqueued approved episodes, not all Xtream
+  // media. Only starts the existing verified-byte workers.
+  if(dailyMediaSessionStore){
+   let checking=false;
+   const check=async()=>{
+    if(checking)return;
+    checking=true;
+    try{
+     const r=await hub.runScheduledDailyMediaCopy();
+     if(r.started)console.info('BLOFY_CONTENT_HUB_DAILY_MEDIA_SESSION',
+      JSON.stringify({started:true,mode:r.mode,
+       code:r.code,verifiedCopiesNotYetProven:true,
+       customerCutover:false}));
+    }catch{
+     console.warn('BLOFY_CONTENT_HUB_DAILY_MEDIA_SESSION',
+      JSON.stringify({started:false,code:'session_check_failed',
+       customerCutover:false}));
+    }finally{checking=false}
+   };
+   const timer=setInterval(()=>void check(),5*60*1000);
+   timer.unref?.();
+   const initial=setTimeout(()=>void check(),60*1000);
+   initial.unref?.();
+  }
   console.info('BLOFY_CONTENT_HUB_READY',JSON.stringify({port,
    privateOnly:true,downloadQueueEnabled:false,
    seasonQueueConfigured:Boolean(seasonQueueStore),
@@ -1793,7 +1847,8 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
  const shutdown=()=>{
   hub.stopContinuousCopy();
   hub.stopEpisodeCopy();
-  hub.server.close(()=>void lease.close());
+  hub.server.close(()=>void Promise.allSettled([lease.close(),
+   dailyMediaSessionStore?.close?.()]));
  };
  process.once('SIGTERM',shutdown);process.once('SIGINT',shutdown);
 }
