@@ -16,6 +16,7 @@ on:
       - 'services/activation/test/content-hub-admin*'
       - 'services/activation/test/content-hub-library.test.mjs'
       - 'services/activation/test/content-hub-cinema.test.mjs'
+      - 'services/activation/test/content-hub-detail.test.mjs'
       - 'services/activation/test/season-forecast-ui.test.mjs'
       - '.github/workflows/content-hub-pilot-ci.yml'
   pull_request:
@@ -34,6 +35,7 @@ on:
       - 'services/activation/test/content-hub-admin*'
       - 'services/activation/test/content-hub-library.test.mjs'
       - 'services/activation/test/content-hub-cinema.test.mjs'
+      - 'services/activation/test/content-hub-detail.test.mjs'
       - 'services/activation/test/season-forecast-ui.test.mjs'
       - '.github/workflows/content-hub-pilot-ci.yml'
 
@@ -65,10 +67,12 @@ jobs:
           node --check services/activation/web/admin-library.js
           node --check services/activation/web/admin-library-metadata.js
           node --check services/activation/web/admin-library-cinema.js
+          node --check services/activation/web/admin-library-detail.js
           node --test services/activation/test/content-hub-admin-core.test.mjs
           node --test services/activation/test/content-hub-overview.test.mjs
           node --test services/activation/test/content-hub-library.test.mjs
           node --test services/activation/test/content-hub-cinema.test.mjs
+          node --test services/activation/test/content-hub-detail.test.mjs
           node --test services/activation/test/stream-season-bridge.test.mjs
           node --test services/activation/test/season-forecast-ui.test.mjs
           node --test services/activation/test/content-hub-private-preview-bridge.test.mjs
