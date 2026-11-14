@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {inspectLicensedSeries,inspectLicensedSeriesEpisodes}
+import {inspectLicensedSeries,inspectLicensedSeriesEpisodes,inspectLicensedPilotSeries}
  from '../src/series-catalog.mjs';
 const tok='x'.repeat(48),id=31;
 const meta={gatewayId:42,sourceId:'9adc6472-5d4e-4359-83e4-0298cc038ae3',
@@ -44,4 +44,19 @@ test('series episode mapping retains real season and episode, rejects changed me
  assert.equal(changed.ok,false);
  assert.equal((await inspectLicensedSeriesEpisodes({
   seriesGatewayId:id,env:{},fetchImpl:fake(data)})).ok,false);
+});
+
+test('pilot series lookup is read-only and requires exact mapped numeric IDs',async()=>{
+ const result=await inspectLicensedPilotSeries({
+  env:{BLOFY_CONTENT_HUB_BRIDGE_TOKEN:tok},
+  fetchImpl:fake({ok:true,readOnly:true,
+   seriesGatewayId:31,episodeGatewayId:127434})});
+ assert.equal(result.ok,true);
+ assert.equal(result.seriesGatewayId,31);
+ assert.equal(result.episodeGatewayId,127434);
+ const invalid=await inspectLicensedPilotSeries({
+  env:{BLOFY_CONTENT_HUB_BRIDGE_TOKEN:tok},
+  fetchImpl:fake({ok:true,readOnly:true,
+   seriesGatewayId:'not-number',episodeGatewayId:127434})});
+ assert.equal(invalid.ok,false);
 });
