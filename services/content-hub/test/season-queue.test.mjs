@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
- createSeasonQueueController,seasonQueueReadiness,
+ createSeasonQueueController,createSeasonQueueStore,seasonQueueReadiness,
  seasonQueueSummary,validateSeasonSelection
 } from '../src/season-queue.mjs';
 import {createContentHubServer} from '../src/server.mjs';
@@ -202,4 +202,65 @@ test('owner route rejects unauthenticated enqueue and queues only catalog matche
   await until(()=>copies===1);
   assert.equal(store.rows[0].state,'verified');
  }finally{await new Promise(resolve=>hub.server.close(resolve))}
+});
+
+
+test('Postgres enqueue reuses exact previously verified episode and no duplicate S3 object',async()=>{
+ const existing={run_id:'saleh_episode_127434_20261114',
+  state:'verified',source_id:candidate(123).sourceId,
+  media_id:'media_123',extension:'mkv',expected_bytes:'8388608'};
+ const observed=[];
+ class MockPool{
+  async query(sql){assert.match(sql,/CREATE TABLE IF NOT EXISTS/);
+   return {rows:[]}}
+  async connect(){return {
+   release:()=>{},
+   query:async(sql,args=[])=>{
+    observed.push({sql,args});
+    if(sql.includes('to_regclass'))return {rows:[{table_name:'existing'}]};
+    if(sql.includes('SELECT run_id,state'))return {rows:[existing]};
+    if(sql.includes('INSERT INTO blofy_content_hub_season_queue'))
+     return {rowCount:1,rows:[{run_id:args[0]}]};
+    return {rowCount:0,rows:[]};
+   }
+  }}
+  async end(){}
+ }
+ const store=createSeasonQueueStore({connectionString:'mock',Pool:MockPool});
+ const jobs=validateSeasonSelection({seasonKey:'valid_season',
+  episodes:[{gatewayId:123,episodeNumber:1,expectedBytes:8388608}],
+  candidates:[candidate(123)]});
+ const result=await store.enqueue(jobs);
+ assert.equal(result.added,1);
+ assert.equal(result.reusedExisting,1);
+ const insert=observed.find(c=>c.sql.includes(
+  'INSERT INTO blofy_content_hub_season_queue'));
+ assert.equal(insert.args[0],existing.run_id);
+ assert.equal(insert.args[9],'verified');
+ await store.close();
+});
+test('Postgres enqueue fails closed when existing run source or size differs',async()=>{
+ let rollback=false;
+ class MockPool{
+  async query(){return {rows:[]}}
+  async connect(){return {release:()=>{},
+   query:async(sql)=>{
+    if(sql.includes('to_regclass'))return {rows:[{table_name:'existing'}]};
+    if(sql.includes('SELECT run_id,state'))return {rows:[{
+     run_id:'old_episode_123',state:'verified',
+     source_id:candidate(123).sourceId,media_id:'media_123',
+     extension:'mkv',expected_bytes:'9999999'}]};
+    if(sql==='ROLLBACK')rollback=true;
+    return {rows:[],rowCount:0};
+   }
+  }}
+  async end(){}
+ }
+ const store=createSeasonQueueStore({connectionString:'mock',Pool:MockPool});
+ const jobs=validateSeasonSelection({seasonKey:'valid_season',
+  episodes:[{gatewayId:123,episodeNumber:1,expectedBytes:8388608}],
+  candidates:[candidate(123)]});
+ await assert.rejects(store.enqueue(jobs),/season_existing_episode_scope_conflict/);
+ assert.equal(rollback,true);
+ await store.close();
 });
