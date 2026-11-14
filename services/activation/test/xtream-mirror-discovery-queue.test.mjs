@@ -54,6 +54,11 @@ function fixture(movieRows=[{gateway_id:1,media_id:'film01',extension:'mp4',
   connect:async()=>client,
   query:async(sql,args=[])=>{
    if(sql.startsWith('CREATE'))return {rowCount:0};
+   if(sql.includes('SELECT gateway_id,media_id,extension,title')){
+    return {rows:posted.filter(x=>x.gateway_id>args[2]).slice(0,args[4])
+      .map(x=>({...x,state:'needs_review',
+        mapping_conflict:false,expected_bytes:null}))};
+   }
    if(sql.includes('GROUP BY media_kind,state'))return {rows:[
     {media_kind:'movie',state:'needs_review',total:String(posted.length)}]};
    if(sql.includes('SELECT media_kind,cursor_id'))return {rows:[...cursors.entries()]
@@ -160,4 +165,24 @@ test('source is rejected before touching queue if not approved and fresh',async(
  assert.equal(r.code,'mirror_source_not_currently_approved');
  assert.equal(rolledBack,true);
  assert.equal(r.mediaBytesTransferred,0);
+});
+
+test('admin can inspect paginated discovered items but cannot start copy',async()=>{
+ const f=fixture();
+ await f.store.scanPage({sourceId:ID,
+  mediaKind:'movie',localDay:'2026-11-14',limit:20});
+ const page=await f.store.listQueue({sourceId:ID,mediaKind:'movie',limit:1});
+ assert.equal(page.items.length,1);
+ assert.equal(page.items[0].gatewayId,1);
+ assert.equal(page.items[0].mappingConflict,false);
+ assert.equal(page.items[0].expectedBytes,null);
+ assert.equal(page.items[0].sizeVerified,false);
+ assert.equal(page.hasMore,true);
+ assert.equal(page.nextCursor,1);
+ assert.equal(page.mediaBytesTransferred,0);
+ const other=await f.store.listQueue({sourceId:ID,
+  mediaKind:'movie',afterGatewayId:1,limit:1});
+ assert.equal(other.items[0].gatewayId,3);
+ await assert.rejects(()=>f.store.listQueue({sourceId:ID,
+  mediaKind:'live'}),/queue_query_invalid/);
 });
