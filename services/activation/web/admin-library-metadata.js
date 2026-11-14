@@ -43,9 +43,115 @@ document.addEventListener('blofy:edit-library-metadata',event=>{
  $('libraryMetaPoster').value=data.posterPath||'';
  $('libraryMetaRights').checked=false;
  $('libraryMetaStatus').textContent='';
+ $('libraryMatchQuery').value=data.title||'';
+ $('libraryMatchLanguage').value='ar-SA';
+ $('libraryMatchStatus').textContent='أدخل الاسم واضغط البحث؛ لا حفظ أو مطابقة تلقائية.';
+ $('libraryMatchHints').replaceChildren();
+ $('libraryMatchResults').replaceChildren();
  resetPreview();
  dialog.showModal();
  $('libraryMetaName').focus();
+});
+// Match suggestions remain transient until a separate explicit save.
+let matching=false;
+const createText=(tag,text,className='')=>{
+ const el=document.createElement(tag);
+ el.textContent=String(text);
+ if(className)el.className=className;
+ return el;
+};
+$('libraryMatchSearch').addEventListener('click',async()=>{
+ if(matching||saving||!dialog.open)return;
+ const key=$('libraryMetaKey').value,
+  query=$('libraryMatchQuery').value.trim();
+ if(!allowedKey.test(key)||query.length<2||query.length>100){
+  $('libraryMatchStatus').textContent='اكتب اسم العمل من حرفين إلى 100 حرف.';
+  return;
+ }
+ const yearValue=$('libraryMetaYear').value.trim(),
+  year=yearValue===''?null:Number(yearValue);
+ matching=true;
+ $('libraryMatchSearch').disabled=true;
+ $('libraryMatchStatus').textContent='جارٍ قراءة تلميحات المحتوى وفحص المطابقات المرخصة…';
+ $('libraryMatchHints').replaceChildren();
+ $('libraryMatchResults').replaceChildren();
+ try{
+  const response=await fetch('/api/v1/admin/content-hub/library/matches',{
+   method:'POST',credentials:'same-origin',cache:'no-store',
+   headers:{'content-type':'application/json',
+    'x-blofy-owner-action':'match-private-metadata'},
+   body:JSON.stringify({key,query,year,
+    language:$('libraryMatchLanguage').value})
+  });
+  if(response.status===401){location.assign('/admin');return}
+  const result=await response.json();
+  if(!response.ok||result.ok!==true||result.readOnly!==true||
+     result.automaticSave!==false||result.needsOwnerReview!==true)
+   throw Error('تعذرت قراءة المطابقات ('+(result.code||response.status)+').');
+  if(key!==$('libraryMetaKey').value||!dialog.open)return;
+  const hints=Array.isArray(result.localHints)?
+   result.localHints.slice(0,5):[];
+  const suggestions=Array.isArray(result.candidates)?
+   result.candidates.slice(0,8):[];
+  $('libraryMatchStatus').textContent=result.tmdbEnabled?
+   'ظهرت '+suggestions.length+' مطابقة مقترحة من TMDB، وهي غير مؤكدة؛ اختر بعد المراجعة.':
+   'البحث الخارجي غير مفعل: يحتاج ترخيص TMDB التجاري ومفتاح القراءة الخاص. التلميحات المحلية أدناه لا تثبت هوية المسلسل.';
+  for(const hint of hints){
+   const line=createText('div','', 'library-match-hint');
+   const label=createText('span',
+    hint.title+' · ورد في '+Number(hint.count||0)+' حلقة مسجلة');
+   const button=createText('button','البحث بهذا الاسم');
+   button.type='button';
+   button.addEventListener('click',()=>{
+    $('libraryMatchQuery').value=hint.title;
+    $('libraryMatchQuery').focus();
+   });
+   line.append(label,button);
+   $('libraryMatchHints').append(line);
+  }
+  for(const candidate of suggestions){
+   const card=createText('article','', 'library-match-card');
+   const cleanPoster=typeof candidate.posterPath==='string'&&
+    allowedPath.test(candidate.posterPath)?candidate.posterPath:null;
+   if(cleanPoster){
+    const img=document.createElement('img');
+    img.src='https://image.tmdb.org/t/p/w185'+cleanPoster;
+    img.alt='صورة مقترحة: '+String(candidate.title||'');
+    img.loading='lazy';img.decoding='async';img.referrerPolicy='no-referrer';
+    img.addEventListener('error',()=>img.remove(),{once:true});
+    card.append(img);
+   }
+   const info=createText('div','', 'library-match-info');
+   info.append(createText('strong',candidate.title||'بدون عنوان'),
+    createText('p','سنة '+(candidate.year||'غير معروفة')+
+     ' · درجة تشابه تقريبية '+Number(candidate.confidence||0)+'٪'),
+    createText('p',String(candidate.overview||'').slice(0,160)));
+   const choose=createText('button','اختيار للمعاينة');
+   choose.type='button';
+   choose.addEventListener('click',()=>{
+    if(!$('libraryMetaDialog').open||key!==$('libraryMetaKey').value)return;
+    $('libraryMetaName').value=String(candidate.title||'').slice(0,140);
+    $('libraryMetaYear').value=candidate.year||'';
+    const existing=[...$('libraryMetaGenre').options].some(
+     option=>option.value===candidate.genre);
+    $('libraryMetaGenre').value=existing?candidate.genre:'unspecified';
+    $('libraryMetaOverview').value=String(candidate.overview||'').slice(0,700);
+    $('libraryMetaPoster').value=cleanPoster||'';
+    $('libraryMetaRights').checked=false;
+    $('libraryMetaStatus').textContent=
+     'تم تعبئة الحقول للمراجعة فقط. تحقق من الصورة والمحتوى ثم أكد الحقوق قبل الحفظ.';
+    resetPreview();
+    $('libraryMetaName').focus();
+   });
+   info.append(choose);card.append(info);
+   $('libraryMatchResults').append(card);
+  }
+  if(result.tmdbEnabled&&suggestions.length===0)
+   $('libraryMatchResults').append(
+    createText('p','لم نجد نتائج مطابقة؛ جرب تغيير اللغة أو العنوان.'));
+ }catch(e){
+  $('libraryMatchStatus').textContent=e.message||'تعذر البحث دون أي تعديل.';
+ }finally{matching=false;$('libraryMatchSearch').disabled=false}
 });
 $('libraryMetaForm').addEventListener('submit',async event=>{
  event.preventDefault();
