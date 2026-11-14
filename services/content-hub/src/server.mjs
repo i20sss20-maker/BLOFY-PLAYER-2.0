@@ -296,7 +296,7 @@ export function createContentHubServer({storage,lease,
    }catch{return json(res,503,{ok:false,code:'season_health_database_unavailable'})}
   }
   // Owner-only, read-only season detail; no media or S3 access.
-  const detailRoute=/^\\/internal\\/seasons\\/report\\/([a-z0-9][a-z0-9_-]{2,63})\\/page\\/([1-9][0-9]{0,4})$/.exec(path);
+  const detailRoute=/^\/internal\/seasons\/report\/([a-z0-9][a-z0-9_-]{2,63})\/page\/([1-9][0-9]{0,4})$/.exec(path);
   if(detailRoute&&req.method==='GET'){
    if(String(req.url||'').includes('?'))
     return json(res,400,{ok:false,code:'season_report_query_denied'});
