@@ -294,7 +294,7 @@ http.createServer=function withContentHubAdmin(listener){
      ok:false,code:'season_queue_unavailable'});
     return json(res,200,await safeReadJson(response));
    }
-   const reportRoute=/^\\/api\\/v1\\/admin\\/content-hub\\/seasons\\/report\\/([a-z0-9][a-z0-9_-]{2,63})\\/page\\/([1-9][0-9]{0,4})$/.exec(path);
+   const reportRoute=/^\/api\/v1\/admin\/content-hub\/seasons\/report\/([a-z0-9][a-z0-9_-]{2,63})\/page\/([1-9][0-9]{0,4})$/.exec(path);
    if(reportRoute&&req.method==='GET'){
     const page=Number(reportRoute[2]);
     if(page>20000)return json(res,400,{
