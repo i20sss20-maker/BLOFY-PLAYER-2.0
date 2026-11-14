@@ -80,3 +80,49 @@ test('only bounded operator audit status is persisted, with no bucket keys',asyn
   checkedParts:1,totalParts:173,checkedBytes:100}),/season_storage_audit_invalid/);
  await store.close();
 });
+
+
+test('checkpoint age SQL reads DB time after latest persisted part without writing to source',async()=>{
+ const queries=[];
+ class MockPool{
+  async query(sql,args=[]){
+   queries.push({sql,args});
+   if(sql.startsWith('CREATE TABLE'))return {rows:[]};
+   if(sql.includes('SELECT EXTRACT(EPOCH'))return {
+    rows:[{age_seconds:'243.9'}]};
+   throw Error('unexpected query');
+  }
+  async end(){}
+ }
+ const store=createSeasonQueueStore({connectionString:'mock',Pool:MockPool});
+ const runId='season_0123456789abcdef01234567';
+ assert.equal(await store.currentCheckpoint('bad'),null);
+ assert.deepEqual(await store.currentCheckpoint(runId),
+  {runId,ageSeconds:243});
+ const read=queries.find(q=>q.sql.includes('SELECT EXTRACT(EPOCH'));
+ assert.match(read.sql,/LEFT JOIN blofy_content_hub_episode_runs/);
+ assert.match(read.sql,/GREATEST\(q.updated_at/);
+ assert.deepEqual(read.args,[runId]);
+ await store.close();
+});
+test('when episode manifest table does not exist, queue timestamp remains readable',async()=>{
+ let readCalls=0;
+ class MockPool{
+  async query(sql){
+   if(sql.startsWith('CREATE TABLE'))return {rows:[]};
+   if(sql.includes('LEFT JOIN blofy_content_hub_episode_runs')){
+    const e=new Error('relation missing');e.code='42P01';throw e;
+   }
+   if(sql.includes('SELECT EXTRACT(EPOCH')){
+    readCalls++;return {rows:[{age_seconds:'190.8'}]};
+   }
+   throw Error('unexpected query');
+  }
+  async end(){}
+ }
+ const store=createSeasonQueueStore({connectionString:'mock',Pool:MockPool});
+ assert.equal((await store.currentCheckpoint('season_0123456789abcdef01234567'))
+  ?.ageSeconds,190);
+ assert.equal(readCalls,1);
+ await store.close();
+});
