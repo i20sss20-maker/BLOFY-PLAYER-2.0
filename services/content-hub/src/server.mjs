@@ -59,7 +59,7 @@ export async function runSyntheticPrivateStorageCheck({storage}){
 export function createContentHubServer({storage,lease,
  token='',allowSynthetic=false,logger=()=>{},
  pilotPreflight=inspectOneMoviePilot,pilotEnv=process.env,
- batchRunner=runChunkedMovieBatch}={}){
+ batchRunner=runChunkedMovieBatch,previewBuilder=buildPrivateBrowserPreview}={}){
  if(!storage||!lease)throw Error('content_hub_private_dependencies_required');
  const started=Date.now();
  let syntheticRunning=false,lastSynthetic=null;
@@ -184,7 +184,7 @@ export function createContentHubServer({storage,lease,
      // A small cooldown stops repeated video encodes on an authenticated
      // but repeatedly refreshed preview page.
      previewThrottleUntil=Date.now()+30000;
-     clip=await buildPrivateBrowserPreview({
+     clip=await previewBuilder({
       runId,storage,lease,signal:abort.signal});
      if(clip.ok){
       previewCache={runId,result:clip,expiresAt:Date.now()+120000};
