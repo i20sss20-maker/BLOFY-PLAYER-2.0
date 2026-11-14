@@ -15,7 +15,8 @@ export function seasonStorageSamplePositions(partCount){
 const count=n=>Math.max(0,Math.floor(Number(n)||0));
 const bytes=n=>Math.max(0,Number(n)||0);
 export function summarizeSeasonHealth({
- stats={},audits=[],unresolvedAudits=null,worker={},storageSoftLimitBytes=null,now=Date.now()
+ stats={},audits=[],unresolvedAudits=null,worker={},currentCheckpoint=null,
+ storageSoftLimitBytes=null,now=Date.now()
 }={}){
  const episodes=count(stats.episode_count);
  const verified=count(stats.verified_count);
@@ -34,6 +35,13 @@ export function summarizeSeasonHealth({
    severity:'error',count:failed});
  if(running&&!worker.active)alerts.push({
    code:'season_worker_interrupted',severity:'warning',count:running});
+ const age=Number(currentCheckpoint?.ageSeconds);
+ if(worker?.active===true&&worker.currentRunId&&
+    currentCheckpoint?.runId===worker.currentRunId&&
+    Number.isFinite(age)&&age>=180){
+  alerts.push({code:'season_checkpoint_no_progress',
+   severity:'warning',count:1,ageSeconds:Math.floor(age)});
+ }
  if(usableLimit&&stored>=Math.floor(usableLimit*.85))
   alerts.push({code:'season_storage_budget_near_threshold',
    severity:stored>usableLimit?'error':'warning',count:1});
