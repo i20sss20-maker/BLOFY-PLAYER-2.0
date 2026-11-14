@@ -13,6 +13,7 @@
   <script src="/admin-ops-overview.js" defer></script>
   <script src="/admin-library.js" defer></script>
   <script src="/admin-library-metadata.js" defer></script>
+  <script src="/admin-library-cinema.js" defer></script>
 </head>
 <body>
 <main class="shell">
@@ -135,6 +136,24 @@
         </div>
       </details>
       <p class="hint">إضافة الصور اختيارية وتتطلب تصريح استخدامها. لا يتم جلب صور أو أسماء تلقائيًا؛ قائمة المراجعة لا تشمل المحتوى خارج الصفحة الحالية أو كامل كتالوج المصدر.</p>
+    </section>
+    <section class="library-cinema-mode" aria-labelledby="cinemaTitle">
+      <div class="library-cinema-header">
+        <div>
+          <p class="eyebrow">BLOFY · PRIVATE CINEMA</p>
+          <h3 id="cinemaTitle">استعراض المكتبة السينمائي</h3>
+          <p class="muted">واجهة بصرية خاصة بالمالك لنتائج الصفحة الحالية. المحتوى والصور يظهران فقط إذا كانت بياناتهما محفوظة ومصرحًا باستخدامها.</p>
+        </div>
+        <div class="cinema-mode-switch" role="group" aria-label="طريقة عرض المكتبة">
+          <button type="button" id="cinemaGridButton" aria-pressed="true">🎞️ عرض سينمائي</button>
+          <button type="button" id="cinemaDetailsButton" aria-pressed="false">☷ العرض التفصيلي</button>
+        </div>
+      </div>
+      <div class="cinema-genre-toolbar" id="cinemaGenreToolbar" aria-label="تصفية التصنيف الظاهر" role="group"></div>
+      <p class="hint" id="cinemaScope">تعرض البطاقات العناصر المسجلة في الصفحة الحالية فقط، وليس كتالوج المصدر الكامل.</p>
+      <div id="libraryCinema" class="library-cinema-content" aria-live="polite">
+        <p class="muted">جارٍ تجهيز البطاقات من سجلات المكتبة الخاصة…</p>
+      </div>
     </section>
     <div class="library-results" id="libraryResults" aria-live="polite">
       <p class="muted">لا توجد نتائج بعد.</p>
