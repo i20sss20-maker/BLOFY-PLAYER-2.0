@@ -84,7 +84,11 @@ function exportCurrentPage(){
   document.body.append(a);
   a.click();
   a.remove();
- }finally{URL.revokeObjectURL(objectUrl)}
+ }finally{
+  // Browser downloads can continue asynchronously after the click event.
+  // Release the local blob URL after the browser has begun the download.
+  setTimeout(()=>URL.revokeObjectURL(objectUrl),2000);
+ }
  $('seasonReadinessStatus').textContent=
   'تم تجهيز CSV لصفحة '+fmt(data.page)+
   ' فقط، إضافة إلى الإجماليات المسجلة. التقرير لا يمنح موافقة نشر.';
