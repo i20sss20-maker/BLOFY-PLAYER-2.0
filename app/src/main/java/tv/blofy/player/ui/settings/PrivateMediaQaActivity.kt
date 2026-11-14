@@ -110,7 +110,11 @@ class PrivateMediaQaActivity : AppCompatActivity() {
         ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri == null || selected == null) return@registerForActivityResult
-        if (uri.scheme != "content") {
+        if (!PrivateMediaQaPolicy.maySelectLocalVideo(
+                episodeSelected = selected != null,
+                candidateForPrivateDeviceTest = selected?.candidate == true,
+                documentScheme = uri.scheme
+            )) {
             status.text = "الفيديو المحلي يجب اختياره عبر منتقي ملفات النظام فقط."
             return@registerForActivityResult
         }
@@ -219,7 +223,9 @@ class PrivateMediaQaActivity : AppCompatActivity() {
         subtitleCheck = checkbox("راجعت الترجمة (أو دونت أنها غير متوفرة)")
         listOf(imageCheck, soundCheck, navigationCheck, subtitleCheck).forEach(root::addView)
         export = action("٣ · حفظ تقرير اختبار محلي (بدون إرسال)") {
-            if (selected == null || localVideo == null || !playingObserved) {
+            if (!PrivateMediaQaPolicy.mayExportObservation(
+                    selected != null, localVideo != null, playingObserved
+                )) {
                 status.text = "شغّل عينة محلية فعليًا أولًا ثم احفظ التقرير."
             } else {
                 exportWorksheet.launch("BLOFY-device-qa-${expectedPlatform}-${selected?.number}.json")
@@ -234,23 +240,27 @@ class PrivateMediaQaActivity : AppCompatActivity() {
 
     private fun parseWorksheet(data: ByteArray): Pair<String, List<Episode>> {
         val root = JSONObject(data.toString(Charsets.UTF_8))
-        require(root.optString("schema") == "blofy.private-device-qa-manifest")
-        require(root.optInt("version") == 1)
-        require(root.optString("platform") == expectedPlatform)
-        require(root.optBoolean("privateOnly") && root.optBoolean("readOnly"))
-        require(!root.optBoolean("releaseToSubscribersApproved", true))
-        require(!root.optBoolean("appIntegrationCompleted", true))
-        require(!root.optBoolean("playableMediaUrlsIncluded", true))
-        require(!root.optBoolean("customerCutover", true))
-        val season = root.optString("seasonKey")
-        require(Regex("^series_[1-9][0-9]{0,14}_s[0-9]{1,3}$").matches(season))
         val rows = root.optJSONArray("episodes") ?: error("no_episodes")
-        require(rows.length() in 1..50)
+        require(PrivateMediaQaPolicy.acceptsWorksheet(
+            schema = root.optString("schema"),
+            version = root.optInt("version"),
+            platform = root.optString("platform"),
+            expectedPlatform = expectedPlatform,
+            privateOnly = root.optBoolean("privateOnly"),
+            readOnly = root.optBoolean("readOnly"),
+            customerCutover = root.optBoolean("customerCutover", true),
+            releaseApproved = root.optBoolean("releaseToSubscribersApproved", true),
+            appIntegrationCompleted = root.optBoolean("appIntegrationCompleted", true),
+            mediaUrlsIncluded = root.optBoolean("playableMediaUrlsIncluded", true),
+            episodeCount = rows.length()
+        ))
+        val season = root.optString("seasonKey")
+        require(PrivateMediaQaPolicy.validSeasonKey(season))
         val seen = HashSet<String>()
         val episodes = (0 until rows.length()).map { index ->
             val row = rows.getJSONObject(index)
             val id = row.getString("runId")
-            require(Regex("^[A-Za-z0-9_-]{8,80}$").matches(id) && seen.add(id))
+            require(PrivateMediaQaPolicy.validRunId(id) && seen.add(id))
             val number = row.getInt("episodeNumber")
             require(number in 1..500)
             // Never read any URL, token, storage key, host or player hint from
