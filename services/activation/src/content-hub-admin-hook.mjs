@@ -198,7 +198,8 @@ http.createServer=function withContentHubAdmin(listener){
   catch{return listener(req,res)}
   const path=url.pathname;
   if(req.method==='GET'&&['/admin-content-hub.css',
-    '/admin-content-hub.js','/admin-season-analytics.js'].includes(path)){
+    '/admin-content-hub.js','/admin-season-analytics.js',
+     '/admin-season-detail.js'].includes(path)){
    try{
     const file=path.slice(1);
     const data=await readFile(new URL('../web/'+file,import.meta.url));
