@@ -128,6 +128,8 @@ export function createContentHubServer({storage,lease,
     episodeCopyReadiness:episodeCopyReadiness(pilotEnv),
     canaryRunning,lastCanary,episodeCanaryRunning,lastEpisodeCanary,
     ownerPreviewEnabled:pilotEnv.BLOFY_CONTENT_HUB_OWNER_PREVIEW_ENABLED==='1',
+    ownerEpisodePreviewEnabled:pilotEnv.BLOFY_CONTENT_HUB_OWNER_PREVIEW_ENABLED==='1'&&
+      pilotEnv.BLOFY_CONTENT_HUB_EPISODE_OWNER_PREVIEW_ENABLED==='1',
     continuousCopy:copy.status(),durablePilot,chunkedBatchEnabled:chunkedBatchReadiness(pilotEnv).ready,
     customerCutover:false,
     licensedRightsRequired:true});
@@ -279,6 +281,8 @@ export function createContentHubServer({storage,lease,
        lastEpisodeCopy,episodeRuns,episodeContinuousCopy:episodeCopy.status(),
        episodeCopyReadiness:episodeCopyReadiness(pilotEnv),
        ownerPreviewEnabled:pilotEnv.BLOFY_CONTENT_HUB_OWNER_PREVIEW_ENABLED==='1',
+    ownerEpisodePreviewEnabled:pilotEnv.BLOFY_CONTENT_HUB_OWNER_PREVIEW_ENABLED==='1'&&
+      pilotEnv.BLOFY_CONTENT_HUB_EPISODE_OWNER_PREVIEW_ENABLED==='1',
        continuousCopy:copy.status(),downloadQueueEnabled:false,
        chunkedBatchEnabled:chunkedBatchReadiness(pilotEnv).ready,
        batchReadiness:chunkedBatchReadiness(pilotEnv)});
@@ -288,17 +292,29 @@ export function createContentHubServer({storage,lease,
   }
   // Short MP4 preview exclusively for an authenticated owner in STREAM.
   // Never a public link, signed URL, or subscriber route. No provider call.
-  if(path==='/internal/playback/preview'&&req.method==='GET'){
+  if((path==='/internal/playback/preview'||
+     path==='/internal/episodes/playback/preview')&&req.method==='GET'){
+   const mediaKind=path.startsWith('/internal/episodes/')?
+    'episode':'movie';
+   const expectedHeader=mediaKind==='episode'?
+     'operator-episode-only':'operator-only';
    if(String(req.url||'').includes('?')||
-      req.headers['x-blofy-owner-preview']!=='operator-only')
+      req.headers['x-blofy-owner-preview']!==expectedHeader)
     return json(res,403,{ok:false,code:'owner_preview_confirmation_required'});
-   if(pilotEnv.BLOFY_CONTENT_HUB_OWNER_PREVIEW_ENABLED!=='1')
+   if(pilotEnv.BLOFY_CONTENT_HUB_OWNER_PREVIEW_ENABLED!=='1'||
+      (mediaKind==='episode'&&
+       pilotEnv.BLOFY_CONTENT_HUB_EPISODE_OWNER_PREVIEW_ENABLED!=='1'))
     return json(res,409,{ok:false,code:'owner_preview_disabled'});
    if(previewBuilding)return json(res,429,{
     ok:false,code:'owner_preview_busy'});
-   if(Date.now()<previewThrottleUntil&&!previewCache)
+   const runId=String(mediaKind==='episode'?
+      pilotEnv.BLOFY_CONTENT_HUB_EPISODE_RUN_ID||'':
+      pilotEnv.BLOFY_CONTENT_HUB_BATCH_RUN_ID||'');
+   const cacheHit=previewCache?.runId===runId&&
+       previewCache?.mediaKind===mediaKind&&
+       previewCache.expiresAt>Date.now();
+   if(Date.now()<previewThrottleUntil&&!cacheHit)
     return json(res,429,{ok:false,code:'owner_preview_cooldown'});
-   const runId=String(pilotEnv.BLOFY_CONTENT_HUB_BATCH_RUN_ID||'');
    if(!/^[A-Za-z0-9_-]{8,80}$/.test(runId))
     return json(res,409,{ok:false,code:'owner_preview_movie_not_selected'});
    const abort=new AbortController();
@@ -307,17 +323,17 @@ export function createContentHubServer({storage,lease,
    res.once('close',close);
    let clip=null;
    try{
-    if(previewCache?.runId===runId&&previewCache.expiresAt>Date.now())
-     clip=previewCache.result;
+    if(cacheHit)clip=previewCache.result;
     else{
      previewBuilding=true;
      // A small cooldown stops repeated video encodes on an authenticated
      // but repeatedly refreshed preview page.
      previewThrottleUntil=Date.now()+30000;
      clip=await previewBuilder({
-      runId,storage,lease,signal:abort.signal});
+      runId,storage,lease,signal:abort.signal,mediaKind});
      if(clip.ok){
-      previewCache={runId,result:clip,expiresAt:Date.now()+120000};
+      previewCache={runId,mediaKind,result:clip,
+        expiresAt:Date.now()+120000};
      }
     }
     if(!clip.ok||!Buffer.isBuffer(clip.bytes))
