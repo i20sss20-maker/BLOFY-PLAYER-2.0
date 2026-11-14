@@ -12,6 +12,7 @@ import {verifyPrivateSeekRanges} from './seek-diagnostics.mjs';
 import {buildPrivateBrowserPreview} from './private-preview.mjs';
 import {inspectEpisodeCandidates} from './episode-candidates.mjs';
 import {inspectEpisodeSize} from './episode-probe.mjs';
+import {runOneEpisodeChunk,episodeCopyReadiness} from './episode-chunk-pilot.mjs';
 
 const FIXTURE_SOURCE='00000000-0000-4000-8000-000000000000';
 const FIXTURE_SIZE=8*1024*1024;
@@ -63,7 +64,8 @@ export function createContentHubServer({storage,lease,
  pilotPreflight=inspectOneMoviePilot,pilotEnv=process.env,
  batchRunner=runChunkedMovieBatch,previewBuilder=buildPrivateBrowserPreview,
  episodeCandidateInspector=inspectEpisodeCandidates,
- episodeSizeInspector=inspectEpisodeSize}={}){
+ episodeSizeInspector=inspectEpisodeSize,
+ episodeChunkRunner=runOneEpisodeChunk}={}){
  if(!storage||!lease)throw Error('content_hub_private_dependencies_required');
  const started=Date.now();
  let syntheticRunning=false,lastSynthetic=null;
@@ -71,6 +73,7 @@ export function createContentHubServer({storage,lease,
  let canaryRunning=false,lastCanary=null;
  let previewBuilding=false,previewCache=null,previewThrottleUntil=0;
  let episodeProbeBusy=false,episodeProbeAt=0,lastEpisodeProbe=null;
+ let episodeCopyBusy=false,episodeCopyAbort=null,lastEpisodeCopy=null;
  const copy=createContinuousCopyController({
   runBatch:({signal})=>batchRunner({storage,lease,env:pilotEnv,signal,logger}),
   readiness:()=>chunkedBatchReadiness(pilotEnv),logger
@@ -111,7 +114,8 @@ export function createContentHubServer({storage,lease,
     databaseAvailable:database,downloadQueueEnabled:false,
     syntheticTestEnabled:allowSynthetic,
     lastSynthetic,pilotRunning:pilotRunning||copy.isRunning(),lastPilot,
-    lastEpisodeProbe,
+    lastEpisodeProbe,episodeCopyBusy,lastEpisodeCopy,
+    episodeCopyReadiness:episodeCopyReadiness(pilotEnv),
     canaryRunning,lastCanary,
     ownerPreviewEnabled:pilotEnv.BLOFY_CONTENT_HUB_OWNER_PREVIEW_ENABLED==='1',
     continuousCopy:copy.status(),durablePilot,chunkedBatchEnabled:chunkedBatchReadiness(pilotEnv).ready,
@@ -141,6 +145,47 @@ export function createContentHubServer({storage,lease,
   }
   // Only operator-confirmed low-impact 4KiB source probe.
   // It cannot start episode storage/copy, even with a valid bearer token.
+  // At most ONE explicitly authorized episode chunk per POST. The
+  // controller returns 202 immediately and persists progress in PostgreSQL.
+  // It is separate from the verified movie worker and client playback.
+  if(path==='/internal/episodes/next'&&req.method==='POST'){
+   if(String(req.url||'').includes('?')||
+      req.headers['x-blofy-episode-copy-confirm']!=='approved-single-8mib')
+    return json(res,403,{ok:false,code:'episode_copy_confirmation_required'});
+   const gatewayId=Number(req.headers['x-blofy-episode-gateway-id']);
+   const approved=Number(pilotEnv.BLOFY_CONTENT_HUB_EPISODE_APPROVED_GATEWAY_ID);
+   if(!Number.isSafeInteger(gatewayId)||gatewayId<1||
+     gatewayId!==approved)return json(res,403,{
+       ok:false,code:'episode_copy_id_not_selected'});
+   if(episodeCopyBusy||pilotRunning||copy.isRunning())
+    return json(res,409,{ok:false,code:'content_hub_source_writer_busy'});
+   const readiness=episodeCopyReadiness(pilotEnv);
+   if(!readiness.ready)return json(res,409,{ok:false,
+     code:'episode_safety_gates_off',episodeCopyReadiness:readiness});
+   episodeCopyBusy=true;
+   const abort=episodeCopyAbort=new AbortController();
+   const timer=setTimeout(()=>abort.abort(),220000);timer.unref?.();
+   lastEpisodeCopy={ok:false,code:'episode_copy_running',gatewayId,
+    checkedAt:new Date().toISOString(),customerCutover:false};
+   void episodeChunkRunner({env:pilotEnv,storage,lease,signal:abort.signal,
+     logger}).then(result=>{
+      lastEpisodeCopy={ok:result.ok===true,code:result.code,
+       completed:result.completed===true,
+       bytes:result.bytesCopied||result.bytes||0,
+       gatewayId,checkedAt:new Date().toISOString(),
+       customerCutover:false};
+      logger('BLOFY_CONTENT_HUB_EPISODE_BATCH_RESULT',lastEpisodeCopy);
+     }).catch(()=>{
+      lastEpisodeCopy={ok:false,code:'episode_copy_unavailable',
+       gatewayId,checkedAt:new Date().toISOString(),
+       customerCutover:false};
+     }).finally(()=>{
+      clearTimeout(timer);episodeCopyBusy=false;episodeCopyAbort=null;
+     });
+   return json(res,202,{ok:true,code:'episode_batch_accepted',
+    gatewayId,maxSourceRangeBytes:CHUNK_BYTES,
+    automaticDownload:false,customerCutover:false});
+  }
   if(path==='/internal/episodes/probe'&&req.method==='POST'){
    if(String(req.url||'').includes('?')||
       req.headers['x-blofy-episode-probe-confirm']!=='operator-approved-probe')
@@ -172,11 +217,12 @@ export function createContentHubServer({storage,lease,
    if(String(req.url||'').includes('?'))
     return json(res,400,{ok:false,code:'content_hub_query_not_allowed'});
    try{
-    const [legacyRuns,legacyAccounting,batches,batchAccounting]=await Promise.all([
+    const [legacyRuns,legacyAccounting,batches,batchAccounting,episodeRuns]=await Promise.all([
       lease.listPilotRuns?.({limit:20})||[],
       lease.storageAccounting?.()||null,
       lease.listChunkedRuns?.({limit:20})||[],
-      lease.chunkedStorageAccounting?.()||null
+      lease.chunkedStorageAccounting?.()||null,
+      lease.listEpisodeRuns?.({limit:15})||[]
     ]);
     const runs=[...batches,...legacyRuns].sort((a,b)=>
       String(b.startedAt||'').localeCompare(String(a.startedAt||''))).slice(0,25);
@@ -195,6 +241,8 @@ export function createContentHubServer({storage,lease,
     return json(res,200,{ok:true,privateOnly:true,customerCutover:false,
        accounting,runs,pilotRunning:pilotRunning||copy.isRunning(),
        canaryRunning,lastCanary,lastEpisodeProbe,
+       episodeCopyBusy,lastEpisodeCopy,episodeRuns,
+       episodeCopyReadiness:episodeCopyReadiness(pilotEnv),
        ownerPreviewEnabled:pilotEnv.BLOFY_CONTENT_HUB_OWNER_PREVIEW_ENABLED==='1',
        continuousCopy:copy.status(),downloadQueueEnabled:false,
        chunkedBatchEnabled:chunkedBatchReadiness(pilotEnv).ready,
