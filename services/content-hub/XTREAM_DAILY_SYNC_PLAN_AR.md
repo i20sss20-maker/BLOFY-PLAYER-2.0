@@ -156,3 +156,49 @@ can sync daily; permanent recording of live streams is not enabled.
 The branch is a draft PR, not connected to live Railway deployments,
 so even the restricted daily worker will not run until a separate
 reviewed deployment explicitly opts it in.
+
+
+## 2026-11-14: durable full-index mirror discovery queue (QA, OFF)
+
+A new PostgreSQL-backed index `blofy_xtream_mirror_items` stores
+source-scoped *movie* and *gateway-mapped episode* candidates. Each
+candidate defaults to `needs_review`. The queue stores only catalog
+metadata; it does **not** falsely infer an individual perpetual copy
+license, exact file size, private S3 verification, source connection quota,
+or success of transfer.
+
+`blofy_xtream_mirror_discovery` persists the last gateway ID separately
+for movies/episodes with a row lock to prevent simultaneous workers from
+duplicating cursor advances. Each scan processes up to 250 records,
+continues across container restarts, and revisits a completed catalog
+on a subsequent local Riyadh day. If a gateway ID now points to a
+different media ID or extension, `mapping_conflict=true` is retained
+without overwriting the original approved identity.
+
+Enable only on the operator portal (currently NOT enabled):
+- `BLOFY_XTREAM_MIRROR_DISCOVERY_ENABLED=1`
+- `BLOFY_XTREAM_DAILY_CATALOG_SOURCE_ID=<exact approved saleh UUID>`
+
+At most one 250-movie + one 250-mapped-episode metadata page is scanned
+per minute per worker instance, and a shared PostgreSQL row lock ensures
+a source/type cursor is advanced safely across multiple replicas.
+Scanning only runs while the source has an *online*, complete
+(`last_error IS NULL`) metadata sync within the last 48 hours.
+This reads existing DB rows only and never connects to Xtream.
+
+Admin-session routes (not public):
+- `GET /api/v1/admin/xtream/mirror/queue/status?sourceId=<UUID>`
+  grouped candidate counts and persisted scan cursors.
+- `GET /api/v1/admin/xtream/mirror/queue/items?sourceId=<UUID>&mediaKind=movie&state=needs_review&limit=50`
+  cursor-paged individual candidates and source remap warnings.
+- `POST /api/v1/admin/xtream/mirror/queue/discover` with
+  `x-blofy-owner-action: discover-private-mirror-metadata` and JSON
+  `{"sourceId":"<UUID>","mediaKind":"movie","limit":100}`
+  to advance one bounded scan page when the flag is enabled.
+
+**Limitations:** the episode map is only the already-discovered subset
+of `get_series_info`; it is NOT exhaustive for all series. Entire-source
+episode enumeration and approved-file download dispatch are separate
+future stages. No file is uploaded because of a discovery queue row,
+and there is no production deployment or scheduled production run in
+this draft PR.
