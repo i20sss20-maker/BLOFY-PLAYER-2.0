@@ -1,4 +1,5 @@
 // Bounded, authenticated owner-only season report; never calls an upstream media URL.
+import {forecastSeasonTransfer} from './season-forecast.mjs';
 const clamp=(n,max=Number.MAX_SAFE_INTEGER)=>Math.min(max,Math.max(0,Math.floor(Number(n)||0)));
 const STR=/^[a-z0-9_]{1,80}$/;
 const code=n=>STR.test(String(n||''))?String(n):'unknown';
@@ -49,6 +50,10 @@ export function buildSeasonReport({page={},totals={},episodes=[],events=[],worke
   lastMeasuredAt:date(timing.last_measured_at),
   completeHistory:measuredBytes>=storedBytes&&samples>0,
   scope:'durable_chunk_wall_clock_since_telemetry_enabled'};
+ const forecast=forecastSeasonTransfer({
+  events:eventRows,expectedBytes,storedBytes,
+  episodeCount:all,verifiedCount:verified,failedCount:failed
+ });
  const alerts=[];
  if(failed>0)alerts.push({code:'failed_episodes',
   level:'warning',text:failed+' حلقة بحالة فشل. راجع رمز الخطأ قبل إعادة المحاولة.'});
@@ -60,6 +65,11 @@ export function buildSeasonReport({page={},totals={},episodes=[],events=[],worke
  if(storedBytes>0&&!eventRows.length)
   alerts.push({code:'history_not_recorded',level:'info',
    text:'توجد بيانات مخزنة قبل بدء القياسات؛ لا تتوفر لها تفاصيل زمن النقل.'});
+ if(forecast.recentSlowdown)alerts.push({code:'recent_transfer_slowdown',
+  level:'notice',text:'آخر 5 أجزاء مقاسة أبطأ من الخمسة التي سبقتها بأكثر من 35٪. مؤشر يستدعي المراقبة، وليس إثباتًا لخلل بالمصدر.'});
+ if(forecast.status==='insufficient_recent_samples')
+  alerts.push({code:'forecast_not_ready',level:'info',
+   text:'التوقع يحتاج 3 أجزاء حديثة وناجحة على الأقل خلال آخر 24 ساعة؛ لا توجد مدة متبقية موثوقة الآن.'});
  return {ok:true,readOnly:true,privateOnly:true,customerCutover:false,
   providerMediaRequests:0,bucketFreeBytes:null,
   seasonKey,
@@ -70,7 +80,7 @@ export function buildSeasonReport({page={},totals={},episodes=[],events=[],worke
    queuedCount:queued,runningCount:running,pausedCount:paused,
    expectedBytes,storedBytes,percent:expectedBytes?
     Math.min(100,Math.floor(100*storedBytes/expectedBytes)):0},
-  episodes:episodeRows,recentEvents:eventRows,transferTiming,
+  episodes:episodeRows,recentEvents:eventRows,transferTiming,forecast,
   eventHistoryScope:'newest_60_telemetry_rows_for_selected_season',
   eventsLimited:Array.isArray(events)&&events.length>60,
   alerts,measurementNote:'Chunk wall-clock time includes source, upload, checksum and checkpoint. Older chunks may not have telemetry.',

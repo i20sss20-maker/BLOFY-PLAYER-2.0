@@ -13,6 +13,7 @@ on:
       - 'services/activation/web/admin-season-*'
       - 'services/activation/web/admin.html'
       - 'services/activation/test/content-hub-admin*'
+      - 'services/activation/test/season-forecast-ui.test.mjs'
       - '.github/workflows/content-hub-pilot-ci.yml'
   pull_request:
     paths:
@@ -27,6 +28,7 @@ on:
       - 'services/activation/web/admin-season-*'
       - 'services/activation/web/admin.html'
       - 'services/activation/test/content-hub-admin*'
+      - 'services/activation/test/season-forecast-ui.test.mjs'
       - '.github/workflows/content-hub-pilot-ci.yml'
 
 permissions:
@@ -53,6 +55,7 @@ jobs:
           node --check services/activation/web/admin-season-detail.js
           node --test services/activation/test/content-hub-admin-core.test.mjs
           node --test services/activation/test/stream-season-bridge.test.mjs
+          node --test services/activation/test/season-forecast-ui.test.mjs
           node --test services/activation/test/content-hub-private-preview-bridge.test.mjs
           node --test services/activation/test/xtream-content-hub-season-approval.test.mjs
           node --test services/activation/test/xtream-content-hub-series.test.mjs
@@ -64,6 +67,7 @@ jobs:
           node --check services/content-hub/src/server.mjs
           node --check services/content-hub/src/season-analytics.mjs
           node --check services/content-hub/src/season-report.mjs
+          node --check services/content-hub/src/season-forecast.mjs
           node --check services/content-hub/src/episode-chunk-pilot.mjs
           node --check services/content-hub/src/source-lease.mjs
       - name: Install test-only dependencies (no install scripts)
