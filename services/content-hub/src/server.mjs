@@ -14,6 +14,7 @@ import {inspectEpisodeCandidates} from './episode-candidates.mjs';
 import {inspectEpisodeSize} from './episode-probe.mjs';
 import {runOneEpisodeChunk,episodeCopyReadiness} from './episode-chunk-pilot.mjs';
 import {createContentCatalogStore,validateCuratedMetadata} from './curated-metadata.mjs';
+import {createMetadataMatcher,validateMatchRequest,deriveEpisodeTitleHints} from './metadata-matcher.mjs';
 import {createSeasonQueueStore,createSeasonQueueController,seasonQueueReadiness,validateSeasonSelection,seasonQueueSummary} from './season-queue.mjs';
 import {inspectLicensedSeries,inspectLicensedSeriesEpisodes,inspectLicensedPilotSeries} from './series-catalog.mjs';
 import {summarizeSeasonHealth,auditSeasonEpisodeSample} from './season-health.mjs';
@@ -86,6 +87,10 @@ export function createContentHubServer({storage,lease,
  episodeCandidateInspector=inspectEpisodeCandidates,
  episodeSizeInspector=inspectEpisodeSize,
  episodeChunkRunner=runOneEpisodeChunk,seasonQueueStore=null,catalogStore=null,
+ metadataMatcher=createMetadataMatcher({
+  token:process.env.BLOFY_TMDB_READ_TOKEN||'',
+  commercialLicenseConfirmed:process.env.BLOFY_TMDB_COMMERCIAL_LICENSE_CONFIRMED==='1'
+ }),
  seriesCatalogInspector=inspectLicensedSeries,
  pilotSeriesInspector=inspectLicensedPilotSeries,
  seriesEpisodesInspector=inspectLicensedSeriesEpisodes}={}){
@@ -348,6 +353,46 @@ export function createContentHubServer({storage,lease,
     const result=await catalogStore.save(input);
     return json(res,result.ok?200:404,result);
    }catch{return json(res,503,{ok:false,code:'curated_metadata_database_unavailable'})}
+  }
+  // Private, strictly owner-clicked match review. A registered media key
+  // is mandatory. Local episode title hints work even without TMDB access.
+  if(path==='/internal/library/matches'&&req.method==='POST'){
+   if(String(req.url||'').includes('?')||
+      req.headers['x-blofy-owner-action']!=='match-private-metadata')
+    return json(res,403,{ok:false,code:'metadata_match_owner_only'});
+   if(!catalogStore?.hasRegisteredKey||!catalogStore?.episodeTitleHints)
+    return json(res,503,{ok:false,code:'metadata_match_unavailable'});
+   let input;
+   try{input=validateMatchRequest(await readSeasonJson(req))}
+   catch{return json(res,400,{ok:false,code:'metadata_match_invalid'})}
+   let registered=false,hints=[];
+   try{
+    registered=await catalogStore.hasRegisteredKey(input.key);
+    if(registered&&input.kind==='series'){
+     hints=deriveEpisodeTitleHints(
+      await catalogStore.episodeTitleHints(input.key));
+    }
+   }catch{return json(res,503,{ok:false,code:'metadata_match_database_unavailable'})}
+   if(!registered)return json(res,404,{ok:false,
+    code:'metadata_match_media_not_registered'});
+   const lookup=await metadataMatcher.suggest(input).catch(()=>({
+    ok:false,code:'tmdb_lookup_unavailable',candidates:[]}));
+   return json(res,200,{
+    ok:true,readOnly:true,privateOnly:true,
+    key:input.key,kind:input.kind,query:input.query,
+    localHints:hints.slice(0,5),candidates:Array.isArray(lookup.candidates)?
+     lookup.candidates.slice(0,8):[],
+    tmdbEnabled:metadataMatcher.enabled===true,
+    tmdbLookupStatus:lookup.ok===true?
+     (lookup.configured===false?'commercial_license_not_configured':'ready'):
+     String(lookup.code||'tmdb_lookup_unavailable'),
+    tmdbRequests:Number(lookup.tmdbRequests||0),
+    providerMediaRequests:0,storageRequests:0,automaticSave:false,
+    needsOwnerReview:true,
+    tmdbAttribution:'This product uses the TMDB API but is not endorsed or certified by TMDB.',
+    commercialLicenseRequired:true,
+    artworkUseRequiresRights:true
+   });
   }
   // Read-only library search. Owner token and explicit action assertion
   // are required even though this POST never mutates content.

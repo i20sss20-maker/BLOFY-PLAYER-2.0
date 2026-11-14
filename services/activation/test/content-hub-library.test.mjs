@@ -69,3 +69,29 @@ test('manual poster editor is private, accessible and never auto-imports artwork
  assert.doesNotMatch(editor,/innerHTML\s*=/);
  assert.doesNotMatch(editor,/method:'GET'/);
 });
+
+
+test('metadata matching review is only on explicit owner action and cannot auto-save',async()=>{
+ const [html,js,hookSource,cssText]=await Promise.all([
+  readFile(web,'utf8'),
+  readFile(new URL('../web/admin-library-metadata.js',import.meta.url),'utf8'),
+  readFile(hook,'utf8'),readFile(css,'utf8')
+ ]);
+ for(const id of ['libraryMatchTitle','libraryMatchSearch',
+  'libraryMatchQuery','libraryMatchLanguage','libraryMatchStatus',
+  'libraryMatchResults','libraryMatchHints']){
+  assert.equal((html.match(new RegExp('id="'+id+'"','g'))||[]).length,1,id);
+  if(id!=='libraryMatchTitle')assert.ok(js.includes(id),id);
+ }
+ assert.match(html,/ترخيص تجاري ومفتاح API/);
+ assert.match(html,/This product uses the TMDB API but is not endorsed or certified by TMDB/);
+ assert.match(js,/libraryMatchSearch'\)\.addEventListener\('click'/);
+ assert.match(js,/x-blofy-owner-action':'match-private-metadata'/);
+ assert.match(js,/result\.automaticSave!==false/);
+ assert.match(js,/libraryMetaRights'\)\.checked=false/);
+ assert.match(js,/textContent/);
+ assert.doesNotMatch(js,/innerHTML\s*=/);
+ assert.match(hookSource,/\/api\/v1\/admin\/content-hub\/library\/matches/);
+ assert.match(hookSource,/match-private-metadata/);
+ assert.match(cssText,/\.library-match-review/);
+});

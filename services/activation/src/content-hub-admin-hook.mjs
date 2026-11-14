@@ -340,6 +340,29 @@ http.createServer=function withContentHubAdmin(listener){
      ok:false,code:'season_attention_unavailable'});
     return json(res,200,await safeReadJson(response));
    }
+   if(path==='/api/v1/admin/content-hub/library/matches'&&req.method==='POST'){
+    if(req.headers['x-blofy-owner-action']!=='match-private-metadata')
+     return json(res,403,{ok:false,code:'metadata_match_owner_only'});
+    let input;
+    try{input=await readSeasonAdminBody(req)}
+    catch{return json(res,400,{ok:false,code:'metadata_match_invalid'})}
+    if(!input||typeof input.key!=='string'||
+       !/^(?:movie:[A-Za-z0-9_-]{8,80}|series:[1-9][0-9]{0,14})$/.test(input.key)||
+       typeof input.query!=='string'||input.query.trim().length<2||
+       input.query.trim().length>100||/[\x00-\x1f\x7f<>]/.test(input.query)||
+       /https?:\/\//i.test(input.query)||
+       !(input.year===null||Number.isSafeInteger(input.year)&&
+         input.year>=1888&&input.year<=new Date().getUTCFullYear()+2)||
+       !['ar-SA','en-US'].includes(input.language))
+     return json(res,400,{ok:false,code:'metadata_match_invalid'});
+    const response=await request('/internal/library/matches',{
+     method:'POST',signal:AbortSignal.timeout(11000),
+     extraHeaders:{'content-type':'application/json',
+      'x-blofy-owner-action':'match-private-metadata'},
+     body:JSON.stringify({key:input.key,query:input.query.trim(),
+      year:input.year,language:input.language})});
+    return json(res,response.status,await safeReadJson(response));
+   }
    if(path==='/api/v1/admin/content-hub/library/metadata'&&req.method==='POST'){
     if(req.headers['x-blofy-owner-action']!=='curate-private-metadata')
      return json(res,403,{ok:false,code:'curated_owner_confirmation_required'});

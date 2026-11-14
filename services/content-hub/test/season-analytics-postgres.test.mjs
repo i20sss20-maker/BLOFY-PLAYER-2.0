@@ -198,6 +198,11 @@ test('real PostgreSQL executes reporting and chunk-timing queries safely',{
    year:2025,genre:'drama',overview:'Test-only catalog information',
    posterPath:'/ValidCover1234.jpg',confirmed:true,
    artworkRightsConfirmed:true};
+  assert.equal(await catalog.hasRegisteredKey('series:987654321'),true);
+  assert.equal(await catalog.hasRegisteredKey('series:987654322'),false);
+  assert.deepEqual(await catalog.episodeTitleHints('series:987654321'),
+   ['Fixture heading']);
+  assert.deepEqual(await catalog.episodeTitleHints('movie:movie_missing'),[]);
   const curatedSaved=await catalog.save(metadata);
   assert.equal(curatedSaved.ok,true);
   assert.equal(curatedSaved.metadata.source,'owner_curated');

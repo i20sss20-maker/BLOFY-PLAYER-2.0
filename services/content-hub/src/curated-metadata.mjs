@@ -79,6 +79,25 @@ export function createContentCatalogStore({connectionString,Pool=pg.Pool}={}){
   return false;
  }
  return {
+  async hasRegisteredKey(key){
+   if(!safeCode(key))return false;
+   return persisted(key);
+  },
+  // Hint names come exclusively from stored episode queue titles.
+  // None of these is a verified series title.
+  async episodeTitleHints(key){
+   const series=SERIES.exec(String(key||''));
+   if(!series)return [];
+   const q=await pool.query([
+    'SELECT title FROM blofy_content_hub_season_queue',
+    "WHERE regexp_replace(season_key,'_s[0-9]+$','')=$1",
+    'ORDER BY updated_at DESC LIMIT 25'
+   ].join(' '),['series_'+series[1]]).catch(error=>{
+    if(error?.code==='42P01')return {rows:[]};
+    throw error;
+   });
+   return (q.rows||[]).map(row=>String(row.title||''));
+  },
   async find(keys=[]){
    if(!Array.isArray(keys)||keys.length>META_KEYS||
       keys.some(x=>!safeCode(x)))throw Error('catalog_keys_invalid');
