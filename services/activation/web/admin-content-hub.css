@@ -37,3 +37,32 @@
  font-size:13px;line-height:1.7;cursor:pointer}
 .owner-confirmation input[type=checkbox]{width:19px;height:19px;accent-color:#28c9a1}
 .owner-confirmation button{justify-self:start}
+
+/* Read-only season performance dashboard. Mobile-first and accessible RTL. */
+.season-analytics{margin:0 0 20px}
+.season-analytics .cardhead{flex-wrap:wrap}
+.analytics-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:18px 0}
+.analytics-kpis article{background:#0b1728;border:1px solid #314866;padding:18px;
+ border-radius:13px;display:grid;gap:9px;min-width:0}
+.analytics-kpis small{color:var(--muted);font-size:12px;line-height:1.8}
+.analytics-kpis strong{font-size:clamp(19px,2.8vw,29px);overflow-wrap:anywhere;direction:ltr;text-align:right}
+.analytics-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:22px 0}
+.analytics-grid h3,.analytics-history-title h3{font-size:17px;margin:0 0 12px}
+.analytics-list{display:grid;gap:9px;align-content:start;max-height:500px;overflow:auto}
+.analytics-record{border:1px solid #2d4866;border-radius:10px;
+ background:#0a1727;padding:12px;line-height:1.8;font-size:13px}
+.analytics-record strong{overflow-wrap:anywhere}
+.analytics-record .meter{margin:9px 0}
+.analytics-record .row{line-height:1.8}
+.analytics-warning{border-color:#605340;background:#29241c;color:#ffe1aa}
+.analytics-history-title{margin-top:24px}
+.analytics-scroll{width:100%;max-height:430px;overflow:auto;border:1px solid #314866;border-radius:12px}
+.analytics-table{width:100%;border-collapse:collapse;min-width:780px;text-align:right;font-size:13px}
+.analytics-table th,.analytics-table td{padding:13px 12px;border-bottom:1px solid #2a405b;
+ vertical-align:top;white-space:normal;overflow-wrap:anywhere}
+.analytics-table th{position:sticky;top:0;background:#172c48;color:#c8e2fa;z-index:1}
+.analytics-table td{background:#0a1727;color:#edf5ff}
+.analytics-table tr:last-child td{border-bottom:none}
+@media(max-width:900px){.analytics-grid{grid-template-columns:1fr}}
+@media(max-width:550px){.analytics-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+ .analytics-kpis article{padding:12px}.analytics-table{min-width:660px}}
