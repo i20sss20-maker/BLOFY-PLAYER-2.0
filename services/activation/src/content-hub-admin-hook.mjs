@@ -7,6 +7,7 @@ import {readFile} from 'node:fs/promises';
 import {createFixedWindowLimiter,requestClientKey} from './auth-protection.mjs';
 import {adminCanaryRange,HUB_PILOT_RUN} from './content-hub-admin-core.mjs';
 import {buildUnifiedOpsOverview} from './content-hub-overview.mjs';
+import {enabledOwnerDeviceQa,isDeviceQaRun,mintOwnerDeviceQaTicket,forwardOwnerDeviceQaPlayback} from './content-hub-device-qa.mjs';
 
 const HUB='http://blofy-content-hub.railway.internal:3000';
 const ADMIN=String(process.env.BLOFY_ADMIN_TOKEN||'').trim();
@@ -234,10 +235,43 @@ http.createServer=function withContentHubAdmin(listener){
    }catch{return json(res,503,{ok:false,code:'admin_asset_unavailable'})}
   }
   const canary=runRoute.exec(path);
+  // Header-only, HMAC-scoped 15-minute owner QA range relay. Completely
+  // separate from subscriber routes and the signed admin session.
+  const deviceQaPlayback=/^\/api\/v1\/private-device-qa\/playback\/([A-Za-z0-9_-]{8,80})$/.exec(path);
+  if(deviceQaPlayback)return forwardOwnerDeviceQaPlayback({req,res,
+   runId:deviceQaPlayback[1],requestHub:request,env:process.env});
   if(!path.startsWith('/api/v1/admin/content-hub/'))return listener(req,res);
   if(!authorized(req,res))return;
   if(url.search)return json(res,400,{ok:false,code:'query_forbidden'});
   try{
+   // Session-authenticated owner action: produce a short-lived capability
+   // for exactly one HEAD-verified stored episode; never supply Hub secrets.
+   if(path==='/api/v1/admin/content-hub/device-qa/ticket'&&req.method==='POST'){
+    if(!enabledOwnerDeviceQa(process.env))
+     return json(res,404,{ok:false,code:'device_qa_disabled'});
+    if(req.headers['x-blofy-owner-action']!=='issue-private-device-qa')
+     return json(res,403,{ok:false,code:'device_qa_owner_confirmation_required'});
+    const input=await readSeasonAdminBody(req);
+    if(!input||input.platform!=='windows'||input.rightsConfirmed!==true||
+       input.ownerDeviceTest===undefined||input.ownerDeviceTest!==true||
+       !isDeviceQaRun(input.runId))
+     return json(res,400,{ok:false,code:'device_qa_request_invalid'});
+    const metadata=await request('/internal/episodes/playback/'+input.runId,{
+     method:'HEAD',signal:AbortSignal.timeout(8000)});
+    if(metadata.status!==200||
+       !mimeAllowed.has(String(metadata.headers.get('content-type')||''))||
+       !Number.isSafeInteger(Number(metadata.headers.get('content-length')))||
+       Number(metadata.headers.get('content-length'))<1||
+       Number(metadata.headers.get('content-length'))>4*1024**3)
+     return json(res,404,{ok:false,code:'device_qa_episode_not_verified'});
+    const ticket=mintOwnerDeviceQaTicket({
+     secret:process.env.BLOFY_CONTENT_HUB_DEVICE_QA_SIGNING_KEY,
+     runId:input.runId});
+    return json(res,200,{ok:true,...ticket,
+     endpoint:'https://blofyplayer.com/api/v1/private-device-qa/playback/'+
+      input.runId,manualDeviceReviewRequired:true,providerMediaRequests:0,
+     automaticDownload:false,publicSubscriberRoute:false});
+   }
    if(path==='/api/v1/admin/content-hub/episodes/preview'&&req.method==='GET')
     return await handleEpisodePreview(req,res);
    // Only individually verified private queue episodes can be previewed.
