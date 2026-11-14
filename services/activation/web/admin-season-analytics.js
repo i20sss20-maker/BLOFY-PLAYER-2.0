@@ -65,7 +65,12 @@ function renderSeason(s){
   ' · جارٍ '+number(s.runningCount)+
   ' · متوقفة '+number(s.pausedCount));
  const amount=make('div','row',fmt(s.storedBytes)+' / '+fmt(s.expectedBytes));
- card.append(head,meter,amount,details);
+ const open=make('button','season-report-open','عرض تقرير الموسم');
+ open.type='button';
+ open.addEventListener('click',()=>document.dispatchEvent(
+  new CustomEvent('blofy:open-season-report',
+   {detail:{seasonKey:s.seasonKey}})));
+ card.append(head,meter,amount,details,open);
  return card;
 }
 function renderStages(rows,samples){
