@@ -288,3 +288,36 @@ Do not merge the draft PR or switch the Railway live branch solely
 because unit tests pass. First verify owner-browser episode audio/video,
 review the one-replica/source idle conditions, and then release with all
 new queue flags still OFF before a separate, monitored opt-in.
+
+
+### 2026-11-14 — true series/season discovery and source bridge (follow-up)
+
+The original eight-candidate pilot is no longer sufficient for season copying.
+The operator now has a read-only list of indexed licensed series, a direct
+series gateway-ID lookup, and a season picker fed by the original provider's
+get_series_info metadata as normalized to BLOFY gateway episode IDs.
+It can show the exact episode and season numbers and bound one queue
+submission to 12 operator-selected, size-probed episodes. More episodes in
+a season can be submitted as subsequent batches. The source list is
+restricted to active, published, unique saleh mappings.
+
+**Additional activation portal guard:** the new
+BLOFY_CONTENT_HUB_SEASON_QUEUE_BRIDGE_ENABLED variable must be 1 to allow
+source ranges for episodes other than the original exact one-episode pilot.
+The bridge does not grant access based on a user-supplied ID alone: it
+requires a recent (less than 3 minutes) currently RUNNING private queue
+row, exactly matching source UUID, episode media ID, extension, gateway ID,
+live mapped series, enabled saleh source and storage-size constraints.
+The copy worker receives only the previously selected metadata pinned to
+its durable queue job. The original single-episode permit remains supported
+without broadening it, and probes read only 4KiB when an operator requests
+them. If the queue table is missing or PG is down, the bridge fails closed.
+
+**Rollout:** Do not infer that a functioning browser episode proves
+concurrent channel capacity or confirms that each season item may legally
+be retained. The owner must explicitly confirm audible audio plus visible
+picture in the admin page, and confirm source idle/quota and rights on
+each queue start. Browser sign-off is a prerequisite for queue start, not
+a replacement for those checks. Before bulk copying, verify one new
+episode from an operator-selected mapped series. All subscriber playback
+stays routed as before and no mass copy starts automatically.
