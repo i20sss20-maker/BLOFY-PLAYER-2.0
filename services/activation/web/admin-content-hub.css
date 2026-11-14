@@ -535,3 +535,30 @@
  .library-detail-shell{padding:11px}}
 @media(prefers-reduced-motion:reduce){
  .library-detail-dialog *{scroll-behavior:auto!important}}
+
+
+/* Reviewed playback is a human attestation, separate from storage-verified. */
+.library-detail-preview-navigation{display:flex;align-items:center;
+ justify-content:space-between;gap:10px;flex-wrap:wrap;border-top:1px solid #31516b;
+ padding-top:11px}
+.library-detail-preview-navigation button{background:#15344c;border-color:#3c7a9b;
+ padding:9px 11px;font-size:12px}
+.library-detail-preview-navigation .muted{font-size:12px}
+.library-detail-av-review{background:#0e2832;border:1px solid #447c79;
+ border-radius:12px;padding:13px;display:grid;gap:10px}
+.library-detail-av-review[hidden]{display:none!important}
+.library-detail-av-review h5{margin:0;font-size:16px;color:#b1f3dc}
+.library-detail-av-review label{display:flex;align-items:center;gap:10px;
+ font-size:13px;line-height:1.7;cursor:pointer}
+.library-detail-av-review input{width:19px;height:19px;accent-color:#1d9979}
+.library-detail-av-review button{justify-self:start;background:#126b5d;
+ border-color:#3dcab1;padding:9px 13px;font-size:12px}
+.library-detail-av-review .muted{font-size:12px;margin:0}
+.library-detail-episode-av{font-size:12px;line-height:1.7;
+ color:#d4b98a;padding:8px 10px;background:#40301e4a;
+ border-radius:8px;margin:8px 0}
+.library-detail-episode-av.reviewed{color:#a2f1d1;
+ background:#174f4242;border:1px solid #317661}
+@media(max-width:620px){.library-detail-preview-navigation{align-items:stretch}
+ .library-detail-preview-navigation button{flex:1}
+ .library-detail-preview-navigation .muted{flex:0 0 100%;text-align:center}}
