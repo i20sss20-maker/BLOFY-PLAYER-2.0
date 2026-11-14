@@ -114,3 +114,24 @@ test('authenticated health is read-only and audit requires owner confirmation',a
    body:JSON.stringify({runId,confirmed:true})})).status,429);
  }finally{await new Promise(resolve=>hub.server.close(resolve))}
 });
+
+
+test('stalled-progress warning requires matching active worker and 180s durable checkpoint age',()=>{
+ const worker={active:true,currentRunId:runId};
+ const stats={running_count:'1'};
+ const before=summarizeSeasonHealth({stats,worker,
+  currentCheckpoint:{runId,ageSeconds:179}});
+ assert.equal(before.alerts.some(a=>a.code==='season_checkpoint_no_progress'),false);
+ const stalled=summarizeSeasonHealth({stats,worker,
+  currentCheckpoint:{runId,ageSeconds:241}});
+ assert.deepEqual(stalled.alerts,[{code:'season_checkpoint_no_progress',
+  severity:'warning',count:1,ageSeconds:241}]);
+ assert.equal(stalled.providerMediaRequests,0);
+ const different=summarizeSeasonHealth({stats,worker,
+  currentCheckpoint:{runId:'season_another_run_12345',ageSeconds:1000}});
+ assert.equal(different.alerts.length,0);
+ const inactive=summarizeSeasonHealth({stats,worker:{active:false},currentCheckpoint:{
+  runId,ageSeconds:1000}});
+ assert.equal(inactive.alerts.some(a=>a.code==='season_checkpoint_no_progress'),false);
+ assert.equal(inactive.alerts[0].code,'season_worker_interrupted');
+});
