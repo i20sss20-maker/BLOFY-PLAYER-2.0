@@ -23,7 +23,7 @@ export function seasonTransferReason(code){
  return reasonMap[safeCode(code)]||'فشل مسجل ('+safeCode(code)+')؛ افحص السجلات قبل إعادة المحاولة';
 }
 export function buildSeasonAnalytics({
- health={},metrics={},seasons=[],failures=[],events=[],worker={}
+ health={},metrics={},seasons=[],failures=[],events=[],worker={},episodeStates=[]
 }={}){
  const moved=number(metrics.transfer_bytes);
  const milliseconds=number(metrics.active_ms);
@@ -65,6 +65,20 @@ export function buildSeasonAnalytics({
   code:safeCode(r.code),stage:r.stage?safeCode(r.stage):null,
   recordedAt:ISO(r.recordedAt)
  }));
+ const recentStates=(Array.isArray(episodeStates)?episodeStates:[])
+  .slice(0,30).map(e=>{
+   const allowed=new Set(['queued','paused','running','verified','failed']);
+   const state=allowed.has(e?.state)?e.state:'unknown';
+   return {runId:String(e?.runId||'').slice(0,80),
+    seasonKey:String(e?.seasonKey||'').slice(0,64),
+    episodeNumber:count(e?.episodeNumber),
+    title:String(e?.title||'').slice(0,200),
+    state,code:e?.code?safeCode(e.code):null,
+    expectedBytes:number(e?.expectedBytes),
+    storedBytes:number(e?.storedBytes),
+    percent:Math.min(100,count(e?.percent)),
+    updatedAt:ISO(e?.updatedAt),snapshotOnly:true};
+  });
  const alerts=Array.isArray(health.alerts)?health.alerts:[];
  const diagnostics=[];
  if(alerts.some(a=>a.code==='season_checkpoint_no_progress'))
@@ -122,6 +136,7 @@ export function buildSeasonAnalytics({
    currentRunId:worker?.currentRunId||null},
   seasonSummaries:items,seasonSummariesLimited:Array.isArray(seasons)&&seasons.length>100,
   failureReasons:reasons,recentEvents:history,
+  recentEpisodeStates:recentStates,
   timingBreakdown:breakdown,stageSamples,
   diagnostics,recordedFrom:ISO(metrics.first_recorded_at),
   lastRecordedAt:ISO(metrics.last_recorded_at)
