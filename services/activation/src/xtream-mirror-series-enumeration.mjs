@@ -126,3 +126,39 @@ export async function enumerateOneMirrorSeries({
   client.release();
  }
 }
+
+export async function readMirrorSeriesEnumerationProgress(db,{
+ sourceId
+}={}){
+ if(!UUID.test(String(sourceId||''))||typeof db?.query!=='function')
+  throw Error('mirror_series_status_request_invalid');
+ const result=await db.query(`SELECT p.last_gateway_id,p.started_local_day,
+   p.finished_local_day,p.failed_gateway_id,p.last_error_code,
+   p.series_scanned,p.updated_at
+   FROM blofy_xtream_mirror_series_progress p
+   JOIN blofy_xtream_servers s ON s.id=p.source_id
+   WHERE s.id=$1 AND lower(btrim(s.name))='saleh'
+    AND s.enabled=TRUE AND s.publish_catalog=TRUE
+    AND s.deletion_requested_at IS NULL
+   LIMIT 1`,[sourceId]).catch(error=>{
+    if(error?.code==='42P01')return {rows:[]};
+    throw error;
+   });
+ const row=result.rows?.[0];
+ if(!row)return {ok:true,code:'mirror_series_scan_not_started',
+  readOnly:true,providerRequests:0,mediaBytesTransferred:0,
+  customerCutover:false};
+ return {ok:true,code:'mirror_series_scan_progress',
+  lastGatewayId:Number(row.last_gateway_id)||0,
+  startedLocalDay:row.started_local_day?isoDay(row.started_local_day):null,
+  finishedLocalDay:row.finished_local_day?
+    isoDay(row.finished_local_day):null,
+  failedGatewayId:row.failed_gateway_id===null?null:
+    Number(row.failed_gateway_id),
+  lastErrorCode:row.last_error_code||null,
+  seriesScanned:Number(row.series_scanned)||0,
+  updatedAt:row.updated_at||null,
+  episodesCountNotExhaustivelyVerified:true,
+  readOnly:true,providerRequests:0,mediaBytesTransferred:0,
+  customerCutover:false};
+}
