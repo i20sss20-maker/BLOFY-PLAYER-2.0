@@ -82,7 +82,8 @@ export function buildSeasonAnalytics({
    failedCount:count(health.failedCount),queuedCount:count(health.queuedCount),
    runningCount:count(health.runningCount),pausedCount:count(health.pausedCount),
    storedBytes:number(health.storedBytes),verifiedBytes:number(health.verifiedBytes),
-   expectedBytes:number(health.expectedBytes),seasonCount:items.length,
+   expectedBytes:number(health.expectedBytes),
+   seasonCount:count(health.seasonCount)||items.length,
    transferBytesMeasured:moved,transferSamples:samples,
    averageBytesPerSecond,
    throughputScope:'chunk_wall_clock_including_s3_integrity_and_checkpoint',
@@ -90,7 +91,7 @@ export function buildSeasonAnalytics({
   worker:{active:worker?.active===true,
    state:String(worker?.state||'idle').slice(0,32),
    currentRunId:worker?.currentRunId||null},
-  seasonSummaries:items,seasonSummariesLimited:items.length===100,
+  seasonSummaries:items,seasonSummariesLimited:Array.isArray(seasons)&&seasons.length>100,
   failureReasons:reasons,recentEvents:history,
   diagnostics,recordedFrom:ISO(metrics.first_recorded_at),
   lastRecordedAt:ISO(metrics.last_recorded_at)
