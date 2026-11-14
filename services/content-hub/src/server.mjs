@@ -359,6 +359,37 @@ export function createContentHubServer({storage,lease,
     code:'private_read_canary_unavailable'})}
    finally{seasonConcurrentReadBusy=false}
   }
+  // Resubmit ONLY transient failed queue rows. The row's exact source,
+  // episode ID and saved checkpoint remain pinned. This never starts a job.
+  if(path==='/internal/seasons/retry'&&req.method==='POST'){
+   if(String(req.url||'').includes('?')||
+      req.headers['x-blofy-season-confirm']!=='manual-review-transient-failure')
+    return json(res,403,{ok:false,code:'season_retry_owner_confirmation_required'});
+   if(!seasonQueueStore?.retryFailed)return json(res,503,{
+    ok:false,code:'season_retry_storage_unavailable'});
+   const readiness=seasonQueueReadiness(pilotEnv);
+   if(!readiness.ready)return json(res,409,{ok:false,
+    code:'season_queue_safety_gates_off',blockedBy:readiness.blockedBy});
+   if(seasonQueue?.isRunning()||episodeCopyBusy||
+       episodeCopy.isRunning()||copy.isRunning()||pilotRunning)
+    return json(res,409,{ok:false,code:'season_retry_worker_active'});
+   let request;
+   try{request=await readSeasonJson(req)}
+   catch{return json(res,400,{ok:false,code:'season_retry_invalid_request'})}
+   const runId=String(request?.runId||'');
+   if(request?.confirmed!==true||
+      request?.licensedStorage!==true||
+      request?.sourceIdle!==true||
+      !/^[A-Za-z0-9_-]{8,80}$/.test(runId))
+    return json(res,400,{ok:false,code:'season_retry_manual_review_required'});
+   try{
+    const result=await seasonQueueStore.retryFailed(runId);
+    return json(res,result.ok?200:409,{...result,
+     operatorRequested:true,automaticStart:false,
+     customerCutover:false});
+   }catch{return json(res,503,{
+    ok:false,code:'season_retry_database_unavailable'})}
+  }
   if(path==='/internal/seasons/enqueue'&&req.method==='POST'){
    if(!seasonQueueStore)return json(res,503,{
     ok:false,code:'season_queue_unavailable'});
