@@ -4,6 +4,7 @@ import {safeXtreamTransportCategory} from './xtream-transport-errors.mjs';
 import {withXtreamAccountReconnect} from './xtream-api-resilience.mjs';
 import {createXtreamSyncQueue} from './xtream-sync-queue.mjs';
 import {requestDailyXtreamCatalogSync} from './xtream-daily-catalog-sync.mjs';
+import {listIndexedXtreamMirrorPage} from './xtream-mirror-inventory.mjs';
 import {xtreamConnectionReport} from './xtream-smart-connection.mjs';
 import {runXtreamBootDiagnostics} from './xtream-boot-diagnostics.mjs';
 import {observeRailwayEgress,probeXtreamSocket} from './xtream-egress-inspector.mjs';
@@ -4058,6 +4059,27 @@ http.createServer = function withBlofyXtream(listener) {
             catalogMutation:false,subscriberCutover:false});
         }catch{
           return json(res,503,{ok:false,error:'recovery_probe_unavailable'});
+        }
+      }
+      // Admin-only read of the indexed catalog, not private-file storage.
+      // Useful for safely inspecting the size and episode-map coverage of
+      // the requested Xtream daily mirror without contacting the provider.
+      if(req.method==='GET'&&url.pathname==='/api/v1/admin/xtream/mirror/inventory'){
+        const sourceId=String(url.searchParams.get('sourceId')||'');
+        const mediaType=String(url.searchParams.get('mediaType')||'movie');
+        const cursor=String(url.searchParams.get('cursor')||'');
+        const pageSize=Number(url.searchParams.get('pageSize')||50);
+        try{
+          const report=await listIndexedXtreamMirrorPage(controlPool,{
+            sourceId,mediaType,cursor,pageSize
+          });
+          return json(res,report.ok?200:404,report);
+        }catch(error){
+          const badInput=error?.message==='xtream_mirror_inventory_query_invalid';
+          return json(res,badInput?400:503,{
+            ok:false,code:badInput?'inventory_query_invalid':'inventory_unavailable',
+            providerRequests:0,mediaBytesTransferred:0,customerCutover:false
+          });
         }
       }
       if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream/servers') {
