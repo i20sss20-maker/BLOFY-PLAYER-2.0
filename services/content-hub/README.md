@@ -222,3 +222,69 @@ under an approved low-risk rollout so established live channels are not
 disrupted. Before the first real copy, verify the provider exposes a
 stable ETag or Last-Modified validator for each Range; otherwise the
 worker intentionally rejects the transfer.
+
+
+## 2026-11-14: private episode proof and season queue (draft / not deployed)
+
+The actual one-episode pilot finished with 173/173 verified private chunks,
+1,444,843,431 complete bytes and independent file checksum verification.
+A server-side preview diagnostic verified video and audio decoding and four
+seek positions without contacting the upstream provider. This is NOT
+the same as owner confirmation of audible audio and visible video on a
+browser or device. Subscriber traffic was not rerouted.
+
+The new season queue is isolated in the branch
+feature/blofy-content-hub-season-queue-20261114 and remains NOT deployed.
+It adds a separate operator-only administration panel within the
+existing /admin/content-hub page, with season/episode progress,
+list/candidate selection, size probes, queue enqueue and pause/resume
+controls. The browser also offers a protected short MP4 episode preview.
+No private bucket URL, backend credentials or subscriber playback path is
+exposed.
+
+### Required protection and scope
+
+- The new BLOFY_CONTENT_HUB_SEASON_QUEUE_ENABLED defaults to OFF.
+- The dedicated BLOFY_CONTENT_HUB_EPISODE_COPY_ENABLED, upload enabled,
+  permanent-copy rights, episode rights, source idle and source quiet-window
+  declarations, and a valid private bridge token must all independently
+  be configured. Changing these flags does not itself trigger a download.
+- Each episode must match the current read-only, limited authorized
+  saleh candidate list (at most 12 entries per enqueue), be selected
+  by an authenticated operator with storage rights, and have an exact
+  source size independently measured with the 4-KiB probe. The season
+  identifier is an operator-assigned label: the limited source catalog
+  does not yet establish authoritative series/season relations.
+- POST /internal/seasons/enqueue only schedules the selected items,
+  no media transfer. A second explicit POST /internal/seasons/start
+  is required to begin copying in strictly sequential 8-MiB chunks.
+  The worker uses PostgreSQL durable episode part manifests, SHA-256
+  verification, and the single-source advisory lock. Global scheduler
+  advisory locking prevents multiple concurrent queue loops.
+- An operator may call POST /internal/seasons/pause at any time.
+  Confirmed S3 chunks are kept, and the next explicit approved start
+  resumes from verified checkpoints. A transient error retries at most
+  twice, with a bounded delay; other errors stop for review.
+- During one approved copy session, the queue automatically moves to
+  the next chunk and selected episode. It does not automatically
+  restart after a container restart: the quiet/idle source assumption
+  must be reconfirmed by the operator. This is intentional.
+- Default safety conditions are private-only, no public storage/URL,
+  no redirect of customer playback, one app replica at a time, and
+  no automatic startup. Keep the flag OFF until the preview is tested
+  by the owner and real source quota/storage cost are reviewed.
+
+Internal bearer-protected endpoints:
+GET /internal/seasons/queue,
+POST /internal/seasons/enqueue,
+POST /internal/seasons/start,
+POST /internal/seasons/pause.
+The existing activation portal proxies these through its signed admin
+session at /api/v1/admin/content-hub/seasons/*. All POSTs require
+an additional exact owner action marker and protected internal headers.
+No direct public Content Hub hostname is to be added.
+
+Do not merge the draft PR or switch the Railway live branch solely
+because unit tests pass. First verify owner-browser episode audio/video,
+review the one-replica/source idle conditions, and then release with all
+new queue flags still OFF before a separate, monitored opt-in.
