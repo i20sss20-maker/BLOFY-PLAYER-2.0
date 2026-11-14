@@ -163,6 +163,7 @@ reload();setInterval(()=>{if(!document.hidden)reload()},10000);
 
 
 let seasonRequestBusy=false,seasonActive=false,seasonEnabled=false;
+let selectedSeriesData=null;
 const seasonActions={'x-blofy-owner-action':'season-library'};
 const queueUrl='/api/v1/admin/content-hub/seasons/';
 function percentMeter(progress){
@@ -245,7 +246,10 @@ function candidateCard(item,index){
  const fields=div('candidate-fields');
  const number=document.createElement('input');
  number.type='number';number.min='1';number.max='500';number.step='1';
- number.value=String(index+1);number.className='candidate-number';
+ number.value=String(item.episodeNumber||index+1);number.className='candidate-number';
+ if(item.seriesGatewayId){number.readOnly=true;
+  check.dataset.seriesId=String(item.seriesGatewayId);
+  check.dataset.seasonNumber=String(item.seasonNumber);}
  number.setAttribute('aria-label','رقم الحلقة '+item.title);
  const bytes=document.createElement('input');
  bytes.type='number';bytes.min=String(8*1024*1024);
@@ -274,7 +278,77 @@ function candidateCard(item,index){
   div('muted','الحجم بالبايت'),bytes,probe);
  row.append(line,fields);return row;
 }
+function resetSeasonSelection(){
+ selectedSeriesData=null;
+ $('seasonSelect').replaceChildren(new Option('اختر الموسم',''));
+ $('seasonSelect').disabled=true;
+ $('seasonCandidates').replaceChildren(div('placeholder',
+  'اختر مسلسلًا وموسمًا لعرض حلقاته.'));
+}
+$('seriesSelect').addEventListener('change',()=>{
+ resetSeasonSelection();
+ $('loadSeriesSeasons').disabled=!/^\\d+$/.test($('seriesSelect').value);
+});
+$('loadSeries').addEventListener('click',async()=>{
+ const button=$('loadSeries');button.disabled=true;
+ try{
+  const response=await fetch(queueUrl+'series',{
+   cache:'no-store',credentials:'same-origin'});
+  if(response.status===401){location.assign('/admin');return}
+  const data=await response.json();
+  if(!response.ok||!data.ok||!Array.isArray(data.series))
+   throw Error('series_catalog_unavailable');
+  const sel=$('seriesSelect');
+  sel.replaceChildren(new Option('اختر مسلسلًا',''));
+  for(const series of data.series){
+   sel.add(new Option(String(series.title)+' · #'+series.seriesGatewayId,
+    String(series.seriesGatewayId)));
+  }
+  resetSeasonSelection();
+  $('loadSeriesSeasons').disabled=true;
+  $('seasonNotice').textContent='اختر مسلسلًا ثم اضغط «عرض المواسم والحلقات».';
+ }catch{
+  $('seasonNotice').textContent='تعذر تحميل قائمة المسلسلات المرخصة حاليًا.';
+ }finally{button.disabled=false}
+});
+$('loadSeriesSeasons').addEventListener('click',async()=>{
+ const id=Number($('seriesSelect').value);
+ if(!Number.isSafeInteger(id)||id<1)return;
+ const btn=$('loadSeriesSeasons');btn.disabled=true;
+ $('seasonCandidates').replaceChildren(div('placeholder','جارٍ تحميل بيانات المواسم…'));
+ try{
+  const response=await fetch(queueUrl+'series/'+id,{
+   cache:'no-store',credentials:'same-origin'});
+  if(response.status===401){location.assign('/admin');return}
+  const data=await response.json();
+  if(!response.ok||!data.ok||!Array.isArray(data.seasons))
+   throw Error('licensed_series_not_available');
+  selectedSeriesData=data;
+  const select=$('seasonSelect');
+  select.replaceChildren(new Option('اختر الموسم',''));
+  for(const season of data.seasons){
+   select.add(new Option(
+    'الموسم '+season.seasonNumber+' — '+season.episodeCount+' حلقة',
+    String(season.seasonNumber)));
+  }
+  select.disabled=data.seasons.length===0;
+  $('seasonCandidates').replaceChildren(div('placeholder',
+   data.seasons.length?'اختر الموسم لعرض الحلقات.':'لا توجد حلقات متاحة لهذا المسلسل.'));
+ }catch{
+  resetSeasonSelection();
+  $('seasonNotice').textContent='تعذر قراءة المواسم من مصدر المسلسل؛ لم يبدأ أي نقل.';
+ }finally{btn.disabled=false}
+});
+$('seasonSelect').addEventListener('change',()=>{
+ const number=$('seasonSelect').value;
+ const group=selectedSeriesData?.seasons?.find(
+  x=>String(x.seasonNumber)===number);
+ $('seasonCandidates').replaceChildren(...(group?.episodes?.length?
+  group.episodes.map(candidateCard):
+  [div('placeholder','اختر موسمًا يحتوي على حلقات.')]));
+});
 $('loadCandidates').addEventListener('click',async()=>{
+ resetSeasonSelection();$('seriesSelect').value='';
  const button=$('loadCandidates');button.disabled=true;
  try{
   const response=await fetch(queueUrl+'candidates',{
@@ -291,9 +365,14 @@ $('loadCandidates').addEventListener('click',async()=>{
  finally{button.disabled=false}
 });
 $('enqueueSeason').addEventListener('click',async()=>{
+ const seriesId=Number($('seriesSelect').value);
+ const selectedSeason=Number($('seasonSelect').value);
+ const seriesMode=selectedSeriesData&&
+  selectedSeriesData.seriesGatewayId===seriesId&&
+  selectedSeriesData.seasons.some(s=>s.seasonNumber===selectedSeason);
  const seasonKey=$('seasonKey').value.trim();
- if(!/^[a-z0-9][a-z0-9_-]{2,63}$/.test(seasonKey)){
-  $('seasonNotice').textContent='أدخل معرّف موسم مثل series_s01.';
+ if(!seriesMode&&!/^[a-z0-9][a-z0-9_-]{2,63}$/.test(seasonKey)){
+  $('seasonNotice').textContent='اختر مسلسلًا وموسمًا، أو معرّفًا يدويًا للموسم.';
   return;
  }
  const selected=[...document.querySelectorAll(
@@ -301,6 +380,11 @@ $('enqueueSeason').addEventListener('click',async()=>{
    row.querySelector('.candidate-select').checked);
  if(!selected.length){
   $('seasonNotice').textContent='اختر حلقة واحدة على الأقل.';return;
+ }
+ if(seriesMode&&selected.some(row=>
+  Number(row.querySelector('.candidate-select').dataset.seriesId)!==seriesId||
+  Number(row.querySelector('.candidate-select').dataset.seasonNumber)!==selectedSeason)){
+  $('seasonNotice').textContent='الحلقات المختارة ليست من الموسم المحدد.';return;
  }
  const episodes=selected.map(row=>({
   gatewayId:Number(row.querySelector('.candidate-select').dataset.gatewayId),
@@ -320,7 +404,9 @@ $('enqueueSeason').addEventListener('click',async()=>{
   const response=await fetch(queueUrl+'enqueue',{
    method:'POST',credentials:'same-origin',headers:{
     ...seasonActions,'content-type':'application/json'},
-   body:JSON.stringify({seasonKey,episodes})});
+   body:JSON.stringify(seriesMode?
+    {seriesGatewayId:seriesId,seasonNumber:selectedSeason,episodes}:
+    {seasonKey,episodes})});
   const data=await response.json();
   $('seasonNotice').textContent=response.ok?
    'تمت إضافة '+data.added+' حلقة إلى قائمة الانتظار.':
