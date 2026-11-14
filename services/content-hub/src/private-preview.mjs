@@ -13,13 +13,19 @@ const RUN=/^[A-Za-z0-9_-]{8,80}$/;
 const MAX_BYTES=12*1024*1024;
 const base={privateOnly:true,customerCutover:false,providerRequests:0};
 
-async function ffmpegPreview({input,output,signal}){
+async function ffmpegPreview({input,output,signal,mediaKind='movie'}){
+ // Episode source codecs may not be HTML5-compatible; cap its preview
+ // to 720p H.264/AAC. Movie preview keeps the already tested H.264 copy.
+ const videoArgs=mediaKind==='episode'?
+  ['-c:v','libx264','-preset','ultrafast','-pix_fmt','yuv420p',
+   '-vf','scale=-2:720','-b:v','1500k','-maxrate','1800k','-bufsize','3600k']:
+  ['-c:v','copy'];
  await execFile('ffmpeg',[
   '-hide_banner','-loglevel','error','-nostdin','-y',
   '-threads','1','-probesize','16000000','-analyzeduration','8000000',
   '-i',input,
   '-map','0:v:0','-map','0:a:0',
-  '-t','12','-c:v','copy','-c:a','aac','-b:a','128k',
+  '-t','12',...videoArgs,'-c:a','aac','-b:a','128k',
   '-ac','2','-movflags','+faststart','-f','mp4',output
  ],{
   timeout:50000,maxBuffer:262144,signal,windowsHide:true,
@@ -50,7 +56,7 @@ export async function buildPrivateBrowserPreview({
         output=join(folder,'preview.mp4');
   const sampled=await sampleVerifiedPrefix({
    object:manifest,storage,filename:input,signal});
-  await transcoder({input,output,signal});
+  await transcoder({input,output,signal,mediaKind});
   const meta=await stat(output);
   if(!meta.isFile()||meta.size<2048||meta.size>MAX_BYTES)
    return {...base,ok:false,code:'private_preview_output_size_invalid'};
