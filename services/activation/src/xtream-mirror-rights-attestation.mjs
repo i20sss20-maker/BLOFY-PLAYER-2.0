@@ -33,30 +33,6 @@ export async function attestMirrorStorageRights(db,item={}){
  if(typeof db?.query!=='function')
   throw Error('mirror_rights_database_missing');
  const valid=validateMirrorStorageAttestation(item);
- const sql=`UPDATE blofy_xtream_mirror_items q SET
-    rights_ref_sha256=$6,license_reviewed_at=NOW(),
-    expected_bytes=NULL,size_probe_at=NULL,size_probe_day=NULL,
-    source_validator_sha256=NULL,size_probe_error=NULL,
-    state='needs_review'
-   WHERE q.source_id=$1 AND q.media_kind=$2 AND q.gateway_id=$3
-     AND q.media_id=$4 AND q.extension=$5
-     AND q.mapping_conflict=FALSE AND q.state IN ('needs_review','failed')
-     AND EXISTS (
-      SELECT 1 FROM blofy_xtream_servers s
-      WHERE s.id=q.source_id AND lower(btrim(s.name))='saleh'
-        AND s.enabled=TRUE AND s.publish_catalog=TRUE
-        AND s.deletion_requested_at IS NULL
-        AND s.status='online' AND s.last_error IS NULL
-        AND s.last_sync_at>NOW()-INTERVAL '48 hours'
-     ) AND EXISTS (
-       SELECT 1 FROM blofy_xtream_gateway_item_map m
-       WHERE q.media_kind='movie' AND m.gateway_id=q.gateway_id
-         AND m.server_id=q.source_id AND m.media_type='movie'
-         AND m.source_id=q.media_id
-     ) OR 1=0`;
- // PostgreSQL OR precedence is a dangerous source of ACL regressions.
- // Construct separate exact queries for movie vs episode, with identical
- // source and identity constraints; do not append an unchecked OR.
  const sourceGuard=`EXISTS(SELECT 1 FROM blofy_xtream_servers s
       WHERE s.id=q.source_id AND lower(btrim(s.name))='saleh'
       AND s.enabled=TRUE AND s.publish_catalog=TRUE
