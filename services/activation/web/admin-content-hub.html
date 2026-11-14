@@ -90,6 +90,13 @@
       <p class="muted">عينة قصيرة MP4 من الحلقة التي اجتازت التحقق، لا تتصل بمصدر البث أثناء المشاهدة.</p>
       <div class="screen"><video id="episodePlayer" controls preload="none" playsinline></video></div>
       <p id="episodePlayerNote" class="muted">اضغط «تشغيل عينة الحلقة»، ثم تأكد بنفسك من الصورة والصوت.</p>
+      <div class="owner-confirmation">
+        <p class="muted">بعد تشغيل العينة، أكد ملاحظتك بنفسك. نجاح فحص الخادم لا يُغني عن هذا الاختبار.</p>
+        <label><input id="ownerSawPicture" type="checkbox"> شاهدت صورة الحلقة بوضوح</label>
+        <label><input id="ownerHeardAudio" type="checkbox"> سمعت صوت الحلقة بشكل صحيح</label>
+        <button id="confirmEpisodeAV" type="button" disabled>✓ اعتماد اختبار الصورة والصوت</button>
+        <p id="episodeAVStatus" class="muted" role="status">لم يتم تسجيل تأكيد تشغيل من المتصفح.</p>
+      </div>
     </section>
     <section class="card playback">
       <h2>اختبار الفيلم من التخزين</h2>
