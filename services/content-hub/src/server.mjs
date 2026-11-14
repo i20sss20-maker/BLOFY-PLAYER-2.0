@@ -71,6 +71,7 @@ export function createContentHubServer({storage,lease,
  let syntheticRunning=false,lastSynthetic=null;
  let pilotRunning=false,lastPilot=null,pilotAbort=null;
  let canaryRunning=false,lastCanary=null;
+ let episodeCanaryRunning=false,lastEpisodeCanary=null;
  let previewBuilding=false,previewCache=null,previewThrottleUntil=0;
  let episodeProbeBusy=false,episodeProbeAt=0,lastEpisodeProbe=null;
  let episodeCopyBusy=false,episodeCopyAbort=null,lastEpisodeCopy=null;
@@ -86,12 +87,12 @@ export function createContentHubServer({storage,lease,
   readiness:()=>episodeCopyReadiness(pilotEnv),logger,
   delayMs:2200,maxBatches:180,maxDurationMs:45*60*1000
  });
- async function runFullPlaybackCanary(runId){
-  const diag=await diagnoseVerifiedMovie({runId,storage,lease});
+ async function runFullPlaybackCanary(runId,mediaKind='movie'){
+  const diag=await diagnoseVerifiedMovie({runId,storage,lease,mediaKind});
   if(!diag.ok)return {...diag,seekVerified:false,seeksVerified:0};
   const seek=await verifyPrivateSeekRanges({
     runId,bytes:diag.verifiedMovieBytes,
-    port:server.address()?.port,token
+    port:server.address()?.port,token,mediaKind
   });
   return {...diag,ok:seek.ok===true,
     code:seek.ok?'canary_audio_video_and_seeks_verified':
@@ -125,7 +126,7 @@ export function createContentHubServer({storage,lease,
     lastEpisodeProbe,episodeCopyBusy:episodeCopyBusy||episodeCopy.isRunning(),
     lastEpisodeCopy,episodeContinuousCopy:episodeCopy.status(),
     episodeCopyReadiness:episodeCopyReadiness(pilotEnv),
-    canaryRunning,lastCanary,
+    canaryRunning,lastCanary,episodeCanaryRunning,lastEpisodeCanary,
     ownerPreviewEnabled:pilotEnv.BLOFY_CONTENT_HUB_OWNER_PREVIEW_ENABLED==='1',
     continuousCopy:copy.status(),durablePilot,chunkedBatchEnabled:chunkedBatchReadiness(pilotEnv).ready,
     customerCutover:false,
@@ -273,6 +274,7 @@ export function createContentHubServer({storage,lease,
     return json(res,200,{ok:true,privateOnly:true,customerCutover:false,
        accounting,runs,pilotRunning:pilotRunning||copy.isRunning(),
        canaryRunning,lastCanary,lastEpisodeProbe,
+       episodeCanaryRunning,lastEpisodeCanary,
        episodeCopyBusy:episodeCopyBusy||episodeCopy.isRunning(),
        lastEpisodeCopy,episodeRuns,episodeContinuousCopy:episodeCopy.status(),
        episodeCopyReadiness:episodeCopyReadiness(pilotEnv),
@@ -342,6 +344,31 @@ export function createContentHubServer({storage,lease,
     res.off('close',close);
    }
    return;
+  }
+  // One verified private episode only; never touches the upstream
+  // provider nor updates customer playback. Can only pass after SHA256.
+  if(path==='/internal/episodes/playback/diagnose'&&req.method==='POST'){
+   if(String(req.url||'').includes('?')||
+      req.headers['x-blofy-canary-confirm']!=='verified-private-episode')
+    return json(res,400,{ok:false,
+     code:'episode_canary_confirmation_required'});
+   if(episodeCanaryRunning)return json(res,409,{ok:false,
+    code:'episode_canary_already_running'});
+   const runId=String(pilotEnv.BLOFY_CONTENT_HUB_EPISODE_RUN_ID||'');
+   if(!/^[A-Za-z0-9_-]{8,80}$/.test(runId))
+    return json(res,409,{ok:false,code:'episode_canary_run_not_selected'});
+   episodeCanaryRunning=true;
+   lastEpisodeCanary={ok:false,code:'episode_canary_running',
+    startedAt:new Date().toISOString()};
+   void runFullPlaybackCanary(runId,'episode').then(result=>{
+    lastEpisodeCanary={...result,checkedAt:new Date().toISOString()};
+    logger('BLOFY_CONTENT_HUB_EPISODE_PLAYBACK_CANARY',lastEpisodeCanary);
+   }).catch(()=>{
+    lastEpisodeCanary={ok:false,code:'episode_canary_failed',
+     checkedAt:new Date().toISOString(),customerCutover:false};
+   }).finally(()=>{episodeCanaryRunning=false});
+   return json(res,202,{ok:true,code:'episode_canary_accepted',
+    privateOnly:true,customerCutover:false,providerRequests:0});
   }
   if(path==='/internal/playback/diagnose'&&req.method==='POST'){
    if(String(req.headers['x-blofy-canary-confirm']||'')!=='verified-private')
@@ -422,14 +449,20 @@ export function createContentHubServer({storage,lease,
       privateOnly:true,customerCutover:false});
   }
   // Admin-only and private-network-only canary. No customer cutover.
-  const playback=/^\/internal\/pilot\/playback\/([A-Za-z0-9_-]{8,80})$/.exec(path);
+  const playback=/^\/internal\/(pilot|episodes)\/playback\/([A-Za-z0-9_-]{8,80})$/.exec(path);
   if(playback&&['GET','HEAD'].includes(req.method)){
    if(String(req.url||'').includes('?'))
     return json(res,400,{ok:false,code:'pilot_private_query_denied'});
+   const episodePlayback=playback[1]==='episodes';
+   const playbackId=playback[2];
    let saved=null;
-   try{saved=await lease.getVerifiedPilotObject?.(playback[1])}catch{}
-   if(!saved)try{saved=await lease.getVerifiedChunkedObject?.(
-     playback[1])}catch{}
+   if(episodePlayback){
+    try{saved=await lease.getVerifiedEpisodeObject?.(playbackId)}catch{}
+   }else{
+    try{saved=await lease.getVerifiedPilotObject?.(playbackId)}catch{}
+    if(!saved)try{saved=await lease.getVerifiedChunkedObject?.(
+      playbackId)}catch{}
+   }
    if(!saved||!Number.isSafeInteger(saved.bytes)||saved.bytes<=0)
     return json(res,404,{ok:false,code:'pilot_verified_media_unavailable'});
    const ext=saved.kind==='chunked'?saved.extension:
