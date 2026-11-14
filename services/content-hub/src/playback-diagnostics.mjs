@@ -77,13 +77,19 @@ async function command(program,args){
 }
 
 export async function diagnoseVerifiedMovie({
- runId,storage,lease,signal,diagnosticRunner=command
+ runId,storage,lease,signal,diagnosticRunner=command,
+ mediaKind='movie'
 }={}){
  if(!SAFE_RUN.test(String(runId||'')))return {
   ...resultBase,ok:false,code:'canary_run_id_invalid'};
+ if(!['movie','episode'].includes(mediaKind))return {
+  ...resultBase,ok:false,code:'canary_media_kind_invalid'};
  let movie=null;
- try{movie=await lease.getVerifiedChunkedObject(runId)}
- catch{return {...resultBase,ok:false,code:'canary_manifest_unavailable'}}
+ try{
+  movie=mediaKind==='episode'?
+    await lease.getVerifiedEpisodeObject(runId):
+    await lease.getVerifiedChunkedObject(runId);
+ }catch{return {...resultBase,ok:false,code:'canary_manifest_unavailable'}}
  if(!movie)return {...resultBase,ok:false,code:'canary_movie_not_verified'};
  if(!['mp4','mkv','avi','ts'].includes(movie.extension))return {
   ...resultBase,ok:false,code:'canary_container_not_supported'};
