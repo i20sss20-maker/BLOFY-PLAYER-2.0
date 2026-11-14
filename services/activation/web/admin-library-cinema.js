@@ -155,6 +155,42 @@ function makeCard(item){
  body.append(actions);card.append(body);
  return card;
 }
+function featuredCard(item){
+ const hero=el('article','cinema-featured');
+ const copy=el('div','cinema-featured-copy');
+ copy.append(el('span','cinema-feature-tag','من المحتوى المحفوظ · اختيار عرض بصري'),
+  el('h4','',item.title));
+ if(item.meta?.overview)copy.append(el('p','cinema-feature-description',
+  String(item.meta.overview).slice(0,250)));
+ copy.append(el('p','cinema-feature-info',
+  typeLabel(item.kind)+' · '+
+  (genreNames[item.genre]||'غير مصنّف')+' · '+
+  (stateNames[item.state]||'غير محدد')));
+ const actions=el('div','cinema-feature-actions');
+ if(item.seasonKey&&seasonName(item.seasonKey)){
+  const details=el('button','cinema-see','تفاصيل الموسم');
+  details.type='button';details.addEventListener('click',()=>openSeason(item));
+  actions.append(details);
+ }
+ if(item.editKey&&validKey(item.editKey)){
+  const edit=el('button','cinema-edit','إدارة بيانات العرض');
+  edit.type='button';edit.addEventListener('click',()=>openEditor(item));
+  actions.append(edit);
+ }
+ copy.append(actions);hero.append(copy);
+ const path=posterPath(item.meta?.posterPath);
+ if(path&&item.meta?.artworkRightsConfirmed===true){
+  const image=el('img','cinema-feature-art');
+  image.src='https://image.tmdb.org/t/p/w500'+path;
+  image.alt='صورة العمل '+item.title;
+  image.loading='lazy';image.decoding='async';
+  image.referrerPolicy='no-referrer';
+  image.addEventListener('error',()=>image.remove(),{once:true});
+  hero.append(image);
+ }
+ return hero;
+}
+
 function genreToolbar(all){
  const labels=[...new Set(Object.values(all).flat().map(x=>x.genre)
   .filter(x=>x&&x!=='unspecified'&&genreNames[x]))].slice(0,14);
@@ -179,6 +215,16 @@ function render(){
  const kinds=currentKind==='all'?
   ['movie','series','season','episode']:[currentKind];
  const containers=[];
+ // Feature an already owner-curated image only: never manufacture a cover,
+ // recommendation score, or verified playback claim from source metadata.
+ const eligible=[...all.movie,...all.series].filter(x=>
+  x.meta?.artworkRightsConfirmed===true&&posterPath(x.meta.posterPath)&&
+  typeof x.meta.title==='string'&&x.meta.title.trim()&&
+  (genre==='all'||genre===x.genre));
+ const featured=eligible.find(x=>x.kind==='movie'&&x.state==='verified')||
+  eligible[0]||null;
+ if(featured&&['all','movie','series'].includes(currentKind))
+  containers.push(featuredCard(featured));
  for(const kind of kinds){
   if(!all[kind])continue;
   const rows=all[kind].filter(x=>genre==='all'||x.genre===genre);
