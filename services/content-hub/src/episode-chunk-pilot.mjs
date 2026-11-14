@@ -35,7 +35,9 @@ export function episodeCopyReadiness(env={}){
  if(String(env.BLOFY_CONTENT_HUB_BRIDGE_TOKEN||'').length<32)
   blockedBy.push('source_bridge_not_configured');
  return {ready:blockedBy.length===0,blockedBy,automaticDownload:false,
-   customerCutover:false};
+   approvedGatewayId:Number.isSafeInteger(id)&&id>0?id:null,
+   expectedBytes:Number.isSafeInteger(bytes)&&bytes>=CHUNK&&bytes<=MAX_FILE?
+     bytes:null,customerCutover:false};
 }
 function config(env){
  if(!episodeCopyReadiness(env).ready)return null;
