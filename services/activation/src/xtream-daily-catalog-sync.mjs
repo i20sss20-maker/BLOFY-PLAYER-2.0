@@ -43,8 +43,13 @@ export async function requestDailyXtreamCatalogSync({
     source_id UUID NOT NULL,
     local_day DATE NOT NULL,
     requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    state TEXT NOT NULL DEFAULT 'queued' CHECK (state IN ('queued','completed','partial','failed')),
+    finished_at TIMESTAMPTZ,
     PRIMARY KEY (source_id, local_day)
   )`);
+  await db.query(`ALTER TABLE blofy_xtream_daily_catalog_requests
+    ADD COLUMN IF NOT EXISTS state TEXT NOT NULL DEFAULT 'queued',
+    ADD COLUMN IF NOT EXISTS finished_at TIMESTAMPTZ`);
   const claim = await db.query(`INSERT INTO blofy_xtream_daily_catalog_requests
     (source_id, local_day) VALUES ($1, $2::date)
     ON CONFLICT DO NOTHING RETURNING source_id`, [sourceId, window.localDay]);
