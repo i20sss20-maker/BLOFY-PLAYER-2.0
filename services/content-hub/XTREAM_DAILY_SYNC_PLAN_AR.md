@@ -70,3 +70,33 @@ the existing Xtream admin interface before declaring a successful day.
 
 Existing Content Hub upload and queue flags remain OFF; do not turn them
 all on as a substitute for missing authorization, capacity or testing.
+
+
+## Additional implemented QA controls (2026-11-14)
+
+The admin-session-protected activation API can inspect the imported source
+without fetching media:
+- `GET /api/v1/admin/xtream/mirror/inventory?sourceId=<UUID>&mediaType=movie&pageSize=50`
+- mediaType can be `live`, `movie`, `series`, or `episode`; the episode
+  view is only the gateway's **previously mapped** episode subset, never
+  guaranteed full provider `get_series_info` coverage.
+- Query uses a source-scoped keyset cursor. No Xtream URL, password, token,
+  private S3 key or source media bytes is returned.
+- `GET /api/v1/admin/xtream/daily-sync/receipts?sourceId=<UUID>` shows
+  recent `queued`, `completed`, `partial` or `failed` daily metadata
+  import receipts. `partial` is not full synchronization success.
+
+An additional Content Hub private bearer-protected API exposes
+`POST /internal/mirror/daily/plan`, requiring the explicit operator header
+`x-blofy-owner-action: preview-licensed-daily-mirror` AND the opt-in
+`BLOFY_CONTENT_HUB_DAILY_MIRROR_PLANNER_ENABLED=1`.
+It accepts up to 25 individually licensed items and proposes up to 12
+files / 8 GiB in one dry-run. It **never** contacts Xtream or writes
+storage; it rejects client claims of pre-verified S3 objects. It does
+not independently measure a provider's current stream-count or legal
+grant. An actual production worker must recheck both.
+
+All flags remain OFF in Railway. The remaining full physical-copy implementation
+requires an independently licensed and budgeted durable media queue,
+provider metadata enumeration, tested general movie/episode workers, media
+size and version probes, and a post-copy private playback test.
