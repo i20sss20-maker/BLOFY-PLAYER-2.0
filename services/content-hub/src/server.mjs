@@ -10,6 +10,7 @@ import {createContinuousCopyController} from './continuous-copy.mjs';
 import {diagnoseVerifiedMovie} from './playback-diagnostics.mjs';
 import {verifyPrivateSeekRanges} from './seek-diagnostics.mjs';
 import {buildPrivateBrowserPreview} from './private-preview.mjs';
+import {inspectEpisodeCandidates} from './episode-candidates.mjs';
 
 const FIXTURE_SOURCE='00000000-0000-4000-8000-000000000000';
 const FIXTURE_SIZE=8*1024*1024;
@@ -59,7 +60,8 @@ export async function runSyntheticPrivateStorageCheck({storage}){
 export function createContentHubServer({storage,lease,
  token='',allowSynthetic=false,logger=()=>{},
  pilotPreflight=inspectOneMoviePilot,pilotEnv=process.env,
- batchRunner=runChunkedMovieBatch,previewBuilder=buildPrivateBrowserPreview}={}){
+ batchRunner=runChunkedMovieBatch,previewBuilder=buildPrivateBrowserPreview,
+ episodeCandidateInspector=inspectEpisodeCandidates}={}){
  if(!storage||!lease)throw Error('content_hub_private_dependencies_required');
  const started=Date.now();
  let syntheticRunning=false,lastSynthetic=null;
@@ -120,6 +122,18 @@ export function createContentHubServer({storage,lease,
     return json(res,503,{ok:false,code:'pilot_preflight_unavailable',
      providerMediaRequests:0,downloadStarted:false});
    }
+  }
+  if(path==='/internal/episodes/candidates'&&req.method==='GET'){
+   if(String(req.url||'').includes('?'))
+    return json(res,400,{ok:false,code:'episode_query_not_allowed',
+     providerMediaRequests:0,customerCutover:false});
+   try{
+    const result=await episodeCandidateInspector({env:pilotEnv});
+    return json(res,result.ok?200:503,result);
+   }catch{return json(res,503,{ok:false,
+     code:'episode_catalog_preflight_failed',readOnly:true,
+     providerMediaRequests:0,automaticDownload:false,
+     customerCutover:false})}
   }
   if(path==='/internal/pilots'&&req.method==='GET'){
    if(String(req.url||'').includes('?'))
