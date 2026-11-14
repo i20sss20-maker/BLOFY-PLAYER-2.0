@@ -12,7 +12,9 @@ test('licensed episode candidate query is metadata-only and scoped to saleh',asy
  let count=0;
  const pool={query:async(sql,params)=>{
   count++;assert.match(sql,/lower\(btrim\(s.name\)\)='saleh'/);
-  assert.match(sql,/m.media_type='episode'/);
+  assert.match(sql,/FROM blofy_xtream_gateway_episode_map e/);
+  assert.match(sql,/i.media_type='series'/);
+  assert.match(sql,/i.source_id=e.series_source_id/);
   assert.match(sql,/s.publish_catalog=TRUE/);
   assert.match(sql,/i.enabled=TRUE/);
   assert.match(sql,/LIMIT \$1/);
