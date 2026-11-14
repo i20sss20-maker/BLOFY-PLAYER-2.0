@@ -303,12 +303,13 @@ export function createContentHubServer({storage,lease,
       !seasonQueueStore?.seasonAnalyticsSummary)
     return json(res,503,{ok:false,code:'season_analytics_unavailable'});
    try{
-    const [stats,metrics,seasons,failures,events,audits,unresolved]=
-     await Promise.all([
+    const [stats,metrics,seasons,failures,events,audits,unresolved,
+     episodeStates]=await Promise.all([
       seasonQueueStore.healthStats(),seasonQueueStore.analyticsStats(),
       seasonQueueStore.seasonAnalyticsSummary(),seasonQueueStore.failureReasons(),
       seasonQueueStore.recentTransferEvents(),seasonQueueStore.recentAudits(),
-      seasonQueueStore.unresolvedAuditCounts?.()||{mismatch:0,unavailable:0}
+      seasonQueueStore.unresolvedAuditCounts?.()||{mismatch:0,unavailable:0},
+      seasonQueueStore.recentEpisodeStates?.()||[]
      ]);
     const worker=seasonQueue?.status()||{};
     const currentCheckpoint=worker.active&&worker.currentRunId?
@@ -318,7 +319,7 @@ export function createContentHubServer({storage,lease,
      storageSoftLimitBytes:pilotEnv.BLOFY_CONTENT_HUB_STORAGE_SOFT_LIMIT_BYTES
     });
     return json(res,200,buildSeasonAnalytics({
-     health,metrics,seasons,failures,events,worker
+     health,metrics,seasons,failures,events,worker,episodeStates
     }));
    }catch{
     return json(res,503,{ok:false,code:'season_analytics_database_unavailable'});
