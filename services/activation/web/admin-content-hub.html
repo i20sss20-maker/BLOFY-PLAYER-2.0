@@ -28,6 +28,42 @@
     <article class="tile"><small>عمليات نقل جارية</small><b id="active">—</b></article>
     <article class="tile"><small>عمليات لم تكتمل</small><b id="failed">—</b></article>
   </section>
+  <section class="card seasons" aria-labelledby="season-title">
+    <div class="cardhead">
+      <div><h2 id="season-title">مكتبة المواسم والحلقات</h2>
+        <p class="muted">نقل منظم إلى التخزين الخاص، بحفظ نسبة كل حلقة وموسم. لا يؤثر على تشغيل العملاء.</p></div>
+      <span id="seasonState" class="badge pending">غير مفعّل</span>
+    </div>
+    <div class="season-layout">
+      <div>
+        <div class="cardhead"><h3>قائمة انتظار المواسم</h3>
+          <button id="refreshSeasons" type="button">تحديث القائمة</button></div>
+        <div id="seasonSummary" class="jobs" aria-live="polite">
+          <p class="placeholder">جارٍ جلب معلومات المواسم…</p>
+        </div>
+        <div class="actions">
+          <button id="startSeasons" type="button" disabled>▶ استكمال النقل المتسلسل</button>
+          <button id="pauseSeasons" class="danger" type="button" disabled>⏸ إيقاف آمن</button>
+        </div>
+        <p id="seasonNotice" class="muted" role="status"></p>
+      </div>
+      <div>
+        <div class="cardhead"><h3>إضافة حلقات مصرّح بتخزينها</h3>
+          <button id="loadCandidates" type="button">عرض الحلقات المتاحة</button></div>
+        <label class="season-label" for="seasonKey">معرّف الموسم (حروف إنجليزية صغيرة وأرقام)</label>
+        <input id="seasonKey" class="season-input" maxlength="64"
+          placeholder="example_series_s01" autocomplete="off">
+        <p class="muted">حدد الحلقات، رقم كل حلقة، ثم افحص حجمها أولًا قبل إضافتها. فحص الحجم يقرأ 4 كيلوبايت فقط من المصدر.</p>
+        <div id="seasonCandidates" class="candidate-list">
+          <p class="placeholder">اضغط «عرض الحلقات المتاحة» لاختيار المحتوى.</p>
+        </div>
+        <div class="actions">
+          <button id="enqueueSeason" type="button" disabled>＋ إضافة المحدد إلى الانتظار</button>
+        </div>
+      </div>
+    </div>
+    <p class="hint">التخزين مرهون بحقوق نسخ وتخزين المحتوى، وخمول المصدر قبل النقل. الاستئناف تلقائي بين الأجزاء أثناء جلسة تشغيل معتمدة فقط؛ بعد إعادة تشغيل الخادم يلزم اعتماد جلسة جديدة.</p>
+  </section>
   <div class="columns">
     <section class="card">
       <div class="cardhead"><h2>عمليات النسخ</h2>
