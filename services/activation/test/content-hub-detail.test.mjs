@@ -180,3 +180,95 @@ test('series details fetch all registered seasons and only verified episodes sho
  assert.equal(fake.refs.libraryDetailPlayer.src,'');
  assert.equal(fake.refs.libraryDetailDialog.open,false);
 });
+
+
+test('manual A/V proof follows real player event, resets between verified episodes and never autoconfirms',async()=>{
+ let saved=false,postCalls=0;
+ const reports=[];
+ const routes=async(url,options)=>{
+  if(url.endsWith('/seasons/report/series_42_s01/page/1')){
+   reports.push(url);
+   return {ok:true,status:200,json:async()=>({
+    ok:true,readOnly:true,privateOnly:true,seasonKey:'series_42_s01',
+    page:{number:1,pages:1,totalEpisodes:3},
+    totals:{verifiedCount:2,episodeCount:3},
+    episodes:[{
+     runId:'season_reviewed_12345',episodeNumber:1,title:'Episode One',
+     state:'verified',sourceVerified:true,expectedBytes:100,storedBytes:100,
+     ownerAvConfirmedAt:null,videoOwnerConfirmed:false,audioOwnerConfirmed:false
+    },{
+     runId:'season_verif_9876543',episodeNumber:2,title:'Episode Two',
+     state:'verified',sourceVerified:true,expectedBytes:100,storedBytes:100,
+     ownerAvConfirmedAt:saved?'2026-11-14T12:34:00Z':null,
+     videoOwnerConfirmed:saved,audioOwnerConfirmed:saved
+    },{
+     runId:'season_pending_98765',episodeNumber:3,title:'Pending',
+     state:'queued',sourceVerified:false,expectedBytes:100,storedBytes:30
+    }]
+   })};
+  }
+  if(url.endsWith('/seasons/episodes/av/confirm')){
+   postCalls++;
+   assert.equal(options.method,'POST');
+   assert.equal(options.headers['x-blofy-owner-action'],
+    'confirm-manual-episode-av');
+   const body=JSON.parse(options.body);
+   assert.equal(body.runId,'season_verif_9876543');
+   assert.equal(body.confirmed,true);
+   assert.equal(body.videoConfirmed,true);
+   assert.equal(body.audioConfirmed,true);
+   saved=true;
+   return {ok:true,status:200,json:async()=>({
+    ok:true,manualOnly:true,runId:body.runId,
+    confirmedAt:'2026-11-14T12:34:00Z',
+    videoOwnerConfirmed:true,audioOwnerConfirmed:true})};
+  }
+  throw Error('unexpected private request '+url);
+ };
+ const fake=env({fetchImpl:routes});
+ vm.runInNewContext(await web('admin-library-detail.js'),fake.context);
+ fake.dispatch('blofy:open-library-detail',{item:{
+  kind:'season',key:'series_42_s01',seasonKey:'series_42_s01',
+  title:'One season',meta:{title:'Series Test'}}});
+ await flush();await flush();
+ assert.equal(reports.length,1);
+ assert.equal(fake.refs.libraryDetailEpisodes.children.length,3);
+ assert.equal(fake.refs.libraryDetailNextVerified.disabled,false);
+ assert.equal(fake.refs.libraryDetailAvReview.hidden,true);
+ assert.equal(postCalls,0);
+ // Navigating starts no playback and has no external side effects.
+ fake.refs.libraryDetailNextVerified.click();
+ assert.equal(fake.refs.libraryDetailPlayer.src,
+  '/api/v1/admin/content-hub/seasons/episodes/season_reviewed_12345/preview');
+ assert.equal(fake.refs.libraryDetailAvReview.hidden,true);
+ assert.equal(fake.refs.libraryDetailAvConfirm.disabled,true);
+ assert.equal(postCalls,0);
+ fake.refs.libraryDetailPlayer.dispatch({type:'playing'});
+ assert.equal(fake.refs.libraryDetailAvReview.hidden,false);
+ assert.equal(fake.refs.libraryDetailAvConfirm.disabled,true);
+ fake.refs.libraryDetailAvVideoCheck.checked=true;
+ fake.refs.libraryDetailAvVideoCheck.dispatch({type:'change'});
+ assert.equal(fake.refs.libraryDetailAvConfirm.disabled,true);
+ // Move to the next verified episode, revoking previous click's checks.
+ fake.refs.libraryDetailNextVerified.click();
+ assert.equal(fake.refs.libraryDetailPlayer.src,
+  '/api/v1/admin/content-hub/seasons/episodes/season_verif_9876543/preview');
+ assert.equal(fake.refs.libraryDetailAvReview.hidden,true);
+ assert.equal(fake.refs.libraryDetailAvVideoCheck.checked,false);
+ assert.equal(fake.refs.libraryDetailAvAudioCheck.checked,false);
+ assert.equal(fake.refs.libraryDetailNextVerified.disabled,true);
+ fake.refs.libraryDetailPlayer.dispatch({type:'playing'});
+ fake.refs.libraryDetailAvVideoCheck.checked=true;
+ fake.refs.libraryDetailAvAudioCheck.checked=true;
+ fake.refs.libraryDetailAvAudioCheck.dispatch({type:'change'});
+ assert.equal(fake.refs.libraryDetailAvConfirm.disabled,false);
+ fake.refs.libraryDetailAvConfirm.click();
+ await flush();await flush();
+ assert.equal(postCalls,1);
+ assert.ok(reports.length>=2,'server persisted proof is read back from report');
+ const card=fake.refs.libraryDetailEpisodes.children[1];
+ assert.equal(flatten(card,n=>n.textContent.includes('أكدها المالك يدويًا')).length>0,true);
+ assert.equal(fake.refs.libraryDetailPlayer.src,'');
+ fake.refs.libraryDetailClose.click();
+ assert.equal(fake.refs.libraryDetailDialog.open,false);
+});
