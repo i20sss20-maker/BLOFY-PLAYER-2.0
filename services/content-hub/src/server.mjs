@@ -21,6 +21,7 @@ import {inspectLicensedSeries,inspectLicensedSeriesEpisodes,inspectLicensedPilot
 import {summarizeSeasonHealth,auditSeasonEpisodeSample} from './season-health.mjs';
 import {buildSeasonAnalytics} from './season-analytics.mjs';
 import {buildSeasonReport} from './season-report.mjs';
+import {buildPrivateDeviceQaManifest} from './device-qa-manifest.mjs';
 import {buildSeasonAttention} from './season-attention.mjs';
 import {checkPrivateReadConcurrency,validateConcurrentReadIds} from './concurrent-private-read.mjs';
 
@@ -318,6 +319,27 @@ export function createContentHubServer({storage,lease,
      page:Number(readinessRoute[1])});
     return json(res,200,data);
    }catch{return json(res,503,{ok:false,code:'season_readiness_database_unavailable'})}
+  }
+  // Owner-selected, DB-only test worksheet for Android/Android TV/Windows.
+  // No public app API and no stream URLs; the existing private preview route
+  // continues to require a separate authenticated owner session.
+  const qaRoute=/^\/internal\/seasons\/device-qa\/(android|android_tv|windows)\/(series_[1-9][0-9]{0,14}_s[0-9]{1,3})\/page\/([1-9][0-9]{0,4})$/.exec(path);
+  if(qaRoute&&req.method==='GET'){
+   if(String(req.url||'').includes('?')||
+      req.headers['x-blofy-owner-action']!=='prepare-private-device-qa')
+    return json(res,403,{ok:false,code:'private_device_qa_owner_only'});
+   if(!seasonQueueStore?.seasonDetailPage)
+    return json(res,503,{ok:false,code:'private_device_qa_unavailable'});
+   const page=Number(qaRoute[3]);
+   if(page>20000)return json(res,400,{ok:false,code:'private_device_qa_page_invalid'});
+   try{
+    const detail=await seasonQueueStore.seasonDetailPage({
+     seasonKey:qaRoute[2],page});
+    if(!detail)return json(res,404,{ok:false,code:'private_device_qa_season_missing'});
+    return json(res,200,buildPrivateDeviceQaManifest({
+     platform:qaRoute[1],seasonKey:qaRoute[2],page,detail
+    }));
+   }catch{return json(res,503,{ok:false,code:'private_device_qa_database_unavailable'})}
   }
   // Owner-only, read-only season detail; no media or S3 access.
   const detailRoute=/^\/internal\/seasons\/report\/([a-z0-9][a-z0-9_-]{2,63})\/page\/([1-9][0-9]{0,4})$/.exec(path);

@@ -12,6 +12,65 @@ const create=(tag,className,text)=>{
 const fmt=value=>Number(value||0).toLocaleString('ar-SA');
 const seasonValid=/^[a-z0-9][a-z0-9_-]{2,63}$/;
 let page=1,working=false,revision=0,lastSnapshot=null;
+let qaBusy=false;
+const deviceSeasonValid=/^series_[1-9][0-9]{0,14}_s[0-9]{1,3}$/;
+const deviceNames={android:'Android',android_tv:'Android TV',windows:'Windows'};
+async function downloadPrivateDeviceQa(seasonKey){
+ if(qaBusy||!deviceSeasonValid.test(String(seasonKey||'')))return;
+ const platform=$('seasonDeviceQaPlatform').value;
+ const rawPage=$('seasonDeviceQaPage').value;
+ const episodePage=Number(rawPage);
+ if(!Object.hasOwn(deviceNames,platform)||!/^\d{1,5}$/.test(rawPage)||
+    !Number.isSafeInteger(episodePage)||episodePage<1||episodePage>20000){
+  $('seasonDeviceQaStatus').textContent=
+   'اختر نوع الجهاز وصفحة حلقات صحيحة بين 1 و20000.';
+  return;
+ }
+ qaBusy=true;
+ $('seasonDeviceQaStatus').textContent='جارٍ تجهيز خطة '+deviceNames[platform]+
+  ' للموسم '+seasonKey+' من البيانات الخاصة…';
+ try{
+  const endpoint='/api/v1/admin/content-hub/seasons/device-qa/'+
+   platform+'/'+seasonKey+'/page/'+episodePage;
+  const response=await fetch(endpoint,{
+   method:'GET',credentials:'same-origin',cache:'no-store',
+   headers:{'x-blofy-owner-action':'prepare-private-device-qa'},
+   signal:AbortSignal.timeout(12000)
+  });
+  if(response.status===401){location.assign('/admin');return}
+  if(!response.ok)throw Error('تعذر قراءة خطة الجهاز ('+response.status+').');
+  const data=await response.json();
+  if(data?.ok!==true||data.schema!=='blofy.private-device-qa-manifest'||
+     data.version!==1||data.readOnly!==true||data.privateOnly!==true||
+     data.platform!==platform||data.seasonKey!==seasonKey||
+     data.page!==episodePage||data.customerCutover!==false||
+     data.playableMediaUrlsIncluded!==false||
+     data.releaseToSubscribersApproved!==false||
+     data.appIntegrationCompleted!==false||
+     !Array.isArray(data.episodes)||data.episodes.length>50)
+   throw Error('الخطة المستلمة غير آمنة أو غير مكتملة.');
+  const json=JSON.stringify(data,null,2)+'\n';
+  const url=URL.createObjectURL(new Blob([json],{
+   type:'application/json;charset=utf-8'
+  }));
+  try{
+   const anchor=create('a');
+   anchor.href=url;
+   anchor.download='BLOFY-private-device-qa-'+platform+'-'+seasonKey+
+    '-p'+episodePage+'.json';
+   document.body.append(anchor);anchor.click();anchor.remove();
+  }finally{setTimeout(()=>URL.revokeObjectURL(url),2000)}
+  $('seasonDeviceQaStatus').textContent=
+   '✅ تم تجهيز خطة اختبار '+deviceNames[platform]+
+   ' لعدد '+fmt(data.totalShown)+' حلقة في الصفحة '+fmt(episodePage)+
+   '؛ المرشحة للاختبار الخاص: '+fmt(data.candidateCount)+
+   '. لا يحتوي الملف روابط تشغيل أو صلاحيات دخول ولا يربط التطبيق تلقائيًا.';
+ }catch(error){
+  $('seasonDeviceQaStatus').textContent=error.message||
+   'تعذر تجهيز خطة اختبار الأجهزة؛ لم تتغير البيانات.';
+ }finally{qaBusy=false}
+}
+
 const reasonNames={
  no_registered_episodes:'لا توجد حلقات مدرجة',
  manifest_status_unavailable:'بيانات إثبات التخزين غير متاحة',
@@ -159,6 +218,13 @@ function seasonTile(row){
    detail:{seasonKey:row.seasonKey}}));
  });
  actions.append(report);
+ if(deviceSeasonValid.test(String(row.seasonKey||''))){
+  const qaButton=create('button','season-device-qa-button',
+   'تجهيز ملف اختبار الجهاز');
+  qaButton.type='button';
+  qaButton.addEventListener('click',()=>{void downloadPrivateDeviceQa(row.seasonKey)});
+  actions.append(qaButton);
+ }
  const decision=create('span','season-readiness-gate-label',
   gateLabel(row.privateDeviceTestGate));
  actions.append(decision);

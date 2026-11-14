@@ -335,6 +335,24 @@ http.createServer=function withContentHubAdmin(listener){
      ok:false,code:'season_readiness_unavailable'});
     return json(res,200,await safeReadJson(response));
    }
+   const deviceQaRoute=
+    /^\/api\/v1\/admin\/content-hub\/seasons\/device-qa\/(android|android_tv|windows)\/(series_[1-9][0-9]{0,14}_s[0-9]{1,3})\/page\/([1-9][0-9]{0,4})$/.exec(path);
+   if(deviceQaRoute&&req.method==='GET'){
+    if(req.headers['x-blofy-owner-action']!=='prepare-private-device-qa')
+     return json(res,403,{ok:false,code:'private_device_qa_owner_only'});
+    const page=Number(deviceQaRoute[3]);
+    if(page>20000)return json(res,400,{
+     ok:false,code:'private_device_qa_page_invalid'});
+    const response=await request('/internal/seasons/device-qa/'+
+     deviceQaRoute[1]+'/'+deviceQaRoute[2]+'/page/'+page,{
+     signal:AbortSignal.timeout(11000),
+     extraHeaders:{'x-blofy-owner-action':'prepare-private-device-qa'}});
+    if(response.status===404)return json(res,404,{
+     ok:false,code:'private_device_qa_season_missing'});
+    if(response.status!==200)return json(res,503,{
+     ok:false,code:'private_device_qa_unavailable'});
+    return json(res,200,await safeReadJson(response));
+   }
    const reportRoute=/^\/api\/v1\/admin\/content-hub\/seasons\/report\/([a-z0-9][a-z0-9_-]{2,63})\/page\/([1-9][0-9]{0,4})$/.exec(path);
    if(reportRoute&&req.method==='GET'){
     const page=Number(reportRoute[2]);
