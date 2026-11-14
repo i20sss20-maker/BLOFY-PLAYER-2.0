@@ -9,6 +9,12 @@ const RUN=/^[A-Za-z0-9_-]{8,80}$/;
 const SEASON=/^[a-z0-9][a-z0-9_-]{2,63}$/;
 const MAX_BYTES=4*1024**3, MIN_BYTES=8*1024*1024;
 const MODES=new Set(['queued','running','paused','verified','failed']);
+const VIEW_STATES=new Set(['all','pending',...MODES]);
+export function validateSeasonQueueFilter(state){
+ if(typeof state!=='string'||!VIEW_STATES.has(state))
+  throw Error('season_queue_filter_invalid');
+ return state;
+}
 const safeCode=value=>/^[a-z0-9_]{1,80}$/.test(String(value||''))?
   String(value):'season_copy_failed';
 const safeStatus=row=>{
@@ -340,20 +346,30 @@ export function createSeasonQueueStore({
    });
    return result.rows?.length===1;
   },
-  async list({limit=100,offset=0}={}){
+  async list({limit=100,offset=0,state='all'}={}){
    await ensure();
    const n=Math.max(1,Math.min(200,Number(limit)||100));
    if(!Number.isSafeInteger(offset)||offset<0||offset>1000000)
     throw Error('season_queue_offset_invalid');
+   validateSeasonQueueFilter(state);
+   const condition=state==='all'?'':state==='pending'?
+    "WHERE q.state IN ('queued','paused','running')":"WHERE q.state=$3";
+   const args=state==='all'||state==='pending'?[n,offset]:[n,offset,state];
    const result=await pool.query([
     'SELECT q.*,COALESCE(r.bytes_copied,0) AS bytes_copied,',
     'r.state AS episode_state FROM blofy_content_hub_season_queue q',
     'LEFT JOIN blofy_content_hub_episode_runs r ON r.run_id=q.run_id',
+    condition,
     'ORDER BY q.created_at,q.run_id LIMIT $1 OFFSET $2'
-   ].join(' '),[n,offset]).catch(async e=>{
+   ].filter(Boolean).join(' '),args).catch(async e=>{
     // The episode table is created lazily by the original pilot.
     if(e?.code!=='42P01')throw e;
-    const q=await pool.query('SELECT * FROM blofy_content_hub_season_queue ORDER BY created_at,run_id LIMIT $1 OFFSET $2',[n,offset]);
+    const fallback=state==='all'?'':state==='pending'?
+      "WHERE state IN ('queued','paused','running')":"WHERE state=$3";
+    const q=await pool.query([
+      'SELECT * FROM blofy_content_hub_season_queue',fallback,
+      'ORDER BY created_at,run_id LIMIT $1 OFFSET $2'
+     ].filter(Boolean).join(' '),args);
     return {rows:q.rows.map(row=>({...row,bytes_copied:0,episode_state:null}))};
    });
    return (result.rows||[]).map(safeStatus);
@@ -361,21 +377,28 @@ export function createSeasonQueueStore({
   // Exact page counts, not the truncated 100-row default list.
   // Pagination allows operators to inspect large series backlogs without
   // ever pulling more than 50 rows of private metadata into the browser.
-  async listPage({page=1}={}){
+  async listPage({page=1,state='all'}={}){
    if(!Number.isSafeInteger(page)||page<1||page>20000)
     throw Error('season_queue_page_invalid');
+   validateSeasonQueueFilter(state);
    await ensure();
    const pageSize=50;
-   const total=await pool.query(
-    "SELECT COUNT(*)::text AS total, COUNT(*) FILTER (WHERE state IN ('queued','paused','running'))::text AS pending FROM blofy_content_hub_season_queue");
+   const filter=state==='all'?'':state==='pending'?
+     "WHERE state IN ('queued','paused','running')":"WHERE state=$1";
+   const countArgs=['all','pending'].includes(state)?[]:[state];
+   const total=await pool.query([
+    '(SELECT COUNT(*)::text FROM blofy_content_hub_season_queue',
+    filter,') AS total,',
+    "(SELECT COUNT(*)::text FROM blofy_content_hub_season_queue WHERE state IN ('queued','paused','running')) AS pending"
+   ].filter(Boolean).join(' ').replace(/^/,'SELECT '),countArgs);
    const totalEpisodes=Number(total.rows?.[0]?.total||0);
    const pendingEpisodes=Number(total.rows?.[0]?.pending||0);
    const pages=Math.max(1,Math.ceil(totalEpisodes/pageSize));
    if(page>pages)return {episodes:[],page:{
-    number:page,pageSize,totalEpisodes,pendingEpisodes,pages,hasPrevious:page>1,
+    number:page,state,pageSize,totalEpisodes,pendingEpisodes,pages,hasPrevious:page>1,
     hasNext:false,outOfRange:true}};
-   const episodes=await this.list({limit:pageSize,offset:(page-1)*pageSize});
-   return {episodes,page:{number:page,pageSize,totalEpisodes,pendingEpisodes,pages,
+   const episodes=await this.list({limit:pageSize,offset:(page-1)*pageSize,state});
+   return {episodes,page:{number:page,state,pageSize,totalEpisodes,pendingEpisodes,pages,
     hasPrevious:page>1,hasNext:page<pages,outOfRange:false}};
   },
   async recoverInterrupted(){
