@@ -93,13 +93,29 @@
         <h2 id="seasonReadinessTitle">جاهزية الحلقات واختبار الصورة والصوت</h2>
         <p class="muted">إحصائية شاملة للحلقات المدرجة في قائمة النقل الخاصة فقط، وليس لكل محتوى المصدر. تؤكد سجلات التخزين سلامة الملف المسجلة، بينما مراجعة الصورة والصوت تأكيد يدوي مستقل من المالك.</p>
       </div>
-      <button id="seasonReadinessRefresh" type="button">تحديث الفحص</button>
+      <div class="season-readiness-top-actions">
+        <button id="seasonReadinessRefresh" type="button">تحديث الفحص</button>
+        <button id="seasonReadinessExport" type="button" disabled>
+          تصدير تقرير الصفحة CSV
+        </button>
+      </div>
     </div>
     <p id="seasonReadinessStatus" class="muted" role="status">
       اختر «تحديث الفحص» لقراءة الحالة من PostgreSQL دون تشغيل أي ملف.
     </p>
     <div id="seasonReadinessKpis" class="season-readiness-kpis" aria-live="polite">
       <p class="muted">لا توجد إحصائية محسوبة بعد.</p>
+    </div>
+    <div class="season-readiness-approval" aria-labelledby="seasonReadinessApprovalTitle">
+      <h3 id="seasonReadinessApprovalTitle">تقييم أهلية الاختبار داخل الأجهزة</h3>
+      <p id="seasonReadinessDecision" role="status" class="muted">
+        بانتظار تقييم جاهزية الحلقات المدرجة.
+      </p>
+      <p class="hint">
+        «مرشح لاختبار خاص» لا يعني الموافقة على نشر العمل للمشتركين.
+        يجب التحقق من حقوق العرض والتوزيع، وتجربة التشغيل في Android وWindows وTV،
+        والتأكد من الصوت والترجمة والتنقل قبل أي اعتماد مستقل.
+      </p>
     </div>
     <div id="seasonReadinessWarnings" class="season-readiness-warnings"></div>
     <div class="season-readiness-head">
