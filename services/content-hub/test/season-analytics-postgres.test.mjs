@@ -122,6 +122,29 @@ test('real PostgreSQL executes reporting and chunk-timing queries safely',{
   const h=await store.healthStats();
   assert.equal(h.episode_count,'3');
   assert.equal(h.season_count,'1');
+  // Upgrade safety: production queue has no priority column initially.
+  // Claim stays FIFO, and operator action migrates only while idle.
+  await pool.query('ALTER TABLE blofy_content_hub_season_queue DROP COLUMN priority');
+  const legacy='season_ci_legacy_123456789';
+  await pool.query([
+   'INSERT INTO blofy_content_hub_season_queue',
+   '(run_id,season_key,episode_number,title,gateway_id,source_id,',
+   'media_id,extension,expected_bytes,state)',
+   "VALUES ($1,'series_ci_s01',4,'Legacy',9512368,",
+   "'00000000-0000-4000-8000-000000000001'::uuid,",
+   "'fixture','mp4',8388608,'queued')"
+  ].join(' '),[legacy]);
+  const fifo=await store.claimNext();
+  assert.equal(fifo.runId,legacy);
+  assert.equal(fifo.priority,0);
+  await store.update(legacy,'paused',{code:'season_queue_paused'});
+  const migrated=await store.setPriority({runId:legacy,priority:2});
+  assert.equal(migrated.ok,true);
+  const newColumn=await pool.query(
+   'SELECT priority FROM blofy_content_hub_season_queue WHERE run_id=$1',
+   [legacy]);
+  assert.equal(Number(newColumn.rows[0].priority),2);
+
  }finally{
   await store.close();await pool.end();
  }
