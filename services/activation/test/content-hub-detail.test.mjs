@@ -9,11 +9,16 @@ const ids=['libraryDetailDialog','libraryDetailClose','libraryDetailStop',
  'libraryDetailPlayer','libraryDetailPlayerWrap','libraryDetailPlay',
  'libraryDetailEdit','libraryDetailReport','libraryDetailSeasons',
  'libraryDetailSeriesScope','libraryDetailEpisodes','libraryDetailPrev',
- 'libraryDetailNext','libraryDetailPageLabel','libraryDetailStatus'];
+ 'libraryDetailNext','libraryDetailPageLabel','libraryDetailStatus',
+ 'libraryDetailPrevVerified','libraryDetailNextVerified',
+ 'libraryDetailPreviewPosition','libraryDetailAvReview',
+ 'libraryDetailAvVideoCheck','libraryDetailAvAudioCheck',
+ 'libraryDetailAvConfirm','libraryDetailAvStatus'];
 class FakeNode{
  constructor(tag='div'){
   this.tagName=tag.toUpperCase();this.children=[];this.textContent='';
   this.style={};this.src='';this.hidden=false;this.open=false;
+  this.checked=false;this.disabled=false;
   this.listeners={};this.pauses=0;this.loads=0;this.parentElement=null;
   this.className='';this.classList={
    add:name=>{this.className+=' '+name},
@@ -69,16 +74,22 @@ test('owner cinematic details are private, no autoplay, and id/rights constraine
  assert.match(html,/admin-library-detail\.js/);
  assert.match(html,/controls preload="none" playsinline/);
  assert.match(html,/عدد الحلقات المكتملة يعني الحلقات المدرجة/);
+ assert.match(html,/توثيق مشاهدة الصورة والصوت يدويًا/);
+ assert.match(html,/الحلقة المكتملة التالية/);
  for(const id of ids){
   assert.equal((html.match(new RegExp('id="'+id+'"','g'))||[]).length,1,id);
  }
  assert.match(js,/blofy:open-library-detail/);
  assert.match(js,/artworkRightsConfirmed===true/);
  assert.match(js,/sourceVerified===true/);
+ assert.match(js,/video\.addEventListener\('playing'/);
+ assert.match(js,/confirm-manual-episode-av/);
+ assert.match(js,/verifiedPageEntries/);
  assert.match(js,/view-private-series/);
  assert.match(js,/credentials:'same-origin'/);
  assert.match(hook,/view-private-series/);
  assert.match(hook,/queuedEpisodePreview/);
+ assert.match(hook,/confirm-manual-episode-av/);
  assert.match(hub,/ownsVerifiedRun/);
  assert.match(hub,/owner_preview_confirmation_required/);
  assert.match(css,/\.library-detail-dialog/);
