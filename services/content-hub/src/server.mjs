@@ -345,7 +345,7 @@ export function createContentHubServer({storage,lease,
    try{body=await readSeasonJson(req)}
    catch{return json(res,400,{ok:false,code:'library_search_bad_json'})}
    if(!body||typeof body.query!=='string'||body.query.length>80||
-      /[\\x00-\\x1f\\x7f]/.test(body.query)||
+      /[\x00-\x1f\x7f]/.test(body.query)||
       !['all','queued','paused','running','verified','failed'].includes(body.state)||
       !Number.isSafeInteger(body.page)||body.page<1||body.page>20000)
     return json(res,400,{ok:false,code:'library_search_invalid'});
