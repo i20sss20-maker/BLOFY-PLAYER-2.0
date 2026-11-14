@@ -581,6 +581,51 @@ export function createContentHubServer({storage,lease,
  return {server,
   startEpisodeCopy:()=>episodeCopy.start(),
   stopEpisodeCopy:()=>episodeCopy.stop(),
+  validateVerifiedEpisode:async()=>{
+   const runId=String(pilotEnv.BLOFY_CONTENT_HUB_EPISODE_RUN_ID||'');
+   if(!/^[A-Za-z0-9_-]{8,80}$/.test(runId))
+    return {ok:false,code:'episode_canary_run_not_selected'};
+   if(episodeCanaryRunning||previewBuilding)return {
+    ok:false,code:'episode_canary_busy'};
+   episodeCanaryRunning=true;
+   let canary;
+   try{
+    canary=await runFullPlaybackCanary(runId,'episode');
+    lastEpisodeCanary={...canary,checkedAt:new Date().toISOString()};
+    logger('BLOFY_CONTENT_HUB_EPISODE_PLAYBACK_CANARY',lastEpisodeCanary);
+   }catch{
+    return {ok:false,code:'episode_canary_error',
+      providerRequests:0,customerCutover:false};
+   }finally{episodeCanaryRunning=false}
+   if(!canary.ok)return {ok:false,code:canary.code,
+    providerRequests:0,customerCutover:false,
+    seekVerified:canary.seekVerified===true};
+   if(pilotEnv.BLOFY_CONTENT_HUB_OWNER_PREVIEW_ENABLED!=='1'||
+      pilotEnv.BLOFY_CONTENT_HUB_EPISODE_OWNER_PREVIEW_ENABLED!=='1')
+    return {ok:false,code:'episode_preview_not_enabled',
+     audioVideoDecoded:true,seekVerified:true,
+     providerRequests:0,customerCutover:false};
+   previewBuilding=true;
+   try{
+    const preview=await previewBuilder({runId,storage,lease,
+      mediaKind:'episode'});
+    if(preview.ok&&Buffer.isBuffer(preview.bytes)){
+     previewCache={runId,mediaKind:'episode',result:preview,
+       expiresAt:Date.now()+120000};
+    }
+    return {ok:preview.ok===true,code:preview.code,
+     audioVideoDecoded:true,seekVerified:true,
+     videoCodec:canary.videoCodec,audioCodec:canary.audioCodec,
+     width:canary.width,height:canary.height,
+     seeksVerified:canary.seeksVerified,
+     mp4Bytes:Buffer.isBuffer(preview.bytes)?preview.bytes.length:0,
+     sourceSampleBytes:preview.sourceSampleBytes||0,
+     providerRequests:0,customerCutover:false};
+   }catch{return {ok:false,code:'episode_preview_encode_failed',
+    audioVideoDecoded:true,seekVerified:true,
+    providerRequests:0,customerCutover:false}}
+   finally{previewBuilding=false}
+  },
   runPreviewSelfCheck:async()=>{
    if(pilotEnv.BLOFY_CONTENT_HUB_OWNER_PREVIEW_ENABLED!=='1')
     return {ok:false,code:'owner_preview_disabled',providerRequests:0};
@@ -880,6 +925,35 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
        JSON.stringify({ok:false,code:'owner_preview_boot_unavailable',
         providerRequests:0,customerCutover:false})));
    },5000);timer.unref?.();
+  }
+  // Once-only validation of a FULLY verified private episode.
+  // Reads S3 only: real video/audio decode, 4 private HTTP seeks, then
+  // short H264/AAC owner clip. Requires durable Postgres event claim.
+  if(process.env.BLOFY_CONTENT_HUB_EPISODE_VALIDATE_ON_BOOT==='1'){
+   const timer=setTimeout(()=>{
+    void (async()=>{
+     const runId=String(process.env.BLOFY_CONTENT_HUB_EPISODE_RUN_ID||''),
+       event=String(process.env.BLOFY_CONTENT_HUB_EPISODE_VALIDATE_TOKEN||'');
+     if(!/^[A-Za-z0-9_-]{8,80}$/.test(event))
+      return {ok:false,code:'episode_validation_token_invalid'};
+     if(!await lease.claimBatchBootOnce(event,runId))
+      return {ok:false,code:'episode_validation_already_claimed'};
+     return hub.validateVerifiedEpisode();
+    })().then(result=>console.info(
+     'BLOFY_CONTENT_HUB_EPISODE_VALIDATION',
+     JSON.stringify({ok:result.ok===true,code:result.code,
+      audioVideoDecoded:result.audioVideoDecoded===true,
+      seekVerified:result.seekVerified===true,
+      seeksVerified:result.seeksVerified||0,
+      videoCodec:result.videoCodec||null,audioCodec:result.audioCodec||null,
+      width:result.width||null,height:result.height||null,
+      mp4Bytes:result.mp4Bytes||0,sourceSampleBytes:result.sourceSampleBytes||0,
+      providerRequests:0,customerCutover:false
+     }))).catch(()=>console.warn(
+     'BLOFY_CONTENT_HUB_EPISODE_VALIDATION',
+     JSON.stringify({ok:false,code:'episode_validation_unavailable',
+      providerRequests:0,customerCutover:false})));
+   },7000);timer.unref?.();
   }
   // Independently decode a verified PRIVATE movie sample with FFprobe
   // and FFmpeg once. This NEVER touches the Xtream source or subscriber.
