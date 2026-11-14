@@ -149,10 +149,10 @@ function render(data){
   health.available?health.databaseAvailable:null);
  setBadge('opsMovieWorker',!health.available?'نقل الأفلام: غير معروف':
   health.movieWorkerActive?'نقل الأفلام: جارٍ':'نقل الأفلام: متوقف',
-  !health.available?null:!health.movieWorkerActive);
+  !health.available?null:health.movieWorkerActive?true:null);
  setBadge('opsSeasonWorker',!seasons.available?'نقل المواسم: غير معروف':
   seasons.workerActive?'نقل المواسم: جارٍ':'نقل المواسم: متوقف',
-  !seasons.available?null:!seasons.workerActive);
+  !seasons.available?null:seasons.workerActive?true:null);
  showStorage(data.storage);
  showAlerts(data);
  showSeasons(seasons);
