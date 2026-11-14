@@ -7,6 +7,7 @@ import {runPrivateSalehSample} from './real-source-sample.mjs';
 import {runOneMoviePilot,inspectOneMoviePilot,probeApprovedMovieRange} from './one-movie-pilot.mjs';
 import {runChunkedMovieBatch,chunkedPilotEnabled,chunkedBatchReadiness,CHUNK_BYTES} from './chunked-pilot.mjs';
 import {createContinuousCopyController} from './continuous-copy.mjs';
+import {diagnoseVerifiedMovie} from './playback-diagnostics.mjs';
 
 const FIXTURE_SOURCE='00000000-0000-4000-8000-000000000000';
 const FIXTURE_SIZE=8*1024*1024;
@@ -61,6 +62,7 @@ export function createContentHubServer({storage,lease,
  const started=Date.now();
  let syntheticRunning=false,lastSynthetic=null;
  let pilotRunning=false,lastPilot=null,pilotAbort=null;
+ let canaryRunning=false,lastCanary=null;
  const copy=createContinuousCopyController({
   runBatch:({signal})=>batchRunner({storage,lease,env:pilotEnv,signal,logger}),
   readiness:()=>chunkedBatchReadiness(pilotEnv),logger
@@ -85,6 +87,7 @@ export function createContentHubServer({storage,lease,
     databaseAvailable:database,downloadQueueEnabled:false,
     syntheticTestEnabled:allowSynthetic,
     lastSynthetic,pilotRunning:pilotRunning||copy.isRunning(),lastPilot,
+    canaryRunning,lastCanary,
     continuousCopy:copy.status(),durablePilot,chunkedBatchEnabled:chunkedBatchReadiness(pilotEnv).ready,
     customerCutover:false,
     licensedRightsRequired:true});
@@ -124,12 +127,33 @@ export function createContentHubServer({storage,lease,
     };
     return json(res,200,{ok:true,privateOnly:true,customerCutover:false,
        accounting,runs,pilotRunning:pilotRunning||copy.isRunning(),
-       continuousCopy:copy.status(),downloadQueueEnabled:false,
+       canaryRunning,lastCanary,continuousCopy:copy.status(),downloadQueueEnabled:false,
        chunkedBatchEnabled:chunkedBatchReadiness(pilotEnv).ready,
        batchReadiness:chunkedBatchReadiness(pilotEnv)});
    }catch{
     return json(res,503,{ok:false,code:'content_hub_pilot_records_unavailable'});
    }
+  }
+  if(path==='/internal/playback/diagnose'&&req.method==='POST'){
+   if(String(req.headers['x-blofy-canary-confirm']||'')!=='verified-private')
+    return json(res,400,{ok:false,code:'playback_canary_confirmation_required'});
+   if(canaryRunning)return json(res,409,{
+    ok:false,code:'playback_canary_already_running'});
+   const runId=String(pilotEnv.BLOFY_CONTENT_HUB_BATCH_RUN_ID||'');
+   if(!/^[A-Za-z0-9_-]{8,80}$/.test(runId))
+    return json(res,409,{ok:false,code:'playback_canary_run_not_selected'});
+   canaryRunning=true;
+   lastCanary={ok:false,code:'playback_canary_running',
+    startedAt:new Date().toISOString()};
+   void diagnoseVerifiedMovie({runId,storage,lease}).then(result=>{
+    lastCanary={...result,checkedAt:new Date().toISOString()};
+    logger('BLOFY_CONTENT_HUB_PLAYBACK_CANARY',lastCanary);
+   }).catch(()=>{
+    lastCanary={ok:false,code:'playback_canary_failed',
+     checkedAt:new Date().toISOString(),customerCutover:false};
+   }).finally(()=>{canaryRunning=false});
+   return json(res,202,{ok:true,code:'playback_canary_accepted',
+    privateOnly:true,customerCutover:false,providerRequests:0});
   }
   if(path==='/internal/batch/start'&&req.method==='POST'){
    if(String(req.headers['x-blofy-batch-confirm']||'')!=='approved-8mib-batch')
@@ -297,6 +321,17 @@ export function createContentHubServer({storage,lease,
   return json(res,404,{ok:false,code:'content_hub_not_found'});
  });
  return {server,
+  runPlaybackCanary:async()=>{
+    if(canaryRunning)return {ok:false,code:'playback_canary_already_running'};
+    canaryRunning=true;
+    const runId=String(process.env.BLOFY_CONTENT_HUB_BATCH_RUN_ID||'');
+    try{
+      const result=await diagnoseVerifiedMovie({runId,storage,lease});
+      lastCanary={...result,checkedAt:new Date().toISOString()};
+      logger('BLOFY_CONTENT_HUB_PLAYBACK_CANARY',lastCanary);
+      return lastCanary;
+    }finally{canaryRunning=false}
+  },
   startContinuousCopy:()=>pilotRunning?
     {ok:false,code:'batch_writer_busy'}:copy.start(),
   stopContinuousCopy:()=>copy.stop(),
@@ -440,6 +475,28 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
      console.warn('BLOFY_CONTENT_HUB_CONTINUOUS_BOOT',JSON.stringify({
       ok:false,code:'continuous_boot_failed',customerCutover:false})));
    },8500);timer.unref?.();
+  }
+  // Independently decode a verified PRIVATE movie sample with FFprobe
+  // and FFmpeg once. This NEVER touches the Xtream source or subscriber.
+  if(process.env.BLOFY_CONTENT_HUB_CANARY_ON_BOOT==='1'){
+   const timer=setTimeout(()=>{
+    void (async()=>{
+     const runId=String(process.env.BLOFY_CONTENT_HUB_BATCH_RUN_ID||'');
+     const token=String(process.env.BLOFY_CONTENT_HUB_CANARY_BOOT_TOKEN||'');
+     if(!/^[A-Za-z0-9_-]{8,80}$/.test(token))
+      return {ok:false,code:'canary_boot_token_invalid'};
+     if(!await lease.claimBatchBootOnce(token,runId))
+      return {ok:false,code:'canary_boot_already_claimed'};
+     return hub.runPlaybackCanary();
+    })().then(result=>{
+      console.info('BLOFY_CONTENT_HUB_PLAYBACK_CANARY_BOOT',JSON.stringify({
+       ok:result.ok,code:result.code,customerCutover:false,
+       providerRequests:0
+      }));
+    }).catch(()=>console.warn('BLOFY_CONTENT_HUB_PLAYBACK_CANARY_BOOT',
+     JSON.stringify({ok:false,code:'canary_boot_failed',
+      customerCutover:false,providerRequests:0})));
+   },7000);timer.unref?.();
   }
   // Operator-only one-shot full movie pilot; all switches default OFF.
   // Never run alongside the existing small real-source sample.
