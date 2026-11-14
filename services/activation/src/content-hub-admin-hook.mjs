@@ -582,6 +582,31 @@ http.createServer=function withContentHubAdmin(listener){
      return json(res,response.status,await response.json());
     }
    }
+   if(path==='/api/v1/admin/content-hub/mirror/daily/sessions'&&
+      req.method==='GET'){
+     const response=await request('/internal/mirror/daily/sessions',{
+       signal:AbortSignal.timeout(8000)});
+     if(response.status!==200)return json(res,503,{
+       ok:false,code:'daily_media_session_history_unavailable'});
+     return json(res,200,await safeReadJson(response));
+   }
+   if(path==='/api/v1/admin/content-hub/mirror/daily/plan'&&
+      req.method==='POST'){
+     if(req.headers['x-blofy-owner-action']!=='preview-licensed-daily-mirror')
+       return json(res,403,{ok:false,code:'mirror_plan_owner_action_required'});
+     const input=await readSeasonAdminBody(req);
+     if(!input||!Array.isArray(input.catalog)||input.catalog.length<1||
+        input.catalog.length>25||input.verifiedCopies!==undefined)
+       return json(res,400,{ok:false,code:'mirror_plan_batch_invalid'});
+     const response=await request('/internal/mirror/daily/plan',{
+       method:'POST',signal:AbortSignal.timeout(12000),
+       extraHeaders:{'content-type':'application/json',
+         'x-blofy-owner-action':'preview-licensed-daily-mirror'},
+       body:JSON.stringify({catalog:input.catalog})});
+     if(![200,400,403,409].includes(response.status))
+       return json(res,503,{ok:false,code:'mirror_plan_unavailable'});
+     return json(res,response.status,await response.json());
+   }
    if(path==='/api/v1/admin/content-hub/overview'&&req.method==='GET')
     return await handleOverview(res);
    if(path==='/api/v1/admin/content-hub/status'&&req.method==='GET')
