@@ -367,6 +367,17 @@ export function createContentHubServer({storage,lease,
     observed=proof?.confirmed===true}catch{}
    if(!observed)return json(res,409,{ok:false,
     code:'owner_episode_browser_playback_not_confirmed'});
+   if(!seasonQueueStore?.recentAudits)return json(res,503,{
+    ok:false,code:'season_storage_audit_state_unavailable'});
+   try{
+    const audits=await seasonQueueStore.recentAudits();
+    if(audits.some(x=>[
+      'season_storage_checksum_mismatch',
+      'season_storage_read_unavailable'
+    ].includes(x.code)))return json(res,409,{ok:false,
+      code:'season_storage_integrity_review_required'});
+   }catch{return json(res,503,{
+    ok:false,code:'season_storage_audit_state_unavailable'})}
    const result=seasonQueue.start();
    return json(res,result.ok?202:409,{...result,privateOnly:true,
     customerCutover:false,maxSourceRangeBytes:CHUNK_BYTES});
