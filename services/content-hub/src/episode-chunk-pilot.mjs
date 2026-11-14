@@ -166,7 +166,7 @@ export async function runOneEpisodeChunk({
   if(signal?.aborted)throw Error('episode_cancelled');
   stage='boundary_precheck';
   const boundary=await boundaryFingerprint({cfg,fetchImpl,signal});
-  if(run.validator&&run.validator!==boundary){
+  if(run.validator?.startsWith('boundary-sha256:')&&run.validator!==boundary){
    hardFailure=true;errorCode='episode_source_fingerprint_changed';
    throw Error('episode_source_changed');
   }
