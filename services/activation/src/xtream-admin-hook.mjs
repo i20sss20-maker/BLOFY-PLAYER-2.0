@@ -5,6 +5,7 @@ import {withXtreamAccountReconnect} from './xtream-api-resilience.mjs';
 import {createXtreamSyncQueue} from './xtream-sync-queue.mjs';
 import {requestDailyXtreamCatalogSync} from './xtream-daily-catalog-sync.mjs';
 import {listIndexedXtreamMirrorPage} from './xtream-mirror-inventory.mjs';
+import {classifyDailyXtreamOutcome,recordDailyXtreamCatalogOutcome,readDailyXtreamCatalogReceipts} from './xtream-daily-sync-receipts.mjs';
 import {xtreamConnectionReport} from './xtream-smart-connection.mjs';
 import {runXtreamBootDiagnostics} from './xtream-boot-diagnostics.mjs';
 import {observeRailwayEgress,probeXtreamSocket} from './xtream-egress-inspector.mjs';
@@ -1753,12 +1754,24 @@ async function syncServer(id, requestedTypes = ['live','movie','series']) {
     await pool.query(`UPDATE blofy_xtream_servers SET status='online',account_info=$2::jsonb,counts=$3::jsonb,last_error=$4,last_test_at=NOW(),last_sync_at=NOW(),updated_at=NOW() WHERE id=$1 AND enabled=TRUE AND deletion_requested_at IS NULL`,
       [id, JSON.stringify(accountInfo), JSON.stringify(counts),partialWarning]);
     const catalogRevision=await bumpXtreamCatalogRevision(pool,id,'sync');
+    if(process.env.BLOFY_XTREAM_DAILY_CATALOG_SYNC_ENABLED==='1'&&
+       process.env.BLOFY_XTREAM_DAILY_CATALOG_SOURCE_ID===id){
+      await recordDailyXtreamCatalogOutcome(controlPool,{
+        sourceId:id,state:classifyDailyXtreamOutcome({ok:true,partialWarning})
+      }).catch(()=>{});
+    }
     return { id, counts, details, partialWarning,catalogRevision };
   } catch (error) {
     const message = redactXtreamError(error);
     const cancelled=message==='xtream_sync_cancelled';
     await pool.query(`UPDATE blofy_xtream_servers SET status='${cancelled?'unknown':'error'}',last_error=$2,updated_at=NOW()
       WHERE id=$1 AND enabled=TRUE AND deletion_requested_at IS NULL`, [id, message]).catch(() => {});
+    if(process.env.BLOFY_XTREAM_DAILY_CATALOG_SYNC_ENABLED==='1'&&
+       process.env.BLOFY_XTREAM_DAILY_CATALOG_SOURCE_ID===id){
+      await recordDailyXtreamCatalogOutcome(controlPool,{
+        sourceId:id,state:'failed'
+      }).catch(()=>{});
+    }
     throw error;
   } finally {
     syncLocks.delete(id);
@@ -4059,6 +4072,21 @@ http.createServer = function withBlofyXtream(listener) {
             catalogMutation:false,subscriberCutover:false});
         }catch{
           return json(res,503,{ok:false,error:'recovery_probe_unavailable'});
+        }
+      }
+      if(req.method==='GET'&&url.pathname==='/api/v1/admin/xtream/daily-sync/receipts'){
+        const sourceId=String(url.searchParams.get('sourceId')||'');
+        try{
+          const receipts=await readDailyXtreamCatalogReceipts(
+            controlPool,{sourceId,limit:7});
+          return json(res,200,receipts);
+        }catch(error){
+          const badInput=error?.message==='daily_xtream_receipts_invalid';
+          return json(res,badInput?400:503,{
+            ok:false,code:badInput?'daily_receipts_query_invalid':
+              'daily_receipts_unavailable',
+            readOnly:true,mediaFilesCopied:0,customerCutover:false
+          });
         }
       }
       // Admin-only read of the indexed catalog, not private-file storage.
