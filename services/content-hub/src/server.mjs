@@ -595,6 +595,22 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
       ok:false,code:'continuous_boot_failed',customerCutover:false})));
    },8500);timer.unref?.();
   }
+  // One-time read-only catalog snapshot for the first episode pilot.
+  // No upstream media connection, S3 write, customer route, or batch copy.
+  if(process.env.BLOFY_CONTENT_HUB_EPISODE_PREFLIGHT_ON_BOOT==='1'){
+   const timer=setTimeout(()=>{
+    void inspectEpisodeCandidates({env:process.env}).then(result=>{
+     console.info('BLOFY_CONTENT_HUB_EPISODE_PREFLIGHT',JSON.stringify({
+      ok:result.ok===true,code:result.code,
+      candidates:Array.isArray(result.candidates)?result.candidates.length:0,
+      providerMediaRequests:0,automaticDownload:false,
+      customerCutover:false
+     }));
+    }).catch(()=>console.warn('BLOFY_CONTENT_HUB_EPISODE_PREFLIGHT',
+     JSON.stringify({ok:false,code:'episode_catalog_unavailable',
+      providerMediaRequests:0,automaticDownload:false})));
+   },4000);timer.unref?.();
+  }
   // One-time real browser MP4 transcode smoke check. Only S3 bytes,
   // no Xtream/requests to customers. Durable token prevents boot replays.
   if(process.env.BLOFY_CONTENT_HUB_PREVIEW_TEST_ON_BOOT==='1'){
