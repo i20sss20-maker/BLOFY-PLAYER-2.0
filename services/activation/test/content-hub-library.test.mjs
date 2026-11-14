@@ -89,6 +89,8 @@ test('metadata matching review is only on explicit owner action and cannot auto-
  assert.match(js,/x-blofy-owner-action':'match-private-metadata'/);
  assert.match(js,/result\.automaticSave!==false/);
  assert.match(js,/libraryMetaRights'\)\.checked=false/);
+ assert.match(js,/استخدام الاسم للمراجعة/);
+ assert.match(js,/لم نتحقق من هوية المسلسل/);
  assert.match(js,/textContent/);
  assert.doesNotMatch(js,/innerHTML\s*=/);
  assert.match(hookSource,/\/api\/v1\/admin\/content-hub\/library\/matches/);
