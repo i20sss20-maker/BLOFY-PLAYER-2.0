@@ -78,3 +78,23 @@ export function buildLicensedSeriesSeasons({
      episodes:episodes.sort((a,b)=>a.episodeNumber-b.episodeNumber)
    }))};
 }
+
+export async function findPilotSeriesForEpisode(pool,episodeGatewayId){
+ const id=Number(episodeGatewayId);
+ if(!Number.isSafeInteger(id)||id<1)return null;
+ const result=await pool.query(`SELECT m.gateway_id AS series_gateway_id
+  FROM blofy_xtream_gateway_episode_map e
+  JOIN blofy_xtream_gateway_item_map m ON m.server_id=e.server_id
+    AND m.media_type='series' AND m.source_id=e.series_source_id
+  JOIN blofy_xtream_items i ON i.server_id=m.server_id
+    AND i.media_type=m.media_type AND i.source_id=m.source_id
+  JOIN blofy_xtream_servers s ON s.id=e.server_id
+  WHERE e.gateway_id=$1
+    AND s.enabled=TRUE AND s.publish_catalog=TRUE
+    AND s.deletion_requested_at IS NULL
+    AND lower(btrim(s.name))='saleh' AND i.enabled=TRUE
+  LIMIT 1`,[id]);
+ const seriesGatewayId=Number(result.rows?.[0]?.series_gateway_id);
+ return Number.isSafeInteger(seriesGatewayId)&&seriesGatewayId>0?
+  {seriesGatewayId,episodeGatewayId:id}:null;
+}
