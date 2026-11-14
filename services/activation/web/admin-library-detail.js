@@ -25,6 +25,25 @@ const genres={drama:'دراما',action:'أكشن',comedy:'كوميديا',
  science_fiction:'خيال علمي',fantasy:'فانتازيا',crime:'جريمة',
  adventure:'مغامرة',other:'أخرى'};
 let item=null,selectedSeason=null,currentPage=1,pages=1,epoch=0;
+let verifiedPageEntries=[],previewRunId=null,previewObserved=false,avSaving=false;
+const validVerifiedEntry=entry=>entry?.sourceVerified===true&&
+ entry.state==='verified'&&validEpisode.test(String(entry.runId||''));
+function updatePreviewNavigation(){
+ const pos=verifiedPageEntries.findIndex(entry=>entry.runId===previewRunId);
+ $('libraryDetailPrevVerified').disabled=pos<1;
+ $('libraryDetailNextVerified').disabled=verifiedPageEntries.length===0||
+  pos>=verifiedPageEntries.length-1;
+ $('libraryDetailPreviewPosition').textContent=pos>=0?
+  'الحلقة المكتملة '+number(pos+1)+' من '+number(verifiedPageEntries.length)+
+   ' في الصفحة الحالية':
+  'اختر حلقة مكتملة لمعاينتها · التنقل لا يبدأ التشغيل تلقائيًا';
+}
+function updateAvButton(){
+ $('libraryDetailAvConfirm').disabled=!previewObserved||!previewRunId||
+  !validEpisode.test(previewRunId)||avSaving||
+  !$('libraryDetailAvVideoCheck').checked||
+  !$('libraryDetailAvAudioCheck').checked;
+}
 function number(x){return Number(x||0).toLocaleString('ar-SA')}
 function formatBytes(x){
  const n=Number(x);
@@ -37,18 +56,25 @@ function formatBytes(x){
  }
 }
 function stopPreview(){
+ previewRunId=null;previewObserved=false;
+ $('libraryDetailAvVideoCheck').checked=false;
+ $('libraryDetailAvAudioCheck').checked=false;
+ $('libraryDetailAvReview').hidden=true;
+ $('libraryDetailAvStatus').textContent='';
+ updateAvButton();
  try{
   video.pause();
   video.removeAttribute('src');
   video.load();
  }catch{}
  $('libraryDetailPlayerWrap').hidden=true;
+ updatePreviewNavigation();
 }
 function close(){
  ++epoch;
  stopPreview();
  if(dialog.open)dialog.close();
- item=null;selectedSeason=null;
+ item=null;selectedSeason=null;verifiedPageEntries=[];
 }
 function cover(meta){
  const target=$('libraryDetailArt');
@@ -74,13 +100,18 @@ function showPreview(kind,runId){
  // durable verified media manifest again on each request.
  const movie=kind==='movie';
  if(movie&&!(item.kind==='movie'&&item.state==='verified'))return;
- if(!movie&&!(item.kind==='episode'&&item.verified===true||
-   item.kind==='season'||item.kind==='series'))return;
+ if(!movie&&!(
+   (item.kind==='episode'&&item.verified===true&&item.key===runId)||
+   verifiedPageEntries.some(entry=>entry.runId===runId&&
+    validVerifiedEntry(entry))))return;
  const url=movie?
   '/api/v1/admin/content-hub/canary/'+runId:
   '/api/v1/admin/content-hub/seasons/episodes/'+runId+'/preview';
  stopPreview();
+ if(!movie)previewRunId=runId;
  $('libraryDetailPlayerWrap').hidden=false;
+ $('libraryDetailAvStatus').textContent='بانتظار تشغيل المقطع ومراجعة الصورة والصوت.';
+ updatePreviewNavigation();
  video.src=url;
  video.load();
  $('libraryDetailStatus').textContent='تم تجهيز معاينة '+(movie?'الفيلم':'الحلقة')+
