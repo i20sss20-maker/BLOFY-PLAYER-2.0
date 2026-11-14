@@ -148,6 +148,45 @@ async function handleCanary(req,res,id){
   try{await body?.cancel?.()}catch{}
  }
 }
+async function handleEpisodePreview(req,res){
+ const ctrl=new AbortController();
+ const close=()=>ctrl.abort();
+ res.once('close',close);
+ const timer=setTimeout(()=>ctrl.abort(),85000);timer.unref?.();
+ try{
+  const response=await request('/internal/episodes/playback/preview',{
+   signal:ctrl.signal,extraHeaders:{
+    'x-blofy-owner-preview':'operator-episode-only'}});
+  if(response.status!==200||!response.body||
+     response.headers.get('content-type')!=='video/mp4')
+   return json(res,503,{ok:false,code:'episode_preview_not_available'});
+  const length=Number(response.headers.get('content-length'));
+  if(!Number.isSafeInteger(length)||length<1||length>32*1024*1024)
+   return json(res,503,{ok:false,code:'episode_preview_invalid_size'});
+  res.writeHead(200,{
+   'content-type':'video/mp4','content-length':String(length),
+   'content-disposition':'inline; filename="blofy-episode-preview.mp4"',
+   'cache-control':'private,no-store',
+   'cross-origin-resource-policy':'same-origin',
+   'x-content-type-options':'nosniff','referrer-policy':'no-referrer'});
+  let sent=0;
+  for await(const chunk of response.body){
+   if(ctrl.signal.aborted)throw Error('preview_closed');
+   sent+=chunk.byteLength;
+   if(sent>length)throw Error('preview_overlong');
+   if(!res.write(chunk))await new Promise((resolve,reject)=>{
+    res.once('drain',resolve);
+    res.once('close',()=>reject(Error('preview_closed')));
+   });
+  }
+  if(sent!==length)throw Error('preview_short');
+  return res.end();
+ }catch{
+  if(res.headersSent){if(!res.destroyed)res.destroy()}
+  else if(!res.destroyed)json(res,503,{
+   ok:false,code:'episode_preview_temporarily_unavailable'});
+ }finally{clearTimeout(timer);res.off('close',close)}
+}
 const old=http.createServer.bind(http);
 http.createServer=function withContentHubAdmin(listener){
  if(typeof listener!=='function')return old(listener);
@@ -174,6 +213,8 @@ http.createServer=function withContentHubAdmin(listener){
   if(!authorized(req,res))return;
   if(url.search)return json(res,400,{ok:false,code:'query_forbidden'});
   try{
+   if(path==='/api/v1/admin/content-hub/episodes/preview'&&req.method==='GET')
+    return await handleEpisodePreview(req,res);
    if(canary&&['GET','HEAD'].includes(req.method))
     return await handleCanary(req,res,canary[1]);
    if(path==='/api/v1/admin/content-hub/preflight'&&req.method==='GET'){
