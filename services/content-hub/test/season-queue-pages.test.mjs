@@ -9,7 +9,7 @@ test('queue listing uses stable ordering and exact 50-row SQL pages',async()=>{
   async query(sql,args=[]){
    queries.push({sql,args});
    if(sql.startsWith('CREATE TABLE'))return {rows:[]};
-   if(sql.startsWith('SELECT COUNT(*)'))return {rows:[{total:'173'}]};
+   if(sql.startsWith('SELECT COUNT(*)'))return {rows:[{total:'173',pending:'47'}]};
    if(sql.startsWith('SELECT q.*'))return {rows:Array.from({length:args[0]},(_,i)=>({
     run_id:'season_page_'+String(args[1]+i+1).padStart(8,'0'),
     season_key:'series_3_s1',episode_number:i+1,
@@ -23,11 +23,12 @@ test('queue listing uses stable ordering and exact 50-row SQL pages',async()=>{
  const store=createSeasonQueueStore({connectionString:'mock',Pool});
  const first=await store.listPage({page:1});
  assert.deepEqual(first.page,{number:1,pageSize:50,totalEpisodes:173,
-  pages:4,hasPrevious:false,hasNext:true,outOfRange:false});
+  pendingEpisodes:47,pages:4,hasPrevious:false,hasNext:true,outOfRange:false});
  assert.equal(first.episodes.length,50);
  assert.equal(first.episodes[0].runId,'season_page_00000001');
  const second=await store.listPage({page:2});
  assert.equal(second.episodes[0].runId,'season_page_00000051');
+ assert.equal(second.page.pendingEpisodes,47);
  const final=await store.listPage({page:4});
  assert.equal(final.page.hasNext,false);
  const outside=await store.listPage({page:5});
