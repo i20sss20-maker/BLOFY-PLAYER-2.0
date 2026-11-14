@@ -108,11 +108,22 @@
         <h3 class="analytics-subtitle">مؤشرات البطء والأعطال</h3><div id="analyticsDiagnostics" class="analytics-list" aria-live="polite"></div>
         <h3>أسباب فشل الحلقات</h3><div id="analyticsFailures" class="analytics-list"></div></div>
     </div>
+    <section class="season-resume-panel analytics-record" aria-labelledby="analyticsResumeTitle">
+      <div class="cardhead">
+        <div>
+          <h3 id="analyticsResumeTitle">فحص الاستكمال الآمن بعد الانقطاع</h3>
+          <p class="muted">معاينة حالة السجل المحفوظ في PostgreSQL فقط؛ لا تفحص المصدر أو S3، ولا تؤكد سلامة الملف ولا تبدأ نقلًا تلقائيًا.</p>
+        </div>
+        <button type="button" id="analyticsResumePreview">فحص الحلقات القابلة للمراجعة</button>
+      </div>
+      <p class="hint" id="analyticsResumeStatus" role="status">الاستكمال لا يبدأ إلا من زر بدء النقل المعتاد بعد تأكيد خمول المصدر والتصريح بالتخزين.</p>
+      <div id="analyticsResumeItems" class="analytics-list" aria-live="polite"></div>
+    </section>
     <section class="season-report" id="analyticsReportPanel" hidden aria-labelledby="analyticsReportTitle">
       <div class="cardhead">
-        <div><p class="eyebrow">SEASON DETAILS · READ ONLY</p>
+        <div><p class="eyebrow">SEASON REPORT · MANUAL PRIORITY</p>
           <h3 id="analyticsReportTitle">تقرير الموسم</h3>
-          <p class="muted">حالة جميع الحلقات المحفوظة للموسم، 50 حلقة في الصفحة. المخططات من بيانات فعلية، لا تتصل بالمصدر.</p></div>
+          <p class="muted">حالة الحلقات المحفوظة، 50 حلقة في الصفحة، ومخططات من القياسات الفعلية. يمكن تغيير أولوية الحلقة المنتظرة يدويًا دون بدء النقل.</p></div>
         <div class="season-report-actions">
           <button id="analyticsExportSeason" type="button" disabled>تصدير تقرير CSV</button>
           <button id="analyticsCloseReport" type="button">إغلاق التقرير</button>
@@ -130,8 +141,8 @@
       </div>
       <div class="analytics-scroll">
         <table class="analytics-table">
-          <thead><tr><th>الحلقة</th><th>الحالة</th><th>الإنجاز</th><th>المحفوظ</th><th>آخر تحديث</th><th>الخطأ</th></tr></thead>
-          <tbody id="analyticsReportRows"><tr><td colspan="6">لا توجد بيانات بعد.</td></tr></tbody>
+          <thead><tr><th>الحلقة</th><th>الحالة</th><th>الإنجاز</th><th>المحفوظ</th><th>آخر تحديث</th><th>الخطأ</th><th>الأولوية</th></tr></thead>
+          <tbody id="analyticsReportRows"><tr><td colspan="7">لا توجد بيانات بعد.</td></tr></tbody>
         </table>
       </div>
       <div class="season-report-pagination">

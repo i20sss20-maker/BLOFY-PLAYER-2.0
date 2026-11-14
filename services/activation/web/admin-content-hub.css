@@ -116,3 +116,20 @@
 .analytics-series-group>.jobtop{gap:12px;flex-wrap:wrap;
  padding:3px 4px 6px}
 .analytics-series-group .analytics-record{margin:0}
+
+
+/* Resumption inspection is explicitly read-only; priority changes need owner confirmation. */
+.season-resume-panel{margin:22px 0;padding:18px;background:#0c2036;
+ border-color:#2d6079}
+.season-resume-panel h3{font-size:17px;margin:0 0 8px}
+.season-resume-panel .cardhead{align-items:start}
+.season-resume-panel .cardhead button{flex-shrink:0}
+.season-resume-panel .analytics-list{max-height:310px;margin:12px 0;grid-template-columns:repeat(2,minmax(0,1fr))}
+.season-resume-panel .analytics-record{margin:0}
+.season-priority-select{background:#122e4b;color:#eaf7ff;font:inherit;font-size:13px;
+ border:1px solid #447caa;border-radius:8px;padding:8px;min-width:110px}
+.season-priority-select:disabled{opacity:.55}
+@media(max-width:650px){
+ .season-resume-panel{padding:12px}
+ .season-resume-panel .analytics-list{grid-template-columns:1fr}
+}
