@@ -202,3 +202,62 @@ episode enumeration and approved-file download dispatch are separate
 future stages. No file is uploaded because of a discovery queue row,
 and there is no production deployment or scheduled production run in
 this draft PR.
+
+
+## 2026-11-14: per-series enumeration + one-file rights review and exact range preflight
+
+**New feature, OFF by default:** previously unmapped Xtream TV-series
+episodes can now be discovered by calling the existing official
+`get_series_info` metadata handler, which persists the series' episode
+gateway map. The scanner is serialized across Railway replicas using a
+session PostgreSQL advisory lock, persists the last indexed series, and
+handles multi-day scans without restarting at the beginning. A failed
+provider call preserves the cursor for the next permitted run. It
+requests at most one series metadata response per 90-second timer tick
+inside **04:00–05:59 Asia/Riyadh**, not during peak hours.
+
+Activation/gateway opt-in:
+- `BLOFY_XTREAM_MIRROR_SERIES_ENUM_ENABLED=1`
+- `BLOFY_XTREAM_DAILY_CATALOG_SOURCE_ID=<approved saleh UUID>`
+
+The admin route `GET /api/v1/admin/xtream/mirror/series-status?sourceId=<UUID>`
+shows current source-scoped series progress.
+
+Individual storage grants: a separate authenticated operator-only
+`POST /api/v1/admin/xtream/mirror/rights-review` requires:
+- `BLOFY_XTREAM_MIRROR_RIGHTS_REVIEW_ENABLED=1`
+- Header `x-blofy-owner-action: review-one-mirror-storage-right`
+- JSON with exact `sourceId`, `mediaKind` (`movie` / `episode`),
+  `gatewayId`, `mediaId`, `extension`, an owner's *individual*
+  `evidenceReference`, `storagePermitted:true`,
+  `persistentStorageScope:"saleh-vod-persistent-copy"`,
+  and `operatorReviewed:true`.
+
+This is a **record of an owner's claim**, not an independent legal
+verification. Only the SHA-256 digest of evidence reference is saved.
+The update checks source status, exact gateway identity and that the
+candidate was not remapped. It cannot approve or copy a file on its
+own; the item remains `needs_review` until a provider size probe.
+
+Size preflight: `BLOFY_XTREAM_MIRROR_SIZE_PROBE_ENABLED=1` enables
+one 4KiB `Range` request for a separately reviewed, exact-mapped
+item, at most once per candidate per Riyadh day, during
+04:00–05:59. HTTP 206, total size (8 MiB–4 GiB), exact range and
+body length are checked. The current source and media gateway
+mapping are checked again when recording the size proof in Postgres.
+Changed mappings are held for review. Only a valid probe moves the
+candidate to `approved` (eligible for a FUTURE independently scoped
+private transfer job). **Approved does not mean copied, legally
+audited, or playable.** Existing private chunk workers still must
+verify complete S3 objects and source stability.
+
+Still **not implemented**:
+- Scheduling transfers from each newly approved row using its own
+  source gateway scope, avoiding interference with customer playback.
+- Source/provider concurrency, real cloud storage budget and rights
+  audit for every movie/episode.
+- Actual production switch-on, migration rollout and on-device tests.
+
+No bulk request for every series is sent at once, no media files are
+stored by metadata enumeration/size probing, and no customer routes
+are changed. The entire feature remains under draft PR #609.
