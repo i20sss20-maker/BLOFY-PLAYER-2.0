@@ -239,6 +239,27 @@ export function createSeasonQueueStore({
    ].join(' '),[runId,result.code,result.checkedParts,
     result.totalParts,result.checkedBytes]);
   },
+  // Never derive safety authorization from the 20 most recent rows alone:
+  // older unresolved damaged runs must still block new transfer sessions.
+  async unresolvedAuditCounts(){
+   await ensure();
+   const result=await pool.query([
+    'SELECT code,COUNT(*)::text AS total',
+    'FROM blofy_content_hub_season_audits',
+    "WHERE code IN ('season_storage_checksum_mismatch',",
+    "'season_storage_read_unavailable')",
+    'GROUP BY code'
+   ].join(' ')).catch(error=>{
+    if(error?.code==='42P01')return {rows:[]};
+    throw error;
+   });
+   return {
+    mismatch:Number(result.rows.find(x=>
+     x.code==='season_storage_checksum_mismatch')?.total||0),
+    unavailable:Number(result.rows.find(x=>
+     x.code==='season_storage_read_unavailable')?.total||0)
+   };
+  },
   async recentAudits({limit=20}={}){
    const n=Math.max(1,Math.min(20,Number(limit)||20));
    const response=await pool.query([
