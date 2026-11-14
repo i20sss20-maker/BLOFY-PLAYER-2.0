@@ -426,7 +426,13 @@ export function createContentHubServer({storage,lease,
       code:'season_storage_integrity_review_required'});
    }catch{return json(res,503,{
     ok:false,code:'season_storage_audit_state_unavailable'})}
-   const result=seasonQueue.start();
+   const requestedBudget=req.headers['x-blofy-season-batch-budget'];
+   const sessionMaxBatches=requestedBudget===undefined?null:
+    Number(requestedBudget);
+   if(sessionMaxBatches!==null&&
+      ![12,60,120].includes(sessionMaxBatches))
+    return json(res,400,{ok:false,code:'season_batch_budget_invalid'});
+   const result=seasonQueue.start({sessionMaxBatches});
    return json(res,result.ok?202:409,{...result,privateOnly:true,
     customerCutover:false,maxSourceRangeBytes:CHUNK_BYTES});
   }
