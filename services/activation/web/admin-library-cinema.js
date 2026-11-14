@@ -61,7 +61,7 @@ function collect(data){
    caption:m.verified===true?'نسخة متحقق منها في النظام الخاص':
     'نسخة محفوظة أو قيد النقل — لم يُتحقق من تشغيلها',
    progress:Math.min(100,Math.max(0,Number(m.percent)||0)),
-   editKey:'movie:'+m.runId,seasonKey:null});
+   editKey:'movie:'+m.runId,seasonKey:null,verified:m.verified===true});
  }
  const series=new Map();
  for(const s of data.seasons.slice(0,40)){
@@ -71,7 +71,7 @@ function collect(data){
    title:meta?.title||'مسلسل رقم '+id,
    genre:meta?.genre||'unspecified',year:meta?.year||null,meta,
    seasons:0,episodeCount:0,verifiedCount:0,
-   editKey:seriesKey,seasonKey:s.seasonKey};
+   editKey:seriesKey,seasonKey:s.seasonKey,verified:false};
   existing.seasons++;
   existing.episodeCount+=Number(s.episodeCount)||0;
   existing.verifiedCount+=Number(s.verifiedCount)||0;
@@ -86,7 +86,7 @@ function collect(data){
    caption:num(s.verifiedCount)+' من '+num(s.episodeCount)+
     ' حلقة مدرجة متحقق منها',
    progress:Math.min(100,Math.max(0,Number(s.percent)||0)),
-   editKey:seriesKey,seasonKey:s.seasonKey});
+   editKey:seriesKey,seasonKey:s.seasonKey,verified:false});
  }
  for(const s of series.values()){
   s.caption=num(s.seasons)+' موسم ظاهر · '+num(s.verifiedCount)+
@@ -104,7 +104,7 @@ function collect(data){
    state:e.verified===true?'verified':e.state||'unknown',
    caption:meta?.title?meta.title+' · '+e.seasonKey:e.seasonKey,
    progress:Math.min(100,Math.max(0,Number(e.percent)||0)),
-   editKey:null,seasonKey:e.seasonKey});
+   editKey:null,seasonKey:e.seasonKey,verified:e.verified===true});
  }
  return result;
 }
@@ -117,6 +117,12 @@ function openSeason(item){
  if(!seasonName(item.seasonKey))return;
  document.dispatchEvent(new CustomEvent('blofy:open-season-report',{
   detail:{seasonKey:item.seasonKey}}));
+}
+function openDetail(item){
+ if(!['movie','series','season','episode'].includes(item?.kind))return;
+ document.dispatchEvent(new CustomEvent('blofy:open-library-detail',{
+  detail:{item}
+ }));
 }
 function makeCard(item){
  const card=el('article','cinema-card cinema-kind-'+item.kind);
@@ -140,6 +146,9 @@ function makeCard(item){
   body.append(track);
  }
  const actions=el('div','cinema-card-actions');
+ const detail=el('button','cinema-details','تفاصيل العمل');
+ detail.type='button';detail.addEventListener('click',()=>openDetail(item));
+ actions.append(detail);
  if(item.seasonKey&&seasonName(item.seasonKey)){
   const see=el('button','cinema-see','تفاصيل الموسم');
   see.type='button';see.addEventListener('click',()=>openSeason(item));
@@ -167,6 +176,9 @@ function featuredCard(item){
   (genreNames[item.genre]||'غير مصنّف')+' · '+
   (stateNames[item.state]||'غير محدد')));
  const actions=el('div','cinema-feature-actions');
+ const detail=el('button','cinema-details','تفاصيل العمل');
+ detail.type='button';detail.addEventListener('click',()=>openDetail(item));
+ actions.append(detail);
  if(item.seasonKey&&seasonName(item.seasonKey)){
   const details=el('button','cinema-see','تفاصيل الموسم');
   details.type='button';details.addEventListener('click',()=>openSeason(item));
