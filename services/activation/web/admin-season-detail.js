@@ -152,7 +152,7 @@ async function load(page=1){
   if(serial===requestSerial&&key===currentKey)display(report);
  }catch(e){
   if(serial===requestSerial)setMessage(e.message||'تعذر قراءة التقرير.');
- }finally{loading=false;updateButtons()}
+ }finally{if(serial===requestSerial){loading=false;updateButtons()}}
 }
 function exportCell(value){
  let v=String(value??'').replace(/[\r\n]/g,' ');
@@ -197,6 +197,7 @@ async function exportCsv(){
  finally{exporting=false;updateButtons()}
 }
 document.addEventListener('blofy:open-season-report',event=>{
+ if(exporting){setMessage('التصدير جارٍ؛ أكمله قبل فتح موسم آخر.');return}
  const key=event?.detail?.seasonKey;
  if(!valid.test(String(key||'')))return;
  currentKey=key;currentPage=1;data=null;loading=false;
@@ -211,6 +212,7 @@ document.addEventListener('blofy:open-season-report',event=>{
  $('analyticsReportPanel').scrollIntoView({block:'start',behavior:'smooth'});
 });
 $('analyticsCloseReport').addEventListener('click',()=>{
+ if(exporting)return;
  currentKey=null;data=null;requestSerial++;loading=false;
  $('analyticsReportPanel').hidden=true;updateButtons();
 });
