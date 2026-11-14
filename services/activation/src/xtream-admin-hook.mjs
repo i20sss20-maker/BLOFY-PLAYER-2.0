@@ -6,6 +6,7 @@ import {createXtreamSyncQueue} from './xtream-sync-queue.mjs';
 import {requestDailyXtreamCatalogSync} from './xtream-daily-catalog-sync.mjs';
 import {listIndexedXtreamMirrorPage} from './xtream-mirror-inventory.mjs';
 import {readXtreamPrivateMirrorCoverage} from './xtream-mirror-coverage.mjs';
+import {createXtreamMirrorDiscoveryStore,riyadhMirrorDay} from './xtream-mirror-discovery-queue.mjs';
 import {classifyDailyXtreamOutcome,recordDailyXtreamCatalogOutcome,readDailyXtreamCatalogReceipts} from './xtream-daily-sync-receipts.mjs';
 import {xtreamConnectionReport} from './xtream-smart-connection.mjs';
 import {runXtreamBootDiagnostics} from './xtream-boot-diagnostics.mjs';
@@ -116,6 +117,7 @@ const controlPool = new pg.Pool({
   statement_timeout: 6500
 });
 controlPool.on('error', error => console.error('xtream admin database error:',safeErrorSummary(error)));
+const mirrorDiscoveryStore=createXtreamMirrorDiscoveryStore(controlPool);
 
 async function sourceMutation(sql, values) {
   for (let attempt=0;attempt<3;attempt++) {
@@ -2076,6 +2078,41 @@ const dailyXtreamStartupTimer=setTimeout(()=>{
   }).catch(()=>{});
 },60*1000);
 dailyXtreamStartupTimer.unref?.();
+
+// Incremental full indexed VOD discovery. Operator-only and opt-in.
+// One bounded metadata-only DB page per type/tick, no media downloads.
+let mirrorDiscoveryBusy=false;
+const mirrorDiscoveryTick=async()=>{
+ if(process.env.BLOFY_XTREAM_MIRROR_DISCOVERY_ENABLED!=='1'||
+    mirrorDiscoveryBusy)return;
+ const sourceId=String(process.env.BLOFY_XTREAM_DAILY_CATALOG_SOURCE_ID||'').trim();
+ if(!validUuid(sourceId))return;
+ mirrorDiscoveryBusy=true;
+ try{
+  await ensureReady();
+  const localDay=riyadhMirrorDay();
+  for(const mediaKind of ['movie','episode']){
+   const result=await mirrorDiscoveryStore.scanPage({
+    sourceId,mediaKind,localDay,limit:250});
+   if(result?.code==='mirror_scan_page_saved'||
+      result?.code==='mirror_scan_pass_completed'){
+    console.info('BLOFY_XTREAM_MIRROR_DISCOVERY',JSON.stringify({
+     mediaKind,scanned:result.scanned,eligibleMetadata:result.discoverable,
+     hasMore:result.hasMore,copyStarted:false,mediaBytesTransferred:0,
+     customerCutover:false
+    }));
+   }
+  }
+ }catch(error){
+  console.warn('BLOFY_XTREAM_MIRROR_DISCOVERY',
+   JSON.stringify({code:'mirror_discovery_tick_failed',
+    mediaBytesTransferred:0,customerCutover:false}));
+ }finally{mirrorDiscoveryBusy=false}
+};
+const mirrorDiscoveryTimer=setInterval(()=>void mirrorDiscoveryTick(),60*1000);
+mirrorDiscoveryTimer.unref?.();
+const mirrorDiscoveryStartupTimer=setTimeout(()=>void mirrorDiscoveryTick(),45*1000);
+mirrorDiscoveryStartupTimer.unref?.();
 
 const studioPro=createStudioPro({pool,ensureXtreamReady:ensureReady,startSync});
 const studioTimer=setInterval(()=>{
@@ -4093,6 +4130,40 @@ http.createServer = function withBlofyXtream(listener) {
       // Admin-only read of the indexed catalog, not private-file storage.
       // Useful for safely inspecting the size and episode-map coverage of
       // the requested Xtream daily mirror without contacting the provider.
+      if(req.method==='GET'&&url.pathname==='/api/v1/admin/xtream/mirror/queue/status'){
+        const sourceId=String(url.searchParams.get('sourceId')||'').trim();
+        try{
+          const result=await mirrorDiscoveryStore.summary({sourceId});
+          return json(res,200,result);
+        }catch(error){
+          const invalid=error?.message==='mirror_discovery_source_invalid';
+          return json(res,invalid?400:503,{
+            ok:false,code:invalid?'mirror_discovery_source_invalid':
+              'mirror_discovery_status_unavailable',readOnly:true,
+            providerRequests:0,mediaBytesTransferred:0,customerCutover:false});
+        }
+      }
+      if(req.method==='POST'&&url.pathname==='/api/v1/admin/xtream/mirror/queue/discover'){
+        if(req.headers['x-blofy-owner-action']!=='discover-private-mirror-metadata')
+          return json(res,403,{ok:false,code:'mirror_discovery_owner_action_required'});
+        if(process.env.BLOFY_XTREAM_MIRROR_DISCOVERY_ENABLED!=='1')
+          return json(res,409,{ok:false,code:'mirror_discovery_disabled'});
+        const body=await readJson(req);
+        const sourceId=String(body?.sourceId||'').trim();
+        if(sourceId!==String(process.env.BLOFY_XTREAM_DAILY_CATALOG_SOURCE_ID||'').trim()||
+           !validUuid(sourceId)||!['movie','episode'].includes(body?.mediaKind))
+          return json(res,403,{ok:false,code:'mirror_discovery_source_not_approved'});
+        try{
+          const result=await mirrorDiscoveryStore.scanPage({
+            sourceId,mediaKind:body.mediaKind,
+            localDay:riyadhMirrorDay(),limit:Math.min(250,Math.max(1,
+              Number(body?.limit)||100))});
+          return json(res,result.ok?200:409,result);
+        }catch{
+          return json(res,503,{ok:false,code:'mirror_discovery_unavailable',
+            mediaBytesTransferred:0,customerCutover:false});
+        }
+      }
       if(req.method==='GET'&&url.pathname==='/api/v1/admin/xtream/mirror/coverage'){
         const sourceId=String(url.searchParams.get('sourceId')||'');
         try{
