@@ -22,7 +22,7 @@ const countDecodedFrames=output=>
  String(output||'').split('\n').filter(line=>
   /^\s*0,\s*-?[0-9]/.test(line)).length;
 
-async function sampleVerifiedPrefix({object,storage,filename,signal}){
+export async function sampleVerifiedPrefix({object,storage,filename,signal}){
  const manifest=object.parts;
  if(!manifest?.length||!Number.isSafeInteger(object.bytes)||
    object.bytes<CHUNK_SIZE||!/^[a-f0-9]{64}$/.test(String(object.sha256||'')))
