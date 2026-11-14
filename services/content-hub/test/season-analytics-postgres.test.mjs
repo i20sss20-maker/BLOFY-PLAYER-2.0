@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Pool} from 'pg';
 import {createSeasonQueueStore} from '../src/season-queue.mjs';
+import {createContentCatalogStore} from '../src/curated-metadata.mjs';
 
 // Uses only an ephemeral CI Postgres service. No source, S3 or customer data.
 test('real PostgreSQL executes reporting and chunk-timing queries safely',{
@@ -10,6 +11,7 @@ test('real PostgreSQL executes reporting and chunk-timing queries safely',{
  const url=process.env.BLOFY_TEST_PG_URL;
  const pool=new Pool({connectionString:url});
  const store=createSeasonQueueStore({connectionString:url});
+ const catalog=createContentCatalogStore({connectionString:url});
  const runId='season_ci_0123456789abcdef';
  try{
   await store.ensure();
@@ -181,7 +183,38 @@ test('real PostgreSQL executes reporting and chunk-timing queries safely',{
 
 
 
+  // Curated names are stored only after the owner edits a persisted series.
+  // Full title search must remain an index of *registered* queue episodes.
+  const curatedRun='season_curated_pg_123456789';
+  await pool.query([
+   'INSERT INTO blofy_content_hub_season_queue',
+   '(run_id,season_key,episode_number,title,gateway_id,source_id,',
+   'media_id,extension,expected_bytes,state)',
+   "VALUES($1,'series_987654321_s01',1,'Fixture heading',98675345,",
+   "'00000000-0000-4000-8000-000000000001'::uuid,",
+   "'fixture','mp4',8388608,'queued')"
+  ].join(' '),[curatedRun]);
+  const metadata={key:'series:987654321',title:'Curated Neon Voyage',
+   year:2025,genre:'drama',overview:'Test-only catalog information',
+   posterPath:'/ValidCover1234.jpg',confirmed:true,
+   artworkRightsConfirmed:true};
+  const saved=await catalog.save(metadata);
+  assert.equal(saved.ok,true);
+  assert.equal(saved.metadata.source,'owner_curated');
+  assert.equal(saved.metadata.posterPath,metadata.posterPath);
+  const names=await catalog.searchSeriesIds('Neon Voyage');
+  assert.deepEqual(names.ids,['987654321']);
+  const full=await store.librarySearch({
+   query:'Neon Voyage',state:'all',page:1,seriesIds:names.ids});
+  assert.equal(full.episodes.length,1);
+  assert.equal(full.episodes[0].runId,curatedRun);
+  assert.equal(full.seasons.length,1);
+  assert.equal(full.seasons[0].episodeCount,1);
+  assert.equal((await catalog.find(['series:987654321']))[0].title,
+   'Curated Neon Voyage');
+  assert.equal((await catalog.save({...metadata,
+   key:'series:987654322'})).code,'curated_media_not_registered');
  }finally{
-  await store.close();await pool.end();
+  await catalog.close();await store.close();await pool.end();
  }
 });
