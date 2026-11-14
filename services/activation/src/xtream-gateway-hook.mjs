@@ -62,7 +62,7 @@ import {contentHubBridgeAuth,parseContentHubClientRange,
   validContentHubResponse,approvedContentHubMedia}
   from './xtream-content-hub-private-range.mjs';
 import {findLicensedEpisodeCandidates,findLicensedEpisodeCandidateById} from './xtream-content-hub-episode-candidates.mjs';
-import {listLicensedSeries,mappedLicensedSeriesEpisodes,buildLicensedSeriesSeasons} from './xtream-content-hub-series.mjs';
+import {listLicensedSeries,mappedLicensedSeriesEpisodes,buildLicensedSeriesSeasons,findPilotSeriesForEpisode} from './xtream-content-hub-series.mjs';
 import {findRunningApprovedSeasonEpisode} from './xtream-content-hub-season-approval.mjs';
 import {probePrivateEpisodeRange} from './xtream-content-hub-episode-probe.mjs';
 import { readXtreamGatewayJsonResponse } from './xtream-gateway-response.mjs';
@@ -1867,6 +1867,18 @@ async function handlePrivateContentHubSource(req,res,url){
  // Only operator-selected *saleh* series with an indexed mapped ID.
  // Series metadata lookup may perform one provider API request, but NO
  // media transfer or customer playback route is affected.
+ if(url.pathname==='/internal/blofy-content-hub/series/pilot'){
+  if(url.search)return json(res,400,{ok:false,
+   code:'pilot_series_query_not_allowed'});
+  try{
+   const approvedEpisode=Number(process.env.BLOFY_CONTENT_HUB_ALLOWED_EPISODE_GATEWAY_ID);
+   const result=await findPilotSeriesForEpisode(pool,approvedEpisode);
+   return json(res,result?200:404,{
+    ok:Boolean(result),...(result||{}),privateOnly:true,readOnly:true,
+    sourceMediaRequests:0,customerCutover:false});
+  }catch{return json(res,503,{ok:false,
+   code:'pilot_series_lookup_unavailable',sourceMediaRequests:0})}
+ }
  if(url.pathname==='/internal/blofy-content-hub/series/candidates'){
   if(url.search)return json(res,400,{ok:false,
    code:'content_hub_series_query_denied'});
