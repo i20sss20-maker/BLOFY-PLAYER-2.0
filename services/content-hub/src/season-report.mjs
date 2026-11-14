@@ -4,7 +4,7 @@ const STR=/^[a-z0-9_]{1,80}$/;
 const code=n=>STR.test(String(n||''))?String(n):'unknown';
 const date=n=>n?String(n):null;
 const allowed=new Set(['queued','paused','running','verified','failed']);
-export function buildSeasonReport({page={},totals={},episodes=[],events=[],worker={}}={}){
+export function buildSeasonReport({page={},totals={},episodes=[],events=[],worker={},timing={}}={}){
  const seasonKey=String(page.seasonKey||'').slice(0,64);
  const expectedBytes=clamp(totals.expected_bytes);
  const storedBytes=clamp(totals.stored_bytes);
@@ -21,6 +21,8 @@ export function buildSeasonReport({page={},totals={},episodes=[],events=[],worke
   return {runId:String(row.runId||'').slice(0,80),
    episodeNumber:clamp(row.episodeNumber,500),
    title:String(row.title||'').slice(0,220),state,
+   priority:[0,1,2].includes(Number(row.priority))?Number(row.priority):0,
+   priorityEditable:state==='queued'||state==='paused',
    sourceVerified:row.verified===true,
    code:row.code?code(row.code):null,
    expectedBytes:expected,storedBytes:copied,
@@ -35,6 +37,18 @@ export function buildSeasonReport({page={},totals={},episodes=[],events=[],worke
   bytesPerSecond:e.bytes>0&&e.durationMs>0?
    Math.floor(Number(e.bytes)*1000/Number(e.durationMs)):null
  }));
+ const samples=clamp(timing.sample_count);
+ const activeMs=clamp(timing.active_ms);
+ const measuredBytes=clamp(timing.measured_bytes);
+ const transferTiming={measuredChunkCount:samples,
+  measuredActiveMs:samples>0?activeMs:null,
+  measuredBytes:samples>0?measuredBytes:null,
+  averageBytesPerSecond:samples>0&&activeMs>0?
+   Math.floor(measuredBytes*1000/activeMs):null,
+  firstMeasuredAt:date(timing.first_measured_at),
+  lastMeasuredAt:date(timing.last_measured_at),
+  completeHistory:measuredBytes>=storedBytes&&samples>0,
+  scope:'durable_chunk_wall_clock_since_telemetry_enabled'};
  const alerts=[];
  if(failed>0)alerts.push({code:'failed_episodes',
   level:'warning',text:failed+' حلقة بحالة فشل. راجع رمز الخطأ قبل إعادة المحاولة.'});
@@ -56,7 +70,7 @@ export function buildSeasonReport({page={},totals={},episodes=[],events=[],worke
    queuedCount:queued,runningCount:running,pausedCount:paused,
    expectedBytes,storedBytes,percent:expectedBytes?
     Math.min(100,Math.floor(100*storedBytes/expectedBytes)):0},
-  episodes:episodeRows,recentEvents:eventRows,
+  episodes:episodeRows,recentEvents:eventRows,transferTiming,
   eventHistoryScope:'newest_60_telemetry_rows_for_selected_season',
   eventsLimited:Array.isArray(events)&&events.length>60,
   alerts,measurementNote:'Chunk wall-clock time includes source, upload, checksum and checkpoint. Older chunks may not have telemetry.',
