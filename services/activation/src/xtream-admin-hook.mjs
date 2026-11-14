@@ -3157,10 +3157,12 @@ async function unifiedStreamBridge(req,res,url){
     '/internal/blofy-stream/content-hub/batch/next':'/internal/batch/next',
     '/internal/blofy-stream/content-hub/batch/start':'/internal/batch/start',
     '/internal/blofy-stream/content-hub/batch/pause':'/internal/batch/pause',
-    '/internal/blofy-stream/content-hub/playback/diagnose':'/internal/playback/diagnose'
+    '/internal/blofy-stream/content-hub/playback/diagnose':'/internal/playback/diagnose',
+    '/internal/blofy-stream/content-hub/episodes/playback/diagnose':'/internal/episodes/playback/diagnose'
   };
   if(Object.hasOwn(batchBridgePaths,p)){
     const canary=p.endsWith('/playback/diagnose');
+    const episodeCanary=p.endsWith('/episodes/playback/diagnose');
     const episodeProbe=p.endsWith('/episodes/probe');
     const episodeCopy=p.endsWith('/episodes/next');
     const episodeStart=p.endsWith('/episodes/start');
@@ -3198,7 +3200,8 @@ async function unifiedStreamBridge(req,res,url){
             episodeProbe?{'x-blofy-episode-probe-confirm':'operator-approved-probe',
             'x-blofy-episode-gateway-id':String(episodeGatewayId)}:
             confirmed?canary?
-            {'x-blofy-canary-confirm':'verified-private'}:
+            {'x-blofy-canary-confirm':episodeCanary?
+              'verified-private-episode':'verified-private'}:
             {'x-blofy-batch-confirm':'approved-8mib-batch'}:{})}
       });
       if(![200,202,400,409,429,503].includes(response.status))
