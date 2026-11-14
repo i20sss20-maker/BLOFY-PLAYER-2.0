@@ -18,6 +18,10 @@ test('authenticated season analytics returns only Postgres accounting and measur
    queued_count:'1',running_count:'0',paused_count:'0',
    expected_bytes:'25165824',stored_bytes:'8388608'}],
   failureReasons:async()=>[{code:'episode_source_busy',total:'1'}],
+  recentEpisodeStates:async()=>[{runId:'season_1234567890abcdef',
+   seasonKey:'series_s01',episodeNumber:1,title:'Episode one',
+   state:'verified',code:'episode_fully_verified',expectedBytes:8388608,
+   storedBytes:8388608,percent:100,updatedAt:'2026-11-14T08:00:00Z'}],
   recentTransferEvents:async()=>[{
    runId:'season_1234567890abcdef',seasonKey:'series_s01',
    episodeNumber:1,bytes:8388608,durationMs:4000,
@@ -42,6 +46,7 @@ test('authenticated season analytics returns only Postgres accounting and measur
   assert.equal(data.providerMediaRequests,0);
   assert.equal(data.totals.averageBytesPerSecond,2097152);
   assert.equal(data.totals.seasonCount,1);
+  assert.equal(data.recentEpisodeStates[0].snapshotOnly,true);
   assert.equal(data.seasonSummaries[0].failedCount,1);
   assert.equal(data.failureReasons[0].code,'episode_source_busy');
   assert.equal(data.bucketFreeBytes,null);
