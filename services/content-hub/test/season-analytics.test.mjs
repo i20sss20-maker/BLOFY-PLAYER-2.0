@@ -38,3 +38,15 @@ test('alerts and failure stages produce hints without exposing upstream URLs',()
  assert.equal(out.failureReasons[0].count,3);
  assert.equal(JSON.stringify(out).includes('username='),false);
 });
+
+test('stage diagnostics highlight the slowest recorded section, not a guessed provider fault',()=>{
+ const out=buildSeasonAnalytics({health:{episodeCount:6},
+  metrics:{sample_count:'3',stage_sample_count:'3',
+   active_ms:'300000',transfer_bytes:'25165824',
+   source_ms:'210000',boundary_ms:'30000',
+   upload_ms:'20000',verification_ms:'30000'}});
+ assert.equal(out.stageSamples,3);
+ assert.equal(out.timingBreakdown.find(x=>x.stage==='source').sharePercent,80);
+ assert.ok(out.diagnostics.some(x=>x.code==='dominant_source'));
+ assert.equal(out.totals.averageBytesPerSecond,83886);
+});
