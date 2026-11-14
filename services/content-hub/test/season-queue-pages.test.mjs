@@ -14,7 +14,9 @@ test('queue listing uses stable ordering and exact 50-row SQL pages',async()=>{
     run_id:'season_page_'+String(args[1]+i+1).padStart(8,'0'),
     season_key:'series_3_s1',episode_number:i+1,
     gateway_id:args[1]+i+1,state:'queued',expected_bytes:'8388608',
-    bytes_copied:'0',manual_retries:0,title:'Test '+i
+    bytes_copied:'0',manual_retries:0,title:'Test '+i,
+    checkpoint_at:'2026-11-14T03:00:00Z',
+    checkpoint_age_seconds:'235.71'
    }))};
    throw Error('unexpected SQL');
   }
@@ -26,6 +28,12 @@ test('queue listing uses stable ordering and exact 50-row SQL pages',async()=>{
   pendingEpisodes:47,pages:4,hasPrevious:false,hasNext:true,outOfRange:false});
  assert.equal(first.episodes.length,50);
  assert.equal(first.episodes[0].runId,'season_page_00000001');
+ assert.equal(first.episodes[0].checkpointAgeSeconds,235);
+ assert.equal(first.episodes[0].checkpointSource,'postgres_verified_chunk');
+ assert.equal(first.episodes[0].checkpointAt,'2026-11-14T03:00:00Z');
+ const listQuery=queries.find(q=>q.sql.startsWith('SELECT q.*'));
+ assert.match(listQuery.sql,/GREATEST\(q\.updated_at/);
+ assert.match(listQuery.sql,/r\.updated_at/);
  const second=await store.listPage({page:2});
  assert.equal(second.episodes[0].runId,'season_page_00000051');
  assert.equal(second.page.pendingEpisodes,47);
