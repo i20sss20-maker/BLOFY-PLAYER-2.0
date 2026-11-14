@@ -61,6 +61,7 @@ import {probeSalehRangedMovie} from './xtream-content-hub-range-pilot.mjs';
 import {contentHubBridgeAuth,parseContentHubClientRange,
   validContentHubResponse,approvedContentHubMedia}
   from './xtream-content-hub-private-range.mjs';
+import {findLicensedEpisodeCandidates} from './xtream-content-hub-episode-candidates.mjs';
 import { readXtreamGatewayJsonResponse } from './xtream-gateway-response.mjs';
 import {configuredXtreamPublicOrigin} from './xtream-public-origin.mjs';
 import {probeXtreamAccountCompatibility} from './xtream-compatibility-probe.mjs';
@@ -1860,6 +1861,19 @@ async function handlePrivateContentHubSource(req,res,url){
   return json(res,401,{ok:false,code:'content_hub_source_unauthorized'});
  if(req.method!=='GET')
   return json(res,405,{ok:false,code:'content_hub_method_denied'});
+ if(url.pathname==='/internal/blofy-content-hub/episodes/candidates'){
+  if(url.search)return json(res,400,{ok:false,
+    code:'content_hub_episode_query_denied'});
+  try{
+   const items=await findLicensedEpisodeCandidates(pool,{limit:8});
+   return json(res,200,{ok:true,sourceName:'saleh',mediaKind:'episode',
+     candidates:items,readOnly:true,selectionRequired:true,
+     automaticDownload:false,providerMediaRequests:0,
+     customerCutover:false});
+  }catch{return json(res,503,{ok:false,
+    code:'content_hub_episode_catalog_unavailable',
+    providerMediaRequests:0,customerCutover:false})}
+ }
  const id=await hubApprovedMovieId();
  const row=await gatewayItemById('movie',id);
  if(!approvedContentHubMedia(row))
