@@ -357,6 +357,10 @@ refreshSeasons();
 setInterval(()=>{if(!document.hidden)refreshSeasons()},10000);
 
 $('loadEpisodePreview').addEventListener('click',()=>{
+ episodeSamplePlayed=false;
+ $('ownerSawPicture').checked=false;
+ $('ownerHeardAudio').checked=false;
+ updateOwnerAVButton();
  const video=$('episodePlayer');
  video.pause();video.removeAttribute('src');video.load();
  video.src='/api/v1/admin/content-hub/episodes/preview';
@@ -368,3 +372,56 @@ $('episodePlayer').addEventListener('error',()=>{
  $('episodePlayerNote').textContent=
   'تعذّر عرض العينة: قد تكون صلاحية المعاينة غير مفعّلة، أو لم يكتمل التحقق، أو المتصفح لا يدعم الملف.';
 });
+
+
+let episodeSamplePlayed=false,episodeAVConfirmed=false;
+function updateOwnerAVButton(){
+ $('confirmEpisodeAV').disabled=episodeAVConfirmed||
+  !episodeSamplePlayed||!$('ownerSawPicture').checked||
+  !$('ownerHeardAudio').checked;
+}
+$('ownerSawPicture').addEventListener('change',updateOwnerAVButton);
+$('ownerHeardAudio').addEventListener('change',updateOwnerAVButton);
+$('episodePlayer').addEventListener('timeupdate',()=>{
+ if($('episodePlayer').currentTime>0.4){
+  episodeSamplePlayed=true;updateOwnerAVButton();
+ }
+});
+async function loadEpisodeBrowserConfirmation(){
+ try{
+  const response=await fetch('/api/v1/admin/content-hub/episodes/confirmation',{
+   credentials:'same-origin',cache:'no-store'});
+  if(response.status===401){location.assign('/admin');return}
+  const data=await response.json();
+  if(!response.ok)return;
+  episodeAVConfirmed=data.confirmed===true;
+  if(episodeAVConfirmed)
+   $('episodeAVStatus').textContent='✅ تم تسجيل تأكيد المشاهدة والصوت من المسؤول'+
+    (data.confirmedAt?' بتاريخ '+new Date(data.confirmedAt).toLocaleString('ar-SA'):'');
+  updateOwnerAVButton();
+ }catch{}
+}
+$('confirmEpisodeAV').addEventListener('click',async()=>{
+ if(!episodeSamplePlayed||!$('ownerSawPicture').checked||
+   !$('ownerHeardAudio').checked)return;
+ if(!confirm('هل شاهدت صورة الحلقة وسمعت صوتها فعليًا داخل المتصفح؟ سيتم حفظ تأكيدك لاستخدامه كشرط قبل بدء نقل المواسم.'))return;
+ const btn=$('confirmEpisodeAV');btn.disabled=true;
+ try{
+  const response=await fetch('/api/v1/admin/content-hub/episodes/confirm',{
+   method:'POST',credentials:'same-origin',headers:{
+    'x-blofy-owner-action':'browser-av-tested',
+    'content-type':'application/json'
+   },body:JSON.stringify({videoConfirmed:true,audioConfirmed:true})});
+  if(response.status===401){location.assign('/admin');return}
+  const data=await response.json();
+  if(response.ok&&data.ok){
+   episodeAVConfirmed=true;
+   $('episodeAVStatus').textContent='✅ تم اعتماد تشغيل الحلقة بالصورة والصوت.'; 
+  }else{
+   $('episodeAVStatus').textContent=
+    'لا يمكن الاعتماد: يجب أن تكون النسخة مكتملة ومتحقق منها وتفعيل المعاينة للمسؤول.';
+  }
+ }catch{$('episodeAVStatus').textContent='تعذر الاتصال لحفظ تأكيد التشغيل.'}
+ updateOwnerAVButton();
+});
+loadEpisodeBrowserConfirmation();
