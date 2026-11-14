@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {cleanSeriesCandidate,listLicensedSeries,mappedLicensedSeriesEpisodes,
- buildLicensedSeriesSeasons} from '../src/xtream-content-hub-series.mjs';
+ buildLicensedSeriesSeasons,findPilotSeriesForEpisode} from '../src/xtream-content-hub-series.mjs';
 const serverId='9adc6472-5d4e-4359-83e4-0298cc038ae3';
 test('list licensed series only from approved saleh and no passwords',async()=>{
  const pool={query:async(sql,args)=>{
@@ -46,4 +46,16 @@ test('reject malformed season mapping instead of inventing episode files',()=>{
   info:{episodes:{'__proto__':[{id:'41'}],'9999':[{id:'41'}]}},
   candidates:[]});
  assert.equal(result.seasons.length,0);
+});
+
+test('verified pilot episode resolves only to an enabled licensed series gateway',async()=>{
+ const pool={query:async(sql,args)=>{
+  assert.match(sql,/e.gateway_id=\$1/);
+  assert.match(sql,/lower\(btrim\(s.name\)\)='saleh'/);
+  assert.deepEqual(args,[127434]);
+  return {rows:[{series_gateway_id:31}]};
+ }};
+ assert.deepEqual(await findPilotSeriesForEpisode(pool,127434),{
+  seriesGatewayId:31,episodeGatewayId:127434});
+ assert.equal(await findPilotSeriesForEpisode(pool,-1),null);
 });
