@@ -708,6 +708,9 @@ export function createSeasonQueueStore({
    ].filter(Boolean).join(' ');
    const params=[seasonKey,pageSize,(page-1)*pageSize];
    const items=await pool.query(rows(hasRuns),params);
+   const av=await this.episodeAvReviews({
+    runIds:(items.rows||[]).map(row=>String(row.run_id))});
+   const ownerReviews=new Map(av.map(entry=>[entry.runId,entry]));
    return {page:{number:page,seasonKey,pages,hasPrevious:page>1,
      hasNext:page<pages},totals,
     episodes:(items.rows||[]).map(row=>{
@@ -717,6 +720,9 @@ export function createSeasonQueueStore({
       title:row.title,state:row.state,priority:Number(row.priority||0),
       verified:row.state==='verified'&&
        row.episode_state==='verified',
+      ownerAvConfirmedAt:row.state==='verified'&&
+       row.episode_state==='verified'?
+        ownerReviews.get(row.run_id)?.confirmedAt||null:null,
       code:row.code,expectedBytes:expected,storedBytes:copied,
       updatedAt:row.updated_at};
     })};
@@ -897,6 +903,70 @@ export function createSeasonQueueStore({
     checkedBytes:Number(row.checked_bytes),
     checkedAt:row.checked_at
    }));
+  },
+  // This table records a human owner's explicit browser A/V observation.
+  // It does not constitute a codec scan, a new storage verification, or
+  // approval to display content to subscribers. Reads never create tables.
+  async episodeAvReviews({runIds=[]}={}){
+   if(!Array.isArray(runIds)||runIds.length>50||
+      runIds.some(id=>!RUN.test(String(id||''))))
+    throw Error('episode_av_review_selection_invalid');
+   if(!runIds.length)return [];
+   await ensure();
+   const result=await pool.query([
+    'SELECT v.run_id,v.confirmed_at',
+    'FROM blofy_content_hub_episode_av_reviews v',
+    'INNER JOIN blofy_content_hub_season_queue q ON q.run_id=v.run_id',
+    'INNER JOIN blofy_content_hub_episode_runs r ON r.run_id=q.run_id',
+    "WHERE v.run_id=ANY($1::text[]) AND q.state='verified'",
+    "AND r.state='verified' ORDER BY v.run_id LIMIT 50"
+   ].join(' '),[[...new Set(runIds)]]).catch(error=>{
+    if(error?.code==='42P01')return {rows:[]};
+    throw error;
+   });
+   return (result.rows||[]).map(row=>({runId:row.run_id,
+    videoOwnerConfirmed:true,audioOwnerConfirmed:true,
+    confirmedAt:row.confirmed_at,
+    reviewMethod:'owner_explicit_browser_visual_and_audio_check',
+    automaticVerification:false}));
+  },
+  async confirmEpisodeAv({runId}={}){
+   if(!RUN.test(String(runId||'')))
+    return {ok:false,code:'episode_av_review_id_invalid'};
+   // Don't create the table or issue any write until durable queue and
+   // episode run state are both verified.
+   if(!await this.ownsVerifiedRun(runId))
+    return {ok:false,code:'episode_av_not_storage_verified'};
+   await pool.query([
+    'CREATE TABLE IF NOT EXISTS blofy_content_hub_episode_av_reviews (',
+    'run_id TEXT PRIMARY KEY,',
+    'video_owner_confirmed BOOLEAN NOT NULL DEFAULT TRUE,',
+    'audio_owner_confirmed BOOLEAN NOT NULL DEFAULT TRUE,',
+    'confirmed_at TIMESTAMPTZ NOT NULL DEFAULT NOW())'
+   ].join(' '));
+   // Recheck verified status in the INSERT itself; a stale UI can never
+   // attach a human playback review to an unverified queue run.
+   const result=await pool.query([
+    'INSERT INTO blofy_content_hub_episode_av_reviews',
+    '(run_id,video_owner_confirmed,audio_owner_confirmed,confirmed_at)',
+    'SELECT q.run_id,TRUE,TRUE,NOW()',
+    'FROM blofy_content_hub_season_queue q',
+    'INNER JOIN blofy_content_hub_episode_runs r ON r.run_id=q.run_id',
+    "WHERE q.run_id=$1 AND q.state='verified' AND r.state='verified'",
+    'ON CONFLICT(run_id) DO NOTHING',
+    'RETURNING confirmed_at'
+   ].join(' '),[runId]);
+   if(!result.rows?.length){
+    const verified=await this.ownsVerifiedRun(runId);
+    if(!verified)return {ok:false,code:'episode_av_not_storage_verified'};
+   }
+   const current=await this.episodeAvReviews({runIds:[runId]});
+   const review=current.find(row=>row.runId===runId);
+   if(!review)return {ok:false,code:'episode_av_review_not_persisted'};
+   return {ok:true,code:result.rows?.length?
+     'episode_av_owner_review_saved':'episode_av_owner_review_already_saved',
+    ...review,automaticVerification:false,
+    customerCutover:false,providerMediaRequests:0,storageRequests:0};
   },
   async ownsVerifiedRun(runId){
    if(!RUN.test(String(runId||'')))return false;

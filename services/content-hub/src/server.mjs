@@ -326,6 +326,33 @@ export function createContentHubServer({storage,lease,
     }));
    }catch{return json(res,503,{ok:false,code:'season_report_database_unavailable'})}
   }
+  // Explicit owner human video AND audio check for one storage-verified
+  // episode. Neither a video analyzer nor subscriber playback approval.
+  if(path==='/internal/seasons/episodes/av/confirm'&&req.method==='POST'){
+   if(String(req.url||'').includes('?')||
+      req.headers['x-blofy-owner-action']!=='confirm-manual-episode-av'||
+      req.headers['x-blofy-video-confirmed']!=='yes'||
+      req.headers['x-blofy-audio-confirmed']!=='yes')
+    return json(res,403,{ok:false,code:'episode_av_manual_owner_confirmation_required'});
+   if(!seasonQueueStore?.confirmEpisodeAv)return json(res,503,{
+    ok:false,code:'episode_av_review_unavailable'});
+   let body;
+   try{body=await readSeasonJson(req)}
+   catch{return json(res,400,{ok:false,code:'episode_av_request_invalid'})}
+   if(!body||body.confirmed!==true||
+      body.videoConfirmed!==true||body.audioConfirmed!==true||
+      typeof body.runId!=='string'||
+      !/^[A-Za-z0-9_-]{8,80}$/.test(body.runId))
+    return json(res,400,{ok:false,code:'episode_av_request_invalid'});
+   try{
+    const result=await seasonQueueStore.confirmEpisodeAv({
+     runId:body.runId});
+    return json(res,result.ok?200:409,{
+     ...result,privateOnly:true,manualOnly:true,
+     customerCutover:false,automaticStart:false,storageRequests:0,
+     providerMediaRequests:0});
+   }catch{return json(res,503,{ok:false,code:'episode_av_review_database_unavailable'})}
+  }
   // Private owner alert triage. The caller gets database snapshots only.
   if(path==='/internal/seasons/attention'&&req.method==='GET'){
    if(String(req.url||'').includes('?'))

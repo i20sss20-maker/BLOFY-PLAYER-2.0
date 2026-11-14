@@ -194,6 +194,24 @@
           </div>
           <video id="libraryDetailPlayer" controls preload="none" playsinline
             controlslist="nodownload" aria-label="معاينة النسخة الخاصة المتحقق منها"></video>
+          <div class="library-detail-preview-navigation" role="group"
+            aria-label="التنقل بين الحلقات المتحقق منها في الصفحة الحالية">
+            <button id="libraryDetailPrevVerified" type="button" disabled>← الحلقة المكتملة السابقة</button>
+            <span id="libraryDetailPreviewPosition" class="muted">اختر حلقة مكتملة لمعاينتها</span>
+            <button id="libraryDetailNextVerified" type="button" disabled>الحلقة المكتملة التالية →</button>
+          </div>
+          <section id="libraryDetailAvReview" class="library-detail-av-review"
+            aria-labelledby="libraryDetailAvTitle" hidden>
+            <h5 id="libraryDetailAvTitle">توثيق مشاهدة الصورة والصوت يدويًا</h5>
+            <p class="hint">التحقق من التخزين لا يعني تأكيد الصورة أو الصوت. بعد تشغيل المقطع ومراجعته بنفسك فقط، اختر ما لاحظته فعلاً. لا يوجد تحليل صوت أو صورة تلقائي.</p>
+            <label><input type="checkbox" id="libraryDetailAvVideoCheck">
+              شاهدت صورة فيديو سليمة بنفسي</label>
+            <label><input type="checkbox" id="libraryDetailAvAudioCheck">
+              سمعت صوت المقطع بوضوح بنفسي</label>
+            <button id="libraryDetailAvConfirm" type="button" disabled>
+              اعتماد فحص الصورة والصوت لهذه الحلقة فقط</button>
+            <p id="libraryDetailAvStatus" class="muted" role="status"></p>
+          </section>
           <p class="hint">المعاينة لمالك النظام فقط، وبطلب صريح منك. لا تعني اعتماد عرض الملف للعملاء.</p>
         </div>
         <section class="library-detail-registered" aria-labelledby="libraryDetailSeasonsHeading">
