@@ -35,3 +35,22 @@ export async function findLicensedEpisodeCandidates(pool,{limit=8}={}){
    ORDER BY e.gateway_id ASC LIMIT $1`,[n]);
  return (result.rows||[]).map(cleanEpisodeCandidate).filter(Boolean);
 }
+
+export async function findLicensedEpisodeCandidateById(pool,gatewayId){
+ const id=Number(gatewayId);
+ if(!Number.isSafeInteger(id)||id<1)return null;
+ const result=await pool.query(`SELECT e.gateway_id,
+   e.source_episode_id AS source_id,e.server_id,
+   e.container_extension,
+   (i.name || ' — episode ' || e.source_episode_id) AS display_name
+   FROM blofy_xtream_gateway_episode_map e
+   JOIN blofy_xtream_items i ON i.server_id=e.server_id
+     AND i.media_type='series' AND i.source_id=e.series_source_id
+   JOIN blofy_xtream_servers s ON s.id=e.server_id
+   WHERE e.gateway_id=$1 AND s.enabled=TRUE AND s.publish_catalog=TRUE
+     AND s.deletion_requested_at IS NULL
+     AND lower(btrim(s.name))='saleh' AND i.enabled=TRUE
+     AND lower(e.container_extension) IN ('mp4','mkv','ts','avi')
+   LIMIT 1`,[id]);
+ return result.rows?.length===1?cleanEpisodeCandidate(result.rows[0]):null;
+}
