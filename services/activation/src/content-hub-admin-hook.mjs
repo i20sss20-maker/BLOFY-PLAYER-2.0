@@ -163,13 +163,17 @@ async function handleCanary(req,res,id){
   try{await body?.cancel?.()}catch{}
  }
 }
-async function handleEpisodePreview(req,res){
+async function handleEpisodePreview(req,res,runId=null){
+ if(runId!==null&&!/^[A-Za-z0-9_-]{8,80}$/.test(String(runId)))
+  return json(res,400,{ok:false,code:'episode_preview_id_invalid'});
  const ctrl=new AbortController();
  const close=()=>ctrl.abort();
  res.once('close',close);
  const timer=setTimeout(()=>ctrl.abort(),85000);timer.unref?.();
  try{
-  const response=await request('/internal/episodes/playback/preview',{
+  const route=runId===null?'/internal/episodes/playback/preview':
+   '/internal/seasons/episodes/'+runId+'/preview';
+  const response=await request(route,{
    signal:ctrl.signal,extraHeaders:{
     'x-blofy-owner-preview':'operator-episode-only'}});
   if(response.status!==200||!response.body||
@@ -234,6 +238,12 @@ http.createServer=function withContentHubAdmin(listener){
   try{
    if(path==='/api/v1/admin/content-hub/episodes/preview'&&req.method==='GET')
     return await handleEpisodePreview(req,res);
+   // Only individually verified private queue episodes can be previewed.
+   // The Hub rechecks ownsVerifiedRun and verified storage on each request.
+   const queuedEpisodePreview=
+    /^\/api\/v1\/admin\/content-hub\/seasons\/episodes\/([A-Za-z0-9_-]{8,80})\/preview$/.exec(path);
+   if(queuedEpisodePreview&&req.method==='GET')
+    return await handleEpisodePreview(req,res,queuedEpisodePreview[1]);
    if(canary&&['GET','HEAD'].includes(req.method))
     return await handleCanary(req,res,canary[1]);
    if(path==='/api/v1/admin/content-hub/preflight'&&req.method==='GET'){
