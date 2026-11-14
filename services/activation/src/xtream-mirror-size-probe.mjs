@@ -155,34 +155,7 @@ export async function probeOneAttestedMirrorItem({
       AND q.media_id=$4 AND q.extension=$5
       AND q.mapping_conflict=FALSE AND q.state='needs_review'
       AND q.license_reviewed_at IS NOT NULL
-      AND q.rights_ref_sha256 ~ '^[a-f0-9]{64}`:
-   `UPDATE blofy_xtream_mirror_items SET
-    size_probe_day=$6::date,size_probe_error=$7
-    WHERE source_id=$1 AND media_kind=$2 AND gateway_id=$3
-      AND media_id=$4 AND extension=$5 AND state='needs_review'
-    RETURNING gateway_id`;
-  const params=proof.ok?
-   [item.sourceId,item.mediaKind,item.gatewayId,item.mediaId,
-    item.extension,proof.expectedBytes,localDay,
-    proof.sourceValidatorSha256]:
-   [item.sourceId,item.mediaKind,item.gatewayId,item.mediaId,
-    item.extension,localDay,proof.code];
-  const saved=await client.query(sql,params);
-  return {ok:proof.ok&&saved.rowCount===1,
-    code:saved.rowCount!==1?'mirror_size_candidate_changed':proof.code,
-    gatewayId:item.gatewayId,mediaKind:item.mediaKind,
-    expectedBytes:proof.ok?proof.expectedBytes:null,
-    providerRequests:1,probeBytes:proof.probeBytes||0,
-    stored:false,copyStarted:false,mediaBytesTransferred:0,
-    readyForCopy:false,customerCutover:false};
- }finally{
-  if(held)await client.query(
-    'SELECT pg_advisory_unlock($1::integer,$2::integer)',
-    [LOCK_A,LOCK_B]).catch(()=>{});
-  client.release();
- }
-}
-
+      AND q.rights_ref_sha256 ~ '^[a-f0-9]{64}$'
       AND ${currentSource} AND ${currentMapping}
     RETURNING q.gateway_id`:
    `UPDATE blofy_xtream_mirror_items SET
