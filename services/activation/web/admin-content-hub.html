@@ -15,6 +15,7 @@
   <script src="/admin-library-metadata.js" defer></script>
   <script src="/admin-library-cinema.js" defer></script>
   <script src="/admin-library-detail.js" defer></script>
+  <script src="/admin-season-readiness.js" defer></script>
 </head>
 <body>
 <main class="shell">
@@ -79,9 +80,41 @@
     <nav class="ops-links" aria-label="الانتقال السريع">
       <a href="#season-title">إدارة المواسم</a>
       <a href="#analyticsTitle">التقارير التفصيلية</a>
+      <a href="#seasonReadinessTitle">جاهزية الصورة والصوت</a>
       <a href="#attentionTitle">التنبيهات</a>
       <a href="#runs">عمليات الأفلام</a>
     </nav>
+  </section>
+  <section class="card season-readiness" id="seasonReadiness"
+    aria-labelledby="seasonReadinessTitle">
+    <div class="cardhead">
+      <div>
+        <p class="eyebrow">BLOFY · OWNER PLAYBACK REVIEW</p>
+        <h2 id="seasonReadinessTitle">جاهزية الحلقات واختبار الصورة والصوت</h2>
+        <p class="muted">إحصائية شاملة للحلقات المدرجة في قائمة النقل الخاصة فقط، وليس لكل محتوى المصدر. تؤكد سجلات التخزين سلامة الملف المسجلة، بينما مراجعة الصورة والصوت تأكيد يدوي مستقل من المالك.</p>
+      </div>
+      <button id="seasonReadinessRefresh" type="button">تحديث الفحص</button>
+    </div>
+    <p id="seasonReadinessStatus" class="muted" role="status">
+      اختر «تحديث الفحص» لقراءة الحالة من PostgreSQL دون تشغيل أي ملف.
+    </p>
+    <div id="seasonReadinessKpis" class="season-readiness-kpis" aria-live="polite">
+      <p class="muted">لا توجد إحصائية محسوبة بعد.</p>
+    </div>
+    <div id="seasonReadinessWarnings" class="season-readiness-warnings"></div>
+    <div class="season-readiness-head">
+      <h3>المواسم المسجلة وترتيب ما يحتاج مراجعة</h3>
+      <span id="seasonReadinessScope" class="muted"></span>
+    </div>
+    <div id="seasonReadinessRows" class="season-readiness-rows" aria-live="polite">
+      <p class="muted">لا توجد نتائج بعد.</p>
+    </div>
+    <div class="season-readiness-pagination">
+      <button id="seasonReadinessPrev" type="button" disabled>المواسم السابقة</button>
+      <span id="seasonReadinessPage" class="muted">الصفحة 1</span>
+      <button id="seasonReadinessNext" type="button" disabled>المواسم التالية</button>
+    </div>
+    <p class="hint">هذه قراءة للقيود المسجلة في قاعدة البيانات فقط. لا تقيس تلقائيًا جودة الصوت أو الفيديو ولا تقرأ ملفات S3 ولا تشغّل تنزيلات أو تغيّر بث العملاء. لن تُعد الحلقات مناسبة للتطبيقات قبل فحصها النهائي ومراجعة حقوق عرضها.</p>
   </section>
   <section class="card library-browser" id="libraryBrowser" aria-labelledby="libraryBrowserTitle">
     <div class="cardhead">
