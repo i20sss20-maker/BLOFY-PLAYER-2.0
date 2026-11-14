@@ -32,6 +32,9 @@ function fakeQueue(){
  const rows=[];
  return {rows,auditAlerts:[],
   async recentAudits(){return this.auditAlerts},
+  async unresolvedAuditCounts(){return {
+   mismatch:this.auditAlerts.filter(a=>a.code==='season_storage_checksum_mismatch').length,
+   unavailable:this.auditAlerts.filter(a=>a.code==='season_storage_read_unavailable').length}},
   async list(){return rows.map(r=>({...r,
     state:r.state,bytesCopied:r.bytesCopied||0,
     expectedBytes:r.expectedBytes,percent:r.bytesCopied?
