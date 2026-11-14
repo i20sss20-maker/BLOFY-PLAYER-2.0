@@ -196,3 +196,28 @@ test('signed transient retry request keeps rights and source-idle confirmation',
  assert.deepEqual(JSON.parse(bridge.received.init.body),{
   runId,confirmed:true,licensedStorage:true,sourceIdle:true});
 });
+
+
+test('signed page 2 route is fixed read-only; unsafe numbers and query strings denied',async()=>{
+ const target=stub('/internal/seasons/queue/page/2',{data:{
+  ok:true,readOnly:true,page:{number:2,pageSize:50,totalEpisodes:160,
+   pages:4},episodes:[]}});
+ assert.equal(isStreamSeasonBridgePath(NS+'/queue/page/2'),true);
+ assert.equal(isStreamSeasonBridgePath(NS+'/queue/page/20001'),false);
+ assert.equal(isStreamSeasonBridgePath(NS+'/queue/page/-1'),false);
+ assert.equal(isStreamSeasonBridgePath(NS+'/queue/page/02'),false);
+ assert.equal(isStreamSeasonBridgePath(NS+'/queue/page/2?token=bad'),false);
+ const allowed=await requestStreamSeasonBridge({path:NS+'/queue/page/2',
+  operatorToken:secret,fetchImpl:target.fetchImpl});
+ assert.equal(allowed.status,200);
+ assert.equal(allowed.data.readOnly,true);
+ assert.equal(allowed.data.page.number,2);
+ assert.equal(target.calls,1);
+ assert.equal(target.received.init.method,'GET');
+ assert.equal(target.received.init.body,undefined);
+ const denied=await requestStreamSeasonBridge({path:NS+'/queue/page/2',
+  method:'POST',operatorToken:secret,body:{confirmed:true},
+  fetchImpl:target.fetchImpl});
+ assert.equal(denied.status,400);
+ assert.equal(target.calls,1);
+});
