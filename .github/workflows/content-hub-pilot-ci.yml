@@ -41,6 +41,8 @@ jobs:
           node --check services/activation/src/admin-session-hook.mjs
           node --check services/activation/web/admin-content-hub.js
           node --test services/activation/test/content-hub-admin-core.test.mjs
+          node --test services/activation/test/xtream-content-hub-season-approval.test.mjs
+          node --test services/activation/test/xtream-content-hub-series.test.mjs
       - name: Check isolated policy and worker syntax
         run: |
           node --check services/content-hub/src/mirror-policy.mjs
