@@ -144,6 +144,21 @@ test('real PostgreSQL executes reporting and chunk-timing queries safely',{
    'SELECT priority FROM blofy_content_hub_season_queue WHERE run_id=$1',
    [legacy]);
   assert.equal(Number(newColumn.rows[0].priority),2);
+  // The triage index reads historical failed/paused/partial queue snapshots.
+  // It may not request source media and cannot alter any persisted state.
+  const attention=await store.attentionRows({limit:51});
+  const failed=attention.find(r=>r.runId===runId);
+  const paused=attention.find(r=>r.runId===high);
+  assert.equal(failed.state,'failed');
+  assert.equal(failed.code,'episode_source_busy');
+  assert.equal(failed.storedBytes,0);
+  assert.equal(failed.manualRetries,0);
+  assert.equal(paused.state,'paused');
+  assert.ok(attention.length<=51);
+  assert.equal((await pool.query(
+   "SELECT state FROM blofy_content_hub_season_queue WHERE run_id=$1",
+   [runId])).rows[0].state,'failed');
+
 
  }finally{
   await store.close();await pool.end();
