@@ -215,6 +215,17 @@ test('real PostgreSQL executes reporting and chunk-timing queries safely',{
   assert.equal(full.episodes[0].runId,curatedRun);
   assert.equal(full.seasons.length,1);
   assert.equal(full.seasons[0].episodeCount,1);
+  const seriesDetail=await store.registeredSeriesSummary({seriesId:'987654321'});
+  assert.equal(seriesDetail.readOnly,true);
+  assert.equal(seriesDetail.providerMediaRequests,0);
+  assert.equal(seriesDetail.seasonSummaries.length,1);
+  assert.equal(seriesDetail.seasonSummaries[0].seasonKey,'series_987654321_s01');
+  assert.equal(seriesDetail.seasonSummaries[0].episodeCount,1);
+  assert.equal(seriesDetail.seasonSummaries[0].verifiedCount,0);
+  assert.equal(seriesDetail.hasMoreSeasons,false);
+  const notRegistered=await store.registeredSeriesSummary({seriesId:'987654322'});
+  assert.equal(notRegistered.seasonSummaries.length,0);
+
   assert.equal((await catalog.find(['series:987654321']))[0].title,
    'Curated Neon Voyage');
   assert.equal((await catalog.save({...metadata,

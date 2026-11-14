@@ -163,13 +163,17 @@ async function handleCanary(req,res,id){
   try{await body?.cancel?.()}catch{}
  }
 }
-async function handleEpisodePreview(req,res){
+async function handleEpisodePreview(req,res,runId=null){
+ if(runId!==null&&!/^[A-Za-z0-9_-]{8,80}$/.test(String(runId)))
+  return json(res,400,{ok:false,code:'episode_preview_id_invalid'});
  const ctrl=new AbortController();
  const close=()=>ctrl.abort();
  res.once('close',close);
  const timer=setTimeout(()=>ctrl.abort(),85000);timer.unref?.();
  try{
-  const response=await request('/internal/episodes/playback/preview',{
+  const route=runId===null?'/internal/episodes/playback/preview':
+   '/internal/seasons/episodes/'+runId+'/preview';
+  const response=await request(route,{
    signal:ctrl.signal,extraHeaders:{
     'x-blofy-owner-preview':'operator-episode-only'}});
   if(response.status!==200||!response.body||
@@ -214,7 +218,8 @@ http.createServer=function withContentHubAdmin(listener){
   const path=url.pathname;
   if(req.method==='GET'&&['/admin-content-hub.css',
     '/admin-content-hub.js','/admin-ops-overview.js','/admin-library.js',
-     '/admin-library-metadata.js','/admin-library-cinema.js','/admin-season-analytics.js',
+     '/admin-library-metadata.js','/admin-library-cinema.js',
+     '/admin-library-detail.js','/admin-season-analytics.js',
      '/admin-season-detail.js','/admin-season-attention.js'].includes(path)){
    try{
     const file=path.slice(1);
@@ -234,6 +239,12 @@ http.createServer=function withContentHubAdmin(listener){
   try{
    if(path==='/api/v1/admin/content-hub/episodes/preview'&&req.method==='GET')
     return await handleEpisodePreview(req,res);
+   // Only individually verified private queue episodes can be previewed.
+   // The Hub rechecks ownsVerifiedRun and verified storage on each request.
+   const queuedEpisodePreview=
+    /^\/api\/v1\/admin\/content-hub\/seasons\/episodes\/([A-Za-z0-9_-]{8,80})\/preview$/.exec(path);
+   if(queuedEpisodePreview&&req.method==='GET')
+    return await handleEpisodePreview(req,res,queuedEpisodePreview[1]);
    if(canary&&['GET','HEAD'].includes(req.method))
     return await handleCanary(req,res,canary[1]);
    if(path==='/api/v1/admin/content-hub/preflight'&&req.method==='GET'){
@@ -384,6 +395,17 @@ http.createServer=function withContentHubAdmin(listener){
       'x-blofy-owner-action':'curate-private-metadata'},
      body:JSON.stringify(input)});
     return json(res,response.status,await response.json());
+   }
+   const ownerSeriesRoute=/^\/api\/v1\/admin\/content-hub\/library\/series\/([1-9][0-9]{0,14})$/.exec(path);
+   if(ownerSeriesRoute&&req.method==='GET'){
+    if(req.headers['x-blofy-owner-action']!=='view-private-series')
+     return json(res,403,{ok:false,code:'series_detail_owner_read_required'});
+    const response=await request('/internal/library/series/'+ownerSeriesRoute[1],{
+     signal:AbortSignal.timeout(10000),
+     extraHeaders:{'x-blofy-owner-action':'view-private-series'}});
+    if(response.status!==200)return json(res,503,{
+     ok:false,code:'series_detail_unavailable'});
+    return json(res,200,await safeReadJson(response));
    }
    if(path==='/api/v1/admin/content-hub/library/search'&&req.method==='POST'){
     if(req.headers['x-blofy-owner-action']!=='library-read-only')

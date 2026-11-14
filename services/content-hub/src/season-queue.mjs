@@ -603,6 +603,63 @@ export function createSeasonQueueStore({
      updatedAt:row.updated_at,snapshotOnly:true};
    });
   },
+  // Entire registered series snapshot, up to 50 seasons per request.
+  // Data is taken from persisted private episode queue rows, not provider
+  // listings. One extra row establishes the "more" flag without guessing.
+  async registeredSeriesSummary({seriesId}={}){
+   const id=String(seriesId||'');
+   if(!/^[1-9][0-9]{0,14}$/.test(id))
+    throw Error('series_detail_invalid_id');
+   await ensure();
+   const params=['series_'+id+'_s',51];
+   const query=hasRuns=>[
+    'SELECT q.season_key,COUNT(*)::text AS episode_count,',
+    "COUNT(*) FILTER (WHERE q.state='queued')::text AS queued_count,",
+    "COUNT(*) FILTER (WHERE q.state='running')::text AS running_count,",
+    "COUNT(*) FILTER (WHERE q.state='paused')::text AS paused_count,",
+    "COUNT(*) FILTER (WHERE q.state='failed')::text AS failed_count,",
+    hasRuns?
+     "COUNT(*) FILTER (WHERE q.state='verified' AND r.state='verified')::text AS verified_count,":
+     "'0'::text AS verified_count,",
+    'COALESCE(SUM(q.expected_bytes),0)::text AS expected_bytes,',
+    hasRuns?'COALESCE(SUM(r.bytes_copied),0)::text AS stored_bytes':
+     "'0'::text AS stored_bytes",
+    'FROM blofy_content_hub_season_queue q',
+    hasRuns?'LEFT JOIN blofy_content_hub_episode_runs r ON r.run_id=q.run_id':'',
+    "WHERE q.season_key LIKE $1 || '%' AND",
+    "q.season_key ~ ('^' || $1 || '[0-9]{1,3}$')",
+    'GROUP BY q.season_key ORDER BY q.season_key LIMIT $2'
+   ].filter(Boolean).join(' ');
+   let rows;
+   try{rows=await pool.query(query(true),params)}
+   catch(error){
+    if(error?.code!=='42P01')throw error;
+    rows=await pool.query(query(false),params);
+   }
+   const items=rows.rows||[];
+   const summaries=items.slice(0,50).map(row=>{
+    const expected=Math.max(0,Number(row.expected_bytes)||0);
+    const stored=Math.min(expected,Math.max(0,Number(row.stored_bytes)||0));
+    const total=Math.max(0,Number(row.episode_count)||0);
+    const verified=Math.min(total,Math.max(0,Number(row.verified_count)||0));
+    return {seasonKey:row.season_key,episodeCount:total,
+     verifiedCount:verified,
+     failedCount:Math.max(0,Number(row.failed_count)||0),
+     queuedCount:Math.max(0,Number(row.queued_count)||0),
+     runningCount:Math.max(0,Number(row.running_count)||0),
+     pausedCount:Math.max(0,Number(row.paused_count)||0),
+     expectedBytes:expected,storedBytes:stored,
+     percent:expected?Math.min(100,Math.floor(stored*100/expected)):0,
+     fullyVerifiedInQueue:total>0&&verified===total};
+   });
+   return {seriesId:id,seasonSummaries:summaries,
+    hasMoreSeasons:items.length>50,
+    registeredSeasonCountInResponse:summaries.length,
+    completenessScope:'registered_episodes_in_private_season_queue_only',
+    neverRepresentsUpstreamSeriesCompleteness:true,
+    readOnly:true,privateOnly:true,automaticStart:false,
+    storageRequests:0,providerMediaRequests:0};
+  },
   // Each request returns up to 50 persisted episode snapshots.
   // No provider, S3 or media URLs are ever fetched by this report.
   async seasonDetailPage({seasonKey,page=1}={}){

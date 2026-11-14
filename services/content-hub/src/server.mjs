@@ -395,6 +395,21 @@ export function createContentHubServer({storage,lease,
     artworkUseRequiresRights:true
    });
   }
+  // Bounded series details from registered private queue entries only.
+  const registeredSeriesRoute=/^\/internal\/library\/series\/([1-9][0-9]{0,14})$/.exec(path);
+  if(registeredSeriesRoute&&req.method==='GET'){
+   if(String(req.url||'').includes('?')||
+      req.headers['x-blofy-owner-action']!=='view-private-series')
+    return json(res,403,{ok:false,code:'series_detail_owner_read_required'});
+   if(!seasonQueueStore?.registeredSeriesSummary)
+    return json(res,503,{ok:false,code:'series_detail_unavailable'});
+   try{
+    const detail=await seasonQueueStore.registeredSeriesSummary({
+     seriesId:registeredSeriesRoute[1]});
+    return json(res,200,{ok:true,privateOnly:true,readOnly:true,
+     customerCutover:false,...detail});
+   }catch{return json(res,503,{ok:false,code:'series_detail_database_unavailable'})}
+  }
   // Read-only library search. Owner token and explicit action assertion
   // are required even though this POST never mutates content.
   if(path==='/internal/library/search'&&req.method==='POST'){

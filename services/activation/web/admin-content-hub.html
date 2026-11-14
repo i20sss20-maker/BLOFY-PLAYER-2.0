@@ -14,6 +14,7 @@
   <script src="/admin-library.js" defer></script>
   <script src="/admin-library-metadata.js" defer></script>
   <script src="/admin-library-cinema.js" defer></script>
+  <script src="/admin-library-detail.js" defer></script>
 </head>
 <body>
 <main class="shell">
@@ -163,6 +164,56 @@
       <span id="libraryPage" aria-live="polite">الصفحة 1</span>
       <button id="libraryNext" type="button" disabled>التالي</button>
     </div>
+    <dialog id="libraryDetailDialog" class="library-detail-dialog" aria-labelledby="libraryDetailTitle">
+      <div class="library-detail-shell">
+        <div class="library-detail-topbar">
+          <span class="eyebrow">BLOFY · PRIVATE CONTENT DETAILS</span>
+          <button id="libraryDetailClose" type="button" aria-label="إغلاق تفاصيل المحتوى">✕ إغلاق</button>
+        </div>
+        <div class="library-detail-hero">
+          <div id="libraryDetailArt" class="library-detail-art" aria-label="صورة العمل المحفوظة">
+            <span class="muted">صورة خاصة معتمدة أو بطاقة BLOFY</span>
+          </div>
+          <div class="library-detail-copy">
+            <p id="libraryDetailKind" class="eyebrow"></p>
+            <h3 id="libraryDetailTitle">تفاصيل المحتوى</h3>
+            <p id="libraryDetailMeta" class="library-detail-meta"></p>
+            <p id="libraryDetailDescription" class="library-detail-description"></p>
+            <p id="libraryDetailFacts" class="library-detail-facts"></p>
+            <div class="library-detail-actions">
+              <button id="libraryDetailPlay" type="button" hidden>▶ معاينة النسخة المتحقق منها</button>
+              <button id="libraryDetailEdit" type="button" hidden>تعديل الاسم والصورة</button>
+              <button id="libraryDetailReport" type="button" hidden>فتح تقرير الموسم</button>
+            </div>
+          </div>
+        </div>
+        <div id="libraryDetailPlayerWrap" class="library-detail-player-wrap" hidden>
+          <div class="cardhead">
+            <h4>معاينة خاصة للتأكد من الصورة والصوت</h4>
+            <button id="libraryDetailStop" type="button">إيقاف المعاينة</button>
+          </div>
+          <video id="libraryDetailPlayer" controls preload="none" playsinline
+            controlslist="nodownload" aria-label="معاينة النسخة الخاصة المتحقق منها"></video>
+          <p class="hint">المعاينة لمالك النظام فقط، وبطلب صريح منك. لا تعني اعتماد عرض الملف للعملاء.</p>
+        </div>
+        <section class="library-detail-registered" aria-labelledby="libraryDetailSeasonsHeading">
+          <h4 id="libraryDetailSeasonsHeading">المواسم المسجلة</h4>
+          <div id="libraryDetailSeasons" class="library-detail-seasons" aria-live="polite"></div>
+          <p id="libraryDetailSeriesScope" class="hint"></p>
+        </section>
+        <section class="library-detail-registered" aria-labelledby="libraryDetailEpisodesHeading">
+          <h4 id="libraryDetailEpisodesHeading">الحلقات المحفوظة في الموسم</h4>
+          <div id="libraryDetailEpisodes" class="library-detail-episodes" aria-live="polite"></div>
+          <div class="library-detail-pagination">
+            <button id="libraryDetailPrev" type="button" disabled>الحلقات السابقة</button>
+            <span id="libraryDetailPageLabel" class="muted">—</span>
+            <button id="libraryDetailNext" type="button" disabled>الحلقات التالية</button>
+          </div>
+        </section>
+        <p id="libraryDetailStatus" role="status" class="muted"></p>
+        <p class="hint">التفاصيل من سجلات نسخ BLOFY الخاصة فقط. عدد الحلقات المكتملة يعني الحلقات المدرجة، وليس كل الحلقات المتوفرة لدى المصدر. لا يوجد تنزيل أو نشر للمشتركين من هذه الصفحة.</p>
+      </div>
+    </dialog>
     <dialog id="libraryMetaDialog" class="library-meta-dialog" aria-labelledby="libraryMetaTitle">
       <form id="libraryMetaForm">
         <div class="cardhead">
