@@ -182,3 +182,56 @@
 @media(max-width:750px){.season-attention-list{grid-template-columns:1fr}}
 @media(max-width:550px){.season-attention{padding:12px}
  .season-attention .cardhead{display:grid;gap:12px}}
+
+
+/* Unified owner operations summary. Read-only, scoped logical accounting. */
+.ops-overview{margin-bottom:23px;border-color:#3b628a;
+ background:linear-gradient(140deg,#152b47,#0b172a)}
+.ops-overview .cardhead{flex-wrap:wrap;align-items:start}
+.ops-overview .cardhead h2{font-size:clamp(19px,2.6vw,26px)}
+.ops-overview .cardhead .muted{max-width:780px}
+.ops-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+ gap:12px;margin:19px 0}
+.ops-kpis article{background:#091b2e;border:1px solid #324c69;
+ border-radius:14px;min-width:0;padding:17px;display:grid;gap:9px}
+.ops-kpis article small{color:#adc7de;font-size:13px;line-height:1.7}
+.ops-kpis article strong{font-size:clamp(21px,3.1vw,31px);
+ direction:ltr;text-align:right;overflow-wrap:anywhere}
+.ops-service-state{display:flex;flex-wrap:wrap;gap:8px;margin:15px 0 20px}
+.ops-service-state .badge{padding:7px 12px}
+.ops-panels{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+.ops-panel{background:#09192b;border:1px solid #304b68;border-radius:13px;
+ padding:15px;min-width:0}
+.ops-panel h3{font-size:17px;margin:0 0 14px}
+.ops-storage-row{padding:8px 0}
+.ops-storage-row .jobtop{flex-wrap:wrap;gap:12px;font-size:13px}
+.ops-storage-row strong{direction:ltr}
+.ops-alerts{display:grid;gap:8px;max-height:280px;overflow:auto}
+.ops-alert{padding:11px 12px;display:flex;justify-content:space-between;
+ align-items:center;flex-wrap:wrap;gap:8px;background:#15253b;
+ border:1px solid #35506d;border-inline-start:4px solid #6498c3;
+ border-radius:9px;font-size:13px;line-height:1.8}
+.ops-alert-critical{border-inline-start-color:#f07372}
+.ops-alert-warning{border-inline-start-color:#e6b25d}
+.ops-alert-notice{border-inline-start-color:#72b7dc}
+.ops-alert-info{border-inline-start-color:#66caa5}
+.ops-alert button{padding:7px 10px;font-size:12px}
+.ops-season-panel{margin-top:13px}
+.ops-seasons{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ops-season-item{border:1px solid #2d5270;background:#0e253d;
+ border-radius:10px;padding:12px;min-width:0}
+.ops-season-item .jobtop{flex-wrap:wrap;gap:7px}
+.ops-season-item strong{overflow-wrap:anywhere;font-size:13px}
+.ops-season-item .row{flex-wrap:wrap;line-height:1.9}
+.ops-season-warning{color:#ffdba4;font-size:12px}
+.ops-season-open{margin-top:10px;padding:8px 11px;font-size:12px}
+.ops-links{display:flex;flex-wrap:wrap;gap:9px;margin-top:16px}
+.ops-links a{background:#142f4b;border:1px solid #39729f;
+ border-radius:10px;padding:10px 13px;font-size:13px}
+.ops-links a:focus-visible,.ops-season-open:focus-visible{outline:2px solid #9adcf7}
+@media(max-width:930px){.ops-panels{grid-template-columns:1fr}}
+@media(max-width:720px){.ops-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .ops-seasons{grid-template-columns:1fr}}
+@media(max-width:480px){.ops-overview{padding:13px}
+ .ops-kpis{gap:8px}.ops-kpis article{padding:12px}
+ .ops-kpis article strong{font-size:21px}}
