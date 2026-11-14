@@ -22,7 +22,7 @@ function fixture(movieRows=[{gateway_id:1,media_id:'film01',extension:'mp4',
    if(sql.includes('FROM blofy_xtream_mirror_discovery')&&
       sql.includes('FOR UPDATE')){
     return {rows:[cursors.get(args[1])||{
-     cursor_id:0,completed_local_day:null}]};
+     cursor_id:0,scan_started_day:null,completed_local_day:null}]};
    }
    if(sql.includes('FROM blofy_xtream_gateway_item_map m')&&
       sql.includes('SELECT m.gateway_id')){
@@ -40,8 +40,9 @@ function fixture(movieRows=[{gateway_id:1,media_id:'film01',extension:'mp4',
    if(sql.includes('UPDATE blofy_xtream_mirror_discovery')){
     const prev=cursors.get(args[1])||{};
     cursors.set(args[1],{
-      cursor_id:args[2],completed_local_day:args[3]?args[4]:
-      prev.completed_local_day||null
+      cursor_id:args[2],
+      scan_started_day:args[5]||!prev.scan_started_day?args[4]:prev.scan_started_day,
+      completed_local_day:args[3]?args[4]:prev.completed_local_day||null
     });
     return {rowCount:1};
    }
@@ -101,6 +102,12 @@ test('durable keyset movie scan continues until full pass, avoids daily re-impor
   mediaKind:'movie',localDay:'2026-11-15',limit:1});
  assert.equal(next.lastGatewayId,1);
  assert.equal(next.hasMore,true);
+ // After the first page of a new day's rescan, the next tick must
+ // advance to gateway 3 rather than restarting gateway 1 forever.
+ const nextSecond=await f.store.scanPage({sourceId:ID,
+  mediaKind:'movie',localDay:'2026-11-15',limit:1});
+ assert.equal(nextSecond.lastGatewayId,3);
+ assert.equal(nextSecond.hasMore,true);
  const report=await f.store.summary({sourceId:ID});
  assert.equal(report.allMediaFilesCopied,false);
  assert.equal(report.episodesOnlyMappedSubset,true);
