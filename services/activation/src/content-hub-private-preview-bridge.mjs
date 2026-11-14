@@ -15,8 +15,10 @@ function fail(res,status,code){
  res.end(body);
 }
 export async function forwardPrivatePreview({
- req,res,hubToken,fetchImpl=fetch
+ req,res,hubToken,fetchImpl=fetch,mediaKind='movie'
 }={}){
+ if(!['movie','episode'].includes(mediaKind))
+  return fail(res,400,'owner_preview_media_kind_invalid');
  if(req.method!=='GET')return fail(res,405,'owner_preview_method_denied');
  if(String(req.url||'').includes('?'))
   return fail(res,400,'owner_preview_query_denied');
@@ -28,10 +30,13 @@ export async function forwardPrivatePreview({
  res.once('close',closed);
  let count=0;
  try{
-  const upstream=await fetchImpl(HUB+'/internal/playback/preview',{
+  const episode=mediaKind==='episode';
+  const upstream=await fetchImpl(HUB+
+    (episode?'/internal/episodes/playback/preview':
+      '/internal/playback/preview'),{
     method:'GET',redirect:'manual',signal:abort.signal,
     headers:{authorization:'Bearer '+hubToken,
-      'x-blofy-owner-preview':'operator-only'}
+      'x-blofy-owner-preview':episode?'operator-episode-only':'operator-only'}
   });
   if(upstream.status!==200||!upstream.body||
      upstream.headers.get('content-type')!=='video/mp4')
