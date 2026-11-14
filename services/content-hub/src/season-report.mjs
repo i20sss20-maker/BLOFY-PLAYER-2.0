@@ -25,6 +25,11 @@ export function buildSeasonReport({page={},totals={},episodes=[],events=[],worke
    priority:[0,1,2].includes(Number(row.priority))?Number(row.priority):0,
    priorityEditable:state==='queued'||state==='paused',
    sourceVerified:row.verified===true,
+   ownerAvConfirmedAt:row.verified===true&&row.ownerAvConfirmedAt?
+    date(row.ownerAvConfirmedAt):null,
+   videoOwnerConfirmed:row.verified===true&&Boolean(row.ownerAvConfirmedAt),
+   audioOwnerConfirmed:row.verified===true&&Boolean(row.ownerAvConfirmedAt),
+   avReviewSource:'owner_manual_browser_confirmation_only',
    code:row.code?code(row.code):null,
    expectedBytes:expected,storedBytes:copied,
    percent:expected?Math.floor(100*copied/expected):0,
