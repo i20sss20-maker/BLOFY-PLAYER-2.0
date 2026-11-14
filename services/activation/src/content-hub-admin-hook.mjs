@@ -385,6 +385,17 @@ http.createServer=function withContentHubAdmin(listener){
      body:JSON.stringify(input)});
     return json(res,response.status,await response.json());
    }
+   const ownerSeriesRoute=/^\/api\/v1\/admin\/content-hub\/library\/series\/([1-9][0-9]{0,14})$/.exec(path);
+   if(ownerSeriesRoute&&req.method==='GET'){
+    if(req.headers['x-blofy-owner-action']!=='view-private-series')
+     return json(res,403,{ok:false,code:'series_detail_owner_read_required'});
+    const response=await request('/internal/library/series/'+ownerSeriesRoute[1],{
+     signal:AbortSignal.timeout(10000),
+     extraHeaders:{'x-blofy-owner-action':'view-private-series'}});
+    if(response.status!==200)return json(res,503,{
+     ok:false,code:'series_detail_unavailable'});
+    return json(res,200,await safeReadJson(response));
+   }
    if(path==='/api/v1/admin/content-hub/library/search'&&req.method==='POST'){
     if(req.headers['x-blofy-owner-action']!=='library-read-only')
      return json(res,403,{ok:false,code:'library_owner_read_required'});
