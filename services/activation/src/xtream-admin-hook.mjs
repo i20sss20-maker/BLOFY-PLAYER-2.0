@@ -3,6 +3,7 @@ import { safeErrorSummary } from './diagnostics-sanitizer.mjs';
 import {safeXtreamTransportCategory} from './xtream-transport-errors.mjs';
 import {withXtreamAccountReconnect} from './xtream-api-resilience.mjs';
 import {createXtreamSyncQueue} from './xtream-sync-queue.mjs';
+import {requestDailyXtreamCatalogSync} from './xtream-daily-catalog-sync.mjs';
 import {xtreamConnectionReport} from './xtream-smart-connection.mjs';
 import {runXtreamBootDiagnostics} from './xtream-boot-diagnostics.mjs';
 import {observeRailwayEgress,probeXtreamSocket} from './xtream-egress-inspector.mjs';
@@ -2035,6 +2036,32 @@ function startSync(id, types) {
     throw error;
   }
 }
+// Owner-only daily catalog metadata refresh. OFF unless the exact saleh
+// source ID and opt-in are set; never downloads media or reroutes customers.
+// The database claim makes it once per Riyadh local day across replicas.
+const dailyXtreamCatalogTimer=setInterval(()=>{
+  void requestDailyXtreamCatalogSync({
+    env:process.env,now:new Date(),db:controlPool,
+    getSource:serverById,startSync,
+    isBusy:id=>syncQueue.has(id)||syncLocks.has(id)
+  }).then(result=>{
+    if(result.requested)
+      console.info('BLOFY_XTREAM_DAILY_CATALOG',
+        JSON.stringify({status:'queued',mediaFilesCopied:0,customerCutover:false}));
+  }).catch(error=>console.warn('BLOFY_XTREAM_DAILY_CATALOG',
+    JSON.stringify({status:'not_queued',
+      reason:redactXtreamError(error),mediaFilesCopied:0,customerCutover:false})));
+},5*60*1000);
+dailyXtreamCatalogTimer.unref?.();
+const dailyXtreamStartupTimer=setTimeout(()=>{
+  void requestDailyXtreamCatalogSync({
+    env:process.env,now:new Date(),db:controlPool,
+    getSource:serverById,startSync,
+    isBusy:id=>syncQueue.has(id)||syncLocks.has(id)
+  }).catch(()=>{});
+},60*1000);
+dailyXtreamStartupTimer.unref?.();
+
 const studioPro=createStudioPro({pool,ensureXtreamReady:ensureReady,startSync});
 const studioTimer=setInterval(()=>{
   void studioPro.tick().catch(error=>console.warn('BLOFY Studio schedule check failed:',String(error?.code||'unavailable').slice(0,30)));
