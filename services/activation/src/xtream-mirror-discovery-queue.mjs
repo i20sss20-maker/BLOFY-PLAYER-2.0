@@ -57,6 +57,7 @@ export function createXtreamMirrorDiscoveryStore(db){
     source_id UUID NOT NULL,
     media_kind TEXT NOT NULL CHECK(media_kind IN ('movie','episode')),
     cursor_id BIGINT NOT NULL DEFAULT 0,
+    scan_started_day DATE,
     completed_local_day DATE,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY(source_id,media_kind)
@@ -91,7 +92,7 @@ export function createXtreamMirrorDiscoveryStore(db){
    await client.query(`INSERT INTO blofy_xtream_mirror_discovery
     (source_id,media_kind) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
     [sourceId,mediaKind]);
-   const lock=await client.query(`SELECT cursor_id,completed_local_day
+   const lock=await client.query(`SELECT cursor_id,scan_started_day,completed_local_day
     FROM blofy_xtream_mirror_discovery
     WHERE source_id=$1 AND media_kind=$2 FOR UPDATE`,[sourceId,mediaKind]);
    const state=lock.rows?.[0]||{};
@@ -104,7 +105,11 @@ export function createXtreamMirrorDiscoveryStore(db){
    }
    // On a new local day after completing the previous full pass, start
    // from zero. Incomplete scans continue across local day boundaries.
-   const cursor=finishedDay&&finishedDay<localDay?0:Number(state.cursor_id||0);
+   const scanStarted=state.scan_started_day?
+    isoDay(state.scan_started_day):null;
+   const reset=Boolean(finishedDay&&finishedDay<localDay&&
+    (!scanStarted||scanStarted<=finishedDay));
+   const cursor=reset?0:Number(state.cursor_id||0);
    if(!Number.isSafeInteger(cursor)||cursor<0)
     throw Error('mirror_discovery_cursor_invalid');
    const sql=mediaKind==='movie'?`SELECT m.gateway_id,
@@ -153,10 +158,12 @@ export function createXtreamMirrorDiscoveryStore(db){
    const complete=records.length<limit;
    await client.query(`UPDATE blofy_xtream_mirror_discovery
      SET cursor_id=$3,
+       scan_started_day=CASE WHEN $6::boolean OR scan_started_day IS NULL
+         THEN $5::date ELSE scan_started_day END,
        completed_local_day=CASE WHEN $4::boolean THEN $5::date
          ELSE completed_local_day END,updated_at=NOW()
      WHERE source_id=$1 AND media_kind=$2`,
-    [sourceId,mediaKind,last,complete,localDay]);
+    [sourceId,mediaKind,last,complete,localDay,reset]);
    await client.query('COMMIT');active=false;
    return {ok:true,code:complete?'mirror_scan_pass_completed':
       'mirror_scan_page_saved',
