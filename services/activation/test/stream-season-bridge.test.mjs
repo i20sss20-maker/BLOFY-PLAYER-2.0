@@ -18,7 +18,7 @@ function stub(expectedPath,{status=200,data={ok:true}}={}){
 }
 test('season bridge permits only explicit finite authenticated actions',async()=>{
  for(const name of ['series','pilot','queue','confirmation','probe',
-  'enqueue','start','pause','confirm','health','audit',
+  'enqueue','start','pause','confirm','health','analytics','audit',
   'concurrent-read','retry','series/31']){
   assert.equal(isStreamSeasonBridgePath(NS+'/'+name),true,name);
  }
@@ -36,6 +36,7 @@ test('read licensed series, season detail and queue via private token',async()=>
   ['series/31','/internal/series/episodes/31'],
   ['queue','/internal/seasons/queue'],
   ['health','/internal/seasons/health'],
+  ['analytics','/internal/seasons/analytics'],
   ['confirmation','/internal/episodes/playback/confirmation']
  ];
  for(const [name,target] of specs){
