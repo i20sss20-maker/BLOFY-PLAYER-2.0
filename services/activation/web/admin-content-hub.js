@@ -311,6 +311,26 @@ $('loadSeries').addEventListener('click',async()=>{
   $('seasonNotice').textContent='تعذر تحميل قائمة المسلسلات المرخصة حاليًا.';
  }finally{button.disabled=false}
 });
+$('openSeriesId').addEventListener('click',()=>{
+ const value=Number($('seriesLookupId').value);
+ if(!Number.isSafeInteger(value)||value<1){
+  $('seasonNotice').textContent='اكتب معرّف مسلسل صحيحًا من مكتبتك.';return;
+ }
+ const selected=$('seriesSelect');
+ const id=String(value);
+ if(![...selected.options].some(o=>o.value===id))
+  selected.add(new Option('مسلسل #'+id,id));
+ selected.value=id;
+ selected.dispatchEvent(new Event('change'));
+ $('loadSeriesSeasons').click();
+});
+$('selectSeasonBatch').addEventListener('click',()=>{
+ const boxes=[...document.querySelectorAll(
+  '#seasonCandidates .candidate-select')];
+ for(const [i,box] of boxes.entries())box.checked=i<12;
+ $('seasonNotice').textContent='تم تحديد '+Math.min(12,boxes.length)+
+  ' حلقة. افحص حجم كل حلقة قبل إضافتها.';
+});
 $('loadSeriesSeasons').addEventListener('click',async()=>{
  const id=Number($('seriesSelect').value);
  if(!Number.isSafeInteger(id)||id<1)return;
@@ -324,6 +344,8 @@ $('loadSeriesSeasons').addEventListener('click',async()=>{
   if(!response.ok||!data.ok||!Array.isArray(data.seasons))
    throw Error('licensed_series_not_available');
   selectedSeriesData=data;
+  const option=$('seriesSelect').selectedOptions[0];
+  if(option&&data.title)option.textContent=String(data.title)+' · #'+id;
   const select=$('seasonSelect');
   select.replaceChildren(new Option('اختر الموسم',''));
   for(const season of data.seasons){
@@ -385,6 +407,9 @@ $('enqueueSeason').addEventListener('click',async()=>{
   Number(row.querySelector('.candidate-select').dataset.seriesId)!==seriesId||
   Number(row.querySelector('.candidate-select').dataset.seasonNumber)!==selectedSeason)){
   $('seasonNotice').textContent='الحلقات المختارة ليست من الموسم المحدد.';return;
+ }
+ if(selected.length>12){
+  $('seasonNotice').textContent='اختر 12 حلقة كحد أقصى في كل دفعة.';return;
  }
  const episodes=selected.map(row=>({
   gatewayId:Number(row.querySelector('.candidate-select').dataset.gatewayId),
