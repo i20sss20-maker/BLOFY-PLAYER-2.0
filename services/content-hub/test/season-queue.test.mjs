@@ -342,3 +342,33 @@ test('series queue requires authoritative exact season number from source catalo
   assert.equal(store.rows[0].episodeNumber,7);
  }finally{await new Promise(resolve=>hub.server.close(resolve))}
 });
+
+
+test('manual per-session budget stops at 12 verified chunks and does not restart itself',async()=>{
+ const store=fakeQueue();
+ for(let n=1;n<=15;n++)store.rows.push({
+  runId:'season_budget_'+String(n).padStart(8,'0'),
+  gatewayId:3000+n,seasonKey:'series_budget_s01',episodeNumber:n,
+  sourceId:candidate(n).sourceId,mediaId:candidate(n).mediaId,
+  extension:'mkv',expectedBytes:8388608,state:'queued',retries:0
+ });
+ let chunks=0;
+ const controller=createSeasonQueueController({
+  store,lease:{},storage:{},env,delayMs:0,
+  runner:async()=>{chunks++;return {
+   ok:true,completed:true,code:'episode_fully_verified'}}
+ });
+ assert.equal(controller.start({sessionMaxBatches:5}).code,
+  'season_batch_budget_invalid');
+ assert.equal(controller.start({sessionMaxBatches:12}).ok,true);
+ await until(()=>!controller.status().active);
+ assert.equal(controller.status().state,'paused');
+ assert.equal(controller.status().code,'season_session_limit');
+ assert.equal(controller.status().maxBatches,12);
+ assert.equal(chunks,12);
+ assert.equal(store.rows.filter(r=>r.state==='queued').length,3);
+ assert.equal(controller.start({sessionMaxBatches:12}).ok,true);
+ await until(()=>!controller.status().active);
+ assert.equal(controller.status().state,'completed');
+ assert.equal(chunks,15);
+});
