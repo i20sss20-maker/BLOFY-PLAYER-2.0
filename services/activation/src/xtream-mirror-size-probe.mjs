@@ -127,6 +127,26 @@ export async function probeOneAttestedMirrorItem({
    return {ok:false,code:proof.code,providerRequests:0,
      probeBytes:0,mediaBytesTransferred:0,customerCutover:false};
   }
+  // Re-check source and gateway identity at commit time: a provider or
+  // catalog remap during the HTTP probe must not promote a stale item.
+  const currentSource=`EXISTS(SELECT 1 FROM blofy_xtream_servers s
+    WHERE s.id=q.source_id AND s.enabled=TRUE AND s.publish_catalog=TRUE
+      AND s.deletion_requested_at IS NULL AND s.status='online'
+      AND s.last_error IS NULL AND lower(btrim(s.name))='saleh'
+      AND s.last_sync_at>NOW()-INTERVAL '48 hours')`;
+  const currentMapping=item.mediaKind==='movie'?
+   `EXISTS(SELECT 1 FROM blofy_xtream_gateway_item_map m
+    JOIN blofy_xtream_items i ON i.server_id=m.server_id
+      AND i.media_type=m.media_type AND i.source_id=m.source_id
+    WHERE m.server_id=q.source_id AND m.gateway_id=q.gateway_id
+      AND m.media_type='movie' AND m.source_id=q.media_id
+      AND i.enabled=TRUE AND lower(i.container_extension)=q.extension)`:
+   `EXISTS(SELECT 1 FROM blofy_xtream_gateway_episode_map e
+    JOIN blofy_xtream_items i ON i.server_id=e.server_id
+      AND i.media_type='series' AND i.source_id=e.series_source_id
+    WHERE e.server_id=q.source_id AND e.gateway_id=q.gateway_id
+      AND e.source_episode_id=q.media_id
+      AND i.enabled=TRUE AND lower(e.container_extension)=q.extension)`;
   const sql=proof.ok?`UPDATE blofy_xtream_mirror_items q SET
     expected_bytes=$6,size_probe_at=NOW(),size_probe_day=$7::date,
     source_validator_sha256=$8,size_probe_error=NULL,
@@ -135,7 +155,35 @@ export async function probeOneAttestedMirrorItem({
       AND q.media_id=$4 AND q.extension=$5
       AND q.mapping_conflict=FALSE AND q.state='needs_review'
       AND q.license_reviewed_at IS NOT NULL
-      AND q.rights_ref_sha256 ~ '^[a-f0-9]{64}$'
+      AND q.rights_ref_sha256 ~ '^[a-f0-9]{64}`:
+   `UPDATE blofy_xtream_mirror_items SET
+    size_probe_day=$6::date,size_probe_error=$7
+    WHERE source_id=$1 AND media_kind=$2 AND gateway_id=$3
+      AND media_id=$4 AND extension=$5 AND state='needs_review'
+    RETURNING gateway_id`;
+  const params=proof.ok?
+   [item.sourceId,item.mediaKind,item.gatewayId,item.mediaId,
+    item.extension,proof.expectedBytes,localDay,
+    proof.sourceValidatorSha256]:
+   [item.sourceId,item.mediaKind,item.gatewayId,item.mediaId,
+    item.extension,localDay,proof.code];
+  const saved=await client.query(sql,params);
+  return {ok:proof.ok&&saved.rowCount===1,
+    code:saved.rowCount!==1?'mirror_size_candidate_changed':proof.code,
+    gatewayId:item.gatewayId,mediaKind:item.mediaKind,
+    expectedBytes:proof.ok?proof.expectedBytes:null,
+    providerRequests:1,probeBytes:proof.probeBytes||0,
+    stored:false,copyStarted:false,mediaBytesTransferred:0,
+    readyForCopy:false,customerCutover:false};
+ }finally{
+  if(held)await client.query(
+    'SELECT pg_advisory_unlock($1::integer,$2::integer)',
+    [LOCK_A,LOCK_B]).catch(()=>{});
+  client.release();
+ }
+}
+
+      AND ${currentSource} AND ${currentMapping}
     RETURNING q.gateway_id`:
    `UPDATE blofy_xtream_mirror_items SET
     size_probe_day=$6::date,size_probe_error=$7
