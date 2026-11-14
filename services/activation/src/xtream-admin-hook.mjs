@@ -3149,6 +3149,15 @@ async function unifiedStreamBridge(req,res,url){
    return json(res,result.status,result.data,{'cache-control':'no-store'});
   }
 
+  const selectedSeasonPreview=/^\/internal\/blofy-stream\/content-hub\/seasons\/episodes\/([A-Za-z0-9_-]{8,80})\/preview$/.exec(p);
+  if(selectedSeasonPreview){
+   if(req.method!=='GET'||url.search)return json(res,405,{
+    ok:false,code:'season_episode_preview_method_or_query_denied'});
+   return forwardPrivatePreview({req,res,
+    mediaKind:'episode',runId:selectedSeasonPreview[1],
+    hubToken:String(process.env.BLOFY_CONTENT_HUB_OPERATOR_TOKEN||'')});
+  }
+
   // Owner-only, 12-second MP4 stream from verified private S3.
   // This bridge authorization was checked above. Never proxy arbitrary paths.
   if(p==='/internal/blofy-stream/content-hub/preview'||
