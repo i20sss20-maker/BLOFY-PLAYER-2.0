@@ -61,8 +61,66 @@ test('real PostgreSQL executes reporting and chunk-timing queries safely',{
   assert.equal(emptyPage.episodes.length,0);
   await assert.rejects(store.seasonDetailPage({seasonKey:'bad/season',page:1}),
    /season_report_selection_invalid/);
+  const timing=await store.seasonTimingStats({seasonKey:'series_ci_s01'});
+  assert.equal(timing.sample_count,'1');
+  assert.equal(timing.active_ms,'20000');
+  assert.equal(timing.measured_bytes,'8388608');
+  assert.ok(timing.first_measured_at);
+  assert.equal((await store.seasonTimingStats({seasonKey:'series_none_s01'}))
+   .sample_count,'0');
+  assert.equal((await store.setPriority({runId,priority:2})).code,
+   'season_priority_not_pending');
+  const pending='season_ci_pending_12345678';
+  const high='season_ci_urgent_123456789';
+  for(const [id,episode,gate] of [[pending,2,9512366],[high,3,9512367]]){
+   await pool.query([
+    'INSERT INTO blofy_content_hub_season_queue',
+    '(run_id,season_key,episode_number,title,gateway_id,source_id,',
+    'media_id,extension,expected_bytes,state)',
+    "VALUES ($1,'series_ci_s01',$2,'Pending', $3,",
+    "'00000000-0000-4000-8000-000000000001'::uuid,",
+    "'fixture','mp4',8388608,'queued')"
+   ].join(' '),[id,episode,gate]);
+  }
+  // Read-only preview does not change the worker or object storage.
+  const preview=await store.resumePreview();
+  assert.equal(preview.automaticStart,false);
+  assert.equal(preview.sourceProbePerformed,false);
+  assert.equal(preview.items.length,0);
+  const before=await pool.query(
+   'SELECT updated_at FROM blofy_content_hub_season_queue WHERE run_id=$1',
+   [high]);
+  const saved=await store.setPriority({runId:high,priority:2});
+  assert.equal(saved.ok,true);
+  assert.equal(saved.automaticStart,false);
+  const after=await pool.query(
+   'SELECT updated_at,priority FROM blofy_content_hub_season_queue WHERE run_id=$1',
+   [high]);
+  assert.equal(Number(after.rows[0].priority),2);
+  assert.equal(String(before.rows[0].updated_at),String(after.rows[0].updated_at));
+  assert.equal((await store.seasonDetailPage({
+   seasonKey:'series_ci_s01',page:1})).episodes[2].priority,2);
+  assert.equal((await store.setPriority({runId:high,priority:9})).code,
+   'season_priority_invalid');
+  const lock=await store.acquireWorker();
+  assert.ok(lock);
+  assert.equal((await store.setPriority({runId:pending,priority:1})).code,
+   'season_priority_worker_active');
+  await lock.release();
+  // Production priority ordering is enforced on claims, not only in the UI.
+  const job=await store.claimNext();
+  assert.equal(job.runId,high);
+  assert.equal(job.priority,2);
+  await store.update(high,'paused',{code:'season_queue_paused'});
+  assert.equal((await store.setPriority({runId:high,priority:1})).ok,true);
+  const pausedPreview=await store.resumePreview();
+  assert.equal(pausedPreview.items[0].runId,high);
+  assert.equal(pausedPreview.items[0].databaseSnapshotOnly,true);
+  const other=await store.claimNext();
+  assert.equal(other.runId,pending);
+  await store.update(pending,'paused',{code:'season_queue_paused'});
   const h=await store.healthStats();
-  assert.equal(h.episode_count,'1');
+  assert.equal(h.episode_count,'3');
   assert.equal(h.season_count,'1');
  }finally{
   await store.close();await pool.end();
