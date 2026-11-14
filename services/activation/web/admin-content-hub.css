@@ -66,3 +66,5 @@
 @media(max-width:900px){.analytics-grid{grid-template-columns:1fr}}
 @media(max-width:550px){.analytics-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
  .analytics-kpis article{padding:12px}.analytics-table{min-width:660px}}
+
+.analytics-subtitle{margin-top:20px!important}
