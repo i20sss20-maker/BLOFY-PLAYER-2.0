@@ -19,7 +19,10 @@ const safeStatus=row=>{
   episodeNumber:Number(row.episode_number),title:row.title,
   gatewayId:Number(row.gateway_id),state,expectedBytes:total,
   bytesCopied:bytes,percent:total?Math.floor(100*bytes/total):0,
-  retries:Number(row.retries||0),code:row.code||null,
+  retries:Number(row.retries||0),manualRetries:Number(row.manual_retries||0),
+  retryable:row.state==='failed'&&Number(row.manual_retries||0)<2&&
+    ['episode_retryable_error','episode_source_busy'].includes(row.code),
+  code:row.code||null,
   createdAt:row.created_at,updatedAt:row.updated_at};
 };
 export function seasonQueueSummary(rows){
@@ -186,6 +189,49 @@ export function createSeasonQueueStore({
     return {added,reusedExisting:reused,skipped:entries.length-added};
    }catch(e){await client.query('ROLLBACK').catch(()=>{});throw e}
    finally{client.release()}
+  },
+  // Manual, capped retry of *transient* failure only. Never repairs
+  // source-fingerprint mismatches, lost checksums or rights failures.
+  // A transactional advisory lock prevents a second replica's scheduler
+  // from picking this row before the current operator confirms Start.
+  async retryFailed(runId){
+   if(!RUN.test(String(runId||'')))return {ok:false,
+    code:'season_retry_run_invalid'};
+   await ensure();
+   await pool.query([
+    'ALTER TABLE blofy_content_hub_season_queue',
+    'ADD COLUMN IF NOT EXISTS manual_retries SMALLINT NOT NULL DEFAULT 0'
+   ].join(' '));
+   const client=await pool.connect();
+   try{
+    await client.query('BEGIN');
+    const lock=await client.query([
+     'SELECT pg_try_advisory_xact_lock(',
+     "hashtext('blofy_season_scheduler'),hashtext('saleh')) AS held"
+    ].join(' '));
+    if(lock.rows?.[0]?.held!==true){
+     await client.query('ROLLBACK');
+     return {ok:false,code:'season_retry_worker_active'};
+    }
+    const updated=await client.query([
+     'UPDATE blofy_content_hub_season_queue',
+     "SET state='queued',code='manual_retry_approved',",
+     'manual_retries=manual_retries+1,updated_at=NOW()',
+     'WHERE run_id=$1 AND state=\'failed\'',
+     "AND code IN ('episode_retryable_error','episode_source_busy')",
+     'AND manual_retries<2',
+     'RETURNING run_id,manual_retries'
+    ].join(' '),[runId]);
+    await client.query('COMMIT');
+    if(updated.rowCount!==1)return {ok:false,
+     code:'season_retry_not_eligible'};
+    return {ok:true,code:'season_retry_queued',
+     runId,manualRetries:Number(updated.rows[0].manual_retries),
+     automaticStart:false,privateOnly:true};
+   }catch(error){
+    await client.query('ROLLBACK').catch(()=>{});
+    throw error;
+   }finally{client.release()}
   },
   async healthStats(){
    await ensure();
