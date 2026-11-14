@@ -133,3 +133,23 @@
  .season-resume-panel{padding:12px}
  .season-resume-panel .analytics-list{grid-template-columns:1fr}
 }
+
+
+/* Conservative ETA display: never represent active transfer time as a deadline. */
+.season-forecast{border:1px solid #3f7296;background:#0a2840;
+ border-radius:13px;padding:17px;margin:16px 0;display:grid;gap:8px}
+.season-forecast h4{font-size:16px;margin:0}
+.season-forecast strong{font-size:clamp(22px,3vw,30px);color:#a8e9fb}
+.season-forecast .jobtop{flex-wrap:wrap}
+.season-report-controls{display:flex;align-items:end;flex-wrap:wrap;gap:11px;
+ margin:20px 0 10px}
+.season-report-controls label{display:grid;gap:7px;font-size:13px;
+ min-width:150px;color:#b7d0eb;flex:1}
+.season-report-controls input,.season-report-controls select{
+ background:#10283f;color:#f2f7ff;border:1px solid #467aa1;
+ padding:10px;border-radius:9px;min-height:43px;font:inherit;min-width:0}
+.season-report-controls input:focus-visible,.season-report-controls select:focus-visible{
+ outline:2px solid #72c9ff;outline-offset:2px}
+.season-report-controls button{min-height:43px}
+@media(max-width:540px){.season-report-controls{display:grid;grid-template-columns:1fr}
+ .season-report-controls label{min-width:0}}
