@@ -333,6 +333,58 @@ export function createContentHubServer({storage,lease,
    }catch{return json(res,503,{ok:false,
     code:'season_attention_database_unavailable'})}
   }
+  // Read-only library search. Owner token and explicit action assertion
+  // are required even though this POST never mutates content.
+  if(path==='/internal/library/search'&&req.method==='POST'){
+   if(String(req.url||'').includes('?')||
+      req.headers['x-blofy-owner-action']!=='library-read-only')
+    return json(res,403,{ok:false,code:'library_owner_read_required'});
+   if(!seasonQueueStore?.librarySearch)
+    return json(res,503,{ok:false,code:'library_search_unavailable'});
+   let body;
+   try{body=await readSeasonJson(req)}
+   catch{return json(res,400,{ok:false,code:'library_search_bad_json'})}
+   if(!body||typeof body.query!=='string'||body.query.length>80||
+      /[\x00-\x1f\x7f]/.test(body.query)||
+      !['all','queued','paused','running','verified','failed'].includes(body.state)||
+      !Number.isSafeInteger(body.page)||body.page<1||body.page>20000)
+    return json(res,400,{ok:false,code:'library_search_invalid'});
+   try{
+    const [data,a,b]=await Promise.all([
+     seasonQueueStore.librarySearch({
+      query:body.query,state:body.state,page:body.page}),
+     Promise.resolve().then(()=>lease.listPilotRuns?.({limit:50})||[]),
+     Promise.resolve().then(()=>lease.listChunkedRuns?.({limit:50})||[])
+    ].map((p,i)=>i===0?p:Promise.resolve(p).catch(()=>null)));
+    const norm=(raw,format)=>Array.isArray(raw)?raw.slice(0,50).map(x=>{
+     const state=['verified','failed'].includes(x.state)?x.state:
+      ['started','staged','running'].includes(x.state)?'running':'unknown';
+     const expected=Math.max(0,Number(x.expectedBytes)||0);
+     const stored=Math.min(expected,Math.max(0,Number(x.bytesCopied)||0));
+     return {runId:String(x.runId||''),format,state,
+      expectedBytes:expected,storedBytes:stored,
+      percent:expected?Math.min(100,Math.floor(stored*100/expected)):0,
+      verified:state==='verified',date:x.finishedAt||x.startedAt||null,
+      code:/^[a-z0-9_]{1,80}$/.test(String(x.code||''))?x.code:null};
+    }).filter(x=>/^[A-Za-z0-9_-]{8,80}$/.test(x.runId)):[];
+    const allMovies=[...norm(a,'legacy'),...norm(b,'chunked')];
+    const query=body.query.trim().toLocaleLowerCase();
+    const matches=allMovies.filter(x=>
+     (!query||x.runId.toLocaleLowerCase().includes(query))&&
+     (body.state==='all'||x.state===body.state));
+    matches.sort((x,y)=>String(y.date||'').localeCompare(String(x.date||'')));
+    return json(res,200,{ok:true,privateOnly:true,readOnly:true,
+     customerCutover:false,automaticStart:false,automaticRetry:false,
+     providerMediaRequests:0,storageRequests:0,...data,
+     movies:matches.slice((body.page-1)*40,body.page*40),
+     movieHistoryAvailable:a!==null&&b!==null,
+     movieHistoryMaybeLimited:(Array.isArray(a)&&a.length>=50)||
+       (Array.isArray(b)&&b.length>=50),
+     movieScope:'most_recent_50_legacy_and_50_chunked_runs_not_global_search',
+     movieHasMore:matches.length>body.page*40,
+     searchablePersistedSeasons:true});
+   }catch{return json(res,503,{ok:false,code:'library_search_database_unavailable'})}
+  }
   // Bounded operator analytics. No source requests, no S3 listing,
   // no control actions and no customer/player-facing routes.
   if(path==='/internal/seasons/analytics'&&req.method==='GET'){

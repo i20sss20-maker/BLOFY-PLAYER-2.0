@@ -158,6 +158,27 @@ test('real PostgreSQL executes reporting and chunk-timing queries safely',{
   assert.equal((await pool.query(
    "SELECT state FROM blofy_content_hub_season_queue WHERE run_id=$1",
    [runId])).rows[0].state,'failed');
+  // Full database search is paged and does not perform source-media reads.
+  const library=await store.librarySearch({
+   query:'Pending',state:'all',page:1});
+  assert.equal(library.episodes.length,2);
+  assert.equal(library.seasons.length,1);
+  // Whole-season counts remain full despite title match on only two episodes.
+  assert.equal(library.seasons[0].episodeCount,4);
+  assert.equal(library.seasons[0].fullyVerifiedInQueue,false);
+  assert.equal(library.episodes.some(x=>x.title==='Pending'),true);
+  const byState=await store.librarySearch({
+   query:'series_ci_s01',state:'failed',page:1});
+  assert.equal(byState.episodes.length,1);
+  assert.equal(byState.episodes[0].runId,runId);
+  assert.equal(byState.seasons[0].episodeCount,4);
+  const afterPage=await store.librarySearch({
+   query:'Pending',state:'all',page:2});
+  assert.equal(afterPage.episodes.length,0);
+  assert.equal(afterPage.seasons.length,0);
+  assert.equal(library.automaticStart,false);
+  assert.equal(library.storageRequests,0);
+
 
 
  }finally{

@@ -11,6 +11,7 @@
   <script src="/admin-season-detail.js" defer></script>
   <script src="/admin-season-attention.js" defer></script>
   <script src="/admin-ops-overview.js" defer></script>
+  <script src="/admin-library.js" defer></script>
 </head>
 <body>
 <main class="shell">
@@ -78,6 +79,53 @@
       <a href="#attentionTitle">التنبيهات</a>
       <a href="#runs">عمليات الأفلام</a>
     </nav>
+  </section>
+  <section class="card library-browser" id="libraryBrowser" aria-labelledby="libraryBrowserTitle">
+    <div class="cardhead">
+      <div>
+        <p class="eyebrow">PRIVATE LIBRARY · SEARCH</p>
+        <h2 id="libraryBrowserTitle">مكتبة المحتوى المحفوظ</h2>
+        <p class="muted">بحث في الأفلام المسجلة وحلقات ومسلسلات ومواسم قائمة النقل، مع معرفة الحالة والناقص منها. ليس فهرس محتوى المصدر الكامل.</p>
+      </div>
+      <button type="button" id="libraryRefresh">تحديث المكتبة</button>
+    </div>
+    <div class="library-search-controls">
+      <label for="libraryText">ابحث باسم الحلقة أو معرّف الفيلم أو الموسم
+        <input type="search" id="libraryText" maxlength="80"
+          placeholder="عنوان الحلقة، رقمها، الموسم، أو معرّف النسخة" autocomplete="off">
+      </label>
+      <label for="libraryKind">نوع المحتوى
+        <select id="libraryKind">
+          <option value="all">الكل</option>
+          <option value="movie">أفلام</option>
+          <option value="series">مسلسلات</option>
+          <option value="season">مواسم</option>
+          <option value="episode">حلقات</option>
+        </select>
+      </label>
+      <label for="libraryState">حالة النقل
+        <select id="libraryState">
+          <option value="all">جميع الحالات</option>
+          <option value="verified">مكتملة</option>
+          <option value="failed">فاشلة</option>
+          <option value="queued">تنتظر</option>
+          <option value="running">جارٍ نقلها</option>
+          <option value="paused">متوقفة</option>
+        </select>
+      </label>
+      <button id="librarySearch" type="button">بحث</button>
+    </div>
+    <p class="muted" id="libraryStatus" role="status">جارٍ قراءة سجلات المكتبة…</p>
+    <div class="library-summary" id="librarySummary" aria-live="polite"></div>
+    <div class="library-results" id="libraryResults" aria-live="polite">
+      <p class="muted">لا توجد نتائج بعد.</p>
+    </div>
+    <div class="library-pagination">
+      <button id="libraryPrev" type="button" disabled>السابق</button>
+      <span id="libraryPage" aria-live="polite">الصفحة 1</span>
+      <button id="libraryNext" type="button" disabled>التالي</button>
+    </div>
+    <p class="hint" id="libraryScope">البحث في جميع سجلات حلقات المواسم المحفوظة في PostgreSQL مع 40 نتيجة لكل صفحة. الأفلام تُعرض من أحدث 50 سجلًا تقليديًا و50 سجلًا مجزأً فقط؛ البحث بالأفلام ليس شاملًا، وقد يكون عدد الحلقات المدرجة أقل من إجمالي حلقات المسلسل في المصدر.</p>
   </section>
   <section class="stats" aria-label="ملخص التخزين">
     <article class="tile"><small>أفلام محفوظة ومتحقق منها</small><b id="verified">—</b></article>

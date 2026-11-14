@@ -472,6 +472,97 @@ export function createSeasonQueueStore({
    });
    return result.rows||[];
   },
+  // Owner-only searchable persisted library. These are DB snapshots only:
+  // no calls to provider APIs, player endpoints or object-storage listings.
+  // Pagination is independent for episode hits and season summaries.
+  async librarySearch({query='',state='all',page=1}={}){
+   if(typeof query!=='string'||query.length>80||/[\x00-\x1f\x7f]/.test(query)||
+      typeof state!=='string'||!['all','queued','paused','running',
+       'verified','failed'].includes(state)||
+      !Number.isSafeInteger(page)||page<1||page>20000)
+    throw Error('season_library_search_invalid');
+   await ensure();
+   const term=query.trim(),n=40,offset=(page-1)*n,
+    values=[term,state,n+1,offset];
+   const episodeSql=withRuns=>[
+    'SELECT q.*,',
+    withRuns?'COALESCE(r.bytes_copied,0) AS bytes_copied, r.state AS verified_state':
+      '0 AS bytes_copied, NULL AS verified_state',
+    'FROM blofy_content_hub_season_queue q',
+    withRuns?'LEFT JOIN blofy_content_hub_episode_runs r ON r.run_id=q.run_id':'',
+    'WHERE ($1=\'\' OR POSITION(LOWER($1) IN LOWER(q.title))>0',
+    'OR POSITION(LOWER($1) IN LOWER(q.season_key))>0',
+    'OR q.episode_number::text=$1)',
+    "AND ($2='all' OR q.state=$2)",
+    'ORDER BY q.updated_at DESC,q.run_id DESC LIMIT $3 OFFSET $4'
+   ].filter(Boolean).join(' ');
+   let hits=await pool.query(episodeSql(true),values).catch(error=>{
+    if(error?.code==='42P01')return pool.query(episodeSql(false),values);
+    throw error;
+   });
+   const episodes=(hits.rows||[]).slice(0,n).map(row=>{
+    const expected=Math.max(0,Number(row.expected_bytes)||0),
+     stored=Math.min(expected,Math.max(0,Number(row.bytes_copied)||0));
+    const verified=row.state==='verified'&&row.verified_state==='verified';
+    return {runId:row.run_id,seasonKey:row.season_key,
+     episodeNumber:Number(row.episode_number),
+     title:String(row.title||'').slice(0,200).replace(/https?:\/\/\S+/gi,'[رابط مخفي]'),
+     state:row.state,verified,
+     code:row.code||null,expectedBytes:expected,storedBytes:stored,
+     percent:expected?Math.min(100,Math.floor(stored*100/expected)):0,
+     updatedAt:row.updated_at};
+   });
+   // Match by whole season key, or the presence of a matching episode title.
+   // Full-season counts must NOT be reduced to only matching episode titles.
+   const seasonSql=withRuns=>[
+    'SELECT q.season_key, COUNT(*)::text AS episode_count,',
+    "COUNT(*) FILTER (WHERE q.state='failed')::text AS failed_count,",
+    "COUNT(*) FILTER (WHERE q.state='queued')::text AS queued_count,",
+    "COUNT(*) FILTER (WHERE q.state='running')::text AS running_count,",
+    "COUNT(*) FILTER (WHERE q.state='paused')::text AS paused_count,",
+    withRuns?
+     "COUNT(*) FILTER (WHERE q.state='verified' AND r.state='verified')::text AS verified_count,":
+     "'0'::text AS verified_count,",
+    'COALESCE(SUM(q.expected_bytes),0)::text AS expected_bytes,',
+    withRuns?'COALESCE(SUM(r.bytes_copied),0)::text AS stored_bytes':
+     "'0'::text AS stored_bytes",
+    'FROM blofy_content_hub_season_queue q',
+    withRuns?'LEFT JOIN blofy_content_hub_episode_runs r ON r.run_id=q.run_id':'',
+    "WHERE ($1='' OR POSITION(LOWER($1) IN LOWER(q.season_key))>0 OR",
+    'EXISTS (SELECT 1 FROM blofy_content_hub_season_queue match_ep',
+    'WHERE match_ep.season_key=q.season_key',
+    'AND POSITION(LOWER($1) IN LOWER(match_ep.title))>0))',
+    "AND ($2='all' OR EXISTS(SELECT 1 FROM blofy_content_hub_season_queue state_ep",
+    'WHERE state_ep.season_key=q.season_key AND state_ep.state=$2))',
+    'GROUP BY q.season_key ORDER BY q.season_key LIMIT $3 OFFSET $4'
+   ].filter(Boolean).join(' ');
+   const groups=await pool.query(seasonSql(true),values).catch(error=>{
+    if(error?.code==='42P01')return pool.query(seasonSql(false),values);
+    throw error;
+   });
+   const seasons=(groups.rows||[]).slice(0,n).map(row=>{
+    const expected=Math.max(0,Number(row.expected_bytes)||0),
+     stored=Math.min(expected,Math.max(0,Number(row.stored_bytes)||0)),
+     count=Number(row.episode_count||0),
+     verified=Number(row.verified_count||0);
+    return {seasonKey:row.season_key,episodeCount:count,
+     verifiedCount:verified,failedCount:Number(row.failed_count||0),
+     queuedCount:Number(row.queued_count||0),
+     runningCount:Number(row.running_count||0),
+     pausedCount:Number(row.paused_count||0),
+     expectedBytes:expected,storedBytes:stored,
+     percent:expected?Math.min(100,Math.floor(stored*100/expected)):0,
+     fullyVerifiedInQueue:count>0&&verified===count,
+     scope:'persisted_episodes_for_this_season_only'};
+   });
+   return {query:term,state,page,pageSize:n,
+    episodes,episodesHasMore:(hits.rows||[]).length>n,
+    seasons,seasonsHasMore:(groups.rows||[]).length>n,
+    readOnly:true,automaticStart:false,
+    providerMediaRequests:0,storageRequests:0,
+    searchedAllPersistedEpisodes:true,
+    seasonCompletenessScope:'queued_season_episodes_only'};
+  },
   // Recent queue *states* include rows created before telemetry.
   // Snapshots are not a full transfer-event history.
   async recentEpisodeStates({limit=30}={}){
