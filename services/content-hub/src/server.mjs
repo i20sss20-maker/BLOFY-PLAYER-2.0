@@ -14,6 +14,7 @@ import {inspectEpisodeCandidates} from './episode-candidates.mjs';
 import {inspectEpisodeSize} from './episode-probe.mjs';
 import {runOneEpisodeChunk,episodeCopyReadiness} from './episode-chunk-pilot.mjs';
 import {createSeasonQueueStore,createSeasonQueueController,seasonQueueReadiness,validateSeasonSelection,seasonQueueSummary} from './season-queue.mjs';
+import {inspectLicensedSeries,inspectLicensedSeriesEpisodes} from './series-catalog.mjs';
 
 const FIXTURE_SOURCE='00000000-0000-4000-8000-000000000000';
 const FIXTURE_SIZE=8*1024*1024;
@@ -78,7 +79,9 @@ export function createContentHubServer({storage,lease,
  batchRunner=runChunkedMovieBatch,previewBuilder=buildPrivateBrowserPreview,
  episodeCandidateInspector=inspectEpisodeCandidates,
  episodeSizeInspector=inspectEpisodeSize,
- episodeChunkRunner=runOneEpisodeChunk,seasonQueueStore=null}={}){
+ episodeChunkRunner=runOneEpisodeChunk,seasonQueueStore=null,
+ seriesCatalogInspector=inspectLicensedSeries,
+ seriesEpisodesInspector=inspectLicensedSeriesEpisodes}={}){
  if(!storage||!lease)throw Error('content_hub_private_dependencies_required');
  const started=Date.now();
  let syntheticRunning=false,lastSynthetic=null;
@@ -194,6 +197,20 @@ export function createContentHubServer({storage,lease,
    }catch{return json(res,503,{
     ok:false,code:'episode_browser_confirmation_failed'})}
   }
+  if(path==='/internal/series/candidates'&&req.method==='GET'){
+   if(String(req.url||'').includes('?'))
+    return json(res,400,{ok:false,code:'series_query_not_allowed'});
+   const data=await seriesCatalogInspector({env:pilotEnv});
+   return json(res,data.ok?200:503,data);
+  }
+  const seriesInfoRoute=/^\/internal\/series\/episodes\/([1-9][0-9]{0,14})$/.exec(path);
+  if(seriesInfoRoute&&req.method==='GET'){
+   if(String(req.url||'').includes('?'))
+    return json(res,400,{ok:false,code:'series_query_not_allowed'});
+   const data=await seriesEpisodesInspector({
+    seriesGatewayId:Number(seriesInfoRoute[1]),env:pilotEnv});
+   return json(res,data.ok?200:503,data);
+  }
   // Owner-only queue. It accepts listed, individually licensed episodes
   // and cannot alter customer routes or expose the private bucket.
   if(path==='/internal/seasons/queue'&&req.method==='GET'){
@@ -224,15 +241,32 @@ export function createContentHubServer({storage,lease,
     ok:false,code:'season_queue_running'});
    try{
     const request=await readSeasonJson(req);
-    const catalog=await episodeCandidateInspector({env:pilotEnv});
-    if(!catalog?.ok||!Array.isArray(catalog.candidates))
-     return json(res,503,{ok:false,code:'season_candidate_catalog_unavailable'});
+    let candidates,seasonKey;
+    const seriesId=Number(request?.seriesGatewayId);
+    if(Number.isSafeInteger(seriesId)&&seriesId>0){
+     const seasonNumber=Number(request?.seasonNumber);
+     const catalog=await seriesEpisodesInspector({
+      seriesGatewayId:seriesId,env:pilotEnv});
+     const selected=catalog.seasons?.find(x=>x.seasonNumber===seasonNumber);
+     if(!catalog.ok||!selected||!Array.isArray(selected.episodes))
+      return json(res,403,{ok:false,code:'season_not_licensed_or_mapped'});
+     candidates=selected.episodes;
+     seasonKey='series_'+seriesId+'_s'+seasonNumber;
+     if(request.episodes?.some?.(e=>{
+      const exact=candidates.find(x=>x.gatewayId===Number(e.gatewayId));
+      return !exact||Number(e.episodeNumber)!==exact.episodeNumber;
+     }))return json(res,403,{ok:false,code:'season_episode_number_mismatch'});
+    }else{
+     const catalog=await episodeCandidateInspector({env:pilotEnv});
+     if(!catalog?.ok||!Array.isArray(catalog.candidates))
+      return json(res,503,{ok:false,code:'season_candidate_catalog_unavailable'});
+     candidates=catalog.candidates;seasonKey=request?.seasonKey;
+    }
     const entries=validateSeasonSelection({
-     seasonKey:request?.seasonKey,episodes:request?.episodes,
-     candidates:catalog.candidates});
+     seasonKey,episodes:request?.episodes,candidates});
     const saved=await seasonQueueStore.enqueue(entries);
     return json(res,201,{ok:true,code:'season_episodes_queued',
-     ...saved,seasonKey:request.seasonKey,privateOnly:true,
+     ...saved,seasonKey,privateOnly:true,
      sourceMediaRequests:0,customerCutover:false});
    }catch{return json(res,400,{ok:false,
     code:'season_selection_invalid_or_conflicting',
