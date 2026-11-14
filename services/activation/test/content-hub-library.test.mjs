@@ -43,7 +43,7 @@ test('document makes storage-only and movie-search sampling limitations visible'
 
 
 test('manual poster editor is private, accessible and never auto-imports artwork',async()=>{
- const [html,library,editor,hook,css]=await Promise.all([
+ const [html,library,editor,hookText,css]=await Promise.all([
   readFile(web,'utf8'),
   readFile(js,'utf8'),
   readFile(new URL('../web/admin-library-metadata.js',import.meta.url),'utf8'),
@@ -62,8 +62,8 @@ test('manual poster editor is private, accessible and never auto-imports artwork
  assert.match(editor,/confirmed:true/);
  assert.match(editor,/image\.tmdb\.org\/t\/p\/w342/);
  assert.match(editor,/x-blofy-owner-action/);
- assert.match(hook,/curate-private-metadata/);
- assert.match(hook,/\/api\/v1\/admin\/content-hub\/library\/metadata/);
+ assert.match(hookText,/curate-private-metadata/);
+ assert.match(hookText,/\/api\/v1\/admin\/content-hub\/library\/metadata/);
  assert.match(css,/\.library-meta-dialog/);
  assert.doesNotMatch(library,/innerHTML\s*=/);
  assert.doesNotMatch(editor,/innerHTML\s*=/);
