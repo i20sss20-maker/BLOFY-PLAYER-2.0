@@ -36,12 +36,25 @@ function authorized(req,res){
  }
  return true;
 }
-function request(path,{method='GET',range,signal,confirmBatch=false}={}){
+function request(path,{method='GET',range,signal,confirmBatch=false,extraHeaders={},body}={}){
  const headers={authorization:'Bearer '+HUB_TOKEN};
  if(range)headers.range=range;
  if(confirmBatch)headers['x-blofy-batch-confirm']='approved-8mib-batch';
- return fetch(HUB+path,{method,headers,redirect:'manual',
+ Object.assign(headers,extraHeaders);
+ return fetch(HUB+path,{method,headers,body,redirect:'manual',
   signal:signal||AbortSignal.timeout(8000)});
+}
+async function readSeasonAdminBody(req){
+ if(!/^application\/json(?:\s*;|$)/i.test(String(req.headers['content-type']||'')))
+  throw Error('season_admin_json_required');
+ let size=0;const chunks=[];
+ for await(const chunk of req){
+  size+=chunk.length;
+  if(size>8192)throw Error('season_admin_payload_too_large');
+  chunks.push(chunk);
+ }
+ try{return JSON.parse(Buffer.concat(chunks).toString('utf8'))}
+ catch{throw Error('season_admin_json_invalid')}
 }
 async function safeReadJson(response){
  if(response.status!==200||!String(response.headers.get('content-type')||'')
@@ -185,6 +198,72 @@ http.createServer=function withContentHubAdmin(listener){
       uploadFeatureEnabled:preflight.uploadFeatureEnabled===true,
       automaticPilotEnabled:preflight.automaticPilotEnabled===true
     });
+   }
+   if(path==='/api/v1/admin/content-hub/seasons/queue'&&req.method==='GET'){
+    const response=await request('/internal/seasons/queue',{
+     signal:AbortSignal.timeout(8000)});
+    if(response.status!==200)return json(res,503,{
+     ok:false,code:'season_queue_unavailable'});
+    return json(res,200,await safeReadJson(response));
+   }
+   if(path==='/api/v1/admin/content-hub/seasons/candidates'&&req.method==='GET'){
+    const response=await request('/internal/episodes/candidates',{
+     signal:AbortSignal.timeout(8000)});
+    if(response.status!==200)return json(res,503,{
+     ok:false,code:'episode_catalog_unavailable'});
+    const result=await safeReadJson(response);
+    return json(res,200,{ok:true,privateOnly:true,
+     candidates:Array.isArray(result.candidates)?result.candidates:[],
+     sourceMediaRequests:0});
+   }
+   if(path.startsWith('/api/v1/admin/content-hub/seasons/')&&
+      req.method==='POST'){
+    if(req.headers['x-blofy-owner-action']!=='season-library')
+     return json(res,403,{ok:false,code:'season_owner_action_required'});
+    if(path==='/api/v1/admin/content-hub/seasons/probe'){
+     const input=await readSeasonAdminBody(req);
+     const id=Number(input?.gatewayId);
+     if(!Number.isSafeInteger(id)||id<1)return json(res,400,{
+      ok:false,code:'episode_id_invalid'});
+     const candidates=await request('/internal/episodes/candidates',{
+      signal:AbortSignal.timeout(8000)});
+     const catalog=await safeReadJson(candidates);
+     if(!Array.isArray(catalog.candidates)||
+       !catalog.candidates.some(c=>c.gatewayId===id))
+      return json(res,403,{ok:false,code:'episode_not_approved'});
+     const response=await request('/internal/episodes/probe',{
+      method:'POST',signal:AbortSignal.timeout(60000),
+      extraHeaders:{
+       'x-blofy-episode-probe-confirm':'operator-approved-probe',
+       'x-blofy-episode-gateway-id':String(id)}});
+     return json(res,response.status===200?200:503,await response.json());
+    }
+    if(path==='/api/v1/admin/content-hub/seasons/enqueue'){
+     const input=await readSeasonAdminBody(req);
+     if(!input||typeof input!=='object'||Array.isArray(input))
+      return json(res,400,{ok:false,code:'season_selection_invalid'});
+     const response=await request('/internal/seasons/enqueue',{
+      method:'POST',signal:AbortSignal.timeout(10000),
+      extraHeaders:{
+       'content-type':'application/json',
+       'x-blofy-season-confirm':'licensed-private-episodes',
+       'x-blofy-storage-rights-confirm':'licensed-persistent-copy'
+      },body:JSON.stringify(input)});
+     return json(res,response.status,await response.json());
+    }
+    const controls={
+     '/api/v1/admin/content-hub/seasons/start':
+      ['/internal/seasons/start','start-private-sequential'],
+     '/api/v1/admin/content-hub/seasons/pause':
+      ['/internal/seasons/pause','pause-private-sequential']
+    };
+    const command=controls[path];
+    if(command){
+     const response=await request(command[0],{
+      method:'POST',signal:AbortSignal.timeout(8000),
+      extraHeaders:{'x-blofy-season-confirm':command[1]}});
+     return json(res,response.status,await response.json());
+    }
    }
    if(path==='/api/v1/admin/content-hub/status'&&req.method==='GET')
     return await handleStatus(res);
