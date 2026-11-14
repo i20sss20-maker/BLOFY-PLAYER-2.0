@@ -67,6 +67,10 @@ public partial class MainWindow : Window
     private readonly Dictionary<string, string> _browserCategoryByKind = new(StringComparer.OrdinalIgnoreCase);
     private string? _lastFocusedContentKey;
     private TextBox? _activeBrowserSearch;
+#if DEBUG
+    // Never compiled into Release/installed customer builds.
+    private OwnerDeviceQaLoopbackProxy? _ownerDeviceQaProxy;
+#endif
 
     public MainWindow()
     {
@@ -106,8 +110,15 @@ public partial class MainWindow : Window
                     "BLOFY STREAM", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         };
-        Closed += (_, _) =>
+        Closed += async (_, _) =>
         {
+#if DEBUG
+            if (_ownerDeviceQaProxy is not null)
+            {
+                try { await _ownerDeviceQaProxy.DisposeAsync(); } catch { }
+                _ownerDeviceQaProxy = null;
+            }
+#endif
             _syncCts?.Cancel();
             _searchCts?.Cancel();
             _homeRenderCts?.Cancel();
@@ -3608,6 +3619,39 @@ public partial class MainWindow : Window
     }
 #endif
 
+#if DEBUG
+    private async Task ShowOwnerDeviceQaLabAsync()
+    {
+        // This starts a separate short-lived loopback relay for one already
+        // SHA-verified Content Hub episode. Does NOT change the active catalog.
+        var runId = UiDialogs.Prompt(this, "BLOFY Content Hub — اختبار الجهاز",
+            "معرف الحلقة المحفوظة والمتحقق منها (runId). هذا ليس رابط مصدر Xtream.");
+        if (string.IsNullOrWhiteSpace(runId)) return;
+        var ticket = UiDialogs.Prompt(this, "BLOFY Content Hub — رمز تجربة مؤقت",
+            "الصق رمز اختبار الجهاز الصادر من لوحة الإدارة. لا تحفظه أو تشاركه.");
+        if (string.IsNullOrWhiteSpace(ticket)) return;
+        try
+        {
+            if (_ownerDeviceQaProxy is not null)
+            {
+                await _ownerDeviceQaProxy.DisposeAsync();
+                _ownerDeviceQaProxy = null;
+            }
+            _ownerDeviceQaProxy = await OwnerDeviceQaLoopbackProxy.StartAsync(
+                runId.Trim(), ticket.Trim());
+            await ShowPlayerOverlayAsync("BLOFY Content Hub — owner QA",
+                _ownerDeviceQaProxy.PlaybackUrl);
+        }
+        catch
+        {
+            MessageBox.Show(this,
+                "تعذّر إنشاء اتصال التجربة الخاص. تحقق من انتهاء صلاحية الرمز (15 دقيقة)، " +
+                "ومن تفعيل الربط الآمن وصحة ملف الحلقة المحفوظ. لم يتم تغيير نسخة العملاء.",
+                "BLOFY QA", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+#endif
+
     private void ShowSettings()
     {
         DisposePreview();
@@ -3711,7 +3755,9 @@ public partial class MainWindow : Window
 #if DEBUG
         root.Children.Add(SettingsSection("مختبر التطوير — نسخة Debug فقط",
             SettingActionTile("🧪 اختبار HLS / DASH", "اختبر فيديو مسموحًا وغير محمي • لا يدعم Widevine على Windows",
-                async (_, _) => await ShowDebugPlaybackLabAsync())));
+                async (_, _) => await ShowDebugPlaybackLabAsync()),
+            SettingActionTile("🔒 اختبار Content Hub الخاص", "تشغيل الحلقة المحفوظة نفسها على محرك Windows عبر HTTPS + رمز مؤقت",
+                async (_, _) => await ShowOwnerDeviceQaLabAsync())));
 #endif
 
         var save = Action("حفظ التغييرات", true, async (_, _) =>

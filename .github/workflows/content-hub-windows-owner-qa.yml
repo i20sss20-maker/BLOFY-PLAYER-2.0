@@ -1,0 +1,46 @@
+name: BLOFY Windows owner-only Content Hub real-player QA
+on:
+  push:
+    branches:
+      - qa/windows-content-hub-device-bridge-20261114
+    paths:
+      - 'windows/**'
+      - '.github/workflows/content-hub-windows-owner-qa.yml'
+  pull_request:
+    paths:
+      - 'windows/**'
+      - '.github/workflows/content-hub-windows-owner-qa.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows-debug-owner-only:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Verify Windows continuity regressions
+        shell: pwsh
+        run: |
+          dotnet run --project windows/tests/StreamMediaCopyChecks/StreamMediaCopyChecks.csproj -c Release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build actual WPF Windows Debug owner QA player
+        shell: pwsh
+        run: |
+          dotnet restore windows/src/BlofyPlayer.Windows/BlofyPlayer.Windows.csproj
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet build windows/src/BlofyPlayer.Windows/BlofyPlayer.Windows.csproj -c Debug --no-restore
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet publish windows/src/BlofyPlayer.Windows/BlofyPlayer.Windows.csproj -c Debug -r win-x64 --self-contained true -p:PublishReadyToRun=false -o windows/qa-content-hub-debug
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (!(Test-Path 'windows/qa-content-hub-debug/BLOFY STREAM.exe')) { throw 'BLOFY STREAM QA Debug binary missing' }
+      - name: Upload temporary unsigned private QA artifact - NOT a customer release
+        uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-Windows-ContentHub-OWNER-DEBUG-${{ github.sha }}
+          path: windows/qa-content-hub-debug/
+          retention-days: 3
+          if-no-files-found: error
