@@ -108,7 +108,7 @@ test('metadata readiness is explicitly page-scoped and only offers manual owner 
  }
  assert.match(html,/صفحة النتائج الحالية فقط/);
  assert.match(html,/إضافة الصور اختيارية/);
- assert.match(library,/review\.sampleOnly!==true/);
+ assert.match(library,/review\?\.sampleOnly!==true/);
  assert.match(library,/metadataAvailable!==true/);
  assert.match(library,/blofy:edit-library-metadata/);
  assert.match(library,/lookups\.has\(row\.key\)/);
