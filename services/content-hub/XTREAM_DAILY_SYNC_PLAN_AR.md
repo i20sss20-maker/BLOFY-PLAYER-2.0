@@ -100,3 +100,59 @@ All flags remain OFF in Railway. The remaining full physical-copy implementation
 requires an independently licensed and budgeted durable media queue,
 provider metadata enumeration, tested general movie/episode workers, media
 size and version probes, and a post-copy private playback test.
+
+
+## Latest QA implementation: daily REAL private chunk-copy session (still OFF)
+
+The Content Hub runtime can now **launch** the existing S3 copy workers
+inside the 04:00–04:59 Asia/Riyadh window. This is a meaningful next
+step beyond the previous dry-run planner, but the scope is intentionally
+small and opt-in.
+
+Config on `blofy-content-hub`, all initially absent or OFF:
+- `BLOFY_CONTENT_HUB_DAILY_COPY_ENABLED=1`
+- `BLOFY_CONTENT_HUB_DAILY_COPY_MODE=movie` **OR** `episodes`
+- The ordinary per-media rights, operator-approved fixed gateway,
+  read-only size probe, private storage, bridge, source-idle and
+  quiet-window flags still must independently pass.
+
+**movie mode** launches only the single already-approved movie described
+by `BLOFY_CONTENT_HUB_APPROVED_GATEWAY_ID` and
+`BLOFY_CONTENT_HUB_BATCH_RUN_ID`. The existing chunked worker downloads
+up to 8 MiB per source read, records PG/S3 checkpoints and independently
+verifies the full SHA-256 at completion. Its session is bounded to up to
+400 chunks and 40 minutes; unfinished verified chunks remain reusable.
+
+**episodes mode** launches only already-selected and approved rows in
+the durable season queue, not every Xtream series. It additionally
+requires the independently recorded owner confirmation of visible
+video / audible audio on a verified sample and zero unresolved
+storage-integrity issues. At most 60 chunk operations are launched
+per day, each with the existing 8 MiB per-chunk limit.
+
+The daily launcher stores a unique `(saleh,local_day)` Postgres claim
+before starting, so another replica/restart cannot double-start the
+same day's copying. A refused start releases the claim. The claim proves
+a session was STARTED, **not** that a movie or episode completed or
+that S3 bytes were verified.
+
+Endpoints, accessible only via operator auth:
+- Hub `GET /internal/mirror/daily/sessions` — last seven starts.
+- Portal `GET /api/v1/admin/content-hub/mirror/daily/sessions` — same,
+  only through the existing signed owner session.
+- Portal `POST /api/v1/admin/content-hub/mirror/daily/plan` — dry-run,
+  owner marker required.
+- Portal `GET /api/v1/admin/xtream/mirror/coverage?sourceId=<UUID>` —
+  *catalog items vs verified manifest rows*; no provider network calls.
+
+**The full requested automatic copy of every licensed Xtream movie and
+episode is NOT implemented.** Still missing: safe enumeration of every
+series episode, durable source-scoped cross-item copy queue,
+independent item-level license evidence, dynamic source bridge mapping,
+oversized-file support, realistic source concurrency monitoring,
+storage budget and full device playback tests. Live channel metadata
+can sync daily; permanent recording of live streams is not enabled.
+
+The branch is a draft PR, not connected to live Railway deployments,
+so even the restricted daily worker will not run until a separate
+reviewed deployment explicitly opts it in.
