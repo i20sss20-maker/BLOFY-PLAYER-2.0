@@ -32,6 +32,19 @@ export function buildSeasonAnalytics({
  // Not an instantaneous network bandwidth measurement.
  const averageBytesPerSecond=samples>0&&milliseconds>0?
   Math.floor(moved*1000/milliseconds):null;
+ const stageSamples=count(metrics.stage_sample_count);
+ const sourceMs=number(metrics.source_ms)+number(metrics.boundary_ms);
+ const storageMs=number(metrics.upload_ms);
+ const verificationMs=number(metrics.verification_ms);
+ const overheadMs=Math.max(0,milliseconds-sourceMs-storageMs-verificationMs);
+ const breakdown=stageSamples>0?[
+  {stage:'source',durationMs:sourceMs},
+  {stage:'storage',durationMs:storageMs},
+  {stage:'verification',durationMs:verificationMs},
+  {stage:'other',durationMs:overheadMs}
+ ].map(x=>({...x,
+  sharePercent:milliseconds?Math.min(100,Math.round(100*x.durationMs/milliseconds)):0
+ })): [];
  const items=(Array.isArray(seasons)?seasons:[]).slice(0,100).map(s=>{
   const expected=number(s.expected_bytes),stored=number(s.stored_bytes);
   return {seasonKey:String(s.season_key||'').slice(0,64),
@@ -71,6 +84,22 @@ export function buildSeasonAnalytics({
   text:'بعض الأجزاء استغرقت 90 ثانية أو أكثر، والمدة تشمل النقل والرفع والتحقق.'});
  if(reasons.length)diagnostics.push({code:'failed_jobs',
   text:'توجد أسباب فشل مسجلة. التفاصيل أدناه مؤشرات أولية وليست تشخيصًا قاطعًا.'});
+ if(stageSamples>=3){
+  const dominant=[...breakdown].sort((a,b)=>b.durationMs-a.durationMs)[0];
+  const descriptions={
+   source:'غالبية الزمن في فحص/قراءة المصدر؛ راجع تأخر استجابة المصدر واتصاله.',
+   storage:'غالبية الزمن في رفع S3؛ راجع زمن اتصال التخزين وسعة الاتصال.',
+   verification:'غالبية الزمن في التحقق من التخزين والبصمات؛ راجع ضغط الموارد.',
+   other:'غالبية الزمن في الحصول على القفل أو البيانات أو حفظ النقاط؛ راجع ازدحام الخدمة وقاعدة البيانات.'
+  };
+  if(dominant?.sharePercent>=50)diagnostics.push({
+   code:'dominant_'+dominant.stage,
+   text:descriptions[dominant.stage]+' (مؤشر من القياسات وليس سببًا مثبتًا).'
+  });
+ }
+ if(stageSamples>0&&stageSamples<3)diagnostics.push({
+  code:'stage_sample_small',text:'تحليل مراحل البطء أولي حتى تتوفر 3 أجزاء مقاسة أو أكثر.'
+ });
  if(!samples)diagnostics.push({code:'speed_not_measured',
   text:'لم تُجمع قياسات سرعة للأجزاء بعد؛ لن نعرض سرعة تقديرية غير موثوقة.'});
  return {
@@ -93,6 +122,7 @@ export function buildSeasonAnalytics({
    currentRunId:worker?.currentRunId||null},
   seasonSummaries:items,seasonSummariesLimited:Array.isArray(seasons)&&seasons.length>100,
   failureReasons:reasons,recentEvents:history,
+  timingBreakdown:breakdown,stageSamples,
   diagnostics,recordedFrom:ISO(metrics.first_recorded_at),
   lastRecordedAt:ISO(metrics.last_recorded_at)
  };
