@@ -109,3 +109,10 @@
 @media(max-width:900px){.season-report-charts{grid-template-columns:1fr}}
 @media(max-width:650px){.season-report-totals{grid-template-columns:repeat(2,minmax(0,1fr))}
  .season-report{padding:11px}.season-report-tile{padding:9px}}
+
+
+.analytics-series-group{border:1px solid #355c7d;border-radius:12px;
+ background:#102742;padding:11px;display:grid;gap:10px}
+.analytics-series-group>.jobtop{gap:12px;flex-wrap:wrap;
+ padding:3px 4px 6px}
+.analytics-series-group .analytics-record{margin:0}
