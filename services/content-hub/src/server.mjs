@@ -303,6 +303,22 @@ export function createContentHubServer({storage,lease,
 
    }catch{return json(res,503,{ok:false,code:'season_health_database_unavailable'})}
   }
+  // Globally aggregated private queue A/V readiness, with a strictly
+  // bounded season page. No provider, S3, media or subscriber lookups.
+  const readinessRoute=
+   /^\/internal\/seasons\/readiness\/page\/([1-9][0-9]{0,3})$/.exec(path);
+  if(readinessRoute&&req.method==='GET'){
+   if(String(req.url||'').includes('?')||
+      req.headers['x-blofy-owner-action']!=='review-private-seasons')
+    return json(res,403,{ok:false,code:'season_readiness_owner_only'});
+   if(!seasonQueueStore?.readinessAudit)
+    return json(res,503,{ok:false,code:'season_readiness_unavailable'});
+   try{
+    const data=await seasonQueueStore.readinessAudit({
+     page:Number(readinessRoute[1])});
+    return json(res,200,data);
+   }catch{return json(res,503,{ok:false,code:'season_readiness_database_unavailable'})}
+  }
   // Owner-only, read-only season detail; no media or S3 access.
   const detailRoute=/^\/internal\/seasons\/report\/([a-z0-9][a-z0-9_-]{2,63})\/page\/([1-9][0-9]{0,4})$/.exec(path);
   if(detailRoute&&req.method==='GET'){
