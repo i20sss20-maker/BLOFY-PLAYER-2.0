@@ -36,6 +36,7 @@ const updateButtons=()=>{
   !data.page.hasPrevious;
  $('analyticsReportNext').disabled=!data||loading||exporting||priorityBusy||
   !data.page.hasNext;
+ $('analyticsReportRefresh').disabled=!currentKey||loading||exporting||priorityBusy;
 };
 async function getReport(key,page){
  const response=await fetch(
@@ -78,6 +79,34 @@ function showTotals(t,timing={}){
   box.append(make('small','',label),make('strong','',value));
   return box;
  }));
+}
+function showForecast(forecast){
+ const f=forecast||{};
+ const labels={
+  empty_season:'لا توجد حلقات في الموسم',
+  completed:'الموسم مكتمل ومتحقق منه',
+  awaiting_full_verification:'بانتظار اكتمال التحقق من الحلقات',
+  blocked_by_failed_episodes:'التقدير متوقف لوجود حلقات فاشلة',
+  insufficient_recent_samples:'قياسات حديثة غير كافية',
+  insufficient_sample_bytes:'حجم العينات المقاس غير كافٍ',
+  insufficient_throughput:'لا توجد سرعة مستقرة قابلة للقياس',
+  forecast_out_of_range:'مدة النقل المقاسة خارج نطاق التقدير',
+  invalid_accounting:'بيانات الحجم غير مكتملة',
+  estimate_available:'مدة النقل النشط المتوقعة'
+ };
+ const ready=f.status==='estimate_available'&&
+  Number.isSafeInteger(f.estimatedActiveSeconds);
+ const seconds=ready?f.estimatedActiveSeconds:0;
+ $('analyticsForecastValue').textContent=ready?
+  timeText(seconds*1000):(labels[f.status]||'لا تتوفر بيانات كافية');
+ $('analyticsForecastDescription').textContent=ready?
+  'تقدير تقريبي لباقي '+amount(f.remainingBytes)+
+  ' اعتمادًا على '+num(f.observedSamples)+
+  ' جزء مقاس خلال آخر 24 ساعة ومتوسط '+amount(f.observedBytesPerSecond)+
+  '/ث. لا يشمل وقت الانتظار أو توقف المصدر أو جلسات النقل اليدوية؛ ليس موعدًا مضمونًا للانتهاء.'+
+  (f.recentSlowdown?' يوجد تباطؤ في أحدث الأجزاء.':''):
+  (labels[f.status]||'التقدير غير متاح.')+
+  ' لا نعرض وقت انتهاء مفترضًا دون ثلاثة أجزاء حديثة ناجحة على الأقل، ولا نبدأ أي نقل تلقائي.';
 }
 function showAlerts(alerts){
  const list=$('analyticsReportAlerts'),items=Array.isArray(alerts)?alerts:[];
@@ -158,6 +187,20 @@ async function updatePriority(item,select){
   setMessage(e.message||'فشل تحديث الأولوية.')}
  finally{priorityBusy=false;updateButtons();select.disabled=false}
 }
+function filteredEpisodes(episodes){
+ const state=$('analyticsReportFilter').value,
+  query=$('analyticsReportSearch').value.trim().toLocaleLowerCase();
+ const items=(Array.isArray(episodes)?episodes:[]).filter(e=>{
+  if(state!=='all'&&e.state!==state)return false;
+  if(!query)return true;
+  return String(e.episodeNumber).includes(query)||
+   String(e.title||'').toLocaleLowerCase().includes(query);
+ });
+ $('analyticsReportFilterScope').textContent=
+  'عرض '+num(items.length)+' من '+num((episodes||[]).length)+
+  ' حلقة في الصفحة الحالية فقط. لا تشمل الفلترة بقية صفحات الموسم.';
+ return items;
+}
 function showRows(episodes){
  const body=$('analyticsReportRows');
  if(!episodes.length){
@@ -191,10 +234,11 @@ function showRows(episodes){
 function display(report){
  data=report;currentPage=report.page.number;
  showTotals(report.totals,report.transferTiming);
+ showForecast(report.forecast);
  showAlerts(report.alerts);
  showEpisodeChart(report.episodes);
  showSpeedChart(report.recentEvents);
- showRows(report.episodes);
+ showRows(filteredEpisodes(report.episodes));
  $('analyticsReportPage').textContent='صفحة '+num(report.page.number)+
   ' من '+num(report.page.pages)+' · '+num(report.page.totalEpisodes)+' حلقة';
  setMessage('آخر تحديث '+stamp(new Date().toISOString())+
@@ -267,6 +311,8 @@ document.addEventListener('blofy:open-season-report',event=>{
  $('analyticsReportBars').replaceChildren();
  $('analyticsReportSpeed').replaceChildren();
  $('analyticsReportRows').replaceChildren();
+ $('analyticsReportSearch').value='';
+ $('analyticsReportFilter').value='all';
  updateButtons();void load(1);
  $('analyticsReportPanel').scrollIntoView({block:'start',behavior:'smooth'});
 });
@@ -275,6 +321,21 @@ $('analyticsCloseReport').addEventListener('click',()=>{
  currentKey=null;data=null;requestSerial++;loading=false;
  $('analyticsReportPanel').hidden=true;updateButtons();
 });
+$('analyticsReportSearch').addEventListener('input',()=>{
+ if(data&&!loading&&!priorityBusy)showRows(filteredEpisodes(data.episodes));
+});
+$('analyticsReportFilter').addEventListener('change',()=>{
+ if(data&&!loading&&!priorityBusy)showRows(filteredEpisodes(data.episodes));
+});
+$('analyticsReportRefresh').addEventListener('click',()=>void load(currentPage));
+// Reporting reads are bounded and allowed only while the owner watches this tab.
+setInterval(()=>{
+ if(document.hidden||!currentKey||loading||exporting||priorityBusy||
+    $('analyticsReportPanel').hidden||
+    document.activeElement?.classList?.contains('season-priority-select'))
+  return;
+ void load(currentPage);
+},30000);
 $('analyticsReportPrev').addEventListener('click',()=>void load(currentPage-1));
 $('analyticsReportNext').addEventListener('click',()=>void load(currentPage+1));
 $('analyticsResumePreview').addEventListener('click',async()=>{
