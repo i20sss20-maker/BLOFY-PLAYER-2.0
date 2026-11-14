@@ -83,7 +83,7 @@ test('metadata matching review is only on explicit owner action and cannot auto-
   assert.equal((html.match(new RegExp('id="'+id+'"','g'))||[]).length,1,id);
   if(id!=='libraryMatchTitle')assert.ok(js.includes(id),id);
  }
- assert.match(html,/ترخيص TMDB التجاري/);
+ assert.match(html,/ترخيص تجاري ومفتاح API/);
  assert.match(html,/This product uses the TMDB API but is not endorsed or certified by TMDB/);
  assert.match(js,/libraryMatchSearch'\)\.addEventListener\('click'/);
  assert.match(js,/x-blofy-owner-action':'match-private-metadata'/);
