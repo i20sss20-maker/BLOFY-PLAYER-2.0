@@ -6,6 +6,7 @@ const ID=/^[1-9][0-9]{0,14}$/;
 const TOKEN=32;
 const MAX=256000;
 const PAGE_ROUTE=/^\/internal\/blofy-stream\/content-hub\/seasons\/queue\/page\/([1-9][0-9]{0,4})$/;
+const FILTERED_PAGE_ROUTE=/^\/internal\/blofy-stream\/content-hub\/seasons\/queue\/status\/(all|pending|queued|running|paused|verified|failed)\/page\/([1-9][0-9]{0,4})$/;
 
 const shortError=(code,status=400)=>({status,data:{ok:false,code}});
 export function isStreamSeasonBridgePath(path){
@@ -16,6 +17,7 @@ export function isStreamSeasonBridgePath(path){
   path===NS+'/probe'||path===NS+'/enqueue'||
   path===NS+'/start'||path===NS+'/pause'||path===NS+'/confirm'||
   (PAGE_ROUTE.test(path)&&Number(path.match(PAGE_ROUTE)?.[1])<=20000)||
+  (FILTERED_PAGE_ROUTE.test(path)&&Number(path.match(FILTERED_PAGE_ROUTE)?.[2])<=20000)||
   /^\/internal\/blofy-stream\/content-hub\/seasons\/series\/[1-9][0-9]{0,14}$/.test(path);
 }
 const boundedId=n=>Number.isSafeInteger(Number(n))&&Number(n)>0&&
@@ -24,6 +26,7 @@ const validatedBody=(path,method,raw)=>{
  if(method==='GET'){
   if(!['series','pilot','queue','confirmation','health'].some(k=>path===NS+'/'+k)&&
     !(PAGE_ROUTE.test(path)&&Number(path.match(PAGE_ROUTE)?.[1])<=20000)&&
+    !(FILTERED_PAGE_ROUTE.test(path)&&Number(path.match(FILTERED_PAGE_ROUTE)?.[2])<=20000)&&
     !/^\/internal\/blofy-stream\/content-hub\/seasons\/series\/[1-9][0-9]{0,14}$/.test(path))
    throw Error('season_bridge_method_denied');
   return null;
@@ -120,8 +123,10 @@ export async function requestStreamSeasonBridge({path,method='GET',body,
   pause:'/internal/seasons/pause',
   confirm:'/internal/episodes/playback/confirm'
  };
- const page=PAGE_ROUTE.exec(path);
- const target=page&&Number(page[1])<=20000?
+ const page=PAGE_ROUTE.exec(path),filtered=FILTERED_PAGE_ROUTE.exec(path);
+ const target=filtered&&Number(filtered[2])<=20000?
+   '/internal/seasons/queue/status/'+filtered[1]+'/page/'+filtered[2]:
+   page&&Number(page[1])<=20000?
    '/internal/seasons/queue/page/'+page[1]:
    Object.hasOwn(routes,action)?routes[action]:
   action.startsWith('series/')&&ID.test(action.slice(7))?
