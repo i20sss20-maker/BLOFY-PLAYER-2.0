@@ -21,7 +21,9 @@ const safeStatus=row=>{
  const total=Number(row.expected_bytes||0);
  const bytes=Math.max(0,Math.min(total,Number(row.bytes_copied||0)));
  const state=row.episode_state==='verified'?'verified':row.state;
- const checkpointAgeSeconds=Number(row.checkpoint_age_seconds);
+ const checkpointAgeSeconds=row.checkpoint_age_seconds===null||
+   row.checkpoint_age_seconds===undefined?NaN:
+   Number(row.checkpoint_age_seconds);
  const age=Number.isFinite(checkpointAgeSeconds)?
   Math.max(0,Math.floor(checkpointAgeSeconds)):null;
  return {runId:row.run_id,seasonKey:row.season_key,
