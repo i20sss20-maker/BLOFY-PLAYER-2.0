@@ -102,7 +102,9 @@
     <p id="analyticsScope" class="hint">حجم التخزين من سجلات الملفات، وليس المساحة الفعلية المتبقية في S3. السرعة تقاس من الأجزاء الجديدة بعد تحديث النظام.</p>
     <div class="analytics-grid">
       <div><h3>ملخص كل موسم</h3><div id="analyticsSeasons" class="analytics-list" aria-live="polite"></div></div>
-      <div><h3>مؤشرات البطء والأعطال</h3><div id="analyticsDiagnostics" class="analytics-list" aria-live="polite"></div>
+      <div><h3>توزيع وقت النقل المقاس</h3>
+        <div id="analyticsStages" class="analytics-list" aria-live="polite"></div>
+        <h3 class="analytics-subtitle">مؤشرات البطء والأعطال</h3><div id="analyticsDiagnostics" class="analytics-list" aria-live="polite"></div>
         <h3>أسباب فشل الحلقات</h3><div id="analyticsFailures" class="analytics-list"></div></div>
     </div>
     <div class="cardhead analytics-history-title">
