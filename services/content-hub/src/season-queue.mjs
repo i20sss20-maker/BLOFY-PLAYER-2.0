@@ -367,14 +367,15 @@ export function createSeasonQueueStore({
    await ensure();
    const pageSize=50;
    const total=await pool.query(
-    'SELECT COUNT(*)::text AS total FROM blofy_content_hub_season_queue');
+    "SELECT COUNT(*)::text AS total, COUNT(*) FILTER (WHERE state IN ('queued','paused','running'))::text AS pending FROM blofy_content_hub_season_queue");
    const totalEpisodes=Number(total.rows?.[0]?.total||0);
+   const pendingEpisodes=Number(total.rows?.[0]?.pending||0);
    const pages=Math.max(1,Math.ceil(totalEpisodes/pageSize));
    if(page>pages)return {episodes:[],page:{
-    number:page,pageSize,totalEpisodes,pages,hasPrevious:page>1,
+    number:page,pageSize,totalEpisodes,pendingEpisodes,pages,hasPrevious:page>1,
     hasNext:false,outOfRange:true}};
    const episodes=await this.list({limit:pageSize,offset:(page-1)*pageSize});
-   return {episodes,page:{number:page,pageSize,totalEpisodes,pages,
+   return {episodes,page:{number:page,pageSize,totalEpisodes,pendingEpisodes,pages,
     hasPrevious:page>1,hasNext:page<pages,outOfRange:false}};
   },
   async recoverInterrupted(){
