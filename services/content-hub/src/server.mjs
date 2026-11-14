@@ -470,12 +470,12 @@ export function createContentHubServer({storage,lease,
      (body.state==='all'||x.state===body.state));
     matches.sort((x,y)=>String(y.date||'').localeCompare(String(x.date||'')));
     const visibleMovies=matches.slice((body.page-1)*40,body.page*40);
-    const metadataReview=buildMetadataReview({
+    const metadataReview=metadataAvailable?buildMetadataReview({
      movies:visibleMovies,seasons,
      moviesSampleLimited:(Array.isArray(a)&&a.length>=50)||
       (Array.isArray(b)&&b.length>=50),
      seasonsHasMore:data.seasonsHasMore===true,page:body.page
-    });
+    }):null;
     return json(res,200,{ok:true,privateOnly:true,readOnly:true,
      customerCutover:false,automaticStart:false,automaticRetry:false,
      providerMediaRequests:0,storageRequests:0,...data,
