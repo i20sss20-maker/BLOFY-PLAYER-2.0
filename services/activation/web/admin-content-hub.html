@@ -131,6 +131,12 @@
       </div>
       <p id="analyticsReportStatus" class="muted" role="status">اختر موسمًا لعرض تقريره.</p>
       <div class="season-report-totals" id="analyticsReportTotals" aria-label="ملخص تقدم الموسم"></div>
+      <div class="season-forecast" aria-labelledby="analyticsForecastTitle">
+        <div class="jobtop"><h4 id="analyticsForecastTitle">تقدير مدة النقل المتبقية</h4>
+          <span class="chip">تقديري · وقت النقل النشط فقط</span></div>
+        <strong id="analyticsForecastValue">بانتظار القياسات</strong>
+        <p id="analyticsForecastDescription" class="muted">لا يمكن حساب توقع موثوق حتى تتوفر أجزاء حديثة مقاسة.</p>
+      </div>
       <div id="analyticsReportAlerts" class="analytics-list" aria-live="polite"></div>
       <div class="season-report-charts">
         <div><h4>نسبة النقل حسب الحلقة في الصفحة الحالية</h4>
@@ -139,6 +145,23 @@
           <div class="season-report-speed" id="analyticsReportSpeed" aria-label="مخطط قياسات سرعة الأجزاء"></div>
           <p class="hint">القياس يشمل قراءة المصدر والرفع والتحقق والحفظ؛ لا يمثل سرعة الإنترنت اللحظية.</p></div>
       </div>
+      <div class="season-report-controls" aria-label="تصفية حلقات الصفحة الحالية">
+        <label for="analyticsReportSearch">بحث في الحلقات المعروضة
+          <input type="search" id="analyticsReportSearch" autocomplete="off" placeholder="رقم الحلقة أو عنوانها">
+        </label>
+        <label for="analyticsReportFilter">فلترة حسب الحالة
+          <select id="analyticsReportFilter">
+            <option value="all">جميع الحالات</option>
+            <option value="queued">بانتظار النقل</option>
+            <option value="running">جارٍ النقل</option>
+            <option value="paused">متوقفة</option>
+            <option value="verified">مكتملة</option>
+            <option value="failed">فاشلة</option>
+          </select>
+        </label>
+        <button id="analyticsReportRefresh" type="button">تحديث التقرير الآن</button>
+      </div>
+      <p class="hint" id="analyticsReportFilterScope">البحث والفلترة للحلقات الخمسين المعروضة في الصفحة الحالية فقط، وليس جميع حلقات المسلسل.</p>
       <div class="analytics-scroll">
         <table class="analytics-table">
           <thead><tr><th>الحلقة</th><th>الحالة</th><th>الإنجاز</th><th>المحفوظ</th><th>آخر تحديث</th><th>الخطأ</th><th>الأولوية</th></tr></thead>
