@@ -14,7 +14,7 @@ import {inspectEpisodeCandidates} from './episode-candidates.mjs';
 import {inspectEpisodeSize} from './episode-probe.mjs';
 import {runOneEpisodeChunk,episodeCopyReadiness} from './episode-chunk-pilot.mjs';
 import {createSeasonQueueStore,createSeasonQueueController,seasonQueueReadiness,validateSeasonSelection,seasonQueueSummary} from './season-queue.mjs';
-import {inspectLicensedSeries,inspectLicensedSeriesEpisodes} from './series-catalog.mjs';
+import {inspectLicensedSeries,inspectLicensedSeriesEpisodes,inspectLicensedPilotSeries} from './series-catalog.mjs';
 
 const FIXTURE_SOURCE='00000000-0000-4000-8000-000000000000';
 const FIXTURE_SIZE=8*1024*1024;
@@ -81,6 +81,7 @@ export function createContentHubServer({storage,lease,
  episodeSizeInspector=inspectEpisodeSize,
  episodeChunkRunner=runOneEpisodeChunk,seasonQueueStore=null,
  seriesCatalogInspector=inspectLicensedSeries,
+ pilotSeriesInspector=inspectLicensedPilotSeries,
  seriesEpisodesInspector=inspectLicensedSeriesEpisodes}={}){
  if(!storage||!lease)throw Error('content_hub_private_dependencies_required');
  const started=Date.now();
@@ -196,6 +197,12 @@ export function createContentHubServer({storage,lease,
      confirmedAt:proof.confirmedAt,runId});
    }catch{return json(res,503,{
     ok:false,code:'episode_browser_confirmation_failed'})}
+  }
+  if(path==='/internal/series/pilot'&&req.method==='GET'){
+   if(String(req.url||'').includes('?'))
+    return json(res,400,{ok:false,code:'pilot_series_query_not_allowed'});
+   const data=await pilotSeriesInspector({env:pilotEnv});
+   return json(res,data.ok?200:503,data);
   }
   if(path==='/internal/series/candidates'&&req.method==='GET'){
    if(String(req.url||'').includes('?'))
