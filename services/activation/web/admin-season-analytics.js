@@ -103,6 +103,30 @@ function renderFailures(rows){
    number(i.count)+' حلقة · '+i.explanation)):
   [make('p','muted','لا توجد حلقات فاشلة حاليًا.')]));
 }
+function renderEpisodeStates(rows){
+ const body=$('analyticsEpisodeStates');
+ const items=Array.isArray(rows)?rows:[];
+ if(!items.length){
+  const tr=make('tr'),td=make('td','',
+   'لا توجد حلقات في قائمة انتظار المواسم حتى الآن.');
+  td.colSpan=6;tr.append(td);body.replaceChildren(tr);return;
+ }
+ const labels={queued:'بانتظار النقل',running:'قيد النقل',
+  paused:'متوقفة مؤقتًا',verified:'مكتملة ومتحقق منها',
+  failed:'فاشلة',unknown:'غير محدد'};
+ body.replaceChildren(...items.map(item=>{
+  const tr=make('tr');
+  const info=[date(item.updatedAt),
+   item.seasonKey+' · '+number(item.episodeNumber)+
+    (item.title?' · '+item.title:''),
+   labels[item.state]||'غير معروف',
+   number(item.percent)+'%',
+   fmt(item.storedBytes)+' / '+fmt(item.expectedBytes),
+   item.state==='failed'?(item.code||'غير معروف'):'—'];
+  for(const value of info)tr.append(make('td','',value));
+  return tr;
+ }));
+}
 function renderHistory(rows){
  const body=$('analyticsHistory');
  const items=Array.isArray(rows)?rows:[];
@@ -143,6 +167,7 @@ async function reloadAnalytics(){
   renderDiagnostics(data.diagnostics);
   renderFailures(data.failureReasons);
   renderHistory(data.recentEvents);
+  renderEpisodeStates(data.recentEpisodeStates);
   const from=data.recordedFrom?date(data.recordedFrom):'لم يبدأ القياس بعد';
   $('analyticsScope').textContent=
    'التخزين المسجل '+fmt(data.totals.storedBytes)+
