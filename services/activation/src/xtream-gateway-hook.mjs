@@ -1915,10 +1915,9 @@ async function handlePrivateContentHubSource(req,res,url){
    const gatewayId=Number(episodeProbe[1]);
    if(!Number.isSafeInteger(gatewayId))return json(res,400,{
     ok:false,code:'content_hub_episode_id_invalid'});
-   const allowed=await findLicensedEpisodeCandidates(pool,{limit:8});
-   const candidate=allowed.find(x=>x.gatewayId===gatewayId);
+   const candidate=await findLicensedEpisodeCandidateById(pool,gatewayId);
    if(!candidate)return json(res,403,{
-    ok:false,code:'content_hub_episode_not_in_review_list'});
+    ok:false,code:'content_hub_episode_not_licensed'});
    const row=await episodeByGatewayId(gatewayId,candidate.sourceId);
    if(!row||String(row.source_episode_id)!==candidate.mediaId||
       String(row.series_source_id||'').length<1||
