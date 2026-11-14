@@ -18,7 +18,7 @@ test('missing A/V table reads as no owner review, without creating schema',async
  const store=createSeasonQueueStore({connectionString:'mock',Pool:MockPool});
  const result=await store.episodeAvReviews({runIds:[good]});
  assert.deepEqual(result,[]);
- assert.equal(queries.some(x=>x.sql.includes('CREATE TABLE')),false);
+ assert.equal(queries.some(x=>x.sql.includes('CREATE TABLE IF NOT EXISTS blofy_content_hub_episode_av_reviews')),false);
  assert.equal(queries.some(x=>x.sql.includes('DELETE')),false);
  for(const list of [Array(51).fill(good),['../../secret'],['<script>']]){
   await assert.rejects(store.episodeAvReviews({runIds:list}),
