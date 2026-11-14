@@ -49,10 +49,23 @@ export function createXtreamMirrorDiscoveryStore(db){
     license_reviewed_at TIMESTAMPTZ,
     mapping_conflict BOOLEAN NOT NULL DEFAULT FALSE,
     mapping_conflict_at TIMESTAMPTZ,
+    rights_ref_sha256 CHAR(64),
+    size_probe_at TIMESTAMPTZ,
+    size_probe_day DATE,
+    source_validator_sha256 CHAR(64),
+    size_probe_error TEXT,
     first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY(source_id,media_kind,gateway_id)
    )`);
+   // Idempotent upgrades for databases that already used the original
+   // metadata-only discovery queue. Missing proof fields are never inferred.
+   await db.query(`ALTER TABLE blofy_xtream_mirror_items
+     ADD COLUMN IF NOT EXISTS rights_ref_sha256 CHAR(64),
+     ADD COLUMN IF NOT EXISTS size_probe_at TIMESTAMPTZ,
+     ADD COLUMN IF NOT EXISTS size_probe_day DATE,
+     ADD COLUMN IF NOT EXISTS source_validator_sha256 CHAR(64),
+     ADD COLUMN IF NOT EXISTS size_probe_error TEXT`);
    await db.query(`CREATE INDEX IF NOT EXISTS idx_xtream_mirror_queue_state
     ON blofy_xtream_mirror_items(source_id,media_kind,state,gateway_id)`);
    await db.query(`CREATE TABLE IF NOT EXISTS blofy_xtream_mirror_discovery (
@@ -216,7 +229,8 @@ export function createXtreamMirrorDiscoveryStore(db){
    throw Error('mirror_discovery_queue_query_invalid');
   await ensure();
   const result=await db.query(`SELECT gateway_id,media_id,extension,title,
-    state,mapping_conflict,expected_bytes,first_seen_at,last_seen_at
+    state,mapping_conflict,rights_ref_sha256,license_reviewed_at,
+    size_probe_at,size_probe_error,expected_bytes,first_seen_at,last_seen_at
     FROM blofy_xtream_mirror_items
     WHERE source_id=$1 AND media_kind=$2 AND gateway_id>$3
       AND ($4::text='all' OR state=$4)
@@ -227,7 +241,11 @@ export function createXtreamMirrorDiscoveryStore(db){
     gatewayId:Number(x.gateway_id),mediaId:String(x.media_id).slice(0,128),
     extension:String(x.extension),title:String(x.title||'').slice(0,220),
     state:String(x.state),mappingConflict:x.mapping_conflict===true,
-    sizeVerified:false,
+    operatorAttestedStorageRights:/^[a-f0-9]{64}$/.test(
+      String(x.rights_ref_sha256||'').trim())&&Boolean(x.license_reviewed_at),
+    lastProbeError:String(x.size_probe_error||'').slice(0,100)||null,
+    sizeProbedAt:x.size_probe_at||null,
+    sizeVerified:Boolean(x.size_probe_at),
     expectedBytes:Number.isSafeInteger(Number(x.expected_bytes))&&
       x.expected_bytes!==null?Number(x.expected_bytes):null,
     discoveredAt:x.first_seen_at||null,lastSeenAt:x.last_seen_at||null
