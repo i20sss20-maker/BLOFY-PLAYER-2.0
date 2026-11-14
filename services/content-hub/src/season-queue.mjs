@@ -21,6 +21,9 @@ const safeStatus=row=>{
  const total=Number(row.expected_bytes||0);
  const bytes=Math.max(0,Math.min(total,Number(row.bytes_copied||0)));
  const state=row.episode_state==='verified'?'verified':row.state;
+ const checkpointAgeSeconds=Number(row.checkpoint_age_seconds);
+ const age=Number.isFinite(checkpointAgeSeconds)?
+  Math.max(0,Math.floor(checkpointAgeSeconds)):null;
  return {runId:row.run_id,seasonKey:row.season_key,
   episodeNumber:Number(row.episode_number),title:row.title,
   gatewayId:Number(row.gateway_id),state,expectedBytes:total,
@@ -29,7 +32,9 @@ const safeStatus=row=>{
   retryable:row.state==='failed'&&Number(row.manual_retries||0)<2&&
     ['episode_retryable_error','episode_source_busy'].includes(row.code),
   code:row.code||null,
-  createdAt:row.created_at,updatedAt:row.updated_at};
+  createdAt:row.created_at,updatedAt:row.updated_at,
+  checkpointAt:row.checkpoint_at||null,checkpointAgeSeconds:age,
+  checkpointSource:'postgres_verified_chunk'};
 };
 export function seasonQueueSummary(rows){
  const seasons=new Map();
@@ -357,6 +362,9 @@ export function createSeasonQueueStore({
    const args=state==='all'||state==='pending'?[n,offset]:[n,offset,state];
    const result=await pool.query([
     'SELECT q.*,COALESCE(r.bytes_copied,0) AS bytes_copied,',
+    'GREATEST(q.updated_at,COALESCE(r.updated_at,q.updated_at)) AS checkpoint_at,',
+    'EXTRACT(EPOCH FROM (NOW()-GREATEST(q.updated_at,',
+    'COALESCE(r.updated_at,q.updated_at)))) AS checkpoint_age_seconds,',
     'r.state AS episode_state FROM blofy_content_hub_season_queue q',
     'LEFT JOIN blofy_content_hub_episode_runs r ON r.run_id=q.run_id',
     condition,
@@ -370,7 +378,9 @@ export function createSeasonQueueStore({
       'SELECT * FROM blofy_content_hub_season_queue',fallback,
       'ORDER BY created_at,run_id LIMIT $1 OFFSET $2'
      ].filter(Boolean).join(' '),args);
-    return {rows:q.rows.map(row=>({...row,bytes_copied:0,episode_state:null}))};
+    return {rows:q.rows.map(row=>({...row,bytes_copied:0,
+      checkpoint_at:row.updated_at,checkpoint_age_seconds:null,
+      episode_state:null}))};
    });
    return (result.rows||[]).map(safeStatus);
   },
