@@ -187,6 +187,20 @@ export function createSeasonQueueStore({
    }catch(e){await client.query('ROLLBACK').catch(()=>{});throw e}
    finally{client.release()}
   },
+  async ownsVerifiedRun(runId){
+   if(!RUN.test(String(runId||'')))return false;
+   await ensure();
+   const result=await pool.query([
+    'SELECT 1 FROM blofy_content_hub_season_queue q',
+    'INNER JOIN blofy_content_hub_episode_runs r ON r.run_id=q.run_id',
+    "WHERE q.run_id=$1 AND q.state='verified' AND r.state='verified'",
+    'LIMIT 1'
+   ].join(' '),[runId]).catch(error=>{
+    if(error?.code==='42P01')return {rows:[]};
+    throw error;
+   });
+   return result.rows?.length===1;
+  },
   async list({limit=100}={}){
    await ensure();
    const n=Math.max(1,Math.min(200,Number(limit)||100));
