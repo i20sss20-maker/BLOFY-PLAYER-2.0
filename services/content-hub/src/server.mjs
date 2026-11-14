@@ -245,10 +245,20 @@ export function createContentHubServer({storage,lease,
    try{
     const [stats,audits]=await Promise.all([
      seasonQueueStore.healthStats(),seasonQueueStore.recentAudits()]);
-    return json(res,200,summarizeSeasonHealth({
-     stats,audits,worker:seasonQueue?.status()||{},
-     storageSoftLimitBytes:pilotEnv.BLOFY_CONTENT_HUB_STORAGE_SOFT_LIMIT_BYTES
-    }));
+    const pilotRunId=String(pilotEnv.BLOFY_CONTENT_HUB_EPISODE_RUN_ID||'');
+    let verifiedPilotRunId=null;
+    if(/^[A-Za-z0-9_-]{8,80}$/.test(pilotRunId)){
+     try{
+      if(await lease.getVerifiedEpisodeObject?.(pilotRunId))
+       verifiedPilotRunId=pilotRunId;
+     }catch{}
+    }
+    return json(res,200,{
+     ...summarizeSeasonHealth({
+      stats,audits,worker:seasonQueue?.status()||{},
+      storageSoftLimitBytes:pilotEnv.BLOFY_CONTENT_HUB_STORAGE_SOFT_LIMIT_BYTES
+     }),verifiedPilotRunId});
+
    }catch{return json(res,503,{ok:false,code:'season_health_database_unavailable'})}
   }
   // Explicit operator action only: <=3 S3 objects (<=24MiB total).
