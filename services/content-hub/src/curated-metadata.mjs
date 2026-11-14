@@ -83,73 +83,18 @@ export function createContentCatalogStore({connectionString,Pool=pg.Pool}={}){
    if(!safeCode(key))return false;
    return persisted(key);
   },
-  // Recent stored episode names, never a remote source lookup. These
-  // are unreliable hints and must not be treated as verified series names.
+  // Hint names come exclusively from stored episode queue titles.
+  // None of these is a verified series title.
   async episodeTitleHints(key){
    const series=SERIES.exec(String(key||''));
    if(!series)return [];
    const q=await pool.query([
     'SELECT title FROM blofy_content_hub_season_queue',
-    "WHERE regexp_replace(season_key,'_s[0-9]+
-   if(!Array.isArray(keys)||keys.length>META_KEYS||
-      keys.some(x=>!safeCode(x)))throw Error('catalog_keys_invalid');
-   if(!keys.length)return [];
-   const unique=[...new Set(keys)];
-   const rows=await pool.query([
-    'SELECT media_key,title,release_year,genre,overview,poster_path,updated_at',
-    'FROM blofy_content_hub_curated_metadata WHERE media_key=ANY($1::text[])',
-    'ORDER BY media_key LIMIT $2'
-   ].join(' '),[unique,META_KEYS]).catch(e=>{
-    if(e?.code==='42P01')return {rows:[]};
-    throw e;
-   });
-   return (rows.rows||[]).map(toItem);
-  },
-  async searchSeriesIds(query,{limit=120}={}){
-   if(typeof query!=='string'||query.length>80||
-      /[\x00-\x1f\x7f]/.test(query))throw Error('catalog_search_invalid');
-   if(!query.trim())return {ids:[],limited:false};
-   const n=Math.min(120,Math.max(1,Math.floor(Number(limit)||120)));
-   const r=await pool.query([
-    'SELECT media_key FROM blofy_content_hub_curated_metadata',
-    "WHERE media_key LIKE 'series:%' AND",
-    'POSITION(LOWER($1) IN LOWER(title))>0',
-    'ORDER BY media_key LIMIT $2'
-   ].join(' '),[query.trim(),n+1]).catch(e=>{
-    if(e?.code==='42P01')return {rows:[]};
-    throw e;
-   });
-   const rows=r.rows||[];
-   return {ids:rows.slice(0,n).map(x=>SERIES.exec(x.media_key)?.[1])
-    .filter(Boolean),limited:rows.length>n};
-  },
-  async save(input){
-   const item=validateCuratedMetadata(input);
-   if(!await persisted(item.key))
-    return {ok:false,code:'curated_media_not_registered'};
-   await ensure(); // schema creation occurs only after explicit owner save.
-   const r=await pool.query([
-    'INSERT INTO blofy_content_hub_curated_metadata',
-    '(media_key,title,release_year,genre,overview,poster_path)',
-    'VALUES($1,$2,$3,$4,$5,$6)',
-    'ON CONFLICT(media_key) DO UPDATE SET',
-    'title=EXCLUDED.title,release_year=EXCLUDED.release_year,',
-    'genre=EXCLUDED.genre,overview=EXCLUDED.overview,',
-    'poster_path=EXCLUDED.poster_path,updated_at=NOW()',
-    'RETURNING media_key,title,release_year,genre,overview,poster_path,updated_at'
-   ].join(' '),[item.key,item.title,item.year,item.genre,
-     item.overview,item.posterPath]);
-   return {ok:true,metadata:toItem(r.rows[0]),automaticDownload:false,
-    customerCutover:false,providerMediaRequests:0,storageRequests:0};
-  },
-  async close(){await pool.end()}
- };
-}
-,'')=$1",
+    "WHERE regexp_replace(season_key,'_s[0-9]+$','')=$1",
     'ORDER BY updated_at DESC LIMIT 25'
-   ].join(' '),['series_'+series[1]]).catch(e=>{
-    if(e?.code==='42P01')return {rows:[]};
-    throw e;
+   ].join(' '),['series_'+series[1]]).catch(error=>{
+    if(error?.code==='42P01')return {rows:[]};
+    throw error;
    });
    return (q.rows||[]).map(row=>String(row.title||''));
   },
