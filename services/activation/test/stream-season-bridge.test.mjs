@@ -221,3 +221,28 @@ test('signed page 2 route is fixed read-only; unsafe numbers and query strings d
  assert.equal(denied.status,400);
  assert.equal(target.calls,1);
 });
+
+
+test('signed filtered pages preserve narrow enum and protect total count',async()=>{
+ const path=NS+'/queue/status/failed/page/3';
+ const stubFetch=stub('/internal/seasons/queue/status/failed/page/3',{
+  data:{ok:true,readOnly:true,page:{
+   number:3,state:'failed',pageSize:50,totalEpisodes:109,pendingEpisodes:8},episodes:[]}});
+ assert.equal(isStreamSeasonBridgePath(path),true);
+ for(const denied of [
+  NS+'/queue/status/invalid/page/3',
+  NS+'/queue/status/failed/page/20001',
+  NS+'/queue/status/failed/page/03',
+  NS+'/queue/status/failed/page/3?secret=1'
+ ])assert.equal(isStreamSeasonBridgePath(denied),false);
+ const ok=await requestStreamSeasonBridge({path,operatorToken:secret,
+  fetchImpl:stubFetch.fetchImpl});
+ assert.equal(ok.status,200);
+ assert.equal(ok.data.page.pendingEpisodes,8);
+ assert.equal(stubFetch.received.init.method,'GET');
+ assert.equal(stubFetch.received.init.body,undefined);
+ const denied=await requestStreamSeasonBridge({path,operatorToken:secret,
+  method:'POST',body:{runId:'x'},fetchImpl:stubFetch.fetchImpl});
+ assert.equal(denied.status,400);
+ assert.equal(stubFetch.calls,1);
+});
