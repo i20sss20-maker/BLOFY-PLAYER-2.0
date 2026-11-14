@@ -18,7 +18,7 @@ function stub(expectedPath,{status=200,data={ok:true}}={}){
 }
 test('season bridge permits only explicit finite authenticated actions',async()=>{
  for(const name of ['series','pilot','queue','confirmation','probe',
-  'enqueue','start','pause','confirm','series/31']){
+  'enqueue','start','pause','confirm','health','audit','series/31']){
   assert.equal(isStreamSeasonBridgePath(NS+'/'+name),true,name);
  }
  for(const bad of ['..','series/../../../xx','series/0','arbitrary',
@@ -34,6 +34,7 @@ test('read licensed series, season detail and queue via private token',async()=>
   ['pilot','/internal/series/pilot'],
   ['series/31','/internal/series/episodes/31'],
   ['queue','/internal/seasons/queue'],
+  ['health','/internal/seasons/health'],
   ['confirmation','/internal/episodes/playback/confirmation']
  ];
  for(const [name,target] of specs){
@@ -107,4 +108,25 @@ test('private bridge rejects redirects, HTML and large bodies',async()=>{
    operatorToken:secret,fetchImpl:async()=>reply});
   assert.equal(result.status,503);
  }
+});
+
+test('manual private storage SHA audit requires exact owner permission and run ID',async()=>{
+ const runId='saleh_episode_127434_20261114';
+ const audit=stub('/internal/seasons/audit',{status:200,data:{
+  ok:true,code:'season_storage_sample_verified',
+  sampledOnly:true,checkedParts:3,totalParts:173,checkedBytes:25165824}});
+ const body={confirmed:true,runId};
+ const bad=await requestStreamSeasonBridge({path:NS+'/audit',
+  method:'POST',body:{confirmed:false,runId},
+  operatorToken:secret,fetchImpl:audit.fetchImpl});
+ assert.equal(bad.status,400);
+ assert.equal(audit.calls,0);
+ const response=await requestStreamSeasonBridge({path:NS+'/audit',
+  method:'POST',body,operatorToken:secret,fetchImpl:audit.fetchImpl});
+ assert.equal(response.status,200);
+ assert.equal(response.data.sampledOnly,true);
+ assert.equal(audit.received.init.headers['x-blofy-season-confirm'],
+  'audit-private-verified-chunks');
+ assert.equal(audit.received.init.headers['content-type'],'application/json');
+ assert.deepEqual(JSON.parse(audit.received.init.body),body);
 });
