@@ -219,7 +219,8 @@ http.createServer=function withContentHubAdmin(listener){
   if(req.method==='GET'&&['/admin-content-hub.css',
     '/admin-content-hub.js','/admin-ops-overview.js','/admin-library.js',
      '/admin-library-metadata.js','/admin-library-cinema.js',
-     '/admin-library-detail.js','/admin-season-analytics.js',
+     '/admin-library-detail.js','/admin-season-readiness.js',
+     '/admin-season-analytics.js',
      '/admin-season-detail.js','/admin-season-attention.js'].includes(path)){
    try{
     const file=path.slice(1);
@@ -319,6 +320,19 @@ http.createServer=function withContentHubAdmin(listener){
      signal:AbortSignal.timeout(8000)});
     if(response.status!==200)return json(res,503,{
      ok:false,code:'season_queue_unavailable'});
+    return json(res,200,await safeReadJson(response));
+   }
+   const readinessRoute=
+    /^\/api\/v1\/admin\/content-hub\/seasons\/readiness\/page\/([1-9][0-9]{0,3})$/.exec(path);
+   if(readinessRoute&&req.method==='GET'){
+    if(req.headers['x-blofy-owner-action']!=='review-private-seasons')
+     return json(res,403,{ok:false,code:'season_readiness_owner_only'});
+    const response=await request('/internal/seasons/readiness/page/'+
+     readinessRoute[1],{
+     signal:AbortSignal.timeout(11000),
+     extraHeaders:{'x-blofy-owner-action':'review-private-seasons'}});
+    if(response.status!==200)return json(res,503,{
+     ok:false,code:'season_readiness_unavailable'});
     return json(res,200,await safeReadJson(response));
    }
    const reportRoute=/^\/api\/v1\/admin\/content-hub\/seasons\/report\/([a-z0-9][a-z0-9_-]{2,63})\/page\/([1-9][0-9]{0,4})$/.exec(path);

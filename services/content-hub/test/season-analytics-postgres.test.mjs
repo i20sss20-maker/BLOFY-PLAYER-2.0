@@ -262,6 +262,20 @@ test('real PostgreSQL executes reporting and chunk-timing queries safely',{
   assert.equal(confirmedAv.videoOwnerConfirmed,true);
   assert.equal(confirmedAv.audioOwnerConfirmed,true);
   assert.equal(confirmedAv.automaticVerification,false);
+  // Global queue audit covers all registered seasons, not a 50-row UI page.
+  const readiness=await store.readinessAudit({page:1});
+  assert.equal(readiness.readOnly,true);
+  assert.equal(readiness.databaseSnapshotOnly,true);
+  assert.equal(readiness.manifestStateAvailable,true);
+  assert.equal(readiness.ownerReviewSchemaAvailable,true);
+  assert.equal(readiness.global.ownerAvReviewedEpisodes,1);
+  assert.equal(readiness.global.verifiedAwaitingOwnerAv,0);
+  assert.ok(readiness.global.registeredEpisodes>=6);
+  assert.ok(readiness.global.registeredSeasons>=3);
+  assert.equal(readiness.seasons.find(x=>
+   x.seasonKey==='series_987654321_s02').ownerAvReviewedEpisodes,1);
+  assert.equal(readiness.providerMediaRequests,0);
+  assert.equal(readiness.storageRequests,0);
   const repeatedAv=await store.confirmEpisodeAv({runId:avRun});
   assert.equal(repeatedAv.code,'episode_av_owner_review_already_saved');
   assert.equal(String(repeatedAv.confirmedAt),String(confirmedAv.confirmedAt));
@@ -279,6 +293,18 @@ test('real PostgreSQL executes reporting and chunk-timing queries safely',{
    "UPDATE blofy_content_hub_season_queue SET state='paused' WHERE run_id=$1",
    [avRun]);
   assert.equal((await store.episodeAvReviews({runIds:[avRun]})).length,0);
+  const afterUnverify=await store.readinessAudit({page:1});
+  assert.equal(afterUnverify.global.ownerAvReviewedEpisodes,0);
+  // Re-verification after an older A/V review must invalidate that review;
+  // stale human approval must never become proof for new media bytes.
+  await pool.query(
+   "UPDATE blofy_content_hub_season_queue SET state='verified',updated_at=NOW()+INTERVAL '1 minute' WHERE run_id=$1",
+   [avRun]);
+  assert.equal((await store.episodeAvReviews({runIds:[avRun]})).length,0);
+  const stale=await store.readinessAudit({page:1});
+  assert.equal(stale.global.storageVerifiedEpisodes,1);
+  assert.equal(stale.global.ownerAvReviewedEpisodes,0);
+  assert.equal(stale.global.verifiedAwaitingOwnerAv,1);
   assert.equal((await catalog.find(['series:987654321']))[0].title,
    'Curated Neon Voyage');
   assert.equal((await catalog.save({...metadata,
