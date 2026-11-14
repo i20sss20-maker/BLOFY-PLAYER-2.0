@@ -130,7 +130,7 @@ test('private readiness route rejects missing bearer, query tricks, no owner hea
   assert.equal((await fetch(url,{headers:auth})).status,403);
   assert.equal((await fetch(url+'?url=https://evil.example',{headers})).status,403);
   assert.equal((await fetch(url,{method:'POST',headers})).status,404);
-  assert.equal((await fetch(url.replace(/\\/page\\/1$/, '/page/000'),{headers})).status,404);
+  assert.equal((await fetch(url.replace(/\/page\/1$/, '/page/000'),{headers})).status,404);
   assert.equal(calls.length,0);
   const response=await fetch(url,{headers});
   assert.equal(response.status,200);
