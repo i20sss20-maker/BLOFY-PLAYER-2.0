@@ -62,6 +62,7 @@ import {contentHubBridgeAuth,parseContentHubClientRange,
   validContentHubResponse,approvedContentHubMedia}
   from './xtream-content-hub-private-range.mjs';
 import {findLicensedEpisodeCandidates} from './xtream-content-hub-episode-candidates.mjs';
+import {findRunningApprovedSeasonEpisode} from './xtream-content-hub-season-approval.mjs';
 import {probePrivateEpisodeRange} from './xtream-content-hub-episode-probe.mjs';
 import { readXtreamGatewayJsonResponse } from './xtream-gateway-response.mjs';
 import {configuredXtreamPublicOrigin} from './xtream-public-origin.mjs';
@@ -1918,13 +1919,19 @@ async function handlePrivateContentHubSource(req,res,url){
  if(isEpisode){
   id=Number((episodeRange||episodeDescribe)[1]);
   const permitted=Number(process.env.BLOFY_CONTENT_HUB_ALLOWED_EPISODE_GATEWAY_ID);
-  if(!Number.isSafeInteger(id)||!Number.isSafeInteger(permitted)||id!==permitted||
-    url.search)return json(res,403,{ok:false,
-    code:'content_hub_episode_not_approved'});
-  const candidates=await findLicensedEpisodeCandidates(pool,{limit:8});
-  episodeCandidate=candidates.find(item=>item.gatewayId===id)||null;
+  if(!Number.isSafeInteger(id)||id<1||url.search)
+   return json(res,403,{ok:false,code:'content_hub_episode_not_approved'});
+  if(Number.isSafeInteger(permitted)&&id===permitted){
+   const candidates=await findLicensedEpisodeCandidates(pool,{limit:8});
+   episodeCandidate=candidates.find(item=>item.gatewayId===id)||null;
+  }
+  if(!episodeCandidate){
+   episodeCandidate=await findRunningApprovedSeasonEpisode(pool,{
+    gatewayId:id,enabled:
+      process.env.BLOFY_CONTENT_HUB_SEASON_QUEUE_BRIDGE_ENABLED==='1'});
+  }
   if(!episodeCandidate)return json(res,403,{ok:false,
-   code:'content_hub_episode_not_in_review_list'});
+   code:'content_hub_episode_not_approved'});
   row=await episodeByGatewayId(id,episodeCandidate.sourceId);
   if(!row||row.server_enabled!==true||
     row.server_id!==episodeCandidate.sourceId||
