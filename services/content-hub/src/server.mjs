@@ -15,6 +15,7 @@ import {inspectEpisodeSize} from './episode-probe.mjs';
 import {runOneEpisodeChunk,episodeCopyReadiness} from './episode-chunk-pilot.mjs';
 import {createSeasonQueueStore,createSeasonQueueController,seasonQueueReadiness,validateSeasonSelection,seasonQueueSummary} from './season-queue.mjs';
 import {inspectLicensedSeries,inspectLicensedSeriesEpisodes,inspectLicensedPilotSeries} from './series-catalog.mjs';
+import {summarizeSeasonHealth,auditSeasonEpisodeSample} from './season-health.mjs';
 
 const FIXTURE_SOURCE='00000000-0000-4000-8000-000000000000';
 const FIXTURE_SIZE=8*1024*1024;
@@ -92,6 +93,7 @@ export function createContentHubServer({storage,lease,
  let previewBuilding=false,previewCache=null,previewThrottleUntil=0;
  let episodeProbeBusy=false,episodeProbeAt=0,lastEpisodeProbe=null;
  let episodeCopyBusy=false,episodeCopyAbort=null,lastEpisodeCopy=null;
+ let seasonStorageAuditBusy=false,seasonStorageAuditAt=0;
  const copy=createContinuousCopyController({
   runBatch:({signal})=>batchRunner({storage,lease,env:pilotEnv,signal,logger}),
   readiness:()=>chunkedBatchReadiness(pilotEnv),logger
@@ -233,6 +235,69 @@ export function createContentHubServer({storage,lease,
      worker:seasonQueue.status(),seasons:seasonQueueSummary(episodes),
      episodes});
    }catch{return json(res,503,{ok:false,code:'season_queue_read_failed'})}
+  }
+  // Read-only exact accounting, no S3 list and no upstream source calls.
+  if(path==='/internal/seasons/health'&&req.method==='GET'){
+   if(String(req.url||'').includes('?'))
+    return json(res,400,{ok:false,code:'season_health_query_not_allowed'});
+   if(!seasonQueueStore?.healthStats||!seasonQueueStore?.recentAudits)
+    return json(res,503,{ok:false,code:'season_health_unavailable'});
+   try{
+    const [stats,audits]=await Promise.all([
+     seasonQueueStore.healthStats(),seasonQueueStore.recentAudits()]);
+    return json(res,200,summarizeSeasonHealth({
+     stats,audits,worker:seasonQueue?.status()||{},
+     storageSoftLimitBytes:pilotEnv.BLOFY_CONTENT_HUB_STORAGE_SOFT_LIMIT_BYTES
+    }));
+   }catch{return json(res,503,{ok:false,code:'season_health_database_unavailable'})}
+  }
+  // Explicit operator action only: <=3 S3 objects (<=24MiB total).
+  // Verifies against recorded SHA-256, not a generic HEAD or assumed S3
+  // capacity. Never reads source Xtream or starts copying content.
+  if(path==='/internal/seasons/audit'&&req.method==='POST'){
+   if(req.headers['x-blofy-season-confirm']!=='audit-private-verified-chunks'||
+      String(req.url||'').includes('?'))
+    return json(res,403,{ok:false,code:'season_audit_owner_confirmation_required'});
+   if(!seasonQueueStore?.ownsVerifiedRun||!seasonQueueStore?.saveAudit)
+    return json(res,503,{ok:false,code:'season_audit_unavailable'});
+   if(seasonStorageAuditBusy)return json(res,429,{
+    ok:false,code:'season_storage_audit_busy'});
+   if(Date.now()-seasonStorageAuditAt<60000)return json(res,429,{
+    ok:false,code:'season_storage_audit_cooldown'});
+   let payload;
+   try{payload=await readSeasonJson(req)}
+   catch{return json(res,400,{ok:false,code:'season_storage_audit_bad_json'})}
+   const runId=String(payload?.runId||'');
+   if(payload?.confirmed!==true||
+      !/^[A-Za-z0-9_-]{8,80}$/.test(runId))
+    return json(res,400,{ok:false,code:'season_storage_audit_invalid_selection'});
+   const pilotRunId=String(pilotEnv.BLOFY_CONTENT_HUB_EPISODE_RUN_ID||'');
+   let allowed=false;
+   try{
+    allowed=(runId===pilotRunId&&pilotRunId.length>=8)||
+      await seasonQueueStore.ownsVerifiedRun(runId);
+   }catch{return json(res,503,{ok:false,code:'season_storage_audit_lookup_failed'})}
+   if(!allowed)return json(res,403,{ok:false,
+    code:'season_storage_audit_run_not_approved'});
+   seasonStorageAuditBusy=true;seasonStorageAuditAt=Date.now();
+   try{
+    const result=await auditSeasonEpisodeSample({
+     runId,lease,storage,signal:AbortSignal.timeout(65000),logger});
+    if([
+     'season_storage_sample_verified','season_storage_checksum_mismatch',
+     'season_storage_read_unavailable','season_storage_manifest_unavailable'
+    ].includes(result.code)){
+     await seasonQueueStore.saveAudit(runId,{
+      code:result.code,checkedParts:result.checkedParts||0,
+      totalParts:result.totalParts||0,checkedBytes:result.checkedBytes||0
+     });
+    }
+    return json(res,result.ok?200:409,{
+     ...result,privateOnly:true,customerCutover:false,
+     runId,operatorRequested:true});
+   }catch{return json(res,503,{
+    ok:false,code:'season_storage_audit_unavailable'})}
+   finally{seasonStorageAuditBusy=false}
   }
   if(path==='/internal/seasons/enqueue'&&req.method==='POST'){
    if(!seasonQueueStore)return json(res,503,{
