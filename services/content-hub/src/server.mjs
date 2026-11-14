@@ -222,6 +222,29 @@ export function createContentHubServer({storage,lease,
     seriesGatewayId:Number(seriesInfoRoute[1]),env:pilotEnv});
    return json(res,data.ok?200:503,data);
   }
+  // Exact read-only pagination. Fixed route, no query parameters.
+  // Each response only includes 50 individually licensed episode rows;
+  // page summaries describe visible rows, while health has global counts.
+  const seasonPageRoute=/^\\/internal\\/seasons\\/queue\\/page\\/([1-9][0-9]{0,4})$/.exec(path);
+  if(seasonPageRoute&&req.method==='GET'){
+   if(String(req.url||'').includes('?'))
+    return json(res,400,{ok:false,code:'season_queue_page_query_denied'});
+   if(!seasonQueueStore?.listPage||!seasonQueue)
+    return json(res,503,{ok:false,code:'season_queue_pagination_unavailable'});
+   const number=Number(seasonPageRoute[1]);
+   if(number>20000)return json(res,400,{
+    ok:false,code:'season_queue_page_out_of_range'});
+   try{
+    const result=await seasonQueueStore.listPage({page:number});
+    return json(res,200,{ok:true,privateOnly:true,
+     customerCutover:false,readOnly:true,
+     readiness:seasonQueueReadiness(pilotEnv),
+     worker:seasonQueue.status(),
+     page:result.page,seasons:seasonQueueSummary(result.episodes),
+     episodes:result.episodes});
+   }catch{return json(res,503,{ok:false,
+    code:'season_queue_page_unavailable'})}
+  }
   // Owner-only queue. It accepts listed, individually licensed episodes
   // and cannot alter customer routes or expose the private bucket.
   if(path==='/internal/seasons/queue'&&req.method==='GET'){
