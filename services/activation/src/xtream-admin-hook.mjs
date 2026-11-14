@@ -3189,7 +3189,7 @@ async function unifiedStreamBridge(req,res,url){
             {'x-blofy-canary-confirm':'verified-private'}:
             {'x-blofy-batch-confirm':'approved-8mib-batch'}:{})}
       });
-      if(![200,202,400,409,503].includes(response.status))
+      if(![200,202,400,409,429,503].includes(response.status))
         return json(res,503,{ok:false,code:'hub_private_response_invalid'});
       const raw=await response.text();
       if(Buffer.byteLength(raw)>256000)
