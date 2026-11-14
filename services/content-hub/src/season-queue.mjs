@@ -187,6 +187,76 @@ export function createSeasonQueueStore({
    }catch(e){await client.query('ROLLBACK').catch(()=>{});throw e}
    finally{client.release()}
   },
+  async healthStats(){
+   await ensure();
+   const exists=await pool.query(
+    "SELECT to_regclass('blofy_content_hub_episode_runs') AS table_name");
+   const hasEpisodeTable=Boolean(exists.rows?.[0]?.table_name);
+   const from=hasEpisodeTable?
+    'FROM blofy_content_hub_season_queue q LEFT JOIN blofy_content_hub_episode_runs r ON r.run_id=q.run_id':
+    'FROM blofy_content_hub_season_queue q';
+   const stored=hasEpisodeTable?
+    'COALESCE(r.bytes_copied,0)':'0';
+   const verified=hasEpisodeTable?
+    "q.state='verified' AND r.state='verified'":'FALSE';
+   const rows=await pool.query([
+    'SELECT COUNT(*)::text AS episode_count,',
+    "COUNT(*) FILTER (WHERE q.state='queued')::text AS queued_count,",
+    "COUNT(*) FILTER (WHERE q.state='running')::text AS running_count,",
+    "COUNT(*) FILTER (WHERE q.state='paused')::text AS paused_count,",
+    "COUNT(*) FILTER (WHERE q.state='failed')::text AS failed_count,",
+    "COUNT(*) FILTER (WHERE "+verified+")::text AS verified_count,",
+    'COALESCE(SUM(q.expected_bytes),0)::text AS expected_bytes,',
+    'COALESCE(SUM('+stored+'),0)::text AS stored_bytes,',
+    'COALESCE(SUM(CASE WHEN '+verified+' THEN q.expected_bytes ELSE 0 END),0)::text AS verified_bytes',
+    from
+   ].join(' '));
+   return rows.rows?.[0]||{};
+  },
+  async saveAudit(runId,result){
+   if(!RUN.test(String(runId||''))||
+      !['season_storage_sample_verified',
+        'season_storage_checksum_mismatch',
+        'season_storage_read_unavailable',
+        'season_storage_manifest_unavailable'].includes(result?.code)||
+      !Number.isSafeInteger(result.checkedParts)||result.checkedParts<0||
+      !Number.isSafeInteger(result.totalParts)||result.totalParts<0||
+      !Number.isSafeInteger(result.checkedBytes)||result.checkedBytes<0)
+    throw Error('season_storage_audit_invalid');
+   await pool.query([
+    'CREATE TABLE IF NOT EXISTS blofy_content_hub_season_audits (',
+    'run_id TEXT PRIMARY KEY, code TEXT NOT NULL,',
+    'checked_parts INTEGER NOT NULL, total_parts INTEGER NOT NULL,',
+    'checked_bytes BIGINT NOT NULL,',
+    'checked_at TIMESTAMPTZ NOT NULL DEFAULT NOW())'
+   ].join(' '));
+   await pool.query([
+    'INSERT INTO blofy_content_hub_season_audits',
+    '(run_id,code,checked_parts,total_parts,checked_bytes)',
+    'VALUES ($1,$2,$3,$4,$5) ON CONFLICT (run_id)',
+    'DO UPDATE SET code=$2,checked_parts=$3,total_parts=$4,',
+    'checked_bytes=$5,checked_at=NOW()'
+   ].join(' '),[runId,result.code,result.checkedParts,
+    result.totalParts,result.checkedBytes]);
+  },
+  async recentAudits({limit=20}={}){
+   const n=Math.max(1,Math.min(20,Number(limit)||20));
+   const response=await pool.query([
+    'SELECT run_id,code,checked_parts,total_parts,checked_bytes,',
+    'checked_at FROM blofy_content_hub_season_audits',
+    'ORDER BY checked_at DESC LIMIT $1'
+   ].join(' '),[n]).catch(error=>{
+    if(error?.code==='42P01')return {rows:[]};
+    throw error;
+   });
+   return (response.rows||[]).map(row=>({
+    runId:row.run_id,code:row.code,
+    checkedParts:Number(row.checked_parts),
+    totalParts:Number(row.total_parts),
+    checkedBytes:Number(row.checked_bytes),
+    checkedAt:row.checked_at
+   }));
+  },
   async ownsVerifiedRun(runId){
    if(!RUN.test(String(runId||'')))return false;
    await ensure();
