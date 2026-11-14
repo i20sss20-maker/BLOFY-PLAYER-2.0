@@ -15,7 +15,7 @@ export function seasonStorageSamplePositions(partCount){
 const count=n=>Math.max(0,Math.floor(Number(n)||0));
 const bytes=n=>Math.max(0,Number(n)||0);
 export function summarizeSeasonHealth({
- stats={},audits=[],worker={},storageSoftLimitBytes=null,now=Date.now()
+ stats={},audits=[],unresolvedAudits=null,worker={},storageSoftLimitBytes=null,now=Date.now()
 }={}){
  const episodes=count(stats.episode_count);
  const verified=count(stats.verified_count);
@@ -50,6 +50,11 @@ export function summarizeSeasonHealth({
   recent.push(entry);
   if(entry.code==='season_storage_checksum_mismatch')confirmedFailures++;
   if(entry.code==='season_storage_read_unavailable')unavailable++;
+ }
+ // Full table counts override the recent-20 UI sample for safety alerts.
+ if(unresolvedAudits){
+  confirmedFailures=count(unresolvedAudits.mismatch);
+  unavailable=count(unresolvedAudits.unavailable);
  }
  if(confirmedFailures)alerts.push({
   code:'season_storage_integrity_mismatch',
