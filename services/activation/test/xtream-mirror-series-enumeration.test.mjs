@@ -27,25 +27,18 @@ function fixture({series=[12,14],sourceApproved=true}={}){
     return {rows:id?[{gateway_id:id}]:[]};
    }
    if(sql.includes('UPDATE blofy_xtream_mirror_series_progress')){
-    if(sql.includes('SET last_gateway_id=$2')){
+    if(sql.includes('finished_local_day=$3::date')){
      state.last_gateway_id=args[1];
      state.started_local_day=args[2];
      state.finished_local_day=args[2];
+     state.failed_gateway_id=null;
     }else if(sql.includes('SET failed_gateway_id')){
      state.failed_gateway_id=args[1];
     }else if(sql.includes('SET last_gateway_id=$2')){
      state.last_gateway_id=args[1];
-    }else if(sql.includes('last_gateway_id=$2')){
-     state.last_gateway_id=args[1];
      state.started_local_day=args[3]?args[2]:
       state.started_local_day||args[2];
      state.failed_gateway_id=null;
-    }
-    // For actual successful enumeration, SQL includes SET last_gateway_id.
-    if(sql.includes('last_gateway_id=$2')&&!sql.includes('finished_local_day=$3')){
-      state.last_gateway_id=args[1];
-      state.started_local_day=args[3]?args[2]:
-       state.started_local_day||args[2];
     }
     return {rowCount:1,rows:[]};
    }
