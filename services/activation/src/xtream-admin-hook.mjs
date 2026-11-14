@@ -26,6 +26,7 @@ import {inspectSameXtreamVodInfo} from './xtream-vod-info-direct-source-audit.mj
 import {summarizeSameMovieCandidates} from './xtream-cross-source-coverage-audit.mjs';
 import {distributedMovieOffsets,summarizeDistributedMovieProbe} from './xtream-distributed-movie-audit.mjs';
 import { createFixedWindowLimiter, requestClientKey } from './auth-protection.mjs';
+import {forwardPrivatePreview} from './content-hub-private-preview-bridge.mjs';
 import {
   assertPublicXtreamUrl,
   decryptXtreamSecret,
@@ -3132,6 +3133,15 @@ async function unifiedStreamBridge(req,res,url){
   const limit=bridgeLimiter.consume(requestClientKey(req));
   if(!limit.allowed)return json(res,429,{ok:false,code:'stream_bridge_rate_limited'});
   const p=url.pathname;
+
+  // Owner-only, 12-second MP4 stream from verified private S3.
+  // This bridge authorization was checked above. Never proxy arbitrary paths.
+  if(p==='/internal/blofy-stream/content-hub/preview'){
+    if(req.method!=='GET')return json(res,405,{
+      ok:false,code:'owner_preview_method_denied'});
+    return forwardPrivatePreview({req,res,
+      hubToken:String(process.env.BLOFY_CONTENT_HUB_OPERATOR_TOKEN||'')});
+  }
 
   // Private Content Hub: STREAM operator Basic -> authenticated unified
   // bridge -> this portal -> private Hub token. No S3/media credentials
