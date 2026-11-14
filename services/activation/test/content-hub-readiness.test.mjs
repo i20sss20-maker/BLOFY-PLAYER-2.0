@@ -35,7 +35,7 @@ test('owner readiness page has clearly scoped registered-queue-only labels',asyn
  for(const id of [...ids,'seasonReadinessTitle']){
   assert.equal((html.match(new RegExp('id="'+id+'"','g'))||[]).length,1,id);
  }
- assert.match(html,/الحلقات المدرجة في قائمة النقل الخاصة فقط/);
+ assert.match(html,/للحلقات المدرجة في قائمة النقل الخاصة فقط/);
  assert.match(html,/لا تقيس تلقائيًا جودة الصوت أو الفيديو/);
  assert.match(html,/admin-season-readiness\.js/);
  assert.match(hook,/admin-season-readiness\.js/);
