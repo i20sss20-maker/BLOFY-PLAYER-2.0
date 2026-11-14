@@ -4,6 +4,9 @@ on:
     paths:
       - 'services/content-hub/**'
       - 'services/activation/src/content-hub-admin*'
+      - 'services/activation/src/stream-season-bridge.mjs'
+      - 'services/activation/src/xtream-admin-hook.mjs'
+      - 'services/activation/test/stream-season-bridge.test.mjs'
       - 'services/activation/src/admin-session-hook.mjs'
       - 'services/activation/src/bootstrap.mjs'
       - 'services/activation/web/admin-content-hub*'
@@ -14,6 +17,9 @@ on:
     paths:
       - 'services/content-hub/**'
       - 'services/activation/src/content-hub-admin*'
+      - 'services/activation/src/stream-season-bridge.mjs'
+      - 'services/activation/src/xtream-admin-hook.mjs'
+      - 'services/activation/test/stream-season-bridge.test.mjs'
       - 'services/activation/src/admin-session-hook.mjs'
       - 'services/activation/src/bootstrap.mjs'
       - 'services/activation/web/admin-content-hub*'
@@ -37,10 +43,12 @@ jobs:
         run: |
           node --check services/activation/src/content-hub-admin-core.mjs
           node --check services/activation/src/content-hub-admin-hook.mjs
+          node --check services/activation/src/stream-season-bridge.mjs
           node --check services/activation/src/bootstrap.mjs
           node --check services/activation/src/admin-session-hook.mjs
           node --check services/activation/web/admin-content-hub.js
           node --test services/activation/test/content-hub-admin-core.test.mjs
+          node --test services/activation/test/stream-season-bridge.test.mjs
           node --test services/activation/test/xtream-content-hub-season-approval.test.mjs
           node --test services/activation/test/xtream-content-hub-series.test.mjs
       - name: Check isolated policy and worker syntax
