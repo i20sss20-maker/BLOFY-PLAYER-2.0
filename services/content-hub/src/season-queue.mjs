@@ -304,8 +304,16 @@ export function createSeasonQueueController({
     }
     let result;
     try{
+     // This candidate was authenticated, selected by the operator,
+     // and pinned to the queue row at enqueue time. The activation
+     // source bridge rechecks its exact live mapping on EVERY Range.
+     const jobCandidate={gatewayId:job.gatewayId,
+      sourceId:job.sourceId,mediaId:job.mediaId,
+      extension:job.extension,sourceName:'saleh',mediaKind:'episode',
+      title:'Approved episode '+job.episodeNumber};
      result=await runner({env:perEpisodeEnv,storage,lease,
-      signal:abort.signal,logger});
+      signal:abort.signal,logger,
+      candidateInspector:async()=>({ok:true,candidates:[jobCandidate]})});
     }catch{result={ok:false,code:'episode_retryable_error'}}
     const code=safeCode(result?.code);
     if(abort.signal.aborted){
