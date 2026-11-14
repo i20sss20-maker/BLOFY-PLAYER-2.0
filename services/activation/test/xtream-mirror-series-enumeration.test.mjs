@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {enumerateOneMirrorSeries,shouldEnumerateMirrorSeries}
+import {enumerateOneMirrorSeries,shouldEnumerateMirrorSeries,
+ readMirrorSeriesEnumerationProgress}
  from '../src/xtream-mirror-series-enumeration.mjs';
 
 const ID='123e4567-e89b-42d3-a456-426614174000';
@@ -116,4 +117,29 @@ test('unapproved source cannot cause provider traffic',async()=>{
  assert.equal(r.code,'mirror_series_source_not_currently_approved');
  assert.equal(r.providerRequests,0);
  assert.deepEqual(f.ids,[]);
+});
+
+test('admin series progress reports no previous scan, without guessing coverage',async()=>{
+ const p=await readMirrorSeriesEnumerationProgress({
+  query:async()=>({rows:[]})
+ },{sourceId:ID});
+ assert.equal(p.code,'mirror_series_scan_not_started');
+ const existing=await readMirrorSeriesEnumerationProgress({
+  query:async()=>({rows:[{
+   last_gateway_id:14,
+   started_local_day:new Date('2026-11-14T00:00:00Z'),
+   finished_local_day:null,
+   failed_gateway_id:null,
+   last_error_code:null,series_scanned:'2',
+   updated_at:'2026-11-14T01:00:00Z'
+  }]})
+ },{sourceId:ID});
+ assert.equal(existing.lastGatewayId,14);
+ assert.equal(existing.seriesScanned,2);
+ assert.equal(existing.startedLocalDay,'2026-11-14');
+ assert.equal(existing.episodesCountNotExhaustivelyVerified,true);
+ assert.equal(existing.providerRequests,0);
+ await assert.rejects(()=>readMirrorSeriesEnumerationProgress({
+  query:async()=>({rows:[]})
+ },{sourceId:'invalid'}),/status_request_invalid/);
 });
