@@ -225,7 +225,7 @@ export function createContentHubServer({storage,lease,
   // Exact read-only pagination. Fixed route, no query parameters.
   // Each response only includes 50 individually licensed episode rows;
   // page summaries describe visible rows, while health has global counts.
-  const seasonPageRoute=/^\\/internal\\/seasons\\/queue\\/page\\/([1-9][0-9]{0,4})$/.exec(path);
+  const seasonPageRoute=/^\/internal\/seasons\/queue\/page\/([1-9][0-9]{0,4})$/.exec(path);
   if(seasonPageRoute&&req.method==='GET'){
    if(String(req.url||'').includes('?'))
     return json(res,400,{ok:false,code:'season_queue_page_query_denied'});
