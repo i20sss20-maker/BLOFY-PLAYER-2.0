@@ -78,6 +78,14 @@ export function createContentHubServer({storage,lease,
   runBatch:({signal})=>batchRunner({storage,lease,env:pilotEnv,signal,logger}),
   readiness:()=>chunkedBatchReadiness(pilotEnv),logger
  });
+ // Strict single-source sequential episode loop, never concurrent with
+ // the movie loop. Operator starts/stops it; no subscriber cutover.
+ const episodeCopy=createContinuousCopyController({
+  runBatch:({signal})=>episodeChunkRunner({
+   env:pilotEnv,storage,lease,signal,logger}),
+  readiness:()=>episodeCopyReadiness(pilotEnv),logger,
+  delayMs:2200,maxBatches:180,maxDurationMs:45*60*1000
+ });
  async function runFullPlaybackCanary(runId){
   const diag=await diagnoseVerifiedMovie({runId,storage,lease});
   if(!diag.ok)return {...diag,seekVerified:false,seeksVerified:0};
@@ -114,7 +122,8 @@ export function createContentHubServer({storage,lease,
     databaseAvailable:database,downloadQueueEnabled:false,
     syntheticTestEnabled:allowSynthetic,
     lastSynthetic,pilotRunning:pilotRunning||copy.isRunning(),lastPilot,
-    lastEpisodeProbe,episodeCopyBusy,lastEpisodeCopy,
+    lastEpisodeProbe,episodeCopyBusy:episodeCopyBusy||episodeCopy.isRunning(),
+    lastEpisodeCopy,episodeContinuousCopy:episodeCopy.status(),
     episodeCopyReadiness:episodeCopyReadiness(pilotEnv),
     canaryRunning,lastCanary,
     ownerPreviewEnabled:pilotEnv.BLOFY_CONTENT_HUB_OWNER_PREVIEW_ENABLED==='1',
@@ -145,6 +154,29 @@ export function createContentHubServer({storage,lease,
   }
   // Only operator-confirmed low-impact 4KiB source probe.
   // It cannot start episode storage/copy, even with a valid bearer token.
+  if(path==='/internal/episodes/start'&&req.method==='POST'){
+   if(String(req.url||'').includes('?')||
+     req.headers['x-blofy-episode-copy-confirm']!=='approved-sequential-8mib')
+    return json(res,403,{ok:false,code:'episode_start_confirmation_required'});
+   const gatewayId=Number(req.headers['x-blofy-episode-gateway-id']),
+     approved=Number(pilotEnv.BLOFY_CONTENT_HUB_EPISODE_APPROVED_GATEWAY_ID);
+   if(!Number.isSafeInteger(gatewayId)||gatewayId!==approved)
+    return json(res,403,{ok:false,code:'episode_start_id_not_approved'});
+   if(episodeCopyBusy||pilotRunning||copy.isRunning()||episodeCopy.isRunning())
+    return json(res,409,{ok:false,code:'episode_source_writer_busy'});
+   const result=episodeCopy.start();
+   return json(res,result.ok?202:409,{
+    ...result,privateOnly:true,customerCutover:false,
+    maxSourceRangeBytes:CHUNK_BYTES});
+  }
+  if(path==='/internal/episodes/pause'&&req.method==='POST'){
+   if(String(req.url||'').includes('?')||
+      req.headers['x-blofy-episode-copy-confirm']!=='pause-sequential')
+    return json(res,403,{ok:false,code:'episode_pause_confirmation_required'});
+   const result=episodeCopy.stop();
+   return json(res,result.ok?202:409,{
+    ...result,privateOnly:true,customerCutover:false});
+  }
   // At most ONE explicitly authorized episode chunk per POST. The
   // controller returns 202 immediately and persists progress in PostgreSQL.
   // It is separate from the verified movie worker and client playback.
@@ -157,7 +189,7 @@ export function createContentHubServer({storage,lease,
    if(!Number.isSafeInteger(gatewayId)||gatewayId<1||
      gatewayId!==approved)return json(res,403,{
        ok:false,code:'episode_copy_id_not_selected'});
-   if(episodeCopyBusy||pilotRunning||copy.isRunning())
+   if(episodeCopyBusy||episodeCopy.isRunning()||pilotRunning||copy.isRunning())
     return json(res,409,{ok:false,code:'content_hub_source_writer_busy'});
    const readiness=episodeCopyReadiness(pilotEnv);
    if(!readiness.ready)return json(res,409,{ok:false,
@@ -241,7 +273,8 @@ export function createContentHubServer({storage,lease,
     return json(res,200,{ok:true,privateOnly:true,customerCutover:false,
        accounting,runs,pilotRunning:pilotRunning||copy.isRunning(),
        canaryRunning,lastCanary,lastEpisodeProbe,
-       episodeCopyBusy,lastEpisodeCopy,episodeRuns,
+       episodeCopyBusy:episodeCopyBusy||episodeCopy.isRunning(),
+       lastEpisodeCopy,episodeRuns,episodeContinuousCopy:episodeCopy.status(),
        episodeCopyReadiness:episodeCopyReadiness(pilotEnv),
        ownerPreviewEnabled:pilotEnv.BLOFY_CONTENT_HUB_OWNER_PREVIEW_ENABLED==='1',
        continuousCopy:copy.status(),downloadQueueEnabled:false,
@@ -497,6 +530,8 @@ export function createContentHubServer({storage,lease,
   return json(res,404,{ok:false,code:'content_hub_not_found'});
  });
  return {server,
+  startEpisodeCopy:()=>episodeCopy.start(),
+  stopEpisodeCopy:()=>episodeCopy.stop(),
   runPreviewSelfCheck:async()=>{
    if(pilotEnv.BLOFY_CONTENT_HUB_OWNER_PREVIEW_ENABLED!=='1')
     return {ok:false,code:'owner_preview_disabled',providerRequests:0};
@@ -835,6 +870,7 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
  });
  const shutdown=()=>{
   hub.stopContinuousCopy();
+  hub.stopEpisodeCopy();
   hub.server.close(()=>void lease.close());
  };
  process.once('SIGTERM',shutdown);process.once('SIGINT',shutdown);
