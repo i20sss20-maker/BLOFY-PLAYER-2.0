@@ -47,6 +47,7 @@ jobs:
           node --check services/activation/src/bootstrap.mjs
           node --check services/activation/src/admin-session-hook.mjs
           node --check services/activation/web/admin-content-hub.js
+          node --check services/activation/web/admin-season-analytics.js
           node --test services/activation/test/content-hub-admin-core.test.mjs
           node --test services/activation/test/stream-season-bridge.test.mjs
           node --test services/activation/test/content-hub-private-preview-bridge.test.mjs
@@ -58,6 +59,8 @@ jobs:
           node --check services/content-hub/src/mirror-pilot.mjs
           node --check services/content-hub/src/one-movie-pilot.mjs
           node --check services/content-hub/src/server.mjs
+          node --check services/content-hub/src/season-analytics.mjs
+          node --check services/content-hub/src/episode-chunk-pilot.mjs
           node --check services/content-hub/src/source-lease.mjs
       - name: Install test-only dependencies (no install scripts)
         run: npm install --prefix services/content-hub --ignore-scripts --no-audit --no-fund --package-lock=false
