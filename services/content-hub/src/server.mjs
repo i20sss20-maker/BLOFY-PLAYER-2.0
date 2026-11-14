@@ -7,6 +7,7 @@ import {runPrivateSalehSample} from './real-source-sample.mjs';
 import {runOneMoviePilot,inspectOneMoviePilot,probeApprovedMovieRange} from './one-movie-pilot.mjs';
 import {runChunkedMovieBatch,chunkedPilotEnabled,chunkedBatchReadiness,CHUNK_BYTES} from './chunked-pilot.mjs';
 import {createContinuousCopyController} from './continuous-copy.mjs';
+import {planDailyLicensedXtreamCopies} from './xtream-daily-copy-plan.mjs';
 import {diagnoseVerifiedMovie} from './playback-diagnostics.mjs';
 import {verifyPrivateSeekRanges} from './seek-diagnostics.mjs';
 import {buildPrivateBrowserPreview} from './private-preview.mjs';
@@ -150,6 +151,39 @@ export function createContentHubServer({storage,lease,
     uptimeSeconds:Math.floor((Date.now()-started)/1000)});
   if(!safeAuth(req.headers.authorization,token))
    return json(res,401,{ok:false,code:'content_hub_auth_required'});
+  // Private operator preview of a small, explicitly licensed VOD batch.
+  // Creates no S3 objects and never contacts Xtream. Real media transfer
+  // still requires separate item-size probes, a dedicated worker and
+  // independent storage checks. OFF in production by default.
+  if(path==='/internal/mirror/daily/plan'&&req.method==='POST'){
+   if(String(req.url||'').includes('?')||
+      req.headers['x-blofy-owner-action']!=='preview-licensed-daily-mirror')
+    return json(res,403,{ok:false,code:'mirror_preview_owner_action_required'});
+   if(pilotEnv.BLOFY_CONTENT_HUB_DAILY_MIRROR_PLANNER_ENABLED!=='1')
+    return json(res,409,{ok:false,code:'mirror_preview_disabled'});
+   let input;
+   try{input=await readSeasonJson(req)}
+   catch{return json(res,400,{ok:false,code:'mirror_preview_invalid_json'})}
+   if(!Array.isArray(input?.catalog)||input.catalog.length<1||
+      input.catalog.length>25||input.verifiedCopies!==undefined)
+    return json(res,400,{ok:false,code:'mirror_preview_batch_invalid'});
+   let storageReady=false;
+   try{storageReady=(await storage.health()).ok===true}catch{}
+   try{
+    const report=planDailyLicensedXtreamCopies({
+      catalog:input.catalog,verifiedCopies:[],
+      env:pilotEnv,privateBucket:{
+        private:true,configured:storageReady
+      },
+      maxFiles:12,maxBytes:8*1024**3,activeUpstreamFeeds:0
+    });
+    return json(res,200,{ok:true,...report,
+      physicalCopyCoverageUnknown:true,providerRequests:0,
+      privateOnly:true,automaticStart:false});
+   }catch{return json(res,400,{ok:false,
+      code:'mirror_preview_catalog_invalid',providerRequests:0,
+      bytesTransferred:0,customerCutover:false})}
+  }
   if(path==='/internal/status'&&req.method==='GET'){
    let bucket=false,database=false,durablePilot=null;
    let ownerBrowserCheck={confirmed:false,videoConfirmed:false,audioConfirmed:false};
