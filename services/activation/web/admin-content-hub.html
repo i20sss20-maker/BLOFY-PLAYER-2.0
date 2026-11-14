@@ -52,6 +52,11 @@
           <button id="loadSeries" type="button">عرض المسلسلات</button></div>
         <label class="season-label" for="seriesSelect">المسلسل</label>
         <select class="season-input" id="seriesSelect"><option value="">اختر مسلسلًا بعد تحميل القائمة</option></select>
+        <div class="actions">
+          <input id="seriesLookupId" class="season-input" type="number" min="1" step="1"
+            placeholder="أو أدخل رقم المسلسل من مكتبتك" aria-label="معرف المسلسل الدقيق">
+          <button id="openSeriesId" type="button">فتح بالمعرّف</button>
+        </div>
         <div class="actions"><button id="loadSeriesSeasons" type="button" disabled>عرض المواسم والحلقات</button></div>
         <label class="season-label" for="seasonSelect">الموسم</label>
         <select class="season-input" id="seasonSelect" disabled><option value="">اختر الموسم</option></select>
@@ -63,6 +68,7 @@
             placeholder="example_series_s01" autocomplete="off">
           <button id="loadCandidates" type="button">عرض الحلقات المعتمدة المحدودة</button>
         </details>
+        <div class="actions"><button id="selectSeasonBatch" type="button">تحديد أول 12 حلقة</button></div>
         <div id="seasonCandidates" class="candidate-list">
           <p class="placeholder">اضغط «عرض الحلقات المتاحة» لاختيار المحتوى.</p>
         </div>
