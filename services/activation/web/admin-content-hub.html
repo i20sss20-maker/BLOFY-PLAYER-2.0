@@ -7,6 +7,7 @@
   <title>BLOFY · مركز المحتوى</title>
   <link rel="stylesheet" href="/admin-content-hub.css">
   <script src="/admin-content-hub.js" defer></script>
+  <script src="/admin-season-analytics.js" defer></script>
 </head>
 <body>
 <main class="shell">
@@ -81,6 +82,38 @@
       </div>
     </div>
     <p class="hint">التخزين مرهون بحقوق نسخ وتخزين المحتوى، وخمول المصدر قبل النقل. الاستئناف تلقائي بين الأجزاء أثناء جلسة تشغيل معتمدة فقط؛ بعد إعادة تشغيل الخادم يلزم اعتماد جلسة جديدة.</p>
+  </section>
+  <section class="card season-analytics" aria-labelledby="analyticsTitle">
+    <div class="cardhead">
+      <div><p class="eyebrow">REPORTING · READ ONLY</p>
+        <h2 id="analyticsTitle">إحصائيات نقل المواسم</h2>
+        <p class="muted">إحصائيات قاعدة البيانات الخاصة بالمواسم، دون بدء أي نقل أو التأثير على عملاء BLOFY STREAM.</p></div>
+      <button id="analyticsRefresh" type="button">تحديث الإحصائيات</button>
+    </div>
+    <p id="analyticsStatus" class="muted" role="status">جارٍ قراءة الإحصائيات…</p>
+    <div class="analytics-kpis">
+      <article><small>إجمالي الحلقات</small><strong id="analyticsEpisodes">—</strong></article>
+      <article><small>حلقات مكتملة</small><strong id="analyticsVerified">—</strong></article>
+      <article><small>حلقات فاشلة</small><strong id="analyticsFailed">—</strong></article>
+      <article><small>في الانتظار</small><strong id="analyticsQueued">—</strong></article>
+      <article><small>الحجم المسجل</small><strong id="analyticsStorage">—</strong></article>
+      <article><small>متوسط السرعة المقاسة</small><strong id="analyticsSpeed">—</strong></article>
+    </div>
+    <p id="analyticsScope" class="hint">حجم التخزين من سجلات الملفات، وليس المساحة الفعلية المتبقية في S3. السرعة تقاس من الأجزاء الجديدة بعد تحديث النظام.</p>
+    <div class="analytics-grid">
+      <div><h3>ملخص كل موسم</h3><div id="analyticsSeasons" class="analytics-list" aria-live="polite"></div></div>
+      <div><h3>مؤشرات البطء والأعطال</h3><div id="analyticsDiagnostics" class="analytics-list" aria-live="polite"></div>
+        <h3>أسباب فشل الحلقات</h3><div id="analyticsFailures" class="analytics-list"></div></div>
+    </div>
+    <div class="cardhead analytics-history-title">
+      <div><h3>سجل النقل</h3><p class="muted">آخر 30 قياسًا مع مدة كل جزء ومرحلة الفشل؛ السجل لا يعيد قراءة محتوى المصدر.</p></div>
+    </div>
+    <div class="analytics-scroll">
+      <table class="analytics-table">
+        <thead><tr><th>الوقت</th><th>الموسم / الحلقة</th><th>النتيجة</th><th>الحجم</th><th>المدة</th><th>المرحلة</th></tr></thead>
+        <tbody id="analyticsHistory"><tr><td colspan="6">لا توجد بيانات بعد.</td></tr></tbody>
+      </table>
+    </div>
   </section>
   <div class="columns">
     <section class="card">
