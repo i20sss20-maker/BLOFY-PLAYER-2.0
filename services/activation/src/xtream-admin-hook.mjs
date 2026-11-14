@@ -3151,6 +3151,8 @@ async function unifiedStreamBridge(req,res,url){
     '/internal/blofy-stream/content-hub/episodes/candidates':'/internal/episodes/candidates',
     '/internal/blofy-stream/content-hub/episodes/probe':'/internal/episodes/probe',
     '/internal/blofy-stream/content-hub/episodes/next':'/internal/episodes/next',
+    '/internal/blofy-stream/content-hub/episodes/start':'/internal/episodes/start',
+    '/internal/blofy-stream/content-hub/episodes/pause':'/internal/episodes/pause',
     '/internal/blofy-stream/content-hub/preflight':'/internal/pilot/preflight',
     '/internal/blofy-stream/content-hub/batch/next':'/internal/batch/next',
     '/internal/blofy-stream/content-hub/batch/start':'/internal/batch/start',
@@ -3161,8 +3163,11 @@ async function unifiedStreamBridge(req,res,url){
     const canary=p.endsWith('/playback/diagnose');
     const episodeProbe=p.endsWith('/episodes/probe');
     const episodeCopy=p.endsWith('/episodes/next');
-    const write=p.includes('/batch/')||canary||episodeProbe||episodeCopy;
-    const confirmed=write&&!p.endsWith('/batch/pause');
+    const episodeStart=p.endsWith('/episodes/start');
+    const episodePause=p.endsWith('/episodes/pause');
+    const write=p.includes('/batch/')||canary||episodeProbe||
+      episodeCopy||episodeStart||episodePause;
+    const confirmed=write&&!p.endsWith('/batch/pause')&&!episodePause;
     let episodeGatewayId=null;
     if((write&&req.method!=='POST')||(!write&&req.method!=='GET'))
       return json(res,405,{ok:false,code:'hub_bridge_method_denied'});
@@ -3170,7 +3175,7 @@ async function unifiedStreamBridge(req,res,url){
       const body=await readJson(req);
       if(confirmed&&body.confirmed!==true)return json(res,400,{
         ok:false,code:'hub_batch_explicit_confirmation_required'});
-      if(episodeProbe||episodeCopy){
+      if(episodeProbe||episodeCopy||episodeStart){
        episodeGatewayId=Number(body.gatewayId);
        if(!Number.isSafeInteger(episodeGatewayId)||episodeGatewayId<1)
         return json(res,400,{ok:false,code:'hub_episode_id_invalid'});
@@ -3185,7 +3190,10 @@ async function unifiedStreamBridge(req,res,url){
         method:req.method,redirect:'manual',
         signal:AbortSignal.timeout(episodeProbe?55000:8500),
         headers:{authorization:'Bearer '+operatorToken,
-          ...(episodeCopy?{'x-blofy-episode-copy-confirm':'approved-single-8mib',
+          ...(episodeStart?{'x-blofy-episode-copy-confirm':'approved-sequential-8mib',
+            'x-blofy-episode-gateway-id':String(episodeGatewayId)}:
+            episodePause?{'x-blofy-episode-copy-confirm':'pause-sequential'}:
+            episodeCopy?{'x-blofy-episode-copy-confirm':'approved-single-8mib',
             'x-blofy-episode-gateway-id':String(episodeGatewayId)}:
             episodeProbe?{'x-blofy-episode-probe-confirm':'operator-approved-probe',
             'x-blofy-episode-gateway-id':String(episodeGatewayId)}:
