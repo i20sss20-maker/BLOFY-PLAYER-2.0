@@ -335,6 +335,29 @@ http.createServer=function withContentHubAdmin(listener){
      ok:false,code:'season_report_unavailable'});
     return json(res,200,await safeReadJson(response));
    }
+   if(path==='/api/v1/admin/content-hub/seasons/episodes/av/confirm'&&
+      req.method==='POST'){
+    if(req.headers['x-blofy-owner-action']!=='confirm-manual-episode-av')
+     return json(res,403,{ok:false,
+      code:'episode_av_manual_owner_confirmation_required'});
+    let body;
+    try{body=await readSeasonAdminBody(req)}
+    catch{return json(res,400,{ok:false,code:'episode_av_request_invalid'})}
+    if(!body||body.confirmed!==true||
+       body.videoConfirmed!==true||body.audioConfirmed!==true||
+       typeof body.runId!=='string'||
+       !/^[A-Za-z0-9_-]{8,80}$/.test(body.runId))
+     return json(res,400,{ok:false,code:'episode_av_request_invalid'});
+    const response=await request('/internal/seasons/episodes/av/confirm',{
+     method:'POST',signal:AbortSignal.timeout(10000),
+     extraHeaders:{'content-type':'application/json',
+      'x-blofy-owner-action':'confirm-manual-episode-av',
+      'x-blofy-video-confirmed':'yes',
+      'x-blofy-audio-confirmed':'yes'},
+     body:JSON.stringify({runId:body.runId,confirmed:true,
+      videoConfirmed:true,audioConfirmed:true})});
+    return json(res,response.status,await safeReadJson(response));
+   }
    if(path==='/api/v1/admin/content-hub/seasons/resume/preview'&&
       req.method==='GET'){
     const response=await request('/internal/seasons/resume/preview',{
