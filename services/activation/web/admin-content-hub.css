@@ -30,3 +30,10 @@
 .candidate-fields button{grid-column:1/-1;justify-self:start}
 .candidate-fields .muted{margin:0}
 @media(max-width:800px){.season-layout{grid-template-columns:1fr}}
+
+.owner-confirmation{margin-top:16px;padding:14px;border-radius:12px;
+ background:#101e32;border:1px solid #375374;display:grid;gap:12px}
+.owner-confirmation label{display:flex;align-items:center;gap:10px;
+ font-size:13px;line-height:1.7;cursor:pointer}
+.owner-confirmation input[type=checkbox]{width:19px;height:19px;accent-color:#28c9a1}
+.owner-confirmation button{justify-self:start}
