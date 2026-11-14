@@ -46,6 +46,7 @@ export function seasonQueueReadiness(env={}){
   ['BLOFY_CONTENT_HUB_UPLOAD_ENABLED','storage_upload_disabled'],
   ['BLOFY_CONTENT_HUB_STORAGE_RIGHTS_CONFIRMED','storage_rights_unconfirmed'],
   ['BLOFY_CONTENT_HUB_EPISODE_RIGHTS_CONFIRMED','episode_rights_unconfirmed'],
+  ['BLOFY_CONTENT_HUB_EPISODE_COPY_ENABLED','episode_copy_disabled'],
   ['BLOFY_CONTENT_HUB_SOURCE_IDLE_CONFIRMED','source_idle_unconfirmed'],
   ['BLOFY_CONTENT_HUB_SOURCE_QUIET_WINDOW_CONFIRMED','quiet_window_unconfirmed']
  ])if(env[key]!=='1')blockedBy.push(code);
@@ -239,7 +240,6 @@ export function createSeasonQueueController({
       code:'season_queue_empty',currentRunId:null};break}
     status={...status,currentRunId:job.runId};
     const perEpisodeEnv={...env,
-     BLOFY_CONTENT_HUB_EPISODE_COPY_ENABLED:'1',
      BLOFY_CONTENT_HUB_EPISODE_APPROVED_GATEWAY_ID:String(job.gatewayId),
      BLOFY_CONTENT_HUB_EPISODE_EXPECTED_BYTES:String(job.expectedBytes),
      BLOFY_CONTENT_HUB_EPISODE_RUN_ID:job.runId};
