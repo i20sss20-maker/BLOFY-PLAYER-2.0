@@ -28,8 +28,19 @@ function summaryBadge(label,value){
  badge.append(make('small','',label),make('strong','',value));
  return badge;
 }
-function entryCard(title,kind,description,progress,seasonKey=null,extra=null){
+function entryCard(title,kind,description,progress,seasonKey=null,extra=null,
+ metadata=null,editKey=null){
  const card=make('article','library-item');
+ if(metadata?.posterPath&&/^\/[A-Za-z0-9_-]{5,90}\.(?:jpg|jpeg|png|webp)$/.test(
+  metadata.posterPath)){
+  const poster=make('img','library-poster');
+  poster.src='https://image.tmdb.org/t/p/w342'+metadata.posterPath;
+  poster.alt='بوستر '+(metadata.title||title);
+  poster.loading='lazy';poster.referrerPolicy='no-referrer';
+  poster.decoding='async';
+  poster.addEventListener('error',()=>poster.remove(),{once:true});
+  card.append(poster);
+ }
  const head=make('div','jobtop');
  head.append(make('strong','',title),make('span','chip',kind));
  card.append(head,make('p','muted',description));
@@ -40,6 +51,20 @@ function entryCard(title,kind,description,progress,seasonKey=null,extra=null){
   card.append(track,make('p','library-progress',num(progress)+'% من الحجم المعلن'));
  }
  if(extra)card.append(make('p','hint',extra));
+ if(metadata?.overview)card.append(
+  make('p','library-overview',metadata.overview));
+ if(metadata?.year||metadata?.genre&&metadata.genre!=='unspecified')
+  card.append(make('p','library-meta-badge',
+   (metadata.year?String(metadata.year)+' · ':'')+
+   (metadata.genre&&metadata.genre!=='unspecified'?metadata.genre:'')));
+ if(editKey){
+  const edit=make('button','library-edit','تعديل الاسم والصورة');
+  edit.type='button';
+  edit.addEventListener('click',()=>document.dispatchEvent(
+   new CustomEvent('blofy:edit-library-metadata',
+    {detail:{key:editKey,metadata}})));
+  card.append(edit);
+ }
  if(seasonKey){
   const button=make('button','library-open-season','عرض تقرير الموسم');
   button.type='button';
@@ -68,12 +93,13 @@ function render(){
  };
  if(['all','movie'].includes(category)){
   appendGroup('الأفلام الخاصة · '+num(movies.length),movies.map(m=>
-   entryCard('معرّف الفيلم · '+m.runId,'فيلم',
+   entryCard(m.metadata?.title||'معرّف الفيلم · '+m.runId,'فيلم',
     (states[m.state]||'غير معروف')+' · '+bytes(m.storedBytes)+
     ' / '+bytes(m.expectedBytes)+
     ' · '+(m.format==='chunked'?'نقل بأجزاء':'نسخة تقليدية'),
     m.percent,null,m.verified?'تم التحقق من الملف في السجل الخاص.':
-     'الحالة الحالية من السجل فقط؛ لا تثبت سلامة مصدر الفيديو.')));
+     'الحالة الحالية من السجل فقط؛ لا تثبت سلامة مصدر الفيديو.',
+    m.metadata,'movie:'+m.runId)));
  }
  if(['all','series'].includes(category)){
   const groupsBySeries=new Map();
@@ -82,27 +108,32 @@ function render(){
     String(season.seasonKey||''));
    if(!match)continue;
    const id=match[1],group=groupsBySeries.get(id)||{seasons:[],ok:0,total:0};
-   group.seasons.push(season);group.ok+=Number(season.verifiedCount)||0;
+   group.seasons.push(season);
+   if(season.metadata)group.metadata=season.metadata;
+   group.ok+=Number(season.verifiedCount)||0;
    group.total+=Number(season.episodeCount)||0;
    groupsBySeries.set(id,group);
   }
   appendGroup('المسلسلات الظاهرة · '+num(groupsBySeries.size),
    [...groupsBySeries].map(([id,g])=>
-    entryCard('مسلسل رقم '+id,'مسلسل',
+    entryCard(g.metadata?.title||'مسلسل رقم '+id,'مسلسل',
      num(g.seasons.length)+' موسم معروض · '+num(g.ok)+' / '+
      num(g.total)+' حلقة مكتملة ضمن المواسم المعروضة',
      null,g.seasons.length===1?g.seasons[0].seasonKey:null,
-     'المسلسلات مشتقة من مفاتيح المواسم المسجلة فقط، وقد توجد مواسم أخرى خارج صفحة النتائج.')));
+     'المسلسلات مشتقة من مفاتيح المواسم المسجلة فقط، وقد توجد مواسم أخرى خارج صفحة النتائج.',
+     g.metadata,'series:'+id)));
  }
  if(['all','season'].includes(category)){
   appendGroup('المواسم · '+num(seasons.length),seasons.map(s=>
-   entryCard(s.seasonKey,'موسم',
+   entryCard((s.metadata?.title?s.metadata.title+' · ':'')+s.seasonKey,'موسم',
     num(s.verifiedCount)+' / '+num(s.episodeCount)+
     ' حلقة مكتملة · '+num(s.failedCount)+' فاشلة · '+
     bytes(s.storedBytes)+' / '+bytes(s.expectedBytes),
     s.percent,s.seasonKey,
     s.fullyVerifiedInQueue?'كل حلقات هذا الموسم المدرجة بالنظام متحقق منها.':
-     'الموسم غير مكتمل ضمن الحلقات المدرجة بالنظام؛ لا نفترض إجمالي حلقات المصدر.')));
+     'الموسم غير مكتمل ضمن الحلقات المدرجة بالنظام؛ لا نفترض إجمالي حلقات المصدر.',
+    s.metadata,/^series_([1-9][0-9]{0,14})_s[0-9]+$/.test(s.seasonKey)?
+     'series:'+s.seasonKey.match(/^series_([1-9][0-9]{0,14})_s/)[1]:null)));
  }
  if(['all','episode'].includes(category)){
   appendGroup('الحلقات · '+num(episodes.length),episodes.map(e=>
@@ -111,7 +142,8 @@ function render(){
     ' · '+bytes(e.storedBytes)+' / '+bytes(e.expectedBytes),
     e.percent,e.seasonKey,
     e.verified?'الحلقة متحقق منها في سجل PostgreSQL.':
-     'الحالة من آخر نقطة حفظ، ولا تعني تأكيد تشغيل الصورة والصوت.')));
+     'الحالة من آخر نقطة حفظ، ولا تعني تأكيد تشغيل الصورة والصوت.',
+    null,null)));
  }
  board.replaceChildren(...groups);
  const total=movies.length+seasons.length+episodes.length;
@@ -133,7 +165,8 @@ function render(){
   'بحث حلقات المواسم والمواسم في قاعدة البيانات كلها؛ '+
   (data.movieHistoryAvailable===false?'تعذر جلب أحد سجلات الأفلام · ':
    'الأفلام ضمن أحدث عينة محفوظة فقط · ')+
-  'لم يبدأ أي تنزيل';
+  'لم يبدأ أي تنزيل'+
+  (data.curatedTitleMatchesLimited?' · البحث بأسماء المسلسلات المعدلة محدود بأول 120 نتيجة':'');
  $('libraryScope').textContent=
   'نتائج المواسم والحلقات من كافة سجلات قائمة الانتظار، 40 لكل نوع في الصفحة. '+
   'الأفلام من أحدث 50 سجلًا تقليديًا و50 سجلًا مجزأً فقط'+

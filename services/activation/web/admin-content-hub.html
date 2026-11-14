@@ -12,6 +12,7 @@
   <script src="/admin-season-attention.js" defer></script>
   <script src="/admin-ops-overview.js" defer></script>
   <script src="/admin-library.js" defer></script>
+  <script src="/admin-library-metadata.js" defer></script>
 </head>
 <body>
 <main class="shell">
@@ -125,6 +126,65 @@
       <span id="libraryPage" aria-live="polite">الصفحة 1</span>
       <button id="libraryNext" type="button" disabled>التالي</button>
     </div>
+    <dialog id="libraryMetaDialog" class="library-meta-dialog" aria-labelledby="libraryMetaTitle">
+      <form id="libraryMetaForm">
+        <div class="cardhead">
+          <h3 id="libraryMetaTitle">تعديل بيانات المحتوى</h3>
+          <button type="button" id="libraryMetaClose" aria-label="إغلاق محرر المحتوى">✕</button>
+        </div>
+        <p class="muted">البيانات من إدخالك فقط، ولا يتم جلب أسماء أو صور تلقائيًا من المصدر أو مواقع خارجية.</p>
+        <label>معرّف السجل
+          <input id="libraryMetaKey" type="text" readonly>
+        </label>
+        <label>العنوان المعروض
+          <input id="libraryMetaName" type="text" required minlength="2" maxlength="140"
+            placeholder="اسم الفيلم أو المسلسل">
+        </label>
+        <div class="library-meta-fields">
+          <label>سنة الإنتاج (اختياري)
+            <input id="libraryMetaYear" type="number" min="1888" max="2100" placeholder="2024">
+          </label>
+          <label>التصنيف
+            <select id="libraryMetaGenre">
+              <option value="unspecified">بدون تصنيف</option>
+              <option value="action">أكشن</option>
+              <option value="drama">دراما</option>
+              <option value="comedy">كوميديا</option>
+              <option value="thriller">تشويق</option>
+              <option value="romance">رومانسي</option>
+              <option value="family">عائلي</option>
+              <option value="animation">رسوم متحركة</option>
+              <option value="documentary">وثائقي</option>
+              <option value="horror">رعب</option>
+              <option value="science_fiction">خيال علمي</option>
+              <option value="fantasy">فانتازيا</option>
+              <option value="crime">جريمة</option>
+              <option value="adventure">مغامرة</option>
+              <option value="other">أخرى</option>
+            </select>
+          </label>
+        </div>
+        <label>وصف مختصر
+          <textarea id="libraryMetaOverview" maxlength="700" rows="3"
+            placeholder="وصف مختصر بدون روابط أو بيانات دخول"></textarea>
+        </label>
+        <label>مسار صورة TMDb المصرح باستخدامها (اختياري)
+          <input id="libraryMetaPoster" type="text" maxlength="96" dir="ltr"
+            placeholder="/AbCdEf12345.jpg">
+        </label>
+        <p class="hint">أدخل مسار الصورة فقط كما يظهر بعد /t/p/w500 في image.tmdb.org، وليس رابطًا كاملًا. سيعرض المتصفح الصورة من TMDb بعد إدخالك؛ لن يحملها الخادم.</p>
+        <div class="library-meta-preview" id="libraryMetaPreview" aria-live="polite">بدون صورة بعد</div>
+        <label class="library-rights">
+          <input id="libraryMetaRights" type="checkbox" required>
+          أؤكد أن بيانات العنوان والصورة مصرح لي باستخدامها وأنني أراجع ارتباطها بالمحتوى الصحيح.
+        </label>
+        <div class="library-meta-actions">
+          <button type="submit" id="libraryMetaSave">حفظ البيانات</button>
+          <button type="button" id="libraryMetaCancel">إلغاء</button>
+        </div>
+        <p id="libraryMetaStatus" class="muted" role="status"></p>
+      </form>
+    </dialog>
     <p class="hint" id="libraryScope">البحث في جميع سجلات حلقات المواسم المحفوظة في PostgreSQL مع 40 نتيجة لكل صفحة. الأفلام تُعرض من أحدث 50 سجلًا تقليديًا و50 سجلًا مجزأً فقط؛ البحث بالأفلام ليس شاملًا، وقد يكون عدد الحلقات المدرجة أقل من إجمالي حلقات المسلسل في المصدر.</p>
   </section>
   <section class="stats" aria-label="ملخص التخزين">

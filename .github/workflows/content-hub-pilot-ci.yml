@@ -11,6 +11,7 @@ on:
       - 'services/activation/src/bootstrap.mjs'
       - 'services/activation/web/admin-content-hub*'
       - 'services/activation/web/admin-season-*'
+      - 'services/activation/web/admin-library*'
       - 'services/activation/web/admin.html'
       - 'services/activation/test/content-hub-admin*'
       - 'services/activation/test/season-forecast-ui.test.mjs'
@@ -26,6 +27,7 @@ on:
       - 'services/activation/src/bootstrap.mjs'
       - 'services/activation/web/admin-content-hub*'
       - 'services/activation/web/admin-season-*'
+      - 'services/activation/web/admin-library*'
       - 'services/activation/web/admin.html'
       - 'services/activation/test/content-hub-admin*'
       - 'services/activation/test/season-forecast-ui.test.mjs'
@@ -57,6 +59,7 @@ jobs:
           node --check services/activation/web/admin-season-attention.js
           node --check services/activation/web/admin-ops-overview.js
           node --check services/activation/web/admin-library.js
+          node --check services/activation/web/admin-library-metadata.js
           node --test services/activation/test/content-hub-admin-core.test.mjs
           node --test services/activation/test/content-hub-overview.test.mjs
           node --test services/activation/test/content-hub-library.test.mjs
@@ -76,6 +79,7 @@ jobs:
           node --check services/content-hub/src/season-forecast.mjs
           node --check services/content-hub/src/season-attention.mjs
           node --check services/content-hub/src/season-queue.mjs
+          node --check services/content-hub/src/curated-metadata.mjs
           node --check services/content-hub/src/episode-chunk-pilot.mjs
           node --check services/content-hub/src/source-lease.mjs
       - name: Install test-only dependencies (no install scripts)

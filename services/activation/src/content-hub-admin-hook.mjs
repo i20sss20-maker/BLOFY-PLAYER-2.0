@@ -213,7 +213,8 @@ http.createServer=function withContentHubAdmin(listener){
   catch{return listener(req,res)}
   const path=url.pathname;
   if(req.method==='GET'&&['/admin-content-hub.css',
-    '/admin-content-hub.js','/admin-ops-overview.js','/admin-library.js','/admin-season-analytics.js',
+    '/admin-content-hub.js','/admin-ops-overview.js','/admin-library.js',
+     '/admin-library-metadata.js','/admin-season-analytics.js',
      '/admin-season-detail.js','/admin-season-attention.js'].includes(path)){
    try{
     const file=path.slice(1);
@@ -338,6 +339,28 @@ http.createServer=function withContentHubAdmin(listener){
     if(response.status!==200)return json(res,503,{
      ok:false,code:'season_attention_unavailable'});
     return json(res,200,await safeReadJson(response));
+   }
+   if(path==='/api/v1/admin/content-hub/library/metadata'&&req.method==='POST'){
+    if(req.headers['x-blofy-owner-action']!=='curate-private-metadata')
+     return json(res,403,{ok:false,code:'curated_owner_confirmation_required'});
+    let input;
+    try{input=await readSeasonAdminBody(req)}
+    catch{return json(res,400,{ok:false,code:'curated_metadata_invalid'})}
+    if(!input||typeof input!=='object'||Array.isArray(input)||
+       input.confirmed!==true||input.artworkRightsConfirmed!==true||
+       typeof input.key!=='string'||!(/^(movie:[A-Za-z0-9_-]{8,80}|series:[1-9][0-9]{0,14})$/).test(input.key)||
+       typeof input.title!=='string'||input.title.trim().length<2||
+       input.title.trim().length>140||
+       typeof input.overview!=='string'||input.overview.length>700||
+       !(input.posterPath===null||typeof input.posterPath==='string'&&
+        /^\/[A-Za-z0-9_-]{5,90}\.(?:jpg|jpeg|png|webp)$/.test(input.posterPath)))
+     return json(res,400,{ok:false,code:'curated_metadata_invalid'});
+    const response=await request('/internal/library/metadata',{
+     method:'POST',signal:AbortSignal.timeout(10000),
+     extraHeaders:{'content-type':'application/json',
+      'x-blofy-owner-action':'curate-private-metadata'},
+     body:JSON.stringify(input)});
+    return json(res,response.status,await response.json());
    }
    if(path==='/api/v1/admin/content-hub/library/search'&&req.method==='POST'){
     if(req.headers['x-blofy-owner-action']!=='library-read-only')

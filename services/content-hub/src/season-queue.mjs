@@ -475,7 +475,10 @@ export function createSeasonQueueStore({
   // Owner-only searchable persisted library. These are DB snapshots only:
   // no calls to provider APIs, player endpoints or object-storage listings.
   // Pagination is independent for episode hits and season summaries.
-  async librarySearch({query='',state='all',page=1}={}){
+  async librarySearch({query='',state='all',page=1,seriesIds=[]}={}){
+   if(!Array.isArray(seriesIds)||seriesIds.length>120||
+      seriesIds.some(x=>typeof x!=='string'||!/^[1-9][0-9]{0,14}$/.test(x)))
+    throw Error('season_library_series_filter_invalid');
    if(typeof query!=='string'||query.length>80||/[\x00-\x1f\x7f]/.test(query)||
       typeof state!=='string'||!['all','queued','paused','running',
        'verified','failed'].includes(state)||
@@ -484,6 +487,7 @@ export function createSeasonQueueStore({
    await ensure();
    const term=query.trim(),n=40,offset=(page-1)*n,
     values=[term,state,n+1,offset];
+   if(seriesIds.length)values.push(seriesIds.map(x=>'series_'+x));
    const episodeSql=withRuns=>[
     'SELECT q.*,',
     withRuns?'COALESCE(r.bytes_copied,0) AS bytes_copied, r.state AS verified_state':
@@ -492,6 +496,8 @@ export function createSeasonQueueStore({
     withRuns?'LEFT JOIN blofy_content_hub_episode_runs r ON r.run_id=q.run_id':'',
     'WHERE ($1=\'\' OR POSITION(LOWER($1) IN LOWER(q.title))>0',
     'OR POSITION(LOWER($1) IN LOWER(q.season_key))>0',
+    seriesIds.length?
+     'OR regexp_replace(q.season_key,\'_s[0-9]+$\',\'\')=ANY($5::text[])': '',
     'OR q.episode_number::text=$1)',
     "AND ($2='all' OR q.state=$2)",
     'ORDER BY q.updated_at DESC,q.run_id DESC LIMIT $3 OFFSET $4'
@@ -531,7 +537,10 @@ export function createSeasonQueueStore({
     "WHERE ($1='' OR POSITION(LOWER($1) IN LOWER(q.season_key))>0 OR",
     'EXISTS (SELECT 1 FROM blofy_content_hub_season_queue match_ep',
     'WHERE match_ep.season_key=q.season_key',
-    'AND POSITION(LOWER($1) IN LOWER(match_ep.title))>0))',
+    'AND POSITION(LOWER($1) IN LOWER(match_ep.title))>0)',
+    seriesIds.length?
+     'OR regexp_replace(q.season_key,\'_s[0-9]+$\',\'\')=ANY($5::text[])':'',
+    ')',
     "AND ($2='all' OR EXISTS(SELECT 1 FROM blofy_content_hub_season_queue state_ep",
     'WHERE state_ep.season_key=q.season_key AND state_ep.state=$2))',
     'GROUP BY q.season_key ORDER BY q.season_key LIMIT $3 OFFSET $4'
