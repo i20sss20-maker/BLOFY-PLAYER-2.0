@@ -31,7 +31,8 @@ export async function readXtreamPrivateMirrorCoverage(db,{sourceId}={}){
     to_regclass('blofy_content_hub_episode_runs') IS NOT NULL AS episode_runs`);
  const present=names.rows?.[0]||{};
  let mappedMovieCount=null,mappedEpisodeCount=null;
- let verifiedMovieCount=null,verifiedEpisodeCount=null,verifiedBytes=null;
+ let verifiedMovieCount=null,verifiedEpisodeCount=null,verifiedBytes=0;
+ let verifiedKinds=0;
  if(present.movies_mapped===true){
   const r=await db.query(`SELECT COUNT(*)::text AS total
     FROM blofy_xtream_gateway_item_map
@@ -56,7 +57,8 @@ export async function readXtreamPrivateMirrorCoverage(db,{sourceId}={}){
   // Multiple verified revisions may exist per file; this is a manifest
   // count, not proof that every unique title still exists in S3.
   verifiedMovieCount=n(r.rows?.[0]?.verified);
-  verifiedBytes=n(r.rows?.[0]?.bytes);
+  verifiedBytes+=n(r.rows?.[0]?.bytes);
+  verifiedKinds++;
  }
  if(present.episodes_mapped===true&&present.episode_runs===true){
   const r=await db.query(`SELECT COUNT(*)::text AS verified,
@@ -68,7 +70,8 @@ export async function readXtreamPrivateMirrorCoverage(db,{sourceId}={}){
         WHERE m.server_id=e.source_id AND m.gateway_id=e.gateway_id
           AND m.source_episode_id=e.media_id)`,[sourceId]);
   verifiedEpisodeCount=n(r.rows?.[0]?.verified);
-  verifiedBytes=verifiedBytes===null?null:verifiedBytes+n(r.rows?.[0]?.bytes);
+  verifiedBytes+=n(r.rows?.[0]?.bytes);
+  verifiedKinds++;
  }
  return {ok:true,code:'source_coverage_read_only',sourceId,
   lastCatalogSyncAt:s.last_sync_at||null,
@@ -77,7 +80,8 @@ export async function readXtreamPrivateMirrorCoverage(db,{sourceId}={}){
   gatewayMapped:{movie:mappedMovieCount,episode:mappedEpisodeCount},
   verifiedPrivateManifests:{
    movie:verifiedMovieCount,episode:verifiedEpisodeCount,
-   knownBytes:verifiedBytes
+   knownBytes:verifiedKinds>0?verifiedBytes:null,
+   unknownProofKinds:2-verifiedKinds
   },
   restrictions:{
    episodesAreMappedSubsetOnly:true,
