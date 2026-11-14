@@ -136,6 +136,28 @@
         <label>معرّف السجل
           <input id="libraryMetaKey" type="text" readonly>
         </label>
+        <section class="library-match-review" aria-labelledby="libraryMatchTitle">
+          <h4 id="libraryMatchTitle">مساعد مطابقة الاسم والصورة</h4>
+          <p class="muted">ابحث عن العمل بالاسم للمراجعة. قد يعرض النظام تلميحات من أسماء الحلقات المحفوظة. اقتراحات TMDB الخارجية لا تعمل إلا بترخيص تجاري ومفتاح API؛ لا يتم اعتماد أي نتيجة تلقائيًا.</p>
+          <div class="library-match-controls">
+            <label>اسم العمل للبحث
+              <input id="libraryMatchQuery" type="search" maxlength="100"
+                placeholder="اكتب اسم الفيلم أو المسلسل" autocomplete="off">
+            </label>
+            <label>لغة النتائج
+              <select id="libraryMatchLanguage">
+                <option value="ar-SA">العربية</option>
+                <option value="en-US">English</option>
+              </select>
+            </label>
+            <button id="libraryMatchSearch" type="button">البحث عن مطابقات</button>
+          </div>
+          <p id="libraryMatchStatus" class="muted" role="status">البحث يعمل عند طلبك فقط، ولا يغيّر بيانات المكتبة.</p>
+          <div id="libraryMatchHints" class="library-match-hints"></div>
+          <div id="libraryMatchResults" class="library-match-results" aria-live="polite"></div>
+          <p class="hint">تأكد من العمل والسنة والبوستر قبل اختيار الاقتراح. حتى بعد الاختيار لن يُحفظ شيء إلا عند ضغط «حفظ البيانات» وتأكيد حقوق الاستخدام.</p>
+          <p class="hint">This product uses the TMDB API but is not endorsed or certified by TMDB. <a href="https://www.themoviedb.org" target="_blank" rel="noopener noreferrer">The Movie Database (TMDB)</a></p>
+        </section>
         <label>العنوان المعروض
           <input id="libraryMetaName" type="text" required minlength="2" maxlength="140"
             placeholder="اسم الفيلم أو المسلسل">
