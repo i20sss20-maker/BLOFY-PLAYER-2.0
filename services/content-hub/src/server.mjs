@@ -676,6 +676,36 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
       ok:false,code:'continuous_boot_failed',customerCutover:false})));
    },8500);timer.unref?.();
   }
+  // One owner-authorized 8MiB episode part smoke test, at most once.
+  // This gate starts NO continuous episode copying and changes NO customers.
+  // Its durable PostgreSQL claim prevents repeat on restart or redeploy.
+  if(process.env.BLOFY_CONTENT_HUB_EPISODE_CHUNK_ON_BOOT==='1'){
+   const timer=setTimeout(()=>{
+    void (async()=>{
+     const run=String(process.env.BLOFY_CONTENT_HUB_EPISODE_RUN_ID||'');
+     const event=String(process.env.BLOFY_CONTENT_HUB_EPISODE_CHUNK_BOOT_TOKEN||'');
+     if(!/^[A-Za-z0-9_-]{8,80}$/.test(event))
+      return {ok:false,code:'episode_chunk_boot_token_invalid'};
+     const ready=episodeCopyReadiness(process.env);
+     if(!ready.ready)return {ok:false,code:'episode_chunk_safety_gates_off',
+      blockedBy:ready.blockedBy};
+     const claimed=await lease.claimBatchBootOnce(event,run);
+     if(!claimed)return {ok:false,code:'episode_chunk_boot_already_claimed'};
+     return runOneEpisodeChunk({storage,lease,env:process.env,
+       logger:(name,payload)=>console.info(name,JSON.stringify(payload))});
+    })().then(result=>console.info('BLOFY_CONTENT_HUB_EPISODE_CHUNK_BOOT',
+     JSON.stringify({ok:result.ok===true,code:result.code,
+      errorStage:result.errorStage||null,
+      bytesCopied:result.bytesCopied||result.bytes||0,
+      chunksSaved:result.chunksSaved||0,
+      completed:result.completed===true,
+      blockedBy:result.blockedBy||null,
+      customerCutover:false,automaticDownload:false})))
+    .catch(()=>console.warn('BLOFY_CONTENT_HUB_EPISODE_CHUNK_BOOT',
+     JSON.stringify({ok:false,code:'episode_chunk_boot_failed',
+      customerCutover:false,automaticDownload:false})));
+   },7000);timer.unref?.();
+  }
   // Explicit one-time 4KiB size proof of the FIRST eligible episode
   // from the source-verified review list. No S3 write, no episode copy.
   if(process.env.BLOFY_CONTENT_HUB_EPISODE_PROBE_ON_BOOT==='1'&&
