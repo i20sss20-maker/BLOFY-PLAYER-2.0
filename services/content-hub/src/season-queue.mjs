@@ -351,7 +351,7 @@ export function createSeasonQueueStore({
     'COALESCE(SUM(duration_ms) FILTER (WHERE bytes>0),0)::text AS active_ms,',
     "COUNT(*) FILTER (WHERE bytes>0 AND stage_timings <> '{}'::jsonb)::text AS stage_sample_count,",
     "COALESCE(SUM((stage_timings->>'source_chunk')::bigint) FILTER (WHERE bytes>0),0)::text AS source_ms,",
-    "COALESCE(SUM((stage_timings->>'boundary_precheck')::bigint +",
+    "COALESCE(SUM(COALESCE((stage_timings->>'boundary_precheck')::bigint,0) +",
     "COALESCE((stage_timings->>'boundary_postcheck')::bigint,0)) FILTER (WHERE bytes>0),0)::text AS boundary_ms,",
     "COALESCE(SUM(COALESCE((stage_timings->>'s3_begin')::bigint,0)+",
     "COALESCE((stage_timings->>'s3_upload')::bigint,0)+",
