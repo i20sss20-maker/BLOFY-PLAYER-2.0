@@ -273,6 +273,10 @@ export function createContentHubServer({storage,lease,
     const [stats,audits,unresolvedAudits]=await Promise.all([
      seasonQueueStore.healthStats(),seasonQueueStore.recentAudits(),
      seasonQueueStore.unresolvedAuditCounts?.()||{mismatch:0,unavailable:0}]);
+    const worker=seasonQueue?.status()||{};
+    const currentCheckpoint=worker.active===true&&worker.currentRunId&&
+      seasonQueueStore?.currentCheckpoint?
+      await seasonQueueStore.currentCheckpoint(worker.currentRunId):null;
     const pilotRunId=String(pilotEnv.BLOFY_CONTENT_HUB_EPISODE_RUN_ID||'');
     let verifiedPilotRunId=null;
     if(/^[A-Za-z0-9_-]{8,80}$/.test(pilotRunId)){
@@ -283,7 +287,7 @@ export function createContentHubServer({storage,lease,
     }
     return json(res,200,{
      ...summarizeSeasonHealth({
-      stats,audits,unresolvedAudits,worker:seasonQueue?.status()||{},
+      stats,audits,unresolvedAudits,worker,currentCheckpoint,
       storageSoftLimitBytes:pilotEnv.BLOFY_CONTENT_HUB_STORAGE_SOFT_LIMIT_BYTES
      }),verifiedPilotRunId,lastConcurrentRead:lastSeasonConcurrentRead});
 
