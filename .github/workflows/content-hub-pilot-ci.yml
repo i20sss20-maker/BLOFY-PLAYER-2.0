@@ -64,6 +64,7 @@ jobs:
           node --check services/content-hub/src/server.mjs
           node --check services/content-hub/src/season-analytics.mjs
           node --check services/content-hub/src/season-report.mjs
+          node --check services/content-hub/src/season-forecast.mjs
           node --check services/content-hub/src/episode-chunk-pilot.mjs
           node --check services/content-hub/src/source-lease.mjs
       - name: Install test-only dependencies (no install scripts)
