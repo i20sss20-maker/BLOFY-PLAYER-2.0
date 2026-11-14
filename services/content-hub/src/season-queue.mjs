@@ -248,6 +248,33 @@ export function createSeasonQueueStore({
     throw error;
    }finally{client.release()}
   },
+  // Read-only DB time since the last durable chunk checkpoint.
+  // A stale checkpoint is only an operator warning; it cannot prove
+  // the provider failed or authorize restarting an active job.
+  async currentCheckpoint(runId){
+   if(!RUN.test(String(runId||'')))return null;
+   await ensure();
+   const sql=[
+    'SELECT EXTRACT(EPOCH FROM (NOW()-GREATEST(q.updated_at,',
+    'COALESCE(r.updated_at,q.updated_at)))) AS age_seconds',
+    'FROM blofy_content_hub_season_queue q',
+    'LEFT JOIN blofy_content_hub_episode_runs r ON r.run_id=q.run_id',
+    "WHERE q.run_id=$1 AND q.state='running' LIMIT 1"
+   ].join(' ');
+   let response;
+   try{response=await pool.query(sql,[runId])}
+   catch(error){
+    if(error?.code!=='42P01')throw error;
+    response=await pool.query([
+     'SELECT EXTRACT(EPOCH FROM (NOW()-updated_at)) AS age_seconds',
+     'FROM blofy_content_hub_season_queue',
+     "WHERE run_id=$1 AND state='running' LIMIT 1"
+    ].join(' '),[runId]);
+   }
+   const age=response.rows?.[0]?.age_seconds;
+   return age===null||age===undefined||!Number.isFinite(Number(age))?
+    null:{runId,ageSeconds:Math.max(0,Math.floor(Number(age)))};
+  },
   async healthStats(){
    await ensure();
    const exists=await pool.query(
