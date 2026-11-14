@@ -353,3 +353,16 @@ $('pauseSeasons').addEventListener('click',async()=>{
 $('refreshSeasons').addEventListener('click',refreshSeasons);
 refreshSeasons();
 setInterval(()=>{if(!document.hidden)refreshSeasons()},10000);
+
+$('loadEpisodePreview').addEventListener('click',()=>{
+ const video=$('episodePlayer');
+ video.pause();video.removeAttribute('src');video.load();
+ video.src='/api/v1/admin/content-hub/episodes/preview';
+ video.load();
+ $('episodePlayerNote').textContent=
+  'شغّل المقطع وتحقق من ظهور الصورة وسماع الصوت بنفسك. هذه عينة خاصة لا تغيّر مسارات المشتركين.';
+});
+$('episodePlayer').addEventListener('error',()=>{
+ $('episodePlayerNote').textContent=
+  'تعذّر عرض العينة: قد تكون صلاحية المعاينة غير مفعّلة، أو لم يكتمل التحقق، أو المتصفح لا يدعم الملف.';
+});
