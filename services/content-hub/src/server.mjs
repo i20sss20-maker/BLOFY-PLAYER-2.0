@@ -455,6 +455,9 @@ export function createContentHubServer({storage,lease,
     ownerEpisodePreviewEnabled:pilotEnv.BLOFY_CONTENT_HUB_OWNER_PREVIEW_ENABLED==='1'&&
       pilotEnv.BLOFY_CONTENT_HUB_EPISODE_OWNER_PREVIEW_ENABLED==='1',
        continuousCopy:copy.status(),downloadQueueEnabled:false,
+       seasonQueueReady:Boolean(seasonQueue)&&seasonQueueReadiness(pilotEnv).ready,
+       seasonQueueReadiness:seasonQueueReadiness(pilotEnv),
+       seasonQueueStatus:seasonQueue?.status()||null,
        chunkedBatchEnabled:chunkedBatchReadiness(pilotEnv).ready,
        batchReadiness:chunkedBatchReadiness(pilotEnv)});
    }catch{
@@ -862,8 +865,13 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
   logger:(name,payload)=>console.info(name,JSON.stringify(payload))});
  const port=Number(process.env.PORT||3000);
  hub.server.listen(port,'0.0.0.0',()=>{
+  const seasonsReady=seasonQueueReadiness(process.env);
   console.info('BLOFY_CONTENT_HUB_READY',JSON.stringify({port,
-   privateOnly:true,downloadQueueEnabled:false,customerCutover:false}));
+   privateOnly:true,downloadQueueEnabled:false,
+   seasonQueueConfigured:Boolean(seasonQueueStore),
+   seasonQueueReady:Boolean(seasonQueueStore)&&seasonsReady.ready,
+   seasonQueueBlockedBy:seasonsReady.blockedBy,
+   automaticSeasonStartup:false,customerCutover:false}));
   // One-off read-only mapping discovery. No source media is fetched and no
   // customer path is modified; only sanitized gateway ID and extension log.
   if(process.env.BLOFY_CONTENT_HUB_PREFLIGHT_ON_BOOT==='1'){
