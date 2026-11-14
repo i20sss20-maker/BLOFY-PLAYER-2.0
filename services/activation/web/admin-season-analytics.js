@@ -68,6 +68,26 @@ function renderSeason(s){
  card.append(head,meter,amount,details);
  return card;
 }
+function renderStages(rows,samples){
+ const box=$('analyticsStages');
+ const labels={source:'قراءة وفحص المصدر',storage:'رفع التخزين S3',
+  verification:'التحقق من سلامة الملف',other:'القفل والبيانات والحفظ'};
+ const items=Array.isArray(rows)?rows:[];
+ box.replaceChildren(...(items.length?items.map(item=>{
+  const card=make('div','analytics-record'),head=make('div','jobtop');
+  head.append(make('strong','',labels[item.stage]||item.stage),
+   make('span','chip',number(item.sharePercent)+'%'));
+  const meter=make('div','meter'),fill=make('div','fill');
+  fill.style.width=Math.max(0,Math.min(100,item.sharePercent||0))+'%';
+  meter.append(fill);
+  card.append(head,meter,make('div','muted',
+   (item.durationMs/1000).toLocaleString('ar-SA',{
+    maximumFractionDigits:1})+' ثانية من زمن الأجزاء المسجلة'));
+  return card;
+ }):[make('p','muted','يظهر توزيع الوقت بعد نقل الأجزاء الجديدة وقياس مراحلها.')]));
+ if(samples>0&&samples<3)box.append(make('p','hint',
+  'العينة صغيرة حتى الآن؛ لا يمكن تأكيد سبب البطء منها وحدها.'));
+}
 function renderDiagnostics(rows){
  const box=$('analyticsDiagnostics');
  const items=Array.isArray(rows)?rows:[];
@@ -119,6 +139,7 @@ async function reloadAnalytics(){
   const seasons=Array.isArray(data.seasonSummaries)?data.seasonSummaries:[];
   $('analyticsSeasons').replaceChildren(...(seasons.length?
    seasons.map(renderSeason):[make('p','muted','لم تتم إضافة مواسم بعد.')]));
+  renderStages(data.timingBreakdown,data.stageSamples);
   renderDiagnostics(data.diagnostics);
   renderFailures(data.failureReasons);
   renderHistory(data.recentEvents);
