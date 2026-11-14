@@ -50,3 +50,16 @@ test('stage diagnostics highlight the slowest recorded section, not a guessed pr
  assert.ok(out.diagnostics.some(x=>x.code==='dominant_source'));
  assert.equal(out.totals.averageBytesPerSecond,83886);
 });
+
+test('existing episode states are explicitly snapshots, not inferred transfer events',()=>{
+ const state={runId:'season_0123456789abcdef01234567',
+  seasonKey:'series_s02',episodeNumber:7,title:'الحلقة السابعة',
+  state:'failed',code:'episode_source_busy',storedBytes:1048576,
+  expectedBytes:8388608,percent:12,updatedAt:'2026-11-14T06:44:00Z'};
+ const out=buildSeasonAnalytics({episodeStates:[state]});
+ assert.equal(out.recentEvents.length,0);
+ assert.equal(out.recentEpisodeStates.length,1);
+ assert.equal(out.recentEpisodeStates[0].snapshotOnly,true);
+ assert.equal(out.recentEpisodeStates[0].state,'failed');
+ assert.equal(out.recentEpisodeStates[0].percent,12);
+});
