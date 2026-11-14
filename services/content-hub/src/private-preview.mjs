@@ -27,13 +27,19 @@ async function ffmpegPreview({input,output,signal}){
  });
 }
 export async function buildPrivateBrowserPreview({
- runId,lease,storage,signal,transcoder=ffmpegPreview
+ runId,lease,storage,signal,transcoder=ffmpegPreview,
+ mediaKind='movie'
 }={}){
+ if(!['movie','episode'].includes(mediaKind))return {
+  ...base,ok:false,code:'private_preview_media_kind_invalid'};
  if(!RUN.test(String(runId||'')))return {...base,ok:false,
   code:'private_preview_invalid_run'};
  let manifest=null;
- try{manifest=await lease.getVerifiedChunkedObject(runId)}
- catch{return {...base,ok:false,code:'private_preview_manifest_unavailable'}}
+ try{
+  manifest=mediaKind==='episode'?
+    await lease.getVerifiedEpisodeObject(runId):
+    await lease.getVerifiedChunkedObject(runId);
+ }catch{return {...base,ok:false,code:'private_preview_manifest_unavailable'}}
  if(!manifest)return {...base,ok:false,code:'private_preview_movie_not_verified'};
  if(!['mkv','mp4','ts','avi'].includes(manifest.extension))return {
   ...base,ok:false,code:'private_preview_unsupported_container'};
