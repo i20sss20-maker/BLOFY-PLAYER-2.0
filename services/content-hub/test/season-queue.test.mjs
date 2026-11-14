@@ -388,6 +388,8 @@ test('retryFailed changes only transient failed row once per confirmed operator 
    if(sql==='ROLLBACK'){rollbacks++;return {rows:[]}}
    if(sql.includes('pg_try_advisory_xact_lock'))
     return {rows:[{held:!busy}]};
+   if(sql.includes('ALTER TABLE blofy_content_hub_season_queue'))
+    return {rows:[]};
    if(sql.includes('UPDATE blofy_content_hub_season_queue')){
     updates++;
     assert.match(sql,/manual_retries<2/);
