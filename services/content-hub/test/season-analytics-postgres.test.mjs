@@ -46,6 +46,21 @@ test('real PostgreSQL executes reporting and chunk-timing queries safely',{
   assert.equal(states[0].state,'failed');
   assert.equal(states[0].snapshotOnly,true);
   assert.equal(states[0].percent,0);
+  const detail=await store.seasonDetailPage({seasonKey:'series_ci_s01',page:1});
+  assert.equal(detail.totals.episode_count,'1');
+  assert.equal(detail.page.pages,1);
+  assert.equal(detail.episodes[0].state,'failed');
+  assert.equal(detail.episodes[0].title,'Offline fixture');
+  assert.equal(detail.episodes[0].storedBytes,0);
+  const history=await store.seasonTransferEvents({seasonKey:'series_ci_s01'});
+  assert.equal(history.length,1);
+  assert.equal(history[0].durationMs,20000);
+  const outside=await store.seasonDetailPage({seasonKey:'series_no_s07',page:1});
+  assert.equal(outside,null);
+  const emptyPage=await store.seasonDetailPage({seasonKey:'series_ci_s01',page:2});
+  assert.equal(emptyPage.episodes.length,0);
+  await assert.rejects(store.seasonDetailPage({seasonKey:'bad/season',page:1}),
+   /season_report_selection_invalid/);
   const h=await store.healthStats();
   assert.equal(h.episode_count,'1');
   assert.equal(h.season_count,'1');
