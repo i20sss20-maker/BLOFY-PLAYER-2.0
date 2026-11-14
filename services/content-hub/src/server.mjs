@@ -243,8 +243,9 @@ export function createContentHubServer({storage,lease,
    if(!seasonQueueStore?.healthStats||!seasonQueueStore?.recentAudits)
     return json(res,503,{ok:false,code:'season_health_unavailable'});
    try{
-    const [stats,audits]=await Promise.all([
-     seasonQueueStore.healthStats(),seasonQueueStore.recentAudits()]);
+    const [stats,audits,unresolvedAudits]=await Promise.all([
+     seasonQueueStore.healthStats(),seasonQueueStore.recentAudits(),
+     seasonQueueStore.unresolvedAuditCounts?.()||{mismatch:0,unavailable:0}]);
     const pilotRunId=String(pilotEnv.BLOFY_CONTENT_HUB_EPISODE_RUN_ID||'');
     let verifiedPilotRunId=null;
     if(/^[A-Za-z0-9_-]{8,80}$/.test(pilotRunId)){
@@ -255,7 +256,7 @@ export function createContentHubServer({storage,lease,
     }
     return json(res,200,{
      ...summarizeSeasonHealth({
-      stats,audits,worker:seasonQueue?.status()||{},
+      stats,audits,unresolvedAudits,worker:seasonQueue?.status()||{},
       storageSoftLimitBytes:pilotEnv.BLOFY_CONTENT_HUB_STORAGE_SOFT_LIMIT_BYTES
      }),verifiedPilotRunId});
 
@@ -367,14 +368,12 @@ export function createContentHubServer({storage,lease,
     observed=proof?.confirmed===true}catch{}
    if(!observed)return json(res,409,{ok:false,
     code:'owner_episode_browser_playback_not_confirmed'});
-   if(!seasonQueueStore?.recentAudits)return json(res,503,{
+   if(!seasonQueueStore?.unresolvedAuditCounts)return json(res,503,{
     ok:false,code:'season_storage_audit_state_unavailable'});
    try{
-    const audits=await seasonQueueStore.recentAudits();
-    if(audits.some(x=>[
-      'season_storage_checksum_mismatch',
-      'season_storage_read_unavailable'
-    ].includes(x.code)))return json(res,409,{ok:false,
+    const counts=await seasonQueueStore.unresolvedAuditCounts();
+    if(Number(counts.mismatch)>0||Number(counts.unavailable)>0)
+     return json(res,409,{ok:false,
       code:'season_storage_integrity_review_required'});
    }catch{return json(res,503,{
     ok:false,code:'season_storage_audit_state_unavailable'})}
