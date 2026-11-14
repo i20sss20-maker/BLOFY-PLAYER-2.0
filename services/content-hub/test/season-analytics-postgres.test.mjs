@@ -274,6 +274,12 @@ test('real PostgreSQL executes reporting and chunk-timing queries safely',{
   assert.ok(readiness.global.registeredSeasons>=3);
   assert.equal(readiness.seasons.find(x=>
    x.seasonKey==='series_987654321_s02').ownerAvReviewedEpisodes,1);
+  const seasonReady=readiness.seasons.find(x=>
+   x.seasonKey==='series_987654321_s02').privateDeviceTestGate;
+  assert.equal(seasonReady.canConsiderPrivateDeviceTest,true);
+  assert.equal(seasonReady.customerReleaseApproved,false);
+  assert.equal(seasonReady.distributionRightsVerified,false);
+
   assert.equal(readiness.providerMediaRequests,0);
   assert.equal(readiness.storageRequests,0);
   const repeatedAv=await store.confirmEpisodeAv({runId:avRun});
@@ -305,6 +311,11 @@ test('real PostgreSQL executes reporting and chunk-timing queries safely',{
   assert.equal(stale.global.storageVerifiedEpisodes,1);
   assert.equal(stale.global.ownerAvReviewedEpisodes,0);
   assert.equal(stale.global.verifiedAwaitingOwnerAv,1);
+  const staleGate=stale.seasons.find(x=>
+   x.seasonKey==='series_987654321_s02').privateDeviceTestGate;
+  assert.equal(staleGate.canConsiderPrivateDeviceTest,false);
+  assert.ok(staleGate.blockingReasons.includes('owner_av_review_incomplete'));
+
   assert.equal((await catalog.find(['series:987654321']))[0].title,
    'Curated Neon Voyage');
   assert.equal((await catalog.save({...metadata,
