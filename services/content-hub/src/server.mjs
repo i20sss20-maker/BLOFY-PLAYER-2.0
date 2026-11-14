@@ -628,6 +628,36 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
       ok:false,code:'continuous_boot_failed',customerCutover:false})));
    },8500);timer.unref?.();
   }
+  // Explicit one-time 4KiB size proof of the FIRST eligible episode
+  // from the source-verified review list. No S3 write, no episode copy.
+  if(process.env.BLOFY_CONTENT_HUB_EPISODE_PROBE_ON_BOOT==='1'&&
+     process.env.BLOFY_CONTENT_HUB_SOURCE_IDLE_CONFIRMED==='1'&&
+     process.env.BLOFY_CONTENT_HUB_SOURCE_QUIET_WINDOW_CONFIRMED==='1'){
+   const timer=setTimeout(()=>{
+    void (async()=>{
+     const event=String(process.env.BLOFY_CONTENT_HUB_EPISODE_PROBE_BOOT_TOKEN||'');
+     const run=String(process.env.BLOFY_CONTENT_HUB_BATCH_RUN_ID||'');
+     if(!/^[A-Za-z0-9_-]{8,80}$/.test(event))
+      return {ok:false,code:'episode_boot_token_invalid'};
+     if(!await lease.claimBatchBootOnce(event,run))
+      return {ok:false,code:'episode_boot_already_claimed'};
+     const catalog=await inspectEpisodeCandidates({env:process.env});
+     if(!catalog.ok||!catalog.candidates.length)
+      return {ok:false,code:'episode_boot_no_candidates'};
+     const chosen=catalog.candidates[0].gatewayId;
+     return inspectEpisodeSize({gatewayId:chosen,env:process.env});
+    })().then(result=>console.info('BLOFY_CONTENT_HUB_EPISODE_SIZE_BOOT',
+     JSON.stringify({ok:result.ok===true,code:result.code,
+      gatewayId:result.gatewayId||null,
+      expectedBytes:result.expectedBytes||null,
+      validatorPresent:result.validatorPresent===true,
+      probeBytes:result.probeBytes||0,
+      automaticDownload:false,stored:false,customerCutover:false})))
+    .catch(()=>console.warn('BLOFY_CONTENT_HUB_EPISODE_SIZE_BOOT',
+     JSON.stringify({ok:false,code:'episode_size_boot_unavailable',
+      automaticDownload:false,stored:false,customerCutover:false})));
+   },5000);timer.unref?.();
+  }
   // One-time read-only catalog snapshot for the first episode pilot.
   // No upstream media connection, S3 write, customer route, or batch copy.
   if(process.env.BLOFY_CONTENT_HUB_EPISODE_PREFLIGHT_ON_BOOT==='1'){
