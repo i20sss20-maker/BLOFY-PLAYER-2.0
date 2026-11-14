@@ -65,8 +65,36 @@ function renderSeason(s){
   ' · جارٍ '+number(s.runningCount)+
   ' · متوقفة '+number(s.pausedCount));
  const amount=make('div','row',fmt(s.storedBytes)+' / '+fmt(s.expectedBytes));
- card.append(head,meter,amount,details);
+ const open=make('button','season-report-open','عرض تقرير الموسم');
+ open.type='button';
+ open.addEventListener('click',()=>document.dispatchEvent(
+  new CustomEvent('blofy:open-season-report',
+   {detail:{seasonKey:s.seasonKey}})));
+ card.append(head,meter,amount,details,open);
  return card;
+}
+function renderSeriesGroups(rows){
+ const groups=new Map();
+ for(const season of rows){
+  const match=/^series_([1-9][0-9]{0,14})_s([0-9]{1,3})$/.exec(
+   String(season.seasonKey||''));
+  const id=match?match[1]:season.seasonKey;
+  const label=match?'مسلسل · رقم '+id:'موسم مستقل';
+  const group=groups.get(id)||{label,seasons:[],episodes:0,verified:0};
+  group.seasons.push(season);
+  group.episodes+=Number(season.episodeCount)||0;
+  group.verified+=Number(season.verifiedCount)||0;
+  groups.set(id,group);
+ }
+ return [...groups.values()].map(group=>{
+  const wrapper=make('section','analytics-series-group'),
+   head=make('div','jobtop');
+  head.append(make('strong','',group.label),
+   make('span','chip',number(group.seasons.length)+' مواسم · '+
+    number(group.verified)+' / '+number(group.episodes)+' حلقة'));
+  wrapper.append(head,...group.seasons.map(renderSeason));
+  return wrapper;
+ });
 }
 function renderStages(rows,samples){
  const box=$('analyticsStages');
@@ -162,7 +190,7 @@ async function reloadAnalytics(){
   setKpis(data.totals);
   const seasons=Array.isArray(data.seasonSummaries)?data.seasonSummaries:[];
   $('analyticsSeasons').replaceChildren(...(seasons.length?
-   seasons.map(renderSeason):[make('p','muted','لم تتم إضافة مواسم بعد.')]));
+   renderSeriesGroups(seasons):[make('p','muted','لم تتم إضافة مواسم بعد.')]));
   renderStages(data.timingBreakdown,data.stageSamples);
   renderDiagnostics(data.diagnostics);
   renderFailures(data.failureReasons);

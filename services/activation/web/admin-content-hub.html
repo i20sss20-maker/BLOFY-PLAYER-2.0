@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="/admin-content-hub.css">
   <script src="/admin-content-hub.js" defer></script>
   <script src="/admin-season-analytics.js" defer></script>
+  <script src="/admin-season-detail.js" defer></script>
 </head>
 <body>
 <main class="shell">
@@ -107,6 +108,38 @@
         <h3 class="analytics-subtitle">مؤشرات البطء والأعطال</h3><div id="analyticsDiagnostics" class="analytics-list" aria-live="polite"></div>
         <h3>أسباب فشل الحلقات</h3><div id="analyticsFailures" class="analytics-list"></div></div>
     </div>
+    <section class="season-report" id="analyticsReportPanel" hidden aria-labelledby="analyticsReportTitle">
+      <div class="cardhead">
+        <div><p class="eyebrow">SEASON DETAILS · READ ONLY</p>
+          <h3 id="analyticsReportTitle">تقرير الموسم</h3>
+          <p class="muted">حالة جميع الحلقات المحفوظة للموسم، 50 حلقة في الصفحة. المخططات من بيانات فعلية، لا تتصل بالمصدر.</p></div>
+        <div class="season-report-actions">
+          <button id="analyticsExportSeason" type="button" disabled>تصدير تقرير CSV</button>
+          <button id="analyticsCloseReport" type="button">إغلاق التقرير</button>
+        </div>
+      </div>
+      <p id="analyticsReportStatus" class="muted" role="status">اختر موسمًا لعرض تقريره.</p>
+      <div class="season-report-totals" id="analyticsReportTotals" aria-label="ملخص تقدم الموسم"></div>
+      <div id="analyticsReportAlerts" class="analytics-list" aria-live="polite"></div>
+      <div class="season-report-charts">
+        <div><h4>نسبة النقل حسب الحلقة في الصفحة الحالية</h4>
+          <div class="season-report-bars" id="analyticsReportBars" aria-label="مخطط تقدم الحلقات"></div></div>
+        <div><h4>سرعة آخر 18 جزءًا مقاسًا من آخر 60 حدثًا</h4>
+          <div class="season-report-speed" id="analyticsReportSpeed" aria-label="مخطط قياسات سرعة الأجزاء"></div>
+          <p class="hint">القياس يشمل قراءة المصدر والرفع والتحقق والحفظ؛ لا يمثل سرعة الإنترنت اللحظية.</p></div>
+      </div>
+      <div class="analytics-scroll">
+        <table class="analytics-table">
+          <thead><tr><th>الحلقة</th><th>الحالة</th><th>الإنجاز</th><th>المحفوظ</th><th>آخر تحديث</th><th>الخطأ</th></tr></thead>
+          <tbody id="analyticsReportRows"><tr><td colspan="6">لا توجد بيانات بعد.</td></tr></tbody>
+        </table>
+      </div>
+      <div class="season-report-pagination">
+        <button id="analyticsReportPrev" type="button" disabled>السابق</button>
+        <span id="analyticsReportPage" aria-live="polite">—</span>
+        <button id="analyticsReportNext" type="button" disabled>التالي</button>
+      </div>
+    </section>
     <div class="cardhead analytics-history-title">
       <div><h3>آخر حالات الحلقات المسجلة</h3>
       <p class="muted">يشمل الحلقات السابقة لتفعيل قياس السرعة. هذه آخر حالة محفوظة لكل حلقة وليست سجلًا كاملًا لكل تغيير.</p></div>

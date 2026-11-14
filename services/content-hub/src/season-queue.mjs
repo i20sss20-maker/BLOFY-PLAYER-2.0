@@ -452,6 +452,89 @@ export function createSeasonQueueStore({
      updatedAt:row.updated_at,snapshotOnly:true};
    });
   },
+  // Each request returns up to 50 persisted episode snapshots.
+  // No provider, S3 or media URLs are ever fetched by this report.
+  async seasonDetailPage({seasonKey,page=1}={}){
+   if(!SEASON.test(String(seasonKey||''))||
+      !Number.isSafeInteger(page)||page<1||page>20000)
+    throw Error('season_report_selection_invalid');
+   await ensure();
+   const summary=(hasRuns)=>[
+    'SELECT COUNT(*)::text AS episode_count,',
+    "COUNT(*) FILTER (WHERE q.state='queued')::text AS queued_count,",
+    "COUNT(*) FILTER (WHERE q.state='running')::text AS running_count,",
+    "COUNT(*) FILTER (WHERE q.state='paused')::text AS paused_count,",
+    "COUNT(*) FILTER (WHERE q.state='failed')::text AS failed_count,",
+    hasRuns?
+     "COUNT(*) FILTER (WHERE q.state='verified' AND r.state='verified')::text AS verified_count,":
+     "'0'::text AS verified_count,",
+    'COALESCE(SUM(q.expected_bytes),0)::text AS expected_bytes,',
+    hasRuns?'COALESCE(SUM(r.bytes_copied),0)::text AS stored_bytes':
+     "'0'::text AS stored_bytes",
+    'FROM blofy_content_hub_season_queue q',
+    hasRuns?
+     'LEFT JOIN blofy_content_hub_episode_runs r ON r.run_id=q.run_id':'',
+    'WHERE q.season_key=$1'
+   ].filter(Boolean).join(' ');
+   let hasRuns=true,result;
+   try{result=await pool.query(summary(true),[seasonKey])}
+   catch(error){
+    if(error?.code!=='42P01')throw error;
+    hasRuns=false;result=await pool.query(summary(false),[seasonKey]);
+   }
+   const totals=result.rows?.[0]||{};
+   const totalEpisodes=Number(totals.episode_count||0);
+   if(!totalEpisodes)return null;
+   const pageSize=50;
+   const pages=Math.ceil(totalEpisodes/pageSize);
+   const rows=(withRuns)=>[
+    'SELECT q.run_id,q.season_key,q.episode_number,q.title,q.state,',
+    'q.code,q.expected_bytes,q.updated_at,',
+    withRuns?
+     'COALESCE(r.bytes_copied,0) AS bytes_copied,r.state AS episode_state':
+     '0 AS bytes_copied,NULL AS episode_state',
+    'FROM blofy_content_hub_season_queue q',
+    withRuns?
+     'LEFT JOIN blofy_content_hub_episode_runs r ON r.run_id=q.run_id':'',
+    'WHERE q.season_key=$1',
+    'ORDER BY q.episode_number,q.run_id LIMIT $2 OFFSET $3'
+   ].filter(Boolean).join(' ');
+   const params=[seasonKey,pageSize,(page-1)*pageSize];
+   const items=await pool.query(rows(hasRuns),params);
+   return {page:{number:page,seasonKey,pages,hasPrevious:page>1,
+     hasNext:page<pages},totals,
+    episodes:(items.rows||[]).map(row=>{
+     const expected=Number(row.expected_bytes||0);
+     const copied=Math.min(expected,Math.max(0,Number(row.bytes_copied||0)));
+     return {runId:row.run_id,episodeNumber:Number(row.episode_number),
+      title:row.title,state:row.state,verified:row.state==='verified'&&
+       row.episode_state==='verified',
+      code:row.code,expectedBytes:expected,storedBytes:copied,
+      updatedAt:row.updated_at};
+    })};
+  },
+  async seasonTransferEvents({seasonKey,limit=61}={}){
+   if(!SEASON.test(String(seasonKey||'')))
+    throw Error('season_report_selection_invalid');
+   await ensure();
+   const n=Math.max(1,Math.min(61,Math.floor(Number(limit)||61)));
+   const response=await pool.query([
+    'SELECT e.bytes,e.duration_ms,e.code,e.stage,e.recorded_at,',
+    'q.episode_number',
+    'FROM blofy_content_hub_season_transfer_metrics e',
+    'INNER JOIN blofy_content_hub_season_queue q ON q.run_id=e.run_id',
+    'WHERE q.season_key=$1',
+    'ORDER BY e.id DESC LIMIT $2'
+   ].join(' '),[seasonKey,n]).catch(error=>{
+    if(error?.code==='42P01')return {rows:[]};
+    throw error;
+   });
+   return (response.rows||[]).map(row=>({
+    episodeNumber:Number(row.episode_number),bytes:Number(row.bytes),
+    durationMs:Number(row.duration_ms),code:row.code,stage:row.stage,
+    recordedAt:row.recorded_at
+   }));
+  },
   async saveAudit(runId,result){
    if(!RUN.test(String(runId||''))||
       !['season_storage_sample_verified',

@@ -17,6 +17,7 @@ import {createSeasonQueueStore,createSeasonQueueController,seasonQueueReadiness,
 import {inspectLicensedSeries,inspectLicensedSeriesEpisodes,inspectLicensedPilotSeries} from './series-catalog.mjs';
 import {summarizeSeasonHealth,auditSeasonEpisodeSample} from './season-health.mjs';
 import {buildSeasonAnalytics} from './season-analytics.mjs';
+import {buildSeasonReport} from './season-report.mjs';
 import {checkPrivateReadConcurrency,validateConcurrentReadIds} from './concurrent-private-read.mjs';
 
 const FIXTURE_SOURCE='00000000-0000-4000-8000-000000000000';
@@ -293,6 +294,28 @@ export function createContentHubServer({storage,lease,
      }),verifiedPilotRunId,lastConcurrentRead:lastSeasonConcurrentRead});
 
    }catch{return json(res,503,{ok:false,code:'season_health_database_unavailable'})}
+  }
+  // Owner-only, read-only season detail; no media or S3 access.
+  const detailRoute=/^\/internal\/seasons\/report\/([a-z0-9][a-z0-9_-]{2,63})\/page\/([1-9][0-9]{0,4})$/.exec(path);
+  if(detailRoute&&req.method==='GET'){
+   if(String(req.url||'').includes('?'))
+    return json(res,400,{ok:false,code:'season_report_query_denied'});
+   if(!seasonQueueStore?.seasonDetailPage||
+      !seasonQueueStore?.seasonTransferEvents)
+    return json(res,503,{ok:false,code:'season_report_unavailable'});
+   const seasonKey=detailRoute[1],page=Number(detailRoute[2]);
+   if(page>20000)return json(res,400,{
+    ok:false,code:'season_report_page_invalid'});
+   try{
+    const [data,events]=await Promise.all([
+     seasonQueueStore.seasonDetailPage({seasonKey,page}),
+     seasonQueueStore.seasonTransferEvents({seasonKey})
+    ]);
+    if(!data)return json(res,404,{ok:false,code:'season_report_not_found'});
+    return json(res,200,buildSeasonReport({
+     ...data,events,worker:seasonQueue?.status()||{}
+    }));
+   }catch{return json(res,503,{ok:false,code:'season_report_database_unavailable'})}
   }
   // Bounded operator analytics. No source requests, no S3 listing,
   // no control actions and no customer/player-facing routes.

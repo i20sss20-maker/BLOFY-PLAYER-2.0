@@ -198,7 +198,8 @@ http.createServer=function withContentHubAdmin(listener){
   catch{return listener(req,res)}
   const path=url.pathname;
   if(req.method==='GET'&&['/admin-content-hub.css',
-    '/admin-content-hub.js','/admin-season-analytics.js'].includes(path)){
+    '/admin-content-hub.js','/admin-season-analytics.js',
+     '/admin-season-detail.js'].includes(path)){
    try{
     const file=path.slice(1);
     const data=await readFile(new URL('../web/'+file,import.meta.url));
@@ -291,6 +292,20 @@ http.createServer=function withContentHubAdmin(listener){
      signal:AbortSignal.timeout(8000)});
     if(response.status!==200)return json(res,503,{
      ok:false,code:'season_queue_unavailable'});
+    return json(res,200,await safeReadJson(response));
+   }
+   const reportRoute=/^\/api\/v1\/admin\/content-hub\/seasons\/report\/([a-z0-9][a-z0-9_-]{2,63})\/page\/([1-9][0-9]{0,4})$/.exec(path);
+   if(reportRoute&&req.method==='GET'){
+    const page=Number(reportRoute[2]);
+    if(page>20000)return json(res,400,{
+     ok:false,code:'season_report_page_invalid'});
+    const response=await request('/internal/seasons/report/'+
+     reportRoute[1]+'/page/'+page,{
+     signal:AbortSignal.timeout(12000)});
+    if(response.status===404)return json(res,404,{
+     ok:false,code:'season_report_not_found'});
+    if(response.status!==200)return json(res,503,{
+     ok:false,code:'season_report_unavailable'});
     return json(res,200,await safeReadJson(response));
    }
    if(path==='/api/v1/admin/content-hub/seasons/analytics'&&req.method==='GET'){
