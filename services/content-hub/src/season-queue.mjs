@@ -105,7 +105,7 @@ export function createSeasonQueueStore({
  if(!connectionString)throw Error('season_queue_database_required');
  const pool=new Pool({connectionString,max:2,connectionTimeoutMillis:5000,
   idleTimeoutMillis:10000,application_name:'blofy-season-queue'});
- let initPromise;
+ let initPromise,metricTablePromise;
  async function ensure(){
   if(!initPromise){
    initPromise=(async()=>{
@@ -294,12 +294,111 @@ export function createSeasonQueueStore({
     "COUNT(*) FILTER (WHERE q.state='paused')::text AS paused_count,",
     "COUNT(*) FILTER (WHERE q.state='failed')::text AS failed_count,",
     "COUNT(*) FILTER (WHERE "+verified+")::text AS verified_count,",
+    'COUNT(DISTINCT q.season_key)::text AS season_count,',
     'COALESCE(SUM(q.expected_bytes),0)::text AS expected_bytes,',
     'COALESCE(SUM('+stored+'),0)::text AS stored_bytes,',
     'COALESCE(SUM(CASE WHEN '+verified+' THEN q.expected_bytes ELSE 0 END),0)::text AS verified_bytes',
     from
    ].join(' '));
    return rows.rows?.[0]||{};
+  },
+  // A separate, append-only table: no changes to checkpoints or player reads.
+  // Telemetry failure must never make the active transfer fail.
+  async recordTransferMetric({runId,bytes=0,durationMs,code,stage=null}={}){
+   const size=Number(bytes),duration=Number(durationMs);
+   if(!RUN.test(String(runId||''))||
+      !Number.isSafeInteger(size)||size<0||size>8*1024*1024||
+      !Number.isSafeInteger(duration)||duration<1||duration>3600000||
+      !/^[a-z0-9_]{1,80}$/.test(String(code||''))||
+      (stage!==null&&!/^[a-z0-9_]{1,80}$/.test(String(stage))))
+    throw Error('season_transfer_metric_invalid');
+   await ensure();
+   if(!metricTablePromise){
+    metricTablePromise=pool.query([
+     'CREATE TABLE IF NOT EXISTS blofy_content_hub_season_transfer_metrics (',
+     'id BIGSERIAL PRIMARY KEY, run_id TEXT NOT NULL,',
+     'bytes BIGINT NOT NULL CHECK(bytes BETWEEN 0 AND 8388608),',
+     'duration_ms INTEGER NOT NULL CHECK(duration_ms BETWEEN 1 AND 3600000),',
+     'code TEXT NOT NULL, stage TEXT,',
+     'recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW())'
+    ].join(' ')).catch(e=>{metricTablePromise=null;throw e});
+   }
+   await metricTablePromise;
+   await pool.query([
+    'INSERT INTO blofy_content_hub_season_transfer_metrics',
+    '(run_id,bytes,duration_ms,code,stage) VALUES ($1,$2,$3,$4,$5)'
+   ].join(' '),[runId,size,duration,code,stage]);
+  },
+  async analyticsStats(){
+   await ensure();
+   const result=await pool.query([
+    'SELECT COUNT(*)::text AS event_count,',
+    'COUNT(*) FILTER (WHERE bytes>0)::text AS sample_count,',
+    'COALESCE(SUM(bytes) FILTER (WHERE bytes>0),0)::text AS transfer_bytes,',
+    'COALESCE(SUM(duration_ms) FILTER (WHERE bytes>0),0)::text AS active_ms,',
+    'MIN(recorded_at) AS first_recorded_at,',
+    'MAX(recorded_at) AS last_recorded_at',
+    'FROM blofy_content_hub_season_transfer_metrics'
+   ].join(' ')).catch(e=>{
+    if(e?.code==='42P01')return {rows:[]};
+    throw e;
+   });
+   return result.rows?.[0]||{};
+  },
+  async recentTransferEvents({limit=30}={}){
+   await ensure();
+   const n=Math.max(1,Math.min(30,Math.floor(Number(limit)||30)));
+   const result=await pool.query([
+    'SELECT e.run_id,e.bytes,e.duration_ms,e.code,e.stage,e.recorded_at,',
+    'q.season_key,q.episode_number',
+    'FROM blofy_content_hub_season_transfer_metrics e',
+    'INNER JOIN blofy_content_hub_season_queue q ON q.run_id=e.run_id',
+    'ORDER BY e.id DESC LIMIT $1'
+   ].join(' '),[n]).catch(e=>{
+    if(e?.code==='42P01')return {rows:[]};
+    throw e;
+   });
+   return (result.rows||[]).map(row=>({
+    runId:row.run_id,seasonKey:row.season_key,
+    episodeNumber:Number(row.episode_number),bytes:Number(row.bytes),
+    durationMs:Number(row.duration_ms),code:row.code,stage:row.stage,
+    recordedAt:row.recorded_at
+   }));
+  },
+  async failureReasons(){
+   await ensure();
+   const result=await pool.query([
+    'SELECT COALESCE(code,\'unknown\') AS code,COUNT(*)::text AS total',
+    'FROM blofy_content_hub_season_queue',
+    "WHERE state='failed' GROUP BY COALESCE(code,'unknown')",
+    'ORDER BY total DESC LIMIT 15'
+   ].join(' '));
+   return result.rows||[];
+  },
+  async seasonAnalyticsSummary(){
+   await ensure();
+   const grouped=(hasEpisodeTable)=>[
+    'SELECT q.season_key,COUNT(*)::text AS episode_count,',
+    "COUNT(*) FILTER (WHERE q.state='queued')::text AS queued_count,",
+    "COUNT(*) FILTER (WHERE q.state='running')::text AS running_count,",
+    "COUNT(*) FILTER (WHERE q.state='paused')::text AS paused_count,",
+    "COUNT(*) FILTER (WHERE q.state='failed')::text AS failed_count,",
+    hasEpisodeTable?
+     "COUNT(*) FILTER (WHERE q.state='verified' AND r.state='verified')::text AS verified_count,":
+     "'0' AS verified_count,",
+    'COALESCE(SUM(q.expected_bytes),0)::text AS expected_bytes,',
+    hasEpisodeTable?'COALESCE(SUM(r.bytes_copied),0)::text AS stored_bytes':
+     "'0' AS stored_bytes",
+    'FROM blofy_content_hub_season_queue q',
+    hasEpisodeTable?
+     'LEFT JOIN blofy_content_hub_episode_runs r ON r.run_id=q.run_id':'',
+    'GROUP BY q.season_key ORDER BY q.season_key LIMIT 101'
+   ].filter(Boolean).join(' ');
+   const result=await pool.query(grouped(true)).catch(e=>{
+    if(e?.code==='42P01')return pool.query(grouped(false));
+    throw e;
+   });
+   return result.rows||[];
   },
   async saveAudit(runId,result){
    if(!RUN.test(String(runId||''))||
@@ -543,6 +642,7 @@ export function createSeasonQueueController({
      status={...status,state:'paused',code:'episode_safety_gates_off'};break;
     }
     let result;
+    const metricStartedAt=Date.now();
     try{
      // This candidate was authenticated, selected by the operator,
      // and pinned to the queue row at enqueue time. The activation
@@ -556,6 +656,28 @@ export function createSeasonQueueController({
       candidateInspector:async()=>({ok:true,candidates:[jobCandidate]})});
     }catch{result={ok:false,code:'episode_retryable_error'}}
     const code=safeCode(result?.code);
+    // Measure only verified durable chunks. A repeated "already verified"
+    // response has zero bytes and is never double-counted as transfer speed.
+    const partNo=Number(result?.chunksSaved);
+    const measurable=result?.ok===true&&
+      ['episode_checkpoint_saved','episode_fully_verified'].includes(code)&&
+      Number.isSafeInteger(partNo)&&partNo>=1&&partNo<=1024;
+    const chunkBytes=measurable?
+      Math.min(8*1024*1024,Math.max(0,
+       job.expectedBytes-(partNo-1)*8*1024*1024)):0;
+    if(typeof store.recordTransferMetric==='function'&&
+       (chunkBytes>0||result?.ok===false)){
+      const stage=/^[a-z0-9_]{1,80}$/.test(String(result?.errorStage||''))?
+       result.errorStage:null;
+      // Non-blocking observation. Logging failure cannot interrupt playback
+      // or the licensed transfer/checkpoint state machine.
+      void store.recordTransferMetric({
+       runId:job.runId,bytes:chunkBytes,
+       durationMs:Math.max(1,Math.min(3600000,Date.now()-metricStartedAt)),
+       code,stage
+      }).catch(()=>logger('BLOFY_SEASON_METRIC_UNAVAILABLE',{
+       code:'telemetry_write_failed',customerCutover:false}));
+    }
     if(abort.signal.aborted){
      await store.update(job.runId,'paused',{code:'season_queue_paused'});
      status={...status,state:'paused',code:'season_queue_paused'};break;
