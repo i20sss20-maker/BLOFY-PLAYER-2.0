@@ -64,3 +64,24 @@ test('operator can stop a running source before next chunk',async()=>{
  assert.equal(c.status().state,'paused');
  assert.equal(c.status().code,'copy_stopped_by_operator');
 });
+
+test('episode continuous controller checkpoints each part and stops at verified episode',async()=>{
+ let parts=0;
+ const c=createContinuousCopyController({
+  readiness:()=>({ready:true,blockedBy:[]}),
+  pause:async()=>{},delayMs:0,maxBatches:5,
+  runBatch:async()=>{
+   parts++;
+   return parts===3?{ok:true,code:'episode_fully_verified',
+      completed:true,bytes:3*8388608}:
+      {ok:true,code:'episode_checkpoint_saved',
+       bytesCopied:parts*8388608};
+  }
+ });
+ assert.equal(c.start().ok,true);
+ await settle();
+ assert.equal(parts,3);
+ assert.equal(c.status().state,'completed');
+ assert.equal(c.status().active,false);
+ assert.equal(c.status().bytesCopied,3*8388608);
+});
