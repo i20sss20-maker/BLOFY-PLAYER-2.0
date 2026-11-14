@@ -927,7 +927,7 @@ export function createSeasonQueueStore({
     const {verified,checked}=expression();
     return [
      'COUNT(*)::text AS episode_count,',
-     'COUNT(DISTINCT q.season_key)::text AS registered_season_count,'
+     'COUNT(DISTINCT q.season_key)::text AS registered_season_count,',
      "COUNT(*) FILTER (WHERE q.state='queued')::text AS queued_count,",
      "COUNT(*) FILTER (WHERE q.state='paused')::text AS paused_count,",
      "COUNT(*) FILTER (WHERE q.state='running')::text AS running_count,",
@@ -957,7 +957,7 @@ export function createSeasonQueueStore({
      'SELECT',withSeason?'q.season_key,':'',...columns(),joins(),
      withSeason?'GROUP BY q.season_key':'',
      withSeason?
-      'ORDER BY COUNT(*) FILTER (WHERE q.state='failed') DESC, q.season_key LIMIT $1 OFFSET $2':
+      "ORDER BY COUNT(*) FILTER (WHERE q.state='failed') DESC, q.season_key LIMIT $1 OFFSET $2":
       ''
     ].filter(Boolean).join(' ');
     const args=withSeason?[size+1,offset]:[];
@@ -969,7 +969,7 @@ export function createSeasonQueueStore({
       ...columns(),joins(),
       withSeason?'GROUP BY q.season_key':'',
       withSeason?
-       'ORDER BY COUNT(*) FILTER (WHERE q.state='failed') DESC, q.season_key LIMIT $1 OFFSET $2':''
+       "ORDER BY COUNT(*) FILTER (WHERE q.state='failed') DESC, q.season_key LIMIT $1 OFFSET $2":''
      ].filter(Boolean).join(' '),args).catch(async second=>{
       if(second?.code!=='42P01')throw second;
       hasRuns=false;
@@ -978,14 +978,14 @@ export function createSeasonQueueStore({
        ...columns(),joins(),
        withSeason?'GROUP BY q.season_key':'',
        withSeason?
-        'ORDER BY COUNT(*) FILTER (WHERE q.state='failed') DESC, q.season_key LIMIT $1 OFFSET $2':''
+        "ORDER BY COUNT(*) FILTER (WHERE q.state='failed') DESC, q.season_key LIMIT $1 OFFSET $2":''
       ].filter(Boolean).join(' '),args);
      })}
      if(hasRuns){hasRuns=false;return pool.query([
       'SELECT',withSeason?'q.season_key,':'',...columns(),joins(),
       withSeason?'GROUP BY q.season_key':'',
       withSeason?
-       'ORDER BY COUNT(*) FILTER (WHERE q.state='failed') DESC, q.season_key LIMIT $1 OFFSET $2':''
+       "ORDER BY COUNT(*) FILTER (WHERE q.state='failed') DESC, q.season_key LIMIT $1 OFFSET $2":''
      ].filter(Boolean).join(' '),args)}
      throw error;
     }
