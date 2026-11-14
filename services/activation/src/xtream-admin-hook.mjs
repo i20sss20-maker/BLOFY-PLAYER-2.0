@@ -3150,6 +3150,7 @@ async function unifiedStreamBridge(req,res,url){
     '/internal/blofy-stream/content-hub/status':'/internal/pilots',
     '/internal/blofy-stream/content-hub/episodes/candidates':'/internal/episodes/candidates',
     '/internal/blofy-stream/content-hub/episodes/probe':'/internal/episodes/probe',
+    '/internal/blofy-stream/content-hub/episodes/next':'/internal/episodes/next',
     '/internal/blofy-stream/content-hub/preflight':'/internal/pilot/preflight',
     '/internal/blofy-stream/content-hub/batch/next':'/internal/batch/next',
     '/internal/blofy-stream/content-hub/batch/start':'/internal/batch/start',
@@ -3159,7 +3160,8 @@ async function unifiedStreamBridge(req,res,url){
   if(Object.hasOwn(batchBridgePaths,p)){
     const canary=p.endsWith('/playback/diagnose');
     const episodeProbe=p.endsWith('/episodes/probe');
-    const write=p.includes('/batch/')||canary||episodeProbe;
+    const episodeCopy=p.endsWith('/episodes/next');
+    const write=p.includes('/batch/')||canary||episodeProbe||episodeCopy;
     const confirmed=write&&!p.endsWith('/batch/pause');
     let episodeGatewayId=null;
     if((write&&req.method!=='POST')||(!write&&req.method!=='GET'))
@@ -3168,7 +3170,7 @@ async function unifiedStreamBridge(req,res,url){
       const body=await readJson(req);
       if(confirmed&&body.confirmed!==true)return json(res,400,{
         ok:false,code:'hub_batch_explicit_confirmation_required'});
-      if(episodeProbe){
+      if(episodeProbe||episodeCopy){
        episodeGatewayId=Number(body.gatewayId);
        if(!Number.isSafeInteger(episodeGatewayId)||episodeGatewayId<1)
         return json(res,400,{ok:false,code:'hub_episode_id_invalid'});
@@ -3183,7 +3185,9 @@ async function unifiedStreamBridge(req,res,url){
         method:req.method,redirect:'manual',
         signal:AbortSignal.timeout(episodeProbe?55000:8500),
         headers:{authorization:'Bearer '+operatorToken,
-          ...(episodeProbe?{'x-blofy-episode-probe-confirm':'operator-approved-probe',
+          ...(episodeCopy?{'x-blofy-episode-copy-confirm':'approved-single-8mib',
+            'x-blofy-episode-gateway-id':String(episodeGatewayId)}:
+            episodeProbe?{'x-blofy-episode-probe-confirm':'operator-approved-probe',
             'x-blofy-episode-gateway-id':String(episodeGatewayId)}:
             confirmed?canary?
             {'x-blofy-canary-confirm':'verified-private'}:
