@@ -51,7 +51,7 @@ test('cinematic UI is private, accessible, and deliberately no-media/no-write',a
  ]);
  assert.match(html,/admin-library-cinema\.js/);
  assert.match(html,/واجهة بصرية خاصة بالمالك/);
- assert.match(html,/صفحة البحث/);
+ assert.match(html,/الصفحة الحالية/);
  assert.match(html,/aria-pressed="true"/);
  for(const id of [...ids,'libraryCinema','cinemaTitle']){
   assert.equal((html.match(new RegExp('id="'+id+'"','g'))||[]).length,1,id);
@@ -130,7 +130,7 @@ test('cinematic cards only show licensed posters and open existing owner actions
  edits[0].fire('click');
  assert.equal(emitted[1].type,'blofy:edit-library-metadata');
  assert.match(emitted[1].detail.key,/^(?:movie:|series:)/);
- assert.match(fake.refs.cinemaScope.textContent,/الصفحة/);
+ assert.match(fake.refs.cinemaScope.textContent,/صفحة البحث/);
 });
 test('cinema/details mode switch changes only presentation, not server state',async()=>{
  const fake=makeFakeBrowser();
