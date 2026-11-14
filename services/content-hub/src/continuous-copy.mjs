@@ -45,12 +45,13 @@ export function createContinuousCopyController({
     let result;
     try{result=await runBatch({signal:abort.signal})}
     catch{result={ok:false,code:'copy_batch_exception'}}
-    if(result?.code==='batch_checkpoint_saved'&&result.ok){
+    if(['batch_checkpoint_saved','episode_checkpoint_saved'].includes(result?.code)&&result.ok){
      status={...status,state:'running',code:result.code,
       batchesThisRun:status.batchesThisRun+1,
       bytesCopied:Number(result.bytesCopied||0)};
     }else if(result?.ok&&
-       (result.completed===true||result.code==='batch_already_verified')){
+       (result.completed===true||result.code==='batch_already_verified'||
+        result.code==='episode_already_verified')){
      status={...status,state:'completed',code:result.code,
       batchesThisRun:status.batchesThisRun+1,
       bytesCopied:Number(result.bytes||result.bytesCopied||0)};
