@@ -68,11 +68,11 @@ async function sampleVerifiedPrefix({object,storage,filename,signal}){
 }
 async function command(program,args){
  return execFile(program,args,{timeout:35000,maxBuffer:512000,
-  windowsHide:true,env:{...process.env,
-   // Explicitly do not inherit ffmpeg network proxy variables or tokens.
-   BLOFY_CONTENT_HUB_BRIDGE_TOKEN:'',
-   BLOFY_CONTENT_HUB_ADMIN_TOKEN:'',
-   BLOFY_CONTENT_HUB_S3_SECRET_ACCESS_KEY:''
+  windowsHide:true,env:{
+    // Decoder subprocess receives no application, database, provider,
+    // Railway, cloud-storage or operator credentials.
+    PATH:process.env.PATH||'/usr/local/bin:/usr/bin:/bin',
+    HOME:tmpdir(),LANG:'C'
   }});
 }
 
