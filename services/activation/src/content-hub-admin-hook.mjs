@@ -199,7 +199,7 @@ http.createServer=function withContentHubAdmin(listener){
   const path=url.pathname;
   if(req.method==='GET'&&['/admin-content-hub.css',
     '/admin-content-hub.js','/admin-season-analytics.js',
-     '/admin-season-detail.js'].includes(path)){
+     '/admin-season-detail.js','/admin-season-attention.js'].includes(path)){
    try{
     const file=path.slice(1);
     const data=await readFile(new URL('../web/'+file,import.meta.url));
@@ -316,6 +316,14 @@ http.createServer=function withContentHubAdmin(listener){
      ok:false,code:'season_resume_preview_unavailable'});
     return json(res,200,await safeReadJson(response));
    }
+   if(path==='/api/v1/admin/content-hub/seasons/attention'&&
+      req.method==='GET'){
+    const response=await request('/internal/seasons/attention',{
+     signal:AbortSignal.timeout(8000)});
+    if(response.status!==200)return json(res,503,{
+     ok:false,code:'season_attention_unavailable'});
+    return json(res,200,await safeReadJson(response));
+   }
    if(path==='/api/v1/admin/content-hub/seasons/analytics'&&req.method==='GET'){
     // Owner session already authenticated; do not leak private Hub token.
     const response=await request('/internal/seasons/analytics',{
@@ -338,6 +346,23 @@ http.createServer=function withContentHubAdmin(listener){
       req.method==='POST'){
     if(req.headers['x-blofy-owner-action']!=='season-library')
      return json(res,403,{ok:false,code:'season_owner_action_required'});
+    if(path==='/api/v1/admin/content-hub/seasons/retry'){
+     const input=await readSeasonAdminBody(req);
+     const runId=String(input?.runId||'');
+     if(input?.confirmed!==true||
+        input?.licensedStorage!==true||input?.sourceIdle!==true||
+        !/^[A-Za-z0-9_-]{8,80}$/.test(runId))
+      return json(res,400,{ok:false,
+       code:'season_retry_manual_review_required'});
+     const response=await request('/internal/seasons/retry',{
+      method:'POST',signal:AbortSignal.timeout(12000),
+      extraHeaders:{
+       'content-type':'application/json',
+       'x-blofy-season-confirm':'manual-review-transient-failure'},
+      body:JSON.stringify({runId,confirmed:true,licensedStorage:true,
+       sourceIdle:true})});
+     return json(res,response.status,await response.json());
+    }
     if(path==='/api/v1/admin/content-hub/seasons/priority'){
      const input=await readSeasonAdminBody(req);
      if(input?.confirmed!==true||

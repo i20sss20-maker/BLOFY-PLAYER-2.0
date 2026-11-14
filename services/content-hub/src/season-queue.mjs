@@ -586,6 +586,39 @@ export function createSeasonQueueStore({
     recordedAt:row.recorded_at
    }));
   },
+  // Read-only bounded attention index, with no upstream media requests.
+  async attentionRows({limit=51}={}){
+   await ensure();
+   const n=Math.max(1,Math.min(51,Math.floor(Number(limit)||51)));
+   const query=withRuns=>[
+    'SELECT q.*,',
+    withRuns?'COALESCE(r.bytes_copied,0) AS bytes_copied':
+      '0 AS bytes_copied',
+    'FROM blofy_content_hub_season_queue q',
+    withRuns?'LEFT JOIN blofy_content_hub_episode_runs r ON r.run_id=q.run_id':'',
+    withRuns?
+     "WHERE q.state IN ('failed','running','paused') OR":
+     "WHERE q.state IN ('failed','running','paused')",
+    withRuns?
+     "(q.state='queued' AND COALESCE(r.bytes_copied,0)>0)":"",
+    "ORDER BY CASE q.state WHEN 'failed' THEN 0",
+    "WHEN 'running' THEN 1 WHEN 'paused' THEN 2 ELSE 3 END,",
+    'q.updated_at DESC,q.run_id DESC LIMIT $1'
+   ].filter(Boolean).join(' ');
+   const response=await pool.query(query(true),[n]).catch(error=>{
+    if(error?.code==='42P01')return pool.query(query(false),[n]);
+    throw error;
+   });
+   return (response.rows||[]).map(row=>({
+    runId:row.run_id,seasonKey:row.season_key,
+    episodeNumber:Number(row.episode_number),
+    state:row.state,code:row.code||null,
+    expectedBytes:Number(row.expected_bytes||0),
+    storedBytes:Number(row.bytes_copied||0),
+    manualRetries:Number(row.manual_retries||0),
+    updatedAt:row.updated_at
+   }));
+  },
   // Full measured wall-clock *chunk* time, not time between season dates.
   // Older chunks without telemetry are explicitly excluded.
   async seasonTimingStats({seasonKey}={}){

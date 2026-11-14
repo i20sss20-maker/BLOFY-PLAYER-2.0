@@ -9,6 +9,7 @@
   <script src="/admin-content-hub.js" defer></script>
   <script src="/admin-season-analytics.js" defer></script>
   <script src="/admin-season-detail.js" defer></script>
+  <script src="/admin-season-attention.js" defer></script>
 </head>
 <body>
 <main class="shell">
@@ -108,6 +109,31 @@
         <h3 class="analytics-subtitle">مؤشرات البطء والأعطال</h3><div id="analyticsDiagnostics" class="analytics-list" aria-live="polite"></div>
         <h3>أسباب فشل الحلقات</h3><div id="analyticsFailures" class="analytics-list"></div></div>
     </div>
+    <section class="season-attention" aria-labelledby="attentionTitle">
+      <div class="cardhead">
+        <div>
+          <p class="eyebrow">SEASON ATTENTION · OWNER ONLY</p>
+          <h3 id="attentionTitle">مركز تنبيهات الحلقات المتعثرة</h3>
+          <p class="muted">تنبيهات مستنتجة من حالات PostgreSQL فقط. لا تثبت أن المصدر متوقف، ولا تفحص الملفات أو تبدأ نقلًا تلقائيًا.</p>
+        </div>
+        <button type="button" id="attentionRefresh">تحديث التنبيهات</button>
+      </div>
+      <div class="season-attention-summary" id="attentionSummary" aria-live="polite"></div>
+      <div class="season-attention-controls">
+        <label for="attentionLevel">عرض التنبيهات
+          <select id="attentionLevel">
+            <option value="all">كل المستويات</option>
+            <option value="critical">تحتاج مراجعة مهمة</option>
+            <option value="warning">تحتاج انتباهًا</option>
+            <option value="notice">توقف للمراجعة</option>
+            <option value="info">معلومات</option>
+          </select>
+        </label>
+      </div>
+      <p class="muted" id="attentionStatus" role="status">جارٍ فحص حالة الحلقات المحفوظة…</p>
+      <div class="season-attention-list" id="attentionList" aria-live="polite"></div>
+      <p class="hint">إعادة المحاولة اليدوية متاحة فقط للأخطاء المؤقتة وبحد مرتين؛ تتطلب تأكيد صلاحية التخزين وخمول المصدر، ولا تشغّل النقل. الأخطاء المتعلقة بالسلامة والترخيص لا يمكن تجاوزها بهذا الإجراء.</p>
+    </section>
     <section class="season-resume-panel analytics-record" aria-labelledby="analyticsResumeTitle">
       <div class="cardhead">
         <div>

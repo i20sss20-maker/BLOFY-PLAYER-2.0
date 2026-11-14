@@ -153,3 +153,32 @@
 .season-report-controls button{min-height:43px}
 @media(max-width:540px){.season-report-controls{display:grid;grid-template-columns:1fr}
  .season-report-controls label{min-width:0}}
+
+
+/* Smart queue triage is a passive database snapshot, never a retry scheduler. */
+.season-attention{margin:23px 0;padding:19px;border-radius:15px;
+ border:1px solid #3c6281;background:#102236}
+.season-attention h3{font-size:20px;margin:4px 0}
+.season-attention .cardhead{align-items:start}
+.season-attention-summary{display:flex;flex-wrap:wrap;gap:9px;margin:16px 0}
+.season-attention-count{background:#142f46;padding:9px 11px}
+.season-attention-controls{display:flex;flex-wrap:wrap;margin:12px 0}
+.season-attention-controls label{display:grid;gap:7px;font-size:13px}
+.season-attention-controls select{background:#112d46;color:#e9f6ff;
+ border:1px solid #48759a;border-radius:8px;padding:9px}
+.season-attention-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.season-attention-item{min-width:0;padding:14px;background:#102a42;
+ border:1px solid #40627b;border-radius:11px;overflow-wrap:anywhere}
+.season-attention-critical{border-inline-start:5px solid #ee6b69}
+.season-attention-warning{border-inline-start:5px solid #ebac4f}
+.season-attention-notice{border-inline-start:5px solid #72b7dc}
+.season-attention-info{border-inline-start:5px solid #65c4a2}
+.season-attention-item p{margin:9px 0}
+.season-attention-name{font-weight:700;font-size:15px}
+.season-attention-buttons{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.season-attention-buttons button{padding:9px;font-size:13px}
+.season-attention-retry{background:#2e653d;border-color:#418959}
+.season-attention-retry:disabled{opacity:.6}
+@media(max-width:750px){.season-attention-list{grid-template-columns:1fr}}
+@media(max-width:550px){.season-attention{padding:12px}
+ .season-attention .cardhead{display:grid;gap:12px}}

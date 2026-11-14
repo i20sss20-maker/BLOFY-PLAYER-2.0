@@ -18,6 +18,7 @@ import {inspectLicensedSeries,inspectLicensedSeriesEpisodes,inspectLicensedPilot
 import {summarizeSeasonHealth,auditSeasonEpisodeSample} from './season-health.mjs';
 import {buildSeasonAnalytics} from './season-analytics.mjs';
 import {buildSeasonReport} from './season-report.mjs';
+import {buildSeasonAttention} from './season-attention.mjs';
 import {checkPrivateReadConcurrency,validateConcurrentReadIds} from './concurrent-private-read.mjs';
 
 const FIXTURE_SOURCE='00000000-0000-4000-8000-000000000000';
@@ -317,6 +318,20 @@ export function createContentHubServer({storage,lease,
      ...data,events,timing,worker:seasonQueue?.status()||{}
     }));
    }catch{return json(res,503,{ok:false,code:'season_report_database_unavailable'})}
+  }
+  // Private owner alert triage. The caller gets database snapshots only.
+  if(path==='/internal/seasons/attention'&&req.method==='GET'){
+   if(String(req.url||'').includes('?'))
+    return json(res,400,{ok:false,code:'season_attention_query_forbidden'});
+   if(!seasonQueueStore?.attentionRows)
+    return json(res,503,{ok:false,code:'season_attention_unavailable'});
+   try{
+    const rows=await seasonQueueStore.attentionRows({limit:51});
+    return json(res,200,buildSeasonAttention({
+     rows,limited:rows.length>50,worker:seasonQueue?.status()||{}
+    }));
+   }catch{return json(res,503,{ok:false,
+    code:'season_attention_database_unavailable'})}
   }
   // Bounded operator analytics. No source requests, no S3 listing,
   // no control actions and no customer/player-facing routes.
