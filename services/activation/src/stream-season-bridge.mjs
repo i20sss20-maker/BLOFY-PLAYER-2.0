@@ -10,7 +10,7 @@ export function isStreamSeasonBridgePath(path){
  return path===NS+'/series'||path===NS+'/pilot'||
   path===NS+'/queue'||path===NS+'/confirmation'||
   path===NS+'/health'||path===NS+'/audit'||
-  path===NS+'/concurrent-read'||
+  path===NS+'/concurrent-read'||path===NS+'/retry'||
   path===NS+'/probe'||path===NS+'/enqueue'||
   path===NS+'/start'||path===NS+'/pause'||path===NS+'/confirm'||
   /^\/internal\/blofy-stream\/content-hub\/seasons\/series\/[1-9][0-9]{0,14}$/.test(path);
@@ -63,6 +63,14 @@ const validatedBody=(path,method,raw)=>{
   if(b.confirmed!==true)throw Error('season_pause_confirmation_required');
   return {};
  }
+ if(path===NS+'/retry'){
+  if(b.confirmed!==true||b.licensedStorage!==true||
+     b.sourceIdle!==true||
+     !/^[A-Za-z0-9_-]{8,80}$/.test(String(b.runId||'')))
+   throw Error('season_retry_manual_review_required');
+  return {runId:b.runId,confirmed:true,licensedStorage:true,
+   sourceIdle:true};
+ }
  if(path===NS+'/concurrent-read'){
   const ids=b.runIds;
   if(b.confirmed!==true||!Array.isArray(ids)||ids.length!==2||
@@ -103,6 +111,7 @@ export async function requestStreamSeasonBridge({path,method='GET',body,
   confirmation:'/internal/episodes/playback/confirmation',
   probe:'/internal/episodes/probe',
   enqueue:'/internal/seasons/enqueue',
+  retry:'/internal/seasons/retry',
   start:'/internal/seasons/start',
   pause:'/internal/seasons/pause',
   confirm:'/internal/episodes/playback/confirm'
@@ -124,6 +133,9 @@ export async function requestStreamSeasonBridge({path,method='GET',body,
   headers['x-blofy-season-confirm']='start-private-sequential';
   if(input?.maxBatches)headers['x-blofy-season-batch-budget']=String(input.maxBatches);
  }
+ if(action==='retry')Object.assign(headers,{
+  'x-blofy-season-confirm':'manual-review-transient-failure',
+  'content-type':'application/json'});
  if(action==='concurrent-read')Object.assign(headers,{
   'x-blofy-season-confirm':'two-verified-private-s3-reads',
   'content-type':'application/json'});
@@ -140,7 +152,7 @@ export async function requestStreamSeasonBridge({path,method='GET',body,
    method,headers,redirect:'manual',cache:'no-store',
    signal:AbortSignal.timeout(action.startsWith('series/')?65000:
       action==='concurrent-read'?55000:action==='audit'?73000:action==='probe'?55000:11000),
-   ...(['enqueue','audit','concurrent-read'].includes(action)?{body:JSON.stringify(input)}:{})
+   ...(['enqueue','audit','concurrent-read','retry'].includes(action)?{body:JSON.stringify(input)}:{})
   });
   if(![200,201,202,400,403,409,429,503].includes(response.status))
    return shortError('season_bridge_private_status_unexpected',503);
