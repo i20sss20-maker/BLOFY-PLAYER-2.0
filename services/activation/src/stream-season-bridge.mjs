@@ -54,7 +54,10 @@ const validatedBody=(path,method,raw)=>{
  if(path===NS+'/start'){
   if(b.confirmed!==true||b.sourceIdle!==true||b.licensedStorage!==true)
    throw Error('season_start_operator_confirmation_required');
-  return {};
+  if(b.maxBatches===undefined)return {};
+  if(![12,60,120].includes(Number(b.maxBatches)))
+   throw Error('season_start_batch_budget_invalid');
+  return {maxBatches:Number(b.maxBatches)};
  }
  if(path===NS+'/pause'){
   if(b.confirmed!==true)throw Error('season_pause_confirmation_required');
@@ -117,7 +120,10 @@ export async function requestStreamSeasonBridge({path,method='GET',body,
   'content-type':'application/json',
   'x-blofy-season-confirm':'licensed-private-episodes',
   'x-blofy-storage-rights-confirm':'licensed-persistent-copy'});
- if(action==='start')headers['x-blofy-season-confirm']='start-private-sequential';
+ if(action==='start'){
+  headers['x-blofy-season-confirm']='start-private-sequential';
+  if(input?.maxBatches)headers['x-blofy-season-batch-budget']=String(input.maxBatches);
+ }
  if(action==='concurrent-read')Object.assign(headers,{
   'x-blofy-season-confirm':'two-verified-private-s3-reads',
   'content-type':'application/json'});
