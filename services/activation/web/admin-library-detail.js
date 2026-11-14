@@ -204,6 +204,7 @@ async function loadSeason(key,page){
  ++epoch;
  const requestEpoch=epoch;
  selectedSeason=key;currentPage=page;
+ verifiedPageEntries=[];
  stopPreview();
  showVideoButton(null,null,false);
  $('libraryDetailStatus').textContent='جارٍ عرض الحلقات المحفوظة…';
@@ -221,6 +222,8 @@ async function loadSeason(key,page){
    throw Error('محتوى تقرير الموسم لا يطابق الطلب.');
   pages=Math.max(1,Math.min(20000,Number(report.page.pages)||1));
   const entries=report.episodes.slice(0,50);
+  verifiedPageEntries=entries.filter(validVerifiedEntry);
+  updatePreviewNavigation();
   const cards=entries.map(entry=>{
    const row=make('article','library-detail-episode');
    const head=make('div','library-detail-episode-top');
@@ -230,9 +233,17 @@ async function loadSeason(key,page){
    const label=make('span','chip'+(verified?' ok':''),
     verified?'متحقق منها':statuses[entry.state]||'غير معروف');
    head.append(name,label);
+   const reviewed=verified&&entry.videoOwnerConfirmed===true&&
+    entry.audioOwnerConfirmed===true&&Boolean(entry.ownerAvConfirmedAt);
+   const avState=make('p','library-detail-episode-av'+
+    (reviewed?' reviewed':''),
+    verified?(reviewed?
+     'الصورة: أكدها المالك يدويًا ✅ · الصوت: أكده المالك يدويًا ✅':
+     'الصورة: لم يراجعها المالك · الصوت: لم يراجعه المالك'):
+     'الملف غير متحقق من التخزين؛ لا يوجد فحص تشغيل معتمد');
    const expected=Number(entry.expectedBytes)||0,
     stored=Math.min(expected,Number(entry.storedBytes)||0);
-   row.append(head,make('p','muted',
+   row.append(head,avState,make('p','muted',
     'المسجل: '+formatBytes(stored)+' / '+formatBytes(expected)));
    const meter=make('div','meter'),bar=make('div','fill');
    bar.style.width=expected?
@@ -284,6 +295,9 @@ function show(itemInput){
   caption:String(itemInput.caption||'').slice(0,300)
  };
  ++epoch;currentPage=1;pages=1;selectedSeason=null;
+ verifiedPageEntries=[];
+ if(kind==='episode'&&itemInput.verified===true&&validEpisode.test(key))
+  verifiedPageEntries=[{runId:key,sourceVerified:true,state:'verified'}];
  stopPreview();
  $('libraryDetailKind').textContent=
   {movie:'فيلم محفوظ',series:'مسلسل محفوظ',season:'موسم مسجل',
@@ -324,6 +338,65 @@ function show(itemInput){
  }
  $('libraryDetailClose').focus();
 }
+// Viewing an actual playback attempt only unlocks optional human
+// attestation controls. It never automatically marks video/audio valid.
+video.addEventListener('playing',()=>{
+ if(!previewRunId||!dialog.open)return;
+ previewObserved=true;
+ $('libraryDetailAvReview').hidden=false;
+ $('libraryDetailAvStatus').textContent=
+  'إذا شاهدت الصورة فعلاً وسمعت الصوت، أكد كل واحدة بنفسك. لم يُحفظ أي فحص بعد.';
+ updateAvButton();
+});
+for(const id of ['libraryDetailAvVideoCheck','libraryDetailAvAudioCheck']){
+ $(id).addEventListener('change',updateAvButton);
+}
+$('libraryDetailAvConfirm').addEventListener('click',async()=>{
+ const runId=previewRunId,openedAt=epoch;
+ if(!previewObserved||!dialog.open||avSaving||!runId||
+    !validEpisode.test(runId)||!$('libraryDetailAvVideoCheck').checked||
+    !$('libraryDetailAvAudioCheck').checked)return;
+ if(!(item?.kind==='episode'&&item.verified===true&&item.key===runId||
+      verifiedPageEntries.some(entry=>entry.runId===runId&&validVerifiedEntry(entry))))
+  return;
+ avSaving=true;updateAvButton();
+ $('libraryDetailAvStatus').textContent='جارٍ حفظ تأكيدك اليدوي لهذه الحلقة فقط…';
+ try{
+  const response=await fetch(
+   '/api/v1/admin/content-hub/seasons/episodes/av/confirm',{
+    method:'POST',credentials:'same-origin',cache:'no-store',
+    headers:{'content-type':'application/json',
+     'x-blofy-owner-action':'confirm-manual-episode-av'},
+    body:JSON.stringify({runId,confirmed:true,
+     videoConfirmed:true,audioConfirmed:true}),
+    signal:AbortSignal.timeout(12000)
+   });
+  if(response.status===401){location.assign('/admin');return}
+  const result=await response.json();
+  if(!response.ok||result.ok!==true||result.manualOnly!==true||
+     result.runId!==runId||!result.confirmedAt)
+   throw Error('رفض الخادم اعتماد المراجعة. تأكد من تحقق النسخة في التخزين.');
+  if(epoch!==openedAt||previewRunId!==runId||!dialog.open)return;
+  $('libraryDetailAvStatus').textContent=
+   '✅ سُجل تأكيدك الشخصي للصورة والصوت. هذا لا يعني فحصًا آليًا أو نشرًا للعملاء.';
+  if(selectedSeason)void loadSeason(selectedSeason,currentPage);
+  else $('libraryDetailStatus').textContent=
+   'سُجلت مراجعتك اليدوية لهذه الحلقة. لا توجد تغييرات في تشغيل العملاء.';
+ }catch(error){
+  if(epoch===openedAt&&dialog.open)
+   $('libraryDetailAvStatus').textContent=error.message||
+    'تعذر حفظ المراجعة؛ لم تتغير حالة الحلقة.';
+ }finally{avSaving=false;updateAvButton()}
+});
+$('libraryDetailPrevVerified').addEventListener('click',()=>{
+ const index=verifiedPageEntries.findIndex(e=>e.runId===previewRunId);
+ if(index>0)showPreview('episode',verifiedPageEntries[index-1].runId);
+});
+$('libraryDetailNextVerified').addEventListener('click',()=>{
+ const index=verifiedPageEntries.findIndex(e=>e.runId===previewRunId);
+ if(index+1<verifiedPageEntries.length)
+  showPreview('episode',verifiedPageEntries[index+1].runId);
+});
 $('libraryDetailClose').addEventListener('click',close);
 $('libraryDetailStop').addEventListener('click',stopPreview);
 $('libraryDetailPrev').addEventListener('click',()=>{
