@@ -109,7 +109,12 @@ test('controller transfers sequentially, checkpoints and stops when empty',async
  let calls=0,concurrent=0,maxConcurrent=0;
  const queue=createSeasonQueueController({store,lease:{},storage:{},env,
   delayMs:0,
-  runner:async({env:jobEnv})=>{
+  runner:async({env:jobEnv,candidateInspector})=>{
+   const mapped=await candidateInspector();
+   assert.equal(mapped.candidates.length,1);
+   assert.equal(mapped.candidates[0].gatewayId,123);
+   assert.equal(mapped.candidates[0].sourceName,'saleh');
+   assert.equal(mapped.candidates[0].mediaKind,'episode');
    concurrent++;maxConcurrent=Math.max(maxConcurrent,concurrent);
    assert.equal(jobEnv.BLOFY_CONTENT_HUB_EPISODE_APPROVED_GATEWAY_ID,'123');
    await sleep(1);
