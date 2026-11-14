@@ -369,15 +369,18 @@ export function createSeasonQueueController({
   status={...status,state:'stopping',code:'season_queue_pause_requested'};
   return {...snapshot(),ok:true,code:'season_queue_pause_requested'};
  };
- const start=()=>{
+ const start=({sessionMaxBatches=null}={})=>{
   if(active)return {...snapshot(),ok:false,code:'season_queue_running'};
+  if(sessionMaxBatches!==null&&![12,60,120].includes(sessionMaxBatches))
+   return {...snapshot(),ok:false,code:'season_batch_budget_invalid'};
+  const batchBudget=sessionMaxBatches??maxBatches;
   const ready=seasonQueueReadiness(env);
   if(!ready.ready)return {...snapshot(),ok:false,
    code:'season_queue_safety_gates_off',blockedBy:ready.blockedBy};
   if(isSourceBusy())return {...snapshot(),ok:false,code:'source_writer_busy'};
   const abort=new AbortController();active=abort;
   status={state:'running',code:'season_queue_started',batches:0,
-   currentRunId:null,customerCutover:false};
+   maxBatches:batchBudget,currentRunId:null,customerCutover:false};
   const since=Date.now();
   void (async()=>{
    const workerLock=typeof store.acquireWorker==='function'?
@@ -389,7 +392,7 @@ export function createSeasonQueueController({
    }
    try{
    await store.recoverInterrupted();
-   for(let n=0;n<maxBatches&&Date.now()-since<maxDurationMs;n++){
+   for(let n=0;n<batchBudget&&Date.now()-since<maxDurationMs;n++){
     if(abort.signal.aborted){status={...status,state:'paused',
      code:'season_queue_paused'};break}
     if(!seasonQueueReadiness(env).ready||isSourceBusy()){
