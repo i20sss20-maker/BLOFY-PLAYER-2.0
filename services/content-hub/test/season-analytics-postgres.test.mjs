@@ -1,0 +1,55 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {Pool} from 'pg';
+import {createSeasonQueueStore} from '../src/season-queue.mjs';
+
+// Uses only an ephemeral CI Postgres service. No source, S3 or customer data.
+test('real PostgreSQL executes reporting and chunk-timing queries safely',{
+ skip:!process.env.BLOFY_TEST_PG_URL
+},async()=>{
+ const url=process.env.BLOFY_TEST_PG_URL;
+ const pool=new Pool({connectionString:url});
+ const store=createSeasonQueueStore({connectionString:url});
+ const runId='season_ci_0123456789abcdef';
+ try{
+  await store.ensure();
+  await pool.query([
+   'INSERT INTO blofy_content_hub_season_queue',
+   '(run_id,season_key,episode_number,title,gateway_id,source_id,',
+   'media_id,extension,expected_bytes,state,code)',
+   "VALUES($1,'series_ci_s01',1,'Offline fixture',9512365,",
+   "'00000000-0000-4000-8000-000000000001'::uuid,",
+   "'fixture','mp4',8388608,'failed','episode_source_busy')"
+  ].join(' '),[runId]);
+  const missing=await store.analyticsStats();
+  assert.equal(Number(missing.sample_count||0),0);
+  await store.recordTransferMetric({runId,bytes:8388608,
+   durationMs:20000,code:'episode_checkpoint_saved',
+   stageTimingsMs:{source_chunk:9000,boundary_precheck:1000,
+    s3_upload:6500,s3_verify:2000,checkpoint:1500}});
+  const stats=await store.analyticsStats();
+  assert.equal(stats.sample_count,'1');
+  assert.equal(stats.transfer_bytes,'8388608');
+  assert.equal(stats.source_ms,'9000');
+  assert.equal(stats.boundary_ms,'1000');
+  assert.equal(stats.upload_ms,'6500');
+  assert.equal(stats.verification_ms,'2000');
+  const seasons=await store.seasonAnalyticsSummary();
+  assert.equal(seasons[0].episode_count,'1');
+  assert.equal(seasons[0].failed_count,'1');
+  const reasons=await store.failureReasons();
+  assert.equal(reasons[0].code,'episode_source_busy');
+  const events=await store.recentTransferEvents();
+  assert.equal(events[0].seasonKey,'series_ci_s01');
+  assert.equal(events[0].bytes,8388608);
+  const states=await store.recentEpisodeStates();
+  assert.equal(states[0].state,'failed');
+  assert.equal(states[0].snapshotOnly,true);
+  assert.equal(states[0].percent,0);
+  const h=await store.healthStats();
+  assert.equal(h.episode_count,'1');
+  assert.equal(h.season_count,'1');
+ }finally{
+  await store.close();await pool.end();
+ }
+});
