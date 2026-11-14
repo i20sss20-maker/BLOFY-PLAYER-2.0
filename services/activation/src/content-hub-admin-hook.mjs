@@ -213,7 +213,7 @@ http.createServer=function withContentHubAdmin(listener){
   catch{return listener(req,res)}
   const path=url.pathname;
   if(req.method==='GET'&&['/admin-content-hub.css',
-    '/admin-content-hub.js','/admin-ops-overview.js','/admin-season-analytics.js',
+    '/admin-content-hub.js','/admin-ops-overview.js','/admin-library.js','/admin-season-analytics.js',
      '/admin-season-detail.js','/admin-season-attention.js'].includes(path)){
    try{
     const file=path.slice(1);
@@ -337,6 +337,27 @@ http.createServer=function withContentHubAdmin(listener){
      signal:AbortSignal.timeout(8000)});
     if(response.status!==200)return json(res,503,{
      ok:false,code:'season_attention_unavailable'});
+    return json(res,200,await safeReadJson(response));
+   }
+   if(path==='/api/v1/admin/content-hub/library/search'&&req.method==='POST'){
+    if(req.headers['x-blofy-owner-action']!=='library-read-only')
+     return json(res,403,{ok:false,code:'library_owner_read_required'});
+    let input;
+    try{input=await readSeasonAdminBody(req)}
+    catch{return json(res,400,{ok:false,code:'library_search_bad_json'})}
+    if(!input||typeof input.query!=='string'||input.query.length>80||
+       /[\x00-\x1f\x7f]/.test(input.query)||
+       !['all','queued','paused','running','verified','failed'].includes(input.state)||
+       !Number.isSafeInteger(input.page)||input.page<1||input.page>20000)
+     return json(res,400,{ok:false,code:'library_search_invalid'});
+    const response=await request('/internal/library/search',{
+     method:'POST',signal:AbortSignal.timeout(15000),
+     extraHeaders:{'content-type':'application/json',
+      'x-blofy-owner-action':'library-read-only'},
+     body:JSON.stringify({query:input.query,state:input.state,
+      page:input.page})});
+    if(response.status!==200)return json(res,503,{
+     ok:false,code:'library_search_unavailable'});
     return json(res,200,await safeReadJson(response));
    }
    if(path==='/api/v1/admin/content-hub/seasons/analytics'&&req.method==='GET'){
