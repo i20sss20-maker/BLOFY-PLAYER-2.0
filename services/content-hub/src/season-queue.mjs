@@ -586,6 +586,63 @@ export function createSeasonQueueStore({
     recordedAt:row.recorded_at
    }));
   },
+  // Full measured wall-clock *chunk* time, not time between season dates.
+  // Older chunks without telemetry are explicitly excluded.
+  async seasonTimingStats({seasonKey}={}){
+   if(!SEASON.test(String(seasonKey||'')))
+    throw Error('season_timing_selection_invalid');
+   await ensure();
+   const response=await pool.query([
+    'SELECT COUNT(*) FILTER (WHERE e.bytes>0)::text AS sample_count,',
+    'COALESCE(SUM(e.bytes) FILTER (WHERE e.bytes>0),0)::text AS measured_bytes,',
+    'COALESCE(SUM(e.duration_ms) FILTER (WHERE e.bytes>0),0)::text AS active_ms,',
+    'MIN(e.recorded_at) FILTER (WHERE e.bytes>0) AS first_measured_at,',
+    'MAX(e.recorded_at) FILTER (WHERE e.bytes>0) AS last_measured_at',
+    'FROM blofy_content_hub_season_transfer_metrics e',
+    'INNER JOIN blofy_content_hub_season_queue q ON q.run_id=e.run_id',
+    'WHERE q.season_key=$1'
+   ].join(' '),[seasonKey]).catch(error=>{
+    if(error?.code==='42P01')return {rows:[]};
+    throw error;
+   });
+   return response.rows?.[0]||{};
+  },
+  // Non-destructive restart inspection. Reports only durable DB snapshots,
+  // not proof that a source remains available or source content is unchanged.
+  async resumePreview({limit=50}={}){
+   await ensure();
+   const n=Math.max(1,Math.min(50,Math.floor(Number(limit)||50)));
+   const sql=withRuns=>[
+    'SELECT q.run_id,q.season_key,q.episode_number,q.state,q.code,',
+    'q.expected_bytes,q.updated_at,',
+    withRuns?
+     'COALESCE(r.bytes_copied,0) AS bytes_copied':
+     '0 AS bytes_copied',
+    'FROM blofy_content_hub_season_queue q',
+    withRuns?
+     'LEFT JOIN blofy_content_hub_episode_runs r ON r.run_id=q.run_id':'',
+    withRuns?
+     "WHERE q.state IN ('paused','running') OR (q.state='queued' AND COALESCE(r.bytes_copied,0)>0)":
+     "WHERE q.state IN ('paused','running')",
+    'ORDER BY q.updated_at DESC,q.run_id DESC LIMIT $1'
+   ].filter(Boolean).join(' ');
+   const response=await pool.query(sql(true),[n+1]).catch(error=>{
+    if(error?.code==='42P01')return pool.query(sql(false),[n+1]);
+    throw error;
+   });
+   const rows=response.rows||[];
+   return {items:rows.slice(0,n).map(row=>({
+    runId:row.run_id,seasonKey:row.season_key,
+    episodeNumber:Number(row.episode_number),
+    state:row.state,code:row.code||null,
+    expectedBytes:Number(row.expected_bytes||0),
+    storedBytes:Math.max(0,Number(row.bytes_copied||0)),
+    checkpointAt:row.updated_at,
+    verifiedCheckpointOnly:true
+   })),limited:rows.length>n,requiresOperatorStart:true,
+    automaticStart:false,sourceProbePerformed:false,
+    needsFreshMappingValidation:true};
+  },
   async saveAudit(runId,result){
    if(!RUN.test(String(runId||''))||
       !['season_storage_sample_verified',
