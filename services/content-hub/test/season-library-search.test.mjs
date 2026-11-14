@@ -88,7 +88,7 @@ test('private library route requires owner bearer and signed read action',async(
   assert.equal(data.movieScope,'most_recent_50_legacy_and_50_chunked_runs_not_global_search');
   assert.equal(data.movies[0].verified,true);
   assert.equal(JSON.stringify(data).includes('do-not-export'),false);
-  assert.deepEqual(seen,[{query:'',state:'all',page:1}]);
+  assert.deepEqual(seen,[{query:'',state:'all',page:1,seriesIds:[]}]);
  }finally{await new Promise(done=>hub.server.close(done))}
 });
 test('unavailable movie history does not fake global results or fail episode search',async()=>{
