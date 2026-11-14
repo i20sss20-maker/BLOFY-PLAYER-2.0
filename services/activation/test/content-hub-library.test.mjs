@@ -40,3 +40,32 @@ test('document makes storage-only and movie-search sampling limitations visible'
  assert.match(page,/الحلقات المدرجة/);
  assert.match(page,/ليس فهرس محتوى المصدر الكامل/);
 });
+
+
+test('manual poster editor is private, accessible and never auto-imports artwork',async()=>{
+ const [html,library,editor,hook,css]=await Promise.all([
+  readFile(web,'utf8'),
+  readFile(js,'utf8'),
+  readFile(new URL('../web/admin-library-metadata.js',import.meta.url),'utf8'),
+  readFile(hook,'utf8'),readFile(css,'utf8')
+ ]);
+ for(const id of ['libraryMetaDialog','libraryMetaForm','libraryMetaTitle',
+  'libraryMetaKey','libraryMetaName','libraryMetaGenre',
+  'libraryMetaYear','libraryMetaPoster','libraryMetaOverview',
+  'libraryMetaRights','libraryMetaPreview','libraryMetaSave']){
+  assert.equal((html.match(new RegExp('id="'+id+'"','g'))||[]).length,1,id);
+ }
+ assert.match(html,/admin-library-metadata\.js/);
+ assert.match(library,/blofy:edit-library-metadata/);
+ assert.match(library,/metadata\?\.posterPath/);
+ assert.match(editor,/artworkRightsConfirmed:true/);
+ assert.match(editor,/confirmed:true/);
+ assert.match(editor,/image\.tmdb\.org\/t\/p\/w342/);
+ assert.match(editor,/x-blofy-owner-action/);
+ assert.match(hook,/curate-private-metadata/);
+ assert.match(hook,/\/api\/v1\/admin\/content-hub\/library\/metadata/);
+ assert.match(css,/\.library-meta-dialog/);
+ assert.doesNotMatch(library,/innerHTML\s*=/);
+ assert.doesNotMatch(editor,/innerHTML\s*=/);
+ assert.doesNotMatch(editor,/method:'GET'/);
+});
