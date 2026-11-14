@@ -163,7 +163,7 @@ reload();setInterval(()=>{if(!document.hidden)reload()},10000);
 
 
 let seasonRequestBusy=false,seasonActive=false,seasonEnabled=false;
-let selectedSeriesData=null;
+let selectedSeriesData=null,pilotEpisodeToSelect=null;
 const seasonActions={'x-blofy-owner-action':'season-library'};
 const queueUrl='/api/v1/admin/content-hub/seasons/';
 function percentMeter(progress){
@@ -311,6 +311,30 @@ $('loadSeries').addEventListener('click',async()=>{
   $('seasonNotice').textContent='تعذر تحميل قائمة المسلسلات المرخصة حاليًا.';
  }finally{button.disabled=false}
 });
+$('openPilotSeries').addEventListener('click',async()=>{
+ const btn=$('openPilotSeries');btn.disabled=true;
+ try{
+  const response=await fetch(queueUrl+'pilot',{
+   credentials:'same-origin',cache:'no-store'});
+  if(response.status===401){location.assign('/admin');return}
+  const data=await response.json();
+  if(!response.ok||!data.ok||
+     !Number.isSafeInteger(data.seriesGatewayId)||
+     !Number.isSafeInteger(data.episodeGatewayId))
+   throw Error('pilot_series_missing');
+  pilotEpisodeToSelect=data.episodeGatewayId;
+  const id=String(data.seriesGatewayId);
+  const selected=$('seriesSelect');
+  if(![...selected.options].some(o=>o.value===id))
+   selected.add(new Option('مسلسل الحلقة المحفوظة #'+id,id));
+  selected.value=id;
+  selected.dispatchEvent(new Event('change'));
+  $('loadSeriesSeasons').click();
+  $('seasonNotice').textContent='جارٍ تحديد الموسم الذي يحتوي الحلقة المحفوظة…';
+ }catch{$('seasonNotice').textContent=
+  'تعذر معرفة مسلسل الحلقة المحفوظة من الفهرس الحالي.'}
+ finally{btn.disabled=false}
+});
 $('openSeriesId').addEventListener('click',()=>{
  const value=Number($('seriesLookupId').value);
  if(!Number.isSafeInteger(value)||value<1){
@@ -354,8 +378,19 @@ $('loadSeriesSeasons').addEventListener('click',async()=>{
     String(season.seasonNumber)));
   }
   select.disabled=data.seasons.length===0;
-  $('seasonCandidates').replaceChildren(div('placeholder',
-   data.seasons.length?'اختر الموسم لعرض الحلقات.':'لا توجد حلقات متاحة لهذا المسلسل.'));
+  const pilotSeason=pilotEpisodeToSelect==null?null:data.seasons.find(group=>
+   group.episodes?.some(item=>item.gatewayId===pilotEpisodeToSelect));
+  pilotEpisodeToSelect=null;
+  if(pilotSeason){
+   select.value=String(pilotSeason.seasonNumber);
+   select.dispatchEvent(new Event('change'));
+   $('seasonNotice').textContent=
+    'تم العثور على موسم الحلقة المحفوظة. اختر الحلقات التالية وافحص أحجامها.';
+  }else{
+   $('seasonCandidates').replaceChildren(div('placeholder',
+    data.seasons.length?'اختر الموسم لعرض الحلقات.':
+     'لا توجد حلقات متاحة لهذا المسلسل.'));
+  }
  }catch{
   resetSeasonSelection();
   $('seasonNotice').textContent='تعذر قراءة المواسم من مصدر المسلسل؛ لم يبدأ أي نقل.';
