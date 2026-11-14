@@ -264,6 +264,13 @@ http.createServer=function withContentHubAdmin(listener){
      }});
     return json(res,response.status,await response.json());
    }
+   if(path==='/api/v1/admin/content-hub/seasons/pilot'&&req.method==='GET'){
+    const result=await request('/internal/series/pilot',{
+     signal:AbortSignal.timeout(9000)});
+    if(result.status!==200)return json(res,503,{
+     ok:false,code:'pilot_series_not_available'});
+    return json(res,200,await safeReadJson(result));
+   }
    if(path==='/api/v1/admin/content-hub/seasons/series'&&req.method==='GET'){
     const result=await request('/internal/series/candidates',{
      signal:AbortSignal.timeout(10000)});
