@@ -8,6 +8,7 @@ import {runOneMoviePilot,inspectOneMoviePilot,probeApprovedMovieRange} from './o
 import {runChunkedMovieBatch,chunkedPilotEnabled,chunkedBatchReadiness,CHUNK_BYTES} from './chunked-pilot.mjs';
 import {createContinuousCopyController} from './continuous-copy.mjs';
 import {diagnoseVerifiedMovie} from './playback-diagnostics.mjs';
+import {verifyPrivateSeekRanges} from './seek-diagnostics.mjs';
 
 const FIXTURE_SOURCE='00000000-0000-4000-8000-000000000000';
 const FIXTURE_SIZE=8*1024*1024;
@@ -67,6 +68,22 @@ export function createContentHubServer({storage,lease,
   runBatch:({signal})=>batchRunner({storage,lease,env:pilotEnv,signal,logger}),
   readiness:()=>chunkedBatchReadiness(pilotEnv),logger
  });
+ async function runFullPlaybackCanary(runId){
+  const diag=await diagnoseVerifiedMovie({runId,storage,lease});
+  if(!diag.ok)return {...diag,seekVerified:false,seeksVerified:0};
+  const seek=await verifyPrivateSeekRanges({
+    runId,bytes:diag.verifiedMovieBytes,
+    port:server.address()?.port,token
+  });
+  return {...diag,ok:seek.ok===true,
+    code:seek.ok?'canary_audio_video_and_seeks_verified':
+      'canary_private_seek_failed',
+    seekVerified:seek.ok===true,
+    seeksVerified:seek.seeksVerified,
+    seekErrorCode:seek.ok?null:seek.code,
+    unauthenticatedAccessDenied:seek.unauthorizedDenied===true,
+    providerRequests:0,customerCutover:false};
+ }
  const server=http.createServer(async(req,res)=>{
   const path=String(req.url||'').split('?')[0];
   if(path==='/health'&&req.method==='GET')
@@ -145,7 +162,7 @@ export function createContentHubServer({storage,lease,
    canaryRunning=true;
    lastCanary={ok:false,code:'playback_canary_running',
     startedAt:new Date().toISOString()};
-   void diagnoseVerifiedMovie({runId,storage,lease}).then(result=>{
+   void runFullPlaybackCanary(runId).then(result=>{
     lastCanary={...result,checkedAt:new Date().toISOString()};
     logger('BLOFY_CONTENT_HUB_PLAYBACK_CANARY',lastCanary);
    }).catch(()=>{
@@ -326,7 +343,7 @@ export function createContentHubServer({storage,lease,
     canaryRunning=true;
     const runId=String(process.env.BLOFY_CONTENT_HUB_BATCH_RUN_ID||'');
     try{
-      const result=await diagnoseVerifiedMovie({runId,storage,lease});
+      const result=await runFullPlaybackCanary(runId);
       lastCanary={...result,checkedAt:new Date().toISOString()};
       logger('BLOFY_CONTENT_HUB_PLAYBACK_CANARY',lastCanary);
       return lastCanary;
