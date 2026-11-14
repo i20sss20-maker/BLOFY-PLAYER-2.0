@@ -16,6 +16,7 @@ import {runOneEpisodeChunk,episodeCopyReadiness} from './episode-chunk-pilot.mjs
 import {createSeasonQueueStore,createSeasonQueueController,seasonQueueReadiness,validateSeasonSelection,seasonQueueSummary} from './season-queue.mjs';
 import {inspectLicensedSeries,inspectLicensedSeriesEpisodes,inspectLicensedPilotSeries} from './series-catalog.mjs';
 import {summarizeSeasonHealth,auditSeasonEpisodeSample} from './season-health.mjs';
+import {checkPrivateReadConcurrency,validateConcurrentReadIds} from './concurrent-private-read.mjs';
 
 const FIXTURE_SOURCE='00000000-0000-4000-8000-000000000000';
 const FIXTURE_SIZE=8*1024*1024;
@@ -94,6 +95,7 @@ export function createContentHubServer({storage,lease,
  let episodeProbeBusy=false,episodeProbeAt=0,lastEpisodeProbe=null;
  let episodeCopyBusy=false,episodeCopyAbort=null,lastEpisodeCopy=null;
  let seasonStorageAuditBusy=false,seasonStorageAuditAt=0;
+ let seasonConcurrentReadBusy=false,seasonConcurrentReadAt=0,lastSeasonConcurrentRead=null;
  const copy=createContinuousCopyController({
   runBatch:({signal})=>batchRunner({storage,lease,env:pilotEnv,signal,logger}),
   readiness:()=>chunkedBatchReadiness(pilotEnv),logger
@@ -258,7 +260,7 @@ export function createContentHubServer({storage,lease,
      ...summarizeSeasonHealth({
       stats,audits,unresolvedAudits,worker:seasonQueue?.status()||{},
       storageSoftLimitBytes:pilotEnv.BLOFY_CONTENT_HUB_STORAGE_SOFT_LIMIT_BYTES
-     }),verifiedPilotRunId});
+     }),verifiedPilotRunId,lastConcurrentRead:lastSeasonConcurrentRead});
 
    }catch{return json(res,503,{ok:false,code:'season_health_database_unavailable'})}
   }
@@ -309,6 +311,53 @@ export function createContentHubServer({storage,lease,
    }catch{return json(res,503,{
     ok:false,code:'season_storage_audit_unavailable'})}
    finally{seasonStorageAuditBusy=false}
+  }
+  // Two distinct, fully verified episode manifests, requested explicitly.
+  // This measures concurrent PRIVATE S3 reads (not real viewer playback).
+  if(path==='/internal/seasons/concurrent-read'&&req.method==='POST'){
+   if(String(req.url||'').includes('?')||
+      req.headers['x-blofy-season-confirm']!=='two-verified-private-s3-reads')
+    return json(res,403,{ok:false,code:'private_read_canary_owner_confirmation_required'});
+   if(!seasonQueueStore?.ownsVerifiedRun)return json(res,503,{
+    ok:false,code:'private_read_canary_queue_unavailable'});
+   if(seasonConcurrentReadBusy)return json(res,429,{
+    ok:false,code:'private_read_canary_busy'});
+   if(Date.now()-seasonConcurrentReadAt<120000)return json(res,429,{
+    ok:false,code:'private_read_canary_cooldown'});
+   if(seasonQueue?.isRunning()||copy.isRunning()||
+      episodeCopy.isRunning()||episodeCopyBusy||pilotRunning)
+    return json(res,409,{ok:false,code:'private_read_canary_source_priority'});
+   let runIds;
+   try{
+    const input=await readSeasonJson(req);
+    if(input?.confirmed!==true)throw Error('not_confirmed');
+    runIds=validateConcurrentReadIds(input.runIds);
+   }catch{return json(res,400,{ok:false,
+    code:'private_read_canary_selection_invalid'})}
+   const pilotRunId=String(pilotEnv.BLOFY_CONTENT_HUB_EPISODE_RUN_ID||'');
+   try{
+    for(const runId of runIds){
+     const queueVerified=await seasonQueueStore.ownsVerifiedRun(runId);
+     if(!queueVerified&&(runId!==pilotRunId||
+        !await lease.getVerifiedEpisodeObject(runId)))
+       return json(res,403,{ok:false,
+        code:'private_read_canary_episode_not_verified'});
+    }
+   }catch{return json(res,503,{
+    ok:false,code:'private_read_canary_validation_unavailable'})}
+   seasonConcurrentReadBusy=true;seasonConcurrentReadAt=Date.now();
+   try{
+    const result=await checkPrivateReadConcurrency({
+     runIds,lease,storage,signal:AbortSignal.timeout(45000),logger
+    });
+    lastSeasonConcurrentRead={code:result.code,ok:result.ok,
+     checkedAt:new Date().toISOString(),concurrentReads:2,
+     checkedChunks:result.checkedChunks||0};
+    return json(res,result.ok?200:409,{...result,
+     operatorRequested:true});
+   }catch{return json(res,503,{ok:false,
+    code:'private_read_canary_unavailable'})}
+   finally{seasonConcurrentReadBusy=false}
   }
   if(path==='/internal/seasons/enqueue'&&req.method==='POST'){
    if(!seasonQueueStore)return json(res,503,{
