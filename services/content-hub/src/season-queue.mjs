@@ -957,7 +957,7 @@ export function createSeasonQueueStore({
      'SELECT',withSeason?'q.season_key,':'',...columns(),joins(),
      withSeason?'GROUP BY q.season_key':'',
      withSeason?
-      'ORDER BY failed_count::int DESC, (verified_count::int - av_reviewed_count::int) DESC, q.season_key LIMIT $1 OFFSET $2':
+      'ORDER BY COUNT(*) FILTER (WHERE q.state='failed') DESC, q.season_key LIMIT $1 OFFSET $2':
       ''
     ].filter(Boolean).join(' ');
     const args=withSeason?[size+1,offset]:[];
@@ -969,7 +969,7 @@ export function createSeasonQueueStore({
       ...columns(),joins(),
       withSeason?'GROUP BY q.season_key':'',
       withSeason?
-       'ORDER BY failed_count::int DESC, (verified_count::int - av_reviewed_count::int) DESC, q.season_key LIMIT $1 OFFSET $2':''
+       'ORDER BY COUNT(*) FILTER (WHERE q.state='failed') DESC, q.season_key LIMIT $1 OFFSET $2':''
      ].filter(Boolean).join(' '),args).catch(async second=>{
       if(second?.code!=='42P01')throw second;
       hasRuns=false;
@@ -978,14 +978,14 @@ export function createSeasonQueueStore({
        ...columns(),joins(),
        withSeason?'GROUP BY q.season_key':'',
        withSeason?
-        'ORDER BY failed_count::int DESC, (verified_count::int - av_reviewed_count::int) DESC, q.season_key LIMIT $1 OFFSET $2':''
+        'ORDER BY COUNT(*) FILTER (WHERE q.state='failed') DESC, q.season_key LIMIT $1 OFFSET $2':''
       ].filter(Boolean).join(' '),args);
      })}
      if(hasRuns){hasRuns=false;return pool.query([
       'SELECT',withSeason?'q.season_key,':'',...columns(),joins(),
       withSeason?'GROUP BY q.season_key':'',
       withSeason?
-       'ORDER BY failed_count::int DESC, (verified_count::int - av_reviewed_count::int) DESC, q.season_key LIMIT $1 OFFSET $2':''
+       'ORDER BY COUNT(*) FILTER (WHERE q.state='failed') DESC, q.season_key LIMIT $1 OFFSET $2':''
      ].filter(Boolean).join(' '),args)}
      throw error;
     }
