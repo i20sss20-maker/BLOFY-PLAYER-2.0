@@ -7,6 +7,7 @@ import {requestDailyXtreamCatalogSync} from './xtream-daily-catalog-sync.mjs';
 import {listIndexedXtreamMirrorPage} from './xtream-mirror-inventory.mjs';
 import {readXtreamPrivateMirrorCoverage} from './xtream-mirror-coverage.mjs';
 import {createXtreamMirrorDiscoveryStore,riyadhMirrorDay} from './xtream-mirror-discovery-queue.mjs';
+import {readMirrorSeriesEnumerationProgress} from './xtream-mirror-series-enumeration.mjs';
 import {classifyDailyXtreamOutcome,recordDailyXtreamCatalogOutcome,readDailyXtreamCatalogReceipts} from './xtream-daily-sync-receipts.mjs';
 import {xtreamConnectionReport} from './xtream-smart-connection.mjs';
 import {runXtreamBootDiagnostics} from './xtream-boot-diagnostics.mjs';
@@ -4145,6 +4146,20 @@ http.createServer = function withBlofyXtream(listener) {
           return json(res,invalid?400:503,{ok:false,
             code:invalid?'mirror_discovery_query_invalid':'mirror_discovery_items_unavailable',
             readOnly:true,mediaBytesTransferred:0,customerCutover:false});
+        }
+      }
+      if(req.method==='GET'&&url.pathname==='/api/v1/admin/xtream/mirror/series-status'){
+        const sourceId=String(url.searchParams.get('sourceId')||'').trim();
+        try{
+          const status=await readMirrorSeriesEnumerationProgress(
+            controlPool,{sourceId});
+          return json(res,200,status);
+        }catch(error){
+          const bad=error?.message==='mirror_series_status_request_invalid';
+          return json(res,bad?400:503,{ok:false,
+            code:bad?'mirror_series_status_query_invalid':
+              'mirror_series_status_unavailable',readOnly:true,
+            mediaBytesTransferred:0,customerCutover:false});
         }
       }
       if(req.method==='GET'&&url.pathname==='/api/v1/admin/xtream/mirror/queue/status'){
