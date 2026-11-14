@@ -47,6 +47,8 @@ export function createXtreamMirrorDiscoveryStore(db){
       CHECK(state IN ('needs_review','approved','copying','verified','failed')),
     expected_bytes BIGINT,
     license_reviewed_at TIMESTAMPTZ,
+    mapping_conflict BOOLEAN NOT NULL DEFAULT FALSE,
+    mapping_conflict_at TIMESTAMPTZ,
     first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY(source_id,media_kind,gateway_id)
@@ -144,9 +146,17 @@ export function createXtreamMirrorDiscoveryStore(db){
         gateway_id bigint,media_id text,series_media_id text,
         extension text,title text)
       ON CONFLICT(source_id,media_kind,gateway_id) DO UPDATE SET
-        last_seen_at=NOW(),title=EXCLUDED.title
-      WHERE blofy_xtream_mirror_items.media_id=EXCLUDED.media_id
-        AND blofy_xtream_mirror_items.extension=EXCLUDED.extension`,
+        last_seen_at=NOW(),
+        title=CASE WHEN blofy_xtream_mirror_items.media_id=EXCLUDED.media_id
+           AND blofy_xtream_mirror_items.extension=EXCLUDED.extension
+          THEN EXCLUDED.title ELSE blofy_xtream_mirror_items.title END,
+        mapping_conflict=blofy_xtream_mirror_items.mapping_conflict OR
+          blofy_xtream_mirror_items.media_id<>EXCLUDED.media_id OR
+          blofy_xtream_mirror_items.extension<>EXCLUDED.extension,
+        mapping_conflict_at=CASE WHEN
+          blofy_xtream_mirror_items.media_id<>EXCLUDED.media_id OR
+          blofy_xtream_mirror_items.extension<>EXCLUDED.extension
+          THEN NOW() ELSE blofy_xtream_mirror_items.mapping_conflict_at END`,
      [sourceId,mediaKind,JSON.stringify(valid.map(x=>({
         gateway_id:x.gatewayId,media_id:x.mediaId,
         series_media_id:x.seriesMediaId,
@@ -206,7 +216,7 @@ export function createXtreamMirrorDiscoveryStore(db){
    throw Error('mirror_discovery_queue_query_invalid');
   await ensure();
   const result=await db.query(`SELECT gateway_id,media_id,extension,title,
-    state,expected_bytes,first_seen_at,last_seen_at
+    state,mapping_conflict,expected_bytes,first_seen_at,last_seen_at
     FROM blofy_xtream_mirror_items
     WHERE source_id=$1 AND media_kind=$2 AND gateway_id>$3
       AND ($4::text='all' OR state=$4)
@@ -216,7 +226,8 @@ export function createXtreamMirrorDiscoveryStore(db){
   const items=raw.slice(0,limit).map(x=>({
     gatewayId:Number(x.gateway_id),mediaId:String(x.media_id).slice(0,128),
     extension:String(x.extension),title:String(x.title||'').slice(0,220),
-    state:String(x.state),sizeVerified:false,
+    state:String(x.state),mappingConflict:x.mapping_conflict===true,
+    sizeVerified:false,
     expectedBytes:Number.isSafeInteger(Number(x.expected_bytes))&&
       x.expected_bytes!==null?Number(x.expected_bytes):null,
     discoveredAt:x.first_seen_at||null,lastSeenAt:x.last_seen_at||null
