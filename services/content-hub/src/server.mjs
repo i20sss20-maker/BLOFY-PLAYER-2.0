@@ -9,6 +9,7 @@ import {runChunkedMovieBatch,chunkedPilotEnabled,chunkedBatchReadiness,CHUNK_BYT
 import {createContinuousCopyController} from './continuous-copy.mjs';
 import {diagnoseVerifiedMovie} from './playback-diagnostics.mjs';
 import {verifyPrivateSeekRanges} from './seek-diagnostics.mjs';
+import {buildPrivateBrowserPreview} from './private-preview.mjs';
 
 const FIXTURE_SOURCE='00000000-0000-4000-8000-000000000000';
 const FIXTURE_SIZE=8*1024*1024;
@@ -64,6 +65,7 @@ export function createContentHubServer({storage,lease,
  let syntheticRunning=false,lastSynthetic=null;
  let pilotRunning=false,lastPilot=null,pilotAbort=null;
  let canaryRunning=false,lastCanary=null;
+ let previewBuilding=false,previewCache=null,previewThrottleUntil=0;
  const copy=createContinuousCopyController({
   runBatch:({signal})=>batchRunner({storage,lease,env:pilotEnv,signal,logger}),
   readiness:()=>chunkedBatchReadiness(pilotEnv),logger
@@ -105,6 +107,7 @@ export function createContentHubServer({storage,lease,
     syntheticTestEnabled:allowSynthetic,
     lastSynthetic,pilotRunning:pilotRunning||copy.isRunning(),lastPilot,
     canaryRunning,lastCanary,
+    ownerPreviewEnabled:pilotEnv.BLOFY_CONTENT_HUB_OWNER_PREVIEW_ENABLED==='1',
     continuousCopy:copy.status(),durablePilot,chunkedBatchEnabled:chunkedBatchReadiness(pilotEnv).ready,
     customerCutover:false,
     licensedRightsRequired:true});
@@ -144,12 +147,73 @@ export function createContentHubServer({storage,lease,
     };
     return json(res,200,{ok:true,privateOnly:true,customerCutover:false,
        accounting,runs,pilotRunning:pilotRunning||copy.isRunning(),
-       canaryRunning,lastCanary,continuousCopy:copy.status(),downloadQueueEnabled:false,
+       canaryRunning,lastCanary,
+       ownerPreviewEnabled:pilotEnv.BLOFY_CONTENT_HUB_OWNER_PREVIEW_ENABLED==='1',
+       continuousCopy:copy.status(),downloadQueueEnabled:false,
        chunkedBatchEnabled:chunkedBatchReadiness(pilotEnv).ready,
        batchReadiness:chunkedBatchReadiness(pilotEnv)});
    }catch{
     return json(res,503,{ok:false,code:'content_hub_pilot_records_unavailable'});
    }
+  }
+  // Short MP4 preview exclusively for an authenticated owner in STREAM.
+  // Never a public link, signed URL, or subscriber route. No provider call.
+  if(path==='/internal/playback/preview'&&req.method==='GET'){
+   if(String(req.url||'').includes('?')||
+      req.headers['x-blofy-owner-preview']!=='operator-only')
+    return json(res,403,{ok:false,code:'owner_preview_confirmation_required'});
+   if(pilotEnv.BLOFY_CONTENT_HUB_OWNER_PREVIEW_ENABLED!=='1')
+    return json(res,409,{ok:false,code:'owner_preview_disabled'});
+   if(previewBuilding)return json(res,429,{
+    ok:false,code:'owner_preview_busy'});
+   if(Date.now()<previewThrottleUntil&&!previewCache)
+    return json(res,429,{ok:false,code:'owner_preview_cooldown'});
+   const runId=String(pilotEnv.BLOFY_CONTENT_HUB_BATCH_RUN_ID||'');
+   if(!/^[A-Za-z0-9_-]{8,80}$/.test(runId))
+    return json(res,409,{ok:false,code:'owner_preview_movie_not_selected'});
+   const abort=new AbortController();
+   const timer=setTimeout(()=>abort.abort(),75000);timer.unref?.();
+   const close=()=>abort.abort();
+   res.once('close',close);
+   let clip=null;
+   try{
+    if(previewCache?.runId===runId&&previewCache.expiresAt>Date.now())
+     clip=previewCache.result;
+    else{
+     previewBuilding=true;
+     // A small cooldown stops repeated video encodes on an authenticated
+     // but repeatedly refreshed preview page.
+     previewThrottleUntil=Date.now()+30000;
+     clip=await buildPrivateBrowserPreview({
+      runId,storage,lease,signal:abort.signal});
+     if(clip.ok){
+      previewCache={runId,result:clip,expiresAt:Date.now()+120000};
+     }
+    }
+    if(!clip.ok||!Buffer.isBuffer(clip.bytes))
+     return json(res,503,{ok:false,code:clip.code||
+      'owner_preview_unavailable',customerCutover:false});
+    if(abort.signal.aborted)return;
+    res.writeHead(200,{
+     'content-type':'video/mp4',
+     'content-length':String(clip.bytes.length),
+     'content-disposition':'inline; filename="blofy-private-preview.mp4"',
+     'cache-control':'private,no-store',
+     'cross-origin-resource-policy':'same-origin',
+     'x-content-type-options':'nosniff',
+     'referrer-policy':'no-referrer'
+    });
+    return res.end(clip.bytes);
+   }catch{
+    if(!res.headersSent&&!res.destroyed)
+     return json(res,503,{ok:false,code:'owner_preview_unavailable'});
+    if(!res.destroyed)res.destroy();
+   }finally{
+    previewBuilding=false;
+    clearTimeout(timer);
+    res.off('close',close);
+   }
+   return;
   }
   if(path==='/internal/playback/diagnose'&&req.method==='POST'){
    if(String(req.headers['x-blofy-canary-confirm']||'')!=='verified-private')
