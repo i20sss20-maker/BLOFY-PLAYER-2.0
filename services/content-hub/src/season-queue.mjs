@@ -422,6 +422,36 @@ export function createSeasonQueueStore({
    });
    return result.rows||[];
   },
+  // Recent queue *states* include rows created before telemetry.
+  // Snapshots are not a full transfer-event history.
+  async recentEpisodeStates({limit=30}={}){
+   await ensure();
+   const n=Math.max(1,Math.min(30,Math.floor(Number(limit)||30)));
+   const select=(hasRuns)=>[
+    'SELECT q.run_id,q.season_key,q.episode_number,q.title,q.state,q.code,',
+    'q.expected_bytes,q.updated_at,',
+    hasRuns?'COALESCE(r.bytes_copied,0) AS bytes_copied':
+     '0 AS bytes_copied',
+    'FROM blofy_content_hub_season_queue q',
+    hasRuns?
+     'LEFT JOIN blofy_content_hub_episode_runs r ON r.run_id=q.run_id':'',
+    'ORDER BY q.updated_at DESC,q.run_id DESC LIMIT $1'
+   ].filter(Boolean).join(' ');
+   const response=await pool.query(select(true),[n]).catch(e=>{
+    if(e?.code==='42P01')return pool.query(select(false),[n]);
+    throw e;
+   });
+   return (response.rows||[]).map(row=>{
+    const expected=Math.max(0,Number(row.expected_bytes)||0);
+    const copied=Math.min(expected,Math.max(0,Number(row.bytes_copied)||0));
+    return {runId:row.run_id,seasonKey:row.season_key,
+     episodeNumber:Number(row.episode_number),title:String(row.title||'').slice(0,200),
+     state:row.state,code:row.code||null,
+     expectedBytes:expected,storedBytes:copied,
+     percent:expected?Math.min(100,Math.floor(copied*100/expected)):0,
+     updatedAt:row.updated_at,snapshotOnly:true};
+   });
+  },
   async saveAudit(runId,result){
    if(!RUN.test(String(runId||''))||
       !['season_storage_sample_verified',
