@@ -19,7 +19,7 @@ test('daily scheduler is OFF by default and scoped to 04:00 Riyadh',()=>{
 test('daily queue is once per Riyadh day with SQL claim',async()=>{
  const claims=new Set(),events=[];
  const db={async query(sql,args){
-   if(sql.startsWith('CREATE'))return {rowCount:0};
+   if(sql.startsWith('CREATE')||sql.startsWith('ALTER'))return {rowCount:0};
    if(sql.startsWith('INSERT')){
      const key=args.join('|');
      if(claims.has(key))return {rowCount:0};
@@ -63,5 +63,5 @@ test('enqueue failure releases day claim for bounded retry',async()=>{
   startSync:()=>{throw Error('queue_busy')}
  })]);
  assert.equal(result[0].status,'rejected');
- assert.deepEqual(calls,['CREATE','INSERT','DELETE']);
+ assert.deepEqual(calls,['CREATE','ALTER','INSERT','DELETE']);
 });
