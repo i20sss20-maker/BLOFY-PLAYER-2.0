@@ -292,3 +292,36 @@ test('Postgres enqueue fails closed when existing run source or size differs',as
  assert.equal(rollback,true);
  await store.close();
 });
+
+
+test('series queue requires authoritative exact season number from source catalog',async()=>{
+ const store=fakeQueue();
+ const meta=[{...candidate(456),seriesGatewayId:31,
+  seasonNumber:2,episodeNumber:7}];
+ const hub=createContentHubServer({token,pilotEnv:env,
+  storage:{},lease:{},seasonQueueStore:store,
+  seriesEpisodesInspector:async()=>({ok:true,seriesGatewayId:31,
+   seasons:[{seasonNumber:2,episodeCount:1,episodes:meta}]})});
+ hub.server.listen(0,'127.0.0.1');
+ await new Promise(resolve=>hub.server.once('listening',resolve));
+ const base='http://127.0.0.1:'+hub.server.address().port;
+ const headers={authorization:'Bearer '+token,'content-type':'application/json',
+  'x-blofy-season-confirm':'licensed-private-episodes',
+  'x-blofy-storage-rights-confirm':'licensed-persistent-copy'};
+ const body={seriesGatewayId:31,seasonNumber:2,episodes:[{
+  gatewayId:456,episodeNumber:7,expectedBytes:8388608}]};
+ try{
+  const bad=await fetch(base+'/internal/seasons/enqueue',{method:'POST',
+   headers,body:JSON.stringify({...body,episodes:[{
+    ...body.episodes[0],episodeNumber:8}]})});
+  assert.equal(bad.status,403);
+  assert.equal(store.rows.length,0);
+  const valid=await fetch(base+'/internal/seasons/enqueue',{method:'POST',
+   headers,body:JSON.stringify(body)});
+  assert.equal(valid.status,201);
+  const saved=await valid.json();
+  assert.equal(saved.seasonKey,'series_31_s2');
+  assert.equal(saved.added,1);
+  assert.equal(store.rows[0].episodeNumber,7);
+ }finally{await new Promise(resolve=>hub.server.close(resolve))}
+});
