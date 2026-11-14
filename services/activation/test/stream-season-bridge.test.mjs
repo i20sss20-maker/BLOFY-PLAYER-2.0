@@ -155,3 +155,22 @@ test('two signed verified run IDs are necessary for an explicit concurrent S3 te
  assert.deepEqual(JSON.parse(target.received.init.body),{
   confirmed:true,runIds:ids});
 });
+
+
+test('manual season copy budget forwarded as fixed header, not arbitrary user JSON',async()=>{
+ const target=stub('/internal/seasons/start',{status:202,data:{
+  ok:true,code:'season_queue_started',maxBatches:12}});
+ const base={confirmed:true,sourceIdle:true,licensedStorage:true};
+ const denied=await requestStreamSeasonBridge({
+  path:NS+'/start',method:'POST',operatorToken:secret,
+  body:{...base,maxBatches:2},fetchImpl:target.fetchImpl});
+ assert.equal(denied.status,400);
+ assert.equal(target.calls,0);
+ const good=await requestStreamSeasonBridge({
+  path:NS+'/start',method:'POST',operatorToken:secret,
+  body:{...base,maxBatches:12},fetchImpl:target.fetchImpl});
+ assert.equal(good.status,202);
+ assert.equal(target.received.init.headers['x-blofy-season-batch-budget'],'12');
+ assert.equal(target.received.init.headers['x-blofy-season-confirm'],
+  'start-private-sequential');
+});
