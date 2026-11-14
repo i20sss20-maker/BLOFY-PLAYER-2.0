@@ -15,6 +15,8 @@ import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import androidx.annotation.OptIn
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
@@ -43,6 +45,7 @@ import java.util.Locale
  * Not available through release build navigation. Component is non-exported
  * and guarded again here to fail closed even if launched internally.
  */
+@OptIn(markerClass = [UnstableApi::class])
 class PrivateMediaQaActivity : AppCompatActivity() {
     private val expectedPlatform by lazy {
         val mask = resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK
@@ -253,7 +256,7 @@ class PrivateMediaQaActivity : AppCompatActivity() {
             // Never read any URL, token, storage key, host or player hint from
             // imported data. Only the safe display subset is accepted.
             val title = row.optString("title").take(120)
-                .map { if (it.isISOControl()) ' ' else it }.joinToString("")
+                .map { if (Character.isISOControl(it)) ' ' else it }.joinToString("")
             Episode(id, number, title, row.optBoolean("candidateForOwnerDeviceTesting"))
         }
         return season to episodes
@@ -364,7 +367,9 @@ class PrivateMediaQaActivity : AppCompatActivity() {
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
     override fun onStop() {
-        stopLocalPlayback()
+        // Android system document pickers also stop this Activity. Pause but
+        // preserve the selected media and observations for CreateDocument.
+        player?.pause()
         super.onStop()
     }
     override fun onDestroy() {
