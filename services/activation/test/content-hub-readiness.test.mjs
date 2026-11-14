@@ -97,6 +97,7 @@ test('owner dashboard shows global counts and season report links, without media
  class CE{constructor(type,{detail}={}){this.type=type;this.detail=detail}}
  const context={
   document:doc,CustomEvent:CE,AbortSignal,Blob,
+  setTimeout:(fn,ms)=>{assert.equal(ms,2000);fn()},
   URL:{
    createObjectURL(blob){capturedBlob=blob;return 'blob:test-csv'},
    revokeObjectURL(url){assert.equal(url,'blob:test-csv');revoked=true}
