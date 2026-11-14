@@ -358,7 +358,7 @@ export function createSeasonQueueStore({
     "COALESCE((stage_timings->>'s3_complete')::bigint,0)) FILTER (WHERE bytes>0),0)::text AS upload_ms,",
     "COALESCE(SUM(COALESCE((stage_timings->>'s3_verify')::bigint,0)+",
     "COALESCE((stage_timings->>'verify_full_file')::bigint,0)) FILTER (WHERE bytes>0),0)::text AS verification_ms,",
-    'MIN(recorded_at) AS first_recorded_at,
+    'MIN(recorded_at) AS first_recorded_at,',
     'MAX(recorded_at) AS last_recorded_at',
     'FROM blofy_content_hub_season_transfer_metrics'
    ].join(' ')).catch(e=>{
