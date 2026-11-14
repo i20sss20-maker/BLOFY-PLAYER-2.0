@@ -476,7 +476,7 @@ export function createSeasonQueueStore({
   // no calls to provider APIs, player endpoints or object-storage listings.
   // Pagination is independent for episode hits and season summaries.
   async librarySearch({query='',state='all',page=1}={}){
-   if(typeof query!=='string'||query.length>80||/[\\x00-\\x1f\\x7f]/.test(query)||
+   if(typeof query!=='string'||query.length>80||/[\x00-\x1f\x7f]/.test(query)||
       typeof state!=='string'||!['all','queued','paused','running',
        'verified','failed'].includes(state)||
       !Number.isSafeInteger(page)||page<1||page>20000)
@@ -506,7 +506,7 @@ export function createSeasonQueueStore({
     const verified=row.state==='verified'&&row.verified_state==='verified';
     return {runId:row.run_id,seasonKey:row.season_key,
      episodeNumber:Number(row.episode_number),
-     title:String(row.title||'').slice(0,200).replace(/https?:\\/\\/\\S+/gi,'[رابط مخفي]'),
+     title:String(row.title||'').slice(0,200).replace(/https?:\/\/\S+/gi,'[رابط مخفي]'),
      state:row.state,verified,
      code:row.code||null,expectedBytes:expected,storedBytes:stored,
      percent:expected?Math.min(100,Math.floor(stored*100/expected)):0,
