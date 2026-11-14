@@ -114,6 +114,30 @@ export function createSeasonQueueStore({
  }
  return {
   ensure,
+  // Global scheduler lock is distinct from the per-chunk source lock.
+  // Prevents a second replica from resetting an active worker's state.
+  async acquireWorker(){
+   await ensure();
+   const client=await pool.connect();
+   try{
+    const row=await client.query([
+     'SELECT pg_try_advisory_lock(',
+     "hashtext('blofy_season_scheduler'),hashtext('saleh')) AS held"
+    ].join(' '));
+    if(row.rows?.[0]?.held!==true){client.release();return null}
+    let released=false;
+    return {release:async()=>{
+     if(released)return;
+     released=true;
+     try{
+      await client.query([
+       'SELECT pg_advisory_unlock(',
+       "hashtext('blofy_season_scheduler'),hashtext('saleh'))"
+      ].join(' '));
+     }finally{client.release()}
+    }};
+   }catch(e){client.release(e);throw e}
+  },
   async enqueue(entries){
    await ensure();
    if(!Array.isArray(entries)||entries.length<1||entries.length>12||
@@ -228,6 +252,14 @@ export function createSeasonQueueController({
    currentRunId:null,customerCutover:false};
   const since=Date.now();
   void (async()=>{
+   const workerLock=typeof store.acquireWorker==='function'?
+    await store.acquireWorker():{release:async()=>{}};
+   if(!workerLock){
+    status={...status,state:'paused',
+     code:'season_queue_other_worker_running'};
+    return;
+   }
+   try{
    await store.recoverInterrupted();
    for(let n=0;n<maxBatches&&Date.now()-since<maxDurationMs;n++){
     if(abort.signal.aborted){status={...status,state:'paused',
@@ -277,6 +309,7 @@ export function createSeasonQueueController({
    }
    if(status.state==='running')status={...status,state:'paused',
     code:'season_session_limit',currentRunId:null};
+   }finally{await workerLock.release()}
   })().catch(()=>{
    status={...status,state:'failed',code:'season_queue_controller_failed'};
   }).finally(()=>{
