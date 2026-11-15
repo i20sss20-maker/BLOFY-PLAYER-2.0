@@ -10,6 +10,7 @@ import {createContinuousCopyController} from './continuous-copy.mjs';
 import {diagnoseVerifiedMovie} from './playback-diagnostics.mjs';
 import {verifyPrivateSeekRanges} from './seek-diagnostics.mjs';
 import {buildPrivateBrowserPreview} from './private-preview.mjs';
+import {buildStoredMovieSeekPreview} from './private-seek-preview.mjs';
 import {parseSiteQaRange} from './site-qa-range.mjs';
 import {inspectEpisodeCandidates} from './episode-candidates.mjs';
 import {inspectEpisodeSize} from './episode-probe.mjs';
@@ -104,6 +105,7 @@ export function createContentHubServer({storage,lease,
  let canaryRunning=false,lastCanary=null;
  let episodeCanaryRunning=false,lastEpisodeCanary=null;
  let previewBuilding=false,previewCache=null,previewThrottleUntil=0;
+ let seekPreviewBuilding=false,seekPreviewThrottleUntil=0;
  let episodeProbeBusy=false,episodeProbeAt=0,lastEpisodeProbe=null;
  let episodeCopyBusy=false,episodeCopyAbort=null,lastEpisodeCopy=null;
  let seasonStorageAuditBusy=false,seasonStorageAuditAt=0;
@@ -1012,6 +1014,65 @@ export function createContentHubServer({storage,lease,
    }catch{
     return json(res,503,{ok:false,code:'content_hub_pilot_records_unavailable'});
    }
+  }
+  // Owner-only 10-second seeking sample of the ORIGINAL, verified S3
+  // movie/episode. FFprobe+FFmpeg use a loopback private Range reader, not
+  // provider Xtream. No full movie is copied to local disk or client app.
+  const seekQa=/^\/internal\/site-qa\/seek-preview\/(movie|episode)\/([A-Za-z0-9_-]{8,80})\/(start|middle|near_end)$/.exec(path);
+  if(seekQa){
+   const kind=seekQa[1],runId=seekQa[2],position=seekQa[3];
+   if(req.method!=='GET'||String(req.url||'').includes('?'))
+    return json(res,405,{ok:false,code:'site_qa_seek_method_denied'});
+   if(pilotEnv.BLOFY_CONTENT_HUB_WEBSITE_SEEK_PREVIEW_ENABLED!=='1'||
+     pilotEnv.BLOFY_CONTENT_HUB_OWNER_PREVIEW_ENABLED!=='1'||
+     pilotEnv.BLOFY_CONTENT_HUB_STORAGE_RIGHTS_CONFIRMED!=='1'||
+     (kind==='episode'&&(
+       pilotEnv.BLOFY_CONTENT_HUB_EPISODE_OWNER_PREVIEW_ENABLED!=='1'||
+       pilotEnv.BLOFY_CONTENT_HUB_EPISODE_RIGHTS_CONFIRMED!=='1'))||
+     req.headers['x-blofy-owner-action']!=='private-verified-s3-seek-clip'||
+     runId!==String(kind==='movie'?
+       pilotEnv.BLOFY_CONTENT_HUB_BATCH_RUN_ID||'':
+       pilotEnv.BLOFY_CONTENT_HUB_EPISODE_RUN_ID||''))
+    return json(res,404,{ok:false,code:'site_qa_seek_not_available'});
+   if(seekPreviewBuilding||previewBuilding)
+    return json(res,429,{ok:false,code:'site_qa_seek_busy'});
+   if(Date.now()<seekPreviewThrottleUntil)
+    return json(res,429,{ok:false,code:'site_qa_seek_cooldown'});
+   seekPreviewBuilding=true;
+   seekPreviewThrottleUntil=Date.now()+20000;
+   const abort=new AbortController();
+   const timer=setTimeout(()=>abort.abort(),100000);timer.unref?.();
+   const close=()=>abort.abort();
+   res.once('close',close);
+   try{
+    const clip=await buildStoredMovieSeekPreview({
+      runId,mediaKind:kind,position,lease,storage,signal:abort.signal});
+    if(!clip.ok||!Buffer.isBuffer(clip.bytes))
+     return json(res,503,{ok:false,
+       code:clip.code||'site_qa_seek_not_ready',
+       providerRequests:0,customerCutover:false});
+    if(abort.signal.aborted)return;
+    res.writeHead(200,{
+      'content-type':'video/mp4',
+      'content-length':String(clip.bytes.length),
+      'content-disposition':'inline; filename="blofy-owner-seek.mp4"',
+      'cache-control':'private,no-store',
+      'cross-origin-resource-policy':'same-origin',
+      'x-content-type-options':'nosniff','referrer-policy':'no-referrer',
+      'x-blofy-clip-position':position,
+      'x-blofy-clip-start-seconds':String(Math.floor(clip.clipStartsAtSeconds)),
+      'x-blofy-clip-source':'verified-private-s3'
+    });
+    return res.end(clip.bytes);
+   }catch{
+    if(!res.headersSent&&!res.destroyed)
+     return json(res,503,{ok:false,code:'site_qa_seek_unavailable'});
+    if(!res.destroyed)res.destroy();
+   }finally{
+    seekPreviewBuilding=false;
+    clearTimeout(timer);res.off('close',close);
+   }
+   return;
   }
   // Short MP4 preview exclusively for an authenticated owner in STREAM.
   // Never a public link, signed URL, or subscriber route. No provider call.
