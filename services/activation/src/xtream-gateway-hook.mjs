@@ -45,6 +45,8 @@ import { acceptsXtreamGzip } from './xtream-catalog-compression.mjs';
 import { shouldRetryXtreamWithoutRange,firstByteXtreamRange } from './xtream-media-range.mjs';
 import { recordXtreamPlayback,xtreamPlaybackSnapshot } from './xtream-playback-metrics.mjs';
 import {xtreamDirectMediaGauge} from './xtream-direct-media-gauge.mjs';
+import {anisAudioEnabled,anisAudioPublicCatalog,anisAudioSourceFor}
+  from './stream-anis-audio.mjs';
 import { XtreamDenialCooldown } from './xtream-denial-cooldown.mjs';
 import { createGatewayUsageThrottle } from './xtream-gateway-usage-throttle.mjs';
 import {createDistributorCustomerCatalog}
@@ -2347,6 +2349,79 @@ if(process.env.BLOFY_XTREAM_SHARED_LIVE_SOURCE_NAME){
 }
 
 
+
+// Optional operator-controlled Arabic commentary sources appear INSIDE the
+// BLOFY STREAM app, never in the Xtream or external provider manager.
+// This gateway only exposes audio to active, code-authorized STREAM users.
+// All original Anis source tokens remain in Railway secrets, never APKs.
+async function handleCodeProtectedAnisAudio(req,res,trackId) {
+  if (!requirePublicBudget(req,res)) return;
+  const account=await authenticateAppBearer(req);
+  if (!account) return text(res,401,'Unauthorized');
+  const target=anisAudioSourceFor(trackId,process.env.BLOFY_STREAM_ANIS_TOKEN);
+  if (!anisAudioEnabled() || !target) return text(res,404,'Audio not found');
+  const controller=new AbortController();
+  const onClose=()=>controller.abort();
+  res.on('close',onClose);
+  const startupTimer=setTimeout(()=>controller.abort(),15_000);
+  let response;
+  try {
+    // Only the fixed operator-supplied hostname, NEVER user-selected URLs.
+    // Deny redirects to avoid exposing the private token in Location headers.
+    response=await fetch(target,{
+      method:req.method,redirect:'manual',signal:controller.signal,
+      headers:{
+        'accept':'audio/*',
+        'user-agent':'BLOFY-STREAM-Arabic-Audio/1.0'
+      }
+    });
+    clearTimeout(startupTimer);
+    if(response.status!==200&&response.status!==206){
+      await response.body?.cancel().catch(()=>{});
+      return text(res,502,'Arabic audio temporarily unavailable');
+    }
+    const type=String(response.headers.get('content-type')||'')
+      .split(';')[0].trim().toLowerCase();
+    // Refuse to proxy video or unrelated HTML. HLS needs a separate
+    // authenticated manifest/segment route, not unrestricted redirects.
+    const supported=new Set([
+      'audio/mpeg','audio/mp3','audio/aac','audio/aacp','audio/x-aac',
+      'audio/mp4','audio/ogg','audio/wav','audio/x-wav','audio/flac',
+      'audio/x-flac','audio/opus'
+    ]);
+    if(!supported.has(type)){
+      await response.body?.cancel().catch(()=>{});
+      return text(res,415,'Source is not a supported standalone audio feed');
+    }
+    const headers={
+      'content-type':type,
+      'cache-control':'no-store, private',
+      'x-content-type-options':'nosniff',
+      'referrer-policy':'no-referrer',
+      'x-robots-tag':'noindex'
+    };
+    if(req.method==='HEAD'){
+      await response.body?.cancel().catch(()=>{});
+      res.writeHead(200,headers);
+      return res.end();
+    }
+    if(!response.body)return text(res,502,'Empty audio source');
+    res.writeHead(200,headers);
+    await pipeline(Readable.fromWeb(response.body),res);
+  } catch {
+    // Redact the upstream path/query and activation code from all logs.
+    if(!res.headersSent&&!res.destroyed)
+      text(res,503,'Arabic audio temporarily unavailable');
+    else if(!res.destroyed)res.destroy();
+  } finally {
+    clearTimeout(startupTimer);
+    res.off('close',onClose);
+    controller.abort();
+    if(response?.body&&!response.body.locked)
+      await response.body.cancel().catch(()=>{});
+  }
+}
+
 const previousCreateServer = http.createServer.bind(http);
 http.createServer = function withBlofyXtreamGateway(listener) {
   if (typeof listener !== 'function') return previousCreateServer(listener);
@@ -2421,6 +2496,20 @@ http.createServer = function withBlofyXtreamGateway(listener) {
           daysRemaining:expiry==null?null:Math.max(0,Math.ceil((expiry-now)/86400000))},
           {'cache-control':'no-store'});
       }
+      // Audio catalog appears as a normal choice inside the STREAM player.
+      // It is intentionally not exposed to anonymous users or PLAYER.
+      if(req.method==='GET'&&url.pathname==='/api/v1/stream/audio/catalog'){
+        if(!requirePublicBudget(req,res))return;
+        const account=await authenticateAppBearer(req);
+        if(!account)return json(res,401,{error:'stream_app_session_invalid'});
+        return json(res,200,{
+          tracks:anisAudioEnabled()?anisAudioPublicCatalog():[]
+        },{'cache-control':'no-store, private'});
+      }
+      const anisAudioMatch=url.pathname.match(
+        /^\\/api\\/v1\\/stream\\/media\\/audio\\/(anis-[a-z0-9-]{1,60})$/);
+      if(anisAudioMatch&&(req.method==='GET'||req.method==='HEAD'))
+        return handleCodeProtectedAnisAudio(req,res,anisAudioMatch[1]);
       const tokenMedia=url.pathname.match(
         /^\/api\/v1\/stream\/media\/(live|movie|series)\/([0-9]+)(?:\.([A-Za-z0-9]{1,8}))?$/i);
       if(tokenMedia&&(req.method==='GET'||req.method==='HEAD')){
