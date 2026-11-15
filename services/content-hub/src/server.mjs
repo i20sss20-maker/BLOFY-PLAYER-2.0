@@ -9,6 +9,8 @@ import {runChunkedMovieBatch,chunkedPilotEnabled,chunkedBatchReadiness,CHUNK_BYT
 import {createContinuousCopyController} from './continuous-copy.mjs';
 import {planDailyLicensedXtreamCopies} from './xtream-daily-copy-plan.mjs';
 import {createDailyMediaSessionStore,startApprovedDailyMediaSession} from './xtream-daily-media-worker.mjs';
+import {createMirrorMovieTransferStore,runOneApprovedMirrorMovieChunk,
+ mirrorMovieDispatchReadiness} from './xtream-mirror-movie-transfer.mjs';
 import {diagnoseVerifiedMovie} from './playback-diagnostics.mjs';
 import {verifyPrivateSeekRanges} from './seek-diagnostics.mjs';
 import {buildPrivateBrowserPreview} from './private-preview.mjs';
@@ -91,7 +93,7 @@ export function createContentHubServer({storage,lease,
  episodeCandidateInspector=inspectEpisodeCandidates,
  episodeSizeInspector=inspectEpisodeSize,
  episodeChunkRunner=runOneEpisodeChunk,seasonQueueStore=null,catalogStore=null,
- dailyMediaSessionStore=null,
+ dailyMediaSessionStore=null,mirrorMovieTransferStore=null,
  metadataMatcher=createMetadataMatcher({
   token:process.env.BLOFY_TMDB_READ_TOKEN||'',
   commercialLicenseConfirmed:process.env.BLOFY_TMDB_COMMERCIAL_LICENSE_CONFIRMED==='1'
@@ -108,6 +110,7 @@ export function createContentHubServer({storage,lease,
  let previewBuilding=false,previewCache=null,previewThrottleUntil=0;
  let episodeProbeBusy=false,episodeProbeAt=0,lastEpisodeProbe=null;
  let episodeCopyBusy=false,episodeCopyAbort=null,lastEpisodeCopy=null;
+ let mirrorMovieBusy=false,lastMirrorMovieChunk=null;
  let seasonStorageAuditBusy=false,seasonStorageAuditAt=0;
  let seasonConcurrentReadBusy=false,seasonConcurrentReadAt=0,lastSeasonConcurrentRead=null;
  const copy=createContinuousCopyController({
@@ -126,7 +129,7 @@ export function createContentHubServer({storage,lease,
   store:seasonQueueStore,storage,lease,env:pilotEnv,
   runner:episodeChunkRunner,logger,
   isSourceBusy:()=>episodeCopyBusy||episodeCopy.isRunning()||
-   pilotRunning||copy.isRunning()
+   pilotRunning||copy.isRunning()||mirrorMovieBusy
  }):null;
  async function runFullPlaybackCanary(runId,mediaKind='movie'){
   const diag=await diagnoseVerifiedMovie({runId,storage,lease,mediaKind});
@@ -185,6 +188,19 @@ export function createContentHubServer({storage,lease,
    }catch{return json(res,400,{ok:false,
       code:'mirror_preview_catalog_invalid',providerRequests:0,
       bytesTransferred:0,customerCutover:false})}
+  }
+  if(path==='/internal/mirror/movie/status'&&req.method==='GET'){
+   if(String(req.url||'').includes('?')||!mirrorMovieTransferStore)
+    return json(res,404,{ok:false,code:'mirror_movie_dispatch_not_configured'});
+   const sourceId=String(pilotEnv.BLOFY_XTREAM_DAILY_CATALOG_SOURCE_ID||'');
+   try{
+    const status=await mirrorMovieTransferStore.status(sourceId);
+    return json(res,200,{...status,lastAttempt:lastMirrorMovieChunk,
+     running:mirrorMovieBusy,
+     readiness:mirrorMovieDispatchReadiness(pilotEnv),
+     privateOnly:true,customerCutover:false});
+   }catch{return json(res,503,{ok:false,
+    code:'mirror_movie_status_unavailable'})}
   }
   if(path==='/internal/mirror/daily/sessions'&&req.method==='GET'){
    if(String(req.url||'').includes('?')||
@@ -1358,6 +1374,27 @@ export function createContentHubServer({storage,lease,
   return json(res,404,{ok:false,code:'content_hub_not_found'});
  });
  return {server,
+  runOneMirroredMovieChunk:async(now=new Date())=>{
+   if(!mirrorMovieTransferStore)return {ok:false,
+    code:'mirror_movie_dispatch_disabled',customerCutover:false};
+   if(mirrorMovieBusy)return {ok:false,
+    code:'mirror_movie_worker_busy',customerCutover:false};
+   mirrorMovieBusy=true;
+   try{
+    const result=await runOneApprovedMirrorMovieChunk({
+     env:pilotEnv,now,store:mirrorMovieTransferStore,
+     storage,lease,runner:batchRunner,logger,
+     sourceBusy:()=>pilotRunning||episodeCopyBusy||
+      episodeCopy.isRunning()||copy.isRunning()||
+      Boolean(seasonQueue?.isRunning())
+    });
+    lastMirrorMovieChunk={
+     code:result.code,at:new Date().toISOString(),
+     verified:result.verified===true,customerCutover:false
+    };
+    return result;
+   }finally{mirrorMovieBusy=false}
+  },
   runScheduledDailyMediaCopy:async(now=new Date())=>{
    if(!dailyMediaSessionStore)return {ok:false,started:false,
     code:'daily_media_copy_disabled'};
@@ -1480,8 +1517,11 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
  const catalogStore=createContentCatalogStore({connectionString:process.env.DATABASE_URL});
  const dailyMediaSessionStore=process.env.BLOFY_CONTENT_HUB_DAILY_COPY_ENABLED==='1'?
   createDailyMediaSessionStore({connectionString:process.env.DATABASE_URL}):null;
+ const mirrorMovieTransferStore=
+  process.env.BLOFY_CONTENT_HUB_MIRROR_MOVIE_DISPATCH_ENABLED==='1'?
+   createMirrorMovieTransferStore({connectionString:process.env.DATABASE_URL}):null;
  const hub=createContentHubServer({storage,lease,seasonQueueStore,catalogStore,
-  dailyMediaSessionStore,
+  dailyMediaSessionStore,mirrorMovieTransferStore,
   token:process.env.BLOFY_CONTENT_HUB_ADMIN_TOKEN||'',
   allowSynthetic:process.env.BLOFY_CONTENT_HUB_SYNTHETIC_TEST_ENABLED==='1',
   logger:(name,payload)=>console.info(name,JSON.stringify(payload))});
@@ -1512,6 +1552,31 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
    timer.unref?.();
    const initial=setTimeout(()=>void check(),60*1000);
    initial.unref?.();
+  }
+  // Default OFF: individual rights, mapping, private S3 and daily byte
+  // budgets remain independent gates. One 8MiB chunk per tick.
+  if(mirrorMovieTransferStore){
+   let mirrorTickBusy=false;
+   const mirrorTick=async()=>{
+    if(mirrorTickBusy)return;
+    mirrorTickBusy=true;
+    try{
+     const result=await hub.runOneMirroredMovieChunk();
+     if(result.code==='mirror_movie_chunk_checkpoint_saved'||
+        result.code==='mirror_movie_private_sha_verified')
+      console.info('BLOFY_CONTENT_HUB_MIRROR_MOVIE_CHUNK',JSON.stringify({
+       code:result.code,gatewayId:result.gatewayId,
+       verified:result.verified===true,
+       subscriberRoutesChanged:false
+      }));
+    }catch{
+     console.warn('BLOFY_CONTENT_HUB_MIRROR_MOVIE_CHUNK',
+      JSON.stringify({code:'mirror_movie_tick_failed',
+       customerCutover:false}));
+    }finally{mirrorTickBusy=false}
+   };
+   const m=setInterval(()=>void mirrorTick(),2*60*1000);m.unref?.();
+   const m0=setTimeout(()=>void mirrorTick(),70*1000);m0.unref?.();
   }
   console.info('BLOFY_CONTENT_HUB_READY',JSON.stringify({port,
    privateOnly:true,downloadQueueEnabled:false,
@@ -1848,7 +1913,7 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
   hub.stopContinuousCopy();
   hub.stopEpisodeCopy();
   hub.server.close(()=>void Promise.allSettled([lease.close(),
-   dailyMediaSessionStore?.close?.()]));
+   dailyMediaSessionStore?.close?.(),mirrorMovieTransferStore?.close?.()]));
  };
  process.once('SIGTERM',shutdown);process.once('SIGINT',shutdown);
 }
