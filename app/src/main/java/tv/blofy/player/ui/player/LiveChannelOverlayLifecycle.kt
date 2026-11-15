@@ -228,7 +228,18 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             val adapter = LiveChannelAdapter(
                 onClick = { channel -> selectChannel(channel) },
                 onFocus = {},
-                onLongClick = {},
+                onLongClick = { channel ->
+                    activity.lifecycleScope.launch {
+                        val dao = BlofyDatabase.get(activity.applicationContext).dao()
+                        val item = dao.stream(channel.key) ?: return@launch
+                        dao.setFavorite(channel.key, !item.favorite)
+                        Toast.makeText(activity,
+                            if (!item.favorite) copy("أضيفت للمفضلة", "Added to favorites")
+                            else copy("أزيلت من المفضلة", "Removed from favorites"),
+                            Toast.LENGTH_SHORT).show()
+                        if (activeTab == LiveChannelTab.FAVORITES) refreshList()
+                    }
+                },
                 itemKey = { it.key },
                 translucent = true
             )
@@ -312,7 +323,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                             setOnClickListener {
                                 activeTab = tab
                                 for (index in 0 until childCount) {
-                                    childAt(index)?.background = GradientDrawable().apply {
+                                    getChildAt(index)?.background = GradientDrawable().apply {
                                         cornerRadius = dp(10).toFloat()
                                         setColor(if (index == options.indexOfFirst { it.first == tab })
                                             0xB25A3384.toInt() else 0x522C2538)
@@ -481,74 +492,85 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 layoutDirection = activity.resources.configuration.layoutDirection
                 setPadding(dp(9), dp(4), dp(9), dp(9))
             }
-            footer.addView(View(activity).apply {
-                setBackgroundColor(0x665E4787)
-            }, LinearLayout.LayoutParams(-1, dp(1)).apply {
-                bottomMargin = dp(5)
-            })
-            footer.addView(TextView(activity).apply {
-                text = copy("التحكم بالبث", "LIVE CONTROLS")
-                textSize = 11.5f
-                setTextColor(BlofyTvDesign.TextSecondary)
-                typeface = BlofyTvDesign.HeadingTypeface
-                gravity = Gravity.CENTER_VERTICAL or Gravity.START
-                setPadding(dp(9), 0, dp(9), 0)
-            }, LinearLayout.LayoutParams(-1, dp(23)))
-
-            fun style(focused: Boolean) = GradientDrawable().apply {
+            fun surface(focused: Boolean) = GradientDrawable().apply {
                 cornerRadius = dp(11).toFloat()
                 setColor(if (focused) 0xE058367E.toInt() else 0x552E263F)
                 setStroke(dp(1), if (focused) 0xFFCEB0FF.toInt() else 0x665E4787)
             }
-
-            LiveChannelPanelPolicy.actions(streamCodeOnly = BuildConfig.CODE_ONLY_LOGIN)
-                .forEach { action ->
+            // Keep four useful controls visible; MORE expands the rest
+            // immediately BELOW them in the SAME sidebar, never a floating HUD.
+            fun draw(expanded: Boolean) {
+                footer.removeAllViews()
+                footer.addView(View(activity).apply {
+                    setBackgroundColor(0x665E4787)
+                }, LinearLayout.LayoutParams(-1, dp(1)).apply { bottomMargin = dp(5) })
+                footer.addView(TextView(activity).apply {
+                    text = copy("التحكم بالبث", "LIVE CONTROLS")
+                    textSize = 11.5f
+                    setTextColor(BlofyTvDesign.TextSecondary)
+                    typeface = BlofyTvDesign.HeadingTypeface
+                    gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                    setPadding(dp(9), 0, dp(9), 0)
+                }, LinearLayout.LayoutParams(-1, dp(23)))
+                LiveChannelPanelPolicy.actions(BuildConfig.CODE_ONLY_LOGIN, expanded).forEach { action ->
                     val label = when (action) {
                         LiveChannelPanelAction.BLOFY_AUDIO ->
                             copy("♫  صوتيات BLOFY العربية", "♫  BLOFY Arabic audio")
+                        LiveChannelPanelAction.FAVORITE ->
+                            copy("☆  إضافة/إزالة المفضلة", "☆  Toggle favorite")
+                        LiveChannelPanelAction.EPG ->
+                            copy("▣  برنامج الآن والقادم", "▣  Now and next")
+                        LiveChannelPanelAction.MORE ->
+                            if (expanded) copy("⌃  إخفاء الخيارات", "⌃  Fewer controls")
+                            else copy("⌄  المزيد من التحكم", "⌄  More controls")
                         LiveChannelPanelAction.AUDIO_TRACKS ->
                             copy("◉  مسارات الصوت", "◉  Audio tracks")
                         LiveChannelPanelAction.SUBTITLES ->
                             copy("CC  الترجمة", "CC  Subtitles")
                         LiveChannelPanelAction.VIDEO_QUALITY ->
                             copy("▣  جودة الصورة", "▣  Video quality")
-                        LiveChannelPanelAction.FAVORITE ->
-                            copy("☆  إضافة للمفضلة", "☆  Add to favorites")
+                        LiveChannelPanelAction.STREAM_INFO ->
+                            copy("ⓘ  معلومات البث", "ⓘ  Stream information")
+                        LiveChannelPanelAction.RECONNECT ->
+                            copy("↻  إعادة الاتصال", "↻  Reconnect stream")
                     }
-                    val button = TextView(activity).apply {
+                    footer.addView(TextView(activity).apply {
                         id = View.generateViewId()
                         text = label
                         contentDescription = label
-                        textSize = 13f
+                        textSize = 12.5f
                         maxLines = 1
                         ellipsize = android.text.TextUtils.TruncateAt.END
                         setTextColor(Color.WHITE)
                         typeface = BlofyTvDesign.HeadingTypeface
-                        gravity = Gravity.CENTER_VERTICAL or Gravity.START
+                        gravity = Gravity.START or Gravity.CENTER_VERTICAL
                         setPadding(dp(12), 0, dp(12), 0)
                         isFocusable = true
                         isClickable = true
-                        background = style(false)
+                        background = surface(false)
                         setOnFocusChangeListener { view, focused ->
-                            view.background = style(focused)
+                            view.background = surface(focused)
                         }
                         setOnClickListener {
-                            // Dismiss the channel list before opening the
-                            // existing audio/subtitle/quality chooser. This
-                            // avoids stacked Window.Callback focus conflicts.
-                            close()
-                            if (!activity.openLivePanelAction(action)) {
-                                Toast.makeText(activity,
-                                    copy("تعذر فتح هذا الخيار", "Could not open this control"),
-                                    Toast.LENGTH_SHORT).show()
+                            if (action == LiveChannelPanelAction.MORE) {
+                                draw(!expanded)
+                            } else {
+                                // Existing picker and diagnostic dialogs open
+                                // over the same running ExoPlayer, not a new one.
+                                close()
+                                if (!activity.openLivePanelAction(action)) {
+                                    Toast.makeText(activity,
+                                        copy("تعذر فتح هذا الخيار", "Could not open this control"),
+                                        Toast.LENGTH_SHORT).show()
+                                }
                             }
                         }
-                    }
-                    footer.addView(button, LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT, dp(40)).apply {
+                    }, LinearLayout.LayoutParams(-1, dp(39)).apply {
                         bottomMargin = dp(4)
                     })
                 }
+            }
+            draw(expanded = false)
             return footer
         }
 
@@ -577,42 +599,15 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
         }
 
         private fun selectChannel(channel: StreamEntity) {
-            val playingKey = RecentChannelStore.keys(activity, channel.providerId).firstOrNull() ?: currentChannelKey
-            if (channel.key == playingKey) return
-            val which = displayedChannels.indexOfFirst { it.key == channel.key }
-            if (which < 0) return
-            val channelNumber = which + 1
-            if (channelNumber > 9_999) {
-                Toast.makeText(
-                    activity,
-                    copy("رقم القناة أكبر من حد التبديل الحالي", "Channel number is above the current zap limit"),
-                    Toast.LENGTH_SHORT
-                ).show()
-                return
-            }
-            // Return focus to video before dispatching the established
-            // numeric zapping path. Never leave an invisible dialog consuming
-            // OK after the viewer has selected a new channel.
+            if (activity.isFinishing || activity.isDestroyed) return
+            val playingKey = RecentChannelStore.keys(activity, channel.providerId).firstOrNull()
+                ?: currentChannelKey
             close()
-            dispatchChannelNumber(channelNumber)
-        }
-
-        private fun dispatchChannelNumber(number: Int) {
-            number.toString().forEach { digit ->
-                val keyCode = when (digit) {
-                    '0' -> KeyEvent.KEYCODE_0
-                    '1' -> KeyEvent.KEYCODE_1
-                    '2' -> KeyEvent.KEYCODE_2
-                    '3' -> KeyEvent.KEYCODE_3
-                    '4' -> KeyEvent.KEYCODE_4
-                    '5' -> KeyEvent.KEYCODE_5
-                    '6' -> KeyEvent.KEYCODE_6
-                    '7' -> KeyEvent.KEYCODE_7
-                    '8' -> KeyEvent.KEYCODE_8
-                    '9' -> KeyEvent.KEYCODE_9
-                    else -> return@forEach
-                }
-                activity.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
+            if (channel.key == playingKey) return
+            if (!activity.selectLiveChannelFromPanel(channel)) {
+                Toast.makeText(activity,
+                    copy("تعذر فتح هذه القناة", "Unable to open this channel"),
+                    Toast.LENGTH_SHORT).show()
             }
         }
 
