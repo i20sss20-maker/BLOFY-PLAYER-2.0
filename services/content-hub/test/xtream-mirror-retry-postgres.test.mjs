@@ -46,7 +46,8 @@ test('real PG cross-media copy budget, durable checkpoints and 3 maximum retries
     series_source_id TEXT,container_extension TEXT)`);
   await pool.query(`CREATE TABLE blofy_xtream_items (
     server_id UUID,media_type TEXT,source_id TEXT,
-    enabled BOOLEAN,container_extension TEXT)`);
+    enabled BOOLEAN,container_extension TEXT,
+    name TEXT NOT NULL DEFAULT '',custom_name TEXT)`);
   const discovery=createXtreamMirrorDiscoveryStore(pool);
   await discovery.ensure();
   await pool.query(`INSERT INTO blofy_xtream_servers(
