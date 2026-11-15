@@ -1523,6 +1523,10 @@ export function createContentHubServer({storage,lease,
     code:'mirror_episode_dispatch_disabled',customerCutover:false};
    if(mirrorEpisodeBusy)return {ok:false,
     code:'mirror_episode_worker_busy',customerCutover:false};
+   // Atomically exclude a concurrent movie tick BEFORE async PG/S3
+   // preflight, so two timers cannot both pass and both stand down.
+   if(mirrorMovieBusy)return {ok:false,
+    code:'mirror_episode_source_busy',customerCutover:false};
    mirrorEpisodeBusy=true;
    try{
     const before=await assertMirrorTechnicalPreflight();
@@ -1547,6 +1551,8 @@ export function createContentHubServer({storage,lease,
     code:'mirror_movie_dispatch_disabled',customerCutover:false};
    if(mirrorMovieBusy)return {ok:false,
     code:'mirror_movie_worker_busy',customerCutover:false};
+   if(mirrorEpisodeBusy)return {ok:false,
+    code:'mirror_movie_source_busy',customerCutover:false};
    mirrorMovieBusy=true;
    try{
     const before=await assertMirrorTechnicalPreflight();
