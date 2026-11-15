@@ -1602,17 +1602,27 @@ open class PlayerActivity : ContentAccessActivity() {
         if (sessionReleased || kind != KIND_LIVE || tracks.isEmpty()) return
         val grouped = tracks.groupBy { StreamArabicAudioCatalog.groupName(it, english) }
         val groups = grouped.keys.toList()
+        val saved = StreamAudioPreferenceStore.read(this, currentStreamId)
+        val lastChoice = tracks.firstOrNull { it.id == saved?.trackId }
+        val resumeLabel = lastChoice?.let { track ->
+            if (english) "Last used: " + track.label
+            else "آخر صوتية: " + track.label
+        }
         val labels = listOf(
             if (english) "Original channel audio" else "الصوت الأصلي للقناة"
-        ) + groups.map { group -> group + " (" + (grouped[group]?.size ?: 0) + ")" }
+        ) + listOfNotNull(resumeLabel) +
+            groups.map { group -> group + " (" + (grouped[group]?.size ?: 0) + ")" }
         AlertDialog.Builder(this)
             .setTitle(if (english) "BLOFY audio library" else "مكتبة الصوتيات • BLOFY")
             .setItems(labels.toTypedArray()) { _, index ->
                 if (index == 0) {
                     arabicAudioSession?.stop()
                     arabicAudioSession = null
+                } else if (lastChoice != null && index == 1) {
+                    activateArabicTrack(lastChoice, english)
                 } else {
-                    val selectedGroup = groups.getOrNull(index - 1) ?: return@setItems
+                    val selectedGroup = groups.getOrNull(index - 1 -
+                        if (lastChoice != null) 1 else 0) ?: return@setItems
                     showArabicTracks(grouped[selectedGroup].orEmpty(), selectedGroup, english)
                 }
             }
@@ -1631,7 +1641,7 @@ open class PlayerActivity : ContentAccessActivity() {
                 tracks.getOrNull(index)?.let { activateArabicTrack(it, english) }
             }
             .setNeutralButton(if (english) "Back to groups" else "رجوع للأقسام") { _, _ ->
-                showArabicAudioMenu()
+                showArabicAudioMenu(chooseAnother = true)
             }
             .setNegativeButton(if (english) "Cancel" else "إلغاء", null)
             .show()
@@ -1652,9 +1662,16 @@ open class PlayerActivity : ContentAccessActivity() {
                 Toast.LENGTH_LONG
             ).show()
         }
+        val saved = StreamAudioPreferenceStore.read(this, currentStreamId)
+        val preferred = if (saved?.trackId == choice.id)
+            choice.copy(initialDelaySeconds = saved.delaySeconds) else choice
         arabicAudioSession?.stop()
         arabicAudioSession = controller
-        controller.start(choice)
+        controller.start(preferred)
+        if (controller.isActive) {
+            StreamAudioPreferenceStore.save(this, currentStreamId,
+                choice.id, controller.delaySeconds)
+        }
         showArabicAudioControls()
     }
 
@@ -1683,6 +1700,10 @@ open class PlayerActivity : ContentAccessActivity() {
                 isAllCaps = false
                 setOnClickListener {
                     change()
+                    controller.currentTrackId?.let { id ->
+                        StreamAudioPreferenceStore.save(this@PlayerActivity,
+                            currentStreamId, id, controller.delaySeconds)
+                    }
                     refresh()
                 }
             }, LinearLayout.LayoutParams(0, dp(54), 1f))
