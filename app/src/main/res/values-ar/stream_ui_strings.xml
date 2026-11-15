@@ -187,4 +187,5 @@
     <string name="stream_chat_series_prompt">رشح لي مسلسل جريمة حديث</string>
     <string name="stream_chat_shortcut">تحدث مع BLOFY AI</string>
     <string name="stream_search_local_only">البحث هنا محلي للأفلام والمسلسلات والقنوات والممثلين. للتوصيات والمحادثة افتح BLOFY AI من القائمة الرئيسية.</string>
+    <string name="stream_ai_local_fallback">BLOFY AI غير متاح مؤقتًا. عرضت لك %1$d نتائج موجودة فعلًا في مكتبتك المحلية. اضغط الاسم للبحث.</string>
 </resources>
