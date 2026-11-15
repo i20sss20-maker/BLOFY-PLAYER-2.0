@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {
  ANIS_AUDIO_TRACKS,anisAudioPublicCatalog,
- anisAudioEnabled,anisAudioSourceFor
+ anisAudioEnabled,anisAudioSourceFor,classifyAnisAudioMime
 } from '../src/stream-anis-audio.mjs';
 
 const TEST_TOKEN='TEST_ONLY_Audio_Token_001';
@@ -61,4 +61,35 @@ test('STREAM code authentication wraps catalog and media, never leaks source on 
  assert.match(gateway,/anisAudioEnabled\(\)\?anisAudioPublicCatalog\(\):\[\]/);
  assert.match(gateway,/redirect:'manual'/);
  assert.match(gateway,/const supported=new Set/);
+});
+
+test('radio MIME validator allows MP3/AAC and rejects HLS, HTML, video',()=>{
+ assert.equal(classifyAnisAudioMime('audio/mpeg',Buffer.alloc(0)),'audio/mpeg');
+ assert.equal(classifyAnisAudioMime('audio/aacp',Buffer.alloc(0)),'audio/aacp');
+ assert.equal(classifyAnisAudioMime('application/octet-stream',Buffer.from('ID3xyz')),'audio/mpeg');
+ assert.equal(classifyAnisAudioMime('',Buffer.from([255,243,160,0])),'audio/mpeg');
+ assert.equal(classifyAnisAudioMime('application/octet-stream',
+    Buffer.from([255,241,80,128])),'audio/aac');
+ assert.equal(classifyAnisAudioMime('application/octet-stream',Buffer.from('OggS')),'audio/ogg');
+ assert.equal(classifyAnisAudioMime('application/octet-stream',Buffer.from('fLaC')),'audio/flac');
+ assert.equal(classifyAnisAudioMime('text/html',Buffer.from('ID3xyz')),null);
+ assert.equal(classifyAnisAudioMime('application/vnd.apple.mpegurl',
+    Buffer.from('#EXTM3U')),null);
+ assert.equal(classifyAnisAudioMime('video/mp4',Buffer.from('hello')),null);
+ assert.equal(classifyAnisAudioMime('application/octet-stream',
+    Buffer.from('<html>Access denied</html>')),null);
+});
+
+test('first media byte timeout and safe write are checked before announcing audio',async()=>{
+ const gateway=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
+ const open=gateway.indexOf('async function handleCodeProtectedAnisAudio');
+ const close=gateway.indexOf('const previousCreateServer',open);
+ assert.ok(open>=0&&close>open);
+ const section=gateway.slice(open,close);
+ assert.ok(section.indexOf('const first=await reader.read()')>=0);
+ assert.ok(section.indexOf('const type=classifyAnisAudioMime')>=0);
+ assert.ok(section.indexOf("clearTimeout(firstByteTimer)")>=0);
+ assert.ok(section.indexOf('res.writeHead(200')>section.indexOf('const first=await reader.read()'));
+ assert.ok(section.includes("redirect:'manual'"));
+ assert.ok(section.includes("res.off('close',onClose)"));
 });
