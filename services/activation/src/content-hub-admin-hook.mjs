@@ -218,7 +218,8 @@ http.createServer=function withContentHubAdmin(listener){
   catch{return listener(req,res)}
   const path=url.pathname;
   if(req.method==='GET'&&['/admin-content-hub.css',
-    '/admin-content-hub.js','/admin-ops-overview.js','/admin-library.js',
+    '/admin-content-hub.js','/admin-mirror-dashboard.js',
+    '/admin-ops-overview.js','/admin-library.js',
      '/admin-library-metadata.js','/admin-library-cinema.js',
      '/admin-library-detail.js','/admin-season-readiness.js',
      '/admin-season-analytics.js',
