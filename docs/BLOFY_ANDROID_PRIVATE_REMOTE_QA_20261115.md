@@ -51,3 +51,20 @@ This UI was built to exercise actual S3-backed media on a device, but the
 software test/build alone does not prove it has done so. No publicly
 signed production APK or Google Play release has been produced from
 this QA branch.
+
+
+## Device-kind binding and CI
+The per-device HMAC now covers the named platform and the new relay
+requires the `x-blofy-device-platform: android` or
+`x-blofy-device-platform: android_tv` header, matching the platform
+recorded in the signed 15-minute ticket. A missing, different-platform
+or expired ticket fails before opening S3. The Windows debug proxy sends
+`windows`. The header is a claim, not hardware attestation; it
+prevents accidental cross-platform ticket reuse, not a malicious
+client pretending to be another platform.
+
+The Android CI for the earlier owner-player integration commit
+`c5d88d3b` succeeded and generated a `codeDemo` private test APK.
+The platform-binding change after that commit must pass its own
+workflow before any QA device install is approved. These builds are
+not app-store signed builds and should never replace customer APKs.
