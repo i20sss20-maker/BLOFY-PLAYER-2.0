@@ -17,6 +17,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.HttpDataSource
 import tv.blofy.player.core.network.TransportFactory
 import tv.blofy.player.core.provider.ProviderProfile
 
@@ -37,9 +38,28 @@ internal class StreamArabicAudioSession(
     context: Context,
     private val video: ExoPlayer,
     private val profile: ProviderProfile,
-    private val onFailure: () -> Unit,
+    private val onFailure: (FailureReason) -> Unit,
     private val onStarted: () -> Unit = {}
 ) {
+    enum class FailureReason { UNSUPPORTED_FORMAT, SOURCE_UNAVAILABLE, ACCESS_DENIED, BUSY, TIMEOUT, ENDED, NETWORK }
+
+    private fun classify(error: PlaybackException): FailureReason {
+        var cause: Throwable? = error.cause
+        repeat(8) {
+            if (cause is HttpDataSource.InvalidResponseCodeException) {
+                return when ((cause as HttpDataSource.InvalidResponseCodeException).responseCode) {
+                    415 -> FailureReason.UNSUPPORTED_FORMAT
+                    401, 403 -> FailureReason.ACCESS_DENIED
+                    429 -> FailureReason.BUSY
+                    500, 502, 503, 504 -> FailureReason.SOURCE_UNAVAILABLE
+                    else -> FailureReason.NETWORK
+                }
+            }
+            cause = cause?.cause
+        }
+        return FailureReason.NETWORK
+    }
+
     private val appContext = context.applicationContext
     private val handler = Handler(Looper.getMainLooper())
     private val stallHandler = Handler(Looper.getMainLooper())
@@ -111,7 +131,7 @@ internal class StreamArabicAudioSession(
                         onPrimaryPlaybackChanged()
                     }
                     Player.STATE_BUFFERING -> scheduleOriginalAudioOnStall(version)
-                    Player.STATE_ENDED -> failAndRestore()
+                    Player.STATE_ENDED -> failAndRestore(FailureReason.ENDED)
                 }
             }
 
@@ -135,7 +155,7 @@ internal class StreamArabicAudioSession(
             }
 
             override fun onPlayerError(error: PlaybackException) {
-                if (version == generation) failAndRestore()
+                if (version == generation) failAndRestore(classify(error))
             }
         })
         companion.setMediaItem(
@@ -148,7 +168,8 @@ internal class StreamArabicAudioSession(
         // No infinite spinner: a selected station that never becomes audible
         // must fail cleanly, leaving the original channel's audio intact.
         startupHandler.postDelayed({
-            if (version == generation && !companion.isPlaying) failAndRestore()
+            if (version == generation && !companion.isPlaying)
+                failAndRestore(FailureReason.TIMEOUT)
         }, 18_000L + delay * 1_000L)
         onPrimaryPlaybackChanged()
     }
@@ -267,9 +288,9 @@ internal class StreamArabicAudioSession(
         adjustDelay(-delay)
     }
 
-    private fun failAndRestore() {
+    private fun failAndRestore(reason: FailureReason) {
         stop()
-        onFailure()
+        onFailure(reason)
     }
 
     fun stop() {
