@@ -40,7 +40,7 @@ export function mintOwnerDeviceQaTicket({secret,runId,mediaKind='episode',platfo
   runId,mediaKind,platform,privateOnly:true,customerCutover:false};
 }
 
-export function verifyOwnerDeviceQaTicket({secret,ticket,runId,mediaKind='episode',now=Date.now()}={}){
+export function verifyOwnerDeviceQaTicket({secret,ticket,runId,mediaKind='episode',platform=null,now=Date.now()}={}){
  if(typeof secret!=='string'||secret.length<32||
     !isDeviceQaRun(runId)||!KINDS.has(mediaKind)||typeof ticket!=='string'||
     ticket.length>600||!Number.isSafeInteger(now)||now<0)return false;
@@ -54,6 +54,7 @@ export function verifyOwnerDeviceQaTicket({secret,ticket,runId,mediaKind='episod
   const current=Math.floor(now/1000);
   return payload.v===1&&payload.aud==='blofy-private-device-qa'&&
    payload.kind===mediaKind&&PLATFORMS.has(payload.platform)&&
+   (platform===null||platform===payload.platform)&&
    payload.runId===runId&&
    typeof payload.nonce==='string'&&/^[a-f0-9]{32}$/.test(payload.nonce)&&
    Number.isSafeInteger(payload.iat)&&Number.isSafeInteger(payload.exp)&&
@@ -74,19 +75,22 @@ export function strictDeviceQaRange(range,total){
 }
 
 export async function forwardOwnerDeviceQaPlayback({
- req,res,runId,mediaKind='episode',env=process.env,requestHub,now=Date.now
+ req,res,runId,mediaKind='episode',requirePlatform=false,env=process.env,requestHub,now=Date.now
 }={}){
  if(!enabledOwnerDeviceQa(env))return body(res,404,'device_qa_disabled');
  if(!isDeviceQaRun(runId)||!KINDS.has(mediaKind)||
     !['GET','HEAD'].includes(req.method)||
     String(req.url||'').includes('?'))
   return body(res,404,'device_qa_route_invalid');
+ const platform=String(req.headers['x-blofy-device-platform']||'');
+ if(requirePlatform&&!PLATFORMS.has(platform))
+  return body(res,401,'device_qa_platform_header_required');
  const authorization=req.headers.authorization;
  const m=/^Bearer ([A-Za-z0-9._-]{40,600})$/.exec(
   typeof authorization==='string'?authorization:'');
  if(!m||!verifyOwnerDeviceQaTicket({
   secret:env.BLOFY_CONTENT_HUB_DEVICE_QA_SIGNING_KEY,ticket:m[1],
-  runId,mediaKind,now:now()
+  runId,mediaKind,platform:requirePlatform?platform:null,now:now()
  }))return body(res,401,'device_qa_authorization_required');
  if(typeof requestHub!=='function')return body(res,503,'device_qa_bridge_unavailable');
  const controller=new AbortController();
