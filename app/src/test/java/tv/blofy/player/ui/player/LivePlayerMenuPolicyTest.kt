@@ -26,6 +26,19 @@ class LivePlayerMenuPolicyTest {
         assertEquals(LivePlayerMenuAction.RETURN_TO_BROWSER, key(KeyEvent.KEYCODE_BACK))
     }
 
+    @Test fun streamUnifiedPanelReplacesDetachedHudOnMenuAndArrows() {
+        assertEquals(LivePlayerMenuAction.SHOW_CHANNEL_LIST,
+            LivePlayerMenuPolicy.action(KeyEvent.KEYCODE_MENU, false, false, true))
+        assertEquals(LivePlayerMenuAction.SHOW_CHANNEL_LIST,
+            LivePlayerMenuPolicy.action(KeyEvent.KEYCODE_DPAD_UP, false, false, true))
+        assertEquals(LivePlayerMenuAction.SHOW_CHANNEL_LIST,
+            LivePlayerMenuPolicy.action(KeyEvent.KEYCODE_DPAD_DOWN, false, false, true))
+        assertEquals(LivePlayerMenuAction.SHOW_CHANNEL_LIST,
+            LivePlayerMenuPolicy.action(KeyEvent.KEYCODE_DPAD_CENTER, false, false, true))
+        assertEquals(LivePlayerMenuAction.PASS_THROUGH,
+            LivePlayerMenuPolicy.action(KeyEvent.KEYCODE_DPAD_DOWN, true, false, true))
+    }
+
     @Test fun openDialogOwnsItsNavigationAndSelection() {
         assertEquals(LivePlayerMenuAction.PASS_THROUGH,
             key(KeyEvent.KEYCODE_DPAD_CENTER, dialog = true))
