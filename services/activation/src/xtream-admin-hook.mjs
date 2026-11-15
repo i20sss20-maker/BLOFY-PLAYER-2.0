@@ -3,6 +3,7 @@ import { safeErrorSummary } from './diagnostics-sanitizer.mjs';
 import {safeXtreamTransportCategory} from './xtream-transport-errors.mjs';
 import {withXtreamAccountReconnect} from './xtream-api-resilience.mjs';
 import {createXtreamSyncQueue} from './xtream-sync-queue.mjs';
+import {listIndexedXtreamMirrorPage} from './xtream-mirror-inventory.mjs';
 import {configuredDailySourceId,riyadhCatalogDay,scheduleDailyApprovedCatalog,
  markDailyCatalogRunning,recordDailyCatalogOutcome,readDailyCatalogReceipts
 } from './xtream-daily-approved-catalog.mjs';
@@ -3465,6 +3466,33 @@ async function unifiedStreamBridge(req,res,url){
   // STREAM bridge; no schedule is silently enabled by a deploy.
   // Read-only nightly metadata receipts. Only within the authenticated
   // private BLOFY STREAM operator bridge, never a customer endpoint.
+  // Exact-source, read-only catalog inventory for the owner's *private*
+  // mirror planning. No provider media reads, S3 writes or client cutover.
+  if(p==='/internal/blofy-stream/ops/mirror-inventory'){
+    if(req.method!=='GET')return json(res,405,{
+      ok:false,code:'mirror_inventory_read_only'});
+    const sourceId=configuredDailySourceId(process.env);
+    if(!sourceId)return json(res,503,{
+      ok:false,code:'mirror_inventory_source_unconfigured',
+      providerRequests:0,mediaBytesTransferred:0,customerCutover:false});
+    const mediaType=String(url.searchParams.get('type')||'movie');
+    const cursor=String(url.searchParams.get('cursor')||'');
+    const size=String(url.searchParams.get('limit')||'50');
+    if(!['live','movie','series','episode'].includes(mediaType)||
+       cursor.length>128||!/^[0-9]{1,3}$/.test(size)||
+       Number(size)<1||Number(size)>100)
+      return json(res,400,{ok:false,code:'mirror_inventory_query_invalid'});
+    try{
+      const result=await listIndexedXtreamMirrorPage(controlPool,{
+        sourceId,mediaType,cursor,pageSize:Number(size)});
+      return json(res,result.ok?200:404,result,{'cache-control':'no-store'});
+    }catch(error){
+      if(String(error?.message)==='xtream_mirror_inventory_query_invalid')
+        return json(res,400,{ok:false,code:'mirror_inventory_query_invalid'});
+      return json(res,503,{ok:false,code:'mirror_inventory_unavailable',
+        providerRequests:0,mediaBytesTransferred:0,customerCutover:false});
+    }
+  }
   if(req.method==='GET'&&p==='/internal/blofy-stream/ops/daily-catalog'){
     const sourceId=configuredDailySourceId(process.env);
     const active=process.env.BLOFY_XTREAM_DAILY_CATALOG_SYNC_ENABLED==='1';
