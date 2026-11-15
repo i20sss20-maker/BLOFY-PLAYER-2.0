@@ -20,13 +20,13 @@ class StreamAudioQuickPickPolicyTest {
     }
 
     @Test fun onlyRealPlaybackMayReceivePlayingState() {
-        assertEquals(p.State.FAILED_RECENTLY,
+        assertEquals(StreamAudioQuickPickPolicy.State.FAILED_RECENTLY,
             p.status("anis-a",null,"anis-a",setOf("anis-a")))
-        assertEquals(p.State.RECENTLY_WORKED,
+        assertEquals(StreamAudioQuickPickPolicy.State.RECENTLY_WORKED,
             p.status("anis-a",null,"anis-a",emptySet()))
-        assertEquals(p.State.PLAYING,
+        assertEquals(StreamAudioQuickPickPolicy.State.PLAYING,
             p.status("anis-a","anis-a","anis-b",setOf("anis-a")))
-        assertEquals(p.State.UNTESTED,
+        assertEquals(StreamAudioQuickPickPolicy.State.UNTESTED,
             p.status("anis-z",null,"anis-b",emptySet()))
     }
 }
