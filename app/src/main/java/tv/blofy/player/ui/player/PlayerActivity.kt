@@ -1147,8 +1147,90 @@ open class PlayerActivity : ContentAccessActivity() {
             LiveChannelPanelAction.SUBTITLES -> showTrackDialog(C.TRACK_TYPE_TEXT)
             LiveChannelPanelAction.VIDEO_QUALITY -> showVideoQualityDialog()
             LiveChannelPanelAction.FAVORITE -> toggleFavorite()
+            LiveChannelPanelAction.EPG -> showCurrentLiveEpg()
+            LiveChannelPanelAction.STREAM_INFO -> showCurrentLiveDiagnostics()
+            LiveChannelPanelAction.RECONNECT -> retryPlayback()
+            LiveChannelPanelAction.MORE -> return false // expanded inside attached panel
         }
         return true
+    }
+
+    /** EPG is read from the authorized provider's existing on-device cache. */
+    private fun showCurrentLiveEpg() {
+        val id = currentStreamId
+        if (id.isBlank() || providerId.isBlank()) return
+        val english = !streamUiLanguage().startsWith("ar")
+        lifecycleScope.launch {
+            val entries = kotlinx.coroutines.withContext(Dispatchers.IO) {
+                runCatching { dao.epg(providerId, id, System.currentTimeMillis()).first() }
+                    .getOrDefault(emptyList())
+            }
+            if (id != currentStreamId || isFinishing || isDestroyed) return@launch
+            val now = System.currentTimeMillis()
+            val current = entries.firstOrNull { now in it.startMs until it.endMs }
+            val next = entries.firstOrNull { it.startMs > now && it !== current }
+            val message = listOfNotNull(
+                current?.let { (if (english) "Now: " else "الآن: ") +
+                    "${time(it.startMs)}–${time(it.endMs)}  ${it.title}" },
+                next?.let { (if (english) "Next: " else "التالي: ") +
+                    "${time(it.startMs)}–${time(it.endMs)}  ${it.title}" }
+            ).joinToString("\n\n").ifBlank {
+                if (english) "No schedule is available for this channel."
+                else "لا تتوفر بيانات برامج لهذه القناة حاليًا."
+            }
+            AlertDialog.Builder(this@PlayerActivity)
+                .setTitle(if (english) "Programme guide" else "دليل برامج القناة")
+                .setMessage(message)
+                .setPositiveButton(if (english) "Close" else "إغلاق", null)
+                .show()
+        }
+    }
+
+    /**
+     * Truthful playback diagnostics. Network link bandwidth is a device
+     * estimate, NOT measured stream throughput. Never display source URLs.
+     */
+    private fun showCurrentLiveDiagnostics() {
+        if (sessionReleased) return
+        val english = !streamUiLanguage().startsWith("ar")
+        val player = session.player
+        val video = player.videoFormat
+        val audio = player.audioFormat
+        val size = if (video != null && video.width > 0 && video.height > 0)
+            "${video.width} × ${video.height}" else "—"
+        val audioHealth = StreamAudioHealth.inspect(
+            player.currentTracks, player.volume, known = player.playbackState == Player.STATE_READY
+        )
+        val state = when (player.playbackState) {
+            Player.STATE_READY -> if (english) "Playing / ready" else "جاهز للتشغيل"
+            Player.STATE_BUFFERING -> if (english) "Buffering" else "جارٍ التخزين المؤقت"
+            Player.STATE_IDLE -> if (english) "Idle" else "غير نشط"
+            else -> if (english) "Ended" else "انتهى التشغيل"
+        }
+        val linkEstimate = runCatching {
+            connectivity.getNetworkCapabilities(connectivity.activeNetwork)
+                ?.linkDownstreamBandwidthKbps?.takeIf { it > 0 }
+        }.getOrNull()
+        val report = if (english) {
+            "Playback: $state\nResolution: $size\nVideo: ${video?.sampleMimeType ?: "Unknown"}" +
+                "\nAudio: ${audio?.sampleMimeType ?: "Unknown"}" +
+                "\nAudio tracks: ${audioHealth.available} (supported ${audioHealth.supported})" +
+                "\nBuffered: ${player.totalBufferedDuration / 1000}s" +
+                "\nNetwork link estimate: ${linkEstimate?.let { "${it / 1000.0} Mbps" } ?: "Unknown"}" +
+                "\nThis is not measured stream speed."
+        } else {
+            "حالة التشغيل: $state\nالدقة: $size\nترميز الصورة: ${video?.sampleMimeType ?: "غير معروف"}" +
+                "\nترميز الصوت: ${audio?.sampleMimeType ?: "غير معروف"}" +
+                "\nمسارات الصوت: ${audioHealth.available} (المدعومة ${audioHealth.supported})" +
+                "\nالمخزن مؤقتًا: ${player.totalBufferedDuration / 1000} ثانية" +
+                "\nسرعة ارتباط الشبكة التقديرية: ${linkEstimate?.let { "${it / 1000.0} ميجابت/ث" } ?: "غير معروفة"}" +
+                "\nليست قياسًا لسرعة بث القناة."
+        }
+        AlertDialog.Builder(this)
+            .setTitle(if (english) "Stream information" else "معلومات البث")
+            .setMessage(report)
+            .setPositiveButton(if (english) "Close" else "إغلاق", null)
+            .show()
     }
 
     internal fun liveControlsVisible(): Boolean =
