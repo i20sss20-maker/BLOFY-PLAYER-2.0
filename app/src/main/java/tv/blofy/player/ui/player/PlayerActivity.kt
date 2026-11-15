@@ -1890,7 +1890,15 @@ open class PlayerActivity : ContentAccessActivity() {
                 }
             },
             onStarted = {
-                if (!isFinishing && !sessionReleased) onPlaybackState?.invoke(true)
+                if (!isFinishing && !sessionReleased) {
+                    // A mere click/loading state is not proof of playable audio.
+                    // Store a preferred voice only after companion playback starts.
+                    arabicAudioSession?.takeIf { it.currentTrackId == choice.id }?.let {
+                        StreamAudioPreferenceStore.save(this, currentStreamId,
+                            choice.id, it.delaySeconds)
+                    }
+                    onPlaybackState?.invoke(true)
+                }
             }
         )
         val saved = StreamAudioPreferenceStore.read(this, currentStreamId)
@@ -1899,10 +1907,6 @@ open class PlayerActivity : ContentAccessActivity() {
         arabicAudioSession?.stop()
         arabicAudioSession = controller
         controller.start(preferred)
-        if (controller.isActive) {
-            StreamAudioPreferenceStore.save(this, currentStreamId,
-                choice.id, controller.delaySeconds)
-        }
         if (showControls) showArabicAudioControls()
     }
 
