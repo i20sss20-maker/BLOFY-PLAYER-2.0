@@ -58,8 +58,11 @@ export async function auditPrivateHeadBatch({
   if(!matched)failures++;
   examined.push({partNumber:index+1,status,sizeMatched:matched});
  }
- const last=start+examined.length>=parts.length;
- const next=last?null:start+PRIVATE_HEAD_BATCH;
+ const expectedInThisBatch=Math.min(PRIVATE_HEAD_BATCH,parts.length-start);
+ const fullyVisited=examined.length===expectedInThisBatch;
+ const last=fullyVisited&&start+examined.length>=parts.length;
+ // On timeout, re-check THIS batch; never silently skip unchecked chunks.
+ const next=!fullyVisited?start:last?null:start+PRIVATE_HEAD_BATCH;
  return {
   ok:true,code:failures?'private_head_batch_needs_attention':
     'private_head_batch_checked',
