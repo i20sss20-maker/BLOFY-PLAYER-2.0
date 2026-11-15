@@ -13,6 +13,7 @@ import {buildPrivateBrowserPreview} from './private-preview.mjs';
 import {buildStoredMovieSeekPreview} from './private-seek-preview.mjs';
 import {inspectPrivateTimeline,buildPrivateTimelineSegment} from './private-timeline.mjs';
 import {createPrivateTimelineClipCache} from './private-timeline-cache.mjs';
+import {auditPrivateHeadBatch} from './private-head-audit.mjs';
 import {parseSiteQaRange} from './site-qa-range.mjs';
 import {inspectEpisodeCandidates} from './episode-candidates.mjs';
 import {inspectEpisodeSize} from './episode-probe.mjs';
@@ -110,6 +111,7 @@ export function createContentHubServer({storage,lease,
  let previewBuilding=false,previewCache=null,previewThrottleUntil=0;
  let seekPreviewBuilding=false,seekPreviewThrottleUntil=0;
  let timelineRendering=false,timelineLastRequestAt=0;
+ let physicalHeadAuditBusy=false;
  const timelineClipCache=createPrivateTimelineClipCache();
  let episodeProbeBusy=false,episodeProbeAt=0,lastEpisodeProbe=null;
  let episodeCopyBusy=false,episodeCopyAbort=null,lastEpisodeCopy=null;
@@ -158,6 +160,42 @@ export function createContentHubServer({storage,lease,
     uptimeSeconds:Math.floor((Date.now()-started)/1000)});
   if(!safeAuth(req.headers.authorization,token))
    return json(res,401,{ok:false,code:'content_hub_auth_required'});
+  // Bounded physical S3 HEAD check of one verified catalog movie or
+  // episode: strictly owner-only, one 8-chunk batch at a time, no media GET.
+  if(path==='/internal/mirror/physical-head-audit'){
+   if(req.method!=='POST'||String(req.url||'').includes('?'))
+    return json(res,405,{ok:false,code:'private_head_method_denied'});
+   if(pilotEnv.BLOFY_CONTENT_HUB_PHYSICAL_HEAD_AUDIT_ENABLED!=='1'||
+      pilotEnv.BLOFY_CONTENT_HUB_STORAGE_RIGHTS_CONFIRMED!=='1'||
+      req.headers['x-blofy-owner-action']!=='private-verified-s3-head-audit')
+    return json(res,404,{ok:false,code:'private_head_not_available'});
+   if(physicalHeadAuditBusy)return json(res,429,{
+    ok:false,code:'private_head_busy'});
+   let body;
+   try{body=await readSeasonJson(req)}catch{
+    return json(res,400,{ok:false,code:'private_head_json_invalid'});
+   }
+   physicalHeadAuditBusy=true;
+   const abort=new AbortController();
+   const timeout=setTimeout(()=>abort.abort(),10300);timeout.unref?.();
+   const disconnect=()=>abort.abort();
+   res.once('close',disconnect);
+   try{
+    const out=await auditPrivateHeadBatch({
+      sourceId:body?.sourceId,kind:body?.kind,
+      id:body?.id,start:body?.start,
+      lease,storage,signal:abort.signal,maxTimeMs:9800});
+    if(!abort.signal.aborted)return json(res,out.ok?200:400,out);
+   }catch{
+    if(!abort.signal.aborted&&!res.headersSent)return json(res,503,{
+     ok:false,code:'private_head_audit_unavailable',
+     mediaBytesTransferred:0,providerRequests:0,customerCutover:false});
+   }finally{
+    physicalHeadAuditBusy=false;clearTimeout(timeout);
+    res.off('close',disconnect);
+   }
+   return;
+  }
   // Read-only reconciliation of the owner's catalog page with private
   // completed chunk manifests. A database proof is not a live S3 HEAD;
   // no provider request, no uploads and no customer playback.
@@ -1717,6 +1755,66 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
    seasonQueueReady:Boolean(seasonQueueStore)&&seasonsReady.ready,
    seasonQueueBlockedBy:seasonsReady.blockedBy,
    automaticSeasonStartup:false,customerCutover:false}));
+  // Once-only physical storage proof of the FIRST and LAST private
+  // chunks in the existing SHA-verified owner movie or episode manifest.
+  // HEAD checks only object presence and SIZE; no full-file hash reread,
+  // provider media fetch, S3 copy or automatic customer route change.
+  if(process.env.BLOFY_CONTENT_HUB_PHYSICAL_HEAD_SMOKE_ON_BOOT==='1'){
+   const timer=setTimeout(()=>{
+    void (async()=>{
+     const env=process.env;
+     const kind=String(env.BLOFY_CONTENT_HUB_PHYSICAL_HEAD_SMOKE_KIND||'movie');
+     const runId=String(kind==='episode'?
+       env.BLOFY_CONTENT_HUB_EPISODE_RUN_ID||'':
+       env.BLOFY_CONTENT_HUB_BATCH_RUN_ID||'');
+     const event=String(env.BLOFY_CONTENT_HUB_PHYSICAL_HEAD_SMOKE_TOKEN||'');
+     if(!['movie','episode'].includes(kind)||
+       !/^[A-Za-z0-9_-]{8,80}$/.test(runId)||
+       !/^[A-Za-z0-9_-]{8,80}$/.test(event))
+      return {ok:false,code:'physical_head_smoke_invalid_selection'};
+     if(env.BLOFY_CONTENT_HUB_STORAGE_RIGHTS_CONFIRMED!=='1'||
+        env.BLOFY_CONTENT_HUB_PHYSICAL_HEAD_AUDIT_ENABLED!=='1'||
+        (kind==='episode'&&env.BLOFY_CONTENT_HUB_EPISODE_RIGHTS_CONFIRMED!=='1'))
+      return {ok:false,code:'physical_head_smoke_rights_gates_off'};
+     if(!await lease.claimBatchBootOnce(event,runId))
+      return {ok:false,code:'physical_head_smoke_already_claimed'};
+     const m=kind==='movie'?await lease.getVerifiedChunkedObject(runId):
+       await lease.getVerifiedEpisodeObject(runId);
+     if(!m?.parts?.length)return {ok:false,
+       code:'physical_head_smoke_manifest_missing'};
+     const picks=[m.parts[0],
+       ...(m.parts.length>1?[m.parts.at(-1)]:[])];
+     const checked=[];
+     for(const part of picks){
+      const p=await storage.headVerifiedChunk({
+       key:part.key,expectedBytes:part.bytes,
+       signal:AbortSignal.timeout(8000)});
+      checked.push({partNumber:part.partNumber,status:p.status,
+        matched:p.ok===true&&p.bytes===part.bytes});
+     }
+     return {ok:checked.every(p=>p.matched),
+      code:checked.every(p=>p.matched)?
+        'physical_head_first_last_sizes_match':
+        'physical_head_first_last_needs_attention',
+      kind,totalParts:m.parts.length,checked,
+      entireFilePhysicallyVerified:m.parts.length<=2&&
+        checked.every(p=>p.matched),
+      fullContentHashRecomputed:false,sourceMediaRequests:0,
+      s3MediaBytesRead:0,customerCutover:false};
+    })().then(out=>console.info('BLOFY_CONTENT_HUB_PHYSICAL_HEAD_SMOKE',
+      JSON.stringify({
+       ok:out.ok===true,code:out.code,kind:out.kind||null,
+       checked:out.checked||[],totalParts:out.totalParts||0,
+       entireFilePhysicallyVerified:
+         out.entireFilePhysicallyVerified===true,
+       fullContentHashRecomputed:false,
+       sourceMediaRequests:0,s3MediaBytesRead:0,
+       customerCutover:false}))).catch(()=>console.warn(
+      'BLOFY_CONTENT_HUB_PHYSICAL_HEAD_SMOKE',JSON.stringify({
+       ok:false,code:'physical_head_smoke_failed',sourceMediaRequests:0,
+       s3MediaBytesRead:0,customerCutover:false})));
+   },8500);timer.unref?.();
+  }
   // One-off read-only mapping discovery. No source media is fetched and no
   // customer path is modified; only sanitized gateway ID and extension log.
   if(process.env.BLOFY_CONTENT_HUB_PREFLIGHT_ON_BOOT==='1'){
