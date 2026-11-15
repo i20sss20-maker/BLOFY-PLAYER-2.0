@@ -2507,7 +2507,7 @@ http.createServer = function withBlofyXtreamGateway(listener) {
         },{'cache-control':'no-store, private'});
       }
       const anisAudioMatch=url.pathname.match(
-        /^\\/api\\/v1\\/stream\\/media\\/audio\\/(anis-[a-z0-9-]{1,60})$/);
+        /^\/api\/v1\/stream\/media\/audio\/(anis-[a-z0-9-]{1,60})$/);
       if(anisAudioMatch&&(req.method==='GET'||req.method==='HEAD'))
         return handleCodeProtectedAnisAudio(req,res,anisAudioMatch[1]);
       const tokenMedia=url.pathname.match(
