@@ -1511,6 +1511,12 @@ open class PlayerActivity : ContentAccessActivity() {
         SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(ms))
 
     private fun showHudBriefly() {
+        // STREAM live uses its unified attached channel/actions sidebar.
+        // Never flash the legacy detached bottom HUD over that experience.
+        if (BuildConfig.CODE_ONLY_LOGIN && kind == KIND_LIVE) {
+            if (::hud.isInitialized && hud.visibility == View.VISIBLE) hideHud()
+            return
+        }
         keepHudVisible()
         hud.visibility = View.VISIBLE
         hudOverlay.visibility = View.VISIBLE
