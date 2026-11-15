@@ -1782,8 +1782,13 @@ open class PlayerActivity : ContentAccessActivity() {
             response else null
     }
 
+    /** Display PLAYING only once the sidecar decoder actually emits audio. */
     internal fun currentInlineArabicTrackId(): String? =
-        arabicAudioSession?.takeIf { it.isActive }?.currentTrackId
+        arabicAudioSession?.takeIf { it.isAudible }?.currentTrackId
+
+    /** A previously successful local choice, not a live server-health claim. */
+    internal fun lastConfirmedInlineArabicTrackId(): String? =
+        StreamAudioPreferenceStore.read(this, currentStreamId)?.trackId
 
     internal fun returnInlineOriginalAudio() {
         if (kind != KIND_LIVE || sessionReleased) return
