@@ -28,5 +28,7 @@ jobs:
           node --check services/activation/src/xtream-stream-arabic-audio.mjs
           node --check services/activation/src/xtream-gateway-hook.mjs
           node --check services/activation/web/xtream-gateway-admin.js
+          node --check services/activation/web/stream-arabic-audio-import.mjs
+          node --test services/activation/test/stream-arabic-audio-import.test.mjs
           node --test services/activation/test/xtream-stream-arabic-audio.test.mjs
           node --test services/activation/test/xtream-code-app-token.test.mjs
