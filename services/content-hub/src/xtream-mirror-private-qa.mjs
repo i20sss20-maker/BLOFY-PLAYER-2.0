@@ -26,6 +26,7 @@ export async function resolveVerifiedMirrorMedia({
     !KINDS.has(mediaKind)||!Number.isSafeInteger(gatewayId)||gatewayId<1)
   throw Error('mirror_qa_selection_invalid');
  const r=await db.query(`SELECT q.copy_run_id,q.copy_sha256,
+   q.source_id,q.media_id,q.gateway_id,
    q.expected_bytes,q.extension,q.copy_completed_at
    FROM blofy_xtream_mirror_items q
    WHERE q.source_id=$1 AND q.media_kind=$2 AND q.gateway_id=$3
@@ -43,7 +44,9 @@ export async function resolveVerifiedMirrorMedia({
  const sha=String(row.copy_sha256||'').trim();
  const bytes=Number(row.expected_bytes);
  const extension=String(row.extension||'').toLowerCase();
+ const mediaId=String(row.media_id||'');
  if(!RUN.test(runId)||!DIGEST.test(sha)||
+    !/^[A-Za-z0-9._-]{1,128}$/.test(mediaId)||
     !Number.isSafeInteger(bytes)||bytes<8*1024*1024||
     bytes>4*1024**3||!['mkv','mp4','avi','ts'].includes(extension))
   return {ok:false,code:'mirror_qa_record_invalid',
@@ -57,7 +60,13 @@ export async function resolveVerifiedMirrorMedia({
   return {ok:false,code:'mirror_qa_manifest_unavailable',
    providerRequests:0,customerCutover:false};
  }
- if(!manifest||manifest.bytes!==bytes||
+ // Compare both independent registries across ALL exact media identity
+ // dimensions, not only SHA and bytes. A verified file from a different
+ // Xtream source or a remapped gateway must NEVER grant owner-device QA.
+ if(!manifest||manifest.kind!=='chunked'||
+    manifest.mediaKind!==mediaKind||
+    manifest.sourceId!==sourceId||manifest.mediaId!==mediaId||
+    manifest.gatewayId!==gatewayId||manifest.bytes!==bytes||
     String(manifest.sha256||'').trim()!==sha||
     manifest.extension!==extension||
     !Array.isArray(manifest.parts)||manifest.parts.length<1)
