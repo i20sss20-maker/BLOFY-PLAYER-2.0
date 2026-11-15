@@ -118,7 +118,7 @@ test('cross-item daily byte budget table is the same as the movie worker',async(
    if(sql.includes('SELECT reserved_bytes'))return {rows:[{reserved_bytes:'0'}]};
    if(sql.includes('WITH picked'))return {rows:[row],rowCount:1};
    if(sql.includes('SET reserved_bytes='))return {rowCount:1};
-   if(sql.includes('SET state=$4'))return {rowCount:1,rows:[{gateway_id:401}]};
+   if(sql.includes("SET state=CASE WHEN $4='retry'"))return {rowCount:1,rows:[{gateway_id:401}]};
    if(sql.includes('SELECT local_day,reserved_bytes'))return {rows:[]};
    throw Error('unexpected SQL '+sql.slice(0,100));
   }
