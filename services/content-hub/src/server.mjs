@@ -1755,6 +1755,66 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
    seasonQueueReady:Boolean(seasonQueueStore)&&seasonsReady.ready,
    seasonQueueBlockedBy:seasonsReady.blockedBy,
    automaticSeasonStartup:false,customerCutover:false}));
+  // Once-only physical storage proof of the FIRST and LAST private
+  // chunks in the existing SHA-verified owner movie or episode manifest.
+  // HEAD checks only object presence and SIZE; no full-file hash reread,
+  // provider media fetch, S3 copy or automatic customer route change.
+  if(process.env.BLOFY_CONTENT_HUB_PHYSICAL_HEAD_SMOKE_ON_BOOT==='1'){
+   const timer=setTimeout(()=>{
+    void (async()=>{
+     const env=process.env;
+     const kind=String(env.BLOFY_CONTENT_HUB_PHYSICAL_HEAD_SMOKE_KIND||'movie');
+     const runId=String(kind==='episode'?
+       env.BLOFY_CONTENT_HUB_EPISODE_RUN_ID||'':
+       env.BLOFY_CONTENT_HUB_BATCH_RUN_ID||'');
+     const event=String(env.BLOFY_CONTENT_HUB_PHYSICAL_HEAD_SMOKE_TOKEN||'');
+     if(!['movie','episode'].includes(kind)||
+       !/^[A-Za-z0-9_-]{8,80}$/.test(runId)||
+       !/^[A-Za-z0-9_-]{8,80}$/.test(event))
+      return {ok:false,code:'physical_head_smoke_invalid_selection'};
+     if(env.BLOFY_CONTENT_HUB_STORAGE_RIGHTS_CONFIRMED!=='1'||
+        env.BLOFY_CONTENT_HUB_PHYSICAL_HEAD_AUDIT_ENABLED!=='1'||
+        (kind==='episode'&&env.BLOFY_CONTENT_HUB_EPISODE_RIGHTS_CONFIRMED!=='1'))
+      return {ok:false,code:'physical_head_smoke_rights_gates_off'};
+     if(!await lease.claimBatchBootOnce(event,runId))
+      return {ok:false,code:'physical_head_smoke_already_claimed'};
+     const m=kind==='movie'?await lease.getVerifiedChunkedObject(runId):
+       await lease.getVerifiedEpisodeObject(runId);
+     if(!m?.parts?.length)return {ok:false,
+       code:'physical_head_smoke_manifest_missing'};
+     const picks=[m.parts[0],
+       ...(m.parts.length>1?[m.parts.at(-1)]:[])];
+     const checked=[];
+     for(const part of picks){
+      const p=await storage.headVerifiedChunk({
+       key:part.key,expectedBytes:part.bytes,
+       signal:AbortSignal.timeout(8000)});
+      checked.push({partNumber:part.partNumber,status:p.status,
+        matched:p.ok===true&&p.bytes===part.bytes});
+     }
+     return {ok:checked.every(p=>p.matched),
+      code:checked.every(p=>p.matched)?
+        'physical_head_first_last_sizes_match':
+        'physical_head_first_last_needs_attention',
+      kind,totalParts:m.parts.length,checked,
+      entireFilePhysicallyVerified:m.parts.length<=2&&
+        checked.every(p=>p.matched),
+      fullContentHashRecomputed:false,sourceMediaRequests:0,
+      s3MediaBytesRead:0,customerCutover:false};
+    })().then(out=>console.info('BLOFY_CONTENT_HUB_PHYSICAL_HEAD_SMOKE',
+      JSON.stringify({
+       ok:out.ok===true,code:out.code,kind:out.kind||null,
+       checked:out.checked||[],totalParts:out.totalParts||0,
+       entireFilePhysicallyVerified:
+         out.entireFilePhysicallyVerified===true,
+       fullContentHashRecomputed:false,
+       sourceMediaRequests:0,s3MediaBytesRead:0,
+       customerCutover:false}))).catch(()=>console.warn(
+      'BLOFY_CONTENT_HUB_PHYSICAL_HEAD_SMOKE',JSON.stringify({
+       ok:false,code:'physical_head_smoke_failed',sourceMediaRequests:0,
+       s3MediaBytesRead:0,customerCutover:false})));
+   },8500);timer.unref?.();
+  }
   // One-off read-only mapping discovery. No source media is fetched and no
   // customer path is modified; only sanitized gateway ID and extension log.
   if(process.env.BLOFY_CONTENT_HUB_PREFLIGHT_ON_BOOT==='1'){
