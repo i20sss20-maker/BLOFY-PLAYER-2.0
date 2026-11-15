@@ -28,6 +28,7 @@ import {distributedMovieOffsets,summarizeDistributedMovieProbe} from './xtream-d
 import { createFixedWindowLimiter, requestClientKey } from './auth-protection.mjs';
 import {forwardPrivatePreview} from './content-hub-private-preview-bridge.mjs';
 import {forwardPrivateOriginalRange} from './content-hub-private-original-range-bridge.mjs';
+import {forwardPrivateSeekPreview} from './content-hub-private-seek-bridge.mjs';
 import {isStreamSeasonBridgePath,requestStreamSeasonBridge} from './stream-season-bridge.mjs';
 import {
   assertPublicXtreamUrl,
@@ -3148,6 +3149,17 @@ async function unifiedStreamBridge(req,res,url){
     path:p,method:req.method,body:data,
     operatorToken:process.env.BLOFY_CONTENT_HUB_OPERATOR_TOKEN||''});
    return json(res,result.status,result.data,{'cache-control':'no-store'});
+  }
+
+  // Authenticated STREAM website owner preview samples at start/middle/end,
+  // created from VERIFIED private S3, not the Xtream source or app routes.
+  const seekSample=p.match(
+    /^\/internal\/blofy-stream\/content-hub\/site-qa\/seek-preview\/(movie|episode)\/([A-Za-z0-9_-]{8,80})\/(start|middle|near_end)$/);
+  if(seekSample){
+   if(url.search)return json(res,400,{ok:false,code:'site_qa_seek_query_denied'});
+   return forwardPrivateSeekPreview({req,res,
+     mediaKind:seekSample[1],runId:seekSample[2],position:seekSample[3],
+     hubToken:String(process.env.BLOFY_CONTENT_HUB_OPERATOR_TOKEN||'')});
   }
 
   // Original-file website QA is private, range-limited and explicitly
