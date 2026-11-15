@@ -261,3 +261,69 @@ Still **not implemented**:
 No bulk request for every series is sent at once, no media files are
 stored by metadata enumeration/size probing, and no customer routes
 are changed. The entire feature remains under draft PR #609.
+
+
+## 2026-11-15: REAL (but disabled) individually licensed MOVIE transfer worker
+
+The pipeline now has a cross-item dynamic private movie path:
+
+`Xtream mirror discovery -> owner item-level storage rights attestation
+ -> verified 4KiB HTTP 206 source size probe -> approved Postgres row
+ -> reserved private 8MiB transfer lease -> existing 8MiB chunked movie
+ runner -> private S3 verified chunk/checkpoint -> full private SHA256
+ manifest -> verified queue row`.
+
+A second exact-item, private-token-protected activation bridge uses
+`/internal/blofy-content-hub/mirror/movie/<gatewayId>/describe` and
+`/internal/blofy-content-hub/mirror/movie/<gatewayId>/source` rather than
+the earlier hard-coded pilot movie. The gateway verifies on every call:
+the item is an *active leased* row in state `copying`, the original
+individual rights attestation and recent size proof exist, the approved
+saleh Xtream source is still enabled, the gateway ID still maps to
+the same media ID/extension, the lease has not expired, and the provider
+Range response matches the exact pinned file length. Other IDs fail closed.
+
+BLOFY Content Hub now has a cross-replica, persisted daily per-source
+**reserved byte budget** and an exact one-file claim. At most ONE
+8 MiB chunk is dispatched per two-minute timer tick; the default
+ceiling is 64 MiB per Riyadh day (hard cap 512 MiB/day) until
+provider connection limits and actual S3 cost have been measured.
+An interrupted worker can resume an expired lease under the SAME
+private run ID, reusing verified S3/PG checkpoints. A normal checkpoint
+returns the queue row to approved; a source/storage failure requires
+review. Only the private `getVerifiedChunkedObject` full-file manifest
+with exact length + SHA-256 can mark a row `verified`. This never
+creates subscriber media routes or deletes verified content.
+
+All flags below must be specifically reviewed by the operator and are
+absent/OFF in Railway:
+
+On **blofy-activation-portal**:
+- `BLOFY_CONTENT_HUB_BRIDGE_ENABLED=1` (existing private bridge)
+- `BLOFY_XTREAM_MIRROR_DYNAMIC_MOVIE_BRIDGE_ENABLED=1`
+
+On **blofy-content-hub**:
+- `BLOFY_CONTENT_HUB_MIRROR_MOVIE_DISPATCH_ENABLED=1`
+- `BLOFY_CONTENT_HUB_MIRROR_INDIVIDUAL_RIGHTS_AUDITED=1`
+  (never set from merely having Xtream credentials; requires actual
+  license evidence for each movie).
+- `BLOFY_XTREAM_DAILY_CATALOG_SOURCE_ID=<exact approved saleh UUID>`
+- `BLOFY_CONTENT_HUB_MIRROR_DAILY_BYTES_LIMIT=67108864`
+  (64 MiB/day, optional, max 536870912).
+- Existing `CHUNKED_ENABLED`, `UPLOAD_ENABLED`,
+  `STORAGE_RIGHTS_CONFIRMED`, quiet-window, source-idle and
+  private bridge-token flags must also independently pass.
+
+Admin-session monitoring:
+`GET /api/v1/admin/content-hub/mirror/movie/status` proxies
+the private Hub `/internal/mirror/movie/status` and reports the
+last attempt + seven days of bytes reserved. A reserved chunk does NOT
+guarantee bytes were copied or that the movie is playable.
+
+**Not production-ready yet**: the rights audit, storage estimate, provider
+capacity and real device play/seek/audio test are incomplete. Physical
+movie transfer is implemented in the QA code path but **not enabled
+or run against the live provider**. Entire-series episode transfer is
+still handled by the prior manual season queue, not this movie worker.
+The goal of automatic copying of all authorized Xtream content remains
+unfinished. No Railway deploy or customer traffic cutover was made.
