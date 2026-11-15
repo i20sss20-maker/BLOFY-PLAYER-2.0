@@ -246,3 +246,46 @@ test('ACTUAL episode 8MiB HTTP 206 -> private S3 SHA -> verified queue, no catal
  assert.ok(upstream.requests.some(x=>x.episodeGuard==='operator-authorized'));
  assert.ok(upstream.requests.some(x=>x.range==='bytes=0-8388607'));
 });
+
+test('episode crash after LAST checkpoint safely resumes full-file S3 SHA without a provider Range',async()=>{
+ const gatewayId=81,storage=fakePrivateStorage(),
+  lease=fakeLease('episode'),source=fakeProvider('episode',gatewayId,'mp4');
+ const env={...base,
+  BLOFY_CONTENT_HUB_EPISODE_COPY_ENABLED:'1',
+  BLOFY_CONTENT_HUB_EPISODE_RIGHTS_CONFIRMED:'1',
+  BLOFY_CONTENT_HUB_MIRROR_DYNAMIC_EPISODE_ENABLED:'1',
+  BLOFY_CONTENT_HUB_EPISODE_APPROVED_GATEWAY_ID:String(gatewayId),
+  BLOFY_CONTENT_HUB_EPISODE_EXPECTED_BYTES:String(FILE_BYTES),
+  BLOFY_CONTENT_HUB_EPISODE_RUN_ID:RUN_ID
+ };
+ const item={sourceName:'saleh',mediaKind:'episode',gatewayId,
+  sourceId:ID,mediaId:'test-episode',extension:'mp4'};
+ const candidateInspector=async()=>({ok:true,candidates:[item]});
+ let failOnce=true;
+ const read=storage.readVerifiedRange.bind(storage);
+ storage.readVerifiedRange=async opts=>{
+  if(failOnce){failOnce=false;throw Error('synthetic_s3_temporary_read_failure')}
+  return read(opts);
+ };
+ const first=await runOneEpisodeChunk({env,storage,lease,
+  fetchImpl:source.fetchImpl,candidateInspector});
+ assert.equal(first.ok,false);
+ assert.equal(first.code,'episode_retryable_error');
+ assert.equal(first.errorStage,'verify_full_file');
+ assert.equal(lease.state.parts.length,1);
+ assert.equal(lease.state.state,'staged');
+ assert.equal(storage.saved.size,1);
+ const requestsAfterFirst=source.requests.length;
+ const second=await runOneEpisodeChunk({env,storage,lease,
+  fetchImpl:source.fetchImpl,candidateInspector});
+ assert.equal(second.ok,true,JSON.stringify(second));
+ assert.equal(second.code,'episode_fully_verified');
+ assert.equal(second.resumedAfterLastChunk,true);
+ assert.equal(second.providerMediaRequests,0);
+ assert.equal(second.sha256,SHA);
+ assert.equal(source.requests.length,requestsAfterFirst,
+  'no provider bytes needed after last recorded S3 checkpoint');
+ assert.equal(lease.state.state,'verified');
+ assert.equal(lease.state.parts.length,1);
+ assert.equal(lease.lockCount,0);
+});
