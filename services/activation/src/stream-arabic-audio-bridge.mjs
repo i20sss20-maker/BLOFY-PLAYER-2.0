@@ -37,7 +37,11 @@ export function parseOperatorAudioPlaylist(raw) {
   const taken=new Set(),result=[];
   for(const row of values){
     const label=String(row?.channel||'').trim();
-    const id=label.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+    const normalized=label.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+    // Real operator playlist uses "Anis Max 1 Low" and "Anis Al Kass 1".
+    // Canonicalize those to stable IDs expected by the Android groups.
+    const id=normalized.replace(/^anis-max-([1-6])-low$/, 'anis-max-low-$1')
+      .replace(/^anis-al-kass-/, 'anis-alkass-');
     if(!AUDIO_ID.test(id)||taken.has(id)||label.length>80)continue;
     const rawUrl=String(row?.url||'').trim();
     if(rawUrl.length<20||rawUrl.length>1200)continue;
@@ -47,7 +51,7 @@ export function parseOperatorAudioPlaylist(raw) {
     // HTTP proxy. External sources are operator-vetted, not customer-supplied.
     if(url.protocol!=='http:'||url.hostname!==LIVE_HOST||
        (url.port&&url.port!=='80')||url.username||url.password||
-       !/^\/live\/[a-z0-9_-]{1,28}\/[0-9]{1,4}$/i.test(url.pathname)||
+       !/^\/live\/[a-z0-9_-]{1,28}\/[a-z0-9_-]{1,12}$/i.test(url.pathname)||
        !url.searchParams.has('token'))continue;
     url.hash='';
     taken.add(id);
