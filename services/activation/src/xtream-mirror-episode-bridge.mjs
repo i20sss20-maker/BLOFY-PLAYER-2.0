@@ -5,7 +5,7 @@ export async function findActiveMirrorEpisode(pool,{gatewayId,sourceId}={}){
     !/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(String(sourceId||''))||
     typeof pool?.query!=='function')return null;
  const r=await pool.query(`SELECT q.source_id,q.media_id,q.gateway_id,
-    q.extension,q.expected_bytes,q.copy_run_id
+    q.series_media_id,q.extension,q.expected_bytes,q.copy_run_id
     FROM blofy_xtream_mirror_items q
     JOIN blofy_xtream_servers s ON s.id=q.source_id
     JOIN blofy_xtream_gateway_episode_map e
@@ -36,6 +36,7 @@ export async function findActiveMirrorEpisode(pool,{gatewayId,sourceId}={}){
  if(!Number.isSafeInteger(size)||size<8388608||size>4294967296)
   return null;
  return {gatewayId:Number(row.gateway_id),sourceId:String(row.source_id),
-  mediaId:String(row.media_id),extension:String(row.extension),
+  mediaId:String(row.media_id),seriesMediaId:String(row.series_media_id),
+  extension:String(row.extension),
   expectedBytes:size,copyRunId:String(row.copy_run_id)};
 }
