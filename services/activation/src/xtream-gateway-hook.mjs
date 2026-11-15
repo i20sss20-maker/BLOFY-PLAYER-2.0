@@ -45,7 +45,7 @@ import { acceptsXtreamGzip } from './xtream-catalog-compression.mjs';
 import { shouldRetryXtreamWithoutRange,firstByteXtreamRange } from './xtream-media-range.mjs';
 import { recordXtreamPlayback,xtreamPlaybackSnapshot } from './xtream-playback-metrics.mjs';
 import {xtreamDirectMediaGauge} from './xtream-direct-media-gauge.mjs';
-import {anisAudioEnabled,anisAudioPublicCatalog,anisAudioSourceFor}
+import {anisAudioEnabled,anisAudioPublicCatalog,anisAudioSourceFor,classifyAnisAudioMime}
   from './stream-anis-audio.mjs';
 import { XtreamDenialCooldown } from './xtream-denial-cooldown.mjs';
 import { createGatewayUsageThrottle } from './xtream-gateway-usage-throttle.mjs';
@@ -2363,11 +2363,14 @@ async function handleCodeProtectedAnisAudio(req,res,trackId) {
   const controller=new AbortController();
   const onClose=()=>controller.abort();
   res.on('close',onClose);
-  const startupTimer=setTimeout(()=>controller.abort(),15_000);
-  let response;
+  // Keep the timeout active UNTIL first audio bytes, not only headers. An
+  // idle radio cannot leave a customer on an endless loading indicator.
+  const firstByteTimer=setTimeout(()=>controller.abort(),15_000);
+  let response,reader;
   try {
-    // Only the fixed operator-supplied hostname, NEVER user-selected URLs.
-    // Deny redirects to avoid exposing the private token in Location headers.
+    // The upstream URL consists only of a fixed operator-approved hostname
+    // and whitelisted track path. Never forward user-provided URLs or follow
+    // redirects (which could disclose the provider token).
     response=await fetch(target,{
       method:req.method,redirect:'manual',signal:controller.signal,
       headers:{
@@ -2375,49 +2378,58 @@ async function handleCodeProtectedAnisAudio(req,res,trackId) {
         'user-agent':'BLOFY-STREAM-Arabic-Audio/1.0'
       }
     });
-    clearTimeout(startupTimer);
     if(response.status!==200&&response.status!==206){
       await response.body?.cancel().catch(()=>{});
       return text(res,502,'Arabic audio temporarily unavailable');
     }
-    const type=String(response.headers.get('content-type')||'')
-      .split(';')[0].trim().toLowerCase();
-    // Refuse to proxy video or unrelated HTML. HLS needs a separate
-    // authenticated manifest/segment route, not unrestricted redirects.
-    const supported=new Set([
-      'audio/mpeg','audio/mp3','audio/aac','audio/aacp','audio/x-aac',
-      'audio/mp4','audio/ogg','audio/wav','audio/x-wav','audio/flac',
-      'audio/x-flac','audio/opus'
-    ]);
-    if(!supported.has(type)){
-      await response.body?.cancel().catch(()=>{});
-      return text(res,415,'Source is not a supported standalone audio feed');
-    }
+    const headerType=response.headers.get('content-type');
     const headers={
-      'content-type':type,
       'cache-control':'no-store, private',
       'x-content-type-options':'nosniff',
       'referrer-policy':'no-referrer',
       'x-robots-tag':'noindex'
     };
     if(req.method==='HEAD'){
+      const type=classifyAnisAudioMime(headerType,null);
+      if(!type){
+        await response.body?.cancel().catch(()=>{});
+        return text(res,415,'Audio format not verified');
+      }
+      clearTimeout(firstByteTimer);
+      res.writeHead(200,{'content-type':type,...headers});
       await response.body?.cancel().catch(()=>{});
-      res.writeHead(200,headers);
       return res.end();
     }
     if(!response.body)return text(res,502,'Empty audio source');
-    res.writeHead(200,headers);
-    await pipeline(Readable.fromWeb(response.body),res);
+    reader=response.body.getReader();
+    const first=await reader.read();
+    if(first.done||!first.value?.byteLength)
+      return text(res,502,'Audio source returned no bytes');
+    const type=classifyAnisAudioMime(headerType,first.value);
+    if(!type)return text(res,415,'Source is not standalone audio');
+    clearTimeout(firstByteTimer);
+    res.writeHead(200,{'content-type':type,...headers});
+    await writeStreamChunk(res,first.value);
+    for(;;){
+      const part=await reader.read();
+      if(part.done)break;
+      if(controller.signal.aborted)throw new Error('audio_client_closed');
+      if(part.value?.byteLength)await writeStreamChunk(res,part.value);
+    }
+    if(!res.destroyed&&!res.writableEnded)res.end();
   } catch {
-    // Redact the upstream path/query and activation code from all logs.
+    // Never put upstream request URLs or subscriber tokens in error logs.
     if(!res.headersSent&&!res.destroyed)
       text(res,503,'Arabic audio temporarily unavailable');
     else if(!res.destroyed)res.destroy();
   } finally {
-    clearTimeout(startupTimer);
+    clearTimeout(firstByteTimer);
     res.off('close',onClose);
     controller.abort();
-    if(response?.body&&!response.body.locked)
+    if(reader) {
+      try{await reader.cancel()}catch{}
+      try{reader.releaseLock()}catch{}
+    }else if(response?.body&&!response.body.locked)
       await response.body.cancel().catch(()=>{});
   }
 }
