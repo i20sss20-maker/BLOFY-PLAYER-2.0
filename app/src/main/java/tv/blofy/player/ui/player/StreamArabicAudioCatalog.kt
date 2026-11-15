@@ -25,7 +25,8 @@ internal object StreamArabicAudioCatalog {
         val id: String,
         val label: String,
         val playbackUrl: String,
-        val initialDelaySeconds: Int
+        val initialDelaySeconds: Int,
+        val format: String
     )
 
     private val client by lazy {
@@ -91,7 +92,8 @@ internal object StreamArabicAudioCatalog {
                 label.isBlank() || !trustedAudioUrl(url)) continue
             items += Track(
                 id, label, url,
-                ArabicSidecarTimingPolicy.clamp(row.optInt("delaySeconds", 0))
+                ArabicSidecarTimingPolicy.clamp(row.optInt("delaySeconds", 0)),
+                if (row.optString("format").equals("hls", ignoreCase = true)) "hls" else "progressive"
             )
             if (items.size == 8) break
         }
