@@ -19,9 +19,9 @@ internal object DownloadFileProbe {
     private val client = OkHttpClient.Builder()
         .followRedirects(false)
         .followSslRedirects(false)
-        .callTimeout(8, TimeUnit.SECONDS)
-        .connectTimeout(5, TimeUnit.SECONDS)
-        .readTimeout(6, TimeUnit.SECONDS)
+        .callTimeout(4, TimeUnit.SECONDS)
+        .connectTimeout(3, TimeUnit.SECONDS)
+        .readTimeout(3, TimeUnit.SECONDS)
         .build()
 
     suspend fun sizeIfKnown(context: Context, url: String): Long? = withContext(Dispatchers.IO) {
