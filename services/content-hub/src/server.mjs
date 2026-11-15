@@ -1204,6 +1204,9 @@ export function createContentHubServer({storage,lease,
   const playback=/^\/internal\/(pilot|episodes)\/playback\/([A-Za-z0-9_-]{8,80})$/.exec(path);
   if(siteQa&&(
     pilotEnv.BLOFY_CONTENT_HUB_WEBSITE_FULL_RANGE_QA_ENABLED!=='1'||
+    pilotEnv.BLOFY_CONTENT_HUB_STORAGE_RIGHTS_CONFIRMED!=='1'||
+    (siteQa[1]==='episode'&&
+      pilotEnv.BLOFY_CONTENT_HUB_EPISODE_RIGHTS_CONFIRMED!=='1')||
     pilotEnv.BLOFY_CONTENT_HUB_OWNER_PREVIEW_ENABLED!=='1'||
     (siteQa[1]==='episode'&&
       pilotEnv.BLOFY_CONTENT_HUB_EPISODE_OWNER_PREVIEW_ENABLED!=='1')||
