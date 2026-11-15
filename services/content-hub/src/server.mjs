@@ -1392,6 +1392,42 @@ export function createContentHubServer({storage,lease,
   return json(res,404,{ok:false,code:'content_hub_not_found'});
  });
  return {server,
+  // Read only SHA-verified S3 source bytes; tests actual on-demand FFmpeg
+  // seek preview at the chosen position. NEVER exposes a customer URL.
+  runSeekPreviewSelfCheck:async({mediaKind='movie',position='middle'}={})=>{
+   if(!['movie','episode'].includes(mediaKind)||
+      !['start','middle','near_end'].includes(position))
+    return {ok:false,code:'site_qa_seek_selection_invalid'};
+   if(pilotEnv.BLOFY_CONTENT_HUB_WEBSITE_SEEK_PREVIEW_ENABLED!=='1'||
+      pilotEnv.BLOFY_CONTENT_HUB_OWNER_PREVIEW_ENABLED!=='1'||
+      pilotEnv.BLOFY_CONTENT_HUB_STORAGE_RIGHTS_CONFIRMED!=='1'||
+      (mediaKind==='episode'&&(
+        pilotEnv.BLOFY_CONTENT_HUB_EPISODE_RIGHTS_CONFIRMED!=='1'||
+        pilotEnv.BLOFY_CONTENT_HUB_EPISODE_OWNER_PREVIEW_ENABLED!=='1')))
+    return {ok:false,code:'site_qa_seek_gates_off'};
+   if(previewBuilding||seekPreviewBuilding)
+    return {ok:false,code:'site_qa_seek_busy'};
+   const runId=String(mediaKind==='movie'?
+     pilotEnv.BLOFY_CONTENT_HUB_BATCH_RUN_ID||'':
+     pilotEnv.BLOFY_CONTENT_HUB_EPISODE_RUN_ID||'');
+   if(!/^[A-Za-z0-9_-]{8,80}$/.test(runId))
+    return {ok:false,code:'site_qa_seek_run_not_selected'};
+   seekPreviewBuilding=true;
+   try{
+    const result=await buildStoredMovieSeekPreview({
+      runId,mediaKind,position,lease,storage});
+    return {ok:result.ok===true,code:result.code,position,mediaKind,
+      clipStartsAtSeconds:result.clipStartsAtSeconds||0,
+      durationSeconds:result.durationSeconds||0,
+      sourceBytesRead:result.privateSourceBytesRead||0,
+      rangeRequests:result.privateRangeRequests||0,
+      mp4Bytes:Buffer.isBuffer(result.bytes)?result.bytes.length:0,
+      providerRequests:0,customerCutover:false,
+      fullMoviePlayed:false};
+   }catch{return {ok:false,code:'site_qa_seek_selfcheck_failed',
+     mediaKind,position,providerRequests:0,customerCutover:false}}
+   finally{seekPreviewBuilding=false}
+  },
   startEpisodeCopy:()=>episodeCopy.start(),
   stopEpisodeCopy:()=>episodeCopy.stop(),
   validateVerifiedEpisode:async()=>{
@@ -1726,6 +1762,40 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
      JSON.stringify({ok:false,code:'episode_catalog_unavailable',
       providerMediaRequests:0,automaticDownload:false})));
    },4000);timer.unref?.();
+  }
+  // One-time private website seek check at an owner-approved file position.
+  // Must be explicitly enabled with unique PostgreSQL boot token; no source
+  // provider requests and no customer cutover. All switches default OFF.
+  if(process.env.BLOFY_CONTENT_HUB_SEEK_SMOKE_ON_BOOT==='1'){
+   const timer=setTimeout(()=>{
+    void (async()=>{
+     const mediaKind=String(process.env.BLOFY_CONTENT_HUB_SEEK_SMOKE_MEDIA_KIND||'movie');
+     const position=String(process.env.BLOFY_CONTENT_HUB_SEEK_SMOKE_POSITION||'middle');
+     const event=String(process.env.BLOFY_CONTENT_HUB_SEEK_SMOKE_BOOT_TOKEN||'');
+     const runId=String(mediaKind==='movie'?
+       process.env.BLOFY_CONTENT_HUB_BATCH_RUN_ID||'':
+       process.env.BLOFY_CONTENT_HUB_EPISODE_RUN_ID||'');
+     if(!/^[A-Za-z0-9_-]{8,80}$/.test(event)||
+        !/^[A-Za-z0-9_-]{8,80}$/.test(runId)||
+        !['movie','episode'].includes(mediaKind)||
+        !['start','middle','near_end'].includes(position))
+      return {ok:false,code:'site_qa_seek_smoke_settings_invalid'};
+     if(!await lease.claimBatchBootOnce(event,runId))
+      return {ok:false,code:'site_qa_seek_smoke_already_claimed'};
+     return hub.runSeekPreviewSelfCheck({mediaKind,position});
+    })().then(result=>console.info('BLOFY_CONTENT_HUB_SEEK_SMOKE',
+      JSON.stringify({ok:result.ok===true,code:result.code,
+       mediaKind:result.mediaKind||null,position:result.position||null,
+       durationSeconds:result.durationSeconds||0,
+       clipStartsAtSeconds:result.clipStartsAtSeconds||0,
+       sourceBytesRead:result.sourceBytesRead||0,
+       rangeRequests:result.rangeRequests||0,
+       mp4Bytes:result.mp4Bytes||0,providerRequests:0,
+       customerCutover:false}))).catch(()=>console.warn(
+      'BLOFY_CONTENT_HUB_SEEK_SMOKE',
+      JSON.stringify({ok:false,code:'site_qa_seek_smoke_failed',
+       providerRequests:0,customerCutover:false})));
+   },9500);timer.unref?.();
   }
   // One-time real browser MP4 transcode smoke check. Only S3 bytes,
   // no Xtream/requests to customers. Durable token prevents boot replays.
