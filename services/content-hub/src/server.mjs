@@ -223,7 +223,8 @@ export function createContentHubServer({storage,lease,
     return json(res,200,{
      ok:true,code:selected.code,sourceId,mediaKind,gatewayId,
      bytes:selected.bytes,parts:selected.parts,
-     fullSha256Verified:true,
+     fullFileSha256PreviouslyRecorded:true,
+     liveStorageFullRecheck:false,
      lastQa:prior?{...prior}:null,
      privateOnly:true,providerRequests:0,customerCutover:false,
      // Audio/seek proof is not an on-device app playback result.
