@@ -6,16 +6,16 @@ This branch is **not** the released Windows app and must **not** be promoted or 
 The existing BLOFY Windows LibVLC player plays the **same SHA-verified stored episode** through a temporary, randomized HTTP loopback address which forwards byte ranges to the owner-only HTTPS endpoint. Every upstream S3-backed request is limited to an explicit 8 MiB range; the route never calls a provider or plays an unrelated local file. Run ID and 15-minute HMAC ticket bind one verified episode and never enter the customer catalog.
 
 ## Required operator prerequisites (not enabled automatically)
-1. Backend draft PR #607 must be reviewed and deployed separately only to an owner-approved QA environment / low-risk isolated pilot. Do not turn on customer routes.
+1. Backend draft PR #609 must be reviewed and deployed separately only to an owner-approved QA environment / low-risk isolated pilot. Do not turn on customer routes.
 2. An independent 32+ character `BLOFY_CONTENT_HUB_DEVICE_QA_SIGNING_KEY` must be kept only as a private Railway **activation** service variable. Set `BLOFY_CONTENT_HUB_DEVICE_QA_ENABLED=1` only for a bounded owner test; default is off.
 3. The verified episode run ID must exist in private Content Hub S3/Postgres. The current operator-signed admin session must be active and the episode must have valid distribution rights.
 4. From the authenticated `https://blofyplayer.com/admin/content-hub` page (only after opt-in deployment), the operator can issue an owner-only ticket using a same-origin browser request, for example:
    ```js
-   const r = await fetch('/api/v1/admin/content-hub/device-qa/ticket', {
+   const r = await fetch('/api/v1/admin/content-hub/mirror/device-qa/ticket', {
      method: 'POST', credentials: 'same-origin',
      headers: {'content-type': 'application/json',
-       'x-blofy-owner-action':'issue-private-device-qa'},
-     body: JSON.stringify({runId:'REPLACE_WITH_VERIFIED_RUN_ID',
+       'x-blofy-owner-action':'issue-private-mirror-device-ticket'},
+     body: JSON.stringify({mediaKind:'episode',gatewayId:401,
        platform:'windows',rightsConfirmed:true,ownerDeviceTest:true})
    });
    const result = await r.json();
@@ -36,3 +36,11 @@ The existing BLOFY Windows LibVLC player plays the **same SHA-verified stored ep
 - A green CI build cannot assert audio/video on a real machine; that requires the owner's observation.
 - There is no actual recorded real-device success yet. The QA artifact should never be published to the download center or replace any signed Windows installation.
 - Both server and client branches must remain unmerged until standalone CI and actual-device testing pass.
+
+
+## Backend integration reference (QA ONLY)
+This Windows debug bridge now requests `/api/v1/private-device-qa/episode/playback/{runId}` with the 15-minute HMAC ticket exclusively in the Authorization header. The ticket is issued by **draft PR #609** ONLY after Content Hub validates its private SHA-verified manifest and a recent successful owner-only audio/video + four-seek canary. A previously copied sample from an unrelated run is not sufficient. The complete backend feature remains OFF in production.
+
+Ticket issuance requires a separately authorized, signed admin session, `BLOFY_CONTENT_HUB_DEVICE_QA_ENABLED=1` and a 32+ character activation-only `BLOFY_CONTENT_HUB_DEVICE_QA_SIGNING_KEY`, and `BLOFY_CONTENT_HUB_MIRROR_OWNER_QA_ENABLED=1` in the private Hub. Enter the returned **runId and ticket** into the Windows DEBUG-only device lab. No token or provider URL should be checked into code, saved into a diagnostic log, or placed into an app playlist.
+
+This does not prove actual video/audio on a physical Windows device until the user tests the debug build. Do not release this debug executable to customers.
