@@ -599,7 +599,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 }
             }
             draw(expanded = false)
-            scroller.addView(footer, ScrollView.LayoutParams(
+            scroller.addView(footer, ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
             return scroller
         }
