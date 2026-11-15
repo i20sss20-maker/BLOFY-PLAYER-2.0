@@ -44,7 +44,8 @@ function config(env){
  return {gatewayId:Number(env.BLOFY_CONTENT_HUB_EPISODE_APPROVED_GATEWAY_ID),
    expectedBytes:Number(env.BLOFY_CONTENT_HUB_EPISODE_EXPECTED_BYTES),
    runId:String(env.BLOFY_CONTENT_HUB_EPISODE_RUN_ID),
-   token:String(env.BLOFY_CONTENT_HUB_BRIDGE_TOKEN)};
+   token:String(env.BLOFY_CONTENT_HUB_BRIDGE_TOKEN),
+   dynamic:env.BLOFY_CONTENT_HUB_MIRROR_DYNAMIC_EPISODE_ENABLED==='1'};
 }
 async function exactRange(response,{from,to,total}){
  const needed=to-from+1;
@@ -70,9 +71,14 @@ async function exactRange(response,{from,to,total}){
   try{reader.releaseLock()}catch{}
  }
 }
+function episodeSourcePath(cfg){
+ return cfg.dynamic?
+  '/internal/blofy-content-hub/mirror/episode/'+cfg.gatewayId+'/source':
+  '/internal/blofy-content-hub/source/episode/'+cfg.gatewayId;
+}
 async function sourceRange({cfg,fetchImpl,from,to,signal}){
  const request=await fetchImpl(ORIGIN+
-    '/internal/blofy-content-hub/source/episode/'+cfg.gatewayId,{
+    episodeSourcePath(cfg),{
    method:'GET',redirect:'manual',headers:{
     authorization:'Bearer '+cfg.token,
     'x-blofy-episode-transfer':'operator-authorized',
