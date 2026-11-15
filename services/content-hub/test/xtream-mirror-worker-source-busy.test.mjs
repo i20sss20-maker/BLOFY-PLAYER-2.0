@@ -23,7 +23,7 @@ const noJob=code=>({ok:false,code});
 const storage={health:async()=>({ok:true})};
 function hubWithStores(episodeStore,movieStore){
  return createContentHubServer({
-  storage,lease:{},pilotEnv:ENV,
+  storage,lease:{acquire:async()=>({release:async()=>{}})},pilotEnv:ENV,
   mirrorEpisodeTransferStore:episodeStore,
   mirrorMovieTransferStore:movieStore
  });
