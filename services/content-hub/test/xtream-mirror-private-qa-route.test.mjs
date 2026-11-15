@@ -55,6 +55,14 @@ test('only bearer-authenticated owner may run private verified movie A/V+seek QA
   assert.equal(meta.devicePlaybackValidated,false);
   assert.equal(meta.releaseToSubscribersApproved,false);
   assert.equal(meta.lastQa,null);
+  const proofUrl=url+'/device-proof';
+  assert.equal((await fetch(proofUrl,{
+   headers:{authorization:'Bearer '+token}
+  })).status,403);
+  const proofHeaders={authorization:'Bearer '+token,
+   'x-blofy-owner-action':'prepare-private-mirror-device-qa'};
+  const beforeProof=await fetch(proofUrl,{headers:proofHeaders});
+  assert.equal(beforeProof.status,409);
   assert.equal((await fetch(url,opts('POST',false))).status,403);
   const go=await fetch(url,opts('POST'));
   assert.equal(go.status,202);
@@ -67,6 +75,14 @@ test('only bearer-authenticated owner may run private verified movie A/V+seek QA
   assert.equal(after.lastQa.seeksVerified,4);
   assert.equal(after.lastQa.audioCodec,'aac');
   assert.equal(after.devicePlaybackValidated,false);
+  const ticketProof=await fetch(proofUrl,{headers:proofHeaders});
+  assert.equal(ticketProof.status,200);
+  const proof=await ticketProof.json();
+  assert.equal(proof.mediaKind,'movie');
+  assert.equal(proof.runId,runId);
+  assert.equal(proof.bytes,16777216);
+  assert.equal(proof.releaseToSubscribersApproved,false);
+  assert.equal(proof.devicePlaybackValidated,false);
   assert.equal(calls(),1);
   assert.equal(provider(),0);
  });
