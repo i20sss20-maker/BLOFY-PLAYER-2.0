@@ -382,8 +382,10 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 // translucent panel, not in separate floating HUD windows.
                 addView(list, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
                 if (BuildConfig.CODE_ONLY_LOGIN) {
+                    // Reserve a fixed, scrollable remote-control footer so 38
+                    // direct audio buttons never shrink the channel list.
                     addView(buildAttachedActions(), LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+                        ViewGroup.LayoutParams.MATCH_PARENT, dp(170)))
                 }
             }
 
@@ -607,7 +609,10 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 }
                 resetScroll()
             }
-            restoreMainActions = { showActions(false) }
+            restoreMainActions = {
+                showActions(false)
+                footer.post { if (dialog?.isShowing == true) footer.getChildAt(1)?.requestFocus() }
+            }
             showActions(false)
             scroller.addView(footer, ViewGroup.LayoutParams(-1, -2))
             return scroller
@@ -683,14 +688,14 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 var lastGroup = ""
                 voices.forEach { voice ->
                     val group = StreamArabicAudioCatalog.groupName(
-                        voice, !copy("ar", "en").equals("ar", ignoreCase = true))
+                        voice, copy("ar", "en") == "en")
                     if (group != lastGroup) {
                         addHeading(group)
                         lastGroup = group
                     }
                     val selected = activity.currentInlineArabicTrackId() == voice.id
                     val label = (if (selected) "✓ " else "♫ ") + voice.label
-                    val direct = addButton(label) {
+                    addButton(label) {
                         status.text = copy(
                             "جارٍ الاتصال بـ ${voice.label}… الصوت الأصلي مستمر.",
                             "Connecting to ${voice.label}… original audio continues.")
@@ -700,7 +705,6 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                                     copy("✓ يشتغل الآن: ${voice.label}", "✓ Playing: ${voice.label}")
                                 else copy("فشل تشغيل ${voice.label}؛ رجع الصوت الأصلي.",
                                     "Voice unavailable: ${voice.label}. Original audio restored.")
-                                direct.contentDescription = status.text
                                 refreshSync()
                             }
                         }
