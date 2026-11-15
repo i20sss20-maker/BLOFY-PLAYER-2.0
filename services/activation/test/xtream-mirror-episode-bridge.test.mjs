@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
 import {findActiveMirrorEpisode}
  from '../src/xtream-mirror-episode-bridge.mjs';
 
@@ -59,4 +60,20 @@ test('missing leased episode parent cannot produce private source authorization'
  const db={query:async()=>({rows:[{...row,series_media_id:null}]})};
  assert.equal(await findActiveMirrorEpisode(db,{
   gatewayId:42,sourceId:ID}),null);
+});
+
+test('private episode controller rechecks original series after second gateway DB lookup',async()=>{
+ // A parent can change BETWEEN the leased queue SQL and the gateway
+ // row lookup. Both must agree before any provider URL is constructed.
+ const script=await readFile(new URL('../src/xtream-gateway-hook.mjs',
+  import.meta.url),'utf8');
+ const start=script.indexOf('if(mirrorEpisodeId!==null){');
+ const end=script.indexOf('}else if(isEpisode){',start);
+ assert.ok(start>0&&end>start);
+ const guarded=script.slice(start,end);
+ assert.match(guarded,/findActiveMirrorEpisode\(pool,/);
+ assert.match(guarded,/sourceId:process\.env\.BLOFY_XTREAM_DAILY_CATALOG_SOURCE_ID/);
+ assert.match(guarded,/episodeByGatewayId\(mirrorEpisodeId,approved\.sourceId\)/);
+ assert.match(guarded,/String\(row\.series_source_id\)!==approved\.seriesMediaId/);
+ assert.match(guarded,/mirror_episode_gateway_changed/);
 });
