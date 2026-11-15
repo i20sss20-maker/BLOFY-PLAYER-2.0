@@ -277,7 +277,7 @@ export async function runOneApprovedMirrorMovieChunk({
  const safeCode=SAFE_CODE.test(String(result?.code||''))?
   result.code:'mirror_movie_chunk_unverified';
  const saved=await store.finish(job,{status:state,parts,sha256:sha,
-  code:state==='failed'?safeCode:null});
+  code:['failed','retry'].includes(state)?safeCode:null});
  return {ok:saved.ok&&(state==='approved'||state==='verified'),
   code:!saved.ok?'mirror_movie_lease_or_mapping_changed':
     state==='verified'?'mirror_movie_private_sha_verified':
