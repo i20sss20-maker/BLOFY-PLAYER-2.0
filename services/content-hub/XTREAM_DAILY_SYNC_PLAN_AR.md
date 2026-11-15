@@ -703,3 +703,29 @@ ordinary non-mirror pilot run IDs.
 
 This is isolated QA branch code; not deployed on customer Railway
 and not evidence of physical Android TV/Windows playback.
+
+
+## 2026-11-15: Final QA caveat — Android native FFmpeg ABI gate
+
+The FFmpeg Native GitHub workflow has intermittently rejected its
+generated AAR because `jni/x86_64/libffmpegJNI.so` was **not detected
+as an ELF64 binary**, even though arm64-v8a passed and the Gradle
+native module itself reported a successful build. This is a
+release-blocking native ABI check, **not** proof that FFmpeg audio
+decoding on the customer's Android TV has been repaired.
+
+The QA build script now prints, for each required 64-bit JNI ABI,
+the generated file's native `file` architecture, ELF
+`Class`/`Machine`/`Type` headers and SHA-256 **before** rejecting
+an invalid output. The ELF64 and >=16KiB LOAD-alignment requirements
+have NOT been weakened or bypassed. Diagnostic output is needed to
+identify whether x86_64 compilation or artifact packaging is wrong;
+do not publish a signed app or silently exclude x86_64 to make CI
+appear green.
+
+The owner-only backend manifest provenance checks in this PR now
+compare exact Xtream source/media/gateway identity and S3 object
+namespace before any private A/V canary or device-ticket issuance.
+A separate fix prevents a legacy pilot row from taking priority
+over a reviewed mirror movie sharing the same internal run ID.
+These checks remain isolated, with zero production media copying.
