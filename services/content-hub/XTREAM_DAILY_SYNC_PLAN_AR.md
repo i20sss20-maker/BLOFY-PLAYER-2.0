@@ -327,3 +327,50 @@ or run against the live provider**. Entire-series episode transfer is
 still handled by the prior manual season queue, not this movie worker.
 The goal of automatic copying of all authorized Xtream content remains
 unfinished. No Railway deploy or customer traffic cutover was made.
+
+
+## 2026-11-15: Licensed EPISODE dynamic transfer joins the movie worker (QA)
+
+An additional opt-in independent **episode** dispatcher now performs:
+`approved exact mapped episode + stored per-item rights attestation
+ -> current size-probe proof -> exclusive source-scoped PG claim
+ -> private /mirror/episode/:id/source Range bridge -> existing
+ runOneEpisodeChunk() 8MiB S3 worker -> durable manifest/part SHA-256
+ -> independent final private getVerifiedEpisodeObject() SHA+size proof
+ -> verified mirror queue row`.
+
+The episode bridge checks the live active lease, exact provider/source
+mapping, individual rights attestation, current original media length,
+and source health before each Range. A private bearer token is required.
+On failure, the item is held as `failed` for operator review, not
+automatically retried forever. An expired lease can resume the same
+run ID and reuse verified stored S3 chunks.
+
+**Movies and episodes share the SAME Postgres daily byte budget table**.
+The default combined budget is 64MiB per Riyadh local day, hard cap 512MiB,
+and each worker claims only one 8MiB chunk per two-minute tick during
+04:00–05:59 Saudi time. Source lease and in-process busy checks prevent
+simultaneous copy loops. There is no subscriber cutover.
+
+Opt-in flags, all **OFF in production**:
+- Gateway: `BLOFY_XTREAM_MIRROR_DYNAMIC_EPISODE_BRIDGE_ENABLED=1`,
+  plus existing `BLOFY_CONTENT_HUB_BRIDGE_ENABLED=1` and
+  `BLOFY_CONTENT_HUB_EPISODE_RANGE_ENABLED=1`.
+- Content Hub: `BLOFY_CONTENT_HUB_MIRROR_EPISODE_DISPATCH_ENABLED=1`,
+  `BLOFY_CONTENT_HUB_MIRROR_INDIVIDUAL_RIGHTS_AUDITED=1`,
+  `BLOFY_CONTENT_HUB_MIRROR_EPISODE_AV_SAMPLE_CONFIRMED=1`,
+  `BLOFY_XTREAM_DAILY_CATALOG_SOURCE_ID=<approved saleh UUID>`.
+  Existing `EPISODE_COPY_ENABLED`, `EPISODE_RIGHTS_CONFIRMED`,
+  `UPLOAD_ENABLED`, `STORAGE_RIGHTS_CONFIRMED`,
+  `SOURCE_IDLE_CONFIRMED`, `SOURCE_QUIET_WINDOW_CONFIRMED`,
+  and shared private bridge token must also pass.
+- Admin status:
+  `GET /api/v1/admin/content-hub/mirror/episode/status`
+  proxies private `/internal/mirror/episode/status`.
+
+These are **only software gates**, not a determination that the Xtream
+provider grants permanent media copying. Actual per-file legal rights,
+storage cost, source feed limits, real-media stream quality and mobile/TV
+playback must be verified by an operator BEFORE enabling source traffic.
+The new code has NOT downloaded the user's entire Xtream catalog.
+No production deployment and no customer-app changes in this draft.
