@@ -1510,9 +1510,10 @@ export function createContentHubServer({storage,lease,
     const result=await runOneApprovedMirrorEpisodeChunk({
      env:pilotEnv,now,store:mirrorEpisodeTransferStore,
      storage,lease,runner:episodeChunkRunner,logger,
+     // mirrorEpisodeBusy belongs to THIS worker, and was set true
+     // before this call. Checking it here would block every episode.
      sourceBusy:()=>pilotRunning||episodeCopyBusy||
-      mirrorMovieBusy||mirrorEpisodeBusy||
-      episodeCopy.isRunning()||copy.isRunning()||
+      mirrorMovieBusy||episodeCopy.isRunning()||copy.isRunning()||
       Boolean(seasonQueue?.isRunning())
     });
     lastMirrorEpisodeChunk={code:result.code,
@@ -1551,7 +1552,7 @@ export function createContentHubServer({storage,lease,
     movie:copy,episodes:seasonQueue,lease,seasonStore:seasonQueueStore,
     storageReady:()=>safeStorage?.ok===true,
     sourceBusy:()=>pilotRunning||episodeCopyBusy||mirrorMovieBusy||
-      episodeCopy.isRunning()||copy.isRunning()||
+      mirrorEpisodeBusy||episodeCopy.isRunning()||copy.isRunning()||
       Boolean(seasonQueue?.isRunning())
    });
   },
