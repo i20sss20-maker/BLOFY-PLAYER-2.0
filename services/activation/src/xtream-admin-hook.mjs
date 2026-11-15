@@ -27,6 +27,7 @@ import {summarizeSameMovieCandidates} from './xtream-cross-source-coverage-audit
 import {distributedMovieOffsets,summarizeDistributedMovieProbe} from './xtream-distributed-movie-audit.mjs';
 import { createFixedWindowLimiter, requestClientKey } from './auth-protection.mjs';
 import {forwardPrivatePreview} from './content-hub-private-preview-bridge.mjs';
+import {forwardPrivateOriginalRange} from './content-hub-private-original-range-bridge.mjs';
 import {isStreamSeasonBridgePath,requestStreamSeasonBridge} from './stream-season-bridge.mjs';
 import {
   assertPublicXtreamUrl,
@@ -3147,6 +3148,16 @@ async function unifiedStreamBridge(req,res,url){
     path:p,method:req.method,body:data,
     operatorToken:process.env.BLOFY_CONTENT_HUB_OPERATOR_TOKEN||''});
    return json(res,result.status,result.data,{'cache-control':'no-store'});
+  }
+
+  // Original-file website QA is private, range-limited and explicitly
+  // gated by the Hub; this route never forwards arbitrary Hub URLs.
+  const siteQaFile=/^\/internal\/blofy-stream\/content-hub\/site-qa\/files\/(movie|episode)\/([A-Za-z0-9_-]{8,80})$/.exec(p);
+  if(siteQaFile){
+   if(url.search)return json(res,400,{ok:false,code:'site_qa_query_denied'});
+   return forwardPrivateOriginalRange({req,res,mediaKind:siteQaFile[1],
+    runId:siteQaFile[2],
+    hubToken:String(process.env.BLOFY_CONTENT_HUB_OPERATOR_TOKEN||'')});
   }
 
   const selectedSeasonPreview=/^\/internal\/blofy-stream\/content-hub\/seasons\/episodes\/([A-Za-z0-9_-]{8,80})\/preview$/.exec(p);
