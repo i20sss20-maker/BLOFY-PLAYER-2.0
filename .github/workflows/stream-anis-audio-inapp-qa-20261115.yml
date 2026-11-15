@@ -7,6 +7,7 @@ on:
       - fix/stream-live-audio-menu-ai-chat-20261115
       - feat/stream-55-8-26-unified-live-panel-qa-20261115
       - fix/stream-55-8-27-live-sidebar-audio-diagnostics-20261115
+      - fix/stream-55-8-28-one-click-audio-sidebar-20261115
   workflow_dispatch:
 
 permissions:
