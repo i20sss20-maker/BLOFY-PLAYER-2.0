@@ -1,7 +1,7 @@
 name: BLOFY STREAM Protected Arabic Audio Backend QA
 on:
   push:
-    branches: [fix/stream-arabic-audio-502-diagnostics-20261115]
+    branches: [fix/stream-audio-node-lookup-all-20261115]
     paths:
       - 'services/activation/src/stream-arabic-audio-bridge.mjs'
       - 'services/activation/src/xtream-gateway-hook.mjs'
