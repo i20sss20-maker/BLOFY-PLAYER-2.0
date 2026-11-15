@@ -59,6 +59,9 @@ export function createXtreamMirrorDiscoveryStore(db){
     copied_parts INTEGER NOT NULL DEFAULT 0,
     copy_sha256 CHAR(64),
     copy_error TEXT,
+    copy_retry_count INTEGER NOT NULL DEFAULT 0
+      CHECK(copy_retry_count BETWEEN 0 AND 3),
+    copy_retry_after TIMESTAMPTZ,
     copy_completed_at TIMESTAMPTZ,
     first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -77,6 +80,8 @@ export function createXtreamMirrorDiscoveryStore(db){
      ADD COLUMN IF NOT EXISTS copied_parts INTEGER NOT NULL DEFAULT 0,
      ADD COLUMN IF NOT EXISTS copy_sha256 CHAR(64),
      ADD COLUMN IF NOT EXISTS copy_error TEXT,
+     ADD COLUMN IF NOT EXISTS copy_retry_count INTEGER NOT NULL DEFAULT 0,
+     ADD COLUMN IF NOT EXISTS copy_retry_after TIMESTAMPTZ,
      ADD COLUMN IF NOT EXISTS copy_completed_at TIMESTAMPTZ`);
    await db.query(`CREATE INDEX IF NOT EXISTS idx_xtream_mirror_queue_state
     ON blofy_xtream_mirror_items(source_id,media_kind,state,gateway_id)`);
@@ -252,6 +257,7 @@ export function createXtreamMirrorDiscoveryStore(db){
   const result=await db.query(`SELECT gateway_id,media_id,extension,title,
     state,mapping_conflict,rights_ref_sha256,license_reviewed_at,
     size_probe_at,size_probe_error,copy_error,copied_parts,
+    copy_retry_count,copy_retry_after,
     copy_sha256,expected_bytes,first_seen_at,last_seen_at
     FROM blofy_xtream_mirror_items
     WHERE source_id=$1 AND media_kind=$2 AND gateway_id>$3
@@ -269,6 +275,8 @@ export function createXtreamMirrorDiscoveryStore(db){
     sizeProbedAt:x.size_probe_at||null,
     copiedParts:Number(x.copied_parts)||0,
     copyError:String(x.copy_error||'').slice(0,100)||null,
+    transientAttempts:Number(x.copy_retry_count)||0,
+    nextAttemptAfter:x.copy_retry_after||null,
     storedFileManifestVerified:x.state==='verified'&&
       /^[a-f0-9]{64}$/.test(String(x.copy_sha256||'').trim()),
     sizeVerified:Boolean(x.size_probe_at),
