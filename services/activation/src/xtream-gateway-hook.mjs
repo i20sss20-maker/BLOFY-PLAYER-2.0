@@ -67,6 +67,7 @@ import {findRunningApprovedSeasonEpisode} from './xtream-content-hub-season-appr
 import {enumerateOneMirrorSeries,shouldEnumerateMirrorSeries} from './xtream-mirror-series-enumeration.mjs';
 import {probeOneAttestedMirrorItem,mirrorSizeProbeEnabled} from './xtream-mirror-size-probe.mjs';
 import {findActiveMirrorMovie} from './xtream-mirror-movie-bridge.mjs';
+import {findActiveMirrorEpisode} from './xtream-mirror-episode-bridge.mjs';
 import {probePrivateEpisodeRange} from './xtream-content-hub-episode-probe.mjs';
 import { readXtreamGatewayJsonResponse } from './xtream-gateway-response.mjs';
 import {configuredXtreamPublicOrigin} from './xtream-public-origin.mjs';
@@ -1974,6 +1975,10 @@ async function handlePrivateContentHubSource(req,res,url){
  const mirrorSource=/^\/internal\/blofy-content-hub\/mirror\/movie\/([1-9][0-9]{0,14})\/source$/.exec(url.pathname);
  const mirrorId=mirrorDescribe||mirrorSource?
    Number((mirrorDescribe||mirrorSource)[1]):null;
+ const mirrorEpisodeDescribe=/^\/internal\/blofy-content-hub\/mirror\/episode\/([1-9][0-9]{0,14})\/describe$/.exec(url.pathname);
+ const mirrorEpisodeSource=/^\/internal\/blofy-content-hub\/mirror\/episode\/([1-9][0-9]{0,14})\/source$/.exec(url.pathname);
+ const mirrorEpisodeId=mirrorEpisodeDescribe||mirrorEpisodeSource?
+  Number((mirrorEpisodeDescribe||mirrorEpisodeSource)[1]):null;
 
  // Only operator-selected *saleh* series with an indexed mapped ID.
  // Series metadata lookup may perform one provider API request, but NO
@@ -2075,9 +2080,27 @@ async function handlePrivateContentHubSource(req,res,url){
  }
  const episodeRange=/^\/internal\/blofy-content-hub\/source\/episode\/([1-9][0-9]{0,14})$/.exec(url.pathname);
  const episodeDescribe=/^\/internal\/blofy-content-hub\/episodes\/describe\/([1-9][0-9]{0,14})$/.exec(url.pathname);
- const isEpisode=Boolean(episodeRange||episodeDescribe);
+ const isEpisode=Boolean(episodeRange||episodeDescribe||mirrorEpisodeId!==null);
  let id,row,episodeCandidate=null;
- if(isEpisode){
+ if(mirrorEpisodeId!==null){
+  if(process.env.BLOFY_XTREAM_MIRROR_DYNAMIC_EPISODE_BRIDGE_ENABLED!=='1'||
+     process.env.BLOFY_CONTENT_HUB_EPISODE_RANGE_ENABLED!=='1'||url.search)
+   return json(res,403,{ok:false,code:'mirror_episode_bridge_disabled'});
+  const approved=await findActiveMirrorEpisode(pool,{gatewayId:mirrorEpisodeId});
+  if(!approved)return json(res,403,{ok:false,code:'mirror_episode_not_leased'});
+  row=await episodeByGatewayId(mirrorEpisodeId,approved.sourceId);
+  if(!row||row.server_enabled!==true||
+     String(row.server_id)!==approved.sourceId||
+     String(row.source_episode_id)!==approved.mediaId||
+     String(row.container_extension||'').toLowerCase()!==approved.extension)
+   return json(res,409,{ok:false,code:'mirror_episode_gateway_changed'});
+  id=mirrorEpisodeId;
+  episodeCandidate={
+   gatewayId:id,sourceId:approved.sourceId,mediaId:approved.mediaId,
+   extension:approved.extension,mediaKind:'episode',sourceName:'saleh'
+  };
+  req.mirrorApprovedExpectedBytes=approved.expectedBytes;
+ }else if(isEpisode){
   id=Number((episodeRange||episodeDescribe)[1]);
   const permitted=Number(process.env.BLOFY_CONTENT_HUB_ALLOWED_EPISODE_GATEWAY_ID);
   if(!Number.isSafeInteger(id)||id<1||url.search)
@@ -2127,7 +2150,7 @@ async function handlePrivateContentHubSource(req,res,url){
    mediaKind:'movie',extension:String(row.container_extension).toLowerCase(),
    automaticDownload:false,customerTrafficChanged:false});
  }
- if(isEpisode&&episodeDescribe){
+ if(isEpisode&&(episodeDescribe||mirrorEpisodeDescribe)){
   return json(res,200,{ok:true,sourceName:'saleh',
    sourceId:row.server_id,mediaId:row.source_episode_id,
    gatewayId:id,mediaKind:'episode',
@@ -2147,6 +2170,8 @@ async function handlePrivateContentHubSource(req,res,url){
   return json(res,403,{ok:false,code:'content_hub_episode_transfer_disabled'});
  if(url.pathname!==(mirrorSource?
     `/internal/blofy-content-hub/mirror/movie/${id}/source`:
+    mirrorEpisodeSource?
+    `/internal/blofy-content-hub/mirror/episode/${id}/source`:
     `/internal/blofy-content-hub/source/${isEpisode?'episode':'movie'}/${id}`)||url.search)
   return json(res,404,{ok:false,code:'content_hub_source_not_found'});
  const range=parseContentHubClientRange(req.headers.range);
@@ -2170,7 +2195,8 @@ async function handlePrivateContentHubSource(req,res,url){
    timeoutMs:75000,signal:abort.signal});
   const ok=validContentHubResponse(upstream,range);
   if(!ok||!upstream.body||
-     mirrorSource&&ok.size!==req.mirrorApprovedExpectedBytes){
+     (mirrorSource||mirrorEpisodeSource)&&
+      ok.size!==req.mirrorApprovedExpectedBytes){
    await upstream.body?.cancel().catch(()=>{});
    return json(res,502,{ok:false,code:'content_hub_provider_range_invalid'});
   }
