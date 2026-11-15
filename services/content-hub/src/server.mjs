@@ -1403,7 +1403,7 @@ export function createContentHubServer({storage,lease,
     now,env:pilotEnv,store:dailyMediaSessionStore,
     movie:copy,episodes:seasonQueue,lease,seasonStore:seasonQueueStore,
     storageReady:()=>safeStorage?.ok===true,
-    sourceBusy:()=>pilotRunning||episodeCopyBusy||
+    sourceBusy:()=>pilotRunning||episodeCopyBusy||mirrorMovieBusy||
       episodeCopy.isRunning()||copy.isRunning()||
       Boolean(seasonQueue?.isRunning())
    });
