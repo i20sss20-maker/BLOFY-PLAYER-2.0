@@ -91,3 +91,24 @@ test('probe uses a compatible Node all-address custom DNS hook',async()=>{
   const result=await bridge.probe();
   assert.equal(result[0].reason,'audio_bytes_detected');
 });
+
+test('HTTP 200 HTML login page is NOT mistaken for playable radio audio',async()=>{
+  const bridge=createProtectedArabicAudioBridge({getPlaylist:()=>playlist,
+    isEnabled:()=>true,lookup:dns,
+    createRequest:httpFixture(200,'text/html',
+      Buffer.from('<!doctype html><html><title>Login</title>Not playable</html>'))});
+  const result=await bridge.probe();
+  assert.equal(result[0].reason,'unrecognized_stream_bytes');
+  assert.equal(result[0].payloadClass,'html_document');
+  assert.equal(JSON.stringify(result).includes('Login'),false);
+});
+
+test('HTTP 200 HLS index is reported as a playlist and not as raw audio',async()=>{
+  const bridge=createProtectedArabicAudioBridge({getPlaylist:()=>playlist,
+    isEnabled:()=>true,lookup:dns,
+    createRequest:httpFixture(200,'application/vnd.apple.mpegurl',
+      Buffer.from('#EXTM3U\\n#EXT-X-VERSION:3\\n'))});
+  const result=await bridge.probe();
+  assert.equal(result[0].payloadClass,'hls_playlist');
+  assert.equal(result[0].reason,'unrecognized_stream_bytes');
+});

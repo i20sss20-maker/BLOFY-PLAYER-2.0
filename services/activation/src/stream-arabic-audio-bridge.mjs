@@ -227,8 +227,22 @@ export function createProtectedArabicAudioBridge({
                 (first===0xff&&(bytes[1]&0xe0)===0xe0)||
                 (first===0x47&&bytes.length>188&&bytes[188]===0x47)
               );
+              // Classification is deliberately coarse and content-free.
+              // The source can answer 200 with an HTML login/error page
+              // or an HLS index, neither is a progressive MP3 stream.
+              const prefix=bytes.subarray(0,96).toString('utf8')
+                .trimStart().toLowerCase();
+              const payloadClass=good?'audio_packet':
+                prefix.startsWith('#extm3u')?'hls_playlist':
+                prefix.startsWith('<!doctype')||prefix.startsWith('<html')?
+                  'html_document':
+                prefix.startsWith('{')||prefix.startsWith('[')?'json_document':
+                prefix.startsWith('icy ')?'icy_header':
+                prefix.startsWith('<?xml')?'xml_document':
+                /^[\x20-\x7e\r\n\t]{16,}$/.test(prefix.slice(0,64))?
+                  'text_response':'unknown_binary';
               finish({id,reason:good?'audio_bytes_detected':'unrecognized_stream_bytes',
-                mime,receivedBytes:Math.min(bytes.length,4096)});
+                mime,payloadClass,receivedBytes:Math.min(bytes.length,4096)});
             });
             response.once('end',()=>finish({id,reason:'empty_stream',mime}));
             response.once('error',()=>finish({id,reason:'upstream_read_error',mime}));
