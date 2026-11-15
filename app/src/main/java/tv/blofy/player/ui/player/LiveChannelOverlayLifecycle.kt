@@ -297,6 +297,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 })
             } else null
             val tabs = LinearLayout(activity).apply {
+                val tabContainer = this
                 orientation = LinearLayout.HORIZONTAL
                 layoutDirection = activity.resources.configuration.layoutDirection
                 gravity = Gravity.CENTER
@@ -322,8 +323,8 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                             }
                             setOnClickListener {
                                 activeTab = tab
-                                for (index in 0 until childCount) {
-                                    getChildAt(index)?.background = GradientDrawable().apply {
+                                for (index in 0 until tabContainer.childCount) {
+                                    tabContainer.getChildAt(index)?.background = GradientDrawable().apply {
                                         cornerRadius = dp(10).toFloat()
                                         setColor(if (index == options.indexOfFirst { it.first == tab })
                                             0xB25A3384.toInt() else 0x522C2538)
