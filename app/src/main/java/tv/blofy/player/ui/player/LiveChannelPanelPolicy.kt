@@ -14,7 +14,8 @@ internal object LiveChannelPanelPolicy {
         if (!streamCodeOnly) return emptyList()
         val main = listOf(LiveChannelPanelAction.BLOFY_AUDIO, LiveChannelPanelAction.FAVORITE,
             LiveChannelPanelAction.EPG, LiveChannelPanelAction.MORE)
-        return if (!expanded) main else main + listOf(LiveChannelPanelAction.AUDIO_TRACKS,
+        return if (!expanded) main else listOf(LiveChannelPanelAction.MORE,
+            LiveChannelPanelAction.AUDIO_TRACKS,
             LiveChannelPanelAction.SUBTITLES, LiveChannelPanelAction.VIDEO_QUALITY,
             LiveChannelPanelAction.STREAM_INFO, LiveChannelPanelAction.RECONNECT)
     }
