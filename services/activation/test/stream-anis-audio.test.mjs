@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {
  ANIS_AUDIO_TRACKS,anisAudioPublicCatalog,
- anisAudioEnabled,anisAudioSourceFor,classifyAnisAudioMime
+ anisAudioEnabled,anisAudioSourceFor,classifyAnisAudioMime,probeAnisAudioTrack
 } from '../src/stream-anis-audio.mjs';
 
 const TEST_TOKEN='TEST_ONLY_Audio_Token_001';
@@ -92,4 +92,59 @@ test('first media byte timeout and safe write are checked before announcing audi
  assert.ok(section.indexOf("res.writeHead(200,{'content-type':type,...headers});", section.indexOf('const first=await reader.read()'))>0);
  assert.ok(section.includes("redirect:'manual'"));
  assert.ok(section.includes("res.off('close',onClose)"));
+});
+
+test('operator preflight detects genuine MP3 audio without disclosing radio tokens',async()=>{
+ let called=0,endpoint='';
+ const env={BLOFY_STREAM_ANIS_AUDIO_ENABLED:'1',BLOFY_STREAM_ANIS_TOKEN:TEST_TOKEN};
+ const result=await probeAnisAudioTrack('anis-max-1',{
+   env,
+   fetchImpl:async(url,options)=>{
+     called++;endpoint=url;
+     assert.equal(options.redirect,'manual');
+     assert.equal(options.method,'GET');
+     return new Response(Buffer.from('ID3'+'.'.repeat(80)),{
+       headers:{'content-type':'application/octet-stream'}
+     });
+   }
+ });
+ assert.equal(called,1);
+ assert.match(endpoint,/^http:\/\/radio\.anisfm\.vip\/live\/mx\/1\?token=/);
+ assert.deepEqual(result,{id:'anis-max-1',ok:true,contentType:'audio/mpeg'});
+ assert.ok(!JSON.stringify(result).includes(TEST_TOKEN));
+ assert.ok(!JSON.stringify(result).includes('radio.anisfm.vip'));
+});
+
+test('operator preflight remains off without source approvals and never calls network',async()=>{
+ let called=false;
+ const result=await probeAnisAudioTrack('anis-max-1',{
+    env:{},fetchImpl:async()=>{called=true;throw Error('must not fetch')}
+ });
+ assert.equal(called,false);
+ assert.equal(result.reason,'not_configured');
+});
+
+test('operator preflight rejects unknown track and non-audio response',async()=>{
+ const env={BLOFY_STREAM_ANIS_AUDIO_ENABLED:'1',BLOFY_STREAM_ANIS_TOKEN:TEST_TOKEN};
+ let called=false;
+ const unknown=await probeAnisAudioTrack('anis-unknown',{
+    env,fetchImpl:async()=>{called=true;throw Error('must not fetch')}
+ });
+ assert.equal(called,false);
+ assert.equal(unknown.reason,'unknown_audio_id');
+ const bad=await probeAnisAudioTrack('anis-max-2',{
+    env,
+    fetchImpl:async()=>new Response('<html>error</html>',{
+      headers:{'content-type':'text/html'}})
+ });
+ assert.deepEqual(bad,{id:'anis-max-2',ok:false,reason:'unsupported_audio_format'});
+});
+
+test('admin preflight requires existing admin scope and has independent rate cap',async()=>{
+ const gateway=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
+ const guard=gateway.indexOf("if (!requireAdmin(req, res)) return;");
+ const path=gateway.indexOf("url.pathname==='/api/v1/admin/xtream-gateway/anis-audio/preflight'");
+ assert.ok(guard>=0&&path>guard);
+ assert.ok(gateway.includes("anisAudioProbeLimiter.consume('all_anis_preflight')"));
+ assert.ok(gateway.includes("return json(res,200,await probeAnisAudioTrack(id)"));
 });
