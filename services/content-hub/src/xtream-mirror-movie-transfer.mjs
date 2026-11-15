@@ -111,6 +111,8 @@ export function createMirrorMovieTransferStore({connectionString,Pool=pg.Pool}={
       AND q.size_probe_at>NOW()-INTERVAL '48 hours'
       AND q.expected_bytes BETWEEN 8388608 AND 4294967296
       AND (q.copy_run_id IS NULL OR q.copy_run_id ~ '^mirror_[a-f0-9]{40}$')
+      AND COALESCE(q.copy_retry_count,0)<3
+      AND (q.copy_retry_after IS NULL OR q.copy_retry_after<=NOW())
       AND s.enabled=TRUE AND s.publish_catalog=TRUE
       AND s.deletion_requested_at IS NULL AND s.status='online'
       AND s.last_error IS NULL AND lower(btrim(s.name))='saleh'
@@ -157,27 +159,40 @@ export function createMirrorMovieTransferStore({connectionString,Pool=pg.Pool}={
  async function finish(job,{status,parts=0,sha256=null,code=null}={}){
   if(!UUID.test(job?.sourceId)||!RUN.test(job?.runId)||
      !Number.isSafeInteger(job.gatewayId)||job.gatewayId<1||
-     !['approved','verified','failed'].includes(status)||
+     !['approved','verified','failed','retry'].includes(status)||
      !Number.isSafeInteger(parts)||parts<0||parts>512||
      (status==='verified'&&!/^[a-f0-9]{64}$/.test(String(sha256)))||
-     status==='failed'&&!SAFE_CODE.test(String(code||'')))
+     ['failed','retry'].includes(status)&&
+       !SAFE_CODE.test(String(code||'')))
    throw Error('mirror_movie_finish_invalid');
   const query=`UPDATE blofy_xtream_mirror_items
-    SET state=$4,copy_lease_until=NULL,
+    SET state=CASE WHEN $4='retry' AND copy_retry_count<2
+         THEN 'approved' WHEN $4='retry' THEN 'failed' ELSE $4 END,
+      copy_lease_until=NULL,
       copied_parts=GREATEST(copied_parts,$5),
+      copy_retry_count=CASE WHEN $4='retry' THEN
+        LEAST(copy_retry_count+1,3)
+        WHEN $4 IN ('approved','verified') THEN 0
+        ELSE copy_retry_count END,
+      copy_retry_after=CASE WHEN $4='retry' AND
+        copy_retry_count<2 THEN NOW()+INTERVAL '15 minutes'
+        ELSE NULL END,
       copy_sha256=CASE WHEN $4='verified' THEN $6
         ELSE copy_sha256 END,
       copy_completed_at=CASE WHEN $4='verified' THEN NOW()
         ELSE copy_completed_at END,
-      copy_error=CASE WHEN $4='failed' THEN $7 ELSE NULL END
+      copy_error=CASE WHEN $4 IN ('failed','retry') THEN $7 ELSE NULL END
     WHERE source_id=$1 AND media_kind='movie' AND gateway_id=$2
       AND copy_run_id=$3 AND state='copying'
       AND copy_lease_until>NOW()
       AND mapping_conflict=FALSE
-    RETURNING gateway_id`;
+    RETURNING gateway_id,state,copy_retry_count,copy_retry_after`;
   const r=await pool.query(query,[job.sourceId,job.gatewayId,job.runId,
     status,parts,sha256,code]);
-  return {ok:r.rowCount===1,state:status,
+  return {ok:r.rowCount===1,
+   state:r.rows?.[0]?.state||status,
+   retryAttempts:Number(r.rows?.[0]?.copy_retry_count)||0,
+   retryAfter:r.rows?.[0]?.copy_retry_after||null,
    code:r.rowCount===1?'mirror_movie_checkpoint_committed':
     'mirror_movie_lease_or_mapping_changed',
    customerCutover:false};
@@ -229,7 +244,7 @@ export async function runOneApprovedMirrorMovieChunk({
  try{result=await runner({env:jobEnv,storage,lease,logger})}
  catch{result={ok:false,code:'mirror_movie_worker_failed'}}
  let state='failed',sha=null;
- let parts=Number(result?.chunksSaved)||0;
+ let parts=Number(result?.chunksSaved??result?.checkpointsRetained)||0;
  if(result?.ok===true&&result.code==='batch_checkpoint_saved'){
   state='approved';
  }else if(result?.ok===true&&
@@ -243,15 +258,27 @@ export async function runOneApprovedMirrorMovieChunk({
    parts=verified.parts.length;
   }
  }
+ // A short network/S3 outage must NOT poison a successfully SHA-checked
+ // partial copy. Retry at most 3 times per stalled item, 15min apart;
+ // never blindly retry an origin-version, mapping or rights change.
+ const transientCodes=new Set([
+  'batch_retryable_error','batch_source_busy','batch_cancelled',
+  'mirror_movie_worker_failed'
+ ]);
+ if(result?.ok===false&&transientCodes.has(result?.code))state='retry';
  const safeCode=SAFE_CODE.test(String(result?.code||''))?
   result.code:'mirror_movie_chunk_unverified';
  const saved=await store.finish(job,{status:state,parts,sha256:sha,
   code:state==='failed'?safeCode:null});
- return {ok:saved.ok&&state!=='failed',
-  code:saved.ok?(state==='verified'?'mirror_movie_private_sha_verified':
+ return {ok:saved.ok&&(state==='approved'||state==='verified'),
+  code:!saved.ok?'mirror_movie_lease_or_mapping_changed':
+    state==='verified'?'mirror_movie_private_sha_verified':
     state==='approved'?'mirror_movie_chunk_checkpoint_saved':
-    'mirror_movie_worker_requires_review'):
-    'mirror_movie_lease_or_mapping_changed',
+    state==='retry'&&saved.state==='approved'?
+      'mirror_movie_retry_scheduled':
+    state==='retry'?'mirror_movie_retry_limit_review':
+    'mirror_movie_worker_requires_review',
+  nextRetryAt:saved.retryAfter||null,retryAttempts:saved.retryAttempts||0,
   gatewayId:job.gatewayId,sourceId:job.sourceId,
   partsSaved:parts,verified:state==='verified'&&saved.ok,
   mediaCopiedInThisAttempt:result?.code==='batch_checkpoint_saved'||
