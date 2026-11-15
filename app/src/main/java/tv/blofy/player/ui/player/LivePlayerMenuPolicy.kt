@@ -21,14 +21,12 @@ internal object LivePlayerMenuPolicy {
                 if (unifiedChannelPanel) LivePlayerMenuAction.SHOW_CHANNEL_LIST
                 else LivePlayerMenuAction.SHOW_AUDIO_CONTROLS
             KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN ->
-                if (hudVisible) LivePlayerMenuAction.PASS_THROUGH
-                else if (unifiedChannelPanel) LivePlayerMenuAction.SHOW_CHANNEL_LIST
+                if (unifiedChannelPanel) LivePlayerMenuAction.SHOW_CHANNEL_LIST
+                else if (hudVisible) LivePlayerMenuAction.PASS_THROUGH
                 else LivePlayerMenuAction.SHOW_AUDIO_CONTROLS
             KeyEvent.KEYCODE_GUIDE -> LivePlayerMenuAction.SHOW_CHANNEL_LIST
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER,
-            KeyEvent.KEYCODE_NUMPAD_ENTER ->
-                if (hudVisible) LivePlayerMenuAction.PASS_THROUGH
-                else LivePlayerMenuAction.SHOW_CHANNEL_LIST
+            KeyEvent.KEYCODE_NUMPAD_ENTER -> LivePlayerMenuAction.SHOW_CHANNEL_LIST
             KeyEvent.KEYCODE_BACK ->
                 if (hudVisible) LivePlayerMenuAction.DISMISS_CONTROLS
                 else LivePlayerMenuAction.RETURN_TO_BROWSER
