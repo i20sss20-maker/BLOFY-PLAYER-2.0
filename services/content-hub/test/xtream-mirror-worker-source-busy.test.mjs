@@ -21,10 +21,24 @@ const ENV={
 };
 const noJob=code=>({ok:false,code});
 const storage={health:async()=>({ok:true})};
-function hubWithStores(episodeStore,movieStore){
+function hubWithStores(episodeStore,movieStore,{preflightReady=true}={}){
+ // The runtime safety gate talks to the Hub's private PostgreSQL
+ // connection; these rows simulate the SAME source and all manifests.
+ const mirrorPreflightStore={db:{async query(sql){
+  if(sql.startsWith('SELECT to_regclass('))return {rows:[{
+   xtreamServers:preflightReady,xtreamCatalog:preflightReady,
+   movieGatewayMap:preflightReady,episodeGatewayMap:preflightReady,
+   mirrorQueue:preflightReady,privateMovieManifests:true,
+   privateEpisodeManifests:true,sharedDailyBudget:true
+  }]};
+  if(sql.includes('FROM blofy_xtream_servers'))return {
+   rows:[{id:ID,source_online:true,catalog_fresh:true}]
+  };
+  throw Error('unexpected_preflight_sql');
+ }}};
  return createContentHubServer({
   storage,lease:{acquire:async()=>({release:async()=>{}})},pilotEnv:ENV,
-  mirrorEpisodeTransferStore:episodeStore,
+  mirrorEpisodeTransferStore:episodeStore,mirrorPreflightStore,
   mirrorMovieTransferStore:movieStore
  });
 }
@@ -74,4 +88,19 @@ test('one active episode source-scoped tick blocks concurrent movie tick, never 
  const after=await h.runOneMirroredMovieChunk(QUIET);
  assert.equal(after.code,'mirror_movie_no_approved_item');
  assert.equal(movieClaims,1);
+});
+
+test('missing Xtream tables in private Hub PostgreSQL blocks episode AND movie before claiming bytes',async()=>{
+ let claims=0;
+ const denied={async claim(){claims++;throw Error('source should not be used')},
+  async finish(){throw Error('not attempted')}};
+ const hub=hubWithStores(denied,denied,{preflightReady:false});
+ const episode=await hub.runOneMirroredEpisodeChunk(QUIET);
+ assert.equal(episode.code,'mirror_copy_preflight_blocked');
+ assert.equal(episode.sourceMediaRequests,0);
+ assert.ok(episode.blockedBy.includes(
+  'mirror_preflight_xtream_catalog_not_on_hub_db'));
+ const movie=await hub.runOneMirroredMovieChunk(QUIET);
+ assert.equal(movie.code,'mirror_copy_preflight_blocked');
+ assert.equal(claims,0);
 });
