@@ -2,7 +2,7 @@ import {createHash} from 'node:crypto';
 import {
  S3Client,CreateMultipartUploadCommand,UploadPartCommand,
  CompleteMultipartUploadCommand,AbortMultipartUploadCommand,
- DeleteObjectCommand,GetObjectCommand,HeadBucketCommand
+ DeleteObjectCommand,GetObjectCommand,HeadBucketCommand,HeadObjectCommand
 } from '@aws-sdk/client-s3';
 
 const MAX_OBJECT_BYTES=64*1024*1024*1024;
@@ -79,6 +79,30 @@ export function createPrivateS3Adapter({config=process.env,client=null}={}){
   async remove({key}){
    safeObjectKey(key);
    await s3.send(new DeleteObjectCommand({...headers,Key:key}));
+  },
+  // HEAD-only verification of one exact, manifest-approved private S3
+  // chunk. Checks current object presence and size, NOT its SHA-256 bytes.
+  // No provider media requests and no full object download.
+  async headVerifiedChunk({key,expectedBytes,signal}={}){
+   safeObjectKey(key);
+   if(!Number.isSafeInteger(expectedBytes)||expectedBytes<1||
+      expectedBytes>8*1024*1024)
+    throw Error('content_hub_private_head_invalid');
+   try{
+    const result=await s3.send(new HeadObjectCommand({
+      ...headers,Key:key}),{abortSignal:signal});
+    const found=Number(result.ContentLength);
+    if(!Number.isSafeInteger(found)||found<0)
+     return {ok:false,status:'head_invalid_length'};
+    return found===expectedBytes?
+      {ok:true,status:'present_size_match',bytes:found}:
+      {ok:false,status:'size_mismatch',bytes:found};
+   }catch(error){
+    if(error?.$metadata?.httpStatusCode===404||
+       ['NotFound','NoSuchKey'].includes(error?.name))
+      return {ok:false,status:'missing'};
+    return {ok:false,status:'head_unavailable'};
+   }
   },
   async readVerifiedRange({key,from,to,expectedBytes,signal}){
    safeObjectKey(key);
