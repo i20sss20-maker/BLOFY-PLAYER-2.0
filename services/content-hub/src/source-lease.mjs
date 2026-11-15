@@ -1,4 +1,5 @@
 import pg from 'pg';
+import {reconcilePrivateVerifiedManifests} from './private-mirror-reconcile.mjs';
 
 // Session-bound PostgreSQL advisory lock, not a TTL: if the worker dies,
 // Postgres releases its lock. One Content Hub writer per exact source.
@@ -10,6 +11,9 @@ export function createSourceLease({connectionString,
  const pool=new Pool({connectionString,max:2,connectionTimeoutMillis:5000,
   idleTimeoutMillis:10000,application_name:applicationName});
  return {
+  async reconcilePrivateVerifiedManifests(selection){
+   return reconcilePrivateVerifiedManifests(pool,selection);
+  },
   async health(){
    const result=await pool.query('SELECT 1 AS ok');
    return Number(result.rows?.[0]?.ok)===1;
