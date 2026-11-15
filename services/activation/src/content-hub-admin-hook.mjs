@@ -582,6 +582,14 @@ http.createServer=function withContentHubAdmin(listener){
      return json(res,response.status,await response.json());
     }
    }
+   if(path==='/api/v1/admin/content-hub/mirror/movie/status'&&
+      req.method==='GET'){
+     const response=await request('/internal/mirror/movie/status',{
+       signal:AbortSignal.timeout(8000)});
+     if(response.status!==200)return json(res,503,{
+       ok:false,code:'mirror_movie_status_unavailable'});
+     return json(res,200,await safeReadJson(response));
+   }
    if(path==='/api/v1/admin/content-hub/mirror/daily/sessions'&&
       req.method==='GET'){
      const response=await request('/internal/mirror/daily/sessions',{
