@@ -101,6 +101,7 @@ open class PlayerActivity : ContentAccessActivity() {
     private var lastCheckpointAt = 0L
     private var defaultTextDisabled = false
     private var pendingNetworkRecovery = false
+    private var disconnectedAtElapsedMs = 0L
     private var vlcFallbackLaunched = false
     private var lastStreamAudioHealth = ""
     private lateinit var connectionNotice: TextView
@@ -110,6 +111,9 @@ open class PlayerActivity : ContentAccessActivity() {
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onLost(network: Network) { runOnUiThread {
             if (!sessionReleased && !online()) {
+                if (disconnectedAtElapsedMs == 0L) {
+                    disconnectedAtElapsedMs = android.os.SystemClock.elapsedRealtime()
+                }
                 pendingNetworkRecovery = true
                 saveResume()
                 showConnectionNotice(getString(R.string.player_offline))
@@ -118,8 +122,15 @@ open class PlayerActivity : ContentAccessActivity() {
         override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
             if (PlayerNetworkPolicy.canAttempt(capabilities)) runOnUiThread {
                 if (!sessionReleased && pendingNetworkRecovery) {
+                    val now = android.os.SystemClock.elapsedRealtime()
+                    val offlineMs = if (disconnectedAtElapsedMs > 0L)
+                        (now - disconnectedAtElapsedMs).coerceAtLeast(0L) else 0L
+                    disconnectedAtElapsedMs = 0L
                     pendingNetworkRecovery = false
-                    if (PlayerNetworkPolicy.shouldRetryAfterReconnect(session.player.playerError != null, session.player.playbackState)) retryPlayback()
+                    if (PlayerNetworkPolicy.shouldRetryAfterReconnect(
+                            session.player.playerError != null,
+                            session.player.playbackState, offlineMs
+                        )) retryPlayback()
                     else if (::connectionNotice.isInitialized) connectionNotice.visibility = View.GONE
                 }
             }
@@ -281,6 +292,9 @@ open class PlayerActivity : ContentAccessActivity() {
         onTerminalError = { failedUrl ->
             saveResume()
             pendingNetworkRecovery = !online()
+            if (pendingNetworkRecovery && disconnectedAtElapsedMs == 0L) {
+                disconnectedAtElapsedMs = android.os.SystemClock.elapsedRealtime()
+            }
             if (!BuildConfig.CODE_ONLY_LOGIN &&
                 !pendingNetworkRecovery &&
                 kind != KIND_LIVE &&
@@ -1713,7 +1727,13 @@ open class PlayerActivity : ContentAccessActivity() {
 
     private fun retryPlayback() {
         if (sessionReleased) return
-        if (!online()) { pendingNetworkRecovery = true; showConnectionNotice(getString(R.string.player_offline)); return }
+        if (!online()) {
+            if (disconnectedAtElapsedMs == 0L)
+                disconnectedAtElapsedMs = android.os.SystemClock.elapsedRealtime()
+            pendingNetworkRecovery = true
+            showConnectionNotice(getString(R.string.player_offline))
+            return
+        }
         saveResume()
         val playWhenReady = session.player.playWhenReady
         session.retrySameUrl()
