@@ -770,6 +770,9 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                         layoutDirection = activity.resources.configuration.layoutDirection
                         gravity = Gravity.CENTER_VERTICAL
                     }
+                    // Never capture an initializing Kotlin val from its own
+                    // click callback (the compiler rejects that self-reference).
+                    var playButtonRef: TextView? = null
                     val playButton = addButton(prefix + voice.label) {
                         // One click starts the chosen voice; no group/file pages.
                         pendingButton?.isEnabled = true
@@ -788,13 +791,13 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                                 pendingButton?.isEnabled = true
                                 pendingButton = null
                                 if (actuallyPlaying) {
-                                    playButton.setTextColor(0xFF9DE8B4.toInt())
-                                    playButton.text = "● " + voice.label
+                                    playButtonRef?.setTextColor(0xFF9DE8B4.toInt())
+                                    playButtonRef?.text = "● " + voice.label
                                     paintStatus(copy("✓ يشتغل الآن: ", "✓ Playing now: ") +
                                         voice.label, StreamAudioQuickPickPolicy.State.PLAYING)
                                 } else {
-                                    playButton.setTextColor(0xFFFFB5A7.toInt())
-                                    playButton.text = "⚠ " + voice.label
+                                    playButtonRef?.setTextColor(0xFFFFB5A7.toInt())
+                                    playButtonRef?.text = "⚠ " + voice.label
                                     paintStatus(copy("تعذر تشغيل ", "Failed: ") + voice.label +
                                         copy(" • رجع الصوت الأصلي. جرّب مصدرًا ثانيًا.",
                                             " • original audio restored. Choose another voice."),
@@ -804,9 +807,9 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                             }
                         }
                         if (accepted) {
-                            pendingButton = playButton
+                            pendingButton = playButtonRef
                             // Prevent accidental repeat clicks while buffering.
-                            playButton.isEnabled = false
+                            playButtonRef?.isEnabled = false
                         } else {
                             pendingId = null
                             StreamAudioQuickPickPrefs.markFailed(activity, voice.id)
@@ -815,6 +818,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                                 StreamAudioQuickPickPolicy.State.FAILED_RECENTLY)
                         }
                     }
+                    playButtonRef = playButton
                     footer.removeView(playButton)
                     playButton.contentDescription = when (condition) {
                         StreamAudioQuickPickPolicy.State.PLAYING ->
