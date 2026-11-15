@@ -305,7 +305,8 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 setPadding(dp(6), 0, dp(6), 0)
                 if (BuildConfig.CODE_ONLY_LOGIN) {
                     val options = listOf(
-                        LiveChannelTab.ALL to copy("الكل", "All"),
+                        LiveChannelTab.ALL to if (activity.intent.getStringExtra(PlayerActivity.EXTRA_CATEGORY_ID) == null)
+                            copy("الكل", "All") else copy("القسم", "Category"),
                         LiveChannelTab.FAVORITES to copy("★ المفضلة", "★ Favorites"),
                         LiveChannelTab.RECENT to copy("◷ الأخيرة", "◷ Recent")
                     )
@@ -563,6 +564,9 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                         setOnClickListener {
                             if (action == LiveChannelPanelAction.MORE) {
                                 draw(!expanded)
+                                footer.post {
+                                    if (dialog?.isShowing == true) footer.getChildAt(2)?.requestFocus()
+                                }
                             } else {
                                 // Existing picker and diagnostic dialogs open
                                 // over the same running ExoPlayer, not a new one.
