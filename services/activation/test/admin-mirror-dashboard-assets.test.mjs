@@ -17,7 +17,7 @@ test('mirror dashboard is linked and served by the explicit admin asset allowlis
  assert.ok(hook.includes("'/admin-mirror-dashboard.js'"));
  assert.doesNotThrow(()=>new Script(js,{filename:'admin-mirror-dashboard.js'}));
  for(const id of ['mirrorSource','mirrorKind','mirrorState',
-  'mirrorStatus','mirrorStats','mirrorRows','mirrorScan',
+  'mirrorStatus','mirrorDeploymentPreflight','mirrorStats','mirrorRows','mirrorScan',
   'mirrorTransfers','mirrorPrev','mirrorNext','mirrorPage',
   'mirrorRefresh']){
   assert.match(html,new RegExp('id="'+id+'"'),id);
@@ -32,4 +32,15 @@ test('new owner dashboard reads only, never posts source/media/copy operations',
  assert.match(js,/\/api\/v1\/admin\/xtream\/mirror\/queue\/status/);
  assert.match(js,/\/api\/v1\/admin\/xtream\/mirror\/queue\/items/);
  assert.match(js,/episodesOnlyMappedSubset|الفهرس|فهرسة/);
+});
+
+test('preflight warns on mismatched Content Hub PG source and cannot approve licensing',async()=>{
+ const js=await readFile(new URL('admin-mirror-dashboard.js',web),'utf8');
+ assert.match(js,/get\('\/api\/v1\/admin\/content-hub\/mirror\/deployment\/preflight'\)/);
+ assert.match(js,/preflightData\?\.sourceId===id/);
+ assert.match(js,/technicalPreflightPassed===true/);
+ assert.match(js,/catalogVisibleOnHubConnection/);
+ assert.match(js,/privateStorageAccessible/);
+ assert.match(js,/حقوق تخزين المحتوى/);
+ assert.doesNotMatch(js,/method:\s*['"]POST['"]/);
 });
