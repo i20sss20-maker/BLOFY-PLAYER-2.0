@@ -45,7 +45,7 @@ import { acceptsXtreamGzip } from './xtream-catalog-compression.mjs';
 import { shouldRetryXtreamWithoutRange,firstByteXtreamRange } from './xtream-media-range.mjs';
 import { recordXtreamPlayback,xtreamPlaybackSnapshot } from './xtream-playback-metrics.mjs';
 import {xtreamDirectMediaGauge} from './xtream-direct-media-gauge.mjs';
-import {anisAudioEnabled,anisAudioPublicCatalog,anisAudioSourceFor,classifyAnisAudioMime}
+import {anisAudioEnabled,anisAudioPublicCatalog,anisAudioSourceFor,classifyAnisAudioMime,probeAnisAudioTrack}
   from './stream-anis-audio.mjs';
 import { XtreamDenialCooldown } from './xtream-denial-cooldown.mjs';
 import { createGatewayUsageThrottle } from './xtream-gateway-usage-throttle.mjs';
@@ -113,6 +113,7 @@ const distributorCatalog=createDistributorCustomerCatalog({
 
 const adminLimiter = createFixedWindowLimiter({ limit: 120, windowMs: 60_000 });
 const publicLimiter = createFixedWindowLimiter({ limit: 1200, windowMs: 60_000 });
+const anisAudioProbeLimiter = createFixedWindowLimiter({ limit: 6, windowMs: 60_000 });
 const mediaDenialCooldown = new XtreamDenialCooldown();
 // Bound metadata refresh attempts for missing movies. Avoid repeatedly
 // querying the provider's catalog for the same broken item across viewers.
@@ -2550,6 +2551,22 @@ http.createServer = function withBlofyXtreamGateway(listener) {
       if (!url.pathname.startsWith('/api/v1/admin/xtream-gateway')) return listener(req, res);
       if (!requireAdmin(req, res)) return;
       await ensureReady();
+      if(req.method==='POST'&&
+        url.pathname==='/api/v1/admin/xtream-gateway/anis-audio/preflight'){
+        // Admin bearer is checked above. One probe only per invocation
+        // and at most 6 per minute across the whole service.
+        const rate=anisAudioProbeLimiter.consume('all_anis_preflight');
+        if(!rate.allowed)return json(res,429,{ok:false,error:'preflight_rate_limited'},
+          {'retry-after':String(rate.retryAfterSeconds)});
+        if(!anisAudioEnabled())
+          return json(res,409,{ok:false,error:'anis_audio_not_configured'});
+        const body=await readJson(req);
+        const id=String(body.id||'');
+        if(!/^anis-[a-z0-9-]{1,60}$/.test(id))
+          return json(res,400,{ok:false,error:'audio_id_invalid'});
+        return json(res,200,await probeAnisAudioTrack(id),
+          {'cache-control':'no-store, private','referrer-policy':'no-referrer'});
+      }
       if (req.method === 'POST' && url.pathname === '/api/v1/admin/xtream-gateway/playback-probe') {
         const body=await readJson(req);
         const raw=String(body.itemId??'');
