@@ -36,6 +36,9 @@ internal object OfflineDownloadUi {
                 .setPositiveButton(android.R.string.ok,null).show()
             return
         }
+        // Give immediate button feedback before the optional HEAD request.
+        // Some providers do not respond to HEAD; never make the button look inert.
+        Toast.makeText(activity, R.string.stream_downloads_preparing, Toast.LENGTH_SHORT).show()
         // A HEAD probe only reads response headers: it does not download media
         // or trust that a playback URL gives the subscriber download rights.
         activity.lifecycleScope.launch {
