@@ -1396,11 +1396,34 @@ open class PlayerActivity : ContentAccessActivity() {
             "\n\nTracks: ${result.available} · Supported: ${result.supported} · Selected: ${result.selected}" +
                 "\nCodec: ${result.selectedMimeType ?: "Unknown"}"
         }
-        AlertDialog.Builder(this)
+        val dialog = AlertDialog.Builder(this)
             .setTitle(if (isArabic) "حالة صوت القناة" else "Channel audio status")
             .setMessage(result.explanationFor(language) + stats)
             .setPositiveButton(if (isArabic) "حسنًا" else "OK", null)
-            .show()
+        if (result.canOfferAudioAutoSelection(
+                session.player.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_AUDIO)
+            )) {
+            // Opt-in, supported-track recovery only. No stream restart or codec forcing.
+            dialog.setNeutralButton(
+                if (isArabic) "تجربة الصوت التلقائي" else "Try automatic audio"
+            ) { _, _ ->
+                if (!sessionReleased) {
+                    StreamAudioPreferences.save(applicationContext, null)
+                    session.player.trackSelectionParameters =
+                        session.player.trackSelectionParameters.buildUpon()
+                            .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+                            .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
+                            .setPreferredAudioLanguage(null)
+                            .build()
+                    Toast.makeText(
+                        this,
+                        if (isArabic) "تمت إعادة اختيار الصوت تلقائيًا" else "Automatic audio selection restored",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        }
+        dialog.show()
     }
 
     private fun showTrackDialog(trackType: Int) {
