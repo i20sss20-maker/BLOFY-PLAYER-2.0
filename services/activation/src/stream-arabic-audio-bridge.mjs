@@ -219,11 +219,16 @@ export function createProtectedArabicAudioBridge({
           });
           client.once('timeout',()=>{client.destroy();finish({id,reason:'upstream_timeout'});});
           client.once('error',err=>{
-            const code=String(err?.code||'');
+            const rawCode=String(err?.code||'').toUpperCase();
+            // Only print a strictly filtered *error identifier*, not a
+            // potentially credential-bearing error.message or cause.
+            const code=/^(?:E[A-Z0-9_]{2,35}|ERR_[A-Z0-9_]{2,45})$/.test(rawCode)
+              ?rawCode:'UNKNOWN';
             const reason=['ENOTFOUND','EAI_AGAIN'].includes(code)?'upstream_dns_failed':
-              ['ECONNRESET','ECONNREFUSED','EHOSTUNREACH','ENETUNREACH'].includes(code)?
+              ['ECONNRESET','ECONNREFUSED','EHOSTUNREACH','ENETUNREACH',
+                'ETIMEDOUT','EACCES','EPERM'].includes(code)?
                 'upstream_connection_failed':'upstream_request_failed';
-            finish({id,reason});
+            finish({id,reason,errorCode:code,ipFamily:address.family});
           });
           client.end();
         }catch{finish({id,reason:'upstream_request_failed'});}
