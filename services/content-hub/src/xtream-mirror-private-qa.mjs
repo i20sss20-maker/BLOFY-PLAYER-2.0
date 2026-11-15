@@ -63,8 +63,10 @@ export async function resolveVerifiedMirrorMedia({
     !Array.isArray(manifest.parts)||manifest.parts.length<1)
   return {ok:false,code:'mirror_qa_manifest_mismatch',
    providerRequests:0,customerCutover:false};
- return {ok:true,code:'mirror_qa_private_manifest_verified',
+ return {ok:true,code:'mirror_qa_recorded_manifest_matched',
   sourceId,mediaKind,gatewayId,runId,
   sha256:sha,bytes,parts:manifest.parts.length,
+  fullFileSha256PreviouslyRecorded:true,
+  liveStorageFullRecheck:false,
   providerRequests:0,copyStarted:false,customerCutover:false};
 }
