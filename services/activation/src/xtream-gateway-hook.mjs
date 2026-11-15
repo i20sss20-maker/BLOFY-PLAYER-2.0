@@ -2097,6 +2097,7 @@ async function handlePrivateContentHubSource(req,res,url){
   if(!row||row.server_enabled!==true||
      String(row.server_id)!==approved.sourceId||
      String(row.source_episode_id)!==approved.mediaId||
+     String(row.series_source_id)!==approved.seriesMediaId||
      String(row.container_extension||'').toLowerCase()!==approved.extension)
    return json(res,409,{ok:false,code:'mirror_episode_gateway_changed'});
   id=mirrorEpisodeId;
