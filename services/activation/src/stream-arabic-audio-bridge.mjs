@@ -152,7 +152,88 @@ export function createProtectedArabicAudioBridge({
       else res.destroy();
     }finally{release();}
   }
-  return {catalog,stream};
+
+  /**
+   * Private, bounded operator-only connectivity check. Never log or return
+   * upstream URLs, query tokens, IP addresses, HTTP response bodies or
+   * authentication headers. Does not bypass upstream access restrictions.
+   */
+  async function probe(ids=['anis-max-1','anis-alkass-1']) {
+    const rows=entries();
+    if(!rows.length)return [{reason:'audio_disabled_or_unconfigured'}];
+    let addresses;
+    try{addresses=await lookup(LIVE_HOST,{all:true});}
+    catch{return [{reason:'dns_lookup_failed'}];}
+    const address=addresses.find(x=>publicAddress(x.address));
+    if(!address)return [{reason:'no_public_dns_address'}];
+    const results=[];
+    for(const id of ids.slice(0,2)) {
+      const row=rows.find(x=>x.id===id);
+      if(!row){results.push({id,reason:'track_not_in_catalog'});continue;}
+      const upstream=new URL(row.url);
+      const item=await new Promise(resolve=>{
+        let settled=false,client;
+        const timer=setTimeout(()=>{
+          client?.destroy();
+          finish({id,reason:'upstream_timeout'});
+        },5_500);
+        function finish(value){
+          if(settled)return;
+          settled=true;
+          clearTimeout(timer);
+          resolve(value);
+        }
+        try {
+          client=createRequest({
+            protocol:'http:',hostname:LIVE_HOST,port:80,
+            path:upstream.pathname+upstream.search,method:'GET',
+            timeout:5_000,agent:false,
+            headers:{'accept':'audio/*,*/*;q=0.4',
+              'user-agent':'BLOFY-STREAM-Audio-Relay/1.0'},
+            lookup(_host,_opts,cb){cb(null,address.address,address.family);}
+          },response=>{
+            const status=Number(response.statusCode)||0;
+            const rawType=String(response.headers['content-type']||'').toLowerCase();
+            const mime=/^(audio\/[a-z0-9.+-]+|application\/(octet-stream|vnd.apple.mpegurl|x-mpegurl|mpegurl))\b/
+              .exec(rawType)?.[1]||'other';
+            if(status!==200&&status!==206){
+              response.destroy();
+              finish({id,reason:'upstream_http_status',httpStatus:status});
+              return;
+            }
+            response.once('data',chunk=>{
+              response.destroy();
+              const bytes=Buffer.isBuffer(chunk)?chunk:Buffer.from(chunk||'');
+              const first=bytes.length>0?bytes[0]:-1;
+              const good=bytes.length>2&&(
+                bytes.subarray(0,3).toString('ascii')==='ID3'||
+                bytes.subarray(0,4).toString('ascii')==='OggS'||
+                (first===0xff&&(bytes[1]&0xe0)===0xe0)||
+                (first===0x47&&bytes.length>188&&bytes[188]===0x47)
+              );
+              finish({id,reason:good?'audio_bytes_detected':'unrecognized_stream_bytes',
+                mime,receivedBytes:Math.min(bytes.length,4096)});
+            });
+            response.once('end',()=>finish({id,reason:'empty_stream',mime}));
+            response.once('error',()=>finish({id,reason:'upstream_read_error',mime}));
+          });
+          client.once('timeout',()=>{client.destroy();finish({id,reason:'upstream_timeout'});});
+          client.once('error',err=>{
+            const code=String(err?.code||'');
+            const reason=['ENOTFOUND','EAI_AGAIN'].includes(code)?'upstream_dns_failed':
+              ['ECONNRESET','ECONNREFUSED','EHOSTUNREACH','ENETUNREACH'].includes(code)?
+                'upstream_connection_failed':'upstream_request_failed';
+            finish({id,reason});
+          });
+          client.end();
+        }catch{finish({id,reason:'upstream_request_failed'});}
+      });
+      results.push(item);
+    }
+    return results;
+  }
+  return {catalog,stream,probe};
+
 }
 
 function errorResponse(res,status,message) {
