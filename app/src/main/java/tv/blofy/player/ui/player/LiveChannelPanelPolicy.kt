@@ -22,7 +22,9 @@ internal object LiveChannelPanelPolicy {
 
     fun matchesSearch(channelName: String, query: String): Boolean {
         val needle = ArabicSearchNormalizer.normalize(query.trim())
-        return needle.isEmpty() || ArabicSearchNormalizer.normalize(channelName).contains(needle)
+        return if (query.isBlank()) true
+        else if (needle.isEmpty()) channelName.contains(query.trim(), ignoreCase = true)
+        else ArabicSearchNormalizer.normalize(channelName).contains(needle)
     }
 
     /** Existing channel order for ALL; recent tab uses recently watched order. */
