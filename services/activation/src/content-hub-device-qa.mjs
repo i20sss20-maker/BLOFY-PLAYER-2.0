@@ -7,6 +7,8 @@ import {once} from 'node:events';
 export const DEVICE_QA_TTL_SECONDS=15*60;
 export const DEVICE_QA_MAX_RANGE=8*1024*1024;
 const RUN=/^[A-Za-z0-9_-]{8,80}$/;
+const KINDS=new Set(['movie','episode']);
+const PLATFORMS=new Set(['windows','android','android_tv']);
 const MIME=new Set(['video/mp4','video/x-matroska','video/mp2t','video/x-msvideo']);
 const body=(res,status,code)=>{
  const bytes=Buffer.from(JSON.stringify({ok:false,code}));
@@ -21,12 +23,13 @@ export const enabledOwnerDeviceQa=env=>
  env.BLOFY_CONTENT_HUB_DEVICE_QA_SIGNING_KEY.length>=32;
 export const isDeviceQaRun=x=>typeof x==='string'&&RUN.test(x);
 
-export function mintOwnerDeviceQaTicket({secret,runId,now=Date.now()}={}){
+export function mintOwnerDeviceQaTicket({secret,runId,mediaKind='episode',platform='windows',now=Date.now()}={}){
  if(typeof secret!=='string'||secret.length<32||!isDeviceQaRun(runId)||
+    !KINDS.has(mediaKind)||!PLATFORMS.has(platform)||
     !Number.isSafeInteger(now)||now<0)throw Error('owner_device_qa_issue_invalid');
  const issued=Math.floor(now/1000);
  const payload=Buffer.from(JSON.stringify({
-  v:1,aud:'blofy-private-device-qa',kind:'episode',runId,
+  v:1,aud:'blofy-private-device-qa',kind:mediaKind,platform,runId,
   iat:issued,exp:issued+DEVICE_QA_TTL_SECONDS,
   nonce:randomBytes(16).toString('hex')
  })).toString('base64url');
@@ -34,12 +37,12 @@ export function mintOwnerDeviceQaTicket({secret,runId,now=Date.now()}={}){
  const signature=createHmac('sha256',secret).update(signed).digest('base64url');
  return {ticket:signed+'.'+signature,
   expiresAt:new Date((issued+DEVICE_QA_TTL_SECONDS)*1000).toISOString(),
-  runId,mediaKind:'episode',privateOnly:true,customerCutover:false};
+  runId,mediaKind,platform,privateOnly:true,customerCutover:false};
 }
 
-export function verifyOwnerDeviceQaTicket({secret,ticket,runId,now=Date.now()}={}){
+export function verifyOwnerDeviceQaTicket({secret,ticket,runId,mediaKind='episode',now=Date.now()}={}){
  if(typeof secret!=='string'||secret.length<32||
-    !isDeviceQaRun(runId)||typeof ticket!=='string'||
+    !isDeviceQaRun(runId)||!KINDS.has(mediaKind)||typeof ticket!=='string'||
     ticket.length>600||!Number.isSafeInteger(now)||now<0)return false;
  const parts=/^(v1\.[A-Za-z0-9_-]{20,450})\.([A-Za-z0-9_-]{43})$/.exec(ticket);
  if(!parts)return false;
@@ -50,7 +53,8 @@ export function verifyOwnerDeviceQaTicket({secret,ticket,runId,now=Date.now()}={
   const payload=JSON.parse(Buffer.from(parts[1].slice(3),'base64url').toString('utf8'));
   const current=Math.floor(now/1000);
   return payload.v===1&&payload.aud==='blofy-private-device-qa'&&
-   payload.kind==='episode'&&payload.runId===runId&&
+   payload.kind===mediaKind&&PLATFORMS.has(payload.platform)&&
+   payload.runId===runId&&
    typeof payload.nonce==='string'&&/^[a-f0-9]{32}$/.test(payload.nonce)&&
    Number.isSafeInteger(payload.iat)&&Number.isSafeInteger(payload.exp)&&
    payload.exp-payload.iat===DEVICE_QA_TTL_SECONDS&&
@@ -70,10 +74,11 @@ export function strictDeviceQaRange(range,total){
 }
 
 export async function forwardOwnerDeviceQaPlayback({
- req,res,runId,env=process.env,requestHub,now=Date.now
+ req,res,runId,mediaKind='episode',env=process.env,requestHub,now=Date.now
 }={}){
  if(!enabledOwnerDeviceQa(env))return body(res,404,'device_qa_disabled');
- if(!isDeviceQaRun(runId)||!['GET','HEAD'].includes(req.method)||
+ if(!isDeviceQaRun(runId)||!KINDS.has(mediaKind)||
+    !['GET','HEAD'].includes(req.method)||
     String(req.url||'').includes('?'))
   return body(res,404,'device_qa_route_invalid');
  const authorization=req.headers.authorization;
@@ -81,7 +86,7 @@ export async function forwardOwnerDeviceQaPlayback({
   typeof authorization==='string'?authorization:'');
  if(!m||!verifyOwnerDeviceQaTicket({
   secret:env.BLOFY_CONTENT_HUB_DEVICE_QA_SIGNING_KEY,ticket:m[1],
-  runId,now:now()
+  runId,mediaKind,now:now()
  }))return body(res,401,'device_qa_authorization_required');
  if(typeof requestHub!=='function')return body(res,503,'device_qa_bridge_unavailable');
  const controller=new AbortController();
@@ -90,7 +95,8 @@ export async function forwardOwnerDeviceQaPlayback({
  res.once('close',onClose);
  let upstream;
  try{
-  const path='/internal/episodes/playback/'+runId;
+  const path=(mediaKind==='episode'?'/internal/episodes/playback/':
+    '/internal/pilot/playback/')+runId;
   const head=await requestHub(path,{method:'HEAD',signal:controller.signal});
   const bytes=Number(head.headers.get('content-length'));
   const mime=String(head.headers.get('content-type')||'');
