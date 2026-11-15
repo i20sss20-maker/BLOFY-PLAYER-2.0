@@ -4,21 +4,25 @@ import android.view.KeyEvent
 
 /**
  * Explicit live-TV remote routing. A short OK opens the channel list while
- * MENU and UP/DOWN expose in-player controls, including Arabic commentary.
- * Once controls are visible their focused buttons own OK/DPAD navigation.
+ * STREAM shows one joined channel/action sidebar for MENU, OK and UP/DOWN.
+ * Original PLAYER keeps its existing in-player controls. Visible controls
+ * still own focused OK/DPAD navigation.
  */
 internal enum class LivePlayerMenuAction {
     PASS_THROUGH, SHOW_AUDIO_CONTROLS, SHOW_CHANNEL_LIST, DISMISS_CONTROLS, RETURN_TO_BROWSER
 }
 
 internal object LivePlayerMenuPolicy {
-    fun action(keyCode: Int, hudVisible: Boolean, channelDialogVisible: Boolean): LivePlayerMenuAction {
+    fun action(keyCode: Int, hudVisible: Boolean, channelDialogVisible: Boolean,
+        unifiedChannelPanel: Boolean = false): LivePlayerMenuAction {
         if (channelDialogVisible) return LivePlayerMenuAction.PASS_THROUGH
         return when (keyCode) {
             KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_TV_CONTENTS_MENU ->
-                LivePlayerMenuAction.SHOW_AUDIO_CONTROLS
+                if (unifiedChannelPanel) LivePlayerMenuAction.SHOW_CHANNEL_LIST
+                else LivePlayerMenuAction.SHOW_AUDIO_CONTROLS
             KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN ->
                 if (hudVisible) LivePlayerMenuAction.PASS_THROUGH
+                else if (unifiedChannelPanel) LivePlayerMenuAction.SHOW_CHANNEL_LIST
                 else LivePlayerMenuAction.SHOW_AUDIO_CONTROLS
             KeyEvent.KEYCODE_GUIDE -> LivePlayerMenuAction.SHOW_CHANNEL_LIST
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER,
