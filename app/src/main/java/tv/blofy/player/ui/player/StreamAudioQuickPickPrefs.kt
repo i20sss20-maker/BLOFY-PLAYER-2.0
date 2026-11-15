@@ -1,6 +1,8 @@
 package tv.blofy.player.ui.player
 
 import android.content.Context
+import android.os.SystemClock
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Personal-only voice shortcuts. No source URL, bearer, account code or device
@@ -10,7 +12,8 @@ import android.content.Context
 internal object StreamAudioQuickPickPrefs {
     private const val FILE = "blofy_stream_audio_quick_pick_v1"
     private const val FAVS = "favorite_track_ids"
-    private const val BAD_PREFIX = "failed_at_"
+    // Failures last only for this process; no wrong-TV-date dependency.
+    private val failedAtElapsedMs = ConcurrentHashMap<String, Long>()
     private val validId = Regex("anis-[a-z0-9-]{1,54}")
     private const val MAX_FAVORITES = 12
     private const val FAIL_TTL_MS = 120_000L
@@ -38,25 +41,21 @@ internal object StreamAudioQuickPickPrefs {
         return added
     }
 
-    fun markFailed(context: Context, id: String, nowMs: Long = System.currentTimeMillis()) {
+    fun markFailed(context: Context, id: String) {
         if (!validId.matches(id)) return
-        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()
-            .putLong(BAD_PREFIX + id, nowMs).apply()
+        failedAtElapsedMs[id] = SystemClock.elapsedRealtime()
     }
 
     fun markStarted(context: Context, id: String) {
         if (!validId.matches(id)) return
-        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()
-            .remove(BAD_PREFIX + id).apply()
+        failedAtElapsedMs.remove(id)
     }
 
-    fun failedRecently(
-        context: Context, id: String, nowMs: Long = System.currentTimeMillis()
-    ): Boolean {
+    fun failedRecently(context: Context, id: String): Boolean {
         if (!validId.matches(id)) return false
-        val at = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
-            .getLong(BAD_PREFIX + id, 0)
-        return at > 0 && nowMs >= at && nowMs - at < FAIL_TTL_MS
+        val at = failedAtElapsedMs[id] ?: return false
+        val age = SystemClock.elapsedRealtime() - at
+        return age >= 0 && age < FAIL_TTL_MS
     }
 }
 
