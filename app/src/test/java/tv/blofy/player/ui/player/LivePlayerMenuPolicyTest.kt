@@ -35,7 +35,7 @@ class LivePlayerMenuPolicyTest {
             LivePlayerMenuPolicy.action(KeyEvent.KEYCODE_DPAD_DOWN, false, false, true))
         assertEquals(LivePlayerMenuAction.SHOW_CHANNEL_LIST,
             LivePlayerMenuPolicy.action(KeyEvent.KEYCODE_DPAD_CENTER, false, false, true))
-        assertEquals(LivePlayerMenuAction.PASS_THROUGH,
+        assertEquals(LivePlayerMenuAction.SHOW_CHANNEL_LIST,
             LivePlayerMenuPolicy.action(KeyEvent.KEYCODE_DPAD_DOWN, true, false, true))
     }
 
