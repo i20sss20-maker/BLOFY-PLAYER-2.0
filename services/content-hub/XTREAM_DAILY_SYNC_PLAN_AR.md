@@ -608,3 +608,39 @@ remain 200-only by default. A new test checks this exact behavior.
 PR #609, and no Railway production environment variables or customer
 streams have been changed. Actual DB affinity cannot be declared
 verified before the diagnostic runs on the eventual deployed build.
+
+
+## 2026-11-15: Exact source and episode-parent identity protection
+
+**Prevent accidental cross-source copying:** A source may have a gateway
+item with the same numeric ID as another Xtream source. Previously the
+private dynamic movie/episode Range bridge queried active leases by
+gateway ID only. It now requires the exact
+`BLOFY_XTREAM_DAILY_CATALOG_SOURCE_ID` UUID on the **activation
+portal** as well as Content Hub. SQL checks
+`q.source_id=$2::uuid` against the operator-pinned source on every
+dynamic private describe/Range request. Without a pinned source, or
+when source UUIDs differ, the bridge **fails closed**. All provider
+tokens remain server-side and no catalog route is exposed to customers.
+
+**Prevent episode parent remap:** An episode's storage license is tied
+to its original source-episode ID AND its original parent
+`series_media_id`. The discovery upsert now uses PostgreSQL
+`IS DISTINCT FROM` to flag a changed series parent as a permanent
+`mapping_conflict` even when the episode ID, gateway ID and
+extension all remain unchanged. It never silently replaces a reviewed
+series ID. The per-item rights attestation, 4KiB size probe,
+source bridge, and Hub leased-copy claim now each check
+`e.series_source_id=q.series_media_id`. Candidates without an exact,
+bounded, valid series parent are rejected rather than truncated.
+
+The offline integration coverage includes a disposable PostgreSQL
+source-parent remap: a previously approved episode cannot be leased
+after a source-side parent change, and a new metadata scan records the
+conflict for manual review. Tests also check that private bridges
+cannot query an unpinned or invalid source.
+
+These safeguards are software identity checks only: not proof of
+storage rights, source quality or actual device playback. This branch
+is still unmerged, and **no Railway deployment or automatic copying
+is authorized** by this change.
