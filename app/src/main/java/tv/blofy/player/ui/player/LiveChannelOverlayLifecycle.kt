@@ -644,6 +644,12 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
         /** One click starts a specific commentary track. Header labels are not
          * navigable folders; all source buttons live in one scrollable panel.
          */
+        /**
+         * BLOFY Premium Audio: one connected, scrollable LIVE sidebar.
+         * All selectable stations are direct buttons; stars are independent
+         * TV-remote-focusable shortcuts. "Recently worked" is local history,
+         * NOT an assertion that an upstream source is online right now.
+         */
         private fun showInlineArabicVoices(
             footer: LinearLayout,
             scroller: ScrollView,
@@ -652,93 +658,259 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             returnHome: () -> Unit
         ) {
             audioPickerOpen = true
-            footer.removeAllViews()
-            addHeading(copy("🎙 اختر المعلق مباشرة", "🎙 One-tap Arabic voices"))
-            val back = addButton(copy("↩ رجوع للتحكم", "↩ Back to controls"), returnHome)
-            addButton(copy("🔊 صوت القناة الأصلي", "🔊 Original channel audio")) {
-                activity.returnInlineOriginalAudio()
-                Toast.makeText(activity,
-                    copy("رجع صوت القناة الأصلي", "Original channel audio restored"),
-                    Toast.LENGTH_SHORT).show()
+            val allVoices = mutableListOf<StreamArabicAudioCatalog.Track>()
+            var favoritesOnly = false
+            var pendingButton: TextView? = null
+            var pendingId: String? = null
+            val baseColor = BlofyTvDesign.TextSecondary
+            val status = TextView(activity).apply {
+                textSize = 12f
+                setTextColor(baseColor)
+                maxLines = 3
+                gravity = Gravity.CENTER_VERTICAL or Gravity.START
+                setPadding(dp(12), dp(6), dp(12), dp(6))
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(10).toFloat()
+                    setColor(0x882C223D.toInt())
+                    setStroke(dp(1), 0x556D508D)
+                }
             }
-
-            // These are direct remote buttons, not modal synchronization pages.
             val sync = TextView(activity).apply {
-                textSize = 11.5f
-                setTextColor(BlofyTvDesign.TextSecondary)
+                textSize = 11f
+                setTextColor(baseColor)
                 setPadding(dp(9), dp(3), dp(9), dp(4))
             }
-            fun refreshSync() {
+            fun updateSync() {
                 sync.text = copy("التأخير: ", "Delay: ") +
                     activity.inlineArabicDelaySeconds() + copy(" ثانية", "s")
             }
-            refreshSync()
 
-            val status = TextView(activity).apply {
-                text = copy("جارٍ تحميل المعلقين…", "Loading available voices…")
-                textSize = 11f
-                setTextColor(BlofyTvDesign.TextSecondary)
-                setPadding(dp(9), dp(5), dp(9), dp(5))
-                maxLines = 3
+            fun paintStatus(message: String, state: StreamAudioQuickPickPolicy.State?) {
+                status.text = message
+                status.setTextColor(when (state) {
+                    StreamAudioQuickPickPolicy.State.PLAYING -> 0xFF9DE8B4.toInt()
+                    StreamAudioQuickPickPolicy.State.FAILED_RECENTLY -> 0xFFFFB5A7.toInt()
+                    else -> Color.WHITE
+                })
             }
-            footer.addView(status, LinearLayout.LayoutParams(-1, -2))
-            back.post { if (dialog?.isShowing == true) back.requestFocus() }
-            scroller.post { scroller.scrollTo(0, 0) }
+
+            fun render(focusId: String? = null, focusStar: Boolean = false) {
+                if (!audioPickerOpen || dialog?.isShowing != true) return
+                val savedFavorites = StreamAudioQuickPickPrefs.favorites(activity)
+                val lastGood = activity.lastConfirmedInlineArabicTrackId()
+                val playing = activity.currentInlineArabicTrackId()
+                val failed = allVoices.filter {
+                    StreamAudioQuickPickPrefs.failedRecently(activity, it.id)
+                }.mapTo(mutableSetOf()) { it.id }
+                val choices = StreamAudioQuickPickPolicy.arrange(
+                    allVoices, savedFavorites, lastGood, failed
+                ) { it.id }
+                val visible = if (favoritesOnly) choices.filter { it.id in savedFavorites }
+                    else choices
+
+                footer.removeAllViews()
+                addHeading(copy("✦  BLOFY  •  الصوتيات المباشرة",
+                    "✦  BLOFY  •  LIVE AUDIO"))
+                addButton(copy("↩  العودة للتحكم", "↩  Back to live controls"), returnHome)
+                addButton(copy("🔊  استعادة صوت القناة", "🔊  Use original channel audio")) {
+                    pendingButton?.isEnabled = true
+                    pendingButton = null
+                    pendingId = null
+                    activity.returnInlineOriginalAudio()
+                    paintStatus(copy("صوت القناة الأصلي يعمل الآن.",
+                        "Original channel audio is restored."), null)
+                }
+                footer.addView(status, LinearLayout.LayoutParams(-1, dp(56)).apply {
+                    topMargin = dp(2); bottomMargin = dp(4)
+                })
+                val filterButton = addButton(
+                    if (favoritesOnly) copy("☆  جميع المعلقين", "☆  Show all voices")
+                    else copy("★  المفضلة فقط", "★  Favorites only")
+                ) {
+                    favoritesOnly = !favoritesOnly
+                    render()
+                }
+
+                if (allVoices.isEmpty()) {
+                    addHeading(copy("جارٍ جلب المعلقين من BLOFY…",
+                        "Loading voices securely from BLOFY…"))
+                    return
+                }
+                if (visible.isEmpty()) {
+                    addHeading(copy("ما ثبتت معلقين. افتح الكل واضغط ☆ لحفظ المفضل.",
+                        "No favorites yet. Show all, then press ☆ to pin a voice."))
+                }
+
+                var previousGroup = ""
+                var focusTarget: TextView? = null
+                var scrollTarget: View? = null
+                visible.forEach { voice ->
+                    val group = if (voice.id in savedFavorites)
+                        copy("★  المعلقون المثبتون", "★  PINNED VOICES")
+                    else if (voice.id == lastGood)
+                        copy("◷  آخر صوتية اشتغلت", "◷  LAST WORKED")
+                    else StreamArabicAudioCatalog.groupName(
+                        voice, copy("ar", "en") == "en"
+                    )
+                    if (group != previousGroup) {
+                        addHeading(group)
+                        previousGroup = group
+                    }
+                    val condition = StreamAudioQuickPickPolicy.status(
+                        voice.id, playing, lastGood, failed
+                    )
+                    val prefix = when (condition) {
+                        StreamAudioQuickPickPolicy.State.PLAYING -> "● "
+                        StreamAudioQuickPickPolicy.State.RECENTLY_WORKED -> "◷ "
+                        StreamAudioQuickPickPolicy.State.FAILED_RECENTLY -> "⚠ "
+                        StreamAudioQuickPickPolicy.State.UNTESTED -> "♫ "
+                    }
+                    val row = LinearLayout(activity).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        layoutDirection = activity.resources.configuration.layoutDirection
+                        gravity = Gravity.CENTER_VERTICAL
+                    }
+                    val playButton = addButton(prefix + voice.label) {
+                        // One click starts the chosen voice; no group/file pages.
+                        pendingButton?.isEnabled = true
+                        pendingButton = null
+                        pendingId = voice.id
+                        val attempt = copy("جارٍ تجربة ", "Connecting: ") + voice.label
+                        paintStatus(attempt + copy(" • صوت القناة مستمر", " • original audio remains"), null)
+                        val accepted = activity.playInlineArabicAudio(voice) { actuallyPlaying ->
+                            if (actuallyPlaying) {
+                                StreamAudioQuickPickPrefs.markStarted(activity, voice.id)
+                            } else {
+                                StreamAudioQuickPickPrefs.markFailed(activity, voice.id)
+                            }
+                            if (audioPickerOpen && dialog?.isShowing == true &&
+                                pendingId == voice.id) {
+                                pendingButton?.isEnabled = true
+                                pendingButton = null
+                                if (actuallyPlaying) {
+                                    playButton.setTextColor(0xFF9DE8B4.toInt())
+                                    playButton.text = "● " + voice.label
+                                    paintStatus(copy("✓ يشتغل الآن: ", "✓ Playing now: ") +
+                                        voice.label, StreamAudioQuickPickPolicy.State.PLAYING)
+                                } else {
+                                    playButton.setTextColor(0xFFFFB5A7.toInt())
+                                    playButton.text = "⚠ " + voice.label
+                                    paintStatus(copy("تعذر تشغيل ", "Failed: ") + voice.label +
+                                        copy(" • رجع الصوت الأصلي. جرّب مصدرًا ثانيًا.",
+                                            " • original audio restored. Choose another voice."),
+                                        StreamAudioQuickPickPolicy.State.FAILED_RECENTLY)
+                                }
+                                updateSync()
+                            }
+                        }
+                        if (accepted) {
+                            pendingButton = playButton
+                            // Prevent accidental repeat clicks while buffering.
+                            playButton.isEnabled = false
+                        } else {
+                            pendingId = null
+                            StreamAudioQuickPickPrefs.markFailed(activity, voice.id)
+                            paintStatus(copy("تعذر اختيار المعلق؛ الصوت الأصلي مستمر.",
+                                "Voice unavailable; original channel audio continues."),
+                                StreamAudioQuickPickPolicy.State.FAILED_RECENTLY)
+                        }
+                    }
+                    footer.removeView(playButton)
+                    playButton.contentDescription = when (condition) {
+                        StreamAudioQuickPickPolicy.State.PLAYING ->
+                            copy("يشتغل الآن: ", "Playing now: ") + voice.label
+                        StreamAudioQuickPickPolicy.State.RECENTLY_WORKED ->
+                            copy("آخر مصدر نجح: ", "Previously worked: ") + voice.label
+                        StreamAudioQuickPickPolicy.State.FAILED_RECENTLY ->
+                            copy("تعذر مؤخرًا، اضغط للمحاولة: ", "Failed recently, press to retry: ") + voice.label
+                        else -> voice.label
+                    }
+                    if (condition == StreamAudioQuickPickPolicy.State.PLAYING) {
+                        playButton.setTextColor(0xFF9DE8B4.toInt())
+                    } else if (condition == StreamAudioQuickPickPolicy.State.FAILED_RECENTLY) {
+                        playButton.setTextColor(0xFFFFB5A7.toInt())
+                    }
+                    val starButton = addButton(if (voice.id in savedFavorites) "★" else "☆") {
+                        val enabled = StreamAudioQuickPickPrefs.toggleFavorite(activity, voice.id)
+                        // This is a personal shortcut, not an availability test.
+                        val alreadyPinned = enabled
+                        Toast.makeText(activity,
+                            if (alreadyPinned) copy("تم تثبيت المعلق", "Voice pinned")
+                            else copy("تم تحديث المفضلة", "Favorites updated"),
+                            Toast.LENGTH_SHORT).show()
+                        render(voice.id, focusStar = true)
+                    }
+                    footer.removeView(starButton)
+                    starButton.gravity = Gravity.CENTER
+                    starButton.textSize = 19f
+                    starButton.contentDescription =
+                        if (voice.id in savedFavorites)
+                            copy("إزالة من المفضلة: ", "Unpin voice: ") + voice.label
+                        else copy("تثبيت المعلق: ", "Pin voice: ") + voice.label
+                    row.addView(playButton, LinearLayout.LayoutParams(0, dp(38), 1f).apply {
+                        marginEnd = dp(5)
+                    })
+                    row.addView(starButton, LinearLayout.LayoutParams(dp(43), dp(38)))
+                    footer.addView(row, LinearLayout.LayoutParams(-1, dp(43)))
+                    if (voice.id == focusId) {
+                        focusTarget = if (focusStar) starButton else playButton
+                        scrollTarget = row
+                    }
+                }
+                addHeading(copy("⏱  مزامنة الصوت", "⏱  AUDIO SYNC"))
+                updateSync()
+                footer.addView(sync, LinearLayout.LayoutParams(-1, dp(24)))
+                addButton(copy("−1ث  تقديم الصوت", "−1s  Advance audio")) {
+                    activity.adjustInlineArabicSync(-1); updateSync()
+                }
+                addButton(copy("+1ث  تأخير الصوت", "+1s  Delay audio")) {
+                    activity.adjustInlineArabicSync(1); updateSync()
+                }
+                addButton(copy("⟲  التوقيت الأصلي", "⟲  Reset synchronization")) {
+                    activity.adjustInlineArabicSync(0); updateSync()
+                }
+                if (focusTarget != null) {
+                    val target = focusTarget
+                    val row = scrollTarget
+                    footer.post {
+                        if (dialog?.isShowing == true && audioPickerOpen) {
+                            target?.requestFocus()
+                            scroller.smoothScrollTo(0, row?.top ?: 0)
+                        }
+                    }
+                } else {
+                    footer.post {
+                        if (dialog?.isShowing == true && audioPickerOpen) {
+                            filterButton.requestFocus()
+                            scroller.scrollTo(0, 0)
+                        }
+                    }
+                }
+            }
+
+            paintStatus(copy("♫ اختر معلقًا. ● تشغيل مؤكد، ◷ نجح سابقًا، ⚠ تعذر مؤخرًا.",
+                "♫ Select a voice. ● playing, ◷ previously worked, ⚠ recently failed."), null)
+            // Render controls immediately while the protected catalog loads.
+            // A callback can never populate a picker that has already closed.
+            render()
             activity.lifecycleScope.launch {
                 val response = activity.inlineArabicAudioTracks()
                 if (!audioPickerOpen || dialog?.isShowing != true ||
                     activity.isFinishing || activity.isDestroyed) return@launch
                 if (response == null || response.tracks.isEmpty()) {
-                    status.text = copy(
-                        "ما توفرت صوتيات للقناة حاليًا؛ صوتها الأصلي مستمر.",
-                        "No available voices right now; original audio continues.")
+                    paintStatus(copy(
+                        "تعذّر جلب الصوتيات الآن. صوت القناة الأصلي مستمر.",
+                        "Voices unavailable right now. Original audio continues."
+                    ), StreamAudioQuickPickPolicy.State.FAILED_RECENTLY)
                     return@launch
                 }
-                status.text = copy(
-                    "اضغط على أي معلق لتشغيله مباشرة. يبقى صوت القناة حتى يشتغل.",
-                    "Press a voice once to play. Original audio stays until it starts.")
-                val voices = response.tracks.distinctBy { it.id }
-                var lastGroup = ""
-                voices.forEach { voice ->
-                    val group = StreamArabicAudioCatalog.groupName(
-                        voice, copy("ar", "en") == "en")
-                    if (group != lastGroup) {
-                        addHeading(group)
-                        lastGroup = group
-                    }
-                    val selected = activity.currentInlineArabicTrackId() == voice.id
-                    val label = (if (selected) "✓ " else "♫ ") + voice.label
-                    addButton(label) {
-                        status.text = copy(
-                            "جارٍ الاتصال بـ ${voice.label}… الصوت الأصلي مستمر.",
-                            "Connecting to ${voice.label}… original audio continues.")
-                        val accepted = activity.playInlineArabicAudio(voice) { playing ->
-                            if (dialog?.isShowing == true && audioPickerOpen) {
-                                status.text = if (playing)
-                                    copy("✓ يشتغل الآن: ${voice.label}", "✓ Playing: ${voice.label}")
-                                else copy("فشل تشغيل ${voice.label}؛ رجع الصوت الأصلي.",
-                                    "Voice unavailable: ${voice.label}. Original audio restored.")
-                                refreshSync()
-                            }
-                        }
-                        if (!accepted) {
-                            status.text = copy("تعذّر اختيار المعلق", "Could not select voice")
-                        }
-                    }
-                }
-                // Fine-grained sync belongs AFTER the direct voice choices:
-                // first screen shows playable voices, not another settings menu.
-                addHeading(copy("ضبط مزامنة الصوت", "Audio synchronization"))
-                footer.addView(sync, LinearLayout.LayoutParams(-1, dp(24)))
-                addButton(copy("−1ث  تقديم الصوت", "−1s  Advance audio")) {
-                    activity.adjustInlineArabicSync(-1); refreshSync()
-                }
-                addButton(copy("+1ث  تأخير الصوت", "+1s  Delay audio")) {
-                    activity.adjustInlineArabicSync(1); refreshSync()
-                }
-                addButton(copy("⟲  تصفير التأخير", "⟲  Reset delay")) {
-                    activity.adjustInlineArabicSync(0); refreshSync()
-                }
+                allVoices.clear()
+                allVoices.addAll(response.tracks.distinctBy { it.id })
+                paintStatus(copy(
+                    "♫ اختر المعلق بضغطة؛ ☆ لتثبيته. ● تعني تشغيلًا مؤكدًا.",
+                    "♫ One click plays. ☆ pins a voice. ● means confirmed playback."
+                ), null)
+                render()
             }
         }
 
