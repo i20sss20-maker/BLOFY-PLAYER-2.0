@@ -59,12 +59,20 @@ export function createMirrorMovieTransferStore({connectionString,Pool=pg.Pool}={
   application_name:'blofy-licensed-mirror-movie'});
  let init=null;
  const ensure=()=>{
-  if(!init)init=pool.query(`CREATE TABLE IF NOT EXISTS blofy_content_hub_mirror_daily_budget (
+  if(!init)init=(async()=>{
+  await pool.query(`CREATE TABLE IF NOT EXISTS blofy_content_hub_mirror_daily_budget (
    source_id UUID NOT NULL,local_day DATE NOT NULL,
    reserved_bytes BIGINT NOT NULL DEFAULT 0,
    reserved_batches INTEGER NOT NULL DEFAULT 0,
    PRIMARY KEY(source_id,local_day)
-  )`).catch(e=>{init=null;throw e});
+  )`);
+  // Activation may not yet have initialized the latest queue schema:
+  // add the recovery columns before claiming any provider connection.
+  // If databases differ or the queue itself is absent, fail CLOSED.
+  await pool.query(`ALTER TABLE blofy_xtream_mirror_items
+   ADD COLUMN IF NOT EXISTS copy_retry_count INTEGER NOT NULL DEFAULT 0,
+   ADD COLUMN IF NOT EXISTS copy_retry_after TIMESTAMPTZ`);
+ })().catch(e=>{init=null;throw e});
   return init;
  };
  async function claim({sourceId,localDay,dailyBytesLimit}={}){
