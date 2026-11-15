@@ -10,6 +10,8 @@ import {createMirrorMovieTransferStore} from
  '../src/xtream-mirror-movie-transfer.mjs';
 import {createMirrorEpisodeTransferStore} from
  '../src/xtream-mirror-episode-transfer.mjs';
+import {inspectMirrorDeploymentPreflight} from
+ '../src/xtream-mirror-deployment-preflight.mjs';
 
 const PG=process.env.BLOFY_TEST_PG_URL||'';
 const SOURCE='123e4567-e89b-42d3-a456-426614174000';
@@ -61,6 +63,17 @@ test('real PG cross-media copy budget, durable checkpoints and 3 maximum retries
        $2,NOW(),NOW(),16777216),
       ($1,'episode',401,'test-ep','mkv','Fixture episode','approved',
        $2,NOW(),NOW(),16777216)`,[SOURCE,SHA]);
+  // A real PG connection can see the Xtream tables yet not the Hub
+  // private manifest/budget tables; an operator must NOT enable copy.
+  const beforeSetup=await inspectMirrorDeploymentPreflight({
+   db:pool,storage:{health:async()=>({ok:true})},
+   env:{BLOFY_XTREAM_DAILY_CATALOG_SOURCE_ID:SOURCE}
+  });
+  assert.equal(beforeSetup.checks.catalogVisibleOnHubConnection,true);
+  assert.equal(beforeSetup.checks.privateManifestTablesVisible,false);
+  assert.equal(beforeSetup.checks.sharedBudgetVisible,false);
+  assert.equal(beforeSetup.technicalPreflightPassed,false);
+
   movie=createMirrorMovieTransferStore({
    connectionString:PG,Pool:IsolatedPool});
   episode=createMirrorEpisodeTransferStore({
@@ -75,6 +88,19 @@ test('real PG cross-media copy budget, durable checkpoints and 3 maximum retries
   assert.match(m1.runId,/^mirror_[a-f0-9]{40}$/);
   assert.match(e1.runId,/^mirror_[a-f0-9]{40}$/);
   assert.notEqual(m1.runId,e1.runId);
+  // The transfer workers created the shared PG budget in this schema;
+  // supply separate sample manifest tables without writing actual media.
+  await pool.query('CREATE TABLE blofy_content_hub_chunk_runs (run_id TEXT)');
+  await pool.query('CREATE TABLE blofy_content_hub_episode_runs (run_id TEXT)');
+  const ready=await inspectMirrorDeploymentPreflight({
+   db:pool,storage:{health:async()=>({ok:true})},
+   env:{BLOFY_XTREAM_DAILY_CATALOG_SOURCE_ID:SOURCE}
+  });
+  assert.equal(ready.technicalDatabaseCompatible,true);
+  assert.equal(ready.technicalPreflightPassed,true);
+  assert.equal(ready.enableTransferAutomatically,false);
+  assert.equal(ready.perFileStorageRightsIndependentlyVerified,false);
+  assert.equal(ready.providerRequests,0);
   const before=await movie.status(SOURCE);
   assert.equal(before.dailyBudgets[0].bytesReserved,2*PART,
    'movie and episode must share ONE atomic PG source-day budget');
