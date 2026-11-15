@@ -1,0 +1,31 @@
+name: BLOFY STREAM Anis Audio Secure Backend QA
+
+on:
+  push:
+    branches:
+      - feat/stream-anis-audio-protected-20261115
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stream-anis-audio-backend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  isolated-audio:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Code-only Anis audio metadata, auth and token protection
+        run: |
+          set -euo pipefail
+          node --check services/activation/src/stream-anis-audio.mjs
+          node --check services/activation/src/xtream-gateway-hook.mjs
+          node --test services/activation/test/stream-anis-audio.test.mjs
+          node --test services/activation/test/xtream-code-app-token.test.mjs
