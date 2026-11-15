@@ -33,7 +33,8 @@ export async function findActiveMirrorEpisode(pool,{gatewayId,sourceId}={}){
  const row=r.rows?.[0];
  if(!row)return null;
  const size=Number(row.expected_bytes);
- if(!Number.isSafeInteger(size)||size<8388608||size>4294967296)
+ if(!Number.isSafeInteger(size)||size<8388608||size>4294967296||
+    !/^[A-Za-z0-9._-]{1,128}$/.test(String(row.series_media_id||'')))
   return null;
  return {gatewayId:Number(row.gateway_id),sourceId:String(row.source_id),
   mediaId:String(row.media_id),seriesMediaId:String(row.series_media_id),
