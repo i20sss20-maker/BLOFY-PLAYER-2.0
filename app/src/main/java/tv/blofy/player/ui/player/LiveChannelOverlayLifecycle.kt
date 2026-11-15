@@ -18,6 +18,7 @@ import android.view.Window
 import android.view.WindowManager
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.os.ConfigurationCompat
@@ -496,7 +497,13 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
          * Nested track/quality dialogs remain the established player menus;
          * the video is never restarted or replaced.
          */
-        private fun buildAttachedActions(): LinearLayout {
+        private fun buildAttachedActions(): ScrollView {
+            val scroller = ScrollView(activity).apply {
+                isFillViewport = false
+                isVerticalScrollBarEnabled = true
+                overScrollMode = View.OVER_SCROLL_NEVER
+                background = null
+            }
             val footer = LinearLayout(activity).apply {
                 orientation = LinearLayout.VERTICAL
                 layoutDirection = activity.resources.configuration.layoutDirection
@@ -564,8 +571,16 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                         setOnClickListener {
                             if (action == LiveChannelPanelAction.MORE) {
                                 draw(!expanded)
-                                footer.post {
-                                    if (dialog?.isShowing == true) footer.getChildAt(2)?.requestFocus()
+                                // Extra options scroll within a capped footer,
+                                // so the channel list never collapses to one row.
+                                scroller.layoutParams = LinearLayout.LayoutParams(
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                    if (!expanded) dp(175) else ViewGroup.LayoutParams.WRAP_CONTENT)
+                                scroller.post {
+                                    if (dialog?.isShowing == true) {
+                                        scroller.scrollTo(0, 0)
+                                        footer.getChildAt(3)?.requestFocus()
+                                    }
                                 }
                             } else {
                                 // Existing picker and diagnostic dialogs open
@@ -584,7 +599,9 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 }
             }
             draw(expanded = false)
-            return footer
+            scroller.addView(footer, ScrollView.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            return scroller
         }
 
         private fun prepareWindow(window: Window, width: Int, height: Int, reveal: Boolean) {
