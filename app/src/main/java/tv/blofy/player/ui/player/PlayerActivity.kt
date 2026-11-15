@@ -19,6 +19,9 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import androidx.appcompat.widget.AppCompatImageButton
+import androidx.activity.result.contract.ActivityResultContracts
+import android.provider.OpenableColumns
+import kotlinx.coroutines.withContext
 import android.content.res.ColorStateList
 import android.net.ConnectivityManager
 import android.net.Network
@@ -105,6 +108,58 @@ open class PlayerActivity : ContentAccessActivity() {
     private var vlcFallbackLaunched = false
     private var lastStreamAudioHealth = ""
     private var arabicAudioSession: StreamArabicAudioSession? = null
+    private var pendingArabicImportChannel = ""
+    private val pickArabicAudioFile =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri == null) return@registerForActivityResult
+            val selectedChannel = pendingArabicImportChannel
+            if (!BuildConfig.CODE_ONLY_LOGIN || selectedChannel.isBlank() ||
+                sessionReleased || kind != KIND_LIVE) return@registerForActivityResult
+            val english = !streamUiLanguage().startsWith("ar", ignoreCase = true)
+            lifecycleScope.launch {
+                val preview = withContext(Dispatchers.IO) {
+                    runCatching {
+                        val fileName = contentResolver.query(
+                            uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null
+                        )?.use { cursor ->
+                            if (cursor.moveToFirst()) {
+                                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                                if (index >= 0) cursor.getString(index) else null
+                            } else null
+                        } ?: uri.lastPathSegment.orEmpty()
+                        val raw = contentResolver.openInputStream(uri)?.use { input ->
+                            val output = java.io.ByteArrayOutputStream()
+                            val block = ByteArray(4096)
+                            while (output.size() <= 262_144) {
+                                val n = input.read(block)
+                                if (n < 0) break
+                                output.write(block, 0, n)
+                            }
+                            if (output.size() > 262_144) "" else
+                                output.toString(Charsets.UTF_8.name())
+                        }.orEmpty()
+                        StreamInAppAudioImport.parse(fileName, raw)
+                    }.getOrDefault(
+                        StreamInAppAudioImport.Preview(emptyList(), "cannot_read")
+                    )
+                }
+                if (!sessionReleased && !isFinishing && kind == KIND_LIVE &&
+                    selectedChannel == currentStreamId) {
+                    if (preview.tracks.isEmpty()) {
+                        AlertDialog.Builder(this@PlayerActivity)
+                            .setTitle(if (english) "In-app audio file" else "ملف الصوتيات داخل التطبيق")
+                            .setMessage(
+                                if (english) "No playable audio feed was found. M3U8 media manifests need a remote playlist URL."
+                                else "لم أجد رابط بث صوتي قابلًا للتشغيل. ملف M3U8 الذي يحتوي على المقاطع يحتاج رابط القائمة الأصلي."
+                            )
+                            .setPositiveButton(if (english) "OK" else "حسنًا", null)
+                            .show()
+                    } else {
+                        showImportedArabicTracks(preview.tracks, english)
+                    }
+                }
+            }
+        }
     private lateinit var connectionNotice: TextView
     private lateinit var controlHint: TextView
     private var networkRegistered = false
@@ -1562,8 +1617,9 @@ open class PlayerActivity : ContentAccessActivity() {
     }
 
 
-    /** Optional Arabic soundstreams come only from the code-authorized BLOFY
-     * catalog. A missing backend endpoint leaves standard channel audio intact.
+    /** The Arabic audio library is displayed INSIDE BLOFY STREAM.
+     * Bundled tracks come from APK assets. Files picked by the device owner
+     * are parsed locally (never sent to BLOFY or to third-party servers).
      */
     private fun showArabicAudioMenu() {
         if (!BuildConfig.CODE_ONLY_LOGIN || kind != KIND_LIVE || sessionReleased ||
@@ -1588,8 +1644,11 @@ open class PlayerActivity : ContentAccessActivity() {
             if (tracks.isEmpty()) {
                 AlertDialog.Builder(this@PlayerActivity)
                     .setTitle(if (english) "BLOFY Arabic audio" else "صوتيات BLOFY العربية")
-                    .setMessage(if (english) "No Arabic audio was assigned to this channel."
-                        else "لا توجد صوتيات عربية مضافة لهذه القناة من لوحة BLOFY.")
+                    .setMessage(if (english) "No Arabic audio is bundled for this channel yet. You can select a local M3U, M3U8, TXT, CFG, XML or JSON playlist inside the app."
+                        else "لا توجد صوتيات مدمجة لهذه القناة حتى الآن. تقدر تختار ملف M3U أو M3U8 أو TXT أو CFG أو XML أو JSON من جهازك مباشرة.")
+                    .setNeutralButton(if (english) "Import audio file" else "اختيار ملف صوتيات") { _, _ ->
+                        openInAppAudioPicker()
+                    }
                     .setPositiveButton(if (english) "OK" else "حسنًا", null)
                     .show()
                 return@launch
@@ -1605,24 +1664,66 @@ open class PlayerActivity : ContentAccessActivity() {
                         arabicAudioSession = null
                     } else {
                         val choice = tracks.getOrNull(selected - 1) ?: return@setItems
-                        val controller = StreamArabicAudioSession(
-                            this@PlayerActivity, session.player, profileFromIntent()
-                        ) {
-                            if (!isFinishing && !sessionReleased) Toast.makeText(
-                                this@PlayerActivity,
-                                if (english) "Arabic audio unavailable; original audio restored."
-                                else "تعذر تشغيل الصوت العربي، ورجع الصوت الأصلي.",
-                                Toast.LENGTH_LONG
-                            ).show()
-                        }
-                        arabicAudioSession?.stop()
-                        arabicAudioSession = controller
-                        controller.start(choice)
-                        showArabicAudioControls()
+                        activateArabicTrack(choice, english)
                     }
+                }
+                .setNeutralButton(if (english) "Import audio file" else "اختيار ملف صوتيات") { _, _ ->
+                    openInAppAudioPicker()
                 }
                 .show()
         }
+    }
+
+    private fun openInAppAudioPicker() {
+        if (!BuildConfig.CODE_ONLY_LOGIN || kind != KIND_LIVE || sessionReleased) return
+        pendingArabicImportChannel = currentStreamId
+        runCatching { pickArabicAudioFile.launch(arrayOf("*/*")) }
+            .onFailure {
+                Toast.makeText(
+                    this, "تعذر فتح ملفات الجهاز على هذه الشاشة",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+    }
+
+    private fun showImportedArabicTracks(
+        tracks: List<StreamArabicAudioCatalog.Track>, english: Boolean
+    ) {
+        if (sessionReleased || kind != KIND_LIVE || tracks.isEmpty()) return
+        val labels = listOf(if (english) "Original channel audio" else "الصوت الأصلي للقناة") +
+            tracks.map { it.label }
+        AlertDialog.Builder(this)
+            .setTitle(if (english) "Audio from this device" else "صوتيات من داخل التطبيق")
+            .setItems(labels.toTypedArray()) { _, index ->
+                if (index == 0) {
+                    arabicAudioSession?.stop()
+                    arabicAudioSession = null
+                } else {
+                    tracks.getOrNull(index - 1)?.let { activateArabicTrack(it, english) }
+                }
+            }
+            .setNegativeButton(if (english) "Cancel" else "إلغاء", null)
+            .show()
+    }
+
+    private fun activateArabicTrack(
+        choice: StreamArabicAudioCatalog.Track, english: Boolean
+    ) {
+        if (!BuildConfig.CODE_ONLY_LOGIN || sessionReleased || kind != KIND_LIVE) return
+        val controller = StreamArabicAudioSession(
+            this, session.player, profileFromIntent()
+        ) {
+            if (!isFinishing && !sessionReleased) Toast.makeText(
+                this,
+                if (english) "Arabic audio unavailable; original audio restored."
+                else "تعذر تشغيل الصوت العربي، ورجع الصوت الأصلي.",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+        arabicAudioSession?.stop()
+        arabicAudioSession = controller
+        controller.start(choice)
+        showArabicAudioControls()
     }
 
     private fun showArabicAudioControls() {
@@ -1635,7 +1736,7 @@ open class PlayerActivity : ContentAccessActivity() {
             setPadding(dp(12), dp(18), dp(12), dp(18))
         }
         fun refresh() {
-            label.text = (controller.currentLabel ?: "") + "\\n" +
+            label.text = (controller.currentLabel ?: "") + "\n" +
                 if (english) "Audio delay: +${controller.delaySeconds}s (0–30s)"
                 else "تأخير الصوت: +${controller.delaySeconds} ثانية (0–30)"
         }
