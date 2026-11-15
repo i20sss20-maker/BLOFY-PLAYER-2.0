@@ -1,7 +1,8 @@
 // Restrict a private dynamic episode source Range to ONE active, leased,
 // rights-reviewed and size-probed episode. Provider URLs remain internal.
-export async function findActiveMirrorEpisode(pool,{gatewayId}={}){
+export async function findActiveMirrorEpisode(pool,{gatewayId,sourceId}={}){
  if(!Number.isSafeInteger(gatewayId)||gatewayId<1||
+    !/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(String(sourceId||''))||
     typeof pool?.query!=='function')return null;
  const r=await pool.query(`SELECT q.source_id,q.media_id,q.gateway_id,
     q.extension,q.expected_bytes,q.copy_run_id
@@ -14,6 +15,7 @@ export async function findActiveMirrorEpisode(pool,{gatewayId}={}){
     JOIN blofy_xtream_items i ON i.server_id=e.server_id
       AND i.media_type='series' AND i.source_id=e.series_source_id
     WHERE q.media_kind='episode' AND q.gateway_id=$1
+      AND q.source_id=$2::uuid
       AND q.state='copying' AND q.mapping_conflict=FALSE
       AND q.copy_lease_until>NOW()
       AND q.copy_run_id ~ '^mirror_[a-f0-9]{40}$'
@@ -27,7 +29,7 @@ export async function findActiveMirrorEpisode(pool,{gatewayId}={}){
       AND s.deletion_requested_at IS NULL
       AND lower(btrim(s.name))='saleh'
       AND s.last_sync_at>NOW()-INTERVAL '48 hours'
-    LIMIT 1`,[gatewayId]);
+    LIMIT 1`,[gatewayId,sourceId]);
  const row=r.rows?.[0];
  if(!row)return null;
  const size=Number(row.expected_bytes);
