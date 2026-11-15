@@ -105,6 +105,21 @@ class StreamAudioHealthTest {
     }
 
     @Test
+    fun automaticSelectionIsUserInitiatedOnlyForSupportedUnselectedAudio() {
+        val unselected = StreamAudioHealth.Summary(
+            StreamAudioHealth.State.SUPPORTED_NOT_SELECTED, 2, 1, 0, null
+        )
+        assertTrue(unselected.canOfferAudioAutoSelection(false))
+        assertFalse(unselected.canOfferAudioAutoSelection(true))
+        assertFalse(StreamAudioHealth.Summary(
+            StreamAudioHealth.State.UNSUPPORTED_AUDIO_CODEC, 1, 0, 0, null
+        ).canOfferAudioAutoSelection(false))
+        assertFalse(StreamAudioHealth.Summary(
+            StreamAudioHealth.State.AUDIO_TRACK_SELECTED, 1, 1, 1, MimeTypes.AUDIO_AAC
+        ).canOfferAudioAutoSelection(false))
+    }
+
+    @Test
     fun unsupportedAudioGivesRelevantGuidanceWithoutRebuildingPlayback() {
         val unsupported=StreamAudioHealth.Summary(
             StreamAudioHealth.State.UNSUPPORTED_AUDIO_CODEC,1,0,0,null)
