@@ -305,8 +305,17 @@ done
 
 for abi in "${REQUIRED_64_BIT_ABIS[@]}"; do
   library="$VERIFY_DIR/jni/$abi/libffmpegJNI.so"
+  # Guard against an incorrectly packaged x86_64 file. Print the
+  # architecture evidence before failing; an AAR containing a 32-bit
+  # binary under jni/x86_64 must NEVER advance into a signed app.
+  echo "--- FFmpeg JNI ELF check: $abi ---"
+  if command -v file >/dev/null 2>&1; then
+    file "$library"
+  fi
+  "$LLVM_READELF" -h "$library" | grep -E 'Class:|Machine:|OS/ABI:|Type:' || true
+  sha256sum "$library"
   if ! "$LLVM_READELF" -h "$library" | grep -Eq 'Class:[[:space:]]+ELF64'; then
-    echo "jni/$abi/libffmpegJNI.so is not a 64-bit ELF library" >&2
+    echo "::error::jni/$abi/libffmpegJNI.so is not ELF64; verify NDK ABI and correct AAR packaging" >&2
     exit 4
   fi
 
