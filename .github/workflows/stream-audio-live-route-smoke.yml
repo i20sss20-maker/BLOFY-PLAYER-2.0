@@ -1,0 +1,31 @@
+name: BLOFY STREAM Live Audio Route Smoke (Unauthenticated)
+on:
+  push:
+    branches: [qa/stream-audio-live-route-smoke-20261115]
+    paths: ['.github/workflows/stream-audio-live-route-smoke.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-route-auth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Verify existing portal stays healthy and protected audio route exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          for host in https://blofyplayer.com https://api.blofyplayer.com; do
+            echo "Checking $host health and audio route (no credentials)"
+            health="$(curl --max-time 20 --retry 2 --retry-delay 2 -sS -o /dev/null -w '%{http_code}' "$host/health")"
+            catalog="$(curl --max-time 20 --retry 2 --retry-delay 2 -sS -o /dev/null -w '%{http_code}' "$host/api/v1/stream/audio/catalog")"
+            audio="$(curl --max-time 20 --retry 2 --retry-delay 2 -sS -o /dev/null -w '%{http_code}' "$host/api/v1/stream/media/audio/anis-max-1")"
+            echo "status $host health=$health catalog=$catalog media=$audio"
+            test "$health" = 200
+            test "$catalog" = 401
+            test "$audio" = 401
+          done
+          echo 'HTTP 401 confirms the protected endpoints are registered, not public or missing.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Does NOT verify upstream sound, customer rights, timing sync or an authenticated session.' >> "$GITHUB_STEP_SUMMARY"
