@@ -12,6 +12,7 @@ import {verifyPrivateSeekRanges} from './seek-diagnostics.mjs';
 import {buildPrivateBrowserPreview} from './private-preview.mjs';
 import {buildStoredMovieSeekPreview} from './private-seek-preview.mjs';
 import {inspectPrivateTimeline,buildPrivateTimelineSegment} from './private-timeline.mjs';
+import {createPrivateTimelineClipCache} from './private-timeline-cache.mjs';
 import {parseSiteQaRange} from './site-qa-range.mjs';
 import {inspectEpisodeCandidates} from './episode-candidates.mjs';
 import {inspectEpisodeSize} from './episode-probe.mjs';
@@ -109,6 +110,7 @@ export function createContentHubServer({storage,lease,
  let previewBuilding=false,previewCache=null,previewThrottleUntil=0;
  let seekPreviewBuilding=false,seekPreviewThrottleUntil=0;
  let timelineRendering=false,timelineLastRequestAt=0;
+ const timelineClipCache=createPrivateTimelineClipCache();
  let episodeProbeBusy=false,episodeProbeAt=0,lastEpisodeProbe=null;
  let episodeCopyBusy=false,episodeCopyAbort=null,lastEpisodeCopy=null;
  let seasonStorageAuditBusy=false,seasonStorageAuditAt=0;
@@ -1097,7 +1099,23 @@ export function createContentHubServer({storage,lease,
       pilotEnv.BLOFY_CONTENT_HUB_BATCH_RUN_ID||'':
       pilotEnv.BLOFY_CONTENT_HUB_EPISODE_RUN_ID||''))
     return json(res,404,{ok:false,code:'private_timeline_not_available'});
-   if(timelineRendering||seekPreviewBuilding||previewBuilding)
+   // Validate the current SHA-verified private manifest before any cache
+   // hit: a changed file cannot reuse a previous run's MP4 bytes.
+   let cachedSegment=null,cacheSelection=null;
+   if(!isMeta){
+    try{
+     const saved=kind==='movie'?
+       await lease.getVerifiedChunkedObject(runId):
+       await lease.getVerifiedEpisodeObject(runId);
+     if(!saved||!/^[a-f0-9]{64}$/.test(String(saved.sha256||''))||
+        !Number.isSafeInteger(saved.bytes)||saved.bytes<2048)
+      return json(res,404,{ok:false,code:'private_timeline_not_verified'});
+     cacheSelection={mediaKind:kind,runId,sha256:saved.sha256,
+       originalFileBytes:saved.bytes,segment:Number(timelineRoute[4])};
+     cachedSegment=timelineClipCache.get(cacheSelection);
+    }catch{return json(res,503,{ok:false,code:'private_timeline_lease_unavailable'})}
+   }
+   if(!cachedSegment&&(timelineRendering||seekPreviewBuilding||previewBuilding))
     return json(res,429,{ok:false,code:'private_timeline_busy'});
    const abort=new AbortController();
    const timer=setTimeout(()=>abort.abort(),150000);timer.unref?.();
@@ -1118,15 +1136,19 @@ export function createContentHubServer({storage,lease,
        fullFilePlaybackVerified:false});
     }
     const segmentText=timelineRoute[4];
-    timelineRendering=true;timelineLastRequestAt=Date.now();
-    const segment=await timelineRenderer({
+    if(!cachedSegment){timelineRendering=true;timelineLastRequestAt=Date.now()}
+    const segment=cachedSegment||await timelineRenderer({
       runId,mediaKind:kind,segment:segmentText,
       storage,lease,signal:abort.signal});
     if(abort.signal.aborted)return;
-    if(!segment.ok||!Buffer.isBuffer(segment.bytes))
+    if(!segment.ok||!Buffer.isBuffer(segment.bytes)||
+       segment.segmentIndex!==Number(segmentText)||
+       segment.mediaKind!==kind||segment.runId!==runId||
+       segment.originalFileBytes!==cacheSelection.originalFileBytes)
      return json(res,503,{ok:false,
        code:segment.code||'private_timeline_segment_unavailable',
        privateOnly:true,providerRequests:0,customerCutover:false});
+    if(!cachedSegment)timelineClipCache.put(cacheSelection,segment);
     const bytes=segment.bytes;
     res.writeHead(200,{
      'content-type':'video/mp4','content-length':String(bytes.length),
@@ -1146,7 +1168,7 @@ export function createContentHubServer({storage,lease,
      return json(res,503,{ok:false,code:'private_timeline_unavailable'});
     if(!res.destroyed)res.destroy();
    }finally{
-    if(!isMeta)timelineRendering=false;
+    if(!isMeta&&!cachedSegment)timelineRendering=false;
     clearTimeout(timer);res.off('close',close);
    }
    return;
