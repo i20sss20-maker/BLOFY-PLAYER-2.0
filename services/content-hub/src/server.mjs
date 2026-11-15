@@ -123,6 +123,24 @@ export function createContentHubServer({storage,lease,
  let mirrorEpisodeBusy=false,lastMirrorEpisodeChunk=null;
  let mirrorQaBusy=false;
  const mirrorQaResults=new Map();
+ // Never assume that two healthy Railway services with DATABASE_URL
+ // point at the same PostgreSQL database. Fail closed before launching
+ // ANY new source-bound mirror job if the private Hub's DB cannot see
+ // the exact source/rights rows and S3 manifest registry.
+ async function assertMirrorTechnicalPreflight(){
+  if(!mirrorPreflightStore?.db)return {ok:false,
+   code:'mirror_copy_preflight_not_configured',customerCutover:false};
+  try{
+   const check=await inspectMirrorDeploymentPreflight({
+    db:mirrorPreflightStore.db,storage,env:pilotEnv
+   });
+   if(check.technicalPreflightPassed===true)return {ok:true};
+   return {ok:false,code:'mirror_copy_preflight_blocked',
+    blockedBy:check.blockedBy||[],customerCutover:false,
+    sourceMediaRequests:0};
+  }catch{return {ok:false,code:'mirror_copy_preflight_unavailable',
+   customerCutover:false,sourceMediaRequests:0}}
+ }
  let seasonStorageAuditBusy=false,seasonStorageAuditAt=0;
  let seasonConcurrentReadBusy=false,seasonConcurrentReadAt=0,lastSeasonConcurrentRead=null;
  const copy=createContinuousCopyController({
@@ -1507,6 +1525,8 @@ export function createContentHubServer({storage,lease,
     code:'mirror_episode_worker_busy',customerCutover:false};
    mirrorEpisodeBusy=true;
    try{
+    const before=await assertMirrorTechnicalPreflight();
+    if(!before.ok)return before;
     const result=await runOneApprovedMirrorEpisodeChunk({
      env:pilotEnv,now,store:mirrorEpisodeTransferStore,
      storage,lease,runner:episodeChunkRunner,logger,
@@ -1529,6 +1549,8 @@ export function createContentHubServer({storage,lease,
     code:'mirror_movie_worker_busy',customerCutover:false};
    mirrorMovieBusy=true;
    try{
+    const before=await assertMirrorTechnicalPreflight();
+    if(!before.ok)return before;
     const result=await runOneApprovedMirrorMovieChunk({
      env:pilotEnv,now,store:mirrorMovieTransferStore,
      storage,lease,runner:batchRunner,logger,
