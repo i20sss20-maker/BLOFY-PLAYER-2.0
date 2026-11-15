@@ -5,6 +5,7 @@ import {withXtreamAccountReconnect} from './xtream-api-resilience.mjs';
 import {createXtreamSyncQueue} from './xtream-sync-queue.mjs';
 import {listIndexedXtreamMirrorPage} from './xtream-mirror-inventory.mjs';
 import {reconcileStreamCatalogPage} from './content-hub-private-mirror-reconcile-bridge.mjs';
+import {forwardStreamS3HeadAudit} from './content-hub-private-head-audit-bridge.mjs';
 import {configuredDailySourceId,riyadhCatalogDay,scheduleDailyApprovedCatalog,
  markDailyCatalogRunning,recordDailyCatalogOutcome,readDailyCatalogReceipts
 } from './xtream-daily-approved-catalog.mjs';
@@ -3469,6 +3470,55 @@ async function unifiedStreamBridge(req,res,url){
   // private BLOFY STREAM operator bridge, never a customer endpoint.
   // Exact-source, read-only catalog inventory for the owner's *private*
   // mirror planning. No provider media reads, S3 writes or client cutover.
+  // Explicit owner on-demand S3 HEAD audit for ONE catalog item.
+  // The exact source is pinned by the Portal and the item must exist in
+  // its published indexed catalog; no arbitrary S3 paths or provider URLs.
+  if(p==='/internal/blofy-stream/ops/mirror-physical-head'){
+    if(req.method!=='GET')return json(res,405,{
+      ok:false,code:'stream_head_read_only'});
+    if(process.env.BLOFY_STREAM_MIRROR_PHYSICAL_HEAD_AUDIT_ENABLED!=='1')
+      return json(res,404,{ok:false,code:'stream_head_not_enabled'});
+    const sourceId=configuredDailySourceId(process.env);
+    const kind=String(url.searchParams.get('type')||'');
+    const id=String(url.searchParams.get('id')||'');
+    const requested=String(url.searchParams.get('start')||'0');
+    if(!sourceId||!['movie','episode'].includes(kind)||
+       !(kind==='movie'?/^[A-Za-z0-9._:-]{1,128}$/:
+         /^[1-9][0-9]{0,9}$/).test(id)||
+       !/^(0|[1-9][0-9]{0,2})$/.test(requested)||
+       Number(requested)>504||Number(requested)%8!==0)
+      return json(res,400,{ok:false,code:'stream_head_selection_invalid'});
+    try{
+      const source=await serverById(sourceId);
+      if(!source||String(source.id||'').toLowerCase()!==sourceId||
+         source.enabled!==true||source.publish_catalog!==true||
+         String(source.name||'').trim().toLowerCase()!=='saleh')
+        return json(res,404,{ok:false,code:'stream_head_source_unapproved'});
+      const indexed=kind==='movie'?
+        await controlPool.query(
+          "SELECT 1 FROM blofy_xtream_items "+
+          "WHERE server_id=$1 AND media_type='movie' "+
+          "AND source_id=$2 AND enabled=TRUE LIMIT 1",
+          [sourceId,id]):
+        await controlPool.query(
+          "SELECT 1 FROM blofy_xtream_gateway_episode_map e "+
+          "JOIN blofy_xtream_items i ON i.server_id=e.server_id "+
+          "AND i.media_type='series' AND i.source_id=e.series_source_id "+
+          "WHERE e.server_id=$1 AND e.gateway_id=$2 "+
+          "AND i.enabled=TRUE LIMIT 1",
+          [sourceId,Number(id)]);
+      if(indexed.rowCount!==1)return json(res,404,{
+        ok:false,code:'stream_head_catalog_item_unavailable'});
+      const out=await forwardStreamS3HeadAudit({
+        sourceId,kind,id,start:Number(requested),
+        hubToken:String(process.env.BLOFY_CONTENT_HUB_OPERATOR_TOKEN||'')});
+      return json(res,out.ok?200:out.code==='stream_head_audit_busy'?429:503,out,
+        {'cache-control':'no-store'});
+    }catch{return json(res,503,{
+      ok:false,code:'stream_head_unavailable',
+      mediaBytesTransferred:0,providerRequests:0,
+      customerCutover:false})}
+  }
   if(p==='/internal/blofy-stream/ops/mirror-inventory'){
     if(req.method!=='GET')return json(res,405,{
       ok:false,code:'mirror_inventory_read_only'});
