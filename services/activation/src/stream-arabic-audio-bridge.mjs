@@ -45,7 +45,7 @@ export function sniffFirstAudioMime(sample) {
   if(b.length>=3&&b.subarray(0,3).toString('ascii')==='ID3')return 'audio/mpeg';
   if(b.length>=4&&b.subarray(0,4).toString('ascii')==='OggS')return 'audio/ogg';
   if(b.length>=4&&b.subarray(0,4).toString('ascii')==='fLaC')return 'audio/flac';
-  if(b.length>=3&&b[0]===0xff&&(b[1]&0xf0)===0xf0)
+  if(b.length>=3&&b[0]===0xff&&(b[1]&0xf6)===0xf0)
     return 'audio/aac';
   if(b.length>=3&&b[0]===0xff&&(b[1]&0xe0)===0xe0)
     return 'audio/mpeg';
