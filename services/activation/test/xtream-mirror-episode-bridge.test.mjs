@@ -5,7 +5,7 @@ import {findActiveMirrorEpisode}
 
 const ID='123e4567-e89b-42d3-a456-426614174000';
 const row={source_id:ID,media_id:'ep_42',gateway_id:42,
- extension:'mkv',expected_bytes:'16777216',
+ series_media_id:'series_11',extension:'mkv',expected_bytes:'16777216',
  copy_run_id:'mirror_'+'a'.repeat(40)};
 
 test('one specific leased episode has active rights, exact series identity, and size',async()=>{
@@ -15,6 +15,7 @@ test('one specific leased episode has active rights, exact series identity, and 
  },{gatewayId:42,sourceId:ID});
  assert.equal(item.gatewayId,42);
  assert.equal(item.mediaId,'ep_42');
+ assert.equal(item.seriesMediaId,'series_11');
  assert.equal(item.sourceId,ID);
  assert.equal(item.expectedBytes,16777216);
  assert.equal(sql.length,1);
@@ -52,4 +53,10 @@ test('private mirror bridge refuses a missing, invalid or unpinned source before
  assert.equal(await findActiveMirrorEpisode(
   db,{gatewayId:42,sourceId:'wrong-source'}),null);
  assert.equal(reads,0);
+});
+
+test('missing leased episode parent cannot produce private source authorization',async()=>{
+ const db={query:async()=>({rows:[{...row,series_media_id:null}]})};
+ assert.equal(await findActiveMirrorEpisode(db,{
+  gatewayId:42,sourceId:ID}),null);
 });
