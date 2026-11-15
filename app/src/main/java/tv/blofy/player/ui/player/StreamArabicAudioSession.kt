@@ -55,6 +55,7 @@ internal class StreamArabicAudioSession(
 
     val isActive: Boolean get() = audio != null && track != null
     val currentLabel: String? get() = track?.label
+    val currentTrackId: String? get() = track?.id
     val delaySeconds: Int get() = delay
 
     fun start(item: StreamArabicAudioCatalog.Track) {
