@@ -7,6 +7,7 @@ import {readFile} from 'node:fs/promises';
 import {createFixedWindowLimiter,requestClientKey} from './auth-protection.mjs';
 import {adminCanaryRange,HUB_PILOT_RUN} from './content-hub-admin-core.mjs';
 import {buildUnifiedOpsOverview} from './content-hub-overview.mjs';
+import {enabledOwnerDeviceQa,mintOwnerDeviceQaTicket,forwardOwnerDeviceQaPlayback} from './content-hub-device-qa.mjs';
 
 const HUB='http://blofy-content-hub.railway.internal:3000';
 const ADMIN=String(process.env.BLOFY_ADMIN_TOKEN||'').trim();
@@ -234,10 +235,57 @@ http.createServer=function withContentHubAdmin(listener){
    }catch{return json(res,503,{ok:false,code:'admin_asset_unavailable'})}
   }
   const canary=runRoute.exec(path);
+  // Header-only HMAC owner device playback: no subscriber/media routes.
+  const qaPlayback=/^\/api\/v1\/private-device-qa\/(movie|episode)\/playback\/([A-Za-z0-9_-]{8,80})$/.exec(path);
+  if(qaPlayback)
+   return forwardOwnerDeviceQaPlayback({req,res,
+    mediaKind:qaPlayback[1],runId:qaPlayback[2],
+    env:process.env,requestHub:request});
   if(!path.startsWith('/api/v1/admin/content-hub/'))return listener(req,res);
   if(!authorized(req,res))return;
   if(url.search)return json(res,400,{ok:false,code:'query_forbidden'});
   try{
+   if(path==='/api/v1/admin/content-hub/mirror/device-qa/ticket'&&
+      req.method==='POST'){
+    if(!enabledOwnerDeviceQa(process.env))
+     return json(res,404,{ok:false,code:'mirror_device_qa_disabled'});
+    if(req.headers['x-blofy-owner-action']!=='issue-private-mirror-device-ticket')
+     return json(res,403,{ok:false,code:'mirror_device_qa_owner_action_required'});
+    const input=await readSeasonAdminBody(req);
+    const kind=String(input?.mediaKind||'');
+    const id=Number(input?.gatewayId);
+    const platform=String(input?.platform||'');
+    if(!['movie','episode'].includes(kind)||
+       !['windows','android','android_tv'].includes(platform)||
+       !Number.isSafeInteger(id)||id<1||
+       input?.rightsConfirmed!==true||
+       input?.ownerDeviceTest!==true)
+     return json(res,400,{ok:false,code:'mirror_device_qa_request_invalid'});
+    const response=await request('/internal/mirror/media-qa/'+kind+'/'+id+
+       '/device-proof',{method:'GET',signal:AbortSignal.timeout(9000),
+       extraHeaders:{'x-blofy-owner-action':
+         'prepare-private-mirror-device-qa'}});
+    if(response.status!==200)
+     return json(res,409,{ok:false,
+       code:'mirror_device_recent_private_av_proof_required'});
+    const proof=await safeReadJson(response);
+    if(proof?.ok!==true||proof.mediaKind!==kind||
+       !/^mirror_[a-f0-9]{40}$/.test(String(proof.runId||''))||
+       proof.customerCutover!==false||
+       proof.devicePlaybackValidated!==false)
+     return json(res,409,{ok:false,code:'mirror_device_qa_proof_invalid'});
+    const signed=mintOwnerDeviceQaTicket({
+     secret:process.env.BLOFY_CONTENT_HUB_DEVICE_QA_SIGNING_KEY,
+     runId:proof.runId,mediaKind:kind,platform
+    });
+    // Bearer token goes in the Authorization HEADER, not in endpoint URL.
+    return json(res,200,{ok:true,...signed,
+     endpoint:'https://blofyplayer.com/api/v1/private-device-qa/'+
+      kind+'/playback/'+proof.runId,
+     maxRangeBytes:8*1024*1024,manualDeviceTestRequired:true,
+     releaseToSubscribersApproved:false,
+     automaticDownload:false,customerCutover:false});
+   }
    if(path==='/api/v1/admin/content-hub/episodes/preview'&&req.method==='GET')
     return await handleEpisodePreview(req,res);
    // Only individually verified private queue episodes can be previewed.
