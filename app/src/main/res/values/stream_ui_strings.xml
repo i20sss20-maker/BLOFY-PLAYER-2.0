@@ -194,4 +194,5 @@
     <string name="stream_chat_series_prompt">Recommend a recent crime series</string>
     <string name="stream_chat_shortcut">Chat with BLOFY AI</string>
     <string name="stream_search_local_only">Search films, series, channels and cast locally. For recommendations, open BLOFY AI from the main menu.</string>
+    <string name="stream_ai_local_fallback">BLOFY AI is temporarily unavailable. Showing %1$d results verified in your local library instead. Tap a title to search.</string>
 </resources>
