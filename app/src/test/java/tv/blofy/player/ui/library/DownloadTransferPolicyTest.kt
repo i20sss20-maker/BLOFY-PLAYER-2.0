@@ -18,6 +18,13 @@ class DownloadTransferPolicyTest {
         assertNull(DownloadTransferPolicy.secondsRemaining(-1L, 5L, 300L))
         assertEquals(0L, DownloadTransferPolicy.bytesPerSecond(200L, 190L, 200L))
     }
+    @Test fun extremelyLargeLengthCannotOverflowSpaceOrEta() {
+        assertFalse(DownloadTransferPolicy.enoughSpace(900_000_000L, Long.MAX_VALUE))
+        assertTrue(DownloadTransferPolicy.enoughSpace(Long.MAX_VALUE, 1000L))
+        assertEquals(86_400L, DownloadTransferPolicy.secondsRemaining(Long.MAX_VALUE, 0L, 1L))
+        assertEquals(1L, DownloadTransferPolicy.secondsRemaining(Long.MAX_VALUE, Long.MAX_VALUE - 1, Long.MAX_VALUE))
+        assertNull(DownloadTransferPolicy.secondsRemaining(100L, -1L, 4L))
+    }
     @Test fun readyRequiresActualBytesAndAccessibleUri() {
         assertFalse(DownloadTransferPolicy.isValidDownloadedFile(8, 0L, true))
         assertFalse(DownloadTransferPolicy.isValidDownloadedFile(8, 10L, false))
