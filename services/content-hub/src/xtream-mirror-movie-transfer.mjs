@@ -5,13 +5,19 @@
 import pg from 'pg';
 import {randomBytes} from 'node:crypto';
 import {runChunkedMovieBatch,chunkedBatchReadiness} from './chunked-pilot.mjs';
-import {riyadhMirrorDay} from '../../activation/src/xtream-mirror-discovery-queue.mjs';
+function riyadhMirrorDay(now=new Date()){
+ const d=new Date(now);
+ if(!Number.isFinite(d.getTime()))throw Error('mirror_clock_invalid');
+ const p=Object.fromEntries(new Intl.DateTimeFormat('en-US',{
+  timeZone:'Asia/Riyadh',year:'numeric',month:'2-digit',day:'2-digit'
+ }).formatToParts(d).map(x=>[x.type,x.value]));
+ return [p.year,p.month,p.day].join('-');
+}
 
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const RUN=/^mirror_[a-f0-9]{40}$/;
 const PART=8*1024*1024, MAX_FILE=4*1024**3;
 const MAX_DAILY=512*1024**2;
-const MAX_DURATION=10*60*1000;
 const SAFE_CODE=/^[a-z0-9_]{1,80}$/;
 
 export function mirrorMovieDispatchReadiness(env={},now=new Date()){
