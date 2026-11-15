@@ -425,3 +425,53 @@ interactive testing before customer rollout.
 **Status:** PR #609 is a draft, not deployed. New metadata scan,
 copying and QA flags remain OFF; the code's offline tests are not
 evidence that the live Xtream catalog was transferred or played.
+
+
+## 2026-11-15: private owner-device QA playback ticket (Windows / Android / Android TV)
+
+The separately reviewed owner-device ticket implementation from draft
+PR #607 is integrated and expanded here to support **movie AND episode**.
+The public-facing *QA-only*, opt-in Range relay is:
+
+- `HEAD/GET /api/v1/private-device-qa/movie/playback/<runId>`
+- `HEAD/GET /api/v1/private-device-qa/episode/playback/<runId>`
+
+It requires `Authorization: Bearer <15-minute HMAC ticket>`, never
+a token in the URL. The signed ticket binds the exact run ID,
+media kind, device-test platform (`windows`, `android`, or
+`android_tv`), issue time and 15-minute expiry. A token for a movie
+cannot access an episode. Every GET requires an explicit byte range
+no larger than **8 MiB**. The activation portal forwards only a
+HEAD or bounded Range request to the **SHA-verified private S3-backed
+Content Hub**; it never accesses Xtream, a subscriber catalog, or
+long-lived provider credentials. It refuses unverified private objects.
+
+To issue one owner-only ticket, the current admin session POSTs to
+`/api/v1/admin/content-hub/mirror/device-qa/ticket` with
+`x-blofy-owner-action: issue-private-mirror-device-ticket`, and
+JSON `{"mediaKind":"episode","gatewayId":401,"platform":"windows",
+"rightsConfirmed":true,"ownerDeviceTest":true}`.
+This causes a private call to
+`/internal/mirror/media-qa/episode/401/device-proof`. It returns an
+approved run ID **only if** the exact mirror queue item still has its
+previously SHA-verified S3 manifest AND a matching successful private
+audio+video+four-seek canary recorded within the last 30 minutes.
+An old canary, changed run, mismatched SHA or missing verified storage
+cannot mint a ticket.
+
+This flow requires TWO additional, disabled-by-default switches:
+- On activation: `BLOFY_CONTENT_HUB_DEVICE_QA_ENABLED=1` and a unique
+  32+ character `BLOFY_CONTENT_HUB_DEVICE_QA_SIGNING_KEY` not shared
+  with any other token.
+- On Hub: `BLOFY_CONTENT_HUB_MIRROR_OWNER_QA_ENABLED=1` and working
+  private PostgreSQL+S3 manifest verification.
+
+Windows debug consumer is in separate draft PR **#608**; its endpoint
+has been changed to the episode-scoped path above. Its application is
+NOT a signed customer release, and actual hardware playback/audio
+testing has not been performed. Android/TV ticket issuance is supported
+at the backend but still requires an isolated debug-only app UI/player
+integration and physical device tests.
+
+**No flags are enabled in Railway production, no tokens were minted,
+and no external video was made publicly viewable in this QA branch.**
