@@ -511,3 +511,48 @@ physical free space, nor constitute a fresh complete S3 rehash.
 individual storage licensing, real provider quota, storage expense,
 real content transfer + A/V/seek canary and physical Android TV/Windows
 tests have completed.
+
+
+## 2026-11-15: resumable transient failures and verified Postgres retry policy
+
+**Durable recovery:** A temporary Xtream connection reset, private S3
+read problem, lease contention or worker cancellation should not mark
+an already downloaded movie/episode permanently failed. Both the real
+movie and episode dispatchers now classify only known **transient**
+errors as `retry`. The same PG queue row retains its original
+`copy_run_id`, `copied_parts` and private SHA-checked S3 chunk
+lineage. Under a source-scoped PostgreSQL row lock, the store schedules
+a retry after **15 minutes**, with **3 transient failures maximum**
+between successful checkpoints. After the third unsuccessful attempt,
+the item becomes `failed` and needs a new owner review. Successful
+verified chunk progress resets the retry count. The global
+8MiB-chunk/day budget still counts attempted source reads, including
+failed attempts; it is never refunded speculatively.
+
+Changed source size, source version/boundary, incorrect gateway
+mapping, corrupt S3 chunks and missing media licenses are **NOT**
+silently retried. They remain blocked pending manual review. A fresh
+rights attestation resets only the transient retry count and deadline,
+not old stored parts or SHA lineage. Incompatible old parts must be
+inspected/reset through a separate audited operator process, not
+automatically overwritten.
+
+**Crash after final checkpoint:** The episode worker now recognizes
+the case where the last part was SHA-verified and recorded but the
+process restarted before full-file finalization. It rereads all
+previously stored private S3 chunks, independently verifies each part
+and the full-file SHA, commits verified state, and requests **zero new
+source bytes**.
+
+**Verification added:** Offline tests exercise both real 8MiB HTTP
+Range-to-private-S3 workers, the last-chunk crash/restart case, and
+transient/permanent error classification. A separate disposable
+PostgreSQL 16 CI test exercises actual shared movie/episode source-day
+budget transactions, row locks, preserved run IDs, delayed retries
+and the three-attempt terminal state. No provider credentials or
+production resources are used in these tests.
+
+**Still draft:** Production feature flags remain disabled, all
+new files must have individually reviewed storage permission,
+and actual source/network and device playback performance remain
+unverified.
