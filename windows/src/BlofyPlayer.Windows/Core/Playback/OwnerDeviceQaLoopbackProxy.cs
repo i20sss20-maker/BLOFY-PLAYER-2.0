@@ -28,6 +28,7 @@ public sealed class OwnerDeviceQaLoopbackProxy : IAsyncDisposable
     private const long MaximumMediaBytes = 4L * 1024 * 1024 * 1024;
     private readonly string _runId;
     private readonly string _ticket;
+    private readonly string _mediaKind;
     private readonly string _secret = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(24));
     private readonly HttpClient _client = new(new HttpClientHandler
     {
@@ -41,20 +42,22 @@ public sealed class OwnerDeviceQaLoopbackProxy : IAsyncDisposable
     private long _length;
     public string PlaybackUrl { get; private set; } = "";
 
-    private OwnerDeviceQaLoopbackProxy(string runId, string ticket)
+    private OwnerDeviceQaLoopbackProxy(string runId, string ticket, string mediaKind)
     {
         _runId = runId;
         _ticket = ticket;
+        _mediaKind = mediaKind;
     }
 
     public static async Task<OwnerDeviceQaLoopbackProxy> StartAsync(
-        string runId, string ticket, CancellationToken cancellationToken = default)
+        string runId, string ticket, string mediaKind = "episode", CancellationToken cancellationToken = default)
     {
         if (!Regex.IsMatch(runId ?? "", @"^[A-Za-z0-9_-]{8,80}$") ||
-            !Regex.IsMatch(ticket ?? "", @"^v1\.[A-Za-z0-9_-]{20,450}\.[A-Za-z0-9_-]{43}$"))
+            !Regex.IsMatch(ticket ?? "", @"^v1\.[A-Za-z0-9_-]{20,450}\.[A-Za-z0-9_-]{43}$") ||
+            mediaKind is not ("movie" or "episode"))
             throw new InvalidOperationException("Invalid owner QA run or short-lived ticket");
 
-        var proxy = new OwnerDeviceQaLoopbackProxy(runId, ticket);
+        var proxy = new OwnerDeviceQaLoopbackProxy(runId, ticket, mediaKind);
         try
         {
             await proxy.ReadVerifiedMetadataAsync(cancellationToken);
@@ -72,9 +75,11 @@ public sealed class OwnerDeviceQaLoopbackProxy : IAsyncDisposable
         HttpMethod method, string? exactRange, CancellationToken cancellationToken)
     {
         var request = new HttpRequestMessage(method,
-            "https://blofyplayer.com/api/v1/private-device-qa/episode/playback/" + _runId);
+            "https://blofyplayer.com/api/v1/private-device-qa/" + _mediaKind +
+            "/playback/" + _runId);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _ticket);
         request.Headers.TryAddWithoutValidation("User-Agent", "BLOFY-Windows-OwnerDeviceQA/1");
+        request.Headers.TryAddWithoutValidation("x-blofy-device-platform", "windows");
         if (exactRange is not null)
             request.Headers.TryAddWithoutValidation("Range", exactRange);
         using (request)
@@ -110,7 +115,7 @@ public sealed class OwnerDeviceQaLoopbackProxy : IAsyncDisposable
         });
         builder.WebHost.UseKestrel(options => options.Listen(IPAddress.Loopback, 0));
         var app = builder.Build();
-        app.MapMethods("/{key}/episode/{file}", ["HEAD", "GET"],
+        app.MapMethods("/{key}/media/{file}", ["HEAD", "GET"],
             async (HttpContext context, string key, string file) =>
             {
                 if (key != _secret || file != LocalName())
@@ -143,7 +148,7 @@ public sealed class OwnerDeviceQaLoopbackProxy : IAsyncDisposable
                 a => a.StartsWith("http://127.0.0.1:", StringComparison.Ordinal));
             if (url is null) throw new InvalidOperationException("Owner QA loopback did not bind");
             PlaybackUrl = url.TrimEnd('/') + "/" + _secret +
-                "/episode/" + LocalName();
+                "/media/" + LocalName();
             _app = app;
         }
         catch
