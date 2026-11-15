@@ -7,12 +7,16 @@ import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.text.Editable
+import android.text.InputType
+import android.text.TextWatcher
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.Window
 import android.view.WindowManager
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -21,6 +25,8 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -88,6 +94,12 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
         private var loading = false
         private var displayedChannels: List<StreamEntity> = emptyList()
         private var currentChannelKey: String? = null
+        private var originalChannels: List<StreamEntity> = emptyList()
+        private var activeTab: LiveChannelTab = LiveChannelTab.ALL
+        private var searchText: String = ""
+        private var filterJob: Job? = null
+        private var visibleAdapter: LiveChannelAdapter? = null
+        private var visibleCount: TextView? = null
 
         override fun dispatchKeyEvent(event: KeyEvent): Boolean {
             if (event.action != KeyEvent.ACTION_DOWN) return delegate.dispatchKeyEvent(event)
@@ -125,9 +137,14 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
         }
 
         fun close() {
+            filterJob?.cancel()
+            filterJob = null
             dialog?.dismiss()
             dialog = null
             displayedChannels = emptyList()
+            originalChannels = emptyList()
+            visibleAdapter = null
+            visibleCount = null
             currentChannelKey = null
         }
 
@@ -185,6 +202,9 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                     return@launch
                 }
                 displayedChannels = channels
+                originalChannels = channels
+                activeTab = LiveChannelTab.ALL
+                searchText = ""
                 currentChannelKey = RecentChannelStore.keys(activity, providerId).firstOrNull()
                     ?: activity.intent.getStringExtra(PlayerActivity.EXTRA_CONTENT_KEY).orEmpty()
                 showDialog(result.second)
@@ -214,6 +234,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             )
             adapter.submit(channels)
             list.adapter = adapter
+            visibleAdapter = adapter
 
             val header = TextView(activity).apply {
                 text = buildString {
@@ -241,6 +262,79 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 maxLines = 1
                 ellipsize = android.text.TextUtils.TruncateAt.END
             }
+            val searchField = if (BuildConfig.CODE_ONLY_LOGIN) EditText(activity).apply {
+                hint = copy("بحث في جميع القنوات…", "Search all channels…")
+                contentDescription = hint
+                textSize = 13.5f
+                setSingleLine(true)
+                inputType = InputType.TYPE_CLASS_TEXT
+                setTextColor(Color.WHITE)
+                setHintTextColor(0xFFB7ABC5.toInt())
+                setPadding(dp(12), dp(8), dp(12), dp(8))
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(12).toFloat()
+                    setColor(0x8A1A1527.toInt())
+                    setStroke(dp(1), 0x7B6D508D)
+                }
+                addTextChangedListener(object : TextWatcher {
+                    override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                    override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                        searchText = s?.toString().orEmpty().take(80)
+                        refreshList()
+                    }
+                    override fun afterTextChanged(s: Editable?) = Unit
+                })
+            } else null
+            val tabs = LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutDirection = activity.resources.configuration.layoutDirection
+                gravity = Gravity.CENTER
+                setPadding(dp(6), 0, dp(6), 0)
+                if (BuildConfig.CODE_ONLY_LOGIN) {
+                    val options = listOf(
+                        LiveChannelTab.ALL to copy("الكل", "All"),
+                        LiveChannelTab.FAVORITES to copy("★ المفضلة", "★ Favorites"),
+                        LiveChannelTab.RECENT to copy("◷ الأخيرة", "◷ Recent")
+                    )
+                    options.forEach { (tab, caption) ->
+                        addView(TextView(activity).apply {
+                            text = caption
+                            contentDescription = caption
+                            textSize = 11.7f
+                            gravity = Gravity.CENTER
+                            setTextColor(Color.WHITE)
+                            isFocusable = true
+                            isClickable = true
+                            background = GradientDrawable().apply {
+                                cornerRadius = dp(10).toFloat()
+                                setColor(if (tab == activeTab) 0xB25A3384.toInt() else 0x522C2538)
+                            }
+                            setOnClickListener {
+                                activeTab = tab
+                                for (index in 0 until childCount) {
+                                    childAt(index)?.background = GradientDrawable().apply {
+                                        cornerRadius = dp(10).toFloat()
+                                        setColor(if (index == options.indexOfFirst { it.first == tab })
+                                            0xB25A3384.toInt() else 0x522C2538)
+                                    }
+                                }
+                                refreshList()
+                            }
+                        }, LinearLayout.LayoutParams(0, dp(36), 1f).apply {
+                            marginStart = dp(2); marginEnd = dp(2)
+                        })
+                    }
+                }
+            }
+            val count = TextView(activity).apply {
+                text = copy("${channels.size} قناة", "${channels.size} channels")
+                textSize = 10.5f
+                setTextColor(BlofyTvDesign.TextMuted)
+                gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                setPadding(dp(12), 0, dp(12), 0)
+            }
+            visibleCount = count
+
             val panel = LinearLayout(activity).apply {
                 orientation = LinearLayout.VERTICAL
                 layoutDirection = activity.resources.configuration.layoutDirection
@@ -254,6 +348,14 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 elevation = dp(7).toFloat()
                 addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(36)))
                 addView(hint, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(24)))
+                if (BuildConfig.CODE_ONLY_LOGIN) {
+                    searchField?.let { addView(it, LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, dp(46)).apply {
+                            marginStart = dp(7); marginEnd = dp(7); bottomMargin = dp(5)
+                        }) }
+                    addView(tabs, LinearLayout.LayoutParams(-1, dp(40)))
+                    addView(count, LinearLayout.LayoutParams(-1, dp(19)))
+                }
                 // Channel rows scroll above the controls. Both are in this one
                 // translucent panel, not in separate floating HUD windows.
                 addView(list, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
@@ -285,7 +387,11 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             created.setCanceledOnTouchOutside(false)
             created.setOnDismissListener {
                 if (dialog === created) dialog = null
+                filterJob?.cancel()
+                visibleAdapter = null
+                visibleCount = null
                 displayedChannels = emptyList()
+                originalChannels = emptyList()
                 currentChannelKey = null
             }
             dialog = created
@@ -308,6 +414,59 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 }
             }
             created.show()
+        }
+
+        /** Search is bounded and debounced. Favorites and recents are resolved
+         * from the user's real local provider rows, never invented remote URLs. */
+        private fun refreshList() {
+            val openDialog = dialog ?: return
+            val adapter = visibleAdapter ?: return
+            val providerId = activity.intent.getStringExtra(PlayerActivity.EXTRA_PROVIDER_ID).orEmpty()
+            if (providerId.isBlank()) return
+            val query = searchText
+            val tab = activeTab
+            val base = originalChannels
+            filterJob?.cancel()
+            filterJob = activity.lifecycleScope.launch {
+                delay(160)
+                val filtered = withContext(Dispatchers.IO) {
+                    val dao = BlofyDatabase.get(activity.applicationContext).dao()
+                    val source = when (tab) {
+                        LiveChannelTab.ALL -> if (query.isBlank()) base
+                            else runCatching { dao.searchCatalog(providerId, KIND_LIVE, query, 200) }
+                                .getOrDefault(emptyList())
+                        LiveChannelTab.FAVORITES ->
+                            runCatching { dao.favorites(providerId).first() }
+                                .getOrDefault(emptyList()).filter { it.kind == KIND_LIVE }
+                        LiveChannelTab.RECENT ->
+                            RecentChannelStore.keys(activity, providerId).take(30).mapNotNull {
+                                key -> runCatching { dao.stream(key) }.getOrNull()
+                                    ?.takeIf { it.kind == KIND_LIVE && it.providerId == providerId }
+                            }
+                    }
+                    source.filter { LiveChannelPanelPolicy.matchesSearch(it.name, query) }
+                        .distinctBy { it.key }.take(200)
+                }
+                if (dialog !== openDialog || openDialog.isShowing.not() ||
+                    activity.isFinishing || activity.isDestroyed || activeTab != tab ||
+                    searchText != query) return@launch
+                adapter.replace(filtered)
+                displayedChannels = filtered
+                visibleCount?.text = if (filtered.isEmpty())
+                    copy("ما فيه قنوات مطابقة", "No matching channels")
+                    else copy("${filtered.size} قناة", "${filtered.size} channels")
+                if (filtered.isNotEmpty() && !query.isBlank()) {
+                    // Avoid stealing focus from the soft keyboard during typing.
+                    listFocusAfterFilter(adapter, filtered)
+                }
+            }
+        }
+
+        private fun listFocusAfterFilter(adapter: LiveChannelAdapter, channels: List<StreamEntity>) {
+            // The RecyclerView keeps the current focus during search; only its
+            // adapter changes. This helper deliberately never jumps to another
+            // view while the user is entering text.
+            if (adapter.itemCount == 0 || channels.isEmpty()) return
         }
 
         /**
