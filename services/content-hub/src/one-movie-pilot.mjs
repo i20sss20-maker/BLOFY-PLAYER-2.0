@@ -161,7 +161,7 @@ export async function runOneMoviePilot({
  let result={...BASE,ok:false,code:'pilot_failed',stored:false};
  let objectKey=null;
  try{
-  const meta=await getMetadata(fetchImpl,token,combined);
+  const meta=await getMetadata(fetchImpl,token,combined,env);
   if(approvedGatewayId!==meta.gatewayId)
    throw Error('pilot_movie_not_approved');
   // Versioned private object key: never overwrite a previous verified copy.
