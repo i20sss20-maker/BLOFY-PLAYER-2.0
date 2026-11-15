@@ -90,12 +90,12 @@ function fakeLease(kind){
   async loadChunkedRun(args){
    assert.equal(kind,'movie');
    if(!run)run={...args,state:'staged',parts:[],validator:null};
-   return run;
+   return {...run,parts:run.parts.slice()};
   },
   async loadEpisodeRun(args){
    assert.equal(kind,'episode');
    if(!run)run={...args,state:'staged',parts:[],validator:null};
-   return run;
+   return {...run,parts:run.parts.slice()};
   },
   async recordChunk(id,part){
    assert.equal(id,RUN_ID);
