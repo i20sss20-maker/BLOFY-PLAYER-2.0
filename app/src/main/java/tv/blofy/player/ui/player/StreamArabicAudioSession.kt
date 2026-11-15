@@ -15,6 +15,8 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.DefaultHttpDataSource
 import tv.blofy.player.core.network.TransportFactory
 import tv.blofy.player.core.provider.ProviderProfile
 
@@ -56,14 +58,29 @@ internal class StreamArabicAudioSession(
 
     fun start(item: StreamArabicAudioCatalog.Track) {
         stop()
-        if (!StreamArabicAudioCatalog.trustedAudioUrl(item.playbackUrl)) return
+        if (!StreamArabicAudioCatalog.playableUrl(item.playbackUrl)) return
         originalVolume = video.volume
         track = item
         delay = ArabicSidecarTimingPolicy.clamp(item.initialDelaySeconds)
         val version = ++generation
+        // No STREAM authentication bearer ever leaves blofyplayer.com.
+        // Personal in-app playlist URLs use a separate credential-free
+        // transport. The main Xtream/video session remains unchanged.
+        val upstream = if (StreamArabicAudioCatalog.trustedAudioUrl(item.playbackUrl)) {
+            TransportFactory.create(appContext, profile)
+        } else {
+            DefaultDataSource.Factory(
+                appContext,
+                DefaultHttpDataSource.Factory()
+                    .setUserAgent("BLOFY STREAM Audio/1.0")
+                    .setAllowCrossProtocolRedirects(false)
+                    .setConnectTimeoutMs(8_000)
+                    .setReadTimeoutMs(15_000)
+            )
+        }
         val companion = ExoPlayer.Builder(appContext)
             .setRenderersFactory(DefaultRenderersFactory(appContext).setEnableDecoderFallback(true))
-            .setMediaSourceFactory(DefaultMediaSourceFactory(TransportFactory.create(appContext, profile)))
+            .setMediaSourceFactory(DefaultMediaSourceFactory(upstream))
             .build()
         audio = companion
         companion.setAudioAttributes(
