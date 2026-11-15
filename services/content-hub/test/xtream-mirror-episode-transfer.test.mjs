@@ -112,7 +112,7 @@ test('cross-item daily byte budget table is the same as the movie worker',async(
   release(){}
   async query(sql,args=[]){
    logs.push({sql,args});
-   if(sql.startsWith('CREATE')||sql==='BEGIN'||sql==='COMMIT')
+   if(sql.startsWith('CREATE')||sql.startsWith('ALTER')||sql==='BEGIN'||sql==='COMMIT')
     return {rowCount:0,rows:[]};
    if(sql.startsWith('INSERT'))return {rowCount:1,rows:[]};
    if(sql.includes('SELECT reserved_bytes'))return {rows:[{reserved_bytes:'0'}]};
