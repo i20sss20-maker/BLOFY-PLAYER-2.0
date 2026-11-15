@@ -14,7 +14,7 @@ test('mirror dashboard is linked and served by the explicit admin asset allowlis
   readFile(new URL('admin-mirror-dashboard.js',web),'utf8')
  ]);
  assert.match(html,/<script src="\/admin-mirror-dashboard\.js" defer><\/script>/);
- assert.match(hook,/\/'\/admin-mirror-dashboard\.js'/);
+ assert.ok(hook.includes("'/admin-mirror-dashboard.js'"));
  assert.doesNotThrow(()=>new Script(js,{filename:'admin-mirror-dashboard.js'}));
  for(const id of ['mirrorSource','mirrorKind','mirrorState',
   'mirrorStatus','mirrorStats','mirrorRows','mirrorScan',
