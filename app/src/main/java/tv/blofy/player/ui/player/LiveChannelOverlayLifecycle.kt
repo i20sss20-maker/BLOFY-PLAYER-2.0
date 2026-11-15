@@ -412,12 +412,25 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             // Dialogs own focus on Android TV; activity's Window.Callback is
             // not guaranteed to see BACK while the joined panel is open.
             // One BACK returns to controls, the next dismisses the sidebar.
+            var consumeBackRelease = false
             created.setOnKeyListener { _, keyCode, event ->
-                if (keyCode == KeyEvent.KEYCODE_BACK &&
-                    event.action == KeyEvent.ACTION_DOWN && audioPickerOpen) {
-                    restoreMainActions?.invoke()
-                    true
-                } else false
+                if (keyCode != KeyEvent.KEYCODE_BACK) false
+                else when (event.action) {
+                    KeyEvent.ACTION_DOWN -> {
+                        if (audioPickerOpen) {
+                            consumeBackRelease = true
+                            restoreMainActions?.invoke()
+                            true
+                        } else false
+                    }
+                    KeyEvent.ACTION_UP -> {
+                        if (consumeBackRelease) {
+                            consumeBackRelease = false
+                            true // Do not also dismiss the sidebar on key-up.
+                        } else false
+                    }
+                    else -> false
+                }
             }
             created.setOnDismissListener {
                 if (dialog === created) dialog = null
