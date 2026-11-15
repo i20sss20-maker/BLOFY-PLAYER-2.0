@@ -1469,6 +1469,45 @@ export function createContentHubServer({storage,lease,
   return json(res,404,{ok:false,code:'content_hub_not_found'});
  });
  return {server,
+  // One-shot real private S3 ffprobe + FFmpeg 30s segment smoke test for
+  // owner QA only; sanitized stats, no subscriber stream or provider call.
+  runTimelineSelfCheck:async({mediaKind='movie',segment='0'}={})=>{
+   if(!['movie','episode'].includes(mediaKind)||
+      !/^(0|[1-9][0-9]{0,3})$/.test(String(segment)))
+    return {ok:false,code:'private_timeline_selection_invalid'};
+   if(pilotEnv.BLOFY_CONTENT_HUB_WEBSITE_TIMELINE_ENABLED!=='1'||
+      pilotEnv.BLOFY_CONTENT_HUB_STORAGE_RIGHTS_CONFIRMED!=='1'||
+      pilotEnv.BLOFY_CONTENT_HUB_OWNER_PREVIEW_ENABLED!=='1'||
+      (mediaKind==='episode'&&(
+        pilotEnv.BLOFY_CONTENT_HUB_EPISODE_RIGHTS_CONFIRMED!=='1'||
+        pilotEnv.BLOFY_CONTENT_HUB_EPISODE_OWNER_PREVIEW_ENABLED!=='1')))
+    return {ok:false,code:'private_timeline_gates_off'};
+   if(timelineRendering||seekPreviewBuilding||previewBuilding)
+    return {ok:false,code:'private_timeline_busy'};
+   const runId=String(mediaKind==='movie'?
+     pilotEnv.BLOFY_CONTENT_HUB_BATCH_RUN_ID||'':
+     pilotEnv.BLOFY_CONTENT_HUB_EPISODE_RUN_ID||'');
+   if(!/^[A-Za-z0-9_-]{8,80}$/.test(runId))
+    return {ok:false,code:'private_timeline_run_not_selected'};
+   timelineRendering=true;
+   try{
+    const result=await timelineRenderer({
+      runId,mediaKind,segment,lease,storage});
+    return {ok:result.ok===true,code:result.code,
+     mediaKind,segmentIndex:result.segmentIndex??null,
+     startSeconds:result.startSeconds||0,
+     segmentDurationSeconds:result.segmentDurationSeconds||0,
+     originalDurationSeconds:result.originalDurationSeconds||0,
+     originalFileBytes:result.originalFileBytes||0,
+     privateS3BytesRead:result.privateS3BytesRead||0,
+     privateS3RangeRequests:result.privateS3RangeRequests||0,
+     outputMp4Bytes:Buffer.isBuffer(result.bytes)?result.bytes.length:0,
+     providerRequests:0,customerCutover:false,
+     fullFilePlaybackVerified:false};
+   }catch{return {ok:false,code:'private_timeline_smoke_failed',
+     providerRequests:0,customerCutover:false}}
+   finally{timelineRendering=false}
+  },
   // Read only SHA-verified S3 source bytes; tests actual on-demand FFmpeg
   // seek preview at the chosen position. NEVER exposes a customer URL.
   runSeekPreviewSelfCheck:async({mediaKind='movie',position='middle'}={})=>{
@@ -1839,6 +1878,41 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
      JSON.stringify({ok:false,code:'episode_catalog_unavailable',
       providerMediaRequests:0,automaticDownload:false})));
    },4000);timer.unref?.();
+  }
+  // A single owner-authorized 30s timeline MP4 smoke from the private
+  // verified S3 file. One-time event is claimed durably in PostgreSQL.
+  if(process.env.BLOFY_CONTENT_HUB_TIMELINE_SMOKE_ON_BOOT==='1'){
+   const timer=setTimeout(()=>{
+    void (async()=>{
+     const kind=String(process.env.BLOFY_CONTENT_HUB_TIMELINE_SMOKE_MEDIA_KIND||'movie');
+     const segment=String(process.env.BLOFY_CONTENT_HUB_TIMELINE_SMOKE_SEGMENT||'0');
+     const event=String(process.env.BLOFY_CONTENT_HUB_TIMELINE_SMOKE_BOOT_TOKEN||'');
+     const runId=String(kind==='movie'?
+       process.env.BLOFY_CONTENT_HUB_BATCH_RUN_ID||'':
+       process.env.BLOFY_CONTENT_HUB_EPISODE_RUN_ID||'');
+     if(!/^[A-Za-z0-9_-]{8,80}$/.test(event)||
+       !/^[A-Za-z0-9_-]{8,80}$/.test(runId)||
+       !['movie','episode'].includes(kind)||
+       !/^(0|[1-9][0-9]{0,3})$/.test(segment))
+      return {ok:false,code:'private_timeline_smoke_settings_invalid'};
+     if(!await lease.claimBatchBootOnce(event,runId))
+      return {ok:false,code:'private_timeline_smoke_already_claimed'};
+     return hub.runTimelineSelfCheck({mediaKind:kind,segment});
+    })().then(result=>console.info('BLOFY_CONTENT_HUB_TIMELINE_SMOKE',
+      JSON.stringify({ok:result.ok===true,code:result.code,
+       mediaKind:result.mediaKind||null,
+       segmentIndex:result.segmentIndex??null,
+       startSeconds:result.startSeconds||0,
+       segmentDurationSeconds:result.segmentDurationSeconds||0,
+       originalDurationSeconds:result.originalDurationSeconds||0,
+       privateS3BytesRead:result.privateS3BytesRead||0,
+       privateS3RangeRequests:result.privateS3RangeRequests||0,
+       outputMp4Bytes:result.outputMp4Bytes||0,
+       providerRequests:0,customerCutover:false})))
+     .catch(()=>console.warn('BLOFY_CONTENT_HUB_TIMELINE_SMOKE',
+       JSON.stringify({ok:false,code:'private_timeline_smoke_error',
+        customerCutover:false,providerRequests:0})));
+   },9500);timer.unref?.();
   }
   // One-time private website seek check at an owner-approved file position.
   // Must be explicitly enabled with unique PostgreSQL boot token; no source
