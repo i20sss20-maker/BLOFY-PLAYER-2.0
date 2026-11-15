@@ -48,7 +48,7 @@ internal object StreamArabicAudioCatalog {
      * STREAM activation bearer to them. Restrict these to public HTTPS hosts.
      */
     internal fun publicAudioUrl(value: String): Boolean {
-        if (value.length !in 12..1600 || value.any { it.isWhitespace() || it.isISOControl() })
+        if (value.length !in 12..1600 || value.any { it.isWhitespace() || it.code < 32 || it.code == 127 })
             return false
         val uri = runCatching { Uri.parse(value) }.getOrNull() ?: return false
         val host = uri.host?.lowercase() ?: return false
