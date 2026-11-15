@@ -178,3 +178,30 @@ test('budget exhausted before provider/source job claim',async()=>{
  assert.ok(calls>=4);
  await store.close();
 });
+
+test('retryable movie connection reset preserves SHA chunks and schedules bounded backoff',async()=>{
+ const f=fixture();
+ f.store.finish=async(job,opts)=>{
+  f.calls.push(['finish',job,opts]);
+  return {ok:true,state:'approved',retryAttempts:1,
+   retryAfter:'2026-11-15T01:27:00Z'};
+ };
+ const answer=await runOneApprovedMirrorMovieChunk({...f,env,now:time,
+  runner:async()=>({ok:false,code:'batch_retryable_error',
+   checkpointsRetained:2,errorStage:'source_chunk'})});
+ assert.equal(answer.ok,false);
+ assert.equal(answer.code,'mirror_movie_retry_scheduled');
+ assert.equal(answer.retryAttempts,1);
+ assert.equal(answer.nextRetryAt,'2026-11-15T01:27:00Z');
+ assert.equal(f.calls[1][2].status,'retry');
+ assert.equal(f.calls[1][2].parts,2);
+ assert.equal(f.calls[1][2].code,'batch_retryable_error');
+ const exhausted=fixture();
+ exhausted.store.finish=async()=>({ok:true,state:'failed',
+  retryAttempts:3,retryAfter:null});
+ const blocked=await runOneApprovedMirrorMovieChunk({
+  ...exhausted,env,now:time,
+  runner:async()=>({ok:false,code:'batch_retryable_error'})});
+ assert.equal(blocked.code,'mirror_movie_retry_limit_review');
+ assert.equal(blocked.ok,false);
+});
