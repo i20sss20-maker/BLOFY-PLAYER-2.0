@@ -1414,9 +1414,16 @@ export function createContentHubServer({storage,lease,
    if(episodePlayback){
     try{saved=await lease.getVerifiedEpisodeObject?.(playbackId)}catch{}
    }else{
-    try{saved=await lease.getVerifiedPilotObject?.(playbackId)}catch{}
-    if(!saved)try{saved=await lease.getVerifiedChunkedObject?.(
-      playbackId)}catch{}
+    // A mirror ticket is scoped to a private SHA-verified CHUNK manifest.
+    // Never allow a legacy pilot run with the same identifier to shadow
+    // the reviewed mirror and stream unrelated media to an owner device.
+    if(/^mirror_[a-f0-9]{40}$/.test(playbackId)){
+     try{saved=await lease.getVerifiedChunkedObject?.(playbackId)}catch{}
+    }else{
+     try{saved=await lease.getVerifiedPilotObject?.(playbackId)}catch{}
+     if(!saved)try{saved=await lease.getVerifiedChunkedObject?.(
+       playbackId)}catch{}
+    }
    }
    if(!saved||!Number.isSafeInteger(saved.bytes)||saved.bytes<=0)
     return json(res,404,{ok:false,code:'pilot_verified_media_unavailable'});
