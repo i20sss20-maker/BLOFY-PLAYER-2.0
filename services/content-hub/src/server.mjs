@@ -11,6 +11,8 @@ import {planDailyLicensedXtreamCopies} from './xtream-daily-copy-plan.mjs';
 import {createDailyMediaSessionStore,startApprovedDailyMediaSession} from './xtream-daily-media-worker.mjs';
 import {createMirrorMovieTransferStore,runOneApprovedMirrorMovieChunk,
  mirrorMovieDispatchReadiness} from './xtream-mirror-movie-transfer.mjs';
+import {createMirrorEpisodeTransferStore,runOneApprovedMirrorEpisodeChunk,
+ mirrorEpisodeDispatchReadiness} from './xtream-mirror-episode-transfer.mjs';
 import {diagnoseVerifiedMovie} from './playback-diagnostics.mjs';
 import {verifyPrivateSeekRanges} from './seek-diagnostics.mjs';
 import {buildPrivateBrowserPreview} from './private-preview.mjs';
@@ -94,6 +96,7 @@ export function createContentHubServer({storage,lease,
  episodeSizeInspector=inspectEpisodeSize,
  episodeChunkRunner=runOneEpisodeChunk,seasonQueueStore=null,catalogStore=null,
  dailyMediaSessionStore=null,mirrorMovieTransferStore=null,
+ mirrorEpisodeTransferStore=null,
  metadataMatcher=createMetadataMatcher({
   token:process.env.BLOFY_TMDB_READ_TOKEN||'',
   commercialLicenseConfirmed:process.env.BLOFY_TMDB_COMMERCIAL_LICENSE_CONFIRMED==='1'
@@ -111,6 +114,7 @@ export function createContentHubServer({storage,lease,
  let episodeProbeBusy=false,episodeProbeAt=0,lastEpisodeProbe=null;
  let episodeCopyBusy=false,episodeCopyAbort=null,lastEpisodeCopy=null;
  let mirrorMovieBusy=false,lastMirrorMovieChunk=null;
+ let mirrorEpisodeBusy=false,lastMirrorEpisodeChunk=null;
  let seasonStorageAuditBusy=false,seasonStorageAuditAt=0;
  let seasonConcurrentReadBusy=false,seasonConcurrentReadAt=0,lastSeasonConcurrentRead=null;
  const copy=createContinuousCopyController({
@@ -129,7 +133,7 @@ export function createContentHubServer({storage,lease,
   store:seasonQueueStore,storage,lease,env:pilotEnv,
   runner:episodeChunkRunner,logger,
   isSourceBusy:()=>episodeCopyBusy||episodeCopy.isRunning()||
-   pilotRunning||copy.isRunning()||mirrorMovieBusy
+   pilotRunning||copy.isRunning()||mirrorMovieBusy||mirrorEpisodeBusy
  }):null;
  async function runFullPlaybackCanary(runId,mediaKind='movie'){
   const diag=await diagnoseVerifiedMovie({runId,storage,lease,mediaKind});
@@ -188,6 +192,19 @@ export function createContentHubServer({storage,lease,
    }catch{return json(res,400,{ok:false,
       code:'mirror_preview_catalog_invalid',providerRequests:0,
       bytesTransferred:0,customerCutover:false})}
+  }
+  if(path==='/internal/mirror/episode/status'&&req.method==='GET'){
+   if(String(req.url||'').includes('?')||!mirrorEpisodeTransferStore)
+    return json(res,404,{ok:false,code:'mirror_episode_dispatch_not_configured'});
+   const sourceId=String(pilotEnv.BLOFY_XTREAM_DAILY_CATALOG_SOURCE_ID||'');
+   try{
+    const status=await mirrorEpisodeTransferStore.status(sourceId);
+    return json(res,200,{...status,lastAttempt:lastMirrorEpisodeChunk,
+     running:mirrorEpisodeBusy,
+     readiness:mirrorEpisodeDispatchReadiness(pilotEnv),
+     privateOnly:true,customerCutover:false});
+   }catch{return json(res,503,{ok:false,
+    code:'mirror_episode_status_unavailable'})}
   }
   if(path==='/internal/mirror/movie/status'&&req.method==='GET'){
    if(String(req.url||'').includes('?')||!mirrorMovieTransferStore)
@@ -1374,6 +1391,27 @@ export function createContentHubServer({storage,lease,
   return json(res,404,{ok:false,code:'content_hub_not_found'});
  });
  return {server,
+  runOneMirroredEpisodeChunk:async(now=new Date())=>{
+   if(!mirrorEpisodeTransferStore)return {ok:false,
+    code:'mirror_episode_dispatch_disabled',customerCutover:false};
+   if(mirrorEpisodeBusy)return {ok:false,
+    code:'mirror_episode_worker_busy',customerCutover:false};
+   mirrorEpisodeBusy=true;
+   try{
+    const result=await runOneApprovedMirrorEpisodeChunk({
+     env:pilotEnv,now,store:mirrorEpisodeTransferStore,
+     storage,lease,runner:episodeChunkRunner,logger,
+     sourceBusy:()=>pilotRunning||episodeCopyBusy||
+      mirrorMovieBusy||mirrorEpisodeBusy||
+      episodeCopy.isRunning()||copy.isRunning()||
+      Boolean(seasonQueue?.isRunning())
+    });
+    lastMirrorEpisodeChunk={code:result.code,
+     at:new Date().toISOString(),verified:result.verified===true,
+     customerCutover:false};
+    return result;
+   }finally{mirrorEpisodeBusy=false}
+  },
   runOneMirroredMovieChunk:async(now=new Date())=>{
    if(!mirrorMovieTransferStore)return {ok:false,
     code:'mirror_movie_dispatch_disabled',customerCutover:false};
@@ -1384,7 +1422,7 @@ export function createContentHubServer({storage,lease,
     const result=await runOneApprovedMirrorMovieChunk({
      env:pilotEnv,now,store:mirrorMovieTransferStore,
      storage,lease,runner:batchRunner,logger,
-     sourceBusy:()=>pilotRunning||episodeCopyBusy||
+     sourceBusy:()=>pilotRunning||episodeCopyBusy||mirrorEpisodeBusy||
       episodeCopy.isRunning()||copy.isRunning()||
       Boolean(seasonQueue?.isRunning())
     });
@@ -1520,8 +1558,11 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
  const mirrorMovieTransferStore=
   process.env.BLOFY_CONTENT_HUB_MIRROR_MOVIE_DISPATCH_ENABLED==='1'?
    createMirrorMovieTransferStore({connectionString:process.env.DATABASE_URL}):null;
+ const mirrorEpisodeTransferStore=
+  process.env.BLOFY_CONTENT_HUB_MIRROR_EPISODE_DISPATCH_ENABLED==='1'?
+   createMirrorEpisodeTransferStore({connectionString:process.env.DATABASE_URL}):null;
  const hub=createContentHubServer({storage,lease,seasonQueueStore,catalogStore,
-  dailyMediaSessionStore,mirrorMovieTransferStore,
+  dailyMediaSessionStore,mirrorMovieTransferStore,mirrorEpisodeTransferStore,
   token:process.env.BLOFY_CONTENT_HUB_ADMIN_TOKEN||'',
   allowSynthetic:process.env.BLOFY_CONTENT_HUB_SYNTHETIC_TEST_ENABLED==='1',
   logger:(name,payload)=>console.info(name,JSON.stringify(payload))});
@@ -1552,6 +1593,31 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
    timer.unref?.();
    const initial=setTimeout(()=>void check(),60*1000);
    initial.unref?.();
+  }
+  // Separate opt-in for individually licensed episodes. The exact same
+  // 8 MiB/day-budget table is used by movie transfers.
+  if(mirrorEpisodeTransferStore){
+   let checking=false;
+   const check=async()=>{
+    if(checking)return;checking=true;
+    try{
+     const result=await hub.runOneMirroredEpisodeChunk();
+     if(result.code==='mirror_episode_chunk_checkpoint_saved'||
+        result.code==='mirror_episode_private_sha_verified')
+      console.info('BLOFY_CONTENT_HUB_MIRROR_EPISODE_CHUNK',
+       JSON.stringify({code:result.code,gatewayId:result.gatewayId,
+        verified:result.verified===true,
+        subscriberRoutesChanged:false}));
+    }catch{
+     console.warn('BLOFY_CONTENT_HUB_MIRROR_EPISODE_CHUNK',
+      JSON.stringify({code:'mirror_episode_tick_failed',
+       subscriberRoutesChanged:false}));
+    }finally{checking=false}
+   };
+   const timer=setInterval(()=>void check(),2*60*1000);
+   timer.unref?.();
+   const first=setTimeout(()=>void check(),95*1000);
+   first.unref?.();
   }
   // Default OFF: individual rights, mapping, private S3 and daily byte
   // budgets remain independent gates. One 8MiB chunk per tick.
@@ -1913,7 +1979,8 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
   hub.stopContinuousCopy();
   hub.stopEpisodeCopy();
   hub.server.close(()=>void Promise.allSettled([lease.close(),
-   dailyMediaSessionStore?.close?.(),mirrorMovieTransferStore?.close?.()]));
+   dailyMediaSessionStore?.close?.(),mirrorMovieTransferStore?.close?.(),
+   mirrorEpisodeTransferStore?.close?.()]));
  };
  process.once('SIGTERM',shutdown);process.once('SIGINT',shutdown);
 }
