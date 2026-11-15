@@ -66,9 +66,9 @@ class PrivateHubStreamQaActivity : AppCompatActivity() {
         this.hint = hint
         setTextColor(Color.WHITE)
         setHintTextColor(Color.LTGRAY)
-        inputType = InputType.TYPE_CLASS_TEXT or if (secret)
+        inputType = InputType.TYPE_CLASS_TEXT or (if (secret)
             InputType.TYPE_TEXT_VARIATION_PASSWORD
-        else InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+        else InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD)
         if (secret) transformationMethod = PasswordTransformationMethod.getInstance()
         isSingleLine = true
         isSaveEnabled = false
