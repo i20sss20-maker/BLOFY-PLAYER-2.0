@@ -3624,8 +3624,11 @@ public partial class MainWindow : Window
     {
         // This starts a separate short-lived loopback relay for one already
         // SHA-verified Content Hub episode. Does NOT change the active catalog.
+        var mediaKind = UiDialogs.Prompt(this, "BLOFY Content Hub — نوع المحتوى",
+            "اكتب episode للحلقة أو movie للفيلم — للنسخ المحفوظة والمتحقق منها فقط.");
+        if (mediaKind is not ("episode" or "movie")) return;
         var runId = UiDialogs.Prompt(this, "BLOFY Content Hub — اختبار الجهاز",
-            "معرف الحلقة المحفوظة والمتحقق منها (runId). هذا ليس رابط مصدر Xtream.");
+            "معرف الملف المحفوظ والمتحقق منه (runId). هذا ليس رابط مصدر Xtream.");
         if (string.IsNullOrWhiteSpace(runId)) return;
         var ticket = UiDialogs.Prompt(this, "BLOFY Content Hub — رمز تجربة مؤقت",
             "الصق رمز اختبار الجهاز الصادر من لوحة الإدارة. لا تحفظه أو تشاركه.");
@@ -3638,7 +3641,7 @@ public partial class MainWindow : Window
                 _ownerDeviceQaProxy = null;
             }
             _ownerDeviceQaProxy = await OwnerDeviceQaLoopbackProxy.StartAsync(
-                runId.Trim(), ticket.Trim());
+                runId.Trim(), ticket.Trim(), mediaKind);
             await ShowPlayerOverlayAsync("BLOFY Content Hub — owner QA",
                 _ownerDeviceQaProxy.PlaybackUrl);
         }
@@ -3646,7 +3649,7 @@ public partial class MainWindow : Window
         {
             MessageBox.Show(this,
                 "تعذّر إنشاء اتصال التجربة الخاص. تحقق من انتهاء صلاحية الرمز (15 دقيقة)، " +
-                "ومن تفعيل الربط الآمن وصحة ملف الحلقة المحفوظ. لم يتم تغيير نسخة العملاء.",
+                "ومن تفعيل الربط الآمن وصحة الملف المحفوظ. لم يتم تغيير نسخة العملاء.",
                 "BLOFY QA", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
