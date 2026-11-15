@@ -9,6 +9,7 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
@@ -207,6 +208,16 @@ internal class EpisodeCardAdapter(
         renderFocus(holder, holder.itemView.hasFocus())
         holder.itemView.contentDescription = listOf(holder.title.text, holder.meta.text, holder.state.text).joinToString(". ")
         holder.itemView.setOnClickListener { onClick(episode) }
+        // On some TV remotes RecyclerView keeps the row as the only focus
+        // target and the child Download button cannot be reached. Route the
+        // correct physical direction explicitly for both LTR and RTL layouts.
+        holder.itemView.setOnKeyListener { view, keyCode, event ->
+            event.action == KeyEvent.ACTION_DOWN &&
+                EpisodeDownloadFocusPolicy.towardsDownload(
+                    keyCode, view.layoutDirection == View.LAYOUT_DIRECTION_RTL
+                ) &&
+                holder.downloadButton?.requestFocus() == true
+        }
         holder.itemView.setOnLongClickListener {
             onDownload?.invoke(episode)
             onDownload != null
@@ -216,6 +227,12 @@ internal class EpisodeCardAdapter(
             // both touch and D-pad; row selection must never swallow its click.
             isEnabled = onDownload != null
             setOnClickListener { onDownload?.invoke(episode) }
+            setOnKeyListener { _, keyCode, event ->
+                event.action == KeyEvent.ACTION_DOWN &&
+                    EpisodeDownloadFocusPolicy.towardsEpisode(
+                        keyCode, holder.itemView.layoutDirection == View.LAYOUT_DIRECTION_RTL
+                    ) && holder.itemView.requestFocus()
+            }
             setOnFocusChangeListener { _, focused ->
                 background = if (focused)
                     ContentScreenStyle.actionBackground(context, true, true)

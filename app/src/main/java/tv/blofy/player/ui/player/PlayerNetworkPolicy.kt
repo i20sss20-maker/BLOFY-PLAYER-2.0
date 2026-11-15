@@ -8,7 +8,11 @@ internal object PlayerNetworkPolicy {
     fun canAttempt(capabilities: NetworkCapabilities?): Boolean =
         capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
 
-    /** A buffering player can already be recovering. Do not restart it merely on a network callback. */
-    fun shouldRetryAfterReconnect(hasPlayerError: Boolean, state: Int): Boolean =
-        hasPlayerError || state == Player.STATE_IDLE
+    /** Only restart buffering after a confirmed, sustained offline interval.
+     * Routine network validation callbacks must never disrupt a healthy player. */
+    fun shouldRetryAfterReconnect(
+        hasPlayerError: Boolean, state: Int, offlineDurationMs: Long = 0L
+    ): Boolean =
+        hasPlayerError || state == Player.STATE_IDLE ||
+            (state == Player.STATE_BUFFERING && offlineDurationMs >= 4_000L)
 }

@@ -41,6 +41,14 @@ class PlayerNetworkPolicyTest {
             assertFalse(PlayerNetworkPolicy.shouldRetryAfterReconnect(false, state))
         }
     }
+    @Test fun prolongedRealOfflineIntervalCanRecoverStalledBuffering() {
+        assertFalse(PlayerNetworkPolicy.shouldRetryAfterReconnect(false, Player.STATE_BUFFERING, 3_999))
+        assertTrue(PlayerNetworkPolicy.shouldRetryAfterReconnect(false, Player.STATE_BUFFERING, 4_000))
+        assertTrue(PlayerNetworkPolicy.shouldRetryAfterReconnect(false, Player.STATE_BUFFERING, 20_000))
+        assertFalse(PlayerNetworkPolicy.shouldRetryAfterReconnect(false, Player.STATE_READY, 60_000))
+        assertFalse(PlayerNetworkPolicy.shouldRetryAfterReconnect(false, Player.STATE_ENDED, 60_000))
+        assertFalse(PlayerNetworkPolicy.shouldRetryAfterReconnect(false, Player.STATE_BUFFERING, -1))
+    }
     @Test fun anIdleOrFailedPlayerRetainsItsExistingRecoveryPath() {
         assertTrue(PlayerNetworkPolicy.shouldRetryAfterReconnect(false, Player.STATE_IDLE))
         for (state in listOf(Player.STATE_IDLE, Player.STATE_BUFFERING, Player.STATE_READY, Player.STATE_ENDED)) {

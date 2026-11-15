@@ -56,6 +56,10 @@ object StreamAudioHealth {
             State.AUDIO_TRACK_SELECTED -> "A supported audio track is selected, but audible output is not confirmed. Check TV audio output if it is still silent."
         }
 
+        /** A user may restore Media3 automatic selection; never force a decoder or restart video. */
+        fun canOfferAudioAutoSelection(disabledByViewer: Boolean): Boolean =
+            state == State.SUPPORTED_NOT_SELECTED && !disabledByViewer
+
         fun explanationFor(language: String): String =
             if (language.equals("ar", ignoreCase = true) || language.startsWith("ar-", ignoreCase = true))
                 explanationAr() else explanationEn()

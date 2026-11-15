@@ -12,6 +12,10 @@ import tv.blofy.player.R
 
 /** Deliberate subscriber opt-in, never auto-downloads from watch history. */
 internal object OfflineDownloadUi {
+    // Repeated remote clicks during a slow HEAD check must not open overlapping
+    // confirmation dialogs or queue the same transfer multiple times.
+    private val promptGate = DownloadPromptGate()
+
     data class Plan(
         val providerId: String,
         val contentKey: String,
@@ -36,9 +40,13 @@ internal object OfflineDownloadUi {
                 .setPositiveButton(android.R.string.ok,null).show()
             return
         }
+        // Give immediate feedback, but perform only one check for this screen.
+        Toast.makeText(activity, R.string.stream_downloads_preparing, Toast.LENGTH_SHORT).show()
+        if (!promptGate.enter(activity)) return
         // A HEAD probe only reads response headers: it does not download media
         // or trust that a playback URL gives the subscriber download rights.
         activity.lifecycleScope.launch {
+            try {
             val size = if (allowed.size == 1)
                 DownloadFileProbe.sizeIfKnown(activity.applicationContext, allowed.first().url)
             else null
@@ -78,6 +86,9 @@ internal object OfflineDownloadUi {
                 return@launch
             }
             confirmDownloads(activity, allowed, size)
+            } finally {
+                promptGate.leave(activity)
+            }
         }
     }
 

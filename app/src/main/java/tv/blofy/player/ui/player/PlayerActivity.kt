@@ -101,6 +101,7 @@ open class PlayerActivity : ContentAccessActivity() {
     private var lastCheckpointAt = 0L
     private var defaultTextDisabled = false
     private var pendingNetworkRecovery = false
+    private var disconnectedAtElapsedMs = 0L
     private var vlcFallbackLaunched = false
     private var lastStreamAudioHealth = ""
     private lateinit var connectionNotice: TextView
@@ -110,6 +111,9 @@ open class PlayerActivity : ContentAccessActivity() {
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onLost(network: Network) { runOnUiThread {
             if (!sessionReleased && !online()) {
+                if (disconnectedAtElapsedMs == 0L) {
+                    disconnectedAtElapsedMs = android.os.SystemClock.elapsedRealtime()
+                }
                 pendingNetworkRecovery = true
                 saveResume()
                 showConnectionNotice(getString(R.string.player_offline))
@@ -118,8 +122,15 @@ open class PlayerActivity : ContentAccessActivity() {
         override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
             if (PlayerNetworkPolicy.canAttempt(capabilities)) runOnUiThread {
                 if (!sessionReleased && pendingNetworkRecovery) {
+                    val now = android.os.SystemClock.elapsedRealtime()
+                    val offlineMs = if (disconnectedAtElapsedMs > 0L)
+                        (now - disconnectedAtElapsedMs).coerceAtLeast(0L) else 0L
+                    disconnectedAtElapsedMs = 0L
                     pendingNetworkRecovery = false
-                    if (PlayerNetworkPolicy.shouldRetryAfterReconnect(session.player.playerError != null, session.player.playbackState)) retryPlayback()
+                    if (PlayerNetworkPolicy.shouldRetryAfterReconnect(
+                            session.player.playerError != null,
+                            session.player.playbackState, offlineMs
+                        )) retryPlayback()
                     else if (::connectionNotice.isInitialized) connectionNotice.visibility = View.GONE
                 }
             }
@@ -281,6 +292,9 @@ open class PlayerActivity : ContentAccessActivity() {
         onTerminalError = { failedUrl ->
             saveResume()
             pendingNetworkRecovery = !online()
+            if (pendingNetworkRecovery && disconnectedAtElapsedMs == 0L) {
+                disconnectedAtElapsedMs = android.os.SystemClock.elapsedRealtime()
+            }
             if (!BuildConfig.CODE_ONLY_LOGIN &&
                 !pendingNetworkRecovery &&
                 kind != KIND_LIVE &&
@@ -1382,11 +1396,34 @@ open class PlayerActivity : ContentAccessActivity() {
             "\n\nTracks: ${result.available} · Supported: ${result.supported} · Selected: ${result.selected}" +
                 "\nCodec: ${result.selectedMimeType ?: "Unknown"}"
         }
-        AlertDialog.Builder(this)
+        val dialog = AlertDialog.Builder(this)
             .setTitle(if (isArabic) "حالة صوت القناة" else "Channel audio status")
             .setMessage(result.explanationFor(language) + stats)
             .setPositiveButton(if (isArabic) "حسنًا" else "OK", null)
-            .show()
+        if (result.canOfferAudioAutoSelection(
+                session.player.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_AUDIO)
+            )) {
+            // Opt-in, supported-track recovery only. No stream restart or codec forcing.
+            dialog.setNeutralButton(
+                if (isArabic) "تجربة الصوت التلقائي" else "Try automatic audio"
+            ) { _, _ ->
+                if (!sessionReleased) {
+                    StreamAudioPreferences.save(applicationContext, null)
+                    session.player.trackSelectionParameters =
+                        session.player.trackSelectionParameters.buildUpon()
+                            .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+                            .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
+                            .setPreferredAudioLanguage(null)
+                            .build()
+                    Toast.makeText(
+                        this,
+                        if (isArabic) "تمت إعادة اختيار الصوت تلقائيًا" else "Automatic audio selection restored",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        }
+        dialog.show()
     }
 
     private fun showTrackDialog(trackType: Int) {
@@ -1713,7 +1750,13 @@ open class PlayerActivity : ContentAccessActivity() {
 
     private fun retryPlayback() {
         if (sessionReleased) return
-        if (!online()) { pendingNetworkRecovery = true; showConnectionNotice(getString(R.string.player_offline)); return }
+        if (!online()) {
+            if (disconnectedAtElapsedMs == 0L)
+                disconnectedAtElapsedMs = android.os.SystemClock.elapsedRealtime()
+            pendingNetworkRecovery = true
+            showConnectionNotice(getString(R.string.player_offline))
+            return
+        }
         saveResume()
         val playWhenReady = session.player.playWhenReady
         session.retrySameUrl()

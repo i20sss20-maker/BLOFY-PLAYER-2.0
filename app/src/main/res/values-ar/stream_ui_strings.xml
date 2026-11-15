@@ -101,6 +101,7 @@
     <string name="stream_downloads_title">تنزيلاتي</string>
     <string name="stream_downloads_note">التنزيل للمحتوى المباشر المسموح بحفظه عبر HTTPS فقط. لا يتم تسجيل البث المباشر أو تجاوز حماية DRM. تشغيل الملفات يخضع لتفعيل BLOFY.</string>
     <string name="stream_downloads_empty">لا توجد تنزيلات. افتح فيلمًا أو حلقة واضغط تحميل.</string>
+    <string name="stream_downloads_preparing">جاري فحص الملف ومساحة الجهاز…</string>
     <string name="stream_downloads_confirm_title">تحميل %1$d ملف؟</string>
     <string name="stream_downloads_consent">حمّل فقط المحتوى الذي يسمح مصدره بحفظ نسخة منه. التنزيل يستهلك مساحة وبيانات. لا ندعم تنزيل البث المباشر أو روابط HLS/DASH أو المحتوى المحمي. هل تريد المتابعة؟</string>
     <string name="stream_downloads_confirm">بدء التحميل</string>
