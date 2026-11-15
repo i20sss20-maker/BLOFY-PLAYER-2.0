@@ -12,12 +12,15 @@ internal enum class LiveChannelTab { ALL, FAVORITES, RECENT }
 internal object LiveChannelPanelPolicy {
     fun actions(streamCodeOnly: Boolean, expanded: Boolean = false): List<LiveChannelPanelAction> {
         if (!streamCodeOnly) return emptyList()
-        val main = listOf(LiveChannelPanelAction.BLOFY_AUDIO, LiveChannelPanelAction.FAVORITE,
-            LiveChannelPanelAction.EPG, LiveChannelPanelAction.MORE)
-        return if (!expanded) main else listOf(LiveChannelPanelAction.MORE,
-            LiveChannelPanelAction.AUDIO_TRACKS,
-            LiveChannelPanelAction.SUBTITLES, LiveChannelPanelAction.VIDEO_QUALITY,
-            LiveChannelPanelAction.STREAM_INFO, LiveChannelPanelAction.RECONNECT)
+        // On small/720p TVs a tall static action footer left room for only
+        // one channel card. Show the two essential controls by default.
+        val compact = listOf(LiveChannelPanelAction.BLOFY_AUDIO, LiveChannelPanelAction.MORE)
+        return if (!expanded) compact else compact + listOf(
+            LiveChannelPanelAction.FAVORITE, LiveChannelPanelAction.EPG,
+            LiveChannelPanelAction.AUDIO_TRACKS, LiveChannelPanelAction.SUBTITLES,
+            LiveChannelPanelAction.VIDEO_QUALITY, LiveChannelPanelAction.STREAM_INFO,
+            LiveChannelPanelAction.RECONNECT
+        )
     }
 
     fun matchesSearch(channelName: String, query: String): Boolean {
