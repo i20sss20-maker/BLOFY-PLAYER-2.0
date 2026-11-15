@@ -29,6 +29,7 @@ import { createFixedWindowLimiter, requestClientKey } from './auth-protection.mj
 import {forwardPrivatePreview} from './content-hub-private-preview-bridge.mjs';
 import {forwardPrivateOriginalRange} from './content-hub-private-original-range-bridge.mjs';
 import {forwardPrivateSeekPreview} from './content-hub-private-seek-bridge.mjs';
+import {forwardPrivateTimeline} from './content-hub-private-timeline-bridge.mjs';
 import {isStreamSeasonBridgePath,requestStreamSeasonBridge} from './stream-season-bridge.mjs';
 import {
   assertPublicXtreamUrl,
@@ -3149,6 +3150,17 @@ async function unifiedStreamBridge(req,res,url){
     path:p,method:req.method,body:data,
     operatorToken:process.env.BLOFY_CONTENT_HUB_OPERATOR_TOKEN||''});
    return json(res,result.status,result.data,{'cache-control':'no-store'});
+  }
+
+  // Private on-demand 30s timeline windows. Every index must correspond
+  // to the exact verified S3 file; authorization was checked above.
+  const timeline=p.match(
+    /^\/internal\/blofy-stream\/content-hub\/site-qa\/timeline\/(movie|episode)\/([A-Za-z0-9_-]{8,80})\/(meta|clip\/(0|[1-9][0-9]{0,3})\.mp4)$/);
+  if(timeline){
+   if(url.search)return json(res,400,{ok:false,code:'private_timeline_query_denied'});
+   return forwardPrivateTimeline({req,res,mediaKind:timeline[1],
+      runId:timeline[2],segment:timeline[4]||null,
+      hubToken:String(process.env.BLOFY_CONTENT_HUB_OPERATOR_TOKEN||'')});
   }
 
   // Authenticated STREAM website owner preview samples at start/middle/end,
