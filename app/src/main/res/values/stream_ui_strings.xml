@@ -108,6 +108,7 @@
     <string name="stream_downloads_title">My Downloads</string>
     <string name="stream_downloads_note">Only direct HTTPS downloads authorized by your content provider. This app does not capture live streams, DRM content, or HLS/DASH playlists. Local playback still respects BLOFY activation.</string>
     <string name="stream_downloads_empty">No downloads yet. Open a movie or an episode and choose Download.</string>
+    <string name="stream_downloads_preparing">Checking file and device storage…</string>
     <string name="stream_downloads_confirm_title">Download %1$d item(s)?</string>
     <string name="stream_downloads_consent">Only download content your provider permits you to save. Downloading uses device storage and data. Unsupported HLS/DASH, live, and DRM videos cannot be saved. Continue?</string>
     <string name="stream_downloads_confirm">Start download</string>
