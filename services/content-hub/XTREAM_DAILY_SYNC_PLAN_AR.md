@@ -644,3 +644,33 @@ These safeguards are software identity checks only: not proof of
 storage rights, source quality or actual device playback. This branch
 is still unmerged, and **no Railway deployment or automatic copying
 is authorized** by this change.
+
+
+## 2026-11-15: Trust-boundary verification across queue, PG manifest and S3 paths
+
+The private owner A/V and Android TV/Windows device QA gate now
+checks more than a saved SHA-256 and length:
+
+- The licensed, `verified` Xtream queue row must contain the exact
+  source UUID, media kind, gateway ID, media ID, file extension,
+  reviewed rights evidence, bytes and full-file SHA-256.
+- The **independent** private PG movie or episode manifest must
+  describe the **same** source UUID, media kind, media ID and
+  gateway ID in addition to exact bytes, extension and SHA.
+- All verified chunk S3 keys must live under
+  `saleh/movie/<matching-source-UUID>/` or
+  `saleh/episode/<matching-source-UUID>/` as appropriate. A
+  cross-source chunk key cannot be used to authorize owner QA even
+  if its stored digest is identical.
+
+New tests cover cross-source movie substitutions, wrong gateway/media
+ID, missing PG provenance, wrong-kind manifests, and S3 chunk paths
+whose source UUID does not agree with the verified manifest. Both
+movie and episode metadata-only retrievals remain private, and
+a failed comparison denies A/V canary and device-ticket issuance
+before any provider request. Existing verified-file metadata is only
+a previous integrity proof; a fresh full S3 rehash and physical
+playback are separate release gates.
+
+The change is in isolated draft PR #609. No Railway configuration
+changes, source copying or customer update was performed.
