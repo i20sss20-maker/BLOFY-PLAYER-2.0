@@ -27,7 +27,7 @@ class StreamArabicAudioCatalogTest {
 
     @Test fun invalidUntrustedAndOversizedTracksAreRejected() {
         val payload = """{"tracks":[
-          {"id":"ar","label":"Arabic Commentary","playbackUrl":"https://blofyplayer.com/api/v1/stream/media/audio/f1","delaySeconds":4},
+          {"id":"ar","label":"Arabic Commentary","playbackUrl":"https://blofyplayer.com/api/v1/stream/media/audio/f1","delaySeconds":4,"format":"hls"},
           {"id":"ar","label":"Duplicate","playbackUrl":"https://blofyplayer.com/api/v1/stream/media/audio/f2","delaySeconds":2},
           {"id":"no","label":"Untrusted","playbackUrl":"https://untrusted.example.com/a.mp3"},
           {"id":"test","label":"Arabic Feed","playbackUrl":"https://blofyplayer.com/api/v1/stream/media/audio/f3","delaySeconds":999}
@@ -36,6 +36,8 @@ class StreamArabicAudioCatalogTest {
         assertEquals(2, tracks.size)
         assertEquals("ar", tracks[0].id)
         assertEquals(4, tracks[0].initialDelaySeconds)
+        assertEquals("hls",tracks[0].format)
+        assertEquals("progressive",tracks[1].format)
         assertEquals(30, tracks[1].initialDelaySeconds)
         assertEquals(emptyList<StreamArabicAudioCatalog.Track>(), StreamArabicAudioCatalog.decode("bad json"))
     }
