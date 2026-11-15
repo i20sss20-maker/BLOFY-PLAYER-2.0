@@ -50,7 +50,8 @@ test('only bearer-authenticated owner may run private verified movie A/V+seek QA
   const before=await fetch(url,opts('GET'));
   assert.equal(before.status,200);
   const meta=await before.json();
-  assert.equal(meta.fullSha256Verified,true);
+  assert.equal(meta.fullFileSha256PreviouslyRecorded,true);
+  assert.equal(meta.liveStorageFullRecheck,false);
   assert.equal(meta.devicePlaybackValidated,false);
   assert.equal(meta.releaseToSubscribersApproved,false);
   assert.equal(meta.lastQa,null);
