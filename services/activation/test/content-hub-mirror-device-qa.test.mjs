@@ -6,6 +6,15 @@ import {
  forwardOwnerDeviceQaPlayback
 } from '../src/content-hub-device-qa.mjs';
 
+const base64urlAlphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+function nonCanonicalHmacAlias(ticket){
+ const final=ticket.at(-1),number=base64urlAlphabet.indexOf(final);
+ assert.ok(number>=0);
+ // Signature is 32 bytes -> 43 base64url chars; the last 2 pad
+ // bits must be 0 in canonical encoding, but a decoder ignores them.
+ assert.equal(number%4,0);
+ return ticket.slice(0,-1)+base64urlAlphabet[number+1];
+}
 const secret='S'.repeat(64),runId='mirror_'+'a'.repeat(40);
 const env={BLOFY_CONTENT_HUB_DEVICE_QA_ENABLED:'1',
  BLOFY_CONTENT_HUB_DEVICE_QA_SIGNING_KEY:secret};
@@ -20,6 +29,9 @@ test('movie/episode tickets are bound to kind, run and valid device platform',()
   runId,mediaKind:'movie',platform:'android_tv',now}),true);
  assert.equal(verifyOwnerDeviceQaTicket({secret,ticket:a.ticket,
   runId,mediaKind:'movie',platform:'windows',now}),false);
+ assert.equal(verifyOwnerDeviceQaTicket({
+  secret,ticket:nonCanonicalHmacAlias(a.ticket),runId,
+  mediaKind:'movie',platform:'android_tv',now}),false);
  assert.equal(verifyOwnerDeviceQaTicket({secret,ticket:a.ticket,
   runId,mediaKind:'episode',now}),false);
  assert.equal(verifyOwnerDeviceQaTicket({secret,ticket:a.ticket,
