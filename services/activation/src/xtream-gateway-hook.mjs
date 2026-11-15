@@ -45,6 +45,7 @@ import { acceptsXtreamGzip } from './xtream-catalog-compression.mjs';
 import { shouldRetryXtreamWithoutRange,firstByteXtreamRange } from './xtream-media-range.mjs';
 import { recordXtreamPlayback,xtreamPlaybackSnapshot } from './xtream-playback-metrics.mjs';
 import {xtreamDirectMediaGauge} from './xtream-direct-media-gauge.mjs';
+import {createStreamArabicAudioRegistry} from './xtream-stream-arabic-audio.mjs';
 import { XtreamDenialCooldown } from './xtream-denial-cooldown.mjs';
 import { createGatewayUsageThrottle } from './xtream-gateway-usage-throttle.mjs';
 import {createDistributorCustomerCatalog}
@@ -100,6 +101,11 @@ const pool = new pg.Pool({
   connectionTimeoutMillis: 5000,
   idleTimeoutMillis: 15000,
   statement_timeout: 30000
+});
+const arabicAudio = createStreamArabicAudioRegistry({
+  pool,keyHex:KEY_HEX,
+  allowedSourceHosts:process.env.BLOFY_STREAM_ARABIC_AUDIO_ALLOWED_HOSTS||'',
+  enabled:process.env.BLOFY_STREAM_ARABIC_AUDIO_ENABLED==='1'
 });
 pool.on('error', error => console.error('xtream gateway database error:', safeErrorSummary(error)));
 const distributorCatalog=createDistributorCustomerCatalog({
@@ -2347,6 +2353,75 @@ if(process.env.BLOFY_XTREAM_SHARED_LIVE_SOURCE_NAME){
 }
 
 
+
+async function authorizedArabicChannel(req,res,channelId){
+  const account=await authenticateAppBearer(req);
+  if(!account){text(res,401,'Unauthorized');return null;}
+  if(!/^[1-9][0-9]{0,14}$/.test(String(channelId))){
+    text(res,404,'Channel not found');return null;
+  }
+  const row=await gatewayItemById('live',channelId,account.source_id||null);
+  if(!row||!row.server_enabled){
+    text(res,404,'Channel not found');return null;
+  }
+  const scope=await distributorCatalog.forAccount(account);
+  if(await distributorCatalog.isHidden(scope,'live',row.source_id)){
+    text(res,404,'Channel not found');return null;
+  }
+  return row;
+}
+
+// A separate live MP3/AAC audio feed; never redirects a customer to the
+// operator's storage URL. Auth, channel scope and expiry are checked afresh.
+async function handleArabicAudioMedia(req,res,id){
+  if(!requirePublicBudget(req,res))return;
+  const item=await arabicAudio.lookup(id);
+  if(!item)return text(res,404,'Arabic audio not found');
+  if(!await authorizedArabicChannel(req,res,item.channelId))return;
+  const controller=new AbortController();
+  const onClose=()=>controller.abort();
+  res.on('close',onClose);
+  const timer=setTimeout(()=>controller.abort(),20000);
+  let response;
+  try{
+    const target=new URL(item.sourceUrl);
+    // Must recheck public DNS on every request, not only at registration.
+    await assertPublicXtreamUrl(target.origin);
+    response=await fetch(target,{
+      method:req.method,redirect:'manual',signal:controller.signal,
+      headers:{accept:'audio/*','user-agent':'BLOFY-STREAM-Arabic-Audio/1.0'}
+    });
+    clearTimeout(timer);
+    if(![200,206].includes(response.status)||!response.body){
+      await response.body?.cancel().catch(()=>{});
+      return text(res,502,'Arabic audio source unavailable');
+    }
+    const type=String(response.headers.get('content-type')||'').split(';')[0].trim().toLowerCase();
+    // HLS requires signed child-playlist + segment proxying and is not yet
+    // enabled. The development pilot accepts progressive live audio only.
+    if(!['audio/mpeg','audio/aac','audio/x-aac','audio/mp4','audio/ogg','audio/wav'].includes(type)){
+      await response.body.cancel().catch(()=>{});
+      return text(res,415,'Arabic audio format unsupported');
+    }
+    const headers={
+      'content-type':type,'cache-control':'private, no-store',
+      'x-content-type-options':'nosniff','referrer-policy':'no-referrer',
+      'accept-ranges':'none'
+    };
+    res.writeHead(200,headers);
+    if(req.method==='HEAD'){await response.body.cancel().catch(()=>{});return res.end();}
+    await pipeline(Readable.fromWeb(response.body),res);
+  }catch{
+    if(!res.headersSent&&!res.destroyed)text(res,503,'Arabic audio temporarily unavailable');
+    else if(!res.destroyed)res.destroy();
+  }finally{
+    clearTimeout(timer);
+    res.off('close',onClose);
+    controller.abort();
+    if(response?.body&&!response.body.locked)await response.body.cancel().catch(()=>{});
+  }
+}
+
 const previousCreateServer = http.createServer.bind(http);
 http.createServer = function withBlofyXtreamGateway(listener) {
   if (typeof listener !== 'function') return previousCreateServer(listener);
@@ -2421,6 +2496,20 @@ http.createServer = function withBlofyXtreamGateway(listener) {
           daysRemaining:expiry==null?null:Math.max(0,Math.ceil((expiry-now)/86400000))},
           {'cache-control':'no-store'});
       }
+      const arabicChannelMatch=url.pathname.match(
+        /^\/api\/v1\/stream\/audio\/channels\/([1-9][0-9]{0,14})$/);
+      if(req.method==='GET'&&arabicChannelMatch){
+        if(!arabicAudio.configured())return json(res,404,{tracks:[]});
+        if(!requirePublicBudget(req,res))return;
+        if(!await authorizedArabicChannel(req,res,arabicChannelMatch[1]))return;
+        return json(res,200,{tracks:await arabicAudio.catalog(arabicChannelMatch[1])},
+          {'cache-control':'no-store, private'});
+      }
+      const arabicMediaMatch=url.pathname.match(
+        /^\/api\/v1\/stream\/media\/audio\/([0-9a-f-]{36})$/i);
+      if(arabicAudio.configured()&&arabicMediaMatch&&
+          (req.method==='GET'||req.method==='HEAD'))
+        return handleArabicAudioMedia(req,res,arabicMediaMatch[1]);
       const tokenMedia=url.pathname.match(
         /^\/api\/v1\/stream\/media\/(live|movie|series)\/([0-9]+)(?:\.([A-Za-z0-9]{1,8}))?$/i);
       if(tokenMedia&&(req.method==='GET'||req.method==='HEAD')){
@@ -2449,6 +2538,21 @@ http.createServer = function withBlofyXtreamGateway(listener) {
       if (!url.pathname.startsWith('/api/v1/admin/xtream-gateway')) return listener(req, res);
       if (!requireAdmin(req, res)) return;
       await ensureReady();
+      if(url.pathname==='/api/v1/admin/xtream-gateway/audio'){
+        if(req.method==='GET')
+          return json(res,200,{items:await arabicAudio.list(url.searchParams.get('channelId'))});
+        if(req.method==='POST'){
+          const body=await readJson(req);
+          const item=await arabicAudio.register(body);
+          return json(res,201,{ok:true,item});
+        }
+      }
+      const arabicAudioDelete=url.pathname.match(
+        /^\/api\/v1\/admin\/xtream-gateway\/audio\/([0-9a-f-]{36})$/i);
+      if(req.method==='DELETE'&&arabicAudioDelete){
+        const removed=await arabicAudio.remove(arabicAudioDelete[1]);
+        return json(res,removed?200:404,{ok:removed});
+      }
       if (req.method === 'POST' && url.pathname === '/api/v1/admin/xtream-gateway/playback-probe') {
         const body=await readJson(req);
         const raw=String(body.itemId??'');
