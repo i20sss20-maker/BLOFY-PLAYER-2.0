@@ -64,6 +64,27 @@ export async function readMirrorFileSize206(fetchOneRange){
  }
 }
 
+// A multi-day transfer (64MiB/day) would otherwise become stuck once its
+// original 48-hour size proof expires. Probe the same exact mapped file
+// again before continuing, never treating an old checkpoint as a new file.
+export function validateMirrorProbeContinuity(row,proof){
+ if(proof?.ok!==true)return {ok:false,code:proof?.code||'mirror_size_probe_failed'};
+ const oldSize=row?.expected_bytes==null?null:Number(row.expected_bytes);
+ const oldDigest=String(row?.source_validator_sha256||'').trim()||null;
+ const oldParts=Math.max(0,Number(row?.copied_parts)||0);
+ if(oldSize!==null&&oldSize!==proof.expectedBytes)
+  return {ok:false,code:'mirror_source_size_changed'};
+ // An interrupted copy needs the SAME origin version; where no provider
+ // validator exists, the chunk worker also independently samples boundary
+ // hashes before/after every 8MiB transfer.
+ if(oldParts>0&&oldDigest!==proof.sourceValidatorSha256)
+  return {ok:false,code:'mirror_source_validator_changed'};
+ if(oldDigest&&proof.sourceValidatorSha256&&
+    oldDigest!==proof.sourceValidatorSha256)
+  return {ok:false,code:'mirror_source_validator_changed'};
+ return {ok:true,code:'mirror_source_size_and_version_continuous'};
+}
+
 export async function probeOneAttestedMirrorItem({
  db,sourceId,localDay,resolveSourceMedia
 }={}){
@@ -81,18 +102,23 @@ export async function probeOneAttestedMirrorItem({
   if(!held)return {ok:false,code:'mirror_size_scan_busy',
    providerRequests:0,mediaBytesTransferred:0};
   const picked=await client.query(`SELECT q.media_kind,q.gateway_id,
-     q.source_id,q.media_id,q.extension
+     q.source_id,q.media_id,q.extension,q.state,
+     q.expected_bytes,q.source_validator_sha256,q.copied_parts
     FROM blofy_xtream_mirror_items q
     JOIN blofy_xtream_servers s ON s.id=q.source_id
     WHERE q.source_id=$1 AND s.enabled=TRUE AND s.publish_catalog=TRUE
       AND lower(btrim(s.name))='saleh' AND s.status='online'
       AND s.deletion_requested_at IS NULL AND s.last_error IS NULL
       AND s.last_sync_at>NOW()-INTERVAL '48 hours'
-      AND q.state='needs_review' AND q.mapping_conflict=FALSE
+      AND (q.state='needs_review' OR
+         (q.state='approved' AND q.size_probe_at<NOW()-INTERVAL '20 hours'))
+      AND q.mapping_conflict=FALSE
       AND q.license_reviewed_at IS NOT NULL
       AND q.rights_ref_sha256 ~ '^[a-f0-9]{64}$'
       AND (q.size_probe_day IS NULL OR q.size_probe_day<$2::date)
-    ORDER BY q.gateway_id,q.media_kind LIMIT 1`,[sourceId,localDay]);
+    ORDER BY CASE WHEN q.state='approved' AND q.copied_parts>0
+        THEN 0 WHEN q.state='approved' THEN 1 ELSE 2 END,
+      q.gateway_id,q.media_kind LIMIT 1`,[sourceId,localDay]);
   const row=picked.rows?.[0];
   if(!row)return {ok:true,code:'mirror_size_no_attested_items_due',
    providerRequests:0,probeBytes:0,mediaBytesTransferred:0,
@@ -121,11 +147,30 @@ export async function probeOneAttestedMirrorItem({
      SET mapping_conflict=TRUE,mapping_conflict_at=NOW(),
        size_probe_error=$6,size_probe_day=$7::date
      WHERE source_id=$1 AND media_kind=$2 AND gateway_id=$3
-       AND media_id=$4 AND extension=$5 AND state='needs_review'`,
+       AND media_id=$4 AND extension=$5
+       AND state IN ('needs_review','approved')`,
     [item.sourceId,item.mediaKind,item.gatewayId,item.mediaId,
      item.extension,proof.code,localDay]);
    return {ok:false,code:proof.code,providerRequests:0,
      probeBytes:0,mediaBytesTransferred:0,customerCutover:false};
+  }
+  const continuity=proof.ok?validateMirrorProbeContinuity(row,proof):null;
+  if(continuity&&!continuity.ok){
+   // Old verified checkpoints are retained for forensic review, but no
+   // further provider fetch is authorized until an operator intervenes.
+   await client.query(`UPDATE blofy_xtream_mirror_items
+    SET state='failed',size_probe_error=$6,size_probe_day=$7::date,
+      copy_lease_until=NULL
+    WHERE source_id=$1 AND media_kind=$2 AND gateway_id=$3
+      AND media_id=$4 AND extension=$5
+      AND state IN ('approved','needs_review')
+      AND mapping_conflict=FALSE`,[
+    item.sourceId,item.mediaKind,item.gatewayId,item.mediaId,
+    item.extension,continuity.code,localDay]);
+   return {ok:false,code:continuity.code,
+     gatewayId,mediaKind:item.mediaKind,providerRequests:1,
+     probeBytes:proof.probeBytes||0,mediaBytesTransferred:0,
+     previousCheckpointsRetained:true,customerCutover:false};
   }
   // Re-check source and gateway identity at commit time: a provider or
   // catalog remap during the HTTP probe must not promote a stale item.
@@ -153,7 +198,9 @@ export async function probeOneAttestedMirrorItem({
     state='approved'
     WHERE q.source_id=$1 AND q.media_kind=$2 AND q.gateway_id=$3
       AND q.media_id=$4 AND q.extension=$5
-      AND q.mapping_conflict=FALSE AND q.state='needs_review'
+      AND q.mapping_conflict=FALSE
+      AND q.state IN ('needs_review','approved')
+      AND (q.expected_bytes IS NULL OR q.expected_bytes=$6)
       AND q.license_reviewed_at IS NOT NULL
       AND q.rights_ref_sha256 ~ '^[a-f0-9]{64}$'
       AND ${currentSource} AND ${currentMapping}
@@ -161,7 +208,8 @@ export async function probeOneAttestedMirrorItem({
    `UPDATE blofy_xtream_mirror_items SET
     size_probe_day=$6::date,size_probe_error=$7
     WHERE source_id=$1 AND media_kind=$2 AND gateway_id=$3
-      AND media_id=$4 AND extension=$5 AND state='needs_review'
+      AND media_id=$4 AND extension=$5
+      AND state IN ('needs_review','approved')
     RETURNING gateway_id`;
   const params=proof.ok?
    [item.sourceId,item.mediaKind,item.gatewayId,item.mediaId,
