@@ -87,9 +87,6 @@ internal object StreamInAppAudioImport {
 
     private fun parseJson(contents: String, add: (String?, String?, Int) -> Unit) {
         var nodesLeft = 1000
-        fun visit(value: Any?, inherited: String, depth: Int, visitRec: (Any?, String, Int) -> Unit) {
-            visitRec(value, inherited, depth)
-        }
         lateinit var walk: (Any?, String, Int) -> Unit
         walk = { node, label, depth ->
             if (--nodesLeft >= 0 && depth <= 12) {
@@ -116,7 +113,7 @@ internal object StreamInAppAudioImport {
             val trimmed = contents.trimStart()
             if (trimmed.startsWith("[")) JSONArray(contents) else JSONObject(contents)
         }.getOrNull() ?: return
-        visit(root, "", 0, walk)
+        walk(root, "", 0)
     }
 
     private fun parseXml(contents: String, add: (String?, String?, Int) -> Unit) {
@@ -127,9 +124,11 @@ internal object StreamInAppAudioImport {
             var event = parser.eventType
             var inspected = 0
             var currentLabel = ""
+            var currentTag = ""
             while (event != XmlPullParser.END_DOCUMENT && inspected++ < 8_000) {
                 when (event) {
                     XmlPullParser.START_TAG -> {
+                        currentTag = parser.name?.lowercase().orEmpty()
                         currentLabel = parser.getAttributeValue(null, "label")
                             ?: parser.getAttributeValue(null, "title")
                             ?: parser.getAttributeValue(null, "name")
@@ -140,8 +139,7 @@ internal object StreamInAppAudioImport {
                         }
                     }
                     XmlPullParser.TEXT -> {
-                        val tag = parser.name?.lowercase().orEmpty()
-                        if (tag in urlKeys) add(parser.text, currentLabel, 0)
+                        if (currentTag in urlKeys) add(parser.text, currentLabel, 0)
                     }
                 }
                 event = parser.next()
