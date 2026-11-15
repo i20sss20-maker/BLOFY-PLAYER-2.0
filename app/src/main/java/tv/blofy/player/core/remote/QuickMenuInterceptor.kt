@@ -13,7 +13,12 @@ import tv.blofy.player.ui.quick.QuickMenuActivity
 /** Installs one lightweight Window.Callback wrapper per Activity so TV quick access is consistent. */
 class QuickMenuInterceptor : Application.ActivityLifecycleCallbacks {
     override fun onActivityResumed(activity: Activity) {
-        if (activity is QuickMenuActivity) return
+        // Live video has its own Window.Callback for OK/channel list and
+        // MENU/audio controls. Wrapping that callback again on every resume
+        // stole MENU and stacked nested callbacks after opening dialogs.
+        if (activity is QuickMenuActivity ||
+            (activity is PlayerActivity &&
+                activity.intent.getStringExtra(PlayerActivity.EXTRA_KIND) == "live")) return
         val current = activity.window.callback ?: return
         if (current is Callback) return
         activity.window.callback = Callback(activity, current)
