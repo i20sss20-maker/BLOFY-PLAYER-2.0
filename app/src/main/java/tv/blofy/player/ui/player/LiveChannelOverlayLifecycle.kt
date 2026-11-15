@@ -275,8 +275,8 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 ellipsize = android.text.TextUtils.TruncateAt.END
             }
             val searchField = if (BuildConfig.CODE_ONLY_LOGIN) EditText(activity).apply {
-                hint = copy("بحث في جميع القنوات…", "Search all channels…")
-                contentDescription = hint
+                this.hint = copy("بحث في جميع القنوات…", "Search all channels…")
+                contentDescription = this.hint
                 textSize = 13.5f
                 setSingleLine(true)
                 inputType = InputType.TYPE_CLASS_TEXT
