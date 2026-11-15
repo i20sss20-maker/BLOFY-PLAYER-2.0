@@ -180,8 +180,21 @@ export async function runOneEpisodeChunk({
    code:'episode_run_not_resumable'};
   const totalParts=Math.ceil(cfg.expectedBytes/CHUNK);
   const no=run.parts.length+1;
-  if(no>totalParts)return {...base,ok:false,
-   code:'episode_final_verification_pending'};
+  // A crash after the LAST durable S3 checkpoint but before committing
+  // the full-file SHA must not strand an otherwise complete episode.
+  // Rehash every previously stored part, without fetching ANY provider byte.
+  if(no>totalParts){
+   markStage('verify_full_file_resume');
+   const fullSha=await verifyStoredEpisode({
+    storage,parts:run.parts,total:cfg.expectedBytes,signal
+   });
+   const saved=await lease.verifyEpisodeRun(cfg.runId,{sha256:fullSha});
+   if(saved===false)throw Error('episode_final_verification_commit_failed');
+   return {...base,ok:true,code:'episode_fully_verified',
+    completed:true,bytes:cfg.expectedBytes,sha256:fullSha,
+    chunksSaved:totalParts,totalParts,resumedAfterLastChunk:true,
+    providerMediaRequests:0,stageTimingsMs:timings()};
+  }
   const from=(no-1)*CHUNK,to=Math.min(cfg.expectedBytes,from+CHUNK)-1;
   if(signal?.aborted)throw Error('episode_cancelled');
   markStage('boundary_precheck');
