@@ -12,6 +12,10 @@ import {createMirrorEpisodeTransferStore} from
  '../src/xtream-mirror-episode-transfer.mjs';
 import {inspectMirrorDeploymentPreflight} from
  '../src/xtream-mirror-deployment-preflight.mjs';
+import {findActiveMirrorMovie} from
+ '../../activation/src/xtream-mirror-movie-bridge.mjs';
+import {findActiveMirrorEpisode} from
+ '../../activation/src/xtream-mirror-episode-bridge.mjs';
 
 const PG=process.env.BLOFY_TEST_PG_URL||'';
 const SOURCE='123e4567-e89b-42d3-a456-426614174000';
@@ -89,6 +93,45 @@ test('real PG cross-media copy budget, durable checkpoints and 3 maximum retries
   assert.match(m1.runId,/^mirror_[a-f0-9]{40}$/);
   assert.match(e1.runId,/^mirror_[a-f0-9]{40}$/);
   assert.notEqual(m1.runId,e1.runId);
+  // Two distinct online sources can have identical gateway IDs. A
+  // bridge keyed by gateway ID alone could return the WRONG movie or
+  // episode, violating source-specific storage approvals.
+  const SOURCE2='523e4567-e89b-42d3-a456-426614174000';
+  await pool.query(`INSERT INTO blofy_xtream_servers(
+   id,name,enabled,publish_catalog,status,last_sync_at)
+   VALUES($1,'saleh',TRUE,TRUE,'online',NOW())`,[SOURCE2]);
+  await pool.query(`INSERT INTO blofy_xtream_gateway_item_map
+   VALUES($1,'movie',15,'other-movie')`,[SOURCE2]);
+  await pool.query(`INSERT INTO blofy_xtream_gateway_episode_map
+   VALUES($1,401,'other-episode','other-series','mkv')`,[SOURCE2]);
+  await pool.query(`INSERT INTO blofy_xtream_items
+   VALUES($1,'movie','other-movie',TRUE,'mp4'),
+    ($1,'series','other-series',TRUE,'mkv')`,[SOURCE2]);
+  const otherRun='mirror_'+'a'.repeat(40);
+  await pool.query(`INSERT INTO blofy_xtream_mirror_items(
+    source_id,media_kind,gateway_id,media_id,series_media_id,
+    extension,title,state,rights_ref_sha256,license_reviewed_at,
+    size_probe_at,expected_bytes,copy_run_id,copy_lease_until)
+    VALUES
+    ($1,'movie',15,'other-movie',NULL,'mp4','Other movie',
+     'copying',$2,NOW(),NOW(),16777216,$3,NOW()+INTERVAL '15 minutes'),
+    ($1,'episode',401,'other-episode','other-series','mkv',
+     'Other episode','copying',$2,NOW(),NOW(),16777216,$3,
+     NOW()+INTERVAL '15 minutes')`,[SOURCE2,SHA,otherRun]);
+  const correctMovie=await findActiveMirrorMovie(pool,{
+   gatewayId:15,sourceId:SOURCE});
+  const otherMovie=await findActiveMirrorMovie(pool,{
+   gatewayId:15,sourceId:SOURCE2});
+  assert.equal(correctMovie?.mediaId,'test-movie');
+  assert.equal(otherMovie?.mediaId,'other-movie');
+  const correctEpisode=await findActiveMirrorEpisode(pool,{
+   gatewayId:401,sourceId:SOURCE});
+  const otherEpisode=await findActiveMirrorEpisode(pool,{
+   gatewayId:401,sourceId:SOURCE2});
+  assert.equal(correctEpisode?.mediaId,'test-ep');
+  assert.equal(otherEpisode?.mediaId,'other-episode');
+  assert.equal(await findActiveMirrorEpisode(pool,{
+   gatewayId:401,sourceId:'bad-source'}),null);
   // The transfer workers created the shared PG budget in this schema;
   // supply separate sample manifest tables without writing actual media.
   await pool.query('CREATE TABLE blofy_content_hub_chunk_runs (run_id TEXT)');
