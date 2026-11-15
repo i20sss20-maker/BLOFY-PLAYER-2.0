@@ -556,3 +556,55 @@ production resources are used in these tests.
 new files must have individually reviewed storage permission,
 and actual source/network and device playback performance remain
 unverified.
+
+
+## 2026-11-15: Pre-deployment safety check for two Railway PostgreSQL services
+
+**Important blocker addressed:** an activation service and a Content
+Hub service can BOTH have a `DATABASE_URL` while pointing to
+DIFFERENT PostgreSQL databases. The dynamic mirror copy claims source
+metadata, rights-review rows, episode gateway mappings and S3 manifests
+under a single atomic source-scoped transaction. Before deploying or
+enabling ANY media worker, the owner must prove these tables are
+visible from the actual **Content Hub** connection; a healthy Railway
+service alone cannot establish this.
+
+A new authenticated, **read-only** technical diagnostic (zero DDL,
+zero provider requests, zero copy) is now implemented:
+- Content Hub: `GET /internal/mirror/deployment/preflight` using the
+  existing private Hub bearer token.
+- Activation owner-session proxy:
+  `GET /api/v1/admin/content-hub/mirror/deployment/preflight`.
+- The `مزامنة مكتبة Xtream` dashboard shows a prominent warning when
+  the approved `saleh` source ID differs, the source is offline or
+  stale, any Xtream map/queue table is absent in the Hub PostgreSQL
+  connection, the private movie/episode manifest tables are missing,
+  the shared source/day byte budget is absent, or private S3 health
+  cannot be confirmed.
+
+The result distinguishes `technicalPreflightPassed` from
+`perFileStorageRightsIndependentlyVerified` (always false in this
+schema-only diagnostic). Even a fully green technical check **does
+not authorize a download**, does not validate a provider's permanent
+storage license or concurrency limit and **never turns any flag ON**.
+
+An isolated real PostgreSQL integration test verifies that the
+diagnostic initially fails when manifest/budget tables are absent,
+then passes once the same database schema contains all technical
+tables. A missing table is not interpreted as zero copied files.
+There is no automatic database migration between services and no
+storage of database passwords or other credentials in the response.
+
+**Additional bug fixed:** operator POST to
+`/api/v1/admin/content-hub/mirror/media-qa/<kind>/<gatewayId>`
+previously forwarded the Content Hub's asynchronous **202 Accepted**
+but then rejected its JSON body with a strict 200-only decoder,
+making an accepted QA appear failed. The owner proxy now explicitly
+preserves 200, 202, 400, 403 and 409 JSON statuses using a bounded,
+allow-listed response decoder. All other private-read callers
+remain 200-only by default. A new test checks this exact behavior.
+
+**Status:** This functionality remains only in unmerged draft
+PR #609, and no Railway production environment variables or customer
+streams have been changed. Actual DB affinity cannot be declared
+verified before the diagnostic runs on the eventual deployed build.
