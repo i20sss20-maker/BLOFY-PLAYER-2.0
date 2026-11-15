@@ -21,12 +21,16 @@ export function riyadhMirrorDay(now=new Date()){
 export function normalizeMirrorDiscoveryCandidate(row,mediaKind){
  const gatewayId=Number(row?.gateway_id);
  const mediaId=String(row?.media_id||'');
+ const seriesMediaId=mediaKind==='episode'?String(row?.series_media_id||''):null;
  const extension=String(row?.extension||'').toLowerCase();
  if(!TYPES.has(mediaKind)||!Number.isSafeInteger(gatewayId)||gatewayId<1||
     !/^[A-Za-z0-9._-]{1,128}$/.test(mediaId)||
+    (mediaKind==='episode'&&!/^[A-Za-z0-9._-]{1,128}$/.test(seriesMediaId))||
     !ALLOWED_EXT.has(extension))return null;
+ // Never truncate a series identity: changing parent rights by implicit
+ // truncation is unsafe. Invalid parent IDs remain undiscovered.
  return {gatewayId,mediaId,extension,mediaKind,
-  seriesMediaId:mediaKind==='episode'?String(row?.series_media_id||'').slice(0,128):null,
+  seriesMediaId,
   title:String(row?.title||'').replace(/[\u0000-\u001f\u007f]/g,' ').trim().slice(0,220)};
 }
 
