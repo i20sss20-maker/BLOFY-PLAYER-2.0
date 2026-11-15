@@ -196,37 +196,37 @@ export const ANIS_AUDIO_TRACKS = Object.freeze([
   },
   {
     "id": "anis-max-low-1",
-    "label": "Anis Max Low 1",
+    "label": "Anis Max 1 Low",
     "sourcePath": "/live/mx/1L",
     "group": "max-low"
   },
   {
     "id": "anis-max-low-2",
-    "label": "Anis Max Low 2",
+    "label": "Anis Max 2 Low",
     "sourcePath": "/live/mx/2L",
     "group": "max-low"
   },
   {
     "id": "anis-max-low-3",
-    "label": "Anis Max Low 3",
+    "label": "Anis Max 3 Low",
     "sourcePath": "/live/mx/3L",
     "group": "max-low"
   },
   {
     "id": "anis-max-low-4",
-    "label": "Anis Max Low 4",
+    "label": "Anis Max 4 Low",
     "sourcePath": "/live/mx/4L",
     "group": "max-low"
   },
   {
     "id": "anis-max-low-5",
-    "label": "Anis Max Low 5",
+    "label": "Anis Max 5 Low",
     "sourcePath": "/live/mx/5L",
     "group": "max-low"
   },
   {
     "id": "anis-max-low-6",
-    "label": "Anis Max Low 6",
+    "label": "Anis Max 6 Low",
     "sourcePath": "/live/mx/6L",
     "group": "max-low"
   }
