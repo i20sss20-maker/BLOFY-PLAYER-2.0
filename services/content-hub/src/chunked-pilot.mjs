@@ -28,7 +28,8 @@ function configFromEnv(env){
   expectedBytes>=CHUNK_BYTES&&expectedBytes<=MAX_BYTES&&
   Number.isSafeInteger(gatewayId)&&gatewayId>0&&token.length>=32&&
   Number.isInteger(perBatch)&&perBatch>=1&&perBatch<=2?
-  {runId,expectedBytes,gatewayId,token,perBatch}:null;
+  {runId,expectedBytes,gatewayId,token,perBatch,
+   dynamic:env.BLOFY_CONTENT_HUB_MIRROR_DYNAMIC_MOVIE_ENABLED==='1'}:null;
 }
 // Operator-visible, read-only readiness. Reason codes are intentionally
 // bounded and contain no source credentials, media URLs or private S3 keys.
@@ -90,12 +91,17 @@ async function rangeBuffer(response,{from,to,total}){
 // ETag/Last-Modified. Double-probe fixed 4KiB boundary blocks before AND
 // after each real chunk. This is a sampled change detector (not as strong
 // as a provider-supplied full-file version ID). Never use as customer proof.
+function privateMovieSourcePath(cfg){
+ return cfg.dynamic?
+  '/internal/blofy-content-hub/mirror/movie/'+cfg.gatewayId+'/source':
+  '/internal/blofy-content-hub/source/movie/'+cfg.gatewayId;
+}
 async function sampleBoundaryFingerprint({cfg,fetchImpl,signal}){
  const digest=createHash('sha256');
  const pairs=[[0,4095],[cfg.expectedBytes-4096,cfg.expectedBytes-1]];
  for(const [from,to] of pairs){
   const r=await fetchImpl(ORIGIN+
-    '/internal/blofy-content-hub/source/movie/'+cfg.gatewayId,{
+    privateMovieSourcePath(cfg),{
     method:'GET',redirect:'manual',
     headers:{authorization:'Bearer '+cfg.token,
       range:`bytes=${from}-${to}`,'accept-encoding':'identity'},
@@ -192,7 +198,7 @@ export async function runChunkedMovieBatch({
    }
    stage='source_chunk';
    const response=await fetchImpl(ORIGIN+
-      '/internal/blofy-content-hub/source/movie/'+cfg.gatewayId,{
+      privateMovieSourcePath(cfg),{
      method:'GET',redirect:'manual',
      headers:{authorization:'Bearer '+cfg.token,
        range:'bytes='+from+'-'+to,'accept-encoding':'identity'},
