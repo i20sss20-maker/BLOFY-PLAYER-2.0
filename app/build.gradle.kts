@@ -47,11 +47,11 @@ android {
         applicationId = if (xiaomiEdition) "tv.blofy.player.xiaomi" else "tv.blofy.player.v2"
         minSdk = 23
         targetSdk = 36
-        // Isolated STREAM 55.8.25 owner-only QA candidate. This branch does
+        // Isolated STREAM 55.8.26 owner-only QA candidate. This branch does
         // not change the main app, customer updater or Google Play releases.
-        versionCode = 2000102
-        // Upgrade over original owner-signed STREAM 55.8.24 (2000101).
-        versionName = "2.0.0-rc07.55.8.25" // STREAM build type appends -STREAM
+        versionCode = 2000103
+        // VersionCode is higher than the published signed STREAM 55.8.24 (2000101).
+        versionName = "2.0.0-rc07.55.8.26" // STREAM build type appends -STREAM
         manifestPlaceholders["blofyApplicationLabel"] = "@string/app_name"
         manifestPlaceholders["blofyApplicationIcon"] = "@drawable/blofy_logo"
         manifestPlaceholders["blofyApplicationBanner"] = "@drawable/blofy_tv_banner"
