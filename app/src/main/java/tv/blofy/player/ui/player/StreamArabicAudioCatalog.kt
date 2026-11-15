@@ -84,34 +84,64 @@ internal object StreamArabicAudioCatalog {
      * are provided securely by the current BLOFY server session, not a
      * third-party file picker or a customer-entered URL.
      */
-    suspend fun list(context: Context, channelId: String): List<Track> = withContext(Dispatchers.IO) {
-        if (!channelIdFormat.matches(channelId)) return@withContext emptyList()
-        val bearer = StreamCodeSession.authorization(context) ?: return@withContext emptyList()
-        runCatching {
-            val request = Request.Builder()
-                .url(StreamCodeSession.HOST + "/api/v1/stream/audio/catalog")
-                .header("Authorization", bearer)
-                .header("Accept", "application/json")
-                .get().build()
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return@use emptyList()
-                if ((response.body?.contentLength() ?: 0) > MAX_JSON_BYTES)
-                    return@use emptyList()
-                val source = response.body?.byteStream() ?: return@use emptyList()
-                val raw = source.use { input ->
-                    val output = java.io.ByteArrayOutputStream()
-                    val bytes = ByteArray(4096)
-                    while (output.size() <= MAX_JSON_BYTES) {
-                        val n = input.read(bytes)
-                        if (n < 0) break
-                        output.write(bytes, 0, n)
-                    }
-                    if (output.size() > MAX_JSON_BYTES) "" else output.toString(Charsets.UTF_8.name())
-                }
-                decode(raw).filter { trustedAudioUrl(it.playbackUrl) }
-            }
-        }.getOrDefault(emptyList())
+    internal enum class Failure {
+        NONE, INVALID_CHANNEL, NOT_ACTIVATED, UNAUTHORIZED, NO_ENDPOINT,
+        RATE_LIMITED, SERVICE, EMPTY_CATALOG, NETWORK
     }
+
+    internal data class Lookup(val tracks: List<Track>, val failure: Failure)
+
+    /** UI needs to distinguish missing backend endpoint from unavailable
+     * commentary, otherwise customers see misleading "not available yet".
+     * Preserve the original protected bearer route; never use public HTTP
+     * endpoints or leak operator source URLs into application logs.
+     */
+    suspend fun lookup(context: Context, channelId: String): Lookup =
+        withContext(Dispatchers.IO) {
+            if (!channelIdFormat.matches(channelId))
+                return@withContext Lookup(emptyList(), Failure.INVALID_CHANNEL)
+            val bearer = StreamCodeSession.authorization(context)
+                ?: return@withContext Lookup(emptyList(), Failure.NOT_ACTIVATED)
+            runCatching {
+                val request = Request.Builder()
+                    .url(StreamCodeSession.HOST + "/api/v1/stream/audio/catalog")
+                    .header("Authorization", bearer)
+                    .header("Accept", "application/json").get().build()
+                client.newCall(request).execute().use { response ->
+                    val reason = when (response.code) {
+                        401, 403 -> Failure.UNAUTHORIZED
+                        404 -> Failure.NO_ENDPOINT
+                        429 -> Failure.RATE_LIMITED
+                        in 500..599 -> Failure.SERVICE
+                        else -> Failure.NETWORK
+                    }
+                    if (!response.isSuccessful) return@use Lookup(emptyList(), reason)
+                    if ((response.body?.contentLength() ?: 0) > MAX_JSON_BYTES)
+                        return@use Lookup(emptyList(), Failure.EMPTY_CATALOG)
+                    val input = response.body?.byteStream()
+                        ?: return@use Lookup(emptyList(), Failure.EMPTY_CATALOG)
+                    val raw = input.use { stream ->
+                        val output = java.io.ByteArrayOutputStream()
+                        val buffer = ByteArray(4096)
+                        while (output.size() <= MAX_JSON_BYTES) {
+                            val n = stream.read(buffer)
+                            if (n < 0) break
+                            output.write(buffer, 0, n)
+                        }
+                        if (output.size() > MAX_JSON_BYTES) ""
+                        else output.toString(Charsets.UTF_8.name())
+                    }
+                    val source = runCatching { JSONObject(raw) }.getOrNull()
+                    val tracks = (if (source?.has("channels") == true)
+                        decodeForChannel(raw, channelId)
+                    else decode(raw)).filter { trustedAudioUrl(it.playbackUrl) }
+                    Lookup(tracks, if (tracks.isEmpty()) Failure.EMPTY_CATALOG else Failure.NONE)
+                }
+            }.getOrElse { Lookup(emptyList(), Failure.NETWORK) }
+        }
+
+    suspend fun list(context: Context, channelId: String): List<Track> =
+        lookup(context, channelId).tracks
 
     internal fun groupName(track: Track, english: Boolean): String {
         val id = track.id
