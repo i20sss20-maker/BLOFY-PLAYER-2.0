@@ -1,0 +1,37 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {findActiveMirrorEpisode}
+ from '../src/xtream-mirror-episode-bridge.mjs';
+
+const ID='123e4567-e89b-42d3-a456-426614174000';
+const row={source_id:ID,media_id:'ep_42',gateway_id:42,
+ extension:'mkv',expected_bytes:'16777216',
+ copy_run_id:'mirror_'+'a'.repeat(40)};
+
+test('one specific leased episode has active rights, exact series identity, and size',async()=>{
+ const sql=[];
+ const item=await findActiveMirrorEpisode({
+  query:async(q,params)=>{sql.push({q,params});return {rows:[row]}}
+ },{gatewayId:42});
+ assert.equal(item.gatewayId,42);
+ assert.equal(item.mediaId,'ep_42');
+ assert.equal(item.sourceId,ID);
+ assert.equal(item.expectedBytes,16777216);
+ assert.equal(sql.length,1);
+ assert.deepEqual(sql[0].params,[42]);
+ for(const needle of [
+  "q.media_kind='episode'","q.state='copying'",
+  "q.copy_lease_until>NOW()","q.mapping_conflict=FALSE",
+  "e.source_episode_id=q.media_id","s.last_sync_at>NOW()",
+  "q.rights_ref_sha256", "q.expected_bytes BETWEEN"
+ ])assert.ok(sql[0].q.includes(needle),needle);
+});
+test('invalid ID, no approved lease or impossible source size fails closed',async()=>{
+ assert.equal(await findActiveMirrorEpisode({query:async()=>{throw Error('bad')}},
+  {gatewayId:0}),null);
+ assert.equal(await findActiveMirrorEpisode({query:async()=>({rows:[]})},
+  {gatewayId:42}),null);
+ assert.equal(await findActiveMirrorEpisode({query:async()=>({
+  rows:[{...row,expected_bytes:'99999999999'}]})},
+  {gatewayId:42}),null);
+});
