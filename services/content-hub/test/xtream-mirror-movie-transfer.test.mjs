@@ -124,7 +124,7 @@ test('global per-source/day budget is reserved before a single claimed item',asy
   release(){}
   async query(sql,args=[]){
    trace.push({sql,args});
-   if(sql.startsWith('CREATE')||sql==='BEGIN'||sql==='COMMIT')
+   if(sql.startsWith('CREATE')||sql.startsWith('ALTER')||sql==='BEGIN'||sql==='COMMIT')
     return {rowCount:0,rows:[]};
    if(sql.startsWith('INSERT'))return {rowCount:1,rows:[]};
    if(sql.includes('SELECT reserved_bytes'))return {
