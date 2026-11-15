@@ -7,13 +7,13 @@ import org.junit.Test
 
 class LiveChannelPanelPolicyTest {
     @Test fun mainControlsStayCompactWhileAdvancedControlsExpandBelow() {
-        assertEquals(listOf(LiveChannelPanelAction.BLOFY_AUDIO, LiveChannelPanelAction.FAVORITE,
-            LiveChannelPanelAction.EPG, LiveChannelPanelAction.MORE),
+        assertEquals(listOf(LiveChannelPanelAction.BLOFY_AUDIO, LiveChannelPanelAction.MORE),
             LiveChannelPanelPolicy.actions(true))
         assertTrue(LiveChannelPanelPolicy.actions(true, true)
             .containsAll(listOf(LiveChannelPanelAction.AUDIO_TRACKS,
                 LiveChannelPanelAction.SUBTITLES, LiveChannelPanelAction.VIDEO_QUALITY,
-                LiveChannelPanelAction.STREAM_INFO, LiveChannelPanelAction.RECONNECT)))
+                LiveChannelPanelAction.STREAM_INFO, LiveChannelPanelAction.RECONNECT,
+                LiveChannelPanelAction.FAVORITE, LiveChannelPanelAction.EPG)))
     }
     @Test fun legacyBlofyPlayerUnchanged() {
         assertTrue(LiveChannelPanelPolicy.actions(false).isEmpty())
