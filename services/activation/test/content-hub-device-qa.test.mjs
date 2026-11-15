@@ -7,6 +7,15 @@ import {
  verifyOwnerDeviceQaTicket,strictDeviceQaRange,
  forwardOwnerDeviceQaPlayback,DEVICE_QA_MAX_RANGE
 } from '../src/content-hub-device-qa.mjs';
+const base64urlAlphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+function nonCanonicalHmacAlias(ticket){
+ const final=ticket.at(-1),number=base64urlAlphabet.indexOf(final);
+ assert.ok(number>=0);
+ // Signature is 32 bytes -> 43 base64url chars; the last 2 pad
+ // bits must be 0 in canonical encoding, but a decoder ignores them.
+ assert.equal(number%4,0);
+ return ticket.slice(0,-1)+base64urlAlphabet[number+1];
+}
 const secret='s'.repeat(64),runId='owner_verified_20261114';
 const env={BLOFY_CONTENT_HUB_DEVICE_QA_ENABLED:'1',
  BLOFY_CONTENT_HUB_DEVICE_QA_SIGNING_KEY:secret};
@@ -33,7 +42,12 @@ test('HMAC ticket cannot be forged, extended, replayed on another ID, or used af
  assert.equal(verifyOwnerDeviceQaTicket({
   secret:'x'.repeat(64),ticket:a.ticket,runId,now:issued}),false);
  assert.equal(verifyOwnerDeviceQaTicket({
-  secret,ticket:a.ticket.slice(0,-1)+'A',runId,now:issued}),false);
+  secret,ticket:nonCanonicalHmacAlias(a.ticket),runId,now:issued}),false);
+ // Unlike changing a random character, this alias decodes to the
+ // SAME 32-byte HMAC and tests the missing canonicality check.
+ assert.deepEqual(
+  Buffer.from(nonCanonicalHmacAlias(a.ticket).split('.').at(-1),'base64url'),
+  Buffer.from(a.ticket.split('.').at(-1),'base64url'));
  assert.notEqual(mintOwnerDeviceQaTicket({secret,runId,now:issued}).ticket,a.ticket);
  assert.throws(()=>mintOwnerDeviceQaTicket({secret,runId:'../bad'}));
  assert.equal(a.ticket.includes('https:'),false);
