@@ -374,3 +374,51 @@ storage cost, source feed limits, real-media stream quality and mobile/TV
 playback must be verified by an operator BEFORE enabling source traffic.
 The new code has NOT downloaded the user's entire Xtream catalog.
 No production deployment and no customer-app changes in this draft.
+
+
+## 2026-11-15: Multi-day copy reliability and verified PRIVATE playback QA
+
+**Fix:** With the safe initial daily media budget (64MiB/day), a 1GiB
+film could take many days. Previously the original media size proof
+expired after 48 hours while the size probe only checked
+`needs_review` rows, so an `approved`, partially copied item would
+eventually stall. The preflight now preferentially reprobes
+partially copied, individually authorized and **approved** movies or
+episodes before the old size proof expires, once per local day
+during the existing quiet window. A changed byte length or
+origin-version validator freezes the item for operator review while
+preserving all already verified S3 checkpoints. An origin with no
+version header is still protected by the existing two-boundary sampled
+SHA check per chunk (not equivalent to a signed source version).
+No provider request is added outside the specifically opted-in scanner.
+
+**New private owner QA only, default OFF:**
+`BLOFY_CONTENT_HUB_MIRROR_OWNER_QA_ENABLED=1` creates a limited
+one-connection Postgres mirror QA lookup. After a movie or episode is
+`verified` in the mirror candidate queue, the QA function independently
+reads the verified chunk manifest and compares its exact media length,
+container and SHA-256 against the queue's final copy proof.
+
+Operator session endpoints:
+- `GET /api/v1/admin/content-hub/mirror/media-qa/movie/<gatewayId>`
+- `GET /api/v1/admin/content-hub/mirror/media-qa/episode/<gatewayId>`
+- `POST` to either with the explicit
+  `x-blofy-owner-action: verify-private-mirror-playback` header.
+
+Each POST requires a valid owner session, exact approved source and
+verified private S3 manifest before it can run. It uses the existing
+private ffprobe/ffmpeg A/V decode canary and four authenticated
+S3 byte-range seeks (start/middle/cross-chunk/end). GET reports the
+last result; QA logs contain no upstream provider URL or credentials.
+The backend does **not** contact the Xtream provider during QA,
+publish any public media, or re-route subscribers.
+
+A successful canary proves private file-backed A/V decoding and seeking
+inside Content Hub. It DOES NOT establish real playback or remote
+control behavior on Android phone, Android TV, or Windows clients.
+Those devices still require signed debug builds and actual
+interactive testing before customer rollout.
+
+**Status:** PR #609 is a draft, not deployed. New metadata scan,
+copying and QA flags remain OFF; the code's offline tests are not
+evidence that the live Xtream catalog was transferred or played.
