@@ -48,6 +48,22 @@ class StreamAnisAudioCatalogTest {
                 decoded.first { it.id == "anis-max-low-6" }, true))
     }
 
+    @Test fun perChannelCatalogDoesNotShowOtherChannelAudio() {
+        fun channel(id: String, trackId: String): JSONObject =
+            JSONObject().put("channelId", id).put("tracks", JSONArray().put(
+                JSONObject().put("id", trackId).put("label", trackId)
+                    .put("playbackUrl",
+                        "https://blofyplayer.com/api/v1/stream/media/audio/" + trackId)
+            ))
+        val payload = JSONObject().put("channels", JSONArray()
+            .put(channel("100", "anis-max-1"))
+            .put(channel("200", "anis-sport-1"))).toString()
+        val chosen = StreamArabicAudioCatalog.decodeForChannel(payload, "200")
+        assertEquals(listOf("anis-sport-1"), chosen.map { it.id })
+        assertTrue(StreamArabicAudioCatalog.decodeForChannel(payload, "300").isEmpty())
+        assertTrue(StreamArabicAudioCatalog.decode(payload).isEmpty())
+    }
+
     @Test fun neverAllowExternalOriginForCodeProtectedAudio() {
         val firstParty =
             "https://blofyplayer.com/api/v1/stream/media/audio/anis-max-1"
