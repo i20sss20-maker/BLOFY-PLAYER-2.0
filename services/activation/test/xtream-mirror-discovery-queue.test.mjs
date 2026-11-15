@@ -186,3 +186,24 @@ test('admin can inspect paginated discovered items but cannot start copy',async(
  await assert.rejects(()=>f.store.listQueue({sourceId:ID,
   mediaKind:'live'}),/queue_query_invalid/);
 });
+
+test('episode series source identity is required and never silently truncated',()=>{
+ const base={gateway_id:42,media_id:'ep42',extension:'mkv',title:'Show'};
+ assert.equal(normalizeMirrorDiscoveryCandidate(base,'episode'),null);
+ assert.equal(normalizeMirrorDiscoveryCandidate({...base,
+  series_media_id:'x'.repeat(129)},'episode'),null);
+ assert.equal(normalizeMirrorDiscoveryCandidate({...base,
+  series_media_id:'../hidden/show'},'episode'),null);
+ assert.equal(normalizeMirrorDiscoveryCandidate({...base,
+  series_media_id:'series_17'},'episode').seriesMediaId,'series_17');
+});
+test('discovery SQL marks mapping conflict when only episode series parent changes',async()=>{
+ const f=fixture([], [{gateway_id:53,media_id:'ep53',
+  series_media_id:'series_a',extension:'mp4',title:'Series A'}]);
+ await f.store.scanPage({sourceId:ID,mediaKind:'episode',
+  localDay:'2026-11-15',limit:10});
+ const upsert=f.calls.find(x=>x.sql.includes('INSERT INTO blofy_xtream_mirror_items'));
+ assert.ok(upsert);
+ assert.match(upsert.sql,/series_media_id\s+IS DISTINCT FROM EXCLUDED.series_media_id/);
+ assert.match(upsert.sql,/mapping_conflict_at=CASE/);
+});
