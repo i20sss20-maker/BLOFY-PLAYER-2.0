@@ -102,7 +102,8 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             return when (LivePlayerMenuPolicy.action(
                 event.keyCode,
                 hudVisible = activity.liveControlsVisible(),
-                channelDialogVisible = dialog?.isShowing == true
+                channelDialogVisible = dialog?.isShowing == true,
+                unifiedChannelPanel = BuildConfig.CODE_ONLY_LOGIN
             )) {
                 LivePlayerMenuAction.SHOW_AUDIO_CONTROLS ->
                     if (activity.showLiveAudioControls()) true else delegate.dispatchKeyEvent(event)
