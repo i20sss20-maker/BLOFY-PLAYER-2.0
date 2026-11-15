@@ -89,7 +89,7 @@ test('first media byte timeout and safe write are checked before announcing audi
  assert.ok(section.indexOf('const first=await reader.read()')>=0);
  assert.ok(section.indexOf('const type=classifyAnisAudioMime')>=0);
  assert.ok(section.indexOf("clearTimeout(firstByteTimer)")>=0);
- assert.ok(section.indexOf('res.writeHead(200')>section.indexOf('const first=await reader.read()'));
+ assert.ok(section.indexOf("res.writeHead(200,{'content-type':type,...headers});", section.indexOf('const first=await reader.read()'))>0);
  assert.ok(section.includes("redirect:'manual'"));
  assert.ok(section.includes("res.off('close',onClose)"));
 });
