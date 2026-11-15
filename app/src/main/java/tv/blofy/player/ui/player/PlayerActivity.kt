@@ -163,7 +163,9 @@ open class PlayerActivity : ContentAccessActivity() {
 
     private val providerId by lazy { intent.getStringExtra(EXTRA_PROVIDER_ID).orEmpty() }
     private val kind by lazy { intent.getStringExtra(EXTRA_KIND).orEmpty() }
-    private val categoryId by lazy { intent.getStringExtra(EXTRA_CATEGORY_ID) }
+    // Live channel search can select a channel from a different category
+    // without creating a second player. Read the current Intent identity.
+    private val categoryId get() = intent.getStringExtra(EXTRA_CATEGORY_ID)
     private val seriesId by lazy { intent.getStringExtra(EXTRA_SERIES_ID).orEmpty() }
     private val dao by lazy { BlofyDatabase.get(applicationContext).dao() }
     private val zappingCoordinator by lazy { SmartZappingCoordinator(dao) }
@@ -1376,6 +1378,11 @@ open class PlayerActivity : ContentAccessActivity() {
         currentStreamId = stream.remoteId
         currentContentKey = stream.key
         currentTitle = stream.name
+        // Keep return-to-browser, channel position and favorites coherent
+        // when the user selects a result outside the original TV category.
+        intent.putExtra(EXTRA_STREAM_ID, stream.remoteId)
+        intent.putExtra(EXTRA_CONTENT_KEY, stream.key)
+        intent.putExtra(EXTRA_CATEGORY_ID, stream.categoryId)
 
         RecentChannelStore.record(this, provider.id, stream.key)
         updateTitle(stream.name)
