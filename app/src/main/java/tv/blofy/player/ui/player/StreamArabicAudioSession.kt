@@ -7,6 +7,7 @@ import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
@@ -95,7 +96,11 @@ internal class StreamArabicAudioSession(
                 if (version == generation) failAndRestore()
             }
         })
-        companion.setMediaItem(MediaItem.fromUri(item.playbackUrl))
+        companion.setMediaItem(
+            MediaItem.Builder().setUri(item.playbackUrl).apply {
+                if (item.format == "hls") setMimeType(MimeTypes.APPLICATION_M3U8)
+            }.build()
+        )
         companion.prepare()
         companion.playWhenReady = false
         onPrimaryPlaybackChanged()
