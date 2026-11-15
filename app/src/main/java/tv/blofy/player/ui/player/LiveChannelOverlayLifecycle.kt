@@ -32,6 +32,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.BuildConfig
 import tv.blofy.player.core.device.DeviceClass
+import tv.blofy.player.core.text.ArabicSearchNormalizer
 import tv.blofy.player.core.remote.RemoteAction
 import tv.blofy.player.core.remote.RemoteKeyRouter
 import tv.blofy.player.data.RecentChannelStore
@@ -445,8 +446,15 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                     val dao = BlofyDatabase.get(activity.applicationContext).dao()
                     val source = when (tab) {
                         LiveChannelTab.ALL -> if (query.isBlank()) base
-                            else runCatching { dao.searchCatalog(providerId, KIND_LIVE, query, 200) }
-                                .getOrDefault(emptyList())
+                            else {
+                                val fts = ArabicSearchNormalizer.ftsQuery(query)
+                                val indexed = if (fts.isNotBlank()) runCatching {
+                                    dao.searchStreamsFtsByKind(providerId, KIND_LIVE, fts, 200)
+                                }.getOrDefault(emptyList()) else emptyList()
+                                if (indexed.isNotEmpty()) indexed
+                                else runCatching { dao.searchCatalog(providerId, KIND_LIVE, query, 200) }
+                                    .getOrDefault(emptyList())
+                            }
                         LiveChannelTab.FAVORITES ->
                             runCatching { dao.favorites(providerId).first() }
                                 .getOrDefault(emptyList()).filter { it.kind == KIND_LIVE }
