@@ -45,7 +45,7 @@ test('owner admin route explicitly allows and forwards 202 without invoking stri
  const src=await readFile(new URL('../src/content-hub-admin-hook.mjs',
   import.meta.url),'utf8');
  const start=src.indexOf("const mirrorMediaQa=/^");
- const end=src.indexOf("if(path==='/api/v1/admin/content-hub/mirror/episode/status'",start);
+ const end=src.indexOf("if(path==='/api/v1/admin/content-hub/mirror/deployment/preflight'",start);
  assert.ok(start>0&&end>start);
  const fragment=src.slice(start,end);
  assert.match(fragment,/allowedStatuses:\[200,202,400,403,409\]/);
