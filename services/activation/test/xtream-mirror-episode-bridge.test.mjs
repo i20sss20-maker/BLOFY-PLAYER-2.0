@@ -35,3 +35,11 @@ test('invalid ID, no approved lease or impossible source size fails closed',asyn
   rows:[{...row,expected_bytes:'99999999999'}]})},
   {gatewayId:42}),null);
 });
+
+test('private episode bridge requires the ORIGINAL attested series source',async()=>{
+ const sql=[];
+ await findActiveMirrorEpisode({query:async q=>{sql.push(q);
+  return {rows:[row]}}},{gatewayId:42});
+ assert.equal(sql.length,1);
+ assert.match(sql[0],/e.series_source_id=q.series_media_id/);
+});
