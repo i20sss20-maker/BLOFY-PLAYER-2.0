@@ -1,0 +1,31 @@
+name: BLOFY STREAM Arabic Audio Backend Dev QA
+
+on:
+  push:
+    branches:
+      - feat/stream-arabic-audio-server-api-20261115
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stream-arabic-audio-backend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate syntax and isolated Arabic audio feature tests
+        run: |
+          set -euo pipefail
+          node --check services/activation/src/xtream-stream-arabic-audio.mjs
+          node --check services/activation/src/xtream-gateway-hook.mjs
+          node --test services/activation/test/xtream-stream-arabic-audio.test.mjs
+          node --test services/activation/test/xtream-code-app-token.test.mjs
