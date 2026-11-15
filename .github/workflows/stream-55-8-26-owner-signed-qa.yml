@@ -1,4 +1,5 @@
 name: BLOFY STREAM 55.8.26 Full Owner-Signed QA
+# Require the corrected on-device search hint and its exact source SHA QA to pass.
 on:
   push:
     branches:
