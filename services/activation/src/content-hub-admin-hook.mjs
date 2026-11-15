@@ -648,6 +648,16 @@ http.createServer=function withContentHubAdmin(listener){
      allowedStatuses:[200,202,400,403,409]
     }));
    }
+   if(path==='/api/v1/admin/content-hub/mirror/deployment/preflight'&&
+      req.method==='GET'){
+    if(String(req.url||'').includes('?'))
+     return json(res,400,{ok:false,code:'mirror_preflight_query_denied'});
+    const response=await request('/internal/mirror/deployment/preflight',{
+     signal:AbortSignal.timeout(12000)});
+    if(response.status!==200)return json(res,503,{
+     ok:false,code:'mirror_deployment_preflight_unavailable'});
+    return json(res,200,await safeReadJson(response));
+   }
    if(path==='/api/v1/admin/content-hub/mirror/episode/status'&&
       req.method==='GET'){
      const response=await request('/internal/mirror/episode/status',{
