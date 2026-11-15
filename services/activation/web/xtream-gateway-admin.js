@@ -728,6 +728,86 @@ function initArabicAudioManager(){
   rows.style.cssText='display:grid;gap:6px;margin-top:8px';
   form.append(acknowledgment,add,refresh,status);
   section.append(title,description,form,rows);
+
+  // Preview supported playlist/config files in the browser. No complete
+  // uploaded file crosses to Railway, even if it contains source credentials.
+  const importer=gatewayNode('div','stream-arabic-audio-import','');
+  importer.style.cssText='margin-top:14px;padding:12px;border:1px solid #504467;border-radius:12px';
+  importer.append(gatewayNode('strong','',
+    'استيراد قائمة صوتيات: M3U / M3U8 / TXT / CFG / XML / JSON'));
+  const importerHint=gatewayNode('p','',
+    'اختر ملفاً لمعاينة الروابط الصوتية محلياً، ثم اختر صوتية واحدة لملء نموذج الإضافة أعلاه. لا يتم رفع ملفك إلى الخادم.');
+  const file=gatewayNode('input','','');
+  file.type='file';file.accept='.m3u,.m3u8,.txt,.cfg,.xml,.json';
+  file.setAttribute('aria-label','ملف قائمة الصوتيات');
+  file.style.cssText='display:block;margin:10px 0;max-width:100%';
+  const importStatus=gatewayNode('p','','');
+  importStatus.setAttribute('role','status');
+  importStatus.setAttribute('aria-live','polite');
+  const importRows=gatewayNode('div','','');
+  importRows.style.cssText='display:grid;gap:8px;max-height:300px;overflow:auto';
+  importer.append(importerHint,file,importStatus,importRows);
+  section.append(importer);
+
+  file.addEventListener('change',async()=>{
+    importRows.replaceChildren();
+    importStatus.textContent='';
+    const picked=file.files?.[0];
+    if(!picked)return;
+    // Bound file size before reading. Huge playlist exports may contain
+    // hundreds of thousands of channels and should be filtered externally.
+    if(picked.size>1_000_000){
+      importStatus.textContent='الملف كبير؛ الحد 1 ميجابايت للمعاينة الآمنة.';
+      file.value='';
+      return;
+    }
+    const ext=picked.name.toLowerCase().split('.').pop();
+    try{
+      const {parseArabicAudioImport}=await import('/stream-arabic-audio-import.mjs');
+      const result=parseArabicAudioImport(await picked.text(),ext);
+      file.value=''; // never hold a reference to the uploaded file
+      if(result.error){
+        importStatus.textContent={
+          unsupported_file_type:'امتداد الملف غير مدعوم.',
+          invalid_json:'ملف JSON غير صالح.',
+          invalid_xml:'ملف XML غير صالح.',
+          file_too_large:'الملف أكبر من الحد الآمن.'
+        }[result.error]||'تعذرت قراءة القائمة.';
+        return;
+      }
+      if(!result.entries.length){
+        importStatus.textContent='لم أجد روابط HTTPS صوتية صالحة. بعض الملفات تحتوي على إعدادات أو دليل برامج فقط، وليس بثاً صوتياً.';
+        return;
+      }
+      importStatus.textContent='وجدت '+result.entries.length+
+        ' عنصرًا مرشحًا. اختر رابط الصوت، ثم أضفه بعد مراجعة تصريح استخدامه.'+
+        (result.truncated?' عُرض أول 60 عنصرًا فقط.':'');
+      for(const item of result.entries){
+        const row=gatewayNode('div','', '');
+        row.style.cssText='display:flex;align-items:center;gap:8px;justify-content:space-between';
+        const kind=item.kind==='hls_unavailable'
+          ?' · HLS (يحتاج تجهيز خادم منفصل)'
+          :item.kind==='verify_audio_type'
+            ?' · يحتاج التحقق من أنه صوت'
+            :' · صوت مباشر محتمل';
+        row.append(gatewayNode('span','',item.label+kind));
+        const choose=gatewayNode('button','button ghost','اختيار');
+        choose.type='button';choose.disabled=!item.selectable;
+        choose.addEventListener('click',()=>{
+          url.value=item.url;
+          if(!label.value.trim()&&item.label&&!item.label.startsWith('صوتية'))
+            label.value=item.label.slice(0,80);
+          status.textContent='تم اختيار رابط من الملف. تأكد من رقم القناة والصلاحيات، ثم اضغط إضافة الصوت العربي.';
+          url.focus();
+          // The preview has no links to reveal or fetch secret URL values.
+        });
+        row.append(choose);importRows.append(row);
+      }
+    }catch{
+      importStatus.textContent='تعذرت معاينة الملف. تأكد من صيغة المحتوى.';
+      file.value='';
+    }
+  });
   host.parentElement.insertBefore(section,host.nextSibling);
 
   async function list(){
