@@ -1114,6 +1114,27 @@ open class PlayerActivity : ContentAccessActivity() {
         }
     }
 
+    /**
+     * Public only to the live Window.Callback router: MENU or UP/DOWN opens
+     * playback controls with audio focused, without interrupting video.
+     * The separate OK channel browser remains available while HUD is hidden.
+     */
+    internal fun showLiveAudioControls(): Boolean {
+        if (!contentReady || kind != KIND_LIVE || sessionReleased ||
+            isFinishing || isDestroyed || !::hud.isInitialized || !::audioButton.isInitialized)
+            return false
+        showHud()
+        audioButton.requestFocus()
+        return true
+    }
+
+    internal fun liveControlsVisible(): Boolean =
+        contentReady && ::hud.isInitialized && hud.visibility == View.VISIBLE
+
+    internal fun dismissLiveAudioControls() {
+        if (liveControlsVisible()) hideHud()
+    }
+
     private fun showHud() {
         keepHudVisible()
         hud.visibility = View.VISIBLE
