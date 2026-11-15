@@ -13,6 +13,8 @@ import {createMirrorMovieTransferStore,runOneApprovedMirrorMovieChunk,
  mirrorMovieDispatchReadiness} from './xtream-mirror-movie-transfer.mjs';
 import {createMirrorEpisodeTransferStore,runOneApprovedMirrorEpisodeChunk,
  mirrorEpisodeDispatchReadiness} from './xtream-mirror-episode-transfer.mjs';
+import {createPrivateMirrorQaStore,resolveVerifiedMirrorMedia}
+ from './xtream-mirror-private-qa.mjs';
 import {diagnoseVerifiedMovie} from './playback-diagnostics.mjs';
 import {verifyPrivateSeekRanges} from './seek-diagnostics.mjs';
 import {buildPrivateBrowserPreview} from './private-preview.mjs';
@@ -96,7 +98,8 @@ export function createContentHubServer({storage,lease,
  episodeSizeInspector=inspectEpisodeSize,
  episodeChunkRunner=runOneEpisodeChunk,seasonQueueStore=null,catalogStore=null,
  dailyMediaSessionStore=null,mirrorMovieTransferStore=null,
- mirrorEpisodeTransferStore=null,
+ mirrorEpisodeTransferStore=null,mirrorQaStore=null,
+ mirrorCanaryRunner=null,
  metadataMatcher=createMetadataMatcher({
   token:process.env.BLOFY_TMDB_READ_TOKEN||'',
   commercialLicenseConfirmed:process.env.BLOFY_TMDB_COMMERCIAL_LICENSE_CONFIRMED==='1'
@@ -115,6 +118,8 @@ export function createContentHubServer({storage,lease,
  let episodeCopyBusy=false,episodeCopyAbort=null,lastEpisodeCopy=null;
  let mirrorMovieBusy=false,lastMirrorMovieChunk=null;
  let mirrorEpisodeBusy=false,lastMirrorEpisodeChunk=null;
+ let mirrorQaBusy=false;
+ const mirrorQaResults=new Map();
  let seasonStorageAuditBusy=false,seasonStorageAuditAt=0;
  let seasonConcurrentReadBusy=false,seasonConcurrentReadAt=0,lastSeasonConcurrentRead=null;
  const copy=createContinuousCopyController({
@@ -192,6 +197,67 @@ export function createContentHubServer({storage,lease,
    }catch{return json(res,400,{ok:false,
       code:'mirror_preview_catalog_invalid',providerRequests:0,
       bytesTransferred:0,customerCutover:false})}
+  }
+  // Authenticated owner-only QA for a fully verified mirrored movie or
+  // episode. GET reconciles PG/S3; POST starts private ffprobe/ffmpeg and
+  // four authenticated S3 seeks. Neither command opens a provider feed.
+  const mirrorQaRoute=/^\/internal\/mirror\/media-qa\/(movie|episode)\/([1-9][0-9]{0,14})$/.exec(path);
+  if(mirrorQaRoute&&['GET','POST'].includes(req.method)){
+   if(pilotEnv.BLOFY_CONTENT_HUB_MIRROR_OWNER_QA_ENABLED!=='1'||
+      !mirrorQaStore?.db)
+    return json(res,409,{ok:false,code:'mirror_media_qa_disabled'});
+   if(String(req.url||'').includes('?'))
+    return json(res,400,{ok:false,code:'mirror_media_qa_query_denied'});
+   const mediaKind=mirrorQaRoute[1],gatewayId=Number(mirrorQaRoute[2]);
+   const sourceId=String(pilotEnv.BLOFY_XTREAM_DAILY_CATALOG_SOURCE_ID||'');
+   let selected;
+   try{
+    selected=await resolveVerifiedMirrorMedia({
+     db:mirrorQaStore.db,lease,sourceId,mediaKind,gatewayId
+    });
+   }catch{return json(res,503,{ok:false,code:'mirror_media_qa_lookup_unavailable'})}
+   if(!selected.ok)return json(res,409,selected);
+   const id=mediaKind+':'+gatewayId;
+   if(req.method==='GET'){
+    const prior=mirrorQaResults.get(id)||null;
+    return json(res,200,{
+     ok:true,code:selected.code,sourceId,mediaKind,gatewayId,
+     bytes:selected.bytes,parts:selected.parts,
+     fullSha256Verified:true,
+     lastQa:prior?{...prior}:null,
+     privateOnly:true,providerRequests:0,customerCutover:false,
+     // Audio/seek proof is not an on-device app playback result.
+     devicePlaybackValidated:false,releaseToSubscribersApproved:false
+    });
+   }
+   if(req.headers['x-blofy-owner-action']!=='verify-private-mirror-playback')
+    return json(res,403,{ok:false,code:'mirror_media_qa_owner_action_required'});
+   if(mirrorQaBusy)return json(res,409,{ok:false,
+    code:'mirror_media_qa_busy'});
+   mirrorQaBusy=true;
+   mirrorQaResults.set(id,{code:'mirror_media_qa_running',
+    ok:false,checkedAt:new Date().toISOString()});
+   void Promise.resolve().then(()=>mirrorCanaryRunner?
+    mirrorCanaryRunner({runId:selected.runId,mediaKind,
+     storage,lease,port:server.address()?.port,token}):
+    runFullPlaybackCanary(selected.runId,mediaKind)).then(result=>{
+    mirrorQaResults.set(id,{
+     ok:result?.ok===true&&result.seekVerified===true,
+     code:result?.code||'mirror_media_qa_incomplete',
+     videoCodec:String(result?.videoCodec||'unknown').slice(0,40),
+     audioCodec:String(result?.audioCodec||'unknown').slice(0,40),
+     seeksVerified:Number(result?.seeksVerified)||0,
+     checkedAt:new Date().toISOString()
+    });
+   }).catch(()=>{
+    mirrorQaResults.set(id,{ok:false,code:'mirror_media_qa_failed',
+     checkedAt:new Date().toISOString()});
+   }).finally(()=>{
+    mirrorQaBusy=false;
+   });
+   return json(res,202,{ok:true,code:'mirror_media_qa_accepted',
+    mediaKind,gatewayId,privateOnly:true,providerRequests:0,
+    customerCutover:false,devicePlaybackValidated:false});
   }
   if(path==='/internal/mirror/episode/status'&&req.method==='GET'){
    if(String(req.url||'').includes('?')||!mirrorEpisodeTransferStore)
@@ -1561,8 +1627,11 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
  const mirrorEpisodeTransferStore=
   process.env.BLOFY_CONTENT_HUB_MIRROR_EPISODE_DISPATCH_ENABLED==='1'?
    createMirrorEpisodeTransferStore({connectionString:process.env.DATABASE_URL}):null;
+ const mirrorQaStore=process.env.BLOFY_CONTENT_HUB_MIRROR_OWNER_QA_ENABLED==='1'?
+  createPrivateMirrorQaStore({connectionString:process.env.DATABASE_URL}):null;
  const hub=createContentHubServer({storage,lease,seasonQueueStore,catalogStore,
   dailyMediaSessionStore,mirrorMovieTransferStore,mirrorEpisodeTransferStore,
+  mirrorQaStore,
   token:process.env.BLOFY_CONTENT_HUB_ADMIN_TOKEN||'',
   allowSynthetic:process.env.BLOFY_CONTENT_HUB_SYNTHETIC_TEST_ENABLED==='1',
   logger:(name,payload)=>console.info(name,JSON.stringify(payload))});
@@ -1980,7 +2049,7 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
   hub.stopEpisodeCopy();
   hub.server.close(()=>void Promise.allSettled([lease.close(),
    dailyMediaSessionStore?.close?.(),mirrorMovieTransferStore?.close?.(),
-   mirrorEpisodeTransferStore?.close?.()]));
+   mirrorEpisodeTransferStore?.close?.(),mirrorQaStore?.close?.()]));
  };
  process.once('SIGTERM',shutdown);process.once('SIGINT',shutdown);
 }
