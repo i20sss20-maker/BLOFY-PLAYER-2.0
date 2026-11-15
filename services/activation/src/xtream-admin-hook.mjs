@@ -2034,6 +2034,7 @@ function startSync(id, types, options={}) {
   const daily=options?.dailyReceipt===true&&
     /^20[0-9]{2}-[0-9]{2}-[0-9]{2}$/.test(String(options.day||''));
   try{
+    if(!daily)return syncQueue.enqueue(id,()=>syncServer(id,types));
     return syncQueue.enqueue(id,async()=>{
       if(daily)await markDailyCatalogRunning(controlPool,{
        sourceId:id,day:options.day}).catch(()=>{});
