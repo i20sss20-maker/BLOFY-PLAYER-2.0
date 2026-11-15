@@ -8,6 +8,7 @@ import {createFixedWindowLimiter,requestClientKey} from './auth-protection.mjs';
 import {adminCanaryRange,HUB_PILOT_RUN} from './content-hub-admin-core.mjs';
 import {buildUnifiedOpsOverview} from './content-hub-overview.mjs';
 import {enabledOwnerDeviceQa,mintOwnerDeviceQaTicket,forwardOwnerDeviceQaPlayback} from './content-hub-device-qa.mjs';
+import {readPrivateHubJsonResponse} from './content-hub-private-json.mjs';
 
 const HUB='http://blofy-content-hub.railway.internal:3000';
 const ADMIN=String(process.env.BLOFY_ADMIN_TOKEN||'').trim();
@@ -59,9 +60,7 @@ async function readSeasonAdminBody(req){
  catch{throw Error('season_admin_json_invalid')}
 }
 async function safeReadJson(response){
- if(response.status!==200||!String(response.headers.get('content-type')||'')
-   .includes('application/json'))throw Error('hub_private_response_unavailable');
- return response.json();
+ return readPrivateHubJsonResponse(response);
 }
 async function handleOverview(res){
  const paths=['/internal/status','/internal/pilots',
@@ -645,7 +644,9 @@ http.createServer=function withContentHubAdmin(listener){
       mirrorMediaQa[1]+'/'+mirrorMediaQa[2],opts);
     if(![200,202,400,403,409].includes(response.status))
      return json(res,503,{ok:false,code:'mirror_qa_unavailable'});
-    return json(res,response.status,await safeReadJson(response));
+    return json(res,response.status,await readPrivateHubJsonResponse(response,{
+     allowedStatuses:[200,202,400,403,409]
+    }));
    }
    if(path==='/api/v1/admin/content-hub/mirror/episode/status'&&
       req.method==='GET'){
