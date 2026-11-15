@@ -66,6 +66,7 @@ import {listLicensedSeries,mappedLicensedSeriesEpisodes,buildLicensedSeriesSeaso
 import {findRunningApprovedSeasonEpisode} from './xtream-content-hub-season-approval.mjs';
 import {enumerateOneMirrorSeries,shouldEnumerateMirrorSeries} from './xtream-mirror-series-enumeration.mjs';
 import {probeOneAttestedMirrorItem,mirrorSizeProbeEnabled} from './xtream-mirror-size-probe.mjs';
+import {findActiveMirrorMovie} from './xtream-mirror-movie-bridge.mjs';
 import {probePrivateEpisodeRange} from './xtream-content-hub-episode-probe.mjs';
 import { readXtreamGatewayJsonResponse } from './xtream-gateway-response.mjs';
 import {configuredXtreamPublicOrigin} from './xtream-public-origin.mjs';
@@ -1969,6 +1970,11 @@ async function handlePrivateContentHubSource(req,res,url){
   return json(res,401,{ok:false,code:'content_hub_source_unauthorized'});
  if(req.method!=='GET')
   return json(res,405,{ok:false,code:'content_hub_method_denied'});
+ const mirrorDescribe=/^\/internal\/blofy-content-hub\/mirror\/movie\/([1-9][0-9]{0,14})\/describe$/.exec(url.pathname);
+ const mirrorSource=/^\/internal\/blofy-content-hub\/mirror\/movie\/([1-9][0-9]{0,14})\/source$/.exec(url.pathname);
+ const mirrorId=mirrorDescribe||mirrorSource?
+   Number((mirrorDescribe||mirrorSource)[1]):null;
+
  // Only operator-selected *saleh* series with an indexed mapped ID.
  // Series metadata lookup may perform one provider API request, but NO
  // media transfer or customer playback route is affected.
@@ -2093,11 +2099,33 @@ async function handlePrivateContentHubSource(req,res,url){
     String(row.source_episode_id)!==episodeCandidate.mediaId||
     String(row.container_extension).toLowerCase()!==episodeCandidate.extension)
    return json(res,409,{ok:false,code:'content_hub_episode_source_changed'});
+ }else if(mirrorId!==null){
+  if(process.env.BLOFY_XTREAM_MIRROR_DYNAMIC_MOVIE_BRIDGE_ENABLED!=='1'||
+    process.env.BLOFY_CONTENT_HUB_BRIDGE_ENABLED!=='1'||url.search)
+   return json(res,403,{ok:false,code:'mirror_movie_bridge_disabled'});
+  const approved=await findActiveMirrorMovie(pool,{gatewayId:mirrorId});
+  if(!approved)return json(res,403,{ok:false,code:'mirror_movie_not_leased'});
+  row=await gatewayItemById('movie',mirrorId,approved.sourceId);
+  if(!approvedContentHubMedia(row)||
+     row.server_id!==approved.sourceId||
+     String(row.source_id)!==approved.mediaId||
+     String(row.container_extension||'').toLowerCase()!==approved.extension)
+   return json(res,409,{ok:false,code:'mirror_movie_gateway_changed'});
+  id=mirrorId;
+  // Retain one precise source size for every HTTP Range. It is a
+  // bounded item-level permission, NOT a blanket right to copy Xtream.
+  req.mirrorApprovedExpectedBytes=approved.expectedBytes;
  }else{
   id=await hubApprovedMovieId();
   row=await gatewayItemById('movie',id);
   if(!approvedContentHubMedia(row))
    return json(res,409,{ok:false,code:'content_hub_source_not_ready'});
+ }
+ if(mirrorDescribe){
+  return json(res,200,{ok:true,sourceName:'saleh',
+   sourceId:row.server_id,mediaId:row.source_id,gatewayId:id,
+   mediaKind:'movie',extension:String(row.container_extension).toLowerCase(),
+   automaticDownload:false,customerTrafficChanged:false});
  }
  if(isEpisode&&episodeDescribe){
   return json(res,200,{ok:true,sourceName:'saleh',
@@ -2117,7 +2145,9 @@ async function handlePrivateContentHubSource(req,res,url){
    process.env.BLOFY_CONTENT_HUB_EPISODE_RANGE_ENABLED!=='1'||
    req.headers['x-blofy-episode-transfer']!=='operator-authorized'))
   return json(res,403,{ok:false,code:'content_hub_episode_transfer_disabled'});
- if(url.pathname!==`/internal/blofy-content-hub/source/${isEpisode?'episode':'movie'}/${id}`||url.search)
+ if(url.pathname!==(mirrorSource?
+    `/internal/blofy-content-hub/mirror/movie/${id}/source`:
+    `/internal/blofy-content-hub/source/${isEpisode?'episode':'movie'}/${id}`)||url.search)
   return json(res,404,{ok:false,code:'content_hub_source_not_found'});
  const range=parseContentHubClientRange(req.headers.range);
  if(!range)return json(res,416,{ok:false,code:'content_hub_range_required'});
@@ -2139,7 +2169,8 @@ async function handlePrivateContentHubSource(req,res,url){
     'accept-encoding':'identity','user-agent':'BLOFY-ContentHub-SourceBridge/1.0'},
    timeoutMs:75000,signal:abort.signal});
   const ok=validContentHubResponse(upstream,range);
-  if(!ok||!upstream.body){
+  if(!ok||!upstream.body||
+     mirrorSource&&ok.size!==req.mirrorApprovedExpectedBytes){
    await upstream.body?.cancel().catch(()=>{});
    return json(res,502,{ok:false,code:'content_hub_provider_range_invalid'});
   }
