@@ -158,6 +158,37 @@ export function createContentHubServer({storage,lease,
     uptimeSeconds:Math.floor((Date.now()-started)/1000)});
   if(!safeAuth(req.headers.authorization,token))
    return json(res,401,{ok:false,code:'content_hub_auth_required'});
+  // Read-only reconciliation of the owner's catalog page with private
+  // completed chunk manifests. A database proof is not a live S3 HEAD;
+  // no provider request, no uploads and no customer playback.
+  if(path==='/internal/mirror/verified-inventory'){
+   if(req.method!=='POST'||String(req.url||'').includes('?'))
+    return json(res,405,{ok:false,code:'private_reconcile_method_denied'});
+   if(pilotEnv.BLOFY_CONTENT_HUB_MIRROR_RECONCILE_ENABLED!=='1'||
+      pilotEnv.BLOFY_CONTENT_HUB_STORAGE_RIGHTS_CONFIRMED!=='1'||
+      req.headers['x-blofy-owner-action']!=='private-catalog-manifest-reconcile')
+    return json(res,404,{ok:false,code:'private_reconcile_not_available'});
+   let body;
+   try{body=await readSeasonJson(req)}catch{
+    return json(res,400,{ok:false,code:'private_reconcile_json_invalid'});
+   }
+   if(!body||!Array.isArray(body.items)||body.items.length<1||
+      body.items.length>50||
+      typeof body.sourceId!=='string')
+    return json(res,400,{ok:false,code:'private_reconcile_input_invalid'});
+   try{
+    const result=await lease.reconcilePrivateVerifiedManifests({
+      sourceId:body.sourceId,items:body.items});
+    return json(res,200,result);
+   }catch(error){
+    if(/private_reconcile_(?:item|scope|duplicate)/.test(
+      String(error?.message||'')))
+     return json(res,400,{ok:false,code:'private_reconcile_input_invalid'});
+    return json(res,503,{ok:false,code:'private_reconcile_database_unavailable',
+     physicalS3Checked:false,providerRequests:0,
+     mediaBytesTransferred:0,customerCutover:false});
+   }
+  }
   if(path==='/internal/status'&&req.method==='GET'){
    let bucket=false,database=false,durablePilot=null;
    let ownerBrowserCheck={confirmed:false,videoConfirmed:false,audioConfirmed:false};
