@@ -679,3 +679,115 @@ function initStreamCodeManagement(){
   });
 }
 initStreamCodeManagement();
+
+
+/** Operator-only Arabic live-audio assignment. The upstream URL is NEVER
+ * listed, copied, saved in localStorage, or sent to customer devices.
+ * Disabled server-side until source storage/rights and device QA are approved.
+ */
+function initArabicAudioManager(){
+  const anchor=gx('gatewayCustomerLabel');
+  if(!anchor)return;
+  const host=anchor.closest('section')||anchor.parentElement;
+  if(!host?.parentElement)return;
+  const section=gatewayNode('section','gateway-arabic-audio-panel');
+  section.setAttribute('aria-label','صوتيات BLOFY العربية');
+  section.style.cssText='border:1px solid #62527e;border-radius:16px;padding:16px;margin:16px 0;background:#1e1930';
+  const title=gatewayNode('h3','','🎧 صوتيات القنوات العربية — BLOFY STREAM');
+  const description=gatewayNode('p','','اختر رقم القناة من قائمة BLOFY ثم أضف رابط صوت عربي مباشر مصرح به. يتم حفظ المصدر مشفرًا ولا يظهر للمشترك.');
+  const form=gatewayNode('form','','');
+  form.style.cssText='display:flex;flex-wrap:wrap;gap:8px;align-items:center';
+  function field(name,type,placeholder,required=true){
+    const input=gatewayNode('input','','');
+    input.type=type;input.name=name;input.placeholder=placeholder;
+    input.required=required;input.setAttribute('aria-label',placeholder);
+    input.style.cssText='padding:10px;max-width:100%;min-width:160px;flex:1;border-radius:9px';
+    form.append(input);return input;
+  }
+  const channel=field('channelId','number','رقم القناة (Stream ID)');
+  channel.min='1';channel.step='1';
+  const label=field('label','text','اسم الصوت العربي');
+  label.maxLength=80;
+  const url=field('sourceUrl','password','رابط الصوت المباشر HTTPS');
+  url.autocomplete='off';url.spellcheck=false;
+  const delay=field('delaySeconds','number','التأخير بالثواني',false);
+  delay.value='0';delay.min='0';delay.max='30';delay.step='1';
+  const acknowledgment=gatewayNode('label','','');
+  acknowledgment.style.cssText='display:flex;align-items:center;gap:7px;flex-basis:100%';
+  const rights=gatewayNode('input','','');
+  rights.type='checkbox';rights.required=true;
+  acknowledgment.append(rights,document.createTextNode('أؤكد أن لدي تصريحًا باستخدام هذا الصوت مع القنوات المختارة.'));
+  const add=gatewayNode('button','button','إضافة الصوت العربي');
+  add.type='submit';
+  const refresh=gatewayNode('button','button ghost','عرض صوتيات القناة');
+  refresh.type='button';
+  const status=gatewayNode('p','','');
+  status.setAttribute('role','status');status.setAttribute('aria-live','polite');
+  status.style.cssText='flex-basis:100%;color:#d8cdf5';
+  const rows=gatewayNode('div','','');
+  rows.style.cssText='display:grid;gap:6px;margin-top:8px';
+  form.append(acknowledgment,add,refresh,status);
+  section.append(title,description,form,rows);
+  host.parentElement.insertBefore(section,host.nextSibling);
+
+  async function list(){
+    const id=channel.value.trim();
+    if(!/^[1-9][0-9]{0,14}$/.test(id)){
+      status.textContent='أدخل رقم قناة صحيحًا.';return;
+    }
+    rows.replaceChildren();
+    try{
+      const data=await gatewayApi('/api/v1/admin/xtream-gateway/audio?channelId='+encodeURIComponent(id));
+      if(!data.items?.length){
+        rows.append(gatewayNode('p','','لا توجد صوتيات مضافة لهذه القناة.'));
+        status.textContent='تم الفحص.';return;
+      }
+      for(const item of data.items){
+        const line=gatewayNode('div','','');
+        line.style.cssText='display:flex;justify-content:space-between;gap:8px;align-items:center';
+        line.append(gatewayNode('span','',item.label+' · تأخير '+item.delaySeconds+'ث'));
+        const del=gatewayNode('button','button ghost','حذف');
+        del.type='button';
+        del.addEventListener('click',async()=>{
+          if(!window.confirm('حذف هذا الصوت من القناة؟'))return;
+          del.disabled=true;
+          try{
+            await gatewayApi('/api/v1/admin/xtream-gateway/audio/'+encodeURIComponent(item.id),{
+              method:'DELETE'
+            });
+            await list();
+          }catch(error){status.textContent='تعذر الحذف: '+String(error.message).slice(0,80)}
+          finally{del.disabled=false}
+        });
+        line.append(del);rows.append(line);
+      }
+      status.textContent='تم تحميل الصوتيات المضافة لهذه القناة.';
+    }catch(error){
+      status.textContent=String(error.message).includes('arabic_audio_not_enabled')
+        ?'ميزة الصوتيات تحتاج تفعيلًا واختبارًا على الخادم قبل الإطلاق.'
+        :'تعذر تحميل الصوتيات: '+String(error.message).slice(0,80);
+    }
+  }
+  refresh.addEventListener('click',()=>{void list()});
+  form.addEventListener('submit',async event=>{
+    event.preventDefault();
+    if(!rights.checked)return;
+    add.disabled=true;status.textContent='جاري حفظ الصوتية بصورة آمنة…';
+    try{
+      const payload={
+        channelId:channel.value.trim(),label:label.value.trim(),
+        sourceUrl:url.value.trim(),delaySeconds:Number(delay.value||0),
+        confirmAuthorizedAudio:true
+      };
+      await gatewayApi('/api/v1/admin/xtream-gateway/audio',{
+        method:'POST',body:JSON.stringify(payload)
+      });
+      url.value='';rights.checked=false;label.value='';
+      status.textContent='تمت الإضافة إلى كتالوج الصوتيات. يلزم اختبار تطابق الصوت مع القناة.';
+      await list();
+    }catch(error){
+      status.textContent='تعذرت الإضافة: '+String(error.message).slice(0,90);
+    }finally{add.disabled=false}
+  });
+}
+initArabicAudioManager();
