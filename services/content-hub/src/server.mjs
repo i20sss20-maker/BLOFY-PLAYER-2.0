@@ -14,6 +14,7 @@ import {buildStoredMovieSeekPreview} from './private-seek-preview.mjs';
 import {inspectPrivateTimeline,buildPrivateTimelineSegment} from './private-timeline.mjs';
 import {createPrivateTimelineClipCache} from './private-timeline-cache.mjs';
 import {auditPrivateHeadBatch} from './private-head-audit.mjs';
+import {auditAllVerifiedPrivateS3Chunks} from './private-full-head-audit.mjs';
 import {parseSiteQaRange} from './site-qa-range.mjs';
 import {inspectEpisodeCandidates} from './episode-candidates.mjs';
 import {inspectEpisodeSize} from './episode-probe.mjs';
@@ -1755,6 +1756,55 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
    seasonQueueReady:Boolean(seasonQueueStore)&&seasonsReady.ready,
    seasonQueueBlockedBy:seasonsReady.blockedBy,
    automaticSeasonStartup:false,customerCutover:false}));
+  // One explicit owner-approved exhaustive read-only S3 HEAD scan for
+  // exactly ONE previously verified private file on service startup. The
+  // PostgreSQL token is claimed ONCE, and the job never copies or fetches
+  // Xtream media. HEAD checks all chunk sizes, NOT a full content rehash.
+  if(process.env.BLOFY_CONTENT_HUB_FULL_HEAD_AUDIT_ON_BOOT==='1'){
+   const timer=setTimeout(()=>{
+    void (async()=>{
+     const env=process.env;
+     const kind=String(env.BLOFY_CONTENT_HUB_FULL_HEAD_KIND||'movie');
+     const runId=String(kind==='episode'?
+       env.BLOFY_CONTENT_HUB_EPISODE_RUN_ID||'':
+       env.BLOFY_CONTENT_HUB_BATCH_RUN_ID||'');
+     const token=String(env.BLOFY_CONTENT_HUB_FULL_HEAD_TOKEN||'');
+     if(!['movie','episode'].includes(kind)||
+       !/^[A-Za-z0-9_-]{8,80}$/.test(runId)||
+       !/^[A-Za-z0-9_-]{8,80}$/.test(token))
+      return {ok:false,code:'full_private_head_boot_invalid'};
+     if(env.BLOFY_CONTENT_HUB_STORAGE_RIGHTS_CONFIRMED!=='1'||
+        env.BLOFY_CONTENT_HUB_PHYSICAL_HEAD_AUDIT_ENABLED!=='1'||
+        (kind==='episode'&&
+         env.BLOFY_CONTENT_HUB_EPISODE_RIGHTS_CONFIRMED!=='1'))
+      return {ok:false,code:'full_private_head_rights_blocked'};
+     if(!await lease.claimBatchBootOnce(token,runId))
+      return {ok:false,code:'full_private_head_claim_exists'};
+     return auditAllVerifiedPrivateS3Chunks({
+       kind,runId,lease,storage,maxDurationMs:240000,pauseMs:110,
+       onProgress:p=>console.info('BLOFY_CONTENT_HUB_FULL_HEAD_PROGRESS',
+         JSON.stringify(p))
+     });
+    })().then(result=>{
+     console.info('BLOFY_CONTENT_HUB_FULL_HEAD_RESULT',JSON.stringify({
+      ok:result.ok===true,code:result.code,kind:result.kind||null,
+      totalParts:result.totalParts||0,
+      checkedParts:result.checkedParts||0,
+      matched:result.matched||0,missing:result.missing||0,
+      mismatch:result.mismatch||0,unavailable:result.unavailable||0,
+      retries:result.retries||0,durationMs:result.durationMs||0,
+      allPartsHeadChecked:result.allPartsHeadChecked===true,
+      allPhysicalS3ChunkSizesMatched:
+       result.allPhysicalS3ChunkSizesMatched===true,
+      contentSha256Recomputed:false,sourceMediaRequests:0,
+      s3MediaBytesRead:0,customerCutover:false
+     }));
+    }).catch(()=>console.warn('BLOFY_CONTENT_HUB_FULL_HEAD_RESULT',
+      JSON.stringify({ok:false,code:'full_private_head_boot_failed',
+       contentSha256Recomputed:false,sourceMediaRequests:0,
+       s3MediaBytesRead:0,customerCutover:false})));
+   },7500);timer.unref?.();
+  }
   // Once-only physical storage proof of the FIRST and LAST private
   // chunks in the existing SHA-verified owner movie or episode manifest.
   // HEAD checks only object presence and SIZE; no full-file hash reread,
