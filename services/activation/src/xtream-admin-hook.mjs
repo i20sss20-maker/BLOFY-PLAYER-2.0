@@ -3,6 +3,9 @@ import { safeErrorSummary } from './diagnostics-sanitizer.mjs';
 import {safeXtreamTransportCategory} from './xtream-transport-errors.mjs';
 import {withXtreamAccountReconnect} from './xtream-api-resilience.mjs';
 import {createXtreamSyncQueue} from './xtream-sync-queue.mjs';
+import {configuredDailySourceId,riyadhCatalogDay,scheduleDailyApprovedCatalog,
+ markDailyCatalogRunning,recordDailyCatalogOutcome,readDailyCatalogReceipts
+} from './xtream-daily-approved-catalog.mjs';
 import {xtreamConnectionReport} from './xtream-smart-connection.mjs';
 import {runXtreamBootDiagnostics} from './xtream-boot-diagnostics.mjs';
 import {observeRailwayEgress,probeXtreamSocket} from './xtream-egress-inspector.mjs';
@@ -2025,11 +2028,30 @@ async function cancelSourceSync(id) {
     staleStateCleared:clearStale};
 }
 
-function startSync(id, types) {
+function startSync(id, types, options={}) {
   if (syncQueue.has(id)||syncLocks.has(id))
     throw Object.assign(new Error('xtream_sync_in_progress'), { status: 409 });
+  const daily=options?.dailyReceipt===true&&
+    /^20[0-9]{2}-[0-9]{2}-[0-9]{2}$/.test(String(options.day||''));
   try{
-    return syncQueue.enqueue(id,()=>syncServer(id,types));
+    if(!daily)return syncQueue.enqueue(id,()=>syncServer(id,types));
+    return syncQueue.enqueue(id,async()=>{
+      if(daily)await markDailyCatalogRunning(controlPool,{
+       sourceId:id,day:options.day}).catch(()=>{});
+      try{
+        const result=await syncServer(id,types);
+        if(daily)await recordDailyCatalogOutcome(controlPool,{
+         sourceId:id,day:options.day,
+         state:result.partialWarning?'partial':'completed'}).catch(()=>{});
+        return result;
+      }catch(error){
+        if(daily)await recordDailyCatalogOutcome(controlPool,{
+         sourceId:id,day:options.day,
+         state:String(error?.message||'')==='xtream_sync_cancelled'?
+          'cancelled':'failed'}).catch(()=>{});
+        throw error;
+      }
+    });
   }catch(error){
     if(error.message==='xtream_sync_queue_full')
       throw Object.assign(new Error('xtream_sync_queue_full'),{status:429});
@@ -2039,6 +2061,31 @@ function startSync(id, types) {
   }
 }
 const studioPro=createStudioPro({pool,ensureXtreamReady:ensureReady,startSync});
+async function dailyCatalogTick(){
+  const result=await scheduleDailyApprovedCatalog({
+    env:process.env,db:controlPool,sourceById:serverById,
+    enqueue:startSync,sourceBusy:id=>syncQueue.has(id)||syncLocks.has(id)
+  });
+  if(result.requested===true)
+    console.info('BLOFY_STREAM_DAILY_CATALOG',JSON.stringify({
+      code:result.code,day:result.day,queued:result.queued,
+      mediaFilesCopied:0,customerCutover:false}));
+  return result;
+}
+const dailyCatalogTimer=setInterval(()=>{
+ void dailyCatalogTick().catch(()=>console.warn(
+  'BLOFY_STREAM_DAILY_CATALOG',JSON.stringify({
+   code:'daily_catalog_tick_failed',mediaFilesCopied:0,
+   customerCutover:false})));
+},300000);
+dailyCatalogTimer.unref?.();
+const dailyCatalogStartupTimer=setTimeout(()=>{
+ void dailyCatalogTick().catch(()=>console.warn(
+  'BLOFY_STREAM_DAILY_CATALOG',JSON.stringify({
+   code:'daily_catalog_startup_failed',mediaFilesCopied:0,
+   customerCutover:false})));
+},40000);
+dailyCatalogStartupTimer.unref?.();
 const studioTimer=setInterval(()=>{
   void studioPro.tick().catch(error=>console.warn('BLOFY Studio schedule check failed:',String(error?.code||'unavailable').slice(0,30)));
 },300000);
@@ -3416,6 +3463,33 @@ async function unifiedStreamBridge(req,res,url){
   // The pre-existing Studio scheduler runs every five minutes. These routes
   // merely expose source-scoped opt-in controls through the authenticated
   // STREAM bridge; no schedule is silently enabled by a deploy.
+  // Read-only nightly metadata receipts. Only within the authenticated
+  // private BLOFY STREAM operator bridge, never a customer endpoint.
+  if(req.method==='GET'&&p==='/internal/blofy-stream/ops/daily-catalog'){
+    const sourceId=configuredDailySourceId(process.env);
+    const active=process.env.BLOFY_XTREAM_DAILY_CATALOG_SYNC_ENABLED==='1';
+    const local=riyadhCatalogDay();
+    const source=sourceId?await serverById(sourceId):null;
+    const approved=source&&source.id?.toLowerCase()===sourceId&&
+      source.enabled===true&&source.publish_catalog===true&&
+      String(source.name||'').trim().toLowerCase()==='saleh'&&
+      !source.deletion_requested_at;
+    let receipts=[];
+    if(sourceId){
+      const result=await readDailyCatalogReceipts(controlPool,{
+       sourceId,limit:7});
+      receipts=result.receipts;
+    }
+    return json(res,200,{ok:true,
+      scope:'catalog_metadata_only_no_media_copy',
+      enabled:active,sourceConfigured:Boolean(sourceId),
+      sourceApproved:Boolean(approved),
+      sourceName:approved?'saleh':null,
+      localDay:local?.day||null,windowHourRiyadh:4,
+      nextRunManualTime:'04:00 Asia/Riyadh',
+      receipts,mediaFilesCopied:0,customerCutover:false},
+      {'cache-control':'no-store'});
+  }
   if(req.method==='GET'&&p==='/internal/blofy-stream/ops/schedule'){
     const sourceId=String(url.searchParams.get('sourceId')||'');
     if(!validUuid(sourceId))return json(res,400,{ok:false,code:'stream_invalid_source_id'});
