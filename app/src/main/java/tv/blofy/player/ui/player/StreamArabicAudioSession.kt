@@ -149,7 +149,7 @@ internal class StreamArabicAudioSession(
         // must fail cleanly, leaving the original channel's audio intact.
         startupHandler.postDelayed({
             if (version == generation && !companion.isPlaying) failAndRestore()
-        }, 18_000L)
+        }, 18_000L + delay * 1_000L)
         onPrimaryPlaybackChanged()
     }
 
