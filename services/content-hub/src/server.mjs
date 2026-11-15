@@ -15,6 +15,7 @@ import {createMirrorEpisodeTransferStore,runOneApprovedMirrorEpisodeChunk,
  mirrorEpisodeDispatchReadiness} from './xtream-mirror-episode-transfer.mjs';
 import {createPrivateMirrorQaStore,resolveVerifiedMirrorMedia}
  from './xtream-mirror-private-qa.mjs';
+import {validateMirrorDeviceTicketProof} from './xtream-mirror-device-proof.mjs';
 import {diagnoseVerifiedMovie} from './playback-diagnostics.mjs';
 import {verifyPrivateSeekRanges} from './seek-diagnostics.mjs';
 import {buildPrivateBrowserPreview} from './private-preview.mjs';
@@ -198,6 +199,27 @@ export function createContentHubServer({storage,lease,
       code:'mirror_preview_catalog_invalid',providerRequests:0,
       bytesTransferred:0,customerCutover:false})}
   }
+  // This private proof intentionally returns the one allowed run ID
+  // ONLY after an independent, recent A/V+seek QA. The operator portal
+  // must still separately authenticate and HMAC-sign the device ticket.
+  const mirrorDeviceProof=/^\/internal\/mirror\/media-qa\/(movie|episode)\/([1-9][0-9]{0,14})\/device-proof$/.exec(path);
+  if(mirrorDeviceProof&&req.method==='GET'){
+   if(req.headers['x-blofy-owner-action']!=='prepare-private-mirror-device-qa'||
+      String(req.url||'').includes('?'))
+    return json(res,403,{ok:false,code:'mirror_device_proof_owner_action_required'});
+   if(pilotEnv.BLOFY_CONTENT_HUB_MIRROR_OWNER_QA_ENABLED!=='1'||
+      !mirrorQaStore?.db)
+    return json(res,409,{ok:false,code:'mirror_media_qa_disabled'});
+   const mediaKind=mirrorDeviceProof[1],gatewayId=Number(mirrorDeviceProof[2]);
+   const sourceId=String(pilotEnv.BLOFY_XTREAM_DAILY_CATALOG_SOURCE_ID||'');
+   let selected;
+   try{selected=await resolveVerifiedMirrorMedia({
+    db:mirrorQaStore.db,lease,sourceId,mediaKind,gatewayId
+   })}catch{return json(res,503,{ok:false,code:'mirror_device_proof_lookup_unavailable'})}
+   const lastQa=mirrorQaResults.get(mediaKind+':'+gatewayId);
+   const proof=validateMirrorDeviceTicketProof({selected,lastQa});
+   return json(res,proof.ok?200:409,proof);
+  }
   // Authenticated owner-only QA for a fully verified mirrored movie or
   // episode. GET reconciles PG/S3; POST starts private ffprobe/ffmpeg and
   // four authenticated S3 seeks. Neither command opens a provider feed.
@@ -243,6 +265,7 @@ export function createContentHubServer({storage,lease,
      storage,lease,port:server.address()?.port,token}):
     runFullPlaybackCanary(selected.runId,mediaKind)).then(result=>{
     mirrorQaResults.set(id,{
+     runId:selected.runId,sha256:selected.sha256,
      ok:result?.ok===true&&result.seekVerified===true,
      code:result?.code||'mirror_media_qa_incomplete',
      videoCodec:String(result?.videoCodec||'unknown').slice(0,40),
