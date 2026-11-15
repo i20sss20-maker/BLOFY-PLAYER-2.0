@@ -2090,6 +2090,34 @@ const dailyCatalogStartupTimer=setTimeout(()=>{
    customerCutover:false})));
 },40000);
 dailyCatalogStartupTimer.unref?.();
+// One-off READ-ONLY ledger preflight. Creates only the transfer-intake
+// metadata table if absent; no intent rows, source video, uploads or copies.
+if(process.env.BLOFY_STREAM_MIRROR_INTAKE_DB_SMOKE_ON_BOOT==='1'){
+ const intakeTimer=setTimeout(()=>{
+  void (async()=>{
+   const sourceId=configuredDailySourceId(process.env);
+   if(!sourceId)return {ok:false,code:'mirror_intake_smoke_source_missing'};
+   const source=await serverById(sourceId);
+   if(!source||source.enabled!==true||
+      source.publish_catalog!==true||
+      String(source.name||'').trim().toLowerCase()!=='saleh')
+    return {ok:false,code:'mirror_intake_smoke_source_unapproved'};
+   const ledger=await listMirrorIntake(controlPool,{sourceId});
+   return {ok:ledger.ok===true,
+    code:ledger.ok?'mirror_intake_ledger_ready':'mirror_intake_ledger_missing',
+    stagedCount:ledger.pending,maxStaged:ledger.maxStaged};
+  })().then(data=>console.info('BLOFY_STREAM_MIRROR_INTAKE_DB_SMOKE',
+    JSON.stringify({ok:data.ok===true,code:data.code,
+      pending:Number(data.stagedCount||0),
+      maxStaged:Number(data.maxStaged||0),
+      mediaCopyStarted:false,sourceMediaRequests:0,
+      s3BytesWritten:0,customerCutover:false})
+  )).catch(()=>console.warn('BLOFY_STREAM_MIRROR_INTAKE_DB_SMOKE',
+   JSON.stringify({ok:false,code:'mirror_intake_smoke_failed',
+    sourceMediaRequests:0,s3BytesWritten:0,customerCutover:false})));
+ },12000);intakeTimer.unref?.();
+}
+
 const studioTimer=setInterval(()=>{
   void studioPro.tick().catch(error=>console.warn('BLOFY Studio schedule check failed:',String(error?.code||'unavailable').slice(0,30)));
 },300000);
