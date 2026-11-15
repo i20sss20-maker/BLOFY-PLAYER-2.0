@@ -138,3 +138,31 @@ test('cross-item daily byte budget table is the same as the movie worker',async(
   sha256:'b'.repeat(64)})).ok,true);
  await store.close();
 });
+
+test('temporary episode media failure backs off but never loses previously recorded parts',async()=>{
+ const f=mock();
+ f.store.finish=async(j,opts)=>{
+  f.events.push(['finish',j,opts]);
+  return {ok:true,state:'approved',retryAttempts:1,
+   retryAfter:'2026-11-15T01:20:00Z'};
+ };
+ const result=await runOneApprovedMirrorEpisodeChunk({
+  ...f,env,now:NOW,
+  runner:async()=>({ok:false,code:'episode_retryable_error',
+   checkpointsRetained:1,errorStage:'source_chunk'})
+ });
+ assert.equal(result.ok,false);
+ assert.equal(result.code,'mirror_episode_retry_scheduled');
+ assert.equal(result.retryAttempts,1);
+ assert.equal(f.events[1][2].state,'retry');
+ assert.equal(f.events[1][2].parts,1);
+ assert.equal(f.events[1][2].code,'episode_retryable_error');
+ const exhausted=mock();
+ exhausted.store.finish=async()=>({ok:true,state:'failed',
+  retryAttempts:3,retryAfter:null});
+ const reviewed=await runOneApprovedMirrorEpisodeChunk({
+  ...exhausted,env,now:NOW,
+  runner:async()=>({ok:false,code:'episode_retryable_error'})
+ });
+ assert.equal(reviewed.code,'mirror_episode_retry_limit_review');
+});
