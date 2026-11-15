@@ -1884,11 +1884,33 @@ open class PlayerActivity : ContentAccessActivity() {
             !StreamArabicAudioCatalog.trustedAudioUrl(choice.playbackUrl)) return
         val controller = StreamArabicAudioSession(
             this, session.player, profileFromIntent(),
-            onFailure = {
+            onFailure = { reason ->
                 if (!isFinishing && !sessionReleased) {
-                    Toast.makeText(this,
-                        if (english) "This voice failed; original channel audio is back."
-                        else "تعذّر تشغيل هذه الصوتية، ورجع الصوت الأصلي للقناة.",
+                    val reasonText = when (reason) {
+                        StreamArabicAudioSession.FailureReason.UNSUPPORTED_FORMAT ->
+                            if (english) "Unsupported audio response (415). Try another voice."
+                            else "المصدر أرسل بيانات غير مدعومة (415). جرب معلقًا آخر."
+                        StreamArabicAudioSession.FailureReason.SOURCE_UNAVAILABLE ->
+                            if (english) "Commentary source is unavailable (502/503)."
+                            else "مصدر التعليق متعذر حاليًا (502/503)."
+                        StreamArabicAudioSession.FailureReason.ACCESS_DENIED ->
+                            if (english) "Audio source denied access (401/403)."
+                            else "مصدر الصوت رفض الاتصال (401/403)."
+                        StreamArabicAudioSession.FailureReason.BUSY ->
+                            if (english) "Source is busy (429). Try again later."
+                            else "مصدر الصوت مزدحم (429). جرب بعد قليل."
+                        StreamArabicAudioSession.FailureReason.TIMEOUT ->
+                            if (english) "Commentary did not start in time."
+                            else "انتهت مهلة تشغيل التعليق العربي."
+                        StreamArabicAudioSession.FailureReason.ENDED ->
+                            if (english) "This commentary broadcast has ended."
+                            else "انتهى بث المعلق."
+                        StreamArabicAudioSession.FailureReason.NETWORK ->
+                            if (english) "Could not connect to this commentary source."
+                            else "تعذر الاتصال بمصدر التعليق."
+                    }
+                    Toast.makeText(this, reasonText +
+                        if (english) " Original audio restored." else " رجع صوت القناة الأصلي.",
                         Toast.LENGTH_LONG
                     ).show()
                     onPlaybackState?.invoke(false)
