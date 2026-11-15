@@ -1,0 +1,32 @@
+name: BLOFY STREAM Protected Arabic Audio Backend QA
+on:
+  push:
+    branches: [feat/stream-authorized-arabic-audio-relay-qa-20261115]
+    paths:
+      - 'services/activation/src/stream-arabic-audio-bridge.mjs'
+      - 'services/activation/src/xtream-gateway-hook.mjs'
+      - 'services/activation/test/stream-arabic-audio-bridge.test.mjs'
+      - '.github/workflows/stream-arabic-audio-backend-qa.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  safe-backend-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Source syntax checks
+        run: |
+          node --check services/activation/src/stream-arabic-audio-bridge.mjs
+          node --check services/activation/src/xtream-gateway-hook.mjs
+      - name: Run isolated no-network, no-secrets audio backend tests
+        run: node --test services/activation/test/stream-arabic-audio-bridge.test.mjs
+      - name: Preserve opt-in status
+        run: |
+          echo 'Backend audio relay exists ONLY on the feature branch.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Default production flag is OFF. Operator sources are not in Git.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'No Railway production deployment or source configuration was changed.' >> "$GITHUB_STEP_SUMMARY"
