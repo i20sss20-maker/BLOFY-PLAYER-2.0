@@ -79,6 +79,19 @@ import {claimDurableSharedLiveTrial,durableSharedLiveTrialEnabled}
   from './xtream-shared-pilot-registry.mjs';
 const firstAccountSharedLiveTestPilot=createFirstAccountSharedLiveTestPilot();
 const protectedArabicAudio=createProtectedArabicAudioBridge();
+if(process.env.BLOFY_STREAM_ARABIC_AUDIO_PROBE_ON_BOOT==='1'){
+  const timer=setTimeout(()=>{
+    protectedArabicAudio.probe().then(results=>{
+      // Sanitized diagnostics only: track IDs, failure class, response status,
+      // media type class, bounded received byte count. No URLs or tokens.
+      console.info('BLOFY_STREAM_ARABIC_AUDIO_SOURCE_PROBE '+JSON.stringify(results));
+    }).catch(()=>{
+      console.warn('BLOFY_STREAM_ARABIC_AUDIO_SOURCE_PROBE '+JSON.stringify([
+        {reason:'probe_failed'}]));
+    });
+  },2500);
+  timer.unref?.();
+}
 import {shouldUseIndependentSourceMedia,shouldFallbackIndependentVod} from './xtream-independent-source-media-policy.mjs';
 import {shouldCompareRelay404Direct} from './xtream-relay-404-direct-recovery.mjs';
 import {readSanitizedXtreamRelayFailure} from './xtream-relay-diagnostic.mjs';
