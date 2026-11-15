@@ -24,6 +24,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import tv.blofy.player.BuildConfig
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.remote.RemoteAction
 import tv.blofy.player.core.remote.RemoteKeyRouter
@@ -252,20 +253,28 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 elevation = dp(7).toFloat()
                 addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(36)))
                 addView(hint, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(24)))
+                // Channel rows scroll above the controls. Both are in this one
+                // translucent panel, not in separate floating HUD windows.
                 addView(list, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+                if (BuildConfig.CODE_ONLY_LOGIN) {
+                    addView(buildAttachedActions(), LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+                }
             }
 
             val device = DeviceClass.detect(activity)
-            val widthRatio = when (device) {
-                DeviceClass.Kind.TV -> 0.24f
-                DeviceClass.Kind.TABLET -> 0.38f
-                DeviceClass.Kind.PHONE -> 0.78f
-            }
-            val heightRatio = when (device) {
-                DeviceClass.Kind.TV -> 0.58f
-                DeviceClass.Kind.TABLET -> 0.66f
-                DeviceClass.Kind.PHONE -> 0.76f
-            }
+            // Keep the legacy BLOFY PLAYER layout unchanged. STREAM gives
+            // the joined vertical controls enough width and channel-row space.
+            val (widthRatio, heightRatio) =
+                if (BuildConfig.CODE_ONLY_LOGIN) LiveChannelPanelPolicy.dimensions(
+                    isTv = device == DeviceClass.Kind.TV,
+                    isTablet = device == DeviceClass.Kind.TABLET
+                )
+                else when (device) {
+                    DeviceClass.Kind.TV -> 0.24f to 0.58f
+                    DeviceClass.Kind.TABLET -> 0.38f to 0.66f
+                    DeviceClass.Kind.PHONE -> 0.78f to 0.76f
+                }
             val width = (activity.resources.displayMetrics.widthPixels * widthRatio).toInt()
             val height = (activity.resources.displayMetrics.heightPixels * heightRatio).toInt()
 
@@ -298,6 +307,89 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 }
             }
             created.show()
+        }
+
+        /**
+         * One continuous vertical sidebar: scrollable channels on top and
+         * focusable remote-control buttons immediately below in the SAME view.
+         * Nested track/quality dialogs remain the established player menus;
+         * the video is never restarted or replaced.
+         */
+        private fun buildAttachedActions(): LinearLayout {
+            val footer = LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutDirection = activity.resources.configuration.layoutDirection
+                setPadding(dp(9), dp(4), dp(9), dp(9))
+            }
+            footer.addView(View(activity).apply {
+                setBackgroundColor(0x665E4787)
+            }, LinearLayout.LayoutParams(-1, dp(1)).apply {
+                bottomMargin = dp(5)
+            })
+            footer.addView(TextView(activity).apply {
+                text = copy("التحكم بالبث", "LIVE CONTROLS")
+                textSize = 11.5f
+                setTextColor(BlofyTvDesign.TextSecondary)
+                typeface = BlofyTvDesign.HeadingTypeface
+                gravity = Gravity.CENTER_VERTICAL or Gravity.START
+                setPadding(dp(9), 0, dp(9), 0)
+            }, LinearLayout.LayoutParams(-1, dp(23)))
+
+            fun style(focused: Boolean) = GradientDrawable().apply {
+                cornerRadius = dp(11).toFloat()
+                setColor(if (focused) 0xE058367E.toInt() else 0x552E263F)
+                setStroke(dp(1), if (focused) 0xFFCEB0FF.toInt() else 0x665E4787)
+            }
+
+            LiveChannelPanelPolicy.actions(streamCodeOnly = BuildConfig.CODE_ONLY_LOGIN)
+                .forEach { action ->
+                    val label = when (action) {
+                        LiveChannelPanelAction.BLOFY_AUDIO ->
+                            copy("♫  صوتيات BLOFY العربية", "♫  BLOFY Arabic audio")
+                        LiveChannelPanelAction.AUDIO_TRACKS ->
+                            copy("◉  مسارات الصوت", "◉  Audio tracks")
+                        LiveChannelPanelAction.SUBTITLES ->
+                            copy("CC  الترجمة", "CC  Subtitles")
+                        LiveChannelPanelAction.VIDEO_QUALITY ->
+                            copy("▣  جودة الصورة", "▣  Video quality")
+                        LiveChannelPanelAction.FAVORITE ->
+                            copy("☆  إضافة للمفضلة", "☆  Add to favorites")
+                    }
+                    val button = TextView(activity).apply {
+                        id = View.generateViewId()
+                        text = label
+                        contentDescription = label
+                        textSize = 13f
+                        maxLines = 1
+                        ellipsize = android.text.TextUtils.TruncateAt.END
+                        setTextColor(Color.WHITE)
+                        typeface = BlofyTvDesign.HeadingTypeface
+                        gravity = Gravity.CENTER_VERTICAL or Gravity.START
+                        setPadding(dp(12), 0, dp(12), 0)
+                        isFocusable = true
+                        isClickable = true
+                        background = style(false)
+                        setOnFocusChangeListener { view, focused ->
+                            view.background = style(focused)
+                        }
+                        setOnClickListener {
+                            // Dismiss the channel list before opening the
+                            // existing audio/subtitle/quality chooser. This
+                            // avoids stacked Window.Callback focus conflicts.
+                            close()
+                            if (!activity.openLivePanelAction(action)) {
+                                Toast.makeText(activity,
+                                    copy("تعذر فتح هذا الخيار", "Could not open this control"),
+                                    Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                    footer.addView(button, LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, dp(40)).apply {
+                        bottomMargin = dp(4)
+                    })
+                }
+            return footer
         }
 
         private fun prepareWindow(window: Window, width: Int, height: Int, reveal: Boolean) {
