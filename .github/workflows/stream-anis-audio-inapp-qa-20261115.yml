@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feat/stream-anis-audio-inside-app-20261115
+      - fix/stream-live-audio-menu-ai-chat-20261115
   workflow_dispatch:
 
 permissions:
@@ -43,7 +44,10 @@ jobs:
             --tests tv.blofy.player.ui.player.StreamAnisAudioCatalogTest \
             --tests tv.blofy.player.ui.player.StreamAudioPreferenceStoreTest \
             --tests tv.blofy.player.ui.player.StreamArabicAudioCatalogTest \
-            --tests tv.blofy.player.ui.player.ArabicSidecarTimingPolicyTest
+            --tests tv.blofy.player.ui.player.ArabicSidecarTimingPolicyTest \
+            --tests tv.blofy.player.ui.player.LivePlayerMenuPolicyTest \
+            --tests tv.blofy.player.ui.search.AiOfflineIntentPolicyTest \
+            --tests tv.blofy.player.ui.search.AiChatRoutingPolicyTest
           # Build the owner-only debug-signed QA install with the real
           # BLOFY activation endpoints. Its .stream.qa package does not
           # replace any customer installation or reuse an existing device code.
@@ -63,7 +67,7 @@ jobs:
       - name: Owner-only QA install artifact (debug signed, never customer release)
         uses: actions/upload-artifact@v4
         with:
-          name: blofy-stream-anis-audio-owner-qa-${{ github.sha }}
+          name: blofy-stream-live-audio-ai-owner-qa-${{ github.sha }}
           path: app/build/outputs/apk/streamCodeDemo/*.apk
           if-no-files-found: error
           retention-days: 7
