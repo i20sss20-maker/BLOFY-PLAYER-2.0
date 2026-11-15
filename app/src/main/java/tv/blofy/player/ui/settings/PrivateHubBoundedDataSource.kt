@@ -25,7 +25,8 @@ import kotlin.math.min
 @OptIn(UnstableApi::class)
 internal class PrivateHubBoundedDataSource(
     private val endpoint: String,
-    private val ticket: String
+    private val ticket: String,
+    private val platform: String
 ) : BaseDataSource(true) {
     private val client = OkHttpClient.Builder()
         .followRedirects(false).followSslRedirects(false)
@@ -49,6 +50,7 @@ internal class PrivateHubBoundedDataSource(
     private fun request(method: String, range: String? = null): Response {
         val b = Request.Builder().url(endpoint)
             .header("Authorization", "Bearer $ticket")
+            .header("x-blofy-device-platform", platform)
             .header("Cache-Control", "no-store")
             .header("Accept-Encoding", "identity")
         if (range != null) b.header("Range", range)
