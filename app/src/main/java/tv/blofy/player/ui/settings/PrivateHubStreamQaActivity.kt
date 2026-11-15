@@ -130,7 +130,9 @@ class PrivateHubStreamQaActivity : AppCompatActivity() {
         }
         val uri = android.net.Uri.parse(PrivateHubDeviceQaPolicy.endpoint(kind,run))
         val source = ProgressiveMediaSource.Factory(DataSource.Factory {
-            PrivateHubBoundedDataSource(uri.toString(),ticket)
+            PrivateHubBoundedDataSource(uri.toString(),ticket,
+                if (resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK ==
+                    Configuration.UI_MODE_TYPE_TELEVISION) "android_tv" else "android")
         }).createMediaSource(MediaItem.fromUri(uri))
         val p = ExoPlayer.Builder(this).build()
         player = p
