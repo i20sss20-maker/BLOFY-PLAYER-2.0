@@ -159,6 +159,6 @@ test('Portal endpoint requires explicit owner action and confirmed manifest reco
   'mirror_intake_already_verified_in_private_hub',
   'mirror_intake_existing_manifest_inconsistent',
   'mirror_intake_manifest_check_unavailable',
-  'sourceId=configuredDailySourceId(process.env)'
+  'sourceId=selectedSaleh.ok?selectedSaleh.sourceId:null'
  ])assert.ok(code.includes(expected),expected);
 });

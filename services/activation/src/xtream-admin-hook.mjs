@@ -4,6 +4,7 @@ import {safeXtreamTransportCategory} from './xtream-transport-errors.mjs';
 import {withXtreamAccountReconnect} from './xtream-api-resilience.mjs';
 import {createXtreamSyncQueue} from './xtream-sync-queue.mjs';
 import {listIndexedXtreamMirrorPage} from './xtream-mirror-inventory.mjs';
+import {resolveExclusiveApprovedSaleh} from './xtream-approved-saleh-selector.mjs';
 import {stageMirrorIntake,listMirrorIntake,cancelMirrorIntake,validateMirrorIntakeSelection} from './xtream-mirror-transfer-intake.mjs';
 import {reconcileStreamCatalogPage} from './content-hub-private-mirror-reconcile-bridge.mjs';
 import {forwardStreamS3HeadAudit} from './content-hub-private-head-audit-bridge.mjs';
@@ -2064,10 +2065,18 @@ function startSync(id, types, options={}) {
     throw error;
   }
 }
+async function approvedSalehMirrorSource(){
+ await ensureReady();
+ return resolveExclusiveApprovedSaleh(controlPool);
+}
 const studioPro=createStudioPro({pool,ensureXtreamReady:ensureReady,startSync});
 async function dailyCatalogTick(){
+  const selected=await approvedSalehMirrorSource();
+  const scheduleEnv={...process.env,
+    BLOFY_XTREAM_DAILY_CATALOG_SOURCE_ID:selected.ok?
+      selected.sourceId:'-'};
   const result=await scheduleDailyApprovedCatalog({
-    env:process.env,db:controlPool,sourceById:serverById,
+    env:scheduleEnv,db:controlPool,sourceById:serverById,
     enqueue:startSync,sourceBusy:id=>syncQueue.has(id)||syncLocks.has(id)
   });
   if(result.requested===true)
@@ -2095,7 +2104,8 @@ dailyCatalogStartupTimer.unref?.();
 if(process.env.BLOFY_STREAM_MIRROR_INTAKE_DB_SMOKE_ON_BOOT==='1'){
  const intakeTimer=setTimeout(()=>{
   void (async()=>{
-   const sourceId=configuredDailySourceId(process.env);
+   const selectedSaleh=await approvedSalehMirrorSource();
+    const sourceId=selectedSaleh.ok?selectedSaleh.sourceId:null;
    if(!sourceId)return {ok:false,code:'mirror_intake_smoke_source_missing'};
    const source=await serverById(sourceId);
    if(!source||source.enabled!==true||
@@ -3507,7 +3517,8 @@ async function unifiedStreamBridge(req,res,url){
       ok:false,code:'mirror_intake_query_denied'});
     if(process.env.BLOFY_STREAM_MIRROR_INTAKE_ENABLED!=='1')
       return json(res,404,{ok:false,code:'mirror_intake_feature_disabled'});
-    const sourceId=configuredDailySourceId(process.env);
+    const selectedSaleh=await approvedSalehMirrorSource();
+    const sourceId=selectedSaleh.ok?selectedSaleh.sourceId:null;
     if(!sourceId)return json(res,503,{
       ok:false,code:'mirror_intake_source_unconfigured'});
     const isCancel=p.endsWith('/cancel');
@@ -3576,7 +3587,8 @@ async function unifiedStreamBridge(req,res,url){
       ok:false,code:'stream_head_read_only'});
     if(process.env.BLOFY_STREAM_MIRROR_PHYSICAL_HEAD_AUDIT_ENABLED!=='1')
       return json(res,404,{ok:false,code:'stream_head_not_enabled'});
-    const sourceId=configuredDailySourceId(process.env);
+    const selectedSaleh=await approvedSalehMirrorSource();
+    const sourceId=selectedSaleh.ok?selectedSaleh.sourceId:null;
     const kind=String(url.searchParams.get('type')||'');
     const id=String(url.searchParams.get('id')||'');
     const requested=String(url.searchParams.get('start')||'0');
@@ -3620,7 +3632,8 @@ async function unifiedStreamBridge(req,res,url){
   if(p==='/internal/blofy-stream/ops/mirror-inventory'){
     if(req.method!=='GET')return json(res,405,{
       ok:false,code:'mirror_inventory_read_only'});
-    const sourceId=configuredDailySourceId(process.env);
+    const selectedSaleh=await approvedSalehMirrorSource();
+    const sourceId=selectedSaleh.ok?selectedSaleh.sourceId:null;
     if(!sourceId)return json(res,503,{
       ok:false,code:'mirror_inventory_source_unconfigured',
       providerRequests:0,mediaBytesTransferred:0,customerCutover:false});
@@ -3675,7 +3688,8 @@ async function unifiedStreamBridge(req,res,url){
     }
   }
   if(req.method==='GET'&&p==='/internal/blofy-stream/ops/daily-catalog'){
-    const sourceId=configuredDailySourceId(process.env);
+    const selectedSaleh=await approvedSalehMirrorSource();
+    const sourceId=selectedSaleh.ok?selectedSaleh.sourceId:null;
     const active=process.env.BLOFY_XTREAM_DAILY_CATALOG_SYNC_ENABLED==='1';
     const local=riyadhCatalogDay();
     const source=sourceId?await serverById(sourceId):null;
