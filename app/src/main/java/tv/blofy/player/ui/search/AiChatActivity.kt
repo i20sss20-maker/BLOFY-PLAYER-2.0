@@ -1,5 +1,6 @@
 package tv.blofy.player.ui.search
 
+import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
@@ -7,6 +8,7 @@ import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
@@ -25,6 +27,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.BuildConfig
 import tv.blofy.player.R
+import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
@@ -157,6 +160,11 @@ class AiChatActivity : AppCompatActivity() {
         busy = true
         send.isEnabled = false
         compose.text?.clear()
+        // The TV soft keyboard must not cover the conversation and its
+        // clickable catalog results after Send.
+        (getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
+            ?.hideSoftInputFromWindow(compose.windowToken, 0)
+        compose.clearFocus()
         addBubble(question, fromUser = true)
         val pending = addBubble(getString(R.string.stream_ai_searching), fromUser = false)
         val contextual = AiConversationPolicy.prompt(lastQuestion, question)
@@ -171,13 +179,7 @@ class AiChatActivity : AppCompatActivity() {
                 when (response) {
                     is StreamAiSearchClient.Outcome.Ready -> {
                         val parsed = response.intent
-                        val matches = withContext(Dispatchers.IO) {
-                            val dao = BlofyDatabase.get(applicationContext).dao()
-                            val providers = dao.providersStored().first()
-                                .filter { it.enabled }.take(4)
-                            AiChatCatalogResolver.find(dao, providers.map { it.id }, parsed,
-                                question, applicationContext)
-                        }
+                        val matches = findMatches(parsed, question)
                         if (isFinishing || isDestroyed) return@launch
                         val friendly = AiReplyPolicy.safe(parsed.reply)
                         val context = when {
@@ -194,18 +196,40 @@ class AiChatActivity : AppCompatActivity() {
                         if (matches.titles.isNotEmpty()) addTitleButtons(matches.titles)
                     }
                     is StreamAiSearchClient.Outcome.Unavailable -> {
-                        val answer = when (response.reason) {
-                            StreamAiSearchClient.Problem.NOT_ACTIVATED,
-                            StreamAiSearchClient.Problem.EXPIRED_SESSION ->
-                                getString(R.string.stream_ai_session_error)
-                            StreamAiSearchClient.Problem.RATE_LIMIT ->
-                                getString(R.string.stream_ai_rate_error)
-                            StreamAiSearchClient.Problem.SERVICE ->
-                                getString(R.string.stream_ai_chat_error)
-                            else -> getString(R.string.stream_ai_connection_error)
+                        // A temporarily unreachable AI does not make the
+                        // user's downloaded catalog unusable. Local fallback
+                        // never runs for revoked sessions or rate-limit errors.
+                        val canUseLocal = response.reason in setOf(
+                            StreamAiSearchClient.Problem.CONNECTION,
+                            StreamAiSearchClient.Problem.SERVICE,
+                            StreamAiSearchClient.Problem.BAD_RESPONSE
+                        )
+                        val local = if (canUseLocal) {
+                            findMatches(AiOfflineIntentPolicy.parse(question), question)
+                        } else null
+                        if (local != null && local.titles.isNotEmpty()) {
+                            val answer = getString(R.string.stream_ai_local_fallback,
+                                local.titles.size) +
+                                if (local.alternatives)
+                                    "\n\n" + getString(R.string.stream_ai_verified_alternatives)
+                                else ""
+                            pending.text = answer
+                            record(question, answer)
+                            addTitleButtons(local.titles)
+                        } else {
+                            val answer = when (response.reason) {
+                                StreamAiSearchClient.Problem.NOT_ACTIVATED,
+                                StreamAiSearchClient.Problem.EXPIRED_SESSION ->
+                                    getString(R.string.stream_ai_session_error)
+                                StreamAiSearchClient.Problem.RATE_LIMIT ->
+                                    getString(R.string.stream_ai_rate_error)
+                                StreamAiSearchClient.Problem.SERVICE ->
+                                    getString(R.string.stream_ai_chat_error)
+                                else -> getString(R.string.stream_ai_connection_error)
+                            }
+                            pending.text = answer
+                            record(question, answer)
                         }
-                        pending.text = answer
-                        record(question, answer)
                     }
                 }
             } catch (cancelled: CancellationException) {
@@ -222,6 +246,16 @@ class AiChatActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    private suspend fun findMatches(
+        parsed: StreamAiSearchClient.Intent, question: String
+    ): AiChatCatalogResolver.Results = withContext(Dispatchers.IO) {
+        val dao = BlofyDatabase.get(applicationContext).dao()
+        val providers = dao.providersStored().first()
+            .filter { it.enabled }.take(4)
+        AiChatCatalogResolver.find(dao, providers.map { it.id }, parsed,
+            question, applicationContext)
     }
 
     private fun record(question: String, reply: String) {
@@ -265,8 +299,9 @@ class AiChatActivity : AppCompatActivity() {
             setTextColor(BlofyTvDesign.TextMuted)
             setPadding(dp(8), dp(3), 0, dp(8))
         })
+        var firstResult: Button? = null
         titles.take(10).forEach { movie ->
-            group.addView(Button(this).apply {
+            val resultButton = Button(this).apply {
                 text = "⌕  " + movie.name.take(70) +
                     movie.year?.takeIf(String::isNotBlank)?.let { "  ($it)" }.orEmpty()
                 contentDescription = getString(R.string.stream_chat_search_title, movie.name)
@@ -280,12 +315,18 @@ class AiChatActivity : AppCompatActivity() {
                         putExtra(SearchActivity.EXTRA_INITIAL_QUERY, movie.name)
                     })
                 }
-            }, LinearLayout.LayoutParams(-1, dp(51)).apply {
+            }
+            if (firstResult == null) firstResult = resultButton
+            group.addView(resultButton, LinearLayout.LayoutParams(-1, dp(51)).apply {
                 bottomMargin = dp(6)
             })
         }
         transcript.addView(group, LinearLayout.LayoutParams(-1, -2))
         scrollBottom()
+        if (DeviceClass.detect(this) == DeviceClass.Kind.TV) {
+            val target = firstResult
+            transcript.post { if (!isFinishing && !isDestroyed) target?.requestFocus() }
+        }
     }
 
     private fun scrollBottom() {
