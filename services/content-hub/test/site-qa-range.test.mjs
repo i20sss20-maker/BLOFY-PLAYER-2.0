@@ -29,6 +29,8 @@ test('website original-file server route enforces exact run, feature flag and ve
  const {readFile}=await import('node:fs/promises');
  const src=await readFile(new URL('../src/server.mjs',import.meta.url),'utf8');
  assert.match(src,/BLOFY_CONTENT_HUB_WEBSITE_FULL_RANGE_QA_ENABLED/);
+ assert.match(src,/BLOFY_CONTENT_HUB_STORAGE_RIGHTS_CONFIRMED/);
+ assert.match(src,/BLOFY_CONTENT_HUB_EPISODE_RIGHTS_CONFIRMED/);
  assert.match(src,/siteQa\[2\]!==String/);
  assert.match(src,/private-original-range-qa/);
  assert.match(src,/getVerifiedEpisodeObject/);
