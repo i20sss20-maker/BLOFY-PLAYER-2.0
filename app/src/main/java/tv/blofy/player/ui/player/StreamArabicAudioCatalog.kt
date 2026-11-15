@@ -68,8 +68,9 @@ internal object StreamArabicAudioCatalog {
             val raw = body.byteStream().use { stream ->
                 val output = java.io.ByteArrayOutputStream()
                 val block = ByteArray(4096)
-                var count: Int
-                while (output.size() <= 65_536 && stream.read(block).also { count = it } != -1) {
+                while (output.size() <= 65_536) {
+                    val count = stream.read(block)
+                    if (count == -1) break
                     output.write(block, 0, count)
                 }
                 if (output.size() > 65_536) return@withContext emptyList()
