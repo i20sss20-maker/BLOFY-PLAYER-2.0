@@ -191,6 +191,7 @@ export async function probeOneAttestedMirrorItem({
       AND i.media_type='series' AND i.source_id=e.series_source_id
     WHERE e.server_id=q.source_id AND e.gateway_id=q.gateway_id
       AND e.source_episode_id=q.media_id
+      AND e.series_source_id=q.series_media_id
       AND i.enabled=TRUE AND lower(e.container_extension)=q.extension)`;
   const sql=proof.ok?`UPDATE blofy_xtream_mirror_items q SET
     expected_bytes=$6,size_probe_at=NOW(),size_probe_day=$7::date,
