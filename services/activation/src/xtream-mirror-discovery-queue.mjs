@@ -54,6 +54,12 @@ export function createXtreamMirrorDiscoveryStore(db){
     size_probe_day DATE,
     source_validator_sha256 CHAR(64),
     size_probe_error TEXT,
+    copy_run_id TEXT,
+    copy_lease_until TIMESTAMPTZ,
+    copied_parts INTEGER NOT NULL DEFAULT 0,
+    copy_sha256 CHAR(64),
+    copy_error TEXT,
+    copy_completed_at TIMESTAMPTZ,
     first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY(source_id,media_kind,gateway_id)
@@ -65,7 +71,13 @@ export function createXtreamMirrorDiscoveryStore(db){
      ADD COLUMN IF NOT EXISTS size_probe_at TIMESTAMPTZ,
      ADD COLUMN IF NOT EXISTS size_probe_day DATE,
      ADD COLUMN IF NOT EXISTS source_validator_sha256 CHAR(64),
-     ADD COLUMN IF NOT EXISTS size_probe_error TEXT`);
+     ADD COLUMN IF NOT EXISTS size_probe_error TEXT,
+     ADD COLUMN IF NOT EXISTS copy_run_id TEXT,
+     ADD COLUMN IF NOT EXISTS copy_lease_until TIMESTAMPTZ,
+     ADD COLUMN IF NOT EXISTS copied_parts INTEGER NOT NULL DEFAULT 0,
+     ADD COLUMN IF NOT EXISTS copy_sha256 CHAR(64),
+     ADD COLUMN IF NOT EXISTS copy_error TEXT,
+     ADD COLUMN IF NOT EXISTS copy_completed_at TIMESTAMPTZ`);
    await db.query(`CREATE INDEX IF NOT EXISTS idx_xtream_mirror_queue_state
     ON blofy_xtream_mirror_items(source_id,media_kind,state,gateway_id)`);
    await db.query(`CREATE TABLE IF NOT EXISTS blofy_xtream_mirror_discovery (
@@ -230,7 +242,8 @@ export function createXtreamMirrorDiscoveryStore(db){
   await ensure();
   const result=await db.query(`SELECT gateway_id,media_id,extension,title,
     state,mapping_conflict,rights_ref_sha256,license_reviewed_at,
-    size_probe_at,size_probe_error,expected_bytes,first_seen_at,last_seen_at
+    size_probe_at,size_probe_error,copy_error,copied_parts,
+    copy_sha256,expected_bytes,first_seen_at,last_seen_at
     FROM blofy_xtream_mirror_items
     WHERE source_id=$1 AND media_kind=$2 AND gateway_id>$3
       AND ($4::text='all' OR state=$4)
@@ -245,6 +258,10 @@ export function createXtreamMirrorDiscoveryStore(db){
       String(x.rights_ref_sha256||'').trim())&&Boolean(x.license_reviewed_at),
     lastProbeError:String(x.size_probe_error||'').slice(0,100)||null,
     sizeProbedAt:x.size_probe_at||null,
+    copiedParts:Number(x.copied_parts)||0,
+    copyError:String(x.copy_error||'').slice(0,100)||null,
+    storedFileManifestVerified:x.state==='verified'&&
+      /^[a-f0-9]{64}$/.test(String(x.copy_sha256||'').trim()),
     sizeVerified:Boolean(x.size_probe_at),
     expectedBytes:Number.isSafeInteger(Number(x.expected_bytes))&&
       x.expected_bytes!==null?Number(x.expected_bytes):null,
