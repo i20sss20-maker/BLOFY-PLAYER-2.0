@@ -272,7 +272,7 @@ export async function runOneApprovedMirrorEpisodeChunk({
  const rawCode=String(outcome?.code||'');
  const code=CODE.test(rawCode)?rawCode:'mirror_episode_unverified';
  const saved=await store.finish(job,{state,parts,sha256,
-  code:state==='failed'?code:null});
+  code:['failed','retry'].includes(state)?code:null});
  return {ok:saved.ok&&(state==='approved'||state==='verified'),
   code:!saved.ok?'mirror_episode_lease_or_mapping_changed':
     state==='verified'?'mirror_episode_private_sha_verified':
