@@ -4,6 +4,7 @@ import {safeXtreamTransportCategory} from './xtream-transport-errors.mjs';
 import {withXtreamAccountReconnect} from './xtream-api-resilience.mjs';
 import {createXtreamSyncQueue} from './xtream-sync-queue.mjs';
 import {listIndexedXtreamMirrorPage} from './xtream-mirror-inventory.mjs';
+import {reconcileStreamCatalogPage} from './content-hub-private-mirror-reconcile-bridge.mjs';
 import {configuredDailySourceId,riyadhCatalogDay,scheduleDailyApprovedCatalog,
  markDailyCatalogRunning,recordDailyCatalogOutcome,readDailyCatalogReceipts
 } from './xtream-daily-approved-catalog.mjs';
@@ -3485,6 +3486,38 @@ async function unifiedStreamBridge(req,res,url){
     try{
       const result=await listIndexedXtreamMirrorPage(controlPool,{
         sourceId,mediaType,cursor,pageSize:Number(size)});
+      // Manifest status can be queried ONLY for owner-approved catalog
+      // movies or previously mapped episodes; no new source probes here.
+      if(result.ok&&['movie','episode'].includes(mediaType)&&
+         result.items.length>0){
+        const enabled=process.env.BLOFY_STREAM_MIRROR_MANIFEST_RECONCILE_ENABLED==='1';
+        const selected=result.items.map(x=>({kind:mediaType,id:x.id}));
+        const check=enabled?await reconcileStreamCatalogPage({
+          sourceId,items:selected,hubToken:String(
+            process.env.BLOFY_CONTENT_HUB_OPERATOR_TOKEN||'')}):
+          {ok:false,code:'stream_manifest_reconcile_disabled'};
+        const statusById=new Map((check.items||[]).map(x=>[x.id,x]));
+        result.items=result.items.map(x=>{
+          const saved=statusById.get(x.id);
+          return {...x,
+            copyStatus:saved?.status||'not_assessed',
+            storedManifestVerified:saved?.storedManifestVerified===true,
+            physicalS3Checked:false,
+            ...(saved?.expectedBytes?{storedExpectedBytes:saved.expectedBytes}:{}),
+            ...(saved?.storedBytes!==null&&
+                saved?.storedBytes!==undefined?
+                {storedProgressBytes:saved.storedBytes}:{})};
+        });
+        result.manifestReconciliation=check.code;
+        result.manifestCheckAvailable=check.ok===true;
+        result.manifestVerifiedCount=result.items.filter(
+          x=>x.storedManifestVerified===true).length;
+        result.physicalCopyCoverageUnknown=true;
+      }else{
+        result.manifestReconciliation='not_applicable';
+        result.manifestCheckAvailable=false;
+        result.manifestVerifiedCount=0;
+      }
       return json(res,result.ok?200:404,result,{'cache-control':'no-store'});
     }catch(error){
       if(String(error?.message)==='xtream_mirror_inventory_query_invalid')
