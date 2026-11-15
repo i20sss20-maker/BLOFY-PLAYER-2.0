@@ -60,7 +60,7 @@ test('STREAM code authentication wraps catalog and media, never leaks source on 
  assert.match(gateway,/if\(!account\)return json\(res,401/);
  assert.match(gateway,/anisAudioEnabled\(\)\?anisAudioPublicCatalog\(\):\[\]/);
  assert.match(gateway,/redirect:'manual'/);
- assert.match(gateway,/const supported=new Set/);
+ assert.match(gateway,/const type=classifyAnisAudioMime\(headerType,first.value\)/);
 });
 
 test('radio MIME validator allows MP3/AAC and rejects HLS, HTML, video',()=>{
