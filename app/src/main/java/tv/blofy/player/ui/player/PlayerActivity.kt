@@ -1135,6 +1135,22 @@ open class PlayerActivity : ContentAccessActivity() {
         return true
     }
 
+    /** Actions from the unified vertical live-channel panel. Only STREAM uses this entrypoint.
+     * A single player remains attached to the same video surface throughout.
+     */
+    internal fun openLivePanelAction(action: LiveChannelPanelAction): Boolean {
+        if (!BuildConfig.CODE_ONLY_LOGIN || !contentReady || kind != KIND_LIVE ||
+            sessionReleased || isFinishing || isDestroyed) return false
+        when (action) {
+            LiveChannelPanelAction.BLOFY_AUDIO -> showArabicAudioMenu()
+            LiveChannelPanelAction.AUDIO_TRACKS -> showTrackDialog(C.TRACK_TYPE_AUDIO)
+            LiveChannelPanelAction.SUBTITLES -> showTrackDialog(C.TRACK_TYPE_TEXT)
+            LiveChannelPanelAction.VIDEO_QUALITY -> showVideoQualityDialog()
+            LiveChannelPanelAction.FAVORITE -> toggleFavorite()
+        }
+        return true
+    }
+
     internal fun liveControlsVisible(): Boolean =
         contentReady && ::hud.isInitialized && hud.visibility == View.VISIBLE
 
