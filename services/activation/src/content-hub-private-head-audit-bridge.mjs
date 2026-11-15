@@ -52,7 +52,7 @@ export async function forwardStreamS3HeadAudit({
     data.matchedParts+data.failures!==data.partsChecked||
     data.nextPartStart!==null&&(
       !Number.isInteger(data.nextPartStart)||
-      data.nextPartStart!==start+8||
+      ![start,start+8].includes(data.nextPartStart)||
       data.nextPartStart>504))
    throw Error('stream_head_proof_invalid');
   const checked=new Set();
