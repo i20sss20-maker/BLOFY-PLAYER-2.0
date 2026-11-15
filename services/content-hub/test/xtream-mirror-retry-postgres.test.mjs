@@ -56,13 +56,14 @@ test('real PG cross-media copy budget, durable checkpoints and 3 maximum retries
     VALUES($1,'movie','test-movie',TRUE,'mp4'),
       ($1,'series','test-series',TRUE,'mkv')`,[SOURCE]);
   await pool.query(`INSERT INTO blofy_xtream_mirror_items (
-   source_id,media_kind,gateway_id,media_id,extension,title,state,
-   rights_ref_sha256,license_reviewed_at,size_probe_at,expected_bytes)
+   source_id,media_kind,gateway_id,media_id,series_media_id,
+   extension,title,state,rights_ref_sha256,license_reviewed_at,
+   size_probe_at,expected_bytes)
     VALUES
-      ($1,'movie',15,'test-movie','mp4','Fixture movie','approved',
+      ($1,'movie',15,'test-movie',NULL,'mp4','Fixture movie','approved',
        $2,NOW(),NOW(),16777216),
-      ($1,'episode',401,'test-ep','mkv','Fixture episode','approved',
-       $2,NOW(),NOW(),16777216)`,[SOURCE,SHA]);
+      ($1,'episode',401,'test-ep','test-series','mkv',
+       'Fixture episode','approved',$2,NOW(),NOW(),16777216)`,[SOURCE,SHA]);
   // A real PG connection can see the Xtream tables yet not the Hub
   // private manifest/budget tables; an operator must NOT enable copy.
   const beforeSetup=await inspectMirrorDeploymentPreflight({
@@ -173,6 +174,44 @@ test('real PG cross-media copy budget, durable checkpoints and 3 maximum retries
   assert.equal(eFinal.rows[0].copy_sha256,SHA);
   assert.equal(eFinal.rows[0].copy_retry_count,0);
   assert.equal(eFinal.rows[0].copy_retry_after,null);
+
+  // A provider may move an episode to a DIFFERENT series while its
+  // gateway ID, episode ID and extension remain unchanged. This must
+  // never inherit the previous series' reviewed storage permission.
+  await pool.query(`INSERT INTO blofy_xtream_gateway_episode_map
+    VALUES($1,402,'ep-movable','test-series','mkv')`,[SOURCE]);
+  await pool.query(`INSERT INTO blofy_xtream_mirror_items
+   (source_id,media_kind,gateway_id,media_id,series_media_id,
+    extension,title,state,rights_ref_sha256,license_reviewed_at,
+    size_probe_at,expected_bytes)
+   VALUES($1,'episode',402,'ep-movable','test-series','mkv',
+    'Movable episode','approved',$2,NOW(),NOW(),16777216)`,[SOURCE,SHA]);
+  await pool.query(`INSERT INTO blofy_xtream_items
+   VALUES($1,'series','another-series',TRUE,'mkv')`,[SOURCE]);
+  await pool.query(`UPDATE blofy_xtream_gateway_episode_map
+   SET series_source_id='another-series' WHERE server_id=$1
+    AND gateway_id=402`,[SOURCE]);
+  const noCopy=await episode.claim({
+   sourceId:SOURCE,day:DAY,limit:64*1024**2});
+  assert.equal(noCopy.ok,false);
+  assert.equal(noCopy.code,'mirror_episode_no_approved_item',
+   'source-parent drift must block even before a new inventory scan');
+  const rescanned=await discovery.scanPage({
+   sourceId:SOURCE,mediaKind:'episode',localDay:DAY,limit:25});
+  assert.equal(rescanned.ok,true);
+  const conflict=await pool.query(`SELECT series_media_id,
+    mapping_conflict,mapping_conflict_at,state FROM
+     blofy_xtream_mirror_items WHERE source_id=$1
+    AND media_kind='episode' AND gateway_id=402`,[SOURCE]);
+  assert.equal(conflict.rows[0].series_media_id,'test-series',
+   'original reviewed parent must never silently change');
+  assert.equal(conflict.rows[0].mapping_conflict,true);
+  assert.ok(conflict.rows[0].mapping_conflict_at);
+  assert.equal(conflict.rows[0].state,'approved');
+  const blockedAfterScan=await episode.claim({
+   sourceId:SOURCE,day:DAY,limit:64*1024**2});
+  assert.equal(blockedAfterScan.ok,false);
+  assert.equal(blockedAfterScan.code,'mirror_episode_no_approved_item');
  }finally{
   await Promise.allSettled([movie?.close(),episode?.close()]);
   await pool.end();
