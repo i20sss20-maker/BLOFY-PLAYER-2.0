@@ -1138,6 +1138,23 @@ open class PlayerActivity : ContentAccessActivity() {
     /** Actions from the unified vertical live-channel panel. Only STREAM uses this entrypoint.
      * A single player remains attached to the same video surface throughout.
      */
+    /**
+     * Filtered/recent/favorite channel rows must resolve by stable provider
+     * identity, never by their temporary filtered list position.
+     * This reuses the same session and the existing content-access checks.
+     */
+    internal fun selectLiveChannelFromPanel(stream: StreamEntity): Boolean {
+        if (!BuildConfig.CODE_ONLY_LOGIN || !contentReady || kind != KIND_LIVE ||
+            sessionReleased || isFinishing || isDestroyed ||
+            stream.kind != KIND_LIVE || stream.providerId != providerId || stream.locked)
+            return false
+        lifecycleScope.launch {
+            val provider = dao.provider(providerId) ?: return@launch
+            if (!sessionReleased && !isFinishing) playLiveStream(provider, stream)
+        }
+        return true
+    }
+
     internal fun openLivePanelAction(action: LiveChannelPanelAction): Boolean {
         if (!BuildConfig.CODE_ONLY_LOGIN || !contentReady || kind != KIND_LIVE ||
             sessionReleased || isFinishing || isDestroyed) return false
