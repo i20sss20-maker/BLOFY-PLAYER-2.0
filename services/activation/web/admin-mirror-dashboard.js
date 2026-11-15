@@ -1,7 +1,7 @@
 'use strict';
 // Admin-only, READ-ONLY Xtream mirror dashboard.
 // No source URLs, provider credentials, owner HMAC tokens, media bytes,
-// background transfer requests or localStorage writes.
+// background transfer requests or browser persistence.
 (()=>{
  const el=id=>document.getElementById(id);
  const source=el('mirrorSource'),kind=el('mirrorKind'),state=el('mirrorState');
