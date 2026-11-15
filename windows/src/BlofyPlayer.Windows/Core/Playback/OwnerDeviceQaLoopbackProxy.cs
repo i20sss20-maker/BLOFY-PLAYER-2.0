@@ -72,7 +72,7 @@ public sealed class OwnerDeviceQaLoopbackProxy : IAsyncDisposable
         HttpMethod method, string? exactRange, CancellationToken cancellationToken)
     {
         var request = new HttpRequestMessage(method,
-            "https://blofyplayer.com/api/v1/private-device-qa/playback/" + _runId);
+            "https://blofyplayer.com/api/v1/private-device-qa/episode/playback/" + _runId);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _ticket);
         request.Headers.TryAddWithoutValidation("User-Agent", "BLOFY-Windows-OwnerDeviceQA/1");
         if (exactRange is not null)
