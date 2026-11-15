@@ -594,7 +594,13 @@ open class PlayerActivity : ContentAccessActivity() {
 
         controlHint = TextView(this).apply {
             textSize = 11f; setTextColor(PURPLE_SOFT); gravity = Gravity.CENTER
-            visibility = if (isTv) View.GONE else View.VISIBLE
+            // TV viewers also need a visible caption for icon-only controls.
+            visibility = View.VISIBLE
+            text = if (isTv && kind == KIND_LIVE) {
+                if (streamUiLanguage().startsWith("ar", ignoreCase = true))
+                    "MENU / ↑ الصوتيات   •   OK القنوات"
+                else "MENU / UP Audio   •   OK Channels"
+            } else ""
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }
         hud.addView(controlHint, LinearLayout.LayoutParams(-1, dp(22)))
@@ -812,11 +818,12 @@ open class PlayerActivity : ContentAccessActivity() {
         background = surface(false)
         setOnFocusChangeListener { view, focused ->
             view.background = surface(focused)
-            if (!isTv) {
-                if (focused) { controlHint.text = view.contentDescription; keepHudVisible() }
-                else if (controlHint.text == view.contentDescription) controlHint.text = ""
+            if (focused) {
+                controlHint.text = view.contentDescription
+                keepHudVisible()
+            } else if (!isTv && controlHint.text == view.contentDescription) {
+                controlHint.text = ""
             }
-            if (focused) keepHudVisible()
         }
         setOnClickListener { action() }
     }
