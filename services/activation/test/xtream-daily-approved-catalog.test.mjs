@@ -121,7 +121,7 @@ test('daily scheduler integrated only into authenticated STREAM gateway controls
  const code=await readFile(new URL('../src/xtream-admin-hook.mjs',import.meta.url),'utf8');
  assert.match(code,/dailyCatalogTimer=setInterval/);
  assert.match(code,/dailyCatalogStartupTimer=setTimeout/);
- assert.match(code,/dailyReceipt:true,day:due\.day/);
+ assert.match(code,/options\?\.dailyReceipt===true/);
  assert.match(code,/recordDailyCatalogOutcome\(controlPool/);
  assert.match(code,/internal\/blofy-stream\/ops\/daily-catalog/);
  assert.doesNotMatch(code,/dailyCatalogTick\(\).*copyMovie/);
