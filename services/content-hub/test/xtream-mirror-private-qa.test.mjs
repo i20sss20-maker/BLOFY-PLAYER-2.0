@@ -6,11 +6,14 @@ import {resolveVerifiedMirrorMedia}
 const ID='123e4567-e89b-42d3-a456-426614174000';
 const runId='mirror_'+'a'.repeat(40),sha='b'.repeat(64),size=16777216;
 const row={copy_run_id:runId,copy_sha256:sha,
+ source_id:ID,media_id:'movie_123',gateway_id:123,
  expected_bytes:String(size),extension:'mp4',
  copy_completed_at:'2026-11-15T01:00:00Z'};
 const base={sourceId:ID,mediaKind:'movie',gatewayId:123};
 function fake({record=row,manifest={
-  bytes:size,sha256:sha,extension:'mp4',parts:[{partNumber:1},{partNumber:2}]
+  kind:'chunked',mediaKind:'movie',sourceId:ID,mediaId:'movie_123',
+  gatewayId:123,bytes:size,sha256:sha,extension:'mp4',
+  parts:[{partNumber:1},{partNumber:2}]
 }}={}){
  let reads=0,sql='';
  const db={query:async(q,args)=>{
@@ -60,12 +63,15 @@ test('tampered length, sha or extension cannot become QA-ready',async()=>{
 });
 test('verified episodes get checked via episode S3 manifest only',async()=>{
  let hits=0;
- const db={query:async()=>({rows:[{...row,extension:'mkv'}]})};
+ const db={query:async()=>({rows:[{...row,
+  media_id:'episode_88',gateway_id:88,extension:'mkv'}]})};
  const lease={
   getVerifiedChunkedObject:async()=>{throw Error('wrong_kind')},
   getVerifiedEpisodeObject:async id=>{
    hits++;assert.equal(id,runId);
-   return {bytes:size,sha256:sha,extension:'mkv',parts:[{},{}]};
+   return {kind:'chunked',mediaKind:'episode',sourceId:ID,
+    mediaId:'episode_88',gatewayId:88,
+    bytes:size,sha256:sha,extension:'mkv',parts:[{},{}]};
   }
  };
  const r=await resolveVerifiedMirrorMedia({
@@ -83,5 +89,31 @@ test('invalid selections never query database',async()=>{
  await assert.rejects(()=>resolveVerifiedMirrorMedia({
   ...f,sourceId:ID,mediaKind:'live',gatewayId:123
  }),/selection_invalid/);
+ assert.equal(f.getReads(),0);
+});
+
+test('private QA rejects cross-source and remapped movie files even with matching SHA and length',async()=>{
+ const manifest={kind:'chunked',mediaKind:'movie',
+  sourceId:ID,mediaId:'movie_123',gatewayId:123,
+  bytes:size,sha256:sha,extension:'mp4',parts:[{},{}]};
+ for(const override of [
+  {sourceId:'523e4567-e89b-42d3-a456-426614174000'},
+  {mediaId:'different_movie'},
+  {gatewayId:999},
+  {mediaKind:'episode'},
+  {kind:'not_chunked'},
+  {sourceId:undefined}
+ ]){
+  const f=fake({manifest:{...manifest,...override}});
+  const result=await resolveVerifiedMirrorMedia({...f,...base});
+  assert.equal(result.ok,false,JSON.stringify(override));
+  assert.equal(result.code,'mirror_qa_manifest_mismatch');
+ }
+});
+test('owner QA requires exact reviewed movie identity in queue even if a manifest exists',async()=>{
+ const f=fake({record:{...row,media_id:''}});
+ const result=await resolveVerifiedMirrorMedia({...f,...base});
+ assert.equal(result.ok,false);
+ assert.equal(result.code,'mirror_qa_record_invalid');
  assert.equal(f.getReads(),0);
 });
