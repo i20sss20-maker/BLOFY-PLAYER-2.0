@@ -1,5 +1,5 @@
 name: BLOFY STREAM 55.8.28 Full Owner-Signed QA
-# Require the corrected compact ScrollView footer and exact source SHA QA to pass.
+# Require verified one-click in-panel Arabic audio, BACK handling, and actual-playback status before signing.
 on:
   push:
     branches:
