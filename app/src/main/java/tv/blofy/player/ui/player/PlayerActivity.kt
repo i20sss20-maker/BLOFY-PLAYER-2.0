@@ -104,6 +104,7 @@ open class PlayerActivity : ContentAccessActivity() {
     private var disconnectedAtElapsedMs = 0L
     private var vlcFallbackLaunched = false
     private var lastStreamAudioHealth = ""
+    private var arabicAudioSession: StreamArabicAudioSession? = null
     private lateinit var connectionNotice: TextView
     private lateinit var controlHint: TextView
     private var networkRegistered = false
@@ -323,6 +324,7 @@ open class PlayerActivity : ContentAccessActivity() {
                 if (playbackState == Player.STATE_READY && ::connectionNotice.isInitialized) {
                     connectionNotice.visibility = View.GONE
                 }
+                arabicAudioSession?.onPrimaryPlaybackChanged()
                 if (playbackState == Player.STATE_READY) reportStreamAudioHealth()
                 if (playbackState == Player.STATE_ENDED) saveResume()
                 if (playbackState == Player.STATE_ENDED && kind == KIND_EPISODE && !autoNextTriggered) {
@@ -336,7 +338,11 @@ open class PlayerActivity : ContentAccessActivity() {
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
-                if (!sessionReleased) { updatePlayPauseLabel(); if (!isPlaying) saveResume() }
+                if (!sessionReleased) {
+                    arabicAudioSession?.onPrimaryPlaybackChanged()
+                    updatePlayPauseLabel()
+                    if (!isPlaying) saveResume()
+                }
             }
             override fun onTracksChanged(tracks: Tracks) {
                 if (sessionReleased) return
@@ -359,7 +365,8 @@ open class PlayerActivity : ContentAccessActivity() {
     // Diagnostic only: never retry a working video session just because
     // audio is missing, and never include the Xtream URL or code in logs.
     private fun reportStreamAudioHealth() {
-        if (!BuildConfig.CODE_ONLY_LOGIN || kind != KIND_LIVE || sessionReleased) return
+        if (!BuildConfig.CODE_ONLY_LOGIN || kind != KIND_LIVE || sessionReleased ||
+            arabicAudioSession?.isActive == true) return
         val status = StreamAudioHealth.inspect(
             session.player.currentTracks,
             session.player.volume,
@@ -389,6 +396,8 @@ open class PlayerActivity : ContentAccessActivity() {
             if (kind != KIND_LIVE && state.positionMs <= 0L && session.player.playbackState != Player.STATE_READY)
                 state.copy(positionMs = checkpoint.positionMs) else state
         }
+        arabicAudioSession?.stop()
+        arabicAudioSession = null
         sessionReleased = true
         episodeNavigationJob?.cancel()
         zappingJob?.cancel()
@@ -1216,6 +1225,9 @@ open class PlayerActivity : ContentAccessActivity() {
             return
         }
 
+        // A new channel must never inherit the previous channel's audio URL.
+        arabicAudioSession?.stop()
+        arabicAudioSession = null
         val profile = providerProfile(provider)
         liveProvider = provider
         currentStreamId = stream.remoteId
@@ -1446,6 +1458,7 @@ open class PlayerActivity : ContentAccessActivity() {
         val isText = trackType == C.TRACK_TYPE_TEXT
         val isAudio = trackType == C.TRACK_TYPE_AUDIO
         val englishStreamUi = BuildConfig.CODE_ONLY_LOGIN && !streamUiLanguage().startsWith("ar", ignoreCase = true)
+        val allowArabicSidecar = isAudio && BuildConfig.CODE_ONLY_LOGIN && kind == KIND_LIVE
         val labels = buildList {
             if (isText && entries.isNotEmpty()) add(if (englishStreamUi) "Subtitles off" else "إيقاف الترجمة")
             if (isAudio && entries.isNotEmpty()) add(if (englishStreamUi) "Automatic audio" else "الصوت التلقائي")
@@ -1466,7 +1479,13 @@ open class PlayerActivity : ContentAccessActivity() {
                     }
                 )
                 .setPositiveButton(if (englishStreamUi) "OK" else "حسنًا", null)
-            // A channel with zero supported tracks must still expose diagnosis.
+            // A channel with zero supported embedded audio still permits
+            // curated Arabic sidecar audio from the BLOFY server.
+            if (allowArabicSidecar) {
+                dialog.setNegativeButton(if (englishStreamUi) "BLOFY Arabic audio" else "صوتيات BLOFY العربية") { _, _ ->
+                    showArabicAudioMenu()
+                }
+            }
             if (!isText && BuildConfig.CODE_ONLY_LOGIN) {
                 dialog.setNeutralButton(if (englishStreamUi) "Diagnose audio" else "تشخيص الصوت") { _, _ ->
                     showStreamAudioDiagnostic()
@@ -1486,6 +1505,11 @@ open class PlayerActivity : ContentAccessActivity() {
             )
             .setItems(labels.toTypedArray()) { dialog, which ->
                 if (isText) subtitlePolicy.manual = true
+                // Selecting embedded/original audio deactivates Arabic sidecar.
+                if (isAudio) {
+                    arabicAudioSession?.stop()
+                    arabicAudioSession = null
+                }
                 when (AudioTrackChoicePolicy.choice(isAudio, isText, which, entries.size)) {
                     AudioTrackChoicePolicy.Choice.OFF -> {
                         session.player.trackSelectionParameters = session.player.trackSelectionParameters
@@ -1528,7 +1552,131 @@ open class PlayerActivity : ContentAccessActivity() {
                         showStreamAudioDiagnostic()
                     }
                 }
+                if (allowArabicSidecar) {
+                    setNegativeButton(if (englishStreamUi) "BLOFY Arabic audio" else "صوتيات BLOFY العربية") { _, _ ->
+                        showArabicAudioMenu()
+                    }
+                }
             }
+            .show()
+    }
+
+
+    /** Optional Arabic soundstreams come only from the code-authorized BLOFY
+     * catalog. A missing backend endpoint leaves standard channel audio intact.
+     */
+    private fun showArabicAudioMenu() {
+        if (!BuildConfig.CODE_ONLY_LOGIN || kind != KIND_LIVE || sessionReleased ||
+            currentStreamId.isBlank()) return
+        val english = !streamUiLanguage().startsWith("ar", ignoreCase = true)
+        val active = arabicAudioSession
+        val channel = currentStreamId
+        if (active?.isActive == true) {
+            showArabicAudioControls()
+            return
+        }
+        Toast.makeText(
+            this,
+            if (english) "Checking Arabic audio..." else "جاري البحث عن الصوتيات العربية...",
+            Toast.LENGTH_SHORT
+        ).show()
+        lifecycleScope.launch {
+            val tracks = runCatching {
+                StreamArabicAudioCatalog.list(applicationContext, channel)
+            }.getOrDefault(emptyList())
+            if (sessionReleased || isFinishing || currentStreamId != channel) return@launch
+            if (tracks.isEmpty()) {
+                AlertDialog.Builder(this@PlayerActivity)
+                    .setTitle(if (english) "BLOFY Arabic audio" else "صوتيات BLOFY العربية")
+                    .setMessage(if (english) "No Arabic audio was assigned to this channel."
+                        else "لا توجد صوتيات عربية مضافة لهذه القناة من لوحة BLOFY.")
+                    .setPositiveButton(if (english) "OK" else "حسنًا", null)
+                    .show()
+                return@launch
+            }
+            val labels = listOf(
+                if (english) "Original channel audio" else "الصوت الأصلي للقناة"
+            ) + tracks.map { it.label }
+            AlertDialog.Builder(this@PlayerActivity)
+                .setTitle(if (english) "Choose channel audio" else "اختر صوت القناة")
+                .setItems(labels.toTypedArray()) { _, selected ->
+                    if (selected == 0) {
+                        arabicAudioSession?.stop()
+                        arabicAudioSession = null
+                    } else {
+                        val choice = tracks.getOrNull(selected - 1) ?: return@setItems
+                        val controller = StreamArabicAudioSession(
+                            this@PlayerActivity, session.player, profileFromIntent()
+                        ) {
+                            if (!isFinishing && !sessionReleased) Toast.makeText(
+                                this@PlayerActivity,
+                                if (english) "Arabic audio unavailable; original audio restored."
+                                else "تعذر تشغيل الصوت العربي، ورجع الصوت الأصلي.",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                        arabicAudioSession?.stop()
+                        arabicAudioSession = controller
+                        controller.start(choice)
+                        showArabicAudioControls()
+                    }
+                }
+                .show()
+        }
+    }
+
+    private fun showArabicAudioControls() {
+        val controller = arabicAudioSession?.takeIf { it.isActive } ?: return
+        val english = !streamUiLanguage().startsWith("ar", ignoreCase = true)
+        val label = TextView(this).apply {
+            textSize = 17f
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            setPadding(dp(12), dp(18), dp(12), dp(18))
+        }
+        fun refresh() {
+            label.text = (controller.currentLabel ?: "") + "\\n" +
+                if (english) "Audio delay: +${controller.delaySeconds}s (0–30s)"
+                else "تأخير الصوت: +${controller.delaySeconds} ثانية (0–30)"
+        }
+        refresh()
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        fun addAction(title: String, change: () -> Unit) {
+            row.addView(android.widget.Button(this).apply {
+                text = title
+                isAllCaps = false
+                setOnClickListener {
+                    change()
+                    refresh()
+                }
+            }, LinearLayout.LayoutParams(0, dp(54), 1f))
+        }
+        addAction(if (english) "Advance −1s" else "تقديم −1ث") {
+            controller.adjustDelay(-1)
+        }
+        addAction(if (english) "Delay +1s" else "تأخير +1ث") {
+            controller.adjustDelay(1)
+        }
+        addAction(if (english) "Reset" else "تصفير") {
+            controller.resetDelay()
+        }
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+            addView(label)
+            addView(row)
+        }
+        AlertDialog.Builder(this)
+            .setTitle(if (english) "Arabic audio sync" else "مزامنة الصوت العربي")
+            .setView(body)
+            .setNeutralButton(if (english) "Original audio" else "الصوت الأصلي") { _, _ ->
+                arabicAudioSession?.stop()
+                arabicAudioSession = null
+            }
+            .setPositiveButton(if (english) "Done" else "تم", null)
             .show()
     }
 
