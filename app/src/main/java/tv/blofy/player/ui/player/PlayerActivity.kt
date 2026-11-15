@@ -1791,6 +1791,20 @@ open class PlayerActivity : ContentAccessActivity() {
         arabicAudioSession = null
     }
 
+    internal fun inlineArabicDelaySeconds(): Int =
+        arabicAudioSession?.takeIf { it.isActive }?.delaySeconds ?: 0
+
+    /** Inline remote-control sync keys: no second file/folder/dialog. */
+    internal fun adjustInlineArabicSync(delta: Int): Int {
+        val controller = arabicAudioSession?.takeIf { it.isActive } ?: return 0
+        if (delta == 0) controller.resetDelay()
+        else controller.adjustDelay(delta)
+        controller.currentTrackId?.let { id ->
+            StreamAudioPreferenceStore.save(this, currentStreamId, id, controller.delaySeconds)
+        }
+        return controller.delaySeconds
+    }
+
     internal fun playInlineArabicAudio(
         choice: StreamArabicAudioCatalog.Track,
         onPlaybackState: (Boolean) -> Unit
