@@ -674,3 +674,32 @@ playback are separate release gates.
 
 The change is in isolated draft PR #609. No Railway configuration
 changes, source copying or customer update was performed.
+
+
+## 2026-11-15: Private device-playback pilot shadowing guard
+
+The Content Hub historically used the private
+`/internal/pilot/playback/<runId>` route for a single verified
+legacy pilot movie, and subsequently also for a verified chunked
+private mirror. If a legacy pilot object was present with the SAME
+`mirror_<40-hex>` run ID, pilot lookup previously took precedence
+over the reviewed mirror manifest. A legitimate owner HMAC ticket
+for the reviewed mirror could therefore resolve to a different
+legacy pilot object.
+
+Now mirror-prefixed run IDs are handled **exclusively** by
+`lease.getVerifiedChunkedObject(runId)` and NEVER fall back to
+`getVerifiedPilotObject`. An absent/unverified chunked mirror
+returns a private 404. Non-mirror run IDs retain the original
+legacy pilot behavior. The 8MiB explicit range limit, bearer
+authentication and zero public subscriber routes remain unchanged.
+
+An HTTP regression test deliberately returns a legacy pilot
+manifest and an independent mirror manifest under the SAME run ID:
+the valid movie GET must serve only bytes from the reviewed
+mirror chunk. Another test checks 404 when that chunked
+manifest is missing, and one preserves legacy playback for
+ordinary non-mirror pilot run IDs.
+
+This is isolated QA branch code; not deployed on customer Railway
+and not evidence of physical Android TV/Windows playback.
