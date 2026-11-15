@@ -4,6 +4,7 @@ import {safeXtreamTransportCategory} from './xtream-transport-errors.mjs';
 import {withXtreamAccountReconnect} from './xtream-api-resilience.mjs';
 import {createXtreamSyncQueue} from './xtream-sync-queue.mjs';
 import {listIndexedXtreamMirrorPage} from './xtream-mirror-inventory.mjs';
+import {stageMirrorIntake,listMirrorIntake,cancelMirrorIntake,validateMirrorIntakeSelection} from './xtream-mirror-transfer-intake.mjs';
 import {reconcileStreamCatalogPage} from './content-hub-private-mirror-reconcile-bridge.mjs';
 import {forwardStreamS3HeadAudit} from './content-hub-private-head-audit-bridge.mjs';
 import {configuredDailySourceId,riyadhCatalogDay,scheduleDailyApprovedCatalog,
@@ -3470,6 +3471,75 @@ async function unifiedStreamBridge(req,res,url){
   // private BLOFY STREAM operator bridge, never a customer endpoint.
   // Exact-source, read-only catalog inventory for the owner's *private*
   // mirror planning. No provider media reads, S3 writes or client cutover.
+  // Private owner copy-intake ledger: staged *metadata only*, never starts
+  // upstream media requests or transfers. No subscriber endpoints.
+  if(p==='/internal/blofy-stream/ops/mirror-intake'||
+     p==='/internal/blofy-stream/ops/mirror-intake/cancel'){
+    if(url.search)return json(res,400,{
+      ok:false,code:'mirror_intake_query_denied'});
+    if(process.env.BLOFY_STREAM_MIRROR_INTAKE_ENABLED!=='1')
+      return json(res,404,{ok:false,code:'mirror_intake_feature_disabled'});
+    const sourceId=configuredDailySourceId(process.env);
+    if(!sourceId)return json(res,503,{
+      ok:false,code:'mirror_intake_source_unconfigured'});
+    const isCancel=p.endsWith('/cancel');
+    if(!isCancel&&req.method==='GET'){
+      try{
+        const status=await listMirrorIntake(controlPool,{sourceId});
+        return json(res,status.ok?200:503,status,
+          {'cache-control':'no-store'});
+      }catch{return json(res,503,{ok:false,
+        code:'mirror_intake_database_unavailable'})}
+    }
+    if(req.method!=='POST')return json(res,405,{
+      ok:false,code:'mirror_intake_method_denied'});
+    const action=req.headers['x-blofy-owner-action'];
+    if(action!==(isCancel?'cancel-private-mirror-intake':
+        'stage-private-mirror-intake'))
+      return json(res,403,{ok:false,
+        code:'mirror_intake_owner_action_required'});
+    let data;
+    try{data=await readJson(req)}catch{return json(res,400,{
+      ok:false,code:'mirror_intake_json_invalid'})}
+    const kind=String(data?.kind||''),
+      id=String(data?.id||'');
+    if(!validateMirrorIntakeSelection({sourceId,kind,id})||
+       data?.ownerConfirmed!==true)
+      return json(res,400,{ok:false,code:'mirror_intake_selection_invalid'});
+    try{
+      if(isCancel){
+        const out=await cancelMirrorIntake(controlPool,{
+          sourceId,kind,id,ownerConfirmed:true});
+        return json(res,out.ok?200:404,out,
+          {'cache-control':'no-store'});
+      }
+      // A freshly verified movie or episode must not be put into a
+      // second download queue. Fail closed if Content Hub is unavailable.
+      if(process.env.BLOFY_STREAM_MIRROR_MANIFEST_RECONCILE_ENABLED!=='1')
+        return json(res,503,{ok:false,
+          code:'mirror_intake_manifest_check_disabled'});
+      const checked=await reconcileStreamCatalogPage({
+        sourceId,items:[{kind,id}],
+        hubToken:String(process.env.BLOFY_CONTENT_HUB_OPERATOR_TOKEN||'')
+      });
+      if(!checked.ok||!Array.isArray(checked.items)||
+         checked.items.length!==1)
+        return json(res,503,{ok:false,
+          code:'mirror_intake_manifest_check_unavailable'});
+      const status=checked.items[0].status;
+      if(status==='verified_manifest')return json(res,409,{ok:false,
+        code:'mirror_intake_already_verified_in_private_hub'});
+      if(status==='verification_inconsistent')return json(res,409,{
+        ok:false,code:'mirror_intake_existing_manifest_inconsistent'});
+      const staged=await stageMirrorIntake(controlPool,{
+        sourceId,kind,id,manifestStatus:status,ownerConfirmed:true});
+      return json(res,staged.ok?200:409,staged,
+        {'cache-control':'no-store'});
+    }catch{return json(res,503,{ok:false,
+      code:'mirror_intake_transaction_unavailable',
+      mediaBytesTransferred:0,copyWorkerEnabled:false,
+      customerCutover:false})}
+  }
   // Explicit owner on-demand S3 HEAD audit for ONE catalog item.
   // The exact source is pinned by the Portal and the item must exist in
   // its published indexed catalog; no arbitrary S3 paths or provider URLs.
