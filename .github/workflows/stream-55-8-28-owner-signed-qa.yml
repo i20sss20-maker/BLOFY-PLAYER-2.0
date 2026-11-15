@@ -73,7 +73,7 @@ jobs:
           # Regression gate: no nested group/file picker when using the LIVE sidebar.
           grep -Fq 'showInlineArabicVoices(' app/src/main/java/tv/blofy/player/ui/player/LiveChannelOverlayLifecycle.kt
           grep -Fq 'activity.playInlineArabicAudio(voice)' app/src/main/java/tv/blofy/player/ui/player/LiveChannelOverlayLifecycle.kt
-          grep -Fq 'ViewGroup.LayoutParams.MATCH_PARENT, dp(170)' app/src/main/java/tv/blofy/player/ui/player/LiveChannelOverlayLifecycle.kt
+          grep -Fq 'ViewGroup.LayoutParams.MATCH_PARENT, dp(230)' app/src/main/java/tv/blofy/player/ui/player/LiveChannelOverlayLifecycle.kt
           grep -Fq 'val isAudible: Boolean' app/src/main/java/tv/blofy/player/ui/player/StreamArabicAudioSession.kt
           grep -Fq '18_000L' app/src/main/java/tv/blofy/player/ui/player/StreamArabicAudioSession.kt
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
