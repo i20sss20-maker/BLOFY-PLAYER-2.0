@@ -189,12 +189,16 @@ test('ACTUAL movie 8MiB HTTP 206 -> S3 SHA proof -> verified queue, no external 
   BLOFY_CONTENT_HUB_MIRROR_MOVIE_DISPATCH_ENABLED:'1',
   BLOFY_CONTENT_HUB_CHUNKED_ENABLED:'1'
  };
+ let workerResult;
  const done=await runOneApprovedMirrorMovieChunk({
   env,now:NOW,store:queue.store,storage,lease,
-  runner:opts=>runChunkedMovieBatch({
-   ...opts,fetchImpl:upstream.fetchImpl})
+  runner:async opts=>{
+   workerResult=await runChunkedMovieBatch({...opts,fetchImpl:upstream.fetchImpl});
+   return workerResult;
+  }
  });
- assert.equal(done.ok,true,done.code);
+ assert.equal(done.ok,true,JSON.stringify({done,workerResult,
+  operations:storage.ops,sourceRequests:upstream.requests}));
  assert.equal(done.code,'mirror_movie_private_sha_verified');
  assert.equal(done.verified,true);
  assert.equal(done.customerCutover,false);
@@ -219,11 +223,16 @@ test('ACTUAL episode 8MiB HTTP 206 -> private S3 SHA -> verified queue, no catal
   BLOFY_CONTENT_HUB_EPISODE_COPY_ENABLED:'1',
   BLOFY_CONTENT_HUB_EPISODE_RIGHTS_CONFIRMED:'1'
  };
+ let workerResult;
  const done=await runOneApprovedMirrorEpisodeChunk({
   env,now:NOW,store:queue.store,storage,lease,
-  runner:opts=>runOneEpisodeChunk({...opts,fetchImpl:upstream.fetchImpl})
+  runner:async opts=>{
+   workerResult=await runOneEpisodeChunk({...opts,fetchImpl:upstream.fetchImpl});
+   return workerResult;
+  }
  });
- assert.equal(done.ok,true,done.code);
+ assert.equal(done.ok,true,JSON.stringify({done,workerResult,
+  operations:storage.ops,sourceRequests:upstream.requests}));
  assert.equal(done.code,'mirror_episode_private_sha_verified');
  assert.equal(done.verified,true);
  assert.equal(done.customerCutover,false);
