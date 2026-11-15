@@ -46,6 +46,7 @@ jobs:
             --tests tv.blofy.player.ui.player.StreamArabicAudioCatalogTest \
             --tests tv.blofy.player.ui.player.ArabicSidecarTimingPolicyTest \
             --tests tv.blofy.player.ui.player.LivePlayerMenuPolicyTest \
+            --tests tv.blofy.player.ui.player.LiveChannelPanelPolicyTest \
             --tests tv.blofy.player.ui.search.AiOfflineIntentPolicyTest \
             --tests tv.blofy.player.ui.search.AiChatRoutingPolicyTest
           # Build the owner-only debug-signed QA install with the real
