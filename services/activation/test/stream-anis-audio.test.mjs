@@ -20,7 +20,7 @@ test('Anis FM M3U and JSON describe 38 distinct streams in 12 groups',()=>{
  assert.equal(ANIS_AUDIO_TRACKS.find(t=>t.id==='anis-max-low-6').sourcePath,'/live/mx/6L');
 });
 
-test('customer response contains only the app's authenticated HTTPS proxy URLs',()=>{
+test("customer response contains only the app's authenticated HTTPS proxy URLs",()=>{
  const catalogue=anisAudioPublicCatalog();
  assert.equal(catalogue.length,38);
  for(const track of catalogue){
