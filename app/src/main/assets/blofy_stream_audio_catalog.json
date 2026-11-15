@@ -1,0 +1,5 @@
+{
+  "_note": "BLOFY STREAM internal Arabic audio catalog. Operator-owned authorized sources are bundled into the app after testing. Do not embed expiring tokens, usernames, passwords or Xtream credentials.",
+  "_format": "channels: [{channelId: number-as-string, tracks: [{id,label,playbackUrl,delaySeconds,format}]}]",
+  "channels": []
+}
