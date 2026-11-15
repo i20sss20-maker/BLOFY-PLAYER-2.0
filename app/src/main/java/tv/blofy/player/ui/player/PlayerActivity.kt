@@ -1735,20 +1735,36 @@ open class PlayerActivity : ContentAccessActivity() {
             if (english) "Loading Arabic commentary..." else "جاري تحميل الصوتيات العربية...",
             Toast.LENGTH_SHORT).show()
         lifecycleScope.launch {
-            val tracks = StreamArabicAudioCatalog.list(applicationContext, channel)
+            val result = StreamArabicAudioCatalog.lookup(applicationContext, channel)
             if (sessionReleased || isFinishing || currentStreamId != channel) return@launch
-            if (tracks.isEmpty()) {
+            if (result.tracks.isEmpty()) {
+                val message = when (result.failure) {
+                    StreamArabicAudioCatalog.Failure.NO_ENDPOINT ->
+                        if (english) "BLOFY's Arabic audio service has not been connected to this server (HTTP 404). The app and original channel audio are working; this requires a server-side audio catalog and a protected media route."
+                        else "خدمة صوتيات BLOFY ما انربطت بالسيرفر بعد (404). التطبيق وصوت القناة الأصلي شغالين، لكن نحتاج تشغيل قائمة الصوتيات ومسار تشغيلها الآمن على السيرفر."
+                    StreamArabicAudioCatalog.Failure.NOT_ACTIVATED,
+                    StreamArabicAudioCatalog.Failure.UNAUTHORIZED ->
+                        if (english) "This device's BLOFY STREAM session cannot access Arabic audio. Verify the activation code."
+                        else "جلسة تفعيل BLOFY STREAM على هذا الجهاز غير مخوّلة للصوتيات. تحقق من التفعيل."
+                    StreamArabicAudioCatalog.Failure.RATE_LIMITED ->
+                        if (english) "Too many audio requests. Try again later."
+                        else "طلبات الصوتيات كثيرة حاليًا. حاول مرة ثانية."
+                    StreamArabicAudioCatalog.Failure.SERVICE,
+                    StreamArabicAudioCatalog.Failure.NETWORK ->
+                        if (english) "Cannot reach the Arabic audio service. The original channel audio remains available."
+                        else "تعذر الوصول إلى سيرفر الصوتيات. صوت القناة الأصلي ما زال متاحًا."
+                    else ->
+                        if (english) "No Arabic commentary sources are configured for this channel. Original channel audio is unchanged."
+                        else "لا توجد صوتيات عربية مربوطة بهذه القناة. صوت القناة الأصلي ما تغيّر."
+                }
                 AlertDialog.Builder(this@PlayerActivity)
                     .setTitle(if (english) "BLOFY Arabic audio" else "صوتيات BLOFY العربية")
-                    .setMessage(
-                        if (english) "Arabic commentary is not available yet. The original channel audio still works."
-                        else "الصوتيات العربية غير متاحة حاليًا. تقدر تواصل مشاهدة القناة بصوتها الأصلي."
-                    )
+                    .setMessage(message)
                     .setPositiveButton(if (english) "OK" else "حسنًا", null)
                     .show()
                 return@launch
             }
-            showArabicAudioGroups(tracks, english)
+            showArabicAudioGroups(result.tracks, english)
         }
     }
 
