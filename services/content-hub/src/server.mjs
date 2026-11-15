@@ -1227,7 +1227,7 @@ export function createContentHubServer({storage,lease,
    }
    if(!saved||!Number.isSafeInteger(saved.bytes)||saved.bytes<=0)
     return json(res,404,{ok:false,code:'pilot_verified_media_unavailable'});
-   const ext=saved.kind==='chunked'?saved.extension:
+   const ext=(saved.kind==='chunked'||episodePlayback)?saved.extension:
       String(saved.key||'').split('.').pop();
    const type=ext==='mkv'?'video/x-matroska':
     ext==='mp4'?'video/mp4':
