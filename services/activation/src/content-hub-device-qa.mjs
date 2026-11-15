@@ -48,7 +48,10 @@ export function verifyOwnerDeviceQaTicket({secret,ticket,runId,mediaKind='episod
  if(!parts)return false;
  const sig=createHmac('sha256',secret).update(parts[1]).digest();
  const supplied=Buffer.from(parts[2],'base64url');
- if(supplied.length!==sig.length||!timingSafeEqual(sig,supplied))return false;
+ // Node accepts non-canonical base64url pad-bit aliases. Reject them:
+ // two different token strings must never validate as one MAC.
+ if(supplied.toString('base64url')!==parts[2]||
+    supplied.length!==sig.length||!timingSafeEqual(sig,supplied))return false;
  try{
   const payload=JSON.parse(Buffer.from(parts[1].slice(3),'base64url').toString('utf8'));
   const current=Math.floor(now/1000);
