@@ -697,3 +697,12 @@
 .mirror-retry{font-size:12px;color:#a2defb;background:#112f47;
  border:1px solid #2d7291;border-radius:8px;padding:8px;
  margin-top:8px;line-height:1.8}
+
+/* Explicit readiness indicator: green is intentionally avoided because
+   schema/S3 availability alone never grants movie copying rights. */
+.mirror-preflight{border:1px solid #9b6b3a;background:#36281c;
+ color:#ffddbd;border-radius:12px;padding:12px 14px;
+ line-height:1.9;white-space:normal;overflow-wrap:anywhere}
+.mirror-preflight[data-ready="technical-only"]{
+ border-color:#b78e45;background:#302a1c;color:#ffe3ac
+}
