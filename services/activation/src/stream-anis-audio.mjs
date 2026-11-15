@@ -254,3 +254,29 @@ export function anisAudioEnabled(env = process.env) {
   return env.BLOFY_STREAM_ANIS_AUDIO_ENABLED === '1' &&
     /^[A-Za-z0-9_-]{8,128}$/.test(String(env.BLOFY_STREAM_ANIS_TOKEN||'').trim());
 }
+
+/**
+ * MIME validation for a real radio source. Some authorized radio servers
+ * send generic octet-stream instead of audio/mpeg; sniff only a fixed small
+ * prefix, never trust a filename or proxy HTML/video as soundtrack audio.
+ */
+export function classifyAnisAudioMime(contentType,firstChunk) {
+  const type=String(contentType||'').split(';',1)[0].trim().toLowerCase();
+  const accepted=new Set([
+    'audio/mpeg','audio/mp3','audio/aac','audio/aacp','audio/x-aac',
+    'audio/mp4','audio/ogg','audio/wav','audio/x-wav',
+    'audio/flac','audio/x-flac','audio/opus'
+  ]);
+  if(accepted.has(type))return type==='audio/mp3'?'audio/mpeg':type;
+  if(!['application/octet-stream','binary/octet-stream',''].includes(type))
+    return null;
+  const bytes=Buffer.isBuffer(firstChunk)?firstChunk:Buffer.from(firstChunk||[]);
+  if(bytes.length>=3&&bytes.toString('ascii',0,3)==='ID3')return 'audio/mpeg';
+  if(bytes.length>=2&&bytes[0]===0xff&&(bytes[1]&0xf6)===0xf0)return 'audio/aac';
+  if(bytes.length>=2&&bytes[0]===0xff&&(bytes[1]&0xe0)===0xe0)return 'audio/mpeg';
+  if(bytes.length>=4&&bytes.toString('ascii',0,4)==='OggS')return 'audio/ogg';
+  if(bytes.length>=4&&bytes.toString('ascii',0,4)==='fLaC')return 'audio/flac';
+  if(bytes.length>=12&&bytes.toString('ascii',0,4)==='RIFF'&&
+      bytes.toString('ascii',8,12)==='WAVE')return 'audio/wav';
+  return null;
+}
