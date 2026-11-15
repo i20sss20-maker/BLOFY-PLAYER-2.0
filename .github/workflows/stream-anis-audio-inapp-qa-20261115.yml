@@ -5,6 +5,7 @@ on:
     branches:
       - feat/stream-anis-audio-inside-app-20261115
       - fix/stream-live-audio-menu-ai-chat-20261115
+      - feat/stream-55-8-26-unified-live-panel-qa-20261115
   workflow_dispatch:
 
 permissions:
