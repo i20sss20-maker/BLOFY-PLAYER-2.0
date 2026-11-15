@@ -43,7 +43,7 @@ internal object StreamArabicAudioCatalog {
         return uri.scheme.equals("https", ignoreCase = true) &&
             uri.host.equals("blofyplayer.com", ignoreCase = true) &&
             uri.port in listOf(-1, 443) &&
-            uri.userInfo == null &&
+            !uri.encodedAuthority.orEmpty().contains('@') &&
             uri.path?.startsWith("/api/v1/stream/media/audio/") == true &&
             !uri.path.orEmpty().contains("..") &&
             uri.fragment == null
@@ -65,9 +65,14 @@ internal object StreamArabicAudioCatalog {
             val body = response.body ?: return@withContext emptyList()
             if ((body.contentLength() > 65_536) || body.contentLength() < -1) return@withContext emptyList()
             val raw = body.byteStream().use { stream ->
-                val bytes = stream.readNBytes(65_537)
-                if (bytes.size > 65_536) return@withContext emptyList()
-                String(bytes, Charsets.UTF_8)
+                val output = java.io.ByteArrayOutputStream()
+                val block = ByteArray(4096)
+                var count: Int
+                while (output.size() <= 65_536 && stream.read(block).also { count = it } != -1) {
+                    output.write(block, 0, count)
+                }
+                if (output.size() > 65_536) return@withContext emptyList()
+                output.toString(Charsets.UTF_8.name())
             }
             decode(raw)
         }
