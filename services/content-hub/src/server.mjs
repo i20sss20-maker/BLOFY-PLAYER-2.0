@@ -16,6 +16,8 @@ import {createMirrorEpisodeTransferStore,runOneApprovedMirrorEpisodeChunk,
 import {createPrivateMirrorQaStore,resolveVerifiedMirrorMedia}
  from './xtream-mirror-private-qa.mjs';
 import {validateMirrorDeviceTicketProof} from './xtream-mirror-device-proof.mjs';
+import {createMirrorDeploymentPreflightStore,inspectMirrorDeploymentPreflight}
+ from './xtream-mirror-deployment-preflight.mjs';
 import {diagnoseVerifiedMovie} from './playback-diagnostics.mjs';
 import {verifyPrivateSeekRanges} from './seek-diagnostics.mjs';
 import {buildPrivateBrowserPreview} from './private-preview.mjs';
@@ -100,7 +102,7 @@ export function createContentHubServer({storage,lease,
  episodeChunkRunner=runOneEpisodeChunk,seasonQueueStore=null,catalogStore=null,
  dailyMediaSessionStore=null,mirrorMovieTransferStore=null,
  mirrorEpisodeTransferStore=null,mirrorQaStore=null,
- mirrorCanaryRunner=null,
+ mirrorPreflightStore=null,mirrorCanaryRunner=null,
  metadataMatcher=createMetadataMatcher({
   token:process.env.BLOFY_TMDB_READ_TOKEN||'',
   commercialLicenseConfirmed:process.env.BLOFY_TMDB_COMMERCIAL_LICENSE_CONFIRMED==='1'
@@ -166,6 +168,23 @@ export function createContentHubServer({storage,lease,
     uptimeSeconds:Math.floor((Date.now()-started)/1000)});
   if(!safeAuth(req.headers.authorization,token))
    return json(res,401,{ok:false,code:'content_hub_auth_required'});
+  // SAFE READ-ONLY rollout diagnostic: proves that this Content Hub's
+  // DATABASE_URL can see the SAME Xtream catalog, source mappings,
+  // leased queue and private manifest tables. No DDL, no source fetch.
+  if(path==='/internal/mirror/deployment/preflight'&&req.method==='GET'){
+   if(String(req.url||'').includes('?'))
+    return json(res,400,{ok:false,code:'mirror_preflight_query_denied'});
+   if(!mirrorPreflightStore?.db)
+    return json(res,503,{ok:false,code:'mirror_preflight_db_not_configured'});
+   try{
+    const report=await inspectMirrorDeploymentPreflight({
+     db:mirrorPreflightStore.db,storage,env:pilotEnv
+    });
+    return json(res,200,report);
+   }catch{return json(res,503,{ok:false,
+    code:'mirror_preflight_read_only_unavailable',
+    customerCutover:false,providerRequests:0})}
+  }
   // Private operator preview of a small, explicitly licensed VOD batch.
   // Creates no S3 objects and never contacts Xtream. Real media transfer
   // still requires separate item-size probes, a dedicated worker and
@@ -1653,9 +1672,12 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
    createMirrorEpisodeTransferStore({connectionString:process.env.DATABASE_URL}):null;
  const mirrorQaStore=process.env.BLOFY_CONTENT_HUB_MIRROR_OWNER_QA_ENABLED==='1'?
   createPrivateMirrorQaStore({connectionString:process.env.DATABASE_URL}):null;
+ // Read-only schema diagnosis is safe even when every media worker is OFF.
+ const mirrorPreflightStore=createMirrorDeploymentPreflightStore({
+  connectionString:process.env.DATABASE_URL});
  const hub=createContentHubServer({storage,lease,seasonQueueStore,catalogStore,
   dailyMediaSessionStore,mirrorMovieTransferStore,mirrorEpisodeTransferStore,
-  mirrorQaStore,
+  mirrorQaStore,mirrorPreflightStore,
   token:process.env.BLOFY_CONTENT_HUB_ADMIN_TOKEN||'',
   allowSynthetic:process.env.BLOFY_CONTENT_HUB_SYNTHETIC_TEST_ENABLED==='1',
   logger:(name,payload)=>console.info(name,JSON.stringify(payload))});
@@ -2073,7 +2095,8 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
   hub.stopEpisodeCopy();
   hub.server.close(()=>void Promise.allSettled([lease.close(),
    dailyMediaSessionStore?.close?.(),mirrorMovieTransferStore?.close?.(),
-   mirrorEpisodeTransferStore?.close?.(),mirrorQaStore?.close?.()]));
+   mirrorEpisodeTransferStore?.close?.(),mirrorQaStore?.close?.(),
+   mirrorPreflightStore?.close?.()]));
  };
  process.once('SIGTERM',shutdown);process.once('SIGINT',shutdown);
 }
