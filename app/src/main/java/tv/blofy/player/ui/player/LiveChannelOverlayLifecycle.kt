@@ -385,7 +385,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                     // Reserve a fixed, scrollable remote-control footer so 38
                     // direct audio buttons never shrink the channel list.
                     addView(buildAttachedActions(), LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT, dp(170)))
+                        ViewGroup.LayoutParams.MATCH_PARENT, dp(230)))
                 }
             }
 
@@ -673,16 +673,6 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                     activity.inlineArabicDelaySeconds() + copy(" ثانية", "s")
             }
             refreshSync()
-            footer.addView(sync, LinearLayout.LayoutParams(-1, dp(24)))
-            addButton(copy("−1ث  تقديم الصوت", "−1s  Advance audio")) {
-                activity.adjustInlineArabicSync(-1); refreshSync()
-            }
-            addButton(copy("+1ث  تأخير الصوت", "+1s  Delay audio")) {
-                activity.adjustInlineArabicSync(1); refreshSync()
-            }
-            addButton(copy("⟲  تصفير التأخير", "⟲  Reset delay")) {
-                activity.adjustInlineArabicSync(0); refreshSync()
-            }
 
             val status = TextView(activity).apply {
                 text = copy("جارٍ تحميل المعلقين…", "Loading available voices…")
@@ -735,6 +725,19 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                             status.text = copy("تعذّر اختيار المعلق", "Could not select voice")
                         }
                     }
+                }
+                // Fine-grained sync belongs AFTER the direct voice choices:
+                // first screen shows playable voices, not another settings menu.
+                addHeading(copy("ضبط مزامنة الصوت", "Audio synchronization"))
+                footer.addView(sync, LinearLayout.LayoutParams(-1, dp(24)))
+                addButton(copy("−1ث  تقديم الصوت", "−1s  Advance audio")) {
+                    activity.adjustInlineArabicSync(-1); refreshSync()
+                }
+                addButton(copy("+1ث  تأخير الصوت", "+1s  Delay audio")) {
+                    activity.adjustInlineArabicSync(1); refreshSync()
+                }
+                addButton(copy("⟲  تصفير التأخير", "⟲  Reset delay")) {
+                    activity.adjustInlineArabicSync(0); refreshSync()
                 }
             }
         }
