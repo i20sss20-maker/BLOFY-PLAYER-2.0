@@ -29,6 +29,22 @@ function publicAddress(ip) {
   return false;
 }
 
+/** Node 22/24 may request DNS autoSelectFamily with `options.all=true`,
+ * which requires an ARRAY of address records, not the legacy string+family.
+ * Using a string there raises ERR_INVALID_IP_ADDRESS and all media returns 502.
+ * DNS is still resolved and public-validated before this pinned lookup.
+ */
+export function pinnedAudioLookup(address) {
+  return (_host, options, callback) => {
+    if(typeof options==='function') {callback=options;options={};}
+    if(options?.all){
+      callback(null,[{address:address.address,family:address.family}]);
+    }else{
+      callback(null,address.address,address.family);
+    }
+  };
+}
+
 export function parseOperatorAudioPlaylist(raw) {
   if(typeof raw!=='string'||raw.length>25000)return [];
   let values;
@@ -114,7 +130,7 @@ export function createProtectedArabicAudioBridge({
           path:upstream.pathname+upstream.search,
           method:req.method==='HEAD'?'HEAD':'GET',
           headers,timeout:7000,agent:false,
-          lookup(_host,_opts,callback){callback(null,address.address,address.family);}
+          lookup:pinnedAudioLookup(address)
         },audio=>{
           if(![200,206].includes(audio.statusCode)){
             audio.resume();
@@ -190,7 +206,7 @@ export function createProtectedArabicAudioBridge({
             timeout:5_000,agent:false,
             headers:{'accept':'audio/*,*/*;q=0.4',
               'user-agent':'BLOFY-STREAM-Audio-Relay/1.0'},
-            lookup(_host,_opts,cb){cb(null,address.address,address.family);}
+            lookup:pinnedAudioLookup(address)
           },response=>{
             const status=Number(response.statusCode)||0;
             const rawType=String(response.headers['content-type']||'').toLowerCase();

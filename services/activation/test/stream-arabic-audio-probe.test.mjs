@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {EventEmitter} from 'node:events';
-import {createProtectedArabicAudioBridge} from '../src/stream-arabic-audio-bridge.mjs';
+import {createProtectedArabicAudioBridge,pinnedAudioLookup} from '../src/stream-arabic-audio-bridge.mjs';
 
 const playlist=JSON.stringify({playlist:[
   {channel:'Anis Max 1',url:'http://radio.anisfm.vip/live/mx/1?token=FICTIONAL_TEST_ONLY'},
@@ -57,4 +57,37 @@ test('inactive feature never fetches private upstream',async()=>{
   const bridge=createProtectedArabicAudioBridge({getPlaylist:()=>playlist,
     isEnabled:()=>false,lookup:async()=>{throw Error('must not resolve');}});
   assert.deepEqual(await bridge.probe(),[{reason:'audio_disabled_or_unconfigured'}]);
+});
+
+test('Node autoSelectFamily requests array-shaped pinned DNS records',()=>{
+  const pinned=pinnedAudioLookup({address:'8.8.8.8',family:4});
+  pinned('radio.anisfm.vip',{all:true},(err,address)=>{
+    assert.equal(err,null);
+    assert.deepEqual(address,[{address:'8.8.8.8',family:4}]);
+  });
+  pinned('radio.anisfm.vip',{all:false},(err,address,family)=>{
+    assert.equal(err,null);
+    assert.equal(address,'8.8.8.8');
+    assert.equal(family,4);
+  });
+  pinned('radio.anisfm.vip',(err,address,family)=>{
+    assert.equal(err,null);
+    assert.equal(address,'8.8.8.8');
+    assert.equal(family,4);
+  });
+});
+
+test('probe uses a compatible Node all-address custom DNS hook',async()=>{
+  const bridge=createProtectedArabicAudioBridge({
+    getPlaylist:()=>playlist,isEnabled:()=>true,lookup:dns,
+    createRequest:(options,respond)=>{
+      options.lookup('radio.anisfm.vip',{all:true},(err,address)=>{
+        assert.equal(err,null);
+        assert.equal(Array.isArray(address),true);
+      });
+      return httpFixture(200,'audio/mpeg',Buffer.from('ID3payload'))(options,respond);
+    }
+  });
+  const result=await bridge.probe();
+  assert.equal(result[0].reason,'audio_bytes_detected');
 });
