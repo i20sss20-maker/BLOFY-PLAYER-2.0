@@ -9,7 +9,8 @@
  const status=el('mirrorStatus'),stats=el('mirrorStats'),
   rows=el('mirrorRows'),paging=el('mirrorPage'),
   prev=el('mirrorPrev'),next=el('mirrorNext'),
-  scans=el('mirrorScan'),transfers=el('mirrorTransfers');
+  scans=el('mirrorScan'),transfers=el('mirrorTransfers'),
+  preflight=el('mirrorDeploymentPreflight');
  const REF=/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
  const PAGE=25;let cursor=0,history=[],nextCursor=null,busy=false;
  const stateLabels={
@@ -78,6 +79,8 @@
   rows.replaceChildren(node('placeholder','لم تُقرأ قائمة الملفات بعد.'));
   scans.textContent='لم تبدأ قراءة حالة الفهرسة.';
   transfers.textContent='لم تبدأ قراءة حدود النقل.';
+  preflight.textContent='توافق قاعدة Xtream وContent Hub لم يُفحص بعد.';
+  preflight.dataset.ready='false';
   paging.textContent='الصفحة 1';prev.disabled=true;next.disabled=true;
  }
  function selectedSource(){
@@ -85,12 +88,49 @@
   return REF.test(value)?value:null;
  }
  async function loadSummary(id){
-  const [queue,series,movie,episode]=await Promise.allSettled([
+  const [queue,series,movie,episode,readiness]=await Promise.allSettled([
    get('/api/v1/admin/xtream/mirror/queue/status?sourceId='+id),
    get('/api/v1/admin/xtream/mirror/series-status?sourceId='+id),
    get('/api/v1/admin/content-hub/mirror/movie/status'),
-   get('/api/v1/admin/content-hub/mirror/episode/status')
+   get('/api/v1/admin/content-hub/mirror/episode/status'),
+   get('/api/v1/admin/content-hub/mirror/deployment/preflight')
   ]);
+  // Content Hub and activation can each have DATABASE_URL yet still
+  // point to DIFFERENT PostgreSQL databases. Never confuse online
+  // services or recorded manifest bytes with shared source access.
+  const preflightData=readiness.status==='fulfilled'?
+   readiness.value:null;
+  const sameSource=preflightData?.sourceId===id;
+  const checks=preflightData?.checks||{};
+  const compatible=sameSource&&
+    preflightData?.technicalPreflightPassed===true;
+  preflight.dataset.ready=compatible?'technical-only':'false';
+  if(!preflightData?.ok){
+   preflight.textContent='⚠️ فحص توافق قواعد البيانات والتخزين غير متاح. '+
+    'لا تشغّل النقل الآلي إلى أن يُثبت اتصال مصدر Xtream وContent Hub.';
+  }else if(!sameSource){
+   preflight.textContent='⛔ المصدر المعروض في إدارة Xtream لا يطابق المصدر '+
+    'المثبت في خدمة Content Hub. النقل غير جاهز ويحتاج مراجعة ربط البيانات.';
+  }else if(!compatible){
+   const reasons=[];
+   if(!checks.catalogVisibleOnHubConnection)reasons.push(
+    'جداول Xtream أو طابور الملفات غير موجودة على اتصال قاعدة Content Hub');
+   if(!checks.privateManifestTablesVisible)reasons.push(
+    'جداول إثبات الملفات المحفوظة غير متاحة');
+   if(!checks.sharedBudgetVisible)reasons.push(
+    'جدول حصة النقل المشتركة لم يجهّز بعد');
+   if(!checks.sourceOnline||!checks.sourceFresh)reasons.push(
+    'المصدر غير متصل أو آخر فهرسة قديمة');
+   if(!checks.privateStorageAccessible)reasons.push(
+    'التخزين الخاص S3 غير جاهز');
+   preflight.textContent='⛔ النقل غير جاهز تقنيًا: '+
+    (reasons.join('؛ ')||'توجد شروط غير مستوفاة')+
+    '. جميع عمليات النقل تبقى معطّلة حتى معالجة الأسباب.';
+  }else{
+   preflight.textContent='🟡 قاعدة Xtream والطابور وسجل نسخ S3 تبدو '+
+    'متاحة من Content Hub. هذه نتيجة تقنية للقراءة فقط، وليست '+
+    'موافقة على حقوق تخزين المحتوى أو تفعيل النقل للعملاء.';
+  }
   if(queue.status==='fulfilled'&&queue.value?.ok===true){
    const data=queue.value,items=Array.isArray(data.queue)?data.queue:[];
    const total=items.reduce((n,x)=>n+Number(x.total||0),0);
