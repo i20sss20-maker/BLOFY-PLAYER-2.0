@@ -58,6 +58,11 @@ jobs:
           set -euo pipefail
           grep -Fq 'versionCode = 2000102' app/build.gradle.kts
           grep -Fq 'versionName = "2.0.0-rc07.55.8.25"' app/build.gradle.kts
+          # Require the specific panel implementation, not the previous detached HUD.
+          grep -Fq 'addView(buildAttachedActions()' app/src/main/java/tv/blofy/player/ui/player/LiveChannelOverlayLifecycle.kt
+          grep -Fq 'unifiedChannelPanel = BuildConfig.CODE_ONLY_LOGIN' app/src/main/java/tv/blofy/player/ui/player/LiveChannelOverlayLifecycle.kt
+          grep -Fq 'LiveChannelPanelPolicyTest' .github/workflows/stream-anis-audio-inapp-qa-20261115.yml
+          grep -Fq 'LiveChannelPanelAction.BLOFY_AUDIO' app/src/main/java/tv/blofy/player/ui/player/LiveChannelPanelPolicy.kt
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36' "build-tools;$ANDROID_BUILD_TOOLS_VERSION" "ndk;$ANDROID_NDK_VERSION" 'cmake;3.22.1'
           if ! command -v ninja >/dev/null; then sudo apt-get update && sudo apt-get install -y ninja-build; fi
