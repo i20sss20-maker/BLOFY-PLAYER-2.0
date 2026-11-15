@@ -102,11 +102,16 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
         private var filterJob: Job? = null
         private var visibleAdapter: LiveChannelAdapter? = null
         private var visibleCount: TextView? = null
+        // A single in-panel selection state. BACK returns to channel controls
+        // instead of exiting player or opening another file/library screen.
+        private var audioPickerOpen = false
+        private var restoreMainActions: (() -> Unit)? = null
 
         override fun dispatchKeyEvent(event: KeyEvent): Boolean {
             if (event.action != KeyEvent.ACTION_DOWN) return delegate.dispatchKeyEvent(event)
             if (dialog?.isShowing == true && RemoteKeyRouter.route(event).action == RemoteAction.BACK) {
-                close()
+                if (audioPickerOpen) restoreMainActions?.invoke()
+                else close()
                 return true
             }
 
@@ -139,6 +144,8 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
         }
 
         fun close() {
+            audioPickerOpen = false
+            restoreMainActions = null
             filterJob?.cancel()
             filterJob = null
             dialog?.dismiss()
@@ -403,6 +410,8 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             created.setOnDismissListener {
                 if (dialog === created) dialog = null
                 filterJob?.cancel()
+                audioPickerOpen = false
+                restoreMainActions = null
                 visibleAdapter = null
                 visibleCount = null
                 displayedChannels = emptyList()
@@ -497,6 +506,10 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
          * Nested track/quality dialogs remain the established player menus;
          * the video is never restarted or replaced.
          */
+        /**
+         * Flat LIVE controls. Voices are buttons inside this SAME ScrollView;
+         * no folder picker, no nested dialogs and no player restart.
+         */
         private fun buildAttachedActions(): ScrollView {
             val scroller = ScrollView(activity).apply {
                 isFillViewport = false
@@ -507,101 +520,196 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             val footer = LinearLayout(activity).apply {
                 orientation = LinearLayout.VERTICAL
                 layoutDirection = activity.resources.configuration.layoutDirection
-                setPadding(dp(9), dp(4), dp(9), dp(9))
+                setPadding(dp(8), dp(3), dp(8), dp(6))
             }
-            fun surface(focused: Boolean) = GradientDrawable().apply {
-                cornerRadius = dp(11).toFloat()
-                setColor(if (focused) 0xE058367E.toInt() else 0x552E263F)
-                setStroke(dp(1), if (focused) 0xFFCEB0FF.toInt() else 0x665E4787)
-            }
-            // Keep four useful controls visible; MORE expands the rest
-            // immediately BELOW them in the SAME sidebar, never a floating HUD.
-            fun draw(expanded: Boolean) {
-                footer.removeAllViews()
-                footer.addView(View(activity).apply {
-                    setBackgroundColor(0x665E4787)
-                }, LinearLayout.LayoutParams(-1, dp(1)).apply { bottomMargin = dp(5) })
+            fun resetScroll() { scroller.post { scroller.scrollTo(0, 0) } }
+            fun addHeading(caption: String) {
                 footer.addView(TextView(activity).apply {
-                    text = copy("التحكم بالبث", "LIVE CONTROLS")
-                    textSize = 11.5f
+                    text = caption
+                    textSize = 12f
                     setTextColor(BlofyTvDesign.TextSecondary)
                     typeface = BlofyTvDesign.HeadingTypeface
-                    gravity = Gravity.START or Gravity.CENTER_VERTICAL
-                    setPadding(dp(9), 0, dp(9), 0)
-                }, LinearLayout.LayoutParams(-1, dp(23)))
-                LiveChannelPanelPolicy.actions(BuildConfig.CODE_ONLY_LOGIN, expanded).forEach { action ->
+                    setPadding(dp(9), dp(6), dp(9), dp(5))
+                }, LinearLayout.LayoutParams(-1, dp(29)))
+            }
+            fun button(label: String, onTap: () -> Unit): TextView {
+                val result = TextView(activity).apply {
+                    text = label
+                    contentDescription = label
+                    textSize = 12.5f
+                    maxLines = 1
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                    setTextColor(Color.WHITE)
+                    typeface = BlofyTvDesign.HeadingTypeface
+                    gravity = Gravity.CENTER_VERTICAL or Gravity.START
+                    setPadding(dp(11), 0, dp(11), 0)
+                    isFocusable = true
+                    isClickable = true
+                    fun shape(focused: Boolean) = GradientDrawable().apply {
+                        cornerRadius = dp(10).toFloat()
+                        setColor(if (focused) 0xDE60428D.toInt() else 0x76272238)
+                        setStroke(dp(1), if (focused) 0xFFCFADFF.toInt() else 0x665E4787)
+                    }
+                    background = shape(false)
+                    setOnFocusChangeListener { view, focused -> view.background = shape(focused) }
+                    setOnClickListener { onTap() }
+                }
+                footer.addView(result, LinearLayout.LayoutParams(-1, dp(38)).apply {
+                    bottomMargin = dp(4)
+                })
+                return result
+            }
+
+            fun showActions(expanded: Boolean) {
+                audioPickerOpen = false
+                footer.removeAllViews()
+                addHeading(copy("التحكم بالبث", "LIVE CONTROLS"))
+                for (action in LiveChannelPanelPolicy.actions(BuildConfig.CODE_ONLY_LOGIN, expanded)) {
                     val label = when (action) {
                         LiveChannelPanelAction.BLOFY_AUDIO ->
-                            copy("♫  صوتيات BLOFY العربية", "♫  BLOFY Arabic audio")
+                            copy("♫  اختر التعليق العربي", "♫  Choose Arabic voice")
                         LiveChannelPanelAction.FAVORITE ->
-                            copy("☆  إضافة/إزالة المفضلة", "☆  Toggle favorite")
+                            copy("☆  المفضلة", "☆  Toggle favorite")
                         LiveChannelPanelAction.EPG ->
-                            copy("▣  برنامج الآن والقادم", "▣  Now and next")
+                            copy("▣  الآن والقادم", "▣  Now and next")
                         LiveChannelPanelAction.MORE ->
-                            if (expanded) copy("⌃  إخفاء الخيارات", "⌃  Fewer controls")
-                            else copy("⌄  المزيد من التحكم", "⌄  More controls")
+                            if (expanded) copy("⌃  إخفاء", "⌃  Fewer controls")
+                            else copy("⌄  خيارات إضافية", "⌄  More controls")
                         LiveChannelPanelAction.AUDIO_TRACKS ->
-                            copy("◉  مسارات الصوت", "◉  Audio tracks")
+                            copy("◉  صوت القناة", "◉  Original audio tracks")
                         LiveChannelPanelAction.SUBTITLES ->
                             copy("CC  الترجمة", "CC  Subtitles")
                         LiveChannelPanelAction.VIDEO_QUALITY ->
-                            copy("▣  جودة الصورة", "▣  Video quality")
+                            copy("▣  الجودة", "▣  Video quality")
                         LiveChannelPanelAction.STREAM_INFO ->
                             copy("ⓘ  معلومات البث", "ⓘ  Stream information")
                         LiveChannelPanelAction.RECONNECT ->
-                            copy("↻  إعادة الاتصال", "↻  Reconnect stream")
+                            copy("↻  إعادة الاتصال", "↻  Reconnect")
                     }
-                    footer.addView(TextView(activity).apply {
-                        id = View.generateViewId()
-                        text = label
-                        contentDescription = label
-                        textSize = 12.5f
-                        maxLines = 1
-                        ellipsize = android.text.TextUtils.TruncateAt.END
-                        setTextColor(Color.WHITE)
-                        typeface = BlofyTvDesign.HeadingTypeface
-                        gravity = Gravity.START or Gravity.CENTER_VERTICAL
-                        setPadding(dp(12), 0, dp(12), 0)
-                        isFocusable = true
-                        isClickable = true
-                        background = surface(false)
-                        setOnFocusChangeListener { view, focused ->
-                            view.background = surface(focused)
-                        }
-                        setOnClickListener {
-                            if (action == LiveChannelPanelAction.MORE) {
-                                draw(!expanded)
-                                // Extra options scroll within a capped footer,
-                                // so the channel list never collapses to one row.
-                                scroller.layoutParams = LinearLayout.LayoutParams(
-                                    ViewGroup.LayoutParams.MATCH_PARENT,
-                                    if (!expanded) dp(175) else ViewGroup.LayoutParams.WRAP_CONTENT)
-                                scroller.post {
-                                    if (dialog?.isShowing == true) {
-                                        scroller.scrollTo(0, 0)
-                                        footer.getChildAt(3)?.requestFocus()
-                                    }
-                                }
-                            } else {
-                                // Existing picker and diagnostic dialogs open
-                                // over the same running ExoPlayer, not a new one.
+                    button(label) {
+                        when (action) {
+                            LiveChannelPanelAction.BLOFY_AUDIO -> showInlineArabicVoices(
+                                footer, scroller, ::button, ::addHeading) { showActions(false) }
+                            LiveChannelPanelAction.MORE -> {
+                                showActions(!expanded)
+                                footer.post { footer.getChildAt(1)?.requestFocus() }
+                            }
+                            else -> {
                                 close()
                                 if (!activity.openLivePanelAction(action)) {
                                     Toast.makeText(activity,
-                                        copy("تعذر فتح هذا الخيار", "Could not open this control"),
+                                        copy("تعذر فتح هذا الخيار", "Unable to open control"),
                                         Toast.LENGTH_SHORT).show()
                                 }
                             }
                         }
-                    }, LinearLayout.LayoutParams(-1, dp(39)).apply {
-                        bottomMargin = dp(4)
-                    })
+                    }
+                }
+                resetScroll()
+            }
+            restoreMainActions = { showActions(false) }
+            showActions(false)
+            scroller.addView(footer, ViewGroup.LayoutParams(-1, -2))
+            return scroller
+        }
+
+        /** One click starts a specific commentary track. Header labels are not
+         * navigable folders; all source buttons live in one scrollable panel.
+         */
+        private fun showInlineArabicVoices(
+            footer: LinearLayout,
+            scroller: ScrollView,
+            addButton: (String, () -> Unit) -> TextView,
+            addHeading: (String) -> Unit,
+            returnHome: () -> Unit
+        ) {
+            audioPickerOpen = true
+            footer.removeAllViews()
+            addHeading(copy("🎙 اختر المعلق مباشرة", "🎙 One-tap Arabic voices"))
+            val back = addButton(copy("↩ رجوع للتحكم", "↩ Back to controls"), returnHome)
+            addButton(copy("🔊 صوت القناة الأصلي", "🔊 Original channel audio")) {
+                activity.returnInlineOriginalAudio()
+                Toast.makeText(activity,
+                    copy("رجع صوت القناة الأصلي", "Original channel audio restored"),
+                    Toast.LENGTH_SHORT).show()
+            }
+
+            // These are direct remote buttons, not modal synchronization pages.
+            val sync = TextView(activity).apply {
+                textSize = 11.5f
+                setTextColor(BlofyTvDesign.TextSecondary)
+                setPadding(dp(9), dp(3), dp(9), dp(4))
+            }
+            fun refreshSync() {
+                sync.text = copy("التأخير: ", "Delay: ") +
+                    activity.inlineArabicDelaySeconds() + copy(" ثانية", "s")
+            }
+            refreshSync()
+            footer.addView(sync, LinearLayout.LayoutParams(-1, dp(24)))
+            addButton(copy("−1ث  تقديم الصوت", "−1s  Advance audio")) {
+                activity.adjustInlineArabicSync(-1); refreshSync()
+            }
+            addButton(copy("+1ث  تأخير الصوت", "+1s  Delay audio")) {
+                activity.adjustInlineArabicSync(1); refreshSync()
+            }
+            addButton(copy("⟲  تصفير التأخير", "⟲  Reset delay")) {
+                activity.adjustInlineArabicSync(0); refreshSync()
+            }
+
+            val status = TextView(activity).apply {
+                text = copy("جارٍ تحميل المعلقين…", "Loading available voices…")
+                textSize = 11f
+                setTextColor(BlofyTvDesign.TextSecondary)
+                setPadding(dp(9), dp(5), dp(9), dp(5))
+                maxLines = 3
+            }
+            footer.addView(status, LinearLayout.LayoutParams(-1, -2))
+            back.post { if (dialog?.isShowing == true) back.requestFocus() }
+            scroller.post { scroller.scrollTo(0, 0) }
+            activity.lifecycleScope.launch {
+                val response = activity.inlineArabicAudioTracks()
+                if (!audioPickerOpen || dialog?.isShowing != true ||
+                    activity.isFinishing || activity.isDestroyed) return@launch
+                if (response == null || response.tracks.isEmpty()) {
+                    status.text = copy(
+                        "ما توفرت صوتيات للقناة حاليًا؛ صوتها الأصلي مستمر.",
+                        "No available voices right now; original audio continues.")
+                    return@launch
+                }
+                status.text = copy(
+                    "اضغط على أي معلق لتشغيله مباشرة. يبقى صوت القناة حتى يشتغل.",
+                    "Press a voice once to play. Original audio stays until it starts.")
+                val voices = response.tracks.distinctBy { it.id }
+                var lastGroup = ""
+                voices.forEach { voice ->
+                    val group = StreamArabicAudioCatalog.groupName(
+                        voice, !copy("ar", "en").equals("ar", ignoreCase = true))
+                    if (group != lastGroup) {
+                        addHeading(group)
+                        lastGroup = group
+                    }
+                    val selected = activity.currentInlineArabicTrackId() == voice.id
+                    val label = (if (selected) "✓ " else "♫ ") + voice.label
+                    val direct = addButton(label) {
+                        status.text = copy(
+                            "جارٍ الاتصال بـ ${voice.label}… الصوت الأصلي مستمر.",
+                            "Connecting to ${voice.label}… original audio continues.")
+                        val accepted = activity.playInlineArabicAudio(voice) { playing ->
+                            if (dialog?.isShowing == true && audioPickerOpen) {
+                                status.text = if (playing)
+                                    copy("✓ يشتغل الآن: ${voice.label}", "✓ Playing: ${voice.label}")
+                                else copy("فشل تشغيل ${voice.label}؛ رجع الصوت الأصلي.",
+                                    "Voice unavailable: ${voice.label}. Original audio restored.")
+                                direct.contentDescription = status.text
+                                refreshSync()
+                            }
+                        }
+                        if (!accepted) {
+                            status.text = copy("تعذّر اختيار المعلق", "Could not select voice")
+                        }
+                    }
                 }
             }
-            draw(expanded = false)
-            scroller.addView(footer, ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-            return scroller
         }
 
         private fun prepareWindow(window: Window, width: Int, height: Int, reveal: Boolean) {
