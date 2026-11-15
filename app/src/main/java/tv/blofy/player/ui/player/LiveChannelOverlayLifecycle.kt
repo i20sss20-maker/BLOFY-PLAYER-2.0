@@ -90,25 +90,36 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
 
         override fun dispatchKeyEvent(event: KeyEvent): Boolean {
             if (event.action != KeyEvent.ACTION_DOWN) return delegate.dispatchKeyEvent(event)
-            val routed = RemoteKeyRouter.route(event)
+            if (dialog?.isShowing == true && RemoteKeyRouter.route(event).action == RemoteAction.BACK) {
+                close()
+                return true
+            }
 
-            if (routed.action == RemoteAction.BACK) {
-                if (dialog?.isShowing == true) {
-                    close()
-                } else {
-                    returnToLiveBrowser()
+            // The QuickMenu interceptor deliberately leaves live PlayerActivity
+            // alone. One owner of the remote keys avoids nested callback races
+            // and makes audio reachable without stopping playback.
+            return when (LivePlayerMenuPolicy.action(
+                event.keyCode,
+                hudVisible = activity.liveControlsVisible(),
+                channelDialogVisible = dialog?.isShowing == true
+            )) {
+                LivePlayerMenuAction.SHOW_AUDIO_CONTROLS ->
+                    if (activity.showLiveAudioControls()) true else delegate.dispatchKeyEvent(event)
+                LivePlayerMenuAction.SHOW_CHANNEL_LIST -> {
+                    activity.dismissLiveAudioControls()
+                    openChannelList()
+                    true
                 }
-                return true
+                LivePlayerMenuAction.DISMISS_CONTROLS -> {
+                    activity.dismissLiveAudioControls()
+                    true
+                }
+                LivePlayerMenuAction.RETURN_TO_BROWSER -> {
+                    returnToLiveBrowser()
+                    true
+                }
+                LivePlayerMenuAction.PASS_THROUGH -> delegate.dispatchKeyEvent(event)
             }
-
-            // Live fullscreen has one deterministic OK contract: one press opens the channel list.
-            // Do not depend on whichever hidden HUD control happened to own focus, otherwise the
-            // first OK can fall through to PlayerActivity and only the second press opens this list.
-            if (routed.action == RemoteAction.OK && dialog?.isShowing != true) {
-                openChannelList()
-                return true
-            }
-            return delegate.dispatchKeyEvent(event)
         }
 
         fun close() {
@@ -145,7 +156,13 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             if (dialog?.isShowing == true || loading || activity.isFinishing || activity.isDestroyed) return
             val providerId = activity.intent.getStringExtra(PlayerActivity.EXTRA_PROVIDER_ID).orEmpty()
             val categoryId = activity.intent.getStringExtra(PlayerActivity.EXTRA_CATEGORY_ID)
-            if (providerId.isBlank()) return
+            if (providerId.isBlank()) {
+                Toast.makeText(activity, copy(
+                    "تعذر معرفة قائمة القنوات. افتح الصوتيات من زر القائمة.",
+                    "Channel list unavailable. Press MENU for audio controls."
+                ), Toast.LENGTH_SHORT).show()
+                return
+            }
             loading = true
             activity.lifecycleScope.launch {
                 val result = withContext(Dispatchers.IO) {
@@ -321,10 +338,11 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 ).show()
                 return
             }
-            val switchAction = {
-                dispatchChannelNumber(channelNumber)
-            }
-            switchAction() // PlayerActivity checks the same gate for digits, arrows and this overlay.
+            // Return focus to video before dispatching the established
+            // numeric zapping path. Never leave an invisible dialog consuming
+            // OK after the viewer has selected a new channel.
+            close()
+            dispatchChannelNumber(channelNumber)
         }
 
         private fun dispatchChannelNumber(number: Int) {
