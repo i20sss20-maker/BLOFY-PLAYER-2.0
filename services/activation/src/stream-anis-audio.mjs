@@ -280,3 +280,49 @@ export function classifyAnisAudioMime(contentType,firstChunk) {
       bytes.toString('ascii',8,12)==='WAVE')return 'audio/wav';
   return null;
 }
+
+/**
+ * Operator-only preflight for ONE permitted source at a time. It never
+ * requests arbitrary URLs and never serializes token-bearing URLs to results.
+ * Preview reads just the first chunk and cancels to avoid forwarding radio
+ * broadcasts, hanging connections or opening many upstream streams.
+ */
+export async function probeAnisAudioTrack(id,{
+  env=process.env,fetchImpl=globalThis.fetch,timeoutMs=6000
+}={}){
+  if(!anisAudioEnabled(env))return {id,ok:false,reason:'not_configured'};
+  const source=anisAudioSourceFor(id,env.BLOFY_STREAM_ANIS_TOKEN);
+  if(!source)return {id,ok:false,reason:'unknown_audio_id'};
+  const abort=new AbortController();
+  const timer=setTimeout(()=>abort.abort(),Math.min(Math.max(timeoutMs,1000),8000));
+  let response,reader;
+  try{
+    response=await fetchImpl(source,{
+      method:'GET',redirect:'manual',signal:abort.signal,
+      headers:{accept:'audio/*', 'user-agent':'BLOFY-STREAM-Owner-Audio-Preflight/1.0'}
+    });
+    const httpStatus=response.status;
+    if(httpStatus!==200&&httpStatus!==206)
+      return {id,ok:false,reason:'upstream_http',httpStatus};
+    const headerType=response.headers.get('content-type');
+    if(!response.body)return {id,ok:false,reason:'empty_body'};
+    reader=response.body.getReader();
+    const first=await reader.read();
+    if(first.done||!first.value?.length)
+      return {id,ok:false,reason:'no_audio_bytes'};
+    const contentType=classifyAnisAudioMime(headerType,first.value);
+    if(!contentType)return {id,ok:false,reason:'unsupported_audio_format'};
+    return {id,ok:true,contentType};
+  }catch{
+    return {id,ok:false,reason:abort.signal.aborted?'timeout':'network_unreachable'};
+  }finally{
+    clearTimeout(timer);
+    abort.abort();
+    if(reader){
+      try{await reader.cancel()}catch{}
+      try{reader.releaseLock()}catch{}
+    }else if(response?.body&&!response.body.locked){
+      try{await response.body.cancel()}catch{}
+    }
+  }
+}
