@@ -1566,11 +1566,11 @@ open class PlayerActivity : ContentAccessActivity() {
      * no customer file import, Xtream host entry or separate admin page.
      * The server returns safe names and first-party media IDs only.
      */
-    private fun showArabicAudioMenu() {
+    private fun showArabicAudioMenu(chooseAnother: Boolean = false) {
         if (!BuildConfig.CODE_ONLY_LOGIN || kind != KIND_LIVE || sessionReleased ||
             currentStreamId.isBlank()) return
         val english = !streamUiLanguage().startsWith("ar", ignoreCase = true)
-        if (arabicAudioSession?.isActive == true) {
+        if (arabicAudioSession?.isActive == true && !chooseAnother) {
             showArabicAudioControls()
             return
         }
@@ -1705,6 +1705,9 @@ open class PlayerActivity : ContentAccessActivity() {
         AlertDialog.Builder(this)
             .setTitle(if (english) "Arabic audio sync" else "مزامنة الصوت العربي")
             .setView(body)
+            .setNegativeButton(if (english) "Change voice" else "تغيير الصوتية") { _, _ ->
+                showArabicAudioMenu(chooseAnother = true)
+            }
             .setNeutralButton(if (english) "Original audio" else "الصوت الأصلي") { _, _ ->
                 arabicAudioSession?.stop()
                 arabicAudioSession = null
