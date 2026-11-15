@@ -1768,6 +1768,43 @@ open class PlayerActivity : ContentAccessActivity() {
         }
     }
 
+    /**
+     * Single-click LIVE sidebar API. Anis tracks appear as direct buttons,
+     * not nested file/group dialogs. The selected channel's main player
+     * stays attached, and the sidecar uses the protected existing session.
+     */
+    internal suspend fun inlineArabicAudioTracks(): StreamArabicAudioCatalog.Lookup? {
+        if (!BuildConfig.CODE_ONLY_LOGIN || kind != KIND_LIVE || sessionReleased ||
+            isFinishing || currentStreamId.isBlank()) return null
+        val channel = currentStreamId
+        val response = StreamArabicAudioCatalog.lookup(applicationContext, channel)
+        return if (!sessionReleased && !isFinishing && channel == currentStreamId)
+            response else null
+    }
+
+    internal fun currentInlineArabicTrackId(): String? =
+        arabicAudioSession?.takeIf { it.isActive }?.currentTrackId
+
+    internal fun returnInlineOriginalAudio() {
+        if (kind != KIND_LIVE || sessionReleased) return
+        arabicAudioSession?.stop()
+        arabicAudioSession = null
+    }
+
+    internal fun playInlineArabicAudio(
+        choice: StreamArabicAudioCatalog.Track,
+        onPlaybackState: (Boolean) -> Unit
+    ): Boolean {
+        if (!BuildConfig.CODE_ONLY_LOGIN || kind != KIND_LIVE || sessionReleased ||
+            isFinishing || isDestroyed ||
+            !StreamArabicAudioCatalog.trustedAudioUrl(choice.playbackUrl)) return false
+        activateArabicTrack(choice,
+            english = !streamUiLanguage().startsWith("ar", ignoreCase = true),
+            showControls = false,
+            onPlaybackState = onPlaybackState)
+        return true
+    }
+
     private fun showArabicAudioGroups(
         tracks: List<StreamArabicAudioCatalog.Track>, english: Boolean
     ) {
@@ -1820,20 +1857,28 @@ open class PlayerActivity : ContentAccessActivity() {
     }
 
     private fun activateArabicTrack(
-        choice: StreamArabicAudioCatalog.Track, english: Boolean
+        choice: StreamArabicAudioCatalog.Track, english: Boolean,
+        showControls: Boolean = true,
+        onPlaybackState: ((Boolean) -> Unit)? = null
     ) {
         if (!BuildConfig.CODE_ONLY_LOGIN || sessionReleased || kind != KIND_LIVE ||
             !StreamArabicAudioCatalog.trustedAudioUrl(choice.playbackUrl)) return
         val controller = StreamArabicAudioSession(
-            this, session.player, profileFromIntent()
-        ) {
-            if (!isFinishing && !sessionReleased) Toast.makeText(
-                this,
-                if (english) "Arabic audio unavailable; original audio restored."
-                else "تعذر تشغيل الصوت العربي، ورجع الصوت الأصلي.",
-                Toast.LENGTH_LONG
-            ).show()
-        }
+            this, session.player, profileFromIntent(),
+            onFailure = {
+                if (!isFinishing && !sessionReleased) {
+                    Toast.makeText(this,
+                        if (english) "This voice failed; original channel audio is back."
+                        else "تعذّر تشغيل هذه الصوتية، ورجع الصوت الأصلي للقناة.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    onPlaybackState?.invoke(false)
+                }
+            },
+            onStarted = {
+                if (!isFinishing && !sessionReleased) onPlaybackState?.invoke(true)
+            }
+        )
         val saved = StreamAudioPreferenceStore.read(this, currentStreamId)
         val preferred = if (saved?.trackId == choice.id)
             choice.copy(initialDelaySeconds = saved.delaySeconds) else choice
@@ -1844,7 +1889,7 @@ open class PlayerActivity : ContentAccessActivity() {
             StreamAudioPreferenceStore.save(this, currentStreamId,
                 choice.id, controller.delaySeconds)
         }
-        showArabicAudioControls()
+        if (showControls) showArabicAudioControls()
     }
 
     private fun showArabicAudioControls() {
