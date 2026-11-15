@@ -6,6 +6,7 @@ const ID='123e4567-e89b-42d3-a456-426614174000';
 const runId='mirror_'+'a'.repeat(40),sha='b'.repeat(64);
 const token='Q'.repeat(40);
 const fakeRow={copy_run_id:runId,copy_sha256:sha,
+ source_id:ID,media_id:'movie_123',gateway_id:123,
  expected_bytes:'16777216',extension:'mp4',
  copy_completed_at:'2026-11-15T01:00:00Z'};
 
@@ -14,7 +15,8 @@ async function withHub({enabled=true,verified=true}={},cb){
  const db={query:async()=>({rows:verified?[fakeRow]:[]})};
  const lease={
   getVerifiedChunkedObject:async()=>({
-   bytes:16777216,sha256:sha,extension:'mp4',
+   kind:'chunked',mediaKind:'movie',sourceId:ID,mediaId:'movie_123',
+   gatewayId:123,bytes:16777216,sha256:sha,extension:'mp4',
    parts:[{partNumber:1},{partNumber:2}]
   })
  };
