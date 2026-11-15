@@ -2543,6 +2543,11 @@ http.createServer = function withBlofyXtreamGateway(listener) {
           return json(res,200,{items:await arabicAudio.list(url.searchParams.get('channelId'))});
         if(req.method==='POST'){
           const body=await readJson(req);
+          if(!/^[1-9][0-9]{0,14}$/.test(String(body.channelId??'')))
+            return json(res,400,{error:'arabic_audio_channel_invalid'});
+          const channel=await gatewayItemById('live',String(body.channelId));
+          if(!channel||!channel.server_enabled)
+            return json(res,404,{error:'arabic_audio_channel_not_found'});
           const item=await arabicAudio.register(body);
           return json(res,201,{ok:true,item});
         }
