@@ -179,13 +179,25 @@ export function createXtreamMirrorDiscoveryStore(db){
         last_seen_at=NOW(),
         title=CASE WHEN blofy_xtream_mirror_items.media_id=EXCLUDED.media_id
            AND blofy_xtream_mirror_items.extension=EXCLUDED.extension
+           AND (blofy_xtream_mirror_items.media_kind<>'episode' OR
+             blofy_xtream_mirror_items.series_media_id
+               IS NOT DISTINCT FROM EXCLUDED.series_media_id)
           THEN EXCLUDED.title ELSE blofy_xtream_mirror_items.title END,
+        -- An episode changing series parent is a source remap, even
+        -- when its episode ID and extension are unchanged. Never
+        -- silently transfer using a different parent's license.
         mapping_conflict=blofy_xtream_mirror_items.mapping_conflict OR
           blofy_xtream_mirror_items.media_id<>EXCLUDED.media_id OR
-          blofy_xtream_mirror_items.extension<>EXCLUDED.extension,
+          blofy_xtream_mirror_items.extension<>EXCLUDED.extension OR
+          (blofy_xtream_mirror_items.media_kind='episode' AND
+            blofy_xtream_mirror_items.series_media_id
+             IS DISTINCT FROM EXCLUDED.series_media_id),
         mapping_conflict_at=CASE WHEN
           blofy_xtream_mirror_items.media_id<>EXCLUDED.media_id OR
-          blofy_xtream_mirror_items.extension<>EXCLUDED.extension
+          blofy_xtream_mirror_items.extension<>EXCLUDED.extension OR
+          (blofy_xtream_mirror_items.media_kind='episode' AND
+           blofy_xtream_mirror_items.series_media_id
+             IS DISTINCT FROM EXCLUDED.series_media_id)
           THEN NOW() ELSE blofy_xtream_mirror_items.mapping_conflict_at END`,
      [sourceId,mediaKind,JSON.stringify(valid.map(x=>({
         gateway_id:x.gatewayId,media_id:x.mediaId,
