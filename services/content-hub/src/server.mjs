@@ -10,6 +10,7 @@ import {createContinuousCopyController} from './continuous-copy.mjs';
 import {diagnoseVerifiedMovie} from './playback-diagnostics.mjs';
 import {verifyPrivateSeekRanges} from './seek-diagnostics.mjs';
 import {buildPrivateBrowserPreview} from './private-preview.mjs';
+import {parseSiteQaRange} from './site-qa-range.mjs';
 import {inspectEpisodeCandidates} from './episode-candidates.mjs';
 import {inspectEpisodeSize} from './episode-probe.mjs';
 import {runOneEpisodeChunk,episodeCopyReadiness} from './episode-chunk-pilot.mjs';
@@ -1196,13 +1197,26 @@ export function createContentHubServer({storage,lease,
    return json(res,202,{ok:true,code:'content_hub_pilot_cancellation_requested',
       privateOnly:true,customerCutover:false});
   }
-  // Admin-only and private-network-only canary. No customer cutover.
+  // Admin-only private canary plus opt-in WEBSITE owner original-file ranges.
+  // The new website route selects only the exact configured, verified S3
+  // movie/episode run. Subscriber routes never enter this control plane.
+  const siteQa=/^\/internal\/site-qa\/files\/(movie|episode)\/([A-Za-z0-9_-]{8,80})$/.exec(path);
   const playback=/^\/internal\/(pilot|episodes)\/playback\/([A-Za-z0-9_-]{8,80})$/.exec(path);
-  if(playback&&['GET','HEAD'].includes(req.method)){
+  if(siteQa&&(
+    pilotEnv.BLOFY_CONTENT_HUB_WEBSITE_FULL_RANGE_QA_ENABLED!=='1'||
+    pilotEnv.BLOFY_CONTENT_HUB_OWNER_PREVIEW_ENABLED!=='1'||
+    (siteQa[1]==='episode'&&
+      pilotEnv.BLOFY_CONTENT_HUB_EPISODE_OWNER_PREVIEW_ENABLED!=='1')||
+    req.headers['x-blofy-owner-action']!=='private-original-range-qa'||
+    siteQa[2]!==String(siteQa[1]==='movie'?
+      pilotEnv.BLOFY_CONTENT_HUB_BATCH_RUN_ID||'':
+      pilotEnv.BLOFY_CONTENT_HUB_EPISODE_RUN_ID||'')))
+   return json(res,404,{ok:false,code:'site_qa_file_not_available'});
+  if((playback||siteQa)&&['GET','HEAD'].includes(req.method)){
    if(String(req.url||'').includes('?'))
     return json(res,400,{ok:false,code:'pilot_private_query_denied'});
-   const episodePlayback=playback[1]==='episodes';
-   const playbackId=playback[2];
+   const episodePlayback=siteQa?siteQa[1]==='episode':playback[1]==='episodes';
+   const playbackId=siteQa?siteQa[2]:playback[2];
    let saved=null;
    if(episodePlayback){
     try{saved=await lease.getVerifiedEpisodeObject?.(playbackId)}catch{}
@@ -1226,10 +1240,13 @@ export function createContentHubServer({storage,lease,
     });
     return res.end();
    }
-   const m=/^bytes=(0|[1-9][0-9]*)-(0|[1-9][0-9]*)$/.exec(
+   const m=siteQa?null:/^bytes=(0|[1-9][0-9]*)-(0|[1-9][0-9]*)$/.exec(
     String(req.headers.range||''));
-   const from=Number(m?.[1]),to=Number(m?.[2]);
-   if(!m||!Number.isSafeInteger(from)||!Number.isSafeInteger(to)||
+   const bounded=siteQa?parseSiteQaRange(req.headers.range,saved.bytes):null;
+   const from=siteQa?bounded?.from:Number(m?.[1]);
+   const to=siteQa?bounded?.to:Number(m?.[2]);
+   if((siteQa&&!bounded)||(!siteQa&&!m)||
+      !Number.isSafeInteger(from)||!Number.isSafeInteger(to)||
       to<from||to>=saved.bytes||to-from+1>8*1024*1024)
     return json(res,416,{ok:false,code:'pilot_bounded_range_required'});
    const abort=new AbortController();
