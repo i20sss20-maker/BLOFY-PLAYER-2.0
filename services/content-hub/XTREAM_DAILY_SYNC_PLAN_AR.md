@@ -396,8 +396,11 @@ No provider request is added outside the specifically opted-in scanner.
 `BLOFY_CONTENT_HUB_MIRROR_OWNER_QA_ENABLED=1` creates a limited
 one-connection Postgres mirror QA lookup. After a movie or episode is
 `verified` in the mirror candidate queue, the QA function independently
-reads the verified chunk manifest and compares its exact media length,
-container and SHA-256 against the queue's final copy proof.
+reads the previously verified chunk **manifest record** and compares its
+saved length, container and SHA-256 against the queue's final copy proof.
+This initial GET is **not a fresh full S3 object rehash**. The POST
+canary reads private S3 chunks (including four seek positions) and
+decodes audio/video, but does not reread every byte in the file.
 
 Operator session endpoints:
 - `GET /api/v1/admin/content-hub/mirror/media-qa/movie/<gatewayId>`
