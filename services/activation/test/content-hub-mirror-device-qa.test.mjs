@@ -17,7 +17,9 @@ test('movie/episode tickets are bound to kind, run and valid device platform',()
  assert.equal(a.mediaKind,'movie');
  assert.equal(a.platform,'android_tv');
  assert.equal(verifyOwnerDeviceQaTicket({secret,ticket:a.ticket,
-  runId,mediaKind:'movie',now}),true);
+  runId,mediaKind:'movie',platform:'android_tv',now}),true);
+ assert.equal(verifyOwnerDeviceQaTicket({secret,ticket:a.ticket,
+  runId,mediaKind:'movie',platform:'windows',now}),false);
  assert.equal(verifyOwnerDeviceQaTicket({secret,ticket:a.ticket,
   runId,mediaKind:'episode',now}),false);
  assert.equal(verifyOwnerDeviceQaTicket({secret,ticket:a.ticket,
@@ -49,7 +51,7 @@ test('movie owner QA GET is a capped 206 relay from private S3 only',async()=>{
    }})};
  };
  const server=createServer((req,res)=>forwardOwnerDeviceQaPlayback({
-  req,res,runId,mediaKind:'movie',env,requestHub
+  req,res,runId,mediaKind:'movie',requirePlatform:true,env,requestHub
  }));
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  try{
@@ -58,10 +60,15 @@ test('movie owner QA GET is a capped 206 relay from private S3 only',async()=>{
   assert.equal(reads,0);
   const ticket=mintOwnerDeviceQaTicket({secret,runId,
    mediaKind:'movie',platform:'windows'}).ticket;
-  const headers={authorization:'Bearer '+ticket,range:'bytes=1-4'};
+  const headers={authorization:'Bearer '+ticket,range:'bytes=1-4',
+   'x-blofy-device-platform':'windows'};
   assert.equal((await fetch(url+'?ticket=bad',{headers})).status,404);
   assert.equal(reads,0);
-  assert.equal((await fetch(url,{headers:{authorization:'Bearer '+ticket}})).status,416);
+  assert.equal((await fetch(url,{headers:{authorization:'Bearer '+ticket}})).status,401);
+  assert.equal((await fetch(url,{headers:{...headers,
+   'x-blofy-device-platform':'android_tv'}})).status,401);
+  assert.equal((await fetch(url,{headers:{authorization:'Bearer '+ticket,
+   'x-blofy-device-platform':'windows'}})).status,416);
   const response=await fetch(url,{headers});
   assert.equal(response.status,206);
   assert.equal(response.headers.get('cache-control'),'private,no-store');
