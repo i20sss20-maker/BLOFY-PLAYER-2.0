@@ -153,6 +153,13 @@
     count(item.copiedParts)+(item.expectedBytes?
     ' · '+Math.floor(copied*100/item.expectedBytes)+'%':''));
    row.append(title,desc);
+   if(item.nextAttemptAfter&&item.state==='approved'){
+    const parsed=new Date(item.nextAttemptAfter);
+    if(Number.isFinite(parsed.getTime()))
+     row.append(node('mirror-retry','اتصال المصدر تعثّر مؤقتًا · محاولة '+
+      count(item.transientAttempts)+' من 3، التالية بعد '+
+      parsed.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'})));
+   }
    if(item.mappingConflict===true)row.append(node('mirror-alert',
     'تحذير: تغيّر ارتباط معرّف الملف في المصدر. يتطلب مراجعة.'));
    if(item.copyError)row.append(node('mirror-alert',
