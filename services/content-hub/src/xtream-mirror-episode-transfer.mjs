@@ -100,6 +100,7 @@ export function createMirrorEpisodeTransferStore({connectionString,Pool=pg.Pool}
      JOIN blofy_xtream_gateway_episode_map e
       ON e.server_id=q.source_id AND e.gateway_id=q.gateway_id
        AND e.source_episode_id=q.media_id
+       AND e.series_source_id=q.series_media_id
      JOIN blofy_xtream_items i ON i.server_id=e.server_id
        AND i.media_type='series' AND i.source_id=e.series_source_id
      WHERE q.source_id=$1 AND q.media_kind='episode'
