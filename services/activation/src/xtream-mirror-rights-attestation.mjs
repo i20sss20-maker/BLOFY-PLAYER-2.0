@@ -57,6 +57,7 @@ export async function attestMirrorStorageRights(db,item={}){
     rights_ref_sha256=$6,license_reviewed_at=NOW(),
     expected_bytes=NULL,size_probe_at=NULL,size_probe_day=NULL,
     source_validator_sha256=NULL,size_probe_error=NULL,
+    copy_retry_count=0,copy_retry_after=NULL,copy_error=NULL,
     state='needs_review'
     WHERE q.source_id=$1 AND q.media_kind=$2 AND q.gateway_id=$3
       AND q.media_id=$4 AND q.extension=$5
