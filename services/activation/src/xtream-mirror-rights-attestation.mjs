@@ -51,6 +51,7 @@ export async function attestMirrorStorageRights(db,item={}){
        AND i.media_type='series' AND i.source_id=e.series_source_id
      WHERE e.gateway_id=q.gateway_id AND e.server_id=q.source_id
        AND e.source_episode_id=q.media_id
+       AND e.series_source_id=q.series_media_id
        AND lower(e.container_extension)=q.extension
        AND i.enabled=TRUE)`;
  const query=`UPDATE blofy_xtream_mirror_items q SET
