@@ -145,6 +145,9 @@ class SettingsActivity : AppCompatActivity() {
         if (BuildConfig.DEBUG) addCard(actionCard("🧪  مختبر الفيديو الخاص", "اختبار محلي دون تغيير بث العملاء") {
             startActivity(Intent(this, PrivateMediaQaActivity::class.java))
         })
+        if (BuildConfig.DEBUG) addCard(actionCard("🧪  بث المكتبة الخاصة", "تشغيل ملف BLOFY المحفوظ برمز مالك مؤقت") {
+            startActivity(Intent(this, PrivateHubStreamQaActivity::class.java))
+        })
         addCard(actionCard("⟲  استعادة الإعدادات", "العودة للوضع الافتراضي") { confirmRestoreDefaults() })
 
         linkFocus(back)

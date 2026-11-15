@@ -7,6 +7,17 @@ import {runPrivateSalehSample} from './real-source-sample.mjs';
 import {runOneMoviePilot,inspectOneMoviePilot,probeApprovedMovieRange} from './one-movie-pilot.mjs';
 import {runChunkedMovieBatch,chunkedPilotEnabled,chunkedBatchReadiness,CHUNK_BYTES} from './chunked-pilot.mjs';
 import {createContinuousCopyController} from './continuous-copy.mjs';
+import {planDailyLicensedXtreamCopies} from './xtream-daily-copy-plan.mjs';
+import {createDailyMediaSessionStore,startApprovedDailyMediaSession} from './xtream-daily-media-worker.mjs';
+import {createMirrorMovieTransferStore,runOneApprovedMirrorMovieChunk,
+ mirrorMovieDispatchReadiness} from './xtream-mirror-movie-transfer.mjs';
+import {createMirrorEpisodeTransferStore,runOneApprovedMirrorEpisodeChunk,
+ mirrorEpisodeDispatchReadiness} from './xtream-mirror-episode-transfer.mjs';
+import {createPrivateMirrorQaStore,resolveVerifiedMirrorMedia}
+ from './xtream-mirror-private-qa.mjs';
+import {validateMirrorDeviceTicketProof} from './xtream-mirror-device-proof.mjs';
+import {createMirrorDeploymentPreflightStore,inspectMirrorDeploymentPreflight}
+ from './xtream-mirror-deployment-preflight.mjs';
 import {diagnoseVerifiedMovie} from './playback-diagnostics.mjs';
 import {verifyPrivateSeekRanges} from './seek-diagnostics.mjs';
 import {buildPrivateBrowserPreview} from './private-preview.mjs';
@@ -89,6 +100,9 @@ export function createContentHubServer({storage,lease,
  episodeCandidateInspector=inspectEpisodeCandidates,
  episodeSizeInspector=inspectEpisodeSize,
  episodeChunkRunner=runOneEpisodeChunk,seasonQueueStore=null,catalogStore=null,
+ dailyMediaSessionStore=null,mirrorMovieTransferStore=null,
+ mirrorEpisodeTransferStore=null,mirrorQaStore=null,
+ mirrorPreflightStore=null,mirrorCanaryRunner=null,
  metadataMatcher=createMetadataMatcher({
   token:process.env.BLOFY_TMDB_READ_TOKEN||'',
   commercialLicenseConfirmed:process.env.BLOFY_TMDB_COMMERCIAL_LICENSE_CONFIRMED==='1'
@@ -105,6 +119,28 @@ export function createContentHubServer({storage,lease,
  let previewBuilding=false,previewCache=null,previewThrottleUntil=0;
  let episodeProbeBusy=false,episodeProbeAt=0,lastEpisodeProbe=null;
  let episodeCopyBusy=false,episodeCopyAbort=null,lastEpisodeCopy=null;
+ let mirrorMovieBusy=false,lastMirrorMovieChunk=null;
+ let mirrorEpisodeBusy=false,lastMirrorEpisodeChunk=null;
+ let mirrorQaBusy=false;
+ const mirrorQaResults=new Map();
+ // Never assume that two healthy Railway services with DATABASE_URL
+ // point at the same PostgreSQL database. Fail closed before launching
+ // ANY new source-bound mirror job if the private Hub's DB cannot see
+ // the exact source/rights rows and S3 manifest registry.
+ async function assertMirrorTechnicalPreflight(){
+  if(!mirrorPreflightStore?.db)return {ok:false,
+   code:'mirror_copy_preflight_not_configured',customerCutover:false};
+  try{
+   const check=await inspectMirrorDeploymentPreflight({
+    db:mirrorPreflightStore.db,storage,env:pilotEnv
+   });
+   if(check.technicalPreflightPassed===true)return {ok:true};
+   return {ok:false,code:'mirror_copy_preflight_blocked',
+    blockedBy:check.blockedBy||[],customerCutover:false,
+    sourceMediaRequests:0};
+  }catch{return {ok:false,code:'mirror_copy_preflight_unavailable',
+   customerCutover:false,sourceMediaRequests:0}}
+ }
  let seasonStorageAuditBusy=false,seasonStorageAuditAt=0;
  let seasonConcurrentReadBusy=false,seasonConcurrentReadAt=0,lastSeasonConcurrentRead=null;
  const copy=createContinuousCopyController({
@@ -123,7 +159,7 @@ export function createContentHubServer({storage,lease,
   store:seasonQueueStore,storage,lease,env:pilotEnv,
   runner:episodeChunkRunner,logger,
   isSourceBusy:()=>episodeCopyBusy||episodeCopy.isRunning()||
-   pilotRunning||copy.isRunning()
+   pilotRunning||copy.isRunning()||mirrorMovieBusy||mirrorEpisodeBusy
  }):null;
  async function runFullPlaybackCanary(runId,mediaKind='movie'){
   const diag=await diagnoseVerifiedMovie({runId,storage,lease,mediaKind});
@@ -150,6 +186,177 @@ export function createContentHubServer({storage,lease,
     uptimeSeconds:Math.floor((Date.now()-started)/1000)});
   if(!safeAuth(req.headers.authorization,token))
    return json(res,401,{ok:false,code:'content_hub_auth_required'});
+  // SAFE READ-ONLY rollout diagnostic: proves that this Content Hub's
+  // DATABASE_URL can see the SAME Xtream catalog, source mappings,
+  // leased queue and private manifest tables. No DDL, no source fetch.
+  if(path==='/internal/mirror/deployment/preflight'&&req.method==='GET'){
+   if(String(req.url||'').includes('?'))
+    return json(res,400,{ok:false,code:'mirror_preflight_query_denied'});
+   if(!mirrorPreflightStore?.db)
+    return json(res,503,{ok:false,code:'mirror_preflight_db_not_configured'});
+   try{
+    const report=await inspectMirrorDeploymentPreflight({
+     db:mirrorPreflightStore.db,storage,env:pilotEnv
+    });
+    return json(res,200,report);
+   }catch{return json(res,503,{ok:false,
+    code:'mirror_preflight_read_only_unavailable',
+    customerCutover:false,providerRequests:0})}
+  }
+  // Private operator preview of a small, explicitly licensed VOD batch.
+  // Creates no S3 objects and never contacts Xtream. Real media transfer
+  // still requires separate item-size probes, a dedicated worker and
+  // independent storage checks. OFF in production by default.
+  if(path==='/internal/mirror/daily/plan'&&req.method==='POST'){
+   if(String(req.url||'').includes('?')||
+      req.headers['x-blofy-owner-action']!=='preview-licensed-daily-mirror')
+    return json(res,403,{ok:false,code:'mirror_preview_owner_action_required'});
+   if(pilotEnv.BLOFY_CONTENT_HUB_DAILY_MIRROR_PLANNER_ENABLED!=='1')
+    return json(res,409,{ok:false,code:'mirror_preview_disabled'});
+   let input;
+   try{input=await readSeasonJson(req)}
+   catch{return json(res,400,{ok:false,code:'mirror_preview_invalid_json'})}
+   if(!Array.isArray(input?.catalog)||input.catalog.length<1||
+      input.catalog.length>25||input.verifiedCopies!==undefined)
+    return json(res,400,{ok:false,code:'mirror_preview_batch_invalid'});
+   let storageReady=false;
+   try{storageReady=(await storage.health()).ok===true}catch{}
+   try{
+    const report=planDailyLicensedXtreamCopies({
+      catalog:input.catalog,verifiedCopies:[],
+      env:pilotEnv,privateBucket:{
+        private:true,configured:storageReady
+      },
+      maxFiles:12,maxBytes:8*1024**3,activeUpstreamFeeds:0
+    });
+    return json(res,200,{ok:true,...report,
+      physicalCopyCoverageUnknown:true,providerRequests:0,
+      privateOnly:true,automaticStart:false});
+   }catch{return json(res,400,{ok:false,
+      code:'mirror_preview_catalog_invalid',providerRequests:0,
+      bytesTransferred:0,customerCutover:false})}
+  }
+  // This private proof intentionally returns the one allowed run ID
+  // ONLY after an independent, recent A/V+seek QA. The operator portal
+  // must still separately authenticate and HMAC-sign the device ticket.
+  const mirrorDeviceProof=/^\/internal\/mirror\/media-qa\/(movie|episode)\/([1-9][0-9]{0,14})\/device-proof$/.exec(path);
+  if(mirrorDeviceProof&&req.method==='GET'){
+   if(req.headers['x-blofy-owner-action']!=='prepare-private-mirror-device-qa'||
+      String(req.url||'').includes('?'))
+    return json(res,403,{ok:false,code:'mirror_device_proof_owner_action_required'});
+   if(pilotEnv.BLOFY_CONTENT_HUB_MIRROR_OWNER_QA_ENABLED!=='1'||
+      !mirrorQaStore?.db)
+    return json(res,409,{ok:false,code:'mirror_media_qa_disabled'});
+   const mediaKind=mirrorDeviceProof[1],gatewayId=Number(mirrorDeviceProof[2]);
+   const sourceId=String(pilotEnv.BLOFY_XTREAM_DAILY_CATALOG_SOURCE_ID||'');
+   let selected;
+   try{selected=await resolveVerifiedMirrorMedia({
+    db:mirrorQaStore.db,lease,sourceId,mediaKind,gatewayId
+   })}catch{return json(res,503,{ok:false,code:'mirror_device_proof_lookup_unavailable'})}
+   const lastQa=mirrorQaResults.get(mediaKind+':'+gatewayId);
+   const proof=validateMirrorDeviceTicketProof({selected,lastQa});
+   return json(res,proof.ok?200:409,proof);
+  }
+  // Authenticated owner-only QA for a fully verified mirrored movie or
+  // episode. GET reconciles PG/S3; POST starts private ffprobe/ffmpeg and
+  // four authenticated S3 seeks. Neither command opens a provider feed.
+  const mirrorQaRoute=/^\/internal\/mirror\/media-qa\/(movie|episode)\/([1-9][0-9]{0,14})$/.exec(path);
+  if(mirrorQaRoute&&['GET','POST'].includes(req.method)){
+   if(pilotEnv.BLOFY_CONTENT_HUB_MIRROR_OWNER_QA_ENABLED!=='1'||
+      !mirrorQaStore?.db)
+    return json(res,409,{ok:false,code:'mirror_media_qa_disabled'});
+   if(String(req.url||'').includes('?'))
+    return json(res,400,{ok:false,code:'mirror_media_qa_query_denied'});
+   const mediaKind=mirrorQaRoute[1],gatewayId=Number(mirrorQaRoute[2]);
+   const sourceId=String(pilotEnv.BLOFY_XTREAM_DAILY_CATALOG_SOURCE_ID||'');
+   let selected;
+   try{
+    selected=await resolveVerifiedMirrorMedia({
+     db:mirrorQaStore.db,lease,sourceId,mediaKind,gatewayId
+    });
+   }catch{return json(res,503,{ok:false,code:'mirror_media_qa_lookup_unavailable'})}
+   if(!selected.ok)return json(res,409,selected);
+   const id=mediaKind+':'+gatewayId;
+   if(req.method==='GET'){
+    const prior=mirrorQaResults.get(id)||null;
+    return json(res,200,{
+     ok:true,code:selected.code,sourceId,mediaKind,gatewayId,
+     bytes:selected.bytes,parts:selected.parts,
+     fullFileSha256PreviouslyRecorded:true,
+     liveStorageFullRecheck:false,
+     lastQa:prior?{...prior}:null,
+     privateOnly:true,providerRequests:0,customerCutover:false,
+     // Audio/seek proof is not an on-device app playback result.
+     devicePlaybackValidated:false,releaseToSubscribersApproved:false
+    });
+   }
+   if(req.headers['x-blofy-owner-action']!=='verify-private-mirror-playback')
+    return json(res,403,{ok:false,code:'mirror_media_qa_owner_action_required'});
+   if(mirrorQaBusy)return json(res,409,{ok:false,
+    code:'mirror_media_qa_busy'});
+   mirrorQaBusy=true;
+   mirrorQaResults.set(id,{code:'mirror_media_qa_running',
+    ok:false,checkedAt:new Date().toISOString()});
+   void Promise.resolve().then(()=>mirrorCanaryRunner?
+    mirrorCanaryRunner({runId:selected.runId,mediaKind,
+     storage,lease,port:server.address()?.port,token}):
+    runFullPlaybackCanary(selected.runId,mediaKind)).then(result=>{
+    mirrorQaResults.set(id,{
+     runId:selected.runId,sha256:selected.sha256,
+     ok:result?.ok===true&&result.seekVerified===true,
+     code:result?.code||'mirror_media_qa_incomplete',
+     videoCodec:String(result?.videoCodec||'unknown').slice(0,40),
+     audioCodec:String(result?.audioCodec||'unknown').slice(0,40),
+     seeksVerified:Number(result?.seeksVerified)||0,
+     checkedAt:new Date().toISOString()
+    });
+   }).catch(()=>{
+    mirrorQaResults.set(id,{ok:false,code:'mirror_media_qa_failed',
+     checkedAt:new Date().toISOString()});
+   }).finally(()=>{
+    mirrorQaBusy=false;
+   });
+   return json(res,202,{ok:true,code:'mirror_media_qa_accepted',
+    mediaKind,gatewayId,privateOnly:true,providerRequests:0,
+    customerCutover:false,devicePlaybackValidated:false});
+  }
+  if(path==='/internal/mirror/episode/status'&&req.method==='GET'){
+   if(String(req.url||'').includes('?')||!mirrorEpisodeTransferStore)
+    return json(res,404,{ok:false,code:'mirror_episode_dispatch_not_configured'});
+   const sourceId=String(pilotEnv.BLOFY_XTREAM_DAILY_CATALOG_SOURCE_ID||'');
+   try{
+    const status=await mirrorEpisodeTransferStore.status(sourceId);
+    return json(res,200,{...status,lastAttempt:lastMirrorEpisodeChunk,
+     running:mirrorEpisodeBusy,
+     readiness:mirrorEpisodeDispatchReadiness(pilotEnv),
+     privateOnly:true,customerCutover:false});
+   }catch{return json(res,503,{ok:false,
+    code:'mirror_episode_status_unavailable'})}
+  }
+  if(path==='/internal/mirror/movie/status'&&req.method==='GET'){
+   if(String(req.url||'').includes('?')||!mirrorMovieTransferStore)
+    return json(res,404,{ok:false,code:'mirror_movie_dispatch_not_configured'});
+   const sourceId=String(pilotEnv.BLOFY_XTREAM_DAILY_CATALOG_SOURCE_ID||'');
+   try{
+    const status=await mirrorMovieTransferStore.status(sourceId);
+    return json(res,200,{...status,lastAttempt:lastMirrorMovieChunk,
+     running:mirrorMovieBusy,
+     readiness:mirrorMovieDispatchReadiness(pilotEnv),
+     privateOnly:true,customerCutover:false});
+   }catch{return json(res,503,{ok:false,
+    code:'mirror_movie_status_unavailable'})}
+  }
+  if(path==='/internal/mirror/daily/sessions'&&req.method==='GET'){
+   if(String(req.url||'').includes('?')||
+      !dailyMediaSessionStore?.recent)
+    return json(res,404,{ok:false,code:'daily_media_sessions_unavailable'});
+   try{
+    const sessions=await dailyMediaSessionStore.recent();
+    return json(res,200,{ok:true,sessions,privateOnly:true,
+      readOnly:true,customerCutover:false,mediaFilesCopied:0});
+   }catch{return json(res,503,{ok:false,
+    code:'daily_media_sessions_read_failed'})}
+  }
   if(path==='/internal/status'&&req.method==='GET'){
    let bucket=false,database=false,durablePilot=null;
    let ownerBrowserCheck={confirmed:false,videoConfirmed:false,audioConfirmed:false};
@@ -1207,9 +1414,16 @@ export function createContentHubServer({storage,lease,
    if(episodePlayback){
     try{saved=await lease.getVerifiedEpisodeObject?.(playbackId)}catch{}
    }else{
-    try{saved=await lease.getVerifiedPilotObject?.(playbackId)}catch{}
-    if(!saved)try{saved=await lease.getVerifiedChunkedObject?.(
-      playbackId)}catch{}
+    // A mirror ticket is scoped to a private SHA-verified CHUNK manifest.
+    // Never allow a legacy pilot run with the same identifier to shadow
+    // the reviewed mirror and stream unrelated media to an owner device.
+    if(/^mirror_[a-f0-9]{40}$/.test(playbackId)){
+     try{saved=await lease.getVerifiedChunkedObject?.(playbackId)}catch{}
+    }else{
+     try{saved=await lease.getVerifiedPilotObject?.(playbackId)}catch{}
+     if(!saved)try{saved=await lease.getVerifiedChunkedObject?.(
+       playbackId)}catch{}
+    }
    }
    if(!saved||!Number.isSafeInteger(saved.bytes)||saved.bytes<=0)
     return json(res,404,{ok:false,code:'pilot_verified_media_unavailable'});
@@ -1311,6 +1525,72 @@ export function createContentHubServer({storage,lease,
   return json(res,404,{ok:false,code:'content_hub_not_found'});
  });
  return {server,
+  runOneMirroredEpisodeChunk:async(now=new Date())=>{
+   if(!mirrorEpisodeTransferStore)return {ok:false,
+    code:'mirror_episode_dispatch_disabled',customerCutover:false};
+   if(mirrorEpisodeBusy)return {ok:false,
+    code:'mirror_episode_worker_busy',customerCutover:false};
+   // Atomically exclude a concurrent movie tick BEFORE async PG/S3
+   // preflight, so two timers cannot both pass and both stand down.
+   if(mirrorMovieBusy)return {ok:false,
+    code:'mirror_episode_source_busy',customerCutover:false};
+   mirrorEpisodeBusy=true;
+   try{
+    const before=await assertMirrorTechnicalPreflight();
+    if(!before.ok)return before;
+    const result=await runOneApprovedMirrorEpisodeChunk({
+     env:pilotEnv,now,store:mirrorEpisodeTransferStore,
+     storage,lease,runner:episodeChunkRunner,logger,
+     // mirrorEpisodeBusy belongs to THIS worker, and was set true
+     // before this call. Checking it here would block every episode.
+     sourceBusy:()=>pilotRunning||episodeCopyBusy||
+      mirrorMovieBusy||episodeCopy.isRunning()||copy.isRunning()||
+      Boolean(seasonQueue?.isRunning())
+    });
+    lastMirrorEpisodeChunk={code:result.code,
+     at:new Date().toISOString(),verified:result.verified===true,
+     customerCutover:false};
+    return result;
+   }finally{mirrorEpisodeBusy=false}
+  },
+  runOneMirroredMovieChunk:async(now=new Date())=>{
+   if(!mirrorMovieTransferStore)return {ok:false,
+    code:'mirror_movie_dispatch_disabled',customerCutover:false};
+   if(mirrorMovieBusy)return {ok:false,
+    code:'mirror_movie_worker_busy',customerCutover:false};
+   if(mirrorEpisodeBusy)return {ok:false,
+    code:'mirror_movie_source_busy',customerCutover:false};
+   mirrorMovieBusy=true;
+   try{
+    const before=await assertMirrorTechnicalPreflight();
+    if(!before.ok)return before;
+    const result=await runOneApprovedMirrorMovieChunk({
+     env:pilotEnv,now,store:mirrorMovieTransferStore,
+     storage,lease,runner:batchRunner,logger,
+     sourceBusy:()=>pilotRunning||episodeCopyBusy||mirrorEpisodeBusy||
+      episodeCopy.isRunning()||copy.isRunning()||
+      Boolean(seasonQueue?.isRunning())
+    });
+    lastMirrorMovieChunk={
+     code:result.code,at:new Date().toISOString(),
+     verified:result.verified===true,customerCutover:false
+    };
+    return result;
+   }finally{mirrorMovieBusy=false}
+  },
+  runScheduledDailyMediaCopy:async(now=new Date())=>{
+   if(!dailyMediaSessionStore)return {ok:false,started:false,
+    code:'daily_media_copy_disabled'};
+   const safeStorage=await storage.health().catch(()=>({ok:false}));
+   return startApprovedDailyMediaSession({
+    now,env:pilotEnv,store:dailyMediaSessionStore,
+    movie:copy,episodes:seasonQueue,lease,seasonStore:seasonQueueStore,
+    storageReady:()=>safeStorage?.ok===true,
+    sourceBusy:()=>pilotRunning||episodeCopyBusy||mirrorMovieBusy||
+      mirrorEpisodeBusy||episodeCopy.isRunning()||copy.isRunning()||
+      Boolean(seasonQueue?.isRunning())
+   });
+  },
   startEpisodeCopy:()=>episodeCopy.start(),
   stopEpisodeCopy:()=>episodeCopy.stop(),
   validateVerifiedEpisode:async()=>{
@@ -1418,13 +1698,103 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
  const lease=createSourceLease({connectionString:process.env.DATABASE_URL});
  const seasonQueueStore=createSeasonQueueStore({connectionString:process.env.DATABASE_URL});
  const catalogStore=createContentCatalogStore({connectionString:process.env.DATABASE_URL});
+ const dailyMediaSessionStore=process.env.BLOFY_CONTENT_HUB_DAILY_COPY_ENABLED==='1'?
+  createDailyMediaSessionStore({connectionString:process.env.DATABASE_URL}):null;
+ const mirrorMovieTransferStore=
+  process.env.BLOFY_CONTENT_HUB_MIRROR_MOVIE_DISPATCH_ENABLED==='1'?
+   createMirrorMovieTransferStore({connectionString:process.env.DATABASE_URL}):null;
+ const mirrorEpisodeTransferStore=
+  process.env.BLOFY_CONTENT_HUB_MIRROR_EPISODE_DISPATCH_ENABLED==='1'?
+   createMirrorEpisodeTransferStore({connectionString:process.env.DATABASE_URL}):null;
+ const mirrorQaStore=process.env.BLOFY_CONTENT_HUB_MIRROR_OWNER_QA_ENABLED==='1'?
+  createPrivateMirrorQaStore({connectionString:process.env.DATABASE_URL}):null;
+ // Read-only schema diagnosis is safe even when every media worker is OFF.
+ const mirrorPreflightStore=createMirrorDeploymentPreflightStore({
+  connectionString:process.env.DATABASE_URL});
  const hub=createContentHubServer({storage,lease,seasonQueueStore,catalogStore,
+  dailyMediaSessionStore,mirrorMovieTransferStore,mirrorEpisodeTransferStore,
+  mirrorQaStore,mirrorPreflightStore,
   token:process.env.BLOFY_CONTENT_HUB_ADMIN_TOKEN||'',
   allowSynthetic:process.env.BLOFY_CONTENT_HUB_SYNTHETIC_TEST_ENABLED==='1',
   logger:(name,payload)=>console.info(name,JSON.stringify(payload))});
  const port=Number(process.env.PORT||3000);
  hub.server.listen(port,'0.0.0.0',()=>{
   const seasonsReady=seasonQueueReadiness(process.env);
+  // Explicit opt-in only. One brief window each Riyadh day, selected
+  // approved movie OR already-enqueued approved episodes, not all Xtream
+  // media. Only starts the existing verified-byte workers.
+  if(dailyMediaSessionStore){
+   let checking=false;
+   const check=async()=>{
+    if(checking)return;
+    checking=true;
+    try{
+     const r=await hub.runScheduledDailyMediaCopy();
+     if(r.started)console.info('BLOFY_CONTENT_HUB_DAILY_MEDIA_SESSION',
+      JSON.stringify({started:true,mode:r.mode,
+       code:r.code,verifiedCopiesNotYetProven:true,
+       customerCutover:false}));
+    }catch{
+     console.warn('BLOFY_CONTENT_HUB_DAILY_MEDIA_SESSION',
+      JSON.stringify({started:false,code:'session_check_failed',
+       customerCutover:false}));
+    }finally{checking=false}
+   };
+   const timer=setInterval(()=>void check(),5*60*1000);
+   timer.unref?.();
+   const initial=setTimeout(()=>void check(),60*1000);
+   initial.unref?.();
+  }
+  // Separate opt-in for individually licensed episodes. The exact same
+  // 8 MiB/day-budget table is used by movie transfers.
+  if(mirrorEpisodeTransferStore){
+   let checking=false;
+   const check=async()=>{
+    if(checking)return;checking=true;
+    try{
+     const result=await hub.runOneMirroredEpisodeChunk();
+     if(result.code==='mirror_episode_chunk_checkpoint_saved'||
+        result.code==='mirror_episode_private_sha_verified')
+      console.info('BLOFY_CONTENT_HUB_MIRROR_EPISODE_CHUNK',
+       JSON.stringify({code:result.code,gatewayId:result.gatewayId,
+        verified:result.verified===true,
+        subscriberRoutesChanged:false}));
+    }catch{
+     console.warn('BLOFY_CONTENT_HUB_MIRROR_EPISODE_CHUNK',
+      JSON.stringify({code:'mirror_episode_tick_failed',
+       subscriberRoutesChanged:false}));
+    }finally{checking=false}
+   };
+   const timer=setInterval(()=>void check(),2*60*1000);
+   timer.unref?.();
+   const first=setTimeout(()=>void check(),95*1000);
+   first.unref?.();
+  }
+  // Default OFF: individual rights, mapping, private S3 and daily byte
+  // budgets remain independent gates. One 8MiB chunk per tick.
+  if(mirrorMovieTransferStore){
+   let mirrorTickBusy=false;
+   const mirrorTick=async()=>{
+    if(mirrorTickBusy)return;
+    mirrorTickBusy=true;
+    try{
+     const result=await hub.runOneMirroredMovieChunk();
+     if(result.code==='mirror_movie_chunk_checkpoint_saved'||
+        result.code==='mirror_movie_private_sha_verified')
+      console.info('BLOFY_CONTENT_HUB_MIRROR_MOVIE_CHUNK',JSON.stringify({
+       code:result.code,gatewayId:result.gatewayId,
+       verified:result.verified===true,
+       subscriberRoutesChanged:false
+      }));
+    }catch{
+     console.warn('BLOFY_CONTENT_HUB_MIRROR_MOVIE_CHUNK',
+      JSON.stringify({code:'mirror_movie_tick_failed',
+       customerCutover:false}));
+    }finally{mirrorTickBusy=false}
+   };
+   const m=setInterval(()=>void mirrorTick(),2*60*1000);m.unref?.();
+   const m0=setTimeout(()=>void mirrorTick(),70*1000);m0.unref?.();
+  }
   console.info('BLOFY_CONTENT_HUB_READY',JSON.stringify({port,
    privateOnly:true,downloadQueueEnabled:false,
    seasonQueueConfigured:Boolean(seasonQueueStore),
@@ -1759,7 +2129,10 @@ if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
  const shutdown=()=>{
   hub.stopContinuousCopy();
   hub.stopEpisodeCopy();
-  hub.server.close(()=>void lease.close());
+  hub.server.close(()=>void Promise.allSettled([lease.close(),
+   dailyMediaSessionStore?.close?.(),mirrorMovieTransferStore?.close?.(),
+   mirrorEpisodeTransferStore?.close?.(),mirrorQaStore?.close?.(),
+   mirrorPreflightStore?.close?.()]));
  };
  process.once('SIGTERM',shutdown);process.once('SIGINT',shutdown);
 }

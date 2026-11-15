@@ -7,6 +7,8 @@ import {readFile} from 'node:fs/promises';
 import {createFixedWindowLimiter,requestClientKey} from './auth-protection.mjs';
 import {adminCanaryRange,HUB_PILOT_RUN} from './content-hub-admin-core.mjs';
 import {buildUnifiedOpsOverview} from './content-hub-overview.mjs';
+import {enabledOwnerDeviceQa,mintOwnerDeviceQaTicket,forwardOwnerDeviceQaPlayback} from './content-hub-device-qa.mjs';
+import {readPrivateHubJsonResponse} from './content-hub-private-json.mjs';
 
 const HUB='http://blofy-content-hub.railway.internal:3000';
 const ADMIN=String(process.env.BLOFY_ADMIN_TOKEN||'').trim();
@@ -58,9 +60,7 @@ async function readSeasonAdminBody(req){
  catch{throw Error('season_admin_json_invalid')}
 }
 async function safeReadJson(response){
- if(response.status!==200||!String(response.headers.get('content-type')||'')
-   .includes('application/json'))throw Error('hub_private_response_unavailable');
- return response.json();
+ return readPrivateHubJsonResponse(response);
 }
 async function handleOverview(res){
  const paths=['/internal/status','/internal/pilots',
@@ -217,7 +217,8 @@ http.createServer=function withContentHubAdmin(listener){
   catch{return listener(req,res)}
   const path=url.pathname;
   if(req.method==='GET'&&['/admin-content-hub.css',
-    '/admin-content-hub.js','/admin-ops-overview.js','/admin-library.js',
+    '/admin-content-hub.js','/admin-mirror-dashboard.js',
+    '/admin-ops-overview.js','/admin-library.js',
      '/admin-library-metadata.js','/admin-library-cinema.js',
      '/admin-library-detail.js','/admin-season-readiness.js',
      '/admin-season-analytics.js',
@@ -234,10 +235,57 @@ http.createServer=function withContentHubAdmin(listener){
    }catch{return json(res,503,{ok:false,code:'admin_asset_unavailable'})}
   }
   const canary=runRoute.exec(path);
+  // Header-only HMAC owner device playback: no subscriber/media routes.
+  const qaPlayback=/^\/api\/v1\/private-device-qa\/(movie|episode)\/playback\/([A-Za-z0-9_-]{8,80})$/.exec(path);
+  if(qaPlayback)
+   return forwardOwnerDeviceQaPlayback({req,res,
+    mediaKind:qaPlayback[1],runId:qaPlayback[2],
+    requirePlatform:true,env:process.env,requestHub:request});
   if(!path.startsWith('/api/v1/admin/content-hub/'))return listener(req,res);
   if(!authorized(req,res))return;
   if(url.search)return json(res,400,{ok:false,code:'query_forbidden'});
   try{
+   if(path==='/api/v1/admin/content-hub/mirror/device-qa/ticket'&&
+      req.method==='POST'){
+    if(!enabledOwnerDeviceQa(process.env))
+     return json(res,404,{ok:false,code:'mirror_device_qa_disabled'});
+    if(req.headers['x-blofy-owner-action']!=='issue-private-mirror-device-ticket')
+     return json(res,403,{ok:false,code:'mirror_device_qa_owner_action_required'});
+    const input=await readSeasonAdminBody(req);
+    const kind=String(input?.mediaKind||'');
+    const id=Number(input?.gatewayId);
+    const platform=String(input?.platform||'');
+    if(!['movie','episode'].includes(kind)||
+       !['windows','android','android_tv'].includes(platform)||
+       !Number.isSafeInteger(id)||id<1||
+       input?.rightsConfirmed!==true||
+       input?.ownerDeviceTest!==true)
+     return json(res,400,{ok:false,code:'mirror_device_qa_request_invalid'});
+    const response=await request('/internal/mirror/media-qa/'+kind+'/'+id+
+       '/device-proof',{method:'GET',signal:AbortSignal.timeout(9000),
+       extraHeaders:{'x-blofy-owner-action':
+         'prepare-private-mirror-device-qa'}});
+    if(response.status!==200)
+     return json(res,409,{ok:false,
+       code:'mirror_device_recent_private_av_proof_required'});
+    const proof=await safeReadJson(response);
+    if(proof?.ok!==true||proof.mediaKind!==kind||
+       !/^mirror_[a-f0-9]{40}$/.test(String(proof.runId||''))||
+       proof.customerCutover!==false||
+       proof.devicePlaybackValidated!==false)
+     return json(res,409,{ok:false,code:'mirror_device_qa_proof_invalid'});
+    const signed=mintOwnerDeviceQaTicket({
+     secret:process.env.BLOFY_CONTENT_HUB_DEVICE_QA_SIGNING_KEY,
+     runId:proof.runId,mediaKind:kind,platform
+    });
+    // Bearer token goes in the Authorization HEADER, not in endpoint URL.
+    return json(res,200,{ok:true,...signed,
+     endpoint:'https://blofyplayer.com/api/v1/private-device-qa/'+
+      kind+'/playback/'+proof.runId,
+     maxRangeBytes:8*1024*1024,manualDeviceTestRequired:true,
+     releaseToSubscribersApproved:false,
+     automaticDownload:false,customerCutover:false});
+   }
    if(path==='/api/v1/admin/content-hub/episodes/preview'&&req.method==='GET')
     return await handleEpisodePreview(req,res);
    // Only individually verified private queue episodes can be previewed.
@@ -581,6 +629,75 @@ http.createServer=function withContentHubAdmin(listener){
       extraHeaders:{'x-blofy-season-confirm':command[1]}});
      return json(res,response.status,await response.json());
     }
+   }
+   const mirrorMediaQa=/^\/api\/v1\/admin\/content-hub\/mirror\/media-qa\/(movie|episode)\/([1-9][0-9]{0,14})$/.exec(path);
+   if(mirrorMediaQa&&['GET','POST'].includes(req.method)){
+    if(String(req.url||'').includes('?'))
+     return json(res,400,{ok:false,code:'mirror_qa_query_denied'});
+    if(req.method==='POST'&&
+       req.headers['x-blofy-owner-action']!=='verify-private-mirror-playback')
+     return json(res,403,{ok:false,code:'mirror_qa_owner_action_required'});
+    const opts={method:req.method,signal:AbortSignal.timeout(10000)};
+    if(req.method==='POST')
+     opts.extraHeaders={'x-blofy-owner-action':'verify-private-mirror-playback'};
+    const response=await request('/internal/mirror/media-qa/'+
+      mirrorMediaQa[1]+'/'+mirrorMediaQa[2],opts);
+    if(![200,202,400,403,409].includes(response.status))
+     return json(res,503,{ok:false,code:'mirror_qa_unavailable'});
+    return json(res,response.status,await readPrivateHubJsonResponse(response,{
+     allowedStatuses:[200,202,400,403,409]
+    }));
+   }
+   if(path==='/api/v1/admin/content-hub/mirror/deployment/preflight'&&
+      req.method==='GET'){
+    if(String(req.url||'').includes('?'))
+     return json(res,400,{ok:false,code:'mirror_preflight_query_denied'});
+    const response=await request('/internal/mirror/deployment/preflight',{
+     signal:AbortSignal.timeout(12000)});
+    if(response.status!==200)return json(res,503,{
+     ok:false,code:'mirror_deployment_preflight_unavailable'});
+    return json(res,200,await safeReadJson(response));
+   }
+   if(path==='/api/v1/admin/content-hub/mirror/episode/status'&&
+      req.method==='GET'){
+     const response=await request('/internal/mirror/episode/status',{
+       signal:AbortSignal.timeout(8000)});
+     if(response.status!==200)return json(res,503,{
+       ok:false,code:'mirror_episode_status_unavailable'});
+     return json(res,200,await safeReadJson(response));
+   }
+   if(path==='/api/v1/admin/content-hub/mirror/movie/status'&&
+      req.method==='GET'){
+     const response=await request('/internal/mirror/movie/status',{
+       signal:AbortSignal.timeout(8000)});
+     if(response.status!==200)return json(res,503,{
+       ok:false,code:'mirror_movie_status_unavailable'});
+     return json(res,200,await safeReadJson(response));
+   }
+   if(path==='/api/v1/admin/content-hub/mirror/daily/sessions'&&
+      req.method==='GET'){
+     const response=await request('/internal/mirror/daily/sessions',{
+       signal:AbortSignal.timeout(8000)});
+     if(response.status!==200)return json(res,503,{
+       ok:false,code:'daily_media_session_history_unavailable'});
+     return json(res,200,await safeReadJson(response));
+   }
+   if(path==='/api/v1/admin/content-hub/mirror/daily/plan'&&
+      req.method==='POST'){
+     if(req.headers['x-blofy-owner-action']!=='preview-licensed-daily-mirror')
+       return json(res,403,{ok:false,code:'mirror_plan_owner_action_required'});
+     const input=await readSeasonAdminBody(req);
+     if(!input||!Array.isArray(input.catalog)||input.catalog.length<1||
+        input.catalog.length>25||input.verifiedCopies!==undefined)
+       return json(res,400,{ok:false,code:'mirror_plan_batch_invalid'});
+     const response=await request('/internal/mirror/daily/plan',{
+       method:'POST',signal:AbortSignal.timeout(12000),
+       extraHeaders:{'content-type':'application/json',
+         'x-blofy-owner-action':'preview-licensed-daily-mirror'},
+       body:JSON.stringify({catalog:input.catalog})});
+     if(![200,400,403,409].includes(response.status))
+       return json(res,503,{ok:false,code:'mirror_plan_unavailable'});
+     return json(res,response.status,await response.json());
    }
    if(path==='/api/v1/admin/content-hub/overview'&&req.method==='GET')
     return await handleOverview(res);

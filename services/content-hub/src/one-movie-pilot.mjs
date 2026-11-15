@@ -28,8 +28,15 @@ function cleanMetadata(item){
   Number.isSafeInteger(item.gatewayId)&&item.gatewayId>0&&
   ['mp4','mkv','ts','avi'].includes(item.extension);
 }
-async function getMetadata(fetchImpl,token,signal){
- const response=await fetchImpl(ORIGIN+'/internal/blofy-content-hub/describe',{
+async function getMetadata(fetchImpl,token,signal,env={}){
+ const dynamic=env.BLOFY_CONTENT_HUB_MIRROR_DYNAMIC_MOVIE_ENABLED==='1';
+ const id=Number(env.BLOFY_CONTENT_HUB_APPROVED_GATEWAY_ID);
+ if(dynamic&&(!Number.isSafeInteger(id)||id<1))
+  throw Error('dynamic_mirror_movie_id_invalid');
+ const route=dynamic?
+  '/internal/blofy-content-hub/mirror/movie/'+id+'/describe':
+  '/internal/blofy-content-hub/describe';
+ const response=await fetchImpl(ORIGIN+route,{
   method:'GET',redirect:'manual',headers:{authorization:'Bearer '+token},
   signal:timeoutSignal(signal)
  });
@@ -51,7 +58,7 @@ export async function inspectOneMoviePilot({
  try{
   const scoped=signal?AbortSignal.any([signal,AbortSignal.timeout(6000)]):
    AbortSignal.timeout(6000);
-  const media=await getMetadata(fetchImpl,token,scoped);
+  const media=await getMetadata(fetchImpl,token,scoped,env);
   const approved=Number(env.BLOFY_CONTENT_HUB_APPROVED_GATEWAY_ID);
   const bytes=Number(env.BLOFY_CONTENT_HUB_EXPECTED_BYTES);
   const exactMovie=Number.isSafeInteger(approved)&&approved>0&&
@@ -83,11 +90,13 @@ export async function probeApprovedMovieRange({
  if(token.length<32)return {...base,code:'source_bridge_not_configured'};
  let response=null;
  try{
-  const metadata=await getMetadata(fetchImpl,token,signal);
+  const metadata=await getMetadata(fetchImpl,token,signal,env);
   const requestSignal=signal?AbortSignal.any([signal,AbortSignal.timeout(45000)]):
    AbortSignal.timeout(45000);
   response=await fetchImpl(ORIGIN+
-   '/internal/blofy-content-hub/source/movie/'+metadata.gatewayId,{
+   (env.BLOFY_CONTENT_HUB_MIRROR_DYNAMIC_MOVIE_ENABLED==='1'?
+     '/internal/blofy-content-hub/mirror/movie/'+metadata.gatewayId+'/source':
+     '/internal/blofy-content-hub/source/movie/'+metadata.gatewayId),{
     method:'GET',redirect:'manual',
     headers:{authorization:'Bearer '+token,range:'bytes=0-4095',
       'accept-encoding':'identity'},
@@ -152,7 +161,7 @@ export async function runOneMoviePilot({
  let result={...BASE,ok:false,code:'pilot_failed',stored:false};
  let objectKey=null;
  try{
-  const meta=await getMetadata(fetchImpl,token,combined);
+  const meta=await getMetadata(fetchImpl,token,combined,env);
   if(approvedGatewayId!==meta.gatewayId)
    throw Error('pilot_movie_not_approved');
   // Versioned private object key: never overwrite a previous verified copy.

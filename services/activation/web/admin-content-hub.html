@@ -7,6 +7,7 @@
   <title>BLOFY · مركز المحتوى</title>
   <link rel="stylesheet" href="/admin-content-hub.css">
   <script src="/admin-content-hub.js" defer></script>
+  <script src="/admin-mirror-dashboard.js" defer></script>
   <script src="/admin-season-analytics.js" defer></script>
   <script src="/admin-season-detail.js" defer></script>
   <script src="/admin-season-attention.js" defer></script>
@@ -78,12 +79,68 @@
       <p class="hint" id="opsScope">قد يكون عرض المسلسلات والمواسم محدودًا في الاستعلام، ويعرض العدد الظاهر فقط عند عدم اكتمال التغطية.</p>
     </div>
     <nav class="ops-links" aria-label="الانتقال السريع">
+      <a href="#mirrorDashboardTitle">مزامنة Xtream</a>
       <a href="#season-title">إدارة المواسم</a>
       <a href="#analyticsTitle">التقارير التفصيلية</a>
       <a href="#seasonReadinessTitle">جاهزية الصورة والصوت</a>
       <a href="#attentionTitle">التنبيهات</a>
       <a href="#runs">عمليات الأفلام</a>
     </nav>
+  </section>
+  <section class="card mirror-admin" id="mirrorDashboard" aria-labelledby="mirrorDashboardTitle">
+    <div class="cardhead">
+      <div>
+        <p class="eyebrow">BLOFY · PRIVATE XTREAM MIRROR</p>
+        <h2 id="mirrorDashboardTitle">مزامنة مكتبة Xtream والتخزين الخاص</h2>
+        <p class="muted">لوحة قراءة فقط لطابور الأفلام والحلقات المكتشفة ونسب التخزين المسجلة. لا تُنزل الملفات أو تفحص بث المصدر أو تغيّر تطبيقات العملاء.</p>
+      </div>
+      <button id="mirrorRefresh" type="button">تحديث البيانات</button>
+    </div>
+    <div class="mirror-controls">
+      <label for="mirrorSource">المصدر المعتمد
+        <select id="mirrorSource"><option value="">جارٍ قراءة المصادر…</option></select>
+      </label>
+      <label for="mirrorKind">نوع المحتوى
+        <select id="mirrorKind">
+          <option value="movie">الأفلام</option>
+          <option value="episode">حلقات المسلسلات</option>
+        </select>
+      </label>
+      <label for="mirrorState">حالة النسخ
+        <select id="mirrorState">
+          <option value="all">كل الحالات</option>
+          <option value="needs_review">بانتظار مراجعة الترخيص</option>
+          <option value="approved">جاهز / نسخ جزئي</option>
+          <option value="copying">نقل جارٍ</option>
+          <option value="verified">محفوظ ومتحقق منه</option>
+          <option value="failed">فشل يحتاج مراجعة</option>
+        </select>
+      </label>
+    </div>
+    <p id="mirrorStatus" class="muted" role="status">جارٍ قراءة إعدادات المصدر.</p>
+    <p id="mirrorDeploymentPreflight" class="mirror-preflight" role="status">
+      فحص توافق قاعدة Xtream مع التخزين الخاص لم يُنفذ بعد. لا تعتبر النقل جاهزًا قبل ظهور النتيجة.
+    </p>
+    <div id="mirrorStats" class="mirror-stats" aria-live="polite"></div>
+    <div class="mirror-aux">
+      <div>
+        <h3>مزامنة الفهرس والحلقات</h3>
+        <p id="mirrorScan" class="muted">لم تُقرأ البيانات بعد.</p>
+      </div>
+      <div>
+        <h3>حصة النقل اليومي</h3>
+        <p id="mirrorTransfers" class="muted">لم تُقرأ البيانات بعد.</p>
+      </div>
+    </div>
+    <div id="mirrorRows" class="mirror-rows" aria-live="polite">
+      <p class="placeholder">لا توجد ملفات معروضة بعد.</p>
+    </div>
+    <div class="mirror-pagination">
+      <button id="mirrorPrev" type="button" disabled>السابق</button>
+      <span id="mirrorPage" class="muted">الصفحة 1</span>
+      <button id="mirrorNext" type="button" disabled>التالي</button>
+    </div>
+    <p class="hint">الأرقام تشمل الملفات التي اكتشفها نظام BLOFY فقط؛ فهرس الحلقات قد لا يغطي كل حلقات مصدر Xtream. «حجم النسخ المؤكدة بالسجل» لا يعني فحص كل بايت من S3 الآن، و«الحجز» ليس حجمًا منقولًا. جميع عمليات النقل تحتاج تصريح تخزين فرديًا ومراجعة قبل التفعيل.</p>
   </section>
   <section class="card season-readiness" id="seasonReadiness"
     aria-labelledby="seasonReadinessTitle">

@@ -647,3 +647,62 @@
 #seasonDeviceQaStatus{font-size:12px;margin:0;line-height:1.8}
 @media(max-width:650px){.season-device-qa-controls{
  grid-template-columns:1fr}.season-device-qa{padding:11px}}
+
+
+/* Read-only Xtream mirror dashboard; concise RTL mobile and TV layout.
+   No transfer action buttons are exposed here. */
+.mirror-admin{margin:20px 0}
+.mirror-controls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+ gap:12px;margin:18px 0}
+.mirror-controls label{display:grid;gap:7px;font-size:13px;color:#cce5f8}
+.mirror-controls select{width:100%;min-width:0;
+ background:#0b1930;color:#edf6ff;border:1px solid #426287;
+ border-radius:10px;padding:12px 11px;font:inherit}
+.mirror-controls select:focus-visible,.mirror-pagination button:focus-visible{
+ outline:2px solid #83d5ff;outline-offset:2px}
+.mirror-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));
+ gap:11px;margin:16px 0}
+.mirror-stats article{border:1px solid #31506a;border-radius:12px;
+ background:#0d2037;padding:14px;min-width:0}
+.mirror-stats small{color:#b5d1e9;font-size:12px;display:block}
+.mirror-stats strong{display:block;color:#d8f4ff;font-size:clamp(17px,2vw,25px);
+ overflow-wrap:anywhere;margin-top:7px}
+.mirror-aux{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin:16px 0}
+.mirror-aux>div{border:1px solid #2b4f69;border-radius:12px;
+ background:#0b1c30;padding:12px}
+.mirror-aux h3{font-size:15px;margin:0}
+.mirror-aux p{margin:8px 0 0}
+.mirror-rows{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+ gap:9px;margin:16px 0}
+.mirror-row{border:1px solid #2d4c6d;border-radius:12px;
+ background:#0c1a2e;min-width:0;padding:13px;overflow-wrap:anywhere}
+.mirror-row strong{font-size:14px;color:#e1f3ff}
+.mirror-row .muted{margin-top:8px}
+.mirror-alert{font-size:12px;color:#ffd6ab;border-inline-start:3px solid #eaae5c;
+ padding:7px;margin-top:7px;background:#37281d;border-radius:4px}
+.mirror-pagination{display:flex;justify-content:center;align-items:center;
+ gap:14px;margin:16px 0}
+@media(max-width:850px){
+ .mirror-controls{grid-template-columns:1fr 1fr}
+ .mirror-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .mirror-aux{grid-template-columns:1fr}
+}
+@media(max-width:600px){
+ .mirror-admin .cardhead{flex-wrap:wrap}
+ .mirror-controls{grid-template-columns:1fr}
+ .mirror-rows{grid-template-columns:1fr}
+ .mirror-stats article{padding:10px}
+}
+
+.mirror-retry{font-size:12px;color:#a2defb;background:#112f47;
+ border:1px solid #2d7291;border-radius:8px;padding:8px;
+ margin-top:8px;line-height:1.8}
+
+/* Explicit readiness indicator: green is intentionally avoided because
+   schema/S3 availability alone never grants movie copying rights. */
+.mirror-preflight{border:1px solid #9b6b3a;background:#36281c;
+ color:#ffddbd;border-radius:12px;padding:12px 14px;
+ line-height:1.9;white-space:normal;overflow-wrap:anywhere}
+.mirror-preflight[data-ready="technical-only"]{
+ border-color:#b78e45;background:#302a1c;color:#ffe3ac
+}
