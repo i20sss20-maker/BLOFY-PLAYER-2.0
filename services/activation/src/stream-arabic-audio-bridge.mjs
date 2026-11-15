@@ -34,6 +34,26 @@ function publicAddress(ip) {
  * Using a string there raises ERR_INVALID_IP_ADDRESS and all media returns 502.
  * DNS is still resolved and public-validated before this pinned lookup.
  */
+/**
+ * Recognize real audio packets; many radio upstreams wrongly declare
+ * text/plain, application/octet-stream or no content-type at all.
+ * Never trust a 200 header without media bytes: prevents HTML error pages
+ * from being forwarded to a playback decoder as MP3.
+ */
+export function sniffFirstAudioMime(sample) {
+  const b=Buffer.isBuffer(sample)?sample:Buffer.from(sample||[]);
+  if(b.length>=3&&b.subarray(0,3).toString('ascii')==='ID3')return 'audio/mpeg';
+  if(b.length>=4&&b.subarray(0,4).toString('ascii')==='OggS')return 'audio/ogg';
+  if(b.length>=4&&b.subarray(0,4).toString('ascii')==='fLaC')return 'audio/flac';
+  if(b.length>=3&&b[0]===0xff&&(b[1]&0xf6)===0xf0)
+    return 'audio/aac';
+  if(b.length>=3&&b[0]===0xff&&(b[1]&0xe0)===0xe0)
+    return 'audio/mpeg';
+  if(b.length>=377&&b[0]===0x47&&b[188]===0x47&&b[376]===0x47)
+    return 'video/mp2t';
+  return null;
+}
+
 export function pinnedAudioLookup(address) {
   return (_host, options, callback) => {
     if(typeof options==='function') {callback=options;options={};}
@@ -136,23 +156,51 @@ export function createProtectedArabicAudioBridge({
             audio.resume();
             errorResponse(res,502,'audio_source_unavailable');return finish();
           }
-          const type=String(audio.headers['content-type']||'audio/mpeg')
-            .split(';')[0].trim().toLowerCase();
-          if(!/^audio\/(mpeg|mp3|aac|aacp|ogg|opus|x-aac|x-mpegurl)$/.test(type)&&
-             type!=='application/octet-stream'){
-            audio.resume();
-            errorResponse(res,415,'unsupported_audio_format');return finish();
-          }
-          res.writeHead(audio.statusCode,{
-            'content-type':type==='application/octet-stream'?'audio/mpeg':type,
+          const headersFor=mime=>({
+            'content-type':mime,
             'cache-control':'no-store, private',
             'x-content-type-options':'nosniff','accept-ranges':'none',
             'referrer-policy':'no-referrer'
           });
-          if(req.method==='HEAD'){audio.destroy();res.end();return finish();}
-          audio.pipe(res);
-          audio.once('end',finish);
-          audio.once('error',()=>{res.destroy();finish();});
+          if(req.method==='HEAD'){
+            res.writeHead(audio.statusCode,headersFor('application/octet-stream'));
+            audio.destroy();res.end();return finish();
+          }
+          // Do NOT trust the upstream Content-Type; its live station feeds
+          // can contain valid MP3/AAC packets with a generic MIME header.
+          // Also do NOT forward HTML login/errors that masquerade as HTTP 200.
+          let prefix=Buffer.alloc(0);
+          let forwarding=false;
+          const sniff=chunk=>{
+            audio.pause();
+            prefix=Buffer.concat([prefix,chunk]);
+            const mime=sniffFirstAudioMime(prefix);
+            if(mime){
+              forwarding=true;
+              audio.removeListener('data',sniff);
+              res.writeHead(audio.statusCode,headersFor(mime));
+              res.write(prefix);
+              prefix=Buffer.alloc(0);
+              audio.pipe(res);
+              audio.resume();
+            }else if(prefix.length>=4096){
+              audio.removeListener('data',sniff);
+              errorResponse(res,415,'upstream_did_not_return_audio');
+              audio.destroy();
+              finish();
+            }else audio.resume();
+          };
+          audio.on('data',sniff);
+          audio.once('end',()=>{
+            if(!forwarding)errorResponse(res,415,'upstream_did_not_return_audio');
+            else if(!res.writableEnded)res.end();
+            finish();
+          });
+          audio.once('error',()=>{
+            if(!res.headersSent)errorResponse(res,502,'audio_source_read_failed');
+            else if(!res.writableEnded)res.destroy();
+            finish();
+          });
         });
         source.on('timeout',()=>source.destroy());
         source.once('error',()=>{
