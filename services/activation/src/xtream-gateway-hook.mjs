@@ -2435,6 +2435,18 @@ http.createServer = function withBlofyXtreamGateway(listener) {
         await ensureReady();
         return handlePrivateContentHubSource(req,res,url);
       }
+      if(req.method==='GET'&&url.pathname==='/stream-arabic-audio-import.mjs'){
+        const source=await readFile(
+          new URL('../web/stream-arabic-audio-import.mjs',import.meta.url)
+        );
+        res.writeHead(200,{
+          'content-type':'text/javascript; charset=utf-8',
+          'content-length':source.length,
+          'cache-control':'no-store',
+          'x-content-type-options':'nosniff'
+        });
+        return res.end(source);
+      }
       if (req.method === 'GET' && url.pathname === '/xtream-gateway-admin.js') {
         const body = await readFile(new URL('../web/xtream-gateway-admin.js', import.meta.url));
         res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'content-length': body.length, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
