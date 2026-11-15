@@ -218,7 +218,13 @@ export function createXtreamMirrorDiscoveryStore(db){
   const [counts,scans]=await Promise.all([
    db.query(`SELECT media_kind,state,COUNT(*)::text AS total,
        COALESCE(SUM(CASE WHEN state='verified' AND
-         copy_sha256 ~ '^[a-f0-9]{64}
+         copy_sha256 ~ '^[a-f0-9]{64}$' AND copy_completed_at IS NOT NULL
+         THEN expected_bytes ELSE 0 END),0)::text AS verified_bytes,
+       COALESCE(SUM(CASE WHEN state='approved'
+         THEN expected_bytes ELSE 0 END),0)::text AS awaiting_bytes,
+       COUNT(*) FILTER(WHERE mapping_conflict=TRUE)::text AS conflicts
+      FROM blofy_xtream_mirror_items WHERE source_id=$1
+      GROUP BY media_kind,state ORDER BY media_kind,state`,[sourceId]),
    db.query(`SELECT media_kind,cursor_id,completed_local_day,updated_at
       FROM blofy_xtream_mirror_discovery WHERE source_id=$1
       ORDER BY media_kind`,[sourceId])
