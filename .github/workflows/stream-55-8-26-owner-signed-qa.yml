@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   actions: read
 
 concurrency:
@@ -142,6 +142,24 @@ jobs:
           path: build/owner-qa/
           if-no-files-found: error
           retention-days: 7
+      - name: Publish opt-in 55.8.26 QA prerelease (no customer updater changes)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="blofy-stream-55.8.26-unified-live-owner-qa-20261115"
+          apk="build/owner-qa/BLOFY-STREAM-55.8.26-UNIFIED-LIVE-OWNER-SIGNED.apk"
+          test -s "$apk"
+          (cd build/owner-qa && sha256sum -c SHA256SUMS)
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::QA tag already published; refusing overwrite"; exit 1
+          fi
+          gh release create "$tag" "$apk" build/owner-qa/SHA256SUMS build/owner-qa/BUILD-IDENTITY.txt \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title "BLOFY STREAM 55.8.26 | Unified Live Sidebar | Owner-signed QA" \
+            --notes "Owner-signed opt-in test APK only. Single joined vertical sidebar: live channel search, local favorites, recent channels, Anis Arabic audio and sync, program guide, original tracks, subtitles, picture quality, stream diagnostics and manual reconnect. Separate BLOFY AI chat with verified catalog fallback. Package tv.blofy.player.v2.stream, versionCode 2000103. No activation or customer updater changes. Requires real Android TV playback verification before production adoption."
+          echo "Verified original-owner signed QA APK: https://github.com/$GITHUB_REPOSITORY/releases/download/$tag/BLOFY-STREAM-55.8.26-UNIFIED-LIVE-OWNER-SIGNED.apk" >> "$GITHUB_STEP_SUMMARY"
       - name: Remove temporary signing material
         if: always()
         run: rm -f "$RUNNER_TEMP/blofy-production.keystore" "$RUNNER_TEMP/blofy-production.b64"
