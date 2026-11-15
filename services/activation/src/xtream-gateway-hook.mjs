@@ -2086,7 +2086,12 @@ async function handlePrivateContentHubSource(req,res,url){
   if(process.env.BLOFY_XTREAM_MIRROR_DYNAMIC_EPISODE_BRIDGE_ENABLED!=='1'||
      process.env.BLOFY_CONTENT_HUB_EPISODE_RANGE_ENABLED!=='1'||url.search)
    return json(res,403,{ok:false,code:'mirror_episode_bridge_disabled'});
-  const approved=await findActiveMirrorEpisode(pool,{gatewayId:mirrorEpisodeId});
+  // The operator must pin the SAME source in activation and Content Hub.
+  // Never let a duplicate gateway ID from another source supply media.
+  const approved=await findActiveMirrorEpisode(pool,{
+   gatewayId:mirrorEpisodeId,
+   sourceId:process.env.BLOFY_XTREAM_DAILY_CATALOG_SOURCE_ID
+  });
   if(!approved)return json(res,403,{ok:false,code:'mirror_episode_not_leased'});
   row=await episodeByGatewayId(mirrorEpisodeId,approved.sourceId);
   if(!row||row.server_enabled!==true||
@@ -2126,7 +2131,10 @@ async function handlePrivateContentHubSource(req,res,url){
   if(process.env.BLOFY_XTREAM_MIRROR_DYNAMIC_MOVIE_BRIDGE_ENABLED!=='1'||
     process.env.BLOFY_CONTENT_HUB_BRIDGE_ENABLED!=='1'||url.search)
    return json(res,403,{ok:false,code:'mirror_movie_bridge_disabled'});
-  const approved=await findActiveMirrorMovie(pool,{gatewayId:mirrorId});
+  const approved=await findActiveMirrorMovie(pool,{
+   gatewayId:mirrorId,
+   sourceId:process.env.BLOFY_XTREAM_DAILY_CATALOG_SOURCE_ID
+  });
   if(!approved)return json(res,403,{ok:false,code:'mirror_movie_not_leased'});
   row=await gatewayItemById('movie',mirrorId,approved.sourceId);
   if(!approvedContentHubMedia(row)||
