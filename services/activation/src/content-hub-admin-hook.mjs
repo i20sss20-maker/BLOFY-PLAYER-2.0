@@ -240,7 +240,7 @@ http.createServer=function withContentHubAdmin(listener){
   if(qaPlayback)
    return forwardOwnerDeviceQaPlayback({req,res,
     mediaKind:qaPlayback[1],runId:qaPlayback[2],
-    env:process.env,requestHub:request});
+    requirePlatform:true,env:process.env,requestHub:request});
   if(!path.startsWith('/api/v1/admin/content-hub/'))return listener(req,res);
   if(!authorized(req,res))return;
   if(url.search)return json(res,400,{ok:false,code:'query_forbidden'});
