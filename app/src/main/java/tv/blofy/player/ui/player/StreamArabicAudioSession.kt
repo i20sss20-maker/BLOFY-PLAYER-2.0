@@ -41,6 +41,7 @@ internal class StreamArabicAudioSession(
 ) {
     private val appContext = context.applicationContext
     private val handler = Handler(Looper.getMainLooper())
+    private val stallHandler = Handler(Looper.getMainLooper())
     private var audio: ExoPlayer? = null
     private var track: StreamArabicAudioCatalog.Track? = null
     private var originalVolume = 1f
@@ -97,16 +98,28 @@ internal class StreamArabicAudioSession(
         companion.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (version != generation) return
-                if (playbackState == Player.STATE_READY) onPrimaryPlaybackChanged()
-                if (playbackState == Player.STATE_ENDED) failAndRestore()
+                when (playbackState) {
+                    Player.STATE_READY -> {
+                        stallHandler.removeCallbacksAndMessages(null)
+                        onPrimaryPlaybackChanged()
+                    }
+                    Player.STATE_BUFFERING -> scheduleOriginalAudioOnStall(version)
+                    Player.STATE_ENDED -> failAndRestore()
+                }
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 if (version != generation) return
                 // Do not rapidly toggle back to the foreign track during a
                 // deliberate audio offset hold; leave the video muted.
-                if (isPlaying) video.volume = 0f
-                else if (!started) video.volume = originalVolume
+                if (isPlaying) {
+                    stallHandler.removeCallbacksAndMessages(null)
+                    video.volume = 0f
+                } else if (!started) {
+                    video.volume = originalVolume
+                } else if (!holdPending) {
+                    scheduleOriginalAudioOnStall(version)
+                }
             }
 
             override fun onPlayerError(error: PlaybackException) {
@@ -121,6 +134,19 @@ internal class StreamArabicAudioSession(
         companion.prepare()
         companion.playWhenReady = false
         onPrimaryPlaybackChanged()
+    }
+
+    private fun scheduleOriginalAudioOnStall(version: Int) {
+        stallHandler.removeCallbacksAndMessages(null)
+        stallHandler.postDelayed({
+            val companion = audio
+            // Avoid leaving a customer with silence when the commentary
+            // buffers or the remote radio is unavailable, but do not unmute
+            // during a deliberate +1 second synchronization hold.
+            if (version == generation && started && !holdPending &&
+                video.playWhenReady && companion != null && !companion.isPlaying
+            ) video.volume = originalVolume
+        }, 2_500L)
     }
 
     fun onPrimaryPlaybackChanged() {
@@ -232,6 +258,7 @@ internal class StreamArabicAudioSession(
     fun stop() {
         generation++
         handler.removeCallbacksAndMessages(null)
+        stallHandler.removeCallbacksAndMessages(null)
         audio?.let {
             it.playWhenReady = false
             it.release()
