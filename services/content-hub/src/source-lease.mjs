@@ -11,6 +11,37 @@ export function createSourceLease({connectionString,
  const pool=new Pool({connectionString,max:2,connectionTimeoutMillis:5000,
   idleTimeoutMillis:10000,application_name:applicationName});
  return {
+  // Resolve an exact source + catalog ID to an EXISTING completed private
+  // chunk manifest. Run IDs / object keys are never accepted from browsers.
+  async getVerifiedManifestForPhysicalAudit({sourceId,kind,id}={}){
+   if(!/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(String(sourceId||''))||
+      !['movie','episode'].includes(kind)||
+      !(kind==='movie'?/^[A-Za-z0-9._:-]{1,128}$/:
+        /^[1-9][0-9]{0,9}$/).test(String(id||'')))
+     throw Error('private_physical_audit_scope_invalid');
+   const table=kind==='movie'?'blofy_content_hub_chunk_runs':
+     'blofy_content_hub_episode_runs';
+   const field=kind==='movie'?'media_id':'gateway_id';
+   const sql='SELECT run_id FROM '+table+
+     ' WHERE source_id=$1 AND '+field+'=$2 AND state=$3'+
+     ' ORDER BY updated_at DESC LIMIT 1';
+   const selected=await pool.query(sql,[
+     sourceId,kind==='movie'?String(id):Number(id),'verified'
+   ]).catch(error=>{
+     if(error?.code==='42P01')return {rows:[]};
+     throw error;
+   });
+   const runId=String(selected.rows?.[0]?.run_id||'');
+   if(!/^[A-Za-z0-9_-]{8,80}$/.test(runId))return null;
+   const manifest=kind==='movie'?
+     await this.getVerifiedChunkedObject(runId):
+     await this.getVerifiedEpisodeObject(runId);
+   if(!manifest||!Array.isArray(manifest.parts)||
+      manifest.parts.length<1||manifest.parts.length>512||
+      !/^[a-f0-9]{64}$/.test(String(manifest.sha256||'')))
+    return null;
+   return {runId,manifest};
+  },
   async reconcilePrivateVerifiedManifests(selection){
    return reconcilePrivateVerifiedManifests(pool,selection);
   },
