@@ -166,3 +166,31 @@ test('temporary episode media failure backs off but never loses previously recor
  });
  assert.equal(reviewed.code,'mirror_episode_retry_limit_review');
 });
+
+test('episode PostgreSQL lease SELECT validates exact parent series identity',async()=>{
+ const sql=[];
+ class FakePool{
+  async connect(){return this}
+  release(){}
+  async query(text,args=[]){
+   sql.push({text,args});
+   if(text.startsWith('CREATE')||text.startsWith('ALTER')||
+      text==='BEGIN'||text==='COMMIT')return {rows:[],rowCount:0};
+   if(text.startsWith('INSERT'))return {rows:[],rowCount:1};
+   if(text.includes('SELECT reserved_bytes'))return {
+    rows:[{reserved_bytes:'0'}],rowCount:1};
+   if(text.includes('WITH picked'))return {rows:[],rowCount:0};
+   return {rows:[],rowCount:0};
+  }
+  async end(){}
+ }
+ const store=createMirrorEpisodeTransferStore({
+  connectionString:'postgres://test',Pool:FakePool});
+ try{
+  const result=await store.claim({sourceId:ID,day:'2026-11-15',
+   limit:64*1024**2});
+  assert.equal(result.code,'mirror_episode_no_approved_item');
+  const claim=sql.find(x=>x.text.includes('WITH picked'));
+  assert.match(claim.text,/e.series_source_id=q.series_media_id/);
+ }finally{await store.close()}
+});
