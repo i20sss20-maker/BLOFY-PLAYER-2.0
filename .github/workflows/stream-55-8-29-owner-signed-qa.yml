@@ -1,5 +1,5 @@
 name: BLOFY STREAM 55.8.29 Full Owner-Signed QA
-# Require verified one-click in-panel Arabic audio, BACK handling, and actual-playback status before signing.
+# Require proven TV voice shortcuts, source failure classifier, clock-independent status and same-SHA QA before owner signing.
 on:
   push:
     branches:
@@ -79,6 +79,7 @@ jobs:
           grep -Fq 'StreamAudioQuickPickPrefs.toggleFavorite' app/src/main/java/tv/blofy/player/ui/player/LiveChannelOverlayLifecycle.kt
           grep -Fq 'StreamAudioQuickPickPrefs.markStarted' app/src/main/java/tv/blofy/player/ui/player/LiveChannelOverlayLifecycle.kt
           grep -Fq 'StreamAudioQuickPickPrefs.markFailed' app/src/main/java/tv/blofy/player/ui/player/LiveChannelOverlayLifecycle.kt
+          grep -Fq 'SystemClock.elapsedRealtime()' app/src/main/java/tv/blofy/player/ui/player/StreamAudioQuickPickPrefs.kt
           grep -Fq 'classify(error)' app/src/main/java/tv/blofy/player/ui/player/StreamArabicAudioSession.kt
           grep -Fq '18_000L' app/src/main/java/tv/blofy/player/ui/player/StreamArabicAudioSession.kt
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
