@@ -37,7 +37,8 @@ internal class StreamArabicAudioSession(
     context: Context,
     private val video: ExoPlayer,
     private val profile: ProviderProfile,
-    private val onFailure: () -> Unit
+    private val onFailure: () -> Unit,
+    private val onStarted: () -> Unit = {}
 ) {
     private val appContext = context.applicationContext
     private val handler = Handler(Looper.getMainLooper())
@@ -52,8 +53,12 @@ internal class StreamArabicAudioSession(
     private var catchUpPendingMs = 0L
     private var pendingHoldMs = 0L
     private var generation = 0
+    private var playbackAnnounced = false
+    private val startupHandler = Handler(Looper.getMainLooper())
 
     val isActive: Boolean get() = audio != null && track != null
+    /** A track can be selected while its media is still buffering. */
+    val isAudible: Boolean get() = audio?.isPlaying == true
     val currentLabel: String? get() = track?.label
     val currentTrackId: String? get() = track?.id
     val delaySeconds: Int get() = delay
@@ -65,6 +70,7 @@ internal class StreamArabicAudioSession(
         track = item
         delay = ArabicSidecarTimingPolicy.clamp(item.initialDelaySeconds)
         val version = ++generation
+        playbackAnnounced = false
         // No STREAM authentication bearer ever leaves blofyplayer.com.
         // Personal in-app playlist URLs use a separate credential-free
         // transport. The main Xtream/video session remains unchanged.
@@ -116,6 +122,11 @@ internal class StreamArabicAudioSession(
                 if (isPlaying) {
                     stallHandler.removeCallbacksAndMessages(null)
                     video.volume = 0f
+                    startupHandler.removeCallbacksAndMessages(null)
+                    if (!playbackAnnounced) {
+                        playbackAnnounced = true
+                        onStarted()
+                    }
                 } else if (!started) {
                     video.volume = originalVolume
                 } else if (!holdPending) {
@@ -134,6 +145,11 @@ internal class StreamArabicAudioSession(
         )
         companion.prepare()
         companion.playWhenReady = false
+        // No infinite spinner: a selected station that never becomes audible
+        // must fail cleanly, leaving the original channel's audio intact.
+        startupHandler.postDelayed({
+            if (version == generation && !companion.isPlaying) failAndRestore()
+        }, 18_000L)
         onPrimaryPlaybackChanged()
     }
 
@@ -260,6 +276,7 @@ internal class StreamArabicAudioSession(
         generation++
         handler.removeCallbacksAndMessages(null)
         stallHandler.removeCallbacksAndMessages(null)
+        startupHandler.removeCallbacksAndMessages(null)
         audio?.let {
             it.playWhenReady = false
             it.release()
@@ -268,6 +285,7 @@ internal class StreamArabicAudioSession(
         audio = null
         track = null
         started = false
+        playbackAnnounced = false
         waiting = false
         holdPending = false
         pendingHoldMs = 0L
