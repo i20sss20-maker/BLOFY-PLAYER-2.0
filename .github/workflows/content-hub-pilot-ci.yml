@@ -130,4 +130,6 @@ jobs:
       - name: Exercise SQL and analytics with disposable PostgreSQL
         env:
           BLOFY_TEST_PG_URL: postgresql://analytics_test:local_test_only@127.0.0.1:5432/analytics_fixture
-        run: node --test services/content-hub/test/season-analytics-postgres.test.mjs
+        run: |
+          node --test services/content-hub/test/season-analytics-postgres.test.mjs
+          node --test services/content-hub/test/xtream-mirror-retry-postgres.test.mjs
