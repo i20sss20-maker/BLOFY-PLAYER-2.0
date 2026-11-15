@@ -5,22 +5,31 @@ import android.net.Uri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import tv.blofy.player.core.identity.StreamCodeSession
+import java.util.concurrent.TimeUnit
 
 /**
- * BLOFY STREAM's in-application Arabic audio library. The bundled catalog
- * ships with the STREAM APK; it does not depend on an admin page or on a new
- * activation-server API. A file selected from Android's document picker is
- * used on that device only, without uploading it or changing the code login.
- *
- * Operator catalog in app/src/main/assets/blofy_stream_audio_catalog.json:
- * {"channels":[{"channelId":"123","tracks":[
- * {"id":"voice-ar","label":"التعليق العربي","playbackUrl":"https://...",
- * "delaySeconds":2,"format":"hls"}]}]}
+ * BLOFY STREAM Arabic audio appears INSIDE the channel player. Only the
+ * existing code-session bearer can retrieve source names and play audio,
+ * through our first-party authenticated HTTPS proxy. No external audio
+ * provider token, raw M3U URL or Xtream credentials is bundled in the APK.
+ * The optional local-only file parser remains available for dev QA but is
+ * NOT exposed to subscriber UI in this curated-audio release.
  */
 internal object StreamArabicAudioCatalog {
     private const val MAX_JSON_BYTES = 262_144
     private val channelIdFormat = Regex("[A-Za-z0-9_-]{1,80}")
     private val trackIdFormat = Regex("[A-Za-z0-9_-]{1,64}")
+    private val client by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(4, TimeUnit.SECONDS)
+            .readTimeout(7, TimeUnit.SECONDS)
+            .callTimeout(10, TimeUnit.SECONDS)
+            .followRedirects(false).followSslRedirects(false)
+            .build()
+    }
 
     data class Track(
         val id: String,
@@ -69,22 +78,72 @@ internal object StreamArabicAudioCatalog {
     internal fun playableUrl(value: String): Boolean =
         trustedAudioUrl(value) || publicAudioUrl(value)
 
-    /** The embedded catalog has channel assignments and travels in the APK. */
+    /**
+     * The channel video remains unchanged while the viewer chooses a separate
+     * voice from the built-in BLOFY audio menu. All 38 curated voice choices
+     * are provided securely by the current BLOFY server session, not a
+     * third-party file picker or a customer-entered URL.
+     */
     suspend fun list(context: Context, channelId: String): List<Track> = withContext(Dispatchers.IO) {
         if (!channelIdFormat.matches(channelId)) return@withContext emptyList()
-        val raw = runCatching {
-            context.assets.open("blofy_stream_audio_catalog.json").use { source ->
-                val output = java.io.ByteArrayOutputStream()
-                val block = ByteArray(4096)
-                while (output.size() <= MAX_JSON_BYTES) {
-                    val n = source.read(block)
-                    if (n == -1) break
-                    output.write(block, 0, n)
+        val bearer = StreamCodeSession.authorization(context) ?: return@withContext emptyList()
+        runCatching {
+            val request = Request.Builder()
+                .url(StreamCodeSession.HOST + "/api/v1/stream/audio/catalog")
+                .header("Authorization", bearer)
+                .header("Accept", "application/json")
+                .get().build()
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@use emptyList()
+                if ((response.body?.contentLength() ?: 0) > MAX_JSON_BYTES)
+                    return@use emptyList()
+                val source = response.body?.byteStream() ?: return@use emptyList()
+                val raw = source.use { input ->
+                    val output = java.io.ByteArrayOutputStream()
+                    val bytes = ByteArray(4096)
+                    while (output.size() <= MAX_JSON_BYTES) {
+                        val n = input.read(bytes)
+                        if (n < 0) break
+                        output.write(bytes, 0, n)
+                    }
+                    if (output.size() > MAX_JSON_BYTES) "" else output.toString(Charsets.UTF_8.name())
                 }
-                if (output.size() > MAX_JSON_BYTES) "" else output.toString(Charsets.UTF_8.name())
+                decode(raw).filter { trustedAudioUrl(it.playbackUrl) }
             }
-        }.getOrDefault("")
-        decodeForChannel(raw, channelId)
+        }.getOrDefault(emptyList())
+    }
+
+    internal fun groupName(track: Track, english: Boolean): String {
+        val id = track.id
+        val group = when {
+            id.startsWith("anis-max-low-") -> "max-low"
+            id.startsWith("anis-max-") -> "max"
+            id.startsWith("anis-sport-") -> "sport"
+            id.startsWith("anis-italy-") -> "italy"
+            id.startsWith("anis-de-") -> "de"
+            id.startsWith("anis-thm8h-") -> "thm8h"
+            id.startsWith("anis-shasha") -> "shasha"
+            id.startsWith("anis-shahid") -> "shahid"
+            id.startsWith("anis-en-") -> "en"
+            id.startsWith("anis-fr-") -> "fr"
+            id.startsWith("anis-xtra-") -> "xtra"
+            id.startsWith("anis-alkass-") -> "alkass"
+            else -> "other"
+        }
+        val en = mapOf("max" to "Anis Max", "sport" to "Anis Sport",
+            "italy" to "Anis Italy", "de" to "Anis DE", "thm8h" to "Anis Thm8h",
+            "shasha" to "Anis Shasha", "shahid" to "Anis Shahid",
+            "en" to "Anis EN", "fr" to "Anis FR", "xtra" to "Anis Xtra",
+            "alkass" to "Anis Al Kass", "max-low" to "Anis Max Low",
+            "other" to "Other audio")
+        val ar = mapOf("max" to "أنيس ماكس", "sport" to "أنيس سبورت",
+            "italy" to "أنيس إيطاليا", "de" to "أنيس ألمانيا",
+            "thm8h" to "أنيس السعودية", "shasha" to "أنيس شاشة",
+            "shahid" to "أنيس شاهد", "en" to "أنيس الإنجليزية",
+            "fr" to "أنيس الفرنسية", "xtra" to "أنيس إكسترا",
+            "alkass" to "أنيس الكأس", "max-low" to "أنيس ماكس منخفض",
+            "other" to "صوتيات أخرى")
+        return (if (english) en else ar).getValue(group)
     }
 
     internal fun decodeForChannel(raw: String, channelId: String): List<Track> {
@@ -117,7 +176,7 @@ internal object StreamArabicAudioCatalog {
                 Uri.parse(url).path.orEmpty().endsWith(".m3u8", true)) "hls" else "progressive"
             tracks += Track(id, label, url,
                 ArabicSidecarTimingPolicy.clamp(row.optInt("delaySeconds", 0)), format)
-            if (tracks.size == 8) break
+            if (tracks.size == 60) break
         }
         return tracks.distinctBy { it.id }
     }
