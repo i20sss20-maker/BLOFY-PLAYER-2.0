@@ -1,8 +1,9 @@
 // Check the EXACT item leased by a private licensed mirror worker before
 // revealing a provider byte range. Works only for movies approved for
 // persistent private storage; no public listener, no source URL returned.
-export async function findActiveMirrorMovie(pool,{gatewayId}={}){
+export async function findActiveMirrorMovie(pool,{gatewayId,sourceId}={}){
  if(!Number.isSafeInteger(gatewayId)||gatewayId<1||
+    !/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(String(sourceId||''))||
     typeof pool?.query!=='function')return null;
  const r=await pool.query(`SELECT q.source_id,q.media_id,q.gateway_id,
     q.extension,q.expected_bytes,q.copy_run_id
@@ -14,6 +15,7 @@ export async function findActiveMirrorMovie(pool,{gatewayId}={}){
     JOIN blofy_xtream_items i ON i.server_id=m.server_id
       AND i.media_type=m.media_type AND i.source_id=m.source_id
     WHERE q.media_kind='movie' AND q.gateway_id=$1
+      AND q.source_id=$2::uuid
       AND q.state='copying' AND q.mapping_conflict=FALSE
       AND q.copy_lease_until>NOW()
       AND q.copy_run_id ~ '^mirror_[a-f0-9]{40}$'
@@ -27,7 +29,7 @@ export async function findActiveMirrorMovie(pool,{gatewayId}={}){
       AND s.deletion_requested_at IS NULL
       AND lower(btrim(s.name))='saleh'
       AND s.last_sync_at>NOW()-INTERVAL '48 hours'
-    LIMIT 1`,[gatewayId]);
+    LIMIT 1`,[gatewayId,sourceId]);
  const row=r.rows?.[0];
  if(!row)return null;
  const size=Number(row.expected_bytes);
