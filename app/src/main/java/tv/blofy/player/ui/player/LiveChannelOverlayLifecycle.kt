@@ -694,7 +694,10 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 })
             }
 
-            fun render(focusId: String? = null, focusStar: Boolean = false) {
+            fun render(
+                focusId: String? = null, focusStar: Boolean = false,
+                focusFirstVoice: Boolean = false
+            ) {
                 if (!audioPickerOpen || dialog?.isShowing != true) return
                 val savedFavorites = StreamAudioQuickPickPrefs.favorites(activity)
                 val lastGood = activity.lastConfirmedInlineArabicTrackId()
@@ -717,6 +720,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                     pendingButton = null
                     pendingId = null
                     activity.returnInlineOriginalAudio()
+                    render(focusFirstVoice = true)
                     paintStatus(copy("صوت القناة الأصلي يعمل الآن.",
                         "Original channel audio is restored."), null)
                 }
@@ -856,7 +860,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                     })
                     row.addView(starButton, LinearLayout.LayoutParams(dp(43), dp(38)))
                     footer.addView(row, LinearLayout.LayoutParams(-1, dp(43)))
-                    if (voice.id == focusId) {
+                    if (voice.id == focusId || (focusFirstVoice && focusTarget == null)) {
                         focusTarget = if (focusStar) starButton else playButton
                         scrollTarget = row
                     }
@@ -914,7 +918,9 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                     "♫ اختر المعلق بضغطة؛ ☆ لتثبيته. ● تعني تشغيلًا مؤكدًا.",
                     "♫ One click plays. ☆ pins a voice. ● means confirmed playback."
                 ), null)
-                render()
+                // Most important television UX: the first remote focus goes
+                // directly to a playable voice, not to an empty sub-menu.
+                render(focusFirstVoice = true)
             }
         }
 
