@@ -475,3 +475,39 @@ integration and physical device tests.
 
 **No flags are enabled in Railway production, no tokens were minted,
 and no external video was made publicly viewable in this QA branch.**
+
+
+## 2026-11-15: real-worker offline integration and owner mirror status panel
+
+**Integration improvement:** The Content Hub QA suite now exercises the
+**actual** `runChunkedMovieBatch()` and `runOneEpisodeChunk()` against
+8 MiB **synthetic** HTTP 206 private source responses, with a fake
+owner-only provider origin, in-memory private S3 upload/complete/verify,
+persisted PG-like chunk snapshots, SHA-256 of the full 8 MiB file,
+and normal source lease acquisition/release. It does NOT mock away the
+worker: it invokes the real dynamic source path, checks all bytes, and
+verifies checkpoint/manifest before marking the mirror queue row
+verified. Synthetic bytes are not a playable film; no actual provider
+media was fetched. This is an offline regression test, not a production
+copy validation.
+
+**New dashboard:** `/admin-content-hub` now has a **read-only** section
+"مزامنة مكتبة Xtream والتخزين الخاص", backed only by the existing
+authenticated owner APIs. It offers a dropdown of exact-source named
+`saleh`, selectable movie or mapped-episode backlog, queue state
+filter, cursor pagination and per-row progress (recorded 8 MiB parts).
+It also shows index progress, recorded file verification bytes,
+gateway remap warnings and the shared daily **reserved** transfer budget
+for both kinds. When either automated worker is disabled or data is
+unavailable, the page says so instead of pretending files were copied.
+No POST, manual transfer, source-video request or customer cutover is
+possible from this panel.
+
+The UI correctly warns that the episode map can be incomplete and
+that PG-manifest byte totals do not independently measure current S3
+physical free space, nor constitute a fresh complete S3 rehash.
+
+**Rollout:** Keep this draft PR unmerged and flags disabled until
+individual storage licensing, real provider quota, storage expense,
+real content transfer + A/V/seek canary and physical Android TV/Windows
+tests have completed.
