@@ -54,6 +54,7 @@ import {createStreamCommercial,ensureStreamCommercialSchema} from './xtream-code
 import {createStreamRelogin} from './xtream-code-relogin.mjs';
 import {parseStreamAppToken,verifyStreamAppToken,bearerFromRequest}
   from './xtream-code-app-token.mjs';
+import {createProtectedArabicAudioBridge} from './stream-arabic-audio-bridge.mjs';
 import {encryptGatewayAccountPassword,decryptGatewayAccountPassword} from './xtream-account-vault.mjs';
 import {createGatewayCredentialRotator} from './xtream-account-credential-rotation.mjs';
 import {diagnoseSalehCatalogCopy} from './xtream-saleh-copy-capability.mjs';
@@ -77,6 +78,7 @@ import {permittedLicensedLiveFanout,permittedSharedLivePilot,
 import {claimDurableSharedLiveTrial,durableSharedLiveTrialEnabled}
   from './xtream-shared-pilot-registry.mjs';
 const firstAccountSharedLiveTestPilot=createFirstAccountSharedLiveTestPilot();
+const protectedArabicAudio=createProtectedArabicAudioBridge();
 import {shouldUseIndependentSourceMedia,shouldFallbackIndependentVod} from './xtream-independent-source-media-policy.mjs';
 import {shouldCompareRelay404Direct} from './xtream-relay-404-direct-recovery.mjs';
 import {readSanitizedXtreamRelayFailure} from './xtream-relay-diagnostic.mjs';
@@ -2420,6 +2422,24 @@ http.createServer = function withBlofyXtreamGateway(listener) {
           serverNow:now,expiresAt:expiry,
           daysRemaining:expiry==null?null:Math.max(0,Math.ceil((expiry-now)/86400000))},
           {'cache-control':'no-store'});
+      }
+      // Code-only BLOFY STREAM audio route. Each list and media request
+      // independently validates the active voucher/device-bound app bearer.
+      // Never return raw upstream HTTP addresses or operator credentials.
+      if(req.method==='GET'&&url.pathname==='/api/v1/stream/audio/catalog'){
+        if(!requirePublicBudget(req,res))return;
+        const account=await authenticateAppBearer(req);
+        if(!account)return json(res,401,{ok:false,error:'stream_app_session_invalid'});
+        const selected=protectedArabicAudio.catalog();
+        return json(res,selected.status,selected.body,{'cache-control':'no-store, private'});
+      }
+      const protectedAudio=url.pathname.match(
+        /^\/api\/v1\/stream\/media\/audio\/(anis-[a-z0-9-]{1,54})$/);
+      if(protectedAudio&&(req.method==='GET'||req.method==='HEAD')){
+        if(!requirePublicBudget(req,res))return;
+        const account=await authenticateAppBearer(req);
+        if(!account)return text(res,401,'Unauthorized');
+        return protectedArabicAudio.stream(req,res,protectedAudio[1],account.id);
       }
       const tokenMedia=url.pathname.match(
         /^\/api\/v1\/stream\/media\/(live|movie|series)\/([0-9]+)(?:\.([A-Za-z0-9]{1,8}))?$/i);
