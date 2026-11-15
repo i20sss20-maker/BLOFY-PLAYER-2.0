@@ -582,6 +582,22 @@ http.createServer=function withContentHubAdmin(listener){
      return json(res,response.status,await response.json());
     }
    }
+   const mirrorMediaQa=/^\/api\/v1\/admin\/content-hub\/mirror\/media-qa\/(movie|episode)\/([1-9][0-9]{0,14})$/.exec(path);
+   if(mirrorMediaQa&&['GET','POST'].includes(req.method)){
+    if(String(req.url||'').includes('?'))
+     return json(res,400,{ok:false,code:'mirror_qa_query_denied'});
+    if(req.method==='POST'&&
+       req.headers['x-blofy-owner-action']!=='verify-private-mirror-playback')
+     return json(res,403,{ok:false,code:'mirror_qa_owner_action_required'});
+    const opts={method:req.method,signal:AbortSignal.timeout(10000)};
+    if(req.method==='POST')
+     opts.extraHeaders={'x-blofy-owner-action':'verify-private-mirror-playback'};
+    const response=await request('/internal/mirror/media-qa/'+
+      mirrorMediaQa[1]+'/'+mirrorMediaQa[2],opts);
+    if(![200,202,400,403,409].includes(response.status))
+     return json(res,503,{ok:false,code:'mirror_qa_unavailable'});
+    return json(res,response.status,await safeReadJson(response));
+   }
    if(path==='/api/v1/admin/content-hub/mirror/episode/status'&&
       req.method==='GET'){
      const response=await request('/internal/mirror/episode/status',{
