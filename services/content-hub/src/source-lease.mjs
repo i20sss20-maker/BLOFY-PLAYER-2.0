@@ -317,8 +317,18 @@ export function createSourceLease({connectionString,
       !/^[a-f0-9]{64}$/.test(part.sha256)||
       !/^saleh\/episode\/[a-f0-9-]{36}\/batch_[a-f0-9]{24}_part_[0-9]{6}\.(?:mkv|mp4|ts|avi)$/.test(part.key)))
     return null;
+   // Prevent a verified episode from referencing chunks belonging to a
+   // different provider source, even if its saved SHA record matches.
+   const episodeSource=String(row.source_id||'');
+   const episodeMedia=String(row.media_id||'');
+   const episodeGateway=Number(row.gateway_id);
+   if(!/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(episodeSource)||
+     !/^[A-Za-z0-9._-]{1,128}$/.test(episodeMedia)||
+     !Number.isSafeInteger(episodeGateway)||episodeGateway<1||
+     parts.some(p=>!p.key.startsWith('saleh/episode/'+episodeSource+'/')))
+    return null;
    return {kind:'chunked',mediaKind:'episode',
-    sourceId:String(row.source_id||''),mediaId:String(row.media_id||''),
+    sourceId:episodeSource,mediaId:episodeMedia,
     gatewayId:Number(row.gateway_id),extension:row.extension,
     bytes,sha256:row.verified_sha256,parts};
   },
@@ -424,8 +434,16 @@ export function createSourceLease({connectionString,
        !/^[a-f0-9]{64}$/.test(part.sha256)||
        !/^saleh\/movie\/[a-f0-9-]{36}\/batch_[a-f0-9]{24}_part_[0-9]{6}\.(?:mkv|mp4|ts|avi)$/.test(part.key)))
     return null;
+   const movieSource=String(row.source_id||'');
+   const movieMedia=String(row.media_id||'');
+   const movieGateway=Number(row.gateway_id);
+   if(!/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(movieSource)||
+     !/^[A-Za-z0-9._-]{1,128}$/.test(movieMedia)||
+     !Number.isSafeInteger(movieGateway)||movieGateway<1||
+     parts.some(p=>!p.key.startsWith('saleh/movie/'+movieSource+'/')))
+    return null;
    return {kind:'chunked',mediaKind:'movie',
-     sourceId:String(row.source_id||''),mediaId:String(row.media_id||''),
+     sourceId:movieSource,mediaId:movieMedia,
      gatewayId:Number(row.gateway_id),bytes,extension:row.extension,
      sha256:row.verified_sha256,parts};
   },
