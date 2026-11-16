@@ -195,6 +195,8 @@ export function createContentHubServer({storage,lease,
   // prove video frames AND audible-track samples are decodable. Does not
   // contact the Xtream origin or expose a playback URL to customers.
   if(path==='/internal/mirror/copy/canary'){
+   if(pilotEnv.BLOFY_CONTENT_HUB_MIRROR_AV_CANARY_ENABLED!=='1')
+    return json(res,404,{ok:false,code:'mirror_canary_feature_disabled'});
    if(req.method!=='POST'||String(req.url||'').includes('?'))
     return json(res,405,{ok:false,code:'mirror_canary_post_only'});
    if(req.headers['x-blofy-owner-action']!=='verify-private-mirror-audio-video')
@@ -235,9 +237,30 @@ export function createContentHubServer({storage,lease,
           providerRequests:0,customerCutover:false});
       quarantined=true;
     }
+    // Persist a timestamped PARTIAL decoder sample against the SAME
+    // verified DB manifest SHA, not a claim that device/full playback works.
+    let avSamplePersisted=false;
+    if(result.ok===true&&Number(result.videoFramesDecoded)>=1&&
+       Number(result.audioFramesDecoded)>=1){
+      if(typeof lease?.recordMirrorAvSample!=='function')
+        return json(res,503,{ok:false,code:'mirror_av_sample_store_missing',
+          providerRequests:0,customerCutover:false});
+      try{
+        const proof=await lease.recordMirrorAvSample({
+          runId,kind:mediaKind,
+          videoFramesDecoded:Number(result.videoFramesDecoded),
+          audioFramesDecoded:Number(result.audioFramesDecoded)
+        });
+        if(proof.ok!==true)throw Error('mirror_av_sample_not_saved');
+        avSamplePersisted=true;
+      }catch{return json(res,503,{ok:false,
+        code:'mirror_av_sample_not_persisted',
+        providerRequests:0,customerCutover:false})}
+    }
     // Strictly report bounded nonsecret telemetry; not codec FFmpeg logs.
     const summary={ok:result.ok===true,code:String(result.code||''),
       quarantinedOnHashMismatch:quarantined,
+      avSamplePersisted,avSampleOnly:true,devicePlaybackVerified:false,
       runId,mediaKind,privateOnly:true,customerCutover:false,
       providerRequests:0,audioVideoDecoded:result.ok===true,
       videoTracks:Number(result.videoTracks||0),
