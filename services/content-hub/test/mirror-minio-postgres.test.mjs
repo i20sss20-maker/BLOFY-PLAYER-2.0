@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createHash,randomUUID} from 'node:crypto';
+import {createHash} from 'node:crypto';
 import {mkdtemp,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -60,10 +60,13 @@ test('real encrypted S3+PG+FFmpeg: lost ACK recovery and SHA/AV for movie and ep
  skip:!(process.env.BLOFY_TEST_PG_URL&&process.env.BLOFY_TEST_MINIO_URL),
  timeout:110000
 },async()=>{
- const bucket='blofy-ci-'+randomUUID().replaceAll('-','').slice(0,26);
+ // Isolated container per CI job. Stable name permits one deliberate
+ // virtual-host DNS entry (bucket.localhost) without production DNS.
+ const bucket='blofy-ci-virtualhost';
  const client=new S3Client({
-  endpoint:process.env.BLOFY_TEST_MINIO_URL,region:'us-east-1',
-  forcePathStyle:true,maxAttempts:2,
+  endpoint:process.env.BLOFY_TEST_MINIO_VIRTUAL_URL||
+   process.env.BLOFY_TEST_MINIO_URL,region:'us-east-1',
+  forcePathStyle:false,maxAttempts:2,
   credentials:{accessKeyId:'blofyci_testkey',
    secretAccessKey:'blofyci_testsecret123456'}
  });
@@ -91,7 +94,7 @@ test('real encrypted S3+PG+FFmpeg: lost ACK recovery and SHA/AV for movie and ep
     BLOFY_CONTENT_HUB_S3_ACCESS_KEY_ID:'blofyci_testkey',
     BLOFY_CONTENT_HUB_S3_SECRET_ACCESS_KEY:'blofyci_testsecret123456',
     BLOFY_CONTENT_HUB_S3_REGION:'us-east-1',
-    BLOFY_CONTENT_HUB_S3_URL_STYLE:'path'
+    BLOFY_CONTENT_HUB_S3_URL_STYLE:'virtual-host'
    },client
   });
   let adapterError=null;
