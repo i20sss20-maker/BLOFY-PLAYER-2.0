@@ -58,6 +58,7 @@ export async function runIsolatedMirrorPgS3({
 }={}){
  const report={ok:false,code:'qa_integration_not_started',...BASE};
  let storage=null,lease=null,pool=null,httpServer=null;
+ let bucketInitiallyVerifiedEmpty=false;
  const keys=new Set(),runIds=[];
  try{
   gate(env);
@@ -65,6 +66,7 @@ export async function runIsolatedMirrorPgS3({
   const initial=await storage.measurePrivateUsage({maxObjects:200});
   if(initial?.ok!==true||initial.objectCount!==0||initial.usedBytes!==0)
    fail('qa_integration_bucket_not_empty');
+  bucketInitiallyVerifiedEmpty=true;
   const media=await buildMedia();
   if(!Buffer.isBuffer(media)||media.length!==SIZE)
    fail('qa_integration_bad_synthetic_media');
@@ -213,7 +215,7 @@ export async function runIsolatedMirrorPgS3({
   }
   if(lease)await lease.close().catch(()=>{report.dbRowsCleaned=false});
   if(pool)await pool.end().catch(()=>{report.dbRowsCleaned=false});
-  if(storage){
+  if(storage&&bucketInitiallyVerifiedEmpty){
    let deleted=true;
    for(const key of keys){
     try{await storage.remove({key})}catch{deleted=false}
@@ -225,7 +227,7 @@ export async function runIsolatedMirrorPgS3({
      usage.objectCount===0&&usage.usedBytes===0;
    }catch{report.s3ObjectsCleaned=false}
   }
-  if((storage&&!report.s3ObjectsCleaned)||
+  if((storage&&bucketInitiallyVerifiedEmpty&&!report.s3ObjectsCleaned)||
      (pool&&!report.dbRowsCleaned)){
    report.ok=false;report.code='qa_integration_cleanup_unverified';
   }
