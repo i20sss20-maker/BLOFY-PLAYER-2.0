@@ -45,6 +45,8 @@ import { acceptsXtreamGzip } from './xtream-catalog-compression.mjs';
 import { shouldRetryXtreamWithoutRange,firstByteXtreamRange } from './xtream-media-range.mjs';
 import { recordXtreamPlayback,xtreamPlaybackSnapshot } from './xtream-playback-metrics.mjs';
 import {xtreamDirectMediaGauge} from './xtream-direct-media-gauge.mjs';
+import {summarizeStreamSourceCapacity} from './stream-source-capacity-report.mjs';
+import {assessMirrorSourceHeadroom} from './xtream-mirror-source-headroom.mjs';
 import { XtreamDenialCooldown } from './xtream-denial-cooldown.mjs';
 import { createGatewayUsageThrottle } from './xtream-gateway-usage-throttle.mjs';
 import {createDistributorCustomerCatalog}
@@ -1873,6 +1875,34 @@ async function hubApprovedMovieId(){
   throw Object.assign(Error('content_hub_movie_missing'),{status:404});
  hubPilotMovieId=candidate;return candidate;
 }
+// Provider account metadata from the last explicit source test + this
+// Portal's in-memory direct HTTP transfers. NO new Xtream API/stream calls.
+// These counters exclude external relays, HLS edges and other replicas,
+// so this is a conservative gate, not a reliable viewer count.
+async function checkMirrorCachedHeadroom(sourceId){
+ try{
+  const result=await pool.query([
+   'SELECT id,name,enabled,status,account_info,last_test_at',
+   'FROM blofy_xtream_servers',
+   'WHERE id=$1 AND deletion_requested_at IS NULL LIMIT 2'
+  ].join(' '),[sourceId]);
+  const now=Date.now();
+  const mapped=(result.rows||[]).map(row=>({
+   id:row.id,name:row.name,enabled:row.enabled,status:row.status,
+   accountInfo:row.account_info||{},
+   lastTestAt:row.last_test_at?
+    new Date(row.last_test_at).getTime():null
+  }));
+  const report=summarizeStreamSourceCapacity(mapped,null,{
+   now,maxAgeMs:10*60*1000,
+   gatewayDirectMedia:xtreamDirectMediaGauge.snapshot()
+  });
+  return assessMirrorSourceHeadroom(report,{sourceId,now});
+ }catch{return {ok:false,code:'mirror_source_headroom_unavailable',
+   blockedBy:['mirror_source_headroom_unavailable'],
+   providerMediaRequests:0,customerCutover:false}}
+}
+
 async function handlePrivateContentHubSource(req,res,url){
  if(process.env.BLOFY_CONTENT_HUB_BRIDGE_ENABLED!=='1')
   return json(res,404,{ok:false,code:'content_hub_source_disabled'});
@@ -1889,7 +1919,8 @@ async function handlePrivateContentHubSource(req,res,url){
   if(process.env.BLOFY_CONTENT_HUB_MIRROR_BRIDGE_ENABLED!=='1'||
      process.env.BLOFY_CONTENT_HUB_STORAGE_RIGHTS_CONFIRMED!=='1'||
      process.env.BLOFY_CONTENT_HUB_SOURCE_IDLE_CONFIRMED!=='1'||
-     process.env.BLOFY_CONTENT_HUB_SOURCE_QUIET_WINDOW_CONFIRMED!=='1')
+     process.env.BLOFY_CONTENT_HUB_SOURCE_QUIET_WINDOW_CONFIRMED!=='1'||
+     process.env.BLOFY_CONTENT_HUB_MIRROR_SOURCE_HEADROOM_ENABLED!=='1')
    return json(res,404,{ok:false,code:'mirror_private_bridge_disabled'});
   if(url.search)return json(res,400,{ok:false,
    code:'mirror_private_bridge_query_denied'});
@@ -1901,6 +1932,13 @@ async function handlePrivateContentHubSource(req,res,url){
    return json(res,403,{ok:false,code:'mirror_range_owner_action_missing'});
   const approved=await loadApprovedMirrorItem(pool,{kind,id});
   if(!approved.ok)return json(res,409,approved);
+  const headroom=await checkMirrorCachedHeadroom(approved.sourceId);
+  if(headroom?.ok!==true)
+   return json(res,409,{ok:false,
+    code:'mirror_source_headroom_insufficient',
+    blockedBy:Array.isArray(headroom?.blockedBy)?
+      headroom.blockedBy.slice(0,12):['mirror_source_headroom_unavailable'],
+    providerMediaRequests:0,customerCutover:false});
   if(operation==='approval')return json(res,200,approved);
   const range=parseContentHubClientRange(req.headers.range);
   if(!range||range.to>=approved.expectedBytes)
