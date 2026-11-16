@@ -69,3 +69,69 @@ operator-only, per-item 4 KiB source range probe and a separate PostgreSQL
 Run tests with `cd services/activation && node --test
 test/xtream-mirror-transfer-preflight.test.mjs`. No live provider endpoint,
 S3 bucket or subscriber path is accessed by the unit tests.
+
+
+## 16 November: limited resumable worker code (DRAFT, not deployed)
+
+The owner-only copy path is now implemented **in this feature branch only**.
+This is no longer merely a queue design, but NO real file copy was triggered
+and NO production feature switches were changed as part of the change.
+
+- Portal: strict, private, token-protected approval lookup for one staged
+  *saleh* item with an eligible recent preflight, exact catalog mapping,
+  8 MiB–4 GiB size, nonempty rights-evidence SHA-256, and source validator.
+- Portal: per-item private 206 source Range bridge, at most one upstream
+  media request at a time, with no redirects, no fallback to full GET,
+  exact source mapping and file-size validation.
+- Content Hub: one 8 MiB S3 checkpoint per execution; it records source
+  ETag/Last-Modified, validates every downloaded byte and independently
+  reads back each private chunk's SHA-256. Final completion requires a
+  separate full-file hash recomputed over ALL saved S3 chunks. A stored
+  checkpoint survives worker restarts; verified files cannot be downloaded
+  again under the same stable run ID.
+- A **manually approved bounded background session** can start up to 16
+  sequential chunks (128 MiB) or 20 minutes, whichever comes first, with
+  3-second spacing. It supports explicit pause; it never auto-resumes after
+  a restart. Every chunk rechecks private Portal approval and actual S3 usage.
+  No customer playback or download destination is changed.
+- BLOFY STREAM owner UI (companion BLOFY-SOURCES PR #107) shows an explicit
+  size probe, limited transfer start, and pause. Read-only Content Hub status
+  exposes session progress and the last checkpoint result.
+
+### New gates (all OFF unless an operator separately authorizes them)
+
+On **the private activation Portal**:
+- BLOFY_CONTENT_HUB_MIRROR_BRIDGE_ENABLED=1
+- BLOFY_CONTENT_HUB_STORAGE_RIGHTS_CONFIRMED=1
+- BLOFY_CONTENT_HUB_SOURCE_IDLE_CONFIRMED=1
+- BLOFY_CONTENT_HUB_SOURCE_QUIET_WINDOW_CONFIRMED=1
+- BLOFY_STREAM_MIRROR_TRANSFER_CONTROL_ENABLED=1
+- Earlier metadata-intake, private manifest reconcile, and size preflight
+  gates must also remain explicitly authorized.
+
+On **the private Content Hub**:
+- BLOFY_CONTENT_HUB_MIRROR_WORKER_ENABLED=1
+- BLOFY_CONTENT_HUB_UPLOAD_ENABLED=1
+- BLOFY_CONTENT_HUB_STORAGE_RIGHTS_CONFIRMED=1
+- BLOFY_CONTENT_HUB_SOURCE_IDLE_CONFIRMED=1
+- BLOFY_CONTENT_HUB_SOURCE_QUIET_WINDOW_CONFIRMED=1
+- BLOFY_CONTENT_HUB_MIRROR_BUDGET_BYTES=<reviewed spending allocation>
+- Correct private S3 credentials, Hub operator Bearer token and separate
+  Portal data-plane bridge token. Never paste tokens into source code.
+
+### Existing barriers to real automatic *daily* copying
+
+- Verify the Railway bucket's S3 versioning/list APIs, account egress and
+  fresh capacity snapshot against production without disturbing viewers.
+- Demonstrate an owner-approved low-load canary of **one file**, including
+  preserved audio and video and a valid full-file SHA-256. Capture source
+  impact, paid S3 costs, and connection-limit evidence.
+- A multi-item scheduler and daily VOD delta import are **not yet enabled**.
+  The 04:00 Riyadh catalog metadata sync does NOT authorize bulk copying.
+  Avoid assuming 100,000s of catalog entries have copy rights or capacity.
+- Add progress/health alerts and controlled retry/pause/resume policy before
+  any unattended jobs. There is still no subscriber cutover.
+
+Developer offline verification: the normal activation and Content Hub CI
+suites include mirror worker approval, private Range bridge contracts, S3
+capacity and one/two-chunk resumable transfer tests.
