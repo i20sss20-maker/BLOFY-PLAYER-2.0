@@ -515,6 +515,28 @@ export function createSourceLease({connectionString,
      new Date(a.updatedAt||0).getTime());
    return out.slice(0,limit);
   },
+  // Hash-corrupted private S3 data must NEVER stay eligible for future
+  // customer/device playback. Immutable mirror runs can only be
+  // quarantined from verified -> failed, never automatically restored.
+  // Do not delete evidence or any S3 object as part of quarantine.
+  async quarantineMirrorRun({runId,kind}={}){
+   if(!/^mirror_[a-f0-9]{32}$/.test(String(runId||''))||
+      !['movie','episode'].includes(kind))
+    throw Error('mirror_quarantine_scope_invalid');
+   const table=kind==='movie'?
+    'blofy_content_hub_chunk_runs':'blofy_content_hub_episode_runs';
+   const result=await pool.query([
+    'UPDATE',table,
+    "SET state='failed',error_code='mirror_private_sha256_mismatch',",
+    'updated_at=NOW()',
+    "WHERE run_id=$1 AND state='verified' RETURNING run_id"
+   ].join(' '),[runId]);
+   return {ok:result.rowCount===1,
+    code:result.rowCount===1?'mirror_sha_corruption_quarantined':
+      'mirror_quarantine_not_verified',
+    privateOnly:true,customerCutover:false,
+    providerRequests:0,storageObjectsDeleted:0};
+  },
   async chunkedStorageAccounting(){
    const res=await pool.query(`SELECT
     COUNT(*) FILTER(WHERE state='verified')::int AS verified_count,
