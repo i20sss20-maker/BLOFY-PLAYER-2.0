@@ -1,0 +1,90 @@
+// Admin-only, read-only service monitor. No customer data and no arbitrary URL inputs.
+import { readFile } from 'node:fs/promises';
+
+export const CONTROL_CENTER_TARGETS = Object.freeze([
+  Object.freeze({ id:'player', label:'موقع BLOFY PLAYER', tier:'production', endpoint:'https://blofyplayer.com/health' }),
+  Object.freeze({ id:'updates', label:'خدمة التطبيقات والتحديثات', tier:'production', endpoint:'https://updates.blofyplayer.com/health' }),
+  Object.freeze({ id:'stream', label:'واجهة BLOFY STREAM', tier:'production', endpoint:'https://blofy-stream-api-production.up.railway.app/health' }),
+  Object.freeze({ id:'lab', label:'مختبر مركز التحكم', tier:'test', endpoint:'https://blofy-control-center-lab-test.up.railway.app/health' })
+]);
+const CACHE_MS=25_000;
+const PROBE_TIMEOUT_MS=4500;
+const MAX_HISTORY=24;
+let cached=null;
+let cachedAt=0;
+let pending=null;
+const history=[];
+export function classifyControlCenterStatus(status) {
+  if(Number.isInteger(status) && status>=200 && status<=299)return 'healthy';
+  if(Number.isInteger(status) && status>=300 && status<=499)return 'reachable';
+  return 'error';
+}
+export async function probeControlCenterTarget(target, fetchImpl=fetch, now=Date.now) {
+  const started=now();
+  const controller=new AbortController();
+  const stop=setTimeout(()=>controller.abort(),PROBE_TIMEOUT_MS);
+  try {
+    const response=await fetchImpl(target.endpoint,{
+      method:'GET',redirect:'manual',signal:controller.signal,
+      headers:{accept:'application/json,text/plain,*/*;q=0.1','user-agent':'BLOFY-Control-Center-Admin/1.0'}
+    });
+    try {await response.body?.cancel();} catch {}
+    return {
+      id:target.id,name:target.label,tier:target.tier,
+      status:classifyControlCenterStatus(response.status),
+      httpStatus:response.status,latencyMs:Math.max(0,now()-started),
+      note:response.status>=200 && response.status<=299
+        ? 'نجح فحص HTTP، وليس اختبارًا لجودة تشغيل الوسائط'
+        : 'الخادم ردّ برمز HTTP لا يؤكد جاهزية الخدمة'
+    };
+  } catch(error) {
+    return {
+      id:target.id,name:target.label,tier:target.tier,
+      status:'offline',httpStatus:null,latencyMs:Math.max(0,now()-started),
+      note:controller.signal.aborted?'انتهت مهلة الاتصال':'تعذر الوصول إلى الخدمة'
+    };
+  } finally {clearTimeout(stop);}
+}
+export async function controlCenterSnapshot() {
+  if(cached && Date.now()-cachedAt<CACHE_MS)return cached;
+  if(pending)return pending;
+  pending=(async()=>{
+    const checks=await Promise.all(CONTROL_CENTER_TARGETS.map(target=>probeControlCenterTarget(target)));
+    const result={
+      product:'BLOFY CONTROL CENTER',version:1,mode:'read-only',
+      checkedAt:new Date().toISOString(),
+      checks,
+      summary:{
+        total:checks.length,
+        healthy:checks.filter(c=>c.status==='healthy').length,
+        reachable:checks.filter(c=>c.status==='reachable').length,
+        failed:checks.filter(c=>['error','offline'].includes(c.status)).length
+      },
+      scope:'HTTP service reachability only; no media playback or audio inspection',
+      phases:[
+        {label:'لوحة المراقبة',state:'pilot'},
+        {label:'فحص القنوات والصوت والفيديو',state:'planned'},
+        {label:'توزيع الأحمال والتحويل الاحتياطي',state:'planned'},
+        {label:'المكتبة والمزامنة الآمنة',state:'planned'},
+        {label:'الموزعون والأكواد الجماعية',state:'planned'},
+        {label:'مساعد AI الإداري',state:'planned'}
+      ]
+    };
+    cached=result;cachedAt=Date.now();
+    history.push({checkedAt:result.checkedAt,summary:result.summary});
+    while(history.length>MAX_HISTORY)history.shift();
+    return result;
+  })();
+  try{return await pending;}finally{pending=null;}
+}
+const ASSETS=Object.freeze({
+  page:{file:'admin-control-center.html',type:'text/html; charset=utf-8'},
+  css:{file:'admin-control-center.css',type:'text/css; charset=utf-8'},
+  js:{file:'admin-control-center.js',type:'text/javascript; charset=utf-8'}
+});
+export async function controlCenterAsset(key) {
+  const asset=ASSETS[key];
+  if(!asset)throw new Error('unknown_control_center_asset');
+  const content=await readFile(new URL('../web/'+asset.file,import.meta.url));
+  return {content,type:asset.type};
+}
