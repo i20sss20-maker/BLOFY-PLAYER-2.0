@@ -32,8 +32,10 @@ export async function runIsolatedS3Smoke({
   // Content Hub bucket by accidentally swapping a variable reference.
   // Real Railway T3 canary has one pinned bucket; test-only adapters
   // may use other names because they cannot reach the production endpoint.
-  if(String(env.BLOFY_CONTENT_HUB_S3_ENDPOINT||'')===
-      'https://t3.storageapi.dev'&&
+  let storageHostname='';
+  try{storageHostname=new URL(String(env.BLOFY_CONTENT_HUB_S3_ENDPOINT||''))
+   .hostname.toLowerCase()}catch{}
+  if(storageHostname.endsWith('.storageapi.dev')&&
      env.BLOFY_CONTENT_HUB_S3_BUCKET!=='blofy-mirror-s3-isolated-qa')
    err('qa_production_bucket_reference_forbidden');
   if(env.BLOFY_CONTENT_HUB_S3_URL_STYLE!=='virtual-host')
