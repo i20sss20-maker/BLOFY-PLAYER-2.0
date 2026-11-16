@@ -3589,6 +3589,10 @@ async function unifiedStreamBridge(req,res,url){
       return json(res,405,{ok:false,code:'mirror_preflight_post_only'});
     if(process.env.BLOFY_STREAM_MIRROR_PREFLIGHT_ENABLED!=='1')
       return json(res,404,{ok:false,code:'mirror_preflight_feature_disabled'});
+    if(process.env.BLOFY_STREAM_MIRROR_PREFLIGHT_SOURCE_IDLE_CONFIRMED!=='1'||
+       process.env.BLOFY_STREAM_MIRROR_PREFLIGHT_QUIET_WINDOW_CONFIRMED!=='1')
+      return json(res,409,{ok:false,
+        code:'mirror_preflight_source_idle_not_confirmed'});
     if(req.headers['x-blofy-owner-action']!=='probe-private-mirror-intake')
       return json(res,403,{ok:false,code:'mirror_preflight_owner_action_required'});
     let input;
