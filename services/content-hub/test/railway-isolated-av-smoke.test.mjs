@@ -124,6 +124,7 @@ test('A/V verification is refused without an explicit synthetic video QA flag',{
  assert.equal(result.sourceRequests,0);
  assert.equal(result.customerCutover,false);
  assert.equal(result.avVerified,false);
- assert.equal(result.objectCountAfter,0);
- assert.equal(received,true);
+ assert.equal(result.code,'qa_av_validation_not_authorized');
+ assert.equal(result.objectCountAfter,null);
+ assert.equal(received,false);
 });
