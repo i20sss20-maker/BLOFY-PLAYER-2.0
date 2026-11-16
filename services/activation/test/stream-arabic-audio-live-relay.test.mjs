@@ -6,7 +6,7 @@ import {createProtectedArabicAudioBridge,sniffFirstAudioMime}
   from '../src/stream-arabic-audio-bridge.mjs';
 
 const playlist=JSON.stringify({playlist:[
-  {channel:'Anis Max 1',url:'http://radio.anisfm.vip/live/mx/1?token=FICTIONAL_ONLY'}
+  {channel:'BLOFY 1',url:'http://foxfm.xyz/1'}
 ]});
 function makeBridge(packet,declaredType='text/plain') {
   return createProtectedArabicAudioBridge({
