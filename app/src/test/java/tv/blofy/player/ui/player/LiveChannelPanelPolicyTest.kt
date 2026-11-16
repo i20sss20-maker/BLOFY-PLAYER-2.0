@@ -29,8 +29,8 @@ class LiveChannelPanelPolicyTest {
     @Test fun rowsVisibleAboveFooter() {
         val tv = LiveChannelPanelPolicy.dimensions(true, false)
         val phone = LiveChannelPanelPolicy.dimensions(false, false)
-        assertEquals(0.30f, tv.first)
-        assertEquals(0.84f, tv.second)
+        assertEquals(0.31f, tv.first)
+        assertEquals(0.94f, tv.second)
         assertEquals(0.82f, phone.first)
     }
 }

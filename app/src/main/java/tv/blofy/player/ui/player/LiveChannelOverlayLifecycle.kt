@@ -370,15 +370,15 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                     setStroke(dp(1), 0x4D7956A8.toInt())
                 }
                 elevation = dp(7).toFloat()
-                addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(36)))
-                addView(hint, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(24)))
+                addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(30)))
+                addView(hint, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(19)))
                 if (BuildConfig.CODE_ONLY_LOGIN) {
                     searchField?.let { addView(it, LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT, dp(46)).apply {
+                        ViewGroup.LayoutParams.MATCH_PARENT, dp(42)).apply {
                             marginStart = dp(7); marginEnd = dp(7); bottomMargin = dp(5)
                         }) }
-                    addView(tabs, LinearLayout.LayoutParams(-1, dp(40)))
-                    addView(count, LinearLayout.LayoutParams(-1, dp(19)))
+                    addView(tabs, LinearLayout.LayoutParams(-1, dp(36)))
+                    addView(count, LinearLayout.LayoutParams(-1, dp(17)))
                 }
                 // Channel rows scroll above the controls. Both are in this one
                 // translucent panel, not in separate floating HUD windows.
@@ -402,15 +402,14 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                             view.setOnKeyListener { _, keyCode, event ->
                                 if (event.action == KeyEvent.ACTION_DOWN &&
                                     keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                                    ((actions.getChildAt(0) as? LinearLayout)?.getChildAt(1))
-                                        ?.requestFocus() == true
+                                    (actions.tag as? View)?.requestFocus() == true
                                 } else false
                             }
                         }
                         override fun onChildViewDetachedFromWindow(view: View) = Unit
                     })
                     addView(actions, LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT, dp(154)))
+                        ViewGroup.LayoutParams.MATCH_PARENT, dp(76)))
                 }
             }
 
@@ -566,24 +565,42 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 isVerticalScrollBarEnabled = true
                 overScrollMode = View.OVER_SCROLL_NEVER
                 background = null
+                descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
             }
             val footer = LinearLayout(activity).apply {
                 orientation = LinearLayout.VERTICAL
                 layoutDirection = activity.resources.configuration.layoutDirection
-                setPadding(dp(8), dp(3), dp(8), dp(6))
+                setPadding(dp(8), dp(3), dp(8), dp(4))
+            }
+            // The compact bottom bar is fixed, while channel rows above it
+            // keep the remaining available height. Only expanding the audio
+            // menu makes this single footer taller.
+            fun resizeActions(requestedDp: Int) {
+                scroller.post {
+                    val params = scroller.layoutParams ?: return@post
+                    val screenH = activity.resources.displayMetrics.heightPixels
+                    val safePx = (screenH * 0.55f).toInt()
+                    val heightPx = if (requestedDp <= 80) dp(requestedDp)
+                        else minOf(dp(requestedDp), safePx)
+                    if (params.height != heightPx) {
+                        params.height = heightPx
+                        scroller.layoutParams = params
+                    }
+                }
             }
             fun resetScroll() { scroller.post { scroller.scrollTo(0, 0) } }
             fun addHeading(caption: String) {
                 footer.addView(TextView(activity).apply {
                     text = caption
-                    textSize = 12f
+                    textSize = 11.5f
                     setTextColor(BlofyTvDesign.TextSecondary)
                     typeface = BlofyTvDesign.HeadingTypeface
-                    setPadding(dp(9), dp(6), dp(9), dp(5))
-                }, LinearLayout.LayoutParams(-1, dp(29)))
+                    setPadding(dp(9), dp(3), dp(9), dp(2))
+                }, LinearLayout.LayoutParams(-1, dp(22)))
             }
             fun button(label: String, onTap: () -> Unit): TextView {
                 val result = TextView(activity).apply {
+                    id = View.generateViewId()
                     text = label
                     contentDescription = label
                     textSize = 12.5f
@@ -591,17 +608,23 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                     ellipsize = android.text.TextUtils.TruncateAt.END
                     setTextColor(Color.WHITE)
                     typeface = BlofyTvDesign.HeadingTypeface
-                    gravity = Gravity.CENTER_VERTICAL or Gravity.START
-                    setPadding(dp(11), 0, dp(11), 0)
+                    gravity = Gravity.CENTER
+                    setPadding(dp(7), 0, dp(7), 0)
                     isFocusable = true
                     isClickable = true
                     fun shape(focused: Boolean) = GradientDrawable().apply {
                         cornerRadius = dp(10).toFloat()
-                        setColor(if (focused) 0xDE60428D.toInt() else 0x76272238)
-                        setStroke(dp(1), if (focused) 0xFFCFADFF.toInt() else 0x665E4787)
+                        setColor(if (focused) 0xFF60428D.toInt() else 0xEF272238.toInt())
+                        setStroke(dp(if (focused) 2 else 1),
+                            if (focused) 0xFFCFADFF.toInt() else 0xFF5E4787.toInt())
                     }
                     background = shape(false)
-                    setOnFocusChangeListener { view, focused -> view.background = shape(focused) }
+                    setOnFocusChangeListener { view, focused ->
+                        view.background = shape(focused)
+                        view.animate().cancel()
+                        view.animate().alpha(if (focused) 1f else 0.92f)
+                            .setDuration(90L).start()
+                    }
                     setOnClickListener { onTap() }
                     setOnKeyListener { _, keyCode, event ->
                         if (event.action == KeyEvent.ACTION_DOWN &&
@@ -621,52 +644,85 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 audioPickerOpen = false
                 footer.removeAllViews()
                 addHeading(copy("BLOFY • التحكم بالبث", "BLOFY • LIVE CONTROLS"))
-                for (action in LiveChannelPanelPolicy.actions(BuildConfig.CODE_ONLY_LOGIN, expanded)) {
-                    val label = when (action) {
-                        LiveChannelPanelAction.BLOFY_AUDIO ->
-                            copy("♫  اختر التعليق العربي", "♫  Choose Arabic voice")
-                        LiveChannelPanelAction.FAVORITE ->
-                            copy("☆  المفضلة", "☆  Toggle favorite")
-                        LiveChannelPanelAction.EPG ->
-                            copy("▣  الآن والقادم", "▣  Now and next")
-                        LiveChannelPanelAction.MORE ->
-                            if (expanded) copy("⌃  إخفاء", "⌃  Fewer controls")
-                            else copy("⌄  خيارات إضافية", "⌄  More controls")
-                        LiveChannelPanelAction.AUDIO_TRACKS ->
-                            copy("◉  صوت القناة", "◉  Original audio tracks")
-                        LiveChannelPanelAction.SUBTITLES ->
-                            copy("CC  الترجمة", "CC  Subtitles")
-                        LiveChannelPanelAction.VIDEO_QUALITY ->
-                            copy("▣  الجودة", "▣  Video quality")
-                        LiveChannelPanelAction.STREAM_INFO ->
-                            copy("ⓘ  معلومات البث", "ⓘ  Stream information")
-                        LiveChannelPanelAction.RECONNECT ->
-                            copy("↻  إعادة الاتصال", "↻  Reconnect")
-                    }
-                    button(label) {
-                        when (action) {
-                            LiveChannelPanelAction.BLOFY_AUDIO -> showInlineArabicVoices(
-                                footer, scroller, ::button, ::addHeading) { showActions(false) }
-                            LiveChannelPanelAction.MORE -> {
-                                showActions(!expanded)
-                                footer.post { footer.getChildAt(1)?.requestFocus() }
+                fun actionLabel(action: LiveChannelPanelAction): String = when (action) {
+                    LiveChannelPanelAction.BLOFY_AUDIO -> copy("♫ المعلق", "♫ Commentary")
+                    LiveChannelPanelAction.FAVORITE -> copy("☆ المفضلة", "☆ Favorite")
+                    LiveChannelPanelAction.EPG -> copy("▣ الآن والقادم", "▣ Now and next")
+                    LiveChannelPanelAction.MORE -> if (expanded)
+                        copy("⌃ إخفاء الخيارات", "⌃ Close options")
+                        else copy("⚙ المزيد", "⚙ More")
+                    LiveChannelPanelAction.AUDIO_TRACKS ->
+                        copy("◉ صوت القناة", "◉ Original audio tracks")
+                    LiveChannelPanelAction.SUBTITLES -> copy("CC الترجمة", "CC Subtitles")
+                    LiveChannelPanelAction.VIDEO_QUALITY -> copy("▣ الجودة", "▣ Quality")
+                    LiveChannelPanelAction.STREAM_INFO ->
+                        copy("ⓘ معلومات البث", "ⓘ Stream info")
+                    LiveChannelPanelAction.RECONNECT -> copy("↻ إعادة الاتصال", "↻ Reconnect")
+                }
+                fun addAction(action: LiveChannelPanelAction): TextView = button(actionLabel(action)) {
+                    when (action) {
+                        LiveChannelPanelAction.BLOFY_AUDIO -> {
+                            resizeActions(360)
+                            showInlineArabicVoices(footer, scroller, ::button, ::addHeading) {
+                                showActions(false)
                             }
-                            else -> {
-                                close()
-                                if (!activity.openLivePanelAction(action)) {
-                                    Toast.makeText(activity,
-                                        copy("تعذر فتح هذا الخيار", "Unable to open control"),
-                                        Toast.LENGTH_SHORT).show()
-                                }
+                        }
+                        LiveChannelPanelAction.MORE -> {
+                            showActions(!expanded)
+                            footer.post { (scroller.tag as? View)?.requestFocus() }
+                        }
+                        else -> {
+                            close()
+                            if (!activity.openLivePanelAction(action)) {
+                                Toast.makeText(activity,
+                                    copy("تعذر فتح هذا الخيار", "Unable to open control"),
+                                    Toast.LENGTH_SHORT).show()
                             }
                         }
                     }
+                }
+                if (!expanded) {
+                    // Two permanently reachable controls at the BOTTOM of the
+                    // channel list; never scroll through channels to reach audio.
+                    val audioControl = addAction(LiveChannelPanelAction.BLOFY_AUDIO)
+                    val moreControl = addAction(LiveChannelPanelAction.MORE)
+                    footer.removeView(audioControl)
+                    footer.removeView(moreControl)
+                    val bar = LinearLayout(activity).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        layoutDirection = View.LAYOUT_DIRECTION_LTR
+                        gravity = Gravity.CENTER_VERTICAL
+                        addView(audioControl, LinearLayout.LayoutParams(0, dp(42), 1f).apply {
+                            marginEnd = dp(5)
+                        })
+                        addView(moreControl, LinearLayout.LayoutParams(0, dp(42), 1f))
+                    }
+                    footer.addView(bar, LinearLayout.LayoutParams(-1, dp(45)))
+                    // LEFT from "more" goes to audio; LEFT from audio
+                    // returns to the last highlighted channel row.
+                    moreControl.setOnKeyListener { _, code, event ->
+                        if (event.action == KeyEvent.ACTION_DOWN &&
+                            code == KeyEvent.KEYCODE_DPAD_LEFT) {
+                            audioControl.requestFocus()
+                        } else false
+                    }
+                    audioControl.nextFocusRightId = moreControl.id
+                    moreControl.nextFocusLeftId = audioControl.id
+                    scroller.tag = audioControl
+                    resizeActions(76)
+                } else {
+                    LiveChannelPanelPolicy.actions(BuildConfig.CODE_ONLY_LOGIN, true)
+                        .forEach(::addAction)
+                    scroller.tag = footer.getChildAt(1)
+                    resizeActions(255)
                 }
                 resetScroll()
             }
             restoreMainActions = {
                 showActions(false)
-                footer.post { if (dialog?.isShowing == true) footer.getChildAt(1)?.requestFocus() }
+                footer.post {
+                    if (dialog?.isShowing == true) (scroller.tag as? View)?.requestFocus()
+                }
             }
             showActions(false)
             scroller.addView(footer, ViewGroup.LayoutParams(-1, -2))
@@ -713,8 +769,9 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 setPadding(dp(9), dp(3), dp(9), dp(4))
             }
             fun updateSync() {
-                sync.text = copy("التأخير: ", "Delay: ") +
-                    activity.inlineArabicDelaySeconds() + copy(" ثانية", "s")
+                val value = activity.inlineArabicDelaySeconds()
+                sync.text = copy("⏱ فرق التوقيت: +${value} ثانية (0–30)  •  − للتقديم / + للتأخير",
+                    "⏱ Audio offset: +${value}s (0–30)  •  − advance / + delay")
             }
 
             fun paintStatus(message: String, state: StreamAudioQuickPickPolicy.State?) {
@@ -756,9 +813,45 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                     paintStatus(copy("صوت القناة الأصلي يعمل الآن.",
                         "Original channel audio is restored."), null)
                 }
-                footer.addView(status, LinearLayout.LayoutParams(-1, dp(56)).apply {
+                footer.addView(status, LinearLayout.LayoutParams(-1, dp(48)).apply {
                     topMargin = dp(2); bottomMargin = dp(4)
                 })
+                // Keep synchronization ABOVE the station list, never after
+                // dozens of tracks. The user can tune audio while watching.
+                addHeading(copy("⏱ مزامنة الصوت مع الصورة", "⏱ SYNC COMMENTARY WITH VIDEO"))
+                updateSync()
+                footer.addView(sync, LinearLayout.LayoutParams(-1, dp(34)))
+                val syncButtons = LinearLayout(activity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    layoutDirection = View.LAYOUT_DIRECTION_LTR
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+                fun addQuickSync(label: String, delta: Int) {
+                    val item = addButton(label) {
+                        if (activity.currentInlineArabicTrackId() == null) {
+                            paintStatus(copy("شغّل صوتية أولًا لضبط التوقيت.",
+                                "Select a playing voice before adjusting sync."), null)
+                        } else {
+                            activity.adjustInlineArabicSync(delta)
+                            updateSync()
+                        }
+                    }
+                    footer.removeView(item)
+                    item.textSize = 11.5f
+                    syncButtons.addView(item, LinearLayout.LayoutParams(0, dp(40), 1f).apply {
+                        marginEnd = dp(3)
+                    })
+                }
+                addQuickSync("−5s", -5)
+                addQuickSync("−1s", -1)
+                addQuickSync("+1s", 1)
+                addQuickSync("+5s", 5)
+                footer.addView(syncButtons, LinearLayout.LayoutParams(-1, dp(45)))
+                addButton(copy("⟲ إعادة المزامنة إلى 0 ثانية",
+                    "⟲ Reset audio offset to 0s")) {
+                    activity.adjustInlineArabicSync(0)
+                    updateSync()
+                }
                 val filterButton = addButton(
                     if (favoritesOnly) copy("☆  جميع المعلقين", "☆  Show all voices")
                     else copy("★  المفضلة فقط", "★  Favorites only")
@@ -897,19 +990,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                         scrollTarget = row
                     }
                 }
-                addHeading(copy("⏱  مزامنة الصوت", "⏱  AUDIO SYNC"))
-                updateSync()
-                footer.addView(sync, LinearLayout.LayoutParams(-1, dp(24)))
-                addButton(copy("−1ث  تقديم الصوت", "−1s  Advance audio")) {
-                    activity.adjustInlineArabicSync(-1); updateSync()
-                }
-                addButton(copy("+1ث  تأخير الصوت", "+1s  Delay audio")) {
-                    activity.adjustInlineArabicSync(1); updateSync()
-                }
-                addButton(copy("⟲  التوقيت الأصلي", "⟲  Reset synchronization")) {
-                    activity.adjustInlineArabicSync(0); updateSync()
-                }
-                if (focusTarget != null) {
+                 if (focusTarget != null) {
                     val target = focusTarget
                     val row = scrollTarget
                     footer.post {

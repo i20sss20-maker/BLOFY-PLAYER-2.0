@@ -74,6 +74,7 @@ internal class StreamArabicAudioSession(
     private var pendingHoldMs = 0L
     private var generation = 0
     private var playbackAnnounced = false
+    private var invalidAudioRetries = 0
     private val startupHandler = Handler(Looper.getMainLooper())
 
     val isActive: Boolean get() = audio != null && track != null
@@ -91,6 +92,7 @@ internal class StreamArabicAudioSession(
         delay = ArabicSidecarTimingPolicy.clamp(item.initialDelaySeconds)
         val version = ++generation
         playbackAnnounced = false
+        invalidAudioRetries = 0
         // No STREAM authentication bearer ever leaves blofyplayer.com.
         // Personal in-app playlist URLs use a separate credential-free
         // transport. The main Xtream/video session remains unchanged.
@@ -155,7 +157,32 @@ internal class StreamArabicAudioSession(
             }
 
             override fun onPlayerError(error: PlaybackException) {
-                if (version == generation) failAndRestore(classify(error))
+                if (version != generation) return
+                val reason = classify(error)
+                // The protected upstream can transiently return HTML or
+                // another non-audio body (HTTP 415 from our own relay).
+                // Retry only ONCE without spinning or changing the video.
+                // Persistent 415 is a source problem and must be surfaced.
+                if (reason == FailureReason.UNSUPPORTED_FORMAT &&
+                    StreamAudioRetryPolicy.shouldRetryInvalidAudio(invalidAudioRetries)) {
+                    invalidAudioRetries++
+                    video.volume = originalVolume
+                    started = false
+                    waiting = false
+                    holdPending = false
+                    handler.removeCallbacksAndMessages(null)
+                    stallHandler.removeCallbacksAndMessages(null)
+                    companion.playWhenReady = false
+                    companion.stop()
+                    handler.postDelayed({
+                        if (version == generation && audio === companion) {
+                            companion.prepare()
+                            onPrimaryPlaybackChanged()
+                        }
+                    }, StreamAudioRetryPolicy.RETRY_DELAY_MS)
+                } else {
+                    failAndRestore(reason)
+                }
             }
         })
         companion.setMediaItem(
@@ -307,6 +334,7 @@ internal class StreamArabicAudioSession(
         track = null
         started = false
         playbackAnnounced = false
+        invalidAudioRetries = 0
         waiting = false
         holdPending = false
         pendingHoldMs = 0L
