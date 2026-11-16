@@ -1709,6 +1709,10 @@ export function createContentHubServer({storage,lease,
   // objects. This never changes subscriber app routing. It requires a
   // distinct opt-in and cannot be accessed through the old pilot path.
   const mirrorRange=/^\/internal\/mirror\/owner-range\/(movie|episode)\/(mirror_[a-f0-9]{32})$/.exec(path);
+  // A mirror run may never be served by the original site-QA route;
+  // that older path does not perform this per-part pre-response SHA.
+  if(siteQa&&/^mirror_[a-f0-9]{32}$/.test(siteQa[2]))
+   return json(res,404,{ok:false,code:'mirror_legacy_range_denied'});
   if(mirrorRange&&(
     pilotEnv.BLOFY_CONTENT_HUB_MIRROR_OWNER_RANGE_ENABLED!=='1'||
     pilotEnv.BLOFY_CONTENT_HUB_STORAGE_RIGHTS_CONFIRMED!=='1'||
