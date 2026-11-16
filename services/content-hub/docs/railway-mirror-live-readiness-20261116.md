@@ -229,3 +229,24 @@ Next independent hard gates: verify a specific title's permanent
 storage+distribution rights and fresh origin concurrency headroom;
 then run ONE authorized real movie and episode in the isolated
 pipeline and test Android/Windows end-device audio/video + seek.
+
+
+### Post-QA cost/resource cleanup (same day)
+
+- After verifying the final successful QA result, the only temporary
+  PostgreSQL test service `Postgres-aO7C` and its separate 50,000-MB
+  `postgres-volume-cMTi` were deleted from Railway. The original
+  customer PostgreSQL service named exactly `Postgres`, and its
+  original `postgres-volume` stayed untouched and healthy.
+- The isolated QA service was returned to an inert one-shot start
+  command `BLOFY_MIRROR_QA_IDLE` and
+  `BLOFY_QA_REAL_PG_MIRROR=0`. QA database connection variables
+  were blanked; restart policy remains NEVER. A finished one-shot
+  container may show `CRASHED` in Railway despite completed
+  successful smoke logs; it is NOT the customer Content Hub.
+- The dedicated private QA bucket was retained for future synthetic
+  tests, with zero objects after cleanup. The customer Content Hub
+  bucket and existing production API deployment remain unchanged.
+- Verified the Railway environment patch settled (no pending patch),
+  temporary QA PostgreSQL service/volume absent, and production
+  Content Hub, Activation Portal and original Postgres all SUCCESS.
