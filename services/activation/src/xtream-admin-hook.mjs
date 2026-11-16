@@ -3703,6 +3703,53 @@ async function unifiedStreamBridge(req,res,url){
       mediaBytesTransferred:0,customerCutover:false})}
     finally{mirrorPreflightRunning=false}
   }
+  // Owner-triggered, read-only A/V decoder canary from a SHA256-verified
+  // private S3 mirror run; never accesses the Xtream provider or apps.
+  if(p==='/internal/blofy-stream/ops/mirror-intake/canary'){
+    if(req.method!=='POST'||url.search)
+      return json(res,405,{ok:false,code:'mirror_canary_post_only'});
+    if(process.env.BLOFY_STREAM_MIRROR_AV_CANARY_ENABLED!=='1')
+      return json(res,404,{ok:false,code:'mirror_canary_feature_disabled'});
+    if(req.headers['x-blofy-owner-action']!=='verify-private-mirror-audio-video')
+      return json(res,403,{ok:false,code:'mirror_canary_owner_action_missing'});
+    let request;
+    try{request=await readJson(req)}
+    catch{return json(res,400,{ok:false,code:'mirror_canary_invalid_json'})}
+    const runId=String(request?.runId||'');
+    const kind=String(request?.kind||'');
+    if(request?.ownerConfirmed!==true||
+       !/^mirror_[a-f0-9]{32}$/.test(runId)||
+       !['movie','episode'].includes(kind))
+      return json(res,400,{ok:false,code:'mirror_canary_invalid_selection'});
+    const token=String(process.env.BLOFY_CONTENT_HUB_OPERATOR_TOKEN||'');
+    if(token.length<32)return json(res,503,{
+      ok:false,code:'mirror_canary_hub_not_configured'});
+    try{
+      const response=await fetch(
+        'http://blofy-content-hub.railway.internal:3000/internal/mirror/copy/canary',{
+          method:'POST',redirect:'manual',signal:AbortSignal.timeout(74000),
+          headers:{authorization:'Bearer '+token,
+            'x-blofy-owner-action':'verify-private-mirror-audio-video',
+            'content-type':'application/json',accept:'application/json'},
+          body:JSON.stringify({runId,kind,ownerConfirmed:true})
+        });
+      if(![200,409,429,503].includes(response.status))
+        return json(res,503,{ok:false,code:'mirror_canary_hub_response_denied'});
+      if(Number(response.headers.get('content-length')||0)>3200)
+        return json(res,503,{ok:false,code:'mirror_canary_hub_response_too_large'});
+      const raw=await response.text();
+      if(Buffer.byteLength(raw,'utf8')>3200)
+        return json(res,503,{ok:false,code:'mirror_canary_hub_response_too_large'});
+      const output=JSON.parse(raw);
+      if(!output||typeof output!=='object'||Array.isArray(output)||
+         output.customerCutover!==false||output.providerRequests!==0||
+         output.privateOnly!==true||
+         (output.runId&&output.runId!==runId))
+        return json(res,503,{ok:false,code:'mirror_canary_hub_response_invalid'});
+      return json(res,response.status,output,{'cache-control':'no-store'});
+    }catch{return json(res,503,{
+      ok:false,code:'mirror_canary_private_unavailable'})}
+  }
   // Fixed private Hub history: only the authenticated STREAM operator
   // receives checkpoint counts and sanitized errors, no source secrets.
   if(p==='/internal/blofy-stream/ops/mirror-intake/history'){
