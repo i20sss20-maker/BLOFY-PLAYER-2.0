@@ -44,7 +44,8 @@ export function validateMirrorTransferApproval(a,{kind,id,now=Date.now()}={}){
    EXT.has(a.extension)&&Number.isSafeInteger(a.expectedBytes)&&
    a.expectedBytes>=CHUNK&&a.expectedBytes<=MAX&&
    HEX64.test(String(a.rightsEvidenceHash||''))&&
-   a.validatorPresent===true&&Number.isSafeInteger(a.approvedAt)&&
+   a.validatorPresent===true&&HEX64.test(String(a.validatorSha256||''))&&
+   Number.isSafeInteger(a.approvedAt)&&
    a.approvedAt<=now&&now-a.approvedAt<=5*60*1000);
 }
 
@@ -74,7 +75,8 @@ async function checkedChunk(response,{from,to,total,signal}){
    const buf=Buffer.from(piece.value);
    chunks.push(buf);bytes+=buf.byteLength;
   }
-  return {buffer:Buffer.concat(chunks,length),validator};
+  return {buffer:Buffer.concat(chunks,length),validator,
+   validatorSha256:createHash('sha256').update(validator,'utf8').digest('hex')};
  }finally{
   await reader.cancel().catch(()=>{});
   reader.releaseLock();
@@ -133,7 +135,9 @@ export async function runMirrorTransferChunk({kind,id,env={},
  let providerRequests=0,stage='lock',hardFail=false,hardCode=null;
  let storageWrittenBytes=0;
  const runId='mirror_'+createHash('sha256')
-  .update(approval.sourceId+'|'+kind+'|'+id).digest('hex').slice(0,32);
+  .update([approval.sourceId,kind,id,approval.validatorSha256,
+   approval.expectedBytes,approval.rightsEvidenceHash].join('|'))
+  .digest('hex').slice(0,32);
  const digest=createHash('sha256')
   .update(runId+'|'+approval.sourceId+'|'+approval.mediaId+'|'+approval.gatewayId)
   .digest('hex').slice(0,24);
@@ -216,7 +220,8 @@ export async function runMirrorTransferChunk({kind,id,env={},
   try{chunk=await checkedChunk(response,{from,to,total,signal})}
   finally{if(response?.body&&!response.body.locked)
     await response.body.cancel().catch(()=>{})}
-  if(run.validator&&run.validator!==chunk.validator){
+  if(chunk.validatorSha256!==approval.validatorSha256||
+     run.validator&&run.validator!==chunk.validator){
    hardFail=true;hardCode='mirror_source_validator_changed';
    throw Error('mirror_source_validator_changed');
   }
