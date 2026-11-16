@@ -1816,7 +1816,7 @@ open class PlayerActivity : ContentAccessActivity() {
     ): Boolean {
         if (!BuildConfig.CODE_ONLY_LOGIN || kind != KIND_LIVE || sessionReleased ||
             isFinishing || isDestroyed ||
-            !StreamArabicAudioCatalog.trustedAudioUrl(choice.playbackUrl)) return false
+            !StreamArabicAudioCatalog.playableUrl(choice.playbackUrl)) return false
         activateArabicTrack(choice,
             english = !streamUiLanguage().startsWith("ar", ignoreCase = true),
             showControls = false,
@@ -1881,7 +1881,7 @@ open class PlayerActivity : ContentAccessActivity() {
         onPlaybackState: ((Boolean) -> Unit)? = null
     ) {
         if (!BuildConfig.CODE_ONLY_LOGIN || sessionReleased || kind != KIND_LIVE ||
-            !StreamArabicAudioCatalog.trustedAudioUrl(choice.playbackUrl)) return
+            !StreamArabicAudioCatalog.playableUrl(choice.playbackUrl)) return
         val controller = StreamArabicAudioSession(
             this, session.player, profileFromIntent(),
             onFailure = { reason ->
