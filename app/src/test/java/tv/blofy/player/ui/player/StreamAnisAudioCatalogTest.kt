@@ -40,12 +40,25 @@ class StreamAnisAudioCatalogTest {
         assertEquals(12, decoded.map {
             StreamArabicAudioCatalog.groupName(it, false)
         }.distinct().size)
-        assertEquals("أنيس سبورت",
+        assertEquals("بلوفي سبورت",
             StreamArabicAudioCatalog.groupName(
                 decoded.first { it.id == "anis-sport-9" }, false))
-        assertEquals("Anis Max Low",
+        assertEquals("BLOFY Max Low",
             StreamArabicAudioCatalog.groupName(
                 decoded.first { it.id == "anis-max-low-6" }, true))
+    }
+
+    @Test fun ownerBrandReplacesOnlyVisibleAnesLabelsAndKeepsAudioIds() {
+        val json = JSONObject().put("tracks", JSONArray().put(JSONObject()
+            .put("id", "anis-sport-1")
+            .put("label", "Anes Sport / أنيس سبورت")
+            .put("playbackUrl", "https://blofyplayer.com/api/v1/stream/media/audio/anis-sport-1")
+        )).toString()
+        val decoded = StreamArabicAudioCatalog.decode(json)
+        assertEquals(1, decoded.size)
+        assertEquals("anis-sport-1", decoded[0].id)
+        assertEquals("BLOFY Sport / بلوفي سبورت", decoded[0].label)
+        assertTrue(decoded[0].playbackUrl.endsWith("/anis-sport-1"))
     }
 
     @Test fun perChannelCatalogDoesNotShowOtherChannelAudio() {
