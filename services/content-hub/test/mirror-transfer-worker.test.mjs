@@ -141,6 +141,8 @@ test('exact one 8 MiB checkpoint per operator call, then full independent S3 dig
  assert.equal(first.sourceMediaRequests,1);
  assert.equal(first.storageWrittenBytes,K);
  assert.equal(first.customerCutover,false);
+ assert.equal([...f.runs.values()][0].validator,SOURCE_VERSION);
+ assert.equal(JSON.stringify([...f.runs.values()]).includes('etag:"version-1"'),false);
  assert.deepEqual(f.calls.media,[[0,K-1]]);
  const second=await run(f);
  assert.equal(second.ok,true);assert.equal(second.completed,true);
