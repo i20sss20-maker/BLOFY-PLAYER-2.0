@@ -150,6 +150,13 @@ export async function diagnoseVerifiedMovie({
    videoFramesDecoded,audioFramesDecoded:0};
   return {...details,ok:true,code:'canary_audio_video_decoded',
    videoFramesDecoded,audioFramesDecoded};
- }catch{return {...resultBase,ok:false,code:'canary_private_read_failed'}}
+ }catch(error){
+  // A full verified S3 part with incorrect SHA is distinct from a
+  // temporary read timeout. Only a proven digest mismatch can trigger
+  // durable quarantine of an already verified private manifest.
+  const code=String(error?.message||'')==='canary_private_sha256_mismatch'?
+   'canary_private_sha256_mismatch':'canary_private_read_failed';
+  return {...resultBase,ok:false,code};
+ }
  finally{if(folder)await rm(folder,{recursive:true,force:true}).catch(()=>{})}
 }
