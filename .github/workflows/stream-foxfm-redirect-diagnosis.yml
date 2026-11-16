@@ -1,0 +1,55 @@
+name: FoXFM redirect diagnosis (BLOFY safe)
+on:
+  push:
+    branches: [fix/stream-foxfm-blofy-audio-20261116]
+    paths: ['.github/workflows/stream-foxfm-redirect-diagnosis.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Inspect public status and only allow same-host redirects
+        shell: bash
+        run: |
+          node --input-type=module <<'JS'
+          import http from 'node:http';
+          import https from 'node:https';
+          const urls=['http://foxfm.xyz/1','http://foxfm.xyz:8080/live1','http://foxfm.xyz:8080/alkass5'];
+          async function inspect(input,depth=0){
+            const u=new URL(input);
+            if(u.hostname!=='foxfm.xyz'||!['http:','https:'].includes(u.protocol)||![80,443,8080].includes(Number(u.port||((u.protocol==='https:')?443:80))))return {error:'destination_denied'};
+            return new Promise(resolve=>{
+              const mod=u.protocol==='https:'?https:http;
+              const req=mod.get(u,{timeout:6500,headers:{'user-agent':'BLOFY-STREAM-Audio-Relay/1.0','accept':'audio/*,*/*;q=0.4'}},res=>{
+                const status=res.statusCode||0;const mime=String(res.headers['content-type']||'');
+                const loc=res.headers.location;
+                if([301,302,307,308].includes(status)&&loc&&depth<2){
+                  const target=new URL(loc,u);
+                  const out={initial:u.protocol+'//'+u.host+u.pathname,status,redirectProtocol:target.protocol,redirectHost:target.hostname,redirectPath:target.pathname};
+                  res.destroy();
+                  inspect(target.toString(),depth+1).then(x=>resolve({...out,after:x}));
+                  return;
+                }
+                let sample=Buffer.alloc(0);
+                res.on('data',b=>{if(sample.length<1500)sample=Buffer.concat([sample,b.subarray(0,1500-sample.length)]);if(sample.length>=1500)res.destroy()});
+                res.on('close',()=>{
+                  const b=sample;
+                  const ok=b.subarray(0,3).toString()==='ID3'||b.subarray(0,4).toString()==='OggS'||b.subarray(0,4).toString()==='fLaC'||(b.length>=2&&b[0]===255&&((b[1]&224)===224));
+                  const ts=b.length>=377&&b[0]===71&&b[188]===71&&b[376]===71;
+                  resolve({status,mime,bytes:sample.length,isAudio:ok||ts,finalPath:u.pathname});
+                });
+              });
+              req.on('timeout',()=>req.destroy(Error('timeout')));
+              req.on('error',e=>resolve({error:e.message==='timeout'?'timeout':String(e.code||'connection_failure')}));
+            });
+          }
+          for(const url of urls){
+            const result=await inspect(url);
+            console.log(JSON.stringify({source:new URL(url).pathname,diagnostic:result}));
+          }
+          JS
