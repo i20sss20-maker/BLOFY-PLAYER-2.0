@@ -30,8 +30,8 @@ function gate(env){
     env.BLOFY_QA_ISOLATED_BUCKET!=='1'||
     env.BLOFY_QA_REAL_PG_MIRROR!=='1')
   fail('qa_integration_not_authorized');
- if(env.BLOFY_QA_EXPECTED_BUCKET!=='blofy-mirror-s3-isolated-qa'||
-    env.BLOFY_CONTENT_HUB_S3_BUCKET!=='blofy-mirror-s3-isolated-qa')
+ if(env.BLOFY_QA_EXPECTED_BUCKET!=='blofy-mirror-s3-isolated-qa-pkbfbm'||
+    env.BLOFY_CONTENT_HUB_S3_BUCKET!=='blofy-mirror-s3-isolated-qa-pkbfbm')
   fail('qa_integration_bucket_not_isolated');
  const url=new URL(env.BLOFY_QA_PG_CONNECTION_URL||'postgres://invalid');
  if(!url.hostname.endsWith('.railway.internal')||
