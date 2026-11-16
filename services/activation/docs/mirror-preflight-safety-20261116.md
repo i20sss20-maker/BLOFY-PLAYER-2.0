@@ -165,3 +165,34 @@ capacity and one/two-chunk resumable transfer tests.
   canary before switching on recurring uploads.
 - Imported Xtream metadata is not proof that the full catalog has
   been physically transferred to private storage.
+
+
+## Verified private-S3 audio/video canary and exact movie gateway mapping
+
+- Staging a movie now materializes exactly ONE source-scoped gateway map row
+  if absent. The operation is idempotent and never scans/maps the whole
+  Xtream library or starts playback/transfer. It uses the established
+  indexed, enabled, published source and enabled category policy.
+- Content Hub adds an owner-token-only POST /internal/mirror/copy/canary
+  for a verified run ID matching mirror_<32 lowercase hexadecimal digits>
+  and an explicit movie/episode kind. The existing private diagnostics
+  independently reread a bounded sample (up to 32 MiB) from private S3,
+  validate chunk SHA-256, probe audio/video tracks with ffprobe, and decode
+  both video frames and audio samples with ffmpeg. No Xtream media bytes
+  are requested; output is sanitized telemetry, not an accessible URL.
+- The activation Portal requires the new explicit feature flag
+  BLOFY_STREAM_MIRROR_AV_CANARY_ENABLED=1 and the exact owner action
+  verify-private-mirror-audio-video. The default state is disabled.
+- STREAM operator copy history now includes a canary button only on
+  completed, SHA-verified mirror runs. Existing subscriber app routes
+  are unchanged. The season worker source-busy check includes active
+  mirror writers, preventing a competing copy session.
+- Offline tests cover the real private prefix diagnostics with mocked
+  S3 bytes and ffprobe/ffmpeg outputs, missing manifests, corrupted
+  hashes, missing A/V tracks, exact movie mapping and signed API paths.
+
+CAUTION: Passing offline canary tests is not proof that real S3 objects
+or the real provider can be copied, decoded, stored legally, or served.
+Both PRs remain DRAFT and UNDEPLOYED. Any real one-file canary must be
+an individually authorized file under an explicit private capacity
+budget and verified upstream source connection headroom.
