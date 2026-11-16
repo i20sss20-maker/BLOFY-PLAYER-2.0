@@ -2,6 +2,8 @@
 import pg from 'pg';
 import dns from 'node:dns/promises';
 import net from 'node:net';
+import { stat } from 'node:fs/promises';
+import { STREAM_RELEASE_URL, STREAM_RELEASE_FILENAME } from './stream-release.mjs';
 import { ensureDownloadMetrics, recordCompletedDownload } from './download-metrics.mjs';
 
 const { Pool } = pg;
@@ -19,7 +21,7 @@ const pool = new Pool({
 const CATEGORIES = new Set(['media', 'files', 'downloads', 'launcher', 'screensaver', 'tools', 'network', 'store']);
 const MODES = new Set(['official', 'direct']);
 // Version 7 inserts the independent BLOFY STREAM app into already-seeded production databases.
-const SEED_VERSION = 15;
+const SEED_VERSION = 16;
 
 const GITHUB_UPDATE_RULES = Object.freeze({
   'projectivy-launcher': { repo:'spocky/miproja1', asset:'ProjectivyLauncher-*-xda-release.apk' },
@@ -122,10 +124,10 @@ const DEFAULT_APPS = Object.freeze([
   {
     slug:'blofy-stream', name:'BLOFY STREAM', category:'media', symbol:'BS',
     iconUrl:'https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/services/update-distribution/public/blofy-stream.svg',
-    description:'BLOFY STREAM 55.8.24 بتفعيل عبر الكود: محادثة BLOFY AI مستقلة بأسماء أعمال قابلة للضغط، وبحث محلي منفصل. تشغيل الأفلام والمسلسلات والقنوات، ومفضلة وتحميل، مع دعم Android TV والريموت واللغة العربية والإنجليزية.',
-    devices:'Android TV · TV Box · Android Phone · Tablet', version:'55.8.24',
-    architecture:'Universal (ARM + x86)', apkSizeBytes:135682806,
-    downloadUrl:'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/blofy-stream-55.8.24-owner-qa-20261113/BLOFY-STREAM-55.8.24-FFMPEG-OWNER-SIGNED.apk',
+    description:'BLOFY STREAM 55.8.32 موقّع وبتفعيل عبر الكود. تحسين عرض القنوات والتنقل بالريموت، تثبيت أزرار المعلق والإعدادات، تقديم وتأخير المعلق بالثواني، مع المحافظة على تشغيل القنوات والأفلام والمسلسلات والمفضلة والتحميل.',
+    devices:'Android TV · TV Box · Android Phone · Tablet', version:'55.8.32',
+    architecture:'Universal (ARM + x86)', apkSizeBytes:135739422,
+    downloadUrl:STREAM_RELEASE_URL,
     downloadMode:'direct', sortOrder:0, enabled:true, featured:true
   },
   {
@@ -1065,6 +1067,26 @@ export async function initAppLibrary() {
         await client.query("delete from blofy_app_health where slug='blofy-stream'");
         await client.query('update blofy_app_catalog_meta set last_health_at=null where id=1');
       }
+      if (version < 16) {
+        // Publish STREAM only if the catalogue still contains the exact
+        // previously approved 55.8.24 URL. Preserve admin overrides and
+        // maintain the prior signed APK for rollback.
+        const stream = cleanApp(DEFAULT_APPS.find(item => item.slug === 'blofy-stream'));
+        await client.query(
+          `update blofy_app_catalog
+           set previous_version=version, previous_download_url=download_url,
+               previous_apk_size_bytes=apk_size_bytes, previous_saved_at=now(),
+               version=$2, download_url=$3, apk_size_bytes=$4,
+               description=$5, enabled=true, featured=true,
+               version_updated_at=now(), updated_at=now()
+           where slug=$1 and version='55.8.24' and download_url=$6`,
+          [stream.slug, stream.version, stream.downloadUrl, stream.apkSizeBytes,
+           stream.description,
+           'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/blofy-stream-55.8.24-owner-qa-20261113/BLOFY-STREAM-55.8.24-FFMPEG-OWNER-SIGNED.apk']
+        );
+        await client.query("delete from blofy_app_health where slug='blofy-stream'");
+        await client.query('update blofy_app_catalog_meta set last_health_at=null where id=1');
+      }
       await client.query('update blofy_app_catalog_meta set seed_version=$1 where id=1', [SEED_VERSION]);
     } else {
       for (const seed of DEFAULT_APPS) await insertSeed(client, cleanApp(seed));
@@ -1632,7 +1654,15 @@ export async function getAppHealthState() {
 
 async function checkOneAppHealth(app, previousHealth = {}) {
   try {
-    const info = await inspectRemoteApk(app.downloadUrl);
+    const info = app.slug === 'blofy-stream' && app.downloadUrl === STREAM_RELEASE_URL
+      ? await (async () => {
+          // Health-check our own signed APK by its trusted persistent local
+          // storage file, never by making an SSRF-protected request to self.
+          const file = await stat('/data/releases/' + STREAM_RELEASE_FILENAME);
+          if (file.size !== 135739422) throw new Error('stream_apk_size_mismatch');
+          return { status: 200, sizeBytes: file.size };
+        })()
+      : await inspectRemoteApk(app.downloadUrl);
     await pool.query(
       `insert into blofy_app_health(slug,ok,status_code,size_bytes,checked_at,error,consecutive_failures)
        values($1,true,$2,$3,now(),'',0)
