@@ -35,7 +35,7 @@ function gate(env){
   fail('qa_integration_bucket_not_isolated');
  const url=new URL(env.BLOFY_QA_PG_CONNECTION_URL||'postgres://invalid');
  if(!url.hostname.endsWith('.railway.internal')||
-    url.hostname!==env.BLOFY_QA_EXPECTED_PG_HOST||
+    url.hostname!==String(env.BLOFY_QA_EXPECTED_PG_HOST||'').toLowerCase()||
     !/postgres-ao7c/i.test(url.hostname))
   fail('qa_integration_database_not_isolated');
  const s3=new URL(env.BLOFY_CONTENT_HUB_S3_ENDPOINT||'https://invalid');
