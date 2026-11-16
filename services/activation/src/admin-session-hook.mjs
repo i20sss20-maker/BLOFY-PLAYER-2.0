@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { createAdminSessionStore } from './admin-session-store.mjs';
 import { verifyNativeXtreamCsrf } from './xtream-native-csrf.mjs';
+import { controlCenterAsset, controlCenterSnapshot } from './admin-control-center.mjs';
 
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
 const ADMIN_USERNAME = String(process.env.BLOFY_ADMIN_USERNAME || '').trim();
@@ -139,6 +140,27 @@ http.createServer = function patchedAdminSessionCreateServer(listener) {
     if (req.method==='GET' && ['/Admin','/Admin/','/admin/'].includes(url.pathname)) { res.writeHead(302,{'location':'/admin','cache-control':'no-store'}); res.end(); return; }
     if (req.method==='GET' && url.pathname==='/releases-admin') { res.writeHead(302,{'location':'/admin#releases','cache-control':'no-store'}); res.end(); return; }
     if (req.method==='GET' && url.pathname==='/admin') return html(res, await validSession(req)?await dashboardPage():await loginPage());
+    // Admin Control Center: same signed session, same domain, read-only service checks.
+    if (req.method==='GET' && url.pathname==='/admin/control-center') {
+      if (!await validSession(req)) return html(res,await loginPage());
+      const asset=await controlCenterAsset('page');
+      return html(res,asset.content);
+    }
+    if (req.method==='GET' && (url.pathname==='/admin/control-center/app.js' ||
+        url.pathname==='/admin/control-center/style.css')) {
+      if (!await validSession(req)) return json(res,401,{error:'admin_session_required'});
+      const asset=await controlCenterAsset(url.pathname.endsWith('.js')?'js':'css');
+      res.writeHead(200, {
+        'content-type':asset.type, 'content-length':asset.content.length,
+        'cache-control':'no-store','x-content-type-options':'nosniff',
+        'x-robots-tag':'noindex','referrer-policy':'no-referrer'
+      });
+      res.end(asset.content); return;
+    }
+    if (req.method==='GET' && url.pathname==='/api/v1/admin/control-center/status') {
+      if (!await validSession(req)) return json(res,401,{error:'admin_session_required'});
+      return json(res,200,await controlCenterSnapshot());
+    }
     // The private Content Hub dashboard is an admin subpage, not a public
     // route. Reuse exactly the same signed admin session as /admin.
     if (req.method==='GET' && url.pathname==='/admin/content-hub')
