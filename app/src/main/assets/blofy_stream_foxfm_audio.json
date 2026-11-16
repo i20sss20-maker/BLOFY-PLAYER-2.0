@@ -1,0 +1,235 @@
+{
+  "tracks": [
+    {
+      "id": "blofy-live-1",
+      "label": "BLOFY Live 1",
+      "playbackUrl": "http://foxfm.xyz:8080/live1",
+      "format": "progressive",
+      "delaySeconds": 0
+    },
+    {
+      "id": "blofy-live-2",
+      "label": "BLOFY Live 2",
+      "playbackUrl": "http://foxfm.xyz:8080/live2",
+      "format": "progressive",
+      "delaySeconds": 0
+    },
+    {
+      "id": "blofy-live-3",
+      "label": "BLOFY Live 3",
+      "playbackUrl": "http://foxfm.xyz:8080/live3",
+      "format": "progressive",
+      "delaySeconds": 0
+    },
+    {
+      "id": "blofy-live-4",
+      "label": "BLOFY Live 4",
+      "playbackUrl": "http://foxfm.xyz:8080/live4",
+      "format": "progressive",
+      "delaySeconds": 0
+    },
+    {
+      "id": "blofy-main-1",
+      "label": "BLOFY 1",
+      "playbackUrl": "http://foxfm.xyz/1",
+      "format": "progressive",
+      "delaySeconds": 0
+    },
+    {
+      "id": "blofy-main-2",
+      "label": "BLOFY 2",
+      "playbackUrl": "http://foxfm.xyz/2",
+      "format": "progressive",
+      "delaySeconds": 0
+    },
+    {
+      "id": "blofy-main-3",
+      "label": "BLOFY 3",
+      "playbackUrl": "http://foxfm.xyz/3",
+      "format": "progressive",
+      "delaySeconds": 0
+    },
+    {
+      "id": "blofy-main-4",
+      "label": "BLOFY 4",
+      "playbackUrl": "http://foxfm.xyz/4",
+      "format": "progressive",
+      "delaySeconds": 0
+    },
+    {
+      "id": "blofy-main-5",
+      "label": "BLOFY 5",
+      "playbackUrl": "http://foxfm.xyz/5",
+      "format": "progressive",
+      "delaySeconds": 0
+    },
+    {
+      "id": "blofy-main-6",
+      "label": "BLOFY 6",
+      "playbackUrl": "http://foxfm.xyz/6",
+      "format": "progressive",
+      "delaySeconds": 0
+    },
+    {
+      "id": "blofy-main-7",
+      "label": "BLOFY 7",
+      "playbackUrl": "http://foxfm.xyz/7",
+      "format": "progressive",
+      "delaySeconds": 0
+    },
+    {
+      "id": "blofy-main-8",
+      "label": "BLOFY 8",
+      "playbackUrl": "http://foxfm.xyz/8",
+      "format": "progressive",
+      "delaySeconds": 0
+    },
+    {
+      "id": "blofy-main-9",
+      "label": "BLOFY 9",
+      "playbackUrl": "http://foxfm.xyz/9",
+      "format": "progressive",
+      "delaySeconds": 0
+    },
+    {
+      "id": "blofy-xtra-1",
+      "label": "BLOFY Xtra 1",
+      "playbackUrl": "http://foxfm.xyz:8080/xtra1",
+      "format": "progressive",
+      "delaySeconds": 0
+    },
+    {
+      "id": "blofy-xtra-2",
+      "label": "BLOFY Xtra 2",
+      "playbackUrl": "http://foxfm.xyz:8080/xtra2",
+      "format": "progressive",
+      "delaySeconds": 0
+    },
+    {
+      "id": "blofy-xtra-3",
+      "label": "BLOFY Xtra 3",
+      "playbackUrl": "http://foxfm.xyz:8080/xtra3",
+      "format": "progressive",
+      "delaySeconds": 0
+    },
+    {
+      "id": "blofy-en-1",
+      "label": "BLOFY EN 1",
+      "playbackUrl": "http://foxfm.xyz:8080/en1",
+      "format": "progressive",
+      "delaySeconds": 0
+    },
+    {
+      "id": "blofy-en-2",
+      "label": "BLOFY EN 2",
+      "playbackUrl": "http://foxfm.xyz:8080/en2",
+      "format": "progressive",
+      "delaySeconds": 0
+    },
+    {
+      "id": "blofy-fr-1",
+      "label": "BLOFY FR 1",
+      "playbackUrl": "http://foxfm.xyz:8080/fr1",
+      "format": "progressive",
+      "delaySeconds": 0
+    },
+    {
+      "id": "blofy-fr-2",
+      "label": "BLOFY FR 2",
+      "playbackUrl": "http://foxfm.xyz:8080/fr2",
+      "format": "progressive",
+      "delaySeconds": 0
+    },
+    {
+      "id": "blofy-starzplay-1",
+      "label": "BLOFY StarzPlay 1",
+      "playbackUrl": "http://foxfm.xyz:8080/starzplay1",
+      "format": "progressive",
+      "delaySeconds": 0
+    },
+    {
+      "id": "blofy-starzplay-2",
+      "label": "BLOFY StarzPlay 2",
+      "playbackUrl": "http://foxfm.xyz:8080/starzplay2",
+      "format": "progressive",
+      "delaySeconds": 0
+    },
+    {
+      "id": "blofy-shasha-1",
+      "label": "BLOFY Shasha 1",
+      "playbackUrl": "http://foxfm.xyz:8080/shasha1",
+      "format": "progressive",
+      "delaySeconds": 0
+    },
+    {
+      "id": "blofy-shasha-2",
+      "label": "BLOFY Shasha 2",
+      "playbackUrl": "http://foxfm.xyz:8080/shasha2",
+      "format": "progressive",
+      "delaySeconds": 0
+    },
+    {
+      "id": "blofy-thmanyah-1",
+      "label": "BLOFY Thmanyah 1",
+      "playbackUrl": "http://foxfm.xyz:8080/thmanyah1",
+      "format": "progressive",
+      "delaySeconds": 0
+    },
+    {
+      "id": "blofy-thmanyah-2",
+      "label": "BLOFY Thmanyah 2",
+      "playbackUrl": "http://foxfm.xyz:8080/thmanyah2",
+      "format": "progressive",
+      "delaySeconds": 0
+    },
+    {
+      "id": "blofy-thmanyah-3",
+      "label": "BLOFY Thmanyah 3",
+      "playbackUrl": "http://foxfm.xyz:8080/thmanyah3",
+      "format": "progressive",
+      "delaySeconds": 0
+    },
+    {
+      "id": "blofy-shahid-1",
+      "label": "BLOFY Shahid 1",
+      "playbackUrl": "http://foxfm.xyz:8080/shahid1",
+      "format": "progressive",
+      "delaySeconds": 0
+    },
+    {
+      "id": "blofy-shahid-2",
+      "label": "BLOFY Shahid 2",
+      "playbackUrl": "http://foxfm.xyz:8080/shahid2",
+      "format": "progressive",
+      "delaySeconds": 0
+    },
+    {
+      "id": "blofy-alkass-5",
+      "label": "BLOFY Alkass 5",
+      "playbackUrl": "http://foxfm.xyz:8080/alkass5",
+      "format": "progressive",
+      "delaySeconds": 0
+    },
+    {
+      "id": "blofy-alkass-6",
+      "label": "BLOFY Alkass 6",
+      "playbackUrl": "http://foxfm.xyz:8080/alkass6",
+      "format": "progressive",
+      "delaySeconds": 0
+    },
+    {
+      "id": "blofy-alkass-7",
+      "label": "BLOFY Alkass 7",
+      "playbackUrl": "http://foxfm.xyz:8080/alkass7",
+      "format": "progressive",
+      "delaySeconds": 0
+    },
+    {
+      "id": "blofy-alkass-8",
+      "label": "BLOFY Alkass 8",
+      "playbackUrl": "http://foxfm.xyz:8080/alkass8",
+      "format": "progressive",
+      "delaySeconds": 0
+    }
+  ]
+}
