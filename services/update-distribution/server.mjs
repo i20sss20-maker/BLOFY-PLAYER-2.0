@@ -16,7 +16,7 @@ import { appDownloadAction } from './app-download-policy.mjs';
 import { observeDownloadCompletion } from './download-metrics.mjs';
 import { recordDownloadCompletion, getDownloadStats } from './app-library.mjs';
 import { publicSiteRedirect } from './public-site-redirect.mjs';
-import { streamReleaseMetadata, STREAM_RELEASE_FILENAME } from './stream-release.mjs';
+import { streamReleaseMetadata, STREAM_RELEASE_FILENAME, STREAM_TEST_FILENAME, STREAM_TEST_PATH } from './stream-release.mjs';
 import { UPDATE_SITE_CANONICAL, updateRobotsTxt, updateSitemapXml, renderMissingPublicPage, isPublicHtmlRequest } from './public-search-pages.mjs';
 
 const PORT = Number(process.env.PORT || 3000);
@@ -501,7 +501,7 @@ async function downloadPage(req) {
   // This app has its own official card already. Hide only the duplicate
   // generic listing; retain the database row and all public download routes.
   const displayedApps = streamApp ? apps.filter(app => app.slug !== 'blofy-stream') : apps;
-  const streamCard = streamApp ? `<section class="official-card" id="blofy-stream" aria-label="BLOFY STREAM"><div class="official-icon"><img src="${escapeHtml(streamApp.iconUrl)}" alt="BLOFY STREAM"></div><div class="official-copy"><div class="official-title"><h2>BLOFY STREAM</h2><span class="badge">تطبيق مستقل</span></div><div class="official-desc">تطبيق BLOFY STREAM لمشاهدة القنوات والأفلام والمسلسلات. تفعيل بكود فقط، باللغة العربية افتراضيًا مع إمكانية التغيير للإنجليزية. يدعم التلفزيون والريموت وأجهزة Android والجوال.</div><div class="official-meta">الإصدار ${escapeHtml(streamApp.version)} · Android TV / Box / Mobile</div><div class="official-meta">⬇ ${Number(stats.byKey['app:blofy-stream']?.downloadCount || 0).toLocaleString("en-US")} طلب تحميل عبر الموقع</div><div class="direct-url">${escapeHtml(rootUrl)}/d/blofy-stream</div></div><a class="official-download" href="/d/blofy-stream">تحميل BLOFY STREAM APK ↓</a><button class="official-copy-link" type="button" data-copy-url="${escapeHtml(rootUrl)}/d/blofy-stream" aria-label="نسخ رابط BLOFY STREAM للـ Downloader">نسخ رابط Downloader</button></section>` : '';
+  const streamCard = streamApp ? `<section class="official-card" id="blofy-stream" aria-label="BLOFY STREAM"><div class="official-icon"><img src="${escapeHtml(streamApp.iconUrl)}" alt="BLOFY STREAM"></div><div class="official-copy"><div class="official-title"><h2>BLOFY STREAM</h2><span class="badge">تطبيق مستقل</span></div><div class="official-desc">تطبيق BLOFY STREAM لمشاهدة القنوات والأفلام والمسلسلات. تفعيل بكود فقط، باللغة العربية افتراضيًا مع إمكانية التغيير للإنجليزية. يدعم التلفزيون والريموت وأجهزة Android والجوال.</div><div class="official-meta">الإصدار ${escapeHtml(streamApp.version)} · Android TV / Box / Mobile</div><div class="official-meta">⬇ ${Number(stats.byKey['app:blofy-stream']?.downloadCount || 0).toLocaleString("en-US")} طلب تحميل عبر الموقع</div><div class="direct-url">${escapeHtml(rootUrl)}/d/blofy-stream</div></div><a class="official-download" href="/d/blofy-stream">تحميل BLOFY STREAM APK ↓</a><button class="official-copy-link" type="button" data-copy-url="${escapeHtml(rootUrl)}/d/blofy-stream" aria-label="نسخ رابط BLOFY STREAM للـ Downloader">نسخ رابط Downloader</button><div class="official-meta" style="grid-column:1/-1;margin-top:6px"><strong>نسخة اختيارية للتجربة 55.8.33</strong> · قائمة 33 صوتية BLOFY محلية داخل التطبيق. روابط FoXFM لم يثبت تشغيلها من شبكة الفحص، فلا تُستخدم كتحديث إجباري.</div><a class="official-download" style="grid-column:1/-1;text-align:center;background:#382a4e" href="${STREAM_TEST_PATH}">تحميل نسخة تجربة الصوتيات 55.8.33 APK ↓</a><div class="direct-url" style="grid-column:1/-1">${escapeHtml(rootUrl)}${STREAM_TEST_PATH}</div></section>` : '';
   const ownCards = `<section class="official-card"><div class="official-icon"><img src="https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/app/src/main/res/drawable-nodpi/blofy_logo.png" alt="BLOFY PLAYER"></div><div class="official-copy"><div class="official-title"><h1>BLOFY PLAYER</h1><span class="badge">معتمد</span></div><div class="official-desc">مشغل وسائط احترافي للشاشات والرسيفرات، مصمم لتجربة سريعة وسلسة لتصفح وتشغيل القنوات المباشرة والأفلام والمسلسلات مع دعم كامل للريموت.</div><div class="official-meta">${escapeHtml(release.versionName)} · Version Code ${release.versionCode}</div><div class="official-meta">⬇ ${Number(stats.byKey.blofy?.downloadCount || 0).toLocaleString("en-US")} طلب تحميل عبر الموقع</div><div class="direct-url">${escapeHtml(directUrl)}</div></div><a class="official-download" href="/d/blofy">تحميل BLOFY APK ↓</a><button class="official-copy-link" type="button" data-copy-url="${escapeHtml(directUrl)}" aria-label="نسخ رابط BLOFY PLAYER للـ Downloader">نسخ رابط Downloader</button></section>${streamCard}${BLOFY_ONLY_CURRENT ? '' : renderCinematicV74DisplayCard()}${BLOFY_ONLY_CURRENT ? '' : `<section class="official-card" id="xiaomi-v74" aria-label="نسخة شاومي التجريبية"><div class="official-icon"><img src="https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/app/src/main/res/drawable-nodpi/blofy_logo.png" alt="BLOFY PLAYER Xiaomi"></div><div class="official-copy"><div class="official-title"><h2>BLOFY PLAYER Xiaomi 74</h2><span class="badge">تجريبي · Android TV 9</span></div><div class="official-desc">نسخة مستقلة مخصصة لتجربة التثبيت على Xiaomi MiTV-AESP0. لا تستبدل التطبيق الرسمي، ولم تُختبر بعد على الجهاز الفعلي.</div><div class="official-meta">Version Code 2000074 · APK 229 MB</div><div class="official-meta">⬇ ${Number(stats.byKey["blofy-xiaomi-v74-test"]?.downloadCount || 0).toLocaleString("en-US")} طلب تحميل مسجل منذ تفعيل العداد</div><div class="direct-url">updates.blofyplayer.com/download/xiaomi-v74.apk</div></div><a class="official-download" href="/download/xiaomi-v74.apk">تحميل نسخة شاومي APK ↓</a></section>`}`;
   return `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#08070e"><meta name="description" content="مركز تحميل BLOFY PLAYER الرسمي لإصدارات أندرويد وملفات APK."><link rel="canonical" href="${UPDATE_SITE_CANONICAL}"><meta property="og:site_name" content="BLOFY PLAYER"><meta property="og:title" content="BLOFY PLAYER | مركز الإصدارات"><meta property="og:url" content="${UPDATE_SITE_CANONICAL}"><title>BLOFY PLAYER | التحميل</title><style>
 /* Responsive touch and remote usability: final cascade layer */
@@ -1011,7 +1011,8 @@ const server = http.createServer(async (req, res) => {
       // STREAM and PLAYER are independent applications. Never redirect the
       // current STREAM APK to PLAYER while retiring PLAYER's old archive links.
       const isCurrentStreamApk = localReleaseMatch[1] === STREAM_RELEASE_FILENAME;
-      if (BLOFY_ONLY_CURRENT && !isCurrentStreamApk && ['GET', 'HEAD'].includes(method)) {
+      const isOwnerStreamTestApk = localReleaseMatch[1] === STREAM_TEST_FILENAME;
+      if (BLOFY_ONLY_CURRENT && !isCurrentStreamApk && !isOwnerStreamTestApk && ['GET', 'HEAD'].includes(method)) {
         return redirect(res, '/download/latest.apk');
       }
       if (!['GET', 'HEAD'].includes(method)) {
@@ -1019,7 +1020,7 @@ const server = http.createServer(async (req, res) => {
         return res.end();
       }
       return await streamLocalApk(req, res, localReleaseMatch[1], localReleaseMatch[1],
-        isCurrentStreamApk ? 'app:blofy-stream' : 'blofy');
+        isCurrentStreamApk ? 'app:blofy-stream' : isOwnerStreamTestApk ? 'app:blofy-stream-test' : 'blofy');
     }
 
     if (pathname === '/admin' || pathname === '/admin/' || pathname === PUBLIC_ADMIN_PREFIX || pathname === `${PUBLIC_ADMIN_PREFIX}/`) {
@@ -1140,6 +1141,15 @@ const server = http.createServer(async (req, res) => {
     if (appDetailsMatch && ['GET', 'HEAD'].includes(method)) {
       const html = await appDetailsPage(req, appDetailsMatch[1].toLowerCase());
       return html ? sendHtml(req, res, 200, html) : sendHtml(req, res, 404, '<h1>التطبيق غير موجود</h1>');
+    }
+
+    if (pathname === STREAM_TEST_PATH && ['GET', 'HEAD'].includes(method)) {
+      // The optional installer stays separate from the live 55.8.32 update feed.
+      // FoXFM source availability must be confirmed on an actual device.
+      if (method === 'GET') recordDownload('app:blofy-stream-test')
+        .catch(error => console.error('STREAM test download stat failed:', error?.message || error));
+      return await streamLocalApk(req, res, STREAM_TEST_FILENAME,
+        STREAM_TEST_FILENAME, 'app:blofy-stream-test');
     }
 
     const variantMatch = pathname.match(/^\/(?:d|apps|download\/apps)\/([a-z0-9-]+)\/([a-z0-9-]+)$/i);
