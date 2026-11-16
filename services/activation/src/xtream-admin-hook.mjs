@@ -8,6 +8,7 @@ import {resolveExclusiveApprovedSaleh} from './xtream-approved-saleh-selector.mj
 import {stageMirrorIntake,listMirrorIntake,cancelMirrorIntake,validateMirrorIntakeSelection} from './xtream-mirror-transfer-intake.mjs';
 import {probeStagedMirrorSource,recordMirrorPreflight} from './xtream-mirror-transfer-preflight.mjs';
 import {loadPrivateMirrorCapacity} from './content-hub-private-mirror-capacity-bridge.mjs';
+import {inspectDailyMirrorPlan} from './xtream-mirror-daily-plan.mjs';
 import {reconcileStreamCatalogPage} from './content-hub-private-mirror-reconcile-bridge.mjs';
 import {forwardStreamS3HeadAudit} from './content-hub-private-head-audit-bridge.mjs';
 import {configuredDailySourceId,riyadhCatalogDay,scheduleDailyApprovedCatalog,
@@ -3581,6 +3582,21 @@ async function unifiedStreamBridge(req,res,url){
       code:'mirror_intake_transaction_unavailable',
       mediaBytesTransferred:0,copyWorkerEnabled:false,
       customerCutover:false})}
+  }
+  // Owner-only daily metadata reconciliation status. This plan only
+  // reviews existing staged items and a completed 04:00 Riyadh import;
+  // never contacts media origins, uploads, or auto-starts copy workers.
+  if(p==='/internal/blofy-stream/ops/mirror-intake/daily-plan'){
+    if(url.search||req.method!=='GET')
+      return json(res,405,{ok:false,code:'daily_mirror_plan_get_only'});
+    const approved=await approvedSalehMirrorSource();
+    if(!approved.ok)return json(res,503,{ok:false,
+      code:'daily_mirror_plan_source_unavailable'});
+    const plan=await inspectDailyMirrorPlan(controlPool,{
+      env:process.env,sourceId:approved.sourceId});
+    return json(res,plan.ok?200:
+      plan.code==='daily_mirror_plan_disabled'?404:503,plan,
+      {'cache-control':'no-store'});
   }
   // Explicit owner-only ONE-item 4KiB source-size preflight. Never an
   // automatic copy trigger. The private storage capacity must be verified
