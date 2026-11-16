@@ -250,3 +250,32 @@ pipeline and test Android/Windows end-device audio/video + seek.
 - Verified the Railway environment patch settled (no pending patch),
   temporary QA PostgreSQL service/volume absent, and production
   Content Hub, Activation Portal and original Postgres all SUCCESS.
+
+
+## Native-player-like HTTP Range playback acceptance — synthetic CI
+
+- New isolated MinIO S3 + PostgreSQL integration directly opens
+  BOTH verified movie and episode owner-only HTTP byte-range URLs
+  in **actual FFprobe and FFmpeg HTTP clients**, with the required
+  private bearer authorization and exact owner action header.
+- Both remote paths expose recognizable audio AND video tracks;
+  real FFmpeg reads from HTTP (which internally reads stored S3
+  chunks), successfully decodes 1 second of video and audio,
+  and uses an HTTP timestamp seek to decode a video frame at 1.2s.
+- Ten simultaneous **owner-authorized** HTTP GET requests,
+  each crossing the 8 MiB S3 part boundary within file limits,
+  all returned exact 206 bytes and matched the generated source.
+  A deliberately oversized request still returns HTTP 416.
+- The verified source request counter remained at its initial four
+  transfer-only calls for all HTTP playback, decoding and parallel
+  reads: **no extra Xtream/provider source connections**.
+- Initial extended test accidentally requested bytes beyond the
+  8 MiB + 127 B fixture and correctly got HTTP 416; corrected the
+  test's crossing offsets rather than weakening server boundaries.
+- Tested feature commit `9bdd689a579729358d3785ce81783354844ec628`
+  passed Content Hub real MinIO/PostgreSQL integration and all
+  four GitHub workflow suites (Activation, Device Admin, Zid, Hub).
+- This is a Linux-hosted FFmpeg HTTP client acceptance, NOT the
+  actual BLOFY STREAM Android 9/TV player, native Windows app,
+  10 production customers, full-length media, secure public HTTPS
+  publishing, provider rights or a live Railway subscriber test.
