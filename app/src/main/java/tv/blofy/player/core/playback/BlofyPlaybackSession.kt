@@ -49,6 +49,7 @@ class BlofyPlaybackSession(
     private var liveStallStartedAtMs = 0L
     private var lastLiveStallRecoveryAtMs = 0L
     private var liveStallRecoveries = 0
+    private var noFirstFrameRecoveries = 0
     private var seekRecoveryGeneration = 0
     private val fallbackState = PlaybackFallbackState()
     private val retryHandler = Handler(context.mainLooper)
@@ -199,6 +200,7 @@ class BlofyPlaybackSession(
         alternateLiveFormatAttempted = false
         ultraHdCompatibilityFallbackAttempted = false
         liveStallRecoveries = 0
+        noFirstFrameRecoveries = 0
         lastLiveStallRecoveryAtMs = 0L
         resetLiveStallTimer(keepPosition = false)
         val preferredUrl = PlaybackIntelligence.preferredUrl(appContext, profile, contentKind, url)
@@ -254,6 +256,39 @@ class BlofyPlaybackSession(
 
         val now = SystemClock.elapsedRealtime()
         val position = player.currentPosition.coerceAtLeast(0L)
+
+        // READY alone does not prove that a video frame reached the screen.
+        // Some Android TV decoders accept TS bytes yet show only a black surface.
+        // Never recycle an audio-only channel, a paused session or a healthy
+        // stream that has rendered even one frame. Cap recovery per channel.
+        val hasVideoTrack = player.currentTracks.groups.any { it.type == C.TRACK_TYPE_VIDEO }
+        if (player.playbackState == Player.STATE_READY &&
+            !firstFrameRecorded && hasVideoTrack &&
+            now - playStartedAtMs >= LIVE_FIRST_FRAME_TIMEOUT_MS &&
+            noFirstFrameRecoveries < MAX_NO_FIRST_FRAME_RECOVERIES
+        ) {
+            noFirstFrameRecoveries++
+            val route = fallbackState.nextConfiguredUrl()
+            if (route != null) {
+                fallbackState.markConfiguredUrlAttempted(route)
+                playInternalFallback(route)
+            } else {
+                // Retry once: this also reattaches the decoder surface.
+                retrySameUrl()
+            }
+            return
+        }
+        if (player.playbackState == Player.STATE_READY &&
+            !firstFrameRecorded && hasVideoTrack &&
+            now - playStartedAtMs >= LIVE_FIRST_FRAME_TIMEOUT_MS &&
+            noFirstFrameRecoveries >= MAX_NO_FIRST_FRAME_RECOVERIES
+        ) {
+            val failedUrl = player.currentMediaItem?.localConfiguration?.uri?.toString().orEmpty()
+            if (failedUrl.isNotBlank()) onTerminalError?.invoke(failedUrl)
+            // Avoid showing the same error overlay every watchdog tick.
+            noFirstFrameRecoveries++
+            return
+        }
 
         // Some healthy live TS/HLS streams expose a flat or non-monotonic
         // currentPosition. READY is healthy playback and must never trigger
@@ -364,6 +399,8 @@ class BlofyPlaybackSession(
         const val MAX_AUTOMATIC_RETRIES = 1
         const val SEEK_STALL_RECOVERY_MS = 8_000L
         const val LIVE_STALL_WATCHDOG_INTERVAL_MS = 4_000L
+        const val LIVE_FIRST_FRAME_TIMEOUT_MS = 16_000L
+        const val MAX_NO_FIRST_FRAME_RECOVERIES = 2
         const val LIVE_STALL_RECOVERY_THRESHOLD_MS = 12_000L
         const val LIVE_STALL_RECOVERY_COOLDOWN_MS = 60_000L
         const val MAX_LIVE_STALL_RECOVERIES_PER_ITEM = 3
