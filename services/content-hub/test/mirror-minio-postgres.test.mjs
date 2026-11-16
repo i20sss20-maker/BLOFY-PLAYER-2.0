@@ -260,6 +260,7 @@ test('real encrypted S3+PG+FFmpeg: lost ACK recovery and SHA/AV for movie and ep
   const qa=createContentHubServer({
    storage,lease,token:qaToken,
    pilotEnv:{BLOFY_CONTENT_HUB_MIRROR_OWNER_RANGE_ENABLED:'1',
+    BLOFY_CONTENT_HUB_MIRROR_AV_CANARY_ENABLED:'1',
     BLOFY_CONTENT_HUB_STORAGE_RIGHTS_CONFIRMED:'1'}
   });
   try{
@@ -338,7 +339,47 @@ test('real encrypted S3+PG+FFmpeg: lost ACK recovery and SHA/AV for movie and ep
     headers:{...headers,range:'bytes=0-63'}
    });
    assert.equal(wrongKind.status,404);
-   assert.equal(sourceCalls,4,'owner playback must read S3 only');
+   // Owner decodes actual S3 media; persisted A/V proof is bound to a
+   // verified manifest SHA, but explicitly NOT to Android/Windows QA.
+   const canaryUrl='http://127.0.0.1:'+
+    qa.server.address().port+'/internal/mirror/copy/canary';
+   for(const [kind,selectedId] of [['movie',runId],['episode',episodeRunId]]){
+    const saved=await fetch(canaryUrl,{
+     method:'POST',
+     headers:{authorization:'Bearer '+qaToken,
+      'content-type':'application/json',
+      'x-blofy-owner-action':'verify-private-mirror-audio-video'},
+     body:JSON.stringify({runId:selectedId,kind,ownerConfirmed:true})
+    });
+    assert.equal(saved.status,200);
+    const proof=await saved.json();
+    assert.equal(proof.ok,true);
+    assert.equal(proof.avSamplePersisted,true);
+    assert.equal(proof.avSampleOnly,true);
+    assert.equal(proof.devicePlaybackVerified,false);
+    assert.ok(proof.videoFramesDecoded>=1);
+    assert.ok(proof.audioFramesDecoded>=1);
+   }
+   const savedProofs=await lease.listMirrorAvSamples({
+    runIds:[runId,episodeRunId]});
+   assert.equal(savedProofs.length,2);
+   const historyResponse=await fetch(
+    'http://127.0.0.1:'+qa.server.address().port+
+      '/internal/mirror/copy/history',{
+     headers:{authorization:'Bearer '+qaToken,
+      'x-blofy-owner-action':'private-mirror-copy-history'}
+    });
+   assert.equal(historyResponse.status,200);
+   const history=await historyResponse.json();
+   for(const selectedId of [runId,episodeRunId]){
+    const item=history.items.find(x=>x.runId===selectedId);
+    assert.equal(item.avPrefixDecoded,true);
+    assert.ok(item.avSampleCheckedAt);
+    assert.equal(item.ownerDevicePlaybackVerified,false);
+    assert.equal(item.fullLengthPlaybackVerified,false);
+    assert.equal(item.completed,true);
+   }
+   assert.equal(sourceCalls,4,'owner playback and A/V must read S3 only');
   }finally{await new Promise(resolve=>qa.server.close(resolve))}
   // Deliberately tamper with one completed episode S3 object AFTER the
   // verified database manifest. A fresh canary must detect this, never
@@ -361,6 +402,7 @@ test('real encrypted S3+PG+FFmpeg: lost ACK recovery and SHA/AV for movie and ep
   const hub=createContentHubServer({
    storage,lease,token:ownerToken,allowSynthetic:false,
    pilotEnv:{BLOFY_CONTENT_HUB_MIRROR_OWNER_RANGE_ENABLED:'1',
+    BLOFY_CONTENT_HUB_MIRROR_AV_CANARY_ENABLED:'1',
     BLOFY_CONTENT_HUB_STORAGE_RIGHTS_CONFIRMED:'1'}
   });
   try{
@@ -402,6 +444,17 @@ test('real encrypted S3+PG+FFmpeg: lost ACK recovery and SHA/AV for movie and ep
     });
    assert.equal(blocked.status,404,
     'a corrupted S3 episode cannot remain owner-playable after quarantine');
+   const remaining=await fetch(
+    'http://127.0.0.1:'+port+'/internal/mirror/copy/history',{
+     headers:{authorization:'Bearer '+ownerToken,
+      'x-blofy-owner-action':'private-mirror-copy-history'}
+    });
+   assert.equal(remaining.status,200);
+   const remainingHistory=await remaining.json();
+   const excluded=remainingHistory.items.find(x=>x.runId===episodeRunId);
+   assert.equal(excluded.state,'failed');
+   assert.equal(excluded.avPrefixDecoded,false);
+   assert.equal(excluded.ownerDevicePlaybackVerified,false);
   }finally{
    await new Promise(resolve=>hub.server.close(resolve));
   }
