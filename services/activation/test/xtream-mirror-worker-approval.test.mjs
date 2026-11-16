@@ -17,7 +17,7 @@ function fixture({missing=false,ageMs=0,sourceDuplicate=false,
     intake_extension:'mkv',expected_bytes:CHUNK+15,
     rights_evidence_hash:license?'b'.repeat(64):null,
     measured_at:new Date(NOW-ageMs).toISOString(),
-    validator_present:validator
+    validator_present:validator,validator_sha256:validator?'a'.repeat(64):null
    }]};
   if(sql.includes('FROM blofy_xtream_items i')||
      sql.includes('FROM blofy_xtream_gateway_episode_map e'))
@@ -33,6 +33,7 @@ test('only pinned source and eligible staged, recently measured file is approved
  assert.equal(r.ok,true);
  assert.equal(r.sourceName,'saleh');
  assert.equal(r.expectedBytes,CHUNK+15);
+ assert.equal(r.validatorSha256,'a'.repeat(64));
  assert.equal(r.mediaId,'123456');
  assert.equal(r.gatewayId,56);
  assert.equal(r.providerRequests,0);
