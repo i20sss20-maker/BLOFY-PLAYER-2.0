@@ -33,6 +33,7 @@ import {checkPrivateReadConcurrency,validateConcurrentReadIds} from './concurren
 import {runMirrorTransferChunk,mirrorWorkerReadiness,
  validateMirrorTransferApproval} from './mirror-transfer-worker.mjs';
 import {createMirrorPortalBridge} from './mirror-transfer-bridge.mjs';
+import {readMirrorHistory} from './mirror-transfer-history.mjs';
 
 const FIXTURE_SOURCE='00000000-0000-4000-8000-000000000000';
 const FIXTURE_SIZE=8*1024*1024;
@@ -189,6 +190,16 @@ export function createContentHubServer({storage,lease,
     uptimeSeconds:Math.floor((Date.now()-started)/1000)});
   if(!safeAuth(req.headers.authorization,token))
    return json(res,401,{ok:false,code:'content_hub_auth_required'});
+  // Durable PostgreSQL copy progress; explicitly excludes unrelated pilot
+  // and season transfer runs. Read-only, no S3 or provider media requests.
+  if(path==='/internal/mirror/copy/history'){
+   if(req.method!=='GET'||String(req.url||'').includes('?'))
+    return json(res,405,{ok:false,code:'mirror_history_get_only'});
+   if(req.headers['x-blofy-owner-action']!=='private-mirror-copy-history')
+    return json(res,403,{ok:false,code:'mirror_history_owner_action_required'});
+   const result=await readMirrorHistory(lease,{limit:24});
+   return json(res,result.ok?200:503,result);
+  }
   // An explicit owner can start a bounded 128MiB transfer session after
   // successful preflight. The POST acknowledges immediately; status/pause
   // are private operator controls, never subscriber/media APIs.
