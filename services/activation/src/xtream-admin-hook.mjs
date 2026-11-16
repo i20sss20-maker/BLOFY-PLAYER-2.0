@@ -65,6 +65,7 @@ import {sourceLiveCapacity} from './xtream-live-source-capacity.mjs';
 import {xtreamDirectMediaGauge} from './xtream-direct-media-gauge.mjs';
 import {summarizeStreamSourceCapacity} from './stream-source-capacity-report.mjs';
 import {assessMirrorSourceHeadroom} from './xtream-mirror-source-headroom.mjs';
+import {mirrorSourceTransportGuard} from './xtream-mirror-source-transport-guard.mjs';
 import {permittedLicensedLiveFanout} from './xtream-licensed-live-fanout-policy.mjs';
 import {xtreamPlaybackSnapshot} from './xtream-playback-metrics.mjs';
 import {summarizeStreamMediaQuality} from './stream-media-quality.mjs';
@@ -3601,7 +3602,9 @@ async function unifiedStreamBridge(req,res,url){
         null,{now,maxAgeMs:10*60*1000,
           gatewayDirectMedia:xtreamDirectMediaGauge.snapshot()});
       const result=assessMirrorSourceHeadroom(report,{
-        sourceId:approved.sourceId,now});
+        sourceId:approved.sourceId,now,
+        transportRisk:mirrorSourceTransportGuard.snapshot({
+          sourceId:approved.sourceId})});
       return json(res,200,{
         ok:true,code:'mirror_headroom_snapshot_read_only',
         sourceName:'saleh',
@@ -3611,6 +3614,8 @@ async function unifiedStreamBridge(req,res,url){
         sourceReportedActiveConnections:result.sourceReportedActiveConnections,
         sourceActiveDirectTransfers:result.sourceActiveDirectTransfers,
         remainingReportedConnections:result.remainingReportedConnections,
+        localTransportCooldownMs:result.localTransportCooldownMs,
+        recentTransportObservationsOnlyThisReplica:true,
         allUpstreamSessionsMeasured:false,
         storageRightsIndependentlyVerified:false,
         providerMediaRequests:0,mediaBytesTransferred:0,
