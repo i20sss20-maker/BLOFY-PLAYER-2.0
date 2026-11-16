@@ -27,7 +27,8 @@ export async function loadApprovedMirrorItem(db,{kind,id,now=Date.now()}={}){
   const sourceId=String(source.rows[0].id);
   const preflight=await db.query([
    'SELECT t.extension AS intake_extension,p.expected_bytes,',
-   'p.rights_evidence_hash,p.measured_at,p.validator_present',
+   'p.rights_evidence_hash,p.measured_at,p.validator_present,',
+   'p.validator_sha256',
    'FROM blofy_stream_mirror_intents t',
    'JOIN blofy_stream_mirror_preflights p ON p.source_id=t.source_id',
    'AND p.media_kind=t.media_kind AND p.catalog_id=t.catalog_id',
@@ -39,6 +40,7 @@ export async function loadApprovedMirrorItem(db,{kind,id,now=Date.now()}={}){
   const bytes=Number(row?.expected_bytes);
   const observed=new Date(row?.measured_at||0).getTime();
   if(!row||row.validator_present!==true||
+     !/^[a-f0-9]{64}$/.test(String(row.validator_sha256||''))||
      !/^[a-f0-9]{64}$/.test(String(row.rights_evidence_hash||''))||
      !Number.isSafeInteger(bytes)||bytes<8*1024**2||bytes>4*1024**3||
      !Number.isFinite(observed)||observed>now||
@@ -72,7 +74,8 @@ export async function loadApprovedMirrorItem(db,{kind,id,now=Date.now()}={}){
   return {...base,ok:true,code:'mirror_approval_exact_item',
    sourceName:'saleh',sourceId,kind,id,mediaId,gatewayId,extension,
    expectedBytes:bytes,rightsEvidenceHash:String(row.rights_evidence_hash),
-   validatorPresent:true,approvedAt:now,permissionScope:'licensed-private-vod-copy',
+   validatorPresent:true,validatorSha256:String(row.validator_sha256),
+   approvedAt:now,permissionScope:'licensed-private-vod-copy',
    customerCutover:false};
  }catch{return {...base,code:'mirror_approval_database_unavailable'}}
 }
