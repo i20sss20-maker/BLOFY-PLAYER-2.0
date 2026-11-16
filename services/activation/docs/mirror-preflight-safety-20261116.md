@@ -227,3 +227,38 @@ All of these additions are offline-tested draft changes. Source
 version hashes are consistency hints, not a rights license or proof
 that the source will continue serving the file tomorrow. Real
 one-file and capacity tests are still required before production.
+
+
+## Crash-consistent checkpoint safety and cached source headroom
+
+- A deterministic private S3 key may already exist after a PostgreSQL
+  checkpoint commit acknowledgement was lost. Each new attempt HEADs
+  that exact key and independently verifies its bytes + SHA-256 before
+  reuse; it refuses to overwrite any existing mismatching/unknown key.
+- If the DB checkpoint write times out, the verified object is retained
+  for reconciliation, NOT deleted: a timed-out query may actually have
+  committed. A confirmed DB acknowledgement clears the uncertain state.
+- A retry may read the exact source range again to compute its SHA but
+  can reuse the already-verified object with ZERO duplicate S3 writes.
+  Completed checkpoints, source versions and customer routes are not
+  changed. This new branch has offline tests for both pre-commit and
+  post-commit errors and for corrupt/unknown S3 HEAD replies.
+- The strict source headroom gate uses ONLY cached provider account
+  connection limits, its last explicit test time and current HTTP
+  transfers observed by the SAME Portal process; it performs no
+  new Xtream connection probe. It fails closed on stale snapshots,
+  unreliable gauge, absent restream permission flag, any currently
+  active direct source transfer or fewer than TWO reported spare
+  connections. The new Portal-only switch
+  BLOFY_CONTENT_HUB_MIRROR_SOURCE_HEADROOM_ENABLED=1 is required.
+- This measurement is explicitly incomplete: it excludes other Railway
+  replicas, upstream relays and HLS segment traffic, and cannot prove
+  commercial or storage rights. It is a cautious operational veto,
+  not a guarantee that customers will never experience upstream load.
+- STREAM operator UI reads the same provider snapshot using the new
+  GET /internal/blofy-stream/ops/mirror-intake/headroom route with
+  explicit blocked reasons and zero new provider/media requests.
+
+Release remains DRAFT, all copy/headroom flags default OFF. Live
+production services are unchanged; run one authorized source/S3 canary
+only after explicit per-file storage rights and external headroom review.
