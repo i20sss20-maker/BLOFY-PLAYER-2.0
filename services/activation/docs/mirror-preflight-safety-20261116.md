@@ -196,3 +196,34 @@ or the real provider can be copied, decoded, stored legally, or served.
 Both PRs remain DRAFT and UNDEPLOYED. Any real one-file canary must be
 an individually authorized file under an explicit private capacity
 budget and verified upstream source connection headroom.
+
+
+## Hardening: versioned immutable VOD copies and crash-safe completion
+
+- A preflight now hashes the exact upstream 206 strong ETag or (if no
+  strong ETag) Last-Modified version evidence. A weak-only ETag is
+  rejected as insufficient to verify an immutable full byte stream.
+  Only its SHA-256 digest is persisted in PostgreSQL. The raw upstream
+  validator, credentials, and video URLs are never returned to owner UI.
+- Every owner-scoped Range request independently hashes and compares
+  its validator to the staged preflight fingerprint BEFORE forwarding
+  any source bytes to the private worker.
+- Mirror worker also compares the returned validator digest and refuses
+  to write a part on a mismatch. Run IDs now depend on source identity,
+  catalog item, exact source-validator SHA-256, file size, and owner
+  rights-evidence digest. A new source version creates a distinct
+  immutable run rather than incorrectly reusing an old verified copy.
+- A transient S3 timeout during final whole-file re-verification leaves
+  every SHA-verified PostgreSQL checkpoint intact. The next authorized
+  invocation finalizes from saved private parts with zero new Xtream
+  requests or S3 writes. Detected S3 hash/manifest mismatches remain
+  terminal failures.
+- Mirror, season, episode and existing film copy starts and explicit
+  next-chunk operations now check the other workers' active state;
+  source-wide PG advisory locks continue to enforce cross-instance
+  serialization. No production flags or customer routing were changed.
+
+All of these additions are offline-tested draft changes. Source
+version hashes are consistency hints, not a rights license or proof
+that the source will continue serving the file tomorrow. Real
+one-file and capacity tests are still required before production.
