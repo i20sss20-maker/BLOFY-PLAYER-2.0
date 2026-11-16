@@ -157,7 +157,7 @@ jobs:
           docker run --rm -d --name blofy-mirror-ci-minio \
             -e MINIO_ROOT_USER=blofyci_testkey \
             -e MINIO_ROOT_PASSWORD=blofyci_testsecret123456 \
-            -p 9000:9000 minio/minio:latest server /data --address ":9000"
+            -p 9000:9000 quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z server /data --address ":9000"
           for i in $(seq 1 45); do
             if curl --fail --silent http://127.0.0.1:9000/minio/health/ready > /dev/null; then
               exit 0
