@@ -58,7 +58,7 @@ const FLAGS={
 
 test('real encrypted S3+PG+FFmpeg: lost ACK recovery and SHA/AV for movie and episode',{
  skip:!(process.env.BLOFY_TEST_PG_URL&&process.env.BLOFY_TEST_MINIO_URL),
- timeout:110000
+ timeout:160000
 },async()=>{
  // Isolated container per CI job. Stable name permits one deliberate
  // virtual-host DNS entry (bucket.localhost) without production DNS.
@@ -398,7 +398,36 @@ test('real encrypted S3+PG+FFmpeg: lost ACK recovery and SHA/AV for movie and ep
     assert.equal(item.fullLengthPlaybackVerified,false);
     assert.equal(item.completed,true);
    }
-   assert.equal(sourceCalls,4,'owner playback and A/V must read S3 only');
+   // Real FFprobe and FFmpeg HTTP clients must decode the private
+   // S3-backed MP4 with Range requests and header-only owner access.
+   // This is a desktop-player-like network test, NOT Android/Windows
+   // app certification or full-length playback.
+   const authHeaders='Authorization: Bearer '+qaToken+'\r\n'+
+    'x-blofy-owner-action: read-verified-private-mirror-range\r\n';
+   const decodedKinds=[];
+   for(const [kind,url] of [['movie',endpointMovie],
+     ['episode',endpointEpisode]]){
+    const result=await execFile('ffprobe',[
+     '-hide_banner','-v','error','-rw_timeout','15000000',
+     '-headers',authHeaders,
+     '-show_entries','stream=codec_type','-of','json',url
+    ],{timeout:35000,maxBuffer:262144});
+    const streams=JSON.parse(result.stdout).streams||[];
+    assert.ok(streams.some(x=>x.codec_type==='video'),
+     kind+' must provide video to real remote FFprobe');
+    assert.ok(streams.some(x=>x.codec_type==='audio'),
+     kind+' must provide audio to real remote FFprobe');
+    for(const map of ['0:v:0','0:a:0']){
+     await execFile('ffmpeg',[
+      '-hide_banner','-v','error','-nostdin',
+      '-rw_timeout','15000000','-headers',authHeaders,
+      '-i',url,'-map',map,'-t','1','-f','null','-'
+     ],{timeout:35000,maxBuffer:262144});
+    }
+    decodedKinds.push(kind);
+   }
+   assert.deepEqual(decodedKinds,['movie','episode']);
+   assert.equal(sourceCalls,4,'real HTTP client must use S3 only');
   }finally{await new Promise(resolve=>qa.server.close(resolve))}
   // Deliberately tamper with one completed episode S3 object AFTER the
   // verified database manifest. A fresh canary must detect this, never
