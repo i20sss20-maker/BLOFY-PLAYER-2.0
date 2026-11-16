@@ -114,3 +114,50 @@ are satisfied.
 - Existing server `blofy-migration-live-lab-test.up.railway.app` is
   test-only. Real source relay remains gated on demonstrable origin
   permissions, fresh capacity and connection-reset diagnosis.
+
+
+## 16 Nov 17:44 Riyadh — five parallel viewers, two separate waves
+
+- Hardened one isolated `canary` MediaMTX path (not the provider Xtream)
+  to `maxReaders=6` for a **bounded five-viewer** synthetic test.
+  No provider credentials, access to subscriber databases, or automatic
+  media copying were introduced.
+- QA runner `railway-migration-on-demand-smoke.mjs`, commit
+  `34c2c3eb83678148bc3ce9ceca4d43e8069fd82b`,
+  concurrently launched **five** FFmpeg readers, each requiring
+  `0:v:0` H264 and `0:a:0` AAC decode for **8 seconds**.
+- Railway deployment `f1b05707-c167-4ab3-9669-05423f712c47`:
+  **SUCCESS**; `code=canary_five_viewers_decoded`,
+  `passedViewers=5`, `viewersTested=5`, `elapsedMs=9955`,
+  `automaticCopy=false`, `customerCutover=false`.
+- Independently inspected MediaMTX runtime at 14:41:35 UTC:
+  **one** `runOnDemand` startup, **one** RTSP publishing session,
+  **five** distinct HLS sessions, two A/V tracks.
+- After the readers left, the server logged muxer destruction
+  at 14:42:55 UTC and `runOnDemand command stopped: not needed by anyone`
+  at 14:43:03 UTC. This demonstrates the idle shutdown **for this test**.
+- Restarted the **same pinned QA build**, leaving MediaMTX running, to
+  verify reopening after the idle stop:
+  deployment `6fbb933c-3094-481b-884e-c41b9baf621a`:
+  **SUCCESS**, five out of five FFmpeg readers again decoded A/V
+  (`elapsedMs=9917`). MediaMTX logs at 14:43:46 UTC again show
+  one on-demand startup, one RTSP publishing session and five HLS sessions.
+  The test runner deliberately reports
+  `independentPublisherCountVerified=false` because single-publisher
+  evidence comes from separate MediaMTX runtime logs.
+- The service's existing external HLS port remains the only mapped public
+  port; all headless FFmpeg test clients used Railway **private DNS**.
+- These results cover two short, synthetic, low-resolution waves. They
+  **do not** prove real-provider license, capacity, >5 clients,
+  sustained streaming, original audio languages or Android/Windows
+  device playback. The existing real Xtream `saleh` origin has previously
+  produced `xtream_transport_connection_reset`. No real Xtream transfer
+  was started or cut over.
+- After the test the baseline Railway production Content Hub, Portal and
+  BLOFY STREAM API deploys still reported SUCCESS. The S3 synthetic movie
+  and episode acceptance from earlier was untouched.
+
+Next gate: verify actual source storage + redistribution license evidence,
+per-account upstream headroom and private S3 budget, then run one approved
+real channel + movie + episode in isolation with long-playback and device
+acceptance. Do not infer those permissions from an activated Xtream login.
