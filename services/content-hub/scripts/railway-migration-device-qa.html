@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BLOFY | مختبر التشغيل</title>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}
+body{background:#0c101b;color:#f5f6fa;font-family:system-ui,-apple-system,sans-serif;margin:0}
+main{max-width:980px;margin:auto;padding:26px 16px 64px}
+h1{font-size:1.8rem;margin:8px 0 10px}p{color:#b9c4dc;line-height:1.7}
+small{color:#abb6cf}.mark{letter-spacing:3px;color:#55cef3;font-weight:800}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(265px,1fr));gap:16px;margin-top:24px}
+.card{border:1px solid #313d59;background:#151d2d;padding:16px;border-radius:18px}
+.card h2{font-size:1.12rem;margin:0 0 12px}video{width:100%;aspect-ratio:16/9;background:#020309;border-radius:12px}
+a{color:#6ad5ff;overflow-wrap:anywhere}.note{padding:13px;background:#212b41;border-radius:12px}
+</style></head><body><main>
+<div class="mark">BLOFY</div><h1>مختبر تشغيل BLOFY STREAM</h1>
+<p>اختبر البث، والفيلم والحلقة، والتقديم والرجوع والصوت من جهازك. جميع الملفات تجريبية من صنع النظام، وليست محتوى من Xtream أو مكتبة العملاء.</p>
+<div class="note">النتائج تختلف حسب الجهاز والمتصفح. جرب الملفات ببرنامج VLC إذا لم يعمل البث المباشر في المتصفح.</div>
+<div class="grid">
+<section class="card"><h2>📺 بث مباشر تجريبي</h2>
+<video controls playsinline preload="none" src="https://blofy-migration-live-lab-test.up.railway.app/canary/index.m3u8"></video>
+<p><a href="https://blofy-migration-live-lab-test.up.railway.app/canary/index.m3u8" target="_blank" rel="noopener noreferrer">فتح رابط بث HLS في VLC</a></p>
+<small>يبث عند الطلب؛ قد يتأخر بدء الصوت والصورة عدة ثوانٍ.</small></section>
+<section class="card"><h2>🎬 فيلم تجريبي (8 ثوانٍ)</h2>
+<video controls playsinline preload="metadata" src="/movie.mp4"></video>
+<p><a href="/movie.mp4">فتح ملف الفيلم MP4</a></p></section>
+<section class="card"><h2>📺 حلقة تجريبية (11 ثانية)</h2>
+<video controls playsinline preload="metadata" src="/episode.mp4"></video>
+<p><a href="/episode.mp4">فتح ملف الحلقة MP4</a></p></section>
+</div><p>المختبر مستقل عن تطبيقات المشتركين. لا توجد أكواد عملاء أو ملفات مصدر حقيقية هنا.</p>
+</main></body></html>
