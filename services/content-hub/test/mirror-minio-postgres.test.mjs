@@ -280,7 +280,10 @@ test('real encrypted S3+PG+FFmpeg: lost ACK recovery and SHA/AV for movie and ep
    storage,lease,token:qaToken,
    pilotEnv:{BLOFY_CONTENT_HUB_MIRROR_OWNER_RANGE_ENABLED:'1',
     BLOFY_CONTENT_HUB_MIRROR_AV_CANARY_ENABLED:'1',
-    BLOFY_CONTENT_HUB_STORAGE_RIGHTS_CONFIRMED:'1'}
+    BLOFY_CONTENT_HUB_STORAGE_RIGHTS_CONFIRMED:'1',
+    BLOFY_CONTENT_HUB_WEBSITE_FULL_RANGE_QA_ENABLED:'1',
+    BLOFY_CONTENT_HUB_OWNER_PREVIEW_ENABLED:'1',
+    BLOFY_CONTENT_HUB_BATCH_RUN_ID:runId}
   });
   try{
    await new Promise((resolve,reject)=>{
@@ -306,6 +309,14 @@ test('real encrypted S3+PG+FFmpeg: lost ACK recovery and SHA/AV for movie and ep
     method:'GET',headers:{...headers,range:'bytes=0-63'}
    });
    assert.equal(oldRoute.status,404,'legacy route must not bypass owner mirror opt-in');
+   const websiteBypass=await fetch('http://127.0.0.1:'+
+    qa.server.address().port+'/internal/site-qa/files/movie/'+runId,{
+    headers:{...headers,
+     'x-blofy-owner-action':'private-original-range-qa',
+     range:'bytes=0-63'}
+   });
+   assert.equal(websiteBypass.status,404,
+    'original site-QA path must never bypass mirror S3 SHA checks');
    const head=await fetch(endpointMovie,{method:'HEAD',headers});
    assert.equal(head.status,200);
    assert.equal(head.headers.get('content-length'),String(SIZE));
