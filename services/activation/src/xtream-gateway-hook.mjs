@@ -67,6 +67,7 @@ import {listLicensedSeries,mappedLicensedSeriesEpisodes,buildLicensedSeriesSeaso
 import {findRunningApprovedSeasonEpisode} from './xtream-content-hub-season-approval.mjs';
 import {probePrivateEpisodeRange} from './xtream-content-hub-episode-probe.mjs';
 import {loadApprovedMirrorItem} from './xtream-mirror-worker-approval.mjs';
+import {mirrorSourceValidatorHash} from './xtream-mirror-source-validator.mjs';
 import { readXtreamGatewayJsonResponse } from './xtream-gateway-response.mjs';
 import {configuredXtreamPublicOrigin} from './xtream-public-origin.mjs';
 import {probeXtreamAccountCompatibility} from './xtream-compatibility-probe.mjs';
@@ -1933,10 +1934,16 @@ async function handlePrivateContentHubSource(req,res,url){
      'accept-encoding':'identity',
      'user-agent':'BLOFY-ContentHub-MirrorBridge/1.0'}});
    const verified=validContentHubResponse(upstream,range);
+   const validatorSha256=verified?
+    mirrorSourceValidatorHash(upstream.headers):null;
    if(!verified||verified.size!==approved.expectedBytes||
       !verified.validator||!upstream.body){
     await upstream.body?.cancel().catch(()=>{});
     return json(res,502,{ok:false,code:'mirror_range_provider_rejected'});
+   }
+   if(validatorSha256!==approved.validatorSha256){
+    await upstream.body?.cancel().catch(()=>{});
+    return json(res,409,{ok:false,code:'mirror_range_source_version_changed'});
    }
    const headers={
     'content-type':'application/octet-stream',
