@@ -157,7 +157,7 @@ export async function runIsolatedMirrorPgS3({
   }
   report.allSha256Verified=true;
   report.audioVideoDecoded=true;
-  const history=await readMirrorHistory({lease,limit:12});
+  const history=await readMirrorHistory(lease,{limit:12});
   if(history.ok!==true||transfers.some(({runId})=>{
    const found=history.items.find(x=>x.runId===runId);
    return found?.completed!==true||found.avPrefixDecoded!==true||
