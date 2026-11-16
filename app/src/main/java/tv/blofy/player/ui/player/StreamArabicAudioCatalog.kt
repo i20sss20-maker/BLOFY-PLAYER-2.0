@@ -160,18 +160,18 @@ internal object StreamArabicAudioCatalog {
             id.startsWith("anis-alkass-") -> "alkass"
             else -> "other"
         }
-        val en = mapOf("max" to "Anis Max", "sport" to "Anis Sport",
-            "italy" to "Anis Italy", "de" to "Anis DE", "thm8h" to "Anis Thm8h",
-            "shasha" to "Anis Shasha", "shahid" to "Anis Shahid",
-            "en" to "Anis EN", "fr" to "Anis FR", "xtra" to "Anis Xtra",
-            "alkass" to "Anis Al Kass", "max-low" to "Anis Max Low",
+        val en = mapOf("max" to "BLOFY Max", "sport" to "BLOFY Sport",
+            "italy" to "BLOFY Italy", "de" to "BLOFY DE", "thm8h" to "BLOFY Thm8h",
+            "shasha" to "BLOFY Shasha", "shahid" to "BLOFY Shahid",
+            "en" to "BLOFY EN", "fr" to "BLOFY FR", "xtra" to "BLOFY Xtra",
+            "alkass" to "BLOFY Al Kass", "max-low" to "BLOFY Max Low",
             "other" to "Other audio")
-        val ar = mapOf("max" to "أنيس ماكس", "sport" to "أنيس سبورت",
-            "italy" to "أنيس إيطاليا", "de" to "أنيس ألمانيا",
-            "thm8h" to "أنيس السعودية", "shasha" to "أنيس شاشة",
-            "shahid" to "أنيس شاهد", "en" to "أنيس الإنجليزية",
-            "fr" to "أنيس الفرنسية", "xtra" to "أنيس إكسترا",
-            "alkass" to "أنيس الكأس", "max-low" to "أنيس ماكس منخفض",
+        val ar = mapOf("max" to "بلوفي ماكس", "sport" to "بلوفي سبورت",
+            "italy" to "بلوفي إيطاليا", "de" to "بلوفي ألمانيا",
+            "thm8h" to "بلوفي السعودية", "shasha" to "بلوفي شاشة",
+            "shahid" to "بلوفي شاهد", "en" to "بلوفي الإنجليزية",
+            "fr" to "بلوفي الفرنسية", "xtra" to "بلوفي إكسترا",
+            "alkass" to "بلوفي الكأس", "max-low" to "بلوفي ماكس منخفض",
             "other" to "صوتيات أخرى")
         return (if (english) en else ar).getValue(group)
     }
@@ -199,7 +199,10 @@ internal object StreamArabicAudioCatalog {
         for (i in 0 until minOf(rows.length(), 64)) {
             val row = rows.optJSONObject(i) ?: continue
             val id = row.optString("id", "").trim().take(64)
+            // Rebrand only the UI label; preserve upstream track IDs and playback URLs.
             val label = row.optString("label", "").trim().take(80)
+                .replace(Regex("(?i)\\b(?:anes|anis)\\b"), "BLOFY")
+                .replace("أنيس", "بلوفي")
             val url = row.optString("playbackUrl", "")
             if (!trackIdFormat.matches(id) || label.isBlank() || !playableUrl(url)) continue
             val format = if (row.optString("format", "").equals("hls", true) ||

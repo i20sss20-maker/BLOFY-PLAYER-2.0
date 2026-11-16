@@ -234,9 +234,10 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 layoutDirection = View.LAYOUT_DIRECTION_RTL
                 setBackgroundColor(Color.TRANSPARENT)
             }
+            var lastFocusedChannelKey: String? = null
             val adapter = LiveChannelAdapter(
                 onClick = { channel -> selectChannel(channel) },
-                onFocus = {},
+                onFocus = { lastFocusedChannelKey = it.key },
                 onLongClick = { channel ->
                     activity.lifecycleScope.launch {
                         val dao = BlofyDatabase.get(activity.applicationContext).dao()
@@ -250,7 +251,8 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                     }
                 },
                 itemKey = { it.key },
-                translucent = true
+                translucent = true,
+                highContrast = true
             )
             adapter.submit(channels)
             list.adapter = adapter
@@ -271,10 +273,10 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             }
             val hint = TextView(activity).apply {
                 text = copy(
-                    "البث مستمر  •  OK للتبديل  •  BACK للإغلاق",
-                    "Live keeps playing  •  OK switch  •  BACK close"
+                    "→ الصوت مباشرة  •  OK تشغيل  •  BACK إغلاق",
+                    "RIGHT audio  •  OK tune  •  BACK close"
                 )
-                textSize = 8.7f
+                textSize = 10f
                 typeface = BlofyTvDesign.BodyTypeface
                 setTextColor(BlofyTvDesign.TextMuted)
                 gravity = Gravity.START or Gravity.CENTER_VERTICAL
@@ -293,7 +295,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 setPadding(dp(12), dp(8), dp(12), dp(8))
                 background = GradientDrawable().apply {
                     cornerRadius = dp(12).toFloat()
-                    setColor(0x8A1A1527.toInt())
+                    setColor(0xEF1A1527.toInt())
                     setStroke(dp(1), 0x7B6D508D)
                 }
                 addTextChangedListener(object : TextWatcher {
@@ -329,7 +331,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                             isClickable = true
                             background = GradientDrawable().apply {
                                 cornerRadius = dp(10).toFloat()
-                                setColor(if (tab == activeTab) 0xB25A3384.toInt() else 0x522C2538)
+                                setColor(if (tab == activeTab) 0xFF5A3384.toInt() else 0xE52C2538.toInt())
                             }
                             setOnClickListener {
                                 activeTab = tab
@@ -337,7 +339,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                                     tabContainer.getChildAt(index)?.background = GradientDrawable().apply {
                                         cornerRadius = dp(10).toFloat()
                                         setColor(if (index == options.indexOfFirst { it.first == tab })
-                                            0xB25A3384.toInt() else 0x522C2538)
+                                            0xFF5A3384.toInt() else 0xE52C2538.toInt())
                                     }
                                 }
                                 refreshList()
@@ -364,7 +366,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                     cornerRadius = dp(16).toFloat()
                     // Intentionally translucent: the current video remains clearly visible behind
                     // the compact list instead of looking like playback was replaced by a menu.
-                    setColor(0x7416121E.toInt())
+                    setColor(0xF216121E.toInt())
                     setStroke(dp(1), 0x4D7956A8.toInt())
                 }
                 elevation = dp(7).toFloat()
@@ -384,8 +386,31 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 if (BuildConfig.CODE_ONLY_LOGIN) {
                     // Reserve a fixed, scrollable remote-control footer so 38
                     // direct audio buttons never shrink the channel list.
-                    addView(buildAttachedActions(), LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT, dp(230)))
+                    val actions = buildAttachedActions {
+                        val visible = (list.layoutManager as? LinearLayoutManager)
+                            ?.findFirstVisibleItemPosition()?.coerceAtLeast(0) ?: 0
+                        val target = adapter.indexOfKey(lastFocusedChannelKey)
+                            .takeIf { it >= 0 } ?: visible
+                        list.scrollToPosition(target)
+                        list.post {
+                            list.findViewHolderForAdapterPosition(target)?.itemView?.requestFocus()
+                                ?: list.requestFocus()
+                        }
+                    }
+                    list.addOnChildAttachStateChangeListener(object : RecyclerView.OnChildAttachStateChangeListener {
+                        override fun onChildViewAttachedToWindow(view: View) {
+                            view.setOnKeyListener { _, keyCode, event ->
+                                if (event.action == KeyEvent.ACTION_DOWN &&
+                                    keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                                    ((actions.getChildAt(0) as? LinearLayout)?.getChildAt(1))
+                                        ?.requestFocus() == true
+                                } else false
+                            }
+                        }
+                        override fun onChildViewDetachedFromWindow(view: View) = Unit
+                    })
+                    addView(actions, LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, dp(154)))
                 }
             }
 
@@ -535,7 +560,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
          * Flat LIVE controls. Voices are buttons inside this SAME ScrollView;
          * no folder picker, no nested dialogs and no player restart.
          */
-        private fun buildAttachedActions(): ScrollView {
+        private fun buildAttachedActions(onChannels: () -> Unit): ScrollView {
             val scroller = ScrollView(activity).apply {
                 isFillViewport = false
                 isVerticalScrollBarEnabled = true
@@ -578,6 +603,13 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                     background = shape(false)
                     setOnFocusChangeListener { view, focused -> view.background = shape(focused) }
                     setOnClickListener { onTap() }
+                    setOnKeyListener { _, keyCode, event ->
+                        if (event.action == KeyEvent.ACTION_DOWN &&
+                            keyCode == KeyEvent.KEYCODE_DPAD_LEFT && !audioPickerOpen) {
+                            onChannels()
+                            true
+                        } else false
+                    }
                 }
                 footer.addView(result, LinearLayout.LayoutParams(-1, dp(38)).apply {
                     bottomMargin = dp(4)
@@ -588,7 +620,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             fun showActions(expanded: Boolean) {
                 audioPickerOpen = false
                 footer.removeAllViews()
-                addHeading(copy("التحكم بالبث", "LIVE CONTROLS"))
+                addHeading(copy("BLOFY • التحكم بالبث", "BLOFY • LIVE CONTROLS"))
                 for (action in LiveChannelPanelPolicy.actions(BuildConfig.CODE_ONLY_LOGIN, expanded)) {
                     val label = when (action) {
                         LiveChannelPanelAction.BLOFY_AUDIO ->

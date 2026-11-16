@@ -22,7 +22,9 @@ internal class LiveChannelAdapter(
     private val onFocus: (StreamEntity) -> Unit,
     private val onLongClick: (StreamEntity) -> Unit,
     private val itemKey: (StreamEntity) -> String,
-    private val translucent: Boolean = false
+    private val translucent: Boolean = false,
+    /** STREAM live sidebar: keep 56dp rows but use solid, legible surfaces. */
+    private val highContrast: Boolean = false
 ) : RecyclerView.Adapter<LiveChannelAdapter.Holder>() {
     private val items = ArrayList<StreamEntity>(256)
     private var focusedKey: String? = null
@@ -82,7 +84,11 @@ internal class LiveChannelAdapter(
             setPadding(dp(if (compact) 4 else 5), dp(if (compact) 4 else 5), dp(if (compact) 4 else 5), dp(if (compact) 4 else 5))
             background = GradientDrawable().apply {
                 cornerRadius = dp(if (compact) 9 else 10).toFloat()
-                setColor(if (translucent) 0x54211332.toInt() else BlofyTvDesign.BackgroundRaised)
+                setColor(when {
+                    translucent && highContrast -> 0xFF211332.toInt()
+                    translucent -> 0x54211332.toInt()
+                    else -> BlofyTvDesign.BackgroundRaised
+                })
                 setStroke(dp(1), if (translucent) 0x3FFFFFFF else BlofyTvDesign.Divider)
             }
         }
@@ -225,10 +231,15 @@ internal class LiveChannelAdapter(
         val density = contextForBackground.resources.displayMetrics.density
         return GradientDrawable().apply {
             cornerRadius = 10 * density
-            setColor(if (focused) 0xD35C3582.toInt() else 0x5E211332.toInt())
+            setColor(when {
+                highContrast && focused -> 0xFF5C3582.toInt()
+                highContrast -> 0xF3211332.toInt()
+                focused -> 0xD35C3582.toInt()
+                else -> 0x5E211332.toInt()
+            })
             setStroke(
                 ((if (focused) 2 else 1) * density).toInt(),
-                if (focused) BlofyTvDesign.FocusStroke else 0x38FFFFFF
+                if (focused) BlofyTvDesign.FocusStroke else if (highContrast) 0x806C5492.toInt() else 0x38FFFFFF
             )
         }
     }
