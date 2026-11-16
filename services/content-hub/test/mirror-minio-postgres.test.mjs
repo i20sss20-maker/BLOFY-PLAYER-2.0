@@ -252,6 +252,73 @@ test('real encrypted S3+PG+FFmpeg: lost ACK recovery and SHA/AV for movie and ep
   assert.equal(sourceCalls,4);
   assert.equal((await storage.measurePrivateUsage({maxObjects:1000}))
     .objectCount,4);
+  // The owner route serves ONLY an already verified private manifest.
+  // Test genuine S3-backed HTTP ranges (including an 8MiB boundary),
+  // separate movie/episode selection, 401 auth, 404 consent/flag, 416
+  // malformed/oversized ranges, and no source traffic during playback.
+  const qaToken='ci_mirror_private_range_owner_token_12345678';
+  const qa=createContentHubServer({
+   storage,lease,token:qaToken,
+   pilotEnv:{BLOFY_CONTENT_HUB_MIRROR_OWNER_RANGE_ENABLED:'1',
+    BLOFY_CONTENT_HUB_STORAGE_RIGHTS_CONFIRMED:'1'}
+  });
+  try{
+   await new Promise((resolve,reject)=>{
+    qa.server.once('error',reject);
+    qa.server.listen(0,'127.0.0.1',resolve);
+   });
+   const endpoint='http://127.0.0.1:'+
+    qa.server.address().port+'/internal/mirror/owner-range/';
+   const endpointMovie=endpoint+'movie/'+runId;
+   const endpointEpisode=endpoint+'episode/'+episodeRunId;
+   const headers={
+    authorization:'Bearer '+qaToken,
+    'x-blofy-owner-action':'read-verified-private-mirror-range'
+   };
+   const denial=await fetch(endpointMovie,{method:'HEAD'});
+   assert.equal(denial.status,401);
+   const noConsent=await fetch(endpointMovie,{
+    method:'HEAD',headers:{authorization:'Bearer '+qaToken}
+   });
+   assert.equal(noConsent.status,404);
+   const oldRoute=await fetch('http://127.0.0.1:'+
+    qa.server.address().port+'/internal/pilot/playback/'+runId,{
+    method:'GET',headers:{...headers,range:'bytes=0-63'}
+   });
+   assert.equal(oldRoute.status,404,'legacy route must not bypass owner mirror opt-in');
+   const head=await fetch(endpointMovie,{method:'HEAD',headers});
+   assert.equal(head.status,200);
+   assert.equal(head.headers.get('content-length'),String(SIZE));
+   assert.equal(head.headers.get('x-blofy-mirror-private'),'owner-only');
+   assert.equal(head.headers.get('cross-origin-resource-policy'),'same-origin');
+   assert.equal(head.headers.get('accept-ranges'),'bytes');
+   const start=8*1024*1024-8,end=8*1024*1024+9;
+   const crossing=await fetch(endpointMovie,{
+    headers:{...headers,range:'bytes='+start+'-'+end}
+   });
+   assert.equal(crossing.status,206);
+   assert.equal(crossing.headers.get('content-range'),
+    'bytes '+start+'-'+end+'/'+SIZE);
+   assert.deepEqual(Buffer.from(await crossing.arrayBuffer()),
+    BYTE_SAMPLE.subarray(start,end+1));
+   const episode=await fetch(endpointEpisode,{
+    headers:{...headers,range:'bytes=0-2047'}
+   });
+   assert.equal(episode.status,206);
+   assert.deepEqual(Buffer.from(await episode.arrayBuffer()),
+    BYTE_SAMPLE.subarray(0,2048));
+   const missingRange=await fetch(endpointMovie,{headers});
+   assert.equal(missingRange.status,416);
+   const tooLong=await fetch(endpointMovie,{
+    headers:{...headers,range:'bytes=0-8388608'}
+   });
+   assert.equal(tooLong.status,416);
+   const wrongKind=await fetch(endpoint+'episode/'+runId,{
+    headers:{...headers,range:'bytes=0-63'}
+   });
+   assert.equal(wrongKind.status,404);
+   assert.equal(sourceCalls,4,'owner playback must read S3 only');
+  }finally{await new Promise(resolve=>qa.server.close(resolve))}
   // Deliberately tamper with one completed episode S3 object AFTER the
   // verified database manifest. A fresh canary must detect this, never
   // report valid audio/video or request upstream media again.
@@ -271,7 +338,9 @@ test('real encrypted S3+PG+FFmpeg: lost ACK recovery and SHA/AV for movie and ep
   // episode manifest atomically before returning its 409 result.
   const ownerToken='blofy_ci_only_mirror_owner_token_12345678';
   const hub=createContentHubServer({
-   storage,lease,token:ownerToken,allowSynthetic:false,pilotEnv:{}
+   storage,lease,token:ownerToken,allowSynthetic:false,
+   pilotEnv:{BLOFY_CONTENT_HUB_MIRROR_OWNER_RANGE_ENABLED:'1',
+    BLOFY_CONTENT_HUB_STORAGE_RIGHTS_CONFIRMED:'1'}
   });
   try{
    await new Promise((resolve,reject)=>{
@@ -303,6 +372,15 @@ test('real encrypted S3+PG+FFmpeg: lost ACK recovery and SHA/AV for movie and ep
    assert.equal(report.quarantinedOnHashMismatch,true);
    assert.equal(report.providerRequests,0);
    assert.equal(report.customerCutover,false);
+   const blocked=await fetch(
+    'http://127.0.0.1:'+port+'/internal/mirror/owner-range/episode/'+
+    episodeRunId,{
+     headers:{authorization:'Bearer '+ownerToken,
+      'x-blofy-owner-action':'read-verified-private-mirror-range',
+      range:'bytes=0-63'}
+    });
+   assert.equal(blocked.status,404,
+    'a corrupted S3 episode cannot remain owner-playable after quarantine');
   }finally{
    await new Promise(resolve=>hub.server.close(resolve));
   }
