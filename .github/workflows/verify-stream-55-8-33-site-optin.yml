@@ -1,0 +1,34 @@
+name: Verify STREAM 55.8.33 opt-in website APK
+on:
+  push:
+    branches: [qa/verify-stream-55-8-33-site-20261116]
+    paths: ['.github/workflows/verify-stream-55-8-33-site-optin.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-public-download:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Check health and optional APK path (separate from stable)
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='https://updates.blofyplayer.com'
+          for attempt in 1 2 3 4 5 6; do
+            if curl -fsS --max-time 20 "$base/health" >/dev/null; then break; fi
+            if [ "$attempt" = 6 ]; then exit 1; fi
+            sleep 5
+          done
+          url="$base/d/blofy-stream/foxfm-test"
+          curl --fail --silent --show-error --location --retry 4 --retry-all-errors --retry-delay 4 \
+            --max-time 240 "$url" -o /tmp/stream-test.apk
+          test "$(wc -c </tmp/stream-test.apk)" -eq 135740613
+          echo "b676d490ca56319db1cd3cf7cb6f78b395228d79d34d51f06f024ec231433946  /tmp/stream-test.apk" | sha256sum -c -
+          # Current stable 55.8.32 remains the main non-test download.
+          curl --fail --silent --show-error --location --range 0-1023 --retry 4 \
+            --max-time 80 -D /tmp/stable.headers "$base/d/blofy-stream" -o /tmp/stable.part
+          grep -Ei '^content-range: bytes 0-1023/135739422' /tmp/stable.headers
+          test "$(wc -c </tmp/stable.part)" -eq 1024
+          echo "Optional STREAM 55.8.33 APK verified by full SHA256; default STREAM 55.8.32 unchanged." >> "$GITHUB_STEP_SUMMARY"
