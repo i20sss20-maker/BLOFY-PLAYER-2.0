@@ -135,3 +135,33 @@ On **the private Content Hub**:
 Developer offline verification: the normal activation and Content Hub CI
 suites include mirror worker approval, private Range bridge contracts, S3
 capacity and one/two-chunk resumable transfer tests.
+
+
+## Daily reconciliation and durable owner statistics
+
+- Existing Xtream metadata synchronization remains at 04:00 Asia/Riyadh.
+- The new daily copy-plan is read-only. It requires the exact active
+  approved source, a completed same-day catalog import, and active
+  staged per-item preflights less than 30 minutes old. It displays
+  exact blockers; it never starts a download or a subscriber cutover.
+- Portal feature switch: BLOFY_STREAM_MIRROR_DAILY_PLAN_ENABLED=1.
+  The switch defaults OFF.
+- License-reference hashes currently represent owner attestations,
+  NOT independent proof of permanent storage or redistribution rights.
+- The private Hub mirror history endpoint lists recent verified,
+  staged and failed persisted movie/episode copies with percentages,
+  saved byte counts and bounded error codes, excluding unrelated
+  pilot runs. It requires a private owner-action header.
+- The companion STREAM operator UI displays the daily plan and
+  durable mirror transfer progress/failures through signed bridges.
+
+## Release status and remaining verification
+
+- These changes live only in unmerged draft PRs #637 and #107.
+- All GitHub tests are offline mocks. No new real provider video,
+  private S3 transfer, quota scan or player A/V canary was performed.
+- Validate legal storage rights for each file, source concurrency
+  headroom, private S3 API compatibility/cost, and a real-file A/V
+  canary before switching on recurring uploads.
+- Imported Xtream metadata is not proof that the full catalog has
+  been physically transferred to private storage.
