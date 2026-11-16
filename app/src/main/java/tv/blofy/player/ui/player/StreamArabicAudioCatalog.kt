@@ -7,6 +7,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import tv.blofy.player.BuildConfig
 import tv.blofy.player.core.identity.StreamCodeSession
 import java.util.concurrent.TimeUnit
 
@@ -20,6 +21,7 @@ import java.util.concurrent.TimeUnit
  */
 internal object StreamArabicAudioCatalog {
     private const val MAX_JSON_BYTES = 262_144
+    private const val STREAM_APP_AUDIO_ASSET = "blofy_stream_foxfm_audio.json"
     private val channelIdFormat = Regex("[A-Za-z0-9_-]{1,80}")
     private val trackIdFormat = Regex("[A-Za-z0-9_-]{1,64}")
     private val client by lazy {
@@ -75,8 +77,31 @@ internal object StreamArabicAudioCatalog {
         return true
     }
 
+    /** STREAM-only, tightly pinned HTTP URLs from the owner's 33-track local bundle.
+     * No code-session bearer is ever attached to these third-party requests.
+     * Only these known paths on the exact FoXFM origin are accepted.
+     */
+    internal fun appOnlyAudioUrl(value: String): Boolean {
+        if (value.length !in 18..200 || value.any { it.isWhitespace() || it.code < 32 }) return false
+        val uri = runCatching { Uri.parse(value) }.getOrNull() ?: return false
+        if (!uri.scheme.equals("http", true) || !uri.host.equals("foxfm.xyz", true) ||
+            uri.encodedAuthority.orEmpty().contains('@') || uri.query != null ||
+            uri.fragment != null) return false
+        val path = uri.encodedPath.orEmpty()
+        return when (uri.port) {
+            -1, 80 -> Regex("^/[1-9]$").matches(path)
+            8080 -> Regex("^/(?:live[1-4]|xtra[1-3]|en[1-2]|fr[1-2]|starzplay[1-2]|shasha[1-2]|thmanyah[1-3]|shahid[1-2]|alkass[5-8])$").matches(path)
+            else -> false
+        }
+    }
+
     internal fun playableUrl(value: String): Boolean =
-        trustedAudioUrl(value) || publicAudioUrl(value)
+        trustedAudioUrl(value) || publicAudioUrl(value) || appOnlyAudioUrl(value)
+
+    private fun appBundledTracks(context: Context): List<Track> =
+        context.assets.open(STREAM_APP_AUDIO_ASSET).bufferedReader(Charsets.UTF_8).use {
+            decode(it.readText()).filter { track -> appOnlyAudioUrl(track.playbackUrl) }
+        }
 
     /**
      * The channel video remains unchanged while the viewer chooses a separate
@@ -100,6 +125,16 @@ internal object StreamArabicAudioCatalog {
         withContext(Dispatchers.IO) {
             if (!channelIdFormat.matches(channelId))
                 return@withContext Lookup(emptyList(), Failure.INVALID_CHANNEL)
+            // Only the STREAM build uses its locally packaged FoXFM station list.
+            // Production BLOFY PLAYER and the existing ANES server catalog stay untouched.
+            if (BuildConfig.CODE_ONLY_LOGIN) {
+                if (StreamCodeSession.authorization(context) == null)
+                    return@withContext Lookup(emptyList(), Failure.NOT_ACTIVATED)
+                return@withContext runCatching {
+                    val local = appBundledTracks(context)
+                    Lookup(local, if (local.isEmpty()) Failure.EMPTY_CATALOG else Failure.NONE)
+                }.getOrElse { Lookup(emptyList(), Failure.EMPTY_CATALOG) }
+            }
             val bearer = StreamCodeSession.authorization(context)
                 ?: return@withContext Lookup(emptyList(), Failure.NOT_ACTIVATED)
             runCatching {
@@ -145,6 +180,24 @@ internal object StreamArabicAudioCatalog {
 
     internal fun groupName(track: Track, english: Boolean): String {
         val id = track.id
+        if (id.startsWith("blofy-")) {
+            val group = id.removePrefix("blofy-").substringBefore("-")
+            val en = mapOf(
+                "main" to "BLOFY", "live" to "BLOFY Live", "xtra" to "BLOFY Xtra",
+                "en" to "BLOFY EN", "fr" to "BLOFY FR",
+                "starzplay" to "BLOFY StarzPlay", "shasha" to "BLOFY Shasha",
+                "thmanyah" to "BLOFY Thmanyah", "shahid" to "BLOFY Shahid",
+                "alkass" to "BLOFY Alkass"
+            )
+            val ar = mapOf(
+                "main" to "بلوفي", "live" to "بلوفي مباشر", "xtra" to "بلوفي إكسترا",
+                "en" to "بلوفي الإنجليزية", "fr" to "بلوفي الفرنسية",
+                "starzplay" to "بلوفي ستارزبلاي", "shasha" to "بلوفي شاشة",
+                "thmanyah" to "بلوفي ثمانية", "shahid" to "بلوفي شاهد",
+                "alkass" to "بلوفي الكأس"
+            )
+            return (if (english) en else ar)[group] ?: if (english) "BLOFY Audio" else "صوتيات بلوفي"
+        }
         val group = when {
             id.startsWith("anis-max-low-") -> "max-low"
             id.startsWith("anis-max-") -> "max"
