@@ -1,29 +1,21 @@
-// Standalone BLOFY STREAM release identity. It must never reuse the PLAYER update feed.
-// Only expose an update when the website catalog points at the exact, published,
-// owner-signed STREAM APK; a missing or overridden source fails closed.
-export const STREAM_RELEASE_TAG = 'blofy-stream-55.8.24-owner-qa-20261113';
-export const STREAM_RELEASE_FILENAME = 'BLOFY-STREAM-55.8.24-FFMPEG-OWNER-SIGNED.apk';
-export const STREAM_RELEASE_URL =
-  'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/' +
-  STREAM_RELEASE_TAG + '/' + STREAM_RELEASE_FILENAME;
+// Independent BLOFY STREAM public release; never share PLAYER update feed.
+// Local, hash-verified signed APK imported to the existing Railway persistent volume.
+export const STREAM_RELEASE_FILENAME = 'BLOFY-STREAM-55.8.32-AUDIO-SYNC-SIGNED.apk';
+export const STREAM_RELEASE_URL = 'https://updates.blofyplayer.com/files/releases/BLOFY-STREAM-55.8.32-AUDIO-SYNC-SIGNED.apk';
 export const STREAM_PUBLIC_DOWNLOAD = 'https://updates.blofyplayer.com/d/blofy-stream';
 
 export function streamReleaseMetadata(app) {
   if (!app || app.slug !== 'blofy-stream' || app.enabled !== true ||
-      app.version !== '55.8.24' || app.downloadUrl !== STREAM_RELEASE_URL ||
+      app.version !== '55.8.32' || app.downloadUrl !== STREAM_RELEASE_URL ||
       app.downloadMode !== 'direct') return null;
-
   return { release: { app: {
-    versionCode: 2000101,
-    versionName: '2.0.0-rc07.55.8.24-STREAM',
+    versionCode: 2000109,
+    versionName: '2.0.0-rc07.55.8.32-STREAM',
     minSupportedVersionCode: 1,
-    // The Android updater refuses anything lacking the exact application ID,
-    // signed owner APK SHA-256, and expected size. This also prevents mixing
-    // BLOFY PLAYER and STREAM even when both exist on the same device.
     packageName: 'tv.blofy.player.v2.stream',
-    sha256: 'a5af6253ad816d325af9a1f32bc5b03cef9a6cd0f5dc6e8ca3f861dd1325b00d',
-    apkSizeBytes: 135682806,
+    sha256: '9a87ee2e66496b553332960edf071f3130173f66f9f19fe1c8bbee0a5ee58d91',
+    apkSizeBytes: 135739422,
     downloadUrl: STREAM_PUBLIC_DOWNLOAD,
-    releaseNotes: 'BLOFY STREAM 55.8.24 — فصل BLOFY AI في شاشة محادثة مستقلة مع أسماء أفلام ومسلسلات قابلة للضغط لفتح البحث المحلي، والبحث العادي مستقل. حذف زر قائمتي من تفاصيل المحتوى مع بقاء المفضلة والمشاهدة والتحميل. تحسينات ثبات الشاشة واللغة والصوت والتحديثات مع الحفاظ على التفعيل.'
+    releaseNotes: 'BLOFY STREAM 55.8.32 — إصلاح تقديم وتأخير صوت المعلق لمصادر البث الحي، خيارات ±1 و±5 ثوانٍ، عرض قنوات أكثر وأزرار التحكم أسفل القائمة، تحسين حركة الريموت، استبدال أسماء ANES الظاهرة باسم BLOFY. المحافظة على التفعيل ومشغل البث ونسخة BLOFY PLAYER المستقلة.'
   }}};
 }
