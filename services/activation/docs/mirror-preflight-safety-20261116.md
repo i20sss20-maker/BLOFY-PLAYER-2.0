@@ -341,3 +341,27 @@ remain OFF and all drafts remain undeployed.
   media decoders; it does not validate real Railway S3 nor copy rights.
 - All Content Hub licensed pilot CI jobs passed after adding this
   movie-and-episode end-to-end synthetic media smoke on 16 Nov 2026.
+
+
+## Actual MinIO AES256 at-rest and PostgreSQL lost-ACK + corruption gates
+
+- The enhanced CI exercises a **real** PostgreSQL checkpoint commit
+  whose acknowledgement is deliberately lost after an S3 multipart
+  object is saved. The worker returns `mirror_checkpoint_commit_uncertain`,
+  retains the saved object, resumes directly at the next 8MiB range,
+  and independently verifies the complete source byte sequence.
+- The same MinIO end-to-end test now makes an actual HeadObject call
+  for each movie part and asserts `ServerSideEncryption == AES256`,
+  not merely that the SDK requested encryption at upload startup.
+- After verifying the isolated episode and decoding its A/V, the test
+  deliberately corrupts one S3 object using an out-of-band S3 PutObject.
+  A new audio/video canary must reject it before decoding with
+  `canary_private_read_failed`, no Xtream request or customer cutover.
+- All of the isolated `guarded-mirror`, disposable PostgreSQL and real
+  S3/FFmpeg test jobs passed on 16 Nov 2026.
+- One separate BLOFY Activation CI browser test failed at subscriber
+  UI save rendering on this head; it is unrelated to the modified
+  Content Hub fixture and must be investigated before any merge.
+
+None of these tests changes Railway production objects or proves
+the license for copying or redistribution of a third-party library.
