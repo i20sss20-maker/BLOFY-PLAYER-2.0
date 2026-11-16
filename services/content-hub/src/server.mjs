@@ -218,8 +218,26 @@ export function createContentHubServer({storage,lease,
    try{
     const result=await diagnoseVerifiedMovie({
       runId,mediaKind,storage,lease,signal:controller.signal});
+    // Proven SHA mismatch is not a flaky decoder error: quarantine
+    // the verified database manifest before acknowledging the canary.
+    // No S3 deletion; other transient read/decoder errors are NOT
+    // quarantined. Verified playback routes now refuse this run.
+    let quarantined=false;
+    if(result.code==='canary_private_sha256_mismatch'){
+      if(typeof lease?.quarantineMirrorRun!=='function')
+        return json(res,503,{ok:false,
+          code:'mirror_quarantine_storage_unavailable',
+          providerRequests:0,customerCutover:false});
+      const outcome=await lease.quarantineMirrorRun({runId,kind:mediaKind});
+      if(outcome.ok!==true)
+        return json(res,503,{ok:false,
+          code:'mirror_quarantine_not_committed',
+          providerRequests:0,customerCutover:false});
+      quarantined=true;
+    }
     // Strictly report bounded nonsecret telemetry; not codec FFmpeg logs.
     const summary={ok:result.ok===true,code:String(result.code||''),
+      quarantinedOnHashMismatch:quarantined,
       runId,mediaKind,privateOnly:true,customerCutover:false,
       providerRequests:0,audioVideoDecoded:result.ok===true,
       videoTracks:Number(result.videoTracks||0),
