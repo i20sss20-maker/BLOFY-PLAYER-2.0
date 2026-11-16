@@ -8,7 +8,7 @@ import {execFile as execFileCb} from 'node:child_process';
 import {promisify} from 'node:util';
 import {diagnoseVerifiedMovie} from '../src/playback-diagnostics.mjs';
 import {Pool} from 'pg';
-import {S3Client,CreateBucketCommand,DeleteBucketCommand}
+import {S3Client,CreateBucketCommand,DeleteBucketCommand,HeadObjectCommand}
  from '@aws-sdk/client-s3';
 import {createPrivateS3Adapter} from '../src/private-s3.mjs';
 import {createSourceLease} from '../src/source-lease.mjs';
@@ -55,7 +55,7 @@ const FLAGS={
  BLOFY_CONTENT_HUB_BRIDGE_TOKEN:'test-only-minio-to-postgres-token-123456789'
 };
 
-test('real S3+PG+FFmpeg: SHA-verified private movie and episode A/V, source lock',{
+test('real encrypted S3+PG+FFmpeg: lost ACK recovery and SHA/AV for movie and episode',{
  skip:!(process.env.BLOFY_TEST_PG_URL&&process.env.BLOFY_TEST_MINIO_URL),
  timeout:110000
 },async()=>{
@@ -118,17 +118,27 @@ test('real S3+PG+FFmpeg: SHA-verified private movie and episode A/V, source lock
     'etag':'"ci-private-minio-source-v1"'
    }});
   };
-  const execute=()=>runMirrorTransferChunk({
-   kind:'movie',id:'ci_5497',storage,lease,
+  const execute=(activeLease=lease)=>runMirrorTransferChunk({
+   kind:'movie',id:'ci_5497',storage,lease:activeLease,
    env:FLAGS,approvalLoader,readRange,now:()=>now
   });
-  const first=await execute();
-  assert.equal(first.ok,true,JSON.stringify({first,adapterError}));
-  assert.equal(first.code,'mirror_worker_checkpoint_saved');
-  assert.equal(first.bytesCopied,8*1024*1024);
-  runId=first.runId;
+  // Real PG transaction commits but we deliberately discard the ACK.
+  // The S3 part must remain untouched, then resume at the next byte.
+  const lostAckLease={...lease,recordChunk:async(...args)=>{
+   await lease.recordChunk(...args);
+   throw Error('ci_simulated_lost_database_ack_after_commit');
+  }};
+  const first=await execute(lostAckLease);
+  assert.equal(first.ok,false,JSON.stringify({first,adapterError}));
+  assert.equal(first.code,'mirror_checkpoint_commit_uncertain');
+  assert.equal(first.objectRetainedForReconciliation,true);
+  assert.equal(first.storageWrittenBytes,8*1024*1024);
+  assert.equal(sourceCalls,1);
   const halfway=await lease.listMirrorRuns({limit:24});
-  assert.equal(halfway.find(x=>x.runId===runId).state,'staged');
+  assert.equal(halfway.length,1);
+  runId=halfway[0].runId;
+  assert.equal(halfway[0].state,'staged');
+  assert.equal(halfway[0].bytesCopied,8*1024*1024);
   const usage=await storage.measurePrivateUsage({maxObjects:1000});
   assert.equal(usage.ok,true,JSON.stringify(usage));
   assert.equal(usage.usedBytes,8*1024*1024);
@@ -149,6 +159,11 @@ test('real S3+PG+FFmpeg: SHA-verified private movie and episode A/V, source lock
    const proof=await storage.verify({key:part.key,
     expectedBytes:part.bytes,expectedSha256:part.sha256});
    assert.equal(proof.ok,true,JSON.stringify(proof));
+   const info=await client.send(new HeadObjectCommand({
+    Bucket:bucket,Key:part.key
+   }));
+   assert.equal(info.ServerSideEncryption,'AES256',
+    'actual stored S3 multipart object must remain encrypted');
   }
   const after=await storage.measurePrivateUsage({maxObjects:1000});
   assert.equal(after.ok,true,JSON.stringify(after));
