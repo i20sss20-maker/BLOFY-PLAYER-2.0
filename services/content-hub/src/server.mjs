@@ -30,7 +30,8 @@ import {buildSeasonReport} from './season-report.mjs';
 import {buildPrivateDeviceQaManifest} from './device-qa-manifest.mjs';
 import {buildSeasonAttention} from './season-attention.mjs';
 import {checkPrivateReadConcurrency,validateConcurrentReadIds} from './concurrent-private-read.mjs';
-import {runMirrorTransferChunk,mirrorWorkerReadiness} from './mirror-transfer-worker.mjs';
+import {runMirrorTransferChunk,mirrorWorkerReadiness,
+ validateMirrorTransferApproval} from './mirror-transfer-worker.mjs';
 import {createMirrorPortalBridge} from './mirror-transfer-bridge.mjs';
 
 const FIXTURE_SOURCE='00000000-0000-4000-8000-000000000000';
@@ -138,6 +139,25 @@ export function createContentHubServer({storage,lease,
   readiness:()=>episodeCopyReadiness(pilotEnv),logger,
   delayMs:2200,maxBatches:180,maxDurationMs:45*60*1000
  });
+ // Bounded background session for ONE explicitly chosen, licensed item.
+ // No auto-boot, no daily sweep, max sixteen 8MiB parts (128MiB) per session.
+ // PostgreSQL manifests survive restarts; a restarted service stays paused.
+ let mirrorSelection=null;
+ const mirrorAutoCopy=createContinuousCopyController({
+  runBatch:({signal})=>mirrorChunkRunner({
+   ...mirrorSelection,env:pilotEnv,storage,lease,
+   approvalLoader:args=>mirrorBridge.approval(args),
+   readRange:args=>mirrorBridge.range(args),
+   signal,logger
+  }),
+  readiness:()=>{
+   const ready=mirrorWorkerReadiness(pilotEnv);
+   const blockedBy=[...ready.blockedBy];
+   if(!mirrorSelection)blockedBy.push('mirror_item_not_selected');
+   return {ready:blockedBy.length===0,blockedBy};
+  },
+  logger,delayMs:3000,maxBatches:16,maxDurationMs:20*60*1000
+ });
  const seasonQueue=seasonQueueStore?createSeasonQueueController({
   store:seasonQueueStore,storage,lease,env:pilotEnv,
   runner:episodeChunkRunner,logger,
@@ -169,6 +189,47 @@ export function createContentHubServer({storage,lease,
     uptimeSeconds:Math.floor((Date.now()-started)/1000)});
   if(!safeAuth(req.headers.authorization,token))
    return json(res,401,{ok:false,code:'content_hub_auth_required'});
+  // An explicit owner can start a bounded 128MiB transfer session after
+  // successful preflight. The POST acknowledges immediately; status/pause
+  // are private operator controls, never subscriber/media APIs.
+  if(path==='/internal/mirror/copy/start'){
+   if(req.method!=='POST'||String(req.url||'').includes('?'))
+    return json(res,405,{ok:false,code:'mirror_copy_start_post_only'});
+   if(req.headers['x-blofy-owner-action']!=='start-licensed-private-mirror')
+    return json(res,403,{ok:false,code:'mirror_copy_owner_action_required'});
+   const safety=mirrorWorkerReadiness(pilotEnv);
+   if(!safety.ready)return json(res,409,{ok:false,
+     code:'mirror_worker_safety_gates_off',blockedBy:safety.blockedBy});
+   if(mirrorChunkBusy||mirrorAutoCopy.isRunning()||pilotRunning||
+      copy.isRunning()||episodeCopyBusy||episodeCopy.isRunning())
+    return json(res,429,{ok:false,code:'mirror_worker_source_busy'});
+   let body;
+   try{body=await readSeasonJson(req)}
+   catch{return json(res,400,{ok:false,code:'mirror_copy_json_invalid'})}
+   const kind=String(body?.kind||''),id=String(body?.id||'');
+   if(body?.ownerConfirmed!==true||
+      !['movie','episode'].includes(kind)||
+      !(kind==='movie'?/^[A-Za-z0-9._:-]{1,128}$/:
+        /^[1-9][0-9]{0,9}$/).test(id))
+    return json(res,400,{ok:false,code:'mirror_copy_selection_invalid'});
+   // Check one fresh Portal approval before accepting an async job.
+   const approved=await mirrorBridge.approval({kind,id});
+   if(!validateMirrorTransferApproval(approved,{kind,id}))
+    return json(res,409,{ok:false,code:'mirror_copy_approval_missing'});
+   mirrorSelection={kind,id};
+   const outcome=mirrorAutoCopy.start();
+   return json(res,outcome.ok?202:409,{
+    ...outcome,oneItemOnly:true,sessionMaxChunks:16,
+    automaticRestart:false,customerCutover:false});
+  }
+  if(path==='/internal/mirror/copy/pause'){
+   if(req.method!=='POST'||String(req.url||'').includes('?'))
+    return json(res,405,{ok:false,code:'mirror_copy_pause_post_only'});
+   if(req.headers['x-blofy-owner-action']!=='pause-licensed-private-mirror')
+    return json(res,403,{ok:false,code:'mirror_copy_owner_action_required'});
+   const result=mirrorAutoCopy.stop();
+   return json(res,result.ok?200:409,result);
+  }
   // Explicit, owner-authorized ONE private 8MiB mirror chunk. Default OFF.
   // A fresh Portal licensing/size approval and current S3 budget scan are
   // required for every call. Never runs at boot, never changes subscribers.
@@ -180,7 +241,7 @@ export function createContentHubServer({storage,lease,
    const readiness=mirrorWorkerReadiness(pilotEnv);
    if(!readiness.ready)return json(res,409,{ok:false,
     code:'mirror_worker_safety_gates_off',blockedBy:readiness.blockedBy});
-   if(mirrorChunkBusy||pilotRunning||copy.isRunning()||
+   if(mirrorChunkBusy||mirrorAutoCopy.isRunning()||pilotRunning||copy.isRunning()||
       episodeCopyBusy||episodeCopy.isRunning())
     return json(res,429,{ok:false,code:'mirror_worker_source_busy'});
    let body;
@@ -343,6 +404,7 @@ export function createContentHubServer({storage,lease,
     ownerEpisodeBrowserCheck:ownerBrowserCheck,
     mirrorWorkerReadiness:mirrorWorkerReadiness(pilotEnv),
     mirrorChunkBusy,lastMirrorChunk,
+    mirrorAutoCopy:mirrorAutoCopy.status(),
     syntheticTestEnabled:allowSynthetic,
     lastSynthetic,pilotRunning:pilotRunning||copy.isRunning(),lastPilot,
     lastEpisodeProbe,episodeCopyBusy:episodeCopyBusy||episodeCopy.isRunning(),
