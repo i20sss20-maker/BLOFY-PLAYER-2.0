@@ -207,3 +207,55 @@ test('worker source lease busy means no source media requests',async()=>{
  assert.equal(result.code,'mirror_worker_source_busy');
  assert.equal(f.calls.media.length,0);
 });
+
+
+test('S3 timeout after final checkpoint is recoverable with zero new upstream requests',async()=>{
+ const f=fixture();
+ const original=f.storage.readVerifiedRange;
+ let breakOnce=true;
+ f.storage.readVerifiedRange=async args=>{
+   if(breakOnce){
+    breakOnce=false;
+    throw Error('temporary_private_s3_unavailable');
+   }
+   return original(args);
+ };
+ assert.equal((await run(f)).code,'mirror_worker_checkpoint_saved');
+ const failure=await run(f);
+ assert.equal(failure.ok,false);
+ assert.equal(failure.code,'mirror_worker_retryable_failure');
+ assert.equal(failure.stage,'final_verification');
+ assert.equal(f.calls.media.length,2);
+ assert.equal(f.calls.uploads.length,2);
+ assert.equal([...f.runs.values()][0].state,'staged');
+ assert.equal([...f.runs.values()][0].parts.length,2);
+ const recovered=await run(f);
+ assert.equal(recovered.ok,true);
+ assert.equal(recovered.completed,true);
+ assert.equal(recovered.code,'mirror_worker_fully_verified');
+ assert.equal(recovered.sourceMediaRequests,0);
+ assert.equal(recovered.storageWrittenBytes,0);
+ assert.equal(recovered.bytesCopied,K+127);
+ assert.equal(recovered.verifiedSha256,
+  createHash('sha256').update(f.output).digest('hex'));
+ assert.equal(f.calls.media.length,2);
+ assert.equal(f.calls.uploads.length,2);
+ assert.equal([...f.runs.values()][0].state,'verified');
+});
+
+test('zero-byte S3 re-verification succeeds even when capacity scanner is offline',async()=>{
+ const f=fixture();
+ assert.equal((await run(f)).code,'mirror_worker_checkpoint_saved');
+ const original=f.storage.readVerifiedRange;
+ let transient=true;
+ f.storage.readVerifiedRange=async args=>{
+  if(transient){transient=false;throw Error('offline_s3_read')}
+  return original(args);
+ };
+ await run(f);
+ f.storage.measurePrivateUsage=async()=>({ok:false,code:'offline'});
+ const result=await run(f);
+ assert.equal(result.ok,true);
+ assert.equal(result.sourceMediaRequests,0);
+ assert.equal(result.storageWrittenBytes,0);
+});
