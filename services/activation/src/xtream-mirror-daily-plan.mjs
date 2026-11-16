@@ -24,7 +24,8 @@ function publicItem(row,{now,catalogReady}){
  if(!Number.isFinite(measured)||measured<=0||measured>now||
     now-measured>STALE_MS)
   codes.push('preflight_expired');
- if(row.validator_present!==true)
+ if(row.validator_present!==true||
+    !/^[a-f0-9]{64}$/.test(String(row.validator_sha256||'')))
   codes.push('source_validator_not_proven');
  if(!/^[a-f0-9]{64}$/.test(String(row.rights_evidence_hash||'')))
   codes.push('owner_rights_evidence_not_recorded');
@@ -77,7 +78,7 @@ export async function inspectDailyMirrorPlan(db,{
   const result=await db.query([
    'SELECT i.media_kind,i.catalog_id,i.title,i.extension,i.state,',
    'p.state AS preflight_state,p.expected_bytes,p.measured_at,',
-   'p.validator_present,p.rights_evidence_hash',
+   'p.validator_present,p.validator_sha256,p.rights_evidence_hash',
    'FROM blofy_stream_mirror_intents i',
    'LEFT JOIN blofy_stream_mirror_preflights p',
    'ON p.source_id=i.source_id AND p.media_kind=i.media_kind',
