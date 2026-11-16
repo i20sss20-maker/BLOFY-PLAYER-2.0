@@ -1740,12 +1740,16 @@ export function createContentHubServer({storage,lease,
     });
     return res.end();
    }
-   const m=siteQa?null:/^bytes=(0|[1-9][0-9]*)-(0|[1-9][0-9]*)$/.exec(
+   const ownerBounded=Boolean(siteQa||mirrorRange);
+   const m=ownerBounded?null:/^bytes=(0|[1-9][0-9]*)-(0|[1-9][0-9]*)$/.exec(
     String(req.headers.range||''));
-   const bounded=siteQa?parseSiteQaRange(req.headers.range,saved.bytes):null;
-   const from=siteQa?bounded?.from:Number(m?.[1]);
-   const to=siteQa?bounded?.to:Number(m?.[2]);
-   if((siteQa&&!bounded)||(!siteQa&&!m)||
+   // Owner media players commonly request bytes=0- and suffix ranges.
+   // Clamp every request to 8 MiB; never allow open-ended full-file I/O.
+   const bounded=ownerBounded?
+    parseSiteQaRange(req.headers.range,saved.bytes):null;
+   const from=ownerBounded?bounded?.from:Number(m?.[1]);
+   const to=ownerBounded?bounded?.to:Number(m?.[2]);
+   if((ownerBounded&&!bounded)||(!ownerBounded&&!m)||
       !Number.isSafeInteger(from)||!Number.isSafeInteger(to)||
       to<from||to>=saved.bytes||to-from+1>8*1024*1024)
     return json(res,416,{ok:false,code:'pilot_bounded_range_required'});
