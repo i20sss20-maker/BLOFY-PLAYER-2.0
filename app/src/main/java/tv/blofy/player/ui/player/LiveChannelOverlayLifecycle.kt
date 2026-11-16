@@ -234,9 +234,10 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 layoutDirection = View.LAYOUT_DIRECTION_RTL
                 setBackgroundColor(Color.TRANSPARENT)
             }
+            var lastFocusedChannelKey: String? = null
             val adapter = LiveChannelAdapter(
                 onClick = { channel -> selectChannel(channel) },
-                onFocus = {},
+                onFocus = { lastFocusedChannelKey = it.key },
                 onLongClick = { channel ->
                     activity.lifecycleScope.launch {
                         val dao = BlofyDatabase.get(activity.applicationContext).dao()
@@ -250,7 +251,8 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                     }
                 },
                 itemKey = { it.key },
-                translucent = false
+                translucent = true,
+                highContrast = true
             )
             adapter.submit(channels)
             list.adapter = adapter
@@ -271,10 +273,10 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             }
             val hint = TextView(activity).apply {
                 text = copy(
-                    "البث مستمر  •  OK للتبديل  •  BACK للإغلاق",
-                    "Live keeps playing  •  OK switch  •  BACK close"
+                    "→ الصوت مباشرة  •  OK تشغيل  •  BACK إغلاق",
+                    "RIGHT audio  •  OK tune  •  BACK close"
                 )
-                textSize = 8.7f
+                textSize = 10f
                 typeface = BlofyTvDesign.BodyTypeface
                 setTextColor(BlofyTvDesign.TextMuted)
                 gravity = Gravity.START or Gravity.CENTER_VERTICAL
@@ -387,8 +389,13 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                     val actions = buildAttachedActions {
                         val visible = (list.layoutManager as? LinearLayoutManager)
                             ?.findFirstVisibleItemPosition()?.coerceAtLeast(0) ?: 0
-                        list.findViewHolderForAdapterPosition(visible)?.itemView?.requestFocus()
-                            ?: list.requestFocus()
+                        val target = adapter.indexOfKey(lastFocusedChannelKey)
+                            .takeIf { it >= 0 } ?: visible
+                        list.scrollToPosition(target)
+                        list.post {
+                            list.findViewHolderForAdapterPosition(target)?.itemView?.requestFocus()
+                                ?: list.requestFocus()
+                        }
                     }
                     list.addOnChildAttachStateChangeListener(object : RecyclerView.OnChildAttachStateChangeListener {
                         override fun onChildViewAttachedToWindow(view: View) {
@@ -598,7 +605,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                     setOnClickListener { onTap() }
                     setOnKeyListener { _, keyCode, event ->
                         if (event.action == KeyEvent.ACTION_DOWN &&
-                            keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                            keyCode == KeyEvent.KEYCODE_DPAD_LEFT && !audioPickerOpen) {
                             onChannels()
                             true
                         } else false
