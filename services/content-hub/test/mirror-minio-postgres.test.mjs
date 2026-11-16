@@ -308,11 +308,32 @@ test('real encrypted S3+PG+FFmpeg: lost ACK recovery and SHA/AV for movie and ep
    assert.deepEqual(Buffer.from(await episode.arrayBuffer()),
     BYTE_SAMPLE.subarray(0,2048));
    const missingRange=await fetch(endpointMovie,{headers});
-   assert.equal(missingRange.status,416);
+   assert.equal(missingRange.status,206);
+   assert.equal(missingRange.headers.get('content-length'),String(8*1024*1024));
+   assert.deepEqual(Buffer.from(await missingRange.arrayBuffer()),
+    BYTE_SAMPLE.subarray(0,8*1024*1024));
+   const openEnded=await fetch(endpointMovie,{
+    headers:{...headers,range:'bytes=0-'}
+   });
+   assert.equal(openEnded.status,206);
+   assert.equal(openEnded.headers.get('content-length'),
+    String(8*1024*1024));
+   assert.deepEqual(Buffer.from(await openEnded.arrayBuffer()),
+    BYTE_SAMPLE.subarray(0,8*1024*1024));
+   const suffix=await fetch(endpointEpisode,{
+    headers:{...headers,range:'bytes=-64'}
+   });
+   assert.equal(suffix.status,206);
+   assert.deepEqual(Buffer.from(await suffix.arrayBuffer()),
+    BYTE_SAMPLE.subarray(SIZE-64,SIZE));
    const tooLong=await fetch(endpointMovie,{
     headers:{...headers,range:'bytes=0-8388608'}
    });
    assert.equal(tooLong.status,416);
+   const multi=await fetch(endpointMovie,{
+    headers:{...headers,range:'bytes=0-63,128-255'}
+   });
+   assert.equal(multi.status,416);
    const wrongKind=await fetch(endpoint+'episode/'+runId,{
     headers:{...headers,range:'bytes=0-63'}
    });
