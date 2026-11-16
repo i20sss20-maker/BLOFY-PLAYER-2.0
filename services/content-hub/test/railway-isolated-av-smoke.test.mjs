@@ -13,8 +13,8 @@ const available=['ffmpeg','ffprobe'].every(x=>
 const ENV={
  BLOFY_QA_SYNTHETIC_ONLY:'1',BLOFY_QA_ISOLATED_BUCKET:'1',
  BLOFY_QA_SYNTHETIC_AV:'1',
- BLOFY_QA_EXPECTED_BUCKET:'blofy-av-ci-synthetic',
- BLOFY_CONTENT_HUB_S3_BUCKET:'blofy-av-ci-synthetic',
+ BLOFY_QA_EXPECTED_BUCKET:'blofy-mirror-s3-isolated-qa',
+ BLOFY_CONTENT_HUB_S3_BUCKET:'blofy-mirror-s3-isolated-qa',
  BLOFY_CONTENT_HUB_S3_ENDPOINT:'https://t3.storageapi.dev',
  BLOFY_CONTENT_HUB_S3_URL_STYLE:'virtual-host',
  BLOFY_CONTENT_HUB_S3_REGION:'auto',
