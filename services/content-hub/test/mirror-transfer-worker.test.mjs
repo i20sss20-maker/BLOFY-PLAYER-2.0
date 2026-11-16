@@ -35,6 +35,13 @@ function fixture({bytes=K+127,changeValidator=false,
   measurePrivateUsage:async()=>({ok:capacityOk,usageExact:true,
    verifiedPrivateBucket:true,objectCount:stored.size,
    usedBytes:[...stored.values()].reduce((n,b)=>n+b.length,0)}),
+  headVerifiedChunk:async({key,expectedBytes})=>{
+   const object=stored.get(key);
+   if(!object)return {ok:false,status:'missing'};
+   return object.byteLength===expectedBytes?
+    {ok:true,status:'present_size_match',bytes:expectedBytes}:
+    {ok:false,status:'size_mismatch',bytes:object.byteLength};
+  },
   begin:async({key,private:privateOnly})=>{
    assert.equal(privateOnly,true);calls.uploads.push(key);
    return {uploadId:'upload_test'};
@@ -296,4 +303,88 @@ test('mismatched preflight ETag stops before private S3 writes',async()=>{
  assert.equal(wrong.sourceMediaRequests,1);
  assert.equal(f.calls.uploads.length,0);
  assert.equal([...f.runs.values()][0].state,'failed');
+});
+
+
+test('lost PostgreSQL acknowledgement must not delete a committed S3 chunk',async()=>{
+ const f=fixture();
+ const record=f.lease.recordChunk;
+ let loseAck=true;
+ f.lease.recordChunk=async(...args)=>{
+  await record(...args);
+  if(loseAck){loseAck=false;throw Error('database_response_lost')}
+ };
+ const first=await run(f);
+ assert.equal(first.ok,false);
+ assert.equal(first.code,'mirror_checkpoint_commit_uncertain');
+ assert.equal(first.objectRetainedForReconciliation,true);
+ assert.equal(first.storageWrittenBytes,K);
+ assert.equal(f.stored.size,1);
+ assert.equal(f.calls.deleted.length,0);
+ assert.equal([...f.runs.values()][0].parts.length,1);
+ // Re-read the durable manifest: the next invocation starts at part #2.
+ const resumed=await run(f);
+ assert.equal(resumed.ok,true);
+ assert.equal(resumed.completed,true);
+ assert.equal(resumed.bytesCopied,K+127);
+ assert.deepEqual(f.calls.media,[[0,K-1],[K,K+126]]);
+ assert.equal(f.calls.uploads.length,2);
+ assert.equal(f.stored.size,2);
+ assert.equal(f.calls.deleted.length,0);
+});
+
+test('pre-commit database timeout leaves object; retry verifies and reuses without duplicate S3 upload',async()=>{
+ const f=fixture();
+ const original=f.lease.recordChunk;
+ let failOnce=true;
+ f.lease.recordChunk=async(...args)=>{
+  if(failOnce){failOnce=false;throw Error('database_disconnected_before_commit')}
+  return original(...args);
+ };
+ const failure=await run(f);
+ assert.equal(failure.code,'mirror_checkpoint_commit_uncertain');
+ assert.equal(failure.objectRetainedForReconciliation,true);
+ assert.equal(f.stored.size,1);
+ assert.equal([...f.runs.values()][0].parts.length,0);
+ const result=await run(f);
+ assert.equal(result.ok,true);
+ assert.equal(result.code,'mirror_worker_checkpoint_saved');
+ assert.equal(result.bytesCopied,K);
+ assert.equal(result.storageWrittenBytes,0);
+ assert.equal(f.stored.size,1);
+ assert.equal(f.calls.uploads.length,1);
+ assert.equal(f.calls.media.length,2);
+ assert.equal([...f.runs.values()][0].parts.length,1);
+ assert.equal(f.calls.deleted.length,0);
+});
+
+test('existing deterministic key with mismatched bytes is NOT overwritten',async()=>{
+ const f=fixture();
+ const original=f.lease.recordChunk;
+ f.lease.recordChunk=async()=>{throw Error('database_ack_lost')};
+ assert.equal((await run(f)).code,'mirror_checkpoint_commit_uncertain');
+ f.lease.recordChunk=original;
+ const key=[...f.stored.keys()][0];
+ const existing=Buffer.from(f.stored.get(key));
+ existing[0]^=0xff;
+ f.stored.set(key,existing);
+ const failure=await run(f);
+ assert.equal(failure.ok,false);
+ assert.equal(failure.code,'mirror_private_part_sha256_mismatch');
+ assert.equal(f.calls.uploads.length,1);
+ assert.equal(f.calls.deleted.length,0);
+ assert.equal(f.stored.size,1);
+ assert.equal([...f.runs.values()][0].state,'failed');
+});
+
+test('unavailable S3 HEAD prevents destructive overwrites',async()=>{
+ const f=fixture();
+ let calls=0;
+ f.storage.headVerifiedChunk=async()=>{calls++;return {ok:false,status:'head_unavailable'}};
+ const out=await run(f);
+ assert.equal(out.ok,false);
+ assert.equal(out.code,'mirror_private_existing_object_unverified');
+ assert.equal(f.calls.uploads.length,0);
+ assert.equal(f.calls.media.length,1);
+ assert.equal(calls,1);
 });
