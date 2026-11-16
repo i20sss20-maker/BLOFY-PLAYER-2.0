@@ -27,12 +27,34 @@ test('migration lab refuses wrong bucket and absent safety flags',async()=>{
  assert.equal(f.code,'migration_lab_approval_missing');
  assert.equal(calls,0);
 });
-test('migration lab permits only isolated synthetic runner and never reports cutover',async()=>{
- let calls=0;
- const r=await runMigrationLabAvSmoke({env:{...E},runner:async()=>{calls++;return {ok:true,sourceRequests:123,customerCutover:true}}});
- assert.equal(calls,1);
+test('migration lab requires two separate S3 readbacks plus a decoded live proof',async()=>{
+ const types=[];
+ const runner=async({mediaKind})=>{
+  types.push(mediaKind);
+  return {ok:true,fullShaVerified:true,avVerified:true,
+   cleanedUp:true,objectCountAfter:0,writtenBytes:5243007};
+ };
+ const r=await runMigrationLabAvSmoke({env:{...E},runner,liveProbe:async()=>({
+  ok:true,videoDecoded:true,audioDecoded:true
+ })});
+ assert.deepEqual(types,['movie','episode']);
  assert.equal(r.ok,true);
+ assert.equal(r.movieVerified,true);
+ assert.equal(r.episodeVerified,true);
+ assert.equal(r.liveVerified,true);
+ assert.equal(r.storageCleaned,true);
+ assert.equal(r.totalSyntheticBytesWritten,10486014);
  assert.equal(r.sourceRequests,0);
  assert.equal(r.customerCutover,false);
- assert.equal(r.scope,'BLOFY-XTREAM-MIGRATION-LAB');
+});
+test('migration lab fails closed when live fails, even after VOD success',async()=>{
+ const r=await runMigrationLabAvSmoke({
+  env:{...E},
+  runner:async()=>({ok:true,fullShaVerified:true,avVerified:true,
+    cleanedUp:true,objectCountAfter:0,writtenBytes:5243007}),
+  liveProbe:async()=>({ok:false,videoDecoded:false,audioDecoded:false})
+ });
+ assert.equal(r.ok,false);
+ assert.equal(r.code,'migration_lab_live_failed');
+ assert.equal(r.customerCutover,false);
 });
