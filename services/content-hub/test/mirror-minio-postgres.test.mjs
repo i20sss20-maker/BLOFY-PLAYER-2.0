@@ -55,7 +55,7 @@ const FLAGS={
  BLOFY_CONTENT_HUB_BRIDGE_TOKEN:'test-only-minio-to-postgres-token-123456789'
 };
 
-test('real S3, PostgreSQL and FFmpeg: safely mirror, SHA-verify and decode synthetic private A/V',{
+test('real S3+PG+FFmpeg: SHA-verified private movie and episode A/V, source lock',{
  skip:!(process.env.BLOFY_TEST_PG_URL&&process.env.BLOFY_TEST_MINIO_URL),
  timeout:110000
 },async()=>{
@@ -77,7 +77,7 @@ test('real S3, PostgreSQL and FFmpeg: safely mirror, SHA-verify and decode synth
   gatewayId:5497,extension:'mp4',expectedBytes:SIZE,
   rightsEvidenceHash:RIGHTS,validatorPresent:true,validatorSha256:VERSION,
   approvedAt:now,permissionScope:'licensed-private-vod-copy'};
- let created=false,runId=null,sourceCalls=0;
+ let created=false,runId=null,episodeRunId=null,sourceCalls=0;
  try{
   await client.send(new CreateBucketCommand({Bucket:bucket}));
   created=true;
@@ -188,7 +188,63 @@ test('real S3, PostgreSQL and FFmpeg: safely mirror, SHA-verify and decode synth
    assert.equal(busy.code,'mirror_worker_source_busy');
    assert.equal(sourceCalls,2);
   }finally{await lock.release()}
+  // Mirror episode using the REAL same storage protocol, but a distinct
+  // isolated PostgreSQL episode table and exact private S3 namespace.
+  const episodeApproval={
+   ...approval,kind:'episode',id:'5498',
+   mediaId:'ci_episode_5498',gatewayId:5498
+  };
+  const nextEpisode=()=>runMirrorTransferChunk({
+   kind:'episode',id:'5498',storage,lease,env:FLAGS,
+   approvalLoader:async()=>episodeApproval,
+   readRange,now:()=>now
+  });
+  const epFirst=await nextEpisode();
+  assert.equal(epFirst.ok,true,JSON.stringify(epFirst));
+  assert.equal(epFirst.code,'mirror_worker_checkpoint_saved');
+  episodeRunId=epFirst.runId;
+  assert.notEqual(episodeRunId,runId);
+  const epLast=await nextEpisode();
+  assert.equal(epLast.ok,true,JSON.stringify(epLast));
+  assert.equal(epLast.code,'mirror_worker_fully_verified');
+  assert.equal(epLast.verifiedSha256,sha(BYTE_SAMPLE));
+  const episodeManifest=await lease.getVerifiedEpisodeObject(episodeRunId);
+  assert.ok(episodeManifest);
+  assert.equal(episodeManifest.sha256,sha(BYTE_SAMPLE));
+  assert.equal(episodeManifest.parts.length,2);
+  for(const part of episodeManifest.parts){
+   assert.match(part.key,/^saleh\/episode\//);
+   objectKeys.add(part.key);
+  }
+  const episodeAv=await diagnoseVerifiedMovie({
+   runId:episodeRunId,mediaKind:'episode',storage,lease
+  });
+  assert.equal(episodeAv.ok,true,JSON.stringify({
+   code:episodeAv.code,videoTracks:episodeAv.videoTracks,
+   audioTracks:episodeAv.audioTracks,
+   videoFramesDecoded:episodeAv.videoFramesDecoded,
+   audioFramesDecoded:episodeAv.audioFramesDecoded
+  }));
+  assert.ok(episodeAv.videoFramesDecoded>=1);
+  assert.ok(episodeAv.audioFramesDecoded>=1);
+  assert.equal(episodeAv.providerRequests,0);
+  assert.equal(episodeAv.customerCutover,false);
+  const combined=await lease.listMirrorRuns({limit:24});
+  assert.equal(combined.find(x=>x.runId===runId).mediaKind,'movie');
+  assert.equal(combined.find(x=>x.runId===episodeRunId).mediaKind,'episode');
+  assert.equal(combined.find(x=>x.runId===episodeRunId).state,'verified');
+  assert.equal(sourceCalls,4);
+  assert.equal((await storage.measurePrivateUsage({maxObjects:1000}))
+    .objectCount,4);
  }finally{
+  if(episodeRunId){
+   const copied=await pool.query(
+    'SELECT parts FROM blofy_content_hub_episode_runs WHERE run_id=$1',
+    [episodeRunId]).catch(()=>({rows:[]}));
+   for(const part of copied.rows?.[0]?.parts||[])objectKeys.add(part.key);
+   await pool.query('DELETE FROM blofy_content_hub_episode_runs WHERE run_id=$1',
+    [episodeRunId]).catch(()=>{});
+  }
   if(runId){
    const copied=await pool.query([
     'SELECT parts FROM blofy_content_hub_chunk_runs WHERE run_id=$1'
