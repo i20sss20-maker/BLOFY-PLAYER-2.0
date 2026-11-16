@@ -769,8 +769,9 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 setPadding(dp(9), dp(3), dp(9), dp(4))
             }
             fun updateSync() {
-                sync.text = copy("التأخير: ", "Delay: ") +
-                    activity.inlineArabicDelaySeconds() + copy(" ثانية", "s")
+                val value = activity.inlineArabicDelaySeconds()
+                sync.text = copy("⏱ فرق التوقيت: +${value} ثانية (0–30)  •  − للتقديم / + للتأخير",
+                    "⏱ Audio offset: +${value}s (0–30)  •  − advance / + delay")
             }
 
             fun paintStatus(message: String, state: StreamAudioQuickPickPolicy.State?) {
@@ -812,9 +813,45 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                     paintStatus(copy("صوت القناة الأصلي يعمل الآن.",
                         "Original channel audio is restored."), null)
                 }
-                footer.addView(status, LinearLayout.LayoutParams(-1, dp(56)).apply {
+                footer.addView(status, LinearLayout.LayoutParams(-1, dp(48)).apply {
                     topMargin = dp(2); bottomMargin = dp(4)
                 })
+                // Keep synchronization ABOVE the station list, never after
+                // dozens of tracks. The user can tune audio while watching.
+                addHeading(copy("⏱ مزامنة الصوت مع الصورة", "⏱ SYNC COMMENTARY WITH VIDEO"))
+                updateSync()
+                footer.addView(sync, LinearLayout.LayoutParams(-1, dp(34)))
+                val syncButtons = LinearLayout(activity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    layoutDirection = View.LAYOUT_DIRECTION_LTR
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+                fun addQuickSync(label: String, delta: Int) {
+                    val item = addButton(label) {
+                        if (activity.currentInlineArabicTrackId() == null) {
+                            paintStatus(copy("شغّل صوتية أولًا لضبط التوقيت.",
+                                "Select a playing voice before adjusting sync."), null)
+                        } else {
+                            activity.adjustInlineArabicSync(delta)
+                            updateSync()
+                        }
+                    }
+                    footer.removeView(item)
+                    item.textSize = 11.5f
+                    syncButtons.addView(item, LinearLayout.LayoutParams(0, dp(40), 1f).apply {
+                        marginEnd = dp(3)
+                    })
+                }
+                addQuickSync("−5s", -5)
+                addQuickSync("−1s", -1)
+                addQuickSync("+1s", 1)
+                addQuickSync("+5s", 5)
+                footer.addView(syncButtons, LinearLayout.LayoutParams(-1, dp(45)))
+                addButton(copy("⟲ إعادة المزامنة إلى 0 ثانية",
+                    "⟲ Reset audio offset to 0s")) {
+                    activity.adjustInlineArabicSync(0)
+                    updateSync()
+                }
                 val filterButton = addButton(
                     if (favoritesOnly) copy("☆  جميع المعلقين", "☆  Show all voices")
                     else copy("★  المفضلة فقط", "★  Favorites only")
@@ -953,19 +990,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                         scrollTarget = row
                     }
                 }
-                addHeading(copy("⏱  مزامنة الصوت", "⏱  AUDIO SYNC"))
-                updateSync()
-                footer.addView(sync, LinearLayout.LayoutParams(-1, dp(24)))
-                addButton(copy("−1ث  تقديم الصوت", "−1s  Advance audio")) {
-                    activity.adjustInlineArabicSync(-1); updateSync()
-                }
-                addButton(copy("+1ث  تأخير الصوت", "+1s  Delay audio")) {
-                    activity.adjustInlineArabicSync(1); updateSync()
-                }
-                addButton(copy("⟲  التوقيت الأصلي", "⟲  Reset synchronization")) {
-                    activity.adjustInlineArabicSync(0); updateSync()
-                }
-                if (focusTarget != null) {
+                 if (focusTarget != null) {
                     val target = focusTarget
                     val row = scrollTarget
                     footer.post {
