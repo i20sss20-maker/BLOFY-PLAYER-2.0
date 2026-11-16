@@ -4,6 +4,7 @@
 import {createHash} from 'node:crypto';
 import {probePrivateEpisodeRange} from './xtream-content-hub-episode-probe.mjs';
 import {validateMirrorIntakeSelection} from './xtream-mirror-transfer-intake.mjs';
+import {mirrorSourceValidatorHash} from './xtream-mirror-source-validator.mjs';
 
 const MIN_BYTES=8*1024*1024,MAX_BYTES=4*1024**3;
 const EXTS=new Set(['mp4','mkv','avi','ts']);
@@ -47,13 +48,20 @@ export async function probeStagedMirrorSource({source,item,kind,credentials,
    return {...base,code:'mirror_preflight_origin_mismatch'};
  }catch{return {...base,code:'mirror_preflight_origin_invalid'}}
  try{
-  // An explicit one-source probe; no fallback from 206 to a full GET.
+  // Hash the SAME 206 version evidence used by the copy worker.
+  // Store only a digest. A weak ETag without Last-Modified is blocked.
+  let validatorSha256=null;
   const upstream=await probePrivateEpisodeRange({
    url:sourceUrl.href,signal,
-   fetchImpl:(url,opts)=>fetchImpl(url,{
-    ...opts,redirect:'manual',method:'GET',
-    signal:AbortSignal.any([opts.signal,AbortSignal.timeout(10000)])
-   })
+   fetchImpl:async(url,opts)=>{
+    const response=await fetchImpl(url,{
+     ...opts,redirect:'manual',method:'GET',
+     signal:AbortSignal.any([opts.signal,AbortSignal.timeout(10000)])
+    });
+    if(response?.status===206)
+     validatorSha256=mirrorSourceValidatorHash(response.headers);
+    return response;
+   }
   });
   if(upstream.ok!==true||upstream.probeBytes!==4096||
      !safeBytes(upstream.expectedBytes)||
@@ -63,7 +71,9 @@ export async function probeStagedMirrorSource({source,item,kind,credentials,
   return {...base,ok:true,code:'mirror_preflight_size_verified',
    expectedBytes:upstream.expectedBytes,extension:item.extension,
    probeBytes:4096,providerMediaRequests:1,
-   validatorPresent:upstream.validatorPresent===true,
+   validatorPresent:upstream.validatorPresent===true&&
+    /^[a-f0-9]{64}$/.test(String(validatorSha256||'')),
+   validatorSha256,
    storageRightsVerified:false,capacityVerified:false};
  }catch{return {...base,code:'mirror_preflight_provider_unavailable',
   providerMediaRequests:1}}
@@ -80,7 +90,8 @@ export function assessMirrorPreflight({sourceId,kind,id,probe,
     !Number.isSafeInteger(probe.expectedBytes)||
     probe.expectedBytes<MIN_BYTES||probe.expectedBytes>MAX_BYTES)
   blockedBy.push('exact_size_unverified');
- if(probe?.validatorPresent!==true)
+ if(probe?.validatorPresent!==true||
+    !/^[a-f0-9]{64}$/.test(String(probe?.validatorSha256||'')))
   blockedBy.push('source_version_validator_missing');
  if(!EVIDENCE.test(licenseReference))
   blockedBy.push('item_storage_license_evidence_missing');
@@ -121,7 +132,8 @@ async function ensure(db){
    'source_id UUID NOT NULL,',
    "media_kind TEXT NOT NULL CHECK(media_kind IN ('movie','episode')),",
    'catalog_id TEXT NOT NULL,expected_bytes BIGINT NOT NULL,',
-   'validator_present BOOLEAN NOT NULL,rights_evidence_hash TEXT,',
+   'validator_present BOOLEAN NOT NULL,validator_sha256 TEXT,',
+   'rights_evidence_hash TEXT,',
    "state TEXT NOT NULL CHECK(state IN ('measured','eligible')),",
    'measured_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),',
    'updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),',
@@ -132,6 +144,7 @@ async function ensure(db){
   schemaPromises.set(db,promise);
  }
  await promise;
+ await db.query('ALTER TABLE blofy_stream_mirror_preflights ADD COLUMN IF NOT EXISTS validator_sha256 TEXT');
 }
 
 export async function recordMirrorPreflight(db,{sourceId,kind,id,probe,
@@ -179,14 +192,18 @@ export async function recordMirrorPreflight(db,{sourceId,kind,id,probe,
   await client.query([
    'INSERT INTO blofy_stream_mirror_preflights',
    '(source_id,media_kind,catalog_id,expected_bytes,validator_present,',
-   'rights_evidence_hash,state) VALUES($1,$2,$3,$4,$5,$6,$7)',
+   'validator_sha256,rights_evidence_hash,state)',
+   'VALUES($1,$2,$3,$4,$5,$6,$7,$8)',
    'ON CONFLICT(source_id,media_kind,catalog_id) DO UPDATE SET',
    'expected_bytes=EXCLUDED.expected_bytes,',
    'validator_present=EXCLUDED.validator_present,',
+   'validator_sha256=EXCLUDED.validator_sha256,',
    'rights_evidence_hash=EXCLUDED.rights_evidence_hash,',
    'state=EXCLUDED.state,measured_at=NOW(),updated_at=NOW()'
   ].join(' '),[sourceId,kind,id,probe.expectedBytes,
-    probe.validatorPresent===true,digest,state]);
+    probe.validatorPresent===true,
+    /^[a-f0-9]{64}$/.test(String(probe.validatorSha256||''))?
+     probe.validatorSha256:null,digest,state]);
   await client.query('COMMIT');
   return {...verdict,ok:true,kind,id,state,
    eligibleForWorkerReview:verdict.ok,
