@@ -1,0 +1,72 @@
+name: Publish verified BLOFY STREAM 55.8.32 APK (owner approved)
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-blofy-stream-55-8-32.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: publish-stream-55-8-32-signed
+  cancel-in-progress: false
+jobs:
+  publish-signed-stream:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_RUN: '43802219010'
+      SOURCE_SHA: 'c7cb9c3a1e2db7576033f1559418d9d7eee5384f'
+      ARTIFACT: 'BLOFY-STREAM-55.8.32-AUDIO-SYNC-SIGNED-c7cb9c3a1e2db7576033f1559418d9d7eee5384f'
+      TAG: 'blofy-stream-55.8.32-signed-20261116'
+      APK: 'BLOFY-STREAM-55.8.32-AUDIO-SYNC-SIGNED.apk'
+      SHA256: '9a87ee2e66496b553332960edf071f3130173f66f9f19fe1c8bbee0a5ee58d91'
+      CERT: 'C3B98CCCD2F0C86809014ACD9368BF61C7004CFD419CD867B71FEF10BFA6255E'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Gate on verified signed APK even though earlier artifact publish lacked release permission
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" > "$RUNNER_TEMP/source.json"
+          jq -e --arg sha "$SOURCE_SHA" '.head_sha==$sha and .status=="completed"' "$RUNNER_TEMP/source.json"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN/jobs" > "$RUNNER_TEMP/jobs.json"
+          jq -e '[.jobs[].steps[] | select(.name=="Sign owner-only full STREAM 55.8.32 with black screen fix" and .conclusion=="success")] | length==1' "$RUNNER_TEMP/jobs.json"
+          jq -e '[.jobs[].steps[] | select(.name=="Verify full Android identity, real signing certificate and FFmpeg" and .conclusion=="success")] | length==1' "$RUNNER_TEMP/jobs.json"
+          jq -e '[.jobs[].steps[] | select(.name=="Upload full owner-signed APK for private testing only" and .conclusion=="success")] | length==1' "$RUNNER_TEMP/jobs.json"
+      - name: Download source artifact, verify bytes and owner signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p staging
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name "$ARTIFACT" --dir staging
+          test -s "staging/$APK"
+          (cd staging && sha256sum -c SHA256SUMS)
+          test "$(sha256sum "staging/$APK" | cut -d' ' -f1)" = "$SHA256"
+          grep -Fxq "source_commit=$SOURCE_SHA" staging/BUILD-IDENTITY.txt
+          grep -Fxq 'app_id=tv.blofy.player.v2.stream' staging/BUILD-IDENTITY.txt
+          grep -Fxq 'version_code=2000109' staging/BUILD-IDENTITY.txt
+          grep -Fxq 'version_name=2.0.0-rc07.55.8.32-STREAM' staging/BUILD-IDENTITY.txt
+          tools="$ANDROID_HOME/build-tools/35.0.0"
+          "$tools/aapt" dump badging "staging/$APK" > "$RUNNER_TEMP/badging.txt"
+          grep -Fq "name='tv.blofy.player.v2.stream' versionCode='2000109' versionName='2.0.0-rc07.55.8.32-STREAM'" "$RUNNER_TEMP/badging.txt"
+          "$tools/apksigner" verify --verbose --print-certs "staging/$APK" > "$RUNNER_TEMP/cert.txt"
+          got="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/cert.txt" | head -n1 | tr -d '[:space:]-:' | tr '[:lower:]' '[:upper:]')"
+          test "$got" = "$CERT"
+          "$tools/zipalign" -c -P 16 -v 4 "staging/$APK"
+      - name: Publish direct immutable STREAM APK (no customer updater deployment)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release already present. Verifying asset exists."
+            gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets | jq -e --arg name "$APK" '.assets[] | select(.name==$name)'
+            exit 0
+          fi
+          gh release create "$TAG" "staging/$APK" staging/SHA256SUMS staging/BUILD-IDENTITY.txt \
+            --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" \
+            --title 'BLOFY STREAM 55.8.32 | Signed audio sync correction' \
+            --notes 'Signed owner-approved standalone APK. Live audio delay/back correction and compact TV channels/control UI. Verified package/certificate and FFmpeg. Does not update BLOFY PLAYER. Physical Android TV validation remains advisable.'
+          echo "Direct signed APK: https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/$APK" >> "$GITHUB_STEP_SUMMARY"
