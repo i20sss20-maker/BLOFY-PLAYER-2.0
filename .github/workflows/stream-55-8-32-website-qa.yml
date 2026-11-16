@@ -1,0 +1,27 @@
+name: BLOFY STREAM 55.8.32 Website Distribution QA
+on:
+  push:
+    branches:
+      - release/stream-55-8-32-website-20261116
+    paths:
+      - 'services/update-distribution/**'
+      - '.github/workflows/stream-55-8-32-website-qa.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-site:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund --prefix services/update-distribution
+      - run: npm run check --prefix services/update-distribution
+      - name: Do not confuse current STREAM with legacy PLAYER APKs
+        run: |
+          grep -Fq "STREAM_ARTIFACT_ZIP_URL" services/update-distribution/server.mjs
+          grep -Fq "isCurrentStreamApk" services/update-distribution/server.mjs
+          grep -Fq "BLOFY_ONLY_CURRENT && !isCurrentStreamApk" services/update-distribution/server.mjs

@@ -16,7 +16,7 @@ import { appDownloadAction } from './app-download-policy.mjs';
 import { observeDownloadCompletion } from './download-metrics.mjs';
 import { recordDownloadCompletion, getDownloadStats } from './app-library.mjs';
 import { publicSiteRedirect } from './public-site-redirect.mjs';
-import { streamReleaseMetadata } from './stream-release.mjs';
+import { streamReleaseMetadata, STREAM_RELEASE_FILENAME } from './stream-release.mjs';
 import { UPDATE_SITE_CANONICAL, updateRobotsTxt, updateSitemapXml, renderMissingPublicPage, isPublicHtmlRequest } from './public-search-pages.mjs';
 
 const PORT = Number(process.env.PORT || 3000);
@@ -27,6 +27,11 @@ const LOCAL_RELEASE_DIR = '/data/releases';
 const RELEASE_ARTIFACT_ZIP_URL = String(process.env.BLOFY_RELEASE_ARTIFACT_ZIP_URL || '').trim();
 const RELEASE_ARTIFACT_ENTRY = String(process.env.BLOFY_RELEASE_ARTIFACT_ENTRY || '').trim();
 const RELEASE_ARTIFACT_SHA256 = String(process.env.BLOFY_RELEASE_APK_SHA256 || '').trim().toLowerCase();
+// STREAM has its own isolated artifact import settings; do NOT override PLAYER's
+// release artifact source or its existing files when approving STREAM.
+const STREAM_ARTIFACT_ZIP_URL = String(process.env.BLOFY_STREAM_ARTIFACT_ZIP_URL || '').trim();
+const STREAM_ARTIFACT_ENTRY = String(process.env.BLOFY_STREAM_ARTIFACT_ENTRY || '').trim();
+const STREAM_ARTIFACT_SHA256 = String(process.env.BLOFY_STREAM_ARTIFACT_SHA256 || '').trim().toLowerCase();
 // Keep archived builds hidden when one current public release is selected.
 const BLOFY_ONLY_CURRENT = String(process.env.BLOFY_SINGLE_RELEASE_75 || '').toLowerCase() === 'true' ||
   String(process.env.BLOFY_PUBLIC_RELEASE_2000078 || '').toLowerCase() === 'true' ||
@@ -157,14 +162,18 @@ async function sha256File(filePath) {
   });
 }
 
-async function importReleaseArtifactIfConfigured() {
-  if (!RELEASE_ARTIFACT_ZIP_URL || !RELEASE_ARTIFACT_ENTRY || !RELEASE_ARTIFACT_SHA256) return;
-  const filename = localReleaseFilename(path.basename(RELEASE_ARTIFACT_ENTRY));
+async function importReleaseArtifactIfConfigured({
+  url = RELEASE_ARTIFACT_ZIP_URL,
+  entry = RELEASE_ARTIFACT_ENTRY,
+  sha256 = RELEASE_ARTIFACT_SHA256
+} = {}) {
+  if (!url || !entry || !/^[0-9a-f]{64}$/.test(sha256)) return;
+  const filename = localReleaseFilename(path.basename(entry));
   const finalPath = localReleasePath(filename);
   const existing = await stat(finalPath).catch(() => null);
   if (existing?.size > 1024) {
     const digest = await sha256File(finalPath).catch(() => '');
-    if (digest === RELEASE_ARTIFACT_SHA256) {
+    if (digest === sha256) {
       console.log(`release artifact ready: ${filename} (${existing.size} bytes)`);
       return;
     }
@@ -174,7 +183,7 @@ async function importReleaseArtifactIfConfigured() {
   await unlink(archivePath).catch(() => {});
   await mkdir(LOCAL_RELEASE_DIR, { recursive: true });
 
-  const response = await fetch(RELEASE_ARTIFACT_ZIP_URL, {
+  const response = await fetch(url, {
     redirect: 'follow',
     signal: AbortSignal.timeout(120_000),
     headers: { accept: 'application/zip' }
@@ -193,7 +202,7 @@ async function importReleaseArtifactIfConfigured() {
   const tempPath = finalPath + '.part';
   await unlink(tempPath).catch(() => {});
   await new Promise((resolve, reject) => {
-    const unzip = spawn('unzip', ['-p', archivePath, RELEASE_ARTIFACT_ENTRY], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const unzip = spawn('unzip', ['-p', archivePath, entry], { stdio: ['ignore', 'pipe', 'pipe'] });
     const out = createWriteStream(tempPath, { flags: 'wx' });
     let stderr = '';
     unzip.stderr.on('data', chunk => { stderr += chunk.toString().slice(0, 512); });
@@ -207,7 +216,7 @@ async function importReleaseArtifactIfConfigured() {
   });
   await rename(tempPath, finalPath);
   const digest = await sha256File(finalPath);
-  if (digest !== RELEASE_ARTIFACT_SHA256) {
+  if (digest !== sha256) {
     await unlink(finalPath).catch(() => {});
     throw new Error('release_artifact_sha256_mismatch');
   }
@@ -999,14 +1008,18 @@ const server = http.createServer(async (req, res) => {
       // v73 file directly. Never serve retired APK bytes while BLOFY 75 is active.
       // Redirect at the file serving layer so every previously shared URL also
       // installs 75, without deleting archived release blobs or download counts.
-      if (BLOFY_ONLY_CURRENT && ['GET', 'HEAD'].includes(method)) {
+      // STREAM and PLAYER are independent applications. Never redirect the
+      // current STREAM APK to PLAYER while retiring PLAYER's old archive links.
+      const isCurrentStreamApk = localReleaseMatch[1] === STREAM_RELEASE_FILENAME;
+      if (BLOFY_ONLY_CURRENT && !isCurrentStreamApk && ['GET', 'HEAD'].includes(method)) {
         return redirect(res, '/download/latest.apk');
       }
       if (!['GET', 'HEAD'].includes(method)) {
         res.writeHead(405, { ...securityHeaders, allow: 'GET, HEAD', 'cache-control': 'no-store' });
         return res.end();
       }
-      return await streamLocalApk(req, res, localReleaseMatch[1], localReleaseMatch[1], 'blofy');
+      return await streamLocalApk(req, res, localReleaseMatch[1], localReleaseMatch[1],
+        isCurrentStreamApk ? 'app:blofy-stream' : 'blofy');
     }
 
     if (pathname === '/admin' || pathname === '/admin/' || pathname === PUBLIC_ADMIN_PREFIX || pathname === `${PUBLIC_ADMIN_PREFIX}/`) {
@@ -1178,6 +1191,11 @@ const server = http.createServer(async (req, res) => {
 await Promise.all([initReleaseStore(), initAppLibrary()]);
 await importReleaseArtifactIfConfigured().catch(error => {
   console.error('release artifact import failed:', error?.message || error);
+});
+await importReleaseArtifactIfConfigured({
+  url: STREAM_ARTIFACT_ZIP_URL, entry: STREAM_ARTIFACT_ENTRY, sha256: STREAM_ARTIFACT_SHA256
+}).catch(error => {
+  console.error('STREAM artifact import failed:', error?.message || error);
 });
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`BLOFY Azure update distribution listening on ${PORT}`);
