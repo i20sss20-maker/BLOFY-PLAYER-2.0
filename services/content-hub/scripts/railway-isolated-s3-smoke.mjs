@@ -16,7 +16,9 @@ export async function runIsolatedS3Smoke({
  const out={ok:false,code:'qa_not_started',synthetic:true,privateOnly:true,
   sourceRequests:0,customerCutover:false,automaticCopy:false,
   writtenBytes:0,cleanedUp:false,encrypted:false,
-  objectCountAfter:null,fullShaVerified:false,rangeVerified:false};
+  objectCountAfter:null,fullShaVerified:false,rangeVerified:false,
+  encryptionEvidence:'unverified',sseHeaderVerified:false,
+  platformEncryptionDocumented:false};
  let storage=null,key=null,uploadId=null,s3=null;
  try{
   if(env.BLOFY_QA_SYNTHETIC_ONLY!=='1'||
@@ -84,15 +86,28 @@ export async function runIsolatedS3Smoke({
     }});
    const info=await s3.send(new HeadObjectCommand({
     Bucket:env.BLOFY_CONTENT_HUB_S3_BUCKET,Key:key}));
-   if(info.ServerSideEncryption!=='AES256')
-    err('qa_sse_not_proven');
-   out.encrypted=true;
+   if(info.ServerSideEncryption==='AES256'){
+    out.encrypted=true;out.sseHeaderVerified=true;
+    out.encryptionEvidence='s3_head_sse_aes256';
+   }else if(!info.ServerSideEncryption&&
+     env.BLOFY_QA_PLATFORM_ENCRYPTION_DOC_ACK==='1'&&
+     /^https:\/\/t3\.storageapi\.dev\/?$/.test(
+      String(env.BLOFY_CONTENT_HUB_S3_ENDPOINT||''))){
+    // Railway's official Storage Buckets docs say SSE-S3 settings are
+    // unsupported, while Railway Security docs promise AES-256 at rest.
+    // This is PROVIDER DOCUMENTATION, not object-level API proof.
+    out.encrypted=false;out.sseHeaderVerified=false;
+    out.platformEncryptionDocumented=true;
+    out.encryptionEvidence='railway_platform_policy_docs_only';
+   }else err('qa_sse_not_proven');
    stage='usage';
    const during=await storage.measurePrivateUsage({maxObjects:1000});
    if(during?.ok!==true||during.objectCount!==1||
       during.usedBytes!==data.length)
     err('qa_usage_mismatch');
-   out.ok=true;out.code='qa_isolated_s3_verified';
+   out.ok=true;
+   out.code=out.sseHeaderVerified?'qa_isolated_s3_verified':
+    'qa_isolated_s3_verified_platform_at_rest_docs_not_api_proof';
   }catch(error){
    out.code=String(error?.message||'').startsWith('qa_')?
     String(error.message).slice(0,70):'qa_s3_api_failed_'+stage;
