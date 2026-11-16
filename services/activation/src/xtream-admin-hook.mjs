@@ -64,6 +64,7 @@ import {xtreamProviderOrder,withXtreamProviderPosition} from './xtream-provider-
 import {sourceLiveCapacity} from './xtream-live-source-capacity.mjs';
 import {xtreamDirectMediaGauge} from './xtream-direct-media-gauge.mjs';
 import {summarizeStreamSourceCapacity} from './stream-source-capacity-report.mjs';
+import {assessMirrorSourceHeadroom} from './xtream-mirror-source-headroom.mjs';
 import {permittedLicensedLiveFanout} from './xtream-licensed-live-fanout-policy.mjs';
 import {xtreamPlaybackSnapshot} from './xtream-playback-metrics.mjs';
 import {summarizeStreamMediaQuality} from './stream-media-quality.mjs';
@@ -3582,6 +3583,41 @@ async function unifiedStreamBridge(req,res,url){
       code:'mirror_intake_transaction_unavailable',
       mediaBytesTransferred:0,copyWorkerEnabled:false,
       customerCutover:false})}
+  }
+  // Cached source headroom report. Unlike an Xtream connection test,
+  // this is read-only and does not consume a source connection or media.
+  // Direct HTTP gauge only covers this Portal process.
+  if(p==='/internal/blofy-stream/ops/mirror-intake/headroom'){
+    if(req.method!=='GET'||url.search)
+      return json(res,405,{ok:false,code:'mirror_headroom_get_only'});
+    const approved=await approvedSalehMirrorSource();
+    if(!approved.ok)return json(res,503,{ok:false,
+      code:'mirror_headroom_source_not_unique',customerCutover:false});
+    try{
+      const rows=await serverRows();
+      const target=rows.filter(x=>String(x.id)===approved.sourceId);
+      const now=Date.now();
+      const report=summarizeStreamSourceCapacity(target.map(adminServer),
+        null,{now,maxAgeMs:10*60*1000,
+          gatewayDirectMedia:xtreamDirectMediaGauge.snapshot()});
+      const result=assessMirrorSourceHeadroom(report,{
+        sourceId:approved.sourceId,now});
+      return json(res,200,{
+        ok:true,code:'mirror_headroom_snapshot_read_only',
+        sourceName:'saleh',
+        headroomCautiouslyClear:result.ok===true,
+        blockedBy:result.blockedBy,readOnly:true,
+        sourceReportedMaxConnections:result.sourceReportedMaxConnections,
+        sourceReportedActiveConnections:result.sourceReportedActiveConnections,
+        sourceActiveDirectTransfers:result.sourceActiveDirectTransfers,
+        remainingReportedConnections:result.remainingReportedConnections,
+        allUpstreamSessionsMeasured:false,
+        storageRightsIndependentlyVerified:false,
+        providerMediaRequests:0,mediaBytesTransferred:0,
+        customerCutover:false,copyWorkerStarted:false
+      },{'cache-control':'no-store'});
+    }catch{return json(res,503,{ok:false,
+      code:'mirror_headroom_report_unavailable',customerCutover:false})}
   }
   // Owner-only daily metadata reconciliation status. This plan only
   // reviews existing staged items and a completed 04:00 Riyadh import;
