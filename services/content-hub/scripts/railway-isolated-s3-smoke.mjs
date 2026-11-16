@@ -36,7 +36,9 @@ export async function runIsolatedS3Smoke({
   try{storageHostname=new URL(String(env.BLOFY_CONTENT_HUB_S3_ENDPOINT||''))
    .hostname.toLowerCase()}catch{}
   if(storageHostname.endsWith('.storageapi.dev')&&
-     env.BLOFY_CONTENT_HUB_S3_BUCKET!=='blofy-mirror-s3-isolated-qa-pkbfbm')
+     !new Set([ 'blofy-mirror-s3-isolated-qa-pkbfbm',
+       'blofy-xtream-migration-test-media-obm-ml'
+     ]).has(env.BLOFY_CONTENT_HUB_S3_BUCKET))
    err('qa_production_bucket_reference_forbidden');
   if(env.BLOFY_CONTENT_HUB_S3_URL_STYLE!=='virtual-host')
    err('qa_requires_virtual_host');
