@@ -116,3 +116,50 @@ mirroring, public app switch, or production branch change.
 References:
 - https://docs.railway.com/storage-buckets
 - https://docs.railway.com/enterprise/security
+
+
+## Railway T3 synthetic video plus audio codec read-back (2026-11-16)
+
+- Real isolated QA Railway deployment `c5c799ba-ee22-4359-be4b-3a522570f486`
+  succeeded on the pinned developer commit `ceb253d6494681737858e9c0e47019cf87767618`.
+- QA-only service `blofy-mirror-s3-qa` used new runner
+  `services/content-hub/scripts/railway-isolated-av-smoke.mjs`
+  and explicitly enabled `BLOFY_QA_SYNTHETIC_AV=1`.
+- It GENERATED its own 2-second MPEG-4 visual test pattern
+  (320x180@12fps) plus 880Hz AAC audio in MP4 using local FFmpeg.
+  A valid MP4 free atom padded this file to exactly 5,243,007 B.
+- The private QA bucket was confirmed EMPTY before any write.
+  Real Railway T3 S3 accepted two multipart parts, and the runner
+  checked HEAD length, full-file SHA-256, and a cross-part byte range.
+- Crucially, a SECOND full-size private S3 HTTP RANGE read of the
+  stored object was independently SHA-256 checked, written to a
+  temporary local MP4 and decoded through real FFprobe and FFmpeg.
+  BOTH audio samples and video frames successfully decoded.
+- The isolated job removed only its own exact QA object, then
+  checked bucket usage: `objectCountAfter=0`.
+- Actual deployment log contained:
+  `BLOFY_RAILWAY_ISOLATED_AV_SMOKE` with
+  `ok=true`, `writtenBytes=5243007`, `fullShaVerified=true`,
+  `rangeVerified=true`, `avVerified=true`,
+  `independentS3AudioVideoDecoded=true`,
+  `cleanedUp=true`, `objectCountAfter=0`,
+  `sourceRequests=0`, and `devicePlaybackVerified=false`.
+- No Xtream credentials, third-party media, customer playlists,
+  production Content Hub bucket, or production PostgreSQL were used.
+- Encryption result remains provider policy only:
+  `encryptionEvidence=railway_platform_policy_docs_only`,
+  `sseHeaderVerified=false` and `encrypted=false`. Do not claim
+  object-level S3 SSE has been API-verified.
+- This establishes real Railway T3 private A/V media viability
+  in isolation; it is NOT a test of actual customer devices,
+  full-length playback or any real Xtream media copy rights.
+- Full production mirror and customer playback cutover remain OFF.
+
+### CI note
+
+- Isolated Content Hub/MinIO/PostgreSQL/FFmpeg CI passed on
+  `ceb253d6494681737858e9c0e47019cf87767618`.
+- An **unrelated** BLOFY Activation browser job `downloads-browser`
+  failed in that commit: subscriber save UI did not render in time
+  (`STROING 8K: ...`). Activation `verify` and admin session tests
+  passed. This is a separate release blocker; do not merge blindly.
