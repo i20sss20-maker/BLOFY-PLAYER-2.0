@@ -36,9 +36,13 @@ uploaded or deleted, no production deployment, no customer routing change.
 
 - CI acceptance uses synthetic generated movie+episode MPEG4/AAC,
   PostgreSQL 16 and MinIO S3 with server-side encryption and FFmpeg.
-- Added a second production-style **virtual-host addressing** acceptance
-  path in the isolated MinIO job (distinct from earlier path-style).
-  This tests S3 SDK addressing, NOT live T3 permissions or quota.
+- The isolated MinIO job now exercises production-style **virtual-host**
+  addressing (distinct from the earlier path-style). A build-step
+  middleware ASSERTS that multipart uploads, GET, HEAD and ListObjects
+  actually target `blofy-ci-virtualhost.localhost`, instead of
+  silently falling back to path-style. Real MinIO+PostgreSQL+FFmpeg
+  CI passed on 2026-11-16. This proves the AWS SDK request host
+  selection in CI, NOT live T3 permissions, storage quota or egress.
 - The new Xtream mirror remains on GitHub **draft** PR #637, companion
   operator changes draft PR #107. All automatic copying switches
   default OFF and are not provisioned on the live branches.
