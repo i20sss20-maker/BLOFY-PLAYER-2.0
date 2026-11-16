@@ -18,9 +18,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
-          cache-dependency-path: services/update-distribution/package-lock.json
-      - run: npm ci --prefix services/update-distribution
+      - run: npm install --no-audit --no-fund --prefix services/update-distribution
       - run: npm run check --prefix services/update-distribution
       - name: Do not confuse current STREAM with legacy PLAYER APKs
         run: |
