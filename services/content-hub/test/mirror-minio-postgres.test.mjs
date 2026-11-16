@@ -58,7 +58,7 @@ const FLAGS={
 
 test('real encrypted S3+PG+FFmpeg: lost ACK recovery and SHA/AV for movie and episode',{
  skip:!(process.env.BLOFY_TEST_PG_URL&&process.env.BLOFY_TEST_MINIO_URL),
- timeout:160000
+ timeout:180000
 },async()=>{
  // Isolated container per CI job. Stable name permits one deliberate
  // virtual-host DNS entry (bucket.localhost) without production DNS.
@@ -427,7 +427,37 @@ test('real encrypted S3+PG+FFmpeg: lost ACK recovery and SHA/AV for movie and ep
     decodedKinds.push(kind);
    }
    assert.deepEqual(decodedKinds,['movie','episode']);
-   assert.equal(sourceCalls,4,'real HTTP client must use S3 only');
+   // A desktop-style media seek must decode a frame after the
+   // playback position, not merely parse the movie header.
+   for(const url of [endpointMovie,endpointEpisode]){
+    const seek=await execFile('ffmpeg',[
+     '-hide_banner','-v','error','-nostdin',
+     '-rw_timeout','15000000','-headers',authHeaders,
+     '-ss','1.2','-i',url,'-map','0:v:0',
+     '-frames:v','1','-f','framemd5','pipe:1'
+    ],{timeout:35000,maxBuffer:262144});
+    assert.match(seek.stdout,/^\s*0,\s*-?\d+/m,
+     'remote HTTP seek must decode an actual later video frame');
+   }
+   // Ten parallel owner-only readers: storage serves completed video,
+   // with no extra Xtream connection or subscriber app change.
+   const parallel=await Promise.all(Array.from({length:10},(_,i)=>{
+    const url=i%2?endpointEpisode:endpointMovie;
+    const from=8*1024*1024-512+(i*13);
+    const to=from+2047;
+    return fetch(url,{headers:{...headers,
+     range:'bytes='+from+'-'+to}}).then(async response=>{
+      assert.equal(response.status,206);
+      assert.equal(response.headers.get('cache-control'),'private,no-store');
+      const body=Buffer.from(await response.arrayBuffer());
+      assert.deepEqual(body,BYTE_SAMPLE.subarray(from,to+1));
+      return body.length;
+    });
+   }));
+   assert.equal(parallel.length,10);
+   assert.ok(parallel.every(length=>length===2048));
+   assert.equal(sourceCalls,4,
+    'HTTP seek and ten parallel completed-media readers must use only S3');
   }finally{await new Promise(resolve=>qa.server.close(resolve))}
   // Deliberately tamper with one completed episode S3 object AFTER the
   // verified database manifest. A fresh canary must detect this, never
