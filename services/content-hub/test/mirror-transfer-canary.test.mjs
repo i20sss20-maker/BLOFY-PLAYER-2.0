@@ -73,7 +73,7 @@ test('corrupted S3 chunk never reaches decoder',async()=>{
   runId:RUN,storage:f.storage,lease:f.lease,
   diagnosticRunner:f.diagnosticRunner});
  assert.equal(result.ok,false);
- assert.equal(result.code,'canary_private_read_failed');
+ assert.equal(result.code,'canary_private_sha256_mismatch');
  assert.equal(f.usage.decodes,0);
  assert.equal(result.providerRequests,0);
 });
