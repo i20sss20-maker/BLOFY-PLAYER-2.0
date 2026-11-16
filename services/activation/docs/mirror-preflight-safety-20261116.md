@@ -365,3 +365,31 @@ remain OFF and all drafts remain undeployed.
 
 None of these tests changes Railway production objects or proves
 the license for copying or redistribution of a third-party library.
+
+
+## Corrupted private S3 manifest quarantine (fail closed)
+
+- Proven per-part S3 SHA-256 mismatch is returned as the dedicated
+  `canary_private_sha256_mismatch`, separated from temporary storage
+  read/network failure `canary_private_read_failed`.
+- After an authenticated owner requests a movie/episode copy canary
+  and its S3 bytes fail the persisted part digest, the private Hub
+  atomically updates only that `mirror_<32hex>` PostgreSQL run from
+  `verified` to `failed` with `mirror_private_sha256_mismatch`.
+  It does not delete any S3 object or guess at a new source version.
+- A quarantined run is excluded from the existing verified-only movie
+  and episode object readers. It is not automatically promoted back to
+  verified and must be revalidated/retransferred under new approval.
+- Non-hash decode, source, FFmpeg and temporary storage failures do
+  NOT quarantine: only independently observed SHA-256 corruption does.
+- UI highlights the quarantined result and removes its stale verified
+  playability check button. Customers remain on existing routes.
+- An actual authenticated/unauthorized HTTP test hits the private Hub
+  canary endpoint against real disposable MinIO+PostgreSQL, checks
+  exact owner action, verifies 409 and sanitization, and confirms
+  the corrupted episode is no longer retrievable as verified.
+- Both the BLOFY SOURCES CI and the four PLAYER CI workflows passed
+  on 16 Nov 2026 after implementing the quarantine behavior.
+
+All tests use locally generated MPEG4/AAC video. This is NOT permission
+to mirror third-party Xtream media, nor an end-device playback test.
