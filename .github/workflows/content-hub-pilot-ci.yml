@@ -169,6 +169,11 @@ jobs:
           exit 1
       - name: Install offline test dependencies
         run: npm install --prefix services/content-hub --ignore-scripts --no-audit --no-fund --package-lock=false
+      - name: Install FFmpeg for real synthetic audio-video decode
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg
+          ffmpeg -version | head -n 1
       - name: Test one synthetic mirror through actual S3 API and real PostgreSQL
         env:
           BLOFY_TEST_PG_URL: postgresql://mirror_ci:disposable_mirror_ci@127.0.0.1:5432/mirror_fixture
