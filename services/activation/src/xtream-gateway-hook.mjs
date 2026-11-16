@@ -47,6 +47,7 @@ import { recordXtreamPlayback,xtreamPlaybackSnapshot } from './xtream-playback-m
 import {xtreamDirectMediaGauge} from './xtream-direct-media-gauge.mjs';
 import {summarizeStreamSourceCapacity} from './stream-source-capacity-report.mjs';
 import {assessMirrorSourceHeadroom} from './xtream-mirror-source-headroom.mjs';
+import {mirrorSourceTransportGuard} from './xtream-mirror-source-transport-guard.mjs';
 import { XtreamDenialCooldown } from './xtream-denial-cooldown.mjs';
 import { createGatewayUsageThrottle } from './xtream-gateway-usage-throttle.mjs';
 import {createDistributorCustomerCatalog}
@@ -1601,6 +1602,11 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
         const transportFailure=['upstream_unreachable','headers_timeout',
           'xtream_transport_connection_reset','connection_reset','timeout']
           .includes(safeReason);
+        // Never change the customer flow or retry count: only pause NEW
+        // private mirror copies after this observed upstream outage.
+        if(transportFailure)mirrorSourceTransportGuard.recordFailure({
+          sourceId:String(row.server_id||''),reason:safeReason
+        });
         if(fallbackAllowed&&!fallbackTried&&!usingIndependentRelay&&
           !res.headersSent&&transportFailure&&attempt<maxAttempts){
           fallbackTried=true;
@@ -1897,7 +1903,8 @@ async function checkMirrorCachedHeadroom(sourceId){
    now,maxAgeMs:10*60*1000,
    gatewayDirectMedia:xtreamDirectMediaGauge.snapshot()
   });
-  return assessMirrorSourceHeadroom(report,{sourceId,now});
+  return assessMirrorSourceHeadroom(report,{sourceId,now,
+   transportRisk:mirrorSourceTransportGuard.snapshot({sourceId})});
  }catch{return {ok:false,code:'mirror_source_headroom_unavailable',
    blockedBy:['mirror_source_headroom_unavailable'],
    providerMediaRequests:0,customerCutover:false}}
@@ -2003,7 +2010,15 @@ async function handlePrivateContentHubSource(req,res,url){
    }
    if(copied!==range.length)throw Error('mirror_range_incomplete');
    res.end();
-  }catch{
+  }catch(error){
+   // Only source/network failures, NEVER browser cancellations, count
+   // toward the local private-copy source transport cooldown.
+   if(!req.aborted){
+    const observed=safeXtreamTransportCategory(error);
+    if(observed)mirrorSourceTransportGuard.recordFailure({
+      sourceId:approved.sourceId,reason:observed
+    });
+   }
    if(res.headersSent){if(!res.destroyed)res.destroy()}
    else if(!res.destroyed)return json(res,503,{
     ok:false,code:'mirror_range_source_unavailable'});
