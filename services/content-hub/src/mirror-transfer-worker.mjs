@@ -131,6 +131,7 @@ export async function runMirrorTransferChunk({kind,id,env={},
   return error('mirror_worker_approval_invalid_or_stale');
  let exclusive=null,run=null,key=null,uploadId=null,uploaded=false;
  let providerRequests=0,stage='lock',hardFail=false,hardCode=null;
+ let storageWrittenBytes=0;
  const runId='mirror_'+createHash('sha256')
   .update(approval.sourceId+'|'+kind+'|'+id).digest('hex').slice(0,32);
  const digest=createHash('sha256')
@@ -155,12 +156,45 @@ export async function runMirrorTransferChunk({kind,id,env={},
    expectedBytes:approval.expectedBytes,bytesCopied:approval.expectedBytes};
   if(run.state!=='staged'||!Array.isArray(run.parts))
    return error('mirror_worker_run_not_resumable');
+  const totalParts=Math.ceil(approval.expectedBytes/CHUNK);
+  const verifyAndFinish=async()=>{
+   stage='final_verification';
+   let fullSha;
+   try{
+    fullSha=await independentlyVerifyFile({
+     storage,parts:run.parts,expectedBytes:approval.expectedBytes,signal});
+   }catch(error){
+    // A temporary S3 read/timeout must NOT poison all completed
+    // checkpoints. Actual hash/manifest integrity mismatches are terminal.
+    const reason=String(error?.message||'');
+    if(['mirror_checkpoint_hash_mismatch',
+        'mirror_checkpoint_manifest_invalid',
+        'mirror_checkpoint_too_large',
+        'mirror_checkpoint_file_incomplete'].includes(reason)){
+     hardFail=true;hardCode='mirror_private_full_sha256_mismatch';
+    }
+    throw error;
+   }
+   await lease[finish](runId,{sha256:fullSha});
+   return {...NO_TRAFFIC,ok:true,code:'mirror_worker_fully_verified',
+    completed:true,runId,expectedBytes:approval.expectedBytes,
+    bytesCopied:approval.expectedBytes,totalParts,
+    partsSaved:run.parts.length,verifiedSha256:fullSha,
+    sourceMediaRequests:providerRequests,storageWrittenBytes};
+  };
   const copied=run.parts.reduce((a,b)=>a+Number(b.bytes||0),0);
   const total=approval.expectedBytes;
   if(!Number.isSafeInteger(copied)||copied>total||
      run.parts.length>Math.ceil(total/CHUNK))
    return error('mirror_worker_manifest_invalid');
   stage='capacity';
+  // Final verification does not write source/S3 bytes and is safe to
+  // attempt even if a new capacity scan is temporarily unavailable.
+  if(copied===total){
+   if(run.parts.length!==totalParts)
+    return error('mirror_worker_manifest_invalid');
+   return await verifyAndFinish();
+  }
   const usage=await storage.measurePrivateUsage({signal,maxObjects:10000});
   const budget=Number(env.BLOFY_CONTENT_HUB_MIRROR_BUDGET_BYTES);
   const margin=Math.max(64*1024*1024,Math.ceil(total*0.05));
@@ -171,8 +205,8 @@ export async function runMirrorTransferChunk({kind,id,env={},
      !Number.isSafeInteger(usage.objectCount)||
      usage.usedBytes+(total-copied)+margin>budget)
    return error('mirror_worker_private_capacity_unverified_or_exceeded');
-  const no=run.parts.length+1,totalParts=Math.ceil(total/CHUNK);
-  if(no>totalParts)return error('mirror_worker_finalization_pending');
+  const no=run.parts.length+1;
+  if(no>totalParts)return error('mirror_worker_manifest_invalid');
   if(signal?.aborted)return error('mirror_worker_cancelled');
   const from=(no-1)*CHUNK,to=Math.min(from+CHUNK,total)-1;
   stage='source_read';
@@ -199,6 +233,7 @@ export async function runMirrorTransferChunk({kind,id,env={},
   await storage.complete({key,uploadId,
    parts:[{partNumber:1,etag:sent.etag}]});
   uploadId=null;uploaded=true;
+  storageWrittenBytes=chunk.buffer.length;
   stage='s3_verify';
   const proof=await storage.verify({key,
    expectedBytes:chunk.buffer.length,expectedSha256:sha256,signal});
@@ -220,20 +255,7 @@ export async function runMirrorTransferChunk({kind,id,env={},
    code:'mirror_worker_checkpoint_saved',completed:false,
    runId,expectedBytes:total,bytesCopied,totalParts,partsSaved:no,
    sourceMediaRequests:providerRequests,storageWrittenBytes:chunk.buffer.length};
-  stage='final_verification';
-  let fullSha;
-  try{
-   fullSha=await independentlyVerifyFile({
-    storage,parts:run.parts,expectedBytes:total,signal});
-  }catch{
-   hardFail=true;hardCode='mirror_private_full_sha256_mismatch';
-   throw Error('mirror_private_full_sha256_mismatch');
-  }
-  await lease[finish](runId,{sha256:fullSha});
-  return {...NO_TRAFFIC,ok:true,code:'mirror_worker_fully_verified',
-   completed:true,runId,expectedBytes:total,bytesCopied:total,
-   totalParts,partsSaved:no,verifiedSha256:fullSha,
-   sourceMediaRequests:providerRequests,storageWrittenBytes:chunk.buffer.length};
+  return await verifyAndFinish();
  }catch{
   if(key&&uploadId)await storage.abort({key,uploadId}).catch(()=>{});
   if(key&&uploaded)await storage.remove({key}).catch(()=>{});
