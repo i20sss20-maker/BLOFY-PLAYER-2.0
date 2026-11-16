@@ -102,3 +102,40 @@ test('a nonempty QA bucket refuses writes, corruption causes failure and cleanup
  assert.equal(bad.cleanedUp,true);
  assert.equal(bad.objectCountAfter,0);
 });
+
+test('Railway T3 objects can lack SSE-S3 header, but provider policy is explicitly labeled',async()=>{
+ const f=fake();
+ const env={...ENV,
+  BLOFY_CONTENT_HUB_S3_ENDPOINT:'https://t3.storageapi.dev',
+  BLOFY_QA_PLATFORM_ENCRYPTION_DOC_ACK:'1'
+ };
+ const createS3=()=>({send:async()=>({}),destroy(){}});
+ const accepted=await runIsolatedS3Smoke({
+  env,makeStorage:()=>f.storage,makeS3:createS3,
+  generate:()=>Buffer.alloc(M+127,2)});
+ assert.equal(accepted.ok,true,JSON.stringify(accepted));
+ assert.equal(accepted.code,
+  'qa_isolated_s3_verified_platform_at_rest_docs_not_api_proof');
+ assert.equal(accepted.platformEncryptionDocumented,true);
+ assert.equal(accepted.encrypted,false);
+ assert.equal(accepted.sseHeaderVerified,false);
+ assert.equal(accepted.encryptionEvidence,
+  'railway_platform_policy_docs_only');
+ assert.equal(accepted.cleanedUp,true);
+ assert.equal(accepted.objectCountAfter,0);
+ const denied=await runIsolatedS3Smoke({
+  env:{...env,BLOFY_QA_PLATFORM_ENCRYPTION_DOC_ACK:'0'},
+  makeStorage:()=>f.storage,makeS3:createS3,
+  generate:()=>Buffer.alloc(M+127,3)});
+ assert.equal(denied.ok,false);
+ assert.equal(denied.code,'qa_sse_not_proven');
+ assert.equal(denied.cleanedUp,true);
+ assert.equal(denied.objectCountAfter,0);
+ const mismatchedHost=await runIsolatedS3Smoke({
+  env:{...env,BLOFY_CONTENT_HUB_S3_ENDPOINT:'https://other.storageapi.dev'},
+  makeStorage:()=>f.storage,makeS3:createS3,
+  generate:()=>Buffer.alloc(M+127,4)});
+ assert.equal(mismatchedHost.ok,false);
+ assert.equal(mismatchedHost.code,'qa_sse_not_proven');
+ assert.equal(mismatchedHost.objectCountAfter,0);
+});
