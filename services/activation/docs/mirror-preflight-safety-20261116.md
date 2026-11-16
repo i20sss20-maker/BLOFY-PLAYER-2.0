@@ -26,9 +26,14 @@ operator-only, per-item 4 KiB source range probe and a separate PostgreSQL
   are required even for this small probe to avoid disrupting playback.
 - A fresh source validator (ETag or Last-Modified), per-item permanent-storage
   license evidence, and independently verified private bucket usage/budget are
-  all required before a record could be marked eligible. The current route
-  **does not** accept a storage-capacity estimate from the browser and passes
-  `capacity:null`: it records measured size only.
+  all required before an entry can become eligible. The Portal requests a
+  **private signed** scan from Content Hub concurrently with the single source
+  probe; if the scan or budget is unavailable it records measured size only.
+- The Content Hub checks bucket versioning, unfinished multipart uploads, and
+  paginates current object sizes (up to 10,000 objects). More than 10,000
+  objects or a failed scan blocks eligibility; no guessed free-space number
+  from the operator is ever accepted. The budget is a spending/capacity
+  allocation, **not a promise that S3 has a fixed-size disk**.
 - The response always reports `copyWorkerEnabled:false`,
   `mediaBytesTransferred:0`, `customerCutover:false`. No downloads, S3
   writes or customer routing modifications are performed.
@@ -43,18 +48,23 @@ operator-only, per-item 4 KiB source range probe and a separate PostgreSQL
   deliberately approved quiet window.
 - Existing `BLOFY_STREAM_MIRROR_INTAKE_ENABLED=1` plus private manifest
   reconciliation must already be working.
+- `BLOFY_CONTENT_HUB_MIRROR_CAPACITY_AUDIT_ENABLED=1` on the private
+  Content Hub; defaults OFF.
+- `BLOFY_CONTENT_HUB_MIRROR_BUDGET_BYTES` must be an approved private
+  storage cost allocation of at least 1 GiB. Without it, an S3 usage scan
+  cannot authorize a transfer. This branch does not set a budget or enable it.
 
 ## Still required for actual automatic transfers
 
-1. A **signed Content Hub bucket-budget usage attestation** derived from
-   verified stored bytes plus reserved bytes, not operator-supplied free-space
-   estimates; the current API deliberately records a blocked preflight.
-2. A durable source-wide lease for the worker, rights confirmation at job
-   start, checkpointed parts, immutable source-version checks, private S3
-   SHA-256 verification, bounded retry/pause/resume and audit trails.
-3. A separate explicit rollout that proves one approved file with image and
-   audible sound before recurring synchronization; customer playback stays
-   isolated until then.
+1. Validate the new signed private bucket usage scan against the real
+   Railway S3 service and configure a reviewed budget. Until then size-only
+   preflights stay blocked. Do not count unverified historical bucket versions.
+2. Wire eligible rows to a **separate** durable one-worker copy scheduler,
+   with a source-wide lease, current license recheck, SHA-256-verified
+   private chunks, checkpoints, pause/resume, bounded retries and audit.
+3. Prove one authorized new file with visible video and audible audio in
+   client canaries before considering an automatic daily transfer sweep.
+   Customer playback remains on its existing service throughout.
 
 Run tests with `cd services/activation && node --test
 test/xtream-mirror-transfer-preflight.test.mjs`. No live provider endpoint,
