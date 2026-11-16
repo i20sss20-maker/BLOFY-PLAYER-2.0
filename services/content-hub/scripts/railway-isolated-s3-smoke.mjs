@@ -28,6 +28,14 @@ export async function runIsolatedS3Smoke({
   if(!env.BLOFY_QA_EXPECTED_BUCKET||
      env.BLOFY_QA_EXPECTED_BUCKET!==env.BLOFY_CONTENT_HUB_S3_BUCKET)
    err('qa_bucket_identity_mismatch');
+  // Absolutely never allow a QA runner to write to the subscriber
+  // Content Hub bucket by accidentally swapping a variable reference.
+  // Real Railway T3 canary has one pinned bucket; test-only adapters
+  // may use other names because they cannot reach the production endpoint.
+  if(String(env.BLOFY_CONTENT_HUB_S3_ENDPOINT||'')===
+      'https://t3.storageapi.dev'&&
+     env.BLOFY_CONTENT_HUB_S3_BUCKET!=='blofy-mirror-s3-isolated-qa')
+   err('qa_production_bucket_reference_forbidden');
   if(env.BLOFY_CONTENT_HUB_S3_URL_STYLE!=='virtual-host')
    err('qa_requires_virtual_host');
   // Do not begin even S3 inventory or fixture generation if A/V QA lacks
