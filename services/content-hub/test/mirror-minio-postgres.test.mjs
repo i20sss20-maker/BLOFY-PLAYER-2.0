@@ -70,6 +70,22 @@ test('real encrypted S3+PG+FFmpeg: lost ACK recovery and SHA/AV for movie and ep
   credentials:{accessKeyId:'blofyci_testkey',
    secretAccessKey:'blofyci_testsecret123456'}
  });
+ const virtualHostCommands=[];
+ const requiredVirtualHost=new Set([
+  'CreateMultipartUploadCommand','UploadPartCommand',
+  'CompleteMultipartUploadCommand','GetObjectCommand',
+  'HeadObjectCommand','ListObjectsV2Command'
+ ]);
+ // Prove the AWS SDK uses bucket.localhost, not just that an S3 server
+ // accepted the request under path-style compatibility.
+ client.middlewareStack.add((next,context)=>async args=>{
+  if(requiredVirtualHost.has(context.commandName)){
+   assert.equal(args.request?.hostname,bucket+'.localhost',
+    'S3 must use Railway production virtual-host addressing');
+   virtualHostCommands.push(context.commandName);
+  }
+  return next(args);
+ },{step:'build',name:'assertRailwayStyleVirtualHost'});
  const pool=new Pool({connectionString:process.env.BLOFY_TEST_PG_URL});
  const lease=createSourceLease({connectionString:process.env.BLOFY_TEST_PG_URL,
   applicationName:'blofy-mirror-s3-ci'});
@@ -469,6 +485,12 @@ test('real encrypted S3+PG+FFmpeg: lost ACK recovery and SHA/AV for movie and ep
   assert.equal(broken.providerRequests,0);
   assert.equal(broken.customerCutover,false);
   assert.equal(sourceCalls,4,'corruption check must not reread Xtream');
+  for(const command of [
+   'CreateMultipartUploadCommand','UploadPartCommand',
+   'CompleteMultipartUploadCommand','GetObjectCommand',
+   'HeadObjectCommand','ListObjectsV2Command'
+  ])assert.ok(virtualHostCommands.includes(command),
+   'virtual-host proof missing for '+command);
  }finally{
   if(episodeRunId){
    const copied=await pool.query(
