@@ -3703,6 +3703,38 @@ async function unifiedStreamBridge(req,res,url){
       mediaBytesTransferred:0,customerCutover:false})}
     finally{mirrorPreflightRunning=false}
   }
+  // Fixed private Hub history: only the authenticated STREAM operator
+  // receives checkpoint counts and sanitized errors, no source secrets.
+  if(p==='/internal/blofy-stream/ops/mirror-intake/history'){
+    if(req.method!=='GET'||url.search)
+      return json(res,405,{ok:false,code:'mirror_history_get_only'});
+    const token=String(process.env.BLOFY_CONTENT_HUB_OPERATOR_TOKEN||'');
+    if(token.length<32)return json(res,503,{ok:false,
+      code:'mirror_history_private_hub_not_configured'});
+    try{
+      const response=await fetch(
+        'http://blofy-content-hub.railway.internal:3000/internal/mirror/copy/history',{
+          method:'GET',redirect:'manual',signal:AbortSignal.timeout(9000),
+          headers:{authorization:'Bearer '+token,
+            'x-blofy-owner-action':'private-mirror-copy-history',
+            accept:'application/json'}
+        });
+      if(![200,503].includes(response.status))
+        return json(res,503,{ok:false,code:'mirror_history_private_denied'});
+      if(Number(response.headers.get('content-length')||0)>20000)
+        return json(res,503,{ok:false,code:'mirror_history_payload_oversized'});
+      const raw=await response.text();
+      if(Buffer.byteLength(raw,'utf8')>20000)
+        return json(res,503,{ok:false,code:'mirror_history_payload_oversized'});
+      const result=JSON.parse(raw);
+      if(result?.privateOnly!==true||result?.customerCutover!==false||
+         result?.providerRequests!==0||result?.mediaBytesTransferred!==0||
+         !Array.isArray(result.items)||result.items.length>24)
+        return json(res,503,{ok:false,code:'mirror_history_response_invalid'});
+      return json(res,response.status,result,{'cache-control':'no-store'});
+    }catch{return json(res,503,{ok:false,
+      code:'mirror_history_private_unavailable'})}
+  }
   // Private operator controls for the bounded licensed-mirror worker.
   // Start is non-blocking and limited to one item/16 chunks, pause aborts.
   // The Hub independently checks rights, fresh source metadata and S3 budget.
