@@ -281,7 +281,7 @@ class BlofyPlaybackSession(
         if (player.playbackState == Player.STATE_READY &&
             !firstFrameRecorded && hasVideoTrack &&
             now - playStartedAtMs >= LIVE_FIRST_FRAME_TIMEOUT_MS &&
-            noFirstFrameRecoveries >= MAX_NO_FIRST_FRAME_RECOVERIES
+            noFirstFrameRecoveries == MAX_NO_FIRST_FRAME_RECOVERIES
         ) {
             val failedUrl = player.currentMediaItem?.localConfiguration?.uri?.toString().orEmpty()
             if (failedUrl.isNotBlank()) onTerminalError?.invoke(failedUrl)
