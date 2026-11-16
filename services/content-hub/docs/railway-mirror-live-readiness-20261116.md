@@ -279,3 +279,40 @@ pipeline and test Android/Windows end-device audio/video + seek.
   actual BLOFY STREAM Android 9/TV player, native Windows app,
   10 production customers, full-length media, secure public HTTPS
   publishing, provider rights or a live Railway subscriber test.
+
+
+## Owner HTTP pre-response SHA-256 integrity gate (2026-11-16)
+
+- The owner-only `/internal/mirror/owner-range/{movie|episode}/mirror_<32hex>`
+  endpoint now reads the *complete 8MiB S3 part(s)* that overlap a
+  requested bounded HTTP range, hashes them against the exact
+  persisted PostgreSQL part SHA-256, and ONLY THEN writes HTTP 206.
+  A cross-part request buffers at most two chunks (16 MiB).
+- On proven mismatch, no media bytes or 206 are sent: the source
+  `verified` manifest is atomically quarantined in PostgreSQL
+  (`failed`, `mirror_private_sha256_mismatch`). The response is
+  HTTP 409, and later GETs reject the no-longer-verified run.
+- A temporary S3 timeout/short read does NOT falsely quarantine.
+  It fails closed with sanitized HTTP 503 and no media bytes.
+- Original `/internal/pilot/playback/...` and
+  `/internal/site-qa/files/...` now both reject `mirror_<32hex>`
+  IDs. There is no older HTTP route to bypass the SHA guard.
+- Real MinIO S3+PostgreSQL CI deliberately modified bytes **outside**
+  the specific requested 64-byte slice in an already-verified movie
+  chunk. The owner GET detected full-part SHA corruption before
+  serving any video, quarantined the movie, and its next GET was
+  HTTP 404. An independent episode audio/video canary still
+  quarantines deliberately corrupted episode objects.
+- Unit tests confirm successful verified movie/episode cross-boundary
+  ranges, wrong namespace/key/hash rejection, missing/short part
+  rejection, and **zero provider requests**.
+- All four feature-head GitHub CI workflows PASSED on
+  `f0a22ea2d3c0fa0eb7d66959dc86e7ff65e9b490`.
+- Performance trade-off: no new customer routes, but owner QA
+  ranges now require reading up to 16 MiB from S3 per request
+  to validate complete overlapping SHA parts before replying.
+  Caching full parts is NOT enabled, so corruption cannot hide in
+  a stale in-process cache. Production customer bandwidth and
+  Android/Windows native player behavior remain untested.
+- This feature is on DRAFT PR only. It was NOT deployed to
+  customer's Content Hub, Portal, Android or Windows apps.
