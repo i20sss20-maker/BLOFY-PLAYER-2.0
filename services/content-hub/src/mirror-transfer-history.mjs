@@ -12,10 +12,20 @@ export function summarizeMirrorHistory(rows=[],{limit=24}={}){
    const bytes=Number.isSafeInteger(expected)&&expected>0?expected:0;
    const saved=Number.isSafeInteger(copied)&&copied>=0?copied:0;
    const complete=x.state==='verified'&&saved===bytes;
+   const av=complete&&x.avSample&&
+    x.avSample.mediaKind===x.mediaKind&&
+    x.avSample.sha256===x.verifiedSha256&&
+    Number.isSafeInteger(x.avSample.videoFramesDecoded)&&
+    x.avSample.videoFramesDecoded>0&&
+    Number.isSafeInteger(x.avSample.audioFramesDecoded)&&
+    x.avSample.audioFramesDecoded>0;
    return {kind:x.mediaKind==='episode'?'episode':'movie',
     runId:String(x.runId),state:['staged','verified','failed'].includes(x.state)?
       x.state:'unknown',
     completed:complete,expectedBytes:bytes,bytesCopied:Math.min(saved,bytes),
+    avPrefixDecoded:Boolean(av),
+    avSampleCheckedAt:av?x.avSample.checkedAt:null,
+    ownerDevicePlaybackVerified:false,fullLengthPlaybackVerified:false,
     percent:bytes?Math.floor(Math.min(saved,bytes)*100/bytes):0,
     partsCopied:Number.isSafeInteger(Number(x.partsCopied))?
      Math.max(0,Number(x.partsCopied)):0,
@@ -48,6 +58,13 @@ export async function readMirrorHistory(lease,{limit=24}={}){
  try{
   // No provider calls, S3 GETs, or private object keys.
   const runs=await lease.listMirrorRuns({limit});
-  return summarizeMirrorHistory(runs,{limit});
+  const ids=runs.filter(x=>x.state==='verified')
+   .map(x=>x.runId).slice(0,50);
+  const proofs=typeof lease.listMirrorAvSamples==='function'?
+   await lease.listMirrorAvSamples({runIds:ids}):[];
+  const map=new Map(proofs.map(x=>[x.mediaKind+'|'+x.runId,x]));
+  return summarizeMirrorHistory(runs.map(x=>({
+   ...x,avSample:map.get(x.mediaKind+'|'+x.runId)||null
+  })),{limit});
  }catch{return {...base,ok:false,code:'mirror_history_unavailable'}}
 }
