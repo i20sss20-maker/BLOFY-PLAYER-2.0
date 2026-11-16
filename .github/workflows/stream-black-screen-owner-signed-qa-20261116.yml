@@ -131,7 +131,7 @@ jobs:
           test -s "$apk"
           tools="$ANDROID_HOME/build-tools/$ANDROID_BUILD_TOOLS_VERSION"
           "$tools/aapt" dump badging "$apk" > "$RUNNER_TEMP/stream-badging.txt"
-          grep -Fq "name='tv.blofy.player.v2.stream' versionCode='2000106' versionName='2.0.0-rc07.55.8.30-STREAM'" "$RUNNER_TEMP/stream-badging.txt"
+          grep -Fq "name='tv.blofy.player.v2.stream' versionCode='2000107' versionName='2.0.0-rc07.55.8.30-STREAM'" "$RUNNER_TEMP/stream-badging.txt"
           ! grep -Fq 'application-debuggable' "$RUNNER_TEMP/stream-badging.txt"
           "$tools/apksigner" verify --verbose --print-certs "$apk" > "$RUNNER_TEMP/apk-cert.txt"
           cert="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/apk-cert.txt" | head -n1 | tr -d '[:space:]-:' | tr '[:lower:]' '[:upper:]')"
