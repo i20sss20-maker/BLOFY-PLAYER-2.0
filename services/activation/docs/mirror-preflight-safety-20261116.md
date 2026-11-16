@@ -317,3 +317,27 @@ and real PostgreSQL, not a Railway production bucket test or real
 provider video transfer. It does not prove permanent copying rights
 for third-party media or device playback quality. All mirror flags
 remain OFF and all drafts remain undeployed.
+
+
+## Full synthetic audio-video canary through real MinIO + PostgreSQL
+
+- Integration CI now generates a real 2-second video+sound clip LOCALLY
+  using FFmpeg lavfi `testsrc2` and `sine` (MPEG-4 video and AAC audio).
+  Its valid MP4 free atom is expanded to exactly 8 MiB + 127 bytes so
+  every copy necessarily crosses the immutable 8-MiB chunk boundary.
+- Uses the actual private-s3.mjs multipart S3 client talking over HTTP
+  to disposable MinIO with server-side encrypted test storage. It saves
+  movie parts to PostgreSQL, verifies exact source SHA-256 and then
+  independently reads the S3 objects and decodes a video frame and
+  audio samples using real FFprobe + FFmpeg, with NO mocked decoder.
+- The same full pipeline is also exercised for an episode in its
+  distinct PostgreSQL episode runs table and private S3 key namespace.
+  The movie and episode each have two independent saved parts, verified
+  full-file SHA-256, audio and video decode proof, and read-only history.
+- The provider and user playback remain untouched: the test Range
+  origin is only in-process generated content, not an Xtream account.
+- The owner-app and Android/Windows A/V canary remains an outstanding
+  manual validation gate. This CI test validates local S3/DB plus real
+  media decoders; it does not validate real Railway S3 nor copy rights.
+- All Content Hub licensed pilot CI jobs passed after adding this
+  movie-and-episode end-to-end synthetic media smoke on 16 Nov 2026.
