@@ -8,7 +8,7 @@ const base={sourceMediaRequests:0,customerCutover:false,readOnly:true,
  allUpstreamSessionsMeasured:false,providerAccountSnapshotOnly:true};
 
 export function assessMirrorSourceHeadroom(report,{
- sourceId,now=Date.now()
+ sourceId,now=Date.now(),transportRisk=null
 }={}){
  const blockedBy=[];
  if(!UUID.test(String(sourceId||''))||!Number.isSafeInteger(now))
@@ -45,6 +45,10 @@ export function assessMirrorSourceHeadroom(report,{
   blockedBy.push('mirror_source_direct_transfer_sample_unreliable');
  if(row?.providerSnapshotFresh!==true)
   blockedBy.push('mirror_source_provider_snapshot_not_fresh');
+ // This portal's recent relay timeouts/resets veto NEW private copies.
+ // It is not a real-time count of ALL viewers or other replicas.
+ if(transportRisk!==null&&transportRisk?.ok!==true)
+  blockedBy.push('mirror_source_recent_transport_failure');
  return {...base,ok:blockedBy.length===0,
   code:blockedBy.length===0?'mirror_source_headroom_cautiously_clear':
    'mirror_source_headroom_blocked',
@@ -56,6 +60,10 @@ export function assessMirrorSourceHeadroom(report,{
    Number.isSafeInteger(max)&&Number.isSafeInteger(active)&&max>=active)?
    max-active:null,
   snapshotWindowMs:SNAPSHOT_MS,
+  localTransportCooldownMs:transportRisk?.ok===false&&
+   Number.isSafeInteger(transportRisk.remainingMs)?
+    transportRisk.remainingMs:null,
+  recentTransportObservationsOnlyThisReplica:true,
   mirrorDownloadAuthorized:false,
   bandwidthAndOtherProviderSessionsStillUnmeasured:true};
 }
