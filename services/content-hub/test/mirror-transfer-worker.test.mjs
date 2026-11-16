@@ -6,6 +6,7 @@ import {mirrorWorkerReadiness,validateMirrorTransferApproval,
  runMirrorTransferChunk} from '../src/mirror-transfer-worker.mjs';
 
 const UUID='123e4567-e89b-42d3-a456-426614174000',K=8*1024*1024;
+const SOURCE_VERSION=createHash('sha256').update('etag:"version-1"','utf8').digest('hex');
 const ENV={
  BLOFY_CONTENT_HUB_MIRROR_WORKER_ENABLED:'1',
  BLOFY_CONTENT_HUB_UPLOAD_ENABLED:'1',
@@ -21,6 +22,7 @@ const approval=({
  sourceId:UUID,kind:'movie',id:'31415',mediaId:'31415',
  gatewayId:125,extension:'mkv',
  expectedBytes:K+127,rightsEvidenceHash:'a'.repeat(64),
+ validatorSha256:SOURCE_VERSION,
  validatorPresent:true,approvedAt:now,
  permissionScope:'licensed-private-vod-copy'
 });
@@ -116,6 +118,7 @@ test('exact source scope, rights evidence, expiry, source validator mandatory',(
   {...approval,mediaId:'../../etc'},
   {...approval,validatorPresent:false},
   {...approval,rightsEvidenceHash:''},
+  {...approval,validatorSha256:''},
   {...approval,approvedAt:now-3600000},
   {...approval,permissionScope:'public'},
   {...approval,sourceName:'someone else'}
@@ -258,4 +261,39 @@ test('zero-byte S3 re-verification succeeds even when capacity scanner is offlin
  assert.equal(result.ok,true);
  assert.equal(result.sourceMediaRequests,0);
  assert.equal(result.storageWrittenBytes,0);
+});
+
+test('new ETag version makes a distinct run instead of treating old copy as current',async()=>{
+ const f=fixture();
+ const first=await run(f);
+ assert.equal(first.ok,true);
+ const runIdBefore=first.runId;
+ const v2=createHash('sha256').update('etag:"version-2"','utf8').digest('hex');
+ const v2Data=Buffer.alloc(K+127,0x63);
+ const approvalLoader=async()=>({...approval,
+   validatorSha256:v2,expectedBytes:K+127});
+ const readRange=async({from,to})=>{
+  f.calls.media.push([from,to]);
+  const part=v2Data.subarray(from,to+1);
+  return new Response(part,{status:206,headers:{
+   'content-range':'bytes '+from+'-'+to+'/'+(K+127),
+   'content-length':String(part.byteLength),'etag':'"version-2"'
+  }});
+ };
+ const second=await run(f,{approvalLoader,readRange});
+ assert.equal(second.ok,true);
+ assert.notEqual(second.runId,runIdBefore);
+ assert.equal(f.runs.size,2);
+ assert.equal(second.sourceMediaRequests,1);
+});
+test('mismatched preflight ETag stops before private S3 writes',async()=>{
+ const f=fixture();
+ const wrong=await run(f,{approvalLoader:async()=>({
+   ...approval,validatorSha256:'f'.repeat(64)
+ })});
+ assert.equal(wrong.ok,false);
+ assert.equal(wrong.code,'mirror_source_validator_changed');
+ assert.equal(wrong.sourceMediaRequests,1);
+ assert.equal(f.calls.uploads.length,0);
+ assert.equal([...f.runs.values()][0].state,'failed');
 });
