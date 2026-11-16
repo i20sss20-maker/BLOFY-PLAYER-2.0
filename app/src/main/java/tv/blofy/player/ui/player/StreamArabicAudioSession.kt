@@ -3,6 +3,7 @@ package tv.blofy.player.ui.player
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -75,6 +76,9 @@ internal class StreamArabicAudioSession(
     private var generation = 0
     private var playbackAnnounced = false
     private var invalidAudioRetries = 0
+    private var effectiveDelayMs = 0.0
+    private var syncRate = 1f
+    private var syncRateSinceMs = 0L
     private val startupHandler = Handler(Looper.getMainLooper())
 
     val isActive: Boolean get() = audio != null && track != null
@@ -90,6 +94,8 @@ internal class StreamArabicAudioSession(
         originalVolume = video.volume
         track = item
         delay = ArabicSidecarTimingPolicy.clamp(item.initialDelaySeconds)
+        effectiveDelayMs = delay * 1000.0
+        syncRate = 1f
         val version = ++generation
         playbackAnnounced = false
         invalidAudioRetries = 0
@@ -151,7 +157,7 @@ internal class StreamArabicAudioSession(
                     }
                 } else if (!started) {
                     video.volume = originalVolume
-                } else if (!holdPending) {
+                } else {
                     scheduleOriginalAudioOnStall(version)
                 }
             }
@@ -208,7 +214,7 @@ internal class StreamArabicAudioSession(
             // Avoid leaving a customer with silence when the commentary
             // buffers or the remote radio is unavailable, but do not unmute
             // during a deliberate +1 second synchronization hold.
-            if (version == generation && started && !holdPending &&
+            if (version == generation && started &&
                 video.playWhenReady && companion != null && !companion.isPlaying
             ) video.volume = originalVolume
         }, 2_500L)
@@ -221,6 +227,12 @@ internal class StreamArabicAudioSession(
             companion.playWhenReady = false
             if (waiting) {
                 waiting = false
+                handler.removeCallbacksAndMessages(null)
+            }
+            if (syncRate != 1f) {
+                settleSyncClock()
+                syncRate = 1f
+                companion.playbackParameters = PlaybackParameters(1f)
                 handler.removeCallbacksAndMessages(null)
             }
             return
@@ -238,19 +250,74 @@ internal class StreamArabicAudioSession(
                     companion.playWhenReady = true
                 }
             }, delay * 1_000L)
-        } else if (!holdPending) {
+        } else {
             companion.playWhenReady = true
+            if (syncRate == 1f &&
+                kotlin.math.abs(delay * 1000.0 - effectiveDelayMs) > 150.0) {
+                scheduleLiveSync(companion)
+            }
         }
     }
 
-    /** deltaSeconds > 0 delays Arabic more; < 0 advances within current delay. */
+    /** Estimate accumulated live offset while time-stretching the audio. */
+    private fun settleSyncClock() {
+        if (syncRate == 1f) return
+        val now = SystemClock.elapsedRealtime()
+        val elapsed = (now - syncRateSinceMs).coerceAtLeast(0L)
+        effectiveDelayMs = ArabicSidecarTimingPolicy.estimatedOffsetMs(
+            effectiveDelayMs, elapsed, syncRate
+        )
+        syncRateSinceMs = now
+    }
+
+    private fun scheduleLiveSync(companion: ExoPlayer) {
+        settleSyncClock()
+        val targetMs = delay * 1000.0
+        val gapMs = targetMs - effectiveDelayMs
+        handler.removeCallbacksAndMessages(null)
+        val version = generation
+        if (kotlin.math.abs(gapMs) < 150.0) {
+            effectiveDelayMs = targetMs
+            syncRate = 1f
+            companion.playbackParameters = PlaybackParameters(1f)
+            return
+        }
+        // DVR/seekable tracks can rewind audio immediately.
+        val desiredPosition = companion.currentPosition - gapMs.toLong()
+        if (companion.isCurrentMediaItemSeekable && desiredPosition >= 0L) {
+            syncRate = 1f
+            companion.playbackParameters = PlaybackParameters(1f)
+            companion.seekTo(desiredPosition)
+            effectiveDelayMs = targetMs
+            return
+        }
+        // Non-seekable live radio cannot seek backward. The former
+        // playWhenReady=false hold could resume at the live edge and erase
+        // the requested delay. Slow it temporarily instead, retaining
+        // continuous commentary while accumulating buffered lag.
+        val rate = if (gapMs > 0.0) ArabicSidecarTimingPolicy.SLOW_DOWN_RATE
+            else ArabicSidecarTimingPolicy.FAST_FORWARD_RATE
+        syncRate = rate
+        syncRateSinceMs = SystemClock.elapsedRealtime()
+        companion.playbackParameters = PlaybackParameters(rate)
+        val durationMs = ArabicSidecarTimingPolicy.wallTimeToSyncMs(gapMs, rate)
+        handler.postDelayed({
+            if (version != generation || audio !== companion) return@postDelayed
+            settleSyncClock()
+            effectiveDelayMs = targetMs
+            syncRate = 1f
+            companion.playbackParameters = PlaybackParameters(1f)
+        }, durationMs)
+    }
+
+    /** + delays the voice; - advances it. Never seek a live-only feed into the future. */
     fun adjustDelay(deltaSeconds: Int): Boolean {
         val companion = audio ?: return false
         val next = ArabicSidecarTimingPolicy.adjust(delay, deltaSeconds)
         if (next == delay) return false
-        val previous = delay
         delay = next
         if (!started) {
+            effectiveDelayMs = delay * 1000.0
             if (waiting) {
                 handler.removeCallbacksAndMessages(null)
                 waiting = false
@@ -258,55 +325,13 @@ internal class StreamArabicAudioSession(
             }
             return true
         }
-        val change = next - previous
-        if (change > 0) {
-            // Holding audio creates a reproducible added delay, regardless of
-            // whether this live endpoint has a seekable DVR window.
-            catchUpPendingMs = 0L
-            pendingHoldMs += change * 1_000L
-            companion.playbackParameters = PlaybackParameters(1f)
-            companion.playWhenReady = false
-            holdPending = true
-            val version = generation
-            handler.removeCallbacksAndMessages(null)
-            handler.postDelayed({
-                if (version != generation) return@postDelayed
-                pendingHoldMs = 0L
-                holdPending = false
-                onPrimaryPlaybackChanged()
-            }, pendingHoldMs)
+        if (video.playWhenReady && video.playbackState == Player.STATE_READY) {
+            scheduleLiveSync(companion)
         } else {
-            // First finish an intentional delay hold when appropriate.
-            val advanceMs = -change * 1_000L
-            if (holdPending) {
-                pendingHoldMs = (pendingHoldMs - advanceMs).coerceAtLeast(0L)
-                handler.removeCallbacksAndMessages(null)
-                val version = generation
-                handler.postDelayed({
-                    if (version != generation) return@postDelayed
-                    pendingHoldMs = 0L
-                    holdPending = false
-                    onPrimaryPlaybackChanged()
-                }, pendingHoldMs)
-            } else if (companion.isCurrentMediaItemSeekable) {
-                companion.seekTo(companion.currentPosition + advanceMs)
-            } else {
-                // Do not seek to an impossible future timestamp on live TS.
-                // A bounded speed-up drains already-buffered delayed audio.
-                catchUpPendingMs = (catchUpPendingMs + advanceMs)
-                    .coerceAtMost(30_000L)
-                companion.playbackParameters =
-                    PlaybackParameters(ArabicSidecarTimingPolicy.FAST_FORWARD_RATE)
-                val version = generation
-                handler.removeCallbacksAndMessages(null)
-                handler.postDelayed({
-                    if (version != generation) return@postDelayed
-                    catchUpPendingMs = 0L
-                    companion.playbackParameters = PlaybackParameters(1f)
-                }, ArabicSidecarTimingPolicy.catchUpWallTimeMs(
-                    (catchUpPendingMs / 1000).toInt()
-                ))
-            }
+            settleSyncClock()
+            syncRate = 1f
+            companion.playbackParameters = PlaybackParameters(1f)
+            handler.removeCallbacksAndMessages(null)
         }
         return true
     }
@@ -339,6 +364,9 @@ internal class StreamArabicAudioSession(
         holdPending = false
         pendingHoldMs = 0L
         catchUpPendingMs = 0L
+        effectiveDelayMs = 0.0
+        syncRate = 1f
+        syncRateSinceMs = 0L
         delay = 0
     }
 }
