@@ -262,7 +262,8 @@ export function createContentHubServer({storage,lease,
    if(!safety.ready)return json(res,409,{ok:false,
      code:'mirror_worker_safety_gates_off',blockedBy:safety.blockedBy});
    if(mirrorChunkBusy||mirrorAutoCopy.isRunning()||pilotRunning||
-      copy.isRunning()||episodeCopyBusy||episodeCopy.isRunning())
+      copy.isRunning()||episodeCopyBusy||episodeCopy.isRunning()||
+      seasonQueue?.isRunning())
     return json(res,429,{ok:false,code:'mirror_worker_source_busy'});
    let body;
    try{body=await readSeasonJson(req)}
@@ -303,7 +304,7 @@ export function createContentHubServer({storage,lease,
    if(!readiness.ready)return json(res,409,{ok:false,
     code:'mirror_worker_safety_gates_off',blockedBy:readiness.blockedBy});
    if(mirrorChunkBusy||mirrorAutoCopy.isRunning()||pilotRunning||copy.isRunning()||
-      episodeCopyBusy||episodeCopy.isRunning())
+      episodeCopyBusy||episodeCopy.isRunning()||seasonQueue?.isRunning())
     return json(res,429,{ok:false,code:'mirror_worker_source_busy'});
    let body;
    try{body=await readSeasonJson(req)}
@@ -1120,7 +1121,8 @@ export function createContentHubServer({storage,lease,
    if(String(req.url||'').includes('?')||
      req.headers['x-blofy-season-confirm']!=='start-private-sequential')
     return json(res,403,{ok:false,code:'season_start_confirmation_required'});
-   if(episodeCopyBusy||episodeCopy.isRunning()||pilotRunning||copy.isRunning())
+   if(episodeCopyBusy||episodeCopy.isRunning()||pilotRunning||copy.isRunning()||
+      mirrorChunkBusy||mirrorAutoCopy.isRunning())
     return json(res,409,{ok:false,code:'source_writer_busy'});
    let observed=false;
    try{const proof=await lease.getEpisodeBrowserPlaybackStatus?.(
@@ -1187,7 +1189,8 @@ export function createContentHubServer({storage,lease,
      approved=Number(pilotEnv.BLOFY_CONTENT_HUB_EPISODE_APPROVED_GATEWAY_ID);
    if(!Number.isSafeInteger(gatewayId)||gatewayId!==approved)
     return json(res,403,{ok:false,code:'episode_start_id_not_approved'});
-   if(episodeCopyBusy||pilotRunning||copy.isRunning()||episodeCopy.isRunning()||seasonQueue?.isRunning())
+   if(episodeCopyBusy||pilotRunning||copy.isRunning()||episodeCopy.isRunning()||seasonQueue?.isRunning()||
+      mirrorChunkBusy||mirrorAutoCopy.isRunning())
     return json(res,409,{ok:false,code:'episode_source_writer_busy'});
    const result=episodeCopy.start();
    return json(res,result.ok?202:409,{
@@ -1214,7 +1217,8 @@ export function createContentHubServer({storage,lease,
    if(!Number.isSafeInteger(gatewayId)||gatewayId<1||
      gatewayId!==approved)return json(res,403,{
        ok:false,code:'episode_copy_id_not_selected'});
-   if(episodeCopyBusy||episodeCopy.isRunning()||pilotRunning||copy.isRunning()||seasonQueue?.isRunning())
+   if(episodeCopyBusy||episodeCopy.isRunning()||pilotRunning||copy.isRunning()||seasonQueue?.isRunning()||
+      mirrorChunkBusy||mirrorAutoCopy.isRunning())
     return json(res,409,{ok:false,code:'content_hub_source_writer_busy'});
    const readiness=episodeCopyReadiness(pilotEnv);
    if(!readiness.ready)return json(res,409,{ok:false,
@@ -1598,7 +1602,8 @@ export function createContentHubServer({storage,lease,
   if(path==='/internal/batch/start'&&req.method==='POST'){
    if(String(req.headers['x-blofy-batch-confirm']||'')!=='approved-8mib-batch')
     return json(res,400,{ok:false,code:'batch_operator_confirmation_required'});
-   if(pilotRunning||copy.isRunning()||seasonQueue?.isRunning())
+   if(pilotRunning||copy.isRunning()||seasonQueue?.isRunning()||
+      episodeCopyBusy||episodeCopy.isRunning()||mirrorChunkBusy||mirrorAutoCopy.isRunning())
     return json(res,409,{ok:false,code:'batch_writer_busy'});
    const result=copy.start();
    return json(res,result.ok?202:409,{
@@ -1614,7 +1619,8 @@ export function createContentHubServer({storage,lease,
    // Explicit per-batch admin operation, never an automatic source retry.
    if(String(req.headers['x-blofy-batch-confirm']||'')!=='approved-8mib-batch')
     return json(res,400,{ok:false,code:'batch_operator_confirmation_required'});
-   if(pilotRunning||copy.isRunning()||seasonQueue?.isRunning())return json(res,409,{
+   if(pilotRunning||copy.isRunning()||seasonQueue?.isRunning()||
+      episodeCopyBusy||episodeCopy.isRunning()||mirrorChunkBusy||mirrorAutoCopy.isRunning())return json(res,409,{
     ok:false,code:'batch_writer_busy'});
    const readiness=chunkedBatchReadiness(pilotEnv);
    if(!readiness.ready)return json(res,409,{
