@@ -158,7 +158,10 @@ jobs:
             -e MINIO_ROOT_USER=blofyci_testkey \
             -e MINIO_ROOT_PASSWORD=blofyci_testsecret123456 \
             -e MINIO_KMS_SECRET_KEY="ci-only:$(openssl rand -base64 32 | tr -d '\n')" \
+            -e MINIO_DOMAIN=localhost \
             -p 9000:9000 cgr.dev/chainguard/minio:latest server /data --address ":9000"
+          # CI-only DNS for virtual-host bucket addressing, no production host edit.
+          echo "127.0.0.1 blofy-ci-virtualhost.localhost" | sudo tee -a /etc/hosts
           for i in $(seq 1 45); do
             if curl --fail --silent http://127.0.0.1:9000/minio/health/ready > /dev/null; then
               exit 0
@@ -178,6 +181,7 @@ jobs:
         env:
           BLOFY_TEST_PG_URL: postgresql://mirror_ci:disposable_mirror_ci@127.0.0.1:5432/mirror_fixture
           BLOFY_TEST_MINIO_URL: http://127.0.0.1:9000
+          BLOFY_TEST_MINIO_VIRTUAL_URL: http://localhost:9000
         run: node --test services/content-hub/test/mirror-minio-postgres.test.mjs
       - name: Print isolated MinIO logs after failure
         if: failure()
