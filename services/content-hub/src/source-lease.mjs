@@ -493,7 +493,7 @@ export function createSourceLease({connectionString,
    for(const [table,mediaKind] of requests){
     const result=await pool.query([
      'SELECT run_id,state,expected_bytes,bytes_copied,',
-     'jsonb_array_length(parts) AS chunks,error_code,',
+     'jsonb_array_length(parts) AS chunks,error_code,verified_sha256,',
      'started_at,updated_at FROM',table,
      "WHERE run_id ~ '^mirror_[a-f0-9]{32}$'",
      'ORDER BY updated_at DESC LIMIT $1'
@@ -503,7 +503,8 @@ export function createSourceLease({connectionString,
     });
     for(const row of result.rows||[])out.push({
      runId:String(row.run_id),state:String(row.state),
-     mediaKind,expectedBytes:Number(row.expected_bytes),
+     mediaKind,verifiedSha256:row.verified_sha256||null,
+     expectedBytes:Number(row.expected_bytes),
      bytesCopied:Number(row.bytes_copied),
      partsCopied:Number(row.chunks),
      code:row.error_code||null,
@@ -514,6 +515,131 @@ export function createSourceLease({connectionString,
    out.sort((a,b)=>new Date(b.updatedAt||0).getTime()-
      new Date(a.updatedAt||0).getTime());
    return out.slice(0,limit);
+  },
+  // Persist only a decoder PREFIX sample, not actual device playback.
+  // This write is tied to a VERIFIED PostgreSQL movie or episode run.
+  // Quarantined runs stay invalid because the owner history requires
+  // state=verified and the original matching file SHA.
+  async recordMirrorAvSample({runId,kind,videoFramesDecoded,
+    audioFramesDecoded}={}){
+   if(!/^mirror_[a-f0-9]{32}$/.test(String(runId||''))||
+      !['movie','episode'].includes(kind)||
+      !Number.isSafeInteger(videoFramesDecoded)||
+      videoFramesDecoded<1||videoFramesDecoded>100000||
+      !Number.isSafeInteger(audioFramesDecoded)||
+      audioFramesDecoded<1||audioFramesDecoded>100000)
+    throw Error('mirror_av_sample_input_invalid');
+   await pool.query([
+    'CREATE TABLE IF NOT EXISTS blofy_content_hub_mirror_av_checks (',
+    'run_id TEXT NOT NULL,',
+    "media_kind TEXT NOT NULL CHECK(media_kind IN ('movie','episode')),",
+    'full_sha256 CHAR(64) NOT NULL,',
+    'video_frames_decoded INTEGER NOT NULL CHECK(video_frames_decoded > 0),',
+    'audio_frames_decoded INTEGER NOT NULL CHECK(audio_frames_decoded > 0),',
+    'checked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),',
+    'PRIMARY KEY(run_id,media_kind))'
+   ].join(' '));
+   const table=kind==='movie'?
+    'blofy_content_hub_chunk_runs':'blofy_content_hub_episode_runs';
+   const result=await pool.query([
+    'INSERT INTO blofy_content_hub_mirror_av_checks',
+    '(run_id,media_kind,full_sha256,video_frames_decoded,',
+    'audio_frames_decoded,checked_at)',
+    'SELECT r.run_id,$2,r.verified_sha256,$3,$4,NOW() FROM',
+    table,"r WHERE r.run_id=$1 AND r.state='verified'",
+    "AND r.verified_sha256 ~ '^[a-f0-9]{64}
+  // customer/device playback. Immutable mirror runs can only be
+  // quarantined from verified -> failed, never automatically restored.
+  // Do not delete evidence or any S3 object as part of quarantine.
+  async quarantineMirrorRun({runId,kind}={}){
+   if(!/^mirror_[a-f0-9]{32}$/.test(String(runId||''))||
+      !['movie','episode'].includes(kind))
+    throw Error('mirror_quarantine_scope_invalid');
+   const table=kind==='movie'?
+    'blofy_content_hub_chunk_runs':'blofy_content_hub_episode_runs';
+   const result=await pool.query([
+    'UPDATE',table,
+    "SET state='failed',error_code='mirror_private_sha256_mismatch',",
+    'updated_at=NOW()',
+    "WHERE run_id=$1 AND state='verified' RETURNING run_id"
+   ].join(' '),[runId]);
+   return {ok:result.rowCount===1,
+    code:result.rowCount===1?'mirror_sha_corruption_quarantined':
+      'mirror_quarantine_not_verified',
+    privateOnly:true,customerCutover:false,
+    providerRequests:0,storageObjectsDeleted:0};
+  },
+  async chunkedStorageAccounting(){
+   const res=await pool.query(`SELECT
+    COUNT(*) FILTER(WHERE state='verified')::int AS verified_count,
+    COALESCE(SUM(expected_bytes) FILTER(WHERE state='verified'),0)::text
+      AS verified_bytes,
+    COUNT(*) FILTER(WHERE state='staged')::int AS active_count,
+    COUNT(*) FILTER(WHERE state='failed')::int AS failed_count,
+    COALESCE(SUM(bytes_copied),0)::text AS stored_bytes
+    FROM blofy_content_hub_chunk_runs`).catch(e=>{
+      if(e?.code==='42P01')return {rows:[{}]};throw e;
+    });
+   const row=res.rows?.[0]||{};
+   return {verifiedCount:Number(row.verified_count||0),
+    verifiedBytes:Number(row.verified_bytes||0),
+    activeCount:Number(row.active_count||0),
+    failedCount:Number(row.failed_count||0),
+    storedBytes:Number(row.stored_bytes||0)};
+  },
+  // One operator-approved startup request can never be replayed on
+  // container restart or a deploy. A fresh token needs explicit approval.
+  async claimBatchBootOnce(token,runId){
+   if(!/^[A-Za-z0-9_-]{8,80}$/.test(String(token||''))||
+     !/^[A-Za-z0-9_-]{8,80}$/.test(String(runId||'')))
+    throw Error('invalid_one_time_batch_token');
+   await pool.query(`CREATE TABLE IF NOT EXISTS blofy_content_hub_batch_boot_claims (
+      event_token TEXT PRIMARY KEY,
+      run_id TEXT NOT NULL,
+      claimed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   )`);
+   const claimed=await pool.query(`INSERT INTO blofy_content_hub_batch_boot_claims
+      (event_token,run_id) VALUES ($1,$2) ON CONFLICT DO NOTHING
+      RETURNING event_token`,[token,runId]);
+   return claimed.rowCount===1;
+  },
+  async close(){await pool.end()}
+ };
+}
+",
+    'ON CONFLICT(run_id,media_kind) DO UPDATE SET',
+    'full_sha256=EXCLUDED.full_sha256,',
+    'video_frames_decoded=EXCLUDED.video_frames_decoded,',
+    'audio_frames_decoded=EXCLUDED.audio_frames_decoded,',
+    'checked_at=NOW() RETURNING checked_at'
+   ].join(' '),[runId,kind,videoFramesDecoded,audioFramesDecoded]);
+   if(result.rowCount!==1)throw Error('mirror_av_sample_not_verified');
+   return {ok:true,code:'mirror_private_av_sample_saved',
+    sampledOnly:true,devicePlaybackVerified:false,
+    customerCutover:false,providerRequests:0,
+    checkedAt:result.rows[0].checked_at};
+  },
+  async listMirrorAvSamples({runIds=[]}={}){
+   if(!Array.isArray(runIds)||runIds.length>50||
+      runIds.some(x=>!/^mirror_[a-f0-9]{32}$/.test(String(x||''))))
+    throw Error('mirror_av_sample_scope_invalid');
+   if(!runIds.length)return [];
+   const result=await pool.query([
+    'SELECT run_id,media_kind,full_sha256,video_frames_decoded,',
+    'audio_frames_decoded,checked_at',
+    'FROM blofy_content_hub_mirror_av_checks',
+    'WHERE run_id=ANY($1::text[])'
+   ].join(' '),[runIds]).catch(error=>{
+    if(error?.code==='42P01')return {rows:[]};
+    throw error;
+   });
+   return (result.rows||[]).map(row=>({
+    runId:String(row.run_id),mediaKind:String(row.media_kind),
+    sha256:String(row.full_sha256),
+    videoFramesDecoded:Number(row.video_frames_decoded),
+    audioFramesDecoded:Number(row.audio_frames_decoded),
+    checkedAt:row.checked_at
+   }));
   },
   // Hash-corrupted private S3 data must NEVER stay eligible for future
   // customer/device playback. Immutable mirror runs can only be
