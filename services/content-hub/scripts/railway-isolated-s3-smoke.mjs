@@ -30,6 +30,12 @@ export async function runIsolatedS3Smoke({
    err('qa_bucket_identity_mismatch');
   if(env.BLOFY_CONTENT_HUB_S3_URL_STYLE!=='virtual-host')
    err('qa_requires_virtual_host');
+  // Do not begin even S3 inventory or fixture generation if A/V QA lacks
+  // its own explicit approval; never discover this after uploading parts.
+  if(verifyAvFromS3!==null&&(
+     env.BLOFY_QA_SYNTHETIC_AV!=='1'||
+     typeof verifyAvFromS3!=='function'))
+   err('qa_av_validation_not_authorized');
   storage=makeStorage({config:env});
   const before=await storage.measurePrivateUsage({maxObjects:1000});
   if(before?.ok!==true)err('qa_inventory_unavailable');
@@ -79,8 +85,6 @@ export async function runIsolatedS3Smoke({
     err('qa_range_bytes_mismatch');
    out.rangeVerified=true;
    if(verifyAvFromS3!==null){
-    if(env.BLOFY_QA_SYNTHETIC_AV!=='1'||
-       typeof verifyAvFromS3!=='function')err('qa_av_validation_not_authorized');
     stage='audio_video';
     const decoded=await verifyAvFromS3({storage,key,
      expectedBytes:data.length,expectedSha256:expectedHash});
