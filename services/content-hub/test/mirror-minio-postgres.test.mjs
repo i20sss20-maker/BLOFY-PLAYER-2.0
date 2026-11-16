@@ -264,7 +264,17 @@ test('real encrypted S3+PG+FFmpeg: lost ACK recovery and SHA/AV for movie and ep
    runId:episodeRunId,mediaKind:'episode',storage,lease
   });
   assert.equal(broken.ok,false,'tampered S3 must never pass A/V canary');
-  assert.equal(broken.code,'canary_private_read_failed');
+  assert.equal(broken.code,'canary_private_sha256_mismatch');
+  const quarantine=await lease.quarantineMirrorRun({
+   runId:episodeRunId,kind:'episode'
+  });
+  assert.equal(quarantine.ok,true);
+  assert.equal(quarantine.storageObjectsDeleted,0);
+  assert.equal((await lease.listMirrorRuns({limit:24}))
+   .find(x=>x.runId===episodeRunId).state,'failed');
+  assert.equal(await lease.getVerifiedEpisodeObject(episodeRunId),null);
+  assert.equal((await lease.quarantineMirrorRun({
+   runId:episodeRunId,kind:'episode'})).ok,false);
   assert.equal(broken.providerRequests,0);
   assert.equal(broken.customerCutover,false);
   assert.equal(sourceCalls,4,'corruption check must not reread Xtream');
