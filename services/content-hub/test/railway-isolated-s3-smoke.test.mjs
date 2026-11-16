@@ -107,6 +107,8 @@ test('Railway T3 objects can lack SSE-S3 header, but provider policy is explicit
  const f=fake();
  const env={...ENV,
   BLOFY_CONTENT_HUB_S3_ENDPOINT:'https://t3.storageapi.dev',
+  BLOFY_QA_EXPECTED_BUCKET:'blofy-mirror-s3-isolated-qa',
+  BLOFY_CONTENT_HUB_S3_BUCKET:'blofy-mirror-s3-isolated-qa',
   BLOFY_QA_PLATFORM_ENCRYPTION_DOC_ACK:'1'
  };
  const createS3=()=>({send:async()=>({}),destroy(){}});
@@ -138,4 +140,20 @@ test('Railway T3 objects can lack SSE-S3 header, but provider policy is explicit
  assert.equal(mismatchedHost.ok,false);
  assert.equal(mismatchedHost.code,'qa_sse_not_proven');
  assert.equal(mismatchedHost.objectCountAfter,0);
+});
+
+test('production customer bucket references are forbidden before touching S3',async()=>{
+ let invoked=false;
+ const out=await runIsolatedS3Smoke({
+  env:{...ENV,
+   BLOFY_CONTENT_HUB_S3_ENDPOINT:'https://t3.storageapi.dev',
+   BLOFY_QA_EXPECTED_BUCKET:'blofy-content-hub-private',
+   BLOFY_CONTENT_HUB_S3_BUCKET:'blofy-content-hub-private'},
+  makeStorage:()=>{invoked=true;throw Error('must never touch customer S3')}
+ });
+ assert.equal(out.ok,false);
+ assert.equal(out.code,'qa_production_bucket_reference_forbidden');
+ assert.equal(invoked,false);
+ assert.equal(out.sourceRequests,0);
+ assert.equal(out.writtenBytes,0);
 });
