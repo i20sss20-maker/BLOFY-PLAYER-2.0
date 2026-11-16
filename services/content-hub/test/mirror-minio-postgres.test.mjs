@@ -64,6 +64,19 @@ test('private real S3 protocol and PostgreSQL copy: two verified chunks, SHA, lo
     BLOFY_CONTENT_HUB_S3_URL_STYLE:'path'
    },client
   });
+  let adapterError=null;
+  for(const method of ['begin','part','complete','verify']){
+   const original=storage[method].bind(storage);
+   storage[method]=async (...args)=>{
+    try{return await original(...args)}catch(error){
+     adapterError={method,name:String(error?.name||''),
+      code:String(error?.Code||error?.code||'').slice(0,80),
+      status:Number(error?.$metadata?.httpStatusCode||0),
+      detail:String(error?.message||'').slice(0,120)};
+     throw error;
+    }
+   };
+  }
   const approvalLoader=async()=>approval;
   const readRange=async({from,to})=>{
    sourceCalls++;
@@ -79,7 +92,7 @@ test('private real S3 protocol and PostgreSQL copy: two verified chunks, SHA, lo
    env:FLAGS,approvalLoader,readRange,now:()=>now
   });
   const first=await execute();
-  assert.equal(first.ok,true,JSON.stringify(first));
+  assert.equal(first.ok,true,JSON.stringify({first,adapterError}));
   assert.equal(first.code,'mirror_worker_checkpoint_saved');
   assert.equal(first.bytesCopied,8*1024*1024);
   runId=first.runId;
