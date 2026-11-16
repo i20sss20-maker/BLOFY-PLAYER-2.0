@@ -50,7 +50,13 @@ export function createMirrorSourceTransportGuard({
    scope:'this_portal_process_only',otherReplicasMeasured:false};
   const failure=failures.get(id);
   const age=failure?at-failure.at:null;
-  const active=age!==null&&age>=0&&age<=cooldownMs;
+  // A server clock rollback must not silently erase a recorded outage.
+  if(age!==null&&age<0)
+   return {ok:false,code:'mirror_transport_clock_regressed',
+    remainingMs:cooldownMs,recentFailureCount:failure.count,
+    sourceMediaRequests:0,customerCutover:false,
+    scope:'this_portal_process_only',otherReplicasMeasured:false};
+  const active=age!==null&&age<=cooldownMs;
   if(failure&&!active)failures.delete(id);
   return {ok:!active,
    code:active?'mirror_transport_cooldown_active':
