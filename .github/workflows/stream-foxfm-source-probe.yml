@@ -1,0 +1,64 @@
+name: BLOFY FoXFM 33 Source Availability Check
+on:
+  push:
+    branches: [fix/stream-foxfm-blofy-audio-20261116]
+    paths:
+      - '.github/workflows/stream-foxfm-source-probe.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe-operator-supplied-streams:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Safely check all 33 upstream live audio sources, no audio retained
+        shell: bash
+        run: |
+          node --input-type=module <<'JS'
+          import http from 'node:http';
+          const paths=[
+            ...Array.from({length:9},(_,i)=>'http://foxfm.xyz/'+(i+1)),
+            ...['live','xtra','en','fr','starzplay','shasha','thmanyah','shahid','alkass']
+              .flatMap(x=>Array.from({length:({'live':4,'xtra':3,'en':2,'fr':2,'starzplay':2,'shasha':2,'thmanyah':3,'shahid':2,'alkass':4})[x]},(_,i)=>'http://foxfm.xyz:8080/'+x+(i+(x==='alkass'?5:1))))
+          ];
+          async function check(url){
+            return new Promise(resolve=>{
+              let done=false;
+              const finish=value=>{if(done)return;done=true;resolve(value)};
+              const req=http.get(url,{headers:{'accept':'audio/*,*/*','user-agent':'BLOFY-STREAM-Audio-Relay/1.0','range':'bytes=0-2047'},timeout:5500},res=>{
+                const st=res.statusCode||0,ct=String(res.headers['content-type']||'').split(';')[0];
+                const parts=[];let got=0;
+                res.on('data',chunk=>{if(got<2048){parts.push(chunk.subarray(0,2048-got));got+=Math.min(2048-got,chunk.length)}
+                  if(got>=2048)res.destroy()});
+                res.on('close',()=>{
+                  const buf=Buffer.concat(parts),b=buf;
+                  const audio=b.subarray(0,3).toString()==='ID3'||
+                    b.subarray(0,4).toString()==='OggS'||
+                    b.subarray(0,4).toString()==='fLaC'||
+                    (b.length>=3&&b[0]===255&&((b[1]&224)===224));
+                  const ts=b.length>=377&&b[0]===71&&b[188]===71&&b[376]===71;
+                  finish({status:st,contentType:ct,bytes:got,kind:audio?'audio':ts?'ts':'unrecognized'});
+                });
+              });
+              req.on('timeout',()=>req.destroy(Error('timeout')));
+              req.on('error',e=>finish({status:0,contentType:'',bytes:0,kind:e.message==='timeout'?'timeout':'network_error'}));
+            })
+          }
+          let results=[];
+          for(let i=0;i<paths.length;i+=6){
+            results.push(...await Promise.all(paths.slice(i,i+6).map(check)));
+          }
+          const counts={};for(const x of results)counts[x.kind]=(counts[x.kind]||0)+1;
+          const codes={};for(const x of results)codes[x.status]=(codes[x.status]||0)+1;
+          console.log('BLOFY 33-stream source preflight',JSON.stringify({total:results.length,kinds:counts,statuses:codes}));
+          const summary='FoXFM source status (GitHub runner, no media stored): '+JSON.stringify({kinds:counts,statuses:codes});
+          await import('node:fs/promises').then(fs=>fs.appendFile(process.env.GITHUB_STEP_SUMMARY||'/dev/null',summary+'\\n'));
+          if((counts.audio||0)+(counts.ts||0)===0) {
+            console.error('No recognized audio from remote probe. DO NOT replace production provider solely on this test.');
+            process.exitCode=1;
+          }
+          JS
