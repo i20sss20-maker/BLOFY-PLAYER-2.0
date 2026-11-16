@@ -6,6 +6,8 @@ RUN apk add --no-cache ffmpeg && ffprobe -version >/dev/null && ffmpeg -version 
 COPY package.json ./package.json
 RUN npm install --omit=dev --no-audit --no-fund
 COPY src ./src
+# Include isolated, explicitly gated QA runner; no default execution in production.
+COPY scripts ./scripts
 COPY test ./test
 # Build is fully offline from provider Xtream / BLOFY live data.
 RUN npm test && node --check src/server.mjs && node --check src/private-s3.mjs
