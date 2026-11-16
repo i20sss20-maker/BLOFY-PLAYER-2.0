@@ -31,29 +31,28 @@ test('only mirror checkpoint runs count, not old pilots or season queue',()=>{
  assert.equal(response.physicalS3CurrentlyChecked,false);
  assert.equal(response.items[1].failureCode,'mirror_source_validator_changed');
 });
-test('private DB-only history never reaches the original Xtream origin',async()=>{
- let movies=0,episodes=0;
+test('private PostgreSQL mirror-only listing never scans non-mirror pilot rows',async()=>{
+ let reads=0;
  const out=await readMirrorHistory({
-  listChunkedRuns:async({limit})=>{
-   assert.equal(limit,50);movies++;
+  listMirrorRuns:async({limit})=>{
+   assert.equal(limit,24);reads++;
    return [{runId:id,state:'staged',expectedBytes:8388608,
-    bytesCopied:4194304,partsCopied:1,startedAt:now}];
-  },
-  listEpisodeRuns:async({limit})=>{
-   assert.equal(limit,25);episodes++;
-   return [];
+    bytesCopied:4194304,partsCopied:1,mediaKind:'movie',
+    startedAt:now,updatedAt:now}];
   }
  });
  assert.equal(out.ok,true);
  assert.equal(out.itemCount,1);
  assert.equal(out.items[0].percent,50);
  assert.equal(out.items[0].kind,'movie');
- assert.equal(movies,1);assert.equal(episodes,1);
+ assert.equal(reads,1);
+ assert.equal(out.customerCutover,false);
 });
+
 test('missing PG tables fail safely and response never shows S3 object keys',async()=>{
- const result=await readMirrorHistory({listChunkedRuns:async()=>{
+ const result=await readMirrorHistory({listMirrorRuns:async()=>{
   throw Error('database unavailable');
- },listEpisodeRuns:async()=>[]});
+ }});
  assert.equal(result.ok,false);
  assert.equal(result.code,'mirror_history_unavailable');
  assert.equal(result.customerCutover,false);
@@ -65,6 +64,20 @@ test('missing PG tables fail safely and response never shows S3 object keys',asy
  assert.ok(!JSON.stringify(sanitized).includes('password'));
  assert.ok(!JSON.stringify(sanitized).includes('private_file.mkv'));
 });
+test('latest checkpoint order uses updatedAt, not original transfer start',()=>{
+ const a='mirror_'+'c'.repeat(32),b='mirror_'+'d'.repeat(32);
+ const out=summarizeMirrorHistory([
+  {runId:a,mediaKind:'movie',state:'staged',expectedBytes:8388608,
+   bytesCopied:100,startedAt:'2026-11-01',updatedAt:'2026-11-16'},
+  {runId:b,mediaKind:'episode',state:'verified',expectedBytes:8388608,
+   bytesCopied:8388608,startedAt:'2026-11-15',updatedAt:'2026-11-15'}
+ ]);
+ assert.equal(out.items[0].runId,a);
+ assert.equal(out.items[1].runId,b);
+ assert.equal(out.counts.staged,1);
+ assert.equal(out.counts.verified,1);
+});
+
 test('history Hub route is token protected and owner-action gated',async()=>{
  const src=await readFile(new URL('../src/server.mjs',import.meta.url),'utf8');
  assert.ok(src.includes("path==='/internal/mirror/copy/history'"));
