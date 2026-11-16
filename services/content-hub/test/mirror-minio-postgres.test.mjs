@@ -8,7 +8,7 @@ import {execFile as execFileCb} from 'node:child_process';
 import {promisify} from 'node:util';
 import {diagnoseVerifiedMovie} from '../src/playback-diagnostics.mjs';
 import {Pool} from 'pg';
-import {S3Client,CreateBucketCommand,DeleteBucketCommand,HeadObjectCommand}
+import {S3Client,CreateBucketCommand,DeleteBucketCommand,HeadObjectCommand,PutObjectCommand}
  from '@aws-sdk/client-s3';
 import {createPrivateS3Adapter} from '../src/private-s3.mjs';
 import {createSourceLease} from '../src/source-lease.mjs';
@@ -251,6 +251,23 @@ test('real encrypted S3+PG+FFmpeg: lost ACK recovery and SHA/AV for movie and ep
   assert.equal(sourceCalls,4);
   assert.equal((await storage.measurePrivateUsage({maxObjects:1000}))
     .objectCount,4);
+  // Deliberately tamper with one completed episode S3 object AFTER the
+  // verified database manifest. A fresh canary must detect this, never
+  // report valid audio/video or request upstream media again.
+  const tampered=episodeManifest.parts[0];
+  await client.send(new PutObjectCommand({
+   Bucket:bucket,Key:tampered.key,
+   Body:Buffer.alloc(tampered.bytes,0x77),
+   ContentLength:tampered.bytes,ServerSideEncryption:'AES256'
+  }));
+  const broken=await diagnoseVerifiedMovie({
+   runId:episodeRunId,mediaKind:'episode',storage,lease
+  });
+  assert.equal(broken.ok,false,'tampered S3 must never pass A/V canary');
+  assert.equal(broken.code,'canary_private_read_failed');
+  assert.equal(broken.providerRequests,0);
+  assert.equal(broken.customerCutover,false);
+  assert.equal(sourceCalls,4,'corruption check must not reread Xtream');
  }finally{
   if(episodeRunId){
    const copied=await pool.query(
