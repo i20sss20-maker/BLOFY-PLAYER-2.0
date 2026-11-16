@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - release/stream-55-8-32-website-20261116
+      - release/stream-55-8-32-catalog-20261116
     paths:
       - 'services/update-distribution/**'
       - '.github/workflows/stream-55-8-32-website-qa.yml'
@@ -25,3 +26,5 @@ jobs:
           grep -Fq "STREAM_ARTIFACT_ZIP_URL" services/update-distribution/server.mjs
           grep -Fq "isCurrentStreamApk" services/update-distribution/server.mjs
           grep -Fq "BLOFY_ONLY_CURRENT && !isCurrentStreamApk" services/update-distribution/server.mjs
+          grep -Fq "const SEED_VERSION = 16" services/update-distribution/app-library.mjs
+          grep -Fq "versionCode: 2000109" services/update-distribution/stream-release.mjs
