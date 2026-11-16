@@ -480,6 +480,79 @@ export function createSourceLease({connectionString,
       row.updated_at:null,format:'private_chunks'
    }));
   },
+  // Exact mirror runs are scoped at the SQL level, BEFORE pagination.
+  // Listing legacy movie pilots then filtering in JS could hide every
+  // mirror run once more than 50 older legacy transfers exist.
+  async listMirrorRuns({limit=24}={}){
+   if(!Number.isSafeInteger(limit)||limit<1||limit>50)
+    throw Error('mirror_history_limit_invalid');
+   const requests=[
+    ['blofy_content_hub_chunk_runs','movie'],
+    ['blofy_content_hub_episode_runs','episode']
+   ];
+   const out=[];
+   for(const [table,mediaKind] of requests){
+    const result=await pool.query([
+     'SELECT run_id,state,expected_bytes,bytes_copied,',
+     'jsonb_array_length(parts) AS chunks,error_code,',
+     'started_at,updated_at FROM',table,
+     "WHERE run_id ~ '^mirror_[a-f0-9]{32}
+   const res=await pool.query(`SELECT
+    COUNT(*) FILTER(WHERE state='verified')::int AS verified_count,
+    COALESCE(SUM(expected_bytes) FILTER(WHERE state='verified'),0)::text
+      AS verified_bytes,
+    COUNT(*) FILTER(WHERE state='staged')::int AS active_count,
+    COUNT(*) FILTER(WHERE state='failed')::int AS failed_count,
+    COALESCE(SUM(bytes_copied),0)::text AS stored_bytes
+    FROM blofy_content_hub_chunk_runs`).catch(e=>{
+      if(e?.code==='42P01')return {rows:[{}]};throw e;
+    });
+   const row=res.rows?.[0]||{};
+   return {verifiedCount:Number(row.verified_count||0),
+    verifiedBytes:Number(row.verified_bytes||0),
+    activeCount:Number(row.active_count||0),
+    failedCount:Number(row.failed_count||0),
+    storedBytes:Number(row.stored_bytes||0)};
+  },
+  // One operator-approved startup request can never be replayed on
+  // container restart or a deploy. A fresh token needs explicit approval.
+  async claimBatchBootOnce(token,runId){
+   if(!/^[A-Za-z0-9_-]{8,80}$/.test(String(token||''))||
+     !/^[A-Za-z0-9_-]{8,80}$/.test(String(runId||'')))
+    throw Error('invalid_one_time_batch_token');
+   await pool.query(`CREATE TABLE IF NOT EXISTS blofy_content_hub_batch_boot_claims (
+      event_token TEXT PRIMARY KEY,
+      run_id TEXT NOT NULL,
+      claimed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   )`);
+   const claimed=await pool.query(`INSERT INTO blofy_content_hub_batch_boot_claims
+      (event_token,run_id) VALUES ($1,$2) ON CONFLICT DO NOTHING
+      RETURNING event_token`,[token,runId]);
+   return claimed.rowCount===1;
+  },
+  async close(){await pool.end()}
+ };
+}
+",
+     'ORDER BY updated_at DESC LIMIT $1'
+    ].join(' '),[limit]).catch(error=>{
+     if(error?.code==='42P01')return {rows:[]};
+     throw error;
+    });
+    for(const row of result.rows||[])out.push({
+     runId:String(row.run_id),state:String(row.state),
+     mediaKind,expectedBytes:Number(row.expected_bytes),
+     bytesCopied:Number(row.bytes_copied),
+     partsCopied:Number(row.chunks),
+     code:row.error_code||null,
+     startedAt:row.started_at,updatedAt:row.updated_at,
+     finishedAt:row.state==='verified'?row.updated_at:null
+    });
+   }
+   out.sort((a,b)=>new Date(b.updatedAt||0).getTime()-
+     new Date(a.updatedAt||0).getTime());
+   return out.slice(0,limit);
+  },
   async chunkedStorageAccounting(){
    const res=await pool.query(`SELECT
     COUNT(*) FILTER(WHERE state='verified')::int AS verified_count,
