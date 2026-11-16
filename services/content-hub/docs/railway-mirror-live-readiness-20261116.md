@@ -69,3 +69,50 @@ uploaded or deleted, no production deployment, no customer routing change.
 mirroring, public app switch, or production branch change.
 
 **No sensitive tokens or credential values recorded in this file.**
+
+
+## Isolated Railway T3 S3 live synthetic smoke — 16 Nov 2026
+
+- Provisioned a NEW independent QA-only bucket in the existing
+  production Railway project, NOT the subscriber Content Hub bucket:
+  `blofy-mirror-s3-isolated-qa` (region `ams`, S3 T3, `virtual-host`).
+- Provisioned QA-only service `blofy-mirror-s3-qa`, one-shot pinned to
+  development commit, root `services/content-hub`, Node runner
+  `scripts/railway-isolated-s3-smoke.mjs`, restart policy NEVER,
+  max CPU 0.25 and memory 0.5 GB. It has only the fresh QA bucket
+  references, no Xtream credentials, no production PostgreSQL access.
+- Safety flags: BLOFY_QA_SYNTHETIC_ONLY=1 and
+  BLOFY_QA_ISOLATED_BUCKET=1; expected bucket identity must match
+  the target. Refuses ALL writes unless private S3 usage listing
+  confirms bucket had ZERO objects/bytes and no active multipart.
+- Actual successful Railway deployment `9a9f9e07-084a-45de-adf2-49c4f12ac1e4`
+  logged result `qa_isolated_s3_verified_platform_at_rest_docs_not_api_proof`.
+  Real T3 wrote 5,243,007 synthetic random bytes in TWO multipart
+  parts (5 MiB + 127 B), verified HEAD size, entire SHA-256 hash
+  and exact ranged bytes crossing the part boundary, then deleted
+  ONLY its own object and confirmed empty QA bucket (0 objects).
+  This test used real Railway T3 and credentials via bucket references;
+  not synthetic MinIO or an external provider.
+- IMPORTANT encryption distinction: Railway Storage Buckets docs say
+  S3 server-side encryption (SSE-S3) settings are not supported,
+  while Railway Enterprise Security docs state all storage bucket
+  data is encrypted at rest with AES-256 by the platform.
+  Live T3 HeadObject did NOT return the AES256 SSE header, so this
+  smoke can verify successful uploads/reads/cleanup, NOT object-level
+  SSE-S3 proof. The result explicitly records
+  `sseHeaderVerified=false`, `encrypted=false`,
+  `platformEncryptionDocumented=true` with doc-only evidence.
+  No inference that SSE-S3 or end-to-end customer-managed encryption
+  has been verified or enabled.
+- This does not test storage permissions or quota of the EXISTING
+  customer Content Hub bucket, does not prove independent media
+  copying/redistribution rights, and does not perform provider copy.
+- Existing `blofy-content-hub` and `blofy-activation-portal` remained
+  on the preceding production commit during all QA deployments.
+- For a production real-file canary, independently verify per-item
+  rights and source headroom first. Current Xtream transport reset
+  logs remain unresolved. Keep all media-copy switches OFF.
+
+References:
+- https://docs.railway.com/storage-buckets
+- https://docs.railway.com/enterprise/security
