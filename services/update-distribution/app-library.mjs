@@ -1076,7 +1076,7 @@ export async function initAppLibrary() {
                previous_apk_size_bytes=apk_size_bytes, previous_saved_at=now(),
                version=$2, download_url=$3, apk_size_bytes=$4,
                description=$5, version_updated_at=now(), updated_at=now()
-           where slug='blofy-stream' and version='55.8.24'
+           where slug=$1 and version='55.8.24'
              and download_url=$6`,
           [signed.slug, signed.version, signed.downloadUrl, signed.apkSizeBytes,
            signed.description, 'https://github.com/i20sss20-maker/BLOFY-PLAYER-2.0/releases/download/blofy-stream-55.8.24-owner-qa-20261113/BLOFY-STREAM-55.8.24-FFMPEG-OWNER-SIGNED.apk']
