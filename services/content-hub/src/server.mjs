@@ -113,6 +113,7 @@ export function createContentHubServer({storage,lease,
  let seekPreviewBuilding=false,seekPreviewThrottleUntil=0;
  let timelineRendering=false,timelineLastRequestAt=0;
  let physicalHeadAuditBusy=false;
+ let capacityAuditBusy=false;
  const timelineClipCache=createPrivateTimelineClipCache();
  let episodeProbeBusy=false,episodeProbeAt=0,lastEpisodeProbe=null;
  let episodeCopyBusy=false,episodeCopyAbort=null,lastEpisodeCopy=null;
@@ -161,6 +162,47 @@ export function createContentHubServer({storage,lease,
     uptimeSeconds:Math.floor((Date.now()-started)/1000)});
   if(!safeAuth(req.headers.authorization,token))
    return json(res,401,{ok:false,code:'content_hub_auth_required'});
+  // Private, read-only bucket usage attestation for an owner copy-preflight.
+  // This is a COST BUDGET, not physical S3 free space. Missing budget,
+  // ongoing uploads, partial object listing and stale scans FAIL CLOSED.
+  if(path==='/internal/mirror/preflight-capacity'){
+   if(req.method!=='GET'||String(req.url||'').includes('?'))
+    return json(res,405,{ok:false,code:'private_capacity_get_only'});
+   if(pilotEnv.BLOFY_CONTENT_HUB_MIRROR_CAPACITY_AUDIT_ENABLED!=='1'||
+      req.headers['x-blofy-owner-action']!=='private-bucket-capacity-preflight')
+    return json(res,404,{ok:false,code:'private_capacity_audit_disabled'});
+   const budgetBytes=Number(pilotEnv.BLOFY_CONTENT_HUB_MIRROR_BUDGET_BYTES);
+   if(!Number.isSafeInteger(budgetBytes)||budgetBytes<1024**3||
+      budgetBytes>100*1024**4)
+    return json(res,503,{ok:false,code:'private_capacity_budget_unconfigured'});
+   if(capacityAuditBusy)return json(res,429,{ok:false,
+     code:'private_capacity_scan_busy'});
+   if(typeof storage.measurePrivateUsage!=='function')
+    return json(res,503,{ok:false,code:'private_capacity_adapter_missing'});
+   capacityAuditBusy=true;
+   const abort=new AbortController();
+   const timer=setTimeout(()=>abort.abort(),11200);timer.unref?.();
+   const close=()=>abort.abort();res.once('close',close);
+   try{
+    const usage=await storage.measurePrivateUsage({
+      signal:abort.signal,maxObjects:10000});
+    if(!usage?.ok||!usage.usageExact||
+       !Number.isSafeInteger(usage.usedBytes)||
+       usage.usedBytes<0||!Number.isSafeInteger(usage.objectCount))
+      return json(res,503,{ok:false,code:String(usage?.code||
+       'private_capacity_scan_incomplete').slice(0,80)});
+    return json(res,200,{
+      ok:true,code:'private_capacity_attested',privateOnly:true,
+      verifiedPrivateBucket:true,usageExact:true,
+      budgetBytes,usedBytes:usage.usedBytes,reservedBytes:0,
+      objectCount:usage.objectCount,observedAt:Date.now(),
+      providerRequests:0,mediaBytesTransferred:0,
+      automaticDownload:false,customerCutover:false});
+   }catch{return json(res,503,{ok:false,
+     code:'private_capacity_scan_unavailable'})}
+   finally{capacityAuditBusy=false;clearTimeout(timer);
+     res.off('close',close)}
+  }
   // Bounded physical S3 HEAD check of one verified catalog movie or
   // episode: strictly owner-only, one 8-chunk batch at a time, no media GET.
   if(path==='/internal/mirror/physical-head-audit'){
