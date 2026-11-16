@@ -4,6 +4,10 @@ export const STREAM_RELEASE_FILENAME = 'BLOFY-STREAM-55.8.32-AUDIO-SYNC-SIGNED.a
 export const STREAM_RELEASE_URL = 'https://updates.blofyplayer.com/files/releases/BLOFY-STREAM-55.8.32-AUDIO-SYNC-SIGNED.apk';
 export const STREAM_PUBLIC_DOWNLOAD = 'https://updates.blofyplayer.com/d/blofy-stream';
 
+// Optional installer-only version. Never use in the stable updater feed.
+export const STREAM_TEST_FILENAME = 'BLOFY-STREAM-55.8.33-FOXFm-APP-ONLY-OWNER-SIGNED.apk';
+export const STREAM_TEST_PATH = '/d/blofy-stream/foxfm-test';
+
 export function streamReleaseMetadata(app) {
   if (!app || app.slug !== 'blofy-stream' || app.enabled !== true ||
       app.version !== '55.8.32' || app.downloadUrl !== STREAM_RELEASE_URL ||
