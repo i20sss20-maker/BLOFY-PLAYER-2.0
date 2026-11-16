@@ -55,6 +55,16 @@ test('untrusted inputs never become raw logs, identifiers or failed-media cooldo
  assert.ok(!body.includes('provider'));
  assert.equal(risk.sourceMediaRequests,0);
 });
+test('clock rollback never clears a transport failure',()=>{
+ time.value=1773650100000;
+ const guard=make();
+ guard.recordFailure({sourceId:A,reason:'xtream_transport_connection_reset'});
+ time.value-=10000;
+ const risk=guard.snapshot({sourceId:A});
+ assert.equal(risk.ok,false);
+ assert.equal(risk.code,'mirror_transport_clock_regressed');
+ assert.equal(risk.customerCutover,false);
+});
 test('max-tracked guard saturation fails closed for all sources',()=>{
  time.value=1773650100000;
  const guard=createMirrorSourceTransportGuard({
