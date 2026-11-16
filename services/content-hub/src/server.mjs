@@ -30,6 +30,8 @@ import {buildSeasonReport} from './season-report.mjs';
 import {buildPrivateDeviceQaManifest} from './device-qa-manifest.mjs';
 import {buildSeasonAttention} from './season-attention.mjs';
 import {checkPrivateReadConcurrency,validateConcurrentReadIds} from './concurrent-private-read.mjs';
+import {runMirrorTransferChunk,mirrorWorkerReadiness} from './mirror-transfer-worker.mjs';
+import {createMirrorPortalBridge} from './mirror-transfer-bridge.mjs';
 
 const FIXTURE_SOURCE='00000000-0000-4000-8000-000000000000';
 const FIXTURE_SIZE=8*1024*1024;
@@ -96,6 +98,7 @@ export function createContentHubServer({storage,lease,
  episodeCandidateInspector=inspectEpisodeCandidates,
  episodeSizeInspector=inspectEpisodeSize,
  episodeChunkRunner=runOneEpisodeChunk,seasonQueueStore=null,catalogStore=null,
+ mirrorChunkRunner=runMirrorTransferChunk,
  metadataMatcher=createMetadataMatcher({
   token:process.env.BLOFY_TMDB_READ_TOKEN||'',
   commercialLicenseConfirmed:process.env.BLOFY_TMDB_COMMERCIAL_LICENSE_CONFIRMED==='1'
@@ -114,6 +117,10 @@ export function createContentHubServer({storage,lease,
  let timelineRendering=false,timelineLastRequestAt=0;
  let physicalHeadAuditBusy=false;
  let capacityAuditBusy=false;
+ let mirrorChunkBusy=false,lastMirrorChunk=null;
+ const mirrorBridge=createMirrorPortalBridge({
+  token:String(pilotEnv.BLOFY_CONTENT_HUB_BRIDGE_TOKEN||'')
+ });
  const timelineClipCache=createPrivateTimelineClipCache();
  let episodeProbeBusy=false,episodeProbeAt=0,lastEpisodeProbe=null;
  let episodeCopyBusy=false,episodeCopyAbort=null,lastEpisodeCopy=null;
@@ -162,6 +169,56 @@ export function createContentHubServer({storage,lease,
     uptimeSeconds:Math.floor((Date.now()-started)/1000)});
   if(!safeAuth(req.headers.authorization,token))
    return json(res,401,{ok:false,code:'content_hub_auth_required'});
+  // Explicit, owner-authorized ONE private 8MiB mirror chunk. Default OFF.
+  // A fresh Portal licensing/size approval and current S3 budget scan are
+  // required for every call. Never runs at boot, never changes subscribers.
+  if(path==='/internal/mirror/copy/next'){
+   if(req.method!=='POST'||String(req.url||'').includes('?'))
+    return json(res,405,{ok:false,code:'mirror_worker_post_only'});
+   if(req.headers['x-blofy-owner-action']!=='copy-one-licensed-private-chunk')
+    return json(res,403,{ok:false,code:'mirror_worker_owner_action_required'});
+   const readiness=mirrorWorkerReadiness(pilotEnv);
+   if(!readiness.ready)return json(res,409,{ok:false,
+    code:'mirror_worker_safety_gates_off',blockedBy:readiness.blockedBy});
+   if(mirrorChunkBusy||pilotRunning||copy.isRunning()||
+      episodeCopyBusy||episodeCopy.isRunning())
+    return json(res,429,{ok:false,code:'mirror_worker_source_busy'});
+   let body;
+   try{body=await readSeasonJson(req)}
+   catch{return json(res,400,{ok:false,code:'mirror_worker_json_invalid'})}
+   const kind=String(body?.kind||''),id=String(body?.id||'');
+   if(body?.ownerConfirmed!==true||
+      !['movie','episode'].includes(kind)||
+      !(kind==='movie'?/^[A-Za-z0-9._:-]{1,128}$/:
+        /^[1-9][0-9]{0,9}$/).test(id))
+    return json(res,400,{ok:false,code:'mirror_worker_item_invalid'});
+   mirrorChunkBusy=true;
+   const abort=new AbortController();
+   const timeout=setTimeout(()=>abort.abort(),125000);timeout.unref?.();
+   const close=()=>{if(!res.writableEnded)abort.abort()};
+   res.once('close',close);
+   try{
+    const out=await mirrorChunkRunner({kind,id,env:pilotEnv,
+     storage,lease,
+     approvalLoader:args=>mirrorBridge.approval(args),
+     readRange:args=>mirrorBridge.range(args),
+     signal:abort.signal,logger});
+    lastMirrorChunk={ok:out.ok===true,code:String(out.code||''),
+     completed:out.completed===true,
+     bytesCopied:Number(out.bytesCopied||0),
+     expectedBytes:Number(out.expectedBytes||0),
+     checkedAt:new Date().toISOString(),customerCutover:false};
+    if(!abort.signal.aborted&&!res.destroyed)return json(res,
+      out.ok?200:409,out);
+   }catch{
+    if(!abort.signal.aborted&&!res.destroyed)
+     return json(res,503,{ok:false,code:'mirror_worker_internal_failure',
+      customerCutover:false});
+   }finally{
+    mirrorChunkBusy=false;clearTimeout(timeout);res.off('close',close);
+   }
+   return;
+  }
   // Private, read-only bucket usage attestation for an owner copy-preflight.
   // This is a COST BUDGET, not physical S3 free space. Missing budget,
   // ongoing uploads, partial object listing and stale scans FAIL CLOSED.
@@ -284,6 +341,8 @@ export function createContentHubServer({storage,lease,
     databaseAvailable:database,downloadQueueEnabled:Boolean(seasonQueue)&&seasonQueueReadiness(pilotEnv).ready,
     seasonQueue:seasonQueue?.status()||null,
     ownerEpisodeBrowserCheck:ownerBrowserCheck,
+    mirrorWorkerReadiness:mirrorWorkerReadiness(pilotEnv),
+    mirrorChunkBusy,lastMirrorChunk,
     syntheticTestEnabled:allowSynthetic,
     lastSynthetic,pilotRunning:pilotRunning||copy.isRunning(),lastPilot,
     lastEpisodeProbe,episodeCopyBusy:episodeCopyBusy||episodeCopy.isRunning(),
