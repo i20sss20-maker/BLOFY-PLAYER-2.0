@@ -6,8 +6,8 @@ import {runIsolatedS3Smoke} from '../scripts/railway-isolated-s3-smoke.mjs';
 const M=5*1024*1024;
 const ENV={
  BLOFY_QA_SYNTHETIC_ONLY:'1',BLOFY_QA_ISOLATED_BUCKET:'1',
- BLOFY_QA_EXPECTED_BUCKET:'blofy-mirror-s3-isolated-qa',
- BLOFY_CONTENT_HUB_S3_BUCKET:'blofy-mirror-s3-isolated-qa',
+ BLOFY_QA_EXPECTED_BUCKET:'blofy-mirror-s3-isolated-qa-pkbfbm',
+ BLOFY_CONTENT_HUB_S3_BUCKET:'blofy-mirror-s3-isolated-qa-pkbfbm',
  BLOFY_CONTENT_HUB_S3_ENDPOINT:'https://qa.storageapi.dev',
  BLOFY_CONTENT_HUB_S3_URL_STYLE:'virtual-host',
  BLOFY_CONTENT_HUB_S3_REGION:'auto',
@@ -107,8 +107,8 @@ test('Railway T3 objects can lack SSE-S3 header, but provider policy is explicit
  const f=fake();
  const env={...ENV,
   BLOFY_CONTENT_HUB_S3_ENDPOINT:'https://t3.storageapi.dev',
-  BLOFY_QA_EXPECTED_BUCKET:'blofy-mirror-s3-isolated-qa',
-  BLOFY_CONTENT_HUB_S3_BUCKET:'blofy-mirror-s3-isolated-qa',
+  BLOFY_QA_EXPECTED_BUCKET:'blofy-mirror-s3-isolated-qa-pkbfbm',
+  BLOFY_CONTENT_HUB_S3_BUCKET:'blofy-mirror-s3-isolated-qa-pkbfbm',
   BLOFY_QA_PLATFORM_ENCRYPTION_DOC_ACK:'1'
  };
  const createS3=()=>({send:async()=>({}),destroy(){}});
