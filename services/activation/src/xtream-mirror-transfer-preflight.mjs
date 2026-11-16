@@ -188,8 +188,11 @@ export async function recordMirrorPreflight(db,{sourceId,kind,id,probe,
   ].join(' '),[sourceId,kind,id,probe.expectedBytes,
     probe.validatorPresent===true,digest,state]);
   await client.query('COMMIT');
-  return {ok:true,code:verdict.code,kind,id,state,
-   ...verdict,sizeProbePerformed:true,providerMediaRequests:1,
+  return {...verdict,ok:true,kind,id,state,
+   eligibleForWorkerReview:verdict.ok,
+   code:verdict.ok?'mirror_preflight_recorded_eligible':
+     'mirror_preflight_size_recorded_blocked',
+   sizeProbePerformed:true,providerMediaRequests:1,
    rightsEvidenceRecorded:Boolean(digest)};
  }catch{
   await client.query('ROLLBACK').catch(()=>{});
