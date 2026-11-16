@@ -93,6 +93,9 @@ test('Hub mirror canary requires private Bearer and exact owner action',async()=
   "req.headers['x-blofy-owner-action']!=='verify-private-mirror-audio-video'",
   '!/^mirror_[a-f0-9]{32}$/.test(runId)',
   'await diagnoseVerifiedMovie({',
+  "if(result.code==='canary_private_sha256_mismatch')",
+  'await lease.quarantineMirrorRun({runId,kind:mediaKind})',
+  'quarantinedOnHashMismatch:quarantined',
   'providerRequests:0,audioVideoDecoded:result.ok===true',
   'mirrorCanaryBusy',
   'lastMirrorCanary'
