@@ -223,7 +223,7 @@ export async function runMirrorTransferChunk({kind,id,env={},
   finally{if(response?.body&&!response.body.locked)
     await response.body.cancel().catch(()=>{})}
   if(chunk.validatorSha256!==approval.validatorSha256||
-     run.validator&&run.validator!==chunk.validator){
+     run.validator&&run.validator!==chunk.validatorSha256){
    hardFail=true;hardCode='mirror_source_validator_changed';
    throw Error('mirror_source_validator_changed');
   }
@@ -266,7 +266,7 @@ export async function runMirrorTransferChunk({kind,id,env={},
   stage='checkpoint';
   checkpointWriteAttempted=true;
   await lease[record](runId,{partNumber:no,key,bytes:chunk.buffer.length,
-   sha256,validator:chunk.validator});
+   sha256,validator:chunk.validatorSha256});
   checkpointWriteAttempted=false; // PostgreSQL returned definitive ACK.
   run.parts.push({partNumber:no,key,bytes:chunk.buffer.length,sha256});
   key=null;uploaded=false;
