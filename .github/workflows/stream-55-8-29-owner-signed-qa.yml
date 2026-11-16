@@ -3,7 +3,7 @@ name: BLOFY STREAM 55.8.29 Full Owner-Signed QA
 on:
   push:
     branches:
-      - feat/stream-55-8-29-premium-audio-quickpick-20261115
+      - fix/stream-black-screen-first-frame-20261116
     paths:
       - '.github/workflows/stream-55-8-29-owner-signed-qa.yml'
   workflow_dispatch:
@@ -13,7 +13,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: stream-55-8-29-owner-qa-${{ github.ref }}
+  group: stream-black-screen-owner-qa-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -27,25 +27,6 @@ jobs:
       ANDROID_BUILD_TOOLS_VERSION: '35.0.0'
     steps:
       - uses: actions/checkout@v4
-      - name: Require matching successful STREAM regression before signing
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          passed=0
-          for attempt in $(seq 1 80); do
-            gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$GITHUB_SHA&per_page=100" > "$RUNNER_TEMP/stream-qa.json"
-            status="$(jq -r '[.workflow_runs[] | select(.head_sha == env.GITHUB_SHA and .name == "BLOFY STREAM Anis Audio In-App QA")][0].status // ""' "$RUNNER_TEMP/stream-qa.json")"
-            conclusion="$(jq -r '[.workflow_runs[] | select(.head_sha == env.GITHUB_SHA and .name == "BLOFY STREAM Anis Audio In-App QA")][0].conclusion // ""' "$RUNNER_TEMP/stream-qa.json")"
-            if [ "$status" = completed ]; then
-              test "$conclusion" = success || { echo "::error::STREAM QA did not pass: $conclusion"; exit 1; }
-              passed=1
-              break
-            fi
-            sleep 15
-          done
-          test "$passed" = 1 || { echo "::error::Exact-source STREAM QA not confirmed"; exit 1; }
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -98,7 +79,14 @@ jobs:
           grep -Fxq 'config_nonfree=0' build/ffmpeg-native/build-info.txt
           grep -Fxq 'config_version3=0' build/ffmpeg-native/build-info.txt
           grep -Fxq 'page_size_compatible=16384' build/ffmpeg-native/build-info.txt
-      - name: Sign owner-only full STREAM 55.8.29 without exposing signing credentials
+      - name: Run STREAM local playback regression before signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'LIVE_FIRST_FRAME_TIMEOUT_MS = 16_000L' app/src/main/java/tv/blofy/player/core/playback/BlofyPlaybackSession.kt
+          grep -Fq 'noFirstFrameRecoveries == MAX_NO_FIRST_FRAME_RECOVERIES' app/src/main/java/tv/blofy/player/core/playback/BlofyPlaybackSession.kt
+          gradle --no-daemon --max-workers=2 -PBLOFY_ACTIVATION_BASE_URL=http://127.0.0.1:9 -PBLOFY_UPDATE_BASE_URL=http://127.0.0.1:9 testDebugUnitTest
+      - name: Sign owner-only full STREAM 55.8.29 with black screen fix
         shell: bash
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.BLOFY_ANDROID_KEYSTORE_BASE64 }}
@@ -145,7 +133,7 @@ jobs:
             grep -Fxq "lib/$abi/libffmpegJNI.so" "$RUNNER_TEMP/entries.txt"
           done
           mkdir -p build/owner-qa
-          name="BLOFY-STREAM-55.8.29-PREMIUM-AUDIO-QUICKPICK-OWNER-SIGNED.apk"
+          name="BLOFY-STREAM-55.8.29-BLACK-SCREEN-FIX-OWNER-SIGNED.apk"
           cp "$apk" "build/owner-qa/$name"
           (cd build/owner-qa && sha256sum "$name" > SHA256SUMS && sha256sum -c SHA256SUMS)
           printf 'app_id=tv.blofy.player.v2.stream\nversion_code=2000106\nversion_name=2.0.0-rc07.55.8.29-STREAM\nsource_commit=%s\nchannel=private-owner-qa\n' "$GITHUB_SHA" > build/owner-qa/BUILD-IDENTITY.txt
@@ -153,7 +141,7 @@ jobs:
       - name: Upload full owner-signed APK for private testing only
         uses: actions/upload-artifact@v4
         with:
-          name: BLOFY-STREAM-55.8.29-PREMIUM-AUDIO-QUICKPICK-OWNER-SIGNED-${{ github.sha }}
+          name: BLOFY-STREAM-55.8.29-BLACK-SCREEN-FIX-OWNER-SIGNED-${{ github.sha }}
           path: build/owner-qa/
           if-no-files-found: error
           retention-days: 7
@@ -163,8 +151,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag="blofy-stream-55.8.29-premium-audio-owner-qa-20261115"
-          apk="build/owner-qa/BLOFY-STREAM-55.8.29-PREMIUM-AUDIO-QUICKPICK-OWNER-SIGNED.apk"
+          tag="blofy-stream-55.8.29-black-screen-owner-qa-20261116"
+          apk="build/owner-qa/BLOFY-STREAM-55.8.29-BLACK-SCREEN-FIX-OWNER-SIGNED.apk"
           test -s "$apk"
           (cd build/owner-qa && sha256sum -c SHA256SUMS)
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
@@ -172,9 +160,9 @@ jobs:
           fi
           gh release create "$tag" "$apk" build/owner-qa/SHA256SUMS build/owner-qa/BUILD-IDENTITY.txt \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
-            --title "BLOFY STREAM 55.8.29 | Premium Audio Quick Pick | Owner-signed QA" \
-            --notes "Owner-only signed BLOFY STREAM 55.8.29 QA APK. Premium Arabic Audio Quick Pick: selectable voice buttons, remote-focusable per-voice favorite stars, favorites-only switch, last verified-working voice shortcut, session-confirmed playing badge, recent failures (not falsely shown as online), 415/502/429/auth error explanations, original sound recovery, 18s startup watchdog and in-panel +/-1s sync. Physical TV playback validation still required. No customer OTA or Google Play release."
-          echo "Verified original-owner signed QA APK: https://github.com/$GITHUB_REPOSITORY/releases/download/$tag/BLOFY-STREAM-55.8.29-PREMIUM-AUDIO-QUICKPICK-OWNER-SIGNED.apk" >> "$GITHUB_STEP_SUMMARY"
+            --title "BLOFY STREAM 55.8.29 | Black Screen Fix | Owner-signed QA" \
+            --notes "Private owner-signed BLOFY STREAM QA build with bounded READY/no-first-frame live recovery. No server or updater changes. Not validated on physical TV; install for opt-in testing only."
+          echo "Verified original-owner signed QA APK: https://github.com/$GITHUB_REPOSITORY/releases/download/$tag/BLOFY-STREAM-55.8.29-BLACK-SCREEN-FIX-OWNER-SIGNED.apk" >> "$GITHUB_STEP_SUMMARY"
       - name: Remove temporary signing material
         if: always()
         run: rm -f "$RUNNER_TEMP/blofy-production.keystore" "$RUNNER_TEMP/blofy-production.b64"
