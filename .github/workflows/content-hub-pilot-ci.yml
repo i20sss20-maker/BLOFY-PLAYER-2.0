@@ -100,6 +100,8 @@ jobs:
           node --check services/content-hub/src/metadata-review.mjs
           node --check services/content-hub/src/episode-chunk-pilot.mjs
           node --check services/content-hub/src/source-lease.mjs
+          node --check services/content-hub/scripts/railway-mirror-pg-s3-qa.mjs
+          node --check services/content-hub/scripts/railway-isolated-av-smoke.mjs
       - name: Install test-only dependencies (no install scripts)
         run: npm install --prefix services/content-hub --ignore-scripts --no-audit --no-fund --package-lock=false
       - name: Test S3 multipart fixtures (no source or cloud access)
