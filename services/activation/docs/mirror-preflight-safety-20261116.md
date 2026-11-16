@@ -262,3 +262,28 @@ one-file and capacity tests are still required before production.
 Release remains DRAFT, all copy/headroom flags default OFF. Live
 production services are unchanged; run one authorized source/S3 canary
 only after explicit per-file storage rights and external headroom review.
+
+
+## Database-backed checkpoint acceptance test
+
+- The CI workflow `content-hub-pilot-ci.yml` now runs an integration
+  test against a disposable PostgreSQL 16 service (not a mock DB).
+  It uses synthetic 8MiB + 127B movie bytes, fake in-memory S3, and
+  a fake 206 media stream. It NEVER contacts real Xtream, production
+  Railway, user accounts or a paid cloud S3 bucket.
+- Test deliberately simulates a PostgreSQL checkpoint that commits but
+  loses its acknowledgement. The exact verified S3 part must be retained;
+  a subsequent worker invocation resumes from part #2, proves the
+  full-file SHA-256 and marks the actual PostgreSQL manifest verified.
+- New mirror history is filtered using exact `mirror_` run IDs in SQL
+  BEFORE pagination. Prior pilot runs can no longer hide current mirror
+  status, and recent checkpoint ordering follows `updated_at`.
+- The mirror's PostgreSQL checkpoint validator is the SHA-256 digest
+  of the upstream version, never the raw ETag / Last-Modified header.
+- Production requirements are unchanged: independently verify per-item
+  copying rights, private-bucket API support and cost budget, enough
+  upstream headroom, and real A/V + device playback before any rollout.
+
+These tests prove database consistency with synthetic data only. They
+do not prove real provider/S3 compatibility and must not be called a
+successful real-file copy.
