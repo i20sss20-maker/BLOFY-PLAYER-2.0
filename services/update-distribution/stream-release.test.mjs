@@ -7,19 +7,19 @@ import {
 
 const approved = {
   slug:'blofy-stream', enabled:true, downloadMode:'direct',
-  version:'55.8.24', downloadUrl:STREAM_RELEASE_URL
+  version:'55.8.32', downloadUrl:STREAM_RELEASE_URL
 };
 
-test('STREAM release serves code 2000101 and own website URL, never PLAYER updater',()=>{
+test('STREAM release serves code 2000109 and own website URL, never PLAYER updater',()=>{
   const release=streamReleaseMetadata(approved)?.release?.app;
-  assert.equal(release?.versionCode,2000101);
-  assert.equal(release?.versionName,'2.0.0-rc07.55.8.24-STREAM');
+  assert.equal(release?.versionCode,2000109);
+  assert.equal(release?.versionName,'2.0.0-rc07.55.8.32-STREAM');
   assert.equal(release?.downloadUrl,STREAM_PUBLIC_DOWNLOAD);
   assert.equal(release?.minSupportedVersionCode,1);
   assert.equal(release?.packageName,'tv.blofy.player.v2.stream');
-  assert.equal(release?.apkSizeBytes,135682806);
+  assert.equal(release?.apkSizeBytes,135739422);
   assert.match(release?.sha256,/^[0-9a-f]{64}$/);
-  assert.equal(release?.sha256,'a5af6253ad816d325af9a1f32bc5b03cef9a6cd0f5dc6e8ca3f861dd1325b00d');
+  assert.equal(release?.sha256,'9a87ee2e66496b553332960edf071f3130173f66f9f19fe1c8bbee0a5ee58d91');
   assert.ok(release?.apkSizeBytes < 268435456, 'fits installed STREAM legacy resumable updater');
 
 
