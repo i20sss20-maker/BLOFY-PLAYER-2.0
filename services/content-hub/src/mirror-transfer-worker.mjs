@@ -122,6 +122,7 @@ export async function runMirrorTransferChunk({kind,id,env={},
   return error('mirror_worker_item_invalid');
  if(typeof approvalLoader!=='function'||typeof readRange!=='function'||
     typeof storage?.measurePrivateUsage!=='function'||
+    typeof storage?.headVerifiedChunk!=='function'||
     typeof storage?.verify!=='function'||
     typeof storage?.readVerifiedRange!=='function'||
     typeof lease?.acquire!=='function')
@@ -132,6 +133,7 @@ export async function runMirrorTransferChunk({kind,id,env={},
  if(!validateMirrorTransferApproval(approval,{kind,id,now:now()}))
   return error('mirror_worker_approval_invalid_or_stale');
  let exclusive=null,run=null,key=null,uploadId=null,uploaded=false;
+ let checkpointWriteAttempted=false,completionAttempted=false;
  let providerRequests=0,stage='lock',hardFail=false,hardCode=null;
  let storageWrittenBytes=0;
  const runId='mirror_'+createHash('sha256')
@@ -228,17 +230,31 @@ export async function runMirrorTransferChunk({kind,id,env={},
   const sha256=createHash('sha256').update(chunk.buffer).digest('hex');
   key='saleh/'+kind+'/'+approval.sourceId+'/batch_'+digest+
    '_part_'+String(no).padStart(6,'0')+'.'+approval.extension;
-  stage='s3_upload';
-  const opened=await storage.begin({key,private:true,
-   contentType:'application/octet-stream',
-   metadata:{kind:'licensed-mirror-part',part:String(no)}});
-  uploadId=opened.uploadId;
-  const sent=await storage.part({key,uploadId,
-   partNumber:1,body:chunk.buffer});
-  await storage.complete({key,uploadId,
-   parts:[{partNumber:1,etag:sent.etag}]});
-  uploadId=null;uploaded=true;
-  storageWrittenBytes=chunk.buffer.length;
+  // Durable checkpoint writes can commit even if the database response is
+  // lost. Never blindly overwrite an already saved private object.
+  stage='s3_head';
+  const found=await storage.headVerifiedChunk({
+   key,expectedBytes:chunk.buffer.length,signal});
+  if(found?.ok!==true&&found?.status!=='missing')
+   return error('mirror_private_existing_object_unverified',{
+    sourceMediaRequests:providerRequests,stage,priorCheckpoints:no-1});
+  if(found?.ok!==true){
+   stage='s3_upload';
+   const opened=await storage.begin({key,private:true,
+    contentType:'application/octet-stream',
+    metadata:{kind:'licensed-mirror-part',part:String(no)}});
+   uploadId=opened.uploadId;
+   const sent=await storage.part({key,uploadId,
+    partNumber:1,body:chunk.buffer});
+   completionAttempted=true;
+   await storage.complete({key,uploadId,
+    parts:[{partNumber:1,etag:sent.etag}]});
+   uploadId=null;uploaded=true;
+   storageWrittenBytes=chunk.buffer.length;
+  }
+  // Even when S3 HEAD says the deterministic object already exists,
+  // independently hash its complete bytes before reusing it. A mismatch
+  // cannot be overwritten into a potentially committed checkpoint.
   stage='s3_verify';
   const proof=await storage.verify({key,
    expectedBytes:chunk.buffer.length,expectedSha256:sha256,signal});
@@ -248,6 +264,7 @@ export async function runMirrorTransferChunk({kind,id,env={},
    throw Error('mirror_private_part_sha256_mismatch');
   }
   stage='checkpoint';
+  checkpointWriteAttempted=true;
   await lease[record](runId,{partNumber:no,key,bytes:chunk.buffer.length,
    sha256,validator:chunk.validator});
   run.parts.push({partNumber:no,key,bytes:chunk.buffer.length,sha256});
@@ -262,12 +279,20 @@ export async function runMirrorTransferChunk({kind,id,env={},
    sourceMediaRequests:providerRequests,storageWrittenBytes:chunk.buffer.length};
   return await verifyAndFinish();
  }catch{
+  // Unknown database acknowledgement means the checkpoint MAY already be
+  // committed. Deleting that S3 key would corrupt a durable manifest.
+  // Leave the verified deterministic private object for reconciliation.
   if(key&&uploadId)await storage.abort({key,uploadId}).catch(()=>{});
-  if(key&&uploaded)await storage.remove({key}).catch(()=>{});
+  if(key&&uploaded&&!checkpointWriteAttempted)
+   await storage.remove({key}).catch(()=>{});
   if(hardFail&&run)await lease[fail](runId,{code:hardCode}).catch(()=>{});
   return error(hardFail?hardCode:
+    checkpointWriteAttempted?'mirror_checkpoint_commit_uncertain':
     signal?.aborted?'mirror_worker_cancelled':'mirror_worker_retryable_failure',{
     sourceMediaRequests:providerRequests,stage,
+    storageWrittenBytes,
+    objectRetainedForReconciliation:Boolean(
+     key&&(checkpointWriteAttempted||completionAttempted)),
     priorCheckpoints:run?.parts?.length||0});
  }finally{await exclusive?.release().catch(()=>{})}
 }
