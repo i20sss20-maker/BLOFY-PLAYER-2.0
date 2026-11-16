@@ -83,7 +83,7 @@ export function parseOperatorAudioPlaylist(raw) {
       : normalized.startsWith('blofy-thmanyah-')
         ? normalized.replace(/^blofy-thmanyah-/, 'anis-thm8h-')
         : normalized.replace(/^blofy-/, 'anis-').replace(/^anis-([1-9])$/, 'anis-max-$1');
-    if(!/^BLOFY(?:\\s|$)/.test(label)||!AUDIO_ID.test(id)||
+    if(!label.startsWith('BLOFY ')||!AUDIO_ID.test(id)||
        taken.has(id)||label.length>80)continue;
     const rawUrl=String(row?.url||'').trim();
     if(rawUrl.length<18||rawUrl.length>1200)continue;
@@ -92,8 +92,8 @@ export function parseOperatorAudioPlaylist(raw) {
     const fixedPort=url.port||'80';
     // Restrict relaying to exactly the 33 operator-listed paths and ports.
     // Never proxy arbitrary or internal URLs supplied by a client.
-    const station=/^\\/[1-9]$/.test(url.pathname)&&fixedPort==='80';
-    const named=/^\\/(?:live[1-4]|xtra[1-3]|en[1-2]|fr[1-2]|starzplay[1-2]|shasha[1-2]|thmanyah[1-3]|shahid[1-2]|alkass[5-8])$/.test(url.pathname)
+    const station=/^[/][1-9]$/.test(url.pathname)&&fixedPort==='80';
+    const named=/^[/](?:live[1-4]|xtra[1-3]|en[1-2]|fr[1-2]|starzplay[1-2]|shasha[1-2]|thmanyah[1-3]|shahid[1-2]|alkass[5-8])$/.test(url.pathname)
       &&fixedPort==='8080';
     if(url.protocol!=='http:'||url.hostname!==LIVE_HOST||
        url.username||url.password||url.search||url.hash||
