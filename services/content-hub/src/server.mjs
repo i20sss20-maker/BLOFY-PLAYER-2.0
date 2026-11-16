@@ -120,6 +120,7 @@ export function createContentHubServer({storage,lease,
  let physicalHeadAuditBusy=false;
  let capacityAuditBusy=false;
  let mirrorChunkBusy=false,lastMirrorChunk=null;
+ let mirrorCanaryBusy=false,lastMirrorCanary=null;
  const mirrorBridge=createMirrorPortalBridge({
   token:String(pilotEnv.BLOFY_CONTENT_HUB_BRIDGE_TOKEN||'')
  });
@@ -163,7 +164,7 @@ export function createContentHubServer({storage,lease,
   store:seasonQueueStore,storage,lease,env:pilotEnv,
   runner:episodeChunkRunner,logger,
   isSourceBusy:()=>episodeCopyBusy||episodeCopy.isRunning()||
-   pilotRunning||copy.isRunning()
+   pilotRunning||copy.isRunning()||mirrorChunkBusy||mirrorAutoCopy.isRunning()
  }):null;
  async function runFullPlaybackCanary(runId,mediaKind='movie'){
   const diag=await diagnoseVerifiedMovie({runId,storage,lease,mediaKind});
@@ -190,6 +191,55 @@ export function createContentHubServer({storage,lease,
     uptimeSeconds:Math.floor((Date.now()-started)/1000)});
   if(!safeAuth(req.headers.authorization,token))
    return json(res,401,{ok:false,code:'content_hub_auth_required'});
+  // Decode a verified mirror's private S3 prefix (ffprobe + ffmpeg) and
+  // prove video frames AND audible-track samples are decodable. Does not
+  // contact the Xtream origin or expose a playback URL to customers.
+  if(path==='/internal/mirror/copy/canary'){
+   if(req.method!=='POST'||String(req.url||'').includes('?'))
+    return json(res,405,{ok:false,code:'mirror_canary_post_only'});
+   if(req.headers['x-blofy-owner-action']!=='verify-private-mirror-audio-video')
+    return json(res,403,{ok:false,code:'mirror_canary_owner_action_required'});
+   if(mirrorCanaryBusy||mirrorChunkBusy||mirrorAutoCopy.isRunning())
+    return json(res,429,{ok:false,code:'mirror_canary_storage_busy'});
+   let body;
+   try{body=await readSeasonJson(req)}
+   catch{return json(res,400,{ok:false,code:'mirror_canary_invalid_json'})}
+   const runId=String(body?.runId||'');
+   const mediaKind=String(body?.kind||'');
+   if(body?.ownerConfirmed!==true||
+      !/^mirror_[a-f0-9]{32}$/.test(runId)||
+      !['movie','episode'].includes(mediaKind))
+    return json(res,400,{ok:false,code:'mirror_canary_invalid_selection'});
+   mirrorCanaryBusy=true;
+   const controller=new AbortController();
+   const timer=setTimeout(()=>controller.abort(),65000);timer.unref?.();
+   const onClose=()=>{if(!res.writableEnded)controller.abort()};
+   res.once('close',onClose);
+   try{
+    const result=await diagnoseVerifiedMovie({
+      runId,mediaKind,storage,lease,signal:controller.signal});
+    // Strictly report bounded nonsecret telemetry; not codec FFmpeg logs.
+    const summary={ok:result.ok===true,code:String(result.code||''),
+      runId,mediaKind,privateOnly:true,customerCutover:false,
+      providerRequests:0,audioVideoDecoded:result.ok===true,
+      videoTracks:Number(result.videoTracks||0),
+      audioTracks:Number(result.audioTracks||0),
+      videoFramesDecoded:Number(result.videoFramesDecoded||0),
+      audioFramesDecoded:Number(result.audioFramesDecoded||0),
+      sampleBytes:Number(result.sampleBytes||0),
+      checkedAt:new Date().toISOString()};
+    lastMirrorCanary=summary;
+    if(!controller.signal.aborted&&!res.destroyed)
+     return json(res,result.ok?200:409,summary);
+   }catch{
+    if(!controller.signal.aborted&&!res.destroyed)
+     return json(res,503,{ok:false,code:'mirror_canary_unavailable',
+       providerRequests:0,customerCutover:false});
+   }finally{
+    mirrorCanaryBusy=false;clearTimeout(timer);res.off('close',onClose);
+   }
+   return;
+  }
   // Durable PostgreSQL copy progress; explicitly excludes unrelated pilot
   // and season transfer runs. Read-only, no S3 or provider media requests.
   if(path==='/internal/mirror/copy/history'){
@@ -416,6 +466,7 @@ export function createContentHubServer({storage,lease,
     mirrorWorkerReadiness:mirrorWorkerReadiness(pilotEnv),
     mirrorChunkBusy,lastMirrorChunk,
     mirrorAutoCopy:mirrorAutoCopy.status(),
+    mirrorCanaryBusy,lastMirrorCanary,
     syntheticTestEnabled:allowSynthetic,
     lastSynthetic,pilotRunning:pilotRunning||copy.isRunning(),lastPilot,
     lastEpisodeProbe,episodeCopyBusy:episodeCopyBusy||episodeCopy.isRunning(),
