@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   actions: read
 
 concurrency:
@@ -46,6 +46,7 @@ jobs:
           grep -Fq 'versionName = "2.0.0-rc07.55.8.30"' app/build.gradle.kts
           # Require the specific panel implementation, not the previous detached HUD.
           grep -Fq 'val actions = buildAttachedActions' app/src/main/java/tv/blofy/player/ui/player/LiveChannelOverlayLifecycle.kt
+          grep -Fq 'ownerBrandReplacesOnlyVisibleAnesLabelsAndKeepsAudioIds' app/src/test/java/tv/blofy/player/ui/player/StreamAnisAudioCatalogTest.kt
           grep -Fq 'highContrast = true' app/src/main/java/tv/blofy/player/ui/player/LiveChannelOverlayLifecycle.kt
           grep -Fq 'keyCode == KeyEvent.KEYCODE_DPAD_RIGHT' app/src/main/java/tv/blofy/player/ui/player/LiveChannelOverlayLifecycle.kt
           grep -Fq 'keyCode == KeyEvent.KEYCODE_DPAD_LEFT && !audioPickerOpen' app/src/main/java/tv/blofy/player/ui/player/LiveChannelOverlayLifecycle.kt
@@ -144,7 +145,7 @@ jobs:
           name="BLOFY-STREAM-55.8.30-TV-NAV-OWNER-SIGNED.apk"
           cp "$apk" "build/owner-qa/$name"
           (cd build/owner-qa && sha256sum "$name" > SHA256SUMS && sha256sum -c SHA256SUMS)
-          printf 'app_id=tv.blofy.player.v2.stream\nversion_code=2000106\nversion_name=2.0.0-rc07.55.8.30-STREAM\nsource_commit=%s\nchannel=private-owner-qa\n' "$GITHUB_SHA" > build/owner-qa/BUILD-IDENTITY.txt
+          printf 'app_id=tv.blofy.player.v2.stream\nversion_code=2000107\nversion_name=2.0.0-rc07.55.8.30-STREAM\nsource_commit=%s\nchannel=private-owner-qa\n' "$GITHUB_SHA" > build/owner-qa/BUILD-IDENTITY.txt
           echo "Owner-signed full STREAM 55.8.30 APK verified; NOT published to customers." >> "$GITHUB_STEP_SUMMARY"
       - name: Upload full owner-signed APK for private testing only
         uses: actions/upload-artifact@v4
