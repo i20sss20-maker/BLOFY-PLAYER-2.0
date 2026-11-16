@@ -84,3 +84,47 @@ test('history Hub route is token protected and owner-action gated',async()=>{
  assert.ok(src.includes("'private-mirror-copy-history'"));
  assert.ok(src.includes('readMirrorHistory(lease,{limit:24})'));
 });
+
+test('stored decoder prefix proof cannot outlive original verified SHA',async()=>{
+ const sha='a'.repeat(64),newSha='b'.repeat(64);
+ const sample={runId:id,mediaKind:'movie',sha256:sha,
+  videoFramesDecoded:1,audioFramesDecoded:2,checkedAt:now};
+ const base={runId:id,state:'verified',expectedBytes:8388608,
+  bytesCopied:8388608,mediaKind:'movie',verifiedSha256:sha};
+ const response=await readMirrorHistory({
+  listMirrorRuns:async()=>[base],
+  listMirrorAvSamples:async({runIds})=>{
+   assert.deepEqual(runIds,[id]);return [sample];
+  }
+ });
+ assert.equal(response.ok,true);
+ assert.equal(response.items[0].avPrefixDecoded,true);
+ assert.ok(response.items[0].avSampleCheckedAt);
+ assert.equal(response.items[0].ownerDevicePlaybackVerified,false);
+ assert.equal(response.items[0].fullLengthPlaybackVerified,false);
+ for(const changed of [
+  {...base,verifiedSha256:newSha},
+  {...base,state:'failed'},
+  {...base,state:'staged'},
+  {...base,bytesCopied:1000}
+ ]){
+  const invalid=summarizeMirrorHistory([
+   {...changed,avSample:sample}
+  ]);
+  assert.equal(invalid.items[0].avPrefixDecoded,false);
+  assert.equal(invalid.items[0].avSampleCheckedAt,null);
+ }
+});
+test('no A/V sample table means owner history remains readable, not device-approved',async()=>{
+ const result=await readMirrorHistory({
+  listMirrorRuns:async()=>[{
+   runId:id,mediaKind:'episode',state:'verified',
+   verifiedSha256:'a'.repeat(64),expectedBytes:8388608,
+   bytesCopied:8388608
+  }],
+  listMirrorAvSamples:async()=>[]
+ });
+ assert.equal(result.ok,true);
+ assert.equal(result.items[0].avPrefixDecoded,false);
+ assert.equal(result.items[0].ownerDevicePlaybackVerified,false);
+});
