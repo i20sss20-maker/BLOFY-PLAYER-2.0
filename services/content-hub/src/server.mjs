@@ -34,6 +34,7 @@ import {runMirrorTransferChunk,mirrorWorkerReadiness,
  validateMirrorTransferApproval} from './mirror-transfer-worker.mjs';
 import {createMirrorPortalBridge} from './mirror-transfer-bridge.mjs';
 import {readMirrorHistory} from './mirror-transfer-history.mjs';
+import {readIntegrityCheckedMirrorRange} from './mirror-owner-range-verified.mjs';
 
 const FIXTURE_SOURCE='00000000-0000-4000-8000-000000000000';
 const FIXTURE_SIZE=8*1024*1024;
@@ -1780,6 +1781,52 @@ export function createContentHubServer({storage,lease,
    const timer=setTimeout(()=>abort.abort(),90000);timer.unref?.();
    const onDisconnect=()=>abort.abort();
    res.once('close',onDisconnect);
+   if(mirrorRange){
+    // Crucial: do not write 206 or transmit a byte until every S3
+    // part overlapping the requested Range has passed its persisted
+    // SHA-256. Pre-response checks only for the owner mirror route;
+    // customer/legacy playback is untouched.
+    try{
+     const checked=await readIntegrityCheckedMirrorRange({
+      storage,saved,mediaKind:mirrorRange[1],
+      from,to,signal:abort.signal
+     });
+     if(abort.signal.aborted)throw Error('mirror_private_read_cancelled');
+     res.writeHead(206,{
+      'content-type':type,'content-length':String(checked.bytes.length),
+      'content-range':`bytes ${from}-${to}/${saved.bytes}`,
+      'accept-ranges':'bytes','cache-control':'private,no-store',
+      'x-content-type-options':'nosniff','referrer-policy':'no-referrer',
+      'cross-origin-resource-policy':'same-origin',
+      'x-blofy-mirror-private':'owner-only',
+      'x-blofy-mirror-sha256-checked':'parts-before-response'
+     });
+     res.end(checked.bytes);
+    }catch(error){
+     if(!res.destroyed&&!res.headersSent){
+      if(error?.message==='mirror_private_sha256_mismatch'){
+       try{
+        const q=await lease.quarantineMirrorRun({
+         runId:playbackId,kind:mirrorRange[1]
+        });
+        if(q.ok===true)json(res,409,{ok:false,
+         code:'mirror_private_sha256_mismatch',
+         quarantinedOnHashMismatch:true,customerCutover:false});
+        else json(res,503,{ok:false,
+         code:'mirror_quarantine_not_committed',
+         customerCutover:false});
+       }catch{json(res,503,{ok:false,
+         code:'mirror_quarantine_not_committed',
+         customerCutover:false})}
+      }else json(res,503,{ok:false,
+       code:'mirror_owner_range_integrity_unavailable',
+       customerCutover:false});
+     }
+    }finally{
+     clearTimeout(timer);res.off('close',onDisconnect);
+    }
+    return;
+   }
    let body=null;
    try{
     if(saved.kind==='chunked'){
