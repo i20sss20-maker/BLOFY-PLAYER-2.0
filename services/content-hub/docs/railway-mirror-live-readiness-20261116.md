@@ -163,3 +163,19 @@ References:
   failed in that commit: subscriber save UI did not render in time
   (`STROING 8K: ...`). Activation `verify` and admin session tests
   passed. This is a separate release blocker; do not merge blindly.
+
+
+### Post-canary guard: pin real Railway QA to dedicated bucket
+
+- The test runner now refuses all Railway Storage Buckets endpoints
+  (`*.storageapi.dev`) unless the exact target bucket is
+  `blofy-mirror-s3-isolated-qa`. This prevents accidental writes to
+  the subscriber bucket if an environment reference gets changed.
+- This bucket identity validation happens before S3 access or fixture
+  generation, and the video validation mode additionally requires
+  `BLOFY_QA_SYNTHETIC_AV=1` before any upload.
+- Offline tests cover a misconfigured customer bucket, absent QA
+  approval, corrupt S3 read-back and exact-key cleanup.
+- The successful earlier real Railway A/V deployment is pinned to
+  tested commit `ceb253d6494681737858e9c0e47019cf87767618`;
+  subsequent hardening is in the draft branch, not a customer deploy.
