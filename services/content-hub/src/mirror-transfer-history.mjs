@@ -21,12 +21,12 @@ export function summarizeMirrorHistory(rows=[],{limit=24}={}){
      Math.max(0,Number(x.partsCopied)):0,
     failureCode:/^[a-z0-9_]{1,80}$/.test(String(x.code||''))?
      String(x.code):null,
-    startedAt:x.startedAt||null,
+    startedAt:x.startedAt||null,updatedAt:x.updatedAt||null,
     finishedAt:x.finishedAt||null
    }
   })
-  .sort((a,b)=>new Date(b.startedAt||0).getTime()-
-    new Date(a.startedAt||0).getTime()).slice(0,limit);
+  .sort((a,b)=>new Date(b.updatedAt||b.startedAt||0).getTime()-
+    new Date(a.updatedAt||a.startedAt||0).getTime()).slice(0,limit);
  const counts={verified:0,staged:0,failed:0,other:0};
  let saved=0,verifiedBytes=0;
  for(const item of items){
@@ -43,15 +43,11 @@ export function summarizeMirrorHistory(rows=[],{limit=24}={}){
   subscriberPlaybackVerified:false};
 }
 export async function readMirrorHistory(lease,{limit=24}={}){
- if(!lease?.listChunkedRuns||!lease?.listEpisodeRuns)
+ if(typeof lease?.listMirrorRuns!=='function')
   return {...base,ok:false,code:'mirror_history_dependency_missing'};
  try{
   // No provider calls, S3 GETs, or private object keys.
-  const [movies,episodes]=await Promise.all([
-   lease.listChunkedRuns({limit:50}),lease.listEpisodeRuns({limit:25})
-  ]);
-  return summarizeMirrorHistory([
-   ...movies.map(x=>({...x,mediaKind:'movie'})),...episodes
-  ],{limit});
+  const runs=await lease.listMirrorRuns({limit});
+  return summarizeMirrorHistory(runs,{limit});
  }catch{return {...base,ok:false,code:'mirror_history_unavailable'}}
 }
