@@ -393,3 +393,43 @@ the license for copying or redistribution of a third-party library.
 
 All tests use locally generated MPEG4/AAC video. This is NOT permission
 to mirror third-party Xtream media, nor an end-device playback test.
+
+
+## Owner-only mirror S3 playback ranges and durable A/V prefix proof
+
+- The private Content Hub now has an owner-token-only GET/HEAD route
+  /internal/mirror/owner-range/{movie|episode}/mirror_<32hex>.
+  Requires BOTH BLOFY_CONTENT_HUB_MIRROR_OWNER_RANGE_ENABLED=1
+  and BLOFY_CONTENT_HUB_STORAGE_RIGHTS_CONFIRMED=1, and the exact
+  `x-blofy-owner-action: read-verified-private-mirror-range` header.
+  All flags default OFF. Existing pilot playback paths explicitly deny
+  mirror-prefixed run IDs, avoiding an owner-action/flag bypass.
+- Only currently PostgreSQL VERIFIED movie/episode manifests may be
+  read. HEAD returns private size/content type without S3 body download.
+  GET accepts explicit, open-ended, suffix and default ranges but caps
+  each response at 8 MiB; rejects multipart or oversized requests.
+  A requested range can cross an S3 part boundary and preserves bytes
+  exactly; private same-origin, no-store response headers are mandatory.
+- Real PostgreSQL + MinIO S3 HTTP integration proves token rejection,
+  explicit owner-action rejection, blocked pilot bypass, distinct
+  movie/episode manifests, 8MiB-crossing reads, open/suffix bounds,
+  and post-quarantine 404. All bytes come from private S3 only,
+  with zero new provider source requests or customer route changes.
+- The private Hub A/V canary now ALSO requires
+  BLOFY_CONTENT_HUB_MIRROR_AV_CANARY_ENABLED=1 on the Hub side
+  (in addition to the Portal owner flag). After actual FFprobe/FFmpeg
+  decodes video and audio, it records ONLY an A/V prefix-sample proof
+  in new PostgreSQL table blofy_content_hub_mirror_av_checks.
+  The proof ties to the exact verified run SHA-256 and can be shown
+  in the saved history; errors to write the proof fail closed.
+- History/STREAM owner UI distinguishes the recorded A/V sample from
+  full-length playback or Android/Windows device approval. A changed
+  file SHA, staged/failed state, or SHA-based quarantine invalidates
+  the visible sample evidence. There is NO automatic customer cutover.
+- GitHub CI passed real MinIO+PG+FFmpeg audio/video tests and the
+  browser-safe HTTP Range/security checks with synthetic media.
+
+These owner QA routes are NOT public app endpoints, and synthetic
+media tests do not grant rights to store/redistribute Xtream content.
+Production flags remain OFF; private real-media/device tests and
+individual verified rights remain outstanding.
