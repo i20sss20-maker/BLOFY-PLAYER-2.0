@@ -13,6 +13,7 @@ import {S3Client,CreateBucketCommand,DeleteBucketCommand,HeadObjectCommand,PutOb
 import {createPrivateS3Adapter} from '../src/private-s3.mjs';
 import {createSourceLease} from '../src/source-lease.mjs';
 import {runMirrorTransferChunk} from '../src/mirror-transfer-worker.mjs';
+import {createContentHubServer} from '../src/server.mjs';
 
 // Disposable MinIO + PostgreSQL integration only. All media bytes are made
 // IN THIS TEST; absolutely no real Xtream, customer data or paid S3 is used.
@@ -265,11 +266,46 @@ test('real encrypted S3+PG+FFmpeg: lost ACK recovery and SHA/AV for movie and ep
   });
   assert.equal(broken.ok,false,'tampered S3 must never pass A/V canary');
   assert.equal(broken.code,'canary_private_sha256_mismatch');
-  const quarantine=await lease.quarantineMirrorRun({
-   runId:episodeRunId,kind:'episode'
+  // Call the actual private HTTP owner-canary route (not a mock):
+  // bad caller denied; authorized call must quarantine the corrupted
+  // episode manifest atomically before returning its 409 result.
+  const ownerToken='blofy_ci_only_mirror_owner_token_12345678';
+  const hub=createContentHubServer({
+   storage,lease,token:ownerToken,allowSynthetic:false,pilotEnv:{}
   });
-  assert.equal(quarantine.ok,true);
-  assert.equal(quarantine.storageObjectsDeleted,0);
+  try{
+   await new Promise((resolve,reject)=>{
+    hub.server.once('error',reject);
+    hub.server.listen(0,'127.0.0.1',resolve);
+   });
+   const port=hub.server.address().port;
+   const url='http://127.0.0.1:'+port+'/internal/mirror/copy/canary';
+   const body=JSON.stringify({
+    runId:episodeRunId,kind:'episode',ownerConfirmed:true
+   });
+   const unauthorized=await fetch(url,{
+    method:'POST',headers:{'content-type':'application/json'},body
+   });
+   assert.equal(unauthorized.status,401);
+   const wrongAction=await fetch(url,{method:'POST',
+    headers:{authorization:'Bearer '+ownerToken,
+     'content-type':'application/json'},body});
+   assert.equal(wrongAction.status,403);
+   const checked=await fetch(url,{method:'POST',
+    headers:{authorization:'Bearer '+ownerToken,
+     'content-type':'application/json',
+     'x-blofy-owner-action':'verify-private-mirror-audio-video'},
+    body});
+   assert.equal(checked.status,409);
+   const report=await checked.json();
+   assert.equal(report.ok,false);
+   assert.equal(report.code,'canary_private_sha256_mismatch');
+   assert.equal(report.quarantinedOnHashMismatch,true);
+   assert.equal(report.providerRequests,0);
+   assert.equal(report.customerCutover,false);
+  }finally{
+   await new Promise(resolve=>hub.server.close(resolve));
+  }
   assert.equal((await lease.listMirrorRuns({limit:24}))
    .find(x=>x.runId===episodeRunId).state,'failed');
   assert.equal(await lease.getVerifiedEpisodeObject(episodeRunId),null);
