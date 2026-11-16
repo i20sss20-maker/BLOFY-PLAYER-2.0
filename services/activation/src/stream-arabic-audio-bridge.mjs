@@ -5,7 +5,8 @@ import http from 'node:http';
 import dns from 'node:dns/promises';
 import net from 'node:net';
 
-const LIVE_HOST='radio.anisfm.vip';
+// Operator-supplied FoXFM stations shown under BLOFY display names.
+const LIVE_HOST='foxfm.xyz';
 const AUDIO_ID=/^anis-[a-z0-9-]{1,54}$/;
 const MAX_SOURCES=40;
 const MAX_ACTIVE_PER_ACCOUNT=3;
@@ -74,21 +75,29 @@ export function parseOperatorAudioPlaylist(raw) {
   for(const row of values){
     const label=String(row?.channel||'').trim();
     const normalized=label.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
-    // Real operator playlist uses "Anis Max 1 Low" and "Anis Al Kass 1".
-    // Canonicalize those to stable IDs expected by the Android groups.
-    const id=normalized.replace(/^anis-max-([1-6])-low$/, 'anis-max-low-$1')
-      .replace(/^anis-al-kass-/, 'anis-alkass-');
-    if(!AUDIO_ID.test(id)||taken.has(id)||label.length>80)continue;
+    // Preserve opaque anis-* API identifiers for already installed APKs;
+    // upstream and all visible labels are replaced by BLOFY. No credentials
+    // or third-party source URLs are returned in the catalog.
+    const id=normalized.startsWith('blofy-live-')
+      ? normalized.replace(/^blofy-live-/, 'anis-sport-')
+      : normalized.startsWith('blofy-thmanyah-')
+        ? normalized.replace(/^blofy-thmanyah-/, 'anis-thm8h-')
+        : normalized.replace(/^blofy-/, 'anis-').replace(/^anis-([1-9])$/, 'anis-max-$1');
+    if(!/^BLOFY(?:\\s|$)/.test(label)||!AUDIO_ID.test(id)||
+       taken.has(id)||label.length>80)continue;
     const rawUrl=String(row?.url||'').trim();
-    if(rawUrl.length<20||rawUrl.length>1200)continue;
+    if(rawUrl.length<18||rawUrl.length>1200)continue;
     let url;
     try{url=new URL(rawUrl);}catch{continue;}
-    // Intentional one-origin radio allowlist; never turn this into an open
-    // HTTP proxy. External sources are operator-vetted, not customer-supplied.
+    const fixedPort=url.port||'80';
+    // Restrict relaying to exactly the 33 operator-listed paths and ports.
+    // Never proxy arbitrary or internal URLs supplied by a client.
+    const station=/^\\/[1-9]$/.test(url.pathname)&&fixedPort==='80';
+    const named=/^\\/(?:live[1-4]|xtra[1-3]|en[1-2]|fr[1-2]|starzplay[1-2]|shasha[1-2]|thmanyah[1-3]|shahid[1-2]|alkass[5-8])$/.test(url.pathname)
+      &&fixedPort==='8080';
     if(url.protocol!=='http:'||url.hostname!==LIVE_HOST||
-       (url.port&&url.port!=='80')||url.username||url.password||
-       !/^\/live\/[a-z0-9_-]{1,28}\/[a-z0-9_-]{1,12}$/i.test(url.pathname)||
-       !url.searchParams.has('token'))continue;
+       url.username||url.password||url.search||url.hash||
+       !(station||named))continue;
     url.hash='';
     taken.add(id);
     result.push(Object.freeze({id,label,url:url.toString()}));
@@ -146,7 +155,7 @@ export function createProtectedArabicAudioBridge({
         const range=String(req.headers.range||'');
         if(/^bytes=[0-9]+-[0-9]*$/.test(range))headers.range=range;
         const source=createRequest({
-          protocol:'http:',hostname:LIVE_HOST,port:80,
+          protocol:'http:',hostname:LIVE_HOST,port:Number(upstream.port||80),
           path:upstream.pathname+upstream.search,
           method:req.method==='HEAD'?'HEAD':'GET',
           headers,timeout:7000,agent:false,
@@ -222,7 +231,7 @@ export function createProtectedArabicAudioBridge({
    * upstream URLs, query tokens, IP addresses, HTTP response bodies or
    * authentication headers. Does not bypass upstream access restrictions.
    */
-  async function probe(ids=['anis-max-1','anis-alkass-1']) {
+  async function probe(ids=['anis-sport-1','anis-alkass-5']) {
     const rows=entries();
     if(!rows.length)return [{reason:'audio_disabled_or_unconfigured'}];
     let addresses;
@@ -249,7 +258,7 @@ export function createProtectedArabicAudioBridge({
         }
         try {
           client=createRequest({
-            protocol:'http:',hostname:LIVE_HOST,port:80,
+            protocol:'http:',hostname:LIVE_HOST,port:Number(upstream.port||80),
             path:upstream.pathname+upstream.search,method:'GET',
             timeout:5_000,agent:false,
             headers:{'accept':'audio/*,*/*;q=0.4',
