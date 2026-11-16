@@ -1,7 +1,7 @@
 name: BLOFY STREAM Protected Arabic Audio Backend QA
 on:
   push:
-    branches: [fix/stream-audio-sniff-bad-content-type-20261115]
+    branches: [fix/stream-foxfm-blofy-audio-20261116]
     paths:
       - 'services/activation/src/stream-arabic-audio-bridge.mjs'
       - 'services/activation/src/xtream-gateway-hook.mjs'
@@ -30,6 +30,6 @@ jobs:
         run: node --test services/activation/test/stream-arabic-audio-bridge.test.mjs services/activation/test/stream-arabic-audio-operator-shapes.test.mjs services/activation/test/stream-arabic-audio-probe.test.mjs services/activation/test/stream-arabic-audio-live-relay.test.mjs
       - name: Preserve opt-in status
         run: |
-          echo 'Backend audio relay exists ONLY on the feature branch.' >> "$GITHUB_STEP_SUMMARY"
-          echo 'Default production flag is OFF. Operator sources are not in Git.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'BLOFY FoXFM audio relay is tested on a standalone branch before deployment.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'New 33-station runtime playlist must be supplied through Railway environment only.' >> "$GITHUB_STEP_SUMMARY"
           echo 'No Railway deployment or source configuration is performed by this job.' >> "$GITHUB_STEP_SUMMARY"
