@@ -3687,6 +3687,71 @@ async function unifiedStreamBridge(req,res,url){
       mediaBytesTransferred:0,customerCutover:false})}
     finally{mirrorPreflightRunning=false}
   }
+  // Private operator controls for the bounded licensed-mirror worker.
+  // Start is non-blocking and limited to one item/16 chunks, pause aborts.
+  // The Hub independently checks rights, fresh source metadata and S3 budget.
+  if(p==='/internal/blofy-stream/ops/mirror-intake/start'||
+     p==='/internal/blofy-stream/ops/mirror-intake/pause'){
+    if(url.search||req.method!=='POST')
+      return json(res,405,{ok:false,code:'mirror_control_post_only'});
+    if(process.env.BLOFY_STREAM_MIRROR_TRANSFER_CONTROL_ENABLED!=='1')
+      return json(res,404,{ok:false,code:'mirror_control_disabled'});
+    const isPause=p.endsWith('/pause');
+    const required=isPause?'pause-licensed-private-mirror':
+      'start-licensed-private-mirror';
+    if(req.headers['x-blofy-owner-action']!==required)
+      return json(res,403,{ok:false,code:'mirror_control_owner_action_missing'});
+    let body;
+    try{body=await readJson(req)}
+    catch{return json(res,400,{ok:false,code:'mirror_control_invalid_json'})}
+    if(body?.ownerConfirmed!==true)return json(res,400,{
+      ok:false,code:'mirror_control_confirmation_required'});
+    const kind=String(body.kind||''),id=String(body.id||'');
+    if(!isPause&&(!['movie','episode'].includes(kind)||
+        !(kind==='movie'?/^[A-Za-z0-9._:-]{1,128}$/:
+          /^[1-9][0-9]{0,9}$/).test(id)))
+      return json(res,400,{ok:false,code:'mirror_control_invalid_selection'});
+    if(!isPause){
+      const selected=await approvedSalehMirrorSource();
+      if(!selected.ok)return json(res,503,{ok:false,
+        code:'mirror_control_source_not_approved'});
+      const current=await listMirrorIntake(controlPool,{
+        sourceId:selected.sourceId});
+      if(!current.ok||!current.items.some(item=>item.kind===kind&&
+          item.id===id&&item.state==='awaiting_size_and_license'))
+        return json(res,409,{ok:false,code:'mirror_control_item_not_staged'});
+    }
+    const token=String(process.env.BLOFY_CONTENT_HUB_OPERATOR_TOKEN||'');
+    if(token.length<32)return json(res,503,{ok:false,
+      code:'mirror_control_hub_not_configured'});
+    try{
+      const response=await fetch(
+        'http://blofy-content-hub.railway.internal:3000/internal/mirror/copy/'+
+        (isPause?'pause':'start'),{
+         method:'POST',redirect:'manual',signal:AbortSignal.timeout(11000),
+         headers:{authorization:'Bearer '+token,
+          'x-blofy-owner-action':required,
+          'content-type':'application/json',accept:'application/json'},
+         body:JSON.stringify(isPause?{ownerConfirmed:true}:{
+           kind,id,ownerConfirmed:true})
+        });
+      if(![200,202,400,409,429,503].includes(response.status))
+        return json(res,503,{ok:false,code:'mirror_control_hub_response_denied'});
+      if(Number(response.headers.get('content-length')||0)>4000)
+        return json(res,503,{ok:false,code:'mirror_control_hub_large'});
+      const raw=await response.text();
+      if(Buffer.byteLength(raw)>4000)
+        return json(res,503,{ok:false,code:'mirror_control_hub_large'});
+      const result=JSON.parse(raw);
+      if(!result||typeof result!=='object'||Array.isArray(result)||
+         result.customerCutover!==false||
+         result.ok!==true&&typeof result.code!=='string')
+        return json(res,503,{ok:false,code:'mirror_control_hub_invalid'});
+      return json(res,response.status,result,
+        {'cache-control':'no-store'});
+    }catch{return json(res,503,{ok:false,
+      code:'mirror_control_hub_unavailable'})}
+  }
   // Explicit owner on-demand S3 HEAD audit for ONE catalog item.
   // The exact source is pinned by the Portal and the item must exist in
   // its published indexed catalog; no arbitrary S3 paths or provider URLs.
