@@ -10,7 +10,7 @@ const safeName=e=>String(e?.name||e?.code||'unknown').replace(/[^a-zA-Z0-9_-]/g,
 export async function runIsolatedS3Smoke({
  env=process.env,makeStorage=createPrivateS3Adapter,
  makeS3=opts=>new S3Client(opts),generate=()=>randomBytes(M+127),
- now=()=>Date.now()
+ verifyAvFromS3=null,now=()=>Date.now()
 }={}){
  const start=now();
  const out={ok:false,code:'qa_not_started',synthetic:true,privateOnly:true,
@@ -18,7 +18,8 @@ export async function runIsolatedS3Smoke({
   writtenBytes:0,cleanedUp:false,encrypted:false,
   objectCountAfter:null,fullShaVerified:false,rangeVerified:false,
   encryptionEvidence:'unverified',sseHeaderVerified:false,
-  platformEncryptionDocumented:false};
+  platformEncryptionDocumented:false,
+  avVerified:false,avSampleOnly:true,devicePlaybackVerified:false};
  let storage=null,key=null,uploadId=null,s3=null;
  try{
   if(env.BLOFY_QA_SYNTHETIC_ONLY!=='1'||
@@ -34,7 +35,8 @@ export async function runIsolatedS3Smoke({
   if(before?.ok!==true)err('qa_inventory_unavailable');
   if(before.usedBytes!==0||before.objectCount!==0)
    err('qa_bucket_not_empty');
-  const data=generate();
+  // A/V fixture generation is asynchronous and uses only local FFmpeg.
+  const data=await generate();
   if(!Buffer.isBuffer(data)||data.length!==M+127)
    err('qa_payload_invalid');
   const uid=randomUUID().toLowerCase();
@@ -76,6 +78,18 @@ export async function runIsolatedS3Smoke({
    if(!Buffer.concat(chunks).equals(data.subarray(from,to+1)))
     err('qa_range_bytes_mismatch');
    out.rangeVerified=true;
+   if(verifyAvFromS3!==null){
+    if(env.BLOFY_QA_SYNTHETIC_AV!=='1'||
+       typeof verifyAvFromS3!=='function')err('qa_av_validation_not_authorized');
+    stage='audio_video';
+    const decoded=await verifyAvFromS3({storage,key,
+     expectedBytes:data.length,expectedSha256:expectedHash});
+    if(decoded?.ok!==true||decoded?.videoDecoded!==true||
+       decoded?.audioDecoded!==true||
+       decoded?.sha256Verified!==true)
+     err('qa_av_decode_failed');
+    out.avVerified=true;
+   }
    stage='sse';
    s3=makeS3({region:env.BLOFY_CONTENT_HUB_S3_REGION,
     endpoint:env.BLOFY_CONTENT_HUB_S3_ENDPOINT,
