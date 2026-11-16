@@ -161,3 +161,47 @@ Next gate: verify actual source storage + redistribution license evidence,
 per-account upstream headroom and private S3 budget, then run one approved
 real channel + movie + episode in isolation with long-playback and device
 acceptance. Do not infer those permissions from an activated Xtream login.
+
+
+## 16 November — 30-second synthetic endurance and public device test
+
+### Five concurrent HLS viewers, real Railway test service
+- QA commit 98e99fb970d3e041ad281f870fac6e4b08c379f5;
+  Railway deployment ce54e61b-b419-46c2-aff9-48d408e6183d.
+- Result BLOFY_MIGRATION_ENDURANCE_SMOKE was OK: 5/5 FFmpeg
+  viewers each decoded 30 actual seconds, at least 450 video frames,
+  audio and video mapped, duration proof verified, elapsed 32231 ms.
+- Source was locally generated H264/AAC only, zero Xtream requests.
+  This is not a real provider load or permission test.
+
+### Browser/device-facing synthetic test page
+- Separate isolated service blofy-migration-device-preview,
+  ID 9a30c052-0a87-44c1-babf-3800ca276775, test environment.
+- Railway-managed HTTPS URL:
+  https://blofy-migration-device-preview-test.up.railway.app/
+- Generated two local H264/AAC MP4 samples: 8-second movie (322974
+  bytes), 11-second episode (437948 bytes). There is also a synthetic
+  on-demand live HLS player. No real source media or customer content.
+- Preview deployment 19462e28-291e-4f18-90f0-feee40622898 SUCCESS;
+  startup log BLOFY_MIGRATION_DEVICE_QA_READY reported two files and
+  zero provider media requests.
+- Independent Railway private HTTP QA deployment
+  66340325-8e37-4218-be72-15daa8b88205 SUCCESS: both MP4 files
+  passed HEAD, exact HTTP 206 partial byte reading, suffix range,
+  416 invalid range, FFprobe audio/video track recognition,
+  FFmpeg audio/video decoding and timestamp-seek frame decoding.
+- Independent Railway public HTTPS QA deployment
+  8b3ab051-4e76-4639-90b0-b0b77e46b509 SUCCESS: result
+  public_synthetic_https_preview_verified with
+  publicHttpsVerified=true, previewPageVerified=true,
+  mp4RangesVerified=2, providerMediaRequests=0,
+  customerCutover=false, devicePlaybackVerified=false.
+  The test called the exact Railway-generated public domain over TLS.
+  This does not yet prove a user's own phone, browser or Android TV playback.
+
+### No change to subscriber routes
+The real Xtream source remains untested for persistent copying or
+redistribution rights and origin source headroom, and has recorded
+connection resets. Both the live and VOD assets above are SYNTHETIC.
+Do not merge this draft, enable automated source transfer, or cut over
+customers without verified authorization and a real isolated item canary.
