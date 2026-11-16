@@ -38,8 +38,8 @@ internal object LiveChannelPanelPolicy {
 
     /** Scale the joined panel while reserving enough width for remote navigation. */
     fun dimensions(isTv: Boolean, isTablet: Boolean): Pair<Float, Float> = when {
-        isTv -> 0.30f to 0.84f
-        isTablet -> 0.42f to 0.84f
-        else -> 0.82f to 0.90f
+        isTv -> 0.31f to 0.94f
+        isTablet -> 0.42f to 0.92f
+        else -> 0.82f to 0.92f
     }
 }
