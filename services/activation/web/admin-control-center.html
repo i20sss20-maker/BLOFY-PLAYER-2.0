@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="theme-color" content="#09090e">
+  <title>BLOFY CONTROL CENTER | مركز مراقبة البث</title>
+  <link rel="icon" type="image/png" href="/blofy-logo.png">
+  <link rel="stylesheet" href="/admin/control-center/style.css">
+  <script src="/admin/control-center/app.js" defer></script>
+</head>
+<body>
+<div class="shell">
+  <aside class="rail">
+    <a href="/admin" class="brand"><img src="/blofy-logo.png" width="38" height="38" alt=""><span>BLOFY <b>CONTROL CENTER</b></span></a>
+    <p class="small">لوحة المشرف · اتصال موحد</p>
+    <nav class="nav" aria-label="أقسام الإدارة">
+      <a class="active" aria-current="page" href="/admin/control-center">◉ مراقبة البث والسيرفرات</a>
+      <a href="/admin">▣ الأجهزة والاشتراكات</a>
+      <a href="/stream">◈ BLOFY STREAM</a>
+      <a href="/sources-admin#xtream">◈ مصادر Xtream</a>
+      <a href="/admin/content-hub">▦ المكتبة والتخزين</a>
+      <a href="/one">⌘ مركز BLOFY ONE</a>
+    </nav>
+    <p class="small security">محمية بجلسة إدارة BLOFY الحالية. لا يتم تغيير الأكواد أو مصادر العملاء.</p>
+  </aside>
+  <main class="main">
+    <header class="topbar">
+      <div><p class="eyebrow">BLOFY OPERATIONS / READ ONLY</p>
+        <h1>مراقبة البث والسيرفرات</h1>
+        <p>لوحة موحدة داخل موقع BLOFY لفحص الخدمات والتجهيز للتطوير القادم.</p>
+      </div>
+      <div class="actions"><button type="button" id="refresh">↻ تحديث الفحص</button>
+        <button type="button" id="copy" class="outline">نسخ التقرير</button></div>
+    </header>
+    <section class="stats" aria-label="ملخص الفحوصات">
+      <div class="stat"><small>عدد الخدمات</small><strong id="total">—</strong></div>
+      <div class="stat"><small>استجابة ناجحة</small><strong id="healthy">—</strong></div>
+      <div class="stat"><small>استجابة غير مؤكدة</small><strong id="reachable">—</strong></div>
+      <div class="stat"><small>خطأ أو فشل اتصال</small><strong id="failed">—</strong></div>
+    </section>
+    <div class="notice" role="note">المؤشرات تقيس حالة HTTP فقط؛ لا تثبت جودة الصورة أو الصوت أو عمل جميع القنوات. لا توجد أرقام تقديرية.</div>
+    <section class="panel">
+      <div class="panelhead"><h2>الخدمات المفحوصة</h2><span class="small" id="checked">لم يبدأ الفحص</span></div>
+      <div id="checks" class="service-grid" aria-live="polite"></div>
+    </section>
+    <section class="panel">
+      <div class="panelhead"><h2>خارطة التطوير</h2><span class="small">التشغيل التجريبي منفصل عن الإنتاج</span></div>
+      <div id="phases" class="phase-grid"></div>
+    </section>
+    <p class="small footer">BLOFY CONTROL CENTER · نظام متابعة للقراءة فقط · جميع عمليات تعديل السيرفرات مؤجلة حتى الاختبار والمراجعة</p>
+  </main>
+</div>
+</body>
+</html>
