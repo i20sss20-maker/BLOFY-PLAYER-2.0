@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash,randomUUID} from 'node:crypto';
+import {mkdtemp,readFile,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {execFile as execFileCb} from 'node:child_process';
+import {promisify} from 'node:util';
+import {diagnoseVerifiedMovie} from '../src/playback-diagnostics.mjs';
 import {Pool} from 'pg';
 import {S3Client,CreateBucketCommand,DeleteBucketCommand}
  from '@aws-sdk/client-s3';
@@ -14,7 +20,30 @@ const SIZE=8*1024*1024+127;
 const SOURCE='00000000-0000-4000-8000-000000000053';
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const VERSION=sha('etag:"ci-private-minio-source-v1"');
-const BYTE_SAMPLE=Buffer.alloc(SIZE,0x47);
+const execFile=promisify(execFileCb);
+// Produce a REAL independently decodable video+audio sample with no
+// third-party footage. MP4 "free" atom pads it past the 8MiB chunk
+// boundary while keeping the entire file standards-compliant.
+async function generateSyntheticAv(){
+ const folder=await mkdtemp(join(tmpdir(),'blofy-ci-av-'));
+ try{
+  const filename=join(folder,'synthetic.mp4');
+  await execFile('ffmpeg',[
+   '-hide_banner','-loglevel','error','-nostdin',
+   '-f','lavfi','-i','testsrc2=size=320x180:rate=12:duration=2',
+   '-f','lavfi','-i','sine=frequency=880:sample_rate=44100:duration=2',
+   '-c:v','mpeg4','-q:v','5','-c:a','aac','-b:a','96k',
+   '-shortest','-movflags','+faststart','-y',filename
+  ],{timeout:35000,maxBuffer:256000});
+  const media=await readFile(filename);
+  const remaining=SIZE-media.length;
+  if(remaining<8||remaining>0xffffffff)throw Error('ci_video_too_large');
+  const atom=Buffer.alloc(remaining);
+  atom.writeUInt32BE(remaining,0);
+  atom.write('free',4,'ascii');
+  return Buffer.concat([media,atom],SIZE);
+ }finally{await rm(folder,{recursive:true,force:true})}
+}
 const RIGHTS=sha('CI-generated-synthetic-video-bytes-only');
 const FLAGS={
  BLOFY_CONTENT_HUB_MIRROR_WORKER_ENABLED:'1',
@@ -26,7 +55,7 @@ const FLAGS={
  BLOFY_CONTENT_HUB_BRIDGE_TOKEN:'test-only-minio-to-postgres-token-123456789'
 };
 
-test('private real S3 protocol and PostgreSQL copy: two verified chunks, SHA, locked source, no provider calls',{
+test('real S3, PostgreSQL and FFmpeg: safely mirror, SHA-verify and decode synthetic private A/V',{
  skip:!(process.env.BLOFY_TEST_PG_URL&&process.env.BLOFY_TEST_MINIO_URL),
  timeout:110000
 },async()=>{
@@ -45,7 +74,7 @@ test('private real S3 protocol and PostgreSQL copy: two verified chunks, SHA, lo
  const approval={ok:true,code:'mirror_approval_exact_item',
   sourceName:'saleh',sourceId:SOURCE,
   kind:'movie',id:'ci_5497',mediaId:'ci_5497',
-  gatewayId:5497,extension:'mkv',expectedBytes:SIZE,
+  gatewayId:5497,extension:'mp4',expectedBytes:SIZE,
   rightsEvidenceHash:RIGHTS,validatorPresent:true,validatorSha256:VERSION,
   approvedAt:now,permissionScope:'licensed-private-vod-copy'};
  let created=false,runId=null,sourceCalls=0;
@@ -77,6 +106,8 @@ test('private real S3 protocol and PostgreSQL copy: two verified chunks, SHA, lo
     }
    };
   }
+  const BYTE_SAMPLE=await generateSyntheticAv();
+  assert.equal(BYTE_SAMPLE.length,SIZE);
   const approvalLoader=async()=>approval;
   const readRange=async({from,to})=>{
    sourceCalls++;
@@ -123,6 +154,27 @@ test('private real S3 protocol and PostgreSQL copy: two verified chunks, SHA, lo
   assert.equal(after.ok,true,JSON.stringify(after));
   assert.equal(after.usedBytes,SIZE);
   assert.equal(after.objectCount,2);
+
+  // Actual end-to-end A/V proof, not an FFmpeg mock: independently read
+  // the verified private S3 parts and decode video frames + audio samples.
+  const canary=await diagnoseVerifiedMovie({
+   runId,storage,lease,mediaKind:'movie'
+  });
+  assert.equal(canary.ok,true,JSON.stringify({
+   code:canary.code,videoTracks:canary.videoTracks,
+   audioTracks:canary.audioTracks,
+   videoFramesDecoded:canary.videoFramesDecoded,
+   audioFramesDecoded:canary.audioFramesDecoded,
+   sampleBytes:canary.sampleBytes
+  }));
+  assert.equal(canary.code,'canary_audio_video_decoded');
+  assert.ok(canary.videoFramesDecoded>=1);
+  assert.ok(canary.audioFramesDecoded>=1);
+  assert.equal(canary.providerRequests,0);
+  assert.equal(canary.customerCutover,false);
+  assert.equal(canary.sampleBytes,SIZE);
+  assert.equal(sourceCalls,2);
+
   const already=await execute();
   assert.equal(already.code,'mirror_worker_already_verified');
   assert.equal(sourceCalls,2);
