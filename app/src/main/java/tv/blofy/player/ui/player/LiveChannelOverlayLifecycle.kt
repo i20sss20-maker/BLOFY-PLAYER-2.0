@@ -770,8 +770,8 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             }
             fun updateSync() {
                 val value = activity.inlineArabicDelaySeconds()
-                sync.text = copy("⏱ فرق التوقيت: +${value} ثانية (0–30)  •  − للتقديم / + للتأخير",
-                    "⏱ Audio offset: +${value}s (0–30)  •  − advance / + delay")
+                sync.text = copy("⏱ تأخير المعلق: +${value}ث  •  − تقديم / + تأخير تدريجي",
+                    "⏱ Commentary delay: +${value}s  •  − advance / + gradually delay")
             }
 
             fun paintStatus(message: String, state: StreamAudioQuickPickPolicy.State?) {
@@ -832,8 +832,21 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                             paintStatus(copy("شغّل صوتية أولًا لضبط التوقيت.",
                                 "Select a playing voice before adjusting sync."), null)
                         } else {
-                            activity.adjustInlineArabicSync(delta)
+                            val before = activity.inlineArabicDelaySeconds()
+                            val after = activity.adjustInlineArabicSync(delta)
                             updateSync()
+                            val message = when {
+                                before == after -> copy(
+                                    "وصلت لأقصى حد للتقديم أو التأخير (0–30 ثانية).",
+                                    "Already at the 0–30 second limit.")
+                                delta > 0 -> copy(
+                                    "جارٍ تأخير صوت المعلق تدريجيًا للمزامنة مع الصورة.",
+                                    "Gradually delaying commentary to match the picture.")
+                                else -> copy(
+                                    "جارٍ تقديم صوت المعلق للمزامنة مع الصورة.",
+                                    "Advancing commentary to match the picture.")
+                            }
+                            paintStatus(message, null)
                         }
                     }
                     footer.removeView(item)
@@ -842,10 +855,10 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                         marginEnd = dp(3)
                     })
                 }
-                addQuickSync("−5s", -5)
-                addQuickSync("−1s", -1)
-                addQuickSync("+1s", 1)
-                addQuickSync("+5s", 5)
+                addQuickSync("−5ث", -5)
+                addQuickSync("−1ث", -1)
+                addQuickSync("+1ث", 1)
+                addQuickSync("+5ث", 5)
                 footer.addView(syncButtons, LinearLayout.LayoutParams(-1, dp(45)))
                 addButton(copy("⟲ إعادة المزامنة إلى 0 ثانية",
                     "⟲ Reset audio offset to 0s")) {
