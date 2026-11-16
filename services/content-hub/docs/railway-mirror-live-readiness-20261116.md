@@ -179,3 +179,53 @@ References:
 - The successful earlier real Railway A/V deployment is pinned to
   tested commit `ceb253d6494681737858e9c0e47019cf87767618`;
   subsequent hardening is in the draft branch, not a customer deploy.
+
+
+## Railway real PostgreSQL + T3 full synthetic mirror acceptance (16 Nov 2026)
+
+- For this test only, provisioned a SEPARATE managed PostgreSQL 18
+  service `Postgres-aO7C` and its own new volume. Neither the
+  customer's existing `Postgres` service nor existing Content Hub
+  bucket was connected to the QA runner.
+- New one-shot script `scripts/railway-mirror-pg-s3-qa.mjs` requires
+  four explicit synthetic/isolated flags, pins the EXACT actual QA
+  physical bucket name (UI label is not the physical S3 name),
+  and verifies the separate PostgreSQL `.railway.internal` hostname
+  matches an independently referenced expected QA service.
+- Synthetic MP4 video + AAC test tone was created entirely within
+  the QA container, padded to 8 MiB + 127 bytes to cross the
+  8 MiB mirror part boundary, then exposed only via a local
+  in-process HTTP 206 Range response. ZERO Xtream requests.
+- Railway QA deployment `1d7cebd0-6283-4939-98e8-f189df53f7a9`
+  proved both MOVIE and EPISODE media were saved and SHA-verified
+  into real Railway T3 and separate PostgreSQL; the FFmpeg audio
+  + video decoders also passed. Its final history step failed
+  due to a QA call-site argument error; the test cleaned all rows
+  and storage objects before the script exited.
+- Fixed the history call signature and reran. Successful one-shot
+  Railway deployment `4329c9de-7d15-412c-9c56-aad57229e01f`
+  logged `qa_real_pg_s3_synthetic_movie_episode_verified` and
+  `ok=true`, `movieVerified=true`, `episodeVerified=true`,
+  `allSha256Verified=true`, `audioVideoDecoded=true`,
+  `ownerSeekVerified=true`, `dbRowsCleaned=true`,
+  `s3ObjectsCleaned=true`, `s3ObjectsAfter=0`,
+  `sourceRequestsToXtream=0`, `customerCutover=false`,
+  `devicePlaybackVerified=false`.
+- The independent owner-only HTTP GET returned an exact byte
+  range crossing the private 8 MiB S3 part boundary for BOTH
+  movie and episode, with private manifest records from real
+  PostgreSQL and actual FFmpeg decoding from the stored S3 bytes.
+- The QA script deleted only its 2 exact PostgreSQL synthetic
+  mirror rows, stored A/V sample records, and its 4 exact private
+  S3 part objects. Confirmed zero remaining objects on QA S3.
+- Latest GitHub CI for tested commit
+  `11bb8d12b3bad5a11fb3ab40bdb1bec81902a5dc`
+  passed Activation, Content Hub, Device Administration and Zid.
+- No real Xtream copy, customer playback route switch, automated
+  whole-library synchronization, device app playback or independent
+  third-party permanent-storage rights verification occurred.
+
+Next independent hard gates: verify a specific title's permanent
+storage+distribution rights and fresh origin concurrency headroom;
+then run ONE authorized real movie and episode in the isolated
+pipeline and test Android/Windows end-device audio/video + seek.
