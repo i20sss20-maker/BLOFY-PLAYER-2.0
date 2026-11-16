@@ -287,3 +287,33 @@ only after explicit per-file storage rights and external headroom review.
 These tests prove database consistency with synthetic data only. They
 do not prove real provider/S3 compatibility and must not be called a
 successful real-file copy.
+
+
+## S3 wire protocol + real PostgreSQL integration (2026-11-16)
+
+- A dedicated GitHub Actions mirror-minio-postgres job now exercises
+  the actual mirror worker against real PostgreSQL 16 and the MinIO
+  S3-compatible HTTP server, through the production private-s3.mjs
+  adapter: multipart begin / UploadPart / CompleteMultipartUpload,
+  HEAD, ListObjects, GetObject Range, SHA-256, and DeleteObject.
+- Provider Range responses are generated locally from one SYNTHETIC
+  8 MiB + 127 byte fixture; no Xtream, subscriber, paid cloud bucket,
+  or Railway production service is ever contacted by this test.
+- Two private S3 objects are uploaded, checkpointed in PostgreSQL,
+  and independently SHA-256 verified as the exact original bytes.
+  Repeating a completed run produces zero additional source calls
+  or S3 uploads; advisory locking prevents simultaneous copy starts.
+- The CI container uses the maintained public Chainguard MinIO image
+  instead of withdrawn official Docker Hub and Quay images. An
+  ephemeral random test-only static KMS key supports the adapter's
+  mandatory AES256 SSE-S3 multipart encryption. Production encryption
+  remains mandatory and unchanged.
+- 2026-11-16 CI passed: guarded-mirror, postgres-season-analytics,
+  mirror-minio-postgres, Activation CI, Device Administration,
+  and Zid activation integration.
+
+Remaining rollout blockers: this is a SYNTHETIC test of real S3 API
+and real PostgreSQL, not a Railway production bucket test or real
+provider video transfer. It does not prove permanent copying rights
+for third-party media or device playback quality. All mirror flags
+remain OFF and all drafts remain undeployed.
