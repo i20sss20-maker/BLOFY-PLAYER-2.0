@@ -1681,6 +1681,15 @@ export function createContentHubServer({storage,lease,
   // movie/episode run. Subscriber routes never enter this control plane.
   const siteQa=/^\/internal\/site-qa\/files\/(movie|episode)\/([A-Za-z0-9_-]{8,80})$/.exec(path);
   const playback=/^\/internal\/(pilot|episodes)\/playback\/([A-Za-z0-9_-]{8,80})$/.exec(path);
+  // Dedicated, owner-only byte ranges from ALREADY SHA-verified mirror
+  // objects. This never changes subscriber app routing. It requires a
+  // distinct opt-in and cannot be accessed through the old pilot path.
+  const mirrorRange=/^\/internal\/mirror\/owner-range\/(movie|episode)\/(mirror_[a-f0-9]{32})$/.exec(path);
+  if(mirrorRange&&(
+    pilotEnv.BLOFY_CONTENT_HUB_MIRROR_OWNER_RANGE_ENABLED!=='1'||
+    pilotEnv.BLOFY_CONTENT_HUB_STORAGE_RIGHTS_CONFIRMED!=='1'||
+    req.headers['x-blofy-owner-action']!=='read-verified-private-mirror-range'))
+   return json(res,404,{ok:false,code:'mirror_owner_range_not_available'});
   if(siteQa&&(
     pilotEnv.BLOFY_CONTENT_HUB_WEBSITE_FULL_RANGE_QA_ENABLED!=='1'||
     pilotEnv.BLOFY_CONTENT_HUB_STORAGE_RIGHTS_CONFIRMED!=='1'||
@@ -1694,16 +1703,23 @@ export function createContentHubServer({storage,lease,
       pilotEnv.BLOFY_CONTENT_HUB_BATCH_RUN_ID||'':
       pilotEnv.BLOFY_CONTENT_HUB_EPISODE_RUN_ID||'')))
    return json(res,404,{ok:false,code:'site_qa_file_not_available'});
-  if((playback||siteQa)&&['GET','HEAD'].includes(req.method)){
+  if((playback||siteQa||mirrorRange)&&['GET','HEAD'].includes(req.method)){
    if(String(req.url||'').includes('?'))
     return json(res,400,{ok:false,code:'pilot_private_query_denied'});
-   const episodePlayback=siteQa?siteQa[1]==='episode':playback[1]==='episodes';
-   const playbackId=siteQa?siteQa[2]:playback[2];
+   // Do not allow the legacy pilot route to bypass the opt-in and owner
+   // action for new private mirror IDs.
+   if(playback&&/^mirror_[a-f0-9]{32}$/.test(playback[2]))
+    return json(res,404,{ok:false,code:'mirror_legacy_range_denied'});
+   const episodePlayback=mirrorRange?mirrorRange[1]==='episode':
+    siteQa?siteQa[1]==='episode':playback[1]==='episodes';
+   const playbackId=mirrorRange?mirrorRange[2]:
+    siteQa?siteQa[2]:playback[2];
    let saved=null;
    if(episodePlayback){
     try{saved=await lease.getVerifiedEpisodeObject?.(playbackId)}catch{}
    }else{
-    try{saved=await lease.getVerifiedPilotObject?.(playbackId)}catch{}
+    if(!mirrorRange)
+     try{saved=await lease.getVerifiedPilotObject?.(playbackId)}catch{}
     if(!saved)try{saved=await lease.getVerifiedChunkedObject?.(
       playbackId)}catch{}
    }
@@ -1718,7 +1734,9 @@ export function createContentHubServer({storage,lease,
     res.writeHead(200,{
       'content-type':type,'content-length':String(saved.bytes),
       'accept-ranges':'bytes','cache-control':'private,no-store',
-      'x-content-type-options':'nosniff','referrer-policy':'no-referrer'
+      'x-content-type-options':'nosniff','referrer-policy':'no-referrer',
+      ...(mirrorRange?{'cross-origin-resource-policy':'same-origin',
+        'x-blofy-mirror-private':'owner-only'}:{})
     });
     return res.end();
    }
@@ -1751,7 +1769,9 @@ export function createContentHubServer({storage,lease,
       'content-type':type,'content-length':String(to-from+1),
       'content-range':`bytes ${from}-${to}/${saved.bytes}`,
       'accept-ranges':'bytes','cache-control':'private,no-store',
-      'x-content-type-options':'nosniff','referrer-policy':'no-referrer'
+      'x-content-type-options':'nosniff','referrer-policy':'no-referrer',
+      ...(mirrorRange?{'cross-origin-resource-policy':'same-origin',
+        'x-blofy-mirror-private':'owner-only'}:{})
     });
     let count=0;
     const streamPart=async(stream,expected)=>{
