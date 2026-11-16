@@ -182,6 +182,9 @@ test('Portal source probe is opt-in and never accepts an operator capacity estim
  assert.ok(src.includes("BLOFY_STREAM_MIRROR_PREFLIGHT_ENABLED!=='1'"));
  assert.ok(src.includes("req.headers['x-blofy-owner-action']!=='probe-private-mirror-intake'"));
  assert.ok(src.includes('mirrorPreflightRunning'));
- assert.ok(src.includes('capacity:null,ownerConfirmed:true'));
+ assert.ok(src.includes('capacity:capacityResult.ok?capacityResult.capacity:null'));
+ assert.ok(src.includes('BLOFY_STREAM_MIRROR_PREFLIGHT_SOURCE_IDLE_CONFIRMED'));
+ assert.ok(src.includes('BLOFY_STREAM_MIRROR_PREFLIGHT_QUIET_WINDOW_CONFIRMED'));
+ assert.ok(src.includes('loadPrivateMirrorCapacity'));
  assert.ok(src.includes('probeStagedMirrorSource'));
 });
