@@ -535,6 +535,40 @@ test('real encrypted S3+PG+FFmpeg: lost ACK recovery and SHA/AV for movie and ep
    assert.equal(excluded.state,'failed');
    assert.equal(excluded.avPrefixDecoded,false);
    assert.equal(excluded.ownerDevicePlaybackVerified,false);
+   // A second verified movie is corrupted outside the tiny requested
+   // byte span. The owner GET must hash the WHOLE stored S3 part,
+   // quarantine the manifest, and refuse to send a 206 or media bytes
+   // without requiring a separate operator A/V canary first.
+   const stolen=manifest.parts[0];
+   const changed=Buffer.from(BYTE_SAMPLE.subarray(0,stolen.bytes));
+   changed[11]^=0xff;
+   await client.send(new PutObjectCommand({
+    Bucket:bucket,Key:stolen.key,Body:changed,
+    ContentLength:stolen.bytes,ServerSideEncryption:'AES256'
+   }));
+   const integrityUrl='http://127.0.0.1:'+port+
+    '/internal/mirror/owner-range/movie/'+runId;
+   const integrityResult=await fetch(integrityUrl,{headers:{
+    authorization:'Bearer '+ownerToken,
+    'x-blofy-owner-action':'read-verified-private-mirror-range',
+    range:'bytes=4096-4159'
+   }});
+   assert.equal(integrityResult.status,409,
+    'verified-range endpoint must detect corruption before HTTP 206');
+   assert.match(integrityResult.headers.get('content-type')||'',
+    /application\/json/);
+   const corruptResponse=await integrityResult.json();
+   assert.equal(corruptResponse.code,'mirror_private_sha256_mismatch');
+   assert.equal(corruptResponse.quarantinedOnHashMismatch,true);
+   assert.equal(await lease.getVerifiedChunkedObject(runId),null);
+   const autoBlocked=await fetch(integrityUrl,{headers:{
+    authorization:'Bearer '+ownerToken,
+    'x-blofy-owner-action':'read-verified-private-mirror-range',
+    range:'bytes=4096-4159'
+   }});
+   assert.equal(autoBlocked.status,404,
+    'automatically quarantined movie cannot be fetched as verified');
+   assert.equal(sourceCalls,4);
   }finally{
    await new Promise(resolve=>hub.server.close(resolve));
   }
