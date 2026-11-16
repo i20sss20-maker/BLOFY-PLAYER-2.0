@@ -6,6 +6,7 @@ import {createXtreamSyncQueue} from './xtream-sync-queue.mjs';
 import {listIndexedXtreamMirrorPage} from './xtream-mirror-inventory.mjs';
 import {resolveExclusiveApprovedSaleh} from './xtream-approved-saleh-selector.mjs';
 import {stageMirrorIntake,listMirrorIntake,cancelMirrorIntake,validateMirrorIntakeSelection} from './xtream-mirror-transfer-intake.mjs';
+import {probeStagedMirrorSource,recordMirrorPreflight} from './xtream-mirror-transfer-preflight.mjs';
 import {reconcileStreamCatalogPage} from './content-hub-private-mirror-reconcile-bridge.mjs';
 import {forwardStreamS3HeadAudit} from './content-hub-private-head-audit-bridge.mjs';
 import {configuredDailySourceId,riyadhCatalogDay,scheduleDailyApprovedCatalog,
@@ -3126,6 +3127,7 @@ const STREAM_BRIDGE_KEY=String(process.env.BLOFY_STREAM_UNIFIED_BRIDGE_KEY||'');
 const XTREAM_CUSTOMER_HOST=configuredXtreamPublicOrigin('https://blofyplayer.com');
 const bridgeLimiter=createFixedWindowLimiter({limit:90,windowMs:60_000});
 const streamActions=new Map();
+let mirrorPreflightRunning=false,mirrorPreflightLastAt=0;
 let streamCodeSchemaReady;
 function ensureStreamCodeSchema(){
   if(!streamCodeSchemaReady)streamCodeSchemaReady=(async()=>{
@@ -3578,6 +3580,101 @@ async function unifiedStreamBridge(req,res,url){
       code:'mirror_intake_transaction_unavailable',
       mediaBytesTransferred:0,copyWorkerEnabled:false,
       customerCutover:false})}
+  }
+  // Explicit owner-only ONE-item 4KiB source-size preflight. Never an
+  // automatic copy trigger. The private storage capacity must be verified
+  // independently; without a bucket budget snapshot this stays "measured".
+  if(p==='/internal/blofy-stream/ops/mirror-intake/preflight'){
+    if(url.search||req.method!=='POST')
+      return json(res,405,{ok:false,code:'mirror_preflight_post_only'});
+    if(process.env.BLOFY_STREAM_MIRROR_PREFLIGHT_ENABLED!=='1')
+      return json(res,404,{ok:false,code:'mirror_preflight_feature_disabled'});
+    if(req.headers['x-blofy-owner-action']!=='probe-private-mirror-intake')
+      return json(res,403,{ok:false,code:'mirror_preflight_owner_action_required'});
+    let input;
+    try{input=await readJson(req)}
+    catch{return json(res,400,{ok:false,code:'mirror_preflight_json_invalid'})}
+    const kind=String(input?.kind||''),id=String(input?.id||'');
+    if(input?.ownerConfirmed!==true||
+       !['movie','episode'].includes(kind)||!(kind==='movie'?
+       /^[A-Za-z0-9._:-]{1,128}$/:/^[1-9][0-9]{0,9}$/).test(id))
+      return json(res,400,{ok:false,code:'mirror_preflight_selection_invalid'});
+    if(mirrorPreflightRunning||Date.now()-mirrorPreflightLastAt<30000)
+      return json(res,429,{ok:false,code:'mirror_preflight_source_cooldown'},
+        {'retry-after':'30'});
+    const saleh=await approvedSalehMirrorSource();
+    if(!saleh.ok)return json(res,503,{ok:false,
+      code:'mirror_preflight_source_unavailable'});
+    const sourceId=saleh.sourceId;
+    if(!validateMirrorIntakeSelection({sourceId,kind,id}))
+      return json(res,400,{ok:false,code:'mirror_preflight_selection_invalid'});
+    try{
+      const intake=await listMirrorIntake(controlPool,{sourceId});
+      if(!intake.ok||!intake.items?.some(item=>item.kind===kind&&
+           item.id===id&&item.state==='awaiting_size_and_license'))
+        return json(res,409,{ok:false,
+          code:'mirror_preflight_intake_not_staged'});
+    }catch{return json(res,503,{ok:false,
+      code:'mirror_preflight_intake_unavailable'})}
+    // Recheck the private copy manifest because the staged intent can become
+    // obsolete after another verified copy is completed.
+    const manifest=await reconcileStreamCatalogPage({
+      sourceId,items:[{kind,id}],
+      hubToken:String(process.env.BLOFY_CONTENT_HUB_OPERATOR_TOKEN||'')
+    });
+    const manifestState=manifest.items?.[0]?.status;
+    if(!manifest.ok||!['not_recorded','copy_incomplete',
+        'copy_failed'].includes(manifestState))
+      return json(res,409,{ok:false,
+       code:'mirror_preflight_existing_copy_unresolved'});
+    mirrorPreflightRunning=true;
+    mirrorPreflightLastAt=Date.now();
+    try{
+      const source=await serverById(sourceId);
+      if(!source||source.enabled!==true||source.publish_catalog!==true||
+         source.deletion_requested_at||
+         String(source.name||'').trim().toLowerCase()!=='saleh')
+        return json(res,409,{ok:false,code:'mirror_preflight_source_unapproved'});
+      const catalog=kind==='movie'?
+        await controlPool.query([
+          'SELECT source_id AS media_id,container_extension AS extension',
+          'FROM blofy_xtream_items',
+          "WHERE server_id=$1 AND media_type='movie'",
+          'AND source_id=$2 AND enabled=TRUE LIMIT 1'
+        ].join(' '),[sourceId,id]):
+        await controlPool.query([
+          'SELECT e.source_episode_id AS media_id,',
+          'e.container_extension AS extension',
+          'FROM blofy_xtream_gateway_episode_map e',
+          'JOIN blofy_xtream_items i ON i.server_id=e.server_id',
+          "AND i.media_type='series' AND i.source_id=e.series_source_id",
+          'WHERE e.server_id=$1 AND e.gateway_id=$2',
+          'AND i.enabled=TRUE LIMIT 1'
+        ].join(' '),[sourceId,Number(id)]);
+      if(catalog.rowCount!==1)return json(res,404,{ok:false,
+        code:'mirror_preflight_catalog_item_missing'});
+      const row=catalog.rows[0];
+      const proof=await probeStagedMirrorSource({
+        source,kind,item:{mediaId:String(row.media_id),
+          extension:String(row.extension||'').toLowerCase()},
+        credentials:decryptCredentials(source),
+        validateOrigin:assertPublicXtreamUrl,
+        fetchImpl:fetch
+      });
+      if(!proof.ok)return json(res,503,proof);
+      // No storage snapshot is accepted from this request or the operator.
+      // A future Content Hub signed usage attestation must be integrated
+      // before an entry can reserve budget or become worker-eligible.
+      const saved=await recordMirrorPreflight(controlPool,{
+        sourceId,kind,id,probe:proof,
+        licenseReference:String(input.licenseReference||''),
+        capacity:null,ownerConfirmed:true
+      });
+      return json(res,saved.ok?200:409,saved,{'cache-control':'no-store'});
+    }catch{return json(res,503,{ok:false,
+      code:'mirror_preflight_failed',copyWorkerEnabled:false,
+      mediaBytesTransferred:0,customerCutover:false})}
+    finally{mirrorPreflightRunning=false}
   }
   // Explicit owner on-demand S3 HEAD audit for ONE catalog item.
   // The exact source is pinned by the Portal and the item must exist in
