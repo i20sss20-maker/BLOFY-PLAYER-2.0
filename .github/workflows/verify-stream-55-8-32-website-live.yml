@@ -1,0 +1,37 @@
+name: Verify live BLOFY STREAM 55.8.32 download routes
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-stream-55-8-32-website-live.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-public-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check download site health and full signed APK HTTP range support
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='https://updates.blofyplayer.com'
+          apk="$base/files/releases/BLOFY-STREAM-55.8.32-AUDIO-SYNC-SIGNED.apk"
+          for n in 1 2 3 4; do
+            if curl -fsS --max-time 25 "$base/health" -o health.json; then break; fi
+            if [ "$n" = 4 ]; then exit 1; fi
+            sleep 5
+          done
+          curl --fail --silent --show-error --location --max-time 60 \
+            --range 0-1023 -D apk.headers "$apk" -o apk.part
+          grep -Eiq '^HTTP/[0-9.]+ 206' apk.headers
+          grep -Eiq '^content-type: application/vnd.android.package-archive' apk.headers
+          grep -Eiq '^content-range: bytes 0-1023/135739422' apk.headers
+          test "$(wc -c < apk.part)" -eq 1024
+          curl --fail --silent --show-error --location --max-time 60 \
+            --range 0-1023 -D stable.headers "$base/d/blofy-stream" -o stable.part
+          grep -Eiq '^HTTP/[0-9.]+ 206' stable.headers
+          grep -Eiq '^content-type: application/vnd.android.package-archive' stable.headers
+          cmp apk.part stable.part
+          echo "BLOFY STREAM 55.8.32 direct and stable website paths both serve the same APK bytes" >> "$GITHUB_STEP_SUMMARY"
