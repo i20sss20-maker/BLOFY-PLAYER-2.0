@@ -6,8 +6,8 @@ import {runIsolatedS3Smoke} from '../scripts/railway-isolated-s3-smoke.mjs';
 const M=5*1024*1024;
 const ENV={
  BLOFY_QA_SYNTHETIC_ONLY:'1',BLOFY_QA_ISOLATED_BUCKET:'1',
- BLOFY_QA_EXPECTED_BUCKET:'blofy-mirror-s3-qa',
- BLOFY_CONTENT_HUB_S3_BUCKET:'blofy-mirror-s3-qa',
+ BLOFY_QA_EXPECTED_BUCKET:'blofy-mirror-s3-isolated-qa',
+ BLOFY_CONTENT_HUB_S3_BUCKET:'blofy-mirror-s3-isolated-qa',
  BLOFY_CONTENT_HUB_S3_ENDPOINT:'https://qa.storageapi.dev',
  BLOFY_CONTENT_HUB_S3_URL_STYLE:'virtual-host',
  BLOFY_CONTENT_HUB_S3_REGION:'auto',
