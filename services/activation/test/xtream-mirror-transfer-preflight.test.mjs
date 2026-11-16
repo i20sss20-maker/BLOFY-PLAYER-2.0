@@ -12,7 +12,7 @@ const SOURCE_ROW={id:SOURCE,name:'saleh',enabled:true,
  publish_catalog:true,base_url:'https://source.example/media/'};
 const ITEM={mediaId:ID,extension:'mkv'};
 const PROOF={ok:true,probeBytes:4096,expectedBytes:BYTES,
- validatorPresent:true,extension:'mkv'};
+ validatorPresent:true,validatorSha256:'a'.repeat(64),extension:'mkv'};
 const LICENSE='saleh-vod-storage-2026';
 const now=Date.now();
 const CAPACITY={verifiedPrivateBucket:true,usageExact:true,
@@ -36,6 +36,7 @@ test('source preflight reads exactly one 4KiB range without S3 or copy',async()=
  assert.equal(result.expectedBytes,BYTES);
  assert.equal(result.probeBytes,4096);
  assert.equal(result.validatorPresent,true);
+ assert.match(result.validatorSha256,/^[a-f0-9]{64}$/);
  assert.equal(result.mediaBytesTransferred,0);
  assert.equal(result.copyWorkerEnabled,false);
  assert.equal(result.customerCutover,false);
@@ -113,7 +114,8 @@ function dbFixture({staged=true}={}){
  const calls=[],db={
   query:async(sql,args)=>{
    calls.push({sql,args});
-   if(sql.startsWith('CREATE TABLE'))return {rowCount:0,rows:[]};
+   if(sql.startsWith('CREATE TABLE')||sql.startsWith('ALTER TABLE'))
+    return {rowCount:0,rows:[]};
    throw Error('unexpected pool SQL');
   },
   connect:async()=>({
@@ -152,8 +154,9 @@ test('one item stores measured proof durably while no capacity report exists',as
  assert.ok(f.calls.some(c=>c.sql==='COMMIT'));
  const write=f.calls.find(c=>c.sql.startsWith('INSERT INTO blofy_stream_mirror_preflights'));
  assert.equal(write.args[3],BYTES);
- assert.equal(write.args[6],'measured');
+ assert.equal(write.args[7],'measured');
  assert.equal(write.args[5].length,64);
+ assert.equal(write.args[6].length,64);
  assert.ok(!JSON.stringify(f.calls).includes(LICENSE));
 });
 
@@ -187,4 +190,42 @@ test('Portal source probe is opt-in and never accepts an operator capacity estim
  assert.ok(src.includes('BLOFY_STREAM_MIRROR_PREFLIGHT_QUIET_WINDOW_CONFIRMED'));
  assert.ok(src.includes('loadPrivateMirrorCapacity'));
  assert.ok(src.includes('probeStagedMirrorSource'));
+});
+
+test('weak ETag without Last-Modified is not a durable media source version',async()=>{
+ const out=await probeStagedMirrorSource({
+  source:SOURCE_ROW,kind:KIND,item:ITEM,
+  credentials:{username:'demo_user',password:'secret_pass'},
+  validateOrigin:async()=>{},
+  fetchImpl:async()=>new Response(Buffer.alloc(4096),{status:206,
+   headers:{'content-range':'bytes 0-4095/'+BYTES,
+    'content-length':'4096','etag':'W/"weak-proxy-version"'}})
+ });
+ assert.equal(out.ok,true);
+ assert.equal(out.validatorPresent,false);
+ assert.equal(out.validatorSha256,null);
+ const verdict=assessMirrorPreflight({
+  sourceId:SOURCE,kind:KIND,id:ID,probe:out,
+  capacity:CAPACITY,licenseReference:LICENSE,now});
+ assert.equal(verdict.ok,false);
+ assert.ok(verdict.blockedBy.includes('source_version_validator_missing'));
+});
+
+test('changed strong source ETag generates different SHA-256 without exposing raw ETag',async()=>{
+ const hashes=[];
+ for(const etag of ['"binary-v1"','"binary-v2"']){
+  const r=await probeStagedMirrorSource({
+   source:SOURCE_ROW,kind:KIND,item:ITEM,
+   credentials:{username:'demo_user',password:'secret_pass'},
+   validateOrigin:async()=>{},
+   fetchImpl:async()=>new Response(Buffer.alloc(4096),{status:206,
+    headers:{'content-range':'bytes 0-4095/'+BYTES,
+     'content-length':'4096','etag':etag}})
+  });
+  assert.equal(r.ok,true);
+  assert.equal(r.validatorPresent,true);
+  assert.ok(!JSON.stringify(r).includes('binary-v'));
+  hashes.push(r.validatorSha256);
+ }
+ assert.notEqual(hashes[0],hashes[1]);
 });
