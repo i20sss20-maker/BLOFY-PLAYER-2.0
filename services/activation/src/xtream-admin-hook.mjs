@@ -7,6 +7,7 @@ import {listIndexedXtreamMirrorPage} from './xtream-mirror-inventory.mjs';
 import {resolveExclusiveApprovedSaleh} from './xtream-approved-saleh-selector.mjs';
 import {stageMirrorIntake,listMirrorIntake,cancelMirrorIntake,validateMirrorIntakeSelection} from './xtream-mirror-transfer-intake.mjs';
 import {probeStagedMirrorSource,recordMirrorPreflight} from './xtream-mirror-transfer-preflight.mjs';
+import {loadPrivateMirrorCapacity} from './content-hub-private-mirror-capacity-bridge.mjs';
 import {reconcileStreamCatalogPage} from './content-hub-private-mirror-reconcile-bridge.mjs';
 import {forwardStreamS3HeadAudit} from './content-hub-private-head-audit-bridge.mjs';
 import {configuredDailySourceId,riyadhCatalogDay,scheduleDailyApprovedCatalog,
@@ -3658,21 +3659,27 @@ async function unifiedStreamBridge(req,res,url){
       if(catalog.rowCount!==1)return json(res,404,{ok:false,
         code:'mirror_preflight_catalog_item_missing'});
       const row=catalog.rows[0];
-      const proof=await probeStagedMirrorSource({
-        source,kind,item:{mediaId:String(row.media_id),
-          extension:String(row.extension||'').toLowerCase()},
-        credentials:decryptCredentials(source),
-        validateOrigin:assertPublicXtreamUrl,
-        fetchImpl:fetch
-      });
+      // Independent private bucket scan and one 4KiB source proof may run
+      // concurrently to fit the operator proxy time budget. Neither copies.
+      const [proof,capacityResult]=await Promise.all([
+        probeStagedMirrorSource({
+          source,kind,item:{mediaId:String(row.media_id),
+            extension:String(row.extension||'').toLowerCase()},
+          credentials:decryptCredentials(source),
+          validateOrigin:assertPublicXtreamUrl,fetchImpl:fetch
+        }),
+        loadPrivateMirrorCapacity({
+          token:String(process.env.BLOFY_CONTENT_HUB_OPERATOR_TOKEN||'')
+        })
+      ]);
       if(!proof.ok)return json(res,503,proof);
-      // No storage snapshot is accepted from this request or the operator.
-      // A future Content Hub signed usage attestation must be integrated
-      // before an entry can reserve budget or become worker-eligible.
+      // An operator cannot invent private S3 capacity. Without a fresh,
+      // signed Hub scan, retain measured size only (never worker-ready).
       const saved=await recordMirrorPreflight(controlPool,{
         sourceId,kind,id,probe:proof,
         licenseReference:String(input.licenseReference||''),
-        capacity:null,ownerConfirmed:true
+        capacity:capacityResult.ok?capacityResult.capacity:null,
+        ownerConfirmed:true
       });
       return json(res,saved.ok?200:409,saved,{'cache-control':'no-store'});
     }catch{return json(res,503,{ok:false,
