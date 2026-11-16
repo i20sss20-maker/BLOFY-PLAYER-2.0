@@ -7,8 +7,8 @@ const SAFE={
  BLOFY_QA_SYNTHETIC_AV:'1',
  BLOFY_QA_ISOLATED_BUCKET:'1',
  BLOFY_QA_REAL_PG_MIRROR:'1',
- BLOFY_QA_EXPECTED_BUCKET:'blofy-mirror-s3-isolated-qa',
- BLOFY_CONTENT_HUB_S3_BUCKET:'blofy-mirror-s3-isolated-qa',
+ BLOFY_QA_EXPECTED_BUCKET:'blofy-mirror-s3-isolated-qa-pkbfbm',
+ BLOFY_CONTENT_HUB_S3_BUCKET:'blofy-mirror-s3-isolated-qa-pkbfbm',
  BLOFY_QA_PG_CONNECTION_URL:
   'postgresql://qa:local-test@postgres-ao7c.railway.internal:5432/railway',
  BLOFY_QA_EXPECTED_PG_HOST:'postgres-ao7c.railway.internal',
