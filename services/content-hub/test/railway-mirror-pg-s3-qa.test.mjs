@@ -67,7 +67,7 @@ test('the PG/S3 runner fails closed if private QA bucket is not empty',async()=>
   buildMedia:()=>{gen++;throw Error('must-not-generate-video')}
  });
  assert.equal(result.ok,false);
- assert.equal(result.code,'qa_integration_cleanup_unverified');
+ assert.equal(result.code,'qa_integration_bucket_not_empty');
  assert.equal(result.sourceRequestsToXtream,0);
  assert.equal(gen,0);
  assert.equal(db,0);
