@@ -443,8 +443,10 @@ test('real encrypted S3+PG+FFmpeg: lost ACK recovery and SHA/AV for movie and ep
    // with no extra Xtream connection or subscriber app change.
    const parallel=await Promise.all(Array.from({length:10},(_,i)=>{
     const url=i%2?endpointEpisode:endpointMovie;
-    const from=8*1024*1024-512+(i*13);
-    const to=from+2047;
+    // Every requested range crosses the part boundary but stays
+    // within the final 127-byte trailing part of this fixture.
+    const from=8*1024*1024-80+(i*8);
+    const to=from+120;
     return fetch(url,{headers:{...headers,
      range:'bytes='+from+'-'+to}}).then(async response=>{
       assert.equal(response.status,206);
@@ -455,7 +457,7 @@ test('real encrypted S3+PG+FFmpeg: lost ACK recovery and SHA/AV for movie and ep
     });
    }));
    assert.equal(parallel.length,10);
-   assert.ok(parallel.every(length=>length===2048));
+   assert.ok(parallel.every(length=>length===121));
    assert.equal(sourceCalls,4,
     'HTTP seek and ten parallel completed-media readers must use only S3');
   }finally{await new Promise(resolve=>qa.server.close(resolve))}
