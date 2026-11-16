@@ -433,3 +433,36 @@ These owner QA routes are NOT public app endpoints, and synthetic
 media tests do not grant rights to store/redistribute Xtream content.
 Production flags remain OFF; private real-media/device tests and
 individual verified rights remain outstanding.
+
+
+## In-process Xtream source transport failure cooldown (2026-11-16)
+
+- Production read-only Railway Portal logs contained two classified
+  `xtream_transport_connection_reset` incidents at
+  2026-11-16T03:33:04Z and 2026-11-16T03:36:15Z.
+  These errors are NOT evidence of the subscriber stream count.
+- New `xtream-mirror-source-transport-guard.mjs` records only a
+  whitelisted category of network failures observed by the existing
+  direct customer media relay. No provider URL, password, token,
+  customer information, or raw error text is retained.
+- Each such observed failure creates/refreshes a 30-minute local
+  `saleh` source cooldown. This prevents NEW private mirror approvals
+  and ranges via the existing conservative headroom gate, but NEVER
+  interrupts/changes customer playback, media retry count or routing.
+- The operator's read-only headroom panel shows a safe Arabic reason
+  and approximate remaining cooldown, without a new Xtream request.
+- The risk gauge is conservative and explicitly covers only one
+  running Portal process; it does NOT measure external relay traffic,
+  other replicas or full provider bandwidth. It fails closed on
+  unknown source, internal saturation or system-clock regression.
+- This new safeguard exists on DRAFT development branch only.
+  Historical production resets are not retrospectively loaded into
+  an uninstalled per-process gauge; it must not be described as
+  actively protecting the current production Portal until deployed.
+- CI tested fixed 30-minute timeout, source isolation, saturation,
+  clock regressions, invalid source/reason inputs and owner UI.
+  Backend and STREAM operator CI succeeded on the feature branches.
+
+Release gates remain: verified ownership/rights for each stored
+video, source concurrency/bandwidth headroom, permissioned real-media
+pilot and app playback. Automatic bulk Xtream copies remain OFF.
