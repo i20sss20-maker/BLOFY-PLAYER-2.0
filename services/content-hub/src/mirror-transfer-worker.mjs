@@ -267,6 +267,7 @@ export async function runMirrorTransferChunk({kind,id,env={},
   checkpointWriteAttempted=true;
   await lease[record](runId,{partNumber:no,key,bytes:chunk.buffer.length,
    sha256,validator:chunk.validator});
+  checkpointWriteAttempted=false; // PostgreSQL returned definitive ACK.
   run.parts.push({partNumber:no,key,bytes:chunk.buffer.length,sha256});
   key=null;uploaded=false;
   const bytesCopied=copied+chunk.buffer.length;
@@ -276,7 +277,7 @@ export async function runMirrorTransferChunk({kind,id,env={},
   if(no<totalParts)return {...NO_TRAFFIC,ok:true,
    code:'mirror_worker_checkpoint_saved',completed:false,
    runId,expectedBytes:total,bytesCopied,totalParts,partsSaved:no,
-   sourceMediaRequests:providerRequests,storageWrittenBytes:chunk.buffer.length};
+   sourceMediaRequests:providerRequests,storageWrittenBytes};
   return await verifyAndFinish();
  }catch{
   // Unknown database acknowledgement means the checkpoint MAY already be
