@@ -82,3 +82,35 @@ credentials were mounted and there were **0 source-media requests**.
 Keep subscriber routes and automatic source-transfer flags OFF until the
 independent per-source authorization, headroom, cost and real-device gates
 are satisfied.
+
+
+## 16 Nov 17:36 Riyadh — on-demand shared-live concurrency canary
+
+- The isolated lab MediaMTX was configured with a separate `canary` path
+  using `runOnDemand` instead of a permanent provider ingest. The publisher
+  uses only local generated test frames (H264) and tone (AAC), with at most
+  three test readers. Official MediaMTX docs confirm this on-demand hook
+  is started by a reader and ends after readers depart.
+- Independent QA script
+  `scripts/railway-migration-on-demand-smoke.mjs` opened **two concurrent
+  FFmpeg HLS readers** over Railway private DNS, each decoding 2s of video
+  AND audio. It refuses any non-test project, environment, or synthetic flag.
+- Actual Railway deployment
+  `97e504af-a18d-4fbe-9320-2a8eb2b2da2f` finished SUCCESS, logged
+  `BLOFY_MIGRATION_ON_DEMAND_SMOKE`:
+  `ok=true`, `code=canary_two_viewers_decoded`,
+  `viewersTested=2`, `passedViewers=2`, `customerCutover=false`,
+  `sourceMediaRequests=0`.
+- Concurrent MediaMTX runtime logs show **one** `runOnDemand command
+  started`, **one** RTSP publishing session to `canary`, and **two**
+  simultaneous HLS reader sessions. This supports one shared synthetic
+  ingest for two clients. It does NOT prove a provider will allow 2
+  real subscribers, 10 viewers, long-running stability, or the absence
+  of external session limits. The runner itself deliberately reports
+  `actualPublisherCountVerified=false`; the separate runtime log
+  provides observational single-publisher evidence only.
+- No Xtream source keys/URLs, customer codes, customer playback routes or
+  production volume objects were used or changed.
+- Existing server `blofy-migration-live-lab-test.up.railway.app` is
+  test-only. Real source relay remains gated on demonstrable origin
+  permissions, fresh capacity and connection-reset diagnosis.
