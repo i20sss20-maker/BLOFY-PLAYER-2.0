@@ -225,7 +225,8 @@ export async function runIsolatedMirrorPgS3({
      usage.objectCount===0&&usage.usedBytes===0;
    }catch{report.s3ObjectsCleaned=false}
   }
-  if(!report.s3ObjectsCleaned||!report.dbRowsCleaned){
+  if((storage&&!report.s3ObjectsCleaned)||
+     (pool&&!report.dbRowsCleaned)){
    report.ok=false;report.code='qa_integration_cleanup_unverified';
   }
  }
