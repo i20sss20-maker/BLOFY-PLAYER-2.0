@@ -1,9 +1,9 @@
-name: BLOFY STREAM 55.8.31 Expanded Channels and Audio Sync Owner QA
+name: BLOFY STREAM 55.8.32 Expanded Channels and Audio Sync Owner QA
 # Require proven TV voice shortcuts, source failure classifier, clock-independent status and same-SHA QA before owner signing.
 on:
   push:
     branches:
-      - fix/stream-more-channels-sync-415-20261116
+      - fix/stream-audio-backward-sync-55-8-32-20261116
     paths:
       - '.github/workflows/stream-black-screen-owner-signed-qa-20261116.yml'
       - 'app/src/main/java/tv/blofy/player/ui/player/LiveChannelOverlayLifecycle.kt'
@@ -11,13 +11,15 @@ on:
       - 'app/src/main/java/tv/blofy/player/ui/player/StreamArabicAudioCatalog.kt'
       - 'app/build.gradle.kts'
       - 'app/src/main/java/tv/blofy/player/ui/player/StreamArabicAudioSession.kt'
+      - 'app/src/main/java/tv/blofy/player/ui/player/ArabicSidecarTimingPolicy.kt'
+      - 'app/src/test/java/tv/blofy/player/ui/player/ArabicSidecarTimingPolicyTest.kt'
       - 'app/src/main/java/tv/blofy/player/ui/player/LiveChannelPanelPolicy.kt'
       - 'app/src/main/java/tv/blofy/player/ui/player/StreamAudioRetryPolicy.kt'
       - 'app/src/test/java/tv/blofy/player/ui/player/StreamAudioRetryPolicyTest.kt'
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   actions: read
 
 concurrency:
@@ -46,11 +48,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          grep -Fq 'versionCode = 2000108' app/build.gradle.kts
-          grep -Fq 'versionName = "2.0.0-rc07.55.8.31"' app/build.gradle.kts
+          grep -Fq 'versionCode = 2000109' app/build.gradle.kts
+          grep -Fq 'versionName = "2.0.0-rc07.55.8.32"' app/build.gradle.kts
           # Require the specific panel implementation, not the previous detached HUD.
           grep -Fq 'StreamAudioRetryPolicy.shouldRetryInvalidAudio' app/src/main/java/tv/blofy/player/ui/player/StreamArabicAudioSession.kt
-          grep -Fq 'addQuickSync("+5s", 5)' app/src/main/java/tv/blofy/player/ui/player/LiveChannelOverlayLifecycle.kt
+          grep -Fq 'addQuickSync("+5ث", 5)' app/src/main/java/tv/blofy/player/ui/player/LiveChannelOverlayLifecycle.kt
+          grep -Fq 'SLOW_DOWN_RATE' app/src/main/java/tv/blofy/player/ui/player/StreamArabicAudioSession.kt
+          grep -Fq 'wallTimeToSyncMs' app/src/main/java/tv/blofy/player/ui/player/ArabicSidecarTimingPolicy.kt
+          grep -Fq 'reversingNonSeekableLiveAudioAccumulatesDelayWithoutSilence' app/src/test/java/tv/blofy/player/ui/player/ArabicSidecarTimingPolicyTest.kt
           grep -Fq 'resizeActions(76)' app/src/main/java/tv/blofy/player/ui/player/LiveChannelOverlayLifecycle.kt
           grep -Fq 'val actions = buildAttachedActions' app/src/main/java/tv/blofy/player/ui/player/LiveChannelOverlayLifecycle.kt
           grep -Fq 'ownerBrandReplacesOnlyVisibleAnesLabelsAndKeepsAudioIds' app/src/test/java/tv/blofy/player/ui/player/StreamAnisAudioCatalogTest.kt
@@ -102,7 +107,7 @@ jobs:
           grep -Fq 'LIVE_FIRST_FRAME_TIMEOUT_MS = 16_000L' app/src/main/java/tv/blofy/player/core/playback/BlofyPlaybackSession.kt
           grep -Fq 'noFirstFrameRecoveries == MAX_NO_FIRST_FRAME_RECOVERIES' app/src/main/java/tv/blofy/player/core/playback/BlofyPlaybackSession.kt
           gradle --no-daemon --max-workers=2 -PBLOFY_ACTIVATION_BASE_URL=http://127.0.0.1:9 -PBLOFY_UPDATE_BASE_URL=http://127.0.0.1:9 testDebugUnitTest
-      - name: Sign owner-only full STREAM 55.8.31 with black screen fix
+      - name: Sign owner-only full STREAM 55.8.32 with black screen fix
         shell: bash
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.BLOFY_ANDROID_KEYSTORE_BASE64 }}
@@ -138,7 +143,7 @@ jobs:
           test -s "$apk"
           tools="$ANDROID_HOME/build-tools/$ANDROID_BUILD_TOOLS_VERSION"
           "$tools/aapt" dump badging "$apk" > "$RUNNER_TEMP/stream-badging.txt"
-          grep -Fq "name='tv.blofy.player.v2.stream' versionCode='2000108' versionName='2.0.0-rc07.55.8.31-STREAM'" "$RUNNER_TEMP/stream-badging.txt"
+          grep -Fq "name='tv.blofy.player.v2.stream' versionCode='2000109' versionName='2.0.0-rc07.55.8.32-STREAM'" "$RUNNER_TEMP/stream-badging.txt"
           ! grep -Fq 'application-debuggable' "$RUNNER_TEMP/stream-badging.txt"
           "$tools/apksigner" verify --verbose --print-certs "$apk" > "$RUNNER_TEMP/apk-cert.txt"
           cert="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/apk-cert.txt" | head -n1 | tr -d '[:space:]-:' | tr '[:lower:]' '[:upper:]')"
@@ -149,18 +154,36 @@ jobs:
             grep -Fxq "lib/$abi/libffmpegJNI.so" "$RUNNER_TEMP/entries.txt"
           done
           mkdir -p build/owner-qa
-          name="BLOFY-STREAM-55.8.31-CHANNELS-SYNC-OWNER-SIGNED.apk"
+          name="BLOFY-STREAM-55.8.32-AUDIO-SYNC-SIGNED.apk"
           cp "$apk" "build/owner-qa/$name"
           (cd build/owner-qa && sha256sum "$name" > SHA256SUMS && sha256sum -c SHA256SUMS)
-          printf 'app_id=tv.blofy.player.v2.stream\nversion_code=2000108\nversion_name=2.0.0-rc07.55.8.31-STREAM\nsource_commit=%s\nchannel=private-owner-qa\n' "$GITHUB_SHA" > build/owner-qa/BUILD-IDENTITY.txt
-          echo "Owner-signed full STREAM 55.8.31 APK verified; NOT published to customers." >> "$GITHUB_STEP_SUMMARY"
+          printf 'app_id=tv.blofy.player.v2.stream\nversion_code=2000109\nversion_name=2.0.0-rc07.55.8.32-STREAM\nsource_commit=%s\nchannel=private-owner-qa\n' "$GITHUB_SHA" > build/owner-qa/BUILD-IDENTITY.txt
+          echo "Owner-signed full STREAM 55.8.32 APK verified; Published to GitHub after CI verification; site and updater handled separately." >> "$GITHUB_STEP_SUMMARY"
       - name: Upload full owner-signed APK for private testing only
         uses: actions/upload-artifact@v4
         with:
-          name: BLOFY-STREAM-55.8.31-CHANNELS-SYNC-OWNER-SIGNED-${{ github.sha }}
+          name: BLOFY-STREAM-55.8.32-AUDIO-SYNC-SIGNED-${{ github.sha }}
           path: build/owner-qa/
           if-no-files-found: error
           retention-days: 7
+      - name: Publish owner-approved direct APK to GitHub releases after verification
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="blofy-stream-55.8.32-signed-20261116"
+          apk="build/owner-qa/BLOFY-STREAM-55.8.32-AUDIO-SYNC-SIGNED.apk"
+          test -s "$apk"
+          (cd build/owner-qa && sha256sum -c SHA256SUMS)
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Release already exists, do not overwrite"; exit 1
+          fi
+          gh release create "$tag" "$apk" build/owner-qa/SHA256SUMS build/owner-qa/BUILD-IDENTITY.txt \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "BLOFY STREAM 55.8.32 | Audio Backward Sync Fix" \
+            --notes "Owner-approved direct signed APK. Fix live commentary back/delay synchronization, preserve existing broadcast, and improve remote navigation and channels display. Release requires physical TV confirmation for full audio behavior. No automatic customer update is triggered."
+          echo "Direct APK: https://github.com/$GITHUB_REPOSITORY/releases/download/$tag/BLOFY-STREAM-55.8.32-AUDIO-SYNC-SIGNED.apk" >> "$GITHUB_STEP_SUMMARY"
       - name: Remove temporary signing material
         if: always()
         run: rm -f "$RUNNER_TEMP/blofy-production.keystore" "$RUNNER_TEMP/blofy-production.b64"
