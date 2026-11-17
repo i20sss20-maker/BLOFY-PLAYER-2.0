@@ -3,6 +3,7 @@
 // The caller must invoke this ONLY for a capability URL issued by the relay.
 const CODES=new Set([
   'relay_provider_not_found',
+  'relay_provider_http_509',
   'relay_first_byte_timeout',
   'relay_transport_connection_reset',
   'relay_transport_timeout',
@@ -28,6 +29,7 @@ export async function readSanitizedXtreamRelayFailure(response){
     const value=JSON.parse(Buffer.concat(parts).toString('utf8'));
     if(!value||value.ok!==false||!CODES.has(value.code))return null;
     if(value.code==='relay_provider_not_found'&&value.upstreamStatus!==404)return null;
+    if(value.code==='relay_provider_http_509'&&value.upstreamStatus!==509)return null;
     return value.code;
   }catch{return null}
   finally{await reader.cancel().catch(()=>{});reader.releaseLock()}
