@@ -33,16 +33,29 @@ export function dueDailyCatalog(now=new Date(),env={}){
  return {due:true,code:'daily_catalog_due',day:date.day,sourceId};
 }
 async function ensureTable(db){
- await db.query(`CREATE TABLE IF NOT EXISTS ${TABLE} (
-  source_id UUID NOT NULL,
-  local_day DATE NOT NULL,
-  requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  started_at TIMESTAMPTZ,
-  finished_at TIMESTAMPTZ,
-  state TEXT NOT NULL DEFAULT 'queued'
-    CHECK(state IN ('queued','running','completed','partial','failed','cancelled')),
-  PRIMARY KEY(source_id,local_day)
- )`);
+ try{
+  await db.query(`CREATE TABLE IF NOT EXISTS ${TABLE} (
+   source_id UUID NOT NULL,
+   local_day DATE NOT NULL,
+   requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+   started_at TIMESTAMPTZ,
+   finished_at TIMESTAMPTZ,
+   state TEXT NOT NULL DEFAULT 'queued'
+     CHECK(state IN ('queued','running','completed','partial','failed','cancelled')),
+   PRIMARY KEY(source_id,local_day)
+  )`);
+ }catch(error){
+  // PostgreSQL CREATE TABLE IF NOT EXISTS is not atomic across processes.
+  // When two Railway replicas first schedule at 04:00, one can receive
+  // pg_type_typname_nsp_index 23505 despite IF NOT EXISTS. Only accept
+  // that precise race after independently confirming the exact table now
+  // exists; never swallow a generic database or schema failure.
+  if(error?.code!=='23505'||
+     error?.constraint!=='pg_type_typname_nsp_index')throw error;
+  const check=await db.query('SELECT to_regclass($1::text) AS table_oid',
+   ['public.'+TABLE]);
+  if(!check.rows?.[0]?.table_oid)throw error;
+ }
 }
 export async function scheduleDailyApprovedCatalog({
  env={},now=new Date(),db,sourceById,enqueue,sourceBusy=()=>false
@@ -72,9 +85,15 @@ export async function scheduleDailyApprovedCatalog({
   code:'daily_catalog_already_requested_today',
   day:due.day,sourceId:due.sourceId};
  try{
-  const result=enqueue(due.sourceId,['live','movie','series'],{
+  // The durable daily claim is not proof of queue acceptance. Await a
+  // future async queue adapter, reject missing acknowledgements, and never
+  // describe a direct-dispatch (queued=false) as an unsuccessful enqueue.
+  const result=await enqueue(due.sourceId,['live','movie','series'],{
    dailyReceipt:true,day:due.day});
-  return {ok:true,requested:true,queued:result?.queued===true,
+  if(typeof result?.queued!=='boolean')
+   throw Error('daily_catalog_queue_ack_missing');
+  return {ok:true,requested:true,accepted:true,
+   queued:result.queued,dispatchState:result.queued?'waiting':'dispatched',
    code:'daily_catalog_enqueued',day:due.day,sourceId:due.sourceId,
    mediaFilesCopied:0,customerCutover:false};
  }catch{
@@ -108,9 +127,13 @@ export async function recordDailyCatalogOutcome(db,{sourceId,day,state}={}){
  return {recorded:r.rowCount===1,state,
   mediaFilesCopied:0,customerCutover:false};
 }
-export async function readDailyCatalogReceipts(db,{sourceId,limit=7}={}){
+export async function readDailyCatalogReceipts(db,{
+ sourceId,limit=7,now=new Date()
+}={}){
+ const clock=new Date(now).getTime();
  if(!UUID.test(String(sourceId||''))||
-    !Number.isSafeInteger(limit)||limit<1||limit>14)
+    !Number.isSafeInteger(limit)||limit<1||limit>14||
+    !Number.isFinite(clock))
   throw Error('daily_catalog_receipts_invalid');
  const r=await db.query(`SELECT local_day,requested_at,started_at,
   finished_at,state FROM ${TABLE}
@@ -119,13 +142,33 @@ export async function readDailyCatalogReceipts(db,{sourceId,limit=7}={}){
    if(e?.code==='42P01')return {rows:[]};
    throw e;
   });
- return {ok:true,readOnly:true,
-  sourceId,receipts:(r.rows||[]).map(x=>({
+ // A stale receipt is an OBSERVATION only: a queued job may have been
+ // lost on restart, or a long import may still be running. Never auto-retry
+ // from this reader, because the provider may be busy on another replica.
+ const receipts=(r.rows||[]).map(x=>{
+  const state=String(x.state||'queued');
+  const stamp=state==='running'?(x.started_at||x.requested_at):
+   x.requested_at;
+  const startMs=stamp?new Date(stamp).getTime():NaN;
+  const ageMinutes=Number.isFinite(startMs)?
+   Math.max(0,Math.floor((clock-startMs)/60000)):null;
+  const attentionCode=ageMinutes!==null&&
+    ((state==='queued'&&ageMinutes>=60)?
+      'queued_over_one_hour_review_required':
+     (state==='running'&&ageMinutes>=360)?
+      'running_over_six_hours_review_required':null);
+  return {
    day:typeof x.local_day==='string'?x.local_day:
     new Date(x.local_day).toISOString().slice(0,10),
-   state:String(x.state||'queued'),
-   requestedAt:x.requested_at||null,startedAt:x.started_at||null,
-   finishedAt:x.finished_at||null,
-   final:Boolean(x.finished_at&&TERMINAL.has(x.state))
-  })),mediaFilesCopied:0,customerCutover:false};
+   state,requestedAt:x.requested_at||null,
+   startedAt:x.started_at||null,finishedAt:x.finished_at||null,
+   final:Boolean(x.finished_at&&TERMINAL.has(state)),
+   ageMinutes:TERMINAL.has(state)?null:ageMinutes,
+   attentionCode,needsOperatorReview:Boolean(attentionCode)
+  };
+ });
+ return {ok:true,readOnly:true,sourceId,receipts,
+  manualReviewSuggested:receipts.some(x=>x.needsOperatorReview),
+  automaticRetryStarted:false,providerRequests:0,
+  mediaFilesCopied:0,customerCutover:false};
 }
