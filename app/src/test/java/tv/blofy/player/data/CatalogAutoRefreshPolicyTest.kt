@@ -37,6 +37,8 @@ class CatalogAutoRefreshPolicyTest {
         assertTrue(CatalogAutoRefreshPolicy.isDue(now - daily, now, daily))
         assertTrue(CatalogAutoRefreshPolicy.isDue(0L, now, daily))
         assertFalse(CatalogAutoRefreshPolicy.isDue(now + 3600L, now, daily))
+        assertTrue(CatalogAutoRefreshPolicy.isDue(now + 3600L, now, daily,
+            clockRollbackIsDue = true))
     }
 
     @Test fun clockRollbackDoesNotCauseRepeatedDownloads() {
