@@ -209,7 +209,7 @@ class CatalogRefreshWorker(
             currentCoroutineContext().ensureActive()
             when {
                 promoted -> Result.success()
-                manual && lastStage == "SAVE" ->
+                CatalogRefreshCommitPolicy.shouldFailManualCommitTimeout(manual, lastStage) ->
                     Result.failure(workDataOf(KEY_ERROR to "COMMIT_TIMEOUT"))
                 else -> retryOrFail(manual, "TIMEOUT")
             }
