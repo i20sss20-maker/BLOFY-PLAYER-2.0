@@ -4,6 +4,8 @@ import {createHash} from 'node:crypto';
 import {Readable} from 'node:stream';
 import {episodeCopyReadiness,runOneEpisodeChunk}
  from '../src/episode-chunk-pilot.mjs';
+import {validEpisodeContainerHeader,strongEpisodeSourceEtag}
+ from '../src/episode-container-proof.mjs';
 const CHUNK=8*1024*1024;
 const UUID='9adc6472-5d4e-4359-83e4-0298cc038ae3';
 const candidate={gatewayId:127434,mediaKind:'episode',sourceName:'saleh',
@@ -22,6 +24,7 @@ const config=()=>({
 });
 function mocks({tamperSource=false}={}){
  const film=Buffer.alloc(CHUNK+1024,88);
+ film.set([0x1a,0x45,0xdf,0xa3],0); // valid Matroska EBML magic
  const objects=new Map(),writes=[];
  const run={state:'staged',parts:[],validator:null};
  let lockHeld=false,reads=0,wasVerified=false;
@@ -249,4 +252,135 @@ test('valid lengthless chunked 206 ranges remain usable for one exact verified e
  assert.equal(m.getWrites(),2);
  assert.equal(m.verified(),true);
  assert.equal(requests.length,10);
+});
+
+test('container gate rejects full-length binary-looking provider login/error bodies',async()=>{
+ const payloads=[
+  Buffer.alloc(4096,0x58),
+  Buffer.from('<html><body>Subscription expired</body></html>'),
+  Buffer.from('{"error":"not authorized"}'),
+  Buffer.from('#EXTM3U\n#EXTINF:...', 'utf8')
+ ];
+ for(const payload of payloads){
+  const m=mocks();
+  let count=0;
+  const fetchImpl=async(_,opts)=>{
+   count++;
+   const [,a,b]=/^bytes=(\d+)-(\d+)$/.exec(opts.headers.range);
+   const from=Number(a),to=Number(b);
+   const buffer=Buffer.alloc(to-from+1,0x58);
+   if(from===0)payload.copy(buffer,0,0,Math.min(buffer.length,payload.length));
+   return new Response(buffer,{status:206,headers:{
+    'content-type':'application/octet-stream',
+    'content-range':`bytes ${from}-${to}/${m.film.length}`,
+    'content-length':String(buffer.length)
+   }});
+  };
+  const r=await runOneEpisodeChunk({...m,env:config(),
+   candidateInspector:async()=>({ok:true,candidates:[candidate]}),
+   fetchImpl});
+  assert.equal(r.ok,false);
+  assert.equal(r.code,'episode_source_not_media');
+  assert.equal(r.errorStage,'boundary_precheck');
+  assert.equal(m.run.state,'failed');
+  assert.equal(m.getWrites(),0);
+  assert.equal(m.run.parts.length,0);
+  assert.equal(count,1,'reject before reading last boundary or uploading');
+ }
+});
+test('valid sniffed binary containers and legal leading free MP4 atom',()=>{
+ const mkv=Buffer.alloc(4096);mkv.set([0x1a,0x45,0xdf,0xa3]);
+ assert.equal(validEpisodeContainerHeader(mkv,'mkv'),true);
+ assert.equal(validEpisodeContainerHeader(mkv,'mp4'),false);
+ const mp4=Buffer.alloc(4096);
+ mp4.writeUInt32BE(24,0);mp4.write('ftyp',4,'ascii');
+ assert.equal(validEpisodeContainerHeader(mp4,'mp4'),true);
+ const front=Buffer.alloc(4096);
+ front.writeUInt32BE(8,0);front.write('free',4,'ascii');
+ front.writeUInt32BE(24,8);front.write('ftyp',12,'ascii');
+ assert.equal(validEpisodeContainerHeader(front,'mp4'),true);
+ const avi=Buffer.alloc(4096);avi.write('RIFF',0,'ascii');
+ avi.write('AVI ',8,'ascii');
+ assert.equal(validEpisodeContainerHeader(avi,'avi'),true);
+ const ts=Buffer.alloc(4096);
+ for(const i of [0,188,376])ts[i]=0x47;
+ assert.equal(validEpisodeContainerHeader(ts,'ts'),true);
+ ts[188]=0x00;
+ assert.equal(validEpisodeContainerHeader(ts,'ts'),false);
+ assert.equal(validEpisodeContainerHeader(Buffer.alloc(4096),'unknown'),false);
+ assert.equal(validEpisodeContainerHeader(Buffer.alloc(511),'mkv'),false);
+});
+test('weak ETag and last-modified cannot substitute for strong same-file checks',()=>{
+ assert.equal(strongEpisodeSourceEtag('"strong-file-revision"'),
+  '"strong-file-revision"');
+ for(const v of [undefined,null,'','W/"weak"','W/"12345"',
+  '"newline\n"', 'not-quoted', '"'+('a'.repeat(150))+'"'])
+  assert.equal(strongEpisodeSourceEtag(v),null);
+});
+test('first real 8 MiB of invalid provider media is denied even when initial boundary looked valid',async()=>{
+ const m=mocks();
+ let count=0;
+ const fetchImpl=async(_,opts)=>{
+  count++;
+  const [,a,b]=/^bytes=(\d+)-(\d+)$/.exec(opts.headers.range);
+  const from=Number(a),to=Number(b);
+  const bytes=Buffer.from(m.film.subarray(from,to+1));
+  if(count===3){ // first chunk after both successful boundary probes
+   bytes.fill(0x48,0,Math.min(512,bytes.length));
+  }
+  return new Response(bytes,{status:206,headers:{
+   'content-range':`bytes ${from}-${to}/${m.film.length}`,
+   'content-type':'video/x-matroska',
+   'content-length':String(bytes.length)
+  }});
+ };
+ const r=await runOneEpisodeChunk({...m,env:config(),
+  candidateInspector:async()=>({ok:true,candidates:[candidate]}),
+  fetchImpl});
+ assert.equal(r.ok,false);
+ assert.equal(r.code,'episode_source_not_media');
+ assert.equal(r.errorStage,'source_chunk');
+ assert.equal(m.getWrites(),0);
+ assert.equal(m.run.parts.length,0);
+});
+test('weak ETag triggers boundary postcheck instead of being accepted as immutable validator',async()=>{
+ const m=mocks();let count=0;
+ const fetchImpl=async(_,opts)=>{
+  count++;
+  const [,a,b]=/^bytes=(\d+)-(\d+)$/.exec(opts.headers.range);
+  const from=Number(a),to=Number(b);
+  const bytes=Buffer.from(m.film.subarray(from,to+1));
+  return new Response(bytes,{status:206,headers:{
+   'content-range':`bytes ${from}-${to}/${m.film.length}`,
+   'content-length':String(bytes.length),
+   etag:'W/"weak-source-revision"',
+   'last-modified':'Tue, 17 Nov 2026 12:00:00 GMT'
+  }});
+ };
+ const result=await runOneEpisodeChunk({...m,env:config(),
+  candidateInspector:async()=>({ok:true,candidates:[candidate]}),
+  fetchImpl});
+ assert.equal(result.ok,true,result.code);
+ assert.equal(count,5,'must recheck boundary after copy for weak ETag');
+ assert.match(m.run.validator,/^boundary-sha256:/);
+});
+test('strong ETag reduces extra probes while still requiring content byte continuity',async()=>{
+ const m=mocks();let count=0;
+ const fetchImpl=async(_,opts)=>{
+  count++;
+  const [,a,b]=/^bytes=(\d+)-(\d+)$/.exec(opts.headers.range);
+  const from=Number(a),to=Number(b);
+  const bytes=Buffer.from(m.film.subarray(from,to+1));
+  return new Response(bytes,{status:206,headers:{
+   'content-range':`bytes ${from}-${to}/${m.film.length}`,
+   'content-length':String(bytes.length),
+   etag:'"strong-provider-revision"',
+  }});
+ };
+ const result=await runOneEpisodeChunk({...m,env:config(),
+  candidateInspector:async()=>({ok:true,candidates:[candidate]}),
+  fetchImpl});
+ assert.equal(result.ok,true,result.code);
+ assert.equal(count,3,'two boundary probes and exactly one part read');
+ assert.equal(m.run.validator,'"strong-provider-revision"');
 });
