@@ -15,6 +15,7 @@ import {inspectPrivateTimeline,buildPrivateTimelineSegment} from './private-time
 import {createPrivateTimelineClipCache} from './private-timeline-cache.mjs';
 import {auditPrivateHeadBatch} from './private-head-audit.mjs';
 import {auditAllVerifiedPrivateS3Chunks} from './private-full-head-audit.mjs';
+import {auditVerifiedPrivateCopy} from './verified-copy-audit.mjs';
 import {parseSiteQaRange} from './site-qa-range.mjs';
 import {inspectEpisodeCandidates} from './episode-candidates.mjs';
 import {inspectEpisodeSize} from './episode-probe.mjs';
@@ -96,6 +97,7 @@ export function createContentHubServer({storage,lease,
  episodeCandidateInspector=inspectEpisodeCandidates,
  episodeSizeInspector=inspectEpisodeSize,
  episodeChunkRunner=runOneEpisodeChunk,seasonQueueStore=null,catalogStore=null,
+ fullCopyAuditor=auditVerifiedPrivateCopy,
  metadataMatcher=createMetadataMatcher({
   token:process.env.BLOFY_TMDB_READ_TOKEN||'',
   commercialLicenseConfirmed:process.env.BLOFY_TMDB_COMMERCIAL_LICENSE_CONFIRMED==='1'
@@ -113,6 +115,7 @@ export function createContentHubServer({storage,lease,
  let seekPreviewBuilding=false,seekPreviewThrottleUntil=0;
  let timelineRendering=false,timelineLastRequestAt=0;
  let physicalHeadAuditBusy=false;
+ let fullCopyAuditBusy=false,fullCopyAuditAt=0;
  const timelineClipCache=createPrivateTimelineClipCache();
  let episodeProbeBusy=false,episodeProbeAt=0,lastEpisodeProbe=null;
  let episodeCopyBusy=false,episodeCopyAbort=null,lastEpisodeCopy=null;
@@ -161,6 +164,58 @@ export function createContentHubServer({storage,lease,
     uptimeSeconds:Math.floor((Date.now()-started)/1000)});
   if(!safeAuth(req.headers.authorization,token))
    return json(res,401,{ok:false,code:'content_hub_auth_required'});
+  // Optional, operator-only FULL SHA-256 read-back of one previously
+  // verified and explicitly configured private object. No Xtream request,
+  // new storage, playlist changes, or subscriber routing.
+  // Gate defaults OFF. Never automatically runs on service startup.
+  if(path==='/internal/private-copy/audit-full'){
+   if(req.method!=='POST'||String(req.url||'').includes('?'))
+    return json(res,405,{ok:false,code:'private_copy_audit_post_only'});
+   if(pilotEnv.BLOFY_CONTENT_HUB_FULL_SHA_AUDIT_ENABLED!=='1'||
+      pilotEnv.BLOFY_CONTENT_HUB_STORAGE_RIGHTS_CONFIRMED!=='1'||
+      req.headers['x-blofy-owner-action']!=='audit-one-stored-private-copy')
+    return json(res,404,{ok:false,code:'private_copy_audit_disabled'});
+   if(fullCopyAuditBusy)return json(res,429,{
+    ok:false,code:'private_copy_audit_busy'});
+   if(fullCopyAuditAt&&Date.now()-fullCopyAuditAt<60000)
+    return json(res,429,{ok:false,code:'private_copy_audit_cooldown'});
+   let body;
+   try{body=await readSeasonJson(req)}catch{
+    return json(res,400,{ok:false,code:'private_copy_audit_bad_json'});
+   }
+   const kind=body?.kind,runId=body?.runId;
+   const configuredRun=String(kind==='episode'?
+     pilotEnv.BLOFY_CONTENT_HUB_EPISODE_RUN_ID||'':
+     kind==='movie'?pilotEnv.BLOFY_CONTENT_HUB_BATCH_RUN_ID||'':'');
+   if(body?.confirmed!==true||
+      !['movie','episode'].includes(kind)||
+      !/^[A-Za-z0-9_-]{8,80}$/.test(String(runId||''))||
+      !configuredRun||runId!==configuredRun||
+      (kind==='episode'&&pilotEnv.BLOFY_CONTENT_HUB_EPISODE_RIGHTS_CONFIRMED!=='1'))
+    return json(res,403,{ok:false,code:'private_copy_audit_scope_denied'});
+   fullCopyAuditBusy=true;fullCopyAuditAt=Date.now();
+   const controller=new AbortController();
+   const timer=setTimeout(()=>controller.abort(),290000);timer.unref?.();
+   const disconnect=()=>controller.abort();
+   res.once('close',disconnect);
+   try{
+    const result=await fullCopyAuditor({
+     kind,runId,lease,storage,signal:controller.signal,maxDurationMs:285000});
+    if(!controller.signal.aborted&&!res.destroyed)
+     return json(res,result.ok?200:409,{
+      ...result,privateOnly:true,customerCutover:false,
+      providerRequests:0,automaticCopyStarted:false,
+      operatorRequested:true});
+   }catch{
+    if(!controller.signal.aborted&&!res.destroyed)
+     return json(res,503,{ok:false,code:'private_copy_audit_unavailable',
+      providerRequests:0,customerCutover:false});
+   }finally{
+    clearTimeout(timer);res.off('close',disconnect);
+    fullCopyAuditBusy=false;
+   }
+   return;
+  }
   // Bounded physical S3 HEAD check of one verified catalog movie or
   // episode: strictly owner-only, one 8-chunk batch at a time, no media GET.
   if(path==='/internal/mirror/physical-head-audit'){
