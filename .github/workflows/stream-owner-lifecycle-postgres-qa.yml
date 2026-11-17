@@ -1,0 +1,64 @@
+name: BLOFY STREAM real isolated code and reseller PostgreSQL lifecycle
+on:
+  push:
+    branches:
+      - test/stream-real-postgres-code-reseller-lifecycle-20261117
+  pull_request:
+    paths:
+      - 'services/activation/src/xtream-duration-codes.mjs'
+      - 'services/activation/src/xtream-code-commercial.mjs'
+      - 'services/activation/src/stream-distributors.mjs'
+      - 'services/activation/src/stream-owner-admin-readiness.mjs'
+      - 'services/activation/test/stream-owner-lifecycle-postgres.smoke.mjs'
+      - '.github/workflows/stream-owner-lifecycle-postgres-qa.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  isolated-real-postgres-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: blofy_stream_owner_lifecycle_qa
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d blofy_stream_owner_lifecycle_qa"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/blofy_stream_owner_lifecycle_qa
+      PGSSLMODE: disable
+      BLOFY_STREAM_EPHEMERAL_DB_QA: 'true'
+    defaults:
+      run:
+        working-directory: services/activation
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: services/activation/package-lock.json
+      - name: Install production dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Validate production modules and isolated harness
+        run: |
+          node --check src/xtream-duration-codes.mjs
+          node --check src/xtream-code-commercial.mjs
+          node --check src/stream-distributors.mjs
+          node --check src/stream-owner-admin-readiness.mjs
+          node --check test/stream-owner-lifecycle-postgres.smoke.mjs
+      - name: Verify synthetic transaction rules first
+        run: |
+          node --test test/xtream-duration-codes.test.mjs \
+            test/stream-distributors.test.mjs \
+            test/stream-owner-admin-readiness.test.mjs
+      - name: Execute REAL PostgreSQL issue/redeem/revoke + reseller credit and renewal QA
+        run: node test/stream-owner-lifecycle-postgres.smoke.mjs
