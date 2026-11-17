@@ -35,6 +35,7 @@ import tv.blofy.player.core.device.StreamDeviceCompatibility
 import tv.blofy.player.core.diagnostics.StreamConnectionDiagnostics
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.CatalogRefreshWorker
+import tv.blofy.player.data.CatalogAutoRefreshPolicy
 import tv.blofy.player.data.LocalStorageManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.ProviderEntity
@@ -61,6 +62,8 @@ class SettingsActivity : AppCompatActivity() {
     private var refreshState: WorkInfo.State? = null
     private var refreshStage: String? = null
     private var refreshPercent: Int = -1
+    private var refreshItems: Int = 0
+    private var refreshRetry: Int = 0
     private var refreshError: String? = null
     private var refreshRequested = false
     private var refreshNotice: String? = null
@@ -182,6 +185,12 @@ class SettingsActivity : AppCompatActivity() {
         refreshCard = actionCard(copy("تحديث المحتوى", "Refresh content"),
             copy("تحديث القنوات والأفلام والمسلسلات دون حذف المكتبة", "Refresh live, movies and series safely")) { refreshLibrary() }
         addCard(refreshCard)
+        addCard(actionCard(copy("المزامنة التلقائية", "Automatic catalog sync"),
+            if (CatalogAutoRefreshPolicy.isEnabled(applicationContext))
+                copy("مفعلة • مرة يومياً دون إيقاف المشاهدة", "On • daily, without interrupting playback")
+            else copy("متوقفة • اضغط لتفعيلها", "Off • tap to enable")) {
+            chooseStreamAutoSync()
+        })
 
         addSection(page, copy("المشاهدة", "Playback"))
         addCard(cycleSetting(copy("حجم الصورة", "Picture fit"), RuntimeSettings.KEY_ASPECT,
@@ -610,6 +619,28 @@ class SettingsActivity : AppCompatActivity() {
         buildPage()
     }
 
+    private fun chooseStreamAutoSync() {
+        if (!BuildConfig.CODE_ONLY_LOGIN) return
+        val current = CatalogAutoRefreshPolicy.isEnabled(applicationContext)
+        val options = arrayOf(copy("تشغيل المزامنة اليومية", "Enable daily sync"),
+            copy("إيقاف المزامنة", "Disable auto sync"))
+        AlertDialog.Builder(this)
+            .setTitle(copy("مزامنة مكتبة BLOFY", "BLOFY library sync"))
+            .setSingleChoiceItems(options, if (current) 0 else 1) { dialog, selected ->
+                val enabled = selected == 0
+                if (CatalogAutoRefreshPolicy.setEnabled(applicationContext, enabled)) {
+                    provider?.id?.let { id ->
+                        CatalogRefreshWorker.scheduleAutomatic(applicationContext, id)
+                        if (enabled) CatalogRefreshWorker.enqueueIfStale(applicationContext, id)
+                    }
+                    recreate()
+                }
+                dialog.dismiss()
+            }
+            .setNegativeButton(copy("إلغاء", "Cancel"), null)
+            .show()
+    }
+
     /** Settings and Home watch the same manual WorkManager task; neither blocks playback. */
     private fun observeRefresh(providerId: String) {
         if (observedRefreshProvider == providerId) return
@@ -618,6 +649,8 @@ class SettingsActivity : AppCompatActivity() {
         refreshState = null
         refreshStage = null
         refreshPercent = -1
+        refreshItems = 0
+        refreshRetry = 0
         refreshError = null
         refreshRequested = false
         refreshNotice = null
@@ -629,6 +662,8 @@ class SettingsActivity : AppCompatActivity() {
                     refreshState = current?.state
                     refreshStage = current?.progress?.getString("catalog_stage")
                     refreshPercent = current?.progress?.getInt(CatalogRefreshWorker.KEY_PERCENT, -1) ?: -1
+                    refreshItems = current?.progress?.getInt(CatalogRefreshWorker.KEY_ITEMS, 0) ?: 0
+                    refreshRetry = current?.progress?.getInt(CatalogRefreshWorker.KEY_RETRY, 0) ?: 0
                     refreshError = current?.outputData?.getString(CatalogRefreshWorker.KEY_ERROR)
                     if (::status.isInitialized) updateSyncStatus()
                 }
@@ -662,7 +697,11 @@ class SettingsActivity : AppCompatActivity() {
         refreshRequested = true
         refreshStage = null
         refreshPercent = -1
+        refreshItems = 0
+        refreshRetry = 0
         refreshError = null
+        refreshItems = 0
+        refreshRetry = 0
         refreshState = WorkInfo.State.ENQUEUED
         updateSyncStatus()
         try {
@@ -710,6 +749,9 @@ class SettingsActivity : AppCompatActivity() {
         }
         val hint = when {
             refreshNotice != null -> refreshNotice.orEmpty()
+            refreshRequested && refreshState == WorkInfo.State.FAILED && refreshError == "SERIES_TIMEOUT" ->
+                copy("انتهت مهلة فحص المسلسلات. مكتبتك السابقة محفوظة؛ اضغط لإعادة المحاولة.",
+                    "Series scan timed out. Previous library safe; tap to retry.")
             refreshRequested && refreshState == WorkInfo.State.FAILED && refreshError == "COMMIT_TIMEOUT" ->
                 copy("تعذر إنهاء حفظ التحديث. مكتبتك السابقة محفوظة؛ اضغط لإعادة المحاولة.",
                     "Saving the refresh timed out. Your previous library is safe; tap to retry.")
@@ -717,6 +759,9 @@ class SettingsActivity : AppCompatActivity() {
                 if (refreshStage == "SAVE") copy(
                     "اكتمل تنزيل المحتوى • جارٍ حفظ التحديث محلياً ومكتبتك السابقة متاحة",
                     "Download complete • saving locally; your previous library remains available")
+                else if (refreshStage == "SERIES" && refreshItems > 0) copy(
+                    "فحص المسلسلات: $refreshItems عنصر • المحاولة ${refreshRetry + 1} • مكتبتك السابقة محفوظة",
+                    "Scanning series: $refreshItems items • attempt ${refreshRetry + 1} • previous library safe")
                 else section?.let { copy("المرحلة الحالية: $it", "Current section: $it") }
                     ?: copy("يُحدَّث المحتوى والمكتبة السابقة محفوظة", "Updating; your saved library remains available")
             refreshState == WorkInfo.State.ENQUEUED || refreshState == WorkInfo.State.BLOCKED ->
