@@ -62,6 +62,7 @@ class EpisodesActivity : ContentAccessActivity() {
     private var seriesId = ""
     private var restoredOnce = false
     private var syncInProgress = false
+    private var silentEpisodeSync = false
     private var loadState = EpisodeLoadState.LOADING
     private val watchProgress = mutableMapOf<String, Int>()
     private lateinit var deviceKind: DeviceClass.Kind
@@ -251,8 +252,13 @@ class EpisodesActivity : ContentAccessActivity() {
                 updateStatus()
                 syncEpisodes(provider)
             } else {
+                // A cached show opens instantly. The source may have added new
+                // episodes since we last visited; refresh silently in parallel.
                 loadState = EpisodeLoadState.LOADED
                 status.text = getString(R.string.episodes_cached)
+                if (BuildConfig.CODE_ONLY_LOGIN) {
+                    launch { refreshCachedEpisodesSilently(provider) }
+                }
             }
         }
     }
@@ -297,6 +303,34 @@ class EpisodesActivity : ContentAccessActivity() {
     private suspend fun currentProvider(): ProviderEntity = BlofyDatabase.get(applicationContext).dao().provider(providerId)
         ?: throw IllegalStateException(getString(R.string.catalog_provider_not_found))
 
+    private suspend fun refreshCachedEpisodesSilently(provider: ProviderEntity) {
+        if (syncInProgress || !SeriesEpisodeRefreshPolicy.claim(
+                applicationContext, providerId, seriesId
+            )) return
+        syncInProgress = true
+        silentEpisodeSync = true
+        try {
+            // The cached episode list remains visible; Room broadcasts any
+            // newly added episodes without a second loading screen or spinner.
+            val result = withContext(Dispatchers.IO) {
+                PlaylistManager(XtreamClient.episodeApi, BlofyDatabase.get(applicationContext).dao())
+                    .syncSeriesEpisodes(provider, seriesId)
+            }
+            if (result.episodes.isNotEmpty()) {
+                SeriesEpisodeRefreshPolicy.markSuccess(applicationContext, providerId, seriesId)
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            // Keep the known-good cached episodes; retry on another visit,
+            // subject to a bounded interval rather than hammering Xtream.
+        } finally {
+            silentEpisodeSync = false
+            syncInProgress = false
+            if (!isFinishing && !isDestroyed) updateStatus()
+        }
+    }
+
     private suspend fun syncEpisodes(provider: ProviderEntity) {
         if (syncInProgress) return
         syncInProgress = true
@@ -314,7 +348,10 @@ class EpisodesActivity : ContentAccessActivity() {
         loadState = result.fold(
             onSuccess = {
                 when {
-                    it.episodeCount > 0 -> EpisodeLoadState.LOADED
+                    it.episodeCount > 0 -> {
+                        SeriesEpisodeRefreshPolicy.markSuccess(applicationContext, providerId, seriesId)
+                        EpisodeLoadState.LOADED
+                    }
                     it.payloadPresent -> EpisodeLoadState.EMPTY_PROVIDER_RESPONSE
                     else -> EpisodeLoadState.INVALID_PROVIDER_RESPONSE
                 }
@@ -385,7 +422,7 @@ class EpisodesActivity : ContentAccessActivity() {
     private fun updateStatus() {
         if (allEpisodes.isNotEmpty()) {
             val seasons = allEpisodes.map { it.season }.distinct().size
-            status.text = if (syncInProgress) {
+            status.text = if (syncInProgress && !silentEpisodeSync) {
                 getString(R.string.episodes_updating, allEpisodes.size)
             } else {
                 val seasonLabel = resources.getQuantityString(
