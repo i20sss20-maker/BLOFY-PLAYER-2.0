@@ -124,6 +124,9 @@ class CatalogRefreshWorker(
             // Do not write WorkManager's database for every JSON row. The visible
             // percentage comes from measured section progress and never counts backwards.
             val timestamp = System.currentTimeMillis()
+            // Section row counters start from zero independently. Never carry
+            // MOVIES parsed count into SERIES or hide its real progress at 90%.
+            if (stage != lastStage) lastProcessed = -1
             val measuredRowsChanged = processed != null && processed >= 0 &&
                 (lastProcessed < 0 || processed - lastProcessed >= 2_000) &&
                 timestamp - lastPublishedAt >= 2_500L
