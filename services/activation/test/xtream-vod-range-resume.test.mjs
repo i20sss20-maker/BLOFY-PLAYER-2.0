@@ -142,3 +142,15 @@ test('only a named QA account and licensed source can activate the guarded recov
   assert.equal(allowedVodResumePilot({...allowed,...data}),false,JSON.stringify(data));
  }
 });
+
+test('production gateway cannot turn on VOD resume without exact account and source IDs',async()=>{
+ const gateway=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
+ const marker=gateway.slice(gateway.indexOf('const vodPlan=verifiedVodResumePlan({'),
+  gateway.indexOf('let resumedVod=false;'));
+ assert.match(marker,/enabled:allowedVodResumePilot\(/);
+ assert.match(marker,/accountId:String\(account\.id\|\|''\)/);
+ assert.match(marker,/sourceId:String\(row\.server_id\|\|''\)/);
+ assert.match(marker,/BLOFY_XTREAM_VOD_RANGE_RESUME_PILOT_ACCOUNT_ID/);
+ assert.match(marker,/BLOFY_XTREAM_VOD_RANGE_RESUME_PILOT_SOURCE_ID/);
+ assert.doesNotMatch(marker,/enabled:process\.env\.BLOFY_XTREAM_VOD_RANGE_RESUME_ENABLED==='1',\s*kind/);
+});
