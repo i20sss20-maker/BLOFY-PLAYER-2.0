@@ -111,7 +111,9 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             val opening = openingRemoteKey ?: return false
             if (event.action != KeyEvent.ACTION_UP || event.keyCode != opening) return false
             openingRemoteKey = null
-            return SystemClock.uptimeMillis() - openingRemoteAtMs < 1_500L
+            return LiveWindowOpeningKeyPolicy.shouldConsumeRelease(
+                opening, event.keyCode, event.action,
+                SystemClock.uptimeMillis() - openingRemoteAtMs)
         }
         private var loading = false
         private var displayedChannels: List<StreamEntity> = emptyList()
