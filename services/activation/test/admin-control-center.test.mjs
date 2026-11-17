@@ -24,7 +24,7 @@ test('probe uses fixed target and returns time without response content', async 
     hit=url;
     assert.equal(opts.method,'GET');
     assert.equal(opts.redirect,'manual');
-    return {status:200,body:{cancel:async()=>{}}};
+    return Response.json({ok:true});
   };
   const result=await probeControlCenterTarget(CONTROL_CENTER_TARGETS[0],fetchStub,()=>100);
   assert.equal(hit,CONTROL_CENTER_TARGETS[0].endpoint);
@@ -86,4 +86,26 @@ test('status page links to actual same-domain STREAM dashboard and its sections'
   assert.match(html,/href="\/distributor"/);
   assert.doesNotMatch(html,/href="\/stream"/);
   assert.doesNotMatch(html,/href="\/sources-admin#xtream"/);
+});
+
+
+test('HTTP 200 alone is reachable, not green, without explicit health JSON',async()=>{
+  const result=await probeControlCenterTarget(CONTROL_CENTER_TARGETS[0],
+    async()=>new Response('Service is starting',{status:200,
+      headers:{'content-type':'text/plain'}}));
+  assert.equal(result.status,'reachable');
+  assert.match(result.note,/غير مؤكد/);
+});
+
+test('health JSON requiring auth or returning a huge payload stays unverified',async()=>{
+  const result=await probeControlCenterTarget(CONTROL_CENTER_TARGETS[0],
+    async()=>new Response(JSON.stringify({ok:true,payload:'x'.repeat(5000)}),{
+      status:200,headers:{'content-type':'application/json'}}));
+  assert.equal(result.status,'reachable');
+});
+
+test('health JSON with explicit healthy status is classified healthy',async()=>{
+  const result=await probeControlCenterTarget(CONTROL_CENTER_TARGETS[0],
+    async()=>Response.json({status:'healthy'}));
+  assert.equal(result.status,'healthy');
 });
