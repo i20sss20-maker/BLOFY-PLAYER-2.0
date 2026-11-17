@@ -33,16 +33,29 @@ export function dueDailyCatalog(now=new Date(),env={}){
  return {due:true,code:'daily_catalog_due',day:date.day,sourceId};
 }
 async function ensureTable(db){
- await db.query(`CREATE TABLE IF NOT EXISTS ${TABLE} (
-  source_id UUID NOT NULL,
-  local_day DATE NOT NULL,
-  requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  started_at TIMESTAMPTZ,
-  finished_at TIMESTAMPTZ,
-  state TEXT NOT NULL DEFAULT 'queued'
-    CHECK(state IN ('queued','running','completed','partial','failed','cancelled')),
-  PRIMARY KEY(source_id,local_day)
- )`);
+ try{
+  await db.query(`CREATE TABLE IF NOT EXISTS ${TABLE} (
+   source_id UUID NOT NULL,
+   local_day DATE NOT NULL,
+   requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+   started_at TIMESTAMPTZ,
+   finished_at TIMESTAMPTZ,
+   state TEXT NOT NULL DEFAULT 'queued'
+     CHECK(state IN ('queued','running','completed','partial','failed','cancelled')),
+   PRIMARY KEY(source_id,local_day)
+  )`);
+ }catch(error){
+  // PostgreSQL CREATE TABLE IF NOT EXISTS is not atomic across processes.
+  // When two Railway replicas first schedule at 04:00, one can receive
+  // pg_type_typname_nsp_index 23505 despite IF NOT EXISTS. Only accept
+  // that precise race after independently confirming the exact table now
+  // exists; never swallow a generic database or schema failure.
+  if(error?.code!=='23505'||
+     error?.constraint!=='pg_type_typname_nsp_index')throw error;
+  const check=await db.query('SELECT to_regclass($1::text) AS table_oid',
+   ['public.'+TABLE]);
+  if(!check.rows?.[0]?.table_oid)throw error;
+ }
 }
 export async function scheduleDailyApprovedCatalog({
  env={},now=new Date(),db,sourceById,enqueue,sourceBusy=()=>false
