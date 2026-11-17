@@ -169,6 +169,9 @@ class HomeActivity : AppCompatActivity() {
             CatalogSyncState.isReady(applicationContext, StreamCodeSession.providerId)) {
             scheduledProviderId = StreamCodeSession.providerId
             CatalogRefreshWorker.scheduleAutomatic(applicationContext, StreamCodeSession.providerId)
+            // Fast-path returning subscribers previously missed entry-time catalog
+            // catchup. This only schedules a silent worker; Home paints immediately.
+            CatalogRefreshWorker.enqueueIfStale(applicationContext, StreamCodeSession.providerId)
             showReadyHome()
             return
         }
