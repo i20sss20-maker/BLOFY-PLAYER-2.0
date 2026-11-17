@@ -25,6 +25,24 @@ class DownloadTransferPolicyTest {
         assertEquals(1L, DownloadTransferPolicy.secondsRemaining(Long.MAX_VALUE, Long.MAX_VALUE - 1, Long.MAX_VALUE))
         assertNull(DownloadTransferPolicy.secondsRemaining(100L, -1L, 4L))
     }
+    @Test fun hugeFilesHaveSafeAccuratePercent() {
+        assertEquals(0, DownloadTransferPolicy.percent(0L, Long.MAX_VALUE))
+        assertEquals(50, DownloadTransferPolicy.percent(Long.MAX_VALUE / 2, Long.MAX_VALUE))
+        assertEquals(100, DownloadTransferPolicy.percent(Long.MAX_VALUE, Long.MAX_VALUE))
+        assertEquals(100, DownloadTransferPolicy.percent(999L, 800L))
+        assertNull(DownloadTransferPolicy.percent(40L, -1L))
+        assertNull(DownloadTransferPolicy.percent(-1L, 100L))
+    }
+
+    @Test fun downloadedButMissingFileShowsRecoveryInsteadOfWrongPlayAction() {
+        val action = DownloadTransferPolicy::rowAction
+        assertEquals(DownloadTransferPolicy.RowAction.PLAY, action(android.app.DownloadManager.STATUS_SUCCESSFUL, true))
+        assertEquals(DownloadTransferPolicy.RowAction.EXPLAIN_FAILURE, action(android.app.DownloadManager.STATUS_SUCCESSFUL, false))
+        assertEquals(DownloadTransferPolicy.RowAction.EXPLAIN_FAILURE, action(android.app.DownloadManager.STATUS_FAILED, false))
+        assertEquals(DownloadTransferPolicy.RowAction.EXPLAIN_FAILURE, action(OfflineDownloadStore.STATUS_MISSING, false))
+        assertEquals(DownloadTransferPolicy.RowAction.REMOVE_OR_CANCEL, action(android.app.DownloadManager.STATUS_RUNNING, false))
+    }
+
     @Test fun readyRequiresActualBytesAndAccessibleUri() {
         assertFalse(DownloadTransferPolicy.isValidDownloadedFile(8, 0L, true))
         assertFalse(DownloadTransferPolicy.isValidDownloadedFile(8, 10L, false))

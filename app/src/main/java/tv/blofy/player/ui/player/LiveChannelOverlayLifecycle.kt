@@ -44,6 +44,7 @@ import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.browser.ContentBrowserActivity
 import tv.blofy.player.ui.browser.LiveChannelAdapter
 import tv.blofy.player.ui.common.BlofyTvDesign
+import tv.blofy.player.ui.common.TwoPaneFocusGuard
 import java.util.WeakHashMap
 
 /**
@@ -399,6 +400,21 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                                 cornerRadius = dp(10).toFloat()
                                 setColor(if (tab == activeTab) 0xFF5A3384.toInt() else 0xE52C2538.toInt())
                             }
+                            // Explicit transition between the channel list and its tabs.
+                            // UP reaches Search only after the user has focused a tab.
+                            setOnKeyListener { _, keyCode, event ->
+                                if (event.action != KeyEvent.ACTION_DOWN) false
+                                else when (keyCode) {
+                                    KeyEvent.KEYCODE_DPAD_DOWN -> {
+                                        val target = LiveChannelPanelPolicy.initialChannelIndex(
+                                            displayedChannels, lastChannelFocusKey, currentChannelKey,
+                                            StreamEntity::key)
+                                        target >= 0 && TwoPaneFocusGuard.focusItem(list, target)
+                                    }
+                                    KeyEvent.KEYCODE_DPAD_UP -> searchButton.requestFocus()
+                                    else -> false
+                                }
+                            }
                             setOnClickListener {
                                 activeTab = tab
                                 for (index in 0 until tabContainer.childCount) {
@@ -475,6 +491,12 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 }
             }
 
+            if (BuildConfig.CODE_ONLY_LOGIN && tabs.childCount > 0) {
+                // At the first channel row, UP goes to the category tabs, never
+                // directly to Search. Further UP on a tab is an intentional search action.
+                TwoPaneFocusGuard.registerTopTarget(panel, tabs.getChildAt(0))
+            }
+
             val device = DeviceClass.detect(activity)
             // Keep the legacy BLOFY PLAYER layout unchanged. STREAM gives
             // the joined vertical controls enough width and channel-row space.
@@ -501,6 +523,12 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             var consumeBackRelease = false
             created.setOnKeyListener { _, keyCode, event ->
                 if (consumeOpeningRemoteRelease(event)) true
+                else if (list.hasFocus() && keyCode in listOf(
+                    KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN)) {
+                    // Explicit row scrolling consumes repeat presses; Android's generic
+                    // focusSearch would otherwise jump to header Search on older TV boxes.
+                    TwoPaneFocusGuard.handleGrid(event, list)
+                }
                 else if (keyCode != KeyEvent.KEYCODE_BACK) false
                 else when (event.action) {
                     KeyEvent.ACTION_DOWN -> {
@@ -718,10 +746,16 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 addView(resultsCount, LinearLayout.LayoutParams(-1, dp(29)))
                 addView(list, LinearLayout.LayoutParams(-1, 0, 1f))
             }
+            // First result UP returns only to this window's search input.
+            TwoPaneFocusGuard.registerTopTarget(root, searchBox)
             val created = AlertDialog.Builder(activity).setView(root).create()
             created.setCanceledOnTouchOutside(false)
             created.setOnKeyListener { _, code, event ->
                 if (consumeOpeningRemoteRelease(event)) true
+                else if (list.hasFocus() && code in listOf(
+                    KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN)) {
+                    TwoPaneFocusGuard.handleGrid(event, list)
+                }
                 else if (code == KeyEvent.KEYCODE_BACK) {
                     if (event.action == KeyEvent.ACTION_DOWN) {
                         created.dismiss()

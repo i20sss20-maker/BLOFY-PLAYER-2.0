@@ -155,7 +155,7 @@ class DownloadsActivity : AppCompatActivity() {
             val activeProvider = BlofyDatabase.get(applicationContext).dao().activeProviderId()
             OfflineDownloadStore.records(applicationContext,activeProvider ?: "__none__").mapNotNull { record ->
                 OfflineDownloadStore.progress(applicationContext,record)
-                    ?: OfflineDownloadStore.Progress(record,-1,0L,-1L,0,null)
+                    ?: OfflineDownloadStore.Progress(record,OfflineDownloadStore.STATUS_MISSING,0L,-1L,0,null)
             }
         }
         val downloadedBytes=states.asSequence()
@@ -175,7 +175,8 @@ class DownloadsActivity : AppCompatActivity() {
                 DownloadManager.STATUS_PENDING, DownloadManager.STATUS_RUNNING,
                 DownloadManager.STATUS_PAUSED)
             "ready" -> p.status == DownloadManager.STATUS_SUCCESSFUL
-            "failed" -> p.status == DownloadManager.STATUS_FAILED
+            "failed" -> p.status == DownloadManager.STATUS_FAILED ||
+                p.status == OfflineDownloadStore.STATUS_MISSING
             else -> true
         }}.sortedWith(compareBy<OfflineDownloadStore.Progress>(
             { if (it.record.kind == "movie") 0 else 1 },
@@ -212,9 +213,11 @@ class DownloadsActivity : AppCompatActivity() {
                     gravity=Gravity.START or Gravity.CENTER_VERTICAL
                     CinemaStyle.styleButton(this)
                     setOnClickListener {
-                        if(p.status==DownloadManager.STATUS_SUCCESSFUL && p.readyUri!=null) {
+                        if (DownloadTransferPolicy.rowAction(p.status, p.readyUri != null) ==
+                            DownloadTransferPolicy.RowAction.PLAY) {
                             play(p)
-                        } else if (p.status == DownloadManager.STATUS_FAILED) {
+                        } else if (DownloadTransferPolicy.rowAction(p.status, p.readyUri != null) ==
+                            DownloadTransferPolicy.RowAction.EXPLAIN_FAILURE) {
                             showFailure(p)
                         } else {
                             AlertDialog.Builder(this@DownloadsActivity)
@@ -296,9 +299,10 @@ class DownloadsActivity : AppCompatActivity() {
                 // Update click handler with CURRENT status, not the captured
                 // status when a row was first built.
                 setOnClickListener {
-                    if(p.status==DownloadManager.STATUS_SUCCESSFUL && p.readyUri!=null) play(p)
-                    else if(p.status==DownloadManager.STATUS_FAILED) showFailure(p)
-                    else AlertDialog.Builder(this@DownloadsActivity)
+                    when (DownloadTransferPolicy.rowAction(p.status, p.readyUri != null)) {
+                        DownloadTransferPolicy.RowAction.PLAY -> play(p)
+                        DownloadTransferPolicy.RowAction.EXPLAIN_FAILURE -> showFailure(p)
+                        DownloadTransferPolicy.RowAction.REMOVE_OR_CANCEL -> AlertDialog.Builder(this@DownloadsActivity)
                         .setTitle(p.record.title)
                         .setMessage(getString(R.string.stream_downloads_remove_note))
                         .setPositiveButton(getString(R.string.stream_downloads_remove)) { _,_ ->
@@ -306,6 +310,7 @@ class DownloadsActivity : AppCompatActivity() {
                                 OfflineDownloadStore.remove(applicationContext,p.record)
                             }
                         }.setNegativeButton(android.R.string.cancel,null).show()
+                    }
                 }
             }
         }
@@ -313,7 +318,8 @@ class DownloadsActivity : AppCompatActivity() {
 
     /** Android DownloadManager error codes are actionable, not just numbers. */
     private fun showFailure(progress: OfflineDownloadStore.Progress) {
-        val reasonText = when (progress.reason) {
+        val reasonText = if (progress.status == OfflineDownloadStore.STATUS_MISSING)
+            R.string.stream_downloads_failure_file else when (progress.reason) {
             DownloadManager.ERROR_INSUFFICIENT_SPACE -> R.string.stream_downloads_failure_space
             DownloadManager.ERROR_UNHANDLED_HTTP_CODE, DownloadManager.ERROR_TOO_MANY_REDIRECTS ->
                 R.string.stream_downloads_failure_http
