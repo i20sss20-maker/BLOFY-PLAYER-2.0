@@ -260,7 +260,7 @@ class VlcFallbackActivity : AppCompatActivity() {
         }
         setOnFocusChangeListener { view, focused ->
             view.alpha = if (focused) 1f else 0.7f
-            if (focused) hint.text = view.contentDescription
+            if (focused) this@VlcFallbackActivity.hint.text = view.contentDescription
         }
         contentDescription = label
         setOnClickListener { onClick() }
