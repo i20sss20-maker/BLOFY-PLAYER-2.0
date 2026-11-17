@@ -172,17 +172,20 @@ class CatalogRefreshWorker(
             val refreshedProvider = refreshSource.copy(enabled = true, updatedAt = staged.updatedAt)
             currentCoroutineContext().ensureActive()
             if (CatalogPlaybackGate.isPlaying) throw PlaybackInProgressException()
-            // Only the atomic final promotion shares the foreground import lock. This avoids
-            // a background download making Login/CatalogLoading wait before opening old cache.
+            // Only the atomic final promotion shares the foreground import lock. Keep the
+            // previously committed catalog accessible and bound the 95% finalization: both
+            // same-source and approved pending-source paths use a cancellation-safe deadline.
             CatalogLoadPersistence.withProviderLock(provider.id) {
                 if (sourceChanged) {
                     PortalPlaylistClient.commitPendingSource(app, dao, refreshSource) {
-                        dao.promoteStagedBackgroundRefresh(staged.id, provider, refreshedProvider)
-                        promoted = true
-                        runCatching { CatalogSyncState.markSourceReplaced(app, provider.id) }
+                        CatalogRefreshCommitPolicy.run {
+                            dao.promoteStagedBackgroundRefresh(staged.id, provider, refreshedProvider)
+                            promoted = true
+                            runCatching { CatalogSyncState.markSourceReplaced(app, provider.id) }
+                        }
                     }
                 } else {
-                    withContext(NonCancellable + Dispatchers.IO) {
+                    CatalogRefreshCommitPolicy.run {
                         dao.promoteStagedBackgroundRefresh(staged.id, provider, refreshedProvider)
                         promoted = true
                         runCatching { CatalogSyncState.markCatalogCommitted(app, provider.id) }
@@ -200,8 +203,16 @@ class CatalogRefreshWorker(
             retryOrFail(manual, "PLAYBACK")
         } catch (_: TimeoutCancellationException) {
             // A provider timeout is retryable; a cancelled Worker must still stop immediately.
+            // Once all three remote sections reached 95%, an expensive local commit that
+            // timed out should fail visibly on manual refresh, not silently retry for ~24 min.
+            // Keep the old committed catalog and staged checkpoint for a later user retry.
             currentCoroutineContext().ensureActive()
-            if (promoted) Result.success() else retryOrFail(manual, "TIMEOUT")
+            when {
+                promoted -> Result.success()
+                CatalogRefreshCommitPolicy.shouldFailManualCommitTimeout(manual, lastStage) ->
+                    Result.failure(workDataOf(KEY_ERROR to "COMMIT_TIMEOUT"))
+                else -> retryOrFail(manual, "TIMEOUT")
+            }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {

@@ -80,6 +80,7 @@ class ContentBrowserActivity : AppCompatActivity() {
     private var catalogRetry: Button? = null
     private var lastPreviewKey: String? = null
     private var resumedOnce = false
+    private var restoreLiveRowFocusAfterPlayer = false
     private val epgRefreshAt = mutableMapOf<String, Long>()
 
     private val liveItems = ArrayList<StreamEntity>(256)
@@ -713,6 +714,9 @@ class ContentBrowserActivity : AppCompatActivity() {
     }
 
     private fun launchPlayer(stream: StreamEntity, url: String, fallbackUrl: String?) {
+        // When the player closes, the TV remote should return to this channel,
+        // not jump to the header search shortcut or restart browsing at the top.
+        restoreLiveRowFocusAfterPlayer = kind == KIND_LIVE && !phoneMode
         startActivity(Intent(this, PlayerActivity::class.java).apply {
             putExtra(PlayerActivity.EXTRA_URL, url)
             putExtra(PlayerActivity.EXTRA_CONTENT_KEY, stream.key)
@@ -735,6 +739,25 @@ class ContentBrowserActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         if (::provider.isInitialized) refreshExactCount(currentCategoryId)
+        if (restoreLiveRowFocusAfterPlayer && ::streamList.isInitialized &&
+            ::streamAdapter.isInitialized) {
+            restoreLiveRowFocusAfterPlayer = false
+            streamList.post {
+                if (isFinishing || isDestroyed || kind != KIND_LIVE) return@post
+                val highlighted = streamAdapter.indexOfKey(savedStreamKey())
+                if (highlighted < 0) return@post // Don't steal focus if the row is outside this page.
+                (streamList.layoutManager as? LinearLayoutManager)
+                    ?.scrollToPositionWithOffset(highlighted, 0)
+                streamList.isFocusableInTouchMode = true
+                streamList.requestFocus()
+                streamList.postOnAnimation {
+                    if (!isFinishing && !isDestroyed) {
+                        streamList.findViewHolderForAdapterPosition(highlighted)
+                            ?.itemView?.requestFocus()
+                    }
+                }
+            }
+        }
         if (resumedOnce && previewEnabled && ::provider.isInitialized) {
             lastPreviewKey = null
             restartSavedPreview()

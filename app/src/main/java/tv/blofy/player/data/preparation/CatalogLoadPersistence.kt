@@ -8,6 +8,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.FirstImportCheckpoint
@@ -56,10 +57,13 @@ internal class CatalogLoadPersistence(
         }
     }
 
-    suspend fun commit(writeCatalog: suspend () -> Unit) {
+    suspend fun commit(timeoutMillis: Long = MAX_COMMIT_MS, writeCatalog: suspend () -> Unit) {
+        require(timeoutMillis > 0L) { "Commit timeout must be positive" }
         currentCoroutineContext().ensureActive()
         withContext(NonCancellable + Dispatchers.IO) {
-            writeCatalog()
+            // Shield the already-started commit from Activity destruction, but still bound
+            // a stuck Room promotion with a child timeout. Room rolls back canceled transactions.
+            withTimeout(timeoutMillis) { writeCatalog() }
             // Set this inside the same context: cancellation at the return to Main must not erase a
             // successfully committed first import or skip invalidating the previous refresh caches.
             catalogCommitted = true
@@ -80,6 +84,7 @@ internal class CatalogLoadPersistence(
     }
 
     companion object {
+        internal const val MAX_COMMIT_MS = 6 * 60_000L
         private val foregroundLoads = ConcurrentHashMap<String, Mutex>()
 
         /** A replacement activity must wait for the canceled activity's database cleanup. */

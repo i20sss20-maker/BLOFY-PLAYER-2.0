@@ -11,6 +11,7 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withContext
 import org.junit.After
 import org.junit.Assert.*
@@ -118,6 +119,27 @@ class CatalogLoadPersistenceTest {
         assertEquals(epoch, CatalogSyncState.lastUpdatedAt(app, provider.id))
         assertFalse(db.dao().hasCatalog(staged.id))
         assertTrue(CatalogSyncState.isEntryReady(app, provider.id))
+    }
+
+    @Test fun stalledStagedPromotionTimesOutAndPreservesCommittedLibrary(): Unit = runBlocking(Dispatchers.IO) {
+        saveRows(provider)
+        CatalogSyncState.markCatalogCommitted(app, provider.id)
+        val epoch = CatalogSyncState.lastUpdatedAt(app, provider.id)
+        saveRows(staged, "2")
+        val persistence = attempt(firstLoad = false)
+
+        val timedOut = runCatching {
+            // Simulate a final storage operation that never completes.
+            persistence.commit(timeoutMillis = 100L) { awaitCancellation() }
+        }.exceptionOrNull()
+        persistence.discardIfUncommitted()
+
+        assertTrue(timedOut is TimeoutCancellationException)
+        assertFalse(persistence.catalogCommitted)
+        assertEquals(stream(provider), db.dao().stream(stream(provider).key))
+        assertEquals(epoch, CatalogSyncState.lastUpdatedAt(app, provider.id))
+        assertFalse(db.dao().hasCatalog(staged.id))
+        assertTrue(CatalogSyncState.isReady(app, provider.id))
     }
 
     @Test fun cancellationDuringCommitStillPersistsReadinessAndInvalidatesOldCaches(): Unit = runBlocking(Dispatchers.IO) {

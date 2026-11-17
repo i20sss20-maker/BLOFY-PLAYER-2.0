@@ -24,7 +24,9 @@ internal class LiveChannelAdapter(
     private val itemKey: (StreamEntity) -> String,
     private val translucent: Boolean = false,
     /** STREAM live sidebar: keep 56dp rows but use solid, legible surfaces. */
-    private val highContrast: Boolean = false
+    private val highContrast: Boolean = false,
+    /** Only the STREAM overlay supplies this; other channel browsers stay unchanged. */
+    private val playingChannelKey: String? = null
 ) : RecyclerView.Adapter<LiveChannelAdapter.Holder>() {
     private val items = ArrayList<StreamEntity>(256)
     private var focusedKey: String? = null
@@ -145,9 +147,11 @@ internal class LiveChannelAdapter(
 
     override fun onBindViewHolder(holder: Holder, position: Int) {
         val item = items[position]
+        holder.isCurrentChannel = item.key == playingChannelKey
         holder.title.text = (if (item.locked) "🔒  " else "") + displayChannelName(item.name)
-        holder.meta.text = holder.itemView.context.getString(if (item.archiveEnabled) R.string.live_archive_available else R.string.live_now)
-        holder.badge.text = if (item.archiveEnabled) "ARCH" else "LIVE"
+        holder.meta.text = if (holder.isCurrentChannel) holder.itemView.context.getString(R.string.stream_now_playing)
+            else holder.itemView.context.getString(if (item.archiveEnabled) R.string.live_archive_available else R.string.live_now)
+        holder.badge.text = if (holder.isCurrentChannel) "▶" else if (item.archiveEnabled) "ARCH" else "LIVE"
         holder.progress.visibility = View.GONE
         holder.artworkCandidates = listOf(item.icon, item.backdrop).filterNot { it.isNullOrBlank() }
         if (holder.artworkCandidates.isNotEmpty()) ArtworkLoader.load(holder.logo, holder.artworkCandidates) else {
@@ -183,15 +187,16 @@ internal class LiveChannelAdapter(
     }
 
     private fun renderFocus(holder: Holder, focused: Boolean) {
-        holder.itemView.background = rowBackground(holder.itemView.context, focused)
+        holder.itemView.background = rowBackground(holder.itemView.context, focused, holder.isCurrentChannel)
         holder.title.setTextColor(if (focused) Color.WHITE else BlofyTvDesign.TextPrimary)
         holder.meta.setTextColor(if (focused) BlofyTvDesign.Lavender else BlofyTvDesign.TextMuted)
-        holder.badge.setTextColor(if (focused) Color.WHITE else BlofyTvDesign.PurpleSoft)
+        holder.badge.setTextColor(if (focused) Color.WHITE else if (holder.isCurrentChannel) BlofyTvDesign.Mint else BlofyTvDesign.PurpleSoft)
     }
 
     override fun onViewRecycled(holder: Holder) {
         ArtworkLoader.cancel(holder.logo)
         holder.artworkCandidates = emptyList()
+        holder.isCurrentChannel = false
         holder.logo.setImageDrawable(null)
         holder.itemView.animate().cancel()
         holder.itemView.scaleX = 1f
@@ -224,22 +229,24 @@ internal class LiveChannelAdapter(
         val progress: ProgressBar
     ) : RecyclerView.ViewHolder(item) {
         var artworkCandidates: List<String?> = emptyList()
+        var isCurrentChannel: Boolean = false
     }
 
-    private fun rowBackground(contextForBackground: android.content.Context, focused: Boolean): GradientDrawable {
+    private fun rowBackground(contextForBackground: android.content.Context, focused: Boolean, current: Boolean = false): GradientDrawable {
         if (!translucent) return CinemaStyle.surface(contextForBackground, focused = focused)
         val density = contextForBackground.resources.displayMetrics.density
         return GradientDrawable().apply {
             cornerRadius = 10 * density
             setColor(when {
                 highContrast && focused -> 0xFF5C3582.toInt()
+                highContrast && current -> 0xF32A3140.toInt()
                 highContrast -> 0xF3211332.toInt()
                 focused -> 0xD35C3582.toInt()
                 else -> 0x5E211332.toInt()
             })
             setStroke(
                 ((if (focused) 2 else 1) * density).toInt(),
-                if (focused) BlofyTvDesign.FocusStroke else if (highContrast) 0x806C5492.toInt() else 0x38FFFFFF
+                if (focused) BlofyTvDesign.FocusStroke else if (current) BlofyTvDesign.Mint else if (highContrast) 0x806C5492.toInt() else 0x38FFFFFF
             )
         }
     }
