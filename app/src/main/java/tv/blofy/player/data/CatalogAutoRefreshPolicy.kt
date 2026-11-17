@@ -34,12 +34,15 @@ internal object CatalogAutoRefreshPolicy {
     fun isDue(
         lastCompletedAtMs: Long,
         nowMs: Long,
-        minimumGapMs: Long = MINIMUM_GAP_MS
+        minimumGapMs: Long = MINIMUM_GAP_MS,
+        clockRollbackIsDue: Boolean = false
     ): Boolean {
         require(minimumGapMs > 0L)
-        // Reject negative/future timestamps instead of refreshing forever
-        // when a TV has an incorrect RTC (a frequent Android 9 issue).
-        if (lastCompletedAtMs > nowMs) return false
+        // STREAM uses a single WorkManager periodic job as the daily throttle.
+        // If an Android 9 TV's clock goes backwards, don't permanently disable
+        // automatic sync; the next scheduled WorkManager pass may still run.
+        // PLAYER keeps its previous conservative behavior.
+        if (lastCompletedAtMs > nowMs) return clockRollbackIsDue
         return lastCompletedAtMs <= 0L || nowMs - lastCompletedAtMs >= minimumGapMs
     }
 }
