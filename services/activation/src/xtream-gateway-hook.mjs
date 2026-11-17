@@ -1627,7 +1627,7 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
             resumedVod=true;
           }
         })());
-        await pipeline(stream,res);
+        await pipeline(stream, res);
         if(resumedVod){
           console.info('BLOFY_VOD_RANGE_RESUMED',{
             kind,sourceId:row.server_id,
