@@ -10,11 +10,29 @@ Scope: isolated `streamCodeDemo` / `tv.blofy.player.v2.stream.qa` only; no auto-
 3. Offer **Try AAC track** only if Media3 identifies a different **supported, not already selected AAC** track within the **same current player**. User must explicitly press it. It changes only Media3's track selection override, retaining the current URI and video surface. The action rejects stale channel-dialog presses and releases Arabic sidecar output. It does not fetch the provider again, transcode, force an unsupported codec, replace Xtream paths or persist a global audio preference.
 4. Every message explicitly says that even Media3 output advancing **does not prove sound is audible on Android TV**. An AudioSink callback can be transient and must not initiate automatic retries.
 
+## Owner-only copyable audio report
+
+In STREAM Live playback, open **More > Stream information** and press
+**نسخ تقرير الصوت / Copy audio report**. This is a one-click, user-initiated
+clipboard copy; no telemetry upload or new source request is made. It includes
+only Android SDK, Media3 playback state, bounded track counts, allowlisted audio
+MIME, decoder/sink event booleans, capped underruns and the explicit
+`audible_sound=not_verified` caveat. It NEVER includes provider host, playlist,
+session key, code, device identity, channel title, raw exception or media URL.
+The device clipboard is managed by Android: after copying and sharing the
+report with support, the owner can clear the clipboard.
+
+Copy the report for one **working** channel and one **silent** channel using
+the exact same Android TV box. This comparison lets us distinguish an
+unsupported track, a selected track without decoder/output progress, a
+decoder exception, an audio-sink warning, or a TV-level output issue. It still
+cannot establish whether sound was audible without listening.
+
 ## Device acceptance
 
 Install only the isolated QA APK on an Android 9 box alongside the stable signed app, without uninstalling the stable app. Confirm existing content is licensed for testing.
 
-- For one channel where Windows has sound and Android lacks sound, note the Audio > Diagnose audio summary **without sharing credentials**: track count and type, output evidence, AudioSink/codec warnings.
+- For one channel where Windows has sound and Android lacks sound, note the Audio > Diagnose audio summary **without sharing credentials**, then press **Copy audio report** in Stream information. Share only the sanitized report, and compare to a working channel on the same device.
 - If a supported AAC alternative appears, press **Try AAC track** and confirm sound by listening. On a channel with no AAC alternative this option must not appear. Both paths must preserve the live video and user-selected original channel URI.
 - Switch from a manually selected AAC/AC3 channel to another channel: the old track override must not follow the new channel, while the preferred language, subtitles and video quality remain intact.
 - Switch audio tracks within the same channel: output progress and AudioSink error evidence must reset so the next track starts with a clean diagnosis.
