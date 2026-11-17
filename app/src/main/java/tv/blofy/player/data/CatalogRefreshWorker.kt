@@ -233,7 +233,15 @@ class CatalogRefreshWorker(
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
-            if (promoted) Result.success() else retryOrFail(manual, "NETWORK")
+            when {
+                promoted -> Result.success()
+                manual && lastStage == "SERIES" ->
+                    // Xtream already attempted bounded source retries. Do not
+                    // send users through four more 90% loops with no diagnosis.
+                    Result.failure(workDataOf(KEY_ERROR to "SERIES_INTERRUPTED",
+                        KEY_STAGE to lastStage, KEY_PERCENT to lastPercent))
+                else -> retryOrFail(manual, "NETWORK")
+            }
         } finally {
             // On a timeout/cancellation/temporary error keep the *staged* completed sections.
             // Incomplete streamed sections are cleared and retried on the next worker run.
