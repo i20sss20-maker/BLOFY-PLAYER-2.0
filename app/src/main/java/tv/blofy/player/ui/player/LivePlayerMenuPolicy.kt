@@ -39,3 +39,10 @@ internal object LivePlayerMenuPolicy {
         }
     }
 }
+
+/** Prevent a remote key-up used to open a new Android window from clicking its first row. */
+internal object LiveWindowOpeningKeyPolicy {
+    fun shouldConsumeRelease(openedByKey: Int?, keyCode: Int, action: Int, elapsedMs: Long): Boolean =
+        openedByKey != null && openedByKey == keyCode && action == KeyEvent.ACTION_UP &&
+            elapsedMs in 0L..1_500L
+}
