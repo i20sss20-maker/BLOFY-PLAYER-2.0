@@ -127,14 +127,25 @@ async function sourceRange({cfg,fetchImpl,from,to,signal}){
 }
 async function boundaryFingerprint({cfg,fetchImpl,signal,extension}){
  const sha=createHash('sha256');
+ let observedStrongEtag=null,allRangesStrong=true;
  for(const [from,to] of [[0,4095],
    [cfg.expectedBytes-4096,cfg.expectedBytes-1]]){
-  const {buffer}=await sourceRange({cfg,fetchImpl,from,to,signal});
+  const {buffer,providerValidator}=await sourceRange({
+   cfg,fetchImpl,from,to,signal});
   if(from===0&&!validEpisodeContainerHeader(buffer,extension))
     throw Error('episode_source_header_invalid');
+  if(providerValidator){
+   // A strong ETag is only usable when ALL independently fetched ranges
+   // refer to the same exact revision. Never trust a single response ETag.
+   if(observedStrongEtag&&observedStrongEtag!==providerValidator)
+    throw Error('episode_source_etag_conflict');
+   observedStrongEtag=providerValidator;
+  }else allRangesStrong=false;
   sha.update(buffer);
  }
- return 'boundary-sha256:'+sha.digest('hex');
+ return {fingerprint:'boundary-sha256:'+sha.digest('hex'),
+  observedStrongEtag,
+  strongEtag:allRangesStrong?observedStrongEtag:null};
 }
 async function verifyStoredEpisode({storage,parts,total,signal}){
  const overall=createHash('sha256');let pos=0;
@@ -214,19 +225,31 @@ export async function runOneEpisodeChunk({
   const from=(no-1)*CHUNK,to=Math.min(cfg.expectedBytes,from+CHUNK)-1;
   if(signal?.aborted)throw Error('episode_cancelled');
   markStage('boundary_precheck');
-  let boundary;
+  let precheck;
   try{
-   boundary=await boundaryFingerprint({
+   precheck=await boundaryFingerprint({
     cfg,fetchImpl,signal,extension:item.extension});
   }catch(error){
    if(error?.message==='episode_source_header_invalid'){
     hardFailure=true;errorCode='episode_source_not_media';
+   }else if(error?.message==='episode_source_etag_conflict'){
+    hardFailure=true;errorCode='episode_source_version_changed';
    }
    throw error;
   }
-  if(run.validator?.startsWith('boundary-sha256:')&&run.validator!==boundary){
+  const boundary=precheck.fingerprint;
+  const savedBoundary=run.validator?.startsWith('boundary-sha256:');
+  if(savedBoundary&&run.validator!==boundary){
    hardFailure=true;errorCode='episode_source_fingerprint_changed';
    throw Error('episode_source_changed');
+  }
+  // Once chunks have been pinned to a strong ETag, all subsequent range
+  // requests must keep reporting that SAME strong ETag; never silently
+  // downgrade a persisted strong checkpoint to a weak/missing validator.
+  if(run.validator&&!savedBoundary&&
+     precheck.strongEtag!==run.validator){
+   hardFailure=true;errorCode='episode_source_version_changed';
+   throw Error('episode_source_version_changed');
   }
   markStage('source_chunk');
   const result=await sourceRange({cfg,fetchImpl,from,to,signal});
@@ -234,18 +257,48 @@ export async function runOneEpisodeChunk({
    hardFailure=true;errorCode='episode_source_not_media';
    throw Error('episode_source_header_invalid');
   }
-  const validator=result.providerValidator||boundary;
+  if(precheck.observedStrongEtag&&result.providerValidator&&
+     precheck.observedStrongEtag!==result.providerValidator){
+   hardFailure=true;errorCode='episode_source_version_changed';
+   throw Error('episode_source_version_changed');
+  }
+  const trustedStrong=precheck.strongEtag!==null&&
+    result.providerValidator===precheck.strongEtag;
+  // Do not switch between a stored boundary fingerprint and a strong ETag
+  // halfway through a copy. Such a change would make otherwise identical
+  // media fail resume, or weaken the continuity proof.
+  const validator=savedBoundary?boundary:
+    trustedStrong?precheck.strongEtag:boundary;
   if(run.validator&&run.validator!==validator){
    hardFailure=true;errorCode='episode_source_version_changed';
    throw Error('episode_source_version_changed');
   }
-  if(!result.providerValidator){
+  // Any missing/weak ETag or a prior fingerprint-bound checkpoint requires
+  // re-reading both file boundaries after the copied chunk. Even if the
+  // current part has a strong ETag, one header alone is not sufficient.
+  if(!trustedStrong||savedBoundary){
    markStage('boundary_postcheck');
-   const after=await boundaryFingerprint({
-   cfg,fetchImpl,signal,extension:item.extension});
-   if(after!==boundary){
+   let after;
+   try{
+    after=await boundaryFingerprint({
+     cfg,fetchImpl,signal,extension:item.extension});
+   }catch(error){
+    if(error?.message==='episode_source_etag_conflict'){
+     hardFailure=true;errorCode='episode_source_version_changed';
+    }else if(error?.message==='episode_source_header_invalid'){
+     hardFailure=true;errorCode='episode_source_not_media';
+    }
+    throw error;
+   }
+   if(after.fingerprint!==boundary){
     hardFailure=true;errorCode='episode_source_fingerprint_changed';
     throw Error('episode_source_changed_during_transfer');
+   }
+   if(after.observedStrongEtag&&
+      precheck.observedStrongEtag&&
+      after.observedStrongEtag!==precheck.observedStrongEtag){
+    hardFailure=true;errorCode='episode_source_version_changed';
+    throw Error('episode_source_version_changed');
    }
   }
   const sha256=createHash('sha256').update(result.buffer).digest('hex');
