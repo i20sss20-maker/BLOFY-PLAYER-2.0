@@ -575,7 +575,9 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             val providerId = activity.intent.getStringExtra(PlayerActivity.EXTRA_PROVIDER_ID).orEmpty()
             if (providerId.isBlank()) return
 
-            // Only one floating window is active at a time.
+            // Only one floating window is active at a time. BACK from Search returns
+            // to Channels only if Search was launched from that window.
+            val openedFromChannels = dialog?.isShowing == true
             dialog?.dismiss()
             dialog = null
             filterJob?.cancel()
@@ -697,7 +699,10 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             created.setOnKeyListener { _, code, event ->
                 if (consumeOpeningRemoteRelease(event)) true
                 else if (code == KeyEvent.KEYCODE_BACK) {
-                    if (event.action == KeyEvent.ACTION_DOWN) created.dismiss()
+                    if (event.action == KeyEvent.ACTION_DOWN) {
+                        created.dismiss()
+                        if (openedFromChannels) openChannelList()
+                    }
                     true
                 } else false
             }
