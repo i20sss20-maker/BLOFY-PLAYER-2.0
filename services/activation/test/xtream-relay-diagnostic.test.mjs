@@ -55,7 +55,7 @@ test('gateway marks confirmed relay 404 terminal and does not retry that movie',
  assert.match(block,/usingIndependentRelay&&response.status===502/);
  assert.match(block,/readSanitizedXtreamRelayFailure\(response\)/);
  assert.match(block,/confirmedMissing=relayFailure==='relay_provider_not_found'/);
- assert.match(block,/retryable=!confirmedMissing/);
+ assert.match(block,/retryable=!confirmedMissing&&!confirmed509/);
  assert.match(block,/reason:relayFailure\|\|/);
  assert.match(block,/providerHint=retryWithoutRange\|\|shouldRefresh\|\|usingIndependentRelay\?null/);
 });
