@@ -461,3 +461,85 @@ test('owner endpoint rejects unsigned manual retry; accepting it never starts co
   assert.deepEqual(recorded,[id]);
  }finally{await new Promise(resolve=>hub.server.close(resolve))}
 });
+
+test('CRITICAL: absent operator budget header never starts an implicit 5000-chunk transfer',async()=>{
+ const store=fakeQueue();
+ for(let n=1;n<=15;n++)store.rows.push({
+  runId:'season_default_cap_'+String(n).padStart(7,'0'),
+  gatewayId:5600+n,seasonKey:'series_default_cap_s01',episodeNumber:n,
+  sourceId:candidate(n).sourceId,mediaId:candidate(n).mediaId,
+  extension:'mkv',expectedBytes:8388608,state:'queued',retries:0
+ });
+ let chunks=0;
+ const controller=createSeasonQueueController({
+  store,lease:{},storage:{},env,delayMs:0,
+  runner:async()=>{chunks++;return {
+   ok:true,completed:true,code:'episode_fully_verified'
+  }}
+ });
+ assert.equal(controller.start().ok,true);
+ await until(()=>!controller.status().active);
+ assert.equal(chunks,12);
+ assert.equal(controller.status().maxBatches,12);
+ assert.equal(controller.status().state,'paused');
+ assert.equal(controller.status().code,'season_session_limit');
+ assert.equal(store.rows.filter(x=>x.state==='queued').length,3);
+ assert.equal(controller.start().ok,true);
+ await until(()=>!controller.status().active);
+ assert.equal(chunks,15);
+ assert.equal(controller.status().state,'completed');
+});
+test('constructor cannot silently overrule the 120-chunk maximum for operator sessions',()=>{
+ for(const maxBatches of [5000,400,121,0,-1,1.5,NaN]){
+  assert.throws(()=>createSeasonQueueController({
+   store:fakeQueue(),lease:{},storage:{},env,maxBatches
+  }),/season_queue_max_batches_invalid/);
+ }
+ const controller=createSeasonQueueController({
+  store:fakeQueue(),lease:{},storage:{},env,maxBatches:120
+ });
+ assert.equal(controller.start({sessionMaxBatches:5}).code,
+  'season_batch_budget_invalid');
+ assert.equal(controller.start({sessionMaxBatches:5000}).code,
+  'season_batch_budget_invalid');
+ assert.equal(controller.start({sessionMaxBatches:0}).code,
+  'season_batch_budget_invalid');
+ assert.equal(controller.start({sessionMaxBatches:-1}).code,
+  'season_batch_budget_invalid');
+ assert.equal(controller.status().state,'idle');
+});
+test('client POST without session budget is still bounded by the controller',async()=>{
+ const store=fakeQueue();
+ for(let n=1;n<=15;n++)store.rows.push({
+  runId:'season_http_cap_'+String(n).padStart(8,'0'),
+  gatewayId:7800+n,seasonKey:'series_http_cap_s01',
+  episodeNumber:n,sourceId:candidate(n).sourceId,
+  mediaId:candidate(n).mediaId,extension:'mkv',expectedBytes:8388608,
+  state:'queued',retries:0
+ });
+ let processed=0;
+ const hub=createContentHubServer({token,pilotEnv:{
+  ...env,BLOFY_CONTENT_HUB_EPISODE_APPROVED_GATEWAY_ID:'7801',
+  BLOFY_CONTENT_HUB_EPISODE_EXPECTED_BYTES:'8388608',
+  BLOFY_CONTENT_HUB_EPISODE_RUN_ID:'season_licensed_http_test'
+ },storage:{},lease:{},seasonQueueStore:{
+  ...store,
+  unresolvedAuditCounts:async()=>({mismatch:0,unavailable:0})
+ },episodeChunkRunner:async()=>{processed++;return {
+  ok:true,completed:true,code:'episode_fully_verified'
+ }}});
+ hub.server.listen(0,'127.0.0.1');
+ await new Promise(resolve=>hub.server.once('listening',resolve));
+ const base='http://127.0.0.1:'+hub.server.address().port;
+ const head={authorization:'Bearer '+token,
+  'x-blofy-season-confirm':'start-private-sequential'};
+ try{
+  // This test intentionally keeps the required browser-confirmation gate.
+  const denied=await fetch(base+'/internal/seasons/start',{
+   method:'POST',headers:head});
+  assert.equal(denied.status,409);
+  assert.equal(processed,0);
+  const body=await denied.json();
+  assert.equal(body.code,'owner_episode_browser_playback_not_confirmed');
+ }finally{await new Promise(resolve=>hub.server.close(resolve))}
+});
