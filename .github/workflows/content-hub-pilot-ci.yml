@@ -62,6 +62,7 @@ jobs:
           node --check services/activation/src/bootstrap.mjs
           node --check services/activation/src/admin-session-hook.mjs
           node --check services/activation/web/admin-content-hub.js
+          node --check services/activation/web/admin-private-copy-audit.js
           node --check services/activation/web/admin-season-analytics.js
           node --check services/activation/web/admin-season-detail.js
           node --check services/activation/web/admin-season-attention.js
@@ -77,6 +78,7 @@ jobs:
           node --test services/activation/test/content-hub-cinema.test.mjs
           node --test services/activation/test/content-hub-detail.test.mjs
           node --test services/activation/test/content-hub-readiness.test.mjs
+          node --test services/activation/test/content-hub-full-sha-audit-ui.test.mjs
           node --test services/activation/test/stream-season-bridge.test.mjs
           node --test services/activation/test/season-forecast-ui.test.mjs
           node --test services/activation/test/content-hub-private-preview-bridge.test.mjs
