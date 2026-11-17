@@ -37,6 +37,7 @@ import { createFixedWindowLimiter, requestClientKey } from './auth-protection.mj
 import {forwardPrivatePreview} from './content-hub-private-preview-bridge.mjs';
 import {createProtectedArabicAudioBridge} from './stream-arabic-audio-bridge.mjs';
 import {createStreamAudioOperatorDiagnostics} from './stream-audio-operator-diagnostics.mjs';
+import {readOwnerAdminStoreReadiness} from './stream-owner-admin-readiness.mjs';
 import {forwardPrivateOriginalRange} from './content-hub-private-original-range-bridge.mjs';
 import {forwardPrivateSeekPreview} from './content-hub-private-seek-bridge.mjs';
 import {forwardPrivateTimeline} from './content-hub-private-timeline-bridge.mjs';
@@ -3231,6 +3232,15 @@ async function unifiedStreamBridge(req,res,url){
   const limit=bridgeLimiter.consume(requestClientKey(req));
   if(!limit.allowed)return json(res,429,{ok:false,code:'stream_bridge_rate_limited'});
   const p=url.pathname;
+  // Authoritative code/reseller schema and read-permission proof WITHOUT
+  // calling legacy GET handlers that may run CREATE/ALTER migrations.
+  // Fixed path, owner bridge auth above, no rows/identities/data returned.
+  if(p==='/internal/blofy-stream/ops/admin-readiness'){
+   if(req.method!=='GET'||url.search)
+    return json(res,405,{ok:false,code:'admin_readiness_method_denied'});
+   const report=await readOwnerAdminStoreReadiness({pool});
+   return json(res,report.ok?200:503,report,{'cache-control':'no-store'});
+  }
   // A read is metadata only. The owner must explicitly press a button for
   // at most two sequential, 4 KiB licensed-radio probes (120s cooldown).
   if(p==='/internal/blofy-stream/audio/readiness'){
