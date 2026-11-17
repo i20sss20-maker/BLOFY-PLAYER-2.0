@@ -142,3 +142,35 @@ test('reseller POST rewrites backend Origin only after website caller has verifi
    assert.doesNotMatch(response.headers.get('set-cookie'),/blofy_admin_session/);
  });
 });
+
+
+test('operator business policy 403 is not turned into a false bridge 502',async()=>{
+  await withProxy(async()=>Response.json({
+    ok:false,code:'operator_action_header_required'
+  },{status:403,headers:{'content-type':'application/json; charset=utf-8'}}),async base=>{
+    const response=await fetch(base+'/operator/api/codes',{
+      method:'POST',headers:{'content-type':'application/json',
+      'x-blofy-operator-action':'bad-action'},body:'{}'
+    });
+    assert.equal(response.status,403);
+    assert.deepEqual(await response.json(),{ok:false,code:'operator_action_header_required'});
+  });
+});
+
+test('upstream location redirect cannot move media or browser to another host',async()=>{
+  await withProxy(async()=>new Response(null,{status:302,
+    headers:{location:'https://malicious.invalid/redirect?key=do-not-leak'}}),async base=>{
+    const response=await fetch(base+'/operator/api/state',{redirect:'manual'});
+    assert.equal(response.status,502);
+    assert.equal(response.headers.get('location'),null);
+    assert.equal((await response.json()).code,'operator_upstream_redirect_not_allowed');
+  });
+});
+
+test('admin shortcut links point to actual original STREAM tab IDs',async()=>{
+  const {readFile}=await import('node:fs/promises');
+  const admin=await readFile(new URL('../web/admin.html',import.meta.url),'utf8');
+  for(const id of ['library','restream','accounts','codes','distributors','sources','diagnostics']){
+    assert.ok(admin.includes('/admin/control-center#'+id),id);
+  }
+});
