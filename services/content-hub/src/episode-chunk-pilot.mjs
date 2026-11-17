@@ -220,8 +220,26 @@ export async function runOneEpisodeChunk({
    code:'episode_run_not_resumable'};
   const totalParts=Math.ceil(cfg.expectedBytes/CHUNK);
   const no=run.parts.length+1;
-  if(no>totalParts)return {...base,ok:false,
-   code:'episode_final_verification_pending'};
+  // A crash, S3 read timeout, or transient database error AFTER the last
+  // 8 MiB checkpoint must not strand a full episode forever. This path
+  // rereads ONLY already-verified private parts and records the final
+  // full-file hash. No fresh upstream media Range, S3 upload or duplicate
+  // checkpoint is permitted. Rights/source/manual safety gates above remain.
+  if(no>totalParts){
+   if(run.parts.length!==totalParts)return {...base,ok:false,
+    code:'episode_final_verification_pending'};
+   markStage('verify_full_file');
+   const fullSha=await verifyStoredEpisode({
+    storage,parts:run.parts,total:cfg.expectedBytes,signal});
+   markStage('checkpoint');
+   await lease.verifyEpisodeRun(cfg.runId,{sha256:fullSha});
+   return {...base,ok:true,code:'episode_fully_verified',
+    completed:true,recoveredFinalization:true,
+    bytes:cfg.expectedBytes,sha256:fullSha,
+    chunksSaved:totalParts,totalParts,
+    providerMediaRequests:0,newStorageWrites:0,
+    stageTimingsMs:timings()};
+  }
   const from=(no-1)*CHUNK,to=Math.min(cfg.expectedBytes,from+CHUNK)-1;
   if(signal?.aborted)throw Error('episode_cancelled');
   markStage('boundary_precheck');
@@ -339,6 +357,7 @@ export async function runOneEpisodeChunk({
   markStage('verify_full_file');
   const fullSha=await verifyStoredEpisode({storage,parts:run.parts,
     total:cfg.expectedBytes,signal});
+  markStage('checkpoint');
   await lease.verifyEpisodeRun(cfg.runId,{sha256:fullSha});
   return {...base,ok:true,code:'episode_fully_verified',completed:true,
    bytes:cfg.expectedBytes,sha256:fullSha,chunksSaved:no,totalParts,
