@@ -343,10 +343,11 @@ class CatalogRefreshWorker(
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10, TimeUnit.MINUTES)
                 .setInputData(androidx.work.workDataOf(KEY_PROVIDER_ID to providerId, KEY_MANUAL to false))
                 .build()
+            // UPDATE preserves the periodic cadence while safely refreshing
+            // the provider input after a code change or OFF -> ON toggle.
             work.enqueueUniquePeriodicWork(
                 if (stream) STREAM_PERIODIC_NAME else AUTO_PERIODIC_NAME,
-                if (stream) ExistingPeriodicWorkPolicy.KEEP else ExistingPeriodicWorkPolicy.UPDATE,
-                request
+                ExistingPeriodicWorkPolicy.UPDATE, request
             )
         }
 
