@@ -24,7 +24,9 @@ export function verifiedVodResumePlan({
  const total=positiveInteger(headers.get('content-length'));
  const etag=strongEtag(headers.get('etag'));
  const range=String(headers.get('accept-ranges')||'').toLowerCase().trim();
- if(!total||total<2048||total>MAX_TOTAL||!etag||range!=='bytes')return null;
+ const encoding=String(headers.get('content-encoding')||'identity').trim().toLowerCase();
+ if(!total||total<2048||total>MAX_TOTAL||!etag||range!=='bytes'||
+    encoding!=='identity')return null;
  return Object.freeze({total,etag,format});
 }
 // Only a single targeted replacement connection; never retry 403/404/429,
