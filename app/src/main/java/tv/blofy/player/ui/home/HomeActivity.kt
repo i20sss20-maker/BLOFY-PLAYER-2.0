@@ -299,9 +299,13 @@ class HomeActivity : AppCompatActivity() {
         }
         homeResumed = true
         if (homeFeed != null) {
-            // The user may have finished a film or added a favorite in Details.
-            // STREAM used to skip the playback-history refresh entirely.
-            if (BuildConfig.CODE_ONLY_LOGIN && displayedHomeData != null) loadHomeExperience()
+            // Returning from playback must NOT rebuild every hero/poster shelf.
+            // That destroyed the focused View and caused a TV focus jump/flicker.
+            // Refresh only recently watched / Continue Watching; a committed
+            // catalog epoch change is still handled by refreshQuietHomeIfChanged().
+            if (BuildConfig.CODE_ONLY_LOGIN && displayedHomeData != null) {
+                lifecycleScope.launch { refreshHomeHistory() }
+            }
             refreshScheduler.start()
             if (!BuildConfig.CODE_ONLY_LOGIN) historyObserver.start()
             lifecycleScope.launch {
