@@ -58,6 +58,17 @@ internal class CatalogRefreshCheckpoint(private val context: Context, private va
                 prefs.edit().remove(key("done:$kind")).remove(key("count:$kind")).apply()
             }
         }
+        // A previous attempt can stop while parsing SERIES at 90%. That last
+        // visible high-water mark is NOT proof that SERIES was saved. Reset to
+        // the actual verified section boundary (typically MOVIES=66%) before
+        // returning the checkpoint; otherwise every retry misleadingly sticks
+        // at 90% while re-reading the incomplete series response.
+        val verifiedBoundary = CatalogRefreshProgress.completedBaseline(verified)
+        if (prefs.getInt(key("percent"), 0) != verifiedBoundary) {
+            check(prefs.edit().putInt(key("percent"), verifiedBoundary).commit()) {
+                "Unable to repair incomplete refresh progress checkpoint"
+            }
+        }
         return State(stageId, verified)
     }
 
