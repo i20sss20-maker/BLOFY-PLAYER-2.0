@@ -2,6 +2,8 @@ package tv.blofy.player.ui.player
 
 import android.view.KeyEvent
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class LivePlayerMenuPolicyTest {
@@ -48,6 +50,17 @@ class LivePlayerMenuPolicyTest {
             LivePlayerMenuPolicy.action(KeyEvent.KEYCODE_SEARCH, false, false, false))
         assertEquals(LivePlayerMenuAction.PASS_THROUGH,
             LivePlayerMenuPolicy.action(KeyEvent.KEYCODE_SEARCH, false, true, true))
+    }
+
+    @Test fun remoteOpenKeyUpNeverSelectsTheFirstFocusedRow() {
+        assertTrue(LiveWindowOpeningKeyPolicy.shouldConsumeRelease(
+            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.ACTION_UP, 100L))
+        assertFalse(LiveWindowOpeningKeyPolicy.shouldConsumeRelease(
+            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.ACTION_UP, 100L))
+        assertFalse(LiveWindowOpeningKeyPolicy.shouldConsumeRelease(
+            KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_MENU, KeyEvent.ACTION_DOWN, 100L))
+        assertFalse(LiveWindowOpeningKeyPolicy.shouldConsumeRelease(
+            KeyEvent.KEYCODE_SEARCH, KeyEvent.KEYCODE_SEARCH, KeyEvent.ACTION_UP, 2_000L))
     }
 
     @Test fun openDialogOwnsItsNavigationAndSelection() {
