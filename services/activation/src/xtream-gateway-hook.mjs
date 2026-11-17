@@ -1378,7 +1378,10 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
           const relayFailure=usingIndependentRelay&&response.status===502?
             await readSanitizedXtreamRelayFailure(response):null;
           const confirmedMissing=relayFailure==='relay_provider_not_found';
-          const retryable=!confirmedMissing&&[408,500,502,503,504].includes(response.status);
+          const confirmed509=relayFailure==='relay_provider_http_509';
+          // The isolated media relay verified a 509 from this exact source.
+          // Do not repeat a request as if it were a transient gateway 502.
+          const retryable=!confirmedMissing&&!confirmed509&&[408,500,502,503,504].includes(response.status);
           const retryWithoutRange = shouldRetryXtreamWithoutRange({
             status:response.status,range:headers.range,method:req.method,
             alreadyRetried:noRangeRetried
@@ -1459,7 +1462,8 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
             }
           }
           // Respect provider refusals, and cool down this channel only.
-          if(req.method!=='HEAD')mediaDenialCooldown.denied(cooldownKey,response.status);
+          if(req.method!=='HEAD')mediaDenialCooldown.denied(cooldownKey,
+            confirmed509?509:response.status);
           await response.body?.cancel().catch(()=>{});
           if(retryWithoutRange){
             noRangeRetried=true;
@@ -1479,8 +1483,8 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
             usingIndependentRelay,relayStatus:response.status,relayFailure
           });
           observe('failed',{
-            upstreamStatus:confirmedMissing?404:response.status,
-            reason:relayFailure||(['403','404','408','429','456','500','502','503','504'].includes(String(response.status))
+            upstreamStatus:confirmedMissing?404:confirmed509?509:response.status,
+            reason:confirmed509?'upstream_http_509':relayFailure||(['403','404','408','429','456','500','502','503','504'].includes(String(response.status))
               ?'upstream_http_'+response.status:'upstream_http_other'),
             providerHint,attempts:attempt
           });

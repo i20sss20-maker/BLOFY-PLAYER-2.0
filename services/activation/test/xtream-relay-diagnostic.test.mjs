@@ -55,7 +55,36 @@ test('gateway marks confirmed relay 404 terminal and does not retry that movie',
  assert.match(block,/usingIndependentRelay&&response.status===502/);
  assert.match(block,/readSanitizedXtreamRelayFailure\(response\)/);
  assert.match(block,/confirmedMissing=relayFailure==='relay_provider_not_found'/);
- assert.match(block,/retryable=!confirmedMissing/);
- assert.match(block,/reason:relayFailure\|\|/);
+ assert.match(block,/retryable=!confirmedMissing&&!confirmed509/);
+ assert.match(block,/reason:confirmed509\?'upstream_http_509':relayFailure\|\|/);
  assert.match(block,/providerHint=retryWithoutRange\|\|shouldRefresh\|\|usingIndependentRelay\?null/);
+});
+
+
+test('authenticated relay confirmed upstream 509 is trusted only with exact fixed code and upstream status',async()=>{
+ const valid=await readSanitizedXtreamRelayFailure(diagnostic(502,{
+   ok:false,code:'relay_provider_http_509',upstreamStatus:509,
+   password:'SECRET',providerUrl:'https://not-exposed.invalid'
+ }));
+ assert.equal(valid,'relay_provider_http_509');
+ for(const data of [
+   {ok:false,code:'relay_provider_http_509',upstreamStatus:502},
+   {ok:false,code:'relay_provider_http_509'},
+   {ok:false,code:'fake_relay_509',upstreamStatus:509},
+   {ok:true,code:'relay_provider_http_509',upstreamStatus:509}
+ ])assert.equal(await readSanitizedXtreamRelayFailure(diagnostic(502,data)),null);
+ assert.equal(await readSanitizedXtreamRelayFailure(diagnostic(509,{
+   ok:false,code:'relay_provider_http_509',upstreamStatus:509
+ })),null);
+});
+
+test('gateway does not mistake confirmed upstream 509 for transient gateway 502',async()=>{
+ const {readFile}=await import('node:fs/promises');
+ const code=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
+ const a=code.indexOf('async function proxyMedia('),b=code.indexOf('// Explicit operator-only probe.',a);
+ const s=code.slice(a,b);
+ assert.match(s,/confirmed509=relayFailure==='relay_provider_http_509'/);
+ assert.match(s,/retryable=!confirmedMissing&&!confirmed509/);
+ assert.match(s,/mediaDenialCooldown\.denied\(cooldownKey,\s*confirmed509\?509:response\.status\)/);
+ assert.match(s,/upstreamStatus:confirmedMissing\?404:confirmed509\?509:response\.status/);
 });
