@@ -6,6 +6,8 @@ import {pipeline} from 'node:stream/promises';
 
 const ORIGIN='https://blofy-stream-api-production.up.railway.app';
 const MAX_REQUEST_BYTES=64*1024;
+const OWNER_SAMPLE_PATH='/operator/api/media-scan/owner-sample';
+const OWNER_SAMPLE_MAX_BYTES=2_000_000;
 const REQUEST_TIMEOUT_MS=185000;
 const HEADER_ALLOWLIST=[
   'content-type','content-range','accept-ranges','content-length',
@@ -30,14 +32,22 @@ export function operatorProxyTarget(requestUrl,overridePath=''){
   target.search=parsed.search;
   return target.toString();
 }
-async function readBoundedBody(req) {
+export function operatorProxyBodyLimit(path){
+  return path===OWNER_SAMPLE_PATH?OWNER_SAMPLE_MAX_BYTES:MAX_REQUEST_BYTES;
+}
+async function readBoundedBody(req,maxBytes=MAX_REQUEST_BYTES) {
+  const length=Number(req.headers?.['content-length']);
+  if(!Number.isSafeInteger(length)||length<0||length>maxBytes)
+    throw Object.assign(Error('body_too_large'),{code:413});
   const chunks=[];let size=0;
   for await(const chunk of req){
     size+=chunk.length;
-    if(size>MAX_REQUEST_BYTES)throw Object.assign(Error('body_too_large'),{code:413});
+    if(size>maxBytes)throw Object.assign(Error('body_too_large'),{code:413});
     chunks.push(chunk);
   }
-  return Buffer.concat(chunks);
+  if(size!==Number(req.headers?.['content-length']))
+    throw Object.assign(Error('body_length_mismatch'),{code:400});
+  return Buffer.concat(chunks,size);
 }
 function respond(res,status,message){
   const body=Buffer.from(JSON.stringify({ok:false,code:message}));
@@ -75,7 +85,13 @@ export async function proxyStreamOperator(req,res,{
       const value=req.headers[header];
       if(typeof value==='string'&&value.length<=300)headers[header]=value;
     }
-    const body=req.method==='POST'?await readBoundedBody(req):undefined;
+    const sampleUpload=path===OWNER_SAMPLE_PATH;
+    if(sampleUpload && (req.headers['content-type']!=='video/mp2t'||
+        req.headers['x-blofy-sample-rights']!=='confirmed'))
+      return respond(res,403,'operator_sample_confirmation_required');
+    if(sampleUpload)headers['x-blofy-sample-rights']='confirmed';
+    const body=req.method==='POST'?
+      await readBoundedBody(req,operatorProxyBodyLimit(path)):undefined;
     if(body && body.length>0)headers['content-length']=String(body.length);
     timer=setTimeout(()=>controller.abort(),REQUEST_TIMEOUT_MS);
     const reply=await fetchImpl(upstream,{
@@ -120,7 +136,9 @@ export async function proxyStreamOperator(req,res,{
     await pipeline(Readable.fromWeb(reply.body),res);
   }catch(error){
     if(!res.headersSent&&!res.writableEnded){
-      respond(res,error?.code===413?413:502,error?.code===413?'operator_request_too_large':'operator_proxy_unavailable');
+      respond(res,error?.code===413?413:error?.code===400?400:502,
+        error?.code===413?'operator_request_too_large':
+        error?.code===400?'operator_request_length_invalid':'operator_proxy_unavailable');
     }else if(!res.writableEnded)res.destroy();
   }finally{
     if(timer)clearTimeout(timer);
