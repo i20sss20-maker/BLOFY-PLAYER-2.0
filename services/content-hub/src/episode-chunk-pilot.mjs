@@ -5,6 +5,7 @@
 import {createHash} from 'node:crypto';
 import {inspectEpisodeCandidates} from './episode-candidates.mjs';
 import {parseMirrorContentRange} from './mirror-policy.mjs';
+import {validEpisodeContainerHeader,strongEpisodeSourceEtag} from './episode-container-proof.mjs';
 const CHUNK=8*1024*1024;
 const MAX_FILE=4*1024**3;
 const ORIGIN='http://blofy-activation-portal.railway.internal:3000';
@@ -115,20 +116,22 @@ async function sourceRange({cfg,fetchImpl,from,to,signal}){
   });
  try{
   const buffer=await exactRange(request,{from,to,total:cfg.expectedBytes});
-  const providerValidator=String(request.headers?.get?.('etag')||
-    request.headers?.get?.('last-modified')||'').trim();
-  if(providerValidator.length>140||
-    /[\r\n]/.test(providerValidator))
-   throw Error('episode_invalid_provider_validator');
+  // Weak ETag/Last-Modified do NOT guarantee byte-for-byte stable file
+  // versions. Use strong ETag only, or the rechecked boundary fingerprint
+  // for providers which cannot supply an immutable revision validator.
+  const providerValidator=strongEpisodeSourceEtag(
+    request.headers?.get?.('etag'));
   return {buffer,providerValidator};
  }finally{if(request?.body&&!request.body.locked)
   await request.body.cancel().catch(()=>{})}
 }
-async function boundaryFingerprint({cfg,fetchImpl,signal}){
+async function boundaryFingerprint({cfg,fetchImpl,signal,extension}){
  const sha=createHash('sha256');
  for(const [from,to] of [[0,4095],
    [cfg.expectedBytes-4096,cfg.expectedBytes-1]]){
   const {buffer}=await sourceRange({cfg,fetchImpl,from,to,signal});
+  if(from===0&&!validEpisodeContainerHeader(buffer,extension))
+    throw Error('episode_source_header_invalid');
   sha.update(buffer);
  }
  return 'boundary-sha256:'+sha.digest('hex');
@@ -211,13 +214,26 @@ export async function runOneEpisodeChunk({
   const from=(no-1)*CHUNK,to=Math.min(cfg.expectedBytes,from+CHUNK)-1;
   if(signal?.aborted)throw Error('episode_cancelled');
   markStage('boundary_precheck');
-  const boundary=await boundaryFingerprint({cfg,fetchImpl,signal});
+  let boundary;
+  try{
+   boundary=await boundaryFingerprint({
+    cfg,fetchImpl,signal,extension:item.extension});
+  }catch(error){
+   if(error?.message==='episode_source_header_invalid'){
+    hardFailure=true;errorCode='episode_source_not_media';
+   }
+   throw error;
+  }
   if(run.validator?.startsWith('boundary-sha256:')&&run.validator!==boundary){
    hardFailure=true;errorCode='episode_source_fingerprint_changed';
    throw Error('episode_source_changed');
   }
   markStage('source_chunk');
   const result=await sourceRange({cfg,fetchImpl,from,to,signal});
+  if(from===0&&!validEpisodeContainerHeader(result.buffer,item.extension)){
+   hardFailure=true;errorCode='episode_source_not_media';
+   throw Error('episode_source_header_invalid');
+  }
   const validator=result.providerValidator||boundary;
   if(run.validator&&run.validator!==validator){
    hardFailure=true;errorCode='episode_source_version_changed';
@@ -225,7 +241,8 @@ export async function runOneEpisodeChunk({
   }
   if(!result.providerValidator){
    markStage('boundary_postcheck');
-   const after=await boundaryFingerprint({cfg,fetchImpl,signal});
+   const after=await boundaryFingerprint({
+   cfg,fetchImpl,signal,extension:item.extension});
    if(after!==boundary){
     hardFailure=true;errorCode='episode_source_fingerprint_changed';
     throw Error('episode_source_changed_during_transfer');
