@@ -4,7 +4,8 @@ import android.view.KeyEvent
 
 /**
  * Explicit live-TV remote routing. A short OK opens the channel list while
- * STREAM shows one joined channel/action sidebar for MENU, OK and UP/DOWN.
+ * STREAM opens a dedicated channel window for MENU/OK/UP/DOWN only while
+ * the player HUD is hidden; HUD navigation remains inside its focused controls.
  * Original PLAYER keeps its existing in-player controls. Visible controls
  * still own focused OK/DPAD navigation.
  */
@@ -21,15 +22,15 @@ internal object LivePlayerMenuPolicy {
                 if (unifiedChannelPanel) LivePlayerMenuAction.SHOW_CHANNEL_LIST
                 else LivePlayerMenuAction.SHOW_AUDIO_CONTROLS
             KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN ->
-                if (unifiedChannelPanel) LivePlayerMenuAction.SHOW_CHANNEL_LIST
-                else if (hudVisible) LivePlayerMenuAction.PASS_THROUGH
+                if (hudVisible) LivePlayerMenuAction.PASS_THROUGH
+                else if (unifiedChannelPanel) LivePlayerMenuAction.SHOW_CHANNEL_LIST
                 else LivePlayerMenuAction.SHOW_AUDIO_CONTROLS
             KeyEvent.KEYCODE_GUIDE -> LivePlayerMenuAction.SHOW_CHANNEL_LIST
             KeyEvent.KEYCODE_SEARCH -> if (unifiedChannelPanel) LivePlayerMenuAction.SHOW_SEARCH_WINDOW
                 else LivePlayerMenuAction.PASS_THROUGH
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER,
             KeyEvent.KEYCODE_NUMPAD_ENTER ->
-                if (!unifiedChannelPanel && hudVisible) LivePlayerMenuAction.PASS_THROUGH
+                if (hudVisible) LivePlayerMenuAction.PASS_THROUGH
                 else LivePlayerMenuAction.SHOW_CHANNEL_LIST
             KeyEvent.KEYCODE_BACK ->
                 if (hudVisible) LivePlayerMenuAction.DISMISS_CONTROLS
