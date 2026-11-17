@@ -3,9 +3,9 @@ package tv.blofy.player.data
 import kotlinx.coroutines.CancellationException
 import java.util.concurrent.atomic.AtomicInteger
 
-/** Fast but bounded catalogue checks. WorkManager can delay an execution on some TVs. */
+/** Daily, bounded catalogue checks. Android may defer execution on sleeping TVs. */
 internal object CatalogAutoRefreshPolicy {
-    const val INTERVAL_MINUTES = 30L
+    const val INTERVAL_MINUTES = 24L * 60L
     const val MINIMUM_GAP_MS = INTERVAL_MINUTES * 60_000L
     // Ordinary WorkManager jobs have about ten minutes before forced stop.
     // Leave time for staged SQLite rollback even when an upstream source stalls.
