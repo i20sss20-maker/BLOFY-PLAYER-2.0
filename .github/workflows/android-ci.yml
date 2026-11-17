@@ -171,7 +171,8 @@ jobs:
             --tests 'tv.blofy.player.ui.library.DownloadTransferPolicyTest' \
             --tests 'tv.blofy.player.data.CatalogAutoRefreshPolicyTest' \
             --tests 'tv.blofy.player.data.CatalogRefreshCheckpointTest' \
-            --tests 'tv.blofy.player.data.CatalogRefreshProgressTest'
+            --tests 'tv.blofy.player.data.CatalogRefreshProgressTest' \
+            --tests 'tv.blofy.player.data.CatalogSectionRetryTest'
 
       - name: Upload Gradle diagnostics
         if: always()
@@ -303,7 +304,8 @@ jobs:
             --tests 'tv.blofy.player.ui.library.DownloadTransferPolicyTest' \
             --tests 'tv.blofy.player.data.CatalogAutoRefreshPolicyTest' \
             --tests 'tv.blofy.player.data.CatalogRefreshCheckpointTest' \
-            --tests 'tv.blofy.player.data.CatalogRefreshProgressTest'
+            --tests 'tv.blofy.player.data.CatalogRefreshProgressTest' \
+            --tests 'tv.blofy.player.data.CatalogSectionRetryTest'
       - name: Sign full BLOFY STREAM with original owner certificate
         shell: bash
         env:
