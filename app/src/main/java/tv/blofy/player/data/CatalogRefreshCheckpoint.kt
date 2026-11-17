@@ -58,6 +58,16 @@ internal class CatalogRefreshCheckpoint(private val context: Context, private va
                 prefs.edit().remove(key("done:$kind")).remove(key("count:$kind")).apply()
             }
         }
+        // Critical 90% recovery fix: after a killed/stalled SERIES request the
+        // persisted high-water mark belonged to an INCOMPLETE section. A new
+        // Worker must resume from the last verified fully saved section (66%),
+        // instead of displaying the same 90% forever while re-reading series.
+        val verifiedBaseline = CatalogRefreshProgress.completedBaseline(verified)
+        if (prefs.getInt(key("percent"), 0) != verifiedBaseline) {
+            check(prefs.edit().putInt(key("percent"), verifiedBaseline).commit()) {
+                "Unable to reset incomplete catalog progress to verified checkpoint"
+            }
+        }
         return State(stageId, verified)
     }
 
