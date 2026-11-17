@@ -154,7 +154,15 @@ class CatalogRefreshWorker(
                     }
                 )
             }
-            if (sync.failedSectionCount > 0) return retryOrFail(manual, "INCOMPLETE")
+            if (sync.failedSectionCount > 0) {
+                // PlaylistManager already retries each incomplete response.
+                // A manual update must not silently sit at ~90% through four
+                // more WorkManager runs; retain the staged verified sections.
+                return if (manual) Result.failure(workDataOf(
+                    KEY_ERROR to "INCOMPLETE", KEY_STAGE to lastStage,
+                    KEY_PERCENT to lastPercent
+                )) else Result.retry()
+            }
             if (sync.freshItemCount <= 0) {
                 // A zero-item Xtream reply must never replace the known-good catalog.
                 checkpoint.discard(saved, dao)
