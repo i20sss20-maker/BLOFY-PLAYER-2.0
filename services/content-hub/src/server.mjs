@@ -1299,9 +1299,15 @@ export function createContentHubServer({storage,lease,
         expiresAt:Date.now()+120000};
      }
     }
-    if(!clip.ok||!Buffer.isBuffer(clip.bytes))
-     return json(res,503,{ok:false,code:clip.code||
-      'owner_preview_unavailable',customerCutover:false});
+    if(!clip.ok||!Buffer.isBuffer(clip.bytes)){
+     // A selected but unverified owner file is a state conflict, not an
+     // outage. Preserve 503 for actual S3, decoder and bridge failures.
+     const code=clip.code||'owner_preview_unavailable';
+     const status=['private_preview_movie_not_verified',
+       'private_preview_episode_not_verified',
+       'private_preview_unsupported_container'].includes(code)?409:503;
+     return json(res,status,{ok:false,code,customerCutover:false});
+    }
     if(abort.signal.aborted)return;
     res.writeHead(200,{
      'content-type':'video/mp4',

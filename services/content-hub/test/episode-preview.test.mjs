@@ -71,3 +71,36 @@ test('incomplete episode cannot be previewed or read from S3',async()=>{
  assert.equal(result.code,'private_preview_episode_not_verified');
  assert.equal(reads,0);
 });
+
+test('unverified episode preview is 409; only real private storage/codec errors are 503',async()=>{
+ const cases=[
+  ['private_preview_episode_not_verified',409],
+  ['private_preview_unsupported_container',409],
+  ['private_preview_verified_prefix_unavailable',503],
+  ['private_preview_encode_failed',503]
+ ];
+ for(const [code,status] of cases){
+  let called=0;
+  const hub=createContentHubServer({token:secret,storage:{},lease:{},
+   pilotEnv:{BLOFY_CONTENT_HUB_OWNER_PREVIEW_ENABLED:'1',
+    BLOFY_CONTENT_HUB_EPISODE_OWNER_PREVIEW_ENABLED:'1',
+    BLOFY_CONTENT_HUB_EPISODE_RUN_ID:id},
+   previewBuilder:async()=>{called++;return {ok:false,code}}
+  });
+  hub.server.listen(0,'127.0.0.1');
+  await new Promise(resolve=>hub.server.once('listening',resolve));
+  try{
+   const url='http://127.0.0.1:'+hub.server.address().port+
+    '/internal/episodes/playback/preview';
+   const res=await fetch(url,{headers:{
+    authorization:'Bearer '+secret,
+    'x-blofy-owner-preview':'operator-episode-only'
+   }});
+   assert.equal(res.status,status,code);
+   const body=await res.json();
+   assert.equal(body.code,code);
+   assert.equal(body.customerCutover,false);
+   assert.equal(called,1);
+  }finally{await new Promise(resolve=>hub.server.close(resolve))}
+ }
+});
