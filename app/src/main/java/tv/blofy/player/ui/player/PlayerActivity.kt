@@ -1295,8 +1295,8 @@ open class PlayerActivity : ContentAccessActivity() {
         }
         AlertDialog.Builder(this)
             .setTitle(if (english) "Stream information" else "معلومات البث")
-            .setMessage(report + if (BuildConfig.CODE_ONLY_LOGIN && kind == KIND_LIVE)
-                "\n\n" + streamAudioEvidence.summary(audioHealth, streamUiLanguage()) else "")
+            .setMessage(report + (if (BuildConfig.CODE_ONLY_LOGIN && kind == KIND_LIVE)
+                "\n\n" + streamAudioEvidence.summary(audioHealth, streamUiLanguage()) else ""))
             .setPositiveButton(if (english) "Close" else "إغلاق", null)
             .show()
     }
