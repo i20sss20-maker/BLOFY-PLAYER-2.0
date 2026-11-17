@@ -314,7 +314,7 @@ class EpisodesActivity : ContentAccessActivity() {
             // newly added episodes without a second loading screen or spinner.
             val result = withContext(Dispatchers.IO) {
                 PlaylistManager(XtreamClient.episodeApi, BlofyDatabase.get(applicationContext).dao())
-                    .syncSeriesEpisodes(provider, seriesId)
+                    .syncSeriesEpisodes(provider, seriesId, preserveCachedRows = true)
             }
             if (result.episodeCount > 0 && result.cacheUpdated) {
                 SeriesEpisodeRefreshPolicy.markSuccess(applicationContext, providerId, seriesId)
