@@ -6,6 +6,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
+import android.view.View
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.ImageView
@@ -19,8 +20,12 @@ import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import tv.blofy.player.R
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.data.CatalogSyncState
@@ -47,6 +52,8 @@ class CatalogLoadingActivity : AppCompatActivity() {
     private lateinit var readyStep: TextView
     private lateinit var retryButton: Button
     private lateinit var backButton: Button
+    private lateinit var cachedButton: Button
+    private var syncJob: Job? = null
     private var currentProviderId: String = ""
     private var lastPercent = 0
     private val isPhone by lazy { DeviceClass.detect(this) == DeviceClass.Kind.PHONE }
@@ -60,7 +67,6 @@ class CatalogLoadingActivity : AppCompatActivity() {
             fail("تعذر تحديد قائمة التشغيل")
             return
         }
-        CatalogSyncState.markPending(applicationContext, currentProviderId)
         startSync()
     }
 
@@ -176,6 +182,10 @@ class CatalogLoadingActivity : AppCompatActivity() {
         recoveryActions.addView(retryButton, LinearLayout.LayoutParams(0, dp(56), 1f).apply { marginStart = dp(8) })
         recoveryActions.addView(backButton, LinearLayout.LayoutParams(0, dp(56), 1f))
         panel.addView(recoveryActions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(64)).apply { topMargin = dp(12) })
+        cachedButton = recoveryButton("الدخول بالمكتبة المحفوظة") { continueWithCachedLibrary() }.apply {
+            visibility = View.GONE
+        }
+        panel.addView(cachedButton, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(56)).apply { topMargin = dp(8) })
 
         root.addView(panel, LinearLayout.LayoutParams(if (isPhone) LinearLayout.LayoutParams.MATCH_PARENT else dp(980), LinearLayout.LayoutParams.WRAP_CONTENT))
         if (isPhone) {
@@ -223,12 +233,38 @@ class CatalogLoadingActivity : AppCompatActivity() {
     }
 
     private fun startSync() {
+        if (syncJob?.isActive == true) return
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         lastPercent = 0
+        cachedButton.visibility = View.GONE
+        cachedButton.isEnabled = true
         render(0, "جاري الاتصال بالخادم...")
-        recoveryContainer()?.visibility = android.view.View.GONE
-        CatalogSyncState.markPending(applicationContext, currentProviderId)
-        lifecycleScope.launch { sync(currentProviderId) }
+        recoveryContainer()?.visibility = View.GONE
+        syncJob = lifecycleScope.launch { sync(currentProviderId) }
+    }
+
+    /** A refresh must never trap the user: cancel staging, then reopen only the committed catalog. */
+    private fun continueWithCachedLibrary() {
+        if (cachedButton.visibility != View.VISIBLE || !cachedButton.isEnabled) return
+        cachedButton.isEnabled = false
+        lifecycleScope.launch {
+            syncJob?.cancelAndJoin() // Wait for the staging transaction to roll back and clean up.
+            val cached = withContext(Dispatchers.IO) {
+                BlofyDatabase.get(applicationContext).dao().hasStreamsForProvider(currentProviderId)
+            }
+            if (cached) {
+                CatalogSyncState.markReady(applicationContext, currentProviderId)
+                openHome()
+            } else {
+                cachedButton.isEnabled = true
+                fail("لا توجد مكتبة محفوظة صالحة للدخول")
+            }
+        }
+    }
+
+    private fun openHome() {
+        startActivity(Intent(this, HomeActivity::class.java))
+        finish()
     }
 
     private fun recoveryContainer(): LinearLayout? =
@@ -240,6 +276,12 @@ class CatalogLoadingActivity : AppCompatActivity() {
             ?: return fail("قائمة التشغيل غير موجودة")
 
         val firstLoad = withContext(Dispatchers.IO) { !dao.hasStreamsForProvider(providerId) }
+        if (firstLoad) {
+            CatalogSyncState.markPending(applicationContext, providerId)
+        } else {
+            // Keep the existing committed library ready throughout a staged refresh.
+            cachedButton.visibility = View.VISIBLE
+        }
         val syncProvider: ProviderEntity = if (firstLoad) {
             target.copy(enabled = true, updatedAt = System.currentTimeMillis())
         } else {
@@ -259,29 +301,37 @@ class CatalogLoadingActivity : AppCompatActivity() {
             check(result.failedSectionCount == 0) { "تعذر تحميل أحد أقسام الباقة" }
 
             render(96, if (firstLoad) "جاري إنهاء المكتبة..." else "جاري حفظ التحديث بأمان...")
-            withContext(Dispatchers.IO) {
-                if (firstLoad) {
-                    dao.saveAndActivateProvider(syncProvider.copy(enabled = true, updatedAt = System.currentTimeMillis()))
-                } else {
-                    dao.promoteStagedCatalog(
-                        syncProvider.id,
-                        target.copy(enabled = true, updatedAt = System.currentTimeMillis())
-                    )
+            // SQLite promotion can be expensive on TV boxes with slow storage. Never wait forever.
+            check(withTimeoutOrNull(6 * 60_000L) {
+                withContext(Dispatchers.IO) {
+                    if (firstLoad) {
+                        dao.saveAndActivateProvider(syncProvider.copy(enabled = true, updatedAt = System.currentTimeMillis()))
+                    } else {
+                        dao.promoteStagedCatalog(
+                            syncProvider.id,
+                            target.copy(enabled = true, updatedAt = System.currentTimeMillis())
+                        )
+                    }
                 }
-            }
+                true
+            } == true) { "انتهت مهلة حفظ المكتبة. يمكنك إعادة المحاولة أو استخدام المكتبة المحفوظة." }
 
             CatalogSyncState.markReady(applicationContext, providerId)
             render(100, "المكتبة جاهزة")
-            startActivity(Intent(this, HomeActivity::class.java))
-            finish()
+            openHome()
         } catch (cancelled: CancellationException) {
-            withContext(Dispatchers.IO) {
-                if (firstLoad) dao.clearProviderCatalog(providerId) else dao.discardStagedCatalog(syncProvider.id)
+            // Cleanup must run even if lifecycleScope cancelled the current coroutine.
+            runCatching {
+                withContext(Dispatchers.IO + NonCancellable) {
+                    if (firstLoad) dao.clearProviderCatalog(providerId) else dao.discardStagedCatalog(syncProvider.id)
+                }
             }
             throw cancelled
         } catch (error: Throwable) {
-            withContext(Dispatchers.IO) {
-                if (firstLoad) dao.clearProviderCatalog(providerId) else dao.discardStagedCatalog(syncProvider.id)
+            runCatching {
+                withContext(Dispatchers.IO + NonCancellable) {
+                    if (firstLoad) dao.clearProviderCatalog(providerId) else dao.discardStagedCatalog(syncProvider.id)
+                }
             }
             fail("تعذر تجهيز المكتبة: ${error.message ?: "خطأ غير معروف"}")
         }
