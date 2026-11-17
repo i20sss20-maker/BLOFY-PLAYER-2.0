@@ -1,5 +1,6 @@
 // Admin-only, read-only service monitor. No customer data and no arbitrary URL inputs.
 import { readFile } from 'node:fs/promises';
+import {siteOperatorReadiness} from './site-operator-readiness.mjs';
 
 export const CONTROL_CENTER_TARGETS = Object.freeze([
   Object.freeze({ id:'player', label:'موقع BLOFY PLAYER', tier:'production', endpoint:'https://blofyplayer.com/health' }),
@@ -77,11 +78,15 @@ export async function controlCenterSnapshot() {
   if(cached && Date.now()-cachedAt<CACHE_MS)return cached;
   if(pending)return pending;
   pending=(async()=>{
-    const checks=await Promise.all(CONTROL_CENTER_TARGETS.map(target=>probeControlCenterTarget(target)));
+    const [checks,operatorReadiness]=await Promise.all([
+      Promise.all(CONTROL_CENTER_TARGETS.map(target=>probeControlCenterTarget(target))),
+      siteOperatorReadiness()
+    ]);
     const result={
       product:'BLOFY CONTROL CENTER',version:1,mode:'read-only',
       checkedAt:new Date().toISOString(),
       checks,
+      operatorReadiness,
       summary:{
         total:checks.length,
         healthy:checks.filter(c=>c.status==='healthy').length,
