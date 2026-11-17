@@ -84,7 +84,11 @@ test('upstream invalid credential is sanitized and browser is never prompted for
     const response=await fetch(base+'/operator');
     assert.equal(response.status,502);
     assert.equal(response.headers.get('www-authenticate'),null);
-    assert.equal((await response.json()).code,'operator_bridge_auth_failed');
+    assert.match(response.headers.get('content-type'),/text\/html/);
+    const content=await response.text();
+    assert.match(content,/operator_bridge_auth_failed/);
+    assert.match(content,/href="\/admin\/control-center\/health"/);
+    assert.doesNotMatch(content,/operator secret invalid|Basic realm/);
   });
 });
 test('no secret means fail closed',async()=>{
