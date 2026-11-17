@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import {once} from 'node:events';
 import {
-  operatorProxyPath,operatorProxyMethod,operatorProxyTarget,proxyStreamOperator,distributorProxyPath,proxyStreamDistributor
+  operatorProxyPath,operatorProxyMethod,operatorProxyTarget,proxyStreamOperator,operatorProxyBodyLimit,distributorProxyPath,proxyStreamDistributor
 } from '../src/admin-stream-operator-proxy.mjs';
 const token='test-website-to-stream-backend-secret-123456789012345678';
 async function withProxy(fetchImpl,run,secret=token){
@@ -173,4 +173,61 @@ test('admin shortcut links point to actual original STREAM tab IDs',async()=>{
   for(const id of ['library','restream','accounts','codes','distributors','sources','diagnostics']){
     assert.ok(admin.includes('/admin/control-center#'+id),id);
   }
+});
+
+
+test('sample-upload exception is exactly one operator path, not a global 2MB admin limit',()=>{
+  assert.equal(operatorProxyBodyLimit('/operator/api/media-scan/owner-sample'),2_000_000);
+  assert.equal(operatorProxyBodyLimit('/operator/api/accounts'),64*1024);
+  assert.equal(operatorProxyBodyLimit('/distributor/api/login'),64*1024);
+});
+test('authorized site proxy forwards one bounded TS sample with explicit rights only',async()=>{
+  const bytes=Buffer.alloc(188*600,0);
+  for(let i=0;i<600;i++){
+    bytes[i*188]=0x47;bytes[i*188+3]=0x10;
+  }
+  let forwarded=0;
+  await withProxy(async(url,options)=>{
+    forwarded++;
+    assert.equal(url,'https://blofy-stream-api-production.up.railway.app/operator/api/media-scan/owner-sample');
+    assert.equal(options.method,'POST');
+    assert.equal(options.headers['x-blofy-sample-rights'],'confirmed');
+    assert.equal(options.headers['x-blofy-operator-action'],'media-scan-owner-sample');
+    assert.equal(options.headers['content-type'],'video/mp2t');
+    assert.equal(options.headers['content-length'],String(bytes.length));
+    assert.ok(Buffer.isBuffer(options.body));
+    assert.equal(Buffer.compare(Buffer.from(options.body),bytes),0);
+    assert.ok(!('cookie' in options.headers));
+    return Response.json({ok:true,scope:'approved_short_ts_sample',
+      decodedAudio:true,decodedVideo:true,productionStreamVerified:false});
+  },async base=>{
+    const response=await fetch(base+'/operator/api/media-scan/owner-sample',{
+      method:'POST',headers:{
+        'content-type':'video/mp2t',
+        'x-blofy-operator-action':'media-scan-owner-sample',
+        'x-blofy-sample-rights':'confirmed'},
+      body:bytes
+    });
+    assert.equal(response.status,200);
+    assert.equal((await response.json()).scope,'approved_short_ts_sample');
+  });
+  assert.equal(forwarded,1);
+});
+test('site proxy rejects large uploads and missing rights before contacting upstream',async()=>{
+  let hits=0;
+  await withProxy(async()=>{hits++;return Response.json({ok:true});},async base=>{
+    const oversized=await fetch(base+'/operator/api/media-scan/owner-sample',{
+      method:'POST',headers:{'content-type':'video/mp2t',
+        'x-blofy-sample-rights':'confirmed','content-length':String(188*11000),
+        'x-blofy-operator-action':'media-scan-owner-sample'},
+      body:Buffer.alloc(188*11000,0x47)
+    });
+    assert.equal(oversized.status,413);
+    const noRights=await fetch(base+'/operator/api/media-scan/owner-sample',{
+      method:'POST',headers:{'content-type':'video/mp2t'},
+      body:Buffer.alloc(188*12,0x47)
+    });
+    assert.equal(noRights.status,403);
+  });
+  assert.equal(hits,0);
 });
