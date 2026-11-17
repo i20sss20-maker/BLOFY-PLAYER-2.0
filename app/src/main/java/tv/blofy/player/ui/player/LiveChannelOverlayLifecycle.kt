@@ -96,6 +96,8 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
         private var loading = false
         private var displayedChannels: List<StreamEntity> = emptyList()
         private var currentChannelKey: String? = null
+        // Retain the highlighted row when changing BLOFY 1 -> BLOFY 2 and reopening the panel.
+        private var lastChannelFocusKey: String? = null
         private var originalChannels: List<StreamEntity> = emptyList()
         private var activeTab: LiveChannelTab = LiveChannelTab.ALL
         private var searchText: String = ""
@@ -234,10 +236,10 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 layoutDirection = View.LAYOUT_DIRECTION_RTL
                 setBackgroundColor(Color.TRANSPARENT)
             }
-            var lastFocusedChannelKey: String? = null
+            var lastFocusedChannelKey: String? = lastChannelFocusKey
             val adapter = LiveChannelAdapter(
                 onClick = { channel -> selectChannel(channel) },
-                onFocus = { lastFocusedChannelKey = it.key },
+                onFocus = { lastFocusedChannelKey = it.key; lastChannelFocusKey = it.key },
                 onLongClick = { channel ->
                     activity.lifecycleScope.launch {
                         val dao = BlofyDatabase.get(activity.applicationContext).dao()
@@ -478,12 +480,22 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             created.setOnShowListener {
                 val window = created.window ?: return@setOnShowListener
                 prepareWindow(window, width, height, reveal = true)
-                val current = currentChannelKey
-                val currentIndex = channels.indexOfFirst { it.key == current }.coerceAtLeast(0)
-                list.scrollToPosition(currentIndex)
+                val currentIndex = LiveChannelPanelPolicy.initialChannelIndex(
+                    channels.map(StreamEntity::key), lastFocusedChannelKey, currentChannelKey)
+                if (currentIndex < 0) return@setOnShowListener
+                searchField?.clearFocus()
+                created.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
+                (list.layoutManager as? LinearLayoutManager)?.scrollToPositionWithOffset(currentIndex, dp(8))
+                // A row may not be attached immediately after scroll. Do not let the dialog
+                // send TV/keyboard focus to the first EditText (search) in that interval.
+                list.isFocusableInTouchMode = true
+                list.requestFocus()
                 list.post {
-                    list.findViewHolderForAdapterPosition(currentIndex)?.itemView?.requestFocus()
-                        ?: list.requestFocus()
+                    if (list.findViewHolderForAdapterPosition(currentIndex)?.itemView?.requestFocus() != true) {
+                        list.postOnAnimation {
+                            list.findViewHolderForAdapterPosition(currentIndex)?.itemView?.requestFocus()
+                        }
+                    }
                 }
             }
             created.show()
@@ -1078,6 +1090,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             if (activity.isFinishing || activity.isDestroyed) return
             val playingKey = RecentChannelStore.keys(activity, channel.providerId).firstOrNull()
                 ?: currentChannelKey
+            lastChannelFocusKey = channel.key
             close()
             if (channel.key == playingKey) return
             if (!activity.selectLiveChannelFromPanel(channel)) {
