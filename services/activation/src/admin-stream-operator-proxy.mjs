@@ -64,6 +64,41 @@ function respond(res,status,message){
   });
   res.end(body);
 }
+function operatorUnavailablePage(res,status,code,path) {
+  // A navigation-only fallback for the HTML admin page; API/media retain JSON.
+  if(path!=='/operator'&&path!=='/operator/')return respond(res,status,code);
+  const body=[
+    '<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">',
+    '<meta name="viewport" content="width=device-width, initial-scale=1">',
+    '<meta name="robots" content="noindex,nofollow"><title>BLOFY | تعذر فتح لوحة STREAM</title>',
+    '<style>body{margin:0;font-family:system-ui,Tahoma,Arial;background:#0b1321;color:#eaf3ff;min-height:100dvh;display:grid;place-items:center;padding:20px}',
+    'main{max-width:690px;width:100%;background:#17253b;border:1px solid #405474;border-radius:20px;padding:clamp(20px,5vw,38px);box-shadow:0 24px 70px #0006}',
+    'h1{font-size:clamp(23px,4vw,32px)}p{line-height:1.9;color:#bdcde0}',
+    'a{display:inline-block;margin:8px 0 0 10px;padding:11px 17px;border-radius:12px;background:#245278;color:#fff;text-decoration:none}',
+    'a:hover,a:focus-visible{outline:2px solid #9ed9ff}small{display:block;color:#839eba;margin-top:18px}</style></head>',
+    '<body><main role="main"><strong>BLOFY CONTROL CENTER</strong>',
+    '<h1>تعذر الاتصال بلوحة STREAM مؤقتًا</h1>',
+    '<p>موقع BLOFY ما زال متاحًا، لكن صفحة إدارة STREAM لم تُفتح. لم نُعد إرسال أي أمر إدارة أو نُغيّر أكواد المشتركين.</p>',
+    '<nav aria-label="خيارات الإدارة"><a href="/admin/control-center">↻ إعادة المحاولة</a>',
+    '<a href="/admin">إدارة الموقع</a>',
+    '<a href="/admin/control-center/health">فحص اتصال الخدمات</a></nav>',
+    '<small>الرمز: ',code,' • HTTP ',String(status),
+    ' • لا يتضمن هذا التقرير معلومات دخول أو روابط المصادر.</small>',
+    '</main></body></html>'
+  ].join('');
+  res.writeHead(status,{
+    'content-type':'text/html; charset=utf-8',
+    'content-length':Buffer.byteLength(body),
+    'cache-control':'no-store, private',
+    'x-robots-tag':'noindex',
+    'x-content-type-options':'nosniff',
+    'referrer-policy':'no-referrer',
+    'x-frame-options':'DENY',
+    'content-security-policy':"default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+  });
+  res.end(body);
+}
+
 export async function proxyStreamOperator(req,res,{
   secret=process.env.BLOFY_STREAM_OPERATOR_PROXY_TOKEN||'',
   fetchImpl=fetch,
@@ -72,7 +107,7 @@ export async function proxyStreamOperator(req,res,{
   const uri=new URL(req.url||'/','http://localhost');
   const path=pathOverride||uri.pathname;
   if(!operatorProxyMethod(req.method,path))return respond(res,405,'operator_method_not_allowed');
-  if(typeof secret!=='string'||secret.length<40)return respond(res,503,'operator_proxy_not_configured');
+  if(typeof secret!=='string'||secret.length<40)return operatorUnavailablePage(res,503,'operator_proxy_not_configured',path);
   const upstream=operatorProxyTarget(req.url||'/',path);
   const controller=new AbortController();
   const onClose=()=>{if(!res.writableFinished)controller.abort();};
@@ -111,12 +146,16 @@ export async function proxyStreamOperator(req,res,{
     // Never forward WWW-Authenticate or Basic challenges to browsers.
     if(reply.status===401){
       try{await reply.body?.cancel();}catch{}
-      return respond(res,502,'operator_bridge_auth_failed');
+      return operatorUnavailablePage(res,502,'operator_bridge_auth_failed',path);
     }
     // Do not forward any redirects to media providers or external hosts.
     if(reply.status>=300&&reply.status<400 && reply.status!==304){
       try{await reply.body?.cancel();}catch{}
-      return respond(res,502,'operator_upstream_redirect_not_allowed');
+      return operatorUnavailablePage(res,502,'operator_upstream_redirect_not_allowed',path);
+    }
+    if(reply.status>=500&&(path==='/operator'||path==='/operator/')){
+      try{await reply.body?.cancel()}catch{}
+      return operatorUnavailablePage(res,502,'operator_service_unavailable',path);
     }
     const forward={
       'cache-control':'no-store, private',
@@ -140,9 +179,9 @@ export async function proxyStreamOperator(req,res,{
     await pipeline(Readable.fromWeb(reply.body),res);
   }catch(error){
     if(!res.headersSent&&!res.writableEnded){
-      respond(res,error?.code===413?413:error?.code===400?400:502,
+      operatorUnavailablePage(res,error?.code===413?413:error?.code===400?400:502,
         error?.code===413?'operator_request_too_large':
-        error?.code===400?'operator_request_length_invalid':'operator_proxy_unavailable');
+        error?.code===400?'operator_request_length_invalid':'operator_proxy_unavailable',path);
     }else if(!res.writableEnded)res.destroy();
   }finally{
     if(timer)clearTimeout(timer);
