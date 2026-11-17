@@ -16,7 +16,7 @@ import { appDownloadAction } from './app-download-policy.mjs';
 import { observeDownloadCompletion } from './download-metrics.mjs';
 import { recordDownloadCompletion, getDownloadStats } from './app-library.mjs';
 import { publicSiteRedirect } from './public-site-redirect.mjs';
-import { streamReleaseMetadata, STREAM_RELEASE_FILENAME, STREAM_TEST_FILENAME, STREAM_TEST_PATH } from './stream-release.mjs';
+import { streamReleaseMetadata, STREAM_RELEASE_FILENAME, STREAM_PREVIOUS_RELEASE_FILENAME, STREAM_TEST_FILENAME, STREAM_TEST_PATH } from './stream-release.mjs';
 import { UPDATE_SITE_CANONICAL, updateRobotsTxt, updateSitemapXml, renderMissingPublicPage, isPublicHtmlRequest } from './public-search-pages.mjs';
 
 const PORT = Number(process.env.PORT || 3000);
@@ -1016,8 +1016,9 @@ const server = http.createServer(async (req, res) => {
       // STREAM and PLAYER are independent applications. Never redirect the
       // current STREAM APK to PLAYER while retiring PLAYER's old archive links.
       const isCurrentStreamApk = localReleaseMatch[1] === STREAM_RELEASE_FILENAME;
+      const isPreviousStreamApk = localReleaseMatch[1] === STREAM_PREVIOUS_RELEASE_FILENAME;
       const isOwnerStreamTestApk = localReleaseMatch[1] === STREAM_TEST_FILENAME;
-      if (BLOFY_ONLY_CURRENT && !isCurrentStreamApk && !isOwnerStreamTestApk && ['GET', 'HEAD'].includes(method)) {
+      if (BLOFY_ONLY_CURRENT && !isCurrentStreamApk && !isPreviousStreamApk && !isOwnerStreamTestApk && ['GET', 'HEAD'].includes(method)) {
         return redirect(res, '/download/latest.apk');
       }
       if (!['GET', 'HEAD'].includes(method)) {
@@ -1025,7 +1026,7 @@ const server = http.createServer(async (req, res) => {
         return res.end();
       }
       return await streamLocalApk(req, res, localReleaseMatch[1], localReleaseMatch[1],
-        isCurrentStreamApk ? 'app:blofy-stream' : isOwnerStreamTestApk ? 'app:blofy-stream-test' : 'blofy');
+        isCurrentStreamApk || isPreviousStreamApk ? 'app:blofy-stream' : isOwnerStreamTestApk ? 'app:blofy-stream-test' : 'blofy');
     }
 
     if (pathname === '/admin' || pathname === '/admin/' || pathname === PUBLIC_ADMIN_PREFIX || pathname === `${PUBLIC_ADMIN_PREFIX}/`) {
