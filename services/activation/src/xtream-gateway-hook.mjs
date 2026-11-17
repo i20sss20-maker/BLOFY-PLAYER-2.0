@@ -1584,6 +1584,8 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
           requestRange:headers.range||null,usingIndependentRelay,
           format:inspection.format,headers:response.headers
         });
+        if(vodPlan&&first.value.byteLength>vodPlan.total)
+          throw Error('vod_resume_initial_payload_overrun');
         let resumedVod=false;
         res.writeHead(response.status, outputHeaders);
         const stream = Readable.from((async function* () {
