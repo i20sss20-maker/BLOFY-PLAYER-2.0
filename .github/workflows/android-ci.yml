@@ -127,7 +127,7 @@ jobs:
       - name: Verify actual catalog queries on 200k rows
         run: python3 tools/check_catalog_queries.py
       - name: Verify Play Xiaomi-design UX / STREAM candidate 2000088 manifest and TV routes
-        if: github.head_ref != 'fix/stream-55832-catalog-refresh-stall-20261117'
+        if: github.head_ref != 'fix/stream-55832-catalog-refresh-stall-20261117' && github.head_ref != 'integration/stream-55832-stable-tv-catalog-20261117'
         env:
           BLOFY_EXPECTED_PLAY_VERSION_CODE: "2000088"
         run: python3 tools/verify_play_2000073.py
@@ -144,7 +144,7 @@ jobs:
             -PBLOFY_ACTIVATION_BASE_URL=https://api.blofyplayer.com \
             lintDebug assembleDebug assembleDebugAndroidTest 2>&1 | tee -a gradle-ci.log
       - name: Test STREAM 55.8.32 code-only catalog persistence regression
-        if: github.head_ref == 'fix/stream-55832-catalog-refresh-stall-20261117'
+        if: github.head_ref == 'fix/stream-55832-catalog-refresh-stall-20261117' || github.head_ref == 'integration/stream-55832-stable-tv-catalog-20261117'
         shell: bash
         run: |
           set -euo pipefail
@@ -152,7 +152,8 @@ jobs:
             -PBLOFY_ACTIVATION_BASE_URL=http://127.0.0.1:9 \
             -PBLOFY_UPDATE_BASE_URL=http://127.0.0.1:9 \
             testStreamCodeOnlyUnitTest \
-            --tests 'tv.blofy.player.data.preparation.CatalogLoadPersistenceTest'
+            --tests 'tv.blofy.player.data.preparation.CatalogLoadPersistenceTest' \
+            --tests 'tv.blofy.player.ui.player.LiveChannelPanelPolicyTest'
 
       - name: Upload Gradle diagnostics
         if: always()
@@ -196,7 +197,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
       - name: Build Google Play 2000086 debug manifest variant
-        if: github.head_ref != 'fix/stream-55832-catalog-refresh-stall-20261117'
+        if: github.head_ref != 'fix/stream-55832-catalog-refresh-stall-20261117' && github.head_ref != 'integration/stream-55832-stable-tv-catalog-20261117'
         shell: bash
         run: |
           set -euxo pipefail
@@ -219,7 +220,7 @@ jobs:
           done
           cp "$APK" app/build/outputs/apk/debug/blofy-play-2000086-test-only.apk
       - name: Save Google Play 2000086 debug artifact
-        if: github.head_ref != 'fix/stream-55832-catalog-refresh-stall-20261117'
+        if: github.head_ref != 'fix/stream-55832-catalog-refresh-stall-20261117' && github.head_ref != 'integration/stream-55832-stable-tv-catalog-20261117'
         uses: actions/upload-artifact@v4
         with:
           name: BLOFY-PLAY-2000086-TEST-ONLY-${{ github.sha }}
