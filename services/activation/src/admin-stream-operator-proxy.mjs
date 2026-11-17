@@ -85,8 +85,11 @@ export async function proxyStreamOperator(req,res,{
       redirect:'manual',
       signal:controller.signal
     });
-    // Never expose the backend's Basic-auth prompt to browsers.
-    if(reply.status===401||reply.status===403){
+    // A 401 means our server-to-server credential was denied. However, a
+    // 403 from an authorized operator action is a legitimate policy failure,
+    // not a broken bridge: preserve its status and sanitized upstream JSON.
+    // Never forward WWW-Authenticate or Basic challenges to browsers.
+    if(reply.status===401){
       try{await reply.body?.cancel();}catch{}
       return respond(res,502,'operator_bridge_auth_failed');
     }
