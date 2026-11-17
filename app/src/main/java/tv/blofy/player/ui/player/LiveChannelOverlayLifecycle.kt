@@ -192,6 +192,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             activity.intent.putExtra(PlayerReturnNavigationLifecycle.EXTRA_RETURN_ALREADY_ROUTED, true)
             activity.startActivity(Intent(activity, ContentBrowserActivity::class.java).apply {
                 putExtra(ContentBrowserActivity.EXTRA_KIND, KIND_LIVE)
+                putExtra(ContentBrowserActivity.EXTRA_RESTORE_LIVE_FOCUS, true)
                 addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             })
             activity.finish()
