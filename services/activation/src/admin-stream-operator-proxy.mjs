@@ -36,8 +36,12 @@ export function operatorProxyBodyLimit(path){
   return path===OWNER_SAMPLE_PATH?OWNER_SAMPLE_MAX_BYTES:MAX_REQUEST_BYTES;
 }
 async function readBoundedBody(req,maxBytes=MAX_REQUEST_BYTES) {
-  const length=Number(req.headers?.['content-length']);
-  if(!Number.isSafeInteger(length)||length<0||length>maxBytes)
+  const rawLength=req.headers?.['content-length'];
+  const strict=maxBytes===OWNER_SAMPLE_MAX_BYTES;
+  if((strict&&typeof rawLength!=='string')||
+    (rawLength!==undefined&&
+     (!/^[0-9]{1,8}$/.test(String(rawLength))||
+      Number(rawLength)>maxBytes)))
     throw Object.assign(Error('body_too_large'),{code:413});
   const chunks=[];let size=0;
   for await(const chunk of req){
@@ -45,7 +49,7 @@ async function readBoundedBody(req,maxBytes=MAX_REQUEST_BYTES) {
     if(size>maxBytes)throw Object.assign(Error('body_too_large'),{code:413});
     chunks.push(chunk);
   }
-  if(size!==Number(req.headers?.['content-length']))
+  if(rawLength!==undefined&&size!==Number(rawLength))
     throw Object.assign(Error('body_length_mismatch'),{code:400});
   return Buffer.concat(chunks,size);
 }
