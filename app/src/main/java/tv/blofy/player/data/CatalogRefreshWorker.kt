@@ -319,7 +319,8 @@ class CatalogRefreshWorker(
             if (providerId.isBlank() || (!manual && !CatalogAutoRefreshPolicy.isEnabled(context))) return
             val request = OneTimeWorkRequestBuilder<CatalogRefreshWorker>()
                 .setConstraints(if (manual) manualConstraints else constraints)
-                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 20, TimeUnit.SECONDS)
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL,
+                    if (manual) 20 else 30, if (manual) TimeUnit.SECONDS else TimeUnit.MINUTES)
                 .setInputData(androidx.work.workDataOf(KEY_PROVIDER_ID to providerId, KEY_MANUAL to manual))
                 .build()
             WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(
