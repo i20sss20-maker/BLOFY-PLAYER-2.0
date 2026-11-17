@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {verifiedVodResumePlan,resumeVerifiedVodBytes} from '../src/xtream-vod-range-resume.mjs';
+import {verifiedVodResumePlan,resumeVerifiedVodBytes,allowedVodResumePilot} from '../src/xtream-vod-range-resume.mjs';
 
 const etag='"stable-provider-file-revision-2026"';
 const url='https://licensed-provider.example/movie/SAFE_PRIVATE_SESSION/98765.mp4';
@@ -124,4 +124,33 @@ test('customer VOD integration remains disabled by default; no reconnect on live
  assert.match(block,/controller\.abort\(\);[\s\S]*await reader\.cancel\(\)/);
  assert.match(block,/resumedVod/);
  assert.doesNotMatch(block,/\.replace\(\/movie\//);
+});
+
+test('only a named QA account and licensed source can activate the guarded recovery',()=>{
+ const sourceId='f2631a8b-37e4-4b37-ab7b-3f3fe2de912f';
+ const accountId='937ba740-b1dd-44cf-9ff4-55b99e4ca15a';
+ const other='4e0ce9b3-1b26-4405-af70-86be533e2ffc';
+ const allowed={enabled:true,sourceId,accountId,
+  pilotAccountId:accountId,pilotSourceId:sourceId};
+ assert.equal(allowedVodResumePilot(allowed),true);
+ for(const data of [
+  {enabled:false},{pilotAccountId:undefined},{pilotSourceId:''},
+  {accountId:other},{sourceId:other},{pilotSourceId:other},
+  {pilotAccountId:other},{pilotAccountId:'*'},{pilotSourceId:'all'},
+  {pilotAccountId:'not-a-uuid'},{accountId:undefined}
+ ]){
+  assert.equal(allowedVodResumePilot({...allowed,...data}),false,JSON.stringify(data));
+ }
+});
+
+test('production gateway cannot turn on VOD resume without exact account and source IDs',async()=>{
+ const gateway=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
+ const marker=gateway.slice(gateway.indexOf('const vodPlan=verifiedVodResumePlan({'),
+  gateway.indexOf('let resumedVod=false;'));
+ assert.match(marker,/enabled:allowedVodResumePilot\(/);
+ assert.match(marker,/accountId:String\(account\.id\|\|''\)/);
+ assert.match(marker,/sourceId:String\(row\.server_id\|\|''\)/);
+ assert.match(marker,/BLOFY_XTREAM_VOD_RANGE_RESUME_PILOT_ACCOUNT_ID/);
+ assert.match(marker,/BLOFY_XTREAM_VOD_RANGE_RESUME_PILOT_SOURCE_ID/);
+ assert.doesNotMatch(marker,/enabled:process\.env\.BLOFY_XTREAM_VOD_RANGE_RESUME_ENABLED==='1',\s*kind/);
 });
