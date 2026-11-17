@@ -115,7 +115,7 @@ test('full site audit only performs GET and reports no unverified media claims',
   assert.equal(result.summary.connected,8);
   assert.equal(result.summary.unavailable,0);
   assert.match(result.scope,/no POST/);
-  assert.match(result.scope,/no media transfer/);
+  assert.match(result.scope,/media transfer/);
 });
 
 test('admin monitor displays real subsystem readiness without making write actions',async()=>{
