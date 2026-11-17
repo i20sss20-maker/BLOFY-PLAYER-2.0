@@ -32,6 +32,11 @@ const RELEASE_ARTIFACT_SHA256 = String(process.env.BLOFY_RELEASE_APK_SHA256 || '
 const STREAM_ARTIFACT_ZIP_URL = String(process.env.BLOFY_STREAM_ARTIFACT_ZIP_URL || '').trim();
 const STREAM_ARTIFACT_ENTRY = String(process.env.BLOFY_STREAM_ARTIFACT_ENTRY || '').trim();
 const STREAM_ARTIFACT_SHA256 = String(process.env.BLOFY_STREAM_ARTIFACT_SHA256 || '').trim().toLowerCase();
+// Promotion staging: import an owner-signed NEXTGEN APK to the same persistent
+// release volume BEFORE updating the public STREAM catalog. Old release remains live.
+const STREAM_NEXT_ARTIFACT_ZIP_URL = String(process.env.BLOFY_STREAM_NEXT_ARTIFACT_ZIP_URL || '').trim();
+const STREAM_NEXT_ARTIFACT_ENTRY = String(process.env.BLOFY_STREAM_NEXT_ARTIFACT_ENTRY || '').trim();
+const STREAM_NEXT_ARTIFACT_SHA256 = String(process.env.BLOFY_STREAM_NEXT_ARTIFACT_SHA256 || '').trim().toLowerCase();
 // Keep archived builds hidden when one current public release is selected.
 const BLOFY_ONLY_CURRENT = String(process.env.BLOFY_SINGLE_RELEASE_75 || '').toLowerCase() === 'true' ||
   String(process.env.BLOFY_PUBLIC_RELEASE_2000078 || '').toLowerCase() === 'true' ||
@@ -1206,6 +1211,14 @@ await importReleaseArtifactIfConfigured({
   url: STREAM_ARTIFACT_ZIP_URL, entry: STREAM_ARTIFACT_ENTRY, sha256: STREAM_ARTIFACT_SHA256
 }).catch(error => {
   console.error('STREAM artifact import failed:', error?.message || error);
+});
+await importReleaseArtifactIfConfigured({
+  url: STREAM_NEXT_ARTIFACT_ZIP_URL,
+  entry: STREAM_NEXT_ARTIFACT_ENTRY,
+  sha256: STREAM_NEXT_ARTIFACT_SHA256
+}).catch(error => {
+  // Do not promote a missing or unverified candidate in the public catalog.
+  console.error('STREAM NEXT artifact import failed:', error?.message || error);
 });
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`BLOFY Azure update distribution listening on ${PORT}`);
