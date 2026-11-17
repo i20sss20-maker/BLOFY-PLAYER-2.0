@@ -30,14 +30,16 @@ object RemoteKeyRouter {
         if (digit != null) return RoutedKey(RemoteAction.DIGIT, digit)
         return RoutedKey(when (event.keyCode) {
             KeyEvent.KEYCODE_BACK -> RemoteAction.BACK
-            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> RemoteAction.OK
+            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER,
+            KeyEvent.KEYCODE_NUMPAD_ENTER, KeyEvent.KEYCODE_BUTTON_A -> RemoteAction.OK
             KeyEvent.KEYCODE_DPAD_UP -> RemoteAction.UP
             KeyEvent.KEYCODE_DPAD_DOWN -> RemoteAction.DOWN
             KeyEvent.KEYCODE_DPAD_LEFT -> RemoteAction.LEFT
             KeyEvent.KEYCODE_DPAD_RIGHT -> RemoteAction.RIGHT
             KeyEvent.KEYCODE_CHANNEL_UP, KeyEvent.KEYCODE_MEDIA_NEXT -> RemoteAction.CHANNEL_NEXT
             KeyEvent.KEYCODE_CHANNEL_DOWN, KeyEvent.KEYCODE_MEDIA_PREVIOUS -> RemoteAction.CHANNEL_PREVIOUS
-            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_PLAY, KeyEvent.KEYCODE_MEDIA_PAUSE -> RemoteAction.PLAY_PAUSE
+            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_PLAY, KeyEvent.KEYCODE_MEDIA_PAUSE,
+            KeyEvent.KEYCODE_SPACE -> RemoteAction.PLAY_PAUSE
             KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> RemoteAction.FAST_FORWARD
             KeyEvent.KEYCODE_MEDIA_REWIND -> RemoteAction.REWIND
             else -> RemoteAction.UNKNOWN
