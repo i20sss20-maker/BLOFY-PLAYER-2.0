@@ -333,7 +333,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 typeface = BlofyTvDesign.HeadingTypeface
                 setTextColor(Color.WHITE)
                 gravity = Gravity.CENTER
-                isFocusable = true
+                isFocusable = false
                 isClickable = true
                 id = View.generateViewId()
                 background = GradientDrawable().apply {
@@ -352,7 +352,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 gravity = Gravity.CENTER
                 setTextColor(BlofyTvDesign.TextSecondary)
                 isClickable = true
-                isFocusable = true
+                isFocusable = false
                 background = GradientDrawable().apply {
                     cornerRadius = dp(10).toFloat()
                     setColor(0xD52D2537.toInt())
@@ -550,8 +550,9 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 // A row may not be attached immediately after scroll. Do not let the dialog
                 // send TV/keyboard focus to the first EditText (search) in that interval.
                 list.isFocusableInTouchMode = true
-                // Focus a real row before enabling the separate Search shortcut for D-pad.
+                // Neither header shortcut gets default focus when this window opens.
                 searchButton.isFocusable = false
+                closeButton.isFocusable = false
                 list.requestFocus()
                 list.post {
                     if (list.findViewHolderForAdapterPosition(currentIndex)?.itemView?.requestFocus() != true) {
@@ -561,6 +562,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                         }
                     }
                     searchButton.isFocusable = true
+                    closeButton.isFocusable = true
                 }
             }
             created.show()
