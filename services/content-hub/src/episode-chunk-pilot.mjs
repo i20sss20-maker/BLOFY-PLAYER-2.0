@@ -357,6 +357,7 @@ export async function runOneEpisodeChunk({
   markStage('verify_full_file');
   const fullSha=await verifyStoredEpisode({storage,parts:run.parts,
     total:cfg.expectedBytes,signal});
+  markStage('checkpoint');
   await lease.verifyEpisodeRun(cfg.runId,{sha256:fullSha});
   return {...base,ok:true,code:'episode_fully_verified',completed:true,
    bytes:cfg.expectedBytes,sha256:fullSha,chunksSaved:no,totalParts,
