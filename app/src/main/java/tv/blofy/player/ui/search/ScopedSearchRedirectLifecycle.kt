@@ -19,10 +19,9 @@ class ScopedSearchRedirectLifecycle : Application.ActivityLifecycleCallbacks {
             // AI and other deep links arrive in SearchActivity with a real query.
             // Forward it when routing to a scoped screen; otherwise the next
             // activity opens with a blank search box and no matching results.
-            activity.intent.getStringExtra(SearchActivity.EXTRA_INITIAL_QUERY)
-                ?.trim()?.take(120)?.takeIf(String::isNotBlank)?.let {
-                    putExtra(SectionSearchActivity.EXTRA_QUERY, it)
-                }
+            forwardedQuery(activity.intent)?.let {
+                putExtra(SectionSearchActivity.EXTRA_QUERY, it)
+            }
         })
         activity.finish()
     }
@@ -34,7 +33,12 @@ class ScopedSearchRedirectLifecycle : Application.ActivityLifecycleCallbacks {
     override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
     override fun onActivityDestroyed(activity: Activity) = Unit
 
-    private companion object {
-        val SCOPED_KINDS = setOf("live", "movie", "series")
+    companion object {
+        private val SCOPED_KINDS = setOf("live", "movie", "series")
+
+        /** Keep AI-selected search text when an older scoped entry point redirects. */
+        internal fun forwardedQuery(intent: Intent): String? =
+            intent.getStringExtra(SearchActivity.EXTRA_INITIAL_QUERY)
+                ?.trim()?.take(120)?.takeIf(String::isNotBlank)
     }
 }
