@@ -138,6 +138,11 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                     openChannelList()
                     true
                 }
+                LivePlayerMenuAction.SHOW_SEARCH_WINDOW -> {
+                    activity.dismissLiveAudioControls()
+                    openSearchWindow(emptyList())
+                    true
+                }
                 LivePlayerMenuAction.DISMISS_CONTROLS -> {
                     activity.dismissLiveAudioControls()
                     true
