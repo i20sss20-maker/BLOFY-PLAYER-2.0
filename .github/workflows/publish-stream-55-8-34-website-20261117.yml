@@ -67,8 +67,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sdkmanager "build-tools;35.0.0" >/dev/null
           tools="$ANDROID_HOME/build-tools/35.0.0"
+          if [ ! -x "$tools/apksigner" ]; then
+            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "build-tools;35.0.0" >/dev/null
+          fi
           "$tools/aapt" dump badging "$RUNNER_TEMP/$APK" > "$RUNNER_TEMP/badging.txt"
           grep -Fq "name='tv.blofy.player.v2.stream' versionCode='2000111' versionName='2.0.0-rc07.55.8.34-STREAM'" "$RUNNER_TEMP/badging.txt"
           ! grep -Fq 'application-debuggable' "$RUNNER_TEMP/badging.txt"
