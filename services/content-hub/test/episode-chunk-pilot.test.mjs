@@ -384,3 +384,123 @@ test('strong ETag reduces extra probes while still requiring content byte contin
  assert.equal(count,3,'two boundary probes and exactly one part read');
  assert.equal(m.run.validator,'"strong-provider-revision"');
 });
+
+test('source ETags differing between first/last boundary prevent even one S3 write',async()=>{
+ const m=mocks();let calls=0;
+ const fetchImpl=async(_,opts)=>{
+  calls++;
+  const [,a,b]=/^bytes=(\d+)-(\d+)$/.exec(opts.headers.range);
+  const from=Number(a),to=Number(b);
+  const bytes=Buffer.from(m.film.subarray(from,to+1));
+  return new Response(bytes,{status:206,headers:{
+   'content-range':`bytes ${from}-${to}/${m.film.length}`,
+   'content-length':String(bytes.length),
+   etag:calls===1?'"revision-A"':'"revision-B"'
+  }});
+ };
+ const r=await runOneEpisodeChunk({...m,env:config(),
+  candidateInspector:async()=>({ok:true,candidates:[candidate]}),fetchImpl});
+ assert.equal(r.ok,false);
+ assert.equal(r.code,'episode_source_version_changed');
+ assert.equal(r.errorStage,'boundary_precheck');
+ assert.equal(calls,2);
+ assert.equal(m.getWrites(),0);
+ assert.equal(m.run.parts.length,0);
+ assert.equal(m.run.state,'failed');
+});
+test('source ETag changing only on actual 8 MiB media chunk is never checkpointed',async()=>{
+ const m=mocks();let calls=0;
+ const fetchImpl=async(_,opts)=>{
+  calls++;
+  const [,a,b]=/^bytes=(\d+)-(\d+)$/.exec(opts.headers.range);
+  const from=Number(a),to=Number(b);
+  const bytes=Buffer.from(m.film.subarray(from,to+1));
+  return new Response(bytes,{status:206,headers:{
+   'content-range':`bytes ${from}-${to}/${m.film.length}`,
+   'content-length':String(bytes.length),
+   etag:calls===3?'"revision-rotated"':'"revision-original"'
+  }});
+ };
+ const r=await runOneEpisodeChunk({...m,env:config(),
+  candidateInspector:async()=>({ok:true,candidates:[candidate]}),fetchImpl});
+ assert.equal(r.ok,false);
+ assert.equal(r.code,'episode_source_version_changed');
+ assert.equal(r.errorStage,'source_chunk');
+ assert.equal(calls,3);
+ assert.equal(m.getWrites(),0);
+ assert.equal(m.run.parts.length,0);
+});
+test('one missing ETag among boundary samples forces postcheck and boundary checkpoint',async()=>{
+ const m=mocks();let calls=0;
+ const fetchImpl=async(_,opts)=>{
+  calls++;
+  const [,a,b]=/^bytes=(\d+)-(\d+)$/.exec(opts.headers.range);
+  const from=Number(a),to=Number(b);
+  const bytes=Buffer.from(m.film.subarray(from,to+1));
+  return new Response(bytes,{status:206,headers:{
+   'content-range':`bytes ${from}-${to}/${m.film.length}`,
+   'content-length':String(bytes.length),
+   ...(calls===2?{}:{etag:'"revision-A"'})
+  }});
+ };
+ const r=await runOneEpisodeChunk({...m,env:config(),
+  candidateInspector:async()=>({ok:true,candidates:[candidate]}),fetchImpl});
+ assert.equal(r.ok,true,r.code);
+ assert.equal(r.code,'episode_checkpoint_saved');
+ assert.equal(calls,5,'must not trust a single strong ETag');
+ assert.match(m.run.validator,/^boundary-sha256:/);
+ assert.equal(m.getWrites(),1);
+});
+test('an existing fingerprint checkpoint continues when a provider later adds stable strong ETag',async()=>{
+ const m=mocks();let calls=0;
+ const fetchImpl=async(_,opts)=>{
+  calls++;
+  const [,a,b]=/^bytes=(\d+)-(\d+)$/.exec(opts.headers.range);
+  const from=Number(a),to=Number(b);
+  const bytes=Buffer.from(m.film.subarray(from,to+1));
+  return new Response(bytes,{status:206,headers:{
+   'content-range':`bytes ${from}-${to}/${m.film.length}`,
+   'content-length':String(bytes.length),
+   ...(calls>5?{etag:'"revision-A"'}:{})
+  }});
+ };
+ const opts={...m,env:config(),
+  candidateInspector:async()=>({ok:true,candidates:[candidate]}),fetchImpl};
+ const first=await runOneEpisodeChunk(opts);
+ assert.equal(first.ok,true,first.code);
+ assert.match(m.run.validator,/^boundary-sha256:/);
+ const second=await runOneEpisodeChunk(opts);
+ assert.equal(second.ok,true,second.code);
+ assert.equal(second.code,'episode_fully_verified');
+ assert.match(m.run.validator,/^boundary-sha256:/);
+ assert.equal(calls,10,'stored fingerprint requires postcheck even with new ETag');
+ assert.equal(m.getWrites(),2);
+ assert.equal(m.verified(),true);
+});
+test('resumed strong-ETag checkpoint fails closed if next part no longer has strong ETags',async()=>{
+ const m=mocks();let calls=0;
+ const fetchImpl=async(_,opts)=>{
+  calls++;
+  const [,a,b]=/^bytes=(\d+)-(\d+)$/.exec(opts.headers.range);
+  const from=Number(a),to=Number(b);
+  const bytes=Buffer.from(m.film.subarray(from,to+1));
+  return new Response(bytes,{status:206,headers:{
+   'content-range':`bytes ${from}-${to}/${m.film.length}`,
+   'content-length':String(bytes.length),
+   ...(calls>3?{}:{etag:'"revision-A"'})
+  }});
+ };
+ const opts={...m,env:config(),
+  candidateInspector:async()=>({ok:true,candidates:[candidate]}),fetchImpl};
+ const first=await runOneEpisodeChunk(opts);
+ assert.equal(first.ok,true,first.code);
+ assert.equal(m.run.validator,'"revision-A"');
+ const next=await runOneEpisodeChunk(opts);
+ assert.equal(next.ok,false);
+ assert.equal(next.code,'episode_source_version_changed');
+ assert.equal(next.errorStage,'boundary_precheck');
+ assert.equal(calls,5);
+ assert.equal(m.getWrites(),1,'previous verified chunk remains untouched');
+ assert.equal(m.run.parts.length,1);
+ assert.equal(m.run.state,'failed');
+});
