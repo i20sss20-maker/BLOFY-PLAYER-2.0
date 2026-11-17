@@ -49,6 +49,7 @@ class CatalogRefreshWorker(
             dao.provider(providerId)
         } ?: return Result.success()
         val manual = inputData.getBoolean(KEY_MANUAL, false)
+        if (!manual && !CatalogAutoRefreshPolicy.isEnabled(app)) return Result.success()
         // STREAM auto-refresh is explicitly enabled for an already committed
         // catalog. It must never silently change an activation source or provider.
         // A pending periodic job for a previously selected account must not
@@ -290,6 +291,10 @@ class CatalogRefreshWorker(
          */
         fun scheduleAutomatic(context: Context, providerId: String) {
             if (providerId.isBlank()) return
+            if (!CatalogAutoRefreshPolicy.isEnabled(context)) {
+                cancelStreamAutomatic(context, providerId)
+                return
+            }
             val request = PeriodicWorkRequestBuilder<CatalogRefreshWorker>(
                 CatalogAutoRefreshPolicy.INTERVAL_MINUTES, TimeUnit.MINUTES
             )
@@ -303,6 +308,7 @@ class CatalogRefreshWorker(
         }
 
         fun enqueueIfStale(context: Context, providerId: String) {
+            if (!CatalogAutoRefreshPolicy.isEnabled(context)) return
             if (CatalogAutoRefreshPolicy.isDue(
                     CatalogSyncState.lastSyncedAt(context, providerId), System.currentTimeMillis()
                 )
@@ -310,7 +316,7 @@ class CatalogRefreshWorker(
         }
 
         fun enqueueNow(context: Context, providerId: String, manual: Boolean = true) {
-            if (providerId.isBlank()) return
+            if (providerId.isBlank() || (!manual && !CatalogAutoRefreshPolicy.isEnabled(context))) return
             val request = OneTimeWorkRequestBuilder<CatalogRefreshWorker>()
                 .setConstraints(if (manual) manualConstraints else constraints)
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 20, TimeUnit.SECONDS)
