@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { createAdminSessionStore } from './admin-session-store.mjs';
 import { verifyNativeXtreamCsrf } from './xtream-native-csrf.mjs';
 import { controlCenterAsset, controlCenterSnapshot } from './admin-control-center.mjs';
-import { proxyStreamOperator, operatorProxyPath } from './admin-stream-operator-proxy.mjs';
+import { proxyStreamOperator, operatorProxyPath, distributorProxyPath, proxyStreamDistributor } from './admin-stream-operator-proxy.mjs';
 
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
 const ADMIN_USERNAME = String(process.env.BLOFY_ADMIN_USERNAME || '').trim();
@@ -181,6 +181,13 @@ http.createServer = function patchedAdminSessionCreateServer(listener) {
     if (req.method==='GET' && url.pathname==='/api/v1/admin/control-center/status') {
       if (!await validSession(req)) return json(res,401,{error:'admin_session_required'});
       return json(res,200,await controlCenterSnapshot());
+    }
+    // STREAM resellers retain their own distributor session and permissions.
+    // The site's existing CSRF origin check runs before the backend rewrite.
+    if (distributorProxyPath(url.pathname)) {
+      if (req.method==='POST' && !sameOrigin(req))
+        return json(res,403,{error:'invalid_origin'});
+      return proxyStreamDistributor(req,res);
     }
     // The private Content Hub dashboard is an admin subpage, not a public
     // route. Reuse exactly the same signed admin session as /admin.
