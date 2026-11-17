@@ -92,3 +92,20 @@ test('source HLS/HTML/JSON are classified safely, without forwarding upstream co
   assert.equal(JSON.stringify(err).includes('expired token'),false);
  }
 });
+
+test('shifted MPEG TS packets are recognized without forwarding non-media HTML',async()=>{
+ const offset=19,transport=Buffer.alloc(790,0);
+ for(let i=0;i<4;i++)transport[offset+188*i]=0x47;
+ assert.equal(sniffFirstAudioMime(transport),'video/mp2t');
+ const bridge=makeBridge(transport,'application/octet-stream');
+ const {response,body}=fakeResponse();
+ await bridge.stream({method:'GET',headers:{}},response,'anis-max-1','owner-test');
+ assert.equal(response.statusCode,200);
+ assert.equal(response.outgoingHeaders['content-type'],'video/mp2t');
+ assert.deepEqual(body(),transport);
+ const incomplete=Buffer.from(transport);
+ incomplete[offset+3*188]=0;
+ assert.equal(sniffFirstAudioMime(incomplete),null);
+ const text=Buffer.from('<!doctype html>Provider access error');
+ assert.equal(sniffFirstAudioMime(text),null);
+});

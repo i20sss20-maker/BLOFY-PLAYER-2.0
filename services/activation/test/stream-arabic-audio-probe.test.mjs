@@ -112,3 +112,69 @@ test('HTTP 200 HLS index is reported as a playlist and not as raw audio',async()
   assert.equal(result[0].payloadClass,'hls_playlist');
   assert.equal(result[0].reason,'unrecognized_stream_bytes');
 });
+
+function chunkFixture(chunks,status=200){
+ return (_options,respond)=>{
+  const request=new EventEmitter();
+  request.destroy=()=>{};
+  request.end=()=>{
+   const response=new EventEmitter();
+   response.statusCode=status;
+   response.headers={'content-type':'text/plain'};
+   response.destroy=()=>{};
+   queueMicrotask(()=>{
+    respond(response);
+    for(const part of chunks)response.emit('data',part);
+    response.emit('end');
+   });
+  };
+  return request;
+ };
+}
+
+test('fragmented ID3 signature is evaluated across chunks, not rejected on first byte',async()=>{
+ const chunks=[Buffer.from('I'),Buffer.from('D'),Buffer.from('3audio-packet')];
+ const bridge=createProtectedArabicAudioBridge({getPlaylist:()=>playlist,
+  isEnabled:()=>true,lookup:dns,createRequest:chunkFixture(chunks)});
+ const result=await bridge.probe(['anis-max-1']);
+ assert.deepEqual(result[0],{id:'anis-max-1',reason:'audio_bytes_detected',
+  mime:'other',payloadClass:'audio_packet',
+  receivedBytes:Buffer.concat(chunks).length});
+});
+
+test('fragmented TS transport synchronizes only after enough verified headers',async()=>{
+ const ts=Buffer.alloc(377);
+ ts[0]=0x47;ts[188]=0x47;ts[376]=0x47;
+ const chunks=[ts.subarray(0,100),ts.subarray(100,245),ts.subarray(245)];
+ const bridge=createProtectedArabicAudioBridge({getPlaylist:()=>playlist,
+  isEnabled:()=>true,lookup:dns,createRequest:chunkFixture(chunks)});
+ const result=await bridge.probe(['anis-max-1']);
+ assert.equal(result[0].reason,'audio_bytes_detected');
+ assert.equal(result[0].payloadClass,'audio_packet');
+ assert.equal(result[0].receivedBytes,377);
+});
+
+test('plain-text upstream and HLS are diagnosed safely without body or URL leakage',async()=>{
+ for(const [parts,expected] of [
+  [[Buffer.from('Service temporarily unavailable')],'text_response'],
+  [[Buffer.from('#EXT'),Buffer.from('M3U\\n#EXT-X-VERSION:3')],'hls_playlist']
+ ]){
+  const bridge=createProtectedArabicAudioBridge({getPlaylist:()=>playlist,
+   isEnabled:()=>true,lookup:dns,createRequest:chunkFixture(parts)});
+  const result=await bridge.probe(['anis-max-1']);
+  assert.equal(result[0].reason,'unrecognized_stream_bytes');
+  assert.equal(result[0].payloadClass,expected);
+  const summary=JSON.stringify(result);
+  assert.doesNotMatch(summary,/FICTIONAL_TEST_ONLY|temporarily unavailable|radio\\.anisfm\\.vip/);
+ }
+});
+
+test('operator probe caps inspection to 4096 bytes regardless of upstream chunk size',async()=>{
+ const bridge=createProtectedArabicAudioBridge({getPlaylist:()=>playlist,
+  isEnabled:()=>true,lookup:dns,
+  createRequest:chunkFixture([Buffer.alloc(512*1024,0x00)])});
+ const result=await bridge.probe(['anis-max-1']);
+ assert.equal(result[0].receivedBytes,4096);
+ assert.equal(result[0].reason,'unrecognized_stream_bytes');
+ assert.equal(result[0].payloadClass,'unknown_binary');
+});
