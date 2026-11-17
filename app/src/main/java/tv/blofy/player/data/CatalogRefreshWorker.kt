@@ -161,7 +161,8 @@ class CatalogRefreshWorker(
                     }
                 )
             }
-            if (sync.failedSectionCount > 0) return retryOrFail(manual, "INCOMPLETE")
+            if (sync.failedSectionCount > 0)
+                return retryOrFail(manual, sync.failureCode ?: "INCOMPLETE")
             if (sync.freshItemCount <= 0) {
                 // A zero-item Xtream reply must never replace the known-good catalog.
                 checkpoint.discard(saved, dao)
