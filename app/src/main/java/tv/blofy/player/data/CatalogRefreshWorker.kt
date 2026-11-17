@@ -203,8 +203,16 @@ class CatalogRefreshWorker(
             retryOrFail(manual, "PLAYBACK")
         } catch (_: TimeoutCancellationException) {
             // A provider timeout is retryable; a cancelled Worker must still stop immediately.
+            // Once all three remote sections reached 95%, an expensive local commit that
+            // timed out should fail visibly on manual refresh, not silently retry for ~24 min.
+            // Keep the old committed catalog and staged checkpoint for a later user retry.
             currentCoroutineContext().ensureActive()
-            if (promoted) Result.success() else retryOrFail(manual, "TIMEOUT")
+            when {
+                promoted -> Result.success()
+                manual && lastStage == "SAVE" ->
+                    Result.failure(workDataOf(KEY_ERROR to "COMMIT_TIMEOUT"))
+                else -> retryOrFail(manual, "TIMEOUT")
+            }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
