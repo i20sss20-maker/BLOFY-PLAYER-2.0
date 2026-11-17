@@ -60,6 +60,7 @@ class SettingsActivity : AppCompatActivity() {
     private var observedRefreshProvider: String? = null
     private var refreshState: WorkInfo.State? = null
     private var refreshStage: String? = null
+    private var refreshPercent: Int = -1
     private var refreshError: String? = null
     private var refreshRequested = false
     private var refreshNotice: String? = null
@@ -616,6 +617,7 @@ class SettingsActivity : AppCompatActivity() {
         observedRefreshProvider = providerId
         refreshState = null
         refreshStage = null
+        refreshPercent = -1
         refreshError = null
         refreshRequested = false
         refreshNotice = null
@@ -626,6 +628,7 @@ class SettingsActivity : AppCompatActivity() {
                     val current = all.firstOrNull { !it.state.isFinished } ?: all.lastOrNull()
                     refreshState = current?.state
                     refreshStage = current?.progress?.getString("catalog_stage")
+                    refreshPercent = current?.progress?.getInt(CatalogRefreshWorker.KEY_PERCENT, -1) ?: -1
                     refreshError = current?.outputData?.getString(CatalogRefreshWorker.KEY_ERROR)
                     if (::status.isInitialized) updateSyncStatus()
                 }
@@ -658,6 +661,7 @@ class SettingsActivity : AppCompatActivity() {
         refreshNotice = null
         refreshRequested = true
         refreshStage = null
+        refreshPercent = -1
         refreshError = null
         refreshState = WorkInfo.State.ENQUEUED
         updateSyncStatus()
@@ -693,7 +697,9 @@ class SettingsActivity : AppCompatActivity() {
         val value = when {
             refreshNotice != null -> copy("تعذر بدء التحديث", "Refresh unavailable")
             active == null -> copy("تحديث الآن", "Refresh now")
-            refreshState == WorkInfo.State.RUNNING -> copy("جارٍ تحديث المحتوى…", "Updating content…")
+            refreshState == WorkInfo.State.RUNNING -> if (refreshPercent in 0..95)
+                copy("جارٍ تحديث المحتوى $refreshPercent%", "Updating content $refreshPercent%")
+            else copy("جارٍ تحديث المحتوى…", "Updating content…")
             refreshState == WorkInfo.State.ENQUEUED || refreshState == WorkInfo.State.BLOCKED ->
                 copy("بانتظار بدء التحديث…", "Waiting to refresh…")
             refreshRequested && refreshState == WorkInfo.State.SUCCEEDED ->
@@ -708,7 +714,10 @@ class SettingsActivity : AppCompatActivity() {
                 copy("تعذر إنهاء حفظ التحديث. مكتبتك السابقة محفوظة؛ اضغط لإعادة المحاولة.",
                     "Saving the refresh timed out. Your previous library is safe; tap to retry.")
             refreshState == WorkInfo.State.RUNNING ->
-                section?.let { copy("المرحلة الحالية: $it", "Current section: $it") }
+                if (refreshStage == "SAVE") copy(
+                    "اكتمل تنزيل المحتوى • جارٍ حفظ التحديث محلياً ومكتبتك السابقة متاحة",
+                    "Download complete • saving locally; your previous library remains available")
+                else section?.let { copy("المرحلة الحالية: $it", "Current section: $it") }
                     ?: copy("يُحدَّث المحتوى والمكتبة السابقة محفوظة", "Updating; your saved library remains available")
             refreshState == WorkInfo.State.ENQUEUED || refreshState == WorkInfo.State.BLOCKED ->
                 copy("سيبدأ عند توفر الاتصال والموارد", "Starts when network and device are ready")
