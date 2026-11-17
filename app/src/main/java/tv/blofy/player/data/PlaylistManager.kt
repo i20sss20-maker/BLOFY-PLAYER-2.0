@@ -488,11 +488,20 @@ class PlaylistManager(
         return StreamingParseResult(sourceCount, itemCount, items ?: emptyList())
     }
 
-    suspend fun syncSeriesEpisodes(provider: ProviderEntity, seriesId: String): SeriesEpisodeSyncResult {
+    suspend fun syncSeriesEpisodes(
+        provider: ProviderEntity, seriesId: String, preserveCachedRows: Boolean = false
+    ): SeriesEpisodeSyncResult {
         val requestSeriesId = SeriesEpisodeParser.normalizeSeriesIdForRequest(seriesId)
         val response = api.jsonResponse(actionUrl(provider, "get_series_info", mapOf("series_id" to requestSeriesId)))
         val parsed = SeriesEpisodeParser.parse(provider.id, seriesId, response)
-        if (parsed.episodes.isNotEmpty()) dao.replaceEpisodes(provider.id, seriesId, parsed.episodes)
+        if (parsed.episodes.isNotEmpty()) {
+            val merged = if (preserveCachedRows) {
+                SeriesEpisodeRetentionPolicy.preserveCached(
+                    dao.episodeSnapshot(provider.id, seriesId), parsed.episodes
+                )
+            } else parsed.episodes
+            dao.replaceEpisodes(provider.id, seriesId, merged)
+        }
         return SeriesEpisodeSyncResult(parsed.episodes.size, parsed.payloadPresent, parsed.episodes.isNotEmpty())
     }
 
