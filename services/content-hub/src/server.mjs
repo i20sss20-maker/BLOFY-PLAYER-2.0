@@ -182,6 +182,12 @@ export function createContentHubServer({storage,lease,
    if(statusOnly)return json(res,200,{
     ok:true,privateOnly:true,readOnly:true,providerRequests:0,
     automaticCopyStarted:false,customerCutover:false,
+    configuredRuns:{
+     episode:pilotEnv.BLOFY_CONTENT_HUB_EPISODE_RIGHTS_CONFIRMED==='1'&&
+      /^[A-Za-z0-9_-]{8,80}$/.test(String(pilotEnv.BLOFY_CONTENT_HUB_EPISODE_RUN_ID||''))?
+      pilotEnv.BLOFY_CONTENT_HUB_EPISODE_RUN_ID:null,
+     movie:/^[A-Za-z0-9_-]{8,80}$/.test(String(pilotEnv.BLOFY_CONTENT_HUB_BATCH_RUN_ID||''))?
+      pilotEnv.BLOFY_CONTENT_HUB_BATCH_RUN_ID:null},
     status:lastFullCopyAudit||{state:'idle',fullSha256Verified:false}});
    if(fullCopyAuditBusy)return json(res,429,{
     ok:false,code:'private_copy_audit_busy'});
