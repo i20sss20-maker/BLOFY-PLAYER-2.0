@@ -1,12 +1,16 @@
-name: BLOFY STREAM catalog stall 95 percent regression QA
+name: BLOFY STREAM 55.8.32 catalog and channel focus targeted QA
 on:
   push:
     branches:
       - fix/stream-55832-catalog-refresh-stall-20261117
+      - integration/stream-55832-stable-tv-catalog-20261117
     paths:
       - '.github/workflows/stream-catalog-stall-qa-20261117.yml'
       - 'app/src/main/java/tv/blofy/player/data/preparation/CatalogLoadPersistence.kt'
       - 'app/src/main/java/tv/blofy/player/ui/login/CatalogLoadingActivity.kt'
+      - 'app/src/main/java/tv/blofy/player/ui/player/LiveChannelOverlayLifecycle.kt'
+      - 'app/src/main/java/tv/blofy/player/ui/player/LiveChannelPanelPolicy.kt'
+      - 'app/src/test/java/tv/blofy/player/ui/player/LiveChannelPanelPolicyTest.kt'
       - 'app/src/test/java/tv/blofy/player/data/preparation/CatalogLoadPersistenceTest.kt'
       - 'app/src/main/res/values/strings.xml'
       - 'app/src/main/res/values-ar/strings.xml'
@@ -33,18 +37,20 @@ jobs:
           set -euo pipefail
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36'
-      - name: Run Android unit and stalled promotion regression tests (no signing, no deploy)
+      - name: Run STREAM code-only catalog and channel focus tests (no signing, no deploy)
         run: |
           gradle --no-daemon --max-workers=2 \
             -PBLOFY_ACTIVATION_BASE_URL=http://127.0.0.1:9 \
             -PBLOFY_UPDATE_BASE_URL=http://127.0.0.1:9 \
-            testDebugUnitTest
+            testStreamCodeOnlyUnitTest \
+              --tests 'tv.blofy.player.data.preparation.CatalogLoadPersistenceTest' \
+              --tests 'tv.blofy.player.ui.player.LiveChannelPanelPolicyTest'
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: stream-catalog-stall-qa-results
+          name: stream-tv-catalog-navigation-qa-results
           path: |
-            app/build/test-results/testDebugUnitTest/*.xml
-            app/build/reports/tests/testDebugUnitTest/
+            app/build/test-results/testStreamCodeOnlyUnitTest/*.xml
+            app/build/reports/tests/testStreamCodeOnlyUnitTest/
           if-no-files-found: ignore
