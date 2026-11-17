@@ -116,3 +116,42 @@ test('shared ticket issue and safe fallback do not falsify player health',()=>{
  assert.doesNotMatch(JSON.stringify(m),/secret|provider.example|password|username/);
  resetXtreamPlaybackMetricsForTest();
 });
+
+test('hourly transport reset diagnostics count beyond recent 12 events without credentials',()=>{
+  resetXtreamPlaybackMetricsForTest();
+  const now=Date.now();
+  for(let i=0;i<21;i++)recordXtreamPlayback({
+    kind:i%2?'series':'movie',phase:'failed',reason:'xtream_transport_connection_reset',
+    itemId:i+1,sourceId:'6cbe3f8e-f14d-4d0d-9f7e-39b4ae34993a',
+    accessToken:'private-token',providerUrl:'https://provider.example/?password=private'
+  },now+i);
+  recordXtreamPlayback({
+    kind:'series',phase:'interrupted',reason:'xtream_transport_timeout',
+    sourceId:'6cbe3f8e-f14d-4d0d-9f7e-39b4ae34993a'
+  },now+22);
+  const sample=xtreamPlaybackSnapshot(now+25);
+  assert.equal(sample.recentIssues.length,12);
+  assert.equal(sample.failureByReason.xtream_transport_connection_reset,21);
+  assert.equal(sample.failureByReason.xtream_transport_timeout,1);
+  assert.equal(sample.failureByKind.series.xtream_transport_connection_reset,10);
+  assert.equal(sample.failureByKind.movie.xtream_transport_connection_reset,11);
+  assert.equal(sample.failureByKind.series.xtream_transport_timeout,1);
+  assert.equal(sample.failed,21);
+  assert.equal(sample.interrupted,1);
+  assert.doesNotMatch(JSON.stringify(sample.failureByReason),/password|private-token|provider/);
+  resetXtreamPlaybackMetricsForTest();
+});
+test('transport failure aggregates exclude old events, invalid reasons and successful streams',()=>{
+  resetXtreamPlaybackMetricsForTest();
+  const now=Date.now();
+  recordXtreamPlayback({kind:'series',phase:'failed',
+    reason:'xtream_transport_connection_reset'},now-3700000);
+  recordXtreamPlayback({kind:'series',phase:'started',
+    reason:'xtream_transport_connection_reset'},now);
+  recordXtreamPlayback({kind:'series',phase:'failed',reason:'https://secret'},now+1);
+  const sample=xtreamPlaybackSnapshot(now+2);
+  assert.deepEqual({...sample.failureByReason},{});
+  assert.deepEqual({...sample.failureByKind.series},{});
+  assert.equal(sample.failed,1);
+  resetXtreamPlaybackMetricsForTest();
+});
