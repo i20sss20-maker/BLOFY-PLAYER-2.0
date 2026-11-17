@@ -1,6 +1,8 @@
 package tv.blofy.player.data
 
 import kotlinx.coroutines.CancellationException
+import android.content.Context
+import tv.blofy.player.BuildConfig
 import java.util.concurrent.atomic.AtomicInteger
 
 /** Daily, bounded catalogue checks. Android may defer execution on sleeping TVs. */
@@ -10,6 +12,19 @@ internal object CatalogAutoRefreshPolicy {
     // Ordinary WorkManager jobs have about ten minutes before forced stop.
     // Leave time for staged SQLite rollback even when an upstream source stalls.
     const val MAX_SINGLE_SYNC_MS = 7L * 60_000L
+
+    private const val PREFS = "blofy_stream_catalog_auto_sync_v1"
+    private const val ENABLED = "enabled"
+
+    /** STREAM defaults to daily sync, unlike the previous code-only build where it was disabled. */
+    fun isEnabled(context: Context): Boolean =
+        !BuildConfig.CODE_ONLY_LOGIN || context.applicationContext
+            .getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(ENABLED, true)
+
+    /** This is a user setting; the scheduler must be updated separately. */
+    fun setEnabled(context: Context, enabled: Boolean): Boolean =
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putBoolean(ENABLED, enabled).commit()
 
     /** A successful sync, not a queued or failed attempt, resets the refresh clock. */
     fun isDue(lastCompletedAtMs: Long, nowMs: Long): Boolean =
