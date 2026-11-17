@@ -47,4 +47,29 @@ class CatalogAutoRefreshPolicyTest {
         }
         assertFalse(CatalogPlaybackGate.isPlaying)
     }
+
+    @Test fun silentStreamEntryGetsNewSeriesAfterSixHoursWithoutChangingPlayerSchedule() {
+        val now = 200_000_000L
+        val sixHours = CatalogAutoRefreshPolicy.STREAM_ENTRY_MINIMUM_GAP_MS
+        assertTrue(sixHours < CatalogAutoRefreshPolicy.MINIMUM_GAP_MS)
+        assertFalse(CatalogAutoRefreshPolicy.isDueForProduct(now - sixHours + 1L, now, true))
+        assertTrue(CatalogAutoRefreshPolicy.isDueForProduct(now - sixHours, now, true))
+        assertFalse(CatalogAutoRefreshPolicy.isDueForProduct(now - sixHours, now, false))
+        assertTrue(CatalogAutoRefreshPolicy.isDueForProduct(
+            now - CatalogAutoRefreshPolicy.MINIMUM_GAP_MS, now, false))
+    }
+
+    @Test fun rapidReopeningDoesNotQueueRepeatedLargeXtreamDownloads() {
+        val now = 100_000_000L
+        val lastSuccess = now - CatalogAutoRefreshPolicy.STREAM_ENTRY_MINIMUM_GAP_MS
+        assertTrue(CatalogAutoRefreshPolicy.mayQueueEntry(lastSuccess, 0L, now, true))
+        assertFalse(CatalogAutoRefreshPolicy.mayQueueEntry(lastSuccess, now, now + 5_000L, true))
+        assertFalse(CatalogAutoRefreshPolicy.mayQueueEntry(lastSuccess,
+            now, now + CatalogAutoRefreshPolicy.ENTRY_RETRY_GUARD_MS - 1L, true))
+        assertTrue(CatalogAutoRefreshPolicy.mayQueueEntry(lastSuccess,
+            now, now + CatalogAutoRefreshPolicy.ENTRY_RETRY_GUARD_MS, true))
+        assertFalse(CatalogAutoRefreshPolicy.mayQueueEntry(
+            now - CatalogAutoRefreshPolicy.MINIMUM_GAP_MS * 2L, now,
+            now - 1L, true))
+    }
 }
