@@ -481,7 +481,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 val window = created.window ?: return@setOnShowListener
                 prepareWindow(window, width, height, reveal = true)
                 val currentIndex = LiveChannelPanelPolicy.initialChannelIndex(
-                    channels.map(StreamEntity::key), lastFocusedChannelKey, currentChannelKey)
+                    channels, lastFocusedChannelKey, currentChannelKey, StreamEntity::key)
                 if (currentIndex < 0) return@setOnShowListener
                 searchField?.clearFocus()
                 created.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
