@@ -61,6 +61,7 @@ import tv.blofy.player.BuildConfig
 import tv.blofy.player.core.diagnostics.StreamConnectionDiagnostics
 import tv.blofy.player.core.diagnostics.StreamAudioHealth
 import tv.blofy.player.core.diagnostics.StreamAudioOutputEvidence
+import tv.blofy.player.core.diagnostics.StreamAudioQaReport
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.playback.PlaybackResumeState
 import tv.blofy.player.core.playback.BlofyPlaybackSession
@@ -1293,12 +1294,41 @@ open class PlayerActivity : ContentAccessActivity() {
                 "\nسرعة ارتباط الشبكة التقديرية: ${linkEstimate?.let { "${it / 1000.0} ميجابت/ث" } ?: "غير معروفة"}" +
                 "\nليست قياسًا لسرعة بث القناة."
         }
-        AlertDialog.Builder(this)
+        val dialog = AlertDialog.Builder(this)
             .setTitle(if (english) "Stream information" else "معلومات البث")
             .setMessage(report + (if (BuildConfig.CODE_ONLY_LOGIN && kind == KIND_LIVE)
                 "\n\n" + streamAudioEvidence.summary(audioHealth, streamUiLanguage()) else ""))
             .setPositiveButton(if (english) "Close" else "إغلاق", null)
-            .show()
+        if (BuildConfig.CODE_ONLY_LOGIN && kind == KIND_LIVE) {
+            dialog.setNeutralButton(
+                if (english) "Copy audio report" else "نسخ تقرير الصوت"
+            ) { _, _ ->
+                if (sessionReleased || isFinishing || isDestroyed) return@setNeutralButton
+                val now = session.player
+                val status = StreamAudioHealth.inspect(
+                    now.currentTracks, now.volume, known = now.playbackState == Player.STATE_READY
+                )
+                val safeReport = StreamAudioQaReport.create(
+                    sdk = Build.VERSION.SDK_INT,
+                    playbackState = now.playbackState,
+                    audio = status,
+                    evidence = streamAudioEvidence
+                )
+                val clipboard = getSystemService(CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                if (clipboard != null) {
+                    clipboard.setPrimaryClip(
+                        android.content.ClipData.newPlainText("BLOFY Audio QA", safeReport)
+                    )
+                    Toast.makeText(
+                        this@PlayerActivity,
+                        if (english) "Audio diagnostics copied without account details" else
+                            "تم نسخ تشخيص الصوت بدون بيانات الحساب",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        }
+        dialog.show()
     }
 
     internal fun liveControlsVisible(): Boolean =
