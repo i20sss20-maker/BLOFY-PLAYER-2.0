@@ -139,3 +139,114 @@ test('changing source boundaries rejects transfer before S3 write',async()=>{
  assert.equal(m.run.state,'failed');
  assert.equal(m.getWrites(),0);
 });
+
+test('rejects misleading text/JSON/compressed provider 206 before any S3 object exists',async()=>{
+ const badHeaders=[
+  {'content-type':'text/html'},
+  {'content-type':'text/plain; charset=utf-8'},
+  {'content-type':'application/json'},
+  {'content-type':'application/problem+json'},
+  {'content-type':'application/vnd.apple.mpegurl'},
+  {'content-encoding':'gzip'},
+  {'content-encoding':'br'}
+ ];
+ for(const extra of badHeaders){
+  const m=mocks();
+  let providerCalls=0;
+  const response=async(url,req)=>{
+   providerCalls++;
+   const [,lo,hi]=/^bytes=(\d+)-(\d+)$/.exec(req.headers.range);
+   const from=Number(lo),to=Number(hi);
+   return new Response(Buffer.alloc(to-from+1,0x41),{
+    status:206,headers:{
+     'content-range':'bytes '+from+'-'+to+'/'+m.film.length,
+     'content-length':String(to-from+1),...extra}
+   });
+  };
+  const r=await runOneEpisodeChunk({...m,env:config(),
+   candidateInspector:async()=>({ok:true,candidates:[candidate]}),
+   fetchImpl:response});
+  assert.equal(r.ok,false,JSON.stringify(extra));
+  assert.equal(r.code,'episode_retryable_error');
+  assert.equal(r.errorStage,'boundary_precheck');
+  assert.equal(m.getWrites(),0);
+  assert.equal(m.run.parts.length,0);
+  assert.equal(providerCalls,1);
+ }
+});
+test('rejects chunked 206 that sends extra bytes beyond requested range',async()=>{
+ const m=mocks();
+ let count=0;
+ const fetchImpl=async(url,req)=>{
+  count++;
+  const [,a,b]=/^bytes=(\d+)-(\d+)$/.exec(req.headers.range);
+  const from=Number(a),to=Number(b),requested=to-from+1;
+  const body=new ReadableStream({start(controller){
+   controller.enqueue(new Uint8Array(requested).fill(0x5a));
+   controller.enqueue(Uint8Array.of(0xab));
+   controller.close();
+  }});
+  return new Response(body,{
+   status:206,headers:{
+    'content-range':`bytes ${from}-${to}/${m.film.length}`,
+    'content-type':'application/octet-stream'}
+  });
+ };
+ const r=await runOneEpisodeChunk({...m,env:config(),
+  candidateInspector:async()=>({ok:true,candidates:[candidate]}),
+  fetchImpl});
+ assert.equal(r.ok,false);
+ assert.equal(r.errorStage,'boundary_precheck');
+ assert.equal(count,1);
+ assert.equal(m.getWrites(),0);
+ assert.equal(m.run.parts.length,0);
+});
+test('rejects chunked 206 with early EOF instead of persisting incomplete private chunks',async()=>{
+ const m=mocks();
+ const fetchImpl=async(url,req)=>{
+  const [,a,b]=/^bytes=(\d+)-(\d+)$/.exec(req.headers.range);
+  const from=Number(a),to=Number(b),requested=to-from+1;
+  const body=new ReadableStream({start(controller){
+   controller.enqueue(new Uint8Array(requested-1).fill(0x5a));
+   controller.close();
+  }});
+  return new Response(body,{status:206,headers:{
+   'content-range':`bytes ${from}-${to}/${m.film.length}`,
+   'content-type':'video/x-matroska'}});
+ };
+ const r=await runOneEpisodeChunk({...m,env:config(),
+  candidateInspector:async()=>({ok:true,candidates:[candidate]}),
+  fetchImpl});
+ assert.equal(r.ok,false);
+ assert.equal(r.errorStage,'boundary_precheck');
+ assert.equal(m.getWrites(),0);
+});
+test('valid lengthless chunked 206 ranges remain usable for one exact verified episode',async()=>{
+ const m=mocks(),requests=[];
+ const fetchImpl=async(url,opts)=>{
+  const [,a,b]=/^bytes=(\d+)-(\d+)$/.exec(opts.headers.range);
+  const from=Number(a),to=Number(b);
+  requests.push([from,to]);
+  const body=new ReadableStream({start(controller){
+   const bytes=m.film.subarray(from,to+1);
+   controller.enqueue(bytes.subarray(0,Math.min(128,bytes.length)));
+   if(bytes.length>128)controller.enqueue(bytes.subarray(128));
+   controller.close();
+  }});
+  return new Response(body,{status:206,headers:{
+   'content-range':`bytes ${from}-${to}/${m.film.length}`,
+   'content-type':'application/octet-stream'}
+  });
+ };
+ const opts={...m,env:config(),fetchImpl,
+  candidateInspector:async()=>({ok:true,candidates:[candidate]})};
+ const first=await runOneEpisodeChunk(opts);
+ assert.equal(first.ok,true,first.code);
+ assert.equal(first.code,'episode_checkpoint_saved');
+ const next=await runOneEpisodeChunk(opts);
+ assert.equal(next.ok,true,next.code);
+ assert.equal(next.code,'episode_fully_verified');
+ assert.equal(m.getWrites(),2);
+ assert.equal(m.verified(),true);
+ assert.equal(requests.length,10);
+});
