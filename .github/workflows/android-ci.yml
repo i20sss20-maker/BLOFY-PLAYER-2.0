@@ -229,6 +229,122 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+
+  owner-signed-stream-qa:
+    # Private owner-signed artifact only. Never upload to release, website or customer update feed.
+    needs: verify
+    if: github.event_name == 'pull_request' && github.head_ref == 'integration/stream-55832-stable-tv-catalog-20261117'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 150
+    permissions:
+      contents: read
+    env:
+      EXPECTED_CERT: C3B98CCCD2F0C86809014ACD9368BF61C7004CFD419CD867B71FEF10BFA6255E
+      ANDROID_NDK_VERSION: '28.0.13004108'
+      ANDROID_BUILD_TOOLS_VERSION: '35.0.0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Install pinned Android tools and FFmpeg dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'versionCode = 2000109' app/build.gradle.kts
+          grep -Fq 'versionName = "2.0.0-rc07.55.8.32"' app/build.gradle.kts
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;$ANDROID_BUILD_TOOLS_VERSION" "ndk;$ANDROID_NDK_VERSION" 'cmake;3.22.1'
+          if ! command -v ninja >/dev/null; then sudo apt-get update && sudo apt-get install -y ninja-build; fi
+      - name: Build pinned FFmpeg decoders and LGPL compliance material
+        shell: bash
+        run: |
+          set -euo pipefail
+          export NDK_PATH="$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION"
+          export PATH="$ANDROID_HOME/cmake/3.22.1/bin:$PATH"
+          chmod +x tools/build_media3_ffmpeg.sh
+          tools/build_media3_ffmpeg.sh
+          test -s build/ffmpeg-native/media3-decoder-ffmpeg-1.6.1.aar
+          grep -Fxq 'config_gpl=0' build/ffmpeg-native/build-info.txt
+          grep -Fxq 'config_nonfree=0' build/ffmpeg-native/build-info.txt
+          grep -Fxq 'page_size_compatible=16384' build/ffmpeg-native/build-info.txt
+      - name: Re-run critical STREAM tests before signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --max-workers=2 -PBLOFY_ACTIVATION_BASE_URL=http://127.0.0.1:9 -PBLOFY_UPDATE_BASE_URL=http://127.0.0.1:9 testStreamCodeOnlyUnitTest \
+            --tests 'tv.blofy.player.data.CatalogRefreshCommitPolicyTest' \
+            --tests 'tv.blofy.player.data.preparation.CatalogLoadPersistenceTest' \
+            --tests 'tv.blofy.player.ui.player.LiveChannelPanelPolicyTest'
+      - name: Sign full BLOFY STREAM with original owner certificate
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.BLOFY_ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.BLOFY_ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.BLOFY_ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.BLOFY_ANDROID_KEY_PASSWORD }}
+          BLOFY_RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/blofy-production.keystore
+          BLOFY_RELEASE_STORE_PASSWORD: ${{ secrets.BLOFY_ANDROID_KEYSTORE_PASSWORD }}
+          BLOFY_RELEASE_KEY_ALIAS: ${{ secrets.BLOFY_ANDROID_KEY_ALIAS }}
+          BLOFY_RELEASE_KEY_PASSWORD: ${{ secrets.BLOFY_ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for required in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            test -n "${!required:-}" || { echo "::error::Owner signing secret unavailable: $required"; exit 1; }
+          done
+          umask 077
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -cd 'A-Za-z0-9+/=' > "$RUNNER_TEMP/blofy-production.b64"
+          base64 -d "$RUNNER_TEMP/blofy-production.b64" > "$BLOFY_RELEASE_KEYSTORE_PATH"
+          test -s "$BLOFY_RELEASE_KEYSTORE_PATH"
+          cert="$(keytool -exportcert -keystore "$BLOFY_RELEASE_KEYSTORE_PATH" -storepass:env ANDROID_KEYSTORE_PASSWORD -alias "$ANDROID_KEY_ALIAS" | sha256sum | awk '{print toupper($1)}')"
+          test "$cert" = "$EXPECTED_CERT" || { echo "::error::Original STREAM owner certificate mismatch"; exit 1; }
+          gradle --no-daemon --max-workers=2 -Dorg.gradle.jvmargs="-Xmx2048m -XX:MaxMetaspaceSize=768m" \
+            -PBLOFY_FFMPEG_AAR="$GITHUB_WORKSPACE/build/ffmpeg-native/media3-decoder-ffmpeg-1.6.1.aar" \
+            -PBLOFY_ACTIVATION_BASE_URL=https://api.blofyplayer.com \
+            -PBLOFY_UPDATE_BASE_URL=https://updates.blofyplayer.com \
+            validateReleaseConfiguration assembleStreamCodeOnly
+      - name: Verify identity, certificate, signatures, native FFmpeg and SHA256
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_apk="app/build/outputs/apk/streamCodeOnly/app-streamCodeOnly.apk"
+          test -s "$source_apk"
+          tools="$ANDROID_HOME/build-tools/$ANDROID_BUILD_TOOLS_VERSION"
+          "$tools/aapt" dump badging "$source_apk" > "$RUNNER_TEMP/stream-badging.txt"
+          grep -Fq "name='tv.blofy.player.v2.stream' versionCode='2000109' versionName='2.0.0-rc07.55.8.32-STREAM'" "$RUNNER_TEMP/stream-badging.txt"
+          ! grep -Fq 'application-debuggable' "$RUNNER_TEMP/stream-badging.txt"
+          "$tools/apksigner" verify --verbose --print-certs "$source_apk" > "$RUNNER_TEMP/stream-signatures.txt"
+          cert="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/stream-signatures.txt" | head -n1 | tr -d '[:space:]-:' | tr '[:lower:]' '[:upper:]')"
+          test "$cert" = "$EXPECTED_CERT" || { echo "::error::Wrong signed APK certificate"; exit 1; }
+          "$tools/zipalign" -c -P 16 -v 4 "$source_apk"
+          unzip -Z1 "$source_apk" > "$RUNNER_TEMP/entries.txt"
+          for abi in armeabi-v7a arm64-v8a x86 x86_64; do
+            grep -Fxq "lib/$abi/libffmpegJNI.so" "$RUNNER_TEMP/entries.txt"
+          done
+          mkdir -p build/owner-signed-qa
+          name="BLOFY-STREAM-55.8.32-LIBRARY95-CHANNEL-FOCUS-OWNER-SIGNED.apk"
+          cp "$source_apk" "build/owner-signed-qa/$name"
+          (cd build/owner-signed-qa && sha256sum "$name" > SHA256SUMS && sha256sum -c SHA256SUMS)
+          printf 'application_id=tv.blofy.player.v2.stream\nversion_code=2000109\nsource_sha=%s\nchannel=private_owner_qa_no_auto_update\n' "$GITHUB_SHA" > build/owner-signed-qa/IDENTITY.txt
+      - name: Upload verified owner-signed APK for manual testing only
+        uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-STREAM-LIBRARY95-FOCUS-OWNER-SIGNED-${{ github.sha }}
+          path: |
+            build/owner-signed-qa/
+            build/ffmpeg-native/compliance/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Remove temporary signing secrets
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/blofy-production.keystore" "$RUNNER_TEMP/blofy-production.b64"
+
   qa-stream-stock:
     # The full legacy Player CI keeps running separately; do not treat these
     # STREAM-specific checks as passing all Player UI regression tests.
