@@ -26,6 +26,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.R
+import tv.blofy.player.BuildConfig
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.playback.ContentUrlResolver
@@ -143,7 +144,7 @@ class EpisodesActivity : AppCompatActivity() {
             // the player and comes back, the next due refresh runs automatically.
             // No bulk catalog download, device logout or playback interruption.
             while (isActive) {
-                if (::episodeAdapter.isInitialized && !syncInProgress &&
+                if (BuildConfig.CODE_ONLY_LOGIN && ::episodeAdapter.isInitialized && !syncInProgress &&
                     SystemClock.elapsedRealtime() - lastEpisodeSyncAtElapsed >= episodeRefreshIntervalMs) {
                     val provider = runCatching { currentProvider() }.getOrNull()
                     if (provider != null) syncEpisodes(provider, silent = true)
