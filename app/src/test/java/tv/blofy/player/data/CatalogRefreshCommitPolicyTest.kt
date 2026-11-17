@@ -48,6 +48,13 @@ class CatalogRefreshCommitPolicyTest {
         assertTrue(job.isCancelled)
     }
 
+    @Test fun onlyManualFinalSaveTimeoutFailsFast() {
+        assertTrue(CatalogRefreshCommitPolicy.shouldFailManualCommitTimeout(true, "SAVE"))
+        assertFalse(CatalogRefreshCommitPolicy.shouldFailManualCommitTimeout(false, "SAVE"))
+        assertFalse(CatalogRefreshCommitPolicy.shouldFailManualCommitTimeout(true, "SERIES"))
+        assertFalse(CatalogRefreshCommitPolicy.shouldFailManualCommitTimeout(true, "LIVE"))
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun rejectsNonPositiveTimeout() = runBlocking {
         CatalogRefreshCommitPolicy.run(timeoutMillis = 0L) { Unit }
