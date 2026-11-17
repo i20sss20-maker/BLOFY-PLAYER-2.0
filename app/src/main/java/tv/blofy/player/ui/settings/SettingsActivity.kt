@@ -734,6 +734,10 @@ class SettingsActivity : AppCompatActivity() {
             refreshRequested && refreshState == WorkInfo.State.FAILED && refreshError == "SOURCE_TIMEOUT" ->
                 copy("تأخر مصدر المحتوى أثناء تنزيل القنوات أو المسلسلات. مكتبتك محفوظة؛ اضغط لاستكمال التحديث.",
                     "Content source timed out while downloading. Your library is safe; tap to retry.")
+            refreshRequested && refreshState == WorkInfo.State.FAILED &&
+                refreshError == "SERIES_INTERRUPTED" ->
+                copy("انقطع مصدر المسلسلات أثناء المزامنة. تم حفظ الأقسام المكتملة؛ اضغط لاستكمالها.",
+                    "Series source was interrupted. Completed sections are saved; tap to resume.")
             refreshState == WorkInfo.State.RUNNING ->
                 if (refreshStage == "SAVE") copy(
                     "اكتمل تنزيل المحتوى • جارٍ حفظ التحديث محلياً ومكتبتك السابقة متاحة",
