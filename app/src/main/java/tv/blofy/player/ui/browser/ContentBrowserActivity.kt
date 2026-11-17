@@ -104,6 +104,7 @@ class ContentBrowserActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        restoreLiveRowFocusAfterPlayer = intent.getBooleanExtra(EXTRA_RESTORE_LIVE_FOCUS, false)
         setContentView(buildBrowserUi())
 
         streamAdapter = LiveChannelAdapter(
@@ -505,6 +506,7 @@ class ContentBrowserActivity : AppCompatActivity() {
             liveLastRowId = cached.lastRowId
             liveHasMore = cached.total == Int.MAX_VALUE
             streamAdapter.replace(cached.items)
+            restoreFocusedLiveRowIfNeeded()
             if (previewEnabled) startInitialPreview(cached.items)
             return
         }
@@ -541,6 +543,7 @@ class ContentBrowserActivity : AppCompatActivity() {
             }
             liveLoading = false
             saveLiveMemorySnapshot()
+            restoreFocusedLiveRowIfNeeded()
             if (result.first.isNotEmpty()) {
                 ArtworkLoader.prefetch(this@ContentBrowserActivity, result.first.take(6).map { it.icon?.takeIf(String::isNotBlank) ?: it.backdrop })
             }
@@ -739,30 +742,45 @@ class ContentBrowserActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         if (::provider.isInitialized) refreshExactCount(currentCategoryId)
-        if (restoreLiveRowFocusAfterPlayer && ::streamList.isInitialized &&
-            ::streamAdapter.isInitialized) {
-            restoreLiveRowFocusAfterPlayer = false
-            streamList.post {
-                if (isFinishing || isDestroyed || kind != KIND_LIVE) return@post
-                val highlighted = streamAdapter.indexOfKey(savedStreamKey())
-                if (highlighted < 0) return@post // Don't steal focus if the row is outside this page.
-                (streamList.layoutManager as? LinearLayoutManager)
-                    ?.scrollToPositionWithOffset(highlighted, 0)
-                streamList.isFocusableInTouchMode = true
-                streamList.requestFocus()
-                streamList.postOnAnimation {
-                    if (!isFinishing && !isDestroyed) {
-                        streamList.findViewHolderForAdapterPosition(highlighted)
-                            ?.itemView?.requestFocus()
-                    }
-                }
-            }
-        }
+        restoreFocusedLiveRowIfNeeded()
         if (resumedOnce && previewEnabled && ::provider.isInitialized) {
             lastPreviewKey = null
             restartSavedPreview()
         }
         resumedOnce = true
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra(EXTRA_RESTORE_LIVE_FOCUS, false)) {
+            restoreLiveRowFocusAfterPlayer = true
+            restoreFocusedLiveRowIfNeeded()
+        }
+    }
+
+    /** Never let a delayed page load return TV focus to the header search shortcut. */
+    private fun restoreFocusedLiveRowIfNeeded() {
+        if (!restoreLiveRowFocusAfterPlayer || phoneMode || kind != KIND_LIVE ||
+            !::streamList.isInitialized || !::streamAdapter.isInitialized ||
+            streamAdapter.itemCount <= 0 || isFinishing || isDestroyed) return
+        // The selected channel may be outside the first 48 fetched rows. Keep the
+        // remote on a real channel row instead of jumping to Search or a dead header.
+        val position = streamAdapter.indexOfKey(savedStreamKey()).takeIf { it >= 0 } ?: 0
+        restoreLiveRowFocusAfterPlayer = false
+        streamList.post {
+            if (isFinishing || isDestroyed) return@post
+            (streamList.layoutManager as? LinearLayoutManager)
+                ?.scrollToPositionWithOffset(position, dp(10))
+            streamList.isFocusableInTouchMode = true
+            streamList.requestFocus()
+            streamList.postOnAnimation {
+                if (!isFinishing && !isDestroyed) {
+                    streamList.findViewHolderForAdapterPosition(position)?.itemView?.requestFocus()
+                        ?: streamList.requestFocus()
+                }
+            }
+        }
     }
 
     override fun onPause() {
@@ -833,6 +851,7 @@ class ContentBrowserActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_KIND = "kind"
+        const val EXTRA_RESTORE_LIVE_FOCUS = "restore_live_focus_after_player"
         const val KIND_LIVE = "live"
         const val KIND_MOVIE = "movie"
         const val KIND_SERIES = "series"

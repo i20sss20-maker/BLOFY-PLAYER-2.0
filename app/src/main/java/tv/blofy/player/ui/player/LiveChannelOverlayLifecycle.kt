@@ -7,7 +7,9 @@ import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.os.SystemClock
 import android.text.Editable
+import android.text.InputFilter
 import android.text.InputType
 import android.text.TextWatcher
 import android.view.Gravity
@@ -93,6 +95,26 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
         val delegate: Window.Callback,
     ) : Window.Callback by delegate {
         private var dialog: AlertDialog? = null
+        // Search is a dedicated window, not an EditText inside the channel navigation pane.
+        private var searchDialog: AlertDialog? = null
+        private var searchJob: Job? = null
+        private var openingRemoteKey: Int? = null
+        private var openingRemoteAtMs: Long = 0L
+
+        private fun rememberOpeningRemoteKey(code: Int) {
+            openingRemoteKey = code
+            openingRemoteAtMs = SystemClock.uptimeMillis()
+        }
+
+        /** A key-up that originally opened a dialog must not click its first focused row. */
+        private fun consumeOpeningRemoteRelease(event: KeyEvent): Boolean {
+            val opening = openingRemoteKey ?: return false
+            if (event.action != KeyEvent.ACTION_UP || event.keyCode != opening) return false
+            openingRemoteKey = null
+            return LiveWindowOpeningKeyPolicy.shouldConsumeRelease(
+                opening, event.keyCode, event.action,
+                SystemClock.uptimeMillis() - openingRemoteAtMs)
+        }
         private var loading = false
         private var displayedChannels: List<StreamEntity> = emptyList()
         private var currentChannelKey: String? = null
@@ -100,9 +122,9 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
         private var lastChannelFocusKey: String? = null
         private var originalChannels: List<StreamEntity> = emptyList()
         private var activeTab: LiveChannelTab = LiveChannelTab.ALL
-        private var searchText: String = ""
         private var filterJob: Job? = null
         private var visibleAdapter: LiveChannelAdapter? = null
+        private var visibleChannelList: RecyclerView? = null
         private var visibleCount: TextView? = null
         // A single in-panel selection state. BACK returns to channel controls
         // instead of exiting player or opening another file/library screen.
@@ -110,7 +132,9 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
         private var restoreMainActions: (() -> Unit)? = null
 
         override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+            if (consumeOpeningRemoteRelease(event)) return true
             if (event.action != KeyEvent.ACTION_DOWN) return delegate.dispatchKeyEvent(event)
+            if (searchDialog?.isShowing == true) return delegate.dispatchKeyEvent(event)
             if (dialog?.isShowing == true && RemoteKeyRouter.route(event).action == RemoteAction.BACK) {
                 if (audioPickerOpen) restoreMainActions?.invoke()
                 else close()
@@ -123,14 +147,21 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             return when (LivePlayerMenuPolicy.action(
                 event.keyCode,
                 hudVisible = activity.liveControlsVisible(),
-                channelDialogVisible = dialog?.isShowing == true,
+                channelDialogVisible = dialog?.isShowing == true || searchDialog?.isShowing == true,
                 unifiedChannelPanel = BuildConfig.CODE_ONLY_LOGIN
             )) {
                 LivePlayerMenuAction.SHOW_AUDIO_CONTROLS ->
                     if (activity.showLiveAudioControls()) true else delegate.dispatchKeyEvent(event)
                 LivePlayerMenuAction.SHOW_CHANNEL_LIST -> {
+                    rememberOpeningRemoteKey(event.keyCode)
                     activity.dismissLiveAudioControls()
                     openChannelList()
+                    true
+                }
+                LivePlayerMenuAction.SHOW_SEARCH_WINDOW -> {
+                    rememberOpeningRemoteKey(event.keyCode)
+                    activity.dismissLiveAudioControls()
+                    openSearchWindow(emptyList())
                     true
                 }
                 LivePlayerMenuAction.DISMISS_CONTROLS -> {
@@ -150,11 +181,16 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             restoreMainActions = null
             filterJob?.cancel()
             filterJob = null
+            searchJob?.cancel()
+            searchJob = null
+            searchDialog?.dismiss()
+            searchDialog = null
             dialog?.dismiss()
             dialog = null
             displayedChannels = emptyList()
             originalChannels = emptyList()
             visibleAdapter = null
+            visibleChannelList = null
             visibleCount = null
             currentChannelKey = null
         }
@@ -177,13 +213,14 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             activity.intent.putExtra(PlayerReturnNavigationLifecycle.EXTRA_RETURN_ALREADY_ROUTED, true)
             activity.startActivity(Intent(activity, ContentBrowserActivity::class.java).apply {
                 putExtra(ContentBrowserActivity.EXTRA_KIND, KIND_LIVE)
+                putExtra(ContentBrowserActivity.EXTRA_RESTORE_LIVE_FOCUS, true)
                 addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             })
             activity.finish()
         }
 
         private fun openChannelList() {
-            if (dialog?.isShowing == true || loading || activity.isFinishing || activity.isDestroyed) return
+            if (dialog?.isShowing == true || searchDialog?.isShowing == true || loading || activity.isFinishing || activity.isDestroyed) return
             val providerId = activity.intent.getStringExtra(PlayerActivity.EXTRA_PROVIDER_ID).orEmpty()
             val categoryId = activity.intent.getStringExtra(PlayerActivity.EXTRA_CATEGORY_ID)
             if (providerId.isBlank()) {
@@ -215,7 +252,6 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 displayedChannels = channels
                 originalChannels = channels
                 activeTab = LiveChannelTab.ALL
-                searchText = ""
                 currentChannelKey = RecentChannelStore.keys(activity, providerId).firstOrNull()
                     ?: activity.intent.getStringExtra(PlayerActivity.EXTRA_CONTENT_KEY).orEmpty()
                 showDialog(result.second)
@@ -260,6 +296,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             adapter.submit(channels)
             list.adapter = adapter
             visibleAdapter = adapter
+            visibleChannelList = list
 
             val header = TextView(activity).apply {
                 text = buildString {
@@ -287,29 +324,54 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 maxLines = 1
                 ellipsize = android.text.TextUtils.TruncateAt.END
             }
-            val searchField = if (BuildConfig.CODE_ONLY_LOGIN) EditText(activity).apply {
-                this.hint = copy("بحث في جميع القنوات…", "Search all channels…")
-                contentDescription = this.hint
-                textSize = 13.5f
-                setSingleLine(true)
-                inputType = InputType.TYPE_CLASS_TEXT
+            // Channels and search have separate windows. No focusable EditText is present
+            // here, so D-pad navigation cannot land on the search box by accident.
+            val searchButton = TextView(activity).apply {
+                text = copy("⌕ بحث", "⌕ Search")
+                contentDescription = copy("فتح نافذة البحث عن القنوات", "Open dedicated channel search window")
+                textSize = 12f
+                typeface = BlofyTvDesign.HeadingTypeface
                 setTextColor(Color.WHITE)
-                setHintTextColor(0xFFB7ABC5.toInt())
-                setPadding(dp(12), dp(8), dp(12), dp(8))
+                gravity = Gravity.CENTER
+                isFocusable = false
+                isClickable = true
+                id = View.generateViewId()
                 background = GradientDrawable().apply {
-                    cornerRadius = dp(12).toFloat()
-                    setColor(0xEF1A1527.toInt())
-                    setStroke(dp(1), 0x7B6D508D)
+                    cornerRadius = dp(10).toFloat()
+                    setColor(0xFF41305B.toInt())
+                    setStroke(dp(1), 0xFF9976C6.toInt())
                 }
-                addTextChangedListener(object : TextWatcher {
-                    override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
-                    override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                        searchText = s?.toString().orEmpty().take(80)
-                        refreshList()
-                    }
-                    override fun afterTextChanged(s: Editable?) = Unit
+                setOnClickListener {
+                    if (dialog?.isShowing == true) openSearchWindow(displayedChannels.take(80))
+                }
+            }
+            val closeButton = TextView(activity).apply {
+                text = "✕"
+                contentDescription = copy("إغلاق نافذة القنوات", "Close channel window")
+                textSize = 15f
+                gravity = Gravity.CENTER
+                setTextColor(BlofyTvDesign.TextSecondary)
+                isClickable = true
+                isFocusable = false
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(10).toFloat()
+                    setColor(0xD52D2537.toInt())
+                }
+                setOnClickListener { close() }
+            }
+            val headerRow = LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutDirection = activity.resources.configuration.layoutDirection
+                gravity = Gravity.CENTER_VERTICAL
+                addView(header, LinearLayout.LayoutParams(0, dp(37), 1f))
+                if (BuildConfig.CODE_ONLY_LOGIN) addView(searchButton,
+                    LinearLayout.LayoutParams(dp(96), dp(33)).apply {
+                        marginEnd = dp(5)
+                    })
+                addView(closeButton, LinearLayout.LayoutParams(dp(37), dp(33)).apply {
+                    marginEnd = dp(8)
                 })
-            } else null
+            }
             val tabs = LinearLayout(activity).apply {
                 val tabContainer = this
                 orientation = LinearLayout.HORIZONTAL
@@ -330,7 +392,8 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                             textSize = 11.7f
                             gravity = Gravity.CENTER
                             setTextColor(Color.WHITE)
-                            isFocusable = true
+                            // Enable after focusing the selected channel; never autofocus a header tab.
+                            isFocusable = false
                             isClickable = true
                             background = GradientDrawable().apply {
                                 cornerRadius = dp(10).toFloat()
@@ -345,7 +408,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                                             0xFF5A3384.toInt() else 0xE52C2538.toInt())
                                     }
                                 }
-                                refreshList()
+                                refreshList(focusList = true)
                             }
                         }, LinearLayout.LayoutParams(0, dp(36), 1f).apply {
                             marginStart = dp(2); marginEnd = dp(2)
@@ -373,13 +436,9 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                     setStroke(dp(1), 0x4D7956A8.toInt())
                 }
                 elevation = dp(7).toFloat()
-                addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(30)))
+                addView(headerRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(40)))
                 addView(hint, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(19)))
                 if (BuildConfig.CODE_ONLY_LOGIN) {
-                    searchField?.let { addView(it, LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT, dp(42)).apply {
-                            marginStart = dp(7); marginEnd = dp(7); bottomMargin = dp(5)
-                        }) }
                     addView(tabs, LinearLayout.LayoutParams(-1, dp(36)))
                     addView(count, LinearLayout.LayoutParams(-1, dp(17)))
                 }
@@ -441,7 +500,8 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             // One BACK returns to controls, the next dismisses the sidebar.
             var consumeBackRelease = false
             created.setOnKeyListener { _, keyCode, event ->
-                if (keyCode != KeyEvent.KEYCODE_BACK) false
+                if (consumeOpeningRemoteRelease(event)) true
+                else if (keyCode != KeyEvent.KEYCODE_BACK) false
                 else when (event.action) {
                     KeyEvent.ACTION_DOWN -> {
                         if (audioPickerOpen) {
@@ -465,6 +525,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 audioPickerOpen = false
                 restoreMainActions = null
                 visibleAdapter = null
+                visibleChannelList = null
                 visibleCount = null
                 displayedChannels = emptyList()
                 originalChannels = emptyList()
@@ -484,82 +545,321 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 val currentIndex = LiveChannelPanelPolicy.initialChannelIndex(
                     channels, lastFocusedChannelKey, currentChannelKey, StreamEntity::key)
                 if (currentIndex < 0) return@setOnShowListener
-                searchField?.clearFocus()
+                // Focus on the active channel in this window; search is a separate dialog.
                 created.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
                 (list.layoutManager as? LinearLayoutManager)?.scrollToPositionWithOffset(currentIndex, dp(8))
                 // A row may not be attached immediately after scroll. Do not let the dialog
                 // send TV/keyboard focus to the first EditText (search) in that interval.
                 list.isFocusableInTouchMode = true
+                // Neither header shortcut gets default focus when this window opens.
+                searchButton.isFocusable = false
+                closeButton.isFocusable = false
                 list.requestFocus()
                 list.post {
                     if (list.findViewHolderForAdapterPosition(currentIndex)?.itemView?.requestFocus() != true) {
                         list.postOnAnimation {
                             list.findViewHolderForAdapterPosition(currentIndex)?.itemView?.requestFocus()
+                                ?: list.requestFocus()
                         }
                     }
+                    for (index in 0 until tabs.childCount) tabs.getChildAt(index)?.isFocusable = true
+                    searchButton.isFocusable = true
+                    closeButton.isFocusable = true
                 }
             }
             created.show()
         }
 
-        /** Search is bounded and debounced. Favorites and recents are resolved
-         * from the user's real local provider rows, never invented remote URLs. */
-        private fun refreshList() {
+        /**
+         * Search is a completely separate, explicit window. No EditText exists in the
+         * channel window; random D-pad focus restoration can never open search.
+         * Searching does not replace, restart or hide the current playback surface.
+         */
+        private fun openSearchWindow(suggestions: List<StreamEntity>) {
+            if (!BuildConfig.CODE_ONLY_LOGIN || searchDialog?.isShowing == true ||
+                activity.isFinishing || activity.isDestroyed) return
+            val providerId = activity.intent.getStringExtra(PlayerActivity.EXTRA_PROVIDER_ID).orEmpty()
+            if (providerId.isBlank()) return
+
+            // Only one floating window is active at a time. BACK from Search returns
+            // to Channels only if Search was launched from that window.
+            val openedFromChannels = dialog?.isShowing == true
+            dialog?.dismiss()
+            dialog = null
+            filterJob?.cancel()
+            filterJob = null
+            audioPickerOpen = false
+            restoreMainActions = null
+            originalChannels = emptyList()
+            displayedChannels = emptyList()
+
+            val list = RecyclerView(activity).apply {
+                id = View.generateViewId()
+                layoutManager = LinearLayoutManager(activity)
+                layoutDirection = View.LAYOUT_DIRECTION_RTL
+                setPadding(dp(6), dp(6), dp(6), dp(6))
+                itemAnimator = null
+                clipToPadding = false
+                setItemViewCacheSize(12)
+                recycledViewPool.setMaxRecycledViews(0, 24)
+            }
+            val playingKey = RecentChannelStore.keys(activity, providerId).firstOrNull()
+                ?: activity.intent.getStringExtra(PlayerActivity.EXTRA_CONTENT_KEY)
+            val results = LiveChannelAdapter(
+                onClick = { channel -> selectChannel(channel) },
+                onFocus = { lastChannelFocusKey = it.key },
+                onLongClick = { channel ->
+                    activity.lifecycleScope.launch {
+                        val dao = BlofyDatabase.get(activity.applicationContext).dao()
+                        val saved = dao.stream(channel.key) ?: return@launch
+                        dao.setFavorite(channel.key, !saved.favorite)
+                        Toast.makeText(activity, if (saved.favorite)
+                            copy("أزيلت من المفضلة", "Removed from favorites")
+                        else copy("أضيفت للمفضلة", "Added to favorites"), Toast.LENGTH_SHORT).show()
+                    }
+                },
+                itemKey = { it.key },
+                highContrast = true,
+                playingChannelKey = playingKey
+            )
+            results.submit(suggestions)
+            list.adapter = results
+            val title = TextView(activity).apply {
+                text = copy("⌕  بحث القنوات", "⌕  Channel search")
+                textSize = 21f
+                typeface = BlofyTvDesign.HeadingTypeface
+                setTextColor(Color.WHITE)
+                gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                setPadding(dp(8), 0, dp(8), 0)
+            }
+            val back = TextView(activity).apply {
+                text = copy("↩ القنوات", "↩ Channels")
+                contentDescription = copy("العودة إلى نافذة القنوات", "Return to channel window")
+                textSize = 13f
+                typeface = BlofyTvDesign.HeadingTypeface
+                gravity = Gravity.CENTER
+                setTextColor(Color.WHITE)
+                isFocusable = true
+                isClickable = true
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(12).toFloat()
+                    setColor(0xFF483267.toInt())
+                    setStroke(dp(1), 0xFF9976C6.toInt())
+                }
+                setOnClickListener {
+                    searchDialog?.dismiss()
+                    openChannelList()
+                }
+            }
+            val searchBox = EditText(activity).apply {
+                id = View.generateViewId()
+                hint = copy("اكتب اسم القناة...", "Type a channel name...")
+                contentDescription = hint
+                setSingleLine(true)
+                filters = arrayOf(InputFilter.LengthFilter(80))
+                inputType = InputType.TYPE_CLASS_TEXT
+                imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+                textSize = 16f
+                setTextColor(Color.WHITE)
+                setHintTextColor(0xFFB7ABC5.toInt())
+                setPadding(dp(16), dp(9), dp(16), dp(9))
+                isFocusableInTouchMode = true
+                nextFocusDownId = list.id
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(12).toFloat()
+                    setColor(0xFF1F192C.toInt())
+                    setStroke(dp(2), 0xFF8D6CB7.toInt())
+                }
+            }
+            searchBox.setOnEditorActionListener { _, actionId, event ->
+                val submitted = actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH ||
+                    (event?.keyCode == KeyEvent.KEYCODE_ENTER && event.action == KeyEvent.ACTION_DOWN)
+                if (!submitted) false
+                else {
+                    if (results.itemCount > 0) {
+                        list.scrollToPosition(0)
+                        list.post {
+                            if (searchDialog?.isShowing == true) {
+                                list.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus()
+                                    ?: list.requestFocus()
+                            }
+                        }
+                    }
+                    true
+                }
+            }
+            val resultsCount = TextView(activity).apply {
+                text = copy("اقتراحات القنوات: ${suggestions.size}", "Suggested channels: ${suggestions.size}")
+                setTextColor(BlofyTvDesign.TextMuted)
+                textSize = 12f
+                setPadding(dp(10), 0, dp(10), 0)
+                gravity = Gravity.CENTER_VERTICAL or Gravity.START
+            }
+            val header = LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutDirection = activity.resources.configuration.layoutDirection
+                gravity = Gravity.CENTER_VERTICAL
+                addView(title, LinearLayout.LayoutParams(0, dp(52), 1f))
+                addView(back, LinearLayout.LayoutParams(dp(115), dp(40)))
+            }
+            val root = LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutDirection = activity.resources.configuration.layoutDirection
+                setPadding(dp(13), dp(10), dp(13), dp(13))
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(20).toFloat()
+                    setColor(0xFB15121E.toInt())
+                    setStroke(dp(1), 0xFF76519C.toInt())
+                }
+                addView(header, LinearLayout.LayoutParams(-1, dp(54)))
+                addView(searchBox, LinearLayout.LayoutParams(-1, dp(52)).apply {
+                    topMargin = dp(6); bottomMargin = dp(8)
+                })
+                addView(resultsCount, LinearLayout.LayoutParams(-1, dp(29)))
+                addView(list, LinearLayout.LayoutParams(-1, 0, 1f))
+            }
+            val created = AlertDialog.Builder(activity).setView(root).create()
+            created.setCanceledOnTouchOutside(false)
+            created.setOnKeyListener { _, code, event ->
+                if (consumeOpeningRemoteRelease(event)) true
+                else if (code == KeyEvent.KEYCODE_BACK) {
+                    if (event.action == KeyEvent.ACTION_DOWN) {
+                        created.dismiss()
+                        if (openedFromChannels) openChannelList()
+                    }
+                    true
+                } else false
+            }
+            created.setOnDismissListener {
+                searchJob?.cancel()
+                searchJob = null
+                if (searchDialog === created) searchDialog = null
+            }
+            searchDialog = created
+            created.setOnShowListener {
+                val device = DeviceClass.detect(activity)
+                val display = activity.resources.displayMetrics
+                val width = (display.widthPixels * when (device) {
+                    DeviceClass.Kind.TV -> 0.52f
+                    DeviceClass.Kind.TABLET -> 0.72f
+                    DeviceClass.Kind.PHONE -> 0.94f
+                }).toInt()
+                val height = (display.heightPixels * when (device) {
+                    DeviceClass.Kind.TV -> 0.79f
+                    DeviceClass.Kind.TABLET -> 0.78f
+                    DeviceClass.Kind.PHONE -> 0.76f
+                }).toInt()
+                created.window?.let { window ->
+                    window.setBackgroundDrawableResource(android.R.color.transparent)
+                    window.setGravity(Gravity.CENTER)
+                    window.setLayout(width, height)
+                    window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN or
+                        WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+                }
+                // Search field intentionally owns focus only after opening *this* window.
+                searchBox.requestFocus()
+            }
+            created.show()
+            searchBox.addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                    searchInSeparateWindow(providerId, s?.toString().orEmpty(), suggestions, results, resultsCount)
+                }
+                override fun afterTextChanged(s: Editable?) = Unit
+            })
+        }
+
+        private fun searchInSeparateWindow(
+            providerId: String,
+            query: String,
+            suggestions: List<StreamEntity>,
+            adapter: LiveChannelAdapter,
+            count: TextView
+        ) {
+            val currentWindow = searchDialog ?: return
+            searchJob?.cancel()
+            count.text = copy("جارٍ البحث...", "Searching...")
+            searchJob = activity.lifecycleScope.launch {
+                delay(180)
+                val found = withContext(Dispatchers.IO) {
+                    if (query.isBlank()) suggestions
+                    else {
+                        val dao = BlofyDatabase.get(activity.applicationContext).dao()
+                        val fts = ArabicSearchNormalizer.ftsQuery(query)
+                        val indexed = if (fts.isNotBlank()) runCatching {
+                            dao.searchStreamsFtsByKind(providerId, KIND_LIVE, fts, 200)
+                        }.getOrDefault(emptyList()) else emptyList()
+                        val rows = if (indexed.isNotEmpty()) indexed
+                        else runCatching { dao.searchCatalog(providerId, KIND_LIVE, query, 200) }
+                            .getOrDefault(emptyList())
+                        rows.filter { it.providerId == providerId && it.kind == KIND_LIVE }
+                            .filter { LiveChannelPanelPolicy.matchesSearch(it.name, query) }
+                            .distinctBy { it.key }.take(200)
+                    }
+                }
+                if (searchDialog !== currentWindow || !currentWindow.isShowing ||
+                    activity.isFinishing || activity.isDestroyed) return@launch
+                adapter.replace(found)
+                count.text = if (found.isEmpty()) copy("لا توجد قنوات مطابقة", "No matching channels")
+                    else copy("${found.size} قناة", "${found.size} channels")
+                // Do not transfer focus away from the keyboard while a user is typing.
+            }
+        }
+
+        /**
+         * The Channels window owns category/favorites/recent filters only. It
+         * never performs text search or touches the search window's keyboard.
+         */
+        private fun refreshList(focusList: Boolean = false) {
             val openDialog = dialog ?: return
             val adapter = visibleAdapter ?: return
             val providerId = activity.intent.getStringExtra(PlayerActivity.EXTRA_PROVIDER_ID).orEmpty()
             if (providerId.isBlank()) return
-            val query = searchText
             val tab = activeTab
             val base = originalChannels
             filterJob?.cancel()
             filterJob = activity.lifecycleScope.launch {
-                delay(160)
+                delay(100)
                 val filtered = withContext(Dispatchers.IO) {
                     val dao = BlofyDatabase.get(activity.applicationContext).dao()
                     val source = when (tab) {
-                        LiveChannelTab.ALL -> if (query.isBlank()) base
-                            else {
-                                val fts = ArabicSearchNormalizer.ftsQuery(query)
-                                val indexed = if (fts.isNotBlank()) runCatching {
-                                    dao.searchStreamsFtsByKind(providerId, KIND_LIVE, fts, 200)
-                                }.getOrDefault(emptyList()) else emptyList()
-                                if (indexed.isNotEmpty()) indexed
-                                else runCatching { dao.searchCatalog(providerId, KIND_LIVE, query, 200) }
-                                    .getOrDefault(emptyList())
-                            }
+                        LiveChannelTab.ALL -> base
                         LiveChannelTab.FAVORITES ->
                             runCatching { dao.favorites(providerId).first() }
                                 .getOrDefault(emptyList()).filter { it.kind == KIND_LIVE }
                         LiveChannelTab.RECENT ->
-                            RecentChannelStore.keys(activity, providerId).take(30).mapNotNull {
-                                key -> runCatching { dao.stream(key) }.getOrNull()
+                            RecentChannelStore.keys(activity, providerId).take(30).mapNotNull { key ->
+                                runCatching { dao.stream(key) }.getOrNull()
                                     ?.takeIf { it.kind == KIND_LIVE && it.providerId == providerId }
                             }
                     }
-                    source.filter { LiveChannelPanelPolicy.matchesSearch(it.name, query) }
-                        .distinctBy { it.key }.take(200)
+                    source.distinctBy { it.key }.take(200)
                 }
-                if (dialog !== openDialog || openDialog.isShowing.not() ||
-                    activity.isFinishing || activity.isDestroyed || activeTab != tab ||
-                    searchText != query) return@launch
+                if (dialog !== openDialog || !openDialog.isShowing ||
+                    activity.isFinishing || activity.isDestroyed || activeTab != tab) return@launch
                 adapter.replace(filtered)
                 displayedChannels = filtered
                 visibleCount?.text = if (filtered.isEmpty())
-                    copy("ما فيه قنوات مطابقة", "No matching channels")
+                    copy("ما فيه قنوات في هذه القائمة", "No channels in this list")
                     else copy("${filtered.size} قناة", "${filtered.size} channels")
-                if (filtered.isNotEmpty() && !query.isBlank()) {
-                    // Avoid stealing focus from the soft keyboard during typing.
-                    listFocusAfterFilter(adapter, filtered)
+                if (focusList && filtered.isNotEmpty()) {
+                    val view = visibleChannelList ?: return@launch
+                    val target = LiveChannelPanelPolicy.initialChannelIndex(
+                        filtered, lastChannelFocusKey, currentChannelKey, StreamEntity::key)
+                    if (target >= 0) {
+                        (view.layoutManager as? LinearLayoutManager)
+                            ?.scrollToPositionWithOffset(target, dp(6))
+                        view.isFocusableInTouchMode = true
+                        view.requestFocus()
+                        view.post {
+                            if (dialog === openDialog && openDialog.isShowing) {
+                                view.findViewHolderForAdapterPosition(target)?.itemView?.requestFocus()
+                                    ?: view.requestFocus()
+                            }
+                        }
+                    }
                 }
             }
-        }
-
-        private fun listFocusAfterFilter(adapter: LiveChannelAdapter, channels: List<StreamEntity>) {
-            // The RecyclerView keeps the current focus during search; only its
-            // adapter changes. This helper deliberately never jumps to another
-            // view while the user is entering text.
-            if (adapter.itemCount == 0 || channels.isEmpty()) return
         }
 
         /**
