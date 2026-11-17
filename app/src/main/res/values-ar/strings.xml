@@ -146,4 +146,5 @@
     <string name="login_qr_description">رمز QR لربط الجهاز</string>
     <string name="login_qr_loading">جاري إعداد رمز الربط…</string>
     <string name="login_qr_unavailable">ربط الجهاز غير متاح في هذه النسخة. يمكنك إضافة قائمة مباشرة.</string>
+    <string name="stream_now_playing">▶ تعمل الآن</string>
 </resources>
