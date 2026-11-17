@@ -8,7 +8,7 @@ const url='https://licensed-provider.example/movie/SAFE_PRIVATE_SESSION/98765.mp
 function mockHeaders(extra={}){
  return new Headers({
   'content-length':'8192','accept-ranges':'bytes',
-  'content-type':'video/mp4','etag',...extra
+  'content-type':'video/mp4',etag,...extra
  });
 }
 function plan(extra={}){
