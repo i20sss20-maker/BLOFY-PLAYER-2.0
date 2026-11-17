@@ -16,7 +16,7 @@ import kotlinx.coroutines.withTimeout
  * cancellation is responsible for rolling back incomplete database writes.
  */
 internal object CatalogRefreshCommitPolicy {
-    const val MAX_COMMIT_MILLIS = 6L * 60_000L
+    const val MAX_COMMIT_MILLIS = 3L * 60_000L
 
     /** A stalled manual final save should return to the user, not repeat long silent retries. */
     fun shouldFailManualCommitTimeout(manual: Boolean, lastStage: String): Boolean =
