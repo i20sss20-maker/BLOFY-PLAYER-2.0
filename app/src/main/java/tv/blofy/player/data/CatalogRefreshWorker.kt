@@ -25,6 +25,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.core.identity.PortalSyncBook
+import tv.blofy.player.core.identity.StreamCodeSession
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.BlofyDao
 import tv.blofy.player.data.local.ProviderEntity
@@ -52,7 +53,8 @@ class CatalogRefreshWorker(
         // STREAM auto-sync is opt-out, daily and Wi-Fi/unmetered only. Never
         // start hidden downloads on devices where the viewer disabled it.
         if (BuildConfig.CODE_ONLY_LOGIN && !manual &&
-            !CatalogAutoRefreshPolicy.streamEnabled(app)) return Result.success()
+            (!CatalogAutoRefreshPolicy.streamEnabled(app) ||
+                !StreamCodeSession.isClaimed(app))) return Result.success()
         // A pending periodic job for a previously selected account must not
         // consume data or disk on a different active playlist.
         if (!manual && dao.activeProviderId() != provider.id) return Result.success()
