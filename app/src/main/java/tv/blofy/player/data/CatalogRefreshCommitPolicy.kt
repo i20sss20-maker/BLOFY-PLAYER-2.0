@@ -18,6 +18,10 @@ import kotlinx.coroutines.withTimeout
 internal object CatalogRefreshCommitPolicy {
     const val MAX_COMMIT_MILLIS = 6L * 60_000L
 
+    /** A stalled manual final save should return to the user, not repeat long silent retries. */
+    fun shouldFailManualCommitTimeout(manual: Boolean, lastStage: String): Boolean =
+        manual && lastStage == "SAVE"
+
     suspend fun <T> run(
         timeoutMillis: Long = MAX_COMMIT_MILLIS,
         commit: suspend () -> T
