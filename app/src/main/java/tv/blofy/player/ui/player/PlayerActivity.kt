@@ -49,6 +49,7 @@ import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.PlayerView
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -59,6 +60,8 @@ import tv.blofy.player.BlofyApp
 import tv.blofy.player.BuildConfig
 import tv.blofy.player.core.diagnostics.StreamConnectionDiagnostics
 import tv.blofy.player.core.diagnostics.StreamAudioHealth
+import tv.blofy.player.core.diagnostics.StreamAudioOutputEvidence
+import tv.blofy.player.core.diagnostics.StreamAudioQaReport
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.playback.PlaybackResumeState
 import tv.blofy.player.core.playback.BlofyPlaybackSession
@@ -104,6 +107,7 @@ open class PlayerActivity : ContentAccessActivity() {
     private var disconnectedAtElapsedMs = 0L
     private var vlcFallbackLaunched = false
     private var lastStreamAudioHealth = ""
+    private val streamAudioEvidence = StreamAudioOutputEvidence()
     private var arabicAudioSession: StreamArabicAudioSession? = null
     private lateinit var connectionNotice: TextView
     private lateinit var controlHint: TextView
@@ -320,6 +324,51 @@ open class PlayerActivity : ContentAccessActivity() {
     private fun initializePlaybackSession() {
         session = createPlaybackSession()
         sessionReleased = false
+        streamAudioEvidence.reset()
+        if (BuildConfig.CODE_ONLY_LOGIN && kind == KIND_LIVE) {
+            // Read-only Media3 renderer instrumentation. An AudioSink warning
+            // is not a fatal playback error and never triggers a retry here.
+            session.player.addAnalyticsListener(object : AnalyticsListener {
+                override fun onAudioDecoderInitialized(
+                    eventTime: AnalyticsListener.EventTime,
+                    decoderName: String,
+                    initializedTimestampMs: Long,
+                    initializationDurationMs: Long
+                ) {
+                    if (!sessionReleased) streamAudioEvidence.onDecoderInitialized()
+                }
+
+                override fun onAudioPositionAdvancing(
+                    eventTime: AnalyticsListener.EventTime,
+                    playoutStartSystemTimeMs: Long
+                ) {
+                    if (!sessionReleased) streamAudioEvidence.onPositionAdvancing()
+                }
+
+                override fun onAudioSinkError(
+                    eventTime: AnalyticsListener.EventTime,
+                    audioSinkError: Exception
+                ) {
+                    if (!sessionReleased) streamAudioEvidence.onSinkError()
+                }
+
+                override fun onAudioCodecError(
+                    eventTime: AnalyticsListener.EventTime,
+                    audioCodecError: Exception
+                ) {
+                    if (!sessionReleased) streamAudioEvidence.onCodecError()
+                }
+
+                override fun onAudioUnderrun(
+                    eventTime: AnalyticsListener.EventTime,
+                    bufferSize: Int,
+                    bufferSizeMs: Long,
+                    elapsedSinceLastFeedMs: Long
+                ) {
+                    if (!sessionReleased) streamAudioEvidence.onUnderrun()
+                }
+            })
+        }
         session.player.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (sessionReleased) return
@@ -1245,11 +1294,41 @@ open class PlayerActivity : ContentAccessActivity() {
                 "\nسرعة ارتباط الشبكة التقديرية: ${linkEstimate?.let { "${it / 1000.0} ميجابت/ث" } ?: "غير معروفة"}" +
                 "\nليست قياسًا لسرعة بث القناة."
         }
-        AlertDialog.Builder(this)
+        val dialog = AlertDialog.Builder(this)
             .setTitle(if (english) "Stream information" else "معلومات البث")
-            .setMessage(report)
+            .setMessage(report + (if (BuildConfig.CODE_ONLY_LOGIN && kind == KIND_LIVE)
+                "\n\n" + streamAudioEvidence.summary(audioHealth, streamUiLanguage()) else ""))
             .setPositiveButton(if (english) "Close" else "إغلاق", null)
-            .show()
+        if (BuildConfig.CODE_ONLY_LOGIN && kind == KIND_LIVE) {
+            dialog.setNeutralButton(
+                if (english) "Copy audio report" else "نسخ تقرير الصوت"
+            ) { _, _ ->
+                if (sessionReleased || isFinishing || isDestroyed) return@setNeutralButton
+                val now = session.player
+                val status = StreamAudioHealth.inspect(
+                    now.currentTracks, now.volume, known = now.playbackState == Player.STATE_READY
+                )
+                val safeReport = StreamAudioQaReport.create(
+                    sdk = Build.VERSION.SDK_INT,
+                    playbackState = now.playbackState,
+                    audio = status,
+                    evidence = streamAudioEvidence
+                )
+                val clipboard = getSystemService(CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                if (clipboard != null) {
+                    clipboard.setPrimaryClip(
+                        android.content.ClipData.newPlainText("BLOFY Audio QA", safeReport)
+                    )
+                    Toast.makeText(
+                        this@PlayerActivity,
+                        if (english) "Audio diagnostics copied without account details" else
+                            "تم نسخ تشخيص الصوت بدون بيانات الحساب",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        }
+        dialog.show()
     }
 
     internal fun liveControlsVisible(): Boolean =
@@ -1371,6 +1450,8 @@ open class PlayerActivity : ContentAccessActivity() {
         }
 
         // A new channel must never inherit the previous channel's audio URL.
+        streamAudioEvidence.reset()
+        lastStreamAudioHealth = ""
         arabicAudioSession?.stop()
         arabicAudioSession = null
         val profile = providerProfile(provider)
@@ -1387,6 +1468,15 @@ open class PlayerActivity : ContentAccessActivity() {
         RecentChannelStore.record(this, provider.id, stream.key)
         updateTitle(stream.name)
         showCachedChannelPosition(stream.remoteId)
+        if (BuildConfig.CODE_ONLY_LOGIN) {
+            // A user-selected AC3/AAC track belongs to the previous channel.
+            // Reset audio overrides before changing the media item; keep
+            // subtitles, video preferences and preferred audio language.
+            session.player.trackSelectionParameters =
+                StreamAudioChannelTransition.forDifferentLiveChannel(
+                    session.player.trackSelectionParameters
+                )
+        }
         session.play(
             url = ContentUrlResolver.live(provider, profile, stream),
             fallbackUrl = ContentUrlResolver.directFallback(stream), fallbackUrls = ContentUrlResolver.recoveryUrls(stream)
@@ -1566,7 +1656,8 @@ open class PlayerActivity : ContentAccessActivity() {
         }
         val dialog = AlertDialog.Builder(this)
             .setTitle(if (isArabic) "حالة صوت القناة" else "Channel audio status")
-            .setMessage(result.explanationFor(language) + stats)
+            .setMessage(result.explanationFor(language) + stats +
+                "\n\n" + streamAudioEvidence.summary(result, language))
             .setPositiveButton(if (isArabic) "حسنًا" else "OK", null)
         if (result.canOfferAudioAutoSelection(
                 session.player.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_AUDIO)
@@ -1577,6 +1668,7 @@ open class PlayerActivity : ContentAccessActivity() {
             ) { _, _ ->
                 if (!sessionReleased) {
                     StreamAudioPreferences.save(applicationContext, null)
+                    if (kind == KIND_LIVE) streamAudioEvidence.reset()
                     session.player.trackSelectionParameters =
                         session.player.trackSelectionParameters.buildUpon()
                             .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
@@ -1589,6 +1681,33 @@ open class PlayerActivity : ContentAccessActivity() {
                         Toast.LENGTH_SHORT
                     ).show()
                 }
+            }
+        }
+        if (kind == KIND_LIVE && StreamAacTrackChoice.available(session.player.currentTracks) != null) {
+            val expectedStream = currentStreamId
+            // A user-initiated same-stream track override: no extra Xtream
+            // session, new media URL, forced decoder or video reprepare.
+            dialog.setNegativeButton(
+                if (isArabic) "تجربة مسار AAC" else "Try AAC track"
+            ) { _, _ ->
+                if (sessionReleased || currentStreamId != expectedStream) return@setNegativeButton
+                val candidate = StreamAacTrackChoice.available(session.player.currentTracks)
+                    ?: return@setNegativeButton
+                arabicAudioSession?.stop()
+                arabicAudioSession = null
+                session.player.trackSelectionParameters =
+                    session.player.trackSelectionParameters.buildUpon()
+                        .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+                        .setOverrideForType(
+                            TrackSelectionOverride(candidate.group.mediaTrackGroup, listOf(candidate.index))
+                        ).build()
+                streamAudioEvidence.reset()
+                Toast.makeText(
+                    this,
+                    if (isArabic) "تم اختيار AAC المتاح دون إعادة تشغيل القناة" else
+                        "Available AAC track selected without reconnecting",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
         dialog.show()
@@ -1665,6 +1784,11 @@ open class PlayerActivity : ContentAccessActivity() {
                 if (isAudio) {
                     arabicAudioSession?.stop()
                     arabicAudioSession = null
+                    if (BuildConfig.CODE_ONLY_LOGIN && kind == KIND_LIVE) {
+                        // Don't mix the prior selected track's AudioSink signal
+                        // with the newly selected audio decoder.
+                        streamAudioEvidence.reset()
+                    }
                 }
                 when (AudioTrackChoicePolicy.choice(isAudio, isText, which, entries.size)) {
                     AudioTrackChoicePolicy.Choice.OFF -> {
