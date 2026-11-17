@@ -10,7 +10,10 @@ const allowedReasons=new Set([
  'upstream_empty_media','upstream_non_media_response','upstream_unreachable',
  'upstream_denial_cooldown','gateway_auth_denied','catalog_item_unavailable',
  'licensed_fanout_unavailable','upstream_stream_ended','client_or_proxy_closed',
- 'xtream_transport_connection_reset'
+ 'xtream_transport_connection_reset','xtream_transport_timeout',
+ 'xtream_transport_unreachable','xtream_transport_dns_failed',
+ 'xtream_transport_connection_refused','xtream_transport_tls_invalid',
+ 'upstream_http_509'
 ]);
 export function summarizeStreamMediaQuality(raw={},now=Date.now()){
  const byKind={};
@@ -22,11 +25,28 @@ export function summarizeStreamMediaQuality(raw={},now=Date.now()){
     errorPercent:started+failed?Math.round(100*failed/(started+failed)):null,
     verifiedPlayback:false};
  }
+ // Prefer the complete capped 60-minute sample when available.
+ // Legacy instances may only supply the last twelve recent issues.
+ const safeReasonCounts=records=>{
+  const result={};
+  if(!records||typeof records!=='object'||Array.isArray(records))return result;
+  for(const [key,value] of Object.entries(records)){
+   if(allowedReasons.has(key)&&Number.isSafeInteger(value)&&value>=0)
+    result[key]=asCount(value);
+  }
+  return result;
+ };
  const recent={};
  for(const item of Array.isArray(raw.recentIssues)?raw.recentIssues.slice(0,60):[]){
   const key=String(item?.reason||'');
   if(allowedReasons.has(key))recent[key]=(recent[key]||0)+1;
  }
+ const hasHourly=raw.failureByReason&&typeof raw.failureByReason==='object'&&
+   !Array.isArray(raw.failureByReason);
+ const byReason=hasHourly?safeReasonCounts(raw.failureByReason):recent;
+ const reasonByKind={};
+ for(const kind of KINDS)
+  reasonByKind[kind]=safeReasonCounts(raw.failureByKind?.[kind]);
  const p95=Number.isFinite(raw.p95StartMs)?asCount(raw.p95StartMs):null;
  const median=Number.isFinite(raw.medianStartMs)?asCount(raw.medianStartMs):null;
  const slowStarts=asCount(raw.slowStarts);
@@ -35,7 +55,8 @@ export function summarizeStreamMediaQuality(raw={},now=Date.now()){
    decodedOnClient:false,sourceCredentialsExposed:false,
    started:asCount(raw.started),failed:asCount(raw.failed),
    interrupted:asCount(raw.interrupted),slowStarts,medianStartMs:median,
-   p95StartMs:p95,byKind,byReason:recent,
+   p95StartMs:p95,byKind,byReason,reasonByKind,
+   reasonCountWindow:hasHourly?'bounded_hourly_samples':'recent_issue_fallback',
    shortLiveUpstreamEnds:asCount(raw.shortLiveUpstreamEnds),
    clientClosed:asCount(raw.clientOrProxyClosed),
    sourceOutages:asCount(raw.upstreamFailed),

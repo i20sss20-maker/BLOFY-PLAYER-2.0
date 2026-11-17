@@ -42,3 +42,35 @@ test('missing metrics remain zero/unknown, not false evidence of playback',()=>{
  assert.equal(r.decodedOnClient,false);
  assert.deepEqual(r.byReason,{});
 });
+
+test('hourly 502 connection resets are counted from whole bounded window, not only last 12',()=>{
+ const r=summarizeStreamMediaQuality({
+  started:24,failed:21,interrupted:3,byKind:{
+   series:{started:5,failed:18,interrupted:3},
+   movie:{started:19,failed:3},live:{started:0,failed:0}
+  },
+  failureByReason:{xtream_transport_connection_reset:21,
+   xtream_transport_timeout:3,not_allowed_with_secret:100},
+  failureByKind:{
+   series:{xtream_transport_connection_reset:18,
+    xtream_transport_timeout:3,password:'invisible'},
+   movie:{xtream_transport_connection_reset:3}
+  },
+  recentIssues:[{reason:'xtream_transport_connection_reset',sourceUrl:'secret.url'}]
+ });
+ assert.equal(r.byReason.xtream_transport_connection_reset,21);
+ assert.equal(r.byReason.xtream_transport_timeout,3);
+ assert.equal(r.reasonByKind.series.xtream_transport_connection_reset,18);
+ assert.equal(r.reasonByKind.movie.xtream_transport_connection_reset,3);
+ assert.equal(r.reasonCountWindow,'bounded_hourly_samples');
+ assert.doesNotMatch(JSON.stringify(r),/not_allowed_with_secret|password|secret\.url|sourceUrl/);
+});
+test('legacy processes remain explicitly labeled as last-issues-only',()=>{
+ const r=summarizeStreamMediaQuality({recentIssues:[
+  {reason:'upstream_http_502',providerUrl:'private'},
+  {reason:'upstream_http_502',providerUrl:'private'}
+ ]});
+ assert.equal(r.byReason.upstream_http_502,2);
+ assert.equal(r.reasonCountWindow,'recent_issue_fallback');
+ assert.deepEqual(r.reasonByKind,{live:{},movie:{},series:{}});
+});

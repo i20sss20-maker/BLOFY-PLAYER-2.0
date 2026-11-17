@@ -14,7 +14,10 @@ const REASONS=new Set([
   'upstream_http_other','headers_timeout','media_read_timeout','upstream_empty_media',
   'upstream_non_media_response','upstream_unreachable','upstream_denial_cooldown',
   'gateway_auth_denied','catalog_item_unavailable','licensed_fanout_unavailable',
-  'upstream_stream_ended','client_or_proxy_closed','xtream_transport_connection_reset'
+  'upstream_stream_ended','client_or_proxy_closed','xtream_transport_connection_reset',
+  'xtream_transport_timeout','xtream_transport_unreachable',
+  'xtream_transport_dns_failed','xtream_transport_connection_refused',
+  'xtream_transport_tls_invalid'
 ]);
 
 export function recordXtreamPlayback({kind,phase,upstreamStatus,reason,providerHint,startupMs,attempts,itemId,sourceId,durationMs}={},now=Date.now()){
@@ -61,8 +64,19 @@ export function xtreamPlaybackSnapshot(now=Date.now(),sourceId=null){
     sharedTicketsIssued:sharedGranted.filter(row=>row.kind===kind).length,
     sharedGrantFallbacks:sharedFallback.filter(row=>row.kind===kind).length
   }]));
+  // Hourly counters must include every retained failed/interrupted event,
+  // not only the most recent 12 UI rows. Only fixed allowlisted reasons,
+  // without item IDs, source IPs, account details or provider hostnames.
+  const failedEvents=[...failed,...interrupted];
+  const failureByReason=Object.create(null);
+  const failureByKind=Object.fromEntries([...KINDS].map(k=>[k,Object.create(null)]));
   const upstreamCodes={};
-  for(const event of [...failed,...interrupted]){
+  for(const event of failedEvents){
+    if(event.reason&&REASONS.has(event.reason)){
+      failureByReason[event.reason]=(failureByReason[event.reason]||0)+1;
+      const map=failureByKind[event.kind];
+      map[event.reason]=(map[event.reason]||0)+1;
+    }
     if(event.status&&event.status>=400){
       const key=String(event.status);
       upstreamCodes[key]=(upstreamCodes[key]||0)+1;
@@ -87,6 +101,8 @@ export function xtreamPlaybackSnapshot(now=Date.now(),sourceId=null){
     medianStartMs:percentile(0.5),
     p95StartMs:percentile(0.95),
     byKind:kindSummary,
+    failureByReason,
+    failureByKind,
     upstreamCodes,
     recentIssues:[...failed,...interrupted,...ended].sort((a,b)=>b.at-a.at).slice(0,12).map(row=>({
       at:new Date(row.at).toISOString(),
