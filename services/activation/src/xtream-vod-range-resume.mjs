@@ -14,6 +14,18 @@ function positiveInteger(input){
  const n=Number(input);
  return Number.isSafeInteger(n)&&n>0?n:null;
 }
+const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+// Never allow broad subscriber rollout by switching a single Boolean.
+// Both a known test account AND its approved source must match explicit
+// allowlists. Missing IDs leave the feature OFF even if enabled='1'.
+export function allowedVodResumePilot({
+ enabled=false,accountId,sourceId,pilotAccountId,pilotSourceId
+}={}){
+ return enabled===true&&[accountId,sourceId,pilotAccountId,pilotSourceId]
+   .every(x=>typeof x==='string'&&UUID.test(x))&&
+   accountId.toLowerCase()===pilotAccountId.toLowerCase()&&
+   sourceId.toLowerCase()===pilotSourceId.toLowerCase();
+}
 export function verifiedVodResumePlan({
  enabled=false,kind,method='GET',status=200,requestRange=null,
  usingIndependentRelay=false,format='',headers
