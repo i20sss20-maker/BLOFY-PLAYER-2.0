@@ -360,6 +360,9 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             visibleCount = count
 
             val panel = LinearLayout(activity).apply {
+                // Keep initial dialog focus off the search EditText; move it to
+                // the playing channel row once the RecyclerView has laid out.
+                isFocusableInTouchMode = true
                 orientation = LinearLayout.VERTICAL
                 layoutDirection = activity.resources.configuration.layoutDirection
                 background = GradientDrawable().apply {
@@ -480,10 +483,19 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 prepareWindow(window, width, height, reveal = true)
                 val current = currentChannelKey
                 val currentIndex = channels.indexOfFirst { it.key == current }.coerceAtLeast(0)
-                list.scrollToPosition(currentIndex)
+                (list.layoutManager as? LinearLayoutManager)
+                    ?.scrollToPositionWithOffset(currentIndex, 0)
                 list.post {
-                    list.findViewHolderForAdapterPosition(currentIndex)?.itemView?.requestFocus()
-                        ?: list.requestFocus()
+                    if (dialog !== created || !created.isShowing) return@post
+                    // The default dialog focus must never jump to Search when
+                    // opening channels again after BLOFY 1 -> BLOFY 2.
+                    searchField?.clearFocus()
+                    val channelRow = list.findViewHolderForAdapterPosition(currentIndex)?.itemView
+                        ?: list.getChildAt(0)
+                    if (channelRow?.requestFocus() != true) {
+                        list.isFocusableInTouchMode = true
+                        list.requestFocus()
+                    }
                 }
             }
             created.show()
