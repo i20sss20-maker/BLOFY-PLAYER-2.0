@@ -232,7 +232,7 @@ internal class LiveChannelAdapter(
         var isCurrentChannel: Boolean = false
     }
 
-    private fun rowBackground(contextForBackground: android.content.Context, focused: Boolean, current: Boolean): GradientDrawable {
+    private fun rowBackground(contextForBackground: android.content.Context, focused: Boolean, current: Boolean = false): GradientDrawable {
         if (!translucent) return CinemaStyle.surface(contextForBackground, focused = focused)
         val density = contextForBackground.resources.displayMetrics.density
         return GradientDrawable().apply {
