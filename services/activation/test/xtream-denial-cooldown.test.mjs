@@ -57,7 +57,7 @@ test('gateway integrates cooldown only after a real upstream denial',async()=>{
   const gw=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
   const ui=await readFile(new URL('../web/sources-admin.js',import.meta.url),'utf8');
   assert.match(gw,/mediaDenialCooldown\.active\(cooldownKey\)/);
-  assert.match(gw,/mediaDenialCooldown\.denied\(cooldownKey,response\.status\)/);
+  assert.match(gw,/mediaDenialCooldown\.denied\(cooldownKey,\s*confirmed509\?509:response\.status\)/);
   assert.match(gw,/mediaDenialCooldown\.clear\(cooldownKey\)/);
   assert.match(gw,/retry-after/);
   assert.match(ui,/upstream_denial_cooldown/);
