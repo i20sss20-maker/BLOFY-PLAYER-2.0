@@ -55,7 +55,7 @@ class RecentEpisodesRefreshWorker(appContext: Context, params: WorkerParameters)
             if (CatalogPlaybackGate.isPlaying) return Result.retry()
             if (!SeriesEpisodeRefreshPolicy.claim(app, providerId, seriesId)) continue
             try {
-                val result = manager.syncSeriesEpisodes(provider, seriesId)
+                val result = manager.syncSeriesEpisodes(provider, seriesId, preserveCachedRows = true)
                 if (result.cacheUpdated && result.episodeCount > 0) {
                     SeriesEpisodeRefreshPolicy.markSuccess(app, providerId, seriesId)
                 }
