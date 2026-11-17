@@ -7,6 +7,7 @@
   <title>BLOFY · مركز المحتوى</title>
   <link rel="stylesheet" href="/admin-content-hub.css">
   <script src="/admin-content-hub.js" defer></script>
+  <script src="/admin-private-copy-audit.js" defer></script>
   <script src="/admin-season-analytics.js" defer></script>
   <script src="/admin-season-detail.js" defer></script>
   <script src="/admin-season-attention.js" defer></script>
@@ -84,6 +85,30 @@
       <a href="#attentionTitle">التنبيهات</a>
       <a href="#runs">عمليات الأفلام</a>
     </nav>
+  </section>
+  <section class="card" id="privateCopyAudit" aria-labelledby="privateCopyAuditTitle">
+    <div class="cardhead">
+      <div>
+        <p class="eyebrow">PRIVATE S3 · INTEGRITY REVIEW</p>
+        <h2 id="privateCopyAuditTitle">فحص سلامة الملف المحفوظ بالكامل</h2>
+        <p class="muted">أعد قراءة النسخة الخاصة للفيلم أو الحلقة وحساب SHA-256 لكل جزء والملف كاملًا. لا يسحب المحتوى من Xtream ولا ينقل حلقة جديدة ولا يغير بث العملاء.</p>
+      </div>
+      <button type="button" id="privateCopyAuditRefresh">تحديث الحالة</button>
+    </div>
+    <div class="season-device-qa-controls">
+      <label for="privateCopyAuditKind">الملف المحدد للفحص
+        <select id="privateCopyAuditKind" disabled>
+          <option value="">لا توجد ملفات معتمدة للفحص بعد</option>
+        </select>
+      </label>
+      <label for="privateCopyAuditConfirm">
+        <input id="privateCopyAuditConfirm" type="checkbox">
+        أوافق على قراءة الملف الخاص بالكامل وما قد ينتج عنها من استهلاك S3
+      </label>
+      <button type="button" id="privateCopyAuditStart" disabled>بدء فحص SHA-256 للملف المحدد</button>
+    </div>
+    <p id="privateCopyAuditStatus" class="muted" role="status">جارٍ قراءة تفعيل الفحص الخاص…</p>
+    <p class="hint">لا يعمل هذا الفحص تلقائيًا، ويتطلب تصريح التخزين وتفعيلًا مستقلًا من الخادم. النجاح يعني سلامة البايتات داخل التخزين، وليس التأكد من وجود صوت وصورة على جهازك. لا يغطي كل المكتبة أو الموسم.</p>
   </section>
   <section class="card season-readiness" id="seasonReadiness"
     aria-labelledby="seasonReadinessTitle">
