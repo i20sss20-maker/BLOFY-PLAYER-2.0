@@ -44,6 +44,31 @@ async function readPrivatePreviewFailure(response){
  }
  return fallback;
 }
+// Some internal proxies legitimately use Transfer-Encoding: chunked and
+// omit Content-Length. Read such responses only with an actual 12 MiB
+// limit, then supply a verified length to the next private hop.
+async function collectUnlengthenedPreview(body,maxBytes){
+ const reader=body.getReader(),chunks=[];
+ let total=0;
+ try{
+  for(;;){
+   const next=await reader.read();
+   if(next.done)break;
+   const bytes=next.value;
+   if(!(bytes instanceof Uint8Array))return null;
+   total+=bytes.byteLength;
+   if(total>maxBytes)return null;
+   chunks.push(Buffer.from(bytes));
+  }
+  if(total<2048)return null;
+  const data=Buffer.concat(chunks,total);
+  return data.subarray(4,8).toString('ascii')==='ftyp'?data:null;
+ }catch{return null}
+ finally{
+  try{await reader.cancel()}catch{}
+  try{reader.releaseLock()}catch{}
+ }
+}
 export async function forwardPrivatePreview({
  req,res,hubToken,fetchImpl=fetch,mediaKind='movie',runId=null
 }={}){
@@ -77,9 +102,25 @@ export async function forwardPrivatePreview({
   }
   if(!upstream.body||upstream.headers.get('content-type')!=='video/mp4')
    return fail(res,503,'owner_preview_invalid_media_response');
-  const expected=Number(upstream.headers.get('content-length'));
-  if(!Number.isSafeInteger(expected)||expected<2048||expected>MAX_PREVIEW)
+  const declared=upstream.headers.get('content-length');
+  const expected=declared===null?null:Number(declared);
+  if(declared!==null&&
+     (!Number.isSafeInteger(expected)||expected<2048||expected>MAX_PREVIEW))
    return fail(res,503,'owner_preview_upstream_size_invalid');
+  if(expected===null){
+   const bytes=await collectUnlengthenedPreview(upstream.body,MAX_PREVIEW);
+   if(!bytes)return fail(res,503,'owner_preview_upstream_size_invalid');
+   res.writeHead(200,{
+    'content-type':'video/mp4',
+    'content-length':String(bytes.length),
+    'content-disposition':'inline; filename="blofy-private-preview.mp4"',
+    'cache-control':'private,no-store',
+    'cross-origin-resource-policy':'same-origin',
+    'x-content-type-options':'nosniff',
+    'referrer-policy':'no-referrer'
+   });
+   return res.end(bytes);
+  }
   const bounded=new Transform({transform(chunk,enc,cb){
    count+=chunk.byteLength;
    cb(count<=expected?null:Error('owner_preview_overrun'),chunk);
