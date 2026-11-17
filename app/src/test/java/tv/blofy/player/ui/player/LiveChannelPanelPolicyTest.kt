@@ -26,6 +26,17 @@ class LiveChannelPanelPolicyTest {
         assertEquals(listOf("C", "A"),
             LiveChannelPanelPolicy.orderedByRecent(listOf("A", "B", "C"), listOf("C", "A", "C")) { it })
     }
+    @Test fun changingChannelsKeepsFocusOnTheLastHighlightedRow() {
+        val keys = listOf("BLOFY 1", "BLOFY 2", "BLOFY 3")
+        assertEquals(1, LiveChannelPanelPolicy.initialChannelIndex(keys, "BLOFY 2", "BLOFY 1"))
+        assertEquals(2, LiveChannelPanelPolicy.initialChannelIndex(keys, "unavailable", "BLOFY 3"))
+    }
+
+    @Test fun firstOrMissingChannelFallsBackToFirstRowNotSearch() {
+        assertEquals(0, LiveChannelPanelPolicy.initialChannelIndex(listOf("BLOFY 1", "BLOFY 2"), null, null))
+        assertEquals(-1, LiveChannelPanelPolicy.initialChannelIndex(emptyList(), "missing", null))
+    }
+
     @Test fun rowsVisibleAboveFooter() {
         val tv = LiveChannelPanelPolicy.dimensions(true, false)
         val phone = LiveChannelPanelPolicy.dimensions(false, false)
