@@ -9,7 +9,7 @@ import android.view.KeyEvent
  * still own focused OK/DPAD navigation.
  */
 internal enum class LivePlayerMenuAction {
-    PASS_THROUGH, SHOW_AUDIO_CONTROLS, SHOW_CHANNEL_LIST, DISMISS_CONTROLS, RETURN_TO_BROWSER
+    PASS_THROUGH, SHOW_AUDIO_CONTROLS, SHOW_CHANNEL_LIST, SHOW_SEARCH_WINDOW, DISMISS_CONTROLS, RETURN_TO_BROWSER
 }
 
 internal object LivePlayerMenuPolicy {
@@ -25,6 +25,8 @@ internal object LivePlayerMenuPolicy {
                 else if (hudVisible) LivePlayerMenuAction.PASS_THROUGH
                 else LivePlayerMenuAction.SHOW_AUDIO_CONTROLS
             KeyEvent.KEYCODE_GUIDE -> LivePlayerMenuAction.SHOW_CHANNEL_LIST
+            KeyEvent.KEYCODE_SEARCH -> if (unifiedChannelPanel) LivePlayerMenuAction.SHOW_SEARCH_WINDOW
+                else LivePlayerMenuAction.PASS_THROUGH
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER,
             KeyEvent.KEYCODE_NUMPAD_ENTER ->
                 if (!unifiedChannelPanel && hudVisible) LivePlayerMenuAction.PASS_THROUGH
