@@ -46,7 +46,8 @@ export async function buildPrivateBrowserPreview({
     await lease.getVerifiedEpisodeObject(runId):
     await lease.getVerifiedChunkedObject(runId);
  }catch{return {...base,ok:false,code:'private_preview_manifest_unavailable'}}
- if(!manifest)return {...base,ok:false,code:'private_preview_movie_not_verified'};
+ if(!manifest)return {...base,ok:false,code:mediaKind==='episode'?
+  'private_preview_episode_not_verified':'private_preview_movie_not_verified'};
  if(!['mkv','mp4','ts','avi'].includes(manifest.extension))return {
   ...base,ok:false,code:'private_preview_unsupported_container'};
  let folder=null;
@@ -54,9 +55,14 @@ export async function buildPrivateBrowserPreview({
   folder=await mkdtemp(join(tmpdir(),'blofy-owner-preview-'));
   const input=join(folder,'source.'+manifest.extension),
         output=join(folder,'preview.mp4');
-  const sampled=await sampleVerifiedPrefix({
-   object:manifest,storage,filename:input,signal});
-  await transcoder({input,output,signal,mediaKind});
+  let sampled;
+  try{
+   sampled=await sampleVerifiedPrefix({
+    object:manifest,storage,filename:input,signal});
+  }catch{return {...base,ok:false,code:'private_preview_verified_prefix_unavailable'}}
+  try{
+   await transcoder({input,output,signal,mediaKind});
+  }catch{return {...base,ok:false,code:'private_preview_output_unavailable'}}
   const meta=await stat(output);
   if(!meta.isFile()||meta.size<2048||meta.size>MAX_BYTES)
    return {...base,ok:false,code:'private_preview_output_size_invalid'};
