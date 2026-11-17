@@ -1,0 +1,56 @@
+name: Verify BLOFY STREAM 55.8.34 actual public APK and updater
+on:
+  push:
+    branches: [verify/stream-55834-live-download-20261117]
+    paths: ['.github/workflows/verify-stream-55834-live-download-20261117.yml']
+permissions:
+  contents: read
+jobs:
+  live-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      APK_NAME: BLOFY-STREAM-55.8.34-NEXTGEN-FOCUS-DOWNLOADS-OWNER-SIGNED.apk
+      APK_SHA: 434ef88377f01c91a1a9d6a104a4c6a11acac586c9297e3ec56686ce2dbc1b23
+      APK_BYTES: '135755814'
+      BASE: https://updates.blofyplayer.com
+    steps:
+      - name: Check site, exact public STREAM release and unchanged PLAYER updater
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 3 "$BASE/health" > "$RUNNER_TEMP/health.json"
+          jq -e '.ok == true or .status == "ok" or .release != null or .service != null' "$RUNNER_TEMP/health.json"
+          curl --fail --silent --show-error --retry 3 "$BASE/stream/release.json" > "$RUNNER_TEMP/stream.json"
+          jq -e --arg sha "$APK_SHA" --arg base "$BASE" \
+            '.release.app | .versionCode == 2000111 and .versionName == "2.0.0-rc07.55.8.34-STREAM" and .packageName == "tv.blofy.player.v2.stream" and .apkSizeBytes == 135755814 and .sha256 == $sha and .downloadUrl == ($base + "/d/blofy-stream")' \
+            "$RUNNER_TEMP/stream.json"
+          curl --fail --silent --show-error --retry 3 "$BASE/release.json" > "$RUNNER_TEMP/player.json"
+          jq -e '(.release.app.packageName // .app.packageName) != "tv.blofy.player.v2.stream"' "$RUNNER_TEMP/player.json"
+          curl --fail --silent --show-error --retry 3 "$BASE/downloads" > "$RUNNER_TEMP/downloads.html"
+          grep -Fq '55.8.34' "$RUNNER_TEMP/downloads.html"
+          grep -Fq 'BLOFY STREAM' "$RUNNER_TEMP/downloads.html"
+      - name: Verify resumable Range and full APK bytes from public BLOFY site
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="$BASE/d/blofy-stream"
+          curl --fail --location --silent --show-error --retry 3 \
+            -H 'Range: bytes=0-1023' -D "$RUNNER_TEMP/range-headers.txt" \
+            "$url" -o "$RUNNER_TEMP/first-kb.bin"
+          grep -Eiq '^HTTP/[^ ]+ 206' "$RUNNER_TEMP/range-headers.txt"
+          test "$(stat -c '%s' "$RUNNER_TEMP/first-kb.bin")" = 1024
+          curl --fail --location --silent --show-error --retry 3 --retry-delay 3 \
+            "$url" -o "$RUNNER_TEMP/stream.apk"
+          test "$(stat -c '%s' "$RUNNER_TEMP/stream.apk")" = "$APK_BYTES"
+          sha="$(sha256sum "$RUNNER_TEMP/stream.apk" | awk '{print $1}')"
+          test "$sha" = "$APK_SHA"
+          printf 'BLOFY STREAM 55.8.34 public download verified: %s bytes, SHA256=%s\\n' "$APK_BYTES" "$sha"
+          {
+            echo '## BLOFY STREAM 55.8.34 live website smoke PASS'
+            echo "- Website: $BASE/downloads"
+            echo "- Public download: $url"
+            echo "- SHA256: $sha"
+            echo '- APK identity: tv.blofy.player.v2.stream, versionCode 2000111'
+            echo '- Range support: confirmed HTTP 206 for first 1024 bytes'
+          } >> "$GITHUB_STEP_SUMMARY"
