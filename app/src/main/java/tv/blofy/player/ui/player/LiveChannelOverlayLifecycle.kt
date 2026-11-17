@@ -254,7 +254,8 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 },
                 itemKey = { it.key },
                 translucent = true,
-                highContrast = true
+                highContrast = true,
+                playingChannelKey = currentChannelKey
             )
             adapter.submit(channels)
             list.adapter = adapter
