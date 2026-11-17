@@ -75,3 +75,15 @@ test('unconfigured pool is refused before touching database',async()=>{
  await assert.rejects(()=>readOwnerAdminStoreReadiness({pool:{}}),
   /stream_owner_admin_readiness_pool_required/);
 });
+
+test('unified Portal requires authenticated owner bridge before read-only admin QA',async()=>{
+ const {readFile}=await import('node:fs/promises');
+ const src=await readFile(new URL('../src/xtream-admin-hook.mjs',import.meta.url),'utf8');
+ const start=src.indexOf('async function unifiedStreamBridge(');
+ const auth=src.indexOf('streamBridgeAuthorized(',start);
+ const route=src.indexOf("p==='/internal/blofy-stream/ops/admin-readiness'",start);
+ assert.ok(start>=0&&auth>start&&route>auth);
+ assert.match(src.slice(route-80,route+510),/req\.method!=='GET'\|\|url\.search/);
+ assert.match(src.slice(route,route+600),/readOwnerAdminStoreReadiness\(\{pool\}\)/);
+ assert.match(src.slice(route,route+700),/report\.ok\?200:503/);
+});
