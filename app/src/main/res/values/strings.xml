@@ -162,4 +162,5 @@
     <string name="details_metadata_loading">Loading cast and description…</string>
     <string name="details_metadata_retry">Could not update details · Try again</string>
     <string name="setting_cycle_hint">Press to change</string>
+    <string name="stream_now_playing">▶ Playing now</string>
 </resources>
