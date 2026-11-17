@@ -2,7 +2,9 @@
 // source explicitly rejected it. This never changes identities, redirects,
 // IP addresses or authorization. A working channel is never disabled because
 // another channel was rejected.
-const DENIED=new Set([403,456]);
+// Source-specific nonstandard 509 is treated only as a temporary provider
+// refusal, never a license to bypass provider connection limits.
+const DENIED=new Set([403,456,509]);
 
 export class XtreamDenialCooldown {
   constructor({windowMs=60000,cooldownMs=45000,threshold=2,maxEntries=1800}={}){
