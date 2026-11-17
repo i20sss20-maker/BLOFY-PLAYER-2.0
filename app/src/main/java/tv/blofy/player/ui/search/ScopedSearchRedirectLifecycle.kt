@@ -16,6 +16,13 @@ class ScopedSearchRedirectLifecycle : Application.ActivityLifecycleCallbacks {
         if (kind !in SCOPED_KINDS) return
         activity.startActivity(Intent(activity, SectionSearchActivity::class.java).apply {
             putExtra(SectionSearchActivity.EXTRA_KIND, kind)
+            // AI and other deep links arrive in SearchActivity with a real query.
+            // Forward it when routing to a scoped screen; otherwise the next
+            // activity opens with a blank search box and no matching results.
+            activity.intent.getStringExtra(SearchActivity.EXTRA_INITIAL_QUERY)
+                ?.trim()?.take(120)?.takeIf(String::isNotBlank)?.let {
+                    putExtra(SectionSearchActivity.EXTRA_QUERY, it)
+                }
         })
         activity.finish()
     }
