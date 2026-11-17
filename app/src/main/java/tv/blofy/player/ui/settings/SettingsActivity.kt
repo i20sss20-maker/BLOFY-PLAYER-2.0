@@ -60,6 +60,7 @@ class SettingsActivity : AppCompatActivity() {
     private var observedRefreshProvider: String? = null
     private var refreshState: WorkInfo.State? = null
     private var refreshStage: String? = null
+    private var refreshError: String? = null
     private var refreshRequested = false
     private var refreshNotice: String? = null
     private val prefs by lazy { getSharedPreferences(RuntimeSettings.PREFS, MODE_PRIVATE) }
@@ -615,6 +616,7 @@ class SettingsActivity : AppCompatActivity() {
         observedRefreshProvider = providerId
         refreshState = null
         refreshStage = null
+        refreshError = null
         refreshRequested = false
         refreshNotice = null
         refreshJobs = WorkManager.getInstance(applicationContext)
@@ -624,6 +626,7 @@ class SettingsActivity : AppCompatActivity() {
                     val current = all.firstOrNull { !it.state.isFinished } ?: all.lastOrNull()
                     refreshState = current?.state
                     refreshStage = current?.progress?.getString("catalog_stage")
+                    refreshError = current?.outputData?.getString(CatalogRefreshWorker.KEY_ERROR)
                     if (::status.isInitialized) updateSyncStatus()
                 }
             }
@@ -655,6 +658,7 @@ class SettingsActivity : AppCompatActivity() {
         refreshNotice = null
         refreshRequested = true
         refreshStage = null
+        refreshError = null
         refreshState = WorkInfo.State.ENQUEUED
         updateSyncStatus()
         try {
@@ -700,6 +704,9 @@ class SettingsActivity : AppCompatActivity() {
         }
         val hint = when {
             refreshNotice != null -> refreshNotice.orEmpty()
+            refreshRequested && refreshState == WorkInfo.State.FAILED && refreshError == "COMMIT_TIMEOUT" ->
+                copy("تعذر إنهاء حفظ التحديث. مكتبتك السابقة محفوظة؛ اضغط لإعادة المحاولة.",
+                    "Saving the refresh timed out. Your previous library is safe; tap to retry.")
             refreshState == WorkInfo.State.RUNNING ->
                 section?.let { copy("المرحلة الحالية: $it", "Current section: $it") }
                     ?: copy("يُحدَّث المحتوى والمكتبة السابقة محفوظة", "Updating; your saved library remains available")
