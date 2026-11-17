@@ -43,7 +43,7 @@ import { readXtreamProviderDenialHint } from './xtream-provider-denial.mjs';
 import { normalizeXtreamEpg } from './xtream-epg.mjs';
 import { acceptsXtreamGzip } from './xtream-catalog-compression.mjs';
 import { shouldRetryXtreamWithoutRange,firstByteXtreamRange } from './xtream-media-range.mjs';
-import {verifiedVodResumePlan,resumeVerifiedVodBytes} from './xtream-vod-range-resume.mjs';
+import {verifiedVodResumePlan,resumeVerifiedVodBytes,allowedVodResumePilot} from './xtream-vod-range-resume.mjs';
 import { recordXtreamPlayback,xtreamPlaybackSnapshot } from './xtream-playback-metrics.mjs';
 import {xtreamDirectMediaGauge} from './xtream-direct-media-gauge.mjs';
 import { XtreamDenialCooldown } from './xtream-denial-cooldown.mjs';
@@ -1579,7 +1579,13 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
         // may replace one failed upstream socket from the exact next byte.
         // Never reissues customer auth or restarts a live TS stream.
         const vodPlan=verifiedVodResumePlan({
-          enabled:process.env.BLOFY_XTREAM_VOD_RANGE_RESUME_ENABLED==='1',
+          enabled:allowedVodResumePilot({
+            enabled:process.env.BLOFY_XTREAM_VOD_RANGE_RESUME_ENABLED==='1',
+            accountId:String(account.id||''),
+            sourceId:String(row.server_id||''),
+            pilotAccountId:process.env.BLOFY_XTREAM_VOD_RANGE_RESUME_PILOT_ACCOUNT_ID||'',
+            pilotSourceId:process.env.BLOFY_XTREAM_VOD_RANGE_RESUME_PILOT_SOURCE_ID||''
+          }),
           kind,method:req.method,status:response.status,
           requestRange:headers.range||null,usingIndependentRelay,
           format:inspection.format,headers:response.headers
