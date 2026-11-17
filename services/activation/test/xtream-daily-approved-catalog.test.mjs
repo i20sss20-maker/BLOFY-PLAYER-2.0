@@ -210,3 +210,53 @@ test('recent queue receipt is not mislabeled stuck; invalid clock refused before
  }),/daily_catalog_receipts_invalid/);
  assert.equal(queried,1);
 });
+
+test('concurrent PostgreSQL IF NOT EXISTS type-name race is recovered only when exact table exists',async()=>{
+ let creates=0,checked=0,inserted=0;
+ const db={query:async(sql,args)=>{
+  if(sql.startsWith('CREATE TABLE')){
+   creates++;throw Object.assign(Error('concurrent type name'),{
+    code:'23505',constraint:'pg_type_typname_nsp_index'
+   });
+  }
+  if(sql.startsWith('SELECT to_regclass')){
+   checked++;
+   assert.deepEqual(args,['public.blofy_xtream_daily_catalog_requests']);
+   return {rows:[{table_oid:'blofy_xtream_daily_catalog_requests'}]};
+  }
+  if(sql.startsWith('INSERT INTO')){
+   inserted++;return {rowCount:1,rows:[{source_id:SOURCE_ID}]};
+  }
+  throw Error('unexpected SQL');
+ }};
+ const out=await scheduleDailyApprovedCatalog({
+  env:ENV,now:NOW,db,sourceById:async()=>SOURCE,
+  enqueue:()=>({queued:false})
+ });
+ assert.equal(out.requested,true);
+ assert.equal(creates,1);
+ assert.equal(checked,1);
+ assert.equal(inserted,1);
+});
+test('other PostgreSQL errors or unconfirmed DDL type conflict cannot grant a daily claim',async()=>{
+ for(const exception of [
+  Object.assign(Error('permission denied'),{code:'42501'}),
+  Object.assign(Error('another table collision'),{code:'23505',
+   constraint:'unrelated_unique_constraint'}),
+  Object.assign(Error('type race but no table'),{code:'23505',
+   constraint:'pg_type_typname_nsp_index'})
+ ]){
+  let calls=0;
+  const db={query:async(sql)=>{
+   calls++;
+   if(sql.startsWith('CREATE TABLE'))throw exception;
+   if(sql.startsWith('SELECT to_regclass'))return {rows:[{table_oid:null}]};
+   throw Error('unexpected SQL');
+  }};
+  await assert.rejects(()=>scheduleDailyApprovedCatalog({
+   env:ENV,now:NOW,db,sourceById:async()=>SOURCE,
+   enqueue:()=>{throw Error('never enqueue')}
+  }));
+  assert.ok(calls<=2);
+ }
+});
