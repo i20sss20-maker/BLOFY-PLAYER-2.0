@@ -114,6 +114,8 @@ class HomeActivity : AppCompatActivity() {
     private var refreshStage: String? = null
     private var refreshPercent = 0
     private var refreshAttempt = 0
+    private var refreshSeriesItems = 0
+    private var refreshSourceRetries = 0
     private var refreshError: String? = null
     private var refreshRequestInFlight = false
 
@@ -1121,6 +1123,8 @@ class HomeActivity : AppCompatActivity() {
         refreshStartedHere = false
         refreshPercent = CatalogRefreshCheckpoint(applicationContext, providerId).visiblePercent()
         refreshAttempt = 0
+        refreshSeriesItems = 0
+        refreshSourceRetries = 0
         refreshError = null
         refreshStage = null
         renderManualRefreshStatus(null)
@@ -1132,6 +1136,8 @@ class HomeActivity : AppCompatActivity() {
                         ?: infos.firstOrNull()
                     refreshStage = current?.progress?.getString(CatalogRefreshWorker.KEY_STAGE)
                     refreshAttempt = current?.runAttemptCount ?: 0
+                    refreshSourceRetries = current?.progress?.getInt(CatalogRefreshWorker.KEY_RETRY, 0) ?: 0
+                    refreshSeriesItems = current?.progress?.getInt(CatalogRefreshWorker.KEY_ITEMS, 0) ?: 0
                     refreshError = current?.outputData?.getString(CatalogRefreshWorker.KEY_ERROR)
                     val observed = current?.progress?.getInt(CatalogRefreshWorker.KEY_PERCENT, 0) ?: 0
                     val saved = CatalogRefreshCheckpoint(applicationContext, providerId).visiblePercent()
@@ -1175,6 +1181,8 @@ class HomeActivity : AppCompatActivity() {
             refreshStage = "START"
             refreshError = null
             refreshAttempt = 0
+            refreshSourceRetries = 0
+            refreshSeriesItems = 0
             renderManualRefreshStatus(WorkInfo.State.ENQUEUED)
             CatalogRefreshWorker.enqueueNow(applicationContext, providerId, manual = true)
             } finally {
@@ -1230,6 +1238,8 @@ class HomeActivity : AppCompatActivity() {
             }
             text = when (state) {
                 WorkInfo.State.RUNNING -> when {
+                    refreshStage == "SERIES" && refreshSeriesItems > 0 ->
+                        "فحص المسلسلات • $refreshSeriesItems عنصر${if (refreshSourceRetries > 0) " • إعادة المحاولة $refreshSourceRetries" else ""}"
                     refreshAttempt > 0 -> "استكمال • ${stageLabel ?: "المكتبة"}"
                     stageLabel != null -> "تحديث • ${stageLabel}"
                     else -> getString(R.string.home_catalog_refresh_running_v74)
@@ -1239,6 +1249,7 @@ class HomeActivity : AppCompatActivity() {
                 WorkInfo.State.SUCCEEDED -> "اكتمل التحديث 100%"
                 WorkInfo.State.FAILED, WorkInfo.State.CANCELLED -> when (refreshError) {
                     "STORAGE" -> "المساحة غير كافية • تحقق من التخزين"
+                    "SERIES_TIMEOUT" -> "انتهت مهلة فحص المسلسلات • المكتبة محفوظة • أعد المحاولة"
                     "INTEGRITY", "EMPTY", "INCOMPLETE" -> "المصدر ناقص • لم يتم استبدال مكتبتك"
                     else -> "تعذر التحديث • اضغط لإعادة المحاولة"
                 }
