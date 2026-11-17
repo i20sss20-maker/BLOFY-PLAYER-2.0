@@ -104,9 +104,9 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
         private var lastChannelFocusKey: String? = null
         private var originalChannels: List<StreamEntity> = emptyList()
         private var activeTab: LiveChannelTab = LiveChannelTab.ALL
-        private var searchText: String = ""
         private var filterJob: Job? = null
         private var visibleAdapter: LiveChannelAdapter? = null
+        private var visibleChannelList: RecyclerView? = null
         private var visibleCount: TextView? = null
         // A single in-panel selection state. BACK returns to channel controls
         // instead of exiting player or opening another file/library screen.
@@ -169,6 +169,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             displayedChannels = emptyList()
             originalChannels = emptyList()
             visibleAdapter = null
+            visibleChannelList = null
             visibleCount = null
             currentChannelKey = null
         }
@@ -229,7 +230,6 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 displayedChannels = channels
                 originalChannels = channels
                 activeTab = LiveChannelTab.ALL
-                searchText = ""
                 currentChannelKey = RecentChannelStore.keys(activity, providerId).firstOrNull()
                     ?: activity.intent.getStringExtra(PlayerActivity.EXTRA_CONTENT_KEY).orEmpty()
                 showDialog(result.second)
@@ -274,6 +274,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             adapter.submit(channels)
             list.adapter = adapter
             visibleAdapter = adapter
+            visibleChannelList = list
 
             val header = TextView(activity).apply {
                 text = buildString {
@@ -367,7 +368,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                                             0xFF5A3384.toInt() else 0xE52C2538.toInt())
                                     }
                                 }
-                                refreshList()
+                                refreshList(focusList = true)
                             }
                         }, LinearLayout.LayoutParams(0, dp(36), 1f).apply {
                             marginStart = dp(2); marginEnd = dp(2)
@@ -483,6 +484,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 audioPickerOpen = false
                 restoreMainActions = null
                 visibleAdapter = null
+                visibleChannelList = null
                 visibleCount = null
                 displayedChannels = emptyList()
                 originalChannels = emptyList()
@@ -736,64 +738,60 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             }
         }
 
-        /** Search is bounded and debounced. Favorites and recents are resolved
-         * from the user's real local provider rows, never invented remote URLs. */
-        private fun refreshList() {
+        /**
+         * The Channels window owns category/favorites/recent filters only. It
+         * never performs text search or touches the search window's keyboard.
+         */
+        private fun refreshList(focusList: Boolean = false) {
             val openDialog = dialog ?: return
             val adapter = visibleAdapter ?: return
             val providerId = activity.intent.getStringExtra(PlayerActivity.EXTRA_PROVIDER_ID).orEmpty()
             if (providerId.isBlank()) return
-            val query = searchText
             val tab = activeTab
             val base = originalChannels
             filterJob?.cancel()
             filterJob = activity.lifecycleScope.launch {
-                delay(160)
+                delay(100)
                 val filtered = withContext(Dispatchers.IO) {
                     val dao = BlofyDatabase.get(activity.applicationContext).dao()
                     val source = when (tab) {
-                        LiveChannelTab.ALL -> if (query.isBlank()) base
-                            else {
-                                val fts = ArabicSearchNormalizer.ftsQuery(query)
-                                val indexed = if (fts.isNotBlank()) runCatching {
-                                    dao.searchStreamsFtsByKind(providerId, KIND_LIVE, fts, 200)
-                                }.getOrDefault(emptyList()) else emptyList()
-                                if (indexed.isNotEmpty()) indexed
-                                else runCatching { dao.searchCatalog(providerId, KIND_LIVE, query, 200) }
-                                    .getOrDefault(emptyList())
-                            }
+                        LiveChannelTab.ALL -> base
                         LiveChannelTab.FAVORITES ->
                             runCatching { dao.favorites(providerId).first() }
                                 .getOrDefault(emptyList()).filter { it.kind == KIND_LIVE }
                         LiveChannelTab.RECENT ->
-                            RecentChannelStore.keys(activity, providerId).take(30).mapNotNull {
-                                key -> runCatching { dao.stream(key) }.getOrNull()
+                            RecentChannelStore.keys(activity, providerId).take(30).mapNotNull { key ->
+                                runCatching { dao.stream(key) }.getOrNull()
                                     ?.takeIf { it.kind == KIND_LIVE && it.providerId == providerId }
                             }
                     }
-                    source.filter { LiveChannelPanelPolicy.matchesSearch(it.name, query) }
-                        .distinctBy { it.key }.take(200)
+                    source.distinctBy { it.key }.take(200)
                 }
-                if (dialog !== openDialog || openDialog.isShowing.not() ||
-                    activity.isFinishing || activity.isDestroyed || activeTab != tab ||
-                    searchText != query) return@launch
+                if (dialog !== openDialog || !openDialog.isShowing ||
+                    activity.isFinishing || activity.isDestroyed || activeTab != tab) return@launch
                 adapter.replace(filtered)
                 displayedChannels = filtered
                 visibleCount?.text = if (filtered.isEmpty())
-                    copy("ما فيه قنوات مطابقة", "No matching channels")
+                    copy("ما فيه قنوات في هذه القائمة", "No channels in this list")
                     else copy("${filtered.size} قناة", "${filtered.size} channels")
-                if (filtered.isNotEmpty() && !query.isBlank()) {
-                    // Avoid stealing focus from the soft keyboard during typing.
-                    listFocusAfterFilter(adapter, filtered)
+                if (focusList && filtered.isNotEmpty()) {
+                    val view = visibleChannelList ?: return@launch
+                    val target = LiveChannelPanelPolicy.initialChannelIndex(
+                        filtered, lastChannelFocusKey, currentChannelKey, StreamEntity::key)
+                    if (target >= 0) {
+                        (view.layoutManager as? LinearLayoutManager)
+                            ?.scrollToPositionWithOffset(target, dp(6))
+                        view.isFocusableInTouchMode = true
+                        view.requestFocus()
+                        view.post {
+                            if (dialog === openDialog && openDialog.isShowing) {
+                                view.findViewHolderForAdapterPosition(target)?.itemView?.requestFocus()
+                                    ?: view.requestFocus()
+                            }
+                        }
+                    }
                 }
             }
-        }
-
-        private fun listFocusAfterFilter(adapter: LiveChannelAdapter, channels: List<StreamEntity>) {
-            // The RecyclerView keeps the current focus during search; only its
-            // adapter changes. This helper deliberately never jumps to another
-            // view while the user is entering text.
-            if (adapter.itemCount == 0 || channels.isEmpty()) return
         }
 
         /**
