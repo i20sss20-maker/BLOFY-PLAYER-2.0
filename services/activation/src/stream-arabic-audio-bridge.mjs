@@ -71,7 +71,7 @@ export function audioPayloadClass(sample){
  if(prefix.startsWith('{')||prefix.startsWith('['))return 'json_document';
  if(prefix.startsWith('icy '))return 'icy_header';
  if(prefix.startsWith('<?xml'))return 'xml_document';
- if(/^[\\x20-\\x7e\\r\\n\\t]{16,}$/.test(prefix.slice(0,64)))
+ if(/^[\x20-\x7e\r\n\t]{16,}$/.test(prefix.slice(0,64)))
   return 'text_response';
  return 'unknown_binary';
 }
@@ -293,35 +293,32 @@ export function createProtectedArabicAudioBridge({
               finish({id,reason:'upstream_http_status',httpStatus:status});
               return;
             }
-            response.once('data',chunk=>{
-              response.destroy();
-              const bytes=Buffer.isBuffer(chunk)?chunk:Buffer.from(chunk||'');
-              const first=bytes.length>0?bytes[0]:-1;
-              const good=bytes.length>2&&(
-                bytes.subarray(0,3).toString('ascii')==='ID3'||
-                bytes.subarray(0,4).toString('ascii')==='OggS'||
-                (first===0xff&&(bytes[1]&0xe0)===0xe0)||
-                (first===0x47&&bytes.length>188&&bytes[188]===0x47)
-              );
-              // Classification is deliberately coarse and content-free.
-              // The source can answer 200 with an HTML login/error page
-              // or an HLS index, neither is a progressive MP3 stream.
-              const prefix=bytes.subarray(0,96).toString('utf8')
-                .trimStart().toLowerCase();
-              const payloadClass=good?'audio_packet':
-                prefix.startsWith('#extm3u')?'hls_playlist':
-                prefix.startsWith('<!doctype')||prefix.startsWith('<html')?
-                  'html_document':
-                prefix.startsWith('{')||prefix.startsWith('[')?'json_document':
-                prefix.startsWith('icy ')?'icy_header':
-                prefix.startsWith('<?xml')?'xml_document':
-                /^[\x20-\x7e\r\n\t]{16,}$/.test(prefix.slice(0,64))?
-                  'text_response':'unknown_binary';
-              finish({id,reason:good?'audio_bytes_detected':'unrecognized_stream_bytes',
-                mime,payloadClass,receivedBytes:Math.min(bytes.length,4096)});
+            // Probe up to 4096 bytes across multiple network chunks. The
+            // first chunk may contain only one byte, so never classify it
+            // as a broken source before the signature can arrive.
+            let sample=Buffer.alloc(0);
+            const evaluate=()=>{
+              const payloadClass=audioPayloadClass(sample);
+              const good=payloadClass==='audio_packet';
+              finish({id,reason:good?'audio_bytes_detected':
+                sample.length?'unrecognized_stream_bytes':'empty_stream',
+                mime,payloadClass,receivedBytes:sample.length});
+            };
+            response.on('data',chunk=>{
+              if(settled)return;
+              const part=Buffer.isBuffer(chunk)?chunk:Buffer.from(chunk||'');
+              const room=4096-sample.length;
+              if(room>0&&part.length)
+                sample=Buffer.concat([sample,part.subarray(0,room)]);
+              if(sniffFirstAudioMime(sample)||sample.length===4096){
+                response.destroy();
+                evaluate();
+              }
             });
-            response.once('end',()=>finish({id,reason:'empty_stream',mime}));
-            response.once('error',()=>finish({id,reason:'upstream_read_error',mime}));
+            response.once('end',evaluate);
+            response.once('error',()=>finish({id,reason:'upstream_read_error',
+              mime,receivedBytes:sample.length,
+              payloadClass:audioPayloadClass(sample)}));
           });
           client.once('timeout',()=>{client.destroy();finish({id,reason:'upstream_timeout'});});
           client.once('error',err=>{
