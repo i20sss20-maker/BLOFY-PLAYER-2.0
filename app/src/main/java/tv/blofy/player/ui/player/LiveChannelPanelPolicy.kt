@@ -40,11 +40,11 @@ internal object LiveChannelPanelPolicy {
      * First keyboard/TV focus stays on the last highlighted or currently playing channel,
      * not the search field. A stale key falls back to the actual playing channel.
      */
-    fun initialChannelIndex(keys: List<String>, lastFocusedKey: String?, playingKey: String?): Int {
-        if (keys.isEmpty()) return -1
+    fun <T> initialChannelIndex(rows: List<T>, lastFocusedKey: String?, playingKey: String?, key: (T) -> String): Int {
+        if (rows.isEmpty()) return -1
         for (candidate in listOf(lastFocusedKey, playingKey)) {
             if (!candidate.isNullOrBlank()) {
-                val index = keys.indexOf(candidate)
+                val index = rows.indexOfFirst { key(it) == candidate }
                 if (index >= 0) return index
             }
         }
