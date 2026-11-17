@@ -55,6 +55,16 @@ export function sniffFirstAudioMime(sample) {
     return 'audio/mpeg';
   if(b.length>=377&&b[0]===0x47&&b[188]===0x47&&b[376]===0x47)
     return 'video/mp2t';
+  // A live TS response may begin part-way through a 188-byte transport
+  // packet. Require FOUR aligned sync bytes when the first one is shifted;
+  // do not accept a lone 0x47 marker or arbitrary binary as an MPEG-TS feed.
+  if(b.length>=566){
+    for(let offset=1;offset<188&&offset+564<b.length;offset++){
+      if(b[offset]===0x47&&b[offset+188]===0x47&&
+         b[offset+376]===0x47&&b[offset+564]===0x47)
+        return 'video/mp2t';
+    }
+  }
   return null;
 }
 
