@@ -3,6 +3,7 @@ package tv.blofy.player.data
 import com.google.gson.JsonParseException
 import java.io.EOFException
 import java.io.IOException
+import java.net.SocketTimeoutException
 import javax.net.ssl.SSLHandshakeException
 import javax.net.ssl.SSLPeerUnverifiedException
 import kotlinx.coroutines.CancellationException
@@ -53,6 +54,21 @@ internal object CatalogSectionRetry {
                 "broken pipe" in text || "socket closed" in text) return true
         }
         return failure.cause?.takeIf { it !== failure }?.let { isTruncatedBody(it, depth + 1) } ?: false
+    }
+
+    /**
+     * When the upstream closes a huge get_series JSON mid-read OR stops sending
+     * bytes for a socket timeout, a smaller category-scoped request may succeed.
+     * Never promote partial category results: PlaylistManager verifies each
+     * category filter and requires every chunk before committing atomically.
+     */
+    internal fun isRecoverableForSegmentation(failure: Throwable, depth: Int = 0): Boolean {
+        if (depth > 8) return false
+        if (failure is SSLHandshakeException || failure is SSLPeerUnverifiedException) return false
+        if (isTruncatedBody(failure)) return true
+        if (failure is SocketTimeoutException) return true
+        return failure.cause?.takeIf { it !== failure }
+            ?.let { isRecoverableForSegmentation(it, depth + 1) } ?: false
     }
 
     private fun isTransient(failure: Throwable, depth: Int = 0): Boolean {

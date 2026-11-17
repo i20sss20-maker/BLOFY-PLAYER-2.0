@@ -71,9 +71,15 @@ class PlaylistManager(
                 },
                 suspend {
                     onProgress(PlaylistSyncProgress(PlaylistSyncStage.SERIES, 3, 3))
-                    freshItemCount += if ("series" in completedSections) dao.catalogCountAll(provider.id, "series") else syncSeries(provider, onProgress = { percent ->
-                        onProgress(PlaylistSyncProgress(PlaylistSyncStage.SERIES, 3, 3, percent))
-                    })
+                    freshItemCount += if ("series" in completedSections) dao.catalogCountAll(provider.id, "series") else syncSeries(
+                        provider,
+                        onProcessed = { count ->
+                            onProgress(PlaylistSyncProgress(PlaylistSyncStage.SERIES, 3, 3, processedItems = count))
+                        },
+                        onProgress = { percent ->
+                            onProgress(PlaylistSyncProgress(PlaylistSyncStage.SERIES, 3, 3, percent))
+                        }
+                    )
                     onSectionComplete("series")
                 }
             ),
@@ -82,7 +88,7 @@ class PlaylistManager(
                 onProgress(PlaylistSyncProgress(stage, section + 1, 3, retryAttempt = attempt))
             },
             onExhausted = { section, failure ->
-                if (!CatalogSectionRetry.isTruncatedBody(failure)) false
+                if (!CatalogSectionRetry.isRecoverableForSegmentation(failure)) false
                 else {
                     // Full-catalog responses on some IPTV hosts are closed mid-transfer.
                     // After three ordinary retries, request the same section in smaller
@@ -108,7 +114,11 @@ class PlaylistManager(
                         }
                         else -> {
                             onProgress(PlaylistSyncProgress(PlaylistSyncStage.SERIES, 3, 3, retryAttempt = 3))
-                            freshItemCount += syncSeries(provider, recoverByCategory = true) { percent ->
+                            freshItemCount += syncSeries(provider, recoverByCategory = true,
+                                onProcessed = { count ->
+                                    onProgress(PlaylistSyncProgress(PlaylistSyncStage.SERIES, 3, 3, processedItems = count))
+                                }
+                            ) { percent ->
                                 onProgress(PlaylistSyncProgress(PlaylistSyncStage.SERIES, 3, 3, percent))
                             }
                             onSectionComplete("series")
@@ -245,6 +255,7 @@ class PlaylistManager(
     suspend fun syncSeries(
         provider: ProviderEntity,
         recoverByCategory: Boolean = false,
+        onProcessed: suspend (Int) -> Unit = {},
         onProgress: suspend (Int) -> Unit = {}
     ): Int {
         val categories = api.list(actionUrl(provider, "get_series_categories"))
@@ -262,6 +273,7 @@ class PlaylistManager(
                 actionUrl(provider, "get_series"), 88, 95, onProgress,
                 retainItems = !direct,
                 onBatch = directBatchSink(direct),
+                onProcessed = onProcessed,
                 recoverCategoryIds = if (recoverByCategory) categoryRows.map { it.remoteId } else null
             ) { row ->
                 val id = row.id("series_id") ?: return@parseStreamingArray null

@@ -74,6 +74,28 @@ class CatalogRefreshCheckpointTest {
         assertEquals(0, checkpoint.visiblePercent())
     }
 
+    @Test fun incompleteSeriesAt90ResumesFromValidatedMovies66WithoutRemovingOldLibrary(): Unit =
+        runBlocking(Dispatchers.IO) {
+            val dao = db.dao()
+            val checkpoint = CatalogRefreshCheckpoint(app, source.id)
+            val staged = checkpoint.prepare(source, dao)
+            dao.replaceCatalog(staged.stagedId, "live", emptyList(),
+                listOf(item(staged.stagedId, "live", 2)))
+            checkpoint.completed(staged, "live", dao)
+            dao.replaceCatalog(staged.stagedId, "movie", emptyList(),
+                listOf(item(staged.stagedId, "movie", 3)))
+            checkpoint.completed(staged, "movie", dao)
+            dao.replaceCatalog(staged.stagedId, "series", emptyList(),
+                listOf(item(staged.stagedId, "series", 4)))
+            assertEquals(90, checkpoint.recordPercent(staged, 90))
+            val resumed = checkpoint.prepare(source, dao)
+            assertEquals(setOf("live", "movie"), resumed.completed)
+            assertEquals(66, checkpoint.visiblePercent())
+            assertEquals(66, checkpoint.percent(resumed))
+            assertEquals(0, dao.catalogCountAll(staged.stagedId, "series"))
+            assertNotNull(dao.stream(item(source.id, "live", 1).key))
+        }
+
     @Test fun credentialChangeDiscardsOldCandidateAndStartsNewStage(): Unit = runBlocking(Dispatchers.IO) {
         val dao = db.dao()
         val checkpoint = CatalogRefreshCheckpoint(app, source.id)

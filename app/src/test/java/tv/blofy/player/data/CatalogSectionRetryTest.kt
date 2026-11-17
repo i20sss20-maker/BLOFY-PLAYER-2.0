@@ -63,6 +63,21 @@ class CatalogSectionRetryTest {
         assertFalse(CatalogSectionRetry.isTruncatedBody(SSLHandshakeException("bad certificate")))
     }
 
+    @Test fun socketTimeoutAtNinetyPercentCanTryVerifiedCategorySplit() {
+        assertTrue(CatalogSectionRetry.isRecoverableForSegmentation(
+            java.net.SocketTimeoutException("timeout during get_series")))
+        assertTrue(CatalogSectionRetry.isRecoverableForSegmentation(
+            JsonSyntaxException(java.net.SocketTimeoutException("read timed out"))))
+        assertTrue(CatalogSectionRetry.isRecoverableForSegmentation(
+            IOException("unexpected end of stream")))
+        assertFalse(CatalogSectionRetry.isRecoverableForSegmentation(http(401)))
+        assertFalse(CatalogSectionRetry.isRecoverableForSegmentation(http(403)))
+        assertFalse(CatalogSectionRetry.isRecoverableForSegmentation(
+            SSLHandshakeException("untrusted certificate")))
+        assertFalse(CatalogSectionRetry.isRecoverableForSegmentation(
+            IllegalStateException("database write failed")))
+    }
+
     @Test fun onlyExhaustedSectionCanRecoverAndReportSuccess() = runBlocking {
         var fullAttempts = 0
         var fallbackCalls = 0
