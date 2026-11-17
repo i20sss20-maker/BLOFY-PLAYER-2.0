@@ -46,11 +46,26 @@ function config(env){
    runId:String(env.BLOFY_CONTENT_HUB_EPISODE_RUN_ID),
    token:String(env.BLOFY_CONTENT_HUB_BRIDGE_TOKEN)};
 }
+// This is a PERSISTENT S3 copy, not a video-player stream. A 206 reply
+// containing a login HTML page, compressed bytes, or surplus body data
+// must never become a verified storage checkpoint.
+function unsafeEpisodePayloadHeaders(headers){
+ const encoding=String(headers?.get?.('content-encoding')||'identity')
+  .trim().toLowerCase();
+ const type=String(headers?.get?.('content-type')||'')
+  .split(';',1)[0].trim().toLowerCase();
+ return encoding!=='identity'||
+  type.startsWith('text/')||
+  ['application/json','application/problem+json','application/xml',
+   'application/xhtml+xml','application/x-mpegurl',
+   'application/vnd.apple.mpegurl'].includes(type);
+}
 async function exactRange(response,{from,to,total}){
  const needed=to-from+1;
  if(!response?.body||response.status!==206||
    !parseMirrorContentRange(response.headers?.get?.('content-range'),
      {from,to,expectedBytes:total})||
+   unsafeEpisodePayloadHeaders(response.headers)||
    response.headers.get('content-length')!==null&&
      Number(response.headers.get('content-length'))!==needed)
   throw Error('episode_invalid_provider_range');
@@ -64,6 +79,23 @@ async function exactRange(response,{from,to,total}){
     throw Error('episode_short_or_overlong_range');
    chunks.push(Buffer.from(item.value));received+=len;
   }
+  // Require a COMPLETE, exact 206 range, including when Content-Length
+  // is omitted (chunked transfer). Checking only the first N bytes can
+  // incorrectly checkpoint a provider's overlong response as a valid part.
+  // A nonterminating stream fails closed on a small EOF deadline.
+  let timeout;
+  let after;
+  try{
+   after=await Promise.race([
+    reader.read(),
+    new Promise((_,reject)=>{
+     timeout=setTimeout(()=>reject(
+      Error('episode_range_eof_timeout')),5000);
+     timeout.unref?.();
+    })
+   ]);
+  }finally{clearTimeout(timeout)}
+  if(!after.done)throw Error('episode_short_or_overlong_range');
   return Buffer.concat(chunks,received);
  }finally{
   try{await reader.cancel()}catch{}
