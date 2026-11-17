@@ -123,10 +123,16 @@ class CatalogLoadingActivity : AppCompatActivity() {
             progressPulseJob = lifecycleScope.launch {
                 while (true) {
                     delay(10_000L)
-                    val currentStage = lastContentStage ?: continue
-                    if (displayedPercent !in 1..29) continue
                     val idleSeconds = (SystemClock.elapsedRealtime() - lastCatalogActivityAtMs) / 1000L
                     if (idleSeconds < 30L) continue
+                    if (progress.isIndeterminate || displayedPercent in 90..99) {
+                        // This is elapsed time, NOT a fabricated download percentage.
+                        progressMeta.text = getString(R.string.catalog_final_waiting, idleSeconds)
+                        progressMeta.visibility = View.VISIBLE
+                        continue
+                    }
+                    val currentStage = lastContentStage ?: continue
+                    if (displayedPercent !in 1..29) continue
                     // The percentage represents completed work. Don't fake percentage advances:
                     // tell viewers a large response is still pending and preserve all saved sections.
                     val sectionLabel = when (currentStage) {
@@ -580,6 +586,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
 
     private fun render(value: Int, label: String) {
         val safe = maxOf(displayedPercent, value.coerceIn(0, 100))
+        if (safe > displayedPercent) lastCatalogActivityAtMs = SystemClock.elapsedRealtime()
         displayedPercent = safe
         progressMeta.visibility = View.GONE
         progress.isIndeterminate = false
