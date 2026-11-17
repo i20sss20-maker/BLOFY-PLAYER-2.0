@@ -49,10 +49,8 @@ class CatalogRefreshWorker(
             dao.provider(providerId)
         } ?: return Result.success()
         val manual = inputData.getBoolean(KEY_MANUAL, false)
-        // STREAM is an offline-first viewer. Opening Home never silently
-        // downloads or replaces the subscriber's saved source catalogue.
-        // Even legacy WorkManager auto-jobs from an older installed APK exit.
-        if (BuildConfig.CODE_ONLY_LOGIN && !manual) return Result.success()
+        // STREAM auto-refresh is explicitly enabled for an already committed
+        // catalog. It must never silently change an activation source or provider.
         // A pending periodic job for a previously selected account must not
         // consume data or disk on a different active playlist.
         if (!manual && dao.activeProviderId() != provider.id) return Result.success()
@@ -75,6 +73,8 @@ class CatalogRefreshWorker(
         if (!CatalogSyncState.isReady(app, provider.id) || !dao.hasCatalog(provider.id)) return Result.success()
 
         val sourceChanged = PortalSyncBook.hasPendingSource(app, provider.id)
+        // Background content refresh must NOT accept an unapproved source/host migration.
+        if (!manual && sourceChanged) return Result.success()
         if (!manual && !sourceChanged && !CatalogAutoRefreshPolicy.isDue(
                 CatalogSyncState.lastSyncedAt(app, provider.id), System.currentTimeMillis()
             )
@@ -111,7 +111,9 @@ class CatalogRefreshWorker(
         var lastPercent = checkpoint.percent(saved)
         var lastStage = "START"
         var lastRetry = -1
-        suspend fun publish(stage: String, attemptedPercent: Int, attempt: Int = 0) {
+        var lastProcessed = -1
+        var lastPublishedAt = 0L
+        suspend fun publish(stage: String, attemptedPercent: Int, attempt: Int = 0, processed: Int? = null) {
             val previous = lastPercent
             val percent = maxOf(lastPercent, attemptedPercent)
                 .coerceIn(0, CatalogRefreshProgress.COMMIT_START)
@@ -120,10 +122,17 @@ class CatalogRefreshWorker(
             }
             // Do not write WorkManager's database for every JSON row. The visible
             // percentage comes from measured section progress and never counts backwards.
-            if (stage != lastStage || lastPercent != previous || attempt != lastRetry) {
+            val timestamp = System.currentTimeMillis()
+            val measuredRowsChanged = processed != null && processed >= 0 &&
+                (lastProcessed < 0 || processed - lastProcessed >= 2_000) &&
+                timestamp - lastPublishedAt >= 2_500L
+            if (stage != lastStage || lastPercent != previous || attempt != lastRetry || measuredRowsChanged) {
                 lastStage = stage
                 lastRetry = attempt
-                setProgress(workDataOf(KEY_STAGE to stage, KEY_PERCENT to lastPercent, KEY_RETRY to attempt))
+                if (processed != null && processed >= 0) lastProcessed = processed
+                lastPublishedAt = timestamp
+                setProgress(workDataOf(KEY_STAGE to stage, KEY_PERCENT to lastPercent,
+                    KEY_RETRY to attempt, KEY_ITEMS to lastProcessed.coerceAtLeast(0)))
             }
         }
         setProgress(workDataOf(KEY_STAGE to "START", KEY_PERCENT to lastPercent,
@@ -144,7 +153,7 @@ class CatalogRefreshWorker(
                     onProgress = { progress ->
                         if (CatalogPlaybackGate.isPlaying) throw PlaybackInProgressException()
                         publish(progress.stage.name, CatalogRefreshProgress.forSection(progress),
-                            progress.retryAttempt)
+                            progress.retryAttempt, progress.processedItems)
                     }
                 )
             }
@@ -211,6 +220,8 @@ class CatalogRefreshWorker(
                 promoted -> Result.success()
                 CatalogRefreshCommitPolicy.shouldFailManualCommitTimeout(manual, lastStage) ->
                     Result.failure(workDataOf(KEY_ERROR to "COMMIT_TIMEOUT"))
+                manual && lastStage == "SERIES" ->
+                    Result.failure(workDataOf(KEY_ERROR to "SERIES_TIMEOUT", KEY_STAGE to "SERIES"))
                 else -> retryOrFail(manual, "TIMEOUT")
             }
         } catch (cancelled: CancellationException) {
@@ -233,8 +244,11 @@ class CatalogRefreshWorker(
         internal const val KEY_STAGE = "catalog_stage"
         internal const val KEY_PERCENT = "catalog_percent"
         internal const val KEY_RETRY = "catalog_retry"
+        internal const val KEY_ITEMS = "catalog_items_processed"
         internal const val KEY_ERROR = "catalog_error"
-        private const val MAX_MANUAL_RETRIES = 4
+        // A manual screen must not silently repeat many seven-minute scans.
+        // Durable completed sections remain available on the next user retry.
+        private const val MAX_MANUAL_RETRIES = 1
         private val workerLocks = ConcurrentHashMap<String, Mutex>()
         private const val KEY_PROVIDER_ID = "provider_id"
         private const val LEGACY_PERIODIC_NAME = "blofy-catalog-periodic"
@@ -243,7 +257,7 @@ class CatalogRefreshWorker(
         private const val KEY_MANUAL = "manual"
 
         fun manualWorkName(providerId: String): String = MANUAL_NAME_PREFIX + providerId
-        // Keep the existing unique name so UPDATE replaces the old 24-hour schedule.
+        // Keep the existing unique name to update jobs left by older installed APKs.
         private const val AUTO_PERIODIC_NAME = "blofy-catalog-auto-24h"
 
         private val constraints = Constraints.Builder()
@@ -271,15 +285,11 @@ class CatalogRefreshWorker(
         }
 
         /**
-         * One active provider is checked about every 30 minutes when system conditions allow.
+         * One active provider is checked daily when system conditions allow.
          * Actual runs can be deferred by Android or while the viewer is playing video.
          */
         fun scheduleAutomatic(context: Context, providerId: String) {
             if (providerId.isBlank()) return
-            if (BuildConfig.CODE_ONLY_LOGIN) {
-                cancelStreamAutomatic(context, providerId)
-                return
-            }
             val request = PeriodicWorkRequestBuilder<CatalogRefreshWorker>(
                 CatalogAutoRefreshPolicy.INTERVAL_MINUTES, TimeUnit.MINUTES
             )
@@ -293,7 +303,6 @@ class CatalogRefreshWorker(
         }
 
         fun enqueueIfStale(context: Context, providerId: String) {
-            if (BuildConfig.CODE_ONLY_LOGIN) return
             if (CatalogAutoRefreshPolicy.isDue(
                     CatalogSyncState.lastSyncedAt(context, providerId), System.currentTimeMillis()
                 )
@@ -301,7 +310,7 @@ class CatalogRefreshWorker(
         }
 
         fun enqueueNow(context: Context, providerId: String, manual: Boolean = true) {
-            if (providerId.isBlank() || (BuildConfig.CODE_ONLY_LOGIN && !manual)) return
+            if (providerId.isBlank()) return
             val request = OneTimeWorkRequestBuilder<CatalogRefreshWorker>()
                 .setConstraints(if (manual) manualConstraints else constraints)
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 20, TimeUnit.SECONDS)
