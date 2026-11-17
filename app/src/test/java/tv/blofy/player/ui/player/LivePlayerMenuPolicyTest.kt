@@ -35,8 +35,10 @@ class LivePlayerMenuPolicyTest {
             LivePlayerMenuPolicy.action(KeyEvent.KEYCODE_DPAD_DOWN, false, false, true))
         assertEquals(LivePlayerMenuAction.SHOW_CHANNEL_LIST,
             LivePlayerMenuPolicy.action(KeyEvent.KEYCODE_DPAD_CENTER, false, false, true))
-        assertEquals(LivePlayerMenuAction.SHOW_CHANNEL_LIST,
+        assertEquals(LivePlayerMenuAction.PASS_THROUGH,
             LivePlayerMenuPolicy.action(KeyEvent.KEYCODE_DPAD_DOWN, true, false, true))
+        assertEquals(LivePlayerMenuAction.PASS_THROUGH,
+            LivePlayerMenuPolicy.action(KeyEvent.KEYCODE_DPAD_CENTER, true, false, true))
     }
 
     @Test fun searchKeyOpensOnlySearchWindowInStreamNotChannelWindow() {
