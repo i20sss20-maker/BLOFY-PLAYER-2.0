@@ -7,6 +7,7 @@ import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.os.SystemClock
 import android.text.Editable
 import android.text.InputFilter
 import android.text.InputType
@@ -97,6 +98,21 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
         // Search is a dedicated window, not an EditText inside the channel navigation pane.
         private var searchDialog: AlertDialog? = null
         private var searchJob: Job? = null
+        private var openingRemoteKey: Int? = null
+        private var openingRemoteAtMs: Long = 0L
+
+        private fun rememberOpeningRemoteKey(code: Int) {
+            openingRemoteKey = code
+            openingRemoteAtMs = SystemClock.uptimeMillis()
+        }
+
+        /** A key-up that originally opened a dialog must not click its first focused row. */
+        private fun consumeOpeningRemoteRelease(event: KeyEvent): Boolean {
+            val opening = openingRemoteKey ?: return false
+            if (event.action != KeyEvent.ACTION_UP || event.keyCode != opening) return false
+            openingRemoteKey = null
+            return SystemClock.uptimeMillis() - openingRemoteAtMs < 1_500L
+        }
         private var loading = false
         private var displayedChannels: List<StreamEntity> = emptyList()
         private var currentChannelKey: String? = null
@@ -114,6 +130,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
         private var restoreMainActions: (() -> Unit)? = null
 
         override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+            if (consumeOpeningRemoteRelease(event)) return true
             if (event.action != KeyEvent.ACTION_DOWN) return delegate.dispatchKeyEvent(event)
             if (searchDialog?.isShowing == true) return delegate.dispatchKeyEvent(event)
             if (dialog?.isShowing == true && RemoteKeyRouter.route(event).action == RemoteAction.BACK) {
@@ -134,11 +151,13 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 LivePlayerMenuAction.SHOW_AUDIO_CONTROLS ->
                     if (activity.showLiveAudioControls()) true else delegate.dispatchKeyEvent(event)
                 LivePlayerMenuAction.SHOW_CHANNEL_LIST -> {
+                    rememberOpeningRemoteKey(event.keyCode)
                     activity.dismissLiveAudioControls()
                     openChannelList()
                     true
                 }
                 LivePlayerMenuAction.SHOW_SEARCH_WINDOW -> {
+                    rememberOpeningRemoteKey(event.keyCode)
                     activity.dismissLiveAudioControls()
                     openSearchWindow(emptyList())
                     true
@@ -478,7 +497,8 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             // One BACK returns to controls, the next dismisses the sidebar.
             var consumeBackRelease = false
             created.setOnKeyListener { _, keyCode, event ->
-                if (keyCode != KeyEvent.KEYCODE_BACK) false
+                if (consumeOpeningRemoteRelease(event)) true
+                else if (keyCode != KeyEvent.KEYCODE_BACK) false
                 else when (event.action) {
                     KeyEvent.ACTION_DOWN -> {
                         if (audioPickerOpen) {
@@ -675,7 +695,8 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             val created = AlertDialog.Builder(activity).setView(root).create()
             created.setCanceledOnTouchOutside(false)
             created.setOnKeyListener { _, code, event ->
-                if (code == KeyEvent.KEYCODE_BACK) {
+                if (consumeOpeningRemoteRelease(event)) true
+                else if (code == KeyEvent.KEYCODE_BACK) {
                     if (event.action == KeyEvent.ACTION_DOWN) created.dismiss()
                     true
                 } else false
