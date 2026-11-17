@@ -853,11 +853,17 @@ open class PlayerActivity : ContentAccessActivity() {
     }
 
     private fun seekBy(deltaMs: Long) {
+        if (sessionReleased || session.player.currentMediaItem == null) return
+        if (!session.player.isCurrentMediaItemSeekable) {
+            controlHint.text = if (streamUiLanguage().startsWith("ar", ignoreCase = true))
+                "هذا المصدر لا يدعم التقديم والتأخير"
+            else "Seeking is unavailable for this source"
+            return
+        }
         val duration = session.player.duration.takeIf { it > 0L }
         val target = (session.player.currentPosition + deltaMs).coerceAtLeast(0L)
-        session.player.seekTo(
-            if (duration != null) target.coerceAtMost(duration) else target
-        )
+        session.player.seekTo(if (duration != null) target.coerceAtMost(duration) else target)
+        controlHint.text = (if (deltaMs >= 0L) "+" else "") + (deltaMs / 1_000L).toString() + "s"
     }
 
     private fun updateProgressUi() {
@@ -899,7 +905,10 @@ open class PlayerActivity : ContentAccessActivity() {
         }
         if (hud.visibility == View.VISIBLE && routed.action in HUD_NAVIGATION_ACTIONS) {
             keepHudVisible()
-            if (routed.action != RemoteAction.OK) recoverHudFocusForNavigation()
+            if (routed.action != RemoteAction.OK &&
+                routed.action != RemoteAction.LEFT && routed.action != RemoteAction.RIGHT) {
+                recoverHudFocusForNavigation()
+            }
         }
 
         return when (routed.action) {
@@ -925,36 +934,34 @@ open class PlayerActivity : ContentAccessActivity() {
 
             RemoteAction.FAST_FORWARD -> {
                 if (kind != KIND_LIVE) {
-                    seekBy(10_000L)
-                    showHudBriefly()
+                    val step = PlayerHudKeyPolicy.seekStepMs(event.repeatCount)
+                    if (step > 0L) { seekBy(step); showHudBriefly() }
                 }
                 true
             }
 
             RemoteAction.REWIND -> {
                 if (kind != KIND_LIVE) {
-                    seekBy(-10_000L)
-                    showHudBriefly()
+                    val step = PlayerHudKeyPolicy.seekStepMs(event.repeatCount)
+                    if (step > 0L) { seekBy(-step); showHudBriefly() }
                 }
                 true
             }
 
-            RemoteAction.RIGHT -> {
-                if (kind != KIND_LIVE && hud.visibility != View.VISIBLE) {
-                    seekBy(10_000L)
-                    showHudBriefly()
+            RemoteAction.RIGHT, RemoteAction.LEFT -> {
+                if (kind != KIND_LIVE && PlayerHudKeyPolicy.horizontalAction(
+                        hud.visibility == View.VISIBLE,
+                        actionableFocusedHudControl() != null
+                    ) == HudHorizontalAction.SEEK
+                ) {
+                    val step = PlayerHudKeyPolicy.seekStepMs(event.repeatCount)
+                    if (step > 0L) {
+                        seekBy(if (routed.action == RemoteAction.RIGHT) step else -step)
+                        showHudBriefly()
+                    }
                     true
                 } else {
-                    super.dispatchKeyEvent(event)
-                }
-            }
-
-            RemoteAction.LEFT -> {
-                if (kind != KIND_LIVE && hud.visibility != View.VISIBLE) {
-                    seekBy(-10_000L)
-                    showHudBriefly()
-                    true
-                } else {
+                    // When OK focuses controls, arrows navigate the real dock buttons.
                     super.dispatchKeyEvent(event)
                 }
             }
@@ -987,6 +994,7 @@ open class PlayerActivity : ContentAccessActivity() {
             }
 
             RemoteAction.OK -> {
+                if (event.repeatCount > 0) return true
                 val focusedControl = actionableFocusedHudControl()
                 when (
                     PlayerHudKeyPolicy.okAction(
@@ -1531,7 +1539,8 @@ open class PlayerActivity : ContentAccessActivity() {
             updateProgressUi()
         }
         updatePlayPauseLabel()
-        recoverHudFocusForNavigation()
+        // A transient seek overlay must not steal focus from the video.
+        // OK deliberately focuses the dock; focused buttons keep their focus.
         hud.postDelayed(
             hideHudRunnable,
             if (kind == KIND_LIVE) 2200L else 3200L
