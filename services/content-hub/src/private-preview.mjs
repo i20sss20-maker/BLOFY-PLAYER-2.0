@@ -62,7 +62,7 @@ export async function buildPrivateBrowserPreview({
   }catch{return {...base,ok:false,code:'private_preview_verified_prefix_unavailable'}}
   try{
    await transcoder({input,output,signal,mediaKind});
-  }catch{return {...base,ok:false,code:'private_preview_output_unavailable'}}
+  }catch{return {...base,ok:false,code:'private_preview_encode_failed'}}
   const meta=await stat(output);
   if(!meta.isFile()||meta.size<2048||meta.size>MAX_BYTES)
    return {...base,ok:false,code:'private_preview_output_size_invalid'};
@@ -73,6 +73,6 @@ export async function buildPrivateBrowserPreview({
   return {...base,ok:true,code:'private_preview_ready',
    mediaType:'video/mp4',durationSeconds:12,
    bytes,sourceSampleBytes:sampled.sampleBytes};
- }catch{return {...base,ok:false,code:'private_preview_encode_failed'}}
+ }catch{return {...base,ok:false,code:'private_preview_output_unavailable'}}
  finally{if(folder)await rm(folder,{recursive:true,force:true}).catch(()=>{})}
 }
