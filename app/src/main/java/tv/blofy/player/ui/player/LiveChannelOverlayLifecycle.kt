@@ -642,7 +642,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                     setStroke(dp(2), 0xFF8D6CB7.toInt())
                 }
             }
-            val count = TextView(activity).apply {
+            val resultsCount = TextView(activity).apply {
                 text = copy("اقتراحات القنوات: ${suggestions.size}", "Suggested channels: ${suggestions.size}")
                 setTextColor(BlofyTvDesign.TextMuted)
                 textSize = 12f
@@ -669,7 +669,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 addView(searchBox, LinearLayout.LayoutParams(-1, dp(52)).apply {
                     topMargin = dp(6); bottomMargin = dp(8)
                 })
-                addView(count, LinearLayout.LayoutParams(-1, dp(29)))
+                addView(resultsCount, LinearLayout.LayoutParams(-1, dp(29)))
                 addView(list, LinearLayout.LayoutParams(-1, 0, 1f))
             }
             val created = AlertDialog.Builder(activity).setView(root).create()
@@ -713,7 +713,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             searchBox.addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
                 override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                    searchInSeparateWindow(providerId, s?.toString().orEmpty(), suggestions, results, count)
+                    searchInSeparateWindow(providerId, s?.toString().orEmpty(), suggestions, results, resultsCount)
                 }
                 override fun afterTextChanged(s: Editable?) = Unit
             })
