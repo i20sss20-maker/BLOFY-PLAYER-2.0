@@ -504,3 +504,110 @@ test('resumed strong-ETag checkpoint fails closed if next part no longer has str
  assert.equal(m.run.parts.length,1);
  assert.equal(m.run.state,'failed');
 });
+
+test('final 8 MiB checkpoint resumes full S3 verification after a transient read failure without fetching source again',async()=>{
+ const m=mocks();
+ let failOnce=true;
+ const original=m.storage.readVerifiedRange;
+ m.storage.readVerifiedRange=async args=>{
+  if(failOnce){failOnce=false;throw Error('synthetic_s3_read_timeout')}
+  return original(args);
+ };
+ const opts={...m,env:config(),
+  candidateInspector:async()=>({ok:true,candidates:[candidate]})};
+ assert.equal((await runOneEpisodeChunk(opts)).code,'episode_checkpoint_saved');
+ const failed=await runOneEpisodeChunk(opts);
+ assert.equal(failed.code,'episode_retryable_error');
+ assert.equal(failed.errorStage,'verify_full_file');
+ assert.equal(failed.checkpointsRetained,2);
+ assert.equal(m.run.state,'staged');
+ assert.equal(m.getWrites(),2);
+ const sourceReads=m.getReads();
+ const recovered=await runOneEpisodeChunk(opts);
+ assert.equal(recovered.ok,true,recovered.code);
+ assert.equal(recovered.code,'episode_fully_verified');
+ assert.equal(recovered.recoveredFinalization,true);
+ assert.equal(recovered.providerMediaRequests,0);
+ assert.equal(recovered.newStorageWrites,0);
+ assert.equal(recovered.chunksSaved,2);
+ assert.equal(recovered.sha256,createHash('sha256').update(m.film).digest('hex'));
+ assert.equal(m.getReads(),sourceReads,'no upstream video requests during finalization replay');
+ assert.equal(m.getWrites(),2,'no third S3 object or duplicate checkpoint');
+ assert.equal(m.run.parts.length,2);
+ assert.equal(m.verified(),true);
+});
+test('PostgreSQL final manifest commit failure is retryable from existing private S3 bytes only',async()=>{
+ const m=mocks();
+ const actual=m.lease.verifyEpisodeRun;
+ let commits=0;
+ m.lease.verifyEpisodeRun=async(...args)=>{
+  commits++;
+  if(commits===1)throw Error('synthetic_db_commit_timeout');
+  return actual(...args);
+ };
+ const opts={...m,env:config(),
+  candidateInspector:async()=>({ok:true,candidates:[candidate]})};
+ await runOneEpisodeChunk(opts);
+ const failed=await runOneEpisodeChunk(opts);
+ assert.equal(failed.code,'episode_retryable_error');
+ assert.equal(failed.errorStage,'checkpoint');
+ assert.equal(failed.checkpointsRetained,2);
+ assert.equal(m.run.state,'staged');
+ const sourceReads=m.getReads(),writes=m.getWrites();
+ const recovered=await runOneEpisodeChunk(opts);
+ assert.equal(recovered.ok,true,recovered.code);
+ assert.equal(recovered.recoveredFinalization,true);
+ assert.equal(commits,2);
+ assert.equal(m.getReads(),sourceReads);
+ assert.equal(m.getWrites(),writes);
+ assert.equal(m.run.parts.length,2);
+ assert.equal(m.run.state,'verified');
+});
+test('finalization recovery refuses corrupted S3 checkpoint and never marks episode verified',async()=>{
+ const m=mocks();
+ const original=m.storage.readVerifiedRange;
+ let failOnce=true;
+ m.storage.readVerifiedRange=async args=>{
+  if(failOnce){failOnce=false;throw Error('synthetic_s3_read_timeout')}
+  return original(args);
+ };
+ const opts={...m,env:config(),
+  candidateInspector:async()=>({ok:true,candidates:[candidate]})};
+ await runOneEpisodeChunk(opts);
+ assert.equal((await runOneEpisodeChunk(opts)).code,'episode_retryable_error');
+ const [key]=m.run.parts.map(x=>x.key);
+ const damaged=m.objects.get(key);
+ damaged[1024]^=1;
+ const reads=m.getReads(),writes=m.getWrites();
+ const retry=await runOneEpisodeChunk(opts);
+ assert.equal(retry.ok,false);
+ assert.equal(retry.code,'episode_retryable_error');
+ assert.equal(retry.errorStage,'verify_full_file');
+ assert.equal(retry.checkpointsRetained,2);
+ assert.equal(m.run.state,'staged');
+ assert.equal(m.getReads(),reads);
+ assert.equal(m.getWrites(),writes);
+ assert.equal(m.verified(),false);
+});
+test('finalization recovery never bypasses explicit storage permission even for already checkpointed bytes',async()=>{
+ const m=mocks();
+ const actual=m.storage.readVerifiedRange;
+ let failOnce=true;
+ m.storage.readVerifiedRange=async args=>{
+  if(failOnce){failOnce=false;throw Error('synthetic_s3_read_timeout')}
+  return actual(args);
+ };
+ const opts={...m,env:config(),
+  candidateInspector:async()=>({ok:true,candidates:[candidate]})};
+ await runOneEpisodeChunk(opts);
+ await runOneEpisodeChunk(opts);
+ const reads=m.getReads(),writes=m.getWrites();
+ const denied=await runOneEpisodeChunk({...opts,env:{
+  ...config(),BLOFY_CONTENT_HUB_EPISODE_RIGHTS_CONFIRMED:'0'
+ }});
+ assert.equal(denied.ok,false);
+ assert.equal(denied.code,'episode_safety_gates_off');
+ assert.equal(m.getReads(),reads);
+ assert.equal(m.getWrites(),writes);
+ assert.equal(m.run.state,'staged');
+});
