@@ -1141,8 +1141,11 @@ class HomeActivity : AppCompatActivity() {
                     refreshError = current?.outputData?.getString(CatalogRefreshWorker.KEY_ERROR)
                     val observed = current?.progress?.getInt(CatalogRefreshWorker.KEY_PERCENT, 0) ?: 0
                     val saved = CatalogRefreshCheckpoint(applicationContext, providerId).visiblePercent()
+                    // A retried Worker may invalidate an incomplete 90% series
+                    // response and safely resume from the last verified 66% checkpoint.
+                    // Do not retain an old high-water mark from an aborted attempt.
                     refreshPercent = if (current?.state == WorkInfo.State.SUCCEEDED) 100
-                        else maxOf(refreshPercent, saved, observed).coerceIn(0, 95)
+                        else maxOf(saved, observed).coerceIn(0, 95)
                     renderManualRefreshStatus(current?.state)
                 }
             }
