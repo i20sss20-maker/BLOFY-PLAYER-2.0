@@ -49,6 +49,7 @@ jobs:
             testStreamCodeDemoUnitTest \
             --tests 'tv.blofy.player.core.diagnostics.StreamAudioOutputEvidenceTest' \
             --tests 'tv.blofy.player.ui.player.StreamAacTrackChoiceTest' \
+            --tests 'tv.blofy.player.ui.player.StreamAudioChannelTransitionTest' \
             --tests 'tv.blofy.player.core.diagnostics.StreamAudioHealthTest'
       - name: Assemble unsigned separate STREAM QA APK
         shell: bash
