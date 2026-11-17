@@ -5,11 +5,12 @@ export const CONTROL_CENTER_TARGETS = Object.freeze([
   Object.freeze({ id:'player', label:'موقع BLOFY PLAYER', tier:'production', endpoint:'https://blofyplayer.com/health' }),
   Object.freeze({ id:'updates', label:'خدمة التطبيقات والتحديثات', tier:'production', endpoint:'https://updates.blofyplayer.com/health' }),
   Object.freeze({ id:'stream', label:'واجهة BLOFY STREAM', tier:'production', endpoint:'https://blofy-stream-api-production.up.railway.app/health' }),
-  Object.freeze({ id:'lab', label:'مختبر مركز التحكم', tier:'test', endpoint:'https://blofy-control-center-lab-test.up.railway.app/health' })
+  Object.freeze({ id:'decoder', label:'مختبر FFmpeg المعزول', tier:'test', endpoint:'https://blofy-decoder-lab-test.up.railway.app/health' })
 ]);
 const CACHE_MS=25_000;
 const PROBE_TIMEOUT_MS=4500;
 const MAX_HISTORY=24;
+const MAX_HEALTH_BODY_BYTES=4096;
 let cached=null;
 let cachedAt=0;
 let pending=null;
@@ -18,6 +19,29 @@ export function classifyControlCenterStatus(status) {
   if(Number.isInteger(status) && status>=200 && status<=299)return 'healthy';
   if(Number.isInteger(status) && status>=300 && status<=499)return 'reachable';
   return 'error';
+}
+export async function checkHealthPayload(response){
+  const type=String(response.headers?.get?.('content-type')||'').toLowerCase();
+  if(!type.includes('application/json')||!response.body?.getReader)
+    return {isHealthJson:false,explicitlyUnhealthy:false};
+  const reader=response.body.getReader();
+  let bytes=0,parts=[];
+  try{
+    for(;;){
+      const part=await reader.read();
+      if(part.done)break;
+      bytes+=part.value?.byteLength||0;
+      if(bytes>MAX_HEALTH_BODY_BYTES)
+        return {isHealthJson:false,explicitlyUnhealthy:false};
+      parts.push(Buffer.from(part.value));
+    }
+    const payload=JSON.parse(Buffer.concat(parts).toString('utf8'));
+    const explicitFailure=payload?.ok===false||
+      payload?.healthy===false||payload?.status==='error'||
+      payload?.status==='unhealthy'||payload?.status==='down';
+    return {isHealthJson:true,explicitlyUnhealthy:explicitFailure};
+  }catch{return {isHealthJson:false,explicitlyUnhealthy:false};}
+  finally{try{await reader.cancel();}catch{}try{reader.releaseLock()}catch{}}
 }
 export async function probeControlCenterTarget(target, fetchImpl=fetch, now=Date.now) {
   const started=now();
@@ -28,14 +52,18 @@ export async function probeControlCenterTarget(target, fetchImpl=fetch, now=Date
       method:'GET',redirect:'manual',signal:controller.signal,
       headers:{accept:'application/json,text/plain,*/*;q=0.1','user-agent':'BLOFY-Control-Center-Admin/1.0'}
     });
-    try {await response.body?.cancel();} catch {}
+    const payload=await checkHealthPayload(response);
+    const verdict=classifyControlCenterStatus(response.status);
+    const status=payload.explicitlyUnhealthy?'error':verdict;
     return {
       id:target.id,name:target.label,tier:target.tier,
-      status:classifyControlCenterStatus(response.status),
+      status,
       httpStatus:response.status,latencyMs:Math.max(0,now()-started),
-      note:response.status>=200 && response.status<=299
-        ? 'نجح فحص HTTP، وليس اختبارًا لجودة تشغيل الوسائط'
-        : 'الخادم ردّ برمز HTTP لا يؤكد جاهزية الخدمة'
+      note:payload.explicitlyUnhealthy?
+        'الخادم متصل لكنه أبلغ عن حالة غير سليمة؛ لا تُعدّ الخدمة جاهزة':
+        response.status>=200 && response.status<=299
+          ? 'استجاب فحص HTTP؛ لا يثبت جودة الصوت أو تشغيل القنوات'
+          : 'الخادم ردّ برمز HTTP لا يؤكد جاهزية الخدمة'
     };
   } catch(error) {
     return {
@@ -62,12 +90,12 @@ export async function controlCenterSnapshot() {
       },
       scope:'HTTP service reachability only; no media playback or audio inspection',
       phases:[
-        {label:'لوحة المراقبة',state:'pilot'},
-        {label:'فحص القنوات والصوت والفيديو',state:'planned'},
-        {label:'توزيع الأحمال والتحويل الاحتياطي',state:'planned'},
-        {label:'المكتبة والمزامنة الآمنة',state:'planned'},
-        {label:'الموزعون والأكواد الجماعية',state:'planned'},
-        {label:'مساعد AI الإداري',state:'planned'}
+        {label:'إدارة STREAM والمصادر والمكتبة',state:'available'},
+        {label:'الأكواد والمشتركون ولوحات الموزعين',state:'available'},
+        {label:'فحص HLS وعينات الصوت والصورة',state:'manual'},
+        {label:'مختبر FFmpeg المستقل',state:'synthetic'},
+        {label:'التخزين والمزامنة ضمن لوحة المكتبة',state:'available'},
+        {label:'تأكيد تشغيل القنوات على أجهزة حقيقية',state:'not_verified'}
       ]
     };
     cached=result;cachedAt=Date.now();

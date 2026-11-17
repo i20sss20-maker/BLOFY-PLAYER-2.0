@@ -16,20 +16,24 @@
     <a href="/admin" class="brand"><img src="/blofy-logo.png" width="38" height="38" alt=""><span>BLOFY <b>CONTROL CENTER</b></span></a>
     <p class="small">لوحة المشرف · اتصال موحد</p>
     <nav class="nav" aria-label="أقسام الإدارة">
-      <a class="active" aria-current="page" href="/admin/control-center">◉ مراقبة البث والسيرفرات</a>
+      <a class="active" aria-current="page" href="/admin/control-center/health">◉ مراقبة البث والسيرفرات</a>
       <a href="/admin">▣ الأجهزة والاشتراكات</a>
-      <a href="/stream">◈ BLOFY STREAM</a>
-      <a href="/sources-admin#xtream">◈ مصادر Xtream</a>
+      <a href="/admin/control-center">◈ BLOFY STREAM — الإدارة الأصلية</a>
+      <a href="/admin/control-center#sources">◈ مصادر Xtream داخل STREAM</a>
       <a href="/admin/content-hub">▦ المكتبة والتخزين</a>
       <a href="/one">⌘ مركز BLOFY ONE</a>
+      <a href="/admin/control-center#codes">⌁ أكواد STREAM</a>
+      <a href="/admin/control-center#distributors">♙ إدارة الموزعين</a>
+      <a href="/distributor">↗ دخول لوحة الموزع</a>
+      <a href="https://updates.blofyplayer.com/downloads" rel="noopener noreferrer">↓ التطبيقات والتحميلات</a>
     </nav>
     <p class="small security">محمية بجلسة إدارة BLOFY الحالية. لا يتم تغيير الأكواد أو مصادر العملاء.</p>
   </aside>
   <main class="main">
     <header class="topbar">
-      <div><p class="eyebrow">BLOFY OPERATIONS / READ ONLY</p>
-        <h1>مراقبة البث والسيرفرات</h1>
-        <p>لوحة موحدة داخل موقع BLOFY لفحص الخدمات والتجهيز للتطوير القادم.</p>
+      <div><p class="eyebrow">BLOFY OPERATIONS / SERVICE STATUS</p>
+        <h1>حالة خدمات BLOFY</h1>
+        <p>راقب اتصال خدمات الموقع وSTREAM ومختبر فك الترميز، ثم انتقل إلى لوحة الإدارة الأصلية دون تكرار بيانات العملاء.</p>
       </div>
       <div class="actions"><button type="button" id="refresh">↻ تحديث الفحص</button>
         <button type="button" id="copy" class="outline">نسخ التقرير</button></div>
@@ -40,16 +44,16 @@
       <div class="stat"><small>استجابة غير مؤكدة</small><strong id="reachable">—</strong></div>
       <div class="stat"><small>خطأ أو فشل اتصال</small><strong id="failed">—</strong></div>
     </section>
-    <div class="notice" role="note">المؤشرات تقيس حالة HTTP فقط؛ لا تثبت جودة الصورة أو الصوت أو عمل جميع القنوات. لا توجد أرقام تقديرية.</div>
+    <div class="notice" role="note">هذه مؤشرات وصول HTTP وليست إثبات تشغيل كل قناة أو سماع صوتها. مختبر FFmpeg معزول، وفحص محتواه الصناعي لا يؤكد جودة قنوات Xtream.</div>
     <section class="panel">
       <div class="panelhead"><h2>الخدمات المفحوصة</h2><span class="small" id="checked">لم يبدأ الفحص</span></div>
       <div id="checks" class="service-grid" aria-live="polite"></div>
     </section>
     <section class="panel">
-      <div class="panelhead"><h2>خارطة التطوير</h2><span class="small">التشغيل التجريبي منفصل عن الإنتاج</span></div>
+      <div class="panelhead"><h2>حالة الوظائف داخل الموقع</h2><span class="small">متاحة / يدوية / لم تختبر على أجهزة حقيقية</span></div>
       <div id="phases" class="phase-grid"></div>
     </section>
-    <p class="small footer">BLOFY CONTROL CENTER · نظام متابعة للقراءة فقط · جميع عمليات تعديل السيرفرات مؤجلة حتى الاختبار والمراجعة</p>
+    <p class="small footer">BLOFY CONTROL CENTER · هذه الصفحة لمراقبة الاتصال فقط. إدارة المصادر والأكواد والمكتبة والفحوصات اليدوية موجودة في <a href="/admin/control-center">لوحة BLOFY STREAM الأصلية</a>، وليست عمليات تلقائية من هذه الصفحة.</p>
   </main>
 </div>
 </body>

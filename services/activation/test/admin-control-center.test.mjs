@@ -2,11 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   CONTROL_CENTER_TARGETS, classifyControlCenterStatus, probeControlCenterTarget,
-  controlCenterAsset
+  controlCenterAsset,checkHealthPayload
 } from '../src/admin-control-center.mjs';
 
 test('fixed targets only and HTTPS URLs', () => {
   assert.equal(CONTROL_CENTER_TARGETS.length,4);
+  assert.ok(CONTROL_CENTER_TARGETS.find(x=>x.id==='decoder')?.endpoint?.includes('blofy-decoder-lab-test.up.railway.app'));
+  assert.ok(!CONTROL_CENTER_TARGETS.some(x=>x.endpoint.includes('blofy-control-center-lab')));
   for(const item of CONTROL_CENTER_TARGETS)assert.match(item.endpoint,/^https:\/\//);
 });
 test('HTTP classification does not mislabel 404 as a healthy stream', () => {
@@ -46,4 +48,42 @@ test('assets are explicit and use no inline JS', async () => {
   assert.match(script,/api\/v1\/admin\/control-center\/status/);
   assert.ok(style.length>100);
   await assert.rejects(()=>controlCenterAsset('../../etc/passwd'),/unknown_control_center_asset/);
+});
+
+test('health checker does not mark HTTP 200 with explicit ok:false as healthy',async()=>{
+  const response=await probeControlCenterTarget(CONTROL_CENTER_TARGETS[2],
+    async()=>new Response(JSON.stringify({ok:false,status:'unhealthy',
+      password:'should_never_be_copied'}),{
+      status:200,headers:{'content-type':'application/json; charset=utf-8'}
+    }));
+  assert.equal(response.status,'error');
+  assert.equal(response.httpStatus,200);
+  assert.ok(!('password' in response));
+  assert.doesNotMatch(JSON.stringify(response),/should_never_be_copied/);
+});
+
+test('valid JSON health 200 is reachable without exposing response body',async()=>{
+  const response=await probeControlCenterTarget(CONTROL_CENTER_TARGETS[0],
+    async()=>Response.json({ok:true,details:{secret:'should_not_echo'}}));
+  assert.equal(response.status,'healthy');
+  assert.doesNotMatch(JSON.stringify(response),/should_not_echo/);
+});
+
+test('health JSON is bounded and failure of parsing never treats response as decoded media proof',async()=>{
+  const result=await checkHealthPayload(new Response('X'.repeat(6000),{
+    status:200,headers:{'content-type':'application/json'}
+  }));
+  assert.equal(result.isHealthJson,false);
+  assert.equal(result.explicitlyUnhealthy,false);
+});
+
+test('status page links to actual same-domain STREAM dashboard and its sections',async()=>{
+  const html=(await controlCenterAsset('page')).content.toString('utf8');
+  assert.match(html,/href="\/admin\/control-center\/health"/);
+  assert.match(html,/href="\/admin\/control-center#sources"/);
+  assert.match(html,/href="\/admin\/control-center#codes"/);
+  assert.match(html,/href="\/admin\/control-center#distributors"/);
+  assert.match(html,/href="\/distributor"/);
+  assert.doesNotMatch(html,/href="\/stream"/);
+  assert.doesNotMatch(html,/href="\/sources-admin#xtream"/);
 });
