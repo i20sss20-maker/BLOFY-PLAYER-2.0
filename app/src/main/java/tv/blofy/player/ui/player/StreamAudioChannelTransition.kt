@@ -17,7 +17,7 @@ import androidx.media3.common.util.UnstableApi
 internal object StreamAudioChannelTransition {
     fun hasManualAudioOverride(parameters: TrackSelectionParameters): Boolean =
         parameters.overrides.values.any {
-            it.trackGroup.type == C.TRACK_TYPE_AUDIO
+            it.mediaTrackGroup.type == C.TRACK_TYPE_AUDIO
         }
 
     fun forDifferentLiveChannel(parameters: TrackSelectionParameters): TrackSelectionParameters =
