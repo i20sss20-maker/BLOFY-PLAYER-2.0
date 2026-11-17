@@ -39,6 +39,15 @@ class LivePlayerMenuPolicyTest {
             LivePlayerMenuPolicy.action(KeyEvent.KEYCODE_DPAD_DOWN, true, false, true))
     }
 
+    @Test fun searchKeyOpensOnlySearchWindowInStreamNotChannelWindow() {
+        assertEquals(LivePlayerMenuAction.SHOW_SEARCH_WINDOW,
+            LivePlayerMenuPolicy.action(KeyEvent.KEYCODE_SEARCH, false, false, true))
+        assertEquals(LivePlayerMenuAction.PASS_THROUGH,
+            LivePlayerMenuPolicy.action(KeyEvent.KEYCODE_SEARCH, false, false, false))
+        assertEquals(LivePlayerMenuAction.PASS_THROUGH,
+            LivePlayerMenuPolicy.action(KeyEvent.KEYCODE_SEARCH, false, true, true))
+    }
+
     @Test fun openDialogOwnsItsNavigationAndSelection() {
         assertEquals(LivePlayerMenuAction.PASS_THROUGH,
             key(KeyEvent.KEYCODE_DPAD_CENTER, dialog = true))
