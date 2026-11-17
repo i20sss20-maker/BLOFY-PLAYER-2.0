@@ -6,6 +6,7 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
@@ -19,6 +20,9 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tv.blofy.player.R
@@ -47,6 +51,10 @@ class EpisodesActivity : AppCompatActivity() {
     private var seriesId = ""
     private var restoredOnce = false
     private var syncInProgress = false
+    private var autoRefreshJob: Job? = null
+    private var lastEpisodeSyncAtElapsed = 0L
+    // Bound upstream get_series_info calls to the active series, never the 300k-item catalog.
+    private val episodeRefreshIntervalMs = 180_000L
     private var loadState = EpisodeLoadState.LOADING
     private val watchProgress = mutableMapOf<String, Int>()
 
@@ -125,8 +133,30 @@ class EpisodesActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (!::episodeAdapter.isInitialized) return
-        lifecycleScope.launch { refreshWatchProgress(); refreshEpisodes(false) }
+        autoRefreshJob?.cancel()
+        autoRefreshJob = lifecycleScope.launch {
+            if (::episodeAdapter.isInitialized) {
+                refreshWatchProgress()
+                refreshEpisodes(false)
+            }
+            // Only poll while this episode list is visible. If a viewer leaves
+            // the player and comes back, the next due refresh runs automatically.
+            // No bulk catalog download, device logout or playback interruption.
+            while (isActive) {
+                if (::episodeAdapter.isInitialized && !syncInProgress &&
+                    SystemClock.elapsedRealtime() - lastEpisodeSyncAtElapsed >= episodeRefreshIntervalMs) {
+                    val provider = runCatching { currentProvider() }.getOrNull()
+                    if (provider != null) syncEpisodes(provider, silent = true)
+                }
+                delay(30_000L)
+            }
+        }
+    }
+
+    override fun onPause() {
+        autoRefreshJob?.cancel()
+        autoRefreshJob = null
+        super.onPause()
     }
 
     private fun installTvFocusBridge() {
@@ -163,18 +193,30 @@ class EpisodesActivity : AppCompatActivity() {
     private suspend fun currentProvider(): ProviderEntity = BlofyDatabase.get(applicationContext).dao().provider(providerId)
         ?: throw IllegalStateException("قائمة التشغيل غير موجودة")
 
-    private suspend fun syncEpisodes(provider: ProviderEntity) {
+    private suspend fun syncEpisodes(provider: ProviderEntity, silent: Boolean = false) {
         if (syncInProgress) return
-        syncInProgress = true; loadState = EpisodeLoadState.LOADING; retryButton.visibility = View.GONE; updateStatus()
+        syncInProgress = true
+        lastEpisodeSyncAtElapsed = SystemClock.elapsedRealtime()
+        // An automatic refresh must not blank/flicker the existing episode list.
+        if (!silent || allEpisodes.isEmpty()) {
+            loadState = EpisodeLoadState.LOADING
+            retryButton.visibility = View.GONE
+            updateStatus()
+        }
         val result = runCatching {
             withContext(Dispatchers.IO) { PlaylistManager(XtreamClient.api, BlofyDatabase.get(applicationContext).dao()).syncSeriesEpisodes(provider, seriesId) }
         }
         result.exceptionOrNull()?.let { if (it is CancellationException) throw it }
         syncInProgress = false
-        loadState = result.fold(
+        val updatedState = result.fold(
             onSuccess = { when { it.episodeCount > 0 -> EpisodeLoadState.LOADED; it.payloadPresent -> EpisodeLoadState.EMPTY_PROVIDER_RESPONSE; else -> EpisodeLoadState.INVALID_PROVIDER_RESPONSE } },
             onFailure = { EpisodeLoadState.ERROR }
         )
+        // An upstream failure or empty response must not hide episodes that
+        // are already cached. A manual Retry retains its normal error status.
+        if (!silent || allEpisodes.isEmpty() || updatedState == EpisodeLoadState.LOADED) {
+            loadState = updatedState
+        }
         refreshWatchProgress()
         retryButton.visibility = if (loadState.canRetry && allEpisodes.isEmpty()) View.VISIBLE else View.GONE
         updateStatus()
