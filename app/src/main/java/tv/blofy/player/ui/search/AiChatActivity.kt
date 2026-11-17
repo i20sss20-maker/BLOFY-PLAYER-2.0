@@ -32,8 +32,6 @@ import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.ui.common.CinemaStyle
-import tv.blofy.player.ui.details.MovieDetailsActivity
-import tv.blofy.player.ui.details.SeriesDetailsActivity
 
 /**
  * STREAM-only full-screen conversation. Local title search is its OWN screen:
@@ -379,27 +377,14 @@ class AiChatActivity : AppCompatActivity() {
         }
     }
 
-    /** Details are opened only for items verified in the subscriber's local catalog. */
+    /** Only a verified, unlocked row from the local catalog becomes clickable. */
     private fun openVerifiedTitle(item: StreamEntity) {
-        if (item.providerId.isBlank() || item.key.isBlank() || item.locked) return
-        val destination = when (item.kind) {
-            "movie" -> MovieDetailsActivity::class.java
-            "series" -> SeriesDetailsActivity::class.java
-            else -> { searchForTitle(item.name); return }
-        }
-        startActivity(Intent(this, destination).apply {
-            putExtra(MovieDetailsActivity.EXTRA_PROVIDER_ID, item.providerId)
-            putExtra(MovieDetailsActivity.EXTRA_CONTENT_KEY, item.key)
-        })
+        AiResultNavigation.details(this, item)?.let(::startActivity)
+            ?: searchForTitle(item.name)
     }
 
     private fun searchForTitle(title: String) {
-        if (title.isBlank()) return
-        // Search ALL local indexes when a verified result belongs to a
-        // different provider than the currently active search section.
-        startActivity(Intent(this, SearchActivity::class.java).apply {
-            putExtra(SearchActivity.EXTRA_INITIAL_QUERY, title.trim().take(120))
-        })
+        AiResultNavigation.search(this, title)?.let(::startActivity)
     }
 
     private fun scrollBottom() {
