@@ -652,6 +652,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 setSingleLine(true)
                 filters = arrayOf(InputFilter.LengthFilter(80))
                 inputType = InputType.TYPE_CLASS_TEXT
+                imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
                 textSize = 16f
                 setTextColor(Color.WHITE)
                 setHintTextColor(0xFFB7ABC5.toInt())
@@ -662,6 +663,23 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                     cornerRadius = dp(12).toFloat()
                     setColor(0xFF1F192C.toInt())
                     setStroke(dp(2), 0xFF8D6CB7.toInt())
+                }
+            }
+            searchBox.setOnEditorActionListener { _, actionId, event ->
+                val submitted = actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH ||
+                    (event?.keyCode == KeyEvent.KEYCODE_ENTER && event.action == KeyEvent.ACTION_DOWN)
+                if (!submitted) false
+                else {
+                    if (results.itemCount > 0) {
+                        list.scrollToPosition(0)
+                        list.post {
+                            if (searchDialog?.isShowing == true) {
+                                list.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus()
+                                    ?: list.requestFocus()
+                            }
+                        }
+                    }
+                    true
                 }
             }
             val resultsCount = TextView(activity).apply {
