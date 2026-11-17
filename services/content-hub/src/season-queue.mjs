@@ -1252,10 +1252,12 @@ export function createSeasonQueueStore({
 export function createSeasonQueueController({
  store,lease,storage,env=process.env,
  runner=runOneEpisodeChunk,logger=()=>{},isSourceBusy=()=>false,
- delayMs=2200,maxBatches=5000,maxDurationMs=45*60*1000,
+ delayMs=2200,maxBatches=12,maxDurationMs=45*60*1000,
  pause=ms=>new Promise(resolve=>setTimeout(resolve,ms))
 }={}){
  if(!store||!lease||!storage)throw Error('season_queue_dependencies_missing');
+ if(!Number.isSafeInteger(maxBatches)||maxBatches<1||maxBatches>120)
+  throw Error('season_queue_max_batches_invalid');
  let active=null;
  let status={state:'idle',code:null,batches:0,currentRunId:null,
   customerCutover:false};
@@ -1270,7 +1272,12 @@ export function createSeasonQueueController({
   if(active)return {...snapshot(),ok:false,code:'season_queue_running'};
   if(sessionMaxBatches!==null&&![12,60,120].includes(sessionMaxBatches))
    return {...snapshot(),ok:false,code:'season_batch_budget_invalid'};
-  const batchBudget=sessionMaxBatches??maxBatches;
+  // Missing HTTP batch header must NEVER silently choose an unbounded
+  // 5,000-chunk run (40 GiB of 8 MiB source reads). One operator-started
+  // session defaults to at most twelve chunks (96 MiB).
+  // Explicit 60/120 selections still require the authenticated,
+  // rights-confirmed owner start path in server.mjs.
+  const batchBudget=sessionMaxBatches??Math.min(maxBatches,12);
   const ready=seasonQueueReadiness(env);
   if(!ready.ready)return {...snapshot(),ok:false,
    code:'season_queue_safety_gates_off',blockedBy:ready.blockedBy};
