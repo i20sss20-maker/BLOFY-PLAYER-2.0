@@ -1438,6 +1438,15 @@ open class PlayerActivity : ContentAccessActivity() {
         RecentChannelStore.record(this, provider.id, stream.key)
         updateTitle(stream.name)
         showCachedChannelPosition(stream.remoteId)
+        if (BuildConfig.CODE_ONLY_LOGIN) {
+            // A user-selected AC3/AAC track belongs to the previous channel.
+            // Reset audio overrides before changing the media item; keep
+            // subtitles, video preferences and preferred audio language.
+            session.player.trackSelectionParameters =
+                StreamAudioChannelTransition.forDifferentLiveChannel(
+                    session.player.trackSelectionParameters
+                )
+        }
         session.play(
             url = ContentUrlResolver.live(provider, profile, stream),
             fallbackUrl = ContentUrlResolver.directFallback(stream), fallbackUrls = ContentUrlResolver.recoveryUrls(stream)
@@ -1629,6 +1638,7 @@ open class PlayerActivity : ContentAccessActivity() {
             ) { _, _ ->
                 if (!sessionReleased) {
                     StreamAudioPreferences.save(applicationContext, null)
+                    if (kind == KIND_LIVE) streamAudioEvidence.reset()
                     session.player.trackSelectionParameters =
                         session.player.trackSelectionParameters.buildUpon()
                             .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
@@ -1744,6 +1754,11 @@ open class PlayerActivity : ContentAccessActivity() {
                 if (isAudio) {
                     arabicAudioSession?.stop()
                     arabicAudioSession = null
+                    if (BuildConfig.CODE_ONLY_LOGIN && kind == KIND_LIVE) {
+                        // Don't mix the prior selected track's AudioSink signal
+                        // with the newly selected audio decoder.
+                        streamAudioEvidence.reset()
+                    }
                 }
                 when (AudioTrackChoicePolicy.choice(isAudio, isText, which, entries.size)) {
                     AudioTrackChoicePolicy.Choice.OFF -> {
