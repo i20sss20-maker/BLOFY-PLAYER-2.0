@@ -18,6 +18,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -52,6 +54,7 @@ import java.util.Locale
 
 class CatalogLoadingActivity : AppCompatActivity() {
     private lateinit var retryButton: Button
+    private lateinit var cachedButton: Button
     private var loadJob: Job? = null
     private var forceRefreshOnRetry = false
     private var displayedPercent = 0
@@ -82,13 +85,34 @@ class CatalogLoadingActivity : AppCompatActivity() {
         }
         val forceRefresh = intent.getBooleanExtra(EXTRA_FORCE_REFRESH, false)
         retryButton.setOnClickListener { startLoading(providerId, forceRefreshOnRetry) }
+        cachedButton.setOnClickListener { openCommittedCatalogInstead(providerId) }
         startLoading(providerId, forceRefresh)
+    }
+
+    /** Cancel a stuck refresh and wait for rollback before reading the previously saved catalog. */
+    private fun openCommittedCatalogInstead(providerId: String) {
+        if (cachedButton.visibility != View.VISIBLE || !cachedButton.isEnabled) return
+        cachedButton.isEnabled = false
+        lifecycleScope.launch {
+            try {
+                loadJob?.cancelAndJoin()
+                val hasCommitted = withContext(Dispatchers.IO) {
+                    CatalogLoadPersistence.hasCommittedCatalog(applicationContext,
+                        BlofyDatabase.get(applicationContext).dao(), providerId)
+                }
+                if (hasCommitted) openHome(providerId)
+                else fail(getString(R.string.catalog_prepare_failed))
+            } finally {
+                cachedButton.isEnabled = true
+            }
+        }
     }
 
     private fun startLoading(providerId: String, forceRefresh: Boolean) {
         if (loadJob?.isActive == true) return
         forceRefreshOnRetry = forceRefresh
         retryButton.visibility = View.GONE
+        cachedButton.visibility = View.GONE
         stage.setTextColor(BlofyTvDesign.TextPrimary)
         displayedPercent = 0 // A retry is a new attempt; monotonicity holds within each attempt.
         lastContentStage = null
@@ -99,10 +123,16 @@ class CatalogLoadingActivity : AppCompatActivity() {
             progressPulseJob = lifecycleScope.launch {
                 while (true) {
                     delay(10_000L)
-                    val currentStage = lastContentStage ?: continue
-                    if (displayedPercent !in 1..29) continue
                     val idleSeconds = (SystemClock.elapsedRealtime() - lastCatalogActivityAtMs) / 1000L
                     if (idleSeconds < 30L) continue
+                    if (progress.isIndeterminate || displayedPercent in 90..99) {
+                        // This is elapsed time, NOT a fabricated download percentage.
+                        progressMeta.text = getString(R.string.catalog_final_waiting, idleSeconds)
+                        progressMeta.visibility = View.VISIBLE
+                        continue
+                    }
+                    val currentStage = lastContentStage ?: continue
+                    if (displayedPercent !in 1..29) continue
                     // The percentage represents completed work. Don't fake percentage advances:
                     // tell viewers a large response is still pending and preserve all saved sections.
                     val sectionLabel = when (currentStage) {
@@ -136,6 +166,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
                         }
                     }
                     preflight = false
+                    cachedButton.visibility = if (hasCachedCatalog && forceRefresh) View.VISIBLE else View.GONE
                     val catalogReady = CatalogSyncState.isReady(applicationContext, providerId)
                     if (!forceRefresh && hasCachedCatalog &&
                         (BuildConfig.CODE_ONLY_LOGIN || CatalogSyncState.isEntryReady(applicationContext, providerId))) {
@@ -308,6 +339,20 @@ class CatalogLoadingActivity : AppCompatActivity() {
             if (compact) LinearLayout.LayoutParams.MATCH_PARENT else u(320),
             u(if (compact) 50 else 54)
         ).apply { bottomMargin = u(if (compact) 8 else 0) })
+        cachedButton = Button(this).apply {
+            text = getString(R.string.catalog_open_saved)
+            isAllCaps = false
+            visibility = View.GONE
+            isFocusable = true
+            isFocusableInTouchMode = deviceKind == DeviceClass.Kind.TV
+            if (deviceKind == DeviceClass.Kind.TV) {
+                BlofyTvDesign.installTvFocus(this, u(16).toFloat(), 1.02f, true) {}
+            }
+        }
+        panel.addView(cachedButton, LinearLayout.LayoutParams(
+            if (compact) LinearLayout.LayoutParams.MATCH_PARENT else u(320),
+            u(if (compact) 50 else 54)
+        ).apply { bottomMargin = u(if (compact) 8 else 0) })
         panel.addView(steps, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             if (compact) LinearLayout.LayoutParams.WRAP_CONTENT else u(if (shortTv) 50 else 60)
@@ -441,6 +486,21 @@ class CatalogLoadingActivity : AppCompatActivity() {
             render(100, getString(R.string.catalog_complete))
             delay(120L)
             openHome(providerId)
+        } catch (timedOut: TimeoutCancellationException) {
+            // Timeouts are recoverable failures, not user cancellation. Preserve the
+            // previous committed library and let the user enter instead of staying stuck.
+            currentCoroutineContext().ensureActive()
+            persistence.discardIfUncommitted()
+            val preserved = withContext(Dispatchers.IO) {
+                CatalogLoadPersistence.hasCommittedCatalog(applicationContext, dao, providerId)
+            }
+            if (preserved) {
+                render(30, getString(R.string.catalog_refresh_kept))
+                stage.setTextColor(BlofyTvDesign.Mint)
+                openHome(providerId)
+            } else {
+                fail(getString(R.string.catalog_prepare_failed))
+            }
         } catch (cancelled: CancellationException) {
             persistence.discardIfUncommitted()
             throw cancelled
@@ -526,6 +586,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
 
     private fun render(value: Int, label: String) {
         val safe = maxOf(displayedPercent, value.coerceIn(0, 100))
+        if (safe > displayedPercent) lastCatalogActivityAtMs = SystemClock.elapsedRealtime()
         displayedPercent = safe
         progressMeta.visibility = View.GONE
         progress.isIndeterminate = false
