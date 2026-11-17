@@ -17,14 +17,14 @@ class CatalogAutoRefreshPolicyTest {
     @Test fun refreshingTooSoonDoesNotReloadHugeCatalog() {
         assertTrue(CatalogAutoRefreshPolicy.INTERVAL_MINUTES == 24L * 60L)
         assertTrue(CatalogAutoRefreshPolicy.MINIMUM_GAP_MS == 24L * 60L * 60_000L)
-        val now = 10_000_000L
+        val now = 200_000_000L
         assertFalse(CatalogAutoRefreshPolicy.isDue(
             now - CatalogAutoRefreshPolicy.MINIMUM_GAP_MS + 1L, now
         ))
     }
 
     @Test fun refreshDueAtDailyBoundary() {
-        val now = 10_000_000L
+        val now = 200_000_000L
         assertTrue(CatalogAutoRefreshPolicy.isDue(
             now - CatalogAutoRefreshPolicy.MINIMUM_GAP_MS, now
         ))
