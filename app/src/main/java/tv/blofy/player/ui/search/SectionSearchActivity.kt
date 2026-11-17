@@ -273,7 +273,7 @@ class SectionSearchActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_KIND = "kind"
-        private const val EXTRA_QUERY = "query"
+        const val EXTRA_QUERY = "query"
         private const val KIND_LIVE = "live"
         private const val KIND_MOVIE = "movie"
         private const val KIND_SERIES = "series"
