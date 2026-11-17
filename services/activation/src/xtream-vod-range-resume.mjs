@@ -1,0 +1,89 @@
+// Opt-in recovery for a broken DIRECT Xtream VOD response after video bytes
+// have reached an authorized viewer. Never switches provider, credentials,
+// media ID or stream type. Live feeds and independent relay tickets excluded.
+// Requires strong ETag and exact HTTP 206 Range response for byte continuity.
+// Does not read entire media into memory; emits chunks with backpressure.
+const MAX_TOTAL=8*1024*1024*1024;
+const MAX_ETAG=128;
+function strongEtag(input){
+ const x=typeof input==='string'?input:'';
+ return x.length>=3&&x.length<=MAX_ETAG&&
+   /^"[\x21\x23-\x7e]{1,126}"$/.test(x)?x:null;
+}
+function positiveInteger(input){
+ const n=Number(input);
+ return Number.isSafeInteger(n)&&n>0?n:null;
+}
+export function verifiedVodResumePlan({
+ enabled=false,kind,method='GET',status=200,requestRange=null,
+ usingIndependentRelay=false,format='',headers
+}={}){
+ if(!enabled||!['movie','series'].includes(kind)||method!=='GET'||
+   status!==200||requestRange||usingIndependentRelay||
+   !['mp4','mkv'].includes(format)||!headers?.get)return null;
+ const total=positiveInteger(headers.get('content-length'));
+ const etag=strongEtag(headers.get('etag'));
+ const range=String(headers.get('accept-ranges')||'').toLowerCase().trim();
+ const encoding=String(headers.get('content-encoding')||'identity').trim().toLowerCase();
+ if(!total||total<2048||total>MAX_TOTAL||!etag||range!=='bytes'||
+    encoding!=='identity')return null;
+ return Object.freeze({total,etag,format});
+}
+// Only a single targeted replacement connection; never retry 403/404/429,
+// redirects, a 200/full replay, a wrong byte span, or a changed ETag.
+// No URL/header/body data is logged. Caller supplies previously checked
+// authorized same-file upstream target and a client-abort signal.
+export async function* resumeVerifiedVodBytes({
+ plan,forwarded,url,fetchImpl,clientSignal,headers={}
+}={}){
+ if(!plan||!Number.isSafeInteger(forwarded)||forwarded<1||
+   forwarded>=plan.total||typeof fetchImpl!=='function'||!url)
+  throw Error('vod_resume_invalid_request');
+ if(clientSignal?.aborted)throw Error('vod_resume_client_cancelled');
+ const ctl=new AbortController();
+ const signal=clientSignal?AbortSignal.any([ctl.signal,clientSignal]):ctl.signal;
+ const start=forwarded,end=plan.total-1;
+ const range='bytes='+start+'-'+end;
+ const sendHeaders={
+  'user-agent':String(headers['user-agent']||'BLOFY-Xtream-Range-Recovery/1.0').slice(0,160),
+  'range':range,
+  'if-range':plan.etag,
+  'accept-encoding':'identity'
+ };
+ let reply,reader,got=0;
+ try{
+  const timeout=setTimeout(()=>ctl.abort(new Error('vod_resume_headers_timeout')),12000);
+  timeout.unref?.();
+  try{
+   reply=await fetchImpl(url,{method:'GET',headers:sendHeaders,
+    timeoutMs:12000,signal});
+  }finally{clearTimeout(timeout)}
+  const exact='bytes '+start+'-'+end+'/'+plan.total;
+  if(reply?.status!==206||!reply.body||
+     reply.headers.get('content-range')!==exact||
+     positiveInteger(reply.headers.get('content-length'))!==plan.total-start||
+     reply.headers.get('etag')!==plan.etag){
+    throw Error('vod_resume_range_contract_denied');
+  }
+  reader=reply.body.getReader();
+  for(;;){
+   if(signal.aborted)throw Error('vod_resume_cancelled');
+   const timer=setTimeout(()=>ctl.abort(new Error('vod_resume_read_timeout')),20000);
+   timer.unref?.();
+   let part;
+   try{part=await reader.read()}finally{clearTimeout(timer)}
+   if(part.done)break;
+   if(!(part.value instanceof Uint8Array)||!part.value.byteLength)
+    throw Error('vod_resume_invalid_bytes');
+   got+=part.value.byteLength;
+   if(got>plan.total-start)throw Error('vod_resume_overshoot');
+   yield part.value;
+  }
+  if(got!==plan.total-start)throw Error('vod_resume_truncated');
+ }finally{
+  ctl.abort();
+  try{await reader?.cancel()}catch{}
+  try{reader?.releaseLock()}catch{}
+  try{await reply?.body?.cancel()}catch{}
+ }
+}
