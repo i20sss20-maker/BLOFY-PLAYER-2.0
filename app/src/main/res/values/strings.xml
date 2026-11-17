@@ -42,6 +42,7 @@
     <string name="catalog_connecting">Connecting to server…</string>
     <string name="catalog_retry">↻ Continue / Retry</string>
     <string name="catalog_open_saved">Open saved library</string>
+    <string name="catalog_final_waiting">Still preparing library • %1$d seconds without new progress</string>
     <string name="catalog_preflight">Checking saved library…</string>
     <string name="catalog_ready">Library ready</string>
     <string name="catalog_provider_missing">Playlist could not be identified</string>
