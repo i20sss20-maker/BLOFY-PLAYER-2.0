@@ -1,0 +1,59 @@
+name: BLOFY STREAM daily catalog isolated PostgreSQL receipts
+on:
+  pull_request:
+    paths:
+      - 'services/activation/src/xtream-daily-approved-catalog.mjs'
+      - 'services/activation/test/xtream-daily-approved-catalog.test.mjs'
+      - 'services/activation/test/xtream-daily-catalog-postgres.smoke.mjs'
+      - '.github/workflows/stream-daily-catalog-postgres-qa.yml'
+  push:
+    branches:
+      - fix/stream-daily-catalog-ack-stale-receipts-20261117
+    paths:
+      - 'services/activation/src/xtream-daily-approved-catalog.mjs'
+      - 'services/activation/test/xtream-daily-approved-catalog.test.mjs'
+      - 'services/activation/test/xtream-daily-catalog-postgres.smoke.mjs'
+      - '.github/workflows/stream-daily-catalog-postgres-qa.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  daily-receipts-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: blofy_stream_daily_catalog_qa
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d blofy_stream_daily_catalog_qa"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/blofy_stream_daily_catalog_qa
+      PGSSLMODE: disable
+      BLOFY_STREAM_EPHEMERAL_DB_QA: 'true'
+    defaults:
+      run:
+        working-directory: services/activation
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: services/activation/package-lock.json
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Syntax and authorization invariants
+        run: |
+          node --check src/xtream-daily-approved-catalog.mjs
+          node --check test/xtream-daily-catalog-postgres.smoke.mjs
+          node --test test/xtream-daily-approved-catalog.test.mjs
+      - name: Durable per-Riyadh-day PostgreSQL claim and recovery
+        run: node test/xtream-daily-catalog-postgres.smoke.mjs
