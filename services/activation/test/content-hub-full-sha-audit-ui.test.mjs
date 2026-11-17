@@ -25,15 +25,15 @@ test('private full-file audit UI is explicit owner-only and defaults OFF',async(
    'privateCopyAuditStatus','privateCopyAuditRefresh']){
   assert.equal((html.match(new RegExp('id="'+id+'"','g'))||[]).length,1,id);
  }
- assert.match(html,/admin-private-copy-audit\\.js/);
- assert.match(hook,/private-copy\\/audit-full/);
- assert.match(hook,/admin-private-copy-audit\\.js/);
+ assert.match(html,/admin-private-copy-audit\.js/);
+ assert.match(hook,/private-copy\/audit-full/);
+ assert.match(hook,/admin-private-copy-audit\.js/);
  assert.match(hook,/audit-one-stored-private-copy/);
  assert.match(hub,/BLOFY_CONTENT_HUB_FULL_SHA_AUDIT_ENABLED/);
  assert.match(hub,/fullCopyAuditBusy/);
  assert.match(hub,/automaticCopyStarted:false/);
- assert.doesNotMatch(js,/innerHTML\\s*=/);
- assert.doesNotMatch(js,/source\\/episode|Xtream\\/get\\.php/);
+ assert.doesNotMatch(js,/innerHTML\s*=/);
+ assert.doesNotMatch(js,/source\/episode|Xtream\/get\.php/);
 });
 test('UI polls read-only initially, starts no audit until the owner consents',async()=>{
  const ids=['privateCopyAuditKind','privateCopyAuditConfirm',
