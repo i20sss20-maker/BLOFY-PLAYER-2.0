@@ -28,6 +28,19 @@ class CatalogAutoRefreshPolicyTest {
         ))
     }
 
+    @Test fun streamIsDailyAndDoesNotDownloadAgainAfterThirtyMinutes() {
+        val now = 1_000_000_000L
+        val daily = CatalogAutoRefreshPolicy.STREAM_MINIMUM_GAP_MS
+        assertTrue(CatalogAutoRefreshPolicy.STREAM_INTERVAL_MINUTES >= 24L * 60L)
+        assertFalse(CatalogAutoRefreshPolicy.isDue(now - 30L * 60_000L, now, daily))
+        assertFalse(CatalogAutoRefreshPolicy.isDue(now - daily + 1L, now, daily))
+        assertTrue(CatalogAutoRefreshPolicy.isDue(now - daily, now, daily))
+        assertTrue(CatalogAutoRefreshPolicy.isDue(0L, now, daily))
+        assertFalse(CatalogAutoRefreshPolicy.isDue(now + 3600L, now, daily))
+        assertTrue(CatalogAutoRefreshPolicy.isDue(now + 3600L, now, daily,
+            clockRollbackIsDue = true))
+    }
+
     @Test fun clockRollbackDoesNotCauseRepeatedDownloads() {
         assertFalse(CatalogAutoRefreshPolicy.isDue(10_000L, 9_000L))
     }

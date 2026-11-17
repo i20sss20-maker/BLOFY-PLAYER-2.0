@@ -25,6 +25,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import tv.blofy.player.core.identity.PortalPlaylistClient
 import tv.blofy.player.core.identity.PortalSyncBook
+import tv.blofy.player.core.identity.StreamCodeSession
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.BlofyDao
 import tv.blofy.player.data.local.ProviderEntity
@@ -49,10 +50,11 @@ class CatalogRefreshWorker(
             dao.provider(providerId)
         } ?: return Result.success()
         val manual = inputData.getBoolean(KEY_MANUAL, false)
-        // STREAM is an offline-first viewer. Opening Home never silently
-        // downloads or replaces the subscriber's saved source catalogue.
-        // Even legacy WorkManager auto-jobs from an older installed APK exit.
-        if (BuildConfig.CODE_ONLY_LOGIN && !manual) return Result.success()
+        // STREAM auto-sync is opt-out, daily and Wi-Fi/unmetered only. Never
+        // start hidden downloads on devices where the viewer disabled it.
+        if (BuildConfig.CODE_ONLY_LOGIN && !manual &&
+            (!CatalogAutoRefreshPolicy.streamEnabled(app) ||
+                !StreamCodeSession.isClaimed(app))) return Result.success()
         // A pending periodic job for a previously selected account must not
         // consume data or disk on a different active playlist.
         if (!manual && dao.activeProviderId() != provider.id) return Result.success()
@@ -75,8 +77,15 @@ class CatalogRefreshWorker(
         if (!CatalogSyncState.isReady(app, provider.id) || !dao.hasCatalog(provider.id)) return Result.success()
 
         val sourceChanged = PortalSyncBook.hasPendingSource(app, provider.id)
-        if (!manual && !sourceChanged && !CatalogAutoRefreshPolicy.isDue(
-                CatalogSyncState.lastSyncedAt(app, provider.id), System.currentTimeMillis()
+        // Only an explicitly approved user action may switch the Xtream
+        // source/credentials; automatic sync updates the CURRENT source only.
+        if (!manual && sourceChanged) return Result.success()
+        if (!manual && !CatalogAutoRefreshPolicy.isDue(
+                CatalogSyncState.lastSyncedAt(app, provider.id),
+                System.currentTimeMillis(),
+                if (BuildConfig.CODE_ONLY_LOGIN) CatalogAutoRefreshPolicy.STREAM_MINIMUM_GAP_MS
+                else CatalogAutoRefreshPolicy.MINIMUM_GAP_MS,
+                clockRollbackIsDue = BuildConfig.CODE_ONLY_LOGIN
             )
         ) return Result.success()
         // A streaming player must not compete with a full-library download/SQLite promotion.
@@ -148,7 +157,15 @@ class CatalogRefreshWorker(
                     }
                 )
             }
-            if (sync.failedSectionCount > 0) return retryOrFail(manual, "INCOMPLETE")
+            if (sync.failedSectionCount > 0) {
+                // PlaylistManager already retries each incomplete response.
+                // A manual update must not silently sit at ~90% through four
+                // more WorkManager runs; retain the staged verified sections.
+                return if (manual) Result.failure(workDataOf(
+                    KEY_ERROR to "INCOMPLETE", KEY_STAGE to lastStage,
+                    KEY_PERCENT to lastPercent
+                )) else Result.retry()
+            }
             if (sync.freshItemCount <= 0) {
                 // A zero-item Xtream reply must never replace the known-good catalog.
                 checkpoint.discard(saved, dao)
@@ -210,13 +227,24 @@ class CatalogRefreshWorker(
             when {
                 promoted -> Result.success()
                 CatalogRefreshCommitPolicy.shouldFailManualCommitTimeout(manual, lastStage) ->
-                    Result.failure(workDataOf(KEY_ERROR to "COMMIT_TIMEOUT"))
+                    Result.failure(workDataOf(KEY_ERROR to "COMMIT_TIMEOUT", KEY_STAGE to lastStage,
+                        KEY_PERCENT to lastPercent))
+                manual -> Result.failure(workDataOf(KEY_ERROR to "SOURCE_TIMEOUT",
+                    KEY_STAGE to lastStage, KEY_PERCENT to lastPercent))
                 else -> retryOrFail(manual, "TIMEOUT")
             }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
-            if (promoted) Result.success() else retryOrFail(manual, "NETWORK")
+            when {
+                promoted -> Result.success()
+                manual && lastStage == "SERIES" ->
+                    // Xtream already attempted bounded source retries. Do not
+                    // send users through four more 90% loops with no diagnosis.
+                    Result.failure(workDataOf(KEY_ERROR to "SERIES_INTERRUPTED",
+                        KEY_STAGE to lastStage, KEY_PERCENT to lastPercent))
+                else -> retryOrFail(manual, "NETWORK")
+            }
         } finally {
             // On a timeout/cancellation/temporary error keep the *staged* completed sections.
             // Incomplete streamed sections are cleared and retried on the next worker run.
@@ -245,9 +273,16 @@ class CatalogRefreshWorker(
         fun manualWorkName(providerId: String): String = MANUAL_NAME_PREFIX + providerId
         // Keep the existing unique name so UPDATE replaces the old 24-hour schedule.
         private const val AUTO_PERIODIC_NAME = "blofy-catalog-auto-24h"
+        private const val STREAM_PERIODIC_NAME = "blofy-stream-catalog-daily"
+        private const val STREAM_SCHEDULE_PREFS = "blofy_stream_catalog_schedule_v1"
+        private const val STREAM_PROVIDER_KEY = "provider_id"
 
         private val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
+            .setRequiresStorageNotLow(true)
+            .build()
+        private val streamAutoConstraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.UNMETERED)
             .setRequiresStorageNotLow(true)
             .build()
 
@@ -264,6 +299,7 @@ class CatalogRefreshWorker(
             work.cancelUniqueWork(LEGACY_PERIODIC_NAME)
             work.cancelUniqueWork(AUTO_PERIODIC_NAME)
             work.cancelUniqueWork(NOW_NAME_PREFIX + providerId)
+            work.cancelUniqueWork(STREAM_PERIODIC_NAME)
         }
 
         fun cancelLegacyAutomatic(context: Context) {
@@ -271,28 +307,54 @@ class CatalogRefreshWorker(
         }
 
         /**
-         * One active provider is checked about every 30 minutes when system conditions allow.
-         * Actual runs can be deferred by Android or while the viewer is playing video.
+         * STREAM: once daily on Wi-Fi/unmetered, idle from playback, only the active
+         * provider. WorkManager may defer on TVs; it is not an exact alarm.
+         * PLAYER retains its previous 30-minute policy and unique name.
          */
         fun scheduleAutomatic(context: Context, providerId: String) {
             if (providerId.isBlank()) return
-            if (BuildConfig.CODE_ONLY_LOGIN) {
-                cancelStreamAutomatic(context, providerId)
-                return
+            val app = context.applicationContext
+            val work = WorkManager.getInstance(app)
+            val stream = BuildConfig.CODE_ONLY_LOGIN
+            if (stream) {
+                // Retire old 30-min jobs once after upgrade; never cancel the
+                // new daily job on every Home resume.
+                work.cancelUniqueWork(LEGACY_PERIODIC_NAME)
+                work.cancelUniqueWork(AUTO_PERIODIC_NAME)
+                work.cancelUniqueWork(NOW_NAME_PREFIX + providerId)
+                val prefs = app.getSharedPreferences(STREAM_SCHEDULE_PREFS, Context.MODE_PRIVATE)
+                val previous = prefs.getString(STREAM_PROVIDER_KEY, null)
+                if (!CatalogAutoRefreshPolicy.streamEnabled(app)) {
+                    work.cancelUniqueWork(STREAM_PERIODIC_NAME)
+                    return
+                }
+                if (previous != providerId) {
+                    work.cancelUniqueWork(STREAM_PERIODIC_NAME)
+                    check(prefs.edit().putString(STREAM_PROVIDER_KEY, providerId).commit()) {
+                        "Unable to save automatic sync provider"
+                    }
+                }
             }
             val request = PeriodicWorkRequestBuilder<CatalogRefreshWorker>(
-                CatalogAutoRefreshPolicy.INTERVAL_MINUTES, TimeUnit.MINUTES
+                if (stream) CatalogAutoRefreshPolicy.STREAM_INTERVAL_MINUTES
+                else CatalogAutoRefreshPolicy.INTERVAL_MINUTES,
+                TimeUnit.MINUTES
             )
-                .setConstraints(constraints)
+                .setConstraints(if (stream) streamAutoConstraints else constraints)
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10, TimeUnit.MINUTES)
                 .setInputData(androidx.work.workDataOf(KEY_PROVIDER_ID to providerId, KEY_MANUAL to false))
                 .build()
-            WorkManager.getInstance(context.applicationContext).enqueueUniquePeriodicWork(
-                AUTO_PERIODIC_NAME, ExistingPeriodicWorkPolicy.UPDATE, request
+            // UPDATE preserves the periodic cadence while safely refreshing
+            // the provider input after a code change or OFF -> ON toggle.
+            work.enqueueUniquePeriodicWork(
+                if (stream) STREAM_PERIODIC_NAME else AUTO_PERIODIC_NAME,
+                ExistingPeriodicWorkPolicy.UPDATE, request
             )
         }
 
         fun enqueueIfStale(context: Context, providerId: String) {
+            // STREAM's scheduled periodic job already checks last successful sync;
+            // a second Home-triggered one-time job would duplicate downloads.
             if (BuildConfig.CODE_ONLY_LOGIN) return
             if (CatalogAutoRefreshPolicy.isDue(
                     CatalogSyncState.lastSyncedAt(context, providerId), System.currentTimeMillis()

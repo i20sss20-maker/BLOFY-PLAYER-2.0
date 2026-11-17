@@ -74,6 +74,28 @@ class CatalogRefreshCheckpointTest {
         assertEquals(0, checkpoint.visiblePercent())
     }
 
+    @Test fun interruptedSeriesAtNinetyResumesFromVerifiedMoviesSixtySix(): Unit = runBlocking(Dispatchers.IO) {
+        val dao = db.dao()
+        val checkpoint = CatalogRefreshCheckpoint(app, source.id)
+        val first = checkpoint.prepare(source, dao)
+        dao.replaceCatalog(first.stagedId, "live", emptyList(), listOf(item(first.stagedId, "live", 10)))
+        checkpoint.completed(first, "live", dao)
+        dao.replaceCatalog(first.stagedId, "movie", emptyList(), listOf(item(first.stagedId, "movie", 20)))
+        checkpoint.completed(first, "movie", dao)
+        // 90% was only an in-flight response, not a completed SERIES section.
+        dao.replaceCatalog(first.stagedId, "series", emptyList(), listOf(item(first.stagedId, "series", 30)))
+        assertEquals(90, checkpoint.recordPercent(first, 90))
+        assertEquals(90, checkpoint.visiblePercent())
+        val restarted = checkpoint.prepare(source, dao)
+        assertEquals(first.stagedId, restarted.stagedId)
+        assertEquals(setOf("live", "movie"), restarted.completed)
+        assertEquals(66, checkpoint.percent(restarted))
+        assertEquals(66, checkpoint.visiblePercent())
+        assertEquals(0, dao.catalogCountAll(first.stagedId, "series"))
+        assertEquals(1, dao.catalogCountAll(first.stagedId, "movie"))
+        assertNotNull(dao.stream(item(source.id, "live", 1).key))
+    }
+
     @Test fun credentialChangeDiscardsOldCandidateAndStartsNewStage(): Unit = runBlocking(Dispatchers.IO) {
         val dao = db.dao()
         val checkpoint = CatalogRefreshCheckpoint(app, source.id)

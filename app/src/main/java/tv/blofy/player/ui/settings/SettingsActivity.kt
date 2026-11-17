@@ -33,6 +33,7 @@ import tv.blofy.player.core.identity.StreamCodeClient
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.device.StreamDeviceCompatibility
 import tv.blofy.player.core.diagnostics.StreamConnectionDiagnostics
+import tv.blofy.player.data.CatalogAutoRefreshPolicy
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.CatalogRefreshWorker
 import tv.blofy.player.data.LocalStorageManager
@@ -56,6 +57,7 @@ class SettingsActivity : AppCompatActivity() {
     private val sections = mutableListOf<GridLayout>()
     private lateinit var storageCard: SettingCard
     private lateinit var refreshCard: SettingCard
+    private var streamAutoSyncCard: SettingCard? = null
     private var refreshJobs: LiveData<List<WorkInfo>>? = null
     private var observedRefreshProvider: String? = null
     private var refreshState: WorkInfo.State? = null
@@ -182,6 +184,22 @@ class SettingsActivity : AppCompatActivity() {
         refreshCard = actionCard(copy("تحديث المحتوى", "Refresh content"),
             copy("تحديث القنوات والأفلام والمسلسلات دون حذف المكتبة", "Refresh live, movies and series safely")) { refreshLibrary() }
         addCard(refreshCard)
+        streamAutoSyncCard = actionCard(copy("المزامنة التلقائية", "Automatic synchronization"),
+            copy("يومياً عبر Wi-Fi عندما لا تشاهد، مع بقاء المكتبة القديمة آمنة",
+                "Daily on Wi-Fi when idle; previous library stays safe")) {
+            try {
+                CatalogAutoRefreshPolicy.setStreamEnabled(
+                    applicationContext, !CatalogAutoRefreshPolicy.streamEnabled(applicationContext))
+                val id = provider?.id ?: StreamCodeSession.providerId
+                if (id.isNotBlank()) CatalogRefreshWorker.scheduleAutomatic(applicationContext, id)
+                updateStreamAutoSyncCard()
+            } catch (_: Exception) {
+                refreshNotice = copy("تعذر حفظ إعداد المزامنة", "Unable to save sync preference")
+                updateSyncStatus()
+            }
+        }
+        streamAutoSyncCard?.let(::addCard)
+        updateStreamAutoSyncCard()
 
         addSection(page, copy("المشاهدة", "Playback"))
         addCard(cycleSetting(copy("حجم الصورة", "Picture fit"), RuntimeSettings.KEY_ASPECT,
@@ -713,6 +731,13 @@ class SettingsActivity : AppCompatActivity() {
             refreshRequested && refreshState == WorkInfo.State.FAILED && refreshError == "COMMIT_TIMEOUT" ->
                 copy("تعذر إنهاء حفظ التحديث. مكتبتك السابقة محفوظة؛ اضغط لإعادة المحاولة.",
                     "Saving the refresh timed out. Your previous library is safe; tap to retry.")
+            refreshRequested && refreshState == WorkInfo.State.FAILED && refreshError == "SOURCE_TIMEOUT" ->
+                copy("تأخر مصدر المحتوى أثناء تنزيل القنوات أو المسلسلات. مكتبتك محفوظة؛ اضغط لاستكمال التحديث.",
+                    "Content source timed out while downloading. Your library is safe; tap to retry.")
+            refreshRequested && refreshState == WorkInfo.State.FAILED &&
+                refreshError == "SERIES_INTERRUPTED" ->
+                copy("انقطع مصدر المسلسلات أثناء المزامنة. تم حفظ الأقسام المكتملة؛ اضغط لاستكمالها.",
+                    "Series source was interrupted. Completed sections are saved; tap to resume.")
             refreshState == WorkInfo.State.RUNNING ->
                 if (refreshStage == "SAVE") copy(
                     "اكتمل تنزيل المحتوى • جارٍ حفظ التحديث محلياً ومكتبتك السابقة متاحة",
@@ -725,6 +750,19 @@ class SettingsActivity : AppCompatActivity() {
         }
         refreshCard.bind(getString(R.string.setting_refresh_content), value, hint)
         refreshCard.setBusy(busy)
+    }
+
+    /** STREAM automatic sync is on by default but explicitly user-controllable. */
+    private fun updateStreamAutoSyncCard() {
+        val enabled = CatalogAutoRefreshPolicy.streamEnabled(applicationContext)
+        streamAutoSyncCard?.bind(
+            copy("المزامنة التلقائية", "Automatic synchronization"),
+            if (enabled) copy("✓ مفعّلة • يومياً", "✓ Enabled • daily")
+            else copy("متوقفة", "Disabled"),
+            if (enabled) copy("Wi-Fi فقط • أثناء عدم المشاهدة • يمكن التأجيل حسب نظام الجهاز",
+                "Wi-Fi only • no playback • Android may defer the run")
+            else copy("اضغط لتفعيل التحديث اليومي للمحتوى", "Tap to enable daily catalog sync")
+        )
     }
 
     private fun syncSubtitle(): String {

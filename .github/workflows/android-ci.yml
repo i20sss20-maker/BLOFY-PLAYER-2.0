@@ -127,7 +127,7 @@ jobs:
       - name: Verify actual catalog queries on 200k rows
         run: python3 tools/check_catalog_queries.py
       - name: Verify Play Xiaomi-design UX / STREAM candidate 2000088 manifest and TV routes
-        if: github.head_ref != 'fix/stream-55832-catalog-refresh-stall-20261117' && github.head_ref != 'integration/stream-55832-stable-tv-catalog-20261117' && github.head_ref != 'feature/stream-separate-live-search-windows-20261117' && github.head_ref != 'feature/stream-nextgen-phase1-20261117'
+        if: github.head_ref != 'fix/stream-55832-catalog-refresh-stall-20261117' && github.head_ref != 'integration/stream-55832-stable-tv-catalog-20261117' && github.head_ref != 'feature/stream-separate-live-search-windows-20261117' && github.head_ref != 'feature/stream-nextgen-phase1-20261117' && github.head_ref != 'fix/stream-55835-auto-daily-sync-resume-90-20261117'
         env:
           BLOFY_EXPECTED_PLAY_VERSION_CODE: "2000088"
         run: python3 tools/verify_play_2000073.py
@@ -144,7 +144,7 @@ jobs:
             -PBLOFY_ACTIVATION_BASE_URL=https://api.blofyplayer.com \
             lintDebug assembleDebug assembleDebugAndroidTest 2>&1 | tee -a gradle-ci.log
       - name: Verify channel and search are separate windows on STREAM
-        if: github.head_ref == 'feature/stream-separate-live-search-windows-20261117' || github.head_ref == 'feature/stream-nextgen-phase1-20261117'
+        if: github.head_ref == 'feature/stream-separate-live-search-windows-20261117' || github.head_ref == 'feature/stream-nextgen-phase1-20261117' || github.head_ref == 'fix/stream-55835-auto-daily-sync-resume-90-20261117'
         shell: bash
         run: |
           set -euo pipefail
@@ -154,8 +154,8 @@ jobs:
           grep -Fq 'val searchButton = TextView(activity)' "$file"
           ! grep -Fq 'val searchField = if (BuildConfig.CODE_ONLY_LOGIN)' "$file"
 
-      - name: Test STREAM 55.8.34 code-only catalog persistence regression
-        if: github.head_ref == 'fix/stream-55832-catalog-refresh-stall-20261117' || github.head_ref == 'integration/stream-55832-stable-tv-catalog-20261117' || github.head_ref == 'feature/stream-separate-live-search-windows-20261117' || github.head_ref == 'feature/stream-nextgen-phase1-20261117'
+      - name: Test STREAM 55.8.35 code-only catalog persistence regression
+        if: github.head_ref == 'fix/stream-55832-catalog-refresh-stall-20261117' || github.head_ref == 'integration/stream-55832-stable-tv-catalog-20261117' || github.head_ref == 'feature/stream-separate-live-search-windows-20261117' || github.head_ref == 'feature/stream-nextgen-phase1-20261117' || github.head_ref == 'fix/stream-55835-auto-daily-sync-resume-90-20261117'
         shell: bash
         run: |
           set -euo pipefail
@@ -168,7 +168,9 @@ jobs:
             --tests 'tv.blofy.player.data.CatalogRefreshCommitPolicyTest' \
             --tests 'tv.blofy.player.ui.player.LivePlayerMenuPolicyTest' \
             --tests 'tv.blofy.player.core.remote.FocusCheckpointStoreTest' \
-            --tests 'tv.blofy.player.ui.library.DownloadTransferPolicyTest'
+            --tests 'tv.blofy.player.ui.library.DownloadTransferPolicyTest' \
+            --tests 'tv.blofy.player.data.CatalogRefreshCheckpointTest' \
+            --tests 'tv.blofy.player.data.CatalogAutoRefreshPolicyTest'
 
       - name: Upload Gradle diagnostics
         if: always()
@@ -212,7 +214,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
       - name: Build Google Play 2000086 debug manifest variant
-        if: github.head_ref != 'fix/stream-55832-catalog-refresh-stall-20261117' && github.head_ref != 'integration/stream-55832-stable-tv-catalog-20261117' && github.head_ref != 'feature/stream-separate-live-search-windows-20261117' && github.head_ref != 'feature/stream-nextgen-phase1-20261117'
+        if: github.head_ref != 'fix/stream-55832-catalog-refresh-stall-20261117' && github.head_ref != 'integration/stream-55832-stable-tv-catalog-20261117' && github.head_ref != 'feature/stream-separate-live-search-windows-20261117' && github.head_ref != 'feature/stream-nextgen-phase1-20261117' && github.head_ref != 'fix/stream-55835-auto-daily-sync-resume-90-20261117'
         shell: bash
         run: |
           set -euxo pipefail
@@ -235,7 +237,7 @@ jobs:
           done
           cp "$APK" app/build/outputs/apk/debug/blofy-play-2000086-test-only.apk
       - name: Save Google Play 2000086 debug artifact
-        if: github.head_ref != 'fix/stream-55832-catalog-refresh-stall-20261117' && github.head_ref != 'integration/stream-55832-stable-tv-catalog-20261117' && github.head_ref != 'feature/stream-separate-live-search-windows-20261117' && github.head_ref != 'feature/stream-nextgen-phase1-20261117'
+        if: github.head_ref != 'fix/stream-55832-catalog-refresh-stall-20261117' && github.head_ref != 'integration/stream-55832-stable-tv-catalog-20261117' && github.head_ref != 'feature/stream-separate-live-search-windows-20261117' && github.head_ref != 'feature/stream-nextgen-phase1-20261117' && github.head_ref != 'fix/stream-55835-auto-daily-sync-resume-90-20261117'
         uses: actions/upload-artifact@v4
         with:
           name: BLOFY-PLAY-2000086-TEST-ONLY-${{ github.sha }}
@@ -247,7 +249,7 @@ jobs:
   owner-signed-stream-qa:
     # Private owner-signed artifact only. Never upload to release, website or customer update feed.
     needs: verify
-    if: github.event_name == 'pull_request' && (github.head_ref == 'integration/stream-55832-stable-tv-catalog-20261117' || github.head_ref == 'feature/stream-separate-live-search-windows-20261117' || github.head_ref == 'feature/stream-nextgen-phase1-20261117')
+    if: github.event_name == 'pull_request' && (github.head_ref == 'integration/stream-55832-stable-tv-catalog-20261117' || github.head_ref == 'feature/stream-separate-live-search-windows-20261117' || github.head_ref == 'feature/stream-nextgen-phase1-20261117' || github.head_ref == 'fix/stream-55835-auto-daily-sync-resume-90-20261117')
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 150
@@ -270,8 +272,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          grep -Fq 'versionCode = 2000111' app/build.gradle.kts
-          grep -Fq 'versionName = "2.0.0-rc07.55.8.34"' app/build.gradle.kts
+          grep -Fq 'versionCode = 2000112' app/build.gradle.kts
+          grep -Fq 'versionName = "2.0.0-rc07.55.8.35"' app/build.gradle.kts
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;$ANDROID_BUILD_TOOLS_VERSION" "ndk;$ANDROID_NDK_VERSION" 'cmake;3.22.1'
           if ! command -v ninja >/dev/null; then sudo apt-get update && sudo apt-get install -y ninja-build; fi
@@ -297,7 +299,9 @@ jobs:
             --tests 'tv.blofy.player.ui.player.LiveChannelPanelPolicyTest' \
             --tests 'tv.blofy.player.ui.player.LivePlayerMenuPolicyTest' \
             --tests 'tv.blofy.player.core.remote.FocusCheckpointStoreTest' \
-            --tests 'tv.blofy.player.ui.library.DownloadTransferPolicyTest'
+            --tests 'tv.blofy.player.ui.library.DownloadTransferPolicyTest' \
+            --tests 'tv.blofy.player.data.CatalogRefreshCheckpointTest' \
+            --tests 'tv.blofy.player.data.CatalogAutoRefreshPolicyTest'
       - name: Sign full BLOFY STREAM with original owner certificate
         shell: bash
         env:
@@ -333,7 +337,7 @@ jobs:
           test -s "$source_apk"
           tools="$ANDROID_HOME/build-tools/$ANDROID_BUILD_TOOLS_VERSION"
           "$tools/aapt" dump badging "$source_apk" > "$RUNNER_TEMP/stream-badging.txt"
-          grep -Fq "name='tv.blofy.player.v2.stream' versionCode='2000111' versionName='2.0.0-rc07.55.8.34-STREAM'" "$RUNNER_TEMP/stream-badging.txt"
+          grep -Fq "name='tv.blofy.player.v2.stream' versionCode='2000112' versionName='2.0.0-rc07.55.8.35-STREAM'" "$RUNNER_TEMP/stream-badging.txt"
           ! grep -Fq 'application-debuggable' "$RUNNER_TEMP/stream-badging.txt"
           "$tools/apksigner" verify --verbose --print-certs "$source_apk" > "$RUNNER_TEMP/stream-signatures.txt"
           cert="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/stream-signatures.txt" | head -n1 | tr -d '[:space:]-:' | tr '[:lower:]' '[:upper:]')"
@@ -344,14 +348,14 @@ jobs:
             grep -Fxq "lib/$abi/libffmpegJNI.so" "$RUNNER_TEMP/entries.txt"
           done
           mkdir -p build/owner-signed-qa
-          name="BLOFY-STREAM-55.8.34-NEXTGEN-FOCUS-DOWNLOADS-OWNER-SIGNED.apk"
+          name="BLOFY-STREAM-55.8.35-DAILY-AUTOSYNC-90-RECOVERY-OWNER-SIGNED.apk"
           cp "$source_apk" "build/owner-signed-qa/$name"
           (cd build/owner-signed-qa && sha256sum "$name" > SHA256SUMS && sha256sum -c SHA256SUMS)
-          printf 'application_id=tv.blofy.player.v2.stream\nversion_code=2000111\nsource_sha=%s\nchannel=private_owner_qa_no_auto_update\n' "$GITHUB_SHA" > build/owner-signed-qa/IDENTITY.txt
+          printf 'application_id=tv.blofy.player.v2.stream\nversion_code=2000112\nsource_sha=%s\nchannel=private_owner_qa_no_auto_update\n' "$GITHUB_SHA" > build/owner-signed-qa/IDENTITY.txt
       - name: Upload verified owner-signed APK for manual testing only
         uses: actions/upload-artifact@v4
         with:
-          name: BLOFY-STREAM-55.8.34-NEXTGEN-PHASE1-OWNER-SIGNED-${{ github.sha }}
+          name: BLOFY-STREAM-55.8.35-DAILY-AUTOSYNC-OWNER-SIGNED-${{ github.sha }}
           path: |
             build/owner-signed-qa/
             build/ffmpeg-native/compliance/

@@ -1135,8 +1135,14 @@ class HomeActivity : AppCompatActivity() {
                     refreshError = current?.outputData?.getString(CatalogRefreshWorker.KEY_ERROR)
                     val observed = current?.progress?.getInt(CatalogRefreshWorker.KEY_PERCENT, 0) ?: 0
                     val saved = CatalogRefreshCheckpoint(applicationContext, providerId).visiblePercent()
-                    refreshPercent = if (current?.state == WorkInfo.State.SUCCEEDED) 100
-                        else maxOf(refreshPercent, saved, observed).coerceIn(0, 95)
+                    // A restart may legitimately rewind to the last completed
+                    // catalog section. Do not cling to the old 90% from a
+                    // partially parsed SERIES response when work retries.
+                    refreshPercent = when {
+                        current?.state == WorkInfo.State.SUCCEEDED -> 100
+                        refreshStage == "START" -> maxOf(saved, observed).coerceIn(0, 95)
+                        else -> maxOf(refreshPercent, saved, observed).coerceIn(0, 95)
+                    }
                     renderManualRefreshStatus(current?.state)
                 }
             }
@@ -1240,6 +1246,9 @@ class HomeActivity : AppCompatActivity() {
                 WorkInfo.State.FAILED, WorkInfo.State.CANCELLED -> when (refreshError) {
                     "STORAGE" -> "المساحة غير كافية • تحقق من التخزين"
                     "INTEGRITY", "EMPTY", "INCOMPLETE" -> "المصدر ناقص • لم يتم استبدال مكتبتك"
+                    "TIMEOUT", "SOURCE_TIMEOUT", "SERIES_INTERRUPTED" ->
+                        "تأخر أو انقطع مصدر المسلسلات • مكتبتك محفوظة، أعد المحاولة"
+                    "COMMIT_TIMEOUT" -> "تأخر الحفظ النهائي • مكتبتك محفوظة، أعد المحاولة"
                     else -> "تعذر التحديث • اضغط لإعادة المحاولة"
                 }
                 else -> getString(R.string.home_catalog_refresh_waiting_v74)
