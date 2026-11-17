@@ -115,7 +115,7 @@ export function createContentHubServer({storage,lease,
  let seekPreviewBuilding=false,seekPreviewThrottleUntil=0;
  let timelineRendering=false,timelineLastRequestAt=0;
  let physicalHeadAuditBusy=false;
- let fullCopyAuditBusy=false,fullCopyAuditAt=0;
+ let fullCopyAuditBusy=false,fullCopyAuditAt=0,lastFullCopyAudit=null;
  const timelineClipCache=createPrivateTimelineClipCache();
  let episodeProbeBusy=false,episodeProbeAt=0,lastEpisodeProbe=null;
  let episodeCopyBusy=false,episodeCopyAbort=null,lastEpisodeCopy=null;
@@ -168,13 +168,21 @@ export function createContentHubServer({storage,lease,
   // verified and explicitly configured private object. No Xtream request,
   // new storage, playlist changes, or subscriber routing.
   // Gate defaults OFF. Never automatically runs on service startup.
-  if(path==='/internal/private-copy/audit-full'){
-   if(req.method!=='POST'||String(req.url||'').includes('?'))
-    return json(res,405,{ok:false,code:'private_copy_audit_post_only'});
+  if(path==='/internal/private-copy/audit-full'||
+     path==='/internal/private-copy/audit-full/status'){
+   const statusOnly=path.endsWith('/status');
+   if((statusOnly&&req.method!=='GET')||
+      (!statusOnly&&req.method!=='POST')||
+      String(req.url||'').includes('?'))
+    return json(res,405,{ok:false,code:'private_copy_audit_method_denied'});
    if(pilotEnv.BLOFY_CONTENT_HUB_FULL_SHA_AUDIT_ENABLED!=='1'||
       pilotEnv.BLOFY_CONTENT_HUB_STORAGE_RIGHTS_CONFIRMED!=='1'||
       req.headers['x-blofy-owner-action']!=='audit-one-stored-private-copy')
     return json(res,404,{ok:false,code:'private_copy_audit_disabled'});
+   if(statusOnly)return json(res,200,{
+    ok:true,privateOnly:true,readOnly:true,providerRequests:0,
+    automaticCopyStarted:false,customerCutover:false,
+    status:lastFullCopyAudit||{state:'idle',fullSha256Verified:false}});
    if(fullCopyAuditBusy)return json(res,429,{
     ok:false,code:'private_copy_audit_busy'});
    if(fullCopyAuditAt&&Date.now()-fullCopyAuditAt<60000)
@@ -194,27 +202,42 @@ export function createContentHubServer({storage,lease,
       (kind==='episode'&&pilotEnv.BLOFY_CONTENT_HUB_EPISODE_RIGHTS_CONFIRMED!=='1'))
     return json(res,403,{ok:false,code:'private_copy_audit_scope_denied'});
    fullCopyAuditBusy=true;fullCopyAuditAt=Date.now();
+   const id=randomUUID();
+   lastFullCopyAudit={state:'running',auditId:id,kind,runId,
+    fullSha256Verified:false,startedAt:new Date().toISOString()};
    const controller=new AbortController();
-   const timer=setTimeout(()=>controller.abort(),290000);timer.unref?.();
-   const disconnect=()=>controller.abort();
-   res.once('close',disconnect);
-   try{
-    const result=await fullCopyAuditor({
-     kind,runId,lease,storage,signal:controller.signal,maxDurationMs:285000});
-    if(!controller.signal.aborted&&!res.destroyed)
-     return json(res,result.ok?200:409,{
-      ...result,privateOnly:true,customerCutover:false,
-      providerRequests:0,automaticCopyStarted:false,
-      operatorRequested:true});
-   }catch{
-    if(!controller.signal.aborted&&!res.destroyed)
-     return json(res,503,{ok:false,code:'private_copy_audit_unavailable',
-      providerRequests:0,customerCutover:false});
-   }finally{
-    clearTimeout(timer);res.off('close',disconnect);
-    fullCopyAuditBusy=false;
-   }
-   return;
+   const timer=setTimeout(()=>controller.abort(),285000);
+   timer.unref?.();
+   // Return immediately: an entire stored movie can take minutes to
+   // re-read, so no HTTP client or browser should stay open for the audit.
+   // Restarting the service resets this in-memory result to idle; it can
+   // NEVER falsely report that a previous process verified fresh bytes.
+   void Promise.resolve().then(()=>fullCopyAuditor({
+    kind,runId,lease,storage,signal:controller.signal,maxDurationMs:280000
+   })).then(result=>{
+    const verified=!controller.signal.aborted&&result?.ok===true&&
+     result.fullSha256Verified===true&&
+     result.fullFileReadBackVerified===true;
+    const code=/^[a-z0-9_]{1,80}$/.test(String(result?.code||''))?
+     result.code:'private_copy_audit_unavailable';
+    lastFullCopyAudit={state:verified?'verified':'failed',auditId:id,
+     kind,runId,code,fullSha256Verified:verified,
+     bytesRead:Math.max(0,Number(result?.bytesRead)||0),
+     checkedParts:Math.max(0,Number(result?.checkedParts)||0),
+     startedAt:lastFullCopyAudit.startedAt,
+     finishedAt:new Date().toISOString(),customerCutover:false};
+   }).catch(()=>{
+    lastFullCopyAudit={state:'failed',auditId:id,kind,runId,
+     code:'private_copy_audit_unavailable',fullSha256Verified:false,
+     startedAt:lastFullCopyAudit.startedAt,
+     finishedAt:new Date().toISOString(),customerCutover:false};
+   }).finally(()=>{
+    fullCopyAuditBusy=false;clearTimeout(timer);
+    logger('BLOFY_CONTENT_HUB_PRIVATE_FULL_AUDIT',lastFullCopyAudit);
+   });
+   return json(res,202,{ok:true,code:'private_copy_audit_started',
+    state:'running',auditId:id,privateOnly:true,readOnly:true,
+    providerRequests:0,automaticCopyStarted:false,customerCutover:false});
   }
   // Bounded physical S3 HEAD check of one verified catalog movie or
   // episode: strictly owner-only, one 8-chunk batch at a time, no media GET.
