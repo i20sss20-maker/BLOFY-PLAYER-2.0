@@ -42,8 +42,7 @@ internal object OfflineDownloadStore {
         val reason: Int,
         val readyUri: Uri?
     ) {
-        val percent: Int? get() = if (total > 0L) ((downloaded * 100L) / total)
-            .toInt().coerceIn(0,100) else null
+        val percent: Int? get() = DownloadTransferPolicy.percent(downloaded, total)
     }
 
     private fun manager(context: Context) =
