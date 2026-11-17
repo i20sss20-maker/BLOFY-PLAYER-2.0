@@ -84,7 +84,8 @@ class CatalogRefreshWorker(
                 CatalogSyncState.lastSyncedAt(app, provider.id),
                 System.currentTimeMillis(),
                 if (BuildConfig.CODE_ONLY_LOGIN) CatalogAutoRefreshPolicy.STREAM_MINIMUM_GAP_MS
-                else CatalogAutoRefreshPolicy.MINIMUM_GAP_MS
+                else CatalogAutoRefreshPolicy.MINIMUM_GAP_MS,
+                clockRollbackIsDue = BuildConfig.CODE_ONLY_LOGIN
             )
         ) return Result.success()
         // A streaming player must not compete with a full-library download/SQLite promotion.
