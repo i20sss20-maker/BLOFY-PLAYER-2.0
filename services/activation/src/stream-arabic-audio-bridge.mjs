@@ -45,6 +45,10 @@ export function sniffFirstAudioMime(sample) {
   if(b.length>=3&&b.subarray(0,3).toString('ascii')==='ID3')return 'audio/mpeg';
   if(b.length>=4&&b.subarray(0,4).toString('ascii')==='OggS')return 'audio/ogg';
   if(b.length>=4&&b.subarray(0,4).toString('ascii')==='fLaC')return 'audio/flac';
+  if(b.length>=4&&b.subarray(0,4).toString('ascii')==='ADIF')return 'audio/aac';
+  if(b.length>=12&&b.subarray(4,8).toString('ascii')==='ftyp'&&
+     /^M4[ABP] $/.test(b.subarray(8,12).toString('ascii')))
+    return 'audio/mp4';
   if(b.length>=3&&b[0]===0xff&&(b[1]&0xf6)===0xf0)
     return 'audio/aac';
   if(b.length>=3&&b[0]===0xff&&(b[1]&0xe0)===0xe0)
@@ -53,6 +57,30 @@ export function sniffFirstAudioMime(sample) {
     return 'video/mp2t';
   return null;
 }
+
+// A small, content-free error taxonomy for operator diagnostics.
+// Never reveal an upstream payload, token, URL, station name or IP.
+export function audioPayloadClass(sample){
+ const b=Buffer.isBuffer(sample)?sample:Buffer.from(sample||[]);
+ if(sniffFirstAudioMime(b))return 'audio_packet';
+ if(!b.length)return 'empty_stream';
+ const prefix=b.subarray(0,96).toString('utf8').trimStart().toLowerCase();
+ if(prefix.startsWith('#extm3u'))return 'hls_playlist';
+ if(prefix.startsWith('<!doctype')||prefix.startsWith('<html'))
+  return 'html_document';
+ if(prefix.startsWith('{')||prefix.startsWith('['))return 'json_document';
+ if(prefix.startsWith('icy '))return 'icy_header';
+ if(prefix.startsWith('<?xml'))return 'xml_document';
+ if(/^[\\x20-\\x7e\\r\\n\\t]{16,}$/.test(prefix.slice(0,64)))
+  return 'text_response';
+ return 'unknown_binary';
+}
+const audioFailureCode=sample=>{
+ const kind=audioPayloadClass(sample);
+ return ['hls_playlist','html_document','json_document','icy_header',
+  'xml_document','text_response','empty_stream'].includes(kind)?
+  'upstream_'+kind+'_not_progressive_audio':'upstream_did_not_return_audio';
+};
 
 export function pinnedAudioLookup(address) {
   return (_host, options, callback) => {
@@ -185,14 +213,14 @@ export function createProtectedArabicAudioBridge({
               audio.resume();
             }else if(prefix.length>=4096){
               audio.removeListener('data',sniff);
-              errorResponse(res,415,'upstream_did_not_return_audio');
+              errorResponse(res,415,audioFailureCode(prefix));
               audio.destroy();
               finish();
             }else audio.resume();
           };
           audio.on('data',sniff);
           audio.once('end',()=>{
-            if(!forwarding)errorResponse(res,415,'upstream_did_not_return_audio');
+            if(!forwarding)errorResponse(res,415,audioFailureCode(prefix));
             else if(!res.writableEnded)res.end();
             finish();
           });
