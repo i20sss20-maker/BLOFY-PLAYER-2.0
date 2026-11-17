@@ -321,3 +321,45 @@ each queue start. Browser sign-off is a prerequisite for queue start, not
 a replacement for those checks. Before bulk copying, verify one new
 episode from an operator-selected mapped series. All subscriber playback
 stays routed as before and no mass copy starts automatically.
+
+
+## 2026-11-17: draft full SHA-256 private copy re-audit (not deployed)
+
+An optional POST-only, bearer-protected endpoint
+`/internal/private-copy/audit-full` re-reads **one already verified** private
+movie or episode from its S3 chunks. It recomputes every chunk's recorded
+SHA-256 and the complete original file's SHA-256, without using the Xtream
+provider. It does not write to S3 or Postgres, start a download, or alter
+customer playback routes. A database manifest does **not** count as present
+storage without this independent read-back.
+
+The feature is **disabled by default**. For a future, separately authorized
+one-shot operator audit, the private Content Hub would require all of:
+
+- `BLOFY_CONTENT_HUB_FULL_SHA_AUDIT_ENABLED=1` explicitly set, only after
+  reviewing the estimated S3 read time/cost and production capacity;
+- `BLOFY_CONTENT_HUB_STORAGE_RIGHTS_CONFIRMED=1`, plus
+  `BLOFY_CONTENT_HUB_EPISODE_RIGHTS_CONFIRMED=1` for an episode;
+- a *preconfigured exact* `BLOFY_CONTENT_HUB_EPISODE_RUN_ID` for episode
+  or `BLOFY_CONTENT_HUB_BATCH_RUN_ID` for movie, referencing a fully
+  verified manifest;
+- a private operator Bearer token (>=32 characters), a POST request with
+  JSON `{"kind":"episode","runId":"<exact-approved-run>","confirmed":true}`,
+  and `x-blofy-owner-action: audit-one-stored-private-copy`.
+
+It refuses other run IDs, missing rights, concurrent calls and calls within
+60 seconds of the previous attempt. An individual audit is time bounded;
+a timeout or S3 failure must **not** count as verified. This route does not
+accept source URLs, perform source Range fetches, or expose private keys.
+Do not expose the Content Hub service on a public hostname.
+
+The complete-data read of a 1.44 GiB episode can incur real S3 I/O and
+should only be invoked during an observed quiet operator window. It does
+not independently prove audible audio/picture on Android TV, Android or
+Windows; those require separate device playback tests. Before any season
+copy, verify individual item rights, source capacity, cost, and the owner's
+browser device signoff. No bulk transfer or daily scheduler is enabled by
+this draft.
+
+Offline regression tests:
+`node --test services/content-hub/test/verified-copy-audit*.test.mjs`.
