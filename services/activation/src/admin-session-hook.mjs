@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { createAdminSessionStore } from './admin-session-store.mjs';
 import { verifyNativeXtreamCsrf } from './xtream-native-csrf.mjs';
 import { controlCenterAsset, controlCenterSnapshot } from './admin-control-center.mjs';
+import { proxyStreamOperator, operatorProxyPath } from './admin-stream-operator-proxy.mjs';
 
 const ADMIN_TOKEN = String(process.env.BLOFY_ADMIN_TOKEN || '').trim();
 const ADMIN_USERNAME = String(process.env.BLOFY_ADMIN_USERNAME || '').trim();
@@ -141,10 +142,30 @@ http.createServer = function patchedAdminSessionCreateServer(listener) {
     if (req.method==='GET' && url.pathname==='/releases-admin') { res.writeHead(302,{'location':'/admin#releases','cache-control':'no-store'}); res.end(); return; }
     if (req.method==='GET' && url.pathname==='/admin') return html(res, await validSession(req)?await dashboardPage():await loginPage());
     // Admin Control Center: same signed session, same domain, read-only service checks.
+    // Full original STREAM operator panel on the BLOFY website, protected
+    // by the existing admin session. No browser-visible cross-domain tokens.
     if (req.method==='GET' && url.pathname==='/admin/control-center') {
+      if (!await validSession(req)) return html(res,await loginPage());
+      return proxyStreamOperator(req,res,{pathOverride:'/operator'});
+    }
+    // Keep our earlier lightweight HTTP monitor at a separate admin URL.
+    if (req.method==='GET' && url.pathname==='/admin/control-center/health') {
       if (!await validSession(req)) return html(res,await loginPage());
       const asset=await controlCenterAsset('page');
       return html(res,asset.content);
+    }
+    // The operator UI uses root-absolute /operator/api/* fetch and media
+    // sources; route all of them back through this protected same-origin proxy.
+    if (operatorProxyPath(url.pathname)) {
+      const signed=await validSession(req);
+      if (!signed) {
+        if (req.method==='GET' && (url.pathname==='/operator'||url.pathname==='/operator/'))
+          return html(res,await loginPage());
+        return json(res,401,{error:'admin_session_required'});
+      }
+      if (req.method==='POST' && !sameOrigin(req))
+        return json(res,403,{error:'invalid_origin'});
+      return proxyStreamOperator(req,res);
     }
     if (req.method==='GET' && (url.pathname==='/admin/control-center/app.js' ||
         url.pathname==='/admin/control-center/style.css')) {
