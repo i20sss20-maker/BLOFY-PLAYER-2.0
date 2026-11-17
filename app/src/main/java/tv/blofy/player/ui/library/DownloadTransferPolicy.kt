@@ -22,6 +22,25 @@ internal object DownloadTransferPolicy {
             .coerceAtMost(86_400L)
     }
 
+    /** Avoid multiplying very large Content-Length values by 100 and overflowing Long. */
+    fun percent(downloadedBytes: Long, totalBytes: Long): Int? {
+        if (downloadedBytes < 0L || totalBytes <= 0L) return null
+        if (downloadedBytes >= totalBytes) return 100
+        return (downloadedBytes.toDouble() / totalBytes.toDouble() * 100.0)
+            .toInt().coerceIn(0, 100)
+    }
+
+    enum class RowAction { PLAY, EXPLAIN_FAILURE, REMOVE_OR_CANCEL }
+
+    /** Missing files and a 'successful' job without an accessible URI must be retryable. */
+    fun rowAction(status: Int, hasReadyUri: Boolean): RowAction = when {
+        status == android.app.DownloadManager.STATUS_SUCCESSFUL && hasReadyUri -> RowAction.PLAY
+        status == android.app.DownloadManager.STATUS_FAILED ||
+            status == OfflineDownloadStore.STATUS_MISSING ||
+            status == android.app.DownloadManager.STATUS_SUCCESSFUL -> RowAction.EXPLAIN_FAILURE
+        else -> RowAction.REMOVE_OR_CANCEL
+    }
+
     fun isValidDownloadedFile(status: Int, bytes: Long, hasUri: Boolean): Boolean =
         status == android.app.DownloadManager.STATUS_SUCCESSFUL && hasUri && bytes > 0L
 }
