@@ -36,12 +36,11 @@ class DownloadTransferPolicyTest {
 
     @Test fun downloadedButMissingFileShowsRecoveryInsteadOfWrongPlayAction() {
         val action = DownloadTransferPolicy::rowAction
-        val row = DownloadTransferPolicy.RowAction
-        assertEquals(row.PLAY, action(android.app.DownloadManager.STATUS_SUCCESSFUL, true))
-        assertEquals(row.EXPLAIN_FAILURE, action(android.app.DownloadManager.STATUS_SUCCESSFUL, false))
-        assertEquals(row.EXPLAIN_FAILURE, action(android.app.DownloadManager.STATUS_FAILED, false))
-        assertEquals(row.EXPLAIN_FAILURE, action(OfflineDownloadStore.STATUS_MISSING, false))
-        assertEquals(row.REMOVE_OR_CANCEL, action(android.app.DownloadManager.STATUS_RUNNING, false))
+        assertEquals(DownloadTransferPolicy.RowAction.PLAY, action(android.app.DownloadManager.STATUS_SUCCESSFUL, true))
+        assertEquals(DownloadTransferPolicy.RowAction.EXPLAIN_FAILURE, action(android.app.DownloadManager.STATUS_SUCCESSFUL, false))
+        assertEquals(DownloadTransferPolicy.RowAction.EXPLAIN_FAILURE, action(android.app.DownloadManager.STATUS_FAILED, false))
+        assertEquals(DownloadTransferPolicy.RowAction.EXPLAIN_FAILURE, action(OfflineDownloadStore.STATUS_MISSING, false))
+        assertEquals(DownloadTransferPolicy.RowAction.REMOVE_OR_CANCEL, action(android.app.DownloadManager.STATUS_RUNNING, false))
     }
 
     @Test fun readyRequiresActualBytesAndAccessibleUri() {
