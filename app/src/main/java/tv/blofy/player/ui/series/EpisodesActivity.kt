@@ -206,8 +206,11 @@ class EpisodesActivity : AppCompatActivity() {
         val result = runCatching {
             withContext(Dispatchers.IO) { PlaylistManager(XtreamClient.api, BlofyDatabase.get(applicationContext).dao()).syncSeriesEpisodes(provider, seriesId) }
         }
-        result.exceptionOrNull()?.let { if (it is CancellationException) throw it }
+        // A lifecycle pause can cancel the automatic coroutine while its
+        // request is in flight. Release the lock before rethrowing so the
+        // next onResume can safely refresh rather than getting stuck.
         syncInProgress = false
+        result.exceptionOrNull()?.let { if (it is CancellationException) throw it }
         val updatedState = result.fold(
             onSuccess = { when { it.episodeCount > 0 -> EpisodeLoadState.LOADED; it.payloadPresent -> EpisodeLoadState.EMPTY_PROVIDER_RESPONSE; else -> EpisodeLoadState.INVALID_PROVIDER_RESPONSE } },
             onFailure = { EpisodeLoadState.ERROR }
