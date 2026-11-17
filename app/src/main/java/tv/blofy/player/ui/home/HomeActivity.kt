@@ -49,6 +49,7 @@ import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.remote.FocusMemory
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.CatalogRefreshWorker
+import tv.blofy.player.ui.series.RecentEpisodesRefreshWorker
 import tv.blofy.player.data.CatalogRefreshCheckpoint
 import tv.blofy.player.data.HomeSnapshotStore
 import tv.blofy.player.data.preparation.FullLibrarySyncWorker
@@ -169,10 +170,13 @@ class HomeActivity : AppCompatActivity() {
             CatalogSyncState.isReady(applicationContext, StreamCodeSession.providerId)) {
             scheduledProviderId = StreamCodeSession.providerId
             CatalogRefreshWorker.scheduleAutomatic(applicationContext, StreamCodeSession.providerId)
-            // Fast-path returning subscribers previously missed entry-time catalog
-            // catchup. This only schedules a silent worker; Home paints immediately.
-            CatalogRefreshWorker.enqueueIfStale(applicationContext, StreamCodeSession.providerId)
             showReadyHome()
+            // Paint Home first, then schedule both catalog and recent-episode
+            // checks. Neither worker owns a loading overlay or steals TV focus.
+            lifecycleScope.launch(Dispatchers.IO) {
+                CatalogRefreshWorker.enqueueIfStale(applicationContext, StreamCodeSession.providerId)
+                RecentEpisodesRefreshWorker.enqueueIfDue(applicationContext, StreamCodeSession.providerId)
+            }
             return
         }
         // A direct intent must not bypass the same readiness check as the login screen.
@@ -220,7 +224,11 @@ class HomeActivity : AppCompatActivity() {
                 provider?.let {
                     scheduledProviderId = it.id
                     CatalogRefreshWorker.scheduleAutomatic(applicationContext, it.id)
-                    CatalogRefreshWorker.enqueueIfStale(applicationContext, it.id)
+                    // No metadata/artwork crawler in STREAM, only quiet source checks.
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        CatalogRefreshWorker.enqueueIfStale(applicationContext, it.id)
+                        RecentEpisodesRefreshWorker.enqueueIfDue(applicationContext, it.id)
+                    }
                     FullLibrarySyncWorker.enqueue(applicationContext, it.id)
                 }
                 showReadyHome()
@@ -332,6 +340,7 @@ class HomeActivity : AppCompatActivity() {
                 }
                 // Catch up when returning to Home; a running worker is coalesced by unique name.
                 CatalogRefreshWorker.enqueueIfStale(applicationContext, activeId)
+                RecentEpisodesRefreshWorker.enqueueIfDue(applicationContext, activeId)
                 if (displayedHomeData != null && displayedHomeData?.providerId != activeId) {
                     lastHomeInputAtMs = SystemClock.elapsedRealtime()
                     loadHomeExperience()
