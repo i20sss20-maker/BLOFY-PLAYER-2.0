@@ -20,6 +20,16 @@ function makeRuntime(env={}, database=memoryDatabase()) {
   const context=vm.createContext({http,crypto,Buffer,URL,process:{env:testEnv},
     Date:class extends Date {static now(){return now;}},
     verifyNativeXtreamCsrf,
+    // VM tests strip imports; provide safe in-memory stubs for the new
+    // same-origin STREAM integration while keeping real session checks.
+    operatorProxyPath:path=>path==='/operator'||path==='/operator/'||path.startsWith('/operator/api/'),
+    distributorProxyPath:path=>path==='/distributor'||path==='/distributor/'||path.startsWith('/distributor/api/'),
+    proxyStreamOperator:async (req,res)=>{
+      res.writeHead(200,{'content-type':'text/plain'});res.end('OPERATOR_PROXY');
+    },
+    proxyStreamDistributor:async (req,res)=>{
+      res.writeHead(200,{'content-type':'text/plain'});res.end('DISTRIBUTOR_PROXY');
+    },
     createAdminSessionStore:({key})=>{
       const scope=key.toString('hex');
       if(!database.scopes.has(scope))database.scopes.set(scope,{sessions:new Map(),clients:new Map(),account:null});
@@ -277,4 +287,48 @@ test('database failure denies login and cookie access, but preserves bearer and 
   assert.equal(failed.status,503);assert.equal(failed.headers['set-cookie'],undefined);
   assert.equal((await a.request({url:'/api/v1/admin/test',headers:{cookie,authorization:'Bearer '+a.env.BLOFY_ADMIN_TOKEN}})).status,200);
   assert.equal((await a.request({url:'/health',headers:{cookie}})).status,200);
+});
+
+
+test('STREAM UI and API require the existing BLOFY signed admin session',async()=>{
+  const a=makeRuntime();
+  const denied=await a.request({url:'/operator/api/state'});
+  assert.equal(denied.status,401);
+  const page=await a.request({url:'/operator'});
+  assert.equal(page.status,200);
+  assert.equal(page.body,'LOGIN');
+  const cookie=a.sessionCookie(await a.makeSession());
+  const approved=await a.request({url:'/operator',headers:{cookie}});
+  assert.equal(approved.status,200);
+  assert.equal(approved.body,'OPERATOR_PROXY');
+  const api=await a.request({url:'/operator/api/overview',headers:{cookie}});
+  assert.equal(api.status,200);
+  assert.equal(api.body,'OPERATOR_PROXY');
+  const insideAdmin=await a.request({url:'/admin/control-center',headers:{cookie}});
+  assert.equal(insideAdmin.status,200);
+  assert.equal(insideAdmin.body,'OPERATOR_PROXY');
+});
+test('STREAM operator actions reject cross-site POST even with an admin cookie',async()=>{
+  const a=makeRuntime({VERCEL_ENV:undefined,NODE_ENV:'production'});
+  const cookie=a.sessionCookie(await a.makeSession());
+  const bad=await a.request({method:'POST',url:'/operator/api/codes',
+    headers:{cookie,origin:'https://attacker.example'},body:'{}'});
+  assert.equal(bad.status,403);
+  const accepted=await a.request({method:'POST',url:'/operator/api/codes',
+    headers:{cookie,origin:'https://blofyplayer.com'},body:'{}'});
+  assert.equal(accepted.status,200);
+  assert.equal(accepted.body,'OPERATOR_PROXY');
+});
+test('distributor login stays independent and rejects foreign Origin',async()=>{
+  const a=makeRuntime({VERCEL_ENV:undefined,NODE_ENV:'production'});
+  const page=await a.request({url:'/distributor'});
+  assert.equal(page.status,200);
+  assert.equal(page.body,'DISTRIBUTOR_PROXY');
+  const rejected=await a.request({method:'POST',url:'/distributor/api/login',
+    headers:{origin:'https://attacker.example'},body:'{}'});
+  assert.equal(rejected.status,403);
+  const login=await a.request({method:'POST',url:'/distributor/api/login',
+    headers:{origin:'https://blofyplayer.com'},body:'{}'});
+  assert.equal(login.status,200);
+  assert.equal(login.body,'DISTRIBUTOR_PROXY');
 });
