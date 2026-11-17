@@ -1246,7 +1246,8 @@ class HomeActivity : AppCompatActivity() {
                 WorkInfo.State.FAILED, WorkInfo.State.CANCELLED -> when (refreshError) {
                     "STORAGE" -> "المساحة غير كافية • تحقق من التخزين"
                     "INTEGRITY", "EMPTY", "INCOMPLETE" -> "المصدر ناقص • لم يتم استبدال مكتبتك"
-                    "TIMEOUT", "SOURCE_TIMEOUT" -> "توقف رد المصدر أثناء تنزيل المسلسلات • مكتبتك محفوظة، أعد المحاولة"
+                    "TIMEOUT", "SOURCE_TIMEOUT", "SERIES_INTERRUPTED" ->
+                        "تأخر أو انقطع مصدر المسلسلات • مكتبتك محفوظة، أعد المحاولة"
                     "COMMIT_TIMEOUT" -> "تأخر الحفظ النهائي • مكتبتك محفوظة، أعد المحاولة"
                     else -> "تعذر التحديث • اضغط لإعادة المحاولة"
                 }
