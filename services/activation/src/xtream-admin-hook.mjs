@@ -35,6 +35,8 @@ import {summarizeSameMovieCandidates} from './xtream-cross-source-coverage-audit
 import {distributedMovieOffsets,summarizeDistributedMovieProbe} from './xtream-distributed-movie-audit.mjs';
 import { createFixedWindowLimiter, requestClientKey } from './auth-protection.mjs';
 import {forwardPrivatePreview} from './content-hub-private-preview-bridge.mjs';
+import {createProtectedArabicAudioBridge} from './stream-arabic-audio-bridge.mjs';
+import {createStreamAudioOperatorDiagnostics} from './stream-audio-operator-diagnostics.mjs';
 import {forwardPrivateOriginalRange} from './content-hub-private-original-range-bridge.mjs';
 import {forwardPrivateSeekPreview} from './content-hub-private-seek-bridge.mjs';
 import {forwardPrivateTimeline} from './content-hub-private-timeline-bridge.mjs';
@@ -3123,6 +3125,9 @@ async function handleControlAction(req,res,id,action) {
 // manage the existing authoritative sources and accounts without redirecting
 // the browser, copying database encryption keys or storing provider passwords.
 const STREAM_BRIDGE_KEY=String(process.env.BLOFY_STREAM_UNIFIED_BRIDGE_KEY||'');
+const streamAudioDiagnostics=createStreamAudioOperatorDiagnostics({
+ bridge:createProtectedArabicAudioBridge()
+});
 const XTREAM_CUSTOMER_HOST=configuredXtreamPublicOrigin('https://blofyplayer.com');
 const bridgeLimiter=createFixedWindowLimiter({limit:90,windowMs:60_000});
 const streamActions=new Map();
@@ -3226,6 +3231,23 @@ async function unifiedStreamBridge(req,res,url){
   const limit=bridgeLimiter.consume(requestClientKey(req));
   if(!limit.allowed)return json(res,429,{ok:false,code:'stream_bridge_rate_limited'});
   const p=url.pathname;
+  // A read is metadata only. The owner must explicitly press a button for
+  // at most two sequential, 4 KiB licensed-radio probes (120s cooldown).
+  if(p==='/internal/blofy-stream/audio/readiness'){
+   if(req.method!=='GET'||url.search)
+    return json(res,405,{ok:false,code:'audio_readiness_method_denied'});
+   const result=streamAudioDiagnostics.readiness();
+   return json(res,result.status,result.body,{'cache-control':'no-store'});
+  }
+  if(p==='/internal/blofy-stream/audio/probe'){
+   if(req.method!=='POST'||url.search)
+    return json(res,405,{ok:false,code:'audio_probe_method_denied'});
+   if(req.headers['content-type']?.split(';')[0]?.trim()!=='application/json')
+    return json(res,415,{ok:false,code:'audio_probe_json_required'});
+   const payload=await readJson(req);
+   const result=await streamAudioDiagnostics.probe(payload?.ids);
+   return json(res,result.status,result.body,{'cache-control':'no-store'});
+  }
 
   // Same authenticated bridge as every STREAM operator control.
   // All season URLs and content types are hardcoded in the helper. No
