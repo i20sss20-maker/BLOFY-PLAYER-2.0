@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import {once} from 'node:events';
 import {
-  operatorProxyPath,operatorProxyMethod,operatorProxyTarget,proxyStreamOperator
+  operatorProxyPath,operatorProxyMethod,operatorProxyTarget,proxyStreamOperator,distributorProxyPath,proxyStreamDistributor
 } from '../src/admin-stream-operator-proxy.mjs';
 const token='test-website-to-stream-backend-secret-123456789012345678';
 async function withProxy(fetchImpl,run,secret=token){
@@ -92,4 +92,53 @@ test('no secret means fail closed',async()=>{
     const response=await fetch(base+'/operator');
     assert.equal(response.status,503);
   },'');
+});
+
+
+async function withReseller(fetchImpl,run){
+ const app=http.createServer((req,res)=>void proxyStreamDistributor(req,res,{fetchImpl}));
+ app.listen(0,'127.0.0.1');await once(app,'listening');
+ try{await run('http://127.0.0.1:'+app.address().port);}
+ finally{await new Promise(resolve=>app.close(resolve));}
+}
+test('reseller portal is same origin with independent cookie and no admin credentials',async()=>{
+ assert.equal(distributorProxyPath('/distributor'),true);
+ assert.equal(distributorProxyPath('/distributor/api/login'),true);
+ assert.equal(distributorProxyPath('/internal/distributor'),false);
+ await withReseller(async (url,options)=>{
+   assert.equal(url,'https://blofy-stream-api-production.up.railway.app/distributor');
+   assert.ok(!('authorization' in options.headers));
+   assert.ok(!('cookie' in options.headers));
+   return new Response('<html><title>لوحة توزيع</title></html>',{
+     headers:{'content-type':'text/html; charset=utf-8'}});
+ },async base=>{
+   const response=await fetch(base+'/distributor');
+   assert.equal(response.status,200);
+   assert.match(await response.text(),/لوحة توزيع/);
+ });
+});
+test('reseller POST rewrites backend Origin only after website caller has verified true origin',async()=>{
+ const distToken='A'.repeat(43);
+ await withReseller(async (url,options)=>{
+   assert.equal(url,'https://blofy-stream-api-production.up.railway.app/distributor/api/login');
+   assert.equal(options.headers.origin,'https://blofy-stream-api-production.up.railway.app');
+   assert.equal(options.headers['x-blofy-distributor-action'],'login');
+   assert.equal(options.headers.cookie,'blofy_dist='+distToken);
+   assert.equal(Buffer.from(options.body).toString('utf8'),'{"username":"test"}');
+   assert.ok(!('authorization' in options.headers));
+   return new Response('{"ok":true}',{status:200,headers:{
+     'content-type':'application/json',
+     'set-cookie':'blofy_dist='+distToken+'; Path=/distributor; Max-Age=43200; HttpOnly; Secure; SameSite=Strict'
+   }});
+ },async base=>{
+   const response=await fetch(base+'/distributor/api/login',{
+     method:'POST',headers:{'origin':'https://blofyplayer.com',
+       'cookie':'blofy_admin_session=forbidden; blofy_dist='+distToken,
+       'x-blofy-distributor-action':'login','content-type':'application/json'},
+     body:'{"username":"test"}'
+   });
+   assert.equal(response.status,200);
+   assert.match(response.headers.get('set-cookie'),/^blofy_dist=/);
+   assert.doesNotMatch(response.headers.get('set-cookie'),/blofy_admin_session/);
+ });
 });
