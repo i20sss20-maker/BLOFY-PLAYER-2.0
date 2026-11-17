@@ -323,6 +323,20 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                     if (dialog?.isShowing == true) openSearchWindow(displayedChannels.take(80))
                 }
             }
+            val closeButton = TextView(activity).apply {
+                text = "✕"
+                contentDescription = copy("إغلاق نافذة القنوات", "Close channel window")
+                textSize = 15f
+                gravity = Gravity.CENTER
+                setTextColor(BlofyTvDesign.TextSecondary)
+                isClickable = true
+                isFocusable = true
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(10).toFloat()
+                    setColor(0xD52D2537.toInt())
+                }
+                setOnClickListener { close() }
+            }
             val headerRow = LinearLayout(activity).apply {
                 orientation = LinearLayout.HORIZONTAL
                 layoutDirection = activity.resources.configuration.layoutDirection
@@ -330,8 +344,11 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 addView(header, LinearLayout.LayoutParams(0, dp(37), 1f))
                 if (BuildConfig.CODE_ONLY_LOGIN) addView(searchButton,
                     LinearLayout.LayoutParams(dp(96), dp(33)).apply {
-                        marginEnd = dp(8)
+                        marginEnd = dp(5)
                     })
+                addView(closeButton, LinearLayout.LayoutParams(dp(37), dp(33)).apply {
+                    marginEnd = dp(8)
+                })
             }
             val tabs = LinearLayout(activity).apply {
                 val tabContainer = this
