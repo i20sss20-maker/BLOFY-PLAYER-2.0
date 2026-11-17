@@ -217,10 +217,12 @@ class BlofyPlaybackSession(
         if (contentKind.isLiveContent()) retryHandler.postDelayed(liveStallWatchdog, LIVE_STALL_WATCHDOG_INTERVAL_MS)
     }
 
-    fun retrySameUrl() {
+    fun retrySameUrl(resumePositionMs: Long? = null) {
         if (closing) return
         val item = player.currentMediaItem ?: return
-        val position = player.currentPosition.coerceAtLeast(0L)
+        // A stalled seek may report zero or the old position until buffering recovers.
+        val position = (resumePositionMs ?: player.currentPosition).coerceAtLeast(0L)
+        seekRecoveryGeneration++
         resetLiveStallTimer(keepPosition = false)
         playStartedAtMs = SystemClock.elapsedRealtime()
         metric?.let { metric = PlaybackDiagnostics.recovered(it) }
@@ -238,7 +240,7 @@ class BlofyPlaybackSession(
             if (player.currentMediaItem == null || !player.playWhenReady) return@postDelayed
             if (player.playbackState == Player.STATE_BUFFERING) {
                 automaticRetries = 0
-                retrySameUrl()
+                retrySameUrl(targetMs)
             }
         }, SEEK_STALL_RECOVERY_MS)
     }
