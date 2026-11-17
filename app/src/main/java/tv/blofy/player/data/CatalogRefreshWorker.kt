@@ -62,9 +62,9 @@ class CatalogRefreshWorker(
         }
         } catch (cancelled: CancellationException) {
             throw cancelled
-        } catch (_: Exception) {
-            // Bound user-triggered jobs: do not display an endless waiting animation.
-            retryOrFail(inputData.getBoolean(KEY_MANUAL, false), "LOCAL")
+        } catch (failure: Exception) {
+            // Never expose provider URLs, credentials or raw server bodies in the UI.
+            retryOrFail(inputData.getBoolean(KEY_MANUAL, false), CatalogRefreshFailureReason.code(failure))
         }
     }
 
@@ -225,13 +225,17 @@ class CatalogRefreshWorker(
                 CatalogRefreshCommitPolicy.shouldFailManualCommitTimeout(manual, lastStage) ->
                     Result.failure(workDataOf(KEY_ERROR to "COMMIT_TIMEOUT"))
                 manual && lastStage == "SERIES" ->
-                    Result.failure(workDataOf(KEY_ERROR to "SERIES_TIMEOUT", KEY_STAGE to "SERIES"))
+                    // The staging checkpoint already includes completed Live/Movies.
+                    // Automatically attempt one bounded continuation before reporting
+                    // a series timeout; do not ask the viewer to restart from zero.
+                    retryOrFail(manual, "SERIES_TIMEOUT")
                 else -> retryOrFail(manual, "TIMEOUT")
             }
         } catch (cancelled: CancellationException) {
             throw cancelled
-        } catch (_: Exception) {
-            if (promoted) Result.success() else retryOrFail(manual, "NETWORK")
+        } catch (failure: Exception) {
+            if (promoted) Result.success()
+            else retryOrFail(manual, CatalogRefreshFailureReason.code(failure))
         } finally {
             // On a timeout/cancellation/temporary error keep the *staged* completed sections.
             // Incomplete streamed sections are cleared and retried on the next worker run.
