@@ -1252,8 +1252,14 @@ class HomeActivity : AppCompatActivity() {
                 WorkInfo.State.SUCCEEDED -> "اكتمل التحديث 100%"
                 WorkInfo.State.FAILED, WorkInfo.State.CANCELLED -> when (refreshError) {
                     "STORAGE" -> "المساحة غير كافية • تحقق من التخزين"
-                    "SERIES_TIMEOUT" -> "انتهت مهلة فحص المسلسلات • المكتبة محفوظة • أعد المحاولة"
+                    "SERIES_TIMEOUT", "TIMEOUT" -> "المصدر بطيء • انتهت المهلة • مكتبتك محفوظة"
+                    "AUTH" -> "انتهت صلاحية الاتصال بالمصدر • تحقق من الكود"
+                    "SOURCE_NOT_FOUND" -> "مسار المحتوى غير موجود لدى المصدر"
+                    "RATE_LIMIT" -> "المصدر يحدّ الطلبات • أعد المحاولة لاحقاً"
+                    "SERVER", "NETWORK", "DNS", "TLS" -> "تعذر الاتصال بالمصدر • مكتبتك محفوظة"
+                    "BAD_RESPONSE", "FILTER_UNSUPPORTED" -> "رد المصدر غير متوافق • لم تتغير المكتبة"
                     "INTEGRITY", "EMPTY", "INCOMPLETE" -> "المصدر ناقص • لم يتم استبدال مكتبتك"
+                    "COMMIT_TIMEOUT" -> "حفظ المكتبة تأخر • بياناتك السابقة محفوظة"
                     else -> "تعذر التحديث • اضغط لإعادة المحاولة"
                 }
                 else -> getString(R.string.home_catalog_refresh_waiting_v74)
