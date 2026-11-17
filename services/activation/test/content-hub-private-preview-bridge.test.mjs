@@ -117,3 +117,42 @@ test('verified season episode preview uses a pinned queue run, never an arbitrar
   assert.equal(calls,1);
  }finally{await new Promise(resolve=>server.close(resolve))}
 });
+
+test('private episode preview returns a precise safe storage error instead of a generic 503',async()=>{
+ await withServer(async()=>new Response(JSON.stringify({
+  ok:false,code:'private_preview_verified_prefix_unavailable'
+ }),{status:503,headers:{'content-type':'application/json'}}),async base=>{
+  const res=await fetch(base+'/internal/blofy-stream/content-hub/preview');
+  assert.equal(res.status,503);
+  assert.equal((await res.json()).code,
+   'private_preview_verified_prefix_unavailable');
+ });
+});
+test('a busy verified episode returns 429 and safe busy code',async()=>{
+ await withServer(async()=>new Response(JSON.stringify({
+  ok:false,code:'owner_preview_busy'
+ }),{status:429,headers:{'content-type':'application/json'}}),async base=>{
+  const res=await fetch(base+'/internal/blofy-stream/content-hub/preview');
+  assert.equal(res.status,429);
+  assert.equal((await res.json()).code,'owner_preview_busy');
+ });
+});
+test('private preview bridge rejects arbitrary error contents and overlarge JSON',async()=>{
+ await withServer(async()=>new Response(JSON.stringify({
+  ok:false,code:'secret_provider_credentials',
+  sourceUrl:'http://secret-host.invalid/?key=private'
+ }),{status:503,headers:{'content-type':'application/json'}}),async base=>{
+  const res=await fetch(base+'/internal/blofy-stream/content-hub/preview');
+  assert.equal(res.status,503);
+  const body=await res.text();
+  assert.match(body,/owner_preview_not_ready/);
+  assert.doesNotMatch(body,/secret-host|credentials/);
+ });
+ await withServer(async()=>new Response(JSON.stringify({
+  code:'owner_preview_busy',extra:'x'.repeat(2048)
+ }),{status:429,headers:{'content-type':'application/json'}}),async base=>{
+  const res=await fetch(base+'/internal/blofy-stream/content-hub/preview');
+  assert.equal(res.status,429);
+  assert.equal((await res.json()).code,'owner_preview_busy');
+ });
+});

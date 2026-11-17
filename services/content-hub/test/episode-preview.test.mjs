@@ -68,6 +68,6 @@ test('incomplete episode cannot be previewed or read from S3',async()=>{
   storage:{readVerifiedRange:async()=>{reads++}}
  });
  assert.equal(result.ok,false);
- assert.equal(result.code,'private_preview_movie_not_verified');
+ assert.equal(result.code,'private_preview_episode_not_verified');
  assert.equal(reads,0);
 });

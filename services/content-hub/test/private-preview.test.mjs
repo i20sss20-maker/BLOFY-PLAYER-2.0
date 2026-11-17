@@ -66,6 +66,29 @@ test('corrupt S3 data fails verification before ffmpeg runs',async()=>{
  ]);
  const result=await buildPrivateBrowserPreview({runId:'approved_movie_001',...f});
  assert.equal(result.ok,false);
- assert.equal(result.code,'private_preview_encode_failed');
+ assert.equal(result.code,'private_preview_verified_prefix_unavailable');
  assert.equal(f.getEncodes(),0);
+});
+
+test('episode preview reports unverified queued object without transcoding',async()=>{
+ const f=fixture();
+ f.lease.getVerifiedEpisodeObject=async()=>null;
+ const result=await buildPrivateBrowserPreview({
+  runId:'season_valid_episode_001',mediaKind:'episode',...f
+ });
+ assert.equal(result.ok,false);
+ assert.equal(result.code,'private_preview_episode_not_verified');
+ assert.equal(f.getReads(),0);
+ assert.equal(f.getEncodes(),0);
+});
+test('verified episode transcode failure remains an encode error, never a storage error',async()=>{
+ const f=fixture();
+ f.lease.getVerifiedEpisodeObject=f.lease.getVerifiedChunkedObject;
+ f.transcoder=async()=>{throw Error('ffmpeg fixture failure')};
+ const result=await buildPrivateBrowserPreview({
+  runId:'season_valid_episode_001',mediaKind:'episode',...f
+ });
+ assert.equal(result.ok,false);
+ assert.equal(result.code,'private_preview_encode_failed');
+ assert.equal(f.getReads(),1);
 });
