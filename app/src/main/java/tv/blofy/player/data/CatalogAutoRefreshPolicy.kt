@@ -11,7 +11,8 @@ internal object CatalogAutoRefreshPolicy {
     const val MINIMUM_GAP_MS = INTERVAL_MINUTES * 60_000L
     // Ordinary WorkManager jobs have about ten minutes before forced stop.
     // Leave time for staged SQLite rollback even when an upstream source stalls.
-    const val MAX_SINGLE_SYNC_MS = 7L * 60_000L
+    // Leave enough of WorkManager's ~10-minute budget for the atomic Room swap.
+    const val MAX_SINGLE_SYNC_MS = 6L * 60_000L
 
     private const val PREFS = "blofy_stream_catalog_auto_sync_v1"
     private const val ENABLED = "enabled"
