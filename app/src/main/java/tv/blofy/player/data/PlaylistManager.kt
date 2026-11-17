@@ -88,7 +88,7 @@ class PlaylistManager(
                 onProgress(PlaylistSyncProgress(stage, section + 1, 3, retryAttempt = attempt))
             },
             onExhausted = { section, failure ->
-                if (!CatalogSectionRetry.isTruncatedBody(failure)) false
+                if (!CatalogSectionRetry.isRecoverableForSegmentation(failure)) false
                 else {
                     // Full-catalog responses on some IPTV hosts are closed mid-transfer.
                     // After three ordinary retries, request the same section in smaller
