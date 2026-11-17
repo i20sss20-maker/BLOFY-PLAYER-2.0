@@ -700,8 +700,6 @@ class SettingsActivity : AppCompatActivity() {
         refreshItems = 0
         refreshRetry = 0
         refreshError = null
-        refreshItems = 0
-        refreshRetry = 0
         refreshState = WorkInfo.State.ENQUEUED
         updateSyncStatus()
         try {
