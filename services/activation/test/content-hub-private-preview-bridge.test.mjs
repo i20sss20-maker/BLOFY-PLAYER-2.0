@@ -156,3 +156,36 @@ test('private preview bridge rejects arbitrary error contents and overlarge JSON
   assert.equal((await res.json()).code,'owner_preview_busy');
  });
 });
+
+test('chunked authenticated Hub preview without Content-Length is bounded, validated, and receives explicit length',async()=>{
+ const mp4=Buffer.concat([Buffer.alloc(4),Buffer.from('ftyp'),
+   Buffer.alloc(3120,0x36)]);
+ const body=new ReadableStream({start(ctl){
+  ctl.enqueue(mp4.subarray(0,3));ctl.enqueue(mp4.subarray(3,1850));
+  ctl.enqueue(mp4.subarray(1850));ctl.close();
+ }});
+ await withServer(async()=>new Response(body,{status:200,
+  headers:{'content-type':'video/mp4'}}),async base=>{
+  const r=await fetch(base+'/internal/blofy-stream/content-hub/preview');
+  assert.equal(r.status,200);
+  assert.equal(Number(r.headers.get('content-length')),mp4.length);
+  assert.deepEqual(Buffer.from(await r.arrayBuffer()),mp4);
+ });
+});
+test('unlengthened oversized stream and invalid MP4 signatures are rejected without client video bytes',async()=>{
+ await withServer(async()=>new Response(new ReadableStream({start(ctl){
+   ctl.enqueue(Buffer.alloc(12*1024*1024+1));
+   ctl.close();
+  }}),{status:200,headers:{'content-type':'video/mp4'}}),async base=>{
+  const r=await fetch(base+'/internal/blofy-stream/content-hub/preview');
+  assert.equal(r.status,503);
+  assert.equal((await r.json()).code,'owner_preview_upstream_size_invalid');
+ });
+ await withServer(async()=>new Response(new ReadableStream({start(ctl){
+   ctl.enqueue(Buffer.alloc(3000,0x58));ctl.close();
+  }}),{status:200,headers:{'content-type':'video/mp4'}}),async base=>{
+  const r=await fetch(base+'/internal/blofy-stream/content-hub/preview');
+  assert.equal(r.status,503);
+  assert.equal((await r.json()).code,'owner_preview_upstream_size_invalid');
+ });
+});
