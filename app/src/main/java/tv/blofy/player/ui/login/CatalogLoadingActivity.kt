@@ -22,6 +22,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -319,6 +320,13 @@ class CatalogLoadingActivity : AppCompatActivity() {
             CatalogSyncState.markReady(applicationContext, providerId)
             render(100, "المكتبة جاهزة")
             openHome()
+        } catch (_: TimeoutCancellationException) {
+            runCatching {
+                withContext(Dispatchers.IO + NonCancellable) {
+                    if (firstLoad) dao.clearProviderCatalog(providerId) else dao.discardStagedCatalog(syncProvider.id)
+                }
+            }
+            fail("انتهت مهلة تحديث المحتوى. يمكنك المحاولة مجددًا أو الدخول بالمكتبة المحفوظة.")
         } catch (cancelled: CancellationException) {
             // Cleanup must run even if lifecycleScope cancelled the current coroutine.
             runCatching {
@@ -344,7 +352,12 @@ class CatalogLoadingActivity : AppCompatActivity() {
             PlaylistSyncStage.MOVIES -> "جاري تحميل الأفلام"
             PlaylistSyncStage.SERIES -> "جاري تحميل المسلسلات"
         }
-        val detail = if (p.totalSteps > 1) label + " • " + p.step.coerceAtMost(p.totalSteps) + "/" + p.totalSteps else label
+        val detail = when {
+            p.stage == PlaylistSyncStage.SERIES && p.percent >= 95 -> "تم حفظ المسلسلات • جاري إنهاء المكتبة"
+            p.stage == PlaylistSyncStage.SERIES && p.percent >= 94 -> "جاري حفظ فهرس المسلسلات على الجهاز"
+            p.totalSteps > 1 -> label + " • " + p.step.coerceAtMost(p.totalSteps) + "/" + p.totalSteps
+            else -> label
+        }
         render(p.percent.coerceAtMost(95), detail)
     }
 
