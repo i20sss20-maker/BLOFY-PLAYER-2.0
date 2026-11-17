@@ -16,14 +16,20 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import tv.blofy.player.R
+import tv.blofy.player.BuildConfig
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.core.playback.ContentUrlResolver
+import tv.blofy.player.data.PlaylistManager
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.EpisodeEntity
 import tv.blofy.player.data.local.ProviderEntity
+import tv.blofy.player.data.remote.XtreamClient
 import tv.blofy.player.ui.catalog.ArtworkLoader
 import tv.blofy.player.ui.player.PlayerActivity
 import tv.blofy.player.ui.series.EpisodesActivity
@@ -100,22 +106,26 @@ class SeriesDetailsActivity : AppCompatActivity() {
                 val watch = dao.watchState(episode.key) ?: return@mapNotNull null
                 if (watch.completed || watch.positionMs <= 15_000L) null else Resume(episode, watch.positionMs, watch.durationMs, watch.updatedAt)
             }.maxByOrNull { it.updatedAt }
-            val seasons = allEpisodes.map { it.season }.distinct().size
-
-            panel.addView(TextView(this@SeriesDetailsActivity).apply {
-                text = stream.name; BlofyTvDesign.applyHeroTitle(this); textSize = if (compact) 29f else 38f; gravity = Gravity.RIGHT
-            })
-            panel.addView(TextView(this@SeriesDetailsActivity).apply {
-                text = buildList {
+            fun summaryText(items: List<EpisodeEntity>): String {
+                val seasons = items.map { it.season }.distinct().size
+                return buildList {
                     add("مسلسل")
                     stream.year?.takeIf(String::isNotBlank)?.let(::add)
                     stream.genre?.takeIf(String::isNotBlank)?.let(::add)
                     if (seasons > 0) add("$seasons موسم")
-                    if (allEpisodes.isNotEmpty()) add("${allEpisodes.size} حلقة")
+                    if (items.isNotEmpty()) add("${items.size} حلقة")
                     stream.rating?.takeIf(String::isNotBlank)?.let { add("★ $it") }
                 }.joinToString("  •  ")
-                textSize = 16f; setTextColor(BlofyTvDesign.PurpleSoft); gravity = Gravity.RIGHT; setPadding(0, dp(8), 0, dp(18))
+            }
+
+            panel.addView(TextView(this@SeriesDetailsActivity).apply {
+                text = stream.name; BlofyTvDesign.applyHeroTitle(this); textSize = if (compact) 29f else 38f; gravity = Gravity.RIGHT
             })
+            val episodeSummary = TextView(this@SeriesDetailsActivity).apply {
+                text = summaryText(allEpisodes)
+                textSize = 16f; setTextColor(BlofyTvDesign.PurpleSoft); gravity = Gravity.RIGHT; setPadding(0, dp(8), 0, dp(18))
+            }
+            panel.addView(episodeSummary)
             panel.addView(TextView(this@SeriesDetailsActivity).apply {
                 text = stream.plot?.takeIf(String::isNotBlank) ?: "اختر الموسم والحلقة لبدء المشاهدة."
                 textSize = 17f; maxLines = if (compact) 10 else 5; setTextColor(BlofyTvDesign.TextSecondary); gravity = Gravity.RIGHT; setPadding(0, 0, 0, dp(24))
@@ -167,6 +177,21 @@ class SeriesDetailsActivity : AppCompatActivity() {
             row.addView(favoriteButton, actionParams(175))
             panel.addView(row)
             primary?.requestFocus()
+            // A code-only subscriber must not rely on the old local episode
+            // count. Refresh THIS series in the background, then update the
+            // label without rebuilding the screen or stealing TV focus.
+            if (BuildConfig.CODE_ONLY_LOGIN) launch {
+                val result = runCatching {
+                    withContext(Dispatchers.IO) {
+                        PlaylistManager(XtreamClient.api, dao).syncSeriesEpisodes(provider, stream.remoteId)
+                    }
+                }
+                result.exceptionOrNull()?.let { if (it is CancellationException) throw it }
+                if (result.getOrNull()?.cacheUpdated == true && !isFinishing && !isDestroyed) {
+                    val updated = dao.episodes(providerId, stream.remoteId).first()
+                    episodeSummary.text = summaryText(updated)
+                }
+            }
         }
     }
 
