@@ -36,6 +36,9 @@ class VlcFallbackActivity : AppCompatActivity() {
     private lateinit var notice: TextView
     private lateinit var progress: TextView
     private lateinit var hint: TextView
+    private lateinit var remoteControls: LinearLayout
+    private lateinit var remotePlayPause: TextView
+    private lateinit var rootFrame: FrameLayout
 
     private var libVlc: LibVLC? = null
     private var player: VlcMediaPlayer? = null
@@ -99,21 +102,30 @@ class VlcFallbackActivity : AppCompatActivity() {
             KeyEvent.KEYCODE_DPAD_CENTER,
             KeyEvent.KEYCODE_ENTER,
             KeyEvent.KEYCODE_NUMPAD_ENTER,
+            KeyEvent.KEYCODE_BUTTON_A -> {
+                if (event.repeatCount == 0) {
+                    if (focusedVlcButton()) currentFocus?.performClick() else togglePlayback()
+                }
+                true
+            }
             KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
-            KeyEvent.KEYCODE_SPACE -> {
-                togglePlayback()
+            KeyEvent.KEYCODE_MEDIA_PLAY,
+            KeyEvent.KEYCODE_MEDIA_PAUSE,
+            KeyEvent.KEYCODE_SPACE -> { if (event.repeatCount == 0) togglePlayback(); true }
+            KeyEvent.KEYCODE_DPAD_UP -> {
+                remotePlayPause.requestFocus()
                 true
             }
-            KeyEvent.KEYCODE_DPAD_LEFT,
-            KeyEvent.KEYCODE_MEDIA_REWIND -> {
-                seekBy(-10_000L)
+            KeyEvent.KEYCODE_DPAD_DOWN -> {
+                rootFrame.requestFocus()
                 true
             }
-            KeyEvent.KEYCODE_DPAD_RIGHT,
-            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
-                seekBy(10_000L)
-                true
+            KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                if (focusedVlcButton()) super.dispatchKeyEvent(event)
+                else { seekBy(if (event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) 10_000L else -10_000L); true }
             }
+            KeyEvent.KEYCODE_MEDIA_REWIND -> { seekBy(-10_000L); true }
+            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { seekBy(10_000L); true }
             KeyEvent.KEYCODE_BACK -> {
                 finish()
                 true
@@ -122,6 +134,9 @@ class VlcFallbackActivity : AppCompatActivity() {
         }
     }
 
+    private fun focusedVlcButton(): Boolean =
+        ::remoteControls.isInitialized && currentFocus?.parent === remoteControls
+
     private fun buildUi() {
         val root = FrameLayout(this).apply {
             setBackgroundColor(Color.BLACK)
@@ -129,6 +144,7 @@ class VlcFallbackActivity : AppCompatActivity() {
             isFocusableInTouchMode = true
         }
 
+        rootFrame = root
         videoLayout = VLCVideoLayout(this)
         root.addView(videoLayout, FrameLayout.LayoutParams(-1, -1))
 
@@ -204,12 +220,50 @@ class VlcFallbackActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
             setPadding(0, dp(6), 0, 0)
         }
+        remoteControls = LinearLayout(this).apply {
+            gravity = Gravity.CENTER
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, dp(10), 0, dp(6))
+        }
+        val backButton = vlcControl("−10s") { seekBy(-10_000L) }
+        remotePlayPause = vlcControl("▶ / ❚❚") { togglePlayback() }
+        val forwardButton = vlcControl("+10s") { seekBy(10_000L) }
+        val buttons = listOf(backButton, remotePlayPause, forwardButton)
+        buttons.forEachIndexed { index, button ->
+            remoteControls.addView(button, LinearLayout.LayoutParams(dp(98), dp(48)).apply {
+                if (index < buttons.lastIndex) marginEnd = dp(10)
+            })
+            button.nextFocusLeftId = buttons[(index + buttons.size - 1) % buttons.size].id
+            button.nextFocusRightId = buttons[(index + 1) % buttons.size].id
+        }
         bottom.addView(progress)
+        bottom.addView(remoteControls)
         bottom.addView(hint)
         root.addView(bottom, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
 
         setContentView(root)
         root.requestFocus()
+    }
+
+    private fun vlcControl(label: String, onClick: () -> Unit) = TextView(this).apply {
+        id = View.generateViewId()
+        text = label
+        textSize = 16f
+        setTextColor(Color.WHITE)
+        gravity = Gravity.CENTER
+        isFocusable = true
+        isClickable = true
+        background = GradientDrawable().apply {
+            cornerRadius = dp(12).toFloat()
+            setColor(0xC42C1A42.toInt())
+            setStroke(dp(1), 0xFFB98AEF.toInt())
+        }
+        setOnFocusChangeListener { view, focused ->
+            view.alpha = if (focused) 1f else 0.7f
+            if (focused) this@VlcFallbackActivity.hint.text = view.contentDescription
+        }
+        contentDescription = label
+        setOnClickListener { onClick() }
     }
 
     private fun ensureLibVlc(): LibVLC {
@@ -299,7 +353,12 @@ class VlcFallbackActivity : AppCompatActivity() {
 
     private fun seekBy(deltaMs: Long) {
         val active = player ?: return
-        if (!active.isSeekable) return
+        if (!active.isSeekable) {
+            hint.text = if (java.util.Locale.getDefault().language == "ar")
+                "هذا الملف لا يدعم التقديم والتأخير"
+            else "Seeking is not available for this file"
+            return
+        }
         val length = runCatching { active.length }.getOrDefault(0L).coerceAtLeast(0L)
         val current = runCatching { active.time }.getOrDefault(0L).coerceAtLeast(0L)
         val target = (current + deltaMs).coerceAtLeast(0L).let { if (length > 0L) it.coerceAtMost(length) else it }

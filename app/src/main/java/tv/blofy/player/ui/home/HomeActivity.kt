@@ -49,6 +49,7 @@ import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.remote.FocusMemory
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.CatalogRefreshWorker
+import tv.blofy.player.ui.series.RecentEpisodesRefreshWorker
 import tv.blofy.player.data.CatalogRefreshCheckpoint
 import tv.blofy.player.data.HomeSnapshotStore
 import tv.blofy.player.data.preparation.FullLibrarySyncWorker
@@ -170,6 +171,12 @@ class HomeActivity : AppCompatActivity() {
             scheduledProviderId = StreamCodeSession.providerId
             CatalogRefreshWorker.scheduleAutomatic(applicationContext, StreamCodeSession.providerId)
             showReadyHome()
+            // Paint Home first, then schedule both catalog and recent-episode
+            // checks. Neither worker owns a loading overlay or steals TV focus.
+            lifecycleScope.launch(Dispatchers.IO) {
+                CatalogRefreshWorker.enqueueIfStale(applicationContext, StreamCodeSession.providerId)
+                RecentEpisodesRefreshWorker.enqueueIfDue(applicationContext, StreamCodeSession.providerId)
+            }
             return
         }
         // A direct intent must not bypass the same readiness check as the login screen.
@@ -217,7 +224,11 @@ class HomeActivity : AppCompatActivity() {
                 provider?.let {
                     scheduledProviderId = it.id
                     CatalogRefreshWorker.scheduleAutomatic(applicationContext, it.id)
-                    CatalogRefreshWorker.enqueueIfStale(applicationContext, it.id)
+                    // No metadata/artwork crawler in STREAM, only quiet source checks.
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        CatalogRefreshWorker.enqueueIfStale(applicationContext, it.id)
+                        RecentEpisodesRefreshWorker.enqueueIfDue(applicationContext, it.id)
+                    }
                     FullLibrarySyncWorker.enqueue(applicationContext, it.id)
                 }
                 showReadyHome()
@@ -329,6 +340,7 @@ class HomeActivity : AppCompatActivity() {
                 }
                 // Catch up when returning to Home; a running worker is coalesced by unique name.
                 CatalogRefreshWorker.enqueueIfStale(applicationContext, activeId)
+                RecentEpisodesRefreshWorker.enqueueIfDue(applicationContext, activeId)
                 if (displayedHomeData != null && displayedHomeData?.providerId != activeId) {
                     lastHomeInputAtMs = SystemClock.elapsedRealtime()
                     loadHomeExperience()
@@ -1252,8 +1264,14 @@ class HomeActivity : AppCompatActivity() {
                 WorkInfo.State.SUCCEEDED -> "اكتمل التحديث 100%"
                 WorkInfo.State.FAILED, WorkInfo.State.CANCELLED -> when (refreshError) {
                     "STORAGE" -> "المساحة غير كافية • تحقق من التخزين"
-                    "SERIES_TIMEOUT" -> "انتهت مهلة فحص المسلسلات • المكتبة محفوظة • أعد المحاولة"
+                    "SERIES_TIMEOUT", "TIMEOUT" -> "المصدر بطيء • انتهت المهلة • مكتبتك محفوظة"
+                    "AUTH" -> "انتهت صلاحية الاتصال بالمصدر • تحقق من الكود"
+                    "SOURCE_NOT_FOUND" -> "مسار المحتوى غير موجود لدى المصدر"
+                    "RATE_LIMIT" -> "المصدر يحدّ الطلبات • أعد المحاولة لاحقاً"
+                    "SERVER", "NETWORK", "DNS", "TLS" -> "تعذر الاتصال بالمصدر • مكتبتك محفوظة"
+                    "BAD_RESPONSE", "FILTER_UNSUPPORTED" -> "رد المصدر غير متوافق • لم تتغير المكتبة"
                     "INTEGRITY", "EMPTY", "INCOMPLETE" -> "المصدر ناقص • لم يتم استبدال مكتبتك"
+                    "COMMIT_TIMEOUT" -> "حفظ المكتبة تأخر • بياناتك السابقة محفوظة"
                     else -> "تعذر التحديث • اضغط لإعادة المحاولة"
                 }
                 else -> getString(R.string.home_catalog_refresh_waiting_v74)

@@ -96,6 +96,16 @@ class CatalogSectionRetryTest {
         assertEquals(0, result.failureCount)
     }
 
+    @Test fun oneSuccessfulSectionDoesNotHideAnotherSectionsAuthorizationFailure() = runBlocking {
+        val result = runXtreamSections(listOf(
+            suspend { },
+            suspend { throw http(401) }
+        ))
+        assertEquals(1, result.successCount)
+        assertEquals(1, result.failureCount)
+        assertEquals("AUTH", result.failureCode)
+    }
+
     @Test fun cancellationDuringBackoffStopsWithoutAnotherRequest() = runBlocking {
         var calls = 0
         val failure = runCatching {

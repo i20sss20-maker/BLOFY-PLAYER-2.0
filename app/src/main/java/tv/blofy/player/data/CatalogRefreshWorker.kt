@@ -62,9 +62,9 @@ class CatalogRefreshWorker(
         }
         } catch (cancelled: CancellationException) {
             throw cancelled
-        } catch (_: Exception) {
-            // Bound user-triggered jobs: do not display an endless waiting animation.
-            retryOrFail(inputData.getBoolean(KEY_MANUAL, false), "LOCAL")
+        } catch (failure: Exception) {
+            // Never expose provider URLs, credentials or raw server bodies in the UI.
+            retryOrFail(inputData.getBoolean(KEY_MANUAL, false), CatalogRefreshFailureReason.code(failure))
         }
     }
 
@@ -76,8 +76,9 @@ class CatalogRefreshWorker(
         val sourceChanged = PortalSyncBook.hasPendingSource(app, provider.id)
         // Background content refresh must NOT accept an unapproved source/host migration.
         if (!manual && sourceChanged) return Result.success()
-        if (!manual && !sourceChanged && !CatalogAutoRefreshPolicy.isDue(
-                CatalogSyncState.lastSyncedAt(app, provider.id), System.currentTimeMillis()
+        if (!manual && !sourceChanged && !CatalogAutoRefreshPolicy.isDueForProduct(
+                CatalogSyncState.lastSyncedAt(app, provider.id), System.currentTimeMillis(),
+                BuildConfig.CODE_ONLY_LOGIN
             )
         ) return Result.success()
         // A streaming player must not compete with a full-library download/SQLite promotion.
@@ -161,7 +162,8 @@ class CatalogRefreshWorker(
                     }
                 )
             }
-            if (sync.failedSectionCount > 0) return retryOrFail(manual, "INCOMPLETE")
+            if (sync.failedSectionCount > 0)
+                return retryOrFail(manual, sync.failureCode ?: "INCOMPLETE")
             if (sync.freshItemCount <= 0) {
                 // A zero-item Xtream reply must never replace the known-good catalog.
                 checkpoint.discard(saved, dao)
@@ -225,13 +227,17 @@ class CatalogRefreshWorker(
                 CatalogRefreshCommitPolicy.shouldFailManualCommitTimeout(manual, lastStage) ->
                     Result.failure(workDataOf(KEY_ERROR to "COMMIT_TIMEOUT"))
                 manual && lastStage == "SERIES" ->
-                    Result.failure(workDataOf(KEY_ERROR to "SERIES_TIMEOUT", KEY_STAGE to "SERIES"))
+                    // The staging checkpoint already includes completed Live/Movies.
+                    // Automatically attempt one bounded continuation before reporting
+                    // a series timeout; do not ask the viewer to restart from zero.
+                    retryOrFail(manual, "SERIES_TIMEOUT")
                 else -> retryOrFail(manual, "TIMEOUT")
             }
         } catch (cancelled: CancellationException) {
             throw cancelled
-        } catch (_: Exception) {
-            if (promoted) Result.success() else retryOrFail(manual, "NETWORK")
+        } catch (failure: Exception) {
+            if (promoted) Result.success()
+            else retryOrFail(manual, CatalogRefreshFailureReason.code(failure))
         } finally {
             // On a timeout/cancellation/temporary error keep the *staged* completed sections.
             // Incomplete streamed sections are cleared and retried on the next worker run.
@@ -310,10 +316,14 @@ class CatalogRefreshWorker(
             )
         }
 
+        /** Entry-time refresh is silent and coalesced with in-flight WorkManager jobs.
+         * Playback retains priority; no screen waits on this request or shows its progress. */
         fun enqueueIfStale(context: Context, providerId: String) {
-            if (!CatalogAutoRefreshPolicy.isEnabled(context)) return
-            if (CatalogAutoRefreshPolicy.isDue(
-                    CatalogSyncState.lastSyncedAt(context, providerId), System.currentTimeMillis()
+            if (providerId.isBlank() || !CatalogAutoRefreshPolicy.isEnabled(context)) return
+            val now = System.currentTimeMillis()
+            if (CatalogEntryRefreshThrottle.claimIfDue(
+                    context.applicationContext, providerId,
+                    CatalogSyncState.lastSyncedAt(context, providerId), now
                 )
             ) enqueueNow(context, providerId, manual = false)
         }

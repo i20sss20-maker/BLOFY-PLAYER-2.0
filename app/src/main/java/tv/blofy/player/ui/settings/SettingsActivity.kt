@@ -753,6 +753,20 @@ class SettingsActivity : AppCompatActivity() {
             refreshRequested && refreshState == WorkInfo.State.FAILED && refreshError == "COMMIT_TIMEOUT" ->
                 copy("تعذر إنهاء حفظ التحديث. مكتبتك السابقة محفوظة؛ اضغط لإعادة المحاولة.",
                     "Saving the refresh timed out. Your previous library is safe; tap to retry.")
+            refreshRequested && refreshState == WorkInfo.State.FAILED && refreshError == "AUTH" ->
+                copy("انتهت صلاحية الدخول للمصدر. تحقق من الكود والاتصال.",
+                    "Source authorization failed. Check your code and connection.")
+            refreshRequested && refreshState == WorkInfo.State.FAILED && refreshError == "RATE_LIMIT" ->
+                copy("المصدر يحد الطلبات مؤقتاً؛ أعد المحاولة لاحقاً.",
+                    "The source is rate-limiting requests. Retry later.")
+            refreshRequested && refreshState == WorkInfo.State.FAILED && refreshError in
+                setOf("SERVER", "TIMEOUT", "NETWORK", "DNS", "TLS", "SOURCE_NOT_FOUND") ->
+                copy("تعذر الاتصال بمصدر المحتوى (" + refreshError + "). مكتبتك السابقة محفوظة.",
+                    "Catalog connection failed (" + refreshError + "). Your library is safe.")
+            refreshRequested && refreshState == WorkInfo.State.FAILED && refreshError in
+                setOf("BAD_RESPONSE", "FILTER_UNSUPPORTED", "INTEGRITY", "INCOMPLETE", "EMPTY") ->
+                copy("رد المصدر ناقص أو غير متوافق (" + refreshError + ")؛ لم يتم استبدال المكتبة.",
+                    "Incomplete or incompatible source (" + refreshError + "); library unchanged.")
             refreshState == WorkInfo.State.RUNNING ->
                 if (refreshStage == "SAVE") copy(
                     "اكتمل تنزيل المحتوى • جارٍ حفظ التحديث محلياً ومكتبتك السابقة متاحة",

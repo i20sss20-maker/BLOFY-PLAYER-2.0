@@ -89,26 +89,58 @@ class AiChatActivity : AppCompatActivity() {
         }
         root.addView(conversationScroll, LinearLayout.LayoutParams(-1, 0, 1f))
 
-        val suggestions = LinearLayout(this).apply {
+        val promptLanguage = ConfigurationCompat.getLocales(resources.configuration)[0]
+            ?.language.let { if (it == "en") "en" else "ar" }
+        root.addView(TextView(this).apply {
+            text = if (promptLanguage == "en") "Ideas to ask BLOFY AI"
+                else "وش ودك تشوف؟ جرّب أحد هذه الطلبات"
+            textSize = 12.5f
+            setTextColor(BlofyTvDesign.TextMuted)
+            gravity = Gravity.START
+            setPadding(dp(5), dp(2), 0, dp(4))
+        })
+        val promptCategories = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutDirection = resources.configuration.layoutDirection
         }
-        listOf(
-            R.string.stream_ai_quick_action to R.string.stream_chat_action_prompt,
-            R.string.stream_ai_quick_comedy to R.string.stream_chat_comedy_prompt,
-            R.string.stream_ai_quick_series to R.string.stream_chat_series_prompt
-        ).forEach { (label, prompt) ->
-            suggestions.addView(Button(this).apply {
-                text = getString(label)
+        val promptOptions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutDirection = resources.configuration.layoutDirection
+        }
+        fun showCategory(group: AiPromptCatalog.Group) {
+            promptOptions.removeAllViews()
+            group.prompts.forEach { prompt ->
+                val phrase = prompt.text(promptLanguage)
+                promptOptions.addView(Button(this).apply {
+                    text = phrase
+                    isAllCaps = false
+                    maxLines = 2
+                    CinemaStyle.styleButton(this)
+                    contentDescription = phrase
+                    setOnClickListener { ask(phrase) }
+                }, LinearLayout.LayoutParams(dp(if (promptLanguage == "en") 240 else 222),
+                    dp(56)).apply { marginEnd = dp(7) })
+            }
+        }
+        AiPromptCatalog.groups.forEach { group ->
+            promptCategories.addView(Button(this).apply {
+                text = group.label(promptLanguage)
+                isAllCaps = false
                 CinemaStyle.styleButton(this)
-                setOnClickListener { ask(getString(prompt)) }
-            }, LinearLayout.LayoutParams(dp(154), dp(43)).apply { marginEnd = dp(8) })
+                setOnClickListener { showCategory(group) }
+            }, LinearLayout.LayoutParams(dp(160), dp(43)).apply { marginEnd = dp(7) })
         }
         root.addView(HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
             isFocusable = false
-            addView(suggestions)
-        }, LinearLayout.LayoutParams(-1, dp(51)).apply { bottomMargin = dp(8) })
+            addView(promptCategories)
+        }, LinearLayout.LayoutParams(-1, dp(47)))
+        root.addView(HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            isFocusable = false
+            addView(promptOptions)
+        }, LinearLayout.LayoutParams(-1, dp(62)).apply { bottomMargin = dp(7) })
+        showCategory(AiPromptCatalog.groups.first())
 
         val composer = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -293,32 +325,48 @@ class AiChatActivity : AppCompatActivity() {
             gravity = Gravity.START
             setPadding(dp(6), 0, dp(6), dp(12))
         }
+        val english = ConfigurationCompat.getLocales(resources.configuration)[0]?.language == "en"
         group.addView(TextView(this).apply {
-            text = getString(R.string.stream_chat_tap_to_search)
+            text = if (english) "Open the title's details, or search by its name"
+                else "اضغط على العنوان لفتح تفاصيله مباشرة، أو اختر بحث بالاسم"
             textSize = 12.5f
             setTextColor(BlofyTvDesign.TextMuted)
             setPadding(dp(8), dp(3), 0, dp(8))
         })
         var firstResult: Button? = null
-        titles.take(10).forEach { movie ->
+        titles.take(10).forEach { item ->
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutDirection = resources.configuration.layoutDirection
+                gravity = Gravity.CENTER_VERTICAL
+            }
             val resultButton = Button(this).apply {
-                text = "⌕  " + movie.name.take(70) +
-                    movie.year?.takeIf(String::isNotBlank)?.let { "  ($it)" }.orEmpty()
-                contentDescription = getString(R.string.stream_chat_search_title, movie.name)
-                CinemaStyle.styleButton(this)
+                text = "▶  " + item.name.take(70) +
+                    item.year?.takeIf(String::isNotBlank)?.let { "  (" + it + ")" }.orEmpty()
+                contentDescription = if (english) "Open details for " + item.name
+                    else "فتح تفاصيل " + item.name
+                CinemaStyle.styleButton(this, primary = true)
+                isAllCaps = false
                 isSingleLine = false
                 maxLines = 2
-                minHeight = dp(49)
-                setOnClickListener {
-                    startActivity(Intent(this@AiChatActivity, SearchActivity::class.java).apply {
-                        putExtra(SearchActivity.EXTRA_KIND, movie.kind)
-                        putExtra(SearchActivity.EXTRA_INITIAL_QUERY, movie.name)
-                    })
-                }
+                minHeight = dp(50)
+                setOnClickListener { openVerifiedTitle(item) }
             }
+            val searchButton = Button(this).apply {
+                text = if (english) "Search" else "بحث"
+                contentDescription = if (english) "Search for " + item.name
+                    else "بحث عن " + item.name
+                isAllCaps = false
+                CinemaStyle.styleButton(this)
+                setOnClickListener { searchForTitle(item.name) }
+            }
+            row.addView(resultButton, LinearLayout.LayoutParams(0, dp(55), 1f))
+            row.addView(searchButton, LinearLayout.LayoutParams(dp(if (english) 103 else 83), dp(55)).apply {
+                marginStart = dp(7)
+            })
             if (firstResult == null) firstResult = resultButton
-            group.addView(resultButton, LinearLayout.LayoutParams(-1, dp(51)).apply {
-                bottomMargin = dp(6)
+            group.addView(row, LinearLayout.LayoutParams(-1, dp(59)).apply {
+                bottomMargin = dp(5)
             })
         }
         transcript.addView(group, LinearLayout.LayoutParams(-1, -2))
@@ -327,6 +375,16 @@ class AiChatActivity : AppCompatActivity() {
             val target = firstResult
             transcript.post { if (!isFinishing && !isDestroyed) target?.requestFocus() }
         }
+    }
+
+    /** Only a verified, unlocked row from the local catalog becomes clickable. */
+    private fun openVerifiedTitle(item: StreamEntity) {
+        AiResultNavigation.details(this, item)?.let(::startActivity)
+            ?: searchForTitle(item.name)
+    }
+
+    private fun searchForTitle(title: String) {
+        AiResultNavigation.search(this, title)?.let(::startActivity)
     }
 
     private fun scrollBottom() {

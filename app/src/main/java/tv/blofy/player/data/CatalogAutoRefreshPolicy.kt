@@ -9,6 +9,10 @@ import java.util.concurrent.atomic.AtomicInteger
 internal object CatalogAutoRefreshPolicy {
     const val INTERVAL_MINUTES = 24L * 60L
     const val MINIMUM_GAP_MS = INTERVAL_MINUTES * 60_000L
+    // STREAM can discover newly added movies/series on the next app entry,
+    // without downloading the full library every time the user returns Home.
+    const val STREAM_ENTRY_MINIMUM_GAP_MS = 6L * 60L * 60_000L
+    const val ENTRY_RETRY_GUARD_MS = 45L * 60_000L
     // Ordinary WorkManager jobs have about ten minutes before forced stop.
     // Leave time for staged SQLite rollback even when an upstream source stalls.
     // Leave enough of WorkManager's ~10-minute budget for the atomic Room swap.
@@ -29,8 +33,20 @@ internal object CatalogAutoRefreshPolicy {
 
     /** A successful sync, not a queued or failed attempt, resets the refresh clock. */
     fun isDue(lastCompletedAtMs: Long, nowMs: Long): Boolean =
-        lastCompletedAtMs <= 0L ||
-            (nowMs >= lastCompletedAtMs && nowMs - lastCompletedAtMs >= MINIMUM_GAP_MS)
+        elapsed(lastCompletedAtMs, nowMs, MINIMUM_GAP_MS)
+
+    /** STREAM refreshes at most every six hours when opened; PLAYER stays daily. */
+    fun isDueForProduct(lastCompletedAtMs: Long, nowMs: Long, stream: Boolean): Boolean =
+        elapsed(lastCompletedAtMs, nowMs,
+            if (stream) STREAM_ENTRY_MINIMUM_GAP_MS else MINIMUM_GAP_MS)
+
+    fun mayQueueEntry(lastCompletedAtMs: Long, lastRequestedAtMs: Long,
+                      nowMs: Long, stream: Boolean): Boolean =
+        isDueForProduct(lastCompletedAtMs, nowMs, stream) &&
+            elapsed(lastRequestedAtMs, nowMs, ENTRY_RETRY_GUARD_MS)
+
+    private fun elapsed(previous: Long, now: Long, threshold: Long): Boolean =
+        previous <= 0L || (now >= previous && now - previous >= threshold)
 }
 
 /** Avoid downloading/rewriting large Xtream libraries while live TV or VOD is playing. */

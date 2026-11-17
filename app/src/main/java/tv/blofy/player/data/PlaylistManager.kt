@@ -26,7 +26,8 @@ import java.nio.charset.StandardCharsets
 
 data class PlaylistSyncResult(
     val freshItemCount: Int,
-    val failedSectionCount: Int = 0
+    val failedSectionCount: Int = 0,
+    val failureCode: String? = null
 )
 
 /** Xtream-only catalog synchronization for BLOFY rc07.12+. */
@@ -128,7 +129,7 @@ class PlaylistManager(
                 }
             }
         )
-        return PlaylistSyncResult(freshItemCount, sectionResult.failureCount)
+        return PlaylistSyncResult(freshItemCount, sectionResult.failureCount, sectionResult.failureCode)
     }
 
     suspend fun syncLive(
@@ -487,11 +488,20 @@ class PlaylistManager(
         return StreamingParseResult(sourceCount, itemCount, items ?: emptyList())
     }
 
-    suspend fun syncSeriesEpisodes(provider: ProviderEntity, seriesId: String): SeriesEpisodeSyncResult {
+    suspend fun syncSeriesEpisodes(
+        provider: ProviderEntity, seriesId: String, preserveCachedRows: Boolean = false
+    ): SeriesEpisodeSyncResult {
         val requestSeriesId = SeriesEpisodeParser.normalizeSeriesIdForRequest(seriesId)
         val response = api.jsonResponse(actionUrl(provider, "get_series_info", mapOf("series_id" to requestSeriesId)))
         val parsed = SeriesEpisodeParser.parse(provider.id, seriesId, response)
-        if (parsed.episodes.isNotEmpty()) dao.replaceEpisodes(provider.id, seriesId, parsed.episodes)
+        if (parsed.episodes.isNotEmpty()) {
+            val merged = if (preserveCachedRows) {
+                SeriesEpisodeRetentionPolicy.preserveCached(
+                    dao.episodeSnapshot(provider.id, seriesId), parsed.episodes
+                )
+            } else parsed.episodes
+            dao.replaceEpisodes(provider.id, seriesId, merged)
+        }
         return SeriesEpisodeSyncResult(parsed.episodes.size, parsed.payloadPresent, parsed.episodes.isNotEmpty())
     }
 
@@ -631,7 +641,11 @@ internal object CatalogReplacementPolicy {
     }
 }
 
-internal data class XtreamSectionResult(val successCount: Int, val failureCount: Int)
+internal data class XtreamSectionResult(
+    val successCount: Int,
+    val failureCount: Int,
+    val failureCode: String? = null
+)
 
 internal suspend fun runXtreamSections(
     sections: List<suspend () -> Unit>,
@@ -664,5 +678,8 @@ internal suspend fun runXtreamSections(
         failures.drop(1).forEach(first::addSuppressed)
         throw first
     }
-    return XtreamSectionResult(successCount, failures.size)
+    // A partial refresh must retain the actual failed section's error category.
+    // Otherwise one successful section silently masks a 401/timeout/invalid reply.
+    return XtreamSectionResult(successCount, failures.size,
+        failures.firstOrNull()?.let(CatalogRefreshFailureReason::code))
 }

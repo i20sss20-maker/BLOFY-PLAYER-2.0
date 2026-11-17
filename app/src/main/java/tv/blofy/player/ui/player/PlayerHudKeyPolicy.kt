@@ -6,7 +6,22 @@ internal enum class HudOkAction {
     CLICK_FOCUSED_CONTROL
 }
 
+internal enum class HudHorizontalAction { SEEK, NAVIGATE_CONTROLS }
+
 internal object PlayerHudKeyPolicy {
+    /** Seeking remains active while HUD is a transient hint, until OK focuses controls. */
+    fun horizontalAction(hudVisible: Boolean, focusedHudControlClickable: Boolean): HudHorizontalAction =
+        if (hudVisible && focusedHudControlClickable) HudHorizontalAction.NAVIGATE_CONTROLS
+        else HudHorizontalAction.SEEK
+
+    /** Throttle rapid remote repeats to prevent accidental huge jumps. */
+    fun seekStepMs(repeatCount: Int): Long = when {
+        repeatCount <= 0 -> 10_000L
+        repeatCount < 4 || repeatCount % 4 != 0 -> 0L
+        repeatCount < 12 -> 15_000L
+        else -> 30_000L
+    }
+
     /**
      * TV-first OK behavior: opening the HUD is always safe, and once it is visible OK should only
      * activate an actual focused control. If focus is temporarily between controls during D-pad
