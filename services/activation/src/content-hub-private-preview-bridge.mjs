@@ -15,6 +15,35 @@ function fail(res,status,code){
   'x-content-type-options':'nosniff','referrer-policy':'no-referrer'});
  res.end(body);
 }
+// Preserve a safe failure reason across the internal preview hop without
+// forwarding arbitrary upstream response bodies, paths or object identifiers.
+async function readPrivatePreviewFailure(response){
+ const status=response.status===409?409:response.status===429?429:503;
+ const fallback={status,code:status===429?'owner_preview_busy':'owner_preview_not_ready'};
+ if(![409,429,503].includes(response.status)||
+    !String(response.headers.get('content-type')||'').includes('application/json')||
+    !response.body)return fallback;
+ const reader=response.body.getReader(),parts=[];
+ let bytes=0;
+ try{
+  while(true){
+   const next=await reader.read();
+   if(next.done)break;
+   bytes+=next.value?.byteLength||0;
+   if(bytes>512)return fallback;
+   parts.push(Buffer.from(next.value));
+  }
+  const body=JSON.parse(Buffer.concat(parts).toString('utf8'));
+  const code=String(body?.code||'');
+  if(/^(?:private_preview|owner_preview|season_episode|season_verified_episode)_[a-z0-9_]{1,62}$/.test(code))
+   return {status,code};
+ }catch{ /* Fail closed on malformed private errors. */ }
+ finally{
+  await reader.cancel().catch(()=>{});
+  reader.releaseLock();
+ }
+ return fallback;
+}
 export async function forwardPrivatePreview({
  req,res,hubToken,fetchImpl=fetch,mediaKind='movie',runId=null
 }={}){
@@ -42,10 +71,12 @@ export async function forwardPrivatePreview({
     headers:{authorization:'Bearer '+hubToken,
       'x-blofy-owner-preview':episode?'operator-episode-only':'operator-only'}
   });
-  if(upstream.status!==200||!upstream.body||
-     upstream.headers.get('content-type')!=='video/mp4')
-   return fail(res,upstream.status===409?409:503,
-      'owner_preview_not_ready');
+  if(upstream.status!==200){
+   const error=await readPrivatePreviewFailure(upstream);
+   return fail(res,error.status,error.code);
+  }
+  if(!upstream.body||upstream.headers.get('content-type')!=='video/mp4')
+   return fail(res,503,'owner_preview_invalid_media_response');
   const expected=Number(upstream.headers.get('content-length'));
   if(!Number.isSafeInteger(expected)||expected<2048||expected>MAX_PREVIEW)
    return fail(res,503,'owner_preview_upstream_size_invalid');
