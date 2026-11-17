@@ -86,40 +86,28 @@ jobs:
           test "$bytes" -gt 100000000 && test "$bytes" -lt 268435456
           echo "APK_SHA256=$(sha256sum "$RUNNER_TEMP/$APK" | cut -d' ' -f1)" >> "$GITHUB_ENV"
           echo "APK_BYTES=$bytes" >> "$GITHUB_ENV"
-      - name: Publish exact verified APK to permanent public GitHub Release
+      - name: Prepare exact signed APK and pinned SHA256 for Railway's safe importer
         shell: bash
         run: |
           set -euo pipefail
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "::error::Release tag already exists; refusing to overwrite any public APK."
-            exit 1
-          fi
-          cat > "$RUNNER_TEMP/release-notes.md" <<'EOF'
-          # BLOFY STREAM 55.8.34 · NEXT GENERATION Phase 1
-          Signed Android APK for the BLOFY STREAM app only (tv.blofy.player.v2.stream).
-          - New independent windows for live channels and channel search, with improved D-pad focus and return navigation.
-          - More stable Home and series focus after returning from playback.
-          - Download recovery for missing/failed media files; safer progress reporting.
-          - Catalog update-at-95%-recovery improvements retained from the earlier candidate.
-          - Original developer certificate and universal FFmpeg native libraries verified by CI.
-          
-          Note: This is phase 1, not a completed full UI/AI redesign. Real device compatibility may differ.
-          EOF
-          gh release create "$TAG" "$RUNNER_TEMP/$APK" \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$SOURCE_SHA" --title "BLOFY STREAM 55.8.34 · NEXTGEN Phase 1" \
-            --notes-file "$RUNNER_TEMP/release-notes.md" \
-            --latest=false
-          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
-            --json assets --jq '.assets[].name' | grep -Fxq "$APK"
-          url="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/$APK"
+          mkdir -p website-source
+          cp "$RUNNER_TEMP/$APK" "website-source/$APK"
+          (cd website-source && sha256sum "$APK" > SHA256SUMS && sha256sum -c SHA256SUMS)
+          test "$(stat -c '%s' "website-source/$APK")" = "$APK_BYTES"
           {
-            echo "## Public BLOFY STREAM 55.8.34 signed APK"
-            echo "- URL: $url"
+            echo "## BLOFY STREAM 55.8.34 original owner signed APK"
             echo "- SHA256: $APK_SHA256"
             echo "- Size: $APK_BYTES"
-            echo "- Identity: tv.blofy.player.v2.stream / versionCode 2000111"
+            echo "- File: $APK"
             echo "- Source: $SOURCE_SHA"
-            echo "- **Website metadata publication is a separate step.**"
+            echo "- **Download site remains unchanged until this APK is hash-imported into Railway and listed.**"
           } >> "$GITHUB_STEP_SUMMARY"
-          printf 'STREAM_APK_URL=%s\\nSTREAM_APK_SHA256=%s\\nSTREAM_APK_BYTES=%s\\n' "$url" "$APK_SHA256" "$APK_BYTES"
+          printf 'STREAM_APK_SHA256=%s\\nSTREAM_APK_BYTES=%s\\n' "$APK_SHA256" "$APK_BYTES"
+      - name: Upload compact signed APK-only ZIP for verified Railway volume import
+        uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-STREAM-55.8.34-WEBSITE-SIGNED-APK
+          path: website-source/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
