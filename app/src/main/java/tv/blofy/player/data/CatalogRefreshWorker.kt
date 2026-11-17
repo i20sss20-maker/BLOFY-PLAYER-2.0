@@ -76,8 +76,9 @@ class CatalogRefreshWorker(
         val sourceChanged = PortalSyncBook.hasPendingSource(app, provider.id)
         // Background content refresh must NOT accept an unapproved source/host migration.
         if (!manual && sourceChanged) return Result.success()
-        if (!manual && !sourceChanged && !CatalogAutoRefreshPolicy.isDue(
-                CatalogSyncState.lastSyncedAt(app, provider.id), System.currentTimeMillis()
+        if (!manual && !sourceChanged && !CatalogAutoRefreshPolicy.isDueForProduct(
+                CatalogSyncState.lastSyncedAt(app, provider.id), System.currentTimeMillis(),
+                BuildConfig.CODE_ONLY_LOGIN
             )
         ) return Result.success()
         // A streaming player must not compete with a full-library download/SQLite promotion.
@@ -315,10 +316,14 @@ class CatalogRefreshWorker(
             )
         }
 
+        /** Entry-time refresh is silent and coalesced with in-flight WorkManager jobs.
+         * Playback retains priority; no screen waits on this request or shows its progress. */
         fun enqueueIfStale(context: Context, providerId: String) {
-            if (!CatalogAutoRefreshPolicy.isEnabled(context)) return
-            if (CatalogAutoRefreshPolicy.isDue(
-                    CatalogSyncState.lastSyncedAt(context, providerId), System.currentTimeMillis()
+            if (providerId.isBlank() || !CatalogAutoRefreshPolicy.isEnabled(context)) return
+            val now = System.currentTimeMillis()
+            if (CatalogEntryRefreshThrottle.claimIfDue(
+                    context.applicationContext, providerId,
+                    CatalogSyncState.lastSyncedAt(context, providerId), now
                 )
             ) enqueueNow(context, providerId, manual = false)
         }
