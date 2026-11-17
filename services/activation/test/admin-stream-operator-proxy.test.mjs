@@ -231,3 +231,46 @@ test('site proxy rejects large uploads and missing rights before contacting upst
   });
   assert.equal(hits,0);
 });
+
+
+test('HTML STREAM console failure shows safe recovery navigation rather than raw JSON',async()=>{
+  await withProxy(async()=>{throw new Error('upstream contains private-secret-xyz')},async base=>{
+    const response=await fetch(base+'/operator',{headers:{accept:'text/html'}});
+    assert.equal(response.status,502);
+    assert.match(response.headers.get('content-type'),/text\/html/);
+    assert.equal(response.headers.get('x-frame-options'),'DENY');
+    const body=await response.text();
+    assert.match(body,/تعذر الاتصال بلوحة STREAM/);
+    assert.match(body,/href="\/admin"/);
+    assert.match(body,/href="\/admin\/control-center\/health"/);
+    assert.doesNotMatch(body,/private-secret-xyz|Basic |password|provider/);
+  });
+});
+
+test('502 on operator API retains machine-readable JSON and does not mask status',async()=>{
+  await withProxy(async()=>{throw new Error('sensitive')},async base=>{
+    const response=await fetch(base+'/operator/api/overview');
+    assert.equal(response.status,502);
+    assert.match(response.headers.get('content-type'),/application\/json/);
+    assert.deepEqual(await response.json(),{ok:false,code:'operator_proxy_unavailable'});
+  });
+});
+
+test('upstream 503 renders a recovery page on UI only and sanitizes backend body',async()=>{
+  await withProxy(async()=>new Response('sensitive backend trace',{status:503}),async base=>{
+    const response=await fetch(base+'/operator');
+    assert.equal(response.status,502);
+    const text=await response.text();
+    assert.match(text,/operator_service_unavailable/);
+    assert.doesNotMatch(text,/sensitive backend trace/);
+  });
+});
+
+test('missing operator bridge credential has an accessible HTML recovery page',async()=>{
+  await withProxy(async()=>{throw Error('no fetch expected')},async base=>{
+    const response=await fetch(base+'/operator');
+    assert.equal(response.status,503);
+    assert.match(response.headers.get('content-type'),/text\/html/);
+    assert.match(await response.text(),/operator_proxy_not_configured/);
+  },'');
+});
