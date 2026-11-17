@@ -349,7 +349,17 @@ one-shot operator audit, the private Content Hub would require all of:
 
 It refuses other run IDs, missing rights, concurrent calls and calls within
 60 seconds of the previous attempt. An individual audit is time bounded;
-a timeout or S3 failure must **not** count as verified. This route does not
+a timeout or S3 failure must **not** count as verified.
+
+The call returns **HTTP 202 immediately**. Audit results are polled via
+`GET /internal/private-copy/audit-full/status`, using the same owner-action
+header and private bearer token; it exposes only the nonsecret completed
+result, progress state, and the preconfigured approved run IDs. The status is
+process-local: if the service restarts, status resets to `idle` rather than
+claiming a historical check is current. A failed/partial run is never marked
+verified. The owner dashboard provides a manual choose/confirm/start button
+and polls via authenticated `/api/v1/admin/content-hub/private-copy/audit-full/status`
+after the admin session hook verifies the owner. This route does not
 accept source URLs, perform source Range fetches, or expose private keys.
 Do not expose the Content Hub service on a public hostname.
 
