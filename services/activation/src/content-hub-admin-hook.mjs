@@ -238,6 +238,39 @@ http.createServer=function withContentHubAdmin(listener){
   if(!authorized(req,res))return;
   if(url.search)return json(res,400,{ok:false,code:'query_forbidden'});
   try{
+   // Session-authenticated owner bridge to the optional private S3 full-SHA
+   // audit. Returns 202 immediately; GET only polls nonsecret in-memory status.
+   // The protected Content Hub service still enforces exact configured IDs,
+   // individual storage rights, and its default-OFF audit flag.
+   const auditBase='/api/v1/admin/content-hub/private-copy/audit-full';
+   if(path===auditBase||path===auditBase+'/status'){
+    const poll=path.endsWith('/status');
+    if(req.method!==(poll?'GET':'POST'))
+     return json(res,405,{ok:false,code:'private_copy_audit_method_denied'});
+    if(req.headers['x-blofy-owner-action']!=='audit-one-stored-private-copy')
+     return json(res,403,{ok:false,code:'private_copy_audit_owner_only'});
+    let payload;
+    if(!poll){
+     const input=await readSeasonAdminBody(req);
+     if(!input||input.confirmed!==true||
+        !['episode','movie'].includes(input.kind)||
+        !HUB_PILOT_RUN.test(String(input.runId||'')))
+      return json(res,400,{ok:false,code:'private_copy_audit_bad_selection'});
+     payload=JSON.stringify({kind:input.kind,runId:input.runId,
+      confirmed:true});
+    }
+    const target=poll?'/internal/private-copy/audit-full/status':
+     '/internal/private-copy/audit-full';
+    const response=await request(target,{
+     method:poll?'GET':'POST',signal:AbortSignal.timeout(12000),
+     extraHeaders:{'x-blofy-owner-action':'audit-one-stored-private-copy',
+      ...(poll?{}:{'content-type':'application/json'})},body:payload
+    });
+    if(![200,202,400,403,404,405,429].includes(response.status))
+     return json(res,503,{ok:false,code:'private_copy_audit_hub_unavailable'});
+    const result=await response.json();
+    return json(res,response.status,result);
+   }
    if(path==='/api/v1/admin/content-hub/episodes/preview'&&req.method==='GET')
     return await handleEpisodePreview(req,res);
    // Only individually verified private queue episodes can be previewed.
