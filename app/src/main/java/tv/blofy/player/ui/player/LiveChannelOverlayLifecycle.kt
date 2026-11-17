@@ -8,6 +8,7 @@ import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.text.Editable
+import android.text.InputFilter
 import android.text.InputType
 import android.text.TextWatcher
 import android.view.Gravity
@@ -93,6 +94,9 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
         val delegate: Window.Callback,
     ) : Window.Callback by delegate {
         private var dialog: AlertDialog? = null
+        // Search is a dedicated window, not an EditText inside the channel navigation pane.
+        private var searchDialog: AlertDialog? = null
+        private var searchJob: Job? = null
         private var loading = false
         private var displayedChannels: List<StreamEntity> = emptyList()
         private var currentChannelKey: String? = null
@@ -111,6 +115,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
 
         override fun dispatchKeyEvent(event: KeyEvent): Boolean {
             if (event.action != KeyEvent.ACTION_DOWN) return delegate.dispatchKeyEvent(event)
+            if (searchDialog?.isShowing == true) return delegate.dispatchKeyEvent(event)
             if (dialog?.isShowing == true && RemoteKeyRouter.route(event).action == RemoteAction.BACK) {
                 if (audioPickerOpen) restoreMainActions?.invoke()
                 else close()
@@ -123,7 +128,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             return when (LivePlayerMenuPolicy.action(
                 event.keyCode,
                 hudVisible = activity.liveControlsVisible(),
-                channelDialogVisible = dialog?.isShowing == true,
+                channelDialogVisible = dialog?.isShowing == true || searchDialog?.isShowing == true,
                 unifiedChannelPanel = BuildConfig.CODE_ONLY_LOGIN
             )) {
                 LivePlayerMenuAction.SHOW_AUDIO_CONTROLS ->
@@ -150,6 +155,10 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
             restoreMainActions = null
             filterJob?.cancel()
             filterJob = null
+            searchJob?.cancel()
+            searchJob = null
+            searchDialog?.dismiss()
+            searchDialog = null
             dialog?.dismiss()
             dialog = null
             displayedChannels = emptyList()
@@ -183,7 +192,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
         }
 
         private fun openChannelList() {
-            if (dialog?.isShowing == true || loading || activity.isFinishing || activity.isDestroyed) return
+            if (dialog?.isShowing == true || searchDialog?.isShowing == true || loading || activity.isFinishing || activity.isDestroyed) return
             val providerId = activity.intent.getStringExtra(PlayerActivity.EXTRA_PROVIDER_ID).orEmpty()
             val categoryId = activity.intent.getStringExtra(PlayerActivity.EXTRA_CATEGORY_ID)
             if (providerId.isBlank()) {
@@ -287,29 +296,37 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 maxLines = 1
                 ellipsize = android.text.TextUtils.TruncateAt.END
             }
-            val searchField = if (BuildConfig.CODE_ONLY_LOGIN) EditText(activity).apply {
-                this.hint = copy("بحث في جميع القنوات…", "Search all channels…")
-                contentDescription = this.hint
-                textSize = 13.5f
-                setSingleLine(true)
-                inputType = InputType.TYPE_CLASS_TEXT
+            // Channels and search have separate windows. No focusable EditText is present
+            // here, so D-pad navigation cannot land on the search box by accident.
+            val searchButton = TextView(activity).apply {
+                text = copy("⌕ بحث", "⌕ Search")
+                contentDescription = copy("فتح نافذة البحث عن القنوات", "Open dedicated channel search window")
+                textSize = 12f
+                typeface = BlofyTvDesign.HeadingTypeface
                 setTextColor(Color.WHITE)
-                setHintTextColor(0xFFB7ABC5.toInt())
-                setPadding(dp(12), dp(8), dp(12), dp(8))
+                gravity = Gravity.CENTER
+                isFocusable = true
+                isClickable = true
+                id = View.generateViewId()
                 background = GradientDrawable().apply {
-                    cornerRadius = dp(12).toFloat()
-                    setColor(0xEF1A1527.toInt())
-                    setStroke(dp(1), 0x7B6D508D)
+                    cornerRadius = dp(10).toFloat()
+                    setColor(0xFF41305B.toInt())
+                    setStroke(dp(1), 0xFF9976C6.toInt())
                 }
-                addTextChangedListener(object : TextWatcher {
-                    override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
-                    override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                        searchText = s?.toString().orEmpty().take(80)
-                        refreshList()
-                    }
-                    override fun afterTextChanged(s: Editable?) = Unit
-                })
-            } else null
+                setOnClickListener {
+                    if (dialog?.isShowing == true) openSearchWindow(displayedChannels.take(80))
+                }
+            }
+            val headerRow = LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutDirection = activity.resources.configuration.layoutDirection
+                gravity = Gravity.CENTER_VERTICAL
+                addView(header, LinearLayout.LayoutParams(0, dp(37), 1f))
+                if (BuildConfig.CODE_ONLY_LOGIN) addView(searchButton,
+                    LinearLayout.LayoutParams(dp(96), dp(33)).apply {
+                        marginEnd = dp(8)
+                    })
+            }
             val tabs = LinearLayout(activity).apply {
                 val tabContainer = this
                 orientation = LinearLayout.HORIZONTAL
@@ -373,13 +390,9 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                     setStroke(dp(1), 0x4D7956A8.toInt())
                 }
                 elevation = dp(7).toFloat()
-                addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(30)))
+                addView(headerRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(40)))
                 addView(hint, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(19)))
                 if (BuildConfig.CODE_ONLY_LOGIN) {
-                    searchField?.let { addView(it, LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT, dp(42)).apply {
-                            marginStart = dp(7); marginEnd = dp(7); bottomMargin = dp(5)
-                        }) }
                     addView(tabs, LinearLayout.LayoutParams(-1, dp(36)))
                     addView(count, LinearLayout.LayoutParams(-1, dp(17)))
                 }
@@ -484,19 +497,23 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 val currentIndex = LiveChannelPanelPolicy.initialChannelIndex(
                     channels, lastFocusedChannelKey, currentChannelKey, StreamEntity::key)
                 if (currentIndex < 0) return@setOnShowListener
-                searchField?.clearFocus()
+                // Focus on the active channel in this window; search is a separate dialog.
                 created.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
                 (list.layoutManager as? LinearLayoutManager)?.scrollToPositionWithOffset(currentIndex, dp(8))
                 // A row may not be attached immediately after scroll. Do not let the dialog
                 // send TV/keyboard focus to the first EditText (search) in that interval.
                 list.isFocusableInTouchMode = true
+                // Focus a real row before enabling the separate Search shortcut for D-pad.
+                searchButton.isFocusable = false
                 list.requestFocus()
                 list.post {
                     if (list.findViewHolderForAdapterPosition(currentIndex)?.itemView?.requestFocus() != true) {
                         list.postOnAnimation {
                             list.findViewHolderForAdapterPosition(currentIndex)?.itemView?.requestFocus()
+                                ?: list.requestFocus()
                         }
                     }
+                    searchButton.isFocusable = true
                 }
             }
             created.show()
