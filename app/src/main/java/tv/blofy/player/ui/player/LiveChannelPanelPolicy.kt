@@ -36,6 +36,21 @@ internal object LiveChannelPanelPolicy {
         return recentIds.distinct().mapNotNull(byKey::get)
     }
 
+    /**
+     * First keyboard/TV focus stays on the last highlighted or currently playing channel,
+     * not the search field. A stale key falls back to the actual playing channel.
+     */
+    fun <T> initialChannelIndex(rows: List<T>, lastFocusedKey: String?, playingKey: String?, key: (T) -> String): Int {
+        if (rows.isEmpty()) return -1
+        for (candidate in listOf(lastFocusedKey, playingKey)) {
+            if (!candidate.isNullOrBlank()) {
+                val index = rows.indexOfFirst { key(it) == candidate }
+                if (index >= 0) return index
+            }
+        }
+        return 0
+    }
+
     /** Scale the joined panel while reserving enough width for remote navigation. */
     fun dimensions(isTv: Boolean, isTablet: Boolean): Pair<Float, Float> = when {
         isTv -> 0.31f to 0.94f
