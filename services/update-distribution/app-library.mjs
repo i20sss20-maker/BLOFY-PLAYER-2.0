@@ -122,7 +122,7 @@ const DEFAULT_APPS = Object.freeze([
   {
     slug:'blofy-stream', name:'BLOFY STREAM', category:'media', symbol:'BS',
     iconUrl:'https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/services/update-distribution/public/blofy-stream.svg',
-    description:'BLOFY STREAM 55.8.34 — NEXT GENERATION المرحلة الأولى: نوافذ منفصلة للقنوات والبحث، تنقل أدق بالريموت، تذكر موضع الحلقة، رئيسية أكثر استقراراً، تنبيه وتحسينات للتنزيلات، وتحديث مكتبة آمن. مع التفعيل بالكود ومشغل FFmpeg.'
+    description:'BLOFY STREAM 55.8.34 — NEXT GENERATION المرحلة الأولى: نوافذ منفصلة للقنوات والبحث، تنقل أدق بالريموت، تذكر موضع الحلقة، رئيسية أكثر استقراراً، تنبيه وتحسينات للتنزيلات، وتحديث مكتبة آمن. مع التفعيل بالكود ومشغل FFmpeg.',
     devices:'Android TV · TV Box · Android Phone · Tablet', version:'55.8.34',
     architecture:'Universal (ARM + x86)', apkSizeBytes:135755814,
     downloadUrl:'https://updates.blofyplayer.com/files/releases/BLOFY-STREAM-55.8.34-NEXTGEN-FOCUS-DOWNLOADS-OWNER-SIGNED.apk',
