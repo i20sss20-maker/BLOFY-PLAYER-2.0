@@ -316,7 +316,7 @@ class EpisodesActivity : ContentAccessActivity() {
                 PlaylistManager(XtreamClient.episodeApi, BlofyDatabase.get(applicationContext).dao())
                     .syncSeriesEpisodes(provider, seriesId)
             }
-            if (result.episodes.isNotEmpty()) {
+            if (result.episodeCount > 0 && result.cacheUpdated) {
                 SeriesEpisodeRefreshPolicy.markSuccess(applicationContext, providerId, seriesId)
             }
         } catch (cancelled: CancellationException) {
