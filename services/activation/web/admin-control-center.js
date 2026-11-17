@@ -33,6 +33,72 @@ function showPhases(rows){
     card.append(num,detail);root.append(card);
   });
 }
+function showOperatorReadiness(report){
+  const root=$('operator-readiness');
+  const summary=$('operator-readiness-summary');
+  root.replaceChildren();
+  const checks=Array.isArray(report?.checks)?report.checks:[];
+  if(!checks.length){
+    summary.textContent='لم تتوفر نتائج فحص وحدات STREAM.';
+    $('operator-readiness-time').textContent='لم يتم التحقق';
+    return;
+  }
+  const states={
+    connected:['healthy','متصل','ردّ نظام الإدارة بنتيجة سليمة'],
+    reachable:['reachable','الواجهة متاحة','HTTP ناجح، لكن لم يُثبت فحص المحتوى'],
+    degraded:['reachable','يحتاج مراجعة','ردّ النظام بأنه غير سليم'],
+    blocked:['error','التفويض مرفوض','خدمة STREAM رفضت اعتماد ربط الموقع'],
+    unavailable:['error','غير متاح','خدمة الإدارة لم تُكمل الطلب'],
+    unknown:['offline','غير مؤكد','لم تنجح محاولة التحقق']
+  };
+  const codes={
+    operator_bridge_not_configured:'لم يكتمل إعداد ربط الموقع بالسيرفر',
+    operator_backend_auth_denied:'رفض التوثيق بين الموقع ولوحة STREAM',
+    operator_backend_error:'ردّ السيرفر بخطأ',
+    operator_route_unavailable:'المسار الإداري غير متاح',
+    operator_reported_unhealthy:'الواجهة صرحت بوجود خطأ',
+    operator_redirect_rejected:'رفض النظام التحويل إلى موقع آخر',
+    operator_probe_timeout:'انتهت مهلة الفحص',
+    operator_probe_network_error:'تعذر الاتصال بالخدمة',
+    operator_http_ok_only:'استجابة HTTP فقط',
+    operator_read_ok:'استجابة سليمة من مسار الإدارة'
+  };
+  const links={overview:'home',sources:'sources',library:'library',
+    accounts:'accounts',codes:'codes',distributors:'distributors',
+    restream:'restream',security:'diagnostics'};
+  let count=0;
+  for(const row of checks){
+    if(!Object.hasOwn(links,row.id))continue;
+    count++;
+    const mode=states[row.state]||states.unknown;
+    const card=make('article','service');
+    const top=make('div','service-top');
+    top.append(make('strong','',row.label),
+      make('span','pill '+mode[0],mode[1]));
+    card.append(top,make('p','meta',mode[2]));
+    card.append(make('p','meta',codes[row.code]||'لم يتم التحقق'));
+    const http=Number.isInteger(row.httpStatus)?row.httpStatus:'—';
+    const latency=Number.isFinite(row.latencyMs)?Math.round(row.latencyMs):'—';
+    card.append(make('p','meta','HTTP: '+http+' · الاستجابة: '+latency+' ms'));
+    const link=make('a','readiness-link','فتح القسم ←');
+    link.href='/admin/control-center#'+links[row.id];
+    card.append(link);root.append(card);
+  }
+  const sums=report?.summary||{};
+  summary.textContent='وحدات متصلة: '+Number(sums.connected||0)+
+    ' · متاحة دون تحقق كامل: '+Number(sums.reachable||0)+
+    ' · تحتاج مراجعة: '+Number(sums.degraded||0)+
+    ' · غير متاحة: '+Number(sums.unavailable||0)+
+    ' · غير مؤكدة: '+Number(sums.unknown||0)+
+    ' · الإجمالي: '+count;
+  $('operator-readiness-time').textContent='آخر قراءة من النظام الأصلي: '+
+    new Date(report.lastCheckedAt).toLocaleString('ar-SA');
+}
+function clearOperatorReadiness(){
+  $('operator-readiness').replaceChildren();
+  $('operator-readiness-summary').textContent='نتائج الفحص السابقة غير معتمدة.';
+  $('operator-readiness-time').textContent='غير متاح';
+}
 async function refresh(){
   const button=$('refresh');button.disabled=true;button.textContent='جارٍ الفحص...';
   try{
@@ -41,7 +107,7 @@ async function refresh(){
       latest=null;
       $('checked').textContent='انتهت جلسة المشرف. ارجع إلى لوحة الإدارة لتسجيل الدخول.';
       for(const key of ['total','healthy','reachable','failed'])$(key).textContent='—';
-      $('checks').replaceChildren();$('phases').replaceChildren();
+      $('checks').replaceChildren();$('phases').replaceChildren();clearOperatorReadiness();
       return;
     }
     if(!response.ok)throw new Error('HTTP '+response.status);
@@ -49,11 +115,12 @@ async function refresh(){
     for(const key of ['total','healthy','reachable','failed'])$(key).textContent=data.summary[key];
     $('checked').textContent='آخر فحص: '+new Date(data.checkedAt).toLocaleString('ar-SA');
     showChecks(data.checks);showPhases(data.phases);
+    showOperatorReadiness(data.operatorReadiness);
   }catch{
     latest=null;
     $('checked').textContent='تعذر جلب حالة الخدمات؛ النتائج السابقة لم تعد معتمدة.';
     for(const key of ['total','healthy','reachable','failed'])$(key).textContent='—';
-    $('checks').replaceChildren();$('phases').replaceChildren();
+    $('checks').replaceChildren();$('phases').replaceChildren();clearOperatorReadiness();
   }finally{button.disabled=false;button.textContent='↻ تحديث الفحص';}
 }
 $('refresh').addEventListener('click',refresh);

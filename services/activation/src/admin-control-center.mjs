@@ -1,5 +1,6 @@
 // Admin-only, read-only service monitor. No customer data and no arbitrary URL inputs.
 import { readFile } from 'node:fs/promises';
+import {siteOperatorReadiness} from './site-operator-readiness.mjs';
 
 export const CONTROL_CENTER_TARGETS = Object.freeze([
   Object.freeze({ id:'player', label:'موقع BLOFY PLAYER', tier:'production', endpoint:'https://blofyplayer.com/health' }),
@@ -39,7 +40,10 @@ export async function checkHealthPayload(response){
     const explicitFailure=payload?.ok===false||
       payload?.healthy===false||payload?.status==='error'||
       payload?.status==='unhealthy'||payload?.status==='down';
-    return {isHealthJson:true,explicitlyUnhealthy:explicitFailure};
+    return {isHealthJson:true,explicitlyUnhealthy:explicitFailure,
+      explicitlyHealthy:!explicitFailure&&(
+        payload?.ok===true||payload?.healthy===true||
+        ['ok','healthy','online','up'].includes(payload?.status))};
   }catch{return {isHealthJson:false,explicitlyUnhealthy:false};}
   finally{try{await reader.cancel();}catch{}try{reader.releaseLock()}catch{}}
 }
@@ -54,16 +58,20 @@ export async function probeControlCenterTarget(target, fetchImpl=fetch, now=Date
     });
     const payload=await checkHealthPayload(response);
     const verdict=classifyControlCenterStatus(response.status);
-    const status=payload.explicitlyUnhealthy?'error':verdict;
+    // HTTP 200 alone cannot prove the underlying service is healthy.
+    const status=payload.explicitlyUnhealthy?'error':
+      verdict==='healthy'&&!payload.explicitlyHealthy?'reachable':verdict;
     return {
       id:target.id,name:target.label,tier:target.tier,
       status,
       httpStatus:response.status,latencyMs:Math.max(0,now()-started),
       note:payload.explicitlyUnhealthy?
         'الخادم متصل لكنه أبلغ عن حالة غير سليمة؛ لا تُعدّ الخدمة جاهزة':
-        response.status>=200 && response.status<=299
-          ? 'استجاب فحص HTTP؛ لا يثبت جودة الصوت أو تشغيل القنوات'
-          : 'الخادم ردّ برمز HTTP لا يؤكد جاهزية الخدمة'
+        status==='healthy'
+          ? 'أكدت استجابة الصحة جاهزية الخدمة؛ لا يثبت ذلك تشغيل الوسائط'
+          : response.status>=200 && response.status<=299
+            ? 'استجاب HTTP، لكن فحص جاهزية الخدمة غير مؤكد'
+            : 'الخادم ردّ برمز HTTP لا يؤكد جاهزية الخدمة'
     };
   } catch(error) {
     return {
@@ -77,11 +85,15 @@ export async function controlCenterSnapshot() {
   if(cached && Date.now()-cachedAt<CACHE_MS)return cached;
   if(pending)return pending;
   pending=(async()=>{
-    const checks=await Promise.all(CONTROL_CENTER_TARGETS.map(target=>probeControlCenterTarget(target)));
+    const [checks,operatorReadiness]=await Promise.all([
+      Promise.all(CONTROL_CENTER_TARGETS.map(target=>probeControlCenterTarget(target))),
+      siteOperatorReadiness()
+    ]);
     const result={
       product:'BLOFY CONTROL CENTER',version:1,mode:'read-only',
       checkedAt:new Date().toISOString(),
       checks,
+      operatorReadiness,
       summary:{
         total:checks.length,
         healthy:checks.filter(c=>c.status==='healthy').length,
