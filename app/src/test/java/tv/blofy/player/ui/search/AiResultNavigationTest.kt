@@ -5,6 +5,7 @@ import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import tv.blofy.player.data.local.StreamEntity
 import tv.blofy.player.ui.details.MovieDetailsActivity
@@ -13,7 +14,7 @@ import tv.blofy.player.ui.details.SeriesDetailsActivity
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28], application = Application::class)
 class AiResultNavigationTest {
-    private val context = Application()
+    private val context: Application = RuntimeEnvironment.getApplication()
     private fun item(kind: String, locked: Boolean = false) = StreamEntity(
         key = "provider-a:$kind:123", providerId = "provider-a",
         remoteId = "123", categoryId = null, kind = kind,
