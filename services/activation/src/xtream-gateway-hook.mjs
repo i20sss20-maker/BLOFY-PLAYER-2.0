@@ -43,6 +43,7 @@ import { readXtreamProviderDenialHint } from './xtream-provider-denial.mjs';
 import { normalizeXtreamEpg } from './xtream-epg.mjs';
 import { acceptsXtreamGzip } from './xtream-catalog-compression.mjs';
 import { shouldRetryXtreamWithoutRange,firstByteXtreamRange } from './xtream-media-range.mjs';
+import {verifiedVodResumePlan,resumeVerifiedVodBytes} from './xtream-vod-range-resume.mjs';
 import { recordXtreamPlayback,xtreamPlaybackSnapshot } from './xtream-playback-metrics.mjs';
 import {xtreamDirectMediaGauge} from './xtream-direct-media-gauge.mjs';
 import { XtreamDenialCooldown } from './xtream-denial-cooldown.mjs';
@@ -1573,16 +1574,64 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
         // A 307 ticket, HLS manifest and failed source do not count as viewers.
         releaseActiveDirectTransfer=xtreamDirectMediaGauge.begin({kind,
           sourceId:String(row.server_id||'')});
+        // Disabled unless an operator opts in after source-range validation.
+        // Only DIRECT MP4/MKV VOD with strong ETag + exact Content-Length
+        // may replace one failed upstream socket from the exact next byte.
+        // Never reissues customer auth or restarts a live TS stream.
+        const vodPlan=verifiedVodResumePlan({
+          enabled:process.env.BLOFY_XTREAM_VOD_RANGE_RESUME_ENABLED==='1',
+          kind,method:req.method,status:response.status,
+          requestRange:headers.range||null,usingIndependentRelay,
+          format:inspection.format,headers:response.headers
+        });
+        let resumedVod=false;
         res.writeHead(response.status, outputHeaders);
         const stream = Readable.from((async function* () {
+          let sent=first.value.byteLength;
           yield first.value;
-          while (true) {
-            const chunk = await readChunk(45000);
-            if (chunk.done) return;
-            if (chunk.value?.byteLength) yield chunk.value;
+          try {
+            if(vodPlan&&sent===vodPlan.total)return;
+            for(;;){
+              const chunk=await readChunk(45000);
+              if(chunk.done){
+                if(vodPlan&&sent!==vodPlan.total)
+                  throw Error('vod_resume_original_truncated');
+                return;
+              }
+              if(!chunk.value?.byteLength)continue;
+              sent+=chunk.value.byteLength;
+              if(vodPlan&&sent>vodPlan.total)
+                throw Error('vod_resume_original_overshoot');
+              yield chunk.value;
+              if(vodPlan&&sent===vodPlan.total)return;
+            }
+          }catch(error){
+            if(!vodPlan||client.signal.aborted||sent<1||
+               sent>=vodPlan.total)throw error;
+            // Stop the dead connection BEFORE opening a second connection.
+            // One per-viewer replacement attempt; no source switching.
+            controller.abort();
+            try{await reader.cancel()}catch{}
+            try{reader.releaseLock()}catch{}
+            reader=null;
+            for await(const bytes of resumeVerifiedVodBytes({
+              plan:vodPlan,forwarded:sent,url:mediaFetchTarget,
+              fetchImpl:checkedFetch,clientSignal:client.signal,headers
+            })){
+              sent+=bytes.byteLength;
+              yield bytes;
+            }
+            if(sent!==vodPlan.total)throw Error('vod_resume_incomplete');
+            resumedVod=true;
           }
         })());
-        await pipeline(stream, res);
+        await pipeline(stream,res);
+        if(resumedVod){
+          console.info('BLOFY_VOD_RANGE_RESUMED',{
+            kind,sourceId:row.server_id,
+            state:'etag_verified_exact_byte_continuity',
+            customerCutover:false});
+        }
         feedEndedNormally=true;
         if(kind==='live'&&actualStreamStartedAt>0){
           observe('ended',{reason:'upstream_stream_ended',durationMs:Date.now()-actualStreamStartedAt});
