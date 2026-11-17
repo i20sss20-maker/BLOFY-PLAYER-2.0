@@ -64,3 +64,20 @@ test('gateway integrates cooldown only after a real upstream denial',async()=>{
   assert.match(ui,/publishCatalog:false/);
   assert.match(ui,/window\.confirm\('المصدر/);
 });
+
+
+test('two confirmed source-specific 509 rejections protect this channel only',()=>{
+  const c=new XtreamDenialCooldown({threshold:2,cooldownMs:30000});
+  const a='source-A:live:42',b='source-A:live:43',other='source-B:live:42';
+  assert.equal(c.denied(a,509,1000),false);
+  assert.equal(c.denied(b,509,1200),false);
+  assert.equal(c.denied(a,509,1500),true);
+  assert.deepEqual(c.active(a,1600),{status:509,retryAfterSeconds:30});
+  assert.equal(c.active(b,1600),null);
+  assert.equal(c.active(other,1600),null);
+  assert.equal(c.active(a,32000),null);
+  // Generic upstream/gateway 502/503 are not provider-confirmed denials.
+  assert.equal(c.denied(other,502,33000),false);
+  assert.equal(c.denied(other,503,34000),false);
+  assert.equal(c.active(other,34500),null);
+});
