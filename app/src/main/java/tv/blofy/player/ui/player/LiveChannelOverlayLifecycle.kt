@@ -392,7 +392,8 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                             textSize = 11.7f
                             gravity = Gravity.CENTER
                             setTextColor(Color.WHITE)
-                            isFocusable = true
+                            // Enable after focusing the selected channel; never autofocus a header tab.
+                            isFocusable = false
                             isClickable = true
                             background = GradientDrawable().apply {
                                 cornerRadius = dp(10).toFloat()
@@ -561,6 +562,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                                 ?: list.requestFocus()
                         }
                     }
+                    for (index in 0 until tabs.childCount) tabs.getChildAt(index)?.isFocusable = true
                     searchButton.isFocusable = true
                     closeButton.isFocusable = true
                 }
