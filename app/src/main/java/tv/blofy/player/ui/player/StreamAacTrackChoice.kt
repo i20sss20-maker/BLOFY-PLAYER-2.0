@@ -1,5 +1,7 @@
 package tv.blofy.player.ui.player
 
+import androidx.annotation.OptIn
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.common.C
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.Tracks
@@ -9,6 +11,7 @@ import androidx.media3.common.Tracks
  * codec transcode or new upstream connection. It must never choose a Media3
  * unsupported format or replace an already selected AAC track.
  */
+@OptIn(markerClass = [UnstableApi::class])
 internal object StreamAacTrackChoice {
     data class Candidate(val group: Tracks.Group, val index: Int)
 
