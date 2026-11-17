@@ -37,7 +37,7 @@ class StreamAacTrackChoiceTest {
         )
         val candidate = StreamAacTrackChoice.available(tracks)
         assertEquals(1, candidate?.index)
-        assertEquals(MimeTypes.AUDIO_AAC, candidate?.group?.getTrackFormat(candidate.index)?.sampleMimeType)
+        assertEquals(MimeTypes.AUDIO_AAC, candidate?.let { it.group.getTrackFormat(it.index).sampleMimeType })
     }
 
     @Test fun neverOffersUnsupportedAacOnAndroid9() {
