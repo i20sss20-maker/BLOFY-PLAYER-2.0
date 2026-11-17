@@ -55,7 +55,9 @@ class PlaylistManager(
                 },
                 suspend {
                     onProgress(PlaylistSyncProgress(PlaylistSyncStage.SERIES, 3, 3))
-                    freshItemCount += syncSeries(provider)
+                    freshItemCount += syncSeries(provider) { percent ->
+                        onProgress(PlaylistSyncProgress(PlaylistSyncStage.SERIES, 3, 3, percent))
+                    }
                 }
             )
         )
@@ -234,10 +236,16 @@ class PlaylistManager(
         )
     }
 
-    suspend fun syncSeries(provider: ProviderEntity): Int {
+    /**
+     * Parse large series catalogs incrementally, like movies. Avoid keeping both the full
+     * provider JSON array and the converted Room entities in memory on low-RAM TV boxes.
+     */
+    suspend fun syncSeries(
+        provider: ProviderEntity,
+        onProgress: suspend (Int) -> Unit = {}
+    ): Int {
         if (provider.providerType.equals("m3u", true)) return 0
         val categories = api.list(actionUrl(provider, "get_series_categories"))
-        val series = api.list(actionUrl(provider, "get_series"))
         val previous = dao.streams(provider.id, "series", null).first()
         val previousFlags = PreviousStreamFlags(previous)
         val coroutineContext = currentCoroutineContext()
@@ -246,46 +254,74 @@ class PlaylistManager(
             val id = row.id("category_id") ?: return@mapIndexedNotNull null
             CategoryEntity("${provider.id}:series:$id", provider.id, id, "series", row.string("category_name") ?: "Series", index)
         }
-        val streamRows = series.mapIndexedNotNull { index, row ->
-            if (index % 256 == 0) coroutineContext.ensureActive()
-            val id = row.id("series_id") ?: return@mapIndexedNotNull null
-            val key = "${provider.id}:series:$id"
-            val backdrop = when (val raw = row["backdrop_path"]) {
-                is List<*> -> raw.firstOrNull()?.toString()
-                else -> raw?.toString()
+
+        val streamRows = ArrayList<StreamEntity>(4096)
+        var sourceStreamCount = 0
+        val body = api.streamingResponse(actionUrl(provider, "get_series"))
+        val declaredBytes = body.contentLength()
+        body.use { responseBody ->
+            val counting = CountingInputStream(responseBody.byteStream())
+            JsonReader(InputStreamReader(counting, Charsets.UTF_8)).use { reader ->
+                reader.beginArray()
+                val gson = Gson()
+                val mapType = object : TypeToken<Map<String, Any?>>() {}.type
+                while (reader.hasNext()) {
+                    if (sourceStreamCount % 128 == 0) coroutineContext.ensureActive()
+                    val row: Map<String, Any?> = gson.fromJson(reader, mapType)
+                    sourceStreamCount += 1
+                    val id = row.id("series_id")
+                    if (id != null) {
+                        val key = "${provider.id}:series:$id"
+                        val backdrop = when (val raw = row["backdrop_path"]) {
+                            is List<*> -> raw.firstOrNull()?.toString()
+                            else -> raw?.toString()
+                        }
+                        val fresh = StreamEntity(
+                            key = key,
+                            providerId = provider.id,
+                            remoteId = id,
+                            categoryId = row.id("category_id"),
+                            kind = "series",
+                            name = row.string("name") ?: "Series $id",
+                            icon = row.string("cover") ?: row.string("stream_icon"),
+                            addedAt = row.string("last_modified")?.toLongOrNull() ?: row.string("added")?.toLongOrNull(),
+                            plot = row.string("plot") ?: row.string("description"),
+                            genre = row.string("genre"),
+                            releaseDate = row.string("releaseDate") ?: row.string("release_date"),
+                            year = row.string("year"),
+                            rating = row.string("rating") ?: row.string("rating_5based"),
+                            duration = row.string("episode_run_time") ?: row.string("duration"),
+                            backdrop = backdrop?.takeIf { it.isNotBlank() && it != "null" },
+                            favorite = false,
+                            locked = false
+                        )
+                        streamRows += previousFlags.applyTo(fresh)
+                    }
+                    if (sourceStreamCount % 256 == 0) {
+                        val percent = if (declaredBytes > 0L) {
+                            90 + ((counting.bytesRead.toDouble() / declaredBytes.toDouble()) * 4.0).toInt().coerceIn(0, 4)
+                        } else {
+                            90 + (sourceStreamCount / 10_000).coerceIn(0, 3)
+                        }
+                        onProgress(percent.coerceIn(90, 94))
+                    }
+                }
+                reader.endArray()
             }
-            StreamEntity(
-                key = key,
-                providerId = provider.id,
-                remoteId = id,
-                categoryId = row.id("category_id"),
-                kind = "series",
-                name = row.string("name") ?: "Series $id",
-                icon = row.string("cover") ?: row.string("stream_icon"),
-                addedAt = row.string("last_modified")?.toLongOrNull() ?: row.string("added")?.toLongOrNull(),
-                plot = row.string("plot") ?: row.string("description"),
-                genre = row.string("genre"),
-                releaseDate = row.string("releaseDate") ?: row.string("release_date"),
-                year = row.string("year"),
-                rating = row.string("rating") ?: row.string("rating_5based"),
-                duration = row.string("episode_run_time") ?: row.string("duration"),
-                backdrop = backdrop?.takeIf { it.isNotBlank() && it != "null" },
-                favorite = false,
-                locked = false
-            )
         }
-        val preservedRows = previousFlags.applyTo(streamRows)
+        onProgress(94) // Parsing complete; the large local Room write can still be in progress.
         if (CatalogReplacementPolicy.shouldReplace(
                 previousStreamCount = previous.size,
                 sourceCategoryCount = categories.size,
                 parsedCategoryCount = categoryRows.size,
-                sourceStreamCount = series.size,
-                parsedStreamCount = preservedRows.size
+                sourceStreamCount = sourceStreamCount,
+                parsedStreamCount = streamRows.size
             )
         ) {
-            dao.replaceCatalog(provider.id, "series", categoryRows, preservedRows)
+            dao.replaceCatalog(provider.id, "series", categoryRows, streamRows)
         }
-        return preservedRows.size
+        onProgress(95) // Only report this once the series transaction has committed.
+        return streamRows.size
     }
 
     suspend fun syncSeriesEpisodes(provider: ProviderEntity, seriesId: String): SeriesEpisodeSyncResult {
