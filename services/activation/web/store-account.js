@@ -59,6 +59,7 @@
    const data=await api('');
    orders=data.orders||[];
    $('account-email').textContent=data.email||'';
+   $('reminder-optin').checked=data.alertsOptIn===true;
    $('orders').replaceChildren();
    if(!orders.length)$('orders').append(node('p','لا توجد طلبات مربوطة بعد. أضف طلبك السابق باستخدام الرابط الخاص.'));
    else orders.forEach(o=>$('orders').append(addOrderCard(o)));
@@ -133,6 +134,16 @@
    tell('تم ربط الطلب بحسابك بنجاح.');
   }catch(e){tell(statusMessage(e));}
   finally{button.disabled=false;}
+ });
+ $('reminder-optin').addEventListener('change',async function(){
+  this.disabled=true;
+  try{
+   const response=await api('/preferences',{alertsOptIn:this.checked});
+   $('reminder-status').textContent=response.delivery==='email_when_eligible'
+    ?'تم حفظ اختيارك. ستصلك رسالة عند دخول أحد الاشتراكات فترة السبعة أيام إذا كان التنبيه مفعّلًا.'
+    :'تم حفظ اختيارك، لكن إرسال رسائل البريد الآلية لم يُفعّل بعد. ستظل التنبيهات داخل حسابك.';
+  }catch(err){this.checked=!this.checked;$('reminder-status').textContent=statusMessage(err);}
+  finally{this.disabled=false;}
  });
  $('logout').addEventListener('click',async()=>{
   try{await api('/logout',{});view(false);orders=[];tell('تم تسجيل الخروج.');}
