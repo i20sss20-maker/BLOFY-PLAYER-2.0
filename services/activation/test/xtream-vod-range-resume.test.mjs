@@ -189,3 +189,99 @@ test('zero-offset unbounded Range 206 can resume only with exact full-file contr
  assert.equal(received.length,5092);
  assert.equal(called,1);
 });
+
+test('an exact bounded MKV seek range reconnects the remaining requested bytes only',async()=>{
+ const headers=mockHeaders({
+  'content-length':'4096','content-range':'bytes 4096-8191/16384',
+  'content-type':'video/x-matroska'
+ });
+ const verified=plan({kind:'series',status:206,format:'mkv',
+  requestRange:'bytes=4096-8191',headers});
+ assert.equal(verified?.total,4096);
+ assert.equal(verified?.rangeStart,4096);
+ assert.equal(verified?.rangeEnd,8191);
+ assert.equal(verified?.fileTotal,16384);
+ let calls=0,result=Buffer.alloc(0);
+ const fetchImpl=async(target,options)=>{
+  calls++;
+  assert.equal(String(target),url);
+  assert.equal(options.headers['range'],'bytes=6096-8191');
+  assert.equal(options.headers['if-range'],etag);
+  assert.equal(options.headers['accept-encoding'],'identity');
+  return new Response(Buffer.alloc(2096,0x7c),{status:206,headers:{
+   'content-range':'bytes 6096-8191/16384',
+   'content-length':'2096',etag
+  }});
+ };
+ for await(const bytes of resumeVerifiedVodBytes({plan:verified,
+  forwarded:2000,url,fetchImpl})){
+   result=Buffer.concat([result,Buffer.from(bytes)]);
+ }
+ assert.equal(calls,1);
+ assert.equal(result.length,2096);
+ assert.equal(result[0],0x7c);
+});
+test('open ended nonzero MKV seek can finish the same file, never from offset zero',async()=>{
+ const hdr=mockHeaders({
+  'content-length':'12288','content-range':'bytes 4096-16383/16384'
+ });
+ const p=plan({kind:'series',status:206,format:'mkv',
+  requestRange:'bytes=4096-',headers:hdr});
+ assert.equal(p?.total,12288);
+ assert.equal(p?.fileTotal,16384);
+ let fetched=0;
+ for await(const bytes of resumeVerifiedVodBytes({
+  plan:p,forwarded:10240,url,fetchImpl:async(_,req)=>{
+   fetched++;
+   assert.equal(req.headers.range,'bytes=14336-16383');
+   return new Response(Buffer.alloc(2048),{status:206,headers:{
+    etag,'content-length':'2048',
+    'content-range':'bytes 14336-16383/16384'
+   }});
+  }
+ }))assert.equal(bytes.length,2048);
+ assert.equal(fetched,1);
+});
+test('seeks reject off-by-one, multipart, unauthorized extension and short 206 spans',()=>{
+ const options={status:206,kind:'series',format:'mkv'};
+ const validHdr=mockHeaders({'content-length':'4096',
+  'content-range':'bytes 4096-8191/16384'});
+ for(const params of [
+  {requestRange:'bytes=4096-8192',headers:validHdr},
+  {requestRange:'bytes=4095-8191',headers:validHdr},
+  {requestRange:'bytes=4096-',headers:validHdr},
+  {requestRange:'bytes=4096-8191,12288-16383',headers:validHdr},
+  {requestRange:'bytes=8192-4096',headers:validHdr},
+  {requestRange:'bytes=0004096-8191',headers:validHdr},
+  {requestRange:'bytes=-4096',headers:validHdr},
+  {requestRange:'bytes=4096-9999999999999999',headers:validHdr},
+  {requestRange:'bytes=4096-8191',headers:mockHeaders({
+   'content-length':'4095','content-range':'bytes 4096-8191/16384'
+  })},
+  {requestRange:'bytes=4096-8191',headers:mockHeaders({
+   'content-length':'4096','content-range':'bytes 4096-8190/16384'
+  })},
+  {requestRange:'bytes=4096-8191',headers:mockHeaders({
+   'content-length':'4096','content-range':'bytes 4096-8191/8191'
+  })},
+  {requestRange:'bytes=4096-8191',usingIndependentRelay:true,headers:validHdr},
+  {requestRange:'bytes=4096-8191',headers:mockHeaders({
+   'content-length':'4096','content-range':'bytes 4096-8191/16384',
+   'etag':'W/"weak"'
+  })}
+ ])assert.equal(plan({...options,...params}),null,JSON.stringify(params));
+});
+test('resume reply refuses compressed response even with matching Range and ETag',async()=>{
+ const p=plan({status:206,kind:'series',format:'mkv',
+  requestRange:'bytes=4096-8191',headers:mockHeaders({
+   'content-length':'4096','content-range':'bytes 4096-8191/16384'
+  })});
+ await assert.rejects(async()=>{
+  for await(const _ of resumeVerifiedVodBytes({
+   plan:p,forwarded:1000,url,fetchImpl:async()=>new Response(null,{status:206,headers:{
+    'content-range':'bytes 5096-8191/16384','content-length':'3096',
+    'content-encoding':'gzip',etag
+   }})
+  })){}
+ },/vod_resume_range_contract_denied/);
+});
