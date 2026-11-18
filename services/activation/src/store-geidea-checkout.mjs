@@ -2,7 +2,7 @@
 // Uses the existing live Geidea credentials, with no unverified payment fulfillment.
 import crypto from 'node:crypto';
 import {createFixedWindowLimiter,requestClientKey} from './auth-protection.mjs';
-import {createSignature,verifyGeideaCallback,verifiedPayment,CARD_ONLY_WALLETS} from './geidea-live.mjs';
+import {createSignature,verifyGeideaCallback,verifiedPayment,geideaHiddenWallets} from './geidea-live.mjs';
 import {ensureStreamCodeTable,streamNumericCodeLength,randomNumericStreamCode,streamCodeProof,normalizeStreamCode} from './xtream-duration-codes.mjs';
 import {encryptStreamCode,decryptStreamCode} from './xtream-code-vault.mjs';
 import {CART_SKU,parseStoreCart,cartVouchers,publicOrderNumber} from './store-cart.mjs';
@@ -45,7 +45,7 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
    password.length>=16&&/^[a-f0-9]{64}$/i.test(String(keyHex||''));
  const base=String(env.BLOFY_PAYMENT_BASE_URL||'https://api.blofyplayer.com').trim().replace(/\/+$/,'');
  if(enabled&&!/^https:\/\/(?:api\.)?blofyplayer\.com$/.test(base))throw err('store_invalid_origin',503);
- const config={publicKey,password};
+ const config={publicKey,password,applePayEnabled:env.BLOFY_GEIDEA_APPLE_PAY_ENABLED==='true'};
  let ready=null;
  async function schema(){
   if(!ready)ready=(async()=>{
@@ -536,7 +536,7 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
    const request={
      amount:(amountMinor/100).toFixed(2),currency:'SAR',timestamp,merchantReferenceId:id,
      signature:createSignature({publicKey,password,amountMinor,reference:id,timestamp}),
-     paymentOperation:'Pay',language:'ar',hideWallets:[...CARD_ONLY_WALLETS],
+     paymentOperation:'Pay',language:'ar',hideWallets:geideaHiddenWallets(env),
      expressCheckouts:[],acceptTabbyPaymentMethod:false,acceptTamaraPaymentMethod:false,
      appearance:{uiMode:'modal'},
      callbackUrl:base+'/api/v1/store/geidea/webhook',
@@ -604,7 +604,7 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
  const renewalFlow=createStoreRenewalFlow({pool,json,readJson,keyHex,
   enabled:enabled&&renewalsEnabled,requireCheckoutCustomer,browser,
   rateCheckout,requestClientKey,schema,provider,plans:publicStorePlans,
-  publicKey,password,base});
+  publicKey,password,base,env});
  async function reconcile(id,expectedProviderId){
    if(!enabled)throw err('store_checkout_disabled',503);
    await schema();
@@ -770,7 +770,7 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
    const request={
     amount:(quote.priceMinor/100).toFixed(2),currency:'SAR',timestamp,merchantReferenceId:id,
     signature:createSignature({publicKey,password,amountMinor:quote.priceMinor,reference:id,timestamp}),
-    paymentOperation:'Pay',language:'ar',hideWallets:[...CARD_ONLY_WALLETS],expressCheckouts:[],
+    paymentOperation:'Pay',language:'ar',hideWallets:geideaHiddenWallets(env),expressCheckouts:[],
     acceptTabbyPaymentMethod:false,acceptTamaraPaymentMethod:false,appearance:{uiMode:'modal'},
     callbackUrl:base+'/api/v1/store/geidea/webhook',
     returnUrl:base+'/api/v1/store/geidea/return?reference='+id
