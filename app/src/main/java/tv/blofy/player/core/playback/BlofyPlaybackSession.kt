@@ -51,6 +51,9 @@ class BlofyPlaybackSession(
 
     private val renderersFactory = DefaultRenderersFactory(appContext)
         .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+        // Android TV 9 boxes sometimes reject a hardware audio/video codec.
+        // Use another installed decoder rather than failing the whole stream.
+        .setEnableDecoderFallback(true)
 
     val player: ExoPlayer = ExoPlayer.Builder(appContext)
         .setLoadControl(
