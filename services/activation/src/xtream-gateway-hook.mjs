@@ -1654,6 +1654,9 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
             first:first.value,reader,controller,clientSignal:client.signal,
             fetchImpl:checkedFetch,target:mediaFetchTarget,headers,
             onReconnect:({attempt:reconnection})=>{
+              // Count recoveries in the operator's real playback metrics.
+              // An HTTP 200 alone cannot reveal mid-response source drops.
+              observe('recovered',{reason:'live_ts_recovered',attempts:reconnection});
               console.info('BLOFY_LIVE_TS_RECOVERED',{
                 state:'same_source_valid_ts',attempt:reconnection,
                 kind,sourceId:row.server_id,customerCutover:false

@@ -6,7 +6,7 @@ const samples=[];
 const WINDOW_MS=60*60*1000;
 const MAX_SAMPLES=400;
 const KINDS=new Set(['live','movie','series']);
-const PHASES=new Set(['started','failed','interrupted','ended','client_closed','shared_grant','shared_fallback']);
+const PHASES=new Set(['started','recovered','failed','interrupted','ended','client_closed','shared_grant','shared_fallback']);
 const REASONS=new Set([
   'upstream_http_403','upstream_http_404','upstream_http_408','upstream_http_429','upstream_http_456',
   'upstream_http_500','upstream_http_502','upstream_http_503','upstream_http_504',
@@ -17,7 +17,10 @@ const REASONS=new Set([
   'upstream_stream_ended','client_or_proxy_closed','xtream_transport_connection_reset',
   'xtream_transport_timeout','xtream_transport_unreachable',
   'xtream_transport_dns_failed','xtream_transport_connection_refused',
-  'xtream_transport_tls_invalid'
+  'xtream_transport_tls_invalid',
+  'live_ts_recovered','live_ts_reconnect_exhausted',
+  'live_ts_reconnect_denied','live_ts_reconnect_rate_limited',
+  'live_ts_reconnect_budget_exhausted'
 ]);
 
 export function recordXtreamPlayback({kind,phase,upstreamStatus,reason,providerHint,startupMs,attempts,itemId,sourceId,durationMs}={},now=Date.now()){
@@ -48,6 +51,7 @@ export function xtreamPlaybackSnapshot(now=Date.now(),sourceId=null){
   const started=events.filter(row=>row.phase==='started');
   const failed=events.filter(row=>row.phase==='failed');
   const interrupted=events.filter(row=>row.phase==='interrupted');
+  const recovered=events.filter(row=>row.phase==='recovered');
   const ended=events.filter(row=>row.phase==='ended');
   const clientClosed=events.filter(row=>row.phase==='client_closed');
   // Ticket issuance does not prove decoded playback.
@@ -57,6 +61,7 @@ export function xtreamPlaybackSnapshot(now=Date.now(),sourceId=null){
   const percentile=percent=>times.length?times[Math.ceil(percent*times.length)-1]:null;
   const kindSummary=Object.fromEntries([...KINDS].map(kind=>[kind,{
     started:started.filter(row=>row.kind===kind).length,
+    recovered:recovered.filter(row=>row.kind===kind).length,
     failed:failed.filter(row=>row.kind===kind).length,
     interrupted:interrupted.filter(row=>row.kind===kind).length,
     ended:ended.filter(row=>row.kind===kind).length,
@@ -86,6 +91,11 @@ export function xtreamPlaybackSnapshot(now=Date.now(),sourceId=null){
     windowMinutes:60,
     scope:'this_instance',
     started:started.length,
+    recovered:recovered.length,
+    liveTsRecoverySuccesses:recovered.filter(row=>row.kind==='live'&&row.reason==='live_ts_recovered').length,
+    liveTsRecoveryExhausted:interrupted.filter(row=>row.kind==='live'&&row.reason==='live_ts_reconnect_exhausted').length,
+    liveTsRecoveryRateLimited:interrupted.filter(row=>row.kind==='live'&&row.reason==='live_ts_reconnect_rate_limited').length,
+    liveTsRecoveryBudgetExhausted:interrupted.filter(row=>row.kind==='live'&&row.reason==='live_ts_reconnect_budget_exhausted').length,
     failed:failed.length,
     interrupted:interrupted.length,
     upstreamEnded:ended.length,
@@ -104,6 +114,14 @@ export function xtreamPlaybackSnapshot(now=Date.now(),sourceId=null){
     failureByReason,
     failureByKind,
     upstreamCodes,
+    // HTTP 200 on a video response does NOT prove uninterrupted playback.
+    // Show real same-socket recovery events separately from final failures.
+    recentRecoveries:recovered.filter(row=>row.kind==='live').sort((a,b)=>b.at-a.at)
+      .slice(0,12).map(row=>({
+        at:new Date(row.at).toISOString(),
+        kind:row.kind,itemId:row.itemId,reason:row.reason,
+        attempts:row.attempts
+      })),
     recentIssues:[...failed,...interrupted,...ended].sort((a,b)=>b.at-a.at).slice(0,12).map(row=>({
       at:new Date(row.at).toISOString(),
       kind:row.kind,

@@ -163,3 +163,49 @@ test('transport failure aggregates exclude old events, invalid reasons and succe
   assert.equal(sample.failed,1);
   resetXtreamPlaybackMetricsForTest();
 });
+
+test('real MPEG-TS recovery success and exhausted/limited outcomes surface in hourly health',()=>{
+ resetXtreamPlaybackMetricsForTest();
+ const now=Date.now();
+ const source='6cbe3f8e-f14d-4d0d-9f7e-39b4ae34993a';
+ for(let i=0;i<4;i++)recordXtreamPlayback({
+  kind:'live',phase:'recovered',reason:'live_ts_recovered',
+  sourceId:source,itemId:1312445,attempts:i+1,
+  upstreamUrl:'https://secret.provider/live/password',token:'private-key'
+ },now+i);
+ recordXtreamPlayback({kind:'live',phase:'interrupted',
+  reason:'live_ts_reconnect_exhausted',sourceId:source,itemId:1312445},now+10);
+ recordXtreamPlayback({kind:'live',phase:'interrupted',
+  reason:'live_ts_reconnect_rate_limited',sourceId:source,itemId:1312445},now+11);
+ recordXtreamPlayback({kind:'live',phase:'interrupted',
+  reason:'live_ts_reconnect_budget_exhausted',sourceId:source,itemId:1312445},now+12);
+ const snapshot=xtreamPlaybackSnapshot(now+20,source);
+ assert.equal(snapshot.started,0,'HTTP 200 start is different from midstream recovery');
+ assert.equal(snapshot.recovered,4);
+ assert.equal(snapshot.liveTsRecoverySuccesses,4);
+ assert.equal(snapshot.byKind.live.recovered,4);
+ assert.equal(snapshot.liveTsRecoveryExhausted,1);
+ assert.equal(snapshot.liveTsRecoveryRateLimited,1);
+ assert.equal(snapshot.liveTsRecoveryBudgetExhausted,1);
+ assert.equal(snapshot.interrupted,3);
+ assert.equal(snapshot.recentRecoveries.length,4);
+ assert.equal(snapshot.failureByReason.live_ts_reconnect_exhausted,1);
+ assert.equal(snapshot.failureByReason.live_ts_reconnect_rate_limited,1);
+ assert.equal(snapshot.failureByReason.live_ts_reconnect_budget_exhausted,1);
+ assert.doesNotMatch(JSON.stringify(snapshot),/secret.provider|private-key|upstreamUrl|token/);
+ const unknown=xtreamPlaybackSnapshot(now+20,'4e0ce9b3-1b26-4405-af70-86be533e2ffc');
+ assert.equal(unknown.liveTsRecoverySuccesses,0);
+ resetXtreamPlaybackMetricsForTest();
+});
+test('production telemetry records live reconnects and admin renders them without claiming no black screens',async()=>{
+ const [gateway,ui]=await Promise.all([
+  readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8'),
+  readFile(new URL('../web/sources-admin.js',import.meta.url),'utf8')
+ ]);
+ assert.match(gateway,/observe\('recovered',\{reason:'live_ts_recovered',attempts:reconnection\}\)/);
+ assert.match(ui,/m\.liveTsRecoverySuccesses/);
+ assert.match(ui,/m\.liveTsRecoveryExhausted/);
+ assert.match(ui,/m\.liveTsRecoveryRateLimited/);
+ assert.match(ui,/m\.liveTsRecoveryBudgetExhausted/);
+ assert.match(ui,/لا تثبت عدم ظهور شاشة سوداء/);
+});
