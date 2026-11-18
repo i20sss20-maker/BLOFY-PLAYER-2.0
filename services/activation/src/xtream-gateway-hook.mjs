@@ -1653,6 +1653,14 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
           Readable.from(liveTsRecoveryBytes({
             first:first.value,reader,controller,clientSignal:client.signal,
             fetchImpl:checkedFetch,target:mediaFetchTarget,headers,
+            onSourceDrop:({reason,durationMs})=>{
+              observe('source_drop',{reason,durationMs});
+              console.info('BLOFY_LIVE_TS_SOURCE_DROP',JSON.stringify({
+                cause:reason,secondsBucket:Number.isFinite(durationMs)?
+                  Math.round(durationMs/10000)*10:null,
+                sourceId:row.server_id,kind:'live'
+              }));
+            },
             onReconnect:({attempt:reconnection})=>{
               // Count recoveries in the operator's real playback metrics.
               // An HTTP 200 alone cannot reveal mid-response source drops.
