@@ -25,7 +25,7 @@ test('verified email owns linked guest order; no code before login and proof',as
  const voucher={id:voucherId,code_channel:'app',duration_days:90,
    code_hash:streamCodeProof(code,keyHex),code_vault:encryptStreamCode(voucherId,code,keyHex),
    revoked_at:null,redeemed_at:null,expires_at:null};
- const challenges=new Map(),customers=new Map(),sessions=new Map(),claims=new Map();
+ const challenges=new Map(),customers=new Map(),sessions=new Map(),claims=new Map(),carts=new Map();
  const rows=(arr=[])=>({rows:arr,rowCount:arr.length});
  const db={async query(sql,args=[]){
   sql=String(sql).trim();
@@ -54,6 +54,16 @@ test('verified email owns linked guest order; no code before login and proof',as
   if(sql.startsWith('INSERT INTO blofy_store_customer_sessions')){
    sessions.set(args[0],{customer_id:args[1]});return rows();
   }
+  if(sql.startsWith('SELECT items,coupon_code,revision,updated_at FROM blofy_store_customer_carts')){
+   const row=carts.get(args[0]);return rows(row?[row]:[]);
+  }
+  if(sql.startsWith('INSERT INTO blofy_store_customer_carts')){
+   const [id,serialized,coupon,revision]=args,existing=carts.get(id);
+   if(existing&&existing.revision!==revision)return rows();
+   const saved={items:JSON.parse(serialized),coupon_code:coupon,revision:(existing?.revision||0)+1,
+     updated_at:new Date().toISOString()};
+   carts.set(id,saved);return rows([saved]);
+  }
   if(sql.startsWith('SELECT c.id,c.email,c.alerts_opt_in FROM blofy_store_customer_sessions')){
    const session=sessions.get(args[0]);
    return rows(session?[...customers.values()].filter(c=>c.id===session.customer_id):[]);
@@ -81,7 +91,7 @@ test('verified email owns linked guest order; no code before login and proof',as
  const pool={query:(...a)=>db.query(...a),connect:async()=>db};
  let delivered=null;
  const handler=createStoreCustomerHandlers({pool,keyHex,
-   env:{BLOFY_CUSTOMER_ACCOUNTS_ENABLED:'true'},
+   env:{BLOFY_CUSTOMER_ACCOUNTS_ENABLED:'true',BLOFY_STORE_REQUIRE_CUSTOMER_LOGIN:'true'},
    sendCode:async(email,otp)=>{delivered={email,otp};},
    json:(res,status,data,headers={})=>{res.status=status;res.data=data;res.headers=headers;},
    readJson:async(req)=>req.body
@@ -95,6 +105,10 @@ test('verified email owns linked guest order; no code before login and proof',as
  const detail='/api/v1/store/account/orders/'+orderId;
  const before=await call(detail);
  assert.equal(before.status,401);
+ assert.deepEqual(await handler.checkoutIdentity(request('POST',{})),
+   {ok:false,status:401,error:'customer_login_required'});
+ const anonymousCart=await call('/api/v1/store/account/cart');
+ assert.equal(anonymousCart.status,401);
  const requested=await call('/api/v1/store/account/request-code','POST',{email:'TEST@Example.com'});
  assert.equal(requested.status,202);
  assert.equal(delivered.email,'test@example.com');
@@ -104,6 +118,27 @@ test('verified email owns linked guest order; no code before login and proof',as
  assert.equal(verified.status,200);
  const sessionCookie=verified.headers['set-cookie'].split(';')[0];
  const auth={cookie:sessionCookie};
+ assert.equal((await handler.checkoutIdentity(request('POST',{},auth))).ok,true);
+ const initialCart=await call('/api/v1/store/account/cart','GET',{},auth);
+ assert.equal(initialCart.status,200);
+ assert.equal(initialCart.data.revision,0);
+ const invalidCart=await call('/api/v1/store/account/cart','POST',
+   {items:[{sku:'stream-1y',quantity:10}],revision:0},auth);
+ assert.equal(invalidCart.status,400);
+ const savedCart=await call('/api/v1/store/account/cart','POST',
+   {items:[{sku:'stream-3m',quantity:1},{sku:'xtream-6m',quantity:2}],couponCode:'',revision:0},auth);
+ assert.equal(savedCart.status,200);
+ assert.equal(savedCart.data.revision,1);
+ const again=await call('/api/v1/store/account/cart','GET',{},auth);
+ assert.equal(again.status,200);
+ assert.deepEqual(again.data.items,[{sku:'stream-3m',quantity:1},{sku:'xtream-6m',quantity:2}]);
+ const stale=await call('/api/v1/store/account/cart','POST',
+   {items:[],revision:0},auth);
+ assert.equal(stale.status,409,'stale devices cannot erase or resurrect a newer cart');
+ const cleared=await call('/api/v1/store/account/cart','POST',
+   {items:[],revision:1},auth);
+ assert.equal(cleared.status,200);
+ assert.equal(cleared.data.revision,2);
  const unlinked=await call(detail,'GET',{},auth);
  assert.equal(unlinked.status,404);
  const theft=await call('/api/v1/store/account/claim','POST',{orderId,accessToken:'x'.repeat(43)},auth);
@@ -128,4 +163,5 @@ test('verified email owns linked guest order; no code before login and proof',as
  assert.equal(logout.status,200);
  const after=await call(detail,'GET',{},auth);
  assert.equal(after.status,401);
+ assert.equal((await handler.checkoutIdentity(request('POST',{},auth))).status,401);
 });
