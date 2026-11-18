@@ -22,7 +22,7 @@ export function parseXtreamCatalogDeltaRequest({kind,part,since,revision,after}=
  * mark every old row as changed. Source syncs are hidden while status=syncing.
  * Exact gateway IDs and content metadata are reused from regular player_api.
  */
-export async function xtreamCatalogDeltaPage(pool,sourceId,input){
+export async function xtreamCatalogDeltaPage(pool,sourceId,input,{hiddenIds=null}={}){
  const args=parseXtreamCatalogDeltaRequest(input);
  if(!UUID.test(String(sourceId||''))||!args)
   return {ok:false,code:'catalog_delta_invalid_request',status:400};
@@ -97,9 +97,11 @@ export async function xtreamCatalogDeltaPage(pool,sourceId,input){
  }
  const rows=(await pool.query(query,[sourceId,kind,after,earlier,current.updated_at])).rows;
  const page=rows.slice(0,120);
- const entries=part==='categories'?page.map(formatGatewayCategory):
-   part==='items'?page.map(x=>formatGatewayItem(kind,x)):
-     page.map(x=>Number(x.gateway_id));
+ const visible=part==='items'&&hiddenIds instanceof Set?
+    page.filter(row=>!hiddenIds.has(String(row.source_id))):page;
+ const entries=part==='categories'?visible.map(formatGatewayCategory):
+   part==='items'?visible.map(x=>formatGatewayItem(kind,x)):
+     visible.map(x=>Number(x.gateway_id));
  const more=rows.length>120;
  return {ok:true,revision:latest,kind,part,items:entries,
    nextCursor:more?Number(page.at(-1).gateway_id):null,complete:!more};
