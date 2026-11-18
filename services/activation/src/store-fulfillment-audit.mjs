@@ -18,6 +18,8 @@ function validVoucher(row,keyHex){
 export function assessPaidOrder(order,vouchers,keyHex){
  let expected;
  if(order.sku==='cart')expected=cartVouchers(order.cart_items);
+ else if(order.sku==='renewal')expected=[{sku:'renewal',channel:order.channel,
+  durationDays:Number(order.duration_days)}];
  else if(order.sku==='bundle-2y'){
   const channels=order.bundle_selection;
   expected=Array.isArray(channels)&&channels.length===2&&
@@ -51,7 +53,8 @@ export async function auditPaidFulfillment({pool,keyHex}){
  const paid=result.rows||[],truncated=paid.length>MAX_PAID,orders=paid.slice(0,MAX_PAID);
  const carts=orders.filter(o=>o.sku==='cart').map(o=>o.id);
  const bundles=orders.filter(o=>o.sku==='bundle-2y').map(o=>o.id);
- const direct=orders.filter(o=>o.sku!=='cart'&&o.sku!=='bundle-2y'&&o.voucher_id);
+ const direct=orders.filter(o=>o.sku!=='cart'&&o.sku!=='bundle-2y'&&o.sku!=='renewal'&&o.voucher_id);
+ const renewals=orders.filter(o=>o.sku==='renewal').map(o=>o.id);
  const rows=new Map(orders.map(o=>[keyOf(o.id),[]]));
  if(carts.length){
   const r=await pool.query(
@@ -70,6 +73,24 @@ export async function auditPaidFulfillment({pool,keyHex}){
    'LEFT JOIN blofy_xtream_gateway_duration_codes v ON v.id=ov.voucher_id '+
    'WHERE ov.order_id=ANY($1::uuid[]) ORDER BY ov.order_id,ov.position',[bundles]);
   for(const v of r.rows||[])rows.get(keyOf(v.order_id))?.push(v);
+ }
+ if(renewals.length){
+  // A renewal changes the original code's expiry but never issues another code.
+  // The exact same voucher must still exist, verify cryptographically, and
+  // have matching account expiry; no bare "paid" status is trusted.
+  const renewed=(await pool.query(
+   'SELECT r.order_id,v.id,v.code_hash,v.code_vault,v.revoked_at,'+
+   'v.code_channel AS channel,v.expires_at,a.expires_at AS account_expires_at '+
+   'FROM blofy_store_renewal_orders r '+
+   'JOIN blofy_xtream_gateway_duration_codes v ON v.id=r.voucher_id '+
+   'LEFT JOIN blofy_xtream_gateway_accounts a ON a.id=v.account_id '+
+   'WHERE r.order_id=ANY($1::uuid[])',[renewals])).rows||[];
+  for(const v of renewed){
+   const o=orders.find(x=>x.id===v.order_id);
+   if(o&&v.expires_at&&v.account_expires_at&&
+     new Date(v.expires_at).getTime()===new Date(v.account_expires_at).getTime())
+    rows.get(keyOf(o.id))?.push({...v,sku:'renewal',position:1,duration_days:o.duration_days});
+  }
  }
  if(direct.length){
   const vouchers=(await pool.query(
