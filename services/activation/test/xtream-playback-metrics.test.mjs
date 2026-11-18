@@ -32,6 +32,22 @@ test('production playback metrics summarize start latency and provider errors wi
   assert.ok(!JSON.stringify(m).includes('example.org'));
 });
 
+test('short source EOF is distinguished from client close and keeps all credentials private',()=>{
+  resetXtreamPlaybackMetricsForTest();
+  const now=Date.now();
+  recordXtreamPlayback({kind:'live',phase:'started',itemId:13456},now);
+  recordXtreamPlayback({kind:'live',phase:'interrupted',itemId:13456,reason:'upstream_clean_eof',
+    username:'sensitive',password:'sensitive',providerUrl:'http://private'},now+1);
+  const x=xtreamPlaybackSnapshot(now+2);
+  assert.equal(x.byKind.live.started,1);
+  assert.equal(x.byKind.live.interrupted,1);
+  assert.equal(x.recentIssues[0].reason,'upstream_clean_eof');
+  assert.equal(x.recentIssues[0].itemId,13456);
+  assert.ok(!JSON.stringify(x).includes('sensitive'));
+  assert.ok(!JSON.stringify(x).includes('private'));
+  resetXtreamPlaybackMetricsForTest();
+});
+
 test('bounded data expires and malformed values cannot pollute dashboard',()=>{
   resetXtreamPlaybackMetricsForTest();
   const now=Date.now();
