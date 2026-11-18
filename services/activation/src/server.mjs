@@ -3,6 +3,7 @@ import { withDatabaseStartRetry } from './startup-db-retry.mjs';
 import http from 'node:http';
 import { servePrivacyPage } from './privacy-pages.mjs';
 import { PUBLIC_ANALYTICS_CSP, withPublicAnalytics } from './public-analytics.mjs';
+import { createSiteAnalyticsHandlers } from './site-analytics.mjs';
 import { serveIndexNowKey } from './indexnow-key.mjs';
 import { createCommercialHandlers } from './commercial-handlers.mjs';
 import { storeInfoPage } from './store-info-pages.mjs';
@@ -179,6 +180,7 @@ const portal = createPortalHandlers({ pool, json, readJson, authorizedDevice });
 const blofyCodes = createBlofyCodeHandlers({ pool, secretHex: PLAYLIST_ENCRYPTION_KEY, json, readJson, requireAdmin, authorizedDevice });
 const codeOperations = createCodeOperationsHandlers({ pool, secretHex: PLAYLIST_ENCRYPTION_KEY, json, readJson, requireAdmin });
 const commercial = createCommercialHandlers({ pool, keyHex: PLAYLIST_ENCRYPTION_KEY, json, readJson, requireAdmin });
+const siteAnalytics = createSiteAnalyticsHandlers({pool,json,readJson,authorizeAdmin:requireAdmin,keyHex:PLAYLIST_ENCRYPTION_KEY});
 const cloud = createProfileCloudHandlers({ pool, json, readJson, authorizedDevice });
 
 async function initializeDatabase() {
@@ -925,6 +927,7 @@ const server = http.createServer(async (req, res) => {
       });
       return res.end();
     }
+    if (await siteAnalytics(req,res,requestUrl)) return;
     if (await servePrivacyPage(req, res, requestUrl)) return;
     if (['GET', 'HEAD'].includes(req.method) && (requestUrl.pathname === '/' || requestUrl.pathname === '/shop' || requestUrl.pathname === '/shop/')) return await serveStorefront(res);
     if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/offers.js')
