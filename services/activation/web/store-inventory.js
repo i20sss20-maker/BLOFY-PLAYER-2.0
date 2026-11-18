@@ -23,7 +23,7 @@ async function reloadSales(){
  const totalMinor=paid.reduce((a,x)=>a+Number(x.amount_minor||0),0);
  const bundles=paid.filter(x=>x.sku==='bundle-2y').reduce((a,x)=>a+Number(x.orders||0),0);
  const pending=(data.sales||[]).filter(x=>x.status==='pending').reduce((a,x)=>a+Number(x.orders||0),0);
- const cards=[['المبيعات المؤكدة',allPaid+' طلب'],['الإيراد المؤكد',(totalMinor/100).toLocaleString('ar-SA')+' ر.س'],['عروض الاشتراكين المباعة',bundles+' عرض'],['طلبات قيد الدفع',pending+' طلب']];
+ const cards=[['المبيعات المؤكدة',allPaid+' طلب'],['الإيراد المؤكد',(totalMinor/100).toLocaleString('ar-SA')+' ر.س'],['عروض الاشتراكين المباعة',bundles+' عرض'],['طلبات قيد الدفع',pending+' طلب'],['طلبات مدفوعة تحتاج متابعة',Number(data.fulfillmentIssues||0)+' طلب']];
  const root=$('sales-highlights');root.textContent='';
  cards.forEach(([label,value])=>{
    const el=document.createElement('div');el.className='stat';
