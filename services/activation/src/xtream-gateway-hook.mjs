@@ -580,6 +580,7 @@ async function authenticate(usernameInput, passwordInput, { touch = false } = {}
   return row;
 }
 
+// A 290k-item catalog previously required a full map scan each minute.
 // A large catalog can contain hundreds of thousands of titles. Once each
 // media type has stable gateway IDs, an unchanged catalog revision must not
 // trigger another full-library INSERT on every minute's client requests.
