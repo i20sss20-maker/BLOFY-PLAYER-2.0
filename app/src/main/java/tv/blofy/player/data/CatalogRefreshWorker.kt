@@ -39,6 +39,11 @@ class CatalogRefreshWorker(
     params: WorkerParameters
 ) : CoroutineWorker(appContext, params) {
     override suspend fun doWork(): Result {
+        // The old STREAM full-replacement job was freezing TVs at 95% during the
+        // final SQLite promotion. Retire it for CODE_ONLY_LOGIN devices even if
+        // WorkManager retained a job enqueued by a previous installed APK.
+        // PLAYER's own refresh path remains unchanged.
+        if (BuildConfig.CODE_ONLY_LOGIN) return Result.success()
         return try {
         val app = applicationContext
         val dao = BlofyDatabase.get(app).dao()
@@ -294,12 +299,24 @@ class CatalogRefreshWorker(
             WorkManager.getInstance(context.applicationContext).cancelUniqueWork(LEGACY_PERIODIC_NAME)
         }
 
+        /** STREAM retirement: cancel every former large full-catalog background job. */
+        fun retireStreamFullRefresh(context: Context, providerId: String) {
+            if (!BuildConfig.CODE_ONLY_LOGIN) return
+            val manager = WorkManager.getInstance(context.applicationContext)
+            cancelStreamAutomatic(context, providerId)
+            if (providerId.isNotBlank()) manager.cancelUniqueWork(manualWorkName(providerId))
+        }
+
         /**
          * One active provider is checked daily when system conditions allow.
          * Actual runs can be deferred by Android or while the viewer is playing video.
          */
         fun scheduleAutomatic(context: Context, providerId: String) {
             if (providerId.isBlank()) return
+            if (BuildConfig.CODE_ONLY_LOGIN) {
+                retireStreamFullRefresh(context, providerId)
+                return
+            }
             if (!CatalogAutoRefreshPolicy.isEnabled(context)) {
                 cancelStreamAutomatic(context, providerId)
                 return
@@ -319,6 +336,7 @@ class CatalogRefreshWorker(
         /** Entry-time refresh is silent and coalesced with in-flight WorkManager jobs.
          * Playback retains priority; no screen waits on this request or shows its progress. */
         fun enqueueIfStale(context: Context, providerId: String) {
+            if (BuildConfig.CODE_ONLY_LOGIN) return
             if (providerId.isBlank() || !CatalogAutoRefreshPolicy.isEnabled(context)) return
             val now = System.currentTimeMillis()
             if (CatalogEntryRefreshThrottle.claimIfDue(
@@ -329,6 +347,7 @@ class CatalogRefreshWorker(
         }
 
         fun enqueueNow(context: Context, providerId: String, manual: Boolean = true) {
+            if (BuildConfig.CODE_ONLY_LOGIN) return
             if (providerId.isBlank() || (!manual && !CatalogAutoRefreshPolicy.isEnabled(context))) return
             val request = OneTimeWorkRequestBuilder<CatalogRefreshWorker>()
                 .setConstraints(if (manual) manualConstraints else constraints)
