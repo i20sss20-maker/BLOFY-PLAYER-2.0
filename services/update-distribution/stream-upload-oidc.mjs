@@ -27,7 +27,7 @@ export async function verifySignedStreamUploadOidc(authorization) {
   const text = String(authorization || '');
   if (!text.startsWith('Bearer ') || text.length > 16_384) return false;
   const token = text.slice(7);
-  if (!/^[A-Za-z0-9_\\-.]+$/.test(token)) return false;
+  if (!/^[A-Za-z0-9._-]+$/.test(token)) return false;
   const segments = token.split('.');
   if (segments.length !== 3 || segments.some(x => x.length < 4)) return false;
   try {
