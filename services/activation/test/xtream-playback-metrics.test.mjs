@@ -209,3 +209,37 @@ test('production telemetry records live reconnects and admin renders them withou
  assert.match(ui,/m\.liveTsRecoveryBudgetExhausted/);
  assert.match(ui,/لا تثبت عدم ظهور شاشة سوداء/);
 });
+
+test('live source drop metrics separate EOF, stalled bytes and transport failures from HTTP starts',()=>{
+ resetXtreamPlaybackMetricsForTest();
+ const now=Date.now(),src='6cbe3f8e-f14d-4d0d-9f7e-39b4ae34993a';
+ const types=['live_ts_source_eof','live_ts_source_stalled','live_ts_source_transport_error'];
+ for(let i=0;i<3;i++)recordXtreamPlayback({
+  phase:'source_drop',kind:'live',reason:types[i],sourceId:src,
+  itemId:1312445,durationMs:[20000,45000,5000][i],
+  origin:'https://secret.example.com/private',password:'hidden'
+ },now+i);
+ const health=xtreamPlaybackSnapshot(now+8,src);
+ assert.equal(health.started,0);
+ assert.equal(health.failed,0);
+ assert.equal(health.interrupted,0);
+ assert.equal(health.liveTsSourceDrops,3);
+ assert.equal(health.medianLiveTsSourceUptimeMs,20000);
+ assert.equal(health.byKind.live.sourceDrops,3);
+ assert.deepEqual({...health.sourceDropByReason},{
+  live_ts_source_eof:1,live_ts_source_stalled:1,
+  live_ts_source_transport_error:1
+ });
+ assert.deepEqual(health.recentSourceDrops.map(x=>x.durationMs),[5000,45000,20000]);
+ assert.doesNotMatch(JSON.stringify(health),/secret.example.com|hidden|private/);
+ resetXtreamPlaybackMetricsForTest();
+});
+test('admin dashboard displays live origin drop timing and cause without guessing playback success',async()=>{
+ const src=await readFile(new URL('../web/sources-admin.js',import.meta.url),'utf8');
+ assert.match(src,/m\.liveTsSourceDrops/);
+ assert.match(src,/m\.medianLiveTsSourceUptimeMs/);
+ assert.match(src,/m\.sourceDropByReason\?\.live_ts_source_eof/);
+ assert.match(src,/m\.sourceDropByReason\?\.live_ts_source_stalled/);
+ assert.match(src,/m\.sourceDropByReason\?\.live_ts_source_transport_error/);
+ assert.match(src,/m\.recentSourceDrops/);
+});

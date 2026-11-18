@@ -64,6 +64,14 @@ export function createLiveTsReconnectBudget({
   }
  };
 }
+// Source-side interruptions are categorized WITHOUT logging raw fetch errors,
+// provider URLs, subscription credentials or client IPs.
+export function liveTsSourceDropReason(error,controller){
+ if(error?.message==='live_ts_source_eof')return 'live_ts_source_eof';
+ if(controller?.signal?.reason?.message==='live_ts_read_timeout')
+  return 'live_ts_source_stalled';
+ return 'live_ts_source_transport_error';
+}
 // This generator runs only AFTER the upstream passed the initial media
 // checks and the HTTP response began. It keeps one replacement socket at
 // a time. At most two retries PER interruption, eight connections in any
@@ -72,6 +80,7 @@ export function createLiveTsReconnectBudget({
 export async function* liveTsRecoveryBytes({
  first,reader,controller,fetchImpl,target,headers={},
  clientSignal,maxReconnects=2,waitRetry=waitXtreamMediaRetry,onReconnect=()=>{},
+ onSourceDrop=()=>{},now=Date.now,
  reconnectBudget=createLiveTsReconnectBudget()
 }={}){
  if(!tsPackets(first)||!reader||!controller||typeof fetchImpl!=='function'||
@@ -80,6 +89,7 @@ export async function* liveTsRecoveryBytes({
  if(typeof reconnectBudget?.claim!=='function')
   throw Error('live_ts_recovery_invalid_args');
  let activeReader=reader,activeController=controller,pending=first,attempts=0;
+ let lastValidatedMediaAt=Number(now());
  try{
   for(;;){
    if(clientSignal?.aborted)throw Error('live_ts_client_closed');
@@ -94,6 +104,12 @@ export async function* liveTsRecoveryBytes({
     continue;
    }catch(error){
     if(clientSignal?.aborted)throw Error('live_ts_client_closed');
+    const seenAt=Number(now());
+    const durationMs=Number.isFinite(seenAt)&&Number.isFinite(lastValidatedMediaAt)?
+      Math.max(0,Math.min(86_400_000,seenAt-lastValidatedMediaAt)):null;
+    try{onSourceDrop({
+      reason:liveTsSourceDropReason(error,activeController),durationMs
+    })}catch{}
     await closeConnection(activeReader,activeController);
     activeReader=null;activeController=null;
     // Successful recovery on a previous drop must not exhaust all future
@@ -130,6 +146,7 @@ export async function* liveTsRecoveryBytes({
        throw Error('live_ts_reconnect_denied');
       activeReader=temporaryReader;activeController=ctl;
       temporaryReader=null;pending=probe.value;
+      lastValidatedMediaAt=Number(now());
       try{onReconnect({attempt:attempts})}catch{}
       break;
      }catch(e){
