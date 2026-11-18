@@ -6,6 +6,7 @@ import {parseStoreCart,cartVouchers,publicOrderNumber} from './store-cart.mjs';
 import {decryptStreamCode} from './xtream-code-vault.mjs';
 import {streamCodeProof} from './xtream-duration-codes.mjs';
 import {createCustomerReminderEngine} from './store-customer-reminders.mjs';
+import {buildStorePaymentReceipt,createStoreReceiptEmailEngine} from './store-order-receipts.mjs';
 import {classifyResendFailure,checkResendSender} from './store-customer-resend.mjs';
 import {createStoreSubscriptionAdmin} from './store-subscription-admin.mjs';
 import {PAID_OWNED_VOUCHERS_SQL,renewalStartAndExpiry} from './store-same-code-renewal.mjs';
@@ -89,10 +90,12 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
   probe.unref?.();
  }
  const reminderEngine=createCustomerReminderEngine({pool,env,fetchImpl});
+ const receiptEmailEngine=createStoreReceiptEmailEngine({pool,env,fetchImpl});
  let ensureOpsSchema=async()=>{};
  const subscriptionAdmin=createStoreSubscriptionAdmin({pool,json,authorizeAdmin,
    ensureStoreSchema:()=>ensureOpsSchema()});
  reminderEngine.start();
+ receiptEmailEngine.start();
  let migration;
  async function schema(){
   if(!migration)migration=(async()=>{
@@ -388,6 +391,20 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
    return json(res,200,{ok:true,orderId:row.id});
   }catch(e){await db.query('ROLLBACK').catch(()=>{});throw e;}finally{db.release();}
  }
+ async function paymentReceipt(req,res,id){
+  const customer=await current(req);
+  if(!customer)return json(res,401,{error:'login_required'});
+  const order=(await pool.query(
+   'SELECT o.* FROM blofy_store_customer_orders m '+
+   'JOIN blofy_store_geidea_orders o ON o.id=m.order_id '+
+   'WHERE m.customer_id=$1 AND o.id=$2',[customer.id,id])).rows[0];
+  if(!order)return json(res,404,{error:'order_not_found'});
+  if(order.status!=='paid')return json(res,409,{error:'payment_not_confirmed'});
+  const payment=buildStorePaymentReceipt(order);
+  if(!payment)return json(res,503,{error:'receipt_not_available'});
+  // Receipt contains NO code, bearer link, card number or customer email.
+  return json(res,200,payment,{'cache-control':'no-store'});
+ }
  async function receipt(req,res,id){
   const customer=await current(req);
   if(!customer)return json(res,401,{error:'login_required'});
@@ -523,6 +540,8 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
    else if(path==='/api/v1/store/account'&&req.method==='GET')await account(req,res);
    else if(path==='/api/v1/store/account/alerts'&&req.method==='GET')await alerts(req,res);
    else if(path==='/api/v1/store/account/subscriptions'&&req.method==='GET')await subscriptions(req,res);
+   else if(/^\/api\/v1\/store\/account\/orders\/[a-fA-F0-9-]{36}\/payment-receipt$/.test(path)&&req.method==='GET')
+     await paymentReceipt(req,res,path.split('/').at(-2));
    else if(/^\/api\/v1\/store\/account\/orders\/[a-fA-F0-9-]{36}\/check$/.test(path)&&req.method==='POST')
      await refreshOwnedPayment(req,res,path.split('/').at(-2));
    else if(/^\/api\/v1\/store\/account\/orders\/[a-fA-F0-9-]{36}$/.test(path)&&req.method==='GET')

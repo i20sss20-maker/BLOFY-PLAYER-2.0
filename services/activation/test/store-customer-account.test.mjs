@@ -158,6 +158,8 @@ test('verified email owns linked guest order; no code before login and proof',as
  assert.equal(cleared.data.revision,2);
  const unlinked=await call(detail,'GET',{},auth);
  assert.equal(unlinked.status,404);
+ const unlinkedReceipt=await call(detail+'/payment-receipt','GET',{},auth);
+ assert.equal(unlinkedReceipt.status,404,'customer cannot see another unlinked receipt');
  const theft=await call('/api/v1/store/account/claim','POST',{orderId,accessToken:'x'.repeat(43)},auth);
  assert.equal(theft.status,404);
  const claimed=await call('/api/v1/store/account/claim','POST',{orderId,accessToken:secret},auth);
@@ -170,9 +172,18 @@ test('verified email owns linked guest order; no code before login and proof',as
  assert.deepEqual(alerts.data.alerts,[]);
  assert.equal(Object.hasOwn(account.data.orders[0],'code'),false,'summary has no full code field');
  assert.equal(Object.hasOwn(account.data.orders[0],'codes'),false,'summary has no raw code list');
+ const paymentReceipt=await call(detail+'/payment-receipt','GET',{},auth);
+ assert.equal(paymentReceipt.status,200,'paid order owner may retrieve a printable receipt');
+ assert.equal(paymentReceipt.data.totalMinor,4000);
+ assert.equal(paymentReceipt.data.provider,'Geidea');
+ assert.equal(paymentReceipt.data.isTaxInvoice,false);
+ assert.equal(Object.hasOwn(paymentReceipt.data,'codes'),false);
+ assert.equal(Object.hasOwn(paymentReceipt.data,'code'),false);
  // The owner, not an anonymous browser, may request a real provider
  // reconciliation without the old guest receipt token.
  order.status='pending';order.session_id=crypto.randomUUID();order.last_checked_at=null;
+ const pendingPaymentReceipt=await call(detail+'/payment-receipt','GET',{},auth);
+ assert.equal(pendingPaymentReceipt.status,409,'unconfirmed payments have no paid receipt');
  const checkPath=detail+'/check';
  const unauthorized=await call(checkPath,'POST',{},{
    cookie:'__Host-blofy_customer='+crypto.randomBytes(32).toString('base64url')});
@@ -196,5 +207,7 @@ test('verified email owns linked guest order; no code before login and proof',as
  assert.equal(logout.status,200);
  const after=await call(detail,'GET',{},auth);
  assert.equal(after.status,401);
+ const afterReceipt=await call(detail+'/payment-receipt','GET',{},auth);
+ assert.equal(afterReceipt.status,401,'logout revokes access to purchased receipt');
  assert.equal((await handler.checkoutIdentity(request('POST',{},auth))).status,401);
 });

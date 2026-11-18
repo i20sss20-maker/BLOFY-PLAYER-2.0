@@ -10,7 +10,12 @@
  const tell=value=>{$('message').textContent=value;};
  const node=(tag,value)=>{const n=document.createElement(tag);if(value!==undefined)n.textContent=value;return n;};
  const money=n=>(Number(n)/100).toLocaleString('ar-SA')+' ر.س';
- let orders=[],receiptTimer=null,receiptGeneration=0,returnChecked=false;
+ let orders=[],receiptTimer=null,receiptGeneration=0,returnChecked=false,paymentReceiptGeneration=0;
+ function clearPaymentReceipt(){
+  paymentReceiptGeneration++;
+  $('payment-receipt').hidden=true;
+  $('payment-receipt-details').replaceChildren();
+ }
  function clearReceipt(){
   receiptGeneration++;
   if(receiptTimer!==null){clearTimeout(receiptTimer);receiptTimer=null;}
@@ -85,6 +90,11 @@
     finally{verify.disabled=false;}
    });
    buttons.append(verify);
+  }
+  if(o.status==='paid'){
+   const payment=node('button','إيصال الدفع');payment.className='secondary';payment.type='button';
+   payment.addEventListener('click',()=>void showPaymentReceipt(o.orderId));
+   buttons.append(payment);
   }
   buttons.append(details,renew,support);wrapper.append(buttons);return wrapper;
  }
@@ -198,7 +208,7 @@
  }
 
  async function load(){
-  clearReceipt();
+  clearReceipt();clearPaymentReceipt();
   try{
    const data=await api('');
    orders=data.orders||[];
@@ -241,6 +251,31 @@
    if(err.status===401){view(false);return;}
    view(false);tell(statusMessage(err));
   }
+ }
+ async function showPaymentReceipt(id){
+  clearPaymentReceipt();
+  const serial=paymentReceiptGeneration;
+  try{
+   const receipt=await api('/orders/'+encodeURIComponent(id)+'/payment-receipt');
+   if(serial!==paymentReceiptGeneration||document.visibilityState==='hidden')return;
+   if(receipt.kind!=='payment_receipt'||receipt.status!=='paid'||
+     receipt.currency!=='SAR'||!Array.isArray(receipt.items)||receipt.isTaxInvoice!==false)
+     throw Error('receipt_not_available');
+   const section=$('payment-receipt-details');section.replaceChildren();
+   section.append(node('p','رقم الإيصال: '+receipt.receiptNumber),
+    node('p','رقم الطلب: '+receipt.orderNumber),
+    node('p','تاريخ الدفع: '+new Date(receipt.paidAt).toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'})),
+    node('p','وسيلة الدفع: Geidea'),node('h3','المشتريات'));
+   for(const item of receipt.items)
+    section.append(node('p',(item.description||'اشتراك BLOFY')+' × '+item.quantity));
+   section.append(node('p','المجموع قبل الخصم: '+money(receipt.subtotalMinor)),
+    node('p','الخصم: '+money(receipt.discountMinor)),
+    node('strong','الإجمالي المدفوع: '+money(receipt.totalMinor)),
+    node('p',receipt.legalNotice||'هذا ليس فاتورة ضريبية.'),
+    node('p','للاطلاع على أكواد الاشتراك، افتح تفاصيل طلبك من حسابك.'));
+   $('payment-receipt').hidden=false;
+   $('payment-receipt').scrollIntoView({behavior:'smooth'});
+  }catch(e){if(serial===paymentReceiptGeneration)tell(statusMessage(e));}
  }
  async function showOrder(id){
   clearReceipt();
@@ -313,14 +348,16 @@
   finally{this.disabled=false;}
  });
  $('logout').addEventListener('click',async()=>{
-  try{await api('/logout',{});clearReceipt();view(false);orders=[];tell('تم تسجيل الخروج.');}
+  try{await api('/logout',{});clearReceipt();clearPaymentReceipt();view(false);orders=[];tell('تم تسجيل الخروج.');}
   catch(e){tell(statusMessage(e));}
  });
+ $('payment-receipt-close').addEventListener('click',clearPaymentReceipt);
+ $('payment-receipt-print').addEventListener('click',()=>{if(!$('payment-receipt').hidden)window.print();});
  $('close-receipt').addEventListener('click',clearReceipt);
  document.addEventListener('visibilitychange',()=>{
-  if(document.visibilityState==='hidden')clearReceipt();
+  if(document.visibilityState==='hidden'){clearReceipt();clearPaymentReceipt();}
  });
- window.addEventListener('pagehide',clearReceipt);
+ window.addEventListener('pagehide',()=>{clearReceipt();clearPaymentReceipt();});
  if(returnToCart)$('checkout-return').hidden=false;
  // An existing guest token can be transported in the URL fragment, never the server logs.
  const params=new URLSearchParams(location.hash.replace(/^#/,''));
