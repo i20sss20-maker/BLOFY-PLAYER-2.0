@@ -211,13 +211,20 @@ class SettingsActivity : AppCompatActivity() {
         })
 
         addSection(page, copy("الحساب والمساعدة", "Account & help"))
-        addCard(actionCard(copy("فحص الجهاز والاتصال", "Device & connection"),
-            copy("اختبار HTTPS ومعرفة وضع تشغيل الجهاز", "HTTPS check and device compatibility")) {
-            showStreamCompatibility()
-        })
-        addCard(actionCard(copy("معلومات التطبيق", "App information"),
-            copy("إصدار التطبيق وتقرير الدعم", "Version and support diagnostics")) {
-            startActivity(Intent(this, SystemStatusActivity::class.java))
+        // Customer UI stays clean: connectivity diagnostics, codecs, engine
+        // selections, raw SDK details and diagnostic reports are not exposed.
+        // Internal playback telemetry and support logs remain available to operators.
+        addCard(actionCard(copy("المساعدة", "Help"),
+            copy("نصائح سريعة إذا واجهت مشكلة أثناء المشاهدة",
+                "Simple tips if something is not working")) {
+            AlertDialog.Builder(this)
+                .setTitle(copy("المساعدة", "Help"))
+                .setMessage(copy(
+                    "إذا توقف الفيديو، تأكد من الإنترنت ثم جرّب تشغيله مرة أخرى. إذا كان المحتوى غير متاح، اختر غيره أو تواصل مع الدعم.",
+                    "If a video stops, check your internet and try again. If a title is unavailable, choose another or contact support."
+                ))
+                .setPositiveButton(copy("حسنًا", "OK"), null)
+                .show()
         })
         addCard(actionCard(copy("تسجيل الخروج", "Sign out"),
             copy("الخروج من الحساب على هذا الجهاز فقط", "Sign out on this device only")) {
