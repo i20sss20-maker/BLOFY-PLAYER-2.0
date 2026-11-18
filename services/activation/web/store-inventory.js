@@ -16,5 +16,63 @@ try{const result=await request('/api/v1/admin/store/inventory/'+kind,{method:'PO
 catch(e){status('تعذرت العملية ('+e.message+'). لم نعتمد أي كود غير مؤهل.');}
 finally{loading(false);}}
 $('generate').addEventListener('click',()=>void run('generate'));$('import').addEventListener('click',()=>void run('import'));
-reload().catch(e=>status('تعذر تحميل المخزون: '+e.message));
+async function reloadSales(){
+ const data=await request('/api/v1/admin/store/sales');
+ const paid=(data.sales||[]).filter(x=>x.status==='paid');
+ const allPaid=paid.reduce((a,x)=>a+Number(x.orders||0),0);
+ const totalMinor=paid.reduce((a,x)=>a+Number(x.amount_minor||0),0);
+ const bundles=paid.filter(x=>x.sku==='bundle-2y').reduce((a,x)=>a+Number(x.orders||0),0);
+ const pending=(data.sales||[]).filter(x=>x.status==='pending').reduce((a,x)=>a+Number(x.orders||0),0);
+ const cards=[['المبيعات المؤكدة',allPaid+' طلب'],['الإيراد المؤكد',(totalMinor/100).toLocaleString('ar-SA')+' ر.س'],['عروض الاشتراكين المباعة',bundles+' عرض'],['طلبات قيد الدفع',pending+' طلب']];
+ const root=$('sales-highlights');root.textContent='';
+ cards.forEach(([label,value])=>{
+   const el=document.createElement('div');el.className='stat';
+   const heading=document.createElement('b');heading.textContent=label;
+   const number=document.createElement('strong');number.textContent=value;
+   el.append(heading,number);root.append(el);
+ });
+ const breakdown=$('sales-breakdown');breakdown.textContent='';
+ const title=document.createElement('h3');title.textContent='تفصيل المبيعات المدفوعة حسب المنتج';breakdown.append(title);
+ paid.forEach(row=>{
+   const card=document.createElement('div');card.className='sales-row';
+   const name=document.createElement('strong');name.textContent=row.sku==='bundle-2y'?'عرض اشتراكين سنويين':(plans.find(p=>p.sku===row.sku)?.name||row.sku);
+   const count=document.createElement('span');count.textContent=row.orders+' طلب';
+   const sum=document.createElement('span');sum.textContent=(Number(row.amount_minor)/100)+' ر.س';
+   card.append(name,count,sum);breakdown.append(card);
+ });
+ const coupons=$('coupon-list');coupons.textContent='';
+ if(!(data.coupons||[]).length){coupons.textContent='لا توجد كوبونات بعد.';}
+ (data.coupons||[]).forEach(row=>{
+   const line=document.createElement('div');line.className='coupon-row';
+   const info=document.createElement('div');const name=document.createElement('b');name.textContent=row.code;
+   const detail=document.createElement('small');detail.textContent=row.percent+'% خصم — '+row.paid_uses+'/'+row.max_uses+' طلب مدفوع';
+   info.append(name,detail);line.append(info);
+   if(row.active&&Date.parse(row.expires_at)>Date.now()){
+     const disable=document.createElement('button');disable.type='button';disable.className='btn-coupon-disable';disable.textContent='تعطيل';
+     disable.addEventListener('click',async function(){
+       if(!confirm('تعطيل كوبون '+row.code+'؟'))return;
+       disable.disabled=true;
+       try{await request('/api/v1/admin/store/coupons/deactivate',{method:'POST',body:JSON.stringify({code:row.code})});
+         $('sales-notice').textContent='تم تعطيل '+row.code;await reloadSales();
+       }catch(e){$('sales-notice').textContent='فشل التعطيل: '+e.message;disable.disabled=false;}
+     });line.append(disable);
+   }else{const state=document.createElement('small');state.textContent='غير فعّال';line.append(state);}
+   coupons.append(line);
+ });
+}
+$('coupon-code').addEventListener('input',function(){this.value=this.value.toUpperCase().replace(/[^A-Z0-9_-]/g,'').slice(0,20);});
+$('coupon-create').addEventListener('click',async function(){
+ const body={code:$('coupon-code').value.trim().toUpperCase(),percent:Number($('coupon-percent').value),
+   maxUses:Number($('coupon-max').value),validDays:Number($('coupon-days').value)};
+ if(!/^[A-Z0-9][A-Z0-9_-]{3,19}$/.test(body.code)||body.percent<1||body.percent>30||body.maxUses<1||body.validDays<1){
+   $('sales-notice').textContent='تحقق من الكود ونسبة الخصم والمدة والعدد.';return;
+ }
+ if(!confirm('تأكيد إنشاء الكوبون '+body.code+' بنسبة '+body.percent+'%؟'))return;
+ this.disabled=true;
+ try{await request('/api/v1/admin/store/coupons/create',{method:'POST',body:JSON.stringify(body)});
+   $('sales-notice').textContent='تم إنشاء الكوبون: '+body.code;await reloadSales();
+ }catch(e){$('sales-notice').textContent='تعذر إنشاء الكوبون: '+e.message;}
+ finally{this.disabled=false;}
+});
+reload().then(()=>reloadSales()).catch(e=>status('تعذر تحميل بيانات المتجر: '+e.message));
 })();
