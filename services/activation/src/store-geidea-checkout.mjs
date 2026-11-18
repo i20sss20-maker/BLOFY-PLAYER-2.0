@@ -192,7 +192,14 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
     if(order.status==='paid'){await db.query('COMMIT');return true;}
     if(status==='paid'){
       const plan=P.find(p=>p[0]===order.sku);
-      if(!plan||plan[2]!==order.channel||plan[3]!==order.duration_days||plan[4]!==order.amount_minor)
+      // Pending orders created before the price change must remain fulfillable at
+      // their original immutable captured price. New sessions use only today's catalog.
+      const formerPrices={'stream-3m':3000,'stream-6m':5000,'stream-1y':7000,
+        'xtream-3m':3000,'xtream-6m':5000,'xtream-1y':7000};
+      const historical=formerPrices[order.sku]===Number(order.amount_minor) &&
+        new Date(order.created_at).getTime()<Date.parse('2026-11-18T16:00:00Z');
+      if(!plan||plan[2]!==order.channel||plan[3]!==order.duration_days||
+        (plan[4]!==Number(order.amount_minor)&&!historical))
         throw err('store_catalog_price_mismatch',409);
       const sourceId=await source(db);
       const fromStock=await availableInventory(db,order.sku);
@@ -200,7 +207,8 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
       if(fromStock){
         const marked=await db.query("UPDATE blofy_store_inventory SET sold_order_id=$2,sold_at=NOW() WHERE voucher_id=$1 AND sold_order_id IS NULL AND sold_at IS NULL RETURNING voucher_id",[fromStock,id]);
         if(marked.rowCount!==1)throw err('store_inventory_claim_failed',409);
-        await db.query("UPDATE blofy_xtream_gateway_duration_codes SET sold_at=NOW(),sale_price_halalas=$2,sales_channel='geidea-store' WHERE id=$1 AND sold_at IS NULL AND redeemed_at IS NULL AND revoked_at IS NULL",[fromStock,plan[4]]);
+        const recorded=await db.query("UPDATE blofy_xtream_gateway_duration_codes SET sold_at=NOW(),sale_price_halalas=$2,sales_channel='geidea-store' WHERE id=$1 AND sold_at IS NULL AND redeemed_at IS NULL AND revoked_at IS NULL RETURNING id",[fromStock,order.amount_minor]);
+        if(recorded.rowCount!==1)throw err('store_inventory_voucher_unavailable',409);
       }
       if(!voucherId){
       await db.query('SELECT pg_advisory_xact_lock(718420682)');
@@ -215,7 +223,7 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
         "VALUES($1,$2,$3,$4,$5,$6,1,$7,$8,TRUE,$9,NOW(),'geidea-store') "+
         'ON CONFLICT(code_hash) DO NOTHING RETURNING id',[
           newId,p,code.slice(0,2)+'••••'+code.slice(-2),plan[1],sourceId,plan[3],plan[2],
-          encryptStreamCode(newId,code,keyHex),plan[4]
+          encryptStreamCode(newId,code,keyHex),order.amount_minor
         ]);
        if(saved.rows[0]){voucherId=newId;break;}
       }
