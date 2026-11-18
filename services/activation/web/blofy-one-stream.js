@@ -317,6 +317,19 @@
     $('one-stream-revenue').textContent=/^\d{1,22}$/.test(price)?
       (Number(price)/100).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+' ر.س':'—';
   }
+  // Search requests must not be dropped just because another dashboard
+  // refresh is running. loadCodes discards out-of-order responses by sequence.
+  async function searchNow(){
+    const expected=codeLoadSeq+1;
+    setStatus('جارٍ البحث في سجل الأكواد الكامل…');
+    try{
+      await loadCodes();
+      if(expected===codeLoadSeq)
+        setStatus('تم تحديث نتائج البحث من قاعدة الأكواد الكاملة.');
+    }catch(error){
+      if(expected===codeLoadSeq)setStatus('تعذر البحث: '+error.message,true);
+    }
+  }
   async function refresh({justCodes=false}={}){
     if(refreshButton.disabled)return;
     refreshButton.disabled=true;
@@ -337,23 +350,23 @@
     window.clearTimeout(codeSearchTimer);
     codeOffset=0;
     codeSearchTimer=window.setTimeout(()=>{
-      void refresh({justCodes:true});
+      void searchNow();
     },330);
   });
   codeFilter.addEventListener('change',()=>{
     window.clearTimeout(codeSearchTimer);
     codeOffset=0;
-    void refresh({justCodes:true});
+    void searchNow();
   });
   codesPrev.addEventListener('click',()=>{
     if(codeOffset<=0)return;
     codeOffset=Math.max(0,codeOffset-pageSize);
-    void refresh({justCodes:true});
+    void searchNow();
   });
   codesNext.addEventListener('click',()=>{
     if(nextOffset===null)return;
     codeOffset=nextOffset;
-    void refresh({justCodes:true});
+    void searchNow();
   });
   refreshButton.addEventListener('click',()=>void refresh());
   $('one-stream-secret-copy').addEventListener('click',async()=>{
