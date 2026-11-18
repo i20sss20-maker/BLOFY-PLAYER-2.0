@@ -7,7 +7,7 @@ const now = 1_799_800_000;
 const claims = {
   iss: 'https://token.actions.githubusercontent.com',
   aud: 'blofy-stream-55-8-36-website-upload',
-  sub: 'repo:i20sss20-maker/BLOFY-PLAYER-2.0:ref:refs/heads/main',
+  sub: 'repo:i20sss20-maker@317876372/BLOFY-PLAYER-2.0@1351236912:ref:refs/heads/main',
   repository: 'i20sss20-maker/BLOFY-PLAYER-2.0',
   repository_id: '1351236912',
   ref: 'refs/heads/main',
