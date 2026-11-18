@@ -22,6 +22,8 @@
 <script src="/blofy-one-modern.js?v=20261118-v2" defer></script>
 <link rel="stylesheet" href="/blofy-one-code-manager.css?v=20261118-v1">
 <script src="/blofy-one-code-manager.js?v=20261118-v1" defer></script>
+<link rel="stylesheet" href="/blofy-one-launch.css?v=20261118-v1">
+<script src="/blofy-one-launch.js?v=20261118-v1" defer></script>
 </head>
 <body>
 <div class="one-shell">
@@ -31,6 +33,7 @@
     <span class="one-nav-caption">مساحة العمل</span>
     <a class="one-nav-home selected" href="/one"><span aria-hidden="true">▦</span> نظرة عامة</a>
     <a class="one-nav-create" href="#one-issue"><span aria-hidden="true">＋</span> إنشاء كود جديد</a>
+    <a href="#one-growth"><span aria-hidden="true">◷</span> نمو المبيعات والجاهزية</a>
     <a href="#customers"><span aria-hidden="true">♧</span> العملاء والأجهزة</a>
     <a href="#stream-management"><span aria-hidden="true">◈</span> حسابات STREAM وXtream</a>
     <a href="#legacy-xtream"><span aria-hidden="true">⇄</span> استرجاع الأكواد القديمة</a>
@@ -106,6 +109,7 @@
     <a href="#legacy-xtream">استخراج Xtream</a>
     <a href="#stream-management">سجل الأكواد</a>
     <a href="#one-sales">المبيعات</a>
+    <a href="#one-growth">جاهزية الزحمة</a>
     <label class="one-jump-label" for="one-quick-jump">انتقل إلى القسم
       <select id="one-quick-jump" aria-label="الانتقال إلى قسم من لوحة الإدارة">
         <option value="">اختر قسمًا…</option>
@@ -117,6 +121,7 @@
         <option value="one-storage">المكتبة والتخزين</option>
         <option value="one-distributors">الموزعون</option>
         <option value="one-sales">المدفوعات</option>
+        <option value="one-growth">المبيعات والتسويق والجاهزية</option>
         <option value="one-releases">تحديثات التطبيقات</option>
       </select>
     </label>
@@ -183,7 +188,73 @@
     </section>
 
 
-  <section class="one-launchpad" aria-label="اختصارات العمل اليومي">
+  <section class="one-overview one-growth" id="one-growth" aria-labelledby="one-growth-title">
+  <div class="one-section-heading one-growth-heading">
+    <div><span class="one-kicker">BLOFY OPERATIONS · LAUNCH COMMAND CENTER</span>
+      <h2 id="one-growth-title">مركز الزحمة والمبيعات — بيانات حقيقية</h2>
+      <p>إحصائيات المتجر بموافقة الزائر فقط، ونتائج التفعيل والدفع المسجلة والخدمات. <strong>لا نفترض أعداد المشاهدين أو تسوية البنك.</strong></p>
+    </div>
+    <div class="one-growth-actions">
+      <label for="one-growth-days">الفترة
+        <select id="one-growth-days"><option value="7">7 أيام</option><option value="30" selected>30 يومًا</option><option value="90">90 يومًا</option></select>
+      </label>
+      <button type="button" id="one-growth-refresh">↻ تحديث المركز</button>
+    </div>
+  </div>
+  <p class="one-growth-status" id="one-growth-status" role="status" aria-live="polite">جارٍ تحميل مؤشرات الطلبات والخدمات من المصادر المسجلة…</p>
+  <div class="one-growth-metrics" aria-label="مؤشرات المتجر">
+    <article><small>جلسات المتجر التي وافقت على القياس</small><strong id="one-growth-sessions">—</strong><span>ليست أشخاصًا فريدين</span></article>
+    <article><small>مشاهدات صفحات الموقع</small><strong id="one-growth-views">—</strong><span>بموافقة القياس</span></article>
+    <article><small>نقرات واتساب</small><strong id="one-growth-wa-clicks">—</strong><span>لا تعني وصول الرسالة</span></article>
+    <article><small>بدء الدفع من الموقع</small><strong id="one-growth-checkout-starts">—</strong><span>ليس دفعًا ناجحًا</span></article>
+    <article><small>طلبات المتجر المسجلة مدفوعة</small><strong id="one-growth-store-paid">—</strong><span>وفق سجلات Geidea المؤكدة داخل الموقع</span></article>
+    <article><small>قيمة طلبات المتجر المسجلة مدفوعة</small><strong id="one-growth-store-revenue">—</strong><span>ريال · ليست تسوية بنكية أو صافي ربح</span></article>
+  </div>
+  <div class="one-growth-columns">
+    <section class="one-growth-panel" aria-labelledby="one-growth-funnel-title">
+      <div class="one-growth-panel-head"><h3 id="one-growth-funnel-title">رحلة العميل من الإعلان إلى الدفع</h3><span>مؤشرات مستقلة</span></div>
+      <div id="one-growth-funnel" class="one-growth-funnel" role="group" aria-label="عدد أحداث مراحل رحلة العميل">
+        <div><span>مشاهدات</span><strong id="one-growth-funnel-views">—</strong></div>
+        <div><span>اهتمام بالمنتج</span><strong id="one-growth-funnel-product">—</strong></div>
+        <div><span>بدء الدفع</span><strong id="one-growth-funnel-checkout">—</strong></div>
+        <div><span>طلبات مدفوعة</span><strong id="one-growth-funnel-paid">—</strong></div>
+      </div>
+      <p>الأحداث قد تتكرر لنفس العميل؛ هذه مقارنة عددية وليست معدل تحويل دقيق. طلبات الدفع مصدرها قاعدة المتجر.</p>
+      <a href="/admin/visitors">التحليلات التفصيلية ←</a>
+    </section>
+    <section class="one-growth-panel" aria-labelledby="one-growth-campaigns-title">
+      <div class="one-growth-panel-head"><h3 id="one-growth-campaigns-title">الحملات ومصادر الزيارات</h3><span>آخر فترة محددة</span></div>
+      <div class="one-growth-table-wrap" tabindex="0" role="region" aria-label="مصادر الزيارات بالموافقة">
+        <table><thead><tr><th>المصدر</th><th>الحملة</th><th>الجلسات</th></tr></thead>
+        <tbody id="one-growth-campaigns"><tr><td colspan="3">جارٍ التحميل…</td></tr></tbody></table>
+      </div>
+      <p>المصادر المجهولة أو زيارات من لم يوافقوا على التحليل لا تظهر في هذه الأرقام.</p>
+    </section>
+  </div>
+  <div class="one-growth-panel one-growth-readiness">
+    <div class="one-growth-panel-head"><h3>جاهزية البيع واستقبال الزبائن</h3>
+      <a href="/admin/control-center/health">مركز التشخيص التفصيلي ←</a></div>
+    <div class="one-growth-readiness-grid" aria-label="نتائج جاهزية الخدمات والدفع">
+      <div><span class="one-growth-signal" id="one-growth-health-activation" data-state="pending">غير مؤكد</span><strong>تفعيل BLOFY PLAYER</strong><small>HTTP وقاعدة البيانات، لا اختبار جهاز عميل</small></div>
+      <div><span class="one-growth-signal" id="one-growth-health-downloads" data-state="pending">غير مؤكد</span><strong>موقع التحميلات</strong><small>صحة الخدمة فقط؛ لا يثبت اكتمال ملف APK</small></div>
+      <div><span class="one-growth-signal" id="one-growth-health-stream" data-state="pending">غير مؤكد</span><strong>BLOFY STREAM API</strong><small>الخدمة تستجيب، وليس فحص مشاهدة قناة</small></div>
+      <div><span class="one-growth-signal" id="one-growth-health-payment" data-state="pending">غير مؤكد</span><strong>دفع Geidea داخل المتجر</strong><small>قابلية بدء الدفع، ليست تسوية مالية</small></div>
+      <div><span class="one-growth-signal" id="one-growth-health-fulfillment" data-state="pending">غير مؤكد</span><strong>تسليم الأكواد بعد الدفع</strong><small>عدد الطلبات المدفوعة التي تفتقد كودًا</small></div>
+      <div><span class="one-growth-signal" id="one-growth-health-stock" data-state="pending">غير مؤكد</span><strong>مخزون الأكواد الجاهزة</strong><small>يمكن للنظام توليد أكواد عند الدفع وفق التحقق</small></div>
+      <div><span class="one-growth-signal" id="one-growth-health-whatsapp" data-state="warn">رابط فقط</span><strong>واتساب خدمة العملاء</strong><small>المحادثة جاهزة؛ Cloud API والرد التلقائي غير مفعّلين</small></div>
+      <div><span class="one-growth-signal" id="one-growth-health-media" data-state="warn">غير مُقاس</span><strong>سعة المشاهدين والبث</strong><small>نحتاج قياس ضغط آمن بمصدر مرخّص قبل تحديد عدد المشاهدين</small></div>
+    </div>
+    <p id="one-growth-issues" class="one-growth-issues" role="status" aria-live="polite">لا يمكن اعتماد جاهزية المبيعات إلا بعد فحص حالات الطلبات والدفع.</p>
+  </div>
+  <div class="one-growth-next">
+    <a href="#one-issue"><b>＋</b><span><strong>إنشاء كود</strong><small>إصدار وتخصيص داخل BLOFY ONE</small></span></a>
+    <a href="/admin/store-inventory"><b>▤</b><span><strong>مخزون المتجر</strong><small>مراجعة المخزون والتوليد</small></span></a>
+    <a href="#one-distributors"><b>♙</b><span><strong>الموزعون</strong><small>حسابات مستقلة وأرصدة</small></span></a>
+    <a href="https://wa.me/966568941484" target="_blank" rel="noopener noreferrer"><b>◉</b><span><strong>واتساب</strong><small>المحادثة الحالية، ليست API آلية</small></span></a>
+  </div>
+</section>
+
+<section class="one-launchpad" aria-label="اختصارات العمل اليومي">
     <div class="one-section-heading"><div><span class="one-kicker">YOUR WORKSPACE</span>
       <h2>كل أدواتك... باختصار واضح</h2></div><span class="one-note">اختر المهمة وابدأ مباشرة</span></div>
     <div class="one-fast-grid">
