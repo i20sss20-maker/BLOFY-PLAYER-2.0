@@ -22,8 +22,9 @@
 <script src="/blofy-one-modern.js?v=20261118-v2" defer></script>
 <link rel="stylesheet" href="/blofy-one-code-manager.css?v=20261118-v1">
 <script src="/blofy-one-code-manager.js?v=20261118-v1" defer></script>
-<link rel="stylesheet" href="/blofy-one-store-ops.css?v=20261118-v1">
+<link rel="stylesheet" href="/blofy-one-store-ops.css?v=20261118-v2">
 <script src="/blofy-one-store-ops.js?v=20261118-v1" defer></script>
+<script src="/blofy-one-store-sales.js?v=20261118-v1" defer></script>
 <link rel="stylesheet" href="/blofy-one-launch.css?v=20261118-v1">
 <script src="/blofy-one-launch.js?v=20261118-v1" defer></script>
 <link rel="stylesheet" href="/blofy-one-capacity.css?v=20261118-v1">
@@ -46,6 +47,7 @@
     <a href="#one-storage"><span aria-hidden="true">▥</span> التخزين والتنزيلات</a>
     <a href="#one-distributors"><span aria-hidden="true">♙</span> الموزعون</a>
     <a href="#one-sales"><span aria-hidden="true">◫</span> المبيعات والمدفوعات</a>
+    <a href="#one-store-sales"><span aria-hidden="true">▣</span> مبيعات متجر BLOFY</a>
     <a href="#one-renewal-ops"><span aria-hidden="true">◈</span> تجديدات المتجر والاشتراكات</a>
     <a href="#one-releases"><span aria-hidden="true">⇩</span> تحديثات التطبيقات</a>
     <details class="one-nav-advanced">
@@ -311,6 +313,50 @@
       <a href="#one-distributors"><b aria-hidden="true">♙</b><strong>الموزعون</strong><small>الحسابات والأرصدة</small></a>
     </div>
   </section>
+    <section class="one-overview one-store-sales" id="one-store-sales" aria-labelledby="one-store-sales-title">
+      <div class="one-section-heading">
+        <div><span class="one-kicker">BLOFY STORE · RECORDED GEIDEA ORDERS</span>
+          <h2 id="one-store-sales-title">مبيعات متجر BLOFY وطلبات الدفع</h2></div>
+        <button id="one-store-sales-refresh" type="button" class="one-ops-primary">↻ تحديث المبيعات</button>
+      </div>
+      <p class="one-footnote">إحصائيات الطلبات المسجلة في متجر BLOFY للمنتجات والسلة والتجديدات، وليست تحويلات واتساب أو مبيعات PLAYER المنفصلة أو تسوية بنكية. قراءة فقط، ولا يظهر رقم البطاقة أو كود العميل.</p>
+      <div class="one-store-sales-stats" aria-label="ملخص المبيعات المسجلة">
+        <article><small>قيمة الطلبات المسجلة مدفوعة (كل الوقت)</small><strong id="one-store-sales-gross">—</strong></article>
+        <article><small>قيمة الطلبات المسجلة مدفوعة (آخر 30 يومًا)</small><strong id="one-store-sales-30d">—</strong></article>
+        <article><small>الطلبات المسجلة مدفوعة</small><strong id="one-store-sales-paid">—</strong></article>
+        <article><small>الطلبات قيد التحقق من الدفع</small><strong id="one-store-sales-pending">—</strong></article>
+        <article class="one-store-sales-alert-stat"><small>قيد التحقق لأكثر من 20 دقيقة</small><strong id="one-store-sales-overdue">—</strong></article>
+        <article><small>طلبات فاشلة أو ملغاة</small><strong id="one-store-sales-failed">—</strong></article>
+      </div>
+      <form id="one-store-sales-form" class="one-store-sales-controls" autocomplete="off">
+        <label for="one-store-sales-filter">حالة الطلب
+          <select id="one-store-sales-filter">
+            <option value="all">كل الحالات</option>
+            <option value="paid">مدفوع</option>
+            <option value="pending">قيد التحقق</option>
+            <option value="failed">فشل</option>
+            <option value="cancelled">ملغي</option>
+          </select>
+        </label>
+        <label for="one-store-sales-search">بحث برقم الطلب أو بريد الحساب
+          <input id="one-store-sales-search" type="search" maxlength="100" autocomplete="off" placeholder="رقم الطلب أو البريد">
+        </label>
+        <button type="submit" class="one-ops-primary">بحث</button>
+      </form>
+      <p id="one-store-sales-status" class="one-store-sales-status" role="status" aria-live="polite">جارٍ قراءة مبيعات المتجر المسجلة…</p>
+      <div class="one-renewal-table-wrap" tabindex="0" role="region" aria-label="قائمة طلبات متجر BLOFY">
+        <table class="one-renewal-table">
+          <thead><tr><th>الطلب / العميل</th><th>المنتج</th><th>الحالة</th><th>المبلغ المسجل</th><th>التاريخ</th></tr></thead>
+          <tbody id="one-store-sales-rows"><tr><td colspan="5">جارٍ التحميل…</td></tr></tbody>
+        </table>
+      </div>
+      <div class="one-renewal-pager">
+        <button type="button" id="one-store-sales-prev" disabled>السابق</button>
+        <span id="one-store-sales-page">—</span>
+        <button type="button" id="one-store-sales-next" disabled>التالي</button>
+      </div>
+      <p class="one-footnote">الطلب «مدفوع» يعني أن حالته مسجلة مدفوعة داخل BLOFY، وليس إثبات تسوية بنكية أو وصول الأكواد للبريد. للطلبات المعلّقة لا تُعد الدفع أو تصدر أكوادًا يدويًا قبل التحقق من Geidea وسجلات التسليم.</p>
+    </section>
     <section class="one-overview one-renewal-ops" id="one-renewal-ops" aria-labelledby="one-renewal-ops-title">
       <div class="one-section-heading">
         <div><span class="one-kicker">STORE CUSTOMER SUBSCRIPTIONS · VERIFIED RENEWALS</span>
