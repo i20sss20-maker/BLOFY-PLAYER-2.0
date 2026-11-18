@@ -5,6 +5,7 @@ import {createFixedWindowLimiter,requestClientKey} from './auth-protection.mjs';
 import {parseStoreCart,cartVouchers,publicOrderNumber} from './store-cart.mjs';
 import {decryptStreamCode} from './xtream-code-vault.mjs';
 import {streamCodeProof} from './xtream-duration-codes.mjs';
+import {createCustomerReminderEngine} from './store-customer-reminders.mjs';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ACCESS=/^[A-Za-z0-9_-]{42,44}$/;
@@ -60,6 +61,8 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,env=proce
  const mailKey=String(env.BLOFY_CUSTOMER_RESEND_API_KEY||'').trim();
  const mailFrom=String(env.BLOFY_CUSTOMER_MAIL_FROM||'').trim();
  const mailReady=typeof sendCode==='function'||(mailKey.startsWith('re_')&&mailFrom.includes('@'));
+ const reminderEngine=createCustomerReminderEngine({pool,env,fetchImpl});
+ reminderEngine.start();
  let migration;
  async function schema(){
   if(!migration)migration=(async()=>{
@@ -274,7 +277,8 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,env=proce
   await pool.query('UPDATE blofy_store_customers SET alerts_opt_in=$2 WHERE id=$1',
     [customer.id,body.alertsOptIn]);
   // This flag records consent; an email reminder worker is NOT enabled by this endpoint.
-  return json(res,200,{ok:true,alertsOptIn:body.alertsOptIn,delivery:'dashboard_only'});
+  return json(res,200,{ok:true,alertsOptIn:body.alertsOptIn,
+    delivery:reminderEngine.configured?'email_when_eligible':'dashboard_only'});
  }
  async function logout(req,res){
   const token=cookieToken(req);
