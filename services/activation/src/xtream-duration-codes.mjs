@@ -72,6 +72,7 @@ export function safeCodeRecord(row){
   return {
     id:row.id,label:String(row.label||'').slice(0,100),
     channel:row.code_channel||'xtream',
+    dualAccessEnabled:row.dual_access_enabled===true,
     sourceId:row.source_id||null,durationDays:Number(row.duration_days),
     maxConnections:Number(row.max_connections),
     status:row.revoked_at?'revoked':row.redeemed_at?'redeemed':'unused',
@@ -115,6 +116,9 @@ export async function ensureStreamCodeTable(client){
   )`);
   await client.query('ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS redeemed_device_hash TEXT');
   await client.query('ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS code_vault TEXT');
+  // Explicit owner-approved dual app/Xtream capability of the SAME voucher.
+  // The existing channel label remains unchanged for legacy recovery flows.
+  await client.query('ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS dual_access_enabled BOOLEAN NOT NULL DEFAULT FALSE');
   // One-time operator-authorized credential recovery for consumed Xtream vouchers.
   // Never resets redeemed_at or subscription expiry.
   await client.query('ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS xtream_recovery_until TIMESTAMPTZ');
@@ -323,7 +327,8 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
           RETURNING code_channel`,[row.id])).rows[0];
         if(converted?.code_channel==='app')row.code_channel='app';
       }
-      if((row.code_channel||'xtream')!==(appOnly?'app':'xtream'))
+      if((row.code_channel||'xtream')!==(appOnly?'app':'xtream')&&
+         row.dual_access_enabled!==true)
         throw Object.assign(Error('stream_code_wrong_product'),{status:409});
       // Existing activation is immutable. Only the same installation
       // can retrieve its already-issued credentials after an interrupted
@@ -363,7 +368,8 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
         if(!deviceProof)throw Object.assign(Error('stream_code_unavailable'),{status:409});
         // An operator reissues a new recovery code for an existing subscription
         // and clears the old binding. Its original clock and expiry do not reset.
-        const transferPending=appOnly&&row.code_channel==='app'&&
+        const transferPending=appOnly&&
+          (row.code_channel==='app'||row.dual_access_enabled===true)&&
           !row.redeemed_device_hash;
         // A normal logout on the original installation already succeeds.
         // New installations can reuse the SAME voucher only after admin
@@ -372,7 +378,8 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
         // The administrator can also open a short one-time window for the
         // original code without knowing the new device identifier. The FIRST
         // different installation that redeems within 10 minutes claims it.
-        const adminReloginApproved=appOnly&&row.code_channel==='app'&&
+        const adminReloginApproved=appOnly&&
+          (row.code_channel==='app'||row.dual_access_enabled===true)&&
           row.redeemed_device_hash&&row.redeemed_device_hash!==deviceProof&&
           row.admin_relogin_until&&
           new Date(row.admin_relogin_until).getTime()>clock();
