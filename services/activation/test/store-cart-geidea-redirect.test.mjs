@@ -17,6 +17,7 @@ test('signed-in cart redirects to official hosted Geidea even when modal SDK is 
  storage.set('blofy.shop.cart.v1',JSON.stringify([item]));
  storage.set('blofy.shop.cart.owner.v1',customerId);
  const events=new Map(),nodes=new Map(),calls=[],redirects=[];
+ let serverRecovery=false;
  function el(id=''){
   const node={id,hidden:false,disabled:false,style:{},dataset:{},children:[],value:'',
    textContent:'',className:'',setAttribute(){},
@@ -39,7 +40,10 @@ test('signed-in cart redirects to official hosted Geidea even when modal SDK is 
   if(path==='/api/v1/store/account/cart'&&opts.method!=='POST')
    return response(200,{items:[item],couponCode:'',revision:3});
   if(path==='/api/v1/store/products')return response(200,{checkoutAvailable:true});
-  if(path==='/api/v1/store/cart/pending')return response(200,{ok:true,pending:false});
+  if(path==='/api/v1/store/cart/pending')return response(200,serverRecovery?
+   {ok:true,pending:true,orderId,sessionId,
+     sessionExpiresAt:new Date(Date.now()+8*60000).toISOString(),
+     orderNumber:'BF-261118-BBBBBBBB',status:'pending'}:{ok:true,pending:false});
   if(path==='/api/v1/store/cart/quote')return response(200,{codeCount:1,
    subtotalMinor:4000,discountMinor:0,totalMinor:4000,
    items:[{...item,lineTotalMinor:4000}]});
@@ -91,4 +95,21 @@ test('signed-in cart redirects to official hosted Geidea even when modal SDK is 
  assert.match(nodes.get('pending-status').textContent,/نفس الجلسة/);
  assert.equal(calls.filter(x=>x.path==='/api/v1/store/cart/checkout').length,1,
    'reloading the page cannot create another payment session');
+ // Switching device or clearing tab sessionStorage must still recover using the
+ // verified account; no payment token or previous checkout secret is required.
+ session.clear();serverRecovery=true;
+ nodes.clear();events.clear();
+ for(const id of ['checkout','items','clear-cart','coupon','apply','subtotal','discount',
+ 'total','codes-count','message','auth-gate','auth-title','auth-message','auth-link','cart-sync',
+ 'started','order-number','open-geidea','copy-private-link','check-pending','pending-status','retry-pending'])el(id);
+ vm.runInNewContext(code,{...ctx,window:{}},{filename:'store-cart.js'});
+ await new Promise(resolve=>setTimeout(resolve,25));
+ assert.equal(nodes.get('checkout').disabled,true,
+   'cross-device recovery must block another payment session');
+ assert.equal(nodes.get('open-geidea').href,hosted);
+ assert.equal(nodes.get('open-geidea').hidden,false);
+ assert.equal(nodes.get('copy-private-link').hidden,true,
+   'owner recovery never fabricates a private receipt bearer token');
+ assert.match(nodes.get('pending-status').textContent,/نفس جلسة Geidea/);
+ assert.equal(calls.filter(x=>x.path==='/api/v1/store/cart/checkout').length,1);
 });
