@@ -22,6 +22,19 @@ test('Three cart codes require one paid Geidea capture and never duplicate on ca
      return rows([{n:'blofy_xtream_servers'}]);
    if(sql.startsWith('SELECT id FROM blofy_xtream_servers'))
      return rows([{id:sourceId}]);
+   if(sql.startsWith('SELECT o.id FROM blofy_store_customer_orders co')){
+     const [customerId,sku,cartJSON,coupon]=args;
+     return rows([...linked].map(item=>orders.get(item.id)).filter(o=>
+       o && o.sku===sku && o.status==='pending' &&
+       JSON.stringify(o.cart_items)===cartJSON &&
+       (o.coupon_code||'')===(coupon||'') &&
+       Date.now()-Date.parse(o.created_at)<20*60000).map(o=>({id:o.id})));
+   }
+   if(sql.startsWith('INSERT INTO blofy_store_customer_orders')){
+     if(!allowLink)return rows();
+     linked.push({id:args[0],customerId:args[1]});
+     return rows([{order_id:args[0]}]);
+   }
    if(sql.startsWith('INSERT INTO blofy_store_geidea_orders')){
      const [id,sku,channel,days,minor,access_hash,cartJson,gross,number,coupon,discount]=args;
      orders.set(id,{id,sku,channel,duration_days:days,amount_minor:minor,access_hash,
@@ -96,9 +109,9 @@ test('Three cart codes require one paid Geidea capture and never duplicate on ca
    GEIDEA_LIVE_API_PASSWORD:pwd};
  const handler=createStoreGeideaHandlers({
    pool,keyHex:'a'.repeat(64),env,fetchImpl:provider,
-   onCheckoutOrder:async(_req,id,token)=>{if(!allowLink)return false;linked.push({id,token});return true;},
+   onCheckoutOrder:async()=>{throw Error('cart must link atomically rather than via callback');},
    requireCheckoutCustomer:async(req)=>req.headers?.cookie==='verified-customer'
-     ?{ok:true,customerId:'test-customer'}:{ok:false,status:401,error:'customer_login_required'},
+     ?{ok:true,customerId:'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'}:{ok:false,status:401,error:'customer_login_required'},
    json:(res,status,data)=>{res.status=status;res.data=data;},
    readJson:async(req)=>req.body
  });
@@ -136,7 +149,12 @@ test('Three cart codes require one paid Geidea capture and never duplicate on ca
  assert.equal(paymentSessions,1);
  assert.equal(linked.length,1);
  assert.equal(linked[0].id,checkout.data.orderId);
- assert.equal(linked[0].token,checkout.data.accessToken);
+ assert.equal(linked[0].customerId,'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee');
+ const duplicate={};
+ await handler(request({items},true,true),duplicate,{pathname:'/api/v1/store/cart/checkout'});
+ assert.equal(duplicate.status,409,'same customer cannot create second pending Geidea session');
+ assert.equal(duplicate.data.error,'store_pending_checkout_exists');
+ assert.equal(paymentSessions,1,'duplicate checkout did not contact provider');
  assert.match(checkout.data.orderNumber,/^BF-\d{6}-[0-9A-F]{8}$/);
  assert.equal(delivered.length,0,'never issue codes before verified capture');
  const invalid={};
@@ -171,6 +189,6 @@ test('Three cart codes require one paid Geidea capture and never duplicate on ca
  assert.deepEqual(receipt.data.codes.map(x=>x.channel),['app','app','xtream']);
  assert.deepEqual(receipt.data.codes.map(x=>x.durationDays),[180,365,365]);
  assert.equal(new Set(receipt.data.codes.map(x=>x.code)).size,3);
- assert.equal(rolledBack,0);
+ assert.equal(rolledBack,2,'failed ownership and duplicate attempts roll back safely');
  assert.equal(captureCalls,1);
 });
