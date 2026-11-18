@@ -373,3 +373,5 @@ body[data-shop-offer] #offer .offer-hero{min-height:390px}
 @media(max-width:920px){.offer-overlay{width:69%}.offer-hero:before{background:linear-gradient(90deg,transparent,#061329d4 56%,#061329fa 93%)}}
 @media(max-width:650px){.banner-slider-controls{margin-top:12px}.offer-hero{min-height:465px;border-radius:19px}.offer-hero:before{background:linear-gradient(0deg,#07132bf6 0%,#07142ba8 61%,transparent)}.offer-overlay{padding:23px;width:100%;min-height:465px;justify-content:flex-end}
 .offer-overlay h2{font-size:34px}.offer-overlay p{font-size:12px}.offer-big-price strong{font-size:30px}.offer-checkout{grid-template-columns:1fr;padding:21px;gap:10px}.offer-head h3{font-size:22px}.offer-head p{font-size:13px}.offer-total b{font-size:23px}.coupon-panel{grid-template-columns:1fr;padding:20px;gap:15px}.bundle-receipt-codes{grid-template-columns:1fr}.slide-summary{font-size:12px}.banner-slide-title{font-size:30px}}
+
+.popular-badge{background:#274e7f;color:#cce4ff;border:1px solid #6a99d7;padding:5px 10px;font-size:11px;border-radius:100px}
