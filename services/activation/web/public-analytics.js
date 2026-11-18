@@ -3,7 +3,7 @@
   'use strict';
   var measurementId = 'G-2DYE5WB8BT';
   var preferenceKey = 'blofy.analytics.consent.v1';
-  var publicPaths = ['/', '/shop', '/shop/', '/guide', '/guide/', '/support', '/support/', '/downloads', '/downloads/', '/releases', '/releases/', '/en', '/en/', '/es', '/es/', '/fr', '/fr/'];
+  var publicPaths = ['/', '/shop', '/shop/', '/guide', '/guide/', '/support', '/support/', '/downloads', '/downloads/', '/releases', '/releases/', '/en', '/en/', '/es', '/es/', '/fr', '/fr/', '/products/stream', '/products/xtream', '/store/offers', '/store/offers/', '/store/trial', '/store/trial/', '/store/about', '/store/about/', '/store/faq', '/store/faq/', '/store/contact', '/store/contact/', '/store/terms', '/store/terms/'];
   if (publicPaths.indexOf(window.location.pathname) === -1) return;
 
   var active = false;
@@ -36,9 +36,83 @@
   function remember(value) {
     try { localStorage.setItem(preferenceKey, value); } catch (_) { /* private browsing */ }
   }
+
+  // The only persisted identifier is a random per-tab, session-scoped ID.
+  // The backend stores a rotated HMAC proof, never the ID itself.
+  function analyticsSession() {
+    try {
+      var existing = sessionStorage.getItem('blofy.analytics.tab-session.v1');
+      if (existing && /^[0-9a-f-]{36}$/i.test(existing)) return existing;
+      var key=crypto.randomUUID();
+      sessionStorage.setItem('blofy.analytics.tab-session.v1',key);
+      return key;
+    } catch (_) { return crypto.randomUUID(); }
+  }
+  function safeTag(value) {
+    value=String(value||'').trim().toLowerCase();
+    return /^[a-z0-9_-]{1,48}$/.test(value)?value:'';
+  }
+  function safeAttribution() {
+    var query = new URLSearchParams(window.location.search);
+    var fresh={
+      source:safeTag(query.get('utm_source')),
+      medium:safeTag(query.get('utm_medium')),
+      campaign:safeTag(query.get('utm_campaign'))
+    };
+    try {
+      if(fresh.source)sessionStorage.setItem('blofy.analytics.campaign.v1',JSON.stringify(fresh));
+      else {
+        var saved=JSON.parse(sessionStorage.getItem('blofy.analytics.campaign.v1')||'{}');
+        if(saved&&saved.source){
+          fresh.source=safeTag(saved.source);
+          fresh.medium=safeTag(saved.medium);
+          fresh.campaign=safeTag(saved.campaign);
+        }
+      }
+    } catch (_) { /* disabled session storage */ }
+    if(!fresh.source){
+      var host='';
+      try{host=new URL(document.referrer).hostname.toLowerCase();}catch(_){}
+      if(/(^|\.)google\./.test(host))fresh.source='google';
+      else if(/(^|\.)bing\.com$/.test(host))fresh.source='bing';
+      else if(/(^|\.)snapchat\.com$/.test(host))fresh.source='snapchat';
+      else if(/(^|\.)instagram\.com$/.test(host))fresh.source='instagram';
+      else if(/(^|\.)tiktok\.com$/.test(host))fresh.source='tiktok';
+      else if(/(^|\.)x\.com$|(^|\.)twitter\.com$/.test(host))fresh.source='x';
+      else if(/(^|\.)facebook\.com$/.test(host))fresh.source='facebook';
+      else if(/(^|\.)wa\.me$|(^|\.)whatsapp\.com$/.test(host))fresh.source='whatsapp';
+      else if(host && host!=='blofyplayer.com' && host!=='www.blofyplayer.com')fresh.source='referral';
+      else fresh.source='direct';
+    }
+    return {source:fresh.source||'direct',medium:fresh.medium||'none',campaign:fresh.campaign||'none'};
+  }
+  function deviceClass(){
+    var width=window.innerWidth||0;
+    return width<=700?'mobile':width<=1024?'tablet':'desktop';
+  }
+  function sendFirstParty(name){
+    if(!active||!name)return;
+    var session=analyticsSession(),attr=safeAttribution();
+    var event={event:name,page:pagePath,sessionId:session,
+      source:attr.source,medium:attr.medium,campaign:attr.campaign,device:deviceClass()};
+    try{
+      void fetch('/api/v1/site-analytics/collect',{
+        method:'POST',headers:{'content-type':'application/json'},credentials:'omit',
+        keepalive:true,body:JSON.stringify(event)
+      }).catch(function(){});
+    }catch(_){}
+  }
+  function trackPublicEvent(name){
+    if(!active)return;
+    sendFirstParty(name);
+    if(window.gtag)window.gtag('event','blofy_'+name,{page_path:pagePath});
+  }
+
   function startMeasurement() {
     if (active) return;
     active = true;
+    window.BLOFYAnalytics={track:trackPublicEvent,attribution:function(){return active?safeAttribution():null;}};
+    sendFirstParty('page_view');
     window.dataLayer = window.dataLayer || [];
     window.gtag = function () { window.dataLayer.push(arguments); };
     window.gtag('js', new Date());
@@ -56,7 +130,12 @@
   function sendPublicClick(event) {
     if (!active || !window.gtag || !(event.target instanceof Element)) return;
     var link = event.target.closest('a[href]');
-    if (!link) return;
+    if (!link) {
+      var button=event.target.closest('button');
+      if(button && (button.hasAttribute('data-buy')||button.id==='bundle-buy'))sendFirstParty('checkout_click');
+      else if(button&&button.id==='coupon-preview')sendFirstParty('coupon_check');
+      return;
+    }
     var href = link.getAttribute('href') || '';
     var eventName = null;
     if (/^https:\/\/play\.google\.com\/store\/apps\/details/.test(href)) eventName = 'google_play_click';
@@ -68,6 +147,11 @@
     else if (/^https:\/\/t\.me\/share\/url/.test(href)) eventName = 'telegram_share_click';
     else if (/^https:\/\/(?:twitter\.com|x\.com)\/intent\/tweet/.test(href)) eventName = 'x_share_click';
     if (eventName) window.gtag('event', eventName, { page_path: pagePath });
+    if(eventName==='whatsapp_link_click')sendFirstParty('whatsapp_click');
+    else if(eventName==='apk_download_click'||eventName==='downloads_page_click')sendFirstParty('download_click');
+    if(/^/store/offers/?(?:#.*)?$/.test(href))sendFirstParty('offer_click');
+    else if(/^/products/(stream|xtream)/?(?:#.*)?$/.test(href))sendFirstParty('product_click');
+    else if(/^/store/trial/?(?:#.*)?$/.test(href))sendFirstParty('trial_click');
     // Device identifiers, credentials, URL parameters and form values are never forwarded.
   }
   function setChoice(value) {
@@ -75,7 +159,10 @@
     if (banner) { banner.remove(); banner = null; }
     if (settings) settings.hidden = false;
     if (value === 'accepted') startMeasurement();
-    else if (active) window.location.reload(); // Withdraw previously granted consent.
+    else if (active) {
+      try{sessionStorage.removeItem('blofy.analytics.tab-session.v1');sessionStorage.removeItem('blofy.analytics.campaign.v1');}catch(_){}
+      window.location.reload(); // Withdraw analytics consent and remove in-tab attribution.
+    }
   }
   function showChoice() {
     if (banner) return;
@@ -84,10 +171,10 @@
     banner.setAttribute('role', 'region');
     banner.dir = ['/en', '/es', '/fr'].indexOf(pagePath) >= 0 ? 'ltr' : 'rtl';
     banner.style.cssText = 'position:fixed;bottom:16px;left:16px;right:16px;max-width:470px;z-index:99999;background:#181322;color:#fff;border:1px solid #8652c4;border-radius:16px;padding:16px;box-shadow:0 15px 42px #0008;font:14px/1.8 system-ui,Tahoma,sans-serif';
-    if (pagePath === '/es') banner.innerHTML = "<strong>Estadísticas del sitio BLOFY PLAYER</strong><p style=\"margin:8px 0 12px\">Solo con tu permiso usamos Google Analytics para conocer las visitas a las páginas públicas. No recopilamos identificadores del dispositivo, códigos de vinculación ni credenciales de listas. <a href=\"/privacy\" style=\"color:#d7baff\">Privacidad</a></p><div style=\"display:flex;gap:10px;flex-wrap:wrap\"><button type=\"button\" data-ga-accept style=\"cursor:pointer;padding:8px 18px;border:0;border-radius:9px;background:#a36bff;color:#111;font:inherit\">Aceptar</button><button type=\"button\" data-ga-reject style=\"cursor:pointer;padding:8px 18px;border:1px solid #7d6992;border-radius:9px;background:transparent;color:#fff;font:inherit\">Rechazar</button></div>";
-    else if (pagePath === '/fr') banner.innerHTML = "<strong>Statistiques du site BLOFY PLAYER</strong><p style=\"margin:8px 0 12px\">Avec votre autorisation uniquement, Google Analytics nous aide à connaître les visites des pages publiques. Nous ne transmettons pas les identifiants des appareils, les codes d’association ni les identifiants des listes. <a href=\"/privacy\" style=\"color:#d7baff\">Confidentialité</a></p><div style=\"display:flex;gap:10px;flex-wrap:wrap\"><button type=\"button\" data-ga-accept style=\"cursor:pointer;padding:8px 18px;border:0;border-radius:9px;background:#a36bff;color:#111;font:inherit\">Accepter</button><button type=\"button\" data-ga-reject style=\"cursor:pointer;padding:8px 18px;border:1px solid #7d6992;border-radius:9px;background:transparent;color:#fff;font:inherit\">Refuser</button></div>";
-    else if (pagePath === '/en') banner.innerHTML = "<strong>BLOFY PLAYER site analytics</strong><p style=\"margin:8px 0 12px\">With your permission, Google Analytics helps us understand public page visits. Device IDs, pairing codes and playlist credentials are never included. <a href=\"/privacy\" style=\"color:#d7baff\">Privacy</a></p><div style=\"display:flex;gap:10px;flex-wrap:wrap\"><button type=\"button\" data-ga-accept style=\"cursor:pointer;padding:8px 18px;border:0;border-radius:9px;background:#a36bff;color:#111;font:inherit\">Accept</button><button type=\"button\" data-ga-reject style=\"cursor:pointer;padding:8px 18px;border:1px solid #7d6992;border-radius:9px;background:transparent;color:#fff;font:inherit\">Reject</button></div>";
-    else banner.innerHTML = '<strong>إحصاءات BLOFY PLAYER</strong><p style="margin:8px 0 12px">نستخدم Google Analytics بعد موافقتك فقط لمعرفة أداء صفحات الموقع العامة. لا نرسل بيانات الجهاز أو رموز الربط. <a href="/privacy" style="color:#d7baff">الخصوصية</a></p><div style="display:flex;gap:10px;flex-wrap:wrap"><button type="button" data-ga-accept style="cursor:pointer;padding:8px 18px;border:0;border-radius:9px;background:#a36bff;color:#111;font:inherit">موافق</button><button type="button" data-ga-reject style="cursor:pointer;padding:8px 18px;border:1px solid #7d6992;border-radius:9px;background:transparent;color:#fff;font:inherit">رفض</button></div>';
+    if (pagePath === '/es') banner.innerHTML = "<strong>Estadísticas del sitio BLOFY PLAYER</strong><p style=\"margin:8px 0 12px\">Solo con tu permiso registramos visitas, campañas y clics agregados en BLOFY, además de Google Analytics. No guardamos IP, datos de identificación ni códigos de vinculación. <a href=\"/privacy\" style=\"color:#d7baff\">Privacidad</a></p><div style=\"display:flex;gap:10px;flex-wrap:wrap\"><button type=\"button\" data-ga-accept style=\"cursor:pointer;padding:8px 18px;border:0;border-radius:9px;background:#a36bff;color:#111;font:inherit\">Aceptar</button><button type=\"button\" data-ga-reject style=\"cursor:pointer;padding:8px 18px;border:1px solid #7d6992;border-radius:9px;background:transparent;color:#fff;font:inherit\">Rechazar</button></div>";
+    else if (pagePath === '/fr') banner.innerHTML = "<strong>Statistiques du site BLOFY PLAYER</strong><p style=\"margin:8px 0 12px\">Avec votre accord, nous mesurons les visites, campagnes et clics agrégés chez BLOFY ainsi que dans Google Analytics. Aucune IP ni donnée d'identification ou code d'association n'est conservé. <a href=\"/privacy\" style=\"color:#d7baff\">Confidentialité</a></p><div style=\"display:flex;gap:10px;flex-wrap:wrap\"><button type=\"button\" data-ga-accept style=\"cursor:pointer;padding:8px 18px;border:0;border-radius:9px;background:#a36bff;color:#111;font:inherit\">Accepter</button><button type=\"button\" data-ga-reject style=\"cursor:pointer;padding:8px 18px;border:1px solid #7d6992;border-radius:9px;background:transparent;color:#fff;font:inherit\">Refuser</button></div>";
+    else if (pagePath === '/en') banner.innerHTML = "<strong>BLOFY PLAYER site analytics</strong><p style=\"margin:8px 0 12px\">Only with consent we measure aggregated page visits, campaign sources and clicks on BLOFY servers, plus Google Analytics. No IP, device ID, pairing code or playlist credentials are stored. You can withdraw consent. <a href=\"/privacy\" style=\"color:#d7baff\">Privacy</a></p><div style=\"display:flex;gap:10px;flex-wrap:wrap\"><button type=\"button\" data-ga-accept style=\"cursor:pointer;padding:8px 18px;border:0;border-radius:9px;background:#a36bff;color:#111;font:inherit\">Accept</button><button type=\"button\" data-ga-reject style=\"cursor:pointer;padding:8px 18px;border:1px solid #7d6992;border-radius:9px;background:transparent;color:#fff;font:inherit\">Reject</button></div>";
+    else banner.innerHTML = '<strong>إحصاءات BLOFY PLAYER</strong><p style="margin:8px 0 12px">بموافقتك فقط نجمع أعداد الزيارات والتفاعلات ومصادر الحملات بشكل مجمّع على خادم BLOFY، ونستخدم Google Analytics لصفحات الموقع العامة. لا نحفظ IP أو معلومات التعريف أو رموز الربط. يمكنك سحب موافقتك من الإعدادات. <a href="/privacy" style="color:#d7baff">الخصوصية</a></p><div style="display:flex;gap:10px;flex-wrap:wrap"><button type="button" data-ga-accept style="cursor:pointer;padding:8px 18px;border:0;border-radius:9px;background:#a36bff;color:#111;font:inherit">موافق</button><button type="button" data-ga-reject style="cursor:pointer;padding:8px 18px;border:1px solid #7d6992;border-radius:9px;background:transparent;color:#fff;font:inherit">رفض</button></div>';
     document.body.appendChild(banner);
     banner.querySelector('[data-ga-accept]').addEventListener('click', function () { setChoice('accepted'); });
     banner.querySelector('[data-ga-reject]').addEventListener('click', function () { setChoice('rejected'); });
