@@ -11,8 +11,10 @@ test('operator-only probe uses identical get_series_info resolver as already exi
  const next=file.indexOf("if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream-gateway/playback-health')",diagnostic);
  assert.ok(next>diagnostic);
  const block=file.slice(diagnostic,next);
- assert.match(block,/gatewayItemById\('series',Number\(rawId\),sourceId\)/);
- assert.match(block,/seriesInfo\(Number\(rawId\),sourceId\)/);
+ assert.match(block,/gatewayItemById\('series',gatewayId,sourceId\)/);
+ assert.match(block,/seriesSourceId/);
+ assert.match(block,/blofy_xtream_gateway_item_map/);
+ assert.match(block,/seriesInfo\(gatewayId,sourceId\)/);
  assert.match(block,/source\.publish_catalog!==true/);
  assert.match(block,/episode_audit_source_not_approved/);
  assert.match(block,/episode_audit_ids_mapped/);
