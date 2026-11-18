@@ -8,7 +8,13 @@
  const tell=value=>{$('message').textContent=value;};
  const node=(tag,value)=>{const n=document.createElement(tag);if(value!==undefined)n.textContent=value;return n;};
  const money=n=>(Number(n)/100).toLocaleString('ar-SA')+' ر.س';
- let orders=[];
+ let orders=[],receiptTimer=null,receiptGeneration=0;
+ function clearReceipt(){
+  receiptGeneration++;
+  if(receiptTimer!==null){clearTimeout(receiptTimer);receiptTimer=null;}
+  $('receipt').hidden=true;
+  $('codes').replaceChildren();
+ }
  async function api(path,body){
   const opts={cache:'no-store',credentials:'same-origin',headers:{accept:'application/json'}};
   if(body!==undefined){
@@ -80,6 +86,7 @@
   buttons.append(details,renew,support);wrapper.append(buttons);return wrapper;
  }
  async function load(){
+  clearReceipt();
   try{
    const data=await api('');
    orders=data.orders||[];
@@ -110,8 +117,13 @@
   }
  }
  async function showOrder(id){
+  clearReceipt();
+  const generation=receiptGeneration;
   try{
    const data=await api('/orders/'+encodeURIComponent(id));
+   // Ignore an old response after the user closed details, signed out, or
+   // opened another order. Codes must not repopulate a hidden tab.
+   if(generation!==receiptGeneration||document.visibilityState==='hidden')return;
    $('receipt').hidden=false;$('receipt-title').textContent='أكواد الطلب '+data.orderNumber;
    $('receipt-status').textContent=data.fulfilled?'تم تأكيد الدفع واستلام الأكواد.':
     'الطلب '+label(data.status)+'. لا تكرر الدفع قبل التحقق.';
@@ -129,7 +141,10 @@
     box.append(code,meta,copy);root.append(box);
    }
    $('receipt').scrollIntoView({behavior:'smooth'});
-  }catch(err){tell(statusMessage(err));}
+   receiptTimer=setTimeout(()=>{
+    clearReceipt();tell('تم إخفاء الأكواد بعد 90 ثانية. يمكنك فتح تفاصيل الطلب مجددًا عند الحاجة.');
+   },90000);
+  }catch(err){if(generation===receiptGeneration)tell(statusMessage(err));}
  }
  $('request-form').addEventListener('submit',async event=>{
   event.preventDefault();
@@ -172,10 +187,14 @@
   finally{this.disabled=false;}
  });
  $('logout').addEventListener('click',async()=>{
-  try{await api('/logout',{});view(false);orders=[];tell('تم تسجيل الخروج.');}
+  try{await api('/logout',{});clearReceipt();view(false);orders=[];tell('تم تسجيل الخروج.');}
   catch(e){tell(statusMessage(e));}
  });
- $('close-receipt').addEventListener('click',()=>{$('receipt').hidden=true;$('codes').replaceChildren();});
+ $('close-receipt').addEventListener('click',clearReceipt);
+ document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='hidden')clearReceipt();
+ });
+ window.addEventListener('pagehide',clearReceipt);
  if(returnToCart)$('checkout-return').hidden=false;
  // An existing guest token can be transported in the URL fragment, never the server logs.
  const params=new URLSearchParams(location.hash.replace(/^#/,''));
