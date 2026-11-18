@@ -11,6 +11,9 @@
  })[sku]||'اشتراك BLOFY';
  const money=n=>(Number(n)/100).toLocaleString('ar-SA',{minimumFractionDigits:0,maximumFractionDigits:2})+' ر.س';
  let items=[],quoted=null,ready=false,creating=false,paymentOpen=false,currentOrder=null,accessToken=null;
+ let signedIn=false,accountEmail='',cloudRevision=null,cloudSynced=false,cloudSyncing=false,
+   savedSnapshot='',hasUrlAddition=false;
+ const cloudEndpoint='/api/v1/store/account/cart',ownerKey='blofy.shop.cart.owner.v1';
  const message=(text)=>{$('message').textContent=text;};
  const keyOf=item=>item.sku==='bundle-2y'?'bundle-2y:'+item.bundleSelection.join('+'):item.sku;
  function validLine(item){
@@ -23,7 +26,7 @@
  }
  function totalCodes(value){return value.reduce((n,x)=>n+x.quantity*(x.sku==='bundle-2y'?2:1),0);}
  function save(){
-   try{localStorage.setItem(storageKey,JSON.stringify(items));return true;}
+   try{localStorage.setItem(storageKey,JSON.stringify(items));queueSync();return true;}
    catch(_){message('التخزين المحلي غير متاح؛ قد تختفي السلة عند إغلاق الصفحة.');return false;}
  }
  function restore(){
@@ -50,6 +53,7 @@
    if(sku==='bundle-2y')
      line.bundleSelection=[params.get('first')||'app',params.get('second')||'app'];
    if(validLine(line)){
+     hasUrlAddition=true;
      const same=items.find(x=>keyOf(x)===keyOf(line));
      if(same&&same.quantity<3&&totalCodes(items)+(sku==='bundle-2y'?2:1)<=6)same.quantity++;
      else if(!same&&items.length<5&&totalCodes(items)+(sku==='bundle-2y'?2:1)<=6)items.push(line);
@@ -105,6 +109,136 @@
      ...(x.sku==='bundle-2y'?{bundleSelection:[...x.bundleSelection]}:{})})),
      ...(coupon?{couponCode:coupon}:{})};
  }
+
+ function cleanItems(value){
+   if(!Array.isArray(value))return [];
+   const out=[],seen=new Set();
+   for(const raw of value){
+     if(!validLine(raw))continue;
+     const key=keyOf(raw);
+     if(seen.has(key))continue;
+     if(out.length>=5||totalCodes(out)+raw.quantity*(raw.sku==='bundle-2y'?2:1)>6)continue;
+     seen.add(key);
+     out.push({sku:raw.sku,quantity:raw.quantity,
+       ...(raw.sku==='bundle-2y'?{bundleSelection:[...raw.bundleSelection]}:{})});
+   }
+   return out;
+ }
+ function mergeSavedCart(cloud,local){
+   // Previously synced devices respect server deletions. A newly added URL item
+   // and a first-time guest basket merge, without doubling duplicate quantities.
+   const merged=cleanItems(cloud),byKey=new Map(merged.map(x=>[keyOf(x),x]));
+   for(const line of cleanItems(local)){
+     const existing=byKey.get(keyOf(line));
+     if(existing){
+       const former=existing.quantity;
+       existing.quantity=Math.max(existing.quantity,line.quantity);
+       if(totalCodes(merged)>6)existing.quantity=former;
+     }else if(merged.length<5&&totalCodes(merged)+line.quantity*
+       (line.sku==='bundle-2y'?2:1)<=6){
+       const copied={...line,...(line.bundleSelection?{bundleSelection:[...line.bundleSelection]}:{})};
+       merged.push(copied);byKey.set(keyOf(copied),copied);
+     }
+   }
+   return merged;
+ }
+ function cartSnapshot(){
+   return JSON.stringify({items:items.map(x=>({sku:x.sku,quantity:x.quantity,
+     ...(x.bundleSelection?{bundleSelection:[...x.bundleSelection]}:{})})),
+     couponCode:$('coupon').value.trim().toUpperCase()});
+ }
+ function updateCheckoutButton(){
+   const button=$('checkout');
+   button.textContent=!signedIn?'تسجيل الدخول مطلوب قبل الدفع':
+     !cloudSynced?'جارٍ حفظ السلة...':'إكمال الطلب والدفع الآمن';
+   button.disabled=!signedIn||!cloudSynced||!ready||creating||paymentOpen||!quoted||!items.length;
+ }
+ function authUI(){
+   const gate=$('auth-gate'),headline=$('auth-title'),label=$('auth-message'),link=$('auth-link');
+   gate.dataset.state=signedIn?'verified':'login';
+   headline.textContent=signedIn?'تم التحقق من حسابك ✓':'سجّل الدخول قبل الدفع';
+   label.textContent=signedIn?'البريد الموثق: '+accountEmail+
+     ' · سلتك مرتبطة بحسابك ويمكنك متابعتها من أي جهاز.':
+     'اختر باقاتك الآن، ثم سجّل الدخول برمز يصلك على البريد؛ السلة لن تختفي أثناء التسجيل.';
+   link.hidden=signedIn;
+   const indicator=$('cart-sync');
+   indicator.textContent=!signedIn?'ستُحفظ السلة في حسابك بعد تسجيل الدخول.':
+     cloudSynced?'✓ محفوظة بحسابك':'جارٍ مزامنة السلة مع حسابك…';
+   indicator.dataset.state=cloudSynced?'saved':'pending';
+   updateCheckoutButton();
+ }
+ function queueSync(){
+   if(!signedIn||cloudRevision===null)return;
+   cloudSynced=false;authUI();
+   if(!cloudSyncing)void syncCloud();
+ }
+ async function syncCloud(){
+   if(cloudSyncing||!signedIn||cloudRevision===null)return;
+   cloudSyncing=true;
+   try{
+     // Serialize writes and check the snapshot after every response; this prevents
+     // out-of-order changes from reverting quantities or coupons.
+     for(let attempt=0;attempt<8;attempt++){
+       const payload=cartSnapshot();
+       if(payload===savedSnapshot){cloudSynced=true;break;}
+       const snapshot=JSON.parse(payload);
+       const result=await request(cloudEndpoint,{...snapshot,revision:cloudRevision});
+       if(!Number.isSafeInteger(result.revision))throw Error('cart_save_failed');
+       cloudRevision=result.revision;savedSnapshot=payload;
+       if(cartSnapshot()===payload){cloudSynced=true;break;}
+     }
+     authUI();
+   }catch(err){
+     cloudSynced=false;
+     $('cart-sync').textContent=err.message==='store_cart_changed_on_another_device'
+       ?'السلة تغيرت من جهاز آخر. حدّث الصفحة لجلب أحدث نسخة قبل الدفع.'
+       :'فشل حفظ السلة في حسابك. راجع الاتصال ثم أعد محاولة الحفظ.';
+     $('cart-sync').dataset.state='error';
+     updateCheckoutButton();
+   }finally{
+     cloudSyncing=false;
+     // An edit made during an in-flight request must not remain unsaved.
+     if(signedIn&&cloudRevision!==null&&savedSnapshot!==cartSnapshot()&&cloudSynced)
+       queueSync();
+   }
+ }
+ async function initAccount(){
+   try{
+     const response=await fetch('/api/v1/store/account',{cache:'no-store',credentials:'same-origin',
+       headers:{accept:'application/json'}});
+     if(response.status===401){authUI();return;}
+     if(!response.ok)throw Error('account_unavailable');
+     const data=await response.json();
+     if(typeof data.email!=='string'||typeof data.customerId!=='string')
+       throw Error('account_invalid');
+     signedIn=true;accountEmail=data.email;
+     const saved=await fetch(cloudEndpoint,{cache:'no-store',credentials:'same-origin',
+       headers:{accept:'application/json'}});
+     if(!saved.ok)throw Error('cart_unavailable');
+     const remote=await saved.json();
+     if(!Number.isSafeInteger(remote.revision)||!Array.isArray(remote.items))
+       throw Error('cart_invalid');
+     const previouslySynced=localStorage.getItem(ownerKey)===data.customerId;
+     const local=items;
+     items=(!hasUrlAddition&&previouslySynced)?
+       cleanItems(remote.items):mergeSavedCart(remote.items,local);
+     // Keep one exact source of truth after authentication.
+     $('coupon').value=(!hasUrlAddition&&previouslySynced)?
+       (remote.couponCode||''):($('coupon').value||remote.couponCode||'');
+     cloudRevision=remote.revision;
+     savedSnapshot=JSON.stringify({items:cleanItems(remote.items),couponCode:remote.couponCode||''});
+     localStorage.setItem(ownerKey,data.customerId);
+     try{localStorage.setItem(storageKey,JSON.stringify(items));}catch(_){}
+     authUI();queueSync();void refresh();
+   }catch(_){
+     // Fail closed: no payment if a verified account or saved cart is unavailable.
+     cloudSynced=false;
+     $('cart-sync').textContent='لا يمكن التحقق من حسابك أو حفظ السلة الآن. حدّث الصفحة.';
+     $('cart-sync').dataset.state='error';
+     updateCheckoutButton();
+   }
+ }
+
  let requestSerial=0;
  async function refresh(){
    const serial=++requestSerial;
@@ -118,14 +252,19 @@
      $('subtotal').textContent=money(data.subtotalMinor);$('discount').textContent=money(data.discountMinor);
      $('total').textContent=money(data.totalMinor);$('codes-count').textContent=String(data.codeCount);
      render(data.items);
-     $('checkout').disabled=!ready||creating;
-     message(ready?'السلة جاهزة. تأكد من المنتجات والسعر ثم أكمل الدفع.':'الدفع غير متاح حاليًا. تواصل مع الدعم.');
+     updateCheckoutButton();
+     message(!ready?'الدفع غير متاح حاليًا. تواصل مع الدعم.':
+       !signedIn?'السلة جاهزة. سجّل دخولك بالبريد قبل الدفع، وستبقى المنتجات محفوظة.':
+       !cloudSynced?'جارٍ حفظ السلة في حسابك. لن يبدأ الدفع حتى يكتمل الحفظ.':
+       'ممتاز! سلتك محفوظة بحسابك. تأكد من السعر ثم أكمل عملية الدفع الواحدة.');
    }catch(err){
      if(serial!==requestSerial)return;
      message('تعذر حساب السعر أو الكوبون: '+err.message+'. لم يتم بدء أي عملية دفع.');
    }
  }
  async function checkout(){
+   if(!signedIn){location.assign('/store/account?next=%2Fstore%2Fcart');return;}
+   if(!cloudSynced){message('سلتك لم تُحفظ بعد في الحساب. تأكد من اتصالك قبل الدفع.');return;}
    if(!ready||creating||paymentOpen||!quoted||!items.length)return;
    if(typeof window.GeideaCheckout!=='function'){
      message('نافذة الدفع غير متاحة حاليًا. حدّث الصفحة أو تواصل مع الدعم.');return;
@@ -143,6 +282,7 @@
      try{
        sessionStorage.setItem('blofy.shop.order.'+currentOrder,accessToken);
        sessionStorage.setItem('blofy.shop.last-order',currentOrder);
+       sessionStorage.setItem('blofy.shop.cart.checkout.'+currentOrder,JSON.stringify(items));
      }catch(_){}
      $('started').hidden=false;$('order-number').textContent=data.orderNumber;
      message('رقم طلبك '+data.orderNumber+'. احفظ رابط الطلب الخاص ثم أكمل الدفع.');
@@ -156,7 +296,7 @@
      window.BLOFYAnalytics?.track('checkout_started');
    }catch(err){
      message('تعذر إكمال الدفع: '+err.message+'. إذا سبق إنشاء الطلب لا تعِد الدفع قبل التحقق من حالته.');
-   }finally{creating=false;$('checkout').disabled=paymentOpen||!quoted||!ready;}
+   }finally{creating=false;updateCheckoutButton();}
  }
  function privateLink(){
    if(!currentOrder||!accessToken)return null;
@@ -176,8 +316,9 @@
    this.value=this.value.toUpperCase().replace(/[^A-Z0-9_-]/g,'').slice(0,20);
    resetPrice();
  });
- $('apply').addEventListener('click',()=>void refresh());
+ $('apply').addEventListener('click',()=>{queueSync();void refresh();});
  items=restore();addFromURL();render();
+ void initAccount();
  fetch('/api/v1/store/products',{cache:'no-store',headers:{accept:'application/json'}})
    .then(r=>r.ok?r.json():Promise.reject(Error('catalog_unavailable')))
    .then(data=>{ready=data.checkoutAvailable===true;void refresh();})
