@@ -5,6 +5,7 @@ import { servePrivacyPage } from './privacy-pages.mjs';
 import { PUBLIC_ANALYTICS_CSP, withPublicAnalytics } from './public-analytics.mjs';
 import { serveIndexNowKey } from './indexnow-key.mjs';
 import { createCommercialHandlers } from './commercial-handlers.mjs';
+import { storeInfoPage } from './store-info-pages.mjs';
 import { createProfileCloudHandlers } from './profile-cloud.mjs';
 import { registerDeviceTrial, bindExistingTrial, completePendingTrial } from './trial-registration.mjs';
 import crypto from 'node:crypto';
@@ -280,10 +281,19 @@ async function servePortal(res, connectOnly = false) {
   res.end(file);
 }
 
-async function serveStorefront(res) {
-  // Public storefront and Geidea entry points live separately from device linking.
-  // Never expose payment secrets or card fields on the marketing page.
-  const file = Buffer.from(withPublicAnalytics(await readFile(new URL('../web/store.html', import.meta.url), 'utf8')), 'utf8');
+async function serveStorefront(res, product = null) {
+  // Public store, with dedicated canonical detail pages. No client-supplied markup.
+  let source = await readFile(new URL('../web/store.html', import.meta.url), 'utf8');
+  if (product === 'stream' || product === 'xtream') {
+    source = source.replace('data-blofy-storefront="1"',
+      'data-blofy-storefront="1" data-shop-product="'+product+'"');
+    const title=product==='stream'?'اشتراك كود BLOFY STREAM':'اشتراك Xtream BLOFY';
+    const path='/products/'+product;
+    source=source.replace(/<title>[^<]+<\/title>/,'<title>'+title+' | أسعار 40 و60 و100 ريال</title>');
+    source=source.replace('<link rel="canonical" href="https://www.blofyplayer.com/">',
+      '<link rel="canonical" href="https://www.blofyplayer.com'+path+'">');
+  }
+  const file = Buffer.from(withPublicAnalytics(source),'utf8');
   res.writeHead(200, {
     'content-type': 'text/html; charset=utf-8',
     'content-length': file.length,
@@ -299,6 +309,36 @@ async function serveStorefront(res) {
       .replace("connect-src 'self' https://www.google-analytics.com https://region1.google-analytics.com https://www.googletagmanager.com",
         "connect-src 'self' https://www.google-analytics.com https://region1.google-analytics.com https://www.googletagmanager.com https://www.ksamerchant.geidea.net https://api.ksamerchant.geidea.net")
       + "; frame-src https://www.ksamerchant.geidea.net; base-uri 'none'; form-action 'none'"
+  });
+  res.end(file);
+}
+
+function serveStoreInfo(res, slug) {
+  const markup=storeInfoPage(slug);
+  if(!markup){res.writeHead(404,{'cache-control':'no-store'});return res.end();}
+  const file=Buffer.from(markup,'utf8');
+  res.writeHead(200,{
+    'content-type':'text/html; charset=utf-8',
+    'content-length':file.length,
+    'cache-control':'public, max-age=120',
+    'x-content-type-options':'nosniff',
+    'x-frame-options':'DENY',
+    'referrer-policy':'strict-origin-when-cross-origin',
+    'strict-transport-security':'max-age=31536000',
+    'content-security-policy':"default-src 'self'; style-src 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'"
+  });
+  res.end(file);
+}
+
+async function serveStoreGraphic(res, name) {
+  const filename=name==='stream'?'store-stream.svg':'store-xtream.svg';
+  const file=await readFile(new URL('../web/'+filename,import.meta.url));
+  res.writeHead(200,{
+    'content-type':'image/svg+xml; charset=utf-8',
+    'content-length':file.length,
+    'cache-control':'public, max-age=86400',
+    'x-content-type-options':'nosniff',
+    'content-security-policy':"default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox"
   });
   res.end(file);
 }
@@ -821,6 +861,15 @@ const server = http.createServer(async (req, res) => {
     }
     if (await servePrivacyPage(req, res, requestUrl)) return;
     if (['GET', 'HEAD'].includes(req.method) && (requestUrl.pathname === '/' || requestUrl.pathname === '/shop' || requestUrl.pathname === '/shop/')) return await serveStorefront(res);
+    const storeProductMatch=requestUrl.pathname.match(/^\/products\/(stream|xtream)\/?$/);
+    const storeInfoMatch=requestUrl.pathname.match(/^\/store\/(about|trial|faq|contact|terms)\/?$/);
+    const storeImageMatch=requestUrl.pathname.match(/^\/store\/media\/(stream|xtream)\.svg$/);
+    if (['GET','HEAD'].includes(req.method) && storeProductMatch)
+      return await serveStorefront(res,storeProductMatch[1]);
+    if (['GET','HEAD'].includes(req.method) && storeInfoMatch)
+      return serveStoreInfo(res,storeInfoMatch[1]);
+    if (['GET','HEAD'].includes(req.method) && storeImageMatch)
+      return await serveStoreGraphic(res,storeImageMatch[1]);
     if (req.method === 'GET' && requestUrl.pathname === '/connect') return await servePortal(res, true);
     if (['GET', 'HEAD'].includes(req.method) && requestUrl.pathname === '/status') return await serveStatusPage(res);
     if (['GET', 'HEAD'].includes(req.method) && (requestUrl.pathname === '/en' || requestUrl.pathname === '/en/')) return await serveStatusPage(res, 'en.html');
