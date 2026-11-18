@@ -31,10 +31,12 @@ const COUPON_RE=/^[A-Z0-9][A-Z0-9_-]{3,19}$/;
 function discountAmount(amount,percent){return Math.round(amount*percent/100);}
 
 export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAdmin=()=>false,
-   onCheckoutOrder=async()=>false,env=process.env,fetchImpl=globalThis.fetch}){
+   onCheckoutOrder=async()=>false,requireCheckoutCustomer=async()=>({ok:true}),
+   env=process.env,fetchImpl=globalThis.fetch}){
  const publicKey=String(env.GEIDEA_LIVE_MERCHANT_PUBLIC_KEY||'').trim();
  const password=String(env.GEIDEA_LIVE_API_PASSWORD||'');
  const selected=env.BLOFY_PAYMENT_PROVIDER==='geidea'&&env.BLOFY_GEIDEA_CHECKOUT_ENABLED==='true';
+ const loginRequired=env.BLOFY_STORE_REQUIRE_CUSTOMER_LOGIN==='true';
  // Independent opt-in avoids changing live player renewal checkout until store fulfillment is validated.
  const enabled=selected&&env.BLOFY_STORE_GEIDEA_ENABLED==='true'&&UUID.test(publicKey)&&
    password.length>=16&&/^[a-f0-9]{64}$/i.test(String(keyHex||''));
@@ -410,6 +412,9 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
  async function cartCheckout(req,res){
    if(!enabled)return json(res,503,{error:'store_checkout_disabled'});
    if(!browser(req,res))return;
+   // The server, not the disabled/enabled state of a browser button, enforces login.
+   const customer=await requireCheckoutCustomer(req);
+   if(!customer?.ok)return json(res,customer?.status||401,{error:customer?.error||'customer_login_required'});
    if(!rateCheckout.consume(requestClientKey(req)).allowed)
      return json(res,429,{error:'rate_limited'});
    const body=await readJson(req),cart=parseStoreCart(body?.items);
@@ -446,6 +451,15 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
      await db.query('COMMIT');
    }catch(e){await db.query('ROLLBACK').catch(()=>{});throw e;}
    finally{db.release();}
+   if(loginRequired){
+     let linked=false;
+     try{linked=(await onCheckoutOrder(req,id,secret))===true;}catch{}
+     if(!linked){
+       await pool.query("UPDATE blofy_store_geidea_orders SET status='cancelled' "+
+         "WHERE id=$1 AND status='pending' AND session_id IS NULL",[id]).catch(()=>{});
+       return json(res,503,{error:'store_order_link_failed'});
+     }
+   }
    const timestamp=new Date().toISOString().slice(0,19).replaceAll('-','/').replace('T',' ');
    const request={
      amount:(amountMinor/100).toFixed(2),currency:'SAR',timestamp,merchantReferenceId:id,
@@ -463,8 +477,9 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
       Date.parse(created?.session?.expiryDate||'')<=Date.now())
      return json(res,502,{error:'store_geidea_session_invalid',orderNumber:number});
    await pool.query('UPDATE blofy_store_geidea_orders SET session_id=$2 WHERE id=$1',[id,created.session.id]);
-   // Linking is best-effort; a failed customer association must not disrupt paid checkout.
-   try{await onCheckoutOrder(req,id,secret);}catch{}
+   // Legacy mode still supports historical guest receipts; verified-account mode
+   // linked the order before asking Geidea to create a chargeable session.
+   if(!loginRequired)try{await onCheckoutOrder(req,id,secret);}catch{}
    return json(res,201,{
      provider:'geidea',checkoutMode:'modal',sku:CART_SKU,
      orderId:id,orderNumber:number,accessToken:secret,sessionId:created.session.id,
@@ -636,6 +651,8 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
  async function checkout(req,res){
    if(!enabled)return json(res,503,{error:'store_checkout_disabled'});
    if(!browser(req,res))return;
+   const customer=await requireCheckoutCustomer(req);
+   if(!customer?.ok)return json(res,customer?.status||401,{error:customer?.error||'customer_login_required'});
    if(!rateCheckout.consume(requestClientKey(req)).allowed)return json(res,429,{error:'rate_limited'});
    const body=await readJson(req);
    const isBundle=body?.sku===BUNDLE_SKU;
@@ -651,6 +668,15 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
    const id=crypto.randomUUID(),secret=crypto.randomBytes(32).toString('base64url');
    const quote=await prepareCouponAndOrder({id,sku,channel,durationDays:days,priceMinor:listPrice,
      secret,bundleSelection:channels,couponCode});
+   if(loginRequired){
+     let linked=false;
+     try{linked=(await onCheckoutOrder(req,id,secret))===true;}catch{}
+     if(!linked){
+       await pool.query("UPDATE blofy_store_geidea_orders SET status='cancelled' "+
+         "WHERE id=$1 AND status='pending' AND session_id IS NULL",[id]).catch(()=>{});
+       return json(res,503,{error:'store_order_link_failed'});
+     }
+   }
    const timestamp=new Date().toISOString().slice(0,19).replaceAll('-','/').replace('T',' ');
    const request={
     amount:(quote.priceMinor/100).toFixed(2),currency:'SAR',timestamp,merchantReferenceId:id,
@@ -665,8 +691,7 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
    if(!UUID.test(created?.session?.id||'')||Date.parse(created?.session?.expiryDate||'')<=Date.now())
     return json(res,502,{error:'store_geidea_session_invalid'});
    await pool.query('UPDATE blofy_store_geidea_orders SET session_id=$2 WHERE id=$1',[id,created.session.id]);
-   // Linking is best-effort; a failed customer association must not disrupt paid checkout.
-   try{await onCheckoutOrder(req,id,secret);}catch{}
+   if(!loginRequired)try{await onCheckoutOrder(req,id,secret);}catch{}
    return json(res,201,{provider:'geidea',checkoutMode:'modal',orderId:id,accessToken:secret,
     sessionId:created.session.id,sku,priceMinor:quote.priceMinor,discountMinor:quote.discountMinor,couponCode:quote.couponCode,currency:'SAR'});
  }
