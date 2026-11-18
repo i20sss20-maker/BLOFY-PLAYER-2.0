@@ -23,6 +23,9 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -63,6 +66,7 @@ class EpisodesActivity : ContentAccessActivity() {
     private var restoredOnce = false
     private var syncInProgress = false
     private var silentEpisodeSync = false
+    private var visibleEpisodeRefreshJob: Job? = null
     private var loadState = EpisodeLoadState.LOADING
     private val watchProgress = mutableMapOf<String, Int>()
     private lateinit var deviceKind: DeviceClass.Kind
@@ -265,8 +269,33 @@ class EpisodesActivity : ContentAccessActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (!::episodeAdapter.isInitialized) return
-        lifecycleScope.launch { refreshWatchProgress(); refreshEpisodes(false) }
+        if (::episodeAdapter.isInitialized) {
+            lifecycleScope.launch { refreshWatchProgress(); refreshEpisodes(false) }
+        }
+        if (!BuildConfig.CODE_ONLY_LOGIN) return
+        visibleEpisodeRefreshJob?.cancel()
+        visibleEpisodeRefreshJob = lifecycleScope.launch {
+            // Re-check only this series while its episode screen is visible.
+            // The shared policy admits at most one request every three minutes
+            // across Home, episode lists and the recent-episodes worker.
+            // Never refresh the 300k-item full catalog from this screen.
+            while (isActive) {
+                if (::episodeAdapter.isInitialized &&
+                    allEpisodes.isNotEmpty() && !syncInProgress) {
+                    val provider = withContext(Dispatchers.IO) {
+                        BlofyDatabase.get(applicationContext).dao().provider(providerId)
+                    }
+                    if (provider != null) refreshCachedEpisodesSilently(provider)
+                }
+                delay(30_000L)
+            }
+        }
+    }
+
+    override fun onPause() {
+        visibleEpisodeRefreshJob?.cancel()
+        visibleEpisodeRefreshJob = null
+        super.onPause()
     }
 
     private fun installTvFocusBridge() {
