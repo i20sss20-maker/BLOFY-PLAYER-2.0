@@ -189,7 +189,8 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
   if(tables.customers){
     const row=(await pool.query('SELECT COUNT(*)::int AS n, '+
       "COUNT(*) FILTER (WHERE last_login_at>NOW()-INTERVAL '24 hours')::int AS recent, "+
-      'MAX(last_login_at) AS last_verified_at FROM blofy_store_customers')).rows[0]||{};
+      "MAX(last_login_at) FILTER (WHERE last_login_at>NOW()-INTERVAL '24 hours') AS last_verified_at "+
+      'FROM blofy_store_customers')).rows[0]||{};
     customers=Number(row.n||0);
     recentOtpVerifications=Number(row.recent||0);
     lastOtpVerifiedAt=row.last_verified_at||null;
