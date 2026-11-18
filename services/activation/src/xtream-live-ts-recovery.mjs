@@ -41,17 +41,44 @@ async function readWithin(reader,controller,ms){
  timer.unref?.();
  try{return await reader.read()}finally{clearTimeout(timer)}
 }
+// Each failed interruption may retry at most twice, but an earlier successful
+// reconnect must not consume the budget for an unrelated drop minutes later.
+// Explicit limits defend the provider from a true reconnect storm, while a
+// limited number of short clean EOFs can be recovered within one player session.
+export function createLiveTsReconnectBudget({
+ now=Date.now,windowMs=120_000,maxInWindow=8,maxTotal=120,
+ stableResetMs=300_000
+}={}){
+ let total=0,lastAttempt=null;
+ const recent=[];
+ return {
+  claim(){
+   const ts=Number(now());
+   if(!Number.isFinite(ts))return 'live_ts_reconnect_budget_exhausted';
+   if(lastAttempt!==null&&ts-lastAttempt>=stableResetMs)total=0;
+   while(recent.length&&ts-recent[0]>=windowMs)recent.shift();
+   if(total>=maxTotal)return 'live_ts_reconnect_budget_exhausted';
+   if(recent.length>=maxInWindow)return 'live_ts_reconnect_rate_limited';
+   recent.push(ts);total++;lastAttempt=ts;
+   return null;
+  }
+ };
+}
 // This generator runs only AFTER the upstream passed the initial media
 // checks and the HTTP response began. It keeps one replacement socket at
-// a time, with at most two attempts per viewer and a hard timeout per read.
-// A failed reconnect ends the response, letting the app surface an error.
+// a time. At most two retries PER interruption, eight connections in any
+// two-minute window, 120 attempts in sustained instability; a stable five
+// minutes resets the total. A failed reconnect ends the viewer response.
 export async function* liveTsRecoveryBytes({
  first,reader,controller,fetchImpl,target,headers={},
- clientSignal,maxReconnects=2,waitRetry=waitXtreamMediaRetry,onReconnect=()=>{}
+ clientSignal,maxReconnects=2,waitRetry=waitXtreamMediaRetry,onReconnect=()=>{},
+ reconnectBudget=createLiveTsReconnectBudget()
 }={}){
  if(!tsPackets(first)||!reader||!controller||typeof fetchImpl!=='function'||
   !target||typeof waitRetry!=='function')throw Error('live_ts_recovery_invalid_args');
  const limit=Math.min(2,Math.max(0,Number.isSafeInteger(maxReconnects)?maxReconnects:2));
+ if(typeof reconnectBudget?.claim!=='function')
+  throw Error('live_ts_recovery_invalid_args');
  let activeReader=reader,activeController=controller,pending=first,attempts=0;
  try{
   for(;;){
@@ -69,14 +96,20 @@ export async function* liveTsRecoveryBytes({
     if(clientSignal?.aborted)throw Error('live_ts_client_closed');
     await closeConnection(activeReader,activeController);
     activeReader=null;activeController=null;
-    if(attempts>=limit)throw Error('live_ts_reconnect_exhausted');
+    // Successful recovery on a previous drop must not exhaust all future
+    // recovery. Keep the per-event retry limit and an independent bounded
+    // rolling-window/session budget.
+    let failedThisDrop=0;
+    if(limit===0)throw Error('live_ts_reconnect_exhausted');
     // A failed fetch is transient only when there was no HTTP response.
     // Never retry 401/403/404/429/456/509, invalid MIME or unsafe TS bytes.
     for(;;){
      if(clientSignal?.aborted)throw Error('live_ts_client_closed');
-     if(attempts>=limit)throw Error('live_ts_reconnect_exhausted');
-     attempts++;
-     if(!(await waitRetry({attempt:attempts,signal:clientSignal})))
+     if(failedThisDrop>=limit)throw Error('live_ts_reconnect_exhausted');
+     const denied=reconnectBudget.claim();
+     if(denied)throw Error(denied);
+     failedThisDrop++;attempts++;
+     if(!(await waitRetry({attempt:failedThisDrop,signal:clientSignal})))
       throw Error('live_ts_client_closed');
      const ctl=new AbortController();
      const requestSignal=clientSignal?AbortSignal.any([ctl.signal,clientSignal]):ctl.signal;
@@ -97,7 +130,7 @@ export async function* liveTsRecoveryBytes({
        throw Error('live_ts_reconnect_denied');
       activeReader=temporaryReader;activeController=ctl;
       temporaryReader=null;pending=probe.value;
-      onReconnect({attempt:attempts});
+      try{onReconnect({attempt:attempts})}catch{}
       break;
      }catch(e){
       ctl.abort();
@@ -105,7 +138,7 @@ export async function* liveTsRecoveryBytes({
       if(!temporaryReader)await reply?.body?.cancel().catch(()=>{});
       if(clientSignal?.aborted)throw Error('live_ts_client_closed');
       if(e?.message==='live_ts_reconnect_denied')throw e;
-      if(attempts>=limit)throw Error('live_ts_reconnect_exhausted');
+      if(failedThisDrop>=limit)throw Error('live_ts_reconnect_exhausted');
      }
     }
    }
