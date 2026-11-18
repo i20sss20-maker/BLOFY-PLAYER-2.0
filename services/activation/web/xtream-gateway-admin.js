@@ -62,11 +62,12 @@ function showCredentials(credentials) {
   gx('gatewayCredentials').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
-function renderGatewayBatch(credentials){
-  gatewayState.lastIssued=credentials.map(x=>({
+function renderGatewayBatch(credentials,items=[]){
+  gatewayState.lastIssued=credentials.map((x,index)=>({
     serverUrl:String(x.serverUrl||''),
     username:String(x.username||''),
     password:String(x.password||''),
+    accountId:String(items[index]?.id||''),
     appCode:''
   }));
   const panel=gx('gatewayBatchCredentials'),rows=gx('gatewayBatchRows');
@@ -76,21 +77,22 @@ function renderGatewayBatch(credentials){
     const details=gatewayNode('div','gateway-batch-details');
     details.append(gatewayNode('strong','',account.username));
     details.append(gatewayNode('code','',account.serverUrl+' · '+account.password));
-    const button=gatewayNode('button','button ghost','إصدار كود تطبيق BLOFY');
+    const button=gatewayNode('button','button ghost','ربط نفس الحساب بكود BLOFY');
     button.type='button';
     button.addEventListener('click',async()=>{
-      if(!window.confirm('هل تريد إصدار كود تفعيل تطبيق BLOFY لهذا الحساب؟'))return;
+      if(!window.confirm('إصدار كود BLOFY مرتبط بنفس حساب Xtream ونفس تاريخ الانتهاء؟ لن ننشئ اشتراكًا جديدًا.'))return;
       button.disabled=true;
       try{
-        const result=await gatewayApi('/api/v1/admin/blofy-codes',{
-          method:'POST',body:JSON.stringify({
-            source:'custom',host:account.serverUrl,username:account.username,password:account.password
-          })
+        if(!/^[0-9a-f-]{36}$/i.test(account.accountId))
+          throw new Error('رقم حساب Xtream غير متاح في نتيجة الإنشاء.');
+        const result=await gatewayApi('/api/v1/admin/xtream-gateway/link/xtream-to-code',{
+          method:'POST',cache:'no-store',
+          body:JSON.stringify({accountId:account.accountId})
         });
         if(!result.code)throw new Error('blofy_code_not_returned');
         account.appCode=String(result.code);
         button.replaceWith(gatewayNode('strong','gateway-app-code', 'كود التطبيق: '+account.appCode));
-        gatewayMessage('تم إصدار كود BLOFY لهذا الحساب. احفظه الآن مع بيانات Xtream.');
+        gatewayMessage('كود BLOFY مرتبط بنفس حساب Xtream والمدة، وليس اشتراكًا جديدًا.');
       }catch(error){
         button.disabled=false;
         gatewayMessage('تعذر إصدار كود BLOFY: '+error.message,'error');
@@ -464,7 +466,8 @@ gx('gatewayCreateBtn')?.addEventListener('click', async () => {
         expiresAt:new Date(Date.now()+days*86400000).toISOString()
       })
     });
-    renderGatewayBatch(Array.isArray(data.credentials)?data.credentials:[]);
+    renderGatewayBatch(Array.isArray(data.credentials)?data.credentials:[],
+      Array.isArray(data.items)?data.items:[]);
     gatewayMessage('تم إصدار '+String(data.count||0)+' حساب Xtream. انسخ Host وUsername وPassword الآن، أو حمّل ملف CSV.');
     await loadGateway();
   } catch (error) {
