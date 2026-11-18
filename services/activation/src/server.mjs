@@ -428,15 +428,17 @@ function serveRobots(res) {
 function serveSitemap(res) {
   const body = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://blofyplayer.com/</loc></url>
-  <url><loc>https://blofyplayer.com/downloads</loc></url>
-  <url><loc>https://blofyplayer.com/en</loc></url>
-  <url><loc>https://blofyplayer.com/es</loc></url>
-  <url><loc>https://blofyplayer.com/fr</loc></url>
-  <url><loc>https://blofyplayer.com/guide</loc></url>
-  <url><loc>https://blofyplayer.com/support</loc></url>
-  <url><loc>https://blofyplayer.com/privacy</loc></url>
-  <url><loc>https://blofyplayer.com/status</loc></url>
+  <url><loc>https://www.blofyplayer.com/</loc></url>
+  <url><loc>https://www.blofyplayer.com/store/offers</loc></url>
+  <url><loc>https://www.blofyplayer.com/products/stream</loc></url>
+  <url><loc>https://www.blofyplayer.com/products/xtream</loc></url>
+  <url><loc>https://www.blofyplayer.com/store/trial</loc></url>
+  <url><loc>https://www.blofyplayer.com/store/about</loc></url>
+  <url><loc>https://www.blofyplayer.com/store/faq</loc></url>
+  <url><loc>https://www.blofyplayer.com/store/terms</loc></url>
+  <url><loc>https://www.blofyplayer.com/store/contact</loc></url>
+  <url><loc>https://www.blofyplayer.com/privacy</loc></url>
+  <url><loc>https://www.blofyplayer.com/support</loc></url>
 </urlset>`;
   res.writeHead(200, {
     'content-type': 'application/xml; charset=utf-8',
