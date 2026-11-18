@@ -1,0 +1,36 @@
+name: BLOFY Signed APK Edge CI
+on:
+  pull_request:
+    paths:
+      - 'services/apk-edge/**'
+      - '.github/workflows/blofy-apk-edge-ci.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'services/apk-edge/**'
+      - '.github/workflows/blofy-apk-edge-ci.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: services/apk-edge
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install isolated gateway dependencies
+        run: npm install --no-audit --no-fund
+      - name: Verify signed APK endpoint, byte ranges and fail-closed readiness
+        run: npm run check
+      - name: Check production Dockerfile wiring
+        run: |
+          grep -q 'node:22-alpine' Dockerfile
+          grep -q 'signed-release-policy.mjs' Dockerfile
+          grep -q 'CMD \["node", "server.mjs"\]' Dockerfile
