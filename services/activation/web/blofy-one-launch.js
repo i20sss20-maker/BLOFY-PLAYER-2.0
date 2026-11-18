@@ -13,7 +13,7 @@
   let running=false,generation=0;
   const ids=['sessions','views','wa-clicks','checkout-starts','store-paid','store-revenue',
     'funnel-views','funnel-product','funnel-checkout','funnel-paid'];
-  const healthNames=['activation','downloads','stream','payment','fulfillment','stock'];
+  const healthNames=['activation','downloads','stream','payment','fulfillment','stock','customers'];
   const text=(id,value)=>{const e=$('one-growth-'+id);if(e)e.textContent=value;};
   const safeCount=value=>{
     const n=Number(value);
@@ -106,7 +106,8 @@
       get('/api/v1/store/products'),
       get('/api/v1/admin/store/sales'),
       get('/api/v1/admin/store/inventory'),
-      get('/api/v1/admin/whatsapp/cloud/status')
+      get('/api/v1/admin/whatsapp/cloud/status'),
+      get('/api/v1/admin/store/customer-accounts/summary')
     ];
     try{
       const settled=await Promise.allSettled(requests);
@@ -114,7 +115,7 @@
       const good=i=>settled[i].status==='fulfilled';
       const value=i=>good(i)?settled[i].value:null;
       const analytics=value(0),systems=value(1),portal=value(2),
-        catalog=value(3),sales=value(4),inventory=value(5),whatsapp=value(6);
+        catalog=value(3),sales=value(4),inventory=value(5),whatsapp=value(6),customer=value(7);
       if(analytics?.source==='consented_first_party'&&analytics.days===interval){
         const totals=analytics.totals||{};
         const event=new Map((Array.isArray(analytics.events)?analytics.events:[])
@@ -137,6 +138,9 @@
         else if(state==='degraded')signal(name,'استجابة غير سليمة','fail');
         else signal(name,'اتصال غير مؤكد',state==='unknown'?'warn':'pending');
       }
+      if(customer?.accountsEnabled===true&&customer?.emailConfigured===true)
+        signal('customers',safeCount(customer.customers)+' حساب · البريد مهيأ',customer.remindersEnabled?'ok':'warn');
+      else signal('customers',customer?.accountsEnabled===true?'البريد غير مهيأ':'الحسابات غير مفعلة','warn');
       if(whatsapp?.provider==='meta_whatsapp_cloud'&&whatsapp.configured===true)
         signal('whatsapp','Cloud API مهيأ · تحقق Meta مطلوب','warn');
       else signal('whatsapp','رابط فقط · Cloud API غير مهيأ','warn');
@@ -182,6 +186,7 @@
       if(systems?.services?.downloads?.status!=='healthy')warnings.push('موقع التحميلات ليس مؤكدًا');
       if(systems?.services?.stream?.status!=='healthy')warnings.push('STREAM API ليست مؤكدة');
       if(!payReady)warnings.push('بدء الدفع غير متاح أو لم يتم التحقق منه');
+      if(!customer?.accountsEnabled||!customer?.emailConfigured)warnings.push('حسابات العملاء أو بريد الدخول لم تجهز بعد');
       if(Number.isSafeInteger(fulfillmentIssues)&&fulfillmentIssues>0)
         warnings.push(safeCount(fulfillmentIssues)+' طلب مدفوع يحتاج تسليمًا');
       if(fulfillmentIssues===null)warnings.push('لا توجد قراءة مؤكدة لحالات تسليم الطلبات');

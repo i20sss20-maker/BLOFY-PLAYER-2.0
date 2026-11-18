@@ -30,7 +30,8 @@ export function validBundleChannels(v){return Array.isArray(v)&&v.length===2&&v.
 const COUPON_RE=/^[A-Z0-9][A-Z0-9_-]{3,19}$/;
 function discountAmount(amount,percent){return Math.round(amount*percent/100);}
 
-export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAdmin=()=>false,env=process.env,fetchImpl=globalThis.fetch}){
+export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAdmin=()=>false,
+   onCheckoutOrder=async()=>false,env=process.env,fetchImpl=globalThis.fetch}){
  const publicKey=String(env.GEIDEA_LIVE_MERCHANT_PUBLIC_KEY||'').trim();
  const password=String(env.GEIDEA_LIVE_API_PASSWORD||'');
  const selected=env.BLOFY_PAYMENT_PROVIDER==='geidea'&&env.BLOFY_GEIDEA_CHECKOUT_ENABLED==='true';
@@ -462,6 +463,8 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
       Date.parse(created?.session?.expiryDate||'')<=Date.now())
      return json(res,502,{error:'store_geidea_session_invalid',orderNumber:number});
    await pool.query('UPDATE blofy_store_geidea_orders SET session_id=$2 WHERE id=$1',[id,created.session.id]);
+   // Linking is best-effort; a failed customer association must not disrupt paid checkout.
+   try{await onCheckoutOrder(req,id,secret);}catch{}
    return json(res,201,{
      provider:'geidea',checkoutMode:'modal',sku:CART_SKU,
      orderId:id,orderNumber:number,accessToken:secret,sessionId:created.session.id,
@@ -662,6 +665,8 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
    if(!UUID.test(created?.session?.id||'')||Date.parse(created?.session?.expiryDate||'')<=Date.now())
     return json(res,502,{error:'store_geidea_session_invalid'});
    await pool.query('UPDATE blofy_store_geidea_orders SET session_id=$2 WHERE id=$1',[id,created.session.id]);
+   // Linking is best-effort; a failed customer association must not disrupt paid checkout.
+   try{await onCheckoutOrder(req,id,secret);}catch{}
    return json(res,201,{provider:'geidea',checkoutMode:'modal',orderId:id,accessToken:secret,
     sessionId:created.session.id,sku,priceMinor:quote.priceMinor,discountMinor:quote.discountMinor,couponCode:quote.couponCode,currency:'SAR'});
  }

@@ -285,6 +285,16 @@ async function servePortal(res, connectOnly = false) {
   res.end(file);
 }
 
+function withCustomerAccountNavigation(html){
+  // No dead customer-account links on the public storefront until login email is configured.
+  const ready=process.env.BLOFY_CUSTOMER_ACCOUNTS_ENABLED==='true'&&
+    String(process.env.BLOFY_CUSTOMER_RESEND_API_KEY||'').startsWith('re_')&&
+    String(process.env.BLOFY_CUSTOMER_MAIL_FROM||'').includes('@');
+  if(ready)return html;
+  return html.replaceAll('<a href="/store/account">حسابي</a>','')
+    .replace('<a class="secondary" id="account-import" href="/store/account">احفظ طلبك في حسابي</a>','');
+}
+
 async function serveStorefront(res, product = null, offer = false) {
   // Public store, with dedicated canonical detail pages. No client-supplied markup.
   let source = await readFile(new URL('../web/store.html', import.meta.url), 'utf8');
@@ -303,7 +313,7 @@ async function serveStorefront(res, product = null, offer = false) {
     source=source.replace('<link rel="canonical" href="https://www.blofyplayer.com/">',
       '<link rel="canonical" href="https://www.blofyplayer.com/store/offers">');
   }
-  const file = Buffer.from(withPublicAnalytics(source),'utf8');
+  const file = Buffer.from(withPublicAnalytics(withCustomerAccountNavigation(source)),'utf8');
   res.writeHead(200, {
     'content-type': 'text/html; charset=utf-8',
     'content-length': file.length,
@@ -334,9 +344,10 @@ async function serveStoreOfferScript(res) {
 }
 
 async function serveCartPage(res,kind){
-  const name=kind==='cart'?'store-cart.html':'store-orders.html';
+  const name=kind==='cart'?'store-cart.html':kind==='account'?'store-account.html':'store-orders.html';
   const source=await readFile(new URL('../web/'+name,import.meta.url),'utf8');
-  const html=kind==='cart'?withPublicAnalytics(source):source;
+  const gated=withCustomerAccountNavigation(source);
+  const html=kind==='cart'?withPublicAnalytics(gated):gated;
   const file=Buffer.from(html,'utf8');
   res.writeHead(200,{
     'content-type':'text/html; charset=utf-8',
@@ -354,7 +365,8 @@ async function serveCartAsset(res,name){
   const entries={
     'cart.css':['store-cart.css','text/css; charset=utf-8'],
     'cart.js':['store-cart.js','application/javascript; charset=utf-8'],
-    'order-tracking.js':['store-order-tracking.js','application/javascript; charset=utf-8']
+    'order-tracking.js':['store-order-tracking.js','application/javascript; charset=utf-8'],
+    'account.js':['store-account.js','application/javascript; charset=utf-8']
   };
   const asset=entries[name];
   if(!asset)return;
@@ -380,7 +392,7 @@ async function serveStoreDesign(res) {
 function serveStoreInfo(res, slug) {
   const markup=storeInfoPage(slug);
   if(!markup){res.writeHead(404,{'cache-control':'no-store'});return res.end();}
-  const file=Buffer.from(withPublicAnalytics(markup),'utf8');
+  const file=Buffer.from(withPublicAnalytics(withCustomerAccountNavigation(markup)),'utf8');
   res.writeHead(200,{
     'content-type':'text/html; charset=utf-8',
     'content-length':file.length,
@@ -969,8 +981,10 @@ const server = http.createServer(async (req, res) => {
       return await serveCartPage(res,'cart');
     if(['GET','HEAD'].includes(req.method)&&['/store/orders','/store/orders/'].includes(requestUrl.pathname))
       return await serveCartPage(res,'orders');
+    if(['GET','HEAD'].includes(req.method)&&['/store/account','/store/account/'].includes(requestUrl.pathname))
+      return await serveCartPage(res,'account');
     if(['GET','HEAD'].includes(req.method)&&
-       ['/store/cart.css','/store/cart.js','/store/order-tracking.js'].includes(requestUrl.pathname))
+       ['/store/cart.css','/store/cart.js','/store/order-tracking.js','/store/account.js'].includes(requestUrl.pathname))
       return await serveCartAsset(res,requestUrl.pathname.slice('/store/'.length));
     if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/offers.js')
       return await serveStoreOfferScript(res);

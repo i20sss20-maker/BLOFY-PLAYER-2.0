@@ -55,6 +55,8 @@
    $('amount').textContent=Number.isFinite(Number(order.amountMinor))?money(order.amountMinor):'غير متاح';
    $('created').textContent=order.createdAt?new Date(order.createdAt).toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'}):'—';
    const list=$('receipt-products'),codes=$('codes');list.replaceChildren();codes.replaceChildren();
+   const importLink=$('account-import');
+   if(importLink)importLink.href='/store/account#order='+encodeURIComponent(currentId)+'&token='+encodeURIComponent(currentToken);
    if(Array.isArray(order.items))order.items.forEach(item=>{
      const label=make('div','receipt-line',item.name+' × '+item.quantity+' — '+money(item.lineTotalMinor));
      list.append(label);
