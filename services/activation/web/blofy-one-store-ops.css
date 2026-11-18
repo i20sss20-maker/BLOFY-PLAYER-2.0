@@ -1,6 +1,6 @@
 /* BLOFY ONE store subscriptions — read-only verified operations dashboard. */
 .one-renewal-ops{scroll-margin-top:24px}
-.one-renewal-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:18px 0}
+.one-renewal-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:18px 0}
 .one-renewal-stats article{border:1px solid #2e4a64;border-radius:13px;background:#101f32;padding:17px}
 .one-renewal-stats small{display:block;color:#aac6d6;font-size:12px}
 .one-renewal-stats strong{display:block;font:750 26px 'Segoe UI',sans-serif;color:#9af1e4;margin-top:7px}
