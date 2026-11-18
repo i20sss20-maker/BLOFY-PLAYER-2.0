@@ -23,13 +23,14 @@ export function installGracefulShutdown({
      !Number.isSafeInteger(drainMs)||drainMs<1||drainMs>115_000)
     throw new Error('invalid_graceful_shutdown_configuration');
 
-  let draining=false,finished=false,timer=null;
+  let draining=false,finished=false,timer=null,idleSweep=null;
   let resourceCloseStarted=false;
 
   async function finish(code){
     if(finished)return;
     finished=true;
     if(timer){clearTimeout(timer);timer=null;}
+    if(idleSweep){clearInterval(idleSweep);idleSweep=null;}
     // Closing shared Postgres pools only AFTER all HTTP requests finish
     // preserves safe download-completion metrics and concurrent admin ops.
     try{
@@ -60,6 +61,14 @@ export function installGracefulShutdown({
       void finish(1);
     },drainMs);
     timer.unref?.();
+    // Some Node HTTP versions retain a keep-alive socket after its last
+    // active response completes. Sweep only idle sockets during the drain.
+    idleSweep=setInterval(()=>{
+      if(!finished){
+        try{server.closeIdleConnections?.();}catch{}
+      }
+    },200);
+    idleSweep.unref?.();
     // Node >=19 drains idle keep-alive sockets with close(). Active APK
     // responses are allowed to finish until the configured deadline.
     try{
