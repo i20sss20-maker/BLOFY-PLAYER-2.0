@@ -19,7 +19,7 @@ const pool = new Pool({
 const CATEGORIES = new Set(['media', 'files', 'downloads', 'launcher', 'screensaver', 'tools', 'network', 'store']);
 const MODES = new Set(['official', 'direct']);
 // Version 7 inserts the independent BLOFY STREAM app into already-seeded production databases.
-const SEED_VERSION = 17;
+const SEED_VERSION = 18;
 
 const GITHUB_UPDATE_RULES = Object.freeze({
   'projectivy-launcher': { repo:'spocky/miproja1', asset:'ProjectivyLauncher-*-xda-release.apk' },
@@ -122,10 +122,10 @@ const DEFAULT_APPS = Object.freeze([
   {
     slug:'blofy-stream', name:'BLOFY STREAM', category:'media', symbol:'BS',
     iconUrl:'https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/services/update-distribution/public/blofy-stream.svg',
-    description:'BLOFY STREAM 55.8.34 — NEXT GENERATION المرحلة الأولى: نوافذ منفصلة للقنوات والبحث، تنقل أدق بالريموت، تذكر موضع الحلقة، رئيسية أكثر استقراراً، تنبيه وتحسينات للتنزيلات، وتحديث مكتبة آمن. مع التفعيل بالكود ومشغل FFmpeg.',
-    devices:'Android TV · TV Box · Android Phone · Tablet', version:'55.8.34',
-    architecture:'Universal (ARM + x86)', apkSizeBytes:135755814,
-    downloadUrl:'https://updates.blofyplayer.com/files/releases/BLOFY-STREAM-55.8.34-NEXTGEN-FOCUS-DOWNLOADS-OWNER-SIGNED.apk',
+    description:'BLOFY STREAM 55.8.36 — تحديث تلقائي صامت للمكتبة والحلقات الجديدة عند الدخول، إصلاح تحديث القوائم وتعثر التقدم، تحسين الريموت والتقديم والتأخير وأزرار VLC، وإصلاح فتح الأفلام والمسلسلات مباشرة من AI مع 60 طلبًا جاهزًا. التفعيل بالكود ومشغل FFmpeg والمعلقون محفوظون.',
+    devices:'Android TV · TV Box · Android Phone · Tablet', version:'55.8.36',
+    architecture:'Universal (ARM + x86)', apkSizeBytes:135775044,
+    downloadUrl:'https://updates.blofyplayer.com/files/releases/BLOFY-STREAM-55.8.36-CATALOG-TV-CONTROLS-FIX-OWNER-SIGNED.apk',
     downloadMode:'direct', sortOrder:0, enabled:true, featured:true
   },
   {
@@ -1102,6 +1102,27 @@ export async function initAppLibrary() {
           [signed.slug, signed.version, signed.downloadUrl, signed.apkSizeBytes,
            signed.description,
            'https://updates.blofyplayer.com/files/releases/BLOFY-STREAM-55.8.32-AUDIO-SYNC-SIGNED.apk']
+        );
+        if (promoted.rowCount) {
+          await client.query("delete from blofy_app_health where slug='blofy-stream'");
+          await client.query('update blofy_app_catalog_meta set last_health_at=null where id=1');
+        }
+      }
+      if (version < 18) {
+        // Upgrade ONLY the verified 55.8.34 STREAM card after the 55.8.36
+        // owner-signed APK has been uploaded and SHA256-checked on the release
+        // volume. Keep any admin override, newer build and BLOFY PLAYER intact.
+        const signed = cleanApp(DEFAULT_APPS.find(item => item.slug === 'blofy-stream'));
+        const promoted = await client.query(
+          `update blofy_app_catalog
+           set previous_version=version, previous_download_url=download_url,
+               previous_apk_size_bytes=apk_size_bytes, previous_saved_at=now(),
+               version=$2, download_url=$3, apk_size_bytes=$4,
+               description=$5, version_updated_at=now(), updated_at=now()
+           where slug=$1 and version='55.8.34' and download_url=$6`,
+          [signed.slug, signed.version, signed.downloadUrl, signed.apkSizeBytes,
+           signed.description,
+           'https://updates.blofyplayer.com/files/releases/BLOFY-STREAM-55.8.34-NEXTGEN-FOCUS-DOWNLOADS-OWNER-SIGNED.apk']
         );
         if (promoted.rowCount) {
           await client.query("delete from blofy_app_health where slug='blofy-stream'");
