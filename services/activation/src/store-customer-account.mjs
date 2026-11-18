@@ -7,6 +7,7 @@ import {decryptStreamCode} from './xtream-code-vault.mjs';
 import {streamCodeProof} from './xtream-duration-codes.mjs';
 import {createCustomerReminderEngine} from './store-customer-reminders.mjs';
 import {classifyResendFailure,checkResendSender} from './store-customer-resend.mjs';
+import {createStoreSubscriptionAdmin} from './store-subscription-admin.mjs';
 import {PAID_OWNED_VOUCHERS_SQL,renewalStartAndExpiry} from './store-same-code-renewal.mjs';
 import {publicStorePlans} from './store-geidea-checkout.mjs';
 
@@ -88,6 +89,7 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
   probe.unref?.();
  }
  const reminderEngine=createCustomerReminderEngine({pool,env,fetchImpl});
+ const subscriptionAdmin=createStoreSubscriptionAdmin({pool,json,authorizeAdmin});
  reminderEngine.start();
  let migration;
  async function schema(){
@@ -497,6 +499,9 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
  }
  const handler=async function handler(req,res,url){
   const path=url.pathname;
+  if(path==='/api/v1/admin/store/subscription-operations'&&req.method==='GET'){
+   await subscriptionAdmin.handler(req,res,url);return true;
+  }
   if(path==='/api/v1/admin/store/customer-accounts/summary'&&req.method==='GET'){
    if(!authorizeAdmin(req,res))return true;
    await adminSummary(req,res);return true;
