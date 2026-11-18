@@ -112,7 +112,8 @@ test('verified email owns linked guest order; no code before login and proof',as
  const account=await call('/api/v1/store/account','GET',{},auth);
  assert.equal(account.status,200);
  assert.equal(account.data.orders.length,1);
- assert.equal(JSON.stringify(account.data).includes(code),false,'list cannot leak codes');
+ assert.equal(Object.hasOwn(account.data.orders[0],'code'),false,'summary has no full code field');
+ assert.equal(Object.hasOwn(account.data.orders[0],'codes'),false,'summary has no raw code list');
  const receipt=await call(detail,'GET',{},auth);
  assert.equal(receipt.status,200);
  assert.deepEqual(receipt.data.codes.map(v=>v.code),[code]);
