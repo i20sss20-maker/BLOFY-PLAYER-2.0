@@ -41,7 +41,7 @@ class StreamCustomerTextTest {
 
     @Test fun errorAndDownloadMessagesStaySimpleInBothLanguages() {
         for (language in listOf("ar", "en")) {
-            val base = RuntimeEnvironment.getApplication<Application>()
+            val base = RuntimeEnvironment.getApplication()
             val configuration = Configuration(base.resources.configuration).apply {
                 setLocale(Locale.forLanguageTag(language))
             }
