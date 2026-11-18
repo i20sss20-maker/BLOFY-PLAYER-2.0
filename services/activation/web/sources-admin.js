@@ -1849,6 +1849,10 @@ async function loadBlofyPlaybackHealth(){
     const asMs=value=>value===null||value===undefined?'—':Number(value).toLocaleString('en-US')+' ms';
     const stats=[
       ['بدأ التشغيل',m.started??0],
+      ['استعادة البث المباشر من المصدر نفسه',m.liveTsRecoverySuccesses??0],
+      ['استعادة البث استنفدت محاولاتها',m.liveTsRecoveryExhausted??0],
+      ['استعادة البث أوقفها حد السرعة',m.liveTsRecoveryRateLimited??0],
+      ['استعادة البث أوقفها حد الجلسة',m.liveTsRecoveryBudgetExhausted??0],
       ['تصاريح مشاركة أُصدرت',m.sharedTicketsIssued??0],
       ['رجوع للمسار السابق عند تعذر التصريح',m.sharedGrantFallbacks??0],
       ['فشل بدء البث',m.failed??0],
@@ -1884,6 +1888,10 @@ async function loadBlofyPlaybackHealth(){
       xtream_transport_dns_failed:'تعذر DNS للمصدر؛ تأكد من العنوان',
       xtream_transport_connection_refused:'المصدر رفض اتصال الشبكة؛ راجع المنفذ والبروتوكول',
       xtream_transport_connection_reset:'المصدر قطع الاتصال قبل استلام الفيديو',
+      live_ts_reconnect_exhausted:'المصدر انقطع ولم تنجح محاولتا استعادة البث',
+      live_ts_reconnect_denied:'المصدر رفض طلب استعادة البث أو أرسل محتوى غير صالح',
+      live_ts_reconnect_rate_limited:'توقف مؤقت لتجنب تكرار اتصالات المصدر بسرعة',
+      live_ts_reconnect_budget_exhausted:'بلغت جلسة المشاهدة الحد الآمن لمحاولات الاستعادة',
       xtream_transport_timeout:'اتصال المصدر لم يكتمل في الوقت المحدد',
       xtream_transport_tls_invalid:'شهادة HTTPS بالمصدر غير صحيحة أو لا تطابق العنوان',
       xtream_transport_unreachable:'تعذر اتصال السيرفر بمصدر الفيديو',
@@ -1913,7 +1921,7 @@ async function loadBlofyPlaybackHealth(){
       issues.append(make('p','muted','لا توجد أخطاء تشغيل مسجلة خلال الساعة الماضية على هذه النسخة.'));
     }
     const upstreamCodes=Object.entries(m.upstreamCodes||{});
-    note.textContent='الأرقام لآخر ساعة على هذا السيرفر فقط. إصدار تصريح المشاركة لا يؤكد وصول الفيديو أو الصوت. رفض حساب BLOFY (401) يختلف عن رفض المصدر (403)، ولا يعني حدوث عطل بالمصدر. نجاح بدء البث لا يضمن استمراره طوال المشاهدة.'+
+    note.textContent='الأرقام لآخر ساعة على هذا السيرفر فقط. استعادة البث تعني استقبال بيانات TS صالحة من المصدر بعد إعادة الاتصال؛ لا تثبت عدم ظهور شاشة سوداء أو استمرار الصوت على الجهاز. إصدار تصريح المشاركة لا يؤكد وصول الفيديو أو الصوت. رفض حساب BLOFY (401) يختلف عن رفض المصدر (403). نجاح بدء البث لا يضمن استمراره طوال المشاهدة.'+
       (upstreamCodes.length?' · أخطاء المصدر: '+upstreamCodes.map(([code,n])=>'HTTP '+code+' ('+n+')').join('، '):'');
   }catch(error){
     note.textContent='تعذر تحديث مراقبة إعادة البث: '+error.message;
