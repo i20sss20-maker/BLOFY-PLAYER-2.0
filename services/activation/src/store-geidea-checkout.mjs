@@ -92,6 +92,7 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
      'ALTER TABLE blofy_store_geidea_orders ADD COLUMN IF NOT EXISTS cart_items JSONB',
      'ALTER TABLE blofy_store_geidea_orders ADD COLUMN IF NOT EXISTS cart_gross_minor INTEGER',
      'ALTER TABLE blofy_store_geidea_orders ADD COLUMN IF NOT EXISTS public_order_number TEXT',
+     'ALTER TABLE blofy_store_geidea_orders ADD COLUMN IF NOT EXISTS session_expires_at TIMESTAMPTZ',
      'CREATE UNIQUE INDEX IF NOT EXISTS idx_blofy_store_order_number ON blofy_store_geidea_orders(public_order_number) WHERE public_order_number IS NOT NULL',
      'CREATE TABLE IF NOT EXISTS blofy_store_cart_vouchers ('+
        'order_id UUID NOT NULL REFERENCES blofy_store_geidea_orders(id),'+
@@ -409,6 +410,36 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
    return json(res,200,{ok:true,items:cart.items,codeCount:cart.codeCount,
      subtotalMinor:cart.totalMinor,discountMinor,totalMinor:cart.totalMinor-discountMinor,currency:'SAR'});
  }
+ // Reclaim an existing unpaid Geidea session from another tab or device.
+ // Return only session metadata to the verified order owner, never a code or bearer secret.
+ async function cartPending(req,res){
+   if(!enabled||!loginRequired)return json(res,503,{error:'store_checkout_disabled'});
+   if(!browser(req,res))return;
+   const customer=await requireCheckoutCustomer(req);
+   if(!customer?.ok)return json(res,customer?.status||401,{error:customer?.error||'customer_login_required'});
+   const data=await readJson(req),cart=parseStoreCart(data?.items);
+   if(!cart)return json(res,400,{error:'store_invalid_cart'});
+   const coupon=data?.couponCode?String(data.couponCode).trim().toUpperCase():null;
+   if(coupon&&!COUPON_RE.test(coupon))return json(res,400,{error:'store_invalid_coupon'});
+   await schema();
+   const row=(await pool.query(
+     'SELECT o.id,o.public_order_number,o.session_id,o.session_expires_at,o.created_at '+
+     'FROM blofy_store_customer_orders co '+
+     'JOIN blofy_store_geidea_orders o ON o.id=co.order_id '+
+     "WHERE co.customer_id=$1 AND o.sku=$2 AND o.status='pending' "+
+     "AND o.created_at>NOW()-INTERVAL '20 minutes' "+
+     "AND o.cart_items=$3::jsonb AND COALESCE(o.coupon_code,'')=COALESCE($4,'') "+
+     'ORDER BY o.created_at DESC LIMIT 1',
+     [customer.customerId,CART_SKU,JSON.stringify(cart.items),coupon])).rows[0];
+   if(!row)return json(res,200,{ok:true,pending:false});
+   const until=row.session_expires_at?new Date(row.session_expires_at).getTime():
+     new Date(row.created_at).getTime()+12*60000;
+   const active=UUID.test(row.session_id||'')&&Number.isFinite(until)&&until>Date.now()+15000;
+   return json(res,200,{ok:true,pending:true,orderId:row.id,
+     orderNumber:row.public_order_number||publicOrderNumber(row.id,row.created_at),
+     sessionId:active?row.session_id:null,sessionExpiresAt:active?new Date(until).toISOString():null,
+     status:'pending'});
+ }
  async function cartCheckout(req,res){
    if(!enabled)return json(res,503,{error:'store_checkout_disabled'});
    if(!browser(req,res))return;
@@ -505,12 +536,14 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
        "WHERE id=$1 AND status='pending' AND session_id IS NULL",[id]).catch(()=>{});
      return json(res,502,{error:'store_geidea_session_invalid',orderNumber:number});
    }
-   await pool.query('UPDATE blofy_store_geidea_orders SET session_id=$2 WHERE id=$1',[id,created.session.id]);
+   await pool.query('UPDATE blofy_store_geidea_orders SET session_id=$2,session_expires_at=$3 WHERE id=$1',
+     [id,created.session.id,created.session.expiryDate]);
    // Legacy mode preserves optional linking; verified account ownership was committed atomically.
    if(!loginRequired)try{await onCheckoutOrder(req,id,secret);}catch{}
    return json(res,201,{
-     provider:'geidea',checkoutMode:'modal',sku:CART_SKU,
+     provider:'geidea',checkoutMode:'redirect',sku:CART_SKU,
      orderId:id,orderNumber:number,accessToken:secret,sessionId:created.session.id,
+     sessionExpiresAt:created.session.expiryDate,
      subtotalMinor:cart.totalMinor,discountMinor,priceMinor:amountMinor,
      itemCount:cart.items.reduce((n,x)=>n+x.quantity,0),codeCount:cart.codeCount,currency:'SAR'
    });
@@ -718,7 +751,8 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
    catch{return json(res,503,{error:'store_geidea_session_unavailable'});}
    if(!UUID.test(created?.session?.id||'')||Date.parse(created?.session?.expiryDate||'')<=Date.now())
     return json(res,502,{error:'store_geidea_session_invalid'});
-   await pool.query('UPDATE blofy_store_geidea_orders SET session_id=$2 WHERE id=$1',[id,created.session.id]);
+   await pool.query('UPDATE blofy_store_geidea_orders SET session_id=$2,session_expires_at=$3 WHERE id=$1',
+     [id,created.session.id,created.session.expiryDate]);
    if(!loginRequired)try{await onCheckoutOrder(req,id,secret);}catch{}
    return json(res,201,{provider:'geidea',checkoutMode:'modal',orderId:id,accessToken:secret,
     sessionId:created.session.id,sku,priceMinor:quote.priceMinor,discountMinor:quote.discountMinor,couponCode:quote.couponCode,currency:'SAR'});
@@ -824,6 +858,7 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
    if(p==='/api/v1/admin/store/orders'&&req.method==='GET'){await adminOrders(req,res,url);return true;}
    if(p==='/api/v1/store/cart/quote'&&req.method==='POST'){await cartQuote(req,res);return true;}
    if(p==='/api/v1/store/cart/checkout'&&req.method==='POST'){await cartCheckout(req,res);return true;}
+   if(p==='/api/v1/store/cart/pending'&&req.method==='POST'){await cartPending(req,res);return true;}
    if(p==='/api/v1/admin/store/sales'&&req.method==='GET'){await salesSummary(req,res);return true;}
    if(p==='/api/v1/admin/store/coupons/create'&&req.method==='POST'){await newCoupon(req,res);return true;}
    if(p==='/api/v1/admin/store/coupons/deactivate'&&req.method==='POST'){await disableCoupon(req,res);return true;}
