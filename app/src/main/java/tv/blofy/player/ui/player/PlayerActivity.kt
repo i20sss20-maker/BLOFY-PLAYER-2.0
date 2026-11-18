@@ -142,6 +142,12 @@ class PlayerActivity : AppCompatActivity() {
             player = session.player
             isFocusable = true
             isFocusableInTouchMode = true
+            // Retain the last decoded frame during brief live rebuffering and
+            // same-source recovery instead of exposing a black surface.
+            // Non-live media keeps its established reset behavior.
+            if (kind == "live" || kind == "live_preview") {
+                setKeepContentOnPlayerReset(true)
+            }
             setShutterBackgroundColor(Color.BLACK)
         }
         root.addView(playerView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
