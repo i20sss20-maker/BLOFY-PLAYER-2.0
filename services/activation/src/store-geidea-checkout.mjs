@@ -923,6 +923,7 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
  };
  // Only call this from the verified customer portal AFTER owner authorization
  // and server-side rate limiting. Never expose an unauthenticated public endpoint.
+ handler.ensureStoreSchema=()=>schema();
  handler.reconcileCustomerOrder=async id=>{
    if(!UUID.test(id||''))throw err('store_invalid_order_id',400);
    return reconcile(id);
