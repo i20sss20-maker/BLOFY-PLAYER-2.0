@@ -17,7 +17,7 @@ import { observeDownloadCompletion } from './download-metrics.mjs';
 import { recordDownloadCompletion, getDownloadStats } from './app-library.mjs';
 import { publicSiteRedirect } from './public-site-redirect.mjs';
 import { streamReleaseMetadata, STREAM_RELEASE_FILENAME, STREAM_PREVIOUS_RELEASE_FILENAME, STREAM_TEST_FILENAME, STREAM_TEST_PATH } from './stream-release.mjs';
-import { verifySignedStreamUploadOidc, STREAM_55836_APK, STREAM_55836_SHA256, STREAM_55836_BYTES } from './stream-upload-oidc.mjs';
+import { verifySignedStreamUploadOidc, approvedStreamUpload, STREAM_55836_APK, STREAM_56_APK } from './stream-upload-oidc.mjs';
 import { UPDATE_SITE_CANONICAL, updateRobotsTxt, updateSitemapXml, renderMissingPublicPage, isPublicHtmlRequest } from './public-search-pages.mjs';
 
 const PORT = Number(process.env.PORT || 3000);
@@ -238,14 +238,15 @@ async function receiveReleaseUpload(req, res, requestUrl) {
     constantTimeEqual(auth.slice(7), RELEASE_UPLOAD_TOKEN);
   // The OIDC path is restricted to ONE exact, already verified, owner-signed STREAM
   // artifact; ordinary PLAYER uploads retain their existing admin-token gate.
-  const approvedStream = !legacyAdmin && filename === STREAM_55836_APK &&
-    await verifySignedStreamUploadOidc(auth);
+  const pinnedArtifact = approvedStreamUpload(filename);
+  const approvedStream = !legacyAdmin && pinnedArtifact != null &&
+    await verifySignedStreamUploadOidc(auth, filename);
   if (!legacyAdmin && !approvedStream) {
     return sendJson(req, res, 401, { ok: false, error: 'unauthorized' });
   }
   const length = Number(req.headers['content-length'] || 0);
   if (!Number.isFinite(length) || length < 1024 || length > 320 * 1024 * 1024 ||
-      (approvedStream && length !== STREAM_55836_BYTES)) {
+      (approvedStream && length !== pinnedArtifact.bytes)) {
     return sendJson(req, res, 413, { ok: false, error: 'invalid_release_size' });
   }
   await mkdir(LOCAL_RELEASE_DIR, { recursive: true });
@@ -253,8 +254,8 @@ async function receiveReleaseUpload(req, res, requestUrl) {
   // Retry-safe: re-uploading exactly the same approved file is harmless.
   if (approvedStream) {
     const existing = await stat(finalPath).catch(() => null);
-    if (existing?.size === STREAM_55836_BYTES &&
-        await sha256File(finalPath) === STREAM_55836_SHA256) {
+    if (existing?.size === pinnedArtifact.bytes &&
+        await sha256File(finalPath) === pinnedArtifact.sha256) {
       return sendJson(req, res, 200, { ok: true, filename, size: existing.size });
     }
   }
@@ -274,7 +275,7 @@ async function receiveReleaseUpload(req, res, requestUrl) {
   });
   if (approvedStream) {
     const actual = await sha256File(tempPath);
-    if (actual !== STREAM_55836_SHA256) {
+    if (actual !== pinnedArtifact.sha256) {
       await unlink(tempPath).catch(() => {});
       return sendJson(req, res, 422, { ok: false, error: 'signed_stream_sha256_mismatch' });
     }
@@ -1039,7 +1040,8 @@ const server = http.createServer(async (req, res) => {
       // current STREAM APK to PLAYER while retiring PLAYER's old archive links.
       const isCurrentStreamApk = localReleaseMatch[1] === STREAM_RELEASE_FILENAME;
       const isPreviousStreamApk = localReleaseMatch[1] === STREAM_PREVIOUS_RELEASE_FILENAME;
-      const isApprovedNewStreamApk = localReleaseMatch[1] === STREAM_55836_APK;
+      const isApprovedNewStreamApk = localReleaseMatch[1] === STREAM_55836_APK ||
+        localReleaseMatch[1] === STREAM_56_APK;
       const isOwnerStreamTestApk = localReleaseMatch[1] === STREAM_TEST_FILENAME;
       if (BLOFY_ONLY_CURRENT && !isCurrentStreamApk && !isPreviousStreamApk && !isApprovedNewStreamApk && !isOwnerStreamTestApk && ['GET', 'HEAD'].includes(method)) {
         return redirect(res, '/download/latest.apk');
