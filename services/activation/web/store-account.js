@@ -313,8 +313,26 @@
   finally{this.disabled=false;}
  });
  $('logout').addEventListener('click',async()=>{
-  try{await api('/logout',{});clearReceipt();view(false);orders=[];tell('تم تسجيل الخروج.');}
-  catch(e){tell(statusMessage(e));}
+  try{
+   await api('/logout',{});
+   clearReceipt();
+   // This browser must not show the previous customer's basket to the next
+   // guest or carry their receipt tokens into a different verified account.
+   try{
+    localStorage.removeItem('blofy.shop.cart.v1');
+    localStorage.removeItem('blofy.shop.cart.owner.v1');
+   }catch(_){}
+   try{
+    sessionStorage.removeItem('blofy.shop.pending-checkout.v1');
+    sessionStorage.removeItem('blofy.shop.last-order');
+    for(const order of orders){
+     if(!uuid.test(order?.orderId||''))continue;
+     sessionStorage.removeItem('blofy.shop.order.'+order.orderId);
+     sessionStorage.removeItem('blofy.shop.cart.checkout.'+order.orderId);
+    }
+   }catch(_){}
+   view(false);orders=[];tell('تم تسجيل الخروج، وإخفاء السلة وروابط الطلبات الخاصة بهذا الحساب على هذا الجهاز.');
+  }catch(e){tell(statusMessage(e));}
  });
  $('close-receipt').addEventListener('click',clearReceipt);
  document.addEventListener('visibilitychange',()=>{
