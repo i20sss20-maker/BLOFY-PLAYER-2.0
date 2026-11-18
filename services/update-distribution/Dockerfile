@@ -3,7 +3,7 @@ WORKDIR /app
 ENV PUBLIC_ADMIN_PREFIX=/releases-admin
 COPY package.json ./
 RUN apk add --no-cache unzip && npm install --omit=dev
-COPY cinematic-v74.mjs cinematic-v74-patch.mjs cinematic-v74-remote.mjs cinematic-v74-display.mjs server.mjs admin-panel.mjs release-store.mjs app-library.mjs download-metrics.mjs stream-release.mjs release-feed-cache.mjs graceful-shutdown.mjs apk-range-policy.mjs public-site-redirect.mjs public-search-pages.mjs app-download-policy.mjs stream-upload-oidc.mjs ./
+COPY cinematic-v74.mjs cinematic-v74-patch.mjs cinematic-v74-remote.mjs cinematic-v74-display.mjs server.mjs admin-panel.mjs release-store.mjs app-library.mjs download-metrics.mjs stream-release.mjs release-feed-cache.mjs graceful-shutdown.mjs apk-range-policy.mjs signed-apk-mirror.mjs public-site-redirect.mjs public-search-pages.mjs app-download-policy.mjs stream-upload-oidc.mjs ./
 RUN node --check stream-upload-oidc.mjs && npm run check:syntax
 EXPOSE 3000
 CMD ["npm","start"]
