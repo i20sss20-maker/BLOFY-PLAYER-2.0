@@ -65,8 +65,10 @@ export async function makeS3MirrorStore(config){
         Bucket,Key:key,Range:`bytes=${start}-${end}`
       }));
       const expected=end-start+1;
+      const match=/^bytes (\\d+)-(\\d+)\\/(\\d+)$/.exec(String(response.ContentRange||''));
       if(response.$metadata?.httpStatusCode!==206||
-         response.ContentRange!==`bytes ${start}-${end}/${Number(response.ContentRange?.split('/')?.[1]||-1)}`||
+         !match||Number(match[1])!==start||Number(match[2])!==end||
+         !Number.isSafeInteger(Number(match[3]))||Number(match[3])<=end||
          Number(response.ContentLength)!==expected||
          !response.Body)throw Error('mirror_range_response_invalid');
       const data=Buffer.from(await response.Body.transformToByteArray());
