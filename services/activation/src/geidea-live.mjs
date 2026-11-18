@@ -5,11 +5,19 @@ import { ADMIN_CONSOLE_SCHEMA } from './admin-console-schema.mjs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const API = 'https://api.ksamerchant.geidea.net';
-// Modal hosted card-entry checkout only; never redirect to an unrestricted wallet-enabled HPP.
-// Merchant settings already disable Google Pay and Samsung Pay (verified by
-// non-paying Geidea Live preflight 2026-10-26). Hiding a disabled wallet makes
-// Geidea reject session creation with HPP error 110/112.
+// Apple Pay stays hidden until Geidea confirms domain/merchant activation.
+// Google Pay and Samsung Pay are disabled by the merchant; explicitly hiding
+// disabled wallets causes Geidea create-session errors 110/112.
 export const CARD_ONLY_WALLETS = Object.freeze(['apple-pay']);
+export function geideaHiddenWallets(env=process.env) {
+  return env.BLOFY_GEIDEA_APPLE_PAY_ENABLED==='true' ? [] : [...CARD_ONLY_WALLETS];
+}
+const normalizeWallet = value => typeof value==='string' ? value.toLowerCase().replace(/[\s_-]/g,'') : '';
+function approvedPaymentMethod(method,allowApplePay=false) {
+  if (!method || !['mada','visa','mastercard'].includes(String(method.brand||'').toLowerCase())) return false;
+  if (method.wallet==null || method.wallet==='') return method.type==='Card';
+  return allowApplePay && ['Card','Wallet'].includes(method.type) && normalizeWallet(method.wallet)==='applepay';
+}
 const error = (code, status=400) => Object.assign(new Error(code), {status});
 const clean = (v, n=128) => String(v ?? '').trim().slice(0,n);
 
@@ -72,20 +80,18 @@ export function verifiedPayment(provider, order, config) {
       (provider.totalAmount!==undefined && minor(provider.totalAmount)!==Number(order.amount_minor)) ||
       (order.provider_reference && order.provider_reference!==provider.orderId)) throw error('geidea_order_mismatch',409);
   if (provider.status==='Success' && provider.detailedStatus==='Paid') {
-    // Never grant a BLOFY entitlement for Apple Pay / Google Pay / Samsung Pay or another wallet.
-    // Provider read is authoritative. Missing card evidence fails closed.
-    // The order-level paymentMethod is optional in Geidea order lookups.
-    // The captured transaction's paymentMethod is mandatory and verified below.
-    if ((provider.paymentMethod != null && (
-          provider.paymentMethod.type!=='Card' || provider.paymentMethod.wallet != null ||
-          !['mada','visa','mastercard'].includes(String(provider.paymentMethod.brand||'').toLowerCase())
-        )) ||
+    // Provider lookup is authoritative. Only captured Pay transactions can
+    // grant access. When Geidea activates Apple Pay, accept only its wallet,
+    // never Google Pay, Samsung Pay, a refunded capture, or unverified cards.
+    const allowApplePay=config.applePayEnabled===true;
+    const orderWallet=normalizeWallet(provider.paymentMethod?.wallet);
+    if ((provider.paymentMethod != null && !approvedPaymentMethod(provider.paymentMethod,allowApplePay)) ||
         minor(provider.totalCapturedAmount)!==Number(order.amount_minor) ||
         minor(provider.totalRefundedAmount)!==0 || provider.paymentOperation!=='Pay' ||
         !Array.isArray(provider.transactions) || !provider.transactions.some(tx =>
           tx.type==='Pay' && tx.status==='Success' && tx.currency==='SAR' &&
-          tx.paymentMethod?.type==='Card' && tx.paymentMethod.wallet == null &&
-          ['mada','visa','mastercard'].includes(String(tx.paymentMethod?.brand||'').toLowerCase()) &&
+          approvedPaymentMethod(tx.paymentMethod,allowApplePay) &&
+          (!orderWallet || normalizeWallet(tx.paymentMethod?.wallet)===orderWallet) &&
           minor(tx.amount)===Number(order.amount_minor) &&
           tx.codes?.responseCode==='000' && tx.codes?.detailedResponseCode==='000'))
       throw error('geidea_capture_not_verified',409);
@@ -109,7 +115,7 @@ export function createGeideaLiveHandlers({pool,json,readJson,authorize,env=proce
   const configured=selected && env.BLOFY_GEIDEA_CHECKOUT_ENABLED==='true' && UUID.test(publicKey) && password.length>=16;
   const base=clean(env.BLOFY_PAYMENT_BASE_URL || 'https://api.blofyplayer.com',512).replace(/\/+$/,'');
   if (selected && !/^https:\/\/(?:api\.)?blofyplayer\.com$/.test(base)) throw error('geidea_invalid_public_origin',503);
-  const config={publicKey,password};
+  const config={publicKey,password,applePayEnabled:env.BLOFY_GEIDEA_APPLE_PAY_ENABLED==='true'};
   const configuredPlans=selected ? plansFromConfig(env.BLOFY_GEIDEA_PLANS_JSON || env.BLOFY_PAYMENT_PLANS_JSON):[];
   let schemaReady;
   async function schema() {
@@ -204,9 +210,8 @@ export function createGeideaLiveHandlers({pool,json,readJson,authorize,env=proce
       amount:(plan.priceMinor/100).toFixed(2),currency:'SAR',timestamp,merchantReferenceId:id,
       signature:createSignature({publicKey,password,amountMinor:plan.priceMinor,reference:id,timestamp}),
       paymentOperation:'Pay',language:'ar',
-      // Apple Pay explicitly hidden. Google Pay and Samsung Pay are disabled
-      // at merchant level; specifying them here produces Geidea error 110/112.
-      hideWallets:[...CARD_ONLY_WALLETS],expressCheckouts:[],
+      // Enable Apple Pay only after Geidea approves the public domain.
+      hideWallets:geideaHiddenWallets(env),expressCheckouts:[],
       acceptTabbyPaymentMethod:false,acceptTamaraPaymentMethod:false,
       appearance:{uiMode:'modal'},
       callbackUrl:base+'/api/v1/payments/geidea/webhook',
