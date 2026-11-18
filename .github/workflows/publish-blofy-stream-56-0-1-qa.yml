@@ -1,0 +1,127 @@
+name: Upload verified BLOFY STREAM 56.0.1 signed hotfix QA APK
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-blofy-stream-56-0-1-qa.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+concurrency:
+  group: publish-blofy-stream-56-0-1-qa
+  cancel-in-progress: false
+jobs:
+  publish-owner-signed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_RUN: '44347023096'
+      SOURCE_SHA: '4df1bf5f5942755d7b002d20b0d1c1cbee9d14d4'
+      ARTIFACT: 'BLOFY-STREAM-56.0.1-LIVE-RECONNECT-OWNER-SIGNED-61f392c19ee7656029dbfa8b2ec36bc4c7765e3c'
+      APK_NAME: 'BLOFY-STREAM-56.0.1-LIVE-RECONNECT-FIX-OWNER-SIGNED.apk'
+      TAG: 'blofy-stream-56-0-1-live-fix-qa-20261118'
+      PACKAGE: 'tv.blofy.player.v2.stream'
+      CERT: 'C3B98CCCD2F0C86809014ACD9368BF61C7004CFD419CD867B71FEF10BFA6255E'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify exact source run passed full Android, FFmpeg and owner-signature QA
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" > "$RUNNER_TEMP/run.json"
+          jq -e --arg sha "$SOURCE_SHA" '.head_sha==$sha and .status=="completed" and .conclusion=="success"' "$RUNNER_TEMP/run.json"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN/jobs?per_page=100" > "$RUNNER_TEMP/jobs.json"
+          jq -e '[.jobs[] | select(.name=="verify" and .conclusion=="success")] | length==1' "$RUNNER_TEMP/jobs.json"
+          jq -e '[.jobs[] | select(.name=="owner-signed-stream-qa" and .conclusion=="success")] | length==1' "$RUNNER_TEMP/jobs.json"
+          jq -e '[.jobs[].steps[] | select(.name=="Verify identity, certificate, signatures, native FFmpeg and SHA256" and .conclusion=="success")] | length==1' "$RUNNER_TEMP/jobs.json"
+      - name: Retrieve original owner-signed APK and verify real package and certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p staging
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name "$ARTIFACT" --dir staging
+          apk="$(find staging -type f -name "$APK_NAME" -print -quit)"
+          sums="$(find staging -type f -name SHA256SUMS -print -quit)"
+          identity="$(find staging -type f -name IDENTITY.txt -print -quit)"
+          test -s "$apk" && test -s "$sums" && test -s "$identity"
+          grep -Fxq "application_id=$PACKAGE" "$identity"
+          grep -Fxq 'version_code=2000116' "$identity"
+          grep -Fxq "source_sha=61f392c19ee7656029dbfa8b2ec36bc4c7765e3c" "$identity"
+          (cd "$(dirname "$apk")" && sha256sum -c SHA256SUMS)
+          cp "$apk" "staging/$APK_NAME"
+          cp "$sums" staging/SHA256SUMS
+          cp "$identity" staging/IDENTITY.txt
+          tools="$ANDROID_HOME/build-tools/35.0.0"
+          "$tools/aapt" dump badging "staging/$APK_NAME" > "$RUNNER_TEMP/badging.txt"
+          grep -Fq "name='$PACKAGE' versionCode='2000116' versionName='2.0.0-rc07.56.0.1-STREAM'" "$RUNNER_TEMP/badging.txt"
+          ! grep -Fq 'application-debuggable' "$RUNNER_TEMP/badging.txt"
+          "$tools/apksigner" verify --verbose --print-certs "staging/$APK_NAME" > "$RUNNER_TEMP/signer.txt"
+          actual_cert="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/signer.txt" | head -n1 | tr -d '[:space:]-:' | tr '[:lower:]' '[:upper:]')"
+          test "$actual_cert" = "$CERT"
+          "$tools/zipalign" -c -P 16 -v 4 "staging/$APK_NAME"
+          unzip -Z1 "staging/$APK_NAME" > "$RUNNER_TEMP/files.txt"
+          for abi in armeabi-v7a arm64-v8a x86 x86_64; do
+            grep -Fxq "lib/$abi/libffmpegJNI.so" "$RUNNER_TEMP/files.txt"
+          done
+          size="$(stat -c '%s' "staging/$APK_NAME")"
+          sha="$(sha256sum "staging/$APK_NAME" | awk '{print $1}')"
+          test "$sha" = "02d40e3748f0d75905f734ad429ef16994d87a7068280e567d8da9339932e89a"
+          test "$size" = "135785176"
+          echo "APK_SHA256=$sha" >> "$GITHUB_ENV"
+          echo "APK_BYTES=$size" >> "$GITHUB_ENV"
+      - name: Upload byte-verified owner-signed STREAM APK to BLOFY Downloads via GitHub OIDC
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${ACTIONS_ID_TOKEN_REQUEST_URL:?GitHub OIDC unavailable}"
+          : "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:?GitHub OIDC unavailable}"
+          aud='blofy-stream-56-0-1-qa-website-upload'
+          token="$(curl -fsSL --max-time 25 \
+            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=$aud" | jq -er '.value')"
+          test -n "$token"
+          # Log only non-secret OIDC claim identifiers for diagnosing a rejected
+          # identity; never print or store the bearer token itself.
+          JWT="$token" node -e "const p=JSON.parse(Buffer.from(process.env.JWT.split('.')[1],'base64url').toString()); for (const k of ['iss','aud','sub','repository','repository_id','ref','event_name','workflow_ref','iat','exp']) console.log('OIDC_'+k+'='+p[k])"
+          target="https://updates.blofyplayer.com/api/internal/releases/upload?filename=$APK_NAME"
+          # Deployment and GitHub runner start independently. Upload is retry-safe
+          # and the pinned production receiver revalidates the entire APK hash.
+          uploaded=0
+          for attempt in 1 2 3 4 5 6; do
+            if curl --fail-with-body --silent --show-error --max-time 420 \
+              -H "Authorization: Bearer $token" \
+              -H 'Content-Type: application/vnd.android.package-archive' \
+              --data-binary "@staging/$APK_NAME" "$target" > "$RUNNER_TEMP/upload.json"; then
+              uploaded=1
+              break
+            fi
+            sleep 12
+          done
+          test "$uploaded" -eq 1
+          cat "$RUNNER_TEMP/upload.json"
+          jq -e --arg name "$APK_NAME" --argjson bytes "$APK_BYTES" \
+            '.ok==true and .filename==$name and .size==$bytes' "$RUNNER_TEMP/upload.json"
+          echo "### BLOFY STREAM 56.0.1 signed QA file staged on updates.blofyplayer.com, without changing 56.0 public updater" >> "$GITHUB_STEP_SUMMARY"
+          echo "SHA256 $APK_SHA256; size $APK_BYTES bytes; package $PACKAGE" >> "$GITHUB_STEP_SUMMARY"
+      - name: Verify signed QA APK and test route are accessible without affecting stable updater
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="https://updates.blofyplayer.com/files/releases/$APK_NAME"
+          for i in 1 2 3 4 5; do
+            headers="$(curl -fsSI --max-time 35 "$url" || true)"
+            if printf '%s\n' "$headers" | grep -iq "^content-length: $APK_BYTES"; then
+              qa="https://updates.blofyplayer.com/d/blofy-stream/live-fix-test"
+              qaHeaders="$(curl -fsSI --max-time 35 "$qa" || true)"
+              printf '%s\n' "$qaHeaders" | grep -iq "^content-length: $APK_BYTES" || { echo "::error::QA alias wrong length"; exit 1; }
+              echo "$qa" >> "$GITHUB_STEP_SUMMARY"
+              echo "$url" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 6
+          done
+          echo "::error::New STREAM QA file was not yet served with its verified length"
+          exit 1
