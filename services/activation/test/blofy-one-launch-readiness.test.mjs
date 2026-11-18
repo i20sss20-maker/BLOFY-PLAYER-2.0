@@ -57,7 +57,7 @@ test('launch status tells owner explicitly what is NOT verified',async()=>{
   const [html,js]=await Promise.all([read('web/blofy-one.html'),
     read('web/blofy-one-launch.js')]);
   assert.match(html,/لا نفترض أعداد المشاهدين أو تسوية البنك/);
-  assert.match(html,/Cloud API والرد التلقائي غير مفعّلين/);
+  assert.match(html,/الرد الآلي الرسمي يتطلب توصيل Meta/);
   assert.match(html,/لا يثبت اكتمال ملف APK/);
   assert.match(html,/ليست تسوية بنكية أو صافي ربح/);
   assert.match(js,/signal\('media','غير مُقاس','warn'\)/);
