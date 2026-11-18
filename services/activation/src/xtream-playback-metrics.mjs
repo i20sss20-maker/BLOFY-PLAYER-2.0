@@ -63,7 +63,7 @@ export function xtreamPlaybackSnapshot(now=Date.now(),sourceId=null){
   const percentile=percent=>times.length?times[Math.ceil(percent*times.length)-1]:null;
   const liveSourceUptime=sourceDropped.map(row=>row.durationMs).filter(Number.isFinite)
     .sort((a,b)=>a-b);
-  const medianLiveSourceUptimeMs=liveSourceUptime.length?
+  const medianLiveTsSourceUptimeMs=liveSourceUptime.length?
     liveSourceUptime[Math.ceil(liveSourceUptime.length/2)-1]:null;
   const sourceDropByReason=Object.create(null);
   for(const row of sourceDropped){
