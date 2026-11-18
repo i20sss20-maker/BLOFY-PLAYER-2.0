@@ -348,8 +348,27 @@
   finally{this.disabled=false;}
  });
  $('logout').addEventListener('click',async()=>{
-  try{await api('/logout',{});clearReceipt();clearPaymentReceipt();view(false);orders=[];tell('تم تسجيل الخروج.');}
-  catch(e){tell(statusMessage(e));}
+  try{
+   await api('/logout',{});
+   clearReceipt();clearPaymentReceipt();
+   // Do not carry this verified customer's basket or receipt tokens to
+   // the next person who signs in from the same shared browser.
+   try{
+    localStorage.removeItem('blofy.shop.cart.v1');
+    localStorage.removeItem('blofy.shop.cart.owner.v1');
+   }catch(_){}
+   try{
+    sessionStorage.removeItem('blofy.shop.pending-checkout.v1');
+    sessionStorage.removeItem('blofy.shop.last-order');
+    for(const order of orders){
+     if(!uuid.test(order?.orderId||''))continue;
+     sessionStorage.removeItem('blofy.shop.order.'+order.orderId);
+     sessionStorage.removeItem('blofy.shop.cart.checkout.'+order.orderId);
+    }
+   }catch(_){}
+   view(false);orders=[];
+   tell('تم تسجيل الخروج، وإخفاء السلة وروابط الطلبات الخاصة بهذا الحساب على هذا الجهاز.');
+  }catch(e){tell(statusMessage(e));}
  });
  $('payment-receipt-close').addEventListener('click',clearPaymentReceipt);
  $('payment-receipt-print').addEventListener('click',()=>{if(!$('payment-receipt').hidden)window.print();});

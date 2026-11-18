@@ -29,3 +29,9 @@ main{padding:45px 0 80px}.eyebrow{font:700 11px Arial,sans-serif;letter-spacing:
 .account-gate[data-state="verified"] .primary{background:#174d48;border-color:#5da794}
 #cart-sync[data-state="error"]{color:#ffd3b0}#cart-sync[data-state="saved"]{color:#a8f1c5}
 @media(max-width:680px){.account-gate{align-items:stretch;flex-direction:column}.account-gate .primary{width:100%;white-space:normal}}
+
+/* Account recovery buttons stay visible on narrow screens without overlap. */
+.cart-recovery-actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:8px}
+.cart-recovery-actions .secondary{flex:1 1 190px;min-height:42px}
+#retry-cart-sync{border-color:#d4a56b;background:#3d2d2c;color:#ffebd4}
+#cart-sync[data-state="pending"]{color:#c5d9f2}
