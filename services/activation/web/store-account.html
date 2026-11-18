@@ -4,8 +4,8 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#071327"><meta name="robots" content="noindex,nofollow">
 <title>حسابي واشتراكاتي | BLOFY</title><link rel="icon" href="/blofy-logo.png">
-<link rel="stylesheet" href="/store/cart.css?v=2">
-<script defer src="/store/account.js?v=6"></script>
+<link rel="stylesheet" href="/store/cart.css?v=4">
+<script defer src="/store/account.js?v=7"></script>
 <style>
 @media print{
  body *{visibility:hidden!important}
@@ -41,6 +41,17 @@
 </form>
 </section>
 <section id="dashboard" hidden>
+<div class="account-dashboard-head">
+ <div><span class="eyebrow">MY BLOFY</span><h2>لوحة حسابك</h2>
+ <p>ملخص طلباتك واشتراكاتك، دون الحاجة للبحث في رسائل البريد.</p></div>
+ <a class="secondary" href="/store/cart">🛒 متابعة التسوق</a>
+</div>
+<div class="account-summary-grid" aria-label="ملخص الحساب" aria-live="polite">
+ <a class="account-stat" href="#account-orders"><span>الطلبات المدفوعة</span><strong id="overview-paid">—</strong><small>أكواد متاحة من تفاصيل الطلب</small></a>
+ <a class="account-stat" href="#account-orders"><span>طلبات قيد التأكيد</span><strong id="overview-pending">—</strong><small>التحقق دون دفع مكرر</small></a>
+ <a class="account-stat" href="#account-subscriptions"><span>اشتراكات سارية</span><strong id="overview-active">—</strong><small>مفعّلة ولم تنتهِ</small></a>
+ <a class="account-stat" href="#account-expiry"><span>تنتهي خلال 7 أيام</span><strong id="overview-expiring">—</strong><small>من اشتراكاتك السارية</small></a>
+</div>
 <div class="card">
 <div class="card-head"><h2>مرحبًا بك</h2><button id="logout" type="button" class="secondary">تسجيل الخروج</button></div>
 <p>البريد الموثّق: <b dir="ltr" id="account-email"></b></p>
@@ -53,19 +64,31 @@
 <div class="actions"><button type="submit" class="primary" id="claim-button">إضافة الطلب لحسابي</button><a class="secondary" href="/store/orders">صفحة طلب الزائر</a></div>
 </form>
 </div>
-<div class="card">
-<h2>طلباتي واشتراكاتي</h2>
-<p>الكود الجديد يصدر بعد تأكيد دفع الطلب فقط. إذا كان الطلب قيد التحقق، اضغط «التحقق من حالة الدفع» لقراءة النتيجة من Geidea دون بدء عملية دفع جديدة.</p>
+<div class="card" id="account-orders">
+<h2>طلباتي وسجل المشتريات</h2>
+<p>الكود الجديد يصدر بعد تأكيد دفع الطلب فقط. للطلبات قيد التحقق، استخدم «التحقق من حالة الدفع» دون إنشاء طلب جديد.</p>
+<div class="account-order-filters">
+ <label for="orders-search">ابحث برقم الطلب
+  <input id="orders-search" type="search" dir="auto" autocomplete="off" placeholder="مثال BF-..." aria-label="البحث برقم الطلب">
+ </label>
+ <label for="orders-filter">حالة الدفع
+  <select id="orders-filter" aria-label="تصفية الطلبات حسب الحالة">
+   <option value="all">جميع الطلبات</option><option value="paid">مدفوع</option>
+   <option value="pending">قيد التحقق</option><option value="other">ملغي أو متعثر</option>
+  </select>
+ </label>
+</div>
+<div class="account-order-tools"><p class="account-count-note" id="orders-result-count" role="status" aria-live="polite"></p><button id="refresh-orders" type="button" class="secondary">تحديث قائمة الطلبات</button></div>
 <div id="orders"></div>
 </div>
-<div class="card">
+<div class="card" id="account-subscriptions">
 <h2>اشتراكاتي · تجديد نفس الكود</h2>
 <p>اختر الاشتراك الذي سبق شراؤه وتفعيله، ثم مدة التجديد. <b>التجديد لا يغيّر الكود ولا بيانات الدخول.</b>
  تتم إضافة الأيام بعد انتهاء المدة الحالية، أو من اليوم إذا انتهى الاشتراك. الدفع عبر Geidea، ولا يُضاف أي يوم قبل تأكيد الدفع.</p>
 <p id="subscriptions-note" class="hint" role="status" aria-live="polite">جارٍ قراءة اشتراكاتك الموثقة...</p>
 <div id="subscriptions" aria-live="polite"></div>
 </div>
-<div class="card">
+<div class="card" id="account-expiry">
 <h2>تذكير انتهاء الاشتراك</h2>
 <p>تظهر تنبيهات الاشتراكات التي ستنتهي خلال 7 أيام داخل حسابك. يمكنك تفعيل رسالة بريد إلكتروني واحدة لكل اشتراك عند قرب انتهائه بعد تشغيل خدمة التنبيهات رسميًا. لا تُرسل رسائل واتساب تلقائية.</p>
 <label class="toggle"><input type="checkbox" id="reminder-optin"> أوافق على استلام تنبيه انتهاء الاشتراك عبر البريد الإلكتروني، ويمكنني إلغاء الموافقة في أي وقت.</label>

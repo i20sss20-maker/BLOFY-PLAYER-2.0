@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-import {createStoreCustomerHandlers,expiryAlert,customerCookie} from '../src/store-customer-account.mjs';
+import {createStoreCustomerHandlers,expiryAlert,customerCookie,safeOwnedSubscriptionExpiry} from '../src/store-customer-account.mjs';
 import {encryptStreamCode} from '../src/xtream-code-vault.mjs';
 import {streamCodeProof} from '../src/xtream-duration-codes.mjs';
 
@@ -210,4 +210,21 @@ test('verified email owns linked guest order; no code before login and proof',as
  const afterReceipt=await call(detail+'/payment-receipt','GET',{},auth);
  assert.equal(afterReceipt.status,401,'logout revokes access to purchased receipt');
  assert.equal((await handler.checkoutIdentity(request('POST',{},auth))).status,401);
+});
+
+
+test('customer subscriptions never show 1970 expiry for unactivated or unlinked vouchers',()=>{
+ const voucher='2027-11-18T18:00:00.000Z';
+ const account='2027-09-18T18:00:00.000Z';
+ const linked={redeemed_at:'2026-11-18T18:00:00.000Z',expires_at:voucher,account_expires_at:account};
+ assert.equal(safeOwnedSubscriptionExpiry(linked),account,'earlier verified account expiry wins');
+ assert.equal(safeOwnedSubscriptionExpiry({...linked,account_expires_at:null}),voucher,
+  'no linked-account expiry must not be interpreted as Unix epoch');
+ assert.equal(safeOwnedSubscriptionExpiry({...linked,account_expires_at:undefined}),voucher);
+ assert.equal(safeOwnedSubscriptionExpiry({...linked,redeemed_at:null}),null,
+  'unactivated code cannot already be expired');
+ assert.equal(safeOwnedSubscriptionExpiry({...linked,expires_at:null}),null);
+ assert.equal(safeOwnedSubscriptionExpiry({...linked,expires_at:'invalid-date'}),null);
+ assert.equal(safeOwnedSubscriptionExpiry({...linked,account_expires_at:'bad-date'}),voucher);
+ assert.equal(safeOwnedSubscriptionExpiry(null),null);
 });

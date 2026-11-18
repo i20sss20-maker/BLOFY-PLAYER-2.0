@@ -57,6 +57,48 @@
   };
   return map[e.message]||'تعذر إكمال العملية: '+e.message;
  }
+ function updateOrderOverview(){
+  $('overview-paid').textContent=String(orders.filter(o=>o?.status==='paid').length);
+  $('overview-pending').textContent=String(orders.filter(o=>o?.status==='pending').length);
+ }
+ function updateSubscriptionOverview(subs){
+  if(!Array.isArray(subs)){
+   $('overview-active').textContent='—';
+   $('overview-expiring').textContent='—';
+   return;
+  }
+  const now=Date.now(),week=7*86400000;
+  const live=subs.filter(item=>{
+   // Unactivated, revoked, expired or unknown-expiry vouchers must never be
+   // counted as active. Only verified account-scoped summaries are used.
+   if(item?.redeemed!==true||item.reason==='revoked'||!item.expiresAt)return false;
+   const expiry=Date.parse(item.expiresAt);
+   return Number.isFinite(expiry)&&expiry>now;
+  });
+  $('overview-active').textContent=String(live.length);
+  $('overview-expiring').textContent=String(live.filter(item=>Date.parse(item.expiresAt)<=now+week).length);
+ }
+ function renderOrders(){
+  const root=$('orders');root.replaceChildren();
+  const query=String($('orders-search').value||'').trim().toLowerCase();
+  const filter=$('orders-filter').value;
+  const matches=orders.filter(o=>{
+   if(!o||typeof o!=='object')return false;
+   const status=String(o.status||'');
+   if(filter==='paid'&&status!=='paid')return false;
+   if(filter==='pending'&&status!=='pending')return false;
+   if(filter==='other'&&!['failed','cancelled'].includes(status))return false;
+   if(query&&!String(o.orderNumber||'').toLowerCase().includes(query))return false;
+   return true;
+  });
+  $('orders-result-count').textContent=orders.length?
+   'عرض '+matches.length+' من '+orders.length+' طلب':'لا توجد طلبات مرتبطة بحسابك بعد.';
+  if(!orders.length)
+   root.append(node('p','لا توجد طلبات مربوطة بعد. تستطيع إضافة طلب سابق باستخدام رابطه الخاص.'));
+  else if(!matches.length)
+   root.append(node('p','لا توجد طلبات تطابق البحث أو الحالة. جرّب تغيير التصفية.'));
+  else for(const o of matches)root.append(addOrderCard(o));
+ }
  function addOrderCard(o){
   const wrapper=node('article');wrapper.className='receipt-line';
   const title=node('strong','طلب '+o.orderNumber+' — '+label(o.status));
@@ -171,6 +213,7 @@
   try{
    const data=await api('/subscriptions');
    const subs=Array.isArray(data.subscriptions)?data.subscriptions:[];
+   updateSubscriptionOverview(subs);
    $('subscriptions-note').textContent=subs.length?
     'يمكنك تجديد الكود الحالي دون استبداله، فقط بعد دفع مؤكد.':
     'لا توجد أكواد مشتراة ومرتبطة بحسابك بعد. قد تحتاج إضافة طلبك السابق.';
@@ -203,6 +246,7 @@
     box.append(article);
    }
   }catch(_){
+   updateSubscriptionOverview(null);
    $('subscriptions-note').textContent='تعذّر تحميل اشتراكاتك. حدّث الصفحة أو تواصل مع الدعم.';
   }
  }
@@ -211,12 +255,11 @@
   clearReceipt();clearPaymentReceipt();
   try{
    const data=await api('');
-   orders=data.orders||[];
+   orders=Array.isArray(data.orders)?data.orders:[];
    $('account-email').textContent=data.email||'';
    $('reminder-optin').checked=data.alertsOptIn===true;
-   $('orders').replaceChildren();
-   if(!orders.length)$('orders').append(node('p','لا توجد طلبات مربوطة بعد. أضف طلبك السابق باستخدام الرابط الخاص.'));
-   else orders.forEach(o=>$('orders').append(addOrderCard(o)));
+   updateOrderOverview();
+   renderOrders();
    view(true);tell('حسابك جاهز.');
    if(returnToCart){location.replace('/store/cart');return;}
    await loadSubscriptions();
@@ -347,6 +390,15 @@
   }catch(err){this.checked=!this.checked;$('reminder-status').textContent=statusMessage(err);}
   finally{this.disabled=false;}
  });
+ $('orders-search').addEventListener('input',renderOrders);
+ $('orders-filter').addEventListener('change',renderOrders);
+ $('refresh-orders').addEventListener('click',async()=>{
+  const button=$('refresh-orders');button.disabled=true;
+  try{
+   tell('جارٍ تحديث الطلبات والاشتراكات من حسابك...');
+   await load();
+  }finally{button.disabled=false;}
+ });
  $('logout').addEventListener('click',async()=>{
   try{
    await api('/logout',{});
@@ -367,6 +419,10 @@
     }
    }catch(_){}
    view(false);orders=[];
+   $('orders').replaceChildren();
+   $('orders-search').value='';$('orders-filter').value='all';
+   $('overview-paid').textContent='—';$('overview-pending').textContent='—';
+   updateSubscriptionOverview(null);
    tell('تم تسجيل الخروج، وإخفاء السلة وروابط الطلبات الخاصة بهذا الحساب على هذا الجهاز.');
   }catch(e){tell(statusMessage(e));}
  });
