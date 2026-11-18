@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#071327"><meta name="robots" content="noindex,nofollow">
+<title>حسابي واشتراكاتي | BLOFY</title><link rel="icon" href="/blofy-logo.png">
+<link rel="stylesheet" href="/store/cart.css?v=1">
+<script defer src="/store/account.js?v=1"></script>
+</head>
+<body>
+<header class="top"><nav class="wrap main-nav">
+<a class="logo" href="/"><img src="/blofy-logo.png" width="42" height="42" alt=""><span>BLOFY <b>STORE</b></span></a>
+<div class="nav-links"><a href="/">المتجر</a><a href="/store/cart">السلة</a><a href="/store/orders">تتبع طلب زائر</a><a href="/store/contact">الدعم</a></div>
+</nav></header>
+<main class="wrap order-main">
+<span class="eyebrow">BLOFY CUSTOMER PORTAL</span>
+<h1>حسابي واشتراكاتي</h1>
+<p class="intro">حساب اختياري لحفظ طلباتك ومتابعة اشتراكاتك. تقدر تستمر بالشراء كزائر من دون حساب. الأكواد لا تظهر إلا لصاحب الحساب الموثق أو حامل رابط الطلب الخاص.</p>
+<output id="message" role="status" aria-live="polite"></output>
+<section id="login" class="card">
+<h2>دخول آمن بالبريد الإلكتروني</h2>
+<p>نرسل رمز تحقق إلى بريدك؛ ما تحتاج كلمة مرور. لا تشارك الرمز مع أحد.</p>
+<form id="request-form">
+<label for="email">البريد الإلكتروني</label><input type="email" id="email" dir="ltr" required autocomplete="email" maxlength="254" placeholder="example@mail.com">
+<div class="actions"><button class="primary" type="submit" id="request-button">إرسال رمز الدخول</button></div>
+</form>
+<form id="verify-form" hidden>
+<label for="otp">رمز التحقق (6 أرقام)</label><input id="otp" dir="ltr" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required>
+<div class="actions"><button class="primary" type="submit" id="verify-button">التحقق والدخول</button></div>
+</form>
+</section>
+<section id="dashboard" hidden>
+<div class="card">
+<div class="card-head"><h2>مرحبًا بك</h2><button id="logout" type="button" class="secondary">تسجيل الخروج</button></div>
+<p>البريد الموثّق: <b dir="ltr" id="account-email"></b></p>
+<p>يمكنك إضافة الطلبات السابقة برابطها الخاص حتى تظهر جميع اشتراكاتك في حساب واحد.</p>
+<form id="claim-form">
+<label for="claim-order">معرّف الطلب السابق (UUID)</label>
+<input id="claim-order" dir="ltr" required autocomplete="off" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+<label for="claim-token">مفتاح الوصول الموجود في رابط الطلب</label>
+<input id="claim-token" dir="ltr" required type="password" autocomplete="off" placeholder="مفتاح الطلب الخاص">
+<div class="actions"><button type="submit" class="primary" id="claim-button">إضافة الطلب لحسابي</button><a class="secondary" href="/store/orders">صفحة طلب الزائر</a></div>
+</form>
+</div>
+<div class="card">
+<h2>طلباتي واشتراكاتي</h2>
+<p>الكود الجديد يصدر بعد تأكيد دفع الطلب؛ لا تعِد الدفع إذا كانت الحالة قيد التحقق.</p>
+<div id="orders"></div>
+</div>
+<div class="card">
+<h2>تذكير انتهاء الاشتراك</h2>
+<p>تظهر تنبيهات الاشتراكات التي ستنتهي خلال 7 أيام داخل حسابك. لا يتم إرسال رسائل واتساب أو بريد آلية حاليًا.</p>
+<div id="expiry-alerts" aria-live="polite"></div>
+<div class="actions"><a class="secondary" href="/store/contact">دعم BLOFY على واتساب</a></div>
+</div>
+<div class="card receipt" id="receipt" hidden>
+<h2 id="receipt-title">تفاصيل أكواد الطلب</h2>
+<p id="receipt-status"></p>
+<div id="codes" class="code-grid"></div>
+<div class="actions"><button type="button" class="secondary" id="close-receipt">إغلاق التفاصيل</button></div>
+</div>
+</section>
+<p class="hint">للتجديد بنفس الكود أو الاستفسار عن كود قديم تواصل مع الدعم برقم الطلب فقط؛ لا تشارك الرمز السري أو بيانات البطاقة. شراء باقة جديدة من السلة قد يُصدر كودًا جديدًا وليس تمديدًا للكود الحالي.</p>
+</main>
+<footer class="footer"><div class="wrap"><a href="/store/terms">الشروط</a><a href="/privacy">الخصوصية</a><a href="/store/contact">واتساب الدعم</a><span>© BLOFY</span></div></footer>
+</body></html>
