@@ -815,7 +815,7 @@ const server = http.createServer(async (req, res) => {
       return res.end();
     }
     if (await servePrivacyPage(req, res, requestUrl)) return;
-    if (['GET', 'HEAD'].includes(req.method) && ['/', '/shop', '/shop/'].includes(requestUrl.pathname)) return await serveStorefront(res);
+    if (['GET', 'HEAD'].includes(req.method) && (requestUrl.pathname === '/' || requestUrl.pathname === '/shop' || requestUrl.pathname === '/shop/')) return await serveStorefront(res);
     if (req.method === 'GET' && requestUrl.pathname === '/connect') return await servePortal(res, true);
     if (['GET', 'HEAD'].includes(req.method) && requestUrl.pathname === '/status') return await serveStatusPage(res);
     if (['GET', 'HEAD'].includes(req.method) && (requestUrl.pathname === '/en' || requestUrl.pathname === '/en/')) return await serveStatusPage(res, 'en.html');
