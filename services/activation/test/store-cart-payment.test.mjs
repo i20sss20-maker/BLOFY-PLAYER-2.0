@@ -1,0 +1,149 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
+import {createStoreGeideaHandlers} from '../src/store-geidea-checkout.mjs';
+
+test('Three cart codes require one paid Geidea capture and never duplicate on callback replay',async()=>{
+ const publicKey='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+ const pwd='test-store-payment-secret-12345678';
+ const providerId='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+ const sessionId='cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+ const sourceId='dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+ const orders=new Map(),codes=new Map(),delivered=[];
+ let captureCalls=0,paid=0,rolledBack=0;
+ const rows=(items=[])=>({rows:items,rowCount:items.length});
+ const db={async query(input,args=[]){
+   const sql=String(input).trim();
+   if(sql==='BEGIN'||sql==='COMMIT'||sql.startsWith('CREATE ')||
+      sql.startsWith('ALTER ')||sql.startsWith('SELECT pg_advisory'))return rows();
+   if(sql==='ROLLBACK'){rolledBack++;return rows();}
+   if(sql.startsWith("SELECT to_regclass('public.blofy_xtream_servers')"))
+     return rows([{n:'blofy_xtream_servers'}]);
+   if(sql.startsWith('SELECT id FROM blofy_xtream_servers'))
+     return rows([{id:sourceId}]);
+   if(sql.startsWith('INSERT INTO blofy_store_geidea_orders')){
+     const [id,sku,channel,days,minor,access_hash,cartJson,gross,number,coupon,discount]=args;
+     orders.set(id,{id,sku,channel,duration_days:days,amount_minor:minor,access_hash,
+       cart_items:JSON.parse(cartJson),cart_gross_minor:gross,public_order_number:number,
+       coupon_code:coupon,coupon_discount_minor:discount,currency:'SAR',status:'pending',
+       session_id:null,provider_reference:null,created_at:new Date().toISOString(),
+       last_checked_at:null});
+     return rows();
+   }
+   if(sql.startsWith('UPDATE blofy_store_geidea_orders SET session_id=')){
+     orders.get(args[0]).session_id=args[1];return rows();
+   }
+   if(sql.startsWith('SELECT * FROM blofy_store_geidea_orders WHERE id=$1'))
+     return rows(orders.has(args[0])?[{...orders.get(args[0])}]:[]);
+   if(sql.startsWith('SELECT i.voucher_id FROM blofy_store_inventory'))return rows();
+   if(sql.includes('SELECT COUNT(*)::int AS n FROM blofy_xtream_gateway_duration_codes'))
+     return rows([{n:codes.size}]);
+   if(sql.startsWith('INSERT INTO blofy_xtream_gateway_duration_codes')){
+     const [id,hash,hint,label,source,durationDays,channel,vault,priceMinor]=args;
+     codes.set(id,{id,code_hash:hash,code_vault:vault,revoked_at:null,source,
+       duration_days:durationDays,channel,priceMinor});
+     return rows([{id}]);
+   }
+   if(sql.startsWith('INSERT INTO blofy_store_cart_vouchers')){
+     const [order_id,position,voucher_id,channel,days,sku]=args;
+     delivered.push({order_id,position,voucher_id,channel,duration_days:days,sku});
+     return rows();
+   }
+   if(sql.startsWith('SELECT c.position,c.channel,c.duration_days,c.sku,v.id')){
+     return rows(delivered.filter(item=>item.order_id===args[0]).map(item=>({
+       position:item.position,channel:item.channel,duration_days:item.duration_days,
+       sku:item.sku,...codes.get(item.voucher_id)
+     })));
+   }
+   if(sql.startsWith("UPDATE blofy_store_geidea_orders SET status='paid'")){
+     const order=orders.get(args[0]);order.status='paid';order.provider_reference=args[1];
+     order.paid_at=new Date();paid++;return rows();
+   }
+   throw Error('Unexpected SQL: '+sql.slice(0,220));
+ },release(){}};
+ const pool={query:(...args)=>db.query(...args),connect:async()=>db};
+ let currentReference;
+ const provider=async(url,options)=>{
+   if(url.includes('/payment-intent/api/v2/direct/session')){
+     const payload=JSON.parse(options.body);
+     assert.equal(payload.amount,'270.00');
+     currentReference=payload.merchantReferenceId;
+     return {ok:true,json:async()=>({
+       responseCode:'000',detailedResponseCode:'000',
+       session:{id:sessionId,expiryDate:new Date(Date.now()+600000).toISOString()}
+     })};
+   }
+   if(url.includes('/pgw/api/v1/direct/order')){
+     captureCalls++;
+     return {ok:true,json:async()=>({responseCode:'000',detailedResponseCode:'000',order:{
+       orderId:providerId,merchantReferenceId:currentReference,merchantPublicKey:publicKey,
+       isTest:false,status:'Success',detailedStatus:'Paid',amount:'270.00',currency:'SAR',
+       totalAmount:'270.00',totalCapturedAmount:'270.00',totalRefundedAmount:'0.00',
+       paymentOperation:'Pay',transactions:[{type:'Pay',status:'Success',currency:'SAR',
+         amount:'270.00',paymentMethod:{type:'Card',brand:'visa'},
+         codes:{responseCode:'000',detailedResponseCode:'000'}}]
+     }})};
+   }
+   throw Error('Unexpected Geidea API: '+url);
+ };
+ const env={BLOFY_PAYMENT_PROVIDER:'geidea',BLOFY_GEIDEA_CHECKOUT_ENABLED:'true',
+   BLOFY_STORE_GEIDEA_ENABLED:'true',GEIDEA_LIVE_MERCHANT_PUBLIC_KEY:publicKey,
+   GEIDEA_LIVE_API_PASSWORD:pwd};
+ const handler=createStoreGeideaHandlers({
+   pool,keyHex:'a'.repeat(64),env,fetchImpl:provider,
+   json:(res,status,data)=>{res.status=status;res.data=data;},
+   readJson:async(req)=>req.body
+ });
+ const request=(body,origin=true)=>({
+   method:'POST',headers:origin?{'content-type':'application/json',
+     origin:'https://blofyplayer.com','sec-fetch-site':'same-origin'}:{},
+   socket:{remoteAddress:'127.0.0.1'},body
+ });
+ const items=[{sku:'stream-6m',quantity:1},
+   {sku:'bundle-2y',quantity:1,bundleSelection:['app','xtream']}];
+ const quote={};
+ await handler(request({items}),quote,{pathname:'/api/v1/store/cart/quote'});
+ assert.equal(quote.status,200);
+ assert.equal(quote.data.totalMinor,27000);
+ assert.equal(quote.data.codeCount,3);
+ const checkout={};
+ await handler(request({items}),checkout,{pathname:'/api/v1/store/cart/checkout'});
+ assert.equal(checkout.status,201);
+ assert.equal(checkout.data.priceMinor,27000);
+ assert.match(checkout.data.orderNumber,/^BF-\d{6}-[0-9A-F]{8}$/);
+ assert.equal(delivered.length,0,'never issue codes before verified capture');
+ const invalid={};
+ await handler(request({orderId:checkout.data.orderId,accessToken:'z'.repeat(43)}),
+   invalid,{pathname:'/api/v1/store/orders/status'});
+ assert.equal(invalid.status,404,'another browser cannot retrieve the codes');
+ const stamp=new Date().toISOString();
+ const sig=crypto.createHmac('sha256',pwd)
+   .update(publicKey+'270.00'+'SAR'+providerId+'Success'+checkout.data.orderId+stamp)
+   .digest('base64');
+ const callback={timeStamp:stamp,signature:sig,order:{
+   orderId:providerId,merchantReferenceId:checkout.data.orderId,merchantPublicKey:publicKey,
+   amount:'270.00',currency:'SAR',isTest:false,status:'Success'
+ }};
+ const confirmation={};
+ await handler(request(callback,false),confirmation,{pathname:'/api/v1/store/geidea/webhook'});
+ assert.equal(confirmation.status,200);
+ assert.equal(delivered.length,3);
+ assert.equal(paid,1);
+ const repeated={};
+ await handler(request(callback,false),repeated,{pathname:'/api/v1/store/geidea/webhook'});
+ assert.equal(repeated.status,200);
+ assert.equal(delivered.length,3);
+ assert.equal(paid,1);
+ const receipt={};
+ await handler(request({orderId:checkout.data.orderId,accessToken:checkout.data.accessToken}),
+   receipt,{pathname:'/api/v1/store/orders/status'});
+ assert.equal(receipt.status,200);
+ assert.equal(receipt.data.fulfilled,true);
+ assert.equal(receipt.data.amountMinor,27000);
+ assert.equal(receipt.data.codes.length,3);
+ assert.deepEqual(receipt.data.codes.map(x=>x.channel),['app','app','xtream']);
+ assert.deepEqual(receipt.data.codes.map(x=>x.durationDays),[180,365,365]);
+ assert.equal(new Set(receipt.data.codes.map(x=>x.code)).size,3);
+ assert.equal(rolledBack,0);
+ assert.equal(captureCalls,1);
+});
