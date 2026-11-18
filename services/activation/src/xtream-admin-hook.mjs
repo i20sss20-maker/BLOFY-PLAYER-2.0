@@ -1678,7 +1678,7 @@ async function finalizeTypeSync(serverId, mediaType, syncToken,{preserveCategori
             WHERE server_id=$1 AND media_type=$2
               AND sync_token IS DISTINCT FROM $3
             LIMIT 350
-          ) RETURNING source_id`,
+          ) RETURNING ${table==='blofy_xtream_items'?'source_id':'source_category_id'} AS source_id`,
           [serverId,mediaType,syncToken]);
         if(table==='blofy_xtream_items' && result.rows.length) {
           // The caller must never turn 404s into silent missing titles.
