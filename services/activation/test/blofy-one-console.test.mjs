@@ -16,7 +16,7 @@ test('BLOFY ONE links existing code and subscriber flows rather than making new 
   for(const path of ['/sources-admin#xtream','/sources-admin#catalog','/admin#devices',
     '/admin#codes','/admin#releases','/admin#support','/connect','/status'])
     assert.ok(html.includes('href="'+path+'"'),path);
-  for(const asset of ['/blofy-one.css?v=1','/blofy-one.js?v=1'])
+  for(const asset of ['/blofy-one.css?v=20261118-integrated-1','/blofy-one.js?v=20261118-integrated-1'])
     assert.ok(html.includes(asset));
   assert.match(html,/هذه أعداد قاعدة البيانات وليست قنوات أو مشاهدين يعملون الآن/);
   assert.match(html,/لا يثبت عمل القنوات الحقيقية/);
