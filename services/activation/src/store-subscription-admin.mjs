@@ -51,10 +51,11 @@ export function createStoreSubscriptionAdmin({pool,json,authorizeAdmin}){
   if(!opts)return json(res,400,{error:'invalid_store_operations_filter'});
   const tables=['blofy_store_customers','blofy_store_customer_orders',
    'blofy_store_geidea_orders','blofy_store_renewal_orders',
-   'blofy_xtream_gateway_duration_codes','blofy_xtream_gateway_accounts'];
+   'blofy_xtream_gateway_duration_codes','blofy_xtream_gateway_accounts',
+   'blofy_store_customer_reminders'];
   const availability=(await pool.query('SELECT '+tables.map((_,i)=>
    'to_regclass($'+(i+1)+') AS t'+i).join(','),tables.map(t=>'public.'+t))).rows[0]||{};
-  if(tables.some((_,i)=>!availability['t'+i]))
+  if(tables.slice(0,6).some((_,i)=>!availability['t'+i]))
    return json(res,503,{error:'store_operations_schema_unavailable'});
   const summary=(await pool.query(
    'SELECT COUNT(*)::int AS total,'+
@@ -65,6 +66,13 @@ export function createStoreSubscriptionAdmin({pool,json,authorizeAdmin}){
    "COUNT(*) FILTER(WHERE o.status='pending' AND o.created_at<NOW()-INTERVAL '20 minutes')::int AS overdue,"+
    "COALESCE(SUM(o.amount_minor) FILTER(WHERE o.status='paid'),0)::bigint::text AS paid_amount_minor"+
    RENEW_FROM)).rows[0]||{};
+  // Sent means the provider accepted the send request, not that the customer opened it.
+  // Missing reminder table is explicitly unknown, never represented as zero.
+  const reminder=availability.t6?(await pool.query(
+   'SELECT COUNT(*) FILTER(WHERE sent_at IS NOT NULL)::int AS sent,'+
+   'COUNT(*) FILTER(WHERE sent_at IS NULL AND attempts>=3)::int AS exhausted,'+
+   'COUNT(*) FILTER(WHERE sent_at IS NULL AND attempts>0 AND attempts<3)::int AS retrying '+
+   'FROM blofy_store_customer_reminders')).rows[0]||{}:null;
   const pattern=opts.q?'%'+opts.q.replace(/[\\%_]/g,x=>'\\'+x)+'%':'';
   const whereStatus=opts.status==='all'?'':' AND '+(opts.view==='renewals'?'o.status':'state')+'=$2';
   const args=opts.status==='all'?[pattern,PAGE_SIZE,(opts.page-1)*PAGE_SIZE]:
@@ -107,6 +115,8 @@ export function createStoreSubscriptionAdmin({pool,json,authorizeAdmin}){
   return json(res,200,{ok:true,view:opts.view,status:opts.status,
    page:opts.page,pageSize:PAGE_SIZE,matched:Number(result.rows?.[0]?.matched||0),
    subscriptions:counts,
+   reminders:reminder?{acceptedByProvider:Number(reminder.sent||0),
+    exhaustedRetries:Number(reminder.exhausted||0),retrying:Number(reminder.retrying||0)}:null,
    renewals:{total:Number(summary.total||0),paid:Number(summary.paid||0),
     pending:Number(summary.pending||0),failed:Number(summary.failed||0),
     cancelled:Number(summary.cancelled||0),pendingOver20m:Number(summary.overdue||0),
