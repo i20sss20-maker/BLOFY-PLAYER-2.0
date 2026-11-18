@@ -65,7 +65,7 @@ export async function makeS3MirrorStore(config){
         Bucket,Key:key,Range:`bytes=${start}-${end}`
       }));
       const expected=end-start+1;
-      const match=/^bytes (\\d+)-(\\d+)\\/(\\d+)$/.exec(String(response.ContentRange||''));
+      const match=new RegExp('^bytes ([0-9]+)-([0-9]+)/([0-9]+)$').exec(String(response.ContentRange||''));
       if(response.$metadata?.httpStatusCode!==206||
          !match||Number(match[1])!==start||Number(match[2])!==end||
          !Number.isSafeInteger(Number(match[3]))||Number(match[3])<=end||
