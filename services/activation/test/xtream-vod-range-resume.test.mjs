@@ -157,7 +157,9 @@ test('production gateway cannot turn on VOD resume without exact account and sou
  const gateway=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
  const marker=gateway.slice(gateway.indexOf('const vodPlan=verifiedVodResumePlan({'),
   gateway.indexOf('let resumedVod=false;'));
- assert.match(marker,/enabled:allowedVodResumePilot\(/);
+ assert.match(marker,/enabled:authorizedMediaRecoveryRelease\(/);
+ assert.match(marker,/BLOFY_XTREAM_VOD_RANGE_RESUME_PRODUCTION/);
+ assert.match(marker,/allowedVodResumePilot\(/);
  assert.match(marker,/accountId:String\(account\.id\|\|''\)/);
  assert.match(marker,/sourceId:String\(row\.server_id\|\|''\)/);
  assert.match(marker,/BLOFY_XTREAM_VOD_RANGE_RESUME_PILOT_ACCOUNT_ID/);

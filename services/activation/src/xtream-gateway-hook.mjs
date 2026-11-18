@@ -3,6 +3,7 @@ import { databaseOptions } from './database-options.mjs';
 import { safeErrorSummary } from './diagnostics-sanitizer.mjs';
 import {safeXtreamTransportCategory} from './xtream-transport-errors.mjs';
 import {waitXtreamMediaRetry} from './xtream-media-retry-backoff.mjs';
+import {authorizedMediaRecoveryRelease} from './xtream-media-recovery-release.mjs';
 import {allowedLiveTsRecoveryPilot,safeLiveTsRecoveryStart,liveTsRecoveryBytes}
   from './xtream-live-ts-recovery.mjs';
 import { createFixedWindowLimiter, requestClientKey } from './auth-protection.mjs';
@@ -1607,7 +1608,12 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
         // may replace one failed upstream socket from the exact next byte.
         // Never reissues customer auth or restarts a live TS stream.
         const vodPlan=verifiedVodResumePlan({
-          enabled:allowedVodResumePilot({
+          enabled:authorizedMediaRecoveryRelease({
+            enabled:process.env.BLOFY_XTREAM_VOD_RANGE_RESUME_PRODUCTION==='1',
+            accountId:String(account.id||''),
+            sourceId:String(row.server_id||''),
+            serverEnabled:row.server_enabled===true,method:req.method,kind
+          })||allowedVodResumePilot({
             enabled:process.env.BLOFY_XTREAM_VOD_RANGE_RESUME_ENABLED==='1',
             accountId:String(account.id||''),
             sourceId:String(row.server_id||''),
@@ -1625,7 +1631,12 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
         // or socket interruption, without restarting the viewer's HTTP reply.
         // No provider fanout, HLS, Range, 206, or whole-file retry.
         const liveTsPilot=safeLiveTsRecoveryStart({
-          enabled:allowedLiveTsRecoveryPilot({
+          enabled:authorizedMediaRecoveryRelease({
+            enabled:process.env.BLOFY_XTREAM_LIVE_TS_RECOVERY_PRODUCTION==='1',
+            accountId:String(account.id||''),
+            sourceId:String(row.server_id||''),
+            serverEnabled:row.server_enabled===true,method:req.method,kind
+          })||allowedLiveTsRecoveryPilot({
             enabled:process.env.BLOFY_XTREAM_LIVE_TS_RECOVERY_ENABLED==='1',
             accountId:String(account.id||''),
             sourceId:String(row.server_id||''),
