@@ -138,9 +138,21 @@
         else if(state==='degraded')signal(name,'استجابة غير سليمة','fail');
         else signal(name,'اتصال غير مؤكد',state==='unknown'?'warn':'pending');
       }
-      if(customer?.accountsEnabled===true&&customer?.emailConfigured===true)
-        signal('customers',safeCount(customer.customers)+' حساب · البريد مهيأ',customer.remindersEnabled?'ok':'warn');
-      else signal('customers',customer?.accountsEnabled===true?'البريد غير مهيأ':'الحسابات غير مفعلة','warn');
+      const providerStatus=customer?.emailProviderStatus;
+      const emailReady=customer?.accountsEnabled===true&&customer?.emailConfigured===true;
+      const providerVerified=providerStatus==='verified';
+      const emailDegraded=new Set(['key_invalid','sender_domain_absent',
+        'sender_domain_not_verified','invalid_config']).has(providerStatus);
+      if(!emailReady)
+        signal('customers',customer?.accountsEnabled===true?'البريد غير مهيأ':'الحسابات غير مفعلة','warn');
+      else if(emailDegraded)
+        signal('customers',providerStatus==='key_invalid'?
+          'مفتاح البريد مرفوض من مزود الإرسال':'نطاق إرسال البريد يحتاج إصلاحًا','fail');
+      else if(providerVerified)
+        signal('customers',safeCount(customer.customers)+
+          ' حساب · النطاق موثّق، اختبار إرسال مطلوب','warn');
+      else signal('customers',safeCount(customer.customers)+
+          ' حساب · جاهزية البريد غير مؤكدة','warn');
       if(whatsapp?.provider==='meta_whatsapp_cloud'&&whatsapp.configured===true)
         signal('whatsapp','Cloud API مهيأ · تحقق Meta مطلوب','warn');
       else signal('whatsapp','رابط فقط · Cloud API غير مهيأ','warn');
@@ -186,7 +198,12 @@
       if(systems?.services?.downloads?.status!=='healthy')warnings.push('موقع التحميلات ليس مؤكدًا');
       if(systems?.services?.stream?.status!=='healthy')warnings.push('STREAM API ليست مؤكدة');
       if(!payReady)warnings.push('بدء الدفع غير متاح أو لم يتم التحقق منه');
-      if(!customer?.accountsEnabled||!customer?.emailConfigured)warnings.push('حسابات العملاء أو بريد الدخول لم تجهز بعد');
+      if(!emailReady)warnings.push('حسابات العملاء أو إعدادات بريد الدخول لم تجهز بعد');
+      else if(emailDegraded)warnings.push(providerStatus==='key_invalid'?
+        'مفتاح Resend مرفوض: طلبات رمز الدخول ستفشل حتى تصحيح المفتاح':
+        'نطاق البريد ليس موثوقًا لدى مزود الإرسال');
+      else if(!providerVerified)warnings.push('جاهزية مزود البريد غير مؤكدة؛ يلزم اختبار استلام رمز حقيقي');
+      else warnings.push('تحقق النطاق وحده لا يثبت وصول رسائل الدخول؛ اختبر الإرسال فعليًا');
       if(Number.isSafeInteger(fulfillmentIssues)&&fulfillmentIssues>0)
         warnings.push(safeCount(fulfillmentIssues)+' طلب مدفوع يحتاج تسليمًا');
       if(fulfillmentIssues===null)warnings.push('لا توجد قراءة مؤكدة لحالات تسليم الطلبات');
