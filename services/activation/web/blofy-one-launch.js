@@ -105,7 +105,8 @@
       get('/health'),
       get('/api/v1/store/products'),
       get('/api/v1/admin/store/sales'),
-      get('/api/v1/admin/store/inventory')
+      get('/api/v1/admin/store/inventory'),
+      get('/api/v1/admin/whatsapp/cloud/status')
     ];
     try{
       const settled=await Promise.allSettled(requests);
@@ -113,7 +114,7 @@
       const good=i=>settled[i].status==='fulfilled';
       const value=i=>good(i)?settled[i].value:null;
       const analytics=value(0),systems=value(1),portal=value(2),
-        catalog=value(3),sales=value(4),inventory=value(5);
+        catalog=value(3),sales=value(4),inventory=value(5),whatsapp=value(6);
       if(analytics?.source==='consented_first_party'&&analytics.days===interval){
         const totals=analytics.totals||{};
         const event=new Map((Array.isArray(analytics.events)?analytics.events:[])
@@ -136,6 +137,9 @@
         else if(state==='degraded')signal(name,'استجابة غير سليمة','fail');
         else signal(name,'اتصال غير مؤكد',state==='unknown'?'warn':'pending');
       }
+      if(whatsapp?.provider==='meta_whatsapp_cloud'&&whatsapp.configured===true)
+        signal('whatsapp','Cloud API مهيأ · تحقق Meta مطلوب','warn');
+      else signal('whatsapp','رابط فقط · Cloud API غير مهيأ','warn');
       const payReady=catalog?.provider==='geidea'&&catalog.checkoutAvailable===true;
       signal('payment',payReady?'بدء الدفع متاح':'غير جاهز أو غير مؤكد',
         payReady?'ok':'warn');
