@@ -384,7 +384,8 @@ function renderGatewayAccounts() {
         }[why]||why),'error');
       }finally{linkedCode.disabled=false}
     });
-    actions.append(copy, renew, toggle, reset, rotate, linkedCode, remove);
+    actions.append(copy, renew, toggle, reset, rotate, remove);
+    actions.insertBefore(linkedCode,remove);
     card.append(main, actions);
     list.append(card);
   }
