@@ -2686,6 +2686,8 @@ async function approveLibraryAICommand(body){
    result=await autoSortCategories(plan.sourceId,plan.type,plan.mode);
  }else return {ok:false,code:'stream_ai_plan_invalid'};
  libraryAuditCache.delete(plan.sourceId+':'+plan.type);
+ if(changedItems>0||Number(result?.updated)>0)
+   await bumpXtreamCatalogRevision(pool,plan.sourceId,'operator_edit');
  return {ok:true,applied:true,action:plan.action,mode:plan.mode,
   sourceId:plan.sourceId,type:plan.type,
   catalogRevision:publishRevision,
@@ -2766,6 +2768,7 @@ async function approveLibraryTitle(body){
   if(!updated.rowCount)
     throw Object.assign(new Error('stream_library_item_changed_or_missing'),{status:409});
   libraryAuditCache.delete(serverId+':'+type);
+  await bumpXtreamCatalogRevision(pool,serverId,'operator_edit');
   return {ok:true,updated:true,itemId:sourceId,proposedName:proposed};
 }
 
@@ -2795,6 +2798,7 @@ async function patchCategory(serverId, mediaType, categoryId, enabled) {
   const result = await pool.query(`UPDATE blofy_xtream_categories SET enabled=$4,updated_at=NOW() WHERE server_id=$1 AND media_type=$2 AND source_category_id=$3 RETURNING *`,
     [serverId, mediaType, categoryId, Boolean(enabled)]);
   if (!result.rows[0]) throw Object.assign(new Error('xtream_category_not_found'), { status: 404 });
+  await bumpXtreamCatalogRevision(pool,serverId,'operator_edit');
   return result.rows[0];
 }
 
@@ -2968,6 +2972,7 @@ async function patchItem(serverId, mediaType, sourceId, enabled) {
   const result = await pool.query(`UPDATE blofy_xtream_items SET enabled=$4,updated_at=NOW() WHERE server_id=$1 AND media_type=$2 AND source_id=$3 RETURNING server_id,media_type,source_id,enabled`,
     [serverId, mediaType, sourceId, Boolean(enabled)]);
   if (!result.rows[0]) throw Object.assign(new Error('xtream_item_not_found'), { status: 404 });
+  await bumpXtreamCatalogRevision(pool,serverId,'operator_edit');
   return result.rows[0];
 }
 
@@ -2987,6 +2992,7 @@ async function updateStudioItem(serverId,mediaType,sourceId,body,reset=false){
   const result=await pool.query(`UPDATE blofy_xtream_items SET ${assignments.join(',')},updated_at=NOW()
     WHERE server_id=$1 AND media_type=$2 AND source_id=$3 RETURNING source_id`,values);
   if(!result.rowCount)throw Object.assign(new Error('xtream_item_not_found'),{status:404});
+  await bumpXtreamCatalogRevision(pool,serverId,'operator_edit');
   return {updated:true};
 }
 
@@ -3042,6 +3048,8 @@ async function bulkToggle(body) {
       : await pool.query('UPDATE blofy_xtream_items SET enabled=$3,updated_at=NOW() WHERE server_id=$1 AND media_type=$2', [serverId,mediaType,enabled]);
     items = result.rowCount;
   }
+  if(categories>0||items>0)
+    await bumpXtreamCatalogRevision(pool,serverId,'operator_edit');
   return { categories, items, enabled };
 }
 
