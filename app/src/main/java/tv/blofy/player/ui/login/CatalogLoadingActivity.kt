@@ -450,7 +450,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
     }
 
     private fun streamArabic(): Boolean =
-        resources.configuration.locales[0]?.language == "ar"
+        androidx.core.os.ConfigurationCompat.getLocales(resources.configuration)[0]?.language == "ar"
 
     private suspend fun sync(providerId: String, forceRefresh: Boolean) {
         val dao = BlofyDatabase.get(applicationContext).dao()
