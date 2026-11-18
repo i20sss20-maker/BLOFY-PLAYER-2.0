@@ -77,3 +77,15 @@ test('cache response directives are scoped to anonymous updater feed only',async
   assert.match(PUBLIC_STREAM_RELEASE_CACHE_CONTROL,/max-age=0/);
   assert.ok(src.includes("pathname === '/stream/release.json'"));
 });
+
+
+test('production Dockerfile includes every newly imported public feed module',async()=>{
+  const [docker,server,pkg]=await Promise.all([
+    readFile(new URL('./Dockerfile',import.meta.url),'utf8'),
+    readFile(new URL('./server.mjs',import.meta.url),'utf8'),
+    readFile(new URL('./package.json',import.meta.url),'utf8')
+  ]);
+  assert.match(docker,/^COPY .*release-feed-cache\.mjs .*\/\s*$/m);
+  assert.match(server,/from '\.\/release-feed-cache\.mjs'/);
+  assert.match(pkg,/node --check release-feed-cache\.mjs/);
+});
