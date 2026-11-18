@@ -310,6 +310,9 @@
    try{pending=JSON.parse(sessionStorage.getItem(pendingKey)||'null');}catch{return;}
    if(!pending||!UUID.test(pending.orderId||'')||!UUID.test(pending.sessionId||'')||
      pending.accountId!==accountId)return;
+   // A past checkout from a different basket must not freeze a new basket.
+   // The current basket is separately checked with the server before payment.
+   if(pending.cartSnapshot&&pending.cartSnapshot!==cartSnapshot())return;
    const token=sessionStorage.getItem('blofy.shop.order.'+pending.orderId);
    if(!/^[a-zA-Z0-9_-]{42,44}$/.test(token||''))return;
    // Block creation of another Geidea session while checking the older one.
@@ -399,7 +402,8 @@
        sessionStorage.setItem('blofy.shop.cart.checkout.'+currentOrder,JSON.stringify(items));
        sessionStorage.setItem(pendingKey,JSON.stringify({
          orderId:data.orderId,orderNumber:data.orderNumber,sessionId:data.sessionId,
-         accountId,createdAt:Date.now(),expiresAt:Date.parse(data.sessionExpiresAt)||Date.now()+12*60*1000
+         accountId,cartSnapshot:cartSnapshot(),createdAt:Date.now(),
+         expiresAt:Date.parse(data.sessionExpiresAt)||Date.now()+12*60*1000
        }));
      }catch(_){}
      $('started').hidden=false;$('order-number').textContent=data.orderNumber;
@@ -416,26 +420,43 @@
        message('تم إنشاء الطلب، لكن المتصفح منع الانتقال. استخدم زر «فتح بوابة الدفع» أدناه لنفس الطلب دون إعادة إنشائه.');
      }
    }catch(err){
-     if(err.message==='store_pending_checkout_exists'){
+     // Even a network/JSON error may occur AFTER the server created a Geidea
+     // session, so never assume a failed response means no payment session.
+     const indeterminate=!['store_geidea_session_unavailable',
+       'store_geidea_session_invalid','store_invalid_cart','store_invalid_coupon',
+       'store_coupon_unavailable','store_coupon_limit_reached','rate_limited',
+       'customer_login_required','store_checkout_disabled'].includes(err.message);
+     if(indeterminate){
        try{
          const previous=await request('/api/v1/store/cart/pending',body());
-         if(previous.pending)showOwnedPending(previous);
-         else{
+         if(previous.pending){
+           showOwnedPending(previous);
+           message('استرجعنا طلب الدفع السابق من حسابك. استخدم جلسة Geidea نفسها، بدون إنشاء فاتورة جديدة.');
+           return;
+         }
+         if(err.message==='store_pending_checkout_exists'){
+           // Race between server finalization and the recovery read. Ask the
+           // customer to verify their order, rather than guessing settlement.
+           paymentOpen=true;pendingChecked=false;
            $('started').hidden=false;
-           $('pending-status').textContent='وجدنا طلبًا قيد التحقق؛ راجع حسابك قبل إنشاء طلب آخر.';
            $('check-pending').href='/store/account';
-           paymentOpen=true;
+           $('open-geidea').hidden=true;
+           $('pending-status').textContent='لا يمكن تأكيد حالة الطلب السابق الآن. راجع حسابك قبل بدء دفع جديد.';
+         }else{
+           pendingChecked=false;
+           $('retry-pending').hidden=false;
+           message('تعذر إكمال الطلب. تحقّق من الطلبات السابقة بالزر أدناه قبل إعادة الدفع.');
          }
        }catch(_){
-         $('started').hidden=false;
-         $('pending-status').textContent='لا يمكن التأكد من الطلب السابق الآن؛ راجع حسابك قبل محاولة أخرى.';
-         $('check-pending').href='/store/account';
-         paymentOpen=true;
+         // Fail closed if the request might have succeeded but recovery is
+         // unavailable; a retry can otherwise charge twice.
+         pendingChecked=false;
+         $('retry-pending').hidden=false;
+         message('انقطع الاتصال أثناء تجهيز الدفع. لم ننشئ طلبًا ثانيًا؛ أعد فحص الطلبات السابقة قبل المحاولة.');
        }
+     }else{
+       message('تعذر بدء الدفع: '+err.message+'. لم يتم تأكيد أي خصم، ويمكنك المحاولة بعد مراجعة السلة.');
      }
-     message(err.message==='store_pending_checkout_exists'?
-       'تم منع إنشاء فاتورة جديدة لنفس السلة حفاظًا على أموالك. راجع الطلب السابق في حسابك.':
-       'تعذر إكمال الدفع: '+err.message+'. إذا سبق إنشاء الطلب لا تعِد الدفع قبل التحقق من حالته.');
    }finally{creating=false;updateCheckoutButton();}
  }
  function privateLink(){
