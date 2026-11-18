@@ -63,6 +63,8 @@ const deviceAdmin = createDeviceAdmin({ pool, json, readJson, requireAdmin, ensu
 const assets = new Map([
   ['/blofy-one.css', ['blofy-one.css', 'text/css']],
   ['/blofy-one.js', ['blofy-one.js', 'text/javascript']],
+  ['/blofy-one-customers.js', ['blofy-one-customers.js', 'text/javascript']],
+  ['/blofy-one-customers.css', ['blofy-one-customers.css', 'text/css']],
   ['/blofy-one-preview.js', ['blofy-one-preview.js', 'text/javascript']],
   ['/manifest.webmanifest', ['manifest.webmanifest', 'application/manifest+json']],
   ['/site-polish.css', ['site-polish.css', 'text/css']],
