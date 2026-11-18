@@ -310,7 +310,7 @@ open class PlayerActivity : ContentAccessActivity() {
                 val cause = session.player.playerError?.let(StreamConnectionDiagnostics::classify)
                 val detail = if (BuildConfig.CODE_ONLY_LOGIN &&
                     cause != null && cause != StreamConnectionDiagnostics.Cause.OTHER)
-                    StreamConnectionDiagnostics.guidance(cause)
+                    StreamConnectionDiagnostics.guidance(this@PlayerActivity, cause)
                 else getString(if (pendingNetworkRecovery) R.string.player_offline else R.string.player_retry_error)
                 showConnectionNotice(detail)
             }
@@ -1635,10 +1635,8 @@ open class PlayerActivity : ContentAccessActivity() {
                     if (isText) {
                         if (englishStreamUi) "No subtitles available" else "لا توجد ترجمات متاحة"
                     } else if (BuildConfig.CODE_ONLY_LOGIN) {
-                        StreamAudioHealth.inspect(
-                            session.player.currentTracks, session.player.volume,
-                            known = session.player.playbackState == Player.STATE_READY
-                        ).explanationFor(streamUiLanguage())
+                        if (englishStreamUi) "No additional audio available"
+                        else "لا توجد أصوات إضافية متاحة"
                     } else {
                         "لا توجد مسارات صوت إضافية"
                     }
@@ -1651,12 +1649,7 @@ open class PlayerActivity : ContentAccessActivity() {
                     showArabicAudioMenu()
                 }
             }
-            if (!isText && BuildConfig.CODE_ONLY_LOGIN) {
-                dialog.setNeutralButton(if (englishStreamUi) "Diagnose audio" else "تشخيص الصوت") { _, _ ->
-                    showStreamAudioDiagnostic()
-                }
-            }
-            dialog.show()
+             dialog.show()
             return
         }
 
@@ -1712,12 +1705,7 @@ open class PlayerActivity : ContentAccessActivity() {
                 dialog.dismiss()
             }
             .apply {
-                if (!isText && BuildConfig.CODE_ONLY_LOGIN) {
-                    setNeutralButton(if (englishStreamUi) "Diagnose audio" else "تشخيص الصوت") { _, _ ->
-                        showStreamAudioDiagnostic()
-                    }
-                }
-                if (allowArabicSidecar) {
+                 if (allowArabicSidecar) {
                     setNegativeButton(if (englishStreamUi) "BLOFY Arabic audio" else "صوتيات BLOFY العربية") { _, _ ->
                         showArabicAudioMenu()
                     }
@@ -1897,17 +1885,17 @@ open class PlayerActivity : ContentAccessActivity() {
                 if (!isFinishing && !sessionReleased) {
                     val reasonText = when (reason) {
                         StreamArabicAudioSession.FailureReason.UNSUPPORTED_FORMAT ->
-                            if (english) "Unsupported audio response (415). Try another voice."
-                            else "المصدر أرسل بيانات غير مدعومة (415). جرب معلقًا آخر."
+                            if (english) "This audio is not available. Try another."
+                            else "هذا الصوت غير متاح الآن. جرّب معلقًا آخر."
                         StreamArabicAudioSession.FailureReason.SOURCE_UNAVAILABLE ->
-                            if (english) "Commentary source is unavailable (502/503)."
-                            else "مصدر التعليق متعذر حاليًا (502/503)."
+                            if (english) "Commentary is unavailable right now."
+                            else "التعليق غير متاح حاليًا."
                         StreamArabicAudioSession.FailureReason.ACCESS_DENIED ->
-                            if (english) "Audio source denied access (401/403)."
-                            else "مصدر الصوت رفض الاتصال (401/403)."
+                            if (english) "This audio is not available right now."
+                            else "هذا الصوت غير متاح الآن."
                         StreamArabicAudioSession.FailureReason.BUSY ->
-                            if (english) "Source is busy (429). Try again later."
-                            else "مصدر الصوت مزدحم (429). جرب بعد قليل."
+                            if (english) "Please wait a moment and try again."
+                            else "انتظر قليلًا ثم جرّب مجددًا."
                         StreamArabicAudioSession.FailureReason.TIMEOUT ->
                             if (english) "Commentary did not start in time."
                             else "انتهت مهلة تشغيل التعليق العربي."
