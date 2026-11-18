@@ -1543,7 +1543,12 @@ async function flushCategoryBatch(serverId, mediaType, syncToken, batch) {
     FROM jsonb_to_recordset($3::jsonb) AS x(source_category_id text,name text,parent_id text,sort_order int,sync_token text)
     ON CONFLICT(server_id,media_type,source_category_id) DO UPDATE SET
       name=EXCLUDED.name,parent_id=EXCLUDED.parent_id,
-      sort_order=EXCLUDED.sort_order,sync_token=EXCLUDED.sync_token,updated_at=NOW()`,
+      sort_order=EXCLUDED.sort_order,sync_token=EXCLUDED.sync_token,
+       updated_at=CASE WHEN
+         (blofy_xtream_categories.name,blofy_xtream_categories.parent_id,
+          blofy_xtream_categories.sort_order) IS DISTINCT FROM
+         (EXCLUDED.name,EXCLUDED.parent_id,EXCLUDED.sort_order)
+       THEN NOW() ELSE blofy_xtream_categories.updated_at END`,
     [serverId, mediaType, JSON.stringify(payload)]);
   batch.length = 0;
 }
@@ -1575,7 +1580,18 @@ async function flushItemBatch(serverId, mediaType, syncToken, batch) {
           COALESCE(blofy_xtream_items.metadata->'sourceDetails','{}'::jsonb)) ||
         jsonb_build_object('tmdbDetails',
           COALESCE(blofy_xtream_items.metadata->'tmdbDetails','{}'::jsonb)),
-      sync_token=EXCLUDED.sync_token,updated_at=NOW()`,
+      sync_token=EXCLUDED.sync_token,
+       updated_at=CASE WHEN
+         (blofy_xtream_items.source_sort_order,blofy_xtream_items.category_id,
+          blofy_xtream_items.name,blofy_xtream_items.container_extension,
+          blofy_xtream_items.icon_url,
+          blofy_xtream_items.metadata - 'sourceDetails' - 'tmdbDetails') IS DISTINCT FROM
+         (EXCLUDED.source_sort_order,
+          COALESCE(blofy_xtream_items.custom_category_id,EXCLUDED.category_id),
+          EXCLUDED.name,EXCLUDED.container_extension,
+          COALESCE(NULLIF(EXCLUDED.icon_url,''),blofy_xtream_items.icon_url),
+          EXCLUDED.metadata)
+       THEN NOW() ELSE blofy_xtream_items.updated_at END`,
     [serverId, mediaType, JSON.stringify(payload)]);
   const progress=syncProgress.get(serverId);
   if(progress){progress.imported+=payload.length;progress.updatedAt=Date.now();}
@@ -1652,13 +1668,35 @@ async function finalizeTypeSync(serverId, mediaType, syncToken,{preserveCategori
   for(const table of preserveCategories?['blofy_xtream_items']:['blofy_xtream_items','blofy_xtream_categories']){
     for(;;){
       if(cancelledSources.has(serverId))throw Object.assign(new Error('xtream_sync_cancelled'),{status:409});
-      const result=await pool.query(`DELETE FROM ${table}
-        WHERE ctid IN (
-          SELECT ctid FROM ${table}
-          WHERE server_id=$1 AND media_type=$2
-            AND sync_token IS DISTINCT FROM $3
-          LIMIT 350
-        )`,[serverId,mediaType,syncToken]);
+      const client=await pool.connect();
+      let result;
+      try {
+        await client.query('BEGIN');
+        result=await client.query(`DELETE FROM ${table}
+          WHERE ctid IN (
+            SELECT ctid FROM ${table}
+            WHERE server_id=$1 AND media_type=$2
+              AND sync_token IS DISTINCT FROM $3
+            LIMIT 350
+          ) RETURNING ${table==='blofy_xtream_items'?'source_id':'source_category_id'} AS source_id`,
+          [serverId,mediaType,syncToken]);
+        if(table==='blofy_xtream_items' && result.rows.length) {
+          // The caller must never turn 404s into silent missing titles.
+          // Reuse stable gateway IDs through a removal journal. A stale,
+          // interrupted sync cannot publish until its source commits.
+          await client.query(`INSERT INTO blofy_xtream_catalog_removals
+            (source_id,media_type,source_item_id,removed_at)
+            SELECT $1::uuid,$2::text,x.source_id,NOW()
+            FROM jsonb_to_recordset($3::jsonb) AS x(source_id text)
+            ON CONFLICT(source_id,media_type,source_item_id)
+            DO UPDATE SET removed_at=NOW()`,
+            [serverId,mediaType,JSON.stringify(result.rows)]);
+        }
+        await client.query('COMMIT');
+      } catch(error) {
+        await client.query('ROLLBACK').catch(()=>{});
+        throw error;
+      } finally {client.release();}
       if(result.rowCount<350)break;
       await new Promise(resolve=>setTimeout(resolve,8));
     }

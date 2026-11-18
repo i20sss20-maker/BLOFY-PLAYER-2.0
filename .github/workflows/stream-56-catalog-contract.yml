@@ -1,0 +1,34 @@
+name: BLOFY STREAM 56 Catalog Delta Contract
+on:
+  pull_request:
+    paths:
+      - 'services/activation/src/xtream-catalog-*.mjs'
+      - 'services/activation/src/xtream-admin-hook.mjs'
+      - 'services/activation/src/xtream-gateway-hook.mjs'
+      - 'services/activation/test/xtream-catalog-delta.test.mjs'
+      - '.github/workflows/stream-56-catalog-contract.yml'
+  workflow_dispatch:
+jobs:
+  delta-contract:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Compile isolated delta server routes
+        run: |
+          node --check services/activation/src/xtream-catalog-revision.mjs
+          node --check services/activation/src/xtream-catalog-delta.mjs
+          node --check services/activation/src/xtream-admin-hook.mjs
+          node --check services/activation/src/xtream-gateway-hook.mjs
+      - name: Unit regression and source isolation contract
+        working-directory: services/activation
+        run: |
+          node --test \
+            test/xtream-catalog-delta.test.mjs \
+            test/xtream-autosync-revision.test.mjs \
+            test/xtream-selected-source-sync.test.mjs
