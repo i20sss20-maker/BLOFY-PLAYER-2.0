@@ -16,8 +16,8 @@
 <script src="/blofy-one-legacy.js?v=20261118-v1" defer></script>
 <link rel="stylesheet" href="/blofy-one-stream.css?v=20261118-v1">
 <script src="/blofy-one-stream.js?v=20261118-v1" defer></script>
-<link rel="stylesheet" href="/blofy-one-stream.css?v=20261118-v1">
-<script src="/blofy-one-stream.js?v=20261118-v1" defer></script>
+<link rel="stylesheet" href="/blofy-one-operations.css?v=20261118-v1">
+<script src="/blofy-one-operations.js?v=20261118-v1" defer></script>
 </head>
 <body>
 <div class="one-shell">
@@ -29,17 +29,17 @@
     <a href="#stream-management"><span aria-hidden="true">▤</span> حسابات Xtream وأكواد STREAM</a>
     <a href="/sources-admin#dual"><span aria-hidden="true">▣</span> أدوات التحويل المتقدمة</a>
     <a href="/admin/control-center"><span aria-hidden="true">◎</span> لوحة STREAM الكاملة</a>
-    <a href="/admin/content-hub"><span aria-hidden="true">▦</span> التخزين والتنزيلات</a>
+    <a href="#one-storage"><span aria-hidden="true">▦</span> التخزين والتنزيلات</a>
     <a href="/admin/control-center/health"><span aria-hidden="true">●</span> مراقبة السيرفرات</a>
     <a href="#one-sales"><span aria-hidden="true">◫</span> المدفوعات المسجلة</a>
-    <a href="/distributor"><span aria-hidden="true">♙</span> لوحة الموزع</a>
+    <a href="#one-distributors"><span aria-hidden="true">♙</span> الموزعون والتوزيع</a>
     <a href="#stream-management"><span aria-hidden="true">◎</span> مشتركو STREAM وXtream</a>
-    <a href="/sources-admin#xtream"><span aria-hidden="true">▤</span> المصادر المتقدمة</a>
+    <a href="#one-sources"><span aria-hidden="true">▤</span> المصادر وحالتها</a>
     <a href="/sources-admin#catalog"><span aria-hidden="true">▦</span> مكتبة المحتوى</a>
     <a href="/admin#codes"><span aria-hidden="true">⌁</span> أكواد الاشتراك</a>
     <a href="#customers"><span aria-hidden="true">▣</span> العملاء والاشتراكات</a>
     <a href="/admin#devices"><span aria-hidden="true">◩</span> إدارة الأجهزة المتقدمة</a>
-    <a href="/admin#releases"><span aria-hidden="true">⇩</span> إصدارات التطبيق</a>
+    <a href="#one-releases"><span aria-hidden="true">⇩</span> إصدارات التطبيق</a>
     <a href="/admin#support"><span aria-hidden="true">◌</span> الدعم والعملاء</a>
   </nav>
   <div class="one-rail-bottom">
@@ -78,7 +78,7 @@
       <a href="#customers"><b aria-hidden="true">▣</b><strong>العملاء والأجهزة</strong><small>بحث وبيانات وتجديد</small></a>
       <a href="#legacy-xtream"><b aria-hidden="true">⇄</b><strong>كود BLOFY ↔ Xtream</strong><small>الكود الجديد أو القديم</small></a>
       <a href="#stream-management"><b aria-hidden="true">◈</b><strong>حسابات Xtream</strong><small>إدارة فعلية داخل BLOFY ONE</small></a>
-      <a href="/admin/content-hub"><b aria-hidden="true">▦</b><strong>التخزين والنقل</strong><small>المكتبة وملفات المحتوى</small></a>
+      <a href="#one-storage"><b aria-hidden="true">▦</b><strong>التخزين والنقل</strong><small>عرض مباشر لحالة المكتبة</small></a>
     </div>
   </section>
     <section id="customers" class="one-overview one-customers" aria-labelledby="one-customers-title">
@@ -311,6 +311,75 @@
       </div>
     </div>
   </section>
+<section class="one-overview one-ops" id="one-sources" aria-labelledby="one-sources-title">
+  <div class="one-section-heading"><div><span class="one-kicker">SOURCE OPERATIONS · LIVE DATABASE</span>
+    <h2 id="one-sources-title">المصادر والمزامنة</h2></div>
+    <div class="one-ops-header-actions"><button type="button" id="one-sources-refresh">↻ تحديث</button>
+      <a href="/sources-admin#xtream">إدارة المصدر المتقدمة ←</a></div></div>
+  <p class="one-footnote">يعرض بيانات مصادر Xtream الموجودة في BLOFY حاليًا دون كشف روابط Host الأصلية أو كلمات مرور المصادر. فحص الاتصال لا يعني أن جميع القنوات تعمل.</p>
+  <div class="one-ops-stats">
+    <article><span>مصادر مسجلة</span><strong id="one-src-total">—</strong></article>
+    <article><span>مصادر مفعّلة</span><strong id="one-src-active">—</strong></article>
+    <article><span>تنشر مكتبتها</span><strong id="one-src-published">—</strong></article>
+    <article><span>مصادر عليها تنبيهات</span><strong id="one-src-alerts">—</strong></article>
+  </div>
+  <label class="one-ops-search">بحث عن مصدر <input id="one-sources-search" type="search" autocomplete="off" maxlength="90" placeholder="اسم المصدر"></label>
+  <p id="one-sources-status" class="one-ops-status" role="status" aria-live="polite">جارٍ قراءة قائمة المصادر…</p>
+  <div class="one-ops-table-scroller" role="region" aria-label="قائمة المصادر" tabindex="0">
+    <table class="one-ops-table"><thead><tr><th>المصدر</th><th>الحالة</th><th>النشر</th><th>آخر مزامنة</th><th>فحص المصدر</th></tr></thead>
+      <tbody id="one-sources-rows"><tr><td colspan="5">جارٍ التحقق…</td></tr></tbody></table>
+  </div>
+</section>
+<section class="one-overview one-ops" id="one-storage" aria-labelledby="one-storage-title">
+  <div class="one-section-heading"><div><span class="one-kicker">CONTENT HUB · PRIVATE STORAGE</span>
+    <h2 id="one-storage-title">التخزين والتنزيلات والمواسم</h2></div>
+    <div class="one-ops-header-actions"><button type="button" id="one-storage-refresh">↻ تحديث</button>
+      <a href="/admin/content-hub">إدارة النقل المتقدمة ←</a></div></div>
+  <p class="one-footnote">فحص مباشر للتهيئة والتخزين والطابور الداخلي. لا يبدأ هذا القسم تنزيلًا أو نقلًا تلقائيًا، ولا يختبر ملكية حقوق المحتوى.</p>
+  <div class="one-ops-stats">
+    <article><span>قاعدة بيانات Content Hub</span><strong id="one-hub-database">—</strong></article>
+    <article><span>وصول التخزين الخاص</span><strong id="one-hub-bucket">—</strong></article>
+    <article><span>عملية نقل جارية</span><strong id="one-hub-pilot">—</strong></article>
+    <article><span>تشغيل النقل المجزأ</span><strong id="one-hub-batch">—</strong></article>
+  </div>
+  <p id="one-storage-status" class="one-ops-status" role="status" aria-live="polite">جارٍ قراءة حالة Content Hub…</p>
+  <h3 class="one-ops-subhead">آخر المهام المسجلة</h3>
+  <div id="one-hub-runs" class="one-ops-rows" aria-live="polite"></div>
+</section>
+<section class="one-overview one-ops" id="one-distributors" aria-labelledby="one-distributors-title">
+  <div class="one-section-heading"><div><span class="one-kicker">DISTRIBUTORS · STREAM SERVICE</span>
+    <h2 id="one-distributors-title">الموزعون وحسابات التوزيع</h2></div>
+    <div class="one-ops-header-actions"><button type="button" id="one-distributors-refresh">↻ تحديث</button>
+      <a href="/admin/control-center">إدارة الموزعين المتقدمة ←</a></div></div>
+  <p class="one-footnote">تعرض البيانات التي تسمح بها واجهة مشرف STREAM المحمية. لوحة الموزع لها صلاحيات دخول مستقلة؛ لا تُعرض كلمات المرور أو بيانات الدخول هنا.</p>
+  <div class="one-ops-stats one-ops-two">
+    <article><span>عدد الموزعين الظاهرين</span><strong id="one-dist-total">—</strong></article>
+    <article><span>موزعون مفعّلون</span><strong id="one-dist-active">—</strong></article>
+  </div>
+  <label class="one-ops-search">بحث عن موزع <input id="one-distributors-search" type="search" autocomplete="off" maxlength="90" placeholder="الاسم أو المستخدم"></label>
+  <p id="one-distributors-status" class="one-ops-status" role="status" aria-live="polite">جارٍ التحقق من سجل الموزعين…</p>
+  <div class="one-ops-table-scroller" role="region" aria-label="قائمة الموزعين" tabindex="0">
+    <table class="one-ops-table"><thead><tr><th>الموزع</th><th>اسم المستخدم</th><th>الحالة</th><th>الرصيد المتاح</th></tr></thead>
+    <tbody id="one-distributors-rows"><tr><td colspan="4">جارٍ التحقق…</td></tr></tbody></table>
+  </div>
+</section>
+<section class="one-overview one-ops" id="one-releases" aria-labelledby="one-releases-title">
+  <div class="one-section-heading"><div><span class="one-kicker">APP DISTRIBUTION · REAL RELEASE CATALOG</span>
+    <h2 id="one-releases-title">الإصدارات والتحديثات</h2></div>
+    <div class="one-ops-header-actions"><button type="button" id="one-releases-refresh">↻ تحديث</button>
+      <a href="/admin#releases">التحكم المتقدم بالإصدارات ←</a></div></div>
+  <p class="one-footnote">الإصدارات الموجودة في كتالوج BLOFY PLAYER الفعلي، وليست نسخًا مولّدة من اللوحة. تغيير الإصدار الأساسي يؤثر على روابط التحديث؛ يتم فقط بعد تأكيد صريح والتحقق الخارجي من توقيع APK.</p>
+  <div class="one-ops-stats one-ops-two">
+    <article><span>الإصدار الأساسي المسجّل</span><strong id="one-release-primary">—</strong></article>
+    <article><span>الإصدارات في الكتالوج</span><strong id="one-release-count">—</strong></article>
+  </div>
+  <p id="one-releases-status" class="one-ops-status" role="status" aria-live="polite">جارٍ قراءة سجل الإصدارات…</p>
+  <div class="one-ops-table-scroller" role="region" aria-label="الإصدارات المنشورة" tabindex="0">
+    <table class="one-ops-table"><thead><tr><th>اسم الإصدار</th><th>رقم البناء</th><th>القناة</th><th>الحالة</th><th>إدارة</th></tr></thead>
+    <tbody id="one-releases-rows"><tr><td colspan="5">جارٍ تحميل الإصدارات…</td></tr></tbody></table>
+  </div>
+  <p class="one-footnote">الاختيار «اعتماد أساسي» سيغيّر الإصدار الذي يعرضه الكتالوج؛ لا يرفع APK أو يثبت توقيعه. لا يؤثر في اشتراكات العملاء، لكن قد يؤثر في التحديثات المتاحة لهم.</p>
+</section>
   <section class="one-overview" aria-labelledby="health-title">
     <div class="one-section-heading">
       <div><span class="one-kicker">PRODUCTION HEALTH</span><h2 id="health-title">حالة المنصة الآن</h2></div>
@@ -362,11 +431,11 @@
       <a class="one-module" href="#stream-management"><span class="one-icon">▤</span><span class="one-module-text"><strong>حسابات Xtream وأكواد STREAM</strong><small>عرض المشتركين والأكواد واستخراج الكود من الحساب مباشرة</small></span><span class="one-arrow">↖</span></a>
       <a class="one-module" href="/admin#codes"><span class="one-icon">⌁</span><span class="one-module-text"><strong>أكواد الاشتراك</strong><small>إنشاء الكود، ربط المصدر، التجديد والإلغاء</small></span><span class="one-arrow">↖</span></a>
       <a class="one-module" href="/admin#devices"><span class="one-icon">▣</span><span class="one-module-text"><strong>تفعيل BLOFY PLAYER</strong><small>إدارة الأجهزة، أرقام التواصل وصلاحيات التفعيل</small></span><span class="one-arrow">↖</span></a>
-      <a class="one-module" href="/sources-admin#catalog"><span class="one-icon">▦</span><span class="one-module-text"><strong>مكتبة القنوات والأفلام</strong><small>المحتوى المفهرس والفئات وأدوات الإدارة</small></span><span class="one-arrow">↖</span></a>
-      <a class="one-module" href="/admin#releases"><span class="one-icon">⇩</span><span class="one-module-text"><strong>الإصدارات والتحديثات</strong><small>نسخ التطبيق المعتمدة وتحديث العملاء</small></span><span class="one-arrow">↖</span></a>
+      <a class="one-module" href="#one-sources"><span class="one-icon">▦</span><span class="one-module-text"><strong>مصادر Xtream ومكتبة القنوات</strong><small>إحصائيات المصادر وحالات المزامنة داخل BLOFY ONE</small></span><span class="one-arrow">↖</span></a>
+      <a class="one-module" href="#one-releases"><span class="one-icon">⇩</span><span class="one-module-text"><strong>الإصدارات والتحديثات</strong><small>إصدارات التطبيق الفعلية داخل BLOFY ONE</small></span><span class="one-arrow">↖</span></a>
       <a class="one-module" href="/admin#support"><span class="one-icon">◌</span><span class="one-module-text"><strong>الدعم والعملاء</strong><small>الطلبات، البحث عن الأجهزة وسجل العملاء</small></span><span class="one-arrow">↖</span></a>
-      <a class="one-module" href="/admin/content-hub"><span class="one-icon">▦</span><span class="one-module-text"><strong>Content Hub والتخزين</strong><small>التنزيل والنقل والمواسم وحالة الملفات</small></span><span class="one-arrow">↖</span></a>
-      <a class="one-module" href="/distributor"><span class="one-icon">♙</span><span class="one-module-text"><strong>الموزعون</strong><small>لوحة الموزع والأكواد والتوزيع ضمن الصلاحيات</small></span><span class="one-arrow">↖</span></a>
+      <a class="one-module" href="#one-storage"><span class="one-icon">▦</span><span class="one-module-text"><strong>Content Hub والتخزين</strong><small>التنزيل والنقل والمواسم وحالة الملفات</small></span><span class="one-arrow">↖</span></a>
+      <a class="one-module" href="#one-distributors"><span class="one-icon">♙</span><span class="one-module-text"><strong>الموزعون</strong><small>سجل الموزعين الحي داخل BLOFY ONE</small></span><span class="one-arrow">↖</span></a>
       <a class="one-module" href="/admin/control-center/health"><span class="one-icon">●</span><span class="one-module-text"><strong>مراقبة الخدمات</strong><small>الفحوصات والتحقق من اتصال الأنظمة</small></span><span class="one-arrow">↖</span></a>
       <a class="one-module" href="#one-sales"><span class="one-icon">◫</span><span class="one-module-text"><strong>تقارير المدفوعات المسجلة</strong><small>طلبات تفعيل BLOFY PLAYER المدفوعة والمنتظرة والمسجلة فقط</small></span><span class="one-arrow">↖</span></a>
       <a class="one-module" href="https://updates.blofyplayer.com/downloads" target="_blank" rel="noopener noreferrer"><span class="one-icon">↓</span><span class="one-module-text"><strong>مركز تحميل التطبيقات</strong><small>صفحة تنزيل التطبيقات والنسخ المنشورة</small></span><span class="one-arrow">↖</span></a>
