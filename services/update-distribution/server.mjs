@@ -19,6 +19,7 @@ import { publicSiteRedirect } from './public-site-redirect.mjs';
 import { streamReleaseMetadata, STREAM_RELEASE_FILENAME, STREAM_PREVIOUS_RELEASE_FILENAME, STREAM_TEST_FILENAME, STREAM_TEST_PATH } from './stream-release.mjs';
 import { createReleaseFeedCache, PUBLIC_STREAM_RELEASE_CACHE_CONTROL } from './release-feed-cache.mjs';
 import { installGracefulShutdown } from './graceful-shutdown.mjs';
+import { apkRangePolicy, apkCacheControl } from './apk-range-policy.mjs';
 import { verifySignedStreamUploadOidc, approvedStreamUpload, STREAM_55836_APK, STREAM_56_APK } from './stream-upload-oidc.mjs';
 import { UPDATE_SITE_CANONICAL, updateRobotsTxt, updateSitemapXml, renderMissingPublicPage, isPublicHtmlRequest } from './public-search-pages.mjs';
 
@@ -118,40 +119,26 @@ async function streamLocalApk(req, res, filename, downloadName, metricKey) {
   const filePath = localReleasePath(filename);
   const info = await stat(filePath);
   const total = info.size;
-  const rawRange = String(req.headers.range || '').trim();
-  let start = 0;
-  let end = total - 1;
-  let status = 200;
-  if (rawRange) {
-    const match = rawRange.match(/^bytes=(\d*)-(\d*)$/);
-    if (!match) {
-      res.writeHead(416, { ...securityHeaders, 'content-range': `bytes */${total}` });
-      return res.end();
-    }
-    if (match[1]) start = Number(match[1]);
-    if (match[2]) end = Number(match[2]);
-    if (!match[1] && match[2]) {
-      const suffix = Number(match[2]);
-      start = Math.max(0, total - suffix);
-      end = total - 1;
-    }
-    if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end < start || start >= total) {
-      res.writeHead(416, { ...securityHeaders, 'content-range': `bytes */${total}` });
-      return res.end();
-    }
-    end = Math.min(end, total - 1);
-    status = 206;
+  const policy = apkRangePolicy(String(req.headers.range || '').trim(), total);
+  if (policy.status === 416) {
+    res.writeHead(416, {
+      ...securityHeaders,
+      'content-range': policy.contentRange,
+      'accept-ranges': 'bytes',
+      'cache-control': apkCacheControl(416)
+    });
+    return res.end();
   }
-  const length = end - start + 1;
+  const {start, end, length, status} = policy;
   const headers = {
     ...securityHeaders,
     'content-type': 'application/vnd.android.package-archive',
     'content-disposition': `attachment; filename="${safeApkFilename(downloadName)}"`,
     'content-length': String(length),
     'accept-ranges': 'bytes',
-    'cache-control': 'public, max-age=300'
+    'cache-control': apkCacheControl(status)
   };
-  if (status === 206) headers['content-range'] = `bytes ${start}-${end}/${total}`;
+  if (status === 206) headers['content-range'] = policy.contentRange;
   res.writeHead(status, headers);
   if (req.method === 'HEAD') return res.end();
   const body = createReadStream(filePath, { start, end });
