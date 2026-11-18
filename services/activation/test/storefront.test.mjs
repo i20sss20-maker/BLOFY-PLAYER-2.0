@@ -42,7 +42,7 @@ test('Scripts compile, and subscriber UI injection leaves storefront untouched',
 });
 test('Store uses one blue brand system, original product artwork, trial and detail pages',()=>{
  const css=readFileSync(new URL('../web/store-premium.css',import.meta.url),'utf8');
- assert.match(html,/href="\/store\/design\.css\?v=5"/);
+ assert.match(html,/href="\/store\/design\.css\?v=6"/);
  assert.match(css,/font-family:"BLOFY Arabic"/);
  assert.match(css,/IBMPlexSansArabic-Regular\.ttf/);
  assert.match(css,/--night:#050b18/);
@@ -129,18 +129,38 @@ test('STRONG 8K figures, separated product benefits and original banners are dis
  assert.match(html,/اشتراك <span dir="ltr">STRONG 8K<\/span>/);
  assert.match(html,/50,000\+/);
  assert.match(html,/185,000\+/);
- assert.match(html,/strong-stat/);
+ assert.match(html,/class="visual-hero"/);
+ assert.match(html,/class="visual-feature-grid"/);
  assert.match(html,/\/store\/media\/strong8k\.svg/);
  assert.match(html,/\/store\/media\/player\.svg/);
  assert.match(html,/BLOFY PLAYER/);
- assert.match(html,/المسلسلات مرتبة حسب المواسم والحلقات/);
- assert.match(html,/البحث داخل المحتوى والوصول إلى المفضلة/);
- assert.match(html,/التنزيلات والمساعدة الذكية في الإصدارات التي تدعمهما/);
- assert.match(html,/وليست نتيجة فحص مستقل/);
+ assert.match(html,/تنقل منظم بين المواسم والحلقات/);
+ assert.match(html,/بحث داخل مكتبة المحتوى والمفضلة/);
+ assert.match(html,/التنزيلات والمساعدة الذكية في الإصدارات التي تدعمها/);
+ assert.match(html,/غير مدققة بشكل مستقل/);
  assert.match(premium,/\.campaign-banner/);
  assert.match(premium,/\.benefit-panels/);
  assert.match(server,/store-strong8k-banner\.svg/);
  assert.match(server,/store-player-banner\.svg/);
  assert.match(info,/STRONG 8K/);
  assert.doesNotMatch(html,/دقة عرض 8K لجميع/);
+});
+
+test('Image-first storefront presents banners above checkout and keeps text secondary',()=>{
+ const firstBanner=html.indexOf('class="visual-hero"');
+ const productStart=html.indexOf('id="products"');
+ const featureGallery=html.indexOf('class="visual-feature-grid"');
+ assert.ok(firstBanner>0&&firstBanner<productStart,'lead banner must appear before products');
+ assert.ok(featureGallery>productStart,'feature imagery follows product cards');
+ assert.match(html,/src="\/store\/media\/strong8k\.svg"[^>]*fetchpriority="high"/);
+ assert.ok((html.match(/src="\/store\/media\/strong8k\.svg"/g)||[]).length>=2);
+ assert.ok((html.match(/src="\/store\/media\/player\.svg"/g)||[]).length>=2);
+ assert.equal((html.match(/<article class="product"/g)||[]).length,2);
+ assert.match(html,/class="product-features"/);
+ assert.match(html,/class="more-benefits"/);
+ assert.match(html,/data-duration="stream"/);
+ assert.match(html,/data-duration="xtream"/);
+ assert.match(html,/data-buy="stream"/);
+ assert.match(html,/data-buy="xtream"/);
+ assert.match(html,/id="store-receipt"/);
 });
