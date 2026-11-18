@@ -331,6 +331,38 @@ async function serveStoreOfferScript(res) {
   });res.end(file);
 }
 
+async function serveCartPage(res,kind){
+  const name=kind==='cart'?'store-cart.html':'store-orders.html';
+  const source=await readFile(new URL('../web/'+name,import.meta.url),'utf8');
+  const html=kind==='cart'?withPublicAnalytics(source):source;
+  const file=Buffer.from(html,'utf8');
+  res.writeHead(200,{
+    'content-type':'text/html; charset=utf-8',
+    'content-length':file.length,
+    'cache-control':'no-store',
+    'x-content-type-options':'nosniff',
+    'x-frame-options':'DENY',
+    'referrer-policy':'no-referrer',
+    'strict-transport-security':'max-age=31536000',
+    'content-security-policy':kind==='cart'?PUBLIC_ANALYTICS_CSP:
+      "default-src 'self'; style-src 'self'; font-src 'self'; script-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'"
+  });res.end(file);
+}
+async function serveCartAsset(res,name){
+  const entries={
+    'cart.css':['store-cart.css','text/css; charset=utf-8'],
+    'cart.js':['store-cart.js','application/javascript; charset=utf-8'],
+    'order-tracking.js':['store-order-tracking.js','application/javascript; charset=utf-8']
+  };
+  const asset=entries[name];
+  if(!asset)return;
+  const file=await readFile(new URL('../web/'+asset[0],import.meta.url));
+  res.writeHead(200,{
+    'content-type':asset[1],'content-length':file.length,
+    'cache-control':'public, max-age=1800',
+    'x-content-type-options':'nosniff'
+  });res.end(file);
+}
 async function serveStoreDesign(res) {
   const file=await readFile(new URL('../web/store-premium.css',import.meta.url));
   res.writeHead(200,{
@@ -930,6 +962,13 @@ const server = http.createServer(async (req, res) => {
     if (await siteAnalytics(req,res,requestUrl)) return;
     if (await servePrivacyPage(req, res, requestUrl)) return;
     if (['GET', 'HEAD'].includes(req.method) && (requestUrl.pathname === '/' || requestUrl.pathname === '/shop' || requestUrl.pathname === '/shop/')) return await serveStorefront(res);
+    if(['GET','HEAD'].includes(req.method)&&['/store/cart','/store/cart/'].includes(requestUrl.pathname))
+      return await serveCartPage(res,'cart');
+    if(['GET','HEAD'].includes(req.method)&&['/store/orders','/store/orders/'].includes(requestUrl.pathname))
+      return await serveCartPage(res,'orders');
+    if(['GET','HEAD'].includes(req.method)&&
+       ['/store/cart.css','/store/cart.js','/store/order-tracking.js'].includes(requestUrl.pathname))
+      return await serveCartAsset(res,requestUrl.pathname.slice('/store/'.length));
     if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/offers.js')
       return await serveStoreOfferScript(res);
     if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/design.css')

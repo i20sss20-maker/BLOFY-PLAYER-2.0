@@ -3,7 +3,7 @@
   'use strict';
   var measurementId = 'G-2DYE5WB8BT';
   var preferenceKey = 'blofy.analytics.consent.v1';
-  var publicPaths = ['/', '/shop', '/shop/', '/guide', '/guide/', '/support', '/support/', '/downloads', '/downloads/', '/releases', '/releases/', '/en', '/en/', '/es', '/es/', '/fr', '/fr/', '/products/stream', '/products/xtream', '/store/offers', '/store/offers/', '/store/trial', '/store/trial/', '/store/about', '/store/about/', '/store/faq', '/store/faq/', '/store/contact', '/store/contact/', '/store/terms', '/store/terms/'];
+  var publicPaths = ['/', '/shop', '/shop/', '/guide', '/guide/', '/support', '/support/', '/downloads', '/downloads/', '/releases', '/releases/', '/en', '/en/', '/es', '/es/', '/fr', '/fr/', '/products/stream', '/products/xtream', '/store/offers', '/store/offers/', '/store/cart', '/store/cart/', '/store/trial', '/store/trial/', '/store/about', '/store/about/', '/store/faq', '/store/faq/', '/store/contact', '/store/contact/', '/store/terms', '/store/terms/'];
   if (publicPaths.indexOf(window.location.pathname) === -1) return;
 
   var active = false;
@@ -157,7 +157,8 @@
     else if(eventName==='apk_download_click'||eventName==='downloads_page_click')sendFirstParty('download_click');
     var targetPath=href.split('?')[0].split('#')[0];
     if(targetPath.endsWith('/')&&targetPath!=='/')targetPath=targetPath.slice(0,-1);
-    if(targetPath==='/store/offers')sendFirstParty('offer_click');
+    if(targetPath==='/store/cart'&&href.indexOf('add=')!==-1)sendFirstParty('cart_add');
+    else if(targetPath==='/store/offers')sendFirstParty('offer_click');
     else if(targetPath==='/products/stream'||targetPath==='/products/xtream')sendFirstParty('product_click');
     else if(targetPath==='/store/trial')sendFirstParty('trial_click');
     // Device identifiers, credentials, URL parameters and form values are never forwarded.

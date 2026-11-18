@@ -74,5 +74,41 @@ $('coupon-create').addEventListener('click',async function(){
  }catch(e){$('sales-notice').textContent='تعذر إنشاء الكوبون: '+e.message;}
  finally{this.disabled=false;}
 });
-reload().then(()=>reloadSales()).catch(e=>status('تعذر تحميل بيانات المتجر: '+e.message));
+async function reloadOrders(){
+ const filter=$('order-filter').value;
+ const response=await fetch('/api/v1/admin/store/orders?status='+encodeURIComponent(filter),
+   {cache:'no-store',credentials:'same-origin',headers:{accept:'application/json'}});
+ const data=await response.json().catch(()=>({}));
+ if(!response.ok)throw Error(data.error||'orders_unavailable');
+ const root=$('admin-orders');root.replaceChildren();
+ if(!data.orders?.length){root.textContent='ما توجد طلبات بهذه الحالة حاليًا.';return;}
+ const statuses={paid:'مدفوع ✓',pending:'قيد الدفع',failed:'فشل الدفع',cancelled:'ملغي'};
+ for(const order of data.orders){
+   const article=document.createElement('article');article.className='order-card';
+   const head=document.createElement('div');head.className='order-card-head';
+   const id=document.createElement('strong');id.textContent=order.order_number;
+   const state=document.createElement('span');state.textContent=statuses[order.status]||order.status;
+   state.className='order-state '+order.status;head.append(id,state);
+   const details=document.createElement('div');details.className='order-card-details';
+   const desc=document.createElement('span');desc.textContent=order.sku==='cart'
+     ?'سلة متعددة المنتجات':order.sku==='bundle-2y'?'عرض اشتراكين سنويين':
+     (plans.find(p=>p.sku===order.sku)?.name||order.sku);
+   const price=document.createElement('b');price.textContent=(Number(order.amount_minor)/100)+' ر.س';
+   const date=document.createElement('small');date.textContent=new Date(order.created_at).toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'});
+   details.append(desc,price,date);article.append(head,details);
+   if(order.sku==='cart'&&Array.isArray(order.cart_items)){
+     const breakdown=document.createElement('div');breakdown.className='order-breakdown';
+     for(const line of order.cart_items){
+       const text=document.createElement('span');text.textContent=(line.name||line.sku)+' × '+line.quantity;
+       breakdown.append(text);
+     }
+     article.append(breakdown);
+   }
+   root.append(article);
+ }
+}
+$('order-filter').addEventListener('change',()=>void reloadOrders().catch(err=>{status('فشل تحميل الطلبات: '+err.message);}));
+$('order-refresh').addEventListener('click',()=>void reloadOrders().catch(err=>{status('فشل تحميل الطلبات: '+err.message);}));
+
+reload().then(()=>Promise.all([reloadSales(),reloadOrders()])).catch(e=>status('تعذر تحميل بيانات المتجر: '+e.message));
 })();
