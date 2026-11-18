@@ -558,10 +558,7 @@ class SettingsActivity : AppCompatActivity() {
         val device = StreamDeviceCompatibility.current(this)
         val kind = getString(if (device.television) R.string.stream_ui_device_tv
             else R.string.stream_ui_device_mobile)
-        val memory = getString(if (device.lowMemory) R.string.stream_ui_memory_low
-            else R.string.stream_ui_memory_normal)
-        val info = getString(R.string.stream_ui_compat_details, device.sdk,
-            kind, memory, device.maxCatalogRequestsPerHost)
+        val info = getString(R.string.stream_ui_compat_details, kind)
         val dialog = AlertDialog.Builder(this)
             .setTitle(getString(R.string.stream_ui_compat_title))
             .setMessage(info + "\n" + getString(R.string.stream_ui_compat_checking))
