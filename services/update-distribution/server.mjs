@@ -20,6 +20,7 @@ import { streamReleaseMetadata, STREAM_RELEASE_FILENAME, STREAM_PREVIOUS_RELEASE
 import { createReleaseFeedCache, PUBLIC_STREAM_RELEASE_CACHE_CONTROL } from './release-feed-cache.mjs';
 import { installGracefulShutdown } from './graceful-shutdown.mjs';
 import { apkRangePolicy, apkCacheControl } from './apk-range-policy.mjs';
+import { createSignedApkMirror } from './signed-apk-mirror.mjs';
 import { verifySignedStreamUploadOidc, approvedStreamUpload, STREAM_55836_APK, STREAM_56_APK } from './stream-upload-oidc.mjs';
 import { UPDATE_SITE_CANONICAL, updateRobotsTxt, updateSitemapXml, renderMissingPublicPage, isPublicHtmlRequest } from './public-search-pages.mjs';
 
@@ -63,6 +64,7 @@ const securityHeaders = Object.freeze({
 });
 
 const publicStreamReleaseFeed = createReleaseFeedCache();
+const signedApkMirror = createSignedApkMirror();
 function sendJson(req, res, status, value, extraHeaders = {}) {
   const body = JSON.stringify(value);
   res.writeHead(status, {
@@ -273,6 +275,11 @@ async function receiveReleaseUpload(req, res, requestUrl) {
   }
   await rename(tempPath, finalPath);
   const info = await stat(finalPath);
+  // Verified OIDC owner-signed STREAM releases are mirrored privately.
+  // Never delay an installer upload response for optional S3 backup.
+  if (approvedStream) {
+    void signedApkMirror.sync().catch(() => {});
+  }
   return sendJson(req, res, 201, { ok: true, filename, size: info.size });
 }
 
@@ -1105,6 +1112,11 @@ const server = http.createServer(async (req, res) => {
         : sendJson(req, res, 404, { ok: false, error: 'stream_release_not_published' });
     }
 
+    if (pathname === '/health/apk-mirror') {
+      // Admin-only, read-only readiness; no S3 secrets, object keys or URLs.
+      if (!requireAdmin(req, res, securityHeaders)) return;
+      return sendJson(req, res, 200, signedApkMirror.status());
+    }
     if (pathname === '/health' || pathname === '/release.json') return sendJson(req, res, 200, healthPayload());
 
     if (pathname === '/tv' || pathname === '/tv/') {
@@ -1251,9 +1263,23 @@ await importReleaseArtifactIfConfigured({
   console.error('STREAM NEXT artifact import failed:', error?.message || error);
 });
 let stopScheduledRefresh = () => {};
+let mirrorTimer = null;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`BLOFY Azure update distribution listening on ${PORT}`);
   stopScheduledRefresh = scheduleManagedAppRefresh();
+  // Best-effort background backup, after readiness. It is never an
+  // importer/host cutover and cannot block health or customer downloads.
+  mirrorTimer = setTimeout(() => {
+    mirrorTimer = null;
+    void signedApkMirror.sync().then(snapshot => {
+      console.info('BLOFY_SIGNED_APK_BACKUP', JSON.stringify(snapshot));
+    }).catch(() => {
+      console.warn('BLOFY_SIGNED_APK_BACKUP', JSON.stringify({
+        ok:false,code:'mirror_worker_failed'
+      }));
+    });
+  }, 30000);
+  mirrorTimer.unref?.();
 });
 // Railway has a 120s draining window for the single-volume download service.
 // On replacement, preserve active APK HTTP responses for <=105s, rather than
@@ -1262,7 +1288,10 @@ server.listen(PORT, '0.0.0.0', () => {
 installGracefulShutdown({
   server,
   drainMs:105_000,
-  stopJobs:()=>stopScheduledRefresh(),
+  stopJobs:()=>{
+    stopScheduledRefresh();
+    if (mirrorTimer) { clearTimeout(mirrorTimer); mirrorTimer = null; }
+  },
   closeResources:async()=>{
     const results=await Promise.allSettled([
       closeReleaseStore(),closeAppLibrary()
