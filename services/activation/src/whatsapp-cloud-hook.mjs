@@ -139,7 +139,14 @@ export function createWhatsAppCloudHandlers({
       "UPDATE blofy_whatsapp_cloud_receipts SET status='processing',"+
       "attempts=attempts+1,updated_at=NOW() WHERE proof=$1 AND status='failed'"+
       " AND attempts<3 AND updated_at<NOW()-INTERVAL '5 seconds' RETURNING proof",[proof]);
-    return resumed.rowCount===1?proof:null;
+    if(resumed.rowCount===1)return proof;
+    // If a worker crashed mid-send, a message can be retried after two
+    // minutes. Concurrent workers remain protected by the atomic row update.
+    const abandoned=await pool.query(
+      "UPDATE blofy_whatsapp_cloud_receipts SET status='processing',"+
+      "attempts=attempts+1,updated_at=NOW() WHERE proof=$1 AND status='processing'"+
+      " AND attempts<3 AND updated_at<NOW()-INTERVAL '2 minutes' RETURNING proof",[proof]);
+    return abandoned.rowCount===1?proof:null;
   }
   async function mark(proof,status){
     await pool.query('UPDATE blofy_whatsapp_cloud_receipts SET status=$2,updated_at=NOW() WHERE proof=$1',[proof,status]);
