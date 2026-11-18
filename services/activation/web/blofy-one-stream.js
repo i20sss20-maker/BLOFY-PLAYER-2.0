@@ -24,6 +24,7 @@
   const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
   let accounts=[], codes=[], codeTotals={}, codeOffset=0;
   let nextOffset=null, accountsLoaded=false, codesLoaded=false;
+  let codeSearchRemote=false,codeFilteredTotal=null,codeLoadSeq=0,codeSearchTimer=null;
   let serial=0, secretTimer=null, secretValue=null, busy=false;
   const readableStatus=Object.freeze({unused:'غير مفعّل',redeemed:'مستخدم',revoked:'ملغى'});
   const errors=Object.freeze({
@@ -164,7 +165,7 @@
   function renderCodes(){
     const search=codeSearch.value.trim().toLocaleLowerCase('ar');
     const filter=codeFilter.value;
-    const matching=codes.filter(c=>
+    const matching=codeSearchRemote?codes:codes.filter(c=>
       (filter==='all'||c.status===filter) &&
       [c.label,c.codeHint,c.id].join(' ').toLocaleLowerCase('ar').includes(search));
     codeRows.replaceChildren();
@@ -174,6 +175,12 @@
       const title=node('td');
       title.append(node('strong',String(c.label||'كود BLOFY').slice(0,70)));
       title.append(node('small',String(c.codeHint||'—'),'one-stream-code-hint'));
+      if(c.buyerName||c.buyerPhone){
+        const parts=[];
+        if(c.buyerName)parts.push('العميل: '+String(c.buyerName).slice(0,65));
+        if(c.buyerPhone)parts.push('جوال ينتهي بـ '+String(c.buyerPhone).slice(-4));
+        title.append(node('small',parts.join(' · '),'one-stream-code-buyer'));
+      }
       const badge=node('span',readableStatus[c.status]||'غير معروف','one-stream-badge state-'+c.status);
       const state=node('td');state.append(badge);
       const action=node('td');
@@ -200,9 +207,12 @@
       const tr=node('tr'),td=node('td',codesLoaded?'لا توجد أكواد مطابقة في هذه الصفحة.':'تعذر تحميل قائمة الأكواد.');
       td.colSpan=6;tr.append(td);codeRows.append(tr);
     }
-    $('one-stream-codes-count').textContent=
-      'الأكواد المعروضة في هذه الصفحة: '+number(matching.length)+' · من '+number(codes.length)+
-      ' محمّلة. البحث والفلترة يخصان الصفحة الحالية.';
+    $('one-stream-codes-count').textContent=codeSearchRemote?
+      'نتائج البحث في كامل السجل: '+number(codeFilteredTotal)+
+        ' · المعروض في هذه الصفحة: '+number(matching.length)+
+        ' · لا تُعرض الأكواد الأصلية إلا بعد تأكيد المشرف.' :
+      'الأكواد المعروضة في هذه الصفحة: '+number(matching.length)+
+        ' · من '+number(codes.length)+' محمّلة. البحث في كامل السجل متاح بكتابة حرفين أو أكثر.';
     const currentPage=Math.floor(codeOffset/pageSize)+1;
     $('one-stream-codes-page').textContent='الصفحة '+number(currentPage)+
       ' · إجمالي '+number(codeTotals.total);
@@ -264,11 +274,33 @@
     renderAccounts();renderTotals();
   }
   async function loadCodes(){
-    const result=await api('/api/v1/admin/xtream-gateway/codes?limit='+pageSize+'&offset='+codeOffset);
-    if(!Array.isArray(result.items)||typeof result.totals!=='object')
+    const current=++codeLoadSeq;
+    const query=codeSearch.value.trim();
+    const filter=codeFilter.value;
+    // One-character text queries are too broad for private customer searches.
+    // The request never puts the original code or phone in a URL.
+    if(query.length===1){
+      codeSearchRemote=true;codeFilteredTotal=0;
+      codes=[];nextOffset=null;codesLoaded=true;
+      renderCodes();
+      $('one-stream-codes-count').textContent='اكتب حرفين على الأقل للبحث في جميع الأكواد، أو امسح النص لعرض السجل.';
+      return;
+    }
+    const remote=query.length>=2||filter!=='all';
+    const result=remote?
+      await api('/api/v1/admin/xtream-gateway/codes/search',{
+        method:'POST',body:{query,status:filter,offset:codeOffset,limit:pageSize}
+      }):
+      await api('/api/v1/admin/xtream-gateway/codes?limit='+pageSize+'&offset='+codeOffset);
+    if(current!==codeLoadSeq)return;
+    if(!Array.isArray(result.items)||typeof result.totals!=='object'||
+      (remote&&(result.searchApplied!==true||
+        !Number.isSafeInteger(result.filteredTotal))))
       throw Error('قائمة أكواد STREAM غير مكتملة.');
     codes=result.items.filter(item=>item&&UUID.test(String(item.id||'')));
     codeTotals=result.totals||{};
+    codeSearchRemote=remote;
+    codeFilteredTotal=remote?result.filteredTotal:null;
     nextOffset=result.nextOffset===null?null:
       (Number.isSafeInteger(result.nextOffset)&&result.nextOffset>codeOffset?result.nextOffset:null);
     codesLoaded=true;
@@ -284,6 +316,19 @@
     const price=String(result.recorded_revenue_halalas??'');
     $('one-stream-revenue').textContent=/^\d{1,22}$/.test(price)?
       (Number(price)/100).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+' ر.س':'—';
+  }
+  // Search requests must not be dropped just because another dashboard
+  // refresh is running. loadCodes discards out-of-order responses by sequence.
+  async function searchNow(){
+    const expected=codeLoadSeq+1;
+    setStatus('جارٍ البحث في سجل الأكواد الكامل…');
+    try{
+      await loadCodes();
+      if(expected===codeLoadSeq)
+        setStatus('تم تحديث نتائج البحث من قاعدة الأكواد الكاملة.');
+    }catch(error){
+      if(expected===codeLoadSeq)setStatus('تعذر البحث: '+error.message,true);
+    }
   }
   async function refresh({justCodes=false}={}){
     if(refreshButton.disabled)return;
@@ -301,17 +346,27 @@
   }
   accountSearch.addEventListener('input',renderAccounts);
   accountFilter.addEventListener('change',renderAccounts);
-  codeSearch.addEventListener('input',renderCodes);
-  codeFilter.addEventListener('change',renderCodes);
+  codeSearch.addEventListener('input',()=>{
+    window.clearTimeout(codeSearchTimer);
+    codeOffset=0;
+    codeSearchTimer=window.setTimeout(()=>{
+      void searchNow();
+    },330);
+  });
+  codeFilter.addEventListener('change',()=>{
+    window.clearTimeout(codeSearchTimer);
+    codeOffset=0;
+    void searchNow();
+  });
   codesPrev.addEventListener('click',()=>{
     if(codeOffset<=0)return;
     codeOffset=Math.max(0,codeOffset-pageSize);
-    void refresh({justCodes:true});
+    void searchNow();
   });
   codesNext.addEventListener('click',()=>{
     if(nextOffset===null)return;
     codeOffset=nextOffset;
-    void refresh({justCodes:true});
+    void searchNow();
   });
   refreshButton.addEventListener('click',()=>void refresh());
   $('one-stream-secret-copy').addEventListener('click',async()=>{

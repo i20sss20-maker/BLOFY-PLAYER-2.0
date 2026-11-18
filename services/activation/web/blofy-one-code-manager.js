@@ -141,11 +141,12 @@
     }finally{clearTimeout(timer);}
   }
   async function readCurrent(id){
-    const data=await request(root+'?limit=40&offset='+offset);
-    if(!Array.isArray(data.items))throw Error('تعذر قراءة أحدث بيانات الأكواد.');
-    const fresh=data.items.find(v=>v&&v.id===id);
-    if(!fresh)throw Error('تغيّر موضع الكود أو لم يعد موجودًا في الصفحة. حدّث الجدول ثم افتحه مجددًا.');
-    return fresh;
+    // Direct ID readback is pagination-independent and retains all the same
+    // safeguards when the operator found a voucher via global search.
+    const data=await request(root+'/'+encodeURIComponent(id));
+    if(!data.item||data.item.id!==id)
+      throw Error('لم يعد الكود موجودًا أو تغيّر. حدّث سجل الأكواد ثم افتحه مجددًا.');
+    return data.item;
   }
   function sameState(a,b){
     return a&&b&&a.id===b.id&&a.status===b.status&&

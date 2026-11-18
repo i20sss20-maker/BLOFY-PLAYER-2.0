@@ -2688,6 +2688,21 @@ http.createServer = function withBlofyXtreamGateway(listener) {
       if(req.method==='POST'&&url.pathname==='/api/v1/admin/xtream-gateway/codes') {
         return json(res,201,await streamCodes.issue(await readJson(req)));
       }
+      // Global admin-only search: POST body keeps original numeric/legacy
+      // voucher secrets out of browser history, request URLs and access logs.
+      if(req.method==='POST'&&url.pathname==='/api/v1/admin/xtream-gateway/codes/search'){
+        const payload=await readJson(req);
+        return json(res,200,await streamCodes.search({
+          query:payload.query,status:payload.status,
+          limit:payload.limit,offset:payload.offset
+        }),{'cache-control':'no-store, private','referrer-policy':'no-referrer'});
+      }
+      const codeDetail=url.pathname.match(/^\/api\/v1\/admin\/xtream-gateway\/codes\/([0-9a-f-]{36})$/i);
+      if(req.method==='GET'&&codeDetail){
+        const result=await streamCodes.getRecord(codeDetail[1]);
+        return json(res,result.ok?200:404,result,
+          {'cache-control':'no-store, private','referrer-policy':'no-referrer'});
+      }
       const codeReveal=url.pathname.match(/^\/api\/v1\/admin\/xtream-gateway\/codes\/([0-9a-f-]{36})\/reveal$/i);
       if(req.method==='GET'&&codeReveal){
         const result=await streamCodes.reveal(codeReveal[1]);
