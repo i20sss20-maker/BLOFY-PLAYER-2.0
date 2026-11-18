@@ -95,7 +95,7 @@ test('admin gateway and BLOFY ONE browser keep exact secret vouchers out of URLs
   assert.match(ui,/codeSearchRemote=remote/);
   assert.match(ui,/result\.filteredTotal/);
   assert.match(ui,/new CustomEvent\('blofy-one:manage-code'/);
-  assert.match(manager,/request\(root\+'\/\'+encodeURIComponent\(id\)\)/);
+  assert.ok(manager.includes("request(root+'/'+encodeURIComponent(id))"));
   assert.match(html,/بحث في جميع الأكواد/);
   assert.doesNotMatch(ui,/localStorage|sessionStorage|innerHTML\s*=/);
   assert.doesNotMatch(manager,/localStorage|sessionStorage/);
