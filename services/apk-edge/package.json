@@ -1,0 +1,16 @@
+{
+  "name": "blofy-signed-apk-edge",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "check": "node --check server.mjs && node --check signed-release-policy.mjs && node --test *.test.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.800.0"
+  }
+}
