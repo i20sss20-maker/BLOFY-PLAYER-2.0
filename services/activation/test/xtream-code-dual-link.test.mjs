@@ -77,7 +77,7 @@ test('Xtream -> SAME original code enables app access and never issues a new cre
  assert.equal(result.expiresAt,new Date(expiry).getTime());
  assert.equal(result.subscriptionUnchanged,true);
  assert.equal(calls.filter(x=>x.sql.includes('INSERT')).length,0);
- assert.equal(calls.filter(x=>x.sql.includes('UPDATE')).length,1);
+ assert.equal(calls.filter(x=>/^UPDATE\s/i.test(x.sql)).length,1);
  assert.match(calls.find(x=>x.sql.includes('UPDATE')).sql,/dual_access_enabled=TRUE/);
  assert.equal(calls.at(-1).sql,'COMMIT');
 });
