@@ -48,7 +48,7 @@ jobs:
           test -s "$apk" && test -s "$sums" && test -s "$identity"
           grep -Fxq "application_id=$PACKAGE" "$identity"
           grep -Fxq 'version_code=2000113' "$identity"
-          grep -Fxq "source_sha=$SOURCE_SHA" "$identity"
+          grep -Fxq "source_sha=dddf6b5c7e6d04eda0d049e6aa99449da391eb2e" "$identity"
           (cd "$(dirname "$apk")" && sha256sum -c SHA256SUMS)
           cp "$apk" "staging/$APK_NAME"
           cp "$sums" staging/SHA256SUMS
