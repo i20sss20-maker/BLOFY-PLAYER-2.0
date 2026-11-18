@@ -48,3 +48,28 @@
  .one-ops-header-actions button{min-height:38px}
 }
 @media(max-width:375px){.one-ops-stats,.one-ops-stats.one-ops-two{grid-template-columns:1fr}}
+
+.one-issue{background:linear-gradient(120deg,#112d39,#0f2136);border:1px solid #45847b;border-radius:14px;padding:18px;margin:20px 0 12px}
+.one-issue h3{font-size:19px;color:#edffff;margin:0}
+.one-issue-form{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:15px 0}
+.one-issue-form label{display:grid;gap:6px;color:#bddbe3;font-size:12px;min-width:0}
+.one-issue-form input,.one-issue-form select{width:100%;border:1px solid #466e80;background:#0c2233;
+ border-radius:9px;color:#f5fbff;min-height:44px;padding:11px 13px;font:inherit}
+.one-issue-form label.one-issue-wide{grid-column:span 3}
+.one-issue-form button{border:1px solid #57d5c8;color:#083336;background:#72e4d5;min-height:44px;border-radius:9px;padding:10px;
+ font-weight:800;cursor:pointer;grid-column:span 1}
+.one-issue-form button:disabled{opacity:.5;cursor:wait}
+.one-issue-form :is(input,select):focus-visible{outline:2px solid #9cfff0;outline-offset:2px}
+.one-issue-result{border:1px solid #4da69b;background:#0e3738;padding:16px;border-radius:12px}
+.one-issue-result>strong{font-size:15px;color:#eafff6}
+.one-issue-result>small{display:block;color:#c4e5dd;font-size:11px;line-height:1.9}
+.one-issue-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:13px 0}
+.one-issue-code{display:flex;align-items:center;justify-content:space-between;gap:9px;padding:12px;background:#0e2831;border:1px solid #39736f;border-radius:9px}
+.one-issue-code span{font-size:11px;color:#b8dadc}
+.one-issue-code code{font:700 15px ui-monospace,Consolas,monospace;color:#ecfff8;direction:ltr;user-select:all;overflow-wrap:anywhere}
+@media(max-width:1000px){.one-issue-form{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .one-issue-form label.one-issue-wide{grid-column:span 1}
+ .one-issue-form button{grid-column:span 2}}
+@media(max-width:640px){.one-issue{padding:13px}.one-issue-list{grid-template-columns:1fr}}
+@media(max-width:430px){.one-issue-form{grid-template-columns:1fr}
+ .one-issue-form label.one-issue-wide,.one-issue-form button{grid-column:span 1}}
