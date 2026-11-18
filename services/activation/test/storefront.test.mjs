@@ -21,11 +21,11 @@ test('Public catalog prices use exact server values for 3, 6 and 12 months',()=>
  assert.equal(plans.length,6);
  for(const channel of ['app','xtream']){
    const subset=plans.filter(p=>p.channel===channel);
-   assert.deepEqual(subset.map(p=>p.priceMinor),[3000,5000,7000]);
+   assert.deepEqual(subset.map(p=>p.priceMinor),[4000,6000,10000]);
    assert.deepEqual(subset.map(p=>p.durationDays),[90,180,365]);
    assert.ok(subset.every(p=>p.currency==='SAR'));
  }
- for(const price of ['30 ر.س','50 ر.س','70 ر.س'])assert.match(html,new RegExp(price));
+ for(const price of ['40 ر.س','60 ر.س','100 ر.س'])assert.match(html,new RegExp(price));
  assert.match(html,/GeideaCheckout/);
  assert.match(html,/\/api\/v1\/store\/checkout/);
  assert.match(html,/\/api\/v1\/store\/orders\/status/);
@@ -39,6 +39,29 @@ test('Scripts compile, and subscriber UI injection leaves storefront untouched',
  for(const s of scripts)assert.doesNotThrow(()=>new Function(s[1]));
  assert.equal(injectSubscriberPortalUi(html),html);
  assert.notEqual(injectSubscriberPortalUi('<html><body><div id="loginView"></div></body></html>'),'<html><body><div id="loginView"></div></body></html>');
+});
+test('Store uses one blue brand system, original product artwork, trial and detail pages',()=>{
+ assert.match(html,/--bg:#071326/);
+ assert.match(html,/src="\/store\/media\/stream\.svg"/);
+ assert.match(html,/src="\/store\/media\/xtream\.svg"/);
+ assert.match(html,/href="\/products\/stream"/);
+ assert.match(html,/href="\/products\/xtream"/);
+ assert.match(html,/href="\/store\/trial"/);
+ assert.match(html,/يوجد تجربة/);
+ assert.doesNotMatch(html,/ادفع [0-9]+ ر\.س بجيديا/);
+ assert.match(html,/اشترك الآن/);
+});
+test('Admin inventory UI integrates with owner portal and stock-first fulfillment',()=>{
+ const dashboard=readFileSync(new URL('../web/store-inventory.html',import.meta.url),'utf8');
+ const admin=readFileSync(new URL('../web/blofy-one.html',import.meta.url),'utf8');
+ const mod=readFileSync(new URL('../src/store-geidea-checkout.mjs',import.meta.url),'utf8');
+ assert.match(dashboard,/id="generate"/);
+ assert.match(dashboard,/id="import"/);
+ assert.match(dashboard,/100 كود/);
+ assert.match(admin,/href="\/admin\/store-inventory"/);
+ assert.match(mod,/FOR UPDATE OF i SKIP LOCKED LIMIT 1/);
+ assert.match(mod,/authorizeAdmin\(req,res\)/);
+ assert.match(mod,/stream_code_source/);
 });
 test('Store checkout stays off without independent opt-in even if device Geidea config exists',async()=>{
  let queried=0,paid=0;
