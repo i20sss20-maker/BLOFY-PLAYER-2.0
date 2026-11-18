@@ -102,6 +102,7 @@ import {ensureUnavailableMediaTable,validUnavailableKey,recoverySources,
  createRegistryWriteGuard,unavailableMediaSummary,
  expediteUnavailableRecheck} from './xtream-unavailable-media-registry.mjs';
 import {runUnavailableRecheckBatch,classifyUnavailableProbe} from './xtream-unavailable-media-recheck.mjs';
+import {activePublishedSalehRecheckIds} from './xtream-saleh-recheck-scope.mjs';
 import {mayRefreshMovieExtension,correctedMovieExtension,
   mayRefreshEpisodeExtension,correctedEpisodeExtension} from './xtream-vod-extension-recovery.mjs';
 import {shouldUseIndependentXtreamSource,fetchIndependentXtreamSource} from './xtream-independent-catalog-relay.mjs';
@@ -1094,7 +1095,9 @@ async function runDueUnavailableMedia({sourceId=null}={}){
  try{
   // Each source has its own DB lease, which prevents duplicate probes across
   // replicas and keeps traffic below three first-byte attempts per hour.
-  const eligible=recoverySources();
+  // Source credentials may remain valid for a source the owner paused.
+  // Never probe that source: the sole active published source is saleh.
+  const eligible=await activePublishedSalehRecheckIds(pool,[...recoverySources()]);
   // Manual one-source requests never probe any other source.
   const ids=sourceId===null?[...eligible]:eligible.has(sourceId)?[sourceId]:[];
   for(const id of ids){
@@ -2628,6 +2631,9 @@ http.createServer = function withBlofyXtreamGateway(listener) {
         const sourceId=String(body.sourceId||'').trim().toLowerCase();
         if(!validUuid(sourceId)||!recoverySources().has(sourceId))
           return json(res,400,{ok:false,error:'unavailable_source_not_allowed'});
+        const currentlyActive=await activePublishedSalehRecheckIds(pool,[sourceId]);
+        if(!currentlyActive.has(sourceId))
+          return json(res,409,{ok:false,error:'unavailable_source_paused_or_unpublished'});
         // Source-specific manual button cannot override other source grants.
         // SQL excludes leased and recently rechecked items automatically.
         const expedited=await expediteUnavailableRecheck(pool,sourceId,{limit:2});
