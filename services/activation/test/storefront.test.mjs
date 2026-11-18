@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {injectSubscriberPortalUi} from '../src/subscriber-portal-ui-hook.mjs';
-import {publicStorePlans,createStoreGeideaHandlers} from '../src/store-geidea-checkout.mjs';
+import {publicStorePlans,publicStoreOffers,validBundleChannels,createStoreGeideaHandlers} from '../src/store-geidea-checkout.mjs';
 
 const html=readFileSync(new URL('../web/store.html',import.meta.url),'utf8');
 test('Exactly two BLOFY subscription products; no app/download offers',()=>{
@@ -21,11 +21,11 @@ test('Public catalog prices use exact server values for 3, 6 and 12 months',()=>
  assert.equal(plans.length,6);
  for(const channel of ['app','xtream']){
    const subset=plans.filter(p=>p.channel===channel);
-   assert.deepEqual(subset.map(p=>p.priceMinor),[4000,6000,10000]);
+   assert.deepEqual(subset.map(p=>p.priceMinor),[4000,7000,12000]);
    assert.deepEqual(subset.map(p=>p.durationDays),[90,180,365]);
    assert.ok(subset.every(p=>p.currency==='SAR'));
  }
- for(const price of ['40 ر.س','60 ر.س','100 ر.س'])assert.match(html,new RegExp(price));
+ for(const price of ['40 ر.س','70 ر.س','120 ر.س'])assert.match(html,new RegExp(price));
  assert.match(html,/GeideaCheckout/);
  assert.match(html,/\/api\/v1\/store\/checkout/);
  assert.match(html,/\/api\/v1\/store\/orders\/status/);
@@ -42,7 +42,7 @@ test('Scripts compile, and subscriber UI injection leaves storefront untouched',
 });
 test('Store uses one blue brand system, original product artwork, trial and detail pages',()=>{
  const css=readFileSync(new URL('../web/store-premium.css',import.meta.url),'utf8');
- assert.match(html,/href="\/store\/design\.css\?v=7"/);
+ assert.match(html,/href="\/store\/design\.css\?v=8"/);
  assert.match(css,/font-family:"BLOFY Arabic"/);
  assert.match(css,/IBMPlexSansArabic-Regular\.ttf/);
  assert.match(css,/--night:#050b18/);
@@ -177,4 +177,101 @@ test('Actual banner files are committed and available to the website as compact 
  assert.match(server,/serveStorePhoto/);
  assert.match(server,/banner-strong8k-ai\.jpg/);
  assert.match(server,/banner-player-ai\.jpg/);
+});
+
+
+test('Annual two-voucher promotion has a fixed 200 SAR quote and only three legal combinations',()=>{
+ const offers=publicStoreOffers();
+ assert.equal(offers.length,1);
+ const offer=offers[0];
+ assert.equal(offer.sku,'bundle-2y');
+ assert.equal(offer.quantity,2);
+ assert.equal(offer.priceMinor,20000);
+ assert.equal(offer.regularPriceMinor,24000);
+ assert.equal(offer.durationDays,365);
+ for(const combo of [['app','app'],['app','xtream'],['xtream','app'],['xtream','xtream']])
+   assert.equal(validBundleChannels(combo),true);
+ for(const invalid of [[],['app'],['app','xtream','app'],['hack','app'],null,{},['app',null]])
+   assert.equal(validBundleChannels(invalid),false);
+ assert.match(html,/id="bundle-first"/);
+ assert.match(html,/id="bundle-second"/);
+ assert.match(html,/id="bundle-buy"/);
+ assert.match(html,/id="bundle-receipt"/);
+ assert.match(html,/اشتراكان لمدة سنة/);
+ assert.match(html,/200 ر.س/);
+ assert.match(html,/240 ر.س/);
+ assert.match(html,/\/store\/offers/);
+});
+test('Campaign carousel, promo graphic and individual coupon handling do not replace normal checkout',()=>{
+ const js=readFileSync(new URL('../web/store-offers.js',import.meta.url),'utf8');
+ const css=readFileSync(new URL('../web/store-premium.css',import.meta.url),'utf8');
+ const backend=readFileSync(new URL('../src/store-geidea-checkout.mjs',import.meta.url),'utf8');
+ assert.doesNotThrow(()=>new Function(js));
+ assert.match(html,/id="blofy-banners"/);
+ assert.equal((html.match(/data-slide(?: hidden)?/g)||[]).length,3);
+ assert.match(html,/data-prev-slide/);
+ assert.match(html,/data-next-slide/);
+ assert.match(html,/store\/media\/bundle\.svg/);
+ assert.match(html,/id="store-coupon"/);
+ assert.match(html,/id="coupon-preview"/);
+ assert.match(html,/id="coupon-sku"/);
+ assert.match(html,/href="\/store\/design\.css\?v=8"/);
+ assert.match(css,/\.offer-spotlight/);
+ assert.match(css,/\.coupon-panel/);
+ assert.match(js,/sessionStorage\.setItem\('blofy\.bundle\.'/);
+ assert.match(js,/data\.codes\.length===2/);
+ assert.match(backend,/BEGIN/);
+ assert.match(backend,/fulfillBundle/);
+ assert.match(backend,/blofy_store_order_vouchers/);
+ assert.match(backend,/FOR UPDATE OF i SKIP LOCKED LIMIT 1/);
+ assert.match(backend,/store_coupon_limit_reached/);
+ assert.match(backend,/discountAmount/);
+ assert.match(backend,/store_invalid_coupon_amount/);
+ assert.match(backend,/status='paid'/);
+});
+test('Checkout refuses malformed bundle selections without touching database or Geidea',async()=>{
+ let dbReads=0,providerCalls=0;
+ const handler=createStoreGeideaHandlers({
+  pool:{query:async()=>{dbReads++;throw Error('DB may not be touched');}},
+  json:(res,status,data)=>{res.status=status;res.data=data;},
+  readJson:async()=>({sku:'bundle-2y',bundleSelection:['app']}),
+  keyHex:'a'.repeat(64),
+  env:{BLOFY_PAYMENT_PROVIDER:'geidea',BLOFY_GEIDEA_CHECKOUT_ENABLED:'true',BLOFY_STORE_GEIDEA_ENABLED:'true',
+    GEIDEA_LIVE_MERCHANT_PUBLIC_KEY:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    GEIDEA_LIVE_API_PASSWORD:'verylongpassword1234'},
+  fetchImpl:async()=>{providerCalls++;throw Error('must not fetch Geidea');}
+ });
+ const response={};
+ const req={method:'POST',headers:{origin:'https://blofyplayer.com','sec-fetch-site':'same-origin'},socket:{remoteAddress:'127.0.0.1'}};
+ assert.equal(await handler(req,response,{pathname:'/api/v1/store/checkout'}),true);
+ assert.equal(response.status,400);
+ assert.equal(response.data.error,'store_invalid_sku_or_bundle');
+ assert.equal(dbReads,0);
+ assert.equal(providerCalls,0);
+});
+test('Rejects outrageous coupon percentages and protects coupon admin routes',async()=>{
+ let queries=0;
+ const handler=createStoreGeideaHandlers({
+  pool:{query:async()=>{queries++;throw Error('must reject early');}},
+  json:(res,status,data)=>{res.status=status;res.data=data;},
+  readJson:async()=>({code:'BLOFY90',percent:90,maxUses:20,validDays:30}),
+  keyHex:'a'.repeat(64),authorizeAdmin:()=>true,env:{}
+ });
+ const response={};
+ assert.equal(await handler({method:'POST'},response,{pathname:'/api/v1/admin/store/coupons/create'}),true);
+ assert.equal(response.status,400);
+ assert.equal(response.data.error,'store_invalid_coupon');
+ assert.equal(queries,0);
+});
+test('Sales dashboard only counts paid orders toward revenue and has stock safeguards',()=>{
+ const admin=readFileSync(new URL('../web/store-inventory.html',import.meta.url),'utf8');
+ const js=readFileSync(new URL('../web/store-inventory.js',import.meta.url),'utf8');
+ assert.match(admin,/id="sales-highlights"/);
+ assert.match(admin,/id="coupon-create"/);
+ assert.match(admin,/id="coupon-list"/);
+ assert.match(js,/x\.status==='paid'/);
+ assert.match(js,/fulfillmentIssues/);
+ assert.match(js,/coupons\/deactivate/);
+ assert.match(js,/coupons\/create/);
+ assert.doesNotThrow(()=>new Function(js));
 });
