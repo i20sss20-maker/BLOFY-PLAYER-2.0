@@ -12,6 +12,8 @@
 <script src="/blofy-one.js?v=20261118-integrated-1" defer></script>
 <link rel="stylesheet" href="/blofy-one-customers.css?v=20261118-v1">
 <script src="/blofy-one-customers.js?v=20261118-v1" defer></script>
+<link rel="stylesheet" href="/blofy-one-legacy.css?v=20261118-v1">
+<script src="/blofy-one-legacy.js?v=20261118-v1" defer></script>
 </head>
 <body>
 <div class="one-shell">
@@ -19,7 +21,8 @@
   <a class="one-brand" href="/one"><span class="one-brand-icon" aria-hidden="true">B</span><span>BLOFY <b>ONE</b><small>منصة الإدارة الموحدة</small></span></a>
   <nav class="one-nav" aria-label="التنقل الرئيسي">
     <a class="selected" href="/one" aria-current="page"><span aria-hidden="true">◈</span> الرئيسية</a>
-    <a href="/sources-admin#dual"><span aria-hidden="true">⇄</span> تحويل الأكواد وXtream</a>
+    <a href="#legacy-xtream"><span aria-hidden="true">⇄</span> استخراج Xtream من الأكواد القديمة</a>
+    <a href="/sources-admin#dual"><span aria-hidden="true">▣</span> أدوات التحويل المتقدمة</a>
     <a href="/admin/control-center"><span aria-hidden="true">◎</span> لوحة STREAM الكاملة</a>
     <a href="/admin/content-hub"><span aria-hidden="true">▦</span> التخزين والتنزيلات</a>
     <a href="/admin/control-center/health"><span aria-hidden="true">●</span> مراقبة السيرفرات</a>
@@ -54,7 +57,7 @@
       <h1>إدارة BLOFY كاملة.<br><em>من موقع واحد.</em></h1>
       <p>مركز تحكم موحد للعمل اليومي: العملاء، الاشتراكات، كود BLOFY وXtream، الموزعون، المحتوى، التنزيلات والتحديثات، بروابط فعلية للأنظمة القائمة دون المساس باشتراكات العملاء.</p>
       <div class="one-hero-buttons">
-        <a class="one-primary" href="/sources-admin#dual">⇄ ربط كود BLOFY مع Xtream <span>←</span></a>
+        <a class="one-primary" href="#legacy-xtream">⇄ استخراج Xtream من الكود القديم <span>←</span></a>
         <a class="one-secondary" href="/admin/control-center">إدارة STREAM الكاملة <span>←</span></a>
       </div>
     </div>
@@ -67,7 +70,7 @@
     <div class="one-section-heading"><div><span class="one-kicker">DAILY OPERATIONS</span><h2>اختصارات العمل اليومي</h2></div><span class="one-note">فتح الأدوات القائمة دون إصدار أو تغيير أي كود</span></div>
     <div class="one-fast-grid">
       <a href="#customers"><b aria-hidden="true">▣</b><strong>العملاء والأجهزة</strong><small>بحث وبيانات وتجديد</small></a>
-      <a href="/sources-admin#dual"><b aria-hidden="true">⇄</b><strong>كود BLOFY ↔ Xtream</strong><small>نفس حساب العميل والمدة</small></a>
+      <a href="#legacy-xtream"><b aria-hidden="true">⇄</b><strong>كود BLOFY ↔ Xtream</strong><small>الكود الجديد أو القديم</small></a>
       <a href="/sources-admin#xtream"><b aria-hidden="true">◈</b><strong>حسابات Xtream</strong><small>المشتركون والمصادر</small></a>
       <a href="/admin/content-hub"><b aria-hidden="true">▦</b><strong>التخزين والنقل</strong><small>المكتبة وملفات المحتوى</small></a>
     </div>
@@ -147,6 +150,55 @@
     </form>
     <p class="one-footnote">تعديل بيانات العميل وإيقاف الجهاز لا يجدد اشتراكه ولا يغير كود Xtream. مدة التجديد تُدار من سجل التفعيل الأصلي.</p>
   </dialog>
+  <section class="one-overview one-legacy" id="legacy-xtream" aria-labelledby="one-legacy-title">
+    <div class="one-section-heading">
+      <div><span class="one-kicker">BLOFY STREAM · LEGACY & CURRENT VOUCHERS</span>
+        <h2 id="one-legacy-title">استخراج Xtream من الأكواد الجديدة والقديمة</h2></div>
+      <a href="/sources-admin#dual">التحويل بالاتجاهين ←</a>
+    </div>
+    <p class="one-footnote">أدخل الكود الأصلي الكامل من BLOFY STREAM، سواء الجديد (8–12 رقمًا) أو القديم (24 خانة Hex). نقرأ حسابه الحالي من السيرفر ولا ننشئ اشتراكًا آخر أو نغيّر تاريخ انتهائه. لا يدعم رمز الاقتران المكوّن من 6 خانات أو كود تفعيل BLOFY PLAYER المنفصل.</p>
+    <div class="one-legacy-layout">
+      <div class="one-legacy-step">
+        <div class="one-legacy-step-heading"><span class="one-legacy-num">1</span>
+          <div><h3>فحص الكود القديم</h3><small>فحص قراءة فقط، لا يستهلك الكود أو يفعّله</small></div>
+        </div>
+        <form id="one-legacy-lookup-form" class="one-legacy-form" autocomplete="off">
+          <label for="one-legacy-code">كود BLOFY STREAM
+            <input id="one-legacy-code" type="text" autocomplete="off" spellcheck="false"
+              autocapitalize="off" maxlength="32" placeholder="8–12 رقمًا أو 24 حرفًا من الكود القديم" required>
+          </label>
+          <button class="one-legacy-action" id="one-legacy-lookup-btn" type="submit">فحص الكود</button>
+        </form>
+        <p class="one-legacy-status" id="one-legacy-status" role="status" aria-live="polite">الأكواد القديمة المرتبطة بحساب Xtream مفعل قابلة للفحص بنفس الكود الأصلي.</p>
+        <div id="one-legacy-info" class="one-legacy-info" hidden>
+          <div><span>نوع الكود</span><strong id="one-legacy-kind">—</strong></div>
+          <div><span>حالة الاشتراك</span><strong id="one-legacy-state">—</strong></div>
+          <div><span>تاريخ الانتهاء</span><strong id="one-legacy-expiry">—</strong></div>
+          <div><span>الحساب مرتبط</span><strong id="one-legacy-linked">—</strong></div>
+          <div><span>بصمة الكود</span><strong id="one-legacy-hint">—</strong></div>
+        </div>
+      </div>
+      <div class="one-legacy-step">
+        <div class="one-legacy-step-heading"><span class="one-legacy-num">2</span>
+          <div><h3>استخراج بيانات Xtream</h3>
+            <small>لن تظهر بيانات الحساب إلا عند التأكيد</small></div>
+        </div>
+        <p class="one-legacy-note">إذا كان الكود مستعملًا واشتراكه نشطًا وحسابه مرتبطًا، تستخرج Host وUsername وPassword من بيانات BLOFY الداخلية. الكود غير المفعّل لا تصدر له بيانات دخول تلقائيًا.</p>
+        <button class="one-legacy-action" id="one-legacy-extract-btn" type="button" disabled>استخراج Host / Username / Password</button>
+        <div id="one-legacy-credentials" class="one-legacy-credentials" hidden>
+          <div class="one-legacy-credential"><span>Host</span><code id="one-legacy-host" dir="ltr"></code></div>
+          <div class="one-legacy-credential"><span>Username</span><code id="one-legacy-user" dir="ltr"></code></div>
+          <div class="one-legacy-credential"><span>Password</span><code id="one-legacy-password" dir="ltr"></code></div>
+          <div class="one-legacy-actions">
+            <button id="one-legacy-copy" type="button">نسخ بيانات Xtream</button>
+            <button id="one-legacy-hide" type="button">إخفاء البيانات</button>
+          </div>
+          <small>تُخفى بيانات الدخول بعد 90 ثانية، وعند مغادرة الصفحة. لا تستخدمها إلا لحساب صاحب الاشتراك.</small>
+        </div>
+        <p class="one-legacy-hint">إذا لم يكن الكود في قاعدة BLOFY STREAM الحالية أو كانت كلمة المرور القديمة غير محفوظة بشكل قابل للاسترجاع، لن نُنشئ بيانات وهمية أو نغيّر حساب العميل. استخدم إدارة الاسترداد المتقدمة بعد التحقق من صاحب الاشتراك.</p>
+      </div>
+    </div>
+  </section>
   <section class="one-overview" aria-labelledby="health-title">
     <div class="one-section-heading">
       <div><span class="one-kicker">PRODUCTION HEALTH</span><h2 id="health-title">حالة المنصة الآن</h2></div>
