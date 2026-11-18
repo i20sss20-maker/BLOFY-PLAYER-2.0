@@ -219,7 +219,7 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,env=proce
   }else if(order.sku==='bundle-2y'){
    expected=[...(order.bundle_selection||[])].map(channel=>({channel,durationDays:365}));
    if(expected.length!==2)return json(res,503,{error:'order_integrity_unavailable'});
-   rows=(await pool.query('SELECT ov.position,ov.channel,ov.duration_days,'+
+   rows=(await pool.query('SELECT ov.position,ov.channel,365 AS duration_days,'+
     'v.id,v.code_hash,v.code_vault,v.revoked_at,v.redeemed_at,v.expires_at '+
     'FROM blofy_store_order_vouchers ov JOIN blofy_xtream_gateway_duration_codes v ON v.id=ov.voucher_id '+
     'WHERE ov.order_id=$1 ORDER BY ov.position',[id])).rows;
