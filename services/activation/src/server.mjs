@@ -464,8 +464,19 @@ async function activationCheck(req, res) {
     if (status === 'expired' && row.status !== 'blocked') {
       await client.query("UPDATE devices SET status='expired', updated_at=NOW() WHERE device_id=$1", [deviceId]);
     }
+    // A busy marketing launch can make thousands of valid installations
+    // check their entitlement repeatedly. Verification and expiry handling
+    // above still run on EVERY request; only the administrative last-seen
+    // heartbeat is coalesced for 60 seconds to reduce PostgreSQL WAL writes,
+    // vacuum pressure and row churn without hiding version/platform changes.
     await client.query(
-      'UPDATE devices SET last_seen_at=NOW(), last_app_version=$2, last_platform=$3 WHERE device_id=$1',
+      `UPDATE devices
+       SET last_seen_at=NOW(), last_app_version=$2, last_platform=$3
+       WHERE device_id=$1 AND (
+         last_seen_at IS NULL OR last_seen_at <= NOW()-INTERVAL '60 seconds'
+         OR last_app_version IS DISTINCT FROM $2
+         OR last_platform IS DISTINCT FROM $3
+       )`,
       [deviceId, appVersion, platform]
     );
     await client.query('COMMIT');
