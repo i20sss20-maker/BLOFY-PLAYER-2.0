@@ -57,6 +57,9 @@ internal class StreamCatalogDeltaWorker(
     }
 
     private suspend fun syncBounded(): Result {
+        // Code-bound authorization must remain identical through every
+        // resumed page. Never import one subscriber's rows into another code.
+        val sessionAtStart = StreamCodeSession.token(app) ?: return Result.success()
         val dao = BlofyDatabase.get(app).dao()
         val provider = dao.provider(providerId) ?: return Result.success()
         if (dao.activeProviderId() != providerId || !dao.hasCatalog(providerId))
@@ -92,12 +95,18 @@ internal class StreamCatalogDeltaWorker(
             var cursor = if (position == fromPart) prefs.getLong(KEY_CURSOR, 0L) else 0L
             do {
                 if (CatalogPlaybackGate.isPlaying) return Result.retry()
+                if (!StreamCodeSession.isClaimed(app) ||
+                    StreamCodeSession.token(app) != sessionAtStart ||
+                    dao.activeProviderId() != providerId ||
+                    !CatalogSyncState.isReady(app,providerId)) return Result.failure()
                 val url = "${StreamCodeSession.HOST}/player_api.php?action=get_blofy_catalog_delta" +
                     "&kind=$kind&part=$part&since=$base&revision=$current&after=$cursor"
                 val page = XtreamClient.api.objectResponse(url)
                 if (page["ok"] != true || page["kind"] != kind ||
                     page["part"] != part || page["revision"].asNumber()?.toLong() != current
                 ) return Result.retry()
+                if (StreamCodeSession.token(app) != sessionAtStart ||
+                    dao.activeProviderId() != providerId) return Result.failure()
                 val items = page["items"] as? List<*>
                     ?: return Result.retry()
                 if (items.size > 120) return Result.retry()
