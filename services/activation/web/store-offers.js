@@ -97,6 +97,7 @@
         function(){presentReceipt('أُغلقت نافذة الدفع. نتحقق من طلبك دون إعادة الدفع.');void statusCheck();}
       );
       widget.startPayment(payment.sessionId);opened=true;
+      window.BLOFYAnalytics?.track('checkout_started');
       info('أكمل عملية الدفع داخل النافذة الآمنة.');
     }catch(e){
       info('تعذّر بدء العملية. لم يتم إصدار أي كود؛ تواصل مع الدعم إذا احتجت مساعدة.',true);
