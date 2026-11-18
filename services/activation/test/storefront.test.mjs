@@ -42,7 +42,7 @@ test('Scripts compile, and subscriber UI injection leaves storefront untouched',
 });
 test('Store uses one blue brand system, original product artwork, trial and detail pages',()=>{
  const css=readFileSync(new URL('../web/store-premium.css',import.meta.url),'utf8');
- assert.match(html,/href="\/store\/design\.css\?v=4"/);
+ assert.match(html,/href="\/store\/design\.css\?v=5"/);
  assert.match(css,/font-family:"BLOFY Arabic"/);
  assert.match(css,/IBMPlexSansArabic-Regular\.ttf/);
  assert.match(css,/--night:#050b18/);
@@ -120,4 +120,27 @@ test('Bulk code generation commits all 25 vouchers atomically without exposing s
  assert.equal(committed,2,'schema and batch each commit once');
  assert.equal(rolledBack,0);
  assert.equal(response.data.items,undefined);
+});
+
+test('STRONG 8K figures, separated product benefits and original banners are displayed without changing checkout',()=>{
+ const premium=readFileSync(new URL('../web/store-premium.css',import.meta.url),'utf8');
+ const server=readFileSync(new URL('../src/server.mjs',import.meta.url),'utf8');
+ const info=readFileSync(new URL('../src/store-info-pages.mjs',import.meta.url),'utf8');
+ assert.match(html,/اشتراك <span dir="ltr">STRONG 8K<\/span>/);
+ assert.match(html,/50,000\+/);
+ assert.match(html,/185,000\+/);
+ assert.match(html,/strong-stat/);
+ assert.match(html,/\/store\/media\/strong8k\.svg/);
+ assert.match(html,/\/store\/media\/player\.svg/);
+ assert.match(html,/BLOFY PLAYER/);
+ assert.match(html,/المسلسلات مرتبة حسب المواسم والحلقات/);
+ assert.match(html,/البحث داخل المحتوى والوصول إلى المفضلة/);
+ assert.match(html,/التنزيلات والمساعدة الذكية في الإصدارات التي تدعمهما/);
+ assert.match(html,/وليست نتيجة فحص مستقل/);
+ assert.match(premium,/\.campaign-banner/);
+ assert.match(premium,/\.benefit-panels/);
+ assert.match(server,/store-strong8k-banner\.svg/);
+ assert.match(server,/store-player-banner\.svg/);
+ assert.match(info,/STRONG 8K/);
+ assert.doesNotMatch(html,/دقة عرض 8K لجميع/);
 });
