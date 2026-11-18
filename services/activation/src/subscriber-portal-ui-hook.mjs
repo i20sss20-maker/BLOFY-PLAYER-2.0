@@ -3,7 +3,7 @@ import http from 'node:http';
 const PORTAL_PATHS = new Set(['/', '/portal', '/connect']);
 export function injectSubscriberPortalUi(html, { allowRenewal = true } = {}) {
   const source = String(html || '');
-  if (!source.includes('</body>') || source.includes('data-blofy-subscriber-ui="5"')) return source;
+  if (!source.includes('</body>') || !source.includes('id="loginView"') || source.includes('data-blofy-subscriber-ui="5"')) return source;
 
   const renewalStyles = String.raw`  #blofyRenewBtn{min-height:48px;padding:0 18px;border:1px solid rgba(82,223,154,.30);border-radius:15px;background:rgba(82,223,154,.10);color:#9ff1cb;font-weight:800;cursor:pointer}
   #blofyRenewBtn:hover{background:rgba(82,223,154,.16)}
