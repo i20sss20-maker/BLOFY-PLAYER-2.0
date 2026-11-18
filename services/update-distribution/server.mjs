@@ -17,6 +17,7 @@ import { observeDownloadCompletion } from './download-metrics.mjs';
 import { recordDownloadCompletion, getDownloadStats } from './app-library.mjs';
 import { publicSiteRedirect } from './public-site-redirect.mjs';
 import { streamReleaseMetadata, STREAM_RELEASE_FILENAME, STREAM_PREVIOUS_RELEASE_FILENAME, STREAM_TEST_FILENAME, STREAM_TEST_PATH } from './stream-release.mjs';
+import { createReleaseFeedCache, PUBLIC_STREAM_RELEASE_CACHE_CONTROL } from './release-feed-cache.mjs';
 import { verifySignedStreamUploadOidc, approvedStreamUpload, STREAM_55836_APK, STREAM_56_APK } from './stream-upload-oidc.mjs';
 import { UPDATE_SITE_CANONICAL, updateRobotsTxt, updateSitemapXml, renderMissingPublicPage, isPublicHtmlRequest } from './public-search-pages.mjs';
 
@@ -59,13 +60,15 @@ const securityHeaders = Object.freeze({
   'x-permitted-cross-domain-policies': 'none'
 });
 
-function sendJson(req, res, status, value) {
+const publicStreamReleaseFeed = createReleaseFeedCache();
+function sendJson(req, res, status, value, extraHeaders = {}) {
   const body = JSON.stringify(value);
   res.writeHead(status, {
     ...securityHeaders,
     'content-type': 'application/json; charset=utf-8',
     'content-length': Buffer.byteLength(body),
-    'cache-control': 'no-store, max-age=0'
+    'cache-control': 'no-store, max-age=0',
+    ...extraHeaders
   });
   res.end(req.method === 'HEAD' ? undefined : body);
 }
@@ -1095,9 +1098,16 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(405, { ...securityHeaders, allow: 'GET, HEAD', 'cache-control': 'no-store' });
         return res.end();
       }
-      const metadata = streamReleaseMetadata(await getApp('blofy-stream'));
+      // The catalog is identical for every anonymous updater client. Under
+      // bursts, single-flight these reads rather than exhausting the three
+      // PostgreSQL connections shared with download management. The edge
+      // stores only successful public metadata, not admin or customer data.
+      const metadata = await publicStreamReleaseFeed.get(
+        async () => streamReleaseMetadata(await getApp('blofy-stream'))
+      );
       return metadata
-        ? sendJson(req, res, 200, metadata)
+        ? sendJson(req, res, 200, metadata,
+          {'cache-control': PUBLIC_STREAM_RELEASE_CACHE_CONTROL})
         : sendJson(req, res, 404, { ok: false, error: 'stream_release_not_published' });
     }
 
