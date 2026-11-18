@@ -243,3 +243,26 @@ test('admin dashboard displays live origin drop timing and cause without guessin
  assert.match(src,/m\.sourceDropByReason\?\.live_ts_source_transport_error/);
  assert.match(src,/m\.recentSourceDrops/);
 });
+
+test('successful MKV seek recovery is distinct from initial playback and does not expose source',async()=>{
+ resetXtreamPlaybackMetricsForTest();
+ const now=Date.now();
+ recordXtreamPlayback({kind:'series',phase:'recovered',reason:'vod_range_resumed',
+  itemId:256772,sourceId:'6cbe3f8e-f14d-4d0d-9f7e-39b4ae34993a',
+  providerUrl:'https://private-provider.invalid/?key=secret'},now);
+ recordXtreamPlayback({kind:'movie',phase:'recovered',reason:'vod_range_resumed'},now+1);
+ const metrics=xtreamPlaybackSnapshot(now+3);
+ assert.equal(metrics.vodRangeResumeSuccesses,2);
+ assert.equal(metrics.started,0);
+ assert.equal(metrics.failed,0);
+ assert.equal(metrics.byKind.series.recovered,1);
+ assert.equal(metrics.byKind.movie.recovered,1);
+ assert.doesNotMatch(JSON.stringify(metrics),/private-provider|secret|providerUrl/);
+ resetXtreamPlaybackMetricsForTest();
+ const [gateway,ui]=await Promise.all([
+  readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8'),
+  readFile(new URL('../web/sources-admin.js',import.meta.url),'utf8')
+ ]);
+ assert.match(gateway,/observe\('recovered',\{reason:'vod_range_resumed'\}\)/);
+ assert.match(ui,/m\.vodRangeResumeSuccesses/);
+});
