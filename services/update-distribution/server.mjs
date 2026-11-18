@@ -16,7 +16,7 @@ import { appDownloadAction } from './app-download-policy.mjs';
 import { observeDownloadCompletion } from './download-metrics.mjs';
 import { recordDownloadCompletion, getDownloadStats, closeAppLibrary } from './app-library.mjs';
 import { publicSiteRedirect } from './public-site-redirect.mjs';
-import { streamReleaseMetadata, STREAM_RELEASE_FILENAME, STREAM_PREVIOUS_RELEASE_FILENAME, STREAM_TEST_FILENAME, STREAM_TEST_PATH } from './stream-release.mjs';
+import { streamReleaseMetadata, STREAM_RELEASE_FILENAME, STREAM_PREVIOUS_RELEASE_FILENAME, STREAM_TEST_FILENAME, STREAM_TEST_PATH, STREAM_LIVE_FIX_TEST_FILENAME, STREAM_LIVE_FIX_TEST_PATH } from './stream-release.mjs';
 import { createReleaseFeedCache, PUBLIC_STREAM_RELEASE_CACHE_CONTROL } from './release-feed-cache.mjs';
 import { installGracefulShutdown } from './graceful-shutdown.mjs';
 import { apkRangePolicy, apkCacheControl } from './apk-range-policy.mjs';
@@ -1048,7 +1048,8 @@ const server = http.createServer(async (req, res) => {
       const isPreviousStreamApk = localReleaseMatch[1] === STREAM_PREVIOUS_RELEASE_FILENAME;
       const isApprovedNewStreamApk = localReleaseMatch[1] === STREAM_55836_APK ||
         localReleaseMatch[1] === STREAM_56_APK;
-      const isOwnerStreamTestApk = localReleaseMatch[1] === STREAM_TEST_FILENAME;
+      const isOwnerStreamTestApk = localReleaseMatch[1] === STREAM_TEST_FILENAME ||
+        localReleaseMatch[1] === STREAM_LIVE_FIX_TEST_FILENAME;
       if (BLOFY_ONLY_CURRENT && !isCurrentStreamApk && !isPreviousStreamApk && !isApprovedNewStreamApk && !isOwnerStreamTestApk && ['GET', 'HEAD'].includes(method)) {
         return redirect(res, '/download/latest.apk');
       }
@@ -1203,6 +1204,15 @@ const server = http.createServer(async (req, res) => {
     if (appDetailsMatch && ['GET', 'HEAD'].includes(method)) {
       const html = await appDetailsPage(req, appDetailsMatch[1].toLowerCase());
       return html ? sendHtml(req, res, 200, html) : sendHtml(req, res, 404, '<h1>التطبيق غير موجود</h1>');
+    }
+
+    if (pathname === STREAM_LIVE_FIX_TEST_PATH && ['GET', 'HEAD'].includes(method)) {
+      // Verified owner-signed 56.0.1 hotfix QA; never serves through /d/blofy-stream
+      // or updates the customer /stream/release.json endpoint.
+      if (method === 'GET') recordDownload('app:blofy-stream-live-fix-test')
+        .catch(error => console.error('STREAM hotfix test download stat failed:', error?.message || error));
+      return await streamLocalApk(req, res, STREAM_LIVE_FIX_TEST_FILENAME,
+        STREAM_LIVE_FIX_TEST_FILENAME, 'app:blofy-stream-live-fix-test');
     }
 
     if (pathname === STREAM_TEST_PATH && ['GET', 'HEAD'].includes(method)) {
