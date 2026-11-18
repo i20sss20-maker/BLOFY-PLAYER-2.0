@@ -10,6 +10,8 @@
 <link rel="icon" href="/blofy-logo.png" type="image/png">
 <link rel="stylesheet" href="/blofy-one.css?v=20261118-integrated-1">
 <script src="/blofy-one.js?v=20261118-integrated-1" defer></script>
+<link rel="stylesheet" href="/blofy-one-customers.css?v=20261118-v1">
+<script src="/blofy-one-customers.js?v=20261118-v1" defer></script>
 </head>
 <body>
 <div class="one-shell">
@@ -25,7 +27,8 @@
     <a href="/sources-admin#xtream"><span aria-hidden="true">▤</span> المصادر وXtream</a>
     <a href="/sources-admin#catalog"><span aria-hidden="true">▦</span> مكتبة المحتوى</a>
     <a href="/admin#codes"><span aria-hidden="true">⌁</span> أكواد الاشتراك</a>
-    <a href="/admin#devices"><span aria-hidden="true">▣</span> الأجهزة والتفعيل</a>
+    <a href="#customers"><span aria-hidden="true">▣</span> العملاء والاشتراكات</a>
+    <a href="/admin#devices"><span aria-hidden="true">◩</span> إدارة الأجهزة المتقدمة</a>
     <a href="/admin#releases"><span aria-hidden="true">⇩</span> إصدارات التطبيق</a>
     <a href="/admin#support"><span aria-hidden="true">◌</span> الدعم والعملاء</a>
   </nav>
@@ -62,12 +65,87 @@
   <section class="one-launchpad" aria-label="اختصارات العمل اليومي">
     <div class="one-section-heading"><div><span class="one-kicker">DAILY OPERATIONS</span><h2>اختصارات العمل اليومي</h2></div><span class="one-note">فتح الأدوات القائمة دون إصدار أو تغيير أي كود</span></div>
     <div class="one-fast-grid">
-      <a href="/admin#devices"><b aria-hidden="true">▣</b><strong>العملاء والأجهزة</strong><small>بحث وتفعيل وتجديد</small></a>
+      <a href="#customers"><b aria-hidden="true">▣</b><strong>العملاء والأجهزة</strong><small>بحث وبيانات وتجديد</small></a>
       <a href="/sources-admin#dual"><b aria-hidden="true">⇄</b><strong>كود BLOFY ↔ Xtream</strong><small>نفس حساب العميل والمدة</small></a>
       <a href="/sources-admin#xtream"><b aria-hidden="true">◈</b><strong>حسابات Xtream</strong><small>المشتركون والمصادر</small></a>
       <a href="/admin/content-hub"><b aria-hidden="true">▦</b><strong>التخزين والنقل</strong><small>المكتبة وملفات المحتوى</small></a>
     </div>
   </section>
+    <section id="customers" class="one-overview one-customers" aria-labelledby="one-customers-title">
+    <div class="one-section-heading">
+      <div><span class="one-kicker">CUSTOMER OPERATIONS</span><h2 id="one-customers-title">العملاء والاشتراكات — مباشرة من BLOFY ONE</h2></div>
+      <a href="/admin#devices">الإدارة المتقدمة والتجديد ←</a>
+    </div>
+    <p class="one-footnote">بيانات فعلية من نظام BLOFY PLAYER الحالي. يمكنك البحث وتحديث معلومات العميل وإيقاف جهازه بعد التأكيد. أكواد STREAM منفصلة عن بيانات أجهزة PLAYER.</p>
+    <div class="one-customer-metrics" id="one-customer-metrics" aria-label="ملخص الاشتراكات">
+      <article><span>الأجهزة المسجّلة</span><strong id="one-customer-total">—</strong></article>
+      <article><span>لديها رقم جوال</span><strong id="one-customer-phones">—</strong></article>
+      <article><span>أكواد نشطة حسب آخر فحص</span><strong id="one-codes-active">—</strong></article>
+      <article><span>أكواد تنتهي خلال 7 أيام</span><strong id="one-codes-expiring">—</strong></article>
+    </div>
+    <form id="one-customer-search-form" class="one-customer-search" autocomplete="off">
+      <label for="one-customer-query">ابحث عن عميل أو جهاز أو رقم جوال
+        <input id="one-customer-query" name="q" type="search" maxlength="120"
+          autocomplete="off" placeholder="الاسم، رقم الجهاز أو الجوال">
+      </label>
+      <label for="one-customer-filter">الحالة
+        <select id="one-customer-filter" name="filter">
+          <option value="all">كل الأجهزة</option>
+          <option value="withPhone">لديهم رقم جوال</option>
+          <option value="withoutPhone">بدون رقم جوال</option>
+          <option value="active">الاشتراكات السارية</option>
+          <option value="trial">التجارب</option>
+          <option value="expiring7d">تنتهي خلال 7 أيام</option>
+          <option value="expired">المنتهية</option>
+          <option value="blocked">الموقوفة</option>
+          <option value="recent">تواصل خلال 10 دقائق</option>
+          <option value="inactive7d">لم يتواصل منذ 7 أيام</option>
+        </select>
+      </label>
+      <label for="one-customer-sort">الترتيب
+        <select id="one-customer-sort" name="sort">
+          <option value="newest">الأحدث تسجيلًا</option>
+          <option value="seen">آخر تواصل</option>
+          <option value="expiry">الأقرب انتهاءً</option>
+        </select>
+      </label>
+      <button type="submit" class="one-customer-primary">⌕ بحث</button>
+      <button id="one-customer-refresh" type="button">↻ تحديث</button>
+    </form>
+    <p class="one-customer-status" id="one-customer-status" role="status" aria-live="polite">حمّل بيانات العملاء لعرض القائمة.</p>
+    <div class="one-customer-table-wrap" tabindex="0" role="region" aria-label="قائمة العملاء قابلة للتمرير">
+      <table class="one-customer-table"><thead><tr>
+        <th>العميل / الجهاز</th><th>الحالة</th><th>الانتهاء</th><th>آخر تواصل</th><th>رقم الجوال</th><th>إجراء</th>
+      </tr></thead><tbody id="one-customer-rows"><tr><td colspan="6">جارٍ قراءة أجهزة BLOFY…</td></tr></tbody></table>
+    </div>
+    <div class="one-customer-pager">
+      <button type="button" id="one-customer-prev" disabled>السابق</button>
+      <span id="one-customer-page">—</span>
+      <button type="button" id="one-customer-next" disabled>التالي</button>
+      <button type="button" id="one-customer-export">↓ تصدير الصفحة CSV</button>
+    </div>
+    <p class="one-footnote">«آخر تواصل» لا يعني أن بث القناة يعمل. التصدير يحتوي بيانات تواصل العملاء المسجلين فقط؛ استخدمها ضمن صلاحيات الإدارة.</p>
+  </section>
+  <dialog id="one-customer-dialog" class="one-customer-dialog" aria-labelledby="one-customer-dialog-title">
+    <div class="one-customer-dialog-head">
+      <div><span class="one-kicker">CUSTOMER PROFILE</span><h2 id="one-customer-dialog-title">إدارة بيانات العميل</h2></div>
+      <button type="button" id="one-customer-dialog-close" aria-label="إغلاق سجل العميل">×</button>
+    </div>
+    <div class="one-customer-dialog-summary" id="one-customer-dialog-summary"></div>
+    <form id="one-customer-edit-form" class="one-customer-edit-form" autocomplete="off">
+      <label>اسم العميل<input type="text" name="name" maxlength="120" autocomplete="off"></label>
+      <label>الجوال<input type="tel" name="phone" maxlength="32" autocomplete="off"></label>
+      <label>البريد الإلكتروني<input type="email" name="email" maxlength="254" autocomplete="off"></label>
+      <label>ملاحظات داخلية<textarea name="notes" rows="3" maxlength="2000" placeholder="ملاحظات الإدارة، لا تُسجل كلمات المرور"></textarea></label>
+      <p class="one-customer-status" id="one-customer-edit-status" role="status" aria-live="polite"></p>
+      <div class="one-customer-dialog-actions">
+        <button class="one-customer-primary" id="one-customer-save" type="submit">حفظ بيانات العميل</button>
+        <button id="one-customer-toggle-block" type="button">إيقاف الجهاز</button>
+        <a href="/admin#devices">الإدارة المتقدمة ←</a>
+      </div>
+    </form>
+    <p class="one-footnote">تعديل بيانات العميل وإيقاف الجهاز لا يجدد اشتراكه ولا يغير كود Xtream. مدة التجديد تُدار من سجل التفعيل الأصلي.</p>
+  </dialog>
   <section class="one-overview" aria-labelledby="health-title">
     <div class="one-section-heading">
       <div><span class="one-kicker">PRODUCTION HEALTH</span><h2 id="health-title">حالة المنصة الآن</h2></div>
