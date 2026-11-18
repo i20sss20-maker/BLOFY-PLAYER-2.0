@@ -90,7 +90,8 @@ export function safeCodeRecord(row){
     adminReloginCount:Number(row.admin_relogin_count||0),
     adminReloginUntil:row.admin_relogin_until?new Date(row.admin_relogin_until).getTime():null,
     extendedDays:Number(row.extended_days||0),
-    deviceTransferPending:row.code_channel==='app'&&Boolean(row.redeemed_at)&&!row.redeemed_device_hash,
+    deviceTransferPending:(row.code_channel==='app'||row.dual_access_enabled===true)&&
+      Boolean(row.redeemed_at)&&!row.redeemed_device_hash,
     xtreamRecoveryPending:row.code_channel==='xtream'&&Boolean(row.xtream_recovery_until)&&
       new Date(row.xtream_recovery_until).getTime()>Date.now()
   };
@@ -246,7 +247,8 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
         expiresAt:effectiveExpiry,
         canExtend:redeemed&&!row.revoked_at&&accountExists,
         // App re-login requires a separate 6-digit challenge from the new device.
-        requiresDeviceApproval:redeemed&&info.channel==='app'
+        requiresDeviceApproval:redeemed&&
+          (info.channel==='app'||info.dualAccessEnabled===true)
       }
     };
   }
