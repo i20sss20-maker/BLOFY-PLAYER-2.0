@@ -54,5 +54,5 @@ test('56.0.1 owner-signed hotfix is public and retains separate test alias',()=>
   assert.equal(STREAM_LIVE_FIX_TEST_PATH,'/d/blofy-stream/live-fix-test');
   assert.notEqual(STREAM_LIVE_FIX_TEST_PATH,STREAM_PUBLIC_DOWNLOAD.replace('https://updates.blofyplayer.com',''));
   assert.equal(streamReleaseMetadata({...approved, version:'56.0'}),null);
-  assert.equal(streamReleaseMetadata(approved)?.release?.app?.versionCode,2000115);
+  assert.equal(streamReleaseMetadata(approved)?.release?.app?.versionCode,2000116);
 });
