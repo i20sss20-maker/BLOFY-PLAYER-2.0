@@ -1251,7 +1251,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                     val prefix = when (condition) {
                         StreamAudioQuickPickPolicy.State.PLAYING -> "● "
                         StreamAudioQuickPickPolicy.State.RECENTLY_WORKED -> "◷ "
-                        StreamAudioQuickPickPolicy.State.FAILED_RECENTLY -> "⚠ "
+                        StreamAudioQuickPickPolicy.State.FAILED_RECENTLY -> "♫ "
                         StreamAudioQuickPickPolicy.State.UNTESTED -> "♫ "
                     }
                     val row = LinearLayout(activity).apply {
@@ -1286,10 +1286,9 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                                         voice.label, StreamAudioQuickPickPolicy.State.PLAYING)
                                 } else {
                                     playButtonRef?.setTextColor(0xFFFFB5A7.toInt())
-                                    playButtonRef?.text = "⚠ " + voice.label
-                                    paintStatus(copy("تعذر تشغيل ", "Failed: ") + voice.label +
-                                        copy(" • رجع الصوت الأصلي. جرّب مصدرًا ثانيًا.",
-                                            " • original audio restored. Choose another voice."),
+                                    playButtonRef?.text = voice.label
+                                    paintStatus(copy("هذا المعلق غير متاح الآن. جرّب معلقًا آخر.",
+                                        "This commentary is not available. Try another."),
                                         StreamAudioQuickPickPolicy.State.FAILED_RECENTLY)
                                 }
                                 updateSync()
@@ -1315,7 +1314,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                         StreamAudioQuickPickPolicy.State.RECENTLY_WORKED ->
                             copy("آخر مصدر نجح: ", "Previously worked: ") + voice.label
                         StreamAudioQuickPickPolicy.State.FAILED_RECENTLY ->
-                            copy("تعذر مؤخرًا، اضغط للمحاولة: ", "Failed recently, press to retry: ") + voice.label
+                            copy("جرّب المعلق: ", "Try commentary: ") + voice.label
                         else -> voice.label
                     }
                     if (condition == StreamAudioQuickPickPolicy.State.PLAYING) {
@@ -1369,8 +1368,7 @@ class LiveChannelOverlayLifecycle : Application.ActivityLifecycleCallbacks {
                 }
             }
 
-            paintStatus(copy("♫ اختر معلقًا. ● تشغيل مؤكد، ◷ نجح سابقًا، ⚠ تعذر مؤخرًا.",
-                "♫ Select a voice. ● playing, ◷ previously worked, ⚠ recently failed."), null)
+            paintStatus(copy("اختر المعلق المناسب", "Choose your commentary"), null)
             // Render controls immediately while the protected catalog loads.
             // A callback can never populate a picker that has already closed.
             render()
