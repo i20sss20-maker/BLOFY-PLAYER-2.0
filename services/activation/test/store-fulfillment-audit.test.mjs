@@ -34,7 +34,9 @@ test('paid cart with 3 required codes never passes audit with 1 or 2',()=>{
  assert.equal(missing.expectedCodes,3);
  assert.equal(missing.deliveredCodes,2);
  const swapped=[rows[0],rows[2],rows[1]];
- assert.equal(assessPaidOrder(o,swapped,keyHex).reason,'code_product_mismatch');
+ assert.equal(assessPaidOrder(o,swapped,keyHex).reason,'code_position_mismatch');
+ const wrongSku=[rows[0],{...rows[1],sku:'xtream-1y'},rows[2]];
+ assert.equal(assessPaidOrder(o,wrongSku,keyHex).reason,'code_product_mismatch');
  const tampered=[...rows,{...rows[2],code_hash:'a'.repeat(64)}];
  assert.equal(assessPaidOrder(o,tampered.slice(1),keyHex).reason,'code_product_mismatch');
  assert.equal(assessPaidOrder(o,[rows[0],rows[1],{...rows[2],code_hash:'a'.repeat(64)}],keyHex).reason,
