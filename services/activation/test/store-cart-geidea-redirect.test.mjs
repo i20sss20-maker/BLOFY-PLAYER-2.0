@@ -30,7 +30,7 @@ test('signed-in cart redirects to official hosted Geidea even when modal SDK is 
  // Pre-create named elements so repeated calls to getElementById keep identity.
  for(const id of ['checkout','items','clear-cart','coupon','apply','subtotal','discount',
  'total','codes-count','message','auth-gate','auth-title','auth-message','auth-link','cart-sync',
- 'started','order-number','open-geidea','copy-private-link'])el(id);
+ 'started','order-number','open-geidea','copy-private-link','check-pending','pending-status'])el(id);
  const fetch=async(path,opts={})=>{
   calls.push({path,method:opts.method||'GET'});
   const response=(status,data)=>({ok:status>=200&&status<300,status,
@@ -42,6 +42,7 @@ test('signed-in cart redirects to official hosted Geidea even when modal SDK is 
   if(path==='/api/v1/store/cart/quote')return response(200,{codeCount:1,
    subtotalMinor:4000,discountMinor:0,totalMinor:4000,
    items:[{...item,lineTotalMinor:4000}]});
+  if(path==='/api/v1/store/orders/status')return response(200,{orderId,status:'pending',fulfilled:false});
   if(path==='/api/v1/store/cart/checkout')return response(201,{
    provider:'geidea',checkoutMode:'modal',sku:'cart',orderId,
    sessionId,accessToken:token,orderNumber:'BF-261118-BBBBBBBB',
@@ -51,7 +52,7 @@ test('signed-in cart redirects to official hosted Geidea even when modal SDK is 
  };
  const localStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)};
  const session=new Map();
- const sessionStorage={getItem:k=>session.get(k)||null,setItem:(k,v)=>session.set(k,v)};
+ const sessionStorage={getItem:k=>session.get(k)||null,setItem:(k,v)=>session.set(k,v),removeItem:k=>session.delete(k)};
  const location={search:'',origin:'https://blofyplayer.com',
   assign(url){redirects.push(url);}};
  const ctx={window:{},document,fetch,localStorage,sessionStorage,location,
@@ -72,4 +73,20 @@ test('signed-in cart redirects to official hosted Geidea even when modal SDK is 
  assert.equal(session.get('blofy.shop.order.'+orderId),token,'receipt secret stays local');
  assert.equal(nodes.get('started').hidden,false);
  assert.doesNotMatch(html,/geideaCheckout.min.js/);
+ assert.equal(JSON.parse(session.get('blofy.shop.pending-checkout.v1')).orderId,orderId,
+   'new session is preserved for safe recovery after browser back');
+ // Simulate returning to the cart before completing Geidea payment. Never open
+ // a second Geidea session, even if the customer presses the button again.
+ nodes.clear();events.clear();
+ for(const id of ['checkout','items','clear-cart','coupon','apply','subtotal','discount',
+ 'total','codes-count','message','auth-gate','auth-title','auth-message','auth-link','cart-sync',
+ 'started','order-number','open-geidea','copy-private-link','check-pending','pending-status'])el(id);
+ vm.runInNewContext(code,{...ctx,window:{}},{filename:'store-cart.js'});
+ await new Promise(resolve=>setTimeout(resolve,20));
+ assert.equal(nodes.get('checkout').disabled,true,'outstanding Geidea session blocks new checkout');
+ assert.equal(nodes.get('open-geidea').href,hosted,'customer can resume the SAME Geidea session');
+ assert.equal(nodes.get('open-geidea').hidden,false);
+ assert.match(nodes.get('pending-status').textContent,/نفس الجلسة/);
+ assert.equal(calls.filter(x=>x.path==='/api/v1/store/cart/checkout').length,1,
+   'reloading the page cannot create another payment session');
 });
