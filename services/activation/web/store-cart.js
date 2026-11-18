@@ -10,7 +10,7 @@
    'bundle-2y':'عرض اشتراكين سنويين'
  })[sku]||'اشتراك BLOFY';
  const money=n=>(Number(n)/100).toLocaleString('ar-SA',{minimumFractionDigits:0,maximumFractionDigits:2})+' ر.س';
- let items=[],quoted=null,ready=false,creating=false,currentOrder=null,accessToken=null;
+ let items=[],quoted=null,ready=false,creating=false,paymentOpen=false,currentOrder=null,accessToken=null;
  const message=(text)=>{$('message').textContent=text;};
  const keyOf=item=>item.sku==='bundle-2y'?'bundle-2y:'+item.bundleSelection.join('+'):item.sku;
  function validLine(item){
@@ -126,7 +126,7 @@
    }
  }
  async function checkout(){
-   if(!ready||creating||!quoted||!items.length)return;
+   if(!ready||creating||paymentOpen||!quoted||!items.length)return;
    if(typeof window.GeideaCheckout!=='function'){
      message('نافذة الدفع غير متاحة حاليًا. حدّث الصفحة أو تواصل مع الدعم.');return;
    }
@@ -152,10 +152,11 @@
        function(){location.assign('/store/orders#order='+encodeURIComponent(currentOrder));}
      );
      widget.startPayment(data.sessionId);
+     paymentOpen=true;
      window.BLOFYAnalytics?.track('checkout_started');
    }catch(err){
      message('تعذر إكمال الدفع: '+err.message+'. إذا سبق إنشاء الطلب لا تعِد الدفع قبل التحقق من حالته.');
-   }finally{creating=false;$('checkout').disabled=!quoted||!ready;}
+   }finally{creating=false;$('checkout').disabled=paymentOpen||!quoted||!ready;}
  }
  function privateLink(){
    if(!currentOrder||!accessToken)return null;
