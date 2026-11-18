@@ -337,7 +337,7 @@ class DownloadsActivity : AppCompatActivity() {
             else -> null
         }
         val message = networkMessage ?: reasonText?.let(::getString) ?:
-            getString(R.string.stream_downloads_failure_generic, progress.reason)
+            getString(R.string.stream_downloads_failure_generic)
         val dialog = AlertDialog.Builder(this)
             .setTitle(R.string.stream_downloads_failure_title)
             .setMessage(message)
