@@ -1,0 +1,43 @@
+name: Verify public BLOFY STREAM 55.8.36 release
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/verify-blofy-stream-55-8-36-live.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-production:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check precise live STREAM version, site card, signed APK, and isolated PLAYER updater
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=https://updates.blofyplayer.com
+          apk='BLOFY-STREAM-55.8.36-CATALOG-TV-CONTROLS-FIX-OWNER-SIGNED.apk'
+          want='2f5abba6d367d41fd9bab71cb8355f234678a8d715c4bebff899760642bf474e'
+          for attempt in $(seq 1 24); do
+            curl -fsSL --max-time 25 "$root/stream/release.json" -o stream.json
+            if jq -e --arg sha "$want" '.release.app.versionCode==2000113 and .release.app.versionName=="2.0.0-rc07.55.8.36-STREAM" and .release.app.packageName=="tv.blofy.player.v2.stream" and .release.app.sha256==$sha and .release.app.apkSizeBytes==135775044 and .release.app.downloadUrl=="https://updates.blofyplayer.com/d/blofy-stream"' stream.json >/dev/null; then
+              break
+            fi
+            sleep 5
+          done
+          jq -e --arg sha "$want" '.release.app.versionCode==2000113 and .release.app.versionName=="2.0.0-rc07.55.8.36-STREAM" and .release.app.sha256==$sha' stream.json
+          curl -fsSL --max-time 20 "$root/downloads" -o downloads.html
+          grep -Fq 'id="blofy-stream"' downloads.html
+          grep -Fq '55.8.36' downloads.html
+          grep -Fq 'href="/d/blofy-stream"' downloads.html
+          curl -fsSI --max-time 70 "$root/d/blofy-stream" -o app.headers
+          grep -iq '^content-type: application/vnd.android.package-archive' app.headers
+          grep -iq '^content-length: 135775044' app.headers
+          curl -fsSI --max-time 70 "$root/files/releases/$apk" -o file.headers
+          grep -iq '^content-length: 135775044' file.headers
+          curl -fsSL --max-time 20 "$root/release.json" -o player.json
+          jq -e '.release.app.packageName != "tv.blofy.player.v2.stream" and .release.app.downloadUrl!="https://updates.blofyplayer.com/d/blofy-stream"' player.json
+          echo 'STREAM_55_8_36_PUBLIC_SITE=PASS'
+          echo 'STREAM_55_8_36_SIGNED_APK=PASS'
+          echo 'STREAM_55_8_36_IN_APP_UPDATE=PASS'
+          echo 'BLOFY_PLAYER_UNCHANGED=PASS'
