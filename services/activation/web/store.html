@@ -4,16 +4,35 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0b0c18">
-<meta name="description" content="اكتشف خدمات BLOFY STREAM وBLOFY PLAYER ولوحات إدارة الاشتراكات. تعرّف على الخيارات، تواصل مباشرة عبر واتساب، أو جدّد تفعيل جهازك بدفع آمن عبر جيديا.">
+<meta name="description" content="متجر اشتراكات BLOFY: اختر اشتراك كود BLOFY STREAM أو اشتراك Xtream BLOFY، وحدد المدة واطلب عبر واتساب مباشرة.">
 <meta name="robots" content="index,follow">
 <link rel="canonical" href="https://www.blofyplayer.com/">
 <link rel="icon" href="/blofy-logo.png">
 <meta property="og:type" content="website">
 <meta property="og:locale" content="ar_SA">
-<meta property="og:title" content="BLOFY | الترفيه والتطبيقات والاشتراكات">
-<meta property="og:description" content="تعرف على BLOFY STREAM وBLOFY PLAYER وخيارات الاشتراك والتجديد.">
-<title>BLOFY | متجر التطبيقات والاشتراكات</title>
+<meta property="og:title" content="BLOFY | متجر اشتراكات كود ستريم وإكستريم">
+<meta property="og:description" content="اشتراك كود BLOFY STREAM واشتراك Xtream BLOFY في صفحة منتجات واحدة. اختر الباقة وتواصل مباشرة.">
+<title>BLOFY | متجر اشتراكات ستريم وإكستريم</title>
 <style>
+.art-title{position:absolute;bottom:14px;left:22px;direction:ltr;font-size:11px;font-weight:900;color:rgba(225,244,255,.7);letter-spacing:.18em}
+.product-offers .product{box-shadow:0 32px 90px rgba(0,0,0,.27)}
+.product-offers .art{height:205px}
+.product-offers .product-copy{padding:27px}
+.product-offers .product h3{font-size:24px;margin-bottom:14px}
+.offer-badges{display:flex;flex-wrap:wrap;gap:7px;margin:4px 0 21px}
+.offer-badges span{padding:7px 11px;border:1px solid rgba(116,176,241,.21);border-radius:99px;color:#b9dff4;background:rgba(89,156,235,.08);font-size:12px}
+.duration-label{display:block;font-size:13px;font-weight:800;color:#d8eaff;margin-bottom:11px}
+.duration-select{display:block;width:100%;background:#131e38;border:1px solid #3c507a;color:#f2f7ff;border-radius:14px;padding:12px 15px;min-height:48px;font:inherit;cursor:pointer;margin-bottom:15px}
+.duration-select:focus-visible{outline:2px solid #5bdfef;outline-offset:2px}
+.price-note{font-size:13px;line-height:1.9;color:#bdcbe2;border:1px dashed rgba(175,203,239,.25);border-radius:12px;padding:11px 12px;margin-bottom:18px}
+.buy-btn{width:100%}
+.order-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:17px}
+.order-steps>div{padding:26px;border-radius:22px;background:linear-gradient(145deg,#141e37,#10172c);border:1px solid var(--line)}
+.order-steps b{font-size:30px;color:var(--cyan);direction:ltr;display:block}
+.order-steps h3{font-size:18px;margin:10px 0}
+.order-steps p{font-size:13px;line-height:1.8;color:var(--muted);margin:0}
+@media(max-width:680px){.product-offers,.order-steps{grid-template-columns:1fr}.product-offers .art{height:170px}.product-offers .product-copy{padding:20px}}
+
 :root{font-family:Tahoma,Arial,system-ui,sans-serif;--bg:#080a15;--card:#11162a;--line:rgba(183,199,255,.14);--fg:#f4f7ff;--muted:#aebbd4;--cyan:#58e3ef;--blue:#6ca1ff;--purple:#aa85ff;--green:#25d366;color-scheme:dark}
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
@@ -66,7 +85,7 @@ button:focus-visible,a:focus-visible{outline:3px solid var(--cyan);outline-offse
 .disclaimer{display:block;color:#7d8ea9;font-size:11px;margin-top:16px}
 .h2{font-size:clamp(28px,3vw,40px);margin:12px 0;letter-spacing:-.025em;line-height:1.35}
 .lead{color:var(--muted);font-size:15px;line-height:1.95;max-width:700px;margin:0 0 27px}
-.shop-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:19px}
+.shop-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}
 .product{min-width:0;display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--line);border-radius:26px;background:linear-gradient(160deg,rgba(27,39,70,.87),rgba(12,17,34,.99));box-shadow:0 26px 80px rgba(0,0,0,.12)}
 .art{height:185px;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;background:radial-gradient(circle at 60% 50%,rgba(89,187,220,.21),transparent 58%),linear-gradient(150deg,#152549,#1b1837)}
 .art.purple{background:radial-gradient(circle at 60% 40%,rgba(173,102,251,.27),transparent 58%),linear-gradient(130deg,#25204b,#101c30)}
@@ -112,81 +131,98 @@ button:focus-visible,a:focus-visible{outline:3px solid var(--cyan);outline-offse
 </head>
 <body data-blofy-storefront="1">
 <header class="top"><div class="nav container">
-  <a class="brand" href="/" aria-label="BLOFY الرئيسية"><img src="/blofy-logo.png" alt="" width="42" height="42"><span><b>BLOFY</b><small>STREAM · PLAYER</small></span></a>
-  <nav class="links" aria-label="روابط الموقع"><a href="#products">المنتجات</a><a href="#features">المميزات</a><a href="#payments">الدفع والتجديد</a><a href="/downloads">التطبيقات</a><a href="/portal">إدارة جهازي</a></nav>
+  <a class="brand" href="/" aria-label="BLOFY الرئيسية"><img src="/blofy-logo.png" alt="" width="42" height="42"><span><b>BLOFY</b><small>SUBSCRIPTIONS STORE</small></span></a>
+  <nav class="links" aria-label="روابط المتجر"><a href="#products">الاشتراكات</a><a href="#how-it-works">طريقة الطلب</a><a href="#features">المميزات</a><a href="#payments">الدفع</a><a href="#questions">الأسئلة الشائعة</a></nav>
   <a class="nav-cta" href="https://wa.me/966568941484" data-wa="general" rel="noopener noreferrer" target="_blank">تواصل واتساب ↗</a>
 </div></header>
 <main>
 <section class="hero"><div class="container hero-grid">
-  <div><span class="eyebrow">BLOFY · ENTERTAINMENT & SERVICES</span><h1>ترفيهك صار <span class="grad">في مكان واحد.</span></h1>
-  <p>تعرّف على تطبيقات وخدمات بلوفي، واستكشف خيارات الاشتراك والتفعيل وإدارة الأكواد. اختر الخدمة المناسبة، وتواصل معنا مباشرة عبر واتساب أو جدّد تفعيل جهازك من صفحة الدفع الآمنة.</p>
-  <div class="ctas"><a class="btn primary" href="#products">اكتشف منتجات بلوفي ←</a><a class="btn whatsapp" href="https://wa.me/966568941484" data-wa="general" rel="noopener noreferrer" target="_blank">اطلب عبر واتساب ↗</a></div>
-  <div class="proof"><span>◉ قنوات مباشرة</span><span>◉ أفلام ومسلسلات</span><span>◉ تطبيقات التلفزيون</span><span>◉ لوحة إدارة للأكواد</span></div>
+  <div><span class="eyebrow">BLOFY • DIGITAL SUBSCRIPTIONS</span><h1>اشتراكات بلوفي <span class="grad">بطريقتك.</span></h1>
+  <p>تبي <strong>كود BLOFY STREAM</strong> أو بيانات <strong>Xtream BLOFY</strong>؟ اختر نوع الاشتراك وحدد المدة، وتواصل مباشرة لتأكيد السعر والتوفر والتفعيل. كل اشتراكاتك في صفحة منتجات واحدة.</p>
+  <div class="ctas"><a class="btn primary" href="#products">تصفح الاشتراكات ←</a><a class="btn whatsapp" href="https://wa.me/966568941484" data-wa="general" rel="noopener noreferrer" target="_blank">استفسر عبر واتساب ↗</a></div>
+  <div class="proof"><span>◉ اشتراكات رقمية</span><span>◉ كود ستريم</span><span>◉ Xtream</span><span>◉ خدمة العملاء عبر واتساب</span></div>
   </div>
-  <div class="stage" aria-label="عرض توضيحي لأقسام بلوفي"><div class="tv">
-    <div class="tv-head"><strong>BLOFY STREAM</strong><span>الرئيسية • البث المباشر</span></div>
-    <div class="tv-tabs"><span>القنوات</span><span>الأفلام</span><span>المسلسلات</span><span>المفضلة</span></div>
-    <div class="tv-hero"><div class="tv-banner"><b>كل المحتوى أمامك</b><small>اختر ما يناسب وقتك</small></div><div class="tv-items"><span>◉ البث المباشر</span><span>▶ مكتبة الأفلام</span><span>▣ المسلسلات</span></div></div>
+  <div class="stage" aria-label="تصميم توضيحي لمنتجات اشتراكات بلوفي"><div class="tv">
+    <div class="tv-head"><strong>BLOFY • SUBSCRIPTIONS</strong><span>اختر نوع اشتراكك</span></div>
+    <div class="tv-tabs"><span>كود ستريم</span><span>Xtream</span><span>المدد</span></div>
+    <div class="tv-hero"><div class="tv-banner"><b>كود BLOFY STREAM</b><small>طلب الاشتراك بخطوات واضحة</small></div><div class="tv-items"><span>◉ باقة ستريم</span><span>◉ باقة Xtream</span><span>✓ طلب مباشر</span></div></div>
     <div class="tv-foot"><span></span><span></span><span></span><span></span></div>
-  </div><div class="float one">✦ واجهة عربية مرتبة</div><div class="float two">◉ خيارات اشتراك متنوعة</div></div>
-</div><div class="container"><small class="disclaimer">العرض البصري أعلاه توضيحي وليس صورة من واجهة الإصدار الحالي. تختلف الخدمات والمحتويات بحسب الاشتراك والمصدر والإصدار.</small></div></section>
-<section class="section" id="products"><div class="container"><span class="eyebrow">BLOFY COLLECTION</span><h2 class="h2">اختر الخدمة اللي تناسبك</h2><p class="lead">سواء تبحث عن تطبيق للمشاهدة، أو باقة مناسبة، أو أدوات لإدارة أكواد المتجر، فريق BLOFY يساعدك تختار.</p>
- <div class="shop-grid">
-  <article class="product"><div class="art"><div class="orbit"></div><div class="orbit"></div><span class="symbol">▶</span></div><div class="product-copy"><span class="tag">للترفيه</span><h3>BLOFY STREAM</h3><p>اكتشف خدمات القنوات المباشرة والأفلام والمسلسلات والخيارات المتاحة لأجهزة العرض. اسأل عن الباقات والتوافق قبل الاشتراك.</p><div class="actions"><a class="btn whatsapp small" href="https://wa.me/966568941484" data-wa="stream" rel="noopener noreferrer" target="_blank">استفسر عن الاشتراك</a><a class="btn ghost small" href="#features">المميزات</a></div></div></article>
-  <article class="product"><div class="art purple"><div class="orbit"></div><div class="orbit"></div><span class="symbol">▣</span></div><div class="product-copy"><span class="tag">التطبيق والتفعيل</span><h3>BLOFY PLAYER</h3><p>تطبيق بلوفي لأجهزة العرض، مع صفحة لإدارة الجهاز وتجديد التفعيل. حمّل الإصدار المتاح، أو افتح صفحة تجديد الاشتراك.</p><div class="actions"><a class="btn primary small" href="/downloads">تحميل التطبيق</a><a class="btn ghost small" href="/pay">الدفع والتجديد</a></div></div></article>
-  <article class="product"><div class="art mint"><div class="orbit"></div><div class="orbit"></div><span class="symbol">⌘</span></div><div class="product-copy"><span class="tag">لأصحاب المتاجر</span><h3>BLOFY BUSINESS</h3><p>تعرّف على خيارات لوحات إدارة الأكواد والاشتراكات للموزعين. تواصل معنا لمعرفة الشروط والتوافر وآلية البدء.</p><div class="actions"><a class="btn whatsapp small" href="https://wa.me/966568941484" data-wa="business" rel="noopener noreferrer" target="_blank">اطلب معلومات الموزعين</a></div></div></article>
- </div>
+  </div><div class="float one">✦ اشتراك كود ستريم</div><div class="float two">◉ اشتراك Xtream BLOFY</div></div>
+</div><div class="container"><small class="disclaimer">الواجهة أعلاه تصميم توضيحي للمنتجات. التفاصيل والمدة والسعر والتوفر تُؤكَّد قبل إتمام الطلب، والمحتوى متاح فقط بحسب حقوق التوزيع والاشتراك.</small></div></section>
+<section class="section" id="products"><div class="container">
+<span class="eyebrow">BLOFY SUBSCRIPTIONS</span><h2 class="h2">منتجات الاشتراك</h2><p class="lead">منتجان فقط، بدون تطبيقات أو ملفات تحميل. اختر المنتج الذي تريده ثم حدد المدة التي تستفسر عنها.</p>
+<div class="shop-grid product-offers">
+  <article class="product" id="stream-code" data-product-card="stream">
+    <div class="art"><div class="orbit"></div><div class="orbit"></div><span class="symbol">⌗</span><div class="art-title">STREAM CODE</div></div>
+    <div class="product-copy"><span class="tag">اشتراك بالكود</span><h3>اشتراك كود BLOFY STREAM</h3>
+      <p>اشتراك من نوع <b>كود ستريم</b> للاستخدام عبر مسار إدخال الكود المتوافق مع BLOFY STREAM. بعد تأكيد الطلب تحصل على تعليمات التفعيل الخاصة بالباقة.</p>
+      <div class="offer-badges"><span>كود اشتراك</span><span>تفعيل بعد تأكيد الطلب</span><span>خيارات مدد</span></div>
+      <label class="duration-label" for="duration-stream">اختر مدة الاستفسار</label>
+      <select id="duration-stream" class="duration-select" data-duration="stream"><option value="">حدد المدة</option><option value="3 أشهر">3 أشهر</option><option value="6 أشهر">6 أشهر</option><option value="سنة">سنة</option></select>
+      <div class="price-note"><b>السعر:</b> يُؤكَّد حسب الباقة والمدة قبل الدفع.</div>
+      <div class="actions"><a class="btn whatsapp buy-btn" href="https://wa.me/966568941484" data-wa="stream" rel="noopener noreferrer" target="_blank">اطلب كود ستريم عبر واتساب ←</a></div>
+    </div>
+  </article>
+  <article class="product" id="xtream-code" data-product-card="xtream">
+    <div class="art purple"><div class="orbit"></div><div class="orbit"></div><span class="symbol">⌘</span><div class="art-title">XTREAM ACCESS</div></div>
+    <div class="product-copy"><span class="tag">اشتراك بصيغة Xtream</span><h3>اشتراك Xtream BLOFY</h3>
+      <p>اشتراك ببيانات اتصال <b>Xtream</b> (الخادم واسم المستخدم وكلمة المرور) عند توفره ضمن الباقة؛ مناسب لمن يفضّل طريقة الدخول بإكستريم.</p>
+      <div class="offer-badges"><span>Xtream API</span><span>بيانات دخول خاصة</span><span>خيارات مدد</span></div>
+      <label class="duration-label" for="duration-xtream">اختر مدة الاستفسار</label>
+      <select id="duration-xtream" class="duration-select" data-duration="xtream"><option value="">حدد المدة</option><option value="3 أشهر">3 أشهر</option><option value="6 أشهر">6 أشهر</option><option value="سنة">سنة</option></select>
+      <div class="price-note"><b>السعر:</b> يُؤكَّد حسب الباقة والمدة قبل الدفع.</div>
+      <div class="actions"><a class="btn whatsapp buy-btn" href="https://wa.me/966568941484" data-wa="xtream" rel="noopener noreferrer" target="_blank">اطلب اشتراك Xtream ←</a></div>
+    </div>
+  </article>
+</div>
+<p class="disclaimer">اختيار المدة هنا هو طلب استفسار، وليس تأكيدًا لتوفرها أو لسعرها. يتم التأكد من التوفر وحقوق المحتوى قبل إتمام أي عملية دفع.</p>
 </div></section>
-<section class="section" id="features"><div class="container"><span class="eyebrow">WHY BLOFY</span><h2 class="h2">كل شيء واضح من أول خطوة</h2><p class="lead">تصميم عربي يسهّل عليك الوصول إلى ما تحتاجه، مع دعم مباشر عند الاستفسار أو التجديد.</p>
- <div class="feature-grid"><div class="feature"><span class="icon">📺</span><h3>البث المباشر</h3><p>قوائم قنوات وأقسام منظّمة حسب المصدر والباقة.</p></div><div class="feature"><span class="icon">🎞</span><h3>الأفلام والمسلسلات</h3><p>استعراض المحتوى وتفاصيل الأعمال والحلقات المتوفرة.</p></div><div class="feature"><span class="icon">⬇</span><h3>التنزيلات</h3><p>قسم للتنزيلات في الإصدارات التي تدعم هذه الميزة.</p></div><div class="feature"><span class="icon">✦</span><h3>BLOFY AI</h3><p>واجهة مخصصة لاستكشاف المحتوى، بحسب الإصدار والتفعيل.</p></div></div>
+<section class="section" id="features"><div class="container"><span class="eyebrow">WHY BLOFY</span><h2 class="h2">اشتراك واضح من البداية</h2><p class="lead">صفحة مخصصة لبيع الاشتراكات الرقمية، مع تحديد طريقة الدخول ونوع المنتج قبل الطلب.</p>
+ <div class="feature-grid"><div class="feature"><span class="icon">⌗</span><h3>اشتراك بالكود</h3><p>اختر مسار كود BLOFY STREAM واطلب تفاصيل الباقة المناسبة.</p></div><div class="feature"><span class="icon">⌘</span><h3>اشتراك Xtream</h3><p>اختيار نوع الدخول عبر بيانات Xtream عند توفره.</p></div><div class="feature"><span class="icon">◷</span><h3>مدة تناسبك</h3><p>حدد المدة المطلوب الاستفسار عنها قبل تأكيد السعر.</p></div><div class="feature"><span class="icon">✆</span><h3>طلب عبر واتساب</h3><p>رسالة جاهزة باسم المنتج والمدة لتسهيل متابعة طلبك.</p></div></div>
 </div></section>
-<section class="section" id="payments"><div class="container"><div class="payment"><div><span class="eyebrow">SECURE CHECKOUT</span><h2>جدّد تفعيلك بكل وضوح</h2><p>لديك جهاز BLOFY مسجّل؟ افتح صفحة الدفع الرسمية، اختر الباقة المتاحة، وأكمل الدفع بالبطاقة من خلال بوابة Geidea المستضافة. لا تدخل بيانات بطاقتك داخل واتساب.</p></div><div class="buttons"><a href="/pay" class="btn primary">الدفع عبر جيديا ↗</a><a href="/portal" class="btn ghost">إدارة الجهاز</a></div></div>
-<div id="plans" class="plans" hidden aria-live="polite"></div>
-<p id="paymentNote" class="disclaimer">يُعرض الدفع المباشر فقط عند توفر باقات مفعّلة في النظام. الدفع يخص تفعيل الجهاز المسجّل؛ لشراء خدمة جديدة تواصل أولًا عبر واتساب.</p>
+<section class="section" id="how-it-works"><div class="container"><span class="eyebrow">HOW TO ORDER</span><h2 class="h2">ثلاث خطوات لطلب الاشتراك</h2><div class="order-steps"><div><b>01</b><h3>اختر المنتج</h3><p>كود ستريم أو اشتراك Xtream BLOFY.</p></div><div><b>02</b><h3>حدد المدة</h3><p>اختر المدة التي تود الاستفسار عن توفرها.</p></div><div><b>03</b><h3>تواصل وأكمل الطلب</h3><p>تُفتح محادثة واتساب باسم المنتج والمدة، ثم نؤكد لك السعر وخطوات التفعيل والدفع.</p></div></div></div></section>
+<section class="section" id="payments"><div class="container"><div class="payment"><div><span class="eyebrow">PAYMENTS • GEIDEA</span><h2>الدفع بعد تأكيد تفاصيل الاشتراك</h2><p>أزرار المنتجات الآن مخصصة لطلب الاشتراك عبر واتساب والتأكد من السعر والتوفر. نظام Geidea الموجود حاليًا مرتبط بتجديد تفعيل جهاز مسجّل، <b>ولا يُصدر كود BLOFY STREAM أو بيانات Xtream تلقائيًا</b>. لذلك لا نحول طلبات المنتجات الجديدة إلى صفحة الدفع هذه حتى لا يتم تحصيل مبلغ دون تجهيز الاشتراك.</p></div><a class="btn whatsapp" href="https://wa.me/966568941484" data-wa="general" rel="noopener noreferrer" target="_blank">اسأل عن الدفع المتاح ←</a></div>
+<p class="disclaimer">لا ترسل بيانات البطاقة أو كلمة مرور Xtream في واتساب. لا يتم خصم أي مبلغ من صفحة المنتجات نفسها.</p>
 </div></section>
-<section class="section" id="questions"><div class="container"><span class="eyebrow">QUESTIONS</span><h2 class="h2">تحتاج توضيح؟</h2><div class="faq">
-<details><summary>كيف أطلب باقة جديدة؟</summary><p>اضغط «استفسر عن الاشتراك» وتفتح لك محادثة واتساب جاهزة مع فريق BLOFY. نوضح لك الباقات المتاحة وشروطها قبل إتمام الطلب.</p></details>
-<details><summary>هل يمكنني الدفع إلكترونيًا؟</summary><p>للمشتركين ذوي الأجهزة المسجّلة تتوفر صفحة دفع وتجديد من خلال جيديا إذا كانت خدمة الدفع والباقة مفعّلتين.</p></details>
-<details><summary>كيف أحمل التطبيق؟</summary><p>من صفحة «تحميل التطبيق» ستجد الإصدارات المنشورة وتعليمات التثبيت المتاحة.</p></details>
-<details><summary>كيف أتواصل مع الدعم؟</summary><p>عبر واتساب على الرقم 0568941484، أو من صفحة الدعم بالموقع. لا تشارك رمز تفعيل جهازك في محادثة عامة.</p></details>
+<section class="section" id="questions"><div class="container"><span class="eyebrow">QUESTIONS</span><h2 class="h2">الأسئلة الشائعة عن الاشتراكات</h2><div class="faq">
+<details><summary>وش الفرق بين اشتراك الكود واشتراك Xtream؟</summary><p>الكود يُستخدم عبر مسار إدخال الأكواد المدعوم في BLOFY STREAM، أما Xtream فيعتمد على بيانات خادم واسم مستخدم وكلمة مرور. نوع الوصول الفعلي يعتمد على الباقة والنظام المتاح.</p></details>
+<details><summary>كيف أعرف السعر والمدة المتاحة؟</summary><p>اختر المنتج ثم المدة واضغط طلب الاشتراك. تظهر رسالة واتساب بالمنتج والمدة لتأكيد السعر والتوفر قبل الدفع.</p></details>
+<details><summary>هل أستلم الاشتراك تلقائيًا بعد الدفع؟</summary><p>ليس من صفحة المنتجات حاليًا. نؤكد طريقة التسليم والتفعيل معك قبل إتمام الطلب. لا تدفع رسومًا مقابل منتج لم تُؤكَّد تفاصيل تسليمه.</p></details>
+<details><summary>كيف أتواصل مع الدعم؟</summary><p>تواصل معنا عبر واتساب 0568941484. لا تشارك بيانات البطاقة أو كلمات مرور حسابك مع أي طرف غير موثوق.</p></details>
 </div></div></section>
-<section class="section"><div class="container"><div class="payment"><div><span class="eyebrow">START WITH BLOFY</span><h2>جاهز تختار باقتك؟</h2><p>تواصل معنا الآن، وخلّنا نساعدك تحصل على الخيار اللي يناسب جهازك واحتياجك.</p></div><a class="btn whatsapp" href="https://wa.me/966568941484" data-wa="general" rel="noopener noreferrer" target="_blank">افتح محادثة واتساب ←</a></div></div></section>
+<section class="section"><div class="container"><div class="payment"><div><span class="eyebrow">BLOFY STORE</span><h2>حدد اشتراكك وابدأ الطلب</h2><p>منتجات BLOFY STREAM وXtream في مكان واحد، وتواصل مباشر لتأكيد التفاصيل قبل الدفع.</p></div><a class="btn primary" href="#products">العودة للاشتراكات ←</a></div></div></section>
 </main>
-<footer class="bottom"><div class="container bottom-inner"><div><b dir="ltr">BLOFY STREAM · BLOFY PLAYER</b><div style="font-size:12px;margin-top:7px">المنتجات والتوافر بحسب الخدمة والباقات المعتمدة.</div></div><div class="footlinks"><a href="/privacy">الخصوصية</a><a href="/support">الدعم</a><a href="/downloads">التنزيلات</a><a href="/portal">إدارة الجهاز</a><a href="https://wa.me/966568941484" data-wa="general" rel="noopener noreferrer" target="_blank">واتساب 0568941484</a></div></div></footer>
+<footer class="bottom"><div class="container bottom-inner"><div><b dir="ltr">BLOFY · SUBSCRIPTION STORE</b><div style="font-size:12px;margin-top:7px">الاشتراكات الرقمية فقط — السعر والتوفر وحقوق المحتوى تُؤكَّد قبل الدفع.</div></div><div class="footlinks"><a href="#products">الاشتراكات</a><a href="/privacy">الخصوصية</a><a href="/support">الدعم</a><a href="https://wa.me/966568941484" data-wa="general" rel="noopener noreferrer" target="_blank">واتساب 0568941484</a></div></div></footer>
 <a class="whats-bubble" href="https://wa.me/966568941484" data-wa="general" rel="noopener noreferrer" target="_blank" aria-label="التواصل عبر واتساب">واتساب ✆</a>
 <script>
 (function(){
-  var messages={
-    general:'السلام عليكم، وصلت من موقع BLOFY وأرغب في معرفة الباقات والخدمات المتاحة.',
-    stream:'السلام عليكم، أرغب في الاشتراك في BLOFY STREAM. أرجو إرسال الباقات والتفاصيل والتوافق مع جهازي.',
-    business:'السلام عليكم، لدي متجر وأرغب في معلومات عن لوحة إدارة أكواد واشتراكات BLOFY للموزعين.'
+  var products = {
+    general:'السلام عليكم، وصلت من متجر BLOFY وأرغب في الاستفسار عن الاشتراكات المتاحة.',
+    stream:'السلام عليكم، أرغب في طلب اشتراك كود BLOFY STREAM.',
+    xtream:'السلام عليكم، أرغب في طلب اشتراك Xtream BLOFY (بيانات Xtream).'
   };
   var source='';
-  try{var utm=new URLSearchParams(location.search).get('utm_source')||'';if(utm&&/^[a-zA-Z0-9_-]{1,40}$/.test(utm))source=' (المصدر: '+utm+')';}catch(_){}
-  document.querySelectorAll('[data-wa]').forEach(function(a){
-    var m=messages[a.getAttribute('data-wa')]||messages.general;
-    a.href='https://wa.me/966568941484?text='+encodeURIComponent(m+source);
+  try{
+    var utm=new URLSearchParams(location.search).get('utm_source')||'';
+    if(utm&&/^[a-zA-Z0-9_-]{1,40}$/.test(utm))source=' (المصدر: '+utm+')';
+  }catch(_){}
+  function updateLinks(){
+    document.querySelectorAll('[data-wa]').forEach(function(link){
+      var product=link.getAttribute('data-wa')||'general';
+      var message=products[product]||products.general;
+      var dropdown=document.querySelector('[data-duration="'+product+'"]');
+      var value=dropdown&&dropdown.value;
+      if(value)message+=' المدة المطلوبة: '+value+'.';
+      if(product!=='general')message+=' أرجو تأكيد السعر والتوفر وموعد وطريقة التسليم قبل الدفع.';
+      link.href='https://wa.me/966568941484?text='+encodeURIComponent(message+source);
+    });
+  }
+  document.querySelectorAll('[data-duration]').forEach(function(input){
+    input.addEventListener('change',updateLinks);
   });
-  var plans=document.getElementById('plans');
-  fetch('/api/v1/subscriptions/plans',{method:'GET',cache:'no-store',headers:{accept:'application/json'}})
-    .then(function(r){if(!r.ok)throw Error('unavailable');return r.json();})
-    .then(function(data){
-      if(data.provider!=='geidea'||data.purchasesAvailable!==true||!Array.isArray(data.items))return;
-      var valid=data.items.filter(function(p){
-        return p&&typeof p.planKey==='string'&&typeof p.name==='string'&&Number.isInteger(p.priceMinor)&&p.priceMinor>0&&p.currency==='SAR';
-      }).slice(0,12);
-      if(!valid.length)return;
-      valid.forEach(function(p){
-        var card=document.createElement('article');card.className='plan';
-        var name=document.createElement('strong');name.textContent=p.name.slice(0,80);
-        var price=document.createElement('div');price.className='price';price.textContent=(p.priceMinor/100).toLocaleString('ar-SA',{minimumFractionDigits:0,maximumFractionDigits:2})+' ر.س';
-        var note=document.createElement('small');note.textContent=p.durationDays?'المدة: '+p.durationDays+' يوم':'راجع مدة الباقة قبل الدفع';
-        var link=document.createElement('a');link.className='btn primary small';link.href='/pay';link.textContent='التجديد الآمن';
-        card.append(name,price,note,link);plans.append(card);
-      });
-      plans.hidden=false;
-    }).catch(function(){ /* Don't show prices without a verified enabled payment provider. */ });
+  updateLinks();
 })();
+
 </script>
 </body>
 </html>
