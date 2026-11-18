@@ -5,7 +5,7 @@ import {paidOwnerVoucherSelect,renewalPlanFor,renewalStartAndExpiry} from './sto
 import {decryptStreamCode} from './xtream-code-vault.mjs';
 import {streamCodeProof} from './xtream-duration-codes.mjs';
 import {publicOrderNumber} from './store-cart.mjs';
-import {createSignature,CARD_ONLY_WALLETS} from './geidea-live.mjs';
+import {createSignature,geideaHiddenWallets} from './geidea-live.mjs';
 
 export const RENEWAL_SKU='renewal';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -14,7 +14,7 @@ const accessHash=s=>crypto.createHash('sha256').update(s).digest('hex');
 
 export function createStoreRenewalFlow({pool,json,readJson,keyHex,enabled,
  requireCheckoutCustomer,browser,rateCheckout,requestClientKey,
- schema,provider,plans,publicKey,password,base}){
+ schema,provider,plans,publicKey,password,base,env=process.env}){
  const available=()=>enabled===true;
  function verifyVoucher(row){
   if(!row?.code_vault||!row.code_hash)return false;
@@ -110,7 +110,7 @@ export function createStoreRenewalFlow({pool,json,readJson,keyHex,enabled,
   const request={
    amount:(plan.priceMinor/100).toFixed(2),currency:'SAR',timestamp,merchantReferenceId:id,
    signature:createSignature({publicKey,password,amountMinor:plan.priceMinor,reference:id,timestamp}),
-   paymentOperation:'Pay',language:'ar',hideWallets:[...CARD_ONLY_WALLETS],
+   paymentOperation:'Pay',language:'ar',hideWallets:geideaHiddenWallets(env),
    expressCheckouts:[],acceptTabbyPaymentMethod:false,acceptTamaraPaymentMethod:false,
    appearance:{uiMode:'modal'},
    callbackUrl:base+'/api/v1/store/geidea/webhook',
