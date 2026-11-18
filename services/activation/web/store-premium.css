@@ -315,3 +315,61 @@ body[data-shop-product] .visual-hero-content{padding:20px}
  .visual-feature-caption strong{font-size:17px}
  body[data-shop-product] .visual-hero-content{padding:16px}
 }
+
+
+/* BLOFY Subscription Offers · 2026-11, unified royal-navy brand. */
+.blofy-banners{position:relative;isolation:isolate}
+.blofy-banners [data-slide]{width:100%}
+.blofy-banners [data-slide][hidden]{display:none!important}
+.banner-slide-title{font-size:clamp(32px,4.4vw,64px);font-weight:600;line-height:1.31;letter-spacing:-.045em;color:white;margin:18px 0}
+.banner-slide-title em{color:#88b3ff;font-style:normal}
+.slide-summary{font-size:15px;line-height:2;color:#d9e5f7;max-width:470px;margin:0 0 22px}
+.banner-slider-controls{display:flex;align-items:center;justify-content:center;gap:9px;margin:17px auto 0;direction:ltr}
+.banner-slider-controls button{height:32px;width:32px;border:1px solid #54739c;border-radius:100%;background:#101e37;color:#9fb7de;cursor:pointer;display:grid;place-items:center}
+.banner-slider-controls button[data-slide-dot]{height:12px;width:12px;font-size:0;padding:0;border-color:#476491;background:#243d66}
+.banner-slider-controls button[data-slide-dot][aria-pressed="true"]{background:#8cbaff;border-color:#a6c9ff}
+.banner-slider-controls button[data-prev-slide],.banner-slider-controls button[data-next-slide]{font:700 22px Arial}
+.offer-spotlight{padding-top:43px}
+.offer-hero{position:relative;min-height:385px;overflow:hidden;border:1px solid #456293;border-radius:25px;isolation:isolate;box-shadow:0 30px 80px #000917a8;background:#061125}
+.offer-hero>img{position:absolute;inset:0;z-index:-2;width:100%;height:100%;object-fit:cover}
+.offer-hero:before{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(90deg,transparent 8%,#06132c9f 48%,#061329f5 86%)}
+.offer-overlay{min-height:385px;width:min(58%,690px);display:flex;flex-direction:column;align-items:flex-start;justify-content:center;padding:39px clamp(30px,4.5vw,70px)}
+.offer-kicker{display:inline-flex;border:1px solid #cfad65;color:#f8deb0;font-size:12px;border-radius:100px;padding:7px 13px;background:#aa8b4622}
+.offer-overlay h2{font-size:clamp(32px,4vw,56px);font-weight:600;letter-spacing:-.047em;line-height:1.32;margin:16px 0 12px}
+.offer-overlay h2 em{font-style:normal;color:#8bb9ff}
+.offer-overlay p{font-size:14px;line-height:2;color:#cbdaf1;max-width:510px;margin:0 0 20px}
+.offer-big-price{display:flex;gap:17px;align-items:center;flex-wrap:wrap;margin:0 0 23px}
+.offer-big-price del{font-size:22px;color:#a6b4d0}
+.offer-big-price strong{font-size:35px;color:#fff;font-weight:700}
+.offer-big-price span{font-size:12px;border-radius:100px;padding:6px 11px;border:1px solid #b99e62;background:#ac8a3e25;color:#ecd3a2}
+.offer-checkout{display:grid;grid-template-columns:1fr 1fr;gap:34px;margin-top:20px;padding:clamp(25px,4.1vw,48px);background:linear-gradient(145deg,#122748,#0b1931);border:1px solid #385781;border-radius:24px}
+.offer-head h3{font-size:clamp(22px,2.6vw,33px);font-weight:600;line-height:1.35;margin:10px 0}
+.offer-head p{font-size:14px;line-height:2.1;color:#b9cde9;max-width:490px}
+.offer-fields{display:grid;grid-template-columns:1fr;gap:9px}
+.offer-fields label{font-size:13px;font-weight:600;color:#cbddf6}
+.offer-fields select,.coupon-input input,.coupon-input select{background:#08192f;border:1px solid #4a6b9c;color:#f6faff;padding:12px 15px;border-radius:13px;min-height:48px;width:100%;max-width:100%;font:inherit}
+.offer-fields select{margin-bottom:6px}
+.offer-total{display:flex;align-items:center;justify-content:space-between;gap:13px;border-top:1px solid #344f7b;margin-top:11px;padding:17px 0 4px;font-size:13px;color:#afc5e6}
+.offer-total b{font-weight:700;font-size:26px;color:#fff}
+.offer-fields .checkout-status{min-height:16px}
+.coupon-area{margin-top:15px;margin-bottom:25px}
+.coupon-panel{display:grid;grid-template-columns:1fr 1fr;gap:30px;align-items:center;padding:29px;border:1px solid #2d4e77;background:#101f38;border-radius:22px}
+.coupon-panel h2{margin:0 0 7px;font-size:21px;font-weight:600}
+.coupon-panel p{margin:0;font-size:13px;color:#adbfda;line-height:1.9}
+.coupon-input{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.coupon-input label{grid-column:1/-1;font-size:12px;color:#b4c8e8;font-weight:600}
+.coupon-input select{grid-column:1/-1}
+.coupon-input input{direction:ltr;text-transform:uppercase}
+.coupon-input #coupon-result{grid-column:1/-1;font-size:12px;line-height:1.8;min-height:18px}
+.bundle-receipt-codes{display:grid;grid-template-columns:1fr 1fr;gap:15px;margin:21px 0}
+.bundle-receipt-item{display:flex;flex-direction:column;gap:10px;border:1px solid #4d6d99;padding:20px;border-radius:15px;background:#0d2548;min-width:0}
+.bundle-receipt-item b{font-size:14px}
+.bundle-receipt-item code{direction:ltr;display:block;max-width:100%;overflow-wrap:anywhere;font:700 24px Arial,sans-serif;letter-spacing:.1em;color:#e6f3ff;border:1px dashed #527db9;background:#09152d;padding:12px;border-radius:10px;text-align:center}
+.bundle-receipt-item small{color:#91b7df;font-size:12px;line-height:1.7}
+.bundle-receipt-item .btn{align-self:flex-start}
+body[data-shop-offer] .banner-hero,body[data-shop-offer] #products,body[data-shop-offer] #features,body[data-shop-offer] .quick-steps,body[data-shop-offer] #trial,body[data-shop-offer] #questions,body[data-shop-offer] .divider{display:none}
+body[data-shop-offer] #offer{padding-top:56px}
+body[data-shop-offer] #offer .offer-hero{min-height:390px}
+@media(max-width:920px){.offer-overlay{width:69%}.offer-hero:before{background:linear-gradient(90deg,transparent,#061329d4 56%,#061329fa 93%)}}
+@media(max-width:650px){.banner-slider-controls{margin-top:12px}.offer-hero{min-height:465px;border-radius:19px}.offer-hero:before{background:linear-gradient(0deg,#07132bf6 0%,#07142ba8 61%,transparent)}.offer-overlay{padding:23px;width:100%;min-height:465px;justify-content:flex-end}
+.offer-overlay h2{font-size:34px}.offer-overlay p{font-size:12px}.offer-big-price strong{font-size:30px}.offer-checkout{grid-template-columns:1fr;padding:21px;gap:10px}.offer-head h3{font-size:22px}.offer-head p{font-size:13px}.offer-total b{font-size:23px}.coupon-panel{grid-template-columns:1fr;padding:20px;gap:15px}.bundle-receipt-codes{grid-template-columns:1fr}.slide-summary{font-size:12px}.banner-slide-title{font-size:30px}}
