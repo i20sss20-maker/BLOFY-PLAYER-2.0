@@ -10,7 +10,7 @@ const baseOrder={id,sku:'stream-3m',channel:'app',duration_days:90,
   currency:'SAR',status:'paid',created_at:'2026-11-18T19:00:00Z',
   paid_at:paidAt,amount_minor:4000,coupon_discount_minor:0,
   public_order_number:'BF-261118-12345678',
-  code_vault:'RAW-SECRET-MUST-NOT-SEND',code:'12345678'};
+  code_vault:'RAW-SECRET-MUST-NOT-SEND',code:'76543210'};
 const config={BLOFY_CUSTOMER_ACCOUNTS_ENABLED:'true',BLOFY_CUSTOMER_RECEIPTS_ENABLED:'true',
   BLOFY_CUSTOMER_RESEND_API_KEY:'re_test_key',BLOFY_CUSTOMER_MAIL_FROM:'BLOFY <notify@blofyplayer.com>',
   BLOFY_CUSTOMER_RECEIPTS_SINCE:'2026-11-18T19:55:00Z'};
@@ -50,7 +50,7 @@ test('verified payments have customer printable receipts without secrets or clai
  assert.match(mail.text,/4000|40\.00/);
  assert.match(mail.text,/store\/account/);
  assert.match(mail.text,/ليست فاتورة ضريبية/);
- assert.doesNotMatch(JSON.stringify(mail),/12345678|RAW-SECRET-MUST-NOT-SEND|accessToken|cardNumber/);
+ assert.doesNotMatch(JSON.stringify(mail),/76543210|RAW-SECRET-MUST-NOT-SEND|accessToken|cardNumber/);
 });
 test('feature requires explicit on-state, verified sender and exact UTC cutoff',()=>{
  assert.equal(receiptEmailConfig({}).enabled,false);
@@ -74,7 +74,7 @@ test('owned paid order receives one idempotent email; retries never duplicate af
    if(sql.startsWith('CREATE TABLE')){ddl++;return rows();}
    if(sql.startsWith('INSERT INTO blofy_store_payment_receipt_emails')){
     if(!queued){queued=true;inserted++;}
-    assert.equal(args[0],config.BLOFY_CUSTOMER_RECEIPTS_SINCE);
+    assert.equal(args[0],new Date(config.BLOFY_CUSTOMER_RECEIPTS_SINCE).toISOString());
     return rows();
    }
    if(sql.startsWith('WITH todo AS')){
@@ -98,7 +98,7 @@ test('owned paid order receives one idempotent email; retries never duplicate af
   accepted++;
   assert.equal(email,'purchaser@example.com');
   assert.equal(key,'blofy-payment-receipt-v1-'+id);
-  assert.doesNotMatch(JSON.stringify(msg),/RAW-SECRET-MUST-NOT-SEND|12345678/);
+  assert.doesNotMatch(JSON.stringify(msg),/RAW-SECRET-MUST-NOT-SEND|76543210/);
   return 'email-provider-ack-'+accepted;
  };
  const engine=createStoreReceiptEmailEngine({pool,env:config,sendEmail:sender});
