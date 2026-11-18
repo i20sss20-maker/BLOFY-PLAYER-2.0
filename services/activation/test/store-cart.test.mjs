@@ -61,7 +61,11 @@ test('BLOFY store has a verified-account cart, secure historical receipts and ad
  assert.match(cartJs,/\/api\/v1\/store\/cart\/quote/);
  assert.match(cartJs,/\/api\/v1\/store\/cart\/checkout/);
  assert.match(cartJs,/sessionStorage\.setItem\('blofy\.shop\.order\.'/);
- assert.match(cartJs,/GeideaCheckout/);
+ assert.match(cartJs,/https:\/\/www\.ksamerchant\.geidea\.net\/hpp\/checkout\/\?/);
+ assert.match(cartJs,/location\.assign\(paymentUrl\)/);
+ assert.match(cart,/id="open-geidea"/);
+ assert.doesNotMatch(cart,/geideaCheckout\.min\.js/,'payment must not depend on external modal JavaScript');
+ assert.doesNotMatch(cartJs,/window\.GeideaCheckout/,'missing payment modal script cannot block checkout');
  assert.match(orders,/id="access-token"/);
  assert.match(orderJs,/\/api\/v1\/store\/orders\/status/);
  assert.match(orderJs,/history\.replaceState/);
