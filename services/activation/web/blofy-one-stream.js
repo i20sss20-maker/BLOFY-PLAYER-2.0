@@ -175,6 +175,12 @@
       const title=node('td');
       title.append(node('strong',String(c.label||'كود BLOFY').slice(0,70)));
       title.append(node('small',String(c.codeHint||'—'),'one-stream-code-hint'));
+      if(c.buyerName||c.buyerPhone){
+        const parts=[];
+        if(c.buyerName)parts.push('العميل: '+String(c.buyerName).slice(0,65));
+        if(c.buyerPhone)parts.push('جوال ينتهي بـ '+String(c.buyerPhone).slice(-4));
+        title.append(node('small',parts.join(' · '),'one-stream-code-buyer'));
+      }
       const badge=node('span',readableStatus[c.status]||'غير معروف','one-stream-badge state-'+c.status);
       const state=node('td');state.append(badge);
       const action=node('td');
