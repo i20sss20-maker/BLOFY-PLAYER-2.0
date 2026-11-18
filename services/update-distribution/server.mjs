@@ -5,7 +5,7 @@ import { mkdir, rename, stat, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { initReleaseStore, getActiveRelease } from './release-store.mjs';
+import { initReleaseStore, getActiveRelease, closeReleaseStore } from './release-store.mjs';
 import { CINEMATIC_V74_APK_URL, CINEMATIC_V74_DOWNLOAD_PATH, CINEMATIC_V74 } from './cinematic-v74.mjs';
 import { CINEMATIC_V74_PATCH, CINEMATIC_V74_PATCH_APK_URL } from './cinematic-v74-patch.mjs';
 import { CINEMATIC_V74_REMOTE, CINEMATIC_V74_REMOTE_APK_URL } from './cinematic-v74-remote.mjs';
@@ -14,10 +14,11 @@ import { requireAdmin, sameOrigin, readForm, renderAdmin, handleAdminAction } fr
 import { initAppLibrary, listApps, getApp, listAppVariants, getAppVariant, refreshManagedApps, refreshAppHealth, recordDownload, openRemoteApk } from './app-library.mjs';
 import { appDownloadAction } from './app-download-policy.mjs';
 import { observeDownloadCompletion } from './download-metrics.mjs';
-import { recordDownloadCompletion, getDownloadStats } from './app-library.mjs';
+import { recordDownloadCompletion, getDownloadStats, closeAppLibrary } from './app-library.mjs';
 import { publicSiteRedirect } from './public-site-redirect.mjs';
 import { streamReleaseMetadata, STREAM_RELEASE_FILENAME, STREAM_PREVIOUS_RELEASE_FILENAME, STREAM_TEST_FILENAME, STREAM_TEST_PATH } from './stream-release.mjs';
 import { createReleaseFeedCache, PUBLIC_STREAM_RELEASE_CACHE_CONTROL } from './release-feed-cache.mjs';
+import { installGracefulShutdown } from './graceful-shutdown.mjs';
 import { verifySignedStreamUploadOidc, approvedStreamUpload, STREAM_55836_APK, STREAM_56_APK } from './stream-upload-oidc.mjs';
 import { UPDATE_SITE_CANONICAL, updateRobotsTxt, updateSitemapXml, renderMissingPublicPage, isPublicHtmlRequest } from './public-search-pages.mjs';
 
@@ -1012,6 +1013,12 @@ function scheduleManagedAppRefresh() {
   firstRun.unref?.();
   const timer = setInterval(run, APP_REFRESH_INTERVAL_MS);
   timer.unref?.();
+  return () => {
+    // Prevent future catalog health tasks from starting on a draining
+    // container while in-flight customer downloads finish.
+    clearTimeout(firstRun);
+    clearInterval(timer);
+  };
 }
 
 const server = http.createServer(async (req, res) => {
@@ -1256,7 +1263,25 @@ await importReleaseArtifactIfConfigured({
   // Do not promote a missing or unverified candidate in the public catalog.
   console.error('STREAM NEXT artifact import failed:', error?.message || error);
 });
+let stopScheduledRefresh = () => {};
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`BLOFY Azure update distribution listening on ${PORT}`);
-  scheduleManagedAppRefresh();
+  stopScheduledRefresh = scheduleManagedAppRefresh();
+});
+// Railway has a 120s draining window for the single-volume download service.
+// On replacement, preserve active APK HTTP responses for <=105s, rather than
+// abruptly aborting a signed installer when npm/node receives SIGTERM.
+// This doesn't make the single volume horizontally scalable.
+installGracefulShutdown({
+  server,
+  drainMs:105_000,
+  stopJobs:()=>stopScheduledRefresh(),
+  closeResources:async()=>{
+    const results=await Promise.allSettled([
+      closeReleaseStore(),closeAppLibrary()
+    ]);
+    for(const result of results)
+      if(result.status==='rejected')
+        throw result.reason;
+  }
 });
