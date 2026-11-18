@@ -2,6 +2,7 @@ import { collectSourceEpisodes, mapSeriesEpisodes, normalizePlayableSeriesInfo }
 import { databaseOptions } from './database-options.mjs';
 import { safeErrorSummary } from './diagnostics-sanitizer.mjs';
 import {safeXtreamTransportCategory} from './xtream-transport-errors.mjs';
+import {waitXtreamMediaRetry} from './xtream-media-retry-backoff.mjs';
 import { createFixedWindowLimiter, requestClientKey } from './auth-protection.mjs';
 import {ensureXtreamAdminReady,getXtreamStudioBranding} from './xtream-admin-hook.mjs';
 import {
@@ -1498,7 +1499,7 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
           }
           if (retryable && !transientRetried && attempt < maxAttempts) {
             transientRetried=true;
-            await new Promise(resolve=>setTimeout(resolve, 200*attempt));
+            if(!(await waitXtreamMediaRetry({attempt,signal:client.signal})))return;
             continue;
           }
           // The authenticated STREAM relay may envelope a provider 404 as
@@ -1710,7 +1711,7 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
         }
         if (!res.headersSent && !transientRetried && attempt < maxAttempts && safeReason!=='upstream_non_media_response') {
           transientRetried=true;
-          await new Promise(resolve=>setTimeout(resolve,200*attempt));
+          if(!(await waitXtreamMediaRetry({attempt,signal:client.signal})))return;
           continue;
         }
         if(res.headersSent)closedTelemetryRecorded=true;
