@@ -411,7 +411,7 @@ class CatalogLoadingActivity : AppCompatActivity() {
             val works = withContext(Dispatchers.IO) {
                 work.getWorkInfosForUniqueWork(StreamCatalogDeltaWorker.workName(providerId)).get()
             }
-            val state = works.firstOrNull()
+            val state = works.firstOrNull { !it.state.isFinished } ?: works.firstOrNull()
             when (state?.state) {
                 WorkInfo.State.SUCCEEDED -> {
                     render(100, getString(R.string.catalog_complete))
