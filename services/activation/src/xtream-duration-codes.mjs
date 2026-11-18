@@ -210,6 +210,66 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
     return {ok:true,items:result.rows.map(safeCodeRecord),totals:totals.rows[0],
       nextOffset:result.rows.length===n?start+n:null};
   }
+  // Owner-only full inventory search. A plaintext voucher can only be matched
+  // by its HMAC proof; it is never included in a URL or returned in lists.
+  // Other searches inspect recorded label, buyer contact, hint and UUID.
+  async function search({query='',status='all',limit=40,offset=0}={}){
+    if(typeof query!=='string'||query.length>100||
+       /[\x00-\x1f\x7f]/.test(query))
+      throw Object.assign(Error('stream_search_query_invalid'),{status:400});
+    const q=query.trim()
+      .replace(/[٠-٩]/g,char=>String(char.charCodeAt(0)-0x660))
+      .replace(/[۰-۹]/g,char=>String(char.charCodeAt(0)-0x6f0));
+    if(q.length===1||q.length>80)
+      throw Object.assign(Error('stream_search_query_invalid'),{status:400});
+    const states={
+      all:'TRUE',
+      unused:'c.redeemed_at IS NULL AND c.revoked_at IS NULL',
+      redeemed:'c.redeemed_at IS NOT NULL',
+      revoked:'c.revoked_at IS NOT NULL'
+    };
+    if(!Object.hasOwn(states,String(status)))
+      throw Object.assign(Error('stream_search_status_invalid'),{status:400});
+    if(!Number.isSafeInteger(limit)||limit<1||limit>40||
+       !Number.isSafeInteger(offset)||offset<0||offset>100000)
+      throw Object.assign(Error('stream_search_pagination_invalid'),{status:400});
+    const proof=streamCodeProof(q,keyHex)||'';
+    const sql=`FROM blofy_xtream_gateway_duration_codes c
+      WHERE (
+        $1::text='' OR c.code_hash=$2 OR c.id::text=$1 OR
+        strpos(lower(c.label),lower($1::text))>0 OR
+        strpos(lower(COALESCE(c.buyer_name,'')),lower($1::text))>0 OR
+        strpos(COALESCE(c.buyer_phone,''),$1::text)>0 OR
+        strpos(lower(c.code_hint),lower($1::text))>0
+      ) AND (${states[status]})`;
+    const args=[q,proof];
+    const [items,count,totals]=await Promise.all([
+      pool.query(`SELECT c.* ${sql} ORDER BY c.created_at DESC,c.id DESC
+        LIMIT $3 OFFSET $4`,[...args,limit,offset]),
+      pool.query(`SELECT COUNT(*)::int AS count ${sql}`,args),
+      pool.query(`SELECT COUNT(*)::int AS total,
+        COUNT(*) FILTER(WHERE redeemed_at IS NULL AND revoked_at IS NULL)::int AS unused,
+        COUNT(*) FILTER(WHERE redeemed_at IS NOT NULL)::int AS redeemed,
+        COUNT(*) FILTER(WHERE revoked_at IS NOT NULL)::int AS revoked
+        FROM blofy_xtream_gateway_duration_codes`)
+    ]);
+    const filteredTotal=Number(count.rows?.[0]?.count||0);
+    return {ok:true,items:items.rows.map(safeCodeRecord),
+      totals:totals.rows?.[0]||{},filteredTotal,searchApplied:true,
+      nextOffset:offset+limit<filteredTotal?offset+limit:null};
+  }
+  // Protected record-by-ID lookup used for last-moment approval of manual
+  // changes. Never returns a plaintext voucher or Xtream password.
+  async function getRecord(id){
+    if(!UUID.test(String(id||'')))
+      throw Object.assign(Error('stream_code_id_invalid'),{status:400});
+    const result=await pool.query(
+      'SELECT * FROM blofy_xtream_gateway_duration_codes WHERE id=$1 LIMIT 1',[id]);
+    const row=result.rows?.[0];
+    return row?{ok:true,item:safeCodeRecord(row)}:
+      {ok:false,code:'stream_code_not_found'};
+  }
+
   // Operator-only *read* of a voucher by its HMAC proof. Unlike redemption,
   // this never consumes a code, resets a clock, or exposes account credentials.
   // The caller MUST be guarded by the existing admin session.
@@ -483,5 +543,5 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
     }catch(error){await client.query('ROLLBACK').catch(()=>{});throw error}
     finally{client.release()}
   }
-  return {issue,list,lookup,reveal,revoke,redeem};
+  return {issue,list,search,getRecord,lookup,reveal,revoke,redeem};
 }
