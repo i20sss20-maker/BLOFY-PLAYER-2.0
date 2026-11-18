@@ -7,7 +7,8 @@
 - Email verification does NOT grant historical order access by itself. Customers link each order using its private ID + 256-bit guest access token. A single order may only belong to one account.
 - Only verified, paid, linked orders may reveal codes; voucher integrity and revocation are checked. Pending orders cannot reveal codes.
 - Dashboard shows near-expiry based on first successful activation, not checkout. "Renew same code" contacts WhatsApp support; a fresh purchase issues a fresh code, NOT a renewal.
-- NOT IMPLEMENTED: scheduled outgoing expiry reminders and automatic same-code paid renewal. A default-false opt-in flag exists for future reminders but does not send messages.
+- An email expiry worker is now implemented **disabled by default**, sends at most one email per qualifying voucher with explicit customer opt-in, checks redeemed codes expiring within seven days, leases jobs across replicas and passes Resend idempotency keys. No WhatsApp messages are sent.
+- NOT IMPLEMENTED: automatic paid same-code renewal, and production verification of customer email deliverability. A default-false consent setting must be actively selected by the customer.
 - No card details, WhatsApp Cloud API tokens, or third-party login keys are stored in this repository.
 
 ## Railway configuration
@@ -16,9 +17,10 @@ Deploy with customer accounts disabled initially. Verify sender identity in Rese
 - BLOFY_CUSTOMER_RESEND_API_KEY: restricted production sender API key.
 - BLOFY_CUSTOMER_MAIL_FROM: verified sender address, e.g. BLOFY <support@verified-domain.example>.
 - BLOFY_CUSTOMER_ACCOUNTS_ENABLED=true: only after confirming real email delivery and login.
+- BLOFY_CUSTOMER_REMINDERS_ENABLED=true: separate explicit flag, only AFTER customer consent capture, sender verification, and a safe test of the deduplicated worker. Off by default.
 - Existing BLOFY_PLAYLIST_ENCRYPTION_KEY remains necessary to protect proofs and codes.
 
-Customer account enrollment does not change device activation or enable checkout. BLOFY_STORE_GEIDEA_ENABLED remains independent.
+Customer account enrollment does not change device activation or enable checkout. A checkout initiated in a logged-in session is automatically attached to the verified account; guest links remain usable. The owner-only /api/v1/admin/store/customer-accounts/summary endpoint shows account/email/reminder readiness and counts, never emails or raw codes. BLOFY_STORE_GEIDEA_ENABLED remains independent.
 
 ## Real payment acceptance test (requires permission and a real card)
 
@@ -36,7 +38,7 @@ No real payment is performed by this PR. Before testing, verify source rights, a
 
 ## Release gates
 
-- Run npm run check and npm test from services/activation.
+- Run npm run check and npm test from services/activation. Verify stored consent, failed email delivery, leased retry, and operator-only status.
 - GitHub verify, admin-session-persistence and downloads-browser CI must pass before merging.
 - Verify actual Railway service/deployment logs and production health. Do not deploy through retired Vercel.
 - Do not advertise commercial go-live until real-payment and multi-voucher delivery acceptance passes.
