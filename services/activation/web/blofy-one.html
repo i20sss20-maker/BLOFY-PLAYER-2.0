@@ -198,6 +198,27 @@
         <p class="one-legacy-hint">إذا لم يكن الكود في قاعدة BLOFY STREAM الحالية أو كانت كلمة المرور القديمة غير محفوظة بشكل قابل للاسترجاع، لن نُنشئ بيانات وهمية أو نغيّر حساب العميل. استخدم إدارة الاسترداد المتقدمة بعد التحقق من صاحب الاشتراك.</p>
       </div>
     </div>
+    <details class="one-legacy-batch" id="one-legacy-batch-section">
+      <summary>📋 فحص مجموعة أكواد قديمة معًا — حتى 20 كودًا (بدون كشف كلمات المرور)</summary>
+      <p class="one-legacy-note">ضع كودًا كاملًا في كل سطر. يفحص النظام وجود الكود وحالة التفعيل وإمكانية استعادة بيانات Xtream، دون تغيير أي اشتراك. عند ظهور «جاهز» اختر الكود ثم استخدم زر استخراج البيانات بعد التأكيد.</p>
+      <form class="one-legacy-batch-form" id="one-legacy-batch-form" autocomplete="off">
+        <label for="one-legacy-batch-codes">الأكواد القديمة أو الرقمية — كود في كل سطر
+          <textarea id="one-legacy-batch-codes" rows="5" maxlength="800" spellcheck="false"
+            autocomplete="off" placeholder="ABCDEF123456ABCDEF123456&#10;12345678" required></textarea>
+        </label>
+        <button type="submit" id="one-legacy-batch-run" class="one-legacy-action">فحص الأكواد المحددة</button>
+        <button type="button" id="one-legacy-batch-clear">مسح النتائج</button>
+      </form>
+      <p role="status" aria-live="polite" class="one-legacy-status" id="one-legacy-batch-status">الفحص آمن للقراءة فقط. إذا لم يوجد كود في السجلات الحالية فلن نخمّن بيانات اشتراكه.</p>
+      <div class="one-legacy-batch-table-wrap" id="one-legacy-batch-results" hidden tabindex="0" role="region"
+        aria-label="نتائج فحص الأكواد القديمة">
+        <table class="one-legacy-batch-table">
+          <thead><tr><th>#</th><th>الكود المخفي</th><th>النوع</th><th>حالة الربط</th><th>تاريخ الانتهاء</th><th>الإجراء</th></tr></thead>
+          <tbody id="one-legacy-batch-rows"></tbody>
+        </table>
+      </div>
+      <p class="one-legacy-hint">تُمسح الأكواد من واجهة الفحص عند إغلاق الصفحة، وعند إخفاء التبويب، وبعد ثلاث دقائق. لا يتم عرض كلمات المرور ضمن نتائج المجموعة، ولا حفظ الأكواد في سجل المتصفح.</p>
+    </details>
   </section>
   <section class="one-overview" aria-labelledby="health-title">
     <div class="one-section-heading">

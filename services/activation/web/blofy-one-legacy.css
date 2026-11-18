@@ -38,3 +38,26 @@
 @media(max-width:550px){.one-legacy-step{padding:14px}.one-legacy-credential{grid-template-columns:1fr;gap:4px}
  .one-legacy-info{grid-template-columns:1fr 1fr}}
 @media(max-width:360px){.one-legacy-info{grid-template-columns:1fr}}
+
+/* Read-only bulk check for old subscriptions. No plaintext codes in results. */
+.one-legacy-batch{margin-top:18px;border:1px solid #3a617a;border-radius:13px;background:#10243a;padding:18px}
+.one-legacy-batch summary{cursor:pointer;font-weight:700;color:#d1f6f4;font-size:15px;line-height:1.6}
+.one-legacy-batch summary:focus-visible{outline:2px solid #72d9cc;outline-offset:4px}
+.one-legacy-batch[open] summary{margin-bottom:14px}
+.one-legacy-batch-form{display:flex;flex-wrap:wrap;align-items:end;gap:10px}
+.one-legacy-batch-form label{display:grid;gap:7px;color:#c2d7e8;font-size:12px;min-width:260px;flex:1 1 100%}
+.one-legacy-batch-form textarea{width:100%;min-height:130px;border:1px solid #52718e;border-radius:11px;background:#0a1829;color:#e7f5ff;padding:12px;
+ direction:ltr;text-align:left;resize:vertical;font:600 13px ui-monospace,Consolas,monospace;letter-spacing:1px}
+.one-legacy-batch-form textarea:focus-visible{outline:2px solid #70eadb;outline-offset:2px}
+.one-legacy-batch-form button{padding:10px 15px;border:1px solid #537b93;border-radius:9px;background:#1a3a52;color:#cbe7f6;min-height:43px}
+.one-legacy-batch-form button:disabled{opacity:.55;cursor:wait}
+.one-legacy-batch-table-wrap{overflow-x:auto;border:1px solid #385b77;border-radius:11px;background:#0c1c30;margin:12px 0;max-width:100%}
+.one-legacy-batch-table{width:100%;min-width:740px;border-collapse:collapse}
+.one-legacy-batch-table td,.one-legacy-batch-table th{padding:11px 10px;border-bottom:1px solid #2c465d;font-size:12px;text-align:right}
+.one-legacy-batch-table th{background:#142e44;color:#c2e5ea}
+.one-legacy-batch-table td{color:#d4e1f1}
+.one-legacy-batch-table tr:last-child td{border-bottom:0}
+.one-legacy-batch-table td:nth-child(2){font:600 12px ui-monospace,Consolas,monospace;direction:ltr;text-align:left}
+.one-legacy-batch-table .one-legacy-pick{border:1px solid #57d5ca;border-radius:8px;background:#1a4b4a;color:#c4fff5;padding:8px 10px;font-weight:700;cursor:pointer;white-space:nowrap}
+.one-legacy-batch-table .one-legacy-pick:hover{background:#25615d}
+@media(max-width:550px){.one-legacy-batch{padding:13px}.one-legacy-batch-form label{min-width:0}}

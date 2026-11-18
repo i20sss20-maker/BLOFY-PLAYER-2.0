@@ -2712,6 +2712,15 @@ http.createServer = function withBlofyXtreamGateway(listener) {
           'cache-control':'no-store, private','referrer-policy':'no-referrer'
         });
       }
+      // Owner-only batch diagnostics: up to 20 exact codes, never a credential
+      // dump. Reuse the gateway's existing admin session and read-only proof
+      // matching; do not redeem, rotate or extend customer subscriptions.
+      if(req.method==='POST'&&url.pathname==='/api/v1/admin/xtream-gateway/codes/inspect-batch'){
+        const payload=await readJson(req);
+        return json(res,200,await streamDualLink.inspectBatch({codes:payload.codes}),{
+          'cache-control':'no-store, private','referrer-policy':'no-referrer'
+        });
+      }
       // Operator-only, exact voucher -> issued BLOFY Xtream account.
       // Never perform voucher redemption or return the upstream saleh host.
       if(req.method==='POST'&&url.pathname==='/api/v1/admin/xtream-gateway/link/code-to-xtream'){
