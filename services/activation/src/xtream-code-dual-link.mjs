@@ -69,6 +69,53 @@ export function createStreamCodeXtreamLink({pool,keyHex,clock=Date.now,
       credentials:credentials(serverUrl,row.username,password)};
   }
 
+  // Operator-only batch diagnosis. Existing vouchers are matched by HMAC
+  // proofs; no plaintext voucher or Xtream credential is ever returned.
+  // Intentionally read-only: this is not redemption or password rotation.
+  async function inspectBatch({codes}={}){
+    if(!Array.isArray(codes)||codes.length<1||codes.length>20)
+      throw err('stream_link_batch_limit',400);
+    const normalized=codes.map(normalizeStreamCode);
+    if(normalized.some(v=>!v))throw err('stream_link_batch_invalid_code',400);
+    const seen=new Set();
+    if(normalized.some(v=>{if(seen.has(v))return true;seen.add(v);return false}))
+      throw err('stream_link_batch_duplicate',400);
+    const proofs=normalized.map(code=>streamCodeProof(code,keyHex));
+    const found=await pool.query(`SELECT
+        c.code_hash,c.code_hint,c.redeemed_at,c.revoked_at,
+        c.expires_at AS voucher_expiry,c.account_id,
+        a.id AS account_identity,a.username,a.enabled,
+        a.expires_at AS account_expiry,a.source_id,a.credential_vault
+      FROM blofy_xtream_gateway_duration_codes c
+      LEFT JOIN blofy_xtream_gateway_accounts a ON a.id=c.account_id
+      WHERE c.code_hash=ANY($1::text[])`,[proofs]);
+    const rows=new Map((found.rows||[]).map(row=>[row.code_hash,row]));
+    const now=clock();
+    const results=normalized.map((code,index)=>{
+      const row=rows.get(proofs[index]);
+      const kind=/^[A-F0-9]{24}$/.test(code)?'legacy_24_hex':'numeric';
+      const base={index,kind,codeHint:row?.code_hint||null,
+        status:'not_found',canExtract:false,expiresAt:null};
+      if(!row)return base;
+      const vExpiry=timestamp(row.voucher_expiry);
+      const aExpiry=timestamp(row.account_expiry);
+      const expiry=vExpiry===null?aExpiry:aExpiry===null?vExpiry:Math.min(vExpiry,aExpiry);
+      base.expiresAt=expiry;
+      if(row.revoked_at)base.status='revoked';
+      else if(!row.redeemed_at||!row.account_id)base.status='not_activated';
+      else if(!row.account_identity)base.status='missing_account';
+      else if(row.enabled!==true)base.status='account_disabled';
+      else if(vExpiry===null||aExpiry===null||expiry<=now)base.status='expired';
+      else if(row.source_id&&String(row.source_id).toLowerCase()!==SALEH)base.status='unsupported_source';
+      else if(!row.credential_vault||!decryptGatewayAccountPassword(row.account_identity,row.credential_vault,keyHex))
+        base.status='password_unrecoverable';
+      else{base.status='ready';base.canExtract=true;}
+      return base;
+    });
+    return {ok:true,readOnly:true,scanned:results.length,
+      ready:results.filter(row=>row.canExtract).length,results};
+  }
+
   async function xtreamToCode({accountId}={}){
     if(!UUID.test(String(accountId||'')))throw err('stream_link_account_invalid',400);
     const db=await pool.connect();
@@ -144,5 +191,5 @@ export function createStreamCodeXtreamLink({pool,keyHex,clock=Date.now,
       throw error;
     }finally{db.release()}
   }
-  return {codeToXtream,xtreamToCode};
+  return {codeToXtream,xtreamToCode,inspectBatch};
 }
