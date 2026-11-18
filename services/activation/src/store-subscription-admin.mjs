@@ -44,11 +44,15 @@ export function parseOpsOptions(url){
     !Number.isSafeInteger(page)||page<1||page>200)return null;
  return {view,status,q:q.trim(),page};
 }
-export function createStoreSubscriptionAdmin({pool,json,authorizeAdmin}){
+export function createStoreSubscriptionAdmin({pool,json,authorizeAdmin,ensureStoreSchema=async()=>{}}){
  async function handler(req,res,url){
   if(!authorizeAdmin(req,res))return true;
   const opts=parseOpsOptions(url);
   if(!opts)return json(res,400,{error:'invalid_store_operations_filter'});
+  // The Geidea store schema is lazy-initialized on a new deployment. An admin
+  // must not see a false missing-data error before the first cart purchase.
+  // Only DDL/schema preparation is permitted here; no customer/payment writes.
+  await ensureStoreSchema();
   const tables=['blofy_store_customers','blofy_store_customer_orders',
    'blofy_store_geidea_orders','blofy_store_renewal_orders',
    'blofy_xtream_gateway_duration_codes','blofy_xtream_gateway_accounts',
