@@ -1346,8 +1346,15 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
     if (!res.writableEnded) {
       if(kind==='live'&&actualStreamStartedAt>0&&!closedTelemetryRecorded&&!feedEndedNormally){
         closedTelemetryRecorded=true;
+        const liveDurationMs=Date.now()-actualStreamStartedAt;
         observe('client_closed',{reason:'client_or_proxy_closed',
-          durationMs:Date.now()-actualStreamStartedAt});
+          durationMs:liveDurationMs});
+        if(liveDurationMs>=30000&&liveDurationMs<=180000){
+          console.info('BLOFY_LIVE_RELAY_ONE_MINUTE_CLOSE',{
+            cause:'client_or_proxy_closed',
+            secondsBucket:Math.round(liveDurationMs/10000)*10
+          });
+        }
       }
       abort();
     }
@@ -1660,7 +1667,14 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
         }
         feedEndedNormally=true;
         if(kind==='live'&&actualStreamStartedAt>0){
-          observe('ended',{reason:'upstream_stream_ended',durationMs:Date.now()-actualStreamStartedAt});
+          const liveDurationMs=Date.now()-actualStreamStartedAt;
+          observe('ended',{reason:'upstream_stream_ended',durationMs:liveDurationMs});
+          if(liveDurationMs>=30000&&liveDurationMs<=180000){
+            console.info('BLOFY_LIVE_RELAY_ONE_MINUTE_CLOSE',{
+              cause:'upstream_clean_eof',
+              secondsBucket:Math.round(liveDurationMs/10000)*10
+            });
+          }
         }
         return;
       } catch (error) {

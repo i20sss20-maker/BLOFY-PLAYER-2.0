@@ -32,6 +32,14 @@ test('production playback metrics summarize start latency and provider errors wi
   assert.ok(!JSON.stringify(m).includes('example.org'));
 });
 
+test('live one-minute close logs distinguish source EOF from client closure without credentials',async()=>{
+  const gateway=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
+  assert.match(gateway,/BLOFY_LIVE_RELAY_ONE_MINUTE_CLOSE/);
+  assert.match(gateway,/cause:'upstream_clean_eof'/);
+  assert.match(gateway,/cause:'client_or_proxy_closed'/);
+  assert.match(gateway,/secondsBucket:Math\.round\(liveDurationMs\/10000\)\*10/);
+});
+
 test('bounded data expires and malformed values cannot pollute dashboard',()=>{
   resetXtreamPlaybackMetricsForTest();
   const now=Date.now();
