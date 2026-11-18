@@ -182,6 +182,15 @@
       button.disabled=!c.copyAvailable||c.status==='revoked';
       button.addEventListener('click',()=>{void revealVoucher(c,button);});
       action.append(button);
+      const manage=node('button','إدارة الاشتراك','one-stream-compact-button one-stream-manage-code');
+      manage.type='button';
+      manage.setAttribute('aria-label','إدارة سجل كود '+String(c.codeHint||c.label||'BLOFY').slice(0,45));
+      manage.addEventListener('click',()=>{
+        window.dispatchEvent(new CustomEvent('blofy-one:manage-code',{
+          detail:{record:{...c},offset:codeOffset}
+        }));
+      });
+      action.append(manage);
       tr.append(title,node('td',c.channel==='app'?'كود التطبيق':'كود Xtream'),
         state,node('td',date(c.expiresAt)),
         node('td',c.accountId?'مرتبط':'غير مرتبط'),action);
