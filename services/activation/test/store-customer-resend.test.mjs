@@ -43,3 +43,13 @@ test('send-only scope is inconclusive; explicit domain rejection is recognized',
   {name:'blofyplayer.com',status:'pending'}]})})});
  assert.deepEqual(unverified,{status:'sender_domain_not_verified',domain:'blofyplayer.com',verificationStatus:'pending'});
 });
+
+test('GET domain-inspection 401 is inconclusive while POST emails 401 means invalid key',async()=>{
+ const result=await checkResendSender({
+  mailKey:'re_send_only_example',mailFrom:'BLOFY <support@blofyplayer.com>',
+  fetchImpl:async()=>({ok:false,status:401})
+ });
+ assert.deepEqual(result,{status:'key_inspection_unauthorized',domain:'blofyplayer.com'});
+ assert.deepEqual(classifyResendFailure(401,{name:'invalid_api_key'}),
+  {clientCode:'customer_email_key_invalid',reason:'invalid_api_key'});
+});
