@@ -10,7 +10,7 @@ export const STREAM_55836_AUDIENCE = 'blofy-stream-55-8-36-website-upload';
 export function isTrustedStreamUploadClaims(claims, now = Math.floor(Date.now() / 1000)) {
   return Boolean(claims && claims.iss === 'https://token.actions.githubusercontent.com' &&
     claims.aud === STREAM_55836_AUDIENCE &&
-    claims.sub === 'repo:i20sss20-maker/BLOFY-PLAYER-2.0:ref:refs/heads/main' &&
+    claims.sub === 'repo:i20sss20-maker@317876372/BLOFY-PLAYER-2.0@1351236912:ref:refs/heads/main' &&
     claims.repository === 'i20sss20-maker/BLOFY-PLAYER-2.0' &&
     String(claims.repository_id) === '1351236912' &&
     claims.ref === 'refs/heads/main' &&
