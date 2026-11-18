@@ -198,7 +198,7 @@
             ?'أحدث '+audited+' طلب سليم · تدقيق جزئي'
             :audited+' طلب تم فحص أكوادها';
         signal('fulfillment',label,fulfillmentIssues>0?'fail':
-          fulfillmentAudit.truncated?'warn':'ok');
+          fulfillmentAudit.truncated||fulfillmentAudit.auditedOrders===0?'warn':'ok');
       }else signal('fulfillment','التدقيق التفصيلي للأكواد غير متاح','pending');
       let stock=null;
       if(inventory?.ok===true&&Array.isArray(inventory.counts)){
