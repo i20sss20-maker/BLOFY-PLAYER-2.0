@@ -7,6 +7,8 @@ import {decryptStreamCode} from './xtream-code-vault.mjs';
 import {streamCodeProof} from './xtream-duration-codes.mjs';
 import {createCustomerReminderEngine} from './store-customer-reminders.mjs';
 import {classifyResendFailure,checkResendSender} from './store-customer-resend.mjs';
+import {PAID_OWNED_VOUCHERS_SQL,renewalStartAndExpiry} from './store-same-code-renewal.mjs';
+import {publicStorePlans} from './store-geidea-checkout.mjs';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ACCESS=/^[A-Za-z0-9_-]{42,44}$/;
@@ -160,6 +162,35 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
     orders:orders.map(o=>({orderId:o.id,orderNumber:o.public_order_number||publicOrderNumber(o.id,o.created_at),
       status:o.status,sku:o.sku,items:o.cart_items||null,amountMinor:o.amount_minor,
       currency:o.currency,createdAt:o.created_at,paidAt:o.paid_at}))});
+ }
+ async function subscriptions(req,res){
+  const customer=await current(req);
+  if(!customer)return json(res,401,{error:'login_required'});
+  // Only previously paid-and-owned vouchers appear. This endpoint never
+  // decrypts or discloses codes or account credentials.
+  const rows=(await pool.query(
+    'SELECT DISTINCT v.id,v.code_hint,v.code_channel,v.redeemed_at,'+
+    'v.expires_at,v.revoked_at,v.account_id,v.code_vault,'+
+    'a.enabled AS account_enabled,a.expires_at AS account_expires_at '+
+    'FROM ('+PAID_OWNED_VOUCHERS_SQL+') owned '+
+    'JOIN blofy_xtream_gateway_duration_codes v ON v.id=owned.voucher_id '+
+    'LEFT JOIN blofy_xtream_gateway_accounts a ON a.id=v.account_id '+
+    'ORDER BY v.id LIMIT 100',[customer.id])).rows;
+  return json(res,200,{ok:true,
+   renewalsAvailable:env.BLOFY_STORE_SAME_CODE_RENEWAL_ENABLED==='true'&&loginRequiredForStore&&
+     env.BLOFY_STORE_GEIDEA_ENABLED==='true',
+   subscriptions:rows.map(row=>{
+    const eligible=Boolean(renewalStartAndExpiry(row,90));
+    const codeDeadline=new Date(row.expires_at).getTime();
+    const accountDeadline=new Date(row.account_expires_at).getTime();
+    const expiresAt=Number.isFinite(codeDeadline)&&Number.isFinite(accountDeadline)
+      ?new Date(Math.min(codeDeadline,accountDeadline)).toISOString():null;
+    return {voucherId:row.id,codeHint:row.code_hint||'',
+      channel:row.code_channel,redeemed:!!row.redeemed_at,expiresAt,canRenew:eligible,
+      reason:eligible?null:row.revoked_at?'revoked':!row.redeemed_at?'not_activated':'not_eligible'};
+   }),
+   plans:publicStorePlans().map(x=>({sku:x.sku,channel:x.channel,
+     durationDays:x.durationDays,priceMinor:x.priceMinor,currency:x.currency}))});
  }
  async function alerts(req,res){
   const customer=await current(req);
@@ -365,7 +396,20 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
     createdAt:order.created_at,paidAt:order.paid_at,fulfilled:false,codes:[]};
   if(order.status!=='paid')return json(res,200,out);
   let rows=[],expected=null;
-  if(order.sku==='cart'){
+  if(order.sku==='renewal'){
+   // Renewal is a verified payment for the SAME existing voucher.
+   // It does not create a fresh voucher or overwrite its original duration.
+   const renewed=(await pool.query(
+     'SELECT v.id,v.code_hash,v.code_vault,v.revoked_at,v.redeemed_at,'+
+     'v.expires_at,v.duration_days,v.code_channel AS channel FROM blofy_store_renewal_orders r '+
+     'JOIN blofy_xtream_gateway_duration_codes v ON v.id=r.voucher_id '+
+     'WHERE r.order_id=$1',[id])).rows[0];
+   if(!renewed)return json(res,503,{error:'order_delivery_unavailable'});
+   expected=[{channel:order.channel,durationDays:Number(renewed.duration_days)}];
+   rows=[renewed];
+   out.renewalDays=Number(order.duration_days);
+   out.sameCodeRenewal=true;
+  }else if(order.sku==='cart'){
    expected=cartVouchers(order.cart_items);
    if(!parseStoreCart(order.cart_items)||!expected)return json(res,503,{error:'order_integrity_unavailable'});
    rows=(await pool.query('SELECT cv.position,cv.sku,cv.channel,cv.duration_days,'+
@@ -471,6 +515,7 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
    else if(path==='/api/v1/store/account/logout'&&req.method==='POST')await logout(req,res);
    else if(path==='/api/v1/store/account'&&req.method==='GET')await account(req,res);
    else if(path==='/api/v1/store/account/alerts'&&req.method==='GET')await alerts(req,res);
+   else if(path==='/api/v1/store/account/subscriptions'&&req.method==='GET')await subscriptions(req,res);
    else if(/^\/api\/v1\/store\/account\/orders\/[a-fA-F0-9-]{36}\/check$/.test(path)&&req.method==='POST')
      await refreshOwnedPayment(req,res,path.split('/').at(-2));
    else if(/^\/api\/v1\/store\/account\/orders\/[a-fA-F0-9-]{36}$/.test(path)&&req.method==='GET')

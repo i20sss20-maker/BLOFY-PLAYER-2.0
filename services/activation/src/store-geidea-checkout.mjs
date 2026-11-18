@@ -7,6 +7,7 @@ import {ensureStreamCodeTable,streamNumericCodeLength,randomNumericStreamCode,st
 import {encryptStreamCode,decryptStreamCode} from './xtream-code-vault.mjs';
 import {CART_SKU,parseStoreCart,cartVouchers,publicOrderNumber} from './store-cart.mjs';
 import {auditPaidFulfillment} from './store-fulfillment-audit.mjs';
+import {createStoreRenewalFlow,RENEWAL_SKU} from './store-renewal-checkout.mjs';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const API='https://api.ksamerchant.geidea.net';
@@ -38,6 +39,7 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
  const password=String(env.GEIDEA_LIVE_API_PASSWORD||'');
  const selected=env.BLOFY_PAYMENT_PROVIDER==='geidea'&&env.BLOFY_GEIDEA_CHECKOUT_ENABLED==='true';
  const loginRequired=env.BLOFY_STORE_REQUIRE_CUSTOMER_LOGIN==='true';
+ const renewalsEnabled=env.BLOFY_STORE_SAME_CODE_RENEWAL_ENABLED==='true'&&loginRequired;
  // Independent opt-in avoids changing live player renewal checkout until store fulfillment is validated.
  const enabled=selected&&env.BLOFY_STORE_GEIDEA_ENABLED==='true'&&UUID.test(publicKey)&&
    password.length>=16&&/^[a-f0-9]{64}$/i.test(String(keyHex||''));
@@ -103,7 +105,18 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
        'duration_days INTEGER NOT NULL CHECK(duration_days BETWEEN 1 AND 730),'+
        'sku TEXT NOT NULL,'+
        'PRIMARY KEY(order_id,position))',
-     'CREATE INDEX IF NOT EXISTS idx_blofy_store_cart_items_order ON blofy_store_cart_vouchers(order_id)'
+     'CREATE INDEX IF NOT EXISTS idx_blofy_store_cart_items_order ON blofy_store_cart_vouchers(order_id)',
+     'ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS extended_days INTEGER NOT NULL DEFAULT 0',
+     'CREATE TABLE IF NOT EXISTS blofy_xtream_gateway_code_events ('+
+       'id UUID PRIMARY KEY,code_id UUID NOT NULL REFERENCES blofy_xtream_gateway_duration_codes(id),'+
+       "event_type TEXT NOT NULL,occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),"+
+       "details JSONB NOT NULL DEFAULT '{}'::jsonb)",
+     'CREATE TABLE IF NOT EXISTS blofy_store_renewal_orders ('+
+       'order_id UUID PRIMARY KEY REFERENCES blofy_store_geidea_orders(id),'+
+       'voucher_id UUID NOT NULL REFERENCES blofy_xtream_gateway_duration_codes(id),'+
+       'plan_sku TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())',
+     'CREATE INDEX IF NOT EXISTS idx_blofy_store_renewal_voucher ON blofy_store_renewal_orders(voucher_id)'
+
     ])await db.query(statement);
     await db.query('COMMIT');
    }catch(e){await db.query('ROLLBACK').catch(()=>{});throw e;}
@@ -588,6 +601,10 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
      throw err('store_geidea_reference_mismatch',409);
    return items[0];
  }
+ const renewalFlow=createStoreRenewalFlow({pool,json,readJson,keyHex,
+  enabled:enabled&&renewalsEnabled,requireCheckoutCustomer,browser,
+  rateCheckout,requestClientKey,schema,provider,plans:publicStorePlans,
+  publicKey,password,base});
  async function reconcile(id,expectedProviderId){
    if(!enabled)throw err('store_checkout_disabled',503);
    await schema();
@@ -608,8 +625,10 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
     if(status==='paid'){
       const isBundle=order.sku===BUNDLE_SKU;
       const isCart=order.sku===CART_SKU;
+      const isRenewal=order.sku===RENEWAL_SKU;
       const plan=P.find(p=>p[0]===order.sku);
-      const basePrice=isCart?Number(order.cart_gross_minor):isBundle?BUNDLE_PRICE:plan?.[4];
+      const renewalPlan=isRenewal?P.find(p=>p[2]===order.channel&&p[3]===Number(order.duration_days)):null;
+      const basePrice=isRenewal?renewalPlan?.[4]:isCart?Number(order.cart_gross_minor):isBundle?BUNDLE_PRICE:plan?.[4];
       const previous={'stream-6m':6000,'stream-1y':10000,'xtream-6m':6000,'xtream-1y':10000};
       const formerPrices={'stream-3m':3000,'stream-6m':5000,'stream-1y':7000,
         'xtream-3m':3000,'xtream-6m':5000,'xtream-1y':7000};
@@ -618,9 +637,10 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
       const legacyGross=createdMs<Date.parse('2026-11-19T00:00:00Z')&&previous[order.sku];
       const olderGross=createdMs<Date.parse('2026-11-18T16:00:00Z')&&formerPrices[order.sku];
       const gross=[basePrice,legacyGross,olderGross].filter(x=>Number.isInteger(x)&&x>0);
-      if((!plan&&!isBundle&&!isCart)||
+      if((!plan&&!isBundle&&!isCart&&!isRenewal)||
+         (isRenewal&&!renewalPlan)||
          (isCart&&(!parseStoreCart(order.cart_items)||order.channel!=='app'))||
-         (!isBundle&&!isCart&&(plan[2]!==order.channel||plan[3]!==order.duration_days))||
+         (!isBundle&&!isCart&&!isRenewal&&(plan[2]!==order.channel||plan[3]!==order.duration_days))||
          (isBundle&&(!validBundleChannels(order.bundle_selection)||order.channel!=='app'||Number(order.duration_days)!==365)))
         throw err('store_catalog_mismatch',409);
       const discount=Number(order.coupon_discount_minor||0);
@@ -634,7 +654,9 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
       }else if(order.coupon_code)throw err('store_coupon_order_mismatch',409);
       if(!gross.some(x=>Number(order.amount_minor)===x-discount))
         throw err('store_catalog_price_mismatch',409);
-      if(isCart){
+      if(isRenewal){
+        await renewalFlow.fulfill(db,order,settled);
+      }else if(isCart){
         await fulfillCart(db,order,settled);
       }else if(isBundle){
         await fulfillBundle(db,order,settled);
@@ -832,6 +854,22 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
      });
      return json(res,200,{orderId:order.id,orderNumber,status:'paid',fulfilled:true,sku:order.sku,amountMinor:order.amount_minor,currency:'SAR',createdAt:order.created_at,paidAt:order.paid_at,codes});
    }
+   if(order.sku===RENEWAL_SKU){
+     const renewed=(await pool.query(
+       'SELECT v.id,v.code_hash,v.code_vault,v.revoked_at,v.expires_at '+
+       'FROM blofy_store_renewal_orders r JOIN blofy_xtream_gateway_duration_codes v '+
+       'ON v.id=r.voucher_id WHERE r.order_id=$1',[order.id])).rows[0];
+     if(!renewed||renewed.revoked_at||!renewed.code_vault)
+       return json(res,503,{error:'store_paid_delivery_unavailable'});
+     const sameCode=decryptStreamCode(renewed.id,renewed.code_vault,keyHex);
+     if(!sameCode||streamCodeProof(sameCode,keyHex)!==renewed.code_hash)
+       return json(res,503,{error:'store_code_integrity_unavailable'});
+     return json(res,200,{orderId:order.id,orderNumber,status:'paid',fulfilled:true,
+       sameCodeRenewal:true,sku:RENEWAL_SKU,channel:order.channel,
+       amountMinor:order.amount_minor,currency:'SAR',createdAt:order.created_at,
+       paidAt:order.paid_at,renewalDays:Number(order.duration_days),
+       expiresAt:renewed.expires_at,code:sameCode});
+   }
    if(!order.voucher_id)return json(res,503,{error:'store_paid_delivery_unavailable'});
    const voucher=(await pool.query('SELECT id,code_hash,code_vault,revoked_at FROM blofy_xtream_gateway_duration_codes WHERE id=$1',
     [order.voucher_id])).rows[0];
@@ -847,7 +885,8 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
    let path='/#products';
    if(UUID.test(id))try{
      const row=(await pool.query('SELECT sku FROM blofy_store_geidea_orders WHERE id=$1',[id])).rows[0];
-     path=row?.sku===CART_SKU?'/store/orders#order='+encodeURIComponent(id):
+     path=row?.sku===RENEWAL_SKU?'/store/account?renewal_order_id='+encodeURIComponent(id):
+       row?.sku===CART_SKU?'/store/orders#order='+encodeURIComponent(id):
        '/#store_order='+encodeURIComponent(id);
    }catch{
      path='/#store_order='+encodeURIComponent(id);
@@ -866,6 +905,8 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
    if(p==='/api/v1/store/cart/quote'&&req.method==='POST'){await cartQuote(req,res);return true;}
    if(p==='/api/v1/store/cart/checkout'&&req.method==='POST'){await cartCheckout(req,res);return true;}
    if(p==='/api/v1/store/cart/pending'&&req.method==='POST'){await cartPending(req,res);return true;}
+   if(p==='/api/v1/store/renewals/checkout'&&req.method==='POST'){await renewalFlow.checkout(req,res);return true;}
+   if(p==='/api/v1/store/renewals/pending'&&req.method==='POST'){await renewalFlow.getPending(req,res);return true;}
    if(p==='/api/v1/admin/store/sales'&&req.method==='GET'){await salesSummary(req,res);return true;}
    if(p==='/api/v1/admin/store/coupons/create'&&req.method==='POST'){await newCoupon(req,res);return true;}
    if(p==='/api/v1/admin/store/coupons/deactivate'&&req.method==='POST'){await disableCoupon(req,res);return true;}
