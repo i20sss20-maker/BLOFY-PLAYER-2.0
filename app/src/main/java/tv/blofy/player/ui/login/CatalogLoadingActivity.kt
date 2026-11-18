@@ -17,6 +17,9 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.lifecycleScope
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
+import tv.blofy.player.data.StreamCatalogDeltaWorker
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancelAndJoin
@@ -176,8 +179,12 @@ class CatalogLoadingActivity : AppCompatActivity() {
                         // STREAM always enters from the saved server catalogue immediately.
                         if (!BuildConfig.CODE_ONLY_LOGIN) awaitEntryReadyCache(providerId)
                         openHome(providerId)
+                    } else if (BuildConfig.CODE_ONLY_LOGIN && forceRefresh && hasCachedCatalog) {
+                        // STREAM 56 refresh from Settings uses the same login
+                        // loader UI, but NOT the obsolete 95% full-catalog Room
+                        // replacement. Server-side delta pages commit quietly.
+                        syncStreamDelta(providerId)
                     } else {
-                        // A manual refresh stages a replacement. Keep the old entry state until commit.
                         if (!hasCachedCatalog) CatalogSyncState.markPending(applicationContext, providerId)
                         sync(providerId, forceRefresh)
                     }
@@ -387,6 +394,63 @@ class CatalogLoadingActivity : AppCompatActivity() {
             marginEnd = TvUiTuning.dp(this@CatalogLoadingActivity, 5)
         }
     }
+
+    /** No network progress percentage is invented: delta pages are real work. */
+    private suspend fun syncStreamDelta(providerId: String) {
+        render(5, getString(R.string.catalog_start_refresh))
+        progress.isIndeterminate = true
+        percent.text = "…"
+        progressMeta.visibility = View.VISIBLE
+        progressMeta.text = if (streamArabic()) "يمكنك متابعة المشاهدة أثناء تحديث المكتبة"
+            else "Your saved library stays available while updating"
+        StreamCatalogDeltaWorker.enqueue(applicationContext, providerId, automatic = false)
+        val work = WorkManager.getInstance(applicationContext)
+        val startedAt = SystemClock.elapsedRealtime()
+        while (SystemClock.elapsedRealtime() - startedAt < 4 * 60_000L) {
+            currentCoroutineContext().ensureActive()
+            val works = withContext(Dispatchers.IO) {
+                work.getWorkInfosForUniqueWork(StreamCatalogDeltaWorker.workName(providerId)).get()
+            }
+            val state = works.firstOrNull { !it.state.isFinished } ?: works.firstOrNull()
+            when (state?.state) {
+                WorkInfo.State.SUCCEEDED -> {
+                    render(100, getString(R.string.catalog_complete))
+                    delay(160L)
+                    openHome(providerId)
+                    return
+                }
+                WorkInfo.State.FAILED, WorkInfo.State.CANCELLED -> {
+                    render(30, getString(R.string.catalog_refresh_kept))
+                    openHome(providerId)
+                    return
+                }
+                else -> {
+                    val kind = state?.progress?.getString(StreamCatalogDeltaWorker.KEY_KIND)
+                    val count = state?.progress?.getInt(StreamCatalogDeltaWorker.KEY_APPLIED,0) ?: 0
+                    val type = when(kind) {
+                        "live" -> getString(R.string.catalog_stage_live)
+                        "movie" -> getString(R.string.catalog_stage_movies)
+                        "series" -> getString(R.string.catalog_stage_series)
+                        else -> getString(R.string.catalog_preflight)
+                    }
+                    stage.text = type
+                    progressMeta.text = if (count > 0)
+                        (if (streamArabic()) "تمت معالجة $count عنصر • مكتبتك محفوظة"
+                         else "$count titles checked • saved library is safe")
+                    else (if (streamArabic()) "جارٍ فحص المحتوى الجديد • مكتبتك محفوظة"
+                          else "Checking new titles • saved library is safe")
+                }
+            }
+            delay(1300L)
+        }
+        // A large first incremental sweep can continue off-screen. Never
+        // trap a TV viewer waiting for thousands of small delta pages.
+        render(30, getString(R.string.catalog_refresh_kept))
+        openHome(providerId)
+    }
+
+    private fun streamArabic(): Boolean =
+        androidx.core.os.ConfigurationCompat.getLocales(resources.configuration)[0]?.language == "ar"
 
     private suspend fun sync(providerId: String, forceRefresh: Boolean) {
         val dao = BlofyDatabase.get(applicationContext).dao()

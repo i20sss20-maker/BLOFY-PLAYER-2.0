@@ -156,6 +156,10 @@ interface BlofyDao {
     @Query("SELECT * FROM episodes WHERE providerId = :providerId") suspend fun allEpisodesForProvider(providerId: String): List<EpisodeEntity>
     @Query("SELECT * FROM episodes WHERE providerId = :providerId AND seriesId = :seriesId") suspend fun episodeSnapshot(providerId: String, seriesId: String): List<EpisodeEntity>
 
+    @Query("SELECT * FROM categories WHERE `key` IN (:keys)")
+    suspend fun categoriesByKeys(keys: List<String>): List<CategoryEntity>
+    @Query("SELECT * FROM streams WHERE `key` IN (:keys)")
+    suspend fun streamsByKeys(keys: List<String>): List<StreamEntity>
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertCategories(items: List<CategoryEntity>)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertStreams(items: List<StreamEntity>)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertEpisodes(items: List<EpisodeEntity>)
@@ -168,6 +172,27 @@ interface BlofyDao {
         upsertStreams(items)
         insertSearchRows(search)
     }
+    // STREAM 56 applies server-authorized catalog deltas in tiny transactions.
+    // Never clear the existing library: each changed row and its search text
+    // are swapped together, while favorites and watch history stay untouched.
+    @Query("DELETE FROM streams_fts WHERE contentKey IN (:keys)")
+    suspend fun removeSearchRowsByKeys(keys: List<String>)
+
+    @Transaction
+    suspend fun applyChangedCatalogRows(rows: List<StreamEntity>) {
+        if (rows.isEmpty()) return
+        removeSearchRowsByKeys(rows.map { it.key })
+        upsertStreams(rows)
+        insertSearchRows(rows.map(::searchRow))
+    }
+
+    @Transaction
+    suspend fun removeCatalogRowsByKeys(keys: List<String>) {
+        if (keys.isEmpty()) return
+        removeSearchRowsByKeys(keys)
+        deleteStreamsByKeys(keys)
+    }
+
     @Query("SELECT EXISTS(SELECT 1 FROM streams_fts WHERE providerId = :providerId LIMIT 1)")
     suspend fun hasSearchIndex(providerId: String): Boolean
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertActivation(state: ActivationEntity)
