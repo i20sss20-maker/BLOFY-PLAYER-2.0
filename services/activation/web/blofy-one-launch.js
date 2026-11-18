@@ -13,7 +13,7 @@
   let running=false,generation=0;
   const ids=['sessions','views','wa-clicks','checkout-starts','store-paid','store-revenue',
     'funnel-views','funnel-product','funnel-checkout','funnel-paid'];
-  const healthNames=['activation','downloads','stream','payment','fulfillment','stock'];
+  const healthNames=['activation','downloads','apk-edge','stream','payment','fulfillment','stock'];
   const text=(id,value)=>{const e=$('one-growth-'+id);if(e)e.textContent=value;};
   const safeCount=value=>{
     const n=Number(value);
@@ -131,11 +131,12 @@
       if(portal?.ok===true&&portal.database==='ready')
         signal('activation','متصل · DB جاهزة','ok');
       else signal('activation','غير مؤكّد','fail');
-      for(const name of ['downloads','stream']){
+      for(const name of ['downloads','stream','apkEdge']){
         const state=systems?.services?.[name]?.status;
-        if(state==='healthy')signal(name,'HTTP متصل','ok');
-        else if(state==='degraded')signal(name,'استجابة غير سليمة','fail');
-        else signal(name,'اتصال غير مؤكد',state==='unknown'?'warn':'pending');
+        const display=name==='apkEdge'?'apk-edge':name;
+        if(state==='healthy')signal(display,name==='apkEdge'?'الخدمة متصلة · تجربة مستقلة':'HTTP متصل','ok');
+        else if(state==='degraded')signal(display,'استجابة غير سليمة','fail');
+        else signal(display,'اتصال غير مؤكد',state==='unknown'?'warn':'pending');
       }
       if(whatsapp?.provider==='meta_whatsapp_cloud'&&whatsapp.configured===true)
         signal('whatsapp','Cloud API مهيأ · تحقق Meta مطلوب','warn');
