@@ -5,10 +5,10 @@ import crypto from 'node:crypto';
 import {createFixedWindowLimiter,requestClientKey} from './auth-protection.mjs';
 
 const PAGES=new Set(['/', '/shop','/products/stream','/products/xtream',
-  '/store/offers','/store/about','/store/faq','/store/trial','/store/contact',
+  '/store/offers','/store/cart','/store/about','/store/faq','/store/trial','/store/contact',
   '/store/terms','/guide','/support','/downloads','/releases','/en','/es','/fr']);
 const EVENTS=new Set(['page_view','whatsapp_click','trial_click','offer_click',
-  'product_click','checkout_click','checkout_started','coupon_check','download_click']);
+  'product_click','cart_add','checkout_click','checkout_started','coupon_check','download_click']);
 const DEVICES=new Set(['mobile','tablet','desktop']);
 const SAFE_PART=/^[a-z0-9_-]{1,48}$/;
 const SESSION=/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
