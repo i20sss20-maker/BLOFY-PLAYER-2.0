@@ -10,5 +10,19 @@
 <label for="import-sku">نوع الاشتراك</label><select id="import-sku" class="sku"></select><label for="bulk">الأكواد</label><textarea id="bulk" rows="8" placeholder="12345678&#10;87654321" spellcheck="false"></textarea>
 <button id="import" type="button">تحقق وارفع الأكواد</button><small>حد 100 كود لكل طلب. الاستيراد كله يُرفض إذا احتوى على كود غير مؤهل.</small></article>
 </section><output id="notice" role="status" aria-live="polite"></output>
+<section class="admin-sales" aria-labelledby="sales-heading">
+ <div class="intro"><span>STORE ANALYTICS</span><h2 id="sales-heading">مبيعات BLOFY والعروض</h2><p>إحصاءات الطلبات لآخر 90 يومًا؛ تظهر عمليات الدفع المؤكدة فقط ضمن الإيرادات، بما فيها عرض اشتراكين بـ200 ريال.</p></div>
+ <div class="sales-highlights" id="sales-highlights"><div class="notice">جارٍ تحميل إحصاءات المبيعات...</div></div>
+ <div class="sales-breakdown" id="sales-breakdown"></div>
+</section>
+<section class="grid coupon-admin" aria-label="كوبونات التخفيض">
+ <article class="panel"><h2>إنشاء كوبون خصم</h2><p>حدد رمزًا وتخفيضًا لا يتجاوز 30%، وعدد استخدامات محدودًا، ثم شاركه مع عملاء الحملات الإعلانية. لن يسمح النظام بكوبون منتهي أو غير فعّال.</p>
+ <label for="coupon-code">رمز الكوبون (إنجليزي وأرقام)</label><input id="coupon-code" type="text" autocomplete="off" maxlength="20" placeholder="BLOFY10" dir="ltr">
+ <label for="coupon-percent">نسبة الخصم %</label><input id="coupon-percent" type="number" min="1" max="30" value="10">
+ <label for="coupon-max">الحد الأقصى للاستخدامات</label><input id="coupon-max" type="number" min="1" max="100000" value="100">
+ <label for="coupon-days">مدة صلاحية الكوبون بالأيام</label><input id="coupon-days" type="number" min="1" max="365" value="30">
+ <button id="coupon-create" type="button">إنشاء كوبون</button></article>
+ <article class="panel"><h2>الكوبونات الموجودة</h2><p>يمكن تعطيل كوبون دون المساس بعمليات دفع بدأت به قبل التعطيل.</p><div id="coupon-list" class="coupon-list"></div></article>
+</section><output id="sales-notice" role="status" aria-live="polite"></output>
 <div class="foot"><p>ملاحظة: النظام يقبل الأكواد المؤهلة الموجودة فعلًا في قاعدة BLOFY، وليس أكوادًا عشوائية أو غير مملوكة. لا تشارك قائمة أكواد حقيقية خارج صفحة الإدارة المحمية.</p></div>
 </main></body></html>

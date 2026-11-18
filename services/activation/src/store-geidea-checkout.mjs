@@ -11,17 +11,23 @@ const API='https://api.ksamerchant.geidea.net';
 const ALLOWED_ORIGINS=new Set(['https://blofyplayer.com','https://www.blofyplayer.com','https://api.blofyplayer.com']);
 const P=[
  ['stream-3m','كود BLOFY STREAM — 3 أشهر','app',90,4000],
- ['stream-6m','كود BLOFY STREAM — 6 أشهر','app',180,6000],
- ['stream-1y','كود BLOFY STREAM — سنة','app',365,10000],
+ ['stream-6m','كود BLOFY STREAM — 6 أشهر','app',180,7000],
+ ['stream-1y','كود BLOFY STREAM — سنة','app',365,12000],
  ['xtream-3m','Xtream BLOFY — 3 أشهر','xtream',90,4000],
- ['xtream-6m','Xtream BLOFY — 6 أشهر','xtream',180,6000],
- ['xtream-1y','Xtream BLOFY — سنة','xtream',365,10000]
+ ['xtream-6m','Xtream BLOFY — 6 أشهر','xtream',180,7000],
+ ['xtream-1y','Xtream BLOFY — سنة','xtream',365,12000]
 ];
 const err=(code,status=400)=>Object.assign(Error(code),{status});
 const tokenHash=s=>crypto.createHash('sha256').update(s).digest('hex');
 const rateCheckout=createFixedWindowLimiter({limit:8,windowMs:600000});
 const rateStatus=createFixedWindowLimiter({limit:45,windowMs:600000});
 export function publicStorePlans(){return P.map(([sku,name,channel,durationDays,priceMinor])=>({sku,name,channel,durationDays,priceMinor,currency:'SAR'}));}
+const BUNDLE_SKU='bundle-2y';
+const BUNDLE_PRICE=20000;
+export function publicStoreOffers(){return [{sku:BUNDLE_SKU,name:'عرض اشتراكين لمدة سنة',quantity:2,durationDays:365,priceMinor:BUNDLE_PRICE,regularPriceMinor:24000,currency:'SAR',allowedChannels:['app','xtream']}];}
+export function validBundleChannels(v){return Array.isArray(v)&&v.length===2&&v.every(x=>x==='app'||x==='xtream');}
+const COUPON_RE=/^[A-Z0-9][A-Z0-9_-]{3,19}$/;
+function discountAmount(amount,percent){return Math.round(amount*percent/100);}
 
 export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAdmin=()=>false,env=process.env,fetchImpl=globalThis.fetch}){
  const publicKey=String(env.GEIDEA_LIVE_MERCHANT_PUBLIC_KEY||'').trim();
@@ -61,7 +67,24 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
       'sku TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),'+
       'sold_order_id UUID UNIQUE REFERENCES blofy_store_geidea_orders(id),'+
       'sold_at TIMESTAMPTZ)',
-     'CREATE INDEX IF NOT EXISTS idx_blofy_store_inventory_available ON blofy_store_inventory(sku) WHERE sold_at IS NULL'
+     'CREATE INDEX IF NOT EXISTS idx_blofy_store_inventory_available ON blofy_store_inventory(sku) WHERE sold_at IS NULL',
+     'ALTER TABLE blofy_store_geidea_orders ADD COLUMN IF NOT EXISTS bundle_selection JSONB',
+     'ALTER TABLE blofy_store_geidea_orders ADD COLUMN IF NOT EXISTS coupon_code TEXT',
+     'ALTER TABLE blofy_store_geidea_orders ADD COLUMN IF NOT EXISTS coupon_discount_minor INTEGER NOT NULL DEFAULT 0',
+     'CREATE TABLE IF NOT EXISTS blofy_store_order_vouchers ('+
+        'order_id UUID NOT NULL REFERENCES blofy_store_geidea_orders(id),'+
+        'position SMALLINT NOT NULL CHECK(position BETWEEN 1 AND 2),'+
+        'voucher_id UUID NOT NULL UNIQUE REFERENCES blofy_xtream_gateway_duration_codes(id),'+
+        'channel TEXT NOT NULL CHECK(channel IN (\'app\',\'xtream\')),'+
+        'duration_days INTEGER NOT NULL CHECK(duration_days BETWEEN 1 AND 730),'+
+        'PRIMARY KEY(order_id,position))',
+     'CREATE TABLE IF NOT EXISTS blofy_store_coupons ('+
+        'id UUID PRIMARY KEY,code TEXT NOT NULL UNIQUE,percent SMALLINT NOT NULL CHECK(percent BETWEEN 1 AND 30),'+
+        'max_uses INTEGER NOT NULL CHECK(max_uses BETWEEN 1 AND 100000),'+
+        'active BOOLEAN NOT NULL DEFAULT TRUE,'+
+        'expires_at TIMESTAMPTZ NOT NULL,'+
+        'created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())',
+     'CREATE INDEX IF NOT EXISTS idx_blofy_store_orders_coupon ON blofy_store_geidea_orders(coupon_code) WHERE coupon_code IS NOT NULL'
     ])await db.query(statement);
     await db.query('COMMIT');
    }catch(e){await db.query('ROLLBACK').catch(()=>{});throw e;}
@@ -171,6 +194,113 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
      throw e;
    }finally{db.release();}
  }
+ async function salesSummary(req,res){
+   if(!authorizeAdmin(req,res))return;
+   await schema();
+   const [sales,coupons]=await Promise.all([
+     pool.query("SELECT sku,status,COUNT(*)::int AS orders,COALESCE(SUM(amount_minor),0)::bigint AS amount_minor FROM blofy_store_geidea_orders WHERE created_at >= NOW()-INTERVAL '90 days' GROUP BY sku,status ORDER BY sku,status"),
+     pool.query("SELECT c.code,c.percent,c.max_uses,c.active,c.expires_at,COUNT(o.id) FILTER (WHERE o.status='paid')::int AS paid_uses FROM blofy_store_coupons c LEFT JOIN blofy_store_geidea_orders o ON o.coupon_code=c.code GROUP BY c.id,c.code,c.percent,c.max_uses,c.active,c.expires_at ORDER BY c.expires_at DESC LIMIT 100")
+   ]);
+   const failures=(await pool.query(
+     "SELECT COUNT(*)::int AS count FROM blofy_store_geidea_orders o "+
+     "WHERE o.status='paid' AND ("+
+     "(o.sku<>'bundle-2y' AND o.voucher_id IS NULL) OR "+
+     "(o.sku='bundle-2y' AND (SELECT COUNT(*) FROM blofy_store_order_vouchers v WHERE v.order_id=o.id)<>2))"
+   )).rows[0]?.count||0;
+   return json(res,200,{ok:true,periodDays:90,sales:sales.rows,coupons:coupons.rows,
+     fulfillmentIssues:Number(failures)});
+ }
+ async function newCoupon(req,res){
+   if(!authorizeAdmin(req,res))return;
+   const body=await readJson(req);
+   const code=String(body?.code||'').trim().toUpperCase();
+   const percent=Number(body?.percent),maxUses=Number(body?.maxUses),days=Number(body?.validDays);
+   if(!COUPON_RE.test(code)||!Number.isInteger(percent)||percent<1||percent>30||
+      !Number.isInteger(maxUses)||maxUses<1||maxUses>100000||
+      !Number.isInteger(days)||days<1||days>365)
+      return json(res,400,{error:'store_invalid_coupon'});
+   await schema();
+   const expiry=new Date(Date.now()+days*86400000).toISOString();
+   try{
+     await pool.query('INSERT INTO blofy_store_coupons(id,code,percent,max_uses,expires_at) VALUES($1,$2,$3,$4,$5)',
+       [crypto.randomUUID(),code,percent,maxUses,expiry]);
+   }catch(e){if(e.code==='23505')return json(res,409,{error:'store_coupon_exists'});throw e;}
+   return json(res,201,{ok:true,code,percent,maxUses,expiresAt:expiry});
+ }
+ async function disableCoupon(req,res){
+   if(!authorizeAdmin(req,res))return;
+   const body=await readJson(req),code=String(body?.code||'').trim().toUpperCase();
+   if(!COUPON_RE.test(code))return json(res,400,{error:'store_invalid_coupon'});
+   await schema();
+   const changed=await pool.query('UPDATE blofy_store_coupons SET active=FALSE WHERE code=$1 AND active=TRUE RETURNING code',[code]);
+   return json(res,200,{ok:true,disabled:changed.rowCount>0});
+ }
+ async function prepareCouponAndOrder({id,sku,channel,durationDays,priceMinor,secret,bundleSelection,couponCode}){
+   const db=await pool.connect();
+   try{
+     await db.query('BEGIN');
+     let discount=0,applied=null;
+     if(couponCode){
+       const c=(await db.query("SELECT code,percent,max_uses FROM blofy_store_coupons WHERE code=$1 AND active=TRUE AND expires_at>NOW() FOR UPDATE",[couponCode])).rows[0];
+       if(!c)throw err('store_coupon_unavailable',409);
+       const count=(await db.query("SELECT COUNT(*)::int AS n FROM blofy_store_geidea_orders WHERE coupon_code=$1 AND (status='paid' OR (status='pending' AND created_at>NOW()-INTERVAL '45 minutes'))",[c.code])).rows[0]?.n||0;
+       if(Number(count)>=Number(c.max_uses))throw err('store_coupon_limit_reached',409);
+       discount=discountAmount(priceMinor,Number(c.percent));
+       applied=c.code;
+     }
+     const due=priceMinor-discount;
+     if(due<=0)throw err('store_invalid_discount',409);
+     await db.query('INSERT INTO blofy_store_geidea_orders (id,sku,channel,duration_days,amount_minor,access_hash,bundle_selection,coupon_code,coupon_discount_minor) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9)',
+       [id,sku,channel,durationDays,due,tokenHash(secret),bundleSelection?JSON.stringify(bundleSelection):null,applied,discount]);
+     await db.query('COMMIT');
+     return {priceMinor:due,couponCode:applied,discountMinor:discount};
+   }catch(e){await db.query('ROLLBACK').catch(()=>{});throw e;}
+   finally{db.release();}
+ }
+ // Two annual vouchers (any combination) are reserved or generated in the SAME DB
+ // transaction as the order settlement. A failure rolls back both, never one.
+ async function fulfillBundle(db,order,settled){
+   const channels=order.bundle_selection;
+   if(!validBundleChannels(channels)||Number(order.duration_days)!==365)
+      throw err('store_invalid_bundle',409);
+   await db.query('SELECT pg_advisory_xact_lock(718420682)');
+   const src=await source(db);
+   const rows=[];
+   for(let position=1;position<=2;position++){
+     const channel=channels[position-1],sku=channel==='app'?'stream-1y':'xtream-1y';
+     const sourcePlan=P.find(p=>p[0]===sku);
+     let voucherId=await availableInventory(db,sku);
+     if(voucherId){
+       const stock=await db.query('UPDATE blofy_store_inventory SET sold_at=NOW() WHERE voucher_id=$1 AND sold_at IS NULL AND sold_order_id IS NULL RETURNING voucher_id',[voucherId]);
+       if(stock.rowCount!==1)throw err('store_bundle_stock_unavailable',409);
+       const record=await db.query("UPDATE blofy_xtream_gateway_duration_codes SET sold_at=NOW(),sales_channel='geidea-bundle',sale_price_halalas=$2 WHERE id=$1 AND sold_at IS NULL AND redeemed_at IS NULL AND revoked_at IS NULL RETURNING id",
+         [voucherId,Math.floor(Number(order.amount_minor)/2)]);
+       if(record.rowCount!==1)throw err('store_bundle_stock_unavailable',409);
+     }else{
+       const total=(await db.query('SELECT COUNT(*)::int AS n FROM blofy_xtream_gateway_duration_codes')).rows[0]?.n||0;
+       const digits=streamNumericCodeLength(Number(total));
+       for(let attempt=0;attempt<12;attempt++){
+         const code=randomNumericStreamCode(digits),candidate=crypto.randomUUID();
+         const saved=await db.query('INSERT INTO blofy_xtream_gateway_duration_codes '+
+           '(id,code_hash,code_hint,label,source_id,duration_days,max_connections,code_channel,'+
+           'code_vault,dual_access_enabled,sale_price_halalas,sold_at,sales_channel) '+
+           "VALUES($1,$2,$3,$4,$5,365,1,$6,$7,TRUE,$8,NOW(),'geidea-bundle') ON CONFLICT(code_hash) DO NOTHING RETURNING id",[
+             candidate,streamCodeProof(code,keyHex),code.slice(0,2)+'••••'+code.slice(-2),
+             'BLOFY عرض اشتراكين سنوي',src,channel,encryptStreamCode(candidate,code,keyHex),
+             Math.floor(Number(order.amount_minor)/2)
+           ]);
+         if(saved.rowCount){voucherId=candidate;break;}
+       }
+       if(!voucherId)throw err('store_bundle_voucher_unavailable',503);
+     }
+     await db.query('INSERT INTO blofy_store_order_vouchers(order_id,position,voucher_id,channel,duration_days) VALUES($1,$2,$3,$4,365)',
+       [order.id,position,voucherId,channel]);
+     rows.push(voucherId);
+   }
+   if(rows.length!==2||rows[0]===rows[1])throw err('store_bundle_invalid_delivery',409);
+   await db.query("UPDATE blofy_store_geidea_orders SET status='paid',provider_reference=$2,paid_at=NOW(),updated_at=NOW() WHERE id=$1",
+     [order.id,settled.orderId]);
+ }
  async function provider(path,method='GET',body){
    const headers={authorization:'Basic '+Buffer.from(publicKey+':'+password).toString('base64'),accept:'application/json'};
    if(body)headers['content-type']='application/json';
@@ -208,16 +338,36 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
     if(!order)throw err('store_order_not_found',404);
     if(order.status==='paid'){await db.query('COMMIT');return true;}
     if(status==='paid'){
+      const isBundle=order.sku===BUNDLE_SKU;
       const plan=P.find(p=>p[0]===order.sku);
-      // Pending orders created before the price change must remain fulfillable at
-      // their original immutable captured price. New sessions use only today's catalog.
+      const basePrice=isBundle?BUNDLE_PRICE:plan?.[4];
+      const previous={'stream-6m':6000,'stream-1y':10000,'xtream-6m':6000,'xtream-1y':10000};
       const formerPrices={'stream-3m':3000,'stream-6m':5000,'stream-1y':7000,
         'xtream-3m':3000,'xtream-6m':5000,'xtream-1y':7000};
-      const historical=formerPrices[order.sku]===Number(order.amount_minor) &&
-        new Date(order.created_at).getTime()<Date.parse('2026-11-18T16:00:00Z');
-      if(!plan||plan[2]!==order.channel||plan[3]!==order.duration_days||
-        (plan[4]!==Number(order.amount_minor)&&!historical))
+      // Immutable payment quotes from previous deployments remain deliverable.
+      const createdMs=new Date(order.created_at).getTime();
+      const legacyGross=createdMs<Date.parse('2026-11-19T00:00:00Z')&&previous[order.sku];
+      const olderGross=createdMs<Date.parse('2026-11-18T16:00:00Z')&&formerPrices[order.sku];
+      const gross=[basePrice,legacyGross,olderGross].filter(x=>Number.isInteger(x)&&x>0);
+      if((!plan&&!isBundle)||
+         (!isBundle&&(plan[2]!==order.channel||plan[3]!==order.duration_days))||
+         (isBundle&&(!validBundleChannels(order.bundle_selection)||order.channel!=='app'||Number(order.duration_days)!==365)))
+        throw err('store_catalog_mismatch',409);
+      const discount=Number(order.coupon_discount_minor||0);
+      if(!Number.isSafeInteger(discount)||discount<0||discount>Math.floor((basePrice||0)*0.3)+1)
+        throw err('store_invalid_coupon_amount',409);
+      if(discount){
+        if(typeof order.coupon_code!=='string')throw err('store_invalid_coupon_order',409);
+        const coupon=(await db.query('SELECT percent FROM blofy_store_coupons WHERE code=$1',[order.coupon_code])).rows[0];
+        if(!coupon||discount!==discountAmount(basePrice,Number(coupon.percent)))
+          throw err('store_coupon_order_mismatch',409);
+      }else if(order.coupon_code)throw err('store_coupon_order_mismatch',409);
+      if(!gross.some(x=>Number(order.amount_minor)===x-discount))
         throw err('store_catalog_price_mismatch',409);
+      if(isBundle){
+        await fulfillBundle(db,order,settled);
+      }else{
+
       const sourceId=await source(db);
       const fromStock=await availableInventory(db,order.sku);
       let voucherId=fromStock;
@@ -248,6 +398,7 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
       } // batch generation is the safe fallback when uploaded stock is empty
       await db.query("UPDATE blofy_store_geidea_orders SET status='paid',provider_reference=$2,"+
        'voucher_id=$3,paid_at=NOW(),updated_at=NOW() WHERE id=$1',[id,settled.orderId,voucherId]);
+      } // single voucher settlement
     }else{
       await db.query('UPDATE blofy_store_geidea_orders SET status=$2,'+
        "provider_reference=COALESCE(provider_reference,$3),updated_at=NOW() WHERE id=$1 AND status<>'paid'",
@@ -267,24 +418,53 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
  async function catalog(req,res){
    let checkoutAvailable=false;
    if(enabled)try{await source();checkoutAvailable=true;}catch{}
-   return json(res,200,{provider:'geidea',checkoutAvailable,products:publicStorePlans()});
+   let popularSku=null;
+   if(checkoutAvailable)try{
+     const top=(await pool.query("SELECT sku,COUNT(*)::int AS n FROM blofy_store_geidea_orders WHERE status='paid' AND sku<>'bundle-2y' AND created_at>NOW()-INTERVAL '90 days' GROUP BY sku ORDER BY n DESC,sku LIMIT 1")).rows[0];
+     if(top&&Number(top.n)>=10)popularSku=top.sku;
+   }catch{}
+   return json(res,200,{provider:'geidea',checkoutAvailable,products:publicStorePlans(),offers:publicStoreOffers(),popularSku});
+ }
+ async function couponQuote(req,res){
+   if(!enabled)return json(res,503,{error:'store_checkout_disabled'});
+   if(!browser(req,res))return;
+   if(!rateCheckout.consume(requestClientKey(req)).allowed)return json(res,429,{error:'rate_limited'});
+   const body=await readJson(req);
+   const plan=P.find(p=>p[0]===body?.sku);
+   const listPrice=body?.sku===BUNDLE_SKU?BUNDLE_PRICE:plan?.[4];
+   const code=String(body?.couponCode||'').trim().toUpperCase();
+   if(!listPrice||!COUPON_RE.test(code))return json(res,400,{error:'store_invalid_coupon'});
+   await schema();
+   const cp=(await pool.query('SELECT percent,max_uses FROM blofy_store_coupons WHERE code=$1 AND active=TRUE AND expires_at>NOW()',[code])).rows[0];
+   if(!cp)return json(res,404,{error:'store_coupon_unavailable'});
+   const cnt=(await pool.query("SELECT COUNT(*)::int AS n FROM blofy_store_geidea_orders WHERE coupon_code=$1 AND (status='paid' OR (status='pending' AND created_at>NOW()-INTERVAL '45 minutes'))",[code])).rows[0]?.n||0;
+   if(Number(cnt)>=Number(cp.max_uses))return json(res,409,{error:'store_coupon_limit_reached'});
+   const discountMinor=discountAmount(listPrice,Number(cp.percent));
+   return json(res,200,{ok:true,sku:body.sku,currency:'SAR',
+     originalPriceMinor:listPrice,discountMinor,priceMinor:listPrice-discountMinor});
  }
  async function checkout(req,res){
    if(!enabled)return json(res,503,{error:'store_checkout_disabled'});
    if(!browser(req,res))return;
    if(!rateCheckout.consume(requestClientKey(req)).allowed)return json(res,429,{error:'rate_limited'});
    const body=await readJson(req);
+   const isBundle=body?.sku===BUNDLE_SKU;
    const plan=P.find(p=>p[0]===body?.sku);
-   if(!plan)return json(res,400,{error:'store_invalid_sku'});
+   const channels=isBundle?body?.bundleSelection:null;
+   if((!isBundle&&!plan)||(isBundle&&!validBundleChannels(channels)))
+     return json(res,400,{error:'store_invalid_sku_or_bundle'});
+   const sku=isBundle?BUNDLE_SKU:plan[0],
+     channel=isBundle?'app':plan[2],days=isBundle?365:plan[3],listPrice=isBundle?BUNDLE_PRICE:plan[4];
+   const couponCode=body?.couponCode?String(body.couponCode).trim().toUpperCase():null;
+   if(couponCode&&!COUPON_RE.test(couponCode))return json(res,400,{error:'store_invalid_coupon'});
    await source();await schema();
    const id=crypto.randomUUID(),secret=crypto.randomBytes(32).toString('base64url');
-   await pool.query('INSERT INTO blofy_store_geidea_orders '+
-     '(id,sku,channel,duration_days,amount_minor,access_hash) VALUES($1,$2,$3,$4,$5,$6)',
-     [id,plan[0],plan[2],plan[3],plan[4],tokenHash(secret)]);
+   const quote=await prepareCouponAndOrder({id,sku,channel,durationDays:days,priceMinor:listPrice,
+     secret,bundleSelection:channels,couponCode});
    const timestamp=new Date().toISOString().slice(0,19).replaceAll('-','/').replace('T',' ');
    const request={
-    amount:(plan[4]/100).toFixed(2),currency:'SAR',timestamp,merchantReferenceId:id,
-    signature:createSignature({publicKey,password,amountMinor:plan[4],reference:id,timestamp}),
+    amount:(quote.priceMinor/100).toFixed(2),currency:'SAR',timestamp,merchantReferenceId:id,
+    signature:createSignature({publicKey,password,amountMinor:quote.priceMinor,reference:id,timestamp}),
     paymentOperation:'Pay',language:'ar',hideWallets:[...CARD_ONLY_WALLETS],expressCheckouts:[],
     acceptTabbyPaymentMethod:false,acceptTamaraPaymentMethod:false,appearance:{uiMode:'modal'},
     callbackUrl:base+'/api/v1/store/geidea/webhook',
@@ -296,7 +476,7 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
     return json(res,502,{error:'store_geidea_session_invalid'});
    await pool.query('UPDATE blofy_store_geidea_orders SET session_id=$2 WHERE id=$1',[id,created.session.id]);
    return json(res,201,{provider:'geidea',checkoutMode:'modal',orderId:id,accessToken:secret,
-    sessionId:created.session.id,sku:plan[0],priceMinor:plan[4],currency:'SAR'});
+    sessionId:created.session.id,sku,priceMinor:quote.priceMinor,discountMinor:quote.discountMinor,couponCode:quote.couponCode,currency:'SAR'});
  }
  async function webhook(req,res){
    if(!enabled)return json(res,503,{error:'store_checkout_disabled'});
@@ -329,7 +509,19 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
      if(claim.rowCount)try{await reconcile(order.id);}catch{}
      order=(await pool.query('SELECT * FROM blofy_store_geidea_orders WHERE id=$1',[order.id])).rows[0];
    }
-   if(order.status!=='paid'||!order.voucher_id)return json(res,200,{status:order.status,fulfilled:false});
+   if(order.status!=='paid')return json(res,200,{status:order.status,fulfilled:false});
+   if(order.sku===BUNDLE_SKU){
+     const items=(await pool.query('SELECT ov.position,ov.channel,v.id,v.code_hash,v.code_vault,v.revoked_at FROM blofy_store_order_vouchers ov JOIN blofy_xtream_gateway_duration_codes v ON v.id=ov.voucher_id WHERE ov.order_id=$1 ORDER BY ov.position',[order.id])).rows;
+     if(items.length!==2||items.some(x=>x.revoked_at||!x.code_vault))
+       return json(res,503,{error:'store_paid_delivery_unavailable'});
+     const codes=items.map(x=>{
+       const code=decryptStreamCode(x.id,x.code_vault,keyHex);
+       if(!code||streamCodeProof(code,keyHex)!==x.code_hash)throw err('store_code_integrity_unavailable',503);
+       return {position:x.position,channel:x.channel,code,durationDays:365};
+     });
+     return json(res,200,{status:'paid',fulfilled:true,sku:order.sku,amountMinor:order.amount_minor,currency:'SAR',codes});
+   }
+   if(!order.voucher_id)return json(res,503,{error:'store_paid_delivery_unavailable'});
    const voucher=(await pool.query('SELECT id,code_hash,code_vault,revoked_at FROM blofy_xtream_gateway_duration_codes WHERE id=$1',
     [order.voucher_id])).rows[0];
    if(!voucher||voucher.revoked_at||!voucher.code_vault)return json(res,503,{error:'store_paid_delivery_unavailable'});
@@ -347,9 +539,13 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
  }
  return async function handler(req,res,url){
    const p=url.pathname;
+   if(p==='/api/v1/admin/store/sales'&&req.method==='GET'){await salesSummary(req,res);return true;}
+   if(p==='/api/v1/admin/store/coupons/create'&&req.method==='POST'){await newCoupon(req,res);return true;}
+   if(p==='/api/v1/admin/store/coupons/deactivate'&&req.method==='POST'){await disableCoupon(req,res);return true;}
    if(p==='/api/v1/admin/store/inventory'&&req.method==='GET'){await inventorySummary(req,res);return true;}
    if(p==='/api/v1/admin/store/inventory/import'&&req.method==='POST'){await importInventory(req,res);return true;}
    if(p==='/api/v1/admin/store/inventory/generate'&&req.method==='POST'){await generateInventory(req,res);return true;}
+   if(p==='/api/v1/store/coupon/quote'&&req.method==='POST'){await couponQuote(req,res);return true;}
    if(p==='/api/v1/store/products'&&req.method==='GET'){await catalog(req,res);return true;}
    if(p==='/api/v1/store/checkout'&&req.method==='POST'){await checkout(req,res);return true;}
    if(p==='/api/v1/store/orders/status'&&req.method==='POST'){await status(req,res);return true;}
