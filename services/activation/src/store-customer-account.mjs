@@ -121,6 +121,33 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,env=proce
       status:o.status,sku:o.sku,items:o.cart_items||null,amountMinor:o.amount_minor,
       currency:o.currency,createdAt:o.created_at,paidAt:o.paid_at}))});
  }
+ async function alerts(req,res){
+  const customer=await current(req);
+  if(!customer)return json(res,401,{error:'login_required'});
+  // One bounded query, no voucher decryption, and no per-order HTTP requests.
+  const sql='SELECT order_number,channel,expires_at FROM ('+
+    'SELECT o.public_order_number AS order_number,v.code_channel AS channel,v.expires_at '+
+    'FROM blofy_store_customer_orders m JOIN blofy_store_geidea_orders o ON o.id=m.order_id '+
+    'JOIN blofy_xtream_gateway_duration_codes v ON v.id=o.voucher_id '+
+    "WHERE m.customer_id=$1 AND o.status='paid' "+
+    'UNION ALL SELECT o.public_order_number,v.code_channel,v.expires_at '+
+    'FROM blofy_store_customer_orders m JOIN blofy_store_geidea_orders o ON o.id=m.order_id '+
+    'JOIN blofy_store_cart_vouchers cv ON cv.order_id=o.id '+
+    'JOIN blofy_xtream_gateway_duration_codes v ON v.id=cv.voucher_id '+
+    "WHERE m.customer_id=$1 AND o.status='paid' "+
+    'UNION ALL SELECT o.public_order_number,v.code_channel,v.expires_at '+
+    'FROM blofy_store_customer_orders m JOIN blofy_store_geidea_orders o ON o.id=m.order_id '+
+    'JOIN blofy_store_order_vouchers ov ON ov.order_id=o.id '+
+    'JOIN blofy_xtream_gateway_duration_codes v ON v.id=ov.voucher_id '+
+    "WHERE m.customer_id=$1 AND o.status='paid') x "+
+    "WHERE expires_at IS NOT NULL AND expires_at<=NOW()+INTERVAL '7 days' "+
+    'ORDER BY expires_at DESC LIMIT 100';
+  const rows=(await pool.query(sql,[customer.id])).rows;
+  return json(res,200,{alerts:rows.map(row=>({
+    orderNumber:row.order_number,channel:row.channel,expiresAt:row.expires_at,
+    status:expiryAlert(row.expires_at)
+  }))});
+ }
  async function requestCode(req,res){
   if(!mailReady)return json(res,503,{error:'customer_email_not_configured'});
   if(!maxRequests.consume(requestClientKey(req)).allowed)return json(res,429,{error:'rate_limited'});
@@ -267,6 +294,7 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,env=proce
    else if(path==='/api/v1/store/account/preferences'&&req.method==='POST')await preferences(req,res);
    else if(path==='/api/v1/store/account/logout'&&req.method==='POST')await logout(req,res);
    else if(path==='/api/v1/store/account'&&req.method==='GET')await account(req,res);
+   else if(path==='/api/v1/store/account/alerts'&&req.method==='GET')await alerts(req,res);
    else if(/^\/api\/v1\/store\/account\/orders\/[a-fA-F0-9-]{36}$/.test(path)&&req.method==='GET')
      await receipt(req,res,path.split('/').at(-1));
    else json(res,404,{error:'not_found'});
