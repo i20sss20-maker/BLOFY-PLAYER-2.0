@@ -11,6 +11,7 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -35,6 +36,7 @@ class BlofyPlaybackSession(
     private var liveStallStartedAtMs = 0L
     private var lastLiveStallRecoveryAtMs = 0L
     private var liveStallRecoveries = 0
+    private var lastReadyAtMs = 0L
     private val fallbackState = PlaybackFallbackState()
     private val retryHandler = Handler(context.mainLooper)
     private val appContext = context.applicationContext
@@ -50,8 +52,17 @@ class BlofyPlaybackSession(
     private val renderersFactory = DefaultRenderersFactory(appContext)
         .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
 
+    private val liveLoadControl = if (contentKind.isLiveContent()) {
+        DefaultLoadControl.Builder()
+            // Moderate buffer for brief live network jitter, without
+            // applying higher latency to movies and episodes.
+            .setBufferDurationsMs(12_000, 30_000, 1_500, 3_000)
+            .build()
+    } else null
+
     val player: ExoPlayer = ExoPlayer.Builder(appContext)
         .setRenderersFactory(renderersFactory)
+        .apply { liveLoadControl?.let { setLoadControl(it) } }
         .setMediaSourceFactory(DefaultMediaSourceFactory(TransportFactory.create(appContext, profile)))
         .build()
         .apply {
@@ -62,7 +73,10 @@ class BlofyPlaybackSession(
             addListener(object : Player.Listener {
                 override fun onPlaybackStateChanged(playbackState: Int) {
                     if (playbackState == Player.STATE_BUFFERING) metric?.let { metric = PlaybackDiagnostics.buffering(it) }
-                    if (playbackState == Player.STATE_READY) resetLiveStallTimer(keepPosition = true)
+                    if (playbackState == Player.STATE_READY) {
+                        lastReadyAtMs = SystemClock.elapsedRealtime()
+                        resetLiveStallTimer(keepPosition = true)
+                    }
                 }
 
                 override fun onRenderedFirstFrame() {
@@ -83,6 +97,11 @@ class BlofyPlaybackSession(
                         metric = updated
                         PlaybackDiagnosticsUploader.enqueue(appContext, updated)
                     }
+                    // A long healthy playback interval allows one new
+                    // automatic retry if the connection later drops.
+                    if (lastReadyAtMs > 0L &&
+                        SystemClock.elapsedRealtime() - lastReadyAtMs >= STABLE_PLAYBACK_RESET_MS
+                    ) automaticRetries = 0
                     if (automaticRetries < MAX_AUTOMATIC_RETRIES) {
                         automaticRetries++
                         retryHandler.post { retrySameUrl() }
@@ -119,6 +138,7 @@ class BlofyPlaybackSession(
         // A channel switch supersedes any queued retry/fallback/watchdog work from the old URL.
         retryHandler.removeCallbacksAndMessages(null)
         automaticRetries = 0
+        lastReadyAtMs = 0L
         alternateLiveFormatAttempted = false
         liveStallRecoveries = 0
         lastLiveStallRecoveryAtMs = 0L
@@ -222,6 +242,7 @@ class BlofyPlaybackSession(
 
     private companion object {
         const val MAX_AUTOMATIC_RETRIES = 1
+        const val STABLE_PLAYBACK_RESET_MS = 60_000L
         const val LIVE_STALL_WATCHDOG_INTERVAL_MS = 4_000L
         const val LIVE_STALL_RECOVERY_THRESHOLD_MS = 12_000L
         const val LIVE_STALL_RECOVERY_COOLDOWN_MS = 60_000L
