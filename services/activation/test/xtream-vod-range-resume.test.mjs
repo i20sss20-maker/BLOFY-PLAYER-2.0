@@ -25,6 +25,16 @@ test('one-time resume is opt-in and only a strong ETag / exact direct noncompres
  for(const input of [
   {kind:'live'}, {kind:'audio'}, {method:'HEAD'},
   {status:206},{status:302},{requestRange:'bytes=0-1024'},
+  {status:200,requestRange:'bytes=0-'},
+  {status:206,requestRange:'bytes=0-1024',
+   headers:mockHeaders({'content-range':'bytes 0-8191/8192'})},
+  {status:206,requestRange:'bytes=400-',
+   headers:mockHeaders({'content-range':'bytes 0-8191/8192'})},
+  {status:206,requestRange:'bytes=0-',
+   headers:mockHeaders({'content-range':'bytes 1-8191/8192'})},
+  {status:206,requestRange:'bytes=0-',
+   headers:mockHeaders({'content-range':'bytes 0-8191/8193'})},
+  {status:200,headers:mockHeaders({'content-range':'bytes 0-8191/8192'})},
   {usingIndependentRelay:true},{format:'ts'},{format:'hls'},
   {headers:mockHeaders({'etag':'W/"weak"'} )},
   {headers:mockHeaders({'etag':''})},
@@ -153,4 +163,27 @@ test('production gateway cannot turn on VOD resume without exact account and sou
  assert.match(marker,/BLOFY_XTREAM_VOD_RANGE_RESUME_PILOT_ACCOUNT_ID/);
  assert.match(marker,/BLOFY_XTREAM_VOD_RANGE_RESUME_PILOT_SOURCE_ID/);
  assert.doesNotMatch(marker,/enabled:process\.env\.BLOFY_XTREAM_VOD_RANGE_RESUME_ENABLED==='1',\s*kind/);
+});
+
+
+test('zero-offset unbounded Range 206 can resume only with exact full-file contract',async()=>{
+ const full=plan({status:206,requestRange:'bytes=0-',
+  headers:mockHeaders({'content-range':'bytes 0-8191/8192'})});
+ assert.equal(full?.total,8192);
+ let called=0,received=Buffer.alloc(0);
+ const fetchImpl=async(target,opts)=>{
+  called++;assert.equal(String(target),url);
+  assert.equal(opts.headers.range,'bytes=3100-8191');
+  assert.equal(opts.headers['if-range'],etag);
+  return new Response(Buffer.alloc(5092,0x6a),{status:206,headers:{
+   'content-range':'bytes 3100-8191/8192',
+   'content-length':'5092',etag
+  }});
+ };
+ for await(const bytes of resumeVerifiedVodBytes({plan:full,forwarded:3100,
+  url,fetchImpl,clientSignal:new AbortController().signal})){
+  received=Buffer.concat([received,Buffer.from(bytes)]);
+ }
+ assert.equal(received.length,5092);
+ assert.equal(called,1);
 });

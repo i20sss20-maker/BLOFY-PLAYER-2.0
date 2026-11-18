@@ -30,8 +30,14 @@ export function verifiedVodResumePlan({
  enabled=false,kind,method='GET',status=200,requestRange=null,
  usingIndependentRelay=false,format='',headers
 }={}){
+ // Many players start an MP4/MKV as Range: bytes=0-. Permit that
+ // *only* when the provider gives HTTP 206 containing the ENTIRE file,
+ // with an exact Content-Range and Content-Length. Never extend a bounded
+ // seek or a nonzero-range response beyond the bytes the viewer requested.
+ const fullGet=status===200&&!requestRange;
+ const fullZeroRange=status===206&&requestRange==='bytes=0-';
  if(!enabled||!['movie','series'].includes(kind)||method!=='GET'||
-   status!==200||requestRange||usingIndependentRelay||
+   (!fullGet&&!fullZeroRange)||usingIndependentRelay||
    !['mp4','mkv'].includes(format)||!headers?.get)return null;
  const total=positiveInteger(headers.get('content-length'));
  const etag=strongEtag(headers.get('etag'));
@@ -39,6 +45,9 @@ export function verifiedVodResumePlan({
  const encoding=String(headers.get('content-encoding')||'identity').trim().toLowerCase();
  if(!total||total<2048||total>MAX_TOTAL||!etag||range!=='bytes'||
     encoding!=='identity')return null;
+ const advertisedRange=headers.get('content-range');
+ if(fullGet&&advertisedRange)return null;
+ if(fullZeroRange&&advertisedRange!==('bytes 0-'+(total-1)+'/'+total))return null;
  return Object.freeze({total,etag,format});
 }
 // Only a single targeted replacement connection; never retry 403/404/429,
