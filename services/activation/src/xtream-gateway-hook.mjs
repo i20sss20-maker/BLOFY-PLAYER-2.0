@@ -1712,9 +1712,12 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
         })());
         await pipeline(stream, res);
         if(resumedVod){
+          observe('recovered',{reason:'vod_range_resumed'});
           console.info('BLOFY_VOD_RANGE_RESUMED',{
             kind,sourceId:row.server_id,
             state:'etag_verified_exact_byte_continuity',
+            rangeScope:vodPlan?.rangeStart>0||vodPlan?.rangeEnd!==vodPlan?.fileTotal-1?
+              'bounded_seek':'whole_file_tail',
             customerCutover:false});
         }
         feedEndedNormally=true;

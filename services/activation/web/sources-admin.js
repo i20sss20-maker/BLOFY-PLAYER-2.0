@@ -1850,6 +1850,7 @@ async function loadBlofyPlaybackHealth(){
     const stats=[
       ['بدأ التشغيل',m.started??0],
       ['استعادة البث المباشر من المصدر نفسه',m.liveTsRecoverySuccesses??0],
+      ['استكمال فيلم/حلقة من موضع التوقف',m.vodRangeResumeSuccesses??0],
       ['توقف بيانات المصدر أثناء البث',m.liveTsSourceDrops??0],
       ['متوسط عمر اتصال المصدر الوسيط',asMs(m.medianLiveTsSourceUptimeMs)],
       ['انتهاء بث المصدر (EOF)',m.sourceDropByReason?.live_ts_source_eof??0],

@@ -14,6 +14,25 @@ function positiveInteger(input){
  const n=Number(input);
  return Number.isSafeInteger(n)&&n>0?n:null;
 }
+// Exact one-span requests only: never join multipart Range or extend a seek.
+// Limit numeric width and reject malformed, negative or unsafe offsets.
+function requestedByteSpan(value){
+ const m=/^bytes=(0|[1-9][0-9]{0,14})-(0|[1-9][0-9]{0,14})?$/.exec(String(value||''));
+ if(!m)return null;
+ const start=Number(m[1]);
+ const end=m[2]===undefined?null:Number(m[2]);
+ if(!Number.isSafeInteger(start)||start<0||
+    (end!==null&&(!Number.isSafeInteger(end)||end<start)))return null;
+ return {start,end};
+}
+function sourceContentRange(value){
+ const m=/^bytes (0|[1-9][0-9]{0,14})-(0|[1-9][0-9]{0,14})\/(0|[1-9][0-9]{0,14})$/.exec(String(value||''));
+ if(!m)return null;
+ const start=Number(m[1]),end=Number(m[2]),fileTotal=Number(m[3]);
+ if(![start,end,fileTotal].every(Number.isSafeInteger)||
+    start<0||end<start||fileTotal<=end||fileTotal>MAX_TOTAL)return null;
+ return {start,end,fileTotal};
+}
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 // Never allow broad subscriber rollout by switching a single Boolean.
 // Both a known test account AND its approved source must match explicit
@@ -30,14 +49,15 @@ export function verifiedVodResumePlan({
  enabled=false,kind,method='GET',status=200,requestRange=null,
  usingIndependentRelay=false,format='',headers
 }={}){
- // Many players start an MP4/MKV as Range: bytes=0-. Permit that
- // *only* when the provider gives HTTP 206 containing the ENTIRE file,
- // with an exact Content-Range and Content-Length. Never extend a bounded
- // seek or a nonzero-range response beyond the bytes the viewer requested.
+ // Many players seek using Range: bytes=N- or bytes=N-M.
+ // Permit recovery ONLY if the origin provided an exact matching 206
+ // Content-Range spanning the full requested interval. Never extend a
+ // bounded seek or silently replay already delivered bytes to the viewer.
  const fullGet=status===200&&!requestRange;
- const fullZeroRange=status===206&&requestRange==='bytes=0-';
+ const requestSpan=requestedByteSpan(requestRange);
+ const ranged=status===206&&requestSpan!==null;
  if(!enabled||!['movie','series'].includes(kind)||method!=='GET'||
-   (!fullGet&&!fullZeroRange)||usingIndependentRelay||
+   (!fullGet&&!ranged)||usingIndependentRelay||
    !['mp4','mkv'].includes(format)||!headers?.get)return null;
  const total=positiveInteger(headers.get('content-length'));
  const etag=strongEtag(headers.get('etag'));
@@ -46,9 +66,19 @@ export function verifiedVodResumePlan({
  if(!total||total<2048||total>MAX_TOTAL||!etag||range!=='bytes'||
     encoding!=='identity')return null;
  const advertisedRange=headers.get('content-range');
- if(fullGet&&advertisedRange)return null;
- if(fullZeroRange&&advertisedRange!==('bytes 0-'+(total-1)+'/'+total))return null;
- return Object.freeze({total,etag,format});
+ let rangeStart=0,rangeEnd=total-1,fileTotal=total;
+ if(fullGet){
+  if(advertisedRange)return null;
+ }else{
+  const actual=sourceContentRange(advertisedRange);
+  if(!actual||actual.start!==requestSpan.start||
+     actual.end-actual.start+1!==total||
+     (requestSpan.end!==null
+       ?actual.end!==requestSpan.end
+       :actual.end!==actual.fileTotal-1))return null;
+  rangeStart=actual.start;rangeEnd=actual.end;fileTotal=actual.fileTotal;
+ }
+ return Object.freeze({total,etag,format,rangeStart,rangeEnd,fileTotal});
 }
 // Only a single targeted replacement connection; never retry 403/404/429,
 // redirects, a 200/full replay, a wrong byte span, or a changed ETag.
@@ -63,7 +93,12 @@ export async function* resumeVerifiedVodBytes({
  if(clientSignal?.aborted)throw Error('vod_resume_client_cancelled');
  const ctl=new AbortController();
  const signal=clientSignal?AbortSignal.any([ctl.signal,clientSignal]):ctl.signal;
- const start=forwarded,end=plan.total-1;
+ if(!Number.isSafeInteger(plan.rangeStart)||plan.rangeStart<0||
+    !Number.isSafeInteger(plan.rangeEnd)||
+    !Number.isSafeInteger(plan.fileTotal)||
+    plan.rangeEnd-plan.rangeStart+1!==plan.total||
+    plan.fileTotal<=plan.rangeEnd)throw Error('vod_resume_invalid_request');
+ const start=plan.rangeStart+forwarded,end=plan.rangeEnd;
  const range='bytes='+start+'-'+end;
  const sendHeaders={
   'user-agent':String(headers['user-agent']||'BLOFY-Xtream-Range-Recovery/1.0').slice(0,160),
@@ -79,11 +114,12 @@ export async function* resumeVerifiedVodBytes({
    reply=await fetchImpl(url,{method:'GET',headers:sendHeaders,
     timeoutMs:12000,signal});
   }finally{clearTimeout(timeout)}
-  const exact='bytes '+start+'-'+end+'/'+plan.total;
+  const exact='bytes '+start+'-'+end+'/'+plan.fileTotal;
   if(reply?.status!==206||!reply.body||
      reply.headers.get('content-range')!==exact||
-     positiveInteger(reply.headers.get('content-length'))!==plan.total-start||
-     reply.headers.get('etag')!==plan.etag){
+     positiveInteger(reply.headers.get('content-length'))!==plan.total-forwarded||
+     reply.headers.get('etag')!==plan.etag||
+     String(reply.headers.get('content-encoding')||'identity').toLowerCase()!=='identity'){
     throw Error('vod_resume_range_contract_denied');
   }
   reader=reply.body.getReader();
@@ -97,10 +133,10 @@ export async function* resumeVerifiedVodBytes({
    if(!(part.value instanceof Uint8Array)||!part.value.byteLength)
     throw Error('vod_resume_invalid_bytes');
    got+=part.value.byteLength;
-   if(got>plan.total-start)throw Error('vod_resume_overshoot');
+   if(got>plan.total-forwarded)throw Error('vod_resume_overshoot');
    yield part.value;
   }
-  if(got!==plan.total-start)throw Error('vod_resume_truncated');
+  if(got!==plan.total-forwarded)throw Error('vod_resume_truncated');
  }finally{
   ctl.abort();
   try{await reader?.cancel()}catch{}
