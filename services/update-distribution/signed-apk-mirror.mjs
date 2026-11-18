@@ -37,7 +37,7 @@ export function mirrorConfigFromEnv(env=process.env){
 }
 
 export async function makeS3MirrorStore(config){
-  const [{S3Client,HeadObjectCommand}, {Upload}]=await Promise.all([
+  const [{S3Client,HeadObjectCommand,GetObjectCommand}, {Upload}]=await Promise.all([
     import('@aws-sdk/client-s3'),import('@aws-sdk/lib-storage')
   ]);
   const client=new S3Client({
@@ -56,6 +56,24 @@ export async function makeS3MirrorStore(config){
           return null;
         throw error;
       }
+    },
+    async readRange(key,start,end){
+      if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||
+         start<0||end<start||end-start>=8192)
+        throw Error('mirror_range_invalid');
+      const response=await client.send(new GetObjectCommand({
+        Bucket,Key:key,Range:`bytes=${start}-${end}`
+      }));
+      const expected=end-start+1;
+      const match=new RegExp('^bytes ([0-9]+)-([0-9]+)/([0-9]+)$').exec(String(response.ContentRange||''));
+      if(response.$metadata?.httpStatusCode!==206||
+         !match||Number(match[1])!==start||Number(match[2])!==end||
+         !Number.isSafeInteger(Number(match[3]))||Number(match[3])<=end||
+         Number(response.ContentLength)!==expected||
+         !response.Body)throw Error('mirror_range_response_invalid');
+      const data=Buffer.from(await response.Body.transformToByteArray());
+      if(data.length!==expected)throw Error('mirror_range_size_invalid');
+      return data;
     },
     async put({key,filePath,size,sha256}){
       const upload=new Upload({client,

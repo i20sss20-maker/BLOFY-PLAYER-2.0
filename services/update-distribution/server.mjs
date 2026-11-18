@@ -21,6 +21,7 @@ import { createReleaseFeedCache, PUBLIC_STREAM_RELEASE_CACHE_CONTROL } from './r
 import { installGracefulShutdown } from './graceful-shutdown.mjs';
 import { apkRangePolicy, apkCacheControl } from './apk-range-policy.mjs';
 import { createSignedApkMirror } from './signed-apk-mirror.mjs';
+import { createApkMirrorReadiness } from './apk-readback-probe.mjs';
 import { verifySignedStreamUploadOidc, approvedStreamUpload, STREAM_55836_APK, STREAM_56_APK } from './stream-upload-oidc.mjs';
 import { UPDATE_SITE_CANONICAL, updateRobotsTxt, updateSitemapXml, renderMissingPublicPage, isPublicHtmlRequest } from './public-search-pages.mjs';
 
@@ -65,6 +66,7 @@ const securityHeaders = Object.freeze({
 
 const publicStreamReleaseFeed = createReleaseFeedCache();
 const signedApkMirror = createSignedApkMirror();
+const apkMirrorReadiness = createApkMirrorReadiness();
 function sendJson(req, res, status, value, extraHeaders = {}) {
   const body = JSON.stringify(value);
   res.writeHead(status, {
@@ -1067,6 +1069,15 @@ const server = http.createServer(async (req, res) => {
       return sendHtml(req, res, 200, await renderAdmin(String(url.searchParams.get('msg') || '').slice(0, 300)));
     }
 
+    // Explicit owner-only S3 readback proof. No customer download is
+    // changed by this canary. Never include S3 keys or URLs in responses.
+    if (pathname === '/health/apk-mirror/probe' && method === 'POST') {
+      if (!requireAdmin(req, res, securityHeaders)) return;
+      if (!sameOrigin(req)) return sendJson(req, res, 403, {ok:false,code:'origin_rejected'});
+      const report = await apkMirrorReadiness.probe();
+      return sendJson(req, res, report.ok ? 200 : 503, report);
+    }
+
     if (method === 'POST' && (pathname.startsWith('/admin/') || pathname.startsWith(`${PUBLIC_ADMIN_PREFIX}/`))) {
       if (!requireAdmin(req, res, securityHeaders)) return;
       if (!sameOrigin(req)) return sendJson(req, res, 403, { ok: false, error: 'origin_rejected' });
@@ -1115,7 +1126,11 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/health/apk-mirror') {
       // Admin-only, read-only readiness; no S3 secrets, object keys or URLs.
       if (!requireAdmin(req, res, securityHeaders)) return;
-      return sendJson(req, res, 200, signedApkMirror.status());
+      return sendJson(req, res, 200, {
+        backup:signedApkMirror.status(),
+        readback:apkMirrorReadiness.status(),
+        customerDownloadCutover:false
+      });
     }
     if (pathname === '/health' || pathname === '/release.json') return sendJson(req, res, 200, healthPayload());
 
