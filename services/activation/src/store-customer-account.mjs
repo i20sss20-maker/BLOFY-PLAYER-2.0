@@ -73,7 +73,7 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
  if(enabled&&mailReady&&typeof sendCode!=='function'){
   const probe=setTimeout(()=>void checkResendSender({mailKey,mailFrom,fetchImpl})
     .then(result=>{
-      const allowed=new Set(['verified','key_invalid','key_send_only_cannot_inspect',
+      const allowed=new Set(['verified','key_invalid','key_inspection_unauthorized','key_send_only_cannot_inspect',
         'sender_domain_absent','sender_domain_not_verified','provider_query_failed',
         'provider_probe_unavailable','invalid_config']);
       mailProviderStatus=allowed.has(result?.status)?result.status:'provider_probe_unavailable';
@@ -128,6 +128,8 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
    console.warn('[customer-email-send]',JSON.stringify({httpStatus:response.status,reason:classified.reason}));
    throw error(classified.clientCode,503);
   }
+  // POST /emails accepted the request; domain inspection privileges are independent.
+  mailProviderStatus='send_accepted';
  }
  async function current(req){
   const token=cookieToken(req);
@@ -183,8 +185,16 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
     "to_regclass('public.blofy_store_customer_orders') AS orders,"+
     "to_regclass('public.blofy_store_customer_reminders') AS reminders")).rows[0]||{};
   let customers=null,linkedOrders=null,sentReminders=null;
-  if(tables.customers)customers=Number((await pool.query(
-    'SELECT COUNT(*)::int AS n FROM blofy_store_customers')).rows[0]?.n||0);
+  let recentOtpVerifications=0,lastOtpVerifiedAt=null;
+  if(tables.customers){
+    const row=(await pool.query('SELECT COUNT(*)::int AS n, '+
+      "COUNT(*) FILTER (WHERE last_login_at>NOW()-INTERVAL '24 hours')::int AS recent, "+
+      "MAX(last_login_at) FILTER (WHERE last_login_at>NOW()-INTERVAL '24 hours') AS last_verified_at "+
+      'FROM blofy_store_customers')).rows[0]||{};
+    customers=Number(row.n||0);
+    recentOtpVerifications=Number(row.recent||0);
+    lastOtpVerifiedAt=row.last_verified_at||null;
+  }
   if(tables.orders)linkedOrders=Number((await pool.query(
     'SELECT COUNT(*)::int AS n FROM blofy_store_customer_orders')).rows[0]?.n||0);
   if(tables.reminders)sentReminders=Number((await pool.query(
@@ -192,9 +202,11 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
   return json(res,200,{ok:true,accountsEnabled:enabled,emailConfigured:mailReady,
     emailProviderStatus:mailProviderStatus,
     emailProviderVerified:mailProviderStatus==='verified',
-    // Provider key's write permission cannot be established by a GET-only
-    // domain check; a successful transactional email still requires a live test.
-    emailDeliveryVerified:false,
+    // A successfully verified OTP is stronger delivery evidence than a GET-only
+    // provider domain probe; this is recent history, NOT proof of current API health.
+    emailDeliveryVerified:typeof sendCode!=='function'&&recentOtpVerifications>0,
+    emailDeliveryEvidence:recentOtpVerifications>0?'otp_verified_within_24h':null,
+    lastOtpVerifiedAt,
     remindersEnabled:reminderEngine.configured,customers,linkedOrders,sentReminders,
     livePaymentTestVerified:false});
  }

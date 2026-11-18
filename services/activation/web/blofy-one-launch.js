@@ -141,6 +141,8 @@
       const providerStatus=customer?.emailProviderStatus;
       const emailReady=customer?.accountsEnabled===true&&customer?.emailConfigured===true;
       const providerVerified=providerStatus==='verified';
+      const emailProof=customer?.emailDeliveryVerified===true&&
+        customer?.emailDeliveryEvidence==='otp_verified_within_24h';
       const emailDegraded=new Set(['key_invalid','sender_domain_absent',
         'sender_domain_not_verified','invalid_config']).has(providerStatus);
       if(!emailReady)
@@ -148,6 +150,9 @@
       else if(emailDegraded)
         signal('customers',providerStatus==='key_invalid'?
           'مفتاح البريد مرفوض من مزود الإرسال':'نطاق إرسال البريد يحتاج إصلاحًا','fail');
+      else if(emailProof)
+        signal('customers',safeCount(customer.customers)+
+          ' حساب · تأكد وصول رمز دخول خلال 24 ساعة','warn');
       else if(providerVerified)
         signal('customers',safeCount(customer.customers)+
           ' حساب · النطاق موثّق، اختبار إرسال مطلوب','warn');
@@ -202,6 +207,8 @@
       else if(emailDegraded)warnings.push(providerStatus==='key_invalid'?
         'مفتاح Resend مرفوض: طلبات رمز الدخول ستفشل حتى تصحيح المفتاح':
         'نطاق البريد ليس موثوقًا لدى مزود الإرسال');
+      else if(emailProof)warnings.push('نجح تحقق رمز دخول خلال 24 ساعة؛ لا يضمن ذلك استمرار خدمة الإرسال');
+      else if(providerStatus==='key_inspection_unauthorized')warnings.push('فحص نطاق Resend غير مصرح للمفتاح؛ هذا لا يثبت فشل إرسال البريد');
       else if(!providerVerified)warnings.push('جاهزية مزود البريد غير مؤكدة؛ يلزم اختبار استلام رمز حقيقي');
       else warnings.push('تحقق النطاق وحده لا يثبت وصول رسائل الدخول؛ اختبر الإرسال فعليًا');
       if(Number.isSafeInteger(fulfillmentIssues)&&fulfillmentIssues>0)

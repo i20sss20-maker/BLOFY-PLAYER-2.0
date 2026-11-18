@@ -129,3 +129,29 @@ test('verified email owns linked guest order; no code before login and proof',as
  const after=await call(detail,'GET',{},auth);
  assert.equal(after.status,401);
 });
+
+
+test('admin email readiness distinguishes read permissions from recent OTP proof',async()=>{
+ const keyHex='f'.repeat(64);
+ const queries=[];
+ const pool={query:async(sql)=>{
+  queries.push(String(sql));
+  if(String(sql).includes('to_regclass'))return {rows:[{customers:'blofy_store_customers',orders:null,reminders:null}]};
+  if(String(sql).includes('MAX(last_login_at)'))return {rows:[{n:2,recent:1,last_verified_at:'2026-11-18T17:42:09Z'}]};
+  throw Error('unexpected admin query');
+ }};
+ const handler=createStoreCustomerHandlers({pool,keyHex,
+  env:{BLOFY_CUSTOMER_ACCOUNTS_ENABLED:'true',BLOFY_CUSTOMER_RESEND_API_KEY:'re_fake_key',
+   BLOFY_CUSTOMER_MAIL_FROM:'BLOFY <support@blofyplayer.com>'},
+  authorizeAdmin:()=>true,fetchImpl:async()=>({status:401,ok:false}),
+  json:(res,status,data)=>{res.status=status;res.data=data;},
+  readJson:async()=>({})
+ });
+ const res={};
+ await handler({method:'GET',headers:{}},res,{pathname:'/api/v1/admin/store/customer-accounts/summary'});
+ assert.equal(res.status,200);
+ assert.equal(res.data.emailDeliveryVerified,true);
+ assert.equal(res.data.emailDeliveryEvidence,'otp_verified_within_24h');
+ assert.equal(res.data.lastOtpVerifiedAt,'2026-11-18T17:42:09Z');
+ assert.ok(queries.some(sql=>sql.includes('MAX(last_login_at)')));
+});
