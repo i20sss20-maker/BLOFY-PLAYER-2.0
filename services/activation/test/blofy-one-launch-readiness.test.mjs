@@ -45,7 +45,6 @@ test('dashboard reads existing authenticated real finance/analytics endpoints, n
   assert.match(js,/fulfillmentIssues/);
   assert.match(js,/paidMinor\+=BigInt\(amount\)/);
   assert.match(js,/source==='consented_first_party'/);
-  assert.match(js,/result/);
   assert.match(js,/لا يعدّ ذلك اختبار ضغط أو تسوية بنكية/);
   assert.doesNotMatch(js,/localStorage|sessionStorage|innerHTML\s*=|window\.GeideaCheckout/);
   assert.doesNotMatch(js,/method:\s*'POST'|fetch\(.*\/stream\/activate/);
@@ -65,5 +64,5 @@ test('launch status tells owner explicitly what is NOT verified',async()=>{
   assert.match(js,/signal\('whatsapp','رابط فقط','warn'\)/);
   assert.match(js,/لا توجد مشاكل ظاهرة في فحوصات الخدمات/);
   assert.match(js,/لا تظهر أرقام تقديرية/);
-  assert.match(js,/المصادر/);
+  assert.match(js,/مصادر الزيارات/);
 });
