@@ -24,6 +24,7 @@
   const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
   let accounts=[], codes=[], codeTotals={}, codeOffset=0;
   let nextOffset=null, accountsLoaded=false, codesLoaded=false;
+  let codeSearchRemote=false,codeFilteredTotal=null,codeLoadSeq=0,codeSearchTimer=null;
   let serial=0, secretTimer=null, secretValue=null, busy=false;
   const readableStatus=Object.freeze({unused:'غير مفعّل',redeemed:'مستخدم',revoked:'ملغى'});
   const errors=Object.freeze({
@@ -164,7 +165,7 @@
   function renderCodes(){
     const search=codeSearch.value.trim().toLocaleLowerCase('ar');
     const filter=codeFilter.value;
-    const matching=codes.filter(c=>
+    const matching=codeSearchRemote?codes:codes.filter(c=>
       (filter==='all'||c.status===filter) &&
       [c.label,c.codeHint,c.id].join(' ').toLocaleLowerCase('ar').includes(search));
     codeRows.replaceChildren();
@@ -200,9 +201,12 @@
       const tr=node('tr'),td=node('td',codesLoaded?'لا توجد أكواد مطابقة في هذه الصفحة.':'تعذر تحميل قائمة الأكواد.');
       td.colSpan=6;tr.append(td);codeRows.append(tr);
     }
-    $('one-stream-codes-count').textContent=
-      'الأكواد المعروضة في هذه الصفحة: '+number(matching.length)+' · من '+number(codes.length)+
-      ' محمّلة. البحث والفلترة يخصان الصفحة الحالية.';
+    $('one-stream-codes-count').textContent=codeSearchRemote?
+      'نتائج البحث في كامل السجل: '+number(codeFilteredTotal)+
+        ' · المعروض في هذه الصفحة: '+number(matching.length)+
+        ' · لا تُعرض الأكواد الأصلية إلا بعد تأكيد المشرف.' :
+      'الأكواد المعروضة في هذه الصفحة: '+number(matching.length)+
+        ' · من '+number(codes.length)+' محمّلة. البحث في كامل السجل متاح بكتابة حرفين أو أكثر.';
     const currentPage=Math.floor(codeOffset/pageSize)+1;
     $('one-stream-codes-page').textContent='الصفحة '+number(currentPage)+
       ' · إجمالي '+number(codeTotals.total);
@@ -264,11 +268,33 @@
     renderAccounts();renderTotals();
   }
   async function loadCodes(){
-    const result=await api('/api/v1/admin/xtream-gateway/codes?limit='+pageSize+'&offset='+codeOffset);
-    if(!Array.isArray(result.items)||typeof result.totals!=='object')
+    const current=++codeLoadSeq;
+    const query=codeSearch.value.trim();
+    const filter=codeFilter.value;
+    // One-character text queries are too broad for private customer searches.
+    // The request never puts the original code or phone in a URL.
+    if(query.length===1){
+      codeSearchRemote=true;codeFilteredTotal=0;
+      codes=[];nextOffset=null;codesLoaded=true;
+      renderCodes();
+      $('one-stream-codes-count').textContent='اكتب حرفين على الأقل للبحث في جميع الأكواد، أو امسح النص لعرض السجل.';
+      return;
+    }
+    const remote=query.length>=2||filter!=='all';
+    const result=remote?
+      await api('/api/v1/admin/xtream-gateway/codes/search',{
+        method:'POST',body:{query,status:filter,offset:codeOffset,limit:pageSize}
+      }):
+      await api('/api/v1/admin/xtream-gateway/codes?limit='+pageSize+'&offset='+codeOffset);
+    if(current!==codeLoadSeq)return;
+    if(!Array.isArray(result.items)||typeof result.totals!=='object'||
+      (remote&&(result.searchApplied!==true||
+        !Number.isSafeInteger(result.filteredTotal))))
       throw Error('قائمة أكواد STREAM غير مكتملة.');
     codes=result.items.filter(item=>item&&UUID.test(String(item.id||'')));
     codeTotals=result.totals||{};
+    codeSearchRemote=remote;
+    codeFilteredTotal=remote?result.filteredTotal:null;
     nextOffset=result.nextOffset===null?null:
       (Number.isSafeInteger(result.nextOffset)&&result.nextOffset>codeOffset?result.nextOffset:null);
     codesLoaded=true;
@@ -301,8 +327,18 @@
   }
   accountSearch.addEventListener('input',renderAccounts);
   accountFilter.addEventListener('change',renderAccounts);
-  codeSearch.addEventListener('input',renderCodes);
-  codeFilter.addEventListener('change',renderCodes);
+  codeSearch.addEventListener('input',()=>{
+    window.clearTimeout(codeSearchTimer);
+    codeOffset=0;
+    codeSearchTimer=window.setTimeout(()=>{
+      void refresh({justCodes:true});
+    },330);
+  });
+  codeFilter.addEventListener('change',()=>{
+    window.clearTimeout(codeSearchTimer);
+    codeOffset=0;
+    void refresh({justCodes:true});
+  });
   codesPrev.addEventListener('click',()=>{
     if(codeOffset<=0)return;
     codeOffset=Math.max(0,codeOffset-pageSize);
