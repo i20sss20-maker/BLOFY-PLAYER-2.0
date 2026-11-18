@@ -52,7 +52,11 @@ test('large library sync completes in small transactions and pausing halts jobs'
   const end=admin.slice(admin.indexOf('async function finalizeTypeSync('),admin.indexOf('async function calculateCounts('));
   assert.match(end,/LIMIT 350/);
   assert.match(end,/cancelledSources\.has\(serverId\)/);
-  assert.doesNotMatch(end,/BEGIN/);
+  // Bounded 350-row deletes and their tombstone receipt must be one atomic
+  // transaction; the old dangerous full-catalog transaction remains forbidden.
+  assert.match(end,/await client.query\('BEGIN'\)/);
+  assert.match(end,/await client.query\('COMMIT'\)/);
+  assert.match(end,/blofy_xtream_catalog_removals/);
   assert.doesNotMatch(end,/DELETE FROM blofy_xtream_items WHERE server_id=\$1 AND media_type=\$2 AND sync_token IS DISTINCT FROM \$3',/);
   assert.match(admin,/if\(!source\.enabled\)return json\(res,409,\{error:'xtream_source_paused'\}\)/);
 });
