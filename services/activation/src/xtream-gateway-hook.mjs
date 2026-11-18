@@ -1655,6 +1655,16 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
           }
         })());
         await pipeline(stream, res);
+        // An HTTP 200 TS response that terminates cleanly after only ~1min
+        // is an upstream EOF, not proof the viewer stopped watching.
+        // Only record the already-authenticated LIVE source stream when its
+        // server-side pipeline completed without a client disconnect.
+        if (kind === 'live' && !client.signal.aborted) {
+          const elapsedMs = Date.now() - startedAt;
+          if (elapsedMs < 180_000) {
+            observe('interrupted', {reason:'upstream_clean_eof'});
+          }
+        }
         return;
       } catch (error) {
         if (client.signal.aborted) return;
