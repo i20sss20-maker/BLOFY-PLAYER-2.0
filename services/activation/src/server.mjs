@@ -356,6 +356,22 @@ async function serveStoreGraphic(res, name) {
   res.end(file);
 }
 
+async function serveStorePhoto(res, name) {
+  // First-party, locally hosted renders of the marketing banners.
+  const filename=({strong8k:'banner-strong8k-ai.jpg',player:'banner-player-ai.jpg'})[name];
+  if(!filename){res.writeHead(404);return res.end();}
+  const file=await readFile(new URL('../web/'+filename,import.meta.url));
+  res.writeHead(200,{
+    'content-type':'image/jpeg',
+    'content-length':file.length,
+    'cache-control':'public, max-age=86400, immutable',
+    'x-content-type-options':'nosniff',
+    'strict-transport-security':'max-age=31536000',
+    'content-security-policy':"default-src 'none'; sandbox"
+  });
+  res.end(file);
+}
+
 async function serveStatusPage(res, fileName = 'status.html') {
   // Only internal constant filenames are passed; never derive public file paths from URLs.
   const publicPage = fileName === 'guide.html' || fileName === 'support.html' || fileName === 'en.html' || fileName === 'es.html' || fileName === 'fr.html';
@@ -878,6 +894,9 @@ const server = http.createServer(async (req, res) => {
       return await serveStoreDesign(res);
     const storeProductMatch=requestUrl.pathname.match(/^\/products\/(stream|xtream)\/?$/);
     const storeInfoMatch=requestUrl.pathname.match(/^\/store\/(about|trial|faq|contact|terms)\/?$/);
+    const storePhotoMatch=requestUrl.pathname.match(/^\/store\/media\/(strong8k|player)\.jpg$/);
+    if (['GET','HEAD'].includes(req.method) && storePhotoMatch)
+      return await serveStorePhoto(res,storePhotoMatch[1]);
     const storeImageMatch=requestUrl.pathname.match(/^\/store\/media\/(stream|xtream|strong8k|player)\.svg$/);
     if (['GET','HEAD'].includes(req.method) && storeProductMatch)
       return await serveStorefront(res,storeProductMatch[1]);
