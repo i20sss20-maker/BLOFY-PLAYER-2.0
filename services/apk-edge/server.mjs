@@ -1,4 +1,5 @@
 import http from 'node:http';
+import {pathToFileURL} from 'node:url';
 import {pipeline} from 'node:stream/promises';
 import {S3Client,HeadObjectCommand,GetObjectCommand} from '@aws-sdk/client-s3';
 import {SIGNED_APKS,resolveSignedApk,resolveRange,keyOf} from './signed-release-policy.mjs';
@@ -140,7 +141,7 @@ export function createSignedApkGateway({
   return {server,verify,state:()=>({ready,active,maxActive,checkedAt}),
     drain:()=>{draining=true;server.close();server.closeIdleConnections?.();}};
 }
-if(import.meta.url===new URL('file://'+process.argv[1]).href){
+if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   const config=gatewayConfig();
   const storage=makePrivateS3(config);
   const gateway=createSignedApkGateway({storage,logger:console});
