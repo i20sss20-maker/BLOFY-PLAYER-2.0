@@ -444,7 +444,7 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
      expressCheckouts:[],acceptTabbyPaymentMethod:false,acceptTamaraPaymentMethod:false,
      appearance:{uiMode:'modal'},
      callbackUrl:base+'/api/v1/store/geidea/webhook',
-     returnUrl:base+'/api/v1/store/geidea/return?reference='+id
+     returnUrl:base+'/api/v1/store/geidea/return?reference='+id+'&site='+encodeURIComponent(String(req.headers.origin||''))
    };
    let created;
    try{created=await provider('/payment-intent/api/v2/direct/session','POST',request);}
@@ -745,7 +745,10 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
    }catch{
      path='/#store_order='+encodeURIComponent(id);
    }
-   res.writeHead(303,{location:'https://blofyplayer.com'+path,
+   const site=url.searchParams.get('site');
+   const host=site==='https://www.blofyplayer.com'||site==='https://blofyplayer.com'?
+     site:'https://blofyplayer.com';
+   res.writeHead(303,{location:host+path,
       'cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer'});
    res.end();
  }
