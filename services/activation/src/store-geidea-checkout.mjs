@@ -3,7 +3,7 @@
 import crypto from 'node:crypto';
 import {createFixedWindowLimiter,requestClientKey} from './auth-protection.mjs';
 import {createSignature,verifyGeideaCallback,verifiedPayment,CARD_ONLY_WALLETS} from './geidea-live.mjs';
-import {ensureStreamCodeTable,streamNumericCodeLength,randomNumericStreamCode,streamCodeProof,createStreamDurationCodes,normalizeStreamCode} from './xtream-duration-codes.mjs';
+import {ensureStreamCodeTable,streamNumericCodeLength,randomNumericStreamCode,streamCodeProof,normalizeStreamCode} from './xtream-duration-codes.mjs';
 import {encryptStreamCode,decryptStreamCode} from './xtream-code-vault.mjs';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -133,26 +133,43 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
    if(!plan||!Number.isSafeInteger(quantity)||quantity<1||quantity>100)
      return json(res,400,{error:'store_inventory_request_invalid'});
    await schema();
-   const sourceId=await source();
-   const generator=createStreamDurationCodes({pool,keyHex,salehOnlyNewCodes:true});
-   let generated=0;
-   for(let i=0;i<quantity;i+=20){
-     const batch=await generator.issue({durationDays:plan[3],quantity:Math.min(20,quantity-i),
-       channel:plan[2],maxConnections:1,sourceId,label:plan[1]});
-     // Code material stays encrypted in existing vault; never returned in bulk responses.
-     const db=await pool.connect();
-     try{
-       await db.query('BEGIN');
-       for(const row of batch.items){
-         await db.query('UPDATE blofy_xtream_gateway_duration_codes SET dual_access_enabled=TRUE WHERE id=$1',[row.id]);
-         await db.query('INSERT INTO blofy_store_inventory(voucher_id,sku) VALUES($1,$2)',[row.id,plan[0]]);
-         generated++;
+   const db=await pool.connect();
+   try{
+     await db.query('BEGIN');
+     const sourceId=await source(db);
+     // One atomic transaction per batch. No half-created inventory after failures.
+     // This is the same advisory lock as normal BLOFY code issuance.
+     await db.query('SELECT pg_advisory_xact_lock(718420682)');
+     const result=await db.query('SELECT COUNT(*)::int AS n FROM blofy_xtream_gateway_duration_codes');
+     let count=Number(result.rows[0]?.n)||0;
+     for(let i=0;i<quantity;i++){
+       let inserted=false;
+       for(let attempt=0;attempt<12;attempt++){
+         const code=randomNumericStreamCode(streamNumericCodeLength(count));
+         const newId=crypto.randomUUID(),proof=streamCodeProof(code,keyHex);
+         const saved=await db.query('INSERT INTO blofy_xtream_gateway_duration_codes '+
+           '(id,code_hash,code_hint,label,source_id,duration_days,max_connections,code_channel,'+
+           'code_vault,dual_access_enabled) VALUES($1,$2,$3,$4,$5,$6,1,$7,$8,TRUE) '+
+           'ON CONFLICT(code_hash) DO NOTHING RETURNING id',[
+              newId,proof,code.slice(0,2)+'••••'+code.slice(-2),plan[1],sourceId,
+              plan[3],plan[2],encryptStreamCode(newId,code,keyHex)
+           ]);
+         if(saved.rows[0]){
+           await db.query('INSERT INTO blofy_store_inventory(voucher_id,sku) VALUES($1,$2)',
+             [newId,plan[0]]);
+           count++;
+           inserted=true;
+           break;
+         }
        }
-       await db.query('COMMIT');
-     }catch(e){await db.query('ROLLBACK').catch(()=>{});throw e;}
-     finally{db.release();}
-   }
-   return json(res,200,{ok:true,sku:plan[0],generated});
+       if(!inserted)throw err('store_inventory_generation_unavailable',503);
+     }
+     await db.query('COMMIT');
+     return json(res,200,{ok:true,sku:plan[0],generated:quantity});
+   }catch(e){
+     await db.query('ROLLBACK').catch(()=>{});
+     throw e;
+   }finally{db.release();}
  }
  async function provider(path,method='GET',body){
    const headers={authorization:'Basic '+Buffer.from(publicKey+':'+password).toString('base64'),accept:'application/json'};
