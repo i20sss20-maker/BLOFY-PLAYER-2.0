@@ -208,7 +208,7 @@ test('Campaign carousel, promo graphic and individual coupon handling do not rep
  const backend=readFileSync(new URL('../src/store-geidea-checkout.mjs',import.meta.url),'utf8');
  assert.doesNotThrow(()=>new Function(js));
  assert.match(html,/id="blofy-banners"/);
- assert.equal((html.match(/data-slide(?: hidden)?/g)||[]).length,3);
+ assert.equal((html.match(/<div data-slide(?: hidden)?>/g)||[]).length,3);
  assert.match(html,/data-prev-slide/);
  assert.match(html,/data-next-slide/);
  assert.match(html,/store\/media\/bundle\.svg/);
