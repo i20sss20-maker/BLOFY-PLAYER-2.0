@@ -48,7 +48,7 @@ export function createStudioPro({pool,ensureXtreamReady,startSync}){
   }
   async function checkSource(serverId,db=pool){
     if(!validId(serverId))throw invalid('studio_source_invalid');
-    const result=await db.query('SELECT id,name,enabled,publish_catalog,status,last_sync_at,counts FROM blofy_xtream_servers WHERE id=$1 AND deletion_requested_at IS NULL',[serverId]);
+    const result=await db.query('SELECT id,name,enabled,publish_catalog,status,last_sync_at,last_error,counts FROM blofy_xtream_servers WHERE id=$1 AND deletion_requested_at IS NULL',[serverId]);
     if(!result.rows[0])throw invalid('studio_source_not_found',404);
     return result.rows[0];
   }
@@ -65,7 +65,7 @@ export function createStudioPro({pool,ensureXtreamReady,startSync}){
       pool.query('SELECT enabled,interval_hours,types,next_run_at FROM blofy_xtream_studio_schedules WHERE server_id=$1',[serverId]),
       pool.query('SELECT action,details,created_at FROM blofy_xtream_studio_events WHERE server_id=$1 ORDER BY id DESC LIMIT 15',[serverId])
     ]);
-    return {source:{name:src.name,enabled:src.enabled,published:src.publish_catalog,status:src.status,lastSyncAt:src.last_sync_at,counts:src.counts},
+    return {source:{name:src.name,enabled:src.enabled,published:src.publish_catalog,status:src.status,syncWarning:Boolean(src.last_error),lastSyncAt:src.last_sync_at,counts:src.counts},
       sampleOnly:true,sampleLimit:1200,byType:sample.rows,collectionCount:collections.rows[0].count,
       schedule:schedule.rows[0]||null,events:events.rows};
   }
