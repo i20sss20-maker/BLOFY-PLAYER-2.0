@@ -266,4 +266,11 @@
       if (!event.currentTarget.hasAttribute('data-blofy-dual-shortcut')) conceal();
     });
   });
+  // Deep link from BLOFY ONE to the exact operator workflow.
+  // Do not put the subscriber's voucher or password into the URL.
+  if (window.location.hash.toLowerCase() === '#dual') {
+    window.setTimeout(() => {
+      document.querySelector('[data-blofy-dual-shortcut]')?.click();
+    }, 0);
+  }
 })();
