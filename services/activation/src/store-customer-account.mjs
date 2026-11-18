@@ -33,6 +33,19 @@ export function expiryAlert(expiresAt,now=Date.now()){
  const days=Math.ceil((new Date(expiresAt).getTime()-now)/86400000);
  return !Number.isFinite(days)?null:days<=0?'expired':days<=7?'expiring':null;
 }
+// The optional linked player account may have no expiry timestamp.
+ // Date(null) is 1970-01-01, NOT a valid subscription expiry.
+ // Never show a purchase or unredeemed voucher as already expired.
+export function safeOwnedSubscriptionExpiry(row){
+ if(!row?.redeemed_at||!row?.expires_at)return null;
+ const voucherExpiry=new Date(row.expires_at).getTime();
+ if(!Number.isFinite(voucherExpiry)||voucherExpiry<=0)return null;
+ const linkedExpiry=row.account_expires_at==null?null:
+   new Date(row.account_expires_at).getTime();
+ const effective=Number.isFinite(linkedExpiry)&&linkedExpiry>0
+   ?Math.min(voucherExpiry,linkedExpiry):voucherExpiry;
+ return new Date(effective).toISOString();
+}
 export function customerCookie(token,maxAge=2592000){
  return COOKIE+'='+token+'; Path=/; Max-Age='+maxAge+'; HttpOnly; Secure; SameSite=Strict';
 }
@@ -188,10 +201,7 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
      env.BLOFY_STORE_GEIDEA_ENABLED==='true',
    subscriptions:rows.map(row=>{
     const eligible=Boolean(renewalStartAndExpiry(row,90));
-    const codeDeadline=new Date(row.expires_at).getTime();
-    const accountDeadline=new Date(row.account_expires_at).getTime();
-    const expiresAt=Number.isFinite(codeDeadline)&&Number.isFinite(accountDeadline)
-      ?new Date(Math.min(codeDeadline,accountDeadline)).toISOString():null;
+    const expiresAt=safeOwnedSubscriptionExpiry(row);
     return {voucherId:row.id,codeHint:row.code_hint||'',
       channel:row.code_channel,redeemed:!!row.redeemed_at,expiresAt,canRenew:eligible,
       reason:eligible?null:row.revoked_at?'revoked':!row.redeemed_at?'not_activated':'not_eligible'};
