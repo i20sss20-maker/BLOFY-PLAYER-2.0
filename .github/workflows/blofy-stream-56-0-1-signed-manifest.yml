@@ -1,0 +1,81 @@
+name: BLOFY STREAM 56.0.1 signed live hotfix provenance
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/blofy-stream-56-0-1-signed-manifest.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: blofy-stream-56-0-1-provenance
+  cancel-in-progress: false
+jobs:
+  verify-signed-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_RUN: '44347023096'
+      SOURCE_HEAD: '4df1bf5f5942755d7b002d20b0d1c1cbee9d14d4'
+      PREFIX: 'BLOFY-STREAM-56.0.1-LIVE-RECONNECT-OWNER-SIGNED-'
+      APK_NAME: 'BLOFY-STREAM-56.0.1-LIVE-RECONNECT-FIX-OWNER-SIGNED.apk'
+      PACKAGE: 'tv.blofy.player.v2.stream'
+      CERT: 'C3B98CCCD2F0C86809014ACD9368BF61C7004CFD419CD867B71FEF10BFA6255E'
+    steps:
+      - name: Wait for exact latest STREAM 56 source CI and original owner signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 75); do
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" > "$RUNNER_TEMP/run.json"
+            jq -e --arg sha "$SOURCE_HEAD" '.head_sha==$sha' "$RUNNER_TEMP/run.json"
+            status="$(jq -r '.status' "$RUNNER_TEMP/run.json")"
+            if [ "$status" = completed ]; then
+              jq -e '.conclusion=="success"' "$RUNNER_TEMP/run.json"
+              break
+            fi
+            [ "$i" -lt 75 ] || { echo "::error::Timed out waiting for signed build"; exit 1; }
+            sleep 20
+          done
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN/jobs?per_page=100" > "$RUNNER_TEMP/jobs.json"
+          jq -e '[.jobs[] | select(.name=="verify" and .conclusion=="success")] | length==1' "$RUNNER_TEMP/jobs.json"
+          jq -e '[.jobs[] | select(.name=="owner-signed-stream-qa" and .conclusion=="success")] | length==1' "$RUNNER_TEMP/jobs.json"
+          jq -e '[.jobs[].steps[] | select(.name=="Verify identity, certificate, signatures, native FFmpeg and SHA256" and .conclusion=="success")] | length==1' "$RUNNER_TEMP/jobs.json"
+      - name: Download exact passing owner-signed 56 APK and check identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN/artifacts?per_page=100" > "$RUNNER_TEMP/artifacts.json"
+          artifact="$(jq -er --arg prefix "$PREFIX" '[.artifacts[]|select((.name|startswith($prefix)) and .expired==false)]|if length==1 then .[0].name else error("ambiguous signed artifact") end' "$RUNNER_TEMP/artifacts.json")"
+          mkdir -p artifact
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name "$artifact" --dir artifact
+          apk="$(find artifact -type f -name "$APK_NAME" -print -quit)"
+          sums="$(find artifact -type f -name SHA256SUMS -print -quit)"
+          id="$(find artifact -type f -name IDENTITY.txt -print -quit)"
+          test -s "$apk" && test -s "$sums" && test -s "$id"
+          grep -Fxq "application_id=$PACKAGE" "$id"
+          grep -Fxq 'version_code=2000116' "$id"
+          (cd "$(dirname "$apk")" && sha256sum -c SHA256SUMS)
+          tools="$ANDROID_HOME/build-tools/35.0.0"
+          "$tools/aapt" dump badging "$apk" > "$RUNNER_TEMP/badging.txt"
+          grep -Fq "name='$PACKAGE' versionCode='2000116' versionName='2.0.0-rc07.56.0.1-STREAM'" "$RUNNER_TEMP/badging.txt"
+          ! grep -Fq 'application-debuggable' "$RUNNER_TEMP/badging.txt"
+          "$tools/apksigner" verify --verbose --print-certs "$apk" > "$RUNNER_TEMP/signer.txt"
+          got="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/signer.txt" | head -n1 | tr -d '[:space:]-:' | tr '[:lower:]' '[:upper:]')"
+          test "$got" = "$CERT"
+          "$tools/zipalign" -c -P 16 -v 4 "$apk"
+          mkdir -p release-metadata
+          sha="$(sha256sum "$apk" | awk '{print $1}')"
+          bytes="$(stat -c '%s' "$apk")"
+          printf 'versionCode=2000116\nversionName=2.0.0-rc07.56.0.1-STREAM\npackage=%s\nsha256=%s\nbytes=%s\nsource_run=%s\nsource_head=%s\n' "$PACKAGE" "$sha" "$bytes" "$SOURCE_RUN" "$SOURCE_HEAD" > release-metadata/IDENTITY.txt
+          cat release-metadata/IDENTITY.txt >> "$GITHUB_STEP_SUMMARY"
+          cat release-metadata/IDENTITY.txt
+      - name: Save verified compact release metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: BLOFY-STREAM-56-0-1-SIGNED-METADATA
+          path: release-metadata/IDENTITY.txt
+          if-no-files-found: error
+          retention-days: 14
