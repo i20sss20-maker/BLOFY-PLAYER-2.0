@@ -12,7 +12,7 @@
  const money=n=>(Number(n)/100).toLocaleString('ar-SA',{minimumFractionDigits:0,maximumFractionDigits:2})+' ر.س';
  let items=[],quoted=null,ready=false,creating=false,paymentOpen=false,currentOrder=null,accessToken=null;
  let signedIn=false,accountEmail='',cloudRevision=null,cloudSynced=false,cloudSyncing=false,
-   savedSnapshot='',hasUrlAddition=false,accountId='',pendingChecked=false,checkingPending=false;
+   savedSnapshot='',hasUrlAddition=false,urlAddedLine=null,accountId='',pendingChecked=false,checkingPending=false;
  const pendingKey='blofy.shop.pending-checkout.v1';
  const cloudEndpoint='/api/v1/store/account/cart',ownerKey='blofy.shop.cart.owner.v1';
  // Geidea officially supports browser redirection using the already created session.
@@ -60,12 +60,20 @@
    if(sku==='bundle-2y')
      line.bundleSelection=[params.get('first')||'app',params.get('second')||'app'];
    if(validLine(line)){
-     hasUrlAddition=true;
      const same=items.find(x=>keyOf(x)===keyOf(line));
-     if(same&&same.quantity<3&&totalCodes(items)+(sku==='bundle-2y'?2:1)<=6)same.quantity++;
-     else if(!same&&items.length<5&&totalCodes(items)+(sku==='bundle-2y'?2:1)<=6)items.push(line);
-     else message('بلغت الحد الأعلى للسلة، 6 أكواد في الطلب الواحد.');
-     save();
+     let added=false;
+     if(same&&same.quantity<3&&totalCodes(items)+(sku==='bundle-2y'?2:1)<=6){
+       same.quantity++;added=true;
+     }else if(!same&&items.length<5&&totalCodes(items)+(sku==='bundle-2y'?2:1)<=6){
+       items.push(line);added=true;
+     }else message('بلغت الحد الأعلى للسلة، 6 أكواد في الطلب الواحد.');
+     if(added){
+       // Remember ONLY the item chosen in this visit. Never import another
+       // signed-in customer's saved browser cart into a new account.
+       hasUrlAddition=true;
+       urlAddedLine={...line,...(line.bundleSelection?{bundleSelection:[...line.bundleSelection]}:{})};
+       save();
+     }
    }else message('المنتج غير متاح. أضفه مجددًا من المتجر.');
    history.replaceState(null,'','/store/cart');
  }
@@ -174,11 +182,13 @@
    indicator.textContent=!signedIn?'ستُحفظ السلة في حسابك بعد تسجيل الدخول.':
      cloudSynced?'✓ محفوظة بحسابك':'جارٍ مزامنة السلة مع حسابك…';
    indicator.dataset.state=cloudSynced?'saved':'pending';
+   if(cloudSynced)$('retry-cart-sync').hidden=true;
    updateCheckoutButton();
  }
  function queueSync(){
    if(!signedIn||cloudRevision===null)return;
-   cloudSynced=false;pendingChecked=false;authUI();
+   cloudSynced=false;pendingChecked=false;
+   $('retry-cart-sync').hidden=true;authUI();
    if(!cloudSyncing)void syncCloud();
  }
  async function syncCloud(){
@@ -199,11 +209,15 @@
      authUI();
      if(cloudSynced)await checkPendingForCart();
    }catch(err){
-     cloudSynced=false;
-     $('cart-sync').textContent=err.message==='store_cart_changed_on_another_device'
+     cloudSynced=false;pendingChecked=false;
+     const changedElsewhere=err.message==='store_cart_changed_on_another_device';
+     $('cart-sync').textContent=changedElsewhere
        ?'السلة تغيرت من جهاز آخر. حدّث الصفحة لجلب أحدث نسخة قبل الدفع.'
-       :'فشل حفظ السلة في حسابك. راجع الاتصال ثم أعد محاولة الحفظ.';
+       :'فشل حفظ السلة في حسابك. لم يبدأ الدفع؛ أعد محاولة الحفظ.';
      $('cart-sync').dataset.state='error';
+     const retry=$('retry-cart-sync');
+     retry.textContent=changedElsewhere?'جلب السلة المحدثة':'إعادة حفظ السلة';
+     retry.hidden=false;retry.dataset.reload=changedElsewhere?'yes':'no';
      updateCheckoutButton();
    }finally{
      cloudSyncing=false;
@@ -228,22 +242,33 @@
      const remote=await saved.json();
      if(!Number.isSafeInteger(remote.revision)||!Array.isArray(remote.items))
        throw Error('cart_invalid');
-     const previouslySynced=localStorage.getItem(ownerKey)===data.customerId;
-     const local=items;
+     // The browser may still contain another verified account's basket.
+     // Use its owner marker to avoid leaking those items or coupon into
+     // the newly verified account. A product selected on this visit is safe.
+     let previousOwner=null;
+     try{previousOwner=localStorage.getItem(ownerKey);}catch(_){}
+     const accountChanged=!!previousOwner&&previousOwner!==data.customerId;
+     const previouslySynced=previousOwner===data.customerId;
+     const guestLines=accountChanged?(urlAddedLine?[urlAddedLine]:[]):items;
      items=(!hasUrlAddition&&previouslySynced)?
-       cleanItems(remote.items):mergeSavedCart(remote.items,local);
-     // Keep one exact source of truth after authentication.
-     $('coupon').value=(!hasUrlAddition&&previouslySynced)?
+       cleanItems(remote.items):mergeSavedCart(remote.items,guestLines);
+     // Preserve the remote coupon on account change. Never carry an old
+     // customer's private discount or stale quote into this checkout.
+     $('coupon').value=accountChanged||(!hasUrlAddition&&previouslySynced)?
        (remote.couponCode||''):($('coupon').value||remote.couponCode||'');
      cloudRevision=remote.revision;
      savedSnapshot=JSON.stringify({items:cleanItems(remote.items),couponCode:remote.couponCode||''});
-     localStorage.setItem(ownerKey,data.customerId);
-     try{localStorage.setItem(storageKey,JSON.stringify(items));}catch(_){}
+     try{
+       localStorage.setItem(ownerKey,data.customerId);
+       localStorage.setItem(storageKey,JSON.stringify(items));
+     }catch(_){
+       // Cloud is authoritative; private-browsing storage may be disabled.
+     }
      await restorePendingCheckout();
      authUI();queueSync();void refresh();
    }catch(_){
      // Fail closed: no payment if a verified account or saved cart is unavailable.
-     cloudSynced=false;
+     cloudSynced=false;pendingChecked=false;
      $('cart-sync').textContent='لا يمكن التحقق من حسابك أو حفظ السلة الآن. حدّث الصفحة.';
      $('cart-sync').dataset.state='error';
      updateCheckoutButton();
@@ -470,6 +495,18 @@
  });
  $('retry-pending').addEventListener('click',()=>{
    $('retry-pending').hidden=true;void checkPendingForCart();
+ });
+ $('retry-cart-sync').addEventListener('click',()=>{
+   const button=$('retry-cart-sync');
+   button.hidden=true;
+   if(button.dataset.reload==='yes'){
+     // Never overwrite an edit saved by another device with a stale revision.
+     location.reload();
+     return;
+   }
+   if(!signedIn||cloudRevision===null||cloudSyncing)return;
+   cloudSynced=false;pendingChecked=false;
+   authUI();void syncCloud();
  });
  $('checkout').addEventListener('click',()=>void checkout());
  $('clear-cart').addEventListener('click',()=>{
