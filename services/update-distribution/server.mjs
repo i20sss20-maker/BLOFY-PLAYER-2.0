@@ -1286,8 +1286,14 @@ server.listen(PORT, '0.0.0.0', () => {
   // importer/host cutover and cannot block health or customer downloads.
   mirrorTimer = setTimeout(() => {
     mirrorTimer = null;
-    void signedApkMirror.sync().then(snapshot => {
+    void signedApkMirror.sync().then(async snapshot => {
       console.info('BLOFY_SIGNED_APK_BACKUP', JSON.stringify(snapshot));
+      // Read-only, bounded S3 restore proof after successful integrity backup.
+      // No subscriber requests, no CDN cutover, no changes to public APKs.
+      if(snapshot?.ready===true&&snapshot.counts?.mirrored===2){
+        const canary=await apkMirrorReadiness.probe();
+        console.info('BLOFY_APK_S3_READBACK',JSON.stringify(canary));
+      }
     }).catch(() => {
       console.warn('BLOFY_SIGNED_APK_BACKUP', JSON.stringify({
         ok:false,code:'mirror_worker_failed'
