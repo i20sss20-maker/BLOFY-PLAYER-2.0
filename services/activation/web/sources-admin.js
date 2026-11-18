@@ -1850,6 +1850,11 @@ async function loadBlofyPlaybackHealth(){
     const stats=[
       ['بدأ التشغيل',m.started??0],
       ['استعادة البث المباشر من المصدر نفسه',m.liveTsRecoverySuccesses??0],
+      ['توقف بيانات المصدر أثناء البث',m.liveTsSourceDrops??0],
+      ['متوسط عمر اتصال المصدر الوسيط',asMs(m.medianLiveTsSourceUptimeMs)],
+      ['انتهاء بث المصدر (EOF)',m.sourceDropByReason?.live_ts_source_eof??0],
+      ['المصدر قطع الاتصال',m.sourceDropByReason?.live_ts_source_transport_error??0],
+      ['توقف المصدر عن إرسال البيانات',m.sourceDropByReason?.live_ts_source_stalled??0],
       ['استعادة البث استنفدت محاولاتها',m.liveTsRecoveryExhausted??0],
       ['استعادة البث أوقفها حد السرعة',m.liveTsRecoveryRateLimited??0],
       ['استعادة البث أوقفها حد الجلسة',m.liveTsRecoveryBudgetExhausted??0],
@@ -1917,8 +1922,23 @@ async function loadBlofyPlaybackHealth(){
       }
       issues.append(item);
     }
-    if(!recent.length){
-      issues.append(make('p','muted','لا توجد أخطاء تشغيل مسجلة خلال الساعة الماضية على هذه النسخة.'));
+    const drops=Array.isArray(m.recentSourceDrops)?m.recentSourceDrops:[];
+    const causes={
+      live_ts_source_eof:'المصدر أنهى بث HTTP المفتوح',
+      live_ts_source_transport_error:'اتصال المصدر انقطع بخطأ شبكة',
+      live_ts_source_stalled:'المصدر توقف عن إرسال البيانات (45 ثانية)'
+    };
+    for(const row of drops.slice(0,5)){
+      const item=make('div','blofy-playback-issue');
+      const uptime=Number.isFinite(row.durationMs)?
+        ' · الاتصال استمر '+Math.round(row.durationMs/1000)+' ثانية':'';
+      item.append(make('strong','','ملاحظة مصدر · بث مباشر'),
+        make('small','',String(causes[row.reason]||'انقطع اتصال المصدر')+
+          uptime+' · '+new Date(row.at).toLocaleString('ar-SA')));
+      issues.append(item);
+    }
+    if(!recent.length&&!drops.length){
+      issues.append(make('p','muted','لا توجد أخطاء تشغيل أو انقطاعات مصدر مسجلة خلال الساعة الماضية على هذه النسخة.'));
     }
     const upstreamCodes=Object.entries(m.upstreamCodes||{});
     note.textContent='الأرقام لآخر ساعة على هذا السيرفر فقط. استعادة البث تعني استقبال بيانات TS صالحة من المصدر بعد إعادة الاتصال؛ لا تثبت عدم ظهور شاشة سوداء أو استمرار الصوت على الجهاز. إصدار تصريح المشاركة لا يؤكد وصول الفيديو أو الصوت. رفض حساب BLOFY (401) يختلف عن رفض المصدر (403). نجاح بدء البث لا يضمن استمراره طوال المشاهدة.'+
