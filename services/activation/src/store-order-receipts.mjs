@@ -8,6 +8,7 @@ const EMAIL=/^[^\s@]{1,64}@[^\s@]{1,190}$/;
 const CHANNEL=Object.freeze({app:'BLOFY STREAM',xtream:'Xtream BLOFY'});
 const safeMinor=x=>Number.isSafeInteger(Number(x))&&Number(x)>=0?Number(x):null;
 const dateIso=value=>{
+ if(value===null||value===undefined||value==='')return null;
  const valueMs=new Date(value).getTime();
  return Number.isFinite(valueMs)?new Date(valueMs).toISOString():null;
 };
