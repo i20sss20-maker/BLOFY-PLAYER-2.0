@@ -201,7 +201,14 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
      pool.query("SELECT sku,status,COUNT(*)::int AS orders,COALESCE(SUM(amount_minor),0)::bigint AS amount_minor FROM blofy_store_geidea_orders WHERE created_at >= NOW()-INTERVAL '90 days' GROUP BY sku,status ORDER BY sku,status"),
      pool.query("SELECT c.code,c.percent,c.max_uses,c.active,c.expires_at,COUNT(o.id) FILTER (WHERE o.status='paid')::int AS paid_uses FROM blofy_store_coupons c LEFT JOIN blofy_store_geidea_orders o ON o.coupon_code=c.code GROUP BY c.id,c.code,c.percent,c.max_uses,c.active,c.expires_at ORDER BY c.expires_at DESC LIMIT 100")
    ]);
-   return json(res,200,{ok:true,periodDays:90,sales:sales.rows,coupons:coupons.rows});
+   const failures=(await pool.query(
+     "SELECT COUNT(*)::int AS count FROM blofy_store_geidea_orders o "+
+     "WHERE o.status='paid' AND ("+
+     "(o.sku<>'bundle-2y' AND o.voucher_id IS NULL) OR "+
+     "(o.sku='bundle-2y' AND (SELECT COUNT(*) FROM blofy_store_order_vouchers v WHERE v.order_id=o.id)<>2))"
+   )).rows[0]?.count||0;
+   return json(res,200,{ok:true,periodDays:90,sales:sales.rows,coupons:coupons.rows,
+     fulfillmentIssues:Number(failures)});
  }
  async function newCoupon(req,res){
    if(!authorizeAdmin(req,res))return;
@@ -411,7 +418,12 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
  async function catalog(req,res){
    let checkoutAvailable=false;
    if(enabled)try{await source();checkoutAvailable=true;}catch{}
-   return json(res,200,{provider:'geidea',checkoutAvailable,products:publicStorePlans(),offers:publicStoreOffers()});
+   let popularSku=null;
+   if(checkoutAvailable)try{
+     const top=(await pool.query("SELECT sku,COUNT(*)::int AS n FROM blofy_store_geidea_orders WHERE status='paid' AND sku<>'bundle-2y' AND created_at>NOW()-INTERVAL '90 days' GROUP BY sku ORDER BY n DESC,sku LIMIT 1")).rows[0];
+     if(top&&Number(top.n)>=10)popularSku=top.sku;
+   }catch{}
+   return json(res,200,{provider:'geidea',checkoutAvailable,products:publicStorePlans(),offers:publicStoreOffers(),popularSku});
  }
  async function couponQuote(req,res){
    if(!enabled)return json(res,503,{error:'store_checkout_disabled'});
