@@ -283,7 +283,7 @@ async function servePortal(res, connectOnly = false) {
 async function serveStorefront(res) {
   // Public storefront and Geidea entry points live separately from device linking.
   // Never expose payment secrets or card fields on the marketing page.
-  const file = await readFile(new URL('../web/store.html', import.meta.url));
+  const file = Buffer.from(withPublicAnalytics(await readFile(new URL('../web/store.html', import.meta.url), 'utf8')), 'utf8');
   res.writeHead(200, {
     'content-type': 'text/html; charset=utf-8',
     'content-length': file.length,
@@ -293,7 +293,7 @@ async function serveStorefront(res) {
     'referrer-policy': 'strict-origin-when-cross-origin',
     'permissions-policy': 'camera=(), microphone=(), geolocation=()',
     'strict-transport-security': 'max-age=31536000',
-    'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+    'content-security-policy': PUBLIC_ANALYTICS_CSP + "; base-uri 'none'; form-action 'none'"
   });
   res.end(file);
 }
