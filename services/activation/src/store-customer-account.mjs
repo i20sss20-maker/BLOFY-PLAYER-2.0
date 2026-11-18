@@ -6,6 +6,7 @@ import {parseStoreCart,cartVouchers,publicOrderNumber} from './store-cart.mjs';
 import {decryptStreamCode} from './xtream-code-vault.mjs';
 import {streamCodeProof} from './xtream-duration-codes.mjs';
 import {createCustomerReminderEngine} from './store-customer-reminders.mjs';
+import {classifyResendFailure,checkResendSender} from './store-customer-resend.mjs';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ACCESS=/^[A-Za-z0-9_-]{42,44}$/;
@@ -62,6 +63,14 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
  const mailKey=String(env.BLOFY_CUSTOMER_RESEND_API_KEY||'').trim();
  const mailFrom=String(env.BLOFY_CUSTOMER_MAIL_FROM||'').trim();
  const mailReady=typeof sendCode==='function'||(mailKey.startsWith('re_')&&mailFrom.includes('@'));
+ // Run a read-only provider domain check after startup. Keys with send-only access
+ // cannot query domains: that is inconclusive, NOT a reason to disable sending.
+ if(enabled&&mailReady&&typeof sendCode!=='function'){
+  const probe=setTimeout(()=>void checkResendSender({mailKey,mailFrom,fetchImpl})
+    .then(result=>console.info('[customer-email-readiness]',JSON.stringify(result)))
+    .catch(()=>{}),2000);
+  probe.unref?.();
+ }
  const reminderEngine=createCustomerReminderEngine({pool,env,fetchImpl});
  reminderEngine.start();
  let migration;
@@ -102,7 +111,12 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
       text:'رمز دخول BLOFY: '+code+'\nالرمز صالح لمدة 10 دقائق. لا تشاركه مع أحد.'}),
     signal:AbortSignal.timeout(9000)
   });
-  if(!response.ok)throw error('customer_mail_unavailable',503);
+  if(!response.ok){
+   const body=await response.json().catch(()=>({}));
+   const classified=classifyResendFailure(response.status,body);
+   console.warn('[customer-email-send]',JSON.stringify({httpStatus:response.status,reason:classified.reason}));
+   throw error(classified.clientCode,503);
+  }
  }
  async function current(req){
   const token=cookieToken(req);
@@ -181,10 +195,14 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
     "WHERE blofy_store_customer_challenges.issued_at<NOW()-INTERVAL '60 seconds' RETURNING email",
     [email,codeProof(keyHex,email,code)]);
   if(saved.rowCount)try{await sendLogin(email,code);}
-  catch{
+  catch(e){
    await pool.query('DELETE FROM blofy_store_customer_challenges WHERE email=$1 AND code_hash=$2',
      [email,codeProof(keyHex,email,code)]).catch(()=>{});
-   return json(res,503,{error:'customer_email_unavailable'});
+   // Only curated failure codes are exposed; never pass provider text, keys or email content.
+   const reason=/^customer_email_(key_invalid|domain_unverified|sender_restricted|provider_rate_limited|sender_invalid)$/.test(e?.message||'')
+     ?e.message:'customer_email_unavailable';
+   if(reason==='customer_email_unavailable')console.warn('[customer-email-send]',JSON.stringify({reason:'network_or_timeout'}));
+   return json(res,503,{error:reason});
   }
   return json(res,202,{ok:true,message:'check_email'});
  }
