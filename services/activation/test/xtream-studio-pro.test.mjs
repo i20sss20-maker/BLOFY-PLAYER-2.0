@@ -22,6 +22,12 @@ test('opt-in schedule has bounded interval, known media types and no auto-enable
   assert.deepEqual(validateStudioSchedule({enabled:false,intervalHours:24,types:['live','movie']}),{
     enabled:false,intervalHours:24,types:['live','movie']
   });
+  assert.deepEqual(validateStudioSchedule({
+    enabled:true,intervalHours:1,types:['live','movie','series']
+  }),{enabled:true,intervalHours:1,types:['live','movie','series']});
+  assert.deepEqual(validateStudioSchedule({
+    enabled:true,intervalHours:3,types:['movie','series']
+  }),{enabled:true,intervalHours:3,types:['movie','series']});
   for(const input of [{enabled:'true',intervalHours:24,types:['live']},
     {enabled:true,intervalHours:0,types:['live']},
     {enabled:true,intervalHours:24,types:['vod']},
@@ -43,6 +49,11 @@ test('studio curation preserves native provider fields, subscriber accounts and 
   assert.doesNotMatch(src,/UPDATE blofy_xtream_gateway_accounts/i);
   assert.doesNotMatch(src,/username_secret|password_secret/i);
   assert.doesNotMatch(src,/https:\/\/api\.openai|eval\(/i);
+  // A due job that collides with the daily source sync is retried soon
+  // instead of silently postponing the next attempt for 12 hours.
+  assert.match(src,/busy_retry_10m/);
+  assert.match(src,/next_run_at=NOW\(\)\+INTERVAL '10 minutes'/);
+
 });
 test('Studio Pro has real admin-only API routes and a classic script served locally',async()=>{
   const routes=await readFile(new URL('../src/xtream-admin-hook.mjs',import.meta.url),'utf8');
