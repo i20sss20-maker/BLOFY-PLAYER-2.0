@@ -12,6 +12,7 @@ import { ADMIN_CONSOLE_SCHEMA } from './admin-console-schema.mjs';
 import { servePublicDownloads } from './public-downloads.mjs';
 import { createDeviceAdmin } from './device-admin.mjs';
 import { createPublicSystemHealth } from './public-system-health.mjs';
+import { readOneSalesSummary } from './one-sales-overview.mjs';
 
 const pool = new pg.Pool({ ...databaseOptions(process.env.DATABASE_URL),
   max: 2, connectionTimeoutMillis: 4000, idleTimeoutMillis: 10000, statement_timeout: 10000 });
@@ -132,6 +133,14 @@ http.createServer = function withAdminConsole(listener) {
       }
       if (await deviceAdmin(req, res, url)) return;
       if (await handleReleaseAdmin(catalog, req, res, url.pathname, { requireAdmin, readJson, json })) return;
+      // Owner-only, real recorded BLOFY PLAYER checkout orders. No payouts,
+      // no external Geidea/Tap reconciliation, no STREAM sales, no PII.
+      if (url.pathname === '/api/v1/admin/one/sales' && req.method === 'GET') {
+        if (!requireAdmin(req, res)) return;
+        await ensureAdmin();
+        json(res, 200, await readOneSalesSummary(pool));
+        return;
+      }
       if (url.pathname === '/api/v1/admin/users' && req.method === 'GET') {
         if (!requireAdmin(req, res)) return;
         await ensureAdmin();
