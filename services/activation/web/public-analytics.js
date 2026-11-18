@@ -149,9 +149,11 @@
     if (eventName) window.gtag('event', eventName, { page_path: pagePath });
     if(eventName==='whatsapp_link_click')sendFirstParty('whatsapp_click');
     else if(eventName==='apk_download_click'||eventName==='downloads_page_click')sendFirstParty('download_click');
-    if(/^/store/offers/?(?:#.*)?$/.test(href))sendFirstParty('offer_click');
-    else if(/^/products/(stream|xtream)/?(?:#.*)?$/.test(href))sendFirstParty('product_click');
-    else if(/^/store/trial/?(?:#.*)?$/.test(href))sendFirstParty('trial_click');
+    var targetPath=href.split('?')[0].split('#')[0];
+    if(targetPath.endsWith('/')&&targetPath!=='/')targetPath=targetPath.slice(0,-1);
+    if(targetPath==='/store/offers')sendFirstParty('offer_click');
+    else if(targetPath==='/products/stream'||targetPath==='/products/xtream')sendFirstParty('product_click');
+    else if(targetPath==='/store/trial')sendFirstParty('trial_click');
     // Device identifiers, credentials, URL parameters and form values are never forwarded.
   }
   function setChoice(value) {
