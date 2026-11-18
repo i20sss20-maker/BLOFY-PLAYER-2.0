@@ -22,6 +22,15 @@ test('Three cart codes require one paid Geidea capture and never duplicate on ca
      return rows([{n:'blofy_xtream_servers'}]);
    if(sql.startsWith('SELECT id FROM blofy_xtream_servers'))
      return rows([{id:sourceId}]);
+   if(sql.startsWith('SELECT o.id,o.public_order_number,o.session_id,o.session_expires_at')){
+     const [customerId,sku,cartJson,coupon]=args;
+     const result=linked.filter(x=>x.customerId===customerId).map(x=>orders.get(x.id))
+       .filter(o=>o&&o.sku===sku&&o.status==='pending'&&
+         JSON.stringify(o.cart_items)===cartJson&&(o.coupon_code||'')===(coupon||''))
+       .map(o=>({id:o.id,public_order_number:o.public_order_number,
+         session_id:o.session_id,session_expires_at:o.session_expires_at,created_at:o.created_at}));
+     return rows(result.slice(-1));
+   }
    if(sql.startsWith('SELECT o.id FROM blofy_store_customer_orders co')){
      const [customerId,sku,cartJSON,coupon]=args;
      return rows([...linked].map(item=>orders.get(item.id)).filter(o=>
@@ -48,7 +57,8 @@ test('Three cart codes require one paid Geidea capture and never duplicate on ca
      const row=orders.get(args[0]);if(row)row.status='cancelled';return rows([row].filter(Boolean));
    }
    if(sql.startsWith('UPDATE blofy_store_geidea_orders SET session_id=')){
-     orders.get(args[0]).session_id=args[1];return rows();
+     orders.get(args[0]).session_id=args[1];
+     orders.get(args[0]).session_expires_at=args[2];return rows();
    }
    if(sql.startsWith('SELECT * FROM blofy_store_geidea_orders WHERE id=$1'))
      return rows(orders.has(args[0])?[{...orders.get(args[0])}]:[]);
@@ -157,6 +167,18 @@ test('Three cart codes require one paid Geidea capture and never duplicate on ca
  assert.equal(paymentSessions,1,'duplicate checkout did not contact provider');
  assert.match(checkout.data.orderNumber,/^BF-\d{6}-[0-9A-F]{8}$/);
  assert.equal(delivered.length,0,'never issue codes before verified capture');
+ const owned={};
+ await handler(request({items},true,true),owned,{pathname:'/api/v1/store/cart/pending'});
+ assert.equal(owned.status,200);
+ assert.equal(owned.data.pending,true);
+ assert.equal(owned.data.orderId,checkout.data.orderId);
+ assert.equal(owned.data.sessionId,sessionId);
+ assert.equal(typeof owned.data.sessionExpiresAt,'string');
+ assert.equal(Object.hasOwn(owned.data,'accessToken'),false,
+   'cross-device recovery never exposes the private receipt token');
+ const notOwner={};
+ await handler(request({items}),notOwner,{pathname:'/api/v1/store/cart/pending'});
+ assert.equal(notOwner.status,401,'anonymous users cannot retrieve payment sessions');
  const invalid={};
  await handler(request({orderId:checkout.data.orderId,accessToken:'z'.repeat(43)}),
    invalid,{pathname:'/api/v1/store/orders/status'});
@@ -179,6 +201,9 @@ test('Three cart codes require one paid Geidea capture and never duplicate on ca
  assert.equal(repeated.status,200);
  assert.equal(delivered.length,3);
  assert.equal(paid,1);
+ const settledPending={};
+ await handler(request({items},true,true),settledPending,{pathname:'/api/v1/store/cart/pending'});
+ assert.equal(settledPending.data.pending,false,'paid orders cannot reopen a Geidea session');
  const receipt={};
  await handler(request({orderId:checkout.data.orderId,accessToken:checkout.data.accessToken}),
    receipt,{pathname:'/api/v1/store/orders/status'});
