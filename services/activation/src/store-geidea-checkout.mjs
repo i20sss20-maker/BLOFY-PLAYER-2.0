@@ -466,7 +466,7 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
    if(!new Set(['all','paid','pending','failed','cancelled']).has(status))
      return json(res,400,{error:'invalid_order_filter'});
    const limit=50;
-   const query="SELECT id,COALESCE(public_order_number,'BF-'+to_char(created_at AT TIME ZONE 'Asia/Riyadh','YYMMDD')+'-'+upper(substr(id::text,1,8))) AS order_number,"+
+   const query="SELECT id,COALESCE(public_order_number,'BF-'||to_char(created_at AT TIME ZONE 'Asia/Riyadh','YYMMDD')||'-'||upper(substr(id::text,1,8))) AS order_number,"+
      "sku,status,amount_minor,currency,cart_gross_minor,cart_items,provider_reference,"+
      "coupon_code,created_at,paid_at,updated_at FROM blofy_store_geidea_orders "+
      (status==='all'?'':'WHERE status=$1 ')+
@@ -721,7 +721,7 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
        if(!code||streamCodeProof(code,keyHex)!==x.code_hash)throw err('store_code_integrity_unavailable',503);
        return {position:x.position,channel:x.channel,code,durationDays:365};
      });
-     return json(res,200,{status:'paid',fulfilled:true,sku:order.sku,amountMinor:order.amount_minor,currency:'SAR',codes});
+     return json(res,200,{orderId:order.id,orderNumber,status:'paid',fulfilled:true,sku:order.sku,amountMinor:order.amount_minor,currency:'SAR',createdAt:order.created_at,paidAt:order.paid_at,codes});
    }
    if(!order.voucher_id)return json(res,503,{error:'store_paid_delivery_unavailable'});
    const voucher=(await pool.query('SELECT id,code_hash,code_vault,revoked_at FROM blofy_xtream_gateway_duration_codes WHERE id=$1',
@@ -729,13 +729,21 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
    if(!voucher||voucher.revoked_at||!voucher.code_vault)return json(res,503,{error:'store_paid_delivery_unavailable'});
    const code=decryptStreamCode(voucher.id,voucher.code_vault,keyHex);
    if(!code||streamCodeProof(code,keyHex)!==voucher.code_hash)return json(res,503,{error:'store_code_integrity_unavailable'});
-   return json(res,200,{status:'paid',fulfilled:true,sku:order.sku,channel:order.channel,
+   return json(res,200,{orderId:order.id,orderNumber,status:'paid',fulfilled:true,sku:order.sku,channel:order.channel,
+      amountMinor:order.amount_minor,currency:'SAR',createdAt:order.created_at,paidAt:order.paid_at,
       durationDays:order.duration_days,code,redeemUrl:'https://blofyplayer.com/stream/activate'});
  }
  async function returned(req,res,url){
    const id=url.searchParams.get('reference')||'';
-   res.writeHead(303,{location:'https://blofyplayer.com/'+
-      (UUID.test(id)?'#store_order='+encodeURIComponent(id):'#products'),
+   let path='/#products';
+   if(UUID.test(id))try{
+     const row=(await pool.query('SELECT sku FROM blofy_store_geidea_orders WHERE id=$1',[id])).rows[0];
+     path=row?.sku===CART_SKU?'/store/orders#order='+encodeURIComponent(id):
+       '/#store_order='+encodeURIComponent(id);
+   }catch{
+     path='/#store_order='+encodeURIComponent(id);
+   }
+   res.writeHead(303,{location:'https://blofyplayer.com'+path,
       'cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer'});
    res.end();
  }
