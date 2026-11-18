@@ -40,13 +40,17 @@
   // The only persisted identifier is a random per-tab, session-scoped ID.
   // The backend stores a rotated HMAC proof, never the ID itself.
   function analyticsSession() {
+    // Do not invent a fingerprint or predictable identifier on older browsers.
+    if(typeof crypto==='undefined'||typeof crypto.randomUUID!=='function')return null;
     try {
       var existing = sessionStorage.getItem('blofy.analytics.tab-session.v1');
       if (existing && /^[0-9a-f-]{36}$/i.test(existing)) return existing;
       var key=crypto.randomUUID();
       sessionStorage.setItem('blofy.analytics.tab-session.v1',key);
       return key;
-    } catch (_) { return crypto.randomUUID(); }
+    } catch (_) {
+      try{return crypto.randomUUID();}catch(_){return null;}
+    }
   }
   function safeTag(value) {
     value=String(value||'').trim().toLowerCase();
@@ -92,7 +96,9 @@
   }
   function sendFirstParty(name){
     if(!active||!name)return;
-    var session=analyticsSession(),attr=safeAttribution();
+    var session=analyticsSession();
+    if(!session)return;
+    var attr=safeAttribution();
     var event={event:name,page:pagePath,sessionId:session,
       source:attr.source,medium:attr.medium,campaign:attr.campaign,device:deviceClass()};
     try{
