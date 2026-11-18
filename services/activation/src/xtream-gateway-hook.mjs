@@ -3,6 +3,8 @@ import { databaseOptions } from './database-options.mjs';
 import { safeErrorSummary } from './diagnostics-sanitizer.mjs';
 import {safeXtreamTransportCategory} from './xtream-transport-errors.mjs';
 import {waitXtreamMediaRetry} from './xtream-media-retry-backoff.mjs';
+import {allowedLiveTsRecoveryPilot,safeLiveTsRecoveryStart,liveTsRecoveryBytes}
+  from './xtream-live-ts-recovery.mjs';
 import { createFixedWindowLimiter, requestClientKey } from './auth-protection.mjs';
 import {ensureXtreamAdminReady,getXtreamStudioBranding} from './xtream-admin-hook.mjs';
 import {
@@ -1618,9 +1620,36 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
         });
         if(vodPlan&&first.value.byteLength>vodPlan.total)
           throw Error('vod_resume_initial_payload_overrun');
+        // Operator-controlled pilot only. MPEG-TS over an open-ended direct
+        // response can reconnect to the *same* authorized source after EOF
+        // or socket interruption, without restarting the viewer's HTTP reply.
+        // No provider fanout, HLS, Range, 206, or whole-file retry.
+        const liveTsPilot=safeLiveTsRecoveryStart({
+          enabled:allowedLiveTsRecoveryPilot({
+            enabled:process.env.BLOFY_XTREAM_LIVE_TS_RECOVERY_ENABLED==='1',
+            accountId:String(account.id||''),
+            sourceId:String(row.server_id||''),
+            pilotAccountId:process.env.BLOFY_XTREAM_LIVE_TS_RECOVERY_PILOT_ACCOUNT_ID||'',
+            pilotSourceId:process.env.BLOFY_XTREAM_LIVE_TS_RECOVERY_PILOT_SOURCE_ID||''
+          }),
+          kind,method:req.method,status:response.status,
+          requestRange:headers.range||null,usingIndependentRelay,
+          format:inspection.format,response,first:first.value
+        });
         let resumedVod=false;
         res.writeHead(response.status, outputHeaders);
-        const stream = Readable.from((async function* () {
+        const stream=liveTsPilot?
+          Readable.from(liveTsRecoveryBytes({
+            first:first.value,reader,controller,clientSignal:client.signal,
+            fetchImpl:checkedFetch,target:mediaFetchTarget,headers,
+            onReconnect:({attempt:reconnection})=>{
+              console.info('BLOFY_LIVE_TS_RECOVERED',{
+                state:'same_source_valid_ts',attempt:reconnection,
+                kind,sourceId:row.server_id,customerCutover:false
+              });
+            }
+          })):
+          Readable.from((async function* () {
           let sent=first.value.byteLength;
           yield first.value;
           try {
@@ -1680,9 +1709,11 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
         return;
       } catch (error) {
         if (client.signal.aborted) return;
-        const reason = controller.signal.reason?.message || error?.message || 'media_error';
+        const reason = String(error?.message||'').startsWith('live_ts_')?
+          error.message:(controller.signal.reason?.message || error?.message || 'media_error');
         const networkReason=safeXtreamTransportCategory(error);
-        const safeReason = ['headers_timeout','media_read_timeout','upstream_empty_media','upstream_non_media_response'].includes(reason)
+        const safeReason = ['headers_timeout','media_read_timeout','upstream_empty_media','upstream_non_media_response',
+          'live_ts_reconnect_exhausted','live_ts_reconnect_denied'].includes(reason)
           ? reason : (networkReason||'upstream_unreachable');
         console.warn('xtream media relay error', {kind,itemId:gatewayId,reason:safeReason,attempt});
         // Switch egress ONLY if the original connection failed before
