@@ -280,6 +280,24 @@ async function servePortal(res, connectOnly = false) {
   res.end(file);
 }
 
+async function serveStorefront(res) {
+  // Public storefront and Geidea entry points live separately from device linking.
+  // Never expose payment secrets or card fields on the marketing page.
+  const file = Buffer.from(withPublicAnalytics(await readFile(new URL('../web/store.html', import.meta.url), 'utf8')), 'utf8');
+  res.writeHead(200, {
+    'content-type': 'text/html; charset=utf-8',
+    'content-length': file.length,
+    'cache-control': 'public, max-age=120',
+    'x-content-type-options': 'nosniff',
+    'x-frame-options': 'DENY',
+    'referrer-policy': 'strict-origin-when-cross-origin',
+    'permissions-policy': 'camera=(), microphone=(), geolocation=()',
+    'strict-transport-security': 'max-age=31536000',
+    'content-security-policy': PUBLIC_ANALYTICS_CSP + "; base-uri 'none'; form-action 'none'"
+  });
+  res.end(file);
+}
+
 async function serveStatusPage(res, fileName = 'status.html') {
   // Only internal constant filenames are passed; never derive public file paths from URLs.
   const publicPage = fileName === 'guide.html' || fileName === 'support.html' || fileName === 'en.html' || fileName === 'es.html' || fileName === 'fr.html';
@@ -797,6 +815,7 @@ const server = http.createServer(async (req, res) => {
       return res.end();
     }
     if (await servePrivacyPage(req, res, requestUrl)) return;
+    if (['GET', 'HEAD'].includes(req.method) && (requestUrl.pathname === '/' || requestUrl.pathname === '/shop' || requestUrl.pathname === '/shop/')) return await serveStorefront(res);
     if (req.method === 'GET' && requestUrl.pathname === '/connect') return await servePortal(res, true);
     if (['GET', 'HEAD'].includes(req.method) && requestUrl.pathname === '/status') return await serveStatusPage(res);
     if (['GET', 'HEAD'].includes(req.method) && (requestUrl.pathname === '/en' || requestUrl.pathname === '/en/')) return await serveStatusPage(res, 'en.html');
@@ -804,7 +823,7 @@ const server = http.createServer(async (req, res) => {
     if (['GET', 'HEAD'].includes(req.method) && (requestUrl.pathname === '/fr' || requestUrl.pathname === '/fr/')) return await serveStatusPage(res, 'fr.html');
     if (['GET', 'HEAD'].includes(req.method) && (requestUrl.pathname === '/guide' || requestUrl.pathname === '/guide/')) return await serveStatusPage(res, 'guide.html');
     if (['GET', 'HEAD'].includes(req.method) && (requestUrl.pathname === '/support' || requestUrl.pathname === '/support/')) return await serveStatusPage(res, 'support.html');
-    if (['GET', 'HEAD'].includes(req.method) && (requestUrl.pathname === '/' || requestUrl.pathname === '/portal')) return await servePortal(res);
+    if (['GET', 'HEAD'].includes(req.method) && requestUrl.pathname === '/portal') return await servePortal(res);
     if (req.method === 'GET' && requestUrl.pathname === '/blofy-logo.png') return await servePortalLogo(res);
     if (serveIndexNowKey(req, res, requestUrl)) return;
     if (['GET', 'HEAD'].includes(req.method) && requestUrl.pathname === '/robots.txt') return serveRobots(res);

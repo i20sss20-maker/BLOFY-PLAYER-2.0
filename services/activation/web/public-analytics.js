@@ -3,7 +3,7 @@
   'use strict';
   var measurementId = 'G-2DYE5WB8BT';
   var preferenceKey = 'blofy.analytics.consent.v1';
-  var publicPaths = ['/', '/guide', '/guide/', '/support', '/support/', '/downloads', '/downloads/', '/releases', '/releases/', '/en', '/en/', '/es', '/es/', '/fr', '/fr/'];
+  var publicPaths = ['/', '/shop', '/shop/', '/guide', '/guide/', '/support', '/support/', '/downloads', '/downloads/', '/releases', '/releases/', '/en', '/en/', '/es', '/es/', '/fr', '/fr/'];
   if (publicPaths.indexOf(window.location.pathname) === -1) return;
 
   var active = false;
