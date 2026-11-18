@@ -908,6 +908,19 @@ const server = http.createServer(async (req, res) => {
   try {
     const requestUrl = new URL(req.url || '/', 'http://localhost');
     const requestHost = String(req.headers.host || '').toLowerCase().replace(/:\d+$/, '');
+    // Geidea/Apple Pay verifies exact domain bytes. Serve on every BLOFY host
+    // before the api-to-site redirect, with no authentication or HTML wrapper.
+    if (['GET','HEAD'].includes(req.method || '') &&
+        requestUrl.pathname === '/.well-known/apple-developer-merchantid-domain-association') {
+      const file = await readFile(new URL('../web/.well-known/apple-developer-merchantid-domain-association', import.meta.url));
+      res.writeHead(200, {
+        'content-type': 'text/plain; charset=utf-8',
+        'content-length': file.length,
+        'cache-control': 'public, max-age=300',
+        'x-content-type-options': 'nosniff'
+      });
+      return res.end(req.method === 'HEAD' ? undefined : file);
+    }
     if (
       requestHost === 'api.blofyplayer.com' &&
       ['GET', 'HEAD'].includes(req.method || '') &&
