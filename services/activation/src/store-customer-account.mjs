@@ -63,12 +63,23 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
  const mailKey=String(env.BLOFY_CUSTOMER_RESEND_API_KEY||'').trim();
  const mailFrom=String(env.BLOFY_CUSTOMER_MAIL_FROM||'').trim();
  const mailReady=typeof sendCode==='function'||(mailKey.startsWith('re_')&&mailFrom.includes('@'));
+ // Readiness is distinct from merely having a configured key. A syntactically
+ // present key can still be revoked; don't label email delivery "ready" until
+ // an actual provider-domain read verifies it. Send-only keys are *unknown*.
+ let mailProviderStatus=typeof sendCode==='function'?'test_sender_injected':
+   mailReady?'provider_probe_pending':'not_configured';
  // Run a read-only provider domain check after startup. Keys with send-only access
  // cannot query domains: that is inconclusive, NOT a reason to disable sending.
  if(enabled&&mailReady&&typeof sendCode!=='function'){
   const probe=setTimeout(()=>void checkResendSender({mailKey,mailFrom,fetchImpl})
-    .then(result=>console.info('[customer-email-readiness]',JSON.stringify(result)))
-    .catch(()=>{}),2000);
+    .then(result=>{
+      const allowed=new Set(['verified','key_invalid','key_send_only_cannot_inspect',
+        'sender_domain_absent','sender_domain_not_verified','provider_query_failed',
+        'provider_probe_unavailable','invalid_config']);
+      mailProviderStatus=allowed.has(result?.status)?result.status:'provider_probe_unavailable';
+      console.info('[customer-email-readiness]',JSON.stringify(result));
+    })
+    .catch(()=>{mailProviderStatus='provider_probe_unavailable'}),2000);
   probe.unref?.();
  }
  const reminderEngine=createCustomerReminderEngine({pool,env,fetchImpl});
@@ -179,6 +190,11 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
   if(tables.reminders)sentReminders=Number((await pool.query(
     'SELECT COUNT(*)::int AS n FROM blofy_store_customer_reminders WHERE sent_at IS NOT NULL')).rows[0]?.n||0);
   return json(res,200,{ok:true,accountsEnabled:enabled,emailConfigured:mailReady,
+    emailProviderStatus:mailProviderStatus,
+    emailProviderVerified:mailProviderStatus==='verified',
+    // Provider key's write permission cannot be established by a GET-only
+    // domain check; a successful transactional email still requires a live test.
+    emailDeliveryVerified:false,
     remindersEnabled:reminderEngine.configured,customers,linkedOrders,sentReminders,
     livePaymentTestVerified:false});
  }
