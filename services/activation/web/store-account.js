@@ -49,7 +49,10 @@
   const support=node('a','الدعم');support.className='secondary';support.target='_blank';
   support.rel='noopener noreferrer';
   support.href='https://wa.me/966568941484?text='+encodeURIComponent('السلام عليكم، أحتاج مساعدة في طلب BLOFY رقم '+o.orderNumber);
-  buttons.append(details,support);wrapper.append(buttons);return wrapper;
+  const renew=node('a','تجديد نفس الكود');renew.className='secondary';renew.target='_blank';
+  renew.rel='noopener noreferrer';
+  renew.href='https://wa.me/966568941484?text='+encodeURIComponent('السلام عليكم، أريد تجديد نفس كود BLOFY المرتبط بطلب '+o.orderNumber+'. أرجو مراجعة حالته.');
+  buttons.append(details,renew,support);wrapper.append(buttons);return wrapper;
  }
  async function load(){
   try{
