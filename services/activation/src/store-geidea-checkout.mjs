@@ -320,9 +320,18 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
  // A single verified Geidea payment atomically fulfills every item.
  async function fulfillCart(db,order,settled){
    const parsed=parseStoreCart(order.cart_items);
+   // The trusted saved quote must remain redeemable even after future
+   // product price changes. Only the server writes line prices into cart_items.
+   const historicGross=Array.isArray(order.cart_items)?
+     order.cart_items.reduce((n,line)=>n+
+       (Number(line.unitPriceMinor||0)*Number(line.quantity||0)),0):0;
    if(!parsed||!Array.isArray(order.cart_items)||
-      parsed.totalMinor!==Number(order.cart_gross_minor)||
-      Number(order.amount_minor)+Number(order.coupon_discount_minor||0)!==parsed.totalMinor)
+      !Number.isSafeInteger(historicGross)||historicGross<=0||
+      order.cart_items.some(line=>!Number.isSafeInteger(line.unitPriceMinor)||
+        !Number.isSafeInteger(line.lineTotalMinor)||
+        line.lineTotalMinor!==line.unitPriceMinor*line.quantity)||
+      historicGross!==Number(order.cart_gross_minor)||
+      Number(order.amount_minor)+Number(order.coupon_discount_minor||0)!==historicGross)
       throw err('store_cart_quote_integrity_failed',409);
    const vouchers=cartVouchers(order.cart_items);
    if(!vouchers||vouchers.length!==parsed.codeCount)throw err('store_cart_invalid_vouchers',409);
