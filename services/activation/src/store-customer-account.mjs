@@ -152,7 +152,7 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
     'o.cart_items,o.duration_days,o.channel FROM blofy_store_customer_orders m '+
     'JOIN blofy_store_geidea_orders o ON o.id=m.order_id WHERE m.customer_id=$1 '+
     'ORDER BY o.created_at DESC LIMIT 100',[customer.id])).rows;
-  return json(res,200,{email:customer.email,alertsOptIn:customer.alerts_opt_in,
+  return json(res,200,{customerId:customer.id,email:customer.email,alertsOptIn:customer.alerts_opt_in,
     orders:orders.map(o=>({orderId:o.id,orderNumber:o.public_order_number||publicOrderNumber(o.id,o.created_at),
       status:o.status,sku:o.sku,items:o.cart_items||null,amountMinor:o.amount_minor,
       currency:o.currency,createdAt:o.created_at,paidAt:o.paid_at}))});
