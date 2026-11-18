@@ -49,6 +49,7 @@ import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.remote.FocusMemory
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.CatalogRefreshWorker
+import tv.blofy.player.data.StreamCatalogDeltaWorker
 import tv.blofy.player.ui.series.RecentEpisodesRefreshWorker
 import tv.blofy.player.data.CatalogRefreshCheckpoint
 import tv.blofy.player.data.HomeSnapshotStore
@@ -170,11 +171,12 @@ class HomeActivity : AppCompatActivity() {
             CatalogSyncState.isReady(applicationContext, StreamCodeSession.providerId)) {
             scheduledProviderId = StreamCodeSession.providerId
             CatalogRefreshWorker.scheduleAutomatic(applicationContext, StreamCodeSession.providerId)
+            StreamCatalogDeltaWorker.schedule(applicationContext, StreamCodeSession.providerId)
             showReadyHome()
             // Paint Home first, then schedule both catalog and recent-episode
             // checks. Neither worker owns a loading overlay or steals TV focus.
             lifecycleScope.launch(Dispatchers.IO) {
-                CatalogRefreshWorker.enqueueIfStale(applicationContext, StreamCodeSession.providerId)
+                StreamCatalogDeltaWorker.enqueueIfDue(applicationContext, StreamCodeSession.providerId)
                 RecentEpisodesRefreshWorker.enqueueIfDue(applicationContext, StreamCodeSession.providerId)
             }
             return
@@ -224,9 +226,11 @@ class HomeActivity : AppCompatActivity() {
                 provider?.let {
                     scheduledProviderId = it.id
                     CatalogRefreshWorker.scheduleAutomatic(applicationContext, it.id)
+                    if (BuildConfig.CODE_ONLY_LOGIN) StreamCatalogDeltaWorker.schedule(applicationContext, it.id)
                     // No metadata/artwork crawler in STREAM, only quiet source checks.
                     lifecycleScope.launch(Dispatchers.IO) {
-                        CatalogRefreshWorker.enqueueIfStale(applicationContext, it.id)
+                        if (BuildConfig.CODE_ONLY_LOGIN) StreamCatalogDeltaWorker.enqueueIfDue(applicationContext, it.id)
+                        else CatalogRefreshWorker.enqueueIfStale(applicationContext, it.id)
                         RecentEpisodesRefreshWorker.enqueueIfDue(applicationContext, it.id)
                     }
                     FullLibrarySyncWorker.enqueue(applicationContext, it.id)
@@ -337,9 +341,11 @@ class HomeActivity : AppCompatActivity() {
                     scheduledProviderId = activeId
                     observeManualRefresh(activeId)
                     CatalogRefreshWorker.scheduleAutomatic(applicationContext, activeId)
+                    if (BuildConfig.CODE_ONLY_LOGIN) StreamCatalogDeltaWorker.schedule(applicationContext, activeId)
                 }
                 // Catch up when returning to Home; a running worker is coalesced by unique name.
-                CatalogRefreshWorker.enqueueIfStale(applicationContext, activeId)
+                if (BuildConfig.CODE_ONLY_LOGIN) StreamCatalogDeltaWorker.enqueueIfDue(applicationContext, activeId)
+                else CatalogRefreshWorker.enqueueIfStale(applicationContext, activeId)
                 RecentEpisodesRefreshWorker.enqueueIfDue(applicationContext, activeId)
                 if (displayedHomeData != null && displayedHomeData?.providerId != activeId) {
                     lastHomeInputAtMs = SystemClock.elapsedRealtime()
