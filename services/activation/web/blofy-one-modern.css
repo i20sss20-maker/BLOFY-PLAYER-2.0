@@ -262,3 +262,13 @@ body{
  .one-top-actions button{font-size:11px;padding:8px 11px}
 }
 @media(prefers-reduced-motion:reduce){.one-hero-buttons a:hover,.one-issue-form button#one-issue-submit:hover{transform:none}}
+
+.one-copy-single{border:1px solid #70dcce;color:#c8fff1;background:#1b5656;
+ padding:7px 12px;min-height:33px;border-radius:8px;font:700 11px IBMArabic,Tahoma,sans-serif;
+ white-space:nowrap}
+.one-copy-single:hover{background:#27756e}
+.one-issue-code{flex-wrap:wrap}
+.one-issue-code code{direction:ltr;unicode-bidi:isolate;text-align:left;flex:1;min-width:120px}
+.one-issue-countdown{font-size:12px;font-weight:700;color:#a8f9e9;background:#1c4e50;
+ display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:8px;min-height:24px;margin:6px 0}
+.one-issue-countdown:empty{display:none}
