@@ -1,6 +1,7 @@
 // Durable, bounded management features for BLOFY STREAM.
 // Never store or export upstream credentials or subscriber secrets.
 import crypto from 'node:crypto';
+import {bumpXtreamCatalogRevision} from './xtream-catalog-revision.mjs';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MEDIA=new Set(['live','movie','series']);
 const invalid=(name,status=400)=>Object.assign(new Error(name),{status});
@@ -88,6 +89,7 @@ export function createStudioPro({pool,ensureXtreamReady,startSync}){
         result=await db.query('UPDATE blofy_xtream_items SET '+fixed[0]+'=$3,updated_at=NOW() WHERE server_id=$1 AND media_type=\'live\' AND source_id=ANY($2::text[])',[serverId,ids,fixed[1]]);
       }
       await record(serverId,'bulk_'+action,{count:ids.length},db);
+      if(result.rowCount>0)await bumpXtreamCatalogRevision(db,serverId,'operator_edit');
       await db.query('COMMIT');
       return {updated:result.rowCount,action};
     }catch(error){await db.query('ROLLBACK').catch(()=>{});throw error}
@@ -138,6 +140,7 @@ export function createStudioPro({pool,ensureXtreamReady,startSync}){
       await db.query('UPDATE blofy_xtream_items i SET enabled=x.enabled,featured=x.featured,custom_name=x.custom_name,custom_icon_url=x.custom_icon_url,channel_number=x.channel_number,updated_at=NOW() FROM jsonb_to_recordset($2::jsonb) AS x(media_type text,source_id text,enabled boolean,custom_name text,custom_icon_url text,featured boolean,channel_number integer) WHERE i.server_id=$1 AND i.media_type=x.media_type AND i.source_id=x.source_id',[serverId,JSON.stringify(data.items)]);
       await db.query('UPDATE blofy_xtream_categories c SET enabled=x.enabled,sort_order=x.sort_order,updated_at=NOW() FROM jsonb_to_recordset($2::jsonb) AS x(media_type text,source_category_id text,enabled boolean,sort_order integer) WHERE c.server_id=$1 AND c.media_type=x.media_type AND c.source_category_id=x.source_category_id',[serverId,JSON.stringify(data.categories)]);
       await record(serverId,'snapshot_restored',{snapshotId},db);
+      await bumpXtreamCatalogRevision(db,serverId,'restored');
       await db.query('COMMIT');
       return {restored:true,categories:data.categories.length,items:data.items.length};
     }catch(error){await db.query('ROLLBACK').catch(()=>{});throw error}
