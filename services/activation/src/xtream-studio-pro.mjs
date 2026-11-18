@@ -197,7 +197,35 @@ export function createStudioPro({pool,ensureXtreamReady,startSync}){
     finally{db.release()}
     for(const cfg of due){
       try{
-        startSync(cfg.server_id,cfg.types);
+        startSync(cfg.server_id,cfg.types,{
+          onSettled:async({state})=>{
+            if(!['completed','partial','failed'].includes(state))return;
+            // The previous implementation advanced next_run_at on dispatch,
+            // even when one media type failed minutes later. Keep one
+            // bounded recovery attempt per hour, never an endless 10m loop.
+            if(state!=='completed'){
+              const recent=(await pool.query(`SELECT EXISTS(
+                SELECT 1 FROM blofy_xtream_studio_events
+                WHERE server_id=$1 AND action='scheduled_sync_retry_scheduled'
+                  AND created_at>NOW()-INTERVAL '1 hour'
+              ) AS retried`,[cfg.server_id])).rows[0]?.retried===true;
+              if(!recent){
+                const changed=await pool.query(`UPDATE blofy_xtream_studio_schedules
+                  SET next_run_at=NOW()+INTERVAL '10 minutes',updated_at=NOW()
+                  WHERE server_id=$1 AND interval_hours=$2 AND enabled=TRUE
+                    AND next_run_at>NOW()+INTERVAL '10 minutes'`,
+                  [cfg.server_id,cfg.interval_hours]);
+                if(changed.rowCount>0)
+                  await record(cfg.server_id,'scheduled_sync_retry_scheduled',{
+                    retryMinutes:10,reason:state,types:cfg.types
+                  });
+              }
+            }
+            await record(cfg.server_id,'scheduled_sync_'+state,{
+              types:cfg.types,metadataOnly:true
+            });
+          }
+        });
         await record(cfg.server_id,'scheduled_sync_started',{types:cfg.types});
       }catch(error){
         // Do not skip an entire 1h/12h interval if the daily import, another
