@@ -1,4 +1,5 @@
 // Read-only BLOFY ONE store subscriptions + Geidea renewal monitoring.
+import {readStoreSalesReport} from './store-sales-admin.mjs';
 // Queries never reveal codes, credentials or encrypted vaults.
 const STATES=new Set(['all','active','expiring','expired','unused','revoked','disabled']);
 const PAY_STATES=new Set(['all','pending','paid','failed','cancelled']);
@@ -38,8 +39,8 @@ export function parseOpsOptions(url){
    status=url.searchParams.get('status')||'all',
    q=url.searchParams.get('q')||'',
    page=Number(url.searchParams.get('page')||'1');
- if(!['subscriptions','renewals'].includes(view)||
-    !(view==='renewals'?PAY_STATES:STATES).has(status)||
+ if(!['subscriptions','renewals','sales'].includes(view)||
+    !((view==='renewals'||view==='sales')?PAY_STATES:STATES).has(status)||
     typeof q!=='string'||q.length>100||/[\x00-\x1f\x7f]/.test(q)||
     !Number.isSafeInteger(page)||page<1||page>200)return null;
  return {view,status,q:q.trim(),page};
@@ -61,6 +62,7 @@ export function createStoreSubscriptionAdmin({pool,json,authorizeAdmin,ensureSto
    'to_regclass($'+(i+1)+') AS t'+i).join(','),tables.map(t=>'public.'+t))).rows[0]||{};
   if(tables.slice(0,6).some((_,i)=>!availability['t'+i]))
    return json(res,503,{error:'store_operations_schema_unavailable'});
+  if(opts.view==='sales')return readStoreSalesReport({pool,json,res,opts});
   const summary=(await pool.query(
    'SELECT COUNT(*)::int AS total,'+
    "COUNT(*) FILTER(WHERE o.status='paid')::int AS paid,"+
