@@ -1,6 +1,6 @@
 /* BLOFY WhatsApp Cloud API integration, default DISABLED.
  * Reacts only to text messages that the customer initiated via the official
- * Meta webhook. No broadcasts, unsolicited promotions, or automatic issuance.
+ * Meta webhook. No unsolicited promotions or automatic issuance.
  * Neither customer phone numbers nor text bodies are persisted or logged.
  */
 import crypto from 'node:crypto';
