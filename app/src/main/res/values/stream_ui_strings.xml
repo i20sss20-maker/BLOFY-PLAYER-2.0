@@ -63,7 +63,7 @@
     <string name="stream_ui_cert_error">Could not connect right now. Check your internet and try again.</string>
     <string name="stream_ui_dns_error">Connection unavailable. Check your internet and try again.</string>
     <string name="stream_ui_timeout_error">This is taking longer than expected. Please try again.</string>
-    <string name="stream_ui_network_error">You're offline. Check your internet connection.</string>
+    <string name="stream_ui_network_error">You are offline. Check your internet connection.</string>
     <string name="stream_ui_unauthorized_error">Your subscription needs attention. Check your subscription or contact support.</string>
     <string name="stream_ui_content_missing_error">This title is not available right now. Please choose another.</string>
     <string name="stream_ui_rate_limited_error">Please wait a moment and try again.</string>
