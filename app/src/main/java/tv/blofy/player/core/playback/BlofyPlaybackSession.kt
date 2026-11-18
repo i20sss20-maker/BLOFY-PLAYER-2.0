@@ -11,6 +11,7 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -30,14 +31,15 @@ class BlofyPlaybackSession(
     private var metric: PlaybackMetric? = null
     private var firstFrameRecorded = false
     private var automaticRetries = 0
+    private var lastReadyAtMs = 0L
     private var alternateLiveFormatAttempted = false
-    private var lastObservedLivePositionMs = Long.MIN_VALUE
     private var liveStallStartedAtMs = 0L
     private var lastLiveStallRecoveryAtMs = 0L
     private var liveStallRecoveries = 0
     private val fallbackState = PlaybackFallbackState()
     private val retryHandler = Handler(context.mainLooper)
     private val appContext = context.applicationContext
+    private val bufferBudget = PlaybackBufferPolicy.forKind(contentKind)
 
     private val liveStallWatchdog = object : Runnable {
         override fun run() {
@@ -49,8 +51,22 @@ class BlofyPlaybackSession(
 
     private val renderersFactory = DefaultRenderersFactory(appContext)
         .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+        // Android TV 9 boxes sometimes reject a hardware audio/video codec.
+        // Use another installed decoder rather than failing the whole stream.
+        .setEnableDecoderFallback(true)
 
     val player: ExoPlayer = ExoPlayer.Builder(appContext)
+        .setLoadControl(
+            DefaultLoadControl.Builder()
+                .setBufferDurationsMs(
+                    bufferBudget.minBufferMs,
+                    bufferBudget.maxBufferMs,
+                    bufferBudget.playbackStartMs,
+                    bufferBudget.afterRebufferMs
+                )
+                .setTargetBufferBytes(bufferBudget.maxBufferBytes)
+                .build()
+        )
         .setRenderersFactory(renderersFactory)
         .setMediaSourceFactory(DefaultMediaSourceFactory(TransportFactory.create(appContext, profile)))
         .build()
@@ -62,7 +78,10 @@ class BlofyPlaybackSession(
             addListener(object : Player.Listener {
                 override fun onPlaybackStateChanged(playbackState: Int) {
                     if (playbackState == Player.STATE_BUFFERING) metric?.let { metric = PlaybackDiagnostics.buffering(it) }
-                    if (playbackState == Player.STATE_READY) resetLiveStallTimer(keepPosition = true)
+                    if (playbackState == Player.STATE_READY) {
+                        lastReadyAtMs = SystemClock.elapsedRealtime()
+                        resetLiveStallTimer(keepPosition = true)
+                    }
                 }
 
                 override fun onRenderedFirstFrame() {
@@ -83,9 +102,23 @@ class BlofyPlaybackSession(
                         metric = updated
                         PlaybackDiagnosticsUploader.enqueue(appContext, updated)
                     }
+                    val errorAtMs = SystemClock.elapsedRealtime()
+                    if (PlaybackRecoveryPolicy.recoveredLongEnoughToResetErrorRetry(
+                            lastReadyAtMs = lastReadyAtMs,
+                            nowMs = errorAtMs
+                        )
+                    ) {
+                        // A new outage after sustained healthy playback should
+                        // have its own single retry, not inherit an hours-old
+                        // failure. Short failure loops still exhaust the cap.
+                        automaticRetries = 0
+                    }
+                    lastReadyAtMs = 0L
                     if (automaticRetries < MAX_AUTOMATIC_RETRIES) {
                         automaticRetries++
-                        retryHandler.post { retrySameUrl() }
+                        // A short delay gives the prior socket time to close.
+                        // Paused playback is re-prepared but remains paused.
+                        retryHandler.postDelayed({ retrySameUrl() }, ERROR_RETRY_DELAY_MS)
                     } else {
                         val failedUrl = currentMediaItem?.localConfiguration?.uri?.toString().orEmpty()
                         if (failedUrl.isNotBlank()) {
@@ -119,6 +152,7 @@ class BlofyPlaybackSession(
         // A channel switch supersedes any queued retry/fallback/watchdog work from the old URL.
         retryHandler.removeCallbacksAndMessages(null)
         automaticRetries = 0
+        lastReadyAtMs = 0L
         alternateLiveFormatAttempted = false
         liveStallRecoveries = 0
         lastLiveStallRecoveryAtMs = 0L
@@ -135,14 +169,18 @@ class BlofyPlaybackSession(
     }
 
     fun retrySameUrl() {
-        val item = player.currentMediaItem ?: return
+        if (player.currentMediaItem == null) return
         val position = player.currentPosition.coerceAtLeast(0L)
+        val shouldPlay = player.playWhenReady
         resetLiveStallTimer(keepPosition = false)
-        player.stop()
-        player.setMediaItem(item)
+        lastReadyAtMs = 0L
+        // Media3 retains the current media item when stop() is called.
+        // Reusing it avoids clearing the video item and selected audio/subtitle
+        // state, which previously caused a visible black shutter on retries.
+        if (player.playbackState != Player.STATE_IDLE) player.stop()
         player.prepare()
         if (!contentKind.isLiveContent() && position > 0L) player.seekTo(position)
-        player.playWhenReady = true
+        player.playWhenReady = shouldPlay
     }
 
     private fun checkLiveStall() {
@@ -156,29 +194,26 @@ class BlofyPlaybackSession(
         }
 
         val now = SystemClock.elapsedRealtime()
-        val position = player.currentPosition.coerceAtLeast(0L)
 
-        // Live TS/HLS providers do not all expose a monotonic currentPosition.
-        // READY means the player has usable media; never recycle a healthy
-        // fullscreen session just because its reported position is flat.
+        // A healthy READY session can have a flat timeline in TS/HLS; only
+        // sustained BUFFERING qualifies for recovery. Brief 1–2s source
+        // reconnects should resume naturally without resetting the surface.
         if (player.playbackState != Player.STATE_BUFFERING) {
             resetLiveStallTimer(keepPosition = true)
-            lastObservedLivePositionMs = position
             return
         }
 
-        if (lastObservedLivePositionMs == Long.MIN_VALUE) {
-            lastObservedLivePositionMs = position
+        if (liveStallStartedAtMs == 0L) {
             liveStallStartedAtMs = now
             return
         }
-        if (liveStallStartedAtMs == 0L) liveStallStartedAtMs = now
-
         val stalledForMs = now - liveStallStartedAtMs
-        val recoveryCooldownPassed = now - lastLiveStallRecoveryAtMs >= LIVE_STALL_RECOVERY_COOLDOWN_MS
-        if (stalledForMs >= LIVE_STALL_RECOVERY_THRESHOLD_MS &&
-            recoveryCooldownPassed &&
-            liveStallRecoveries < MAX_LIVE_STALL_RECOVERIES_PER_ITEM
+        if (PlaybackRecoveryPolicy.shouldRecoverLiveBuffering(
+                stalledForMs = stalledForMs,
+                nowMs = now,
+                lastRecoveryAtMs = lastLiveStallRecoveryAtMs,
+                recoveries = liveStallRecoveries
+            )
         ) {
             liveStallRecoveries++
             lastLiveStallRecoveryAtMs = now
@@ -187,14 +222,16 @@ class BlofyPlaybackSession(
     }
 
     private fun resetLiveStallTimer(keepPosition: Boolean) {
+        // keepPosition preserves the existing signature for the two callers;
+        // position-based stall detection is intentionally not used for live TS.
         liveStallStartedAtMs = 0L
-        if (!keepPosition) lastObservedLivePositionMs = Long.MIN_VALUE
     }
 
     private fun playInternalFallback(url: String) {
         // Existing error fallback behavior stays unchanged. The stall watchdog never selects this path.
         fallbackState.markUrlAttempted(url)
         automaticRetries = MAX_AUTOMATIC_RETRIES
+        lastReadyAtMs = 0L
         firstFrameRecorded = false
         resetLiveStallTimer(keepPosition = false)
         metric = PlaybackDiagnostics.begin(profile.providerKey, contentKind, url)
@@ -222,10 +259,8 @@ class BlofyPlaybackSession(
 
     private companion object {
         const val MAX_AUTOMATIC_RETRIES = 1
+        const val ERROR_RETRY_DELAY_MS = 600L
         const val LIVE_STALL_WATCHDOG_INTERVAL_MS = 4_000L
-        const val LIVE_STALL_RECOVERY_THRESHOLD_MS = 12_000L
-        const val LIVE_STALL_RECOVERY_COOLDOWN_MS = 60_000L
-        const val MAX_LIVE_STALL_RECOVERIES_PER_ITEM = 3
     }
 
     private fun String.isLiveContent(): Boolean = this == "live" || this == "live_preview"
