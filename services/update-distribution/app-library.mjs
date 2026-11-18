@@ -2,6 +2,10 @@
 import pg from 'pg';
 import dns from 'node:dns/promises';
 import net from 'node:net';
+import { createReadStream } from 'node:fs';
+import { stat } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { STREAM_56_APK, STREAM_56_BYTES, STREAM_56_SHA256 } from './stream-upload-oidc.mjs';
 import { ensureDownloadMetrics, recordCompletedDownload } from './download-metrics.mjs';
 
 const { Pool } = pg;
@@ -19,7 +23,20 @@ const pool = new Pool({
 const CATEGORIES = new Set(['media', 'files', 'downloads', 'launcher', 'screensaver', 'tools', 'network', 'store']);
 const MODES = new Set(['official', 'direct']);
 // Version 7 inserts the independent BLOFY STREAM app into already-seeded production databases.
-const SEED_VERSION = 18;
+const SEED_VERSION = 19;
+
+// Fail closed on a missing or altered signed APK. Never advance the live
+// customer catalog or STREAM updater merely because a seed value changed.
+async function signedStream56Available() {
+  try {
+    const file = '/data/releases/' + STREAM_56_APK;
+    const info = await stat(file);
+    if (info.size !== STREAM_56_BYTES) return false;
+    const hash = createHash('sha256');
+    for await (const chunk of createReadStream(file)) hash.update(chunk);
+    return hash.digest('hex') === STREAM_56_SHA256;
+  } catch { return false; }
+}
 
 const GITHUB_UPDATE_RULES = Object.freeze({
   'projectivy-launcher': { repo:'spocky/miproja1', asset:'ProjectivyLauncher-*-xda-release.apk' },
@@ -122,10 +139,10 @@ const DEFAULT_APPS = Object.freeze([
   {
     slug:'blofy-stream', name:'BLOFY STREAM', category:'media', symbol:'BS',
     iconUrl:'https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/services/update-distribution/public/blofy-stream.svg',
-    description:'BLOFY STREAM 55.8.36 — مزامنة صامتة للمحتوى والحلقات، تحسين الريموت والتقديم والتأخير وأزرار VLC، وإصلاح AI لفتح تفاصيل الفيلم أو المسلسل مباشرة مع 60 اقتراحًا. يحتفظ بالكود وFFmpeg والمعلّقين.',
-    devices:'Android TV · TV Box · Android Phone · Tablet', version:'55.8.36',
-    architecture:'Universal (ARM + x86)', apkSizeBytes:135775044,
-    downloadUrl:'https://updates.blofyplayer.com/files/releases/BLOFY-STREAM-55.8.36-CATALOG-TV-CONTROLS-FIX-OWNER-SIGNED.apk',
+    description:'BLOFY STREAM 56.0 — مزامنة تدريجية للمحتوى والحلقات من سيرفر BLOFY، تحديث من الإعدادات دون تعليق 95%، تحسين الريموت والمشغل والصوت والبحث الذكي، مع الاحتفاظ بكود التفعيل والمفضلة.',
+    devices:'Android TV · TV Box · Android Phone · Tablet', version:'56.0',
+    architecture:'Universal (ARM + x86)', apkSizeBytes:135783643,
+    downloadUrl:'https://updates.blofyplayer.com/files/releases/BLOFY-STREAM-56.0-CATALOG-TV-CONTROLS-FIX-OWNER-SIGNED.apk',
     downloadMode:'direct', sortOrder:0, enabled:true, featured:true
   },
   {
@@ -1127,6 +1144,32 @@ export async function initAppLibrary() {
         if (promoted.rowCount) {
           await client.query("delete from blofy_app_health where slug='blofy-stream'");
           await client.query('update blofy_app_catalog_meta set last_health_at=null where id=1');
+        }
+      }
+      if (version < 19) {
+        // Promote ONLY the known-good published 55.8.36 row, and only once
+        // the exact original-owner-signed 56.0 file is already present and
+        // byte-for-byte SHA256 verified in the persistent release volume.
+        // No other app (including BLOFY PLAYER) or customer code is touched.
+        if (await signedStream56Available()) {
+          const signed = cleanApp(DEFAULT_APPS.find(item => item.slug === 'blofy-stream'));
+          const promoted = await client.query(
+            `update blofy_app_catalog
+             set previous_version=version, previous_download_url=download_url,
+                 previous_apk_size_bytes=apk_size_bytes, previous_saved_at=now(),
+                 version=$2, download_url=$3, apk_size_bytes=$4,
+                 description=$5, version_updated_at=now(), updated_at=now()
+             where slug=$1 and version='55.8.36' and download_url=$6`,
+            [signed.slug, signed.version, signed.downloadUrl, signed.apkSizeBytes,
+             signed.description,
+             'https://updates.blofyplayer.com/files/releases/BLOFY-STREAM-55.8.36-CATALOG-TV-CONTROLS-FIX-OWNER-SIGNED.apk']
+          );
+          if (promoted.rowCount) {
+            await client.query("delete from blofy_app_health where slug='blofy-stream'");
+            await client.query('update blofy_app_catalog_meta set last_health_at=null where id=1');
+          }
+        } else {
+          console.warn('STREAM_56_PROMOTION_BLOCKED: signed release file missing or SHA mismatch');
         }
       }
       await client.query('update blofy_app_catalog_meta set seed_version=$1 where id=1', [SEED_VERSION]);
