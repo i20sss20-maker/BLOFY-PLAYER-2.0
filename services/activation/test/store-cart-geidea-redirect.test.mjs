@@ -17,7 +17,7 @@ test('signed-in cart redirects to official hosted Geidea even when modal SDK is 
  storage.set('blofy.shop.cart.v1',JSON.stringify([item]));
  storage.set('blofy.shop.cart.owner.v1',customerId);
  const events=new Map(),nodes=new Map(),calls=[],redirects=[];
- let serverRecovery=false;
+ let serverRecovery=false,simulateLostResponse=false;
  function el(id=''){
   const node={id,hidden:false,disabled:false,style:{},dataset:{},children:[],value:'',
    textContent:'',className:'',setAttribute(){},
@@ -48,6 +48,10 @@ test('signed-in cart redirects to official hosted Geidea even when modal SDK is 
    subtotalMinor:4000,discountMinor:0,totalMinor:4000,
    items:[{...item,lineTotalMinor:4000}]});
   if(path==='/api/v1/store/orders/status')return response(200,{orderId,status:'pending',fulfilled:false});
+  if(path==='/api/v1/store/cart/checkout'&&simulateLostResponse){
+   // Provider session exists, but the final HTTP response never reached browser.
+   serverRecovery=true;throw Error('network_response_lost');
+  }
   if(path==='/api/v1/store/cart/checkout')return response(201,{
    provider:'geidea',checkoutMode:'modal',sku:'cart',orderId,
    sessionId,sessionExpiresAt:new Date(Date.now()+14*60000).toISOString(),
@@ -112,4 +116,42 @@ test('signed-in cart redirects to official hosted Geidea even when modal SDK is 
    'owner recovery never fabricates a private receipt bearer token');
  assert.match(nodes.get('pending-status').textContent,/نفس جلسة Geidea/);
  assert.equal(calls.filter(x=>x.path==='/api/v1/store/cart/checkout').length,1);
+ // Lost checkout response: server has created exactly one provider session,
+ // browser must look it up from verified account instead of blindly retrying.
+ session.clear();serverRecovery=false;simulateLostResponse=true;
+ nodes.clear();events.clear();
+ for(const id of ['checkout','items','clear-cart','coupon','apply','subtotal','discount',
+ 'total','codes-count','message','auth-gate','auth-title','auth-message','auth-link','cart-sync',
+ 'started','order-number','open-geidea','copy-private-link','check-pending','pending-status','retry-pending'])el(id);
+ vm.runInNewContext(code,{...ctx,window:{}},{filename:'store-cart.js'});
+ await new Promise(resolve=>setTimeout(resolve,30));
+ assert.equal(nodes.get('checkout').disabled,false,'preflight first finds no outstanding session');
+ const beforeLost=calls.filter(x=>x.path==='/api/v1/store/cart/checkout').length;
+ const lostClick=events.get('checkout:click');
+ lostClick();
+ await new Promise(resolve=>setTimeout(resolve,30));
+ assert.equal(calls.filter(x=>x.path==='/api/v1/store/cart/checkout').length,beforeLost+1);
+ assert.equal(nodes.get('checkout').disabled,true,'pending recovered without another checkout');
+ assert.equal(nodes.get('open-geidea').href,hosted);
+ assert.equal(nodes.get('open-geidea').hidden,false);
+ assert.equal(nodes.get('copy-private-link').hidden,true,'lost response never invents secret');
+ assert.match(nodes.get('message').textContent,/استرجعنا طلب الدفع السابق/);
+
+ // Old basket checkout must not prevent shopping for a different product.
+ // The account's current basket still has a mandatory server preflight.
+ simulateLostResponse=false;serverRecovery=false;
+ session.clear();
+ session.set('blofy.shop.pending-checkout.v1',JSON.stringify({
+   orderId,sessionId,orderNumber:'BF-261118-BBBBBBBB',accountId:customerId,
+   cartSnapshot:JSON.stringify({items:[{sku:'xtream-3m',quantity:1}],couponCode:''}),
+   expiresAt:Date.now()+60000
+ }));
+ session.set('blofy.shop.order.'+orderId,token);
+ nodes.clear();events.clear();
+ for(const id of ['checkout','items','clear-cart','coupon','apply','subtotal','discount',
+ 'total','codes-count','message','auth-gate','auth-title','auth-message','auth-link','cart-sync',
+ 'started','order-number','open-geidea','copy-private-link','check-pending','pending-status','retry-pending'])el(id);
+ vm.runInNewContext(code,{...ctx,window:{}},{filename:'store-cart.js'});
+ await new Promise(resolve=>setTimeout(resolve,30));
+ assert.equal(nodes.get('checkout').disabled,false,'different basket not frozen by stale sessionStorage');
 });
