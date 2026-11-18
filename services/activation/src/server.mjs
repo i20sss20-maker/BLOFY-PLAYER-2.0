@@ -334,7 +334,7 @@ async function serveStoreOfferScript(res) {
 }
 
 async function serveCartPage(res,kind){
-  const name=kind==='cart'?'store-cart.html':'store-orders.html';
+  const name=kind==='cart'?'store-cart.html':kind==='account'?'store-account.html':'store-orders.html';
   const source=await readFile(new URL('../web/'+name,import.meta.url),'utf8');
   const html=kind==='cart'?withPublicAnalytics(source):source;
   const file=Buffer.from(html,'utf8');
@@ -354,7 +354,8 @@ async function serveCartAsset(res,name){
   const entries={
     'cart.css':['store-cart.css','text/css; charset=utf-8'],
     'cart.js':['store-cart.js','application/javascript; charset=utf-8'],
-    'order-tracking.js':['store-order-tracking.js','application/javascript; charset=utf-8']
+    'order-tracking.js':['store-order-tracking.js','application/javascript; charset=utf-8'],
+    'account.js':['store-account.js','application/javascript; charset=utf-8']
   };
   const asset=entries[name];
   if(!asset)return;
@@ -969,8 +970,10 @@ const server = http.createServer(async (req, res) => {
       return await serveCartPage(res,'cart');
     if(['GET','HEAD'].includes(req.method)&&['/store/orders','/store/orders/'].includes(requestUrl.pathname))
       return await serveCartPage(res,'orders');
+    if(['GET','HEAD'].includes(req.method)&&['/store/account','/store/account/'].includes(requestUrl.pathname))
+      return await serveCartPage(res,'account');
     if(['GET','HEAD'].includes(req.method)&&
-       ['/store/cart.css','/store/cart.js','/store/order-tracking.js'].includes(requestUrl.pathname))
+       ['/store/cart.css','/store/cart.js','/store/order-tracking.js','/store/account.js'].includes(requestUrl.pathname))
       return await serveCartAsset(res,requestUrl.pathname.slice('/store/'.length));
     if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/offers.js')
       return await serveStoreOfferScript(res);
