@@ -89,7 +89,9 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
   probe.unref?.();
  }
  const reminderEngine=createCustomerReminderEngine({pool,env,fetchImpl});
- const subscriptionAdmin=createStoreSubscriptionAdmin({pool,json,authorizeAdmin});
+ let ensureOpsSchema=async()=>{};
+ const subscriptionAdmin=createStoreSubscriptionAdmin({pool,json,authorizeAdmin,
+   ensureStoreSchema:()=>ensureOpsSchema()});
  reminderEngine.start();
  let migration;
  async function schema(){
@@ -532,5 +534,6 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
  handler.linkCheckoutOrder=linkCheckoutOrder;
  handler.checkoutIdentity=checkoutIdentity;
  handler.setReconciler=fn=>{if(typeof fn==='function')reconcileOwnedPayment=fn;};
+ handler.setStoreSchema=fn=>{if(typeof fn==='function')ensureOpsSchema=fn;};
  return handler;
 }
