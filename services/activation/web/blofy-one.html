@@ -24,6 +24,8 @@
 <script src="/blofy-one-code-manager.js?v=20261118-v1" defer></script>
 <link rel="stylesheet" href="/blofy-one-launch.css?v=20261118-v1">
 <script src="/blofy-one-launch.js?v=20261118-v1" defer></script>
+<link rel="stylesheet" href="/blofy-one-capacity.css?v=20261118-v1">
+<script src="/blofy-one-capacity.js?v=20261118-v1" defer></script>
 </head>
 <body>
 <div class="one-shell">
@@ -34,6 +36,7 @@
     <a class="one-nav-home selected" href="/one"><span aria-hidden="true">▦</span> نظرة عامة</a>
     <a class="one-nav-create" href="#one-issue"><span aria-hidden="true">＋</span> إنشاء كود جديد</a>
     <a href="#one-growth"><span aria-hidden="true">◷</span> نمو المبيعات والجاهزية</a>
+    <a href="#one-capacity"><span aria-hidden="true">▧</span> مراقبة بث STREAM الحية</a>
     <a href="#customers"><span aria-hidden="true">♧</span> العملاء والأجهزة</a>
     <a href="#stream-management"><span aria-hidden="true">◈</span> حسابات STREAM وXtream</a>
     <a href="#legacy-xtream"><span aria-hidden="true">⇄</span> استرجاع الأكواد القديمة</a>
@@ -122,6 +125,7 @@
         <option value="one-distributors">الموزعون</option>
         <option value="one-sales">المدفوعات</option>
         <option value="one-growth">المبيعات والتسويق والجاهزية</option>
+        <option value="one-capacity">مراقبة اتصال البث</option>
         <option value="one-releases">تحديثات التطبيقات</option>
       </select>
     </label>
@@ -255,6 +259,43 @@
   </div>
 </section>
 
+<section class="one-overview one-capacity" id="one-capacity" aria-labelledby="one-capacity-title">
+  <div class="one-section-heading">
+    <div><span class="one-kicker">BLOFY LIVE RELAY · VERIFIED TELEMETRY</span>
+      <h2 id="one-capacity-title">مراقبة اتصال البث المباشر</h2>
+      <p class="one-capacity-intro">قياسات فعلية من ريلاي STREAM الداخلي: الاتصالات التي يراها الريلاي، والضغط والتنبيهات المتعلقة بالمصدر. لا يرسل هذا القسم طلبات مشاهدة جديدة ولا يغيّر عدد الاتصالات أو الأكواد.</p>
+    </div>
+    <div class="one-capacity-actions">
+      <span class="one-capacity-indicator" id="one-capacity-indicator" data-state="unknown">غير مؤكّد</span>
+      <button type="button" id="one-capacity-refresh">↻ فحص الاتصال</button>
+    </div>
+  </div>
+  <p id="one-capacity-status" role="status" aria-live="polite">جارٍ قراءة بيانات المراقبة الحقيقية…</p>
+  <div class="one-capacity-metrics" aria-label="مؤشرات ريلاي STREAM الداخلية">
+    <article><small>مشاهدو الريلاي الداخلي الحاليون</small><strong id="one-capacity-viewers">—</strong><em>لا يمثل جميع مشتركي BLOFY</em></article>
+    <article><small>مصادر بث مشتركة نشطة</small><strong id="one-capacity-feeds">—</strong><em>في هذه النسخة من الريلاي فقط</em></article>
+    <article><small>حد المشاهدين الداخلي لكل بث</small><strong id="one-capacity-feed-limit">—</strong><em>لا يقيس الحد المسموح من Xtream</em></article>
+    <article><small>تذاكر الوصول النشطة</small><strong id="one-capacity-tickets">—</strong><em>ليست اشتراكات عميل</em></article>
+    <article><small>طلبات مرفوضة بسبب السعة</small><strong id="one-capacity-capacity-rejected">—</strong><em>عداد منذ بدء عملية الريلاي</em></article>
+    <article><small>أخطاء اتصال المصدر</small><strong id="one-capacity-provider-failures">—</strong><em>عداد عملية الريلاي</em></article>
+    <article><small>إعادة الاتصال بالمصدر</small><strong id="one-capacity-reconnects">—</strong><em>للريلاي فقط، لا كل الأجهزة</em></article>
+    <article><small>عينات رسم المشاهدين</small><strong id="one-capacity-samples">—</strong><em>آخر عينات المراقبة المتاحة</em></article>
+  </div>
+  <div class="one-capacity-layout">
+    <section class="one-capacity-card" aria-labelledby="one-capacity-alert-title">
+      <h3 id="one-capacity-alert-title">التنبيهات الفعلية</h3>
+      <ul id="one-capacity-alerts" class="one-capacity-alerts"><li>لم تصل بيانات الفحص بعد.</li></ul>
+      <p>التنبيهات تجمع تغيّر الأخطاء والانقطاعات من مراقبة الريلاي، وليست إصدارًا آليًا لأوامر على المصدر.</p>
+    </section>
+    <section class="one-capacity-card" aria-labelledby="one-capacity-trend-title">
+      <h3 id="one-capacity-trend-title">اتجاه مشاهدي الريلاي</h3>
+      <div class="one-capacity-trend" id="one-capacity-trend" role="img" aria-label="رسم اتجاه العدد المقاس للمشاهدين في الريلاي"></div>
+      <p id="one-capacity-playback-note">فحص المشغل: جارٍ التحقق من البيانات.</p>
+      <a href="/admin/control-center" class="one-ops-link">فتح تشخيص STREAM الكامل ←</a>
+    </section>
+  </div>
+  <p class="one-capacity-foot"><strong>تنبيه تجاري:</strong> لا نعلن قدرة 100 أو 1000 مشاهد بناءً على هذه الشاشة. لا بد من موافقة المزود وقياس ضغط تدريجي على مصدر مرخّص. لا نقوم بأي اختبار ضغط تلقائي على قنوات العملاء.</p>
+</section>
 <section class="one-launchpad" aria-label="اختصارات العمل اليومي">
     <div class="one-section-heading"><div><span class="one-kicker">YOUR WORKSPACE</span>
       <h2>كل أدواتك... باختصار واضح</h2></div><span class="one-note">اختر المهمة وابدأ مباشرة</span></div>
