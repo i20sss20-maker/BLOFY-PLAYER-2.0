@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="640" viewBox="0 0 1600 640" role="img" aria-label="تصميم تجريدي لقنوات وأفلام ومسلسلات STRONG 8K">
+<defs>
+ <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#060f25"/><stop offset=".55" stop-color="#0c2350"/><stop offset="1" stop-color="#050b18"/></linearGradient>
+ <radialGradient id="glow"><stop stop-color="#447bff" stop-opacity=".68"/><stop offset="1" stop-color="#233b81" stop-opacity="0"/></radialGradient>
+ <linearGradient id="edge" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#72b6ff"/><stop offset=".55" stop-color="#336bd2"/><stop offset="1" stop-color="#153367"/></linearGradient>
+ <linearGradient id="poster" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#213c7b"/><stop offset=".54" stop-color="#426ab1"/><stop offset="1" stop-color="#122956"/></linearGradient>
+ <pattern id="grain" width="57" height="57" patternUnits="userSpaceOnUse"><path d="M57 0H0V57" fill="none" stroke="#9fc0ff" opacity=".07"/></pattern>
+ <filter id="blur"><feGaussianBlur stdDeviation="55"/></filter>
+ <filter id="drop"><feDropShadow dx="0" dy="28" stdDeviation="25" flood-color="#01040c" flood-opacity=".8"/></filter>
+</defs>
+<rect width="1600" height="640" fill="url(#bg)"/><rect width="1600" height="640" fill="url(#grain)"/>
+<ellipse cx="1100" cy="252" rx="410" ry="350" fill="url(#glow)" filter="url(#blur)" opacity=".7"/>
+<path d="M1600 55Q1265 40 1070 250T550 585" stroke="#679aff" stroke-width="2" opacity=".23" fill="none"/>
+<path d="M1600 120Q1250 120 1120 340T660 660" stroke="#a1c8ff" stroke-width="1" opacity=".12" fill="none"/>
+<g filter="url(#drop)">
+ <g transform="translate(945 63) rotate(5 285 250)">
+ <rect x="0" y="0" width="610" height="496" rx="31" fill="#071323" stroke="url(#edge)" stroke-width="3"/>
+ <rect x="20" y="20" width="570" height="456" rx="22" fill="#0a1e3e"/>
+ <rect x="36" y="38" width="536" height="47" rx="12" fill="#142e58"/>
+ <circle cx="62" cy="61" r="9" fill="#69a9f4"/>
+ <rect x="85" y="53" width="120" height="15" rx="7" fill="#3867a8"/>
+ <rect x="462" y="53" width="72" height="15" rx="7" fill="#385b93"/>
+ <rect x="36" y="102" width="334" height="205" rx="19" fill="url(#poster)"/>
+ <path d="M137 177 Q200 90 277 165 Q333 233 247 290 L115 290Z" fill="#79a4ef" opacity=".18"/>
+ <path d="M162 144 L162 265 L259 207Z" fill="#e2efff" opacity=".86"/>
+ <rect x="389" y="102" width="183" height="95" rx="14" fill="#173970"/>
+ <path d="M443 178l25-50 26 50Z" fill="#87b1ef" opacity=".45"/>
+ <rect x="389" y="212" width="183" height="95" rx="14" fill="#254c87"/>
+ <circle cx="483" cy="257" r="24" stroke="#8cb9f9" stroke-width="6" fill="none" opacity=".45"/>
+ <rect x="36" y="327" width="166" height="117" rx="16" fill="#18305e"/>
+ <rect x="220" y="327" width="166" height="117" rx="16" fill="#203d74"/>
+ <rect x="404" y="327" width="168" height="117" rx="16" fill="#193765"/>
+ <path d="M74 423L118 359l48 64M253 424l44-70 55 70M441 423l45-61 51 61" stroke="#8fb5ec" stroke-width="5" opacity=".22" fill="none"/>
+ </g>
+</g>
+<g filter="url(#drop)" transform="translate(750 295) rotate(-7 120 155)">
+ <rect width="243" height="304" rx="20" fill="#0a1b37" stroke="#6c9eec" stroke-width="3"/>
+ <rect x="13" y="13" width="217" height="278" rx="13" fill="url(#poster)"/>
+ <circle cx="126" cy="107" r="68" fill="#4f84cc" opacity=".3"/>
+ <path d="M48 239L117 107 197 239" stroke="#d6e8ff" opacity=".25" stroke-width="11" fill="none"/>
+ <rect x="38" y="248" width="163" height="12" rx="6" fill="#bbd8ff" opacity=".6"/>
+ </g>
+<g opacity=".35"><circle cx="1451" cy="92" r="44" fill="none" stroke="#9cbcff"/><circle cx="1451" cy="92" r="24" fill="none" stroke="#9cbcff"/></g>
+</svg>
