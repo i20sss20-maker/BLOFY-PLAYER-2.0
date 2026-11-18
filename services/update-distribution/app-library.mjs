@@ -122,7 +122,7 @@ const DEFAULT_APPS = Object.freeze([
   {
     slug:'blofy-stream', name:'BLOFY STREAM', category:'media', symbol:'BS',
     iconUrl:'https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/services/update-distribution/public/blofy-stream.svg',
-    description:'BLOFY STREAM 55.8.36 — تحديث تلقائي صامت للمكتبة والحلقات الجديدة عند الدخول، إصلاح تحديث القوائم وتعثر التقدم، تحسين الريموت والتقديم والتأخير وأزرار VLC، وإصلاح فتح الأفلام والمسلسلات مباشرة من AI مع 60 طلبًا جاهزًا. التفعيل بالكود ومشغل FFmpeg والمعلقون محفوظون.',
+    description:'BLOFY STREAM 55.8.36 — مزامنة صامتة للمحتوى والحلقات، تحسين الريموت والتقديم والتأخير وأزرار VLC، وإصلاح AI لفتح تفاصيل الفيلم أو المسلسل مباشرة مع 60 اقتراحًا. يحتفظ بالكود وFFmpeg والمعلّقين.',
     devices:'Android TV · TV Box · Android Phone · Tablet', version:'55.8.36',
     architecture:'Universal (ARM + x86)', apkSizeBytes:135775044,
     downloadUrl:'https://updates.blofyplayer.com/files/releases/BLOFY-STREAM-55.8.36-CATALOG-TV-CONTROLS-FIX-OWNER-SIGNED.apk',
