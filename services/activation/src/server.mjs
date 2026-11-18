@@ -297,7 +297,7 @@ async function serveStorefront(res, product = null) {
   res.writeHead(200, {
     'content-type': 'text/html; charset=utf-8',
     'content-length': file.length,
-    'cache-control': 'public, max-age=120',
+    'cache-control': 'no-store',
     'x-content-type-options': 'nosniff',
     'x-frame-options': 'DENY',
     'referrer-policy': 'strict-origin-when-cross-origin',
