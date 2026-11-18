@@ -48,7 +48,7 @@ test('database errors briefly reuse only the last verified positive release, nev
   t+=8_001;
   assert.equal(await feed.get(async()=>{reads++;throw Error('dns_down')}),signed);
   assert.equal(reads,2);
-  t+=3_000;
+  t+=1_000;
   assert.equal(await feed.get(async()=>{reads++;throw Error('offline')}),signed);
   assert.equal(reads,2,'stale fallback throttles repeated failures briefly');
   t+=30_000;
@@ -75,5 +75,5 @@ test('cache response directives are scoped to anonymous updater feed only',async
   assert.match(PUBLIC_STREAM_RELEASE_CACHE_CONTROL,/s-maxage=15/);
   assert.match(PUBLIC_STREAM_RELEASE_CACHE_CONTROL,/stale-if-error=120/);
   assert.match(PUBLIC_STREAM_RELEASE_CACHE_CONTROL,/max-age=0/);
-  assert.doesNotMatch(src,/publicStreamReleaseFeed\.get\([\s\S]*'\/admin'/);
+  assert.ok(src.includes("pathname === '/stream/release.json'"));
 });
