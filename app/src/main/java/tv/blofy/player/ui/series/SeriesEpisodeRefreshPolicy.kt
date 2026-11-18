@@ -5,11 +5,12 @@ import android.content.Context
 /**
  * A cached season is immediately viewable, but its Xtream get_series_info may
  * gain episodes even when the parent series card has not changed.
- * Refresh in the background after the user enters the episode page.
+ * Refresh in the background after the user enters the episode page and while the
+ * page remains visible; cap checks to one source request per series per 3 minutes.
  */
 internal object SeriesEpisodeRefreshPolicy {
-    const val SUCCESS_GAP_MS = 2L * 60L * 60_000L
-    const val FAILURE_RETRY_GAP_MS = 15L * 60_000L
+    const val SUCCESS_GAP_MS = 3L * 60_000L
+    const val FAILURE_RETRY_GAP_MS = 3L * 60_000L
     private const val PREFS = "blofy_stream_series_episode_auto_refresh_v1"
 
     fun shouldAttempt(lastSuccessMs: Long, lastAttemptMs: Long, nowMs: Long): Boolean =
