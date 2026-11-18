@@ -38,7 +38,7 @@
     <string name="stream_ui_device_mobile">هاتف أو جهاز لوحي</string>
     <string name="stream_ui_memory_low">اقتصادي (وضع خفيف تلقائي)</string>
     <string name="stream_ui_memory_normal">طبيعي</string>
-    <string name="stream_ui_compat_details">الجهاز: %2$s\nحالة الاتصال:</string>
+    <string name="stream_ui_compat_details">الجهاز: %1$s\nحالة الاتصال:</string>
     <string name="stream_ui_subscription_title">اشتراك BLOFY STREAM</string>
     <string name="stream_ui_no_subscription">لا يوجد اشتراك مفعّل على هذا الجهاز.</string>
     <string name="stream_ui_ok">حسنًا</string>
