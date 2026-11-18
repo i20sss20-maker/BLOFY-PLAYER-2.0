@@ -218,8 +218,9 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
    const failures=(await pool.query(
      "SELECT COUNT(*)::int AS count FROM blofy_store_geidea_orders o "+
      "WHERE o.status='paid' AND ("+
-     "(o.sku<>'bundle-2y' AND o.voucher_id IS NULL) OR "+
-     "(o.sku='bundle-2y' AND (SELECT COUNT(*) FROM blofy_store_order_vouchers v WHERE v.order_id=o.id)<>2))"
+     "(o.sku NOT IN ('bundle-2y','cart') AND o.voucher_id IS NULL) OR "+
+     "(o.sku='bundle-2y' AND (SELECT COUNT(*) FROM blofy_store_order_vouchers v WHERE v.order_id=o.id)<>2) OR "+
+     "(o.sku='cart' AND NOT EXISTS (SELECT 1 FROM blofy_store_cart_vouchers v WHERE v.order_id=o.id)))"
    )).rows[0]?.count||0;
    return json(res,200,{ok:true,periodDays:90,sales:sales.rows,coupons:coupons.rows,
      fulfillmentIssues:Number(failures)});
@@ -667,7 +668,8 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
    return json(res,200,{received:true});
  }
  async function status(req,res){
-   if(!enabled)return json(res,503,{error:'store_checkout_disabled'});
+   // Paid orders remain retrievable even when new checkout is temporarily disabled.
+   if(!/^[a-f0-9]{64}$/i.test(String(keyHex||'')))return json(res,503,{error:'store_codes_unavailable'});
    if(!browser(req,res))return;
    if(!rateStatus.consume(requestClientKey(req)).allowed)return json(res,429,{error:'rate_limited'});
    const body=await readJson(req);
@@ -678,7 +680,7 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
    const h=tokenHash(body.accessToken);
    if(!order||!crypto.timingSafeEqual(Buffer.from(order.access_hash,'hex'),Buffer.from(h,'hex')))
      return json(res,404,{error:'store_order_not_found'});
-   if(order.status==='pending'&&order.session_id&&
+   if(enabled&&order.status==='pending'&&order.session_id&&
       (!order.last_checked_at||Date.now()-new Date(order.last_checked_at).getTime()>12000)){
      const claim=await pool.query('UPDATE blofy_store_geidea_orders SET last_checked_at=NOW() '+
       "WHERE id=$1 AND status='pending' AND (last_checked_at IS NULL OR last_checked_at<NOW()-INTERVAL '12 seconds') RETURNING id",
