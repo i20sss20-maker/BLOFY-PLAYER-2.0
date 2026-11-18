@@ -22,6 +22,8 @@
 <script src="/blofy-one-modern.js?v=20261118-v2" defer></script>
 <link rel="stylesheet" href="/blofy-one-code-manager.css?v=20261118-v1">
 <script src="/blofy-one-code-manager.js?v=20261118-v1" defer></script>
+<link rel="stylesheet" href="/blofy-one-store-ops.css?v=20261118-v1">
+<script src="/blofy-one-store-ops.js?v=20261118-v1" defer></script>
 <link rel="stylesheet" href="/blofy-one-launch.css?v=20261118-v1">
 <script src="/blofy-one-launch.js?v=20261118-v1" defer></script>
 <link rel="stylesheet" href="/blofy-one-capacity.css?v=20261118-v1">
@@ -44,6 +46,7 @@
     <a href="#one-storage"><span aria-hidden="true">▥</span> التخزين والتنزيلات</a>
     <a href="#one-distributors"><span aria-hidden="true">♙</span> الموزعون</a>
     <a href="#one-sales"><span aria-hidden="true">◫</span> المبيعات والمدفوعات</a>
+    <a href="#one-renewal-ops"><span aria-hidden="true">◈</span> تجديدات المتجر والاشتراكات</a>
     <a href="#one-releases"><span aria-hidden="true">⇩</span> تحديثات التطبيقات</a>
     <details class="one-nav-advanced">
       <summary><span aria-hidden="true">⚙</span> خيارات الإدارة المتقدمة <span class="one-nav-chevron" aria-hidden="true">⌄</span></summary>
@@ -308,6 +311,57 @@
       <a href="#one-distributors"><b aria-hidden="true">♙</b><strong>الموزعون</strong><small>الحسابات والأرصدة</small></a>
     </div>
   </section>
+    <section class="one-overview one-renewal-ops" id="one-renewal-ops" aria-labelledby="one-renewal-ops-title">
+      <div class="one-section-heading">
+        <div><span class="one-kicker">STORE CUSTOMER SUBSCRIPTIONS · VERIFIED RENEWALS</span>
+          <h2 id="one-renewal-ops-title">اشتراكات العملاء وتجديدات Geidea</h2></div>
+        <button id="one-renewal-ops-refresh" type="button" class="one-ops-primary">↻ تحديث السجل</button>
+      </div>
+      <p class="one-footnote">بيانات للقراءة فقط من طلبات العملاء المدفوعة والمرتبطة بحساباتهم في المتجر؛ لا تمثل كل أكواد الإدارة أو المبيعات الخارجية. لا نعرض الكود الكامل أو بيانات البطاقة. حالات Geidea هنا هي ما سُجّل في BLOFY وليست كشف تسوية بنكية.</p>
+      <div class="one-renewal-stats" aria-label="مؤشرات اشتراكات المتجر وتجديداته">
+        <article><small>التجديدات المسجلة مدفوعة</small><strong id="one-renewal-paid">—</strong></article>
+        <article><small>التجديدات قيد الدفع</small><strong id="one-renewal-pending">—</strong></article>
+        <article><small>طلبات التجديد المعلّقة أكثر من 20 دقيقة</small><strong id="one-renewal-overdue">—</strong></article>
+        <article><small>الاشتراكات المنتهية خلال 7 أيام</small><strong id="one-renewal-expiring">—</strong></article>
+        <article><small>تنبيهات انتهاء الاشتراك قبلها مزود البريد</small><strong id="one-renewal-reminder-accepted">—</strong></article>
+        <article><small>تنبيهات استنفدت محاولات الإرسال</small><strong id="one-renewal-reminder-exhausted">—</strong></article>
+      </div>
+      <form id="one-renewal-ops-form" class="one-renewal-controls" autocomplete="off">
+        <label>عرض السجل
+          <select id="one-renewal-view">
+            <option value="subscriptions">اشتراكات عملاء المتجر</option>
+            <option value="renewals">سجل تجديد نفس الكود</option>
+          </select>
+        </label>
+        <label>الحالة
+          <select id="one-renewal-filter">
+            <option value="all">كل الحالات</option>
+            <option value="active">نشط</option>
+            <option value="expiring">ينتهي خلال 7 أيام</option>
+            <option value="expired">منتهي</option>
+            <option value="unused">لم يُفعّل</option>
+            <option value="revoked">ملغى</option>
+            <option value="disabled">يحتاج مراجعة</option>
+          </select>
+        </label>
+        <label>بحث آمن
+          <input id="one-renewal-search" type="search" maxlength="100" autocomplete="off" placeholder="البريد أو رقم الطلب أو الكود المخفي">
+        </label>
+        <button class="one-ops-primary" type="submit">بحث</button>
+      </form>
+      <p id="one-renewal-status" class="one-renewal-status" role="status" aria-live="polite">جارٍ فحص سجل المتجر…</p>
+      <div class="one-renewal-table-wrap" tabindex="0" role="region" aria-label="اشتراكات المتجر والتجديدات">
+        <table class="one-renewal-table"><thead><tr id="one-renewal-head"><th>العميل</th><th>الكود المخفي</th><th>القناة</th><th>الحالة</th><th>انتهاء الاشتراك</th></tr></thead>
+          <tbody id="one-renewal-rows"><tr><td colspan="5">جارٍ التحميل…</td></tr></tbody>
+        </table>
+      </div>
+      <div class="one-renewal-pager">
+        <button id="one-renewal-prev" type="button" disabled>السابق</button>
+        <span id="one-renewal-page">—</span>
+        <button id="one-renewal-next" type="button" disabled>التالي</button>
+      </div>
+      <p class="one-footnote">التجديد المدفوع يمدد نفس الكود بعد تحقق Geidea. إذا ظهر تجديد معلق، لا تعِد إنشاء طلب أو تمديدًا يدويًا قبل فحص عملية الدفع مع المزود؛ هذه الصفحة لا تنفذ خصومات أو تمديدات.</p>
+    </section>
     <section id="customers" class="one-overview one-customers" aria-labelledby="one-customers-title">
     <div class="one-section-heading">
       <div><span class="one-kicker">CUSTOMER OPERATIONS</span><h2 id="one-customers-title">العملاء والاشتراكات — مباشرة من BLOFY ONE</h2></div>
