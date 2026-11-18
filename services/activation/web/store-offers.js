@@ -154,7 +154,8 @@
     .then(function(data){
       var offer=Array.isArray(data.offers)&&data.offers.find(function(x){return x.sku==='bundle-2y';});
       ready=!!(data.checkoutAvailable&&offer&&offer.priceMinor===20000&&offer.quantity===2);
-      buy.hidden=!ready;
+      // All new purchases use the verified-account cart.
+      buy.hidden=true;
       info(ready?'اختر الاشتراكين ثم أكمل الطلب.':'الدفع الإلكتروني غير متاح حاليًا. تواصل معنا للاستفسار.');
     }).catch(function(){info('تعذر التحقق من جاهزية الدفع. تواصل مع الدعم.',true);});
 })();

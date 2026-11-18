@@ -47,6 +47,34 @@
    }catch(err){$('receipt').hidden=true;txt('تعذر استرجاع الطلب: '+err.message+'. تحقق من بيانات الوصول أو تواصل مع الدعم.');}
    finally{busy=false;$('track').disabled=false;}
  }
+ async function clearCompletedCart(order){
+   // Never remove another checkout's cart. A completed paid order must match
+   // the exact items this tab submitted, and the current cloud cart revision.
+   if(!order?.fulfilled||order.status!=='paid'||!uuid.test(order.orderId||''))return;
+   const key='blofy.shop.cart.checkout.'+order.orderId;
+   let original;
+   try{original=JSON.parse(sessionStorage.getItem(key)||'null');}catch{return;}
+   if(!Array.isArray(original)||!original.length)return;
+   const cartKey='blofy.shop.cart.v1';
+   try{
+     const current=JSON.parse(localStorage.getItem(cartKey)||'[]');
+     if(JSON.stringify(current)!==JSON.stringify(original))return;
+     const response=await fetch('/api/v1/store/account/cart',{credentials:'same-origin',
+       cache:'no-store',headers:{accept:'application/json'}});
+     if(!response.ok)return;
+     const remote=await response.json();
+     if(!Array.isArray(remote.items)||!Number.isSafeInteger(remote.revision)||
+       JSON.stringify(remote.items)!==JSON.stringify(original))return;
+     const clear=await fetch('/api/v1/store/account/cart',{method:'POST',
+       credentials:'same-origin',cache:'no-store',
+       headers:{accept:'application/json','content-type':'application/json'},
+       body:JSON.stringify({items:[],couponCode:'',revision:remote.revision})});
+     if(!clear.ok)return;
+     if(JSON.stringify(JSON.parse(localStorage.getItem(cartKey)||'[]'))===JSON.stringify(original))
+       localStorage.setItem(cartKey,'[]');
+     sessionStorage.removeItem(key);
+   }catch(_){/* Receipt and delivered codes are more important than cart cleanup. */}
+ }
  function render(order){
    $('receipt').hidden=false;
    $('order-number').textContent=order.orderNumber||order.orderId||currentId;
@@ -68,6 +96,7 @@
      return;
    }
    $('receipt-note').textContent='تم الدفع والتحقق من الطلب. احتفظ بالأكواد لنفسك؛ كل كود يتفعّل بشكل مستقل.';
+   void clearCompletedCart(order);
    const delivered=Array.isArray(order.codes)?order.codes:
      order.code?[{code:order.code,sku:order.sku,channel:order.channel,durationDays:order.durationDays}]:[];
    delivered.forEach((item,i)=>{

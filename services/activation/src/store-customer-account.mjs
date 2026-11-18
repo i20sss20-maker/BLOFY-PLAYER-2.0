@@ -60,6 +60,7 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
   authorizeAdmin=()=>false,env=process.env,fetchImpl=globalThis.fetch,sendCode}){
  const keyOK=/^[a-f0-9]{64}$/i.test(String(keyHex||''));
  const enabled=env.BLOFY_CUSTOMER_ACCOUNTS_ENABLED==='true'&&keyOK;
+ const loginRequiredForStore=env.BLOFY_STORE_REQUIRE_CUSTOMER_LOGIN==='true';
  const mailKey=String(env.BLOFY_CUSTOMER_RESEND_API_KEY||'').trim();
  const mailFrom=String(env.BLOFY_CUSTOMER_MAIL_FROM||'').trim();
  const mailReady=typeof sendCode==='function'||(mailKey.startsWith('re_')&&mailFrom.includes('@'));
@@ -109,6 +110,12 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
       'claimed_at TIMESTAMPTZ NOT NULL DEFAULT NOW())');
     await db.query('CREATE INDEX IF NOT EXISTS idx_blofy_store_customer_orders_owner '+
       'ON blofy_store_customer_orders(customer_id,claimed_at DESC)');
+    // A customer can save only catalog SKUs, quantities and an optional coupon;
+    // prices, card data, codes and tokens never enter the cart table.
+    await db.query('CREATE TABLE IF NOT EXISTS blofy_store_customer_carts ('+
+      'customer_id UUID PRIMARY KEY REFERENCES blofy_store_customers(id) ON DELETE CASCADE,'+
+      "items JSONB NOT NULL DEFAULT '[]'::jsonb,coupon_code TEXT,"+
+      'revision BIGINT NOT NULL DEFAULT 1,updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())');
     await db.query('COMMIT');
    }catch(e){await db.query('ROLLBACK').catch(()=>{});throw e;}finally{db.release();}
   })().catch(e=>{migration=null;throw e;});
@@ -145,7 +152,7 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
     'o.cart_items,o.duration_days,o.channel FROM blofy_store_customer_orders m '+
     'JOIN blofy_store_geidea_orders o ON o.id=m.order_id WHERE m.customer_id=$1 '+
     'ORDER BY o.created_at DESC LIMIT 100',[customer.id])).rows;
-  return json(res,200,{email:customer.email,alertsOptIn:customer.alerts_opt_in,
+  return json(res,200,{customerId:customer.id,email:customer.email,alertsOptIn:customer.alerts_opt_in,
     orders:orders.map(o=>({orderId:o.id,orderNumber:o.public_order_number||publicOrderNumber(o.id,o.created_at),
       status:o.status,sku:o.sku,items:o.cart_items||null,amountMinor:o.amount_minor,
       currency:o.currency,createdAt:o.created_at,paidAt:o.paid_at}))});
@@ -250,6 +257,49 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
    await db.query('COMMIT');
   }catch(e){await db.query('ROLLBACK').catch(()=>{});throw e;}finally{db.release();}
   return json(res,200,{ok:true}, {'set-cookie':customerCookie(token)});
+ }
+ async function checkoutIdentity(req){
+  if(!loginRequiredForStore)return {ok:true,guestCheckoutAllowed:true};
+  if(!enabled||!mailReady)return {ok:false,status:503,error:'store_login_unavailable'};
+  await schema();
+  const customer=await current(req);
+  if(!customer)return {ok:false,status:401,error:'customer_login_required'};
+  return {ok:true,customerId:customer.id};
+ }
+ async function savedCart(req,res){
+  const customer=await current(req);
+  if(!customer)return json(res,401,{error:'login_required'});
+  const row=(await pool.query(
+    'SELECT items,coupon_code,revision,updated_at FROM blofy_store_customer_carts WHERE customer_id=$1',
+    [customer.id])).rows[0];
+  return json(res,200,{ok:true,items:row?.items||[],couponCode:row?.coupon_code||'',
+    revision:Number(row?.revision||0),updatedAt:row?.updated_at||null});
+ }
+ async function saveCart(req,res){
+  const customer=await current(req);
+  if(!customer)return json(res,401,{error:'login_required'});
+  const body=await readJson(req);
+  const raw=body?.items;
+  const cart=Array.isArray(raw)&&raw.length===0?{items:[]}:parseStoreCart(raw);
+  if(!cart)return json(res,400,{error:'store_invalid_cart'});
+  const coupon=typeof body?.couponCode==='string'
+    ?body.couponCode.trim().toUpperCase():'';
+  if(coupon&&!/^[A-Z0-9][A-Z0-9_-]{3,19}$/.test(coupon))
+    return json(res,400,{error:'store_invalid_coupon'});
+  // Prevent old tabs from resurrecting a recently deleted or paid cart.
+  const revision=body?.revision;
+  if(!Number.isSafeInteger(revision)||revision<0)
+    return json(res,400,{error:'store_invalid_cart_revision'});
+  const row=(await pool.query(
+    'INSERT INTO blofy_store_customer_carts(customer_id,items,coupon_code,revision) '+
+    'VALUES($1,$2::jsonb,$3,1) ON CONFLICT(customer_id) DO UPDATE SET '+
+    'items=EXCLUDED.items,coupon_code=EXCLUDED.coupon_code,'+
+    'revision=blofy_store_customer_carts.revision+1,updated_at=NOW() '+
+    'WHERE blofy_store_customer_carts.revision=$4 RETURNING revision,updated_at',
+    [customer.id,JSON.stringify(cart.items.map(({sku,quantity,bundleSelection})=>
+      ({sku,quantity,...(bundleSelection?{bundleSelection}:{} )}))),coupon||null,revision])).rows[0];
+  if(!row)return json(res,409,{error:'store_cart_changed_on_another_device'});
+  return json(res,200,{ok:true,revision:Number(row.revision),updatedAt:row.updated_at});
  }
  async function linkCheckoutOrder(req,orderId,accessToken){
   if(!enabled||!UUID.test(orderId||'')||!ACCESS.test(accessToken||''))return false;
@@ -356,7 +406,9 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
   if(req.method==='POST'&&!browserMutation(req,res,json))return true;
   try{
    await schema();
-   if(path==='/api/v1/store/account/request-code'&&req.method==='POST')await requestCode(req,res);
+   if(path==='/api/v1/store/account/cart'&&req.method==='GET')await savedCart(req,res);
+   else if(path==='/api/v1/store/account/cart'&&req.method==='POST')await saveCart(req,res);
+   else if(path==='/api/v1/store/account/request-code'&&req.method==='POST')await requestCode(req,res);
    else if(path==='/api/v1/store/account/verify-code'&&req.method==='POST')await verifyCode(req,res);
    else if(path==='/api/v1/store/account/claim'&&req.method==='POST')await claim(req,res);
    else if(path==='/api/v1/store/account/preferences'&&req.method==='POST')await preferences(req,res);
@@ -370,5 +422,6 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
   return true;
  };
  handler.linkCheckoutOrder=linkCheckoutOrder;
+ handler.checkoutIdentity=checkoutIdentity;
  return handler;
 }

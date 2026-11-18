@@ -263,7 +263,7 @@
       var add=document.querySelector('[data-cart-add="'+product+'"]');
       if(add)add.href='/store/cart?add='+encodeURIComponent(name);
       if(b){b.textContent='اشترك الآن — '+price+' ر.س';b.dataset.sku=name;
-        b.hidden=!(available && !!plans[name]);b.disabled=busy;}
+        b.hidden=true;b.disabled=true;}
    });
  }
  async function post(path,body){

@@ -10,7 +10,7 @@ test('Three cart codes require one paid Geidea capture and never duplicate on ca
  const sessionId='cccccccc-cccc-4ccc-8ccc-cccccccccccc';
  const sourceId='dddddddd-dddd-4ddd-8ddd-dddddddddddd';
  const orders=new Map(),codes=new Map(),delivered=[];
- let captureCalls=0,paid=0,rolledBack=0;
+ let captureCalls=0,paid=0,rolledBack=0,paymentSessions=0,allowLink=true;
  const linked=[];
  const rows=(items=[])=>({rows:items,rowCount:items.length});
  const db={async query(input,args=[]){
@@ -30,6 +30,9 @@ test('Three cart codes require one paid Geidea capture and never duplicate on ca
        session_id:null,provider_reference:null,created_at:new Date().toISOString(),
        last_checked_at:null});
      return rows();
+   }
+   if(sql.startsWith("UPDATE blofy_store_geidea_orders SET status='cancelled'")){
+     const row=orders.get(args[0]);if(row)row.status='cancelled';return rows([row].filter(Boolean));
    }
    if(sql.startsWith('UPDATE blofy_store_geidea_orders SET session_id=')){
      orders.get(args[0]).session_id=args[1];return rows();
@@ -66,6 +69,7 @@ test('Three cart codes require one paid Geidea capture and never duplicate on ca
  let currentReference;
  const provider=async(url,options)=>{
    if(url.includes('/payment-intent/api/v2/direct/session')){
+     paymentSessions++;
      const payload=JSON.parse(options.body);
      assert.equal(payload.amount,'270.00');
      currentReference=payload.merchantReferenceId;
@@ -88,17 +92,21 @@ test('Three cart codes require one paid Geidea capture and never duplicate on ca
    throw Error('Unexpected Geidea API: '+url);
  };
  const env={BLOFY_PAYMENT_PROVIDER:'geidea',BLOFY_GEIDEA_CHECKOUT_ENABLED:'true',
-   BLOFY_STORE_GEIDEA_ENABLED:'true',GEIDEA_LIVE_MERCHANT_PUBLIC_KEY:publicKey,
+   BLOFY_STORE_GEIDEA_ENABLED:'true',BLOFY_STORE_REQUIRE_CUSTOMER_LOGIN:'true',GEIDEA_LIVE_MERCHANT_PUBLIC_KEY:publicKey,
    GEIDEA_LIVE_API_PASSWORD:pwd};
  const handler=createStoreGeideaHandlers({
    pool,keyHex:'a'.repeat(64),env,fetchImpl:provider,
-   onCheckoutOrder:async(_req,id,token)=>{linked.push({id,token});},
+   onCheckoutOrder:async(_req,id,token)=>{if(!allowLink)return false;linked.push({id,token});return true;},
+   requireCheckoutCustomer:async(req)=>req.headers?.cookie==='verified-customer'
+     ?{ok:true,customerId:'test-customer'}:{ok:false,status:401,error:'customer_login_required'},
    json:(res,status,data)=>{res.status=status;res.data=data;},
    readJson:async(req)=>req.body
  });
- const request=(body,origin=true)=>({
+ const request=(body,origin=true,authenticated=false)=>({
    method:'POST',headers:origin?{'content-type':'application/json',
-     origin:'https://blofyplayer.com','sec-fetch-site':'same-origin'}:{},
+     origin:'https://blofyplayer.com','sec-fetch-site':'same-origin',
+     ...(authenticated?{cookie:'verified-customer'}:{})}:{},
+
    socket:{remoteAddress:'127.0.0.1'},body
  });
  const items=[{sku:'stream-6m',quantity:1},
@@ -108,10 +116,24 @@ test('Three cart codes require one paid Geidea capture and never duplicate on ca
  assert.equal(quote.status,200);
  assert.equal(quote.data.totalMinor,27000);
  assert.equal(quote.data.codeCount,3);
+ const guestCheckout={};
+ await handler(request({items}),guestCheckout,{pathname:'/api/v1/store/cart/checkout'});
+ assert.equal(guestCheckout.status,401,'server forbids unauthenticated checkout');
+ const guestDirect={};
+ await handler(request({sku:'stream-3m'}),guestDirect,{pathname:'/api/v1/store/checkout'});
+ assert.equal(guestDirect.status,401,'old direct-buy endpoint cannot bypass account requirement');
+ assert.equal(paymentSessions,0);
+ allowLink=false;
+ const linkFailure={};
+ await handler(request({items},true,true),linkFailure,{pathname:'/api/v1/store/cart/checkout'});
+ assert.equal(linkFailure.status,503,'cannot pay if order cannot be attached to the account');
+ assert.equal(paymentSessions,0,'never open payment session before secure order association');
+ allowLink=true;
  const checkout={};
- await handler(request({items}),checkout,{pathname:'/api/v1/store/cart/checkout'});
+ await handler(request({items},true,true),checkout,{pathname:'/api/v1/store/cart/checkout'});
  assert.equal(checkout.status,201);
  assert.equal(checkout.data.priceMinor,27000);
+ assert.equal(paymentSessions,1);
  assert.equal(linked.length,1);
  assert.equal(linked[0].id,checkout.data.orderId);
  assert.equal(linked[0].token,checkout.data.accessToken);

@@ -21,3 +21,11 @@ main{padding:45px 0 80px}.eyebrow{font:700 11px Arial,sans-serif;letter-spacing:
 .code-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.code-card{background:#0b284b;padding:17px;border-radius:13px;border:1px solid #537dae}.code-card b{display:block}.code-card code{direction:ltr;display:block;text-align:center;overflow-wrap:anywhere;background:#08172c;padding:12px;margin:11px 0;color:#e9f6ff;border:1px dashed #547ead;border-radius:10px;font:700 20px Arial}.code-card button{margin-top:8px}.code-card small{color:#a0badd;display:block}
 @media(max-width:800px){.layout{grid-template-columns:1fr}.summary{position:static}.code-grid{grid-template-columns:1fr}}
 @media(max-width:500px){.wrap{width:calc(100% - 24px)}.main-nav{min-height:64px}.logo{font-size:19px}.nav-links{gap:11px;font-size:11px}.card{border-radius:16px}.item{grid-template-columns:1fr}.coupon{flex-wrap:wrap}.coupon input{flex:1 1 160px}.actions button{flex:1}}
+
+/* Account-first checkout, consistent with the BLOFY Store dark UI. */
+.account-gate{display:flex;align-items:center;justify-content:space-between;gap:24px;margin-bottom:24px;background:linear-gradient(110deg,#133968,#0b1f3e);border-color:#5d86ba}
+.account-gate h2{margin:3px 0 4px}.account-gate p{margin:0;max-width:740px}.account-gate .primary{white-space:nowrap;flex-shrink:0}
+.account-gate[data-state="verified"]{border-color:#49a77e;background:linear-gradient(110deg,#143b40,#0c233a)}
+.account-gate[data-state="verified"] .primary{background:#174d48;border-color:#5da794}
+#cart-sync[data-state="error"]{color:#ffd3b0}#cart-sync[data-state="saved"]{color:#a8f1c5}
+@media(max-width:680px){.account-gate{align-items:stretch;flex-direction:column}.account-gate .primary{width:100%;white-space:normal}}

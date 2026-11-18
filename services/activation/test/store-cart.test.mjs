@@ -40,7 +40,7 @@ test('Order reference is a non-sensitive receipt reference, not an authorization
  assert.match(n,/^BF-261118-A1245678$/);
  assert.equal(n.includes('888888888888'),false);
 });
-test('BLOFY store has a real cart, separate secure guest order page and administrator order list',()=>{
+test('BLOFY store has a verified-account cart, secure historical receipts and administrator order list',()=>{
  const store=urlPath('../web/store.html');
  const cart=urlPath('../web/store-cart.html');
  const cartJs=urlPath('../web/store-cart.js');
@@ -54,7 +54,10 @@ test('BLOFY store has a real cart, separate secure guest order page and administ
  assert.match(store,/id="bundle-add-cart"/);
  assert.match(store,/href="\/store\/cart"/);
  assert.match(cart,/id="checkout"/);
- assert.match(cart,/الشراء كزائر/);
+ assert.match(cart,/تسجيل الدخول مطلوب قبل الدفع/);
+ assert.match(cart,/id="auth-gate"/);
+ assert.match(cartJs,/\/api\/v1\/store\/account\/cart/);
+ assert.match(cartJs,/\/api\/v1\/store\/account/);
  assert.match(cartJs,/\/api\/v1\/store\/cart\/quote/);
  assert.match(cartJs,/\/api\/v1\/store\/cart\/checkout/);
  assert.match(cartJs,/sessionStorage\.setItem\('blofy\.shop\.order\.'/);
