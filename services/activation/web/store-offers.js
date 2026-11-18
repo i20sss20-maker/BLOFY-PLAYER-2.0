@@ -122,6 +122,14 @@
     },7000);
     show(0);
   }
+  function updateCartOffer(){
+    var link=document.getElementById('bundle-add-cart');
+    if(link)link.href='/store/cart?add=bundle-2y&first='+encodeURIComponent(first.value)+
+      '&second='+encodeURIComponent(second.value);
+  }
+  first.addEventListener('change',updateCartOffer);
+  second.addEventListener('change',updateCartOffer);
+  updateCartOffer();
   runCarousel();
   recheck.addEventListener('click',function(){void statusCheck();});
   buy.addEventListener('click',function(){void buyBundle();});
