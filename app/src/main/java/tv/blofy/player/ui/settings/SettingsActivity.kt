@@ -44,7 +44,6 @@ import tv.blofy.player.ui.common.DeviceLocalTime
 import tv.blofy.player.ui.playlist.ProviderManagerActivity
 import tv.blofy.player.ui.profile.HomePersonalizationActivity
 import tv.blofy.player.ui.login.CodeOnlyLoginActivity
-import tv.blofy.player.ui.login.CatalogLoadingActivity
 import tv.blofy.player.ui.series.RecentEpisodesRefreshWorker
 import tv.blofy.player.ui.login.StartupEntryState
 import java.text.SimpleDateFormat
@@ -696,10 +695,7 @@ class SettingsActivity : AppCompatActivity() {
             // active provider, without clearing the encrypted code session or
             // requesting another redeem/activation.
             CatalogRefreshWorker.retireStreamFullRefresh(applicationContext, active.id)
-            startActivity(Intent(this, CatalogLoadingActivity::class.java).apply {
-                putExtra(CatalogLoadingActivity.EXTRA_PROVIDER_ID, active.id)
-                putExtra(CatalogLoadingActivity.EXTRA_FORCE_REFRESH, true)
-            })
+            startActivity(StreamCatalogRefreshRoute.fromSettings(this, active.id))
             finish()
             return
         }
