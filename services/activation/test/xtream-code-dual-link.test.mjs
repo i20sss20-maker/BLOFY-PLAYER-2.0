@@ -141,6 +141,8 @@ test('linked routes and device rules are administratively scoped and never reset
  assert.match(duration,/dual_access_enabled BOOLEAN NOT NULL DEFAULT FALSE/);
  assert.match(duration,/row\.dual_access_enabled===true/);
  assert.match(duration,/transferPending=appOnly&&/);
+ assert.match(duration,/deviceTransferPending:\(row\.code_channel==='app'\|\|row\.dual_access_enabled===true\)/);
+ assert.match(duration,/requiresDeviceApproval:redeemed&&/);
  assert.match(relogin,/row\.dual_access_enabled!==true/);
  assert.match(ui,/استخراج كود BLOFY/);
  assert.match(ui,/استخراج Xtream من نفس الكود/);
