@@ -35,7 +35,8 @@ export function createCommercialHandlers({pool, keyHex, json, readJson, requireA
   }
   const tapPayments = createTapPaymentHandlers({pool,json,readJson,authorize,schemaSql:ADMIN_CONSOLE_SCHEMA,env});
   const geideaPayments = createGeideaLiveHandlers({pool,json,readJson,authorize,env});
-  const customerAccounts = createStoreCustomerHandlers({pool,json,readJson,keyHex,env});
+  const customerAccounts = createStoreCustomerHandlers({pool,json,readJson,keyHex,
+    authorizeAdmin:requireAdmin,env});
   const storePayments = createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAdmin:requireAdmin,
     onCheckoutOrder:customerAccounts.linkCheckoutOrder,env});
   const zidOAuth = createZidOAuthHandlers({pool,json,keyHex,env});
