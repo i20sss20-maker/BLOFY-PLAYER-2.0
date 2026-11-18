@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {createStoreCustomerHandlers} from '../src/store-customer-account.mjs';
 
-test('admin summary never says verified for a rejected live Resend key',async()=>{
+test('admin summary treats read-only domain 401 as inconclusive, not invalid',async()=>{
  const pool={query:async()=>({rows:[{}]})};
  const env={
    BLOFY_CUSTOMER_ACCOUNTS_ENABLED:'true',
@@ -27,10 +27,10 @@ test('admin summary never says verified for a rejected live Resend key',async()=
  assert.equal(report.value.emailConfigured,true);
  assert.equal(report.value.emailProviderVerified,false);
  assert.equal(report.value.emailDeliveryVerified,false);
- assert.ok(['provider_probe_pending','key_invalid'].includes(report.value.emailProviderStatus));
+ assert.ok(['provider_probe_pending','key_inspection_unauthorized'].includes(report.value.emailProviderStatus));
  await new Promise(resolve=>setTimeout(resolve,2150));
  report=await get();
- assert.equal(report.value.emailProviderStatus,'key_invalid');
+ assert.equal(report.value.emailProviderStatus,'key_inspection_unauthorized');
  assert.equal(report.value.emailProviderVerified,false);
  assert.equal(report.value.emailDeliveryVerified,false);
  assert.equal(JSON.stringify(report).includes('re_invalid_test_example'),false);
