@@ -6,12 +6,16 @@ import {bumpXtreamCatalogRevision,ensureXtreamCatalogRevisionSchema,
 const sourceId='11111111-1111-4111-8111-111111111111';
 test('source-scoped catalog version bumps atomically without client account changes',async()=>{
  const calls=[];
- const db={async query(sql,args=[]){calls.push({sql,args});return {rows:[{revision:'5'}]}}};
+ const db={async query(sql,args=[]){calls.push({sql,args});return {rows:[{
+  revision:'5',updated_at:'2026-11-18T09:00:00Z'
+ }]}}};
  await ensureXtreamCatalogRevisionSchema(db);
  const rev=await bumpXtreamCatalogRevision(db,sourceId);
  assert.equal(rev,5);
  assert.ok(calls.some(x=>x.sql.includes('ON CONFLICT (source_id) DO UPDATE')));
- assert.deepEqual(calls.at(-1).args,[sourceId,'sync']);
+ assert.deepEqual(calls.find(x=>x.sql.includes('RETURNING revision,updated_at')).args,[sourceId,'sync']);
+ assert.deepEqual(calls.at(-1).args,[sourceId,'5','2026-11-18T09:00:00Z','sync']);
+ assert.match(calls.at(-1).sql,/catalog_revision_history/);
  assert.ok(!JSON.stringify(calls).includes('password_secret'));
 });
 test('client version detects stale catalog only for the correct authorized source',async()=>{
