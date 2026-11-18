@@ -144,5 +144,10 @@ test('linked routes and device rules are administratively scoped and never reset
  assert.match(relogin,/row\.dual_access_enabled!==true/);
  assert.match(ui,/استخراج كود BLOFY/);
  assert.match(ui,/استخراج Xtream من نفس الكود/);
+ assert.match(ui,/ربط نفس الحساب بكود BLOFY/);
+ assert.match(ui,/accountId:String\(items\[index\]\?\.id\|\|''\)/);
+ assert.match(ui,/link\/xtream-to-code/);
+ // Old path would create a SECOND independent code on an external host.
+ assert.doesNotMatch(ui,/\/api\/v1\/admin\/blofy-codes/);
  assert.doesNotMatch(duration,/UPDATE blofy_xtream_gateway_accounts SET expires_at=NOW/);
 });
