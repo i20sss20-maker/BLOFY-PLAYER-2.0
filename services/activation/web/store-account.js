@@ -4,11 +4,13 @@
  const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  const token=/^[A-Za-z0-9_-]{42,44}$/;
  const base='/api/v1/store/account';
- const returnToCart=new URLSearchParams(location.search).get('next')==='/store/cart';
+ const query=new URLSearchParams(location.search);
+ const returnToCart=query.get('next')==='/store/cart';
+ const returnedRenewal=query.get('renewal_order_id');
  const tell=value=>{$('message').textContent=value;};
  const node=(tag,value)=>{const n=document.createElement(tag);if(value!==undefined)n.textContent=value;return n;};
  const money=n=>(Number(n)/100).toLocaleString('ar-SA')+' ر.س';
- let orders=[],receiptTimer=null,receiptGeneration=0;
+ let orders=[],receiptTimer=null,receiptGeneration=0,returnChecked=false;
  function clearReceipt(){
   receiptGeneration++;
   if(receiptTimer!==null){clearTimeout(receiptTimer);receiptTimer=null;}
@@ -63,7 +65,8 @@
   support.href='https://wa.me/966568941484?text='+encodeURIComponent('السلام عليكم، أحتاج مساعدة في طلب BLOFY رقم '+o.orderNumber);
   const renew=node('a','تجديد نفس الكود');renew.className='secondary';renew.target='_blank';
   renew.rel='noopener noreferrer';
-  renew.href='https://wa.me/966568941484?text='+encodeURIComponent('السلام عليكم، أريد تجديد نفس كود BLOFY المرتبط بطلب '+o.orderNumber+'. أرجو مراجعة حالته.');
+  renew.textContent='مساعدة في التجديد';
+  renew.href='https://wa.me/966568941484?text='+encodeURIComponent('السلام عليكم، أريد مساعدة في تجديد كود BLOFY المرتبط بطلب '+o.orderNumber+'. أرجو مراجعة حالته.');
   if(o.status==='pending'){
    const verify=node('button','التحقق من حالة الدفع');verify.className='primary';verify.type='button';
    verify.addEventListener('click',async()=>{
@@ -85,6 +88,115 @@
   }
   buttons.append(details,renew,support);wrapper.append(buttons);return wrapper;
  }
+
+ const renewalHost=sessionId=>uuid.test(sessionId||'')?
+   'https://www.ksamerchant.geidea.net/hpp/checkout/?'+encodeURIComponent(sessionId):null;
+ async function renewalRequest(path,body){
+  const response=await fetch('/api/v1/store/renewals/'+path,{
+   method:'POST',credentials:'same-origin',cache:'no-store',
+   headers:{'content-type':'application/json',accept:'application/json'},
+   body:JSON.stringify(body)});
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok)throw Object.assign(Error(data.error||'store_renewal_unavailable'),
+   {status:response.status});
+  return data;
+ }
+ function expiryText(s){
+  if(!s.expiresAt)return s.redeemed?'انتهاء الاشتراك غير معروف':'الكود لم يُفعّل';
+  const expiry=new Date(s.expiresAt);
+  return 'ينتهي: '+expiry.toLocaleDateString('ar-SA')+
+    (expiry.getTime()<Date.now()?' · منتهي':'');
+ }
+ async function renewVoucher(v,sku,button){
+  if(!uuid.test(v.voucherId||'')||typeof sku!=='string')return;
+  button.disabled=true;
+  try{
+   const payload={voucherId:v.voucherId,planSku:sku};
+   tell('جارٍ التحقق من التجديد السابق لنفس الكود...');
+   const older=await renewalRequest('pending',{voucherId:v.voucherId});
+   if(older.pending){
+    const original=renewalHost(older.sessionId);
+    if(original){
+     tell('وجدنا جلسة دفع سابقة لنفس الكود؛ جارٍ فتحها مجددًا دون إصدار فاتورة ثانية.');
+     location.assign(original);
+    }else tell('لديك طلب تجديد سابق قيد التحقق لدى Geidea. افتح طلباتك أو تواصل مع الدعم قبل إعادة الدفع.');
+    return;
+   }
+   const plan=await api('/subscriptions');
+   const offered=plan.plans?.find(p=>p.sku===sku&&p.channel===v.channel);
+   if(!offered)throw Error('store_invalid_renewal_plan');
+   const riyals=(offered.priceMinor/100).toLocaleString('ar-SA')+' ريال';
+   if(!confirm('تجديد نفس الكود '+v.codeHint+' لمدة '+offered.durationDays+
+    ' يومًا مقابل '+riyals+'؟ لن تُضاف الأيام إلا بعد تأكيد الدفع.'))return;
+   tell('جارٍ إنشاء جلسة Geidea لتجديد الكود الحالي...');
+   const created=await renewalRequest('checkout',payload);
+   if(created.sku!=='renewal'||created.voucherId!==v.voucherId||
+     !uuid.test(created.sessionId||'')||!uuid.test(created.orderId||'')||
+     created.priceMinor!==offered.priceMinor||created.currency!=='SAR')
+    throw Error('store_renewal_quote_mismatch');
+   const url=renewalHost(created.sessionId);
+   if(!url)throw Error('store_renewal_session_invalid');
+   tell('تم إنشاء طلب التجديد. جارٍ فتح بوابة Geidea الرسمية...');
+   location.assign(url);
+  }catch(e){
+   // Checkout may have succeeded server-side despite a lost HTTP response.
+   // Reuse the SAME pending Geidea session; never blindly retry a charge.
+   try{
+    const previous=await renewalRequest('pending',{voucherId:v.voucherId});
+    if(previous.pending){
+     const url=renewalHost(previous.sessionId);
+     if(url){
+      tell('استرجعنا جلسة التجديد الموجودة. لن نصدر فاتورة ثانية.');
+      location.assign(url);
+     }else tell('جلسة التجديد السابقة قيد التحقق، ولا يمكن إعادة فتحها. راجع حسابك أو الدعم قبل المحاولة.');
+     return;
+    }
+   }catch(_){}
+   tell(statusMessage(e));
+  }finally{button.disabled=false;}
+ }
+ async function loadSubscriptions(){
+  const box=$('subscriptions');
+  box.replaceChildren();
+  try{
+   const data=await api('/subscriptions');
+   const subs=Array.isArray(data.subscriptions)?data.subscriptions:[];
+   $('subscriptions-note').textContent=subs.length?
+    'يمكنك تجديد الكود الحالي دون استبداله، فقط بعد دفع مؤكد.':
+    'لا توجد أكواد مشتراة ومرتبطة بحسابك بعد. قد تحتاج إضافة طلبك السابق.';
+   for(const s of subs){
+    const article=node('article');article.className='receipt-line';
+    const label=s.channel==='xtream'?'Xtream BLOFY':'BLOFY STREAM';
+    article.append(node('strong',label+' · '+s.codeHint),
+      node('p',expiryText(s)));
+    const status=node('p',s.canRenew?'جاهز للتجديد بنفس الكود':
+      s.reason==='not_activated'?'يلزم تفعيل الكود قبل تجديده':
+      s.reason==='revoked'?'الكود ملغى وغير قابل للتجديد':
+      'هذا الاشتراك يحتاج مراجعة مع الدعم قبل التجديد');
+    article.append(status);
+    if(s.canRenew){
+     const controls=node('div');controls.className='actions';
+     const select=node('select');
+     select.setAttribute('aria-label','مدة تجديد '+label);
+     const offers=(data.plans||[]).filter(p=>p.channel===s.channel&&
+       [90,180,365].includes(p.durationDays));
+     for(const p of offers){
+      const opt=node('option',p.durationDays+' يومًا · '+money(p.priceMinor));
+      opt.value=p.sku;select.append(opt);
+     }
+     const pay=node('button','تجديد نفس الكود عبر Geidea');pay.type='button';pay.className='primary';
+     pay.disabled=!data.renewalsAvailable||!offers.length;
+     pay.addEventListener('click',()=>void renewVoucher(s,select.value,pay));
+     controls.append(select,pay);article.append(controls);
+     if(!data.renewalsAvailable)article.append(node('small','التجديد الإلكتروني غير مفعّل حاليًا؛ استخدم الدعم.'));
+    }
+    box.append(article);
+   }
+  }catch(_){
+   $('subscriptions-note').textContent='تعذّر تحميل اشتراكاتك. حدّث الصفحة أو تواصل مع الدعم.';
+  }
+ }
+
  async function load(){
   clearReceipt();
   try{
@@ -97,6 +209,20 @@
    else orders.forEach(o=>$('orders').append(addOrderCard(o)));
    view(true);tell('حسابك جاهز.');
    if(returnToCart){location.replace('/store/cart');return;}
+   await loadSubscriptions();
+   if(!returnChecked&&uuid.test(returnedRenewal||'')){
+    returnChecked=true;
+    history.replaceState(null,'','/store/account');
+    const found=orders.some(o=>o.orderId===returnedRenewal);
+    if(found)try{
+     const verified=await api('/orders/'+encodeURIComponent(returnedRenewal)+'/check',{});
+     if(verified.confirmedPaid){
+      tell('تم تأكيد تجديد الكود من Geidea. هذه تفاصيل اشتراكك بعد التمديد.');
+      await showOrder(returnedRenewal);
+      await loadSubscriptions();
+     }else tell('رجعنا من Geidea، والطلب لا يزال قيد التحقق. استخدم زر «التحقق من حالة الدفع» قبل أي محاولة جديدة.');
+    }catch(_){tell('تعذر تأكيد تجديدك الآن. راجع حالة الطلب من القائمة ولا تكرر الدفع.');}
+   }
    // A single server-side scoped query returns statuses only, never raw codes.
    const alerts=$('expiry-alerts');alerts.replaceChildren();
    try{
