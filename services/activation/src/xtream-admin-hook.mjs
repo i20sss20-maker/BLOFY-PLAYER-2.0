@@ -3829,6 +3829,41 @@ async function unifiedStreamBridge(req,res,url){
     return json(res,200,{ok:true,sourceId,...result,
       scope:'publisher_overrides_only_not_full_database_backup'});
   }
+  // Single approved disabled source with existing code accounts. Verify
+  // upstream Xtream credentials without re-enabling, reindexing, rotating
+  // codes, probing media, or modifying any source/customer database row.
+  if(req.method==='POST'&&p==='/internal/blofy-stream/ops/disabled-source-connectivity'){
+    if(url.search)return json(res,400,{ok:false,code:'disabled_source_query_denied'});
+    const body=await readJson(req);
+    const sourceId=String(body?.sourceId||'').trim().toLowerCase();
+    if(sourceId!=='d9b0fcf1-0b7e-4209-b281-2b5cf1cef09a'||
+      body?.readOnlyConfirmed!==true)
+      return json(res,403,{ok:false,code:'disabled_source_not_approved'});
+    const source=await serverById(sourceId);
+    if(!source||source.enabled!==false)
+      return json(res,409,{ok:false,code:'disabled_source_state_changed'});
+    const started=Date.now();
+    let connected=false,reason='unavailable';
+    try{
+      await fetchAccount(source,{timeoutMs:8000,maxAttempts:1});
+      connected=true;reason='xtream_account_authenticated';
+    }catch(error){
+      // Strictly fixed reason enums; never leak upstream URL, credentials,
+      // usernames, provider error body or subscriber information.
+      const safe=new Set(['xtream_auth_failed','xtream_transport_connection_reset',
+        'xtream_transport_unreachable','xtream_host_unresolved',
+        'xtream_account_response_invalid','xtream_account_response_too_large',
+        'xtream_private_host_blocked','xtream_http_403','xtream_http_404',
+        'xtream_http_429','xtream_timeout','timeout']);
+      const tag=redactXtreamError(error);
+      reason=safe.has(tag)?tag:'xtream_connection_unavailable';
+    }
+    return json(res,200,{ok:true,sourceId,connected,reason,
+      sourceStillDisabled:true,subscriptionAccountsUnchanged:true,
+      catalogUnchanged:true,mediaBytesRead:0,
+      elapsedMs:Math.max(0,Math.min(15000,Date.now()-started))},
+      {'cache-control':'no-store, private'});
+  }
   if(req.method==='GET'&&p==='/internal/blofy-stream/ops/source-stats'){
     const sourceId=String(url.searchParams.get('sourceId')||'');
     if(!validUuid(sourceId))return json(res,400,{ok:false,code:'stream_invalid_source_id'});
