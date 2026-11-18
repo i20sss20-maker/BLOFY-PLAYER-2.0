@@ -1,0 +1,87 @@
+name: Publish verified BLOFY STREAM 55.8.36 signed APK
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-blofy-stream-55-8-36.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: publish-blofy-stream-55-8-36
+  cancel-in-progress: false
+jobs:
+  publish-owner-signed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_RUN: '44144923219'
+      SOURCE_SHA: '361291a06daca0cbfdc95b34a11d6d11752833be'
+      ARTIFACT: 'BLOFY-STREAM-55.8.36-CATALOG-TV-CONTROLS-OWNER-SIGNED-dddf6b5c7e6d04eda0d049e6aa99449da391eb2e'
+      APK_NAME: 'BLOFY-STREAM-55.8.36-CATALOG-TV-CONTROLS-FIX-OWNER-SIGNED.apk'
+      TAG: 'blofy-stream-55.8.36-owner-signed-20261118'
+      PACKAGE: 'tv.blofy.player.v2.stream'
+      CERT: 'C3B98CCCD2F0C86809014ACD9368BF61C7004CFD419CD867B71FEF10BFA6255E'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify exact source run passed full Android, FFmpeg and owner-signature QA
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" > "$RUNNER_TEMP/run.json"
+          jq -e --arg sha "$SOURCE_SHA" '.head_sha==$sha and .status=="completed" and .conclusion=="success"' "$RUNNER_TEMP/run.json"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN/jobs?per_page=100" > "$RUNNER_TEMP/jobs.json"
+          jq -e '[.jobs[] | select(.name=="verify" and .conclusion=="success")] | length==1' "$RUNNER_TEMP/jobs.json"
+          jq -e '[.jobs[] | select(.name=="owner-signed-stream-qa" and .conclusion=="success")] | length==1' "$RUNNER_TEMP/jobs.json"
+          jq -e '[.jobs[].steps[] | select(.name=="Verify identity, certificate, signatures, native FFmpeg and SHA256" and .conclusion=="success")] | length==1' "$RUNNER_TEMP/jobs.json"
+      - name: Retrieve original owner-signed APK and verify real package and certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p staging
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name "$ARTIFACT" --dir staging
+          apk="$(find staging -type f -name "$APK_NAME" -print -quit)"
+          sums="$(find staging -type f -name SHA256SUMS -print -quit)"
+          identity="$(find staging -type f -name IDENTITY.txt -print -quit)"
+          test -s "$apk" && test -s "$sums" && test -s "$identity"
+          grep -Fxq "application_id=$PACKAGE" "$identity"
+          grep -Fxq 'version_code=2000113' "$identity"
+          grep -Fxq "source_sha=$SOURCE_SHA" "$identity"
+          (cd "$(dirname "$apk")" && sha256sum -c SHA256SUMS)
+          cp "$apk" "staging/$APK_NAME"
+          cp "$sums" staging/SHA256SUMS
+          cp "$identity" staging/IDENTITY.txt
+          tools="$ANDROID_HOME/build-tools/35.0.0"
+          "$tools/aapt" dump badging "staging/$APK_NAME" > "$RUNNER_TEMP/badging.txt"
+          grep -Fq "name='$PACKAGE' versionCode='2000113' versionName='2.0.0-rc07.55.8.36-STREAM'" "$RUNNER_TEMP/badging.txt"
+          ! grep -Fq 'application-debuggable' "$RUNNER_TEMP/badging.txt"
+          "$tools/apksigner" verify --verbose --print-certs "staging/$APK_NAME" > "$RUNNER_TEMP/signer.txt"
+          actual_cert="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/signer.txt" | head -n1 | tr -d '[:space:]-:' | tr '[:lower:]' '[:upper:]')"
+          test "$actual_cert" = "$CERT"
+          "$tools/zipalign" -c -P 16 -v 4 "staging/$APK_NAME"
+          unzip -Z1 "staging/$APK_NAME" > "$RUNNER_TEMP/files.txt"
+          for abi in armeabi-v7a arm64-v8a x86 x86_64; do
+            grep -Fxq "lib/$abi/libffmpegJNI.so" "$RUNNER_TEMP/files.txt"
+          done
+          size="$(stat -c '%s' "staging/$APK_NAME")"
+          sha="$(sha256sum "staging/$APK_NAME" | awk '{print $1}')"
+          echo "APK_SHA256=$sha" >> "$GITHUB_ENV"
+          echo "APK_BYTES=$size" >> "$GITHUB_ENV"
+      - name: Publish immutable signed STREAM APK (distinct from PLAYER)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Release already exists; refusing overwrite."
+            exit 1
+          fi
+          gh release create "$TAG" "staging/$APK_NAME" staging/SHA256SUMS staging/IDENTITY.txt \
+            --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" \
+            --title 'BLOFY STREAM 55.8.36 | Official owner-signed APK' \
+            --notes 'BLOFY STREAM 55.8.36 (versionCode 2000113). Owner-signed Android TV/Box build. Quiet Xtream catalog and recent-episode refresh; fixes for remote seeking, VLC controls and AI search/direct verified title pages. Keeps previously committed library on sync errors. Does not replace BLOFY PLAYER. Physical device smoke testing is still recommended.'
+          echo "### Published signed STREAM APK" >> "$GITHUB_STEP_SUMMARY"
+          echo "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/$APK_NAME" >> "$GITHUB_STEP_SUMMARY"
+          echo "SHA256: $APK_SHA256" >> "$GITHUB_STEP_SUMMARY"
+          echo "APK size: $APK_BYTES" >> "$GITHUB_STEP_SUMMARY"
