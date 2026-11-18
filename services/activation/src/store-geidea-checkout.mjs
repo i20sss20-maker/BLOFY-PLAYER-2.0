@@ -413,6 +413,24 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
    if(enabled)try{await source();checkoutAvailable=true;}catch{}
    return json(res,200,{provider:'geidea',checkoutAvailable,products:publicStorePlans(),offers:publicStoreOffers()});
  }
+ async function couponQuote(req,res){
+   if(!enabled)return json(res,503,{error:'store_checkout_disabled'});
+   if(!browser(req,res))return;
+   if(!rateCheckout.consume(requestClientKey(req)).allowed)return json(res,429,{error:'rate_limited'});
+   const body=await readJson(req);
+   const plan=P.find(p=>p[0]===body?.sku);
+   const listPrice=body?.sku===BUNDLE_SKU?BUNDLE_PRICE:plan?.[4];
+   const code=String(body?.couponCode||'').trim().toUpperCase();
+   if(!listPrice||!COUPON_RE.test(code))return json(res,400,{error:'store_invalid_coupon'});
+   await schema();
+   const cp=(await pool.query('SELECT percent,max_uses FROM blofy_store_coupons WHERE code=$1 AND active=TRUE AND expires_at>NOW()',[code])).rows[0];
+   if(!cp)return json(res,404,{error:'store_coupon_unavailable'});
+   const cnt=(await pool.query("SELECT COUNT(*)::int AS n FROM blofy_store_geidea_orders WHERE coupon_code=$1 AND (status='paid' OR (status='pending' AND created_at>NOW()-INTERVAL '45 minutes'))",[code])).rows[0]?.n||0;
+   if(Number(cnt)>=Number(cp.max_uses))return json(res,409,{error:'store_coupon_limit_reached'});
+   const discountMinor=discountAmount(listPrice,Number(cp.percent));
+   return json(res,200,{ok:true,sku:body.sku,currency:'SAR',
+     originalPriceMinor:listPrice,discountMinor,priceMinor:listPrice-discountMinor});
+ }
  async function checkout(req,res){
    if(!enabled)return json(res,503,{error:'store_checkout_disabled'});
    if(!browser(req,res))return;
@@ -515,6 +533,7 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
    if(p==='/api/v1/admin/store/inventory'&&req.method==='GET'){await inventorySummary(req,res);return true;}
    if(p==='/api/v1/admin/store/inventory/import'&&req.method==='POST'){await importInventory(req,res);return true;}
    if(p==='/api/v1/admin/store/inventory/generate'&&req.method==='POST'){await generateInventory(req,res);return true;}
+   if(p==='/api/v1/store/coupon/quote'&&req.method==='POST'){await couponQuote(req,res);return true;}
    if(p==='/api/v1/store/products'&&req.method==='GET'){await catalog(req,res);return true;}
    if(p==='/api/v1/store/checkout'&&req.method==='POST'){await checkout(req,res);return true;}
    if(p==='/api/v1/store/orders/status'&&req.method==='POST'){await status(req,res);return true;}
