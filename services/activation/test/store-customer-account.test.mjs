@@ -66,6 +66,7 @@ test('verified email owns linked guest order; no code before login and proof',as
   }
   if(sql.startsWith('SELECT customer_id FROM blofy_store_customer_orders'))
    return rows(claims.has(args[0])?[{customer_id:claims.get(args[0])}]:[]);
+  if(sql.startsWith('SELECT order_number,channel,expires_at FROM ('))return rows([]);
   if(sql.startsWith('SELECT o.id,o.sku,o.status,o.amount_minor'))
    return rows(claims.get(orderId)===args[0]?[order]:[]);
   if(sql.startsWith('SELECT o.* FROM blofy_store_customer_orders'))
@@ -112,6 +113,9 @@ test('verified email owns linked guest order; no code before login and proof',as
  const account=await call('/api/v1/store/account','GET',{},auth);
  assert.equal(account.status,200);
  assert.equal(account.data.orders.length,1);
+ const alerts=await call('/api/v1/store/account/alerts','GET',{},auth);
+ assert.equal(alerts.status,200);
+ assert.deepEqual(alerts.data.alerts,[]);
  assert.equal(Object.hasOwn(account.data.orders[0],'code'),false,'summary has no full code field');
  assert.equal(Object.hasOwn(account.data.orders[0],'codes'),false,'summary has no raw code list');
  const receipt=await call(detail,'GET',{},auth);
