@@ -15,20 +15,24 @@ test('admin report rejects malicious filters and excessive pages before accessin
  assert.equal(parseOpsOptions(url('?q='+encodeURIComponent('x'.repeat(101)))),null);
  assert.equal(parseOpsOptions(url('?q='+encodeURIComponent('\\u0000')))?.q,'\\u0000');
  assert.equal(parseOpsOptions(url('?view=renewals&status=pending&page=2')).page,2);
- let accessed=0;
+ let accessed=0,schemaCalls=0;
  const admin=createStoreSubscriptionAdmin({pool:{query:async()=>{accessed++;throw Error('leaked');}},
+  ensureStoreSchema:async()=>{schemaCalls++;},
   json:(res,code,data)=>{res.code=code;res.data=data;},
   authorizeAdmin:(_req,res)=>{res.code=401;return false;}});
  const res={};
  await admin.handler({},res,url(''));
  assert.equal(res.code,401);
  assert.equal(accessed,0,'anonymous browser cannot read even table metadata');
+ assert.equal(schemaCalls,0,'anonymous users cannot trigger any DDL or schema migration');
 });
 test('real owner-linked orders power the dashboard without exposing codes or vaults',async()=>{
  const queries=[],rows=result=>({rows:result,rowCount:result.length});
+ let schemaReady=false,schemaCalls=0;
  const db={async query(sql,args=[]){
   queries.push({sql,args});
   if(sql.startsWith('SELECT to_regclass')){
+   assert.equal(schemaReady,true,'admin page initializes store schema before read queries');
    return rows([Object.fromEntries(Array.from({length:7},(_,i)=>['t'+i,'present']))]);
   }
   if(sql.startsWith('SELECT COUNT(*)::int AS total,')&&sql.includes('blofy_store_renewal_orders')){
@@ -56,11 +60,13 @@ test('real owner-linked orders power the dashboard without exposing codes or vau
   throw Error('Unexpected SQL '+sql.slice(0,150));
  }};
  const admin=createStoreSubscriptionAdmin({pool:db,
+  ensureStoreSchema:async()=>{schemaReady=true;schemaCalls++;},
   json:(res,code,data)=>{res.code=code;res.data=data;},
   authorizeAdmin:()=>true});
  const subscribe={};
  await admin.handler({},subscribe,url('?view=subscriptions&status=expiring&q=client&page=1'));
  assert.equal(subscribe.code,200);
+ assert.equal(schemaCalls,1);
  assert.equal(subscribe.data.subscriptions.expiring,1);
  assert.equal(subscribe.data.renewals.pendingOver20m,1);
  assert.deepEqual(subscribe.data.reminders,
