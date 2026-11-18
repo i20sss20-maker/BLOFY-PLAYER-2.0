@@ -48,7 +48,7 @@
   <main>
     <section class="hero banner-hero" aria-labelledby="hero-title">
       <div class="container">
-        <div class="visual-hero">
+        <div class="blofy-banners" id="blofy-banners"><div data-slide><div class="visual-hero">
           <img class="visual-hero-art" src="/store/media/strong8k.jpg" alt="تصميم إعلان BLOFY STRONG 8K بشاشات ترفيهية وألوان كحلية وزرقاء" width="1600" height="640" fetchpriority="high" loading="eager">
           <div class="visual-hero-content">
             <span class="hero-badge"><i aria-hidden="true"></i> باقة STRONG 8K · BLOFY</span>
@@ -63,7 +63,25 @@
               <a href="/store/trial" class="btn btn-outline">يوجد تجربة ↗</a>
             </div>
           </div>
-        </div>
+        </div></div><div data-slide hidden><div class="visual-hero">
+<img class="visual-hero-art" src="/store/media/bundle.svg" width="1600" height="680" loading="lazy" alt="اشتراكان سنويان من BLOFY مع شاشتين متطابقتين">
+<div class="visual-hero-content">
+<span class="hero-badge">عرض خاص — وفر 40 ريال</span><h2 class="banner-slide-title">اشتراكان لمدة سنة<br><em>بـ200 ريال فقط.</em></h2>
+<p class="slide-summary">كودان منفصلان. اختر ستريم وستريم، إكستريم وإكستريم، أو واحدة من كل نوع.</p>
+<div class="hero-buttons"><a href="/store/offers" class="btn btn-primary">تفاصيل العرض ←</a></div>
+</div></div></div><div data-slide hidden><div class="visual-hero">
+<img class="visual-hero-art" src="/store/media/player.jpg" width="1600" height="640" loading="lazy" alt="تجربة BLOFY على شاشة حديثة">
+<div class="visual-hero-content"><span class="hero-badge">يوجد تجربة — حسب التوفر</span>
+<h2 class="banner-slide-title">جرّب الترفيه<br><em>على كيفك.</em></h2>
+<p class="slide-summary">تعرّف على BLOFY STREAM وXtream قبل اختيار اشتراكك.</p>
+<div class="hero-buttons"><a href="/store/trial" class="btn btn-primary">استفسر عن التجربة ←</a></div>
+</div></div></div><div class="banner-slider-controls" aria-label="التنقل بين بانرات BLOFY">
+ <button type="button" data-prev-slide aria-label="البانر السابق">‹</button>
+ <button type="button" data-slide-dot="0" aria-label="بانر STRONG 8K">●</button>
+ <button type="button" data-slide-dot="1" aria-label="بانر عرض الاشتراكين">●</button>
+ <button type="button" data-slide-dot="2" aria-label="بانر التجربة">●</button>
+ <button type="button" data-next-slide aria-label="البانر التالي">›</button>
+ </div></div>
         <small class="disclaimer">الأرقام بحسب بيانات باقة STRONG 8K المعلنة وغير مدققة بشكل مستقل، وقد تتغير حسب المصدر وحقوق التوزيع. الرسم توضيحي وليس صورة من التطبيق؛ اسم 8K ليس ضمانًا لدقة عرض جميع الأعمال.</small>
       </div>
     </section>
@@ -191,7 +209,10 @@
         </div>
       </div>
     </section>
-    <section class="container coupon-area" id="coupon-area"><div class="coupon-panel"><div><h2>معك كوبون خصم؟</h2><p>أدخل الكود وسيتم حساب خصمه قبل تأكيد عملية الدفع.</p></div><div class="coupon-input"><label for="store-coupon">كود الخصم</label><input id="store-coupon" type="text" maxlength="20" autocomplete="off" dir="ltr" placeholder="مثال: BLOFY10"><button id="coupon-preview" type="button" class="btn btn-outline btn-sm">التحقق من الخصم</button><p id="coupon-result" role="status"></p></div></div></section>
+    <section class="container coupon-area" id="coupon-area"><div class="coupon-panel"><div><h2>معك كوبون خصم؟</h2><p>أدخل الكود وسيتم حساب خصمه قبل تأكيد عملية الدفع.</p></div><div class="coupon-input"><label for="store-coupon">كود الخصم</label><select id="coupon-sku" aria-label="الباقة التي تريد فحص الكوبون لها">
+<option value="bundle-2y">عرض الاشتراكين السنويين (200 ريال)</option>
+<option value="stream-3m">ستريم 3 أشهر (40 ريال)</option><option value="stream-6m">ستريم 6 أشهر (70 ريال)</option><option value="stream-1y">ستريم سنة (120 ريال)</option>
+<option value="xtream-3m">إكستريم 3 أشهر (40 ريال)</option><option value="xtream-6m">إكستريم 6 أشهر (70 ريال)</option><option value="xtream-1y">إكستريم سنة (120 ريال)</option></select><input id="store-coupon" type="text" maxlength="20" autocomplete="off" dir="ltr" placeholder="مثال: BLOFY10"><button id="coupon-preview" type="button" class="btn btn-outline btn-sm">التحقق من الخصم</button><p id="coupon-result" role="status"></p></div></div></section>
     <section class="container" aria-label="نتيجة الدفع">
       <section id="store-receipt" class="receipt-section" hidden aria-live="polite">
         <h3>طلب اشتراكك</h3><p id="store-receipt-status">جارٍ التحقق من حالة الطلب...</p>
