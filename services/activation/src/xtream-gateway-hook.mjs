@@ -1724,7 +1724,8 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
           error.message:(controller.signal.reason?.message || error?.message || 'media_error');
         const networkReason=safeXtreamTransportCategory(error);
         const safeReason = ['headers_timeout','media_read_timeout','upstream_empty_media','upstream_non_media_response',
-          'live_ts_reconnect_exhausted','live_ts_reconnect_denied'].includes(reason)
+          'live_ts_reconnect_exhausted','live_ts_reconnect_denied',
+          'live_ts_reconnect_rate_limited','live_ts_reconnect_budget_exhausted'].includes(reason)
           ? reason : (networkReason||'upstream_unreachable');
         console.warn('xtream media relay error', {kind,itemId:gatewayId,reason:safeReason,attempt});
         // Switch egress ONLY if the original connection failed before
