@@ -4,9 +4,9 @@ const WA='https://wa.me/966568941484?text=';
 const link=(label,text)=>'<a class="btn" href="'+WA+encodeURIComponent(text)+'" target="_blank" rel="noopener noreferrer">'+label+'</a>';
 const blocks={
   about:{
-    title:'عن متجر BLOFY',desc:'تعرف على منتجات واشتراكات BLOFY STREAM وXtream BLOFY.',
+    title:'عن متجر BLOFY',desc:'اشتراك STRONG 8K مع BLOFY STREAM وXtream عبر BLOFY PLAYER، مع مكتبة بث مباشر وأفلام ومسلسلات.',
     lead:'متجر بلوفي للاشتراكات الرقمية',
-    body:'<p>نقدم خيارات الاشتراك الرقمي عبر نوعين: كود BLOFY STREAM، أو كود يُستخدم لاستخراج بيانات Xtream BLOFY. اختر الطريقة الأنسب، ثم المدة والسعر المعروض داخل المتجر.</p>'+
+    body:'<p>نقدم اشتراك STRONG 8K عبر طريقتين: كود BLOFY STREAM، أو Xtream مع تطبيق BLOFY PLAYER. بحسب بيانات الباقة المعلنة، تضم أكثر من 50,000 قناة بث مباشر، وأكثر من 50,000 مسلسل، وأكثر من 185,000 فيلم. تخضع الأرقام للتحديث بحسب المصدر وتوفر حقوق التوزيع.</p>'+
          '<div class="tiles"><div><strong>كود ستريم</strong><p>تفعيل مبسط بإدخال الكود في التطبيق المتوافق.</p></div><div><strong>Xtream BLOFY</strong><p>استخدام كود الاشتراك للحصول على بيانات الاتصال في صفحة التفعيل المخصصة.</p></div><div><strong>دعم مباشر</strong><p>تواصل قبل أو بعد الطلب عبر فريق BLOFY على واتساب.</p></div></div>'
   },
   trial:{
@@ -22,6 +22,7 @@ const blocks={
     lead:'كل الإجابات قبل الاشتراك',
     body:'<div class="faq">'+
       '<details open><summary>كم أسعار المنتجات؟</summary><p>3 أشهر 40 ريال، و6 أشهر 60 ريال، وسنة كاملة 100 ريال لكل من كود BLOFY STREAM وXtream BLOFY.</p></details>'+
+      '<details><summary>وش يحتوي اشتراك STRONG 8K؟</summary><p>حسب بيانات الباقة المعلنة: أكثر من 50 ألف قناة، وأكثر من 50 ألف مسلسل، وأكثر من 185 ألف فيلم. تختلف الإتاحة مع تحديثات المصدر وحقوق المحتوى.</p></details>'+
       '<details><summary>متى تبدأ مدة الاشتراك؟</summary><p>تبدأ عند أول تفعيل ناجح للكود، وليس عند إنشاء الكود في المخزون.</p></details>'+
       '<details><summary>هل تتوفر تجربة؟</summary><p>يوجد خيار تجربة للاستفسار حسب التوفر. تواصل معنا لمعرفة المدة وشروط التجربة.</p></details>'+
       '<details><summary>هل الكود نفسه يصلح للطريقتين؟</summary><p>يمكن ربط الكود نفسه بمسار ستريم وXtream بحسب صلاحيات الباقة والتفعيل المتاح، دون إنشاء اشتراك منفصل تلقائيًا.</p></details>'+
