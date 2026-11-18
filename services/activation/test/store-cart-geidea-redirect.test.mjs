@@ -30,7 +30,7 @@ test('signed-in cart redirects to official hosted Geidea even when modal SDK is 
  // Pre-create named elements so repeated calls to getElementById keep identity.
  for(const id of ['checkout','items','clear-cart','coupon','apply','subtotal','discount',
  'total','codes-count','message','auth-gate','auth-title','auth-message','auth-link','cart-sync',
- 'started','order-number','open-geidea','copy-private-link','check-pending','pending-status'])el(id);
+ 'started','order-number','open-geidea','copy-private-link','check-pending','pending-status','retry-pending'])el(id);
  const fetch=async(path,opts={})=>{
   calls.push({path,method:opts.method||'GET'});
   const response=(status,data)=>({ok:status>=200&&status<300,status,
@@ -39,13 +39,15 @@ test('signed-in cart redirects to official hosted Geidea even when modal SDK is 
   if(path==='/api/v1/store/account/cart'&&opts.method!=='POST')
    return response(200,{items:[item],couponCode:'',revision:3});
   if(path==='/api/v1/store/products')return response(200,{checkoutAvailable:true});
+  if(path==='/api/v1/store/cart/pending')return response(200,{ok:true,pending:false});
   if(path==='/api/v1/store/cart/quote')return response(200,{codeCount:1,
    subtotalMinor:4000,discountMinor:0,totalMinor:4000,
    items:[{...item,lineTotalMinor:4000}]});
   if(path==='/api/v1/store/orders/status')return response(200,{orderId,status:'pending',fulfilled:false});
   if(path==='/api/v1/store/cart/checkout')return response(201,{
    provider:'geidea',checkoutMode:'modal',sku:'cart',orderId,
-   sessionId,accessToken:token,orderNumber:'BF-261118-BBBBBBBB',
+   sessionId,sessionExpiresAt:new Date(Date.now()+14*60000).toISOString(),
+   accessToken:token,orderNumber:'BF-261118-BBBBBBBB',
    priceMinor:4000,currency:'SAR'
   });
   throw Error('Unexpected fetch: '+path);
