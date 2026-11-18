@@ -97,7 +97,7 @@ test('verified email owns linked guest order; no code before login and proof',as
  const requested=await call('/api/v1/store/account/request-code','POST',{email:'TEST@Example.com'});
  assert.equal(requested.status,202);
  assert.equal(delivered.email,'test@example.com');
- const bad=await call('/api/v1/store/account/verify-code','POST',{email:delivered.email,code:'000000'});
+ const bad=await call('/api/v1/store/account/verify-code','POST',{email:delivered.email,code:delivered.otp==='000000'?'999999':'000000'});
  assert.equal(bad.status,401);
  const verified=await call('/api/v1/store/account/verify-code','POST',{email:delivered.email,code:delivered.otp});
  assert.equal(verified.status,200);
