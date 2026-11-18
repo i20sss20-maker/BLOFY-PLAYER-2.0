@@ -4,6 +4,7 @@
  const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  const token=/^[A-Za-z0-9_-]{42,44}$/;
  const base='/api/v1/store/account';
+ const returnToCart=new URLSearchParams(location.search).get('next')==='/store/cart';
  const tell=value=>{$('message').textContent=value;};
  const node=(tag,value)=>{const n=document.createElement(tag);if(value!==undefined)n.textContent=value;return n;};
  const money=n=>(Number(n)/100).toLocaleString('ar-SA')+' ر.س';
@@ -69,6 +70,7 @@
    if(!orders.length)$('orders').append(node('p','لا توجد طلبات مربوطة بعد. أضف طلبك السابق باستخدام الرابط الخاص.'));
    else orders.forEach(o=>$('orders').append(addOrderCard(o)));
    view(true);tell('حسابك جاهز.');
+   if(returnToCart){location.replace('/store/cart');return;}
    // A single server-side scoped query returns statuses only, never raw codes.
    const alerts=$('expiry-alerts');alerts.replaceChildren();
    try{
@@ -155,6 +157,7 @@
   catch(e){tell(statusMessage(e));}
  });
  $('close-receipt').addEventListener('click',()=>{$('receipt').hidden=true;$('codes').replaceChildren();});
+ if(returnToCart)$('checkout-return').hidden=false;
  // An existing guest token can be transported in the URL fragment, never the server logs.
  const params=new URLSearchParams(location.hash.replace(/^#/,''));
  const id=params.get('order'),secret=params.get('token');
