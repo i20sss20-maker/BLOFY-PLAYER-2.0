@@ -176,7 +176,10 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
     'JOIN blofy_xtream_gateway_duration_codes v ON v.id=owned.voucher_id '+
     'LEFT JOIN blofy_xtream_gateway_accounts a ON a.id=v.account_id '+
     'ORDER BY v.id LIMIT 100',[customer.id])).rows;
-  return json(res,200,{ok:true,subscriptions:rows.map(row=>{
+  return json(res,200,{ok:true,
+   renewalsAvailable:env.BLOFY_STORE_SAME_CODE_RENEWAL_ENABLED==='true'&&loginRequiredForStore&&
+     env.BLOFY_STORE_GEIDEA_ENABLED==='true',
+   subscriptions:rows.map(row=>{
     const eligible=Boolean(renewalStartAndExpiry(row,90));
     const codeDeadline=new Date(row.expires_at).getTime();
     const accountDeadline=new Date(row.account_expires_at).getTime();
