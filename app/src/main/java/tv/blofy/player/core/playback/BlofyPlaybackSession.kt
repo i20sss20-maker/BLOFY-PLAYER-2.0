@@ -50,6 +50,11 @@ class BlofyPlaybackSession(
     private var lastLiveStallRecoveryAtMs = 0L
     private var liveStallRecoveries = 0
     private var noFirstFrameRecoveries = 0
+    // HTTP 200 live relays can close cleanly after ~1 minute; this reaches
+    // STATE_ENDED without onPlayerError. Track bounded same-channel recovery.
+    private var liveQuickEnds = 0
+    private var liveEndRecoveryPending = false
+    private var liveRecoveryGeneration = 0
     private var seekRecoveryGeneration = 0
     private val fallbackState = PlaybackFallbackState()
     private val retryHandler = Handler(context.mainLooper)
@@ -77,6 +82,30 @@ class BlofyPlaybackSession(
                         metric?.let { metric = PlaybackDiagnostics.ready(it) }
                         resetLiveStallTimer(keepPosition = true)
                         if (!contentKind.isLiveContent()) seekRecoveryGeneration++
+                    }
+                    // A live TS response that ends cleanly is still LIVE content:
+                    // Media3 reports ENDED, not a network error, and would leave
+                    // the TV stopped until the viewer manually reopens the channel.
+                    if (playbackState == Player.STATE_ENDED && contentKind.isLiveContent() &&
+                        playWhenReady && currentMediaItem != null && !liveEndRecoveryPending) {
+                        val elapsed = (SystemClock.elapsedRealtime() - playStartedAtMs).coerceAtLeast(0L)
+                        val plan = LiveCleanEndRecoveryPolicy.next(elapsed, liveQuickEnds)
+                        if (plan == null) {
+                            val failedUrl = currentMediaItem?.localConfiguration?.uri?.toString().orEmpty()
+                            if (failedUrl.isNotBlank()) onTerminalError?.invoke(failedUrl)
+                        } else {
+                            liveQuickEnds = plan.quickEnds
+                            liveEndRecoveryPending = true
+                            val generation = liveRecoveryGeneration
+                            val item = currentMediaItem
+                            retryHandler.postDelayed({
+                                if (!closing && generation == liveRecoveryGeneration &&
+                                    currentMediaItem == item && playWhenReady) {
+                                    liveEndRecoveryPending = false
+                                    retrySameUrl()
+                                }
+                            }, plan.delayMs)
+                        }
                     }
                 }
 
@@ -190,6 +219,9 @@ class BlofyPlaybackSession(
         if (closing) return
         retryHandler.removeCallbacksAndMessages(null)
         seekRecoveryGeneration++
+        liveRecoveryGeneration++
+        liveQuickEnds = 0
+        liveEndRecoveryPending = false
         compatibilityTrackParameters?.let {
             player.trackSelectionParameters = it
             compatibilityTrackParameters = null
@@ -220,6 +252,10 @@ class BlofyPlaybackSession(
     fun retrySameUrl(resumePositionMs: Long? = null) {
         if (closing) return
         val item = player.currentMediaItem ?: return
+        // Invalidate any delayed clean-EOF retry when a manual or error-driven
+        // retry has already restarted this item.
+        liveRecoveryGeneration++
+        liveEndRecoveryPending = false
         // A stalled seek may report zero or the old position until buffering recovers.
         val position = (resumePositionMs ?: player.currentPosition).coerceAtLeast(0L)
         seekRecoveryGeneration++
@@ -336,6 +372,9 @@ class BlofyPlaybackSession(
 
     private fun playInternalFallback(url: String) {
         if (closing) return
+        liveRecoveryGeneration++
+        liveEndRecoveryPending = false
+        liveQuickEnds = 0
         fallbackState.markUrlAttempted(url)
         automaticRetries = MAX_AUTOMATIC_RETRIES
         // A new route needs its own stall window, not the old host's one-minute cooldown.
@@ -375,6 +414,8 @@ class BlofyPlaybackSession(
     fun release(detachOutput: () -> Unit = {}) {
         if (closing) return
         closing = true
+        liveRecoveryGeneration++
+        liveEndRecoveryPending = false
         metric?.let { current ->
             val completed = PlaybackDiagnostics.finish(current)
             metric = completed

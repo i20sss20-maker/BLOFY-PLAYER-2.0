@@ -63,3 +63,34 @@ internal object PlaybackRecoveryPolicy {
             nowMs - windowStartedAtMs >= ERROR_WINDOW_MS
         ) nowMs to 1 else windowStartedAtMs to (current + 1)
 }
+
+
+/**
+ * A live TS HTTP response can terminate with HTTP 200 after sending valid video
+ * instead of producing an ExoPlayer onPlayerError. Media3 reports STATE_ENDED;
+ * unlike VOD this must not strand the viewer on a stopped picture.
+ *
+ * Reopen a previously stable channel (>=15s of playback) after a short delay.
+ * If the upstream immediately closes repeatedly, back off and stop after
+ * three attempts rather than hammer the source or exhaust a TV box.
+ */
+internal object LiveCleanEndRecoveryPolicy {
+    const val STABLE_PLAYBACK_MS = 15_000L
+    private const val MAX_QUICK_ENDS = 3
+
+    data class Plan(val quickEnds: Int, val delayMs: Long)
+
+    fun next(playbackElapsedMs: Long, previousQuickEnds: Int): Plan? {
+        if (playbackElapsedMs >= STABLE_PLAYBACK_MS) {
+            return Plan(quickEnds = 0, delayMs = 900L)
+        }
+        val quickEnds = previousQuickEnds.coerceAtLeast(0) + 1
+        if (quickEnds > MAX_QUICK_ENDS) return null
+        val backoff = when (quickEnds) {
+            1 -> 900L
+            2 -> 2_000L
+            else -> 4_000L
+        }
+        return Plan(quickEnds = quickEnds, delayMs = backoff)
+    }
+}

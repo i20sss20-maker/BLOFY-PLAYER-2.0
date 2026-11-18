@@ -57,7 +57,7 @@ object TransportFactory {
                 }
                 chain.proceed(next.build())
             }.build()
-        return OkHttpDataSource.Factory(client).setUserAgent("BLOFY STREAM/55.8.7")
+        return OkHttpDataSource.Factory(client).setUserAgent("BLOFY STREAM/${BuildConfig.VERSION_NAME}")
     }
 
     private fun createCronet(context: Context, profile: ProviderProfile): HttpDataSource.Factory? {

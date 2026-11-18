@@ -31,6 +31,7 @@ class PlaybackSessionReleaseTest {
         lateinit var listener: Player.Listener
         var releases = 0
         var prepares = 0
+        var playReady = false
         var releaseError = false
         var throwOnRelease = false
         val player = Proxy.newProxyInstance(ExoPlayer::class.java.classLoader, arrayOf(ExoPlayer::class.java)) { _, method, args ->
@@ -39,11 +40,12 @@ class PlaybackSessionReleaseTest {
                 "getCurrentMediaItem" -> MediaItem.fromUri("https://example.test/live/u/p/1.ts")
                 "getCurrentPosition" -> 0L
                 "getPlaybackState" -> Player.STATE_IDLE
-                "getPlayWhenReady" -> false
+                "getPlayWhenReady" -> playReady
                 "getVideoFormat" -> null
                 "prepare" -> { prepares++; Unit }
                 "release" -> { releases++; if (releaseError) timeout(ExoTimeoutException.TIMEOUT_OPERATION_RELEASE); if (throwOnRelease) error("release failed"); Unit }
-                "setAudioAttributes", "stop", "setMediaItem", "setPlayWhenReady" -> Unit
+                "setPlayWhenReady" -> { playReady = args!![0] as Boolean; Unit }
+                "setAudioAttributes", "stop", "setMediaItem" -> Unit
                 "toString" -> "FakePlayer"
                 else -> error("Unexpected operation: ${method.name}")
             }
@@ -98,6 +100,42 @@ class PlaybackSessionReleaseTest {
             shadowOf(Looper.getMainLooper()).idleFor(600, TimeUnit.MILLISECONDS)
             assertEquals(1, fake.prepares)
         } finally { session.release() }
+    }
+
+
+    @Test fun cleanLiveEndReopensSameStreamWithoutReturningToHome() {
+        val fake = FakePlayer()
+        val session = session(fake)
+        try {
+            session.play("https://example.test/live/u/p/1.ts")
+            assertEquals(1, fake.prepares)
+            fake.listener.onPlaybackStateChanged(Player.STATE_ENDED)
+            shadowOf(Looper.getMainLooper()).idleFor(1000, TimeUnit.MILLISECONDS)
+            assertEquals(2, fake.prepares)
+        } finally { session.release() }
+    }
+
+    @Test fun cleanLiveEndNeverReopensAfterManualPause() {
+        val fake = FakePlayer()
+        val session = session(fake)
+        try {
+            session.play("https://example.test/live/u/p/1.ts")
+            fake.playReady = false
+            fake.listener.onPlaybackStateChanged(Player.STATE_ENDED)
+            shadowOf(Looper.getMainLooper()).idleFor(1500, TimeUnit.MILLISECONDS)
+            assertEquals(1, fake.prepares)
+        } finally { session.release() }
+    }
+
+    @Test fun cleanLiveEndScheduledRetryDiesWithActivityRelease() {
+        val fake = FakePlayer()
+        val session = session(fake)
+        session.play("https://example.test/live/u/p/1.ts")
+        fake.listener.onPlaybackStateChanged(Player.STATE_ENDED)
+        session.release()
+        shadowOf(Looper.getMainLooper()).idleFor(1500, TimeUnit.MILLISECONDS)
+        assertEquals(1, fake.prepares)
+        assertEquals(1, fake.releases)
     }
 
     @Test fun duplicateCloseDetachesAndReleasesOnlyOnce() {
