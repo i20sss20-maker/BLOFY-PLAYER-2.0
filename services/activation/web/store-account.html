@@ -5,7 +5,17 @@
 <meta name="theme-color" content="#071327"><meta name="robots" content="noindex,nofollow">
 <title>حسابي واشتراكاتي | BLOFY</title><link rel="icon" href="/blofy-logo.png">
 <link rel="stylesheet" href="/store/cart.css?v=2">
-<script defer src="/store/account.js?v=5"></script>
+<script defer src="/store/account.js?v=6"></script>
+<style>
+@media print{
+ body *{visibility:hidden!important}
+ #payment-receipt,#payment-receipt *{visibility:visible!important}
+ #payment-receipt{display:block!important;position:absolute;inset:0 auto auto 0;
+ width:100%;max-width:none;border:0;background:#fff!important;color:#000!important;box-shadow:none!important}
+ #payment-receipt button{display:none!important}
+ #payment-receipt :is(h2,h3,p,strong,span,li){color:#000!important}
+}
+</style>
 </head>
 <body>
 <header class="top"><nav class="wrap main-nav">
@@ -62,6 +72,13 @@
 <output id="reminder-status" role="status" aria-live="polite"></output>
 <div id="expiry-alerts" aria-live="polite"></div>
 <div class="actions"><a class="secondary" href="/store/contact">دعم BLOFY على واتساب</a></div>
+</div>
+<div class="card" id="payment-receipt" hidden>
+<h2>إيصال دفع BLOFY</h2>
+<p>هذا إيصال تأكيد دفع من المتجر وليس فاتورة ضريبية.</p>
+<div id="payment-receipt-details" aria-live="polite"></div>
+<div class="actions"><button class="primary" type="button" id="payment-receipt-print">طباعة الإيصال أو حفظه PDF</button>
+<button class="secondary" type="button" id="payment-receipt-close">إغلاق الإيصال</button></div>
 </div>
 <div class="card receipt" id="receipt" hidden>
 <h2 id="receipt-title">تفاصيل أكواد الطلب</h2><p class="hint">حفاظًا على خصوصيتك، تختفي الأكواد بعد 90 ثانية أو عندما تغادر الصفحة، ويمكن فتحها مجددًا من حسابك.</p>
