@@ -27,7 +27,12 @@
   const map={
    customer_accounts_disabled:'حسابات العملاء غير مفعلة بعد. الشراء كزائر متاح.',
    customer_email_not_configured:'خدمة رسائل الدخول لم تُجهّز بعد. يمكنك استرجاع الطلب من رابط الزائر.',
-   customer_email_unavailable:'تعذر إرسال البريد حاليًا؛ حاول لاحقًا.',
+   customer_email_unavailable:'تعذر الاتصال بخدمة البريد حاليًا. أبلغ دعم BLOFY إذا استمرت المشكلة.',
+   customer_email_key_invalid:'مفتاح إرسال البريد يحتاج تحديثًا في إعدادات المتجر. تم إبلاغ الإدارة.',
+   customer_email_domain_unverified:'نطاق بريد BLOFY لم يُوثق بعد لدى خدمة الإرسال. تم إبلاغ الإدارة.',
+   customer_email_sender_restricted:'خدمة البريد ترفض عنوان المرسل أو أن حسابها ما زال في وضع الاختبار. تم إبلاغ الإدارة.',
+   customer_email_sender_invalid:'عنوان المرسل في إعدادات البريد يحتاج مراجعة. تم إبلاغ الإدارة.',
+   customer_email_provider_rate_limited:'خدمة البريد وصلت إلى حد الإرسال مؤقتًا؛ أعد المحاولة لاحقًا.',
    login_code_incorrect:'الرمز غير صحيح أو انتهت صلاحيته.',
    invalid_email:'تحقق من البريد الإلكتروني.',
    origin_forbidden:'أعد فتح الصفحة من رابط متجر BLOFY الرسمي.',
