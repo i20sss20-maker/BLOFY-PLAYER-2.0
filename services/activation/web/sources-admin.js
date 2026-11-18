@@ -301,6 +301,15 @@ function serverCard(item) {
   const info = make('div', 'server-info');
   if (item.accountInfo?.maxConnections != null) info.append(make('span', 'badge', `Max ${item.accountInfo.maxConnections}`));
   if (item.accountInfo?.activeConnections != null) info.append(make('span', 'badge', `Active ${item.accountInfo.activeConnections}`));
+  // Xtream's provider limit is shared by every code linked to this source.
+  // Increasing a customer's allowed devices does not add provider slots.
+  // Never claim fanout is enabled without explicit rebroadcast permission.
+  const sourceLimit=Number(item.accountInfo?.maxConnections);
+  if(item.enabled&&item.publishCatalog&&
+     Number.isSafeInteger(sourceLimit)&&sourceLimit===1){
+    info.append(make('span','account-health-warning',
+      '⚠️ سعة Xtream: اتصال واحد معلَن من المزود، ومشترك بين جميع الأكواد. زيادة الأجهزة وحدها لا تزيد سعة المصدر؛ يلزم رفع حد الاتصالات لدى المزود أو ترخيص إعادة بث.'));
+  }
   if (item.lastSyncAt) info.append(make('span', 'muted', `آخر مزامنة: ${new Date(item.lastSyncAt).toLocaleString('ar-SA')}`));
   updateSourceAccountWarnings(info,item);
   if(item.syncProgress){
