@@ -281,7 +281,7 @@ async function servePortal(res, connectOnly = false) {
   res.end(file);
 }
 
-async function serveStorefront(res, product = null) {
+async function serveStorefront(res, product = null, offer = false) {
   // Public store, with dedicated canonical detail pages. No client-supplied markup.
   let source = await readFile(new URL('../web/store.html', import.meta.url), 'utf8');
   if (product === 'stream' || product === 'xtream') {
@@ -289,9 +289,15 @@ async function serveStorefront(res, product = null) {
       'data-blofy-storefront="1" data-shop-product="'+product+'"');
     const title=product==='stream'?'اشتراك STRONG 8K عبر BLOFY STREAM':'اشتراك STRONG 8K Xtream عبر BLOFY PLAYER';
     const path='/products/'+product;
-    source=source.replace(/<title>[^<]+<\/title>/,'<title>'+title+' | أسعار 40 و60 و100 ريال</title>');
+    source=source.replace(/<title>[^<]+<\/title>/,'<title>'+title+' | أسعار 40 و70 و120 ريال</title>');
     source=source.replace('<link rel="canonical" href="https://www.blofyplayer.com/">',
       '<link rel="canonical" href="https://www.blofyplayer.com'+path+'">');
+  }
+  if (offer) {
+    source=source.replace('data-blofy-storefront="1"','data-blofy-storefront="1" data-shop-offer="1"');
+    source=source.replace(/<title>[^<]+<\/title>/,'<title>عرض اشتراكين سنويين بـ200 ريال | BLOFY</title>');
+    source=source.replace('<link rel="canonical" href="https://www.blofyplayer.com/">',
+      '<link rel="canonical" href="https://www.blofyplayer.com/store/offers">');
   }
   const file = Buffer.from(withPublicAnalytics(source),'utf8');
   res.writeHead(200, {
@@ -311,6 +317,16 @@ async function serveStorefront(res, product = null) {
       + "; frame-src https://www.ksamerchant.geidea.net; base-uri 'none'; form-action 'none'"
   });
   res.end(file);
+}
+
+async function serveStoreOfferScript(res) {
+  const file=await readFile(new URL('../web/store-offers.js',import.meta.url));
+  res.writeHead(200,{
+    'content-type':'application/javascript; charset=utf-8',
+    'content-length':file.length,
+    'cache-control':'public, max-age=3600',
+    'x-content-type-options':'nosniff'
+  });res.end(file);
 }
 
 async function serveStoreDesign(res) {
@@ -343,7 +359,7 @@ function serveStoreInfo(res, slug) {
 }
 
 async function serveStoreGraphic(res, name) {
-  const filename=({stream:'store-stream.svg',xtream:'store-xtream.svg',strong8k:'store-strong8k-banner.svg',player:'store-player-banner.svg'})[name];
+  const filename=({stream:'store-stream.svg',xtream:'store-xtream.svg',strong8k:'store-strong8k-banner.svg',player:'store-player-banner.svg',bundle:'store-bundle-banner.svg'})[name];
   if (!filename) throw new Error('store_graphic_unavailable');
   const file=await readFile(new URL('../web/'+filename,import.meta.url));
   res.writeHead(200,{
@@ -901,14 +917,18 @@ const server = http.createServer(async (req, res) => {
     }
     if (await servePrivacyPage(req, res, requestUrl)) return;
     if (['GET', 'HEAD'].includes(req.method) && (requestUrl.pathname === '/' || requestUrl.pathname === '/shop' || requestUrl.pathname === '/shop/')) return await serveStorefront(res);
+    if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/offers.js')
+      return await serveStoreOfferScript(res);
     if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/design.css')
       return await serveStoreDesign(res);
+    if (['GET','HEAD'].includes(req.method)&&['/store/offers','/store/offers/'].includes(requestUrl.pathname))
+      return await serveStorefront(res,null,true);
     const storeProductMatch=requestUrl.pathname.match(/^\/products\/(stream|xtream)\/?$/);
     const storeInfoMatch=requestUrl.pathname.match(/^\/store\/(about|trial|faq|contact|terms)\/?$/);
     const storePhotoMatch=requestUrl.pathname.match(/^\/store\/media\/(strong8k|player)\.jpg$/);
     if (['GET','HEAD'].includes(req.method) && storePhotoMatch)
       return await serveStorePhoto(res,storePhotoMatch[1]);
-    const storeImageMatch=requestUrl.pathname.match(/^\/store\/media\/(stream|xtream|strong8k|player)\.svg$/);
+    const storeImageMatch=requestUrl.pathname.match(/^\/store\/media\/(stream|xtream|strong8k|player|bundle)\.svg$/);
     if (['GET','HEAD'].includes(req.method) && storeProductMatch)
       return await serveStorefront(res,storeProductMatch[1]);
     if (['GET','HEAD'].includes(req.method) && storeInfoMatch)
