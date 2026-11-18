@@ -61,7 +61,7 @@ test('Admin inventory UI integrates with owner portal and stock-first fulfillmen
  assert.match(admin,/href="\/admin\/store-inventory"/);
  assert.match(mod,/FOR UPDATE OF i SKIP LOCKED LIMIT 1/);
  assert.match(mod,/authorizeAdmin\(req,res\)/);
- assert.match(mod,/stream_code_source/);
+ assert.match(mod,/store_source_unavailable/);
 });
 test('Store checkout stays off without independent opt-in even if device Geidea config exists',async()=>{
  let queried=0,paid=0;
