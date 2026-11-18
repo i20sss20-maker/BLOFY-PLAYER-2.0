@@ -19,6 +19,7 @@ const REASONS=new Set([
   'xtream_transport_dns_failed','xtream_transport_connection_refused',
   'xtream_transport_tls_invalid',
   'live_ts_source_eof','live_ts_source_stalled','live_ts_source_transport_error',
+  'vod_range_resumed',
   'live_ts_recovered','live_ts_reconnect_exhausted',
   'live_ts_reconnect_denied','live_ts_reconnect_rate_limited',
   'live_ts_reconnect_budget_exhausted'
@@ -105,6 +106,7 @@ export function xtreamPlaybackSnapshot(now=Date.now(),sourceId=null){
     started:started.length,
     recovered:recovered.length,
     liveTsRecoverySuccesses:recovered.filter(row=>row.kind==='live'&&row.reason==='live_ts_recovered').length,
+    vodRangeResumeSuccesses:recovered.filter(row=>['movie','series'].includes(row.kind)&&row.reason==='vod_range_resumed').length,
     liveTsSourceDrops:sourceDropped.length,
     medianLiveTsSourceUptimeMs,
     sourceDropByReason,
