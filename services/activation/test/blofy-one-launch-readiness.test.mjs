@@ -16,7 +16,7 @@ test('single, integrated BLOFY ONE launch command center lists all seven workstr
   for(const id of [
     'sessions','views','wa-clicks','checkout-starts','store-paid','store-revenue',
     'funnel-views','funnel-product','funnel-checkout','funnel-paid',
-    'health-activation','health-downloads','health-stream','health-payment',
+    'health-activation','health-downloads','health-apk-edge','health-stream','health-payment',
     'health-fulfillment','health-stock','health-whatsapp','health-media'
   ])assert.ok(html.includes('id="one-growth-'+id+'"'),id);
   const firstIssue=html.indexOf('id="one-issue"'),growth=html.indexOf('id="one-growth"');
@@ -61,6 +61,8 @@ test('launch status tells owner explicitly what is NOT verified',async()=>{
   assert.match(html,/لا يثبت اكتمال ملف APK/);
   assert.match(html,/ليست تسوية بنكية أو صافي ربح/);
   assert.match(js,/signal\('media','غير مُقاس','warn'\)/);
+  assert.match(js,/name==='apkEdge'\?'apk-edge':name/);
+  assert.match(html,/لا تحويل للعملاء قبل اختبار ملف كامل/);
   assert.match(js,/signal\('whatsapp','رابط فقط','warn'\)/);
   assert.match(js,/لا توجد مشاكل ظاهرة في فحوصات الخدمات/);
   assert.match(js,/لا تظهر أرقام تقديرية/);
