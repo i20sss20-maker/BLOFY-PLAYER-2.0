@@ -41,6 +41,7 @@ export function createCommercialHandlers({pool, keyHex, json, readJson, requireA
     onCheckoutOrder:customerAccounts.linkCheckoutOrder,
     requireCheckoutCustomer:customerAccounts.checkoutIdentity,env});
   customerAccounts.setReconciler(storePayments.reconcileCustomerOrder);
+  customerAccounts.setStoreSchema(storePayments.ensureStoreSchema);
   const zidOAuth = createZidOAuthHandlers({pool,json,keyHex,env});
   const zidPayments = createZidPaymentHandlers({pool,json,readJson,authorize,env,tokenProvider:zidOAuth.loadTokens});
   async function transaction(action) {
