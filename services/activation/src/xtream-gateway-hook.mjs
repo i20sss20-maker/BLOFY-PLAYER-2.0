@@ -54,6 +54,7 @@ import {createDistributorCustomerCatalog}
 import {createStreamDurationCodes,ensureStreamCodeTable} from './xtream-duration-codes.mjs';
 import {createStreamCommercial,ensureStreamCommercialSchema} from './xtream-code-commercial.mjs';
 import {createStreamRelogin} from './xtream-code-relogin.mjs';
+import {createStreamCodeXtreamLink} from './xtream-code-dual-link.mjs';
 import {parseStreamAppToken,verifyStreamAppToken,bearerFromRequest}
   from './xtream-code-app-token.mjs';
 import {createProtectedArabicAudioBridge} from './stream-arabic-audio-bridge.mjs';
@@ -147,6 +148,7 @@ const accountUsageThrottle = createGatewayUsageThrottle();
 let streamCodes=null;
 let streamCommercial=null;
 let streamRelogin=null;
+let streamDualLink=null;
 const streamCodeLimiter=createFixedWindowLimiter({limit:6,windowMs:15*60_000});
 // Short numeric vouchers are more susceptible to distributed guessing.
 // Bound all public redemption attempts as well as each client IP.
@@ -306,6 +308,7 @@ async function ensureReady() {
     salehOnlyNewCodes:process.env.BLOFY_STREAM_SALEH_NEW_CODES_ONLY==='1'});
   if(!streamCommercial)streamCommercial=createStreamCommercial({pool,keyHex:KEY_HEX});
   if(!streamRelogin)streamRelogin=createStreamRelogin({pool,keyHex:KEY_HEX});
+  if(!streamDualLink)streamDualLink=createStreamCodeXtreamLink({pool,keyHex:KEY_HEX});
   // Only activated for a one-shot, no-storage operator test. All requests
   // are sequential, cap the first 8 KiB of ONE indexed authorized movie.
   if(process.env.BLOFY_SALEH_RANGE_PROBE_ON_BOOT==='1'&&!salehRangeProbeScheduled){
@@ -2708,6 +2711,22 @@ http.createServer = function withBlofyXtreamGateway(listener) {
         return json(res,result.ok?200:404,result,{
           'cache-control':'no-store, private','referrer-policy':'no-referrer'
         });
+      }
+      // Operator-only, exact voucher -> issued BLOFY Xtream account.
+      // Never perform voucher redemption or return the upstream saleh host.
+      if(req.method==='POST'&&url.pathname==='/api/v1/admin/xtream-gateway/link/code-to-xtream'){
+        const payload=await readJson(req);
+        return json(res,200,await streamDualLink.codeToXtream({
+          code:payload.code,serverUrl:xtreamOrigin(req)
+        }),{'cache-control':'no-store, private','referrer-policy':'no-referrer'});
+      }
+      // Operator-only, Xtream account -> SAME original voucher (if linked)
+      // or one new voucher tied to that existing account and expiry.
+      if(req.method==='POST'&&url.pathname==='/api/v1/admin/xtream-gateway/link/xtream-to-code'){
+        const payload=await readJson(req);
+        return json(res,200,await streamDualLink.xtreamToCode({
+          accountId:payload.accountId
+        }),{'cache-control':'no-store, private','referrer-policy':'no-referrer'});
       }
       if(req.method==='GET'&&url.pathname==='/api/v1/admin/xtream-gateway/codes/sales-summary')
         return json(res,200,await streamCommercial.salesSummary());
