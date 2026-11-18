@@ -154,7 +154,7 @@ jobs:
           grep -Fq 'val searchButton = TextView(activity)' "$file"
           ! grep -Fq 'val searchField = if (BuildConfig.CODE_ONLY_LOGIN)' "$file"
 
-      - name: Test STREAM 55.8.37 code-only catalog persistence regression
+      - name: Test STREAM 56.0 code-only catalog persistence regression
         if: github.head_ref == 'fix/stream-55832-catalog-refresh-stall-20261117' || github.head_ref == 'integration/stream-55832-stable-tv-catalog-20261117' || github.head_ref == 'feature/stream-separate-live-search-windows-20261117' || github.head_ref == 'feature/stream-nextgen-phase1-20261117' || github.head_ref == 'fix/stream-55835-auto-sync-stall90-20261117' || github.head_ref == 'fix/stream-55836-catalog-tv-remote-20261117' || github.head_ref == 'fix/stream-55837-settings-first-login-sync-20261118' || github.head_ref == 'feature/stream-56-clean-customer-ui-20261118'
         shell: bash
         run: |
@@ -172,7 +172,9 @@ jobs:
             --tests 'tv.blofy.player.data.CatalogAutoRefreshPolicyTest' \
             --tests 'tv.blofy.player.data.CatalogRefreshCheckpointTest' \
             --tests 'tv.blofy.player.data.CatalogRefreshProgressTest' \
-            --tests 'tv.blofy.player.data.CatalogSectionRetryTest'
+            --tests 'tv.blofy.player.data.CatalogSectionRetryTest' \
+             --tests 'tv.blofy.player.core.diagnostics.StreamCustomerTextTest' \
+             --tests 'tv.blofy.player.ui.settings.StreamCatalogRefreshRouteTest'
 
       - name: Upload Gradle diagnostics
         if: always()
@@ -251,7 +253,7 @@ jobs:
   owner-signed-stream-qa:
     # Private owner-signed artifact only. Never upload to release, website or customer update feed.
     needs: verify
-    if: github.event_name == 'pull_request' && (github.head_ref == 'integration/stream-55832-stable-tv-catalog-20261117' || github.head_ref == 'feature/stream-separate-live-search-windows-20261117' || github.head_ref == 'feature/stream-nextgen-phase1-20261117' || github.head_ref == 'fix/stream-55835-auto-sync-stall90-20261117' || github.head_ref == 'fix/stream-55836-catalog-tv-remote-20261117' || github.head_ref == 'fix/stream-55837-settings-first-login-sync-20261118')
+    if: github.event_name == 'pull_request' && (github.head_ref == 'integration/stream-55832-stable-tv-catalog-20261117' || github.head_ref == 'feature/stream-separate-live-search-windows-20261117' || github.head_ref == 'feature/stream-nextgen-phase1-20261117' || github.head_ref == 'fix/stream-55835-auto-sync-stall90-20261117' || github.head_ref == 'fix/stream-55836-catalog-tv-remote-20261117' || github.head_ref == 'fix/stream-55837-settings-first-login-sync-20261118' || github.head_ref == 'feature/stream-56-clean-customer-ui-20261118')
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 150
@@ -274,8 +276,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          grep -Fq 'versionCode = 2000114' app/build.gradle.kts
-          grep -Fq 'versionName = "2.0.0-rc07.55.8.37"' app/build.gradle.kts
+          grep -Fq 'versionCode = 2000115' app/build.gradle.kts
+          grep -Fq 'versionName = "2.0.0-rc07.56.0"' app/build.gradle.kts
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;$ANDROID_BUILD_TOOLS_VERSION" "ndk;$ANDROID_NDK_VERSION" 'cmake;3.22.1'
           if ! command -v ninja >/dev/null; then sudo apt-get update && sudo apt-get install -y ninja-build; fi
@@ -305,7 +307,9 @@ jobs:
             --tests 'tv.blofy.player.data.CatalogAutoRefreshPolicyTest' \
             --tests 'tv.blofy.player.data.CatalogRefreshCheckpointTest' \
             --tests 'tv.blofy.player.data.CatalogRefreshProgressTest' \
-            --tests 'tv.blofy.player.data.CatalogSectionRetryTest'
+            --tests 'tv.blofy.player.data.CatalogSectionRetryTest' \
+             --tests 'tv.blofy.player.core.diagnostics.StreamCustomerTextTest' \
+             --tests 'tv.blofy.player.ui.settings.StreamCatalogRefreshRouteTest'
       - name: Sign full BLOFY STREAM with original owner certificate
         shell: bash
         env:
@@ -341,7 +345,7 @@ jobs:
           test -s "$source_apk"
           tools="$ANDROID_HOME/build-tools/$ANDROID_BUILD_TOOLS_VERSION"
           "$tools/aapt" dump badging "$source_apk" > "$RUNNER_TEMP/stream-badging.txt"
-          grep -Fq "name='tv.blofy.player.v2.stream' versionCode='2000114' versionName='2.0.0-rc07.55.8.37-STREAM'" "$RUNNER_TEMP/stream-badging.txt"
+          grep -Fq "name='tv.blofy.player.v2.stream' versionCode='2000115' versionName='2.0.0-rc07.56.0-STREAM'" "$RUNNER_TEMP/stream-badging.txt"
           ! grep -Fq 'application-debuggable' "$RUNNER_TEMP/stream-badging.txt"
           "$tools/apksigner" verify --verbose --print-certs "$source_apk" > "$RUNNER_TEMP/stream-signatures.txt"
           cert="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/stream-signatures.txt" | head -n1 | tr -d '[:space:]-:' | tr '[:lower:]' '[:upper:]')"
@@ -352,14 +356,14 @@ jobs:
             grep -Fxq "lib/$abi/libffmpegJNI.so" "$RUNNER_TEMP/entries.txt"
           done
           mkdir -p build/owner-signed-qa
-          name="BLOFY-STREAM-55.8.37-CATALOG-TV-CONTROLS-FIX-OWNER-SIGNED.apk"
+          name="BLOFY-STREAM-56.0-CATALOG-TV-CONTROLS-FIX-OWNER-SIGNED.apk"
           cp "$source_apk" "build/owner-signed-qa/$name"
           (cd build/owner-signed-qa && sha256sum "$name" > SHA256SUMS && sha256sum -c SHA256SUMS)
-          printf 'application_id=tv.blofy.player.v2.stream\nversion_code=2000114\nsource_sha=%s\nchannel=private_owner_qa_no_auto_update\n' "$GITHUB_SHA" > build/owner-signed-qa/IDENTITY.txt
+          printf 'application_id=tv.blofy.player.v2.stream\nversion_code=2000115\nsource_sha=%s\nchannel=private_owner_qa_no_auto_update\n' "$GITHUB_SHA" > build/owner-signed-qa/IDENTITY.txt
       - name: Upload verified owner-signed APK for manual testing only
         uses: actions/upload-artifact@v4
         with:
-          name: BLOFY-STREAM-55.8.37-CATALOG-TV-CONTROLS-OWNER-SIGNED-${{ github.sha }}
+          name: BLOFY-STREAM-56.0-CATALOG-TV-CONTROLS-OWNER-SIGNED-${{ github.sha }}
           path: |
             build/owner-signed-qa/
             build/ffmpeg-native/compliance/
