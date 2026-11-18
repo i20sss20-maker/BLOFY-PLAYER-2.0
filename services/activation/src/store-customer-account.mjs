@@ -200,6 +200,15 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,env=proce
   }catch(e){await db.query('ROLLBACK').catch(()=>{});throw e;}finally{db.release();}
   return json(res,200,{ok:true}, {'set-cookie':customerCookie(token)});
  }
+ async function linkCheckoutOrder(req,orderId,accessToken){
+  if(!enabled||!UUID.test(orderId||'')||!ACCESS.test(accessToken||''))return false;
+  const customer=await current(req);
+  if(!customer)return false;
+  const inserted=await pool.query('INSERT INTO blofy_store_customer_orders(order_id,customer_id) '+
+    'SELECT id,$2 FROM blofy_store_geidea_orders WHERE id=$1 AND access_hash=$3 '+
+    'ON CONFLICT(order_id) DO NOTHING',[orderId,customer.id,sha(accessToken)]);
+  return inserted.rowCount>0;
+ }
  async function claim(req,res){
   if(!maxClaims.consume(requestClientKey(req)).allowed)return json(res,429,{error:'rate_limited'});
   const customer=await current(req);
@@ -285,7 +294,7 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,env=proce
   if(token)await pool.query('DELETE FROM blofy_store_customer_sessions WHERE token_hash=$1',[sha(token)]);
   return json(res,200,{ok:true},{'set-cookie':customerCookie('',0)});
  }
- return async function handler(req,res,url){
+ const handler=async function handler(req,res,url){
   const path=url.pathname;
   if(!path.startsWith('/api/v1/store/account'))return false;
   if(!enabled){json(res,503,{error:'customer_accounts_disabled'});return true;}
@@ -305,4 +314,6 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,env=proce
   }catch(e){if(e.status)json(res,e.status,{error:e.message});else throw e;}
   return true;
  };
+ handler.linkCheckoutOrder=linkCheckoutOrder;
+ return handler;
 }
