@@ -19,7 +19,7 @@ export function validateStudioBulk(input){
 }
 export function validateStudioSchedule(body){
   const hours=Number(body?.intervalHours);
-  if(typeof body?.enabled!=='boolean'||![6,12,24,48,168].includes(hours)||
+  if(typeof body?.enabled!=='boolean'||![1,3,6,12,24,48,168].includes(hours)||
      !Array.isArray(body.types)||body.types.length<1||body.types.length>3||
      body.types.some(x=>!MEDIA.has(x))||new Set(body.types).size!==body.types.length)
     throw invalid('studio_schedule_invalid');
@@ -196,8 +196,26 @@ export function createStudioPro({pool,ensureXtreamReady,startSync}){
     }catch(error){await db.query('ROLLBACK').catch(()=>{});throw error}
     finally{db.release()}
     for(const cfg of due){
-      try{startSync(cfg.server_id,cfg.types);await record(cfg.server_id,'scheduled_sync_started',{types:cfg.types})}
-      catch{await record(cfg.server_id,'scheduled_sync_skipped',{reason:'busy'}).catch(()=>{})}
+      try{
+        startSync(cfg.server_id,cfg.types);
+        await record(cfg.server_id,'scheduled_sync_started',{types:cfg.types});
+      }catch(error){
+        // Do not skip an entire 1h/12h interval if the daily import, another
+        // replica or the bounded queue is already using this source. Retry
+        // the *metadata* schedule after 10 minutes, with no new subscriber
+        // identities, video downloads, or concurrent imports.
+        const code=String(error?.message||'');
+        const busy=['xtream_sync_in_progress','xtream_sync_queue_full'].includes(code);
+        if(busy)await pool.query(`UPDATE blofy_xtream_studio_schedules
+          SET next_run_at=NOW()+INTERVAL '10 minutes',updated_at=NOW()
+          WHERE server_id=$1 AND interval_hours=$2 AND enabled=TRUE
+            AND next_run_at>NOW()+INTERVAL '10 minutes'`,
+          [cfg.server_id,cfg.interval_hours]).catch(()=>{});
+        await record(cfg.server_id,'scheduled_sync_skipped',{
+          reason:busy?'busy_retry_10m':'dispatch_failed',
+          ...(busy?{retryMinutes:10}:{})
+        }).catch(()=>{});
+      }
     }
     return due.length;
   }
