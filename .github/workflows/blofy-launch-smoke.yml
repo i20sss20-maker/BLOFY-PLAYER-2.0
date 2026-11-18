@@ -1,0 +1,32 @@
+name: BLOFY launch safe public health smoke
+on:
+  schedule:
+    - cron: '17 */2 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'ops/blofy-launch-smoke.mjs'
+      - 'ops/blofy-launch-smoke.test.mjs'
+      - '.github/workflows/blofy-launch-smoke.yml'
+  pull_request:
+    paths:
+      - 'ops/blofy-launch-smoke.mjs'
+      - 'ops/blofy-launch-smoke.test.mjs'
+      - '.github/workflows/blofy-launch-smoke.yml'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test privacy, immutable endpoints and safe Range canary
+        run: node --test ops/blofy-launch-smoke.test.mjs
+      - name: Check real BLOFY public HTTP readiness (no load testing)
+        if: github.event_name != 'pull_request'
+        run: node ops/blofy-launch-smoke.mjs
