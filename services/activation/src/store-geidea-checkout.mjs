@@ -94,7 +94,7 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
        'order_id UUID NOT NULL REFERENCES blofy_store_geidea_orders(id),'+
        'position SMALLINT NOT NULL CHECK(position BETWEEN 1 AND 6),'+
        'voucher_id UUID NOT NULL UNIQUE REFERENCES blofy_xtream_gateway_duration_codes(id),'+
-       'channel TEXT NOT NULL CHECK(channel IN (\\'app\\',\\'xtream\\')),'+
+       'channel TEXT NOT NULL CHECK(channel IN (\'app\',\'xtream\')),'+
        'duration_days INTEGER NOT NULL CHECK(duration_days BETWEEN 1 AND 730),'+
        'sku TEXT NOT NULL,'+
        'PRIMARY KEY(order_id,position))',
@@ -512,8 +512,9 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
     if(order.status==='paid'){await db.query('COMMIT');return true;}
     if(status==='paid'){
       const isBundle=order.sku===BUNDLE_SKU;
+      const isCart=order.sku===CART_SKU;
       const plan=P.find(p=>p[0]===order.sku);
-      const basePrice=isBundle?BUNDLE_PRICE:plan?.[4];
+      const basePrice=isCart?Number(order.cart_gross_minor):isBundle?BUNDLE_PRICE:plan?.[4];
       const previous={'stream-6m':6000,'stream-1y':10000,'xtream-6m':6000,'xtream-1y':10000};
       const formerPrices={'stream-3m':3000,'stream-6m':5000,'stream-1y':7000,
         'xtream-3m':3000,'xtream-6m':5000,'xtream-1y':7000};
@@ -522,8 +523,9 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
       const legacyGross=createdMs<Date.parse('2026-11-19T00:00:00Z')&&previous[order.sku];
       const olderGross=createdMs<Date.parse('2026-11-18T16:00:00Z')&&formerPrices[order.sku];
       const gross=[basePrice,legacyGross,olderGross].filter(x=>Number.isInteger(x)&&x>0);
-      if((!plan&&!isBundle)||
-         (!isBundle&&(plan[2]!==order.channel||plan[3]!==order.duration_days))||
+      if((!plan&&!isBundle&&!isCart)||
+         (isCart&&(!parseStoreCart(order.cart_items)||order.channel!=='app'))||
+         (!isBundle&&!isCart&&(plan[2]!==order.channel||plan[3]!==order.duration_days))||
          (isBundle&&(!validBundleChannels(order.bundle_selection)||order.channel!=='app'||Number(order.duration_days)!==365)))
         throw err('store_catalog_mismatch',409);
       const discount=Number(order.coupon_discount_minor||0);
@@ -537,7 +539,9 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
       }else if(order.coupon_code)throw err('store_coupon_order_mismatch',409);
       if(!gross.some(x=>Number(order.amount_minor)===x-discount))
         throw err('store_catalog_price_mismatch',409);
-      if(isBundle){
+      if(isCart){
+        await fulfillCart(db,order,settled);
+      }else if(isBundle){
         await fulfillBundle(db,order,settled);
       }else{
 
@@ -682,7 +686,32 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
      if(claim.rowCount)try{await reconcile(order.id);}catch{}
      order=(await pool.query('SELECT * FROM blofy_store_geidea_orders WHERE id=$1',[order.id])).rows[0];
    }
-   if(order.status!=='paid')return json(res,200,{status:order.status,fulfilled:false});
+   const orderNumber=order.public_order_number||publicOrderNumber(order.id,order.created_at);
+   if(order.status!=='paid')return json(res,200,{orderId:order.id,orderNumber,sku:order.sku,
+     status:order.status,fulfilled:false,amountMinor:order.amount_minor,currency:'SAR',
+     createdAt:order.created_at});
+   if(order.sku===CART_SKU){
+     const parsed=parseStoreCart(order.cart_items),expected=cartVouchers(order.cart_items);
+     if(!parsed||!expected)return json(res,503,{error:'store_cart_delivery_unavailable'});
+     const rows=(await pool.query('SELECT c.position,c.channel,c.duration_days,c.sku,v.id,v.code_hash,v.code_vault,v.revoked_at '+
+       'FROM blofy_store_cart_vouchers c JOIN blofy_xtream_gateway_duration_codes v ON v.id=c.voucher_id '+
+       'WHERE c.order_id=$1 ORDER BY c.position',[order.id])).rows;
+     if(rows.length!==expected.length||rows.some((item,i)=>!item.code_vault||item.revoked_at||
+       item.sku!==expected[i].sku||item.channel!==expected[i].channel||
+       Number(item.duration_days)!==expected[i].durationDays))
+       return json(res,503,{error:'store_paid_delivery_unavailable'});
+     const codes=rows.map(item=>{
+       const code=decryptStreamCode(item.id,item.code_vault,keyHex);
+       if(!code||streamCodeProof(code,keyHex)!==item.code_hash)
+         throw err('store_code_integrity_unavailable',503);
+       return {position:item.position,sku:item.sku,channel:item.channel,
+         durationDays:Number(item.duration_days),code};
+     });
+     return json(res,200,{orderId:order.id,orderNumber,status:'paid',fulfilled:true,
+       sku:CART_SKU,amountMinor:order.amount_minor,currency:'SAR',
+       createdAt:order.created_at,paidAt:order.paid_at,
+       items:parsed.items,discountMinor:order.coupon_discount_minor||0,codes});
+   }
    if(order.sku===BUNDLE_SKU){
      const items=(await pool.query('SELECT ov.position,ov.channel,v.id,v.code_hash,v.code_vault,v.revoked_at FROM blofy_store_order_vouchers ov JOIN blofy_xtream_gateway_duration_codes v ON v.id=ov.voucher_id WHERE ov.order_id=$1 ORDER BY ov.position',[order.id])).rows;
      if(items.length!==2||items.some(x=>x.revoked_at||!x.code_vault))
@@ -712,6 +741,9 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
  }
  return async function handler(req,res,url){
    const p=url.pathname;
+   if(p==='/api/v1/admin/store/orders'&&req.method==='GET'){await adminOrders(req,res,url);return true;}
+   if(p==='/api/v1/store/cart/quote'&&req.method==='POST'){await cartQuote(req,res);return true;}
+   if(p==='/api/v1/store/cart/checkout'&&req.method==='POST'){await cartCheckout(req,res);return true;}
    if(p==='/api/v1/admin/store/sales'&&req.method==='GET'){await salesSummary(req,res);return true;}
    if(p==='/api/v1/admin/store/coupons/create'&&req.method==='POST'){await newCoupon(req,res);return true;}
    if(p==='/api/v1/admin/store/coupons/deactivate'&&req.method==='POST'){await disableCoupon(req,res);return true;}
