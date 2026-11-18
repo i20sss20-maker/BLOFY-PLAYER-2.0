@@ -300,7 +300,7 @@
       sourceId:'d2bb0397-1c56-4751-adc9-1a17758022f6'
     };
     if(![30,90,180,365].includes(payload.durationDays)||
-       !Number.isInteger(payload.quantity)||payload.quantity<1||payload.quantity>5||
+       !Number.isInteger(payload.quantity)||payload.quantity<1||payload.quantity>20||
        ![1,2].includes(payload.maxConnections)||
        !['app','xtream'].includes(payload.channel)||!payload.label||payload.label.length>95){
       issueMessage('القيم المختارة غير صالحة. راجع نوع الكود والعدد والمدة.',true);return;
@@ -309,6 +309,7 @@
     if(!window.confirm('إصدار '+payload.quantity+' كود '+type+
       ' لمدة '+payload.durationDays+' يومًا بعد أول تفعيل، من مصدر صالح فقط؟\n'+
       'لن يبدأ وقت الاشتراك الآن، ولن تُسجل عملية بيع.'))return;
+    if(payload.quantity>5&&!window.confirm('أنت على وشك إصدار دفعة كبيرة من '+payload.quantity+' كودًا. تأكد من العدد لتجنب تكرار إصدار أكواد غير مقصودة. هل تؤكد الإصدار؟'))return;
     issuing=true;issueButton.disabled=true;hideIssued();
     issueMessage('جارٍ إصدار الأكواد؛ لا تُكرر الطلب إذا تأخر اتصال الشبكة…');
     try{
