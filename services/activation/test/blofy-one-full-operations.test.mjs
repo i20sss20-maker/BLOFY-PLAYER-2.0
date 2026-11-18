@@ -71,6 +71,6 @@ test('owner-only issuance uses verified saleh and never silently bills, redeems 
   assert.match(js,/result\.ok!==true\|\|items\.length!==payload\.quantity/);
   assert.match(js,/window\.setTimeout\(hideIssued,90000\)/);
   assert.match(js,/if\(document\.hidden\)hideIssued\(\)/);
-  assert.match(html,/لم تُسجّل عملية بيع/);
+  assert.match(html,/لا تُباع تلقائيًا/);
   assert.doesNotMatch(js,/\/api\/v1\/stream\/redeem|\/api\/v1\/admin\/xtream-gateway\/accounts\/bulk/);
 });
