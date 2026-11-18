@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {allowedLiveTsRecoveryPilot,safeLiveTsRecoveryStart,liveTsRecoveryBytes,createLiveTsReconnectBudget}
+import {allowedLiveTsRecoveryPilot,safeLiveTsRecoveryStart,liveTsRecoveryBytes,createLiveTsReconnectBudget,liveTsSourceDropReason}
  from '../src/xtream-live-ts-recovery.mjs';
 
 const accountId='937ba740-b1dd-44cf-9ff4-55b99e4ca15a';
@@ -164,4 +164,39 @@ test('recovery stream never opens a ninth source within the two-minute budget',a
  for(let i=0;i<3;i++)assert.equal((await iter.next()).value.length,564);
  await assert.rejects(async()=>{await iter.next()},/live_ts_reconnect_rate_limited/);
  assert.equal(calls,2,'no unbounded connection attempts');
+});
+
+test('interruption classifier separates clean EOF, stalled source, network error without raw data',()=>{
+ assert.equal(liveTsSourceDropReason(new Error('live_ts_source_eof'),null),'live_ts_source_eof');
+ const stalled=new AbortController();stalled.abort(new Error('live_ts_read_timeout'));
+ assert.equal(liveTsSourceDropReason(new Error('AbortError'),stalled),'live_ts_source_stalled');
+ assert.equal(liveTsSourceDropReason(new Error('RESET private-password-must-not-log'),null),
+  'live_ts_source_transport_error');
+});
+test('midstream recovery records source uptime for successive real EOFs, without more fetches',async()=>{
+ const original=response(),reader=original.body.getReader(),first=(await reader.read()).value;
+ let time=1000,calls=0,events=[];
+ const iter=liveTsRecoveryBytes({first,reader,controller:new AbortController(),
+  target:url,waitRetry:immediately,now:()=>time,
+  onSourceDrop:event=>events.push(event),
+  fetchImpl:async()=>{calls++;return response()}
+ });
+ assert.equal((await iter.next()).value.length,564);
+ time+=20000;
+ assert.equal((await iter.next()).value.length,564);
+ time+=30000;
+ assert.equal((await iter.next()).value.length,564);
+ await iter.return();
+ assert.equal(calls,2);
+ assert.deepEqual(events,[
+  {reason:'live_ts_source_eof',durationMs:20000},
+  {reason:'live_ts_source_eof',durationMs:30000}
+ ]);
+});
+test('gateway emits sanitized upstream drop category, distinct from successful reconnect',async()=>{
+ const gateway=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
+ assert.match(gateway,/onSourceDrop:\(\{reason,durationMs\}\)=>/);
+ assert.match(gateway,/observe\('source_drop',\{reason,durationMs\}\)/);
+ assert.match(gateway,/BLOFY_LIVE_TS_SOURCE_DROP/);
+ assert.match(gateway,/secondsBucket:Number\.isFinite\(durationMs\)/);
 });
