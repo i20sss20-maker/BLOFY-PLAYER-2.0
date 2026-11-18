@@ -9,19 +9,19 @@ import {
 
 const approved = {
   slug:'blofy-stream', enabled:true, downloadMode:'direct',
-  version:'56.0', downloadUrl:STREAM_RELEASE_URL
+  version:'56.0.1', downloadUrl:STREAM_RELEASE_URL
 };
 
-test('STREAM release serves code 2000115 and own website URL, never PLAYER updater',()=>{
+test('STREAM release serves code 2000116 and own website URL, never PLAYER updater',()=>{
   const release=streamReleaseMetadata(approved)?.release?.app;
-  assert.equal(release?.versionCode,2000115);
-  assert.equal(release?.versionName,'2.0.0-rc07.56.0-STREAM');
+  assert.equal(release?.versionCode,2000116);
+  assert.equal(release?.versionName,'2.0.0-rc07.56.0.1-STREAM');
   assert.equal(release?.downloadUrl,STREAM_PUBLIC_DOWNLOAD);
   assert.equal(release?.minSupportedVersionCode,1);
   assert.equal(release?.packageName,'tv.blofy.player.v2.stream');
-  assert.equal(release?.apkSizeBytes,135783643);
+  assert.equal(release?.apkSizeBytes,135785176);
   assert.match(release?.sha256,/^[0-9a-f]{64}$/);
-  assert.equal(release?.sha256,'bba9e340d50c95ab8ab9e1c42f96bef8f2d676dee888e975d7a161f2027d8064');
+  assert.equal(release?.sha256,'02d40e3748f0d75905f734ad429ef16994d87a7068280e567d8da9339932e89a');
   assert.ok(release?.apkSizeBytes < 268435456, 'fits installed STREAM legacy resumable updater');
 
 
@@ -46,13 +46,13 @@ test('optional 55.8.33 audio source test never replaces 56.0 updater',()=>{
   assert.equal(STREAM_TEST_PATH,'/d/blofy-stream/foxfm-test');
   assert.notEqual(STREAM_TEST_PATH,STREAM_PUBLIC_DOWNLOAD.replace('https://updates.blofyplayer.com',''));
   assert.equal(streamReleaseMetadata({...approved,version:'55.8.33'}),null);
-  assert.equal(streamReleaseMetadata(approved)?.release?.app?.versionCode,2000115);
+  assert.equal(streamReleaseMetadata(approved)?.release?.app?.versionCode,2000116);
 });
 
-test('56.0.1 signed hotfix remains a separate canary and never auto-updates customers',()=>{
+test('56.0.1 owner-signed hotfix is public and retains separate test alias',()=>{
   assert.equal(STREAM_LIVE_FIX_TEST_FILENAME,'BLOFY-STREAM-56.0.1-LIVE-RECONNECT-FIX-OWNER-SIGNED.apk');
   assert.equal(STREAM_LIVE_FIX_TEST_PATH,'/d/blofy-stream/live-fix-test');
   assert.notEqual(STREAM_LIVE_FIX_TEST_PATH,STREAM_PUBLIC_DOWNLOAD.replace('https://updates.blofyplayer.com',''));
-  assert.equal(streamReleaseMetadata({...approved, version:'56.0.1'}),null);
+  assert.equal(streamReleaseMetadata({...approved, version:'56.0'}),null);
   assert.equal(streamReleaseMetadata(approved)?.release?.app?.versionCode,2000115);
 });

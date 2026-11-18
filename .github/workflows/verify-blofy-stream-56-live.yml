@@ -1,4 +1,4 @@
-name: Verify public BLOFY STREAM 56.0 release
+name: Verify public BLOFY STREAM 56.0.1 release
 on:
   push:
     branches: [main]
@@ -16,28 +16,28 @@ jobs:
         run: |
           set -euo pipefail
           root=https://updates.blofyplayer.com
-          apk='BLOFY-STREAM-56.0-CATALOG-TV-CONTROLS-FIX-OWNER-SIGNED.apk'
-          want='bba9e340d50c95ab8ab9e1c42f96bef8f2d676dee888e975d7a161f2027d8064'
+          apk='BLOFY-STREAM-56.0.1-LIVE-RECONNECT-FIX-OWNER-SIGNED.apk'
+          want='02d40e3748f0d75905f734ad429ef16994d87a7068280e567d8da9339932e89a'
           for attempt in $(seq 1 24); do
             curl -fsSL --max-time 25 "$root/stream/release.json" -o stream.json
-            if jq -e --arg sha "$want" '.release.app.versionCode==2000115 and .release.app.versionName=="2.0.0-rc07.56.0-STREAM" and .release.app.packageName=="tv.blofy.player.v2.stream" and .release.app.sha256==$sha and .release.app.apkSizeBytes==135783643 and .release.app.downloadUrl=="https://updates.blofyplayer.com/d/blofy-stream"' stream.json >/dev/null; then
+            if jq -e --arg sha "$want" '.release.app.versionCode==2000116 and .release.app.versionName=="2.0.0-rc07.56.0.1-STREAM" and .release.app.packageName=="tv.blofy.player.v2.stream" and .release.app.sha256==$sha and .release.app.apkSizeBytes==135785176 and .release.app.downloadUrl=="https://updates.blofyplayer.com/d/blofy-stream"' stream.json >/dev/null; then
               break
             fi
             sleep 5
           done
-          jq -e --arg sha "$want" '.release.app.versionCode==2000115 and .release.app.versionName=="2.0.0-rc07.56.0-STREAM" and .release.app.sha256==$sha' stream.json
+          jq -e --arg sha "$want" '.release.app.versionCode==2000116 and .release.app.versionName=="2.0.0-rc07.56.0.1-STREAM" and .release.app.sha256==$sha' stream.json
           curl -fsSL --max-time 20 "$root/downloads" -o downloads.html
           grep -Fq 'id="blofy-stream"' downloads.html
-          grep -Fq '56.0' downloads.html
+          grep -Fq '56.0.1' downloads.html
           grep -Fq 'href="/d/blofy-stream"' downloads.html
           curl -fsSI --max-time 70 "$root/d/blofy-stream" -o app.headers
           grep -iq '^content-type: application/vnd.android.package-archive' app.headers
-          grep -iq '^content-length: 135783643' app.headers
+          grep -iq '^content-length: 135785176' app.headers
           curl -fsSI --max-time 70 "$root/files/releases/$apk" -o file.headers
-          grep -iq '^content-length: 135783643' file.headers
+          grep -iq '^content-length: 135785176' file.headers
           curl -fsSL --max-time 20 "$root/release.json" -o player.json
           jq -e '.release.app.packageName != "tv.blofy.player.v2.stream" and .release.app.downloadUrl!="https://updates.blofyplayer.com/d/blofy-stream"' player.json
-          echo 'STREAM_56_PUBLIC_SITE=PASS'
-          echo 'STREAM_56_SIGNED_APK=PASS'
-          echo 'STREAM_56_IN_APP_UPDATE=PASS'
+          echo 'STREAM_5601_PUBLIC_SITE=PASS'
+          echo 'STREAM_5601_SIGNED_APK=PASS'
+          echo 'STREAM_5601_IN_APP_UPDATE=PASS'
           echo 'BLOFY_PLAYER_UNCHANGED=PASS'
