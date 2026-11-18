@@ -5,6 +5,7 @@ import { createGooglePlayReviewHandler } from './google-play-review.mjs';
 import { createSubscriberSessionAuthorizer } from './subscriber-session-auth.mjs';
 import { createTapPaymentHandlers } from './tap-payments.mjs';
 import { createGeideaLiveHandlers } from './geidea-live.mjs';
+import { createStoreGeideaHandlers } from './store-geidea-checkout.mjs';
 import { createZidPaymentHandlers } from './zid-payments.mjs';
 import { createZidOAuthHandlers } from './zid-oauth.mjs';
 
@@ -33,6 +34,7 @@ export function createCommercialHandlers({pool, keyHex, json, readJson, env = pr
   }
   const tapPayments = createTapPaymentHandlers({pool,json,readJson,authorize,schemaSql:ADMIN_CONSOLE_SCHEMA,env});
   const geideaPayments = createGeideaLiveHandlers({pool,json,readJson,authorize,env});
+  const storePayments = createStoreGeideaHandlers({pool,json,readJson,keyHex,env});
   const zidOAuth = createZidOAuthHandlers({pool,json,keyHex,env});
   const zidPayments = createZidPaymentHandlers({pool,json,readJson,authorize,env,tokenProvider:zidOAuth.loadTokens});
   async function transaction(action) {
@@ -193,6 +195,7 @@ export function createCommercialHandlers({pool, keyHex, json, readJson, env = pr
     const path=url.pathname;
     if (await googlePlayReview(req,res,url)) return true;
     if (await zidOAuth(req,res,url)) return true;
+    if (await storePayments(req,res,url)) return true;
     if (await geideaPayments(req,res,url)) return true;
     if (await zidPayments(req,res,url)) return true;
     if (env.BLOFY_PAYMENT_PROVIDER === 'geidea' && path === '/api/v1/payments/tap/test-checkout') {json(res,404,{error:'not_found'});return true;}
