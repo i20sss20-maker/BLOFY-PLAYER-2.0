@@ -17,6 +17,7 @@ import { observeDownloadCompletion } from './download-metrics.mjs';
 import { recordDownloadCompletion, getDownloadStats } from './app-library.mjs';
 import { publicSiteRedirect } from './public-site-redirect.mjs';
 import { streamReleaseMetadata, STREAM_RELEASE_FILENAME, STREAM_PREVIOUS_RELEASE_FILENAME, STREAM_TEST_FILENAME, STREAM_TEST_PATH } from './stream-release.mjs';
+import { verifySignedStreamUploadOidc, STREAM_55836_APK, STREAM_55836_SHA256, STREAM_55836_BYTES } from './stream-upload-oidc.mjs';
 import { UPDATE_SITE_CANONICAL, updateRobotsTxt, updateSitemapXml, renderMissingPublicPage, isPublicHtmlRequest } from './public-search-pages.mjs';
 
 const PORT = Number(process.env.PORT || 3000);
@@ -231,18 +232,32 @@ async function importReleaseArtifactIfConfigured({
 }
 
 async function receiveReleaseUpload(req, res, requestUrl) {
-  if (!RELEASE_UPLOAD_TOKEN) return sendJson(req, res, 503, { ok: false, error: 'release_upload_disabled' });
+  const filename = localReleaseFilename(requestUrl.searchParams.get('filename'));
   const auth = String(req.headers.authorization || '');
-  if (!auth.startsWith('Bearer ') || !constantTimeEqual(auth.slice(7), RELEASE_UPLOAD_TOKEN)) {
+  const legacyAdmin = RELEASE_UPLOAD_TOKEN && auth.startsWith('Bearer ') &&
+    constantTimeEqual(auth.slice(7), RELEASE_UPLOAD_TOKEN);
+  // The OIDC path is restricted to ONE exact, already verified, owner-signed STREAM
+  // artifact; ordinary PLAYER uploads retain their existing admin-token gate.
+  const approvedStream = !legacyAdmin && filename === STREAM_55836_APK &&
+    await verifySignedStreamUploadOidc(auth);
+  if (!legacyAdmin && !approvedStream) {
     return sendJson(req, res, 401, { ok: false, error: 'unauthorized' });
   }
-  const filename = localReleaseFilename(requestUrl.searchParams.get('filename'));
   const length = Number(req.headers['content-length'] || 0);
-  if (!Number.isFinite(length) || length < 1024 || length > 320 * 1024 * 1024) {
+  if (!Number.isFinite(length) || length < 1024 || length > 320 * 1024 * 1024 ||
+      (approvedStream && length !== STREAM_55836_BYTES)) {
     return sendJson(req, res, 413, { ok: false, error: 'invalid_release_size' });
   }
   await mkdir(LOCAL_RELEASE_DIR, { recursive: true });
   const finalPath = localReleasePath(filename);
+  // Retry-safe: re-uploading exactly the same approved file is harmless.
+  if (approvedStream) {
+    const existing = await stat(finalPath).catch(() => null);
+    if (existing?.size === STREAM_55836_BYTES &&
+        await sha256File(finalPath) === STREAM_55836_SHA256) {
+      return sendJson(req, res, 200, { ok: true, filename, size: existing.size });
+    }
+  }
   const tempPath = finalPath + '.part';
   await unlink(tempPath).catch(() => {});
   await new Promise((resolve, reject) => {
@@ -257,6 +272,13 @@ async function receiveReleaseUpload(req, res, requestUrl) {
     out.on('error', reject);
     req.on('error', reject);
   });
+  if (approvedStream) {
+    const actual = await sha256File(tempPath);
+    if (actual !== STREAM_55836_SHA256) {
+      await unlink(tempPath).catch(() => {});
+      return sendJson(req, res, 422, { ok: false, error: 'signed_stream_sha256_mismatch' });
+    }
+  }
   await rename(tempPath, finalPath);
   const info = await stat(finalPath);
   return sendJson(req, res, 201, { ok: true, filename, size: info.size });
