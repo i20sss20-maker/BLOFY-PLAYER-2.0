@@ -43,7 +43,8 @@ export function createStreamRelogin({pool,keyHex,clock=Date.now,
     const row=(await db.query(`SELECT * FROM blofy_xtream_gateway_duration_codes
       WHERE code_hash=$1 FOR UPDATE`,[proof])).rows?.[0];
     const now=clock();
-    if(!row||row.code_channel!=='app'||!row.redeemed_at||!row.account_id||
+    if(!row||(row.code_channel!=='app'&&row.dual_access_enabled!==true)||
+       !row.redeemed_at||!row.account_id||
        row.revoked_at||asMs(row.expires_at)<=now)
       throw problem('stream_code_relogin_unavailable',409);
     const account=(await db.query(`SELECT enabled,expires_at
