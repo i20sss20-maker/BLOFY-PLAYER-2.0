@@ -11,6 +11,7 @@ test('Three cart codes require one paid Geidea capture and never duplicate on ca
  const sourceId='dddddddd-dddd-4ddd-8ddd-dddddddddddd';
  const orders=new Map(),codes=new Map(),delivered=[];
  let captureCalls=0,paid=0,rolledBack=0;
+ const linked=[];
  const rows=(items=[])=>({rows:items,rowCount:items.length});
  const db={async query(input,args=[]){
    const sql=String(input).trim();
@@ -91,6 +92,7 @@ test('Three cart codes require one paid Geidea capture and never duplicate on ca
    GEIDEA_LIVE_API_PASSWORD:pwd};
  const handler=createStoreGeideaHandlers({
    pool,keyHex:'a'.repeat(64),env,fetchImpl:provider,
+   onCheckoutOrder:async(_req,id,token)=>{linked.push({id,token});},
    json:(res,status,data)=>{res.status=status;res.data=data;},
    readJson:async(req)=>req.body
  });
@@ -110,6 +112,9 @@ test('Three cart codes require one paid Geidea capture and never duplicate on ca
  await handler(request({items}),checkout,{pathname:'/api/v1/store/cart/checkout'});
  assert.equal(checkout.status,201);
  assert.equal(checkout.data.priceMinor,27000);
+ assert.equal(linked.length,1);
+ assert.equal(linked[0].id,checkout.data.orderId);
+ assert.equal(linked[0].token,checkout.data.accessToken);
  assert.match(checkout.data.orderNumber,/^BF-\d{6}-[0-9A-F]{8}$/);
  assert.equal(delivered.length,0,'never issue codes before verified capture');
  const invalid={};
