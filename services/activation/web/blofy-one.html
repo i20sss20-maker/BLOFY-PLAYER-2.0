@@ -20,6 +20,8 @@
 <script src="/blofy-one-operations.js?v=20261118-v1" defer></script>
 <link rel="stylesheet" href="/blofy-one-modern.css?v=20261118-v2">
 <script src="/blofy-one-modern.js?v=20261118-v2" defer></script>
+<link rel="stylesheet" href="/blofy-one-code-manager.css?v=20261118-v1">
+<script src="/blofy-one-code-manager.js?v=20261118-v1" defer></script>
 </head>
 <body>
 <div class="one-shell">
@@ -147,8 +149,8 @@
             <option value="180">180 يومًا</option><option value="365" selected>365 يومًا</option>
           </select>
         </label>
-        <label>عدد الأكواد (1–5)
-          <input name="quantity" id="one-issue-quantity" type="number" min="1" max="5" value="1" required inputmode="numeric">
+        <label>عدد الأكواد (1–20)
+          <input name="quantity" id="one-issue-quantity" type="number" min="1" max="20" value="1" required inputmode="numeric">
         </label>
         <label>حد الاتصالات المتزامنة
           <select name="maxConnections" id="one-issue-connections"><option value="1">اتصال واحد</option>
@@ -423,6 +425,68 @@
       </div>
     </div>
   </section>
+<dialog id="one-code-manager" class="one-code-manager" aria-labelledby="one-code-manager-title">
+  <div class="one-code-manager-heading">
+    <div><span class="one-kicker">BLOFY ONE · STREAM CODE MANAGER</span>
+      <h2 id="one-code-manager-title">إدارة كود الاشتراك</h2>
+      <p id="one-code-manager-subtitle">تعديل الكود المسجل دون الانتقال إلى لوحة أخرى</p></div>
+    <button type="button" id="one-code-manager-close" class="one-code-manager-close" aria-label="إغلاق إدارة الكود">×</button>
+  </div>
+  <div class="one-code-manager-summary" aria-label="بيانات الكود الحالية">
+    <div><small>العميل / الدفعة</small><strong id="one-code-manager-name">—</strong></div>
+    <div><small>الكود المخفي</small><strong id="one-code-manager-hint" dir="ltr">—</strong></div>
+    <div><small>الحالة</small><strong id="one-code-manager-state">—</strong></div>
+    <div><small>انتهاء الاشتراك</small><strong id="one-code-manager-expiry">—</strong></div>
+    <div><small>النوع</small><strong id="one-code-manager-channel">—</strong></div>
+    <div><small>البيع المسجّل</small><strong id="one-code-manager-sold">—</strong></div>
+  </div>
+  <div class="one-code-manager-tabs" role="group" aria-label="اختر عملية على الكود">
+    <button type="button" data-one-code-action="sell" id="one-code-action-sell">تسجيل بيع يدوي</button>
+    <button type="button" data-one-code-action="extend" id="one-code-action-extend">تمديد الاشتراك</button>
+    <button type="button" data-one-code-action="relogin" id="one-code-action-relogin">دخول بنفس الكود</button>
+    <button type="button" data-one-code-action="revoke" id="one-code-action-revoke">إلغاء غير مستخدم</button>
+  </div>
+  <section class="one-code-manager-detail" id="one-code-panel-sell" hidden aria-labelledby="one-code-sell-title">
+    <h3 id="one-code-sell-title">تسجيل عملية بيع يدوي في سجل الأكواد</h3>
+    <p>هذه العملية تحفظ اسم المشتري ورقم تواصله وسعر البيع في سجل BLOFY STREAM فقط. <strong>لا تُحصّل مبلغًا ولا تتحقق من Geidea.</strong> لا تستخدمها إلا بعد إتمام البيع خارج النظام.</p>
+    <form id="one-code-sell-form" autocomplete="off">
+      <label>اسم المشتري<input id="one-code-buyer-name" name="buyerName" maxlength="80" autocomplete="off" placeholder="اسم العميل" required></label>
+      <label>رقم الجوال<input id="one-code-buyer-phone" name="buyerPhone" type="tel" dir="ltr" maxlength="22" autocomplete="off" placeholder="05xxxxxxxx" required></label>
+      <label>السعر المسجّل بالريال<input id="one-code-sell-price" name="priceSar" type="number" min="0" max="100000" step="0.01" inputmode="decimal" placeholder="100.00" required></label>
+      <label>قناة البيع<select id="one-code-sell-channel" name="channel">
+        <option value="manual">بيع يدوي</option><option value="whatsapp">واتساب</option>
+        <option value="store_manual">متجر — تسجيل يدوي فقط</option></select></label>
+      <button type="submit" class="one-code-submit">تأكيد تسجيل البيع</button>
+    </form>
+  </section>
+  <section class="one-code-manager-detail" id="one-code-panel-extend" hidden aria-labelledby="one-code-extend-title">
+    <h3 id="one-code-extend-title">تمديد مدة الاشتراك المسجل</h3>
+    <p>التمديد يغيّر تاريخ انتهاء الكود وحساب Xtream المرتبط بالفعل. <strong>هذا التغيير لا يتراجع تلقائيًا، ولا تُسجل دفعة مالية.</strong></p>
+    <form id="one-code-extend-form" autocomplete="off">
+      <label>المدة الإضافية<select id="one-code-extend-days" name="days">
+        <option value="30">30 يومًا</option><option value="90">3 أشهر · 90 يومًا</option>
+        <option value="180">6 أشهر · 180 يومًا</option><option value="365">سنة · 365 يومًا</option>
+      </select></label>
+      <button type="submit" class="one-code-submit">تأكيد التمديد</button>
+    </form>
+  </section>
+  <section class="one-code-manager-detail" id="one-code-panel-relogin" hidden aria-labelledby="one-code-relogin-title">
+    <h3 id="one-code-relogin-title">السماح بالدخول مرة واحدة بنفس الكود</h3>
+    <p>يتيح استخدام الكود الأصلي على جهاز جديد <strong>لمرة واحدة خلال 10 دقائق</strong>. لا يجدد المدة ولا يغير الكود، لكنه يمنح وصولًا مؤقتًا؛ تحقق من مالك الاشتراك قبل التنفيذ.</p>
+    <button class="one-code-submit" id="one-code-relogin-submit" type="button">تأكيد السماح بالدخول</button>
+  </section>
+  <section class="one-code-manager-detail one-code-danger" id="one-code-panel-revoke" hidden aria-labelledby="one-code-revoke-title">
+    <h3 id="one-code-revoke-title">إلغاء كود غير مستخدم</h3>
+    <p>يلغي الكود الذي لم يُفعّل ولم يُسجّل عليه بيع. لن تستطيع إعادة تفعيله، وهذا لا يلغي اشتراكًا مُفعّلًا بالفعل.</p>
+    <label>للتأكيد اكتب كلمة <strong>إلغاء</strong><input id="one-code-revoke-confirm" type="text" maxlength="12" autocomplete="off" spellcheck="false" placeholder="إلغاء"></label>
+    <button class="one-code-submit one-code-danger-button" id="one-code-revoke-submit" type="button">إلغاء هذا الكود نهائيًا</button>
+  </section>
+  <p id="one-code-manager-status" class="one-code-manager-status" role="status" aria-live="polite">اختر إجراءً لعرض تفاصيله.</p>
+  <div class="one-code-manager-footer">
+    <small>تُحمّل أحدث بيانات الكود من السيرفر قبل تنفيذ العملية. عند انقطاع الاتصال بعد الإرسال، افحص سجل الأكواد قبل إعادة الطلب.</small>
+    <button type="button" id="one-code-manager-done">إغلاق</button>
+  </div>
+</dialog>
 <section class="one-overview one-ops" id="one-sources" aria-labelledby="one-sources-title">
   <div class="one-section-heading"><div><span class="one-kicker">SOURCE OPERATIONS · LIVE DATABASE</span>
     <h2 id="one-sources-title">المصادر والمزامنة</h2></div>
