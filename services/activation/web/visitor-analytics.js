@@ -21,7 +21,7 @@
    page_view:'عرض صفحة',whatsapp_click:'ضغطات واتساب',
    trial_click:'طلب التجربة',offer_click:'فتح العرض',
    product_click:'زيارة منتج',checkout_click:'ضغط زر الشراء',
-   checkout_started:'فتح جلسة دفع',coupon_check:'فحص كوبون',
+   checkout_started:'فتح جلسة دفع',cart_add:'إضافة إلى السلة',coupon_check:'فحص كوبون',
    download_click:'زيارة صفحة التنزيلات'
  };
  function node(tag,className,txt){
@@ -89,7 +89,7 @@
  }
  function showActivities(data){
    const root=clear('activity'),counts=new Map((data.events||[]).map(r=>[r.event,Number(r.hits||0)]));
-   for(const key of ['offer_click','product_click','checkout_click','checkout_started',
+   for(const key of ['offer_click','cart_add','product_click','checkout_click','checkout_started',
      'whatsapp_click','trial_click','coupon_check','download_click']){
      root.append(metric(eventLabels[key],number(counts.get(key)||0),
        'تفاعل مسجّل بموافقة الزائر'));
