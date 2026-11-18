@@ -14,6 +14,7 @@
     releases:{button:$('one-releases-refresh'),status:$('one-releases-status'),items:[],state:null,loaded:false}
   };
   const safeNumber=value=>{
+    if(value===null||value===undefined||value==='')return '—';
     const n=Number(value);
     return Number.isSafeInteger(n)&&n>=0?n.toLocaleString('en-US'):'—';
   };
@@ -274,6 +275,83 @@
   $('one-refresh')?.addEventListener('click',()=>{
     void refreshSources();void refreshStorage();void refreshDistributors();void refreshReleases();
   });
+  // Real owner-confirmed code issuance. Issued vouchers are kept in memory
+  // for 90 seconds; no auto-redemption, recording a sale or new subscription clock.
+  const issueForm=$('one-issue-form');
+  const issueResult=$('one-issue-result'),issueArea=$('one-issue-code-list');
+  const issueStatus=$('one-issue-status'),issueButton=$('one-issue-submit');
+  let issuedCodes=[],issueTimer=null,issuing=false;
+  function hideIssued(){
+    clearTimeout(issueTimer);issueTimer=null;
+    issuedCodes=[];issueArea.replaceChildren();
+    issueResult.hidden=true;
+  }
+  function issueMessage(message,isError=false){
+    issueStatus.textContent=message;issueStatus.classList.toggle('is-error',isError);
+  }
+  async function issueCodes(event){
+    event.preventDefault();
+    if(issuing||!issueForm.reportValidity())return;
+    const f=issueForm.elements;
+    const payload={
+      durationDays:Number(f.durationDays.value),quantity:Number(f.quantity.value),
+      maxConnections:Number(f.maxConnections.value),
+      channel:String(f.channel.value),label:String(f.label.value).trim(),
+      sourceId:'d2bb0397-1c56-4751-adc9-1a17758022f6'
+    };
+    if(![30,90,180,365].includes(payload.durationDays)||
+       !Number.isInteger(payload.quantity)||payload.quantity<1||payload.quantity>5||
+       ![1,2].includes(payload.maxConnections)||
+       !['app','xtream'].includes(payload.channel)||!payload.label||payload.label.length>95){
+      issueMessage('القيم المختارة غير صالحة. راجع نوع الكود والعدد والمدة.',true);return;
+    }
+    const type=payload.channel==='app'?'BLOFY STREAM':'Xtream';
+    if(!window.confirm('إصدار '+payload.quantity+' كود '+type+
+      ' لمدة '+payload.durationDays+' يومًا بعد أول تفعيل، من مصدر صالح فقط؟\n'+
+      'لن يبدأ وقت الاشتراك الآن، ولن تُسجل عملية بيع.'))return;
+    issuing=true;issueButton.disabled=true;hideIssued();
+    issueMessage('جارٍ إصدار الأكواد؛ لا تُكرر الطلب إذا تأخر اتصال الشبكة…');
+    try{
+      const result=await request('/api/v1/admin/xtream-gateway/codes',{
+        method:'POST',body:payload
+      });
+      const items=Array.isArray(result.items)?result.items:[];
+      if(result.ok!==true||items.length!==payload.quantity||
+         items.some(x=>typeof x.code!=='string'||
+           !/^(?:[0-9]{8,12}|[A-F0-9]{24})$/.test(x.code)))
+        throw Error('رد الإصدار غير مكتمل. تحقق من سجل الأكواد قبل طلب إصدار آخر.');
+      if(document.hidden){
+        issueMessage('تم إصدار الأكواد لكن الصفحة مخفية. استرجعها من سجل الأكواد بعد العودة.');
+      }else{
+        issuedCodes=items.map(x=>x.code);
+        issueArea.replaceChildren();
+        issuedCodes.forEach((code,index)=>{
+          const row=document.createElement('div');row.className='one-issue-code';
+          row.append(el('span','كود '+(index+1)),el('code',code));
+          issueArea.append(row);
+        });
+        issueResult.hidden=false;
+        issueTimer=window.setTimeout(hideIssued,90000);
+        issueMessage('تم إصدار '+items.length+' كودًا؛ لم تبدأ مدة الاشتراك ولم تُسجّل عملية بيع.');
+      }
+      $('one-stream-refresh')?.click();
+    }catch(error){
+      issueMessage('لم نتمكن من تأكيد نتيجة الإصدار: '+error.message+
+        ' تحقق من سجل الأكواد قبل محاولة أخرى لمنع التكرار.',true);
+    }finally{issuing=false;issueButton.disabled=false;}
+  }
+  issueForm.addEventListener('submit',event=>{void issueCodes(event);});
+  $('one-issue-copy').addEventListener('click',async()=>{
+    if(!issuedCodes.length)return;
+    try{
+      await navigator.clipboard.writeText(issuedCodes.join('\n'));
+      issueMessage('نُسخت الأكواد. تذكر إخفاء بيانات العملاء بعد استخدامها.');
+    }catch{issueMessage('تعذر النسخ التلقائي، انسخ من الحقول مباشرة.',true)}
+  });
+  $('one-issue-hide').addEventListener('click',hideIssued);
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)hideIssued();});
+  window.addEventListener('pagehide',hideIssued);
+
   void Promise.allSettled([
     refreshSources(),refreshStorage(),refreshDistributors(),refreshReleases()
   ]);
