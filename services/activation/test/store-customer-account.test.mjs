@@ -79,6 +79,18 @@ test('verified email owns linked guest order; no code before login and proof',as
   if(sql.startsWith('SELECT order_number,channel,expires_at FROM ('))return rows([]);
   if(sql.startsWith('SELECT o.id,o.sku,o.status,o.amount_minor'))
    return rows(claims.get(orderId)===args[0]?[order]:[]);
+  if(sql.startsWith('SELECT o.id,o.status,o.session_id FROM blofy_store_customer_orders')){
+   return rows(claims.get(args[1])===args[0]?[order]:[]);
+  }
+  if(sql.startsWith('UPDATE blofy_store_geidea_orders SET last_checked_at=NOW()')){
+   if(order.id!==args[0]||order.status!=='pending')return rows();
+   if(order.last_checked_at&&Date.now()-Date.parse(order.last_checked_at)<15000)return rows();
+   order.last_checked_at=new Date().toISOString();
+   return rows([{id:order.id}]);
+  }
+  if(sql.startsWith('SELECT o.status,o.paid_at FROM blofy_store_customer_orders')){
+   return rows(claims.get(args[1])===args[0]?[{status:order.status,paid_at:order.paid_at}]:[]);
+  }
   if(sql.startsWith('SELECT o.* FROM blofy_store_customer_orders'))
    return rows(claims.get(args[1])===args[0]?[order]:[]);
   if(sql.startsWith('SELECT v.id,v.code_channel AS channel'))
@@ -95,6 +107,11 @@ test('verified email owns linked guest order; no code before login and proof',as
    sendCode:async(email,otp)=>{delivered={email,otp};},
    json:(res,status,data,headers={})=>{res.status=status;res.data=data;res.headers=headers;},
    readJson:async(req)=>req.body
+ });
+ let reconciliationCalls=0;
+ handler.setReconciler(async id=>{
+   assert.equal(id,orderId);reconciliationCalls++;
+   order.status='paid';order.paid_at=new Date().toISOString();return true;
  });
  const request=(method,body,extra={})=>({method,body,headers:{
    origin:'https://blofyplayer.com','sec-fetch-site':'same-origin',
@@ -153,6 +170,22 @@ test('verified email owns linked guest order; no code before login and proof',as
  assert.deepEqual(alerts.data.alerts,[]);
  assert.equal(Object.hasOwn(account.data.orders[0],'code'),false,'summary has no full code field');
  assert.equal(Object.hasOwn(account.data.orders[0],'codes'),false,'summary has no raw code list');
+ // The owner, not an anonymous browser, may request a real provider
+ // reconciliation without the old guest receipt token.
+ order.status='pending';order.session_id=crypto.randomUUID();order.last_checked_at=null;
+ const checkPath=detail+'/check';
+ const unauthorized=await call(checkPath,'POST',{},{
+   cookie:'__Host-blofy_customer='+crypto.randomBytes(32).toString('base64url')});
+ assert.equal(unauthorized.status,401,'an unrelated browser cannot poll payment');
+ assert.equal(reconciliationCalls,0);
+ const checked=await call(checkPath,'POST',{},auth);
+ assert.equal(checked.status,200);
+ assert.equal(checked.data.confirmedPaid,true);
+ assert.equal(checked.data.status,'paid');
+ assert.equal(reconciliationCalls,1);
+ const replayCheck=await call(checkPath,'POST',{},auth);
+ assert.equal(replayCheck.status,200);
+ assert.equal(reconciliationCalls,1,'already paid orders do not re-query Geidea');
  const receipt=await call(detail,'GET',{},auth);
  assert.equal(receipt.status,200);
  assert.deepEqual(receipt.data.codes.map(v=>v.code),[code]);
