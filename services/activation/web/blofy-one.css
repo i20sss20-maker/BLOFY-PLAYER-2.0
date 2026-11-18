@@ -89,3 +89,29 @@ a{color:inherit;text-decoration:none}button{font:inherit;cursor:pointer}a:focus-
  .one-integrations-note strong{display:block;margin-bottom:7px}
 }
 @media(max-width:380px){.one-fast-grid,.one-readiness-grid{grid-template-columns:1fr}}
+
+/* BLOFY ONE: recorded payment orders only. Values are real DB aggregates, not revenue forecasts. */
+.one-sales{scroll-margin-top:22px}
+.one-sales-refresh{min-height:41px;padding:9px 16px;background:#19374b;
+ border:1px solid #406783;color:#b2ede9;border-radius:10px;font:600 12px IBMArabic,Tahoma,sans-serif;cursor:pointer}
+.one-sales-refresh:disabled{opacity:.55;cursor:wait}
+.one-sales-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:18px 0 13px}
+.one-sales-metrics article{padding:18px;background:linear-gradient(155deg,#102536,#0d1c2d);
+ border:1px solid #2c485e;border-radius:13px}
+.one-sales-metrics article span{display:block;color:#c1d4e3;min-height:36px;font-size:12px}
+.one-sales-metrics article strong{display:block;color:#bff9ef;font:700 clamp(20px,2.1vw,28px) 'Segoe UI',sans-serif;direction:auto;margin:13px 0 7px;overflow-wrap:anywhere}
+.one-sales-metrics article small{color:#9fb8ca;font-size:11px;line-height:1.65}
+.one-sales-status{border:1px solid #34506a;border-radius:10px;padding:12px 14px;margin:12px 0;
+ background:#132335;color:#b6d2e4;font-size:12px;line-height:1.8}
+.one-sales-footnotes{display:flex;flex-wrap:wrap;gap:9px;margin:12px 0}
+.one-sales-footnotes span{padding:9px 12px;border:1px solid #344c62;border-radius:9px;
+ background:#111d2b;color:#adbacb;font-size:12px}
+.one-sales-footnotes strong{color:#e1f3f7;font:600 13px 'Segoe UI',sans-serif}
+.one-sales-alert{padding:13px 15px;border:1px solid #756a3c;border-radius:11px;
+ background:#302e21;color:#f4e3b6;font-size:12px;line-height:1.9}
+@media(max-width:1170px){.one-sales-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:540px){.one-sales-metrics{grid-template-columns:1fr 1fr;gap:8px}
+ .one-sales-metrics article{padding:13px}.one-sales-metrics article span{font-size:11px}
+ .one-sales-metrics article strong{font-size:20px}
+}
+@media(max-width:350px){.one-sales-metrics{grid-template-columns:1fr}}
