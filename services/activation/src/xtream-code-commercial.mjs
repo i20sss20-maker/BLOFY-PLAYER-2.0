@@ -172,7 +172,8 @@ export function createStreamCommercial({pool,keyHex,clock=Date.now,
     return run(async db=>{
       const code=(await db.query(`SELECT * FROM blofy_xtream_gateway_duration_codes
         WHERE id=$1 FOR UPDATE`,[id])).rows[0];
-      if(!code||code.code_channel!=='app'||!code.redeemed_at||
+      if(!code||(code.code_channel!=='app'&&code.dual_access_enabled!==true)||
+        !code.redeemed_at||
         !code.account_id||!code.redeemed_device_hash||code.revoked_at||
         new Date(code.expires_at).getTime()<=clock())
         throw problem('stream_relogin_unavailable',409);
