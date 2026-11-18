@@ -163,3 +163,48 @@ function filterOneModules(){
 }
 byId('one-module-filter')?.addEventListener('input',filterOneModules);
 filterOneModules();
+
+
+/* Real recorded BLOFY PLAYER activation checkout totals only.
+ * GET is admin-authenticated and contains aggregates, never payer data.
+ * Do not add WhatsApp, STREAM, Xtream or offline payments to these totals.
+ */
+let oneSalesBusy = false;
+async function refreshOneSales(){
+  const button=byId('one-sales-refresh');
+  const status=byId('one-sales-status');
+  if(!button||!status||oneSalesBusy)return;
+  oneSalesBusy=true;
+  button.disabled=true;
+  const ids=['gross','paid','30d','pending','refunded','failed','cancelled'];
+  for(const id of ids)byId('one-sales-'+id).textContent='—';
+  status.textContent='جارٍ قراءة الطلبات المسجلة من قاعدة BLOFY…';
+  try{
+    const data=await readJson('/api/v1/admin/one/sales');
+    if(!data.ok||data.scope!=='BLOFY_PLAYER_device_activation_orders_only'||
+      data.currency!=='SAR')throw new Error('invalid_scope');
+    const orders=data.orders||{},value=data.value||{};
+    const safeInt=n=>Number.isSafeInteger(n)&&n>=0?count.format(n):'—';
+    const safeSar=n=>typeof n==='string'&&/^\d{1,30}\.\d{2}$/.test(n)
+      ?n+' ر.س':'—';
+    byId('one-sales-gross').textContent=safeSar(value.recordedPaidSar);
+    byId('one-sales-paid').textContent=safeInt(orders.paid);
+    byId('one-sales-30d').textContent=safeSar(value.paidLast30DaysSar);
+    byId('one-sales-pending').textContent=safeInt(orders.pending);
+    byId('one-sales-refunded').textContent=safeInt(orders.refunded);
+    byId('one-sales-failed').textContent=safeInt(orders.failed);
+    byId('one-sales-cancelled').textContent=safeInt(orders.cancelled);
+    status.textContent='آخر تحديث: '+new Date(data.calculatedAt).toLocaleString('ar-SA')+
+      ' · المصدر: الطلبات المسجلة لتفعيل أجهزة BLOFY PLAYER فقط.';
+  }catch(error){
+    status.textContent=error.message==='session_required'
+      ?'انتهت جلسة الإدارة. سجّل الدخول ثم حدّث التقرير.'
+      :'تعذر قراءة سجل المدفوعات. لا تعرض اللوحة أرقامًا تقديرية عند تعطل قاعدة البيانات.';
+  }finally{
+    oneSalesBusy=false;
+    button.disabled=false;
+  }
+}
+byId('one-sales-refresh')?.addEventListener('click',()=>{void refreshOneSales()});
+byId('one-refresh')?.addEventListener('click',()=>{void refreshOneSales()});
+void refreshOneSales();
