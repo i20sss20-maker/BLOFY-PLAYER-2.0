@@ -177,7 +177,7 @@ async function authorizedDevice(deviceId, activationCode, req) {
 const portal = createPortalHandlers({ pool, json, readJson, authorizedDevice });
 const blofyCodes = createBlofyCodeHandlers({ pool, secretHex: PLAYLIST_ENCRYPTION_KEY, json, readJson, requireAdmin, authorizedDevice });
 const codeOperations = createCodeOperationsHandlers({ pool, secretHex: PLAYLIST_ENCRYPTION_KEY, json, readJson, requireAdmin });
-const commercial = createCommercialHandlers({ pool, keyHex: PLAYLIST_ENCRYPTION_KEY, json, readJson });
+const commercial = createCommercialHandlers({ pool, keyHex: PLAYLIST_ENCRYPTION_KEY, json, readJson, requireAdmin });
 const cloud = createProfileCloudHandlers({ pool, json, readJson, authorizedDevice });
 
 async function initializeDatabase() {
