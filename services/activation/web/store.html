@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0b0c18">
-<meta name="description" content="متجر BLOFY للاشتراكات: كود BLOFY STREAM أو Xtream BLOFY. 3 أشهر 30 ريال، 6 أشهر 50 ريال، سنة 70 ريال. الدفع الآمن عبر جيديا عند توفره.">
+<meta name="description" content="متجر BLOFY للاشتراكات الرقمية: كود BLOFY STREAM أو Xtream BLOFY. 3 أشهر 40 ريال، 6 أشهر 60 ريال، سنة 100 ريال. توجد تجربة للاستفسار، ودفع آمن وتفعيل.">
 <meta name="robots" content="index,follow">
 <link rel="canonical" href="https://www.blofyplayer.com/">
 <link rel="icon" href="/blofy-logo.png">
@@ -12,7 +12,7 @@
 <meta property="og:locale" content="ar_SA">
 <meta property="og:title" content="BLOFY | متجر اشتراكات كود ستريم وإكستريم">
 <meta property="og:description" content="اشتراك كود BLOFY STREAM واشتراك Xtream BLOFY في صفحة منتجات واحدة. اختر الباقة وتواصل مباشرة.">
-<title>BLOFY | اشتراكات ستريم وإكستريم — 30 و50 و70 ريال</title>
+<title>BLOFY | اشتراكات ستريم وإكستريم — 40 و60 و100 ريال</title>
 <style>
 [hidden]{display:none!important}
 .pricing-rows{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:14px 0 20px}
@@ -132,6 +132,31 @@ button:focus-visible,a:focus-visible{outline:3px solid var(--cyan);outline-offse
 @media(max-width:1050px){.links{display:none}.hero-grid{grid-template-columns:1fr}.stage{min-height:360px}.shop-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:680px){.container{width:min(100% - 26px,1180px)}.nav{min-height:68px}.brand b{font-size:17px}.brand img{width:36px;height:36px}.nav-cta{padding:10px 13px;font-size:12px}.hero{padding:45px 0 55px}.hero h1{font-size:36px}.hero p{font-size:15px}.stage{min-height:280px}.tv{max-width:95%;padding:11px;border-width:6px 6px 11px}.tv-hero .tv-banner{min-height:112px}.float{font-size:10px;padding:10px}.float.one{left:0}.float.two{right:0}.section{padding:45px 0}.shop-grid,.feature-grid,.faq,.plans{grid-template-columns:1fr}.art{height:145px}.payment{grid-template-columns:1fr}.whats-bubble{bottom:calc(14px + env(safe-area-inset-bottom));left:12px}.bottom{padding-bottom:96px}.hero .ctas .btn{flex:1}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.btn,.nav-cta{transition:none}.btn:hover,.nav-cta:hover{transform:none}}
+
+/* BLOFY STORE · one coherent navy/royal-blue design system */
+:root{--bg:#071326;--card:#0d2546;--line:rgba(97,163,242,.24);--fg:#eff7ff;--muted:#b8cbe5;--cyan:#6fbaff;--blue:#388de6;--purple:#388de6;--green:#388de6}
+body{background:radial-gradient(ellipse at 18% 2%,rgba(35,101,174,.22),transparent 55%),#071326}
+.top{background:rgba(7,19,38,.94)}
+.nav-cta,.btn.primary{background:linear-gradient(120deg,#65b3ff,#317fd5);color:#05182e}
+.btn.whatsapp,.whats-bubble{background:#16569f;color:#eff8ff;border:1px solid #4da4fa}
+.whats-bubble{box-shadow:0 16px 35px rgba(0,18,49,.38)}
+.grad{background:linear-gradient(95deg,#94d3ff,#348ce7);background-clip:text;color:transparent}
+.art,.art.purple,.art.mint{background:#09234a}
+.payment{background:linear-gradient(105deg,#113363,#0b2140);border-color:#315785}
+.product{background:linear-gradient(160deg,#0d294e,#091b34)}
+.product-image{width:100%;height:100%;object-fit:cover;display:block}
+.hero-media{width:100%;position:relative;max-width:600px}
+.hero-media .main-scene{width:100%;display:block;aspect-ratio:1200/740;object-fit:cover;border-radius:24px;border:1px solid #356aa6;box-shadow:0 25px 75px #020d20a8}
+.hero-inset{position:absolute;width:47%;left:-2%;bottom:-18%;transform:rotate(-5deg);border-radius:17px;box-shadow:0 22px 35px #020c1fbd;overflow:hidden;border:2px solid #3b91e7}
+.hero-inset img{width:100%;display:block}
+.stage{margin-bottom:36px}
+.stage:before{background:radial-gradient(ellipse,#2362a966,transparent 68%)}
+.float.one,.float.two{color:#b7dfff;border-color:#35699b}
+.product-more{margin:0 0 12px!important;font-size:13px!important;flex:0!important}
+.product-more a{color:#79beff;text-decoration:underline;text-underline-offset:4px}
+body[data-shop-product] .shop-grid{grid-template-columns:minmax(0,650px);justify-content:center}
+body[data-shop-product="stream"] [data-product-card="xtream"],body[data-shop-product="xtream"] [data-product-card="stream"]{display:none}
+@media(max-width:680px){.hero-inset{bottom:-11%;left:0}.stage{min-height:235px;margin-bottom:10px}.hero-media{max-width:100%}}
 </style>
 <script>
 (function(){
@@ -144,72 +169,72 @@ button:focus-visible,a:focus-visible{outline:3px solid var(--cyan);outline-offse
 <body data-blofy-storefront="1">
 <header class="top"><div class="nav container">
   <a class="brand" href="/" aria-label="BLOFY الرئيسية"><img src="/blofy-logo.png" alt="" width="42" height="42"><span><b>BLOFY</b><small>SUBSCRIPTIONS STORE</small></span></a>
-  <nav class="links" aria-label="روابط المتجر"><a href="#products">الاشتراكات</a><a href="#how-it-works">طريقة الطلب</a><a href="#features">المميزات</a><a href="#payments">الدفع</a><a href="#questions">الأسئلة الشائعة</a></nav>
+  <nav class="links" aria-label="روابط المتجر"><a href="/">الرئيسية</a><a href="/#products">المنتجات</a><a href="/store/trial">التجربة</a><a href="/store/about">من نحن</a><a href="/store/faq">الأسئلة الشائعة</a><a href="/store/contact">تواصل معنا</a></nav>
   <a class="nav-cta" href="https://wa.me/966568941484" data-wa="general" rel="noopener noreferrer" target="_blank">تواصل واتساب ↗</a>
 </div></header>
 <main>
 <section class="hero"><div class="container hero-grid">
   <div><span class="eyebrow">BLOFY • DIGITAL SUBSCRIPTIONS</span><h1>اشتراكات بلوفي <span class="grad">بطريقتك.</span></h1>
-  <p>تبي <strong>كود BLOFY STREAM</strong> أو بيانات <strong>Xtream BLOFY</strong>؟ اختر نوع الاشتراك وحدد المدة، وتسوّق بالأسعار الواضحة وادفع بجيديا عند توفر الدفع الإلكتروني. كل اشتراكاتك في صفحة منتجات واحدة.</p>
-  <div class="ctas"><a class="btn primary" href="#products">تصفح الاشتراكات ←</a><a class="btn whatsapp" href="https://wa.me/966568941484" data-wa="general" rel="noopener noreferrer" target="_blank">استفسر عبر واتساب ↗</a></div>
-  <div class="proof"><span>◉ اشتراكات رقمية</span><span>◉ كود ستريم</span><span>◉ Xtream</span><span>◉ خدمة العملاء عبر واتساب</span></div>
+  <p>تبي <strong>كود BLOFY STREAM</strong> أو بيانات <strong>Xtream BLOFY</strong>؟ اختر نوع الاشتراك وحدد المدة، وتسوّق بالأسعار الواضحة وأكمل الطلب بخطوات آمنة. كل اشتراكاتك في صفحة منتجات واحدة.</p>
+  <div class="ctas"><a class="btn primary" href="#products">تصفح الاشتراكات ←</a><a class="btn ghost" href="/store/trial">يوجد تجربة — اعرف التفاصيل</a></div>
+  <div class="proof"><span>◉ اشتراكات رقمية</span><span>◉ كود ستريم</span><span>◉ Xtream</span><span>◉ يوجد تجربة للاستفسار</span><span>◉ خدمة العملاء</span></div>
   </div>
-  <div class="stage" aria-label="تصميم توضيحي لمنتجات اشتراكات بلوفي"><div class="tv">
-    <div class="tv-head"><strong>BLOFY • SUBSCRIPTIONS</strong><span>اختر نوع اشتراكك</span></div>
-    <div class="tv-tabs"><span>كود ستريم</span><span>Xtream</span><span>المدد</span></div>
-    <div class="tv-hero"><div class="tv-banner"><b>كود BLOFY STREAM</b><small>طلب الاشتراك بخطوات واضحة</small></div><div class="tv-items"><span>◉ باقة ستريم</span><span>◉ باقة Xtream</span><span>✓ طلب مباشر</span></div></div>
-    <div class="tv-foot"><span></span><span></span><span></span><span></span></div>
-  </div><div class="float one">✦ اشتراك كود ستريم</div><div class="float two">◉ اشتراك Xtream BLOFY</div></div>
+  <div class="stage" aria-label="تصميم BLOFY المعتمد لأقسام الاشتراكات">
+  <div class="hero-media">
+    <img class="main-scene" src="/store/media/stream.svg" alt="تصميم تعريفي أصلي لمنتج كود BLOFY STREAM" width="1200" height="740" loading="eager">
+    <div class="hero-inset"><img src="/store/media/xtream.svg" alt="تصميم تعريفي لمنتج Xtream BLOFY" width="1200" height="740" loading="lazy"></div>
+  </div>
+  <div class="float one">✦ كود BLOFY STREAM</div><div class="float two">◉ Xtream BLOFY</div>
 </div><div class="container"><small class="disclaimer">الواجهة أعلاه تصميم توضيحي للمنتجات. تختلف الإتاحة بحسب صلاحية مصدر المحتوى، والمحتوى متاح فقط بحسب حقوق التوزيع والاشتراك.</small></div></section>
 <section class="section" id="products"><div class="container">
-<span class="eyebrow">BLOFY SUBSCRIPTIONS</span><h2 class="h2">منتجات الاشتراك</h2><p class="lead">منتجان فقط، بدون تحميل تطبيقات. الأسعار: 3 أشهر بـ30 ر.س، و6 أشهر بـ50 ر.س، وسنة بـ70 ر.س.</p>
+<span class="eyebrow">BLOFY SUBSCRIPTIONS</span><h2 class="h2">منتجات الاشتراك</h2><p class="lead">منتجان فقط، بدون تحميل تطبيقات. الأسعار: 3 أشهر بـ40 ر.س، و6 أشهر بـ60 ر.س، وسنة بـ100 ر.س.</p>
 <div class="shop-grid product-offers">
   <article class="product" id="stream-code" data-product-card="stream">
-    <div class="art"><div class="orbit"></div><div class="orbit"></div><span class="symbol">⌗</span><div class="art-title">STREAM CODE</div></div>
+    <div class="art"><img class="product-image" src="/store/media/stream.svg" alt="تصميم بطاقة اشتراك كود BLOFY STREAM" loading="lazy" width="1200" height="740"></div>
     <div class="product-copy"><span class="tag">اشتراك بالكود</span><h3>اشتراك كود BLOFY STREAM</h3>
       <p>اشتراك من نوع <b>كود ستريم</b> للاستخدام عبر مسار إدخال الكود المتوافق مع BLOFY STREAM. بعد تأكيد الطلب تحصل على تعليمات التفعيل الخاصة بالباقة.</p>
-      <div class="offer-badges"><span>كود اشتراك</span><span>تفعيل بعد تأكيد الطلب</span><span>خيارات مدد</span></div>
-      <div class="pricing-rows"><span>3 أشهر<b>30 ر.س</b></span><span>6 أشهر<b>50 ر.س</b></span><span>سنة<b>70 ر.س</b></span></div>
+      <div class="offer-badges"><span>كود اشتراك</span><span>تفعيل بعد نجاح الدفع</span><span>يوجد تجربة</span></div><p class="product-more"><a href="/products/stream">تعرف على تفاصيل اشتراك ستريم ←</a></p>
+      <div class="pricing-rows"><span>3 أشهر<b>40 ر.س</b></span><span>6 أشهر<b>60 ر.س</b></span><span>سنة<b>100 ر.س</b></span></div>
       <label class="duration-label" for="duration-stream">اختر مدة الاشتراك</label>
-      <select id="duration-stream" class="duration-select" data-duration="stream"><option value="3 أشهر" selected>3 أشهر — 30 ر.س</option><option value="6 أشهر">6 أشهر — 50 ر.س</option><option value="سنة">سنة — 70 ر.س</option></select>
-      <div class="price-note" data-price="stream"><b>30 ر.س</b> / 3 أشهر</div>
-      <div class="actions"><button type="button" class="btn primary buy-btn" data-buy="stream" hidden>ادفع 30 ر.س بجيديا ↗</button><a class="btn whatsapp buy-btn" href="https://wa.me/966568941484" data-wa="stream" rel="noopener noreferrer" target="_blank">استفسار واتساب</a></div>
+      <select id="duration-stream" class="duration-select" data-duration="stream"><option value="3 أشهر" selected>3 أشهر — 40 ر.س</option><option value="6 أشهر">6 أشهر — 60 ر.س</option><option value="سنة">سنة — 100 ر.س</option></select>
+      <div class="price-note" data-price="stream"><b>40 ر.س</b> / 3 أشهر</div>
+      <div class="actions"><button type="button" class="btn primary buy-btn" data-buy="stream" hidden>اشترك الآن — 40 ر.س</button><a class="btn whatsapp buy-btn" href="https://wa.me/966568941484" data-wa="stream" rel="noopener noreferrer" target="_blank">استفسار واتساب</a></div>
       <div class="checkout-status" data-checkout-message="stream" role="status"></div>
     </div>
   </article>
   <article class="product" id="xtream-code" data-product-card="xtream">
-    <div class="art purple"><div class="orbit"></div><div class="orbit"></div><span class="symbol">⌘</span><div class="art-title">XTREAM ACCESS</div></div>
+    <div class="art"><img class="product-image" src="/store/media/xtream.svg" alt="تصميم بطاقة اشتراك Xtream BLOFY" loading="lazy" width="1200" height="740"></div>
     <div class="product-copy"><span class="tag">اشتراك بصيغة Xtream</span><h3>اشتراك Xtream BLOFY</h3>
       <p>اشتراك ببيانات اتصال <b>Xtream</b> (الخادم واسم المستخدم وكلمة المرور) عند توفره ضمن الباقة؛ مناسب لمن يفضّل طريقة الدخول بإكستريم.</p>
-      <div class="offer-badges"><span>Xtream API</span><span>بيانات دخول خاصة</span><span>خيارات مدد</span></div>
-      <div class="pricing-rows"><span>3 أشهر<b>30 ر.س</b></span><span>6 أشهر<b>50 ر.س</b></span><span>سنة<b>70 ر.س</b></span></div>
+      <div class="offer-badges"><span>Xtream API</span><span>بيانات دخول خاصة</span><span>يوجد تجربة</span></div><p class="product-more"><a href="/products/xtream">تعرف على تفاصيل اشتراك Xtream ←</a></p>
+      <div class="pricing-rows"><span>3 أشهر<b>40 ر.س</b></span><span>6 أشهر<b>60 ر.س</b></span><span>سنة<b>100 ر.س</b></span></div>
       <label class="duration-label" for="duration-xtream">اختر مدة الاشتراك</label>
-      <select id="duration-xtream" class="duration-select" data-duration="xtream"><option value="3 أشهر" selected>3 أشهر — 30 ر.س</option><option value="6 أشهر">6 أشهر — 50 ر.س</option><option value="سنة">سنة — 70 ر.س</option></select>
-      <div class="price-note" data-price="xtream"><b>30 ر.س</b> / 3 أشهر</div>
-      <div class="actions"><button type="button" class="btn primary buy-btn" data-buy="xtream" hidden>ادفع 30 ر.س بجيديا ↗</button><a class="btn whatsapp buy-btn" href="https://wa.me/966568941484" data-wa="xtream" rel="noopener noreferrer" target="_blank">استفسار واتساب</a></div>
+      <select id="duration-xtream" class="duration-select" data-duration="xtream"><option value="3 أشهر" selected>3 أشهر — 40 ر.س</option><option value="6 أشهر">6 أشهر — 60 ر.س</option><option value="سنة">سنة — 100 ر.س</option></select>
+      <div class="price-note" data-price="xtream"><b>40 ر.س</b> / 3 أشهر</div>
+      <div class="actions"><button type="button" class="btn primary buy-btn" data-buy="xtream" hidden>اشترك الآن — 40 ر.س</button><a class="btn whatsapp buy-btn" href="https://wa.me/966568941484" data-wa="xtream" rel="noopener noreferrer" target="_blank">استفسار واتساب</a></div>
       <div class="checkout-status" data-checkout-message="xtream" role="status"></div>
     </div>
   </article>
 </div>
-<p class="disclaimer">الأسعار المعروضة تخص الكود الرقمي لجهاز واتصال واحد. تبدأ المدة عند أول تفعيل للكود. لا يُصدر أي كود إلا بعد تحقق جيديا من الدفع بنجاح.</p>
+<p class="disclaimer">الأسعار المعروضة تخص الكود الرقمي لجهاز واتصال واحد. تبدأ المدة عند أول تفعيل للكود. لا يُصدر أي كود إلا بعد التحقق الموثوق من الدفع بنجاح.</p>
 </div></section>
 <section class="section" id="features"><div class="container"><span class="eyebrow">WHY BLOFY</span><h2 class="h2">اشتراك واضح من البداية</h2><p class="lead">صفحة مخصصة لبيع الاشتراكات الرقمية، مع تحديد طريقة الدخول ونوع المنتج قبل الطلب.</p>
  <div class="feature-grid"><div class="feature"><span class="icon">⌗</span><h3>اشتراك بالكود</h3><p>اختر مسار كود BLOFY STREAM واطلب تفاصيل الباقة المناسبة.</p></div><div class="feature"><span class="icon">⌘</span><h3>اشتراك Xtream</h3><p>اختيار نوع الدخول عبر بيانات Xtream عند توفره.</p></div><div class="feature"><span class="icon">◷</span><h3>مدة تناسبك</h3><p>حدد المدة المطلوب الاستفسار عنها قبل تأكيد السعر.</p></div><div class="feature"><span class="icon">✆</span><h3>طلب عبر واتساب</h3><p>رسالة جاهزة باسم المنتج والمدة لتسهيل متابعة طلبك.</p></div></div>
 </div></section>
-<section class="section" id="how-it-works"><div class="container"><span class="eyebrow">HOW IT WORKS</span><h2 class="h2">ثلاث خطوات لاشتراكك</h2><div class="order-steps"><div><b>01</b><h3>اختر المنتج</h3><p>كود BLOFY STREAM أو Xtream BLOFY.</p></div><div><b>02</b><h3>اختر المدة والسعر</h3><p>3 أشهر: 30 ريال، 6 أشهر: 50 ريال، سنة: 70 ريال.</p></div><div><b>03</b><h3>ادفع واستلم الكود</h3><p>عند توفر الدفع الإلكتروني، تُفتح نافذة جيديا الآمنة ويُصدر الكود بعد التحقق من نجاح عملية الدفع.</p></div></div></div></section>
-<section class="section" id="payments"><div class="container"><div class="payment"><div><span class="eyebrow">SECURE PAYMENT · GEIDEA</span><h2>الدفع الآمن عبر جيديا</h2><p>اختر الاشتراك والمدة ثم اضغط زر جيديا داخل بطاقة المنتج عند ظهوره. يتم إصدار كود الاشتراك بعد التحقق من الدفع بواسطة خادم Geidea. الدفع بالبطاقات فقط، وتُدخل بيانات البطاقة داخل نافذة الدفع الآمنة، وليس في موقع BLOFY أو واتساب.</p></div><a class="btn primary" href="#products">اختر الباقة ←</a></div>
-<p class="disclaimer">عند تعذر تفعيل وسيلة الدفع أو المصدر، يبقى زر جيديا غير متاح حفاظًا على أموال العملاء. لا يخصم الموقع أي مبلغ من زر واتساب.</p>
+<section class="section" id="how-it-works"><div class="container"><span class="eyebrow">HOW IT WORKS</span><h2 class="h2">ثلاث خطوات لاشتراكك</h2><div class="order-steps"><div><b>01</b><h3>اختر المنتج</h3><p>كود BLOFY STREAM أو Xtream BLOFY.</p></div><div><b>02</b><h3>اختر المدة والسعر</h3><p>3 أشهر: 40 ريال، 6 أشهر: 60 ريال، سنة: 100 ريال.</p></div><div><b>03</b><h3>ادفع واستلم الكود</h3><p>عند توفر الدفع الإلكتروني، تُفتح نافذة الدفع الآمنة، ثم يُسلَّم الكود بعد تأكيد العملية.</p></div></div></div></section>
+<section class="section" id="payments"><div class="container"><div class="payment"><div><span class="eyebrow">SECURE CHECKOUT</span><h2>دفع آمن وتفعيل واضح</h2><p>حدد المنتج والمدة، ثم اختر «اشترك الآن». يتم التحقق من نجاح عملية الدفع قبل تسليم الكود. بيانات البطاقة تدخل داخل نافذة الدفع الآمنة التابعة لمزوّد الدفع، وليس داخل الموقع أو واتساب.</p></div><a class="btn primary" href="#products">اختر الباقة ←</a></div>
+<p class="disclaimer">إذا كانت خدمة الدفع أو المصدر غير متاحة، يتوقف زر الاشتراك حتى لا تُحصّل مبالغ دون تسليم. لا يتم تحصيل أي مبلغ عبر زر الاستفسار.</p>
 <section id="store-receipt" class="receipt-section" hidden aria-live="polite"><h3>طلب الاشتراك</h3><p id="store-receipt-status">جارٍ التحقق من حالة الطلب...</p><strong class="receipt-code" id="store-code" hidden></strong><p id="store-code-instructions" hidden></p><button type="button" class="btn ghost" id="store-check" hidden>التحقق من الدفع مرة أخرى</button><button type="button" class="btn primary" id="store-copy" hidden>نسخ كود الاشتراك</button></section>
 </div></section>
 <section class="section" id="questions"><div class="container"><span class="eyebrow">FAQ</span><h2 class="h2">الأسئلة الشائعة</h2><div class="faq">
 <details><summary>وش الفرق بين كود ستريم وXtream؟</summary><p>اختر كود ستريم للإدخال في BLOFY STREAM. واختر Xtream للحصول على كود تستبدله ببيانات Xtream عبر صفحة التفعيل. كلاهما مرتبط بمدة اشتراك واحدة وتفعيل واحد.</p></details>
-<details><summary>كم أسعار الاشتراكات؟</summary><p>3 أشهر بـ30 ريال، 6 أشهر بـ50 ريال، وسنة بـ70 ريال. تظهر القيمة المختارة قبل الدفع، والسعر النهائي المعتمد يظهر في نافذة جيديا.</p></details>
-<details><summary>متى يصلني الكود؟</summary><p>بعد تأكيد جيديا للدفع يظهر الكود في صفحة إيصال الطلب. احتفظ به بمكان آمن. لا ننشره في روابط عامة أو نرسله لأي شخص آخر.</p></details>
+<details><summary>كم أسعار الاشتراكات؟</summary><p>3 أشهر بـ40 ريال، 6 أشهر بـ60 ريال، وسنة بـ100 ريال. تظهر القيمة المختارة قبل الدفع، والسعر النهائي يظهر في نافذة الدفع الآمنة.</p></details>
+<details><summary>متى يصلني الكود؟</summary><p>بعد تأكيد مزود الدفع للعملية يظهر الكود في صفحة إيصال الطلب. احتفظ به بمكان آمن. لا ننشره في روابط عامة أو نرسله لأي شخص آخر.</p></details>
 <details><summary>هل أقدر أتواصل معكم؟</summary><p>أكيد. واتساب خدمة العملاء 0568941484 لأي استفسار، ولا تطلب مشاركة بيانات بطاقتك أو كلمة مرورك.</p></details>
 </div></div></section>
 <section class="section"><div class="container"><div class="payment"><div><span class="eyebrow">BLOFY</span><h2>جاهز تختار اشتراكك؟</h2><p>اختر كود ستريم أو Xtream وحدد المدة، ثم انتقل للدفع الآمن عند ظهوره.</p></div><a class="btn primary" href="#products">تصفح الاشتراكات ←</a></div></div></section>
 </main>
-<footer class="bottom"><div class="container bottom-inner"><div><b dir="ltr">BLOFY · SUBSCRIPTION STORE</b><div style="font-size:12px;margin-top:7px">الاشتراكات الرقمية فقط — السعر والتوفر وحقوق المحتوى تُؤكَّد قبل الدفع.</div></div><div class="footlinks"><a href="#products">الاشتراكات</a><a href="/privacy">الخصوصية</a><a href="/support">الدعم</a><a href="https://wa.me/966568941484" data-wa="general" rel="noopener noreferrer" target="_blank">واتساب 0568941484</a></div></div></footer>
+<footer class="bottom"><div class="container bottom-inner"><div><b dir="ltr">BLOFY · SUBSCRIPTION STORE</b><div style="font-size:12px;margin-top:7px">الاشتراكات الرقمية فقط — السعر والتوفر وحقوق المحتوى تُؤكَّد قبل الدفع.</div></div><div class="footlinks"><a href="/#products">المنتجات</a><a href="/store/trial">التجربة</a><a href="/store/about">من نحن</a><a href="/store/faq">الأسئلة</a><a href="/store/terms">الشروط</a><a href="/privacy">الخصوصية</a><a href="/store/contact">اتصل بنا</a><a href="/support">الدعم</a></div></div></footer>
 <a class="whats-bubble" href="https://wa.me/966568941484" data-wa="general" rel="noopener noreferrer" target="_blank" aria-label="التواصل عبر واتساب">واتساب ✆</a>
 <script>
 (function(){
@@ -220,7 +245,7 @@ button:focus-visible,a:focus-visible{outline:3px solid var(--cyan);outline-offse
    stream:'السلام عليكم، أرغب في اشتراك كود BLOFY STREAM.',
    xtream:'السلام عليكم، أرغب في اشتراك Xtream BLOFY.'
  };
- var amounts={'3 أشهر':30,'6 أشهر':50,'سنة':70};
+ var amounts={'3 أشهر':40,'6 أشهر':60,'سنة':100};
  var suffix={'3 أشهر':'3m','6 أشهر':'6m','سنة':'1y'};
  var plans={};var available=false;var busy=false;var currentId=null;var currentSecret=null;
  try{var campaign=new URLSearchParams(location.search).get('utm_source')||'';
@@ -238,7 +263,7 @@ button:focus-visible,a:focus-visible{outline:3px solid var(--cyan);outline-offse
       var b=document.querySelector('[data-buy="'+product+'"]');
       var p=document.querySelector('[data-price="'+product+'"]');
       if(p)p.textContent=price+' ر.س / '+dur;
-      if(b){b.textContent='ادفع '+price+' ر.س بجيديا ↗';b.dataset.sku=name;
+      if(b){b.textContent='اشترك الآن — '+price+' ر.س';b.dataset.sku=name;
         b.hidden=!(available && !!plans[name]);b.disabled=busy;}
    });
  }
@@ -260,7 +285,7 @@ button:focus-visible,a:focus-visible{outline:3px solid var(--cyan);outline-offse
  }
  async function check(){
    if(!currentId||!currentSecret)return;
-   showReceipt('جارٍ التحقق من الدفع لدى جيديا...');
+   showReceipt('جارٍ التحقق من عملية الدفع...');
    try{
      var r=await post('/api/v1/store/orders/status',{orderId:currentId,accessToken:currentSecret});
      if(r.status==='paid'&&r.fulfilled&&r.code){
@@ -294,7 +319,7 @@ button:focus-visible,a:focus-visible{outline:3px solid var(--cyan);outline-offse
    var sku=button.dataset.sku;
    var expected=plans[sku];
    if(!expected){message(product,'الباقة غير متاحة للدفع.',true);return;}
-   if(typeof window.GeideaCheckout!=='function'){message(product,'تعذر تحميل بوابة جيديا. حدّث الصفحة وحاول مرة أخرى.',true);return;}
+   if(typeof window.GeideaCheckout!=='function'){message(product,'تعذر تحميل نافذة الدفع الآمنة. حدّث الصفحة وحاول مرة أخرى.',true);return;}
    busy=true;update();message(product,'جارٍ فتح الدفع الآمن...');
    var started=false;
    try{
@@ -311,7 +336,7 @@ button:focus-visible,a:focus-visible{outline:3px solid var(--cyan);outline-offse
      );
      widget.startPayment(data.sessionId);
      started=true;
-     message(product,'أكمل الدفع في نافذة جيديا الآمنة.');
+     message(product,'أكمل الدفع داخل النافذة الآمنة.');
    }catch(_){message(product,'تعذر بدء عملية الدفع. لم يتم تأكيد طلب جديد. حاول لاحقًا أو تواصل عبر واتساب.',true);}
    finally{if(!started){busy=false;update();}}
  }

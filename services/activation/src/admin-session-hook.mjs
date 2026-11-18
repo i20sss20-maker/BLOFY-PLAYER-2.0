@@ -141,6 +141,21 @@ http.createServer = function patchedAdminSessionCreateServer(listener) {
     if (req.method==='GET' && ['/Admin','/Admin/','/admin/'].includes(url.pathname)) { res.writeHead(302,{'location':'/admin','cache-control':'no-store'}); res.end(); return; }
     if (req.method==='GET' && url.pathname==='/releases-admin') { res.writeHead(302,{'location':'/admin#releases','cache-control':'no-store'}); res.end(); return; }
     if (req.method==='GET' && url.pathname==='/admin') return html(res, await validSession(req)?await dashboardPage():await loginPage());
+    if (req.method==='GET' && ['/admin/store-inventory','/admin/store-inventory/'].includes(url.pathname)) {
+      if (!await validSession(req)) return html(res,await loginPage());
+      return html(res,await readFile(new URL('../web/store-inventory.html',import.meta.url),'utf8'));
+    }
+    if (req.method==='GET' && (url.pathname==='/admin/store-inventory/app.js' ||
+      url.pathname==='/admin/store-inventory/style.css')) {
+      if (!await validSession(req)) return json(res,401,{error:'admin_session_required'});
+      const isJs=url.pathname.endsWith('.js');
+      const asset=await readFile(new URL(isJs?'../web/store-inventory.js':'../web/store-inventory.css',import.meta.url));
+      res.writeHead(200,{'content-type':isJs?'application/javascript; charset=utf-8':'text/css; charset=utf-8',
+        'content-length':asset.length,'cache-control':'no-store','x-content-type-options':'nosniff',
+        'referrer-policy':'no-referrer','x-robots-tag':'noindex'});
+      res.end(asset);return;
+    }
+
     // Admin Control Center: same signed session, same domain, read-only service checks.
     // Full original STREAM operator panel on the BLOFY website, protected
     // by the existing admin session. No browser-visible cross-domain tokens.

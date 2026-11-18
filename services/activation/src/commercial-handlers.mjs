@@ -18,7 +18,7 @@ const entitled = row => row && ['active','trial'].includes(row.status) &&
 const validDeviceId = value => /^BLOFY-[A-Z0-9]{4}-[A-Z0-9]{4}$/i.test(String(value || ''));
 const validActivationCode = value => /^\d{6}$/.test(String(value || ''));
 
-export function createCommercialHandlers({pool, keyHex, json, readJson, env = process.env}) {
+export function createCommercialHandlers({pool, keyHex, json, readJson, requireAdmin, env = process.env}) {
   const auth = createSubscriberSessionAuthorizer({pool, keyHex, env, requireActive:false});
   const credentials = createActivationCredentialCodec(keyHex);
   const googlePlayReview = createGooglePlayReviewHandler({pool,keyHex,json,readJson});
@@ -34,7 +34,7 @@ export function createCommercialHandlers({pool, keyHex, json, readJson, env = pr
   }
   const tapPayments = createTapPaymentHandlers({pool,json,readJson,authorize,schemaSql:ADMIN_CONSOLE_SCHEMA,env});
   const geideaPayments = createGeideaLiveHandlers({pool,json,readJson,authorize,env});
-  const storePayments = createStoreGeideaHandlers({pool,json,readJson,keyHex,env});
+  const storePayments = createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAdmin:requireAdmin,env});
   const zidOAuth = createZidOAuthHandlers({pool,json,keyHex,env});
   const zidPayments = createZidPaymentHandlers({pool,json,readJson,authorize,env,tokenProvider:zidOAuth.loadTokens});
   async function transaction(action) {
