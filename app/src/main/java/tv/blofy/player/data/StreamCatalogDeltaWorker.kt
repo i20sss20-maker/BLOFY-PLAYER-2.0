@@ -15,6 +15,9 @@ import androidx.work.workDataOf
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import java.security.MessageDigest
 import tv.blofy.player.BuildConfig
 import tv.blofy.player.core.identity.StreamCodeSession
 import tv.blofy.player.data.local.BlofyDatabase
@@ -44,7 +47,7 @@ internal class StreamCatalogDeltaWorker(
             !CatalogAutoRefreshPolicy.isEnabled(app)) return Result.success()
         if (CatalogPlaybackGate.isPlaying) return Result.retry()
         return try {
-            withTimeout(6 * 60_000L) { syncBounded() }
+            withTimeout(6 * 60_000L) { syncMutex.withLock { syncBounded() } }
         } catch (_: TimeoutCancellationException) {
             Result.retry()
         } catch (cancelled: CancellationException) {
@@ -60,6 +63,16 @@ internal class StreamCatalogDeltaWorker(
         // Code-bound authorization must remain identical through every
         // resumed page. Never import one subscriber's rows into another code.
         val sessionAtStart = StreamCodeSession.token(app) ?: return Result.success()
+        // A new redemption may refer to a different account/source even though
+        // STREAM reuses the same local provider ID. A revision number is not an
+        // account identity. Never reuse a previous subscriber's delta cursor.
+        val accountFingerprint = MessageDigest.getInstance("SHA-256")
+            .digest(sessionAtStart.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+        if (prefs.getString(KEY_ACCOUNT_FINGERPRINT, null) != accountFingerprint) {
+            check(prefs.edit().clear()
+                .putString(KEY_ACCOUNT_FINGERPRINT, accountFingerprint).commit())
+        }
         val dao = BlofyDatabase.get(app).dao()
         val provider = dao.provider(providerId) ?: return Result.success()
         if (dao.activeProviderId() != providerId || !dao.hasCatalog(providerId))
@@ -70,7 +83,8 @@ internal class StreamCatalogDeltaWorker(
         val current = version["revision"].asNumber()?.toLong() ?: return Result.retry()
         if (current <= 0L || version["ok"] != true ||
             version["syncStatus"] != "online") return Result.retry()
-        val base = prefs.getLong(KEY_COMPLETE_REVISION, 0L)
+        val storedBase = prefs.getLong(KEY_COMPLETE_REVISION, 0L)
+        val base = if (storedBase in 0L..current) storedBase else 0L
         val priorPending = prefs.getLong(KEY_PENDING_REVISION, -1L)
         val priorBase = prefs.getLong(KEY_PENDING_BASE, -1L)
         if (current == base) {
@@ -80,7 +94,8 @@ internal class StreamCatalogDeltaWorker(
         if (priorPending != current || priorBase != base) {
             check(prefs.edit().putLong(KEY_PENDING_REVISION, current)
                 .putLong(KEY_PENDING_BASE, base)
-                .putInt(KEY_PART_INDEX, 0).putLong(KEY_CURSOR, 0L).commit())
+                .putInt(KEY_PART_INDEX, 0).putLong(KEY_CURSOR, 0L)
+                .putLong(KEY_APPLIED_COUNT, 0L).commit())
         }
         val stages = listOf(
             "live" to "categories", "live" to "items", "live" to "removed",
@@ -192,6 +207,8 @@ internal class StreamCatalogDeltaWorker(
 
     companion object {
         private const val PREFS = "blofy_stream_incremental_catalog_56"
+        private val syncMutex = Mutex()
+        private const val KEY_ACCOUNT_FINGERPRINT = "account_fingerprint"
         private const val KEY_COMPLETE_REVISION = "complete_revision"
         private const val KEY_PENDING_REVISION = "pending_revision"
         private const val KEY_PENDING_BASE = "pending_base"
@@ -219,7 +236,9 @@ internal class StreamCatalogDeltaWorker(
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL,20,TimeUnit.SECONDS)
                 .build()
             WorkManager.getInstance(context.applicationContext)
-                .enqueueUniqueWork(workName(providerId),ExistingWorkPolicy.KEEP,request)
+                .enqueueUniqueWork(workName(providerId),
+                    if (automatic) ExistingWorkPolicy.KEEP else ExistingWorkPolicy.REPLACE,
+                    request)
         }
 
         fun enqueueIfDue(context: Context, providerId: String) {
