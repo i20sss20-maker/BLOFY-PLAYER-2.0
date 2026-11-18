@@ -11,6 +11,22 @@ export async function ensureXtreamCatalogRevisionSchema(db){
   reason TEXT NOT NULL DEFAULT 'sync'
   CHECK (reason IN ('sync','operator_edit','restored'))
  )`);
+ await db.query(`CREATE TABLE IF NOT EXISTS blofy_xtream_catalog_revision_history(
+  source_id UUID NOT NULL REFERENCES blofy_xtream_servers(id) ON DELETE CASCADE,
+  revision BIGINT NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL,
+  reason TEXT NOT NULL DEFAULT 'sync',
+  PRIMARY KEY(source_id,revision)
+ )`);
+ await db.query(`CREATE TABLE IF NOT EXISTS blofy_xtream_catalog_removals(
+  source_id UUID NOT NULL REFERENCES blofy_xtream_servers(id) ON DELETE CASCADE,
+  media_type TEXT NOT NULL CHECK(media_type IN ('live','movie','series')),
+  source_item_id TEXT NOT NULL,
+  removed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY(source_id,media_type,source_item_id)
+ )`);
+ await db.query(`CREATE INDEX IF NOT EXISTS idx_blofy_catalog_removal_cursor
+  ON blofy_xtream_catalog_removals(source_id,media_type,removed_at)`);
 }
 export async function bumpXtreamCatalogRevision(db,sourceId,reason='sync'){
  if(!UUID.test(String(sourceId||''))||
@@ -21,7 +37,13 @@ export async function bumpXtreamCatalogRevision(db,sourceId,reason='sync'){
   ON CONFLICT (source_id) DO UPDATE SET
    revision=blofy_xtream_catalog_revisions.revision+1,
    reason=EXCLUDED.reason,updated_at=NOW()
-  RETURNING revision`,[sourceId,reason])).rows[0];
+  RETURNING revision,updated_at`,[sourceId,reason])).rows[0];
+ // Immutable revision -> commit timestamp. Older revisions may not be
+ // present (legacy deployments); clients then use a safe full baseline.
+ await db.query(`INSERT INTO blofy_xtream_catalog_revision_history
+  (source_id,revision,updated_at,reason) VALUES($1,$2,$3,$4)
+  ON CONFLICT (source_id,revision) DO NOTHING`,
+  [sourceId,row.revision,row.updated_at,reason]);
  return Number(row.revision);
 }
 export async function xtreamCatalogVersionForAccount(pool,sourceId,since=null){
