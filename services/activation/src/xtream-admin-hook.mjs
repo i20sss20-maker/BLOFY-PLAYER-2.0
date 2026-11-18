@@ -3766,6 +3766,35 @@ async function unifiedStreamBridge(req,res,url){
     return json(res,200,{ok:true,sourceId,...schedule,
       firstRunImmediately:false,sourceCredentialsChanged:false});
   }
+  // A deliberate owner-only metadata refresh: reindex the one approved source
+  // behind existing app codes and Xtream logins. No copied movie/episode bytes,
+  // no customer migration, and no credential rotation.
+  if(req.method==='POST'&&p==='/internal/blofy-stream/ops/catalog/refresh-now'){
+    if(url.search)return json(res,400,{ok:false,code:'catalog_refresh_query_denied'});
+    const body=await readJson(req);
+    const selected=await approvedSalehMirrorSource();
+    const sourceId=String(body?.sourceId||'');
+    if(!selected.ok||sourceId!==selected.sourceId)
+      return json(res,403,{ok:false,code:'catalog_source_not_approved'});
+    const source=await serverById(sourceId);
+    if(!source||source.enabled!==true||source.publish_catalog!==true||
+       String(source.name||'').trim().toLowerCase()!=='saleh')
+      return json(res,409,{ok:false,code:'catalog_source_unavailable'});
+    try{
+      const job=startSync(sourceId,['live','movie','series']);
+      return json(res,202,{ok:true,code:'catalog_refresh_accepted',
+        sourceId,queued:job.queued===true,
+        mediaTypes:['live','movie','series'],
+        metadataOnly:true,codesUnchanged:true,mediaFilesCopied:0,
+        completed:false});
+    }catch(error){
+      const busy=['xtream_sync_in_progress','xtream_sync_queue_full']
+        .includes(String(error?.message||''));
+      return json(res,busy?409:503,{ok:false,
+        code:busy?'catalog_refresh_already_running':'catalog_refresh_unavailable',
+        sourceId,metadataOnly:true,mediaFilesCopied:0});
+    }
+  }
   if(req.method==='GET'&&p==='/internal/blofy-stream/ops/snapshots'){
     const sourceId=String(url.searchParams.get('sourceId')||'');
     if(!validUuid(sourceId))return json(res,400,{ok:false,code:'stream_invalid_source_id'});
