@@ -43,6 +43,7 @@ async function refresh(){
   }
   byId('one-last-checked').textContent='آخر فحص: '+stamp.format(new Date());
   button.disabled=false;
+  void refreshReadiness();
 }
 async function smoke(){
   const button=byId('one-smoke'),result=byId('one-smoke-result');
@@ -75,3 +76,90 @@ async function smoke(){
 byId('one-refresh')?.addEventListener('click',()=>{void refresh()});
 byId('one-smoke')?.addEventListener('click',()=>{void smoke()});
 void refresh();
+
+/* BLOFY ONE centralized operator readiness: existing protected read-only backend.
+ * These are health checks, not customer-account or streaming-success counts.
+ * Never persist admin payloads or display secrets.
+ */
+const oneReadinessLinks=Object.freeze({
+  overview:'/admin/control-center',
+  sources:'/sources-admin#xtream',
+  library:'/admin/content-hub',
+  accounts:'/sources-admin#xtream',
+  codes:'/sources-admin#dual',
+  distributors:'/distributor',
+  restream:'/admin/control-center',
+  security:'/admin/control-center/health'
+});
+const oneReadinessStates=Object.freeze({
+  connected:['متصل','ok'],
+  reachable:['واجهة متاحة','warn'],
+  degraded:['يحتاج مراجعة','warn'],
+  blocked:['تفويض مرفوض','fail'],
+  unavailable:['غير متاح','fail'],
+  unknown:['غير مؤكد','pending']
+});
+let oneReadinessSerial=0;
+async function refreshReadiness(){
+  const token=++oneReadinessSerial;
+  const summary=byId('one-readiness-summary'),list=byId('one-readiness-list');
+  if(!summary||!list)return;
+  summary.textContent='جارٍ قراءة جاهزية وحدات STREAM من مسارات الإدارة المحمية…';
+  try{
+    const snapshot=await readJson('/api/v1/admin/control-center/status');
+    if(token!==oneReadinessSerial)return;
+    const result=snapshot.operatorReadiness||{};
+    const checks=Array.isArray(result.checks)?result.checks.filter(x=>x&&
+      Object.hasOwn(oneReadinessLinks,String(x.id||''))):[];
+    list.replaceChildren();
+    if(!checks.length){
+      summary.textContent='تعذر التحقق من وحدات الإدارة. استخدم مركز المراقبة التفصيلي.';
+      return;
+    }
+    const states=result.summary||{};
+    const connected=Number(states.connected||0),unknown=Number(states.unknown||0);
+    const failures=Number(states.degraded||0)+Number(states.unavailable||0);
+    summary.textContent='واجهات متصلة: '+connected+' من '+checks.length+
+      ' · تحتاج مراجعة: '+failures+' · غير مؤكدة: '+unknown+
+      ' — آخر قراءة: '+new Date(result.lastCheckedAt||snapshot.checkedAt).toLocaleString('ar-SA');
+    for(const row of checks){
+      const state=oneReadinessStates[row.state]||oneReadinessStates.unknown;
+      const card=document.createElement('a');
+      card.className='one-ready-item '+state[1];
+      card.href=oneReadinessLinks[row.id];
+      const title=document.createElement('strong');
+      title.textContent=String(row.label||'خدمة BLOFY');
+      const badge=document.createElement('span');
+      badge.className='one-ready-state';
+      badge.textContent=state[0];
+      card.append(title,badge);
+      list.append(card);
+    }
+  }catch(error){
+    if(token!==oneReadinessSerial)return;
+    summary.textContent=error.message==='session_required'
+      ?'انتهت جلسة الإدارة؛ افتح صفحة تسجيل الدخول لإعادة التحقق.'
+      :'تعذر التحقق من جاهزية الوحدات. الفحوصات السابقة لا تُعتبر نتائج حالية.';
+    list.replaceChildren();
+    const action=document.createElement('a');
+    action.href=error.message==='session_required'?'/admin':'/admin/control-center/health';
+    action.className='one-ready-recovery';
+    action.textContent=error.message==='session_required'?'تسجيل دخول المشرف ←':'فتح المراقبة التفصيلية ←';
+    list.append(action);
+  }
+}
+function filterOneModules(){
+  const field=byId('one-module-filter'),count=byId('one-module-count');
+  if(!field||!count)return;
+  const query=field.value.trim().toLocaleLowerCase('ar');
+  const cards=Array.from(document.querySelectorAll('#one-module-list .one-module'));
+  let visible=0;
+  for(const card of cards){
+    const match=card.textContent.toLocaleLowerCase('ar').includes(query);
+    card.hidden=!match;
+    if(match)visible++;
+  }
+  count.textContent=visible?'الأقسام المعروضة: '+visible:'لا توجد أقسام مطابقة. جرّب كلمة أخرى.';
+}
+byId('one-module-filter')?.addEventListener('input',filterOneModules);
+filterOneModules();
