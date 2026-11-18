@@ -293,7 +293,12 @@ async function serveStorefront(res) {
     'referrer-policy': 'strict-origin-when-cross-origin',
     'permissions-policy': 'camera=(), microphone=(), geolocation=()',
     'strict-transport-security': 'max-age=31536000',
-    'content-security-policy': PUBLIC_ANALYTICS_CSP + "; base-uri 'none'; form-action 'none'"
+    'content-security-policy': PUBLIC_ANALYTICS_CSP
+      .replace("script-src 'self' 'unsafe-inline' https://www.googletagmanager.com",
+        "script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.ksamerchant.geidea.net")
+      .replace("connect-src 'self' https://www.google-analytics.com https://region1.google-analytics.com https://www.googletagmanager.com",
+        "connect-src 'self' https://www.google-analytics.com https://region1.google-analytics.com https://www.googletagmanager.com https://www.ksamerchant.geidea.net https://api.ksamerchant.geidea.net")
+      + "; frame-src https://www.ksamerchant.geidea.net; base-uri 'none'; form-action 'none'"
   });
   res.end(file);
 }
