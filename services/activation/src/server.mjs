@@ -313,6 +313,18 @@ async function serveStorefront(res, product = null) {
   res.end(file);
 }
 
+async function serveStoreDesign(res) {
+  const file=await readFile(new URL('../web/store-premium.css',import.meta.url));
+  res.writeHead(200,{
+    'content-type':'text/css; charset=utf-8',
+    'content-length':file.length,
+    'cache-control':'public, max-age=3600',
+    'x-content-type-options':'nosniff',
+    'strict-transport-security':'max-age=31536000'
+  });
+  res.end(file);
+}
+
 function serveStoreInfo(res, slug) {
   const markup=storeInfoPage(slug);
   if(!markup){res.writeHead(404,{'cache-control':'no-store'});return res.end();}
@@ -861,6 +873,8 @@ const server = http.createServer(async (req, res) => {
     }
     if (await servePrivacyPage(req, res, requestUrl)) return;
     if (['GET', 'HEAD'].includes(req.method) && (requestUrl.pathname === '/' || requestUrl.pathname === '/shop' || requestUrl.pathname === '/shop/')) return await serveStorefront(res);
+    if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/design.css')
+      return await serveStoreDesign(res);
     const storeProductMatch=requestUrl.pathname.match(/^\/products\/(stream|xtream)\/?$/);
     const storeInfoMatch=requestUrl.pathname.match(/^\/store\/(about|trial|faq|contact|terms)\/?$/);
     const storeImageMatch=requestUrl.pathname.match(/^\/store\/media\/(stream|xtream)\.svg$/);
