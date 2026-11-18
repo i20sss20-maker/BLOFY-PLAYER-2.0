@@ -49,9 +49,9 @@ android {
         targetSdk = 36
         // Isolated STREAM 56.0 full customer UX and catalog delta integration QA candidate. This branch does
         // not change the main app, customer updater or Google Play releases.
-        versionCode = 2000115
+        versionCode = 2000116
         // VersionCode is higher than the published signed STREAM 55.8.24 (2000101).
-        versionName = "2.0.0-rc07.56.0" // STREAM build type appends -STREAM
+        versionName = "2.0.0-rc07.56.0.1" // STREAM build type appends -STREAM
         manifestPlaceholders["blofyApplicationLabel"] = "@string/app_name"
         manifestPlaceholders["blofyApplicationIcon"] = "@drawable/blofy_logo"
         manifestPlaceholders["blofyApplicationBanner"] = "@drawable/blofy_tv_banner"
