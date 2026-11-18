@@ -51,14 +51,14 @@
     extractButton.disabled = true;
     hideCredentials();
   }
-  async function request(path, code) {
+  async function request(path, payload) {
     const ctl = new AbortController();
     const timer = window.setTimeout(() => ctl.abort(), 14000);
     try {
       const response = await fetch(path, {
         method:'POST',credentials:'same-origin',cache:'no-store',
         headers:{accept:'application/json','content-type':'application/json'},
-        body:JSON.stringify({code}),signal:ctl.signal
+        body:JSON.stringify(payload),signal:ctl.signal
       });
       if (response.status === 401) throw Error('انتهت جلسة المشرف؛ سجّل الدخول من /admin.');
       const data = await response.json().catch(() => ({}));
@@ -74,7 +74,10 @@
           stream_link_credentials_unavailable:'كلمة مرور Xtream القديمة ليست محفوظة بشكل قابل للاسترجاع؛ لا يمكن استخراجها دون تغيير بيانات الدخول.',
           stream_link_saleh_source_only:'الكود مرتبط بمصدر مختلف عن مصدر صالح المعتمد.',
           stream_link_origin_invalid:'إعدادات Host غير صالحة حاليًا.',
-          stream_code_invalid:'صيغة الكود غير صحيحة.'
+          stream_code_invalid:'صيغة الكود غير صحيحة.',
+          stream_link_batch_limit:'الحد الأقصى 20 كودًا في الفحص الواحد.',
+          stream_link_batch_duplicate:'وجدت أكواد مكررة؛ أدخل كل كود مرة واحدة فقط.',
+          stream_link_batch_invalid_code:'أحد الأكواد غير صالح. يقبل 8–12 رقمًا أو 24 خانة Hex فقط.'
         };
         throw Error(reasons[data.error || data.code] ||
           (response.status===429?'محاولات كثيرة، حاول لاحقًا.':'تعذر إتمام العملية (HTTP '+response.status+').'));
@@ -121,7 +124,7 @@
     setStatus('جارٍ البحث عن الكود في قاعدة BLOFY STREAM دون تفعيله أو تجديده…');
     const version = serial;
     try {
-      const record = await request('/api/v1/admin/xtream-gateway/codes/lookup', code);
+      const record = await request('/api/v1/admin/xtream-gateway/codes/lookup', {code});
       if (version !== serial) return;
       exactCode = code;
       details = record;
@@ -144,7 +147,7 @@
     setStatus('جارٍ استرجاع بيانات الحساب المفعّل؛ لا ننشئ اشتراكًا جديدًا…');
     const code = exactCode,version = serial;
     try {
-      const result = await request('/api/v1/admin/xtream-gateway/link/code-to-xtream',code);
+      const result = await request('/api/v1/admin/xtream-gateway/link/code-to-xtream',{code});
       if (serial !== version) return;
       const c = result.credentials || {};
       if (!c.serverUrl || !c.username || !c.password || result.created !== false ||
@@ -189,4 +192,113 @@
     clearState();
     input.value='';
   });
+
+  // Bounded owner-only batch lookup; NEVER returns passwords or raw vouchers.
+  const batchForm=$('one-legacy-batch-form');
+  const batchText=$('one-legacy-batch-codes');
+  const batchButton=$('one-legacy-batch-run');
+  const batchStatus=$('one-legacy-batch-status');
+  const batchResults=$('one-legacy-batch-results');
+  const batchRows=$('one-legacy-batch-rows');
+  let batchCodes=[],batchSerial=0,batchTimer=null;
+  const batchLabels=Object.freeze({
+    ready:'جاهز للاستخراج',not_found:'غير موجود بالسجلات',
+    not_activated:'لم يُفعّل بعد',missing_account:'الحساب المرتبط غير موجود',
+    revoked:'كود ملغى',account_disabled:'حساب موقوف',
+    expired:'منتهي',unsupported_source:'مصدر غير معتمد',
+    password_unrecoverable:'بيانات الدخول القديمة غير قابلة للاسترجاع'
+  });
+  function clearBatch(message='تم مسح الأكواد والنتائج من الصفحة.'){
+    batchSerial++;
+    batchCodes=[];
+    window.clearTimeout(batchTimer);
+    batchTimer=null;
+    batchText.value='';
+    batchRows.replaceChildren();
+    batchResults.hidden=true;
+    batchButton.disabled=false;
+    batchStatus.textContent=message;
+  }
+  function showBatch(payload,codes){
+    batchRows.replaceChildren();
+    for(const entry of payload.results||[]){
+      if(!Number.isSafeInteger(entry?.index)||!codes[entry.index])continue;
+      const code=codes[entry.index],tr=document.createElement('tr');
+      for(const value of [
+        String(entry.index+1),code.slice(0,2)+'••••'+code.slice(-2),
+        entry.kind==='legacy_24_hex'?'قديم 24 خانة':'رقمي',
+        batchLabels[entry.status]||'تحتاج مراجعة',
+        date(entry.expiresAt)
+      ]){
+        const td=document.createElement('td');
+        td.textContent=value;
+        tr.append(td);
+      }
+      const cell=document.createElement('td');
+      if(entry.canExtract===true){
+        const pick=document.createElement('button');
+        pick.type='button';
+        pick.className='one-legacy-pick';
+        pick.textContent='فحص واستخراج';
+        pick.addEventListener('click',()=>{
+          if(!batchCodes[entry.index])return;
+          // Always reverify the EXACT original code, and require a fresh
+          // explicit confirmation before showing a credential.
+          input.value=batchCodes[entry.index];
+          input.dispatchEvent(new Event('input',{bubbles:true}));
+          form.requestSubmit();
+          input.scrollIntoView({behavior:'smooth',block:'center'});
+        });
+        cell.append(pick);
+      }else{
+        const unavailable=document.createElement('span');
+        unavailable.textContent='غير متاح';
+        cell.append(unavailable);
+      }
+      tr.append(cell);
+      batchRows.append(tr);
+    }
+    batchResults.hidden=false;
+  }
+  batchForm.addEventListener('submit',async event=>{
+    event.preventDefault();
+    const raw=batchText.value.split(/[\r\n,;]+/).map(s=>s.trim()).filter(Boolean);
+    clearBatch('جارٍ إعداد فحص الأكواد...');
+    if(raw.length<1||raw.length>20){
+      batchStatus.textContent='أدخل من 1 إلى 20 كودًا كاملًا، كل كود في سطر.';
+      return;
+    }
+    const codes=raw.map(normalize);
+    if(codes.some(code=>!isValid(code))){
+      batchStatus.textContent='هناك كود غير صالح. استخدم 8–12 رقمًا أو 24 خانة Hex.';
+      return;
+    }
+    if(new Set(codes).size!==codes.length){
+      batchStatus.textContent='توجد أكواد مكررة. احذف التكرارات وأعد الفحص.';
+      return;
+    }
+    batchCodes=codes;
+    const version=++batchSerial;
+    batchButton.disabled=true;
+    batchStatus.textContent='جارٍ فحص '+codes.length+' كودًا، دون إنشاء اشتراك جديد...';
+    try{
+      const result=await request('/api/v1/admin/xtream-gateway/codes/inspect-batch',{codes});
+      if(version!==batchSerial)return;
+      if(result.readOnly!==true||result.scanned!==codes.length||!Array.isArray(result.results))
+        throw Error('نتائج الفحص غير مكتملة.');
+      showBatch(result,codes);
+      batchStatus.textContent='فُحص '+result.scanned+' كودًا؛ الجاهز للاستخراج: '+result.ready+
+        '. اختر «فحص واستخراج» للتحقق قبل عرض بيانات الدخول.';
+      batchTimer=window.setTimeout(()=>clearBatch('انتهت مدة عرض نتائج المجموعة. أعد الفحص عند الحاجة.'),180000);
+    }catch(e){
+      if(version===batchSerial)clearBatch('تعذر فحص الأكواد: '+e.message);
+    }finally{
+      if(version===batchSerial)batchButton.disabled=false;
+    }
+  });
+  $('one-legacy-batch-clear').addEventListener('click',()=>clearBatch());
+  document.addEventListener('visibilitychange',()=>{
+    if(document.hidden)clearBatch('حُذفت نتائج المجموعة عند مغادرة التبويب.');
+  });
+  window.addEventListener('pagehide',()=>clearBatch());
 })();
