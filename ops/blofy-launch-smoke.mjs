@@ -1,3 +1,4 @@
+import {pathToFileURL} from 'node:url';
 /**
  * Fixed-domain, bounded public smoke checks for the BLOFY launch.
  *
@@ -55,7 +56,7 @@ export async function smoke({fetchImpl=fetch,clock=Date.now}={}){
     customerTrafficChanged:false,paymentsCaptured:0,providerMediaRequests:0,
     checkedAt:new Date(clock()).toISOString(),checks:rows};
 }
-if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href){
+if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   const result=await smoke();
   process.stdout.write(JSON.stringify(result)+'\n');
   if(!result.ok)process.exitCode=1;
