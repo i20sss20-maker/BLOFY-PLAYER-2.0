@@ -300,6 +300,44 @@
       </div>
       <p class="one-footnote">هذه بيانات السجل اليدوي لأكواد STREAM فقط، وليست إثبات تحصيل عبر Geidea أو تسوية بنكية أو مبيعات متجر Xtream.</p>
     </section>
+    <section class="one-issue" id="one-issue" aria-labelledby="one-issue-title">
+      <div class="one-section-heading"><div><span class="one-kicker">MANUAL CODE ISSUANCE · OWNER ONLY</span>
+        <h3 id="one-issue-title">إصدار أكواد BLOFY STREAM من نفس اللوحة</h3></div></div>
+      <p class="one-footnote">يُصدر النظام الأكواد الجديدة من مصدر صالح المفعّل فقط. لا تُباع تلقائيًا ولا يبدأ احتساب المدة قبل أول تفعيل. إصدار أكواد Xtream المستقلة يخضع لقواعد التفعيل الخاصة بها. هذا إجراء إداري حقيقي، ولن يُنفّذ إلا بعد تأكيدك.</p>
+      <form id="one-issue-form" class="one-issue-form" autocomplete="off">
+        <label>نوع الكود
+          <select name="channel" id="one-issue-channel"><option value="app">كود تطبيق BLOFY STREAM</option>
+            <option value="xtream">كود Xtream</option></select>
+        </label>
+        <label>مدة الاشتراك بعد أول تفعيل
+          <select name="durationDays" id="one-issue-days">
+            <option value="30">30 يومًا</option><option value="90">90 يومًا</option>
+            <option value="180">180 يومًا</option><option value="365" selected>365 يومًا</option>
+          </select>
+        </label>
+        <label>عدد الأكواد (1–5)
+          <input name="quantity" id="one-issue-quantity" type="number" min="1" max="5" value="1" required inputmode="numeric">
+        </label>
+        <label>حد الاتصالات المتزامنة
+          <select name="maxConnections" id="one-issue-connections"><option value="1">اتصال واحد</option>
+            <option value="2">اتصالان</option></select>
+        </label>
+        <label class="one-issue-wide">اسم الدفعة أو العميل
+          <input name="label" id="one-issue-label" type="text" maxlength="95" value="BLOFY STREAM" required autocomplete="off">
+        </label>
+        <button id="one-issue-submit" type="submit">إصدار الأكواد بعد التأكيد</button>
+      </form>
+      <p class="one-ops-status" id="one-issue-status" aria-live="polite" role="status">لن يصدر أي كود حتى تؤكد الطلب بنفسك.</p>
+      <div id="one-issue-result" class="one-issue-result" hidden>
+        <strong>الأكواد الجديدة — تظهر للمشرف مؤقتًا فقط</strong>
+        <div id="one-issue-code-list" class="one-issue-list"></div>
+        <div class="one-stream-secret-actions">
+          <button type="button" id="one-issue-copy">نسخ الأكواد</button>
+          <button type="button" id="one-issue-hide">إخفاء الأكواد</button>
+        </div>
+        <small>تُخفى الأكواد من الصفحة بعد 90 ثانية أو عند مغادرتها، ويمكن استرجاعها لاحقًا من سجل الأكواد إذا كانت محفوظة في المخزن المشفّر.</small>
+      </div>
+    </section>
     <div class="one-stream-secret" id="one-stream-secret" hidden role="region" aria-label="الكود المسترجع">
       <strong id="one-stream-secret-title">الكود المسترجع</strong>
       <code id="one-stream-secret-code" dir="ltr"></code>
