@@ -156,6 +156,10 @@ interface BlofyDao {
     @Query("SELECT * FROM episodes WHERE providerId = :providerId") suspend fun allEpisodesForProvider(providerId: String): List<EpisodeEntity>
     @Query("SELECT * FROM episodes WHERE providerId = :providerId AND seriesId = :seriesId") suspend fun episodeSnapshot(providerId: String, seriesId: String): List<EpisodeEntity>
 
+    @Query("SELECT * FROM categories WHERE `key` IN (:keys)")
+    suspend fun categoriesByKeys(keys: List<String>): List<CategoryEntity>
+    @Query("SELECT * FROM streams WHERE `key` IN (:keys)")
+    suspend fun streamsByKeys(keys: List<String>): List<StreamEntity>
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertCategories(items: List<CategoryEntity>)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertStreams(items: List<StreamEntity>)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertEpisodes(items: List<EpisodeEntity>)
