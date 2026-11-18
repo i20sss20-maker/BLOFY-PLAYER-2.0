@@ -64,7 +64,7 @@ test('owner-only issuance uses verified saleh and never silently bills, redeems 
     read('web/blofy-one-operations.js'),read('web/blofy-one.html')
   ]);
   assert.match(js,/sourceId:'d2bb0397-1c56-4751-adc9-1a17758022f6'/);
-  assert.match(js,/payload\.quantity<1\|\|payload\.quantity>5/);
+  assert.match(js,/payload\.quantity<1\|\|payload\.quantity>20/);
   assert.match(js,/\['app','xtream'\]/);
   assert.match(js,/window\.confirm\('إصدار '/);
   assert.match(js,/method:'POST',body:payload/);
