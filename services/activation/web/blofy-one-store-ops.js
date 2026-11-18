@@ -14,7 +14,7 @@
   revoked:'ملغى',disabled:'يحتاج مراجعة',paid:'مدفوع',pending:'قيد الدفع',
   failed:'فشل',cancelled:'ملغى'
  };
- let page=1,matched=0,size=25,requestVersion=0,loading=false;
+ let page=1,matched=0,size=25,requestVersion=0,controller=null;
  const cell=(tag,value)=>{
   const e=document.createElement(tag);
   e.textContent=String(value??'—');
@@ -84,20 +84,20 @@
   next.disabled=page*size>=matched;
  }
  async function load(){
-  if(loading)return;
-  loading=true;const serial=++requestVersion;
+  const serial=++requestVersion;
+  controller?.abort();controller=new AbortController();
   refresh.disabled=true;prev.disabled=true;next.disabled=true;
   setStatus('جارٍ فحص الاشتراكات والتجديدات من قاعدة المتجر الموثّقة…');
   try{
    const params=new URLSearchParams({
     view:view.value,status:filter.value,q:search.value.trim(),page:String(page)
    });
-   const controller=new AbortController();
-   const timer=window.setTimeout(()=>controller.abort(),12000);
+   const thisRequest=controller;
+   const timer=window.setTimeout(()=>thisRequest.abort(),12000);
    let response;
    try{response=await fetch('/api/v1/admin/store/subscription-operations?'+params,
      {method:'GET',cache:'no-store',credentials:'same-origin',
-      headers:{accept:'application/json'},signal:controller.signal});}
+      headers:{accept:'application/json'},signal:thisRequest.signal});}
    finally{window.clearTimeout(timer);}
    if(response.status===401)throw Error('انتهت جلسة المشرف. افتح /admin وسجّل الدخول.');
    if(!response.ok)throw Error('تعذّر قراءة قاعدة المتجر (HTTP '+response.status+').');
@@ -109,6 +109,8 @@
    $('one-renewal-paid').textContent=int(r.paid);
    $('one-renewal-pending').textContent=int(r.pending);
    $('one-renewal-overdue').textContent=int(r.pendingOver20m);
+   $('one-renewal-reminder-accepted').textContent=data.reminders?int(data.reminders.acceptedByProvider):'غير مؤكد';
+   $('one-renewal-reminder-exhausted').textContent=data.reminders?int(data.reminders.exhaustedRetries):'غير مؤكد';
    if(data.subscriptions)
     $('one-renewal-expiring').textContent=int(data.subscriptions.expiring);
    render(data);
@@ -122,7 +124,7 @@
    const tr=document.createElement('tr'),td=cell('td','تعذّر تحميل البيانات. استخدم زر التحديث.');
    td.colSpan=5;tr.append(td);tbody.append(tr);
    setStatus(e.name==='AbortError'?'انتهت مهلة فحص السجلات. أعد المحاولة.':e.message,true);
-  }finally{loading=false;refresh.disabled=false;}
+  }finally{if(serial===requestVersion){controller=null;refresh.disabled=false;}}
  }
  view.addEventListener('change',()=>{page=1;updateStatuses();void load();});
  form.addEventListener('submit',e=>{e.preventDefault();page=1;void load();});
