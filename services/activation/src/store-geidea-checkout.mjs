@@ -429,6 +429,27 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
    let amountMinor=cart.totalMinor,discountMinor=0;
    try{
      await db.query('BEGIN');
+     if(loginRequired){
+       if(!UUID.test(customer.customerId||'')){
+         await db.query('ROLLBACK');
+         return json(res,503,{error:'store_customer_identity_unavailable'});
+       }
+       // Serialize concurrent checkout requests across every production replica.
+       await db.query('SELECT pg_advisory_xact_lock(718420812,hashtext($1))',[customer.customerId]);
+       const pending=(await db.query(
+         "SELECT o.id FROM blofy_store_customer_orders co "+
+         "JOIN blofy_store_geidea_orders o ON o.id=co.order_id "+
+         "WHERE co.customer_id=$1 AND o.sku=$2 AND o.status='pending' "+
+         "AND o.created_at>NOW()-INTERVAL '20 minutes' "+
+         "AND o.cart_items=$3::jsonb "+
+         "AND COALESCE(o.coupon_code,'')=COALESCE($4,'') "+
+         "ORDER BY o.created_at DESC LIMIT 1",
+         [customer.customerId,CART_SKU,JSON.stringify(cart.items),couponCode])).rows[0];
+       if(pending){
+         await db.query('ROLLBACK');
+         return json(res,409,{error:'store_pending_checkout_exists'});
+       }
+     }
      if(couponCode){
        const coupon=(await db.query('SELECT percent,max_uses FROM blofy_store_coupons '+
          'WHERE code=$1 AND active=TRUE AND expires_at>NOW() FOR UPDATE',[couponCode])).rows[0];
@@ -448,18 +469,19 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
          id,CART_SKU,'app',365,amountMinor,tokenHash(secret),
          JSON.stringify(cart.items),cart.totalMinor,number,couponCode,discountMinor
        ]);
+     if(loginRequired){
+       // Commit order and owner together to close the previous duplicate-order window.
+       const ownership=await db.query(
+         'INSERT INTO blofy_store_customer_orders(order_id,customer_id) VALUES($1,$2) RETURNING order_id',
+         [id,customer.customerId]);
+       if(ownership.rowCount!==1){
+         await db.query('ROLLBACK');
+         return json(res,503,{error:'store_order_link_failed'});
+       }
+     }
      await db.query('COMMIT');
    }catch(e){await db.query('ROLLBACK').catch(()=>{});throw e;}
    finally{db.release();}
-   if(loginRequired){
-     let linked=false;
-     try{linked=(await onCheckoutOrder(req,id,secret))===true;}catch{}
-     if(!linked){
-       await pool.query("UPDATE blofy_store_geidea_orders SET status='cancelled' "+
-         "WHERE id=$1 AND status='pending' AND session_id IS NULL",[id]).catch(()=>{});
-       return json(res,503,{error:'store_order_link_failed'});
-     }
-   }
    const timestamp=new Date().toISOString().slice(0,19).replaceAll('-','/').replace('T',' ');
    const request={
      amount:(amountMinor/100).toFixed(2),currency:'SAR',timestamp,merchantReferenceId:id,
@@ -472,13 +494,19 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
    };
    let created;
    try{created=await provider('/payment-intent/api/v2/direct/session','POST',request);}
-   catch{return json(res,503,{error:'store_geidea_session_unavailable',orderNumber:number});}
+   catch{
+     await pool.query("UPDATE blofy_store_geidea_orders SET status='cancelled' "+
+       "WHERE id=$1 AND status='pending' AND session_id IS NULL",[id]).catch(()=>{});
+     return json(res,503,{error:'store_geidea_session_unavailable',orderNumber:number});
+   }
    if(!UUID.test(created?.session?.id||'')||
-      Date.parse(created?.session?.expiryDate||'')<=Date.now())
+      Date.parse(created?.session?.expiryDate||'')<=Date.now()){
+     await pool.query("UPDATE blofy_store_geidea_orders SET status='cancelled' "+
+       "WHERE id=$1 AND status='pending' AND session_id IS NULL",[id]).catch(()=>{});
      return json(res,502,{error:'store_geidea_session_invalid',orderNumber:number});
+   }
    await pool.query('UPDATE blofy_store_geidea_orders SET session_id=$2 WHERE id=$1',[id,created.session.id]);
-   // Legacy mode still supports historical guest receipts; verified-account mode
-   // linked the order before asking Geidea to create a chargeable session.
+   // Legacy mode preserves optional linking; verified account ownership was committed atomically.
    if(!loginRequired)try{await onCheckoutOrder(req,id,secret);}catch{}
    return json(res,201,{
      provider:'geidea',checkoutMode:'modal',sku:CART_SKU,

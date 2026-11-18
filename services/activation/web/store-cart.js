@@ -12,7 +12,8 @@
  const money=n=>(Number(n)/100).toLocaleString('ar-SA',{minimumFractionDigits:0,maximumFractionDigits:2})+' ر.س';
  let items=[],quoted=null,ready=false,creating=false,paymentOpen=false,currentOrder=null,accessToken=null;
  let signedIn=false,accountEmail='',cloudRevision=null,cloudSynced=false,cloudSyncing=false,
-   savedSnapshot='',hasUrlAddition=false;
+   savedSnapshot='',hasUrlAddition=false,accountId='';
+ const pendingKey='blofy.shop.pending-checkout.v1';
  const cloudEndpoint='/api/v1/store/account/cart',ownerKey='blofy.shop.cart.owner.v1';
  // Geidea officially supports browser redirection using the already created session.
  // Never depend on the external modal JavaScript loading to let customers pay.
@@ -156,6 +157,7 @@
  function updateCheckoutButton(){
    const button=$('checkout');
    button.textContent=!signedIn?'تسجيل الدخول مطلوب قبل الدفع':
+     paymentOpen?'لديك طلب دفع سابق، راجع حالته':
      !cloudSynced?'جارٍ حفظ السلة...':'إكمال الطلب والدفع الآمن';
    button.disabled=!signedIn||!cloudSynced||!ready||creating||paymentOpen||!quoted||!items.length;
  }
@@ -217,7 +219,7 @@
      const data=await response.json();
      if(typeof data.email!=='string'||typeof data.customerId!=='string')
        throw Error('account_invalid');
-     signedIn=true;accountEmail=data.email;
+     signedIn=true;accountEmail=data.email;accountId=data.customerId;
      const saved=await fetch(cloudEndpoint,{cache:'no-store',credentials:'same-origin',
        headers:{accept:'application/json'}});
      if(!saved.ok)throw Error('cart_unavailable');
@@ -235,6 +237,7 @@
      savedSnapshot=JSON.stringify({items:cleanItems(remote.items),couponCode:remote.couponCode||''});
      localStorage.setItem(ownerKey,data.customerId);
      try{localStorage.setItem(storageKey,JSON.stringify(items));}catch(_){}
+     await restorePendingCheckout();
      authUI();queueSync();void refresh();
    }catch(_){
      // Fail closed: no payment if a verified account or saved cart is unavailable.
@@ -243,6 +246,56 @@
      $('cart-sync').dataset.state='error';
      updateCheckoutButton();
    }
+ }
+
+
+ async function restorePendingCheckout(){
+   let pending;
+   try{pending=JSON.parse(sessionStorage.getItem(pendingKey)||'null');}catch{return;}
+   if(!pending||!UUID.test(pending.orderId||'')||!UUID.test(pending.sessionId||'')||
+     pending.accountId!==accountId)return;
+   const token=sessionStorage.getItem('blofy.shop.order.'+pending.orderId);
+   if(!/^[a-zA-Z0-9_-]{42,44}$/.test(token||''))return;
+   // Block creation of another Geidea session while checking the older one.
+   paymentOpen=true;
+   currentOrder=pending.orderId;accessToken=token;
+   $('started').hidden=false;
+   $('order-number').textContent=pending.orderNumber||pending.orderId;
+   $('check-pending').href='/store/orders#order='+encodeURIComponent(pending.orderId);
+   $('open-geidea').hidden=true;
+   $('pending-status').textContent='جارٍ مراجعة حالة طلبك السابق لدى مزود الدفع...';
+   updateCheckoutButton();
+   try{
+     const status=await request('/api/v1/store/orders/status',{orderId:pending.orderId,accessToken:token});
+     if(status.status==='paid'){
+       sessionStorage.removeItem(pendingKey);
+       $('pending-status').textContent='الطلب مدفوع، افتح تفاصيل طلبك لرؤية الأكواد.';
+       location.assign('/store/orders#order='+encodeURIComponent(pending.orderId));
+       return;
+     }
+     if(status.status==='failed'||status.status==='cancelled'){
+       sessionStorage.removeItem(pendingKey);
+       currentOrder=null;accessToken=null;paymentOpen=false;
+       $('started').hidden=true;
+       updateCheckoutButton();
+       return;
+     }
+     // An expired Geidea session cannot be relaunched. Do not silently create
+     // a new order while provider settlement may still be in flight.
+     const valid=Number.isFinite(pending.expiresAt)&&Date.now()<pending.expiresAt;
+     const paymentUrl=valid?hostedPaymentUrl(pending.sessionId):null;
+     if(paymentUrl){
+       $('open-geidea').href=paymentUrl;
+       $('open-geidea').hidden=false;
+       $('pending-status').textContent='طلبك السابق لا يزال قيد التحقق. تقدر تكمل الدفع على نفس الجلسة أو تراجع حالة الطلب، من دون إنشاء طلب جديد.';
+     }else{
+       $('open-geidea').hidden=true;
+       $('pending-status').textContent='انتهت مهلة جلسة الدفع السابقة، لكن حالة الطلب ما زالت قيد التحقق. افتح تفاصيل الطلب أو تواصل مع الدعم قبل أي عملية جديدة.';
+     }
+   }catch(_){
+     $('pending-status').textContent='تعذر التأكد من حالة الطلب السابق. لم ننشئ طلبًا آخر؛ افتح تفاصيل الطلب أو تواصل مع الدعم.';
+   }
+   updateCheckoutButton();
  }
 
  let requestSerial=0;
@@ -276,7 +329,7 @@
    try{
      const payload=body();
      const data=await request('/api/v1/store/cart/checkout',payload);
-     if(data.provider!=='geidea'||data.checkoutMode!=='modal'||
+     if(data.provider!=='geidea'||(data.checkoutMode!=='modal'&&data.checkoutMode!=='redirect')||
        data.sku!=='cart'||!UUID.test(data.orderId||'')||
        !/^[a-zA-Z0-9_-]{42,44}$/.test(data.accessToken||'')||
        !UUID.test(data.sessionId||'')||data.priceMinor!==quoted.totalMinor||
@@ -288,11 +341,17 @@
        sessionStorage.setItem('blofy.shop.order.'+currentOrder,accessToken);
        sessionStorage.setItem('blofy.shop.last-order',currentOrder);
        sessionStorage.setItem('blofy.shop.cart.checkout.'+currentOrder,JSON.stringify(items));
+       sessionStorage.setItem(pendingKey,JSON.stringify({
+         orderId:data.orderId,orderNumber:data.orderNumber,sessionId:data.sessionId,
+         accountId,createdAt:Date.now(),expiresAt:Date.now()+13*60*1000
+       }));
      }catch(_){}
      $('started').hidden=false;$('order-number').textContent=data.orderNumber;
      const paymentLink=$('open-geidea');
      paymentLink.href=paymentUrl;paymentLink.hidden=false;
      paymentOpen=true;
+     $('pending-status').textContent='إذا رجعت من صفحة الدفع، تقدر تكمل نفس الطلب أو تتحقق من حالته دون إنشاء طلب جديد.';
+     $('check-pending').href='/store/orders#order='+encodeURIComponent(currentOrder);
      message('تم تجهيز طلبك '+data.orderNumber+'. جارٍ فتح صفحة الدفع الرسمية لدى Geidea. إذا لم تنتقل تلقائيًا، اضغط «فتح بوابة الدفع» في الأسفل.');
      window.BLOFYAnalytics?.track('checkout_started');
      // Same-tab navigation preserves sessionStorage for order recovery on return.
@@ -301,7 +360,16 @@
        message('تم إنشاء الطلب، لكن المتصفح منع الانتقال. استخدم زر «فتح بوابة الدفع» أدناه لنفس الطلب دون إعادة إنشائه.');
      }
    }catch(err){
-     message('تعذر إكمال الدفع: '+err.message+'. إذا سبق إنشاء الطلب لا تعِد الدفع قبل التحقق من حالته.');
+     if(err.message==='store_pending_checkout_exists'){
+       $('started').hidden=false;
+       $('pending-status').textContent='يوجد طلب سابق لنفس السلة في حسابك ولم يُحسم بعد. افتح «حسابي» وراجع حالة الطلب قبل محاولة أخرى حتى لا تتكرر العملية.';
+       $('open-geidea').hidden=true;
+       $('check-pending').href='/store/account';
+       paymentOpen=true;
+     }
+     message(err.message==='store_pending_checkout_exists'?
+       'تم منع إنشاء فاتورة جديدة لنفس السلة حفاظًا على أموالك. راجع الطلب السابق في حسابك.':
+       'تعذر إكمال الدفع: '+err.message+'. إذا سبق إنشاء الطلب لا تعِد الدفع قبل التحقق من حالته.');
    }finally{creating=false;updateCheckoutButton();}
  }
  function privateLink(){
