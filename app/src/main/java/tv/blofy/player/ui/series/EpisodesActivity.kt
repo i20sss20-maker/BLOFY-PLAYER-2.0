@@ -282,8 +282,15 @@ class EpisodesActivity : ContentAccessActivity() {
             while (isActive) {
                 if (::episodeAdapter.isInitialized &&
                     allEpisodes.isNotEmpty() && !syncInProgress) {
-                    val provider = withContext(Dispatchers.IO) {
-                        BlofyDatabase.get(applicationContext).dao().provider(providerId)
+                    val provider = try {
+                        withContext(Dispatchers.IO) {
+                            BlofyDatabase.get(applicationContext).dao().provider(providerId)
+                        }
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        // A temporarily busy database must not crash TV navigation.
+                        null
                     }
                     if (provider != null) refreshCachedEpisodesSilently(provider)
                 }
