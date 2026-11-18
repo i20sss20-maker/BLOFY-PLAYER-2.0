@@ -8,6 +8,9 @@ export const STREAM_PUBLIC_DOWNLOAD = 'https://updates.blofyplayer.com/d/blofy-s
 // Optional installer-only version. Never use in the stable updater feed.
 export const STREAM_TEST_FILENAME = 'BLOFY-STREAM-55.8.33-FOXFm-APP-ONLY-OWNER-SIGNED.apk';
 export const STREAM_TEST_PATH = '/d/blofy-stream/foxfm-test';
+// Signed 56.0.1 hotfix canary, intentionally separate from the public 56.0 updater.
+export const STREAM_LIVE_FIX_TEST_FILENAME = 'BLOFY-STREAM-56.0.1-LIVE-RECONNECT-FIX-OWNER-SIGNED.apk';
+export const STREAM_LIVE_FIX_TEST_PATH = '/d/blofy-stream/live-fix-test';
 
 export function streamReleaseMetadata(app) {
   if (!app || app.slug !== 'blofy-stream' || app.enabled !== true ||

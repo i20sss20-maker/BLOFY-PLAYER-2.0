@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   STREAM_RELEASE_URL, STREAM_PUBLIC_DOWNLOAD, STREAM_PREVIOUS_RELEASE_FILENAME,
   STREAM_TEST_FILENAME, STREAM_TEST_PATH,
+  STREAM_LIVE_FIX_TEST_FILENAME, STREAM_LIVE_FIX_TEST_PATH,
   streamReleaseMetadata
 } from './stream-release.mjs';
 
@@ -45,5 +46,13 @@ test('optional 55.8.33 audio source test never replaces 56.0 updater',()=>{
   assert.equal(STREAM_TEST_PATH,'/d/blofy-stream/foxfm-test');
   assert.notEqual(STREAM_TEST_PATH,STREAM_PUBLIC_DOWNLOAD.replace('https://updates.blofyplayer.com',''));
   assert.equal(streamReleaseMetadata({...approved,version:'55.8.33'}),null);
+  assert.equal(streamReleaseMetadata(approved)?.release?.app?.versionCode,2000115);
+});
+
+test('56.0.1 signed hotfix remains a separate canary and never auto-updates customers',()=>{
+  assert.equal(STREAM_LIVE_FIX_TEST_FILENAME,'BLOFY-STREAM-56.0.1-LIVE-RECONNECT-FIX-OWNER-SIGNED.apk');
+  assert.equal(STREAM_LIVE_FIX_TEST_PATH,'/d/blofy-stream/live-fix-test');
+  assert.notEqual(STREAM_LIVE_FIX_TEST_PATH,STREAM_PUBLIC_DOWNLOAD.replace('https://updates.blofyplayer.com',''));
+  assert.equal(streamReleaseMetadata({...approved, version:'56.0.1'}),null);
   assert.equal(streamReleaseMetadata(approved)?.release?.app?.versionCode,2000115);
 });
