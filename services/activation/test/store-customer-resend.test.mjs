@@ -37,6 +37,8 @@ test('sender readiness query honors exact configured domain, no leaking access t
 });
 test('send-only scope is inconclusive; explicit domain rejection is recognized',async()=>{
  const basic={mailKey:'re_fake_secret',mailFrom:'BLOFY <support@blofyplayer.com>'};
+ const unauthorized=await checkResendSender({...basic,fetchImpl:async()=>({status:401,ok:false})});
+ assert.deepEqual(unauthorized,{status:'key_inspection_unauthorized',domain:'blofyplayer.com'});
  const forbidden=await checkResendSender({...basic,fetchImpl:async()=>({status:403,ok:false})});
  assert.deepEqual(forbidden,{status:'key_send_only_cannot_inspect',domain:'blofyplayer.com'});
  const unverified=await checkResendSender({...basic,fetchImpl:async()=>({status:200,ok:true,json:async()=>({data:[
