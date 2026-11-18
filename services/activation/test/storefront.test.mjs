@@ -7,13 +7,13 @@ import {publicStorePlans,createStoreGeideaHandlers} from '../src/store-geidea-ch
 const html=readFileSync(new URL('../web/store.html',import.meta.url),'utf8');
 test('Exactly two BLOFY subscription products; no app/download offers',()=>{
  assert.match(html,/<html lang="ar" dir="rtl">/);
- assert.match(html,/اشتراك كود BLOFY STREAM/);
+ assert.match(html,/كود BLOFY STREAM/);
  assert.match(html,/اشتراك Xtream BLOFY/);
  assert.equal((html.match(/<article class="product"/g)||[]).length,2);
  for(const key of ['stream','xtream'])assert.match(html,new RegExp('data-buy="'+key+'"'));
  assert.match(html,/https:\/\/wa\.me\/966568941484/);
  assert.match(html,/href="\/privacy"/);
- assert.match(html,/href="\/support"/);
+ assert.match(html,/href="\/store\/contact"/);
  assert.doesNotMatch(html,/\/downloads|تحميل التطبيق|BLOFY BUSINESS|href="\/pay"/);
 });
 test('Public catalog prices use exact server values for 3, 6 and 12 months',()=>{
@@ -41,9 +41,13 @@ test('Scripts compile, and subscriber UI injection leaves storefront untouched',
  assert.notEqual(injectSubscriberPortalUi('<html><body><div id="loginView"></div></body></html>'),'<html><body><div id="loginView"></div></body></html>');
 });
 test('Store uses one blue brand system, original product artwork, trial and detail pages',()=>{
- assert.match(html,/--bg:#071326/);
- assert.match(html,/src="\/store\/media\/stream\.svg"/);
- assert.match(html,/src="\/store\/media\/xtream\.svg"/);
+ const css=readFileSync(new URL('../web/store-premium.css',import.meta.url),'utf8');
+ assert.match(html,/href="\/store\/design\.css\?v=4"/);
+ assert.match(css,/font-family:"BLOFY Arabic"/);
+ assert.match(css,/IBMPlexSansArabic-Regular\.ttf/);
+ assert.match(css,/--night:#050b18/);
+ assert.match(html,/class="product-stage stream"/);
+ assert.match(html,/class="product-stage xtream"/);
  assert.match(html,/href="\/products\/stream"/);
  assert.match(html,/href="\/products\/xtream"/);
  assert.match(html,/href="\/store\/trial"/);
