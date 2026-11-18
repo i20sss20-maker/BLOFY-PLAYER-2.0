@@ -3,7 +3,8 @@
 // A transport/HTTP health result does NOT establish licensed playback.
 const FIXED_HEALTH_CHECKS=Object.freeze([
   Object.freeze({key:'downloads',url:'https://updates.blofyplayer.com/health'}),
-  Object.freeze({key:'stream',url:'https://blofy-stream-api-production.up.railway.app/health'})
+  Object.freeze({key:'stream',url:'https://blofy-stream-api-production.up.railway.app/health'}),
+  Object.freeze({key:'apkEdge',url:'https://blofy-signed-apk-edge-production.up.railway.app/health'})
 ]);
 
 export function createPublicSystemHealth({
