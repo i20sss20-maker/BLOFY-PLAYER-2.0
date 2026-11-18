@@ -103,6 +103,7 @@ import {ensureUnavailableMediaTable,validUnavailableKey,recoverySources,
  expediteUnavailableRecheck} from './xtream-unavailable-media-registry.mjs';
 import {runUnavailableRecheckBatch,classifyUnavailableProbe} from './xtream-unavailable-media-recheck.mjs';
 import {activePublishedSalehRecheckIds} from './xtream-saleh-recheck-scope.mjs';
+import {ensureRevisionAwareGatewayMap} from './xtream-gateway-map-revision-cache.mjs';
 import {mayRefreshMovieExtension,correctedMovieExtension,
   mayRefreshEpisodeExtension,correctedEpisodeExtension} from './xtream-vod-extension-recovery.mjs';
 import {shouldUseIndependentXtreamSource,fetchIndependentXtreamSource} from './xtream-independent-catalog-relay.mjs';
@@ -579,24 +580,33 @@ async function authenticate(usernameInput, passwordInput, { touch = false } = {}
   return row;
 }
 
-// A 290k-item catalog used to scan and ON CONFLICT every item for every
-// Xtream player request. Single-flight + bounded freshness avoids repeated
-// heavyweight map INSERTs while still detecting newly imported items.
+// A large catalog can contain hundreds of thousands of titles. Once each
+// media type has stable gateway IDs, an unchanged catalog revision must not
+// trigger another full-library INSERT on every minute's client requests.
 const categoryMapJobs=new Map();
 const itemMapJobs=new Map();
-// Bound expensive catalog map scans to once per minute while still noticing
-// imports without requiring application restarts.
 const MAP_FRESHNESS_MS=60000;
 const publicInfoCache=createXtreamPublicInfoCache();
-async function oncePerMediaMap(cache,key,task){
-  const old=cache.get(key),now=Date.now();
-  if(old && (!old.settled || now-old.startedAt<MAP_FRESHNESS_MS))return old.promise;
-  const entry={startedAt:now,promise:null,settled:false};
-  entry.promise=Promise.resolve().then(task);
-  cache.set(key,entry);
-  try{return await entry.promise;}
-  catch(error){if(cache.get(key)===entry)cache.delete(key);throw error;}
-  finally{entry.settled=true;}
+async function gatewayCatalogRevision(sourceId){
+  // One tiny indexed source/revision aggregate; zero or missing revision
+  // fails open to the safe, preexisting full mapping path. Never expose
+  // subscriber identities, provider URLs, or credentials.
+  const r=await pool.query(`SELECT COALESCE(SUM(v.revision),0)::text AS revision,
+     COUNT(*)::int AS sources,
+     COUNT(*) FILTER(WHERE v.revision IS NULL)::int AS unversioned
+    FROM blofy_xtream_servers s
+    LEFT JOIN blofy_xtream_catalog_revisions v ON v.source_id=s.id
+    WHERE s.enabled=TRUE AND s.publish_catalog=TRUE
+      AND s.deletion_requested_at IS NULL
+      AND ($1::uuid IS NULL OR s.id=$1::uuid)`,[sourceId]);
+  const row=r.rows?.[0];
+  if(!row||Number(row.sources)<1||Number(row.unversioned)>0)return null;
+  return String(row.revision||'0');
+}
+async function oncePerMediaMap(cache,key,task,sourceId){
+  return ensureRevisionAwareGatewayMap(
+    cache,key,task,()=>gatewayCatalogRevision(sourceId),
+    {ttlMs:MAP_FRESHNESS_MS});
 }
 
 async function ensureCategoryMaps(mediaType,sourceId=null) {
@@ -608,7 +618,7 @@ async function ensureCategoryMaps(mediaType,sourceId=null) {
     JOIN blofy_xtream_servers s ON s.id=c.server_id
     WHERE c.media_type=$1 AND c.enabled=TRUE AND s.enabled=TRUE AND s.publish_catalog=TRUE
       AND ($2::uuid IS NULL OR s.id=$2::uuid)
-    ON CONFLICT(server_id,media_type,source_category_id) DO NOTHING`,[mediaType,sourceId]));
+    ON CONFLICT(server_id,media_type,source_category_id) DO NOTHING`,[mediaType,sourceId]),sourceId);
 }
 
 async function ensureItemMaps(mediaType,sourceId=null) {
@@ -622,7 +632,7 @@ async function ensureItemMaps(mediaType,sourceId=null) {
     WHERE i.media_type=$1 AND i.enabled=TRUE AND s.enabled=TRUE AND s.publish_catalog=TRUE
       AND (c.enabled IS NULL OR c.enabled=TRUE)
       AND ($2::uuid IS NULL OR i.server_id=$2::uuid)
-    ON CONFLICT(server_id,media_type,source_id) DO NOTHING`,[mediaType,sourceId]));
+    ON CONFLICT(server_id,media_type,source_id) DO NOTHING`,[mediaType,sourceId]),sourceId);
 }
 
 async function gatewayCategories(mediaType, sourceId=null) {
