@@ -6,6 +6,7 @@ import {createSignature,verifyGeideaCallback,verifiedPayment,CARD_ONLY_WALLETS} 
 import {ensureStreamCodeTable,streamNumericCodeLength,randomNumericStreamCode,streamCodeProof,normalizeStreamCode} from './xtream-duration-codes.mjs';
 import {encryptStreamCode,decryptStreamCode} from './xtream-code-vault.mjs';
 import {CART_SKU,parseStoreCart,cartVouchers,publicOrderNumber} from './store-cart.mjs';
+import {auditPaidFulfillment} from './store-fulfillment-audit.mjs';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const API='https://api.ksamerchant.geidea.net';
@@ -228,6 +229,11 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
    )).rows[0]?.count||0;
    return json(res,200,{ok:true,periodDays:90,sales:sales.rows,coupons:coupons.rows,
      fulfillmentIssues:Number(failures)});
+ }
+ async function adminFulfillmentAudit(req,res){
+   if(!authorizeAdmin(req,res))return;
+   await schema();
+   return json(res,200,await auditPaidFulfillment({pool,keyHex}));
  }
  async function newCoupon(req,res){
    if(!authorizeAdmin(req,res))return;
@@ -856,6 +862,7 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
  const handler=async function handler(req,res,url){
    const p=url.pathname;
    if(p==='/api/v1/admin/store/orders'&&req.method==='GET'){await adminOrders(req,res,url);return true;}
+   if(p==='/api/v1/admin/store/fulfillment-audit'&&req.method==='GET'){await adminFulfillmentAudit(req,res);return true;}
    if(p==='/api/v1/store/cart/quote'&&req.method==='POST'){await cartQuote(req,res);return true;}
    if(p==='/api/v1/store/cart/checkout'&&req.method==='POST'){await cartCheckout(req,res);return true;}
    if(p==='/api/v1/store/cart/pending'&&req.method==='POST'){await cartPending(req,res);return true;}

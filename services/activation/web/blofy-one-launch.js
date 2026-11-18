@@ -107,7 +107,8 @@
       get('/api/v1/admin/store/sales'),
       get('/api/v1/admin/store/inventory'),
       get('/api/v1/admin/whatsapp/cloud/status'),
-      get('/api/v1/admin/store/customer-accounts/summary')
+      get('/api/v1/admin/store/customer-accounts/summary'),
+      get('/api/v1/admin/store/fulfillment-audit')
     ];
     try{
       const settled=await Promise.allSettled(requests);
@@ -115,7 +116,7 @@
       const good=i=>settled[i].status==='fulfilled';
       const value=i=>good(i)?settled[i].value:null;
       const analytics=value(0),systems=value(1),portal=value(2),
-        catalog=value(3),sales=value(4),inventory=value(5),whatsapp=value(6),customer=value(7);
+        catalog=value(3),sales=value(4),inventory=value(5),whatsapp=value(6),customer=value(7),fulfillmentAudit=value(8);
       if(analytics?.source==='consented_first_party'&&analytics.days===interval){
         const totals=analytics.totals||{};
         const event=new Map((Array.isArray(analytics.events)?analytics.events:[])
@@ -177,18 +178,28 @@
           paidOrders+=orders;
           paidMinor+=BigInt(amount);
         }
-        fulfillmentIssues=Number(sales.fulfillmentIssues);
+        // Legacy count checks only for any cart code, not the full purchased set;
+        // it cannot prove that every paid voucher is delivered.
       }
       if(Number.isSafeInteger(paidOrders)&&paidOrders>=0&&paidMinor!==null){
         text('store-paid',safeCount(paidOrders));
         text('store-revenue',moneyMinor(String(paidMinor)));
         text('funnel-paid',safeCount(paidOrders));
       }
-      if(Number.isSafeInteger(fulfillmentIssues)&&fulfillmentIssues>=0){
-        signal('fulfillment',fulfillmentIssues>0?
-          (safeCount(fulfillmentIssues)+' طلب يحتاج تدخلًا'):'لا توجد حالات ناقصة في السجل',
-        fulfillmentIssues>0?'fail':'ok');
-      }else signal('fulfillment','لم يُتحقق من السجل','pending');
+      const auditReady=fulfillmentAudit?.ok===true &&
+        Number.isSafeInteger(fulfillmentAudit.auditedOrders) &&
+        Number.isSafeInteger(fulfillmentAudit.issueOrders);
+      fulfillmentIssues=auditReady?fulfillmentAudit.issueOrders:null;
+      if(auditReady){
+        const audited=safeCount(fulfillmentAudit.auditedOrders);
+        const label=fulfillmentIssues>0
+          ?safeCount(fulfillmentIssues)+' طلب ناقص من '+audited+' تم تدقيقه'
+          :fulfillmentAudit.truncated
+            ?'أحدث '+audited+' طلب سليم · تدقيق جزئي'
+            :audited+' طلب تم فحص أكوادها';
+        signal('fulfillment',label,fulfillmentIssues>0?'fail':
+          fulfillmentAudit.truncated||fulfillmentAudit.auditedOrders===0?'warn':'ok');
+      }else signal('fulfillment','التدقيق التفصيلي للأكواد غير متاح','pending');
       let stock=null;
       if(inventory?.ok===true&&Array.isArray(inventory.counts)){
         stock=inventory.counts.reduce((sum,x)=>{
@@ -213,7 +224,8 @@
       }else if(!providerVerified)warnings.push('جاهزية مزود البريد غير مؤكدة؛ يلزم اختبار استلام رمز حقيقي');
       else warnings.push('تحقق النطاق وحده لا يثبت وصول رسائل الدخول؛ اختبر الإرسال فعليًا');
       if(Number.isSafeInteger(fulfillmentIssues)&&fulfillmentIssues>0)
-        warnings.push(safeCount(fulfillmentIssues)+' طلب مدفوع يحتاج تسليمًا');
+        warnings.push(safeCount(fulfillmentIssues)+' طلب مدفوع به أكواد ناقصة أو غير سليمة');
+      if(fulfillmentAudit?.truncated)warnings.push('التدقيق مقتصر على أحدث 500 طلب مدفوع في 90 يومًا؛ لا يمثل جميع الطلبات');
       if(fulfillmentIssues===null)warnings.push('لا توجد قراءة مؤكدة لحالات تسليم الطلبات');
       if(stock===null)warnings.push('مخزون الأكواد لم يُقرأ');
       issues.classList.toggle('is-error',warnings.length>0);
