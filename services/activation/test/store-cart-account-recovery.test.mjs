@@ -11,7 +11,7 @@ const newId='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const line=(sku,quantity=1)=>({sku,quantity});
 const tick=()=>new Promise(resolve=>setTimeout(resolve,30));
 
-function browser({local=[],owner=null,remote=[],remoteCoupon='',url='',saveFailures=0}={}){
+function browser({local=[],owner=null,remote=[],remoteCoupon='',url='',saveFailures=0,saveConflict=false}={}){
  const storage=new Map([['blofy.shop.cart.v1',JSON.stringify(local)]]);
  if(owner)storage.set('blofy.shop.cart.owner.v1',owner);
  const sessions=new Map(),elements=new Map(),listeners=new Map(),requests=[],redirects=[];
@@ -44,7 +44,10 @@ function browser({local=[],owner=null,remote=[],remoteCoupon='',url='',saveFailu
   if(path==='/api/v1/store/account/cart'&&opts.method!=='POST')
    return response(200,{items:remote,couponCode:remoteCoupon,revision:3});
   if(path==='/api/v1/store/account/cart'){
-   if(writeFailures-- >0)throw Error('simulated_network_drop');
+   if(writeFailures-- >0){
+    if(saveConflict)return response(409,{error:'store_cart_changed_on_another_device'});
+    throw Error('simulated_network_drop');
+   }
    serverRevision++;
    return response(200,{revision:serverRevision});
   }
@@ -109,7 +112,7 @@ test('after a transient cloud write failure checkout remains locked until explic
  await tick();
  assert.equal(b.elements.get('checkout').disabled,true);
  assert.equal(b.elements.get('retry-cart-sync').hidden,false);
- assert.match(b.elements.get('cart-sync').textContent,/إعادة محاولة الحفظ/);
+ assert.match(b.elements.get('cart-sync').textContent,/أعد محاولة الحفظ/);
  assert.equal(b.requests.filter(x=>x.path==='/api/v1/store/cart/checkout').length,0);
  b.listeners.get('retry-cart-sync:click')();
  await tick();
@@ -121,12 +124,10 @@ test('after a transient cloud write failure checkout remains locked until explic
 });
 
 test('retry failure caused by another device requires a reload instead of clobbering its cart',async()=>{
- const b=browser({local:[line('stream-3m')],remote:[],saveFailures:1});
- // Simulate conflict from server for this specific case by swapping the
- // UI state during retry; the real handler sets data.reload=yes on 409.
+ const b=browser({local:[line('stream-3m')],remote:[],saveFailures:1,saveConflict:true});
  await tick();
  const retry=b.elements.get('retry-cart-sync');
- retry.dataset.reload='yes';
+ assert.equal(retry.dataset.reload,'yes','the actual HTTP 409 must require a reload');
  const writes=b.requests.filter(x=>x.path==='/api/v1/store/account/cart'&&x.method==='POST').length;
  b.listeners.get('retry-cart-sync:click')();
  await tick();
