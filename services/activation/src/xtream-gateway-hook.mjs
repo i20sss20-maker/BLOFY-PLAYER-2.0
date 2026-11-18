@@ -34,6 +34,7 @@ import pg from 'pg';
 import { validateBulkAccountRequest } from './xtream-bulk-policy.mjs';
 import { gatewayItemsPageQuery,gatewayOrderedItemsPageQuery,gatewayOrderCursor } from './xtream-gateway-query.mjs';
 import {xtreamCatalogVersionForAccount} from './xtream-catalog-revision.mjs';
+import {xtreamCatalogDeltaPage} from './xtream-catalog-delta.mjs';
 import {createXtreamJsonArrayWriter} from './xtream-json-array-writer.mjs';
 import {createXtreamPublicInfoCache} from './xtream-public-info-cache.mjs';
 import { mergeXtreamPlayerRequest } from './xtream-player-post.mjs';
@@ -2308,6 +2309,28 @@ async function handlePlayerApi(req, res, url) {
     const status=await xtreamCatalogVersionForAccount(
       pool,account.source_id||null,url.searchParams.get('since'));
     return json(res,status.ok?200:409,status);
+  }
+  // STREAM 56: source-scoped incremental catalog, authenticated by the same
+  // active, device-bound bearer as all other player_api calls. The source
+  // and distributor visibility are never chosen by client query parameters.
+  if(action==='get_blofy_catalog_delta'){
+    res.setHeader('cache-control','private, no-store');
+    const kind=url.searchParams.get('kind');
+    const part=url.searchParams.get('part');
+    const source=account.source_id||null;
+    if(!source)return json(res,409,{ok:false,code:'catalog_delta_source_unscoped'});
+    if(['live','movie','series'].includes(kind)){
+      if(part==='categories')await ensureCategoryMaps(kind,source);
+      else await ensureItemMaps(kind,source);
+    }
+    const hidden=part==='items'&&['live','movie','series'].includes(kind)?
+      await distributorCatalog.hiddenIds(distributorScope,kind):null;
+    const delta=await xtreamCatalogDeltaPage(pool,source,{
+      kind,part,since:url.searchParams.get('since'),
+      revision:url.searchParams.get('revision'),
+      after:url.searchParams.get('after')||'0'
+    },{hiddenIds:hidden});
+    return json(res,delta.ok?200:delta.status||409,delta);
   }
   if (action === 'get_live_categories') return json(res, 200, await gatewayCategories('live',account.source_id||null));
   if (action === 'get_vod_categories') return json(res, 200, await gatewayCategories('movie',account.source_id||null));
