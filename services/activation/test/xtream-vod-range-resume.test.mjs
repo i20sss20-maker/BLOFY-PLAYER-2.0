@@ -285,3 +285,18 @@ test('resume reply refuses compressed response even with matching Range and ETag
   })){}
  },/vod_resume_range_contract_denied/);
 });
+
+test('a selected Range is never extended beyond the final byte the viewer requested',()=>{
+ const bounded=plan({kind:'series',status:206,format:'mkv',
+  requestRange:'bytes=8192-12287',headers:mockHeaders({
+   'content-length':'4096','content-range':'bytes 8192-12287/65536'
+  })});
+ assert.equal(bounded?.rangeStart,8192);
+ assert.equal(bounded?.rangeEnd,12287);
+ assert.equal(bounded?.fileTotal,65536);
+ assert.equal(bounded?.total,4096);
+ assert.equal(plan({kind:'series',status:206,format:'mkv',
+  requestRange:'bytes=8192-',headers:mockHeaders({
+   'content-length':'4096','content-range':'bytes 8192-12287/65536'
+  })}),null,'partial origin response cannot fake whole open-ended seek');
+});
