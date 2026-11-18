@@ -296,6 +296,7 @@ button:focus-visible,a:focus-visible{outline:3px solid var(--cyan);outline-offse
    if(!expected){message(product,'الباقة غير متاحة للدفع.',true);return;}
    if(typeof window.GeideaCheckout!=='function'){message(product,'تعذر تحميل بوابة جيديا. حدّث الصفحة وحاول مرة أخرى.',true);return;}
    busy=true;update();message(product,'جارٍ فتح الدفع الآمن...');
+   var started=false;
    try{
      var data=await post('/api/v1/store/checkout',{sku:sku});
      if(data.provider!=='geidea'||data.checkoutMode!=='modal'||!data.orderId||!data.accessToken||
@@ -304,14 +305,15 @@ button:focus-visible,a:focus-visible{outline:3px solid var(--cyan);outline-offse
      currentId=data.orderId;currentSecret=data.accessToken;
      sessionStorage.setItem('blofy.store.'+currentId,currentSecret);
      var widget=new window.GeideaCheckout(
-       function(){void afterPayment();},
-       function(){showReceipt('لم تكتمل عملية الدفع. لا تعِد العملية قبل التحقق من حالة الطلب.');void check();},
-       function(){showReceipt('أُغلقت نافذة الدفع. يمكنك التحقق من حالة الطلب دون إعادة الدفع.');void check();}
+       function(){busy=false;update();void afterPayment();},
+       function(){busy=false;update();showReceipt('لم تكتمل عملية الدفع. لا تعِد العملية قبل التحقق من حالة الطلب.');void check();},
+       function(){busy=false;update();showReceipt('أُغلقت نافذة الدفع. يمكنك التحقق من حالة الطلب دون إعادة الدفع.');void check();}
      );
      widget.startPayment(data.sessionId);
+     started=true;
      message(product,'أكمل الدفع في نافذة جيديا الآمنة.');
    }catch(_){message(product,'تعذر بدء عملية الدفع. لم يتم تأكيد طلب جديد. حاول لاحقًا أو تواصل عبر واتساب.',true);}
-   finally{busy=false;update();}
+   finally{if(!started){busy=false;update();}}
  }
  document.querySelectorAll('[data-duration]').forEach(function(el){el.addEventListener('change',update);});
  document.querySelectorAll('[data-buy]').forEach(function(btn){btn.addEventListener('click',function(){void pay(btn.dataset.buy,btn);});});
