@@ -29,10 +29,13 @@ test('real owner-linked orders power the dashboard without exposing codes or vau
  const db={async query(sql,args=[]){
   queries.push({sql,args});
   if(sql.startsWith('SELECT to_regclass')){
-   return rows([Object.fromEntries(Array.from({length:6},(_,i)=>['t'+i,'present']))]);
+   return rows([Object.fromEntries(Array.from({length:7},(_,i)=>['t'+i,'present']))]);
   }
   if(sql.startsWith('SELECT COUNT(*)::int AS total,')&&sql.includes('blofy_store_renewal_orders')){
    return rows([{total:5,paid:3,pending:1,failed:1,cancelled:0,overdue:1,paid_amount_minor:'21000'}]);
+  }
+  if(sql.includes('FROM blofy_store_customer_reminders')){
+   return rows([{sent:2,exhausted:1,retrying:3}]);
   }
   if(sql.startsWith('WITH bought AS')&&sql.includes('COUNT(*) FILTER')){
    return rows([{total:4,active:1,expiring:1,expired:1,unused:1,revoked:0,disabled:0}]);
@@ -60,6 +63,8 @@ test('real owner-linked orders power the dashboard without exposing codes or vau
  assert.equal(subscribe.code,200);
  assert.equal(subscribe.data.subscriptions.expiring,1);
  assert.equal(subscribe.data.renewals.pendingOver20m,1);
+ assert.deepEqual(subscribe.data.reminders,
+  {acceptedByProvider:2,exhaustedRetries:1,retrying:3});
  assert.equal(subscribe.data.items[0].status,'expiring');
  assert.equal(JSON.stringify(subscribe.data).includes('NEVER EXPOSE'),false);
  assert.equal(JSON.stringify(subscribe.data).includes('DO NOT DISCLOSE'),false);
