@@ -287,7 +287,7 @@ async function serveStorefront(res, product = null) {
   if (product === 'stream' || product === 'xtream') {
     source = source.replace('data-blofy-storefront="1"',
       'data-blofy-storefront="1" data-shop-product="'+product+'"');
-    const title=product==='stream'?'اشتراك كود BLOFY STREAM':'اشتراك Xtream BLOFY';
+    const title=product==='stream'?'اشتراك STRONG 8K عبر BLOFY STREAM':'اشتراك STRONG 8K Xtream عبر BLOFY PLAYER';
     const path='/products/'+product;
     source=source.replace(/<title>[^<]+<\/title>/,'<title>'+title+' | أسعار 40 و60 و100 ريال</title>');
     source=source.replace('<link rel="canonical" href="https://www.blofyplayer.com/">',
@@ -343,7 +343,8 @@ function serveStoreInfo(res, slug) {
 }
 
 async function serveStoreGraphic(res, name) {
-  const filename=name==='stream'?'store-stream.svg':'store-xtream.svg';
+  const filename=({stream:'store-stream.svg',xtream:'store-xtream.svg',strong8k:'store-strong8k-banner.svg',player:'store-player-banner.svg'})[name];
+  if (!filename) throw new Error('store_graphic_unavailable');
   const file=await readFile(new URL('../web/'+filename,import.meta.url));
   res.writeHead(200,{
     'content-type':'image/svg+xml; charset=utf-8',
@@ -877,7 +878,7 @@ const server = http.createServer(async (req, res) => {
       return await serveStoreDesign(res);
     const storeProductMatch=requestUrl.pathname.match(/^\/products\/(stream|xtream)\/?$/);
     const storeInfoMatch=requestUrl.pathname.match(/^\/store\/(about|trial|faq|contact|terms)\/?$/);
-    const storeImageMatch=requestUrl.pathname.match(/^\/store\/media\/(stream|xtream)\.svg$/);
+    const storeImageMatch=requestUrl.pathname.match(/^\/store\/media\/(stream|xtream|strong8k|player)\.svg$/);
     if (['GET','HEAD'].includes(req.method) && storeProductMatch)
       return await serveStorefront(res,storeProductMatch[1]);
     if (['GET','HEAD'].includes(req.method) && storeInfoMatch)
