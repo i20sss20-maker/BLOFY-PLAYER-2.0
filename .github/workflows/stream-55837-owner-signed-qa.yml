@@ -5,6 +5,10 @@ on:
       - fix/stream-55837-episodes-auto-refresh-20261118
     paths:
       - '.github/workflows/stream-55837-owner-signed-qa.yml'
+      - 'app/src/main/java/tv/blofy/player/ui/series/EpisodesActivity.kt'
+      - 'app/src/main/java/tv/blofy/player/ui/series/SeriesEpisodeRefreshPolicy.kt'
+      - 'app/src/test/java/tv/blofy/player/ui/series/SeriesEpisodeRefreshPolicyTest.kt'
+      - 'app/build.gradle.kts'
   workflow_dispatch:
 
 permissions:
@@ -12,7 +16,7 @@ permissions:
 
 concurrency:
   group: stream-55837-owner-only-signing
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   sign-and-verify:
