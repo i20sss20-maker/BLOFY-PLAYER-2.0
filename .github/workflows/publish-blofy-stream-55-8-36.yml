@@ -81,6 +81,9 @@ jobs:
             -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
             "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=$aud" | jq -er '.value')"
           test -n "$token"
+          # Log only non-secret OIDC claim identifiers for diagnosing a rejected
+          # identity; never print or store the bearer token itself.
+          JWT="$token" node -e "const p=JSON.parse(Buffer.from(process.env.JWT.split('.')[1],'base64url').toString()); for (const k of ['iss','aud','sub','repository','repository_id','ref','event_name','workflow_ref','iat','exp']) console.log('OIDC_'+k+'='+p[k])"
           target="https://updates.blofyplayer.com/api/internal/releases/upload?filename=$APK_NAME"
           curl --fail-with-body --silent --show-error --max-time 420 \
             -H "Authorization: Bearer $token" \
