@@ -36,7 +36,9 @@ export async function checkResendSender({mailKey,mailFrom,fetchImpl=globalThis.f
    signal:AbortSignal.timeout(7000)
   });
   if(response.status===403)return {status:'key_send_only_cannot_inspect',domain:senderDomain};
-  if(response.status===401)return {status:'key_invalid',domain:senderDomain};
+  // A 401 to the read-only domain-inspection endpoint can be a send-only
+  // token. Only a 401 on POST /emails proves the sending key is invalid.
+  if(response.status===401)return {status:'key_inspection_unauthorized',domain:senderDomain};
   if(!response.ok)return {status:'provider_query_failed',httpStatus:response.status,domain:senderDomain};
   const data=await response.json().catch(()=>({}));
   const domains=Array.isArray(data.data)?data.data:[];
