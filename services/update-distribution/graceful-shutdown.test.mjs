@@ -105,7 +105,7 @@ test('production startup wires Railway signal draining and the Docker image incl
   assert.match(src,/import \{ installGracefulShutdown \} from '\.\/graceful-shutdown\.mjs'/);
   assert.match(src,/installGracefulShutdown\(\{/);
   assert.match(src,/drainMs:105_000/);
-  assert.match(src,/stopJobs:\(\)=>stopScheduledRefresh\(\)/);
+  assert.match(src,/stopJobs:\(\)=>\{\s*stopScheduledRefresh\(\);/);
   assert.match(src,/closeReleaseStore\(\),closeAppLibrary\(\)/);
   assert.match(docker,/graceful-shutdown\.mjs/);
   assert.match(pkg,/graceful-shutdown\.test\.mjs/);
