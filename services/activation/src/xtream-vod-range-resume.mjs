@@ -133,10 +133,10 @@ export async function* resumeVerifiedVodBytes({
    if(!(part.value instanceof Uint8Array)||!part.value.byteLength)
     throw Error('vod_resume_invalid_bytes');
    got+=part.value.byteLength;
-   if(got>plan.total-start)throw Error('vod_resume_overshoot');
+   if(got>plan.total-forwarded)throw Error('vod_resume_overshoot');
    yield part.value;
   }
-  if(got!==plan.total-start)throw Error('vod_resume_truncated');
+  if(got!==plan.total-forwarded)throw Error('vod_resume_truncated');
  }finally{
   ctl.abort();
   try{await reader?.cancel()}catch{}
