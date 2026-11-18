@@ -23,6 +23,7 @@
     <a href="/admin/control-center"><span aria-hidden="true">◎</span> لوحة STREAM الكاملة</a>
     <a href="/admin/content-hub"><span aria-hidden="true">▦</span> التخزين والتنزيلات</a>
     <a href="/admin/control-center/health"><span aria-hidden="true">●</span> مراقبة السيرفرات</a>
+    <a href="#one-sales"><span aria-hidden="true">◫</span> المدفوعات المسجلة</a>
     <a href="/distributor"><span aria-hidden="true">♙</span> لوحة الموزع</a>
     <a href="/sources-admin#xtream"><span aria-hidden="true">▤</span> المصادر وXtream</a>
     <a href="/sources-admin#catalog"><span aria-hidden="true">▦</span> مكتبة المحتوى</a>
@@ -203,10 +204,31 @@
       <a class="one-module" href="/admin/content-hub"><span class="one-icon">▦</span><span class="one-module-text"><strong>Content Hub والتخزين</strong><small>التنزيل والنقل والمواسم وحالة الملفات</small></span><span class="one-arrow">↖</span></a>
       <a class="one-module" href="/distributor"><span class="one-icon">♙</span><span class="one-module-text"><strong>الموزعون</strong><small>لوحة الموزع والأكواد والتوزيع ضمن الصلاحيات</small></span><span class="one-arrow">↖</span></a>
       <a class="one-module" href="/admin/control-center/health"><span class="one-icon">●</span><span class="one-module-text"><strong>مراقبة الخدمات</strong><small>الفحوصات والتحقق من اتصال الأنظمة</small></span><span class="one-arrow">↖</span></a>
+      <a class="one-module" href="#one-sales"><span class="one-icon">◫</span><span class="one-module-text"><strong>تقارير المدفوعات المسجلة</strong><small>طلبات تفعيل BLOFY PLAYER المدفوعة والمنتظرة والمسجلة فقط</small></span><span class="one-arrow">↖</span></a>
       <a class="one-module" href="https://updates.blofyplayer.com/downloads" target="_blank" rel="noopener noreferrer"><span class="one-icon">↓</span><span class="one-module-text"><strong>مركز تحميل التطبيقات</strong><small>صفحة تنزيل التطبيقات والنسخ المنشورة</small></span><span class="one-arrow">↖</span></a>
     </div>
   </section>
-  <aside class="one-integrations-note"><strong>المدفوعات والإيرادات</strong><p>لم تُضف أرقام مالية تقديرية. ربط تقارير الدفع والمبيعات بمركز BLOFY ONE يحتاج قراءة آمنة ومحددة الصلاحية من مزوّد الدفع قبل إظهار أي إجمالي.</p></aside>
+<section class="one-overview one-sales" id="one-sales" aria-labelledby="one-sales-title">
+    <div class="one-section-heading">
+      <div><span class="one-kicker">RECORDED ORDERS · BLOFY PLAYER</span>
+        <h2 id="one-sales-title">الطلبات والمدفوعات المسجلة</h2></div>
+      <button id="one-sales-refresh" type="button" class="one-sales-refresh">↻ تحديث البيانات</button>
+    </div>
+    <p class="one-footnote">هذه أرقام طلبات تفعيل BLOFY PLAYER المسجلة في قاعدة بيانات الموقع فقط؛ لا تشمل مبيعات BLOFY STREAM أو Xtream أو اتفاقات واتساب. لا تعني المبالغ تسوية من البنك أو صافي الربح.</p>
+    <div class="one-sales-metrics" aria-label="ملخص الطلبات المدفوعة">
+      <article><span>قيمة الطلبات المسجلة مدفوعة</span><strong id="one-sales-gross">—</strong><small>بالريال السعودي · ليست صافي الإيراد</small></article>
+      <article><span>عدد الطلبات المدفوعة</span><strong id="one-sales-paid">—</strong><small>حسب الحالة المحفوظة في الموقع</small></article>
+      <article><span>قيمة الطلبات المدفوعة خلال 30 يومًا</span><strong id="one-sales-30d">—</strong><small>آخر 30 يومًا، وفق تاريخ الدفع المحفوظ</small></article>
+      <article><span>الطلبات بانتظار الدفع</span><strong id="one-sales-pending">—</strong><small>لا تُحسب ضمن المدفوع</small></article>
+    </div>
+    <p class="one-sales-status" id="one-sales-status" role="status" aria-live="polite">جارٍ طلب الملخص المالي الموثق من قاعدة البيانات…</p>
+    <div class="one-sales-footnotes">
+      <span>طلبات مرتجعة: <strong id="one-sales-refunded">—</strong></span>
+      <span>طلبات فاشلة: <strong id="one-sales-failed">—</strong></span>
+      <span>طلبات ملغاة: <strong id="one-sales-cancelled">—</strong></span>
+    </div>
+    <div class="one-sales-alert" role="note">مبيعات اشتراكات STREAM وXtream التي تُنجز عبر واتساب غير مرتبطة بتقارير هذه القاعدة. لا نعرض لها أرقامًا أو مبالغ حتى يوجد سجل طلبات ودفع موثق مستقل.</div>
+  </section>
   <section class="one-lab" aria-labelledby="lab-title">
     <div><span class="one-kicker">MEDIA LAB · OPERATOR ONLY</span><h2 id="lab-title">تجربة محرك البث المستقل</h2>
       <p>يمكن فحص بث تجريبي داخلي على MediaMTX دون تشغيل مصادر العملاء أو تعديل الاشتراكات. نجاح مقطع MPEG-TS التجريبي لا يثبت عمل القنوات الحقيقية أو فك الصوت والصورة.</p>
