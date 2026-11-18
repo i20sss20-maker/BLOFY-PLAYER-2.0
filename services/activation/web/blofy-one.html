@@ -14,6 +14,10 @@
 <script src="/blofy-one-customers.js?v=20261118-v1" defer></script>
 <link rel="stylesheet" href="/blofy-one-legacy.css?v=20261118-v1">
 <script src="/blofy-one-legacy.js?v=20261118-v1" defer></script>
+<link rel="stylesheet" href="/blofy-one-stream.css?v=20261118-v1">
+<script src="/blofy-one-stream.js?v=20261118-v1" defer></script>
+<link rel="stylesheet" href="/blofy-one-stream.css?v=20261118-v1">
+<script src="/blofy-one-stream.js?v=20261118-v1" defer></script>
 </head>
 <body>
 <div class="one-shell">
@@ -22,13 +26,15 @@
   <nav class="one-nav" aria-label="التنقل الرئيسي">
     <a class="selected" href="/one" aria-current="page"><span aria-hidden="true">◈</span> الرئيسية</a>
     <a href="#legacy-xtream"><span aria-hidden="true">⇄</span> استخراج Xtream من الأكواد القديمة</a>
+    <a href="#stream-management"><span aria-hidden="true">▤</span> حسابات Xtream وأكواد STREAM</a>
     <a href="/sources-admin#dual"><span aria-hidden="true">▣</span> أدوات التحويل المتقدمة</a>
     <a href="/admin/control-center"><span aria-hidden="true">◎</span> لوحة STREAM الكاملة</a>
     <a href="/admin/content-hub"><span aria-hidden="true">▦</span> التخزين والتنزيلات</a>
     <a href="/admin/control-center/health"><span aria-hidden="true">●</span> مراقبة السيرفرات</a>
     <a href="#one-sales"><span aria-hidden="true">◫</span> المدفوعات المسجلة</a>
     <a href="/distributor"><span aria-hidden="true">♙</span> لوحة الموزع</a>
-    <a href="/sources-admin#xtream"><span aria-hidden="true">▤</span> المصادر وXtream</a>
+    <a href="#stream-management"><span aria-hidden="true">◎</span> مشتركو STREAM وXtream</a>
+    <a href="/sources-admin#xtream"><span aria-hidden="true">▤</span> المصادر المتقدمة</a>
     <a href="/sources-admin#catalog"><span aria-hidden="true">▦</span> مكتبة المحتوى</a>
     <a href="/admin#codes"><span aria-hidden="true">⌁</span> أكواد الاشتراك</a>
     <a href="#customers"><span aria-hidden="true">▣</span> العملاء والاشتراكات</a>
@@ -71,7 +77,7 @@
     <div class="one-fast-grid">
       <a href="#customers"><b aria-hidden="true">▣</b><strong>العملاء والأجهزة</strong><small>بحث وبيانات وتجديد</small></a>
       <a href="#legacy-xtream"><b aria-hidden="true">⇄</b><strong>كود BLOFY ↔ Xtream</strong><small>الكود الجديد أو القديم</small></a>
-      <a href="/sources-admin#xtream"><b aria-hidden="true">◈</b><strong>حسابات Xtream</strong><small>المشتركون والمصادر</small></a>
+      <a href="#stream-management"><b aria-hidden="true">◈</b><strong>حسابات Xtream</strong><small>إدارة فعلية داخل BLOFY ONE</small></a>
       <a href="/admin/content-hub"><b aria-hidden="true">▦</b><strong>التخزين والنقل</strong><small>المكتبة وملفات المحتوى</small></a>
     </div>
   </section>
@@ -220,6 +226,91 @@
       <p class="one-legacy-hint">تُمسح الأكواد من واجهة الفحص عند إغلاق الصفحة، وعند إخفاء التبويب، وبعد ثلاث دقائق. لا يتم عرض كلمات المرور ضمن نتائج المجموعة، ولا حفظ الأكواد في سجل المتصفح.</p>
     </details>
   </section>
+  <section class="one-overview one-stream" id="stream-management" aria-labelledby="one-stream-title">
+    <div class="one-section-heading">
+      <div><span class="one-kicker">BLOFY STREAM · Xtream · INTEGRATED OPERATIONS</span>
+        <h2 id="one-stream-title">إدارة حسابات Xtream وأكواد STREAM</h2></div>
+      <button type="button" id="one-stream-refresh" class="one-stream-primary">↻ تحديث الحسابات والأكواد</button>
+    </div>
+    <p class="one-footnote">كل العمليات هنا داخل BLOFY ONE نفسه، من قواعد الحسابات والأكواد القائمة؛ لا تحتاج للانتقال إلى لوحة أخرى. لا تُعرض كلمات المرور في قوائم العملاء.</p>
+    <div class="one-stream-summary" aria-label="إحصائيات BLOFY STREAM المسجلة">
+      <article><span>حسابات Xtream</span><strong id="one-stream-accounts-total">—</strong></article>
+      <article><span>حسابات سارية ومفعّلة</span><strong id="one-stream-active-accounts">—</strong></article>
+      <article><span>أكواد STREAM الصادرة</span><strong id="one-stream-code-total">—</strong></article>
+      <article><span>أكواد استُخدمت</span><strong id="one-stream-redeemed">—</strong></article>
+      <article><span>أكواد غير مستعملة</span><strong id="one-stream-unused">—</strong></article>
+      <article><span>تنتهي خلال 7 أيام</span><strong id="one-stream-expiring">—</strong></article>
+    </div>
+    <p class="one-stream-status" id="one-stream-overall-status" role="status" aria-live="polite">جارٍ تحميل بيانات STREAM الفعلية من لوحة الإدارة المحمية…</p>
+    <div class="one-stream-sections">
+      <section class="one-stream-card" aria-labelledby="one-stream-account-title">
+        <div class="one-section-heading"><div><span class="one-kicker">XTREAM ACCOUNTS</span><h3 id="one-stream-account-title">المشتركون وحسابات Xtream</h3></div></div>
+        <div class="one-stream-controls">
+          <label for="one-stream-account-search">بحث عن مشترك<input id="one-stream-account-search" type="search" maxlength="100" autocomplete="off" placeholder="اسم العميل أو Username"></label>
+          <label for="one-stream-account-filter">الحالة
+            <select id="one-stream-account-filter">
+              <option value="all">الكل</option><option value="active">نشط</option>
+              <option value="expiring">ينتهي قريبًا</option><option value="expired">منتهي</option>
+              <option value="disabled">موقوف</option>
+            </select>
+          </label>
+        </div>
+        <p class="one-stream-caption" id="one-stream-accounts-count">—</p>
+        <div class="one-stream-table-wrap" tabindex="0" role="region" aria-label="حسابات Xtream">
+          <table class="one-stream-table"><thead><tr>
+            <th>اسم المشترك</th><th>Username</th><th>الحالة</th><th>الانتهاء</th><th>اتصالات</th><th>الإجراء</th>
+          </tr></thead><tbody id="one-stream-accounts-rows"><tr><td colspan="6">جارٍ تحميل الحسابات…</td></tr></tbody></table>
+        </div>
+        <p class="one-stream-caption">اختيار «استرجاع كود» يكشف الكود الأصلي إن كان محفوظًا، أو ينشئ كودًا واحدًا مرتبطًا بنفس الحساب إذا لم يوجد؛ لا يتغير تاريخ الانتهاء أو بيانات Xtream. الإجراء يحتاج تأكيدًا صريحًا.</p>
+      </section>
+      <section class="one-stream-card" aria-labelledby="one-stream-code-title">
+        <div class="one-section-heading"><div><span class="one-kicker">STREAM VOUCHERS</span><h3 id="one-stream-code-title">سجل الأكواد الجديدة والقديمة</h3></div></div>
+        <div class="one-stream-controls">
+          <label for="one-stream-code-search">بحث في الصفحة الحالية
+            <input id="one-stream-code-search" type="search" maxlength="100" autocomplete="off" placeholder="اسم المشترك أو أول وآخر أرقام الكود">
+          </label>
+          <label for="one-stream-code-filter">حالة الكود
+            <select id="one-stream-code-filter"><option value="all">الكل</option>
+              <option value="unused">لم يُستخدم</option><option value="redeemed">مستخدم</option>
+              <option value="revoked">ملغى</option>
+            </select>
+          </label>
+        </div>
+        <p class="one-stream-caption" id="one-stream-codes-count">—</p>
+        <div class="one-stream-table-wrap" tabindex="0" role="region" aria-label="أكواد STREAM">
+          <table class="one-stream-table"><thead><tr>
+            <th>العميل / الكود المخفي</th><th>النوع</th><th>الحالة</th><th>الانتهاء</th><th>الحساب</th><th>الإجراء</th>
+          </tr></thead><tbody id="one-stream-codes-rows"><tr><td colspan="6">جارٍ تحميل الأكواد…</td></tr></tbody></table>
+        </div>
+        <div class="one-stream-pager">
+          <button id="one-stream-codes-prev" type="button" disabled>السابق</button>
+          <span id="one-stream-codes-page">—</span>
+          <button id="one-stream-codes-next" type="button" disabled>التالي</button>
+        </div>
+        <p class="one-stream-caption">لا نعرض الكود الكامل إلا للمشرف وبعد التأكيد، وإذا كان محفوظًا في المخزن المشفّر. السجلات القديمة التي لا تحتوي نسخة قابلة للاسترجاع لا تُعاد صناعتها.</p>
+      </section>
+    </div>
+    <section class="one-stream-commercial" aria-labelledby="one-stream-sales-title">
+      <div><span class="one-kicker">STREAM SALES REGISTER · NOT PAYMENT SETTLEMENT</span>
+        <h3 id="one-stream-sales-title">إحصائيات بيع الأكواد المسجلة</h3></div>
+      <div class="one-stream-commercial-grid">
+        <div><span>أكواد محددة كمباعة</span><strong id="one-stream-sold">—</strong></div>
+        <div><span>قيمة المبيعات المدخلة بالسجل</span><strong id="one-stream-revenue">—</strong></div>
+        <div><span>عمليات نقل الأكواد</span><strong id="one-stream-transfers">—</strong></div>
+      </div>
+      <p class="one-footnote">هذه بيانات السجل اليدوي لأكواد STREAM فقط، وليست إثبات تحصيل عبر Geidea أو تسوية بنكية أو مبيعات متجر Xtream.</p>
+    </section>
+    <div class="one-stream-secret" id="one-stream-secret" hidden role="region" aria-label="الكود المسترجع">
+      <strong id="one-stream-secret-title">الكود المسترجع</strong>
+      <code id="one-stream-secret-code" dir="ltr"></code>
+      <small id="one-stream-secret-description">يُحذف الكود تلقائيًا بعد 90 ثانية وعند إخفاء الصفحة.</small>
+      <div class="one-stream-secret-actions">
+        <button type="button" id="one-stream-secret-copy">نسخ الكود</button>
+        <button type="button" id="one-stream-secret-xtream">استخراج Xtream من هذا الكود</button>
+        <button type="button" id="one-stream-secret-hide">إخفاء الكود</button>
+      </div>
+    </div>
+  </section>
   <section class="one-overview" aria-labelledby="health-title">
     <div class="one-section-heading">
       <div><span class="one-kicker">PRODUCTION HEALTH</span><h2 id="health-title">حالة المنصة الآن</h2></div>
@@ -267,8 +358,8 @@
     </div>
     <div class="one-cards" id="one-module-list">
       <a class="one-module" href="/admin/control-center"><span class="one-icon">◈</span><span class="one-module-text"><strong>لوحة BLOFY STREAM الكاملة</strong><small>عمليات البث والأكواد والمصادر والمشتركين والموزعين</small></span><span class="one-arrow">↖</span></a>
-      <a class="one-module" href="/sources-admin#dual"><span class="one-icon">⇄</span><span class="one-module-text"><strong>تحويل كود BLOFY وXtream</strong><small>استرجاع نفس الاشتراك بالاتجاهين دون إعادة التجديد</small></span><span class="one-arrow">↖</span></a>
-      <a class="one-module" href="/sources-admin#xtream"><span class="one-icon">▤</span><span class="one-module-text"><strong>مصادر Xtream والمشتركون</strong><small>إصدار بيانات دخول وفحص المصادر المسجّلة</small></span><span class="one-arrow">↖</span></a>
+      <a class="one-module" href="#legacy-xtream"><span class="one-icon">⇄</span><span class="one-module-text"><strong>تحويل كود BLOFY وXtream</strong><small>استرجاع بيانات الكود القديم من نفس لوحة الإدارة</small></span><span class="one-arrow">↖</span></a>
+      <a class="one-module" href="#stream-management"><span class="one-icon">▤</span><span class="one-module-text"><strong>حسابات Xtream وأكواد STREAM</strong><small>عرض المشتركين والأكواد واستخراج الكود من الحساب مباشرة</small></span><span class="one-arrow">↖</span></a>
       <a class="one-module" href="/admin#codes"><span class="one-icon">⌁</span><span class="one-module-text"><strong>أكواد الاشتراك</strong><small>إنشاء الكود، ربط المصدر، التجديد والإلغاء</small></span><span class="one-arrow">↖</span></a>
       <a class="one-module" href="/admin#devices"><span class="one-icon">▣</span><span class="one-module-text"><strong>تفعيل BLOFY PLAYER</strong><small>إدارة الأجهزة، أرقام التواصل وصلاحيات التفعيل</small></span><span class="one-arrow">↖</span></a>
       <a class="one-module" href="/sources-admin#catalog"><span class="one-icon">▦</span><span class="one-module-text"><strong>مكتبة القنوات والأفلام</strong><small>المحتوى المفهرس والفئات وأدوات الإدارة</small></span><span class="one-arrow">↖</span></a>
