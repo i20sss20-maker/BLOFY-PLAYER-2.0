@@ -35,3 +35,36 @@ main{padding:45px 0 80px}.eyebrow{font:700 11px Arial,sans-serif;letter-spacing:
 .cart-recovery-actions .secondary{flex:1 1 190px;min-height:42px}
 #retry-cart-sync{border-color:#d4a56b;background:#3d2d2c;color:#ffebd4}
 #cart-sync[data-state="pending"]{color:#c5d9f2}
+
+
+/* BLOFY customer portal — account-scoped overview and readable order history. */
+.account-dashboard-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;margin:12px 0 18px}
+.account-dashboard-head h2{margin:4px 0;font-size:clamp(22px,3vw,30px)}
+.account-dashboard-head p{margin:0}
+.account-summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:0 0 24px}
+.account-stat{min-width:0;display:flex;flex-direction:column;gap:4px;padding:19px 17px;border:1px solid #3d638f;
+border-radius:18px;background:linear-gradient(145deg,#153960,#0a1d35);color:#e4efff;transition:border-color .15s,transform .15s}
+.account-stat:hover,.account-stat:focus-visible{border-color:#8eb8ff;transform:translateY(-2px)}
+.account-stat span{font-size:12px;color:#c9dffd}
+.account-stat strong{font:700 clamp(25px,3vw,35px)/1.4 Arial,sans-serif;color:#fff;direction:ltr;align-self:flex-start}
+.account-stat small{font-size:11px;color:#abc3df;line-height:1.65}
+.account-stat:nth-child(3){border-color:#377d7a;background:linear-gradient(145deg,#153b46,#0a222e)}
+.account-stat:nth-child(4){border-color:#866c4d;background:linear-gradient(145deg,#3d302d,#17202f)}
+.account-order-filters{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(160px,.8fr);gap:14px;align-items:end;margin-top:14px}
+.account-order-filters label{margin:0;font-size:12px}
+.account-order-filters input,.account-order-filters select{width:100%;min-height:44px;margin-top:7px;border:1px solid #466797;
+border-radius:11px;background:#07182f;color:#fff;padding:10px 12px}
+.account-order-filters input:focus-visible,.account-order-filters select:focus-visible{outline:2px solid #96c4ff;outline-offset:2px}
+.account-order-tools{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin:13px 0}
+.account-count-note{color:#b4cde9;font-size:12px;margin:0}
+.account-order-tools .secondary{min-height:39px}
+#account-orders .receipt-line{padding:16px;border-radius:15px;background:#0b213d}
+#account-orders .receipt-line strong{display:block;font-size:14px;overflow-wrap:anywhere}
+#account-orders .receipt-line .actions{margin-top:10px}
+#account-orders .receipt-line .actions :is(button,a){min-height:40px}
+@media(max-width:780px){.account-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:480px){.account-stat{padding:14px;border-radius:13px}.account-stat strong{font-size:27px}
+ .account-order-filters{grid-template-columns:1fr}
+ .account-dashboard-head>.secondary,.account-order-tools>.secondary{width:100%}
+ .account-summary-grid{gap:9px}}
+@media(prefers-reduced-motion:reduce){.account-stat{transition:none}.account-stat:hover{transform:none}}
