@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createPublicSystemHealth } from '../src/public-system-health.mjs';
 
-test('public status polls only two fixed owned health URLs and sanitizes results',async()=>{
+test('public status polls only three fixed owned health URLs and sanitizes results',async()=>{
   const seen=[];
   const monitor=createPublicSystemHealth({
     fetchImpl:async (url,opts)=>{
@@ -13,7 +13,8 @@ test('public status polls only two fixed owned health URLs and sanitizes results
   const result=await monitor.snapshot();
   assert.equal(result.services.downloads.status,'healthy');
   assert.equal(result.services.stream.status,'healthy');
-  assert.equal(seen.length,2);
+  assert.equal(result.services.apkEdge.status,'healthy');
+  assert.equal(seen.length,3);
   assert.ok(seen.every(x=>x.url.endsWith('/health')&&x.url.startsWith('https://')));
   assert.ok(seen.every(x=>x.opts.redirect==='manual'&&x.opts.method==='GET'));
   const serialized=JSON.stringify(result);
@@ -31,6 +32,7 @@ test('HTTP 503 and provider redirects cannot be represented as healthy',async()=
   const report=await monitor.snapshot();
   assert.equal(report.services.downloads.status,'degraded');
   assert.equal(report.services.stream.status,'degraded');
+  assert.equal(report.services.apkEdge.status,'degraded');
   assert.equal(report.ok,true,'report availability is separate from system health');
 });
 
@@ -40,6 +42,7 @@ test('network failure produces unknown, not false all-green',async()=>{
   });
   const report=await monitor.snapshot();
   assert.equal(report.services.stream.status,'unknown');
+  assert.equal(report.services.apkEdge.status,'unknown');
   assert.equal(report.services.downloads.status,'unknown');
   assert.ok(!JSON.stringify(report).includes('private'));
 });
@@ -53,11 +56,11 @@ test('coalesces concurrent checks, uses bounded cache and refreshes on expiry',a
     }
   });
   const reports=await Promise.all(Array.from({length:40},()=>monitor.snapshot()));
-  assert.equal(calls,2,'many clients share only two external HTTP probes');
+  assert.equal(calls,3,'many clients share only three external HTTP probes');
   assert.ok(reports.every(r=>r===reports[0]));
-  await monitor.snapshot();assert.equal(calls,2);
+  await monitor.snapshot();assert.equal(calls,3);
   now+=30001;
-  await monitor.snapshot();assert.equal(calls,4);
+  await monitor.snapshot();assert.equal(calls,6);
 });
 
 test('rejects unsafe expensive configurations before starting probes',()=>{
