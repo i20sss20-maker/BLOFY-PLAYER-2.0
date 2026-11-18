@@ -17,8 +17,9 @@
   <meta name="twitter:card" content="summary_large_image">
   <link rel="preload" as="image" href="/store/media/strong8k.jpg">
   <title>اشتراك STRONG 8K | متجر BLOFY STREAM وBLOFY PLAYER</title>
-  <link rel="stylesheet" href="/store/design.css?v=7">
+  <link rel="stylesheet" href="/store/design.css?v=8">
   <script src="https://www.ksamerchant.geidea.net/hpp/geideaCheckout.min.js" defer></script>
+  <script src="/store/offers.js?v=1" defer></script>
   <script>
 (function(){
   var hash=location.hash||'';
@@ -36,7 +37,7 @@
       </a>
       <nav class="links" aria-label="التنقل في المتجر">
         <a href="/" class="active" aria-current="page">الرئيسية</a>
-        <a href="/#products">الاشتراكات</a>
+        <a href="/#products">الاشتراكات</a><a href="/store/offers">العروض</a>
         <a href="/store/trial">التجربة</a>
         <a href="/store/about">عن بلوفي</a>
         <a href="/store/faq">الأسئلة الشائعة</a>
@@ -66,6 +67,25 @@
         <small class="disclaimer">الأرقام بحسب بيانات باقة STRONG 8K المعلنة وغير مدققة بشكل مستقل، وقد تتغير حسب المصدر وحقوق التوزيع. الرسم توضيحي وليس صورة من التطبيق؛ اسم 8K ليس ضمانًا لدقة عرض جميع الأعمال.</small>
       </div>
     </section>
+    <section class="section offer-spotlight" id="offer" aria-labelledby="offer-heading"><div class="container">
+      <div class="offer-hero"><img src="/store/media/bundle.svg" width="1600" height="680" alt="شاشتان تعبران عن اشتراكين سنويين منفصلين" loading="lazy">
+        <div class="offer-overlay"><span class="offer-kicker">✦ عرض BLOFY المميز</span><h2 id="offer-heading">اشتراكان لمدة سنة<br><em>بـ200 ريال فقط.</em></h2>
+          <p>اختر اشتراكين سنويين بأي تركيبة: ستريم مع ستريم، إكستريم مع إكستريم، أو واحد من كل نوع.</p>
+          <div class="offer-big-price"><del>240 ر.س</del><strong>200 ر.س</strong><span>وفّر 40 ريال</span></div>
+          <a class="btn btn-primary" href="/store/offers">احصل على العرض ←</a>
+        </div>
+      </div>
+      <div class="offer-checkout" id="offer-checkout"><div class="offer-head"><span class="eyebrow">عرض منفصل</span><h3>جهّز اشتراكيك السنويين</h3><p>سجّل اختيار كل اشتراك. بعد الدفع المؤكد تحصل على <strong>كودين مستقلين</strong>، مدة كل واحد سنة.</p></div>
+        <div class="offer-fields">
+          <label for="bundle-first">الاشتراك الأول</label><select id="bundle-first"><option value="app">كود BLOFY STREAM</option><option value="xtream">Xtream مع BLOFY PLAYER</option></select>
+          <label for="bundle-second">الاشتراك الثاني</label><select id="bundle-second"><option value="app">كود BLOFY STREAM</option><option value="xtream">Xtream مع BLOFY PLAYER</option></select>
+          <div class="offer-total"><span>اشتراكان سنويان بدل 240 ر.س</span><b>200 ر.س</b></div>
+          <button type="button" class="btn btn-primary btn-wide" id="bundle-buy" hidden>اشترك في العرض — 200 ر.س</button>
+          <div class="checkout-status" id="bundle-status" role="status">نراجع جاهزية الدفع...</div>
+        </div>
+      </div>
+      <small class="disclaimer">كل كود مستقل ويبدأ احتساب مدته عند أول تفعيل. لا يتم إصدار كود واحد دون الثاني. يعتمد إتمام الشراء على توفر وسيلة الدفع والمصدر.</small>
+    </div></section>
     <div class="container"><div class="divider"></div></div>
     <section class="section" id="products" aria-labelledby="products-heading">
       <div class="container">
@@ -76,7 +96,7 @@
             <p class="lead">نفس الباقة، بطريقتين للتفعيل. اختر الصورة اللي تناسبك، ثم الباقة والمدة.</p>
           </div>
           <div class="pricing-ribbon" aria-label="قائمة أسعار الباقات">
-            <span>3 أشهر <b>40 ر.س</b></span><span>6 أشهر <b>60 ر.س</b></span><span>سنة <b>100 ر.س</b></span>
+            <span>3 أشهر <b>40 ر.س</b></span><span>6 أشهر <b>70 ر.س</b></span><span>سنة <b>120 ر.س</b></span>
           </div>
         </div>
         <div class="shop-grid product-offers">
@@ -88,9 +108,9 @@
               <p>دخول بالكود، قوائم قنوات وأفلام ومسلسلات، ومواسم وحلقات منظمة.</p>
               <div class="offer-badges"><span>دخول بالكود</span><span>قنوات مباشرة</span><span>أفلام ومسلسلات</span></div><details class="product-features"><summary>مميزات هذا الاشتراك</summary><ul class="offer-feature-list"><li>أقسام واضحة للبث والأفلام والمسلسلات</li><li>تنقل منظم بين المواسم والحلقات</li><li>واجهة عربية بسيطة للتلفزيون</li><li>تفعيل سريع بكود الاشتراك</li></ul></details>
               <div class="product-more"><a href="/products/stream">اعرف أكثر عن كود ستريم ←</a></div>
-              <div class="pricing-rows"><span>3 أشهر<b>40 ر.س</b></span><span>6 أشهر<b>60 ر.س</b></span><span>سنة<b>100 ر.س</b></span></div>
+              <div class="pricing-rows"><span>3 أشهر<b>40 ر.س</b></span><span>6 أشهر<b>70 ر.س</b></span><span>سنة<b>120 ر.س</b></span></div>
               <label class="duration-label" for="duration-stream">اختر مدة اشتراكك</label>
-              <select id="duration-stream" class="duration-select" data-duration="stream"><option value="3 أشهر" selected>3 أشهر — 40 ريال</option><option value="6 أشهر">6 أشهر — 60 ريال</option><option value="سنة">سنة — 100 ريال</option></select>
+              <select id="duration-stream" class="duration-select" data-duration="stream"><option value="3 أشهر" selected>3 أشهر — 40 ريال</option><option value="6 أشهر">6 أشهر — 70 ريال</option><option value="سنة">سنة — 120 ريال</option></select>
               <div class="price-note"><span>المبلغ الإجمالي</span><b data-price="stream">40 ر.س</b></div>
               <div class="actions"><button class="btn btn-primary btn-wide" type="button" data-buy="stream" hidden>اشترك الآن — 40 ر.س</button><a class="btn btn-outline" href="https://wa.me/966568941484" data-wa="stream" target="_blank" rel="noopener noreferrer">اسأل عن الباقة ↗</a></div>
               <div class="checkout-status" role="status" data-checkout-message="stream"></div>
@@ -104,9 +124,9 @@
               <p>اشتراك Xtream مع <b>BLOFY PLAYER</b>: البحث والمفضلة وتفاصيل الأفلام والمسلسلات.</p>
               <div class="offer-badges"><span>Xtream API</span><span>تطبيق BLOFY PLAYER</span><span>مفضلة وبحث</span></div><details class="product-features"><summary>مميزات BLOFY PLAYER</summary><ul class="offer-feature-list"><li>واجهة BLOFY PLAYER بالعربية والإنجليزية</li><li>بحث داخل مكتبة المحتوى والمفضلة</li><li>تفاصيل الأفلام والمواسم والحلقات</li><li>خيارات تشغيل حسب الجهاز والإصدار</li></ul></details>
               <div class="product-more"><a href="/products/xtream">اعرف أكثر عن Xtream BLOFY ←</a></div>
-              <div class="pricing-rows"><span>3 أشهر<b>40 ر.س</b></span><span>6 أشهر<b>60 ر.س</b></span><span>سنة<b>100 ر.س</b></span></div>
+              <div class="pricing-rows"><span>3 أشهر<b>40 ر.س</b></span><span>6 أشهر<b>70 ر.س</b></span><span>سنة<b>120 ر.س</b></span></div>
               <label class="duration-label" for="duration-xtream">اختر مدة اشتراكك</label>
-              <select id="duration-xtream" class="duration-select" data-duration="xtream"><option value="3 أشهر" selected>3 أشهر — 40 ريال</option><option value="6 أشهر">6 أشهر — 60 ريال</option><option value="سنة">سنة — 100 ريال</option></select>
+              <select id="duration-xtream" class="duration-select" data-duration="xtream"><option value="3 أشهر" selected>3 أشهر — 40 ريال</option><option value="6 أشهر">6 أشهر — 70 ريال</option><option value="سنة">سنة — 120 ريال</option></select>
               <div class="price-note"><span>المبلغ الإجمالي</span><b data-price="xtream">40 ر.س</b></div>
               <div class="actions"><button class="btn btn-primary btn-wide" type="button" data-buy="xtream" hidden>اشترك الآن — 40 ر.س</button><a class="btn btn-outline" href="https://wa.me/966568941484" data-wa="xtream" target="_blank" rel="noopener noreferrer">اسأل عن الباقة ↗</a></div>
               <div class="checkout-status" role="status" data-checkout-message="xtream"></div>
@@ -164,12 +184,14 @@
         <div class="faq">
           <details><summary>وش الفرق بين BLOFY STREAM وXtream؟</summary><p>BLOFY STREAM يعتمد الدخول بالكود مباشرة، أما Xtream فيتيح استخدام بيانات الاتصال مع BLOFY PLAYER والاستفادة من خيارات البحث والمفضلة والتنظيم حسب الإصدار.</p></details>
           <details><summary>وش محتوى اشتراك STRONG 8K؟</summary><p>بحسب بيانات الباقة المعلنة: أكثر من 50 ألف قناة بث مباشر، وأكثر من 50 ألف مسلسل، وأكثر من 185 ألف فيلم. المحتوى قابل للتحديث ويختلف حسب المصدر وحقوق التوزيع.</p></details>
-          <details><summary>كم سعر الاشتراكات؟</summary><p>3 أشهر 40 ريال، 6 أشهر 60 ريال، سنة 100 ريال. تتأكد من المبلغ قبل إتمام الدفع.</p></details>
+          <details><summary>كم سعر الاشتراكات؟</summary><p>3 أشهر 40 ريال، 6 أشهر 70 ريال، سنة 120 ريال. تتأكد من المبلغ قبل إتمام الدفع.</p></details>
           <details><summary>هل فيه تجربة قبل الاشتراك؟</summary><p>يوجد خيار تجربة للاستفسار حسب التوفر. تواصل مع الفريق لمعرفة المدة والشروط.</p></details>
+          <details><summary>وش يشمل عرض الاشتراكين السنويين؟</summary><p>كودان مستقلان لمدة سنة، بأي تركيبة من ستريم وإكستريم، مقابل 200 ريال بدل 240 ريال.</p></details>
           <details><summary>متى أستلم الكود؟</summary><p>بعد التحقق من نجاح الدفع يُعرض الكود في صفحة إيصال الطلب. لا تعِد الدفع إذا كانت العملية قيد التحقق.</p></details>
         </div>
       </div>
     </section>
+    <section class="container coupon-area" id="coupon-area"><div class="coupon-panel"><div><h2>معك كوبون خصم؟</h2><p>أدخل الكود وسيتم حساب خصمه قبل تأكيد عملية الدفع.</p></div><div class="coupon-input"><label for="store-coupon">كود الخصم</label><input id="store-coupon" type="text" maxlength="20" autocomplete="off" dir="ltr" placeholder="مثال: BLOFY10"><button id="coupon-preview" type="button" class="btn btn-outline btn-sm">التحقق من الخصم</button><p id="coupon-result" role="status"></p></div></div></section>
     <section class="container" aria-label="نتيجة الدفع">
       <section id="store-receipt" class="receipt-section" hidden aria-live="polite">
         <h3>طلب اشتراكك</h3><p id="store-receipt-status">جارٍ التحقق من حالة الطلب...</p>
@@ -178,12 +200,13 @@
         <button type="button" class="btn btn-outline" id="store-check" hidden>التحقق من الدفع مرة أخرى</button>
         <button type="button" class="btn btn-primary" id="store-copy" hidden>نسخ كود الاشتراك</button>
       </section>
+      <section id="bundle-receipt" class="receipt-section" hidden aria-live="polite"><h3>إيصال العرض السنوي</h3><p id="bundle-receipt-status">جارٍ التحقق من الدفع...</p><div id="bundle-receipt-codes" class="bundle-receipt-codes"></div><button type="button" class="btn btn-outline" id="bundle-recheck" hidden>تحقق مرة أخرى</button></section>
     </section>
   </main>
   <footer class="footer">
     <div class="container footer-inner">
       <div><a class="brand" href="/"><img src="/blofy-logo.png" width="35" height="35" alt=""><span><strong>BLOFY</strong><small>STREAM  ·  XTREAM</small></span></a><p>تجربة أفضل، تبدأ من هنا. جميع الحقوق محفوظة لعلامة BLOFY.</p></div>
-      <div class="footer-links"><a href="/#products">المنتجات</a><a href="/store/trial">التجربة</a><a href="/store/about">من نحن</a><a href="/store/faq">الأسئلة</a><a href="/store/terms">الشروط</a><a href="/privacy">الخصوصية</a><a href="/store/contact">التواصل</a></div>
+      <div class="footer-links"><a href="/#products">المنتجات</a><a href="/store/trial">التجربة</a><a href="/store/offers">العروض</a><a href="/store/about">من نحن</a><a href="/store/faq">الأسئلة</a><a href="/store/terms">الشروط</a><a href="/privacy">الخصوصية</a><a href="/store/contact">التواصل</a></div>
     </div>
   </footer>
   <a class="whats-bubble" href="https://wa.me/966568941484" data-wa="general" target="_blank" rel="noopener noreferrer" aria-label="تواصل معنا على واتساب">
@@ -198,7 +221,7 @@
    stream:'السلام عليكم، أرغب في اشتراك كود BLOFY STREAM.',
    xtream:'السلام عليكم، أرغب في اشتراك Xtream BLOFY.'
  };
- var amounts={'3 أشهر':40,'6 أشهر':60,'سنة':100};
+ var amounts={'3 أشهر':40,'6 أشهر':70,'سنة':120};
  var suffix={'3 أشهر':'3m','6 أشهر':'6m','سنة':'1y'};
  var plans={};var available=false;var busy=false;var currentId=null;var currentSecret=null;
  try{var campaign=new URLSearchParams(location.search).get('utm_source')||'';
@@ -276,9 +299,10 @@
    busy=true;update();message(product,'جارٍ فتح الدفع الآمن...');
    var started=false;
    try{
-     var data=await post('/api/v1/store/checkout',{sku:sku});
+     var couponCode=document.getElementById('store-coupon').value.trim().toUpperCase();
+     var data=await post('/api/v1/store/checkout',{sku:sku,couponCode:couponCode||undefined});
      if(data.provider!=='geidea'||data.checkoutMode!=='modal'||!data.orderId||!data.accessToken||
-        !data.sessionId||data.priceMinor!==expected.priceMinor||data.sku!==sku)
+        !data.sessionId||data.priceMinor>expected.priceMinor||data.priceMinor<expected.priceMinor*0.7-1||data.sku!==sku)
        throw Error('checkout_mismatch');
      currentId=data.orderId;currentSecret=data.accessToken;
      sessionStorage.setItem('blofy.store.'+currentId,currentSecret);
