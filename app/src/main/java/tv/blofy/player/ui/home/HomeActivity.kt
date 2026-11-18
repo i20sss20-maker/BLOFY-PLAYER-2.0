@@ -1073,6 +1073,13 @@ class HomeActivity : AppCompatActivity() {
 
     /** Refresh status follows the real WorkManager job, not an artificial animation timer. */
     private fun buildRefreshControl(compact: Boolean): LinearLayout {
+        // STREAM refresh belongs exclusively to Settings and opens the same
+        // catalog loader used after code login. Never show the obsolete 95%
+        // button or its stale WorkManager progress on a TV Home screen.
+        if (BuildConfig.CODE_ONLY_LOGIN) return LinearLayout(this).apply {
+            visibility = View.GONE
+            tag = "blofy_stream_retired_home_refresh"
+        }
         val wrapper = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER

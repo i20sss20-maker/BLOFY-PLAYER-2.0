@@ -44,6 +44,7 @@ import tv.blofy.player.ui.common.DeviceLocalTime
 import tv.blofy.player.ui.playlist.ProviderManagerActivity
 import tv.blofy.player.ui.profile.HomePersonalizationActivity
 import tv.blofy.player.ui.login.CodeOnlyLoginActivity
+import tv.blofy.player.ui.series.RecentEpisodesRefreshWorker
 import tv.blofy.player.ui.login.StartupEntryState
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -81,7 +82,7 @@ class SettingsActivity : AppCompatActivity() {
                     ?: dao.providers().first().firstOrNull()
             }
             if (!isFinishing) {
-                provider?.let { observeRefresh(it.id) }
+                if (!BuildConfig.CODE_ONLY_LOGIN) provider?.let { observeRefresh(it.id) }
                 updateSyncStatus()
             }
         }
@@ -106,7 +107,7 @@ class SettingsActivity : AppCompatActivity() {
             if (isFinishing || isDestroyed) return@launch
             if (active != null && provider?.id != active.id) {
                 provider = active
-                observeRefresh(active.id)
+                if (!BuildConfig.CODE_ONLY_LOGIN) observeRefresh(active.id)
             }
             if (::status.isInitialized) updateSyncStatus()
         }
@@ -183,12 +184,14 @@ class SettingsActivity : AppCompatActivity() {
         addCard(actionCard(copy("اشتراكي", "My subscription"),
             copy("حالة الكود وتاريخ انتهاء الاشتراك", "Status and subscription expiry")) { showStreamSubscription() })
         refreshCard = actionCard(copy("تحديث المحتوى", "Refresh content"),
-            copy("تحديث القنوات والأفلام والمسلسلات دون حذف المكتبة", "Refresh live, movies and series safely")) { refreshLibrary() }
+            copy("نفس تحميل المكتبة عند الدخول بالكود • دون تسجيل خروج",
+                "Same library loading as code sign-in • without signing out")) { refreshLibrary() }
         addCard(refreshCard)
-        addCard(actionCard(copy("المزامنة التلقائية", "Automatic catalog sync"),
+        addCard(actionCard(copy("تحديث الحلقات تلقائياً", "Automatic episode updates"),
             if (CatalogAutoRefreshPolicy.isEnabled(applicationContext))
-                copy("مفعلة • مرة يومياً دون إيقاف المشاهدة", "On • daily, without interrupting playback")
-            else copy("متوقفة • اضغط لتفعيلها", "Off • tap to enable")) {
+                copy("مفعل • يفحص المسلسلات التي شاهدتها بصمت",
+                    "On • quietly checks recently watched series")
+            else copy("متوقف • اضغط للتفعيل", "Off • tap to enable")) {
             chooseStreamAutoSync()
         })
 
@@ -622,16 +625,16 @@ class SettingsActivity : AppCompatActivity() {
     private fun chooseStreamAutoSync() {
         if (!BuildConfig.CODE_ONLY_LOGIN) return
         val current = CatalogAutoRefreshPolicy.isEnabled(applicationContext)
-        val options = arrayOf(copy("تشغيل المزامنة اليومية", "Enable daily sync"),
-            copy("إيقاف المزامنة", "Disable auto sync"))
+        val options = arrayOf(copy("تشغيل تحديث الحلقات", "Enable episode updates"),
+            copy("إيقاف تحديث الحلقات", "Disable episode updates"))
         AlertDialog.Builder(this)
-            .setTitle(copy("مزامنة مكتبة BLOFY", "BLOFY library sync"))
+            .setTitle(copy("مزامنة الحلقات الجديدة", "New episode synchronization"))
             .setSingleChoiceItems(options, if (current) 0 else 1) { dialog, selected ->
                 val enabled = selected == 0
                 if (CatalogAutoRefreshPolicy.setEnabled(applicationContext, enabled)) {
                     provider?.id?.let { id ->
-                        CatalogRefreshWorker.scheduleAutomatic(applicationContext, id)
-                        if (enabled) CatalogRefreshWorker.enqueueIfStale(applicationContext, id)
+                        CatalogRefreshWorker.retireStreamFullRefresh(applicationContext, id)
+                        if (enabled) RecentEpisodesRefreshWorker.enqueueIfDue(applicationContext, id)
                     }
                     recreate()
                 }
@@ -686,6 +689,16 @@ class SettingsActivity : AppCompatActivity() {
             updateSyncStatus()
             return
         }
+        if (BuildConfig.CODE_ONLY_LOGIN) {
+            // The previous 95%-stalling WorkManager pathway is retired.
+            // Reuse exactly the existing first-code-login loader on the SAME
+            // active provider, without clearing the encrypted code session or
+            // requesting another redeem/activation.
+            CatalogRefreshWorker.retireStreamFullRefresh(applicationContext, active.id)
+            startActivity(StreamCatalogRefreshRoute.fromSettings(this, active.id))
+            finish()
+            return
+        }
         // The card stays focusable for TV remotes, but repeated presses never enqueue duplicates.
         if (refreshState == WorkInfo.State.RUNNING ||
             refreshState == WorkInfo.State.ENQUEUED ||
@@ -720,6 +733,14 @@ class SettingsActivity : AppCompatActivity() {
             else getString(R.string.setting_status_saved)
         }
         if (!::refreshCard.isInitialized) return
+        if (BuildConfig.CODE_ONLY_LOGIN) {
+            refreshCard.bind(copy("تحديث المحتوى", "Refresh content"),
+                copy("تحديث الآن", "Refresh now"),
+                copy("إعادة فحص القائمة مثل أول دخول بالكود • يحتفظ باشتراكك ومكتبتك عند فشل التحديث",
+                    "Reload as on first code sign-in • keeps your subscription and saved library on failure"))
+            refreshCard.setBusy(false)
+            return
+        }
 
         val busy = refreshState == WorkInfo.State.RUNNING ||
             refreshState == WorkInfo.State.ENQUEUED ||
