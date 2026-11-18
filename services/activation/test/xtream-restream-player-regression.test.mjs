@@ -37,7 +37,10 @@ test('gateway mapping only refreshed as one bounded single-flight task',async()=
   assert.match(gateway,/import \{ gatewayItemsPageQuery,gatewayOrderedItemsPageQuery,gatewayOrderCursor \}/);
   assert.match(gateway,/oncePerMediaMap\(itemMapJobs/);
   assert.match(gateway,/oncePerMediaMap\(categoryMapJobs/);
-  assert.match(gateway,/!old\.settled/);
+  const versionCache=await readFile(new URL('../src/xtream-gateway-map-revision-cache.mjs',import.meta.url),'utf8');
+  assert.match(gateway,/ensureRevisionAwareGatewayMap/);
+  assert.match(versionCache,/!old\.settled/);
+  assert.match(versionCache,/old\.revision===revision/);
   assert.match(gateway,/gatewayOrderedItemsPageQuery\(mediaType,cursor,\{filter,sourceId\}\)/);
 });
 test('protected Live and VOD diagnostics check real upstream media and report no credentials',async()=>{

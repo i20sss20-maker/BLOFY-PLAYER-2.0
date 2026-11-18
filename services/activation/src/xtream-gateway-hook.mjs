@@ -34,6 +34,7 @@ import pg from 'pg';
 import { validateBulkAccountRequest } from './xtream-bulk-policy.mjs';
 import { gatewayItemsPageQuery,gatewayOrderedItemsPageQuery,gatewayOrderCursor } from './xtream-gateway-query.mjs';
 import {xtreamCatalogVersionForAccount} from './xtream-catalog-revision.mjs';
+import {xtreamCatalogDeltaPage} from './xtream-catalog-delta.mjs';
 import {createXtreamJsonArrayWriter} from './xtream-json-array-writer.mjs';
 import {createXtreamPublicInfoCache} from './xtream-public-info-cache.mjs';
 import { mergeXtreamPlayerRequest } from './xtream-player-post.mjs';
@@ -102,6 +103,8 @@ import {ensureUnavailableMediaTable,validUnavailableKey,recoverySources,
  createRegistryWriteGuard,unavailableMediaSummary,
  expediteUnavailableRecheck} from './xtream-unavailable-media-registry.mjs';
 import {runUnavailableRecheckBatch,classifyUnavailableProbe} from './xtream-unavailable-media-recheck.mjs';
+import {activePublishedSalehRecheckIds} from './xtream-saleh-recheck-scope.mjs';
+import {ensureRevisionAwareGatewayMap} from './xtream-gateway-map-revision-cache.mjs';
 import {mayRefreshMovieExtension,correctedMovieExtension,
   mayRefreshEpisodeExtension,correctedEpisodeExtension} from './xtream-vod-extension-recovery.mjs';
 import {shouldUseIndependentXtreamSource,fetchIndependentXtreamSource} from './xtream-independent-catalog-relay.mjs';
@@ -578,24 +581,34 @@ async function authenticate(usernameInput, passwordInput, { touch = false } = {}
   return row;
 }
 
-// A 290k-item catalog used to scan and ON CONFLICT every item for every
-// Xtream player request. Single-flight + bounded freshness avoids repeated
-// heavyweight map INSERTs while still detecting newly imported items.
+// A 290k-item catalog previously required a full map scan each minute.
+// A large catalog can contain hundreds of thousands of titles. Once each
+// media type has stable gateway IDs, an unchanged catalog revision must not
+// trigger another full-library INSERT on every minute's client requests.
 const categoryMapJobs=new Map();
 const itemMapJobs=new Map();
-// Bound expensive catalog map scans to once per minute while still noticing
-// imports without requiring application restarts.
 const MAP_FRESHNESS_MS=60000;
 const publicInfoCache=createXtreamPublicInfoCache();
-async function oncePerMediaMap(cache,key,task){
-  const old=cache.get(key),now=Date.now();
-  if(old && (!old.settled || now-old.startedAt<MAP_FRESHNESS_MS))return old.promise;
-  const entry={startedAt:now,promise:null,settled:false};
-  entry.promise=Promise.resolve().then(task);
-  cache.set(key,entry);
-  try{return await entry.promise;}
-  catch(error){if(cache.get(key)===entry)cache.delete(key);throw error;}
-  finally{entry.settled=true;}
+async function gatewayCatalogRevision(sourceId){
+  // One tiny indexed source/revision aggregate; zero or missing revision
+  // fails open to the safe, preexisting full mapping path. Never expose
+  // subscriber identities, provider URLs, or credentials.
+  const r=await pool.query(`SELECT COALESCE(SUM(v.revision),0)::text AS revision,
+     COUNT(*)::int AS sources,
+     COUNT(*) FILTER(WHERE v.revision IS NULL)::int AS unversioned
+    FROM blofy_xtream_servers s
+    LEFT JOIN blofy_xtream_catalog_revisions v ON v.source_id=s.id
+    WHERE s.enabled=TRUE AND s.publish_catalog=TRUE
+      AND s.deletion_requested_at IS NULL
+      AND ($1::uuid IS NULL OR s.id=$1::uuid)`,[sourceId]);
+  const row=r.rows?.[0];
+  if(!row||Number(row.sources)<1||Number(row.unversioned)>0)return null;
+  return String(row.revision||'0');
+}
+async function oncePerMediaMap(cache,key,task,sourceId){
+  return ensureRevisionAwareGatewayMap(
+    cache,key,task,()=>gatewayCatalogRevision(sourceId),
+    {ttlMs:MAP_FRESHNESS_MS});
 }
 
 async function ensureCategoryMaps(mediaType,sourceId=null) {
@@ -607,7 +620,7 @@ async function ensureCategoryMaps(mediaType,sourceId=null) {
     JOIN blofy_xtream_servers s ON s.id=c.server_id
     WHERE c.media_type=$1 AND c.enabled=TRUE AND s.enabled=TRUE AND s.publish_catalog=TRUE
       AND ($2::uuid IS NULL OR s.id=$2::uuid)
-    ON CONFLICT(server_id,media_type,source_category_id) DO NOTHING`,[mediaType,sourceId]));
+    ON CONFLICT(server_id,media_type,source_category_id) DO NOTHING`,[mediaType,sourceId]),sourceId);
 }
 
 async function ensureItemMaps(mediaType,sourceId=null) {
@@ -621,7 +634,7 @@ async function ensureItemMaps(mediaType,sourceId=null) {
     WHERE i.media_type=$1 AND i.enabled=TRUE AND s.enabled=TRUE AND s.publish_catalog=TRUE
       AND (c.enabled IS NULL OR c.enabled=TRUE)
       AND ($2::uuid IS NULL OR i.server_id=$2::uuid)
-    ON CONFLICT(server_id,media_type,source_id) DO NOTHING`,[mediaType,sourceId]));
+    ON CONFLICT(server_id,media_type,source_id) DO NOTHING`,[mediaType,sourceId]),sourceId);
 }
 
 async function gatewayCategories(mediaType, sourceId=null) {
@@ -1094,7 +1107,9 @@ async function runDueUnavailableMedia({sourceId=null}={}){
  try{
   // Each source has its own DB lease, which prevents duplicate probes across
   // replicas and keeps traffic below three first-byte attempts per hour.
-  const eligible=recoverySources();
+  // Source credentials may remain valid for a source the owner paused.
+  // Never probe that source: the sole active published source is saleh.
+  const eligible=await activePublishedSalehRecheckIds(pool,[...recoverySources()]);
   // Manual one-source requests never probe any other source.
   const ids=sourceId===null?[...eligible]:eligible.has(sourceId)?[sourceId]:[];
   for(const id of ids){
@@ -2295,6 +2310,28 @@ async function handlePlayerApi(req, res, url) {
       pool,account.source_id||null,url.searchParams.get('since'));
     return json(res,status.ok?200:409,status);
   }
+  // STREAM 56: source-scoped incremental catalog, authenticated by the same
+  // active, device-bound bearer as all other player_api calls. The source
+  // and distributor visibility are never chosen by client query parameters.
+  if(action==='get_blofy_catalog_delta'){
+    res.setHeader('cache-control','private, no-store');
+    const kind=url.searchParams.get('kind');
+    const part=url.searchParams.get('part');
+    const source=account.source_id||null;
+    if(!source)return json(res,409,{ok:false,code:'catalog_delta_source_unscoped'});
+    if(['live','movie','series'].includes(kind)){
+      if(part==='categories')await ensureCategoryMaps(kind,source);
+      else await ensureItemMaps(kind,source);
+    }
+    const hidden=part==='items'&&['live','movie','series'].includes(kind)?
+      await distributorCatalog.hiddenIds(distributorScope,kind):null;
+    const delta=await xtreamCatalogDeltaPage(pool,source,{
+      kind,part,since:url.searchParams.get('since'),
+      revision:url.searchParams.get('revision'),
+      after:url.searchParams.get('after')||'0'
+    },{hiddenIds:hidden});
+    return json(res,delta.ok?200:delta.status||409,delta);
+  }
   if (action === 'get_live_categories') return json(res, 200, await gatewayCategories('live',account.source_id||null));
   if (action === 'get_vod_categories') return json(res, 200, await gatewayCategories('movie',account.source_id||null));
   if (action === 'get_series_categories') return json(res, 200, await gatewayCategories('series',account.source_id||null));
@@ -2628,6 +2665,9 @@ http.createServer = function withBlofyXtreamGateway(listener) {
         const sourceId=String(body.sourceId||'').trim().toLowerCase();
         if(!validUuid(sourceId)||!recoverySources().has(sourceId))
           return json(res,400,{ok:false,error:'unavailable_source_not_allowed'});
+        const currentlyActive=await activePublishedSalehRecheckIds(pool,[sourceId]);
+        if(!currentlyActive.has(sourceId))
+          return json(res,409,{ok:false,error:'unavailable_source_paused_or_unpublished'});
         // Source-specific manual button cannot override other source grants.
         // SQL excludes leased and recently rechecked items automatically.
         const expedited=await expediteUnavailableRecheck(pool,sourceId,{limit:2});
