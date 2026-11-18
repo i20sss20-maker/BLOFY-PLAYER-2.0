@@ -9,7 +9,7 @@
 .one-customer-search label:first-child{flex:2;min-width:215px}
 .one-customer-search input,.one-customer-search select,.one-customer-edit-form input,.one-customer-edit-form textarea{width:100%;min-height:42px;padding:10px 12px;border:1px solid #355474;border-radius:9px;background:#0b192b;color:#f2fbff;font:inherit}
 .one-customer-search :is(input,select):focus-visible,.one-customer-edit-form :is(input,textarea):focus-visible{outline:2px solid #59d4cb;outline-offset:2px}
-.one-customer-search button,.one-customer-pager button,.one-customer-open,.one-customer-dialog button{min-height:42px;padding:9px 14px;background:#1d344d;color:#dfecf5;border:1px solid #375774;border-radius:9px;cursor:pointer;font:600 12px inherit}
+.one-customer-search button,.one-customer-pager button,.one-customer-open,.one-customer-dialog button{min-height:42px;padding:9px 14px;background:#1d344d;color:#dfecf5;border:1px solid #375774;border-radius:9px;cursor:pointer;font:inherit;font-size:12px;font-weight:600}
 .one-customer-search .one-customer-primary,.one-customer-dialog .one-customer-primary{background:#5cdcd2;border-color:#59d8cb;color:#08232a;font-weight:750}
 .one-customer-search button:disabled,.one-customer-pager button:disabled,.one-customer-dialog button:disabled{opacity:.45;cursor:not-allowed}
 .one-customer-status{color:#a1e7d2;font-size:12px;line-height:1.9;min-height:20px;margin:12px 0}
