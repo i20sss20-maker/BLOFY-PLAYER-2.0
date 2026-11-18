@@ -55,7 +55,8 @@ function renderCode(row,keyHex){
    durationDays:Number(row.duration_days),activatedAt:row.redeemed_at||null,
    expiresAt:row.expires_at||null,alert:expiryAlert(row.expires_at)};
 }
-export function createStoreCustomerHandlers({pool,json,readJson,keyHex,env=process.env,fetchImpl=globalThis.fetch,sendCode}){
+export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
+  authorizeAdmin=()=>false,env=process.env,fetchImpl=globalThis.fetch,sendCode}){
  const keyOK=/^[a-f0-9]{64}$/i.test(String(keyHex||''));
  const enabled=env.BLOFY_CUSTOMER_ACCOUNTS_ENABLED==='true'&&keyOK;
  const mailKey=String(env.BLOFY_CUSTOMER_RESEND_API_KEY||'').trim();
@@ -150,6 +151,22 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,env=proce
     orderNumber:row.order_number,channel:row.channel,expiresAt:row.expires_at,
     status:expiryAlert(row.expires_at)
   }))});
+ }
+ async function adminSummary(req,res){
+  const tables=(await pool.query("SELECT "+
+    "to_regclass('public.blofy_store_customers') AS customers,"+
+    "to_regclass('public.blofy_store_customer_orders') AS orders,"+
+    "to_regclass('public.blofy_store_customer_reminders') AS reminders")).rows[0]||{};
+  let customers=null,linkedOrders=null,sentReminders=null;
+  if(tables.customers)customers=Number((await pool.query(
+    'SELECT COUNT(*)::int AS n FROM blofy_store_customers')).rows[0]?.n||0);
+  if(tables.orders)linkedOrders=Number((await pool.query(
+    'SELECT COUNT(*)::int AS n FROM blofy_store_customer_orders')).rows[0]?.n||0);
+  if(tables.reminders)sentReminders=Number((await pool.query(
+    'SELECT COUNT(*)::int AS n FROM blofy_store_customer_reminders WHERE sent_at IS NOT NULL')).rows[0]?.n||0);
+  return json(res,200,{ok:true,accountsEnabled:enabled,emailConfigured:mailReady,
+    remindersEnabled:reminderEngine.configured,customers,linkedOrders,sentReminders,
+    livePaymentTestVerified:false});
  }
  async function requestCode(req,res){
   if(!mailReady)return json(res,503,{error:'customer_email_not_configured'});
@@ -296,6 +313,10 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,env=proce
  }
  const handler=async function handler(req,res,url){
   const path=url.pathname;
+  if(path==='/api/v1/admin/store/customer-accounts/summary'&&req.method==='GET'){
+   if(!authorizeAdmin(req,res))return true;
+   await adminSummary(req,res);return true;
+  }
   if(!path.startsWith('/api/v1/store/account'))return false;
   if(!enabled){json(res,503,{error:'customer_accounts_disabled'});return true;}
   if(req.method==='POST'&&!browserMutation(req,res,json))return true;
