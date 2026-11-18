@@ -51,7 +51,8 @@
           block.append(label,code,help,copy);receiptCodes.append(block);
         });
         recheck.hidden=true;
-        try{sessionStorage.removeItem('blofy.bundle.'+order);}catch(_){}
+        // Keep the one-tab recovery token until the browser session ends.
+        // Customers can refresh the receipt without triggering another payment.
         setBusy(false);
         return true;
       }
