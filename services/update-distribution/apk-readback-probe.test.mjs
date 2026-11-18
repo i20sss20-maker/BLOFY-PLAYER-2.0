@@ -93,6 +93,9 @@ test('readiness endpoint is admin protected, POST-only, origin checked, and does
  assert.match(server,/if \(!sameOrigin\(req\)\)/);
  assert.match(server,/apkMirrorReadiness\.probe\(\)/);
  assert.match(server,/customerDownloadCutover:false/);
+ assert.match(server,/if\(snapshot\?\.ready===true&&snapshot\.counts\?\.mirrored===2\)/);
+ assert.match(server,/const canary=await apkMirrorReadiness\.probe\(\)/);
+ assert.match(server,/BLOFY_APK_S3_READBACK/);
  assert.match(docker,/apk-readback-probe\.mjs/);
  assert.match(pkg,/apk-readback-probe\.test\.mjs/);
  assert.match(store,/GetObjectCommand/);
