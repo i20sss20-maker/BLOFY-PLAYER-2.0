@@ -2557,10 +2557,9 @@ http.createServer = function withBlofyXtreamGateway(listener) {
       if(req.method==='POST'&&url.pathname==='/api/v1/admin/xtream-gateway/episode-delivery-audit'){
         const body=await readJson(req);
         const sourceId=String(body?.sourceId||'').trim().toLowerCase();
-        const rawId=String(body?.seriesGatewayId??'');
+        const rawId=String(body?.seriesSourceId??'');
         if(!/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(sourceId)||
-           !/^[1-9][0-9]{0,14}$/.test(rawId)||
-           !Number.isSafeInteger(Number(rawId)))
+           !/^[A-Za-z0-9._-]{1,100}$/.test(rawId))
           return json(res,400,{ok:false,code:'episode_audit_invalid_selection'});
         const source=(await pool.query(`SELECT enabled,publish_catalog,name
           FROM blofy_xtream_servers WHERE id=$1 AND deletion_requested_at IS NULL
@@ -2571,9 +2570,16 @@ http.createServer = function withBlofyXtreamGateway(listener) {
         try{
           // Confirm that this series is actually published and visible to this
           // source; gatewayItemById enforces the same source/category ACL.
-          const item=await gatewayItemById('series',Number(rawId),sourceId);
+          const mapped=(await pool.query(`SELECT m.gateway_id
+            FROM blofy_xtream_gateway_item_map m
+            WHERE m.server_id=$1 AND m.media_type='series' AND m.source_id=$2
+            LIMIT 1`,[sourceId,rawId])).rows[0];
+          const gatewayId=Number(mapped?.gateway_id);
+          if(!Number.isSafeInteger(gatewayId)||gatewayId<1)
+            return json(res,404,{ok:false,code:'episode_audit_series_not_published'});
+          const item=await gatewayItemById('series',gatewayId,sourceId);
           if(!item)return json(res,404,{ok:false,code:'episode_audit_series_not_published'});
-          const info=await seriesInfo(Number(rawId),sourceId);
+          const info=await seriesInfo(gatewayId,sourceId);
           const seasonLists=Object.values(info?.episodes||{}).filter(Array.isArray);
           const episodeCount=seasonLists.reduce((sum,rows)=>sum+rows.length,0);
           const valid=seasonLists.every(rows=>rows.every(ep=>{
