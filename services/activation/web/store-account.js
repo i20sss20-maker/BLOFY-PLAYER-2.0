@@ -58,6 +58,25 @@
   const renew=node('a','تجديد نفس الكود');renew.className='secondary';renew.target='_blank';
   renew.rel='noopener noreferrer';
   renew.href='https://wa.me/966568941484?text='+encodeURIComponent('السلام عليكم، أريد تجديد نفس كود BLOFY المرتبط بطلب '+o.orderNumber+'. أرجو مراجعة حالته.');
+  if(o.status==='pending'){
+   const verify=node('button','التحقق من حالة الدفع');verify.className='primary';verify.type='button';
+   verify.addEventListener('click',async()=>{
+    verify.disabled=true;
+    try{
+     tell('جارٍ الاستعلام عن الدفع من Geidea عبر BLOFY...');
+     const result=await api('/orders/'+encodeURIComponent(o.orderId)+'/check',{});
+     await load();
+     if(result.confirmedPaid){
+      tell('تم تأكيد دفع الطلب. تظهر أكواده الآن.');
+      await showOrder(o.orderId);
+     }else tell(result.providerUnavailable?
+      'لم نستطع التواصل مع Geidea الآن. لا تعِد الدفع، وافتح الطلب لاحقًا أو تواصل مع الدعم.':
+      'الطلب ما زال قيد التحقق. لم يُسجّل دفع مؤكد حتى الآن؛ لا تكرر الشراء.');
+    }catch(e){tell(statusMessage(e));}
+    finally{verify.disabled=false;}
+   });
+   buttons.append(verify);
+  }
   buttons.append(details,renew,support);wrapper.append(buttons);return wrapper;
  }
  async function load(){

@@ -40,6 +40,7 @@ export function createCommercialHandlers({pool, keyHex, json, readJson, requireA
   const storePayments = createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAdmin:requireAdmin,
     onCheckoutOrder:customerAccounts.linkCheckoutOrder,
     requireCheckoutCustomer:customerAccounts.checkoutIdentity,env});
+  customerAccounts.setReconciler(storePayments.reconcileCustomerOrder);
   const zidOAuth = createZidOAuthHandlers({pool,json,keyHex,env});
   const zidPayments = createZidPaymentHandlers({pool,json,readJson,authorize,env,tokenProvider:zidOAuth.loadTokens});
   async function transaction(action) {

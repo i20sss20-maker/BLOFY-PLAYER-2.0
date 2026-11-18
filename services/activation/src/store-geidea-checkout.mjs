@@ -853,7 +853,7 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
       'cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer'});
    res.end();
  }
- return async function handler(req,res,url){
+ const handler=async function handler(req,res,url){
    const p=url.pathname;
    if(p==='/api/v1/admin/store/orders'&&req.method==='GET'){await adminOrders(req,res,url);return true;}
    if(p==='/api/v1/store/cart/quote'&&req.method==='POST'){await cartQuote(req,res);return true;}
@@ -873,4 +873,11 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
    if(p==='/api/v1/store/geidea/return'&&req.method==='GET'){await returned(req,res,url);return true;}
    return false;
  };
+ // Only call this from the verified customer portal AFTER owner authorization
+ // and server-side rate limiting. Never expose an unauthenticated public endpoint.
+ handler.reconcileCustomerOrder=async id=>{
+   if(!UUID.test(id||''))throw err('store_invalid_order_id',400);
+   return reconcile(id);
+ };
+ return handler;
 }

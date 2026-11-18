@@ -61,6 +61,7 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
  const keyOK=/^[a-f0-9]{64}$/i.test(String(keyHex||''));
  const enabled=env.BLOFY_CUSTOMER_ACCOUNTS_ENABLED==='true'&&keyOK;
  const loginRequiredForStore=env.BLOFY_STORE_REQUIRE_CUSTOMER_LOGIN==='true';
+ let reconcileOwnedPayment=async()=>false;
  const mailKey=String(env.BLOFY_CUSTOMER_RESEND_API_KEY||'').trim();
  const mailFrom=String(env.BLOFY_CUSTOMER_MAIL_FROM||'').trim();
  const mailReady=typeof sendCode==='function'||(mailKey.startsWith('re_')&&mailFrom.includes('@'));
@@ -379,6 +380,46 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
   out.fulfilled=true;
   return json(res,200,out);
  }
+ // Authenticated order-status refresh: no receipt bearer token required.
+ // Every provider query is gated by order ownership and an atomic DB cooldown.
+ async function refreshOwnedPayment(req,res,id){
+   if(!UUID.test(id||''))return json(res,400,{error:'invalid_order_id'});
+   const customer=await current(req);
+   if(!customer)return json(res,401,{error:'login_required'});
+   const order=(await pool.query(
+     'SELECT o.id,o.status,o.session_id FROM blofy_store_customer_orders m '+
+     'JOIN blofy_store_geidea_orders o ON o.id=m.order_id '+
+     'WHERE m.customer_id=$1 AND o.id=$2',[customer.id,id])).rows[0];
+   if(!order)return json(res,404,{error:'order_not_found'});
+   let checked=false,providerUnavailable=false;
+   if(order.status==='pending'&&order.session_id){
+     // Limit provider calls across app instances and open tabs; paid orders are
+     // immutable after successful verified fulfillment.
+     const lease=await pool.query(
+       'UPDATE blofy_store_geidea_orders SET last_checked_at=NOW() '+
+       "WHERE id=$1 AND status='pending' AND session_id IS NOT NULL "+
+       "AND (last_checked_at IS NULL OR last_checked_at<NOW()-INTERVAL '15 seconds') "+
+       'RETURNING id',[id]);
+     if(lease.rowCount){
+       checked=true;
+       try{await reconcileOwnedPayment(id);}
+       catch(e){
+         providerUnavailable=true;
+         console.warn('[customer-payment-check]',JSON.stringify({reason:
+           e?.status===503?'provider_unavailable':e?.status===409?'provider_mismatch_or_delivery':'reconciliation_failed'}));
+       }
+     }
+   }
+   // Never infer payment success from the Geidea redirect alone.
+   // Return confirmed server order status; no private code or access token here.
+   const latest=(await pool.query(
+     'SELECT o.status,o.paid_at FROM blofy_store_customer_orders m '+
+     'JOIN blofy_store_geidea_orders o ON o.id=m.order_id '+
+     'WHERE m.customer_id=$1 AND o.id=$2',[customer.id,id])).rows[0];
+   return json(res,200,{ok:true,orderId:id,status:latest?.status||order.status,
+     confirmedPaid:latest?.status==='paid',paidAt:latest?.paid_at||null,
+     checked,providerUnavailable});
+ }
  async function preferences(req,res){
   const customer=await current(req);
   if(!customer)return json(res,401,{error:'login_required'});
@@ -415,6 +456,8 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
    else if(path==='/api/v1/store/account/logout'&&req.method==='POST')await logout(req,res);
    else if(path==='/api/v1/store/account'&&req.method==='GET')await account(req,res);
    else if(path==='/api/v1/store/account/alerts'&&req.method==='GET')await alerts(req,res);
+   else if(/^\/api\/v1\/store\/account\/orders\/[a-fA-F0-9-]{36}\/check$/.test(path)&&req.method==='POST')
+     await refreshOwnedPayment(req,res,path.split('/').at(-2));
    else if(/^\/api\/v1\/store\/account\/orders\/[a-fA-F0-9-]{36}$/.test(path)&&req.method==='GET')
      await receipt(req,res,path.split('/').at(-1));
    else json(res,404,{error:'not_found'});
@@ -423,5 +466,6 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
  };
  handler.linkCheckoutOrder=linkCheckoutOrder;
  handler.checkoutIdentity=checkoutIdentity;
+ handler.setReconciler=fn=>{if(typeof fn==='function')reconcileOwnedPayment=fn;};
  return handler;
 }
