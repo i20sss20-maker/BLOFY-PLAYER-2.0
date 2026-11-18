@@ -9,6 +9,14 @@ internal object PlaybackRecoveryPolicy {
     const val LIVE_REBUFFER_GRACE_MS = 22_000L
     const val RECOVERY_COOLDOWN_MS = 60_000L
     const val MAX_RESTARTS_PER_CHANNEL = 3
+    const val HEALTHY_PLAYBACK_FOR_RETRY_RESET_MS = 30_000L
+
+    fun recoveredLongEnoughToResetErrorRetry(
+        lastReadyAtMs: Long,
+        nowMs: Long
+    ): Boolean = lastReadyAtMs > 0L && nowMs >= lastReadyAtMs &&
+        nowMs - lastReadyAtMs >= HEALTHY_PLAYBACK_FOR_RETRY_RESET_MS
+
 
     fun shouldRecoverLiveBuffering(
         stalledForMs: Long,
