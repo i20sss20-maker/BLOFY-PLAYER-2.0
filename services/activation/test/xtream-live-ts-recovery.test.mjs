@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {allowedLiveTsRecoveryPilot,safeLiveTsRecoveryStart,liveTsRecoveryBytes}
+import {allowedLiveTsRecoveryPilot,safeLiveTsRecoveryStart,liveTsRecoveryBytes,createLiveTsReconnectBudget}
  from '../src/xtream-live-ts-recovery.mjs';
 
 const accountId='937ba740-b1dd-44cf-9ff4-55b99e4ca15a';
@@ -123,4 +123,45 @@ test('production entrypoint keeps midstream recovery off without exact opt-in',a
  assert.match(start,/BLOFY_XTREAM_LIVE_TS_RECOVERY_PILOT_SOURCE_ID/);
  assert.match(gateway,/liveTsPilot\?\s*Readable\.from\(liveTsRecoveryBytes/);
  assert.match(gateway,/BLOFY_LIVE_TS_RECOVERED/);
+});
+
+test('third clean live drop can recover after two previous successful reconnects',async()=>{
+ const initial=response(),reader=initial.body.getReader();
+ const first=(await reader.read()).value;
+ let calls=0,seen=[];
+ const iter=liveTsRecoveryBytes({first,reader,controller:new AbortController(),
+  target:url,waitRetry:immediately,
+  fetchImpl:async()=>{calls++;return response();},
+  onReconnect:e=>seen.push(e.attempt)
+ });
+ for(let i=0;i<4;i++)assert.equal((await iter.next()).value.length,564);
+ await iter.return();
+ assert.equal(calls,3);
+ assert.deepEqual(seen,[1,2,3]);
+});
+
+test('rolling window rate cap prevents source retry storms, but credits refill',()=>{
+ let t=100_000;
+ const budget=createLiveTsReconnectBudget({now:()=>t,maxInWindow:3,maxTotal:5,windowMs:120000});
+ for(let i=0;i<3;i++)assert.equal(budget.claim(),null);
+ assert.equal(budget.claim(),'live_ts_reconnect_rate_limited');
+ t+=120001;
+ assert.equal(budget.claim(),null);
+ assert.equal(budget.claim(),null);
+ assert.equal(budget.claim(),'live_ts_reconnect_budget_exhausted');
+ t+=300001;
+ assert.equal(budget.claim(),null,'stable gap resets the per-session breaker');
+});
+
+test('recovery stream never opens a ninth source within the two-minute budget',async()=>{
+ const firstReply=response(),reader=firstReply.body.getReader(),first=(await reader.read()).value;
+ let calls=0;
+ const budget=createLiveTsReconnectBudget({now:()=>200000,maxInWindow:2,maxTotal:120});
+ const iter=liveTsRecoveryBytes({first,reader,controller:new AbortController(),
+  target:url,waitRetry:immediately,reconnectBudget:budget,
+  fetchImpl:async()=>{calls++;return response();}
+ });
+ for(let i=0;i<3;i++)assert.equal((await iter.next()).value.length,564);
+ await assert.rejects(async()=>{await iter.next()},/live_ts_reconnect_rate_limited/);
+ assert.equal(calls,2,'no unbounded connection attempts');
 });
