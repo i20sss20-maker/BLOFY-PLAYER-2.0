@@ -6,8 +6,9 @@ on:
       - '.github/workflows/publish-blofy-stream-55-8-36.yml'
   workflow_dispatch:
 permissions:
-  contents: write
+  contents: read
   actions: read
+  id-token: write
 concurrency:
   group: publish-blofy-stream-55-8-36
   cancel-in-progress: false
@@ -69,19 +70,38 @@ jobs:
           sha="$(sha256sum "staging/$APK_NAME" | awk '{print $1}')"
           echo "APK_SHA256=$sha" >> "$GITHUB_ENV"
           echo "APK_BYTES=$size" >> "$GITHUB_ENV"
-      - name: Publish immutable signed STREAM APK (distinct from PLAYER)
+      - name: Upload byte-verified owner-signed STREAM APK to BLOFY Downloads via GitHub OIDC
         shell: bash
         run: |
           set -euo pipefail
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "::error::Release already exists; refusing overwrite."
-            exit 1
-          fi
-          gh release create "$TAG" "staging/$APK_NAME" staging/SHA256SUMS staging/IDENTITY.txt \
-            --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" \
-            --title 'BLOFY STREAM 55.8.36 | Official owner-signed APK' \
-            --notes 'BLOFY STREAM 55.8.36 (versionCode 2000113). Owner-signed Android TV/Box build. Quiet Xtream catalog and recent-episode refresh; fixes for remote seeking, VLC controls and AI search/direct verified title pages. Keeps previously committed library on sync errors. Does not replace BLOFY PLAYER. Physical device smoke testing is still recommended.'
-          echo "### Published signed STREAM APK" >> "$GITHUB_STEP_SUMMARY"
-          echo "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/$APK_NAME" >> "$GITHUB_STEP_SUMMARY"
-          echo "SHA256: $APK_SHA256" >> "$GITHUB_STEP_SUMMARY"
-          echo "APK size: $APK_BYTES" >> "$GITHUB_STEP_SUMMARY"
+          : "${ACTIONS_ID_TOKEN_REQUEST_URL:?GitHub OIDC unavailable}"
+          : "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:?GitHub OIDC unavailable}"
+          aud='blofy-stream-55-8-36-website-upload'
+          token="$(curl -fsSL --max-time 25 \
+            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=$aud" | jq -er '.value')"
+          test -n "$token"
+          target="https://updates.blofyplayer.com/api/internal/releases/upload?filename=$APK_NAME"
+          curl --fail-with-body --silent --show-error --max-time 420 \
+            -H "Authorization: Bearer $token" \
+            -H 'Content-Type: application/vnd.android.package-archive' \
+            --data-binary "@staging/$APK_NAME" "$target" | tee "$RUNNER_TEMP/upload.json"
+          jq -e --arg name "$APK_NAME" --argjson bytes "$APK_BYTES" \
+            '.ok==true and .filename==$name and .size==$bytes' "$RUNNER_TEMP/upload.json"
+          echo "### BLOFY STREAM 55.8.36 published to updates.blofyplayer.com" >> "$GITHUB_STEP_SUMMARY"
+          echo "SHA256 $APK_SHA256; size $APK_BYTES bytes; package $PACKAGE" >> "$GITHUB_STEP_SUMMARY"
+      - name: Verify signed APK is accessible at its independent STREAM site URL
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="https://updates.blofyplayer.com/files/releases/$APK_NAME"
+          for i in 1 2 3 4 5; do
+            headers="$(curl -fsSI --max-time 35 "$url" || true)"
+            if printf '%s\n' "$headers" | grep -iq "^content-length: $APK_BYTES"; then
+              echo "$url" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 6
+          done
+          echo "::error::New STREAM file was not yet served with its verified length"
+          exit 1
