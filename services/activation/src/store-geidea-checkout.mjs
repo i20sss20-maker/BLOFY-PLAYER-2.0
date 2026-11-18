@@ -3,19 +3,19 @@
 import crypto from 'node:crypto';
 import {createFixedWindowLimiter,requestClientKey} from './auth-protection.mjs';
 import {createSignature,verifyGeideaCallback,verifiedPayment,CARD_ONLY_WALLETS} from './geidea-live.mjs';
-import {ensureStreamCodeTable,streamNumericCodeLength,randomNumericStreamCode,streamCodeProof} from './xtream-duration-codes.mjs';
+import {ensureStreamCodeTable,streamNumericCodeLength,randomNumericStreamCode,streamCodeProof,normalizeStreamCode} from './xtream-duration-codes.mjs';
 import {encryptStreamCode,decryptStreamCode} from './xtream-code-vault.mjs';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const API='https://api.ksamerchant.geidea.net';
 const ALLOWED_ORIGINS=new Set(['https://blofyplayer.com','https://www.blofyplayer.com','https://api.blofyplayer.com']);
 const P=[
- ['stream-3m','كود BLOFY STREAM — 3 أشهر','app',90,3000],
- ['stream-6m','كود BLOFY STREAM — 6 أشهر','app',180,5000],
- ['stream-1y','كود BLOFY STREAM — سنة','app',365,7000],
- ['xtream-3m','Xtream BLOFY — 3 أشهر','xtream',90,3000],
- ['xtream-6m','Xtream BLOFY — 6 أشهر','xtream',180,5000],
- ['xtream-1y','Xtream BLOFY — سنة','xtream',365,7000]
+ ['stream-3m','كود BLOFY STREAM — 3 أشهر','app',90,4000],
+ ['stream-6m','كود BLOFY STREAM — 6 أشهر','app',180,6000],
+ ['stream-1y','كود BLOFY STREAM — سنة','app',365,10000],
+ ['xtream-3m','Xtream BLOFY — 3 أشهر','xtream',90,4000],
+ ['xtream-6m','Xtream BLOFY — 6 أشهر','xtream',180,6000],
+ ['xtream-1y','Xtream BLOFY — سنة','xtream',365,10000]
 ];
 const err=(code,status=400)=>Object.assign(Error(code),{status});
 const tokenHash=s=>crypto.createHash('sha256').update(s).digest('hex');
@@ -23,7 +23,7 @@ const rateCheckout=createFixedWindowLimiter({limit:8,windowMs:600000});
 const rateStatus=createFixedWindowLimiter({limit:45,windowMs:600000});
 export function publicStorePlans(){return P.map(([sku,name,channel,durationDays,priceMinor])=>({sku,name,channel,durationDays,priceMinor,currency:'SAR'}));}
 
-export function createStoreGeideaHandlers({pool,json,readJson,keyHex,env=process.env,fetchImpl=globalThis.fetch}){
+export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAdmin=()=>false,env=process.env,fetchImpl=globalThis.fetch}){
  const publicKey=String(env.GEIDEA_LIVE_MERCHANT_PUBLIC_KEY||'').trim();
  const password=String(env.GEIDEA_LIVE_API_PASSWORD||'');
  const selected=env.BLOFY_PAYMENT_PROVIDER==='geidea'&&env.BLOFY_GEIDEA_CHECKOUT_ENABLED==='true';
@@ -55,7 +55,13 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,env=process
       'session_id UUID,provider_reference UUID,voucher_id UUID UNIQUE,paid_at TIMESTAMPTZ,'+
       'last_checked_at TIMESTAMPTZ,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),'+
       'updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())',
-     'CREATE INDEX IF NOT EXISTS idx_blofy_store_orders_created ON blofy_store_geidea_orders(created_at DESC)'
+     'CREATE INDEX IF NOT EXISTS idx_blofy_store_orders_created ON blofy_store_geidea_orders(created_at DESC)',
+     'CREATE TABLE IF NOT EXISTS blofy_store_inventory ('+
+      'voucher_id UUID PRIMARY KEY REFERENCES blofy_xtream_gateway_duration_codes(id),'+
+      'sku TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),'+
+      'sold_order_id UUID UNIQUE REFERENCES blofy_store_geidea_orders(id),'+
+      'sold_at TIMESTAMPTZ)',
+     'CREATE INDEX IF NOT EXISTS idx_blofy_store_inventory_available ON blofy_store_inventory(sku) WHERE sold_at IS NULL'
     ])await db.query(statement);
     await db.query('COMMIT');
    }catch(e){await db.query('ROLLBACK').catch(()=>{});throw e;}
@@ -69,6 +75,101 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,env=process
    const x=await db.query("SELECT id FROM blofy_xtream_servers WHERE lower(btrim(name))='saleh' AND enabled=TRUE AND publish_catalog=TRUE AND deletion_requested_at IS NULL LIMIT 2");
    if(x.rows.length!==1)throw err('store_source_unavailable',503);
    return x.rows[0].id;
+ }
+ async function availableInventory(db,sku){
+   return (await db.query('SELECT i.voucher_id FROM blofy_store_inventory i '+
+      'JOIN blofy_xtream_gateway_duration_codes v ON v.id=i.voucher_id '+
+      'WHERE i.sku=$1 AND i.sold_at IS NULL AND i.sold_order_id IS NULL '+
+      'AND v.redeemed_at IS NULL AND v.revoked_at IS NULL AND v.account_id IS NULL '+
+      'AND v.sold_at IS NULL AND v.code_vault IS NOT NULL '+
+      'ORDER BY i.created_at,i.voucher_id FOR UPDATE OF i SKIP LOCKED LIMIT 1',[sku])).rows[0]?.voucher_id||null;
+ }
+ async function inventorySummary(req,res){
+   if(!authorizeAdmin(req,res))return;
+   await schema();
+   const totals=(await pool.query('SELECT sku,COUNT(*)::int AS total,COUNT(*) FILTER (WHERE sold_at IS NULL)::int AS available,'+
+      'COUNT(*) FILTER (WHERE sold_at IS NOT NULL)::int AS sold FROM blofy_store_inventory GROUP BY sku ORDER BY sku')).rows;
+   return json(res,200,{ok:true,products:publicStorePlans(),counts:totals});
+ }
+ async function importInventory(req,res){
+   if(!authorizeAdmin(req,res))return;
+   const body=await readJson(req);
+   const plan=P.find(p=>p[0]===body.sku);
+   if(!plan)return json(res,400,{error:'store_invalid_sku'});
+   const codes=body.codes;
+   if(!Array.isArray(codes)||codes.length<1||codes.length>100)
+     return json(res,400,{error:'store_inventory_batch_invalid'});
+   if(codes.some(x=>typeof x!=='string'||!normalizeStreamCode(x)) ||
+      new Set(codes.map(normalizeStreamCode)).size!==codes.length)
+     return json(res,400,{error:'store_inventory_code_invalid'});
+   await schema();
+   const sourceId=await source();
+   const db=await pool.connect();
+   try{
+     await db.query('BEGIN');
+     let inserted=0;
+     for(const entered of codes){
+       const normalized=normalizeStreamCode(entered),proof=streamCodeProof(normalized,keyHex);
+       const row=(await db.query('SELECT * FROM blofy_xtream_gateway_duration_codes WHERE code_hash=$1 FOR UPDATE',[proof])).rows[0];
+       if(!row||row.source_id!==sourceId||row.duration_days!==plan[3]||row.code_channel!==plan[2]||
+          row.redeemed_at||row.revoked_at||row.account_id||row.expires_at||row.sold_at||row.buyer_phone||
+          !row.code_vault||decryptStreamCode(row.id,row.code_vault,keyHex)!==normalized)
+          throw err('store_inventory_code_ineligible',409);
+       const existing=(await db.query('SELECT voucher_id FROM blofy_store_inventory WHERE voucher_id=$1',[row.id])).rows[0];
+       if(existing)throw err('store_inventory_code_duplicate',409);
+       await db.query('UPDATE blofy_xtream_gateway_duration_codes SET dual_access_enabled=TRUE WHERE id=$1',[row.id]);
+       await db.query('INSERT INTO blofy_store_inventory(voucher_id,sku) VALUES($1,$2)',[row.id,plan[0]]);
+       inserted++;
+     }
+     await db.query('COMMIT');
+     return json(res,200,{ok:true,sku:plan[0],added:inserted});
+   }catch(e){await db.query('ROLLBACK').catch(()=>{});throw e;}
+   finally{db.release();}
+ }
+ async function generateInventory(req,res){
+   if(!authorizeAdmin(req,res))return;
+   const body=await readJson(req),plan=P.find(p=>p[0]===body.sku);
+   const quantity=Number(body.quantity);
+   if(!plan||!Number.isSafeInteger(quantity)||quantity<1||quantity>100)
+     return json(res,400,{error:'store_inventory_request_invalid'});
+   await schema();
+   const db=await pool.connect();
+   try{
+     await db.query('BEGIN');
+     const sourceId=await source(db);
+     // One atomic transaction per batch. No half-created inventory after failures.
+     // This is the same advisory lock as normal BLOFY code issuance.
+     await db.query('SELECT pg_advisory_xact_lock(718420682)');
+     const result=await db.query('SELECT COUNT(*)::int AS n FROM blofy_xtream_gateway_duration_codes');
+     let count=Number(result.rows[0]?.n)||0;
+     for(let i=0;i<quantity;i++){
+       let inserted=false;
+       for(let attempt=0;attempt<12;attempt++){
+         const code=randomNumericStreamCode(streamNumericCodeLength(count));
+         const newId=crypto.randomUUID(),proof=streamCodeProof(code,keyHex);
+         const saved=await db.query('INSERT INTO blofy_xtream_gateway_duration_codes '+
+           '(id,code_hash,code_hint,label,source_id,duration_days,max_connections,code_channel,'+
+           'code_vault,dual_access_enabled) VALUES($1,$2,$3,$4,$5,$6,1,$7,$8,TRUE) '+
+           'ON CONFLICT(code_hash) DO NOTHING RETURNING id',[
+              newId,proof,code.slice(0,2)+'••••'+code.slice(-2),plan[1],sourceId,
+              plan[3],plan[2],encryptStreamCode(newId,code,keyHex)
+           ]);
+         if(saved.rows[0]){
+           await db.query('INSERT INTO blofy_store_inventory(voucher_id,sku) VALUES($1,$2)',
+             [newId,plan[0]]);
+           count++;
+           inserted=true;
+           break;
+         }
+       }
+       if(!inserted)throw err('store_inventory_generation_unavailable',503);
+     }
+     await db.query('COMMIT');
+     return json(res,200,{ok:true,sku:plan[0],generated:quantity});
+   }catch(e){
+     await db.query('ROLLBACK').catch(()=>{});
+     throw e;
+   }finally{db.release();}
  }
  async function provider(path,method='GET',body){
    const headers={authorization:'Basic '+Buffer.from(publicKey+':'+password).toString('base64'),accept:'application/json'};
@@ -108,13 +209,28 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,env=process
     if(order.status==='paid'){await db.query('COMMIT');return true;}
     if(status==='paid'){
       const plan=P.find(p=>p[0]===order.sku);
-      if(!plan||plan[2]!==order.channel||plan[3]!==order.duration_days||plan[4]!==order.amount_minor)
+      // Pending orders created before the price change must remain fulfillable at
+      // their original immutable captured price. New sessions use only today's catalog.
+      const formerPrices={'stream-3m':3000,'stream-6m':5000,'stream-1y':7000,
+        'xtream-3m':3000,'xtream-6m':5000,'xtream-1y':7000};
+      const historical=formerPrices[order.sku]===Number(order.amount_minor) &&
+        new Date(order.created_at).getTime()<Date.parse('2026-11-18T16:00:00Z');
+      if(!plan||plan[2]!==order.channel||plan[3]!==order.duration_days||
+        (plan[4]!==Number(order.amount_minor)&&!historical))
         throw err('store_catalog_price_mismatch',409);
       const sourceId=await source(db);
+      const fromStock=await availableInventory(db,order.sku);
+      let voucherId=fromStock;
+      if(fromStock){
+        const marked=await db.query("UPDATE blofy_store_inventory SET sold_order_id=$2,sold_at=NOW() WHERE voucher_id=$1 AND sold_order_id IS NULL AND sold_at IS NULL RETURNING voucher_id",[fromStock,id]);
+        if(marked.rowCount!==1)throw err('store_inventory_claim_failed',409);
+        const recorded=await db.query("UPDATE blofy_xtream_gateway_duration_codes SET sold_at=NOW(),sale_price_halalas=$2,sales_channel='geidea-store' WHERE id=$1 AND sold_at IS NULL AND redeemed_at IS NULL AND revoked_at IS NULL RETURNING id",[fromStock,order.amount_minor]);
+        if(recorded.rowCount!==1)throw err('store_inventory_voucher_unavailable',409);
+      }
+      if(!voucherId){
       await db.query('SELECT pg_advisory_xact_lock(718420682)');
       const count=(await db.query('SELECT COUNT(*)::int AS n FROM blofy_xtream_gateway_duration_codes')).rows[0]?.n||0;
       const digits=streamNumericCodeLength(Number(count));
-      let voucherId=null;
       for(let n=0;n<12;n++){
        const code=randomNumericStreamCode(digits),newId=crypto.randomUUID();
        const p=streamCodeProof(code,keyHex);
@@ -124,11 +240,12 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,env=process
         "VALUES($1,$2,$3,$4,$5,$6,1,$7,$8,TRUE,$9,NOW(),'geidea-store') "+
         'ON CONFLICT(code_hash) DO NOTHING RETURNING id',[
           newId,p,code.slice(0,2)+'••••'+code.slice(-2),plan[1],sourceId,plan[3],plan[2],
-          encryptStreamCode(newId,code,keyHex),plan[4]
+          encryptStreamCode(newId,code,keyHex),order.amount_minor
         ]);
        if(saved.rows[0]){voucherId=newId;break;}
       }
       if(!voucherId)throw err('store_voucher_issue_failed',503);
+      } // batch generation is the safe fallback when uploaded stock is empty
       await db.query("UPDATE blofy_store_geidea_orders SET status='paid',provider_reference=$2,"+
        'voucher_id=$3,paid_at=NOW(),updated_at=NOW() WHERE id=$1',[id,settled.orderId,voucherId]);
     }else{
@@ -230,6 +347,9 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,env=process
  }
  return async function handler(req,res,url){
    const p=url.pathname;
+   if(p==='/api/v1/admin/store/inventory'&&req.method==='GET'){await inventorySummary(req,res);return true;}
+   if(p==='/api/v1/admin/store/inventory/import'&&req.method==='POST'){await importInventory(req,res);return true;}
+   if(p==='/api/v1/admin/store/inventory/generate'&&req.method==='POST'){await generateInventory(req,res);return true;}
    if(p==='/api/v1/store/products'&&req.method==='GET'){await catalog(req,res);return true;}
    if(p==='/api/v1/store/checkout'&&req.method==='POST'){await checkout(req,res);return true;}
    if(p==='/api/v1/store/orders/status'&&req.method==='POST'){await status(req,res);return true;}
