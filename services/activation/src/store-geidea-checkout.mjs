@@ -3,7 +3,7 @@
 import crypto from 'node:crypto';
 import {createFixedWindowLimiter,requestClientKey} from './auth-protection.mjs';
 import {createSignature,verifyGeideaCallback,verifiedPayment,CARD_ONLY_WALLETS} from './geidea-live.mjs';
-import {ensureStreamCodeTable,streamNumericCodeLength,randomNumericStreamCode,streamCodeProof} from './xtream-duration-codes.mjs';
+import {ensureStreamCodeTable,streamNumericCodeLength,randomNumericStreamCode,streamCodeProof,createStreamDurationCodes,normalizeStreamCode} from './xtream-duration-codes.mjs';
 import {encryptStreamCode,decryptStreamCode} from './xtream-code-vault.mjs';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -23,7 +23,7 @@ const rateCheckout=createFixedWindowLimiter({limit:8,windowMs:600000});
 const rateStatus=createFixedWindowLimiter({limit:45,windowMs:600000});
 export function publicStorePlans(){return P.map(([sku,name,channel,durationDays,priceMinor])=>({sku,name,channel,durationDays,priceMinor,currency:'SAR'}));}
 
-export function createStoreGeideaHandlers({pool,json,readJson,keyHex,env=process.env,fetchImpl=globalThis.fetch}){
+export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAdmin=()=>false,env=process.env,fetchImpl=globalThis.fetch}){
  const publicKey=String(env.GEIDEA_LIVE_MERCHANT_PUBLIC_KEY||'').trim();
  const password=String(env.GEIDEA_LIVE_API_PASSWORD||'');
  const selected=env.BLOFY_PAYMENT_PROVIDER==='geidea'&&env.BLOFY_GEIDEA_CHECKOUT_ENABLED==='true';
@@ -55,7 +55,13 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,env=process
       'session_id UUID,provider_reference UUID,voucher_id UUID UNIQUE,paid_at TIMESTAMPTZ,'+
       'last_checked_at TIMESTAMPTZ,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),'+
       'updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())',
-     'CREATE INDEX IF NOT EXISTS idx_blofy_store_orders_created ON blofy_store_geidea_orders(created_at DESC)'
+     'CREATE INDEX IF NOT EXISTS idx_blofy_store_orders_created ON blofy_store_geidea_orders(created_at DESC)',
+     'CREATE TABLE IF NOT EXISTS blofy_store_inventory ('+
+      'voucher_id UUID PRIMARY KEY REFERENCES blofy_xtream_gateway_duration_codes(id),'+
+      'sku TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),'+
+      'sold_order_id UUID UNIQUE REFERENCES blofy_store_geidea_orders(id),'+
+      'sold_at TIMESTAMPTZ)',
+     'CREATE INDEX IF NOT EXISTS idx_blofy_store_inventory_available ON blofy_store_inventory(sku) WHERE sold_at IS NULL'
     ])await db.query(statement);
     await db.query('COMMIT');
    }catch(e){await db.query('ROLLBACK').catch(()=>{});throw e;}
@@ -69,6 +75,84 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,env=process
    const x=await db.query("SELECT id FROM blofy_xtream_servers WHERE lower(btrim(name))='saleh' AND enabled=TRUE AND publish_catalog=TRUE AND deletion_requested_at IS NULL LIMIT 2");
    if(x.rows.length!==1)throw err('store_source_unavailable',503);
    return x.rows[0].id;
+ }
+ async function availableInventory(db,sku){
+   return (await db.query('SELECT i.voucher_id FROM blofy_store_inventory i '+
+      'JOIN blofy_xtream_gateway_duration_codes v ON v.id=i.voucher_id '+
+      'WHERE i.sku=$1 AND i.sold_at IS NULL AND i.sold_order_id IS NULL '+
+      'AND v.redeemed_at IS NULL AND v.revoked_at IS NULL AND v.account_id IS NULL '+
+      'AND v.sold_at IS NULL AND v.code_vault IS NOT NULL '+
+      'ORDER BY i.created_at,i.voucher_id FOR UPDATE OF i SKIP LOCKED LIMIT 1',[sku])).rows[0]?.voucher_id||null;
+ }
+ async function inventorySummary(req,res){
+   if(!authorizeAdmin(req,res))return;
+   await schema();
+   const totals=(await pool.query('SELECT sku,COUNT(*)::int AS total,COUNT(*) FILTER (WHERE sold_at IS NULL)::int AS available,'+
+      'COUNT(*) FILTER (WHERE sold_at IS NOT NULL)::int AS sold FROM blofy_store_inventory GROUP BY sku ORDER BY sku')).rows;
+   return json(res,200,{ok:true,products:publicStorePlans(),counts:totals});
+ }
+ async function importInventory(req,res){
+   if(!authorizeAdmin(req,res))return;
+   const body=await readJson(req);
+   const plan=P.find(p=>p[0]===body.sku);
+   if(!plan)return json(res,400,{error:'store_invalid_sku'});
+   const codes=body.codes;
+   if(!Array.isArray(codes)||codes.length<1||codes.length>100)
+     return json(res,400,{error:'store_inventory_batch_invalid'});
+   if(codes.some(x=>typeof x!=='string'||!normalizeStreamCode(x)) ||
+      new Set(codes.map(normalizeStreamCode)).size!==codes.length)
+     return json(res,400,{error:'store_inventory_code_invalid'});
+   await schema();
+   const sourceId=await source();
+   const db=await pool.connect();
+   try{
+     await db.query('BEGIN');
+     let inserted=0;
+     for(const entered of codes){
+       const normalized=normalizeStreamCode(entered),proof=streamCodeProof(normalized,keyHex);
+       const row=(await db.query('SELECT * FROM blofy_xtream_gateway_duration_codes WHERE code_hash=$1 FOR UPDATE',[proof])).rows[0];
+       if(!row||row.source_id!==sourceId||row.duration_days!==plan[3]||row.code_channel!==plan[2]||
+          row.redeemed_at||row.revoked_at||row.account_id||row.expires_at||row.sold_at||row.buyer_phone||
+          !row.code_vault||decryptStreamCode(row.id,row.code_vault,keyHex)!==normalized)
+          throw err('store_inventory_code_ineligible',409);
+       const existing=(await db.query('SELECT voucher_id FROM blofy_store_inventory WHERE voucher_id=$1',[row.id])).rows[0];
+       if(existing)throw err('store_inventory_code_duplicate',409);
+       await db.query('UPDATE blofy_xtream_gateway_duration_codes SET dual_access_enabled=TRUE WHERE id=$1',[row.id]);
+       await db.query('INSERT INTO blofy_store_inventory(voucher_id,sku) VALUES($1,$2)',[row.id,plan[0]]);
+       inserted++;
+     }
+     await db.query('COMMIT');
+     return json(res,200,{ok:true,sku:plan[0],added:inserted});
+   }catch(e){await db.query('ROLLBACK').catch(()=>{});throw e;}
+   finally{db.release();}
+ }
+ async function generateInventory(req,res){
+   if(!authorizeAdmin(req,res))return;
+   const body=await readJson(req),plan=P.find(p=>p[0]===body.sku);
+   const quantity=Number(body.quantity);
+   if(!plan||!Number.isSafeInteger(quantity)||quantity<1||quantity>100)
+     return json(res,400,{error:'store_inventory_request_invalid'});
+   await schema();
+   const sourceId=await source();
+   const generator=createStreamDurationCodes({pool,keyHex,salehOnlyNewCodes:true});
+   let generated=0;
+   for(let i=0;i<quantity;i+=20){
+     const batch=await generator.issue({durationDays:plan[3],quantity:Math.min(20,quantity-i),
+       channel:plan[2],maxConnections:1,sourceId,label:plan[1]});
+     // Code material stays encrypted in existing vault; never returned in bulk responses.
+     const db=await pool.connect();
+     try{
+       await db.query('BEGIN');
+       for(const row of batch.items){
+         await db.query('UPDATE blofy_xtream_gateway_duration_codes SET dual_access_enabled=TRUE WHERE id=$1',[row.id]);
+         await db.query('INSERT INTO blofy_store_inventory(voucher_id,sku) VALUES($1,$2)',[row.id,plan[0]]);
+         generated++;
+       }
+       await db.query('COMMIT');
+     }catch(e){await db.query('ROLLBACK').catch(()=>{});throw e;}
+     finally{db.release();}
+   }
+   return json(res,200,{ok:true,sku:plan[0],generated});
  }
  async function provider(path,method='GET',body){
    const headers={authorization:'Basic '+Buffer.from(publicKey+':'+password).toString('base64'),accept:'application/json'};
@@ -111,10 +195,17 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,env=process
       if(!plan||plan[2]!==order.channel||plan[3]!==order.duration_days||plan[4]!==order.amount_minor)
         throw err('store_catalog_price_mismatch',409);
       const sourceId=await source(db);
+      const fromStock=await availableInventory(db,order.sku);
+      let voucherId=fromStock;
+      if(fromStock){
+        const marked=await db.query("UPDATE blofy_store_inventory SET sold_order_id=$2,sold_at=NOW() WHERE voucher_id=$1 AND sold_order_id IS NULL AND sold_at IS NULL RETURNING voucher_id",[fromStock,id]);
+        if(marked.rowCount!==1)throw err('store_inventory_claim_failed',409);
+        await db.query("UPDATE blofy_xtream_gateway_duration_codes SET sold_at=NOW(),sale_price_halalas=$2,sales_channel='geidea-store' WHERE id=$1 AND sold_at IS NULL AND redeemed_at IS NULL AND revoked_at IS NULL",[fromStock,plan[4]]);
+      }
+      if(!voucherId){
       await db.query('SELECT pg_advisory_xact_lock(718420682)');
       const count=(await db.query('SELECT COUNT(*)::int AS n FROM blofy_xtream_gateway_duration_codes')).rows[0]?.n||0;
       const digits=streamNumericCodeLength(Number(count));
-      let voucherId=null;
       for(let n=0;n<12;n++){
        const code=randomNumericStreamCode(digits),newId=crypto.randomUUID();
        const p=streamCodeProof(code,keyHex);
@@ -129,6 +220,7 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,env=process
        if(saved.rows[0]){voucherId=newId;break;}
       }
       if(!voucherId)throw err('store_voucher_issue_failed',503);
+      } // batch generation is the safe fallback when uploaded stock is empty
       await db.query("UPDATE blofy_store_geidea_orders SET status='paid',provider_reference=$2,"+
        'voucher_id=$3,paid_at=NOW(),updated_at=NOW() WHERE id=$1',[id,settled.orderId,voucherId]);
     }else{
@@ -230,6 +322,9 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,env=process
  }
  return async function handler(req,res,url){
    const p=url.pathname;
+   if(p==='/api/v1/admin/store/inventory'&&req.method==='GET'){await inventorySummary(req,res);return true;}
+   if(p==='/api/v1/admin/store/inventory/import'&&req.method==='POST'){await importInventory(req,res);return true;}
+   if(p==='/api/v1/admin/store/inventory/generate'&&req.method==='POST'){await generateInventory(req,res);return true;}
    if(p==='/api/v1/store/products'&&req.method==='GET'){await catalog(req,res);return true;}
    if(p==='/api/v1/store/checkout'&&req.method==='POST'){await checkout(req,res);return true;}
    if(p==='/api/v1/store/orders/status'&&req.method==='POST'){await status(req,res);return true;}
