@@ -127,7 +127,7 @@ jobs:
       - name: Verify actual catalog queries on 200k rows
         run: python3 tools/check_catalog_queries.py
       - name: Verify Play Xiaomi-design UX / STREAM candidate 2000088 manifest and TV routes
-        if: github.head_ref != 'fix/stream-55832-catalog-refresh-stall-20261117' && github.head_ref != 'integration/stream-55832-stable-tv-catalog-20261117' && github.head_ref != 'feature/stream-separate-live-search-windows-20261117' && github.head_ref != 'feature/stream-nextgen-phase1-20261117' && github.head_ref != 'fix/stream-55835-auto-sync-stall90-20261117' && github.head_ref != 'fix/stream-55836-catalog-tv-remote-20261117'
+        if: github.head_ref != 'fix/stream-55832-catalog-refresh-stall-20261117' && github.head_ref != 'integration/stream-55832-stable-tv-catalog-20261117' && github.head_ref != 'feature/stream-separate-live-search-windows-20261117' && github.head_ref != 'feature/stream-nextgen-phase1-20261117' && github.head_ref != 'fix/stream-55835-auto-sync-stall90-20261117' && github.head_ref != 'fix/stream-55836-catalog-tv-remote-20261117' && github.head_ref != 'fix/stream-55837-episodes-auto-refresh-20261118'
         env:
           BLOFY_EXPECTED_PLAY_VERSION_CODE: "2000088"
         run: python3 tools/verify_play_2000073.py
@@ -144,7 +144,7 @@ jobs:
             -PBLOFY_ACTIVATION_BASE_URL=https://api.blofyplayer.com \
             lintDebug assembleDebug assembleDebugAndroidTest 2>&1 | tee -a gradle-ci.log
       - name: Verify channel and search are separate windows on STREAM
-        if: github.head_ref == 'feature/stream-separate-live-search-windows-20261117' || github.head_ref == 'feature/stream-nextgen-phase1-20261117' || github.head_ref == 'fix/stream-55835-auto-sync-stall90-20261117' || github.head_ref == 'fix/stream-55836-catalog-tv-remote-20261117'
+        if: github.head_ref == 'feature/stream-separate-live-search-windows-20261117' || github.head_ref == 'feature/stream-nextgen-phase1-20261117' || github.head_ref == 'fix/stream-55835-auto-sync-stall90-20261117' || github.head_ref == 'fix/stream-55836-catalog-tv-remote-20261117' || github.head_ref == 'fix/stream-55837-episodes-auto-refresh-20261118'
         shell: bash
         run: |
           set -euo pipefail
@@ -155,7 +155,7 @@ jobs:
           ! grep -Fq 'val searchField = if (BuildConfig.CODE_ONLY_LOGIN)' "$file"
 
       - name: Test STREAM 55.8.36 code-only catalog persistence regression
-        if: github.head_ref == 'fix/stream-55832-catalog-refresh-stall-20261117' || github.head_ref == 'integration/stream-55832-stable-tv-catalog-20261117' || github.head_ref == 'feature/stream-separate-live-search-windows-20261117' || github.head_ref == 'feature/stream-nextgen-phase1-20261117' || github.head_ref == 'fix/stream-55835-auto-sync-stall90-20261117' || github.head_ref == 'fix/stream-55836-catalog-tv-remote-20261117'
+        if: github.head_ref == 'fix/stream-55832-catalog-refresh-stall-20261117' || github.head_ref == 'integration/stream-55832-stable-tv-catalog-20261117' || github.head_ref == 'feature/stream-separate-live-search-windows-20261117' || github.head_ref == 'feature/stream-nextgen-phase1-20261117' || github.head_ref == 'fix/stream-55835-auto-sync-stall90-20261117' || github.head_ref == 'fix/stream-55836-catalog-tv-remote-20261117' || github.head_ref == 'fix/stream-55837-episodes-auto-refresh-20261118'
         shell: bash
         run: |
           set -euo pipefail
@@ -216,7 +216,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
       - name: Build Google Play 2000086 debug manifest variant
-        if: github.head_ref != 'fix/stream-55832-catalog-refresh-stall-20261117' && github.head_ref != 'integration/stream-55832-stable-tv-catalog-20261117' && github.head_ref != 'feature/stream-separate-live-search-windows-20261117' && github.head_ref != 'feature/stream-nextgen-phase1-20261117' && github.head_ref != 'fix/stream-55835-auto-sync-stall90-20261117' && github.head_ref != 'fix/stream-55836-catalog-tv-remote-20261117'
+        if: github.head_ref != 'fix/stream-55832-catalog-refresh-stall-20261117' && github.head_ref != 'integration/stream-55832-stable-tv-catalog-20261117' && github.head_ref != 'feature/stream-separate-live-search-windows-20261117' && github.head_ref != 'feature/stream-nextgen-phase1-20261117' && github.head_ref != 'fix/stream-55835-auto-sync-stall90-20261117' && github.head_ref != 'fix/stream-55836-catalog-tv-remote-20261117' && github.head_ref != 'fix/stream-55837-episodes-auto-refresh-20261118'
         shell: bash
         run: |
           set -euxo pipefail
@@ -239,7 +239,7 @@ jobs:
           done
           cp "$APK" app/build/outputs/apk/debug/blofy-play-2000086-test-only.apk
       - name: Save Google Play 2000086 debug artifact
-        if: github.head_ref != 'fix/stream-55832-catalog-refresh-stall-20261117' && github.head_ref != 'integration/stream-55832-stable-tv-catalog-20261117' && github.head_ref != 'feature/stream-separate-live-search-windows-20261117' && github.head_ref != 'feature/stream-nextgen-phase1-20261117' && github.head_ref != 'fix/stream-55835-auto-sync-stall90-20261117' && github.head_ref != 'fix/stream-55836-catalog-tv-remote-20261117'
+        if: github.head_ref != 'fix/stream-55832-catalog-refresh-stall-20261117' && github.head_ref != 'integration/stream-55832-stable-tv-catalog-20261117' && github.head_ref != 'feature/stream-separate-live-search-windows-20261117' && github.head_ref != 'feature/stream-nextgen-phase1-20261117' && github.head_ref != 'fix/stream-55835-auto-sync-stall90-20261117' && github.head_ref != 'fix/stream-55836-catalog-tv-remote-20261117' && github.head_ref != 'fix/stream-55837-episodes-auto-refresh-20261118'
         uses: actions/upload-artifact@v4
         with:
           name: BLOFY-PLAY-2000086-TEST-ONLY-${{ github.sha }}
@@ -251,7 +251,7 @@ jobs:
   owner-signed-stream-qa:
     # Private owner-signed artifact only. Never upload to release, website or customer update feed.
     needs: verify
-    if: github.event_name == 'pull_request' && (github.head_ref == 'integration/stream-55832-stable-tv-catalog-20261117' || github.head_ref == 'feature/stream-separate-live-search-windows-20261117' || github.head_ref == 'feature/stream-nextgen-phase1-20261117' || github.head_ref == 'fix/stream-55835-auto-sync-stall90-20261117' || github.head_ref == 'fix/stream-55836-catalog-tv-remote-20261117')
+    if: github.event_name == 'pull_request' && (github.head_ref == 'integration/stream-55832-stable-tv-catalog-20261117' || github.head_ref == 'feature/stream-separate-live-search-windows-20261117' || github.head_ref == 'feature/stream-nextgen-phase1-20261117' || github.head_ref == 'fix/stream-55835-auto-sync-stall90-20261117' || github.head_ref == 'fix/stream-55836-catalog-tv-remote-20261117' || github.head_ref == 'fix/stream-55837-episodes-auto-refresh-20261118')
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 150
