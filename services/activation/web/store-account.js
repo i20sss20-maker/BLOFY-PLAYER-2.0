@@ -63,21 +63,19 @@
    if(!orders.length)$('orders').append(node('p','لا توجد طلبات مربوطة بعد. أضف طلبك السابق باستخدام الرابط الخاص.'));
    else orders.forEach(o=>$('orders').append(addOrderCard(o)));
    view(true);tell('حسابك جاهز.');
-   // Expiry data is only available for verified, linked, paid orders.
+   // A single server-side scoped query returns statuses only, never raw codes.
    const alerts=$('expiry-alerts');alerts.replaceChildren();
-   for(const o of orders.filter(o=>o.status==='paid').slice(0,40)){
-    try{
-     const receipt=await api('/orders/'+encodeURIComponent(o.orderId));
-     for(const c of receipt.codes||[]){
-      if(c.alert){
-       const item=node('p',(c.alert==='expired'?'انتهى':'قرب الانتهاء')+
-        ' — '+(c.channel==='xtream'?'Xtream':'BLOFY STREAM')+
-        ' — طلب '+o.orderNumber+(c.expiresAt?' — '+new Date(c.expiresAt).toLocaleDateString('ar-SA'):''));
-       item.className='receipt-line';alerts.append(item);
-      }
-     }
-    }catch(_){/* Other purchases still show even when one receipt is unavailable. */}
-   }
+   try{
+    const result=await api('/alerts');
+    for(const c of result.alerts||[]){
+     if(!c.status)continue;
+     const item=node('p',(c.status==='expired'?'انتهى':'قرب الانتهاء')+
+      ' — '+(c.channel==='xtream'?'Xtream':'BLOFY STREAM')+
+      ' — طلب '+c.orderNumber+
+      (c.expiresAt?' — '+new Date(c.expiresAt).toLocaleDateString('ar-SA'):''));
+     item.className='receipt-line';alerts.append(item);
+    }
+   }catch(_){alerts.append(node('p','تعذر تحديث تنبيهات الاشتراكات. حاول لاحقًا.'));}
    if(!alerts.childElementCount)alerts.append(node('p','لا توجد اشتراكات مرتبطة تستدعي التنبيه خلال 7 أيام.'));
   }catch(err){
    if(err.status===401){view(false);return;}
