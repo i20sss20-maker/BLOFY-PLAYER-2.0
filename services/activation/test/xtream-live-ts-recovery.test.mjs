@@ -115,7 +115,9 @@ test('production entrypoint keeps midstream recovery off without exact opt-in',a
  const gateway=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
  const start=gateway.slice(gateway.indexOf('const liveTsPilot=safeLiveTsRecoveryStart({'),
   gateway.indexOf('let resumedVod=false;',gateway.indexOf('const liveTsPilot=')));
- assert.match(start,/enabled:allowedLiveTsRecoveryPilot/);
+ assert.match(start,/enabled:authorizedMediaRecoveryRelease/);
+ assert.match(start,/BLOFY_XTREAM_LIVE_TS_RECOVERY_PRODUCTION/);
+ assert.match(start,/allowedLiveTsRecoveryPilot/);
  assert.match(start,/BLOFY_XTREAM_LIVE_TS_RECOVERY_ENABLED==='1'/);
  assert.match(start,/BLOFY_XTREAM_LIVE_TS_RECOVERY_PILOT_ACCOUNT_ID/);
  assert.match(start,/BLOFY_XTREAM_LIVE_TS_RECOVERY_PILOT_SOURCE_ID/);
