@@ -55,6 +55,27 @@ test('studio curation preserves native provider fields, subscriber accounts and 
   assert.match(src,/next_run_at=NOW\(\)\+INTERVAL '10 minutes'/);
 
 });
+test('scheduled Xtream imports retry actual partial/failed outcomes at most once per hour',async()=>{
+  const backend=await readFile(new URL('../src/xtream-admin-hook.mjs',import.meta.url),'utf8');
+  const src=await readFile(new URL('../src/xtream-studio-pro.mjs',import.meta.url),'utf8');
+  const ui=await readFile(new URL('../web/blofy-studio-pro.js',import.meta.url),'utf8');
+  const start=backend.indexOf('function startSync(');
+  const end=backend.indexOf('async function approvedSalehMirrorSource',start);
+  const block=backend.slice(start,end);
+  assert.ok(start>0 && end>start);
+  assert.match(block,/options\.onSettled/);
+  assert.match(block,/result\.partialWarning\?'partial':'completed'/);
+  assert.match(block,/await settled\('failed'\)/);
+  assert.match(src,/scheduled_sync_retry_scheduled/);
+  assert.match(src,/created_at>NOW\(\)-INTERVAL '1 hour'/);
+  assert.match(src,/next_run_at=NOW\(\)\+INTERVAL '10 minutes'/);
+  assert.match(src,/next_run_at>NOW\(\)\+INTERVAL '10 minutes'/);
+  assert.match(src,/scheduled_sync_.*state/);
+  assert.match(src,/syncWarning:Boolean\(src\.last_error\)/);
+  assert.match(ui,/source\.syncWarning/);
+  assert.doesNotMatch(src,/DELETE FROM blofy_xtream_items/);
+});
+
 test('Studio Pro has real admin-only API routes and a classic script served locally',async()=>{
   const routes=await readFile(new URL('../src/xtream-admin-hook.mjs',import.meta.url),'utf8');
   const host=await readFile(new URL('../src/sources-admin-hook.mjs',import.meta.url),'utf8');

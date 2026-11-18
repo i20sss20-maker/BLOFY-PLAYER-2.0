@@ -2042,7 +2042,24 @@ function startSync(id, types, options={}) {
   const daily=options?.dailyReceipt===true&&
     /^20[0-9]{2}-[0-9]{2}-[0-9]{2}$/.test(String(options.day||''));
   try{
-    if(!daily)return syncQueue.enqueue(id,()=>syncServer(id,types));
+    if(!daily)return syncQueue.enqueue(id,async()=>{
+      // Scheduled imports used to report only successful QUEUE acceptance.
+      // Deliver a sanitized terminal outcome after the actual database
+      // import so Studio Pro can retry a partial / failed media type.
+      const settled=async(state)=>{
+        if(typeof options?.onSettled!=='function')return;
+        try{await options.onSettled({state});}
+        catch{console.warn('BLOFY_STUDIO_CATALOG_OUTCOME',{code:'operator_outcome_record_failed'});}
+      };
+      try{
+        const result=await syncServer(id,types);
+        await settled(result.partialWarning?'partial':'completed');
+        return result;
+      }catch(error){
+        await settled('failed');
+        throw error;
+      }
+    });
     return syncQueue.enqueue(id,async()=>{
       if(daily)await markDailyCatalogRunning(controlPool,{
        sourceId:id,day:options.day}).catch(()=>{});

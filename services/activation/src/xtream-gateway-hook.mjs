@@ -2551,6 +2551,59 @@ http.createServer = function withBlofyXtreamGateway(listener) {
         const result=await probeGatewayMedia(body.kind,Number(raw));
         return json(res,200,result);
       }
+      // Same seriesInfo() path that an existing Xtream subscriber code uses.
+      // Admin-only diagnostic: one bounded upstream JSON metadata request,
+      // no media files, no customer credentials, and no returned episode IDs.
+      if(req.method==='POST'&&url.pathname==='/api/v1/admin/xtream-gateway/episode-delivery-audit'){
+        const body=await readJson(req);
+        const sourceId=String(body?.sourceId||'').trim().toLowerCase();
+        const rawId=String(body?.seriesSourceId??'');
+        if(!/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(sourceId)||
+           !/^[A-Za-z0-9._-]{1,100}$/.test(rawId))
+          return json(res,400,{ok:false,code:'episode_audit_invalid_selection'});
+        const source=(await pool.query(`SELECT enabled,publish_catalog,name
+          FROM blofy_xtream_servers WHERE id=$1 AND deletion_requested_at IS NULL
+          LIMIT 1`,[sourceId])).rows[0];
+        if(!source||source.enabled!==true||source.publish_catalog!==true||
+          String(source.name||'').trim().toLowerCase()!=='saleh')
+          return json(res,403,{ok:false,code:'episode_audit_source_not_approved'});
+        try{
+          // Confirm that this series is actually published and visible to this
+          // source; gatewayItemById enforces the same source/category ACL.
+          const mapped=(await pool.query(`SELECT m.gateway_id
+            FROM blofy_xtream_gateway_item_map m
+            WHERE m.server_id=$1 AND m.media_type='series' AND m.source_id=$2
+            LIMIT 1`,[sourceId,rawId])).rows[0];
+          const gatewayId=Number(mapped?.gateway_id);
+          if(!Number.isSafeInteger(gatewayId)||gatewayId<1)
+            return json(res,404,{ok:false,code:'episode_audit_series_not_published'});
+          const item=await gatewayItemById('series',gatewayId,sourceId);
+          if(!item)return json(res,404,{ok:false,code:'episode_audit_series_not_published'});
+          const info=await seriesInfo(gatewayId,sourceId);
+          const seasonLists=Object.values(info?.episodes||{}).filter(Array.isArray);
+          const episodeCount=seasonLists.reduce((sum,rows)=>sum+rows.length,0);
+          const valid=seasonLists.every(rows=>rows.every(ep=>{
+            const id=String(ep?.id||'');
+            return /^[1-9][0-9]{0,14}$/.test(id)&&
+              Number(ep.stream_id)===Number(id)&&
+              String(ep.episode_id)===id;
+          }));
+          return json(res,200,{
+            ok:info!==null&&episodeCount>0&&valid,
+            code:episodeCount<=0?'episode_audit_no_playable_episode':
+              valid?'episode_audit_ids_mapped':'episode_audit_unmapped_episode',
+            mediaBytesRead:0,customerCodesChanged:0,
+            throughCustomerSeriesInfoPath:true,sourceApproved:true,
+            seasonCount:seasonLists.filter(x=>x.length>0).length,
+            episodeCount,mappedIdsValid:valid,
+            // Upstream timestamps and episode names may be sensitive; omit.
+            titlesReturned:false,customerCredentialsReturned:false
+          },{'cache-control':'no-store'});
+        }catch{
+          return json(res,503,{ok:false,code:'episode_audit_upstream_unavailable',
+            mediaBytesRead:0,customerCodesChanged:0});
+        }
+      }
       if (req.method === 'GET' && url.pathname === '/api/v1/admin/xtream-gateway/playback-health') {
         return json(res,200,{ok:true,metrics:xtreamPlaybackSnapshot()});
       }

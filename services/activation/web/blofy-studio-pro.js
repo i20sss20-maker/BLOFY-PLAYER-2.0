@@ -57,7 +57,10 @@
       box.append(subtitle('حالة المصدر',source.status||'غير معروفة'),
         subtitle('النشر للمشتركين',source.published?'مفعّل':'متوقف'),
         subtitle('مجموعات إدارية',normalize(response.collectionCount)),
-        subtitle('آخر مزامنة',date(source.lastSyncAt)));
+        subtitle('آخر مزامنة',date(source.lastSyncAt)),
+        subtitle('حالة المزامنة',source.syncWarning?
+          '⚠️ تحديث جزئي أو خطأ بالمصدر — راجع آخر العمليات وإعادة المحاولة':
+          '✓ لا يوجد تحذير مسجل'));
       for(const item of response.byType||[]){
         const label={live:'القنوات',movie:'الأفلام',series:'المسلسلات'}[item.media_type]||item.media_type;
         box.append(subtitle('عينة '+label,normalize(item.count)+' · مخفية '+normalize(item.hidden)+

@@ -48,7 +48,7 @@ export function createStudioPro({pool,ensureXtreamReady,startSync}){
   }
   async function checkSource(serverId,db=pool){
     if(!validId(serverId))throw invalid('studio_source_invalid');
-    const result=await db.query('SELECT id,name,enabled,publish_catalog,status,last_sync_at,counts FROM blofy_xtream_servers WHERE id=$1 AND deletion_requested_at IS NULL',[serverId]);
+    const result=await db.query('SELECT id,name,enabled,publish_catalog,status,last_sync_at,last_error,counts FROM blofy_xtream_servers WHERE id=$1 AND deletion_requested_at IS NULL',[serverId]);
     if(!result.rows[0])throw invalid('studio_source_not_found',404);
     return result.rows[0];
   }
@@ -65,7 +65,7 @@ export function createStudioPro({pool,ensureXtreamReady,startSync}){
       pool.query('SELECT enabled,interval_hours,types,next_run_at FROM blofy_xtream_studio_schedules WHERE server_id=$1',[serverId]),
       pool.query('SELECT action,details,created_at FROM blofy_xtream_studio_events WHERE server_id=$1 ORDER BY id DESC LIMIT 15',[serverId])
     ]);
-    return {source:{name:src.name,enabled:src.enabled,published:src.publish_catalog,status:src.status,lastSyncAt:src.last_sync_at,counts:src.counts},
+    return {source:{name:src.name,enabled:src.enabled,published:src.publish_catalog,status:src.status,syncWarning:Boolean(src.last_error),lastSyncAt:src.last_sync_at,counts:src.counts},
       sampleOnly:true,sampleLimit:1200,byType:sample.rows,collectionCount:collections.rows[0].count,
       schedule:schedule.rows[0]||null,events:events.rows};
   }
@@ -197,7 +197,35 @@ export function createStudioPro({pool,ensureXtreamReady,startSync}){
     finally{db.release()}
     for(const cfg of due){
       try{
-        startSync(cfg.server_id,cfg.types);
+        startSync(cfg.server_id,cfg.types,{
+          onSettled:async({state})=>{
+            if(!['completed','partial','failed'].includes(state))return;
+            // The previous implementation advanced next_run_at on dispatch,
+            // even when one media type failed minutes later. Keep one
+            // bounded recovery attempt per hour, never an endless 10m loop.
+            if(state!=='completed'){
+              const recent=(await pool.query(`SELECT EXISTS(
+                SELECT 1 FROM blofy_xtream_studio_events
+                WHERE server_id=$1 AND action='scheduled_sync_retry_scheduled'
+                  AND created_at>NOW()-INTERVAL '1 hour'
+              ) AS retried`,[cfg.server_id])).rows[0]?.retried===true;
+              if(!recent){
+                const changed=await pool.query(`UPDATE blofy_xtream_studio_schedules
+                  SET next_run_at=NOW()+INTERVAL '10 minutes',updated_at=NOW()
+                  WHERE server_id=$1 AND interval_hours=$2 AND enabled=TRUE
+                    AND next_run_at>NOW()+INTERVAL '10 minutes'`,
+                  [cfg.server_id,cfg.interval_hours]);
+                if(changed.rowCount>0)
+                  await record(cfg.server_id,'scheduled_sync_retry_scheduled',{
+                    retryMinutes:10,reason:state,types:cfg.types
+                  });
+              }
+            }
+            await record(cfg.server_id,'scheduled_sync_'+state,{
+              types:cfg.types,metadataOnly:true
+            });
+          }
+        });
         await record(cfg.server_id,'scheduled_sync_started',{types:cfg.types});
       }catch(error){
         // Do not skip an entire 1h/12h interval if the daily import, another
