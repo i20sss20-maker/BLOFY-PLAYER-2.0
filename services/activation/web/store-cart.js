@@ -12,7 +12,7 @@
  const money=n=>(Number(n)/100).toLocaleString('ar-SA',{minimumFractionDigits:0,maximumFractionDigits:2})+' ر.س';
  let items=[],quoted=null,ready=false,creating=false,paymentOpen=false,currentOrder=null,accessToken=null;
  let signedIn=false,accountEmail='',cloudRevision=null,cloudSynced=false,cloudSyncing=false,
-   savedSnapshot='',hasUrlAddition=false,accountId='';
+   savedSnapshot='',hasUrlAddition=false,accountId='',pendingChecked=false,checkingPending=false;
  const pendingKey='blofy.shop.pending-checkout.v1';
  const cloudEndpoint='/api/v1/store/account/cart',ownerKey='blofy.shop.cart.owner.v1';
  // Geidea officially supports browser redirection using the already created session.
@@ -158,8 +158,9 @@
    const button=$('checkout');
    button.textContent=!signedIn?'تسجيل الدخول مطلوب قبل الدفع':
      paymentOpen?'لديك طلب دفع سابق، راجع حالته':
-     !cloudSynced?'جارٍ حفظ السلة...':'إكمال الطلب والدفع الآمن';
-   button.disabled=!signedIn||!cloudSynced||!ready||creating||paymentOpen||!quoted||!items.length;
+     !cloudSynced?'جارٍ حفظ السلة...':
+     !pendingChecked?'جارٍ فحص الطلبات السابقة...':'إكمال الطلب والدفع الآمن';
+   button.disabled=!signedIn||!cloudSynced||!pendingChecked||!ready||creating||paymentOpen||!quoted||!items.length;
  }
  function authUI(){
    const gate=$('auth-gate'),headline=$('auth-title'),label=$('auth-message'),link=$('auth-link');
@@ -177,7 +178,7 @@
  }
  function queueSync(){
    if(!signedIn||cloudRevision===null)return;
-   cloudSynced=false;authUI();
+   cloudSynced=false;pendingChecked=false;authUI();
    if(!cloudSyncing)void syncCloud();
  }
  async function syncCloud(){
@@ -196,6 +197,7 @@
        if(cartSnapshot()===payload){cloudSynced=true;break;}
      }
      authUI();
+     if(cloudSynced)await checkPendingForCart();
    }catch(err){
      cloudSynced=false;
      $('cart-sync').textContent=err.message==='store_cart_changed_on_another_device'
@@ -248,6 +250,60 @@
    }
  }
 
+
+ // Show only a session belonging to the signed-in account.
+ // The order's confidential receipt token is intentionally not disclosed across devices.
+ function showOwnedPending(pending){
+   if(!UUID.test(pending.orderId||''))return;
+   paymentOpen=true;pendingChecked=true;
+   currentOrder=pending.orderId;
+   try{accessToken=sessionStorage.getItem('blofy.shop.order.'+currentOrder)||null;}
+   catch(_){accessToken=null;}
+   $('started').hidden=false;
+   $('order-number').textContent=pending.orderNumber||currentOrder;
+   $('check-pending').href=accessToken?
+     '/store/orders#order='+encodeURIComponent(currentOrder):'/store/account';
+   $('copy-private-link').hidden=!accessToken;
+   const until=Date.parse(pending.sessionExpiresAt||'');
+   const paymentUrl=UUID.test(pending.sessionId||'')&&Number.isFinite(until)&&
+     until>Date.now()+15000?hostedPaymentUrl(pending.sessionId):null;
+   if(paymentUrl){
+     $('open-geidea').href=paymentUrl;$('open-geidea').hidden=false;
+     $('pending-status').textContent='هذا طلبك السابق لنفس السلة، افتح نفس جلسة Geidea بدل إنشاء فاتورة ثانية.';
+   }else{
+     $('open-geidea').hidden=true;
+     $('pending-status').textContent='طلبك السابق قيد التحقق، لكن مهلة جلسة الدفع انتهت. راجع الطلب في حسابك قبل محاولة جديدة.';
+   }
+   updateCheckoutButton();
+ }
+ async function checkPendingForCart(){
+   if(!signedIn||!cloudSynced||checkingPending)return;
+   if(!items.length){pendingChecked=true;updateCheckoutButton();return;}
+   checkingPending=true;pendingChecked=false;
+   const snapshot=cartSnapshot();updateCheckoutButton();
+   try{
+     const data=await request('/api/v1/store/cart/pending',body());
+     if(snapshot!==cartSnapshot())return;
+     pendingChecked=true;
+     if(data.pending)showOwnedPending(data);
+     else if(!paymentOpen){
+       $('pending-status').textContent='';
+       $('started').hidden=true;
+     }
+     updateCheckoutButton();
+   }catch(_){
+     if(snapshot===cartSnapshot()){
+       pendingChecked=false;
+       $('cart-sync').textContent='تعذر فحص طلبات الدفع السابقة. أعد التحقق من السلة قبل بدء أي دفع.';
+       $('cart-sync').dataset.state='error';
+       $('retry-pending').hidden=false;
+       updateCheckoutButton();
+     }
+   }finally{
+     checkingPending=false;
+     if(snapshot!==cartSnapshot()&&cloudSynced)void checkPendingForCart();
+   }
+ }
 
  async function restorePendingCheckout(){
    let pending;
@@ -324,7 +380,7 @@
  async function checkout(){
    if(!signedIn){location.assign('/store/account?next=%2Fstore%2Fcart');return;}
    if(!cloudSynced){message('سلتك لم تُحفظ بعد في الحساب. تأكد من اتصالك قبل الدفع.');return;}
-   if(!ready||creating||paymentOpen||!quoted||!items.length)return;
+   if(!ready||creating||paymentOpen||!pendingChecked||!quoted||!items.length)return;
    creating=true;$('checkout').disabled=true;message('جارٍ تجهيز طلبك...');
    try{
      const payload=body();
@@ -343,7 +399,7 @@
        sessionStorage.setItem('blofy.shop.cart.checkout.'+currentOrder,JSON.stringify(items));
        sessionStorage.setItem(pendingKey,JSON.stringify({
          orderId:data.orderId,orderNumber:data.orderNumber,sessionId:data.sessionId,
-         accountId,createdAt:Date.now(),expiresAt:Date.now()+13*60*1000
+         accountId,createdAt:Date.now(),expiresAt:Date.parse(data.sessionExpiresAt)||Date.now()+12*60*1000
        }));
      }catch(_){}
      $('started').hidden=false;$('order-number').textContent=data.orderNumber;
@@ -361,11 +417,21 @@
      }
    }catch(err){
      if(err.message==='store_pending_checkout_exists'){
-       $('started').hidden=false;
-       $('pending-status').textContent='يوجد طلب سابق لنفس السلة في حسابك ولم يُحسم بعد. افتح «حسابي» وراجع حالة الطلب قبل محاولة أخرى حتى لا تتكرر العملية.';
-       $('open-geidea').hidden=true;
-       $('check-pending').href='/store/account';
-       paymentOpen=true;
+       try{
+         const previous=await request('/api/v1/store/cart/pending',body());
+         if(previous.pending)showOwnedPending(previous);
+         else{
+           $('started').hidden=false;
+           $('pending-status').textContent='وجدنا طلبًا قيد التحقق؛ راجع حسابك قبل إنشاء طلب آخر.';
+           $('check-pending').href='/store/account';
+           paymentOpen=true;
+         }
+       }catch(_){
+         $('started').hidden=false;
+         $('pending-status').textContent='لا يمكن التأكد من الطلب السابق الآن؛ راجع حسابك قبل محاولة أخرى.';
+         $('check-pending').href='/store/account';
+         paymentOpen=true;
+       }
      }
      message(err.message==='store_pending_checkout_exists'?
        'تم منع إنشاء فاتورة جديدة لنفس السلة حفاظًا على أموالك. راجع الطلب السابق في حسابك.':
@@ -380,6 +446,9 @@
    const value=privateLink();if(!value)return;
    try{await navigator.clipboard.writeText(value);message('تم نسخ رابط الطلب الخاص. لا تشاركه مع أحد.');}
    catch{message('تعذر النسخ التلقائي. احتفظ برقم طلبك وتواصل مع الدعم عند الحاجة.');}
+ });
+ $('retry-pending').addEventListener('click',()=>{
+   $('retry-pending').hidden=true;void checkPendingForCart();
  });
  $('checkout').addEventListener('click',()=>void checkout());
  $('clear-cart').addEventListener('click',()=>{
