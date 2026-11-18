@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b0c18">
+<meta name="description" content="اكتشف خدمات BLOFY STREAM وBLOFY PLAYER ولوحات إدارة الاشتراكات. تعرّف على الخيارات، تواصل مباشرة عبر واتساب، أو جدّد تفعيل جهازك بدفع آمن عبر جيديا.">
+<meta name="robots" content="index,follow">
+<link rel="canonical" href="https://www.blofyplayer.com/">
+<link rel="icon" href="/blofy-logo.png">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="ar_SA">
+<meta property="og:title" content="BLOFY | الترفيه والتطبيقات والاشتراكات">
+<meta property="og:description" content="تعرف على BLOFY STREAM وBLOFY PLAYER وخيارات الاشتراك والتجديد.">
+<title>BLOFY | متجر التطبيقات والاشتراكات</title>
+<style>
+:root{font-family:Tahoma,Arial,system-ui,sans-serif;--bg:#080a15;--card:#11162a;--line:rgba(183,199,255,.14);--fg:#f4f7ff;--muted:#aebbd4;--cyan:#58e3ef;--blue:#6ca1ff;--purple:#aa85ff;--green:#25d366;color-scheme:dark}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;color:var(--fg);background:radial-gradient(ellipse 70% 25% at 14% 3%,rgba(47,80,174,.24),transparent),radial-gradient(ellipse 50% 30% at 100% 12%,rgba(114,62,169,.19),transparent),var(--bg);min-height:100vh;overflow-x:hidden}
+a{color:inherit;text-decoration:none}
+button,a{ -webkit-tap-highlight-color:transparent }
+button:focus-visible,a:focus-visible{outline:3px solid var(--cyan);outline-offset:4px}
+.container{width:min(1180px,calc(100% - 36px));margin:auto}
+.top{position:sticky;top:0;z-index:20;background:rgba(8,10,21,.91);backdrop-filter:blur(24px);border-bottom:1px solid var(--line)}
+.nav{display:flex;align-items:center;justify-content:space-between;min-height:76px;gap:18px}
+.brand{display:flex;align-items:center;gap:12px;direction:ltr}
+.brand img{width:42px;height:42px;object-fit:contain}
+.brand b{letter-spacing:.09em;font-size:19px;white-space:nowrap}
+.brand small{display:block;font-size:9px;color:var(--cyan);letter-spacing:.28em;text-align:center;margin-top:3px}
+.links{display:flex;align-items:center;gap:24px;color:#c5d2eb;font-size:14px}
+.links a:hover{color:#fff}
+.nav-cta,.btn{display:inline-flex;align-items:center;justify-content:center;gap:9px;border:1px solid transparent;border-radius:15px;padding:14px 21px;font-weight:800;cursor:pointer;text-align:center;transition:transform .18s,border-color .18s,background .18s;min-height:49px}
+.nav-cta:hover,.btn:hover{transform:translateY(-2px)}
+.nav-cta,.btn.primary{background:linear-gradient(115deg,#58deef,#6eabff);color:#081124}
+.btn.ghost{background:rgba(255,255,255,.05);border-color:rgba(205,216,255,.18);color:#f4f7ff}
+.btn.whatsapp{background:#23c55e;color:#06260e}
+.btn.small{min-height:43px;padding:10px 15px;font-size:13px;border-radius:12px}
+.section{padding:70px 0}
+.eyebrow{font-size:12px;letter-spacing:.06em;color:var(--cyan);font-weight:900}
+.hero{padding:78px 0 85px;overflow:hidden}
+.hero-grid{display:grid;grid-template-columns:1fr 1.06fr;align-items:center;gap:42px}
+.hero h1{font-size:clamp(37px,4.8vw,69px);line-height:1.24;letter-spacing:-.04em;margin:16px 0 19px;text-wrap:balance}
+.grad{background:linear-gradient(95deg,#62edf2,#85a1ff,#cda2ff);color:transparent;background-clip:text}
+.hero p{font-size:17px;line-height:2;color:#becae2;max-width:540px;margin:0 0 26px}
+.ctas{display:flex;flex-wrap:wrap;gap:12px}
+.proof{display:flex;flex-wrap:wrap;gap:10px;margin-top:23px}
+.proof span{color:#c3d0e5;font-size:12px;padding:8px 12px;border:1px solid var(--line);border-radius:100px;background:rgba(255,255,255,.025)}
+.stage{position:relative;min-height:395px;display:grid;place-items:center;perspective:1000px}
+.stage:before{content:"";position:absolute;inset:12% -10%;border-radius:50%;background:radial-gradient(ellipse,rgba(56,183,236,.23),rgba(83,77,199,.13) 38%,transparent 68%);filter:blur(18px)}
+.tv{position:relative;width:min(100%,550px);transform:rotateY(8deg) rotateX(2deg);border:9px solid #111827;border-bottom-width:16px;border-radius:22px;box-shadow:0 50px 85px rgba(0,0,0,.57),0 0 0 1px #37435d,0 0 60px rgba(56,182,236,.13);background:#0d1531;padding:18px}
+.tv-head{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:12px;border-bottom:1px solid #283353;padding:0 0 15px}
+.tv-head strong{direction:ltr;letter-spacing:.08em}
+.tv-tabs{display:flex;gap:7px;font-size:10px;margin:16px 0}
+.tv-tabs span{background:#1b2750;padding:7px 10px;border-radius:8px}
+.tv-tabs span:first-child{background:#2d7a92;color:#e2ffff}
+.tv-hero{display:grid;grid-template-columns:1.3fr .7fr;gap:10px}
+.tv-banner{min-height:145px;background:linear-gradient(130deg,#1a325e,#173a50 35%,#4e2b74);border-radius:12px;display:flex;flex-direction:column;justify-content:flex-end;padding:15px}
+.tv-banner b{font-size:18px}.tv-banner small{color:#cddffb;margin-top:8px}
+.tv-items{display:grid;gap:8px}
+.tv-items span{border-radius:10px;background:linear-gradient(110deg,#25376b,#2b2764);display:flex;align-items:center;padding:9px;font-size:11px}
+.tv-foot{display:flex;gap:8px;margin-top:12px}
+.tv-foot span{width:25%;height:30px;border-radius:8px;background:linear-gradient(90deg,#143c67,#39437c)}
+.float{position:absolute;padding:13px 17px;border:1px solid rgba(152,222,251,.28);background:rgba(23,36,65,.85);backdrop-filter:blur(10px);border-radius:15px;box-shadow:0 20px 50px rgba(0,0,0,.28);font-size:13px;font-weight:800}
+.float.one{top:10%;left:-5%;color:#95f7ed}.float.two{bottom:5%;right:-5%;color:#ddc4ff}
+.disclaimer{display:block;color:#7d8ea9;font-size:11px;margin-top:16px}
+.h2{font-size:clamp(28px,3vw,40px);margin:12px 0;letter-spacing:-.025em;line-height:1.35}
+.lead{color:var(--muted);font-size:15px;line-height:1.95;max-width:700px;margin:0 0 27px}
+.shop-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:19px}
+.product{min-width:0;display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--line);border-radius:26px;background:linear-gradient(160deg,rgba(27,39,70,.87),rgba(12,17,34,.99));box-shadow:0 26px 80px rgba(0,0,0,.12)}
+.art{height:185px;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;background:radial-gradient(circle at 60% 50%,rgba(89,187,220,.21),transparent 58%),linear-gradient(150deg,#152549,#1b1837)}
+.art.purple{background:radial-gradient(circle at 60% 40%,rgba(173,102,251,.27),transparent 58%),linear-gradient(130deg,#25204b,#101c30)}
+.art.mint{background:radial-gradient(circle at 48% 40%,rgba(64,223,174,.23),transparent 58%),linear-gradient(125deg,#1a3042,#111c39)}
+.art .symbol{font-size:70px;color:#d4edff;text-shadow:0 10px 45px rgba(103,202,243,.45)}
+.art .orbit{position:absolute;width:260px;height:260px;border:1px solid rgba(183,227,252,.18);transform:rotate(-25deg);border-radius:33px}
+.art .orbit:nth-child(2){width:195px;height:195px;transform:rotate(25deg);border-color:rgba(178,132,248,.23)}
+.product-copy{padding:23px;display:flex;flex-direction:column;flex:1}
+.tag{align-self:flex-start;color:#aee8ff;font-size:12px;background:#1b3550;border:1px solid #2d5170;border-radius:100px;padding:5px 10px}
+.product h3{font-size:22px;margin:13px 0 9px;direction:ltr;text-align:right}
+.product p{color:#bac7df;font-size:14px;line-height:1.95;margin:0 0 22px;flex:1}
+.actions{display:flex;gap:9px;flex-wrap:wrap}
+.feature-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:15px}
+.feature{border:1px solid var(--line);background:rgba(16,24,45,.72);border-radius:21px;padding:22px}
+.feature .icon{font-size:26px}.feature h3{font-size:17px;margin:14px 0 8px}
+.feature p{color:#aebbd4;font-size:13px;line-height:1.8;margin:0}
+.payment{border-radius:28px;padding:clamp(25px,4vw,45px);background:linear-gradient(105deg,rgba(38,44,99,.6),rgba(23,29,57,.8));border:1px solid rgba(148,176,243,.24);display:grid;grid-template-columns:1fr auto;align-items:center;gap:23px}
+.payment h2{margin:8px 0;font-size:28px}.payment p{line-height:1.8;color:#c5d1e8;max-width:650px;font-size:14px}
+.payment .buttons{display:flex;gap:10px;flex-wrap:wrap}
+.plans{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:22px}
+.plan{background:#0c1731;padding:20px;border-radius:18px;border:1px solid var(--line)}
+.plan strong{font-size:19px;display:block;margin-bottom:12px}
+.plan .price{font-size:29px;font-weight:900;color:#70ecf1}
+.plan small{display:block;color:#9aaac4;margin:7px 0 18px}
+.faq{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.faq details{padding:20px;border-radius:19px;background:#111a31;border:1px solid var(--line)}
+.faq summary{cursor:pointer;font-weight:800}
+.faq p{line-height:1.8;color:#b7c5df;margin:14px 0 0;font-size:14px}
+.bottom{border-top:1px solid var(--line);padding:30px 0 44px;color:#b6c4da}
+.bottom-inner{display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap}
+.bottom .footlinks{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.whats-bubble{position:fixed;left:20px;bottom:calc(20px + env(safe-area-inset-bottom));z-index:25;display:flex;align-items:center;gap:8px;border-radius:100px;padding:12px 16px;background:#22c65e;color:#062810;font-weight:900;box-shadow:0 16px 35px rgba(0,0,0,.32)}
+@media(max-width:1050px){.links{display:none}.hero-grid{grid-template-columns:1fr}.stage{min-height:360px}.shop-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:680px){.container{width:min(100% - 26px,1180px)}.nav{min-height:68px}.brand b{font-size:17px}.brand img{width:36px;height:36px}.nav-cta{padding:10px 13px;font-size:12px}.hero{padding:45px 0 55px}.hero h1{font-size:36px}.hero p{font-size:15px}.stage{min-height:280px}.tv{max-width:95%;padding:11px;border-width:6px 6px 11px}.tv-hero .tv-banner{min-height:112px}.float{font-size:10px;padding:10px}.float.one{left:0}.float.two{right:0}.section{padding:45px 0}.shop-grid,.feature-grid,.faq,.plans{grid-template-columns:1fr}.art{height:145px}.payment{grid-template-columns:1fr}.whats-bubble{bottom:calc(14px + env(safe-area-inset-bottom));left:12px}.bottom{padding-bottom:96px}.hero .ctas .btn{flex:1}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.btn,.nav-cta{transition:none}.btn:hover,.nav-cta:hover{transform:none}}
+</style>
+<script>
+(function(){
+  var hash=location.hash||'';
+  if(/^#.*(?:deviceId|activationCode|code)=/i.test(hash)) location.replace('/portal'+hash);
+})();
+</script>
+</head>
+<body>
+<header class="top"><div class="nav container">
+  <a class="brand" href="/" aria-label="BLOFY الرئيسية"><img src="/blofy-logo.png" alt="" width="42" height="42"><span><b>BLOFY</b><small>STREAM · PLAYER</small></span></a>
+  <nav class="links" aria-label="روابط الموقع"><a href="#products">المنتجات</a><a href="#features">المميزات</a><a href="#payments">الدفع والتجديد</a><a href="/downloads">التطبيقات</a><a href="/portal">إدارة جهازي</a></nav>
+  <a class="nav-cta" href="https://wa.me/966568941484" data-wa="general" rel="noopener noreferrer" target="_blank">تواصل واتساب ↗</a>
+</div></header>
+<main>
+<section class="hero"><div class="container hero-grid">
+  <div><span class="eyebrow">BLOFY · ENTERTAINMENT & SERVICES</span><h1>ترفيهك صار <span class="grad">في مكان واحد.</span></h1>
+  <p>تعرّف على تطبيقات وخدمات بلوفي، واستكشف خيارات الاشتراك والتفعيل وإدارة الأكواد. اختر الخدمة المناسبة، وتواصل معنا مباشرة عبر واتساب أو جدّد تفعيل جهازك من صفحة الدفع الآمنة.</p>
+  <div class="ctas"><a class="btn primary" href="#products">اكتشف منتجات بلوفي ←</a><a class="btn whatsapp" href="https://wa.me/966568941484" data-wa="general" rel="noopener noreferrer" target="_blank">اطلب عبر واتساب ↗</a></div>
+  <div class="proof"><span>◉ قنوات مباشرة</span><span>◉ أفلام ومسلسلات</span><span>◉ تطبيقات التلفزيون</span><span>◉ لوحة إدارة للأكواد</span></div>
+  </div>
+  <div class="stage" aria-label="عرض توضيحي لأقسام بلوفي"><div class="tv">
+    <div class="tv-head"><strong>BLOFY STREAM</strong><span>الرئيسية • البث المباشر</span></div>
+    <div class="tv-tabs"><span>القنوات</span><span>الأفلام</span><span>المسلسلات</span><span>المفضلة</span></div>
+    <div class="tv-hero"><div class="tv-banner"><b>كل المحتوى أمامك</b><small>اختر ما يناسب وقتك</small></div><div class="tv-items"><span>◉ البث المباشر</span><span>▶ مكتبة الأفلام</span><span>▣ المسلسلات</span></div></div>
+    <div class="tv-foot"><span></span><span></span><span></span><span></span></div>
+  </div><div class="float one">✦ واجهة عربية مرتبة</div><div class="float two">◉ خيارات اشتراك متنوعة</div></div>
+</div><div class="container"><small class="disclaimer">العرض البصري أعلاه توضيحي وليس صورة من واجهة الإصدار الحالي. تختلف الخدمات والمحتويات بحسب الاشتراك والمصدر والإصدار.</small></div></section>
+<section class="section" id="products"><div class="container"><span class="eyebrow">BLOFY COLLECTION</span><h2 class="h2">اختر الخدمة اللي تناسبك</h2><p class="lead">سواء تبحث عن تطبيق للمشاهدة، أو باقة مناسبة، أو أدوات لإدارة أكواد المتجر، فريق BLOFY يساعدك تختار.</p>
+ <div class="shop-grid">
+  <article class="product"><div class="art"><div class="orbit"></div><div class="orbit"></div><span class="symbol">▶</span></div><div class="product-copy"><span class="tag">للترفيه</span><h3>BLOFY STREAM</h3><p>اكتشف خدمات القنوات المباشرة والأفلام والمسلسلات والخيارات المتاحة لأجهزة العرض. اسأل عن الباقات والتوافق قبل الاشتراك.</p><div class="actions"><a class="btn whatsapp small" href="https://wa.me/966568941484" data-wa="stream" rel="noopener noreferrer" target="_blank">استفسر عن الاشتراك</a><a class="btn ghost small" href="#features">المميزات</a></div></div></article>
+  <article class="product"><div class="art purple"><div class="orbit"></div><div class="orbit"></div><span class="symbol">▣</span></div><div class="product-copy"><span class="tag">التطبيق والتفعيل</span><h3>BLOFY PLAYER</h3><p>تطبيق بلوفي لأجهزة العرض، مع صفحة لإدارة الجهاز وتجديد التفعيل. حمّل الإصدار المتاح، أو افتح صفحة تجديد الاشتراك.</p><div class="actions"><a class="btn primary small" href="/downloads">تحميل التطبيق</a><a class="btn ghost small" href="/pay">الدفع والتجديد</a></div></div></article>
+  <article class="product"><div class="art mint"><div class="orbit"></div><div class="orbit"></div><span class="symbol">⌘</span></div><div class="product-copy"><span class="tag">لأصحاب المتاجر</span><h3>BLOFY BUSINESS</h3><p>تعرّف على خيارات لوحات إدارة الأكواد والاشتراكات للموزعين. تواصل معنا لمعرفة الشروط والتوافر وآلية البدء.</p><div class="actions"><a class="btn whatsapp small" href="https://wa.me/966568941484" data-wa="business" rel="noopener noreferrer" target="_blank">اطلب معلومات الموزعين</a></div></div></article>
+ </div>
+</div></section>
+<section class="section" id="features"><div class="container"><span class="eyebrow">WHY BLOFY</span><h2 class="h2">كل شيء واضح من أول خطوة</h2><p class="lead">تصميم عربي يسهّل عليك الوصول إلى ما تحتاجه، مع دعم مباشر عند الاستفسار أو التجديد.</p>
+ <div class="feature-grid"><div class="feature"><span class="icon">📺</span><h3>البث المباشر</h3><p>قوائم قنوات وأقسام منظّمة حسب المصدر والباقة.</p></div><div class="feature"><span class="icon">🎞</span><h3>الأفلام والمسلسلات</h3><p>استعراض المحتوى وتفاصيل الأعمال والحلقات المتوفرة.</p></div><div class="feature"><span class="icon">⬇</span><h3>التنزيلات</h3><p>قسم للتنزيلات في الإصدارات التي تدعم هذه الميزة.</p></div><div class="feature"><span class="icon">✦</span><h3>BLOFY AI</h3><p>واجهة مخصصة لاستكشاف المحتوى، بحسب الإصدار والتفعيل.</p></div></div>
+</div></section>
+<section class="section" id="payments"><div class="container"><div class="payment"><div><span class="eyebrow">SECURE CHECKOUT</span><h2>جدّد تفعيلك بكل وضوح</h2><p>لديك جهاز BLOFY مسجّل؟ افتح صفحة الدفع الرسمية، اختر الباقة المتاحة، وأكمل الدفع بالبطاقة من خلال بوابة Geidea المستضافة. لا تدخل بيانات بطاقتك داخل واتساب.</p></div><div class="buttons"><a href="/pay" class="btn primary">الدفع عبر جيديا ↗</a><a href="/portal" class="btn ghost">إدارة الجهاز</a></div></div>
+<div id="plans" class="plans" hidden aria-live="polite"></div>
+<p id="paymentNote" class="disclaimer">يُعرض الدفع المباشر فقط عند توفر باقات مفعّلة في النظام. الدفع يخص تفعيل الجهاز المسجّل؛ لشراء خدمة جديدة تواصل أولًا عبر واتساب.</p>
+</div></section>
+<section class="section" id="questions"><div class="container"><span class="eyebrow">QUESTIONS</span><h2 class="h2">تحتاج توضيح؟</h2><div class="faq">
+<details><summary>كيف أطلب باقة جديدة؟</summary><p>اضغط «استفسر عن الاشتراك» وتفتح لك محادثة واتساب جاهزة مع فريق BLOFY. نوضح لك الباقات المتاحة وشروطها قبل إتمام الطلب.</p></details>
+<details><summary>هل يمكنني الدفع إلكترونيًا؟</summary><p>للمشتركين ذوي الأجهزة المسجّلة تتوفر صفحة دفع وتجديد من خلال جيديا إذا كانت خدمة الدفع والباقة مفعّلتين.</p></details>
+<details><summary>كيف أحمل التطبيق؟</summary><p>من صفحة «تحميل التطبيق» ستجد الإصدارات المنشورة وتعليمات التثبيت المتاحة.</p></details>
+<details><summary>كيف أتواصل مع الدعم؟</summary><p>عبر واتساب على الرقم 0568941484، أو من صفحة الدعم بالموقع. لا تشارك رمز تفعيل جهازك في محادثة عامة.</p></details>
+</div></div></section>
+<section class="section"><div class="container"><div class="payment"><div><span class="eyebrow">START WITH BLOFY</span><h2>جاهز تختار باقتك؟</h2><p>تواصل معنا الآن، وخلّنا نساعدك تحصل على الخيار اللي يناسب جهازك واحتياجك.</p></div><a class="btn whatsapp" href="https://wa.me/966568941484" data-wa="general" rel="noopener noreferrer" target="_blank">افتح محادثة واتساب ←</a></div></div></section>
+</main>
+<footer class="bottom"><div class="container bottom-inner"><div><b dir="ltr">BLOFY STREAM · BLOFY PLAYER</b><div style="font-size:12px;margin-top:7px">المنتجات والتوافر بحسب الخدمة والباقات المعتمدة.</div></div><div class="footlinks"><a href="/privacy">الخصوصية</a><a href="/support">الدعم</a><a href="/downloads">التنزيلات</a><a href="/portal">إدارة الجهاز</a><a href="https://wa.me/966568941484" data-wa="general" rel="noopener noreferrer" target="_blank">واتساب 0568941484</a></div></div></footer>
+<a class="whats-bubble" href="https://wa.me/966568941484" data-wa="general" rel="noopener noreferrer" target="_blank" aria-label="التواصل عبر واتساب">واتساب ✆</a>
+<script>
+(function(){
+  var messages={
+    general:'السلام عليكم، وصلت من موقع BLOFY وأرغب في معرفة الباقات والخدمات المتاحة.',
+    stream:'السلام عليكم، أرغب في الاشتراك في BLOFY STREAM. أرجو إرسال الباقات والتفاصيل والتوافق مع جهازي.',
+    business:'السلام عليكم، لدي متجر وأرغب في معلومات عن لوحة إدارة أكواد واشتراكات BLOFY للموزعين.'
+  };
+  var source='';
+  try{var utm=new URLSearchParams(location.search).get('utm_source')||'';if(utm&&/^[a-zA-Z0-9_-]{1,40}$/.test(utm))source=' (المصدر: '+utm+')';}catch(_){}
+  document.querySelectorAll('[data-wa]').forEach(function(a){
+    var m=messages[a.getAttribute('data-wa')]||messages.general;
+    a.href='https://wa.me/966568941484?text='+encodeURIComponent(m+source);
+  });
+  var plans=document.getElementById('plans');
+  fetch('/api/v1/subscriptions/plans',{method:'GET',cache:'no-store',headers:{accept:'application/json'}})
+    .then(function(r){if(!r.ok)throw Error('unavailable');return r.json();})
+    .then(function(data){
+      if(data.provider!=='geidea'||data.purchasesAvailable!==true||!Array.isArray(data.items))return;
+      var valid=data.items.filter(function(p){
+        return p&&typeof p.planKey==='string'&&typeof p.name==='string'&&Number.isInteger(p.priceMinor)&&p.priceMinor>0&&p.currency==='SAR';
+      }).slice(0,12);
+      if(!valid.length)return;
+      valid.forEach(function(p){
+        var card=document.createElement('article');card.className='plan';
+        var name=document.createElement('strong');name.textContent=p.name.slice(0,80);
+        var price=document.createElement('div');price.className='price';price.textContent=(p.priceMinor/100).toLocaleString('ar-SA',{minimumFractionDigits:0,maximumFractionDigits:2})+' ر.س';
+        var note=document.createElement('small');note.textContent=p.durationDays?'المدة: '+p.durationDays+' يوم':'راجع مدة الباقة قبل الدفع';
+        var link=document.createElement('a');link.className='btn primary small';link.href='/pay';link.textContent='التجديد الآمن';
+        card.append(name,price,note,link);plans.append(card);
+      });
+      plans.hidden=false;
+    }).catch(function(){ /* Don't show prices without a verified enabled payment provider. */ });
+})();
+</script>
+</body>
+</html>
