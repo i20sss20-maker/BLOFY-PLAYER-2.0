@@ -41,6 +41,21 @@ class PlaybackRecoveryPolicyTest {
         ))
     }
 
+    @Test fun nextOutageAfterHealthyPlaybackGetsFreshSingleRetry() {
+        assertTrue(PlaybackRecoveryPolicy.recoveredLongEnoughToResetErrorRetry(
+            lastReadyAtMs = 100_000L, nowMs = 131_000L
+        ))
+        assertFalse(PlaybackRecoveryPolicy.recoveredLongEnoughToResetErrorRetry(
+            lastReadyAtMs = 100_000L, nowMs = 112_000L
+        ))
+        assertFalse(PlaybackRecoveryPolicy.recoveredLongEnoughToResetErrorRetry(
+            lastReadyAtMs = 0L, nowMs = 100_000L
+        ))
+        assertFalse(PlaybackRecoveryPolicy.recoveredLongEnoughToResetErrorRetry(
+            lastReadyAtMs = 100_000L, nowMs = 90_000L
+        ))
+    }
+
     @Test fun timeDiscontinuitiesNeverTriggerBusyRetryLoop() {
         assertFalse(PlaybackRecoveryPolicy.shouldRecoverLiveBuffering(
             stalledForMs = 25_000L, nowMs = 25_000L,
