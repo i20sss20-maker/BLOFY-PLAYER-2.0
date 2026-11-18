@@ -346,7 +346,7 @@ async function serveStoreDesign(res) {
 function serveStoreInfo(res, slug) {
   const markup=storeInfoPage(slug);
   if(!markup){res.writeHead(404,{'cache-control':'no-store'});return res.end();}
-  const file=Buffer.from(markup,'utf8');
+  const file=Buffer.from(withPublicAnalytics(markup),'utf8');
   res.writeHead(200,{
     'content-type':'text/html; charset=utf-8',
     'content-length':file.length,
@@ -355,7 +355,7 @@ function serveStoreInfo(res, slug) {
     'x-frame-options':'DENY',
     'referrer-policy':'strict-origin-when-cross-origin',
     'strict-transport-security':'max-age=31536000',
-    'content-security-policy':"default-src 'self'; style-src 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'"
+    'content-security-policy':PUBLIC_ANALYTICS_CSP+"; base-uri 'none'"
   });
   res.end(file);
 }
