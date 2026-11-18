@@ -45,7 +45,7 @@
     <string name="stream_ui_device_mobile">Phone / tablet</string>
     <string name="stream_ui_memory_low">Low-memory profile (automatic optimization)</string>
     <string name="stream_ui_memory_normal">Normal</string>
-    <string name="stream_ui_compat_details">Device: %2$s\nConnection status:</string>
+    <string name="stream_ui_compat_details">Device: %1$s\nConnection status:</string>
     <string name="stream_ui_subscription_title">BLOFY STREAM subscription</string>
     <string name="stream_ui_no_subscription">No subscription is active on this device.</string>
     <string name="stream_ui_ok">OK</string>
