@@ -1039,8 +1039,9 @@ const server = http.createServer(async (req, res) => {
       // current STREAM APK to PLAYER while retiring PLAYER's old archive links.
       const isCurrentStreamApk = localReleaseMatch[1] === STREAM_RELEASE_FILENAME;
       const isPreviousStreamApk = localReleaseMatch[1] === STREAM_PREVIOUS_RELEASE_FILENAME;
+      const isApprovedNewStreamApk = localReleaseMatch[1] === STREAM_55836_APK;
       const isOwnerStreamTestApk = localReleaseMatch[1] === STREAM_TEST_FILENAME;
-      if (BLOFY_ONLY_CURRENT && !isCurrentStreamApk && !isPreviousStreamApk && !isOwnerStreamTestApk && ['GET', 'HEAD'].includes(method)) {
+      if (BLOFY_ONLY_CURRENT && !isCurrentStreamApk && !isPreviousStreamApk && !isApprovedNewStreamApk && !isOwnerStreamTestApk && ['GET', 'HEAD'].includes(method)) {
         return redirect(res, '/download/latest.apk');
       }
       if (!['GET', 'HEAD'].includes(method)) {
@@ -1048,7 +1049,7 @@ const server = http.createServer(async (req, res) => {
         return res.end();
       }
       return await streamLocalApk(req, res, localReleaseMatch[1], localReleaseMatch[1],
-        isCurrentStreamApk || isPreviousStreamApk ? 'app:blofy-stream' : isOwnerStreamTestApk ? 'app:blofy-stream-test' : 'blofy');
+        isCurrentStreamApk || isPreviousStreamApk || isApprovedNewStreamApk ? 'app:blofy-stream' : isOwnerStreamTestApk ? 'app:blofy-stream-test' : 'blofy');
     }
 
     if (pathname === '/admin' || pathname === '/admin/' || pathname === PUBLIC_ADMIN_PREFIX || pathname === `${PUBLIC_ADMIN_PREFIX}/`) {
