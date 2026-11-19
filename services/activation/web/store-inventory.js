@@ -262,6 +262,78 @@ async function loadCampaignReport(){
 }
 $('campaign-days')?.addEventListener('change',()=>void loadCampaignReport());
 $('campaign-report-refresh')?.addEventListener('click',()=>void loadCampaignReport());
+// Official Metricool API: owner-only scheduled-post readout (no publish/update API).
+const metricoolNetworkNames={tiktok:'TikTok',instagram:'Instagram',twitter:'X',
+ facebook:'Facebook',linkedin:'LinkedIn',youtube:'YouTube'};
+async function loadMetricoolOverview(){
+ const button=$('metricool-refresh'),info=$('metricool-connection');
+ const counts=$('metricool-counts'),posts=$('metricool-posts');
+ if(!button||!info||!counts||!posts)return;
+ button.disabled=true;info.textContent='جارٍ التحقق من الجدولة الرسمية…';
+ try{
+  const response=await request('/api/v1/admin/store/metricool');
+  counts.replaceChildren();posts.replaceChildren();
+  if(!response.apiConfigured){
+   info.textContent='الربط المباشر مع Metricool API غير مفعل على هذا الخادم. يمكن إدارة المنشورات من حساب Metricool المتصل بشكل منفصل.';
+   return;
+  }
+  if(response.mode!=='official_api_read_only'||!response.scheduled)
+   throw Error('metricool_not_ready');
+  const schedule=response.scheduled;
+  info.textContent='✓ تم تحديث الجدولة الرسمية للثلاثين يومًا القادمة (قراءة فقط؛ لا يوجد نشر من لوحة المتجر).';
+  const items=Array.isArray(schedule.items)?schedule.items:[];
+  const summary=document.createElement('article');summary.className='metricool-stat';
+  const top=document.createElement('strong');top.textContent=String(items.length);
+  const bottom=document.createElement('span');bottom.textContent='منشور مجدول ضمن التقرير';
+  summary.append(top,bottom);counts.append(summary);
+  for(const [network,count] of Object.entries(schedule.platformCount||{})){
+   if(!Number.isSafeInteger(count)||count<=0||!metricoolNetworkNames[network])continue;
+   const tile=document.createElement('article');tile.className='metricool-stat';
+   const value=document.createElement('strong');value.textContent=String(count);
+   const title=document.createElement('span');title.textContent=metricoolNetworkNames[network];
+   tile.append(value,title);counts.append(tile);
+  }
+  if(!items.length){
+   const empty=document.createElement('p');empty.className='muted';
+   empty.textContent='لا توجد منشورات مجدولة ضمن الفترة المتاحة.';
+   posts.append(empty);return;
+  }
+  const sorted=items.slice().sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  for(const post of sorted.slice(0,18)){
+   const row=document.createElement('article');row.className='metricool-post';
+   const head=document.createElement('div');head.className='metricool-post-head';
+   const date=document.createElement('strong');date.textContent=String(post.date||'').replace('T',' · ');
+   const networks=document.createElement('span');
+   networks.textContent=(post.networks||[]).map(x=>
+    (metricoolNetworkNames[x.network]||x.network)+' · '+String(x.status||'')).join(' / ');
+   head.append(date,networks);
+   const preview=document.createElement('p');preview.textContent=String(post.preview||'').slice(0,180);
+   row.append(head,preview);
+   if(post.reviewFlags?.includes('avoid_iptv_keyword')){
+    const warning=document.createElement('small');warning.className='metricool-review-warning';
+    warning.textContent='⚠ النص يحتوي مصطلح IPTV؛ راجعه بما يناسب سياسة حملتك قبل النشر.';
+    row.append(warning);
+   }
+   if(post.mediaAttached===false){
+    const media=document.createElement('small');media.className='metricool-media-note';
+    media.textContent='ملاحظة: لم يظهر ملف وسائط مرتبط في نتيجة الجدولة.';
+    row.append(media);
+   }
+   posts.append(row);
+  }
+  if(schedule.truncated){
+   const hint=document.createElement('p');hint.className='muted';
+   hint.textContent='التقرير مختصر. راجع تقويم Metricool لتفاصيل بقية المنشورات.';
+   posts.append(hint);
+  }
+ }catch(_){
+  counts.replaceChildren();posts.replaceChildren();
+  info.textContent='تعذر التحقق من Metricool API حاليًا. هذا لا يعني أن المنشورات حُذفت أو فشل نشرها؛ راجع حساب Metricool.';
+ }finally{button.disabled=false;}
+}
+$('metricool-refresh')?.addEventListener('click',()=>void loadMetricoolOverview());
+void loadMetricoolOverview();
+
 void loadCampaignReport();
 
 // Owner-only retention summary. Never collect or display emails, cart contents or private codes.
