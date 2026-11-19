@@ -123,6 +123,45 @@
      document.querySelectorAll('.market-footer-social a[href*="x.com"]').forEach(a=>{a.href='https://x.com/'+config.xHandle;});
    }
  }
+ function merchandising(config){
+   if(!config||!Array.isArray(config.slides)||config.slides.length!==2)return;
+   const slides=document.querySelectorAll('#blofy-banners [data-market-promo]');
+   for(const slide of slides){
+     const index=Number(slide.dataset.marketPromo),banner=config.slides[index];
+     if(!banner)continue;
+     const edit=(selector,value)=>{const el=slide.querySelector(selector);if(el&&typeof value==='string')el.textContent=value;};
+     edit('[data-promo-title]',banner.title);
+     edit('[data-promo-highlight]',banner.highlight);
+     edit('[data-promo-description]',banner.description);
+     edit('[data-promo-cta]',banner.cta);
+     const picture=slide.querySelector('img.market-slide-media');
+     if(picture&&typeof banner.imageUrl==='string'&&(
+       /^\/store\/media\/(?:[a-z0-9-]+\.(?:jpg|svg))$/.test(banner.imageUrl)||
+       banner.imageUrl.startsWith('https://')))picture.src=banner.imageUrl;
+     const link=slide.querySelector('[data-promo-link]');
+     if(link&&typeof banner.href==='string'&&banner.href.startsWith('/'))link.href=banner.href;
+     slide.dataset.published=banner.active===false?'false':'true';
+   }
+   const selectors={
+      categories:'#categories',offers:'#offer',featured:'#shop-managed-products',
+      about:'#about-blofy',questions:'#questions'
+   };
+   for(const [key,selector] of Object.entries(selectors)){
+      if(typeof config.sections?.[key]!=='boolean')continue;
+      const node=document.querySelector(selector);
+      if(!node)continue;
+      if(key==='featured'){
+        node.dataset.merchDisabled=config.sections[key]?'false':'true';
+        // Keep the product section hidden until published products load.
+        node.hidden=!config.sections[key]||!node.querySelector('.managed-product');
+      }else node.hidden=!config.sections[key];
+   }
+   document.dispatchEvent(new Event('blofy:merchandising-ready'));
+ }
+ fetch('/api/v1/store/merchandising',{credentials:'same-origin',cache:'no-store',
+   headers:{accept:'application/json'}})
+   .then(async res=>{if(!res.ok)throw Error('merchandising_unavailable');return res.json();})
+   .then(data=>merchandising(data.merchandising)).catch(()=>{});
  fetch('/api/v1/store/branding',{credentials:'same-origin',cache:'no-store',headers:{accept:'application/json'}})
    .then(async res=>{if(!res.ok)throw Error('unavailable');return res.json();})
    .then(data=>branding(data.branding)).catch(()=>{});
