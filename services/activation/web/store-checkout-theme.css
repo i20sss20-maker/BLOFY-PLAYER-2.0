@@ -1,0 +1,168 @@
+/* BLOFY STORE — unified checkout/account/order theme.
+   Applies AFTER cart.css. Pure presentation: no changes to prices, auth or Geidea. */
+:root{
+  color-scheme:light;
+  --bg:#faf9f7;--surface:#fff;--border:#e8e1ed;--text:#29213a;
+  --muted:#70667b;--blue:#713ac9;
+}
+body{
+  background:radial-gradient(950px 450px at 100% 0%,#f0e7fb 0%,transparent 72%),#faf9f7;
+  color:#2b213b;
+}
+body :is(h1,h2,h3,strong,b){color:inherit}
+body p{color:#756a80}
+body :is(button,a,input,select,summary):focus-visible{outline:3px solid #a57ae1;outline-offset:3px}
+body .top{background:#fff;backdrop-filter:none;border-bottom:1px solid #e9e2ee;box-shadow:0 3px 18px #2619380a}
+body .top .logo{color:#322443;letter-spacing:.02em}
+body .top .logo b{color:#723dbe}
+body .top .nav-links{color:#65566d}
+body .top .nav-links a:hover,body .top .nav-links a:focus-visible{color:#6b34bc}
+body .eyebrow{color:#7b45ca}
+body .card{background:#fff;border:1px solid #e9e2ef;box-shadow:0 13px 35px #1f0e310a;border-radius:20px}
+body .card :is(h2,h3){color:#2b213c}
+body .intro{color:#776c82}
+body .primary{color:#fff;background:#713dc7;border:1px solid #713dc7;box-shadow:none}
+body .primary:not(:disabled):hover{background:#592ba4}
+body .secondary{background:#fbf8ff;border:1px solid #ddd1ec;color:#5c357f}
+body .secondary:not(:disabled):hover{border-color:#ad8fe0;background:#f1e8ff}
+body .link-button{color:#8049c3}
+body .sum-row{border-color:#ece6ef;color:#51485f}
+body .sum-row strong{color:#2b203f}
+body .total{color:#281a3a}
+body .total strong{color:#6737b5}
+body .card-head{border-color:#efe9f3}
+body .summary label,body .order-main label{color:#4f3f61}
+body .coupon input,body .order-main input:not([type="checkbox"]){
+  background:#fff;border:1px solid #d9cde6;color:#2e2343
+}
+body :is(input,select,textarea)::placeholder{color:#998ea8}
+body .hint{color:#62566e;background:#f8f4fc;border-color:#ebdff4}
+body .safe{color:#655976}
+body #message,body #order-message{color:#7549ae}
+body .footer{background:#211730;border-color:#2e1f44}
+body .footer .wrap,body .footer .wrap a{color:#e9e1ef}
+body .footer .wrap a:hover{color:#fff}
+body .started{background:#f7f2ff;border:1px solid #d5c0ed}
+body .state-chip{background:#f6efff;border-color:#deccf1;color:#573681}
+body .receipt-line{background:#fcfaff;border-color:#e2d6ed;color:#4d4162}
+body .receipt-line strong{color:#241e37}
+body .code-card{background:#f8f4fd;border-color:#e1d3ee;color:#322744}
+body .code-card code{background:#fff;border:1px dashed #ba9dde;color:#45257c}
+body .code-card small{color:#78698b}
+body .account-stat{background:#fff;color:#322443;border:1px solid #e7dcef;box-shadow:0 6px 16px #2316360a}
+body .account-stat:nth-child(3){background:#edf9f1;border-color:#ccebd8}
+body .account-stat:nth-child(4){background:#fff7ea;border-color:#f5dfb8}
+body .account-stat :is(span,strong,small){color:#44334e}
+body .account-stat strong{color:#6e3bb5}
+body .account-stat:hover{border-color:#be9adf}
+body .account-order-filters :is(input,select){color:#342747;background:#fff;border-color:#e0d2e9}
+body .account-count-note{color:#806e91}
+body #account-orders .receipt-line{background:#fcfaff}
+body .account-gate{background:#f2eaff;border-color:#d6bdeb}
+body .account-gate[data-state="verified"]{background:#f1faf4;border-color:#b5dec6}
+body .account-gate[data-state="verified"] .primary{background:#3b8d62;border-color:#3b8d62}
+body #cart-sync[data-state="saved"]{color:#267e55}
+body #cart-sync[data-state="pending"]{color:#765b8b}
+body #cart-sync[data-state="error"]{color:#9a5427}
+body #retry-cart-sync{background:#fff3e8;color:#894f20;border-color:#f3d3ab}
+
+/* Cart uses scoped selectors in its original style; override these explicitly. */
+body.cart-experience{
+  color-scheme:light;
+  --cart-bg:#faf9f7;--cart-card:#fff;--cart-line:#eae3ef;
+  --cart-ink:#2e233d;--cart-sub:#73667f;--cart-accent:#713dc7;
+  background:radial-gradient(880px 480px at 10% 0%,#f1e9fc,transparent 77%),#faf9f7;
+  color:#2e233d
+}
+.cart-experience .top{background:#fff;border-color:#eae2ee}
+.cart-experience .checkout-secure{color:#27724b;background:#edf8f1;border-color:#c4e4cf}
+.cart-experience .nav-links{color:#665979}
+.cart-experience .nav-links a:hover,.cart-experience .nav-links a:focus-visible{color:#6b34bc}
+.cart-experience .cart-hero h1{color:#2b1e3c}
+.cart-experience .cart-hero p{color:#71667f}
+.cart-experience .back-shopping{background:#fff;color:#7546b9;border-color:#d7c4ed}
+.cart-experience .eyebrow,.cart-experience .section-kicker{color:#7744bb}
+.cart-experience .checkout-steps{border-color:#e9e1ef}
+.cart-experience .checkout-steps .step{color:#8b7b9b}
+.cart-experience .step:not(:last-child)::after{background:#d9cce4}
+.cart-experience .step-number{background:#fff;color:#785d8c;border-color:#d8c4ea}
+.cart-experience .step.active,.cart-experience .step.complete{color:#4a2b69}
+.cart-experience .step.active .step-number{background:#743dc9;border-color:#743dc9;color:#fff;box-shadow:0 0 0 4px #eadef8}
+.cart-experience .step.complete .step-number{background:#e0f6e8;color:#25784d;border-color:#b3e1c4}
+.cart-experience .card{background:#fff;border:1px solid #e9e2ee;box-shadow:0 12px 31px #2411370b}
+.cart-experience .count-badge{background:#ede2fb;color:#6e3bab}
+.cart-experience .link-button{color:#8051b5}
+.cart-experience .item-list,.cart-experience .cart-product{border-color:#eae4ee}
+.cart-experience .item-symbol{background:linear-gradient(130deg,#eae0fa,#f5effe);border-color:#dfc8f1;color:#6935b3}
+.cart-experience .item-category{color:#8a5dc3}
+.cart-experience .cart-product h3,.cart-experience .item-price strong{color:#35253e}
+.cart-experience .cart-product p,.cart-experience .item-price small{color:#85768f}
+.cart-experience .quantity-picker{background:#fff;border-color:#d8c7e9}
+.cart-experience .quantity-btn{color:#613796}
+.cart-experience .quantity-btn:not(:disabled):hover{background:#f5effa}
+.cart-experience .remove-item{color:#bc4f62}
+.cart-experience .cart-footnote{color:#7c7184}
+.cart-experience .add-more{color:#6c399f;border-color:#cdb6e9}
+.cart-experience .add-more:hover{background:#f6efff}
+.cart-experience .account-gate{background:#fff;border-color:#e5d9ed}
+.cart-experience .account-gate[data-state="verified"]{background:linear-gradient(115deg,#f0faf4,#fff 70%);border-color:#b7e1c7}
+.cart-experience .verified-mark{background:#e4f8ed;border-color:#b7e1cb;color:#1d8652}
+.cart-experience .checkout-auth-panel label{color:#544061}
+.cart-experience .inline-login-row input,.cart-experience .coupon input{background:#fff;color:#362444;border-color:#d7c4e6}
+.cart-experience .inline-login-row input:focus-visible,.cart-experience .coupon input:focus-visible{outline-color:#ab7bdd}
+.cart-experience .checkout-auth-panel small,.cart-experience .auth-heading p{color:#776a82}
+.cart-experience #checkout-login-message,.cart-experience .auth-alternative{color:#7545b2}
+.cart-experience .checkout-explainer p{color:#70657b}
+.cart-experience .delivery-perks span{background:#edf9f3;border-color:#c6e7d6;color:#2b7956}
+.cart-experience .sum-row{color:#6b5c78;border-color:#ece5ef}
+.cart-experience .sum-row strong{color:#2d1f40}
+.cart-experience .discount-row strong{color:#227e59}
+.cart-experience .total{border-color:#e2d3ea;color:#30223f}
+.cart-experience .total strong{color:#6432b0}
+.cart-experience .coupon-details{border-color:#ede6f0}
+.cart-experience .coupon-details summary,.cart-experience .coupon-details[open] summary{color:#6d3baf}
+.cart-experience .primary{background:#6e3bc1;border-color:#6e3bc1}
+.cart-experience .primary:not(:disabled):hover{background:#532b9b;filter:none}
+.cart-experience .checkout-disclaimer{color:#6c6075}
+.cart-experience .payment-wallet-note{color:#895f28}
+.cart-experience #cart-sync{color:#786d82;border-color:#ece4ef}
+.cart-experience .cart-help-links{color:#756780}
+.cart-experience .cart-help-links a{color:#713cb2}
+.cart-experience .footer{background:#21172f}
+.cart-experience .mobile-checkout-dock:not([hidden]){
+  background:#fffffff5;border-color:#e4d4ee;box-shadow:0 -9px 27px #2b1c4018;
+}
+.cart-experience .mobile-total small{color:#72647b}
+.cart-experience .mobile-total strong{color:#5f2da8}
+.cart-experience .payment-methods span{background:#f9f6fc;border:1px solid #e8def0;color:#2e2150}
+
+/* Simple, accessible navigation on small screens across the shopping journey. */
+.store-mobile-links{display:none}
+@media(max-width:680px){
+  .store-mobile-links{
+    display:flex;position:fixed;bottom:0;left:0;right:0;z-index:25;
+    justify-content:space-around;align-items:center;
+    padding:6px max(8px,env(safe-area-inset-right)) calc(5px + env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left));
+    background:#fff;border-top:1px solid #e6d9ed;box-shadow:0 -7px 24px #1a102913;
+  }
+  .store-mobile-links a{flex:1;min-height:48px;text-align:center;display:flex;align-items:center;flex-direction:column;justify-content:center;font-size:10px;color:#675577;gap:1px}
+  .store-mobile-links a[aria-current="page"]{color:#713ac5;font-weight:800}
+  .store-mobile-links a span:first-child{font-size:18px;line-height:23px}
+  body:not(.cart-experience) main{padding-bottom:130px}
+  body:not(.cart-experience) .footer{padding-bottom:90px}
+  .cart-experience .mobile-checkout-dock:not([hidden]){
+    bottom:61px;z-index:26;padding-bottom:11px
+  }
+  .cart-experience main{padding-bottom:195px}
+  .cart-experience .footer{padding-bottom:92px}
+  body .main-nav{gap:10px}
+  body .top .nav-links{gap:9px;font-size:11px}
+}
+@media(prefers-reduced-motion:reduce){
+ .cart-experience .quantity-btn,.cart-experience .primary{transition:none}
+}
+/* Printable receipts remain black text on white, independent of storefront theme. */
+@media print{
+  body{background:#fff!important;color:#000!important}
+  .store-mobile-links{display:none!important}
+}
