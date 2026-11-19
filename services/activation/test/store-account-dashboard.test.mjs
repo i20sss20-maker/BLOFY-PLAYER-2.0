@@ -80,7 +80,8 @@ function browser({subs=subscriptions,subError=false}={}){
  vm.runInNewContext(js,context,{filename:'store-account.js'});
  return {elements,listeners,calls,local,session,setRecords:rows=>{records=rows}};
 }
-const tick=()=>new Promise(resolve=>setTimeout(resolve,25));
+// Wait for the async account + subscription API chain under a fully parallel CI runner.
+const tick=()=>new Promise(resolve=>setTimeout(resolve,120));
 
 test('authenticated BLOFY site shows accurate order and subscription dashboard without issuing codes',async()=>{
  const b=browser();
