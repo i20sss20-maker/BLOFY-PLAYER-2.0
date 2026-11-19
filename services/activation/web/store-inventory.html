@@ -135,6 +135,26 @@
 <div id="admin-orders" class="orders-table" role="table" aria-label="آخر 50 طلبًا"><p>جارٍ تحميل قائمة الطلبات...</p></div>
 <p class="footnote">لعرض الأكواد يجب التحقق من ملكية الطلب من رابط العميل الخاص، ولا يتم إظهار مفاتيح الوصول في لوحة الملخص. السجل يعرض آخر 50 طلبًا فقط.</p>
 </section>
+<section class="commercial-reports" id="commercial-reports" aria-labelledby="commercial-heading">
+  <div class="intro"><span>BUSINESS INSIGHTS</span><h2 id="commercial-heading">لوحة أداء المتجر</h2>
+   <p>تقارير من سجل الطلبات الحقيقي فقط. الإيراد يُحتسب للطلبات المدفوعة المؤكدة، ولا نعدّ الطلبات المعلقة دخلًا. نسبة الإتمام تخص الطلبات المنشأة، وليست نسبة تحول زيارات الموقع.</p></div>
+  <div class="panel">
+   <div class="report-toolbar">
+     <label for="commercial-period">الفترة <select id="commercial-period">
+       <option value="7">آخر 7 أيام</option><option value="30" selected>آخر 30 يومًا</option><option value="90">آخر 90 يومًا</option>
+     </select></label>
+     <button type="button" id="commercial-refresh" class="btn-outline">تحديث التقرير</button>
+     <button type="button" id="commercial-export" class="btn-outline" disabled>تصدير ملخص CSV</button>
+   </div>
+   <div id="commercial-metrics" class="commercial-metrics" aria-live="polite"><p>جارٍ قراءة بيانات المبيعات...</p></div>
+   <div class="report-chart-head"><h3>الإيراد المؤكد يوميًا</h3><span>ريال سعودي</span></div>
+   <div id="commercial-trend" class="commercial-trend" aria-label="رسم بياني لإيراد الطلبات المدفوعة يوميًا" role="img"></div>
+   <h3>توزيع الطلبات المدفوعة حسب نوع الطلب</h3>
+   <p class="report-disclaimer">الطلبات متعددة المنتجات تظهر تحت «سلة متعددة المنتجات»، بدون تخمين توزيع إيرادها على باقات منفردة.</p>
+   <div id="commercial-products" class="commercial-product-table"></div>
+   <output id="commercial-notice" role="status" aria-live="polite"></output>
+  </div>
+</section>
 <section class="admin-sales" aria-labelledby="sales-heading">
  <div class="intro"><span>STORE ANALYTICS</span><h2 id="sales-heading">مبيعات BLOFY والعروض</h2><p>إحصاءات الطلبات لآخر 90 يومًا؛ تظهر عمليات الدفع المؤكدة فقط ضمن الإيرادات، بما فيها عرض اشتراكين بـ200 ريال.</p></div>
  <div class="sales-highlights" id="sales-highlights"><div class="notice">جارٍ تحميل إحصاءات المبيعات...</div></div>
