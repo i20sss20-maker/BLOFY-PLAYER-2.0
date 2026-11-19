@@ -337,6 +337,14 @@ async function serveStorefront(res, product = null, offer = false) {
   res.end(file);
 }
 
+async function serveStoreAssetFile(res,name,type) {
+  const file=await readFile(new URL('../web/'+name,import.meta.url));
+  res.writeHead(200,{
+    'content-type':type,'content-length':file.length,
+    'cache-control':'public,max-age=900',
+    'x-content-type-options':'nosniff'
+  });res.end(file);
+}
 async function serveStoreShowcaseScript(res) {
   const file=await readFile(new URL('../web/store-showcase.js',import.meta.url));
   res.writeHead(200,{
@@ -1012,6 +1020,10 @@ const server = http.createServer(async (req, res) => {
     if(['GET','HEAD'].includes(req.method)&&
        ['/store/cart.css','/store/cart.js','/store/order-tracking.js','/store/account.js'].includes(requestUrl.pathname))
       return await serveCartAsset(res,requestUrl.pathname.slice('/store/'.length));
+    if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/market.css')
+      return await serveStoreAssetFile(res,'store-market.css','text/css; charset=utf-8');
+    if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/market.js')
+      return await serveStoreAssetFile(res,'store-market.js','application/javascript; charset=utf-8');
     if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/showcase.js')
       return await serveStoreShowcaseScript(res);
     if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/offers.js')
