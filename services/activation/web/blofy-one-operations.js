@@ -7,6 +7,48 @@
   const $=id=>document.getElementById(id);
   if(!$('one-sources'))return;
 
+  // Owner-only database health: request on expansion, never poll or run
+  // diagnostic queries for ordinary visitors or while the panel is closed.
+  const dbPanel=$('one-db-audit');
+  const dbFields={
+    connections:$('one-db-connections'),activeQueries:$('one-db-active'),
+    lockWaiters:$('one-db-waiting'),longestTransactionSeconds:$('one-db-longest'),
+    deadlocksTotal:$('one-db-deadlocks')
+  };
+  let dbBusy=false;
+  async function refreshDatabaseHealth(){
+    if(dbBusy||!dbPanel?.open)return;
+    dbBusy=true;
+    const status=$('one-db-status');
+    status.textContent='جارٍ قراءة مؤشرات PostgreSQL من الخادم…';
+    try{
+      const response=await fetch('/api/v1/admin/store/database-health',{
+        credentials:'same-origin',cache:'no-store',
+        headers:{accept:'application/json'}
+      });
+      const data=await response.json().catch(()=>({}));
+      if(!response.ok||data.ok!==true||!data.available)throw Error(
+        response.status===401||response.status===403?'صلاحية إدارة مطلوبة':
+        'لا يمكن قراءة المؤشرات الآن');
+      for(const [key,field] of Object.entries(dbFields)){
+        if(!field)continue;
+        const value=Number(data[key]);
+        field.textContent=Number.isFinite(value)&&value>=0?
+          value.toLocaleString('en-US')+(key==='longestTransactionSeconds'?' ثانية':''):'—';
+      }
+      status.textContent=data.attention?
+        '⚠ توجد حاليًا استعلامات تنتظر أقفالًا أو معاملة تجاوزت دقيقتين. افحص السبب في قاعدة البيانات.':
+        '✓ لا تظهر مؤشرات انتظار أقفال أو معاملات طويلة في هذه اللقطة. عداد التعارضات تراكمي وليس حادثة نشطة.';
+    }catch(error){
+      status.textContent='تعذّر فحص PostgreSQL: '+error.message+
+        '. لا تفترض استقرار الخدمة حتى تعود المؤشرات.';
+    }finally{dbBusy=false;}
+  }
+  if(dbPanel){
+    dbPanel.addEventListener('toggle',()=>{if(dbPanel.open)void refreshDatabaseHealth();});
+    $('one-db-refresh')?.addEventListener('click',()=>void refreshDatabaseHealth());
+  }
+
   const sets={
     sources:{button:$('one-sources-refresh'),status:$('one-sources-status'),items:[],loaded:false},
     storage:{button:$('one-storage-refresh'),status:$('one-storage-status')},

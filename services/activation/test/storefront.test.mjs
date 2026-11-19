@@ -14,7 +14,8 @@ test('Exactly two BLOFY subscription products; no app/download offers',()=>{
  assert.match(html,/https:\/\/wa\.me\/966568941484/);
  assert.match(html,/href="\/privacy"/);
  assert.match(html,/href="\/store\/contact"/);
- assert.doesNotMatch(html,/\/downloads|تحميل التطبيق|BLOFY BUSINESS|href="\/pay"/);
+ assert.match(html,/href="\/downloads"/,'official downloads linked in navigation');
+ assert.doesNotMatch(html,/BLOFY BUSINESS|href="\/pay"/);
 });
 test('Public catalog prices use exact server values for 1, 3, 6 and 12 months',()=>{
  const plans=publicStorePlans();

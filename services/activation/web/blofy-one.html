@@ -103,6 +103,22 @@
       </div>
     </div>
   </section>
+  <details id="one-db-audit" class="one-db-audit" aria-labelledby="one-db-audit-title">
+    <summary id="one-db-audit-title">🛡️ تشخيص قاعدة بيانات BLOFY — قراءة فقط (اضغط للعرض)</summary>
+    <div class="one-db-audit-content">
+      <p>يرصد ضغط الاتصالات وانتظار أقفال PostgreSQL. أعداد التعارضات والأحجام مؤشرات تراكمية منذ تصفير إحصائيات القاعدة، ولا تعني وحدها وجود عطل الآن.</p>
+      <div class="one-db-stats" aria-label="مقاييس PostgreSQL الحالية">
+        <span>اتصالات: <strong id="one-db-connections">—</strong></span>
+        <span>استعلامات نشطة: <strong id="one-db-active">—</strong></span>
+        <span>بانتظار الأقفال: <strong id="one-db-waiting">—</strong></span>
+        <span>أطول معاملة: <strong id="one-db-longest">—</strong></span>
+        <span>تعارضات تراكمية: <strong id="one-db-deadlocks">—</strong></span>
+      </div>
+      <p id="one-db-status" role="status" aria-live="polite">افتح القسم لقراءة الحالة من السيرفر.</p>
+      <button type="button" id="one-db-refresh">↻ تحديث مؤشرات قاعدة البيانات</button>
+      <p>إذا ظهرت تعارضات متكررة أو خطأ مساحة الذاكرة المشتركة، راجع سجلات Postgres وخطة معالجة الأقفال قبل تغيير إعدادات الذاكرة أو إعادة تشغيل الخدمة.</p>
+    </div>
+  </details>
   <section class="one-quick-stats" aria-label="ملخص حالة الأعمال">
     <div class="one-quick-stat"><span class="one-quick-icon">▣</span><div><small>أجهزة العملاء</small><strong id="one-dashboard-customers">—</strong></div><span class="one-mini-indicator">PLAYER</span></div>
     <div class="one-quick-stat"><span class="one-quick-icon">♧</span><div><small>أكواد STREAM المسجلة</small><strong id="one-dashboard-codes">—</strong></div><span class="one-mini-indicator">STREAM</span></div>
