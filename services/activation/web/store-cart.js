@@ -489,6 +489,57 @@
      message('تعذر حساب السعر أو الكوبون: '+err.message+'. لم يتم بدء أي عملية دفع.');
    }
  }
+ async function claimFreeTrialFromCart(){
+   const trial=trialLine();
+   if(!trial||!trialReady)return;
+   creating=true;updateCheckoutButton();
+   message('جارٍ حجز تجربتك من المخزون المجاني، بدون استخدام بوابة الدفع...');
+   try{
+     const response=await fetch('/api/v1/store/trials/claim',{
+       method:'POST',credentials:'same-origin',cache:'no-store',
+       headers:{'content-type':'application/json','x-blofy-trial':'1',accept:'application/json'},
+       body:JSON.stringify({sku:trial.sku})
+     });
+     const result=await response.json().catch(()=>({}));
+     if(!response.ok||result.ok!==true||typeof result.code!=='string'||
+        result.channel!==(trial.sku==='trial-stream-1d'?'app':'xtream')){
+       const problem=result?.error||'trial_claim_unavailable';
+       // If the verified customer already claimed the *other* channel,
+       // no second trial can be granted; explain without inventing success.
+       throw Error(problem);
+     }
+     $('trial-cart-code').textContent=result.code;
+     $('trial-cart-info').textContent=result.alreadyClaimed?
+       'تم استرجاع تجربتك السابقة. مدة التجربة لا تبدأ من جديد.':
+       'مدة التجربة يوم واحد من أول تفعيل ناجح، وليست من وقت إضافتها للسلة.';
+     $('trial-cart-xtream').hidden=result.channel!=='xtream';
+     $('trial-cart-result').hidden=false;
+     items=items.filter(item=>!trialSku(item.sku));
+     save();
+     await refresh();
+     message(items.length?
+       'تم استلام التجربة المجانية. الباقات المدفوعة باقية في سلتك؛ أكمل دفعها بشكل منفصل.':
+       '✓ تمت التجربة المجانية بسعر 0 ريال. لم تبدأ أي عملية دفع.');
+     $('trial-cart-result').scrollIntoView({behavior:'smooth',block:'nearest'});
+   }catch(error){
+     const explanations={
+       trial_login_required:'سجّل الدخول بالبريد المؤكّد قبل استلام التجربة.',
+       trial_out_of_stock:'مخزون التجارب نفد؛ لم نحجز كودًا.',
+       trial_daily_quota_reached:'اكتملت حصة التجارب لهذا اليوم.',
+       trial_rate_limited:'عدد محاولات مرتفع؛ حاول لاحقًا.',
+       trials_unavailable:'خدمة التجارب غير متاحة حاليًا.',
+       trial_code_unavailable:'الكود غير متاح للاسترجاع حاليًا؛ تواصل مع الدعم.'
+     };
+     message(explanations[error.message]||
+       'تعذر التأكد من التسليم. افتح صفحة التجربة لاسترجاع كودك قبل إعادة المحاولة.');
+   }finally{creating=false;updateCheckoutButton();}
+ }
+ $('trial-cart-copy').addEventListener('click',async()=>{
+   const code=$('trial-cart-code').textContent;
+   if(!code)return;
+   try{await navigator.clipboard.writeText(code);message('تم نسخ كود التجربة.');}
+   catch(_){message('حدد الكود الظاهر لنسخه يدويًا.');}
+ });
  async function checkout(){
    if(!signedIn){
      $('auth-gate').scrollIntoView({behavior:'smooth',block:'center'});
@@ -496,8 +547,10 @@
      message('أدخل بريدك واضغط «إرسال الرمز» لإكمال الطلب في نفس الصفحة.');
      return;
    }
-   if(!cloudSynced){message('سلتك لم تُحفظ بعد في الحساب. تأكد من اتصالك قبل الدفع.');return;}
-   if(!ready||creating||paymentOpen||!pendingChecked||!quoted||!items.length)return;
+   if(!cloudSynced){message('سلتك لم تُحفظ بعد في الحساب. تأكد من اتصالك قبل الاستلام.');return;}
+   if(creating||paymentOpen||!pendingChecked||!quoted||!items.length)return;
+   if(trialLine()){await claimFreeTrialFromCart();return;}
+   if(!ready||!paidLines().length)return;
    creating=true;$('checkout').disabled=true;message('جارٍ تجهيز طلبك...');
    try{
      const payload=body();
