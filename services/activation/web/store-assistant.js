@@ -108,15 +108,15 @@
   busy=true;if(sendButton)sendButton.disabled=true;
   add(question,true);input.value='';
   try{
-   if(generative&&!guardedQuestion(question)&&!answer(question).links?.some(([title,href])=>href==='/store/contact')){
+   const guided=answer(question);
+   if(generative&&!guardedQuestion(question)&&!guided.text.startsWith('لأمانك')){
     try{
      const reply=await generate(question);
      add(reply,false,[['شوف الباقات','/#products'],['تواصل مع الدعم','/store/contact']]);
      return;
     }catch(_){ /* Fall back to verified store help without implying live AI succeeded. */ }
    }
-   const result=answer(question);
-   add(result.text,false,result.links||[]);
+   add(guided.text,false,guided.links||[]);
   }finally{
    busy=false;if(sendButton)sendButton.disabled=false;input.focus();
   }
