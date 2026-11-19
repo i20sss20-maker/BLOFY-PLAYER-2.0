@@ -35,7 +35,7 @@ test('visual repair is isolated to CSS and leaves existing checkout intact',()=>
  assert.match(homepage,/data-cart-add="stream"/);
  assert.match(homepage,/data-cart-add="xtream"/);
  assert.match(homepage,/id="bundle-add-cart"/);
- assert.match(homepage,/\/store\/visual\.css\?v=20261119-2/);
+ assert.match(homepage,/\/store\/visual\.css\?v=20261119-3/);
  const server=readFileSync(new URL('../src/server.mjs',import.meta.url),'utf8');
  assert.match(server,/serveStoreAssetFile\(res,'store-visual\.css','text\/css; charset=utf-8'\)/);
 });
