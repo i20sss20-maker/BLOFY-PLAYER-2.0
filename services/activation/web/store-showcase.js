@@ -41,7 +41,7 @@
       body.append(category,title,description,footer);
       card.append(art,body);root.append(card);
     }
-    section.hidden=!root.children.length;
+    section.hidden=!root.children.length||section.dataset.merchDisabled==='true';
     document.dispatchEvent(new Event('blofy:showcase-ready'));
   })
   .catch(()=>{section.hidden=true;});
