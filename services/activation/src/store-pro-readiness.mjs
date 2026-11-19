@@ -32,13 +32,19 @@ export function createStoreProReadinessHandlers({pool,json,authorizeAdmin,env=pr
   const counts={customers:null,optedInMarketing:null,possibleAbandonedCarts:null,
     pendingOrders:null,failedOrders:null,paidOrders:null,reminderEmailsAccepted:null};
   if(schema.customers){
-   const x=(await pool.query(
-    'SELECT COUNT(*)::int AS customers,'+
-    'COUNT(*) FILTER (WHERE marketing_opt_in=TRUE)::int AS marketing '+
-    'FROM blofy_store_customers'
-   )).rows[0]||{};
+   // Migration may not have run yet when an admin opens the panel first.
+   const migration=(await pool.query(
+    "SELECT EXISTS (SELECT 1 FROM information_schema.columns "+
+    "WHERE table_schema='public' AND table_name='blofy_store_customers' "+
+    "AND column_name='marketing_opt_in') AS available"
+   )).rows[0]?.available===true;
+   const sql=migration?
+     'SELECT COUNT(*)::int AS customers,'+
+     'COUNT(*) FILTER (WHERE marketing_opt_in=TRUE)::int AS marketing FROM blofy_store_customers':
+     'SELECT COUNT(*)::int AS customers FROM blofy_store_customers';
+   const x=(await pool.query(sql)).rows[0]||{};
    counts.customers=Number(x.customers||0);
-   counts.optedInMarketing=Number(x.marketing||0);
+   counts.optedInMarketing=migration?Number(x.marketing||0):null;
   }
   if(schema.carts&&schema.customers&&schema.owners&&schema.orders){
    const x=(await pool.query(
