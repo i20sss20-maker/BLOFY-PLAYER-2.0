@@ -32,6 +32,8 @@ function redactPrivate(input){
 export function createStoreAssistantHandlers({json,readJson,requestClientKey,env=process.env,fetchImpl=globalThis.fetch}){
  const buckets=new Map();
  const enabled=assistantEnabled(env);
+ const maxPerDay=Math.min(1000,Math.max(1,Number(env.BLOFY_STORE_AI_DAILY_LIMIT||50)||50));
+ let aiDay='',aiCount=0;
  return async function handler(req,res,url){
   if(url.pathname!=='/api/v1/store/assistant')return false;
   if(req.method!=='POST'){json(res,405,{error:'method_not_allowed'});return true;}
@@ -46,7 +48,11 @@ export function createStoreAssistantHandlers({json,readJson,requestClientKey,env
   const input=await readJson(req),message=safeGuideMessage(input?.message);
   if(!message){json(res,400,{error:'assistant_message_invalid'});return true;}
   const fallback=guideReply(message);
-  if(!enabled){json(res,200,{ok:true,...fallback,aiEnabled:false});return true;}
+  if(!enabled||input?.allowExternalAi!==true){json(res,200,{ok:true,...fallback,aiEnabled:enabled});return true;}
+  const today=new Date(now).toISOString().slice(0,10);
+  if(today!==aiDay){aiDay=today;aiCount=0;}
+  if(aiCount>=maxPerDay){json(res,200,{ok:true,...fallback,aiEnabled:true,dailyLimitReached:true});return true;}
+  aiCount++;
   // OpenAI never receives identity, account status, codes, order references or payment details.
   // Do not switch to an LLM if the input contains anything resembling a payment credential.
   const privateInput=/(?:(?:\d[ -]*?){13,19})/.test(message)||/\b(?:sk-|ghp_|Bearer )\S+/i.test(message);
