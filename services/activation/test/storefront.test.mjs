@@ -122,14 +122,14 @@ test('Bulk code generation commits all 25 vouchers atomically without exposing s
  assert.equal(response.data.items,undefined);
 });
 
-test('STRONG 8K figures, separated product benefits and original banners are displayed without changing checkout',()=>{
+test('Market storefront preserves separated product benefits and trusted checkout with original imagery',()=>{
  const premium=readFileSync(new URL('../web/store-premium.css',import.meta.url),'utf8');
  const server=readFileSync(new URL('../src/server.mjs',import.meta.url),'utf8');
  const info=readFileSync(new URL('../src/store-info-pages.mjs',import.meta.url),'utf8');
- assert.match(html,/اشتراك <span dir="ltr">STRONG 8K<\/span>/);
- assert.match(html,/50,000\+/);
- assert.match(html,/185,000\+/);
- assert.match(html,/class="visual-hero"/);
+ assert.match(html,/id="hero-title"/);
+ assert.match(html,/class="market-slide" data-slide/);
+ assert.match(html,/id="market-categories-title"/);
+ assert.match(html,/class="market-service-strip"/);
  assert.match(html,/class="visual-feature-grid"/);
  assert.match(html,/\/store\/media\/strong8k\.jpg/);
  assert.match(html,/\/store\/media\/player\.jpg/);
@@ -137,7 +137,7 @@ test('STRONG 8K figures, separated product benefits and original banners are dis
  assert.match(html,/تنقل منظم بين المواسم والحلقات/);
  assert.match(html,/بحث داخل مكتبة المحتوى والمفضلة/);
  assert.match(html,/التنزيلات والمساعدة الذكية في الإصدارات التي تدعمها/);
- assert.match(html,/غير مدققة بشكل مستقل/);
+ assert.match(html,/بعد التحقق من الدفع/);
  assert.match(premium,/\.campaign-banner/);
  assert.match(premium,/\.benefit-panels/);
  assert.match(server,/store-strong8k-banner\.svg/);
@@ -147,7 +147,7 @@ test('STRONG 8K figures, separated product benefits and original banners are dis
 });
 
 test('Image-first storefront presents banners above checkout and keeps text secondary',()=>{
- const firstBanner=html.indexOf('class="visual-hero"');
+ const firstBanner=html.indexOf('class="market-slide"');
  const productStart=html.indexOf('id="products"');
  const featureGallery=html.indexOf('class="visual-feature-grid"');
  assert.ok(firstBanner>0&&firstBanner<productStart,'lead banner must appear before products');
@@ -208,7 +208,7 @@ test('Campaign carousel, promo graphic and individual coupon handling do not rep
  const backend=readFileSync(new URL('../src/store-geidea-checkout.mjs',import.meta.url),'utf8');
  assert.doesNotThrow(()=>new Function(js));
  assert.match(html,/id="blofy-banners"/);
- assert.equal((html.match(/<div data-slide(?: hidden)?>/g)||[]).length,3);
+ assert.equal((html.match(/<div class="market-slide" data-slide(?: hidden)?>/g)||[]).length,3);
  assert.match(html,/data-prev-slide/);
  assert.match(html,/data-next-slide/);
  assert.match(html,/store\/media\/bundle\.svg/);
