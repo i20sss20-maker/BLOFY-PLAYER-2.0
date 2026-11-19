@@ -17,7 +17,8 @@
   let exactCode = null;
   let details = null;
   let credentials = null;
-  let hideTimer = null;
+  const completeHost=raw=>{try{const u=new URL(String(raw));return u.protocol==='https:'
+    ?'https://'+u.hostname+':443'+(u.pathname==='/'?'':u.pathname):u.origin;}catch{return String(raw||'');}};
   let serial = 0;
 
   const normalize = value => String(value ?? '').trim().toUpperCase()
@@ -37,8 +38,6 @@
     stateBox.classList.toggle('is-error', error);
   }
   function hideCredentials() {
-    window.clearTimeout(hideTimer);
-    hideTimer = null;
     credentials = null;
     secretsBox.hidden = true;
     fields.forEach(id => { $(id).textContent = ''; });
@@ -152,7 +151,7 @@
       const c = result.credentials || {};
       if (!c.serverUrl || !c.username || !c.password || result.created !== false ||
           result.subscriptionUnchanged !== true) throw Error('رد غير مكتمل من السيرفر، لم تعرض أي بيانات.');
-      credentials = { serverUrl:String(c.serverUrl),username:String(c.username),password:String(c.password) };
+      credentials = { serverUrl:completeHost(c.serverUrl),username:String(c.username),password:String(c.password) };
       $('one-legacy-host').textContent = credentials.serverUrl;
       $('one-legacy-user').textContent = credentials.username;
       $('one-legacy-password').textContent = credentials.password;
@@ -162,7 +161,7 @@
       input.value = '';
       info.hidden = true;
       setStatus('تم استخراج Xtream من نفس الاشتراك. أخفِ البيانات بعد نسخها أو عند الانتهاء.');
-      hideTimer = window.setTimeout(hideCredentials, 90000);
+      // Stay visible until explicitly hidden, next lookup, or page close.
     } catch(e) {
       if (serial===version) setStatus(e.message,true);
     } finally {
@@ -174,19 +173,13 @@
     try {
       await navigator.clipboard.writeText('Host: '+credentials.serverUrl+'\nUsername: '+
         credentials.username+'\nPassword: '+credentials.password);
-      setStatus('تم نسخ بيانات Xtream. تُخفى البيانات المعروضة تلقائيًا.');
+      setStatus('تم نسخ بيانات Xtream. تظل ظاهرة حتى تخفيها أو تغادر الصفحة.');
     } catch {
       setStatus('تعذر النسخ تلقائيًا. انسخ القيم مباشرة من الحقول.',true);
     }
   });
   $('one-legacy-hide').addEventListener('click', hideCredentials);
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-      hideCredentials();
-      clearState();
-      input.value='';
-    }
-  });
+  // Switching browser tabs must not discard recovered credentials.
   window.addEventListener('pagehide', () => {
     hideCredentials();
     clearState();

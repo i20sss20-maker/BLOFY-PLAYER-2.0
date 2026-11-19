@@ -80,7 +80,7 @@
       'تم إصدار كود واحد لنفس حساب Xtream ونفس الانتهاء؛ لم تُنشأ مدة اشتراك جديدة.' :
       'كود الاشتراك المسترجع. لم يتم تمديد الصلاحية أو تغيير بيانات Xtream.';
     secretBox.hidden=false;
-    secretTimer=window.setTimeout(clearSecret,90000);
+    // Remain visible until manual hide or page close.
     secretBox.scrollIntoView({behavior:'smooth',block:'center'});
   }
   async function api(path,{method='GET',body}={}){
@@ -373,7 +373,7 @@
     if(!secretValue)return;
     try{
       await navigator.clipboard.writeText(secretValue);
-      setStatus('نُسخ كود العميل. تُخفى النسخة المعروضة تلقائيًا بعد 90 ثانية.');
+      setStatus('نُسخ كود العميل. تظل النسخة المعروضة حتى تخفيها أو تغادر الصفحة.');
     }catch{setStatus('تعذر النسخ الآلي. انسخ الكود من الحقل مؤقتًا.',true);}
   });
   $('one-stream-secret-hide').addEventListener('click',clearSecret);
@@ -388,7 +388,7 @@
     field.scrollIntoView({behavior:'smooth',block:'center'});
     setStatus('يتم فحص نفس الكود في قسم استخراج Xtream داخل BLOFY ONE.');
   });
-  document.addEventListener('visibilitychange',()=>{if(document.hidden)clearSecret();});
+  // The operator can switch tabs to copy/paste without losing the code.
   window.addEventListener('pagehide',clearSecret);
   $('one-refresh')?.addEventListener('click',()=>void refresh());
   void refresh();

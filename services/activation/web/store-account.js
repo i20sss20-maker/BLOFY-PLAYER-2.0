@@ -11,11 +11,13 @@
  const node=(tag,value)=>{const n=document.createElement(tag);if(value!==undefined)n.textContent=value;return n;};
  const money=n=>(Number(n)/100).toLocaleString('ar-SA')+' ر.س';
  let orders=[],receiptTimer=null,receiptGeneration=0,returnChecked=false,paymentReceiptGeneration=0;
- let privateLogin=null,privateLoginTimer=null;
+ let privateLogin=null;
  function hidePrivateLogin(){
-  if(privateLoginTimer!==null)clearTimeout(privateLoginTimer);
-  privateLoginTimer=null;privateLogin?.remove();privateLogin=null;
+  privateLogin?.remove();privateLogin=null;
  }
+  const completeHost=raw=>{try{const u=new URL(String(raw));return u.protocol==='https:'
+    ?'https://'+u.hostname+':443'+(u.pathname==='/'?'':u.pathname):u.origin;}catch{return String(raw||'');}};
+
  function clearPaymentReceipt(){
   paymentReceiptGeneration++;
   $('payment-receipt').hidden=true;
@@ -223,7 +225,7 @@
    if(!payload.ok||!payload.subscriptionUnchanged||!c.serverUrl||!c.username||!c.password||!c.m3uUrl)
     throw Error('credential_not_recoverable');
    const secret=node('div');secret.className='code-card';
-   for(const [name,value] of [['Host',c.serverUrl],['Port','443'],['Username',c.username],
+   for(const [name,value] of [['Host / رابط السيرفر الكامل',completeHost(c.serverUrl)],['Username',c.username],
      ['Password',c.password],['M3U',c.m3uUrl]]){
     const nameNode=node('small',name),text=node('code',String(value));
     text.setAttribute('dir','ltr');secret.append(nameNode,text);
@@ -231,8 +233,8 @@
    const copy=node('button','نسخ جميع بيانات Xtream');copy.className='secondary';copy.type='button';
    copy.addEventListener('click',async()=>{
     try{
-     await navigator.clipboard.writeText('Host: '+c.serverUrl+
-      '\nPort: 443\nUsername: '+c.username+
+     await navigator.clipboard.writeText('Host: '+completeHost(c.serverUrl)+
+      '\nUsername: '+c.username+
       '\nPassword: '+c.password+'\nM3U: '+c.m3uUrl);
      copy.textContent='تم النسخ ✓';
     }catch{copy.textContent='تعذر النسخ';}
@@ -240,7 +242,7 @@
    const hide=node('button','إخفاء البيانات');hide.className='secondary';hide.type='button';
    hide.addEventListener('click',hidePrivateLogin);
    secret.append(copy,hide);article.append(secret);
-   privateLogin=secret;privateLoginTimer=setTimeout(hidePrivateLogin,90000);
+   privateLogin=secret; // Manual hide or page exit only.
    tell('هذه بيانات اشتراكك الفعّال؛ تاريخ الانتهاء لم يتغير.');
   }catch(e){tell(statusMessage(e));}
   finally{trigger.disabled=false;}
@@ -404,9 +406,7 @@
     root.append(box);
    }
    $('receipt').scrollIntoView({behavior:'smooth'});
-   receiptTimer=setTimeout(()=>{
-    clearReceipt();tell('تم إخفاء الأكواد بعد 90 ثانية. يمكنك فتح تفاصيل الطلب مجددًا عند الحاجة.');
-   },90000);
+   // Verified paid-order codes stay visible until the customer hides the receipt.
   }catch(err){if(generation===receiptGeneration)tell(statusMessage(err));}
  }
  $('request-form').addEventListener('submit',async event=>{
@@ -488,9 +488,7 @@
  $('payment-receipt-close').addEventListener('click',clearPaymentReceipt);
  $('payment-receipt-print').addEventListener('click',()=>{if(!$('payment-receipt').hidden)window.print();});
  $('close-receipt').addEventListener('click',clearReceipt);
- document.addEventListener('visibilitychange',()=>{
-  if(document.visibilityState==='hidden'){clearReceipt();clearPaymentReceipt();hidePrivateLogin();}
- });
+ // Do not erase paid codes or recovered credentials on temporary tab switch.
  window.addEventListener('pagehide',()=>{clearReceipt();clearPaymentReceipt();hidePrivateLogin();});
  if(returnToCart)$('checkout-return').hidden=false;
  // An existing guest token can be transported in the URL fragment, never the server logs.
