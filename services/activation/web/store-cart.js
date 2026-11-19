@@ -455,6 +455,8 @@
        if(!response.ok)throw Error('trial_stock_unavailable');
        availability=await response.json();
        const p=(availability.products||[]).find(x=>x.sku===trial.sku);
+       if(p&&(p.priceMinor!==0||p.currency!=='SAR'||p.durationDays!==1))
+         throw Error('trial_quote_invalid');
        trialAvailable=Math.max(0,Number(p?.available)||0);
        trialReady=availability.enabled===true&&trialAvailable>0;
      }else{trialReady=false;trialAvailable=0;}
