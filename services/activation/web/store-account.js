@@ -258,7 +258,7 @@
    orders=Array.isArray(data.orders)?data.orders:[];
    $('account-email').textContent=data.email||'';
    $('reminder-optin').checked=data.alertsOptIn===true;
-   $('marketing-optin').checked=data.marketingOptIn===true;
+   if($('marketing-optin'))$('marketing-optin').checked=data.marketingOptIn===true;
    updateOrderOverview();
    renderOrders();
    view(true);tell('حسابك جاهز.');
@@ -391,7 +391,7 @@
   }catch(err){this.checked=!this.checked;$('reminder-status').textContent=statusMessage(err);}
   finally{this.disabled=false;}
  });
- $('marketing-optin').addEventListener('change',async function(){
+ $('marketing-optin')?.addEventListener('change',async function(){
   this.disabled=true;
   try{
    const response=await api('/marketing-preferences',{marketingOptIn:this.checked});
