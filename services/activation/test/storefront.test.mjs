@@ -51,7 +51,7 @@ test('Store uses one blue brand system, original product artwork, trial and deta
  assert.match(html,/href="\/products\/stream"/);
  assert.match(html,/href="\/products\/xtream"/);
  assert.doesNotMatch(html,/href="\/store\/trial"/);
- assert.match(html,/يوجد تجربة/);
+ assert.doesNotMatch(html,/يوجد تجربة/);
  assert.doesNotMatch(html,/ادفع [0-9]+ ر\.س بجيديا/);
  assert.match(html,/اشترك الآن/);
 });
