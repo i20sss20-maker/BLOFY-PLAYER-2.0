@@ -83,7 +83,7 @@ test('active code may use existing one-time admin relogin without resetting subs
 test('admin-only pagination and search use parameterized query without plaintext bulk output',async()=>{
  const f=fixture();
  const res={};
- assert.equal(await f.handle({},res,new URL('https://blofyplayer.com/api/v1/admin/store/codes/register?kind=trial&state=delivered&q=0551234567')),true);
+ assert.equal(await f.handle({method:'GET'},res,new URL('https://blofyplayer.com/api/v1/admin/store/codes/register?kind=trial&state=delivered&q=0551234567')),true);
  assert.equal(res.status,200);
  assert.equal(res.payload.matched,1);
  assert.equal(res.payload.items[0].kind,'trial');
@@ -99,7 +99,7 @@ test('admin-only pagination and search use parameterized query without plaintext
 test('owner-only reveal verifies stored code and writes an audit event without secrets',async()=>{
  const f=fixture();
  const res={};
- const handled=await f.handle({headers:{},body:{voucherId:id,purpose:'customer_support'}},
+ const handled=await f.handle({method:'POST',headers:{},body:{voucherId:id,purpose:'customer_support'}},
   res,new URL('https://blofyplayer.com/api/v1/admin/store/codes/reveal'));
  assert.equal(handled,true);
  assert.equal(res.status,200);
@@ -114,16 +114,16 @@ test('owner-only reveal verifies stored code and writes an audit event without s
 test('non-admin cannot list customer details or reveal vouchers',async()=>{
  const f=fixture(false);
  const res={};
- assert.equal(await f.handle({},res,
+ assert.equal(await f.handle({method:'GET'},res,
   new URL('https://blofyplayer.com/api/v1/admin/store/codes/register')),true);
- assert.equal(await f.handle({body:{voucherId:id,purpose:'customer_support'}},res,
+ assert.equal(await f.handle({method:'POST',body:{voucherId:id,purpose:'customer_support'}},res,
   new URL('https://blofyplayer.com/api/v1/admin/store/codes/reveal')),true);
  assert.equal(f.calls.length,0);
 });
 test('invalid owner search filters are rejected before touching database',async()=>{
  const f=fixture();
  const res={};
- await f.handle({},res,new URL(
+ await f.handle({method:'GET'},res,new URL(
   'https://blofyplayer.com/api/v1/admin/store/codes/register?kind=account_password'));
  assert.equal(res.status,400);
  assert.equal(f.calls.length,0);
@@ -141,7 +141,7 @@ test('one visible code register includes paid/free/manual lookup and re-login ma
  assert.match(script,/\/api\/v1\/admin\/store\/codes\/reveal/);
  assert.match(script,/blofy-one:manage-code/);
  assert.match(script,/codeBox\.textContent=''/);
- assert.match(script,/customer\.phone/);
+ assert.match(script,/customer\?\.phone/);
  assert.match(css,/one-register-detail-fields/);
  assert.doesNotThrow(()=>new Function(center));
  assert.doesNotThrow(()=>new Function(script));
