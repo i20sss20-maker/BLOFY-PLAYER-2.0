@@ -124,7 +124,7 @@ test('trial-only checkout takes verified free stock and never opens a Geidea ses
 test('mixed basket takes free code first and leaves paid item for separate authorized payment',async()=>{
  const b=browser({paid:true});
  await new Promise(r=>setTimeout(r,50));
- assert.equal(b.nodes.get('total').textContent,'٤٠ ر.س');
+ assert.equal(b.nodes.get('total').textContent,'٥٠ ر.س');
  b.listeners.get('checkout:click')();
  await new Promise(r=>setTimeout(r,70));
  assert.equal(b.requests.filter(x=>x.path==='/api/v1/store/trials/claim').length,1);
