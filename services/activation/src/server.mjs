@@ -328,6 +328,8 @@ async function serveStorefront(res, product = null, offer = false) {
     'content-security-policy': PUBLIC_ANALYTICS_CSP
       .replace("script-src 'self' 'unsafe-inline' https://www.googletagmanager.com",
         "script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.ksamerchant.geidea.net")
+      .replace("img-src 'self' data: https://www.google-analytics.com https://region1.google-analytics.com",
+        "img-src 'self' data: https:")
       .replace("connect-src 'self' https://www.google-analytics.com https://region1.google-analytics.com https://www.googletagmanager.com",
         "connect-src 'self' https://www.google-analytics.com https://region1.google-analytics.com https://www.googletagmanager.com https://www.ksamerchant.geidea.net https://api.ksamerchant.geidea.net")
       + "; frame-src https://www.ksamerchant.geidea.net; base-uri 'none'; form-action 'none'"
