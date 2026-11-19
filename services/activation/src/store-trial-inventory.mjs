@@ -11,7 +11,7 @@ export const TRIAL_PLANS=Object.freeze([
  {sku:'trial-stream-1d',channel:'app',name:'تجربة BLOFY STREAM',days:1},
  {sku:'trial-xtream-1d',channel:'xtream',name:'تجربة Xtream',days:1}
 ]);
-const publicPlans=()=>TRIAL_PLANS.map(({sku,channel,name,days})=>({sku,channel,name,durationDays:days}));
+const publicPlans=()=>TRIAL_PLANS.map(({sku,channel,name,days})=>({sku,channel,name,durationDays:days,priceMinor:0,currency:'SAR'}));
 const ALLOWED_ORIGINS=new Set([
  'https://blofyplayer.com','https://www.blofyplayer.com',
  'https://api.blofyplayer.com'
