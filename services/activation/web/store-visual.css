@@ -459,3 +459,6 @@ body[data-blofy-storefront] .market-featured-offer .offer-checkout .offer-total{
  .blofy-assistant-messages{max-height:calc(100dvh - 400px)}
 }
 @media(prefers-reduced-motion:reduce){.blofy-assistant *{scroll-behavior:auto}}
+
+.blofy-assistant-ai-consent{display:flex;gap:7px;align-items:flex-start;font-size:10px;color:#66566f;line-height:1.6;padding:0 12px 9px}
+.blofy-assistant-ai-consent input{flex:none;margin-top:2px;accent-color:#6636b9}
