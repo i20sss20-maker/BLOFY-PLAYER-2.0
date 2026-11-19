@@ -1033,6 +1033,19 @@ const server = http.createServer(async (req, res) => {
       return await serveStoreAssetFile(res,'store-checkout-theme.css','text/css; charset=utf-8');
     if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/visual.css')
       return await serveStoreAssetFile(res,'store-visual.css','text/css; charset=utf-8');
+    if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/assistant.js')
+      return await serveStoreAssetFile(res,'store-assistant.js','application/javascript; charset=utf-8');
+    if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/assistant.css')
+      return await serveStoreAssetFile(res,'store-assistant.css','text/css; charset=utf-8');
+    if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/assistant'){
+      const raw=await readFile(new URL('../web/store-assistant.html',import.meta.url));
+      res.writeHead(200,{'content-type':'text/html; charset=utf-8','content-length':raw.length,
+        'cache-control':'public,max-age=120','x-content-type-options':'nosniff',
+        'x-frame-options':'DENY','referrer-policy':'strict-origin-when-cross-origin',
+        'content-security-policy':PUBLIC_ANALYTICS_CSP+"; base-uri 'none'",
+        'strict-transport-security':'max-age=31536000'});
+      return res.end(raw);
+    }
     if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/market.css')
       return await serveStoreAssetFile(res,'store-market.css','text/css; charset=utf-8');
     if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/market.js')
