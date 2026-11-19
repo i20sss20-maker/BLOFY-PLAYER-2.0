@@ -489,6 +489,76 @@
      message('تعذر حساب السعر أو الكوبون: '+err.message+'. لم يتم بدء أي عملية دفع.');
    }
  }
+ // Geidea's supported Drop-in mode mounts the hosted payment form into
+ // #checkout-tag. We do not embed an HPP URL ourselves or touch card fields.
+ function ensureEmbeddedGeidea(){
+   if(typeof window.GeideaCheckout==='function')return Promise.resolve(true);
+   if(sdkPromise)return sdkPromise;
+   sdkPromise=new Promise((resolve,reject)=>{
+     const sdk=document.createElement('script');
+     sdk.src='https://www.ksamerchant.geidea.net/hpp/geideaCheckout.min.js';
+     sdk.async=true;sdk.referrerPolicy='no-referrer';
+     let completed=false;let timer;
+     function finish(error){
+       if(completed)return;completed=true;clearTimeout(timer);
+       if(error||typeof window.GeideaCheckout!=='function'){
+         sdk.remove();reject(error||Error('sdk_not_ready'));return;
+       }
+       resolve(true);
+     }
+     sdk.addEventListener('load',()=>finish(null),{once:true});
+     sdk.addEventListener('error',()=>finish(Error('sdk_network_failed')),{once:true});
+     timer=setTimeout(()=>finish(Error('sdk_timeout')),11000);
+     document.head.appendChild(sdk);
+   }).catch(()=>{sdkPromise=null;return false;});
+   return sdkPromise;
+ }
+ async function verifyEmbeddedOrder(orderId,token){
+   // Never deliver paid codes based on Geidea's browser callback alone.
+   try{
+     const result=await request('/api/v1/store/orders/status',{
+       orderId,accessToken:token
+     });
+     if(result.status==='paid'&&result.fulfilled===true){
+       $('geidea-embedded-notice').textContent='✓ تأكد الدفع من الخادم. جارٍ فتح أكواد طلبك.';
+       location.assign('/store/orders#order='+encodeURIComponent(orderId));
+       return;
+     }
+     $('geidea-embedded-notice').textContent=
+       'الدفع قيد التحقق أو لم يكتمل. لا تعِد الدفع؛ راجع حالة نفس الطلب.';
+   }catch(_){
+     $('geidea-embedded-notice').textContent=
+       'تعذّر التحقق من نتيجة الدفع حاليًا. لم يُصدر كود جديد؛ استخدم مراجعة الطلب.';
+   }
+ }
+ function mountEmbeddedGeidea(data){
+   const panel=$('geidea-embedded-panel');
+   panel.hidden=false;
+   $('geidea-embedded-order').textContent=data.orderNumber||data.orderId;
+   $('geidea-embedded-total').textContent=money(data.priceMinor);
+   $('geidea-review-order').href='/store/orders#order='+encodeURIComponent(data.orderId);
+   $('geidea-hosted-fallback').href=hostedPaymentUrl(data.sessionId);
+   $('geidea-hosted-fallback').hidden=false;
+   $('geidea-embedded-notice').textContent='تم إنشاء طلبك. يمكنك الدفع من الحقول المحمية هنا، أو فتح نفس جلسة الدفع في Geidea.';
+   $('checkout-tag').replaceChildren();
+   panel.scrollIntoView({behavior:'smooth',block:'start'});
+   if(typeof window.GeideaCheckout!=='function'){
+     $('geidea-embedded-notice').textContent='تعذّر تحميل نموذج البطاقة داخل الموقع. افتح نفس جلسة الدفع في Geidea؛ لن ننشئ طلبًا ثانيًا.';
+     return;
+   }
+   try{
+     embeddedWidget=new window.GeideaCheckout(
+       ()=>{void verifyEmbeddedOrder(data.orderId,data.accessToken);},
+       ()=>{$('geidea-embedded-notice').textContent='لم يكتمل الدفع أو ظهر خطأ. راجع حالة الطلب قبل إعادة المحاولة.';},
+       ()=>{$('geidea-embedded-notice').textContent='تم إغلاق نموذج الدفع، راجع حالة الطلب قبل إعادة المحاولة.';}
+     );
+     embeddedWidget.startPayment(data.sessionId,null,'checkout-tag');
+     $('geidea-embedded-notice').textContent='أكمل إدخال البطاقة في نموذج Geidea الآمن المضمّن داخل الصفحة.';
+   }catch(_){
+     $('checkout-tag').replaceChildren();
+     $('geidea-embedded-notice').textContent='تعذّر عرض النموذج المضمّن؛ افتح نفس جلسة الدفع من الرابط، بدون إنشاء طلب جديد.';
+   }
+ }
  async function claimFreeTrialFromCart(){
    const trial=trialLine();
    if(!trial||!trialReady)return;
@@ -553,6 +623,7 @@
    if(!ready||!paidLines().length)return;
    creating=true;$('checkout').disabled=true;message('جارٍ تجهيز طلبك...');
    try{
+     const embeddedReady=await ensureEmbeddedGeidea();
      const payload=body();
      const data=await request('/api/v1/store/cart/checkout',payload);
      if(data.provider!=='geidea'||(data.checkoutMode!=='modal'&&data.checkoutMode!=='redirect')||
@@ -579,13 +650,13 @@
      paymentOpen=true;
      $('pending-status').textContent='إذا رجعت من صفحة الدفع، تقدر تكمل نفس الطلب أو تتحقق من حالته دون إنشاء طلب جديد.';
      $('check-pending').href='/store/orders#order='+encodeURIComponent(currentOrder);
-     message('تم تجهيز طلبك '+data.orderNumber+'. جارٍ فتح صفحة الدفع الرسمية لدى Geidea. إذا لم تنتقل تلقائيًا، اضغط «فتح بوابة الدفع» في الأسفل.');
+     message(embeddedReady?
+       'تم تجهيز طلبك '+data.orderNumber+'. أكمل الدفع داخل نموذج Geidea الآمن في نفس الصفحة.':
+       'تم إنشاء طلبك '+data.orderNumber+'. نموذج Geidea المضمّن لم يُحمّل؛ استخدم رابط نفس الجلسة.');
      window.BLOFYAnalytics?.track('checkout_started');
-     // Same-tab navigation preserves sessionStorage for order recovery on return.
-     // Geidea is the only origin receiving the session ID; no card data touches BLOFY.
-     try{location.assign(paymentUrl);}catch(_){
-       message('تم إنشاء الطلب، لكن المتصفح منع الانتقال. استخدم زر «فتح بوابة الدفع» أدناه لنفس الطلب دون إعادة إنشائه.');
-     }
+     // Official drop-in: startPayment(sessionId, null, divId).
+     // No navigation and no new session when the embedded SDK fails.
+     mountEmbeddedGeidea(data);
    }catch(err){
      // Even a network/JSON error may occur AFTER the server created a Geidea
      // session, so never assume a failed response means no payment session.
