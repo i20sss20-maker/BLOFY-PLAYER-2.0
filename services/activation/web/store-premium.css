@@ -375,3 +375,23 @@ body[data-shop-offer] #offer .offer-hero{min-height:390px}
 .offer-overlay h2{font-size:34px}.offer-overlay p{font-size:12px}.offer-big-price strong{font-size:30px}.offer-checkout{grid-template-columns:1fr;padding:21px;gap:10px}.offer-head h3{font-size:22px}.offer-head p{font-size:13px}.offer-total b{font-size:23px}.coupon-panel{grid-template-columns:1fr;padding:20px;gap:15px}.bundle-receipt-codes{grid-template-columns:1fr}.slide-summary{font-size:12px}.banner-slide-title{font-size:30px}}
 
 .popular-badge{background:#274e7f;color:#cce4ff;border:1px solid #6a99d7;padding:5px 10px;font-size:11px;border-radius:100px}
+
+
+/* Storefront product cards maintained from the authenticated store admin. */
+.managed-products-section{border-top:1px solid #294a73;background:linear-gradient(165deg,#081a31,#0b2443);padding-block:60px}
+.managed-products-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}
+.managed-product{overflow:hidden;min-width:0;display:flex;flex-direction:column;background:#122b4d;border:1px solid #385a83;border-radius:21px;transition:transform .15s,border-color .15s}
+.managed-product:hover{border-color:#87b0e8;transform:translateY(-3px)}
+.managed-product-art{display:block;aspect-ratio:16/10;background:#193a5c}
+.managed-product-art img{width:100%;height:100%;object-fit:cover;display:block}
+.managed-product-body{padding:19px;display:flex;flex:1;flex-direction:column}
+.managed-product-category{color:#92c5ff;font-size:12px;font-weight:700}
+.managed-product h3{color:#fff;font-size:19px;line-height:1.55;margin:7px 0}
+.managed-product p{color:#b2cae7;font-size:13px;line-height:1.9;min-height:50px;margin:0 0 20px}
+.managed-product-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:auto;flex-wrap:wrap}
+.managed-product-price{color:#fff;font-size:20px}
+.managed-product-buy{border-radius:10px;background:#3c7bd8;color:white;padding:10px 13px;text-decoration:none;font-weight:700;font-size:12px}
+.managed-product-buy:hover,.managed-product-buy:focus-visible{background:#5a9df5}
+@media(max-width:880px){.managed-products-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:580px){.managed-products-grid{grid-template-columns:1fr;gap:14px}.managed-products-section{padding-block:38px}.managed-product{border-radius:15px}.managed-product-art{aspect-ratio:16/9}}
+@media(prefers-reduced-motion:reduce){.managed-product{transition:none}.managed-product:hover{transform:none}}
