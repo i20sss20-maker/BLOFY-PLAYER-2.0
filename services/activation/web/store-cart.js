@@ -211,10 +211,10 @@
      'أرسل رمز الدخول إلى بريدك لتأكيد الطلب دون كلمة مرور أو الانتقال لصفحة أخرى.';
    $('checkout-auth-panel').hidden=signedIn;
    link.hidden=signedIn;
-   $('step-cart').classList.toggle('complete',items.length>0);
-   $('step-account').classList.toggle('complete',signedIn);
-   $('step-account').classList.toggle('active',!signedIn);
-   $('step-payment').classList.toggle('active',signedIn);
+   $('step-cart').classList?.toggle('complete',items.length>0);
+   $('step-account').classList?.toggle('complete',signedIn);
+   $('step-account').classList?.toggle('active',!signedIn);
+   $('step-payment').classList?.toggle('active',signedIn);
    const indicator=$('cart-sync');
    indicator.textContent=!signedIn?'سنحفظ السلة في حسابك بعد تأكيد البريد.':
      cloudSynced?'✓ محفوظة في حسابك':'جارٍ حفظ السلة في حسابك…';
