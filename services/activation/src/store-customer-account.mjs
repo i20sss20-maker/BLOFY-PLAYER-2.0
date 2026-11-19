@@ -8,6 +8,7 @@ import {decryptGatewayAccountPassword} from './xtream-account-vault.mjs';
 import {normalizeXtreamPublicOrigin} from './xtream-public-origin.mjs';
 import {streamCodeProof} from './xtream-duration-codes.mjs';
 import {createCustomerReminderEngine} from './store-customer-reminders.mjs';
+import {createCartRecoveryEngine} from './store-cart-recovery.mjs';
 import {buildStorePaymentReceipt,createStoreReceiptEmailEngine} from './store-order-receipts.mjs';
 import {classifyResendFailure,checkResendSender} from './store-customer-resend.mjs';
 import {createStoreSubscriptionAdmin} from './store-subscription-admin.mjs';
@@ -107,11 +108,13 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
   probe.unref?.();
  }
  const reminderEngine=createCustomerReminderEngine({pool,env,fetchImpl});
+ const cartRecoveryEngine=createCartRecoveryEngine({pool,env,fetchImpl});
  const receiptEmailEngine=createStoreReceiptEmailEngine({pool,env,fetchImpl});
  let ensureOpsSchema=async()=>{};
  const subscriptionAdmin=createStoreSubscriptionAdmin({pool,json,authorizeAdmin,
    ensureStoreSchema:()=>ensureOpsSchema()});
  reminderEngine.start();
+ cartRecoveryEngine.start();
  receiptEmailEngine.start();
  let migration;
  async function schema(){
@@ -123,6 +126,8 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
     await db.query('CREATE TABLE IF NOT EXISTS blofy_store_customers ('+
       'id UUID PRIMARY KEY,email TEXT NOT NULL UNIQUE,alerts_opt_in BOOLEAN NOT NULL DEFAULT FALSE,'+
       'created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),last_login_at TIMESTAMPTZ)');
+    await db.query('ALTER TABLE blofy_store_customers ADD COLUMN IF NOT EXISTS marketing_opt_in BOOLEAN NOT NULL DEFAULT FALSE');
+    await db.query('ALTER TABLE blofy_store_customers ADD COLUMN IF NOT EXISTS marketing_opt_in_at TIMESTAMPTZ');
     await db.query('CREATE TABLE IF NOT EXISTS blofy_store_customer_challenges ('+
       'email TEXT PRIMARY KEY,code_hash TEXT NOT NULL,attempts SMALLINT NOT NULL DEFAULT 0,'+
       'expires_at TIMESTAMPTZ NOT NULL,issued_at TIMESTAMPTZ NOT NULL DEFAULT NOW())');
@@ -169,7 +174,7 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
  async function current(req){
   const token=cookieToken(req);
   if(!token)return null;
-  const result=await pool.query('SELECT c.id,c.email,c.alerts_opt_in FROM blofy_store_customer_sessions s '+
+  const result=await pool.query('SELECT c.id,c.email,c.alerts_opt_in,c.marketing_opt_in FROM blofy_store_customer_sessions s '+
     'JOIN blofy_store_customers c ON c.id=s.customer_id '+
     'WHERE s.token_hash=$1 AND s.expires_at>NOW() LIMIT 1',[sha(token)]);
   return result.rows[0]||null;
@@ -182,7 +187,7 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
     'o.cart_items,o.duration_days,o.channel FROM blofy_store_customer_orders m '+
     'JOIN blofy_store_geidea_orders o ON o.id=m.order_id WHERE m.customer_id=$1 '+
     'ORDER BY o.created_at DESC LIMIT 100',[customer.id])).rows;
-  return json(res,200,{customerId:customer.id,email:customer.email,alertsOptIn:customer.alerts_opt_in,
+  return json(res,200,{customerId:customer.id,email:customer.email,alertsOptIn:customer.alerts_opt_in,marketingOptIn:customer.marketing_opt_in===true,
     orders:orders.map(o=>({orderId:o.id,orderNumber:o.public_order_number||publicOrderNumber(o.id,o.created_at),
       status:o.status,sku:o.sku,items:o.cart_items||null,amountMinor:o.amount_minor,
       currency:o.currency,createdAt:o.created_at,paidAt:o.paid_at}))});
@@ -569,6 +574,20 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
   return json(res,200,{ok:true,alertsOptIn:body.alertsOptIn,
     delivery:reminderEngine.configured?'email_when_eligible':'dashboard_only'});
  }
+ async function marketingPreferences(req,res){
+  const customer=await current(req);
+  if(!customer)return json(res,401,{error:'login_required'});
+  const body=await readJson(req);
+  if(typeof body?.marketingOptIn!=='boolean')return json(res,400,{error:'invalid_marketing_preferences'});
+  await pool.query(
+    "UPDATE blofy_store_customers SET marketing_opt_in=$2,"+
+    "marketing_opt_in_at=CASE WHEN $2 THEN NOW() ELSE NULL END WHERE id=$1",
+    [customer.id,body.marketingOptIn]
+  );
+  // Consent is persisted and revocable, but no marketing messages are sent by this route.
+  return json(res,200,{ok:true,marketingOptIn:body.marketingOptIn,
+    recoveryEnabled:cartRecoveryEngine.enabled});
+ }
  async function logout(req,res){
   const token=cookieToken(req);
   if(token)await pool.query('DELETE FROM blofy_store_customer_sessions WHERE token_hash=$1',[sha(token)]);
@@ -594,6 +613,7 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
    else if(path==='/api/v1/store/account/verify-code'&&req.method==='POST')await verifyCode(req,res);
    else if(path==='/api/v1/store/account/claim'&&req.method==='POST')await claim(req,res);
    else if(path==='/api/v1/store/account/preferences'&&req.method==='POST')await preferences(req,res);
+   else if(path==='/api/v1/store/account/marketing-preferences'&&req.method==='POST')await marketingPreferences(req,res);
    else if(path==='/api/v1/store/account/logout'&&req.method==='POST')await logout(req,res);
    else if(path==='/api/v1/store/account'&&req.method==='GET')await account(req,res);
    else if(path==='/api/v1/store/account/alerts'&&req.method==='GET')await alerts(req,res);

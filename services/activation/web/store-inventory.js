@@ -138,6 +138,181 @@ brandingForm?.addEventListener('submit',async event=>{
 });
 void loadBranding().catch(e=>{brandingStatus.textContent='تعذر تحميل إعدادات الموقع: '+e.message;});
 
+const proFlag=(x,on,off)=>x===true?on:off;
+function readinessTile(label,value,good=true,note=''){
+ const tile=document.createElement('article');tile.className='store-pro-tile';
+ tile.dataset.state=good?'ok':'warning';
+ const caption=document.createElement('small');caption.textContent=label;
+ const amount=document.createElement('strong');amount.textContent=String(value);
+ const details=document.createElement('span');details.textContent=note;
+ tile.append(caption,amount,details);return tile;
+}
+async function loadProReadiness(){
+ const button=$('store-pro-refresh');button.disabled=true;
+ const root=$('store-pro-status');root.textContent='جارٍ قراءة التشغيل والموافقة على الرسائل...';
+ try{
+  const result=await request('/api/v1/admin/store/pro-readiness');
+  if(result.ok!==true||!result.flags)throw Error('readiness_unavailable');
+  const f=result.flags,c=result.counts||{};
+  root.replaceChildren();
+  root.append(
+   readinessTile('مدفوعات جيديا',proFlag(f.payment.geideaConfigured,'مهيأة','غير مهيأة'),
+    f.payment.geideaConfigured,'لا يوجد إثبات مستقل لتسوية البنك'),
+   readinessTile('Apple Pay',f.payment.applePayVisible?'ظاهر للعميل':'مخفي للاختبار',
+    !f.payment.applePayVisible,'لا تفتح المحفظة قبل نجاح عملية دفع كاملة'),
+   readinessTile('تجديد نفس الكود',proFlag(f.customer.renewalEnabled,'مهيأ','غير مفعّل'),
+    f.customer.renewalEnabled,'حسب أهلية الاشتراك وتأكيد الدفع'),
+   readinessTile('رسائل انتهاء الاشتراك',proFlag(f.customer.expiryRemindersConfigured,'مهيأة','مغلقة'),
+    f.customer.expiryRemindersConfigured,'لمن وافق على التنبيه فقط'),
+   readinessTile('سلات محتملة غير مكتملة',c.possibleAbandonedCarts===null?'غير متاح':c.possibleAbandonedCarts,
+    true,'تقدير لآخر 14 يومًا، وليس كل محاولة دفع'),
+   readinessTile('موافقون على الرسائل التسويقية',c.optedInMarketing===null?'غير متاح':c.optedInMarketing,
+    true,'موافقة منفصلة وقابلة للإلغاء'),
+   readinessTile('استرجاع السلة بالبريد',proFlag(f.customer.cartRecoveryConfigured,'مهيأ','مغلق'),
+    !f.customer.cartRecoveryConfigured,'لا يرسل للمستخدمين دون موافقتهم'),
+   readinessTile('مساعد BLOFY',f.assistant.aiConfigured?'ذكاء اصطناعي':'دليل المنتجات',
+    true,f.assistant.aiConfigured?'API مهيأ؛ راجع التكلفة':'الذكاء الاصطناعي يتطلب مفتاح API'),
+   readinessTile('طلبات آخر 24 ساعة',c.paidOrders===null?'غير متاح':
+     c.paidOrders+' مدفوعة / '+c.pendingOrders+' معلقة',true,'سجلات BLOFY فقط، وليست كشف البنك'),
+   readinessTile('طلبات فاشلة آخر 24 ساعة',c.failedOrders===null?'غير متاح':c.failedOrders,
+    c.failedOrders===0,'راجع الطلبات إذا ظهر فشل الدفع')
+  );
+ }catch(e){
+  root.textContent='تعذر قراءة مركز التشغيل: '+e.message+'. تحقق من صلاحية المدير والخادم.';
+ }finally{button.disabled=false;}
+}
+$('store-pro-refresh').addEventListener('click',()=>void loadProReadiness());
+void loadProReadiness();
+
+const merchSlideFields=['title','highlight','description','imageUrl','href','cta','active'];
+const merchSectionKeys=['categories','offers','featured','about','questions'];
+const merchForm=$('merchandising-form'),merchStatus=$('merch-status'),merchSave=$('merch-save');
+function renderMerchandising(config){
+ if(!config||!Array.isArray(config.slides))throw Error('invalid_merchandising_response');
+ config.slides.forEach((slide,index)=>{
+  for(const key of merchSlideFields){
+   const el=$('merch-slide-'+index+'-'+key);
+   if(!el)continue;
+   if(key==='active')el.checked=slide.active===true;
+   else el.value=slide[key]??'';
+  }
+ });
+ for(const key of merchSectionKeys){
+  const el=$('merch-section-'+key);
+  if(el)el.checked=config.sections?.[key]===true;
+ }
+}
+async function loadMerchandising(){
+ const data=await request('/api/v1/admin/store/merchandising');
+ renderMerchandising(data.merchandising);
+ merchStatus.textContent='✓ تم تحميل البنرات والأقسام الحالية.';
+}
+merchForm?.addEventListener('submit',async event=>{
+ event.preventDefault();if(merchSave.disabled)return;
+ const slides=[0,1].map(index=>Object.fromEntries(merchSlideFields.map(key=>{
+  const el=$('merch-slide-'+index+'-'+key);
+  return [key,key==='active'?el.checked:el.value.trim()];
+ })));
+ const sections=Object.fromEntries(merchSectionKeys.map(key=>[key,$('merch-section-'+key).checked]));
+ merchSave.disabled=true;merchStatus.textContent='جارٍ حفظ البنرات وأقسام المتجر...';
+ try{
+  const data=await request('/api/v1/admin/store/merchandising',{
+   method:'POST',body:JSON.stringify({slides,sections})
+  });
+  if(data.ok!==true)throw Error('merchandising_save_not_confirmed');
+  merchStatus.textContent='✓ تم حفظ البنرات والأقسام. افتح المتجر لتشاهد التغييرات.';
+ }catch(e){merchStatus.textContent='تعذر الحفظ: '+e.message;}
+ finally{merchSave.disabled=false;}
+});
+void loadMerchandising().catch(e=>{merchStatus.textContent='تعذر تحميل البنرات: '+e.message;});
+
+const moneyMinor=value=>(Number(value||0)/100).toLocaleString('ar-SA',{maximumFractionDigits:2})+' ر.س';
+const reportStatus=$('commercial-notice');
+let reportSnapshot=null;
+const reportProductNames={
+ 'stream-3m':'BLOFY STREAM 3 أشهر','stream-6m':'BLOFY STREAM 6 أشهر','stream-1y':'BLOFY STREAM سنة',
+ 'xtream-3m':'Xtream 3 أشهر','xtream-6m':'Xtream 6 أشهر','xtream-1y':'Xtream سنة',
+ 'bundle-2y':'عرض اشتراكين سنويين','cart':'سلة متعددة المنتجات'
+};
+function renderReport(data){
+ const m=data.metrics||{},root=$('commercial-metrics');root.replaceChildren();
+ for(const [label,value,description] of [
+  ['إيرادات مؤكدة',moneyMinor(m.revenueMinor),'طلبات مدفوعة فقط'],
+  ['طلبات مدفوعة',Number(m.paidOrders||0),'تم تأكيد التحصيل'],
+  ['قيد الدفع',Number(m.pendingOrders||0),'لا تُحتسب ضمن الإيراد'],
+  ['طلبات لم تكتمل',Number(m.failedOrders||0)+Number(m.cancelledOrders||0),'فاشلة أو ملغاة'],
+  ['متوسط الطلب',moneyMinor(m.averageOrderMinor),'متوسط الطلب المدفوع'],
+  ['نسبة إتمام الطلبات',Number(m.completionPercent||0).toLocaleString('ar-SA')+'%','من الطلبات المنشأة خلال الفترة']
+ ]){
+  const card=document.createElement('div');card.className='commercial-metric';
+  const caption=document.createElement('b');caption.textContent=label;
+  const amount=document.createElement('strong');amount.textContent=String(value);
+  const note=document.createElement('small');note.textContent=description;
+  card.append(caption,amount,note);root.append(card);
+ }
+ const chart=$('commercial-trend');chart.replaceChildren();
+ const dayRows=new Map((data.daily||[]).map(row=>[row.date,row]));
+ const days=Number(data.periodDays||30),now=new Date();
+ // Saudi Arabia is UTC+03:00 year-round. Use UTC calendar math for stable local dates.
+ const riyadhNow=new Date(now.getTime()+3*60*60*1000);
+ const end=Date.UTC(riyadhNow.getUTCFullYear(),riyadhNow.getUTCMonth(),riyadhNow.getUTCDate());
+ const entries=Array.from({length:days},(_,i)=>{
+   const date=new Date(end-(days-1-i)*86400000).toISOString().slice(0,10);
+   return dayRows.get(date)||{date,revenueMinor:0,paidOrders:0,createdOrders:0};
+ });
+ const max=Math.max(1,...entries.map(x=>Number(x.revenueMinor||0)));
+ for(const item of entries){
+  const col=document.createElement('div');col.className='commercial-chart-day';
+  const bar=document.createElement('div');bar.className='commercial-chart-bar';
+  bar.style.height=Math.max(3,Math.round(Number(item.revenueMinor||0)/max*135))+'px';
+  col.title=item.date+' — '+moneyMinor(item.revenueMinor)+'، '+Number(item.paidOrders||0)+' طلب مدفوع';
+  const date=document.createElement('span');date.textContent=item.date.slice(5);
+  col.append(bar,date);chart.append(col);
+ }
+ chart.setAttribute('aria-label','الإيراد المؤكد لآخر '+days+' يومًا. المجموع '+moneyMinor(m.revenueMinor));
+ const table=$('commercial-products');table.replaceChildren();
+ const groups=Array.isArray(data.productGroups)?data.productGroups:[];
+ if(!groups.length){table.textContent='لا توجد طلبات مدفوعة في الفترة المحددة.';}
+ for(const row of groups){
+  const item=document.createElement('div');item.className='commercial-product-line';
+  const name=document.createElement('strong');name.textContent=reportProductNames[row.sku]||row.sku;
+  const count=document.createElement('span');count.textContent=Number(row.orders||0)+' طلب';
+  const amount=document.createElement('b');amount.textContent=moneyMinor(row.revenueMinor);
+  item.append(name,count,amount);table.append(item);
+ }
+}
+async function reloadCommercialReport(){
+ const days=$('commercial-period').value;
+ if(!['7','30','90'].includes(days))throw Error('unsupported_period');
+ const button=$('commercial-refresh');button.disabled=true;
+ reportStatus.textContent='جارٍ جلب التقرير من سجل الطلبات...';
+ try{
+  const data=await request('/api/v1/admin/store/insights?days='+days);
+  if(data.ok!==true)throw Error('invalid_report');
+  reportSnapshot=data;renderReport(data);
+  $('commercial-export').disabled=false;
+  reportStatus.textContent='✓ بيانات محدثة. لا تتضمن التقارير أرقام بطاقات أو مفاتيح طلبات.';
+ }catch(e){reportStatus.textContent='تعذر تحميل تقرير الفترة: '+e.message;throw e;}
+ finally{button.disabled=false;}
+}
+$('commercial-period').addEventListener('change',()=>void reloadCommercialReport().catch(()=>{}));
+$('commercial-refresh').addEventListener('click',()=>void reloadCommercialReport().catch(()=>{}));
+$('commercial-export').addEventListener('click',()=>{
+ if(!reportSnapshot)return;
+ const header=['التاريخ','الطلبات المنشأة','الطلبات المدفوعة','الإيراد المؤكد (ريال)'];
+ const escape=value=>'"'+String(value??'').replace(/"/g,'""')+'"';
+ const rows=(reportSnapshot.daily||[]).map(row=>[
+  row.date,row.createdOrders,row.paidOrders,(Number(row.revenueMinor)/100).toFixed(2)
+ ]);
+ const csv='\uFEFF'+[header,...rows].map(x=>x.map(escape).join(',')).join('\r\n');
+ const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+ const a=document.createElement('a');
+ a.href=url;a.download='blofy-store-report-'+reportSnapshot.periodDays+'days.csv';
+ document.body.append(a);a.click();a.remove();
+ setTimeout(()=>URL.revokeObjectURL(url),0);
+});
+void reloadCommercialReport().catch(()=>{});
+
 const showcaseNodes={
  form:$('showcase-form'),id:$('showcase-id'),name:$('showcase-name'),
  category:$('showcase-category'),description:$('showcase-description'),

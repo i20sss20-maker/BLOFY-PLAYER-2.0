@@ -96,7 +96,8 @@ test('batch route and UI are admin-scoped, no bulk password export or in-browser
   assert.match(html,/id="one-legacy-batch-results"/);
   assert.match(script,/\/api\/v1\/admin\/xtream-gateway\/codes\/inspect-batch/);
   assert.match(script,/form\.requestSubmit\(\)/);
-  assert.match(script,/window\.setTimeout\(\(\)=>clearBatch\(/);
+  assert.match(script,/window\.addEventListener\('pagehide',\(\)=>clearBatch\(\)\)/);
+  assert.match(script,/one-legacy-batch-clear/);
   assert.match(script,/180000/);
   assert.match(styles,/\.one-legacy-batch-table/);
   assert.doesNotMatch(script,/localStorage|sessionStorage|console\.log|\/api\/v1\/stream\/redeem/);

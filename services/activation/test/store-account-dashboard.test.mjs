@@ -25,7 +25,7 @@ function browser({subs=subscriptions,subError=false}={}){
   ['blofy.shop.cart.owner.v1','22222222-2222-4222-8222-222222222222']]);
  const session=new Map([['blofy.shop.pending-checkout.v1','example']]);
  const make=(id='')=>{
-  const el={id,value:'',hidden:false,disabled:false,children:[],className:'',dataset:{},
+  const el={id,value:'',hidden:false,disabled:false,children:[],get childNodes(){return this.children;},className:'',dataset:{},
    textContent:'',style:{},type:'',checked:false,href:'',
    append(...children){this.children.push(...children)},
    replaceChildren(...children){this.children=[...children]},
@@ -80,7 +80,8 @@ function browser({subs=subscriptions,subError=false}={}){
  vm.runInNewContext(js,context,{filename:'store-account.js'});
  return {elements,listeners,calls,local,session,setRecords:rows=>{records=rows}};
 }
-const tick=()=>new Promise(resolve=>setTimeout(resolve,25));
+// Wait for the async account + subscription API chain under a fully parallel CI runner.
+const tick=()=>new Promise(resolve=>setTimeout(resolve,120));
 
 test('authenticated BLOFY site shows accurate order and subscription dashboard without issuing codes',async()=>{
  const b=browser();
@@ -150,7 +151,7 @@ test('HTML summary, order filters and existing customer paid receipts remain acc
  for(const id of ['overview-paid','overview-pending','overview-active','overview-expiring',
   'orders-search','orders-filter','orders-result-count','refresh-orders','payment-receipt'])
    assert.match(html,new RegExp('id="'+id+'"'));
- assert.match(html,/store\/account\.js\?v=7/);
+ assert.match(html,/store\/account\.js\?v=8/);
  assert.match(html,/store\/cart\.css\?v=4/);
  assert.match(css,/account-summary-grid/);
  assert.match(css,/prefers-reduced-motion/);

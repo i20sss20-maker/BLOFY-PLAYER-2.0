@@ -9,6 +9,10 @@ import { serveIndexNowKey } from './indexnow-key.mjs';
 import { createCommercialHandlers } from './commercial-handlers.mjs';
 import { createStoreShowcaseHandlers } from './store-showcase.mjs';
 import { createStoreBrandingHandlers } from './store-branding.mjs';
+import { createStoreCommercialInsightsHandlers } from './store-commercial-insights.mjs';
+import { createStoreMerchandisingHandlers } from './store-merchandising.mjs';
+import { createStoreAssistantHandlers } from './store-assistant.mjs';
+import { createStoreProReadinessHandlers } from './store-pro-readiness.mjs';
 import { storeInfoPage } from './store-info-pages.mjs';
 import { createProfileCloudHandlers } from './profile-cloud.mjs';
 import { registerDeviceTrial, bindExistingTrial, completePendingTrial } from './trial-registration.mjs';
@@ -185,6 +189,10 @@ const codeOperations = createCodeOperationsHandlers({ pool, secretHex: PLAYLIST_
 const commercial = createCommercialHandlers({ pool, keyHex: PLAYLIST_ENCRYPTION_KEY, json, readJson, requireAdmin });
 const storeShowcase = createStoreShowcaseHandlers({pool,json,readJson,authorizeAdmin:requireAdmin});
 const storeBranding = createStoreBrandingHandlers({pool,json,readJson,authorizeAdmin:requireAdmin});
+const storeCommercialInsights = createStoreCommercialInsightsHandlers({pool,json,authorizeAdmin:requireAdmin});
+const storeMerchandising = createStoreMerchandisingHandlers({pool,json,readJson,authorizeAdmin:requireAdmin});
+const storeAssistant = createStoreAssistantHandlers({json,readJson,requestClientKey});
+const storeProReadiness = createStoreProReadinessHandlers({pool,json,authorizeAdmin:requireAdmin});
 const siteAnalytics = createSiteAnalyticsHandlers({pool,json,readJson,authorizeAdmin:requireAdmin,keyHex:PLAYLIST_ENCRYPTION_KEY});
 const whatsappCloud = createWhatsAppCloudHandlers({pool,authorizeAdmin:requireAdmin});
 const cloud = createProfileCloudHandlers({ pool, json, readJson, authorizedDevice });
@@ -1008,6 +1016,10 @@ const server = http.createServer(async (req, res) => {
       });
       return res.end();
     }
+    if (await storeProReadiness(req,res,requestUrl)) return;
+    if (await storeAssistant(req,res,requestUrl)) return;
+    if (await storeMerchandising(req,res,requestUrl)) return;
+    if (await storeCommercialInsights(req,res,requestUrl)) return;
     if (await storeBranding(req,res,requestUrl)) return;
     if (await storeShowcase(req,res,requestUrl)) return;
     if (await siteAnalytics(req,res,requestUrl)) return;
@@ -1029,6 +1041,8 @@ const server = http.createServer(async (req, res) => {
       return await serveStoreAssetFile(res,'store-visual.css','text/css; charset=utf-8');
     if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/market.css')
       return await serveStoreAssetFile(res,'store-market.css','text/css; charset=utf-8');
+    if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/assistant.js')
+      return await serveStoreAssetFile(res,'store-assistant.js','application/javascript; charset=utf-8');
     if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/market.js')
       return await serveStoreAssetFile(res,'store-market.js','application/javascript; charset=utf-8');
     if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/showcase.js')

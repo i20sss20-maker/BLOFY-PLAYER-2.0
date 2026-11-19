@@ -313,6 +313,7 @@
    orders=Array.isArray(data.orders)?data.orders:[];
    $('account-email').textContent=data.email||'';
    $('reminder-optin').checked=data.alertsOptIn===true;
+   if($('marketing-optin'))$('marketing-optin').checked=data.marketingOptIn===true;
    updateOrderOverview();
    renderOrders();
    view(true);tell('حسابك جاهز.');
@@ -447,6 +448,16 @@
     ?'تم حفظ اختيارك. ستصلك رسالة عند دخول أحد الاشتراكات فترة السبعة أيام إذا كان التنبيه مفعّلًا.'
     :'تم حفظ اختيارك، لكن إرسال رسائل البريد الآلية لم يُفعّل بعد. ستظل التنبيهات داخل حسابك.';
   }catch(err){this.checked=!this.checked;$('reminder-status').textContent=statusMessage(err);}
+  finally{this.disabled=false;}
+ });
+ $('marketing-optin')?.addEventListener('change',async function(){
+  this.disabled=true;
+  try{
+   const response=await api('/marketing-preferences',{marketingOptIn:this.checked});
+   $('marketing-status').textContent=response.recoveryEnabled
+    ?'تم حفظ موافقتك. تذكيرات السلة متاحة فقط عند وجود سلة غير مكتملة واستيفاء شروط الإرسال.'
+    :'تم حفظ اختيارك. لا تُرسل رسائل تسويق حاليًا حتى إكمال تشغيل النظام.';
+  }catch(err){this.checked=!this.checked;$('marketing-status').textContent=statusMessage(err);}
   finally{this.disabled=false;}
  });
  $('orders-search').addEventListener('input',renderOrders);
