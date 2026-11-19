@@ -135,12 +135,15 @@ export function createStoreCodeRegister({pool,json,readJson,keyHex,
      ORDER BY created_at DESC,id DESC LIMIT $6 OFFSET $7`;
    return pool.query(query,[q,proof,phone,kind,state,PAGE,offset]);
  };
- async function list(req,res,url){
+ async function list(req,res){
    if(!authorizeAdmin(req,res))return;
-   const q=small(url.searchParams.get('q')||'',90).trim();
-   const kind=String(url.searchParams.get('kind')||'all');
-   const state=String(url.searchParams.get('state')||'all');
-   const offset=Number(url.searchParams.get('offset')||'0');
+   // Search by full original voucher must use POST body, NEVER a URL query
+   // because proxy access logs and browser history may retain URL strings.
+   const body=await readJson(req);
+   const q=small(body?.q||'',90).trim();
+   const kind=String(body?.kind||'all');
+   const state=String(body?.state||'all');
+   const offset=Number(body?.offset||0);
    if(!KINDS.has(kind)||!STATES.has(state)||
       !Number.isSafeInteger(offset)||offset<0||offset>100000||
       q.length===1||/[\x00-\x1f\x7f]/.test(q)){
@@ -188,8 +191,8 @@ export function createStoreCodeRegister({pool,json,readJson,keyHex,
    finally{db.release();}
  }
  return async function handle(req,res,url){
-   if(url.pathname==='/api/v1/admin/store/codes/register'&&req.method==='GET'){
-     await list(req,res,url);return true;
+   if(url.pathname==='/api/v1/admin/store/codes/register'&&req.method==='POST'){
+     await list(req,res);return true;
    }
    if(url.pathname==='/api/v1/admin/store/codes/reveal'&&req.method==='POST'){
      await reveal(req,res);return true;
