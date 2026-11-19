@@ -3,6 +3,7 @@ import { databaseOptions } from './database-options.mjs';
 import { safeErrorSummary } from './diagnostics-sanitizer.mjs';
 import {safeXtreamTransportCategory} from './xtream-transport-errors.mjs';
 import {waitXtreamMediaRetry} from './xtream-media-retry-backoff.mjs';
+import {writeGatewayMapWithGuard} from './xtream-gateway-map-serialized.mjs';
 import {authorizedMediaRecoveryRelease} from './xtream-media-recovery-release.mjs';
 import {allowedLiveTsRecoveryPilot,safeLiveTsRecoveryStart,liveTsRecoveryBytes}
   from './xtream-live-ts-recovery.mjs';
@@ -618,10 +619,15 @@ async function oncePerMediaMap(cache,key,task,sourceId){
     {ttlMs:MAP_FRESHNESS_MS});
 }
 
+// Serialized map writes are explicitly enabled only after staged validation.
+const writeGatewayMap=(sql,params)=>writeGatewayMapWithGuard(pool,sql,params,{
+ enabled:process.env.BLOFY_SAFE_GATEWAY_MAP_WRITES==='1'
+});
+
 async function ensureCategoryMaps(mediaType,sourceId=null) {
   await ensureReady();
   const key=mediaType+':'+(sourceId||'*');
-  return oncePerMediaMap(categoryMapJobs,key,()=>pool.query(`INSERT INTO blofy_xtream_gateway_category_map(server_id,media_type,source_category_id)
+  return oncePerMediaMap(categoryMapJobs,key,()=>writeGatewayMap(`INSERT INTO blofy_xtream_gateway_category_map(server_id,media_type,source_category_id)
     SELECT c.server_id,c.media_type,c.source_category_id
     FROM blofy_xtream_categories c
     JOIN blofy_xtream_servers s ON s.id=c.server_id
@@ -633,7 +639,7 @@ async function ensureCategoryMaps(mediaType,sourceId=null) {
 async function ensureItemMaps(mediaType,sourceId=null) {
   await ensureReady();
   const key=mediaType+':'+(sourceId||'*');
-  return oncePerMediaMap(itemMapJobs,key,()=>pool.query(`INSERT INTO blofy_xtream_gateway_item_map(server_id,media_type,source_id)
+  return oncePerMediaMap(itemMapJobs,key,()=>writeGatewayMap(`INSERT INTO blofy_xtream_gateway_item_map(server_id,media_type,source_id)
     SELECT i.server_id,i.media_type,i.source_id
     FROM blofy_xtream_items i
     JOIN blofy_xtream_servers s ON s.id=i.server_id
