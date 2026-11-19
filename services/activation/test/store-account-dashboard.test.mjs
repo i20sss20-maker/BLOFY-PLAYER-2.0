@@ -25,7 +25,7 @@ function browser({subs=subscriptions,subError=false}={}){
   ['blofy.shop.cart.owner.v1','22222222-2222-4222-8222-222222222222']]);
  const session=new Map([['blofy.shop.pending-checkout.v1','example']]);
  const make=(id='')=>{
-  const el={id,value:'',hidden:false,disabled:false,children:[],className:'',dataset:{},
+  const el={id,value:'',hidden:false,disabled:false,children:[],get childNodes(){return this.children;},className:'',dataset:{},
    textContent:'',style:{},type:'',checked:false,href:'',
    append(...children){this.children.push(...children)},
    replaceChildren(...children){this.children=[...children]},
