@@ -63,24 +63,3 @@
 /* Six top-level tasks: even, readable rows instead of five plus an orphaned tab. */
 @media(min-width:1101px){.one-codes-tabs{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(min-width:681px) and (max-width:1100px){.one-codes-tabs{grid-template-columns:repeat(2,minmax(0,1fr))}}
-
-.one-verified-reviews-admin{border:1px solid #36596e;background:#102c3e;padding:18px;border-radius:15px;margin:24px 0}
-.one-verified-reviews-admin .one-section-heading h3{margin:5px 0;color:#defcf4}
-.one-verified-reviews-admin>p{line-height:1.9;color:#b8d2de;font-size:13px}
-.one-verified-reviews-admin button,.one-verified-reviews-admin select{background:#20495f;color:#e7fffa;
- border:1px solid #729da8;border-radius:10px;padding:11px 15px;font:inherit;cursor:pointer}
-.one-reviews-admin-controls{display:flex;align-items:center;gap:10px;margin:16px 0}
-.one-reviews-admin-controls label{display:grid;gap:8px;font-size:12px;color:#e2f6f2}
-.one-reviews-admin-list{display:grid;gap:12px}
-.one-review-admin-card{border:1px solid #36657a;border-radius:12px;padding:17px;background:#16384c;color:#dff4f1}
-.one-review-admin-top{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;overflow-wrap:anywhere}
-.one-review-admin-top span{font-size:12px;color:#b9d4df}
-.one-review-admin-card blockquote{margin:13px 0;border-inline-start:3px solid #5eada2;
- padding-inline-start:14px;white-space:pre-wrap;line-height:1.9;font-size:14px}
-.one-review-admin-footer{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
-.one-review-admin-footer small{color:#b4ccd6;font-size:12px}
-.one-review-admin-actions{display:flex;flex-wrap:wrap;gap:10px}
-.one-review-admin-actions button:first-child{background:#206859;border-color:#85ccb4}
-.one-review-admin-actions button:last-child{background:#5e3643;border-color:#c78996}
-.one-review-admin-actions button:disabled{opacity:.5;cursor:not-allowed}
-.one-review-empty{padding:12px;color:#c6dbe2;line-height:1.9}

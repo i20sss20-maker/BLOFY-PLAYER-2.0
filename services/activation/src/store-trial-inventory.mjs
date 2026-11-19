@@ -331,7 +331,6 @@ export function createStoreTrialInventory({
   else json(res,405,{error:'method_not_allowed'},{...NO_CACHE,allow:path.endsWith('claim')||path.endsWith('generate')?'POST':'GET'});
   return true;
  };
- handler.ensureTrialSchema=()=>schema();
  handler.autoRefillTrials=autoRefillTrials;
  return handler;
 }
