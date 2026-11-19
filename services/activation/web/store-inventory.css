@@ -19,3 +19,21 @@
 
 .admin-orders{margin:32px 0 40px}.admin-orders h2{font-size:30px;margin:9px 0}.order-filter{display:flex;gap:13px;align-items:center;flex-wrap:wrap;margin:22px 0}.order-filter label{font-size:13px}.order-filter select,.order-filter button{background:#102f55;border:1px solid #4676ac;border-radius:11px;padding:10px 14px;color:#e7f4ff;font:inherit}.order-filter button{cursor:pointer;background:#2f72c5;font-weight:700}
 .orders-table{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}.order-card{padding:20px;border-radius:18px;border:1px solid #365985;background:linear-gradient(145deg,#142f52,#0b1f39);min-width:0}.order-card-head,.order-card-details{display:flex;justify-content:space-between;align-items:center;gap:11px;flex-wrap:wrap}.order-card-head strong{font:700 15px Arial,sans-serif;letter-spacing:.03em}.order-state{font-size:12px;padding:5px 12px;border-radius:20px;border:1px solid #506785;background:#173454}.order-state.paid{color:#b0e7cd;border-color:#387e67}.order-state.failed{color:#ffc8c9;border-color:#a14e5f}.order-card-details{font-size:13px;margin-top:12px;color:#c5d8ef}.order-card-details small{font-size:11px;color:#a0bddd}.order-breakdown{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}.order-breakdown span{font-size:11px;color:#a7c9ee;background:#173b6a;border-radius:8px;padding:5px 9px}.footnote{font-size:12px;color:#a9bfdb;line-height:1.9}@media(max-width:800px){.orders-table{grid-template-columns:1fr}}
+
+/* Merchandising controls are isolated from order and code administration. */
+.showcase-admin{margin:35px 0 48px}
+.showcase-admin>.intro h2{font-size:clamp(24px,3vw,31px);margin:6px 0}
+.showcase-check{display:flex!important;gap:11px;align-items:center;flex-wrap:wrap;margin:22px 0!important}
+.showcase-check input{width:auto!important;accent-color:#4299f4;transform:scale(1.3);margin:0 4px}
+.showcase-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.showcase-actions button{margin-top:15px}
+.showcase-admin .btn-outline{background:#132c49!important;color:#c8e2ff!important;border:1px solid #547ba8!important}
+.showcase-item-actions button{padding:10px 14px;margin:0!important;width:auto!important;font-size:12px}
+.showcase-list{display:grid;gap:10px;max-height:550px;overflow:auto}
+.showcase-item{padding:15px;background:#0b1d36;border:1px solid #385a83;border-radius:13px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.showcase-item-info{min-width:0;flex:1}
+.showcase-item-info strong{display:block;color:#f0f8ff;font-size:14px;overflow-wrap:anywhere}
+.showcase-item-info small{display:block;color:#b0c8e7;font-size:11px;margin-top:5px}
+.showcase-item-actions{display:flex;gap:8px}
+#showcase-message{display:block;min-height:22px;margin:10px 0;color:#9dd4ff;font-size:12px}
+@media(max-width:580px){.showcase-actions{grid-template-columns:1fr}.showcase-item-actions{width:100%}.showcase-item-actions button{flex:1}}
