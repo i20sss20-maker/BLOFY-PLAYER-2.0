@@ -423,6 +423,17 @@ async function serveStoreDesign(res) {
   res.end(file);
 }
 
+async function serveStoreTrialPage(req,res){
+  const file=await readFile(new URL('../web/store-trial.html',import.meta.url));
+  res.writeHead(200,{
+   'content-type':'text/html; charset=utf-8',
+   'content-length':file.length,'cache-control':'no-store, private',
+   'x-content-type-options':'nosniff','x-frame-options':'DENY',
+   'referrer-policy':'no-referrer','strict-transport-security':'max-age=31536000',
+   'content-security-policy':"default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+  });
+  res.end(req.method==='HEAD'?undefined:file);
+}
 function serveStoreInfo(res, slug) {
   const markup=storeInfoPage(slug);
   if(!markup){res.writeHead(404,{'cache-control':'no-store'});return res.end();}
@@ -1083,12 +1094,18 @@ const server = http.createServer(async (req, res) => {
       return await serveStoreShowcaseScript(res);
     if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/offers.js')
       return await serveStoreOfferScript(res);
+    if (['GET','HEAD'].includes(req.method) && ['/store/trial','/store/trial/'].includes(requestUrl.pathname))
+      return await serveStoreTrialPage(req,res);
+    if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/trial.js')
+      return await serveStoreAssetFile(res,'store-trial.js','application/javascript; charset=utf-8');
+    if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/trial.css')
+      return await serveStoreAssetFile(res,'store-trial.css','text/css; charset=utf-8');
     if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/design.css')
       return await serveStoreDesign(res);
     if (['GET','HEAD'].includes(req.method)&&['/store/offers','/store/offers/'].includes(requestUrl.pathname))
       return await serveStorefront(res,null,true);
     const storeProductMatch=requestUrl.pathname.match(/^\/products\/(stream|xtream)\/?$/);
-    const storeInfoMatch=requestUrl.pathname.match(/^\/store\/(about|trial|faq|contact|terms)\/?$/);
+    const storeInfoMatch=requestUrl.pathname.match(/^\/store\/(about|faq|contact|terms)\/?$/);
     const storePhotoMatch=requestUrl.pathname.match(/^\/store\/media\/(strong8k|player)\.jpg$/);
     if (['GET','HEAD'].includes(req.method) && storePhotoMatch)
       return await serveStorePhoto(res,storePhotoMatch[1]);
