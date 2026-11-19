@@ -73,6 +73,8 @@ test('bulk issuance uses native backend max 20, but requires a second confirmati
   assert.match(operations,/if\(payload\.quantity>5&&!window\.confirm/);
   assert.match(operations,/window\.confirm\('إصدار '/);
   assert.match(codes,/quantity>20/);
-  assert.match(operations,/window\.setTimeout\(hideIssued,90000\)/);
+  assert.match(operations,/window\.addEventListener\('pagehide',hideIssued\)/);
+  assert.match(operations,/one-issue-hide/);
+  assert.match(operations,/issuedCodes=\[\];issueArea\.replaceChildren\(\)/);
   assert.doesNotMatch(operations,/\/api\/v1\/stream\/redeem/);
 });
