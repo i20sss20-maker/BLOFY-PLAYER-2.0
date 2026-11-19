@@ -20,6 +20,7 @@
     for(const p of data.products){
       if(!p||typeof p.title!=='string'||typeof p.checkoutUrl!=='string')continue;
       const card=el('article','managed-product');
+      if(typeof p.checkoutSku==='string')card.dataset.checkoutSku=p.checkoutSku;
       const art=el('a','managed-product-art');
       art.href=p.checkoutUrl;
       const img=el('img');img.loading='lazy';img.decoding='async';
@@ -41,6 +42,7 @@
       card.append(art,body);root.append(card);
     }
     section.hidden=!root.children.length;
+    document.dispatchEvent(new Event('blofy:showcase-ready'));
   })
   .catch(()=>{section.hidden=true;});
 })();

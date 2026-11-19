@@ -3,27 +3,80 @@
  const $=id=>document.getElementById(id);
  const search=$('market-search'),searchForm=$('market-search-form');
  const safeText=(selector,value)=>{if(typeof value==='string'){const node=document.querySelector(selector);if(node)node.textContent=value;}};
- let matches=null;
- function siteSearch(event){
-   event?.preventDefault();
-   const q=String(search?.value||'').trim().toLocaleLowerCase('ar');
-   const cards=[...document.querySelectorAll('.product,[data-product-card],.managed-product')];
-   const unique=[...new Set(cards)];
-   let count=0;
-   for(const node of unique){
-     const keywords=String(node.textContent||'').toLocaleLowerCase('ar');
-     const ok=!q||keywords.includes(q);
-     node.hidden=!ok;
-     if(ok)count++;
-   }
-   if(q&&count===0){
-     const result=$('market-search-feedback');
-     if(result){result.hidden=false;result.textContent='ما وجدنا نتيجة مطابقة. جرّب «ستريم» أو «إكستريم»، أو تواصل مع الدعم.';}
-   }else if($('market-search-feedback'))$('market-search-feedback').hidden=true;
-   location.hash='#products';
+ // One search covers fixed subscription cards AND admin-published products.
+ // No remote customer search, no unsafe HTML; live filtering stays on this page.
+ let filter='all',searchTimer=null;
+ const normalize=value=>String(value||'').normalize('NFKC').toLowerCase()
+   .replace(/[ًٌٍَُِّْٰ]/g,'').replace(/[إأآٱ]/g,'ا')
+   .replace(/ى/g,'ي').replace(/ـ/g,'').replace(/[^\p{L}\p{N}]+/gu,' ')
+   .trim().replace(/\s+/g,' ');
+ function products(){
+   return [...document.querySelectorAll('article.product,article.managed-product')];
  }
- searchForm?.addEventListener('submit',siteSearch);
- search?.addEventListener('input',()=>{if(!search.value.trim()){for(const node of document.querySelectorAll('.product,.managed-product'))node.hidden=false;const out=$('market-search-feedback');if(out)out.hidden=true;}});
+ function kindOf(node){
+   const sku=node.dataset.checkoutSku||node.dataset.productCard||'';
+   if(sku==='stream'||sku.startsWith('stream-'))return 'stream';
+   if(sku==='xtream'||sku.startsWith('xtream-'))return 'xtream';
+   return 'other';
+ }
+ function searchMatches(node,query){
+   if(!query)return true;
+   let text=normalize(node.textContent);
+   const kind=kindOf(node);
+   if(kind==='stream')text+=' stream blofy streaming ستريم';
+   if(kind==='xtream')text+=' xtream player اكستريم بلاير';
+   return query.split(' ').every(token=>text.includes(token));
+ }
+ function filterProducts({scroll=false}={}){
+   const query=normalize(search?.value);
+   let matching=0,fixed=0,managed=0;
+   for(const card of products()){
+     const show=(filter==='all'||kindOf(card)===filter)&&searchMatches(card,query);
+     card.hidden=!show;
+     if(show){
+       matching++;
+       if(card.classList.contains('managed-product'))managed++;
+       else fixed++;
+     }
+   }
+   const collection=$('shop-managed-products');
+   if(collection&&collection.querySelector('.managed-product'))
+     collection.hidden=managed===0;
+   for(const button of document.querySelectorAll('[data-market-filter]')){
+     button.setAttribute('aria-pressed',String(button.dataset.marketFilter===filter));
+   }
+   const output=$('market-results-count');
+   if(output)output.textContent=matching
+      ?matching===1?'منتج واحد مطابق':'عدد المنتجات المطابقة: '+matching
+      :'لا توجد منتجات مطابقة';
+   const feedback=$('market-search-feedback');
+   if(feedback){
+     feedback.hidden=matching>0||(!query&&filter==='all');
+     if(!feedback.hidden)feedback.textContent='ما لقينا منتجًا بهذا الاختيار. جرّب البحث عن «ستريم» أو «بلاير»، أو اضغط «كل الباقات».';
+   }
+   if(scroll){
+     const destination=matching>0&&fixed===0&&managed>0?collection:$('products');
+     destination?.scrollIntoView({behavior:'smooth',block:'start'});
+   }
+ }
+ searchForm?.addEventListener('submit',event=>{
+   event.preventDefault();filterProducts({scroll:true});
+ });
+ search?.addEventListener('input',()=>{
+   if(searchTimer)clearTimeout(searchTimer);
+   searchTimer=setTimeout(()=>filterProducts(),150);
+ });
+ for(const button of document.querySelectorAll('[data-market-filter]')){
+   button.addEventListener('click',()=>{
+     filter=button.dataset.marketFilter;
+     filterProducts({scroll:false});
+   });
+ }
+ document.addEventListener('blofy:showcase-ready',()=>filterProducts());
+ if(new URLSearchParams(location.search).get('q')){
+   const q=new URLSearchParams(location.search).get('q').slice(0,100);
+   if(search){search.value=q;filterProducts();}
+ }
  function updateCartCount(){
    try{
      const list=JSON.parse(localStorage.getItem('blofy.shop.cart.v1')||'[]');

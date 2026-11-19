@@ -18,11 +18,11 @@
   <link rel="preload" as="image" href="/store/media/strong8k.jpg">
   <title>اشتراك STRONG 8K | متجر BLOFY STREAM وBLOFY PLAYER</title>
   <link rel="stylesheet" href="/store/design.css?v=8">
-  <link rel="stylesheet" href="/store/market.css?v=1">
+  <link rel="stylesheet" href="/store/market.css?v=2">
   <script src="https://www.ksamerchant.geidea.net/hpp/geideaCheckout.min.js" defer></script>
   <script src="/store/offers.js?v=1" defer></script>
-  <script src="/store/showcase.js?v=1" defer></script>
-  <script src="/store/market.js?v=1" defer></script>
+  <script src="/store/showcase.js?v=2" defer></script>
+  <script src="/store/market.js?v=2" defer></script>
   <script>
 (function(){
   var hash=location.hash||'';
@@ -181,6 +181,14 @@
           <div class="pricing-ribbon" aria-label="قائمة أسعار الباقات">
             <span>3 أشهر <b>40 ر.س</b></span><span>6 أشهر <b>70 ر.س</b></span><span>سنة <b>120 ر.س</b></span>
           </div>
+        </div>
+        <div class="market-shopping-tools" aria-label="تصفية منتجات BLOFY">
+          <div class="market-filter-pills" role="group" aria-label="تصفية حسب نوع الاشتراك">
+            <button type="button" class="market-filter" data-market-filter="all" aria-pressed="true">كل الباقات</button>
+            <button type="button" class="market-filter" data-market-filter="stream" aria-pressed="false">BLOFY STREAM</button>
+            <button type="button" class="market-filter" data-market-filter="xtream" aria-pressed="false">Xtream / PLAYER</button>
+          </div>
+          <output id="market-results-count" aria-live="polite">تصفح الباقات المتاحة</output>
         </div>
         <div id="market-search-feedback" class="market-search-feedback" role="status" aria-live="polite" hidden></div>
         <div class="shop-grid product-offers">
@@ -350,6 +358,12 @@
   <a class="whats-bubble market-help-bubble" href="https://wa.me/966568941484" data-wa="general" target="_blank" rel="noopener noreferrer" aria-label="تواصل معنا على واتساب">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l2-5a9 9 0 1 1 4 3z" stroke-width="1.8"/><path d="M9 8l1 2c-1 1 2 4 4 4l2-1 1 2c-2 2-7-1-9-4-1-1-1-3 1-3" stroke-width="1.5"/></svg>مساعدة واتساب
   </a>
+  <nav class="market-mobile-nav" aria-label="التنقل السريع في متجر BLOFY">
+    <a href="/" aria-current="page"><span aria-hidden="true">⌂</span><span>الرئيسية</span></a>
+    <a href="/#products"><span aria-hidden="true">▦</span><span>المنتجات</span></a>
+    <a href="/store/cart"><span aria-hidden="true">🛒</span><span>السلة</span></a>
+    <a href="/store/account"><span aria-hidden="true">♙</span><span>حسابي</span></a>
+  </nav>
   <script>
 (function(){
  'use strict';

@@ -333,3 +333,35 @@ body[data-blofy-storefront] [hidden]{display:none!important}
 .market-slide-heading,.market-slide-copy h1{white-space:normal}
 .market-slide-copy [data-market-content]{white-space:pre-line}
 .market-promo .market-promo-action:hover{text-decoration:underline}
+
+
+/* Shopping UX refresh: keyboard friendly filters and a consistent mobile journey. */
+.market-shopping-tools{display:flex;align-items:center;justify-content:space-between;gap:15px;flex-wrap:wrap;margin:3px 0 18px}
+.market-filter-pills{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.market-filter{
+ appearance:none;display:inline-flex;align-items:center;justify-content:center;min-height:39px;
+ border:1px solid #ded1e8;border-radius:25px;background:#fff;color:#624c70;
+ font:700 12px "BLOFY Arabic",Tahoma,sans-serif;padding:8px 15px;cursor:pointer;
+ transition:border-color .15s,background .15s,color .15s
+}
+.market-filter:hover{background:#f5efff;border-color:#aa85d8}
+.market-filter[aria-pressed="true"]{background:#713dc7;color:#fff;border-color:#713dc7}
+.market-filter:focus-visible{outline:3px solid #a57bdc;outline-offset:3px}
+#market-results-count{color:#786987;font-size:12px}
+.market-mobile-nav{display:none}
+@media(max-width:680px){
+ .market-shopping-tools{align-items:flex-start}
+ .market-filter-pills{gap:6px}
+ .market-filter{min-height:35px;padding:7px 11px;font-size:10px}
+ .market-mobile-nav{
+   position:fixed;z-index:81;bottom:0;inset-inline:0;display:flex;justify-content:space-around;
+   padding:6px max(8px,env(safe-area-inset-right)) calc(5px + env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left));
+   background:#fffffff7;border-top:1px solid #e4d6ee;box-shadow:0 -8px 22px #30203a19;
+ }
+ .market-mobile-nav a{display:flex;flex:1;flex-direction:column;align-items:center;justify-content:center;min-height:48px;gap:0;color:#70637b;font-size:10px;font-weight:600}
+ .market-mobile-nav a[aria-current="page"]{color:#713dc7;font-weight:800}
+ .market-mobile-nav a>span:first-child{font-size:20px;line-height:24px}
+ body[data-blofy-storefront] .market-help-bubble{bottom:76px;left:12px}
+ body[data-blofy-storefront] .market-footer{padding-bottom:69px}
+}
+@media(prefers-reduced-motion:reduce){.market-filter{transition:none}}
