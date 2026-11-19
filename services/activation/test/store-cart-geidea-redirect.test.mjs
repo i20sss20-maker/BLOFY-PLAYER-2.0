@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 
-// Reproduce the user's precise failure: valid signed-in cart but the Geidea
-// modal global never loads. The official hosted checkout must still open.
-test('signed-in cart redirects to official hosted Geidea even when modal SDK is absent',async()=>{
+// Reproduce SDK failure without silently navigating away or creating duplicate
+// orders: branded drop-in should show the existing official hosted link.
+test('signed-in cart safely exposes hosted Geidea fallback when drop-in SDK is absent',async()=>{
  const code=readFileSync(new URL('../web/store-cart.js',import.meta.url),'utf8');
  const html=readFileSync(new URL('../web/store-cart.html',import.meta.url),'utf8');
  const storage=new Map();
@@ -20,14 +20,23 @@ test('signed-in cart redirects to official hosted Geidea even when modal SDK is 
  let serverRecovery=false,simulateLostResponse=false;
  function el(id=''){
   const node={id,hidden:false,disabled:false,style:{},dataset:{},children:[],value:'',
-   textContent:'',className:'',setAttribute(){},
+   textContent:'',className:'',setAttribute(){},remove(){},click(){},
    addEventListener(type,handler){events.set((this.id||'element')+':'+type,handler);},
    append(...items){this.children.push(...items);},
    replaceChildren(...items){this.children=[...items];},
    scrollIntoView(){}};
   if(id)nodes.set(id,node);return node;
  }
- const document={getElementById(id){return nodes.get(id)||el(id);},createElement(tag){return el();}};
+ const scriptListeners=new Map();
+ const document={
+   getElementById(id){return nodes.get(id)||el(id);},
+   createElement(tag){
+     const n=el();
+     if(tag==='script')n.addEventListener=(event,fn)=>scriptListeners.set(event,fn);
+     return n;
+   },
+   head:{appendChild(){setTimeout(()=>scriptListeners.get('error')?.(),0)}}
+ };
  // Pre-create named elements so repeated calls to getElementById keep identity.
  for(const id of ['checkout','items','clear-cart','coupon','apply','subtotal','discount',
  'total','codes-count','message','auth-gate','auth-title','auth-message','auth-link','cart-sync',
@@ -66,7 +75,7 @@ test('signed-in cart redirects to official hosted Geidea even when modal SDK is 
  const location={search:'',origin:'https://blofyplayer.com',
   assign(url){redirects.push(url);}};
  const ctx={window:{},document,fetch,localStorage,sessionStorage,location,
-  history:{replaceState(){}},URLSearchParams,console,confirm:()=>true};
+  history:{replaceState(){}},URLSearchParams,console,confirm:()=>true,setTimeout,clearTimeout};
  vm.runInNewContext(code,ctx,{filename:'store-cart.js'});
  await new Promise(resolve=>setTimeout(resolve,15));
  const button=nodes.get('checkout');
@@ -77,7 +86,10 @@ test('signed-in cart redirects to official hosted Geidea even when modal SDK is 
  await new Promise(resolve=>setTimeout(resolve,15));
  assert.equal(calls.filter(x=>x.path==='/api/v1/store/cart/checkout').length,1);
  const hosted='https://www.ksamerchant.geidea.net/hpp/checkout/?'+sessionId;
- assert.deepEqual(redirects,[hosted]);
+ assert.deepEqual(redirects,[],'drop-in mode stays on the BLOFY checkout page');
+ assert.equal(nodes.get('geidea-embedded-panel').hidden,false);
+ assert.equal(nodes.get('geidea-hosted-fallback').href,hosted);
+ assert.match(nodes.get('geidea-embedded-notice').textContent,/نفس جلسة الدفع/);
  assert.equal(nodes.get('open-geidea').href,hosted,'manual same-session fallback link exists');
  assert.equal(nodes.get('open-geidea').hidden,false);
  assert.equal(session.get('blofy.shop.order.'+orderId),token,'receipt secret stays local');

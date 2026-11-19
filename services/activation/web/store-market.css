@@ -365,3 +365,17 @@ body[data-blofy-storefront] [hidden]{display:none!important}
  body[data-blofy-storefront] .market-footer{padding-bottom:69px}
 }
 @media(prefers-reduced-motion:reduce){.market-filter{transition:none}}
+
+/* Zero SAR trial offer displayed alongside paid product subscriptions. */
+.blofy-trial-product{border:1px solid #d3bceb;background:linear-gradient(160deg,#ffffff 65%,#f7f0fe);overflow:hidden}
+.blofy-trial-product-hero{height:165px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;background:radial-gradient(ellipse at center,#7c50ce,#2b164b 75%);color:#f7edff;font:700 12px/1.5 Arial,sans-serif;letter-spacing:.13em}
+.blofy-trial-symbol{height:70px;width:70px;display:grid;place-items:center;border-radius:19px;background:#fff3;color:#fff;font:900 49px/1 Arial,sans-serif;box-shadow:0 0 0 9px #fff1}
+.blofy-trial-symbol span{font-size:17px;position:absolute;margin-left:61px;margin-top:42px;color:#f5caff}
+.blofy-trial-product .popular-badge{display:inline-flex;background:#e4f7ee;color:#247c57}
+.blofy-trial-price{background:#faf5ff;border:1px solid #e3d5f3;padding:12px 15px;margin:18px 0;border-radius:11px;display:flex;align-items:center;justify-content:space-between;gap:14px}
+.blofy-trial-price span{font-size:12px;color:#5f5076}
+.blofy-trial-price strong{font-size:20px;color:#562c96}
+.blofy-trial-actions{display:flex;flex-direction:column;gap:9px;margin:12px 0}
+.blofy-trial-actions .btn{display:flex;align-items:center;justify-content:center;width:100%;min-height:45px}
+.blofy-trial-product .trial-tag{display:inline-flex;margin-top:12px;color:#653ca2}
+@media(max-width:860px){.blofy-trial-product-hero{height:120px}.blofy-trial-actions .btn{min-height:48px}}

@@ -44,6 +44,32 @@ export function parseStoreCart(input){
  }
  return {items,totalMinor,codeCount,currency:'SAR'};
 }
+// Persist trial lines in the customer basket without allowing them into the
+// paid Geidea quote, invoice or paid-code fulfillment. This is intentionally
+// a different parser from parseStoreCart.
+const FREE_TRIAL_SKUS=new Set(['trial-stream-1d','trial-xtream-1d']);
+export function isTrialCartSku(sku){return FREE_TRIAL_SKUS.has(sku)}
+export function parseSavedStoreCart(input){
+ if(!Array.isArray(input))return null;
+ if(input.length===0)return [];
+ if(input.length>5)return null;
+ let trial=null;
+ const paid=[];
+ for(const row of input){
+  if(isTrialCartSku(row?.sku)){
+   if(trial||row?.quantity!==1||row?.bundleSelection!=null)return null;
+   trial={sku:row.sku,quantity:1};
+  }else paid.push(row);
+ }
+ if(paid.length){
+  const parsed=parseStoreCart(paid);
+  if(!parsed||parsed.codeCount+Number(Boolean(trial))>6)return null;
+  return parsed.items.map(({sku,quantity,bundleSelection})=>({
+   sku,quantity,...(bundleSelection?{bundleSelection}: {})
+  })).concat(trial?[trial]:[]);
+ }
+ return trial?[trial]:null;
+}
 export function cartVouchers(cart){
  const parsed=parseStoreCart(cart);
  if(!parsed)return null;

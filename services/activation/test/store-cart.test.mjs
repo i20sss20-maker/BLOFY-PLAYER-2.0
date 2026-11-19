@@ -64,10 +64,13 @@ test('BLOFY store has a verified-account cart, secure historical receipts and ad
  assert.match(cartJs,/\/api\/v1\/store\/cart\/checkout/);
  assert.match(cartJs,/sessionStorage\.setItem\('blofy\.shop\.order\.'/);
  assert.match(cartJs,/https:\/\/www\.ksamerchant\.geidea\.net\/hpp\/checkout\/\?/);
- assert.match(cartJs,/location\.assign\(paymentUrl\)/);
+ assert.match(cartJs,/startPayment\(data\.sessionId,null,'checkout-tag'\)/);
+ assert.match(cart,/id="checkout-tag"/);
+ assert.match(cart,/id="geidea-embedded-panel"/);
  assert.match(cart,/id="open-geidea"/);
- assert.doesNotMatch(cart,/geideaCheckout\.min\.js/,'payment must not depend on external modal JavaScript');
- assert.doesNotMatch(cartJs,/window\.GeideaCheckout/,'missing payment modal script cannot block checkout');
+ assert.doesNotMatch(cart,/geideaCheckout\.min\.js/,'payment SDK should load only when checkout starts');
+ assert.match(cartJs,/ensureEmbeddedGeidea/,'payment SDK is loaded on demand');
+ assert.match(cartJs,/geidea-hosted-fallback/,'failed embedded SDK preserves a same-session hosted link');
  assert.match(orders,/id="access-token"/);
  assert.match(orderJs,/\/api\/v1\/store\/orders\/status/);
  assert.match(orderJs,/history\.replaceState/);

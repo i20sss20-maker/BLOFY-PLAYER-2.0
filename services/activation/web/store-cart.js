@@ -7,10 +7,13 @@
    'stream-3m':'BLOFY STREAM — 3 أشهر','stream-6m':'BLOFY STREAM — 6 أشهر',
    'stream-1y':'BLOFY STREAM — سنة','xtream-3m':'Xtream BLOFY — 3 أشهر',
    'xtream-6m':'Xtream BLOFY — 6 أشهر','xtream-1y':'Xtream BLOFY — سنة',
-   'bundle-2y':'عرض اشتراكين سنويين'
+   'bundle-2y':'عرض اشتراكين سنويين',
+   'trial-stream-1d':'تجربة BLOFY STREAM — يوم مجاني',
+   'trial-xtream-1d':'تجربة Xtream — يوم مجاني'
  })[sku]||'اشتراك BLOFY';
  const money=n=>(Number(n)/100).toLocaleString('ar-SA',{minimumFractionDigits:0,maximumFractionDigits:2})+' ر.س';
  let items=[],quoted=null,ready=false,creating=false,paymentOpen=false,currentOrder=null,accessToken=null;
+ let trialReady=false,trialAvailable=0,embeddedWidget=null,sdkPromise=null;
  let signedIn=false,accountEmail='',cloudRevision=null,cloudSynced=false,cloudSyncing=false,
    savedSnapshot='',hasUrlAddition=false,urlAddedLine=null,accountId='',pendingChecked=false,checkingPending=false;
  const pendingKey='blofy.shop.pending-checkout.v1';
@@ -22,10 +25,15 @@
      'https://www.ksamerchant.geidea.net/hpp/checkout/?'+encodeURIComponent(sessionId):null;
  }
  const message=(text)=>{$('message').textContent=text;};
+ const trialSku=sku=>sku==='trial-stream-1d'||sku==='trial-xtream-1d';
+ const trialLine=()=>items.find(x=>trialSku(x.sku))||null;
+ const paidLines=()=>items.filter(x=>!trialSku(x.sku));
  const keyOf=item=>item.sku==='bundle-2y'?'bundle-2y:'+item.bundleSelection.join('+'):item.sku;
  function validLine(item){
    if(!item||typeof item!=='object')return false;
-   if(!['stream-3m','stream-6m','stream-1y','xtream-3m','xtream-6m','xtream-1y','bundle-2y'].includes(item.sku))return false;
+   if(!['stream-3m','stream-6m','stream-1y','xtream-3m','xtream-6m','xtream-1y','bundle-2y',
+     'trial-stream-1d','trial-xtream-1d'].includes(item.sku))return false;
+   if(trialSku(item.sku))return item.quantity===1&&item.bundleSelection==null;
    if(!Number.isInteger(item.quantity)||item.quantity<1||item.quantity>3)return false;
    if(item.sku==='bundle-2y')return Array.isArray(item.bundleSelection)&&item.bundleSelection.length===2&&
      item.bundleSelection.every(s=>s==='app'||s==='xtream');
@@ -43,6 +51,7 @@
      const seen=new Set(),out=[];
      for(const it of parsed){
        if(!validLine(it))continue;
+       if(trialSku(it.sku)&&out.some(x=>trialSku(x.sku)))continue;
        const key=keyOf(it);
        if(seen.has(key))continue;
        seen.add(key);out.push({sku:it.sku,quantity:it.quantity,
@@ -62,7 +71,9 @@
    if(validLine(line)){
      const same=items.find(x=>keyOf(x)===keyOf(line));
      let added=false;
-     if(same&&same.quantity<3&&totalCodes(items)+(sku==='bundle-2y'?2:1)<=6){
+     if(trialSku(sku)&&items.some(x=>trialSku(x.sku))){
+       message('تقدر تختار تجربة مجانية واحدة فقط في السلة. احذف السابقة إذا تبي تغيّر النوع.');
+     }else if(same&&!trialSku(sku)&&same.quantity<3&&totalCodes(items)+(sku==='bundle-2y'?2:1)<=6){
        same.quantity++;added=true;
      }else if(!same&&items.length<5&&totalCodes(items)+(sku==='bundle-2y'?2:1)<=6){
        items.push(line);added=true;
@@ -99,7 +110,9 @@
        const details=el('div','item-details');
        const badge=el('span','item-category',item.sku==='bundle-2y'?'عرض خاص':item.sku.startsWith('xtream')?'Xtream':'BLOFY STREAM');
        const heading=el('h3','',title(item.sku));
-       const description=el('p','',item.sku==='bundle-2y'
+       const description=el('p','',trialSku(item.sku)?
+         'تجربة مجانية لمدة 24 ساعة من أول تفعيل ناجح، كود واحد لكل حساب موثّق.':
+         item.sku==='bundle-2y'
          ?'كودان مستقلان لمدة سنة: '+item.bundleSelection.map(x=>x==='app'?'ستريم':'إكستريم').join(' + ')
          :'كود اشتراك رقمي؛ تبدأ مدته عند أول تفعيل');
        const actions=el('div','item-actions');
@@ -109,11 +122,11 @@
        const count=el('span','quantity-value',String(item.quantity));
        const increment=el('button','quantity-btn','+');increment.type='button';increment.setAttribute('aria-label','زيادة كمية '+title(item.sku));
        const perCode=item.sku==='bundle-2y'?2:1;
-       decrement.disabled=item.quantity<=1;
-       increment.disabled=item.quantity>=3||totalCodes(items)+perCode>6;
+       decrement.disabled=trialSku(item.sku)||item.quantity<=1;
+       increment.disabled=trialSku(item.sku)||item.quantity>=3||totalCodes(items)+perCode>6;
        function changeQuantity(step){
          const next=item.quantity+step;
-         if(next<1||next>3||totalCodes(items)+step*perCode>6){
+         if(trialSku(item.sku)||next<1||next>3||totalCodes(items)+step*perCode>6){
            message('الحد الأعلى 6 أكواد في الطلب الواحد.');return;
          }
          item.quantity=next;save();void refresh();
@@ -147,7 +160,7 @@
  }
  function body(){
    const coupon=$('coupon').value.trim().toUpperCase();
-   return {items:items.map(x=>({sku:x.sku,quantity:x.quantity,
+   return {items:paidLines().map(x=>({sku:x.sku,quantity:x.quantity,
      ...(x.sku==='bundle-2y'?{bundleSelection:[...x.bundleSelection]}:{})})),
      ...(coupon?{couponCode:coupon}:{})};
  }
@@ -157,6 +170,7 @@
    const out=[],seen=new Set();
    for(const raw of value){
      if(!validLine(raw))continue;
+     if(trialSku(raw.sku)&&out.some(x=>trialSku(x.sku)))continue;
      const key=keyOf(raw);
      if(seen.has(key))continue;
      if(out.length>=5||totalCodes(out)+raw.quantity*(raw.sku==='bundle-2y'?2:1)>6)continue;
@@ -194,9 +208,12 @@
    const waiting=paymentOpen?'لديك طلب سابق — تحقق من حالته':
      !signedIn?'تأكيد البريد للمتابعة':
      !cloudSynced?'جارٍ حفظ السلة...':
-     !pendingChecked?'جارٍ مراجعة الطلب السابق...':'إكمال الطلب والدفع';
-   const enabled=items.length>0&&quoted!==null&&
-      (!signedIn||ready&&cloudSynced&&pendingChecked&&!creating&&!paymentOpen);
+     !pendingChecked?'جارٍ مراجعة الطلب السابق...':
+     trialLine()?'استلام التجربة المجانية — 0 ر.س':
+     'إكمال الطلب والدفع';
+   const canProceed=trialLine()?trialReady:(ready&&paidLines().length>0);
+   const enabled=items.length>0&&quoted!==null&&canProceed&&
+      (!signedIn||cloudSynced&&pendingChecked&&!creating&&!paymentOpen);
    button.textContent=waiting;
    mobile.textContent=waiting;
    button.disabled=!enabled;
@@ -206,7 +223,7 @@
  function authUI(){
    const gate=$('auth-gate'),headline=$('auth-title'),label=$('auth-message'),link=$('auth-link');
    gate.dataset.state=signedIn?'verified':'login';
-   headline.textContent=signedIn?'بريدك موثّق ✓':'تأكيد البريد قبل الدفع';
+   headline.textContent=signedIn?'بريدك موثّق ✓':'تأكيد البريد قبل استلام طلبك';
    label.textContent=signedIn?'الحساب: '+accountEmail+' — طلباتك وأكوادك محفوظة عندنا.':
      'أرسل رمز الدخول إلى بريدك لتأكيد الطلب دون كلمة مرور أو الانتقال لصفحة أخرى.';
    $('checkout-auth-panel').hidden=signedIn;
@@ -341,7 +358,7 @@
  }
  async function checkPendingForCart(){
    if(!signedIn||!cloudSynced||checkingPending)return;
-   if(!items.length){pendingChecked=true;updateCheckoutButton();return;}
+   if(!paidLines().length){pendingChecked=true;updateCheckoutButton();return;}
    checkingPending=true;pendingChecked=false;
    const snapshot=cartSnapshot();updateCheckoutButton();
    try{
@@ -425,17 +442,49 @@
    const serial=++requestSerial;
    resetPrice();render();
    if(!items.length){message('اختر اشتراكاتك من المتجر ثم ارجع إلى السلة.');return;}
-   message('جارٍ حساب السعر النهائي من خادم BLOFY...');
+   message('جارٍ التحقق من السعر والمخزون من خادم BLOFY...');
    try{
-     const data=await request('/api/v1/store/cart/quote',body());
+     const paid=paidLines(),trial=trialLine();
+     const data=paid.length?await request('/api/v1/store/cart/quote',body()):
+       {subtotalMinor:0,discountMinor:0,totalMinor:0,codeCount:0,items:[]};
+     let availability=null;
+     if(trial){
+       const response=await fetch('/api/v1/store/trials/availability',{
+         credentials:'same-origin',cache:'no-store',headers:{accept:'application/json'}
+       });
+       if(!response.ok)throw Error('trial_stock_unavailable');
+       availability=await response.json();
+       const p=(availability.products||[]).find(x=>x.sku===trial.sku);
+       if(p&&(p.priceMinor!==0||p.currency!=='SAR'||p.durationDays!==1))
+         throw Error('trial_quote_invalid');
+       trialAvailable=Math.max(0,Number(p?.available)||0);
+       trialReady=availability.enabled===true&&trialAvailable>0;
+     }else{trialReady=false;trialAvailable=0;}
      if(serial!==requestSerial)return;
      quoted=data;
      $('subtotal').textContent=money(data.subtotalMinor);$('discount').textContent=money(data.discountMinor);
      $('total').textContent=money(data.totalMinor);$('mobile-total').textContent=money(data.totalMinor);
-     $('codes-count').textContent=String(data.codeCount);
-     render(data.items);
+     $('codes-count').textContent=String(data.codeCount+Number(Boolean(trial)));
+     const priceLines=[];
+     for(const item of items){
+       if(trialSku(item.sku))priceLines.push({lineTotalMinor:0});
+       else priceLines.push(data.items?.find(x=>x.sku===item.sku&&
+          JSON.stringify(x.bundleSelection||null)===JSON.stringify(item.bundleSelection||null))||null);
+     }
+     render(priceLines);
+     $('summary-heading').textContent=paid.length?'تفاصيل الدفع':'ملخص التجربة المجانية';
+     $('step-payment-label').textContent=paid.length?'الدفع':'استلام الكود';
+     $('payment-methods').hidden=!paid.length;
+     $('payment-wallet-note').hidden=!paid.length;
+     $('checkout-disclaimer').textContent=!paid.length?
+       '✓ تجربة مجانية بدون بطاقة أو عملية دفع. يتم تخصيص الكود بعد تأكيد بريدك.':
+       '🔒 الدفع للمنتجات المدفوعة فقط عبر Geidea؛ لا تُرسل بيانات البطاقة إلى BLOFY.';
+     $('coupon-details').hidden=!paid.length;
      updateCheckoutButton();
-     message(!ready?'الدفع غير متاح حاليًا. تواصل مع الدعم.':
+     message(trial&&!trialReady?'التجربة غير متوفرة حاليًا في المخزون؛ يمكنك حذفها ومتابعة الباقات المدفوعة.':
+       trial&&paid.length?'التجربة 0 ريال؛ استلم كود التجربة أولًا، ثم أكمل دفع الباقات الأخرى بشكل منفصل.':
+       trial?'التجربة مجانية بالكامل. سجّل الدخول بالبريد لتستلم الكود من المخزون دون دفع.':
+       !ready?'الدفع غير متاح حاليًا. تواصل مع الدعم.':
        !signedIn?'السلة جاهزة. سجّل دخولك بالبريد قبل الدفع، وستبقى المنتجات محفوظة.':
        !cloudSynced?'جارٍ حفظ السلة في حسابك. لن يبدأ الدفع حتى يكتمل الحفظ.':
        'ممتاز! سلتك محفوظة بحسابك. تأكد من السعر ثم أكمل عملية الدفع الواحدة.');
@@ -444,6 +493,127 @@
      message('تعذر حساب السعر أو الكوبون: '+err.message+'. لم يتم بدء أي عملية دفع.');
    }
  }
+ // Geidea's supported Drop-in mode mounts the hosted payment form into
+ // #checkout-tag. We do not embed an HPP URL ourselves or touch card fields.
+ function ensureEmbeddedGeidea(){
+   if(typeof window.GeideaCheckout==='function')return Promise.resolve(true);
+   if(sdkPromise)return sdkPromise;
+   sdkPromise=new Promise((resolve,reject)=>{
+     const sdk=document.createElement('script');
+     sdk.src='https://www.ksamerchant.geidea.net/hpp/geideaCheckout.min.js';
+     sdk.async=true;sdk.referrerPolicy='no-referrer';
+     let completed=false;let timer;
+     function finish(error){
+       if(completed)return;completed=true;clearTimeout(timer);
+       if(error||typeof window.GeideaCheckout!=='function'){
+         sdk.remove();reject(error||Error('sdk_not_ready'));return;
+       }
+       resolve(true);
+     }
+     sdk.addEventListener('load',()=>finish(null),{once:true});
+     sdk.addEventListener('error',()=>finish(Error('sdk_network_failed')),{once:true});
+     timer=setTimeout(()=>finish(Error('sdk_timeout')),11000);
+     document.head.appendChild(sdk);
+   }).catch(()=>{sdkPromise=null;return false;});
+   return sdkPromise;
+ }
+ async function verifyEmbeddedOrder(orderId,token){
+   // Never deliver paid codes based on Geidea's browser callback alone.
+   try{
+     const result=await request('/api/v1/store/orders/status',{
+       orderId,accessToken:token
+     });
+     if(result.status==='paid'&&result.fulfilled===true){
+       $('geidea-embedded-notice').textContent='✓ تأكد الدفع من الخادم. جارٍ فتح أكواد طلبك.';
+       location.assign('/store/orders#order='+encodeURIComponent(orderId));
+       return;
+     }
+     $('geidea-embedded-notice').textContent=
+       'الدفع قيد التحقق أو لم يكتمل. لا تعِد الدفع؛ راجع حالة نفس الطلب.';
+   }catch(_){
+     $('geidea-embedded-notice').textContent=
+       'تعذّر التحقق من نتيجة الدفع حاليًا. لم يُصدر كود جديد؛ استخدم مراجعة الطلب.';
+   }
+ }
+ function mountEmbeddedGeidea(data){
+   const panel=$('geidea-embedded-panel');
+   panel.hidden=false;
+   $('geidea-embedded-order').textContent=data.orderNumber||data.orderId;
+   $('geidea-embedded-total').textContent=money(data.priceMinor);
+   $('geidea-review-order').href='/store/orders#order='+encodeURIComponent(data.orderId);
+   $('geidea-hosted-fallback').href=hostedPaymentUrl(data.sessionId);
+   $('geidea-hosted-fallback').hidden=false;
+   $('geidea-embedded-notice').textContent='تم إنشاء طلبك. يمكنك الدفع من الحقول المحمية هنا، أو فتح نفس جلسة الدفع في Geidea.';
+   $('checkout-tag').replaceChildren();
+   panel.scrollIntoView({behavior:'smooth',block:'start'});
+   if(typeof window.GeideaCheckout!=='function'){
+     $('geidea-embedded-notice').textContent='تعذّر تحميل نموذج البطاقة داخل الموقع. افتح نفس جلسة الدفع في Geidea؛ لن ننشئ طلبًا ثانيًا.';
+     return;
+   }
+   try{
+     embeddedWidget=new window.GeideaCheckout(
+       ()=>{void verifyEmbeddedOrder(data.orderId,data.accessToken);},
+       ()=>{$('geidea-embedded-notice').textContent='لم يكتمل الدفع أو ظهر خطأ. راجع حالة الطلب قبل إعادة المحاولة.';},
+       ()=>{$('geidea-embedded-notice').textContent='تم إغلاق نموذج الدفع، راجع حالة الطلب قبل إعادة المحاولة.';}
+     );
+     embeddedWidget.startPayment(data.sessionId,null,'checkout-tag');
+     $('geidea-embedded-notice').textContent='أكمل إدخال البطاقة في نموذج Geidea الآمن المضمّن داخل الصفحة.';
+   }catch(_){
+     $('checkout-tag').replaceChildren();
+     $('geidea-embedded-notice').textContent='تعذّر عرض النموذج المضمّن؛ افتح نفس جلسة الدفع من الرابط، بدون إنشاء طلب جديد.';
+   }
+ }
+ async function claimFreeTrialFromCart(){
+   const trial=trialLine();
+   if(!trial||!trialReady)return;
+   creating=true;updateCheckoutButton();
+   message('جارٍ حجز تجربتك من المخزون المجاني، بدون استخدام بوابة الدفع...');
+   try{
+     const response=await fetch('/api/v1/store/trials/claim',{
+       method:'POST',credentials:'same-origin',cache:'no-store',
+       headers:{'content-type':'application/json','x-blofy-trial':'1',accept:'application/json'},
+       body:JSON.stringify({sku:trial.sku})
+     });
+     const result=await response.json().catch(()=>({}));
+     if(!response.ok||result.ok!==true||typeof result.code!=='string'||
+        result.channel!==(trial.sku==='trial-stream-1d'?'app':'xtream')){
+       const problem=result?.error||'trial_claim_unavailable';
+       // If the verified customer already claimed the *other* channel,
+       // no second trial can be granted; explain without inventing success.
+       throw Error(problem);
+     }
+     $('trial-cart-code').textContent=result.code;
+     $('trial-cart-info').textContent=result.alreadyClaimed?
+       'تم استرجاع تجربتك السابقة. مدة التجربة لا تبدأ من جديد.':
+       'مدة التجربة يوم واحد من أول تفعيل ناجح، وليست من وقت إضافتها للسلة.';
+     $('trial-cart-xtream').hidden=result.channel!=='xtream';
+     $('trial-cart-result').hidden=false;
+     items=items.filter(item=>!trialSku(item.sku));
+     save();
+     await refresh();
+     message(items.length?
+       'تم استلام التجربة المجانية. الباقات المدفوعة باقية في سلتك؛ أكمل دفعها بشكل منفصل.':
+       '✓ تمت التجربة المجانية بسعر 0 ريال. لم تبدأ أي عملية دفع.');
+     $('trial-cart-result').scrollIntoView({behavior:'smooth',block:'nearest'});
+   }catch(error){
+     const explanations={
+       trial_login_required:'سجّل الدخول بالبريد المؤكّد قبل استلام التجربة.',
+       trial_out_of_stock:'مخزون التجارب نفد؛ لم نحجز كودًا.',
+       trial_daily_quota_reached:'اكتملت حصة التجارب لهذا اليوم.',
+       trial_rate_limited:'عدد محاولات مرتفع؛ حاول لاحقًا.',
+       trials_unavailable:'خدمة التجارب غير متاحة حاليًا.',
+       trial_code_unavailable:'الكود غير متاح للاسترجاع حاليًا؛ تواصل مع الدعم.'
+     };
+     message(explanations[error.message]||
+       'تعذر التأكد من التسليم. افتح صفحة التجربة لاسترجاع كودك قبل إعادة المحاولة.');
+   }finally{creating=false;updateCheckoutButton();}
+ }
+ $('trial-cart-copy').addEventListener('click',async()=>{
+   const code=$('trial-cart-code').textContent;
+   if(!code)return;
+   try{await navigator.clipboard.writeText(code);message('تم نسخ كود التجربة.');}
+   catch(_){message('حدد الكود الظاهر لنسخه يدويًا.');}
+ });
  async function checkout(){
    if(!signedIn){
      $('auth-gate').scrollIntoView({behavior:'smooth',block:'center'});
@@ -451,10 +621,13 @@
      message('أدخل بريدك واضغط «إرسال الرمز» لإكمال الطلب في نفس الصفحة.');
      return;
    }
-   if(!cloudSynced){message('سلتك لم تُحفظ بعد في الحساب. تأكد من اتصالك قبل الدفع.');return;}
-   if(!ready||creating||paymentOpen||!pendingChecked||!quoted||!items.length)return;
+   if(!cloudSynced){message('سلتك لم تُحفظ بعد في الحساب. تأكد من اتصالك قبل الاستلام.');return;}
+   if(creating||paymentOpen||!pendingChecked||!quoted||!items.length)return;
+   if(trialLine()){await claimFreeTrialFromCart();return;}
+   if(!ready||!paidLines().length)return;
    creating=true;$('checkout').disabled=true;message('جارٍ تجهيز طلبك...');
    try{
+     const embeddedReady=await ensureEmbeddedGeidea();
      const payload=body();
      const data=await request('/api/v1/store/cart/checkout',payload);
      if(data.provider!=='geidea'||(data.checkoutMode!=='modal'&&data.checkoutMode!=='redirect')||
@@ -481,13 +654,13 @@
      paymentOpen=true;
      $('pending-status').textContent='إذا رجعت من صفحة الدفع، تقدر تكمل نفس الطلب أو تتحقق من حالته دون إنشاء طلب جديد.';
      $('check-pending').href='/store/orders#order='+encodeURIComponent(currentOrder);
-     message('تم تجهيز طلبك '+data.orderNumber+'. جارٍ فتح صفحة الدفع الرسمية لدى Geidea. إذا لم تنتقل تلقائيًا، اضغط «فتح بوابة الدفع» في الأسفل.');
+     message(embeddedReady?
+       'تم تجهيز طلبك '+data.orderNumber+'. أكمل الدفع داخل نموذج Geidea الآمن في نفس الصفحة.':
+       'تم إنشاء طلبك '+data.orderNumber+'. نموذج Geidea المضمّن لم يُحمّل؛ استخدم رابط نفس الجلسة.');
      window.BLOFYAnalytics?.track('checkout_started');
-     // Same-tab navigation preserves sessionStorage for order recovery on return.
-     // Geidea is the only origin receiving the session ID; no card data touches BLOFY.
-     try{location.assign(paymentUrl);}catch(_){
-       message('تم إنشاء الطلب، لكن المتصفح منع الانتقال. استخدم زر «فتح بوابة الدفع» أدناه لنفس الطلب دون إعادة إنشائه.');
-     }
+     // Official drop-in: startPayment(sessionId, null, divId).
+     // No navigation and no new session when the embedded SDK fails.
+     mountEmbeddedGeidea(data);
    }catch(err){
      // Even a network/JSON error may occur AFTER the server created a Geidea
      // session, so never assume a failed response means no payment session.
