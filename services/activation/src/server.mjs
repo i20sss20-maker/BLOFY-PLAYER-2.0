@@ -7,6 +7,7 @@ import { createSiteAnalyticsHandlers } from './site-analytics.mjs';
 import { createWhatsAppCloudHandlers } from './whatsapp-cloud-hook.mjs';
 import { serveIndexNowKey } from './indexnow-key.mjs';
 import { createCommercialHandlers } from './commercial-handlers.mjs';
+import { createStoreShowcaseHandlers } from './store-showcase.mjs';
 import { storeInfoPage } from './store-info-pages.mjs';
 import { createProfileCloudHandlers } from './profile-cloud.mjs';
 import { registerDeviceTrial, bindExistingTrial, completePendingTrial } from './trial-registration.mjs';
@@ -181,6 +182,7 @@ const portal = createPortalHandlers({ pool, json, readJson, authorizedDevice });
 const blofyCodes = createBlofyCodeHandlers({ pool, secretHex: PLAYLIST_ENCRYPTION_KEY, json, readJson, requireAdmin, authorizedDevice });
 const codeOperations = createCodeOperationsHandlers({ pool, secretHex: PLAYLIST_ENCRYPTION_KEY, json, readJson, requireAdmin });
 const commercial = createCommercialHandlers({ pool, keyHex: PLAYLIST_ENCRYPTION_KEY, json, readJson, requireAdmin });
+const storeShowcase = createStoreShowcaseHandlers({pool,json,readJson,authorizeAdmin:requireAdmin});
 const siteAnalytics = createSiteAnalyticsHandlers({pool,json,readJson,authorizeAdmin:requireAdmin,keyHex:PLAYLIST_ENCRYPTION_KEY});
 const whatsappCloud = createWhatsAppCloudHandlers({pool,authorizeAdmin:requireAdmin});
 const cloud = createProfileCloudHandlers({ pool, json, readJson, authorizedDevice });
@@ -333,6 +335,14 @@ async function serveStorefront(res, product = null, offer = false) {
   res.end(file);
 }
 
+async function serveStoreShowcaseScript(res) {
+  const file=await readFile(new URL('../web/store-showcase.js',import.meta.url));
+  res.writeHead(200,{
+    'content-type':'application/javascript; charset=utf-8',
+    'content-length':file.length,'cache-control':'public, max-age=900',
+    'x-content-type-options':'nosniff'
+  });res.end(file);
+}
 async function serveStoreOfferScript(res) {
   const file=await readFile(new URL('../web/store-offers.js',import.meta.url));
   res.writeHead(200,{
@@ -986,6 +996,7 @@ const server = http.createServer(async (req, res) => {
       });
       return res.end();
     }
+    if (await storeShowcase(req,res,requestUrl)) return;
     if (await siteAnalytics(req,res,requestUrl)) return;
     if (await whatsappCloud(req,res,requestUrl)) return;
     if (await servePrivacyPage(req, res, requestUrl)) return;
@@ -999,6 +1010,8 @@ const server = http.createServer(async (req, res) => {
     if(['GET','HEAD'].includes(req.method)&&
        ['/store/cart.css','/store/cart.js','/store/order-tracking.js','/store/account.js'].includes(requestUrl.pathname))
       return await serveCartAsset(res,requestUrl.pathname.slice('/store/'.length));
+    if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/showcase.js')
+      return await serveStoreShowcaseScript(res);
     if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/offers.js')
       return await serveStoreOfferScript(res);
     if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/design.css')
