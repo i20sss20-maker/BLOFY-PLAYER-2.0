@@ -112,3 +112,25 @@
  .commercial-product-line strong{grid-column:1/-1}
  .commercial-product-line b{text-align:left}
 }
+
+
+/* BLOFY Store Pro operator hub and privacy-first retention indicators. */
+.store-pro-hub,.retention-insights{margin:34px 0 42px}
+.store-pro-links{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.store-pro-links a{display:flex;flex-direction:column;gap:6px;background:#fff;border:1px solid #e6dcef;color:#33243f;padding:19px 16px;border-radius:15px;box-shadow:0 9px 20px #25113f0b}
+.store-pro-links a:hover{border-color:#ba96e1;background:#fdfaff;transform:translateY(-2px)}
+.store-pro-links a b{font-size:13px;color:#6134a0}
+.store-pro-links a small{font-size:11px;color:#766783;line-height:1.6}
+.retention-insights>.panel{padding:24px}
+.retention-head{display:flex;align-items:center;justify-content:space-between;gap:15px;flex-wrap:wrap}
+.retention-head h3{font-size:17px;margin:0}
+.retention-head button{width:auto;margin:0;padding:11px 16px}
+.retention-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:20px}
+.retention-metric{display:flex;flex-direction:column;gap:7px;min-width:0;background:#f8f5fd;border:1px solid #e3d5ee;padding:18px;border-radius:15px}
+.retention-metric span{font-size:12px;color:#625371}
+.retention-metric strong{font-size:clamp(24px,3vw,34px);color:#6335a6}
+.retention-metric small{font-size:10px;color:#70647a;line-height:1.6}
+#retention-status{display:block;min-height:19px;margin-top:13px;color:#5b367e;font-size:12px}
+@media(max-width:920px){.store-pro-links{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:660px){.retention-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.store-pro-links{gap:9px}.store-pro-links a{padding:15px 12px}}
+@media(max-width:380px){.store-pro-links{grid-template-columns:1fr}}
