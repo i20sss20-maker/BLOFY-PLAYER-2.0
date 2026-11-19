@@ -54,7 +54,9 @@ test('BLOFY store has a verified-account cart, secure historical receipts and ad
  assert.match(store,/id="bundle-add-cart"/);
  assert.match(store,/href="\/store\/cart"/);
  assert.match(cart,/id="checkout"/);
- assert.match(cart,/تسجيل الدخول مطلوب قبل الدفع/);
+ assert.match(cart,/تأكيد البريد قبل الدفع/);
+ assert.match(cart,/id="checkout-login-form"/);
+ assert.match(cart,/id="checkout-verify-form"/);
  assert.match(cart,/id="auth-gate"/);
  assert.match(cartJs,/\/api\/v1\/store\/account\/cart/);
  assert.match(cartJs,/\/api\/v1\/store\/account/);
