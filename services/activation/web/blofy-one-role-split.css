@@ -84,8 +84,24 @@ section[aria-labelledby="readiness-title"],
 @media(max-width:830px){.one-inventory-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:530px){.one-inventory-grid{grid-template-columns:1fr}}
 
-/* Four distinct code-center tasks. Balanced columns across breakpoints. */
-@media (min-width:1101px){.one-codes-tabs{grid-template-columns:repeat(4,minmax(0,1fr));}}
+/* Separate free one-day trial stock; never mix with paid Geidea inventory. */
+.one-codes-trial-shortcut{display:block;margin:0 0 16px;padding:12px 15px;
+ border:1px solid #8ce6d3;border-radius:11px;background:#153d42;
+ color:#dffff6;text-decoration:none;font-weight:750}
+.one-codes-trial-shortcut:hover,.one-codes-trial-shortcut:focus-visible{background:#205e60}
+.one-trial-stock .one-trial-notice{padding:12px 14px;border-radius:11px;
+ background:#173d43;border:1px solid #537e7c;color:#d9fff4;line-height:1.7}
+.one-trial-stock #one-trial-status{color:#b0f5e3;line-height:1.8;min-height:25px}
+.one-trial-links{display:flex;gap:13px;flex-wrap:wrap;margin:16px 0}
+.one-trial-links a{color:#b7fff0;border:1px solid #467d75;
+ padding:9px 12px;border-radius:9px;text-decoration:none}
+.one-trial-history{margin-top:17px;padding:15px;border:1px solid #406d6d;
+ border-radius:11px;color:#c5eae6;line-height:1.8}
+.one-trial-history ul{margin:10px 0 0;padding:0 20px}
+.one-trial-history li{margin:6px 0}
+
+/* Five distinct code-center tasks. Balanced columns across breakpoints. */
+@media (min-width:1101px){.one-codes-tabs{grid-template-columns:repeat(5,minmax(0,1fr));}}
 @media (min-width:681px) and (max-width:1100px){.one-codes-tabs{grid-template-columns:repeat(2,minmax(0,1fr));}}
 @media (max-width:680px){.one-codes-tabs{grid-template-columns:1fr;}}
 

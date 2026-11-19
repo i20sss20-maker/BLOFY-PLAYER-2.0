@@ -41,6 +41,32 @@
       <small>يشمل آخر 90 يومًا، بحد أقصى 500 طلب مدفوع. نجاح السجلات ليس إثباتًا أن البنك سوّى المدفوعات فعلًا.</small>
     </details>
     <a href="/admin/store-inventory">إدارة منتجات المتجر والبنرات والطلبات ←</a>`;
+
+  // Isolated one-day trial inventory: owner creates stock, customers claim
+  // from their verified account. Never change paid stock or payment routes.
+  const trialPanel=document.createElement('section');
+  trialPanel.id='one-trial-stock';
+  trialPanel.className='one-overview one-inventory one-trial-stock';
+  trialPanel.setAttribute('aria-label','إنشاء ومتابعة أكواد التجربة المجانية');
+  trialPanel.innerHTML=[
+    '<div class="one-section-heading"><div><span class="one-kicker">FREE TRIAL · 1 DAY</span>',
+    '<h2>🎁 مخزون الأكواد التجريبية</h2></div>',
+    '<button type="button" id="one-trial-refresh">↻ تحديث المخزون</button></div>',
+    '<p class="one-footnote">أنشئ أكواد تجربة منفصلة لـ BLOFY STREAM أو Xtream. المدة يوم واحد، اتصال واحد، وتبدأ فقط عند أول تفعيل ناجح. السعر للعميل 0 ر.س ولا يُستخدم جيديا.</p>',
+    '<p class="one-trial-notice" id="one-trial-public-state" role="status" aria-live="polite">جارٍ التحقق من إتاحة التجارب للعملاء…</p>',
+    '<div class="one-inventory-grid" id="one-trial-counts" aria-live="polite"></div>',
+    '<div class="one-inventory-controls">',
+    '<label>نوع الكود التجريبي<select id="one-trial-sku">',
+    '<option value="trial-stream-1d">BLOFY STREAM — يوم واحد</option>',
+    '<option value="trial-xtream-1d">Xtream — يوم واحد</option></select></label>',
+    '<label>عدد الأكواد<input id="one-trial-quantity" type="number" min="1" max="30" step="1" value="5" inputmode="numeric"></label>',
+    '<button type="button" id="one-trial-generate">＋ إنشاء الأكواد وإضافتها للمخزون</button></div>',
+    '<p id="one-trial-status" role="status" aria-live="polite"></p>',
+    '<div class="one-trial-links"><a href="/store#trial-product" target="_blank" rel="noopener">عرض باقة 0 ريال في المتجر ↗</a>',
+    '<a href="/store/trial" target="_blank" rel="noopener">صفحة طلب التجربة للعملاء ↗</a></div>',
+    '<div class="one-trial-history"><strong>أحدث الأكواد المسلّمة للعملاء (مخفية جزئيًا)</strong>',
+    '<div id="one-trial-recent">لم يُحمّل سجل التجارب بعد.</div></div>'
+  ].join('');
   const center=document.createElement('div');
   center.id='codes-center';
   center.className='one-codes-center';
@@ -67,7 +93,8 @@
     ['one-issue','＋ إنشاء اشتراك جديد'],
     ['legacy-xtream','⌕ فحص أو استخراج Xtream'],
     ['stream-management','▤ سجل الأكواد والعملاء'],
-    ['one-inventory','▥ مخزون البيع']
+    ['one-inventory','▥ مخزون البيع'],
+    ['one-trial-stock','🎁 الأكواد التجريبية · يوم']
   ];
   for(const [id,name] of definitions){
     const button=document.createElement('button');
@@ -77,15 +104,21 @@
     button.setAttribute('aria-controls',id);
     tabs.append(button);
   }
-  center.append(tabs,issue,legacy,ledger,inventory);
+  center.append(tabs,issue,legacy,ledger,inventory,trialPanel);
+  const trialShortcut=document.createElement('a');
+  trialShortcut.className='one-codes-trial-shortcut';
+  trialShortcut.href='#one-trial-stock';
+  trialShortcut.textContent='🎁 إنشاء أكواد تجريبية مجانًا · يوم واحد · STREAM أو Xtream ←';
+  issue.prepend(trialShortcut);
   const buttons=[...tabs.querySelectorAll('button')];
   let selected='one-issue';
   const choices=new Set(definitions.map(x=>x[0]));
   function show(id,scroll=false){
     if(!choices.has(id))return;
     selected=id;
-    for(const el of [issue,legacy,ledger,inventory])el.hidden=el.id!==id;
+    for(const el of [issue,legacy,ledger,inventory,trialPanel])el.hidden=el.id!==id;
     if(id==='one-inventory')void loadStock();
+    if(id==='one-trial-stock')void loadTrialStock();
     for(const button of buttons){
       const active=button.dataset.oneCodesTab===id;
       button.setAttribute('aria-selected',String(active));
@@ -168,6 +201,85 @@
 
   // All admin inventory requests use the existing authenticated session and
   // atomic DB transactions. Missing responses must NEVER trigger auto-retry.
+
+  let trialBusy=false;
+  const trialStatus=$('one-trial-status');
+  async function loadTrialStock(){
+    if(trialBusy)return;
+    trialStatus.textContent='جارٍ قراءة المخزون التجريبي من قاعدة البيانات…';
+    try{
+      const data=await stockFetch('/api/v1/admin/store/trials/summary');
+      if(data.ok!==true||!Array.isArray(data.products))throw Error('trial_stock_result_invalid');
+      const valid=new Set(['trial-stream-1d','trial-xtream-1d']);
+      const plans=data.products.filter(p=>p&&valid.has(p.sku));
+      const grid=$('one-trial-counts'),selector=$('one-trial-sku');
+      grid.replaceChildren();
+      const previous=selector.value;selector.replaceChildren();
+      for(const p of plans){
+        const box=document.createElement('article');box.className='one-inventory-stock';
+        const title=document.createElement('strong');title.textContent=p.name;
+        const ready=document.createElement('b');ready.textContent='جاهز للتجربة: '+Number(p.available||0);
+        const counts=document.createElement('small');
+        counts.textContent='الإجمالي: '+Number(p.total||0)+' · تم تسليمه: '+Number(p.claimed||0);
+        box.append(title,ready,counts);grid.append(box);
+        const option=document.createElement('option');option.value=p.sku;option.textContent=p.name+' — يوم واحد';
+        selector.append(option);
+      }
+      if(plans.some(p=>p.sku===previous))selector.value=previous;
+      $('one-trial-public-state').textContent=data.publicEnabled===true
+        ?'✓ تسليم الأكواد المجانية للعملاء مفعّل بحسب إعدادات الخادم.'
+        :'⚠ إنشاء مخزون التجربة متاح للإدارة، لكن طلب العملاء غير مفعّل من إعدادات الخادم حتى الآن.';
+      const recent=$('one-trial-recent');recent.replaceChildren();
+      const rows=Array.isArray(data.recent)?data.recent.slice(0,20):[];
+      if(!rows.length)recent.textContent='لم تُسلَّم أي تجربة بعد.';
+      else{
+        const list=document.createElement('ul');
+        for(const row of rows){
+          const li=document.createElement('li');
+          const channel=row.sku==='trial-xtream-1d'?'Xtream':'STREAM';
+          const date=row.claimedAt?new Date(row.claimedAt).toLocaleString('ar-SA'):'—';
+          li.textContent=channel+' · '+String(row.codeHint||'كود مخفي')+' · سُلّم: '+date+
+            (row.activatedAt?' · تم تفعيله':' · لم يفعّل بعد');
+          list.append(li);
+        }
+        recent.append(list);
+      }
+      trialStatus.textContent='تم تحديث مخزون التجربة. الأكواد محفوظة مشفّرة، ولا تُعرض للزوار.';
+    }catch(error){
+      trialStatus.textContent='تعذّر قراءة مخزون التجارب: '+error.message+
+        '. تأكد من صلاحية الدخول إلى الإدارة واتصال الخادم.';
+    }
+  }
+  async function generateTrialCodes(){
+    if(trialBusy)return;
+    const sku=$('one-trial-sku').value,quantity=Number($('one-trial-quantity').value);
+    if(!['trial-stream-1d','trial-xtream-1d'].includes(sku)||
+       !Number.isSafeInteger(quantity)||quantity<1||quantity>30){
+      trialStatus.textContent='اختر النوع وأدخل كمية من 1 إلى 30 كودًا.';return;
+    }
+    const label=sku==='trial-stream-1d'?'BLOFY STREAM':'Xtream';
+    if(!confirm('هل تؤكد إنشاء '+quantity+' كود تجربة '+label+
+      ' لمدة يوم واحد؟ ستضاف للمخزون دون تفعيل أو بيع، ولن يبدأ احتساب اليوم الآن.'))return;
+    trialBusy=true;
+    const button=$('one-trial-generate');button.disabled=true;
+    $('one-trial-refresh').disabled=true;
+    trialStatus.textContent='جارٍ إنشاء المخزون. لا تكرر الضغط ولا تعِد الطلب في حال انقطاع الاتصال.';
+    try{
+      const data=await stockFetch('/api/v1/admin/store/trials/generate',{sku,quantity},45000);
+      if(data.ok!==true||Number(data.generated)!==quantity)
+        throw Error('trial_generation_not_confirmed');
+      trialStatus.textContent='✓ تم إنشاء '+quantity+' كود '+label+
+        ' بالمخزون، بدون تفعيل أو دفع.';
+    }catch(error){
+      trialStatus.textContent='لم يمكن تأكيد الإنشاء: '+error.message+
+        '. حدّث أعداد المخزون قبل إعادة المحاولة لتجنب التكرار.';
+    }finally{
+      trialBusy=false;button.disabled=false;$('one-trial-refresh').disabled=false;
+    }
+    await loadTrialStock();
+  }
+  $('one-trial-refresh').addEventListener('click',()=>void loadTrialStock());
+  $('one-trial-generate').addEventListener('click',()=>void generateTrialCodes());
   const stockGrid=$('one-inventory-counts'),stockSku=$('one-inventory-sku');
   const stockStatus=$('one-inventory-status');
   let stockBusy=false,stockPlans=[];
