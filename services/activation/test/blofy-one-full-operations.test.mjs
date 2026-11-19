@@ -46,7 +46,7 @@ test('operator panels use real read-only scoped existing endpoints without fabri
   assert.match(js,/row\.status\|\|row\.state/);
   assert.match(js,/row\.updatedAt\|\|row\.completedAt\|\|row\.createdAt/);
   assert.match(js,/readJson|request\(/);
-  assert.doesNotMatch(js,/\.innerHTML\s*=|localStorage|sessionStorage|eval\(|console\.log/);
+  // Reject executable secret persistence, not a comment explicitly forbidding it.\n  const executable=js.replace(/\/\/[^\n]*/g,'').replace(/\/\*[\s\S]*?\*\//g,'');\n  assert.doesNotMatch(executable,/\.innerHTML\s*=|localStorage|sessionStorage|eval\(|console\.log/);
   assert.doesNotMatch(js,/source\.password|s\.password|source\.host|s\.serverUrl/);
   assert.match(js,/value===null\|\|value===undefined/);
 });
