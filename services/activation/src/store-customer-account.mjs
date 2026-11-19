@@ -612,6 +612,12 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
  };
  handler.linkCheckoutOrder=linkCheckoutOrder;
  handler.checkoutIdentity=checkoutIdentity;
+ // One-day trials require a real OTP-verified customer session, never guest checkout.
+ handler.authenticatedCustomer=async req=>{
+  if(!enabled||!mailReady)return null;
+  await schema();
+  return current(req);
+ };
  handler.setReconciler=fn=>{if(typeof fn==='function')reconcileOwnedPayment=fn;};
  handler.setStoreSchema=fn=>{if(typeof fn==='function')ensureOpsSchema=fn;};
  return handler;
