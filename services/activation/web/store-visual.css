@@ -426,3 +426,36 @@ body[data-blofy-storefront] .market-featured-offer .offer-checkout .offer-total{
   font-size:clamp(14px,3.6vw,19px);
  }
 }
+
+
+/* BLOFY PRO — public guided shopping widget. No checkout controls or secret fields. */
+.blofy-assistant{position:fixed;bottom:20px;right:20px;z-index:88;direction:rtl}
+.blofy-assistant-toggle{border:0;border-radius:40px;background:#6535b3;color:#fff;font:800 13px inherit;padding:12px 20px;box-shadow:0 9px 26px #321c5e42;cursor:pointer}
+.blofy-assistant-toggle:hover{background:#4c238d}
+.blofy-assistant-panel{position:absolute;bottom:58px;right:0;width:min(385px,calc(100vw - 26px));max-height:min(610px,calc(100dvh - 125px));display:flex;flex-direction:column;border-radius:20px;overflow:hidden;border:1px solid #decff0;background:#fff;box-shadow:0 20px 58px #29144342;color:#2d243a}
+.blofy-assistant-panel[hidden]{display:none!important}
+.blofy-assistant-head{display:flex;justify-content:space-between;gap:13px;align-items:center;padding:14px 17px;background:#2e1d53;color:white}
+.blofy-assistant-head b{display:block;font-size:16px}
+.blofy-assistant-head small{display:block;font-size:11px;color:#e2d4fa;margin-top:2px}
+.blofy-assistant-head button{border:1px solid #ffffff55;background:#ffffff18;color:#fff;width:34px;height:34px;border-radius:50%;font-size:23px;line-height:1}
+.blofy-assistant-messages{overflow-y:auto;flex:1;min-height:140px;max-height:345px;padding:16px 13px;display:flex;flex-direction:column;gap:10px;background:#faf8fc;scrollbar-color:#d4c4e4 transparent}
+.blofy-chat-message{max-width:91%;align-self:flex-start;border:1px solid #e0d5eb;border-radius:15px 15px 5px 15px;background:#fff;padding:11px 12px}
+.blofy-chat-message.from-user{align-self:flex-end;color:#fff;background:#6436b3;border-color:#6436b3;border-radius:15px 15px 15px 5px}
+.blofy-chat-message p{color:inherit;font-size:12px;line-height:1.9;margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
+.blofy-chat-message a{display:inline-flex;margin-top:7px;color:#6634af;font-weight:800;font-size:11px;text-decoration:underline}
+.blofy-chat-message.from-user a{color:#fff}
+.blofy-assistant-topics{display:flex;gap:5px;overflow-x:auto;padding:9px 12px;border-top:1px solid #eee5f3;scrollbar-width:none}
+.blofy-assistant-topics button{min-width:max-content;padding:7px 10px;font:700 11px inherit;border:1px solid #ded0ee;border-radius:17px;color:#62369b;background:#f8f3ff;cursor:pointer}
+.blofy-assistant-topics button:hover{background:#efe3ff}
+.blofy-assistant-form{display:flex;gap:7px;padding:10px;border-top:1px solid #eee5f3}
+.blofy-assistant-form input{flex:1;min-width:0;border:1px solid #d7c6e7;background:#fff;color:#342541;border-radius:10px;padding:10px 12px;font:12px inherit}
+.blofy-assistant-form button{border:0;border-radius:10px;padding:10px 13px;color:#fff;background:#6636b9;font:800 12px inherit}
+.blofy-assistant-form button:disabled{opacity:.6}
+.blofy-assistant-note{font-size:10px;line-height:1.6;color:#7b6b87;margin:0;padding:0 12px 11px}
+@media(max-width:680px){
+ .blofy-assistant{right:13px;bottom:76px}
+ .blofy-assistant-toggle{font-size:11px;padding:10px 14px}
+ .blofy-assistant-panel{bottom:53px;max-height:calc(100dvh - 185px)}
+ .blofy-assistant-messages{max-height:calc(100dvh - 400px)}
+}
+@media(prefers-reduced-motion:reduce){.blofy-assistant *{scroll-behavior:auto}}
