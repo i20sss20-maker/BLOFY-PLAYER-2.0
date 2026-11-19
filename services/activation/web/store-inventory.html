@@ -144,6 +144,7 @@
   <a href="#commercial-reports"><b>◫ تقارير المبيعات</b><small>الإيرادات والطلبات المدفوعة</small></a>
   <a href="#retention-insights"><b>↻ التجديد والاحتفاظ</b><small>السلات المحفوظة والتنبيهات</small></a>
   <a href="#merchandising-admin"><b>✧ البنرات والعروض</b><small>تحكم بأقسام الصفحة الرئيسية</small></a>
+  <a href="#campaign-hub"><b>◎ الحملات التسويقية</b><small>روابط تتبع وكوبونات وتقارير</small></a>
   <a href="#showcase-admin"><b>▣ إدارة المنتجات</b><small>الإضافة والنشر والإخفاء</small></a>
   <a href="/one#one-distributors" target="_blank" rel="noopener noreferrer"><b>♧ إدارة الموزعين ↗</b><small>قسم الموزعين في BLOFY ONE</small></a>
   <a href="/admin/visitors" target="_blank" rel="noopener noreferrer"><b>↗ إحصاءات الزيارات</b><small>مصادر الحركة والأداء</small></a>
@@ -184,6 +185,38 @@
  <div class="intro"><span>STORE ANALYTICS</span><h2 id="sales-heading">مبيعات BLOFY والعروض</h2><p>إحصاءات الطلبات لآخر 90 يومًا؛ تظهر عمليات الدفع المؤكدة فقط ضمن الإيرادات، بما فيها عرض اشتراكين بـ200 ريال.</p></div>
  <div class="sales-highlights" id="sales-highlights"><div class="notice">جارٍ تحميل إحصاءات المبيعات...</div></div>
  <div class="sales-breakdown" id="sales-breakdown"></div>
+</section>
+<section class="campaign-hub" id="campaign-hub" aria-labelledby="campaign-hub-title">
+ <div class="intro"><span>MARKETING PERFORMANCE</span><h2 id="campaign-hub-title">مركز الحملات التسويقية</h2>
+ <p>اصنع رابط حملة قابلًا للنسخ، وراجع الزيارات المرتبطة به من إحصاءات الموقع التي وافق أصحابها على القياس. هذه التقارير لا تنسب إيرادات الدفع للحملة بدون ربط موثوق، ولا ترسل رسائل تلقائيًا.</p></div>
+ <div class="campaign-hub-grid">
+ <form id="campaign-link-form" class="panel" autocomplete="off">
+ <h3>إنشاء رابط حملة</h3>
+ <label for="campaign-name">اسم الحملة بالإنجليزية</label><input id="campaign-name" type="text" required maxlength="48" minlength="3" placeholder="winter_blofy" pattern="[a-z0-9_-]{3,48}" dir="ltr" aria-describedby="campaign-name-hint">
+ <small id="campaign-name-hint">حروف إنجليزية صغيرة أو أرقام أو _ أو - فقط؛ لتتبع المصدر دون بيانات عملاء.</small>
+ <label for="campaign-platform">منصة النشر</label>
+ <select id="campaign-platform"><option value="x">منصة X</option><option value="instagram">إنستغرام</option><option value="tiktok">تيك توك</option><option value="whatsapp">واتساب</option><option value="referral">شريك أو رابط مباشر</option></select>
+ <label for="campaign-destination">صفحة الحملة</label>
+ <select id="campaign-destination"><option value="/">الرئيسية</option><option value="/#products">الاشتراكات</option><option value="/store/offers">عرض الاشتراكين</option><option value="/products/stream">باقات STREAM</option><option value="/products/xtream">باقات Xtream</option><option value="/store/assistant">مساعد التسوق</option></select>
+ <label for="campaign-coupon">كوبون خصم فعّال (اختياري)</label><select id="campaign-coupon"><option value="">بدون كوبون</option></select>
+ <small>يعرض النظام الكوبونات الفعالة فقط بعد تحميل المبيعات. الكوبون يُدخل يدويًا في السلة؛ الرابط لا ينشئ كوبونًا ولا يخصم تلقائيًا.</small>
+ <button type="submit" id="campaign-generate">إنشاء الرابط والنص</button>
+ <label for="campaign-share-link">رابط المشاركة</label><textarea id="campaign-share-link" readonly rows="3" dir="ltr" aria-label="الرابط الجاهز للمشاركة"></textarea>
+ <label for="campaign-share-text">نص ترويجي مختصر</label><textarea id="campaign-share-text" readonly rows="4" aria-label="رسالة ترويجية جاهزة"></textarea>
+ <div class="campaign-copy-actions"><button id="campaign-copy-link" type="button" class="btn-outline">نسخ الرابط</button><button id="campaign-copy-text" type="button" class="btn-outline">نسخ النص</button></div>
+ <output id="campaign-builder-status" role="status" aria-live="polite"></output>
+ </form>
+ <div class="panel">
+ <div class="campaign-summary-head"><h3>نتائج الحملات المجمّعة</h3>
+ <label for="campaign-days">الفترة <select id="campaign-days"><option value="7">آخر 7 أيام</option><option value="30" selected>آخر 30 يومًا</option><option value="90">آخر 90 يومًا</option></select></label></div>
+ <div class="campaign-summary-actions"><button type="button" id="campaign-report-refresh" class="btn-outline">تحديث التقرير</button><a href="/admin/visitors" target="_blank" rel="noopener noreferrer">تفاصيل الزيارات ↗</a></div>
+ <div id="campaign-summary-metrics" class="campaign-summary-metrics"><span>جارٍ تحميل مؤشرات الزيارات...</span></div>
+ <h4>جلسات الحملات وفق موافقة الزائر</h4>
+ <div id="campaign-report-list" class="campaign-report-list" aria-live="polite"></div>
+ <p class="campaign-disclaimer">البيانات تسجل فقط الزيارات التي وافق أصحابها على الإحصاءات. لا تُعد عددًا للعملاء الفريدين، ولا تعني مبيعات أو أرباحًا منسوبة للحملات. المدفوعات تُراجع بشكل منفصل في لوحة المبيعات.</p>
+ <output id="campaign-report-status" role="status" aria-live="polite"></output>
+ </div>
+ </div>
 </section>
 <section class="grid coupon-admin" aria-label="كوبونات التخفيض">
  <article class="panel"><h2>إنشاء كوبون خصم</h2><p>حدد رمزًا وتخفيضًا لا يتجاوز 30%، وعدد استخدامات محدودًا، ثم شاركه مع عملاء الحملات الإعلانية. لن يسمح النظام بكوبون منتهي أو غير فعّال.</p>
