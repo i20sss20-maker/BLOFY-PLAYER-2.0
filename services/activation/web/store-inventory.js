@@ -579,5 +579,68 @@ $('showcase-reload').addEventListener('click',()=>void loadShowcase().catch(e=>{
 }));
 void loadShowcase().catch(e=>{showcaseNodes.notice.textContent='تعذر تحميل المنتجات: '+e.message;});
 
+// Independent one-day trial stock; never uses paid Geidea inventory.
+async function loadTrialStock(){
+ const statusEl=$('trial-stock-status'),grid=$('trial-stock-counts'),history=$('trial-stock-recent');
+ const data=await request('/api/v1/admin/store/trials/summary');
+ grid.replaceChildren();
+ for(const item of data.products||[]){
+  const card=document.createElement('article');card.className='stat';
+  const label=document.createElement('b');label.textContent=item.channel==='app'?'تجربة STREAM — يوم':'تجربة Xtream — يوم';
+  const available=document.createElement('strong');available.textContent=Number(item.available||0)+' كود';
+  const detail=document.createElement('small');
+  detail.textContent='الإجمالي: '+Number(item.total||0)+' · تم التسليم: '+Number(item.claimed||0);
+  card.append(label,available,detail);grid.append(card);
+ }
+ if(!grid.children.length)grid.textContent='المخزون التجريبي غير مهيأ بعد.';
+ statusEl.textContent=data.publicEnabled?
+  '✓ صفحة العميل مفعّلة. يمكن طلب تجربة واحدة بعد تسجيل الدخول بالبريد.':
+  'التوليد متاح للإدارة، لكن التسليم التلقائي للعميل غير مفعّل حتى اعتماد إعدادات الخدمة.';
+ history.replaceChildren();
+ if(!data.recent?.length){
+  const p=document.createElement('p');p.textContent='لا توجد تجارب مسلّمة بعد.';history.append(p);
+  return;
+ }
+ for(const item of data.recent){
+  const card=document.createElement('div');card.className='trial-stock-record';
+  const name=document.createElement('strong');
+  name.textContent=item.sku==='trial-stream-1d'?'STREAM':'Xtream';
+  const hint=document.createElement('code');hint.textContent=item.codeHint||'—';
+  const date=document.createElement('span');
+  const instant=item.claimedAt?new Date(item.claimedAt):null;
+  date.textContent=instant&&Number.isFinite(instant.getTime())?
+    instant.toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'}):'—';
+  const phase=document.createElement('small');
+  phase.textContent=item.activatedAt?'مفعّل':'لم يبدأ بعد';
+  card.append(name,hint,date,phase);history.append(card);
+ }
+}
+async function createTrialStock(){
+ const sku=$('trial-stock-type').value,quantity=Number($('trial-stock-quantity').value);
+ if(!['trial-stream-1d','trial-xtream-1d'].includes(sku)||
+  !Number.isSafeInteger(quantity)||quantity<1||quantity>30){
+  $('trial-stock-status').textContent='الكمية من 1 إلى 30 كود تجريبي.';return;
+ }
+ if(!confirm('إنشاء '+quantity+' كود تجربة ليوم واحد في '+(sku==='trial-stream-1d'?'STREAM':'Xtream')+'؟ لن تبدأ المدة عند الإنشاء.'))return;
+ const button=$('trial-stock-generate');button.disabled=true;
+ $('trial-stock-status').textContent='جارٍ إنشاء الدفعة بشكل آمن...';
+ try{
+  const result=await request('/api/v1/admin/store/trials/generate',{
+   method:'POST',body:JSON.stringify({sku,quantity})
+  });
+  $('trial-stock-status').textContent='✓ أُضيف '+Number(result.generated||0)+' كود تجريبي جديد إلى المخزون المنفصل.';
+  await loadTrialStock();
+ }catch(error){
+  $('trial-stock-status').textContent='تعذّر التوليد: '+error.message+'؛ لم يتم اعتماد دفعة جزئية.';
+ }finally{button.disabled=false;}
+}
+$('trial-stock-generate').addEventListener('click',()=>void createTrialStock());
+$('trial-stock-refresh').addEventListener('click',()=>void loadTrialStock().catch(e=>{
+ $('trial-stock-status').textContent='تعذّر تحديث مخزون التجارب: '+e.message;
+}));
+void loadTrialStock().catch(e=>{
+ $('trial-stock-status').textContent='تعذّر تحميل مخزون التجارب: '+e.message;
+});
+
 reload().then(()=>Promise.all([reloadSales(),reloadOrders()])).catch(e=>status('تعذر تحميل بيانات المتجر: '+e.message));
 })();
