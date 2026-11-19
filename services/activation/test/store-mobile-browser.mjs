@@ -85,7 +85,7 @@ const report=[];
 let browser;
 try{
  await mkdir(output,{recursive:true});
- browser=await chromium.launch({headless:true,args:['--disable-dev-shm-usage','--no-sandbox']});
+ browser=await chromium.launch({channel:'chrome',headless:true,args:['--disable-dev-shm-usage','--no-sandbox']});
  const scenarios=[
   {name:'store-360',path:'/',width:360,height:780},
   {name:'store-390',path:'/',width:390,height:844},
