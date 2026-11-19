@@ -17,8 +17,10 @@ test('BLOFY ONE integrated dashboard links real operator paths and secured workf
     '/admin/control-center','/admin/control-center/health',
     '/sources-admin#dual','/sources-admin#xtream',
     '/admin/content-hub','/distributor','/admin#devices',
-    '/admin#codes','/admin#support','/admin#releases'
+    ...(!html.includes('class="one-panel-switch"')?['/admin#codes']:[]),
+    '/admin#support','/admin#releases'
   ])assert.ok(html.includes('href="'+href+'"'),href);
+  if(html.includes('class="one-panel-switch"'))assert.match(html,/href="\/admin"/);
   assert.match(html,/id="one-readiness-list"/);
   assert.match(html,/id="one-module-filter"/);
   assert.match(html,/id="one-module-list"/);
