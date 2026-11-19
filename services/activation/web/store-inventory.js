@@ -110,5 +110,90 @@ async function reloadOrders(){
 $('order-filter').addEventListener('change',()=>void reloadOrders().catch(err=>{status('فشل تحميل الطلبات: '+err.message);}));
 $('order-refresh').addEventListener('click',()=>void reloadOrders().catch(err=>{status('فشل تحميل الطلبات: '+err.message);}));
 
+
+const showcaseNodes={
+ form:$('showcase-form'),id:$('showcase-id'),name:$('showcase-name'),
+ category:$('showcase-category'),description:$('showcase-description'),
+ image:$('showcase-image'),sku:$('showcase-sku'),order:$('showcase-order'),
+ active:$('showcase-active'),list:$('showcase-list'),notice:$('showcase-message'),
+ save:$('showcase-save')
+};
+let showcaseProducts=[];
+function resetShowcase(){
+ showcaseNodes.form.reset();showcaseNodes.id.value='';
+ showcaseNodes.order.value='0';showcaseNodes.category.value='المنتجات';
+ $('showcase-form-title').textContent='إضافة منتج';
+ showcaseNodes.save.textContent='حفظ المنتج';showcaseNodes.notice.textContent='';
+}
+function editShowcase(product){
+ showcaseNodes.id.value=product.id;
+ showcaseNodes.name.value=product.title;
+ showcaseNodes.description.value=product.description||'';
+ showcaseNodes.category.value=product.category||'المنتجات';
+ showcaseNodes.image.value=product.imageUrl||'';
+ showcaseNodes.sku.value=product.checkoutSku||'';
+ showcaseNodes.order.value=String(product.sortOrder||0);
+ showcaseNodes.active.checked=product.active===true;
+ $('showcase-form-title').textContent='تعديل المنتج';
+ showcaseNodes.save.textContent='حفظ التعديلات';
+ showcaseNodes.form.scrollIntoView({behavior:'smooth',block:'start'});
+}
+async function loadShowcase(){
+ const data=await request('/api/v1/admin/store/showcase');
+ showcaseProducts=Array.isArray(data.products)?data.products:[];
+ showcaseNodes.list.replaceChildren();
+ if(!showcaseProducts.length){showcaseNodes.list.textContent='ما أضفت منتجات بعد. أضف أول منتج من النموذج.';return;}
+ for(const product of showcaseProducts){
+  const card=document.createElement('article');card.className='showcase-item';
+  const info=document.createElement('div');info.className='showcase-item-info';
+  const heading=document.createElement('strong');heading.textContent=product.title;
+  const detail=document.createElement('small');
+  detail.textContent=(product.active?'منشور':'مسودة')+' · '+product.category+
+   ' · '+(product.checkoutSku?'بيع مرتبط بكود '+product.checkoutSku:'استفسار فقط');
+  info.append(heading,detail);
+  const actions=document.createElement('div');actions.className='showcase-item-actions';
+  const edit=document.createElement('button');edit.type='button';edit.textContent='تعديل';edit.className='btn-outline';
+  edit.addEventListener('click',()=>editShowcase(product));
+  const archive=document.createElement('button');archive.type='button';archive.textContent='إخفاء';
+  archive.disabled=!product.active;archive.className='btn-outline';
+  archive.addEventListener('click',async()=>{
+   if(!confirm('هل تريد إخفاء المنتج «'+product.title+'» من الموقع؟'))return;
+   archive.disabled=true;showcaseNodes.notice.textContent='جارٍ إخفاء المنتج...';
+   try{
+    await request('/api/v1/admin/store/showcase/archive',{
+     method:'POST',body:JSON.stringify({id:product.id})
+    });
+    showcaseNodes.notice.textContent='تم إخفاء المنتج.';await loadShowcase();
+   }catch(e){archive.disabled=false;showcaseNodes.notice.textContent='تعذر إخفاء المنتج: '+e.message;}
+  });
+  actions.append(edit,archive);card.append(info,actions);showcaseNodes.list.append(card);
+ }
+}
+showcaseNodes.form.addEventListener('submit',async event=>{
+ event.preventDefault();if(showcaseNodes.save.disabled)return;
+ const payload={
+  id:showcaseNodes.id.value||null,title:showcaseNodes.name.value.trim(),
+  description:showcaseNodes.description.value.trim(),
+  category:showcaseNodes.category.value.trim(),
+  imageUrl:showcaseNodes.image.value.trim(),checkoutSku:showcaseNodes.sku.value||null,
+  sortOrder:Number(showcaseNodes.order.value),active:showcaseNodes.active.checked
+ };
+ if(!payload.title){showcaseNodes.notice.textContent='اكتب اسم المنتج أولًا.';return;}
+ showcaseNodes.save.disabled=true;showcaseNodes.notice.textContent='جارٍ حفظ المنتج...';
+ try{
+  await request('/api/v1/admin/store/showcase/save',{
+   method:'POST',body:JSON.stringify(payload)
+  });
+  resetShowcase();showcaseNodes.notice.textContent='تم حفظ المنتج.';
+  await loadShowcase();
+ }catch(e){showcaseNodes.notice.textContent='تعذر الحفظ: '+e.message;}
+ finally{showcaseNodes.save.disabled=false;}
+});
+$('showcase-cancel').addEventListener('click',resetShowcase);
+$('showcase-reload').addEventListener('click',()=>void loadShowcase().catch(e=>{
+ showcaseNodes.notice.textContent='تعذر تحديث المنتجات: '+e.message;
+}));
+void loadShowcase().catch(e=>{showcaseNodes.notice.textContent='تعذر تحميل المنتجات: '+e.message;});
+
 reload().then(()=>Promise.all([reloadSales(),reloadOrders()])).catch(e=>status('تعذر تحميل بيانات المتجر: '+e.message));
 })();
