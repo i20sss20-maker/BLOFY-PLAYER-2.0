@@ -37,3 +37,18 @@
 .showcase-item-actions{display:flex;gap:8px}
 #showcase-message{display:block;min-height:22px;margin:10px 0;color:#9dd4ff;font-size:12px}
 @media(max-width:580px){.showcase-actions{grid-template-columns:1fr}.showcase-item-actions{width:100%}.showcase-item-actions button{flex:1}}
+
+/* Live storefront brand editor */
+.branding-panel{padding:27px}
+.branding-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 22px}
+.branding-grid .branding-full{grid-column:1/-1}
+.branding-grid label{margin:18px 0 8px}
+.branding-grid input,.branding-grid textarea,.branding-grid select{width:100%;box-sizing:border-box}
+.branding-grid textarea{resize:vertical;line-height:1.9;direction:rtl;text-align:right}
+.branding-grid input[dir=ltr]{text-align:left;direction:ltr}
+.branding-grid small{margin-top:4px;font-size:11px}
+.branding-actions{display:flex;gap:15px;align-items:center;flex-wrap:wrap;margin-top:20px}
+.branding-actions button{width:auto;min-width:220px;margin-top:0}
+.branding-actions a{color:#aad7ff;border-bottom:1px solid #aad7ff;font-size:13px}
+#branding-status{display:block;min-height:24px;margin-top:15px;color:#bde3ff;font-size:13px}
+@media(max-width:690px){.branding-grid{grid-template-columns:1fr}.branding-grid .branding-full{grid-column:auto}.branding-panel{padding:19px}.branding-actions button{width:100%}}
