@@ -4,14 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#fbfaf8">
-  <meta name="description" content="اشتراك STRONG 8K من BLOFY: أكثر من 50 ألف قناة بث مباشر، وأكثر من 50 ألف مسلسل، وأكثر من 185 ألف فيلم بحسب بيانات الباقة. قارن بين BLOFY STREAM وXtream عبر BLOFY PLAYER.">
+  <meta name="description" content="متجر BLOFY للاشتراكات الرقمية. تصفح باقات BLOFY STREAM وBLOFY PLAYER والعروض، وأكمل طلبك بسلة واضحة وحساب عميل.">
   <meta name="robots" content="index,follow">
   <link rel="canonical" href="https://www.blofyplayer.com/">
   <link rel="icon" href="/blofy-logo.png">
   <meta property="og:type" content="website">
   <meta property="og:locale" content="ar_SA">
   <meta property="og:title" content="BLOFY | اشتراك STRONG 8K">
-  <meta property="og:description" content="اشتراك STRONG 8K، أكثر من 50 ألف قناة، أكثر من 50 ألف مسلسل، وأكثر من 185 ألف فيلم بحسب بيانات الباقة. اختر ستريم أو BLOFY PLAYER.">
+  <meta property="og:description" content="متجر BLOFY للاشتراكات الرقمية والعروض: باقات ستريم وبلاير، سلة شراء، حساب عميل ودفع بالبطاقات.">
   <meta property="og:image" content="https://www.blofyplayer.com/store/media/strong8k.jpg">
   <meta property="og:image:alt" content="بانر BLOFY STRONG 8K">
   <meta name="twitter:card" content="summary_large_image">
@@ -293,7 +293,7 @@
         <span class="eyebrow">FAQ</span><h2 class="h2" id="faq-heading">عندك سؤال؟ عندنا الجواب.</h2>
         <div class="faq">
           <details><summary>وش الفرق بين BLOFY STREAM وXtream؟</summary><p>BLOFY STREAM يعتمد الدخول بالكود مباشرة، أما Xtream فيتيح استخدام بيانات الاتصال مع BLOFY PLAYER والاستفادة من خيارات البحث والمفضلة والتنظيم حسب الإصدار.</p></details>
-          <details><summary>وش محتوى اشتراك STRONG 8K؟</summary><p>بحسب بيانات الباقة المعلنة: أكثر من 50 ألف قناة بث مباشر، وأكثر من 50 ألف مسلسل، وأكثر من 185 ألف فيلم. المحتوى قابل للتحديث ويختلف حسب المصدر وحقوق التوزيع.</p></details>
+          <details><summary>وش محتوى اشتراك STRONG 8K؟</summary><p>تختلف مكتبة القنوات والأفلام والمسلسلات حسب الباقة والمصدر والتراخيص المتاحة. راجع وصف الاشتراك وتأكد من توافقه مع جهازك قبل الشراء.</p></details>
           <details><summary>كم سعر الاشتراكات؟</summary><p>3 أشهر 40 ريال، 6 أشهر 70 ريال، سنة 120 ريال. تتأكد من المبلغ قبل إتمام الدفع.</p></details>
           <details><summary>هل فيه تجربة قبل الاشتراك؟</summary><p>يوجد خيار تجربة للاستفسار حسب التوفر. تواصل مع الفريق لمعرفة المدة والشروط.</p></details>
           <details><summary>وش يشمل عرض الاشتراكين السنويين؟</summary><p>كودان مستقلان لمدة سنة، بأي تركيبة من ستريم وإكستريم، مقابل 200 ريال بدل 240 ريال.</p></details>
@@ -370,7 +370,7 @@
    document.querySelectorAll('[data-wa]').forEach(function(link){
      var product=link.dataset.wa||'general',message=messages[product]||messages.general;
      if(product!=='general')message+=' المدة: '+selected(product)+'، السعر: '+amounts[selected(product)]+' ر.س. أرجو المساعدة.';
-     link.href='https://wa.me/966568941484?text='+encodeURIComponent(message);
+     link.href='https://wa.me/'+(window.BLOFY_MARKET_WHATSAPP||'966568941484')+'?text='+encodeURIComponent(message);
    });
    ['stream','xtream'].forEach(function(product){
       var dur=selected(product),price=amounts[dur],name=product+'-'+suffix[dur];
