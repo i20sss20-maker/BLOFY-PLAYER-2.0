@@ -110,13 +110,13 @@
    if(reset)offset=0;
    loading=true;loaded=true;status.textContent='جارٍ قراءة أكواد العملاء والمخزون من قاعدة البيانات…';
    const ctl=new AbortController();fetchAbort=ctl;
-   const qs=new URLSearchParams({
+   const filters={
       q:$('one-register-query').value.trim(),kind:$('one-register-kind').value,
-      state:$('one-register-state').value,offset:String(offset)
-   });
+      state:$('one-register-state').value,offset
+   };
    try{
-    const data=await request('/api/v1/admin/store/codes/register?'+qs.toString(),{
-      signal:ctl.signal
+    const data=await request('/api/v1/admin/store/codes/register',{
+      signal:ctl.signal,payload:filters
     });
     if(!Array.isArray(data.items)||!Number.isSafeInteger(Number(data.matched)))
       throw Error('استجابة سجل الأكواد غير مكتملة.');
