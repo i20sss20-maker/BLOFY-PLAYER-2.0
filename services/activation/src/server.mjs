@@ -12,6 +12,7 @@ import { createStoreBrandingHandlers } from './store-branding.mjs';
 import { createStoreCommercialInsightsHandlers } from './store-commercial-insights.mjs';
 import { createStoreMerchandisingHandlers } from './store-merchandising.mjs';
 import { createStoreAssistantHandlers } from './store-assistant.mjs';
+import { createStoreProReadinessHandlers } from './store-pro-readiness.mjs';
 import { storeInfoPage } from './store-info-pages.mjs';
 import { createProfileCloudHandlers } from './profile-cloud.mjs';
 import { registerDeviceTrial, bindExistingTrial, completePendingTrial } from './trial-registration.mjs';
@@ -191,6 +192,7 @@ const storeBranding = createStoreBrandingHandlers({pool,json,readJson,authorizeA
 const storeCommercialInsights = createStoreCommercialInsightsHandlers({pool,json,authorizeAdmin:requireAdmin});
 const storeMerchandising = createStoreMerchandisingHandlers({pool,json,readJson,authorizeAdmin:requireAdmin});
 const storeAssistant = createStoreAssistantHandlers({json,readJson,requestClientKey});
+const storeProReadiness = createStoreProReadinessHandlers({pool,json,authorizeAdmin:requireAdmin});
 const siteAnalytics = createSiteAnalyticsHandlers({pool,json,readJson,authorizeAdmin:requireAdmin,keyHex:PLAYLIST_ENCRYPTION_KEY});
 const whatsappCloud = createWhatsAppCloudHandlers({pool,authorizeAdmin:requireAdmin});
 const cloud = createProfileCloudHandlers({ pool, json, readJson, authorizedDevice });
@@ -1014,6 +1016,7 @@ const server = http.createServer(async (req, res) => {
       });
       return res.end();
     }
+    if (await storeProReadiness(req,res,requestUrl)) return;
     if (await storeAssistant(req,res,requestUrl)) return;
     if (await storeMerchandising(req,res,requestUrl)) return;
     if (await storeCommercialInsights(req,res,requestUrl)) return;
