@@ -122,6 +122,26 @@
 </section>
 <section class="stats" id="stats" aria-label="مخزون المتجر"><div class="notice">جارٍ تحميل بيانات المخزون...</div></section>
 <section class="panel" id="stock-warning" role="status" aria-live="polite">جارٍ فحص تنبيهات المخزون...</section>
+<section class="trial-stock-admin panel" id="trial-stock-admin" aria-labelledby="trial-stock-title">
+ <div class="intro"><span>ONE-DAY TRIAL INVENTORY</span><h2 id="trial-stock-title">مخزون أكواد التجربة — يوم واحد</h2>
+  <p>مخزون منفصل عن الأكواد المدفوعة: أنشئ أكواد STREAM أو Xtream لمدة يوم واحد. يبدأ اليوم عند أول تفعيل ناجح، وليس عند إنشاء الكود أو تسليمه.</p></div>
+ <div id="trial-stock-counts" class="stats" aria-live="polite"><div class="notice">جارٍ تحميل مخزون التجارب...</div></div>
+ <div class="trial-stock-grid">
+  <div>
+   <label for="trial-stock-type">نوع التجربة</label>
+   <select id="trial-stock-type"><option value="trial-stream-1d">BLOFY STREAM — يوم واحد</option><option value="trial-xtream-1d">Xtream — يوم واحد</option></select>
+  </div>
+  <div><label for="trial-stock-quantity">عدد الأكواد</label><input id="trial-stock-quantity" type="number" min="1" max="30" value="10" inputmode="numeric"></div>
+  <button type="button" id="trial-stock-generate">إنشاء وإضافة للمخزون</button>
+  <button type="button" id="trial-stock-refresh" class="btn-outline">↻ تحديث</button>
+ </div>
+ <output id="trial-stock-status" role="status" aria-live="polite"></output>
+ <div class="trial-stock-links"><a href="/store/trial" target="_blank" rel="noopener noreferrer">↗ صفحة طلب التجربة للعميل</a>
+  <small>كل حساب عميل موثّق بالبريد يستلم تجربة واحدة فقط من أحد النوعين. تفعيل التسليم المباشر يتم من إعدادات الخادم بعد الاختبار.</small></div>
+ <h3>آخر التجارب المسلّمة</h3>
+ <div id="trial-stock-recent" aria-live="polite" class="trial-stock-recent"><p>لم تُحمّل السجلات بعد.</p></div>
+ <p class="footnote">لا تُعرض الأكواد السرية في قائمة الإدارة ولا يُخلط هذا المخزون بالمخزون المدفوع. يمكن للعميل استرجاع تجربته عبر حسابه.</p>
+</section>
 <section class="grid">
 <article class="panel"><h2>إصدار دفعة جديدة</h2><p>توليد أكواد أصلية من خادم BLOFY وتسجيلها تلقائيًا بالمخزون. الكود محفوظ مشفرًا ولن يظهر ضمن القوائم العامة.</p>
 <label for="generate-sku">نوع الاشتراك</label><select id="generate-sku" class="sku"></select><label for="quantity">كم كود تبي تضيف؟</label><input id="quantity" type="number" min="1" max="100" value="10" inputmode="numeric">
