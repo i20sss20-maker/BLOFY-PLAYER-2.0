@@ -43,7 +43,7 @@
      const r=await fetch('/api/v1/store/assistant',{
        method:'POST',credentials:'same-origin',cache:'no-store',
        headers:{'content-type':'application/json',accept:'application/json'},
-       body:JSON.stringify({message:question})
+       body:JSON.stringify({message:question,allowExternalAi:document.getElementById('blofy-assistant-allow-ai')?.checked===true})
      });
      const data=await r.json().catch(()=>({}));
      if(!r.ok)throw Error(data.error||'assistant_unavailable');
