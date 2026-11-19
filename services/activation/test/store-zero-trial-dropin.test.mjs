@@ -34,7 +34,7 @@ test('homepage hides free trial sales while backend redemption still works for e
   assert.doesNotMatch(home,new RegExp('trial-'+product+'-1d'));
  }
  assert.doesNotMatch(home,/id="trial-product"|id="trial-home-stock"|data-free-trial-link/);
- assert.doesNotMatch(home,/href="\\/store\\/trial"|تجربة مجانية|TRY BLOFY/);
+ assert.doesNotMatch(home,/href="[^"]*store.trial"|تجربة مجانية|TRY BLOFY/);
  assert.match(home,/شهر — 25 ريال/);
  assert.match(home,/3 أشهر — 50 ريال/);
 });
