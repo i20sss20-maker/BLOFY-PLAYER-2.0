@@ -9,6 +9,7 @@ const ORIGINS=new Set([
 ]);
 const MODEL=/^gemini-[a-z0-9.-]{3,50}$/;
 const SENSITIVE=/(?:[0-9٠-٩۰-۹][\s-]?){5,}|(?:https?:\/\/|www\.|@)|(?:api.?key|bearer|password|كلمة مرور|كلمه مرور|رقم البطاقة|رقم البطاقه|رمز التحقق|كود التحقق)/i;
+const COMMERCE=/(?:السعر|اسعار|أسعار|كم سعر|دفع|خصم|فاتورة|استرداد|فلوس|مدى|فيزا|ماستر|apple pay|google pay|ابل باي|جوجل باي|شراء|تجديد|كود اشتراك|رمز دخول)/i;
 const SYSTEM_GUIDE=[
  'أنت مساعد تسوق BLOFY للمنتجات الرقمية. اكتب العربية البسيطة باختصار واحترام.',
  'تحدث فقط عن اختيار BLOFY STREAM وXtream/BLOFY PLAYER، توافق الأجهزة وخطوات التسوق العامة.',
@@ -86,6 +87,11 @@ export function createStoreAiAssistantHandlers({
   const question=safeStoreQuestion(body?.question);
   if(!question){
    json(res,400,{ok:false,error:'question_invalid_or_sensitive'},safeHeaders);return true;
+  }
+  // Monetary statements must come from the verified storefront, never an LLM.
+  if(COMMERCE.test(question)){
+   json(res,200,{ok:true,mode:'guided',reply:'افتح صفحة المنتجات والسلة لمعرفة الأسعار والخصومات المتاحة. لمشكلات الدفع افتح طلباتي أو تواصل مع الدعم؛ لا تعِد الدفع قبل التحقق من حالة الطلب.'},safeHeaders);
+   return true;
   }
   const payload={
    systemInstruction:{parts:[{text:SYSTEM_GUIDE}]},
