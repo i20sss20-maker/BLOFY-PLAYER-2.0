@@ -7,7 +7,9 @@
    'stream-3m':'BLOFY STREAM — 3 أشهر','stream-6m':'BLOFY STREAM — 6 أشهر',
    'stream-1y':'BLOFY STREAM — سنة','xtream-3m':'Xtream BLOFY — 3 أشهر',
    'xtream-6m':'Xtream BLOFY — 6 أشهر','xtream-1y':'Xtream BLOFY — سنة',
-   'bundle-2y':'عرض اشتراكين سنويين'
+   'bundle-2y':'عرض اشتراكين سنويين',
+   'trial-stream-1d':'تجربة BLOFY STREAM — يوم مجاني',
+   'trial-xtream-1d':'تجربة Xtream — يوم مجاني'
  })[sku]||'اشتراك BLOFY';
  const money=n=>(Number(n)/100).toLocaleString('ar-SA',{minimumFractionDigits:0,maximumFractionDigits:2})+' ر.س';
  let items=[],quoted=null,ready=false,creating=false,paymentOpen=false,currentOrder=null,accessToken=null;
@@ -22,10 +24,15 @@
      'https://www.ksamerchant.geidea.net/hpp/checkout/?'+encodeURIComponent(sessionId):null;
  }
  const message=(text)=>{$('message').textContent=text;};
+ const trialSku=sku=>sku==='trial-stream-1d'||sku==='trial-xtream-1d';
+ const trialLine=()=>items.find(x=>trialSku(x.sku))||null;
+ const paidLines=()=>items.filter(x=>!trialSku(x.sku));
  const keyOf=item=>item.sku==='bundle-2y'?'bundle-2y:'+item.bundleSelection.join('+'):item.sku;
  function validLine(item){
    if(!item||typeof item!=='object')return false;
-   if(!['stream-3m','stream-6m','stream-1y','xtream-3m','xtream-6m','xtream-1y','bundle-2y'].includes(item.sku))return false;
+   if(!['stream-3m','stream-6m','stream-1y','xtream-3m','xtream-6m','xtream-1y','bundle-2y',
+     'trial-stream-1d','trial-xtream-1d'].includes(item.sku))return false;
+   if(trialSku(item.sku))return item.quantity===1&&item.bundleSelection==null;
    if(!Number.isInteger(item.quantity)||item.quantity<1||item.quantity>3)return false;
    if(item.sku==='bundle-2y')return Array.isArray(item.bundleSelection)&&item.bundleSelection.length===2&&
      item.bundleSelection.every(s=>s==='app'||s==='xtream');
@@ -43,6 +50,7 @@
      const seen=new Set(),out=[];
      for(const it of parsed){
        if(!validLine(it))continue;
+       if(trialSku(it.sku)&&out.some(x=>trialSku(x.sku)))continue;
        const key=keyOf(it);
        if(seen.has(key))continue;
        seen.add(key);out.push({sku:it.sku,quantity:it.quantity,
@@ -62,7 +70,9 @@
    if(validLine(line)){
      const same=items.find(x=>keyOf(x)===keyOf(line));
      let added=false;
-     if(same&&same.quantity<3&&totalCodes(items)+(sku==='bundle-2y'?2:1)<=6){
+     if(trialSku(sku)&&items.some(x=>trialSku(x.sku))){
+       message('تقدر تختار تجربة مجانية واحدة فقط في السلة. احذف السابقة إذا تبي تغيّر النوع.');
+     }else if(same&&!trialSku(sku)&&same.quantity<3&&totalCodes(items)+(sku==='bundle-2y'?2:1)<=6){
        same.quantity++;added=true;
      }else if(!same&&items.length<5&&totalCodes(items)+(sku==='bundle-2y'?2:1)<=6){
        items.push(line);added=true;
@@ -99,7 +109,9 @@
        const details=el('div','item-details');
        const badge=el('span','item-category',item.sku==='bundle-2y'?'عرض خاص':item.sku.startsWith('xtream')?'Xtream':'BLOFY STREAM');
        const heading=el('h3','',title(item.sku));
-       const description=el('p','',item.sku==='bundle-2y'
+       const description=el('p','',trialSku(item.sku)?
+         'تجربة مجانية لمدة 24 ساعة من أول تفعيل ناجح، كود واحد لكل حساب موثّق.':
+         item.sku==='bundle-2y'
          ?'كودان مستقلان لمدة سنة: '+item.bundleSelection.map(x=>x==='app'?'ستريم':'إكستريم').join(' + ')
          :'كود اشتراك رقمي؛ تبدأ مدته عند أول تفعيل');
        const actions=el('div','item-actions');
@@ -109,11 +121,11 @@
        const count=el('span','quantity-value',String(item.quantity));
        const increment=el('button','quantity-btn','+');increment.type='button';increment.setAttribute('aria-label','زيادة كمية '+title(item.sku));
        const perCode=item.sku==='bundle-2y'?2:1;
-       decrement.disabled=item.quantity<=1;
-       increment.disabled=item.quantity>=3||totalCodes(items)+perCode>6;
+       decrement.disabled=trialSku(item.sku)||item.quantity<=1;
+       increment.disabled=trialSku(item.sku)||item.quantity>=3||totalCodes(items)+perCode>6;
        function changeQuantity(step){
          const next=item.quantity+step;
-         if(next<1||next>3||totalCodes(items)+step*perCode>6){
+         if(trialSku(item.sku)||next<1||next>3||totalCodes(items)+step*perCode>6){
            message('الحد الأعلى 6 أكواد في الطلب الواحد.');return;
          }
          item.quantity=next;save();void refresh();
@@ -147,7 +159,7 @@
  }
  function body(){
    const coupon=$('coupon').value.trim().toUpperCase();
-   return {items:items.map(x=>({sku:x.sku,quantity:x.quantity,
+   return {items:paidLines().map(x=>({sku:x.sku,quantity:x.quantity,
      ...(x.sku==='bundle-2y'?{bundleSelection:[...x.bundleSelection]}:{})})),
      ...(coupon?{couponCode:coupon}:{})};
  }
@@ -157,6 +169,7 @@
    const out=[],seen=new Set();
    for(const raw of value){
      if(!validLine(raw))continue;
+     if(trialSku(raw.sku)&&out.some(x=>trialSku(x.sku)))continue;
      const key=keyOf(raw);
      if(seen.has(key))continue;
      if(out.length>=5||totalCodes(out)+raw.quantity*(raw.sku==='bundle-2y'?2:1)>6)continue;
