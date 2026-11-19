@@ -218,6 +218,20 @@
  <output id="campaign-report-status" role="status" aria-live="polite"></output>
  </div>
  </div>
+ <div class="panel metricool-panel" id="metricool-panel" aria-labelledby="metricool-title">
+  <div class="metricool-panel-head">
+   <div><span class="eyebrow">OFFICIAL SOCIAL SCHEDULING</span><h3 id="metricool-title">الجدولة الرسمية عبر Metricool</h3>
+   <p>مراجعة المنشورات المجدولة عبر API الرسمي للقراءة فقط عند تفعيل مفتاح مناسب. ربط Metricool من ChatGPT منفصل عن الربط المباشر مع موقع المتجر.</p></div>
+   <div class="metricool-actions">
+    <button type="button" id="metricool-refresh" class="btn-outline">↻ فحص حالة الجدولة</button>
+    <a href="https://app.metricool.com/" rel="noopener noreferrer" target="_blank">فتح Metricool ↗</a>
+   </div>
+  </div>
+  <p id="metricool-connection" class="metricool-connection" role="status" aria-live="polite">جارٍ التحقق من حالة الربط الرسمي…</p>
+  <div id="metricool-counts" class="metricool-counts" aria-label="ملخص المنشورات المجدولة"></div>
+  <div id="metricool-posts" class="metricool-posts" aria-label="المنشورات القادمة"></div>
+  <p class="campaign-disclaimer">هذه بيانات جدولة فقط وليست إثبات نشر أو مبيعات. لا يوجد نشر تلقائي أو تغيير منشورات من هذه الصفحة. راجع نصوص الحملات وسياسات كل منصة قبل اعتماد النشر.</p>
+ </div>
 </section>
 <section class="grid coupon-admin" aria-label="كوبونات التخفيض">
  <article class="panel"><h2>إنشاء كوبون خصم</h2><p>حدد رمزًا وتخفيضًا لا يتجاوز 30%، وعدد استخدامات محدودًا، ثم شاركه مع عملاء الحملات الإعلانية. لن يسمح النظام بكوبون منتهي أو غير فعّال.</p>
