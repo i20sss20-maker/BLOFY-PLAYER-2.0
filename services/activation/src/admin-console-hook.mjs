@@ -65,6 +65,8 @@ const assets = new Map([
   ['/blofy-one.css', ['blofy-one.css', 'text/css']],
   ['/blofy-one-role-split.css', ['blofy-one-role-split.css', 'text/css']],
   ['/blofy-one-code-center.js', ['blofy-one-code-center.js', 'text/javascript']],
+  ['/blofy-one-code-register.js', ['blofy-one-code-register.js', 'text/javascript']],
+  ['/blofy-one-code-register.css', ['blofy-one-code-register.css', 'text/css']],
   ['/blofy-one.js', ['blofy-one.js', 'text/javascript']],
   ['/blofy-one-customers.js', ['blofy-one-customers.js', 'text/javascript']],
   ['/blofy-one-legacy.js', ['blofy-one-legacy.js', 'text/javascript']],
