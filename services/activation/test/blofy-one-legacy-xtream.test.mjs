@@ -76,7 +76,8 @@ test('BLOFY ONE legacy extractor uses authenticated exact POST lookup and requir
   assert.match(js,/\/api\/v1\/admin\/xtream-gateway\/codes\/lookup/);
   assert.match(js,/\/api\/v1\/admin\/xtream-gateway\/link\/code-to-xtream/);
   assert.match(js,/window\.confirm/);
-  assert.match(js,/window\.setTimeout\(hideCredentials, 90000\)/);
+  // Do not auto-discard credentials mid-copy; only the owner can hide them, or they clear on navigation.
+  assert.match(js,/one-legacy-hide'\)\.addEventListener\('click', hideCredentials\)/);
   assert.match(js,/visibilitychange/);
   assert.match(js,/pagehide/);
   assert.match(js,/credentials:'same-origin'/);
