@@ -13,10 +13,12 @@ const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const API='https://api.ksamerchant.geidea.net';
 const ALLOWED_ORIGINS=new Set(['https://blofyplayer.com','https://www.blofyplayer.com','https://api.blofyplayer.com']);
 const P=[
- ['stream-3m','كود BLOFY STREAM — 3 أشهر','app',90,4000],
+ ['stream-1m','كود BLOFY STREAM — شهر','app',30,2500],
+ ['stream-3m','كود BLOFY STREAM — 3 أشهر','app',90,5000],
  ['stream-6m','كود BLOFY STREAM — 6 أشهر','app',180,7000],
  ['stream-1y','كود BLOFY STREAM — سنة','app',365,12000],
- ['xtream-3m','Xtream BLOFY — 3 أشهر','xtream',90,4000],
+ ['xtream-1m','Xtream BLOFY — شهر','xtream',30,2500],
+ ['xtream-3m','Xtream BLOFY — 3 أشهر','xtream',90,5000],
  ['xtream-6m','Xtream BLOFY — 6 أشهر','xtream',180,7000],
  ['xtream-1y','Xtream BLOFY — سنة','xtream',365,12000]
 ];

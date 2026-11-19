@@ -4,8 +4,8 @@ import crypto from 'node:crypto';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PRICE=Object.freeze({
- 'stream-3m':4000,'stream-6m':7000,'stream-1y':12000,
- 'xtream-3m':4000,'xtream-6m':7000,'xtream-1y':12000,
+ 'stream-1m':2500,'stream-3m':5000,'stream-6m':7000,'stream-1y':12000,
+ 'xtream-1m':2500,'xtream-3m':5000,'xtream-6m':7000,'xtream-1y':12000,
  'bundle-2y':20000
 });
 const SITE_ORIGINS=new Set(['https://blofyplayer.com','https://www.blofyplayer.com','https://api.blofyplayer.com']);

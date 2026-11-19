@@ -59,9 +59,9 @@ function browser({local=[],owner=null,remote=[],remoteCoupon='',url='',saveFailu
    const items=data.items||[];
    return response(200,{
     codeCount:items.reduce((n,x)=>n+x.quantity,0),
-    subtotalMinor:items.length*4000,
-    discountMinor:0,totalMinor:items.length*4000,
-    items:items.map(x=>({...x,lineTotalMinor:4000}))
+    subtotalMinor:items.length*5000,
+    discountMinor:0,totalMinor:items.length*5000,
+    items:items.map(x=>({...x,lineTotalMinor:5000}))
    });
   }
   throw Error('Unexpected HTTP call: '+path);

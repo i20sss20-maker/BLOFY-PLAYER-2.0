@@ -10,11 +10,11 @@ test('BLOFY cart uses trusted prices and supports multiple products, quantities 
    {sku:'bundle-2y',quantity:1,bundleSelection:['app','xtream']}
  ];
  const cart=parseStoreCart(input);
- assert.equal(cart.totalMinor,35000);
+ assert.equal(cart.totalMinor,37000);
  assert.equal(cart.codeCount,5);
  assert.equal(cart.items.length,3);
  assert.equal(cart.items[0].unitPriceMinor,7000);
- assert.equal(cart.items[1].lineTotalMinor,8000);
+ assert.equal(cart.items[1].lineTotalMinor,10000);
  assert.equal(cart.items[2].lineTotalMinor,20000);
  assert.deepEqual(cartVouchers(input).map(x=>x.sku),
    ['stream-6m','xtream-3m','xtream-3m','stream-1y','xtream-1y']);
@@ -34,6 +34,16 @@ test('BLOFY cart refuses manipulated amounts, unknown subscriptions, duplicate l
  const priceTamper=parseStoreCart([{sku:'xtream-1y',quantity:1,priceMinor:1,discount:999,days:3}]);
  assert.equal(priceTamper.totalMinor,12000);
  assert.equal(priceTamper.items[0].unitPriceMinor,12000);
+});
+test('Month and three-month plans reject client price tampering',()=>{
+ const rows=[['stream-1m','app',2500,30],['xtream-1m','xtream',2500,30],
+  ['stream-3m','app',5000,90],['xtream-3m','xtream',5000,90]];
+ for(const [sku,channel,priceMinor,durationDays] of rows){
+  const cart=parseStoreCart([{sku,quantity:1,priceMinor:1,durationDays:1}]);
+  assert.equal(cart.totalMinor,priceMinor);
+  assert.equal(cart.items[0].unitPriceMinor,priceMinor);
+  assert.deepEqual(cartVouchers([{sku,quantity:1}]),[{sku,channel,durationDays}]);
+ }
 });
 test('Order reference is a non-sensitive receipt reference, not an authorization token',()=>{
  const n=publicOrderNumber('a1245678-abcd-4eef-84be-888888888888',new Date('2026-11-18'));

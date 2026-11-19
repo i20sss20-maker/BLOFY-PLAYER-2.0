@@ -32,16 +32,17 @@
     const p=prices.find(x=>x.sku===sku&&x.currency==='SAR');
     return Number.isSafeInteger(p?.priceMinor)&&p.priceMinor>0?p.priceMinor:null;
    };
-   const three=lookup('stream-3m'),six=lookup('stream-6m'),year=lookup('stream-1y');
+   const month=lookup('stream-1m'),three=lookup('stream-3m'),six=lookup('stream-6m'),year=lookup('stream-1y');
    const bundle=offers.find(x=>x.sku==='bundle-2y'&&x.currency==='SAR');
-   if(!three||!six||!year)return;
-   livePricing={three,six,year,bundle:Number.isSafeInteger(bundle?.priceMinor)&&bundle.priceMinor>0?bundle.priceMinor:null};
+   if(!month||!three||!six||!year)return;
+   livePricing={month,three,six,year,bundle:Number.isSafeInteger(bundle?.priceMinor)&&bundle.priceMinor>0?bundle.priceMinor:null};
   }catch(_){livePricing=null;}
  }
  function pricingAnswer(){
   if(!livePricing)return 'تعذّر التحقق من أسعار الباقات لحظيًا. افتح صفحة الاشتراكات لعرض الأسعار الحالية، ثم راجع الإجمالي في السلة قبل الدفع.';
   const p=livePricing;
-  return 'حسب كتالوج BLOFY الحالي: ثلاثة أشهر '+formatRiyals(p.three)+
+  return 'حسب كتالوج BLOFY الحالي: شهر واحد '+formatRiyals(p.month)+
+    '، ثلاثة أشهر '+formatRiyals(p.three)+
     '، ستة أشهر '+formatRiyals(p.six)+'، سنة '+formatRiyals(p.year)+
     (p.bundle?'، وعرض اشتراكين سنويين '+formatRiyals(p.bundle):'')+
     '. هذه أسعار الكتالوج؛ السعر النهائي والخصم يتأكدان من ملخص السلة قبل الدفع.';

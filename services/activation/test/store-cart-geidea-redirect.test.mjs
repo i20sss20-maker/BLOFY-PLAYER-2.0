@@ -54,8 +54,8 @@ test('signed-in cart safely exposes hosted Geidea fallback when drop-in SDK is a
      sessionExpiresAt:new Date(Date.now()+8*60000).toISOString(),
      orderNumber:'BF-261118-BBBBBBBB',status:'pending'}:{ok:true,pending:false});
   if(path==='/api/v1/store/cart/quote')return response(200,{codeCount:1,
-   subtotalMinor:4000,discountMinor:0,totalMinor:4000,
-   items:[{...item,lineTotalMinor:4000}]});
+   subtotalMinor:5000,discountMinor:0,totalMinor:5000,
+   items:[{...item,lineTotalMinor:5000}]});
   if(path==='/api/v1/store/orders/status')return response(200,{orderId,status:'pending',fulfilled:false});
   if(path==='/api/v1/store/cart/checkout'&&simulateLostResponse){
    // Provider session exists, but the final HTTP response never reached browser.
@@ -65,7 +65,7 @@ test('signed-in cart safely exposes hosted Geidea fallback when drop-in SDK is a
    provider:'geidea',checkoutMode:'modal',sku:'cart',orderId,
    sessionId,sessionExpiresAt:new Date(Date.now()+14*60000).toISOString(),
    accessToken:token,orderNumber:'BF-261118-BBBBBBBB',
-   priceMinor:4000,currency:'SAR'
+   priceMinor:5000,currency:'SAR'
   });
   throw Error('Unexpected fetch: '+path);
  };

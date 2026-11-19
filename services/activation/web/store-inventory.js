@@ -340,8 +340,8 @@ const moneyMinor=value=>(Number(value||0)/100).toLocaleString('ar-SA',{maximumFr
 const reportStatus=$('commercial-notice');
 let reportSnapshot=null;
 const reportProductNames={
- 'stream-3m':'BLOFY STREAM 3 أشهر','stream-6m':'BLOFY STREAM 6 أشهر','stream-1y':'BLOFY STREAM سنة',
- 'xtream-3m':'Xtream 3 أشهر','xtream-6m':'Xtream 6 أشهر','xtream-1y':'Xtream سنة',
+ 'stream-1m':'BLOFY STREAM شهر','stream-3m':'BLOFY STREAM 3 أشهر','stream-6m':'BLOFY STREAM 6 أشهر','stream-1y':'BLOFY STREAM سنة',
+ 'xtream-1m':'Xtream شهر','xtream-3m':'Xtream 3 أشهر','xtream-6m':'Xtream 6 أشهر','xtream-1y':'Xtream سنة',
  'bundle-2y':'عرض اشتراكين سنويين','cart':'سلة متعددة المنتجات'
 };
 function renderReport(data){

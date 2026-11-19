@@ -4,8 +4,8 @@
  const storageKey='blofy.shop.cart.v1';
  const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  const title=sku=>({
-   'stream-3m':'BLOFY STREAM — 3 أشهر','stream-6m':'BLOFY STREAM — 6 أشهر',
-   'stream-1y':'BLOFY STREAM — سنة','xtream-3m':'Xtream BLOFY — 3 أشهر',
+   'stream-1m':'BLOFY STREAM — شهر','stream-3m':'BLOFY STREAM — 3 أشهر','stream-6m':'BLOFY STREAM — 6 أشهر',
+   'stream-1y':'BLOFY STREAM — سنة','xtream-1m':'Xtream BLOFY — شهر','xtream-3m':'Xtream BLOFY — 3 أشهر',
    'xtream-6m':'Xtream BLOFY — 6 أشهر','xtream-1y':'Xtream BLOFY — سنة',
    'bundle-2y':'عرض اشتراكين سنويين',
    'trial-stream-1d':'تجربة BLOFY STREAM — يوم مجاني',
@@ -31,7 +31,7 @@
  const keyOf=item=>item.sku==='bundle-2y'?'bundle-2y:'+item.bundleSelection.join('+'):item.sku;
  function validLine(item){
    if(!item||typeof item!=='object')return false;
-   if(!['stream-3m','stream-6m','stream-1y','xtream-3m','xtream-6m','xtream-1y','bundle-2y',
+   if(!['stream-1m','stream-3m','stream-6m','stream-1y','xtream-1m','xtream-3m','xtream-6m','xtream-1y','bundle-2y',
      'trial-stream-1d','trial-xtream-1d'].includes(item.sku))return false;
    if(trialSku(item.sku))return item.quantity===1&&item.bundleSelection==null;
    if(!Number.isInteger(item.quantity)||item.quantity<1||item.quantity>3)return false;

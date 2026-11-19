@@ -5,10 +5,12 @@ export const CART_SKU='cart';
 export const CART_MAX_CODES=6;
 export const CART_MAX_ITEMS=5;
 const CATALOG=new Map([
- ['stream-3m',{name:'BLOFY STREAM — 3 أشهر',channel:'app',days:90,priceMinor:4000}],
+ ['stream-1m',{name:'BLOFY STREAM — شهر',channel:'app',days:30,priceMinor:2500}],
+ ['stream-3m',{name:'BLOFY STREAM — 3 أشهر',channel:'app',days:90,priceMinor:5000}],
  ['stream-6m',{name:'BLOFY STREAM — 6 أشهر',channel:'app',days:180,priceMinor:7000}],
  ['stream-1y',{name:'BLOFY STREAM — سنة',channel:'app',days:365,priceMinor:12000}],
- ['xtream-3m',{name:'Xtream BLOFY — 3 أشهر',channel:'xtream',days:90,priceMinor:4000}],
+ ['xtream-1m',{name:'Xtream BLOFY — شهر',channel:'xtream',days:30,priceMinor:2500}],
+ ['xtream-3m',{name:'Xtream BLOFY — 3 أشهر',channel:'xtream',days:90,priceMinor:5000}],
  ['xtream-6m',{name:'Xtream BLOFY — 6 أشهر',channel:'xtream',days:180,priceMinor:7000}],
  ['xtream-1y',{name:'Xtream BLOFY — سنة',channel:'xtream',days:365,priceMinor:12000}]
 ]);

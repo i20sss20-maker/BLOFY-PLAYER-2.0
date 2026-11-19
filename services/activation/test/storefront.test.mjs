@@ -16,16 +16,16 @@ test('Exactly two BLOFY subscription products; no app/download offers',()=>{
  assert.match(html,/href="\/store\/contact"/);
  assert.doesNotMatch(html,/\/downloads|تحميل التطبيق|BLOFY BUSINESS|href="\/pay"/);
 });
-test('Public catalog prices use exact server values for 3, 6 and 12 months',()=>{
+test('Public catalog prices use exact server values for 1, 3, 6 and 12 months',()=>{
  const plans=publicStorePlans();
- assert.equal(plans.length,6);
+ assert.equal(plans.length,8);
  for(const channel of ['app','xtream']){
    const subset=plans.filter(p=>p.channel===channel);
-   assert.deepEqual(subset.map(p=>p.priceMinor),[4000,7000,12000]);
-   assert.deepEqual(subset.map(p=>p.durationDays),[90,180,365]);
+   assert.deepEqual(subset.map(p=>p.priceMinor),[2500,5000,7000,12000]);
+   assert.deepEqual(subset.map(p=>p.durationDays),[30,90,180,365]);
    assert.ok(subset.every(p=>p.currency==='SAR'));
  }
- for(const price of ['40 ر.س','70 ر.س','120 ر.س'])assert.match(html,new RegExp(price));
+ for(const price of ['25 ر.س','50 ر.س','70 ر.س','120 ر.س'])assert.match(html,new RegExp(price));
  assert.match(html,/GeideaCheckout/);
  assert.match(html,/\/api\/v1\/store\/checkout/);
  assert.match(html,/\/api\/v1\/store\/orders\/status/);

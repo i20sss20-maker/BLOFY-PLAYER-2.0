@@ -86,8 +86,8 @@ function browser({paid=false}={}){
    if(path==='/api/v1/store/trials/availability')return response(200,{ok:true,enabled:true,
       products:[{sku:'trial-stream-1d',available:2,priceMinor:0,currency:'SAR',durationDays:1}]});
    if(path==='/api/v1/store/cart/quote'&&paid)
-     return response(200,{items:[{sku:'stream-3m',quantity:1,lineTotalMinor:4000}],
-      totalMinor:4000,subtotalMinor:4000,discountMinor:0,codeCount:1});
+     return response(200,{items:[{sku:'stream-3m',quantity:1,lineTotalMinor:5000}],
+      totalMinor:5000,subtotalMinor:5000,discountMinor:0,codeCount:1});
    if(path==='/api/v1/store/cart/pending'&&paid)return response(200,{pending:false});
    if(path==='/api/v1/store/trials/claim'){
      assert.deepEqual(payload,{sku:'trial-stream-1d'});
