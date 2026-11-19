@@ -33,3 +33,31 @@ section[aria-labelledby="readiness-title"],
 .one-issue-xtream-actions button{padding:10px 14px;border:1px solid #74d6c7;border-radius:10px;color:#e6fff8;background:#20575a;font-weight:700;cursor:pointer}
 .one-issue-xtream-actions button:hover{background:#26706b}
 @media(max-width:640px){.one-issue-xtream-fields{grid-template-columns:minmax(0,1fr)}}
+
+/* Unify all customer STREAM/Xtream code operations into one center.
+   UI navigation only: unchanged APIs, credentials, codes and expiries. */
+.one-codes-center{border:1px solid rgba(111,222,211,.42);border-radius:20px;
+  padding:20px 20px 24px;margin:18px 0 34px;
+  background:linear-gradient(130deg,#102c39,#102938);
+  box-shadow:0 16px 28px rgba(0,0,0,.15)}
+.one-codes-center-heading{display:flex;align-items:center;justify-content:space-between;gap:18px;
+  flex-wrap:wrap;margin-bottom:17px}
+.one-codes-center-heading h2{font-size:clamp(23px,2.6vw,31px);margin:5px 0;color:#f7fffd}
+.one-codes-center-heading p{color:#bbd9df;font-size:13px;line-height:1.8;
+  max-width:760px;margin:0}
+.one-codes-host{border:1px solid #3c797a;border-radius:9px;padding:10px 13px;
+  color:#c6f4ec;background:#143e43;font-size:12px;direction:ltr;unicode-bidi:isolate}
+.one-codes-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:15px 0}
+.one-codes-tabs button{min-height:52px;padding:12px 10px;border:1px solid #3b6273;
+  border-radius:10px;background:#172f42;color:#c8e3e8;cursor:pointer;font-size:14px;font-weight:700}
+.one-codes-tabs button[aria-selected="true"]{background:#87ead9;border-color:#96f2e5;color:#082b31}
+.one-codes-tabs button:focus-visible{outline:3px solid #7ce5d9;outline-offset:2px}
+.one-codes-center>[hidden]{display:none!important}
+.one-codes-center>.one-issue,.one-codes-center>.one-overview{margin:0!important}
+.one-codes-product-hint{font-weight:400;line-height:1.7;color:#c9eee7;
+  font-size:11px;margin:7px 0 0}
+@media(max-width:700px){
+ .one-codes-center{padding:12px 10px 16px;border-radius:13px}
+ .one-codes-tabs{grid-template-columns:minmax(0,1fr);gap:7px}
+ .one-codes-tabs button{min-height:43px;padding:9px 10px}
+}
