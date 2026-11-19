@@ -9,9 +9,9 @@
   <title>إتمام الطلب | BLOFY STORE</title>
   <link rel="icon" href="/blofy-logo.png">
   <link rel="stylesheet" href="/store/cart.css?v=5">
-<link rel="stylesheet" href="/store/checkout-theme.css?v=1">
+<link rel="stylesheet" href="/store/checkout-theme.css?v=2">
 <link rel="stylesheet" href="/store/visual.css?v=20261119-2">
-  <script defer src="/store/cart.js?v=8"></script>
+  <script defer src="/store/cart.js?v=9"></script>
 </head>
 <body class="cart-experience">
   <header class="top">
@@ -44,7 +44,7 @@
             <button id="clear-cart" type="button" class="link-button">إفراغ السلة</button>
           </div>
           <div id="items" class="item-list" aria-live="polite"><p>جارٍ تحميل سلتك...</p></div>
-          <div class="cart-footnote">كل اشتراك يُسلَّم بكود مستقل. الحد الأقصى 6 أكواد في الطلب الواحد.</div>
+          <div class="cart-footnote">الحد الأقصى 6 أكواد للسلة. التجربة مجانية لمدة يوم، كود واحد فقط لكل حساب، وتُسلّم منفصلة عن الباقات المدفوعة.</div>
           <a class="add-more" href="/#products">+ أضف اشتراكًا آخر</a>
         </section>
 
@@ -94,14 +94,22 @@
         <div class="sum-row discount-row"><span>الخصم</span><strong id="discount">—</strong></div>
         <div class="sum-row total"><span>الإجمالي شامل الخصم</span><strong id="total">—</strong></div>
         <button id="checkout" class="primary checkout-main-btn" type="button" disabled>جارٍ تجهيز الطلب</button>
-        <p class="checkout-disclaimer">🔒 لن يتم خصم أي مبلغ قبل تأكيد الدفع في بوابة جيديا الرسمية.</p>
-        <div class="payment-methods" aria-label="وسائل الدفع المتاحة">
+        <p class="checkout-disclaimer" id="checkout-disclaimer">🔒 لن يتم خصم أي مبلغ قبل تأكيد الدفع في بوابة جيديا الرسمية.</p>
+        <div class="payment-methods" id="payment-methods" aria-label="وسائل الدفع المتاحة">
           <span>مدى</span><span>VISA</span><span>Mastercard</span>
         </div>
-        <p class="payment-wallet-note">Apple Pay متوقف مؤقتًا حتى إكمال اختبار الدفع مع جيديا.</p>
+        <p class="payment-wallet-note" id="payment-wallet-note">Apple Pay متوقف مؤقتًا حتى إكمال اختبار الدفع مع جيديا.</p>
         <p class="safe" id="cart-sync" role="status" aria-live="polite">نحفظ السلة في حسابك بعد تسجيل الدخول.</p>
         <div class="cart-recovery-actions"><button type="button" class="secondary" id="retry-cart-sync" hidden>إعادة حفظ السلة</button><button type="button" class="secondary" id="retry-pending" hidden>مراجعة الطلب السابق</button></div>
         <output id="message" role="status" aria-live="polite"></output>
+        <section id="trial-cart-result" class="trial-cart-result" hidden aria-labelledby="trial-cart-title">
+          <h3 id="trial-cart-title">🎁 تم تخصيص تجربتك المجانية</h3>
+          <p>الكود التجريبي الخاص بك (يوم واحد من أول تفعيل):</p>
+          <div class="trial-cart-code"><output id="trial-cart-code" dir="ltr"></output><button type="button" id="trial-cart-copy" class="secondary">نسخ الكود</button></div>
+          <p id="trial-cart-info" role="status" aria-live="polite"></p>
+          <a href="/stream/activate" id="trial-cart-xtream" class="secondary" hidden>استخراج بيانات Xtream</a>
+          <a href="/store/trial" class="secondary">استرجاع التجربة لاحقًا</a>
+        </section>
         <section id="started" class="started" hidden>
           <h3>طلبك محفوظ</h3>
           <p>رقم الطلب: <strong id="order-number"></strong></p>
@@ -112,6 +120,25 @@
         </section>
       </aside>
     </div>
+    <section class="geidea-embedded-panel" id="geidea-embedded-panel" aria-labelledby="geidea-embedded-heading" hidden>
+      <div class="geidea-embedded-top">
+        <div><span class="section-kicker">BLOFY × GEIDEA · SECURE PAYMENT</span>
+         <h2 id="geidea-embedded-heading">أكمل الدفع بأمان داخل BLOFY</h2>
+         <p>نموذج البطاقة يُقدَّم مباشرة من Geidea داخل هذه المساحة. تفاصيل البطاقة لا تمر عبر خوادم BLOFY.</p></div>
+        <div class="geidea-embedded-mark">B<span>✦</span></div>
+      </div>
+      <div class="geidea-embedded-details">
+        <span>رقم الطلب <b id="geidea-embedded-order">—</b></span>
+        <span>المبلغ للدفع <strong id="geidea-embedded-total">—</strong></span>
+        <span>الوسائل <b>مدى · VISA · Mastercard</b></span>
+      </div>
+      <p id="geidea-embedded-notice" role="status" aria-live="polite">جارٍ تجهيز نموذج الدفع الآمن…</p>
+      <div id="checkout-tag" class="geidea-hosted-container" aria-label="حقول دفع Geidea المحمية"></div>
+      <div class="geidea-embedded-bottom"><span>🔒 مُستضاف عبر Geidea. لا تغلق الصفحة قبل مراجعة حالة العملية.</span>
+        <a id="geidea-hosted-fallback" class="secondary" rel="noopener noreferrer" referrerpolicy="no-referrer" target="_blank" href="#" hidden>فتح نفس جلسة الدفع في Geidea ↗</a>
+        <a id="geidea-review-order" class="secondary" href="/store/orders">التحقق من الطلب</a>
+      </div>
+    </section>
     <div class="cart-help-links">
       <span>تحتاج مساعدة؟</span><a href="/store/contact">تواصل مع الدعم</a><a href="/store/terms">الشروط</a><a href="/privacy">الخصوصية</a>
     </div>
