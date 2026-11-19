@@ -24,6 +24,7 @@
   <script src="/store/offers.js?v=1" defer></script>
   <script src="/store/showcase.js?v=2" defer></script>
   <script src="/store/market.js?v=2" defer></script>
+  <script src="/store/assistant.js?v=1" defer></script>
   <script>
 (function(){
   var hash=location.hash||'';
@@ -359,6 +360,29 @@
   <a class="whats-bubble market-help-bubble" href="https://wa.me/966568941484" data-wa="general" target="_blank" rel="noopener noreferrer" aria-label="تواصل معنا على واتساب">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l2-5a9 9 0 1 1 4 3z" stroke-width="1.8"/><path d="M9 8l1 2c-1 1 2 4 4 4l2-1 1 2c-2 2-7-1-9-4-1-1-1-3 1-3" stroke-width="1.5"/></svg>مساعدة واتساب
   </a>
+  <aside id="blofy-assistant" class="blofy-assistant" aria-label="مساعد متجر BLOFY">
+    <button type="button" id="blofy-assistant-toggle" class="blofy-assistant-toggle"
+      aria-controls="blofy-assistant-panel" aria-expanded="false">✦ اسأل BLOFY</button>
+    <section id="blofy-assistant-panel" class="blofy-assistant-panel" aria-label="محادثة مساعدة المنتجات" hidden>
+      <div class="blofy-assistant-head">
+        <div><b>مساعد BLOFY</b><small>استفسارات المنتجات والتجديد</small></div>
+        <button type="button" id="blofy-assistant-close" aria-label="إغلاق المساعد">×</button>
+      </div>
+      <div id="blofy-assistant-messages" class="blofy-assistant-messages" role="log" aria-live="polite"></div>
+      <div class="blofy-assistant-topics">
+        <button type="button" data-blofy-ask="كيف أجدد اشتراكي؟">تجديد الاشتراك</button>
+        <button type="button" data-blofy-ask="وش الفرق بين STREAM وPLAYER؟">اختيار الباقة</button>
+        <button type="button" data-blofy-ask="كيف أستلم الكود بعد الدفع؟">استلام الأكواد</button>
+      </div>
+      <form id="blofy-assistant-form" class="blofy-assistant-form">
+        <label for="blofy-assistant-input" class="sr">سؤالك إلى مساعد BLOFY</label>
+        <input id="blofy-assistant-input" type="text" maxlength="500"
+          placeholder="اكتب سؤالك هنا..." autocomplete="off" required>
+        <button id="blofy-assistant-send" type="submit">إرسال</button>
+      </form>
+      <p id="blofy-assistant-state" class="blofy-assistant-note">دليل BLOFY؛ لا ترسل رموز التفعيل أو بيانات الدفع.</p>
+    </section>
+  </aside>
   <nav class="market-mobile-nav" aria-label="التنقل السريع في متجر BLOFY">
     <a href="/" aria-current="page"><span aria-hidden="true">⌂</span><span>الرئيسية</span></a>
     <a href="/#products"><span aria-hidden="true">▦</span><span>المنتجات</span></a>
