@@ -34,7 +34,7 @@ test('existing CSP still permits same Geidea host and modal iframe',()=>{
  assert.match(server,/https:\/\/www\.ksamerchant\.geidea\.net/);
  assert.match(server,/frame-src https:\/\/www\.ksamerchant\.geidea\.net/);
  assert.match(server,/form-action 'none'/);
- const scripts=[...html.matchAll(/<script>([\\s\\S]*?)<\\/script>/g)].map(match=>match[1]);
+ const scripts=[...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(match=>match[1]);
  assert.ok(scripts.some(source=>source.includes('function ensureGeideaCheckout()')));
  for(const source of scripts)assert.doesNotThrow(()=>new Function(source));
 });
