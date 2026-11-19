@@ -14,7 +14,7 @@ test('one cohesive storefront theme loads last on every BLOFY customer and merch
  for(const [path,scope] of pages){
   const html=read(path);
   assert.ok(html.includes(scope),path+' is not scoped to safe theme');
-  assert.equal((html.match(/\/store\/visual\.css\?v=20261119-1/g)||[]).length,1,path+' must load one versioned visual theme');
+  assert.equal((html.match(/\/store\/visual\.css\?v=20261119-2/g)||[]).length,1,path+' must load one versioned visual theme');
   assert.ok(html.lastIndexOf('/store/visual.css')>html.lastIndexOf('stylesheet" href="'),path+' theme must be the last stylesheet');
   assert.match(html,/blofy-logo\.png/);
  }
