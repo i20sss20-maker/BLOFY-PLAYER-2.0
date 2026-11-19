@@ -50,7 +50,8 @@ export function parseStoreCart(input){
 const FREE_TRIAL_SKUS=new Set(['trial-stream-1d','trial-xtream-1d']);
 export function isTrialCartSku(sku){return FREE_TRIAL_SKUS.has(sku)}
 export function parseSavedStoreCart(input){
- if(!Array.isArray(input)||input.length===0)return [];
+ if(!Array.isArray(input))return null;
+ if(input.length===0)return [];
  if(input.length>5)return null;
  let trial=null;
  const paid=[];
