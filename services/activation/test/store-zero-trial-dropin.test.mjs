@@ -27,14 +27,16 @@ test('zero SAR trial may be saved but never parsed as a paid Geidea invoice',()=
  assert.equal(parseSavedStoreCart({items:[]}),null);
  assert.equal(parseSavedStoreCart([{sku:'fake-free',quantity:1}]),null);
 });
-test('both paid product cards offer a real free-day selection and visible zero-price card',()=>{
+test('homepage hides free trial sales while backend redemption still works for existing customers',()=>{
  for(const product of ['stream','xtream']){
-   assert.match(home,new RegExp('id="duration-'+product+'"[^<]*><option value="تجربة مجانية"'));
-   assert.match(home,new RegExp('/store/cart\\?add=trial-'+product+'-1d'));
+  assert.match(home,new RegExp('id="duration-'+product+'"'));
+  assert.match(home,new RegExp('/store/cart\\?add='+product+'-3m'));
+  assert.doesNotMatch(home,new RegExp('trial-'+product+'-1d'));
  }
- assert.match(home,/id="trial-product"/);
- assert.match(home,/تجربة مجانية — يوم واحد — 0 ريال/);
- assert.match(home,/trial-stream-1d/);
+ assert.doesNotMatch(home,/id="trial-product"|id="trial-home-stock"|data-free-trial-link/);
+ assert.doesNotMatch(home,/href="\\/store\\/trial"|تجربة مجانية|TRY BLOFY/);
+ assert.match(home,/شهر — 25 ريال/);
+ assert.match(home,/3 أشهر — 50 ريال/);
 });
 test('Geidea SDK uses official drop-in, with no merchant card inputs or callback-based code release',()=>{
  assert.match(cartHtml,/id="checkout-tag"/);
