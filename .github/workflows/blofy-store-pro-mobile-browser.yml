@@ -35,7 +35,7 @@ jobs:
         working-directory: services/activation
         run: |
           npm install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.56.1
-          npx playwright install --with-deps chromium
+          google-chrome --version
       - name: Verify checkout lazy-load safety contract
         working-directory: services/activation
         run: node --test test/store-mobile-performance.test.mjs test/storefront.test.mjs test/store-pro-mobile-ux.test.mjs
