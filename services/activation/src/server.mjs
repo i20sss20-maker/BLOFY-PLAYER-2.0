@@ -8,6 +8,7 @@ import { createWhatsAppCloudHandlers } from './whatsapp-cloud-hook.mjs';
 import { serveIndexNowKey } from './indexnow-key.mjs';
 import { createCommercialHandlers } from './commercial-handlers.mjs';
 import { createStoreShowcaseHandlers } from './store-showcase.mjs';
+import { createStoreBrandingHandlers } from './store-branding.mjs';
 import { storeInfoPage } from './store-info-pages.mjs';
 import { createProfileCloudHandlers } from './profile-cloud.mjs';
 import { registerDeviceTrial, bindExistingTrial, completePendingTrial } from './trial-registration.mjs';
@@ -183,6 +184,7 @@ const blofyCodes = createBlofyCodeHandlers({ pool, secretHex: PLAYLIST_ENCRYPTIO
 const codeOperations = createCodeOperationsHandlers({ pool, secretHex: PLAYLIST_ENCRYPTION_KEY, json, readJson, requireAdmin });
 const commercial = createCommercialHandlers({ pool, keyHex: PLAYLIST_ENCRYPTION_KEY, json, readJson, requireAdmin });
 const storeShowcase = createStoreShowcaseHandlers({pool,json,readJson,authorizeAdmin:requireAdmin});
+const storeBranding = createStoreBrandingHandlers({pool,json,readJson,authorizeAdmin:requireAdmin});
 const siteAnalytics = createSiteAnalyticsHandlers({pool,json,readJson,authorizeAdmin:requireAdmin,keyHex:PLAYLIST_ENCRYPTION_KEY});
 const whatsappCloud = createWhatsAppCloudHandlers({pool,authorizeAdmin:requireAdmin});
 const cloud = createProfileCloudHandlers({ pool, json, readJson, authorizedDevice });
@@ -1006,6 +1008,7 @@ const server = http.createServer(async (req, res) => {
       });
       return res.end();
     }
+    if (await storeBranding(req,res,requestUrl)) return;
     if (await storeShowcase(req,res,requestUrl)) return;
     if (await siteAnalytics(req,res,requestUrl)) return;
     if (await whatsappCloud(req,res,requestUrl)) return;
