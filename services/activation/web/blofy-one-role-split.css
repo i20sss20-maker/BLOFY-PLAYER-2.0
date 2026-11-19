@@ -61,3 +61,25 @@ section[aria-labelledby="readiness-title"],
  .one-codes-tabs{grid-template-columns:minmax(0,1fr);gap:7px}
  .one-codes-tabs button{min-height:43px;padding:9px 10px}
 }
+
+/* Sales stock is a fourth tab in BLOFY ONE, not a second admin site. */
+.one-inventory{padding:10px 8px 5px}
+.one-inventory-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:16px 0}
+.one-inventory-stock{border:1px solid #426f75;border-radius:12px;padding:14px;background:#123140;display:grid;gap:8px}
+.one-inventory-stock strong{color:#eaffff;font-size:13px}
+.one-inventory-stock b{color:#9bf7dd;font-size:18px}
+.one-inventory-stock small{color:#b3d5d8;font-size:11px}
+.one-inventory-controls{display:flex;align-items:end;gap:12px;flex-wrap:wrap}
+.one-inventory-controls label{display:grid;gap:7px;flex:1;min-width:170px;font-size:12px;color:#d8f2ed}
+.one-inventory-controls :is(select,input){min-height:43px;border:1px solid #5b7d82;border-radius:10px;
+ background:#102e3a;color:#fff;padding:8px}
+.one-inventory button{min-height:43px;border:1px solid #79d6cb;border-radius:9px;
+ background:#246259;color:#eefff9;padding:9px 13px;font-weight:750;cursor:pointer}
+.one-inventory button:disabled{opacity:.55;cursor:wait}
+.one-inventory-import{margin:18px 0;border:1px solid #406d6d;border-radius:10px;padding:14px}
+.one-inventory-import summary{cursor:pointer;color:#d3fff4;font-weight:700}
+.one-inventory-import textarea{width:100%;display:block;margin:10px 0;background:#0b2638;
+ color:white;direction:ltr;text-align:left;border:1px solid #53757a;border-radius:8px;padding:10px}
+#one-inventory-status{color:#b0f5e3;font-size:13px;line-height:1.7}
+@media(max-width:830px){.one-inventory-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:530px){.one-inventory-grid{grid-template-columns:1fr}}

@@ -5,6 +5,31 @@
   const $=id=>document.getElementById(id);
   const issue=$('one-issue'),legacy=$('legacy-xtream'),ledger=$('stream-management');
   if(!issue||!legacy||!ledger)return;
+  // Existing inventory API generates valid, unactivated codes atomically.
+  // Keep stock next to issuance and customer accounts instead of another menu.
+  const inventory=document.createElement('section');
+  inventory.id='one-inventory';
+  inventory.className='one-overview one-inventory';
+  inventory.setAttribute('aria-label','مخزون اشتراكات BLOFY');
+  inventory.innerHTML=`
+    <div class="one-section-heading"><div><span class="one-kicker">STORE STOCK</span>
+      <h2>مخزون STREAM وXtream</h2></div>
+      <button id="one-inventory-refresh" type="button">↻ تحديث المخزون</button></div>
+    <p class="one-footnote">أصدر كمية أكواد للمخزون قبل البيع. لا يبدأ أي اشتراك عند إنشاء الأكواد، والتسليم في المتجر يكون فقط بعد تأكيد الدفع.</p>
+    <div id="one-inventory-counts" class="one-inventory-grid" aria-live="polite"></div>
+    <div class="one-inventory-controls">
+      <label>نوع الباقة<select id="one-inventory-sku"></select></label>
+      <label>عدد الأكواد<input id="one-inventory-quantity" type="number" min="1" max="100" inputmode="numeric" value="10"></label>
+      <button id="one-inventory-generate" type="button">＋ إصدار وإضافة للمخزون</button>
+    </div>
+    <details class="one-inventory-import">
+      <summary>لدي أكواد سابقة — استيرادها للمخزون</summary>
+      <p>كود واحد في كل سطر، بحد أقصى 100 كود غير مستخدم، ومن نفس باقة وصلاحية المصدر.</p>
+      <textarea id="one-inventory-existing" rows="4" maxlength="2600" autocomplete="off" spellcheck="false" placeholder="اكتب كودًا واحدًا في كل سطر"></textarea>
+      <button id="one-inventory-import" type="button">استيراد الأكواد</button>
+    </details>
+    <p id="one-inventory-status" role="status" aria-live="polite"></p>
+    <a href="/admin/store-inventory">إدارة منتجات المتجر والبنرات والطلبات ←</a>`;
   const center=document.createElement('div');
   center.id='codes-center';
   center.className='one-codes-center';
@@ -30,7 +55,8 @@
   const definitions=[
     ['one-issue','＋ إنشاء اشتراك جديد'],
     ['legacy-xtream','⌕ فحص أو استخراج Xtream'],
-    ['stream-management','▤ سجل الأكواد والعملاء']
+    ['stream-management','▤ سجل الأكواد والعملاء'],
+    ['one-inventory','▥ مخزون البيع']
   ];
   for(const [id,name] of definitions){
     const button=document.createElement('button');
@@ -40,7 +66,7 @@
     button.setAttribute('aria-controls',id);
     tabs.append(button);
   }
-  center.append(tabs,issue,legacy,ledger);
+  center.append(tabs,issue,legacy,ledger,inventory);
   const buttons=[...tabs.querySelectorAll('button')];
   let selected='one-issue';
   const choices=new Set(definitions.map(x=>x[0]));
@@ -53,7 +79,8 @@
     if(!choices.has(id))return;
     if(selected!==id)wipe(selected);
     selected=id;
-    for(const el of [issue,legacy,ledger])el.hidden=el.id!==id;
+    for(const el of [issue,legacy,ledger,inventory])el.hidden=el.id!==id;
+    if(id==='one-inventory')void loadStock();
     for(const button of buttons){
       const active=button.dataset.oneCodesTab===id;
       button.setAttribute('aria-selected',String(active));
@@ -132,6 +159,97 @@
   }
   const growth=document.querySelector('.one-growth a[href="#one-issue"]');
   if(growth)growth.href='#codes-center';
+
+
+  // All admin inventory requests use the existing authenticated session and
+  // atomic DB transactions. Missing responses must NEVER trigger auto-retry.
+  const stockGrid=$('one-inventory-counts'),stockSku=$('one-inventory-sku');
+  const stockStatus=$('one-inventory-status');
+  let stockBusy=false,stockPlans=[];
+  async function stockFetch(path,body){
+    const ctl=new AbortController(),t=setTimeout(()=>ctl.abort(),15000);
+    try{
+      const response=await fetch(path,{method:body===undefined?'GET':'POST',
+        credentials:'same-origin',cache:'no-store',
+        headers:{accept:'application/json',
+          ...(body===undefined?{}:{'content-type':'application/json'})},
+        body:body===undefined?undefined:JSON.stringify(body),signal:ctl.signal});
+      const data=await response.json().catch(()=>({}));
+      if(!response.ok||data.ok===false)throw Error(data.error||'http_'+response.status);
+      return data;
+    }finally{clearTimeout(t);}
+  }
+  async function loadStock(){
+    if(stockBusy)return;
+    stockStatus.textContent='جارٍ تحميل مخزون المتجر…';
+    try{
+      const data=await stockFetch('/api/v1/admin/store/inventory');
+      stockPlans=Array.isArray(data.products)?data.products.filter(p=>p&&
+        ['app','xtream'].includes(p.channel)&&Number.isInteger(Number(p.durationDays))):[];
+      stockGrid.replaceChildren();
+      for(const p of stockPlans){
+        const count=(data.counts||[]).find(x=>x.sku===p.sku)||{};
+        const box=document.createElement('article');box.className='one-inventory-stock';
+        const title=document.createElement('strong');title.textContent=p.name;
+        const available=document.createElement('b');available.textContent='جاهز للبيع: '+Number(count.available||0);
+        const sold=document.createElement('small');
+        sold.textContent='مباع من المخزون: '+Number(count.sold||0)+
+          (Number(count.blocked||0)?' · غير صالح للبيع: '+Number(count.blocked):'');
+        box.append(title,available,sold);stockGrid.append(box);
+      }
+      const original=stockSku.value;
+      stockSku.replaceChildren();
+      for(const p of stockPlans){
+        const option=document.createElement('option');option.value=p.sku;
+        option.textContent=p.name;stockSku.append(option);
+      }
+      if(stockPlans.some(p=>p.sku===original))stockSku.value=original;
+      stockStatus.textContent='الأعداد من قاعدة الأكواد الفعلية، ولا تشمل الأكواد المستخدمة أو الملغاة.';
+    }catch(e){stockStatus.textContent='فشل قراءة المخزون: '+e.message;}
+  }
+  $('one-inventory-refresh').addEventListener('click',()=>void loadStock());
+  async function stockWrite(kind){
+    if(stockBusy)return;
+    const sku=stockSku.value;
+    if(!stockPlans.some(p=>p.sku===sku))return;
+    const payload={sku},source=$('one-inventory-existing');
+    if(kind==='generate'){
+      payload.quantity=Number($('one-inventory-quantity').value);
+      if(!Number.isInteger(payload.quantity)||payload.quantity<1||payload.quantity>100){
+        stockStatus.textContent='أدخل عددًا من 1 إلى 100.';return;
+      }
+    }else{
+      payload.codes=source.value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+      if(!payload.codes.length||payload.codes.length>100){
+        stockStatus.textContent='أدخل من 1 إلى 100 كود، كل كود في سطر.';return;
+      }
+    }
+    const qty=kind==='generate'?payload.quantity:payload.codes.length;
+    if(!confirm('هل تؤكد '+(kind==='generate'?'إنشاء':'استيراد')+' '+qty+
+      ' كود لباقـة '+sku+'؟ لن تبدأ مدة الكود، ولن تُسجّل عملية بيع.'))return;
+    stockBusy=true;
+    $('one-inventory-generate').disabled=true;$('one-inventory-import').disabled=true;
+    stockStatus.textContent='جارٍ تسجيل المخزون. لا تكرر الطلب عند تأخر الشبكة.';
+    try{
+      const data=await stockFetch('/api/v1/admin/store/inventory/'+kind,payload);
+      const n=Number(kind==='generate'?data.generated:data.added);
+      if(!data.ok||!Number.isInteger(n)||n!==qty)
+        throw Error('stock_write_result_unconfirmed');
+      stockStatus.textContent='تمت إضافة '+n+' كود إلى المخزون دون تفعيل أي اشتراك.';
+      source.value='';
+      $('one-stream-refresh')?.click();
+      stockBusy=false;
+      await loadStock();
+    }catch(e){
+      stockStatus.textContent='لا يمكن تأكيد العملية: '+e.message+
+        ' افحص السجل والمخزون قبل إعادة الطلب كي لا تكرر الأكواد.';
+    }finally{
+      stockBusy=false;$('one-inventory-generate').disabled=false;
+      $('one-inventory-import').disabled=false;
+    }
+  }
+  $('one-inventory-generate').addEventListener('click',()=>void stockWrite('generate'));
+  $('one-inventory-import').addEventListener('click',()=>void stockWrite('import'));
 
   const type=$('one-issue-channel');
   const note=document.createElement('p');note.className='one-codes-product-hint';
