@@ -111,7 +111,12 @@
        try{await navigator.clipboard.writeText(item.code);copy.textContent='تم النسخ ✓';}
        catch{copy.textContent='تعذر النسخ';}
      });
-     card.append(heading,span,code,copy);codes.append(card);
+     card.append(heading,span,code,copy);
+     if(item.channel==='xtream'){
+      const redeem=make('a','secondary','تفعيل واستخراج Xtream');
+      redeem.href='/redeem';card.append(redeem);
+     }else card.append(make('small','','يبدأ اشتراك STREAM عند إدخال الكود في تطبيق BLOFY STREAM.'));
+     codes.append(card);
    });
  }
  function link(){

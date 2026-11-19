@@ -2553,7 +2553,7 @@ http.createServer = function withBlofyXtreamGateway(listener) {
         res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'content-length': body.length, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
         return res.end(body);
       }
-      if (req.method === 'GET' && url.pathname === '/stream/activate') {
+      if (req.method === 'GET' && (url.pathname === '/stream/activate' || url.pathname === '/redeem')) {
         const page=await readFile(new URL('../web/stream-activate.html',import.meta.url));
         res.writeHead(200,{'content-type':'text/html; charset=utf-8','content-length':page.length,
           'cache-control':'no-store','referrer-policy':'no-referrer',

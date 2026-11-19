@@ -342,7 +342,13 @@
      try{await navigator.clipboard.writeText(c.code);copy.textContent='تم النسخ ✓';}
      catch{copy.textContent='تعذر النسخ';}
     });
-    box.append(code,meta,copy);root.append(box);
+    box.append(code,meta,copy);
+    if(c.channel==='xtream'){
+     const link=node('a',c.expiresAt?'عرض اشتراكي من حسابي':'تفعيل واستخراج Xtream');
+     link.className='secondary';link.href=c.expiresAt?'#account-subscriptions':'/redeem';
+     box.append(link);
+    }else box.append(node('small','فعّل الكود داخل تطبيق BLOFY STREAM لبدء مدة الاشتراك.'));
+    root.append(box);
    }
    $('receipt').scrollIntoView({behavior:'smooth'});
    receiptTimer=setTimeout(()=>{
