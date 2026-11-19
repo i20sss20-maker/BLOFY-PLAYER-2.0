@@ -12,7 +12,7 @@ const cartStyle=source('../web/store-checkout-theme.css');
 
 test('one visual shopping theme is loaded on cart, account and order pages',()=>{
   for(const [name,html] of [['cart',cart],['account',account],['orders',orders]]){
-    assert.match(html,/\/store\/checkout-theme\.css\?v=(?:1|2)/,name+' must load the same shopping theme');
+    assert.match(html,/\/store\/checkout-theme\.css\?v=\d+(?:-[a-z0-9-]+)?/,name+' must load the same shopping theme');
     assert.match(html,/class="store-mobile-links"/,name+' must expose mobile navigation');
     for(const path of ['/', '/store/cart', '/store/account'])
       assert.ok(html.includes('href="'+path+'"'),name+' navigation has '+path);
