@@ -652,6 +652,7 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
   }catch(e){if(e.status)json(res,e.status,{error:e.message});else throw e;}
   return true;
  };
+ handler.ensureCustomerSchema=()=>schema();
  handler.linkCheckoutOrder=linkCheckoutOrder;
  handler.checkoutIdentity=checkoutIdentity;
  // One-day trials require a real OTP-verified customer session, never guest checkout.

@@ -57,6 +57,22 @@
       <div id="one-fulfillment-issues" class="one-fulfillment-issues" hidden></div>
       <small>يشمل آخر 90 يومًا، بحد أقصى 500 طلب مدفوع. نجاح السجلات ليس إثباتًا أن البنك سوّى المدفوعات فعلًا.</small>
     </details>
+    <section id="one-verified-reviews-admin" class="one-verified-reviews-admin" aria-labelledby="one-reviews-heading">
+      <div class="one-section-heading">
+        <div><span class="one-kicker">VERIFIED CUSTOMER REVIEWS</span><h3 id="one-reviews-heading">💬 تقييمات العملاء الحقيقية</h3></div>
+        <button type="button" id="one-reviews-refresh">↻ تحديث التقييمات</button>
+      </div>
+      <p>تعليقات فقط من حسابات طلبت تجربة أو اشترت فعليًا. انشر التقييمات الحقيقية المفيدة، إيجابية أو نقدية. احجب السبام أو المعلومات الخاصة، ولا تنشئ تقييمات باسم عملاء وهميين.</p>
+      <div class="one-reviews-admin-controls">
+        <label>الحالة <select id="one-reviews-status">
+          <option value="pending">بانتظار المراجعة</option>
+          <option value="approved">منشورة</option>
+          <option value="rejected">مرفوضة</option>
+        </select></label>
+      </div>
+      <p id="one-reviews-notice" role="status" aria-live="polite">افتح قسم مخزون البيع لقراءة التقييمات.</p>
+      <div id="one-reviews-list" class="one-reviews-admin-list"></div>
+    </section>
     <a href="/admin/store-inventory">إدارة منتجات المتجر والبنرات والطلبات ←</a>`;
 
   // Isolated one-day trial inventory: owner creates stock, customers claim
@@ -206,7 +222,10 @@
     if(!choices.has(id))return;
     selected=id;
     for(const el of [issue,legacy,ledger,registry,inventory,trialPanel])el.hidden=el.id!==id;
-    if(id==='one-inventory'){void loadStock();void loadOperationsOverview();}
+    if(id==='one-inventory'){
+      void loadStock();void loadOperationsOverview();
+      dispatchEvent(new CustomEvent('blofy-one:reviews-admin-visible'));
+    }
     if(id==='one-trial-stock')void loadTrialStock();
     if(id==='one-code-register')dispatchEvent(new CustomEvent('blofy-one:code-register-visible'));
     for(const button of buttons){

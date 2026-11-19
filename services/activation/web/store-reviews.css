@@ -1,0 +1,49 @@
+/* Verified BLOFY customer reviews and database-backed storefront numbers */
+.blofy-voices{padding:clamp(46px,6vw,84px) 0;background:linear-gradient(135deg,#f4f8ff,#fbfafb 55%,#f5f1ff);
+ color:#282c3d;position:relative}
+.blofy-voices .voices-header{display:flex;align-items:end;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:24px}
+.blofy-voices .voices-kicker{font-size:12px;letter-spacing:2px;color:#7657bd;font-weight:850}
+.blofy-voices h2{font-size:clamp(26px,3.5vw,42px);line-height:1.3;color:#252a40;margin:10px 0}
+.blofy-voices .voices-intro{line-height:1.9;color:#646a7b;max-width:640px;font-size:15px}
+.blofy-voices .voices-badge{background:white;border:1px solid #ddd5f2;border-radius:35px;padding:12px 17px;
+ font-size:13px;color:#524572;font-weight:800;box-shadow:0 10px 25px #56498c12}
+.blofy-voices .voices-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:25px 0}
+.blofy-voices .voices-metric{border:1px solid #e0deeb;background:#fff;border-radius:19px;padding:23px 20px;
+ box-shadow:0 8px 22px #2629450b;min-width:0}
+.blofy-voices .voices-metric strong{font-size:clamp(27px,3vw,40px);font-weight:900;color:#512da0;display:block;line-height:1.25}
+.blofy-voices .voices-metric span{color:#515b71;font-size:13px;line-height:1.7;display:block;margin-top:5px}
+.blofy-voices .voices-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:15px}
+.blofy-voices .voice-card{background:white;border:1px solid #e9e6f0;border-radius:20px;padding:22px;
+ display:flex;flex-direction:column;gap:14px;min-height:178px;box-shadow:0 8px 26px #2e20460a}
+.blofy-voices .voice-card .voice-stars{letter-spacing:3px;color:#edac28;direction:ltr;text-align:right;font-size:19px}
+.blofy-voices .voice-card p{margin:0;line-height:1.9;color:#3c4252;font-size:15px;overflow-wrap:anywhere;flex:1}
+.blofy-voices .voice-card footer{display:flex;justify-content:space-between;gap:8px;align-items:center;color:#7a8091;
+ font-size:12px;border-top:1px solid #ececf2;padding-top:13px}
+.blofy-voices .voice-card footer b{color:#514d61;font-size:13px}
+.blofy-voices .voices-empty{border:1px dashed #cabfdc;background:#fff;border-radius:18px;
+ padding:25px;text-align:center;grid-column:1/-1;color:#4c4866;line-height:1.9}
+.blofy-voices .voices-features{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:24px}
+.blofy-voices .voices-features span{border-radius:11px;background:#f5f0fc;border:1px solid #e7dcf5;
+ color:#5d4980;padding:13px;text-align:center;font-weight:700;font-size:13px}
+.blofy-voices .voice-form-shell{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.35fr);gap:26px;align-items:start;
+ background:#242841;color:white;border-radius:24px;padding:clamp(20px,4vw,34px);margin-top:30px}
+.blofy-voices .voice-form-shell h3{color:#fff;margin:0 0 12px;font-size:clamp(20px,2vw,25px)}
+.blofy-voices .voice-form-shell p{line-height:1.95;color:#d9d7e7;margin:0 0 12px;font-size:14px}
+.blofy-voices .voice-form-shell a{color:#d6c2ff;font-weight:750;text-decoration:underline}
+.blofy-voices .voice-form{display:grid;gap:12px}
+.blofy-voices .voice-form label{display:grid;gap:7px;color:#f2f0fa;font-weight:750;font-size:13px}
+.blofy-voices .voice-form select,.blofy-voices .voice-form textarea{border-radius:12px;border:1px solid #6d6b8a;
+ background:#fff;color:#28283c;padding:13px;font:inherit;width:100%}
+.blofy-voices .voice-form textarea{resize:vertical;min-height:110px}
+.blofy-voices .voice-form label.voices-consent{display:flex;align-items:center;gap:10px;font-weight:500}
+.blofy-voices .voice-form label.voices-consent input{width:18px;height:18px;flex:none}
+.blofy-voices .voice-form button{border:0;border-radius:12px;background:#d3b9ff;color:#2d234d;
+ min-height:48px;font:inherit;font-weight:800;cursor:pointer}
+.blofy-voices .voice-form button:disabled{opacity:.65;cursor:wait}
+.blofy-voices #voices-submit-status{font-size:13px;color:#b9ffdd;line-height:1.9;min-height:24px}
+.blofy-voices .voices-explainer{font-size:12px;line-height:1.8;color:#7b7489;margin:12px 0 0}
+@media(max-width:800px){.blofy-voices .voices-grid,.blofy-voices .voices-metrics,.blofy-voices .voices-features{
+ grid-template-columns:repeat(2,minmax(0,1fr))}
+ .blofy-voices .voice-form-shell{grid-template-columns:1fr}}
+@media(max-width:520px){.blofy-voices .voices-grid,.blofy-voices .voices-metrics,.blofy-voices .voices-features{
+ grid-template-columns:1fr}}

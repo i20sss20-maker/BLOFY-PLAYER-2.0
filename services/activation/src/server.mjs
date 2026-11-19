@@ -1051,6 +1051,10 @@ const server = http.createServer(async (req, res) => {
       return await serveCartAsset(res,requestUrl.pathname.slice('/store/'.length));
     if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/checkout-theme.css')
       return await serveStoreAssetFile(res,'store-checkout-theme.css','text/css; charset=utf-8');
+    if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/reviews.css')
+      return await serveStoreAssetFile(res,'store-reviews.css','text/css; charset=utf-8');
+    if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/reviews.js')
+      return await serveStoreAssetFile(res,'store-reviews.js','application/javascript; charset=utf-8');
     if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/visual.css')
       return await serveStoreAssetFile(res,'store-visual.css','text/css; charset=utf-8');
     if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/assistant.js')
