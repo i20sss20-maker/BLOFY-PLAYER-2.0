@@ -10,6 +10,8 @@ class MockPg{
  constructor(){}
  async query(sql,params=[]){
   MockPg.queries.push({sql,params});
+  if(sql==='SELECT to_regclass($1) AS relation')
+    return {rows:[{relation:params[0]}]};
   if(sql.includes('CREATE TABLE IF NOT EXISTS'))return {rows:[]};
   if(sql.includes('INSERT INTO')&&
      sql.includes('blofy_content_hub_episode_browser_checks')){

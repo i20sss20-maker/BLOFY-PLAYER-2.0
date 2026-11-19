@@ -10,6 +10,26 @@ export function createSourceLease({connectionString,
  if(!connectionString)throw Error('content_hub_db_required');
  const pool=new Pool({connectionString,max:2,connectionTimeoutMillis:5000,
   idleTimeoutMillis:10000,application_name:applicationName});
+ // Some historical pilot/confirmation tables are deliberately lazy-created.
+ // Reading those tables before the first pilot is expected and must not
+ // produce PostgreSQL ERROR 42P01 events every time an operator views stats.
+ // pg_catalog.to_regclass safely detects absence without DDL or source reads.
+ // On an unlikely drop after detection, only SQLSTATE 42P01 is treated as
+ // an empty optional table; other database failures still propagate.
+ async function readOptionalTable(table,sql,parameters=[]){
+   const known=new Set([
+     'blofy_content_hub_pilot_runs',
+     'blofy_content_hub_episode_browser_checks',
+     'blofy_content_hub_episode_runs'
+   ]);
+   if(!known.has(table))throw Error('content_hub_optional_table_not_allowlisted');
+   const check=await pool.query('SELECT to_regclass($1) AS relation',[table]);
+   if(!check.rows?.[0]?.relation)return {rows:[],rowCount:0};
+   return pool.query(sql,parameters).catch(error=>{
+     if(error?.code==='42P01')return {rows:[],rowCount:0};
+     throw error;
+   });
+ }
  return {
   // Resolve an exact source + catalog ID to an EXISTING completed private
   // chunk manifest. Run IDs / object keys are never accepted from browsers.
@@ -135,7 +155,8 @@ export function createSourceLease({connectionString,
   },
   async getPilotStatus(runId){
    if(!/^[A-Za-z0-9_-]{8,80}$/.test(String(runId||'')))return null;
-   const r=await pool.query(`SELECT state,result_code,
+   const r=await readOptionalTable('blofy_content_hub_pilot_runs',
+     `SELECT state,result_code,
      expected_bytes,bytes_copied,parts_copied,started_at,finished_at
      FROM blofy_content_hub_pilot_runs WHERE run_id=$1`,[runId]);
    const row=r.rows?.[0];if(!row)return null;
@@ -147,7 +168,8 @@ export function createSourceLease({connectionString,
   },
   async getVerifiedPilotObject(runId){
    if(!/^[A-Za-z0-9_-]{8,80}$/.test(String(runId||'')))return null;
-   const r=await pool.query(`SELECT object_key,expected_bytes,verified_sha256
+   const r=await readOptionalTable('blofy_content_hub_pilot_runs',
+     `SELECT object_key,expected_bytes,verified_sha256
       FROM blofy_content_hub_pilot_runs
       WHERE run_id=$1 AND state='verified' AND object_key IS NOT NULL`,[runId]);
    const row=r.rows?.[0];
@@ -157,17 +179,13 @@ export function createSourceLease({connectionString,
   // Admin-only storage accounting from verified pilot records. This is not
   // an S3 invoice or a scan of other private bucket objects.
   async storageAccounting(){
-   const r=await pool.query(`SELECT
+   const r=await readOptionalTable('blofy_content_hub_pilot_runs',
+     `SELECT
       COUNT(*) FILTER (WHERE state='verified')::int AS verified_count,
       COALESCE(SUM(expected_bytes) FILTER (WHERE state='verified'),0)::text AS verified_bytes,
       COUNT(*) FILTER (WHERE state='started')::int AS active_count,
       COUNT(*) FILTER (WHERE state='failed')::int AS failed_count
-     FROM blofy_content_hub_pilot_runs`).catch(error=>{
-      if(error?.code==='42P01')return {rows:[{
-       verified_count:0,verified_bytes:'0',active_count:0,failed_count:0
-      }]};
-      throw error;
-     });
+     FROM blofy_content_hub_pilot_runs`);
    const row=r.rows?.[0]||{};
    return {verifiedCount:Number(row.verified_count||0),
     verifiedBytes:Number(row.verified_bytes||0),
@@ -177,11 +195,9 @@ export function createSourceLease({connectionString,
   },
   async listPilotRuns({limit=20}={}){
    const safeLimit=Math.max(1,Math.min(50,Number(limit)||20));
-   const r=await pool.query(`SELECT run_id FROM blofy_content_hub_pilot_runs
-     ORDER BY started_at DESC LIMIT $1`,[safeLimit]).catch(error=>{
-      if(error?.code==='42P01')return {rows:[]};
-      throw error;
-     });
+   const r=await readOptionalTable('blofy_content_hub_pilot_runs',
+     `SELECT run_id FROM blofy_content_hub_pilot_runs
+     ORDER BY started_at DESC LIMIT $1`,[safeLimit]);
    const list=[];
    for(const row of r.rows||[]){
      const entry=await this.getPilotStatus(row.run_id);
@@ -297,15 +313,12 @@ export function createSourceLease({connectionString,
   async getEpisodeBrowserPlaybackStatus(runId){
    if(!/^[A-Za-z0-9_-]{8,80}$/.test(String(runId||'')))
     return {confirmed:false,videoConfirmed:false,audioConfirmed:false};
-   const result=await pool.query([
+   const result=await readOptionalTable('blofy_content_hub_episode_browser_checks',[
     'SELECT c.audio_confirmed,c.video_confirmed,c.confirmed_at',
     'FROM blofy_content_hub_episode_browser_checks c',
     'INNER JOIN blofy_content_hub_episode_runs r ON r.run_id=c.run_id',
     "WHERE c.run_id=$1 AND r.state='verified'"
-   ].join(' '),[runId]).catch(error=>{
-    if(error?.code==='42P01')return {rows:[]};
-    throw error;
-   });
+   ].join(' '),[runId]);
    const row=result.rows?.[0];
    return {confirmed:row?.audio_confirmed===true&&row?.video_confirmed===true,
     audioConfirmed:row?.audio_confirmed===true,
@@ -314,12 +327,11 @@ export function createSourceLease({connectionString,
   },
   async listEpisodeRuns({limit=15}={}){
    const n=Math.max(1,Math.min(25,Number(limit)||15));
-   const result=await pool.query(`SELECT run_id,state,expected_bytes,
+   const result=await readOptionalTable('blofy_content_hub_episode_runs',
+     `SELECT run_id,state,expected_bytes,
     bytes_copied,jsonb_array_length(parts) AS chunks,error_code,
     started_at,updated_at FROM blofy_content_hub_episode_runs
-    ORDER BY updated_at DESC LIMIT $1`,[n]).catch(e=>{
-     if(e?.code==='42P01')return {rows:[]};throw e;
-   });
+    ORDER BY updated_at DESC LIMIT $1`,[n]);
    return (result.rows||[]).map(row=>({
     runId:row.run_id,mediaKind:'episode',state:row.state,
     expectedBytes:Number(row.expected_bytes),bytesCopied:Number(row.bytes_copied),
