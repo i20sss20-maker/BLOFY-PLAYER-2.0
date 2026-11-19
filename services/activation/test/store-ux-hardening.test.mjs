@@ -39,3 +39,15 @@ test('accessible mobile product controls and reduced motion use latest visual la
  const one=read('blofy-one.html');
  assert.match(one,/href="#one-code-register"/);
 });
+
+test('the two primary products appear before annual-bundle upsell, with honest trial entry',()=>{
+ const home=read('store.html');
+ assert.ok(home.indexOf('id="products"')<home.indexOf('id="offer"'),
+  'show STREAM and Xtream products before the secondary yearly bundle');
+ assert.match(home,/جرّب قبل ما تشترك/);
+ assert.match(home,/تجربة مجانية لمدة يوم/);
+ assert.match(home,/حسب توفر المخزون/);
+ assert.match(home,/id="bundle-add-cart"/);
+ assert.match(home,/id="duration-stream"/);
+ assert.match(home,/id="duration-xtream"/);
+});
