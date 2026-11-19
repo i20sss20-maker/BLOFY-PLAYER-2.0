@@ -19,7 +19,7 @@ test('campaign hub is part of the authenticated BLOFY commerce administration',(
  assert.match(html,/href="#campaign-hub"/);
  assert.match(html,/لا ترسل رسائل تلقائيًا/);
  assert.match(html,/وفق موافقة الزائر/);
- assert.match(html,/ليست منسوبة/);
+ assert.match(html,/ولا تعني مبيعات أو أرباحًا منسوبة للحملات/);
  const server=read('../src/server.mjs');
  assert.match(html,/src="\/admin\/store-inventory\/app\.js"/);
  assert.match(server,/siteAnalytics\(req,res,requestUrl\)/);
