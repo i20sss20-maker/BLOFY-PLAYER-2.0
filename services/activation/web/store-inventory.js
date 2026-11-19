@@ -6,6 +6,20 @@ const data=await res.json().catch(()=>({}));if(!res.ok)throw Error(data.error||'
 function loading(value){buttons.forEach(b=>b.disabled=value);}
 async function reload(){const data=await request('/api/v1/admin/store/inventory');plans=data.products||[];const totals=data.counts||[];
 for(const el of document.querySelectorAll('select.sku')){let old=el.value;el.textContent='';for(const p of plans){let opt=document.createElement('option');opt.value=p.sku;opt.textContent=p.name+' — '+(p.priceMinor/100)+' ر.س';el.append(opt);}if(plans.some(p=>p.sku===old))el.value=old;}
+const warnings=Array.isArray(data.lowStockAlerts)?data.lowStockAlerts:[];
+const alert=$('stock-warning');alert.replaceChildren();
+const strong=document.createElement('strong');
+strong.textContent=warnings.length?'⚠ باقات تحتاج تعبئة المخزون':'✓ المخزون فوق حد التنبيه';
+alert.append(strong);
+if(warnings.length){
+ const list=document.createElement('ul');
+ for(const item of warnings){
+  const li=document.createElement('li');
+  li.textContent=String(item.name||item.sku)+' — '+Number(item.available||0)+' كود متبقٍ';
+  list.append(li);
+ }
+ alert.append(list);
+}else alert.append(document.createTextNode(' — لا توجد باقات أقل من 20 كودًا.'));
 const grid=$('stats');grid.textContent='';for(const p of plans){const t=totals.find(q=>q.sku===p.sku)||{available:0,sold:0};const card=document.createElement('div');card.className='stat';const name=document.createElement('b');name.textContent=p.name;const qty=document.createElement('strong');qty.textContent=Number(t.available||0)+' كود';const sold=document.createElement('small');sold.textContent='تم البيع من المخزون: '+Number(t.sold||0);card.append(name,qty,sold);grid.append(card);}}
 async function run(kind){const isGenerate=kind==='generate';const sku=$(isGenerate?'generate-sku':'import-sku').value;let body={sku};
 if(isGenerate){body.quantity=Number($('quantity').value);if(!Number.isSafeInteger(body.quantity)||body.quantity<1||body.quantity>100){status('الكمية بين 1 و100.');return;}}

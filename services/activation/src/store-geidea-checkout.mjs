@@ -154,7 +154,13 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
     'OR v.account_id IS NOT NULL OR v.code_vault IS NULL))::int AS blocked '+
     'FROM blofy_store_inventory i JOIN blofy_xtream_gateway_duration_codes v '+
     'ON v.id=i.voucher_id GROUP BY i.sku ORDER BY i.sku')).rows;
-   return json(res,200,{ok:true,products:publicStorePlans(),counts:totals});
+   const products=publicStorePlans();
+   const availableBySku=new Map(totals.map(row=>[row.sku,Number(row.available)||0]));
+   const lowStockAlerts=products.filter(p=>['app','xtream'].includes(p.channel))
+     .map(p=>({sku:p.sku,name:p.name,channel:p.channel,
+       available:availableBySku.get(p.sku)||0,threshold:20}))
+     .filter(p=>p.available<20);
+   return json(res,200,{ok:true,products,counts:totals,lowStockAlerts,lowStockThreshold:20});
  }
  async function importInventory(req,res){
    if(!authorizeAdmin(req,res))return;

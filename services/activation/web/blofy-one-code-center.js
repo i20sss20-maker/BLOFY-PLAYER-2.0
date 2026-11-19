@@ -16,6 +16,7 @@
       <h2>مخزون STREAM وXtream</h2></div>
       <button id="one-inventory-refresh" type="button">↻ تحديث المخزون</button></div>
     <p class="one-footnote">أصدر كمية أكواد للمخزون قبل البيع. لا يبدأ أي اشتراك عند إنشاء الأكواد، والتسليم في المتجر يكون فقط بعد تأكيد الدفع.</p>
+    <div id="one-inventory-alerts" class="one-inventory-alerts" role="status" aria-live="polite"></div>
     <div id="one-inventory-counts" class="one-inventory-grid" aria-live="polite"></div>
     <div class="one-inventory-controls">
       <label>نوع الباقة<select id="one-inventory-sku"></select></label>
@@ -180,6 +181,23 @@
       const data=await stockFetch('/api/v1/admin/store/inventory');
       stockPlans=Array.isArray(data.products)?data.products.filter(p=>p&&
         ['app','xtream'].includes(p.channel)&&Number.isInteger(Number(p.durationDays))):[];
+      const warningBox=$('one-inventory-alerts');
+      warningBox.replaceChildren();
+      const low=Array.isArray(data.lowStockAlerts)?data.lowStockAlerts:[];
+      const summary=document.createElement('p');
+      summary.textContent=low.length
+        ?'⚠ تنبيه: '+low.length+' باقة أقل من 20 كودًا. راجع المخزون قبل نفاده.'
+        :'✓ لا توجد باقات أقل من حد 20 كودًا في المخزون.';
+      warningBox.append(summary);
+      if(low.length){
+        const ul=document.createElement('ul');
+        for(const item of low){
+          const li=document.createElement('li');
+          li.textContent=String(item.name||item.sku)+' — '+Number(item.available||0)+' كود متبقٍ';
+          ul.append(li);
+        }
+        warningBox.append(ul);
+      }
       stockGrid.replaceChildren();
       for(const p of stockPlans){
         const count=(data.counts||[]).find(x=>x.sku===p.sku)||{};
@@ -199,7 +217,7 @@
       }
       if(stockPlans.some(p=>p.sku===original))stockSku.value=original;
       stockStatus.textContent='الأعداد من قاعدة الأكواد الفعلية، ولا تشمل الأكواد المستخدمة أو الملغاة.';
-    }catch(e){stockStatus.textContent='فشل قراءة المخزون: '+e.message;}
+    }catch(e){$('one-inventory-alerts').textContent='تعذر تحميل تنبيهات المخزون.';stockStatus.textContent='فشل قراءة المخزون: '+e.message;}
   }
   $('one-inventory-refresh').addEventListener('click',()=>void loadStock());
   async function stockWrite(kind){
