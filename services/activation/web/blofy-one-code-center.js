@@ -47,7 +47,7 @@
   desc.textContent='من هنا فقط: أصدر اشتراكًا، افحص كودًا موجودًا، أو راجع جميع الحسابات. اختر عملية واحدة بدل التنقل بين أقسام كثيرة.';
   title.append(cap,h2,desc);
   const host=document.createElement('span');host.className='one-codes-host';
-  host.textContent='هوست Xtream: y.blofyplayer.com';
+  host.textContent='Host: https://y.blofyplayer.com:443';
   intro.append(title,host);center.append(intro);
   const tabs=document.createElement('div');tabs.className='one-codes-tabs';
   tabs.setAttribute('role','tablist');
@@ -70,14 +70,8 @@
   const buttons=[...tabs.querySelectorAll('button')];
   let selected='one-issue';
   const choices=new Set(definitions.map(x=>x[0]));
-  function wipe(id){
-    if(id==='one-issue')$('one-issue-hide')?.click();
-    if(id==='legacy-xtream')$('one-legacy-hide')?.click();
-    if(id==='stream-management')$('one-stream-secret-hide')?.click();
-  }
   function show(id,scroll=false){
     if(!choices.has(id))return;
-    if(selected!==id)wipe(selected);
     selected=id;
     for(const el of [issue,legacy,ledger,inventory])el.hidden=el.id!==id;
     if(id==='one-inventory')void loadStock();
@@ -107,7 +101,7 @@
     if(choices.has(id))show(id,true);
     else if(id==='codes-center')show('one-issue',true);
     else if(!id)show('one-issue');
-    else wipe(selected);
+    // Other section anchors do not wipe previously displayed codes.
   }
   addEventListener('hashchange',sync);
 

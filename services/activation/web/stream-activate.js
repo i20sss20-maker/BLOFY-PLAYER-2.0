@@ -3,11 +3,14 @@
  const form=document.getElementById('form'),input=document.getElementById('code'),
    button=document.getElementById('submit'),message=document.getElementById('message'),
    section=document.getElementById('result'),fields=document.getElementById('fields');
- let credentials=null,secretTimer=null;
+ let credentials=null;
  function hideSecrets(){
-  if(secretTimer!==null)clearTimeout(secretTimer);
-  secretTimer=null;credentials=null;fields.replaceChildren();section.classList.add('hide');
+  credentials=null;fields.replaceChildren();section.classList.add('hide');
  }
+  // Display a complete standard HTTPS Xtream URL, including its default port.
+  const completeHost=raw=>{try{const u=new URL(String(raw));return u.protocol==='https:'
+    ?'https://'+u.hostname+':443'+(u.pathname==='/'?'':u.pathname):u.origin;}catch{return String(raw||'');}};
+
  function show(text,ok){message.textContent=text;message.className='status'+(ok?' ok':'');}
  function field(label,value,copy){
    const row=document.createElement('div');row.className='row';
@@ -41,8 +44,7 @@
      }
      fields.replaceChildren();
      credentials=d.credentials;
-     field('الهوست / عنوان السيرفر',d.credentials.serverUrl,true);
-     field('Port / المنفذ','443',true);
+     field('Host / رابط السيرفر الكامل',completeHost(d.credentials.serverUrl),true);
      field('اسم المستخدم',d.credentials.username,true);
      field('كلمة المرور (مرة واحدة)',d.credentials.password,true);
      field('رابط M3U',d.credentials.m3uUrl,true);
@@ -50,20 +52,20 @@
      field('تاريخ بدء الاشتراك',new Date(d.account.activatedAt).toLocaleString('ar-SA'),false);
      field('تاريخ انتهاء الاشتراك',new Date(d.account.expiresAt).toLocaleString('ar-SA'),false);
      section.classList.remove('hide');input.value='';show('تم التفعيل! بدأت مدة الاشتراك الآن.',true);
-     secretTimer=setTimeout(hideSecrets,90000);
+     // Remain visible until customer presses Hide or leaves the page.
    }catch{show('تعذر الاتصال بالسيرفر. تحقق من الإنترنت وأعد المحاولة.',false)}
    finally{button.disabled=false}
  });
  document.getElementById('copy-all').addEventListener('click',async()=>{
   if(!credentials)return;
   try{
-   await navigator.clipboard.writeText('Host: '+credentials.serverUrl+
-     '\nPort: 443\nUsername: '+credentials.username+'\nPassword: '+credentials.password+
+   await navigator.clipboard.writeText('Host: '+completeHost(credentials.serverUrl)+
+     '\nUsername: '+credentials.username+'\nPassword: '+credentials.password+
      '\nM3U: '+credentials.m3uUrl);
    show('تم نسخ بيانات Xtream. احتفظ بها في مكان آمن.',true);
   }catch{show('تعذر النسخ التلقائي؛ يمكنك نسخ كل حقل على حدة.',false);}
  });
  document.getElementById('hide-result').addEventListener('click',hideSecrets);
- document.addEventListener('visibilitychange',()=>{if(document.hidden)hideSecrets();});
+ // Changing browser tabs does not clear the redemption result.
  window.addEventListener('pagehide',hideSecrets);
 })();
