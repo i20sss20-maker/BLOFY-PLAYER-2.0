@@ -48,3 +48,18 @@ test('read-only status uses true service endpoints and explicit on-demand synthe
   assert.match(js,/credentials:'same-origin'/);
   assert.doesNotMatch(js,/(?:localStorage|sessionStorage|POST|DELETE|PATCH|\/api\/v1\/admin\/xtream\/sync)/);
 });
+
+test('BLOFY ONE serves every locally referenced JS and CSS; no silent 404 scripts',async()=>{
+  const [html,admin]=await Promise.all([
+    file('web/blofy-one.html'),file('src/admin-console-hook.mjs')
+  ]);
+  const urls=[...html.matchAll(/(?:src|href)="(\/[^"?]+\.(?:js|css))(?:\?[^"]*)?"/g)]
+    .map(m=>m[1]);
+  assert.ok(urls.length>=15,'asset coverage must include complete management app');
+  for(const path of new Set(urls)){
+    assert.ok(admin.includes("['"+path+"'"),'not allowlisted by admin console: '+path);
+    assert.ok((await file('web'+path)).length>10,'asset file missing or empty: '+path);
+  }
+  for(const name of ['blofy-one-store-ops.css','blofy-one-store-ops.js',
+    'blofy-one-store-sales.js'])assert.ok(urls.includes('/'+name),name);
+});
