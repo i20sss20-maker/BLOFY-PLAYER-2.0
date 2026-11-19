@@ -313,3 +313,23 @@ body[data-shop-offer] .market-featured-offer{padding-top:50px!important}
 }
 @media(max-width:370px){.market-promo-title{font-size:13px}.market-promo-price{font-size:26px}.market-hero-buttons{flex-direction:column;align-items:flex-start}.market-cta{min-height:40px}}
 @media(prefers-reduced-motion:reduce){.market-category-tile,.market-cta{transition:none}.market-category-tile:hover{transform:none}}
+
+
+/* Site-wide branded color themes controlled from the admin UI. */
+body[data-market-theme="ocean"]{--market-violet:#1675b6;--market-violet-deep:#115285;--market-lilac:#e3f3ff}
+body[data-market-theme="rose"]{--market-violet:#bd477d;--market-violet-deep:#872b58;--market-lilac:#ffecf4}
+body[data-market-theme="ocean"] .market-slide-shade{background:linear-gradient(270deg,#06284bf7,#0b416ade 40%,#073c6199 72%,transparent)}
+body[data-market-theme="rose"] .market-slide-shade{background:linear-gradient(270deg,#3c0e32f7,#67234eda 40%,#6d214d99 72%,transparent)}
+body[data-market-theme="ocean"] .market-about{background:#e8f5ff!important}
+body[data-market-theme="rose"] .market-about{background:#fff0f5!important}
+body[data-market-theme="ocean"] .market-category-icon.purple{background:#e7f4ff;color:#1675b6}
+body[data-market-theme="rose"] .market-category-icon.purple{background:#fff0f7;color:#bd477d}
+body[data-market-theme="ocean"] .market-featured-offer .offer-checkout{background:#0e304e}
+body[data-market-theme="rose"] .market-featured-offer .offer-checkout{background:#4a1940}
+body[data-market-theme="ocean"] .market-footer{background:#0f2137}
+body[data-market-theme="rose"] .market-footer{background:#301b2c}
+body[data-blofy-storefront] [hidden]{display:none!important}
+.market-search-feedback{padding:14px 18px;border:1px solid #e2d3f1;border-radius:12px;background:#f8f3ff;color:#5d397a;margin:8px 0 20px;font-size:13px}
+.market-slide-heading,.market-slide-copy h1{white-space:normal}
+.market-slide-copy [data-market-content]{white-space:pre-line}
+.market-promo .market-promo-action:hover{text-decoration:underline}
