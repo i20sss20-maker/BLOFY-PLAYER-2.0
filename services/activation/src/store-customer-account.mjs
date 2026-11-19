@@ -612,6 +612,13 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
  };
  handler.linkCheckoutOrder=linkCheckoutOrder;
  handler.checkoutIdentity=checkoutIdentity;
+ // Trial claims require a real OTP-verified customer session; checkout may
+ // allow guests in other configurations, which must not grant a free code.
+ handler.authenticatedCustomer=async req=>{
+  if(!enabled||!mailReady)return null;
+  await schema();
+  return current(req);
+ };
  handler.setReconciler=fn=>{if(typeof fn==='function')reconcileOwnedPayment=fn;};
  handler.setStoreSchema=fn=>{if(typeof fn==='function')ensureOpsSchema=fn;};
  return handler;
