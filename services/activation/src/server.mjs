@@ -1042,12 +1042,13 @@ const server = http.createServer(async (req, res) => {
       return await serveStoreAssetFile(res,'store-assistant.css','text/css; charset=utf-8');
     if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/assistant'){
       const raw=await readFile(new URL('../web/store-assistant.html',import.meta.url));
-      res.writeHead(200,{'content-type':'text/html; charset=utf-8','content-length':raw.length,
+      const html=Buffer.from(withPublicAnalytics(raw.toString('utf8')),'utf8');
+      res.writeHead(200,{'content-type':'text/html; charset=utf-8','content-length':html.length,
         'cache-control':'public,max-age=120','x-content-type-options':'nosniff',
         'x-frame-options':'DENY','referrer-policy':'strict-origin-when-cross-origin',
         'content-security-policy':PUBLIC_ANALYTICS_CSP+"; base-uri 'none'",
         'strict-transport-security':'max-age=31536000'});
-      return res.end(raw);
+      return res.end(html);
     }
     if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/market.css')
       return await serveStoreAssetFile(res,'store-market.css','text/css; charset=utf-8');

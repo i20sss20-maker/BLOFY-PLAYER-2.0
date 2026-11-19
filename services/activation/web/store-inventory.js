@@ -30,6 +30,7 @@ try{const result=await request('/api/v1/admin/store/inventory/'+kind,{method:'PO
 catch(e){status('تعذرت العملية ('+e.message+'). لم نعتمد أي كود غير مؤهل.');}
 finally{loading(false);}}
 $('generate').addEventListener('click',()=>void run('generate'));$('import').addEventListener('click',()=>void run('import'));
+let activeCampaignCoupons=[];
 async function reloadSales(){
  const data=await request('/api/v1/admin/store/sales');
  const paid=(data.sales||[]).filter(x=>x.status==='paid');
@@ -54,6 +55,24 @@ async function reloadSales(){
    const sum=document.createElement('span');sum.textContent=(Number(row.amount_minor)/100)+' ر.س';
    card.append(name,count,sum);breakdown.append(card);
  });
+ const currentlyActive=(data.coupons||[]).filter(row=>
+   row.active===true&&Number(row.paid_uses||0)<Number(row.max_uses||0)&&
+   Date.parse(row.expires_at)>Date.now());
+ const selector=$('campaign-coupon');
+ if(selector){
+   const previous=selector.value;selector.replaceChildren();
+   const initial=document.createElement('option');initial.value='';initial.textContent='بدون كوبون';selector.append(initial);
+   for(const row of currentlyActive){
+     const option=document.createElement('option');
+     option.value=String(row.code);
+     option.textContent=String(row.code)+' — '+Number(row.percent)+'% خصم';
+     selector.append(option);
+   }
+   if(currentlyActive.some(row=>row.code===previous))selector.value=previous;
+ }
+ activeCampaignCoupons=currentlyActive.map(row=>({
+   code:String(row.code),percent:Number(row.percent),expiresAt:String(row.expires_at)
+ }));
  const coupons=$('coupon-list');coupons.textContent='';
  if(!(data.coupons||[]).length){coupons.textContent='لا توجد كوبونات بعد.';}
  (data.coupons||[]).forEach(row=>{
@@ -151,6 +170,99 @@ brandingForm?.addEventListener('submit',async event=>{
  finally{brandingSave.disabled=false;}
 });
 void loadBranding().catch(e=>{brandingStatus.textContent='تعذر تحميل إعدادات الموقع: '+e.message;});
+
+// Campaigns use existing first-party analytics and authorised coupon status only.
+// No customer lists, automatic sends, financial attribution or new payment state.
+const campaignSources=new Set(['x','instagram','tiktok','whatsapp','referral']);
+const campaignDestinations=new Set(['/','/#products','/store/offers','/products/stream','/products/xtream','/store/assistant']);
+const campaignValidName=/^[a-z0-9_-]{3,48}$/;
+function campaignLink(name,platform,destination){
+  const trimmed=String(name).trim().toLowerCase();
+  if(!campaignValidName.test(trimmed)||!campaignSources.has(platform)||
+     !campaignDestinations.has(destination))throw Error('تحقق من اسم الحملة والمنصة وصفحة الوصول.');
+  const url=new URL(destination,'https://blofyplayer.com');
+  url.searchParams.set('utm_source',platform);
+  url.searchParams.set('utm_medium',platform==='whatsapp'?'message':platform==='referral'?'referral':'social');
+  url.searchParams.set('utm_campaign',trimmed);
+  return url.href;
+}
+const campaignForm=$('campaign-link-form');
+campaignForm?.addEventListener('submit',event=>{
+  event.preventDefault();
+  const status=$('campaign-builder-status');
+  try{
+    const name=$('campaign-name').value.trim().toLowerCase();
+    const platform=$('campaign-platform').value;
+    const destination=$('campaign-destination').value;
+    const url=campaignLink(name,platform,destination);
+    const couponCode=$('campaign-coupon').value;
+    const coupon=activeCampaignCoupons.find(x=>x.code===couponCode&&Date.parse(x.expiresAt)>Date.now());
+    if(couponCode&&!coupon)throw Error('الكوبون المحدد غير متاح حاليًا. حدّث قائمة الكوبونات.');
+    const message='اكتشف اشتراكات BLOFY STREAM وXtream من متجر BLOFY الرسمي. '+
+      'اختر الباقة المناسبة لك وأكمل الطلب بأمان.'+
+      (coupon?' استخدم رمز الخصم '+coupon.code+' للحصول على خصم '+coupon.percent+
+        '% إذا كان ما زال فعّالًا ومتاحًا عند الدفع.':'')+
+      '\n'+url;
+    $('campaign-share-link').value=url;
+    $('campaign-share-text').value=message;
+    status.textContent='✓ الرابط جاهز للنسخ. لا يُنشر تلقائيًا ولا يُرسل لأي عميل.';
+  }catch(e){status.textContent=e.message;}
+});
+for(const [id,field] of [['campaign-copy-link','campaign-share-link'],['campaign-copy-text','campaign-share-text']]){
+  $(id)?.addEventListener('click',async()=>{
+    const value=$(field).value;
+    if(!value){$('campaign-builder-status').textContent='أنشئ الرابط أولًا.';return;}
+    try{
+      await navigator.clipboard.writeText(value);
+      $('campaign-builder-status').textContent='✓ تم النسخ إلى الحافظة.';
+    }catch{
+      $(field).focus();$(field).select();
+      $('campaign-builder-status').textContent='النسخ التلقائي غير متاح؛ انسخ النص من الحقل المحدد.';
+    }
+  });
+}
+async function loadCampaignReport(){
+  const days=$('campaign-days').value;
+  const status=$('campaign-report-status'),button=$('campaign-report-refresh');
+  if(!['7','30','90'].includes(days)){status.textContent='فترة التقرير غير مدعومة.';return;}
+  button.disabled=true;status.textContent='جارٍ قراءة حملات الزوار الموافقين على القياس...';
+  try{
+    const data=await request('/api/v1/admin/site-analytics/summary?days='+days);
+    if(data.ok!==true||data.source!=='consented_first_party')throw Error('unexpected_analytics_source');
+    const total=Number(data.totals?.sessions||0);
+    const campaigns=Array.isArray(data.campaigns)?data.campaigns:[];
+    const attributed=campaigns.reduce((n,x)=>n+Number(x.sessions||0),0);
+    const metrics=$('campaign-summary-metrics');metrics.replaceChildren();
+    for(const [label,value,tip] of [
+      ['جلسات وافقت على القياس',total,'جميع مصادر المتجر'],
+      ['جلسات الحملات المعروضة',attributed,'أعلى 12 مجموعة مصدر/حملة فقط'],
+      ['طلبات مدفوعة بالمتجر',Number(data.totals?.paidOrders||0),'إجمالي المتجر؛ ليست منسوبة لهذه الحملات']
+    ]){
+      const item=document.createElement('article');item.className='campaign-metric';
+      const name=document.createElement('span');name.textContent=label;
+      const number=document.createElement('strong');number.textContent=value.toLocaleString('ar-SA');
+      const note=document.createElement('small');note.textContent=tip;
+      item.append(name,number,note);metrics.append(item);
+    }
+    const list=$('campaign-report-list');list.replaceChildren();
+    if(!campaigns.length){
+      const empty=document.createElement('p');empty.textContent='لا توجد جلسات حملات مقاسة خلال الفترة. قد تكون الزيارات بدون موافقة القياس.';
+      list.append(empty);
+    }
+    for(const row of campaigns){
+      const item=document.createElement('article');item.className='campaign-report-row';
+      const source=document.createElement('strong');source.textContent=String(row.source||'غير معروف');
+      const campaign=document.createElement('span');campaign.textContent=String(row.campaign||'بدون اسم');
+      const count=document.createElement('b');count.textContent=Number(row.sessions||0).toLocaleString('ar-SA')+' جلسة';
+      item.append(source,campaign,count);list.append(item);
+    }
+    status.textContent='✓ التقرير من بيانات الموافقة الاختيارية. لا يوجد إسناد مدفوعات إلى الحملات.';
+  }catch(e){status.textContent='تعذر تحميل إحصاءات الحملات: '+e.message;}
+  finally{button.disabled=false;}
+}
+$('campaign-days')?.addEventListener('change',()=>void loadCampaignReport());
+$('campaign-report-refresh')?.addEventListener('click',()=>void loadCampaignReport());
+void loadCampaignReport();
 
 // Owner-only retention summary. Never collect or display emails, cart contents or private codes.
 async function loadRetention(){
