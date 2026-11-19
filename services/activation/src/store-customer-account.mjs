@@ -2,7 +2,7 @@
 // Orders may only be linked with their existing 256-bit guest access token.
 import crypto from 'node:crypto';
 import {createFixedWindowLimiter,requestClientKey} from './auth-protection.mjs';
-import {parseStoreCart,cartVouchers,publicOrderNumber} from './store-cart.mjs';
+import {parseStoreCart,parseSavedStoreCart,cartVouchers,publicOrderNumber} from './store-cart.mjs';
 import {decryptStreamCode} from './xtream-code-vault.mjs';
 import {decryptGatewayAccountPassword} from './xtream-account-vault.mjs';
 import {normalizeXtreamPublicOrigin} from './xtream-public-origin.mjs';
@@ -348,8 +348,8 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
   if(!customer)return json(res,401,{error:'login_required'});
   const body=await readJson(req);
   const raw=body?.items;
-  const cart=Array.isArray(raw)&&raw.length===0?{items:[]}:parseStoreCart(raw);
-  if(!cart)return json(res,400,{error:'store_invalid_cart'});
+  const savedItems=parseSavedStoreCart(raw);
+  if(!savedItems)return json(res,400,{error:'store_invalid_cart'});
   const coupon=typeof body?.couponCode==='string'
     ?body.couponCode.trim().toUpperCase():'';
   if(coupon&&!/^[A-Z0-9][A-Z0-9_-]{3,19}$/.test(coupon))
@@ -364,8 +364,7 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
     'items=EXCLUDED.items,coupon_code=EXCLUDED.coupon_code,'+
     'revision=blofy_store_customer_carts.revision+1,updated_at=NOW() '+
     'WHERE blofy_store_customer_carts.revision=$4 RETURNING revision,updated_at',
-    [customer.id,JSON.stringify(cart.items.map(({sku,quantity,bundleSelection})=>
-      ({sku,quantity,...(bundleSelection?{bundleSelection}:{} )}))),coupon||null,revision])).rows[0];
+    [customer.id,JSON.stringify(savedItems),coupon||null,revision])).rows[0];
   if(!row)return json(res,409,{error:'store_cart_changed_on_another_device'});
   return json(res,200,{ok:true,revision:Number(row.revision),updatedAt:row.updated_at});
  }
