@@ -115,17 +115,24 @@ export function createSiteAnalyticsHandlers({pool,json,readJson,authorizeAdmin,k
     const db=await pool.connect();
     try{
     const window="day >= (NOW() AT TIME ZONE 'Asia/Riyadh')::date - ($1::integer - 1)";
-    const [overall,series,pages,sources,devices,events,campaigns,active,hasOrders]=await Promise.all([
-      db.query('SELECT COALESCE(SUM(hits) FILTER (WHERE event=$2),0)::int AS views,COALESCE(SUM(hits) FILTER (WHERE event=$3),0)::int AS sessions FROM blofy_site_analytics_daily WHERE '+window,[days,'page_view','session_start']),
-      db.query("SELECT to_char(day,'YYYY-MM-DD') AS day, COALESCE(SUM(hits) FILTER (WHERE event='page_view'),0)::int AS views,COALESCE(SUM(hits) FILTER (WHERE event='session_start'),0)::int AS sessions FROM blofy_site_analytics_daily WHERE "+window+" GROUP BY day ORDER BY day",[days]),
-      db.query("SELECT page,COALESCE(SUM(hits),0)::int AS views FROM blofy_site_analytics_daily WHERE "+window+" AND event='page_view' GROUP BY page ORDER BY views DESC,page LIMIT 15",[days]),
-      db.query("SELECT source,medium,COALESCE(SUM(hits),0)::int AS sessions FROM blofy_site_analytics_daily WHERE "+window+" AND event='session_start' GROUP BY source,medium ORDER BY sessions DESC LIMIT 15",[days]),
-      db.query("SELECT device,COALESCE(SUM(hits),0)::int AS sessions FROM blofy_site_analytics_daily WHERE "+window+" AND event='session_start' GROUP BY device ORDER BY sessions DESC",[days]),
-      db.query("SELECT event,COALESCE(SUM(hits),0)::int AS hits FROM blofy_site_analytics_daily WHERE "+window+" AND event NOT IN ('page_view','session_start') GROUP BY event ORDER BY hits DESC",[days]),
-      db.query("SELECT source,campaign,COALESCE(SUM(hits),0)::int AS sessions FROM blofy_site_analytics_daily WHERE "+window+" AND event='session_start' AND campaign<>'none' GROUP BY source,campaign ORDER BY sessions DESC LIMIT 12",[days]),
-      db.query("SELECT COUNT(*)::int AS n FROM blofy_site_analytics_sessions WHERE last_seen_at >= NOW()-INTERVAL '5 minutes'"),
-      db.query("SELECT to_regclass('public.blofy_store_geidea_orders') IS NOT NULL AS n")
-    ]);
+    // Node-postgres requires a leased client to finish one query before
+    // starting the next. Promise.all on the *same* client queued 9 calls and
+    // emitted pg@9 deprecation warnings on every visitors-dashboard refresh.
+    // Keep one connection, query sequentially, and release it in finally.
+    const summaries=[
+      ()=>db.query('SELECT COALESCE(SUM(hits) FILTER (WHERE event=$2),0)::int AS views,COALESCE(SUM(hits) FILTER (WHERE event=$3),0)::int AS sessions FROM blofy_site_analytics_daily WHERE '+window,[days,'page_view','session_start']),
+      ()=>db.query("SELECT to_char(day,'YYYY-MM-DD') AS day, COALESCE(SUM(hits) FILTER (WHERE event='page_view'),0)::int AS views,COALESCE(SUM(hits) FILTER (WHERE event='session_start'),0)::int AS sessions FROM blofy_site_analytics_daily WHERE "+window+" GROUP BY day ORDER BY day",[days]),
+      ()=>db.query("SELECT page,COALESCE(SUM(hits),0)::int AS views FROM blofy_site_analytics_daily WHERE "+window+" AND event='page_view' GROUP BY page ORDER BY views DESC,page LIMIT 15",[days]),
+      ()=>db.query("SELECT source,medium,COALESCE(SUM(hits),0)::int AS sessions FROM blofy_site_analytics_daily WHERE "+window+" AND event='session_start' GROUP BY source,medium ORDER BY sessions DESC LIMIT 15",[days]),
+      ()=>db.query("SELECT device,COALESCE(SUM(hits),0)::int AS sessions FROM blofy_site_analytics_daily WHERE "+window+" AND event='session_start' GROUP BY device ORDER BY sessions DESC",[days]),
+      ()=>db.query("SELECT event,COALESCE(SUM(hits),0)::int AS hits FROM blofy_site_analytics_daily WHERE "+window+" AND event NOT IN ('page_view','session_start') GROUP BY event ORDER BY hits DESC",[days]),
+      ()=>db.query("SELECT source,campaign,COALESCE(SUM(hits),0)::int AS sessions FROM blofy_site_analytics_daily WHERE "+window+" AND event='session_start' AND campaign<>'none' GROUP BY source,campaign ORDER BY sessions DESC LIMIT 12",[days]),
+      ()=>db.query("SELECT COUNT(*)::int AS n FROM blofy_site_analytics_sessions WHERE last_seen_at >= NOW()-INTERVAL '5 minutes'"),
+      ()=>db.query("SELECT to_regclass('public.blofy_store_geidea_orders') IS NOT NULL AS n")
+    ];
+    const summaryRows=[];
+    for(const run of summaries)summaryRows.push(await run());
+    const [overall,series,pages,sources,devices,events,campaigns,active,hasOrders]=summaryRows;
     let store={paidOrders:0,revenueMinor:0,byDay:[]};
     if(hasOrders.rows[0]?.n){
       const o=await db.query("SELECT to_char((paid_at AT TIME ZONE 'Asia/Riyadh')::date,'YYYY-MM-DD') AS day,"+

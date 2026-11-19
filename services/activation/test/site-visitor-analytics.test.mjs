@@ -121,3 +121,48 @@ test('BLOFY ONE visitors UI, first-party consent and sales attribution links are
  assert.doesNotMatch(publicJs,/\b(?:deviceId|activationCode|username|password)\b/);
  assert.doesNotMatch(page,/id="(?:username|deviceId|activationCode)"/);
 });
+
+test('visitors dashboard uses one leased pg client without any overlapping queries',async()=>{
+ // pg@9 will reject a query started while the same client is busy.
+ let active=0,maxActive=0,released=0,summaryQueries=0;
+ const db={
+  async query(sql,params=[]){
+   active++;maxActive=Math.max(active,maxActive);
+   if(active!==1)throw Error('concurrent client.query called on one pg client');
+   try{
+    await new Promise(resolve=>setTimeout(resolve,2));
+    if(sql.includes("FROM blofy_site_analytics_daily")||
+       sql.includes("FROM blofy_site_analytics_sessions")||
+       sql.includes("to_regclass('public.blofy_store_geidea_orders')"))
+      summaryQueries++;
+    if(sql.includes("AS views,COALESCE")&&sql.includes(" AS sessions"))
+      return {rows:[{views:34,sessions:10}]};
+    if(sql.includes("last_seen_at >= NOW()-INTERVAL '5 minutes'"))
+      return {rows:[{n:3}]};
+    if(sql.includes('to_regclass('))return {rows:[{n:false}]};
+    return {rows:[],rowCount:0};
+   }finally{active--;}
+  },
+  release(){released++;}
+ };
+ const pool={connect:async()=>db,query:db.query};
+ const handler=createSiteAnalyticsHandlers({
+  pool,keyHex:'a'.repeat(64),authorizeAdmin:()=>true,
+  json:(res,status,data)=>{res.status=status;res.data=data;},
+  readJson:async(req)=>req.body
+ });
+ const reply={};
+ const handled=await handler({method:'GET',headers:{}},reply,
+  new URL('https://blofyplayer.com/api/v1/admin/site-analytics/summary?days=7'));
+ assert.equal(handled,true);
+ assert.equal(reply.status,200);
+ assert.equal(reply.data.ok,true);
+ assert.equal(reply.data.totals.activeLast5m,3);
+ assert.equal(reply.data.totals.paidOrders,0);
+ assert.equal(maxActive,1);
+ assert.equal(summaryQueries,9,'all nine analytics dashboard queries still execute');
+ assert.equal(released,2,'schema and dashboard each release the client');
+ const implementation=read('../src/site-analytics.mjs');
+ assert.doesNotMatch(implementation,/Promise\.all\(\[\s*db\.query/);
+ assert.match(implementation,/for\(const run of summaries\)summaryRows\.push\(await run\(\)\)/);
+});
