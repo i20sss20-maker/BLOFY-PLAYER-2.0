@@ -10,13 +10,16 @@ const BRIDGE='b'.repeat(48);
 const environment={BLOFY_STREAM_UNIFIED_BRIDGE_KEY:BRIDGE,PORT:'3000'};
 const json=(res,status,body,headers)=>Object.assign(res,{status,body,headers});
 const url=pathname=>({pathname});
-const request=(payload={},overrides={})=>({
- method:'POST',headers:{
-  origin:'https://blofyplayer.com','x-blofy-reseller':'1',
-  'content-type':'application/json',...overrides.headers
- },
- socket:{remoteAddress:'127.0.0.1'},payload,...overrides,
-});
+const request=(payload={},overrides={})=>{
+ const {headers:headerOverrides={},...other}=overrides;
+ return {
+  method:'POST',headers:{
+   origin:'https://blofyplayer.com','x-blofy-reseller':'1',
+   'content-type':'application/json',...headerOverrides
+  },
+  socket:{remoteAddress:'127.0.0.1'},payload,...other
+ };
+};
 const incoming=(body,status=200)=>({
  ok:status>=200&&status<300,status,
  headers:{get:()=>null},
