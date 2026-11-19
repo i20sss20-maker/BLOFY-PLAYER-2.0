@@ -46,6 +46,14 @@ const contentType=file=>file.endsWith('.html')?'text/html; charset=utf-8':
  file.endsWith('.png')?'image/png':'application/octet-stream';
 const server=http.createServer(async(req,res)=>{
  const path=new URL(req.url||'/', 'http://127.0.0.1').pathname;
+ if(path.startsWith('/api/v1/store/reseller/')){
+  // A guest must remain logged out: the real reseller API rejects absent
+  // signed cookies, unlike the generic read-only fixture below.
+  const payload=JSON.stringify({ok:false,error:'reseller_login_required'});
+  res.writeHead(401,{'content-type':'application/json',
+   'content-length':Buffer.byteLength(payload),'cache-control':'no-store'});
+  return res.end(payload);
+ }
  if(path.startsWith('/api/')){
   // Never simulate a paid order in a storefront performance audit.
   const payload=JSON.stringify({
