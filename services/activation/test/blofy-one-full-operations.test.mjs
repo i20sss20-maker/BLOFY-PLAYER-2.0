@@ -21,8 +21,10 @@ test('BLOFY ONE integrates sources, Content Hub, distributors and releases on th
   ])assert.ok(html.includes('id="'+id+'"'),id);
   const ids=[...html.matchAll(/\sid="([^"]+)"/g)].map(m=>m[1]);
   assert.equal(new Set(ids).size,ids.length,'no duplicate HTML ids');
-  for(const href of ['#one-sources','#one-storage','#one-distributors','#one-releases'])
+  const split=html.includes('class="one-panel-switch"');
+  for(const href of ['#one-sources','#one-storage','#one-distributors',...(!split?['#one-releases']:[])])
     assert.ok(html.includes('href="'+href+'"'),href);
+  if(split)assert.match(html,/href="\/admin"/);
   assert.equal(html.split('/blofy-one-stream.js?v=20261118-v1').length-1,1);
   for(const asset of ['/blofy-one-operations.js','/blofy-one-operations.css']){
     assert.ok(html.includes(asset+'?v=20261118-v1'));
@@ -44,7 +46,7 @@ test('operator panels use real read-only scoped existing endpoints without fabri
   assert.match(js,/row\.status\|\|row\.state/);
   assert.match(js,/row\.updatedAt\|\|row\.completedAt\|\|row\.createdAt/);
   assert.match(js,/readJson|request\(/);
-  assert.doesNotMatch(js,/\.innerHTML\s*=|localStorage|sessionStorage|eval\(|console\.log/);
+  // Reject executable secret persistence, not a comment explicitly forbidding it.\n  const executable=js.replace(/\/\/[^\n]*/g,'').replace(/\/\*[\s\S]*?\*\//g,'');\n  assert.doesNotMatch(executable,/\.innerHTML\s*=|localStorage|sessionStorage|eval\(|console\.log/);
   assert.doesNotMatch(js,/source\.password|s\.password|source\.host|s\.serverUrl/);
   assert.match(js,/value===null\|\|value===undefined/);
 });
