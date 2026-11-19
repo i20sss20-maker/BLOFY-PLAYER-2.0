@@ -43,7 +43,7 @@ export function storeShowcasePublic(row){
  return {id:row.id,title:row.title,description:row.description,category:row.category,
   imageUrl:row.image_url||null,checkoutSku:sku,priceMinor:sku?PRICE[sku]:null,
   currency:'SAR',checkoutUrl:sku?'/store/cart?add='+encodeURIComponent(sku)+
-    (sku==='bundle-2y'?'&first=app&second=app'):'/store/contact',
+    (sku==='bundle-2y'?'&first=app&second=app':''):'/store/contact',
   sortOrder:row.sort_order};
 }
 export function createStoreShowcaseHandlers({pool,json,readJson,authorizeAdmin}){
