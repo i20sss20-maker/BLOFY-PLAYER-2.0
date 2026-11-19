@@ -24,6 +24,60 @@
   <small>التعديلات تخص المحتوى والهوية البصرية فقط. تسعير الاشتراكات ومدفوعات جيديا محميان بإعدادات مستقلة. لا تضف شعارات شركات غير مرتبطة بالمتجر.</small>
  </form>
 </section>
+<section class="admin-merchandising" id="merchandising-admin" aria-labelledby="merchandising-heading">
+  <div class="intro"><span>VISUAL MERCHANDISING</span><h2 id="merchandising-heading">إدارة البنرات وأقسام الواجهة</h2>
+   <p>تحكم في البانرين الثاني والثالث وصورهما وروابطهما، وحدد الأقسام الظاهرة للزوار. البانر الأول موجود في إعدادات هوية المتجر أعلاه.</p></div>
+  <form id="merchandising-form" class="panel">
+   <div class="merchandising-layout">
+    <fieldset class="merchandising-banner" data-editor-slide="0">
+     <legend>البانر الثاني — العرض الترويجي</legend>
+     <label for="merch-slide-0-title">عنوان البانر</label><input id="merch-slide-0-title" type="text" maxlength="55" required>
+     <label for="merch-slide-0-highlight">عبارة مميزة</label><input id="merch-slide-0-highlight" type="text" maxlength="55" required>
+     <label for="merch-slide-0-description">الوصف</label><textarea id="merch-slide-0-description" maxlength="240" rows="2" required></textarea>
+     <label for="merch-slide-0-imageUrl">صورة البانر HTTPS أو صورة من المتجر</label>
+     <input id="merch-slide-0-imageUrl" type="text" maxlength="700" dir="ltr" required>
+     <label for="merch-slide-0-cta">نص الزر</label><input id="merch-slide-0-cta" maxlength="40" required>
+     <label for="merch-slide-0-href">وجهة الزر</label><select id="merch-slide-0-href">
+      <option value="/store/offers">صفحة العروض</option><option value="/#products">الاشتراكات</option>
+      <option value="/store/trial">التجربة</option><option value="/store/cart">السلة</option>
+      <option value="/products/stream">منتج ستريم</option><option value="/products/xtream">منتج بلاير</option>
+      <option value="/store/contact">مركز الدعم</option><option value="/#categories">التصنيفات</option>
+     </select>
+     <label class="merch-checkbox" for="merch-slide-0-active"><input id="merch-slide-0-active" type="checkbox"> إظهار هذا البانر</label>
+    </fieldset>
+    <fieldset class="merchandising-banner" data-editor-slide="1">
+     <legend>البانر الثالث — تعريف بالمنتجات</legend>
+     <label for="merch-slide-1-title">عنوان البانر</label><input id="merch-slide-1-title" type="text" maxlength="55" required>
+     <label for="merch-slide-1-highlight">عبارة مميزة</label><input id="merch-slide-1-highlight" type="text" maxlength="55" required>
+     <label for="merch-slide-1-description">الوصف</label><textarea id="merch-slide-1-description" maxlength="240" rows="2" required></textarea>
+     <label for="merch-slide-1-imageUrl">صورة البانر HTTPS أو صورة من المتجر</label>
+     <input id="merch-slide-1-imageUrl" type="text" maxlength="700" dir="ltr" required>
+     <label for="merch-slide-1-cta">نص الزر</label><input id="merch-slide-1-cta" maxlength="40" required>
+     <label for="merch-slide-1-href">وجهة الزر</label><select id="merch-slide-1-href">
+      <option value="/#products">الاشتراكات</option><option value="/store/offers">صفحة العروض</option>
+      <option value="/store/trial">التجربة</option><option value="/store/cart">السلة</option>
+      <option value="/products/stream">منتج ستريم</option><option value="/products/xtream">منتج بلاير</option>
+      <option value="/store/contact">مركز الدعم</option><option value="/#categories">التصنيفات</option>
+     </select>
+     <label class="merch-checkbox" for="merch-slide-1-active"><input id="merch-slide-1-active" type="checkbox"> إظهار هذا البانر</label>
+    </fieldset>
+   </div>
+   <fieldset class="merch-visibility">
+    <legend>الأقسام الظاهرة في الصفحة الرئيسية</legend>
+    <div class="merch-visibility-grid">
+     <label for="merch-section-categories"><input id="merch-section-categories" type="checkbox"> التصنيفات</label>
+     <label for="merch-section-offers"><input id="merch-section-offers" type="checkbox"> عرض الاشتراكين</label>
+     <label for="merch-section-featured"><input id="merch-section-featured" type="checkbox"> منتجات الإدارة</label>
+     <label for="merch-section-about"><input id="merch-section-about" type="checkbox"> نبذة عن BLOFY</label>
+     <label for="merch-section-questions"><input id="merch-section-questions" type="checkbox"> الأسئلة الشائعة</label>
+    </div>
+    <small>تبقى باقات الاشتراك الأساسية والسلة متاحتين دائمًا. إخفاء العرض من الصفحة لا يغير أسعار المنتجات أو الطلبات السابقة.</small>
+   </fieldset>
+   <div class="merch-actions"><button type="submit" id="merch-save">حفظ البنرات والأقسام</button>
+    <a href="/" target="_blank" rel="noopener noreferrer">معاينة المتجر ↗</a></div>
+   <output id="merch-status" role="status" aria-live="polite"></output>
+  </form>
+</section>
 <section class="showcase-admin" id="showcase-admin" aria-labelledby="showcase-heading">
   <div class="intro"><span>PRODUCT MANAGER</span><h2 id="showcase-heading">إدارة منتجات المتجر</h2>
     <p>أضف المنتجات والصور والتصنيفات، وعدّل ظهورها وترتيبها. الاشتراكات التي تختار لها كودًا معتمدًا تُباع بالسعر المحمي في خادم BLOFY؛ المنتجات الأخرى تُعرض للاستفسار فقط حتى يُجهز نظام تسليمها.</p>
