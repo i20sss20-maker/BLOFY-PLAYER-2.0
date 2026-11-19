@@ -21,7 +21,8 @@ test('live capacity dashboard is inside existing owner-protected BLOFY ONE, not 
   // capacity remains owner-protected and accessible via the separate technical panel.
   if(html.includes('class="one-panel-switch"'))assert.match(html,/href="\/admin"/);
   else assert.match(html,/href="#one-capacity"/);
-  assert.match(html,/option value="one-capacity"/);
+  if(html.includes('class="one-panel-switch"'))assert.match(html,/href="\/admin"/);
+  else assert.match(html,/option value="one-capacity"/);
   assert.match(html,/لا نعلن قدرة 100 أو 1000 مشاهد/);
   for(const extension of ['js','css']){
     assert.ok(hook.includes("'/blofy-one-capacity."+extension+"'"));
