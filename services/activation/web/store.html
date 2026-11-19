@@ -235,9 +235,10 @@
               <p>باقة تجريبية بسعر <strong>0 ريال</strong>، اختر ستريم أو Xtream وأضف التجربة إلى سلتك مثل بقية الاشتراكات. تتطلب تسجيل الدخول بالبريد، وكود واحد فقط لكل حساب.</p>
               <div class="offer-badges"><span>24 ساعة بعد أول تفعيل</span><span>مخزون منفصل</span><span>تسليم بدون دفع</span></div>
               <div class="blofy-trial-price"><span>السعر النهائي</span><strong>مجانًا · 0 ر.س</strong></div>
+              <p id="trial-home-stock" class="blofy-trial-stock" role="status" aria-live="polite">جارٍ التحقق من مخزون التجارب...</p>
               <div class="blofy-trial-actions">
-                <a class="btn btn-primary" href="/store/cart?add=trial-stream-1d">أضف تجربة STREAM للسلة 🛒</a>
-                <a class="btn btn-outline" href="/store/cart?add=trial-xtream-1d">أضف تجربة Xtream للسلة 🛒</a>
+                <a class="btn btn-primary" data-free-trial-link="trial-stream-1d" href="/store/cart?add=trial-stream-1d">أضف تجربة STREAM للسلة 🛒</a>
+                <a class="btn btn-outline" data-free-trial-link="trial-xtream-1d" href="/store/cart?add=trial-xtream-1d">أضف تجربة Xtream للسلة 🛒</a>
               </div>
               <small class="disclaimer">حسب التوفر، ويبدأ اليوم عند أول تفعيل ناجح. لا يمكن الحصول على تجربتين من الحساب نفسه.</small>
               <a href="/store/trial" class="trial-tag">عرض الكميات المتوفرة واسترجاع تجربتك ←</a>
@@ -395,6 +396,7 @@
  var amounts={'تجربة مجانية':0,'3 أشهر':40,'6 أشهر':70,'سنة':120};
  var suffix={'3 أشهر':'3m','6 أشهر':'6m','سنة':'1y'};
  var plans={};var available=false;var busy=false;var currentId=null;var currentSecret=null;
+ var trialCounts=Object.create(null),trialEnabled=false,trialChecked=false;
  try{var campaign=new URLSearchParams(location.search).get('utm_source')||'';
    if(campaign&&/^[a-zA-Z0-9_-]{1,40}$/.test(campaign))messages.general+=' (المصدر: '+campaign+')';
  }catch(_){}
@@ -411,7 +413,11 @@
       var p=document.querySelector('[data-price="'+product+'"]');
       if(p)p.textContent=trial?'مجانا · 0 ر.س / يوم واحد':price+' ر.س / '+dur;
       var add=document.querySelector('[data-cart-add="'+product+'"]');
-      if(add){add.href='/store/cart?add='+encodeURIComponent(name);add.textContent=trial?'أضف التجربة المجانية للسلة 🛒':'أضف للسلة 🛒';}
+      if(add){
+        var trialAvailable=trialEnabled&&Number(trialCounts[name])>0;
+        add.href=trial&&!trialAvailable?'/store/trial':'/store/cart?add='+encodeURIComponent(name);
+        add.textContent=trial?(trialAvailable?'أضف التجربة المجانية للسلة 🛒':'التحقق من مخزون التجارب ↗'):'أضف للسلة 🛒';
+      }
       if(b){b.textContent='اشترك الآن — '+price+' ر.س';b.dataset.sku=name;
         b.hidden=true;b.disabled=true;}
    });
@@ -491,6 +497,33 @@
    }catch(_){message(product,'تعذر بدء عملية الدفع. لم يتم تأكيد طلب جديد. حاول لاحقًا أو تواصل عبر واتساب.',true);}
    finally{if(!started){busy=false;update();}}
  }
+ function updateTrialStock(){
+    var status=document.getElementById('trial-home-stock');
+    if(status){
+      status.textContent=trialChecked&&trialEnabled?
+        'المتوفر الآن: STREAM '+Number(trialCounts['trial-stream-1d']||0)+
+        ' · Xtream '+Number(trialCounts['trial-xtream-1d']||0)+' كود':
+        'التجارب غير مفعّلة أو المخزون غير متاح حاليًا؛ راجع صفحة التجربة.';
+    }
+    document.querySelectorAll('[data-free-trial-link]').forEach(function(link){
+      var sku=link.dataset.freeTrialLink;
+      var ok=trialChecked&&trialEnabled&&Number(trialCounts[sku])>0;
+      link.href=ok?'/store/cart?add='+encodeURIComponent(sku):'/store/trial';
+      link.textContent=ok?(sku==='trial-stream-1d'?'أضف تجربة STREAM للسلة 🛒':'أضف تجربة Xtream للسلة 🛒'):
+        (sku==='trial-stream-1d'?'راجع مخزون STREAM ↗':'راجع مخزون Xtream ↗');
+    });
+    update();
+ }
+ fetch('/api/v1/store/trials/availability',{cache:'no-store',headers:{accept:'application/json'}})
+   .then(function(r){if(!r.ok)throw Error('trial_stock_unavailable');return r.json();})
+   .then(function(data){
+     trialEnabled=data.enabled===true;trialChecked=true;
+     (data.products||[]).forEach(function(p){
+       if(p&&['trial-stream-1d','trial-xtream-1d'].includes(p.sku))
+         trialCounts[p.sku]=Math.max(0,Number(p.available)||0);
+     });
+     updateTrialStock();
+   }).catch(function(){trialChecked=true;trialEnabled=false;updateTrialStock();});
  document.querySelectorAll('[data-duration]').forEach(function(el){el.addEventListener('change',update);});
  document.querySelectorAll('[data-buy]').forEach(function(btn){btn.addEventListener('click',function(){void pay(btn.dataset.buy,btn);});});
  document.getElementById('store-check').addEventListener('click',function(){void check();});
