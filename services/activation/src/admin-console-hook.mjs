@@ -63,6 +63,7 @@ const experience = createExperienceHandlers({ pool, json, readJson, requireAdmin
 const deviceAdmin = createDeviceAdmin({ pool, json, readJson, requireAdmin, ensureAdmin });
 const assets = new Map([
   ['/blofy-one.css', ['blofy-one.css', 'text/css']],
+  ['/blofy-one-role-split.css', ['blofy-one-role-split.css', 'text/css']],
   ['/blofy-one.js', ['blofy-one.js', 'text/javascript']],
   ['/blofy-one-customers.js', ['blofy-one-customers.js', 'text/javascript']],
   ['/blofy-one-legacy.js', ['blofy-one-legacy.js', 'text/javascript']],
