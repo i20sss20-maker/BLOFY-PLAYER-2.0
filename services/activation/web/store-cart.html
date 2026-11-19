@@ -1,20 +1,122 @@
-<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#071327">
-<meta name="description" content="سلة مشتريات BLOFY: اختر اشتراكات ستريم وإكستريم والعرض السنوي، وادفع في عملية واحدة."><meta name="robots" content="noindex,nofollow"><title>سلة مشتريات BLOFY</title>
-<link rel="icon" href="/blofy-logo.png"><link rel="stylesheet" href="/store/cart.css?v=3">
-<script src="/store/cart.js?v=7" defer></script></head>
-<body><header class="top"><nav class="wrap main-nav"><a class="logo" href="/"><img src="/blofy-logo.png" width="42" height="42" alt=""><span>BLOFY <b>STORE</b></span></a><div class="nav-links"><a href="/">الرئيسية</a><a href="/#products">الاشتراكات</a><a href="/store/offers">العروض</a><a href="/store/orders">تتبع طلب</a><a href="/store/account">حسابي</a></div></nav></header>
-<main class="wrap"><div class="title"><div><span class="eyebrow">BLOFY COMMERCE</span><h1>سلة مشترياتك</h1><p>اختر اشتراكاتك، ثم سجّل الدخول ببريدك الإلكتروني لتأكيد الطلب ودفع المبلغ مرة واحدة. المنتجات محفوظة أثناء تسجيل الدخول.</p></div><a class="secondary" href="/#products">← متابعة التسوق</a></div>
-<div id="auth-gate" class="card account-gate" role="status" aria-live="polite">
-  <div><span class="eyebrow">الخطوة 1 من 2 · تأمين الطلب</span><h2 id="auth-title">سجّل الدخول قبل الدفع</h2>
-  <p id="auth-message">لأمان اشتراكاتك، يلزم تسجيل الدخول برمز يصلك على بريدك. لن تُفتح نافذة الدفع قبل التحقق.</p></div>
-  <a id="auth-link" class="primary" href="/store/account?next=%2Fstore%2Fcart">تسجيل الدخول / إنشاء حساب</a>
- </div>
- <div class="layout"><section class="card items"><div class="card-head"><h2>المنتجات المختارة</h2><button id="clear-cart" type="button" class="link-button">إفراغ السلة</button></div><div id="items" class="item-list" aria-live="polite"><p>جارٍ قراءة سلة التسوق...</p></div><div class="hint">حد الطلب الواحد: 6 أكواد اشتراك كحد أقصى. لا تُحتسب مدة أي كود إلا عند أول تفعيل.</div></section>
-<aside class="card summary"><h2>ملخص الطلب</h2><div class="sum-row"><span>عدد الأكواد</span><strong id="codes-count">—</strong></div><div class="sum-row"><span>المجموع قبل الخصم</span><strong id="subtotal">—</strong></div>
-<label for="coupon">كوبون خصم (اختياري)</label><div class="coupon"><input id="coupon" type="text" maxlength="20" dir="ltr" autocomplete="off" placeholder="BLOFY10"><button id="apply" type="button" class="secondary">تحقق</button></div>
-<div class="sum-row"><span>الخصم</span><strong id="discount">—</strong></div><div class="sum-row total"><span>الإجمالي</span><strong id="total">—</strong></div>
-<button id="checkout" class="primary" type="button" disabled>تسجيل الدخول مطلوب قبل الدفع</button><p class="safe">🔒 الدفع آمن، وتُصدر الأكواد بعد التحقق من نجاح الدفع فقط.</p>
-<p class="guest">✓ <b>حساب موثّق</b> — بعد تسجيل الدخول برمز البريد، تحفظ طلباتك تلقائيًا في حسابك وتظهر أكوادها بعد تأكيد الدفع. لن نطلب بيانات بطاقتك داخل BLOFY.</p><p class="safe" id="cart-sync" role="status" aria-live="polite">يتم حفظ السلة في حسابك بعد تسجيل الدخول.</p><div class="cart-recovery-actions"><button type="button" class="secondary" id="retry-cart-sync" hidden>إعادة حفظ السلة</button><button type="button" class="secondary" id="retry-pending" hidden>إعادة التحقق من طلباتي قبل الدفع</button></div>
-<output id="message" role="status" aria-live="polite"></output><section id="started" class="started" hidden><h3>طلبك جاهز للدفع</h3><p>رقم الطلب: <strong id="order-number"></strong></p><a class="primary" id="open-geidea" href="#" rel="noopener noreferrer" referrerpolicy="no-referrer" hidden>فتح بوابة Geidea للدفع الآمن ←</a><a class="secondary" id="check-pending" href="/store/orders">تحقق من حالة الطلب السابق ←</a><p class="safe" id="pending-status" role="status" aria-live="polite"></p><button type="button" id="copy-private-link" class="secondary">انسخ رابط الطلب الخاص</button><p>يتم الدفع على موقع Geidea الرسمي. بعد العودة يمكنك متابعة الطلب من حسابك. احتفظ بالرابط الخاص ولا تشاركه.</p></section>
-</aside></div><section class="help card"><h2>كيف أتابع طلبي؟</h2><p>بعد الدفع ستجد طلبك وأكوادك أيضًا في <a href="/store/account"><b>حسابي</b></a>، ويمكنك استخدام رابط الطلب الخاص عند الحاجة. بمجرد بدء الدفع يصدر رقم طلب مثل <b dir="ltr">BF-261118-ABC12345</b>. نعرض لك رابطًا خاصًا لاسترجاع حالة الدفع والأكواد بعد التحقق. رقم الطلب وحده يكفي لمساعدة فريق الدعم على العثور على العملية، لكنه لا يكشف الأكواد دون تحقق.</p><a class="secondary" href="/store/orders">فتح صفحة تتبع الطلب ←</a></section></main>
-<footer class="footer"><div class="wrap"><a href="/store/terms">الشروط</a><a href="/privacy">الخصوصية</a><a href="/store/contact">التواصل</a><span>© BLOFY</span></div></footer></body></html>
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#071327">
+  <meta name="description" content="سلة BLOFY — مراجعة الاشتراكات والدفع الآمن في خطوات بسيطة.">
+  <meta name="robots" content="noindex,nofollow">
+  <title>إتمام الطلب | BLOFY STORE</title>
+  <link rel="icon" href="/blofy-logo.png">
+  <link rel="stylesheet" href="/store/cart.css?v=5">
+  <script defer src="/store/cart.js?v=8"></script>
+</head>
+<body class="cart-experience">
+  <header class="top">
+    <nav class="wrap main-nav" aria-label="تنقل المتجر">
+      <a class="logo" href="/" aria-label="BLOFY STORE الرئيسية"><img src="/blofy-logo.png" width="42" height="42" alt=""><span>BLOFY <b>STORE</b></span></a>
+      <div class="nav-links">
+        <a href="/">المتجر</a>
+        <a href="/store/orders">طلباتي</a>
+        <a href="/store/account">حسابي</a>
+      </div>
+      <span class="checkout-secure"><span aria-hidden="true">♢</span> دفع آمن</span>
+    </nav>
+  </header>
+  <main class="wrap" id="cart-main">
+    <div class="cart-hero">
+      <div><span class="eyebrow">BLOFY CHECKOUT</span><h1>إتمام الطلب</h1><p>راجع اشتراكاتك وادفع مرة واحدة. أكوادك تظهر في حسابك بعد تأكيد الدفع.</p></div>
+      <a class="secondary back-shopping" href="/#products">متابعة التسوق ←</a>
+    </div>
+    <ol class="checkout-steps" aria-label="خطوات إتمام الطلب">
+      <li id="step-cart" class="step active"><span class="step-number">1</span><span>السلة</span></li>
+      <li id="step-account" class="step"><span class="step-number">2</span><span>تأكيد البريد</span></li>
+      <li id="step-payment" class="step"><span class="step-number">3</span><span>الدفع</span></li>
+    </ol>
+    <div class="layout cart-layout">
+      <div class="cart-content">
+        <section class="card items" id="cart-items-section" aria-labelledby="cart-products-title">
+          <div class="card-head">
+            <div><span class="section-kicker">01 / مشترياتك</span><h2 id="cart-products-title">المنتجات المختارة <span id="cart-items-badge" class="count-badge">0</span></h2></div>
+            <button id="clear-cart" type="button" class="link-button">إفراغ السلة</button>
+          </div>
+          <div id="items" class="item-list" aria-live="polite"><p>جارٍ تحميل سلتك...</p></div>
+          <div class="cart-footnote">كل اشتراك يُسلَّم بكود مستقل. الحد الأقصى 6 أكواد في الطلب الواحد.</div>
+          <a class="add-more" href="/#products">+ أضف اشتراكًا آخر</a>
+        </section>
+
+        <section id="auth-gate" class="card account-gate" role="region" aria-labelledby="auth-title" data-state="login">
+          <div class="auth-heading">
+            <div><span class="section-kicker">02 / بيانات العميل</span><h2 id="auth-title">تأكيد البريد قبل الدفع</h2><p id="auth-message">رمز واحد على بريدك الإلكتروني يحفظ مشترياتك وأكوادك في حسابك.</p></div>
+            <span class="verified-mark" aria-hidden="true">✓</span>
+          </div>
+          <div id="checkout-auth-panel" class="checkout-auth-panel">
+            <form id="checkout-login-form" autocomplete="on">
+              <label for="checkout-email">البريد الإلكتروني</label>
+              <div class="inline-login-row">
+                <input id="checkout-email" type="email" inputmode="email" dir="ltr" autocomplete="email" maxlength="254" placeholder="name@example.com" required>
+                <button id="checkout-send-code" type="submit" class="primary">إرسال الرمز</button>
+              </div>
+            </form>
+            <form id="checkout-verify-form" hidden>
+              <label for="checkout-otp">رمز التحقق (6 أرقام)</label>
+              <div class="inline-login-row">
+                <input id="checkout-otp" type="text" dir="ltr" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="••••••" required>
+                <button id="checkout-verify-code" type="submit" class="primary">تأكيد الدخول</button>
+              </div>
+              <small>تحقق من البريد الوارد والرسائل غير المرغوب فيها. الرمز صالح لمدة 10 دقائق.</small>
+            </form>
+            <output id="checkout-login-message" role="status" aria-live="polite"></output>
+          </div>
+          <a id="auth-link" class="auth-alternative" href="/store/account?next=%2Fstore%2Fcart">تفضّل الدخول من صفحة حسابي؟</a>
+        </section>
+
+        <section class="card checkout-explainer" aria-labelledby="delivery-heading">
+          <span class="section-kicker">03 / استلام الطلب</span>
+          <h2 id="delivery-heading">أكوادك تصلك في حسابك</h2>
+          <p>بعد تأكيد الدفع من جيديا، افتح «حسابي» أو «طلباتي» للاطلاع على الأكواد. لا تحتاج إلى إنشاء طلب جديد عند العودة من الدفع.</p>
+          <div class="delivery-perks"><span>✓ أكواد رقمية</span><span>✓ سجل طلبات محفوظ</span><span>✓ دعم عند الحاجة</span></div>
+        </section>
+      </div>
+
+      <aside class="card summary" id="order-summary" aria-labelledby="summary-heading">
+        <span class="section-kicker">ملخص الطلب</span>
+        <h2 id="summary-heading">تفاصيل الدفع</h2>
+        <div class="sum-row"><span>عدد الأكواد</span><strong id="codes-count">—</strong></div>
+        <div class="sum-row"><span>المجموع</span><strong id="subtotal">—</strong></div>
+        <details id="coupon-details" class="coupon-details"><summary>عندك كوبون خصم؟ <span aria-hidden="true">+</span></summary>
+          <label for="coupon">رمز الخصم</label>
+          <div class="coupon"><input id="coupon" type="text" maxlength="20" dir="ltr" autocomplete="off" placeholder="BLOFY10"><button id="apply" type="button" class="secondary">تطبيق</button></div>
+        </details>
+        <div class="sum-row discount-row"><span>الخصم</span><strong id="discount">—</strong></div>
+        <div class="sum-row total"><span>الإجمالي شامل الخصم</span><strong id="total">—</strong></div>
+        <button id="checkout" class="primary checkout-main-btn" type="button" disabled>جارٍ تجهيز الطلب</button>
+        <p class="checkout-disclaimer">🔒 لن يتم خصم أي مبلغ قبل تأكيد الدفع في بوابة جيديا الرسمية.</p>
+        <div class="payment-methods" aria-label="وسائل الدفع المتاحة">
+          <span>مدى</span><span>VISA</span><span>Mastercard</span>
+        </div>
+        <p class="payment-wallet-note">Apple Pay متوقف مؤقتًا حتى إكمال اختبار الدفع مع جيديا.</p>
+        <p class="safe" id="cart-sync" role="status" aria-live="polite">نحفظ السلة في حسابك بعد تسجيل الدخول.</p>
+        <div class="cart-recovery-actions"><button type="button" class="secondary" id="retry-cart-sync" hidden>إعادة حفظ السلة</button><button type="button" class="secondary" id="retry-pending" hidden>مراجعة الطلب السابق</button></div>
+        <output id="message" role="status" aria-live="polite"></output>
+        <section id="started" class="started" hidden>
+          <h3>طلبك محفوظ</h3>
+          <p>رقم الطلب: <strong id="order-number"></strong></p>
+          <a class="primary" id="open-geidea" href="#" rel="noopener noreferrer" referrerpolicy="no-referrer" hidden>إكمال نفس الدفع لدى جيديا</a>
+          <a class="secondary" id="check-pending" href="/store/orders">مراجعة حالة الطلب</a>
+          <p class="safe" id="pending-status" role="status" aria-live="polite"></p>
+          <button type="button" id="copy-private-link" class="secondary">نسخ رابط الطلب الخاص</button>
+        </section>
+      </aside>
+    </div>
+    <div class="cart-help-links">
+      <span>تحتاج مساعدة؟</span><a href="/store/contact">تواصل مع الدعم</a><a href="/store/terms">الشروط</a><a href="/privacy">الخصوصية</a>
+    </div>
+  </main>
+  <div class="mobile-checkout-dock" id="mobile-checkout-dock" hidden>
+    <div class="mobile-total"><small>الإجمالي</small><strong id="mobile-total">—</strong></div>
+    <button type="button" id="mobile-checkout" class="primary" disabled>متابعة الطلب</button>
+  </div>
+  <footer class="footer"><div class="wrap"><span>© BLOFY STORE</span><a href="/">المتجر</a><a href="/store/account">حسابي</a></div></footer>
+</body>
+</html>
