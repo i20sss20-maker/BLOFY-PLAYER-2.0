@@ -212,5 +212,5 @@ test('an earlier trial of the other channel is shown correctly, not counted as s
  await new Promise(r=>setTimeout(r,60));
  assert.equal(b.nodes.get('trial-cart-code').textContent,'98765432');
  assert.equal(b.nodes.get('trial-cart-xtream').hidden,false);
- assert.match(b.nodes.get('message').textContent,/التجربة السابقة/);
+ assert.match(b.nodes.get('message').textContent,/تجربتك السابقة/);
 });
