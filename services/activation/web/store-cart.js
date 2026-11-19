@@ -80,36 +80,63 @@
  function el(tag,className,text){const node=document.createElement(tag);if(className)node.className=className;if(text!==undefined)node.textContent=text;return node;}
  function render(lines=null){
    const root=$('items');root.replaceChildren();
+   $('cart-items-badge').textContent=String(totalCodes(items));
+   $('mobile-checkout-dock').hidden=!items.length;
    if(!items.length){
-     root.append(el('p','', 'السلة فارغة حاليًا. اختر اشتراك ستريم أو إكستريم أو العرض السنوي من المتجر.'));
-     $('checkout').disabled=true;$('clear-cart').disabled=true;
+     const empty=el('div','cart-empty');
+     const glyph=el('span','cart-empty-icon','🛍️');
+     const heading=el('h3','', 'سلتك فارغة');
+     const hint=el('p','', 'اختر باقة من المتجر، وسنحتفظ بها هنا حتى تكمل طلبك.');
+     const shop=el('a','primary','تصفح الاشتراكات');shop.href='/#products';
+     empty.append(glyph,heading,hint,shop);root.append(empty);
+     $('checkout').disabled=true;$('mobile-checkout').disabled=true;$('clear-cart').disabled=true;
    }else{
      $('clear-cart').disabled=false;
      for(const [i,item] of items.entries()){
-       const row=el('div','item'),content=el('div'),p=el('p','',item.sku==='bundle-2y'
-         ?'كودان مستقلان لسنة كاملة: '+item.bundleSelection.map(x=>x==='app'?'ستريم':'إكستريم').join(' + ')
-         :'كود واحد لكل اشتراك'),heading=el('h3','',title(item.sku));
-       const act=el('div','item-actions'),label=el('label','', 'الكمية'),select=el('select');
-       select.setAttribute('aria-label','عدد '+title(item.sku));
-       for(let q=1;q<=3;q++){const option=el('option','',String(q));option.value=String(q);if(q===item.quantity)option.selected=true;select.append(option);}
-       select.addEventListener('change',()=>{
-         const before=item.quantity;item.quantity=Number(select.value);
-         if(totalCodes(items)>6){item.quantity=before;message('الطلب الواحد يسمح بـ6 أكواد فقط.');render();return;}
-         save();void refresh();
-       });
-       const remove=el('button','', 'حذف المنتج');remove.type='button';remove.addEventListener('click',()=>{
-         items.splice(i,1);save();void refresh();
-       });
-       act.append(label,select,remove);content.append(heading,p,act);
-       const price=lines&&lines[i]?money(lines[i].lineTotalMinor):'يُحسب الآن';
-       const sum=el('strong','',price);row.append(content,sum);root.append(row);
+       const row=el('article','item cart-product');
+       const icon=el('span','item-symbol',item.sku==='bundle-2y'?'🎁':item.sku.startsWith('xtream')?'▶':'▣');
+       icon.setAttribute('aria-hidden','true');
+       const details=el('div','item-details');
+       const badge=el('span','item-category',item.sku==='bundle-2y'?'عرض خاص':item.sku.startsWith('xtream')?'Xtream':'BLOFY STREAM');
+       const heading=el('h3','',title(item.sku));
+       const description=el('p','',item.sku==='bundle-2y'
+         ?'كودان مستقلان لمدة سنة: '+item.bundleSelection.map(x=>x==='app'?'ستريم':'إكستريم').join(' + ')
+         :'كود اشتراك رقمي؛ تبدأ مدته عند أول تفعيل');
+       const actions=el('div','item-actions');
+       const quantity=el('div','quantity-picker');
+       quantity.setAttribute('role','group');quantity.setAttribute('aria-label','كمية '+title(item.sku));
+       const decrement=el('button','quantity-btn','−');decrement.type='button';decrement.setAttribute('aria-label','تقليل كمية '+title(item.sku));
+       const count=el('span','quantity-value',String(item.quantity));
+       const increment=el('button','quantity-btn','+');increment.type='button';increment.setAttribute('aria-label','زيادة كمية '+title(item.sku));
+       const perCode=item.sku==='bundle-2y'?2:1;
+       decrement.disabled=item.quantity<=1;
+       increment.disabled=item.quantity>=3||totalCodes(items)+perCode>6;
+       function changeQuantity(step){
+         const next=item.quantity+step;
+         if(next<1||next>3||totalCodes(items)+step*perCode>6){
+           message('الحد الأعلى 6 أكواد في الطلب الواحد.');return;
+         }
+         item.quantity=next;save();void refresh();
+       }
+       decrement.addEventListener('click',()=>changeQuantity(-1));
+       increment.addEventListener('click',()=>changeQuantity(1));
+       quantity.append(decrement,count,increment);
+       const remove=el('button','remove-item','حذف');remove.type='button';
+       remove.setAttribute('aria-label','حذف '+title(item.sku));
+       remove.addEventListener('click',()=>{items.splice(i,1);save();void refresh();});
+       actions.append(quantity,remove);
+       const price=el('div','item-price');
+       price.append(el('small','', 'إجمالي المنتج'),el('strong','',lines&&lines[i]?money(lines[i].lineTotalMinor):'جارٍ الحساب'));
+       details.append(badge,heading,description,actions);
+       row.append(icon,details,price);root.append(row);
      }
    }
    $('codes-count').textContent=String(totalCodes(items));
  }
  function resetPrice(){
    $('subtotal').textContent='—';$('discount').textContent='—';$('total').textContent='—';
-   $('checkout').disabled=true;quoted=null;
+   $('checkout').disabled=true;$('mobile-checkout').disabled=true;
+   $('mobile-total').textContent='—';quoted=null;
  }
  async function request(path,body){
    const response=await fetch(path,{method:'POST',credentials:'same-origin',cache:'no-store',
@@ -163,24 +190,34 @@
      couponCode:$('coupon').value.trim().toUpperCase()});
  }
  function updateCheckoutButton(){
-   const button=$('checkout');
-   button.textContent=!signedIn?'تسجيل الدخول مطلوب قبل الدفع':
-     paymentOpen?'لديك طلب دفع سابق، راجع حالته':
+   const button=$('checkout'),mobile=$('mobile-checkout');
+   const waiting=paymentOpen?'لديك طلب سابق — تحقق من حالته':
+     !signedIn?'تأكيد البريد للمتابعة':
      !cloudSynced?'جارٍ حفظ السلة...':
-     !pendingChecked?'جارٍ فحص الطلبات السابقة...':'إكمال الطلب والدفع الآمن';
-   button.disabled=!signedIn||!cloudSynced||!pendingChecked||!ready||creating||paymentOpen||!quoted||!items.length;
+     !pendingChecked?'جارٍ مراجعة الطلب السابق...':'إكمال الطلب والدفع';
+   const enabled=items.length>0&&quoted!==null&&
+      (!signedIn||ready&&cloudSynced&&pendingChecked&&!creating&&!paymentOpen);
+   button.textContent=waiting;
+   mobile.textContent=waiting;
+   button.disabled=!enabled;
+   mobile.disabled=!enabled;
+   $('mobile-checkout-dock').hidden=!items.length;
  }
  function authUI(){
    const gate=$('auth-gate'),headline=$('auth-title'),label=$('auth-message'),link=$('auth-link');
    gate.dataset.state=signedIn?'verified':'login';
-   headline.textContent=signedIn?'تم التحقق من حسابك ✓':'سجّل الدخول قبل الدفع';
-   label.textContent=signedIn?'البريد الموثق: '+accountEmail+
-     ' · سلتك مرتبطة بحسابك ويمكنك متابعتها من أي جهاز.':
-     'اختر باقاتك الآن، ثم سجّل الدخول برمز يصلك على البريد؛ السلة لن تختفي أثناء التسجيل.';
+   headline.textContent=signedIn?'بريدك موثّق ✓':'تأكيد البريد قبل الدفع';
+   label.textContent=signedIn?'الحساب: '+accountEmail+' — طلباتك وأكوادك محفوظة عندنا.':
+     'أرسل رمز الدخول إلى بريدك لتأكيد الطلب دون كلمة مرور أو الانتقال لصفحة أخرى.';
+   $('checkout-auth-panel').hidden=signedIn;
    link.hidden=signedIn;
+   $('step-cart').classList.toggle('complete',items.length>0);
+   $('step-account').classList.toggle('complete',signedIn);
+   $('step-account').classList.toggle('active',!signedIn);
+   $('step-payment').classList.toggle('active',signedIn);
    const indicator=$('cart-sync');
-   indicator.textContent=!signedIn?'ستُحفظ السلة في حسابك بعد تسجيل الدخول.':
-     cloudSynced?'✓ محفوظة بحسابك':'جارٍ مزامنة السلة مع حسابك…';
+   indicator.textContent=!signedIn?'سنحفظ السلة في حسابك بعد تأكيد البريد.':
+     cloudSynced?'✓ محفوظة في حسابك':'جارٍ حفظ السلة في حسابك…';
    indicator.dataset.state=cloudSynced?'saved':'pending';
    if(cloudSynced)$('retry-cart-sync').hidden=true;
    updateCheckoutButton();
@@ -256,6 +293,7 @@
      // customer's private discount or stale quote into this checkout.
      $('coupon').value=accountChanged||(!hasUrlAddition&&previouslySynced)?
        (remote.couponCode||''):($('coupon').value||remote.couponCode||'');
+     if($('coupon').value)$('coupon-details').open=true;
      cloudRevision=remote.revision;
      savedSnapshot=JSON.stringify({items:cleanItems(remote.items),couponCode:remote.couponCode||''});
      try{
@@ -393,7 +431,8 @@
      if(serial!==requestSerial)return;
      quoted=data;
      $('subtotal').textContent=money(data.subtotalMinor);$('discount').textContent=money(data.discountMinor);
-     $('total').textContent=money(data.totalMinor);$('codes-count').textContent=String(data.codeCount);
+     $('total').textContent=money(data.totalMinor);$('mobile-total').textContent=money(data.totalMinor);
+     $('codes-count').textContent=String(data.codeCount);
      render(data.items);
      updateCheckoutButton();
      message(!ready?'الدفع غير متاح حاليًا. تواصل مع الدعم.':
@@ -406,7 +445,12 @@
    }
  }
  async function checkout(){
-   if(!signedIn){location.assign('/store/account?next=%2Fstore%2Fcart');return;}
+   if(!signedIn){
+     $('auth-gate').scrollIntoView({behavior:'smooth',block:'center'});
+     $('checkout-email').focus({preventScroll:true});
+     message('أدخل بريدك واضغط «إرسال الرمز» لإكمال الطلب في نفس الصفحة.');
+     return;
+   }
    if(!cloudSynced){message('سلتك لم تُحفظ بعد في الحساب. تأكد من اتصالك قبل الدفع.');return;}
    if(!ready||creating||paymentOpen||!pendingChecked||!quoted||!items.length)return;
    creating=true;$('checkout').disabled=true;message('جارٍ تجهيز طلبك...');
@@ -488,6 +532,51 @@
    if(!currentOrder||!accessToken)return null;
    return location.origin+'/store/orders#order='+currentOrder+'&token='+encodeURIComponent(accessToken);
  }
+ const loginMessage=text=>{$('checkout-login-message').textContent=text;};
+ const loginErrors={
+   invalid_email:'تأكد من صحة البريد الإلكتروني.',
+   rate_limited:'محاولات كثيرة. حاول بعد قليل.',
+   customer_email_unavailable:'تعذر إرسال الرمز حاليًا. جرّب لاحقًا.',
+   customer_email_key_invalid:'خدمة البريد تحتاج إصلاحًا من الإدارة.',
+   customer_email_domain_unverified:'خدمة البريد تحتاج توثيقًا من الإدارة.',
+   customer_email_sender_restricted:'خدمة البريد لا تسمح بالإرسال حاليًا.',
+   login_code_incorrect:'الرمز غير صحيح أو منتهي. حاول مجددًا.',
+   origin_forbidden:'أعد فتح السلة من نطاق BLOFY الرسمي.'
+ };
+ let loginBusy=false;
+ $('checkout-login-form').addEventListener('submit',async event=>{
+   event.preventDefault();if(loginBusy||signedIn)return;
+   const email=$('checkout-email').value.trim().toLowerCase();
+   if(!$('checkout-email').checkValidity()){$('checkout-email').reportValidity();return;}
+   loginBusy=true;$('checkout-send-code').disabled=true;
+   loginMessage('جارٍ إرسال رمز الدخول إلى بريدك...');
+   try{
+     await request('/api/v1/store/account/request-code',{email});
+     $('checkout-verify-form').hidden=false;
+     $('checkout-send-code').textContent='إعادة إرسال الرمز';
+     loginMessage('إذا وصل الرمز، أدخله هنا لإكمال الشراء. إذا طلبته مجددًا انتظر دقيقة.');
+     $('checkout-otp').focus();
+   }catch(err){loginMessage(loginErrors[err.message]||'تعذر إرسال الرمز. راجع البريد وحاول لاحقًا.');}
+   finally{loginBusy=false;$('checkout-send-code').disabled=false;}
+ });
+ $('checkout-otp').addEventListener('input',event=>{
+   event.target.value=event.target.value.replace(/\D/g,'').slice(0,6);
+ });
+ $('checkout-verify-form').addEventListener('submit',async event=>{
+   event.preventDefault();if(loginBusy||signedIn)return;
+   const email=$('checkout-email').value.trim().toLowerCase(),code=$('checkout-otp').value.trim();
+   if(!/^\d{6}$/.test(code)){loginMessage('أدخل الرمز المكوّن من ستة أرقام.');return;}
+   loginBusy=true;$('checkout-verify-code').disabled=true;
+   loginMessage('جارٍ تأكيد حسابك وحفظ السلة...');
+   try{
+     await request('/api/v1/store/account/verify-code',{email,code});
+     loginMessage('تم تأكيد البريد، جارٍ تجهيز السلة.');
+     await initAccount();
+     $('order-summary').scrollIntoView({behavior:'smooth',block:'nearest'});
+   }catch(err){loginMessage(loginErrors[err.message]||'تعذر التحقق من الرمز. جرّب مرة أخرى.');}
+   finally{loginBusy=false;$('checkout-verify-code').disabled=false;}
+ });
+ $('mobile-checkout').addEventListener('click',()=>void checkout());
  $('copy-private-link').addEventListener('click',async()=>{
    const value=privateLink();if(!value)return;
    try{await navigator.clipboard.writeText(value);message('تم نسخ رابط الطلب الخاص. لا تشاركه مع أحد.');}
