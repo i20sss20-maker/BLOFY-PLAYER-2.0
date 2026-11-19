@@ -138,6 +138,52 @@ brandingForm?.addEventListener('submit',async event=>{
 });
 void loadBranding().catch(e=>{brandingStatus.textContent='تعذر تحميل إعدادات الموقع: '+e.message;});
 
+const proFlag=(x,on,off)=>x===true?on:off;
+function readinessTile(label,value,good=true,note=''){
+ const tile=document.createElement('article');tile.className='store-pro-tile';
+ tile.dataset.state=good?'ok':'warning';
+ const caption=document.createElement('small');caption.textContent=label;
+ const amount=document.createElement('strong');amount.textContent=String(value);
+ const details=document.createElement('span');details.textContent=note;
+ tile.append(caption,amount,details);return tile;
+}
+async function loadProReadiness(){
+ const button=$('store-pro-refresh');button.disabled=true;
+ const root=$('store-pro-status');root.textContent='جارٍ قراءة التشغيل والموافقة على الرسائل...';
+ try{
+  const result=await request('/api/v1/admin/store/pro-readiness');
+  if(result.ok!==true||!result.flags)throw Error('readiness_unavailable');
+  const f=result.flags,c=result.counts||{};
+  root.replaceChildren();
+  root.append(
+   readinessTile('مدفوعات جيديا',proFlag(f.payment.geideaConfigured,'مهيأة','غير مهيأة'),
+    f.payment.geideaConfigured,'لا يوجد إثبات مستقل لتسوية البنك'),
+   readinessTile('Apple Pay',f.payment.applePayVisible?'ظاهر للعميل':'مخفي للاختبار',
+    !f.payment.applePayVisible,'لا تفتح المحفظة قبل نجاح عملية دفع كاملة'),
+   readinessTile('تجديد نفس الكود',proFlag(f.customer.renewalEnabled,'مهيأ','غير مفعّل'),
+    f.customer.renewalEnabled,'حسب أهلية الاشتراك وتأكيد الدفع'),
+   readinessTile('رسائل انتهاء الاشتراك',proFlag(f.customer.expiryRemindersConfigured,'مهيأة','مغلقة'),
+    f.customer.expiryRemindersConfigured,'لمن وافق على التنبيه فقط'),
+   readinessTile('سلات محتملة غير مكتملة',c.possibleAbandonedCarts===null?'غير متاح':c.possibleAbandonedCarts,
+    true,'تقدير لآخر 14 يومًا، وليس كل محاولة دفع'),
+   readinessTile('موافقون على الرسائل التسويقية',c.optedInMarketing===null?'غير متاح':c.optedInMarketing,
+    true,'موافقة منفصلة وقابلة للإلغاء'),
+   readinessTile('استرجاع السلة بالبريد',proFlag(f.customer.cartRecoveryConfigured,'مهيأ','مغلق'),
+    !f.customer.cartRecoveryConfigured,'لا يرسل للمستخدمين دون موافقتهم'),
+   readinessTile('مساعد BLOFY',f.assistant.aiConfigured?'ذكاء اصطناعي':'دليل المنتجات',
+    true,f.assistant.aiConfigured?'API مهيأ؛ راجع التكلفة':'الذكاء الاصطناعي يتطلب مفتاح API'),
+   readinessTile('طلبات آخر 24 ساعة',c.paidOrders===null?'غير متاح':
+     c.paidOrders+' مدفوعة / '+c.pendingOrders+' معلقة',true,'سجلات BLOFY فقط، وليست كشف البنك'),
+   readinessTile('طلبات فاشلة آخر 24 ساعة',c.failedOrders===null?'غير متاح':c.failedOrders,
+    c.failedOrders===0,'راجع الطلبات إذا ظهر فشل الدفع')
+  );
+ }catch(e){
+  root.textContent='تعذر قراءة مركز التشغيل: '+e.message+'. تحقق من صلاحية المدير والخادم.';
+ }finally{button.disabled=false;}
+}
+$('store-pro-refresh').addEventListener('click',()=>void loadProReadiness());
+void loadProReadiness();
+
 const merchSlideFields=['title','highlight','description','imageUrl','href','cta','active'];
 const merchSectionKeys=['categories','offers','featured','about','questions'];
 const merchForm=$('merchandising-form'),merchStatus=$('merch-status'),merchSave=$('merch-save');
