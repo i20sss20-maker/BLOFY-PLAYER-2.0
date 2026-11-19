@@ -91,6 +91,70 @@
     '<div class="one-trial-history"><strong>أحدث الأكواد المسلّمة للعملاء (مخفية جزئيًا)</strong>',
     '<div id="one-trial-recent">لم يُحمّل سجل التجارب بعد.</div></div>'
   ].join('');
+
+  // Owner-only unified ledger: trials, paid inventory, and older manual codes.
+  // List rows contain no plaintext codes; support reveal is explicit and audited.
+  const registry=document.createElement('section');
+  registry.id='one-code-register';
+  registry.className='one-overview one-code-register';
+  registry.setAttribute('aria-label','سجل جميع أكواد BLOFY والعملاء');
+  registry.innerHTML=`
+    <div class="one-section-heading">
+      <div><span class="one-kicker">ALL CODES · CUSTOMERS · SUPPORT</span>
+        <h2>📋 جميع الأكواد والتجارب والعملاء</h2></div>
+      <button id="one-register-refresh" type="button">↻ تحديث السجل</button>
+    </div>
+    <p class="one-footnote">كل أكواد STREAM وXtream، المدفوعة والتجريبية والقديمة، في مكان واحد. يظهر من استلم الكود، وبيانات تسجيله الموثقة بالبريد، وحالة التفعيل والمدة. يمكنك استرجاع الكود الأصلي أو السماح بدخول الجهاز مجددًا دون تمديد الاشتراك.</p>
+    <form id="one-register-search-form" class="one-register-filters" autocomplete="off">
+      <label>بحث بالاسم أو البريد أو الجوال أو الكود أو رقم الطلب
+        <input id="one-register-query" type="search" maxlength="80" placeholder="اسم العميل، 05...، البريد، أو الكود" spellcheck="false"></label>
+      <label>فئة الأكواد
+        <select id="one-register-kind">
+          <option value="all">كل الأكواد</option><option value="trial">التجريبية فقط</option>
+          <option value="paid">المخزون والاشتراكات المدفوعة</option>
+          <option value="manual">الأكواد اليدوية والقديمة</option>
+        </select></label>
+      <label>الحالة
+        <select id="one-register-state"><option value="all">كل الحالات</option>
+          <option value="ready">متوفر</option><option value="delivered">سُلّم ولم يفعّل</option>
+          <option value="active">مفعّل</option><option value="expired">منتهي</option>
+          <option value="revoked">ملغى</option>
+        </select></label>
+      <button type="submit">⌕ بحث</button>
+    </form>
+    <p id="one-register-status" role="status" aria-live="polite">افتح هذا القسم لقراءة الأكواد من قاعدة بيانات BLOFY.</p>
+    <div class="one-register-table-wrap" tabindex="0" role="region" aria-label="جميع الأكواد">
+      <table class="one-register-table"><thead><tr>
+        <th>الكود / الباقة</th><th>العميل المسجّل</th><th>التسليم</th>
+        <th>التفعيل والانتهاء</th><th>الإجراءات</th>
+      </tr></thead>
+        <tbody id="one-register-rows"><tr><td colspan="5">جارٍ تحميل السجل…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="one-register-pagination">
+      <button type="button" id="one-register-prev" disabled>← السابق</button>
+      <span id="one-register-page">—</span>
+      <button type="button" id="one-register-next" disabled>التالي →</button>
+    </div>
+    <p class="one-register-warning">حماية العملاء: الأكواد الأصلية مخفية حتى تختار «كشف الكود» وتؤكد عملية دعم العميل؛ الكشف يُسجّل في سجل الإدارة ولا يغيّر التفعيل. «دخول بنفس الكود» متاح فقط للاشتراك المفعل والساري ويمنح فرصة واحدة خلال 10 دقائق، دون تصفير المدة أو سحب كود جديد.</p>
+    <dialog id="one-register-dialog" class="one-register-dialog" aria-labelledby="one-register-dialog-title">
+      <div class="one-register-dialog-header">
+        <h3 id="one-register-dialog-title">تفاصيل الكود والعميل</h3>
+        <button type="button" id="one-register-close">✕ إغلاق</button>
+      </div>
+      <div id="one-register-detail"></div>
+      <div class="one-register-actions">
+        <button type="button" id="one-register-reveal">◉ كشف الكود الأصلي</button>
+        <button type="button" id="one-register-manage">▤ إدارة / دخول بنفس الكود</button>
+        <button type="button" id="one-register-xtream">↗ فتح صفحة Xtream</button>
+      </div>
+      <div id="one-register-secret" hidden aria-live="polite">
+        <strong>الكود الأصلي — للدعم فقط</strong><code id="one-register-secret-code" dir="ltr"></code>
+        <button type="button" id="one-register-copy">نسخ الكود</button>
+        <button type="button" id="one-register-hide">إخفاء</button>
+      </div>
+      <p id="one-register-detail-status" role="status" aria-live="polite"></p>
+    </dialog>`;
   const center=document.createElement('div');
   center.id='codes-center';
   center.className='one-codes-center';
@@ -117,6 +181,7 @@
     ['one-issue','＋ إنشاء اشتراك جديد'],
     ['legacy-xtream','⌕ فحص أو استخراج Xtream'],
     ['stream-management','▤ سجل الأكواد والعملاء'],
+    ['one-code-register','📋 جميع الأكواد والعميل'],
     ['one-inventory','▥ مخزون البيع'],
     ['one-trial-stock','🎁 الأكواد التجريبية · يوم']
   ];
@@ -128,7 +193,7 @@
     button.setAttribute('aria-controls',id);
     tabs.append(button);
   }
-  center.append(tabs,issue,legacy,ledger,inventory,trialPanel);
+  center.append(tabs,issue,legacy,ledger,registry,inventory,trialPanel);
   const trialShortcut=document.createElement('a');
   trialShortcut.className='one-codes-trial-shortcut';
   trialShortcut.href='#one-trial-stock';
@@ -140,9 +205,10 @@
   function show(id,scroll=false){
     if(!choices.has(id))return;
     selected=id;
-    for(const el of [issue,legacy,ledger,inventory,trialPanel])el.hidden=el.id!==id;
+    for(const el of [issue,legacy,ledger,registry,inventory,trialPanel])el.hidden=el.id!==id;
     if(id==='one-inventory'){void loadStock();void loadOperationsOverview();}
     if(id==='one-trial-stock')void loadTrialStock();
+    if(id==='one-code-register')dispatchEvent(new CustomEvent('blofy-one:code-register-visible'));
     for(const button of buttons){
       const active=button.dataset.oneCodesTab===id;
       button.setAttribute('aria-selected',String(active));

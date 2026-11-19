@@ -8,6 +8,7 @@ import { createGeideaLiveHandlers } from './geidea-live.mjs';
 import { createStoreGeideaHandlers } from './store-geidea-checkout.mjs';
 import { createStoreCustomerHandlers } from './store-customer-account.mjs';
 import { createStoreTrialInventory } from './store-trial-inventory.mjs';
+import { createStoreCodeRegister } from './store-code-register.mjs';
 import { createZidPaymentHandlers } from './zid-payments.mjs';
 import { createZidOAuthHandlers } from './zid-oauth.mjs';
 
@@ -43,6 +44,8 @@ export function createCommercialHandlers({pool, keyHex, json, readJson, requireA
     requireCheckoutCustomer:customerAccounts.checkoutIdentity,env});
   const storeTrials = createStoreTrialInventory({pool,json,readJson,keyHex,
     authorizeAdmin:requireAdmin,getAuthenticatedCustomer:customerAccounts.authenticatedCustomer,env});
+  const storeCodeRegister=createStoreCodeRegister({pool,json,readJson,keyHex,
+    authorizeAdmin:requireAdmin,ensureSchema:storePayments.ensureStoreSchema});
   // One shared stock automation runner per service process. Database advisory
   // issuance locks serialize across replicas; no customer codes enter logs.
   // Trial stock starts at 30+30 when empty; subsequent refills are triggered
@@ -236,6 +239,7 @@ export function createCommercialHandlers({pool, keyHex, json, readJson, requireA
     if (await googlePlayReview(req,res,url)) return true;
     if (await zidOAuth(req,res,url)) return true;
     if (await customerAccounts(req,res,url)) return true;
+    if (await storeCodeRegister(req,res,url)) return true;
     if (await storeTrials(req,res,url)) return true;
     if (await storePayments(req,res,url)) return true;
     if (await geideaPayments(req,res,url)) return true;

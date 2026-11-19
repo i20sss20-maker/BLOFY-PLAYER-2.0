@@ -1,0 +1,61 @@
+/* BLOFY ONE · owner-only unified codes & customer support register */
+.one-code-register{padding:16px 20px;color:#e3eff8;min-width:0}
+.one-code-register .one-section-heading h2{font-size:clamp(19px,2.2vw,27px);margin:3px 0}
+.one-register-filters{display:grid;grid-template-columns:minmax(210px,2.4fr) repeat(2,minmax(130px,1fr)) auto;
+ gap:12px;align-items:end;margin:20px 0}
+.one-register-filters label{display:grid;gap:7px;color:#c5dce7;font-size:12px;font-weight:650}
+.one-register-filters input,.one-register-filters select{width:100%;min-height:44px;
+ border:1px solid #43667d;border-radius:11px;background:#0e2639;color:#ecffff;
+ padding:10px 12px;font:inherit}
+.one-register-filters button,.one-register-open,.one-register-pagination button{
+ min-height:43px;background:#23685f;border:1px solid #72b4a9;color:#eefff9;
+ border-radius:10px;padding:9px 15px;font:inherit;cursor:pointer}
+.one-register-open{font-size:12px;white-space:nowrap}
+.one-register-filters button:hover,.one-register-open:hover{background:#317b71}
+#one-register-status{margin:11px 0 15px;color:#bdeddf;font-size:13px;line-height:1.8}
+.one-register-table-wrap{max-width:100%;overflow:auto;border-radius:13px;border:1px solid #315972}
+.one-register-table{width:100%;min-width:785px;border-collapse:collapse;font-size:13px;text-align:right}
+.one-register-table th{background:#12344b;color:#dcfff2;padding:13px;border-bottom:1px solid #47748a;white-space:nowrap}
+.one-register-table td{background:#112c40;color:#e4eff5;padding:13px;border-bottom:1px solid #2b5368;
+ vertical-align:middle;max-width:245px;overflow-wrap:anywhere}
+.one-register-table tr:nth-child(even) td{background:#153449}
+.one-register-table td strong,.one-register-table td b,.one-register-table td small{
+ display:block;line-height:1.75}
+.one-register-table td small{font-size:11px;color:#aecad8;white-space:pre-line}
+.one-register-pagination{display:flex;justify-content:center;align-items:center;gap:14px;margin:20px auto}
+.one-register-pagination button[disabled]{opacity:.4;cursor:not-allowed}
+.one-register-pagination span{color:#bcdfdf;font-weight:700}
+.one-register-warning{padding:14px;border:1px solid #7ab9a3;background:#173e45;
+ color:#c8eddf;line-height:1.9;font-size:12px;border-radius:11px}
+.one-register-dialog{position:fixed;inset:5% 15%;margin:auto;max-height:90vh;
+ overflow:auto;width:min(850px,92vw);max-width:92vw;border:1px solid #8accc0;border-radius:17px;
+ background:#10293c;color:#e7fcf8;padding:24px;box-shadow:0 24px 100px #0009;direction:rtl}
+.one-register-dialog::backdrop{background:rgba(3,11,22,.75);backdrop-filter:blur(4px)}
+.one-register-dialog-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:20px}
+.one-register-dialog-header h3{font-size:21px;color:#c8fff1;margin:0}
+.one-register-dialog button{background:#1d5660;color:#edfffa;border:1px solid #70b3a2;
+ border-radius:10px;padding:10px 14px;cursor:pointer;font:inherit}
+.one-register-dialog button:disabled{opacity:.45;cursor:not-allowed}
+.one-register-detail-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.one-register-detail-field{border:1px solid #34536b;background:#14374a;border-radius:10px;padding:10px 13px;min-width:0}
+.one-register-detail-field small{display:block;color:#9bcbd0;font-size:11px;line-height:1.7;margin-bottom:6px}
+.one-register-detail-field strong{display:block;color:#f3fdfb;font-size:13px;overflow-wrap:anywhere;line-height:1.7}
+.one-register-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:19px}
+.one-register-actions button:first-child{background:#256a5d}
+#one-register-detail>p{color:#c9edda;line-height:1.85;font-size:13px;border-right:3px solid #65bba1;padding-right:10px;margin:12px 0}
+#one-register-secret{display:flex;flex-wrap:wrap;align-items:center;gap:12px;
+ margin-top:15px;padding:16px;border:2px solid #87cdb8;border-radius:13px;background:#123c43}
+#one-register-secret[hidden]{display:none}
+#one-register-secret code{display:inline-block;font-size:clamp(17px,2vw,24px);
+ color:#afffd9;overflow-wrap:anywhere;letter-spacing:1px;direction:ltr;unicode-bidi:isolate}
+#one-register-detail-status{color:#b9ebdd;line-height:1.85;font-size:13px;margin-top:15px}
+@media(max-width:1050px){
+ .one-register-filters{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .one-register-dialog{inset:2%;padding:15px}
+}
+@media(max-width:640px){
+ .one-register-filters,.one-register-detail-fields{grid-template-columns:1fr}
+ .one-register-dialog-header{align-items:flex-start}
+ .one-register-dialog{width:95vw;max-width:95vw;padding:12px}
+ .one-register-dialog-header h3{font-size:18px}
+}
