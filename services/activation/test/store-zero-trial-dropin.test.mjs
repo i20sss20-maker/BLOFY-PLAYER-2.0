@@ -56,7 +56,8 @@ test('Geidea SDK uses official drop-in, with no merchant card inputs or callback
  assert.match(server,/frame-src https:\/\/www\.ksamerchant\.geidea\.net/);
  assert.doesNotThrow(()=>new Function(script));
 });
-function browser({paid=false}={}){
+function browser({paid=false,incomplete=false,claimError=null,previousClaim=false}={}){
+ let profileSaved=!incomplete;
  const customerId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
  const initial=[{sku:'trial-stream-1d',quantity:1},
   ...(paid?[{sku:'stream-3m',quantity:1}]:[])];
@@ -83,7 +84,24 @@ function browser({paid=false}={}){
  const fetch=async(path,opts={})=>{
    const payload=opts.body?JSON.parse(opts.body):null;
    requests.push({path,method:opts.method||'GET',payload});
-   if(path==='/api/v1/store/account')return response(200,{customerId,email:'verified@test.example'});
+   if(path==='/api/v1/store/account')return response(200,{
+     customerId,email:'verified@test.example',profileRequired:true,
+     profileComplete:profileSaved,fullName:profileSaved?'اختبار BLOFY':'',
+     phone:profileSaved?'+966551234567':''
+   });
+   if(path==='/api/v1/store/account/profile'&&opts.method==='POST'){
+     assert.equal(payload.fullName,'اختبار BLOFY');
+     assert.equal(payload.phone,'0551234567');
+     profileSaved=true;
+     return response(200,{ok:true,profileComplete:true,fullName:payload.fullName,
+       phone:'+966551234567'});
+   }
+   if(path==='/api/v1/store/trials/mine'){
+     return response(200,previousClaim?
+       {ok:true,claimed:true,trial:{ok:true,code:'88776655',channel:'app',
+         alreadyClaimed:true,activatedAt:null,expiresAt:null}}:
+       {ok:true,claimed:false,trial:null});
+   }
    if(path==='/api/v1/store/account/cart'&&opts.method!=='POST')
      return response(200,{items:initial,revision:3,couponCode:''});
    if(path==='/api/v1/store/account/cart')return response(200,{ok:true,revision:++revision});
@@ -96,6 +114,11 @@ function browser({paid=false}={}){
    if(path==='/api/v1/store/cart/pending'&&paid)return response(200,{pending:false});
    if(path==='/api/v1/store/trials/claim'){
      assert.deepEqual(payload,{sku:'trial-stream-1d'});
+     if(claimError==='forbidden')return response(403,{error:'trial_profile_required'});
+     if(claimError==='after_commit')return response(503,{error:'trial_claim_unconfirmed'});
+     if(claimError==='other_channel')return response(200,{
+       ok:true,sku:'trial-xtream-1d',channel:'xtream',durationDays:1,
+       code:'98765432',alreadyClaimed:true,activatedAt:null,expiresAt:null});
      return response(200,{ok:true,sku:'trial-stream-1d',channel:'app',durationDays:1,
        code:'12345678',alreadyClaimed:false,expiresAt:null});
    }
@@ -137,4 +160,57 @@ test('mixed basket takes free code first and leaves paid item for separate autho
  assert.deepEqual(JSON.parse(b.storage.get('blofy.shop.cart.v1')),
    [{sku:'stream-3m',quantity:1}]);
  assert.equal(b.nodes.get('trial-cart-code').textContent,'12345678');
+});
+
+test('verified email missing profile sees mandatory inline full name and phone before free checkout',async()=>{
+ const b=browser({incomplete:true});
+ await new Promise(r=>setTimeout(r,80));
+ assert.equal(b.nodes.get('checkout-profile-panel').hidden,false,
+   'same checkout page must display the missing customer form');
+ assert.match(b.nodes.get('checkout').textContent,/أكمل الاسم والجوال/);
+ b.listeners.get('checkout:click')();
+ await new Promise(r=>setTimeout(r,10));
+ assert.equal(b.requests.filter(x=>x.path==='/api/v1/store/trials/claim').length,0,
+   'must not submit trial until profile is saved');
+ b.nodes.get('checkout-profile-name').value='اختبار BLOFY';
+ b.nodes.get('checkout-profile-phone').value='0551234567';
+ await b.listeners.get('checkout-profile-form:submit')({preventDefault(){}});
+ assert.equal(b.nodes.get('checkout-profile-panel').hidden,true);
+ assert.ok(b.requests.some(x=>x.path==='/api/v1/store/account/profile'));
+ b.listeners.get('checkout:click')();
+ await new Promise(r=>setTimeout(r,70));
+ assert.equal(b.requests.filter(x=>x.path==='/api/v1/store/trials/claim').length,1);
+ assert.equal(b.nodes.get('trial-cart-code').textContent,'12345678');
+});
+
+test('403 profile gate shows actionable inline form instead of generic delivery error',async()=>{
+ const b=browser({claimError:'forbidden'});
+ await new Promise(r=>setTimeout(r,55));
+ b.listeners.get('checkout:click')();
+ await new Promise(r=>setTimeout(r,70));
+ assert.equal(b.nodes.get('checkout-profile-panel').hidden,false);
+ assert.match(b.nodes.get('checkout-profile-message').textContent,/الاسم ورقم الجوال/);
+ assert.doesNotMatch(b.nodes.get('message').textContent,/تعذر التأكد من التسليم/);
+ assert.equal(b.requests.filter(x=>x.path==='/api/v1/store/trials/claim').length,1);
+});
+
+test('an ambiguous trial response reopens the already-issued code without a duplicate claim',async()=>{
+ const b=browser({claimError:'after_commit',previousClaim:true});
+ await new Promise(r=>setTimeout(r,55));
+ b.listeners.get('checkout:click')();
+ await new Promise(r=>setTimeout(r,75));
+ assert.equal(b.requests.filter(x=>x.path==='/api/v1/store/trials/claim').length,1);
+ assert.equal(b.requests.filter(x=>x.path==='/api/v1/store/trials/mine').length,1);
+ assert.equal(b.nodes.get('trial-cart-code').textContent,'88776655');
+ assert.equal(b.nodes.get('trial-cart-result').hidden,false);
+ assert.equal(JSON.parse(b.storage.get('blofy.shop.cart.v1')).length,0);
+});
+test('an earlier trial of the other channel is shown correctly, not counted as second free code',async()=>{
+ const b=browser({claimError:'other_channel'});
+ await new Promise(r=>setTimeout(r,55));
+ b.listeners.get('checkout:click')();
+ await new Promise(r=>setTimeout(r,60));
+ assert.equal(b.nodes.get('trial-cart-code').textContent,'98765432');
+ assert.equal(b.nodes.get('trial-cart-xtream').hidden,false);
+ assert.match(b.nodes.get('message').textContent,/التجربة السابقة/);
 });

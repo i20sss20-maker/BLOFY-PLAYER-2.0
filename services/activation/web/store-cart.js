@@ -14,7 +14,8 @@
  const money=n=>(Number(n)/100).toLocaleString('ar-SA',{minimumFractionDigits:0,maximumFractionDigits:2})+' ر.س';
  let items=[],quoted=null,ready=false,creating=false,paymentOpen=false,currentOrder=null,accessToken=null;
  let trialReady=false,trialAvailable=0,embeddedWidget=null,sdkPromise=null;
- let signedIn=false,accountEmail='',cloudRevision=null,cloudSynced=false,cloudSyncing=false,
+ let signedIn=false,accountEmail='',profileRequired=false,profileComplete=false,
+   cloudRevision=null,cloudSynced=false,cloudSyncing=false,
    savedSnapshot='',hasUrlAddition=false,urlAddedLine=null,accountId='',pendingChecked=false,checkingPending=false;
  const pendingKey='blofy.shop.pending-checkout.v1';
  const cloudEndpoint='/api/v1/store/account/cart',ownerKey='blofy.shop.cart.owner.v1';
@@ -205,15 +206,17 @@
  }
  function updateCheckoutButton(){
    const button=$('checkout'),mobile=$('mobile-checkout');
+   const needsProfile=signedIn&&profileRequired&&!profileComplete;
    const waiting=paymentOpen?'لديك طلب سابق — تحقق من حالته':
      !signedIn?'تأكيد البريد للمتابعة':
+     needsProfile?'أكمل الاسم والجوال لاستلام الكود':
      !cloudSynced?'جارٍ حفظ السلة...':
      !pendingChecked?'جارٍ مراجعة الطلب السابق...':
      trialLine()?'استلام التجربة المجانية — 0 ر.س':
      'إكمال الطلب والدفع';
    const canProceed=trialLine()?trialReady:(ready&&paidLines().length>0);
    const enabled=items.length>0&&quoted!==null&&canProceed&&
-      (!signedIn||cloudSynced&&pendingChecked&&!creating&&!paymentOpen);
+      (!signedIn||needsProfile||cloudSynced&&pendingChecked&&!creating&&!paymentOpen);
    button.textContent=waiting;
    mobile.textContent=waiting;
    button.disabled=!enabled;
@@ -222,16 +225,22 @@
  }
  function authUI(){
    const gate=$('auth-gate'),headline=$('auth-title'),label=$('auth-message'),link=$('auth-link');
-   gate.dataset.state=signedIn?'verified':'login';
-   headline.textContent=signedIn?'بريدك موثّق ✓':'تأكيد البريد قبل استلام طلبك';
-   label.textContent=signedIn?'الحساب: '+accountEmail+' — طلباتك وأكوادك محفوظة عندنا.':
-     'أرسل رمز الدخول إلى بريدك لتأكيد الطلب دون كلمة مرور أو الانتقال لصفحة أخرى.';
+   const needsProfile=signedIn&&profileRequired&&!profileComplete;
+   gate.dataset.state=!signedIn?'login':needsProfile?'incomplete':'verified';
+   headline.textContent=!signedIn?'تأكيد البريد قبل استلام طلبك':
+     needsProfile?'بريدك موثّق ✓ — أكمل البيانات':'بريدك موثّق وبياناتك مكتملة ✓';
+   label.textContent=!signedIn?
+     'أرسل رمز الدخول إلى بريدك لتأكيد الطلب دون كلمة مرور أو الانتقال لصفحة أخرى.':
+     needsProfile?'الحساب: '+accountEmail+' — أدخل اسمك ورقم الجوال هنا مرة واحدة، ثم استلم التجربة دون دفع.':
+     'الحساب: '+accountEmail+' — طلباتك وأكوادك محفوظة عندنا.';
    $('checkout-auth-panel').hidden=signedIn;
+   $('checkout-profile-panel').hidden=!needsProfile;
+   $('trial-cart-recovery').hidden=!signedIn;
    link.hidden=signedIn;
    $('step-cart').classList?.toggle('complete',items.length>0);
-   $('step-account').classList?.toggle('complete',signedIn);
-   $('step-account').classList?.toggle('active',!signedIn);
-   $('step-payment').classList?.toggle('active',signedIn);
+   $('step-account').classList?.toggle('complete',signedIn&&!needsProfile);
+   $('step-account').classList?.toggle('active',!signedIn||needsProfile);
+   $('step-payment').classList?.toggle('active',signedIn&&!needsProfile);
    const indicator=$('cart-sync');
    indicator.textContent=!signedIn?'سنحفظ السلة في حسابك بعد تأكيد البريد.':
      cloudSynced?'✓ محفوظة في حسابك':'جارٍ حفظ السلة في حسابك…';
@@ -290,6 +299,10 @@
      if(typeof data.email!=='string'||typeof data.customerId!=='string')
        throw Error('account_invalid');
      signedIn=true;accountEmail=data.email;accountId=data.customerId;
+     profileRequired=data.profileRequired===true;
+     profileComplete=data.profileComplete===true||!profileRequired;
+     $('checkout-profile-name').value=String(data.fullName||'');
+     $('checkout-profile-phone').value=String(data.phone||'');
      const saved=await fetch(cloudEndpoint,{cache:'no-store',credentials:'same-origin',
        headers:{accept:'application/json'}});
      if(!saved.ok)throw Error('cart_unavailable');
@@ -563,11 +576,69 @@
      $('geidea-embedded-notice').textContent='تعذّر عرض النموذج المضمّن؛ افتح نفس جلسة الدفع من الرابط، بدون إنشاء طلب جديد.';
    }
  }
+
+ // Recover using the verified customer's existing session, never issue a second
+ // voucher to resolve a failed response. This is also available in the cart.
+ let recoveringTrial=false;
+ function renderTrialInCart(trial,fromRecovery=false){
+   if(!trial||typeof trial.code!=='string'||!['app','xtream'].includes(trial.channel))
+     return false;
+   $('trial-cart-code').textContent=trial.code;
+   const previouslyOwned=fromRecovery||trial.alreadyClaimed===true;
+   $('trial-cart-info').textContent=previouslyOwned?
+     'هذا كود التجربة الموجود في حسابك سابقًا، ولن تُمنح تجربة ثانية.':
+     'تم استلام كود مجاني واحد لحسابك، وتبدأ مدة اليوم من أول تفعيل ناجح.';
+   const time=value=>new Date(value).toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'});
+   $('trial-cart-dates').textContent=trial.expiresAt?
+     'تم التفعيل '+(trial.activatedAt?'بتاريخ '+time(trial.activatedAt):'')+
+       ' · تنتهي التجربة بتاريخ '+time(trial.expiresAt):
+     'لم يُفعّل الكود بعد. ستبدأ مدة 24 ساعة بعد أول تفعيل ناجح، وسيظهر تاريخ الانتهاء بعد ذلك.';
+   $('trial-cart-download').hidden=trial.channel!=='app';
+   $('trial-cart-xtream').hidden=trial.channel!=='xtream';
+   const guide=$('trial-cart-guide');
+   guide.replaceChildren();
+   const steps=trial.channel==='xtream'?
+     ['انسخ الكود أعلاه.','افتح صفحة تفعيل واستخراج Xtream من الزر أدناه.',
+      'أدخل الكود واستخرج رابط Host الكامل واسم المستخدم وكلمة المرور.',
+      'أضف بيانات Xtream إلى BLOFY PLAYER أو مشغّل متوافق.']:
+     ['انسخ الكود أعلاه.','نزّل تطبيق BLOFY STREAM من الرابط أدناه.',
+      'افتح التطبيق وأدخل الكود التجريبي لتفعيله.','تبدأ مدة اليوم من أول تفعيل ناجح.'];
+   for(const text of steps){const li=document.createElement('li');li.textContent=text;guide.append(li);}
+   $('trial-cart-result').hidden=false;
+   return true;
+ }
+ async function recoverExistingTrial({quiet=false}={}){
+   if(!signedIn||recoveringTrial)return false;
+   recoveringTrial=true;
+   const button=$('trial-cart-recover');
+   button.disabled=true;
+   if(!quiet)$('trial-cart-recovery-status').textContent='جارٍ التحقق من كود التجربة المسلّم لهذا الحساب…';
+   try{
+     const response=await fetch('/api/v1/store/trials/mine',{
+       credentials:'same-origin',cache:'no-store',headers:{accept:'application/json'}
+     });
+     const data=await response.json().catch(()=>({}));
+     if(!response.ok)throw Error(data.error||'trial_recovery_unavailable');
+     if(data.claimed&&renderTrialInCart(data.trial,true)){
+       $('trial-cart-recovery-status').textContent='✓ تم استرجاع الكود السابق من حسابك بأمان، دون إصدار كود جديد.';
+       $('trial-cart-result').scrollIntoView({behavior:'smooth',block:'nearest'});
+       return true;
+     }
+     if(!quiet)$('trial-cart-recovery-status').textContent='لا توجد تجربة مسلّمة لهذا الحساب حتى الآن.';
+     return false;
+   }catch(error){
+     if(!quiet)$('trial-cart-recovery-status').textContent=
+       'تعذّر استرجاع التجربة: '+error.message+'. تحقق من اتصالك وحسابك.';
+     return false;
+   }finally{
+     recoveringTrial=false;button.disabled=false;
+   }
+ }
  async function claimFreeTrialFromCart(){
    const trial=trialLine();
    if(!trial||!trialReady)return;
    creating=true;updateCheckoutButton();
-   message('جارٍ حجز تجربتك من المخزون المجاني، بدون استخدام بوابة الدفع...');
+   message('جارٍ تسليم التجربة المجانية إلى حسابك، دون استخدام بوابة الدفع…');
    try{
      const response=await fetch('/api/v1/store/trials/claim',{
        method:'POST',credentials:'same-origin',cache:'no-store',
@@ -575,39 +646,55 @@
        body:JSON.stringify({sku:trial.sku})
      });
      const result=await response.json().catch(()=>({}));
-     if(!response.ok||result.ok!==true||typeof result.code!=='string'||
-        result.channel!==(trial.sku==='trial-stream-1d'?'app':'xtream')){
-       const problem=result?.error||'trial_claim_unavailable';
-       // If the verified customer already claimed the *other* channel,
-       // no second trial can be granted; explain without inventing success.
-       throw Error(problem);
-     }
-     $('trial-cart-code').textContent=result.code;
-     $('trial-cart-info').textContent=result.alreadyClaimed?
-       'تم استرجاع تجربتك السابقة. مدة التجربة لا تبدأ من جديد.':
-       'مدة التجربة يوم واحد من أول تفعيل ناجح، وليست من وقت إضافتها للسلة.';
-     $('trial-cart-xtream').hidden=result.channel!=='xtream';
-     $('trial-cart-result').hidden=false;
+     if(!response.ok||result.ok!==true||typeof result.code!=='string')
+       throw Error(result?.error||'trial_claim_unavailable');
+     // A one-trial-per-account claim may return a previously claimed code
+     // for a different channel. Never treat that as a new STREAM/Xtream issue.
+     const expectedChannel=trial.sku==='trial-stream-1d'?'app':'xtream';
+     if(result.channel!==expectedChannel&&result.alreadyClaimed!==true)
+       throw Error('trial_channel_mismatch');
+     if(!renderTrialInCart(result,false))throw Error('trial_delivery_invalid');
      items=items.filter(item=>!trialSku(item.sku));
-     save();
-     await refresh();
-     message(items.length?
-       'تم استلام التجربة المجانية. الباقات المدفوعة باقية في سلتك؛ أكمل دفعها بشكل منفصل.':
-       '✓ تمت التجربة المجانية بسعر 0 ريال. لم تبدأ أي عملية دفع.');
+     save();await refresh();
+     message(result.alreadyClaimed?
+       '✓ استعدنا كود تجربتك السابقة. لا يمكن منح تجربة جديدة لهذا الحساب.':
+       items.length?'✓ استلمت تجربتك المجانية. الباقات المدفوعة باقية في سلتك.':
+       '✓ تم التسليم بسعر 0 ريال، دون دفع أو بطاقة.');
      $('trial-cart-result').scrollIntoView({behavior:'smooth',block:'nearest'});
    }catch(error){
      const explanations={
-       trial_login_required:'سجّل الدخول بالبريد المؤكّد قبل استلام التجربة.',
-       trial_out_of_stock:'مخزون التجارب نفد؛ لم نحجز كودًا.',
-       trial_daily_quota_reached:'اكتملت حصة التجارب لهذا اليوم.',
-       trial_rate_limited:'عدد محاولات مرتفع؛ حاول لاحقًا.',
-       trials_unavailable:'خدمة التجارب غير متاحة حاليًا.',
-       trial_code_unavailable:'الكود غير متاح للاسترجاع حاليًا؛ تواصل مع الدعم.'
+       trial_login_required:'يجب تأكيد بريدك الإلكتروني أولًا.',
+       trial_profile_required:'بريدك موثّق، لكن الاسم ورقم الجوال مطلوبان قبل تسليم الكود.',
+       trial_origin_invalid:'تعذّر التحقق من مصدر الطلب. حدّث صفحة BLOFY الرسمية.',
+       trial_out_of_stock:'نفد مخزون التجربة؛ لم يتم خصم أي مبلغ.',
+       trial_daily_quota_reached:'اكتملت حصة التجارب اليومية. لم يتم خصم أي مبلغ.',
+       trial_rate_limited:'وصلت محاولات الطلب إلى الحد المسموح؛ لا تكرر الضغط.',
+       trial_already_claimed:'لديك تجربة سابقة لهذا الحساب، يمكنك استرجاع كودها من السلة.',
+       trials_unavailable:'خدمة التجارب غير متاحة على الخادم حاليًا.',
+       trial_code_unavailable:'تعذّر عرض كودك المخزّن؛ تواصل مع الدعم.',
+       trial_code_integrity_unavailable:'تعذّر التحقق من الكود المخزّن؛ تواصل مع الدعم.'
      };
-     message(explanations[error.message]||
-       'تعذر التأكد من التسليم. افتح صفحة التجربة لاسترجاع كودك قبل إعادة المحاولة.');
+     if(error.message==='trial_profile_required'){
+       profileRequired=true;profileComplete=false;authUI();
+       $('checkout-profile-panel').scrollIntoView({behavior:'smooth',block:'center'});
+       $('checkout-profile-message').textContent=explanations.trial_profile_required;
+       message('أكمل الاسم والجوال في نموذج بيانات العميل الظاهر هنا، ثم أعد الطلب.');
+     }else{
+       // Network, proxy, or timeout may occur AFTER the claim committed.
+       // Read the existing claim first rather than issuing another voucher.
+       const recovered=await recoverExistingTrial({quiet:true});
+       if(recovered){
+         items=items.filter(item=>!trialSku(item.sku));save();await refresh();
+         message('✓ تم العثور على كود التجربة المسلّم لحسابك وعرضه هنا. لا تعِد الطلب.');
+       }else{
+         message(explanations[error.message]||
+           'لم نتمكن من تأكيد التسليم. اضغط «استرجاع تجربتي» أسفل هذا الملخص للتحقق من حسابك دون إصدار طلب آخر.');
+       }
+     }
    }finally{creating=false;updateCheckoutButton();}
  }
+
+ $('trial-cart-recover').addEventListener('click',()=>void recoverExistingTrial());
  $('trial-cart-copy').addEventListener('click',async()=>{
    const code=$('trial-cart-code').textContent;
    if(!code)return;
@@ -619,6 +706,13 @@
      $('auth-gate').scrollIntoView({behavior:'smooth',block:'center'});
      $('checkout-email').focus({preventScroll:true});
      message('أدخل بريدك واضغط «إرسال الرمز» لإكمال الطلب في نفس الصفحة.');
+     return;
+   }
+   if(profileRequired&&!profileComplete){
+     $('checkout-profile-panel').hidden=false;
+     $('checkout-profile-panel').scrollIntoView({behavior:'smooth',block:'center'});
+     $('checkout-profile-name').focus({preventScroll:true});
+     message('أكمل الاسم ورقم الجوال من داخل السلة ثم استلم الكود هنا، بدون الانتقال لصفحة أخرى.');
      return;
    }
    if(!cloudSynced){message('سلتك لم تُحفظ بعد في الحساب. تأكد من اتصالك قبل الاستلام.');return;}
@@ -705,6 +799,38 @@
    if(!currentOrder||!accessToken)return null;
    return location.origin+'/store/orders#order='+currentOrder+'&token='+encodeURIComponent(accessToken);
  }
+
+ const profileErrors={
+   invalid_customer_profile:'أدخل الاسم الكامل ورقم جوال سعودي صحيح مثل 05xxxxxxxx.',
+   customer_phone_in_use:'هذا الجوال مسجّل في حساب BLOFY آخر. استخدم حسابك الأول أو تواصل مع الدعم.',
+   rate_limited:'محاولات عديدة لحفظ الملف. حاول بعد قليل.',
+   login_required:'انتهت جلسة البريد، سجّل دخولك من جديد.'
+ };
+ $('checkout-profile-form').addEventListener('submit',async event=>{
+   event.preventDefault();
+   if(!signedIn||profileComplete)return;
+   const name=$('checkout-profile-name').value.trim().replace(/\s+/g,' ');
+   const phone=$('checkout-profile-phone').value.trim();
+   if(name.length<2||name.length>100||/[<>]/.test(name)||
+      !/^(?:05\d{8}|5\d{8}|\+9665\d{8}|009665\d{8})$/.test(phone)){
+     $('checkout-profile-message').textContent=profileErrors.invalid_customer_profile;
+     return;
+   }
+   const button=$('checkout-profile-submit');button.disabled=true;
+   $('checkout-profile-message').textContent='جارٍ حفظ بياناتك بشكل آمن في حساب BLOFY…';
+   try{
+     const result=await request('/api/v1/store/account/profile',{fullName:name,phone});
+     if(result.ok!==true||result.profileComplete!==true)throw Error('profile_not_confirmed');
+     profileComplete=true;profileRequired=true;
+     $('checkout-profile-message').textContent='✓ تم توثيق بريدك وحفظ الاسم والجوال.';
+     authUI();await refresh();
+     message('✓ بياناتك مكتملة. يمكنك الآن الضغط على «استلام التجربة المجانية — 0 ريال».');
+     $('checkout').scrollIntoView({behavior:'smooth',block:'nearest'});
+   }catch(error){
+     $('checkout-profile-message').textContent=profileErrors[error.message]||
+       'تعذّر حفظ البيانات: '+error.message+'. راجع معلوماتك ولا تكرر الطلب حتى تتأكد.';
+   }finally{button.disabled=false;}
+ });
  const loginMessage=text=>{$('checkout-login-message').textContent=text;};
  const loginErrors={
    invalid_email:'تأكد من صحة البريد الإلكتروني.',

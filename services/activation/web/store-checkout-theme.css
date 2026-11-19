@@ -191,3 +191,36 @@ body.cart-experience{
 .cart-experience .trial-cart-result>a{display:inline-flex;min-height:40px;margin:9px 5px 0 0}
 @media(max-width:720px){.cart-experience .geidea-embedded-details{grid-template-columns:1fr}.cart-experience .geidea-embedded-mark{display:none}.cart-experience .geidea-hosted-container{border-radius:10px}.cart-experience .geidea-hosted-container iframe{min-height:600px}}
 @media(max-width:420px){.cart-experience .geidea-embedded-panel{padding:16px}.cart-experience .geidea-hosted-container{margin:10px -8px;width:calc(100% + 16px)}.cart-experience .trial-cart-code output{font-size:20px}}
+
+/* Inline verified-customer profile completion: same cart, no offsite handoff. */
+.cart-experience .account-gate[data-state="incomplete"]{
+ background:linear-gradient(120deg,#fffaf0,#ffffff 75%);border-color:#e7bd73;
+}
+.cart-experience .account-gate[data-state="incomplete"] .verified-mark{visibility:visible}
+.cart-experience .checkout-profile-panel{margin-top:18px;padding:18px;border:1px solid #e4cfa9;
+ background:#fffdf8;border-radius:15px;color:#30223f}
+.cart-experience .checkout-profile-panel[hidden],
+.cart-experience .trial-cart-recovery[hidden]{display:none!important}
+.cart-experience .checkout-profile-panel h3{font-size:19px;line-height:1.5;color:#5b309b;margin:0 0 8px}
+.cart-experience .checkout-profile-panel p{color:#68576d;font-size:13px;line-height:1.85;margin:0 0 14px}
+.cart-experience .checkout-profile-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-bottom:16px}
+.cart-experience .checkout-profile-fields label{display:grid;gap:7px;font-weight:700;color:#3b284f;font-size:13px}
+.cart-experience .checkout-profile-fields label strong{color:#a52a42}
+.cart-experience .checkout-profile-fields input{display:block;width:100%;min-height:48px;padding:11px 14px;
+ background:white;border:1px solid #cab9d9;border-radius:10px;color:#362444;font:inherit}
+.cart-experience .checkout-profile-fields input:focus-visible{outline:3px solid #b38be3;outline-offset:2px}
+.cart-experience #checkout-profile-submit{font-size:14px;min-height:48px}
+.cart-experience #checkout-profile-message{display:block;min-height:21px;margin-top:10px;
+ color:#5f347f;font-size:13px;line-height:1.7}
+.cart-experience .trial-cart-recovery{margin-top:14px;padding:12px 0;border-top:1px solid #eadfef}
+.cart-experience .trial-cart-recovery button{width:100%;font-weight:750;min-height:43px;justify-content:center}
+.cart-experience #trial-cart-recovery-status{display:block;color:#327155;font-size:12px;line-height:1.7;margin-top:8px}
+.cart-experience .trial-cart-guide{margin:12px 0 8px;padding-inline-start:26px;color:#285f4b;
+ font-size:13px;line-height:2}
+.cart-experience #trial-cart-dates{background:#f4fff9;border:1px solid #c4e6d3;border-radius:9px;
+ padding:11px;color:#256b4a;margin-top:10px}
+@media(max-width:600px){
+ .cart-experience .checkout-profile-fields{grid-template-columns:1fr}
+ .cart-experience .checkout-profile-panel{padding:14px}
+ .cart-experience #checkout-profile-submit{width:100%}
+}

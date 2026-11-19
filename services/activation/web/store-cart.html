@@ -9,9 +9,9 @@
   <title>إتمام الطلب | BLOFY STORE</title>
   <link rel="icon" href="/blofy-logo.png">
   <link rel="stylesheet" href="/store/cart.css?v=5">
-<link rel="stylesheet" href="/store/checkout-theme.css?v=2">
+<link rel="stylesheet" href="/store/checkout-theme.css?v=3-trial-profile">
 <link rel="stylesheet" href="/store/visual.css?v=20261119-2">
-  <script defer src="/store/cart.js?v=10"></script>
+  <script defer src="/store/cart.js?v=11-trial-profile"></script>
 </head>
 <body class="cart-experience">
   <header class="top">
@@ -33,7 +33,7 @@
     </div>
     <ol class="checkout-steps" aria-label="خطوات إتمام الطلب">
       <li id="step-cart" class="step active"><span class="step-number">1</span><span>السلة</span></li>
-      <li id="step-account" class="step"><span class="step-number">2</span><span>تأكيد البريد</span></li>
+      <li id="step-account" class="step"><span class="step-number">2</span><span>تأكيد البريد والبيانات</span></li>
       <li id="step-payment" class="step"><span class="step-number">3</span><span id="step-payment-label">الدفع</span></li>
     </ol>
     <div class="layout cart-layout">
@@ -71,6 +71,22 @@
             </form>
             <output id="checkout-login-message" role="status" aria-live="polite"></output>
           </div>
+          <section id="checkout-profile-panel" class="checkout-profile-panel" hidden aria-labelledby="checkout-profile-title">
+            <h3 id="checkout-profile-title">أكمل بياناتك قبل استلام الكود</h3>
+            <p>بريدك الإلكتروني موثّق ✓. باقي الاسم الكامل ورقم الجوال السعودي، وهذا مطلوب مرة واحدة قبل التجربة المجانية أو أي شراء. رقم الجوال لا يتطلب رسالة SMS حاليًا.</p>
+            <form id="checkout-profile-form" autocomplete="on">
+              <div class="checkout-profile-fields">
+                <label>الاسم الكامل <strong>*</strong>
+                  <input id="checkout-profile-name" type="text" autocomplete="name" required minlength="2" maxlength="100" placeholder="اسمك الكامل">
+                </label>
+                <label>رقم الجوال السعودي <strong>*</strong>
+                  <input id="checkout-profile-phone" type="tel" autocomplete="tel" inputmode="tel" dir="ltr" required maxlength="18" placeholder="05xxxxxxxx">
+                </label>
+              </div>
+              <button id="checkout-profile-submit" type="submit" class="primary">حفظ البيانات ومتابعة الطلب</button>
+              <output id="checkout-profile-message" role="status" aria-live="polite"></output>
+            </form>
+          </section>
           <a id="auth-link" class="auth-alternative" href="/store/account?next=%2Fstore%2Fcart">تفضّل الدخول من صفحة حسابي؟</a>
         </section>
 
@@ -102,13 +118,19 @@
         <p class="safe" id="cart-sync" role="status" aria-live="polite">نحفظ السلة في حسابك بعد تسجيل الدخول.</p>
         <div class="cart-recovery-actions"><button type="button" class="secondary" id="retry-cart-sync" hidden>إعادة حفظ السلة</button><button type="button" class="secondary" id="retry-pending" hidden>مراجعة الطلب السابق</button></div>
         <output id="message" role="status" aria-live="polite"></output>
+        <div id="trial-cart-recovery" class="trial-cart-recovery" hidden>
+          <button type="button" id="trial-cart-recover" class="secondary">↻ استرجاع تجربتي المجانية من حسابي</button>
+          <output id="trial-cart-recovery-status" role="status" aria-live="polite"></output>
+        </div>
         <section id="trial-cart-result" class="trial-cart-result" hidden aria-labelledby="trial-cart-title">
           <h3 id="trial-cart-title">🎁 تم تخصيص تجربتك المجانية</h3>
           <p>الكود التجريبي الخاص بك (يوم واحد من أول تفعيل):</p>
           <div class="trial-cart-code"><output id="trial-cart-code" dir="ltr"></output><button type="button" id="trial-cart-copy" class="secondary">نسخ الكود</button></div>
           <p id="trial-cart-info" role="status" aria-live="polite"></p>
-          <a href="/stream/activate" id="trial-cart-xtream" class="secondary" hidden>استخراج بيانات Xtream</a>
-          <a href="/store/trial" class="secondary">استرجاع التجربة لاحقًا</a>
+          <p id="trial-cart-dates" aria-live="polite">تبدأ مدة التجربة عند أول تفعيل ناجح، وسيظهر موعد الانتهاء بعده.</p>
+          <ol id="trial-cart-guide" class="trial-cart-guide" aria-label="خطوات تفعيل التجربة"></ol>
+          <a href="/downloads" id="trial-cart-download" class="secondary" hidden>تحميل تطبيق BLOFY STREAM ↗</a>
+          <a href="/stream/activate" id="trial-cart-xtream" class="secondary" hidden>تفعيل واستخراج Xtream ↗</a>
         </section>
         <section id="started" class="started" hidden>
           <h3>طلبك محفوظ</h3>
