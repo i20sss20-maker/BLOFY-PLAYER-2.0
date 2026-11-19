@@ -13,6 +13,7 @@ import { createStoreCommercialInsightsHandlers } from './store-commercial-insigh
 import { createStoreMerchandisingHandlers } from './store-merchandising.mjs';
 import { createStoreRetentionInsightsHandlers } from './store-retention-insights.mjs';
 import { createStoreAiAssistantHandlers } from './store-ai-assistant.mjs';
+import { createStoreResellerPortal,resellerPortalCsp } from './store-reseller-portal.mjs';
 import { storeInfoPage } from './store-info-pages.mjs';
 import { createProfileCloudHandlers } from './profile-cloud.mjs';
 import { registerDeviceTrial, bindExistingTrial, completePendingTrial } from './trial-registration.mjs';
@@ -193,6 +194,7 @@ const storeCommercialInsights = createStoreCommercialInsightsHandlers({pool,json
 const storeMerchandising = createStoreMerchandisingHandlers({pool,json,readJson,authorizeAdmin:requireAdmin});
 const storeRetentionInsights = createStoreRetentionInsightsHandlers({pool,json,authorizeAdmin:requireAdmin});
 const storeAiAssistant = createStoreAiAssistantHandlers({json,readJson});
+const storeResellerPortal = createStoreResellerPortal({json,readJson});
 const siteAnalytics = createSiteAnalyticsHandlers({pool,json,readJson,authorizeAdmin:requireAdmin,keyHex:PLAYLIST_ENCRYPTION_KEY});
 const whatsappCloud = createWhatsAppCloudHandlers({pool,authorizeAdmin:requireAdmin});
 const cloud = createProfileCloudHandlers({ pool, json, readJson, authorizedDevice });
@@ -1016,6 +1018,23 @@ const server = http.createServer(async (req, res) => {
       });
       return res.end();
     }
+    if (await storeResellerPortal(req,res,requestUrl)) return;
+    if (['GET','HEAD'].includes(req.method) &&
+        ['/distributor','/distributor/'].includes(requestUrl.pathname)){
+      const page=await readFile(new URL('../web/store-reseller.html',import.meta.url));
+      res.writeHead(200,{
+       'content-type':'text/html; charset=utf-8','content-length':page.length,
+       'cache-control':'no-store, private','x-content-type-options':'nosniff',
+       'x-robots-tag':'noindex, nofollow','x-frame-options':'DENY',
+       'referrer-policy':'no-referrer','content-security-policy':resellerPortalCsp,
+       'strict-transport-security':'max-age=31536000'
+      });
+      return res.end(req.method==='HEAD'?undefined:page);
+    }
+    if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/distributor/style.css')
+      return await serveStoreAssetFile(res,'store-reseller.css','text/css; charset=utf-8');
+    if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/distributor/app.js')
+      return await serveStoreAssetFile(res,'store-reseller.js','application/javascript; charset=utf-8');
     if (await storeAiAssistant(req,res,requestUrl)) return;
     if (await storeRetentionInsights(req,res,requestUrl)) return;
     if (await storeMerchandising(req,res,requestUrl)) return;
