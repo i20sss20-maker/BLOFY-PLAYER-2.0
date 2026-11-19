@@ -23,6 +23,8 @@ test('zero SAR trial may be saved but never parsed as a paid Geidea invoice',()=
  assert.equal(parseSavedStoreCart([{sku:'trial-xtream-1d',quantity:1},
    {sku:'trial-xtream-1d',quantity:1}]),null);
  assert.deepEqual(parseSavedStoreCart([]),[]);
+ assert.equal(parseSavedStoreCart(undefined),null);
+ assert.equal(parseSavedStoreCart({items:[]}),null);
  assert.equal(parseSavedStoreCart([{sku:'fake-free',quantity:1}]),null);
 });
 test('both paid product cards offer a real free-day selection and visible zero-price card',()=>{
