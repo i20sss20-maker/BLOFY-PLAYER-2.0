@@ -282,7 +282,7 @@
       showBatch(result,codes);
       batchStatus.textContent='فُحص '+result.scanned+' كودًا؛ الجاهز للاستخراج: '+result.ready+
         '. اختر «فحص واستخراج» للتحقق قبل عرض بيانات الدخول.';
-      batchTimer=window.setTimeout(()=>clearBatch('انتهت مدة عرض نتائج المجموعة. أعد الفحص عند الحاجة.'),180000);
+      // The result table stays visible until Clear or page navigation.
     }catch(e){
       if(version===batchSerial)clearBatch('تعذر فحص الأكواد: '+e.message);
     }finally{
@@ -290,8 +290,6 @@
     }
   });
   $('one-legacy-batch-clear').addEventListener('click',()=>clearBatch());
-  document.addEventListener('visibilitychange',()=>{
-    if(document.hidden)clearBatch('حُذفت نتائج المجموعة عند مغادرة التبويب.');
-  });
+  // Keep batch results visible when switching browser tabs.
   window.addEventListener('pagehide',()=>clearBatch());
 })();

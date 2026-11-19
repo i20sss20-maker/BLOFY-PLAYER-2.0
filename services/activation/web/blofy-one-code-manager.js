@@ -267,9 +267,7 @@
     const detail=event.detail||{};
     open(detail.record,detail.offset);
   });
-  document.addEventListener('visibilitychange',()=>{
-    if(document.hidden&&!busy&&dialog.open)close();
-  });
+  // Keep the code-management panel open while switching browser tabs.
   window.addEventListener('pagehide',()=>{
     if(!busy&&dialog.open)close();
   });
