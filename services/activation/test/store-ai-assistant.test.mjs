@@ -81,6 +81,19 @@ test('cross-origin, invalid media type and sensitive questions never reach provi
  assert.equal(calls,0);
 });
 
+test('verified storefront handles financial questions without sending them to AI',async()=>{
+ let external=0;
+ const handler=createStoreAiAssistantHandlers({env,json,readJson:async r=>r.input,
+  fetchImpl:async()=>{external++;throw Error('provider should not be called');}});
+ const res={};
+ await handler(request({question:'كم سعر الاشتراك في BLOFY؟'}),res,
+  url('/api/v1/store/assistant/chat'));
+ assert.equal(res.status,200);
+ assert.equal(res.body.mode,'guided');
+ assert.match(res.body.reply,/افتح صفحة المنتجات والسلة/);
+ assert.equal(external,0);
+});
+
 test('provider failure is sanitized and rate limiter caps expensive calls',async()=>{
  let calls=0;
  const handler=createStoreAiAssistantHandlers({
