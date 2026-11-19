@@ -12,8 +12,10 @@
  const money=n=>(Number(n)/100).toLocaleString('ar-SA')+' ر.س';
  let orders=[],receiptTimer=null,receiptGeneration=0,returnChecked=false,paymentReceiptGeneration=0;
  let lastSubscriptionData=null;
- let privateLogin=null;
+ let privateLogin=null,privateLoginTimeout=null;
+ const PRIVATE_DISPLAY_MS=90*1000;
  function hidePrivateLogin(){
+  if(privateLoginTimeout!==null){clearTimeout(privateLoginTimeout);privateLoginTimeout=null;}
   privateLogin?.remove();privateLogin=null;
  }
   const completeHost=raw=>{try{const u=new URL(String(raw));return u.protocol==='https:'
@@ -269,8 +271,10 @@
    const hide=node('button','إخفاء البيانات');hide.className='secondary';hide.type='button';
    hide.addEventListener('click',hidePrivateLogin);
    secret.append(copy,hide);article.append(secret);
-   privateLogin=secret; // Manual hide or page exit only.
-   tell('هذه بيانات اشتراكك الفعّال؛ تاريخ الانتهاء لم يتغير.');
+   privateLogin=secret;
+   privateLoginTimeout=setTimeout(hidePrivateLogin,PRIVATE_DISPLAY_MS);
+   privateLoginTimeout?.unref?.();
+   tell('بيانات Xtream ظاهرة مؤقتًا لمدة 90 ثانية ثم تُخفى لحمايتك. اضغط الكشف مجددًا عند الحاجة. تاريخ الاشتراك لم يتغير.');
   }catch(e){tell(statusMessage(e));}
   finally{trigger.disabled=false;}
  }
@@ -581,7 +585,8 @@
  $('payment-receipt-close').addEventListener('click',clearPaymentReceipt);
  $('payment-receipt-print').addEventListener('click',()=>{if(!$('payment-receipt').hidden)window.print();});
  $('close-receipt').addEventListener('click',clearReceipt);
- // Do not erase paid codes or recovered credentials on temporary tab switch.
+ // Keep paid receipts intact; protect recovered credentials when the tab is hidden.
+ document.addEventListener('visibilitychange',()=>{if(document.hidden)hidePrivateLogin();});
  window.addEventListener('pagehide',()=>{clearReceipt();clearPaymentReceipt();hidePrivateLogin();});
  if(returnToCart)$('checkout-return').hidden=false;
  // An existing guest token can be transported in the URL fragment, never the server logs.

@@ -459,3 +459,27 @@ body[data-blofy-storefront] .market-products .pricing-rows > button[data-plan-op
 .blofy-activation-guide ol{margin:5px 0;padding-inline-start:24px;color:#3c2c53;font-size:13px;line-height:1.9}
 .blofy-activation-guide .secondary{display:inline-flex;margin:4px 7px 4px 0;max-width:max-content;
  color:#512397;border:1px solid #bfa2e5;border-radius:10px;padding:9px 13px;text-decoration:none}
+
+/* 2026 storefront usability: keyboard navigation, touch targets and reduced motion */
+body[data-blofy-storefront] :is(a,button,input,select,summary):focus-visible{
+ outline:3px solid #8651da;outline-offset:3px;
+}
+body[data-blofy-storefront] .market-category-nav a,
+body[data-blofy-storefront] .market-mobile-nav a{min-height:44px}
+body[data-blofy-storefront] .quick-flow{display:flex;gap:12px;flex-wrap:wrap}
+body[data-blofy-storefront] .quick-flow span{flex:1 1 205px;min-height:57px}
+body[data-blofy-storefront] .market-products .actions a.btn[data-cart-add]{
+ min-height:49px;justify-content:center;font-weight:800;
+}
+@media(max-width:640px){
+ body[data-blofy-storefront] .market-products .shop-head{gap:14px}
+ body[data-blofy-storefront] .market-products .pricing-ribbon{max-width:100%;overflow-x:auto}
+ body[data-blofy-storefront] .market-products .actions a.btn[data-cart-add]{width:100%}
+}
+@media(prefers-reduced-motion:reduce){
+ body[data-blofy-storefront] *,body[data-blofy-storefront] *::before,
+ body[data-blofy-storefront] *::after{
+  scroll-behavior:auto!important;transition-duration:.01ms!important;
+  animation-duration:.01ms!important;animation-iteration-count:1!important;
+ }
+}

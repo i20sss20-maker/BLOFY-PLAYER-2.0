@@ -3,8 +3,10 @@
  const form=document.getElementById('form'),input=document.getElementById('code'),
    button=document.getElementById('submit'),message=document.getElementById('message'),
    section=document.getElementById('result'),fields=document.getElementById('fields');
- let credentials=null;
+ let credentials=null,secretTimer=null;
+ const SECRET_DISPLAY_MS=90*1000;
  function hideSecrets(){
+  if(secretTimer!==null){clearTimeout(secretTimer);secretTimer=null;}
   credentials=null;fields.replaceChildren();section.classList.add('hide');
  }
   // Display a complete standard HTTPS Xtream URL, including its default port.
@@ -52,7 +54,8 @@
      field('تاريخ بدء الاشتراك',new Date(d.account.activatedAt).toLocaleString('ar-SA'),false);
      field('تاريخ انتهاء الاشتراك',new Date(d.account.expiresAt).toLocaleString('ar-SA'),false);
      section.classList.remove('hide');input.value='';show('تم التفعيل! بدأت مدة الاشتراك الآن.',true);
-     // Remain visible until customer presses Hide or leaves the page.
+     secretTimer=setTimeout(hideSecrets,SECRET_DISPLAY_MS);
+     secretTimer?.unref?.();
    }catch{show('تعذر الاتصال بالسيرفر. تحقق من الإنترنت وأعد المحاولة.',false)}
    finally{button.disabled=false}
  });
@@ -66,6 +69,7 @@
   }catch{show('تعذر النسخ التلقائي؛ يمكنك نسخ كل حقل على حدة.',false);}
  });
  document.getElementById('hide-result').addEventListener('click',hideSecrets);
- // Changing browser tabs does not clear the redemption result.
+ // Automatically clear private credentials on tab switch or page exit.
+ document.addEventListener('visibilitychange',()=>{if(document.hidden)hideSecrets();});
  window.addEventListener('pagehide',hideSecrets);
 })();
