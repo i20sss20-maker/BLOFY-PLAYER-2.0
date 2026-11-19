@@ -6,6 +6,7 @@
  // One search covers fixed subscription cards AND admin-published products.
  // No remote customer search, no unsafe HTML; live filtering stays on this page.
  let filter='all',searchTimer=null;
+ const reducedMotion=()=>{try{return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches===true;}catch(_){return false;}};
  const normalize=value=>String(value||'').normalize('NFKC').toLowerCase()
    .replace(/[ًٌٍَُِّْٰ]/g,'').replace(/[إأآٱ]/g,'ا')
    .replace(/ى/g,'ي').replace(/ـ/g,'').replace(/[^\p{L}\p{N}]+/gu,' ')
@@ -56,7 +57,7 @@
    }
    if(scroll){
      const destination=matching>0&&fixed===0&&managed>0?collection:$('products');
-     destination?.scrollIntoView({behavior:'smooth',block:'start'});
+     destination?.scrollIntoView({behavior:reducedMotion()?'auto':'smooth',block:'start'});
    }
  }
  searchForm?.addEventListener('submit',event=>{
@@ -86,8 +87,14 @@
        if(!item||!Number.isInteger(item.quantity)||item.quantity<1||item.quantity>3)continue;
        count+=item.quantity*(item.sku==='bundle-2y'?2:1);
      }
-     const badge=$('market-cart-count');
-     if(badge){badge.hidden=count===0;badge.textContent=String(count);}
+     for(const id of ['market-cart-count','market-mobile-cart-count']){
+       const badge=$(id);
+       if(badge){
+         badge.hidden=count===0;
+         badge.textContent=String(count);
+         badge.setAttribute('aria-label','عدد الأكواد في السلة: '+count);
+       }
+     }
    }catch(_){}
  }
  updateCartCount();
