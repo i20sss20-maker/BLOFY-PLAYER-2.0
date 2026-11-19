@@ -1,6 +1,29 @@
 <!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>BLOFY ONE | مخزون الاشتراكات</title><link rel="icon" href="/blofy-logo.png"><link rel="stylesheet" href="/admin/store-inventory/style.css"><script src="/admin/store-inventory/app.js" defer></script></head><body>
 <header><a href="/one" class="logo"><img src="/blofy-logo.png" alt=""> BLOFY <b>ONE</b></a><nav><a href="/one">لوحة الإدارة</a><a href="/admin/visitors">إحصائيات الزوار</a><a href="/admin">إدارة العملاء</a><a href="/" target="_blank" rel="noopener">زيارة المتجر</a></nav></header>
-<main><div class="intro"><span>STORE OPERATIONS</span><h1>إدارة مخزون أكواد الاشتراكات</h1><p>أنشئ أو أضف أكواد صادرة من نظام BLOFY إلى مخزون البيع دفعة واحدة، موزعة حسب نوع المنتج ومدته. يُستخدم المخزون أولًا بعد نجاح الدفع، ثم الإصدار التلقائي عند نفاده.</p></div>
+<main><div class="intro"><span>STORE OPERATIONS</span><h1>إدارة متجر BLOFY</h1><p>تحكّم في البنرات والألوان والنبذة ومنتجات المتجر، وراجع الطلبات والمبيعات والأكواد والكوبونات من مكان واحد.</p></div>
+<section class="showcase-admin" id="branding-admin" aria-labelledby="branding-heading">
+ <div class="intro"><span>HOMEPAGE & BRAND</span><h2 id="branding-heading">تصميم الصفحة الرئيسية والبنرات</h2>
+  <p>غيّر النصوص وصورة البانر والنبذة ورقم التواصل وهوية الألوان، ثم اضغط حفظ. تظهر التغييرات في المتجر دون تعديل ملفات أو أسعار الاشتراكات.</p></div>
+ <form id="branding-form" class="panel branding-panel">
+  <div class="branding-grid">
+   <div><label for="branding-announcement">الشريط العلوي (إعلان قصير)</label><input id="branding-announcement" maxlength="150" required></div>
+   <div><label for="branding-theme">ألوان المتجر</label><select id="branding-theme"><option value="violet">بنفسجي BLOFY وأبيض</option><option value="ocean">أزرق وأبيض</option><option value="rose">وردي وأبيض</option></select></div>
+   <div><label for="branding-heroTitle">عنوان البانر الرئيسي</label><input id="branding-heroTitle" maxlength="55" required></div>
+   <div><label for="branding-heroHighlight">العبارة المميزة في البانر</label><input id="branding-heroHighlight" maxlength="65" required></div>
+   <div class="branding-full"><label for="branding-heroDescription">وصف البانر</label><textarea id="branding-heroDescription" maxlength="250" rows="2" required></textarea></div>
+   <div class="branding-full"><label for="branding-heroImage">صورة البانر الرئيسي (رابط HTTPS أو الصورة الحالية)</label>
+    <input id="branding-heroImage" maxlength="700" dir="ltr" required placeholder="/store/media/strong8k.jpg"><small>لأفضل نتيجة استخدم صورة عريضة بنسبة 16:9 وبجودة واضحة.</small></div>
+   <div class="branding-full"><label for="branding-aboutTitle">عنوان نبذة «من نحن»</label><input id="branding-aboutTitle" maxlength="90" required></div>
+   <div class="branding-full"><label for="branding-aboutDescription">نبذة تعريفية عن BLOFY</label><textarea id="branding-aboutDescription" maxlength="850" rows="4" required></textarea></div>
+   <div><label for="branding-whatsapp">رقم واتساب بصيغة دولية (9665...)</label><input id="branding-whatsapp" dir="ltr" pattern="9665[0-9]{8}" maxlength="12" required></div>
+   <div><label for="branding-xHandle">اسم حساب X بدون @</label><input id="branding-xHandle" dir="ltr" pattern="[A-Za-z0-9_]{1,15}" maxlength="15" required></div>
+  </div>
+  <div class="branding-actions"><button type="submit" id="branding-save">حفظ تصميم المتجر</button>
+   <a href="/" target="_blank" rel="noopener noreferrer">فتح الصفحة الرئيسية ↗</a></div>
+  <output id="branding-status" role="status" aria-live="polite"></output>
+  <small>التعديلات تخص المحتوى والهوية البصرية فقط. تسعير الاشتراكات ومدفوعات جيديا محميان بإعدادات مستقلة. لا تضف شعارات شركات غير مرتبطة بالمتجر.</small>
+ </form>
+</section>
 <section class="showcase-admin" id="showcase-admin" aria-labelledby="showcase-heading">
   <div class="intro"><span>PRODUCT MANAGER</span><h2 id="showcase-heading">إدارة منتجات المتجر</h2>
     <p>أضف المنتجات والصور والتصنيفات، وعدّل ظهورها وترتيبها. الاشتراكات التي تختار لها كودًا معتمدًا تُباع بالسعر المحمي في خادم BLOFY؛ المنتجات الأخرى تُعرض للاستفسار فقط حتى يُجهز نظام تسليمها.</p>

@@ -3,24 +3,26 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#050b18">
-  <meta name="description" content="اشتراك STRONG 8K من BLOFY: أكثر من 50 ألف قناة بث مباشر، وأكثر من 50 ألف مسلسل، وأكثر من 185 ألف فيلم بحسب بيانات الباقة. قارن بين BLOFY STREAM وXtream عبر BLOFY PLAYER.">
+  <meta name="theme-color" content="#fbfaf8">
+  <meta name="description" content="متجر BLOFY للاشتراكات الرقمية. تصفح باقات BLOFY STREAM وBLOFY PLAYER والعروض، وأكمل طلبك بسلة واضحة وحساب عميل.">
   <meta name="robots" content="index,follow">
   <link rel="canonical" href="https://www.blofyplayer.com/">
   <link rel="icon" href="/blofy-logo.png">
   <meta property="og:type" content="website">
   <meta property="og:locale" content="ar_SA">
   <meta property="og:title" content="BLOFY | اشتراك STRONG 8K">
-  <meta property="og:description" content="اشتراك STRONG 8K، أكثر من 50 ألف قناة، أكثر من 50 ألف مسلسل، وأكثر من 185 ألف فيلم بحسب بيانات الباقة. اختر ستريم أو BLOFY PLAYER.">
+  <meta property="og:description" content="متجر BLOFY للاشتراكات الرقمية والعروض: باقات ستريم وبلاير، سلة شراء، حساب عميل ودفع بالبطاقات.">
   <meta property="og:image" content="https://www.blofyplayer.com/store/media/strong8k.jpg">
   <meta property="og:image:alt" content="بانر BLOFY STRONG 8K">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="preload" as="image" href="/store/media/strong8k.jpg">
   <title>اشتراك STRONG 8K | متجر BLOFY STREAM وBLOFY PLAYER</title>
   <link rel="stylesheet" href="/store/design.css?v=8">
+  <link rel="stylesheet" href="/store/market.css?v=1">
   <script src="https://www.ksamerchant.geidea.net/hpp/geideaCheckout.min.js" defer></script>
   <script src="/store/offers.js?v=1" defer></script>
   <script src="/store/showcase.js?v=1" defer></script>
+  <script src="/store/market.js?v=1" defer></script>
   <script>
 (function(){
   var hash=location.hash||'';
@@ -29,64 +31,126 @@
 </script>
 </head>
 <body data-blofy-storefront="1">
-  <div class="announce"><span class="pulse" aria-hidden="true"></span><span>تجربة ترفيهية بواجهة أبسط. <a href="/store/trial">تعرّف على تجربة BLOFY ←</a></span></div>
-  <header class="top">
-    <div class="container nav">
-      <a href="/" class="brand" aria-label="BLOFY - الرئيسية">
-        <img src="/blofy-logo.png" alt="" width="44" height="44">
-        <span><strong>BLOFY</strong><small>STREAM  ·  XTREAM</small></span>
+  <div class="market-announcement" role="note"><div class="container market-announcement-inner">
+    <span id="market-announcement-text">تسوّق باقات BLOFY الرقمية بسهولة — الدفع بالبطاقات متاح</span>
+    <a href="/store/offers">اكتشف العروض <span aria-hidden="true">←</span></a>
+  </div></div>
+  <header class="top market-top">
+    <div class="container market-header-main">
+      <a href="/" class="brand market-brand" aria-label="BLOFY STORE الصفحة الرئيسية">
+        <img src="/blofy-logo.png" alt="" width="48" height="48">
+        <span><strong>BLOFY</strong><small>OFFICIAL STORE</small></span>
       </a>
-      <nav class="links" aria-label="التنقل في المتجر">
-        <a href="/" class="active" aria-current="page">الرئيسية</a>
-        <a href="/#products">الاشتراكات</a><a href="/store/offers">العروض</a>
-        <a href="/store/trial">التجربة</a>
-        <a href="/store/about">عن بلوفي</a>
-        <a href="/store/faq">الأسئلة الشائعة</a><a href="/store/orders">تتبع طلب</a><a href="/store/account">حسابي</a>
-      </nav>
-      <div class="nav-actions"><a href="/store/cart" class="btn btn-outline btn-sm" aria-label="فتح سلة مشتريات BLOFY">🛒 السلة</a><a href="/store/contact" class="btn btn-outline btn-sm">تواصل معنا</a><a href="/#products" class="btn btn-primary btn-sm">عرض الباقات <span aria-hidden="true">↙</span></a></div>
+      <form id="market-search-form" class="market-search" role="search" action="/#products">
+        <label class="sr" for="market-search">ابحث عن منتج BLOFY</label>
+        <span aria-hidden="true">⌕</span>
+        <input type="search" id="market-search" placeholder="ابحث عن اشتراك أو باقة..." autocomplete="off">
+        <button type="submit" aria-label="البحث في منتجات المتجر">بحث</button>
+      </form>
+      <div class="market-header-actions">
+        <a href="/store/account" class="market-icon-link" aria-label="حساب العميل"><span aria-hidden="true">♙</span><span>حسابي</span></a>
+        <a href="/store/orders" class="market-icon-link market-orders" aria-label="طلباتي"><span aria-hidden="true">▤</span><span>طلباتي</span></a>
+        <a href="/store/cart" class="market-icon-link market-cart-link" aria-label="افتح سلة الشراء">
+          <span aria-hidden="true">🛒</span><span>السلة</span><b id="market-cart-count" aria-label="عدد الأكواد في السلة" hidden>0</b>
+        </a>
+      </div>
+    </div>
+    <div class="market-nav-shell">
+      <div class="container market-nav-row">
+        <nav class="market-category-nav" aria-label="القائمة الرئيسية">
+          <a href="/" aria-current="page">الرئيسية</a>
+          <a href="/#products">الاشتراكات</a>
+          <a href="/store/offers">العروض</a>
+          <a href="/#shop-managed-products">المنتجات الجديدة</a>
+          <a href="/store/trial">التجربة</a>
+          <a href="/#about-blofy">من نحن</a>
+          <a href="/#questions">الأسئلة الشائعة</a>
+        </nav>
+        <a class="market-nav-support" id="market-header-contact" href="https://wa.me/966568941484" target="_blank" rel="noopener noreferrer">
+          <span aria-hidden="true">◉</span> تواصل معنا <b dir="ltr">056 894 1484</b>
+        </a>
+      </div>
     </div>
   </header>
   <main>
-    <section class="hero banner-hero" aria-labelledby="hero-title">
-      <div class="container">
-        <div class="blofy-banners" id="blofy-banners"><div data-slide><div class="visual-hero">
-          <img class="visual-hero-art" src="/store/media/strong8k.jpg" alt="تصميم إعلان BLOFY STRONG 8K بشاشات ترفيهية وألوان كحلية وزرقاء" width="1600" height="640" fetchpriority="high" loading="eager">
-          <div class="visual-hero-content">
-            <span class="hero-badge"><i aria-hidden="true"></i> باقة STRONG 8K · BLOFY</span>
-            <h1 id="hero-title">اشتراك <span dir="ltr">STRONG 8K</span><br><em>ترفيهك بدون تعقيد.</em></h1>
-            <div class="visual-hero-stats">
-              <span><b dir="ltr">50,000+</b> قناة مباشرة</span>
-              <span><b dir="ltr">50,000+</b> مسلسل</span>
-              <span><b dir="ltr">185,000+</b> فيلم</span>
-            </div>
-            <div class="hero-buttons">
-              <a href="#products" class="btn btn-primary">شوف الاشتراكات ←</a>
-              <a href="/store/trial" class="btn btn-outline">يوجد تجربة ↗</a>
+    <section class="market-hero" aria-labelledby="hero-title">
+      <div class="container market-hero-layout">
+        <div class="market-carousel" id="blofy-banners" aria-roledescription="carousel" aria-label="عروض BLOFY">
+          <div class="market-slide" data-slide>
+            <img class="market-slide-media" src="/store/media/strong8k.jpg" alt="تصميم إعلاني لباقات BLOFY" width="1600" height="640" fetchpriority="high">
+            <div class="market-slide-shade" aria-hidden="true"></div>
+            <div class="market-slide-copy">
+              <span class="market-eyebrow">BLOFY DIGITAL STORE <i aria-hidden="true">✦</i></span>
+              <h1 id="hero-title"><span data-market-content="heroTitle">عالم BLOFY</span><br><em data-market-content="heroHighlight">اشتراكك صار أسهل.</em></h1>
+              <p data-market-content="heroDescription">اختر اشتراكك المناسب، أضفه للسلة، وتابع أكوادك من حسابك في مكان واحد.</p>
+              <div class="market-hero-buttons">
+                <a href="#products" class="market-cta market-cta-primary">تسوق الاشتراكات <span aria-hidden="true">←</span></a>
+                <a href="/store/offers" class="market-cta market-cta-ghost">شاهد العروض</a>
+              </div>
+              <div class="market-hero-foot">استلام رقمي بعد التحقق من الدفع <span aria-hidden="true">·</span> دعم عبر واتساب</div>
             </div>
           </div>
-        </div></div><div data-slide hidden><div class="visual-hero">
-<img class="visual-hero-art" src="/store/media/bundle.svg" width="1600" height="680" loading="lazy" alt="اشتراكان سنويان من BLOFY مع شاشتين متطابقتين">
-<div class="visual-hero-content">
-<span class="hero-badge">عرض خاص — وفر 40 ريال</span><h2 class="banner-slide-title">اشتراكان لمدة سنة<br><em>بـ200 ريال فقط.</em></h2>
-<p class="slide-summary">كودان منفصلان. اختر ستريم وستريم، إكستريم وإكستريم، أو واحدة من كل نوع.</p>
-<div class="hero-buttons"><a href="/store/offers" class="btn btn-primary">تفاصيل العرض ←</a></div>
-</div></div></div><div data-slide hidden><div class="visual-hero">
-<img class="visual-hero-art" src="/store/media/player.jpg" width="1600" height="640" loading="lazy" alt="تجربة BLOFY على شاشة حديثة">
-<div class="visual-hero-content"><span class="hero-badge">يوجد تجربة — حسب التوفر</span>
-<h2 class="banner-slide-title">جرّب الترفيه<br><em>على كيفك.</em></h2>
-<p class="slide-summary">تعرّف على BLOFY STREAM وXtream قبل اختيار اشتراكك.</p>
-<div class="hero-buttons"><a href="/store/trial" class="btn btn-primary">استفسر عن التجربة ←</a></div>
-</div></div></div><div class="banner-slider-controls" aria-label="التنقل بين بانرات BLOFY">
- <button type="button" data-prev-slide aria-label="البانر السابق">‹</button>
- <button type="button" data-slide-dot="0" aria-label="بانر STRONG 8K">●</button>
- <button type="button" data-slide-dot="1" aria-label="بانر عرض الاشتراكين">●</button>
- <button type="button" data-slide-dot="2" aria-label="بانر التجربة">●</button>
- <button type="button" data-next-slide aria-label="البانر التالي">›</button>
- </div></div>
-        <small class="disclaimer">الأرقام بحسب بيانات باقة STRONG 8K المعلنة وغير مدققة بشكل مستقل، وقد تتغير حسب المصدر وحقوق التوزيع. الرسم توضيحي وليس صورة من التطبيق؛ اسم 8K ليس ضمانًا لدقة عرض جميع الأعمال.</small>
+          <div class="market-slide" data-slide hidden>
+            <img class="market-slide-media" src="/store/media/bundle.svg" alt="عرض اشتراكين سنويين من BLOFY" width="1600" height="680" loading="lazy">
+            <div class="market-slide-shade" aria-hidden="true"></div>
+            <div class="market-slide-copy">
+              <span class="market-eyebrow">عرض محدود من BLOFY</span>
+              <h2 class="market-slide-heading">اشتراكان سنويان<br><em>بسعر 200 ريال</em></h2>
+              <p>كودان مستقلان لمدة سنة. وفّر 40 ريالًا مقارنةً بالسعر المعتاد للاشتراكين.</p>
+              <div class="market-hero-buttons"><a href="/store/offers" class="market-cta market-cta-primary">اطلب العرض <span aria-hidden="true">←</span></a></div>
+            </div>
+          </div>
+          <div class="market-slide" data-slide hidden>
+            <img class="market-slide-media" src="/store/media/player.jpg" alt="BLOFY PLAYER لتشغيل الاشتراكات" width="1600" height="640" loading="lazy">
+            <div class="market-slide-shade" aria-hidden="true"></div>
+            <div class="market-slide-copy">
+              <span class="market-eyebrow">اختر اللي يناسب جهازك</span>
+              <h2 class="market-slide-heading">باقتك جاهزة<br><em>بخطوات بسيطة.</em></h2>
+              <p>تعرف على BLOFY STREAM وBLOFY PLAYER، وقارن بين طرق الاشتراك والتفعيل.</p>
+              <div class="market-hero-buttons"><a href="#products" class="market-cta market-cta-primary">استعرض الباقات <span aria-hidden="true">←</span></a></div>
+            </div>
+          </div>
+          <div class="market-carousel-controls" aria-label="التنقل بين بانرات المتجر">
+            <button type="button" data-prev-slide aria-label="البانر السابق">‹</button>
+            <button type="button" data-slide-dot="0" aria-label="البانر الأول">●</button>
+            <button type="button" data-slide-dot="1" aria-label="البانر الثاني">●</button>
+            <button type="button" data-slide-dot="2" aria-label="البانر الثالث">●</button>
+            <button type="button" data-next-slide aria-label="البانر التالي">›</button>
+          </div>
+        </div>
+        <div class="market-side-promos">
+          <a class="market-promo market-promo-bright" href="/store/offers">
+            <span class="market-promo-label">عرض هذا الموسم</span><span class="market-promo-title">اثنين بسعر أوفر</span>
+            <span class="market-promo-price">200 <small>ر.س</small></span><span class="market-promo-action">اطلب الآن ↖</span>
+            <span class="market-promo-decor" aria-hidden="true">✳</span>
+          </a>
+          <a class="market-promo market-promo-muted" href="/store/trial">
+            <span class="market-promo-label">جديد على BLOFY؟</span>
+            <span class="market-promo-title">تعرّف على التجربة<br>قبل الاشتراك</span>
+            <span class="market-promo-action">اعرف التفاصيل ↖</span>
+            <span class="market-promo-orb" aria-hidden="true">B</span>
+          </a>
+        </div>
       </div>
     </section>
-    <section class="section offer-spotlight" id="offer" aria-labelledby="offer-heading"><div class="container">
+    <section class="market-service-strip" aria-label="مميزات الطلب"><div class="container market-service-grid">
+      <div><span class="market-service-icon" aria-hidden="true">✦</span><span><b>منتجات رقمية</b><small>باقات واستخدامات مختلفة</small></span></div>
+      <div><span class="market-service-icon" aria-hidden="true">▣</span><span><b>دفع آمن</b><small>عبر بوابة جيديا للبطاقات</small></span></div>
+      <div><span class="market-service-icon" aria-hidden="true">✓</span><span><b>حساب خاص لك</b><small>طلباتك وأكوادك في مكان واحد</small></span></div>
+      <div><span class="market-service-icon" aria-hidden="true">◉</span><span><b>دعم ومساعدة</b><small>تواصل معنا عبر واتساب</small></span></div>
+    </div></section>
+    <section class="market-categories section" id="categories" aria-labelledby="market-categories-title">
+      <div class="container">
+        <div class="market-section-heading"><div><span class="market-section-eyebrow">اختر القسم</span><h2 id="market-categories-title">تسوّق حسب احتياجك</h2></div><a href="#products">عرض كل المنتجات ←</a></div>
+        <div class="market-categories-grid">
+          <a href="/products/stream" class="market-category-tile"><span class="market-category-icon purple">▣</span><strong>BLOFY STREAM</strong><small>اشتراكات بالكود</small></a>
+          <a href="/products/xtream" class="market-category-tile"><span class="market-category-icon blue">▶</span><strong>BLOFY PLAYER</strong><small>اشتراكات Xtream</small></a>
+          <a href="/store/offers" class="market-category-tile"><span class="market-category-icon orange">✷</span><strong>العروض</strong><small>باقات بسعر أوفر</small></a>
+          <a href="/store/trial" class="market-category-tile"><span class="market-category-icon green">◇</span><strong>التجربة</strong><small>تعرّف قبل الشراء</small></a>
+        </div>
+      </div>
+    </section>
+    <section class="section offer-spotlight market-featured-offer" id="offer" aria-labelledby="offer-heading"><div class="container">
       <div class="offer-hero"><img src="/store/media/bundle.svg" width="1600" height="680" alt="شاشتان تعبران عن اشتراكين سنويين منفصلين" loading="lazy">
         <div class="offer-overlay"><span class="offer-kicker">✦ عرض BLOFY المميز</span><h2 id="offer-heading">اشتراكان لمدة سنة<br><em>بـ200 ريال فقط.</em></h2>
           <p>اختر اشتراكين سنويين بأي تركيبة: ستريم مع ستريم، إكستريم مع إكستريم، أو واحد من كل نوع.</p>
@@ -106,18 +170,19 @@
       <small class="disclaimer">كل كود مستقل ويبدأ احتساب مدته عند أول تفعيل. لا يتم إصدار كود واحد دون الثاني. يعتمد إتمام الشراء على توفر وسيلة الدفع والمصدر.</small>
     </div></section>
     <div class="container"><div class="divider"></div></div>
-    <section class="section" id="products" aria-labelledby="products-heading">
+    <section class="section market-products" id="products" aria-labelledby="products-heading">
       <div class="container">
         <div class="shop-head">
           <div>
             <span class="eyebrow">BLOFY PRODUCTS</span>
-            <h2 class="h2" id="products-heading">اشتراكك يبدأ من هنا</h2>
-            <p class="lead">نفس الباقة، بطريقتين للتفعيل. اختر الصورة اللي تناسبك، ثم الباقة والمدة.</p>
+            <h2 class="h2" id="products-heading">باقاتنا الأكثر طلبًا</h2>
+            <p class="lead">منتجات واضحة وأسعار معلنة. اختر الطريقة والمدة، والباقي عليك من السلة.</p>
           </div>
           <div class="pricing-ribbon" aria-label="قائمة أسعار الباقات">
             <span>3 أشهر <b>40 ر.س</b></span><span>6 أشهر <b>70 ر.س</b></span><span>سنة <b>120 ر.س</b></span>
           </div>
         </div>
+        <div id="market-search-feedback" class="market-search-feedback" role="status" aria-live="polite" hidden></div>
         <div class="shop-grid product-offers">
           <article class="product" id="stream-code" data-product-card="stream">
             <div class="product-stage stream"><a class="product-art-link" href="/products/stream" aria-label="تفاصيل اشتراك STRONG 8K عبر BLOFY STREAM"><img src="/store/media/strong8k.jpg" alt="صورة ترويجية لاشتراك BLOFY STREAM مع شاشة تطبيق" loading="lazy" width="1600" height="640"><span class="product-art-label">BLOFY STREAM</span></a></div>
@@ -155,7 +220,7 @@
         <small class="disclaimer">تبدأ مدة الاشتراك عند أول تفعيل ناجح للكود، بحسب شروط الخدمة. لا يتم إصدار كود مدفوع إلا بعد تأكيد الدفع من جهة المزود.</small>
       </div>
     </section>
-    <section class="section managed-products-section" id="shop-managed-products" aria-labelledby="managed-products-heading" hidden>
+    <section class="section managed-products-section market-featured-collection" id="shop-managed-products" aria-labelledby="managed-products-heading" hidden>
       <div class="container">
         <div class="shop-head"><div><span class="eyebrow">BLOFY COLLECTION</span>
           <h2 class="h2" id="managed-products-heading">منتجات مختارة لك</h2>
@@ -164,7 +229,7 @@
         <div class="managed-products-grid" id="shop-managed-grid"></div>
       </div>
     </section>
-    <section class="section image-features" id="features" aria-labelledby="features-heading">
+    <section class="section image-features market-feature-gallery" id="features" aria-labelledby="features-heading">
       <div class="container">
         <span class="eyebrow">BLOFY EXPERIENCE</span>
         <h2 class="h2" id="features-heading">شوف الفرق بعينك.</h2>
@@ -192,6 +257,23 @@
         <small class="disclaimer">المميزات بحسب إصدار التطبيق والجهاز. توفر المحتوى خاضع لصلاحيات المصدر وحقوق التوزيع.</small>
       </div>
     </section>
+        <section class="market-about section" id="about-blofy" aria-labelledby="market-about-title"><div class="container market-about-layout">
+      <div class="market-about-copy">
+        <span class="market-section-eyebrow">من نحن</span><h2 id="market-about-title" data-market-content="aboutTitle">BLOFY — اختيار أبسط لتجربتك الرقمية</h2>
+        <p data-market-content="aboutDescription">في BLOFY نركز على تسهيل اختيار الاشتراكات الرقمية وربطها بحساب واحد. نوفر واجهة عربية واضحة للمقارنة بين الباقات، وإتمام الطلب عبر بوابة دفع معروفة، ومتابعة الأكواد بعد تأكيد الدفع.</p>
+        <div class="market-about-list">
+          <div><span>01</span><b>اختر الاشتراك</b><small>تعرف على الفرق بين الباقات</small></div>
+          <div><span>02</span><b>أكمل الطلب</b><small>راجع السعر قبل الدفع</small></div>
+          <div><span>03</span><b>استرجع أكوادك</b><small>من حسابك عند تأكيد الدفع</small></div>
+        </div>
+        <a href="/store/about" class="market-cta market-cta-primary">اعرف أكثر عن BLOFY ←</a>
+      </div>
+      <div class="market-about-visual" aria-hidden="true">
+        <div class="market-visual-logo"><img src="/blofy-logo.png" alt="" width="110" height="110"><b>BLOFY</b><span>STREAM · PLAYER</span></div>
+        <div class="market-visual-float one">متجر رقمي مرتب ✦</div>
+        <div class="market-visual-float two">حسابك · طلباتك · أكوادك</div>
+      </div>
+    </div></section>
     <section class="section quick-steps" id="how-it-works" aria-labelledby="how-heading">
       <div class="container">
         <h2 id="how-heading" class="h2">اختَر. اشترِ. فعّل.</h2>
@@ -211,7 +293,7 @@
         <span class="eyebrow">FAQ</span><h2 class="h2" id="faq-heading">عندك سؤال؟ عندنا الجواب.</h2>
         <div class="faq">
           <details><summary>وش الفرق بين BLOFY STREAM وXtream؟</summary><p>BLOFY STREAM يعتمد الدخول بالكود مباشرة، أما Xtream فيتيح استخدام بيانات الاتصال مع BLOFY PLAYER والاستفادة من خيارات البحث والمفضلة والتنظيم حسب الإصدار.</p></details>
-          <details><summary>وش محتوى اشتراك STRONG 8K؟</summary><p>بحسب بيانات الباقة المعلنة: أكثر من 50 ألف قناة بث مباشر، وأكثر من 50 ألف مسلسل، وأكثر من 185 ألف فيلم. المحتوى قابل للتحديث ويختلف حسب المصدر وحقوق التوزيع.</p></details>
+          <details><summary>وش محتوى اشتراك STRONG 8K؟</summary><p>تختلف مكتبة القنوات والأفلام والمسلسلات حسب الباقة والمصدر والتراخيص المتاحة. راجع وصف الاشتراك وتأكد من توافقه مع جهازك قبل الشراء.</p></details>
           <details><summary>كم سعر الاشتراكات؟</summary><p>3 أشهر 40 ريال، 6 أشهر 70 ريال، سنة 120 ريال. تتأكد من المبلغ قبل إتمام الدفع.</p></details>
           <details><summary>هل فيه تجربة قبل الاشتراك؟</summary><p>يوجد خيار تجربة للاستفسار حسب التوفر. تواصل مع الفريق لمعرفة المدة والشروط.</p></details>
           <details><summary>وش يشمل عرض الاشتراكين السنويين؟</summary><p>كودان مستقلان لمدة سنة، بأي تركيبة من ستريم وإكستريم، مقابل 200 ريال بدل 240 ريال.</p></details>
@@ -219,6 +301,10 @@
         </div>
       </div>
     </section>
+    <section class="market-contact-band" aria-labelledby="market-contact-title"><div class="container market-contact-inner">
+      <div><span class="market-section-eyebrow">معك خطوة بخطوة</span><h2 id="market-contact-title">محتاج مساعدة قبل الطلب؟</h2><p>فريق BLOFY يساعدك تختار الباقة المناسبة ويفهمك طريقة التفعيل.</p></div>
+      <a class="market-cta market-cta-light" href="https://wa.me/966568941484" target="_blank" rel="noopener noreferrer">تواصل عبر واتساب ↖</a>
+    </div></section>
     <section class="container coupon-area" id="coupon-area"><div class="coupon-panel"><div><h2>معك كوبون خصم؟</h2><p>أدخل الكود وسيتم حساب خصمه قبل تأكيد عملية الدفع.</p></div><div class="coupon-input"><label for="store-coupon">كود الخصم</label><select id="coupon-sku" aria-label="الباقة التي تريد فحص الكوبون لها">
 <option value="bundle-2y">عرض الاشتراكين السنويين (200 ريال)</option>
 <option value="stream-3m">ستريم 3 أشهر (40 ريال)</option><option value="stream-6m">ستريم 6 أشهر (70 ريال)</option><option value="stream-1y">ستريم سنة (120 ريال)</option>
@@ -234,13 +320,34 @@
       <section id="bundle-receipt" class="receipt-section" hidden aria-live="polite"><h3>إيصال العرض السنوي</h3><p id="bundle-receipt-status">جارٍ التحقق من الدفع...</p><div id="bundle-receipt-codes" class="bundle-receipt-codes"></div><button type="button" class="btn btn-outline" id="bundle-recheck" hidden>تحقق مرة أخرى</button></section>
     </section>
   </main>
-  <footer class="footer">
-    <div class="container footer-inner">
-      <div><a class="brand" href="/"><img src="/blofy-logo.png" width="35" height="35" alt=""><span><strong>BLOFY</strong><small>STREAM  ·  XTREAM</small></span></a><p>تجربة أفضل، تبدأ من هنا. جميع الحقوق محفوظة لعلامة BLOFY.</p></div>
-      <div class="footer-links"><a href="/#products">المنتجات</a><a href="/store/trial">التجربة</a><a href="/store/offers">العروض</a><a href="/store/cart">السلة</a><a href="/store/orders">تتبع طلب</a><a href="/store/account">حسابي</a><a href="/store/about">من نحن</a><a href="/store/faq">الأسئلة</a><a href="/store/terms">الشروط</a><a href="/privacy">الخصوصية</a><a href="/store/contact">التواصل</a></div>
+  <footer class="market-footer" aria-label="معلومات متجر BLOFY">
+    <div class="container market-footer-main">
+      <div class="market-footer-brand">
+        <a href="/" class="brand market-brand" aria-label="BLOFY"><img src="/blofy-logo.png" alt="" width="48" height="48"><span><strong>BLOFY</strong><small>OFFICIAL STORE</small></span></a>
+        <p>متجر BLOFY للمنتجات والاشتراكات الرقمية. نساعدك تختار الباقة المناسبة وتتابع طلبك وأكوادك بكل وضوح.</p>
+        <div class="market-footer-social"><a href="https://wa.me/966568941484" target="_blank" rel="noopener noreferrer">واتساب</a><a href="https://x.com/i20au" target="_blank" rel="noopener noreferrer">X</a></div>
+      </div>
+      <div class="market-footer-column"><h3>تسوّق معنا</h3>
+        <a href="/#products">الاشتراكات</a><a href="/store/offers">العروض</a><a href="/products/stream">BLOFY STREAM</a><a href="/products/xtream">BLOFY PLAYER</a><a href="/store/cart">سلة الشراء</a></div>
+      <div class="market-footer-column"><h3>خدمة العملاء</h3>
+        <a href="/store/account">حسابي</a><a href="/store/orders">تتبع الطلب</a><a href="/store/trial">التجربة</a><a href="/store/faq">الأسئلة الشائعة</a><a href="/store/contact">مركز الدعم</a></div>
+      <div class="market-footer-column market-footer-contact"><h3>تواصل معنا</h3>
+        <span>واتساب وخدمة العملاء</span><a class="market-footer-phone" href="https://wa.me/966568941484" id="market-footer-phone" target="_blank" rel="noopener noreferrer" dir="ltr">+966 56 894 1484</a>
+        <span>متجر رقمي سعودي</span>
+        <a href="/store/about">نبذة عن BLOFY</a>
+        <a href="/store/terms">الشروط والأحكام</a><a href="/privacy">سياسة الخصوصية</a>
+      </div>
     </div>
+    <div class="container market-footer-payments" aria-label="وسائل الدفع المتاحة">
+      <span>طرق الدفع الإلكتروني عبر جيديا</span>
+      <div class="market-payment-logos"><span class="pay-mada" aria-label="مدى">مدى <small>mada</small></span><span class="pay-visa" aria-label="Visa">VISA</span><span class="pay-mastercard" aria-label="Mastercard"><i></i><i></i><b>mastercard</b></span></div>
+      <small>ظهور الوسيلة يعتمد على إعدادات البوابة والبطاقة المدعومة. لا تتضمن هذه الرموز ادعاء شراكة رسمية.</small>
+    </div>
+    <div class="market-footer-bottom"><div class="container">
+      <small>© 2026 BLOFY STORE — جميع الحقوق محفوظة.</small><span><a href="/store/terms">الشروط</a><a href="/privacy">الخصوصية</a><a href="/store/contact">التواصل</a></span>
+    </div></div>
   </footer>
-  <a class="whats-bubble" href="https://wa.me/966568941484" data-wa="general" target="_blank" rel="noopener noreferrer" aria-label="تواصل معنا على واتساب">
+  <a class="whats-bubble market-help-bubble" href="https://wa.me/966568941484" data-wa="general" target="_blank" rel="noopener noreferrer" aria-label="تواصل معنا على واتساب">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l2-5a9 9 0 1 1 4 3z" stroke-width="1.8"/><path d="M9 8l1 2c-1 1 2 4 4 4l2-1 1 2c-2 2-7-1-9-4-1-1-1-3 1-3" stroke-width="1.5"/></svg>مساعدة واتساب
   </a>
   <script>
@@ -263,7 +370,7 @@
    document.querySelectorAll('[data-wa]').forEach(function(link){
      var product=link.dataset.wa||'general',message=messages[product]||messages.general;
      if(product!=='general')message+=' المدة: '+selected(product)+'، السعر: '+amounts[selected(product)]+' ر.س. أرجو المساعدة.';
-     link.href='https://wa.me/966568941484?text='+encodeURIComponent(message);
+     link.href='https://wa.me/'+(window.BLOFY_MARKET_WHATSAPP||'966568941484')+'?text='+encodeURIComponent(message);
    });
    ['stream','xtream'].forEach(function(product){
       var dur=selected(product),price=amounts[dur],name=product+'-'+suffix[dur];
