@@ -92,3 +92,14 @@ section[aria-labelledby="readiness-title"],
 .one-inventory-alerts{border:1px solid #588c84;border-radius:12px;padding:12px 15px;margin:12px 0;background:#193e3d;color:#dffff6;line-height:1.8}
 .one-inventory-alerts:has(ul){border-color:#d6a64d;background:#46361b;color:#fff5d5}
 .one-inventory-alerts p{margin:0}.one-inventory-alerts ul{margin:4px 18px 0;padding:0}
+
+/* Read-only paid-order delivery integrity check is deliberately tucked under stock. */
+.one-fulfillment-audit{border:1px solid #496b79;border-radius:12px;background:#132d3b;padding:13px 16px;margin:18px 0;color:#dff7f6}
+.one-fulfillment-audit summary{cursor:pointer;font-weight:800;font-size:14px;padding:5px 0}
+.one-fulfillment-audit p,.one-fulfillment-audit small{line-height:1.8;color:#bed4db}
+.one-fulfillment-audit button{margin:10px 0}
+#one-fulfillment-status{padding:9px 0;font-size:13px;color:#c5eee5}
+.one-fulfillment-summary,.one-fulfillment-issues{border-radius:10px;padding:12px;margin:9px 0;border:1px solid #506f7a;background:#0e2735}
+.one-fulfillment-summary strong{color:#ccf5e9}
+.one-fulfillment-issues{border-color:#b39a5c}
+.one-fulfillment-issues ul{padding:0 20px 0 0;line-height:1.8;font-size:13px;overflow-wrap:anywhere}

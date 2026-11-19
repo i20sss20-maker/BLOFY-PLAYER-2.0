@@ -249,15 +249,19 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
      pool.query("SELECT sku,status,COUNT(*)::int AS orders,COALESCE(SUM(amount_minor),0)::bigint AS amount_minor FROM blofy_store_geidea_orders WHERE created_at >= NOW()-INTERVAL '90 days' GROUP BY sku,status ORDER BY sku,status"),
      pool.query("SELECT c.code,c.percent,c.max_uses,c.active,c.expires_at,COUNT(o.id) FILTER (WHERE o.status='paid')::int AS paid_uses FROM blofy_store_coupons c LEFT JOIN blofy_store_geidea_orders o ON o.coupon_code=c.code GROUP BY c.id,c.code,c.percent,c.max_uses,c.active,c.expires_at ORDER BY c.expires_at DESC LIMIT 100")
    ]);
+   // Summary is a quick, shallow paid-code link check, not a settlement audit.
+   // Renewals reuse an existing code, so voucher_id on the payment row is NULL
+   // by design. They must be checked against blofy_store_renewal_orders.
    const failures=(await pool.query(
      "SELECT COUNT(*)::int AS count FROM blofy_store_geidea_orders o "+
-     "WHERE o.status='paid' AND ("+
-     "(o.sku NOT IN ('bundle-2y','cart') AND o.voucher_id IS NULL) OR "+
+     "WHERE o.status='paid' AND o.created_at >= NOW()-INTERVAL '90 days' AND ("+
+     "(o.sku NOT IN ('bundle-2y','cart','renewal') AND o.voucher_id IS NULL) OR "+
+     "(o.sku='renewal' AND NOT EXISTS (SELECT 1 FROM blofy_store_renewal_orders r WHERE r.order_id=o.id)) OR "+
      "(o.sku='bundle-2y' AND (SELECT COUNT(*) FROM blofy_store_order_vouchers v WHERE v.order_id=o.id)<>2) OR "+
      "(o.sku='cart' AND NOT EXISTS (SELECT 1 FROM blofy_store_cart_vouchers v WHERE v.order_id=o.id)))"
    )).rows[0]?.count||0;
    return json(res,200,{ok:true,periodDays:90,sales:sales.rows,coupons:coupons.rows,
-     fulfillmentIssues:Number(failures)});
+     fulfillmentIssues:Number(failures),fulfillmentIssuesScope:'shallow_link_check_last_90_days'});
  }
  async function adminFulfillmentAudit(req,res){
    if(!authorizeAdmin(req,res))return;

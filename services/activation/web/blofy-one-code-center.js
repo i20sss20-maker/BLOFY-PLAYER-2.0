@@ -30,6 +30,16 @@
       <button id="one-inventory-import" type="button">استيراد الأكواد</button>
     </details>
     <p id="one-inventory-status" role="status" aria-live="polite"></p>
+    <details class="one-fulfillment-audit" id="one-fulfillment-audit">
+      <summary>🔎 فحص تسليم الأكواد للطلبات المدفوعة</summary>
+      <p>فحص قراءة فقط لسجلات الطلبات المدفوعة: عدد أكواد STREAM وXtream،
+       مطابقة الباقة والمدة، وسلامة الأكواد المحفوظة. لا يسحب أي مبلغ، ولا يصدر أو يفعّل اشتراكًا.</p>
+      <button type="button" id="one-fulfillment-check">فحص تسليم الطلبات الآن</button>
+      <div id="one-fulfillment-status" role="status" aria-live="polite">لم يُجرَ الفحص بعد.</div>
+      <div id="one-fulfillment-summary" class="one-fulfillment-summary" hidden></div>
+      <div id="one-fulfillment-issues" class="one-fulfillment-issues" hidden></div>
+      <small>يشمل آخر 90 يومًا، بحد أقصى 500 طلب مدفوع. نجاح السجلات ليس إثباتًا أن البنك سوّى المدفوعات فعلًا.</small>
+    </details>
     <a href="/admin/store-inventory">إدارة منتجات المتجر والبنرات والطلبات ←</a>`;
   const center=document.createElement('div');
   center.id='codes-center';
@@ -161,8 +171,8 @@
   const stockGrid=$('one-inventory-counts'),stockSku=$('one-inventory-sku');
   const stockStatus=$('one-inventory-status');
   let stockBusy=false,stockPlans=[];
-  async function stockFetch(path,body){
-    const ctl=new AbortController(),t=setTimeout(()=>ctl.abort(),15000);
+  async function stockFetch(path,body,timeoutMs=15000){
+    const ctl=new AbortController(),t=setTimeout(()=>ctl.abort(),timeoutMs);
     try{
       const response=await fetch(path,{method:body===undefined?'GET':'POST',
         credentials:'same-origin',cache:'no-store',
@@ -220,6 +230,75 @@
     }catch(e){$('one-inventory-alerts').textContent='تعذر تحميل تنبيهات المخزون.';stockStatus.textContent='فشل قراءة المخزون: '+e.message;}
   }
   $('one-inventory-refresh').addEventListener('click',()=>void loadStock());
+  // Explicit owner-initiated paid-order integrity audit. This is read-only.
+  // No customer plaintext credentials or voucher hashes are disclosed by the API.
+  let auditBusy=false;
+  const auditButton=$('one-fulfillment-check'),
+    auditStatus=$('one-fulfillment-status'),
+    auditSummary=$('one-fulfillment-summary'),
+    auditIssues=$('one-fulfillment-issues');
+  const issueReasons={
+    invalid_paid_order:'بيانات الطلب المدفوع غير متوافقة مع الباقة',
+    code_count_mismatch:'عدد الأكواد المسلّمة لا يطابق الطلب',
+    code_position_mismatch:'ترتيب الأكواد في الطلب غير صحيح',
+    code_product_mismatch:'نوع الباقة لا يطابق الكود',
+    code_channel_mismatch:'كود STREAM وXtream غير مطابقين لنوع المنتج',
+    code_duration_mismatch:'مدة الكود لا تطابق الباقة',
+    code_integrity_or_revocation:'الكود غير قابل للاسترجاع أو ملغي'
+  };
+  auditButton.addEventListener('click',async()=>{
+    if(auditBusy)return;
+    auditBusy=true;auditButton.disabled=true;
+    auditStatus.textContent='جارٍ فحص السجلات المدفوعة دون تغيير أي اشتراك…';
+    auditSummary.hidden=true;auditIssues.hidden=true;
+    auditSummary.replaceChildren();auditIssues.replaceChildren();
+    try{
+      const result=await stockFetch('/api/v1/admin/store/fulfillment-audit',undefined,45000);
+      if(result.ok!==true||!Number.isSafeInteger(Number(result.auditedOrders))||
+         !Number.isSafeInteger(Number(result.completeOrders))||
+         !Number.isSafeInteger(Number(result.issueOrders))||
+         Number(result.auditedOrders)!==Number(result.completeOrders)+Number(result.issueOrders))
+         throw Error('audit_result_invalid');
+      const audited=Number(result.auditedOrders),complete=Number(result.completeOrders),
+        issues=Number(result.issueOrders);
+      const title=document.createElement('strong');
+      title.textContent=issues
+        ?'⚠ يوجد '+issues+' طلب مدفوع يحتاج مراجعة'
+        :'✓ جميع الطلبات المشمولة اجتازت فحص تسليم الأكواد';
+      const stats=document.createElement('p');
+      stats.textContent='تم فحص '+audited+' طلب · سليم '+complete+' · يحتاج مراجعة '+issues;
+      auditSummary.append(title,stats);
+      if(result.truncated===true){
+        const warning=document.createElement('p');
+        warning.textContent='تنبيه: يوجد أكثر من 500 طلب؛ النتائج تخص أحدث 500 طلب فقط، وليست فحصًا شاملًا.';
+        auditSummary.append(warning);
+      }
+      auditSummary.hidden=false;
+      const rows=Array.isArray(result.issues)?result.issues:[];
+      if(rows.length){
+        const title2=document.createElement('strong');
+        title2.textContent='الطلبات التي تتطلب مراجعة (بحد أقصى 20):';
+        const list=document.createElement('ul');
+        for(const record of rows.slice(0,20)){
+          const row=document.createElement('li');
+          const order=String(record.orderNumber||record.orderId||'طلب غير محدد').slice(0,90);
+          const reason=issueReasons[String(record.reason)]||'فشل فحص سلامة الكود';
+          row.textContent=order+' — '+reason+' (متوقع '+Number(record.expectedCodes||0)+
+            '، موجود '+Number(record.deliveredCodes||0)+')';
+          list.append(row);
+        }
+        auditIssues.append(title2,list);
+        auditIssues.hidden=false;
+      }
+      auditStatus.textContent='انتهى فحص سلامة تسليم الأكواد. لا يثبت صحة تحصيل الدفع من البنك.';
+    }catch(error){
+      auditStatus.textContent='تعذر إكمال الفحص: '+error.message+
+        '. لا تحاول إصدار أكواد بديلة تلقائيًا؛ راجع الطلب من الإدارة.';
+    }finally{
+      auditBusy=false;auditButton.disabled=false;
+    }
+  });
+
   async function stockWrite(kind){
     if(stockBusy)return;
     const sku=stockSku.value;
