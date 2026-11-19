@@ -63,8 +63,8 @@ test('new code issue is still the validated explicit-confirm owner action, not a
   assert.match(operations,/sourceId:'d2bb0397-1c56-4751-adc9-1a17758022f6'/);
   assert.match(operations,/payload\.quantity<1\|\|payload\.quantity>20/);
   assert.match(operations,/\/api\/v1\/admin\/xtream-gateway\/codes/);
-  assert.match(operations,/window\.setTimeout\(hideIssued,90000\)/);
-  assert.match(operations,/document\.addEventListener\('visibilitychange'/);
+  assert.match(operations,/one-issue-hide'\)\.addEventListener\('click',hideIssued\)/);
+  assert.match(operations,/window\.addEventListener\('pagehide',hideIssued\)/);
   assert.doesNotMatch(modern,/issueForm\.requestSubmit\(/);
   assert.doesNotMatch(modern,/\/api\/v1\/stream\/redeem/);
 });
