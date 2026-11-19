@@ -52,3 +52,64 @@
 .branding-actions a{color:#aad7ff;border-bottom:1px solid #aad7ff;font-size:13px}
 #branding-status{display:block;min-height:24px;margin-top:15px;color:#bde3ff;font-size:13px}
 @media(max-width:690px){.branding-grid{grid-template-columns:1fr}.branding-grid .branding-full{grid-column:auto}.branding-panel{padding:19px}.branding-actions button{width:100%}}
+
+
+/* BLOFY commercial report: no third-party script or chart dependency. */
+.admin-merchandising,.commercial-reports{margin:33px 0 48px}
+.admin-merchandising .panel{padding:25px}
+.merchandising-layout{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.merchandising-banner{min-width:0;border:1px solid #45698c;border-radius:16px;padding:18px}
+.merchandising-banner legend,.merch-visibility legend{padding:0 8px;color:#c8e4ff;font-size:14px;font-weight:800}
+.merchandising-banner label{margin:11px 0 5px}
+.merchandising-banner textarea{resize:vertical;min-height:75px;text-align:right;direction:rtl}
+.merchandising-banner input[dir=ltr]{direction:ltr;text-align:left}
+.merch-checkbox{display:flex!important;align-items:center;gap:10px;flex-wrap:wrap;margin-top:20px!important}
+.merch-checkbox input,.merch-visibility input{accent-color:#6d9ffc;width:auto!important;min-width:18px;min-height:18px;padding:0!important}
+.merch-visibility{border:1px solid #45698c;padding:18px;border-radius:16px;margin-top:24px}
+.merch-visibility-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.merch-visibility-grid label{display:flex;align-items:center;gap:11px;margin:0;padding:11px;border:1px solid #395979;border-radius:12px;font-weight:600}
+.merch-visibility small{display:block;font-size:11px;color:#a9c6dd;margin-top:12px;line-height:1.8}
+.merch-actions{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:20px}
+.merch-actions button{width:auto;min-width:230px;margin:0}
+.merch-actions a{font-size:13px;color:#9bd4ff;border-bottom:1px solid currentColor}
+#merch-status{display:block;min-height:25px;font-size:12px;color:#b3e2ff;margin-top:12px}
+.commercial-reports .panel{padding:25px}
+.report-toolbar{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.report-toolbar label{margin:0}
+.report-toolbar select{margin-top:6px;min-width:150px}
+.report-toolbar button{width:auto;padding:11px 16px;min-height:44px}
+.commercial-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:22px 0 27px}
+.commercial-metric{background:#091a32;border:1px solid #40628a;border-radius:15px;padding:16px}
+.commercial-metric b{display:block;color:#c3dbf2;font-size:11px}
+.commercial-metric strong{display:block;margin:8px 0;color:#9dcdf9;font-size:clamp(20px,2.6vw,30px);overflow-wrap:anywhere}
+.commercial-metric small{display:block;font-size:10px;color:#9fb6d5}
+.report-chart-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.report-chart-head h3,.commercial-reports .panel>h3{font-size:16px;color:#e1f0ff;margin:15px 0 10px}
+.report-chart-head>span{font-size:11px;color:#a4c2df}
+.commercial-trend{display:flex;align-items:flex-end;gap:6px;overflow-x:auto;min-height:180px;padding:16px 6px 8px;border-bottom:1px solid #547399;background:#091b35;border-radius:12px 12px 0 0}
+.commercial-chart-day{display:flex;align-items:center;justify-content:end;flex-direction:column;gap:5px;flex:1 0 14px;min-width:14px;max-width:90px;min-height:158px}
+.commercial-chart-day span{font:400 9px Arial;color:#a5c8e9;transform:rotate(-30deg);margin-bottom:6px}
+.commercial-chart-bar{width:100%;min-width:7px;max-width:35px;background:linear-gradient(0deg,#5b72df,#88d2ef);border-radius:5px 5px 0 0}
+.commercial-chart-day:hover .commercial-chart-bar{background:linear-gradient(0deg,#7f4eec,#abf3ff)}
+.commercial-product-table{display:grid;gap:7px}
+.commercial-product-line{display:grid;grid-template-columns:1.4fr .6fr .65fr;gap:12px;align-items:center;background:#0b213b;border:1px solid #304f72;border-radius:11px;padding:12px}
+.commercial-product-line strong{font-size:12px;color:#e4f4ff}
+.commercial-product-line span{font-size:11px;color:#adc9e7}
+.commercial-product-line b{font-size:12px;color:#a1d9fa;text-align:left}
+.report-disclaimer{font-size:12px;line-height:2;color:#aec8e3}
+#commercial-notice{display:block;font-size:12px;margin-top:16px;color:#bce3ff;min-height:20px}
+@media(max-width:800px){
+ .merchandising-layout{grid-template-columns:1fr}
+ .merch-visibility-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .commercial-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:510px){
+ .merch-visibility-grid{grid-template-columns:1fr}
+ .commercial-metrics{gap:9px}
+ .commercial-metric{padding:12px}
+ .commercial-metric strong{font-size:21px}
+ .report-toolbar button{width:100%}
+ .commercial-product-line{grid-template-columns:1fr 1fr}
+ .commercial-product-line strong{grid-column:1/-1}
+ .commercial-product-line b{text-align:left}
+}
