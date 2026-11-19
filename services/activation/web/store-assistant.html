@@ -5,7 +5,7 @@
 <title>مساعد BLOFY | متجر BLOFY PLAYER</title>
 <link rel="icon" href="/blofy-logo.png">
 <link rel="stylesheet" href="/store/assistant.css?v=1">
-<script src="/store/assistant.js?v=2" defer></script>
+<script src="/store/assistant.js?v=3" defer></script>
 </head><body>
 <header><div class="wrap header-inner">
 <a class="brand" href="/"><img src="/blofy-logo.png" width="45" height="45" alt=""><span><strong>BLOFY</strong><small>STORE ASSISTANT</small></span></a>
@@ -13,16 +13,16 @@
 </div></header>
 <main class="wrap">
 <section class="hero"><span class="eyebrow">مساعدة فورية بدون انتظار</span><h1>وش تحتاج تعرف عن BLOFY؟</h1>
-<p>أساعدك تختار الباقة المناسبة، وأشرح خطوات الشراء والتفعيل والتجديد. الردود مبنية على معلومات المتجر المتاحة، وليست خدمة دردشة ذكاء اصطناعي أو موظف دعم مباشر.</p></section>
+<p>أساعدك تختار الباقة المناسبة وتفهم طريقة الطلب. الميزة التوليدية اختيارية عند تفعيلها، ومع تعذرها أرجع لدليل المتجر الموثوق. لا يمكنني إجراء دفعات أو الاطلاع على بيانات حسابك.</p></section>
 <div class="assistant-layout">
 <section class="conversation" aria-label="المحادثة">
-<div class="conversation-top"><span class="avatar" aria-hidden="true">✦</span><span><strong>مساعد BLOFY التفاعلي</strong><small>إرشادات المنتجات والطلبات</small></span></div>
+<div class="conversation-top"><span class="avatar" aria-hidden="true">✦</span><span><strong>مساعد BLOFY التفاعلي</strong><small id="assistant-mode" aria-live="polite">إرشادات المنتجات والطلبات</small></span></div>
 <div id="messages" class="messages" role="log" aria-live="polite" aria-relevant="additions">
 <div class="bubble agent"><b>مرحبًا 👋</b><p>أقدر أوضح لك الفرق بين ستريم وإكستريم، والأسعار، وكيف تسترجع أكوادك وتجدد اشتراكك.</p></div>
 </div>
 <form id="assistant-form" class="message-form" autocomplete="off">
 <label for="assistant-question" class="sr-only">اكتب سؤالك</label>
-<input id="assistant-question" maxlength="400" placeholder="مثل: كم سعر اشتراك السنة؟" required>
+<input id="assistant-question" maxlength="380" placeholder="مثل: كم سعر اشتراك السنة؟" required>
 <button type="submit">إرسال ←</button>
 </form></section>
 <aside class="suggestions" aria-labelledby="suggestions-title">
@@ -39,6 +39,6 @@
 <a href="/store/contact" class="contact">تواصل مع الدعم ↗</a>
 <a href="/store/orders" class="secondary">تتبع طلبك</a></div></aside>
 </div>
-<p class="footer-note">لا تشارك رقم بطاقتك أو كلمة مرور حسابك أو رمز التحقق في أي محادثة. المساعد لا يطلع على طلباتك الخاصة؛ لعرضها سجّل الدخول إلى حسابك.</p>
+<p class="footer-note">لا تشارك رقم بطاقتك أو بريدك أو كلمة المرور أو رمز التحقق. عند تفعيل الميزة التوليدية يُرسل نص السؤال فقط إلى مزود ذكاء اصطناعي خارجي لتكوين الرد، دون بيانات حسابك أو أكوادك. لمتابعة طلباتك الخاصة سجّل الدخول إلى حسابك.</p>
 </main><footer>© 2026 BLOFY STORE <a href="/store/terms">الشروط</a><a href="/privacy">الخصوصية</a></footer>
 </body></html>

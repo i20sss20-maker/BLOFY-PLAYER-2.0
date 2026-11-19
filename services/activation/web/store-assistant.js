@@ -2,7 +2,10 @@
 (function(){
  const form=document.getElementById('assistant-form'),
    input=document.getElementById('assistant-question'),
-   log=document.getElementById('messages');
+   log=document.getElementById('messages'),
+   modeLabel=document.getElementById('assistant-mode'),
+   sendButton=form?.querySelector('button[type="submit"]');
+ let generative=false,busy=false;
  const normalize=s=>String(s||'').normalize('NFKC').toLowerCase()
    .replace(/[ًٌٍَُِّْ]/g,'').replace(/[إأآٱ]/g,'ا')
    .replace(/ى/g,'ي').replace(/[^\p{L}\p{N}]+/gu,' ').trim();
@@ -70,14 +73,57 @@
   if(found?.pricing)return {...found,text:pricingAnswer()};
   return found||{text:'أقدر أساعدك في الأسعار، واختيار STREAM أو Xtream، وخطوات الطلب، والدخول وتجديد الاشتراك. جرّب صياغة أخرى أو تواصل مع موظف الدعم.',links:[['الدعم','/store/contact']]};
  }
- function submit(question){
-  question=String(question||'').trim().slice(0,400);if(!question)return;
-  add(question,true);
-  const result=answer(question);add(result.text,false,result.links||[]);
-  input.value='';input.focus();
+ // Generative mode is optional and never receives account, session or cart data.
+ // Prices, payment, refunds and credentials always use locally verified guidance.
+ const guardedQuestion=q=>/سعر|اسعار|كم|خصم|دفع|مدى|فيزا|ماستر|apple|google|ابل|بطاقة|استرجاع|فلوس|بريد|رمز|تحقق|شراء|طلب|اكواد|كود|تجديد|ينتهي/i.test(normalize(q));
+ async function loadMode(){
+  try{
+   const response=await fetch('/api/v1/store/assistant/availability',{
+    credentials:'omit',cache:'no-store',headers:{accept:'application/json'}
+   });
+   if(!response.ok)return;
+   const data=await response.json();
+   generative=data?.enabled===true&&data?.mode==='generative';
+   if(modeLabel)modeLabel.textContent=generative?'اقتراحات توليدية اختيارية · بدون بيانات حسابك':'إرشادات المتجر الموثوقة';
+  }catch(_){generative=false;}
  }
- form.addEventListener('submit',e=>{e.preventDefault();submit(input.value);});
+ async function generate(question){
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),10500);
+  try{
+   const response=await fetch('/api/v1/store/assistant/chat',{
+    method:'POST',credentials:'omit',cache:'no-store',
+    headers:{'content-type':'application/json',accept:'application/json'},
+    body:JSON.stringify({question}),signal:controller.signal
+   });
+   if(!response.ok)throw Error('assistant_unavailable');
+   const payload=await response.json();
+   if(payload?.mode!=='generative'||typeof payload.reply!=='string'||payload.reply.length<2)
+    throw Error('assistant_invalid_reply');
+   return payload.reply.slice(0,1100);
+  }finally{clearTimeout(timer);}
+ }
+ async function submit(question){
+  question=String(question||'').trim().slice(0,380);if(!question||busy)return;
+  busy=true;if(sendButton)sendButton.disabled=true;
+  add(question,true);input.value='';
+  try{
+   const guided=answer(question);
+   if(generative&&!guardedQuestion(question)&&!guided.text.startsWith('لأمانك')){
+    try{
+     const reply=await generate(question);
+     add(reply,false,[['شوف الباقات','/#products'],['تواصل مع الدعم','/store/contact']]);
+     return;
+    }catch(_){ /* Fall back to verified store help without implying live AI succeeded. */ }
+   }
+   add(guided.text,false,guided.links||[]);
+  }finally{
+   busy=false;if(sendButton)sendButton.disabled=false;input.focus();
+  }
+ }
+ void loadMode();
+ form.addEventListener('submit',e=>{e.preventDefault();void submit(input.value);});
  for(const b of document.querySelectorAll('[data-question]')){
-  b.addEventListener('click',()=>submit(b.dataset.question));
+  b.addEventListener('click',()=>{void submit(b.dataset.question);});
  }
 })();

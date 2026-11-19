@@ -73,7 +73,7 @@ test('store assistant is supported by consent-only analytics and never emits pri
  assert.match(guide,/livePricing/);
  assert.match(guide,/تعذّر التحقق من أسعار الباقات لحظيًا/);
  assert.doesNotMatch(guide,/ثلاثة أشهر بـ40|سنة بـ120|اشتراكين سنويين بسعر 200/);
- assert.match(read('../web/store-assistant.html'),/assistant\.js\?v=2/);
+ assert.match(read('../web/store-assistant.html'),/assistant\.js\?v=3/);
  const script=read('../src/server.mjs');
  assert.match(script,/withPublicAnalytics\(raw\.toString\('utf8'\)\)/);
  assert.match(script,/PUBLIC_ANALYTICS_CSP/);
