@@ -142,8 +142,18 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
  async function inventorySummary(req,res){
    if(!authorizeAdmin(req,res))return;
    await schema();
-   const totals=(await pool.query('SELECT sku,COUNT(*)::int AS total,COUNT(*) FILTER (WHERE sold_at IS NULL)::int AS available,'+
-      'COUNT(*) FILTER (WHERE sold_at IS NOT NULL)::int AS sold FROM blofy_store_inventory GROUP BY sku ORDER BY sku')).rows;
+   // Available must match what fulfillment is allowed to sell.
+   const totals=(await pool.query(
+    'SELECT i.sku,COUNT(*)::int AS total,'+
+    'COUNT(*) FILTER (WHERE i.sold_at IS NULL AND i.sold_order_id IS NULL '+
+    'AND v.sold_at IS NULL AND v.redeemed_at IS NULL AND v.revoked_at IS NULL '+
+    'AND v.account_id IS NULL AND v.code_vault IS NOT NULL)::int AS available,'+
+    'COUNT(*) FILTER (WHERE i.sold_at IS NOT NULL OR i.sold_order_id IS NOT NULL)::int AS sold,'+
+    'COUNT(*) FILTER (WHERE i.sold_at IS NULL AND i.sold_order_id IS NULL AND '+
+    '(v.sold_at IS NOT NULL OR v.redeemed_at IS NOT NULL OR v.revoked_at IS NOT NULL '+
+    'OR v.account_id IS NOT NULL OR v.code_vault IS NULL))::int AS blocked '+
+    'FROM blofy_store_inventory i JOIN blofy_xtream_gateway_duration_codes v '+
+    'ON v.id=i.voucher_id GROUP BY i.sku ORDER BY i.sku')).rows;
    return json(res,200,{ok:true,products:publicStorePlans(),counts:totals});
  }
  async function importInventory(req,res){

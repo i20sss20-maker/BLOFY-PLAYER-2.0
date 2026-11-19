@@ -4,6 +4,8 @@ import crypto from 'node:crypto';
 import {createFixedWindowLimiter,requestClientKey} from './auth-protection.mjs';
 import {parseStoreCart,cartVouchers,publicOrderNumber} from './store-cart.mjs';
 import {decryptStreamCode} from './xtream-code-vault.mjs';
+import {decryptGatewayAccountPassword} from './xtream-account-vault.mjs';
+import {normalizeXtreamPublicOrigin} from './xtream-public-origin.mjs';
 import {streamCodeProof} from './xtream-duration-codes.mjs';
 import {createCustomerReminderEngine} from './store-customer-reminders.mjs';
 import {buildStorePaymentReceipt,createStoreReceiptEmailEngine} from './store-order-receipts.mjs';
@@ -20,6 +22,8 @@ const ORIGINS=new Set(['https://blofyplayer.com','https://www.blofyplayer.com','
 const maxRequests=createFixedWindowLimiter({limit:5,windowMs:600000});
 const maxVerifies=createFixedWindowLimiter({limit:12,windowMs:600000});
 const maxClaims=createFixedWindowLimiter({limit:20,windowMs:600000});
+// Verified email + paid-order ownership is required for all password recovery.
+const maxReveals=createFixedWindowLimiter({limit:10,windowMs:600000});
 const sha=s=>crypto.createHash('sha256').update(s).digest('hex');
 const equal=(a,b)=>/^[a-f0-9]{64}$/.test(String(a||''))&&/^[a-f0-9]{64}$/.test(String(b||''))&&
   crypto.timingSafeEqual(Buffer.from(a,'hex'),Buffer.from(b,'hex'));
@@ -401,6 +405,50 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
    return json(res,200,{ok:true,orderId:row.id});
   }catch(e){await db.query('ROLLBACK').catch(()=>{});throw e;}finally{db.release();}
  }
+ // One controlled credential reveal for an ACTIVE, already redeemed Xtream
+ // voucher belonging to an authenticated, paid-order customer. No issuance.
+ async function ownedXtreamCredentials(req,res,id){
+  if(!UUID.test(id||''))return json(res,400,{error:'invalid_voucher_id'});
+  const customer=await current(req);
+  if(!customer)return json(res,401,{error:'login_required'});
+  if(!maxReveals.consume(requestClientKey(req)+':'+customer.id).allowed)
+   return json(res,429,{error:'credential_reveal_rate_limited'});
+  const body=await readJson(req);
+  if(body?.acknowledge!==true)
+   return json(res,400,{error:'credential_reveal_confirmation_required'});
+  const origin=normalizeXtreamPublicOrigin(env.BLOFY_XTREAM_PUBLIC_ORIGIN);
+  if(!origin)return json(res,503,{error:'xtream_host_not_ready'});
+  const row=(await pool.query(
+    'SELECT v.id,v.code_channel,v.redeemed_at,v.expires_at,v.revoked_at,v.account_id,'+
+    'a.id AS account_identity,a.username,a.credential_vault,a.enabled,a.expires_at AS account_expiry '+
+    'FROM blofy_xtream_gateway_duration_codes v '+
+    'LEFT JOIN blofy_xtream_gateway_accounts a ON a.id=v.account_id '+
+    'WHERE v.id=$2 AND EXISTS (SELECT 1 FROM ('+PAID_OWNED_VOUCHERS_SQL+
+    ') owned WHERE owned.voucher_id=v.id) LIMIT 1',[customer.id,id])).rows[0];
+  if(!row)return json(res,404,{error:'owned_subscription_not_found'});
+  if(row.code_channel!=='xtream')
+   return json(res,409,{error:'not_an_xtream_subscription'});
+  if(!row.redeemed_at||!row.account_id)
+   return json(res,409,{error:'activate_xtream_first'});
+  const voucherExpiry=new Date(row.expires_at).getTime();
+  const accountExpiry=new Date(row.account_expiry).getTime();
+  if(row.revoked_at||row.enabled!==true||row.account_identity!==row.account_id||
+     !Number.isFinite(voucherExpiry)||!Number.isFinite(accountExpiry)||
+     Math.min(voucherExpiry,accountExpiry)<=Date.now())
+   return json(res,409,{error:'subscription_expired_or_disabled'});
+  const password=decryptGatewayAccountPassword(row.account_id,row.credential_vault,keyHex);
+  if(!password||!row.username)
+   return json(res,409,{error:'credential_not_recoverable'});
+  const query=new URLSearchParams({
+   username:row.username,password,type:'m3u_plus',output:'ts'
+  });
+  return json(res,200,{ok:true,subscriptionUnchanged:true,
+   credentials:{serverUrl:origin,port:443,username:row.username,password,
+    m3uUrl:origin+'/get.php?'+query.toString()},
+   expiresAt:new Date(Math.min(voucherExpiry,accountExpiry)).toISOString()},
+   {'cache-control':'no-store, private','pragma':'no-cache',
+    'referrer-policy':'no-referrer','x-content-type-options':'nosniff'});
+ }
  async function paymentReceipt(req,res,id){
   const customer=await current(req);
   if(!customer)return json(res,401,{error:'login_required'});
@@ -550,6 +598,8 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
    else if(path==='/api/v1/store/account'&&req.method==='GET')await account(req,res);
    else if(path==='/api/v1/store/account/alerts'&&req.method==='GET')await alerts(req,res);
    else if(path==='/api/v1/store/account/subscriptions'&&req.method==='GET')await subscriptions(req,res);
+   else if(/^\/api\/v1\/store\/account\/subscriptions\/[a-fA-F0-9-]{36}\/xtream$/.test(path)&&req.method==='POST')
+    await ownedXtreamCredentials(req,res,path.split('/').at(-2));
    else if(/^\/api\/v1\/store\/account\/orders\/[a-fA-F0-9-]{36}\/payment-receipt$/.test(path)&&req.method==='GET')
      await paymentReceipt(req,res,path.split('/').at(-2));
    else if(/^\/api\/v1\/store\/account\/orders\/[a-fA-F0-9-]{36}\/check$/.test(path)&&req.method==='POST')

@@ -11,12 +11,18 @@
  const node=(tag,value)=>{const n=document.createElement(tag);if(value!==undefined)n.textContent=value;return n;};
  const money=n=>(Number(n)/100).toLocaleString('ar-SA')+' ر.س';
  let orders=[],receiptTimer=null,receiptGeneration=0,returnChecked=false,paymentReceiptGeneration=0;
+ let privateLogin=null,privateLoginTimer=null;
+ function hidePrivateLogin(){
+  if(privateLoginTimer!==null)clearTimeout(privateLoginTimer);
+  privateLoginTimer=null;privateLogin?.remove();privateLogin=null;
+ }
  function clearPaymentReceipt(){
   paymentReceiptGeneration++;
   $('payment-receipt').hidden=true;
   $('payment-receipt-details').replaceChildren();
  }
  function clearReceipt(){
+  hidePrivateLogin();
   receiptGeneration++;
   if(receiptTimer!==null){clearTimeout(receiptTimer);receiptTimer=null;}
   $('receipt').hidden=true;
@@ -207,6 +213,38 @@
    tell(statusMessage(e));
   }finally{button.disabled=false;}
  }
+ async function revealOwnedXtream(voucherId,article,trigger){
+  if(!uuid.test(voucherId))return;
+  if(!confirm('عرض بيانات Xtream الخاصة باشتراكك؟ لا تشارك كلمة المرور أو رابط M3U مع أحد.'))return;
+  hidePrivateLogin();trigger.disabled=true;
+  try{
+   const payload=await api('/subscriptions/'+voucherId+'/xtream',{acknowledge:true});
+   const c=payload.credentials||{};
+   if(!payload.ok||!payload.subscriptionUnchanged||!c.serverUrl||!c.username||!c.password||!c.m3uUrl)
+    throw Error('credential_not_recoverable');
+   const secret=node('div');secret.className='code-card';
+   for(const [name,value] of [['Host',c.serverUrl],['Port','443'],['Username',c.username],
+     ['Password',c.password],['M3U',c.m3uUrl]]){
+    const nameNode=node('small',name),text=node('code',String(value));
+    text.setAttribute('dir','ltr');secret.append(nameNode,text);
+   }
+   const copy=node('button','نسخ جميع بيانات Xtream');copy.className='secondary';copy.type='button';
+   copy.addEventListener('click',async()=>{
+    try{
+     await navigator.clipboard.writeText('Host: '+c.serverUrl+
+      '\nPort: 443\nUsername: '+c.username+
+      '\nPassword: '+c.password+'\nM3U: '+c.m3uUrl);
+     copy.textContent='تم النسخ ✓';
+    }catch{copy.textContent='تعذر النسخ';}
+   });
+   const hide=node('button','إخفاء البيانات');hide.className='secondary';hide.type='button';
+   hide.addEventListener('click',hidePrivateLogin);
+   secret.append(copy,hide);article.append(secret);
+   privateLogin=secret;privateLoginTimer=setTimeout(hidePrivateLogin,90000);
+   tell('هذه بيانات اشتراكك الفعّال؛ تاريخ الانتهاء لم يتغير.');
+  }catch(e){tell(statusMessage(e));}
+  finally{trigger.disabled=false;}
+ }
  async function loadSubscriptions(){
   const box=$('subscriptions');
   box.replaceChildren();
@@ -227,6 +265,21 @@
       s.reason==='revoked'?'الكود ملغى وغير قابل للتجديد':
       'هذا الاشتراك يحتاج مراجعة مع الدعم قبل التجديد');
     article.append(status);
+    const actions=node('div');actions.className='actions';
+    if(s.channel==='xtream'){
+     if(!s.redeemed&&s.reason!=='revoked'){
+      const redeem=node('a','تفعيل واستخراج Xtream');
+      redeem.href='/redeem';redeem.className='primary';actions.append(redeem);
+     }else if(s.redeemed&&s.expiresAt&&Date.parse(s.expiresAt)>Date.now()&&s.reason!=='revoked'){
+      const restore=node('button','عرض بيانات Xtream');restore.type='button';
+      restore.className='secondary';
+      restore.addEventListener('click',()=>void revealOwnedXtream(s.voucherId,article,restore));
+      actions.append(restore);
+     }
+    }else if(s.channel==='app'&&!s.redeemed){
+     actions.append(node('small','أدخل الكود داخل تطبيق BLOFY STREAM لبدء مدة الاشتراك.'));
+    }
+    if(actions.childNodes.length)article.append(actions);
     if(s.canRenew){
      const controls=node('div');controls.className='actions';
      const select=node('select');
@@ -436,9 +489,9 @@
  $('payment-receipt-print').addEventListener('click',()=>{if(!$('payment-receipt').hidden)window.print();});
  $('close-receipt').addEventListener('click',clearReceipt);
  document.addEventListener('visibilitychange',()=>{
-  if(document.visibilityState==='hidden'){clearReceipt();clearPaymentReceipt();}
+  if(document.visibilityState==='hidden'){clearReceipt();clearPaymentReceipt();hidePrivateLogin();}
  });
- window.addEventListener('pagehide',()=>{clearReceipt();clearPaymentReceipt();});
+ window.addEventListener('pagehide',()=>{clearReceipt();clearPaymentReceipt();hidePrivateLogin();});
  if(returnToCart)$('checkout-return').hidden=false;
  // An existing guest token can be transported in the URL fragment, never the server logs.
  const params=new URLSearchParams(location.hash.replace(/^#/,''));
