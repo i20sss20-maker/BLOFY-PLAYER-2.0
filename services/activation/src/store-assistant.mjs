@@ -1,7 +1,7 @@
 // BLOFY website guide with an optional (disabled-by-default) OpenAI Responses API integration.
 // Strictly public catalogue information: never submit codes, payment data, orders or customer details.
 const HELP=Object.freeze([
- {test:/تجديد|انته|renew|expiry/i,answer:'يمكنك متابعة اشتراكاتك وتجديد الكود نفسه، إن كان مؤهلًا، من صفحة حسابك بعد تأكيد البريد. لا تحتاج إلى دفع جديد إذا كان لديك طلب معلق.',url:'/store/account',label:'اشتراكاتي والتجديد'},
+ {test:/تجديد|جدد|اجدد|أجدد|انته|renew|expiry/i,answer:'يمكنك متابعة اشتراكاتك وتجديد الكود نفسه، إن كان مؤهلًا، من صفحة حسابك بعد تأكيد البريد. لا تحتاج إلى دفع جديد إذا كان لديك طلب معلق.',url:'/store/account',label:'اشتراكاتي والتجديد'},
  {test:/سلة|شراء|دفع|payment|checkout|خصم|كوبون/i,answer:'اختر الباقة والمدة، أضفها إلى السلة ثم أكّد بريدك. تدفع ببطاقات مدى أو Visa أو Mastercard عبر بوابة جيديا. تأكد من حالة الطلب قبل أي إعادة دفع.',url:'/store/cart',label:'افتح السلة'},
  {test:/ابل|apple\s*pay|google\s*pay|جوجل\s*باي/i,answer:'وسائل الدفع بالمحافظ قد تتغير، ولا نعرض أي محفظة قبل اختبارها بنجاح. يمكنك الاطلاع على وسائل الدفع المتاحة حاليًا داخل بوابة جيديا عند إتمام الطلب.',url:'/store/cart',label:'وسائل الدفع الحالية'},
  {test:/اكستريم|xtream|player|بلاير|شاشة|اندرويد|android|ويندوز|windows/i,answer:'BLOFY PLAYER يعرض لك الاشتراكات المناسبة لطريقة تشغيل Xtream. تحقّق من دعم جهازك وطريقة التفعيل قبل الشراء، ويمكن للدعم مساعدتك في اختيار النسخة.',url:'/products/xtream',label:'باقات BLOFY PLAYER'},
