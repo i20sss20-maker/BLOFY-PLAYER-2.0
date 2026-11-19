@@ -109,7 +109,7 @@
     else if(!id)show('one-issue');
     else wipe(selected);
   }
-  addEventListener('hashchange',sync);sync();
+  addEventListener('hashchange',sync);
 
   // Replace competing code destinations with one obvious menu entry.
   const nav=$('one-nav');
@@ -261,4 +261,6 @@
       :'BLOFY STREAM: سلّم الكود للعميل ليدخله في التطبيق. المدة تبدأ عند أول تفعيل.';
   }
   type?.addEventListener('change',describeType);describeType();
+  // Initialize after inventory consts and listeners exist (deep-linked #one-inventory).
+  sync();
 })();
