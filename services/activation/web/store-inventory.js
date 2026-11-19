@@ -152,6 +152,36 @@ brandingForm?.addEventListener('submit',async event=>{
 });
 void loadBranding().catch(e=>{brandingStatus.textContent='تعذر تحميل إعدادات الموقع: '+e.message;});
 
+// Owner-only retention summary. Never collect or display emails, cart contents or private codes.
+async function loadRetention(){
+ const btn=$('retention-refresh');if(btn)btn.disabled=true;
+ const msg=$('retention-status');msg.textContent='جارٍ تحديث بيانات العملاء...';
+ try{
+  const data=await request('/api/v1/admin/store/retention');
+  if(data.ok!==true)throw Error('retention_report_unconfirmed');
+  const metrics=[
+    ['إجمالي العملاء',data.customers.total,'حسابات مسجلة'],
+    ['العملاء الجدد',data.customers.new30Days,'خلال آخر 30 يومًا'],
+    ['الموافقون على التنبيهات',data.customers.marketingOptIn,'موافقة تنبيهات الاشتراك، ليست موافقة تلقائية على الإعلانات'],
+    ['سلات محفوظة',data.savedCarts.total,'جميع السلات الحالية غير الفارغة'],
+    ['سلات محدثة خلال أسبوع',data.savedCarts.changedLast7Days,'لا يعني بالضرورة أنها متروكة'],
+    ['طلبات تجديد مدفوعة',data.renewals.paid30Days,'من '+data.renewals.attempts30Days+' محاولة تجديد']
+  ];
+  const root=$('retention-metrics');root.replaceChildren();
+  for(const [label,number,hint] of metrics){
+    const item=document.createElement('article');item.className='retention-metric';
+    const title=document.createElement('span');title.textContent=label;
+    const value=document.createElement('strong');value.textContent=Number(number||0).toLocaleString('ar-SA');
+    const note=document.createElement('small');note.textContent=hint;
+    item.append(title,value,note);root.append(item);
+  }
+  msg.textContent='✓ البيانات محدثة. تذكيرات الانتهاء يرسلها نظام الاشتراكات الحالي عند السماح بذلك؛ التسويق منفصل.';
+ }catch(e){msg.textContent='تعذر تحميل إحصاءات الاحتفاظ: '+e.message;}
+ finally{if(btn)btn.disabled=false;}
+}
+$('retention-refresh')?.addEventListener('click',()=>void loadRetention());
+void loadRetention();
+
 const merchSlideFields=['title','highlight','description','imageUrl','href','cta','active'];
 const merchSectionKeys=['categories','offers','featured','about','questions'];
 const merchForm=$('merchandising-form'),merchStatus=$('merch-status'),merchSave=$('merch-save');
