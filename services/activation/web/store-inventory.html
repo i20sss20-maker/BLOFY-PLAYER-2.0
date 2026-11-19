@@ -2,6 +2,60 @@
 <link rel="stylesheet" href="/store/visual.css?v=20261119-2"><script src="/admin/store-inventory/app.js" defer></script></head><body data-blofy-store-admin="1">
 <header><a href="/one" class="logo"><img src="/blofy-logo.png" alt=""> BLOFY <b>ONE</b></a><nav><a href="/one">لوحة الإدارة</a><a href="/admin/visitors">إحصائيات الزوار</a><a href="/admin">إدارة العملاء</a><a href="/" target="_blank" rel="noopener">زيارة المتجر</a></nav></header>
 <main><div class="intro"><span>STORE OPERATIONS</span><h1>إدارة متجر BLOFY</h1><p>تحكّم في البنرات والألوان والنبذة ومنتجات المتجر، وراجع الطلبات والمبيعات والأكواد والكوبونات من مكان واحد.</p></div>
+<section class="admin-merchandising" id="merchandising-admin" aria-labelledby="merchandising-heading">
+  <div class="intro"><span>VISUAL MERCHANDISING</span><h2 id="merchandising-heading">إدارة البنرات وأقسام الواجهة</h2>
+   <p>تحكم في البانرين الثاني والثالث وصورهما وروابطهما، وحدد الأقسام الظاهرة للزوار. البانر الأول موجود في إعدادات هوية المتجر أعلاه.</p></div>
+  <form id="merchandising-form" class="panel">
+   <div class="merchandising-layout">
+    <fieldset class="merchandising-banner" data-editor-slide="0">
+     <legend>البانر الثاني — العرض الترويجي</legend>
+     <label for="merch-slide-0-title">عنوان البانر</label><input id="merch-slide-0-title" type="text" maxlength="55" required>
+     <label for="merch-slide-0-highlight">عبارة مميزة</label><input id="merch-slide-0-highlight" type="text" maxlength="55" required>
+     <label for="merch-slide-0-description">الوصف</label><textarea id="merch-slide-0-description" maxlength="240" rows="2" required></textarea>
+     <label for="merch-slide-0-imageUrl">صورة البانر HTTPS أو صورة من المتجر</label>
+     <input id="merch-slide-0-imageUrl" type="text" maxlength="700" dir="ltr" required>
+     <label for="merch-slide-0-cta">نص الزر</label><input id="merch-slide-0-cta" maxlength="40" required>
+     <label for="merch-slide-0-href">وجهة الزر</label><select id="merch-slide-0-href">
+      <option value="/store/offers">صفحة العروض</option><option value="/#products">الاشتراكات</option>
+      <option value="/store/trial">التجربة</option><option value="/store/cart">السلة</option>
+      <option value="/products/stream">منتج ستريم</option><option value="/products/xtream">منتج بلاير</option>
+      <option value="/store/contact">مركز الدعم</option><option value="/#categories">التصنيفات</option>
+     </select>
+     <label class="merch-checkbox" for="merch-slide-0-active"><input id="merch-slide-0-active" type="checkbox"> إظهار هذا البانر</label>
+    </fieldset>
+    <fieldset class="merchandising-banner" data-editor-slide="1">
+     <legend>البانر الثالث — تعريف بالمنتجات</legend>
+     <label for="merch-slide-1-title">عنوان البانر</label><input id="merch-slide-1-title" type="text" maxlength="55" required>
+     <label for="merch-slide-1-highlight">عبارة مميزة</label><input id="merch-slide-1-highlight" type="text" maxlength="55" required>
+     <label for="merch-slide-1-description">الوصف</label><textarea id="merch-slide-1-description" maxlength="240" rows="2" required></textarea>
+     <label for="merch-slide-1-imageUrl">صورة البانر HTTPS أو صورة من المتجر</label>
+     <input id="merch-slide-1-imageUrl" type="text" maxlength="700" dir="ltr" required>
+     <label for="merch-slide-1-cta">نص الزر</label><input id="merch-slide-1-cta" maxlength="40" required>
+     <label for="merch-slide-1-href">وجهة الزر</label><select id="merch-slide-1-href">
+      <option value="/#products">الاشتراكات</option><option value="/store/offers">صفحة العروض</option>
+      <option value="/store/trial">التجربة</option><option value="/store/cart">السلة</option>
+      <option value="/products/stream">منتج ستريم</option><option value="/products/xtream">منتج بلاير</option>
+      <option value="/store/contact">مركز الدعم</option><option value="/#categories">التصنيفات</option>
+     </select>
+     <label class="merch-checkbox" for="merch-slide-1-active"><input id="merch-slide-1-active" type="checkbox"> إظهار هذا البانر</label>
+    </fieldset>
+   </div>
+   <fieldset class="merch-visibility">
+    <legend>الأقسام الظاهرة في الصفحة الرئيسية</legend>
+    <div class="merch-visibility-grid">
+     <label for="merch-section-categories"><input id="merch-section-categories" type="checkbox"> التصنيفات</label>
+     <label for="merch-section-offers"><input id="merch-section-offers" type="checkbox"> عرض الاشتراكين</label>
+     <label for="merch-section-featured"><input id="merch-section-featured" type="checkbox"> منتجات الإدارة</label>
+     <label for="merch-section-about"><input id="merch-section-about" type="checkbox"> نبذة عن BLOFY</label>
+     <label for="merch-section-questions"><input id="merch-section-questions" type="checkbox"> الأسئلة الشائعة</label>
+    </div>
+    <small>تبقى باقات الاشتراك الأساسية والسلة متاحتين دائمًا. إخفاء العرض من الصفحة لا يغير أسعار المنتجات أو الطلبات السابقة.</small>
+   </fieldset>
+   <div class="merch-actions"><button type="submit" id="merch-save">حفظ البنرات والأقسام</button>
+    <a href="/" target="_blank" rel="noopener noreferrer">معاينة المتجر ↗</a></div>
+   <output id="merch-status" role="status" aria-live="polite"></output>
+  </form>
+</section>
 <section class="showcase-admin" id="branding-admin" aria-labelledby="branding-heading">
  <div class="intro"><span>HOMEPAGE & BRAND</span><h2 id="branding-heading">تصميم الصفحة الرئيسية والبنرات</h2>
   <p>غيّر النصوص وصورة البانر والنبذة ورقم التواصل وهوية الألوان، ثم اضغط حفظ. تظهر التغييرات في المتجر دون تعديل ملفات أو أسعار الاشتراكات.</p></div>
@@ -81,6 +135,26 @@
 <div class="order-filter"><label for="order-filter">حالة الطلب</label><select id="order-filter"><option value="all">جميع الطلبات</option><option value="paid">مدفوعة</option><option value="pending">قيد الدفع</option><option value="failed">فاشلة</option><option value="cancelled">ملغاة</option></select><button id="order-refresh" type="button">تحديث الطلبات</button></div>
 <div id="admin-orders" class="orders-table" role="table" aria-label="آخر 50 طلبًا"><p>جارٍ تحميل قائمة الطلبات...</p></div>
 <p class="footnote">لعرض الأكواد يجب التحقق من ملكية الطلب من رابط العميل الخاص، ولا يتم إظهار مفاتيح الوصول في لوحة الملخص. السجل يعرض آخر 50 طلبًا فقط.</p>
+</section>
+<section class="commercial-reports" id="commercial-reports" aria-labelledby="commercial-heading">
+  <div class="intro"><span>BUSINESS INSIGHTS</span><h2 id="commercial-heading">لوحة أداء المتجر</h2>
+   <p>تقارير من سجل الطلبات الحقيقي فقط. الإيراد يُحتسب للطلبات المدفوعة المؤكدة، ولا نعدّ الطلبات المعلقة دخلًا. نسبة الإتمام تخص الطلبات المنشأة، وليست نسبة تحول زيارات الموقع.</p></div>
+  <div class="panel">
+   <div class="report-toolbar">
+     <label for="commercial-period">الفترة <select id="commercial-period">
+       <option value="7">آخر 7 أيام</option><option value="30" selected>آخر 30 يومًا</option><option value="90">آخر 90 يومًا</option>
+     </select></label>
+     <button type="button" id="commercial-refresh" class="btn-outline">تحديث التقرير</button>
+     <button type="button" id="commercial-export" class="btn-outline" disabled>تصدير ملخص CSV</button>
+   </div>
+   <div id="commercial-metrics" class="commercial-metrics" aria-live="polite"><p>جارٍ قراءة بيانات المبيعات...</p></div>
+   <div class="report-chart-head"><h3>الإيراد المؤكد يوميًا</h3><span>ريال سعودي</span></div>
+   <div id="commercial-trend" class="commercial-trend" aria-label="رسم بياني لإيراد الطلبات المدفوعة يوميًا" role="img"></div>
+   <h3>توزيع الطلبات المدفوعة حسب نوع الطلب</h3>
+   <p class="report-disclaimer">الطلبات متعددة المنتجات تظهر تحت «سلة متعددة المنتجات»، بدون تخمين توزيع إيرادها على باقات منفردة.</p>
+   <div id="commercial-products" class="commercial-product-table"></div>
+   <output id="commercial-notice" role="status" aria-live="polite"></output>
+  </div>
 </section>
 <section class="admin-sales" aria-labelledby="sales-heading">
  <div class="intro"><span>STORE ANALYTICS</span><h2 id="sales-heading">مبيعات BLOFY والعروض</h2><p>إحصاءات الطلبات لآخر 90 يومًا؛ تظهر عمليات الدفع المؤكدة فقط ضمن الإيرادات، بما فيها عرض اشتراكين بـ200 ريال.</p></div>
