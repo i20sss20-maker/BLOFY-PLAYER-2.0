@@ -385,7 +385,13 @@ async function serveCartPage(res,kind){
     'x-frame-options':'DENY',
     'referrer-policy':'no-referrer',
     'strict-transport-security':'max-age=31536000',
-    'content-security-policy':kind==='cart'?PUBLIC_ANALYTICS_CSP:
+    'content-security-policy':kind==='cart'?
+      PUBLIC_ANALYTICS_CSP
+        .replace("script-src 'self' 'unsafe-inline' https://www.googletagmanager.com",
+          "script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.ksamerchant.geidea.net")
+        .replace("connect-src 'self' https://www.google-analytics.com https://region1.google-analytics.com https://www.googletagmanager.com",
+          "connect-src 'self' https://www.google-analytics.com https://region1.google-analytics.com https://www.googletagmanager.com https://www.ksamerchant.geidea.net https://api.ksamerchant.geidea.net")
+        + "; frame-src https://www.ksamerchant.geidea.net; base-uri 'none'; form-action 'none'":
       "default-src 'self'; style-src 'self'; font-src 'self'; script-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'"
   });res.end(file);
 }
