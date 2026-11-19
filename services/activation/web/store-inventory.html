@@ -1,6 +1,47 @@
 <!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>BLOFY ONE | مخزون الاشتراكات</title><link rel="icon" href="/blofy-logo.png"><link rel="stylesheet" href="/admin/store-inventory/style.css"><script src="/admin/store-inventory/app.js" defer></script></head><body>
 <header><a href="/one" class="logo"><img src="/blofy-logo.png" alt=""> BLOFY <b>ONE</b></a><nav><a href="/one">لوحة الإدارة</a><a href="/admin/visitors">إحصائيات الزوار</a><a href="/admin">إدارة العملاء</a><a href="/" target="_blank" rel="noopener">زيارة المتجر</a></nav></header>
 <main><div class="intro"><span>STORE OPERATIONS</span><h1>إدارة مخزون أكواد الاشتراكات</h1><p>أنشئ أو أضف أكواد صادرة من نظام BLOFY إلى مخزون البيع دفعة واحدة، موزعة حسب نوع المنتج ومدته. يُستخدم المخزون أولًا بعد نجاح الدفع، ثم الإصدار التلقائي عند نفاده.</p></div>
+<section class="showcase-admin" id="showcase-admin" aria-labelledby="showcase-heading">
+  <div class="intro"><span>PRODUCT MANAGER</span><h2 id="showcase-heading">إدارة منتجات المتجر</h2>
+    <p>أضف المنتجات والصور والتصنيفات، وعدّل ظهورها وترتيبها. الاشتراكات التي تختار لها كودًا معتمدًا تُباع بالسعر المحمي في خادم BLOFY؛ المنتجات الأخرى تُعرض للاستفسار فقط حتى يُجهز نظام تسليمها.</p>
+  </div>
+  <div class="grid">
+    <form id="showcase-form" class="panel">
+      <h2 id="showcase-form-title">إضافة منتج</h2>
+      <input type="hidden" id="showcase-id">
+      <label for="showcase-name">اسم المنتج</label>
+      <input id="showcase-name" type="text" maxlength="110" required placeholder="اسم المنتج أو الباقة">
+      <label for="showcase-category">التصنيف</label>
+      <input id="showcase-category" maxlength="50" value="المنتجات" placeholder="مثل: التطبيقات، اشتراكات، عروض">
+      <label for="showcase-description">وصف المنتج</label>
+      <textarea id="showcase-description" rows="3" maxlength="1000" placeholder="وصف واضح لما يحصل عليه العميل"></textarea>
+      <label for="showcase-image">رابط الصورة (HTTPS أو صورة موجودة في الموقع)</label>
+      <input id="showcase-image" type="url" placeholder="https://... صورة المنتج" dir="ltr">
+      <label for="showcase-sku">طريقة البيع والتسليم</label>
+      <select id="showcase-sku">
+        <option value="">استفسار فقط — لا يوجد دفع لهذا المنتج</option>
+        <option value="stream-3m">BLOFY STREAM — 3 أشهر (40 ريال)</option>
+        <option value="stream-6m">BLOFY STREAM — 6 أشهر (70 ريال)</option>
+        <option value="stream-1y">BLOFY STREAM — سنة (120 ريال)</option>
+        <option value="xtream-3m">Xtream BLOFY — 3 أشهر (40 ريال)</option>
+        <option value="xtream-6m">Xtream BLOFY — 6 أشهر (70 ريال)</option>
+        <option value="xtream-1y">Xtream BLOFY — سنة (120 ريال)</option>
+        <option value="bundle-2y">عرض اشتراكين سنويين (200 ريال)</option>
+      </select>
+      <label for="showcase-order">ترتيب الظهور (الأقل أولًا)</label>
+      <input id="showcase-order" type="number" min="0" max="9999" value="0">
+      <label class="showcase-check" for="showcase-active"><input type="checkbox" id="showcase-active"> نشر المنتج في الموقع</label>
+      <div class="showcase-actions"><button id="showcase-save" type="submit">حفظ المنتج</button>
+      <button id="showcase-cancel" type="button" class="btn-outline">إلغاء التعديل</button></div>
+      <output id="showcase-message" role="status" aria-live="polite"></output>
+    </form>
+    <div class="panel">
+      <div class="card-head"><h2>المنتجات المضافة</h2><button id="showcase-reload" type="button" class="btn-outline">تحديث القائمة</button></div>
+      <div id="showcase-list" class="showcase-list" aria-live="polite"><p>جارٍ تحميل المنتجات...</p></div>
+      <small>يمكنك إخفاء المنتج فورًا. إخفاء الصفحة لا يلغي أي طلب مدفوع أو أكواد أُصدرت سابقًا.</small>
+    </div>
+  </div>
+</section>
 <section class="stats" id="stats" aria-label="مخزون المتجر"><div class="notice">جارٍ تحميل بيانات المخزون...</div></section>
 <section class="grid">
 <article class="panel"><h2>إصدار دفعة جديدة</h2><p>توليد أكواد أصلية من خادم BLOFY وتسجيلها تلقائيًا بالمخزون. الكود محفوظ مشفرًا ولن يظهر ضمن القوائم العامة.</p>
