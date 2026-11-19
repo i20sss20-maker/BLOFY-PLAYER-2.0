@@ -34,9 +34,9 @@ test('new search and mobile navigation preserve normal purchase/catalog controls
   assert.match(main,/data-cart-add="xtream"/);
   assert.match(main,/id="bundle-first"/);
   assert.match(main,/id="bundle-second"/);
-  assert.match(main,/\/store\/market\.js\?v=2/);
+  assert.match(main,/\/store\/market\.js\?v=3/);
   assert.match(main,/\/store\/market\.css\?v=2/);
-  assert.match(main,/\/store\/showcase\.js\?v=2/);
+  assert.match(main,/\/store\/showcase\.js\?v=3/);
   assert.doesNotThrow(()=>new Function(marketScript));
 });
 test('server can deliver new theme without changing Geidea or order routes',()=>{
