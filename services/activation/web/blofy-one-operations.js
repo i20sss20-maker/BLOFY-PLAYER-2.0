@@ -281,9 +281,19 @@
   const issueResult=$('one-issue-result'),issueArea=$('one-issue-code-list');
   const issueStatus=$('one-issue-status'),issueButton=$('one-issue-submit');
   let issuedCodes=[],issueTimer=null,issuing=false;
+  const xtreamBox=$('one-issue-xtream-result');
+  const xtreamFields={host:$('one-issue-xtream-host'),user:$('one-issue-xtream-username'),
+    password:$('one-issue-xtream-password'),m3u:$('one-issue-xtream-m3u')};
+  let activeXtream=null,issueVersion=0,extractingXtream=false;
+  function hideXtream(){
+    activeXtream=null;xtreamBox.hidden=true;
+    for(const field of Object.values(xtreamFields))field.textContent='';
+  }
   function hideIssued(){
+    issueVersion++;
     clearTimeout(issueTimer);issueTimer=null;
     issuedCodes=[];issueArea.replaceChildren();
+    hideXtream();
     issueResult.hidden=true;
   }
   function issueMessage(message,isError=false){
@@ -329,6 +339,13 @@
         issuedCodes.forEach((code,index)=>{
           const row=document.createElement('div');row.className='one-issue-code';
           row.append(el('span','كود '+(index+1)),el('code',code));
+          if(payload.channel==='xtream'){
+            const extract=el('button','تفعيل واستخراج Xtream','one-issue-extract-button');
+            extract.type='button';
+            extract.dataset.oneExtractXtream='true';
+            extract.setAttribute('aria-label','تفعيل الكود '+(index+1)+' الآن واستخراج بيانات Xtream');
+            row.append(extract);
+          }
           issueArea.append(row);
         });
         issueResult.hidden=false;
@@ -349,6 +366,65 @@
       issueMessage('نُسخت الأكواد. تذكر إخفاء بيانات العملاء بعد استخدامها.');
     }catch{issueMessage('تعذر النسخ التلقائي، انسخ من الحقول مباشرة.',true)}
   });
+  // An issued voucher stays unused until this explicitly confirmed action.
+  // Never place voucher secrets in query strings, localStorage or logs.
+  issueArea.addEventListener('click',async event=>{
+    const target=event.target.closest('button[data-one-extract-xtream]');
+    if(!target||extractingXtream||issueResult.hidden)return;
+    const code=target.closest('.one-issue-code')?.querySelector('code')?.textContent||'';
+    if(!issuedCodes.includes(code)||!/^[0-9]{8,12}$/.test(code))return;
+    if(!window.confirm('تفعيل هذا الكود واستخراج Xtream الآن؟\n' +
+      'تنبيه: تبدأ مدة الاشتراك فورًا ولن يستطيع العميل إعادة تفعيل الكود كاشتراك جديد.\n' +
+      'لبداية المدة عند استخدام العميل، اضغط إلغاء وانسخ الكود فقط.'))return;
+    extractingXtream=true;
+    const version=issueVersion;
+    target.disabled=true;
+    target.textContent='جارٍ التفعيل…';
+    hideXtream();
+    issueMessage('جارٍ تفعيل الاشتراك واستخراج Xtream. إذا انقطع الاتصال لا تكرر التفعيل؛ افحص الكود من سجل الاشتراكات.');
+    try{
+      const result=await request('/api/v1/admin/xtream-gateway/codes/activate-xtream',{
+        method:'POST',body:{code,confirmActivation:true}
+      });
+      if(version!==issueVersion||document.hidden)return;
+      const c=result.credentials||{};
+      if(result.ok!==true||result.manualActivation!==true||!c.serverUrl||!c.username||
+         !c.password||!c.m3uUrl)throw Error('رد غير مكتمل؛ افحص سجل الاشتراكات قبل محاولة جديدة.');
+      activeXtream={host:String(c.serverUrl),username:String(c.username),
+        password:String(c.password),m3u:String(c.m3uUrl)};
+      xtreamFields.host.textContent=activeXtream.host;
+      xtreamFields.user.textContent=activeXtream.username;
+      xtreamFields.password.textContent=activeXtream.password;
+      xtreamFields.m3u.textContent=activeXtream.m3u;
+      xtreamBox.hidden=false;
+      target.textContent='✓ تم التفعيل';
+      target.disabled=true;
+      issueMessage('تم تفعيل الكود وبدأت مدته الآن. انسخ بيانات Xtream ثم أخفِها.');
+      $('one-stream-refresh')?.click();
+    }catch(error){
+      if(version!==issueVersion||document.hidden)return;
+      target.disabled=false;
+      target.textContent='تفعيل واستخراج Xtream';
+      issueMessage('تعذر تأكيد الاستخراج: '+error.message+
+        ' إذا كان الكود مفعّلًا فاسترجع بياناته من «استرجاع الأكواد» دون إنشاء اشتراك آخر.',true);
+    }finally{extractingXtream=false;}
+  });
+  $('one-issue-xtream-copy').addEventListener('click',async()=>{
+    if(!activeXtream)return;
+    try{
+      await navigator.clipboard.writeText('Host: '+activeXtream.host+
+        '\nPort: 443\nUsername: '+activeXtream.username+
+        '\nPassword: '+activeXtream.password+'\nM3U: '+activeXtream.m3u);
+      issueMessage('تم نسخ بيانات Xtream. سلّمها لصاحب الاشتراك فقط.');
+    }catch{issueMessage('تعذّر النسخ التلقائي؛ انسخ القيم من الحقول.',true);}
+  });
+  $('one-issue-xtream-m3u-copy').addEventListener('click',async()=>{
+    if(!activeXtream)return;
+    try{await navigator.clipboard.writeText(activeXtream.m3u);
+      issueMessage('تم نسخ رابط M3U الخاص بالاشتراك.');
+    }catch{issueMessage('تعذر نسخ M3U تلقائيًا.',true);}
+  });
+  $('one-issue-xtream-hide').addEventListener('click',hideXtream);
   $('one-issue-hide').addEventListener('click',hideIssued);
   document.addEventListener('visibilitychange',()=>{if(document.hidden)hideIssued();});
   window.addEventListener('pagehide',hideIssued);

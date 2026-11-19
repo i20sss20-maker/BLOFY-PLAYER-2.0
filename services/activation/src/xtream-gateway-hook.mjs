@@ -2760,6 +2760,26 @@ http.createServer = function withBlofyXtreamGateway(listener) {
       if(req.method==='POST'&&url.pathname==='/api/v1/admin/xtream-gateway/codes') {
         return json(res,201,await streamCodes.issue(await readJson(req)));
       }
+      // Explicit, owner-confirmed activation of an UNUSED Xtream voucher.
+      // Issue alone never starts its clock. Existing redeem() is atomic and
+      // creates exactly one account under a database row lock.
+      if(req.method==='POST'&&url.pathname==='/api/v1/admin/xtream-gateway/codes/activate-xtream'){
+        const payload=await readJson(req);
+        if(payload?.confirmActivation!==true)
+          return json(res,400,{ok:false,error:'stream_activation_confirmation_required'});
+        const found=await streamCodes.lookup(payload.code);
+        if(!found.ok)
+          return json(res,404,{ok:false,error:'stream_code_not_found'});
+        if(found.item?.channel!=='xtream')
+          return json(res,409,{ok:false,error:'stream_code_wrong_product'});
+        if(found.item?.status!=='unused'||found.subscription?.redeemed)
+          return json(res,409,{ok:false,error:'stream_code_already_activated'});
+        const result=await streamCodes.redeem(payload.code,xtreamOrigin(req));
+        return json(res,201,{...result,manualActivation:true},{
+          'cache-control':'no-store, private','referrer-policy':'no-referrer',
+          'pragma':'no-cache'
+        });
+      }
       // Global admin-only search: POST body keeps original numeric/legacy
       // voucher secrets out of browser history, request URLs and access logs.
       if(req.method==='POST'&&url.pathname==='/api/v1/admin/xtream-gateway/codes/search'){

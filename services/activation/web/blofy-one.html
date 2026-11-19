@@ -135,7 +135,7 @@
       <div class="one-issue-flow" aria-label="مراحل الإنشاء">
         <span class="is-current"><b>1</b> حدّد الاشتراك</span>
         <span><b>2</b> أكّد الإصدار</span>
-        <span><b>3</b> انسخ الكود</span>
+        <span><b>3</b> انسخ الكود أو فعّل Xtream</span>
       </div>
       <div class="one-issue-presets" role="group" aria-label="مدد جاهزة">
         <span>اختيار سريع للمدة:</span>
@@ -178,13 +178,29 @@
           <div><strong>تم إصدار الأكواد بنجاح</strong><small>انسخها الآن، ثم راجع سجل الأكواد من هذه اللوحة.</small></div>
         </div>
         <div id="one-issue-code-list" class="one-issue-list"></div>
+        <div id="one-issue-xtream-result" class="one-issue-xtream-result" hidden role="region" aria-label="بيانات دخول Xtream">
+          <div class="one-issue-xtream-heading"><strong>بيانات Xtream جاهزة</strong>
+            <small>تم تفعيل الكود وبدأت مدته الآن. هذه البيانات خاصة بالعميل؛ انسخها ثم أخفِها.</small></div>
+          <div class="one-issue-xtream-fields">
+            <div><span>Host / رابط السيرفر</span><code id="one-issue-xtream-host" dir="ltr"></code></div>
+            <div><span>Port / المنفذ</span><code>443</code></div>
+            <div><span>Username / المستخدم</span><code id="one-issue-xtream-username" dir="ltr"></code></div>
+            <div><span>Password / كلمة المرور</span><code id="one-issue-xtream-password" dir="ltr"></code></div>
+            <div class="one-issue-xtream-m3u"><span>رابط M3U الكامل</span><code id="one-issue-xtream-m3u" dir="ltr"></code></div>
+          </div>
+          <div class="one-issue-xtream-actions">
+            <button type="button" id="one-issue-xtream-copy">نسخ بيانات Xtream</button>
+            <button type="button" id="one-issue-xtream-m3u-copy">نسخ M3U</button>
+            <button type="button" id="one-issue-xtream-hide">إخفاء بيانات الدخول</button>
+          </div>
+        </div>
         <p class="one-issue-countdown" id="one-issue-countdown" aria-live="off"></p>
         <div class="one-stream-secret-actions">
           <button type="button" id="one-issue-copy">نسخ الأكواد</button>
           <button type="button" id="one-issue-hide">إخفاء الأكواد</button>
           <a class="one-issue-results-link" href="#stream-management">عرض سجل الأكواد ←</a>
         </div>
-        <small>هذه أكواد اشتراك فقط. بيانات دخول Xtream المرتبطة تتوفر بعد تفعيل الكود وفق سياسة المصدر. الأكواد المعروضة تُخفى بعد 90 ثانية أو عند مغادرة الصفحة، ويمكن استرجاعها لاحقًا إذا كانت محفوظة بشكل قابل للاسترجاع.</small>
+        <small>عند اختيار «كود Xtream» يظهر زر «تفعيل واستخراج Xtream» بجانب كل كود. الضغط عليه بعد التأكيد يبدأ الاشتراك فورًا ويعرض Host وUsername وPassword وM3U. إذا رغبت أن تبدأ المدة لدى العميل، انسخ الكود فقط ولا تفعّله هنا. تُخفى الأكواد وبيانات الدخول بعد 90 ثانية أو عند مغادرة الصفحة.</small>
       </div>
     </section>
 

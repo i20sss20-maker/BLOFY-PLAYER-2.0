@@ -14,3 +14,22 @@ section[aria-labelledby="readiness-title"],
 .one-panel-switch-link{display:block;text-align:center;text-decoration:none;border:1px solid rgba(122,189,254,.42);border-radius:9px;padding:11px 10px;background:rgba(81,154,231,.13);font-weight:750;color:#e9f4ff}
 .one-panel-switch-link:hover,.one-panel-switch-link:focus-visible{background:rgba(81,154,231,.25);outline-offset:3px}
 .one-nav .one-panel-switch-link{display:block}
+
+/* BLOFY ONE: manual Xtream extraction after explicit activation. */
+.one-issue-extract-button{border:1px solid #8cefe2;background:#184e4a;color:#ddfff5;padding:9px 12px;border-radius:10px;font-weight:750;cursor:pointer}
+.one-issue-extract-button:hover{background:#237d6f}
+.one-issue-extract-button:disabled{opacity:.63;cursor:default}
+.one-issue-xtream-result{border:1px solid #7ce6d6;border-radius:15px;background:#0d3038;padding:18px;margin:15px 0;color:#e6fff8}
+.one-issue-xtream-result[hidden]{display:none!important}
+.one-issue-xtream-heading{display:grid;gap:5px;margin-bottom:12px}
+.one-issue-xtream-heading strong{font-size:17px}
+.one-issue-xtream-heading small{color:#bfe6dd;line-height:1.7}
+.one-issue-xtream-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.one-issue-xtream-fields>div{display:grid;gap:5px;border:1px solid #386e75;border-radius:10px;background:#102936;padding:10px;min-width:0}
+.one-issue-xtream-fields span{color:#b4d4da;font-size:12px}
+.one-issue-xtream-fields code{overflow-wrap:anywhere;word-break:break-word;direction:ltr;text-align:left;unicode-bidi:isolate;user-select:all;font-size:13px;color:#f7fffc}
+.one-issue-xtream-fields .one-issue-xtream-m3u{grid-column:1/-1}
+.one-issue-xtream-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+.one-issue-xtream-actions button{padding:10px 14px;border:1px solid #74d6c7;border-radius:10px;color:#e6fff8;background:#20575a;font-weight:700;cursor:pointer}
+.one-issue-xtream-actions button:hover{background:#26706b}
+@media(max-width:640px){.one-issue-xtream-fields{grid-template-columns:minmax(0,1fr)}}
