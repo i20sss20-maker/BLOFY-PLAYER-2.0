@@ -111,6 +111,33 @@ $('order-filter').addEventListener('change',()=>void reloadOrders().catch(err=>{
 $('order-refresh').addEventListener('click',()=>void reloadOrders().catch(err=>{status('فشل تحميل الطلبات: '+err.message);}));
 
 
+const brandingFields=['announcement','heroTitle','heroHighlight','heroDescription','heroImage','aboutTitle','aboutDescription','whatsapp','xHandle','theme'];
+const brandingForm=$('branding-form'),brandingStatus=$('branding-status'),brandingSave=$('branding-save');
+async function loadBranding(){
+ const data=await request('/api/v1/admin/store/branding');
+ if(!data.branding)throw Error('branding_missing');
+ for(const key of brandingFields){
+   const node=$('branding-'+key);
+   if(node)node.value=String(data.branding[key]||'');
+ }
+ brandingStatus.textContent='✓ تم تحميل إعدادات الموقع الحالية.';
+}
+brandingForm?.addEventListener('submit',async event=>{
+ event.preventDefault();if(brandingSave.disabled)return;
+ const input={};
+ for(const key of brandingFields)input[key]=$('branding-'+key).value.trim();
+ brandingSave.disabled=true;brandingStatus.textContent='جارٍ حفظ تصميم الموقع...';
+ try{
+  const updated=await request('/api/v1/admin/store/branding',{
+    method:'POST',body:JSON.stringify(input)
+  });
+  if(updated.ok!==true)throw Error('branding_save_unconfirmed');
+  brandingStatus.textContent='✓ تم حفظ إعدادات المتجر. افتح الموقع في تبويب جديد لتظهر الألوان والبانر والنبذة.';
+ }catch(e){brandingStatus.textContent='تعذر حفظ تصميم المتجر: '+e.message;}
+ finally{brandingSave.disabled=false;}
+});
+void loadBranding().catch(e=>{brandingStatus.textContent='تعذر تحميل إعدادات الموقع: '+e.message;});
+
 const showcaseNodes={
  form:$('showcase-form'),id:$('showcase-id'),name:$('showcase-name'),
  category:$('showcase-category'),description:$('showcase-description'),
