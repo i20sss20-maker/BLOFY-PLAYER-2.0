@@ -312,3 +312,117 @@ body[data-blofy-store-admin] .report-disclaimer{color:var(--blofy-muted)}
   box-shadow:none
  }
 }
+
+
+/* Contrast repair 2026-11-19: screenshots showed dark text on dark price chips and offer art.
+   Each price option is now a light, readable card; text over dark promotional art is always light.
+   These targeted rules intentionally override earlier legacy dark-theme rules. */
+body[data-blofy-storefront] .market-products .pricing-rows{
+ background:transparent;
+ border:0;
+ gap:12px;
+}
+body[data-blofy-storefront] .market-products .pricing-rows > span{
+ background:linear-gradient(150deg,#ffffff 0%,#f8f2ff 100%);
+ color:#554567;
+ border:1px solid #d6c5e9;
+ border-radius:15px;
+ padding:17px 8px 15px;
+ box-shadow:0 4px 13px rgba(72,39,120,.06);
+ font-weight:600;
+ min-width:0;
+ gap:6px;
+}
+body[data-blofy-storefront] .market-products .pricing-rows > span b{
+ color:#542a98;
+ font-size:clamp(16px,1.55vw,23px);
+ font-weight:800;
+ line-height:1.5;
+}
+body[data-blofy-storefront] .market-products .pricing-ribbon{
+ background:transparent;
+ border:0;
+}
+body[data-blofy-storefront] .market-products .pricing-ribbon span{
+ background:#f7f2fd;
+ border:1px solid #ded0ef;
+ color:#655474;
+}
+body[data-blofy-storefront] .market-products .pricing-ribbon span b{
+ color:#542a98;
+}
+body[data-blofy-storefront] .market-featured-offer .offer-hero{
+ background:#0c1c37;
+ border:1px solid #243b5c;
+ box-shadow:0 17px 36px rgba(31,16,59,.18);
+}
+body[data-blofy-storefront] .market-featured-offer .offer-hero:before{
+ background:linear-gradient(90deg,rgba(9,23,46,.12) 2%,rgba(9,23,46,.84) 47%,rgba(8,21,43,.95) 100%);
+}
+body[data-blofy-storefront] .market-featured-offer .offer-overlay h2,
+body[data-blofy-storefront] .market-featured-offer .offer-overlay h2 strong{
+ color:#ffffff;
+ text-shadow:0 2px 18px rgba(1,9,26,.32);
+}
+body[data-blofy-storefront] .market-featured-offer .offer-overlay h2 em{
+ color:#ffe0ae;
+ font-weight:800;
+ font-style:normal;
+ text-shadow:0 2px 13px rgba(1,9,26,.36);
+}
+body[data-blofy-storefront] .market-featured-offer .offer-overlay p{
+ color:#f2eef9;
+}
+body[data-blofy-storefront] .market-featured-offer .offer-big-price strong{
+ color:#ffffff;
+}
+body[data-blofy-storefront] .market-featured-offer .offer-big-price del{
+ color:#d4cadd;
+}
+body[data-blofy-storefront] .market-featured-offer .offer-kicker,
+body[data-blofy-storefront] .market-featured-offer .offer-big-price span{
+ color:#ffe2b4;
+ border-color:#c9a36b;
+ background:rgba(47,34,26,.4);
+}
+body[data-blofy-storefront] .market-featured-offer .offer-overlay .btn-primary{
+ background:var(--market-violet,#6b3cc2);
+ border-color:var(--market-violet,#6b3cc2);
+ color:#ffffff;
+ box-shadow:0 8px 20px rgba(0,0,0,.18);
+}
+body[data-blofy-storefront] .market-featured-offer .offer-overlay .btn-primary:hover{
+ background:var(--market-violet-deep,#50299a);
+}
+body[data-blofy-storefront] .market-featured-offer .offer-checkout{
+ background:#261a44;
+ border-color:#493669;
+}
+body[data-blofy-storefront] .market-featured-offer .offer-checkout .offer-head h3,
+body[data-blofy-storefront] .market-featured-offer .offer-checkout .offer-head strong,
+body[data-blofy-storefront] .market-featured-offer .offer-checkout .offer-total b{
+ color:#ffffff;
+}
+body[data-blofy-storefront] .market-featured-offer .offer-checkout .offer-head p{
+ color:#e4d9ee;
+}
+body[data-blofy-storefront] .market-featured-offer .offer-checkout .offer-total{
+ color:#d6c8e3;
+ border-color:#5f4d78;
+}
+@media(max-width:650px){
+ body[data-blofy-storefront] .market-featured-offer .offer-hero:before{
+  background:linear-gradient(0deg,rgba(8,21,43,.98),rgba(8,21,43,.85) 50%,rgba(8,21,43,.24));
+ }
+ body[data-blofy-storefront] .market-products .pricing-rows{
+  gap:7px;
+ }
+ body[data-blofy-storefront] .market-products .pricing-rows > span{
+  padding:12px 4px;
+  border-radius:11px;
+  font-size:11px;
+ }
+ body[data-blofy-storefront] .market-products .pricing-rows > span b{
+  font-size:clamp(14px,3.6vw,19px);
+ }
+}
