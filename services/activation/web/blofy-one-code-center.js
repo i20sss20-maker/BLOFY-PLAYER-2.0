@@ -78,7 +78,7 @@
     '<div class="one-inventory-controls"><label>المستهدف لكل نوع',
     '<select id="one-trial-refill-target"><option value="10" selected>10 أكواد</option><option value="20">20 كودًا</option><option value="30">30 كودًا</option></select></label>',
     '<button type="button" id="one-trial-refill-all">＋ تعبئة النوعين</button></div>',
-    '<p id="one-trial-refill-status" role="status" aria-live="polite">ينشئ الأكواد الناقصة فقط بعد موافقتك.</p></div>'
+    '<p id="one-trial-refill-status" role="status" aria-live="polite">ينشئ الأكواد الناقصة فقط بعد موافقتك.</p></div>',
     '<div class="one-inventory-controls">',
     '<label>نوع الكود التجريبي<select id="one-trial-sku">',
     '<option value="trial-stream-1d">BLOFY STREAM — يوم واحد</option>',
@@ -86,7 +86,7 @@
     '<label>عدد الأكواد<input id="one-trial-quantity" type="number" min="1" max="30" step="1" value="5" inputmode="numeric"></label>',
     '<button type="button" id="one-trial-generate">＋ إنشاء الأكواد وإضافتها للمخزون</button></div>',
     '<p id="one-trial-status" role="status" aria-live="polite"></p>',
-    '<div class="one-trial-links"><a href="/store#trial-product" target="_blank" rel="noopener">عرض باقة 0 ريال في المتجر ↗</a>',
+    '<div class="one-trial-links"><a href="/#products" target="_blank" rel="noopener">خيار تجربة اليوم داخل الاشتراكات ↗</a>',
     '<a href="/store/trial" target="_blank" rel="noopener">صفحة طلب التجربة للعملاء ↗</a></div>',
     '<div class="one-trial-history"><strong>أحدث الأكواد المسلّمة للعملاء (مخفية جزئيًا)</strong>',
     '<div id="one-trial-recent">لم يُحمّل سجل التجارب بعد.</div></div>'

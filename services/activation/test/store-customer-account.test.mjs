@@ -31,7 +31,7 @@ test('verified email owns linked guest order; no code before login and proof',as
  const db={async query(sql,args=[]){
   sql=String(sql).trim();
   if(['BEGIN','COMMIT','ROLLBACK'].includes(sql)||sql.startsWith('CREATE ')||
-      sql.startsWith('SELECT pg_advisory'))return rows();
+      sql.startsWith('SELECT pg_advisory')||sql.startsWith('ALTER TABLE'))return rows();
   if(sql.startsWith('INSERT INTO blofy_store_customer_challenges')){
    const old=challenges.get(args[0]);
    if(old&&Date.now()-old.issued_at<60000)return rows();
@@ -65,7 +65,7 @@ test('verified email owns linked guest order; no code before login and proof',as
      updated_at:new Date().toISOString()};
    carts.set(id,saved);return rows([saved]);
   }
-  if(sql.startsWith('SELECT c.id,c.email,c.alerts_opt_in FROM blofy_store_customer_sessions')){
+  if(sql.startsWith('SELECT c.id,c.email,c.alerts_opt_in')){
    const session=sessions.get(args[0]);
    return rows(session?[...customers.values()].filter(c=>c.id===session.customer_id):[]);
   }
