@@ -1,0 +1,40 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+const read=path=>readFileSync(new URL(path,import.meta.url),'utf8');
+const html=read('../web/store.html');
+const server=read('../src/server.mjs');
+const paymentScript=html.slice(html.indexOf("var geideaSdkPromise"),html.lastIndexOf("</script>"));
+test('ordinary storefront browsing never preloads the cross-origin Geidea payment SDK',()=>{
+ assert.doesNotMatch(html,/<script[^>]*\bsrc=["']https:\/\/www\.ksamerchant\.geidea\.net\/hpp\/geideaCheckout\.min\.js/i);
+ assert.match(paymentScript,/script\.src='https:\/\/www\.ksamerchant\.geidea\.net\/hpp\/geideaCheckout\.min\.js'/);
+ assert.match(paymentScript,/script\.async=true/);
+ assert.match(paymentScript,/function ensureGeideaCheckout\(\)/);
+ assert.match(paymentScript,/if\(geideaSdkPromise\)return geideaSdkPromise/);
+ assert.match(paymentScript,/clearTimeout\(timer\)/);
+ assert.match(paymentScript,/geideaSdkPromise=null;throw error/);
+ assert.match(html,/rel="preload" as="image" href="\/store\/media\/strong8k\.jpg"/);
+ assert.match(html,/fetchpriority="high"/);
+});
+test('payment SDK must be loaded before creating any Geidea checkout session',()=>{
+ const sdk=paymentScript.indexOf('await ensureGeideaCheckout()');
+ const request=paymentScript.indexOf("post('/api/v1/store/checkout'");
+ assert.ok(sdk>=0&&request>sdk,'the checkout POST must not precede SDK readiness');
+ assert.match(paymentScript,/new window\.GeideaCheckout\(/);
+ assert.match(paymentScript,/widget\.startPayment\(data\.sessionId\)/);
+ assert.match(paymentScript,/sessionStorage\.setItem\('blofy\.store\.'/);
+ assert.match(paymentScript,/data\.provider!=='geidea'/);
+ assert.match(paymentScript,/data\.checkoutMode!=='modal'/);
+ assert.match(paymentScript,/data\.priceMinor>expected\.priceMinor/);
+ assert.match(paymentScript,/data\.priceMinor<expected\.priceMinor\*0\.7-1/);
+ assert.match(paymentScript,/afterPayment\(\)/);
+ assert.match(paymentScript,/void check\(\)/);
+});
+test('existing CSP still permits same Geidea host and modal iframe',()=>{
+ assert.match(server,/https:\/\/www\.ksamerchant\.geidea\.net/);
+ assert.match(server,/frame-src https:\/\/www\.ksamerchant\.geidea\.net/);
+ assert.match(server,/form-action 'none'/);
+ const scripts=[...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(match=>match[1]);
+ assert.ok(scripts.some(source=>source.includes('function ensureGeideaCheckout()')));
+ for(const source of scripts)assert.doesNotThrow(()=>new Function(source));
+});

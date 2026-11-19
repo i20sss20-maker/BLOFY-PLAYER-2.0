@@ -20,7 +20,7 @@
   <link rel="stylesheet" href="/store/design.css?v=8">
   <link rel="stylesheet" href="/store/market.css?v=3">
 <link rel="stylesheet" href="/store/visual.css?v=20261119-2">
-  <script src="https://www.ksamerchant.geidea.net/hpp/geideaCheckout.min.js" defer></script>
+  <!-- Payment SDK is downloaded only after an explicit checkout action. -->
   <script src="/store/offers.js?v=1" defer></script>
   <script src="/store/showcase.js?v=2" defer></script>
   <script src="/store/market.js?v=3" defer></script>
@@ -448,15 +448,42 @@
    for(var i=0;i<8;i++){if(await check())return;
      await new Promise(function(resolve){setTimeout(resolve,2500);});}
  }
+ // Avoid fetching a third-party payment SDK for ordinary browsers that
+ // only compare products. Never create a checkout session until SDK is ready.
+ var geideaSdkPromise=null;
+ function ensureGeideaCheckout(){
+   if(typeof window.GeideaCheckout==='function')return Promise.resolve();
+   if(geideaSdkPromise)return geideaSdkPromise;
+   geideaSdkPromise=new Promise(function(resolve,reject){
+     var script=document.createElement('script');
+     script.src='https://www.ksamerchant.geidea.net/hpp/geideaCheckout.min.js';
+     script.async=true;script.referrerPolicy='no-referrer';
+     var done=false,timer=null;
+     function finish(error){
+       if(done)return;done=true;clearTimeout(timer);
+       if(error){script.remove();reject(error);return;}
+       if(typeof window.GeideaCheckout!=='function'){
+         script.remove();reject(Error('geidea_sdk_unavailable'));return;
+       }
+       resolve();
+     }
+     script.addEventListener('load',function(){finish(null);},{once:true});
+     script.addEventListener('error',function(){finish(Error('geidea_sdk_failed'));},{once:true});
+     timer=setTimeout(function(){finish(Error('geidea_sdk_timeout'));},12000);
+     document.head.append(script);
+   }).catch(function(error){geideaSdkPromise=null;throw error;});
+   return geideaSdkPromise;
+ }
  async function pay(product,button){
    if(busy||!available)return;
    var sku=button.dataset.sku;
    var expected=plans[sku];
    if(!expected){message(product,'الباقة غير متاحة للدفع.',true);return;}
-   if(typeof window.GeideaCheckout!=='function'){message(product,'تعذر تحميل نافذة الدفع الآمنة. حدّث الصفحة وحاول مرة أخرى.',true);return;}
-   busy=true;update();message(product,'جارٍ فتح الدفع الآمن...');
+   busy=true;update();message(product,'جارٍ تجهيز نافذة الدفع الآمنة...');
    var started=false;
    try{
+     await ensureGeideaCheckout();
+     message(product,'جارٍ فتح الدفع الآمن...');
      var couponCode=document.getElementById('store-coupon').value.trim().toUpperCase();
      var data=await post('/api/v1/store/checkout',{sku:sku,couponCode:couponCode||undefined});
      if(data.provider!=='geidea'||data.checkoutMode!=='modal'||!data.orderId||!data.accessToken||
