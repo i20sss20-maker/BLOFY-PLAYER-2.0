@@ -21,7 +21,7 @@ test('campaign hub is part of the authenticated BLOFY commerce administration',(
  assert.match(html,/وفق موافقة الزائر/);
  assert.match(html,/ليست منسوبة/);
  const server=read('../src/server.mjs');
- assert.match(server,/\/admin\/store-inventory\/app\.js/);
+ assert.match(html,/src="\/admin\/store-inventory\/app\.js"/);
  assert.match(server,/siteAnalytics\(req,res,requestUrl\)/);
 });
 
@@ -40,7 +40,7 @@ test('campaign builder allows only public permitted URLs and actual active coupo
  assert.match(js,/Number\(row\.paid_uses\|\|0\)<Number\(row\.max_uses\|\|0\)/);
  assert.match(js,/activeCampaignCoupons\.find/);
  assert.match(js,/clipboard\.writeText\(value\)/);
- assert.match(js,/textContent=message/); // Existing safe status UI, no HTML.
+ assert.match(js,/campaign\.textContent=String\(row\.campaign/);
  assert.doesNotMatch(js,/eval\(|new Function\(|innerHTML\s*=/);
 });
 
