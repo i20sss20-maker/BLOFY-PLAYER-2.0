@@ -415,8 +415,8 @@
       var add=document.querySelector('[data-cart-add="'+product+'"]');
       if(add){
         var trialAvailable=trialEnabled&&Number(trialCounts[name])>0;
-        add.href=trial&&!trialAvailable?'/store/trial':'/store/cart?add='+encodeURIComponent(name);
-        add.textContent=trial?(trialAvailable?'أضف التجربة المجانية للسلة 🛒':'التحقق من مخزون التجارب ↗'):'أضف للسلة 🛒';
+        add.href='/store/cart?add='+encodeURIComponent(name);
+        add.textContent=trial?(trialAvailable?'أضف التجربة المجانية للسلة 🛒':'أضف التجربة للسلة · التسليم عند التوفر'):'أضف للسلة 🛒';
       }
       if(b){b.textContent='اشترك الآن — '+price+' ر.س';b.dataset.sku=name;
         b.hidden=true;b.disabled=true;}
@@ -508,9 +508,9 @@
     document.querySelectorAll('[data-free-trial-link]').forEach(function(link){
       var sku=link.dataset.freeTrialLink;
       var ok=trialChecked&&trialEnabled&&Number(trialCounts[sku])>0;
-      link.href=ok?'/store/cart?add='+encodeURIComponent(sku):'/store/trial';
+      link.href='/store/cart?add='+encodeURIComponent(sku);
       link.textContent=ok?(sku==='trial-stream-1d'?'أضف تجربة STREAM للسلة 🛒':'أضف تجربة Xtream للسلة 🛒'):
-        (sku==='trial-stream-1d'?'راجع مخزون STREAM ↗':'راجع مخزون Xtream ↗');
+        (sku==='trial-stream-1d'?'تجربة STREAM · بانتظار توفر الأكواد':'تجربة Xtream · بانتظار توفر الأكواد');
     });
     update();
  }
