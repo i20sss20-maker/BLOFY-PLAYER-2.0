@@ -13,13 +13,13 @@ function contrast(a,b){
  return (Math.max(l(a),l(b))+0.05)/(Math.min(l(a),l(b))+0.05);
 }
 test('pricing options have light card backgrounds and high-contrast text, not inherited navy',()=>{
- assert.match(homepage,/<div class="pricing-rows">/);
- assert.match(css,/\.market-products \.pricing-rows > span\s*\{[^}]*background:linear-gradient\(150deg,#ffffff 0%,#f8f2ff 100%\)/);
- assert.match(css,/\.market-products \.pricing-rows > span b\s*\{[^}]*color:#542a98/);
+ assert.match(homepage,/<div class="pricing-rows" role="group"/);
+ assert.match(css,/\.market-products \.pricing-rows > :is\(span,button\)\s*\{[^}]*background:linear-gradient\(150deg,#ffffff 0%,#f8f2ff 100%\)/);
+ assert.match(css,/\.market-products \.pricing-rows > :is\(span,button\) b\s*\{[^}]*color:#542a98/);
  assert.ok(contrast('#542a98','#f8f2ff')>4.5);
  assert.ok(contrast('#554567','#f8f2ff')>4.5);
- assert.match(market,/\.pricing-rows span\{color:#665c74\}/);
- assert.ok(css.lastIndexOf('.market-products .pricing-rows > span')>css.lastIndexOf('/* Contrast repair 2026-11-19'), 'repair must come after palette');
+ assert.match(market,/\.pricing-rows :is\(span,button\)\{color:#665c74\}/);
+ assert.ok(css.lastIndexOf('.market-products .pricing-rows > :is(span,button)')>css.lastIndexOf('/* Contrast repair 2026-11-19'), 'repair must come after palette');
 });
 test('hero promotional offer uses explicit readable white/gold on dark artwork',()=>{
  assert.match(homepage,/id="offer-heading"/);

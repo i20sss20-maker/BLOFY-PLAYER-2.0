@@ -322,7 +322,7 @@ body[data-blofy-storefront] .market-products .pricing-rows{
  border:0;
  gap:12px;
 }
-body[data-blofy-storefront] .market-products .pricing-rows > span{
+body[data-blofy-storefront] .market-products .pricing-rows > :is(span,button){
  background:linear-gradient(150deg,#ffffff 0%,#f8f2ff 100%);
  color:#554567;
  border:1px solid #d6c5e9;
@@ -333,7 +333,7 @@ body[data-blofy-storefront] .market-products .pricing-rows > span{
  min-width:0;
  gap:6px;
 }
-body[data-blofy-storefront] .market-products .pricing-rows > span b{
+body[data-blofy-storefront] .market-products .pricing-rows > :is(span,button) b{
  color:#542a98;
  font-size:clamp(16px,1.55vw,23px);
  font-weight:800;
@@ -417,12 +417,36 @@ body[data-blofy-storefront] .market-featured-offer .offer-checkout .offer-total{
  body[data-blofy-storefront] .market-products .pricing-rows{
   gap:7px;
  }
- body[data-blofy-storefront] .market-products .pricing-rows > span{
+ body[data-blofy-storefront] .market-products .pricing-rows > :is(span,button){
   padding:12px 4px;
   border-radius:11px;
   font-size:11px;
  }
- body[data-blofy-storefront] .market-products .pricing-rows > span b{
+ body[data-blofy-storefront] .market-products .pricing-rows > :is(span,button) b{
   font-size:clamp(14px,3.6vw,19px);
+ }
+}
+
+/* Interactive plan cards: same proven contrast as the old non-clickable tiles. */
+body[data-blofy-storefront] .market-products .pricing-rows > button{
+ appearance:none;font-family:inherit;cursor:pointer;line-height:1.55;
+}
+body[data-blofy-storefront] .market-products .pricing-rows > button:hover,
+body[data-blofy-storefront] .market-products .pricing-rows > button[aria-pressed="true"]{
+ border-color:#7446bf;box-shadow:0 0 0 2px rgba(107,60,194,.15);
+}
+body[data-blofy-storefront] .market-products .pricing-rows > button:focus-visible{
+ outline:3px solid #7446bf;outline-offset:3px;
+}
+body[data-blofy-storefront] .market-products .pricing-rows > button[data-plan-option="تجربة مجانية"]{
+ background:linear-gradient(155deg,#edfcf3,#dff9eb);
+ border-color:#75bb97;color:#246647;
+}
+body[data-blofy-storefront] .market-products .pricing-rows > button[data-plan-option="تجربة مجانية"] b{
+ color:#216c4a;
+}
+@media(max-width:650px){
+ body[data-blofy-storefront] .market-products .pricing-rows{
+  grid-template-columns:repeat(2,minmax(0,1fr));
  }
 }
