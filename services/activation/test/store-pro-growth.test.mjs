@@ -34,7 +34,7 @@ test('safe store guide is honest, accessible and never touches private customer 
   js=source('../web/store-assistant.js'),
   server=source('../src/server.mjs');
  assert.match(html,/مساعد BLOFY التفاعلي/);
- assert.match(html,/ليست خدمة دردشة ذكاء اصطناعي/);
+ assert.match(html,/الميزة التوليدية اختيارية/);
  assert.match(html,/id="assistant-form"/);
  assert.match(html,/id="messages"/);
  assert.match(html,/id="assistant-question"/);
