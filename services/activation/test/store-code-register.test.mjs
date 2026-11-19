@@ -83,7 +83,8 @@ test('active code may use existing one-time admin relogin without resetting subs
 test('admin-only pagination and search use parameterized query without plaintext bulk output',async()=>{
  const f=fixture();
  const res={};
- assert.equal(await f.handle({method:'GET'},res,new URL('https://blofyplayer.com/api/v1/admin/store/codes/register?kind=trial&state=delivered&q=0551234567')),true);
+ assert.equal(await f.handle({method:'POST',body:{q:'0551234567',kind:'trial',state:'delivered'}},
+  res,new URL('https://blofyplayer.com/api/v1/admin/store/codes/register')),true);
  assert.equal(res.status,200);
  assert.equal(res.payload.matched,1);
  assert.equal(res.payload.items[0].kind,'trial');
@@ -114,7 +115,7 @@ test('owner-only reveal verifies stored code and writes an audit event without s
 test('non-admin cannot list customer details or reveal vouchers',async()=>{
  const f=fixture(false);
  const res={};
- assert.equal(await f.handle({method:'GET'},res,
+ assert.equal(await f.handle({method:'POST',body:{}},res,
   new URL('https://blofyplayer.com/api/v1/admin/store/codes/register')),true);
  assert.equal(await f.handle({method:'POST',body:{voucherId:id,purpose:'customer_support'}},res,
   new URL('https://blofyplayer.com/api/v1/admin/store/codes/reveal')),true);
@@ -123,8 +124,8 @@ test('non-admin cannot list customer details or reveal vouchers',async()=>{
 test('invalid owner search filters are rejected before touching database',async()=>{
  const f=fixture();
  const res={};
- await f.handle({method:'GET'},res,new URL(
-  'https://blofyplayer.com/api/v1/admin/store/codes/register?kind=account_password'));
+ await f.handle({method:'POST',body:{kind:'account_password'}},res,new URL(
+  'https://blofyplayer.com/api/v1/admin/store/codes/register'));
  assert.equal(res.status,400);
  assert.equal(f.calls.length,0);
 });
@@ -142,6 +143,7 @@ test('one visible code register includes paid/free/manual lookup and re-login ma
  assert.match(script,/blofy-one:manage-code/);
  assert.match(script,/codeBox\.textContent=''/);
  assert.match(script,/customer\?\.phone/);
+ assert.doesNotMatch(script,/register\?'\+qs\.toString/);
  assert.match(css,/one-register-detail-fields/);
  assert.doesNotThrow(()=>new Function(center));
  assert.doesNotThrow(()=>new Function(script));
