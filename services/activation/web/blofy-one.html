@@ -6,9 +6,10 @@
 <meta name="theme-color" content="#080e1d">
 <meta name="robots" content="noindex,nofollow">
 <meta name="description" content="BLOFY ONE - لوحة تحكم BLOFY الموحدة">
-<title>BLOFY ONE | لوحة إدارة BLOFY المتكاملة</title>
+<title>BLOFY ONE | العملاء والمبيعات والاشتراكات</title>
 <link rel="icon" href="/blofy-logo.png" type="image/png">
 <link rel="stylesheet" href="/blofy-one.css?v=20261118-integrated-1">
+<link rel="stylesheet" href="/blofy-one-role-split.css?v=20261119-role-separation">
 <script src="/blofy-one.js?v=20261118-integrated-1" defer></script>
 <link rel="stylesheet" href="/blofy-one-customers.css?v=20261118-v1">
 <script src="/blofy-one-customers.js?v=20261118-v1" defer></script>
@@ -33,49 +34,42 @@
 <body>
 <div class="one-shell">
 <aside class="one-rail">
-  <a class="one-brand" href="/one"><span class="one-brand-icon" aria-hidden="true">B</span><span>BLOFY <b>ONE</b><small>منصة الإدارة الموحدة</small></span></a>
-  <nav class="one-nav" id="one-nav" aria-label="التنقل الرئيسي">
-    <span class="one-nav-caption">مساحة العمل</span>
-    <a class="one-nav-home selected" href="/one"><span aria-hidden="true">▦</span> نظرة عامة</a>
-    <a class="one-nav-create" href="#one-issue"><span aria-hidden="true">＋</span> إنشاء كود جديد</a>
-    <a href="#one-growth"><span aria-hidden="true">◷</span> نمو المبيعات والجاهزية</a>
-    <a href="#one-capacity"><span aria-hidden="true">▧</span> مراقبة بث STREAM الحية</a>
-    <a href="#customers"><span aria-hidden="true">♧</span> العملاء والأجهزة</a>
+  <a class="one-brand" href="/one"><span class="one-brand-icon" aria-hidden="true">B</span><span>BLOFY <b>ONE</b><small>مركز العملاء والمبيعات</small></span></a>
+  <nav class="one-nav" id="one-nav" aria-label="إدارة العملاء والمبيعات">
+    <span class="one-nav-caption">BLOFY ONE · الإدارة التجارية</span>
+    <a class="one-nav-home selected" href="/one"><span aria-hidden="true">▦</span> ملخص الأعمال</a>
+    <a class="one-nav-create" href="#one-issue"><span aria-hidden="true">＋</span> إصدار كود جديد</a>
+    <a href="#customers"><span aria-hidden="true">♧</span> العملاء والاشتراكات</a>
     <a href="#stream-management"><span aria-hidden="true">◈</span> حسابات STREAM وXtream</a>
-    <a href="#legacy-xtream"><span aria-hidden="true">⇄</span> استرجاع الأكواد القديمة</a>
-    <a href="#one-sources"><span aria-hidden="true">◉</span> المصادر والقنوات</a>
-    <a href="#one-storage"><span aria-hidden="true">▥</span> التخزين والتنزيلات</a>
+    <a href="#legacy-xtream"><span aria-hidden="true">⇄</span> استرجاع الأكواد</a>
     <a href="#one-distributors"><span aria-hidden="true">♙</span> الموزعون</a>
-    <a href="#one-sales"><span aria-hidden="true">◫</span> المبيعات والمدفوعات</a>
-    <a href="#one-store-sales"><span aria-hidden="true">▣</span> مبيعات متجر BLOFY</a>
-    <a href="#one-renewal-ops"><span aria-hidden="true">◈</span> تجديدات المتجر والاشتراكات</a>
-    <a href="#one-releases"><span aria-hidden="true">⇩</span> تحديثات التطبيقات</a>
+    <a href="#one-store-sales"><span aria-hidden="true">▣</span> طلبات المتجر والمبيعات</a>
+    <a href="#one-renewal-ops"><span aria-hidden="true">◈</span> التجديدات والمدفوعات</a>
+    <a href="#one-sales"><span aria-hidden="true">◫</span> تقارير مبيعات PLAYER</a>
+    <a href="#one-growth"><span aria-hidden="true">◷</span> التسويق ونمو المبيعات</a>
     <details class="one-nav-advanced">
-      <summary><span aria-hidden="true">⚙</span> خيارات الإدارة المتقدمة <span class="one-nav-chevron" aria-hidden="true">⌄</span></summary>
+      <summary><span aria-hidden="true">⚙</span> أدوات البيع والدعم <span class="one-nav-chevron" aria-hidden="true">⌄</span></summary>
       <div class="one-advanced-links">
-        <a href="/admin/control-center">لوحة STREAM الكاملة</a>
-        <a href="/sources-admin#dual">التحويل المتقدم</a>
-        <a href="/admin/content-hub">التحكم التفصيلي في النقل</a>
-        <a href="/admin/control-center/health">فحص صحة الخدمات</a>
-        <a href="/sources-admin#catalog">مكتبة المحتوى</a>
-        <a href="/admin#codes">أكواد PLAYER</a>
-        <a href="/admin/store-inventory">مخزون أكواد المتجر</a>
-        <a href="/admin#devices">الأجهزة المتقدمة</a>
-        <a href="/admin#releases">إدارة إصدارات PLAYER</a>
-        <a href="/admin#support">الدعم الفني</a>
-        <a href="/distributor">دخول الموزّع</a>
+        <a href="/admin/store-inventory">مخزون المنتجات والأكواد</a>
+        <a href="/admin/visitors">إحصائيات زوار المتجر</a>
+        <a href="/admin#support">طلبات دعم العملاء</a>
+        <a href="/distributor">دخول الموزّع المستقل</a>
       </div>
     </details>
+    <div class="one-panel-switch" role="group" aria-label="الانتقال إلى لوحة العمليات">
+      <span class="one-panel-switch-label">للمصادر والبث والتخزين والتطبيقات</span>
+      <a class="one-panel-switch-link" href="/admin">⚙ افتح الإدارة التقنية ←</a>
+    </div>
   </nav>
   <div class="one-rail-bottom">
     <span class="one-secure"><span aria-hidden="true">●</span> جلسة مشرف آمنة</span>
-    <a href="/admin">الإدارة التفصيلية ←</a>
+    <a href="/admin">الإدارة التقنية ←</a>
     <a href="/status">حالة الخدمات ←</a>
   </div>
 </aside>
 <main id="main" class="one-main">
   <header class="one-top">
-    <div class="one-trail">BLOFY <span>/</span> ONE <span>/</span> <strong>موقع الإدارة المتكاملة</strong></div>
+    <div class="one-trail">BLOFY <span>/</span> ONE <span>/</span> <strong>إدارة العملاء والمبيعات</strong></div>
     <div class="one-top-actions">
       <a href="/connect" target="_blank" rel="noopener noreferrer">بوابة الجهاز ↗</a>
       <a href="https://updates.blofyplayer.com/downloads" target="_blank" rel="noopener noreferrer">مركز التحميل ↗</a>
@@ -85,9 +79,9 @@
   </header>
   <section class="one-hero" aria-labelledby="one-home-title">
     <div class="one-hero-copy">
-      <div class="one-eyebrow"><span class="one-glow"></span> BLOFY ONE · CONTROL CENTER</div>
-      <h1 id="one-home-title">كل إدارة BLOFY<br><em>قدّامك في مكان واحد.</em></h1>
-      <p>أنشئ الأكواد، تابع العملاء، استرجع Xtream، وراقب المصادر والاشتراكات والمبيعات مباشرة. كل زر يؤدي إلى وظيفة حقيقية في لوحة الإدارة.</p>
+      <div class="one-eyebrow"><span class="one-glow"></span> BLOFY ONE · BUSINESS CENTER</div>
+      <h1 id="one-home-title">العملاء والمبيعات<br><em>في مكان واحد.</em></h1>
+      <p>أنشئ أكواد الاشتراكات، تابع العملاء والموزعين، وشوف طلبات المتجر والتجديدات والمبيعات. إدارة البث والمصادر والتخزين والتطبيقات صارت في لوحة الإدارة التقنية المنفصلة.</p>
       <div class="one-hero-buttons">
         <a class="one-primary" href="#one-issue">＋ إنشاء كود الآن <span>←</span></a>
         <a class="one-secondary" href="#customers">▣ إدارة العملاء <span>←</span></a>
@@ -100,7 +94,7 @@
         <div class="one-visual-chart"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
         <div class="one-visual-row"><i>◈</i><strong>إصدار الأكواد</strong><em>إدارة</em></div>
         <div class="one-visual-row"><i>▦</i><strong>إدارة العملاء</strong><em>الاشتراكات</em></div>
-        <div class="one-visual-row"><i>◉</i><strong>المصادر والتخزين</strong><em>التقارير</em></div>
+        <div class="one-visual-row"><i>◉</i><strong>الطلبات والتجديدات</strong><em>المبيعات</em></div>
       </div>
     </div>
   </section>
@@ -119,19 +113,17 @@
     <a href="#one-sales">المبيعات</a>
     <a href="#one-growth">جاهزية الزحمة</a>
     <label class="one-jump-label" for="one-quick-jump">انتقل إلى القسم
-      <select id="one-quick-jump" aria-label="الانتقال إلى قسم من لوحة الإدارة">
+      <select id="one-quick-jump" aria-label="الانتقال إلى قسم من إدارة الأعمال">
         <option value="">اختر قسمًا…</option>
         <option value="one-issue">إنشاء كود</option>
         <option value="customers">العملاء</option>
         <option value="stream-management">اشتراكات Xtream وأكواد STREAM</option>
         <option value="legacy-xtream">استخراج الكود القديم</option>
-        <option value="one-sources">المصادر</option>
-        <option value="one-storage">المكتبة والتخزين</option>
+
         <option value="one-distributors">الموزعون</option>
         <option value="one-sales">المدفوعات</option>
         <option value="one-growth">المبيعات والتسويق والجاهزية</option>
-        <option value="one-capacity">مراقبة اتصال البث</option>
-        <option value="one-releases">تحديثات التطبيقات</option>
+
       </select>
     </label>
   </div>
@@ -810,27 +802,21 @@
     <p class="one-footnote">هذه قراءة جاهزية واجهات الإدارة، وليست إثبات تشغيل القنوات أو صلاحية اشتراكات العملاء أو نجاح نقل الملفات.</p>
   </section>
   <section class="one-overview" aria-labelledby="actions-title">
-    <div class="one-section-heading"><div><span class="one-kicker">OPERATIONS</span><h2 id="actions-title">كل أقسام الإدارة</h2></div><span class="one-note">بحث فوري في الأدوات</span></div>
+    <div class="one-section-heading"><div><span class="one-kicker">OPERATIONS</span><h2 id="actions-title">مهام المبيعات والعملاء</h2></div><span class="one-note">بحث فوري في الأدوات</span></div>
     <div class="one-module-search"><label for="one-module-filter">ابحث عن قسم أو مهمة</label>
-      <input id="one-module-filter" type="search" autocomplete="off" placeholder="مثلاً: الأكواد، الموزعين، التنزيلات، المدفوعات" aria-controls="one-module-list">
+      <input id="one-module-filter" type="search" autocomplete="off" placeholder="مثلاً: الأكواد، العملاء، الموزعين، الطلبات" aria-controls="one-module-list">
       <small id="one-module-count" aria-live="polite"></small>
     </div>
     <div class="one-cards" id="one-module-list">
-      <a class="one-module" href="/admin/control-center"><span class="one-icon">◈</span><span class="one-module-text"><strong>لوحة BLOFY STREAM الكاملة</strong><small>عمليات البث والأكواد والمصادر والمشتركين والموزعين</small></span><span class="one-arrow">↖</span></a>
-      <a class="one-module" href="#legacy-xtream"><span class="one-icon">⇄</span><span class="one-module-text"><strong>تحويل كود BLOFY وXtream</strong><small>استرجاع بيانات الكود القديم من نفس لوحة الإدارة</small></span><span class="one-arrow">↖</span></a>
-      <a class="one-module" href="#stream-management"><span class="one-icon">▤</span><span class="one-module-text"><strong>حسابات Xtream وأكواد STREAM</strong><small>عرض المشتركين والأكواد واستخراج الكود من الحساب مباشرة</small></span><span class="one-arrow">↖</span></a>
-      <a class="one-module" href="/admin/visitors"><span class="one-icon">◫</span><span class="one-module-text"><strong>إحصائيات زوار المتجر</strong><small>الزيارات اليومية، سناب وتيك توك، الحملات، العروض، النقرات ومبيعات BLOFY</small></span><span class="one-arrow">↖</span></a>
-      <a class="one-module" href="/admin/store-inventory"><span class="one-icon">▤</span><span class="one-module-text"><strong>مخزون اشتراكات المتجر</strong><small>رفع أكواد ستريم وإكستريم دفعة واحدة وإصدار باقات 3 و6 و12 شهرًا</small></span><span class="one-arrow">↖</span></a>
-      <a class="one-module" href="/admin#codes"><span class="one-icon">⌁</span><span class="one-module-text"><strong>أكواد الاشتراك</strong><small>إنشاء الكود، ربط المصدر، التجديد والإلغاء</small></span><span class="one-arrow">↖</span></a>
-      <a class="one-module" href="/admin#devices"><span class="one-icon">▣</span><span class="one-module-text"><strong>تفعيل BLOFY PLAYER</strong><small>إدارة الأجهزة، أرقام التواصل وصلاحيات التفعيل</small></span><span class="one-arrow">↖</span></a>
-      <a class="one-module" href="#one-sources"><span class="one-icon">▦</span><span class="one-module-text"><strong>مصادر Xtream ومكتبة القنوات</strong><small>إحصائيات المصادر وحالات المزامنة داخل BLOFY ONE</small></span><span class="one-arrow">↖</span></a>
-      <a class="one-module" href="#one-releases"><span class="one-icon">⇩</span><span class="one-module-text"><strong>الإصدارات والتحديثات</strong><small>إصدارات التطبيق الفعلية داخل BLOFY ONE</small></span><span class="one-arrow">↖</span></a>
-      <a class="one-module" href="/admin#support"><span class="one-icon">◌</span><span class="one-module-text"><strong>الدعم والعملاء</strong><small>الطلبات، البحث عن الأجهزة وسجل العملاء</small></span><span class="one-arrow">↖</span></a>
-      <a class="one-module" href="#one-storage"><span class="one-icon">▦</span><span class="one-module-text"><strong>Content Hub والتخزين</strong><small>التنزيل والنقل والمواسم وحالة الملفات</small></span><span class="one-arrow">↖</span></a>
-      <a class="one-module" href="#one-distributors"><span class="one-icon">♙</span><span class="one-module-text"><strong>الموزعون</strong><small>سجل الموزعين الحي داخل BLOFY ONE</small></span><span class="one-arrow">↖</span></a>
-      <a class="one-module" href="/admin/control-center/health"><span class="one-icon">●</span><span class="one-module-text"><strong>مراقبة الخدمات</strong><small>الفحوصات والتحقق من اتصال الأنظمة</small></span><span class="one-arrow">↖</span></a>
-      <a class="one-module" href="#one-sales"><span class="one-icon">◫</span><span class="one-module-text"><strong>تقارير المدفوعات المسجلة</strong><small>طلبات تفعيل BLOFY PLAYER المدفوعة والمنتظرة والمسجلة فقط</small></span><span class="one-arrow">↖</span></a>
-      <a class="one-module" href="https://updates.blofyplayer.com/downloads" target="_blank" rel="noopener noreferrer"><span class="one-icon">↓</span><span class="one-module-text"><strong>مركز تحميل التطبيقات</strong><small>صفحة تنزيل التطبيقات والنسخ المنشورة</small></span><span class="one-arrow">↖</span></a>
+       <a class="one-module" href="#one-issue"><span class="one-icon">＋</span><span class="one-module-text"><strong>إصدار الأكواد</strong><small>إنشاء اشتراكات جديدة وتحديد المدة والعدد</small></span><span class="one-arrow">↖</span></a>
+       <a class="one-module" href="#customers"><span class="one-icon">♧</span><span class="one-module-text"><strong>العملاء</strong><small>البحث، بيانات التواصل، والاشتراكات</small></span><span class="one-arrow">↖</span></a>
+       <a class="one-module" href="#stream-management"><span class="one-icon">▤</span><span class="one-module-text"><strong>حسابات Xtream وأكواد STREAM</strong><small>إدارة الحسابات والأكواد والتجديد</small></span><span class="one-arrow">↖</span></a>
+       <a class="one-module" href="#legacy-xtream"><span class="one-icon">⇄</span><span class="one-module-text"><strong>استرجاع بيانات Xtream</strong><small>الاشتراكات الجديدة والقديمة</small></span><span class="one-arrow">↖</span></a>
+       <a class="one-module" href="#one-distributors"><span class="one-icon">♙</span><span class="one-module-text"><strong>الموزعون</strong><small>الحسابات والأرصدة</small></span><span class="one-arrow">↖</span></a>
+       <a class="one-module" href="#one-store-sales"><span class="one-icon">▣</span><span class="one-module-text"><strong>طلبات المتجر</strong><small>متابعة الطلبات والمبيعات</small></span><span class="one-arrow">↖</span></a>
+       <a class="one-module" href="/admin/store-inventory"><span class="one-icon">▤</span><span class="one-module-text"><strong>مخزون الاشتراكات</strong><small>إدارة منتجات المتجر والأكواد</small></span><span class="one-arrow">↖</span></a>
+       <a class="one-module" href="#one-renewal-ops"><span class="one-icon">◈</span><span class="one-module-text"><strong>التجديدات</strong><small>المدفوعات وتجديد اشتراكات العملاء</small></span><span class="one-arrow">↖</span></a>
+       <a class="one-module" href="/admin/visitors"><span class="one-icon">◫</span><span class="one-module-text"><strong>تسويق المتجر</strong><small>زيارات الموقع ومصادر العملاء</small></span><span class="one-arrow">↖</span></a>
     </div>
   </section>
 <section class="one-overview one-sales" id="one-sales" aria-labelledby="one-sales-title">
@@ -860,7 +846,7 @@
     </div>
     <div class="one-lab-actions"><a class="one-lab-link" href="/one/media-lab">▶ افتح مشغل البث التجريبي</a><button id="one-smoke" type="button">اختبار مقطع تجريبي</button><output id="one-smoke-result" role="status" aria-live="polite">لم يبدأ الاختبار</output></div>
   </section>
-  <footer class="one-footer"><span>BLOFY ONE · INTEGRATED ADMINISTRATIVE PORTAL</span><span>الموقع والتفعيلات محفوظة. محرك البث لم يُحوّل إلى العملاء.</span></footer>
+  <footer class="one-footer"><span>BLOFY ONE · SALES & CUSTOMERS</span><span>الأكواد والعملاء والطلبات هنا؛ المصادر والبث والتخزين والتحديثات في الإدارة التقنية.</span></footer>
 </main>
 </div>
 </body>
