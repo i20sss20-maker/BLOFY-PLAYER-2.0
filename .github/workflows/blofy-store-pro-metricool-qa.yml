@@ -1,0 +1,41 @@
+name: BLOFY STORE PRO Metricool QA
+
+on:
+  pull_request:
+    paths:
+      - 'services/activation/src/store-metricool-overview.mjs'
+      - 'services/activation/src/server.mjs'
+      - 'services/activation/web/store-inventory.*'
+      - 'services/activation/test/store-metricool-overview.test.mjs'
+      - '.github/workflows/blofy-store-pro-metricool-qa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  metricool:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: services/activation/package-lock.json
+      - name: Install dependencies
+        working-directory: services/activation
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify syntax
+        working-directory: services/activation
+        run: |
+          node --check src/store-metricool-overview.mjs
+          node --check src/server.mjs
+          node --check web/store-inventory.js
+      - name: Provider contract and storefront regressions
+        working-directory: services/activation
+        run: |
+          node --test test/store-metricool-overview.test.mjs test/store-pro-campaign-center.test.mjs test/store-pro-growth.test.mjs test/store-ai-assistant.test.mjs
