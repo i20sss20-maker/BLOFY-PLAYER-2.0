@@ -365,3 +365,50 @@ body[data-blofy-storefront] [hidden]{display:none!important}
  body[data-blofy-storefront] .market-footer{padding-bottom:69px}
 }
 @media(prefers-reduced-motion:reduce){.market-filter{transition:none}}
+
+/* STORE PRO mobile reliability pass: navigation and touch targets only.
+   Intentionally leaves pricing, checkout, Geidea scripts and delivery untouched. */
+@media(max-width:860px){
+ .market-nav-row{min-width:0;gap:0}
+ .market-category-nav{
+  flex:1 1 auto;min-width:0;max-width:100%;overflow-x:auto;overflow-y:hidden;
+  scrollbar-width:thin;scroll-snap-type:x proximity;overscroll-behavior-x:contain;
+  -webkit-overflow-scrolling:touch;touch-action:pan-x;
+ }
+ .market-category-nav>a{
+  display:inline-flex;align-items:center;justify-content:center;
+  min-height:44px;box-sizing:border-box;flex:0 0 auto;scroll-snap-align:start;
+ }
+}
+.market-category-nav a:focus-visible,
+.market-mobile-nav a:focus-visible{
+ outline:3px solid var(--market-violet,#6e3bce);outline-offset:-3px;
+ border-radius:9px;
+}
+@media(max-width:680px){
+ .market-mobile-nav a{
+  position:relative;min-width:0;box-sizing:border-box;min-height:52px;
+  padding:5px 2px 3px;line-height:1.35;
+ }
+ .market-mobile-cart-count{
+  position:absolute;inset-inline-start:calc(50% + 12px);top:1px;
+  display:grid;place-items:center;min-width:19px;height:19px;
+  padding:0 3px;border-radius:999px;background:#b6264b;color:#fff;
+  font:800 11px/1 Arial,sans-serif;box-shadow:0 0 0 2px #fff;
+ }
+ .market-mobile-cart-count[hidden]{display:none!important}
+ body[data-blofy-storefront] .market-help-bubble{
+  bottom:calc(82px + env(safe-area-inset-bottom));max-width:calc(100vw - 24px);
+ }
+ body[data-blofy-storefront] .market-footer{
+  padding-bottom:calc(77px + env(safe-area-inset-bottom));
+ }
+}
+@media(max-width:380px){
+ .market-mobile-nav a{font-size:9px;min-height:50px}
+ .market-mobile-nav a>span:first-child{font-size:19px}
+ .market-header-actions{gap:10px}
+}
+@media(prefers-reduced-motion:reduce){
+ .market-category-nav{scroll-behavior:auto}
+}
