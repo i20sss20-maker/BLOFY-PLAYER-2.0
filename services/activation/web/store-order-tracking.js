@@ -75,6 +75,29 @@
      sessionStorage.removeItem(key);
    }catch(_){/* Receipt and delivered codes are more important than cart cleanup. */}
  }
+ function appendActivationGuide(card,item){
+  const section=make('div','blofy-activation-guide');
+  const date=value=>new Date(value).toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'});
+  section.append(make('b','',item.channel==='xtream'?'تفعيل Xtream واستخراج البيانات':'خطوات تشغيل BLOFY STREAM'));
+  section.append(make('p','',item.activatedAt?'بدأ الاشتراك: '+date(item.activatedAt):
+    'الكود لم يفعّل بعد. لا تبدأ المدة إلا عند أول تفعيل ناجح.'));
+  section.append(make('p','',item.expiresAt?'ينتهي الاشتراك: '+date(item.expiresAt):
+    'لا يوجد تاريخ انتهاء محدد قبل أول تفعيل، وسيظهر بعده.'));
+  const steps=make('ol','');
+  const list=item.channel==='xtream'
+    ?['انسخ كود Xtream.', 'افتح صفحة التفعيل وأدخل الكود.',
+       'استخرج Host الكامل وUsername وPassword.', 'أدخل البيانات في BLOFY PLAYER أو مشغّل متوافق.']
+    :['نزّل تطبيق BLOFY STREAM من مركز التحميل.', 'افتح التطبيق واختر إدخال كود.',
+       'الصق الكود الظاهر في طلبك.', 'تبدأ مدة اشتراكك عند التفعيل الناجح.'];
+  for(const step of list)steps.append(make('li','',step));
+  section.append(steps);
+  const link=make('a','secondary',item.channel==='xtream'?'افتح تفعيل Xtream ↗':'تحميل BLOFY STREAM ↗');
+  link.href=item.channel==='xtream'?'/stream/activate':'/downloads';section.append(link);
+  if(item.channel==='xtream'){
+    const recover=make('a','secondary','استخراج / استرجاع Xtream ↗');recover.href='/redeem';section.append(recover);
+  }
+  card.append(section);
+ }
  function render(order){
    $('receipt').hidden=false;
    $('order-number').textContent=order.orderNumber||order.orderId||currentId;
@@ -116,6 +139,7 @@
       const redeem=make('a','secondary','تفعيل واستخراج Xtream');
       redeem.href='/redeem';card.append(redeem);
      }else card.append(make('small','','يبدأ اشتراك STREAM عند إدخال الكود في تطبيق BLOFY STREAM.'));
+     appendActivationGuide(card,item);
      codes.append(card);
    });
  }

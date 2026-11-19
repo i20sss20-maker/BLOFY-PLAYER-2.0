@@ -39,6 +39,14 @@
       <button id="one-inventory-import" type="button">استيراد الأكواد</button>
     </details>
     <p id="one-inventory-status" role="status" aria-live="polite"></p>
+    <section id="one-operations-report" class="one-operations-report" aria-labelledby="one-operations-title">
+      <div class="one-section-heading"><h3 id="one-operations-title">▣ إحصائيات BLOFY — آخر 30 يومًا</h3>
+        <button id="one-operations-refresh" type="button">↻ تحديث الإحصائيات</button></div>
+      <p>الأرقام من قاعدة بيانات الموقع: المبيعات المدفوعة، الطلبات المعلقة، المخزون، التفعيل والتجارب وحسابات العملاء. لا تتضمن أي بيانات شخصية أو أكواد.</p>
+      <div id="one-operations-cards" class="one-inventory-grid" aria-live="polite"></div>
+      <div id="one-operations-breakdown"></div>
+      <p id="one-operations-status" role="status" aria-live="polite">اختر تحديث الإحصائيات لعرض آخر أرقام الخادم.</p>
+    </section>
     <details class="one-fulfillment-audit" id="one-fulfillment-audit">
       <summary>🔎 فحص تسليم الأكواد للطلبات المدفوعة</summary>
       <p>فحص قراءة فقط لسجلات الطلبات المدفوعة: عدد أكواد STREAM وXtream،
@@ -70,7 +78,7 @@
     '<div class="one-inventory-controls"><label>المستهدف لكل نوع',
     '<select id="one-trial-refill-target"><option value="10" selected>10 أكواد</option><option value="20">20 كودًا</option><option value="30">30 كودًا</option></select></label>',
     '<button type="button" id="one-trial-refill-all">＋ تعبئة النوعين</button></div>',
-    '<p id="one-trial-refill-status" role="status" aria-live="polite">ينشئ الأكواد الناقصة فقط بعد موافقتك.</p></div>',
+    '<p id="one-trial-refill-status" role="status" aria-live="polite">ينشئ الأكواد الناقصة فقط بعد موافقتك.</p></div>'
     '<div class="one-inventory-controls">',
     '<label>نوع الكود التجريبي<select id="one-trial-sku">',
     '<option value="trial-stream-1d">BLOFY STREAM — يوم واحد</option>',
@@ -78,7 +86,7 @@
     '<label>عدد الأكواد<input id="one-trial-quantity" type="number" min="1" max="30" step="1" value="5" inputmode="numeric"></label>',
     '<button type="button" id="one-trial-generate">＋ إنشاء الأكواد وإضافتها للمخزون</button></div>',
     '<p id="one-trial-status" role="status" aria-live="polite"></p>',
-    '<div class="one-trial-links"><a href="/#products" target="_blank" rel="noopener">عرض تجربة اليوم داخل خيارات الاشتراكات ↗</a>',
+    '<div class="one-trial-links"><a href="/store#trial-product" target="_blank" rel="noopener">عرض باقة 0 ريال في المتجر ↗</a>',
     '<a href="/store/trial" target="_blank" rel="noopener">صفحة طلب التجربة للعملاء ↗</a></div>',
     '<div class="one-trial-history"><strong>أحدث الأكواد المسلّمة للعملاء (مخفية جزئيًا)</strong>',
     '<div id="one-trial-recent">لم يُحمّل سجل التجارب بعد.</div></div>'
@@ -133,7 +141,7 @@
     if(!choices.has(id))return;
     selected=id;
     for(const el of [issue,legacy,ledger,inventory,trialPanel])el.hidden=el.id!==id;
-    if(id==='one-inventory')void loadStock();
+    if(id==='one-inventory'){void loadStock();void loadOperationsOverview();}
     if(id==='one-trial-stock')void loadTrialStock();
     for(const button of buttons){
       const active=button.dataset.oneCodesTab===id;
@@ -407,6 +415,78 @@
     }catch(e){$('one-inventory-alerts').textContent='تعذر تحميل تنبيهات المخزون.';stockStatus.textContent='فشل قراءة المخزون: '+e.message;}
   }
   $('one-inventory-refresh').addEventListener('click',()=>void loadStock());
+  async function loadOperationsOverview(){
+    const status=$('one-operations-status'),grid=$('one-operations-cards'),
+      breakdown=$('one-operations-breakdown');
+    status.textContent='جارٍ قراءة تقرير المتجر من قاعدة البيانات…';
+    try{
+      const data=await stockFetch('/api/v1/admin/store/operations/overview',undefined,30000);
+      if(data.ok!==true||!Array.isArray(data.products)||!data.paymentSummary)
+        throw Error('analytics_result_invalid');
+      const currency=minor=>(Number(minor||0)/100).toLocaleString('ar-SA')+' ر.س';
+      const sums=data.paymentSummary,customers=data.customers||{},
+        trials=Array.isArray(data.trials)?data.trials:[];
+      const trialReady=trials.reduce((v,x)=>v+Number(x.available||0),0);
+      const trialClaimed=trials.reduce((v,x)=>v+Number(x.claimed||0),0);
+      const metrics=[
+        ['مبيعات مؤكدة · 30 يومًا',sums.paidOrders+' طلب'],
+        ['الإيرادات المؤكدة · 30 يومًا',currency(sums.revenueMinor)],
+        ['طلبات معلقة',sums.pendingOrders+' طلب'],
+        ['طلبات فاشلة',sums.failedOrders+' طلب'],
+        ['أكواد مدفوعة متاحة',data.paidStockTotals?.available+' كود'],
+        ['أكواد مدفوعة مباعة من المخزون',data.paidStockTotals?.sold+' كود'],
+        ['تجارب متاحة',trialReady+' كود'],
+        ['تجارب مسلّمة',trialClaimed+' تجربة'],
+        ['حسابات العملاء',Number(customers.registered||0)+' حساب'],
+        ['ملفات مكتملة',Number(customers.profilesComplete||0)+' عميل']
+      ];
+      grid.replaceChildren();breakdown.replaceChildren();
+      for(const [caption,count] of metrics){
+        const box=document.createElement('article');box.className='one-inventory-stock';
+        const title=document.createElement('strong');title.textContent=caption;
+        const number=document.createElement('b');number.textContent=count;
+        box.append(title,number);grid.append(box);
+      }
+      const detail=document.createElement('details');
+      detail.className='one-operations-details';
+      const heading=document.createElement('summary');
+      heading.textContent='تفصيل كل باقة والتفعيل والمبيعات اليومية ←';detail.append(heading);
+      for(const row of data.products){
+        const line=document.createElement('p');
+        line.textContent=row.name+' · متاح '+row.available+' · مباع '+row.sold+
+          ' · غير صالح '+row.blocked+' · السعر '+currency(row.priceMinor);
+        detail.append(line);
+      }
+      for(const row of trials){
+        const line=document.createElement('p');
+        line.textContent=(row.sku==='trial-stream-1d'?'تجربة STREAM':'تجربة Xtream')+
+          ' · متاح '+row.available+' · سُلّم '+row.claimed+' · مفعّل '+row.activated;
+        detail.append(line);
+      }
+      for(const row of data.activation||[]){
+        const line=document.createElement('p');
+        line.textContent=(row.code_channel==='app'?'STREAM':'Xtream')+
+         ' · أصدر '+row.issued+' · فعّل '+row.activated+
+         ' · منتهي '+row.expired+' · ملغى '+row.revoked;
+        detail.append(line);
+      }
+      const trend=document.createElement('strong');trend.textContent='آخر المبيعات اليومية';
+      detail.append(trend);
+      for(const row of (data.dailyTrend||[]).slice(-30)){
+        const p=document.createElement('p');
+        p.textContent=String(row.day).slice(0,10)+' · مدفوع '+row.paidOrders+
+          ' · معلق '+row.pendingOrders+' · إيراد '+currency(row.revenueMinor);
+        detail.append(p);
+      }
+      breakdown.append(detail);
+      status.textContent='✓ آخر تحديث: '+new Date(data.generatedAt).toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'});
+    }catch(error){
+      status.textContent='تعذر قراءة الإحصائيات: '+error.message+
+        '. بيانات الدفع والمخزون لم يتم تغييرها.';
+    }
+  }
+  $('one-operations-refresh').addEventListener('click',()=>void loadOperationsOverview());
+
   // Owner-confirmed, atomic refill for every *paid* duration/channel,
   // using the server-side inventory lock and real database counts.
   async function refillAllPaidStock(){

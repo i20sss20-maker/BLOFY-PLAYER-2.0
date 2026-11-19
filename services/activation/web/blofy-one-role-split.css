@@ -129,3 +129,18 @@ section[aria-labelledby="readiness-title"],
 .one-fulfillment-summary strong{color:#ccf5e9}
 .one-fulfillment-issues{border-color:#b39a5c}
 .one-fulfillment-issues ul{padding:0 20px 0 0;line-height:1.8;font-size:13px;overflow-wrap:anywhere}
+ 
+/* Read-only commercial operations report shared with stock counters. */
+.one-operations-report{margin:22px 0 18px;border:1px solid #4f897e;border-radius:14px;
+ padding:15px;background:#12313b;color:#e2f6f0}
+.one-operations-report h3{margin:0;font-size:17px}
+.one-operations-report>p{color:#b9e0dc;font-size:12px;line-height:1.8}
+.one-operations-report .one-inventory-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.one-operations-details{border:1px solid #467c7d;border-radius:10px;
+ padding:12px;margin:14px 0;background:#102b37}
+.one-operations-details summary{cursor:pointer;font-weight:800;margin-bottom:7px}
+.one-operations-details p{padding:5px 0;border-bottom:1px solid #2c4e59;
+ font-size:12px;color:#d1f7eb;line-height:1.7;overflow-wrap:anywhere}
+#one-operations-status{font-size:12px;line-height:1.8;color:#b2ede2}
+@media(max-width:800px){.one-operations-report .one-inventory-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:500px){.one-operations-report .one-inventory-grid{grid-template-columns:1fr}}

@@ -450,3 +450,12 @@ body[data-blofy-storefront] .market-products .pricing-rows > button[data-plan-op
   grid-template-columns:repeat(2,minmax(0,1fr));
  }
 }
+
+/* Channel-specific activation guide inside authenticated orders and guest receipts. */
+.blofy-activation-guide{display:grid;gap:8px;margin:15px 0 3px;padding:16px;
+ border:1px solid #cdb7e8;border-radius:13px;background:#fbf8ff;color:#302444}
+.blofy-activation-guide h4{margin:0;color:#4d2498}
+.blofy-activation-guide p{margin:0;color:#544461;font-size:13px;line-height:1.85}
+.blofy-activation-guide ol{margin:5px 0;padding-inline-start:24px;color:#3c2c53;font-size:13px;line-height:1.9}
+.blofy-activation-guide .secondary{display:inline-flex;margin:4px 7px 4px 0;max-width:max-content;
+ color:#512397;border:1px solid #bfa2e5;border-radius:10px;padding:9px 13px;text-decoration:none}

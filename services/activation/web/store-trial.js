@@ -4,6 +4,7 @@
  const products=new Map();
  const messages={
   trial_login_required:'سجّل دخولك إلى حساب BLOFY بالبريد ورمز التحقق قبل طلب التجربة.',
+   trial_profile_required:'أكمل الاسم ورقم الجوال من حساب BLOFY أولًا. لا تُتاح إلا تجربة واحدة لكل حساب وجوال.',
   trial_out_of_stock:'نفد مخزون هذا النوع حاليًا. راجع التوفر لاحقًا أو تواصل مع الدعم.',
   trial_daily_quota_reached:'اكتملت حصة التجارب اليومية. جرّب لاحقًا.',
   trial_rate_limited:'عدد محاولات مرتفع. يرجى إعادة المحاولة لاحقًا.',
@@ -55,6 +56,21 @@
    'تم التفعيل؛ تاريخ انتهاء التجربة: '+formatDate(trial.expiresAt):
    'تبدأ مدة اليوم الواحد عند أول تفعيل ناجح فقط.';
   $('trial-xtream-link').hidden=trial.channel!=='xtream';
+  const help=$('trial-claim-guide');
+  if(help){
+    help.replaceChildren();
+    const title=document.createElement('strong');
+    title.textContent=trial.channel==='xtream'?'تفعيل واستخراج Xtream':'تشغيل BLOFY STREAM';
+    const details=document.createElement('p');
+    details.textContent=trial.channel==='xtream'?
+      'انسخ الكود ثم افتح صفحة التفعيل واستخرج Host الكامل وUsername وPassword. يبدأ اليوم بعد أول تفعيل ناجح.':
+      'انسخ الكود ثم حمّل تطبيق BLOFY STREAM وأدخله داخل التطبيق. يبدأ اليوم بعد أول تفعيل ناجح.';
+    const link=document.createElement('a');
+    link.href=trial.channel==='xtream'?'/stream/activate':'/downloads';
+    link.textContent=trial.channel==='xtream'?'صفحة تفعيل واستخراج Xtream ↗':'تحميل تطبيق BLOFY STREAM ↗';
+    link.className='btn btn-outline';
+    help.append(title,details,link);
+  }
   $('trial-result').hidden=false;
   buttons(false);
   if(!trial.alreadyClaimed)notice('تم تخصيص كود تجريبي لحسابك. يمكنك نسخه الآن.','success');

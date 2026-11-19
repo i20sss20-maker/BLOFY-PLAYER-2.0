@@ -43,6 +43,36 @@ export function createCommercialHandlers({pool, keyHex, json, readJson, requireA
     requireCheckoutCustomer:customerAccounts.checkoutIdentity,env});
   const storeTrials = createStoreTrialInventory({pool,json,readJson,keyHex,
     authorizeAdmin:requireAdmin,getAuthenticatedCustomer:customerAccounts.authenticatedCustomer,env});
+  // One shared stock automation runner per service process. Database advisory
+  // issuance locks serialize across replicas; no customer codes enter logs.
+  // Trial stock starts at 30+30 when empty; subsequent refills are triggered
+  // only below 10 available for a SKU. Paid stock uses the same 10→30 rule.
+  if(env.BLOFY_STORE_AUTO_REFILL_ENABLED==='true'||
+     env.BLOFY_STORE_TRIAL_AUTO_REFILL_ENABLED==='true'){
+    let refillBusy=false;
+    const refill=async()=>{
+      if(refillBusy)return;
+      refillBusy=true;
+      try{
+        if(env.BLOFY_STORE_TRIAL_AUTO_REFILL_ENABLED==='true'){
+          const trial=await storeTrials.autoRefillTrials();
+          if(trial?.generated)console.info('[blofy-trial-stock-refill]',JSON.stringify({
+            generated:trial.generated,available:trial.available}));
+        }
+        if(env.BLOFY_STORE_AUTO_REFILL_ENABLED==='true'){
+          const paid=await storePayments.autoRefillPaidStock();
+          if(paid?.generated)console.info('[blofy-paid-stock-refill]',JSON.stringify({
+            generated:paid.generated,plans:paid.plans.map(p=>({sku:p.sku,after:p.after}))}));
+        }
+      }catch(error){
+        console.warn('[blofy-stock-refill]',String(error?.message||'refill_unavailable').slice(0,100));
+      }finally{refillBusy=false;}
+    };
+    const first=setTimeout(()=>void refill(),5000);
+    first.unref?.();
+    const periodic=setInterval(()=>void refill(),30*60*1000);
+    periodic.unref?.();
+  }
   customerAccounts.setReconciler(storePayments.reconcileCustomerOrder);
   customerAccounts.setStoreSchema(storePayments.ensureStoreSchema);
   const zidOAuth = createZidOAuthHandlers({pool,json,keyHex,env});

@@ -225,3 +225,28 @@ test('customer-facing page and owner stock are completely separate from card che
  assert.match(account,/handler\.authenticatedCustomer=async req/);
  assert.match(adminJs,/\/api\/v1\/admin\/store\/trials\/generate/);
 });
+
+
+test('safe automatic trial refill seeds exactly 30 STREAM and 30 Xtream and skips repeat calls',async()=>{
+ const {pool,state}=fakeDatabase();
+ const handler=createStoreTrialInventory({pool,json,readJson,keyHex:KEY,
+   env:{...env,BLOFY_STORE_TRIAL_AUTO_REFILL_ENABLED:'true'},
+   getAuthenticatedCustomer:async()=>({id:CUSTOMER}),authorizeAdmin:()=>false});
+ const once=await handler.autoRefillTrials();
+ assert.equal(once.ok,true);
+ assert.equal(once.generated,60);
+ assert.equal(state.stock.filter(x=>x.sku==='trial-stream-1d').length,30);
+ assert.equal(state.stock.filter(x=>x.sku==='trial-xtream-1d').length,30);
+ const second=await handler.autoRefillTrials();
+ assert.equal(second.generated,0);
+ assert.equal(state.vouchers.size,60,'repeat must not duplicate codes');
+ // Inventory is restored only once it drops *below* 10.
+ for(const item of state.stock.filter(x=>x.sku==='trial-stream-1d').slice(0,21)){
+  item.customer_id=crypto.randomUUID();
+  item.claimed_at=new Date();
+ }
+ const still=await handler.autoRefillTrials();
+ assert.equal(still.generated,21,'9 remaining triggers restore to 30 for only STREAM');
+ assert.equal(state.stock.filter(x=>x.sku==='trial-stream-1d'&&!x.customer_id).length,30);
+ assert.equal(state.stock.filter(x=>x.sku==='trial-xtream-1d'&&!x.customer_id).length,30);
+});

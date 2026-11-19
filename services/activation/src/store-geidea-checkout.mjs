@@ -247,12 +247,7 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
  // All eight paid SKUs have a separate, real voucher pool. Never seed stock
  // from a public route, never change existing voucher expiry or live customers.
  // A repeat request fills only the current shortfall, under the issuance lock.
- async function refillAllInventory(req,res){
-   if(!authorizeAdmin(req,res))return;
-   const body=await readJson(req);
-   const target=Number(body?.target);
-   if(!Number.isSafeInteger(target)||![10,20,30,50].includes(target))
-     return json(res,400,{error:'store_inventory_refill_target_invalid'});
+ async function fillPaidStock(target,{onlyWhenLow=false}={}){
    await schema();
    const db=await pool.connect();
    try{
@@ -270,14 +265,16 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
        sku:plan[0],name:plan[1],channel:plan[2],durationDays:plan[3],
        before:counts.get(plan[0])||0,generated:0
      }));
-     const missing=rows.reduce((sum,r)=>sum+Math.max(0,target-r.before),0);
+     const required=onlyWhenLow?rows.filter(row=>row.before<10):rows;
+     const mustRefill=new Set(required.map(row=>row.sku));
+     const missing=required.reduce((sum,r)=>sum+Math.max(0,target-r.before),0);
      if(missing>400)throw err('store_inventory_refill_limit',400);
      if(missing){
        const sourceId=await source(db);
        const issueCount=await db.query('SELECT COUNT(*)::int AS n FROM blofy_xtream_gateway_duration_codes');
        let totalIssued=Number(issueCount.rows[0]?.n)||0;
        for(const row of rows){
-         const need=Math.max(0,target-row.before);
+         const need=mustRefill.has(row.sku)?Math.max(0,target-row.before):0;
          for(let i=0;i<need;i++){
            let inserted=false;
            for(let retry=0;retry<12;retry++){
@@ -301,11 +298,19 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
        }
      }
      await db.query('COMMIT');
-     return json(res,200,{ok:true,target,generated:missing,
+     return {ok:true,target,generated:missing,
        plans:rows.map(r=>({...r,after:r.before+r.generated})),
-       channelCount:2,paidPlanCount:P.length,activated:false});
+       channelCount:2,paidPlanCount:P.length,activated:false};
    }catch(e){await db.query('ROLLBACK').catch(()=>{});throw e}
    finally{db.release();}
+ }
+ async function refillAllInventory(req,res){
+   if(!authorizeAdmin(req,res))return;
+   const body=await readJson(req);
+   const target=Number(body?.target);
+   if(!Number.isSafeInteger(target)||![10,20,30,50].includes(target))
+     return json(res,400,{error:'store_inventory_refill_target_invalid'});
+   return json(res,200,await fillPaidStock(target));
  }
  async function salesSummary(req,res){
    if(!authorizeAdmin(req,res))return;
@@ -327,6 +332,87 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
    )).rows[0]?.count||0;
    return json(res,200,{ok:true,periodDays:90,sales:sales.rows,coupons:coupons.rows,
      fulfillmentIssues:Number(failures),fulfillmentIssuesScope:'shallow_link_check_last_90_days'});
+ }
+ async function fullOperationsOverview(req,res){
+   if(!authorizeAdmin(req,res))return;
+   await schema();
+   // Read-only totals: do not expose voucher secrets or customer PII.
+   const [stock,orders,trend,activation,tables]=await Promise.all([
+     pool.query('SELECT i.sku,COUNT(*)::int AS total,'+
+      'COUNT(*) FILTER (WHERE i.sold_at IS NULL AND i.sold_order_id IS NULL '+
+      'AND v.sold_at IS NULL AND v.redeemed_at IS NULL AND v.revoked_at IS NULL '+
+      'AND v.account_id IS NULL AND v.code_vault IS NOT NULL)::int AS available,'+
+      'COUNT(*) FILTER (WHERE i.sold_at IS NOT NULL OR i.sold_order_id IS NOT NULL)::int AS sold,'+
+      'COUNT(*) FILTER (WHERE i.sold_at IS NULL AND i.sold_order_id IS NULL AND '+
+      '(v.sold_at IS NOT NULL OR v.redeemed_at IS NOT NULL OR v.revoked_at IS NOT NULL '+
+      'OR v.account_id IS NOT NULL OR v.code_vault IS NULL))::int AS blocked '+
+      'FROM blofy_store_inventory i JOIN blofy_xtream_gateway_duration_codes v '+
+      'ON v.id=i.voucher_id GROUP BY i.sku ORDER BY i.sku'),
+     pool.query("SELECT status,sku,COUNT(*)::int AS orders,COALESCE(SUM(amount_minor),0)::bigint AS amount_minor "+
+       "FROM blofy_store_geidea_orders WHERE created_at>=NOW()-INTERVAL '30 days' "+
+       "GROUP BY status,sku ORDER BY status,sku"),
+     pool.query("SELECT (created_at AT TIME ZONE 'Asia/Riyadh')::date AS day,"+
+       "COUNT(*) FILTER (WHERE status='paid')::int AS paid_orders,"+
+       "COUNT(*) FILTER (WHERE status='pending')::int AS pending_orders,"+
+       "COALESCE(SUM(amount_minor) FILTER (WHERE status='paid'),0)::bigint AS revenue_minor "+
+       "FROM blofy_store_geidea_orders WHERE created_at>=NOW()-INTERVAL '30 days' "+
+       "GROUP BY day ORDER BY day"),
+     pool.query('SELECT v.code_channel,COUNT(*)::int AS issued,'+
+       'COUNT(*) FILTER (WHERE v.redeemed_at IS NOT NULL)::int AS activated,'+
+       'COUNT(*) FILTER (WHERE v.revoked_at IS NOT NULL)::int AS revoked,'+
+       'COUNT(*) FILTER (WHERE v.expires_at IS NOT NULL AND v.expires_at<NOW())::int AS expired '+
+       'FROM blofy_xtream_gateway_duration_codes v WHERE v.id IN '+
+       '(SELECT voucher_id FROM blofy_store_inventory) GROUP BY v.code_channel'),
+     pool.query("SELECT to_regclass('public.blofy_store_trial_inventory') AS trials,"+
+       "to_regclass('public.blofy_store_customers') AS customers")
+   ]);
+   let trials=[],customerStats={registered:0,profilesComplete:0,missingProfile:0};
+   if(tables.rows[0]?.trials){
+     trials=(await pool.query('SELECT i.sku,COUNT(*)::int AS total,'+
+       'COUNT(*) FILTER (WHERE i.claimed_at IS NULL AND v.redeemed_at IS NULL '+
+       'AND v.revoked_at IS NULL AND v.account_id IS NULL AND v.code_vault IS NOT NULL)::int AS available,'+
+       'COUNT(*) FILTER (WHERE i.claimed_at IS NOT NULL)::int AS claimed,'+
+       'COUNT(*) FILTER (WHERE i.claimed_at IS NOT NULL AND v.redeemed_at IS NOT NULL)::int AS activated '+
+       'FROM blofy_store_trial_inventory i JOIN blofy_xtream_gateway_duration_codes v '+
+       'ON v.id=i.voucher_id GROUP BY i.sku ORDER BY i.sku')).rows;
+   }
+   if(tables.rows[0]?.customers){
+     const cols=(await pool.query("SELECT column_name FROM information_schema.columns "+
+       "WHERE table_schema='public' AND table_name='blofy_store_customers' "+
+       "AND column_name IN ('full_name','phone_e164')")).rows;
+     const completeCols=cols.length===2;
+     const c=(await pool.query(completeCols?
+       'SELECT COUNT(*)::int AS registered,'+
+       'COUNT(*) FILTER (WHERE full_name IS NOT NULL AND phone_e164 IS NOT NULL)::int AS profiles_complete '+
+       'FROM blofy_store_customers':
+       'SELECT COUNT(*)::int AS registered,0::int AS profiles_complete FROM blofy_store_customers')).rows[0];
+     customerStats={registered:Number(c?.registered||0),profilesComplete:Number(c?.profiles_complete||0),
+       missingProfile:Math.max(0,Number(c?.registered||0)-Number(c?.profiles_complete||0))};
+   }
+   const ordersRows=orders.rows.map(row=>({...row,orders:Number(row.orders||0),
+     amount_minor:Number(row.amount_minor||0)}));
+   const paid=ordersRows.filter(x=>x.status==='paid');
+   return json(res,200,{ok:true,periodDays:30,generatedAt:new Date().toISOString(),
+     products:publicStorePlans().map(plan=>{
+       const count=stock.rows.find(x=>x.sku===plan.sku)||{};
+       return {...plan,total:Number(count.total||0),available:Number(count.available||0),
+         sold:Number(count.sold||0),blocked:Number(count.blocked||0)};
+     }),
+     paidStockTotals:{available:stock.rows.reduce((v,x)=>v+Number(x.available||0),0),
+       sold:stock.rows.reduce((v,x)=>v+Number(x.sold||0),0)},
+     ordersBySku:ordersRows,
+     paymentSummary:{paidOrders:paid.reduce((n,x)=>n+x.orders,0),
+       revenueMinor:paid.reduce((n,x)=>n+x.amount_minor,0),
+       pendingOrders:ordersRows.filter(x=>x.status==='pending').reduce((n,x)=>n+x.orders,0),
+       failedOrders:ordersRows.filter(x=>x.status==='failed').reduce((n,x)=>n+x.orders,0)},
+     dailyTrend:trend.rows.map(row=>({day:row.day,paidOrders:Number(row.paid_orders||0),
+       pendingOrders:Number(row.pending_orders||0),revenueMinor:Number(row.revenue_minor||0)})),
+     activation:activation.rows.map(row=>({...row,issued:Number(row.issued||0),
+       activated:Number(row.activated||0),revoked:Number(row.revoked||0),
+       expired:Number(row.expired||0)})),
+     trials:trials.map(row=>({sku:row.sku,total:Number(row.total||0),
+       available:Number(row.available||0),claimed:Number(row.claimed||0),
+       activated:Number(row.activated||0)})),customers:customerStats});
  }
  async function adminFulfillmentAudit(req,res){
    if(!authorizeAdmin(req,res))return;
@@ -993,6 +1079,7 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
    if(p==='/api/v1/store/renewals/checkout'&&req.method==='POST'){await renewalFlow.checkout(req,res);return true;}
    if(p==='/api/v1/store/renewals/pending'&&req.method==='POST'){await renewalFlow.getPending(req,res);return true;}
    if(p==='/api/v1/admin/store/sales'&&req.method==='GET'){await salesSummary(req,res);return true;}
+   if(p==='/api/v1/admin/store/operations/overview'&&req.method==='GET'){await fullOperationsOverview(req,res);return true;}
    if(p==='/api/v1/admin/store/coupons/create'&&req.method==='POST'){await newCoupon(req,res);return true;}
    if(p==='/api/v1/admin/store/coupons/deactivate'&&req.method==='POST'){await disableCoupon(req,res);return true;}
    if(p==='/api/v1/admin/store/inventory'&&req.method==='GET'){await inventorySummary(req,res);return true;}
@@ -1009,6 +1096,8 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
  };
  // Only call this from the verified customer portal AFTER owner authorization
  // and server-side rate limiting. Never expose an unauthenticated public endpoint.
+ handler.autoRefillPaidStock=async()=>env.BLOFY_STORE_AUTO_REFILL_ENABLED==='true'
+   ?fillPaidStock(30,{onlyWhenLow:true}):{ok:false,reason:'disabled'};
  handler.ensureStoreSchema=()=>schema();
  handler.reconcileCustomerOrder=async id=>{
    if(!UUID.test(id||''))throw err('store_invalid_order_id',400);

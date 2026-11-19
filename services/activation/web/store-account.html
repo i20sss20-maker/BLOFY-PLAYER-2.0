@@ -6,8 +6,8 @@
 <title>حسابي واشتراكاتي | BLOFY</title><link rel="icon" href="/blofy-logo.png">
 <link rel="stylesheet" href="/store/cart.css?v=4">
 <link rel="stylesheet" href="/store/checkout-theme.css?v=1">
-<link rel="stylesheet" href="/store/visual.css?v=20261119-2">
-<script defer src="/store/account.js?v=20261119-subscriptions-v2"></script>
+<link rel="stylesheet" href="/store/visual.css?v=20261119-orders-guide-v3">
+<script defer src="/store/account.js?v=20261119-profile-v3"></script>
 <style>
 .subscription-state{display:inline-flex;align-items:center;border-radius:999px;font-weight:700;font-size:12px;padding:5px 11px;margin:6px 0;border:1px solid #ccd4d8;background:#f3f4f6;color:#4b5563}
 .subscription-state-active{background:#e4f7ed;border-color:#97d7b5;color:#176039}
@@ -48,6 +48,18 @@
 </form>
 </section>
 <section id="dashboard" hidden>
+<section class="card" id="profile-required" hidden aria-labelledby="profile-heading">
+ <h2 id="profile-heading">إكمال بيانات حساب BLOFY</h2>
+ <p>قبل طلب التجربة أو إتمام الشراء، يجب إدخال الاسم ورقم الجوال. بريدك الإلكتروني تم توثيقه برمز الدخول. رقم الجوال يُستخدم للتواصل ومنع تكرار التجربة ولا يُعد موثقًا برسالة SMS.</p>
+ <form id="profile-form">
+  <label for="profile-name">الاسم الكامل *</label>
+  <input id="profile-name" type="text" autocomplete="name" required minlength="2" maxlength="100" placeholder="اسمك الكامل">
+  <label for="profile-phone">رقم الجوال السعودي *</label>
+  <input id="profile-phone" type="tel" inputmode="tel" autocomplete="tel" required maxlength="18" dir="ltr" placeholder="05xxxxxxxx">
+  <div class="actions"><button type="submit" class="primary" id="profile-save">حفظ بياناتي والمتابعة</button></div>
+ </form>
+ <p id="profile-feedback" role="status" aria-live="polite"></p>
+</section>
 <div class="account-dashboard-head">
  <div><span class="eyebrow">MY BLOFY</span><h2>لوحة حسابك</h2>
  <p>ملخص طلباتك واشتراكاتك، دون الحاجة للبحث في رسائل البريد.</p></div>

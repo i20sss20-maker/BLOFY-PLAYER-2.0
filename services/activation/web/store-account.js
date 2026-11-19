@@ -43,6 +43,29 @@
  function view(loggedIn){
   $('login').hidden=loggedIn;$('dashboard').hidden=!loggedIn;
  }
+ function showProfileRequired(data){
+  const missing=data.profileRequired===true&&data.profileComplete!==true;
+  const form=$('profile-required');form.hidden=!missing;
+  $('profile-name').value=String(data.fullName||'');
+  $('profile-phone').value=String(data.phone||'');
+  const dash=$('dashboard');
+  for(const child of dash.children){
+    if(child===form||child.classList?.contains('account-dashboard-head'))continue;
+    child.hidden=missing;
+  }
+  return missing;
+ }
+ $('profile-form').addEventListener('submit',async event=>{
+  event.preventDefault();const btn=$('profile-save');btn.disabled=true;
+  $('profile-feedback').textContent='جارٍ حفظ البيانات…';
+  try{
+   const data=await api('/profile',{fullName:$('profile-name').value,phone:$('profile-phone').value});
+   if(data.ok!==true||data.profileComplete!==true)throw Error('invalid_customer_profile');
+   $('profile-feedback').textContent='✓ تم الحفظ. بريدك موثّق وبياناتك مكتملة.';
+   await load();
+  }catch(e){$('profile-feedback').textContent=statusMessage(e);}
+  finally{btn.disabled=false;}
+ });
  function label(s){
   return ({paid:'مدفوع',pending:'جارٍ تأكيد الدفع',failed:'فشل الدفع',cancelled:'ملغي'})[s]||'قيد المراجعة';
  }
@@ -62,7 +85,10 @@
    rate_limited:'محاولات كثيرة؛ حاول لاحقًا.',
    order_not_found:'تعذر تأكيد ملكية الطلب؛ تحقق من المعرف ومفتاح الرابط.',
    order_already_linked:'هذا الطلب مرتبط بحساب مختلف؛ تواصل مع الدعم.',
-   order_delivery_unavailable:'لم نتمكن من عرض الأكواد الآن؛ لا تكرر الدفع وتواصل مع الدعم.'
+   order_delivery_unavailable:'لم نتمكن من عرض الأكواد الآن؛ لا تكرر الدفع وتواصل مع الدعم.',
+   customer_profile_required:'أكمل الاسم ورقم الجوال أولًا قبل طلب تجربة أو الدفع.',
+   invalid_customer_profile:'أدخل اسمًا صحيحًا ورقم جوال سعودي يبدأ بـ05 أو +9665.',
+   customer_phone_in_use:'رقم الجوال مستخدم بحساب BLOFY آخر. استرجع الحساب الأول أو تواصل مع الدعم.'
   };
   return map[e.message]||'تعذر إكمال العملية: '+e.message;
  }
@@ -348,6 +374,8 @@
    const data=await api('');
    orders=Array.isArray(data.orders)?data.orders:[];
    $('account-email').textContent=data.email||'';
+   view(true);
+   if(showProfileRequired(data)){tell('أكمل الاسم ورقم الجوال للمتابعة.');return;}
    $('reminder-optin').checked=data.alertsOptIn===true;
    updateOrderOverview();
    renderOrders();
@@ -411,6 +439,34 @@
    $('payment-receipt').scrollIntoView({behavior:'smooth'});
   }catch(e){if(serial===paymentReceiptGeneration)tell(statusMessage(e));}
  }
+ function appendActivationGuide(box,c){
+  const guide=node('div');guide.className='blofy-activation-guide';
+  const format=value=>new Date(value).toLocaleString('ar-SA',{timeZone:'Asia/Riyadh'});
+  guide.append(node('h4',c.channel==='xtream'?'خطوات تفعيل واستخراج Xtream':'خطوات تشغيل BLOFY STREAM'),
+    node('p',c.activatedAt?'بدأ الاشتراك: '+format(c.activatedAt):
+      'الكود غير مفعّل: لن تبدأ مدة الاشتراك إلا بعد أول تفعيل ناجح.'),
+    node('p',c.expiresAt?'تاريخ الانتهاء: '+format(c.expiresAt):
+      'لا يوجد تاريخ انتهاء حتى أول تفعيل ناجح؛ سيظهر بعدها.'));
+  const list=node('ol');
+  const steps=c.channel==='xtream'
+   ?['انسخ كود Xtream أعلاه.','افتح صفحة التفعيل وأدخل الكود.',
+      'استخرج رابط Host الكامل واسم المستخدم وكلمة المرور.',
+      'أضف بيانات Xtream في تطبيق BLOFY PLAYER أو مشغّل متوافق.']
+   :['حمّل تطبيق BLOFY STREAM من مركز التحميل الرسمي.',
+      'افتح التطبيق ثم اختر إدخال كود الاشتراك.',
+      'الصق الكود الموجود في تفاصيل الطلب لتفعيله.',
+      'تبدأ مدة الاشتراك من أول تفعيل ناجح فقط.'];
+  for(const step of steps)list.append(node('li',step));
+  guide.append(list);
+  const link=node('a',c.channel==='xtream'?'فتح صفحة تفعيل Xtream ↗':'تحميل BLOFY STREAM ↗');
+  link.className='secondary';link.href=c.channel==='xtream'?'/stream/activate':'/downloads';
+  guide.append(link);
+  if(c.channel==='xtream'){
+   const recover=node('a','استخراج / استرجاع بيانات Xtream ↗');
+   recover.href='/redeem';recover.className='secondary';guide.append(recover);
+  }
+  box.append(guide);
+ }
  async function showOrder(id){
   clearReceipt();
   const generation=receiptGeneration;
@@ -439,6 +495,7 @@
      link.className='secondary';link.href=c.expiresAt?'#account-subscriptions':'/redeem';
      box.append(link);
     }else box.append(node('small','فعّل الكود داخل تطبيق BLOFY STREAM لبدء مدة الاشتراك.'));
+    appendActivationGuide(box,c);
     root.append(box);
    }
    $('receipt').scrollIntoView({behavior:'smooth'});

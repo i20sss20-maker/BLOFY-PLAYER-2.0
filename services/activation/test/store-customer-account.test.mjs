@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-import {createStoreCustomerHandlers,expiryAlert,customerCookie,safeOwnedSubscriptionExpiry} from '../src/store-customer-account.mjs';
+import {readFileSync} from 'node:fs';
+import {createStoreCustomerHandlers,expiryAlert,customerCookie,safeOwnedSubscriptionExpiry,normalizeCustomerPhone,normalizeCustomerName} from '../src/store-customer-account.mjs';
 import {encryptStreamCode} from '../src/xtream-code-vault.mjs';
 import {streamCodeProof} from '../src/xtream-duration-codes.mjs';
 
@@ -227,4 +228,28 @@ test('customer subscriptions never show 1970 expiry for unactivated or unlinked 
  assert.equal(safeOwnedSubscriptionExpiry({...linked,expires_at:'invalid-date'}),null);
  assert.equal(safeOwnedSubscriptionExpiry({...linked,account_expires_at:'bad-date'}),voucher);
  assert.equal(safeOwnedSubscriptionExpiry(null),null);
+});
+
+test('verified customer profile requires a valid name and non-duplicated Saudi phone',()=>{
+ assert.equal(normalizeCustomerPhone('0551234567'),'+966551234567');
+ assert.equal(normalizeCustomerPhone('551234567'),'+966551234567');
+ assert.equal(normalizeCustomerPhone('+966551234567'),'+966551234567');
+ assert.equal(normalizeCustomerPhone('00966551234567'),'+966551234567');
+ for(const bad of ['','123','009665512345678','050000000','not a phone']){
+  assert.equal(normalizeCustomerPhone(bad),null);
+ }
+ assert.equal(normalizeCustomerName('  أحمد   محمد  '),'أحمد محمد');
+ assert.equal(normalizeCustomerName('<script>'),null);
+ assert.equal(normalizeCustomerName('a'),null);
+ const source=readFileSync(new URL('../src/store-customer-account.mjs',import.meta.url),'utf8');
+ const html=readFileSync(new URL('../web/store-account.html',import.meta.url),'utf8');
+ const js=readFileSync(new URL('../web/store-account.js',import.meta.url),'utf8');
+ assert.match(source,/idx_blofy_store_customer_phone_unique/);
+ assert.match(source,/customer_profile_required/);
+ assert.match(source,/\/api\/v1\/store\/account\/profile/);
+ assert.match(html,/id="profile-name"/);
+ assert.match(html,/id="profile-phone"/);
+ assert.match(js,/showProfileRequired/);
+ assert.match(js,/await api\('\/profile'/);
+ assert.match(js,/appendActivationGuide/);
 });

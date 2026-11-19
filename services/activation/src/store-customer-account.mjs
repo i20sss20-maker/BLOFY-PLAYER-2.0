@@ -22,6 +22,23 @@ const ORIGINS=new Set(['https://blofyplayer.com','https://www.blofyplayer.com','
 const maxRequests=createFixedWindowLimiter({limit:5,windowMs:600000});
 const maxVerifies=createFixedWindowLimiter({limit:12,windowMs:600000});
 const maxClaims=createFixedWindowLimiter({limit:20,windowMs:600000});
+const maxProfiles=createFixedWindowLimiter({limit:8,windowMs:600000});
+// Phone number is collected for customer contact and one-trial-per-phone
+// enforcement. It is NOT SMS-verified: do not imply phone ownership verification.
+export function normalizeCustomerPhone(input){
+ const digits=String(input||'').trim().replace(/[\s()\-]/g,'');
+ if(/^05[0-9]{8}$/.test(digits))return '+966'+digits.slice(1);
+ if(/^5[0-9]{8}$/.test(digits))return '+966'+digits;
+ if(/^\+9665[0-9]{8}$/.test(digits))return digits;
+ if(/^009665[0-9]{8}$/.test(digits))return '+'+digits.slice(2);
+ return null;
+}
+export function normalizeCustomerName(input){
+ const name=String(input||'').trim().replace(/\s+/g,' ');
+ if(name.length<2||name.length>100||/[<>\u0000-\u001f]/.test(name))return null;
+ return name;
+}
+const completeProfile=customer=>Boolean(customer?.full_name&&customer?.phone_e164);
 // Verified email + paid-order ownership is required for all password recovery.
 const maxReveals=createFixedWindowLimiter({limit:10,windowMs:600000});
 const sha=s=>crypto.createHash('sha256').update(s).digest('hex');
@@ -82,6 +99,7 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
  const keyOK=/^[a-f0-9]{64}$/i.test(String(keyHex||''));
  const enabled=env.BLOFY_CUSTOMER_ACCOUNTS_ENABLED==='true'&&keyOK;
  const loginRequiredForStore=env.BLOFY_STORE_REQUIRE_CUSTOMER_LOGIN==='true';
+ const profileRequired=env.BLOFY_CUSTOMER_PROFILE_REQUIRED==='true';
  let reconcileOwnedPayment=async()=>false;
  const mailKey=String(env.BLOFY_CUSTOMER_RESEND_API_KEY||'').trim();
  const mailFrom=String(env.BLOFY_CUSTOMER_MAIL_FROM||'').trim();
@@ -123,6 +141,10 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
     await db.query('CREATE TABLE IF NOT EXISTS blofy_store_customers ('+
       'id UUID PRIMARY KEY,email TEXT NOT NULL UNIQUE,alerts_opt_in BOOLEAN NOT NULL DEFAULT FALSE,'+
       'created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),last_login_at TIMESTAMPTZ)');
+    await db.query('ALTER TABLE blofy_store_customers ADD COLUMN IF NOT EXISTS full_name TEXT');
+    await db.query('ALTER TABLE blofy_store_customers ADD COLUMN IF NOT EXISTS phone_e164 TEXT');
+    await db.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_blofy_store_customer_phone_unique '+
+      'ON blofy_store_customers(phone_e164) WHERE phone_e164 IS NOT NULL');
     await db.query('CREATE TABLE IF NOT EXISTS blofy_store_customer_challenges ('+
       'email TEXT PRIMARY KEY,code_hash TEXT NOT NULL,attempts SMALLINT NOT NULL DEFAULT 0,'+
       'expires_at TIMESTAMPTZ NOT NULL,issued_at TIMESTAMPTZ NOT NULL DEFAULT NOW())');
@@ -169,7 +191,7 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
  async function current(req){
   const token=cookieToken(req);
   if(!token)return null;
-  const result=await pool.query('SELECT c.id,c.email,c.alerts_opt_in FROM blofy_store_customer_sessions s '+
+  const result=await pool.query('SELECT c.id,c.email,c.alerts_opt_in,c.full_name,c.phone_e164 FROM blofy_store_customer_sessions s '+
     'JOIN blofy_store_customers c ON c.id=s.customer_id '+
     'WHERE s.token_hash=$1 AND s.expires_at>NOW() LIMIT 1',[sha(token)]);
   return result.rows[0]||null;
@@ -182,7 +204,7 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
     'o.cart_items,o.duration_days,o.channel FROM blofy_store_customer_orders m '+
     'JOIN blofy_store_geidea_orders o ON o.id=m.order_id WHERE m.customer_id=$1 '+
     'ORDER BY o.created_at DESC LIMIT 100',[customer.id])).rows;
-  return json(res,200,{customerId:customer.id,email:customer.email,alertsOptIn:customer.alerts_opt_in,
+  return json(res,200,{customerId:customer.id,email:customer.email,fullName:customer.full_name||'',phone:customer.phone_e164||'',profileComplete:completeProfile(customer),profileRequired,alertsOptIn:customer.alerts_opt_in,
     orders:orders.map(o=>({orderId:o.id,orderNumber:o.public_order_number||publicOrderNumber(o.id,o.created_at),
       status:o.status,sku:o.sku,items:o.cart_items||null,amountMinor:o.amount_minor,
       currency:o.currency,createdAt:o.created_at,paidAt:o.paid_at}))});
@@ -326,12 +348,32 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
   }catch(e){await db.query('ROLLBACK').catch(()=>{});throw e;}finally{db.release();}
   return json(res,200,{ok:true}, {'set-cookie':customerCookie(token)});
  }
+ async function saveProfile(req,res){
+   if(!maxProfiles.consume(requestClientKey(req)).allowed)
+     return json(res,429,{error:'rate_limited'});
+   const customer=await current(req);
+   if(!customer)return json(res,401,{error:'login_required'});
+   const body=await readJson(req);
+   const name=normalizeCustomerName(body?.fullName),phone=normalizeCustomerPhone(body?.phone);
+   if(!name||!phone)return json(res,400,{error:'invalid_customer_profile'});
+   try{
+     const saved=await pool.query('UPDATE blofy_store_customers '+
+       'SET full_name=$2,phone_e164=$3 WHERE id=$1 RETURNING id,full_name,phone_e164',
+       [customer.id,name,phone]);
+     if(!saved.rowCount)return json(res,401,{error:'login_required'});
+   }catch(e){
+     if(e.code==='23505')return json(res,409,{error:'customer_phone_in_use'});
+     throw e;
+   }
+   return json(res,200,{ok:true,fullName:name,phone,profileComplete:true});
+ }
  async function checkoutIdentity(req){
   if(!loginRequiredForStore)return {ok:true,guestCheckoutAllowed:true};
   if(!enabled||!mailReady)return {ok:false,status:503,error:'store_login_unavailable'};
   await schema();
   const customer=await current(req);
   if(!customer)return {ok:false,status:401,error:'customer_login_required'};
+  if(profileRequired&&!completeProfile(customer))return {ok:false,status:403,error:'customer_profile_required'};
   return {ok:true,customerId:customer.id};
  }
  async function savedCart(req,res){
@@ -591,6 +633,7 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
    else if(path==='/api/v1/store/account/cart'&&req.method==='POST')await saveCart(req,res);
    else if(path==='/api/v1/store/account/request-code'&&req.method==='POST')await requestCode(req,res);
    else if(path==='/api/v1/store/account/verify-code'&&req.method==='POST')await verifyCode(req,res);
+   else if(path==='/api/v1/store/account/profile'&&req.method==='POST')await saveProfile(req,res);
    else if(path==='/api/v1/store/account/claim'&&req.method==='POST')await claim(req,res);
    else if(path==='/api/v1/store/account/preferences'&&req.method==='POST')await preferences(req,res);
    else if(path==='/api/v1/store/account/logout'&&req.method==='POST')await logout(req,res);

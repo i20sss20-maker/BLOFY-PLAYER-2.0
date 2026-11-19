@@ -355,3 +355,19 @@ test('Sales dashboard only counts paid orders toward revenue and has stock safeg
  assert.match(js,/coupons\/create/);
  assert.doesNotThrow(()=>new Function(js));
 });
+
+test('operations overview and first-activation guides are available only in the proper views',()=>{
+ const backend=readFileSync(new URL('../src/store-geidea-checkout.mjs',import.meta.url),'utf8');
+ const dashboard=readFileSync(new URL('../web/blofy-one-code-center.js',import.meta.url),'utf8');
+ const orders=readFileSync(new URL('../web/store-order-tracking.js',import.meta.url),'utf8');
+ const account=readFileSync(new URL('../web/store-account.js',import.meta.url),'utf8');
+ const wiring=readFileSync(new URL('../src/commercial-handlers.mjs',import.meta.url),'utf8');
+ assert.match(backend,/\/api\/v1\/admin\/store\/operations\/overview/);
+ assert.match(backend,/function fullOperationsOverview/);
+ assert.match(dashboard,/one-operations-report/);
+ assert.match(dashboard,/paidStockTotals/);
+ assert.match(account,/appendActivationGuide/);
+ assert.match(orders,/appendActivationGuide/);
+ assert.match(wiring,/BLOFY_STORE_TRIAL_AUTO_REFILL_ENABLED/);
+ assert.match(wiring,/BLOFY_STORE_AUTO_REFILL_ENABLED/);
+});

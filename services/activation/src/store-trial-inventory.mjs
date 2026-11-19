@@ -169,6 +169,69 @@ export function createStoreTrialInventory({
   }catch(e){await db.query('ROLLBACK').catch(()=>{});throw e}
   finally{db.release()}
  }
+
+ // Internal-only refill. Automatically seeds 30+30 on first deployment and
+ // subsequently restores one SKU to 30 only once its available stock is <10.
+ // No public route and no raw customer codes in logs or API responses.
+ async function autoRefillTrials({target=30,threshold=10}={}){
+  if(!enabled||env.BLOFY_STORE_TRIAL_AUTO_REFILL_ENABLED!=='true')
+   return {ok:false,reason:'disabled'};
+  if(target!==30||threshold!==10)throw fail('trial_refill_config_invalid',400);
+  await schema();
+  const db=await pool.connect();
+  try{
+   await db.query('BEGIN');
+   await db.query('SELECT pg_advisory_xact_lock(718420682)');
+   const amounts=(await db.query(`SELECT i.sku,
+      COUNT(*) FILTER (WHERE i.claimed_at IS NULL AND v.redeemed_at IS NULL
+        AND v.revoked_at IS NULL AND v.account_id IS NULL
+        AND v.code_vault IS NOT NULL)::int AS available
+      FROM blofy_store_trial_inventory i
+      JOIN blofy_xtream_gateway_duration_codes v ON v.id=i.voucher_id
+      GROUP BY i.sku`)).rows;
+   const available=new Map(amounts.map(row=>[row.sku,Number(row.available)||0]));
+   const targetRows=TRIAL_PLANS.map(p=>({
+     ...p,before:available.get(p.sku)||0,
+     added:0
+   }));
+   if(!targetRows.some(row=>row.before<threshold)){
+     await db.query('COMMIT');
+     return {ok:true,generated:0,available:targetRows.map(p=>({sku:p.sku,available:p.before}))};
+   }
+   const selected=targetRows.filter(row=>row.before<threshold);
+   const sourceId=await chosenSource(db);
+   const count=(await db.query('SELECT COUNT(*)::int AS n FROM blofy_xtream_gateway_duration_codes')).rows[0];
+   let issued=Number(count?.n)||0;
+   for(const row of selected){
+     const missing=Math.max(0,target-row.before);
+     for(let i=0;i<missing;i++){
+       let inserted=false;
+       for(let attempt=0;attempt<12;attempt++){
+         const code=randomNumericStreamCode(streamNumericCodeLength(issued));
+         const voucherId=crypto.randomUUID();
+         const save=await db.query(`INSERT INTO blofy_xtream_gateway_duration_codes
+          (id,code_hash,code_hint,label,source_id,duration_days,max_connections,
+           code_channel,code_vault,dual_access_enabled)
+          VALUES($1,$2,$3,$4,$5,1,1,$6,$7,FALSE)
+          ON CONFLICT(code_hash) DO NOTHING RETURNING id`,[
+           voucherId,streamCodeProof(code,keyHex),code.slice(0,2)+'••••'+code.slice(-2),
+           row.name+' — يوم واحد',sourceId,row.channel,
+           encryptStreamCode(voucherId,code,keyHex)
+         ]);
+         if(!save.rows.length)continue;
+         await db.query('INSERT INTO blofy_store_trial_inventory(voucher_id,sku) VALUES($1,$2)',
+           [voucherId,row.sku]);
+         issued++;row.added++;inserted=true;break;
+       }
+       if(!inserted)throw fail('trial_refill_generation_unavailable',503);
+     }
+   }
+   await db.query('COMMIT');
+   return {ok:true,generated:targetRows.reduce((n,x)=>n+x.added,0),
+    available:targetRows.map(row=>({sku:row.sku,available:row.before+row.added}))};
+  }catch(e){await db.query('ROLLBACK').catch(()=>{});throw e}
+  finally{db.release()}
+ }
  async function adminSummary(req,res){
   if(!authorizeAdmin(req,res))return;
   await schema();
@@ -208,6 +271,9 @@ export function createStoreTrialInventory({
   const customer=await getAuthenticatedCustomer(req);
   if(!customer?.id||!UUID.test(customer.id))
    return json(res,401,{error:'trial_login_required'},NO_CACHE);
+  if(env.BLOFY_CUSTOMER_PROFILE_REQUIRED==='true'&&
+     (!customer.full_name||!customer.phone_e164))
+   return json(res,403,{error:'trial_profile_required'},NO_CACHE);
   const plan=trialStockRequest(await readJson(req));
   if(!plan)return json(res,400,{error:'trial_product_invalid'},NO_CACHE);
   await schema();
@@ -253,7 +319,7 @@ export function createStoreTrialInventory({
   }finally{db.release()}
   return json(res,200,issued,NO_CACHE);
  }
- return async function handle(req,res,url){
+ const handler=async function handle(req,res,url){
   const path=url.pathname;
   if(![ROUTE+'/availability',ROUTE+'/mine',ROUTE+'/claim',
         ADMIN+'/summary',ADMIN+'/generate'].includes(path))return false;
@@ -265,4 +331,6 @@ export function createStoreTrialInventory({
   else json(res,405,{error:'method_not_allowed'},{...NO_CACHE,allow:path.endsWith('claim')||path.endsWith('generate')?'POST':'GET'});
   return true;
  };
+ handler.autoRefillTrials=autoRefillTrials;
+ return handler;
 }
