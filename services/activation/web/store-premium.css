@@ -126,7 +126,9 @@ img{max-width:100%}
 .offer-badges{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 18px}
 .offer-badges span{font-size:11px;border:1px solid #344e75;padding:6px 10px;border-radius:8px;color:#adbfda}
 .pricing-rows{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin:8px 0 20px}
-.pricing-rows span{display:grid;gap:4px;text-align:center;border:1px solid #314b70;border-radius:12px;padding:12px 5px 10px;color:#adc0da;font-size:11px;background:#0d1b31}
+.pricing-rows :is(span,button){display:grid;gap:4px;text-align:center;border:1px solid #314b70;border-radius:12px;padding:12px 5px 10px;color:#adc0da;font-size:11px;background:#0d1b31}
+.pricing-rows button{font-family:inherit;min-width:0;cursor:pointer;transition:border-color .15s,box-shadow .15s,background .15s}
+.pricing-rows button:focus-visible{outline:3px solid #a77cff;outline-offset:2px}
 .pricing-rows b{font-size:20px;color:#fff;font-weight:600}
 .duration-label{font-size:12px;color:#c4d5f0;font-weight:600;margin:0 0 8px;display:block}
 .duration-select{background:#0a172d;border:1px solid #38557c;color:#f5f8ff;width:100%;min-height:47px;border-radius:12px;padding:10px 14px;outline-offset:3px}

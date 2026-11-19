@@ -27,14 +27,17 @@ test('zero SAR trial may be saved but never parsed as a paid Geidea invoice',()=
  assert.equal(parseSavedStoreCart({items:[]}),null);
  assert.equal(parseSavedStoreCart([{sku:'fake-free',quantity:1}]),null);
 });
-test('homepage hides free trial sales while backend redemption still works for existing customers',()=>{
+test('free day is one of five price choices inside both product cards, not a standalone product',()=>{
  for(const product of ['stream','xtream']){
-  assert.match(home,new RegExp('id="duration-'+product+'"'));
-  assert.match(home,new RegExp('/store/cart\\?add='+product+'-3m'));
-  assert.doesNotMatch(home,new RegExp('trial-'+product+'-1d'));
+  assert.match(home,new RegExp('id="duration-'+product+'"[^>]*><option value="تجربة مجانية"'));
+  assert.match(home,new RegExp('data-plan-product="'+product+'" data-plan-option="تجربة مجانية"'));
+  assert.match(home,new RegExp('data-trial-stock="'+product+'"'));
+  assert.match(home,new RegExp('trial-'+product+'-1d'));
  }
  assert.doesNotMatch(home,/id="trial-product"|id="trial-home-stock"|data-free-trial-link/);
- assert.doesNotMatch(home,/href="[^"]*store.trial"|تجربة مجانية|TRY BLOFY/);
+ assert.doesNotMatch(home,/href="[^"]*store.trial"/);
+ assert.match(home,/0 ر.س/);
+ assert.ok(home.includes('/api/v1/store/trials/availability'));
  assert.match(home,/شهر — 25 ريال/);
  assert.match(home,/3 أشهر — 50 ريال/);
 });
