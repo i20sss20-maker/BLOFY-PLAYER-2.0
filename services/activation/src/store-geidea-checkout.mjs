@@ -995,7 +995,7 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
    if(order.sku===CART_SKU){
      const parsed=parseStoreCart(order.cart_items),expected=cartVouchers(order.cart_items);
      if(!parsed||!expected)return json(res,503,{error:'store_cart_delivery_unavailable'});
-     const rows=(await pool.query('SELECT c.position,c.channel,c.duration_days,c.sku,v.id,v.code_hash,v.code_vault,v.revoked_at '+
+     const rows=(await pool.query('SELECT c.position,c.channel,c.duration_days,c.sku,v.id,v.code_hash,v.code_vault,v.revoked_at,v.redeemed_at,v.expires_at '+
        'FROM blofy_store_cart_vouchers c JOIN blofy_xtream_gateway_duration_codes v ON v.id=c.voucher_id '+
        'WHERE c.order_id=$1 ORDER BY c.position',[order.id])).rows;
      if(rows.length!==expected.length||rows.some((item,i)=>!item.code_vault||item.revoked_at||
@@ -1007,7 +1007,8 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
        if(!code||streamCodeProof(code,keyHex)!==item.code_hash)
          throw err('store_code_integrity_unavailable',503);
        return {position:item.position,sku:item.sku,channel:item.channel,
-         durationDays:Number(item.duration_days),code};
+         durationDays:Number(item.duration_days),code,activatedAt:item.redeemed_at||null,
+         expiresAt:item.expires_at||null};
      });
      return json(res,200,{orderId:order.id,orderNumber,status:'paid',fulfilled:true,
        sku:CART_SKU,amountMinor:order.amount_minor,currency:'SAR',
@@ -1015,19 +1016,20 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
        items:parsed.items,discountMinor:order.coupon_discount_minor||0,codes});
    }
    if(order.sku===BUNDLE_SKU){
-     const items=(await pool.query('SELECT ov.position,ov.channel,v.id,v.code_hash,v.code_vault,v.revoked_at FROM blofy_store_order_vouchers ov JOIN blofy_xtream_gateway_duration_codes v ON v.id=ov.voucher_id WHERE ov.order_id=$1 ORDER BY ov.position',[order.id])).rows;
+     const items=(await pool.query('SELECT ov.position,ov.channel,v.id,v.code_hash,v.code_vault,v.revoked_at,v.redeemed_at,v.expires_at FROM blofy_store_order_vouchers ov JOIN blofy_xtream_gateway_duration_codes v ON v.id=ov.voucher_id WHERE ov.order_id=$1 ORDER BY ov.position',[order.id])).rows;
      if(items.length!==2||items.some(x=>x.revoked_at||!x.code_vault))
        return json(res,503,{error:'store_paid_delivery_unavailable'});
      const codes=items.map(x=>{
        const code=decryptStreamCode(x.id,x.code_vault,keyHex);
        if(!code||streamCodeProof(code,keyHex)!==x.code_hash)throw err('store_code_integrity_unavailable',503);
-       return {position:x.position,channel:x.channel,code,durationDays:365};
+       return {position:x.position,channel:x.channel,code,durationDays:365,
+         activatedAt:x.redeemed_at||null,expiresAt:x.expires_at||null};
      });
      return json(res,200,{orderId:order.id,orderNumber,status:'paid',fulfilled:true,sku:order.sku,amountMinor:order.amount_minor,currency:'SAR',createdAt:order.created_at,paidAt:order.paid_at,codes});
    }
    if(order.sku===RENEWAL_SKU){
      const renewed=(await pool.query(
-       'SELECT v.id,v.code_hash,v.code_vault,v.revoked_at,v.expires_at '+
+       'SELECT v.id,v.code_hash,v.code_vault,v.revoked_at,v.redeemed_at,v.expires_at '+
        'FROM blofy_store_renewal_orders r JOIN blofy_xtream_gateway_duration_codes v '+
        'ON v.id=r.voucher_id WHERE r.order_id=$1',[order.id])).rows[0];
      if(!renewed||renewed.revoked_at||!renewed.code_vault)
@@ -1039,17 +1041,18 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
        sameCodeRenewal:true,sku:RENEWAL_SKU,channel:order.channel,
        amountMinor:order.amount_minor,currency:'SAR',createdAt:order.created_at,
        paidAt:order.paid_at,renewalDays:Number(order.duration_days),
-       expiresAt:renewed.expires_at,code:sameCode});
+       activatedAt:renewed.redeemed_at||null,expiresAt:renewed.expires_at||null,code:sameCode});
    }
    if(!order.voucher_id)return json(res,503,{error:'store_paid_delivery_unavailable'});
-   const voucher=(await pool.query('SELECT id,code_hash,code_vault,revoked_at FROM blofy_xtream_gateway_duration_codes WHERE id=$1',
+   const voucher=(await pool.query('SELECT id,code_hash,code_vault,revoked_at,redeemed_at,expires_at FROM blofy_xtream_gateway_duration_codes WHERE id=$1',
     [order.voucher_id])).rows[0];
    if(!voucher||voucher.revoked_at||!voucher.code_vault)return json(res,503,{error:'store_paid_delivery_unavailable'});
    const code=decryptStreamCode(voucher.id,voucher.code_vault,keyHex);
    if(!code||streamCodeProof(code,keyHex)!==voucher.code_hash)return json(res,503,{error:'store_code_integrity_unavailable'});
    return json(res,200,{orderId:order.id,orderNumber,status:'paid',fulfilled:true,sku:order.sku,channel:order.channel,
       amountMinor:order.amount_minor,currency:'SAR',createdAt:order.created_at,paidAt:order.paid_at,
-      durationDays:order.duration_days,code,redeemUrl:'https://blofyplayer.com/stream/activate'});
+      durationDays:order.duration_days,code,activatedAt:voucher.redeemed_at||null,
+      expiresAt:voucher.expires_at||null,redeemUrl:'https://blofyplayer.com/stream/activate'});
  }
  async function returned(req,res,url){
    const id=url.searchParams.get('reference')||'';
