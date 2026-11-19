@@ -54,7 +54,7 @@ test('store manager exposes safe marketing, real orders and distributor gateway 
  for(const id of ['store-pro-hub','retention-insights','retention-refresh','retention-metrics','commercial-reports','merchandising-form','merch-slide-0-title']){
   assert.ok(admin.includes('id="'+id+'"'),id+' missing from BLOFY STORE PRO');
  }
- assert.match(admin,/href="\/distributor"/);
+ assert.match(admin,/href="\/one#one-distributors"/);
  assert.match(admin,/href="\/admin\/visitors"/);
  assert.match(admin,/href="\/store\/assistant"/);
  assert.match(js,/api\/v1\/admin\/store\/retention/);
