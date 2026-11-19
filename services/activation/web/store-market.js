@@ -53,6 +53,7 @@
    }
    if(['violet','ocean','rose'].includes(config.theme))document.body.dataset.marketTheme=config.theme;
    if(typeof config.whatsapp==='string'&&/^9665\d{8}$/.test(config.whatsapp)){
+     window.BLOFY_MARKET_WHATSAPP=config.whatsapp;
      const url='https://wa.me/'+config.whatsapp;
      const phone=$('market-footer-phone');
      if(phone){
