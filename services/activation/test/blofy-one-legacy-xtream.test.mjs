@@ -78,7 +78,6 @@ test('BLOFY ONE legacy extractor uses authenticated exact POST lookup and requir
   assert.match(js,/window\.confirm/);
   // Do not auto-discard credentials mid-copy; only the owner can hide them, or they clear on navigation.
   assert.match(js,/one-legacy-hide'\)\.addEventListener\('click', hideCredentials\)/);
-  assert.match(js,/visibilitychange/);
   assert.match(js,/pagehide/);
   assert.match(js,/credentials:'same-origin'/);
   assert.match(js,/cache:'no-store'/);
