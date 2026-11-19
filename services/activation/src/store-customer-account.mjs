@@ -6,6 +6,7 @@ import {parseStoreCart,cartVouchers,publicOrderNumber} from './store-cart.mjs';
 import {decryptStreamCode} from './xtream-code-vault.mjs';
 import {streamCodeProof} from './xtream-duration-codes.mjs';
 import {createCustomerReminderEngine} from './store-customer-reminders.mjs';
+import {createCartRecoveryEngine} from './store-cart-recovery.mjs';
 import {buildStorePaymentReceipt,createStoreReceiptEmailEngine} from './store-order-receipts.mjs';
 import {classifyResendFailure,checkResendSender} from './store-customer-resend.mjs';
 import {createStoreSubscriptionAdmin} from './store-subscription-admin.mjs';
@@ -103,11 +104,13 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
   probe.unref?.();
  }
  const reminderEngine=createCustomerReminderEngine({pool,env,fetchImpl});
+ const cartRecoveryEngine=createCartRecoveryEngine({pool,env,fetchImpl});
  const receiptEmailEngine=createStoreReceiptEmailEngine({pool,env,fetchImpl});
  let ensureOpsSchema=async()=>{};
  const subscriptionAdmin=createStoreSubscriptionAdmin({pool,json,authorizeAdmin,
    ensureStoreSchema:()=>ensureOpsSchema()});
  reminderEngine.start();
+ cartRecoveryEngine.start();
  receiptEmailEngine.start();
  let migration;
  async function schema(){
@@ -535,7 +538,7 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
   );
   // Consent is persisted and revocable, but no marketing messages are sent by this route.
   return json(res,200,{ok:true,marketingOptIn:body.marketingOptIn,
-    recoveryEnabled:env.BLOFY_STORE_CART_RECOVERY_ENABLED==='true'});
+    recoveryEnabled:cartRecoveryEngine.enabled});
  }
  async function logout(req,res){
   const token=cookieToken(req);
