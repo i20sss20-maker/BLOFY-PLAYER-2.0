@@ -24,8 +24,11 @@ test('code issuance is visible immediately, ahead of all long customer and STREA
   const ids=[...html.matchAll(/\sid="([^"]+)"/g)].map(x=>x[1]);
   assert.equal(ids.length,new Set(ids).size,'unique DOM IDs');
   const nav=html.slice(html.indexOf('<nav class="one-nav"'),html.indexOf('</nav>')+6);
-  for(const href of ['#one-issue','#customers','#stream-management','#one-storage','#one-distributors','#one-releases'])
+  const split=nav.includes('class="one-panel-switch"');
+  for(const href of ['#one-issue','#customers','#stream-management','#one-distributors',
+    ...(!split?['#one-storage','#one-releases']:[])])
     assert.ok(nav.includes('href="'+href+'"'),href);
+  if(split)assert.match(nav,/href="\/admin"/);
   assert.match(html,/لا نغيّر بيانات أي عميل عند فتح هذه الصفحة/);
 });
 test('modern interface is local, CSP-compatible, responsive and uses real KPIs',async()=>{
