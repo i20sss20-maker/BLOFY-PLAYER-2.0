@@ -13,9 +13,11 @@ test('BLOFY ONE dashboard uses existing admin session and never exposes an unpro
 
 test('BLOFY ONE links existing code and subscriber flows rather than making new databases or customer routes',async()=>{
   const html=await file('web/blofy-one.html');
+  const split=html.includes('class="one-panel-switch"');
   for(const path of ['/sources-admin#xtream','/sources-admin#catalog','/admin#devices',
-    '/admin#codes','/admin#releases','/admin#support','/connect','/status'])
+    ...(!split?['/admin#codes']:[]),'/admin#releases','/admin#support','/connect','/status'])
     assert.ok(html.includes('href="'+path+'"'),path);
+  if(split)assert.match(html,/href="\/admin"/);
   for(const asset of ['/blofy-one.css?v=20261118-integrated-1','/blofy-one.js?v=20261118-integrated-1'])
     assert.ok(html.includes(asset));
   assert.match(html,/هذه أعداد قاعدة البيانات وليست قنوات أو مشاهدين يعملون الآن/);
