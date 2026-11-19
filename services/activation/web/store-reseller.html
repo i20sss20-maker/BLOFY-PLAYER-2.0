@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#12132e">
+<title>بوابة الموزعين | BLOFY STORE PRO</title>
+<link rel="icon" href="/blofy-logo.png">
+<link rel="stylesheet" href="/distributor/style.css?v=1">
+<script src="/distributor/app.js?v=1" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">تخطي إلى المحتوى</a>
+<header class="site-header">
+ <div class="wrap header-content">
+  <a class="brand" href="/"><img src="/blofy-logo.png" width="45" height="45" alt=""><span><b>BLOFY</b><small>STORE PRO / RESELLERS</small></span></a>
+  <div class="header-side"><span class="private-tag">بوابة الموزعين المستقلة</span><a class="support-link" href="/store/contact">الدعم ↗</a></div>
+ </div>
+</header>
+<main class="wrap" id="main">
+ <section class="hero">
+  <div><span class="eyebrow">BLOFY DISTRIBUTOR PORTAL</span><h1>إدارة اشتراكاتك،<br><em>من مكان واحد.</em></h1>
+  <p>حساب خاص بكل موزع: الرصيد، إصدار الأكواد، سجل الاشتراكات والعملاء والتقارير. صلاحياتك تخص حسابك فقط، ولا تشمل إدارة المتجر أو مصادر البث.</p></div>
+  <div class="hero-art" aria-hidden="true"><strong>B</strong><span>STREAM <i>+</i> XTREAM</span></div>
+ </section>
+ <div class="notice" role="status" id="reseller-notice" aria-live="polite" hidden></div>
+ <section class="login-panel card" id="login-panel" aria-labelledby="login-title">
+  <div class="section-intro"><span class="eyebrow">تسجيل الدخول الآمن</span><h2 id="login-title">أهلًا بك في حساب الموزع</h2><p>استخدم بيانات الموزع التي حصلت عليها من إدارة BLOFY. لا تستخدم بيانات حساب العميل.</p></div>
+  <form id="login-form" autocomplete="on">
+    <label for="login-username">اسم المستخدم</label>
+    <input id="login-username" name="username" required minlength="4" maxlength="32" autocomplete="username" dir="ltr" placeholder="distributor_name">
+    <label for="login-password">كلمة المرور</label>
+    <input id="login-password" name="password" type="password" required maxlength="200" autocomplete="current-password" dir="ltr">
+    <button class="primary wide" id="login-button" type="submit">دخول لوحة الموزع <span aria-hidden="true">←</span></button>
+  </form>
+  <p class="fineprint">الجلسة محفوظة في ملف تعريف ارتباط آمن (HttpOnly) وتنتهي خلال 12 ساعة. لا تخزن البوابة كلمة المرور على هذا الجهاز.</p>
+ </section>
+ <div id="reseller-workspace" hidden>
+  <section class="workspace-heading card" aria-labelledby="workspace-title">
+   <div><span class="eyebrow">حساب موزع مستقل</span><h2 id="workspace-title">مرحبًا، <span id="reseller-name">الموزع</span></h2><small id="reseller-username" dir="ltr"></small></div>
+   <button class="ghost" type="button" id="logout-button">تسجيل الخروج</button>
+  </section>
+  <nav class="tabs" aria-label="أقسام حساب الموزع">
+   <button type="button" data-tab="overview" aria-selected="true">◈ الملخص</button>
+   <button type="button" data-tab="issue" aria-selected="false">＋ إصدار اشتراك</button>
+   <button type="button" data-tab="codes" aria-selected="false">▤ الأكواد</button>
+   <button type="button" data-tab="customers" aria-selected="false">♙ العملاء</button>
+   <button type="button" data-tab="account" aria-selected="false">⚙ الحساب</button>
+  </nav>
+  <section class="view" id="view-overview" aria-label="ملخص الموزع">
+   <div class="stats">
+    <article class="stat"><span>رصيدك المتاح</span><strong id="stat-credits">—</strong><small>وحدات رصيد (وليست ريالات)</small></article>
+    <article class="stat"><span>إصداراتك اليوم</span><strong id="stat-today">—</strong><small>حسب توقيت السعودية</small></article>
+    <article class="stat"><span>الإصدارات هذا الشهر</span><strong id="stat-month">—</strong><small>لا تشمل طلبات المتجر العامة</small></article>
+    <article class="stat"><span>الحد اليومي</span><strong id="stat-limit">—</strong><small>يحدده مدير النظام</small></article>
+   </div>
+   <div class="dual">
+    <article class="card"><div class="section-heading"><h3>نشاط حسابك</h3><button class="ghost small" type="button" id="activity-refresh">تحديث</button></div><div id="activity-list" class="item-list"><p class="muted">جارٍ تحميل السجل…</p></div></article>
+    <article class="card"><h3>قبل إصدار أي كود</h3>
+     <div class="tips"><p>✓ اختر STREAM للتفعيل بالكود أو Xtream لبيانات اتصال خاصة.</p>
+     <p>✓ لا يبدأ اشتراك STREAM عند إنشاء الكود؛ يبدأ حسب سياسة التفعيل.</p>
+     <p>✓ كل إصدار يخص حسابك ويخصم رصيد الباقة عند نجاح العملية.</p>
+     <p>✓ إن انقطع الاتصال، راجع قائمة الأكواد قبل إنشاء طلب جديد.</p></div>
+     <a class="primary inline-action" href="#view-issue" data-open-tab="issue">ابدأ إصدار اشتراك ←</a>
+    </article>
+   </div>
+  </section>
+  <section class="view" id="view-issue" aria-label="إصدار اشتراك" hidden>
+   <div class="dual">
+    <article class="card">
+     <div class="section-intro"><span class="eyebrow">NEW SUBSCRIPTION</span><h2>إصدار كود جديد</h2><p>حدد المنتج والمدة. يصدر الخادم كودًا جديدًا بحسب رصيدك وصلاحيات حسابك، دون الوصول إلى مخزون المتجر العام.</p></div>
+     <form id="issue-form">
+      <label for="issue-kind">نوع الاشتراك</label>
+      <select id="issue-kind" required><option value="app">BLOFY STREAM — كود تفعيل</option><option value="xtream">Xtream — بيانات الاتصال</option></select>
+      <label for="issue-days">مدة الاشتراك</label>
+      <select id="issue-days" required>
+       <option value="30">30 يومًا — رصيد واحد</option>
+       <option value="90">90 يومًا — 3 أرصدة</option>
+       <option value="180">180 يومًا — 6 أرصدة</option>
+       <option value="365">سنة — 12 رصيدًا</option>
+      </select>
+      <label for="issue-label">وصف الاشتراك (للتعرف عليه لاحقًا)</label>
+      <input id="issue-label" required maxlength="80" placeholder="مثال: اشتراك أحمد">
+      <div class="form-grid">
+       <div><label for="issue-customer">اسم العميل (اختياري)</label><input id="issue-customer" maxlength="80" autocomplete="off"></div>
+       <div><label for="issue-phone">رقم العميل (اختياري)</label><input id="issue-phone" type="tel" inputmode="tel" maxlength="22" dir="ltr" autocomplete="off"></div>
+      </div>
+      <p id="issue-cost-note" class="cost-hint" role="status">التكلفة: رصيد واحد</p>
+      <button class="primary wide" id="issue-button" type="submit">تأكيد وإصدار الاشتراك ←</button>
+      <small class="muted">يُستخدم معرّف طلب ثابت عند إعادة المحاولة لنفس البيانات، لتجنب تكرار الإصدار.</small>
+     </form>
+    </article>
+    <article class="card"><h3>النتيجة</h3>
+     <p class="muted">بعد نجاح الإصدار، تظهر بيانات الاشتراك هنا فقط. انسخها واحفظها بشكل آمن.</p>
+     <div class="result-card" id="issue-result" hidden><strong id="issue-result-title">تم الإصدار</strong>
+      <div id="issue-result-fields"></div><button id="issue-copy" class="ghost" type="button" hidden>نسخ بيانات الاشتراك</button></div>
+     <hr><h3>التجديد</h3><p class="muted">يمكنك تجديد أحد أكوادك من قسم الأكواد بعد التحقق من الرصيد وتأكيد العملية.</p>
+     <div id="renew-box" hidden>
+      <form id="renew-form"><label for="renew-target">معرّف اشتراكك</label><input id="renew-target" readonly dir="ltr">
+       <label for="renew-days">مدة التجديد</label>
+       <select id="renew-days"><option value="30">30 يومًا — رصيد واحد</option><option value="90">90 يومًا — 3 أرصدة</option><option value="180">180 يومًا — 6 أرصدة</option><option value="365">سنة — 12 رصيدًا</option></select>
+       <button class="primary wide" type="submit" id="renew-button">تأكيد التجديد وخصم الرصيد</button>
+       <button class="ghost wide" type="button" id="renew-cancel">إلغاء</button>
+      </form>
+     </div>
+    </article>
+   </div>
+  </section>
+  <section class="view card" id="view-codes" aria-label="أكواد الموزع" hidden>
+   <div class="section-heading"><div><span class="eyebrow">OWNED SUBSCRIPTIONS ONLY</span><h2>أكوادك واشتراكاتك</h2></div><button type="button" class="ghost" id="codes-refresh">↻ تحديث</button></div>
+   <form id="codes-search-form" class="search-row">
+    <label class="sr" for="codes-search">بحث في أكوادك</label><input type="search" id="codes-search" placeholder="بحث بالاسم أو العميل أو كود مخفي" maxlength="80">
+    <label class="sr" for="codes-status">تصفية الحالة</label><select id="codes-status"><option value="all">كل الحالات</option><option value="active">نشط</option><option value="unused">غير مفعّل</option><option value="expiring">قارب الانتهاء</option><option value="expired">منتهي</option><option value="disabled">معطّل</option></select>
+    <button class="ghost" type="submit">بحث</button>
+   </form>
+   <div class="table-scroller"><table><thead><tr><th>الاشتراك</th><th>النوع / المدة</th><th>الحالة</th><th>الانتهاء</th><th>الإجراءات</th></tr></thead><tbody id="codes-rows"></tbody></table></div>
+   <div class="pager"><span id="codes-page">—</span><button type="button" class="ghost" id="codes-next" hidden>المزيد من الأكواد ←</button></div>
+  </section>
+  <section class="view card" id="view-customers" aria-label="عملاء الموزع" hidden>
+   <div class="section-heading"><div><span class="eyebrow">CUSTOMERS</span><h2>عملاؤك فقط</h2></div><button class="ghost" id="customers-refresh" type="button">تحديث</button></div>
+   <p class="muted">هذه القائمة تخص العملاء الذين سجلتهم أنت عند إصدار الاشتراكات؛ لا تشمل عملاء المتجر الآخرين.</p>
+   <form class="search-row" id="customers-search-form"><label class="sr" for="customers-search">بحث العملاء</label><input type="search" id="customers-search" maxlength="80" placeholder="اسم العميل أو رقم جواله"><button class="ghost" type="submit">بحث</button></form>
+   <div class="table-scroller"><table><thead><tr><th>العميل</th><th>رقم التواصل</th><th>الاشتراكات</th><th>آخر نشاط</th></tr></thead><tbody id="customers-rows"></tbody></table></div>
+  </section>
+  <section class="view" id="view-account" aria-label="إعدادات الحساب" hidden>
+   <div class="dual"><article class="card"><h2>أمان الحساب</h2><p>غيّر كلمة المرور لتبقى بيانات الموزع خاصة بك. سيتم إلغاء الجلسات الأخرى بعد التغيير.</p>
+    <form id="password-form">
+     <label for="password-current">كلمة المرور الحالية</label><input id="password-current" type="password" required autocomplete="current-password">
+     <label for="password-new">كلمة المرور الجديدة</label><input id="password-new" type="password" required minlength="14" maxlength="128" autocomplete="new-password" aria-describedby="password-hint">
+     <small id="password-hint" class="muted">14 حرفًا على الأقل، وتتضمن حرفًا كبيرًا وصغيرًا ورقمًا (بالإنجليزية).</small>
+     <button class="primary wide" type="submit" id="password-button">حفظ كلمة المرور الجديدة</button>
+    </form>
+   </article>
+   <article class="card"><h2>حدود الصلاحيات</h2><div class="tips">
+    <p>✓ ترى اشتراكاتك وأكوادك وعملاءك فقط.</p>
+    <p>✓ لا يمكنك الوصول إلى لوحة مدير BLOFY أو بيانات الموزعين الآخرين.</p>
+    <p>✓ إضافة الرصيد وتغيير حدود الإصدار من إدارة BLOFY فقط.</p>
+    <p>✓ عند تعطيل حسابك تُلغى جميع جلسات الدخول.</p>
+   </div></article></div>
+  </section>
+ </div>
+</main>
+<footer><div class="wrap">© 2026 BLOFY STORE PRO <span>بوابة خاصة بالموزعين — الدفع والتسليم في المتجر العام منفصلان</span></div></footer>
+</body></html>
