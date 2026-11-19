@@ -43,9 +43,10 @@ export function createStoreTrialInventory({
     typeof getAuthenticatedCustomer!=='function'||!/^[0-9a-f]{64}$/i.test(String(keyHex||'')))
   throw Error('trial_inventory_dependencies_invalid');
  const enabled=env.BLOFY_STORE_TRIALS_ENABLED==='true'&&
-  env.BLOFY_CUSTOMER_ACCOUNTS_ENABLED==='true';
+  env.BLOFY_CUSTOMER_ACCOUNTS_ENABLED==='true'&&
+  String(env.BLOFY_CUSTOMER_RESEND_API_KEY||'').startsWith('re_')&&
+  String(env.BLOFY_CUSTOMER_MAIL_FROM||'').includes('@');
  const claimsLimiter=createFixedWindowLimiter({limit:6,windowMs:10*60_000,maxEntries:12000});
- const inventoryLimiter=createFixedWindowLimiter({limit:60,windowMs:60_000,maxEntries:8000});
  let migration=null;
  async function schema(){
   if(!migration)migration=(async()=>{
