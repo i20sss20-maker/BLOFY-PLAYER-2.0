@@ -122,6 +122,86 @@ test('Bulk code generation commits all 25 vouchers atomically without exposing s
  assert.equal(response.data.items,undefined);
 });
 
+test('owner full inventory refill creates the missing stock across all eight durations atomically',async()=>{
+ const inventory=new Map(),requests=[];
+ let commits=0,rollbacks=0,codeInserts=0,stockInserts=0;
+ const fake={async query(sql,args=[]){
+  requests.push(sql);
+  if(sql==='BEGIN'||sql.startsWith('SELECT pg_advisory_xact_lock'))return {rows:[]};
+  if(sql==='COMMIT'){commits++;return {rows:[]};}
+  if(sql==='ROLLBACK'){rollbacks++;return {rows:[]};}
+  if(sql.includes("SELECT to_regclass"))return {rows:[{n:'blofy_xtream_servers'}]};
+  if(sql.startsWith("SELECT id FROM blofy_xtream_servers"))
+   return {rows:[{id:'00000000-0000-4000-8000-000000000100'}]};
+  if(sql.startsWith('SELECT i.sku,COUNT(*) FILTER'))
+   return {rows:[...inventory].map(([sku,available])=>({sku,available}))};
+  if(sql.includes('COUNT(*)::int AS n FROM blofy_xtream_gateway_duration_codes'))
+   return {rows:[{n:codeInserts}]};
+  if(sql.startsWith('INSERT INTO blofy_xtream_gateway_duration_codes')){
+   codeInserts++;return {rows:[{id:args[0]}],rowCount:1};
+  }
+  if(sql.startsWith('INSERT INTO blofy_store_inventory')){
+   stockInserts++;inventory.set(args[1],(inventory.get(args[1])||0)+1);
+   return {rows:[],rowCount:1};
+  }
+  return {rows:[],rowCount:0};
+ },release(){}};
+ const pool={connect:async()=>fake,query:fake.query};
+ const handler=createStoreGeideaHandlers({pool,keyHex:'a'.repeat(64),
+  env:{BLOFY_PAYMENT_PROVIDER:'other'},authorizeAdmin:()=>true,
+  json:(res,status,body)=>{res.status=status;res.data=body;},
+  readJson:async()=>({target:20})});
+ const url={pathname:'/api/v1/admin/store/inventory/refill-all'};
+ const first={};
+ assert.equal(await handler({method:'POST'},first,url),true);
+ assert.equal(first.status,200);
+ assert.equal(first.data.ok,true);
+ assert.equal(first.data.paidPlanCount,8);
+ assert.equal(first.data.generated,160);
+ assert.equal(first.data.plans.length,8);
+ assert.ok(first.data.plans.every(x=>x.before===0&&x.generated===20&&x.after===20));
+ assert.equal(stockInserts,160);
+ assert.equal(inventory.size,8);
+ assert.equal(rollbacks,0);
+ assert.equal(first.data.plans.some(x=>x.code||x.codeVault||x.password),false);
+ const second={};
+ await handler({method:'POST'},second,url);
+ assert.equal(second.status,200);
+ assert.equal(second.data.generated,0,'repeat fills only the shortage, not another 160 codes');
+ assert.equal(stockInserts,160);
+ assert.equal(commits,3,'one schema and two successful atomic refill transactions');
+});
+
+test('full inventory refill rejects invalid target and unauthenticated calls',async()=>{
+ let writes=0;
+ const pool={connect:async()=>{writes++;throw Error('must not connect');},query:async()=>{writes++;throw Error('must not query');}};
+ const build=(authorizeAdmin,body)=>createStoreGeideaHandlers({pool,
+  keyHex:'a'.repeat(64),env:{BLOFY_PAYMENT_PROVIDER:'other'},authorizeAdmin,
+  json:(res,status,payload)=>{res.status=status;res.data=payload;},
+  readJson:async()=>body});
+ const url={pathname:'/api/v1/admin/store/inventory/refill-all'};
+ const unauth={};await build(()=>false,{target:20})({method:'POST'},unauth,url);
+ assert.equal(writes,0);
+ const invalid={};await build(()=>true,{target:999})({method:'POST'},invalid,url);
+ assert.equal(invalid.status,400);
+ assert.equal(invalid.data.error,'store_inventory_refill_target_invalid');
+ assert.equal(writes,0);
+});
+
+test('owner panels expose paid and trial replenishment without auto-issuing on page load',()=>{
+ const codeCenter=readFileSync(new URL('../web/blofy-one-code-center.js',import.meta.url),'utf8');
+ const admin=readFileSync(new URL('../web/store-inventory.html',import.meta.url),'utf8');
+ const adminScript=readFileSync(new URL('../web/store-inventory.js',import.meta.url),'utf8');
+ assert.match(codeCenter,/id="one-refill-all"/);
+ assert.match(codeCenter,/id="one-trial-refill-all"/);
+ assert.match(codeCenter,/\/api\/v1\/admin\/store\/inventory\/refill-all/);
+ assert.match(codeCenter,/\/api\/v1\/admin\/store\/trials\/generate/);
+ assert.match(admin,/id="fill-all"/);
+ assert.match(adminScript,/\/api\/v1\/admin\/store\/inventory\/refill-all/);
+ assert.doesNotThrow(()=>new Function(codeCenter));
+ assert.doesNotThrow(()=>new Function(adminScript));
+});
+
 test('Market storefront preserves separated product benefits and trusted checkout with original imagery',()=>{
  const premium=readFileSync(new URL('../web/store-premium.css',import.meta.url),'utf8');
  const server=readFileSync(new URL('../src/server.mjs',import.meta.url),'utf8');

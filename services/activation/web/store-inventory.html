@@ -124,6 +124,14 @@
 </section>
 <section class="stats" id="stats" aria-label="مخزون المتجر"><div class="notice">جارٍ تحميل بيانات المخزون...</div></section>
 <section class="panel" id="stock-warning" role="status" aria-live="polite">جارٍ فحص تنبيهات المخزون...</section>
+<section class="panel stock-refill" id="stock-refill" aria-label="تعبئة مخزون جميع الباقات المدفوعة">
+ <h2>⚡ تعبئة شاملة لمخزون STREAM وXtream</h2>
+ <p>8 باقات مستقلة: شهر، 3 أشهر، 6 أشهر، سنة × النوعين. يضيف النظام الأكواد الناقصة فقط ولا يمس أكواد العملاء. تبدأ المدة عند أول تفعيل ناجح.</p>
+ <label for="fill-all-target">الرصيد المطلوب لكل باقة</label>
+ <select id="fill-all-target"><option value="20" selected>20 كودًا</option><option value="30">30 كودًا</option><option value="50">50 كودًا</option><option value="10">10 أكواد</option></select>
+ <button id="fill-all" type="button">＋ تعبئة مخزون الباقات الثماني</button>
+ <output id="fill-all-status" role="status" aria-live="polite">التعبئة تتم عند التأكيد فقط؛ الأكواد تُحفظ مشفّرة.</output>
+</section>
 <section class="trial-stock-admin panel" id="trial-stock-admin" aria-labelledby="trial-stock-title">
  <div class="intro"><span>ONE-DAY TRIAL INVENTORY</span><h2 id="trial-stock-title">مخزون أكواد التجربة — يوم واحد</h2>
   <p>مخزون منفصل عن الأكواد المدفوعة: أنشئ أكواد STREAM أو Xtream لمدة يوم واحد. يبدأ اليوم عند أول تفعيل ناجح، وليس عند إنشاء الكود أو تسليمه.</p></div>

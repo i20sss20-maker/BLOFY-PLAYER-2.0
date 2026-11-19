@@ -17,6 +17,15 @@
       <button id="one-inventory-refresh" type="button">↻ تحديث المخزون</button></div>
     <p class="one-footnote">أصدر كمية أكواد للمخزون قبل البيع. لا يبدأ أي اشتراك عند إنشاء الأكواد، والتسليم في المتجر يكون فقط بعد تأكيد الدفع.</p>
     <div id="one-inventory-alerts" class="one-inventory-alerts" role="status" aria-live="polite"></div>
+    <div class="one-inventory-refill">
+      <div><h3>⚡ تعبئة مخزون كل الباقات</h3>
+        <p>8 باقات منفصلة: STREAM وXtream × شهر و3 أشهر و6 أشهر وسنة. يكمل النظام الناقص فقط حتى الحد المطلوب، ولا يعيد إصدار الأكواد الموجودة.</p></div>
+      <label>عدد الأكواد المطلوب لكل باقة
+        <select id="one-refill-target"><option value="20" selected>20 كودًا — الحد الأساسي</option><option value="30">30 كودًا</option><option value="50">50 كودًا</option><option value="10">10 أكواد</option></select>
+      </label>
+      <button id="one-refill-all" type="button">＋ تعبئة الباقات الثماني الآن</button>
+      <p id="one-refill-status" role="status" aria-live="polite">تتم التعبئة عند الضغط فقط، بعد تأكيدك. الأكواد غير مفعّلة ومشفّرة.</p>
+    </div>
     <div id="one-inventory-counts" class="one-inventory-grid" aria-live="polite"></div>
     <div class="one-inventory-controls">
       <label>نوع الباقة<select id="one-inventory-sku"></select></label>
@@ -55,6 +64,13 @@
     '<p class="one-footnote">أنشئ أكواد تجربة منفصلة لـ BLOFY STREAM أو Xtream. المدة يوم واحد، اتصال واحد، وتبدأ فقط عند أول تفعيل ناجح. السعر للعميل 0 ر.س ولا يُستخدم جيديا.</p>',
     '<p class="one-trial-notice" id="one-trial-public-state" role="status" aria-live="polite">جارٍ التحقق من إتاحة التجارب للعملاء…</p>',
     '<div class="one-inventory-grid" id="one-trial-counts" aria-live="polite"></div>',
+    '<div class="one-inventory-refill">',
+    '<h3>⚡ تعبئة التجارب للنوعين</h3>',
+    '<p>تجربة STREAM وتجربة Xtream، يوم واحد، مخزون منفصل، ولا يسحب أي مبلغ.</p>',
+    '<div class="one-inventory-controls"><label>المستهدف لكل نوع',
+    '<select id="one-trial-refill-target"><option value="10" selected>10 أكواد</option><option value="20">20 كودًا</option><option value="30">30 كودًا</option></select></label>',
+    '<button type="button" id="one-trial-refill-all">＋ تعبئة النوعين</button></div>',
+    '<p id="one-trial-refill-status" role="status" aria-live="polite">ينشئ الأكواد الناقصة فقط بعد موافقتك.</p></div>'
     '<div class="one-inventory-controls">',
     '<label>نوع الكود التجريبي<select id="one-trial-sku">',
     '<option value="trial-stream-1d">BLOFY STREAM — يوم واحد</option>',
@@ -280,6 +296,55 @@
   }
   $('one-trial-refresh').addEventListener('click',()=>void loadTrialStock());
   $('one-trial-generate').addEventListener('click',()=>void generateTrialCodes());
+  // Separate trial stock needs a different, no-payment owner endpoint.
+  // Re-fetch counts before writing and never automatically retry a timeout.
+  async function refillTrialAll(){
+    if(trialBusy||stockBusy)return;
+    const target=Number($('one-trial-refill-target').value),
+      status=$('one-trial-refill-status');
+    if(![10,20,30].includes(target))return;
+    const stock=await stockFetch('/api/v1/admin/store/trials/summary');
+    if(stock.ok!==true||!Array.isArray(stock.products))throw Error('trial_summary_unavailable');
+    const types=['trial-stream-1d','trial-xtream-1d'];
+    const plans=types.map(sku=>{
+      const row=stock.products.find(x=>x.sku===sku);
+      if(!row)throw Error('trial_sku_missing');
+      return {sku,name:row.name,missing:Math.max(0,target-Number(row.available||0))};
+    });
+    const n=plans.reduce((t,x)=>t+x.missing,0);
+    if(!n){status.textContent='✓ التجربتان مكتملتان، '+target+' كود متوفر لكل نوع.';return;}
+    if(!confirm('تأكيد تعبئة تجارب STREAM وXtream بإجمالي '+n+
+      ' كود جديد؟ التجربة يوم، ولن يتم تفعيل الأكواد الآن.'))return;
+    trialBusy=true;
+    const ids=['one-trial-refill-all','one-trial-generate','one-trial-refresh'];
+    ids.forEach(id=>$(id).disabled=true);
+    let added=0;
+    try{
+      for(const row of plans){
+        if(!row.missing)continue;
+        status.textContent='تعبئة '+row.name+' — '+row.missing+' كود…';
+        const response=await stockFetch('/api/v1/admin/store/trials/generate',
+          {sku:row.sku,quantity:row.missing},70000);
+        if(response.ok!==true||Number(response.generated)!==row.missing)
+          throw Error('trial_refill_unconfirmed');
+        added+=row.missing;
+      }
+      status.textContent='✓ أُضيف '+added+' كود تجربة للنوعين، دون بدء مدة أو دفع.';
+    }catch(error){
+      status.textContent='⚠ تمت إضافة '+added+' كود مؤكد، ثم توقف الطلب: '+error.message+
+        '. راجع أعداد المخزون قبل إعادة المحاولة لتجنب التكرار.';
+    }finally{
+      trialBusy=false;
+      ids.forEach(id=>$(id).disabled=false);
+      await loadTrialStock();
+    }
+  }
+  $('one-trial-refill-all').addEventListener('click',()=>{
+    void refillTrialAll().catch(error=>{
+      $('one-trial-refill-status').textContent='تعذر قراءة مخزون التجارب: '+error.message;
+    });
+  });
+
   const stockGrid=$('one-inventory-counts'),stockSku=$('one-inventory-sku');
   const stockStatus=$('one-inventory-status');
   let stockBusy=false,stockPlans=[];
@@ -342,6 +407,48 @@
     }catch(e){$('one-inventory-alerts').textContent='تعذر تحميل تنبيهات المخزون.';stockStatus.textContent='فشل قراءة المخزون: '+e.message;}
   }
   $('one-inventory-refresh').addEventListener('click',()=>void loadStock());
+  // Owner-confirmed, atomic refill for every *paid* duration/channel,
+  // using the server-side inventory lock and real database counts.
+  async function refillAllPaidStock(){
+    if(stockBusy||trialBusy)return;
+    const status=$('one-refill-status'),target=Number($('one-refill-target').value);
+    if(![10,20,30,50].includes(target))return;
+    const latest=await stockFetch('/api/v1/admin/store/inventory');
+    if(latest.ok!==true||!Array.isArray(latest.products)||latest.products.length!==8)
+      throw Error('paid_plans_not_ready');
+    const missing=latest.products.reduce((total,p)=>{
+      const row=(latest.counts||[]).find(x=>x.sku===p.sku);
+      return total+Math.max(0,target-Number(row?.available||0));
+    },0);
+    if(!missing){status.textContent='✓ جميع الباقات الثماني لديها '+target+' كودًا أو أكثر.';return;}
+    if(!confirm('سيُنشئ النظام '+missing+' كودًا جديدًا لتعبئة 8 باقات حتى '+target+
+      ' كودًا لكل باقة. المخزون من مصدر saleh، بلا تفعيل أو بيع. هل تعتمد؟'))return;
+    stockBusy=true;
+    const ids=['one-refill-all','one-inventory-generate','one-inventory-import','one-inventory-refresh'];
+    ids.forEach(id=>$(id).disabled=true);
+    status.textContent='جارٍ تعبئة الباقات الثماني في عملية ذرّية. لا تعِد الطلب عند انقطاع الاتصال.';
+    try{
+      const result=await stockFetch('/api/v1/admin/store/inventory/refill-all',{target},150000);
+      if(result.ok!==true||Number(result.paidPlanCount)!==8||
+         !Array.isArray(result.plans)||result.plans.length!==8||
+         !Number.isSafeInteger(Number(result.generated)))
+         throw Error('refill_result_not_confirmed');
+      status.textContent='✓ تم إنشاء '+result.generated+' كودًا؛ كل باقة وصلت للحد المستهدف أو كانت أعلى منه.';
+    }catch(error){
+      status.textContent='⚠ تعذّر تأكيد التعبئة: '+error.message+
+        '. حدّث المخزون قبل أي محاولة جديدة. لن يتم تكرار الطلب تلقائيًا.';
+    }finally{
+      stockBusy=false;
+      ids.forEach(id=>$(id).disabled=false);
+      await loadStock();
+    }
+  }
+  $('one-refill-all').addEventListener('click',()=>{
+    void refillAllPaidStock().catch(error=>{
+      $('one-refill-status').textContent='تعذر قراءة حالة الباقات: '+error.message;
+    });
+  });
+
   // Explicit owner-initiated paid-order integrity audit. This is read-only.
   // No customer plaintext credentials or voucher hashes are disclosed by the API.
   let auditBusy=false;

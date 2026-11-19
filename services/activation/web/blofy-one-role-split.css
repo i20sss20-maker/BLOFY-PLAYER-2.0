@@ -69,6 +69,16 @@ section[aria-labelledby="readiness-title"],
 .one-inventory-stock strong{color:#eaffff;font-size:13px}
 .one-inventory-stock b{color:#9bf7dd;font-size:18px}
 .one-inventory-stock small{color:#b3d5d8;font-size:11px}
+.one-inventory-refill{border:1px solid #76c9ba;border-radius:13px;padding:15px 16px;margin:15px 0;
+ background:linear-gradient(125deg,#12484c,#103140);color:#e7fff7;display:grid;gap:10px}
+.one-inventory-refill h3{margin:0;font-size:18px;color:#e0fff7}
+.one-inventory-refill p{margin:0;font-size:12px;line-height:1.8;color:#c7f1e5}
+.one-inventory-refill label{display:grid;gap:6px;font-size:12px;max-width:330px}
+.one-inventory-refill select{min-height:43px;border-radius:9px;border:1px solid #80c4b8;
+ background:#10323d;color:#f5fffc;padding:8px 12px}
+.one-inventory-refill button{justify-self:start;background:#a2f0dc;color:#082d33;border-color:#c4fff1}
+.one-inventory-refill #one-refill-status,.one-inventory-refill #one-trial-refill-status{
+ font-size:12px;line-height:1.8;color:#e4fbf4}
 .one-inventory-controls{display:flex;align-items:end;gap:12px;flex-wrap:wrap}
 .one-inventory-controls label{display:grid;gap:7px;flex:1;min-width:170px;font-size:12px;color:#d8f2ed}
 .one-inventory-controls :is(select,input){min-height:43px;border:1px solid #5b7d82;border-radius:10px;

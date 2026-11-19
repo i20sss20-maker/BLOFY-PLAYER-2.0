@@ -244,6 +244,69 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
      throw e;
    }finally{db.release();}
  }
+ // All eight paid SKUs have a separate, real voucher pool. Never seed stock
+ // from a public route, never change existing voucher expiry or live customers.
+ // A repeat request fills only the current shortfall, under the issuance lock.
+ async function refillAllInventory(req,res){
+   if(!authorizeAdmin(req,res))return;
+   const body=await readJson(req);
+   const target=Number(body?.target);
+   if(!Number.isSafeInteger(target)||![10,20,30,50].includes(target))
+     return json(res,400,{error:'store_inventory_refill_target_invalid'});
+   await schema();
+   const db=await pool.connect();
+   try{
+     await db.query('BEGIN');
+     // Shared with all normal, trial and individual batch issuance.
+     await db.query('SELECT pg_advisory_xact_lock(718420682)');
+     const current=(await db.query(
+       'SELECT i.sku,COUNT(*) FILTER (WHERE i.sold_at IS NULL AND i.sold_order_id IS NULL '+
+       'AND v.sold_at IS NULL AND v.redeemed_at IS NULL AND v.revoked_at IS NULL '+
+       'AND v.account_id IS NULL AND v.code_vault IS NOT NULL)::int AS available '+
+       'FROM blofy_store_inventory i JOIN blofy_xtream_gateway_duration_codes v '+
+       'ON v.id=i.voucher_id GROUP BY i.sku')).rows;
+     const counts=new Map(current.map(x=>[x.sku,Math.max(0,Number(x.available)||0)]));
+     const rows=P.map(plan=>({
+       sku:plan[0],name:plan[1],channel:plan[2],durationDays:plan[3],
+       before:counts.get(plan[0])||0,generated:0
+     }));
+     const missing=rows.reduce((sum,r)=>sum+Math.max(0,target-r.before),0);
+     if(missing>400)throw err('store_inventory_refill_limit',400);
+     if(missing){
+       const sourceId=await source(db);
+       const issueCount=await db.query('SELECT COUNT(*)::int AS n FROM blofy_xtream_gateway_duration_codes');
+       let totalIssued=Number(issueCount.rows[0]?.n)||0;
+       for(const row of rows){
+         const need=Math.max(0,target-row.before);
+         for(let i=0;i<need;i++){
+           let inserted=false;
+           for(let retry=0;retry<12;retry++){
+             const code=randomNumericStreamCode(streamNumericCodeLength(totalIssued));
+             const id=crypto.randomUUID(),proof=streamCodeProof(code,keyHex);
+             const result=await db.query('INSERT INTO blofy_xtream_gateway_duration_codes '+
+               '(id,code_hash,code_hint,label,source_id,duration_days,max_connections,code_channel,'+
+               'code_vault,dual_access_enabled) VALUES($1,$2,$3,$4,$5,$6,1,$7,$8,TRUE) '+
+               'ON CONFLICT(code_hash) DO NOTHING RETURNING id',[
+                 id,proof,code.slice(0,2)+'••••'+code.slice(-2),
+                 row.name,sourceId,row.durationDays,row.channel,
+                 encryptStreamCode(id,code,keyHex)
+               ]);
+             if(!result.rows[0])continue;
+             await db.query('INSERT INTO blofy_store_inventory(voucher_id,sku) VALUES($1,$2)',
+               [id,row.sku]);
+             totalIssued++;row.generated++;inserted=true;break;
+           }
+           if(!inserted)throw err('store_inventory_refill_failed',503);
+         }
+       }
+     }
+     await db.query('COMMIT');
+     return json(res,200,{ok:true,target,generated:missing,
+       plans:rows.map(r=>({...r,after:r.before+r.generated})),
+       channelCount:2,paidPlanCount:P.length,activated:false});
+   }catch(e){await db.query('ROLLBACK').catch(()=>{});throw e}
+   finally{db.release();}
+ }
  async function salesSummary(req,res){
    if(!authorizeAdmin(req,res))return;
    await schema();
@@ -935,6 +998,7 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
    if(p==='/api/v1/admin/store/inventory'&&req.method==='GET'){await inventorySummary(req,res);return true;}
    if(p==='/api/v1/admin/store/inventory/import'&&req.method==='POST'){await importInventory(req,res);return true;}
    if(p==='/api/v1/admin/store/inventory/generate'&&req.method==='POST'){await generateInventory(req,res);return true;}
+   if(p==='/api/v1/admin/store/inventory/refill-all'&&req.method==='POST'){await refillAllInventory(req,res);return true;}
    if(p==='/api/v1/store/coupon/quote'&&req.method==='POST'){await couponQuote(req,res);return true;}
    if(p==='/api/v1/store/products'&&req.method==='GET'){await catalog(req,res);return true;}
    if(p==='/api/v1/store/checkout'&&req.method==='POST'){await checkout(req,res);return true;}
