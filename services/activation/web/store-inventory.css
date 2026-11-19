@@ -112,3 +112,25 @@
  .commercial-product-line strong{grid-column:1/-1}
  .commercial-product-line b{text-align:left}
 }
+
+
+/* Commercial control center cards adopt the published BLOFY violet/cream brand. */
+.store-pro-overview{margin:30px 0 48px}
+.store-pro-overview .panel{padding:22px}
+.store-pro-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:0 0 22px}
+.store-pro-actions>a{display:flex;align-items:center;min-height:48px;padding:11px 13px;background:#f5effd;border:1px solid #e2d5f1;border-radius:12px;color:#6233a4;font-size:12px;font-weight:800}
+.store-pro-actions>a:hover{background:#eadbfc;border-color:#b69bdf}
+.store-pro-status{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:11px}
+.store-pro-tile{display:flex;flex-direction:column;gap:6px;background:#faf8fe;border:1px solid #e7dcef;border-radius:14px;padding:15px;min-width:0}
+.store-pro-tile[data-state=warning]{background:#fff9f0;border-color:#efd9b8}
+.store-pro-tile small{font-size:11px;color:#655673;font-weight:800;line-height:1.5}
+.store-pro-tile strong{font-size:clamp(15px,1.5vw,23px);color:#6331a8;line-height:1.55;overflow-wrap:anywhere}
+.store-pro-tile[data-state=warning] strong{color:#945518}
+.store-pro-tile span{font-size:10px;line-height:1.8;color:#7c6c88}
+.store-pro-footnote{font-size:11px;color:#6e5d7b;line-height:2;margin:20px 0 12px}
+.store-pro-footnote b{color:#532c84;margin-inline-start:10px}
+#store-pro-refresh{padding:10px 16px;width:auto;margin:0}
+@media(max-width:1180px){.store-pro-status{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:940px){.store-pro-actions{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:720px){.store-pro-status,.store-pro-actions{grid-template-columns:repeat(2,minmax(0,1fr))}.store-pro-overview .panel{padding:15px}}
+@media(max-width:410px){.store-pro-status{grid-template-columns:1fr 1fr}.store-pro-tile{padding:11px}.store-pro-actions{grid-template-columns:1fr 1fr;gap:7px}.store-pro-actions a{font-size:11px;padding:9px;min-height:40px}}
