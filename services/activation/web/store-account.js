@@ -11,6 +11,7 @@
  const node=(tag,value)=>{const n=document.createElement(tag);if(value!==undefined)n.textContent=value;return n;};
  const money=n=>(Number(n)/100).toLocaleString('ar-SA')+' ر.س';
  let orders=[],receiptTimer=null,receiptGeneration=0,returnChecked=false,paymentReceiptGeneration=0;
+ let lastSubscriptionData=null;
  let privateLogin=null;
  function hidePrivateLogin(){
   privateLogin?.remove();privateLogin=null;
@@ -247,22 +248,50 @@
   }catch(e){tell(statusMessage(e));}
   finally{trigger.disabled=false;}
  }
- async function loadSubscriptions(){
+ function subscriptionState(s){
+  if(s?.reason==='revoked')return 'revoked';
+  if(!s?.redeemed)return 'unused';
+  const deadline=Date.parse(s?.expiresAt||'');
+  if(!Number.isFinite(deadline))return 'unknown';
+  if(deadline<=Date.now())return 'expired';
+  return deadline<=Date.now()+7*86400000?'expiring':'active';
+ }
+ async function loadSubscriptions({fromCache=false}={}){
   const box=$('subscriptions');
-  box.replaceChildren();
+  hidePrivateLogin();box.replaceChildren();
   try{
-   const data=await api('/subscriptions');
+   const data=fromCache&&lastSubscriptionData?lastSubscriptionData:await api('/subscriptions');
+   lastSubscriptionData=data;
    const subs=Array.isArray(data.subscriptions)?data.subscriptions:[];
+   const filter=$('subscriptions-filter').value,needle=$('subscriptions-search').value.trim().toLowerCase();
+   const labels={active:'نشط',expiring:'قرب الانتهاء',unused:'لم يُفعّل',expired:'منتهي',revoked:'ملغى',unknown:'بحاجة مراجعة'};
+   const matching=subs.filter(s=>{
+    if(filter!=='all'&&subscriptionState(s)!==filter)return false;
+    if(needle&&!String(s.codeHint||'').toLowerCase().includes(needle)&&
+     !(s.channel==='xtream'?'xtream':'stream').includes(needle))return false;
+    return true;
+   }).sort((a,b)=>{
+    const order={expiring:0,unused:1,active:2,unknown:3,expired:4,revoked:5};
+    return (order[subscriptionState(a)]??9)-(order[subscriptionState(b)]??9)||
+     ((Date.parse(a.expiresAt||'')||0)-(Date.parse(b.expiresAt||'')||0));
+   });
+   $('subscriptions-count').textContent='عرض '+matching.length+' من '+subs.length+' اشتراك';
    updateSubscriptionOverview(subs);
    $('subscriptions-note').textContent=subs.length?
     'يمكنك تجديد الكود الحالي دون استبداله، فقط بعد دفع مؤكد.':
     'لا توجد أكواد مشتراة ومرتبطة بحسابك بعد. قد تحتاج إضافة طلبك السابق.';
-   for(const s of subs){
+   for(const s of matching){
     const article=node('article');article.className='receipt-line';
     const label=s.channel==='xtream'?'Xtream BLOFY':'BLOFY STREAM';
-    article.append(node('strong',label+' · '+s.codeHint),
-      node('p',expiryText(s)));
-    const status=node('p',s.canRenew?'جاهز للتجديد بنفس الكود':
+    const state=subscriptionState(s);
+    const chip=node('span',labels[state]||'بحاجة مراجعة');
+    chip.className='subscription-state subscription-state-'+state;
+    const end=Date.parse(s.expiresAt||'');
+    const days=Number.isFinite(end)&&end>Date.now()?Math.ceil((end-Date.now())/86400000):null;
+    const remaining=days!==null?' · متبقي '+days+' يوم':'';
+    article.append(node('strong',label+' · '+s.codeHint),chip,
+      node('p',expiryText(s)+remaining));
+    const status=node('p',s.canRenew?'يمكن تجديد نفس الكود دون تغيير بيانات الدخول':
       s.reason==='not_activated'?'يلزم تفعيل الكود قبل تجديده':
       s.reason==='revoked'?'الكود ملغى وغير قابل للتجديد':
       'هذا الاشتراك يحتاج مراجعة مع الدعم قبل التجديد');
@@ -301,11 +330,15 @@
     box.append(article);
    }
   }catch(_){
+   lastSubscriptionData=null;
+   $('subscriptions-count').textContent='تعذّر قراءة عدد الاشتراكات.';
    updateSubscriptionOverview(null);
    $('subscriptions-note').textContent='تعذّر تحميل اشتراكاتك. حدّث الصفحة أو تواصل مع الدعم.';
   }
  }
 
+ $('subscriptions-filter').addEventListener('change',()=>void loadSubscriptions({fromCache:true}));
+ $('subscriptions-search').addEventListener('input',()=>void loadSubscriptions({fromCache:true}));
  async function load(){
   clearReceipt();clearPaymentReceipt();
   try{
@@ -477,7 +510,7 @@
      sessionStorage.removeItem('blofy.shop.cart.checkout.'+order.orderId);
     }
    }catch(_){}
-   view(false);orders=[];
+   view(false);orders=[];lastSubscriptionData=null;
    $('orders').replaceChildren();
    $('orders-search').value='';$('orders-filter').value='all';
    $('overview-paid').textContent='—';$('overview-pending').textContent='—';
