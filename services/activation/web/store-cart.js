@@ -472,6 +472,8 @@
           JSON.stringify(x.bundleSelection||null)===JSON.stringify(item.bundleSelection||null))||null);
      }
      render(priceLines);
+     $('summary-heading').textContent=paid.length?'تفاصيل الدفع':'ملخص التجربة المجانية';
+     $('step-payment-label').textContent=paid.length?'الدفع':'استلام الكود';
      $('payment-methods').hidden=!paid.length;
      $('payment-wallet-note').hidden=!paid.length;
      $('checkout-disclaimer').textContent=!paid.length?
