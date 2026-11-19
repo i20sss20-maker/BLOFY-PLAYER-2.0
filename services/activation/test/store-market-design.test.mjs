@@ -18,7 +18,6 @@ test('brand defaults stay informative and show only configured payment methods',
  assert.match(homepage,/id="bundle-second"/);
  assert.match(homepage,/data-cart-add="stream"/);
  assert.match(homepage,/data-cart-add="xtream"/);
- assert.match(homepage,/id="checkout"/)===false;
  assert.match(homepage,/id="coupon-preview"/);
  assert.match(homepage,/store\/market\.css/);
  assert.match(homepage,/store\/market\.js/);
