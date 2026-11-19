@@ -80,7 +80,7 @@
   const live=subs.filter(item=>{
    // Unactivated, revoked, expired or unknown-expiry vouchers must never be
    // counted as active. Only verified account-scoped summaries are used.
-   if(item?.redeemed!==true||item.reason==='revoked'||!item.expiresAt)return false;
+   if(item?.redeemed!==true||item.reason==='revoked'||item.accountEnabled===false||!item.expiresAt)return false;
    const expiry=Date.parse(item.expiresAt);
    return Number.isFinite(expiry)&&expiry>now;
   });
@@ -251,6 +251,7 @@
  function subscriptionState(s){
   if(s?.reason==='revoked')return 'revoked';
   if(!s?.redeemed)return 'unused';
+  if(s.accountEnabled===false)return 'disabled';
   const deadline=Date.parse(s?.expiresAt||'');
   if(!Number.isFinite(deadline))return 'unknown';
   if(deadline<=Date.now())return 'expired';
@@ -264,14 +265,15 @@
    lastSubscriptionData=data;
    const subs=Array.isArray(data.subscriptions)?data.subscriptions:[];
    const filter=$('subscriptions-filter').value,needle=$('subscriptions-search').value.trim().toLowerCase();
-   const labels={active:'نشط',expiring:'قرب الانتهاء',unused:'لم يُفعّل',expired:'منتهي',revoked:'ملغى',unknown:'بحاجة مراجعة'};
+   const labels={active:'نشط',expiring:'قرب الانتهاء',unused:'لم يُفعّل',expired:'منتهي',revoked:'ملغى',disabled:'موقوف',unknown:'بحاجة مراجعة'};
    const matching=subs.filter(s=>{
-    if(filter!=='all'&&subscriptionState(s)!==filter)return false;
+    if(filter!=='all'&&!(filter==='active'&&['active','expiring'].includes(subscriptionState(s)))
+      &&subscriptionState(s)!==filter)return false;
     if(needle&&!String(s.codeHint||'').toLowerCase().includes(needle)&&
      !(s.channel==='xtream'?'xtream':'stream').includes(needle))return false;
     return true;
    }).sort((a,b)=>{
-    const order={expiring:0,unused:1,active:2,unknown:3,expired:4,revoked:5};
+    const order={expiring:0,unused:1,active:2,disabled:3,unknown:4,expired:5,revoked:6};
     return (order[subscriptionState(a)]??9)-(order[subscriptionState(b)]??9)||
      ((Date.parse(a.expiresAt||'')||0)-(Date.parse(b.expiresAt||'')||0));
    });
@@ -337,6 +339,7 @@
   }
  }
 
+ $('subscriptions-refresh').addEventListener('click',()=>void loadSubscriptions());
  $('subscriptions-filter').addEventListener('change',()=>void loadSubscriptions({fromCache:true}));
  $('subscriptions-search').addEventListener('input',()=>void loadSubscriptions({fromCache:true}));
  async function load(){

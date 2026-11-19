@@ -207,7 +207,7 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
     const eligible=Boolean(renewalStartAndExpiry(row,90));
     const expiresAt=safeOwnedSubscriptionExpiry(row);
     return {voucherId:row.id,codeHint:row.code_hint||'',
-      channel:row.code_channel,redeemed:!!row.redeemed_at,expiresAt,canRenew:eligible,
+      channel:row.code_channel,redeemed:!!row.redeemed_at,accountEnabled:row.account_enabled===true,expiresAt,canRenew:eligible,
       reason:eligible?null:row.revoked_at?'revoked':!row.redeemed_at?'not_activated':'not_eligible'};
    }),
    plans:publicStorePlans().map(x=>({sku:x.sku,channel:x.channel,

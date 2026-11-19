@@ -13,7 +13,7 @@
 .subscription-state-active{background:#e4f7ed;border-color:#97d7b5;color:#176039}
 .subscription-state-expiring{background:#fff1ce;border-color:#e3b95a;color:#805400}
 .subscription-state-unused{background:#e9edff;border-color:#b2c3e8;color:#374b88}
-.subscription-state-expired,.subscription-state-revoked{background:#ffe9e8;border-color:#e3ada7;color:#8c3d35}
+.subscription-state-expired,.subscription-state-revoked,.subscription-state-disabled{background:#ffe9e8;border-color:#e3ada7;color:#8c3d35}
 @media print{
  body *{visibility:hidden!important}
  #payment-receipt,#payment-receipt *{visibility:visible!important}
@@ -97,14 +97,15 @@
   <select id="subscriptions-filter">
    <option value="all">جميع الاشتراكات</option><option value="active">نشطة</option>
    <option value="expiring">تنتهي خلال 7 أيام</option><option value="unused">لم تُفعّل</option>
-   <option value="expired">منتهية</option><option value="revoked">ملغاة</option>
+   <option value="expired">منتهية</option><option value="disabled">موقوفة</option><option value="revoked">ملغاة</option>
   </select>
  </label>
  <label for="subscriptions-search">بحث في اشتراكاتي
   <input id="subscriptions-search" type="search" maxlength="60" autocomplete="off" placeholder="STREAM، Xtream، أو جزء من الكود">
  </label>
 </div>
-<p id="subscriptions-count" role="status" class="hint" aria-live="polite"></p>
+<div class="account-order-tools"><p id="subscriptions-count" role="status" class="hint" aria-live="polite"></p>
+<button id="subscriptions-refresh" type="button" class="secondary">تحديث اشتراكاتي</button></div>
 <p id="subscriptions-note" class="hint" role="status" aria-live="polite">جارٍ قراءة اشتراكاتك الموثقة...</p>
 <div id="subscriptions" aria-live="polite"></div>
 </div>
