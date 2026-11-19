@@ -9,6 +9,9 @@ import { serveIndexNowKey } from './indexnow-key.mjs';
 import { createCommercialHandlers } from './commercial-handlers.mjs';
 import { createStoreShowcaseHandlers } from './store-showcase.mjs';
 import { createStoreBrandingHandlers } from './store-branding.mjs';
+import { createStoreCommercialInsightsHandlers } from './store-commercial-insights.mjs';
+import { createStoreMerchandisingHandlers } from './store-merchandising.mjs';
+import { createStoreRetentionInsightsHandlers } from './store-retention-insights.mjs';
 import { storeInfoPage } from './store-info-pages.mjs';
 import { createProfileCloudHandlers } from './profile-cloud.mjs';
 import { registerDeviceTrial, bindExistingTrial, completePendingTrial } from './trial-registration.mjs';
@@ -185,6 +188,9 @@ const codeOperations = createCodeOperationsHandlers({ pool, secretHex: PLAYLIST_
 const commercial = createCommercialHandlers({ pool, keyHex: PLAYLIST_ENCRYPTION_KEY, json, readJson, requireAdmin });
 const storeShowcase = createStoreShowcaseHandlers({pool,json,readJson,authorizeAdmin:requireAdmin});
 const storeBranding = createStoreBrandingHandlers({pool,json,readJson,authorizeAdmin:requireAdmin});
+const storeCommercialInsights = createStoreCommercialInsightsHandlers({pool,json,authorizeAdmin:requireAdmin});
+const storeMerchandising = createStoreMerchandisingHandlers({pool,json,readJson,authorizeAdmin:requireAdmin});
+const storeRetentionInsights = createStoreRetentionInsightsHandlers({pool,json,authorizeAdmin:requireAdmin});
 const siteAnalytics = createSiteAnalyticsHandlers({pool,json,readJson,authorizeAdmin:requireAdmin,keyHex:PLAYLIST_ENCRYPTION_KEY});
 const whatsappCloud = createWhatsAppCloudHandlers({pool,authorizeAdmin:requireAdmin});
 const cloud = createProfileCloudHandlers({ pool, json, readJson, authorizedDevice });
@@ -1008,6 +1014,9 @@ const server = http.createServer(async (req, res) => {
       });
       return res.end();
     }
+    if (await storeRetentionInsights(req,res,requestUrl)) return;
+    if (await storeMerchandising(req,res,requestUrl)) return;
+    if (await storeCommercialInsights(req,res,requestUrl)) return;
     if (await storeBranding(req,res,requestUrl)) return;
     if (await storeShowcase(req,res,requestUrl)) return;
     if (await siteAnalytics(req,res,requestUrl)) return;
@@ -1027,6 +1036,19 @@ const server = http.createServer(async (req, res) => {
       return await serveStoreAssetFile(res,'store-checkout-theme.css','text/css; charset=utf-8');
     if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/visual.css')
       return await serveStoreAssetFile(res,'store-visual.css','text/css; charset=utf-8');
+    if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/assistant.js')
+      return await serveStoreAssetFile(res,'store-assistant.js','application/javascript; charset=utf-8');
+    if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/assistant.css')
+      return await serveStoreAssetFile(res,'store-assistant.css','text/css; charset=utf-8');
+    if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/assistant'){
+      const raw=await readFile(new URL('../web/store-assistant.html',import.meta.url));
+      res.writeHead(200,{'content-type':'text/html; charset=utf-8','content-length':raw.length,
+        'cache-control':'public,max-age=120','x-content-type-options':'nosniff',
+        'x-frame-options':'DENY','referrer-policy':'strict-origin-when-cross-origin',
+        'content-security-policy':PUBLIC_ANALYTICS_CSP+"; base-uri 'none'",
+        'strict-transport-security':'max-age=31536000'});
+      return res.end(raw);
+    }
     if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/market.css')
       return await serveStoreAssetFile(res,'store-market.css','text/css; charset=utf-8');
     if (['GET','HEAD'].includes(req.method) && requestUrl.pathname==='/store/market.js')

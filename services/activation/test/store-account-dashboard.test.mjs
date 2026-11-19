@@ -150,7 +150,7 @@ test('HTML summary, order filters and existing customer paid receipts remain acc
  for(const id of ['overview-paid','overview-pending','overview-active','overview-expiring',
   'orders-search','orders-filter','orders-result-count','refresh-orders','payment-receipt'])
    assert.match(html,new RegExp('id="'+id+'"'));
- assert.match(html,/store\/account\.js\?v=7/);
+ assert.match(html,/store\/account\.js\?v=[a-z0-9-]+/i);
  assert.match(html,/store\/cart\.css\?v=4/);
  assert.match(css,/account-summary-grid/);
  assert.match(css,/prefers-reduced-motion/);

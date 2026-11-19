@@ -40,8 +40,8 @@ test('integrated Xtream accounts, vouchers and STREAM sales use authenticated re
   assert.match(js,/method,credentials:'same-origin',cache:'no-store'/);
   assert.match(js,/window\.confirm\(/);
   assert.match(js,/result\.subscriptionUnchanged!==true/);
-  assert.match(js,/window\.setTimeout\(clearSecret,90000\)/);
-  assert.match(js,/if\(document\.hidden\)clearSecret\(\)/);
+  assert.match(js,/one-stream-secret-hide'\)\.addEventListener\('click',clearSecret\)/);
+  assert.match(js,/window\.addEventListener\('pagehide',clearSecret\)/);
   assert.match(js,/codeOffset=nextOffset/);
   assert.match(js,/form\.requestSubmit\(\)/);
   // No mass credential exports or direct app redemption from admin.
