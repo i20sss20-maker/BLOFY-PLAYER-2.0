@@ -30,6 +30,7 @@ import tv.blofy.player.R
 import tv.blofy.player.ui.common.BlofyTvDesign
 import tv.blofy.player.core.device.DeviceClass
 import tv.blofy.player.core.identity.PortalPlaylistClient
+import tv.blofy.player.core.identity.ActivationManager
 import tv.blofy.player.core.url.PlaylistUrlPolicy
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.PlaylistManager
@@ -160,7 +161,14 @@ class PlaylistActivity : AppCompatActivity() {
                         } finally { if (!promoted) withContext(NonCancellable) { dao.discardStagedCatalog(staging.id) } }
                     } else { dao.upsertProvider(next); dao.disableAllProviders(); dao.activateProvider(id) }
                     CatalogSyncState.markReady(applicationContext, id)
-                    val endpoint = BuildConfig.ACTIVATION_BASE_URL.trim(); if (endpoint.isNotBlank()) runCatching { PortalPlaylistClient.pushProvider(applicationContext, endpoint, next) }
+                    // User-added FREE playlists stay on-device. Sync to BLOFY portal only for
+                    // devices with an active legacy activation entitlement.
+                    val endpoint = BuildConfig.ACTIVATION_BASE_URL.trim()
+                    val activation = dao.activation()
+                    val canSyncPortal = activation != null && ActivationManager(applicationContext, dao).cachedCanUse(activation)
+                    if (endpoint.isNotBlank() && canSyncPortal) {
+                        runCatching { PortalPlaylistClient.pushProvider(applicationContext, endpoint, next) }
+                    }
                     next
                 }
                 setResult(RESULT_OK); status.text = if (connectAfter) "تم الحفظ • جاري الدخول" else "تم الحفظ"
