@@ -36,7 +36,8 @@
    const paid=paidLines().length>0,available=applePayMerchantEnabled&&applePaySupported();
    $('apple-pay-option').hidden=!paid||!applePayMerchantEnabled;
    $('checkout-apple-pay').hidden=!paid||!available;
-   $('checkout-apple-pay').disabled=$('checkout').disabled||creating||paymentOpen;
+   // Existing paid sessions are resumed by checkout(true) without new charges.
+   $('checkout-apple-pay').disabled=$('checkout').disabled||creating;
    $('payment-wallet-note').textContent=!applePayMerchantEnabled?
      'Apple Pay قيد التحقق؛ بطاقات مدى وVisa وMastercard متاحة.':
      !available?'Apple Pay متاح على أجهزة تدعمه مع Wallet؛ يمكنك الدفع بالبطاقة على هذا الجهاز.':

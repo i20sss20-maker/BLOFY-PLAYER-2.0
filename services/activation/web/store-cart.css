@@ -226,13 +226,16 @@ border-radius:11px;background:#07182f;color:#fff;padding:10px 12px}
    It is never displayed until both Geidea merchant flag and ApplePaySession
    indicate support; card checkout remains unchanged. */
 .cart-experience .apple-pay-choice:not([hidden]){
- display:block;width:100%;height:48px;min-height:48px;margin:7px 0 6px;
- padding:8px 14px;background:#000;color:#fff;border:1px solid #333;
- border-radius:12px;font:600 19px -apple-system,BlinkMacSystemFont,Arial,sans-serif;
- cursor:pointer;letter-spacing:-.02em;
+ display:block;width:100%;height:52px;min-height:52px;margin:7px 0 6px;
+ padding:0;background:#000;color:transparent;border:0;
+ border-radius:12px;font-size:0;line-height:0;
+ white-space:nowrap;overflow:hidden;cursor:pointer;
  -webkit-appearance:-apple-pay-button;-apple-pay-button-type:buy;
  -apple-pay-button-style:black;
 }
+.cart-experience .apple-pay-choice::before,
+.cart-experience .apple-pay-choice::after{content:none!important}
+.cart-experience .apple-pay-choice:focus-visible{outline:3px solid #a87ce0;outline-offset:3px}
 .cart-experience .apple-pay-choice:disabled{opacity:.5;cursor:not-allowed}
 .cart-experience .payment-methods .apple-pay-badge:not([hidden]){
  background:#080808;color:#fff;font-size:13px;min-width:88px

@@ -88,8 +88,13 @@ test('supported Apple Wallet creates ONE order and redirects to same Geidea host
  assert.equal(f.saved.get('blofy.shop.order.'+orderId),token);
  assert.equal(f.saved.get('blofy.shop.applepay.pilot.v1'),pilotToken);
  assert.equal(JSON.parse(f.saved.get('blofy.shop.pending-checkout.v1')).sessionId,sessionId);
- assert.equal(f.nodes.get('checkout-apple-pay').disabled,true,
-  'same session remains locked while payment is in progress');
+ assert.equal(f.nodes.get('checkout-apple-pay').disabled,false,
+  'same session remains resumable without a second charge');
+ click();
+ await new Promise(resolve=>setTimeout(resolve,20));
+ assert.deepEqual(f.redirects,[hosted,hosted],'repeat click resumes original provider session');
+ assert.equal(f.calls.filter(x=>x.path==='/api/v1/store/cart/checkout').length,1,
+  'resuming payment never creates a second order');
 });
 
 test('disabled merchant wallet remains hidden even if a device supports Apple Pay',async()=>{
@@ -107,4 +112,14 @@ test('non-Apple device keeps ordinary card checkout available',async()=>{
  assert.equal(f.nodes.get('checkout').disabled,false);
  assert.match(f.nodes.get('payment-wallet-note').textContent,/أجهزة تدعمه/);
  assert.equal(f.calls.filter(x=>x.path==='/api/v1/store/cart/checkout').length,0);
+});
+
+test('native Safari Apple Pay button has no duplicate HTML text',()=>{
+ const html=readFileSync(new URL('../web/store-cart.html',import.meta.url),'utf8');
+ const css=readFileSync(new URL('../web/store-cart.css',import.meta.url),'utf8');
+ assert.match(html,/<button id="checkout-apple-pay"[^>]+hidden disabled><\/button>/);
+ assert.doesNotMatch(html,/<button id="checkout-apple-pay"[^>]+>[^<]+<\/button>/);
+ assert.match(css,/-webkit-appearance:-apple-pay-button/);
+ assert.match(css,/-apple-pay-button-type:buy/);
+ assert.match(css,/-apple-pay-button-style:black/);
 });
