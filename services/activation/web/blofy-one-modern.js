@@ -58,7 +58,7 @@
   const label=$('one-issue-label'),summary=$('one-issue-preview');
   const presets=[...issue.querySelectorAll('[data-one-days]')];
   const channelName=value=>value==='app'?'BLOFY STREAM':'Xtream';
-  const durationName=value=>({30:'30 يومًا',90:'3 أشهر',180:'6 أشهر',365:'سنة'})[value]||
+  const durationName=value=>({1:'يوم واحد',7:'أسبوع',30:'شهر',90:'3 أشهر',180:'6 أشهر',365:'سنة'})[value]||
     String(value)+' يومًا';
   const wordQuantity=value=>value===1?'كود واحد':String(value)+' أكواد';
   const connectionsName=value=>value===1?'اتصال واحد':String(value)+' اتصالات';

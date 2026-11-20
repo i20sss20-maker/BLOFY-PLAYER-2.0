@@ -354,7 +354,7 @@
       channel:String(f.channel.value),label:String(f.label.value).trim(),
       sourceId:'d2bb0397-1c56-4751-adc9-1a17758022f6'
     };
-    if(![30,90,180,365].includes(payload.durationDays)||
+    if(![1,7,30,90,180,365].includes(payload.durationDays)||
        !Number.isInteger(payload.quantity)||payload.quantity<1||payload.quantity>20||
        ![1,2].includes(payload.maxConnections)||
        !['app','xtream'].includes(payload.channel)||!payload.label||payload.label.length>95){
