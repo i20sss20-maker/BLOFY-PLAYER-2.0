@@ -5,7 +5,7 @@ import net from 'node:net';
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { STREAM_56_APK, STREAM_56_BYTES, STREAM_56_SHA256, STREAM_5601_APK, STREAM_5601_BYTES, STREAM_5601_SHA256 } from './stream-upload-oidc.mjs';
+import { STREAM_56_APK, STREAM_56_BYTES, STREAM_56_SHA256, STREAM_5601_APK, STREAM_5601_BYTES, STREAM_5601_SHA256, STREAM_5602_APK, STREAM_5602_BYTES, STREAM_5602_SHA256 } from './stream-upload-oidc.mjs';
 import { ensureDownloadMetrics, recordCompletedDownload } from './download-metrics.mjs';
 
 const { Pool } = pg;
@@ -23,7 +23,7 @@ const pool = new Pool({
 const CATEGORIES = new Set(['media', 'files', 'downloads', 'launcher', 'screensaver', 'tools', 'network', 'store']);
 const MODES = new Set(['official', 'direct']);
 // Version 7 inserts the independent BLOFY STREAM app into already-seeded production databases.
-const SEED_VERSION = 20;
+const SEED_VERSION = 21;
 
 // Fail closed on a missing or altered signed APK. Never advance the live
 // customer catalog or STREAM updater merely because a seed value changed.
@@ -46,6 +46,17 @@ async function signedStream5601Available() {
     const hash = createHash('sha256');
     for await (const chunk of createReadStream(file)) hash.update(chunk);
     return hash.digest('hex') === STREAM_5601_SHA256;
+  } catch { return false; }
+}
+
+async function signedStream5602Available() {
+  try {
+    const file = '/data/releases/' + STREAM_5602_APK;
+    const info = await stat(file);
+    if (info.size !== STREAM_5602_BYTES) return false;
+    const hash = createHash('sha256');
+    for await (const chunk of createReadStream(file)) hash.update(chunk);
+    return hash.digest('hex') === STREAM_5602_SHA256;
   } catch { return false; }
 }
 
@@ -150,10 +161,10 @@ const DEFAULT_APPS = Object.freeze([
   {
     slug:'blofy-stream', name:'BLOFY STREAM', category:'media', symbol:'BS',
     iconUrl:'https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/services/update-distribution/public/blofy-stream.svg',
-    description:'BLOFY STREAM 56.0.1 — إصلاح انقطاع البث المباشر وإعادة الاتصال، ومزامنة تدريجية للمحتوى والحلقات من سيرفر BLOFY، تحديث من الإعدادات دون تعليق 95%، تحسين الريموت والمشغل والصوت والبحث الذكي، مع الاحتفاظ بكود التفعيل والمفضلة.',
-    devices:'Android TV · TV Box · Android Phone · Tablet', version:'56.0.1',
-    architecture:'Universal (ARM + x86)', apkSizeBytes:135785176,
-    downloadUrl:'https://updates.blofyplayer.com/files/releases/BLOFY-STREAM-56.0.1-LIVE-RECONNECT-FIX-OWNER-SIGNED.apk',
+    description:'BLOFY STREAM 56.0.2 — مزامنة تلقائية وتدريجية للمحتوى كل 30 دقيقة تقريباً وخلال فتح التطبيق، مع تحميل التغييرات فقط. زر تحديث المحتوى داخل الإعدادات يعرض التحميل والنجاح والخطأ دون الانتقال لشاشة أخرى، ويحافظ على المكتبة والبوسترات وكود التفعيل والمفضلة.',
+    devices:'Android TV · TV Box · Android Phone · Tablet', version:'56.0.2',
+    architecture:'Universal (ARM + x86)', apkSizeBytes:135787039,
+    downloadUrl:'https://updates.blofyplayer.com/files/releases/BLOFY-STREAM-56.0.2-AUTO-CATALOG-FIX-OWNER-SIGNED.apk',
     downloadMode:'direct', sortOrder:0, enabled:true, featured:true
   },
   {
@@ -1184,10 +1195,15 @@ export async function initAppLibrary() {
         }
       }
       if (version < 20) {
-        // Preserve the previous public APK and promote only a byte-verified,
-        // original-owner-signed 56.0.1 hotfix. Do not touch BLOFY PLAYER.
+        // An older catalog must still advance through the immutable 56.0.1
+        // historical version before the separately verified 56.0.2 promotion.
         if (await signedStream5601Available()) {
-          const signed = cleanApp(DEFAULT_APPS.find(item => item.slug === 'blofy-stream'));
+          const signed = {
+            ...cleanApp(DEFAULT_APPS.find(item => item.slug === 'blofy-stream')),
+            version: '56.0.1',
+            downloadUrl: 'https://updates.blofyplayer.com/files/releases/BLOFY-STREAM-56.0.1-LIVE-RECONNECT-FIX-OWNER-SIGNED.apk',
+            apkSizeBytes: STREAM_5601_BYTES
+          };
           const promoted = await client.query(
             `update blofy_app_catalog
              set previous_version=version, previous_download_url=download_url,
@@ -1206,6 +1222,33 @@ export async function initAppLibrary() {
         } else {
           // Fail closed; do not advertise an unavailable or mismatched APK.
           throw new Error('STREAM_5601_PROMOTION_BLOCKED: signed APK missing or SHA mismatch');
+        }
+      }
+      if (version < 21) {
+        // Only promote the exact signed 56.0.2 bytes that the protected
+        // first-party GitHub OIDC workflow uploaded and SHA256-verified.
+        // The previous 56.0.1 installer remains available for rollback.
+        if (await signedStream5602Available()) {
+          const signed = cleanApp(DEFAULT_APPS.find(item => item.slug === 'blofy-stream'));
+          const promoted = await client.query(
+            `update blofy_app_catalog
+             set previous_version=version, previous_download_url=download_url,
+                 previous_apk_size_bytes=apk_size_bytes, previous_saved_at=now(),
+                 version=$2, download_url=$3, apk_size_bytes=$4,
+                 description=$5, version_updated_at=now(), updated_at=now()
+             where slug=$1 and version='56.0.1' and download_url=$6`,
+            [signed.slug, signed.version, signed.downloadUrl, signed.apkSizeBytes,
+             signed.description,
+             'https://updates.blofyplayer.com/files/releases/BLOFY-STREAM-56.0.1-LIVE-RECONNECT-FIX-OWNER-SIGNED.apk']
+          );
+          if (promoted.rowCount) {
+            await client.query("delete from blofy_app_health where slug='blofy-stream'");
+            await client.query('update blofy_app_catalog_meta set last_health_at=null where id=1');
+          }
+        } else {
+          // Fail closed: never advertise unverified bytes or clobber a
+          // manually configured app, but keep the site itself available.
+          console.warn('STREAM_5602_PROMOTION_BLOCKED: owner-signed APK not yet SHA256-ready');
         }
       }
       await client.query('update blofy_app_catalog_meta set seed_version=$1 where id=1', [SEED_VERSION]);
