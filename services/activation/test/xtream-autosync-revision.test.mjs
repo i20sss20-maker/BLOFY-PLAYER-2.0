@@ -47,6 +47,11 @@ test('bridge exposes only protected source schedule, backup metadata and aggrega
  const schedule=hook.indexOf("/internal/blofy-stream/ops/schedule",start);
  assert.ok(authorized>start&&schedule>authorized);
  assert.match(hook,/studioPro\.setSchedule\(sourceId/);
+ assert.ok(hook.includes('/internal/blofy-stream/ops/catalog/refresh-now'));
+ assert.ok(hook.includes('catalog_source_not_approved'));
+ assert.ok(hook.includes('catalog_refresh_accepted'));
+ assert.ok(hook.includes('codesUnchanged:true,mediaFilesCopied:0'));
+
  assert.match(hook,/studioPro\.snapshot\(sourceId,label\)/);
  assert.match(hook,/firstRunImmediately:false/);
  assert.match(hook,/concurrentViewersMeasured:false/);
