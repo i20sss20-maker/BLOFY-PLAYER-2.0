@@ -57,6 +57,10 @@ jobs:
           actual_size="$(stat -c '%s' "verified/$APK_NAME")"
           actual_sha="$(sha256sum "verified/$APK_NAME" | awk '{print $1}')"
           test "$actual_size" = "$BYTES" && test "$actual_sha" = "$SHA256"
+          # Fresh Ubuntu runners may not include the pinned Android build-tools.
+          if [ ! -x "$ANDROID_HOME/build-tools/35.0.0/aapt" ]; then
+            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "build-tools;35.0.0" || test -x "$ANDROID_HOME/build-tools/35.0.0/aapt"
+          fi
           tools="$ANDROID_HOME/build-tools/35.0.0"
           "$tools/aapt" dump badging "verified/$APK_NAME" > "$RUNNER_TEMP/badging.txt"
           grep -Fq "name='tv.blofy.player.v2.stream' versionCode='2000117' versionName='2.0.0-rc07.56.0.2-STREAM'" "$RUNNER_TEMP/badging.txt"
