@@ -52,19 +52,20 @@ jobs:
           grep -Fxq 'application_id=tv.blofy.player.v2.stream' "$identity"
           grep -Fxq 'version_code=2000117' "$identity"
           grep -Fxq "source_sha=$SOURCE_SHA" "$identity"
-          cp "$apk" "staging/$APK_NAME"
-          actual_size="$(stat -c '%s' "staging/$APK_NAME")"
-          actual_sha="$(sha256sum "staging/$APK_NAME" | awk '{print $1}')"
+          mkdir -p verified
+          cp "$apk" "verified/$APK_NAME"
+          actual_size="$(stat -c '%s' "verified/$APK_NAME")"
+          actual_sha="$(sha256sum "verified/$APK_NAME" | awk '{print $1}')"
           test "$actual_size" = "$BYTES" && test "$actual_sha" = "$SHA256"
           tools="$ANDROID_HOME/build-tools/35.0.0"
-          "$tools/aapt" dump badging "staging/$APK_NAME" > "$RUNNER_TEMP/badging.txt"
+          "$tools/aapt" dump badging "verified/$APK_NAME" > "$RUNNER_TEMP/badging.txt"
           grep -Fq "name='tv.blofy.player.v2.stream' versionCode='2000117' versionName='2.0.0-rc07.56.0.2-STREAM'" "$RUNNER_TEMP/badging.txt"
           ! grep -Fq 'application-debuggable' "$RUNNER_TEMP/badging.txt"
-          "$tools/apksigner" verify --verbose --print-certs "staging/$APK_NAME" > "$RUNNER_TEMP/cert.txt"
+          "$tools/apksigner" verify --verbose --print-certs "verified/$APK_NAME" > "$RUNNER_TEMP/cert.txt"
           actual_cert="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/cert.txt" | head -n1 | tr -d '[:space:]-:' | tr '[:lower:]' '[:upper:]')"
           test "$actual_cert" = "$CERT"
-          "$tools/zipalign" -c -P 16 -v 4 "staging/$APK_NAME" >/dev/null
-          unzip -Z1 "staging/$APK_NAME" > "$RUNNER_TEMP/entries.txt"
+          "$tools/zipalign" -c -P 16 -v 4 "verified/$APK_NAME" >/dev/null
+          unzip -Z1 "verified/$APK_NAME" > "$RUNNER_TEMP/entries.txt"
           for abi in armeabi-v7a arm64-v8a x86 x86_64; do
             grep -Fxq "lib/$abi/libffmpegJNI.so" "$RUNNER_TEMP/entries.txt"
           done
@@ -83,7 +84,7 @@ jobs:
             if curl --fail-with-body --silent --show-error --max-time 420 \
                 -H "Authorization: Bearer $token" \
                 -H 'Content-Type: application/vnd.android.package-archive' \
-                --data-binary "@staging/$APK_NAME" "$target" > "$RUNNER_TEMP/upload.json"; then
+                --data-binary "@verified/$APK_NAME" "$target" > "$RUNNER_TEMP/upload.json"; then
               uploaded=1
               break
             fi
