@@ -100,9 +100,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          existing=0
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "::error::Immutable release tag already exists; refusing to overwrite it"
-            exit 1
+            existing=1
+            # Idempotency only for byte-identical, already published signed files.
+            mkdir -p "$RUNNER_TEMP/existing"
+            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$APK" --dir "$RUNNER_TEMP/existing"
+            test "$(sha256sum "$RUNNER_TEMP/existing/$APK" | awk '{print $1}')" = "$SHA256" ||
+              { echo "::error::Existing release tag has a different APK"; exit 1; }
           fi
           cat > "$RUNNER_TEMP/notes.md" <<EOF
           BLOFY STREAM 56.0.2 | App package tv.blofy.player.v2.stream, versionCode 2000117.
@@ -115,12 +120,14 @@ jobs:
           update feed is not changed until Railway imports and verifies the exact APK.
           Install without uninstalling the previous same-certificate STREAM app.
           EOF
-          gh release create "$TAG" "release/$APK" "release/$ZIP" release/SHA256SUMS release/IDENTITY.txt \
-            --repo "$GITHUB_REPOSITORY" --target "$SOURCE_HEAD" --prerelease \
-            --title "BLOFY STREAM 56.0.2 | Automatic Content Refresh | Owner Signed" \
-            --notes-file "$RUNNER_TEMP/notes.md"
-          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName,assets \
-            --jq --arg apk "$APK" --arg zip "$ZIP" 'select((.assets|map(.name)|index($apk)) and (.assets|map(.name)|index($zip))) | .tagName'
+          if [ "$existing" -eq 0 ]; then
+            gh release create "$TAG" "release/$APK" "release/$ZIP" release/SHA256SUMS release/IDENTITY.txt \
+              --repo "$GITHUB_REPOSITORY" --target "$SOURCE_HEAD" --prerelease \
+              --title "BLOFY STREAM 56.0.2 | Automatic Content Refresh | Owner Signed" \
+              --notes-file "$RUNNER_TEMP/notes.md"
+          fi
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName,assets |
+            jq -er --arg apk "$APK" --arg zip "$ZIP" 'select((.assets|map(.name)|index($apk)) and (.assets|map(.name)|index($zip))) | .tagName'
           echo "### Verified BLOFY STREAM 56.0.2 owner-signed APK published (not yet website-promoted)" >> "$GITHUB_STEP_SUMMARY"
           echo "SHA256: $SHA256; bytes: $SIZE; source: $SOURCE_RUN" >> "$GITHUB_STEP_SUMMARY"
           echo "Release: https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG" >> "$GITHUB_STEP_SUMMARY"
