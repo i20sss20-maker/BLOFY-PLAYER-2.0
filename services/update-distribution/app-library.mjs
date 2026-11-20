@@ -161,7 +161,7 @@ const DEFAULT_APPS = Object.freeze([
   {
     slug:'blofy-stream', name:'BLOFY STREAM', category:'media', symbol:'BS',
     iconUrl:'https://raw.githubusercontent.com/i20sss20-maker/BLOFY-PLAYER-2.0/main/services/update-distribution/public/blofy-stream.svg',
-    description:'BLOFY STREAM 56.0.2 — مزامنة تلقائية وتدريجية للمحتوى كل 30 دقيقة تقريباً وخلال فتح التطبيق، مع تحميل التغييرات فقط. زر تحديث المحتوى داخل الإعدادات يعرض التحميل والنجاح والخطأ دون الانتقال لشاشة أخرى، ويحافظ على المكتبة والبوسترات وكود التفعيل والمفضلة.',
+    description:'BLOFY STREAM 56.0.2 — تحديث تلقائي للمحتوى في الخلفية، وتحميل التغييرات فقط. زر تحديث المحتوى داخل الإعدادات يعرض التحميل والنتيجة دون مغادرة الصفحة. يحافظ على المكتبة والبوسترات وكود التفعيل والمفضلة.',
     devices:'Android TV · TV Box · Android Phone · Tablet', version:'56.0.2',
     architecture:'Universal (ARM + x86)', apkSizeBytes:135787039,
     downloadUrl:'https://updates.blofyplayer.com/files/releases/BLOFY-STREAM-56.0.2-AUTO-CATALOG-FIX-OWNER-SIGNED.apk',
