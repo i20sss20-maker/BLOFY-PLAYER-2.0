@@ -729,6 +729,9 @@ class SettingsActivity : AppCompatActivity() {
             if (refreshState == WorkInfo.State.RUNNING ||
                 refreshState == WorkInfo.State.ENQUEUED ||
                 refreshState == WorkInfo.State.BLOCKED) {
+                // The background job is already doing the requested work.
+                // Mark this as a user request so its final result is announced.
+                refreshRequested = true
                 updateSyncStatus()
                 return
             }
