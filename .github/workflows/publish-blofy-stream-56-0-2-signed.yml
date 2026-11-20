@@ -64,7 +64,9 @@ jobs:
           grep -Eq '^source_sha=[0-9a-f]{40}$' "$identity"
           (cd "$(dirname "$source_apk")" && sha256sum -c SHA256SUMS)
           cp "$source_apk" "release/$APK"
-          cp "$sums" release/SHA256SUMS
+          # The signed artifact also carries FFmpeg compliance checksums.
+          # Publish an APK-only checksum manifest after the original bundle was verified.
+          (cd release && sha256sum "$APK" > SHA256SUMS && sha256sum -c SHA256SUMS)
           cp "$identity" release/IDENTITY.txt
           size="$(stat -c '%s' "release/$APK")"
           test "$size" -gt 25000000 && test "$size" -lt 268435456
