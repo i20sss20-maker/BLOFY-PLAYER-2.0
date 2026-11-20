@@ -1,0 +1,37 @@
+name: Verify BLOFY STREAM download center live after 502 recovery
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-stream-download-center-live-20261121.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify public health, downloads page, updater and signed APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='https://updates.blofyplayer.com'
+          ok=0
+          for attempt in 1 2 3 4 5 6; do
+            h=$(curl --silent --show-error --max-time 20 -o /tmp/health.json -w '%{http_code}' "$base/health" || true)
+            page=$(curl --silent --show-error --max-time 20 -o /tmp/downloads.html -w '%{http_code}' "$base/downloads" || true)
+            feed=$(curl --silent --show-error --max-time 20 -o /tmp/stream-release.json -w '%{http_code}' "$base/stream/release.json" || true)
+            if [[ "$h" == 200 && "$page" == 200 && "$feed" == 200 ]] &&                 grep -Fq 'BLOFY STREAM' /tmp/downloads.html &&                 grep -Fq '56.0.2' /tmp/downloads.html &&                 jq -e '.release.app.versionCode==2000117 and .release.app.packageName=="tv.blofy.player.v2.stream" and .release.app.apkSizeBytes==135787039 and .release.app.sha256=="9a3037936b374b3e62e2bc06f4f9fe8b5a3a64441c249c8cf00d78944c58876a"' /tmp/stream-release.json >/dev/null; then
+              ok=1
+              break
+            fi
+            echo "Attempt $attempt: health=$h downloads=$page feed=$feed"
+            sleep 8
+          done
+          test "$ok" = 1 || { echo "::error::BLOFY download center not yet healthy or 56.0.2 release not promoted"; exit 1; }
+          apk='https://updates.blofyplayer.com/files/releases/BLOFY-STREAM-56.0.2-AUTO-CATALOG-FIX-OWNER-SIGNED.apk'
+          code=$(curl --silent --show-error --max-time 25 -o /dev/null -w '%{http_code}' -I "$apk")
+          [[ "$code" == 200 || "$code" == 206 ]]
+          echo "### Verified HTTP 200: official downloads + health + STREAM 56.0.2 updater" >> "$GITHUB_STEP_SUMMARY"
+          echo "Owner-signed APK accessible: $code" >> "$GITHUB_STEP_SUMMARY"
