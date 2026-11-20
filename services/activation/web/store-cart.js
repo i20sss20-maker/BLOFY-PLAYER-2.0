@@ -421,8 +421,7 @@
      if(snapshot!==cartSnapshot())return;
      pendingChecked=true;
      if(data.pending)showOwnedPending(data);
-     else{
-       paymentOpen=false;
+     else if(!paymentOpen){
        $('pending-status').textContent='';
        $('started').hidden=true;
      }
