@@ -16,6 +16,10 @@ function fixture({existing=null,cap=0,sourceApproved=true,
    if(sql==='BEGIN'||sql==='COMMIT'||sql==='ROLLBACK'||
       sql.startsWith('SET LOCAL')||sql.includes('pg_advisory_xact_lock'))
     return {rowCount:1,rows:[]};
+   if(sql.includes('INSERT INTO blofy_xtream_gateway_item_map'))
+    return {rowCount:1,rows:[]};
+   if(sql.includes('SELECT gateway_id FROM blofy_xtream_gateway_item_map'))
+    return {rowCount:1,rows:[{gateway_id:125}]};
    if(sql.includes('FROM blofy_xtream_servers'))
     return {rowCount:sourceApproved?1:0,rows:sourceApproved?[{id:SOURCE}]:[]};
    if(sql.includes('FROM blofy_xtream_gateway_episode_map e')||
@@ -98,6 +102,20 @@ test('unapproved source and unknown catalog movie fail without writes',async()=>
   assert.equal(f.calls.some(x=>x.sql==='ROLLBACK'),true);
  }
 });
+test('selected movie alone is mapped, with no wholesale Xtream catalog materialization',async()=>{
+ const f=fixture();
+ const r=await stageMirrorIntake(f.db,{
+  sourceId:SOURCE,kind:'movie',id:'new_movie_999',
+  manifestStatus:'not_recorded',ownerConfirmed:true
+ });
+ assert.equal(r.ok,true);
+ const writes=f.calls.filter(x=>x.sql.includes('INSERT INTO blofy_xtream_gateway_item_map'));
+ assert.equal(writes.length,1);
+ assert.deepEqual(writes[0].args,[SOURCE,'new_movie_999']);
+ assert.match(writes[0].sql,/i.source_id=\$2/);
+ assert.match(writes[0].sql,/ON CONFLICT\(server_id,media_type,source_id\)/);
+ assert.equal(f.calls.some(x=>x.sql.includes('INSERT INTO blofy_xtream_gateway_category_map')),false);
+});
 test('episode intent uses mapped episode gateway ID, never a freeform URL',async()=>{
  const f=fixture({episode:true});
  const r=await stageMirrorIntake(f.db,{
@@ -117,7 +135,8 @@ test('a repeated click returns existing planned copy without duplicate queue ent
   sourceId:SOURCE,kind:'movie',id:'1349410',
   manifestStatus:'not_recorded',ownerConfirmed:true});
  assert.equal(r.code,'mirror_intake_already_staged');
- assert.equal(f.calls.filter(x=>x.sql.includes('INSERT INTO')).length,0);
+ assert.equal(f.calls.filter(x=>x.sql.includes('INSERT INTO blofy_stream_mirror_intents')).length,0);
+ assert.equal(f.calls.filter(x=>x.sql.includes('INSERT INTO blofy_xtream_gateway_item_map')).length,1);
 });
 test('per-source cap blocks a 25th staging record',async()=>{
  const f=fixture({cap:mirrorIntakeLimit});

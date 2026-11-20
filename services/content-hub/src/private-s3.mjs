@@ -2,7 +2,8 @@ import {createHash} from 'node:crypto';
 import {
  S3Client,CreateMultipartUploadCommand,UploadPartCommand,
  CompleteMultipartUploadCommand,AbortMultipartUploadCommand,
- DeleteObjectCommand,GetObjectCommand,HeadBucketCommand,HeadObjectCommand
+ DeleteObjectCommand,GetObjectCommand,HeadBucketCommand,HeadObjectCommand,
+ ListObjectsV2Command,ListMultipartUploadsCommand,GetBucketVersioningCommand
 } from '@aws-sdk/client-s3';
 
 const MAX_OBJECT_BYTES=64*1024*1024*1024;
@@ -34,9 +35,53 @@ export function createPrivateS3Adapter({config=process.env,client=null}={}){
  });
  const headers={Bucket:bucket};
  return {
-  async health(){
-   await s3.send(new HeadBucketCommand(headers));
-   return {ok:true,private:true,configured:true};
+  // Exact current-object usage check for an owner-only STORAGE BUDGET,
+  // not a claim that S3 has a fixed physical disk size. Reject any active
+  // multipart upload, unexpected versioning, partial pagination or timeout.
+  // No object names or URLs leave this private adapter.
+  async measurePrivateUsage({signal,maxObjects=10000}={}){
+   if(!Number.isSafeInteger(maxObjects)||maxObjects<1||
+      maxObjects>10000)
+    return {ok:false,code:'private_usage_scan_limit_invalid'};
+   try{
+    const opts=signal?{abortSignal:signal}:{};
+    const versioning=await s3.send(new GetBucketVersioningCommand(headers),opts);
+    if(versioning?.Status==='Enabled'||versioning?.Status==='Suspended')
+     return {ok:false,code:'private_usage_versioning_unaccounted'};
+    const uploads=await s3.send(new ListMultipartUploadsCommand({
+     ...headers,MaxUploads:1
+    }),opts);
+    if(uploads.IsTruncated===true||Array.isArray(uploads.Uploads)&&
+       uploads.Uploads.length>0)
+     return {ok:false,code:'private_usage_multipart_active'};
+    let usedBytes=0,objectCount=0,next=null,pages=0;
+    do{
+     const page=await s3.send(new ListObjectsV2Command({
+      ...headers,MaxKeys:1000,...(next?{ContinuationToken:next}:{})
+     }),opts);
+     if(++pages>11||!Array.isArray(page.Contents)&&page.Contents!==undefined)
+      return {ok:false,code:'private_usage_page_invalid'};
+     for(const object of page.Contents||[]){
+      if(!Number.isSafeInteger(object.Size)||object.Size<0)
+       return {ok:false,code:'private_usage_item_invalid'};
+      usedBytes+=object.Size;
+      objectCount++;
+      if(!Number.isSafeInteger(usedBytes)||objectCount>maxObjects)
+       return {ok:false,code:'private_usage_bound_exceeded'};
+     }
+     if(page.IsTruncated!==true)break;
+     const candidate=String(page.NextContinuationToken||'');
+     if(!candidate||candidate===next)
+      return {ok:false,code:'private_usage_cursor_invalid'};
+     next=candidate;
+    }while(true);
+    return {ok:true,code:'private_usage_objects_counted',
+     usedBytes,objectCount,usageExact:true,verifiedPrivateBucket:true,
+     providerRequests:0,mediaBytesTransferred:0,customerCutover:false};
+   }catch{
+    return {ok:false,code:'private_usage_scan_unavailable',
+     providerRequests:0,mediaBytesTransferred:0,customerCutover:false};
+   }
   },
   async begin({key,private:priv,contentType,metadata}){
    safeObjectKey(key);

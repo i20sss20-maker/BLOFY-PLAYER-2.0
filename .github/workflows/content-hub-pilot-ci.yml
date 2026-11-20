@@ -100,6 +100,8 @@ jobs:
           node --check services/content-hub/src/metadata-review.mjs
           node --check services/content-hub/src/episode-chunk-pilot.mjs
           node --check services/content-hub/src/source-lease.mjs
+          node --check services/content-hub/scripts/railway-mirror-pg-s3-qa.mjs
+          node --check services/content-hub/scripts/railway-isolated-av-smoke.mjs
       - name: Install test-only dependencies (no install scripts)
         run: npm install --prefix services/content-hub --ignore-scripts --no-audit --no-fund --package-lock=false
       - name: Test S3 multipart fixtures (no source or cloud access)
@@ -130,4 +132,61 @@ jobs:
       - name: Exercise SQL and analytics with disposable PostgreSQL
         env:
           BLOFY_TEST_PG_URL: postgresql://analytics_test:local_test_only@127.0.0.1:5432/analytics_fixture
-        run: node --test services/content-hub/test/season-analytics-postgres.test.mjs
+        run: node --test services/content-hub/test/season-analytics-postgres.test.mjs services/content-hub/test/mirror-postgres.test.mjs
+
+  mirror-minio-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: mirror_ci
+          POSTGRES_PASSWORD: disposable_mirror_ci
+          POSTGRES_DB: mirror_fixture
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mirror_ci -d mirror_fixture"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Start isolated MinIO S3 protocol server
+        run: |
+          docker run --rm -d --name blofy-mirror-ci-minio \
+            -e MINIO_ROOT_USER=blofyci_testkey \
+            -e MINIO_ROOT_PASSWORD=blofyci_testsecret123456 \
+            -e MINIO_KMS_SECRET_KEY="ci-only:$(openssl rand -base64 32 | tr -d '\n')" \
+            -e MINIO_DOMAIN=localhost \
+            -p 9000:9000 cgr.dev/chainguard/minio:latest server /data --address ":9000"
+          # CI-only DNS for virtual-host bucket addressing, no production host edit.
+          echo "127.0.0.1 blofy-ci-virtualhost.localhost" | sudo tee -a /etc/hosts
+          for i in $(seq 1 45); do
+            if curl --fail --silent http://127.0.0.1:9000/minio/health/ready > /dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs blofy-mirror-ci-minio
+          exit 1
+      - name: Install offline test dependencies
+        run: npm install --prefix services/content-hub --ignore-scripts --no-audit --no-fund --package-lock=false
+      - name: Install FFmpeg for real synthetic audio-video decode
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg
+          ffmpeg -version | head -n 1
+      - name: Decode synthetic MP4/AAC after isolated S3-style readback
+        run: node --test services/content-hub/test/railway-isolated-av-smoke.test.mjs
+      - name: Test one synthetic mirror through actual S3 API and real PostgreSQL
+        env:
+          BLOFY_TEST_PG_URL: postgresql://mirror_ci:disposable_mirror_ci@127.0.0.1:5432/mirror_fixture
+          BLOFY_TEST_MINIO_URL: http://127.0.0.1:9000
+          BLOFY_TEST_MINIO_VIRTUAL_URL: http://localhost:9000
+        run: node --test services/content-hub/test/mirror-minio-postgres.test.mjs
+      - name: Print isolated MinIO logs after failure
+        if: failure()
+        run: docker logs blofy-mirror-ci-minio || true

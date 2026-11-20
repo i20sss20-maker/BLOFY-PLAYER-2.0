@@ -68,7 +68,7 @@ test('canary detects altered stored byte stream and does not call ffprobe',async
  const a=make({invalidHash:true});
  const res=await diagnoseVerifiedMovie({runId:'private_run_001',...a});
  assert.equal(res.ok,false);
- assert.equal(res.code,'canary_private_read_failed');
+ assert.equal(res.code,'canary_private_sha256_mismatch');
  assert.equal(a.files.length,0);
 });
 test('canary reports missing audio tracks rather than claiming playable media',async()=>{

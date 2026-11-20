@@ -30,6 +30,11 @@ import {buildSeasonReport} from './season-report.mjs';
 import {buildPrivateDeviceQaManifest} from './device-qa-manifest.mjs';
 import {buildSeasonAttention} from './season-attention.mjs';
 import {checkPrivateReadConcurrency,validateConcurrentReadIds} from './concurrent-private-read.mjs';
+import {runMirrorTransferChunk,mirrorWorkerReadiness,
+ validateMirrorTransferApproval} from './mirror-transfer-worker.mjs';
+import {createMirrorPortalBridge} from './mirror-transfer-bridge.mjs';
+import {readMirrorHistory} from './mirror-transfer-history.mjs';
+import {readIntegrityCheckedMirrorRange} from './mirror-owner-range-verified.mjs';
 
 const FIXTURE_SOURCE='00000000-0000-4000-8000-000000000000';
 const FIXTURE_SIZE=8*1024*1024;
@@ -96,6 +101,7 @@ export function createContentHubServer({storage,lease,
  episodeCandidateInspector=inspectEpisodeCandidates,
  episodeSizeInspector=inspectEpisodeSize,
  episodeChunkRunner=runOneEpisodeChunk,seasonQueueStore=null,catalogStore=null,
+ mirrorChunkRunner=runMirrorTransferChunk,
  metadataMatcher=createMetadataMatcher({
   token:process.env.BLOFY_TMDB_READ_TOKEN||'',
   commercialLicenseConfirmed:process.env.BLOFY_TMDB_COMMERCIAL_LICENSE_CONFIRMED==='1'
@@ -113,6 +119,12 @@ export function createContentHubServer({storage,lease,
  let seekPreviewBuilding=false,seekPreviewThrottleUntil=0;
  let timelineRendering=false,timelineLastRequestAt=0;
  let physicalHeadAuditBusy=false;
+ let capacityAuditBusy=false;
+ let mirrorChunkBusy=false,lastMirrorChunk=null;
+ let mirrorCanaryBusy=false,lastMirrorCanary=null;
+ const mirrorBridge=createMirrorPortalBridge({
+  token:String(pilotEnv.BLOFY_CONTENT_HUB_BRIDGE_TOKEN||'')
+ });
  const timelineClipCache=createPrivateTimelineClipCache();
  let episodeProbeBusy=false,episodeProbeAt=0,lastEpisodeProbe=null;
  let episodeCopyBusy=false,episodeCopyAbort=null,lastEpisodeCopy=null;
@@ -130,11 +142,30 @@ export function createContentHubServer({storage,lease,
   readiness:()=>episodeCopyReadiness(pilotEnv),logger,
   delayMs:2200,maxBatches:180,maxDurationMs:45*60*1000
  });
+ // Bounded background session for ONE explicitly chosen, licensed item.
+ // No auto-boot, no daily sweep, max sixteen 8MiB parts (128MiB) per session.
+ // PostgreSQL manifests survive restarts; a restarted service stays paused.
+ let mirrorSelection=null;
+ const mirrorAutoCopy=createContinuousCopyController({
+  runBatch:({signal})=>mirrorChunkRunner({
+   ...mirrorSelection,env:pilotEnv,storage,lease,
+   approvalLoader:args=>mirrorBridge.approval(args),
+   readRange:args=>mirrorBridge.range(args),
+   signal,logger
+  }),
+  readiness:()=>{
+   const ready=mirrorWorkerReadiness(pilotEnv);
+   const blockedBy=[...ready.blockedBy];
+   if(!mirrorSelection)blockedBy.push('mirror_item_not_selected');
+   return {ready:blockedBy.length===0,blockedBy};
+  },
+  logger,delayMs:3000,maxBatches:16,maxDurationMs:20*60*1000
+ });
  const seasonQueue=seasonQueueStore?createSeasonQueueController({
   store:seasonQueueStore,storage,lease,env:pilotEnv,
   runner:episodeChunkRunner,logger,
   isSourceBusy:()=>episodeCopyBusy||episodeCopy.isRunning()||
-   pilotRunning||copy.isRunning()
+   pilotRunning||copy.isRunning()||mirrorChunkBusy||mirrorAutoCopy.isRunning()
  }):null;
  async function runFullPlaybackCanary(runId,mediaKind='movie'){
   const diag=await diagnoseVerifiedMovie({runId,storage,lease,mediaKind});
@@ -161,6 +192,239 @@ export function createContentHubServer({storage,lease,
     uptimeSeconds:Math.floor((Date.now()-started)/1000)});
   if(!safeAuth(req.headers.authorization,token))
    return json(res,401,{ok:false,code:'content_hub_auth_required'});
+  // Decode a verified mirror's private S3 prefix (ffprobe + ffmpeg) and
+  // prove video frames AND audible-track samples are decodable. Does not
+  // contact the Xtream origin or expose a playback URL to customers.
+  if(path==='/internal/mirror/copy/canary'){
+   if(pilotEnv.BLOFY_CONTENT_HUB_MIRROR_AV_CANARY_ENABLED!=='1')
+    return json(res,404,{ok:false,code:'mirror_canary_feature_disabled'});
+   if(req.method!=='POST'||String(req.url||'').includes('?'))
+    return json(res,405,{ok:false,code:'mirror_canary_post_only'});
+   if(req.headers['x-blofy-owner-action']!=='verify-private-mirror-audio-video')
+    return json(res,403,{ok:false,code:'mirror_canary_owner_action_required'});
+   if(mirrorCanaryBusy||mirrorChunkBusy||mirrorAutoCopy.isRunning())
+    return json(res,429,{ok:false,code:'mirror_canary_storage_busy'});
+   let body;
+   try{body=await readSeasonJson(req)}
+   catch{return json(res,400,{ok:false,code:'mirror_canary_invalid_json'})}
+   const runId=String(body?.runId||'');
+   const mediaKind=String(body?.kind||'');
+   if(body?.ownerConfirmed!==true||
+      !/^mirror_[a-f0-9]{32}$/.test(runId)||
+      !['movie','episode'].includes(mediaKind))
+    return json(res,400,{ok:false,code:'mirror_canary_invalid_selection'});
+   mirrorCanaryBusy=true;
+   const controller=new AbortController();
+   const timer=setTimeout(()=>controller.abort(),65000);timer.unref?.();
+   const onClose=()=>{if(!res.writableEnded)controller.abort()};
+   res.once('close',onClose);
+   try{
+    const result=await diagnoseVerifiedMovie({
+      runId,mediaKind,storage,lease,signal:controller.signal});
+    // Proven SHA mismatch is not a flaky decoder error: quarantine
+    // the verified database manifest before acknowledging the canary.
+    // No S3 deletion; other transient read/decoder errors are NOT
+    // quarantined. Verified playback routes now refuse this run.
+    let quarantined=false;
+    if(result.code==='canary_private_sha256_mismatch'){
+      if(typeof lease?.quarantineMirrorRun!=='function')
+        return json(res,503,{ok:false,
+          code:'mirror_quarantine_storage_unavailable',
+          providerRequests:0,customerCutover:false});
+      const outcome=await lease.quarantineMirrorRun({runId,kind:mediaKind});
+      if(outcome.ok!==true)
+        return json(res,503,{ok:false,
+          code:'mirror_quarantine_not_committed',
+          providerRequests:0,customerCutover:false});
+      quarantined=true;
+    }
+    // Persist a timestamped PARTIAL decoder sample against the SAME
+    // verified DB manifest SHA, not a claim that device/full playback works.
+    let avSamplePersisted=false;
+    if(result.ok===true&&Number(result.videoFramesDecoded)>=1&&
+       Number(result.audioFramesDecoded)>=1){
+      if(typeof lease?.recordMirrorAvSample!=='function')
+        return json(res,503,{ok:false,code:'mirror_av_sample_store_missing',
+          providerRequests:0,customerCutover:false});
+      try{
+        const proof=await lease.recordMirrorAvSample({
+          runId,kind:mediaKind,
+          videoFramesDecoded:Number(result.videoFramesDecoded),
+          audioFramesDecoded:Number(result.audioFramesDecoded)
+        });
+        if(proof.ok!==true)throw Error('mirror_av_sample_not_saved');
+        avSamplePersisted=true;
+      }catch{return json(res,503,{ok:false,
+        code:'mirror_av_sample_not_persisted',
+        providerRequests:0,customerCutover:false})}
+    }
+    // Strictly report bounded nonsecret telemetry; not codec FFmpeg logs.
+    const summary={ok:result.ok===true,code:String(result.code||''),
+      quarantinedOnHashMismatch:quarantined,
+      avSamplePersisted,avSampleOnly:true,devicePlaybackVerified:false,
+      runId,mediaKind,privateOnly:true,customerCutover:false,
+      providerRequests:0,audioVideoDecoded:result.ok===true,
+      videoTracks:Number(result.videoTracks||0),
+      audioTracks:Number(result.audioTracks||0),
+      videoFramesDecoded:Number(result.videoFramesDecoded||0),
+      audioFramesDecoded:Number(result.audioFramesDecoded||0),
+      sampleBytes:Number(result.sampleBytes||0),
+      checkedAt:new Date().toISOString()};
+    lastMirrorCanary=summary;
+    if(!controller.signal.aborted&&!res.destroyed)
+     return json(res,result.ok?200:409,summary);
+   }catch{
+    if(!controller.signal.aborted&&!res.destroyed)
+     return json(res,503,{ok:false,code:'mirror_canary_unavailable',
+       providerRequests:0,customerCutover:false});
+   }finally{
+    mirrorCanaryBusy=false;clearTimeout(timer);res.off('close',onClose);
+   }
+   return;
+  }
+  // Durable PostgreSQL copy progress; explicitly excludes unrelated pilot
+  // and season transfer runs. Read-only, no S3 or provider media requests.
+  if(path==='/internal/mirror/copy/history'){
+   if(req.method!=='GET'||String(req.url||'').includes('?'))
+    return json(res,405,{ok:false,code:'mirror_history_get_only'});
+   if(req.headers['x-blofy-owner-action']!=='private-mirror-copy-history')
+    return json(res,403,{ok:false,code:'mirror_history_owner_action_required'});
+   const result=await readMirrorHistory(lease,{limit:24});
+   return json(res,result.ok?200:503,result);
+  }
+  // An explicit owner can start a bounded 128MiB transfer session after
+  // successful preflight. The POST acknowledges immediately; status/pause
+  // are private operator controls, never subscriber/media APIs.
+  if(path==='/internal/mirror/copy/start'){
+   if(req.method!=='POST'||String(req.url||'').includes('?'))
+    return json(res,405,{ok:false,code:'mirror_copy_start_post_only'});
+   if(req.headers['x-blofy-owner-action']!=='start-licensed-private-mirror')
+    return json(res,403,{ok:false,code:'mirror_copy_owner_action_required'});
+   const safety=mirrorWorkerReadiness(pilotEnv);
+   if(!safety.ready)return json(res,409,{ok:false,
+     code:'mirror_worker_safety_gates_off',blockedBy:safety.blockedBy});
+   if(mirrorChunkBusy||mirrorAutoCopy.isRunning()||pilotRunning||
+      copy.isRunning()||episodeCopyBusy||episodeCopy.isRunning()||
+      seasonQueue?.isRunning())
+    return json(res,429,{ok:false,code:'mirror_worker_source_busy'});
+   let body;
+   try{body=await readSeasonJson(req)}
+   catch{return json(res,400,{ok:false,code:'mirror_copy_json_invalid'})}
+   const kind=String(body?.kind||''),id=String(body?.id||'');
+   if(body?.ownerConfirmed!==true||
+      !['movie','episode'].includes(kind)||
+      !(kind==='movie'?/^[A-Za-z0-9._:-]{1,128}$/:
+        /^[1-9][0-9]{0,9}$/).test(id))
+    return json(res,400,{ok:false,code:'mirror_copy_selection_invalid'});
+   // Check one fresh Portal approval before accepting an async job.
+   const approved=await mirrorBridge.approval({kind,id});
+   if(!validateMirrorTransferApproval(approved,{kind,id}))
+    return json(res,409,{ok:false,code:'mirror_copy_approval_missing'});
+   mirrorSelection={kind,id};
+   const outcome=mirrorAutoCopy.start();
+   return json(res,outcome.ok?202:409,{
+    ...outcome,oneItemOnly:true,sessionMaxChunks:16,
+    automaticRestart:false,customerCutover:false});
+  }
+  if(path==='/internal/mirror/copy/pause'){
+   if(req.method!=='POST'||String(req.url||'').includes('?'))
+    return json(res,405,{ok:false,code:'mirror_copy_pause_post_only'});
+   if(req.headers['x-blofy-owner-action']!=='pause-licensed-private-mirror')
+    return json(res,403,{ok:false,code:'mirror_copy_owner_action_required'});
+   const result=mirrorAutoCopy.stop();
+   return json(res,result.ok?200:409,result);
+  }
+  // Explicit, owner-authorized ONE private 8MiB mirror chunk. Default OFF.
+  // A fresh Portal licensing/size approval and current S3 budget scan are
+  // required for every call. Never runs at boot, never changes subscribers.
+  if(path==='/internal/mirror/copy/next'){
+   if(req.method!=='POST'||String(req.url||'').includes('?'))
+    return json(res,405,{ok:false,code:'mirror_worker_post_only'});
+   if(req.headers['x-blofy-owner-action']!=='copy-one-licensed-private-chunk')
+    return json(res,403,{ok:false,code:'mirror_worker_owner_action_required'});
+   const readiness=mirrorWorkerReadiness(pilotEnv);
+   if(!readiness.ready)return json(res,409,{ok:false,
+    code:'mirror_worker_safety_gates_off',blockedBy:readiness.blockedBy});
+   if(mirrorChunkBusy||mirrorAutoCopy.isRunning()||pilotRunning||copy.isRunning()||
+      episodeCopyBusy||episodeCopy.isRunning()||seasonQueue?.isRunning())
+    return json(res,429,{ok:false,code:'mirror_worker_source_busy'});
+   let body;
+   try{body=await readSeasonJson(req)}
+   catch{return json(res,400,{ok:false,code:'mirror_worker_json_invalid'})}
+   const kind=String(body?.kind||''),id=String(body?.id||'');
+   if(body?.ownerConfirmed!==true||
+      !['movie','episode'].includes(kind)||
+      !(kind==='movie'?/^[A-Za-z0-9._:-]{1,128}$/:
+        /^[1-9][0-9]{0,9}$/).test(id))
+    return json(res,400,{ok:false,code:'mirror_worker_item_invalid'});
+   mirrorChunkBusy=true;
+   const abort=new AbortController();
+   const timeout=setTimeout(()=>abort.abort(),125000);timeout.unref?.();
+   const close=()=>{if(!res.writableEnded)abort.abort()};
+   res.once('close',close);
+   try{
+    const out=await mirrorChunkRunner({kind,id,env:pilotEnv,
+     storage,lease,
+     approvalLoader:args=>mirrorBridge.approval(args),
+     readRange:args=>mirrorBridge.range(args),
+     signal:abort.signal,logger});
+    lastMirrorChunk={ok:out.ok===true,code:String(out.code||''),
+     completed:out.completed===true,
+     bytesCopied:Number(out.bytesCopied||0),
+     expectedBytes:Number(out.expectedBytes||0),
+     checkedAt:new Date().toISOString(),customerCutover:false};
+    if(!abort.signal.aborted&&!res.destroyed)return json(res,
+      out.ok?200:409,out);
+   }catch{
+    if(!abort.signal.aborted&&!res.destroyed)
+     return json(res,503,{ok:false,code:'mirror_worker_internal_failure',
+      customerCutover:false});
+   }finally{
+    mirrorChunkBusy=false;clearTimeout(timeout);res.off('close',close);
+   }
+   return;
+  }
+  // Private, read-only bucket usage attestation for an owner copy-preflight.
+  // This is a COST BUDGET, not physical S3 free space. Missing budget,
+  // ongoing uploads, partial object listing and stale scans FAIL CLOSED.
+  if(path==='/internal/mirror/preflight-capacity'){
+   if(req.method!=='GET'||String(req.url||'').includes('?'))
+    return json(res,405,{ok:false,code:'private_capacity_get_only'});
+   if(pilotEnv.BLOFY_CONTENT_HUB_MIRROR_CAPACITY_AUDIT_ENABLED!=='1'||
+      req.headers['x-blofy-owner-action']!=='private-bucket-capacity-preflight')
+    return json(res,404,{ok:false,code:'private_capacity_audit_disabled'});
+   const budgetBytes=Number(pilotEnv.BLOFY_CONTENT_HUB_MIRROR_BUDGET_BYTES);
+   if(!Number.isSafeInteger(budgetBytes)||budgetBytes<1024**3||
+      budgetBytes>100*1024**4)
+    return json(res,503,{ok:false,code:'private_capacity_budget_unconfigured'});
+   if(capacityAuditBusy)return json(res,429,{ok:false,
+     code:'private_capacity_scan_busy'});
+   if(typeof storage.measurePrivateUsage!=='function')
+    return json(res,503,{ok:false,code:'private_capacity_adapter_missing'});
+   capacityAuditBusy=true;
+   const abort=new AbortController();
+   const timer=setTimeout(()=>abort.abort(),11200);timer.unref?.();
+   const close=()=>abort.abort();res.once('close',close);
+   try{
+    const usage=await storage.measurePrivateUsage({
+      signal:abort.signal,maxObjects:10000});
+    if(!usage?.ok||!usage.usageExact||
+       !Number.isSafeInteger(usage.usedBytes)||
+       usage.usedBytes<0||!Number.isSafeInteger(usage.objectCount))
+      return json(res,503,{ok:false,code:String(usage?.code||
+       'private_capacity_scan_incomplete').slice(0,80)});
+    return json(res,200,{
+      ok:true,code:'private_capacity_attested',privateOnly:true,
+      verifiedPrivateBucket:true,usageExact:true,
+      budgetBytes,usedBytes:usage.usedBytes,reservedBytes:0,
+      objectCount:usage.objectCount,observedAt:Date.now(),
+      providerRequests:0,mediaBytesTransferred:0,
+      automaticDownload:false,customerCutover:false});
+   }catch{return json(res,503,{ok:false,
+     code:'private_capacity_scan_unavailable'})}
+   finally{capacityAuditBusy=false;clearTimeout(timer);
+     res.off('close',close)}
+  }
   // Bounded physical S3 HEAD check of one verified catalog movie or
   // episode: strictly owner-only, one 8-chunk batch at a time, no media GET.
   if(path==='/internal/mirror/physical-head-audit'){
@@ -242,6 +506,10 @@ export function createContentHubServer({storage,lease,
     databaseAvailable:database,downloadQueueEnabled:Boolean(seasonQueue)&&seasonQueueReadiness(pilotEnv).ready,
     seasonQueue:seasonQueue?.status()||null,
     ownerEpisodeBrowserCheck:ownerBrowserCheck,
+    mirrorWorkerReadiness:mirrorWorkerReadiness(pilotEnv),
+    mirrorChunkBusy,lastMirrorChunk,
+    mirrorAutoCopy:mirrorAutoCopy.status(),
+    mirrorCanaryBusy,lastMirrorCanary,
     syntheticTestEnabled:allowSynthetic,
     lastSynthetic,pilotRunning:pilotRunning||copy.isRunning(),lastPilot,
     lastEpisodeProbe,episodeCopyBusy:episodeCopyBusy||episodeCopy.isRunning(),
@@ -895,7 +1163,8 @@ export function createContentHubServer({storage,lease,
    if(String(req.url||'').includes('?')||
      req.headers['x-blofy-season-confirm']!=='start-private-sequential')
     return json(res,403,{ok:false,code:'season_start_confirmation_required'});
-   if(episodeCopyBusy||episodeCopy.isRunning()||pilotRunning||copy.isRunning())
+   if(episodeCopyBusy||episodeCopy.isRunning()||pilotRunning||copy.isRunning()||
+      mirrorChunkBusy||mirrorAutoCopy.isRunning())
     return json(res,409,{ok:false,code:'source_writer_busy'});
    let observed=false;
    try{const proof=await lease.getEpisodeBrowserPlaybackStatus?.(
@@ -962,7 +1231,8 @@ export function createContentHubServer({storage,lease,
      approved=Number(pilotEnv.BLOFY_CONTENT_HUB_EPISODE_APPROVED_GATEWAY_ID);
    if(!Number.isSafeInteger(gatewayId)||gatewayId!==approved)
     return json(res,403,{ok:false,code:'episode_start_id_not_approved'});
-   if(episodeCopyBusy||pilotRunning||copy.isRunning()||episodeCopy.isRunning()||seasonQueue?.isRunning())
+   if(episodeCopyBusy||pilotRunning||copy.isRunning()||episodeCopy.isRunning()||seasonQueue?.isRunning()||
+      mirrorChunkBusy||mirrorAutoCopy.isRunning())
     return json(res,409,{ok:false,code:'episode_source_writer_busy'});
    const result=episodeCopy.start();
    return json(res,result.ok?202:409,{
@@ -989,7 +1259,8 @@ export function createContentHubServer({storage,lease,
    if(!Number.isSafeInteger(gatewayId)||gatewayId<1||
      gatewayId!==approved)return json(res,403,{
        ok:false,code:'episode_copy_id_not_selected'});
-   if(episodeCopyBusy||episodeCopy.isRunning()||pilotRunning||copy.isRunning()||seasonQueue?.isRunning())
+   if(episodeCopyBusy||episodeCopy.isRunning()||pilotRunning||copy.isRunning()||seasonQueue?.isRunning()||
+      mirrorChunkBusy||mirrorAutoCopy.isRunning())
     return json(res,409,{ok:false,code:'content_hub_source_writer_busy'});
    const readiness=episodeCopyReadiness(pilotEnv);
    if(!readiness.ready)return json(res,409,{ok:false,
@@ -1379,7 +1650,8 @@ export function createContentHubServer({storage,lease,
   if(path==='/internal/batch/start'&&req.method==='POST'){
    if(String(req.headers['x-blofy-batch-confirm']||'')!=='approved-8mib-batch')
     return json(res,400,{ok:false,code:'batch_operator_confirmation_required'});
-   if(pilotRunning||copy.isRunning()||seasonQueue?.isRunning())
+   if(pilotRunning||copy.isRunning()||seasonQueue?.isRunning()||
+      episodeCopyBusy||episodeCopy.isRunning()||mirrorChunkBusy||mirrorAutoCopy.isRunning())
     return json(res,409,{ok:false,code:'batch_writer_busy'});
    const result=copy.start();
    return json(res,result.ok?202:409,{
@@ -1395,7 +1667,8 @@ export function createContentHubServer({storage,lease,
    // Explicit per-batch admin operation, never an automatic source retry.
    if(String(req.headers['x-blofy-batch-confirm']||'')!=='approved-8mib-batch')
     return json(res,400,{ok:false,code:'batch_operator_confirmation_required'});
-   if(pilotRunning||copy.isRunning()||seasonQueue?.isRunning())return json(res,409,{
+   if(pilotRunning||copy.isRunning()||seasonQueue?.isRunning()||
+      episodeCopyBusy||episodeCopy.isRunning()||mirrorChunkBusy||mirrorAutoCopy.isRunning())return json(res,409,{
     ok:false,code:'batch_writer_busy'});
    const readiness=chunkedBatchReadiness(pilotEnv);
    if(!readiness.ready)return json(res,409,{
@@ -1438,6 +1711,19 @@ export function createContentHubServer({storage,lease,
   // movie/episode run. Subscriber routes never enter this control plane.
   const siteQa=/^\/internal\/site-qa\/files\/(movie|episode)\/([A-Za-z0-9_-]{8,80})$/.exec(path);
   const playback=/^\/internal\/(pilot|episodes)\/playback\/([A-Za-z0-9_-]{8,80})$/.exec(path);
+  // Dedicated, owner-only byte ranges from ALREADY SHA-verified mirror
+  // objects. This never changes subscriber app routing. It requires a
+  // distinct opt-in and cannot be accessed through the old pilot path.
+  const mirrorRange=/^\/internal\/mirror\/owner-range\/(movie|episode)\/(mirror_[a-f0-9]{32})$/.exec(path);
+  // A mirror run may never be served by the original site-QA route;
+  // that older path does not perform this per-part pre-response SHA.
+  if(siteQa&&/^mirror_[a-f0-9]{32}$/.test(siteQa[2]))
+   return json(res,404,{ok:false,code:'mirror_legacy_range_denied'});
+  if(mirrorRange&&(
+    pilotEnv.BLOFY_CONTENT_HUB_MIRROR_OWNER_RANGE_ENABLED!=='1'||
+    pilotEnv.BLOFY_CONTENT_HUB_STORAGE_RIGHTS_CONFIRMED!=='1'||
+    req.headers['x-blofy-owner-action']!=='read-verified-private-mirror-range'))
+   return json(res,404,{ok:false,code:'mirror_owner_range_not_available'});
   if(siteQa&&(
     pilotEnv.BLOFY_CONTENT_HUB_WEBSITE_FULL_RANGE_QA_ENABLED!=='1'||
     pilotEnv.BLOFY_CONTENT_HUB_STORAGE_RIGHTS_CONFIRMED!=='1'||
@@ -1451,16 +1737,23 @@ export function createContentHubServer({storage,lease,
       pilotEnv.BLOFY_CONTENT_HUB_BATCH_RUN_ID||'':
       pilotEnv.BLOFY_CONTENT_HUB_EPISODE_RUN_ID||'')))
    return json(res,404,{ok:false,code:'site_qa_file_not_available'});
-  if((playback||siteQa)&&['GET','HEAD'].includes(req.method)){
+  if((playback||siteQa||mirrorRange)&&['GET','HEAD'].includes(req.method)){
    if(String(req.url||'').includes('?'))
     return json(res,400,{ok:false,code:'pilot_private_query_denied'});
-   const episodePlayback=siteQa?siteQa[1]==='episode':playback[1]==='episodes';
-   const playbackId=siteQa?siteQa[2]:playback[2];
+   // Do not allow the legacy pilot route to bypass the opt-in and owner
+   // action for new private mirror IDs.
+   if(playback&&/^mirror_[a-f0-9]{32}$/.test(playback[2]))
+    return json(res,404,{ok:false,code:'mirror_legacy_range_denied'});
+   const episodePlayback=mirrorRange?mirrorRange[1]==='episode':
+    siteQa?siteQa[1]==='episode':playback[1]==='episodes';
+   const playbackId=mirrorRange?mirrorRange[2]:
+    siteQa?siteQa[2]:playback[2];
    let saved=null;
    if(episodePlayback){
     try{saved=await lease.getVerifiedEpisodeObject?.(playbackId)}catch{}
    }else{
-    try{saved=await lease.getVerifiedPilotObject?.(playbackId)}catch{}
+    if(!mirrorRange)
+     try{saved=await lease.getVerifiedPilotObject?.(playbackId)}catch{}
     if(!saved)try{saved=await lease.getVerifiedChunkedObject?.(
       playbackId)}catch{}
    }
@@ -1475,16 +1768,22 @@ export function createContentHubServer({storage,lease,
     res.writeHead(200,{
       'content-type':type,'content-length':String(saved.bytes),
       'accept-ranges':'bytes','cache-control':'private,no-store',
-      'x-content-type-options':'nosniff','referrer-policy':'no-referrer'
+      'x-content-type-options':'nosniff','referrer-policy':'no-referrer',
+      ...(mirrorRange?{'cross-origin-resource-policy':'same-origin',
+        'x-blofy-mirror-private':'owner-only'}:{})
     });
     return res.end();
    }
-   const m=siteQa?null:/^bytes=(0|[1-9][0-9]*)-(0|[1-9][0-9]*)$/.exec(
+   const ownerBounded=Boolean(siteQa||mirrorRange);
+   const m=ownerBounded?null:/^bytes=(0|[1-9][0-9]*)-(0|[1-9][0-9]*)$/.exec(
     String(req.headers.range||''));
-   const bounded=siteQa?parseSiteQaRange(req.headers.range,saved.bytes):null;
-   const from=siteQa?bounded?.from:Number(m?.[1]);
-   const to=siteQa?bounded?.to:Number(m?.[2]);
-   if((siteQa&&!bounded)||(!siteQa&&!m)||
+   // Owner media players commonly request bytes=0- and suffix ranges.
+   // Clamp every request to 8 MiB; never allow open-ended full-file I/O.
+   const bounded=ownerBounded?
+    parseSiteQaRange(req.headers.range,saved.bytes):null;
+   const from=ownerBounded?bounded?.from:Number(m?.[1]);
+   const to=ownerBounded?bounded?.to:Number(m?.[2]);
+   if((ownerBounded&&!bounded)||(!ownerBounded&&!m)||
       !Number.isSafeInteger(from)||!Number.isSafeInteger(to)||
       to<from||to>=saved.bytes||to-from+1>8*1024*1024)
     return json(res,416,{ok:false,code:'pilot_bounded_range_required'});
@@ -1492,6 +1791,52 @@ export function createContentHubServer({storage,lease,
    const timer=setTimeout(()=>abort.abort(),90000);timer.unref?.();
    const onDisconnect=()=>abort.abort();
    res.once('close',onDisconnect);
+   if(mirrorRange){
+    // Crucial: do not write 206 or transmit a byte until every S3
+    // part overlapping the requested Range has passed its persisted
+    // SHA-256. Pre-response checks only for the owner mirror route;
+    // customer/legacy playback is untouched.
+    try{
+     const checked=await readIntegrityCheckedMirrorRange({
+      storage,saved,mediaKind:mirrorRange[1],
+      from,to,signal:abort.signal
+     });
+     if(abort.signal.aborted)throw Error('mirror_private_read_cancelled');
+     res.writeHead(206,{
+      'content-type':type,'content-length':String(checked.bytes.length),
+      'content-range':`bytes ${from}-${to}/${saved.bytes}`,
+      'accept-ranges':'bytes','cache-control':'private,no-store',
+      'x-content-type-options':'nosniff','referrer-policy':'no-referrer',
+      'cross-origin-resource-policy':'same-origin',
+      'x-blofy-mirror-private':'owner-only',
+      'x-blofy-mirror-sha256-checked':'parts-before-response'
+     });
+     res.end(checked.bytes);
+    }catch(error){
+     if(!res.destroyed&&!res.headersSent){
+      if(error?.message==='mirror_private_sha256_mismatch'){
+       try{
+        const q=await lease.quarantineMirrorRun({
+         runId:playbackId,kind:mirrorRange[1]
+        });
+        if(q.ok===true)json(res,409,{ok:false,
+         code:'mirror_private_sha256_mismatch',
+         quarantinedOnHashMismatch:true,customerCutover:false});
+        else json(res,503,{ok:false,
+         code:'mirror_quarantine_not_committed',
+         customerCutover:false});
+       }catch{json(res,503,{ok:false,
+         code:'mirror_quarantine_not_committed',
+         customerCutover:false})}
+      }else json(res,503,{ok:false,
+       code:'mirror_owner_range_integrity_unavailable',
+       customerCutover:false});
+     }
+    }finally{
+     clearTimeout(timer);res.off('close',onDisconnect);
+    }
+    return;
+   }
    let body=null;
    try{
     if(saved.kind==='chunked'){
@@ -1508,7 +1853,9 @@ export function createContentHubServer({storage,lease,
       'content-type':type,'content-length':String(to-from+1),
       'content-range':`bytes ${from}-${to}/${saved.bytes}`,
       'accept-ranges':'bytes','cache-control':'private,no-store',
-      'x-content-type-options':'nosniff','referrer-policy':'no-referrer'
+      'x-content-type-options':'nosniff','referrer-policy':'no-referrer',
+      ...(mirrorRange?{'cross-origin-resource-policy':'same-origin',
+        'x-blofy-mirror-private':'owner-only'}:{})
     });
     let count=0;
     const streamPart=async(stream,expected)=>{

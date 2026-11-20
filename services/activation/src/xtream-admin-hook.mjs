@@ -6,6 +6,9 @@ import {createXtreamSyncQueue} from './xtream-sync-queue.mjs';
 import {listIndexedXtreamMirrorPage} from './xtream-mirror-inventory.mjs';
 import {resolveExclusiveApprovedSaleh} from './xtream-approved-saleh-selector.mjs';
 import {stageMirrorIntake,listMirrorIntake,cancelMirrorIntake,validateMirrorIntakeSelection} from './xtream-mirror-transfer-intake.mjs';
+import {probeStagedMirrorSource,recordMirrorPreflight} from './xtream-mirror-transfer-preflight.mjs';
+import {loadPrivateMirrorCapacity} from './content-hub-private-mirror-capacity-bridge.mjs';
+import {inspectDailyMirrorPlan} from './xtream-mirror-daily-plan.mjs';
 import {reconcileStreamCatalogPage} from './content-hub-private-mirror-reconcile-bridge.mjs';
 import {forwardStreamS3HeadAudit} from './content-hub-private-head-audit-bridge.mjs';
 import {configuredDailySourceId,riyadhCatalogDay,scheduleDailyApprovedCatalog,
@@ -64,6 +67,8 @@ import {xtreamProviderOrder,withXtreamProviderPosition} from './xtream-provider-
 import {sourceLiveCapacity} from './xtream-live-source-capacity.mjs';
 import {xtreamDirectMediaGauge} from './xtream-direct-media-gauge.mjs';
 import {summarizeStreamSourceCapacity} from './stream-source-capacity-report.mjs';
+import {assessMirrorSourceHeadroom} from './xtream-mirror-source-headroom.mjs';
+import {mirrorSourceTransportGuard} from './xtream-mirror-source-transport-guard.mjs';
 import {permittedLicensedLiveFanout} from './xtream-licensed-live-fanout-policy.mjs';
 import {xtreamPlaybackSnapshot} from './xtream-playback-metrics.mjs';
 import {summarizeStreamMediaQuality} from './stream-media-quality.mjs';
@@ -3132,6 +3137,7 @@ const streamAudioDiagnostics=createStreamAudioOperatorDiagnostics({
 const XTREAM_CUSTOMER_HOST=configuredXtreamPublicOrigin('https://blofyplayer.com');
 const bridgeLimiter=createFixedWindowLimiter({limit:90,windowMs:60_000});
 const streamActions=new Map();
+let mirrorPreflightRunning=false,mirrorPreflightLastAt=0;
 let streamCodeSchemaReady;
 function ensureStreamCodeSchema(){
   if(!streamCodeSchemaReady)streamCodeSchemaReady=(async()=>{
@@ -3610,6 +3616,309 @@ async function unifiedStreamBridge(req,res,url){
       code:'mirror_intake_transaction_unavailable',
       mediaBytesTransferred:0,copyWorkerEnabled:false,
       customerCutover:false})}
+  }
+  // Cached source headroom report. Unlike an Xtream connection test,
+  // this is read-only and does not consume a source connection or media.
+  // Direct HTTP gauge only covers this Portal process.
+  if(p==='/internal/blofy-stream/ops/mirror-intake/headroom'){
+    if(req.method!=='GET'||url.search)
+      return json(res,405,{ok:false,code:'mirror_headroom_get_only'});
+    const approved=await approvedSalehMirrorSource();
+    if(!approved.ok)return json(res,503,{ok:false,
+      code:'mirror_headroom_source_not_unique',customerCutover:false});
+    try{
+      const rows=await serverRows();
+      const target=rows.filter(x=>String(x.id)===approved.sourceId);
+      const now=Date.now();
+      const report=summarizeStreamSourceCapacity(target.map(adminServer),
+        null,{now,maxAgeMs:10*60*1000,
+          gatewayDirectMedia:xtreamDirectMediaGauge.snapshot()});
+      const result=assessMirrorSourceHeadroom(report,{
+        sourceId:approved.sourceId,now,
+        transportRisk:mirrorSourceTransportGuard.snapshot({
+          sourceId:approved.sourceId})});
+      return json(res,200,{
+        ok:true,code:'mirror_headroom_snapshot_read_only',
+        sourceName:'saleh',
+        headroomCautiouslyClear:result.ok===true,
+        blockedBy:result.blockedBy,readOnly:true,
+        sourceReportedMaxConnections:result.sourceReportedMaxConnections,
+        sourceReportedActiveConnections:result.sourceReportedActiveConnections,
+        sourceActiveDirectTransfers:result.sourceActiveDirectTransfers,
+        remainingReportedConnections:result.remainingReportedConnections,
+        localTransportCooldownMs:result.localTransportCooldownMs,
+        recentTransportObservationsOnlyThisReplica:true,
+        allUpstreamSessionsMeasured:false,
+        storageRightsIndependentlyVerified:false,
+        providerMediaRequests:0,mediaBytesTransferred:0,
+        customerCutover:false,copyWorkerStarted:false
+      },{'cache-control':'no-store'});
+    }catch{return json(res,503,{ok:false,
+      code:'mirror_headroom_report_unavailable',customerCutover:false})}
+  }
+  // Owner-only daily metadata reconciliation status. This plan only
+  // reviews existing staged items and a completed 04:00 Riyadh import;
+  // never contacts media origins, uploads, or auto-starts copy workers.
+  if(p==='/internal/blofy-stream/ops/mirror-intake/daily-plan'){
+    if(url.search||req.method!=='GET')
+      return json(res,405,{ok:false,code:'daily_mirror_plan_get_only'});
+    const approved=await approvedSalehMirrorSource();
+    if(!approved.ok)return json(res,503,{ok:false,
+      code:'daily_mirror_plan_source_unavailable'});
+    const plan=await inspectDailyMirrorPlan(controlPool,{
+      env:process.env,sourceId:approved.sourceId});
+    return json(res,plan.ok?200:
+      plan.code==='daily_mirror_plan_disabled'?404:503,plan,
+      {'cache-control':'no-store'});
+  }
+  // Explicit owner-only ONE-item 4KiB source-size preflight. Never an
+  // automatic copy trigger. The private storage capacity must be verified
+  // independently; without a bucket budget snapshot this stays "measured".
+  if(p==='/internal/blofy-stream/ops/mirror-intake/preflight'){
+    if(url.search||req.method!=='POST')
+      return json(res,405,{ok:false,code:'mirror_preflight_post_only'});
+    if(process.env.BLOFY_STREAM_MIRROR_PREFLIGHT_ENABLED!=='1')
+      return json(res,404,{ok:false,code:'mirror_preflight_feature_disabled'});
+    if(process.env.BLOFY_STREAM_MIRROR_PREFLIGHT_SOURCE_IDLE_CONFIRMED!=='1'||
+       process.env.BLOFY_STREAM_MIRROR_PREFLIGHT_QUIET_WINDOW_CONFIRMED!=='1')
+      return json(res,409,{ok:false,
+        code:'mirror_preflight_source_idle_not_confirmed'});
+    if(req.headers['x-blofy-owner-action']!=='probe-private-mirror-intake')
+      return json(res,403,{ok:false,code:'mirror_preflight_owner_action_required'});
+    let input;
+    try{input=await readJson(req)}
+    catch{return json(res,400,{ok:false,code:'mirror_preflight_json_invalid'})}
+    const kind=String(input?.kind||''),id=String(input?.id||'');
+    if(input?.ownerConfirmed!==true||
+       !['movie','episode'].includes(kind)||!(kind==='movie'?
+       /^[A-Za-z0-9._:-]{1,128}$/:/^[1-9][0-9]{0,9}$/).test(id))
+      return json(res,400,{ok:false,code:'mirror_preflight_selection_invalid'});
+    if(mirrorPreflightRunning||Date.now()-mirrorPreflightLastAt<30000)
+      return json(res,429,{ok:false,code:'mirror_preflight_source_cooldown'},
+        {'retry-after':'30'});
+    const saleh=await approvedSalehMirrorSource();
+    if(!saleh.ok)return json(res,503,{ok:false,
+      code:'mirror_preflight_source_unavailable'});
+    const sourceId=saleh.sourceId;
+    if(!validateMirrorIntakeSelection({sourceId,kind,id}))
+      return json(res,400,{ok:false,code:'mirror_preflight_selection_invalid'});
+    try{
+      const intake=await listMirrorIntake(controlPool,{sourceId});
+      if(!intake.ok||!intake.items?.some(item=>item.kind===kind&&
+           item.id===id&&item.state==='awaiting_size_and_license'))
+        return json(res,409,{ok:false,
+          code:'mirror_preflight_intake_not_staged'});
+    }catch{return json(res,503,{ok:false,
+      code:'mirror_preflight_intake_unavailable'})}
+    // Recheck the private copy manifest because the staged intent can become
+    // obsolete after another verified copy is completed.
+    const manifest=await reconcileStreamCatalogPage({
+      sourceId,items:[{kind,id}],
+      hubToken:String(process.env.BLOFY_CONTENT_HUB_OPERATOR_TOKEN||'')
+    });
+    const manifestState=manifest.items?.[0]?.status;
+    if(!manifest.ok||!['not_recorded','copy_incomplete',
+        'copy_failed'].includes(manifestState))
+      return json(res,409,{ok:false,
+       code:'mirror_preflight_existing_copy_unresolved'});
+    mirrorPreflightRunning=true;
+    mirrorPreflightLastAt=Date.now();
+    try{
+      const source=await serverById(sourceId);
+      if(!source||source.enabled!==true||source.publish_catalog!==true||
+         source.deletion_requested_at||
+         String(source.name||'').trim().toLowerCase()!=='saleh')
+        return json(res,409,{ok:false,code:'mirror_preflight_source_unapproved'});
+      const catalog=kind==='movie'?
+        await controlPool.query([
+          'SELECT source_id AS media_id,container_extension AS extension',
+          'FROM blofy_xtream_items',
+          "WHERE server_id=$1 AND media_type='movie'",
+          'AND source_id=$2 AND enabled=TRUE LIMIT 1'
+        ].join(' '),[sourceId,id]):
+        await controlPool.query([
+          'SELECT e.source_episode_id AS media_id,',
+          'e.container_extension AS extension',
+          'FROM blofy_xtream_gateway_episode_map e',
+          'JOIN blofy_xtream_items i ON i.server_id=e.server_id',
+          "AND i.media_type='series' AND i.source_id=e.series_source_id",
+          'WHERE e.server_id=$1 AND e.gateway_id=$2',
+          'AND i.enabled=TRUE LIMIT 1'
+        ].join(' '),[sourceId,Number(id)]);
+      if(catalog.rowCount!==1)return json(res,404,{ok:false,
+        code:'mirror_preflight_catalog_item_missing'});
+      const row=catalog.rows[0];
+      // Independent private bucket scan and one 4KiB source proof may run
+      // concurrently to fit the operator proxy time budget. Neither copies.
+      const [proof,capacityResult]=await Promise.all([
+        probeStagedMirrorSource({
+          source,kind,item:{mediaId:String(row.media_id),
+            extension:String(row.extension||'').toLowerCase()},
+          credentials:decryptCredentials(source),
+          validateOrigin:assertPublicXtreamUrl,fetchImpl:fetch
+        }),
+        loadPrivateMirrorCapacity({
+          token:String(process.env.BLOFY_CONTENT_HUB_OPERATOR_TOKEN||'')
+        })
+      ]);
+      if(!proof.ok)return json(res,503,proof);
+      // An operator cannot invent private S3 capacity. Without a fresh,
+      // signed Hub scan, retain measured size only (never worker-ready).
+      const saved=await recordMirrorPreflight(controlPool,{
+        sourceId,kind,id,probe:proof,
+        licenseReference:String(input.licenseReference||''),
+        capacity:capacityResult.ok?capacityResult.capacity:null,
+        ownerConfirmed:true
+      });
+      return json(res,saved.ok?200:409,saved,{'cache-control':'no-store'});
+    }catch{return json(res,503,{ok:false,
+      code:'mirror_preflight_failed',copyWorkerEnabled:false,
+      mediaBytesTransferred:0,customerCutover:false})}
+    finally{mirrorPreflightRunning=false}
+  }
+  // Owner-triggered, read-only A/V decoder canary from a SHA256-verified
+  // private S3 mirror run; never accesses the Xtream provider or apps.
+  if(p==='/internal/blofy-stream/ops/mirror-intake/canary'){
+    if(req.method!=='POST'||url.search)
+      return json(res,405,{ok:false,code:'mirror_canary_post_only'});
+    if(process.env.BLOFY_STREAM_MIRROR_AV_CANARY_ENABLED!=='1')
+      return json(res,404,{ok:false,code:'mirror_canary_feature_disabled'});
+    if(req.headers['x-blofy-owner-action']!=='verify-private-mirror-audio-video')
+      return json(res,403,{ok:false,code:'mirror_canary_owner_action_missing'});
+    let request;
+    try{request=await readJson(req)}
+    catch{return json(res,400,{ok:false,code:'mirror_canary_invalid_json'})}
+    const runId=String(request?.runId||'');
+    const kind=String(request?.kind||'');
+    if(request?.ownerConfirmed!==true||
+       !/^mirror_[a-f0-9]{32}$/.test(runId)||
+       !['movie','episode'].includes(kind))
+      return json(res,400,{ok:false,code:'mirror_canary_invalid_selection'});
+    const token=String(process.env.BLOFY_CONTENT_HUB_OPERATOR_TOKEN||'');
+    if(token.length<32)return json(res,503,{
+      ok:false,code:'mirror_canary_hub_not_configured'});
+    try{
+      const response=await fetch(
+        'http://blofy-content-hub.railway.internal:3000/internal/mirror/copy/canary',{
+          method:'POST',redirect:'manual',signal:AbortSignal.timeout(74000),
+          headers:{authorization:'Bearer '+token,
+            'x-blofy-owner-action':'verify-private-mirror-audio-video',
+            'content-type':'application/json',accept:'application/json'},
+          body:JSON.stringify({runId,kind,ownerConfirmed:true})
+        });
+      if(![200,409,429,503].includes(response.status))
+        return json(res,503,{ok:false,code:'mirror_canary_hub_response_denied'});
+      if(Number(response.headers.get('content-length')||0)>3200)
+        return json(res,503,{ok:false,code:'mirror_canary_hub_response_too_large'});
+      const raw=await response.text();
+      if(Buffer.byteLength(raw,'utf8')>3200)
+        return json(res,503,{ok:false,code:'mirror_canary_hub_response_too_large'});
+      const output=JSON.parse(raw);
+      if(!output||typeof output!=='object'||Array.isArray(output)||
+         output.customerCutover!==false||output.providerRequests!==0||
+         output.privateOnly!==true||
+         (output.runId&&output.runId!==runId))
+        return json(res,503,{ok:false,code:'mirror_canary_hub_response_invalid'});
+      return json(res,response.status,output,{'cache-control':'no-store'});
+    }catch{return json(res,503,{
+      ok:false,code:'mirror_canary_private_unavailable'})}
+  }
+  // Fixed private Hub history: only the authenticated STREAM operator
+  // receives checkpoint counts and sanitized errors, no source secrets.
+  if(p==='/internal/blofy-stream/ops/mirror-intake/history'){
+    if(req.method!=='GET'||url.search)
+      return json(res,405,{ok:false,code:'mirror_history_get_only'});
+    const token=String(process.env.BLOFY_CONTENT_HUB_OPERATOR_TOKEN||'');
+    if(token.length<32)return json(res,503,{ok:false,
+      code:'mirror_history_private_hub_not_configured'});
+    try{
+      const response=await fetch(
+        'http://blofy-content-hub.railway.internal:3000/internal/mirror/copy/history',{
+          method:'GET',redirect:'manual',signal:AbortSignal.timeout(9000),
+          headers:{authorization:'Bearer '+token,
+            'x-blofy-owner-action':'private-mirror-copy-history',
+            accept:'application/json'}
+        });
+      if(![200,503].includes(response.status))
+        return json(res,503,{ok:false,code:'mirror_history_private_denied'});
+      if(Number(response.headers.get('content-length')||0)>20000)
+        return json(res,503,{ok:false,code:'mirror_history_payload_oversized'});
+      const raw=await response.text();
+      if(Buffer.byteLength(raw,'utf8')>20000)
+        return json(res,503,{ok:false,code:'mirror_history_payload_oversized'});
+      const result=JSON.parse(raw);
+      if(result?.privateOnly!==true||result?.customerCutover!==false||
+         result?.providerRequests!==0||result?.mediaBytesTransferred!==0||
+         !Array.isArray(result.items)||result.items.length>24)
+        return json(res,503,{ok:false,code:'mirror_history_response_invalid'});
+      return json(res,response.status,result,{'cache-control':'no-store'});
+    }catch{return json(res,503,{ok:false,
+      code:'mirror_history_private_unavailable'})}
+  }
+  // Private operator controls for the bounded licensed-mirror worker.
+  // Start is non-blocking and limited to one item/16 chunks, pause aborts.
+  // The Hub independently checks rights, fresh source metadata and S3 budget.
+  if(p==='/internal/blofy-stream/ops/mirror-intake/start'||
+     p==='/internal/blofy-stream/ops/mirror-intake/pause'){
+    if(url.search||req.method!=='POST')
+      return json(res,405,{ok:false,code:'mirror_control_post_only'});
+    if(process.env.BLOFY_STREAM_MIRROR_TRANSFER_CONTROL_ENABLED!=='1')
+      return json(res,404,{ok:false,code:'mirror_control_disabled'});
+    const isPause=p.endsWith('/pause');
+    const required=isPause?'pause-licensed-private-mirror':
+      'start-licensed-private-mirror';
+    if(req.headers['x-blofy-owner-action']!==required)
+      return json(res,403,{ok:false,code:'mirror_control_owner_action_missing'});
+    let body;
+    try{body=await readJson(req)}
+    catch{return json(res,400,{ok:false,code:'mirror_control_invalid_json'})}
+    if(body?.ownerConfirmed!==true)return json(res,400,{
+      ok:false,code:'mirror_control_confirmation_required'});
+    const kind=String(body.kind||''),id=String(body.id||'');
+    if(!isPause&&(!['movie','episode'].includes(kind)||
+        !(kind==='movie'?/^[A-Za-z0-9._:-]{1,128}$/:
+          /^[1-9][0-9]{0,9}$/).test(id)))
+      return json(res,400,{ok:false,code:'mirror_control_invalid_selection'});
+    if(!isPause){
+      const selected=await approvedSalehMirrorSource();
+      if(!selected.ok)return json(res,503,{ok:false,
+        code:'mirror_control_source_not_approved'});
+      const current=await listMirrorIntake(controlPool,{
+        sourceId:selected.sourceId});
+      if(!current.ok||!current.items.some(item=>item.kind===kind&&
+          item.id===id&&item.state==='awaiting_size_and_license'))
+        return json(res,409,{ok:false,code:'mirror_control_item_not_staged'});
+    }
+    const token=String(process.env.BLOFY_CONTENT_HUB_OPERATOR_TOKEN||'');
+    if(token.length<32)return json(res,503,{ok:false,
+      code:'mirror_control_hub_not_configured'});
+    try{
+      const response=await fetch(
+        'http://blofy-content-hub.railway.internal:3000/internal/mirror/copy/'+
+        (isPause?'pause':'start'),{
+         method:'POST',redirect:'manual',signal:AbortSignal.timeout(11000),
+         headers:{authorization:'Bearer '+token,
+          'x-blofy-owner-action':required,
+          'content-type':'application/json',accept:'application/json'},
+         body:JSON.stringify(isPause?{ownerConfirmed:true}:{
+           kind,id,ownerConfirmed:true})
+        });
+      if(![200,202,400,409,429,503].includes(response.status))
+        return json(res,503,{ok:false,code:'mirror_control_hub_response_denied'});
+      if(Number(response.headers.get('content-length')||0)>4000)
+        return json(res,503,{ok:false,code:'mirror_control_hub_large'});
+      const raw=await response.text();
+      if(Buffer.byteLength(raw)>4000)
+        return json(res,503,{ok:false,code:'mirror_control_hub_large'});
+      const result=JSON.parse(raw);
+      if(!result||typeof result!=='object'||Array.isArray(result)||
+         result.customerCutover!==false||
+         result.ok!==true&&typeof result.code!=='string')
+        return json(res,503,{ok:false,code:'mirror_control_hub_invalid'});
+      return json(res,response.status,result,
+        {'cache-control':'no-store'});
+    }catch{return json(res,503,{ok:false,
+      code:'mirror_control_hub_unavailable'})}
   }
   // Explicit owner on-demand S3 HEAD audit for ONE catalog item.
   // The exact source is pinned by the Portal and the item must exist in

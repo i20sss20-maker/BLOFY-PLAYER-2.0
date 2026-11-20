@@ -46,6 +46,9 @@ import { shouldRetryXtreamWithoutRange,firstByteXtreamRange } from './xtream-med
 import {verifiedVodResumePlan,resumeVerifiedVodBytes,allowedVodResumePilot} from './xtream-vod-range-resume.mjs';
 import { recordXtreamPlayback,xtreamPlaybackSnapshot } from './xtream-playback-metrics.mjs';
 import {xtreamDirectMediaGauge} from './xtream-direct-media-gauge.mjs';
+import {summarizeStreamSourceCapacity} from './stream-source-capacity-report.mjs';
+import {assessMirrorSourceHeadroom} from './xtream-mirror-source-headroom.mjs';
+import {mirrorSourceTransportGuard} from './xtream-mirror-source-transport-guard.mjs';
 import { XtreamDenialCooldown } from './xtream-denial-cooldown.mjs';
 import { createGatewayUsageThrottle } from './xtream-gateway-usage-throttle.mjs';
 import {createDistributorCustomerCatalog}
@@ -67,6 +70,8 @@ import {findLicensedEpisodeCandidates,findLicensedEpisodeCandidateById} from './
 import {listLicensedSeries,mappedLicensedSeriesEpisodes,buildLicensedSeriesSeasons,findPilotSeriesForEpisode} from './xtream-content-hub-series.mjs';
 import {findRunningApprovedSeasonEpisode} from './xtream-content-hub-season-approval.mjs';
 import {probePrivateEpisodeRange} from './xtream-content-hub-episode-probe.mjs';
+import {loadApprovedMirrorItem} from './xtream-mirror-worker-approval.mjs';
+import {mirrorSourceValidatorHash} from './xtream-mirror-source-validator.mjs';
 import { readXtreamGatewayJsonResponse } from './xtream-gateway-response.mjs';
 import {configuredXtreamPublicOrigin} from './xtream-public-origin.mjs';
 import {probeXtreamAccountCompatibility} from './xtream-compatibility-probe.mjs';
@@ -1658,6 +1663,11 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
         const transportFailure=['upstream_unreachable','headers_timeout',
           'xtream_transport_connection_reset','connection_reset','timeout']
           .includes(safeReason);
+        // Never change the customer flow or retry count: only pause NEW
+        // private mirror copies after this observed upstream outage.
+        if(transportFailure)mirrorSourceTransportGuard.recordFailure({
+          sourceId:String(row.server_id||''),reason:safeReason
+        });
         if(fallbackAllowed&&!fallbackTried&&!usingIndependentRelay&&
           !res.headersSent&&transportFailure&&attempt<maxAttempts){
           fallbackTried=true;
@@ -1932,6 +1942,35 @@ async function hubApprovedMovieId(){
   throw Object.assign(Error('content_hub_movie_missing'),{status:404});
  hubPilotMovieId=candidate;return candidate;
 }
+// Provider account metadata from the last explicit source test + this
+// Portal's in-memory direct HTTP transfers. NO new Xtream API/stream calls.
+// These counters exclude external relays, HLS edges and other replicas,
+// so this is a conservative gate, not a reliable viewer count.
+async function checkMirrorCachedHeadroom(sourceId){
+ try{
+  const result=await pool.query([
+   'SELECT id,name,enabled,status,account_info,last_test_at',
+   'FROM blofy_xtream_servers',
+   'WHERE id=$1 AND deletion_requested_at IS NULL LIMIT 2'
+  ].join(' '),[sourceId]);
+  const now=Date.now();
+  const mapped=(result.rows||[]).map(row=>({
+   id:row.id,name:row.name,enabled:row.enabled,status:row.status,
+   accountInfo:row.account_info||{},
+   lastTestAt:row.last_test_at?
+    new Date(row.last_test_at).getTime():null
+  }));
+  const report=summarizeStreamSourceCapacity(mapped,null,{
+   now,maxAgeMs:10*60*1000,
+   gatewayDirectMedia:xtreamDirectMediaGauge.snapshot()
+  });
+  return assessMirrorSourceHeadroom(report,{sourceId,now,
+   transportRisk:mirrorSourceTransportGuard.snapshot({sourceId})});
+ }catch{return {ok:false,code:'mirror_source_headroom_unavailable',
+   blockedBy:['mirror_source_headroom_unavailable'],
+   providerMediaRequests:0,customerCutover:false}}
+}
+
 async function handlePrivateContentHubSource(req,res,url){
  if(process.env.BLOFY_CONTENT_HUB_BRIDGE_ENABLED!=='1')
   return json(res,404,{ok:false,code:'content_hub_source_disabled'});
@@ -1940,6 +1979,118 @@ async function handlePrivateContentHubSource(req,res,url){
   return json(res,401,{ok:false,code:'content_hub_source_unauthorized'});
  if(req.method!=='GET')
   return json(res,405,{ok:false,code:'content_hub_method_denied'});
+ // Private staged-mirror bridge. Inactive by default. An exact eligible
+ // per-item preflight is rechecked on EVERY byte-range, not just job start.
+ // This cannot be reached by subscriber tokens or browser-supplied URLs.
+ const mirror=/^\/internal\/blofy-content-hub\/mirror\/(approval|range)\/(movie|episode)\/([A-Za-z0-9._:-]{1,128})$/.exec(url.pathname);
+ if(mirror){
+  if(process.env.BLOFY_CONTENT_HUB_MIRROR_BRIDGE_ENABLED!=='1'||
+     process.env.BLOFY_CONTENT_HUB_STORAGE_RIGHTS_CONFIRMED!=='1'||
+     process.env.BLOFY_CONTENT_HUB_SOURCE_IDLE_CONFIRMED!=='1'||
+     process.env.BLOFY_CONTENT_HUB_SOURCE_QUIET_WINDOW_CONFIRMED!=='1'||
+     process.env.BLOFY_CONTENT_HUB_MIRROR_SOURCE_HEADROOM_ENABLED!=='1')
+   return json(res,404,{ok:false,code:'mirror_private_bridge_disabled'});
+  if(url.search)return json(res,400,{ok:false,
+   code:'mirror_private_bridge_query_denied'});
+  const operation=mirror[1],kind=mirror[2],id=mirror[3];
+  if(kind==='episode'&&!/^[1-9][0-9]{0,9}$/.test(id))
+   return json(res,400,{ok:false,code:'mirror_episode_id_invalid'});
+  if(operation==='range'&&
+     req.headers['x-blofy-mirror-transfer']!=='licensed-one-chunk')
+   return json(res,403,{ok:false,code:'mirror_range_owner_action_missing'});
+  const approved=await loadApprovedMirrorItem(pool,{kind,id});
+  if(!approved.ok)return json(res,409,approved);
+  const headroom=await checkMirrorCachedHeadroom(approved.sourceId);
+  if(headroom?.ok!==true)
+   return json(res,409,{ok:false,
+    code:'mirror_source_headroom_insufficient',
+    blockedBy:Array.isArray(headroom?.blockedBy)?
+      headroom.blockedBy.slice(0,12):['mirror_source_headroom_unavailable'],
+    providerMediaRequests:0,customerCutover:false});
+  if(operation==='approval')return json(res,200,approved);
+  const range=parseContentHubClientRange(req.headers.range);
+  if(!range||range.to>=approved.expectedBytes)
+   return json(res,416,{ok:false,code:'mirror_range_invalid'});
+  if(hubActiveRange)return json(res,429,{
+   ok:false,code:'content_hub_upstream_busy'},{'retry-after':'3'});
+  hubActiveRange=true;
+  const abort=new AbortController();
+  const timer=setTimeout(()=>abort.abort(),75000);timer.unref?.();
+  const onAbort=()=>abort.abort();
+  req.once('aborted',onAbort);
+  res.once('close',()=>{if(!res.writableEnded)abort.abort()});
+  let upstream;
+  try{
+   const row=kind==='movie'?
+    await gatewayItemById('movie',approved.gatewayId,approved.sourceId):
+    await episodeByGatewayId(approved.gatewayId,approved.sourceId);
+   const mediaId=kind==='movie'?row?.source_id:row?.source_episode_id;
+   if(!row||row.server_enabled!==true||
+      String(row.server_id)!==approved.sourceId||
+      String(mediaId)!==approved.mediaId||
+      String(row.container_extension||'').toLowerCase()!==approved.extension)
+    return json(res,409,{ok:false,code:'mirror_range_catalog_changed'});
+   const upstreamUrl=mediaUpstreamUrl(row,kind==='movie'?'movie':'series',
+    mediaId,approved.extension);
+   await assertPublicXtreamUrl(upstreamUrl.origin);
+   // NO redirects and NO full-GET retries; the origin must honor HTTP 206.
+   upstream=await fetch(upstreamUrl,{
+    method:'GET',redirect:'manual',signal:abort.signal,
+    headers:{range:'bytes='+range.from+'-'+range.to,
+     'accept-encoding':'identity',
+     'user-agent':'BLOFY-ContentHub-MirrorBridge/1.0'}});
+   const verified=validContentHubResponse(upstream,range);
+   const validatorSha256=verified?
+    mirrorSourceValidatorHash(upstream.headers):null;
+   if(!verified||verified.size!==approved.expectedBytes||
+      !verified.validator||!upstream.body){
+    await upstream.body?.cancel().catch(()=>{});
+    return json(res,502,{ok:false,code:'mirror_range_provider_rejected'});
+   }
+   if(validatorSha256!==approved.validatorSha256){
+    await upstream.body?.cancel().catch(()=>{});
+    return json(res,409,{ok:false,code:'mirror_range_source_version_changed'});
+   }
+   const headers={
+    'content-type':'application/octet-stream',
+    'content-length':String(range.length),
+    'content-range':verified.contentRange,
+    'cache-control':'private,no-store',
+    'x-content-type-options':'nosniff',
+    'referrer-policy':'no-referrer'
+   };
+   if(verified.etag)headers.etag=verified.etag;
+   if(verified.lastModified)headers['last-modified']=verified.lastModified;
+   res.writeHead(206,headers);
+   let copied=0;
+   for await(const bytes of upstream.body){
+    if(abort.signal.aborted)throw Error('mirror_range_aborted');
+    copied+=bytes.byteLength;
+    if(copied>range.length)throw Error('mirror_range_overlong');
+    await writeStreamChunk(res,bytes);
+   }
+   if(copied!==range.length)throw Error('mirror_range_incomplete');
+   res.end();
+  }catch(error){
+   // Only source/network failures, NEVER browser cancellations, count
+   // toward the local private-copy source transport cooldown.
+   if(!req.aborted){
+    const observed=safeXtreamTransportCategory(error);
+    if(observed)mirrorSourceTransportGuard.recordFailure({
+      sourceId:approved.sourceId,reason:observed
+    });
+   }
+   if(res.headersSent){if(!res.destroyed)res.destroy()}
+   else if(!res.destroyed)return json(res,503,{
+    ok:false,code:'mirror_range_source_unavailable'});
+  }finally{
+   clearTimeout(timer);abort.abort();req.off('aborted',onAbort);
+   if(upstream?.body&&!upstream.body.locked)
+    await upstream.body.cancel().catch(()=>{});
+   hubActiveRange=false;
+  }
+  return;
+ }
  // Only operator-selected *saleh* series with an indexed mapped ID.
  // Series metadata lookup may perform one provider API request, but NO
  // media transfer or customer playback route is affected.

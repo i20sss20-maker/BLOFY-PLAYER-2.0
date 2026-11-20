@@ -56,6 +56,33 @@ const toPublic=row=>({
  createdAt:row.created_at,updatedAt:row.updated_at,
  transferReady:false,storageBytesReserved:0,bytesCopied:0
 });
+// Materialize exactly ONE owner-selected movie gateway mapping. Xtream
+// catalog imports do not necessarily precreate the mapping, but the Hub
+// private Range bridge resolves it by gateway ID. Never map the entire
+// catalog here (that would be a large unexpected DB write).
+async function ensureSelectedMovieGateway(client,sourceId,id){
+ const inserted=await client.query([
+  'INSERT INTO blofy_xtream_gateway_item_map',
+  '(server_id,media_type,source_id)',
+  'SELECT i.server_id,i.media_type,i.source_id',
+  'FROM blofy_xtream_items i',
+  'JOIN blofy_xtream_servers s ON s.id=i.server_id',
+  'LEFT JOIN blofy_xtream_categories c',
+  'ON c.server_id=i.server_id AND c.media_type=i.media_type',
+  'AND c.source_category_id=i.category_id',
+  "WHERE i.server_id=$1 AND i.source_id=$2 AND i.media_type='movie'",
+  "AND i.enabled=TRUE AND s.enabled=TRUE AND s.publish_catalog=TRUE",
+  'AND (c.enabled IS NULL OR c.enabled=TRUE)',
+  'ON CONFLICT(server_id,media_type,source_id) DO NOTHING'
+ ].join(' '),[sourceId,id]);
+ const mapped=await client.query([
+  'SELECT gateway_id FROM blofy_xtream_gateway_item_map',
+  "WHERE server_id=$1 AND media_type='movie' AND source_id=$2",
+  'LIMIT 1'
+ ].join(' '),[sourceId,id]);
+ return Number.isSafeInteger(Number(mapped.rows?.[0]?.gateway_id))&&
+  Number(mapped.rows[0].gateway_id)>0;
+}
 export async function stageMirrorIntake(db,{
  sourceId,kind,id,manifestStatus,ownerConfirmed
 }={}){
@@ -106,6 +133,10 @@ export async function stageMirrorIntake(db,{
    'WHERE source_id=$1 AND media_kind=$2 AND catalog_id=$3'
   ].join(' '),[sourceId,kind,id]);
   if(old.rowCount===1&&old.rows[0].state===STATE){
+   if(kind==='movie'&&!await ensureSelectedMovieGateway(client,sourceId,id)){
+    await client.query('ROLLBACK');
+    return noCopy({ok:false,code:'mirror_intake_movie_mapping_unavailable'});
+   }
    await client.query('COMMIT');
    return noCopy({ok:true,code:'mirror_intake_already_staged',
     item:toPublic(old.rows[0]),maxStaged:CAP});
@@ -118,6 +149,10 @@ export async function stageMirrorIntake(db,{
    await client.query('ROLLBACK');
    return noCopy({ok:false,code:'mirror_intake_queue_limit',
     maxStaged:CAP});
+  }
+  if(kind==='movie'&&!await ensureSelectedMovieGateway(client,sourceId,id)){
+   await client.query('ROLLBACK');
+   return noCopy({ok:false,code:'mirror_intake_movie_mapping_unavailable'});
   }
   const title=String(existingItem.title||'').trim().slice(0,190)||
     'Untitled catalog media';
