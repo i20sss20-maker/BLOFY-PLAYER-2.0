@@ -35,6 +35,7 @@ import tv.blofy.player.core.device.StreamDeviceCompatibility
 import tv.blofy.player.core.diagnostics.StreamConnectionDiagnostics
 import tv.blofy.player.data.CatalogSyncState
 import tv.blofy.player.data.CatalogRefreshWorker
+import tv.blofy.player.data.StreamCatalogDeltaWorker
 import tv.blofy.player.data.CatalogAutoRefreshPolicy
 import tv.blofy.player.data.LocalStorageManager
 import tv.blofy.player.data.local.BlofyDatabase
@@ -82,7 +83,7 @@ class SettingsActivity : AppCompatActivity() {
                     ?: dao.providers().first().firstOrNull()
             }
             if (!isFinishing) {
-                if (!BuildConfig.CODE_ONLY_LOGIN) provider?.let { observeRefresh(it.id) }
+                provider?.let { if (BuildConfig.CODE_ONLY_LOGIN) observeStreamRefresh(it.id) else observeRefresh(it.id) }
                 updateSyncStatus()
             }
         }
@@ -107,7 +108,7 @@ class SettingsActivity : AppCompatActivity() {
             if (isFinishing || isDestroyed) return@launch
             if (active != null && provider?.id != active.id) {
                 provider = active
-                if (!BuildConfig.CODE_ONLY_LOGIN) observeRefresh(active.id)
+                if (BuildConfig.CODE_ONLY_LOGIN) observeStreamRefresh(active.id) else observeRefresh(active.id)
             }
             if (::status.isInitialized) updateSyncStatus()
         }
@@ -184,8 +185,8 @@ class SettingsActivity : AppCompatActivity() {
         addCard(actionCard(copy("اشتراكي", "My subscription"),
             copy("حالة الكود وتاريخ انتهاء الاشتراك", "Status and subscription expiry")) { showStreamSubscription() })
         refreshCard = actionCard(copy("تحديث المحتوى", "Refresh content"),
-            copy("نفس تحميل المكتبة عند الدخول بالكود • دون تسجيل خروج",
-                "Same library loading as code sign-in • without signing out")) { refreshLibrary() }
+            copy("تحديث تلقائي في الخلفية • اضغط للفحص الآن",
+                "Automatically updated in background • tap to check now")) { refreshLibrary() }
         addCard(refreshCard)
         addCard(actionCard(copy("تحديث الحلقات تلقائياً", "Automatic episode updates"),
             if (CatalogAutoRefreshPolicy.isEnabled(applicationContext))
@@ -648,6 +649,33 @@ class SettingsActivity : AppCompatActivity() {
             .show()
     }
 
+
+    /** Observe the SAME delta worker used by Home and the periodic background sync. */
+    private fun observeStreamRefresh(providerId: String) {
+        if (!BuildConfig.CODE_ONLY_LOGIN || observedRefreshProvider == providerId) return
+        refreshJobs?.removeObservers(this)
+        observedRefreshProvider = providerId
+        refreshState = null
+        refreshStage = null
+        refreshItems = 0
+        refreshError = null
+        refreshRequested = false
+        refreshNotice = null
+        refreshJobs = WorkManager.getInstance(applicationContext)
+            .getWorkInfosForUniqueWorkLiveData(StreamCatalogDeltaWorker.workName(providerId))
+            .also { jobs ->
+                jobs.observe(this) { all ->
+                    val current = all.firstOrNull { !it.state.isFinished } ?: all.lastOrNull()
+                    refreshState = current?.state
+                    refreshStage = current?.progress?.getString(StreamCatalogDeltaWorker.KEY_KIND)
+                    refreshItems = current?.progress?.getInt(StreamCatalogDeltaWorker.KEY_APPLIED, 0)
+                        ?: current?.outputData?.getInt(StreamCatalogDeltaWorker.KEY_APPLIED, 0) ?: 0
+                    refreshError = current?.outputData?.getString(StreamCatalogDeltaWorker.KEY_STATUS)
+                    if (::status.isInitialized) updateSyncStatus()
+                }
+            }
+    }
+
     /** Settings and Home watch the same manual WorkManager task; neither blocks playback. */
     private fun observeRefresh(providerId: String) {
         if (observedRefreshProvider == providerId) return
@@ -694,13 +722,34 @@ class SettingsActivity : AppCompatActivity() {
             return
         }
         if (BuildConfig.CODE_ONLY_LOGIN) {
-            // The previous 95%-stalling WorkManager pathway is retired.
-            // Reuse exactly the existing first-code-login loader on the SAME
-            // active provider, without clearing the encrypted code session or
-            // requesting another redeem/activation.
+            // No navigation, re-login, full-library replacement or blank screen.
+            // Delta pages update locally while the current library remains visible.
             CatalogRefreshWorker.retireStreamFullRefresh(applicationContext, active.id)
-            startActivity(StreamCatalogRefreshRoute.fromSettings(this, active.id))
-            finish()
+            observeStreamRefresh(active.id)
+            if (refreshState == WorkInfo.State.RUNNING ||
+                refreshState == WorkInfo.State.ENQUEUED ||
+                refreshState == WorkInfo.State.BLOCKED) {
+                // The background job is already doing the requested work.
+                // Mark this as a user request so its final result is announced.
+                refreshRequested = true
+                updateSyncStatus()
+                return
+            }
+            refreshRequested = true
+            refreshNotice = null
+            refreshState = WorkInfo.State.ENQUEUED
+            refreshStage = null
+            refreshItems = 0
+            refreshError = null
+            updateSyncStatus()
+            try {
+                StreamCatalogDeltaWorker.enqueue(applicationContext, active.id, automatic = false)
+            } catch (_: Exception) {
+                refreshState = WorkInfo.State.FAILED
+                refreshNotice = copy("تعذر بدء التحديث. جرّب مرة أخرى.",
+                    "Could not start the refresh. Please try again.")
+                updateSyncStatus()
+            }
             return
         }
         // The card stays focusable for TV remotes, but repeated presses never enqueue duplicates.
@@ -738,11 +787,54 @@ class SettingsActivity : AppCompatActivity() {
         }
         if (!::refreshCard.isInitialized) return
         if (BuildConfig.CODE_ONLY_LOGIN) {
-            refreshCard.bind(copy("تحديث المحتوى", "Refresh content"),
-                copy("تحديث الآن", "Refresh now"),
-                copy("إعادة فحص القائمة مثل أول دخول بالكود • يحتفظ باشتراكك ومكتبتك عند فشل التحديث",
-                    "Reload as on first code sign-in • keeps your subscription and saved library on failure"))
-            refreshCard.setBusy(false)
+            val busy = refreshState == WorkInfo.State.RUNNING ||
+                refreshState == WorkInfo.State.ENQUEUED ||
+                refreshState == WorkInfo.State.BLOCKED
+            val stage = when (refreshStage) {
+                "live" -> copy("القنوات", "Live TV")
+                "movie" -> copy("الأفلام", "Movies")
+                "series" -> copy("المسلسلات", "Series")
+                else -> null
+            }
+            val checkedAt = StreamCatalogDeltaWorker.lastCheckedAt(applicationContext)
+            val value = when {
+                refreshNotice != null -> copy("تعذر بدء التحديث", "Unable to start")
+                refreshState == WorkInfo.State.RUNNING ->
+                    stage?.let { copy("جارٍ تحديث $it…", "Updating $it…") }
+                        ?: copy("جارٍ فحص المحتوى…", "Checking content…")
+                refreshState == WorkInfo.State.ENQUEUED ||
+                    refreshState == WorkInfo.State.BLOCKED ->
+                    copy("جارٍ تجهيز التحديث…", "Preparing refresh…")
+                refreshRequested && refreshState == WorkInfo.State.SUCCEEDED ->
+                    if (refreshError == "up_to_date")
+                        copy("✓ المحتوى محدّث بالفعل", "✓ Content already up to date")
+                    else copy("✓ تم تحديث المحتوى", "✓ Content updated")
+                refreshRequested && (refreshState == WorkInfo.State.FAILED ||
+                    refreshState == WorkInfo.State.CANCELLED) ->
+                    copy("تعذر التحديث • اضغط للمحاولة", "Refresh failed • tap to retry")
+                else -> copy("تحديث الآن", "Check now")
+            }
+            val hint = when {
+                refreshNotice != null -> refreshNotice.orEmpty()
+                busy && refreshItems > 0 ->
+                    copy("تمت معالجة $refreshItems عنصر • يمكنك متابعة المشاهدة",
+                        "$refreshItems items processed • you can keep watching")
+                busy -> copy("يجري التحديث داخليًا دون إغلاق هذه الصفحة أو حذف المكتبة.",
+                    "Refreshing internally without closing this page or clearing your library.")
+                refreshRequested && refreshState == WorkInfo.State.SUCCEEDED ->
+                    copy("✓ اكتمل الفحص، وستظهر التغييرات تلقائيًا.",
+                        "✓ Check complete. Changes will appear automatically.")
+                refreshRequested && (refreshState == WorkInfo.State.FAILED ||
+                    refreshState == WorkInfo.State.CANCELLED) ->
+                    copy("لم نفقد أي محتوى محفوظ. افحص الإنترنت وأعد المحاولة.",
+                        "Saved content was preserved. Check your connection and retry.")
+                checkedAt > 0L -> copy("تحديث تلقائي • آخر فحص ناجح: ${formatSyncTime(checkedAt)}",
+                    "Auto refresh • last successful check: ${formatSyncTime(checkedAt)}")
+                else -> copy("التحديث تلقائي في الخلفية عند توفر الإنترنت.",
+                    "Content updates automatically in the background when online.")
+            }
+            refreshCard.bind(copy("تحديث المحتوى", "Refresh content"), value, hint)
+            refreshCard.setBusy(busy)
             return
         }
 

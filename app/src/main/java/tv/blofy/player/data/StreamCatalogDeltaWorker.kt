@@ -40,16 +40,19 @@ internal class StreamCatalogDeltaWorker(
     private val providerId get() = StreamCodeSession.providerId
 
     override suspend fun doWork(): Result {
-        if (!BuildConfig.CODE_ONLY_LOGIN || !StreamCodeSession.isClaimed(app) ||
+        val automatic = inputData.getBoolean(KEY_AUTO, true)
+        if (!BuildConfig.CODE_ONLY_LOGIN) return Result.success()
+        if (!StreamCodeSession.isClaimed(app) ||
             !CatalogSyncState.isReady(app, providerId)
-        ) return Result.success()
-        if (inputData.getBoolean(KEY_AUTO, true) &&
-            !CatalogAutoRefreshPolicy.isEnabled(app)) return Result.success()
-        if (CatalogPlaybackGate.isPlaying) return Result.retry()
+        ) return if (automatic) Result.success() else notReady()
+        if (CatalogPlaybackGate.isPlaying)
+            return if (automatic) Result.retry() else Result.failure(
+                workDataOf(KEY_STATUS to "playback_busy"))
         return try {
             withTimeout(6 * 60_000L) { syncMutex.withLock { syncBounded() } }
         } catch (_: TimeoutCancellationException) {
-            Result.retry()
+            if (inputData.getBoolean(KEY_AUTO, true)) Result.retry()
+            else Result.failure(workDataOf(KEY_STATUS to "timeout"))
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
@@ -62,7 +65,7 @@ internal class StreamCatalogDeltaWorker(
     private suspend fun syncBounded(): Result {
         // Code-bound authorization must remain identical through every
         // resumed page. Never import one subscriber's rows into another code.
-        val sessionAtStart = StreamCodeSession.token(app) ?: return Result.success()
+        val sessionAtStart = StreamCodeSession.token(app) ?: return notReady()
         // A new redemption may refer to a different account/source even though
         // STREAM reuses the same local provider ID. A revision number is not an
         // account identity. Never reuse a previous subscriber's delta cursor.
@@ -74,20 +77,23 @@ internal class StreamCatalogDeltaWorker(
                 .putString(KEY_ACCOUNT_FINGERPRINT, accountFingerprint).commit())
         }
         val dao = BlofyDatabase.get(app).dao()
-        val provider = dao.provider(providerId) ?: return Result.success()
+        val provider = dao.provider(providerId) ?: return notReady()
         if (dao.activeProviderId() != providerId || !dao.hasCatalog(providerId))
-            return Result.success()
+            return notReady()
         val version = XtreamClient.api.objectResponse(
             "${StreamCodeSession.HOST}/player_api.php?action=get_blofy_catalog_version"
         )
-        val current = version["revision"].asNumber()?.toLong() ?: return Result.retry()
+        val current = version["revision"].asNumber()?.toLong() ?: return recoverableFailure()
         if (current <= 0L || version["ok"] != true ||
-            version["syncStatus"] != "online") return Result.retry()
+            version["syncStatus"] != "online") return recoverableFailure()
         val storedBase = prefs.getLong(KEY_COMPLETE_REVISION, 0L)
         val base = if (storedBase in 0L..current) storedBase else 0L
         val priorPending = prefs.getLong(KEY_PENDING_REVISION, -1L)
         val priorBase = prefs.getLong(KEY_PENDING_BASE, -1L)
         if (current == base) {
+            // A successful no-change poll is still useful diagnostic information.
+            if (!prefs.edit().putLong(KEY_LAST_CHECK, System.currentTimeMillis()).commit())
+                return recoverableFailure()
             clearCheckpoint()
             return Result.success(workDataOf(KEY_STATUS to "up_to_date"))
         }
@@ -105,11 +111,11 @@ internal class StreamCatalogDeltaWorker(
         var completedItems = prefs.getLong(KEY_APPLIED_COUNT, 0L)
         val fromPart = prefs.getInt(KEY_PART_INDEX, 0).coerceIn(0, stages.size)
         for (position in fromPart until stages.size) {
-            if (CatalogPlaybackGate.isPlaying) return Result.retry()
+            if (CatalogPlaybackGate.isPlaying) return recoverableFailure("playback_busy")
             val (kind, part) = stages[position]
             var cursor = if (position == fromPart) prefs.getLong(KEY_CURSOR, 0L) else 0L
             do {
-                if (CatalogPlaybackGate.isPlaying) return Result.retry()
+                if (CatalogPlaybackGate.isPlaying) return recoverableFailure("playback_busy")
                 if (!StreamCodeSession.isClaimed(app) ||
                     StreamCodeSession.token(app) != sessionAtStart ||
                     dao.activeProviderId() != providerId ||
@@ -119,12 +125,12 @@ internal class StreamCatalogDeltaWorker(
                 val page = XtreamClient.api.objectResponse(url)
                 if (page["ok"] != true || page["kind"] != kind ||
                     page["part"] != part || page["revision"].asNumber()?.toLong() != current
-                ) return Result.retry()
+                ) return recoverableFailure()
                 if (StreamCodeSession.token(app) != sessionAtStart ||
                     dao.activeProviderId() != providerId) return Result.failure()
                 val items = page["items"] as? List<*>
-                    ?: return Result.retry()
-                if (items.size > 120) return Result.retry()
+                    ?: return recoverableFailure()
+                if (items.size > 120) return recoverableFailure()
                 when (part) {
                     "categories" -> {
                         val parsed = items.mapNotNull { value ->
@@ -132,7 +138,7 @@ internal class StreamCatalogDeltaWorker(
                                 StreamCatalogDeltaParser.category(providerId,kind,it)
                             }
                         }
-                        if (parsed.size != items.size) return Result.retry()
+                        if (parsed.size != items.size) return recoverableFailure()
                         val existing = if (parsed.isEmpty()) emptyMap() else
                             dao.categoriesByKeys(parsed.map { it.key }).associateBy { it.key }
                         dao.upsertCategories(parsed.map { row ->
@@ -147,13 +153,13 @@ internal class StreamCatalogDeltaWorker(
                                 StreamCatalogDeltaParser.item(providerId,kind,it)
                             }
                         }
-                        if (first.size != items.size) return Result.retry()
+                        if (first.size != items.size) return recoverableFailure()
                         val existing = if (first.isEmpty()) emptyMap() else
                             dao.streamsByKeys(first.map { it.key }).associateBy { it.key }
                         val rows = items.mapIndexed { i, value ->
                             StreamCatalogDeltaParser.item(providerId,kind,
                                 value as Map<*, *>,existing[first[i].key])
-                                ?: return Result.retry()
+                                ?: return recoverableFailure()
                         }
                         dao.applyChangedCatalogRows(rows)
                     }
@@ -162,7 +168,7 @@ internal class StreamCatalogDeltaWorker(
                             val id = v.asNumber()?.toLong()
                             id?.takeIf { it > 0 }?.let { "$providerId:$kind:$it" }
                         }
-                        if (keys.size != items.size) return Result.retry()
+                        if (keys.size != items.size) return recoverableFailure()
                         dao.removeCatalogRowsByKeys(keys)
                     }
                 }
@@ -170,7 +176,7 @@ internal class StreamCatalogDeltaWorker(
                 val next = page["nextCursor"].asNumber()?.toLong()
                 val complete = page["complete"] == true
                 if (!complete && (next == null || next <= cursor))
-                    return Result.retry()
+                    return recoverableFailure()
                 cursor = if (complete) 0L else checkNotNull(next)
                 // Save only AFTER the Room page commit. Retrying repeats at
                 // most one idempotent small batch, not a full-library import.
@@ -178,7 +184,7 @@ internal class StreamCatalogDeltaWorker(
                     if (complete) position + 1 else position)
                     .putLong(KEY_CURSOR,cursor)
                     .putLong(KEY_APPLIED_COUNT,completedItems).commit()
-                if (!changed) return Result.retry()
+                if (!changed) return recoverableFailure()
                 setProgress(workDataOf(KEY_KIND to kind, KEY_PART to part,
                     KEY_APPLIED to completedItems.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()))
             } while (!complete)
@@ -188,10 +194,11 @@ internal class StreamCatalogDeltaWorker(
             "${StreamCodeSession.HOST}/player_api.php?action=get_blofy_catalog_version"
         )
         if (endVersion["revision"].asNumber()?.toLong() != current ||
-            endVersion["syncStatus"] != "online") return Result.retry()
+            endVersion["syncStatus"] != "online") return recoverableFailure()
         if (!prefs.edit().putLong(KEY_COMPLETE_REVISION,current)
-                .putLong(KEY_LAST_SUCCESS,System.currentTimeMillis()).commit())
-            return Result.retry()
+                .putLong(KEY_LAST_SUCCESS,System.currentTimeMillis())
+                .putLong(KEY_LAST_CHECK,System.currentTimeMillis()).commit())
+            return recoverableFailure()
         clearCheckpoint()
         // Invalidate derived home metadata only after all nine parts have been
         // applied; neither the code token nor the provider identity changes.
@@ -199,6 +206,12 @@ internal class StreamCatalogDeltaWorker(
         return Result.success(workDataOf(KEY_STATUS to "updated",
             KEY_APPLIED to completedItems.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()))
     }
+
+    private fun notReady() = Result.failure(workDataOf(KEY_STATUS to "not_ready"))
+
+    private fun recoverableFailure(reason: String = "unavailable"): Result =
+        if (inputData.getBoolean(KEY_AUTO, true)) Result.retry()
+        else Result.failure(workDataOf(KEY_STATUS to reason))
 
     private fun clearCheckpoint() {
         prefs.edit().remove(KEY_PENDING_REVISION).remove(KEY_PENDING_BASE)
@@ -216,6 +229,7 @@ internal class StreamCatalogDeltaWorker(
         private const val KEY_CURSOR = "cursor"
         private const val KEY_APPLIED_COUNT = "applied"
         private const val KEY_LAST_SUCCESS = "last_success"
+        private const val KEY_LAST_CHECK = "last_check"
         private const val KEY_LAST_ATTEMPT = "last_attempt"
         const val KEY_AUTO = "auto"
         const val KEY_STATUS = "status"
@@ -226,6 +240,10 @@ internal class StreamCatalogDeltaWorker(
         private const val PERIODIC = "blofy-stream-56-periodic-"
 
         fun workName(providerId: String) = UNIQUE + providerId
+
+        /** Only reads a timestamp, no network or subscriber credentials. */
+        fun lastCheckedAt(context: Context): Long = context.applicationContext
+            .getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(KEY_LAST_CHECK, 0L)
 
         fun enqueue(context: Context, providerId: String, automatic: Boolean = true) {
             if (!BuildConfig.CODE_ONLY_LOGIN || providerId != StreamCodeSession.providerId) return
@@ -242,19 +260,22 @@ internal class StreamCatalogDeltaWorker(
         }
 
         fun enqueueIfDue(context: Context, providerId: String) {
-            if (!BuildConfig.CODE_ONLY_LOGIN || !CatalogAutoRefreshPolicy.isEnabled(context))
+            if (!BuildConfig.CODE_ONLY_LOGIN || providerId != StreamCodeSession.providerId)
                 return
             val prefs=context.applicationContext.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
             val now=System.currentTimeMillis()
             val last=prefs.getLong(KEY_LAST_ATTEMPT,0L)
-            if (last>0L && now>=last && now-last<6*60*60_000L) return
+            if (!StreamCatalogRefreshCadence.isEntryCheckDue(last, now)) return
             if (prefs.edit().putLong(KEY_LAST_ATTEMPT,now).commit())
                 enqueue(context,providerId,true)
         }
 
         fun schedule(context: Context, providerId: String) {
             if (!BuildConfig.CODE_ONLY_LOGIN || providerId != StreamCodeSession.providerId) return
-            val request=PeriodicWorkRequestBuilder<StreamCatalogDeltaWorker>(24,TimeUnit.HOURS)
+            // WorkManager schedules best-effort checks, not exact wall-clock polling.
+            // The revision endpoint is cheap; pages download only on a changed revision.
+            val request=PeriodicWorkRequestBuilder<StreamCatalogDeltaWorker>(
+                StreamCatalogRefreshCadence.PERIODIC_MINUTES, TimeUnit.MINUTES)
                 .setConstraints(Constraints.Builder()
                     .setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .setInputData(workDataOf(KEY_AUTO to true))
@@ -270,4 +291,18 @@ private fun Any?.asNumber(): Number? = when(this) {
     is Number -> this
     is String -> this.toLongOrNull()
     else -> null
+}
+
+/**
+ * Small server revision checks are safe to run often. Full catalogue downloads
+ * happen only when that revision changes, and WorkManager defers during playback.
+ * Not a push service: sleeping devices may be checked later by Android.
+ */
+internal object StreamCatalogRefreshCadence {
+    const val ENTRY_MINIMUM_GAP_MS = 20L * 60_000L
+    const val PERIODIC_MINUTES = 30L
+
+    fun isEntryCheckDue(lastAttemptMs: Long, nowMs: Long): Boolean =
+        lastAttemptMs <= 0L || nowMs < lastAttemptMs ||
+            nowMs - lastAttemptMs >= ENTRY_MINIMUM_GAP_MS
 }
