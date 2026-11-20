@@ -14,6 +14,10 @@ export const STREAM_5601_APK = 'BLOFY-STREAM-56.0.1-LIVE-RECONNECT-FIX-OWNER-SIG
 export const STREAM_5601_SHA256 = '02d40e3748f0d75905f734ad429ef16994d87a7068280e567d8da9339932e89a';
 export const STREAM_5601_BYTES = 135785176;
 export const STREAM_5601_AUDIENCE = 'blofy-stream-56-0-1-qa-website-upload';
+export const STREAM_5602_APK = 'BLOFY-STREAM-56.0.2-AUTO-CATALOG-FIX-OWNER-SIGNED.apk';
+export const STREAM_5602_SHA256 = '9a3037936b374b3e62e2bc06f4f9fe8b5a3a64441c249c8cf00d78944c58876a';
+export const STREAM_5602_BYTES = 135787039;
+export const STREAM_5602_AUDIENCE = 'blofy-stream-56-0-2-owner-signed-website-upload';
 
 // Each authorized GitHub OIDC workflow can upload ONLY its immutable pinned
 // artifact. This registry neither widens the legacy admin bearer nor changes
@@ -33,6 +37,11 @@ const APPROVED = Object.freeze({
     sha256: STREAM_5601_SHA256, bytes: STREAM_5601_BYTES,
     audience: STREAM_5601_AUDIENCE,
     workflowRef: 'i20sss20-maker/BLOFY-PLAYER-2.0/.github/workflows/publish-blofy-stream-56-0-1-qa.yml@refs/heads/main'
+  }),
+  [STREAM_5602_APK]: Object.freeze({
+    sha256: STREAM_5602_SHA256, bytes: STREAM_5602_BYTES,
+    audience: STREAM_5602_AUDIENCE,
+    workflowRef: 'i20sss20-maker/BLOFY-PLAYER-2.0/.github/workflows/publish-blofy-stream-56-0-2-site.yml@refs/heads/main'
   })
 });
 
