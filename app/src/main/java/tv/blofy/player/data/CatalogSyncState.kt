@@ -10,18 +10,28 @@ import android.content.Context
 object CatalogSyncState {
     private const val PREFS = "blofy_catalog_sync_state"
     private const val PREFIX = "ready:"
+    private const val PENDING_PREFIX = "pending:"
 
     fun isReady(context: Context, providerId: String): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getBoolean(PREFIX + providerId, false)
 
+    /** Preserve the last fully synchronized catalog while a staged refresh runs. */
     fun markPending(context: Context, providerId: String) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putBoolean(PREFIX + providerId, false).apply()
+            .edit().putBoolean(PENDING_PREFIX + providerId, true).apply()
     }
 
     fun markReady(context: Context, providerId: String) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putBoolean(PREFIX + providerId, true).apply()
+            .edit()
+            .putBoolean(PREFIX + providerId, true)
+            .putBoolean(PENDING_PREFIX + providerId, false)
+            .apply()
+    }
+
+    fun markFailed(context: Context, providerId: String) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putBoolean(PENDING_PREFIX + providerId, false).apply()
     }
 }

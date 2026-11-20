@@ -43,6 +43,10 @@ object BlofySubscriberClient {
             put("activationCode", DeviceIdentity.activationCode(context))
             put("username", username.trim())
             put("password", password)
+            // BLOFY's hidden host is resolved server-side. Request the authenticated
+            // direct Xtream contract instead of routing large catalogs through
+            // the activation portal's streaming proxy.
+            put("delivery", "direct")
         }
         val request = Request.Builder()
             .url("$endpoint/api/v1/subscribers/session")
@@ -65,6 +69,12 @@ object BlofySubscriberClient {
             val proxyUser = root.optString("username").trim()
             val proxyPassword = root.optString("password")
             require(baseUrl.isNotBlank() && proxyUser.isNotBlank()) { "استجابة BLOFY غير مكتملة" }
+            check(root.optString("delivery") == "direct") {
+                "خدمة BLOFY لم ترجع اتصال السيرفر المباشر"
+            }
+            require(baseUrl.startsWith("http://", true) || baseUrl.startsWith("https://", true)) {
+                "عنوان سيرفر BLOFY غير صالح"
+            }
             Session(
                 providerName = root.optString("providerName").ifBlank { "مشتركين BLOFY" },
                 baseUrl = baseUrl.trimEnd('/'),
