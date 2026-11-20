@@ -41,8 +41,7 @@ jobs:
       - name: Download and independently verify original-owner-signed APK identity
         shell: bash
         run: |
-          # This step reads only public binary provenance and no private credentials.
-          set -euxo pipefail
+          set -euo pipefail
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN/artifacts?per_page=100" > "$RUNNER_TEMP/artifacts.json"
           artifact="$(jq -er --arg prefix "$ARTIFACT_PREFIX" '[.artifacts[] | select((.name|startswith($prefix)) and .expired==false)] | if length==1 then .[0].name else error("missing or ambiguous signed APK") end' "$RUNNER_TEMP/artifacts.json")"
           mkdir -p staging
@@ -52,7 +51,11 @@ jobs:
           test -s "$apk" && test -s "$identity"
           grep -Fxq 'application_id=tv.blofy.player.v2.stream' "$identity"
           grep -Fxq 'version_code=2000117' "$identity"
-          grep -Fxq "source_sha=$SOURCE_SHA" "$identity"
+          # Pull-request runs build the GitHub synthetic merge commit; the run head
+          # differs from the actual checkout SHA embedded in the signed artifact.
+          build_sha="${artifact#$ARTIFACT_PREFIX}"
+          [[ "$build_sha" =~ ^[a-f0-9]{40}$ ]]
+          grep -Fxq "source_sha=$build_sha" "$identity"
           mkdir -p verified
           cp "$apk" "verified/$APK_NAME"
           actual_size="$(stat -c '%s' "verified/$APK_NAME")"
