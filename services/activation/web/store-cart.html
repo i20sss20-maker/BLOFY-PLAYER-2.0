@@ -11,7 +11,7 @@
   <link rel="stylesheet" href="/store/cart.css?v=5">
 <link rel="stylesheet" href="/store/checkout-theme.css?v=3-trial-profile">
 <link rel="stylesheet" href="/store/visual.css?v=20261119-2">
-  <script defer src="/store/cart.js?v=11-trial-profile"></script>
+  <script defer src="/store/cart.js?v=12-apple-pay-hpp"></script>
 </head>
 <body class="cart-experience">
   <header class="top">
@@ -110,11 +110,12 @@
         <div class="sum-row discount-row"><span>الخصم</span><strong id="discount">—</strong></div>
         <div class="sum-row total"><span>الإجمالي شامل الخصم</span><strong id="total">—</strong></div>
         <button id="checkout" class="primary checkout-main-btn" type="button" disabled>جارٍ تجهيز الطلب</button>
+        <button id="checkout-apple-pay" class="apple-pay-choice" type="button" aria-label="الدفع عبر Apple Pay لدى جيديا" hidden disabled>Apple Pay</button>
         <p class="checkout-disclaimer" id="checkout-disclaimer">🔒 لن يتم خصم أي مبلغ قبل تأكيد الدفع في بوابة جيديا الرسمية.</p>
         <div class="payment-methods" id="payment-methods" aria-label="وسائل الدفع المتاحة">
-          <span>مدى</span><span>VISA</span><span>Mastercard</span>
+          <span>مدى</span><span>VISA</span><span>Mastercard</span><span class="apple-pay-badge" id="apple-pay-option" hidden>Apple Pay</span>
         </div>
-        <p class="payment-wallet-note" id="payment-wallet-note">Apple Pay متوقف مؤقتًا حتى إكمال اختبار الدفع مع جيديا.</p>
+        <p class="payment-wallet-note" id="payment-wallet-note" role="status" aria-live="polite">جارٍ التحقق من توفر Apple Pay لدى جيديا…</p>
         <p class="safe" id="cart-sync" role="status" aria-live="polite">نحفظ السلة في حسابك بعد تسجيل الدخول.</p>
         <div class="cart-recovery-actions"><button type="button" class="secondary" id="retry-cart-sync" hidden>إعادة حفظ السلة</button><button type="button" class="secondary" id="retry-pending" hidden>مراجعة الطلب السابق</button></div>
         <output id="message" role="status" aria-live="polite"></output>
@@ -152,7 +153,7 @@
       <div class="geidea-embedded-details">
         <span>رقم الطلب <b id="geidea-embedded-order">—</b></span>
         <span>المبلغ للدفع <strong id="geidea-embedded-total">—</strong></span>
-        <span>الوسائل <b>مدى · VISA · Mastercard</b></span>
+        <span>الوسائل <b id="geidea-payment-label">مدى · VISA · Mastercard</b></span>
       </div>
       <p id="geidea-embedded-notice" role="status" aria-live="polite">جارٍ تجهيز نموذج الدفع الآمن…</p>
       <div id="checkout-tag" class="geidea-hosted-container" aria-label="حقول دفع Geidea المحمية"></div>

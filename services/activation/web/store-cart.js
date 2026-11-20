@@ -14,6 +14,27 @@
  const money=n=>(Number(n)/100).toLocaleString('ar-SA',{minimumFractionDigits:0,maximumFractionDigits:2})+' ر.س';
  let items=[],quoted=null,ready=false,creating=false,paymentOpen=false,currentOrder=null,accessToken=null;
  let trialReady=false,trialAvailable=0,embeddedWidget=null,sdkPromise=null;
+ let applePayMerchantEnabled=false;
+ // Apple Pay is processed by the existing Geidea hosted checkout, not by BLOFY.
+ // Only offer a wallet-specific action on a browser with Apple Pay capability.
+ function applePaySupported(){
+   try{return typeof window.ApplePaySession?.canMakePayments==='function' &&
+     window.ApplePaySession.canMakePayments()===true;}
+   catch{return false;}
+ }
+ function updateApplePay(){
+   const paid=paidLines().length>0,available=applePayMerchantEnabled&&applePaySupported();
+   $('apple-pay-option').hidden=!paid||!applePayMerchantEnabled;
+   $('checkout-apple-pay').hidden=!paid||!available;
+   $('checkout-apple-pay').disabled=$('checkout').disabled||creating||paymentOpen;
+   $('payment-wallet-note').textContent=!applePayMerchantEnabled?
+     'Apple Pay قيد التفعيل لدى جيديا؛ بطاقات مدى وVisa وMastercard متاحة.':
+     !available?'Apple Pay متاح على الأجهزة المدعومة مع Wallet؛ يمكنك الدفع بالبطاقة على هذا الجهاز.':
+     'Apple Pay: اضغط زر Apple Pay ثم اختره في صفحة جيديا الآمنة. لا يُخصم المبلغ من BLOFY.';
+   $('geidea-payment-label').textContent=applePayMerchantEnabled?
+     'مدى · VISA · Mastercard · Apple Pay (للأجهزة المدعومة)':
+     'مدى · VISA · Mastercard';
+ }
  let signedIn=false,accountEmail='',profileRequired=false,profileComplete=false,
    cloudRevision=null,cloudSynced=false,cloudSyncing=false,
    savedSnapshot='',hasUrlAddition=false,urlAddedLine=null,accountId='',pendingChecked=false,checkingPending=false;
@@ -222,6 +243,7 @@
    button.disabled=!enabled;
    mobile.disabled=!enabled;
    $('mobile-checkout-dock').hidden=!items.length;
+   updateApplePay();
  }
  function authUI(){
    const gate=$('auth-gate'),headline=$('auth-title'),label=$('auth-message'),link=$('auth-link');
@@ -701,7 +723,7 @@
    try{await navigator.clipboard.writeText(code);message('تم نسخ كود التجربة.');}
    catch(_){message('حدد الكود الظاهر لنسخه يدويًا.');}
  });
- async function checkout(){
+ async function checkout(preferApplePay=false){
    if(!signedIn){
      $('auth-gate').scrollIntoView({behavior:'smooth',block:'center'});
      $('checkout-email').focus({preventScroll:true});
@@ -719,9 +741,14 @@
    if(creating||paymentOpen||!pendingChecked||!quoted||!items.length)return;
    if(trialLine()){await claimFreeTrialFromCart();return;}
    if(!ready||!paidLines().length)return;
-   creating=true;$('checkout').disabled=true;message('جارٍ تجهيز طلبك...');
+   // A direct Apple Pay action must not create any new session unless the
+   // backend explicitly enables it and this browser reports Apple Pay support.
+   if(preferApplePay&&(!applePayMerchantEnabled||!applePaySupported()))return;
+   creating=true;$('checkout').disabled=true;
+   $('checkout-apple-pay').disabled=true;
+   message('جارٍ تجهيز طلبك...');
    try{
-     const embeddedReady=await ensureEmbeddedGeidea();
+     const embeddedReady=preferApplePay?false:await ensureEmbeddedGeidea();
      const payload=body();
      const data=await request('/api/v1/store/cart/checkout',payload);
      if(data.provider!=='geidea'||(data.checkoutMode!=='modal'&&data.checkoutMode!=='redirect')||
@@ -752,6 +779,14 @@
        'تم تجهيز طلبك '+data.orderNumber+'. أكمل الدفع داخل نموذج Geidea الآمن في نفس الصفحة.':
        'تم إنشاء طلبك '+data.orderNumber+'. نموذج Geidea المضمّن لم يُحمّل؛ استخدم رابط نفس الجلسة.');
      window.BLOFYAnalytics?.track('checkout_started');
+     if(preferApplePay){
+       // Top-level Geidea HPP gives Apple Pay the best browser compatibility.
+       // The session is already stored for secure return and recovery;
+       // no wallet token or payment credentials are handled by BLOFY.
+       message('اختَر Apple Pay في صفحة جيديا الآمنة؛ يمكنك إلغاء الدفع دون إنشاء طلب جديد.');
+       location.assign(paymentUrl);
+       return;
+     }
      // Official drop-in: startPayment(sessionId, null, divId).
      // No navigation and no new session when the embedded SDK fails.
      mountEmbeddedGeidea(data);
@@ -897,6 +932,7 @@
    authUI();void syncCloud();
  });
  $('checkout').addEventListener('click',()=>void checkout());
+ $('checkout-apple-pay').addEventListener('click',()=>void checkout(true));
  $('clear-cart').addEventListener('click',()=>{
    if(!confirm('تبغى تفرغ سلة مشترياتك؟'))return;
    items=[];save();void refresh();
@@ -910,6 +946,11 @@
  void initAccount();
  fetch('/api/v1/store/products',{cache:'no-store',headers:{accept:'application/json'}})
    .then(r=>r.ok?r.json():Promise.reject(Error('catalog_unavailable')))
-   .then(data=>{ready=data.checkoutAvailable===true;void refresh();})
+   .then(data=>{
+     ready=data.checkoutAvailable===true;
+     applePayMerchantEnabled=ready&&data.paymentMethods?.applePay===true;
+     updateApplePay();
+     void refresh();
+   })
    .catch(()=>message('تعذر التحقق من خدمة الدفع حاليًا. لن تُحصّل أي مبالغ.'));
 })();

@@ -888,7 +888,8 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
      const top=(await pool.query("SELECT sku,COUNT(*)::int AS n FROM blofy_store_geidea_orders WHERE status='paid' AND sku<>'bundle-2y' AND created_at>NOW()-INTERVAL '90 days' GROUP BY sku ORDER BY n DESC,sku LIMIT 1")).rows[0];
      if(top&&Number(top.n)>=10)popularSku=top.sku;
    }catch{}
-   return json(res,200,{provider:'geidea',checkoutAvailable,products:publicStorePlans(),offers:publicStoreOffers(),popularSku});
+   return json(res,200,{provider:'geidea',checkoutAvailable,products:publicStorePlans(),offers:publicStoreOffers(),popularSku,
+   paymentMethods:{cards:true,applePay:checkoutAvailable&&config.applePayEnabled===true}});
  }
  async function couponQuote(req,res){
    if(!enabled)return json(res,503,{error:'store_checkout_disabled'});

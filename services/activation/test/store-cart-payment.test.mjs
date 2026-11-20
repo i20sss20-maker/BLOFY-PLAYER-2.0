@@ -95,6 +95,8 @@ test('Three cart codes require one paid Geidea capture and never duplicate on ca
      paymentSessions++;
      const payload=JSON.parse(options.body);
      assert.equal(payload.amount,'270.00');
+     assert.deepEqual(payload.hideWallets,[],'Apple Pay enabled: Geidea may offer its verified Apple wallet');
+     assert.equal(payload.expressCheckouts.length,0,'do not add an unconfigured standalone wallet SDK');
      currentReference=payload.merchantReferenceId;
      return {ok:true,json:async()=>({
        responseCode:'000',detailedResponseCode:'000',
@@ -115,7 +117,8 @@ test('Three cart codes require one paid Geidea capture and never duplicate on ca
    throw Error('Unexpected Geidea API: '+url);
  };
  const env={BLOFY_PAYMENT_PROVIDER:'geidea',BLOFY_GEIDEA_CHECKOUT_ENABLED:'true',
-   BLOFY_STORE_GEIDEA_ENABLED:'true',BLOFY_STORE_REQUIRE_CUSTOMER_LOGIN:'true',GEIDEA_LIVE_MERCHANT_PUBLIC_KEY:publicKey,
+   BLOFY_STORE_GEIDEA_ENABLED:'true',BLOFY_STORE_REQUIRE_CUSTOMER_LOGIN:'true',
+   BLOFY_GEIDEA_APPLE_PAY_ENABLED:'true',GEIDEA_LIVE_MERCHANT_PUBLIC_KEY:publicKey,
    GEIDEA_LIVE_API_PASSWORD:pwd};
  const handler=createStoreGeideaHandlers({
    pool,keyHex:'a'.repeat(64),env,fetchImpl:provider,
@@ -134,6 +137,10 @@ test('Three cart codes require one paid Geidea capture and never duplicate on ca
  });
  const items=[{sku:'stream-6m',quantity:1},
    {sku:'bundle-2y',quantity:1,bundleSelection:['app','xtream']}];
+ const paymentOptions={};
+ await handler({method:'GET',headers:{}},paymentOptions,{pathname:'/api/v1/store/products'});
+ assert.equal(paymentOptions.status,200);
+ assert.deepEqual(paymentOptions.data.paymentMethods,{cards:true,applePay:true});
  const quote={};
  await handler(request({items}),quote,{pathname:'/api/v1/store/cart/quote'});
  assert.equal(quote.status,200);
