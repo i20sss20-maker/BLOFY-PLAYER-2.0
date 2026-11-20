@@ -41,7 +41,8 @@ jobs:
       - name: Download and independently verify original-owner-signed APK identity
         shell: bash
         run: |
-          set -euo pipefail
+          # This step reads only public binary provenance and no private credentials.
+          set -euxo pipefail
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN/artifacts?per_page=100" > "$RUNNER_TEMP/artifacts.json"
           artifact="$(jq -er --arg prefix "$ARTIFACT_PREFIX" '[.artifacts[] | select((.name|startswith($prefix)) and .expired==false)] | if length==1 then .[0].name else error("missing or ambiguous signed APK") end' "$RUNNER_TEMP/artifacts.json")"
           mkdir -p staging
