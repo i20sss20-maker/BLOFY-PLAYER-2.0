@@ -96,7 +96,7 @@ test('disabled merchant wallet remains hidden even if a device supports Apple Pa
  const f=await fixture({merchantEnabled:false});
  assert.equal(f.nodes.get('checkout-apple-pay').hidden,true);
  assert.equal(f.nodes.get('apple-pay-option').hidden,true);
- assert.match(f.nodes.get('payment-wallet-note').textContent,/قيد التفعيل/);
+ assert.match(f.nodes.get('payment-wallet-note').textContent,/قيد التحقق/);
  assert.equal(f.calls.filter(x=>x.path==='/api/v1/store/cart/checkout').length,0);
 });
 
@@ -105,6 +105,6 @@ test('non-Apple device keeps ordinary card checkout available',async()=>{
  assert.equal(f.nodes.get('checkout-apple-pay').hidden,true);
  assert.equal(f.nodes.get('apple-pay-option').hidden,false);
  assert.equal(f.nodes.get('checkout').disabled,false);
- assert.match(f.nodes.get('payment-wallet-note').textContent,/الأجهزة المدعومة/);
+ assert.match(f.nodes.get('payment-wallet-note').textContent,/أجهزة تدعمه/);
  assert.equal(f.calls.filter(x=>x.path==='/api/v1/store/cart/checkout').length,0);
 });
