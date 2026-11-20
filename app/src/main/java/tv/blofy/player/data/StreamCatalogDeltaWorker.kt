@@ -40,10 +40,14 @@ internal class StreamCatalogDeltaWorker(
     private val providerId get() = StreamCodeSession.providerId
 
     override suspend fun doWork(): Result {
-        if (!BuildConfig.CODE_ONLY_LOGIN || !StreamCodeSession.isClaimed(app) ||
+        val automatic = inputData.getBoolean(KEY_AUTO, true)
+        if (!BuildConfig.CODE_ONLY_LOGIN) return Result.success()
+        if (!StreamCodeSession.isClaimed(app) ||
             !CatalogSyncState.isReady(app, providerId)
-        ) return Result.success()
-        if (CatalogPlaybackGate.isPlaying) return Result.retry()
+        ) return if (automatic) Result.success() else notReady()
+        if (CatalogPlaybackGate.isPlaying)
+            return if (automatic) Result.retry() else Result.failure(
+                workDataOf(KEY_STATUS to "playback_busy"))
         return try {
             withTimeout(6 * 60_000L) { syncMutex.withLock { syncBounded() } }
         } catch (_: TimeoutCancellationException) {
@@ -60,7 +64,7 @@ internal class StreamCatalogDeltaWorker(
     private suspend fun syncBounded(): Result {
         // Code-bound authorization must remain identical through every
         // resumed page. Never import one subscriber's rows into another code.
-        val sessionAtStart = StreamCodeSession.token(app) ?: return Result.success()
+        val sessionAtStart = StreamCodeSession.token(app) ?: return notReady()
         // A new redemption may refer to a different account/source even though
         // STREAM reuses the same local provider ID. A revision number is not an
         // account identity. Never reuse a previous subscriber's delta cursor.
@@ -72,9 +76,9 @@ internal class StreamCatalogDeltaWorker(
                 .putString(KEY_ACCOUNT_FINGERPRINT, accountFingerprint).commit())
         }
         val dao = BlofyDatabase.get(app).dao()
-        val provider = dao.provider(providerId) ?: return Result.success()
+        val provider = dao.provider(providerId) ?: return notReady()
         if (dao.activeProviderId() != providerId || !dao.hasCatalog(providerId))
-            return Result.success()
+            return notReady()
         val version = XtreamClient.api.objectResponse(
             "${StreamCodeSession.HOST}/player_api.php?action=get_blofy_catalog_version"
         )
@@ -106,11 +110,11 @@ internal class StreamCatalogDeltaWorker(
         var completedItems = prefs.getLong(KEY_APPLIED_COUNT, 0L)
         val fromPart = prefs.getInt(KEY_PART_INDEX, 0).coerceIn(0, stages.size)
         for (position in fromPart until stages.size) {
-            if (CatalogPlaybackGate.isPlaying) return Result.retry()
+            if (CatalogPlaybackGate.isPlaying) return recoverableFailure("playback_busy")
             val (kind, part) = stages[position]
             var cursor = if (position == fromPart) prefs.getLong(KEY_CURSOR, 0L) else 0L
             do {
-                if (CatalogPlaybackGate.isPlaying) return Result.retry()
+                if (CatalogPlaybackGate.isPlaying) return recoverableFailure("playback_busy")
                 if (!StreamCodeSession.isClaimed(app) ||
                     StreamCodeSession.token(app) != sessionAtStart ||
                     dao.activeProviderId() != providerId ||
@@ -201,6 +205,12 @@ internal class StreamCatalogDeltaWorker(
         return Result.success(workDataOf(KEY_STATUS to "updated",
             KEY_APPLIED to completedItems.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()))
     }
+
+    private fun notReady() = Result.failure(workDataOf(KEY_STATUS to "not_ready"))
+
+    private fun recoverableFailure(reason: String = "unavailable"): Result =
+        if (inputData.getBoolean(KEY_AUTO, true)) Result.retry()
+        else Result.failure(workDataOf(KEY_STATUS to reason))
 
     private fun clearCheckpoint() {
         prefs.edit().remove(KEY_PENDING_REVISION).remove(KEY_PENDING_BASE)
