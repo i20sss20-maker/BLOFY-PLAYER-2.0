@@ -1,6 +1,10 @@
 name: BLOFY STREAM NextGen - isolated PostgreSQL restore drill
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - 'ops/nextgen-restore-smoke.sh'
+      - '.github/workflows/blofy-nextgen-isolated-restore-drill.yml'
   push:
     branches:
       - feature/blofy-nextgen-integrated-diagnostics-20261112
@@ -15,7 +19,7 @@ jobs:
     timeout-minutes: 15
     services:
       postgres:
-        image: postgres:16
+        image: postgres:18
         env:
           POSTGRES_PASSWORD: ephemeral-synthetic-only
         ports:
@@ -37,7 +41,8 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y -qq postgresql-client
+          sudo apt-get install -y -qq postgresql-client-18
+          echo '/usr/lib/postgresql/18/bin' >> "$GITHUB_PATH"
       - name: Restore synthetic subscription ledger into a fresh isolated database
         shell: bash
         run: bash ops/nextgen-restore-smoke.sh
