@@ -119,6 +119,47 @@ test('no subscriber is created on issuance; duration begins only when redeemed',
   /stream_code_unavailable/);
  assert.equal(state.accounts.length,1,'cannot create account from used code');
 });
+test('CRITICAL app-only 365-day voucher stays dormant for 90 days until its FIRST activation inside BLOFY STREAM',async()=>{
+  const state=fakeDb();
+  const soldAt=Date.parse('2026-11-09T02:00:00Z');
+  let current=soldAt;
+  const system=createStreamDurationCodes({pool:state.pool,keyHex,clock:()=>current});
+  const {items}=await system.issue({durationDays:365,quantity:1,channel:'app'});
+  const voucher=items[0].code,device='d'.repeat(64);
+  assert.equal(items[0].channel,'app');
+  assert.equal(items[0].status,'unused');
+  assert.equal(items[0].redeemedAt,null);
+  assert.equal(items[0].expiresAt,null);
+  assert.equal(state.codes[0].redeemed_at,null);
+  assert.equal(state.codes[0].expires_at,null);
+  assert.equal(state.accounts.length,0,'issuing a voucher cannot start the paid subscription');
+  current+=90*86400000;
+  const before=await system.list();
+  assert.equal(before.items[0].status,'unused');
+  assert.equal(before.items[0].redeemedAt,null);
+  assert.equal(before.items[0].expiresAt,null,'unused app code remains without expiry after 90 days');
+  await assert.rejects(system.redeem(voucher,'https://blofyplayer.com'),
+    /stream_code_wrong_product/);
+  assert.equal(state.accounts.length,0,'web Xtream redemption cannot activate an app-only voucher');
+  const activated=await system.redeem(voucher,'https://blofyplayer.com',{
+    appOnly:true,deviceKey:device
+  });
+  const initialStart=current,initialExpiry=initialStart+365*86400000;
+  assert.equal(activated.account.activatedAt,initialStart,
+    'subscription begins on first successful app redemption, not issuance');
+  assert.equal(activated.account.expiresAt,initialExpiry);
+  assert.equal(state.accounts.length,1);
+  current+=180*86400000;
+  const loginAgain=await system.redeem(voucher,'https://blofyplayer.com',{
+    appOnly:true,deviceKey:device
+  });
+  assert.equal(loginAgain.recovered,true);
+  assert.equal(loginAgain.account.activatedAt,initialStart);
+  assert.equal(loginAgain.account.expiresAt,initialExpiry,
+    're-login after 180 days cannot create another annual period');
+  assert.equal(state.accounts.length,1);
+});
+
 test('unredeemed codes can be revoked, already redeemed codes cannot',async()=>{
  const state=fakeDb();
  const system=createStreamDurationCodes({pool:state.pool,keyHex});
