@@ -43,8 +43,6 @@ internal class StreamCatalogDeltaWorker(
         if (!BuildConfig.CODE_ONLY_LOGIN || !StreamCodeSession.isClaimed(app) ||
             !CatalogSyncState.isReady(app, providerId)
         ) return Result.success()
-        if (inputData.getBoolean(KEY_AUTO, true) &&
-            !CatalogAutoRefreshPolicy.isEnabled(app)) return Result.success()
         if (CatalogPlaybackGate.isPlaying) return Result.retry()
         return try {
             withTimeout(6 * 60_000L) { syncMutex.withLock { syncBounded() } }
@@ -88,6 +86,9 @@ internal class StreamCatalogDeltaWorker(
         val priorPending = prefs.getLong(KEY_PENDING_REVISION, -1L)
         val priorBase = prefs.getLong(KEY_PENDING_BASE, -1L)
         if (current == base) {
+            // A successful no-change poll is still useful diagnostic information.
+            if (!prefs.edit().putLong(KEY_LAST_CHECK, System.currentTimeMillis()).commit())
+                return Result.retry()
             clearCheckpoint()
             return Result.success(workDataOf(KEY_STATUS to "up_to_date"))
         }
@@ -190,7 +191,8 @@ internal class StreamCatalogDeltaWorker(
         if (endVersion["revision"].asNumber()?.toLong() != current ||
             endVersion["syncStatus"] != "online") return Result.retry()
         if (!prefs.edit().putLong(KEY_COMPLETE_REVISION,current)
-                .putLong(KEY_LAST_SUCCESS,System.currentTimeMillis()).commit())
+                .putLong(KEY_LAST_SUCCESS,System.currentTimeMillis())
+                .putLong(KEY_LAST_CHECK,System.currentTimeMillis()).commit())
             return Result.retry()
         clearCheckpoint()
         // Invalidate derived home metadata only after all nine parts have been
@@ -216,6 +218,7 @@ internal class StreamCatalogDeltaWorker(
         private const val KEY_CURSOR = "cursor"
         private const val KEY_APPLIED_COUNT = "applied"
         private const val KEY_LAST_SUCCESS = "last_success"
+        private const val KEY_LAST_CHECK = "last_check"
         private const val KEY_LAST_ATTEMPT = "last_attempt"
         const val KEY_AUTO = "auto"
         const val KEY_STATUS = "status"
@@ -226,6 +229,10 @@ internal class StreamCatalogDeltaWorker(
         private const val PERIODIC = "blofy-stream-56-periodic-"
 
         fun workName(providerId: String) = UNIQUE + providerId
+
+        /** Only reads a timestamp, no network or subscriber credentials. */
+        fun lastCheckedAt(context: Context): Long = context.applicationContext
+            .getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(KEY_LAST_CHECK, 0L)
 
         fun enqueue(context: Context, providerId: String, automatic: Boolean = true) {
             if (!BuildConfig.CODE_ONLY_LOGIN || providerId != StreamCodeSession.providerId) return
@@ -242,19 +249,22 @@ internal class StreamCatalogDeltaWorker(
         }
 
         fun enqueueIfDue(context: Context, providerId: String) {
-            if (!BuildConfig.CODE_ONLY_LOGIN || !CatalogAutoRefreshPolicy.isEnabled(context))
+            if (!BuildConfig.CODE_ONLY_LOGIN || providerId != StreamCodeSession.providerId)
                 return
             val prefs=context.applicationContext.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
             val now=System.currentTimeMillis()
             val last=prefs.getLong(KEY_LAST_ATTEMPT,0L)
-            if (last>0L && now>=last && now-last<6*60*60_000L) return
+            if (!StreamCatalogRefreshCadence.isEntryCheckDue(last, now)) return
             if (prefs.edit().putLong(KEY_LAST_ATTEMPT,now).commit())
                 enqueue(context,providerId,true)
         }
 
         fun schedule(context: Context, providerId: String) {
             if (!BuildConfig.CODE_ONLY_LOGIN || providerId != StreamCodeSession.providerId) return
-            val request=PeriodicWorkRequestBuilder<StreamCatalogDeltaWorker>(24,TimeUnit.HOURS)
+            // WorkManager schedules best-effort checks, not exact wall-clock polling.
+            // The revision endpoint is cheap; pages download only on a changed revision.
+            val request=PeriodicWorkRequestBuilder<StreamCatalogDeltaWorker>(
+                StreamCatalogRefreshCadence.PERIODIC_MINUTES, TimeUnit.MINUTES)
                 .setConstraints(Constraints.Builder()
                     .setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .setInputData(workDataOf(KEY_AUTO to true))
@@ -270,4 +280,18 @@ private fun Any?.asNumber(): Number? = when(this) {
     is Number -> this
     is String -> this.toLongOrNull()
     else -> null
+}
+
+/**
+ * Small server revision checks are safe to run often. Full catalogue downloads
+ * happen only when that revision changes, and WorkManager defers during playback.
+ * Not a push service: sleeping devices may be checked later by Android.
+ */
+internal object StreamCatalogRefreshCadence {
+    const val ENTRY_MINIMUM_GAP_MS = 20L * 60_000L
+    const val PERIODIC_MINUTES = 30L
+
+    fun isEntryCheckDue(lastAttemptMs: Long, nowMs: Long): Boolean =
+        lastAttemptMs <= 0L || nowMs < lastAttemptMs ||
+            nowMs - lastAttemptMs >= ENTRY_MINIMUM_GAP_MS
 }
