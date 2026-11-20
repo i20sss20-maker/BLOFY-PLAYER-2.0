@@ -93,7 +93,7 @@ test('signed-in cart safely exposes hosted Geidea fallback when drop-in SDK is a
  assert.equal(nodes.get('open-geidea').href,hosted,'manual same-session fallback link exists');
  assert.equal(nodes.get('open-geidea').hidden,false);
  assert.equal(session.get('blofy.shop.order.'+orderId),token,'receipt secret stays local');
- assert.equal(nodes.get('started').hidden,false);
+ assert.equal(nodes.get('started').hidden,true,'cart stays focused on basket and payment');
  assert.doesNotMatch(html,/geideaCheckout.min.js/);
  assert.equal(JSON.parse(session.get('blofy.shop.pending-checkout.v1')).orderId,orderId,
    'new session is preserved for safe recovery after browser back');
@@ -105,10 +105,15 @@ test('signed-in cart safely exposes hosted Geidea fallback when drop-in SDK is a
  'started','order-number','open-geidea','copy-private-link','check-pending','pending-status'])el(id);
  vm.runInNewContext(code,{...ctx,window:{}},{filename:'store-cart.js'});
  await new Promise(resolve=>setTimeout(resolve,20));
- assert.equal(nodes.get('checkout').disabled,true,'outstanding Geidea session blocks new checkout');
+ assert.equal(nodes.get('checkout').disabled,false,'continue button remains usable for same session');
  assert.equal(nodes.get('open-geidea').href,hosted,'customer can resume the SAME Geidea session');
  assert.equal(nodes.get('open-geidea').hidden,false);
- assert.match(nodes.get('pending-status').textContent,/نفس الجلسة/);
+ assert.equal(nodes.get('started').hidden,true,'no pending-order banner on cart');
+ const sameSessionCount=calls.filter(x=>x.path==='/api/v1/store/cart/checkout').length;
+ events.get('checkout:click')();
+ await new Promise(resolve=>setTimeout(resolve,10));
+ assert.equal(redirects.at(-1),hosted,'button resumes only original provider session');
+ assert.equal(calls.filter(x=>x.path==='/api/v1/store/cart/checkout').length,sameSessionCount);
  assert.equal(calls.filter(x=>x.path==='/api/v1/store/cart/checkout').length,1,
    'reloading the page cannot create another payment session');
  // Switching device or clearing tab sessionStorage must still recover using the
@@ -120,13 +125,13 @@ test('signed-in cart safely exposes hosted Geidea fallback when drop-in SDK is a
  'started','order-number','open-geidea','copy-private-link','check-pending','pending-status','retry-pending'])el(id);
  vm.runInNewContext(code,{...ctx,window:{}},{filename:'store-cart.js'});
  await new Promise(resolve=>setTimeout(resolve,25));
- assert.equal(nodes.get('checkout').disabled,true,
-   'cross-device recovery must block another payment session');
+ assert.equal(nodes.get('checkout').disabled,false,
+   'customer can resume cross-device payment from the cart');
  assert.equal(nodes.get('open-geidea').href,hosted);
  assert.equal(nodes.get('open-geidea').hidden,false);
  assert.equal(nodes.get('copy-private-link').hidden,true,
    'owner recovery never fabricates a private receipt bearer token');
- assert.match(nodes.get('pending-status').textContent,/نفس جلسة Geidea/);
+ assert.equal(nodes.get('started').hidden,true);
  assert.equal(calls.filter(x=>x.path==='/api/v1/store/cart/checkout').length,1);
  // Lost checkout response: server has created exactly one provider session,
  // browser must look it up from verified account instead of blindly retrying.
@@ -143,11 +148,11 @@ test('signed-in cart safely exposes hosted Geidea fallback when drop-in SDK is a
  lostClick();
  await new Promise(resolve=>setTimeout(resolve,30));
  assert.equal(calls.filter(x=>x.path==='/api/v1/store/cart/checkout').length,beforeLost+1);
- assert.equal(nodes.get('checkout').disabled,true,'pending recovered without another checkout');
+ assert.equal(nodes.get('checkout').disabled,false,'recovered payment can be resumed');
  assert.equal(nodes.get('open-geidea').href,hosted);
  assert.equal(nodes.get('open-geidea').hidden,false);
  assert.equal(nodes.get('copy-private-link').hidden,true,'lost response never invents secret');
- assert.match(nodes.get('message').textContent,/استرجعنا طلب الدفع السابق/);
+ assert.match(nodes.get('message').textContent,/إكمال الدفع/);
 
  // Old basket checkout must not prevent shopping for a different product.
  // The account's current basket still has a mandatory server preflight.

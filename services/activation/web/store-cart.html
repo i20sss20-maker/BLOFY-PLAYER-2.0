@@ -6,12 +6,12 @@
   <meta name="theme-color" content="#faf9f7">
   <meta name="description" content="سلة BLOFY — مراجعة الاشتراكات والدفع الآمن في خطوات بسيطة.">
   <meta name="robots" content="noindex,nofollow">
-  <title>إتمام الطلب | BLOFY STORE</title>
+  <title>سلة المشتريات | BLOFY STORE</title>
   <link rel="icon" href="/blofy-logo.png">
   <link rel="stylesheet" href="/store/cart.css?v=5">
 <link rel="stylesheet" href="/store/checkout-theme.css?v=3-trial-profile">
 <link rel="stylesheet" href="/store/visual.css?v=20261119-2">
-  <script defer src="/store/cart.js?v=12-apple-pay-hpp"></script>
+  <script defer src="/store/cart.js?v=13-cart-only-ui"></script>
 </head>
 <body class="cart-experience">
   <header class="top">
@@ -28,12 +28,12 @@
   </header>
   <main class="wrap" id="cart-main">
     <div class="cart-hero">
-      <div><span class="eyebrow">BLOFY CHECKOUT</span><h1>إتمام الطلب</h1><p>راجع اشتراكاتك وادفع مرة واحدة. أكوادك تظهر في حسابك بعد تأكيد الدفع.</p></div>
+      <div><span class="eyebrow">BLOFY CHECKOUT</span><h1>سلة المشتريات</h1><p>راجع اشتراكاتك وادفع مرة واحدة. أكوادك تظهر في حسابك بعد تأكيد الدفع.</p></div>
       <a class="secondary back-shopping" href="/#products">متابعة التسوق ←</a>
     </div>
     <ol class="checkout-steps" aria-label="خطوات إتمام الطلب">
       <li id="step-cart" class="step active"><span class="step-number">1</span><span>السلة</span></li>
-      <li id="step-account" class="step"><span class="step-number">2</span><span>تأكيد البريد والبيانات</span></li>
+      <li id="step-account" class="step"><span class="step-number">2</span><span>بيانات الحساب</span></li>
       <li id="step-payment" class="step"><span class="step-number">3</span><span id="step-payment-label">الدفع</span></li>
     </ol>
     <div class="layout cart-layout">
@@ -117,7 +117,7 @@
         </div>
         <p class="payment-wallet-note" id="payment-wallet-note" role="status" aria-live="polite">جارٍ التحقق من توفر Apple Pay لدى جيديا…</p>
         <p class="safe" id="cart-sync" role="status" aria-live="polite">نحفظ السلة في حسابك بعد تسجيل الدخول.</p>
-        <div class="cart-recovery-actions"><button type="button" class="secondary" id="retry-cart-sync" hidden>إعادة حفظ السلة</button><button type="button" class="secondary" id="retry-pending" hidden>مراجعة الطلب السابق</button></div>
+        <div class="cart-recovery-actions"><button type="button" class="secondary" id="retry-cart-sync" hidden>إعادة حفظ السلة</button><button type="button" class="secondary" id="retry-pending" hidden>إعادة المحاولة</button></div>
         <output id="message" role="status" aria-live="polite"></output>
         <div id="trial-cart-recovery" class="trial-cart-recovery" hidden>
           <button type="button" id="trial-cart-recover" class="secondary">↻ استرجاع تجربتي المجانية من حسابي</button>

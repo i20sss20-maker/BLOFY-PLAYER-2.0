@@ -74,7 +74,7 @@
  }
  function totalCodes(value){return value.reduce((n,x)=>n+x.quantity*(x.sku==='bundle-2y'?2:1),0);}
  function save(){
-   try{localStorage.setItem(storageKey,JSON.stringify(items));queueSync();return true;}
+   try{localStorage.setItem(storageKey,JSON.stringify(items));queueSync(true);return true;}
    catch(_){message('التخزين المحلي غير متاح؛ قد تختفي السلة عند إغلاق الصفحة.');return false;}
  }
  function restore(){
@@ -239,16 +239,16 @@
  function updateCheckoutButton(){
    const button=$('checkout'),mobile=$('mobile-checkout');
    const needsProfile=signedIn&&profileRequired&&!profileComplete;
-   const waiting=paymentOpen?'لديك طلب سابق — تحقق من حالته':
-     !signedIn?'تأكيد البريد للمتابعة':
+   const waiting=paymentOpen?'إكمال الدفع':
+     !signedIn?'متابعة الدفع':
      needsProfile?'أكمل الاسم والجوال لاستلام الكود':
      !cloudSynced?'جارٍ حفظ السلة...':
-     !pendingChecked?'جارٍ مراجعة الطلب السابق...':
+     !pendingChecked?'جارٍ تجهيز السلة...':
      trialLine()?'استلام التجربة المجانية — 0 ر.س':
      'إكمال الطلب والدفع';
    const canProceed=trialLine()?trialReady:(ready&&paidLines().length>0);
    const enabled=items.length>0&&quoted!==null&&canProceed&&
-      (!signedIn||needsProfile||cloudSynced&&pendingChecked&&!creating&&!paymentOpen);
+      (!signedIn||needsProfile||cloudSynced&&pendingChecked&&!creating);
    button.textContent=waiting;
    mobile.textContent=waiting;
    button.disabled=!enabled;
@@ -281,7 +281,16 @@
    if(cloudSynced)$('retry-cart-sync').hidden=true;
    updateCheckoutButton();
  }
- function queueSync(){
+ function queueSync(edited=false){
+   // Keep basket controls editable while protecting an unsettled payment.
+   // The server continues to reject an accidental second session for same basket.
+   if(edited){
+     paymentOpen=false;
+     $('started').hidden=true;
+     $('geidea-embedded-panel').hidden=true;
+     $('pending-status').textContent='';
+     $('retry-pending').hidden=true;
+   }
    if(!signedIn||cloudRevision===null)return;
    cloudSynced=false;pendingChecked=false;
    $('retry-cart-sync').hidden=true;authUI();
@@ -385,7 +394,7 @@
    currentOrder=pending.orderId;
    try{accessToken=sessionStorage.getItem('blofy.shop.order.'+currentOrder)||null;}
    catch(_){accessToken=null;}
-   $('started').hidden=false;
+   $('started').hidden=true;
    $('order-number').textContent=pending.orderNumber||currentOrder;
    $('check-pending').href=accessToken?
      '/store/orders#order='+encodeURIComponent(currentOrder):'/store/account';
@@ -412,7 +421,8 @@
      if(snapshot!==cartSnapshot())return;
      pendingChecked=true;
      if(data.pending)showOwnedPending(data);
-     else if(!paymentOpen){
+     else{
+       paymentOpen=false;
        $('pending-status').textContent='';
        $('started').hidden=true;
      }
@@ -444,7 +454,7 @@
    // Block creation of another Geidea session while checking the older one.
    paymentOpen=true;
    currentOrder=pending.orderId;accessToken=token;
-   $('started').hidden=false;
+   $('started').hidden=true;
    $('order-number').textContent=pending.orderNumber||pending.orderId;
    $('check-pending').href='/store/orders#order='+encodeURIComponent(pending.orderId);
    $('open-geidea').hidden=true;
@@ -749,9 +759,21 @@
      return;
    }
    if(!cloudSynced){message('سلتك لم تُحفظ بعد في الحساب. تأكد من اتصالك قبل الاستلام.');return;}
-   if(creating||paymentOpen||!pendingChecked||!quoted||!items.length)return;
+   if(creating||!pendingChecked||!quoted||!items.length)return;
    if(trialLine()){await claimFreeTrialFromCart();return;}
    if(!ready||!paidLines().length)return;
+   if(paymentOpen){
+     // The normal cart pay button resumes the SAME provider session.
+     const existing=$('open-geidea');
+     const url=String(existing.href||'');
+     const sessionId=url.split('?')[1];
+     if(!existing.hidden&&url.startsWith('https://www.ksamerchant.geidea.net/hpp/checkout/?')&&UUID.test(sessionId||'')){
+       location.assign(url);return;
+     }
+     // Do not start a second charge while the first payment is unsettled.
+     message('انتهت جلسة الدفع. افتح «طلباتي» للاطمئنان على العملية قبل الدفع مرة أخرى.');
+     return;
+   }
    // A direct Apple Pay action must not create any new session unless the
    // backend explicitly enables it and this browser reports Apple Pay support.
    if(preferApplePay&&(!applePayMerchantEnabled||!applePaySupported()))return;
@@ -781,7 +803,7 @@
          expiresAt:Date.parse(data.sessionExpiresAt)||Date.now()+12*60*1000
        }));
      }catch(_){}
-     $('started').hidden=false;$('order-number').textContent=data.orderNumber;
+     $('started').hidden=true;$('order-number').textContent=data.orderNumber;
      const paymentLink=$('open-geidea');
      paymentLink.href=paymentUrl;paymentLink.hidden=false;
      paymentOpen=true;
@@ -814,7 +836,7 @@
          const previous=await request('/api/v1/store/cart/pending',body());
          if(previous.pending){
            showOwnedPending(previous);
-           message('استرجعنا طلب الدفع السابق من حسابك. استخدم جلسة Geidea نفسها، بدون إنشاء فاتورة جديدة.');
+           message('يمكنك إكمال الدفع من الزر نفسه.');
            return;
          }
          if(err.message==='store_pending_checkout_exists'){
@@ -953,7 +975,7 @@
    this.value=this.value.toUpperCase().replace(/[^A-Z0-9_-]/g,'').slice(0,20);
    resetPrice();
  });
- $('apply').addEventListener('click',()=>{queueSync();void refresh();});
+ $('apply').addEventListener('click',()=>{queueSync(true);void refresh();});
  items=restore();addFromURL();render();
  void initAccount();
  fetch('/api/v1/store/products',{cache:'no-store',headers:{
