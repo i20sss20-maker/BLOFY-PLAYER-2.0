@@ -12,8 +12,9 @@ const customerId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const token='x'.repeat(43);
 const item={sku:'stream-3m',quantity:1};
 const hosted='https://www.ksamerchant.geidea.net/hpp/checkout/?'+sessionId;
+const pilotToken='Wallet_Test_Pilot_Blofy_20261120_X9f7_1234';
 
-async function fixture({merchantEnabled=true,deviceSupported=true}={}){
+async function fixture({merchantEnabled=true,deviceSupported=true,pilotMode=false}={}){
  const storage=new Map([['blofy.shop.cart.v1',JSON.stringify([item])],
   ['blofy.shop.cart.owner.v1',customerId]]);
  const saved=new Map(),calls=[],redirects=[],events=new Map(),nodes=new Map();
@@ -37,23 +38,31 @@ async function fixture({merchantEnabled=true,deviceSupported=true}={}){
    return response(200,{customerId,email:'person@example.test'});
   if(path==='/api/v1/store/account/cart'&&options.method!=='POST')
    return response(200,{items:[item],couponCode:'',revision:1});
-  if(path==='/api/v1/store/products')
-   return response(200,{checkoutAvailable:true,paymentMethods:{cards:true,applePay:merchantEnabled}});
+  if(path==='/api/v1/store/products'){
+   const pilotValid=pilotMode&&options.headers?.['x-blofy-apple-pay-pilot']===pilotToken;
+   return response(200,{checkoutAvailable:true,
+    paymentMethods:{cards:true,applePay:pilotMode?pilotValid:merchantEnabled,
+     applePayTestMode:pilotValid}});
+  }
   if(path==='/api/v1/store/cart/pending')
    return response(200,{ok:true,pending:false});
   if(path==='/api/v1/store/cart/quote')
    return response(200,{codeCount:1,subtotalMinor:5000,discountMinor:0,
     totalMinor:5000,items:[{...item,lineTotalMinor:5000}]});
-  if(path==='/api/v1/store/cart/checkout')
+  if(path==='/api/v1/store/cart/checkout'){
+   if(pilotMode)assert.equal(JSON.parse(options.body).applePayTestToken,pilotToken);
    return response(201,{provider:'geidea',checkoutMode:'redirect',sku:'cart',
     orderId,sessionId,sessionExpiresAt:new Date(Date.now()+9*60000).toISOString(),
     orderNumber:'BF-261120-BBBBBBBB',accessToken:token,priceMinor:5000,currency:'SAR'});
+  }
   throw Error('unexpected request '+path);
  };
  const localStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)};
  const sessionStorage={getItem:k=>saved.get(k)||null,
   setItem:(k,v)=>saved.set(k,v),removeItem:k=>saved.delete(k)};
- const location={search:'',origin:'https://blofyplayer.com',
+ const location={search:'',pathname:'/store/cart',
+  hash:pilotMode?'#applepay_test='+pilotToken:'',
+  origin:'https://blofyplayer.com',
   assign(path){redirects.push(path);}};
  const ctx={window:{...deviceSupported?{ApplePaySession:{canMakePayments:()=>true}}:{}},
   document,fetch,localStorage,sessionStorage,location,
@@ -65,7 +74,7 @@ async function fixture({merchantEnabled=true,deviceSupported=true}={}){
 }
 
 test('supported Apple Wallet creates ONE order and redirects to same Geidea hosted session',async()=>{
- const f=await fixture();
+ const f=await fixture({pilotMode:true});
  assert.equal(f.nodes.get('checkout-apple-pay').hidden,false);
  assert.equal(f.nodes.get('checkout-apple-pay').disabled,false);
  assert.equal(f.nodes.get('apple-pay-option').hidden,false);
@@ -77,6 +86,7 @@ test('supported Apple Wallet creates ONE order and redirects to same Geidea host
  assert.equal(f.calls.filter(x=>x.path==='/api/v1/store/cart/checkout').length,1);
  assert.equal(f.sdkRequests(),0,'Apple Pay must not depend on drop-in iframe or site-owned wallet tokens');
  assert.equal(f.saved.get('blofy.shop.order.'+orderId),token);
+ assert.equal(f.saved.get('blofy.shop.applepay.pilot.v1'),pilotToken);
  assert.equal(JSON.parse(f.saved.get('blofy.shop.pending-checkout.v1')).sessionId,sessionId);
  assert.equal(f.nodes.get('checkout-apple-pay').disabled,true,
   'same session remains locked while payment is in progress');

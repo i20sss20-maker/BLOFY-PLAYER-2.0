@@ -8,6 +8,7 @@ import {encryptStreamCode,decryptStreamCode} from './xtream-code-vault.mjs';
 import {CART_SKU,parseStoreCart,cartVouchers,publicOrderNumber} from './store-cart.mjs';
 import {auditPaidFulfillment} from './store-fulfillment-audit.mjs';
 import {createStoreRenewalFlow,RENEWAL_SKU} from './store-renewal-checkout.mjs';
+import {isAuthorizedApplePayPilot} from './store-apple-pay-pilot.mjs';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const API='https://api.ksamerchant.geidea.net';
@@ -98,6 +99,7 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
      'ALTER TABLE blofy_store_geidea_orders ADD COLUMN IF NOT EXISTS cart_gross_minor INTEGER',
      'ALTER TABLE blofy_store_geidea_orders ADD COLUMN IF NOT EXISTS public_order_number TEXT',
      'ALTER TABLE blofy_store_geidea_orders ADD COLUMN IF NOT EXISTS session_expires_at TIMESTAMPTZ',
+     'ALTER TABLE blofy_store_geidea_orders ADD COLUMN IF NOT EXISTS apple_pay_test BOOLEAN NOT NULL DEFAULT FALSE',
      'CREATE UNIQUE INDEX IF NOT EXISTS idx_blofy_store_order_number ON blofy_store_geidea_orders(public_order_number) WHERE public_order_number IS NOT NULL',
      'CREATE TABLE IF NOT EXISTS blofy_store_cart_vouchers ('+
        'order_id UUID NOT NULL REFERENCES blofy_store_geidea_orders(id),'+
@@ -639,6 +641,7 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
    if(!rateCheckout.consume(requestClientKey(req)).allowed)
      return json(res,429,{error:'rate_limited'});
    const body=await readJson(req),cart=parseStoreCart(body?.items);
+   const pilotApplePay=isAuthorizedApplePayPilot(env,body?.applePayTestToken);
    if(!cart)return json(res,400,{error:'store_invalid_cart'});
    const couponCode=body?.couponCode?String(body.couponCode).trim().toUpperCase():null;
    if(couponCode&&!COUPON_RE.test(couponCode))
@@ -690,6 +693,8 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
          id,CART_SKU,'app',365,amountMinor,tokenHash(secret),
          JSON.stringify(cart.items),cart.totalMinor,number,couponCode,discountMinor
        ]);
+     if(pilotApplePay)await db.query(
+       'UPDATE blofy_store_geidea_orders SET apple_pay_test=TRUE WHERE id=$1',[id]);
      if(loginRequired){
        // Commit order and owner together to close the previous duplicate-order window.
        const ownership=await db.query(
@@ -707,7 +712,8 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
    const request={
      amount:(amountMinor/100).toFixed(2),currency:'SAR',timestamp,merchantReferenceId:id,
      signature:createSignature({publicKey,password,amountMinor,reference:id,timestamp}),
-     paymentOperation:'Pay',language:'ar',hideWallets:geideaHiddenWallets(env),
+     paymentOperation:'Pay',language:'ar',
+     hideWallets:pilotApplePay?[]:geideaHiddenWallets(env),
      expressCheckouts:[],acceptTabbyPaymentMethod:false,acceptTamaraPaymentMethod:false,
      appearance:{uiMode:'modal'},
      callbackUrl:base+'/api/v1/store/geidea/webhook',
@@ -786,7 +792,11 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
      throw err('store_provider_mismatch',409);
    const settled=await official(original);
    if(expectedProviderId&&settled.orderId!==expectedProviderId)throw err('store_provider_mismatch',409);
-   const status=verifiedPayment(settled,original,config);
+   // Existing card orders stay card-only. A pilot order can only be paid if
+   // Geidea confirms a real captured Pay for the explicitly flagged order.
+   const status=verifiedPayment(settled,original,{
+     ...config,applePayEnabled:config.applePayEnabled||original.apple_pay_test===true
+   });
    const db=await pool.connect();
    try{
     await db.query('BEGIN');
@@ -888,8 +898,12 @@ export function createStoreGeideaHandlers({pool,json,readJson,keyHex,authorizeAd
      const top=(await pool.query("SELECT sku,COUNT(*)::int AS n FROM blofy_store_geidea_orders WHERE status='paid' AND sku<>'bundle-2y' AND created_at>NOW()-INTERVAL '90 days' GROUP BY sku ORDER BY n DESC,sku LIMIT 1")).rows[0];
      if(top&&Number(top.n)>=10)popularSku=top.sku;
    }catch{}
-   return json(res,200,{provider:'geidea',checkoutAvailable,products:publicStorePlans(),offers:publicStoreOffers(),popularSku,
-   paymentMethods:{cards:true,applePay:checkoutAvailable&&config.applePayEnabled===true}});
+   const pilot=isAuthorizedApplePayPilot(env,req.headers?.['x-blofy-apple-pay-pilot']);
+   const applePayAvailable=checkoutAvailable&&(config.applePayEnabled===true||pilot);
+   return json(res,200,{provider:'geidea',checkoutAvailable,products:publicStorePlans(),
+     offers:publicStoreOffers(),popularSku,
+     paymentMethods:{cards:true,applePay:applePayAvailable,
+       applePayTestMode:applePayAvailable&&pilot&&config.applePayEnabled!==true}});
  }
  async function couponQuote(req,res){
    if(!enabled)return json(res,503,{error:'store_checkout_disabled'});

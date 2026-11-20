@@ -56,6 +56,9 @@ test('Three cart codes require one paid Geidea capture and never duplicate on ca
    if(sql.startsWith("UPDATE blofy_store_geidea_orders SET status='cancelled'")){
      const row=orders.get(args[0]);if(row)row.status='cancelled';return rows([row].filter(Boolean));
    }
+   if(sql.startsWith('UPDATE blofy_store_geidea_orders SET apple_pay_test=TRUE')){
+     orders.get(args[0]).apple_pay_test=true;return rows();
+   }
    if(sql.startsWith('UPDATE blofy_store_geidea_orders SET session_id=')){
      orders.get(args[0]).session_id=args[1];
      orders.get(args[0]).session_expires_at=args[2];return rows();
@@ -109,16 +112,22 @@ test('Three cart codes require one paid Geidea capture and never duplicate on ca
        orderId:providerId,merchantReferenceId:currentReference,merchantPublicKey:publicKey,
        isTest:false,status:'Success',detailedStatus:'Paid',amount:'270.00',currency:'SAR',
        totalAmount:'270.00',totalCapturedAmount:'270.00',totalRefundedAmount:'0.00',
-       paymentOperation:'Pay',transactions:[{type:'Pay',status:'Success',currency:'SAR',
-         amount:'270.00',paymentMethod:{type:'Card',brand:'visa'},
+       paymentOperation:'Pay',paymentMethod:{type:'Wallet',brand:'visa',wallet:'ApplePay'},
+       transactions:[{type:'Pay',status:'Success',currency:'SAR',
+         amount:'270.00',paymentMethod:{type:'Wallet',brand:'visa',wallet:'ApplePay'},
          codes:{responseCode:'000',detailedResponseCode:'000'}}]
      }})};
    }
    throw Error('Unexpected Geidea API: '+url);
  };
+ const applePayToken='Testing_Apple_Pay_Wallet_26_Nov_2026_AB';
  const env={BLOFY_PAYMENT_PROVIDER:'geidea',BLOFY_GEIDEA_CHECKOUT_ENABLED:'true',
    BLOFY_STORE_GEIDEA_ENABLED:'true',BLOFY_STORE_REQUIRE_CUSTOMER_LOGIN:'true',
-   BLOFY_GEIDEA_APPLE_PAY_ENABLED:'true',GEIDEA_LIVE_MERCHANT_PUBLIC_KEY:publicKey,
+   BLOFY_GEIDEA_APPLE_PAY_ENABLED:'false',
+   BLOFY_GEIDEA_APPLE_PAY_PILOT_ENABLED:'true',
+   BLOFY_GEIDEA_APPLE_PAY_PILOT_TOKEN_SHA256:crypto.createHash('sha256').update(applePayToken).digest('hex'),
+   BLOFY_GEIDEA_APPLE_PAY_PILOT_EXPIRES_AT:new Date(Date.now()+6*86400000).toISOString(),
+   GEIDEA_LIVE_MERCHANT_PUBLIC_KEY:publicKey,
    GEIDEA_LIVE_API_PASSWORD:pwd};
  const handler=createStoreGeideaHandlers({
    pool,keyHex:'a'.repeat(64),env,fetchImpl:provider,
@@ -137,10 +146,16 @@ test('Three cart codes require one paid Geidea capture and never duplicate on ca
  });
  const items=[{sku:'stream-6m',quantity:1},
    {sku:'bundle-2y',quantity:1,bundleSelection:['app','xtream']}];
+ const regularOptions={};
+ await handler({method:'GET',headers:{}},regularOptions,{pathname:'/api/v1/store/products'});
+ assert.equal(regularOptions.status,200);
+ assert.deepEqual(regularOptions.data.paymentMethods,{cards:true,applePay:false,applePayTestMode:false},
+  'regular shoppers must never see pilot wallet');
  const paymentOptions={};
- await handler({method:'GET',headers:{}},paymentOptions,{pathname:'/api/v1/store/products'});
+ await handler({method:'GET',headers:{'x-blofy-apple-pay-pilot':applePayToken}},
+   paymentOptions,{pathname:'/api/v1/store/products'});
  assert.equal(paymentOptions.status,200);
- assert.deepEqual(paymentOptions.data.paymentMethods,{cards:true,applePay:true});
+ assert.deepEqual(paymentOptions.data.paymentMethods,{cards:true,applePay:true,applePayTestMode:true});
  const quote={};
  await handler(request({items}),quote,{pathname:'/api/v1/store/cart/quote'});
  assert.equal(quote.status,200);
@@ -160,10 +175,13 @@ test('Three cart codes require one paid Geidea capture and never duplicate on ca
  assert.equal(paymentSessions,0,'never open payment session before secure order association');
  allowLink=true;
  const checkout={};
- await handler(request({items},true,true),checkout,{pathname:'/api/v1/store/cart/checkout'});
+ await handler(request({items,applePayTestToken:applePayToken},true,true),checkout,
+   {pathname:'/api/v1/store/cart/checkout'});
  assert.equal(checkout.status,201);
  assert.equal(checkout.data.priceMinor,27000);
  assert.equal(paymentSessions,1);
+ assert.equal(orders.get(checkout.data.orderId).apple_pay_test,true,
+  'only the authorized pilot order permits a verified Apple Pay capture');
  assert.equal(linked.length,1);
  assert.equal(linked[0].id,checkout.data.orderId);
  assert.equal(linked[0].customerId,'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee');

@@ -14,7 +14,17 @@
  const money=n=>(Number(n)/100).toLocaleString('ar-SA',{minimumFractionDigits:0,maximumFractionDigits:2})+' ر.س';
  let items=[],quoted=null,ready=false,creating=false,paymentOpen=false,currentOrder=null,accessToken=null;
  let trialReady=false,trialAvailable=0,embeddedWidget=null,sdkPromise=null;
- let applePayMerchantEnabled=false;
+ let applePayMerchantEnabled=false,applePayTestMode=false;
+ const applePilotKey='blofy.shop.applepay.pilot.v1';
+ // Private pilot token lives in the fragment (never transmitted in HTTP
+ // URL/server logs) and in this tab's sessionStorage, never in localStorage.
+ const fragment=String(location.hash||'').match(/^#applepay_test=([A-Za-z0-9_-]{32,90})$/);
+ if(fragment){
+   try{sessionStorage.setItem(applePilotKey,fragment[1]);}catch(_){}
+   try{history.replaceState(null,'',location.pathname+location.search);}catch(_){}
+ }
+ let applePayTestToken=null;
+ try{applePayTestToken=sessionStorage.getItem(applePilotKey)||null;}catch(_){}
  // Apple Pay is processed by the existing Geidea hosted checkout, not by BLOFY.
  // Only offer a wallet-specific action on a browser with Apple Pay capability.
  function applePaySupported(){
@@ -28,9 +38,10 @@
    $('checkout-apple-pay').hidden=!paid||!available;
    $('checkout-apple-pay').disabled=$('checkout').disabled||creating||paymentOpen;
    $('payment-wallet-note').textContent=!applePayMerchantEnabled?
-     'Apple Pay قيد التفعيل لدى جيديا؛ بطاقات مدى وVisa وMastercard متاحة.':
-     !available?'Apple Pay متاح على الأجهزة المدعومة مع Wallet؛ يمكنك الدفع بالبطاقة على هذا الجهاز.':
-     'Apple Pay: اضغط زر Apple Pay ثم اختره في صفحة جيديا الآمنة. لا يُخصم المبلغ من BLOFY.';
+     'Apple Pay قيد التحقق؛ بطاقات مدى وVisa وMastercard متاحة.':
+     !available?'Apple Pay متاح على أجهزة تدعمه مع Wallet؛ يمكنك الدفع بالبطاقة على هذا الجهاز.':
+     applePayTestMode?'اختبار Apple Pay خاص: اختر Apple Pay من صفحة جيديا. لا تعِد الدفع إذا فشل أو علق؛ تحقق من الطلب أولًا.':
+     'Apple Pay: اضغط زر Apple Pay ثم اختره في صفحة جيديا الآمنة.';
    $('geidea-payment-label').textContent=applePayMerchantEnabled?
      'مدى · VISA · Mastercard · Apple Pay (للأجهزة المدعومة)':
      'مدى · VISA · Mastercard';
@@ -750,6 +761,7 @@
    try{
      const embeddedReady=preferApplePay?false:await ensureEmbeddedGeidea();
      const payload=body();
+     if(preferApplePay&&applePayTestToken)payload.applePayTestToken=applePayTestToken;
      const data=await request('/api/v1/store/cart/checkout',payload);
      if(data.provider!=='geidea'||(data.checkoutMode!=='modal'&&data.checkoutMode!=='redirect')||
        data.sku!=='cart'||!UUID.test(data.orderId||'')||
@@ -944,11 +956,15 @@
  $('apply').addEventListener('click',()=>{queueSync();void refresh();});
  items=restore();addFromURL();render();
  void initAccount();
- fetch('/api/v1/store/products',{cache:'no-store',headers:{accept:'application/json'}})
+ fetch('/api/v1/store/products',{cache:'no-store',headers:{
+     accept:'application/json',
+     ...(applePayTestToken?{'x-blofy-apple-pay-pilot':applePayTestToken}:{})
+   }})
    .then(r=>r.ok?r.json():Promise.reject(Error('catalog_unavailable')))
    .then(data=>{
      ready=data.checkoutAvailable===true;
      applePayMerchantEnabled=ready&&data.paymentMethods?.applePay===true;
+     applePayTestMode=applePayMerchantEnabled&&data.paymentMethods?.applePayTestMode===true;
      updateApplePay();
      void refresh();
    })
