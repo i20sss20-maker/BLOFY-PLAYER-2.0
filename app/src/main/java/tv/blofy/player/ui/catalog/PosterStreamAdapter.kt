@@ -29,6 +29,45 @@ class PosterStreamAdapter(
 
     private var categoryNames: Map<String, String> = emptyMap()
     private val cachedMovieGenres: MutableMap<String, List<String>> = HashMap()
+    private val cachedArtworkUrls: MutableMap<String, List<String>> = HashMap()
+
+    /**
+     * Detail metadata is persistent even when Xtream list responses lack
+     * stream_icon/cover. Cache its vetted URLs separately without changing
+     * catalog rows, identities, favorites or playback.
+     */
+    fun rememberArtworkUrls(
+        artwork: Map<String, List<String>>,
+        reset: Boolean = false,
+        notifyExisting: Boolean = false
+    ) {
+        val merged = if (reset) HashMap(artwork) else HashMap(cachedArtworkUrls).apply {
+            putAll(artwork)
+        }
+        if (cachedArtworkUrls == merged) return
+        val changed = if (notifyExisting)
+            (cachedArtworkUrls.keys + merged.keys).filterTo(HashSet()) {
+                cachedArtworkUrls[it] != merged[it]
+            } else emptySet()
+        cachedArtworkUrls.clear()
+        cachedArtworkUrls.putAll(merged)
+        if (changed.isNotEmpty()) items.forEachIndexed { index, item ->
+            if (item.key in changed) notifyItemChanged(index, ARTWORK_META_PAYLOAD)
+        }
+    }
+
+    fun rememberArtworkUrl(key: String, urls: List<String>) {
+        val valid = urls.map(String::trim)
+            .filter { it.startsWith("http://", true) || it.startsWith("https://", true) }
+            .distinct()
+        if (valid.isEmpty() || cachedArtworkUrls[key] == valid) return
+        cachedArtworkUrls[key] = valid
+        val index = items.indexOfFirst { it.key == key }
+        if (index >= 0) notifyItemChanged(index, ARTWORK_META_PAYLOAD)
+    }
+
+    private fun artworkCandidates(item: StreamEntity): List<String?> =
+        listOf(item.icon) + cachedArtworkUrls[item.key].orEmpty() + listOf(item.backdrop)
 
     /** Source categories are already in the local DB; use them as optional genre evidence. */
     fun updateCategoryNames(categories: List<CategoryEntity>) {
@@ -68,6 +107,7 @@ class PosterStreamAdapter(
 
     private companion object {
         const val GENRE_META_PAYLOAD = "movie_genre_line_only"
+        const val ARTWORK_META_PAYLOAD = "movie_artwork_only"
     }
 
     init { setHasStableIds(true) }
@@ -181,6 +221,12 @@ class PosterStreamAdapter(
             bindGenreLine(holder, item, ContentPresentation.of(item).badges)
             return
         }
+        if (payloads.isNotEmpty() && payloads.all { it == ARTWORK_META_PAYLOAD }) {
+            val item = items[position]
+            holder.artworkCandidates = artworkCandidates(item)
+            ArtworkLoader.load(holder.image, holder.artworkCandidates)
+            return
+        }
         super.onBindViewHolder(holder, position, payloads)
     }
 
@@ -194,7 +240,7 @@ class PosterStreamAdapter(
         holder.rating.text = item.rating?.takeIf(String::isNotBlank)?.let { "★ $it" }.orEmpty()
         holder.rating.visibility = if (holder.rating.text.isNotBlank()) View.VISIBLE else View.GONE
         renderFocus(holder, holder.itemView.hasFocus())
-        holder.artworkCandidates = listOf(item.icon, item.backdrop)
+        holder.artworkCandidates = artworkCandidates(item)
         holder.image.scaleType = if (item.kind == "live") ImageView.ScaleType.FIT_CENTER else ImageView.ScaleType.CENTER_CROP
         ArtworkLoader.load(holder.image, holder.artworkCandidates)
         holder.itemView.setOnClickListener { onClick(item) }
