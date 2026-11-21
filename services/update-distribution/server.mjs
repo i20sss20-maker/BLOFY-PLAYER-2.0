@@ -22,7 +22,7 @@ import { installGracefulShutdown } from './graceful-shutdown.mjs';
 import { apkRangePolicy, apkCacheControl } from './apk-range-policy.mjs';
 import { createSignedApkMirror } from './signed-apk-mirror.mjs';
 import { createApkMirrorReadiness } from './apk-readback-probe.mjs';
-import { verifySignedStreamUploadOidc, approvedStreamUpload, STREAM_55836_APK, STREAM_56_APK, STREAM_5602_APK } from './stream-upload-oidc.mjs';
+import { verifySignedStreamUploadOidc, approvedStreamUpload, STREAM_55836_APK, STREAM_56_APK, STREAM_5602_APK, STREAM_5603_APK } from './stream-upload-oidc.mjs';
 import { UPDATE_SITE_CANONICAL, updateRobotsTxt, updateSitemapXml, renderMissingPublicPage, isPublicHtmlRequest } from './public-search-pages.mjs';
 
 const PORT = Number(process.env.PORT || 3000);
@@ -1048,7 +1048,8 @@ const server = http.createServer(async (req, res) => {
       const isPreviousStreamApk = localReleaseMatch[1] === STREAM_PREVIOUS_RELEASE_FILENAME;
       const isApprovedNewStreamApk = localReleaseMatch[1] === STREAM_55836_APK ||
         localReleaseMatch[1] === STREAM_56_APK ||
-        localReleaseMatch[1] === STREAM_5602_APK;
+        localReleaseMatch[1] === STREAM_5602_APK ||
+        localReleaseMatch[1] === STREAM_5603_APK;
       const isOwnerStreamTestApk = localReleaseMatch[1] === STREAM_TEST_FILENAME ||
         localReleaseMatch[1] === STREAM_LIVE_FIX_TEST_FILENAME;
       if (BLOFY_ONLY_CURRENT && !isCurrentStreamApk && !isPreviousStreamApk && !isApprovedNewStreamApk && !isOwnerStreamTestApk && ['GET', 'HEAD'].includes(method)) {
