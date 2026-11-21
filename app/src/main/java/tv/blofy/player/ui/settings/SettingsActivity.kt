@@ -6,6 +6,7 @@ import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
+import kotlinx.coroutines.delay
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -68,6 +69,7 @@ class SettingsActivity : AppCompatActivity() {
     private var refreshRetry: Int = 0
     private var refreshError: String? = null
     private var refreshRequested = false
+    private var streamRefreshInBackground = false
     private var refreshNotice: String? = null
     private val prefs by lazy { getSharedPreferences(RuntimeSettings.PREFS, MODE_PRIVATE) }
     private val isRtl: Boolean get() = resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL
@@ -660,6 +662,7 @@ class SettingsActivity : AppCompatActivity() {
         refreshItems = 0
         refreshError = null
         refreshRequested = false
+        streamRefreshInBackground = false
         refreshNotice = null
         refreshJobs = WorkManager.getInstance(applicationContext)
             .getWorkInfosForUniqueWorkLiveData(StreamCatalogDeltaWorker.workName(providerId))
@@ -726,16 +729,18 @@ class SettingsActivity : AppCompatActivity() {
             // Delta pages update locally while the current library remains visible.
             CatalogRefreshWorker.retireStreamFullRefresh(applicationContext, active.id)
             observeStreamRefresh(active.id)
-            if (refreshState == WorkInfo.State.RUNNING ||
-                refreshState == WorkInfo.State.ENQUEUED ||
-                refreshState == WorkInfo.State.BLOCKED) {
-                // The background job is already doing the requested work.
-                // Mark this as a user request so its final result is announced.
-                refreshRequested = true
+            if (refreshRequested && (refreshState == WorkInfo.State.RUNNING ||
+                    refreshState == WorkInfo.State.ENQUEUED ||
+                    refreshState == WorkInfo.State.BLOCKED)) {
+                // Prevent repeated taps from restarting a real manual refresh.
                 updateSyncStatus()
                 return
             }
+            // An automatic job may be queued in WorkManager retry/backoff for a
+            // long time. A user's explicit tap MUST start a fresh manual job,
+            // replacing that job but preserving the resumable catalog checkpoint.
             refreshRequested = true
+            streamRefreshInBackground = false
             refreshNotice = null
             refreshState = WorkInfo.State.ENQUEUED
             refreshStage = null
@@ -744,6 +749,18 @@ class SettingsActivity : AppCompatActivity() {
             updateSyncStatus()
             try {
                 StreamCatalogDeltaWorker.enqueue(applicationContext, active.id, automatic = false)
+                // This is only a VISUAL watchdog: the worker safely continues
+                // while the viewer uses the app. Never display a success until
+                // the actual worker reports SUCCEEDED.
+                lifecycleScope.launch {
+                    delay(StreamCatalogRefreshUiPolicy.FOREGROUND_SPINNER_MS)
+                    if (refreshRequested && (refreshState == WorkInfo.State.RUNNING ||
+                            refreshState == WorkInfo.State.ENQUEUED ||
+                            refreshState == WorkInfo.State.BLOCKED)) {
+                        streamRefreshInBackground = true
+                        if (!isFinishing && !isDestroyed) updateSyncStatus()
+                    }
+                }
             } catch (_: Exception) {
                 refreshState = WorkInfo.State.FAILED
                 refreshNotice = copy("تعذر بدء التحديث. جرّب مرة أخرى.",
@@ -797,8 +814,14 @@ class SettingsActivity : AppCompatActivity() {
                 else -> null
             }
             val checkedAt = StreamCatalogDeltaWorker.lastCheckedAt(applicationContext)
+            val showSpinner = StreamCatalogRefreshUiPolicy.showSpinner(
+                refreshRequested, busy, streamRefreshInBackground)
             val value = when {
                 refreshNotice != null -> copy("تعذر بدء التحديث", "Unable to start")
+                busy && streamRefreshInBackground && refreshRequested ->
+                    copy("التحديث مستمر بالخلفية", "Refreshing in background")
+                busy && !refreshRequested ->
+                    copy("تحديث تلقائي بالخلفية", "Automatic background refresh")
                 refreshState == WorkInfo.State.RUNNING ->
                     stage?.let { copy("جارٍ تحديث $it…", "Updating $it…") }
                         ?: copy("جارٍ فحص المحتوى…", "Checking content…")
@@ -816,6 +839,12 @@ class SettingsActivity : AppCompatActivity() {
             }
             val hint = when {
                 refreshNotice != null -> refreshNotice.orEmpty()
+                busy && streamRefreshInBackground ->
+                    copy("يمكنك المشاهدة الآن. التغييرات تُحفظ تدريجيًا، وسنعلن اكتمال التحديث عند نجاحه.",
+                        "Keep watching. Changes are saved progressively; completion is shown only after success.")
+                busy && !refreshRequested ->
+                    copy("المزامنة تلقائية ولا تحتاج انتظار هذه الصفحة أو الضغط على الزر.",
+                        "Automatic sync does not require waiting on this page or pressing the button.")
                 busy && refreshItems > 0 ->
                     copy("تمت معالجة $refreshItems عنصر • يمكنك متابعة المشاهدة",
                         "$refreshItems items processed • you can keep watching")
@@ -834,7 +863,7 @@ class SettingsActivity : AppCompatActivity() {
                     "Content updates automatically in the background when online.")
             }
             refreshCard.bind(copy("تحديث المحتوى", "Refresh content"), value, hint)
-            refreshCard.setBusy(busy)
+            refreshCard.setBusy(showSpinner)
             return
         }
 
