@@ -1,7 +1,7 @@
 name: BLOFY STREAM 56.0.3 customer journey QA (Android 9)
 on:
   push:
-    branches: [fix/stream-56-0-3-refresh-indicator-stall-20261121]
+    branches: [fix/stream-56-0-3-refresh-indicator-stall-20261121, release/stream-56-0-4-final-20261121]
     paths: ['.github/workflows/stream-customer-journeys-qa-20261121.yml', 'app/src/main/res/values*/stream_ui_strings.xml']
   workflow_dispatch:
 permissions:
