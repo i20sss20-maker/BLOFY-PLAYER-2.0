@@ -23,7 +23,7 @@ jobs:
             center="$(curl -fsS -m 20 "$base/downloads" || true)"
             if [ -n "$health" ] && [ -n "$center" ] &&
               echo "$feed" | jq -e '.release.app.versionCode==2000117 and .release.app.packageName=="tv.blofy.player.v2.stream"' >/dev/null 2>&1 &&
-              printf '%s' "$center" | grep -Fq 'BLOFY STREAM'; then
+              [[ "$center" == *"BLOFY STREAM"* ]]; then
               okay=1; break
             fi
             sleep 8
