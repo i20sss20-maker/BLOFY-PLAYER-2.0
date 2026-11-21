@@ -8,7 +8,8 @@ test('read-only whole-catalog scan covers all media types and episode map withou
  const calls=[],responses=[
   [{media_type:'live',total:9679,enabled_count:9679,unsafe_id_count:0},
    {media_type:'movie',total:24254,enabled_count:24254,movie_missing_extension_count:3,
-    advertised_direct_source_count:15},
+    advertised_direct_source_count:15,poster_url_present_count:13000,
+    poster_url_missing_count:11254,backdrop_metadata_count:331},
    {media_type:'series',total:5218,enabled_count:5218}],
   [{media_type:'movie',missing_category_reference_count:7}],
   [{media_type:'movie',mapped_items:101,mapped_items_no_longer_imported:2}],
@@ -27,6 +28,13 @@ test('read-only whole-catalog scan covers all media types and episode map withou
  assert.equal(r.episodes.mapped_episodes,88450);
  assert.equal(r.types.find(x=>x.type==='movie').movie_missing_extension_count,3);
  assert.equal(r.integrityWarnings,25);
+ assert.equal(r.posterCoverage.coversPresent,13000);
+ assert.equal(r.posterCoverage.coversMissing,11254);
+ assert.equal(r.posterCoverage.fallbackBackdropsStored,331);
+ assert.equal(r.posterCoverage.artworkActuallyRendered,false);
+ assert.equal(r.posterCoverage.urlsValidatedOverNetwork,false);
+ assert.ok(calls.some(x=>x.sql.includes('poster_url_missing_count')));
+ assert.ok(calls.some(x=>x.sql.includes('backdrop_metadata_count')));
  assert.equal(r.playbackVerified,false);
  assert.equal(r.readOnly,true);
  assert.equal(r.fullLocalCatalogScan,true);
