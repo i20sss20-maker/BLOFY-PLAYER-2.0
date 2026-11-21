@@ -10,6 +10,8 @@ jobs:
   emulator-api28:
     runs-on: ubuntu-latest
     timeout-minutes: 65
+    env:
+      ANDROID_I_WANT_MY_TCG: 'yes'
     steps:
       - uses: actions/checkout@v4
         with:
