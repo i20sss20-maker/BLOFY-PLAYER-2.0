@@ -59,6 +59,7 @@ import tv.blofy.player.ui.login.LoginActivity
 import tv.blofy.player.ui.login.StartupEntryState
 import tv.blofy.player.data.local.BlofyDatabase
 import tv.blofy.player.data.local.StreamEntity
+import tv.blofy.player.data.metadata.ProviderMetadataCache
 import tv.blofy.player.data.local.WatchStateEntity
 import tv.blofy.player.data.profile.ProfileLibraryStore
 import tv.blofy.player.ui.browser.ContentBrowserActivity
@@ -425,7 +426,8 @@ class HomeActivity : AppCompatActivity() {
         val genreDrama: List<StreamEntity> = emptyList(),
         val continueStates: Map<String, WatchStateEntity> = emptyMap(),
         val sourceMovies: List<StreamEntity> = emptyList(),
-        val sourceSeries: List<StreamEntity> = emptyList()
+        val sourceSeries: List<StreamEntity> = emptyList(),
+        val artwork: Map<String, List<String>> = emptyMap()
     )
 
     private fun loadHomeExperience() {
@@ -477,6 +479,16 @@ class HomeActivity : AppCompatActivity() {
                     .take(20).toList()
                 val heroes = if (BuildConfig.CODE_ONLY_LOGIN) latest.take(1)
                     else latest.filter { !it.backdrop.isNullOrBlank() }.take(6).ifEmpty { latest.take(6) }
+                // One bounded local query for already fetched detail covers.
+                // Home must not leave every shelf blue just because the source
+                // list omitted stream_icon but the detail cache has a poster.
+                val homeArtwork = if (BuildConfig.CODE_ONLY_LOGIN) {
+                    val visible = (heroes + latest.take(22) + rated + recommended +
+                        actionMovies + comedyMovies + dramaMovies +
+                        sourceMovies + sourceSeries + history.continueItems +
+                        history.recentItems).map { it.key }.distinct().take(240)
+                    ProviderMetadataCache.readArtworkForPage(applicationContext, visible)
+                } else emptyMap()
                 HomeData(
                     providerId = provider.id,
                     providerName = provider.name,
@@ -496,7 +508,8 @@ class HomeActivity : AppCompatActivity() {
                     genreComedy = comedyMovies,
                     genreDrama = dramaMovies,
                     sourceMovies = sourceMovies,
-                    sourceSeries = sourceSeries
+                    sourceSeries = sourceSeries,
+                    artwork = homeArtwork
                 )
                 }
             } catch (cancelled: CancellationException) {
@@ -624,7 +637,10 @@ class HomeActivity : AppCompatActivity() {
         heroArtwork?.let {
             it.animate().cancel()
             it.alpha = .10f
-            ArtworkLoader.loadPriority(it, listOf(item.backdrop, item.icon))
+            ArtworkLoader.loadPriority(it,
+                listOf(item.backdrop) +
+                    displayedHomeData?.artwork?.get(item.key).orEmpty().asReversed() +
+                    listOf(item.icon))
             it.animate().alpha(.88f).setDuration(330).start()
         }
         heroContent?.apply {
@@ -842,7 +858,10 @@ class HomeActivity : AppCompatActivity() {
 
         val poster = ImageView(this@HomeActivity).apply { scaleType = ImageView.ScaleType.CENTER_CROP; setBackgroundColor(0xFF17101F.toInt()) }
         addView(poster, FrameLayout.LayoutParams(-1, -1).apply { setMargins(dp(2), dp(2), dp(2), dp(2)) })
-        ArtworkLoader.loadPriority(poster, if (landscape) listOf(item.backdrop, item.icon) else listOf(item.icon, item.backdrop))
+        val savedArtwork = displayedHomeData?.artwork?.get(item.key).orEmpty()
+        ArtworkLoader.loadPriority(poster, if (landscape)
+            listOf(item.backdrop) + savedArtwork.asReversed() + listOf(item.icon)
+        else listOf(item.icon) + savedArtwork + listOf(item.backdrop))
 
         val badges = qualityBadges(item)
         if (badges.isNotEmpty()) {
@@ -930,7 +949,10 @@ class HomeActivity : AppCompatActivity() {
         val card = FrameLayout(this).apply {
             id = View.generateViewId(); isFocusable = true; isFocusableInTouchMode = remote; isClickable = true; background = heroSurface(); clipChildren = true
             val art = ImageView(this@HomeActivity).apply { scaleType = ImageView.ScaleType.CENTER_CROP; alpha = .50f }
-            addView(art, FrameLayout.LayoutParams(-1, -1)); ArtworkLoader.loadPriority(art, listOf(item.backdrop, item.icon))
+            addView(art, FrameLayout.LayoutParams(-1, -1))
+            ArtworkLoader.loadPriority(art,
+                listOf(item.backdrop) + displayedHomeData?.artwork?.get(item.key).orEmpty().asReversed() +
+                    listOf(item.icon))
             addView(View(this@HomeActivity).apply { background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xF5181021.toInt(), 0xB52A1738.toInt(), 0x4017101F)) }, FrameLayout.LayoutParams(-1, -1))
             val copy = LinearLayout(this@HomeActivity).apply {
                 orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL or Gravity.START; layoutDirection = uiDirection; setPadding(dp(28), dp(18), dp(28), dp(18))
