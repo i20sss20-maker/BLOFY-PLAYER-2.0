@@ -155,14 +155,16 @@
         <button type="button" id="one-register-hide">إخفاء</button>
       </div>
       <div id="one-register-xtream-secret" class="one-register-xtream-secret" hidden>
-         <strong>بيانات Xtream لنفس الاشتراك — بدون تجديد أو إنشاء حساب</strong>
+         <strong>الكود وبيانات Xtream لنفس الاشتراك — بدون تجديد أو إنشاء حساب</strong>
          <div class="one-register-xtream-fields">
+           <div><small>كود BLOFY الأصلي</small><code id="one-register-bundle-code" dir="ltr"></code></div>
            <div><small>Host / رابط السيرفر الكامل</small><code id="one-register-xtream-host" dir="ltr"></code></div>
            <div><small>Username / اسم المستخدم</small><code id="one-register-xtream-user" dir="ltr"></code></div>
            <div><small>Password / كلمة المرور</small><code id="one-register-xtream-password" dir="ltr"></code></div>
            <div><small>M3U / الرابط الكامل</small><code id="one-register-xtream-m3u" dir="ltr"></code></div>
          </div>
          <div class="one-register-xtream-actions">
+           <button type="button" id="one-register-bundle-copy">نسخ الكود</button>
            <button type="button" id="one-register-xtream-copy">نسخ بيانات Xtream</button>
            <button type="button" id="one-register-m3u-copy">نسخ M3U</button>
            <button type="button" id="one-register-xtream-hide">إخفاء جميع البيانات</button>
