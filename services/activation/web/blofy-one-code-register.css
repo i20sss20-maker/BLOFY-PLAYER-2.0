@@ -119,3 +119,35 @@
 @media(max-width:640px){.one-register-account-panel{padding:11px}
  .one-register-account-panel .one-section-heading{align-items:stretch}
  #one-xtream-register-state{width:100%}}
+
+/* Owner-only account credential change: independent manual/generated controls. */
+.one-xtream-change-button{display:inline-flex;align-items:center;justify-content:center;
+  padding:8px 11px;background:#25596c;color:#e8fbff;border:1px solid #6b9cac;
+  border-radius:9px;cursor:pointer;font:inherit;font-size:12px;margin:5px 0 0 6px}
+.one-xtream-change-button:hover{background:#31758b}
+.one-xtream-change-button:focus-visible{outline:3px solid #a3fff0}
+.one-xtream-edit-dialog{max-width:930px}
+.one-xtream-edit-dialog form{margin:8px 0 16px}
+.one-xtream-edit-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.one-xtream-edit-grid fieldset{border:1px solid #50788a;background:#14354b;
+  border-radius:12px;padding:15px;min-width:0}
+.one-xtream-edit-grid legend{font-size:15px;font-weight:750;padding:0 7px;color:#c0ffea}
+.one-xtream-edit-grid label{display:grid;gap:7px;color:#def6f5;font-size:13px;
+  margin:12px 0}
+.one-xtream-edit-grid label[hidden]{display:none}
+.one-xtream-edit-grid input,.one-xtream-edit-grid select{width:100%;min-height:44px;
+  border:1px solid #618b9d;border-radius:9px;padding:10px 11px;
+  background:#09293d;color:#fff;font:inherit}
+.one-xtream-edit-grid input:focus-visible,.one-xtream-edit-grid select:focus-visible{
+  outline:2px solid #78e1bf;outline-offset:2px}
+.one-xtream-edit-confirm{display:flex;gap:10px;align-items:flex-start;line-height:1.8;
+  padding:14px;margin:14px 0;background:#193b50;border:1px solid #4f8294;
+  border-radius:12px;color:#e0f9f5;font-size:13px}
+.one-xtream-edit-confirm input{margin-top:6px;accent-color:#53d0af;min-width:18px;min-height:18px}
+.one-xtream-edit-actions{display:flex;gap:12px;flex-wrap:wrap}
+.one-xtream-edit-actions button{border:1px solid #88b9bb;border-radius:9px;
+  min-height:44px;padding:10px 18px;background:#276a61;color:#eafffa;
+  cursor:pointer;font:inherit}
+.one-xtream-edit-actions button:disabled{opacity:.45;cursor:not-allowed}
+#one-xtream-edit-status{color:#bdf2e5;font-size:13px;line-height:1.85}
+@media(max-width:700px){.one-xtream-edit-grid{grid-template-columns:1fr}}
