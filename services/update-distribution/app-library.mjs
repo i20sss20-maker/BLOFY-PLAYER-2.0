@@ -1220,8 +1220,10 @@ export async function initAppLibrary() {
             await client.query('update blofy_app_catalog_meta set last_health_at=null where id=1');
           }
         } else {
-          // Fail closed; do not advertise an unavailable or mismatched APK.
-          throw new Error('STREAM_5601_PROMOTION_BLOCKED: signed APK missing or SHA mismatch');
+          // Missing historical APKs must block only that promotion, not crash
+          // the entire official download site (including fresh/test databases).
+          // Keep the existing catalog row and all customer apps untouched.
+          console.warn('STREAM_5601_PROMOTION_BLOCKED: signed APK missing or SHA mismatch');
         }
       }
       if (version < 21) {
