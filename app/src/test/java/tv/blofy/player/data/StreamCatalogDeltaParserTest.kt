@@ -51,6 +51,28 @@ class StreamCatalogDeltaParserTest {
         assertEquals(100L,value?.addedAt)
     }
 
+    @Test fun missingXtreamStreamIconUsesMovieImageOrPreviousPoster() {
+        val base = StreamEntity(
+            key = "$providerId:movie:99", providerId = providerId, remoteId = "99",
+            categoryId = "5", kind = "movie", name = "Example",
+            icon = "https://images.example/old.jpg", favorite = true
+        )
+        val alternate = StreamCatalogDeltaParser.item(providerId, "movie", mapOf(
+            "stream_id" to 99, "name" to "Example",
+            "stream_icon" to "", "movie_image" to "https://images.example/new.jpg",
+            "backdrop_path" to listOf("https://images.example/wide.jpg")
+        ), base)!!
+        assertEquals("https://images.example/new.jpg", alternate.icon)
+        assertEquals("https://images.example/wide.jpg", alternate.backdrop)
+        assertTrue(alternate.favorite)
+
+        val sourceUnavailable = StreamCatalogDeltaParser.item(providerId, "movie", mapOf(
+            "stream_id" to 99, "name" to "Example", "stream_icon" to "null",
+            "movie_image" to "NULL"
+        ), base)!!
+        assertEquals("https://images.example/old.jpg", sourceUnavailable.icon)
+    }
+
     @Test fun categoryRetainsHiddenFlagDuringSync() {
         val old=CategoryEntity("$providerId:live:9",providerId,"9","live","Old",9,true)
         val row=StreamCatalogDeltaParser.category(providerId,"live",mapOf(
