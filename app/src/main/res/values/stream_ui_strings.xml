@@ -59,7 +59,7 @@
     <string name="stream_ui_subscription_valid">Active</string>
     <string name="stream_ui_subscription_days">%1$d days</string>
     <string name="stream_ui_subscription_unknown">Not specified</string>
-    <string name="stream_ui_subscription_details">Your subscription is active.\nTime remaining: %1$s\nValid until: %2$s</string>
+    <string name="stream_ui_subscription_details">Status: Active\nTime remaining: %1$s\nValid until: %2$s</string>
     <string name="stream_ui_cert_error">Could not connect right now. Check your internet and try again.</string>
     <string name="stream_ui_dns_error">Connection unavailable. Check your internet and try again.</string>
     <string name="stream_ui_timeout_error">This is taking longer than expected. Please try again.</string>
