@@ -1,0 +1,38 @@
+name: Verify STREAM 56.0.4 QA artifact and 56.0.2 customer update isolation
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/stream-56-0-4-public-vs-qa-audit.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  public-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Public service health, current update feed and privately staged 56.0.4 APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='https://updates.blofyplayer.com'
+          okay=0
+          for attempt in $(seq 1 9); do
+            health="$(curl -fsS -m 20 "$base/health" || true)"
+            feed="$(curl -fsS -m 20 "$base/stream/release.json" || true)"
+            center="$(curl -fsS -m 20 "$base/downloads" || true)"
+            if [ -n "$health" ] && [ -n "$center" ] &&
+              echo "$feed" | jq -e '.release.app.versionCode==2000117 and .release.app.packageName=="tv.blofy.player.v2.stream"' >/dev/null 2>&1 &&
+              printf '%s' "$center" | grep -Fq 'BLOFY STREAM'; then
+              okay=1; break
+            fi
+            sleep 8
+          done
+          test "$okay" = 1 || { echo "::error::Existing 56.0.2 update feed or downloads unhealthy"; exit 1; }
+          url="$base/files/releases/BLOFY-STREAM-56.0.4-FULL-APP-FIX-OWNER-SIGNED.apk"
+          headers="$(curl -fsSI --max-time 35 "$url")"
+          printf '%s\n' "$headers" | grep -iq '^HTTP/.* 200'
+          printf '%s\n' "$headers" | grep -iq '^content-length: 135792515'
+          echo '### Verified official QA APK reachable and current customer feed still 56.0.2' >> "$GITHUB_STEP_SUMMARY"
+          echo '56.0.4 sha256: 30736f1b688daef9e830950011e28802ff1c03870d11691a41895911eda4e7ec' >> "$GITHUB_STEP_SUMMARY"
+          echo "$url" >> "$GITHUB_STEP_SUMMARY"
