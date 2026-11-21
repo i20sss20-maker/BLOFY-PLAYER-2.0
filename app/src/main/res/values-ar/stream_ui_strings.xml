@@ -52,7 +52,7 @@
     <string name="stream_ui_subscription_valid">ساري</string>
     <string name="stream_ui_subscription_days">%1$d يوم</string>
     <string name="stream_ui_subscription_unknown">غير محدد</string>
-    <string name="stream_ui_subscription_details">اشتراكك نشط.\nالمدة المتبقية: %1$s\nصالح حتى: %2$s</string>
+    <string name="stream_ui_subscription_details">الحالة: ساري\nالمدة المتبقية: %1$s\nصالح حتى: %2$s</string>
     <string name="stream_ui_cert_error">تعذّر الاتصال الآن. تأكد من الإنترنت ثم حاول مجددًا.</string>
     <string name="stream_ui_dns_error">الاتصال غير متاح. تأكد من الإنترنت وحاول مجددًا.</string>
     <string name="stream_ui_timeout_error">الاتصال يستغرق وقتًا أطول من المعتاد. حاول مرة أخرى.</string>
