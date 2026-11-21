@@ -16,7 +16,19 @@ const ITEM_SQL=`
      lower(btrim(container_extension)) NOT IN ('mp4','mkv','avi','mov','webm','ts'))::int
      AS movie_unsupported_extension_count,
    count(*) FILTER (WHERE metadata->>'directSourcePresent'='true')::int
-     AS advertised_direct_source_count
+     AS advertised_direct_source_count,
+   -- Read-only coverage metrics: never copy URLs, fetch third-party images,
+   -- or confuse a nonblank but malformed source value with a working poster.
+   count(*) FILTER (WHERE media_type IN ('movie','series') AND enabled
+     AND btrim(coalesce(icon_url,'')) ~* '^https?://[^[:space:]/]+')::int
+     AS poster_url_present_count,
+   count(*) FILTER (WHERE media_type IN ('movie','series') AND enabled
+     AND btrim(coalesce(icon_url,'')) !~* '^https?://[^[:space:]/]+')::int
+     AS poster_url_missing_count,
+   count(*) FILTER (WHERE media_type IN ('movie','series') AND enabled
+     AND CASE WHEN jsonb_typeof(metadata->'backdropPath')='array'
+       THEN jsonb_array_length(metadata->'backdropPath') > 0
+       ELSE FALSE END)::int AS backdrop_metadata_count
  FROM blofy_xtream_items
  WHERE server_id=$1
  GROUP BY media_type
@@ -80,7 +92,8 @@ export async function auditEntireXtreamStoredCatalog(pool,sourceId){
   const types=['live','movie','series'].map(type=>({
     type,...fields(byType.get(type),['total','enabled_count','disabled_count',
       'blank_name_count','unsafe_id_count','movie_missing_extension_count',
-      'movie_unsupported_extension_count','advertised_direct_source_count']),
+      'movie_unsupported_extension_count','advertised_direct_source_count',
+      'poster_url_present_count','poster_url_missing_count','backdrop_metadata_count']),
     ...fields(category.get(type),['missing_category_reference_count']),
     ...fields(mapped.get(type),['mapped_items','mapped_items_no_longer_imported'])
   }));
@@ -93,6 +106,14 @@ export async function auditEntireXtreamStoredCatalog(pool,sourceId){
     ok:true,readOnly:true,fullLocalCatalogScan:true,playbackVerified:false,
     rowsExamined:examined,importedItems:examined-episodes.mapped_episodes,
     types,episodes,
+    posterCoverage:{
+      coversPresent:types.reduce((n,x)=>n+x.poster_url_present_count,0),
+      coversMissing:types.reduce((n,x)=>n+x.poster_url_missing_count,0),
+      fallbackBackdropsStored:types.reduce((n,x)=>n+x.backdrop_metadata_count,0),
+      // A URL on file is NOT proof that an image decodes on an Android TV.
+      urlsValidatedOverNetwork:false,
+      artworkActuallyRendered:false
+    },
     // These are integrity signals, not proof of playable/unplayable media.
     integrityWarnings:types.reduce((n,x)=>n+
       x.blank_name_count+x.unsafe_id_count+x.movie_missing_extension_count+
