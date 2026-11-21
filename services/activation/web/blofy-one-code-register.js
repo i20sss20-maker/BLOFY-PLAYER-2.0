@@ -95,7 +95,7 @@
     makeCell(tr,[node('small',item.activatedAt?
       'تفعيل: '+dates(item.activatedAt)+'\nانتهاء: '+dates(item.expiresAt):
       'المدة لم تبدأ بعد')]);
-    const button=node('button','عرض التفاصيل / إدارة','one-register-open');
+    const button=node('button',item.canReveal&&item.status==='active'?'استخراج / إعادة استخراج':'التفاصيل / إدارة','one-register-open');
     button.type='button';button.addEventListener('click',()=>openDetails(item));
     makeCell(tr,[button]);
     table.append(tr);
@@ -137,6 +137,9 @@
   function openDetails(item){
    if(!item||!UUID.test(item.voucherId))return;
    resetPrivate();selected=item;
+   dialog.dispatchEvent(new CustomEvent('blofy-one:register-open',{
+     detail:{voucherId:item.voucherId,canReveal:item.canReveal,status:item.status}
+   }));
    const group=node('div','','one-register-detail-fields');
    const fields=[
     ['نوع الكود',labels[item.kind]||item.kind],
@@ -171,7 +174,7 @@
    $('one-register-manage').disabled=!item.manager;
    $('one-register-manage').textContent=item.canRelogin?
      '↻ إدارة الكود / السماح بالدخول بنفسه':'▤ عرض إدارة الكود';
-   $('one-register-xtream').hidden=item.channel!=='xtream';
+   $('one-register-xtream').hidden=Boolean(item.canReveal);
    modalStatus.textContent=item.canRelogin?
      'يمكنك السماح بدخول جهاز آخر مرة واحدة خلال 10 دقائق بعد التحقق من صاحب الاشتراك.':
      item.status==='active'&&item.channel==='xtream'?
@@ -230,7 +233,7 @@
     }));
   });
   $('one-register-xtream').addEventListener('click',()=>{
-    window.open('/stream/activate','_blank','noopener,noreferrer');
+    closeDialog();location.hash='#legacy-xtream';
   });
   window.addEventListener('blofy-one:code-register-visible',()=>void load(false));
   document.addEventListener('visibilitychange',()=>{if(document.hidden)hideSecret();});

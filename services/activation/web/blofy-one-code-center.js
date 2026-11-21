@@ -101,10 +101,10 @@
   registry.innerHTML=`
     <div class="one-section-heading">
       <div><span class="one-kicker">ALL CODES · CUSTOMERS · SUPPORT</span>
-        <h2>📋 جميع الأكواد والتجارب والعملاء</h2></div>
+        <h2>📋 الأكواد وحسابات Xtream · استخراج واسترجاع</h2></div>
       <button id="one-register-refresh" type="button">↻ تحديث السجل</button>
     </div>
-    <p class="one-footnote">كل أكواد STREAM وXtream، المدفوعة والتجريبية والقديمة، في مكان واحد. يظهر من استلم الكود، وبيانات تسجيله الموثقة بالبريد، وحالة التفعيل والمدة. يمكنك استرجاع الكود الأصلي أو السماح بدخول الجهاز مجددًا دون تمديد الاشتراك.</p>
+    <p class="one-footnote">مركز موحّد لحسابات Xtream المباشرة والمرتبطة، ولكل أكواد BLOFY STREAM وXtream المدفوعة والتجريبية والقديمة. افتح أي سجل لاستخراج الكود الأصلي وبيانات Xtream للحساب المفعّل معًا، ثم أعد استخراجها لاحقًا من نفس السجل دون إنشاء كود أو تمديد المدة. البيانات تظهر للمشرف عند الطلب فقط، ولا تظهر كلمات المرور في الجدول.</p>
     <form id="one-register-search-form" class="one-register-filters" autocomplete="off">
       <label>بحث بالاسم أو البريد أو الجوال أو الكود أو رقم الطلب
         <input id="one-register-query" type="search" maxlength="80" placeholder="اسم العميل، 05...، البريد، أو الكود" spellcheck="false"></label>
@@ -122,6 +122,41 @@
         </select></label>
       <button type="submit">⌕ بحث</button>
     </form>
+
+    <section id="one-xtream-register" class="one-register-account-panel" aria-labelledby="one-xtream-register-title">
+      <div class="one-section-heading">
+        <div>
+          <span class="one-kicker">XTREAM · ALL ACTIVE AND HISTORICAL ACCOUNTS</span>
+          <h3 id="one-xtream-register-title">🌐 حسابات Xtream — المرتبطة والمستقلة</h3>
+        </div>
+        <label>حالة Xtream
+          <select id="one-xtream-register-state">
+            <option value="all">جميع الحسابات</option>
+            <option value="active">النشطة</option>
+            <option value="expired">المنتهية</option>
+            <option value="disabled">الموقوفة</option>
+            <option value="unknown">بلا تاريخ انتهاء</option>
+          </select>
+        </label>
+      </div>
+      <p class="one-footnote">هذه الحسابات موجودة في قاعدة Xtream، سواء أُصدرت مباشرة أو من تفعيل كود BLOFY. يمكنك استخراج نفس Host والمستخدم وكلمة المرور مجددًا دون تجديد أو تغيير بيانات الدخول. بحث أعلى الصفحة يشمل هذه الحسابات أيضًا.</p>
+      <p id="one-xtream-register-status" role="status" aria-live="polite">جارٍ جلب حسابات Xtream من السيرفر…</p>
+      <div class="one-register-table-wrap" tabindex="0" role="region" aria-label="حسابات Xtream المستقلة والمرتبطة">
+        <table class="one-register-table">
+          <thead><tr>
+            <th>اسم حساب Xtream</th><th>اسم المستخدم</th><th>الحالة</th><th>تاريخ الانتهاء</th><th>اتصالات</th><th>الإجراءات</th>
+          </tr></thead>
+          <tbody id="one-xtream-register-rows"><tr><td colspan="6">جارٍ تحميل حسابات Xtream…</td></tr></tbody>
+        </table>
+      </div>
+      <div class="one-register-pagination">
+        <button type="button" id="one-xtream-register-prev" disabled>← السابق</button>
+        <span id="one-xtream-register-page">—</span>
+        <button type="button" id="one-xtream-register-next" disabled>التالي →</button>
+      </div>
+    </section>
+    <h3 class="one-register-codes-heading">🔑 أكواد BLOFY STREAM وXtream</h3>
+
     <p id="one-register-status" role="status" aria-live="polite">افتح هذا القسم لقراءة الأكواد من قاعدة بيانات BLOFY.</p>
     <div class="one-register-table-wrap" tabindex="0" role="region" aria-label="جميع الأكواد">
       <table class="one-register-table"><thead><tr>
@@ -136,7 +171,29 @@
       <span id="one-register-page">—</span>
       <button type="button" id="one-register-next" disabled>التالي →</button>
     </div>
-    <p class="one-register-warning">حماية العملاء: الأكواد الأصلية مخفية حتى تختار «كشف الكود» وتؤكد عملية دعم العميل؛ الكشف يُسجّل في سجل الإدارة ولا يغيّر التفعيل. «دخول بنفس الكود» متاح فقط للاشتراك المفعل والساري ويمنح فرصة واحدة خلال 10 دقائق، دون تصفير المدة أو سحب كود جديد.</p>
+    <dialog id="one-xtream-register-dialog" class="one-register-dialog" aria-labelledby="one-xtream-register-dialog-title">
+      <div class="one-register-dialog-header">
+        <h3 id="one-xtream-register-dialog-title">استرجاع بيانات حساب Xtream</h3>
+        <button type="button" id="one-xtream-register-close">✕ إغلاق</button>
+      </div>
+      <p id="one-xtream-register-info" class="one-footnote"></p>
+      <div id="one-xtream-register-credentials" class="one-register-xtream-secret" hidden>
+        <strong>نفس الحساب الأصلي · دون تغيير كلمة المرور أو الاشتراك</strong>
+        <div class="one-register-xtream-fields">
+          <div><small>Host / السيرفر الكامل</small><code id="one-xtream-register-host" dir="ltr"></code></div>
+          <div><small>Username</small><code id="one-xtream-register-user" dir="ltr"></code></div>
+          <div><small>Password</small><code id="one-xtream-register-password" dir="ltr"></code></div>
+          <div><small>رابط M3U</small><code id="one-xtream-register-m3u" dir="ltr"></code></div>
+        </div>
+        <div class="one-register-xtream-actions">
+          <button type="button" id="one-xtream-register-copy">نسخ بيانات Xtream</button>
+          <button type="button" id="one-xtream-register-copy-m3u">نسخ M3U</button>
+          <button type="button" id="one-xtream-register-hide">إخفاء البيانات</button>
+        </div>
+      </div>
+      <p id="one-xtream-register-detail-status" role="status" aria-live="polite"></p>
+    </dialog>
+    <p class="one-register-warning">حماية العملاء: «استخراج مجددًا» قراءة لنفس الكود ونفس حساب Xtream، ولا ينشئ اشتراكًا جديدًا أو يبدأ المدة. يتطلب تفعيلًا ساريًا وكودًا قابلًا للاسترجاع؛ الأكواد القديمة غير القابلة للكشف تحتاج إدخال الكود الأصلي يدويًا. البيانات تظهر مؤقتًا للمشرف فقط، والكشف مسجّل في سجل الإدارة. السماح بدخول الجهاز إجراء منفصل.</p>
     <dialog id="one-register-dialog" class="one-register-dialog" aria-labelledby="one-register-dialog-title">
       <div class="one-register-dialog-header">
         <h3 id="one-register-dialog-title">تفاصيل الكود والعميل</h3>
@@ -144,16 +201,33 @@
       </div>
       <div id="one-register-detail"></div>
       <div class="one-register-actions">
-        <button type="button" id="one-register-reveal">◉ كشف الكود الأصلي</button>
+        <button type="button" id="one-register-extract">⇄ استخراج الكود + Xtream (أو إعادة الاستخراج)</button>
+         <button type="button" id="one-register-reveal">◉ كشف الكود فقط</button>
         <button type="button" id="one-register-manage">▤ إدارة / دخول بنفس الكود</button>
-        <button type="button" id="one-register-xtream">↗ فتح صفحة Xtream</button>
+        <button type="button" id="one-register-xtream">⌕ فحص الكود القديم يدويًا</button>
       </div>
       <div id="one-register-secret" hidden aria-live="polite">
         <strong>الكود الأصلي — للدعم فقط</strong><code id="one-register-secret-code" dir="ltr"></code>
         <button type="button" id="one-register-copy">نسخ الكود</button>
         <button type="button" id="one-register-hide">إخفاء</button>
       </div>
-      <p id="one-register-detail-status" role="status" aria-live="polite"></p>
+      <div id="one-register-xtream-secret" class="one-register-xtream-secret" hidden>
+         <strong>الكود وبيانات Xtream لنفس الاشتراك — بدون تجديد أو إنشاء حساب</strong>
+         <div class="one-register-xtream-fields">
+           <div><small>كود BLOFY الأصلي</small><code id="one-register-bundle-code" dir="ltr"></code></div>
+           <div><small>Host / رابط السيرفر الكامل</small><code id="one-register-xtream-host" dir="ltr"></code></div>
+           <div><small>Username / اسم المستخدم</small><code id="one-register-xtream-user" dir="ltr"></code></div>
+           <div><small>Password / كلمة المرور</small><code id="one-register-xtream-password" dir="ltr"></code></div>
+           <div><small>M3U / الرابط الكامل</small><code id="one-register-xtream-m3u" dir="ltr"></code></div>
+         </div>
+         <div class="one-register-xtream-actions">
+           <button type="button" id="one-register-bundle-copy">نسخ الكود</button>
+           <button type="button" id="one-register-xtream-copy">نسخ بيانات Xtream</button>
+           <button type="button" id="one-register-m3u-copy">نسخ M3U</button>
+           <button type="button" id="one-register-xtream-hide">إخفاء جميع البيانات</button>
+         </div>
+       </div>
+       <p id="one-register-detail-status" role="status" aria-live="polite"></p>
     </dialog>`;
   const center=document.createElement('div');
   center.id='codes-center';
@@ -179,9 +253,9 @@
   tabs.setAttribute('aria-label','عمليات الاشتراكات والأكواد');
   const definitions=[
     ['one-issue','＋ إنشاء اشتراك جديد'],
-    ['legacy-xtream','⌕ فحص أو استخراج Xtream'],
-    ['stream-management','▤ سجل الأكواد والعملاء'],
-    ['one-code-register','📋 جميع الأكواد والعميل'],
+    ['one-code-register','📋 جميع الأكواد + Xtream'],
+    ['legacy-xtream','⌕ فحص الكود القديم'],
+    ['stream-management','▤ حسابات Xtream'],
     ['one-inventory','▥ مخزون البيع'],
     ['one-trial-stock','🎁 الأكواد التجريبية · يوم']
   ];
