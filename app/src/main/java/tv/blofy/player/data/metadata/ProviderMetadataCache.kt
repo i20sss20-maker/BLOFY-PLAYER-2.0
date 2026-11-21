@@ -68,6 +68,40 @@ object ProviderMetadataCache {
         return results
     }
 
+
+    /**
+     * Existing detail screens already persist provider poster/backdrop URLs.
+     * The catalog grid must reuse them as fallback candidates; otherwise an
+     * item with an empty list icon is permanently stuck on its placeholder even
+     * after a successful provider-detail request. This is a batched LOCAL read.
+     */
+    fun readArtworkForPage(context: Context, contentKeys: List<String>): Map<String, List<String>> {
+        if (contentKeys.isEmpty()) return emptyMap()
+        val keys = contentKeys.asSequence().filter(String::isNotBlank).distinct().toList()
+        if (keys.isEmpty()) return emptyMap()
+        val results = LinkedHashMap<String, List<String>>()
+        val db = helper(context).readableDatabase
+        for (chunk in keys.chunked(128)) {
+            val binds = List(chunk.size) { "?" }.joinToString(",")
+            db.query(TABLE, arrayOf("content_key", "payload_json"),
+                "content_key IN ($binds)", chunk.toTypedArray(),
+                null, null, null).use { cursor ->
+                while (cursor.moveToNext()) {
+                    val key = cursor.getString(0) ?: continue
+                    val metadata = runCatching {
+                        gson.fromJson(cursor.getString(1), ProviderMetadata.Metadata::class.java)
+                    }.getOrNull() ?: continue
+                    val urls = listOfNotNull(metadata.posterUrl, metadata.backdropUrl)
+                        .map(String::trim)
+                        .filter { it.startsWith("https://", true) || it.startsWith("http://", true) }
+                        .distinct()
+                    if (urls.isNotEmpty()) results[key] = urls
+                }
+            }
+        }
+        return results
+    }
+
     /**
      * Bounded, entirely offline lookup in saved provider cast/crew metadata.
      * Uses a bound literal token with instr(), never user-generated SQL/LIKE

@@ -1,0 +1,54 @@
+name: BLOFY STREAM complete Android regression audit
+on:
+  push:
+    branches: [fix/stream-56-0-3-refresh-indicator-stall-20261121]
+    paths: ['.github/workflows/stream-full-qa-audit-20261121.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  all-stream-unit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Install Android SDK platforms and tools
+        run: |
+          set -euo pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;35.0.0"
+      - name: Run every STREAM code-edition unit test
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --max-workers=2 \
+            -PBLOFY_ACTIVATION_BASE_URL=http://127.0.0.1:9 \
+            -PBLOFY_UPDATE_BASE_URL=http://127.0.0.1:9 \
+            testStreamCodeOnlyUnitTest
+      - name: Validate 56.0.3 demo APK and runtime resources
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --max-workers=2 \
+            -PBLOFY_ACTIVATION_BASE_URL=http://127.0.0.1:9 \
+            -PBLOFY_UPDATE_BASE_URL=http://127.0.0.1:9 \
+            assembleStreamCodeDemo
+          apk="$(find app/build/outputs/apk -type f -name '*.apk' -print -quit)"
+          test -s "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | grep -F "name='tv.blofy.player.v2.stream' versionCode='2000118'"
+          # Owner-signed native FFmpeg is verified in the separate Android CI job.
+      - name: Retain structured regression report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blofy-stream-56-0-3-complete-regression
+          path: |
+            app/build/test-results/testStreamCodeOnlyUnitTest/
+            app/build/reports/tests/testStreamCodeOnlyUnitTest/
+          if-no-files-found: ignore
+          retention-days: 14

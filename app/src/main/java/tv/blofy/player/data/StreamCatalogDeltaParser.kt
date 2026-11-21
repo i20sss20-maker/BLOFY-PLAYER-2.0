@@ -11,7 +11,15 @@ import tv.blofy.player.data.remote.XtreamIdentifier
  */
 internal object StreamCatalogDeltaParser {
     private fun Map<*, *>.text(key: String): String? =
-        get(key)?.toString()?.takeIf { it.isNotBlank() && it != "null" }
+        get(key)?.toString()?.trim()?.takeIf {
+            it.isNotBlank() && !it.equals("null", true)
+        }
+
+    /** Source list fields vary between Xtream panels; preserve genuine art. */
+    private fun Map<*, *>.artwork(vararg fields: String): String? =
+        fields.firstNotNullOfOrNull { key -> text(key)?.takeIf {
+            it.startsWith("https://", true) || it.startsWith("http://", true)
+        } }
 
     fun category(providerId: String, kind: String, data: Map<*, *>,
                  old: CategoryEntity? = null, order: Int = 0): CategoryEntity? {
@@ -31,12 +39,18 @@ internal object StreamCatalogDeltaParser {
         val id = XtreamIdentifier.normalize(data[if (kind == "series") "series_id" else "stream_id"])
             ?: return null
         val name = data.text("name") ?: return null
-        val icon = (if (kind == "series") data.text("cover") else data.text("stream_icon"))
-            ?: old?.icon
+        val icon = if (kind == "series") {
+            data.artwork("cover", "cover_big", "stream_icon", "movie_image", "thumbnail")
+        } else {
+            data.artwork("stream_icon", "movie_image", "cover_big", "cover", "thumbnail")
+        } ?: old?.icon
         val added = (if (kind == "series") data.text("last_modified") else data.text("added"))
             ?.toLongOrNull() ?: old?.addedAt
-        val backdrop = (data["backdrop_path"] as? List<*>)?.firstOrNull()?.toString()
-            ?: old?.backdrop
+        val backdrop = (data["backdrop_path"] as? List<*>)?.firstNotNullOfOrNull { entry ->
+            entry?.toString()?.trim()?.takeIf {
+                it.startsWith("https://", true) || it.startsWith("http://", true)
+            }
+        } ?: data.artwork("backdrop", "backdrop_url") ?: old?.backdrop
         val sourceCategory = XtreamIdentifier.normalize(data["category_id"])
             ?: old?.categoryId
         return StreamEntity(

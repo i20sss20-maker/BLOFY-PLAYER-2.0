@@ -46,19 +46,16 @@ internal class StreamCatalogDeltaWorker(
             !CatalogSyncState.isReady(app, providerId)
         ) return if (automatic) Result.success() else notReady()
         if (CatalogPlaybackGate.isPlaying)
-            return if (automatic) Result.retry() else Result.failure(
-                workDataOf(KEY_STATUS to "playback_busy"))
+            return recoverableFailure("playback_busy")
         return try {
             withTimeout(6 * 60_000L) { syncMutex.withLock { syncBounded() } }
         } catch (_: TimeoutCancellationException) {
-            if (inputData.getBoolean(KEY_AUTO, true)) Result.retry()
-            else Result.failure(workDataOf(KEY_STATUS to "timeout"))
+            recoverableFailure("timeout")
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
             // Detailed network/server faults are kept away from the customer.
-            if (inputData.getBoolean(KEY_AUTO, true)) Result.retry()
-            else Result.failure(workDataOf(KEY_STATUS to "unavailable"))
+            recoverableFailure("unavailable")
         }
     }
 
@@ -84,8 +81,10 @@ internal class StreamCatalogDeltaWorker(
             "${StreamCodeSession.HOST}/player_api.php?action=get_blofy_catalog_version"
         )
         val current = version["revision"].asNumber()?.toLong() ?: return recoverableFailure()
-        if (current <= 0L || version["ok"] != true ||
-            version["syncStatus"] != "online") return recoverableFailure()
+        if (version["ok"] != true || current <= 0L)
+            return recoverableFailure("source_not_ready")
+        if (version["syncStatus"] != "online")
+            return recoverableFailure("source_syncing")
         val storedBase = prefs.getLong(KEY_COMPLETE_REVISION, 0L)
         val base = if (storedBase in 0L..current) storedBase else 0L
         val priorPending = prefs.getLong(KEY_PENDING_REVISION, -1L)
@@ -210,8 +209,15 @@ internal class StreamCatalogDeltaWorker(
     private fun notReady() = Result.failure(workDataOf(KEY_STATUS to "not_ready"))
 
     private fun recoverableFailure(reason: String = "unavailable"): Result =
-        if (inputData.getBoolean(KEY_AUTO, true)) Result.retry()
-        else Result.failure(workDataOf(KEY_STATUS to reason))
+        if (!inputData.getBoolean(KEY_AUTO, true))
+            Result.failure(workDataOf(KEY_STATUS to reason))
+        // Unlimited automatic one-time retries can remain ENQUEUED for hours
+        // on TV boxes when the source is syncing or offline. WorkManager's
+        // periodic schedule and entry checks will retry later; let the current
+        // attempt stop after one exponential backoff instead of spinning forever.
+        else if (StreamCatalogRetryPolicy.shouldDefer(runAttemptCount))
+            Result.success(workDataOf(KEY_STATUS to "deferred"))
+        else Result.retry()
 
     private fun clearCheckpoint() {
         prefs.edit().remove(KEY_PENDING_REVISION).remove(KEY_PENDING_BASE)
@@ -305,4 +311,10 @@ internal object StreamCatalogRefreshCadence {
     fun isEntryCheckDue(lastAttemptMs: Long, nowMs: Long): Boolean =
         lastAttemptMs <= 0L || nowMs < lastAttemptMs ||
             nowMs - lastAttemptMs >= ENTRY_MINIMUM_GAP_MS
+}
+
+/** A periodic worker must complete this cycle, not permanently fail/cancel it. */
+internal object StreamCatalogRetryPolicy {
+    const val MAX_RETRIES_PER_CYCLE = 1
+    fun shouldDefer(runAttemptCount: Int) = runAttemptCount >= MAX_RETRIES_PER_CYCLE
 }
