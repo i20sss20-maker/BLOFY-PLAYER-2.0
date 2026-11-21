@@ -854,9 +854,20 @@ class SettingsActivity : AppCompatActivity() {
                     copy("✓ اكتمل الفحص، وستظهر التغييرات تلقائيًا.",
                         "✓ Check complete. Changes will appear automatically.")
                 refreshRequested && (refreshState == WorkInfo.State.FAILED ||
-                    refreshState == WorkInfo.State.CANCELLED) ->
-                    copy("لم نفقد أي محتوى محفوظ. افحص الإنترنت وأعد المحاولة.",
+                    refreshState == WorkInfo.State.CANCELLED) -> when (refreshError) {
+                    "source_syncing" -> copy(
+                        "السيرفر يزامن المصدر حاليًا. مكتبتك محفوظة وسيعاد الفحص تلقائيًا.",
+                        "The server is syncing the source. Your library is safe; auto checks will resume.")
+                    "timeout" -> copy(
+                        "استغرق فحص المصدر وقتًا طويلًا. يمكنك المشاهدة وستستمر الفحوصات تلقائيًا.",
+                        "The source check timed out. You can keep watching; automatic checks continue.")
+                    "playback_busy" -> copy(
+                        "تم تأجيل التحديث لحماية استقرار المشاهدة.",
+                        "Refresh was deferred to protect playback.")
+                    else -> copy(
+                        "لم نفقد أي محتوى محفوظ. افحص الإنترنت وأعد المحاولة.",
                         "Saved content was preserved. Check your connection and retry.")
+                }
                 checkedAt > 0L -> copy("تحديث تلقائي • آخر فحص ناجح: ${formatSyncTime(checkedAt)}",
                     "Auto refresh • last successful check: ${formatSyncTime(checkedAt)}")
                 else -> copy("التحديث تلقائي في الخلفية عند توفر الإنترنت.",
