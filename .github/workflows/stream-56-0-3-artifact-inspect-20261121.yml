@@ -1,0 +1,83 @@
+name: Inspect exactly signed 56.0.3 candidate before private website staging
+on:
+  push:
+    branches: [stage/stream-56-0-3-inspect-signed-20261121]
+    paths: ['.github/workflows/stream-56-0-3-artifact-inspect-20261121.yml']
+  workflow_dispatch:
+permissions:
+  actions: read
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 105
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_RUN: '44895229342'
+      SOURCE_HEAD: 'dce60e9fc271b216a5b8c13d9d7a0b573887d854'
+      ARTIFACT_PREFIX: 'BLOFY-STREAM-56.0.3-REFRESH-STALL-OWNER-SIGNED-'
+      APK: 'BLOFY-STREAM-56.0.3-REFRESH-STALL-FIX-OWNER-SIGNED.apk'
+      CERT: 'C3B98CCCD2F0C86809014ACD9368BF61C7004CFD419CD867B71FEF10BFA6255E'
+    steps:
+      - name: Require exact original-owner signed source CI
+        shell: bash
+        run: |
+          set -euo pipefail
+          done_status=''
+          for attempt in $(seq 1 190); do
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" > "$RUNNER_TEMP/source.json"
+            jq -e --arg sha "$SOURCE_HEAD" '.head_sha==$sha' "$RUNNER_TEMP/source.json"
+            status="$(jq -r .status "$RUNNER_TEMP/source.json")"
+            if [ "$status" = completed ]; then
+              jq -e '.conclusion=="success"' "$RUNNER_TEMP/source.json"
+              done_status=passed
+              break
+            fi
+            sleep 22
+          done
+          test "$done_status" = passed
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN/jobs?per_page=100" > "$RUNNER_TEMP/jobs.json"
+          jq -e '[.jobs[] | select(.name=="verify" and .conclusion=="success")] | length==1' "$RUNNER_TEMP/jobs.json"
+          jq -e '[.jobs[] | select(.name=="owner-signed-stream-qa" and .conclusion=="success")] | length==1' "$RUNNER_TEMP/jobs.json"
+          jq -e '[.jobs[].steps[] | select(.name=="Sign full BLOFY STREAM with original owner certificate" and .conclusion=="success")] | length==1' "$RUNNER_TEMP/jobs.json"
+          jq -e '[.jobs[].steps[] | select(.name=="Verify identity, certificate, signatures, native FFmpeg and SHA256" and .conclusion=="success")] | length==1' "$RUNNER_TEMP/jobs.json"
+      - name: Download exact signed artifact and verify detached SHA, package, certificate and decoders
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN/artifacts?per_page=100" > "$RUNNER_TEMP/artifacts.json"
+          artifact="$(jq -er --arg p "$ARTIFACT_PREFIX" '[.artifacts[] | select((.name|startswith($p)) and .expired==false)] | if length==1 then .[0].name else error("signed APK artifact missing") end' "$RUNNER_TEMP/artifacts.json")"
+          mkdir -p signed
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name "$artifact" --dir signed
+          apk="$(find signed -type f -name "$APK" -print -quit)"
+          sums="$(find signed -type f -name SHA256SUMS -print -quit)"
+          identity="$(find signed -type f -name IDENTITY.txt -print -quit)"
+          test -s "$apk" && test -s "$sums" && test -s "$identity"
+          grep -Fxq 'application_id=tv.blofy.player.v2.stream' "$identity"
+          grep -Fxq 'version_code=2000118' "$identity"
+          (cd "$(dirname "$apk")" && sha256sum -c SHA256SUMS)
+          test "$(stat -c '%s' "$apk")" -gt 25000000
+          test "$(stat -c '%s' "$apk")" -lt 260000000
+          tools="$ANDROID_HOME/build-tools/35.0.0"
+          if [ ! -x "$tools/aapt" ]; then yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'build-tools;35.0.0' || test -x "$tools/aapt"; fi
+          "$tools/aapt" dump badging "$apk" > "$RUNNER_TEMP/badging.txt"
+          grep -Fq "name='tv.blofy.player.v2.stream' versionCode='2000118' versionName='2.0.0-rc07.56.0.3-STREAM'" "$RUNNER_TEMP/badging.txt"
+          ! grep -Fq 'application-debuggable' "$RUNNER_TEMP/badging.txt"
+          "$tools/apksigner" verify --verbose --print-certs "$apk" > "$RUNNER_TEMP/cert.txt"
+          actual="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/cert.txt" | head -n1 | tr -d '[:space:]-:' | tr '[:lower:]' '[:upper:]')"
+          test "$actual" = "$CERT"
+          "$tools/zipalign" -c -P 16 -v 4 "$apk" > /dev/null
+          unzip -Z1 "$apk" > "$RUNNER_TEMP/entries.txt"
+          for abi in armeabi-v7a arm64-v8a x86 x86_64; do
+            grep -Fxq "lib/$abi/libffmpegJNI.so" "$RUNNER_TEMP/entries.txt"
+          done
+          SHA256="$(sha256sum "$apk" | awk '{print $1}')"
+          BYTES="$(stat -c '%s' "$apk")"
+          echo "## Verified BLOFY STREAM 56.0.3 original-owner signed APK" >> "$GITHUB_STEP_SUMMARY"
+          echo 'application_id=tv.blofy.player.v2.stream' >> "$GITHUB_STEP_SUMMARY"
+          echo 'version_code=2000118' >> "$GITHUB_STEP_SUMMARY"
+          echo "STREAM_5603_SHA256=$SHA256" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "STREAM_5603_BYTES=$BYTES" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "STREAM_5603_ARTIFACT=$artifact" >> "$GITHUB_STEP_SUMMARY"
+          echo "All four FFmpeg ABIs and existing production signing certificate verified." >> "$GITHUB_STEP_SUMMARY"
+          echo 'This workflow does NOT upload or deploy any customer APK.' >> "$GITHUB_STEP_SUMMARY"
