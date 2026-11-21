@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { mergedXtreamMetadata } from './xtream-item-details.mjs';
+import { mergedXtreamMetadata, safeXtreamArtwork } from './xtream-item-details.mjs';
 
 function keyBuffer(keyHex) {
   const value = String(keyHex || '').trim();
@@ -102,9 +102,14 @@ export function formatGatewayCategory(row) {
 export function formatGatewayItem(mediaType, row) {
   const meta = mergedXtreamMetadata(row.metadata);
   const categoryId = row.category_gateway_id == null ? '0' : String(row.category_gateway_id);
+  // Use valid source backdrops for catalogs where the provider omits the
+  // primary image. Never expose third-party URLs with embedded credentials.
+  const backdrop = Array.isArray(meta.backdropPath) ?
+    meta.backdropPath.map(safeXtreamArtwork).filter(Boolean).slice(0, 4) : [];
+  const primaryArtwork = safeXtreamArtwork(row.icon_url) || backdrop[0] || '';
   const base = {
     name: cleanGatewayDisplayName(row.name),
-    stream_icon: row.icon_url || '',
+    stream_icon: primaryArtwork,
     category_id: categoryId,
     added: meta.added == null ? '' : String(meta.added)
   };
@@ -131,6 +136,7 @@ export function formatGatewayItem(mediaType, row) {
       rating: meta.rating ?? '',
       rating_5based: meta.rating5 ?? '',
       container_extension: safeGatewayExtension(row.container_extension, 'mp4'),
+      backdrop_path: backdrop,
       custom_sid: meta.customSid || '',
       direct_source: ''
     };
@@ -139,7 +145,7 @@ export function formatGatewayItem(mediaType, row) {
     num: meta.num ?? null,
     series_id: Number(row.gateway_id),
     name: cleanGatewayDisplayName(row.name),
-    cover: row.icon_url || '',
+    cover: primaryArtwork,
     plot: meta.plot || '',
     cast: meta.cast || '',
     director: meta.director || '',
@@ -148,7 +154,7 @@ export function formatGatewayItem(mediaType, row) {
     last_modified: meta.added == null ? '' : String(meta.added),
     rating: meta.rating ?? '',
     rating_5based: meta.rating5 ?? '',
-    backdrop_path: Array.isArray(meta.backdropPath) ? meta.backdropPath : [],
+    backdrop_path: backdrop,
     youtube_trailer: meta.youtubeTrailer || '',
     episode_run_time: meta.episodeRunTime ?? '',
     category_id: categoryId
