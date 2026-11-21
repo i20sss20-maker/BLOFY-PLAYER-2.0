@@ -99,7 +99,16 @@
     const extract=node('button','⇄ استخراج / إعادة استخراج Xtream','one-register-open');
     extract.type='button';
     extract.addEventListener('click',()=>void reveal(account,extract));
-    action.append(extract);
+    const change=node('button','🔐 تغيير المستخدم / كلمة المرور','one-xtream-change-button');
+    change.type='button';
+    change.addEventListener('click',()=>{
+     clearSecrets();
+     window.dispatchEvent(new CustomEvent('blofy-one:xtream-change',{
+       detail:{id:account.id,label:account.label,username:account.username,
+        updatedAt:account.updatedAt,expiresAt:account.expiresAt}
+     }));
+    });
+    action.append(extract,change);
     tr.append(name,username,current,node('td',date(account.expiresAt)),
       node('td',Number(account.maxConnections)||1),action);
     rows.append(tr);
@@ -201,6 +210,9 @@
   $('one-register-search-form').addEventListener('submit',()=>{offset=0;if(loaded)render();});
   $('one-register-refresh').addEventListener('click',()=>void load());
   window.addEventListener('blofy-one:code-register-visible',()=>void load());
+  window.addEventListener('blofy-one:xtream-credentials-updated',()=>{
+   close();void load();
+  });
   document.addEventListener('visibilitychange',()=>{if(document.hidden)clearSecrets();});
   window.addEventListener('pagehide',clearSecrets);
   if(location.hash==='#one-code-register')void load();
