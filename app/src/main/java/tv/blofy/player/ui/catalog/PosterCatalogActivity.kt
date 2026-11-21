@@ -416,16 +416,21 @@ class PosterCatalogActivity : AppCompatActivity() {
             posterAdapter.replace(emptyList())
             countView.text = "…"
             pageJob = lifecycleScope.launch {
-                val genreSnapshot = if (kind == KIND_MOVIE || kind == KIND_SERIES) withContext(Dispatchers.IO) {
-                    ProviderMetadataCache.readGenresForPage(applicationContext, snapshot.map { it.key })
-                } else emptyMap()
+                val metadataSnapshot = if (kind == KIND_MOVIE || kind == KIND_SERIES) {
+                    withContext(Dispatchers.IO) {
+                        val keys = snapshot.map { it.key }
+                        ProviderMetadataCache.readGenresForPage(applicationContext, keys) to
+                            ProviderMetadataCache.readArtworkForPage(applicationContext, keys)
+                    }
+                } else emptyMap<String, List<String>>() to emptyMap<String, List<String>>()
                 if (generation != expectedGeneration || selectedCategoryId != id) return@launch
                 loadedItems.clear()
                 loadedItems.addAll(snapshot)
                 displayedCategoryId = id
                 lastRowId = cached.lastRowId
                 hasMore = cached.total == Int.MAX_VALUE
-                posterAdapter.rememberMovieGenres(genreSnapshot, reset = true, notifyExisting = true)
+                posterAdapter.rememberMovieGenres(metadataSnapshot.first, reset = true)
+                posterAdapter.rememberArtworkUrls(metadataSnapshot.second, reset = true)
                 posterAdapter.replace(snapshot)
                 cached.focusedKey?.let { focusedPosterKeys.putIfAbsent(memoryKey(id), it) }
                 loadingPage = false
@@ -469,7 +474,11 @@ class PosterCatalogActivity : AppCompatActivity() {
                         applicationContext, page.map { it.key }
                     )
                 } else emptyMap()
-                Triple(page, page.lastOrNull()?.let { dao.streamRowId(it.key) } ?: cursor, cachedGenres)
+                val cachedArtwork = if (kind == KIND_MOVIE || kind == KIND_SERIES) {
+                    ProviderMetadataCache.readArtworkForPage(applicationContext, page.map { it.key })
+                } else emptyMap()
+                Triple(page, page.lastOrNull()?.let { dao.streamRowId(it.key) } ?: cursor,
+                    cachedGenres to cachedArtwork)
             }
             if (requestGeneration != generation || requestCategoryId != selectedCategoryId) return@launch
             lastRowId = result.second
@@ -478,15 +487,21 @@ class PosterCatalogActivity : AppCompatActivity() {
                 loadedItems.clear()
                 loadedItems.addAll(result.first)
                 displayedCategoryId = requestCategoryId
-                posterAdapter.rememberMovieGenres(result.third, reset = true, notifyExisting = true)
+                posterAdapter.rememberMovieGenres(result.third.first, reset = true)
+                posterAdapter.rememberArtworkUrls(result.third.second, reset = true)
                 posterAdapter.replace(result.first)
             } else {
                 loadedItems.addAll(result.first)
-                posterAdapter.rememberMovieGenres(result.third, reset = false)
+                posterAdapter.rememberMovieGenres(result.third.first, reset = false)
+                posterAdapter.rememberArtworkUrls(result.third.second, reset = false)
                 posterAdapter.append(result.first)
             }
             updateCount()
-            ArtworkLoader.prefetch(this@PosterCatalogActivity, result.first.take(6).map { it.icon?.takeIf(String::isNotBlank) ?: it.backdrop })
+            ArtworkLoader.prefetch(this@PosterCatalogActivity, result.first.take(6).map { item ->
+                (listOf(item.icon) + result.third.second[item.key].orEmpty() + listOf(item.backdrop))
+                    .firstOrNull { it?.startsWith("http://", true) == true ||
+                        it?.startsWith("https://", true) == true }
+            })
             loadingPage = false
             saveMemorySnapshot()
             requestInitialContentFocus()
@@ -541,12 +556,15 @@ class PosterCatalogActivity : AppCompatActivity() {
             try {
                 // Batch-read locally first. A cached detail should never
                 // trigger another network round-trip just to paint its genre.
-                val snapshot = withContext(Dispatchers.IO) {
-                    ProviderMetadataCache.readGenresForPage(applicationContext, visible.map { it.key })
+                val (snapshot, artwork) = withContext(Dispatchers.IO) {
+                    val keys = visible.map { it.key }
+                    ProviderMetadataCache.readGenresForPage(applicationContext, keys) to
+                        ProviderMetadataCache.readArtworkForPage(applicationContext, keys)
                 }
                 if (generation != currentGeneration || providerId != owner ||
                     selectedCategoryId != category) return@launch
                 snapshot.forEach { (key, genres) -> posterAdapter.rememberMovieGenre(key, genres) }
+                posterAdapter.rememberArtworkUrls(artwork, notifyExisting = true)
                 val now = SystemClock.elapsedRealtime()
                 if (genreQuotaWindowStartedMs == 0L || now - genreQuotaWindowStartedMs >= GENRE_QUOTA_WINDOW_MS) {
                     genreQuotaWindowStartedMs = now
@@ -559,9 +577,19 @@ class PosterCatalogActivity : AppCompatActivity() {
                     posterGrid.postDelayed(genreWarmRequest, GENRE_BATCH_COOLDOWN_MS - (now - lastGenreBatchAtMs))
                     return@launch
                 }
-                val candidates = MovieGenrePrefetchPolicy.candidates(
+                // Prioritize visible blue/blank posters even when we already
+                // know the film genre. Details can contain movie_image/cover,
+                // which the Xtream catalog list frequently omits.
+                val missingPoster = visible.filter { item ->
+                    item.kind in setOf("movie", "series") &&
+                        item.icon.isNullOrBlank() && item.backdrop.isNullOrBlank() &&
+                        item.key !in artwork && item.key !in recent
+                }
+                val genres = MovieGenrePrefetchPolicy.candidates(
                     visible, names, snapshot, recent, limit = minOf(4, remaining)
                 )
+                val candidates = (missingPoster + genres)
+                    .distinctBy { it.key }.take(minOf(4, remaining))
                 if (candidates.isEmpty()) return@launch
                 val provider = withContext(Dispatchers.IO) {
                     BlofyDatabase.get(applicationContext).dao().provider(owner)
@@ -575,7 +603,9 @@ class PosterCatalogActivity : AppCompatActivity() {
                     candidates.map { movie ->
                         launch(Dispatchers.IO) {
                             val result = slots.withPermit {
-                                ProviderDetailsRepository.refresh(applicationContext, provider, movie)
+                                ProviderDetailsRepository.refresh(applicationContext, provider, movie,
+                                    force = movie.key !in artwork &&
+                                        movie.icon.isNullOrBlank() && movie.backdrop.isNullOrBlank())
                             }
                             withContext(Dispatchers.Main) {
                                 genreWarmAttempts[movie.key] = SystemClock.elapsedRealtime()
@@ -587,6 +617,10 @@ class PosterCatalogActivity : AppCompatActivity() {
                                     result.metadata?.genres?.filter(String::isNotBlank)
                                         ?.takeIf { it.isNotEmpty() }
                                         ?.let { posterAdapter.rememberMovieGenre(movie.key, it) }
+                                    result.metadata?.let { info ->
+                                        posterAdapter.rememberArtworkUrl(movie.key,
+                                            listOfNotNull(info.posterUrl, info.backdropUrl))
+                                    }
                                 }
                             }
                         }
@@ -737,11 +771,13 @@ class PosterCatalogActivity : AppCompatActivity() {
         val last = manager?.findLastVisibleItemPosition()?.coerceAtLeast(first) ?: minOf(first + 12, loadedItems.lastIndex)
         val keys = loadedItems.drop(first).take((last - first + gridColumns + 1).coerceAtMost(32)).map { it.key }
         genreRefreshJob = lifecycleScope.launch {
-            val snapshot = withContext(Dispatchers.IO) {
-                ProviderMetadataCache.readGenresForPage(applicationContext, keys)
+            val (snapshot, artwork) = withContext(Dispatchers.IO) {
+                ProviderMetadataCache.readGenresForPage(applicationContext, keys) to
+                    ProviderMetadataCache.readArtworkForPage(applicationContext, keys)
             }
             if (generation != expectedGeneration || providerId != owner) return@launch
             posterAdapter.rememberMovieGenres(snapshot, reset = false, notifyExisting = true)
+            posterAdapter.rememberArtworkUrls(artwork, reset = false, notifyExisting = true)
         }
     }
     override fun onPause() {
