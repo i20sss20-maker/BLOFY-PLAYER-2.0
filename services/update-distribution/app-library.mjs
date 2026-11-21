@@ -1236,11 +1236,14 @@ export async function initAppLibrary() {
         }
       }
       if (version < 21) {
-        // Only promote the exact signed 56.0.2 bytes that the protected
-        // first-party GitHub OIDC workflow uploaded and SHA256-verified.
-        // The previous 56.0.1 installer remains available for rollback.
+        // Historical migration stays pinned to 56.0.2 even when a later
+        // release is configured in the default seed values.
         if (await signedStream5602Available()) {
-          const signed = cleanApp(DEFAULT_APPS.find(item => item.slug === 'blofy-stream'));
+          const signed = cleanApp({
+            ...DEFAULT_APPS.find(item => item.slug === 'blofy-stream'),
+            version: '56.0.2', apkSizeBytes: STREAM_5602_BYTES,
+            downloadUrl: 'https://updates.blofyplayer.com/files/releases/BLOFY-STREAM-56.0.2-AUTO-CATALOG-FIX-OWNER-SIGNED.apk'
+          });
           const promoted = await client.query(
             `update blofy_app_catalog
              set previous_version=version, previous_download_url=download_url,
