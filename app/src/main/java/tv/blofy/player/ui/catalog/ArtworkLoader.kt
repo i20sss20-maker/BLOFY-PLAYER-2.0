@@ -15,6 +15,7 @@ import android.util.LruCache
 import android.widget.ImageView
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Call
 import tv.blofy.player.core.commercial.CommercialRuntime
 import java.io.File
@@ -533,8 +534,14 @@ object ArtworkLoader {
     private fun sampleSize(w: Int, h: Int, tw: Int, th: Int): Int { var s = 1; while (w / (s * 2) >= tw && h / (s * 2) >= th) s *= 2; return s }
 
     private fun normalizeUrl(raw: String?): String? {
-        val value = raw?.trim()?.takeIf { it.isNotBlank() && !it.equals("null", true) } ?: return null
-        return runCatching { java.net.URI(value) }.getOrNull()?.takeIf { (it.scheme.equals("https", true) || it.scheme.equals("http", true)) && !it.host.isNullOrBlank() }?.let { value }
+        val value = raw?.trim()?.takeIf {
+            it.isNotBlank() && !it.equals("null", true)
+        } ?: return null
+        // Many Xtream servers return unescaped spaces/Unicode in poster URLs.
+        // java.net.URI silently rejects these valid-in-practice image links
+        // and every card remains on its placeholder. OkHttp canonicalizes
+        // them safely and the resulting URL is used for memory/disk cache keys.
+        return value.toHttpUrlOrNull()?.toString()
     }
 
     private fun adaptiveWorkerCount(): Int {
