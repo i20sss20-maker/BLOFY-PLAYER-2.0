@@ -95,3 +95,27 @@
 .one-register-xtream-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}
 #one-register-extract{background:#247666;font-weight:800}
 @media(max-width:640px){.one-register-xtream-fields{grid-template-columns:1fr}}
+
+/* Both code vouchers AND standalone/linked Xtream accounts live in this tab. */
+.one-register-account-panel{margin:20px 0 28px;padding:18px;border:1px solid #477d80;
+  border-radius:15px;background:#103247;min-width:0}
+.one-register-account-panel .one-section-heading{
+  display:flex;align-items:end;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.one-register-account-panel .one-section-heading h3{
+  margin:4px 0;font-size:clamp(18px,1.9vw,24px);color:#d8fff3}
+.one-register-account-panel label{color:#cbe8e3;display:grid;gap:6px;font-size:13px}
+#one-xtream-register-state{padding:9px 13px;min-height:42px;min-width:160px;
+  border:1px solid #588b96;border-radius:10px;background:#133c51;color:#f1ffff}
+.one-register-account-panel>.one-footnote{line-height:1.9;color:#bddbd9;margin:10px 0}
+#one-xtream-register-status{color:#c9ffea;font-size:13px;line-height:1.8}
+.one-register-codes-heading{font-size:21px;color:#c8f7e9;margin:26px 0 12px}
+.one-xtream-state{display:inline-block;border-radius:8px;padding:4px 11px;
+  background:#265c65;color:#e5fff1;white-space:nowrap}
+.one-xtream-active{background:#226d55}
+.one-xtream-expired{background:#744f2c}
+.one-xtream-disabled{background:#7f4045}
+.one-xtream-unknown{background:#425b70}
+.one-register-account-panel .one-register-table{min-width:810px}
+@media(max-width:640px){.one-register-account-panel{padding:11px}
+ .one-register-account-panel .one-section-heading{align-items:stretch}
+ #one-xtream-register-state{width:100%}}
