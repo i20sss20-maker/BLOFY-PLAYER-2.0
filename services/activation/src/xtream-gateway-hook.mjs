@@ -2888,7 +2888,10 @@ http.createServer = function withBlofyXtreamGateway(listener) {
             'cache-control':'no-store, private',
             'referrer-policy':'no-referrer'
           });
-        if (match[2] === 'credentials' && req.method === 'GET') return json(res,200,await revealAccountCredentials(id,req));
+        if (match[2] === 'credentials' && req.method === 'GET')
+          return json(res,200,await revealAccountCredentials(id,req),{
+            'cache-control':'no-store, private','referrer-policy':'no-referrer'
+          });
         if (match[2] === 'compatibility' && req.method === 'GET')
           return json(res,200,await checkAccountXtreamCompatibility(id));
         if (!match[2] && req.method === 'PATCH') return json(res, 200, { item: await patchAccount(id, await readJson(req)) });
