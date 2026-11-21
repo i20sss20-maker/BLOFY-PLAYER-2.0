@@ -1,0 +1,56 @@
+name: Inspect BLOFY STREAM 56.0.3 owner-signed release for pinned publication
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/inspect-stream-56-0-3-owner-signed.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_RUN: '44842443212'
+      SOURCE_SHA: '9e5f4adc40d2488342c2776ca543d4df966ca8ce'
+      PREFIX: 'BLOFY-STREAM-56.0.3-REFRESH-STALL-OWNER-SIGNED-'
+      APK: 'BLOFY-STREAM-56.0.3-REFRESH-STALL-FIX-OWNER-SIGNED.apk'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify successful native FFmpeg and original-owner signing workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" > /tmp/src.json
+          jq -e --arg sha "$SOURCE_SHA" '.status=="completed" and .conclusion=="success" and .head_sha==$sha' /tmp/src.json
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN/jobs?per_page=100" > /tmp/jobs.json
+          jq -e '[.jobs[] | select(.name=="owner-signed-stream-qa" and .conclusion=="success")] | length==1' /tmp/jobs.json
+          jq -e '[.jobs[].steps[] | select(.name=="Verify identity, certificate, signatures, native FFmpeg and SHA256" and .conclusion=="success")] | length==1' /tmp/jobs.json
+      - name: Print exact signed APK SHA256 and byte size (non-sensitive)
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN/artifacts?per_page=100" > /tmp/artifacts.json
+          artifact="$(jq -er --arg prefix "$PREFIX" '[.artifacts[] | select((.name|startswith($prefix)) and .expired==false)] | if length==1 then .[0].name else error("missing signed artifact") end' /tmp/artifacts.json)"
+          mkdir -p signed
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name "$artifact" --dir signed
+          file="$(find signed -type f -name "$APK" -print -quit)"
+          identity="$(find signed -type f -name IDENTITY.txt -print -quit)"
+          sums="$(find signed -type f -name SHA256SUMS -print -quit)"
+          test -s "$file" && test -s "$identity" && test -s "$sums"
+          test "$(find signed -type f -name "$APK" | wc -l)" -eq 1
+          grep -Fxq 'application_id=tv.blofy.player.v2.stream' "$identity"
+          grep -Fxq 'version_code=2000118' "$identity"
+          sha="$(sha256sum "$file" | awk '{print $1}')"
+          bytes="$(stat -c %s "$file")"
+          (cd "$(dirname "$file")" && sha256sum -c SHA256SUMS)
+          test "$bytes" -gt 50000000 && test "$bytes" -lt 250000000
+          echo "VERIFIED_STREAM_5603_SHA256=$sha"
+          echo "VERIFIED_STREAM_5603_BYTES=$bytes"
+          echo "VERIFIED_STREAM_5603_ARTIFACT=$artifact"
+          echo "### Original-owner-signed STREAM 56.0.3 verified" >> "$GITHUB_STEP_SUMMARY"
+          echo "SHA256: $sha" >> "$GITHUB_STEP_SUMMARY"
+          echo "Bytes: $bytes" >> "$GITHUB_STEP_SUMMARY"
+          echo "Source run: $SOURCE_RUN" >> "$GITHUB_STEP_SUMMARY"
