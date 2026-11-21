@@ -79,7 +79,7 @@ test('Xtream list is readable without secrets; selected existing account re-reve
  };
  const context={document,window,fetch,URL,URLSearchParams,
   location:{hash:'#one-code-register'},navigator:{clipboard:{writeText:async()=>{}}},
-  setTimeout,clearTimeout,Date,Number,String,Math,RegExp,Error,Promise};
+  setTimeout,clearTimeout,AbortController,Date,Number,String,Math,RegExp,Error,Promise};
  runInNewContext(read('blofy-one-xtream-register.js'),context);
  await new Promise(resolve=>setImmediate(resolve));
  assert.equal(calls.length,1,'accounts loaded directly inside unified code register');
