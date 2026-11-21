@@ -65,6 +65,7 @@ import {parseStreamAppToken,verifyStreamAppToken,bearerFromRequest}
 import {createProtectedArabicAudioBridge} from './stream-arabic-audio-bridge.mjs';
 import {encryptGatewayAccountPassword,decryptGatewayAccountPassword} from './xtream-account-vault.mjs';
 import {createGatewayCredentialRotator} from './xtream-account-credential-rotation.mjs';
+import {createGatewayCredentialChanger} from './xtream-account-credential-change.mjs';
 import {diagnoseSalehCatalogCopy} from './xtream-saleh-copy-capability.mjs';
 import {probeSalehRangedMovie} from './xtream-content-hub-range-pilot.mjs';
 import {contentHubBridgeAuth,parseContentHubClientRange,
@@ -503,6 +504,28 @@ async function rotateAccountCredentials(id,req,body) {
     },
     subscriptionUnchanged:true,
     oldCredentialsDisabled:true
+  };
+}
+
+async function changeAccountCredentials(id,req,body){
+  await ensureReady();
+  if(!validUuid(id))
+    throw Object.assign(new Error('xtream_gateway_account_invalid'),{status:400});
+  const change=createGatewayCredentialChanger({pool,keyHex:KEY_HEX});
+  const updated=await change(id,body);
+  const serverUrl=xtreamOrigin(req);
+  const params=new URLSearchParams({
+    username:updated.username,password:updated.password,
+    type:'m3u_plus',output:'ts'
+  });
+  return {
+    item:adminAccount(updated.item),accountId:updated.accountId,
+    credentials:{
+      serverUrl,username:updated.username,password:updated.password,
+      m3uUrl:serverUrl+'/get.php?'+params.toString()
+    },
+    usernameMode:updated.usernameMode,passwordMode:updated.passwordMode,
+    subscriptionUnchanged:true,oldCredentialsDisabled:true
   };
 }
 
@@ -2878,11 +2901,15 @@ http.createServer = function withBlofyXtreamGateway(listener) {
       if (req.method === 'POST' && url.pathname === '/api/v1/admin/xtream-gateway/accounts/bulk') {
         return json(res, 201, await createAccountsBulk(await readJson(req), req));
       }
-      const match = url.pathname.match(/^\/api\/v1\/admin\/xtream-gateway\/accounts\/([0-9a-f-]+)(?:\/(reset|credentials|rotate-credentials|compatibility))?$/i);
+      const match = url.pathname.match(/^\/api\/v1\/admin\/xtream-gateway\/accounts\/([0-9a-f-]+)(?:\/(reset|credentials|rotate-credentials|change-credentials|compatibility))?$/i);
       if (match) {
         const id = match[1];
         if (!validUuid(id)) return json(res, 400, { error: 'xtream_gateway_account_invalid' });
         if (match[2] === 'reset' && req.method === 'POST') return json(res, 200, await resetAccountPassword(id, req));
+        if(match[2]==='change-credentials'&&req.method==='POST')
+          return json(res,200,await changeAccountCredentials(id,req,await readJson(req)),{
+            'cache-control':'no-store, private','referrer-policy':'no-referrer'
+          });
         if(match[2]==='rotate-credentials'&&req.method==='POST')
           return json(res,200,await rotateAccountCredentials(id,req,await readJson(req)),{
             'cache-control':'no-store, private',

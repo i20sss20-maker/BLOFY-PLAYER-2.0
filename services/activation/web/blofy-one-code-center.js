@@ -139,7 +139,7 @@
           </select>
         </label>
       </div>
-      <p class="one-footnote">هذه الحسابات موجودة في قاعدة Xtream، سواء أُصدرت مباشرة أو من تفعيل كود BLOFY. يمكنك استخراج نفس Host والمستخدم وكلمة المرور مجددًا دون تجديد أو تغيير بيانات الدخول. بحث أعلى الصفحة يشمل هذه الحسابات أيضًا.</p>
+      <p class="one-footnote">هذه الحسابات موجودة في قاعدة Xtream، سواء أُصدرت مباشرة أو من تفعيل كود BLOFY. يمكنك استخراج بيانات الحساب أو تعديل اسم المستخدم وكلمة المرور يدويًا أو تلقائيًا من النظام، دون تغيير مدة الاشتراك. بحث أعلى الصفحة يشمل هذه الحسابات أيضًا.</p>
       <p id="one-xtream-register-status" role="status" aria-live="polite">جارٍ جلب حسابات Xtream من السيرفر…</p>
       <div class="one-register-table-wrap" tabindex="0" role="region" aria-label="حسابات Xtream المستقلة والمرتبطة">
         <table class="one-register-table">
@@ -192,6 +192,69 @@
         </div>
       </div>
       <p id="one-xtream-register-detail-status" role="status" aria-live="polite"></p>
+    </dialog>
+    <dialog id="one-xtream-edit-dialog" class="one-register-dialog one-xtream-edit-dialog" aria-labelledby="one-xtream-edit-title">
+      <div class="one-register-dialog-header">
+        <h3 id="one-xtream-edit-title">🔐 تعديل اسم المستخدم وكلمة مرور Xtream</h3>
+        <button id="one-xtream-edit-close" type="button">✕ إغلاق</button>
+      </div>
+      <p id="one-xtream-edit-account" class="one-footnote"></p>
+      <form id="one-xtream-edit-form" autocomplete="off">
+        <div class="one-xtream-edit-grid">
+          <fieldset>
+            <legend>اسم المستخدم (Username)</legend>
+            <label>طريقة التغيير
+              <select id="one-xtream-edit-username-mode">
+                <option value="keep">إبقاء المستخدم الحالي</option>
+                <option value="manual">أكتبه يدويًا</option>
+                <option value="automatic">إنشاء مستخدم من النظام</option>
+              </select>
+            </label>
+            <label id="one-xtream-edit-username-field" hidden>اسم المستخدم الجديد
+              <input id="one-xtream-edit-username" type="text" dir="ltr" maxlength="32"
+                minlength="4" pattern="[A-Za-z0-9_]{4,32}" placeholder="4–32 حروف/أرقام/_" spellcheck="false" autocomplete="off">
+            </label>
+          </fieldset>
+          <fieldset>
+            <legend>كلمة المرور (Password)</legend>
+            <label>طريقة التغيير
+              <select id="one-xtream-edit-password-mode">
+                <option value="keep">إبقاء كلمة المرور الحالية</option>
+                <option value="manual">أكتبها يدويًا</option>
+                <option value="automatic">إنشاء كلمة مرور من النظام</option>
+              </select>
+            </label>
+            <label id="one-xtream-edit-password-field" hidden>كلمة المرور الجديدة
+              <input id="one-xtream-edit-password" type="password" dir="ltr" maxlength="64"
+                minlength="8" pattern="[A-Za-z0-9_-]{8,64}" placeholder="8–64 حروف/أرقام/_/-" spellcheck="false" autocomplete="new-password">
+            </label>
+          </fieldset>
+        </div>
+        <p class="one-register-warning">تغيير أي بيانات دخول يعطّل الدخول القديم فورًا وقد يقطع بث أجهزة Xtream المتصلة. يلزم تزويد العميل بالبيانات الجديدة. <strong>الكود والاشتراك وتاريخ الانتهاء والمصدر وعدد الاتصالات لن تتغير.</strong></p>
+        <label class="one-xtream-edit-confirm">
+          <input id="one-xtream-edit-ack" type="checkbox" required>
+          أؤكد أنني سأبلغ العميل بالبيانات الجديدة وأن الاتصال القديم سيتوقف.
+        </label>
+        <div class="one-xtream-edit-actions">
+          <button id="one-xtream-edit-submit" type="submit">✓ حفظ بيانات الدخول الجديدة</button>
+          <button id="one-xtream-edit-cancel" type="button">إلغاء</button>
+        </div>
+      </form>
+      <p id="one-xtream-edit-status" role="status" aria-live="polite"></p>
+      <div id="one-xtream-edit-result" class="one-register-xtream-secret" hidden>
+        <strong>✓ بيانات Xtream الجديدة — أرسلها لصاحب الحساب فقط</strong>
+        <div class="one-register-xtream-fields">
+          <div><small>Host / السيرفر</small><code id="one-xtream-edit-host" dir="ltr"></code></div>
+          <div><small>Username</small><code id="one-xtream-edit-user" dir="ltr"></code></div>
+          <div><small>Password</small><code id="one-xtream-edit-pass" dir="ltr"></code></div>
+          <div><small>رابط M3U الجديد</small><code id="one-xtream-edit-m3u" dir="ltr"></code></div>
+        </div>
+        <div class="one-register-xtream-actions">
+          <button id="one-xtream-edit-copy" type="button">نسخ بيانات Xtream</button>
+          <button id="one-xtream-edit-copy-m3u" type="button">نسخ رابط M3U</button>
+          <button id="one-xtream-edit-hide" type="button">إخفاء البيانات</button>
+        </div>
+      </div>
     </dialog>
     <p class="one-register-warning">حماية العملاء: «استخراج مجددًا» قراءة لنفس الكود ونفس حساب Xtream، ولا ينشئ اشتراكًا جديدًا أو يبدأ المدة. يتطلب تفعيلًا ساريًا وكودًا قابلًا للاسترجاع؛ الأكواد القديمة غير القابلة للكشف تحتاج إدخال الكود الأصلي يدويًا. البيانات تظهر مؤقتًا للمشرف فقط، والكشف مسجّل في سجل الإدارة. السماح بدخول الجهاز إجراء منفصل.</p>
     <dialog id="one-register-dialog" class="one-register-dialog" aria-labelledby="one-register-dialog-title">
