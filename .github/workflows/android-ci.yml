@@ -67,6 +67,13 @@ jobs:
             -PBLOFY_UPDATE_BASE_URL=https://updates.blofyplayer.com \
             testCodeDemoUnitTest lintCodeDemo assembleCodeDemo 2>&1 | tee -a gradle-ci.log
           test -s app/build/outputs/apk/codeDemo/app-codeDemo.apk
+          # Debug QA is separate from the owner's already-installed signed
+          # BLOFY STREAM package: no uninstall or activation-data loss.
+          apk=app/build/outputs/apk/codeDemo/app-codeDemo.apk
+          package=$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" |
+            sed -n "s/^package: name='\\([^']*\\)'.*/\\1/p")
+          [[ "$package" == "tv.blofy.player.v2.code.qa" ]] ||
+            { echo "::error::Wrong QA package identity: $package"; exit 1; }
       - name: Upload code-only APK for private QA
         uses: actions/upload-artifact@v4
         with:

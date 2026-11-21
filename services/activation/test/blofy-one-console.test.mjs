@@ -13,10 +13,12 @@ test('BLOFY ONE dashboard uses existing admin session and never exposes an unpro
 
 test('BLOFY ONE links existing code and subscriber flows rather than making new databases or customer routes',async()=>{
   const html=await file('web/blofy-one.html');
+  const separated=html.includes('class="one-panel-switch"');
   for(const path of ['/sources-admin#xtream','/sources-admin#catalog','/admin#devices',
-    '/admin#codes','/admin#releases','/admin#support','/connect','/status'])
+    ...(!separated?['/admin#codes']:[]),'/admin#releases','/admin#support','/connect','/status'])
     assert.ok(html.includes('href="'+path+'"'),path);
-  for(const asset of ['/blofy-one.css?v=1','/blofy-one.js?v=1'])
+  if(separated)assert.match(html,/href="\/admin"/);
+  for(const asset of ['/blofy-one.css?v=20261118-integrated-1','/blofy-one.js?v=20261118-integrated-1'])
     assert.ok(html.includes(asset));
   assert.match(html,/هذه أعداد قاعدة البيانات وليست قنوات أو مشاهدين يعملون الآن/);
   assert.match(html,/لا يثبت عمل القنوات الحقيقية/);
@@ -45,4 +47,19 @@ test('read-only status uses true service endpoints and explicit on-demand synthe
   assert.match(js,/realSourceVerified|لا يثبت تشغيل مصادر العملاء/);
   assert.match(js,/credentials:'same-origin'/);
   assert.doesNotMatch(js,/(?:localStorage|sessionStorage|POST|DELETE|PATCH|\/api\/v1\/admin\/xtream\/sync)/);
+});
+
+test('BLOFY ONE serves every locally referenced JS and CSS; no silent 404 scripts',async()=>{
+  const [html,admin]=await Promise.all([
+    file('web/blofy-one.html'),file('src/admin-console-hook.mjs')
+  ]);
+  const urls=[...html.matchAll(/(?:src|href)="(\/[^"?]+\.(?:js|css))(?:\?[^"]*)?"/g)]
+    .map(m=>m[1]);
+  assert.ok(urls.length>=15,'asset coverage must include complete management app');
+  for(const path of new Set(urls)){
+    assert.ok(admin.includes("['"+path+"'"),'not allowlisted by admin console: '+path);
+    assert.ok((await file('web'+path)).length>10,'asset file missing or empty: '+path);
+  }
+  for(const name of ['blofy-one-store-ops.css','blofy-one-store-ops.js',
+    'blofy-one-store-sales.js'])assert.ok(urls.includes('/'+name),name);
 });

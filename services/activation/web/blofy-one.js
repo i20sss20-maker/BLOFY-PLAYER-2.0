@@ -43,6 +43,7 @@ async function refresh(){
   }
   byId('one-last-checked').textContent='آخر فحص: '+stamp.format(new Date());
   button.disabled=false;
+  void refreshReadiness();
 }
 async function smoke(){
   const button=byId('one-smoke'),result=byId('one-smoke-result');
@@ -75,3 +76,135 @@ async function smoke(){
 byId('one-refresh')?.addEventListener('click',()=>{void refresh()});
 byId('one-smoke')?.addEventListener('click',()=>{void smoke()});
 void refresh();
+
+/* BLOFY ONE centralized operator readiness: existing protected read-only backend.
+ * These are health checks, not customer-account or streaming-success counts.
+ * Never persist admin payloads or display secrets.
+ */
+const oneReadinessLinks=Object.freeze({
+  overview:'/admin/control-center',
+  sources:'/sources-admin#xtream',
+  library:'/admin/content-hub',
+  accounts:'/sources-admin#xtream',
+  codes:'/sources-admin#dual',
+  distributors:'/distributor',
+  restream:'/admin/control-center',
+  security:'/admin/control-center/health'
+});
+const oneReadinessStates=Object.freeze({
+  connected:['متصل','ok'],
+  reachable:['واجهة متاحة','warn'],
+  degraded:['يحتاج مراجعة','warn'],
+  blocked:['تفويض مرفوض','fail'],
+  unavailable:['غير متاح','fail'],
+  unknown:['غير مؤكد','pending']
+});
+let oneReadinessSerial=0;
+async function refreshReadiness(){
+  const token=++oneReadinessSerial;
+  const summary=byId('one-readiness-summary'),list=byId('one-readiness-list');
+  if(!summary||!list)return;
+  summary.textContent='جارٍ قراءة جاهزية وحدات STREAM من مسارات الإدارة المحمية…';
+  try{
+    const snapshot=await readJson('/api/v1/admin/control-center/status');
+    if(token!==oneReadinessSerial)return;
+    const result=snapshot.operatorReadiness||{};
+    const checks=Array.isArray(result.checks)?result.checks.filter(x=>x&&
+      Object.hasOwn(oneReadinessLinks,String(x.id||''))):[];
+    list.replaceChildren();
+    if(!checks.length){
+      summary.textContent='تعذر التحقق من وحدات الإدارة. استخدم مركز المراقبة التفصيلي.';
+      return;
+    }
+    const states=result.summary||{};
+    const connected=Number(states.connected||0),unknown=Number(states.unknown||0);
+    const failures=Number(states.degraded||0)+Number(states.unavailable||0);
+    summary.textContent='واجهات متصلة: '+connected+' من '+checks.length+
+      ' · تحتاج مراجعة: '+failures+' · غير مؤكدة: '+unknown+
+      ' — آخر قراءة: '+new Date(result.lastCheckedAt||snapshot.checkedAt).toLocaleString('ar-SA');
+    for(const row of checks){
+      const state=oneReadinessStates[row.state]||oneReadinessStates.unknown;
+      const card=document.createElement('a');
+      card.className='one-ready-item '+state[1];
+      card.href=oneReadinessLinks[row.id];
+      const title=document.createElement('strong');
+      title.textContent=String(row.label||'خدمة BLOFY');
+      const badge=document.createElement('span');
+      badge.className='one-ready-state';
+      badge.textContent=state[0];
+      card.append(title,badge);
+      list.append(card);
+    }
+  }catch(error){
+    if(token!==oneReadinessSerial)return;
+    summary.textContent=error.message==='session_required'
+      ?'انتهت جلسة الإدارة؛ افتح صفحة تسجيل الدخول لإعادة التحقق.'
+      :'تعذر التحقق من جاهزية الوحدات. الفحوصات السابقة لا تُعتبر نتائج حالية.';
+    list.replaceChildren();
+    const action=document.createElement('a');
+    action.href=error.message==='session_required'?'/admin':'/admin/control-center/health';
+    action.className='one-ready-recovery';
+    action.textContent=error.message==='session_required'?'تسجيل دخول المشرف ←':'فتح المراقبة التفصيلية ←';
+    list.append(action);
+  }
+}
+function filterOneModules(){
+  const field=byId('one-module-filter'),count=byId('one-module-count');
+  if(!field||!count)return;
+  const query=field.value.trim().toLocaleLowerCase('ar');
+  const cards=Array.from(document.querySelectorAll('#one-module-list .one-module'));
+  let visible=0;
+  for(const card of cards){
+    const match=card.textContent.toLocaleLowerCase('ar').includes(query);
+    card.hidden=!match;
+    if(match)visible++;
+  }
+  count.textContent=visible?'الأقسام المعروضة: '+visible:'لا توجد أقسام مطابقة. جرّب كلمة أخرى.';
+}
+byId('one-module-filter')?.addEventListener('input',filterOneModules);
+filterOneModules();
+
+
+/* Real recorded BLOFY PLAYER activation checkout totals only.
+ * GET is admin-authenticated and contains aggregates, never payer data.
+ * Do not add WhatsApp, STREAM, Xtream or offline payments to these totals.
+ */
+let oneSalesBusy = false;
+async function refreshOneSales(){
+  const button=byId('one-sales-refresh');
+  const status=byId('one-sales-status');
+  if(!button||!status||oneSalesBusy)return;
+  oneSalesBusy=true;
+  button.disabled=true;
+  const ids=['gross','paid','30d','pending','refunded','failed','cancelled'];
+  for(const id of ids)byId('one-sales-'+id).textContent='—';
+  status.textContent='جارٍ قراءة الطلبات المسجلة من قاعدة BLOFY…';
+  try{
+    const data=await readJson('/api/v1/admin/one/sales');
+    if(!data.ok||data.scope!=='BLOFY_PLAYER_device_activation_orders_only'||
+      data.currency!=='SAR')throw new Error('invalid_scope');
+    const orders=data.orders||{},value=data.value||{};
+    const safeInt=n=>Number.isSafeInteger(n)&&n>=0?count.format(n):'—';
+    const safeSar=n=>typeof n==='string'&&/^\d{1,30}\.\d{2}$/.test(n)
+      ?n+' ر.س':'—';
+    byId('one-sales-gross').textContent=safeSar(value.recordedPaidSar);
+    byId('one-sales-paid').textContent=safeInt(orders.paid);
+    byId('one-sales-30d').textContent=safeSar(value.paidLast30DaysSar);
+    byId('one-sales-pending').textContent=safeInt(orders.pending);
+    byId('one-sales-refunded').textContent=safeInt(orders.refunded);
+    byId('one-sales-failed').textContent=safeInt(orders.failed);
+    byId('one-sales-cancelled').textContent=safeInt(orders.cancelled);
+    status.textContent='آخر تحديث: '+new Date(data.calculatedAt).toLocaleString('ar-SA')+
+      ' · المصدر: الطلبات المسجلة لتفعيل أجهزة BLOFY PLAYER فقط.';
+  }catch(error){
+    status.textContent=error.message==='session_required'
+      ?'انتهت جلسة الإدارة. سجّل الدخول ثم حدّث التقرير.'
+      :'تعذر قراءة سجل المدفوعات. لا تعرض اللوحة أرقامًا تقديرية عند تعطل قاعدة البيانات.';
+  }finally{
+    oneSalesBusy=false;
+    button.disabled=false;
+  }
+}
+byId('one-sales-refresh')?.addEventListener('click',()=>{void refreshOneSales()});
+byId('one-refresh')?.addEventListener('click',()=>{void refreshOneSales()});
+void refreshOneSales();

@@ -12,6 +12,7 @@ import { ADMIN_CONSOLE_SCHEMA } from './admin-console-schema.mjs';
 import { servePublicDownloads } from './public-downloads.mjs';
 import { createDeviceAdmin } from './device-admin.mjs';
 import { createPublicSystemHealth } from './public-system-health.mjs';
+import { readOneSalesSummary } from './one-sales-overview.mjs';
 
 const pool = new pg.Pool({ ...databaseOptions(process.env.DATABASE_URL),
   max: 2, connectionTimeoutMillis: 4000, idleTimeoutMillis: 10000, statement_timeout: 10000 });
@@ -62,7 +63,33 @@ const experience = createExperienceHandlers({ pool, json, readJson, requireAdmin
 const deviceAdmin = createDeviceAdmin({ pool, json, readJson, requireAdmin, ensureAdmin });
 const assets = new Map([
   ['/blofy-one.css', ['blofy-one.css', 'text/css']],
+  ['/blofy-one-role-split.css', ['blofy-one-role-split.css', 'text/css']],
+  ['/blofy-one-code-center.js', ['blofy-one-code-center.js', 'text/javascript']],
+  ['/blofy-one-code-register.js', ['blofy-one-code-register.js', 'text/javascript']],
+  ['/blofy-one-unified-extract.js', ['blofy-one-unified-extract.js', 'text/javascript']],
+  ['/blofy-one-xtream-register.js', ['blofy-one-xtream-register.js', 'text/javascript']],
+  ['/blofy-one-xtream-credential-edit.js', ['blofy-one-xtream-credential-edit.js', 'text/javascript']],
+  ['/blofy-one-code-register.css', ['blofy-one-code-register.css', 'text/css']],
+  ['/blofy-one-store-ops.css', ['blofy-one-store-ops.css', 'text/css']],
+  ['/blofy-one-store-ops.js', ['blofy-one-store-ops.js', 'text/javascript']],
+  ['/blofy-one-store-sales.js', ['blofy-one-store-sales.js', 'text/javascript']],
   ['/blofy-one.js', ['blofy-one.js', 'text/javascript']],
+  ['/blofy-one-customers.js', ['blofy-one-customers.js', 'text/javascript']],
+  ['/blofy-one-legacy.js', ['blofy-one-legacy.js', 'text/javascript']],
+  ['/blofy-one-stream.js', ['blofy-one-stream.js', 'text/javascript']],
+  ['/blofy-one-stream.css', ['blofy-one-stream.css', 'text/css']],
+  ['/blofy-one-operations.js', ['blofy-one-operations.js', 'text/javascript']],
+  ['/blofy-one-operations.css', ['blofy-one-operations.css', 'text/css']],
+  ['/blofy-one-modern.js', ['blofy-one-modern.js', 'text/javascript']],
+  ['/blofy-one-modern.css', ['blofy-one-modern.css', 'text/css']],
+  ['/blofy-one-code-manager.js', ['blofy-one-code-manager.js', 'text/javascript']],
+  ['/blofy-one-code-manager.css', ['blofy-one-code-manager.css', 'text/css']],
+  ['/blofy-one-launch.js', ['blofy-one-launch.js', 'text/javascript']],
+  ['/blofy-one-launch.css', ['blofy-one-launch.css', 'text/css']],
+  ['/blofy-one-capacity.js', ['blofy-one-capacity.js', 'text/javascript']],
+  ['/blofy-one-capacity.css', ['blofy-one-capacity.css', 'text/css']],
+  ['/blofy-one-legacy.css', ['blofy-one-legacy.css', 'text/css']],
+  ['/blofy-one-customers.css', ['blofy-one-customers.css', 'text/css']],
   ['/blofy-one-preview.js', ['blofy-one-preview.js', 'text/javascript']],
   ['/manifest.webmanifest', ['manifest.webmanifest', 'application/manifest+json']],
   ['/site-polish.css', ['site-polish.css', 'text/css']],
@@ -130,6 +157,14 @@ http.createServer = function withAdminConsole(listener) {
       }
       if (await deviceAdmin(req, res, url)) return;
       if (await handleReleaseAdmin(catalog, req, res, url.pathname, { requireAdmin, readJson, json })) return;
+      // Owner-only, real recorded BLOFY PLAYER checkout orders. No payouts,
+      // no external Geidea/Tap reconciliation, no STREAM sales, no PII.
+      if (url.pathname === '/api/v1/admin/one/sales' && req.method === 'GET') {
+        if (!requireAdmin(req, res)) return;
+        await ensureAdmin();
+        json(res, 200, await readOneSalesSummary(pool));
+        return;
+      }
       if (url.pathname === '/api/v1/admin/users' && req.method === 'GET') {
         if (!requireAdmin(req, res)) return;
         await ensureAdmin();

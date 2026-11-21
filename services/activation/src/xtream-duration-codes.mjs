@@ -72,6 +72,7 @@ export function safeCodeRecord(row){
   return {
     id:row.id,label:String(row.label||'').slice(0,100),
     channel:row.code_channel||'xtream',
+    dualAccessEnabled:row.dual_access_enabled===true,
     sourceId:row.source_id||null,durationDays:Number(row.duration_days),
     maxConnections:Number(row.max_connections),
     status:row.revoked_at?'revoked':row.redeemed_at?'redeemed':'unused',
@@ -89,7 +90,8 @@ export function safeCodeRecord(row){
     adminReloginCount:Number(row.admin_relogin_count||0),
     adminReloginUntil:row.admin_relogin_until?new Date(row.admin_relogin_until).getTime():null,
     extendedDays:Number(row.extended_days||0),
-    deviceTransferPending:row.code_channel==='app'&&Boolean(row.redeemed_at)&&!row.redeemed_device_hash,
+    deviceTransferPending:(row.code_channel==='app'||row.dual_access_enabled===true)&&
+      Boolean(row.redeemed_at)&&!row.redeemed_device_hash,
     xtreamRecoveryPending:row.code_channel==='xtream'&&Boolean(row.xtream_recovery_until)&&
       new Date(row.xtream_recovery_until).getTime()>Date.now()
   };
@@ -115,6 +117,9 @@ export async function ensureStreamCodeTable(client){
   )`);
   await client.query('ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS redeemed_device_hash TEXT');
   await client.query('ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS code_vault TEXT');
+  // Explicit owner-approved dual app/Xtream capability of the SAME voucher.
+  // The existing channel label remains unchanged for legacy recovery flows.
+  await client.query('ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS dual_access_enabled BOOLEAN NOT NULL DEFAULT FALSE');
   // One-time operator-authorized credential recovery for consumed Xtream vouchers.
   // Never resets redeemed_at or subscription expiry.
   await client.query('ALTER TABLE blofy_xtream_gateway_duration_codes ADD COLUMN IF NOT EXISTS xtream_recovery_until TIMESTAMPTZ');
@@ -205,6 +210,66 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
     return {ok:true,items:result.rows.map(safeCodeRecord),totals:totals.rows[0],
       nextOffset:result.rows.length===n?start+n:null};
   }
+  // Owner-only full inventory search. A plaintext voucher can only be matched
+  // by its HMAC proof; it is never included in a URL or returned in lists.
+  // Other searches inspect recorded label, buyer contact, hint and UUID.
+  async function search({query='',status='all',limit=40,offset=0}={}){
+    if(typeof query!=='string'||query.length>100||
+       /[\x00-\x1f\x7f]/.test(query))
+      throw Object.assign(Error('stream_search_query_invalid'),{status:400});
+    const q=query.trim()
+      .replace(/[٠-٩]/g,char=>String(char.charCodeAt(0)-0x660))
+      .replace(/[۰-۹]/g,char=>String(char.charCodeAt(0)-0x6f0));
+    if(q.length===1||q.length>80)
+      throw Object.assign(Error('stream_search_query_invalid'),{status:400});
+    const states={
+      all:'TRUE',
+      unused:'c.redeemed_at IS NULL AND c.revoked_at IS NULL',
+      redeemed:'c.redeemed_at IS NOT NULL',
+      revoked:'c.revoked_at IS NOT NULL'
+    };
+    if(!Object.hasOwn(states,String(status)))
+      throw Object.assign(Error('stream_search_status_invalid'),{status:400});
+    if(!Number.isSafeInteger(limit)||limit<1||limit>40||
+       !Number.isSafeInteger(offset)||offset<0||offset>100000)
+      throw Object.assign(Error('stream_search_pagination_invalid'),{status:400});
+    const proof=streamCodeProof(q,keyHex)||'';
+    const sql=`FROM blofy_xtream_gateway_duration_codes c
+      WHERE (
+        $1::text='' OR c.code_hash=$2 OR c.id::text=$1 OR
+        strpos(lower(c.label),lower($1::text))>0 OR
+        strpos(lower(COALESCE(c.buyer_name,'')),lower($1::text))>0 OR
+        strpos(COALESCE(c.buyer_phone,''),$1::text)>0 OR
+        strpos(lower(c.code_hint),lower($1::text))>0
+      ) AND (${states[status]})`;
+    const args=[q,proof];
+    const [items,count,totals]=await Promise.all([
+      pool.query(`SELECT c.* ${sql} ORDER BY c.created_at DESC,c.id DESC
+        LIMIT $3 OFFSET $4`,[...args,limit,offset]),
+      pool.query(`SELECT COUNT(*)::int AS count ${sql}`,args),
+      pool.query(`SELECT COUNT(*)::int AS total,
+        COUNT(*) FILTER(WHERE redeemed_at IS NULL AND revoked_at IS NULL)::int AS unused,
+        COUNT(*) FILTER(WHERE redeemed_at IS NOT NULL)::int AS redeemed,
+        COUNT(*) FILTER(WHERE revoked_at IS NOT NULL)::int AS revoked
+        FROM blofy_xtream_gateway_duration_codes`)
+    ]);
+    const filteredTotal=Number(count.rows?.[0]?.count||0);
+    return {ok:true,items:items.rows.map(safeCodeRecord),
+      totals:totals.rows?.[0]||{},filteredTotal,searchApplied:true,
+      nextOffset:offset+limit<filteredTotal?offset+limit:null};
+  }
+  // Protected record-by-ID lookup used for last-moment approval of manual
+  // changes. Never returns a plaintext voucher or Xtream password.
+  async function getRecord(id){
+    if(!UUID.test(String(id||'')))
+      throw Object.assign(Error('stream_code_id_invalid'),{status:400});
+    const result=await pool.query(
+      'SELECT * FROM blofy_xtream_gateway_duration_codes WHERE id=$1 LIMIT 1',[id]);
+    const row=result.rows?.[0];
+    return row?{ok:true,item:safeCodeRecord(row)}:
+      {ok:false,code:'stream_code_not_found'};
+  }
+
   // Operator-only *read* of a voucher by its HMAC proof. Unlike redemption,
   // this never consumes a code, resets a clock, or exposes account credentials.
   // The caller MUST be guarded by the existing admin session.
@@ -242,7 +307,8 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
         expiresAt:effectiveExpiry,
         canExtend:redeemed&&!row.revoked_at&&accountExists,
         // App re-login requires a separate 6-digit challenge from the new device.
-        requiresDeviceApproval:redeemed&&info.channel==='app'
+        requiresDeviceApproval:redeemed&&
+          (info.channel==='app'||info.dualAccessEnabled===true)
       }
     };
   }
@@ -323,7 +389,8 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
           RETURNING code_channel`,[row.id])).rows[0];
         if(converted?.code_channel==='app')row.code_channel='app';
       }
-      if((row.code_channel||'xtream')!==(appOnly?'app':'xtream'))
+      if((row.code_channel||'xtream')!==(appOnly?'app':'xtream')&&
+         row.dual_access_enabled!==true)
         throw Object.assign(Error('stream_code_wrong_product'),{status:409});
       // Existing activation is immutable. Only the same installation
       // can retrieve its already-issued credentials after an interrupted
@@ -363,7 +430,8 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
         if(!deviceProof)throw Object.assign(Error('stream_code_unavailable'),{status:409});
         // An operator reissues a new recovery code for an existing subscription
         // and clears the old binding. Its original clock and expiry do not reset.
-        const transferPending=appOnly&&row.code_channel==='app'&&
+        const transferPending=appOnly&&
+          (row.code_channel==='app'||row.dual_access_enabled===true)&&
           !row.redeemed_device_hash;
         // A normal logout on the original installation already succeeds.
         // New installations can reuse the SAME voucher only after admin
@@ -372,7 +440,8 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
         // The administrator can also open a short one-time window for the
         // original code without knowing the new device identifier. The FIRST
         // different installation that redeems within 10 minutes claims it.
-        const adminReloginApproved=appOnly&&row.code_channel==='app'&&
+        const adminReloginApproved=appOnly&&
+          (row.code_channel==='app'||row.dual_access_enabled===true)&&
           row.redeemed_device_hash&&row.redeemed_device_hash!==deviceProof&&
           row.admin_relogin_until&&
           new Date(row.admin_relogin_until).getTime()>clock();
@@ -474,5 +543,5 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
     }catch(error){await client.query('ROLLBACK').catch(()=>{});throw error}
     finally{client.release()}
   }
-  return {issue,list,lookup,reveal,revoke,redeem};
+  return {issue,list,search,getRecord,lookup,reveal,revoke,redeem};
 }

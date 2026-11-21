@@ -1,0 +1,146 @@
+/* Separate BLOFY ONE's commercial workspace from /admin technical operations.
+   This is UI scope only; authentication and server API permissions stay unchanged. */
+#one-capacity,
+#one-sources,
+#one-storage,
+#one-releases,
+section[aria-labelledby="health-title"],
+section[aria-labelledby="catalog-title"],
+section[aria-labelledby="readiness-title"],
+.one-lab,
+.one-quick-stats .one-quick-stat:nth-child(4) {display:none !important;}
+.one-panel-switch{border:1px solid rgba(255,255,255,.14);border-radius:14px;padding:14px;margin:15px 8px 5px;background:rgba(255,255,255,.035);display:grid;gap:9px}
+.one-panel-switch-label{font-size:.76rem;line-height:1.6;color:#b2bdd0}
+.one-panel-switch-link{display:block;text-align:center;text-decoration:none;border:1px solid rgba(122,189,254,.42);border-radius:9px;padding:11px 10px;background:rgba(81,154,231,.13);font-weight:750;color:#e9f4ff}
+.one-panel-switch-link:hover,.one-panel-switch-link:focus-visible{background:rgba(81,154,231,.25);outline-offset:3px}
+.one-nav .one-panel-switch-link{display:block}
+
+/* BLOFY ONE: manual Xtream extraction after explicit activation. */
+.one-issue-extract-button{border:1px solid #8cefe2;background:#184e4a;color:#ddfff5;padding:9px 12px;border-radius:10px;font-weight:750;cursor:pointer}
+.one-issue-extract-button:hover{background:#237d6f}
+.one-issue-extract-button:disabled{opacity:.63;cursor:default}
+.one-issue-xtream-result{border:1px solid #7ce6d6;border-radius:15px;background:#0d3038;padding:18px;margin:15px 0;color:#e6fff8}
+.one-issue-xtream-result[hidden]{display:none!important}
+.one-issue-xtream-heading{display:grid;gap:5px;margin-bottom:12px}
+.one-issue-xtream-heading strong{font-size:17px}
+.one-issue-xtream-heading small{color:#bfe6dd;line-height:1.7}
+.one-issue-xtream-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.one-issue-xtream-fields>div{display:grid;gap:5px;border:1px solid #386e75;border-radius:10px;background:#102936;padding:10px;min-width:0}
+.one-issue-xtream-fields span{color:#b4d4da;font-size:12px}
+.one-issue-xtream-fields code{overflow-wrap:anywhere;word-break:break-word;direction:ltr;text-align:left;unicode-bidi:isolate;user-select:all;font-size:13px;color:#f7fffc}
+.one-issue-xtream-fields .one-issue-xtream-m3u{grid-column:1/-1}
+.one-issue-xtream-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+.one-issue-xtream-actions button{padding:10px 14px;border:1px solid #74d6c7;border-radius:10px;color:#e6fff8;background:#20575a;font-weight:700;cursor:pointer}
+.one-issue-xtream-actions button:hover{background:#26706b}
+@media(max-width:640px){.one-issue-xtream-fields{grid-template-columns:minmax(0,1fr)}}
+
+/* Unify all customer STREAM/Xtream code operations into one center.
+   UI navigation only: unchanged APIs, credentials, codes and expiries. */
+.one-codes-center{border:1px solid rgba(111,222,211,.42);border-radius:20px;
+  padding:20px 20px 24px;margin:18px 0 34px;
+  background:linear-gradient(130deg,#102c39,#102938);
+  box-shadow:0 16px 28px rgba(0,0,0,.15)}
+.one-codes-center-heading{display:flex;align-items:center;justify-content:space-between;gap:18px;
+  flex-wrap:wrap;margin-bottom:17px}
+.one-codes-center-heading h2{font-size:clamp(23px,2.6vw,31px);margin:5px 0;color:#f7fffd}
+.one-codes-center-heading p{color:#bbd9df;font-size:13px;line-height:1.8;
+  max-width:760px;margin:0}
+.one-codes-host{border:1px solid #3c797a;border-radius:9px;padding:10px 13px;
+  color:#c6f4ec;background:#143e43;font-size:12px;direction:ltr;unicode-bidi:isolate}
+.one-codes-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:15px 0}
+.one-codes-tabs button{min-height:52px;padding:12px 10px;border:1px solid #3b6273;
+  border-radius:10px;background:#172f42;color:#c8e3e8;cursor:pointer;font-size:14px;font-weight:700}
+.one-codes-tabs button[aria-selected="true"]{background:#87ead9;border-color:#96f2e5;color:#082b31}
+.one-codes-tabs button:focus-visible{outline:3px solid #7ce5d9;outline-offset:2px}
+.one-codes-center>[hidden]{display:none!important}
+.one-codes-center>.one-issue,.one-codes-center>.one-overview{margin:0!important}
+.one-codes-product-hint{font-weight:400;line-height:1.7;color:#c9eee7;
+  font-size:11px;margin:7px 0 0}
+@media(max-width:700px){
+ .one-codes-center{padding:12px 10px 16px;border-radius:13px}
+ .one-codes-tabs{grid-template-columns:minmax(0,1fr);gap:7px}
+ .one-codes-tabs button{min-height:43px;padding:9px 10px}
+}
+
+/* Sales stock is a fourth tab in BLOFY ONE, not a second admin site. */
+.one-inventory{padding:10px 8px 5px}
+.one-inventory-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:16px 0}
+.one-inventory-stock{border:1px solid #426f75;border-radius:12px;padding:14px;background:#123140;display:grid;gap:8px}
+.one-inventory-stock strong{color:#eaffff;font-size:13px}
+.one-inventory-stock b{color:#9bf7dd;font-size:18px}
+.one-inventory-stock small{color:#b3d5d8;font-size:11px}
+.one-inventory-refill{border:1px solid #76c9ba;border-radius:13px;padding:15px 16px;margin:15px 0;
+ background:linear-gradient(125deg,#12484c,#103140);color:#e7fff7;display:grid;gap:10px}
+.one-inventory-refill h3{margin:0;font-size:18px;color:#e0fff7}
+.one-inventory-refill p{margin:0;font-size:12px;line-height:1.8;color:#c7f1e5}
+.one-inventory-refill label{display:grid;gap:6px;font-size:12px;max-width:330px}
+.one-inventory-refill select{min-height:43px;border-radius:9px;border:1px solid #80c4b8;
+ background:#10323d;color:#f5fffc;padding:8px 12px}
+.one-inventory-refill button{justify-self:start;background:#a2f0dc;color:#082d33;border-color:#c4fff1}
+.one-inventory-refill #one-refill-status,.one-inventory-refill #one-trial-refill-status{
+ font-size:12px;line-height:1.8;color:#e4fbf4}
+.one-inventory-controls{display:flex;align-items:end;gap:12px;flex-wrap:wrap}
+.one-inventory-controls label{display:grid;gap:7px;flex:1;min-width:170px;font-size:12px;color:#d8f2ed}
+.one-inventory-controls :is(select,input){min-height:43px;border:1px solid #5b7d82;border-radius:10px;
+ background:#102e3a;color:#fff;padding:8px}
+.one-inventory button{min-height:43px;border:1px solid #79d6cb;border-radius:9px;
+ background:#246259;color:#eefff9;padding:9px 13px;font-weight:750;cursor:pointer}
+.one-inventory button:disabled{opacity:.55;cursor:wait}
+.one-inventory-import{margin:18px 0;border:1px solid #406d6d;border-radius:10px;padding:14px}
+.one-inventory-import summary{cursor:pointer;color:#d3fff4;font-weight:700}
+.one-inventory-import textarea{width:100%;display:block;margin:10px 0;background:#0b2638;
+ color:white;direction:ltr;text-align:left;border:1px solid #53757a;border-radius:8px;padding:10px}
+#one-inventory-status{color:#b0f5e3;font-size:13px;line-height:1.7}
+@media(max-width:830px){.one-inventory-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:530px){.one-inventory-grid{grid-template-columns:1fr}}
+
+/* Separate free one-day trial stock; never mix with paid Geidea inventory. */
+.one-codes-trial-shortcut{display:block;margin:0 0 16px;padding:12px 15px;
+ border:1px solid #8ce6d3;border-radius:11px;background:#153d42;
+ color:#dffff6;text-decoration:none;font-weight:750}
+.one-codes-trial-shortcut:hover,.one-codes-trial-shortcut:focus-visible{background:#205e60}
+.one-trial-stock .one-trial-notice{padding:12px 14px;border-radius:11px;
+ background:#173d43;border:1px solid #537e7c;color:#d9fff4;line-height:1.7}
+.one-trial-stock #one-trial-status{color:#b0f5e3;line-height:1.8;min-height:25px}
+.one-trial-links{display:flex;gap:13px;flex-wrap:wrap;margin:16px 0}
+.one-trial-links a{color:#b7fff0;border:1px solid #467d75;
+ padding:9px 12px;border-radius:9px;text-decoration:none}
+.one-trial-history{margin-top:17px;padding:15px;border:1px solid #406d6d;
+ border-radius:11px;color:#c5eae6;line-height:1.8}
+.one-trial-history ul{margin:10px 0 0;padding:0 20px}
+.one-trial-history li{margin:6px 0}
+
+/* Five distinct code-center tasks. Balanced columns across breakpoints. */
+@media (min-width:1101px){.one-codes-tabs{grid-template-columns:repeat(5,minmax(0,1fr));}}
+@media (min-width:681px) and (max-width:1100px){.one-codes-tabs{grid-template-columns:repeat(2,minmax(0,1fr));}}
+@media (max-width:680px){.one-codes-tabs{grid-template-columns:1fr;}}
+
+.one-inventory-alerts{border:1px solid #588c84;border-radius:12px;padding:12px 15px;margin:12px 0;background:#193e3d;color:#dffff6;line-height:1.8}
+.one-inventory-alerts:has(ul){border-color:#d6a64d;background:#46361b;color:#fff5d5}
+.one-inventory-alerts p{margin:0}.one-inventory-alerts ul{margin:4px 18px 0;padding:0}
+
+/* Read-only paid-order delivery integrity check is deliberately tucked under stock. */
+.one-fulfillment-audit{border:1px solid #496b79;border-radius:12px;background:#132d3b;padding:13px 16px;margin:18px 0;color:#dff7f6}
+.one-fulfillment-audit summary{cursor:pointer;font-weight:800;font-size:14px;padding:5px 0}
+.one-fulfillment-audit p,.one-fulfillment-audit small{line-height:1.8;color:#bed4db}
+.one-fulfillment-audit button{margin:10px 0}
+#one-fulfillment-status{padding:9px 0;font-size:13px;color:#c5eee5}
+.one-fulfillment-summary,.one-fulfillment-issues{border-radius:10px;padding:12px;margin:9px 0;border:1px solid #506f7a;background:#0e2735}
+.one-fulfillment-summary strong{color:#ccf5e9}
+.one-fulfillment-issues{border-color:#b39a5c}
+.one-fulfillment-issues ul{padding:0 20px 0 0;line-height:1.8;font-size:13px;overflow-wrap:anywhere}
+ 
+/* Read-only commercial operations report shared with stock counters. */
+.one-operations-report{margin:22px 0 18px;border:1px solid #4f897e;border-radius:14px;
+ padding:15px;background:#12313b;color:#e2f6f0}
+.one-operations-report h3{margin:0;font-size:17px}
+.one-operations-report>p{color:#b9e0dc;font-size:12px;line-height:1.8}
+.one-operations-report .one-inventory-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.one-operations-details{border:1px solid #467c7d;border-radius:10px;
+ padding:12px;margin:14px 0;background:#102b37}
+.one-operations-details summary{cursor:pointer;font-weight:800;margin-bottom:7px}
+.one-operations-details p{padding:5px 0;border-bottom:1px solid #2c4e59;
+ font-size:12px;color:#d1f7eb;line-height:1.7;overflow-wrap:anywhere}
+#one-operations-status{font-size:12px;line-height:1.8;color:#b2ede2}
+@media(max-width:800px){.one-operations-report .one-inventory-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:500px){.one-operations-report .one-inventory-grid{grid-template-columns:1fr}}

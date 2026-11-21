@@ -118,6 +118,13 @@ class PlayerActivity : AppCompatActivity() {
                 .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
                 .build()
         session.player.addListener(object : Player.Listener {
+            override fun onRenderedFirstFrame() {
+                // Retain the last decoded frame during a transient reconnect,
+                // rather than opening the black shutter when Media3 resets.
+                // Explicit channel/episode switches clear this flag below.
+                if (::playerView.isInitialized) playerView.setKeepContentOnPlayerReset(true)
+            }
+
             override fun onTracksChanged(tracks: Tracks) {
                 if (!::subtitleButton.isInitialized) return
                 val available = tracks.groups.any { group ->
@@ -162,6 +169,9 @@ class PlayerActivity : AppCompatActivity() {
             isFocusable = true
             isFocusableInTouchMode = true
             setShutterBackgroundColor(Color.BLACK)
+            // Do not display video from the previous channel until the new
+            // channel renders its own first frame.
+            setKeepContentOnPlayerReset(false)
         }
         root.addView(playerView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
 
@@ -397,6 +407,7 @@ class PlayerActivity : AppCompatActivity() {
             if (automatic) markCurrentCompleted()
             currentContentKey = target.key; currentTitle = target.title; currentSeason = target.season; currentEpisode = target.episode
             updateTitle("S${target.season} E${target.episode} • ${target.title}")
+            if (::playerView.isInitialized) playerView.setKeepContentOnPlayerReset(false)
             session.play(url = ContentUrlResolver.episode(provider, target), resumeMs = 0L, fallbackUrl = ContentUrlResolver.directFallback(target))
             autoNextTriggered = false; showHudBriefly()
         }
@@ -458,6 +469,7 @@ class PlayerActivity : AppCompatActivity() {
         val profile = providerProfile(provider)
         currentStreamId = stream.remoteId; currentContentKey = stream.key; currentTitle = stream.name
         RecentChannelStore.record(this, provider.id, stream.key); updateTitle(stream.name)
+        if (::playerView.isInitialized) playerView.setKeepContentOnPlayerReset(false)
         session.play(url = ContentUrlResolver.live(provider, profile, stream), fallbackUrl = ContentUrlResolver.directFallback(stream))
         refreshFavoriteState(); requestShortEpgRefresh(provider, stream); observeEpg(); if (hud.visibility != View.VISIBLE) showHudBriefly()
     }

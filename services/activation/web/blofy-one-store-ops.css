@@ -1,0 +1,54 @@
+/* BLOFY ONE store subscriptions — read-only verified operations dashboard. */
+.one-renewal-ops{scroll-margin-top:24px}
+.one-renewal-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:18px 0}
+.one-renewal-stats article{border:1px solid #2e4a64;border-radius:13px;background:#101f32;padding:17px}
+.one-renewal-stats small{display:block;color:#aac6d6;font-size:12px}
+.one-renewal-stats strong{display:block;font:750 26px 'Segoe UI',sans-serif;color:#9af1e4;margin-top:7px}
+.one-renewal-controls{display:flex;flex-wrap:wrap;align-items:end;gap:10px;border:1px solid #2e455b;background:#101d30;border-radius:13px;padding:15px}
+.one-renewal-controls label{display:grid;gap:5px;min-width:150px;flex:1;color:#d0e0f1;font-size:13px}
+.one-renewal-controls label:nth-child(3){flex:2;min-width:200px}
+.one-renewal-controls :is(input,select){font:inherit;color:#f1f8ff;min-height:42px;border:1px solid #39546a;background:#0b192a;padding:8px 12px;border-radius:9px;width:100%}
+.one-renewal-ops button{font:inherit;cursor:pointer;border:1px solid #386479;border-radius:9px;padding:9px 13px;min-height:42px;color:#e3fbf7;background:#153745}
+.one-renewal-ops .one-ops-primary{background:#52d8c9;border-color:#52d8c9;color:#08262c;font-weight:750}
+.one-renewal-ops button:disabled{cursor:not-allowed;opacity:.5}
+.one-renewal-status{font-size:13px;line-height:1.8;margin:13px 0;color:#afecd8}
+.one-renewal-status[data-error=true]{color:#ffc0cb}
+.one-renewal-table-wrap{overflow-x:auto;border:1px solid #2d4258;border-radius:12px;background:#0c1a2b}
+.one-renewal-table{border-collapse:collapse;min-width:760px;width:100%}
+.one-renewal-table th,.one-renewal-table td{padding:13px 12px;text-align:right;border-bottom:1px solid #253e52;font-size:13px}
+.one-renewal-table th{background:#12253c;color:#c6d7e9}
+.one-renewal-table td{color:#edf8ff;overflow-wrap:anywhere}
+.one-renewal-table td small{display:block;color:#9cb5ca;font-size:11px;margin-top:4px}
+.one-renewal-table tbody tr:last-child td{border-bottom:none}
+.one-renewal-table tbody tr:hover{background:#162b42}
+.one-renewal-pager{display:flex;align-items:center;gap:12px;margin-top:13px}
+.one-renewal-pager span{color:#c1d5e8;margin-inline-end:auto}
+.one-renewal-ops [data-state=overdue]{color:#ffb6b6;font-weight:750}
+.one-renewal-ops [data-state=paid],.one-renewal-ops [data-state=active]{color:#9ef1d4}
+.one-renewal-ops [data-state=pending],.one-renewal-ops [data-state=expiring]{color:#ffdb8c}
+@media(max-width:740px){.one-renewal-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.one-renewal-controls{flex-direction:column;align-items:stretch}.one-renewal-controls label{width:100%}}
+
+/* Store orders are intentionally separate from legacy PLAYER activation sales. */
+.one-store-sales{scroll-margin-top:24px}
+.one-store-sales-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:18px 0}
+.one-store-sales-stats article{border:1px solid #2e4a64;border-radius:13px;background:#101f32;padding:17px;min-width:0}
+.one-store-sales-stats small{display:block;color:#bbd2e0;font-size:12px;line-height:1.7}
+.one-store-sales-stats strong{display:block;margin-top:7px;color:#9af1e4;font:750 clamp(19px,2vw,26px) 'Segoe UI',sans-serif;overflow-wrap:anywhere}
+.one-store-sales-stats .one-store-sales-alert-stat{border-color:#a78645;background:#312823}
+.one-store-sales-stats .one-store-sales-alert-stat strong{color:#ffda86}
+.one-store-sales-controls{display:flex;align-items:flex-end;flex-wrap:wrap;gap:10px;padding:15px;background:#101d30;border:1px solid #2e455b;border-radius:13px}
+.one-store-sales-controls label{display:grid;gap:5px;min-width:150px;flex:1;font-size:13px;color:#d0e0f1}
+.one-store-sales-controls label:nth-child(2){flex:2;min-width:220px}
+.one-store-sales-controls :is(input,select){width:100%;min-height:42px;font:inherit;padding:8px 12px;color:#f1f8ff;background:#0b192a;border:1px solid #39546a;border-radius:9px}
+.one-store-sales-controls :is(input,select):focus-visible{outline:2px solid #7fdfcf;outline-offset:2px}
+.one-store-sales button{font:inherit;cursor:pointer;border:1px solid #386479;border-radius:9px;padding:9px 13px;min-height:42px;color:#e3fbf7;background:#153745}
+.one-store-sales .one-ops-primary{background:#52d8c9;border-color:#52d8c9;color:#08262c;font-weight:750}
+.one-store-sales button:disabled{cursor:not-allowed;opacity:.5}
+.one-store-sales-status{font-size:13px;line-height:1.8;margin:13px 0;color:#afecd8}
+.one-store-sales-status[data-error=true]{color:#ffc0cb}
+.one-store-sales [data-state=overdue]{color:#ffb6b6;font-weight:750}
+.one-store-sales [data-state=paid]{color:#9ef1d4}
+.one-store-sales [data-state=pending]{color:#ffdb8c}
+@media(max-width:740px){.one-store-sales-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .one-store-sales-controls{align-items:stretch;flex-direction:column}.one-store-sales-controls label{width:100%}}
+@media(max-width:420px){.one-store-sales-stats{grid-template-columns:1fr}}

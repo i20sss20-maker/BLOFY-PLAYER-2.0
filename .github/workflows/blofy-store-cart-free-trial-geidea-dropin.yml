@@ -1,0 +1,48 @@
+name: BLOFY STORE cart free trial and Geidea drop-in QA
+
+on:
+  pull_request:
+    paths:
+      - 'services/activation/src/store-cart.mjs'
+      - 'services/activation/src/store-customer-account.mjs'
+      - 'services/activation/src/server.mjs'
+      - 'services/activation/web/store.html'
+      - 'services/activation/web/store-cart.*'
+      - 'services/activation/web/store-checkout-theme.css'
+      - 'services/activation/web/store-market.css'
+      - 'services/activation/test/store-zero-trial-dropin.test.mjs'
+      - 'services/activation/test/store-cart-geidea-redirect.test.mjs'
+      - '.github/workflows/blofy-store-cart-free-trial-geidea-dropin.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cart-trial-dropin:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: services/activation/package-lock.json
+      - name: Install service
+        working-directory: services/activation
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Check syntax
+        working-directory: services/activation
+        run: |
+          node --check web/store-cart.js
+          node --check src/store-cart.mjs
+          node --check src/store-customer-account.mjs
+          node --check src/server.mjs
+          node --check test/store-zero-trial-dropin.test.mjs
+      - name: Free cart, same session fallback, no-charge and Geidea paid order regressions
+        working-directory: services/activation
+        run: |
+          node --test test/store-zero-trial-dropin.test.mjs test/store-cart-geidea-redirect.test.mjs test/store-cart-ux.test.mjs test/store-cart-account-recovery.test.mjs test/store-cart.test.mjs test/store-cart-payment.test.mjs test/store-trial-inventory.test.mjs test/store-customer-account.test.mjs test/storefront.test.mjs test/store-market-design.test.mjs

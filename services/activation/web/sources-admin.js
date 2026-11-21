@@ -1849,6 +1849,16 @@ async function loadBlofyPlaybackHealth(){
     const asMs=value=>value===null||value===undefined?'—':Number(value).toLocaleString('en-US')+' ms';
     const stats=[
       ['بدأ التشغيل',m.started??0],
+      ['استعادة البث المباشر من المصدر نفسه',m.liveTsRecoverySuccesses??0],
+      ['استكمال فيلم/حلقة من موضع التوقف',m.vodRangeResumeSuccesses??0],
+      ['توقف بيانات المصدر أثناء البث',m.liveTsSourceDrops??0],
+      ['متوسط عمر اتصال المصدر الوسيط',asMs(m.medianLiveTsSourceUptimeMs)],
+      ['انتهاء بث المصدر (EOF)',m.sourceDropByReason?.live_ts_source_eof??0],
+      ['المصدر قطع الاتصال',m.sourceDropByReason?.live_ts_source_transport_error??0],
+      ['توقف المصدر عن إرسال البيانات',m.sourceDropByReason?.live_ts_source_stalled??0],
+      ['استعادة البث استنفدت محاولاتها',m.liveTsRecoveryExhausted??0],
+      ['استعادة البث أوقفها حد السرعة',m.liveTsRecoveryRateLimited??0],
+      ['استعادة البث أوقفها حد الجلسة',m.liveTsRecoveryBudgetExhausted??0],
       ['تصاريح مشاركة أُصدرت',m.sharedTicketsIssued??0],
       ['رجوع للمسار السابق عند تعذر التصريح',m.sharedGrantFallbacks??0],
       ['فشل بدء البث',m.failed??0],
@@ -1884,6 +1894,10 @@ async function loadBlofyPlaybackHealth(){
       xtream_transport_dns_failed:'تعذر DNS للمصدر؛ تأكد من العنوان',
       xtream_transport_connection_refused:'المصدر رفض اتصال الشبكة؛ راجع المنفذ والبروتوكول',
       xtream_transport_connection_reset:'المصدر قطع الاتصال قبل استلام الفيديو',
+      live_ts_reconnect_exhausted:'المصدر انقطع ولم تنجح محاولتا استعادة البث',
+      live_ts_reconnect_denied:'المصدر رفض طلب استعادة البث أو أرسل محتوى غير صالح',
+      live_ts_reconnect_rate_limited:'توقف مؤقت لتجنب تكرار اتصالات المصدر بسرعة',
+      live_ts_reconnect_budget_exhausted:'بلغت جلسة المشاهدة الحد الآمن لمحاولات الاستعادة',
       xtream_transport_timeout:'اتصال المصدر لم يكتمل في الوقت المحدد',
       xtream_transport_tls_invalid:'شهادة HTTPS بالمصدر غير صحيحة أو لا تطابق العنوان',
       xtream_transport_unreachable:'تعذر اتصال السيرفر بمصدر الفيديو',
@@ -1909,11 +1923,26 @@ async function loadBlofyPlaybackHealth(){
       }
       issues.append(item);
     }
-    if(!recent.length){
-      issues.append(make('p','muted','لا توجد أخطاء تشغيل مسجلة خلال الساعة الماضية على هذه النسخة.'));
+    const drops=Array.isArray(m.recentSourceDrops)?m.recentSourceDrops:[];
+    const causes={
+      live_ts_source_eof:'المصدر أنهى بث HTTP المفتوح',
+      live_ts_source_transport_error:'اتصال المصدر انقطع بخطأ شبكة',
+      live_ts_source_stalled:'المصدر توقف عن إرسال البيانات (45 ثانية)'
+    };
+    for(const row of drops.slice(0,5)){
+      const item=make('div','blofy-playback-issue');
+      const uptime=Number.isFinite(row.durationMs)?
+        ' · الاتصال استمر '+Math.round(row.durationMs/1000)+' ثانية':'';
+      item.append(make('strong','','ملاحظة مصدر · بث مباشر'),
+        make('small','',String(causes[row.reason]||'انقطع اتصال المصدر')+
+          uptime+' · '+new Date(row.at).toLocaleString('ar-SA')));
+      issues.append(item);
+    }
+    if(!recent.length&&!drops.length){
+      issues.append(make('p','muted','لا توجد أخطاء تشغيل أو انقطاعات مصدر مسجلة خلال الساعة الماضية على هذه النسخة.'));
     }
     const upstreamCodes=Object.entries(m.upstreamCodes||{});
-    note.textContent='الأرقام لآخر ساعة على هذا السيرفر فقط. إصدار تصريح المشاركة لا يؤكد وصول الفيديو أو الصوت. رفض حساب BLOFY (401) يختلف عن رفض المصدر (403)، ولا يعني حدوث عطل بالمصدر. نجاح بدء البث لا يضمن استمراره طوال المشاهدة.'+
+    note.textContent='الأرقام لآخر ساعة على هذا السيرفر فقط. استعادة البث تعني استقبال بيانات TS صالحة من المصدر بعد إعادة الاتصال؛ لا تثبت عدم ظهور شاشة سوداء أو استمرار الصوت على الجهاز. إصدار تصريح المشاركة لا يؤكد وصول الفيديو أو الصوت. رفض حساب BLOFY (401) يختلف عن رفض المصدر (403). نجاح بدء البث لا يضمن استمراره طوال المشاهدة.'+
       (upstreamCodes.length?' · أخطاء المصدر: '+upstreamCodes.map(([code,n])=>'HTTP '+code+' ('+n+')').join('، '):'');
   }catch(error){
     note.textContent='تعذر تحديث مراقبة إعادة البث: '+error.message;

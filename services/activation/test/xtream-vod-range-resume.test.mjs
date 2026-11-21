@@ -25,6 +25,16 @@ test('one-time resume is opt-in and only a strong ETag / exact direct noncompres
  for(const input of [
   {kind:'live'}, {kind:'audio'}, {method:'HEAD'},
   {status:206},{status:302},{requestRange:'bytes=0-1024'},
+  {status:200,requestRange:'bytes=0-'},
+  {status:206,requestRange:'bytes=0-1024',
+   headers:mockHeaders({'content-range':'bytes 0-8191/8192'})},
+  {status:206,requestRange:'bytes=400-',
+   headers:mockHeaders({'content-range':'bytes 0-8191/8192'})},
+  {status:206,requestRange:'bytes=0-',
+   headers:mockHeaders({'content-range':'bytes 1-8191/8192'})},
+  {status:206,requestRange:'bytes=0-',
+   headers:mockHeaders({'content-range':'bytes 0-8191/8193'})},
+  {status:200,headers:mockHeaders({'content-range':'bytes 0-8191/8192'})},
   {usingIndependentRelay:true},{format:'ts'},{format:'hls'},
   {headers:mockHeaders({'etag':'W/"weak"'} )},
   {headers:mockHeaders({'etag':''})},
@@ -147,10 +157,146 @@ test('production gateway cannot turn on VOD resume without exact account and sou
  const gateway=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
  const marker=gateway.slice(gateway.indexOf('const vodPlan=verifiedVodResumePlan({'),
   gateway.indexOf('let resumedVod=false;'));
- assert.match(marker,/enabled:allowedVodResumePilot\(/);
+ assert.match(marker,/enabled:authorizedMediaRecoveryRelease\(/);
+ assert.match(marker,/BLOFY_XTREAM_VOD_RANGE_RESUME_PRODUCTION/);
+ assert.match(marker,/allowedVodResumePilot\(/);
  assert.match(marker,/accountId:String\(account\.id\|\|''\)/);
  assert.match(marker,/sourceId:String\(row\.server_id\|\|''\)/);
  assert.match(marker,/BLOFY_XTREAM_VOD_RANGE_RESUME_PILOT_ACCOUNT_ID/);
  assert.match(marker,/BLOFY_XTREAM_VOD_RANGE_RESUME_PILOT_SOURCE_ID/);
  assert.doesNotMatch(marker,/enabled:process\.env\.BLOFY_XTREAM_VOD_RANGE_RESUME_ENABLED==='1',\s*kind/);
+});
+
+
+test('zero-offset unbounded Range 206 can resume only with exact full-file contract',async()=>{
+ const full=plan({status:206,requestRange:'bytes=0-',
+  headers:mockHeaders({'content-range':'bytes 0-8191/8192'})});
+ assert.equal(full?.total,8192);
+ let called=0,received=Buffer.alloc(0);
+ const fetchImpl=async(target,opts)=>{
+  called++;assert.equal(String(target),url);
+  assert.equal(opts.headers.range,'bytes=3100-8191');
+  assert.equal(opts.headers['if-range'],etag);
+  return new Response(Buffer.alloc(5092,0x6a),{status:206,headers:{
+   'content-range':'bytes 3100-8191/8192',
+   'content-length':'5092',etag
+  }});
+ };
+ for await(const bytes of resumeVerifiedVodBytes({plan:full,forwarded:3100,
+  url,fetchImpl,clientSignal:new AbortController().signal})){
+  received=Buffer.concat([received,Buffer.from(bytes)]);
+ }
+ assert.equal(received.length,5092);
+ assert.equal(called,1);
+});
+
+test('an exact bounded MKV seek range reconnects the remaining requested bytes only',async()=>{
+ const headers=mockHeaders({
+  'content-length':'4096','content-range':'bytes 4096-8191/16384',
+  'content-type':'video/x-matroska'
+ });
+ const verified=plan({kind:'series',status:206,format:'mkv',
+  requestRange:'bytes=4096-8191',headers});
+ assert.equal(verified?.total,4096);
+ assert.equal(verified?.rangeStart,4096);
+ assert.equal(verified?.rangeEnd,8191);
+ assert.equal(verified?.fileTotal,16384);
+ let calls=0,result=Buffer.alloc(0);
+ const fetchImpl=async(target,options)=>{
+  calls++;
+  assert.equal(String(target),url);
+  assert.equal(options.headers['range'],'bytes=6096-8191');
+  assert.equal(options.headers['if-range'],etag);
+  assert.equal(options.headers['accept-encoding'],'identity');
+  return new Response(Buffer.alloc(2096,0x7c),{status:206,headers:{
+   'content-range':'bytes 6096-8191/16384',
+   'content-length':'2096',etag
+  }});
+ };
+ for await(const bytes of resumeVerifiedVodBytes({plan:verified,
+  forwarded:2000,url,fetchImpl})){
+   result=Buffer.concat([result,Buffer.from(bytes)]);
+ }
+ assert.equal(calls,1);
+ assert.equal(result.length,2096);
+ assert.equal(result[0],0x7c);
+});
+test('open ended nonzero MKV seek can finish the same file, never from offset zero',async()=>{
+ const hdr=mockHeaders({
+  'content-length':'12288','content-range':'bytes 4096-16383/16384'
+ });
+ const p=plan({kind:'series',status:206,format:'mkv',
+  requestRange:'bytes=4096-',headers:hdr});
+ assert.equal(p?.total,12288);
+ assert.equal(p?.fileTotal,16384);
+ let fetched=0;
+ for await(const bytes of resumeVerifiedVodBytes({
+  plan:p,forwarded:10240,url,fetchImpl:async(_,req)=>{
+   fetched++;
+   assert.equal(req.headers.range,'bytes=14336-16383');
+   return new Response(Buffer.alloc(2048),{status:206,headers:{
+    etag,'content-length':'2048',
+    'content-range':'bytes 14336-16383/16384'
+   }});
+  }
+ }))assert.equal(bytes.length,2048);
+ assert.equal(fetched,1);
+});
+test('seeks reject off-by-one, multipart, unauthorized extension and short 206 spans',()=>{
+ const options={status:206,kind:'series',format:'mkv'};
+ const validHdr=mockHeaders({'content-length':'4096',
+  'content-range':'bytes 4096-8191/16384'});
+ for(const params of [
+  {requestRange:'bytes=4096-8192',headers:validHdr},
+  {requestRange:'bytes=4095-8191',headers:validHdr},
+  {requestRange:'bytes=4096-',headers:validHdr},
+  {requestRange:'bytes=4096-8191,12288-16383',headers:validHdr},
+  {requestRange:'bytes=8192-4096',headers:validHdr},
+  {requestRange:'bytes=0004096-8191',headers:validHdr},
+  {requestRange:'bytes=-4096',headers:validHdr},
+  {requestRange:'bytes=4096-9999999999999999',headers:validHdr},
+  {requestRange:'bytes=4096-8191',headers:mockHeaders({
+   'content-length':'4095','content-range':'bytes 4096-8191/16384'
+  })},
+  {requestRange:'bytes=4096-8191',headers:mockHeaders({
+   'content-length':'4096','content-range':'bytes 4096-8190/16384'
+  })},
+  {requestRange:'bytes=4096-8191',headers:mockHeaders({
+   'content-length':'4096','content-range':'bytes 4096-8191/8191'
+  })},
+  {requestRange:'bytes=4096-8191',usingIndependentRelay:true,headers:validHdr},
+  {requestRange:'bytes=4096-8191',headers:mockHeaders({
+   'content-length':'4096','content-range':'bytes 4096-8191/16384',
+   'etag':'W/"weak"'
+  })}
+ ])assert.equal(plan({...options,...params}),null,JSON.stringify(params));
+});
+test('resume reply refuses compressed response even with matching Range and ETag',async()=>{
+ const p=plan({status:206,kind:'series',format:'mkv',
+  requestRange:'bytes=4096-8191',headers:mockHeaders({
+   'content-length':'4096','content-range':'bytes 4096-8191/16384'
+  })});
+ await assert.rejects(async()=>{
+  for await(const _ of resumeVerifiedVodBytes({
+   plan:p,forwarded:1000,url,fetchImpl:async()=>new Response(null,{status:206,headers:{
+    'content-range':'bytes 5096-8191/16384','content-length':'3096',
+    'content-encoding':'gzip',etag
+   }})
+  })){}
+ },/vod_resume_range_contract_denied/);
+});
+
+test('a selected Range is never extended beyond the final byte the viewer requested',()=>{
+ const bounded=plan({kind:'series',status:206,format:'mkv',
+  requestRange:'bytes=8192-12287',headers:mockHeaders({
+   'content-length':'4096','content-range':'bytes 8192-12287/65536'
+  })});
+ assert.equal(bounded?.rangeStart,8192);
+ assert.equal(bounded?.rangeEnd,12287);
+ assert.equal(bounded?.fileTotal,65536);
+ assert.equal(bounded?.total,4096);
+ assert.equal(plan({kind:'series',status:206,format:'mkv',
+  requestRange:'bytes=8192-',headers:mockHeaders({
+   'content-length':'4096','content-range':'bytes 8192-12287/65536'
+  })}),null,'partial origin response cannot fake whole open-ended seek');
 });

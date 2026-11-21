@@ -1,0 +1,68 @@
+/* BLOFY ONE: true inline BLOFY STREAM and Xtream management. */
+.one-stream{scroll-margin-top:28px}
+.one-stream-summary{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:11px;margin:18px 0}
+.one-stream-summary article{background:linear-gradient(145deg,#142b3d,#0d1f31);border:1px solid #2d4b64;border-radius:12px;padding:16px;min-width:0}
+.one-stream-summary article span{display:block;font-size:11px;color:#a9c8d8;min-height:34px;line-height:1.5}
+.one-stream-summary article strong{display:block;font:700 25px 'Segoe UI',sans-serif;color:#a1f4e5;margin-top:10px}
+.one-stream-primary{min-height:42px;border:1px solid #54d2ca;border-radius:10px;background:#1c4b54;color:#d2fff5;
+ padding:10px 16px;font:700 12px IBMArabic,Tahoma,sans-serif;cursor:pointer}
+.one-stream-primary:disabled{opacity:.55;cursor:wait}
+.one-stream-status{font-size:12px;line-height:1.9;color:#a9edd6;background:#132d37;border:1px solid #347069;border-radius:11px;padding:13px;margin:12px 0}
+.one-stream-error{color:#ffc0ce;background:#321b2e;border-color:#81445a}
+.one-stream-sections{display:grid;grid-template-columns:1fr;gap:18px}
+.one-stream-card{background:#101f30;border:1px solid #2d4d65;border-radius:15px;padding:18px;min-width:0}
+.one-stream-card .one-section-heading h3{font-size:19px;margin:5px 0}
+.one-stream-controls{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin:10px 0}
+.one-stream-controls label{display:grid;gap:6px;color:#b8d1df;font-size:12px;flex:1;min-width:185px}
+.one-stream-controls input,.one-stream-controls select{border:1px solid #466681;border-radius:10px;padding:11px 12px;
+ min-height:44px;background:#0d1b2c;color:#eaf8fc;font:inherit}
+.one-stream-controls input:focus-visible,.one-stream-controls select:focus-visible{outline:2px solid #69e0d8;outline-offset:2px}
+.one-stream-caption{font-size:12px;line-height:1.9;color:#9fbcd1;margin:12px 0}
+.one-stream-table-wrap{width:100%;overflow-x:auto;border:1px solid #2c4b64;border-radius:11px;background:#0d1d2e}
+.one-stream-table{border-collapse:collapse;width:100%;min-width:810px}
+.one-stream-table th{background:#162f46;color:#c6dfeb;text-align:right;font-size:12px}
+.one-stream-table td{color:#daeaf5;font-size:12px;vertical-align:middle}
+.one-stream-table th,.one-stream-table td{padding:12px 14px;border-bottom:1px solid #28465a}
+.one-stream-table tbody tr:last-child td{border-bottom:0}
+.one-stream-table tbody tr:hover{background:#142a3c}
+.one-stream-table td strong{display:block;font-size:13px;max-width:250px;overflow-wrap:anywhere}
+.one-stream-table td small{display:block;margin-top:5px;color:#a2b9cd}
+.one-stream-table td code{display:inline-block;direction:ltr;text-align:left;font:600 12px ui-monospace,Consolas,monospace;
+ color:#c6f4f7;max-width:260px;overflow-wrap:anywhere}
+.one-stream-badge{display:inline-block;border-radius:999px;background:#304257;color:#d4e5f6;padding:4px 9px;font-size:11px;white-space:nowrap}
+.one-stream-badge.state-active,.one-stream-badge.state-redeemed{background:#16483e;color:#89f5cb}
+.one-stream-badge.state-expiring,.one-stream-badge.state-unused{background:#53442a;color:#ffe0a6}
+.one-stream-badge.state-expired,.one-stream-badge.state-revoked,.one-stream-badge.state-disabled{background:#512b37;color:#ffc0cd}
+.one-stream-compact-button{border:1px solid #3c8d8d;border-radius:9px;background:#16454d;color:#c3fff5;
+ min-height:36px;padding:7px 13px;cursor:pointer;font:700 12px IBMArabic,Tahoma,sans-serif;white-space:nowrap}
+.one-stream-compact-button:disabled{cursor:not-allowed;opacity:.4}
+.one-stream-pager{display:flex;gap:10px;align-items:center;justify-content:flex-end;margin-top:12px}
+.one-stream-pager span{font-size:12px;color:#b0cbda}
+.one-stream-pager button{padding:7px 15px;min-height:38px;border:1px solid #3f677d;border-radius:9px;
+ background:#1a354d;color:#e0ecf4;cursor:pointer}
+.one-stream-pager button:disabled{opacity:.4;cursor:not-allowed}
+.one-stream-commercial{background:#111f30;border:1px solid #355671;border-radius:14px;padding:18px;margin-top:18px}
+.one-stream-commercial h3{margin:4px 0 13px;font-size:19px}
+.one-stream-commercial-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.one-stream-commercial-grid>div{background:#152b3e;padding:13px;border:1px solid #31475b;border-radius:10px}
+.one-stream-commercial-grid span{display:block;font-size:12px;color:#bbcfdf}
+.one-stream-commercial-grid strong{display:block;font:700 22px 'Segoe UI',sans-serif;color:#aef4e0;margin-top:10px;overflow-wrap:anywhere}
+.one-stream-secret{background:#0d3134;border:1px solid #55b0ac;border-radius:13px;padding:18px;margin-top:18px}
+.one-stream-secret strong{display:block;font-size:17px;color:#d9ffff}
+.one-stream-secret code{display:block;direction:ltr;text-align:center;font:700 22px ui-monospace,Consolas,monospace;
+ letter-spacing:.5px;color:#b9fff8;background:#061f26;border:1px solid #37625f;border-radius:10px;
+ padding:15px;margin:12px 0;overflow-wrap:anywhere;user-select:all}
+.one-stream-secret small{color:#b8dfdb;font-size:12px;line-height:1.9}
+.one-stream-secret-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:13px}
+.one-stream-secret-actions button{min-height:42px;border:1px solid #448f8b;border-radius:10px;color:#ddfff7;
+ background:#19515a;padding:10px 15px;cursor:pointer;font:600 12px IBMArabic,Tahoma,sans-serif}
+@media(max-width:1180px){.one-stream-summary{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:700px){.one-stream-card{padding:13px}
+ .one-stream-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .one-stream-controls{display:grid;grid-template-columns:1fr}
+ .one-stream-controls label{min-width:0}
+ .one-stream-commercial-grid{grid-template-columns:1fr}
+ .one-stream-secret-actions button{flex:1}
+ .one-stream-pager{justify-content:space-between}
+}
+@media(max-width:355px){.one-stream-summary{grid-template-columns:1fr}}

@@ -75,7 +75,10 @@ android {
         // Testable APK signed only with the Android debug key.
         create("codeDemo") {
             initWith(getByName("debug"))
-            applicationIdSuffix = ".code"
+            // Never collide with the owner-signed BLOFY STREAM package.
+            // Debug-signed QA must install side by side without uninstalling
+            // the production app or erasing customers' saved activation.
+            applicationIdSuffix = ".code.qa"
             versionNameSuffix = "-code-test"
             manifestPlaceholders["blofyApplicationLabel"] = "BLOFY STREAM (Test)"
             buildConfigField("boolean", "CODE_ONLY_LOGIN", "true")
