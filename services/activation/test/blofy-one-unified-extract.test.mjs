@@ -16,7 +16,7 @@ test('owner console exposes ONE repeated-extraction action inside the unified co
   assert.match(panel,/one-register-xtream-password/);
   assert.match(panel,/one-register-m3u-copy/);
   assert.match(panel,/one-register-xtream-hide/);
-  assert.match(panel,/قائمة الأكواد وXtream/);
+  assert.match(panel,/الأكواد وحسابات Xtream/);
   assert.match(register,/blofy-one:register-open/);
   assert.match(register,/voucherId:item\.voucherId/);
   assert.match(css,/one-register-xtream-secret\[hidden\]/);
