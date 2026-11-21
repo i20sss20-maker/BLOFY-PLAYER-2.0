@@ -105,6 +105,26 @@ test('Xtream category and item formatting keeps gateway IDs only', () => {
   assert.equal(movie.direct_source, '');
 });
 
+test('gateway provides a safe existing backdrop when source poster is absent', () => {
+  const movie = formatGatewayItem('movie', {
+    gateway_id: 111, name: 'Missing movie poster', category_gateway_id: 3,
+    icon_url: '',
+    metadata: {backdropPath: [
+      'https://cdn.example/landscape.jpg',
+      'http://bad:secret@cdn.example/private.jpg'
+    ]}
+  });
+  assert.equal(movie.stream_icon, 'https://cdn.example/landscape.jpg');
+  assert.deepEqual(movie.backdrop_path, ['https://cdn.example/landscape.jpg']);
+  assert.equal(movie.direct_source, '');
+  const series = formatGatewayItem('series', {
+    gateway_id: 112, name: 'Missing series poster',
+    icon_url: '', metadata: {backdropPath:['https://cdn.example/series.jpg']}
+  });
+  assert.equal(series.cover, 'https://cdn.example/series.jpg');
+  assert.deepEqual(series.backdrop_path, ['https://cdn.example/series.jpg']);
+});
+
 test('extension and M3U sanitizers are bounded', () => {
   assert.equal(safeGatewayExtension('.TS', 'mp4'), 'ts');
   assert.equal(safeGatewayExtension('../bad', 'mp4'), 'mp4');
