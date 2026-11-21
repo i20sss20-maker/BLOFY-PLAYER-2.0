@@ -1,0 +1,23 @@
+name: Validate Xtream source poster fallback without production deployment
+on:
+  push:
+    branches: [fix/xtream-movie-cover-fallback-20261121]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Validate safe Xtream core and gateway syntax
+        run: |
+          node --check services/activation/src/xtream-core.mjs
+          node --check services/activation/src/xtream-gateway-core.mjs
+      - name: Test unchanged account safety plus new image fallback
+        run: |
+          node --test services/activation/test/xtream-core.test.mjs services/activation/test/xtream-gateway-core.test.mjs services/activation/test/xtream-item-details.test.mjs services/activation/test/xtream-catalog-delta.test.mjs
