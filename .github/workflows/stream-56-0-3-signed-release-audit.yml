@@ -1,0 +1,55 @@
+name: Audit final STREAM 56.0.3 signed APK provenance
+on:
+  push:
+    branches: [fix/stream-56-0-3-refresh-indicator-stall-20261121]
+    paths: ['.github/workflows/stream-56-0-3-signed-release-audit.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect-existing-owner-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_RUN: '44895229342'
+      SOURCE_HEAD: 'dce60e9fc271b216a5b8c13d9d7a0b573887d854'
+      APK: 'BLOFY-STREAM-56.0.3-REFRESH-STALL-FIX-OWNER-SIGNED.apk'
+      ARTIFACT: 'BLOFY-STREAM-56.0.3-REFRESH-STALL-OWNER-SIGNED-c8eed7b87cd02ca4b45abf14c964106fd5b72d55'
+    steps:
+      - name: Enforce exact source commit, successful critical CI and actual original-owner signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" > "$RUNNER_TEMP/run.json"
+          jq -e --arg sha "$SOURCE_HEAD" '.head_sha==$sha and .status=="completed" and .conclusion=="success"' "$RUNNER_TEMP/run.json"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN/jobs?per_page=100" > "$RUNNER_TEMP/jobs.json"
+          jq -e '[.jobs[] | select(.name=="owner-signed-stream-qa" and .conclusion=="success")] | length==1' "$RUNNER_TEMP/jobs.json"
+          jq -e '[.jobs[].steps[] | select(.name=="Sign full BLOFY STREAM with original owner certificate" and .conclusion=="success")] | length==1' "$RUNNER_TEMP/jobs.json"
+      - name: Extract signed APK identity and exact SHA256
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/signature"
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name "$ARTIFACT" --dir "$RUNNER_TEMP/signature"
+          file="$(find "$RUNNER_TEMP/signature" -name "$APK" -type f -print -quit)"
+          identity="$(find "$RUNNER_TEMP/signature" -name IDENTITY.txt -type f -print -quit)"
+          checksums="$(find "$RUNNER_TEMP/signature" -name SHA256SUMS -type f -print -quit)"
+          test -s "$file" && test -s "$identity" && test -s "$checksums"
+          grep -Fxq 'application_id=tv.blofy.player.v2.stream' "$identity"
+          grep -Fxq 'version_code=2000118' "$identity"
+          grep -Fxq 'source_sha=c8eed7b87cd02ca4b45abf14c964106fd5b72d55' "$identity"
+          (cd "$(dirname "$file")" && sha256sum -c SHA256SUMS)
+          size="$(stat -c '%s' "$file")"
+          hash="$(sha256sum "$file" | awk '{print $1}')"
+          test "$size" -gt 25000000 && test "$size" -lt 260000000
+          {
+            echo "### Verified STREAM 56.0.3 original-owner APK (NOT publicly deployed)"
+            echo "Build: $SOURCE_RUN; release code: 2000118"
+            echo "Filename: $APK"
+            echo "APK_SIZE_BYTES=$size"
+            echo "APK_SHA256=$hash"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "APK_SIZE_BYTES=$size"
+          echo "APK_SHA256=$hash"
