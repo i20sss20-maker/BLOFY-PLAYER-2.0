@@ -4,6 +4,7 @@ import { isTrustedStreamUploadClaims, verifySignedStreamUploadOidc,
   STREAM_55836_APK, STREAM_55836_SHA256, STREAM_55836_BYTES,
   STREAM_56_APK, STREAM_56_SHA256, STREAM_56_BYTES,
   STREAM_5601_APK, STREAM_5601_SHA256, STREAM_5601_BYTES,
+  STREAM_5603_APK, STREAM_5603_SHA256, STREAM_5603_BYTES,
   approvedStreamUpload } from './stream-upload-oidc.mjs';
 
 const now = 1_799_800_000;
@@ -81,4 +82,19 @@ test('56.0.1 hotfix requires only the designated original-owner QA upload workfl
   assert.equal(isTrustedStreamUploadClaims(claims,now,STREAM_5601_APK),false);
   assert.equal(isTrustedStreamUploadClaims({...liveFix,event_name:'pull_request'},now,STREAM_5601_APK),false);
   assert.equal(isTrustedStreamUploadClaims({...liveFix,ref:'refs/heads/testing'},now,STREAM_5601_APK),false);
+});
+
+test('56.0.3 owner-signed image and refresh fix permits only its exact OIDC workflow', () => {
+  const claims5603 = {...claims,
+    aud:'blofy-stream-56-0-3-owner-signed-website-upload',
+    workflow_ref:'i20sss20-maker/BLOFY-PLAYER-2.0/.github/workflows/publish-blofy-stream-56-0-3-site.yml@refs/heads/main'
+  };
+  assert.equal(STREAM_5603_BYTES,135792516);
+  assert.equal(STREAM_5603_SHA256,'a43c8041becaac1f6c3de91f68b436c0ff844c9b6c74e571a6484bc3ab2537c9');
+  assert.equal(approvedStreamUpload(STREAM_5603_APK)?.sha256,STREAM_5603_SHA256);
+  assert.equal(approvedStreamUpload(STREAM_5603_APK)?.bytes,STREAM_5603_BYTES);
+  assert.equal(isTrustedStreamUploadClaims(claims5603,now,STREAM_5603_APK),true);
+  assert.equal(isTrustedStreamUploadClaims(claims,now,STREAM_5603_APK),false);
+  assert.equal(isTrustedStreamUploadClaims({...claims5603,event_name:'pull_request'},now,STREAM_5603_APK),false);
+  assert.equal(isTrustedStreamUploadClaims({...claims5603,workflow_ref:claims.workflow_ref},now,STREAM_5603_APK),false);
 });
