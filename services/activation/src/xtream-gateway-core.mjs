@@ -106,7 +106,11 @@ export function formatGatewayItem(mediaType, row) {
   // primary image. Never expose third-party URLs with embedded credentials.
   const backdrop = Array.isArray(meta.backdropPath) ?
     meta.backdropPath.map(safeXtreamArtwork).filter(Boolean).slice(0, 4) : [];
-  const primaryArtwork = safeXtreamArtwork(row.icon_url) || backdrop[0] || '';
+  // Preserve already-published provider poster URLs, including valid signed
+  // image-CDN queries. Validate only the NEW backdrop fallback candidates.
+  const sourceArtwork = String(row.icon_url || '').trim();
+  const primaryArtwork = sourceArtwork && !/^(?:null|undefined)$/i.test(sourceArtwork) ?
+    sourceArtwork : backdrop[0] || '';
   const base = {
     name: cleanGatewayDisplayName(row.name),
     stream_icon: primaryArtwork,
