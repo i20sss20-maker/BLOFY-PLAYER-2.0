@@ -35,7 +35,9 @@ jobs:
             --tests 'tv.blofy.player.ui.settings.StreamCatalogRefreshUiPolicyTest' \
             --tests 'tv.blofy.player.data.StreamCatalogRetryPolicyTest' \
             --tests 'tv.blofy.player.data.StreamCatalogRefreshCadenceTest' \
-            --tests 'tv.blofy.player.data.StreamCatalogDeltaParserTest'
+            --tests 'tv.blofy.player.data.StreamCatalogDeltaParserTest' \
+            --tests 'tv.blofy.player.ui.catalog.PosterStreamArtworkTest' \
+            --tests 'tv.blofy.player.data.metadata.ProviderDetailsRepositoryTest'
       - name: Compile STREAM demo flavor only (not a customer release)
         run: |
           gradle --no-daemon --max-workers=2 \
