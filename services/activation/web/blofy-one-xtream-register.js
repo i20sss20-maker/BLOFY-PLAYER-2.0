@@ -118,6 +118,7 @@
     ' · كلمة المرور مخفية حتى تطلب الاستخراج لحساب معيّن.';
   }
   async function load(){
+   if(loading)return;
    const seq=++loadSeq;loading=true;
    status.textContent='جارٍ قراءة كل حسابات Xtream المباشرة والمرتبطة…';
    buttons.prev.disabled=true;buttons.next.disabled=true;
@@ -129,6 +130,8 @@
       typeof a.username==='string');
     loaded=true;offset=0;
     render();
+    status.textContent='✓ حسابات Xtream الفعلية: '+items.length+
+     ' · يمكنك البحث عن الحساب واستخراج بياناته مجددًا.';
    }catch(e){
     if(seq!==loadSeq)return;
     loaded=false;items=[];rows.replaceChildren();
