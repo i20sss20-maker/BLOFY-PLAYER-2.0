@@ -1,0 +1,95 @@
+name: BLOFY STREAM 56.0.4 retry QA via alternate Maven CDN
+on:
+  push:
+    branches: [stage/stream-56-0-4-artifact-inspect-20261121]
+    paths: ['.github/workflows/stream-56-0-4-customer-journeys-maven-mirror-20261121.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  journeys:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      JAVA_TOOL_OPTIONS: '-Drobolectric.dependency.repo.url=https://repo.maven.apache.org/maven2 -Drobolectric.dependency.repo.id=central'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/stream-56-0-4-final-20261121
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Android SDK 36 and tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;35.0.0"
+      - name: Exercise 39 STREAM journeys; source network mocked, customer codes untouched
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --max-workers=2 \
+            -PBLOFY_ACTIVATION_BASE_URL=http://127.0.0.1:9 \
+            -PBLOFY_UPDATE_BASE_URL=http://127.0.0.1:9 \
+            testStreamCodeOnlyUnitTest \
+            --tests 'tv.blofy.player.core.device.StreamDeviceCompatibilityTest' \
+            --tests 'tv.blofy.player.core.identity.StreamCodeClientTest' \
+            --tests 'tv.blofy.player.core.identity.StreamCodeSessionLogoutTest' \
+            --tests 'tv.blofy.player.core.diagnostics.StreamConnectionDiagnosticsTest' \
+            --tests 'tv.blofy.player.core.diagnostics.StreamAudioHealthTest' \
+            --tests 'tv.blofy.player.core.update.StreamReleaseIsolationTest' \
+            --tests 'tv.blofy.player.core.update.UpdateSafetyTest' \
+            --tests 'tv.blofy.player.core.playback.LiveCleanEndRecoveryPolicyTest' \
+            --tests 'tv.blofy.player.core.playback.PlaybackFallbackPolicyTest' \
+            --tests 'tv.blofy.player.core.playback.PlaybackRecoveryPolicyTest' \
+            --tests 'tv.blofy.player.data.StreamCatalogDeltaParserTest' \
+            --tests 'tv.blofy.player.data.StreamCatalogRefreshCadenceTest' \
+            --tests 'tv.blofy.player.data.StreamCatalogRetryPolicyTest' \
+            --tests 'tv.blofy.player.data.local.CatalogRefreshPersistenceTest' \
+            --tests 'tv.blofy.player.data.local.SearchIndexMigrationTest' \
+            --tests 'tv.blofy.player.data.metadata.ProviderDetailsRepositoryTest' \
+            --tests 'tv.blofy.player.data.remote.StreamCatalogGzipTest' \
+            --tests 'tv.blofy.player.data.remote.EpisodeRequestIsolationTest' \
+            --tests 'tv.blofy.player.data.SeriesEpisodeRetentionPolicyTest' \
+            --tests 'tv.blofy.player.ui.catalog.PosterStreamArtworkTest' \
+            --tests 'tv.blofy.player.ui.catalog.ArtworkCancellationTest' \
+            --tests 'tv.blofy.player.ui.catalog.ArtworkMemoryPressureTest' \
+            --tests 'tv.blofy.player.ui.catalog.ArtworkPersistenceTest' \
+            --tests 'tv.blofy.player.ui.browser.LiveChannelArtworkTest' \
+            --tests 'tv.blofy.player.ui.library.DownloadPromptGateTest' \
+            --tests 'tv.blofy.player.ui.library.DownloadTransferPolicyTest' \
+            --tests 'tv.blofy.player.ui.library.OfflineDownloadPolicyTest' \
+            --tests 'tv.blofy.player.ui.series.EpisodeDownloadFocusPolicyTest' \
+            --tests 'tv.blofy.player.ui.player.StreamArabicAudioCatalogTest' \
+            --tests 'tv.blofy.player.ui.player.StreamAudioRetryPolicyTest' \
+            --tests 'tv.blofy.player.ui.player.EpisodeTransitionResumeTest' \
+            --tests 'tv.blofy.player.ui.search.AiChatRoutingPolicyTest' \
+            --tests 'tv.blofy.player.ui.search.AiResultNavigationTest' \
+            --tests 'tv.blofy.player.ui.search.CatalogSearchRunnerTest' \
+            --tests 'tv.blofy.player.ui.settings.StreamCatalogRefreshUiPolicyTest' \
+            --tests 'tv.blofy.player.ui.settings.StreamLanguageSwitcherTest' \
+            --tests 'tv.blofy.player.ui.login.StreamArabicLanguageTest' \
+            --tests 'tv.blofy.player.ui.home.HomeFocusControllerRegressionTest' \
+            --tests 'tv.blofy.player.ui.common.TwoPaneFocusGuardRegressionTest'
+      - name: Verify official STREAM code-only demo application compiles
+        shell: bash
+        run: |
+          gradle --no-daemon --max-workers=2 \
+            -PBLOFY_ACTIVATION_BASE_URL=http://127.0.0.1:9 \
+            -PBLOFY_UPDATE_BASE_URL=http://127.0.0.1:9 \
+            assembleStreamCodeDemo
+      - name: Store actual test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stream-56-0-4-customer-journeys-mirror-qa
+          path: |
+            app/build/test-results/testStreamCodeOnlyUnitTest/*.xml
+            app/build/reports/tests/testStreamCodeOnlyUnitTest/
+          if-no-files-found: ignore
+          retention-days: 14
