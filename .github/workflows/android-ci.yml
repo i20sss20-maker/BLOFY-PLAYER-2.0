@@ -177,7 +177,7 @@ jobs:
              --tests 'tv.blofy.player.ui.settings.StreamCatalogRefreshRouteTest' \
              --tests 'tv.blofy.player.ui.settings.StreamCatalogRefreshUiPolicyTest' \
              --tests 'tv.blofy.player.data.StreamCatalogRetryPolicyTest' \
-             --tests 'tv.blofy.player.data.StreamCatalogRefreshCadenceTest' \
+             --tests 'tv.blofy.player.data.StreamCatalogRefreshCadenceTest'
 
       - name: Upload Gradle diagnostics
         if: always()
