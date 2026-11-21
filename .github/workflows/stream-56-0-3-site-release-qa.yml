@@ -1,0 +1,44 @@
+name: Verify signed BLOFY STREAM 56.0.3 public site promotion
+on:
+  push:
+    branches: [release/stream-56-0-3-public-20261121]
+    paths: ['.github/workflows/stream-56-0-3-site-release-qa.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  release-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Parse sensitive distribution routes without starting the database
+        run: |
+          set -euo pipefail
+          node --check services/update-distribution/app-library.mjs
+          node --check services/update-distribution/server.mjs
+          node --check services/update-distribution/stream-release.mjs
+          node --check services/update-distribution/stream-upload-oidc.mjs
+      - name: Verify signed release, OIDC isolation and rollback unit tests
+        run: |
+          set -euo pipefail
+          node --test \
+            services/update-distribution/stream-release.test.mjs \
+            services/update-distribution/stream-upload-oidc.test.mjs
+      - name: Check stream description against production database limit
+        run: |
+          node --input-type=module <<'NODE'
+          import {readFileSync} from 'node:fs';
+          import assert from 'node:assert/strict';
+          const source=readFileSync('services/update-distribution/app-library.mjs','utf8');
+          const record=source.match(/slug:'blofy-stream'.*?description:'([^']+)'/s);
+          assert.ok(record, 'stream row not found');
+          assert.ok(record[1].length<=240, 'invalid_app_text would crash Railway startup');
+          assert.match(source,/const SEED_VERSION = 22/);
+          assert.match(source,/signedStream5603Available\(\)/);
+          assert.match(source,/where slug=\$1 and version='56\.0\.2' and download_url=\$6/);
+          console.log('BLOFY STREAM 56.0.3 promotion is guarded by hash and existing 56.0.2 row');
+          NODE
