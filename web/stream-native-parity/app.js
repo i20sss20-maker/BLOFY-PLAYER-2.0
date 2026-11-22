@@ -423,7 +423,7 @@ function loadHls(done){
 function stopPlayback(sendStop){
  if(!S.play)return;var old=S.play;S.play=null;
  if(old.preview)S.livePreview=null;
- try{if(old.timer)clearInterval(old.timer)}catch(e){}
+ try{if(old.timer)clearInterval(old.timer);if(old.stallTimer)clearTimeout(old.stallTimer)}catch(e){}
  if(old.engine){try{old.engine.destroy()}catch(e){}}
  try{if(old.video){old.video.pause();old.video.removeAttribute('src');old.video.load()}}catch(e){}
  if(sendStop!==false&&(old.hlsKey||old.stopUrl))api('POST',old.stopUrl||'/api/hls/'+old.hlsKey+'/stop',{},function(){})
@@ -432,13 +432,23 @@ function cleanupPlayer(){stopPlayback(true)}
 function playerStatus(message,error){var el=document.getElementById('player-status');if(el){el.textContent=message;el.className=error?'player-error':'player-loading'}}
 function playHls(video,kind,id,extension,track,statusElement,preview){
  stopPlayback(true);
- var key=kind+'/'+id+'/'+extension+'/'+track,manifest='/api/hls/'+key+'/index.m3u8',record={video:video,kind:kind,id:id,hlsKey:key,preview:!!preview,engine:null,timer:null,ready:false,started:Date.now()};
+ var key=kind+'/'+id+'/'+extension+'/'+track,manifest='/api/hls/'+key+'/index.m3u8',record={video:video,kind:kind,id:id,hlsKey:key,preview:!!preview,engine:null,timer:null,stallTimer:null,retries:0,ready:false,started:Date.now()};
  S.play=record;
  video.muted=!!preview;video.autoplay=true;video.playsInline=true;video.controls=true;
  function alive(){return S.play===record}
  function status(text){if(!alive())return;if(statusElement)statusElement.textContent=text;else playerStatus(text)}
  video.onerror=function(){if(alive()){status('تعذر تشغيل HLS على هذا الجهاز (رمز '+(video.error?video.error.code:0)+').');if(!preview)playerStatus('فشل التشغيل بتنسيق HLS. تأكد من اتصالك أو جرّب مصدر MP4 قابل للتقديم.',true)}};
- video.onplaying=function(){if(!alive())return;record.ready=true;status(preview?'● المعاينة تعمل':'● تشغيل HLS');};
+ video.onplaying=function(){if(!alive())return;record.ready=true;record.retries=0;if(record.stallTimer){clearTimeout(record.stallTimer);record.stallTimer=null}status(preview?'● المعاينة تعمل':'● تشغيل البث');};
+ video.onwaiting=video.onstalled=function(){
+  if(!alive()||video.paused)return;
+  status(preview?'جار تحميل المعاينة…':'جار تعبئة مخزن البث لتقليل التقطيع…');
+  if(record.stallTimer)clearTimeout(record.stallTimer);
+  record.stallTimer=setTimeout(function(){
+   record.stallTimer=null;
+   if(!alive()||video.paused||video.readyState>=3)return;
+   if(record.engine&&record.retries<3){record.retries++;try{record.engine.startLoad()}catch(e){}}
+  },8500)
+ };
  if(shouldUseNativeHls(video)){
   video.src=manifest;try{var p=video.play();if(p&&p.catch)p.catch(function(){status('اضغط ▶ في المشغّل')})}catch(e){}return
  }
@@ -452,9 +462,19 @@ function playHls(video,kind,id,extension,track,statusElement,preview){
    status('تعذر تحميل مشغّل HLS أو المتصفح لا يدعم MSE.');return
   }
   try{
-   var engine=new window.Hls({enableWorker:false,lowLatencyMode:false,liveSyncDurationCount:2,manifestLoadingTimeOut:25000,fragLoadingTimeOut:25000,maxBufferLength:20});record.engine=engine;
+   var engine=new window.Hls({enableWorker:false,lowLatencyMode:false,liveSyncDurationCount:5,liveMaxLatencyDurationCount:12,maxBufferLength:35,maxBufferHole:1.5,manifestLoadingTimeOut:30000,fragLoadingTimeOut:30000});record.engine=engine;
    engine.on(window.Hls.Events.MANIFEST_PARSED,function(){if(!alive())return;try{var p=video.play();if(p&&p.catch)p.catch(function(){status('اضغط تشغيل ▶')})}catch(e){}});
-   engine.on(window.Hls.Events.ERROR,function(event,detail){if(!alive()||!detail||!detail.fatal)return;diagnose('live','hls_error','video',0);status('خطأ تشغيل: '+String(detail.details||detail.type).slice(0,55))});
+   engine.on(window.Hls.Events.ERROR,function(event,detail){
+    if(!alive()||!detail||!detail.fatal)return;
+    diagnose('live','hls_error','video',0);
+    if(record.retries<3&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){
+     record.retries++;status('انقطاع مؤقت في البث؛ جار استعادة الاتصال…');try{engine.startLoad()}catch(e){};return;
+    }
+    if(record.retries<2&&detail.type===window.Hls.ErrorTypes.MEDIA_ERROR){
+     record.retries++;status('جار إعادة تهيئة الفيديو…');try{engine.recoverMediaError()}catch(e){};return;
+    }
+    status('تعذر استمرار البث: '+String(detail.details||detail.type).slice(0,55))
+   });
    engine.attachMedia(video);engine.loadSource(manifest)
   }catch(e){status('تعذر إعداد مشغّل HLS')}
  })
@@ -514,7 +534,7 @@ function playVodSegments(video,kind,id,ext,track,start,state,ready){
    fail('تعذر تحميل مشغّل HLS أو المتصفح لا يدعم MSE.');return
   }
   try{
-   var engine=new window.Hls({enableWorker:false,lowLatencyMode:false,startPosition:0,liveSyncDurationCount:1,maxBufferLength:30,manifestLoadingTimeOut:25000,fragLoadingTimeOut:25000});
+   var engine=new window.Hls({enableWorker:false,lowLatencyMode:false,startPosition:0,liveSyncDurationCount:4,liveMaxLatencyDurationCount:12,maxBufferLength:40,maxBufferHole:1.5,manifestLoadingTimeOut:30000,fragLoadingTimeOut:30000});
    rec.engine=engine;
    engine.on(window.Hls.Events.MANIFEST_PARSED,function(){
     if(!alive())return;try{var p=video.play();if(p&&p.catch)p.catch(function(){playerStatus('اضغط ▶ لتشغيل الفيلم')})}catch(e){}
