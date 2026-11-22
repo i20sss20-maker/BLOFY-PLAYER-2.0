@@ -1038,9 +1038,10 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
    rec.engine=hls;
    video.onloadedmetadata=function(){
     if(!alive())return;
-    if(state.resume>30&&state.resume<seconds-5&&!state.didResume){
-     state.didResume=true;try{video.currentTime=state.resume}catch(e){}
-    }
+    // Hls.js startPosition already jumps to the saved VOD time.
+    // A second assignment here used to abort the initial chunk download,
+    // leaving some Android-TV browsers stuck rebuffering.
+    state.didResume=state.resume>30&&state.resume<seconds-5;
     if(state.onDuration)state.onDuration()
    };
    hls.on(window.Hls.Events.MANIFEST_PARSED,function(){
