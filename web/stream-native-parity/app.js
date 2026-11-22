@@ -1174,6 +1174,14 @@ function openPlayer(kind,id,extension,name,from){
  video.addEventListener('click',revealControls);
  function realPos(){return state.mode==='vodhls'?state.offset+Math.max(0,video.currentTime||0):video.currentTime||0}
  function totalDuration(){return state.mode==='vodhls'?state.duration:(isFinite(video.duration)&&video.duration>0?video.duration:state.duration)}
+ function nativeCanSeek(target){
+  var ranges=video.seekable;
+  if(!ranges||!ranges.length)return false;
+  for(var i=0;i<ranges.length;i++){
+   try{if(target>=ranges.start(i)-0.4&&target<=ranges.end(i)+0.4)return true}catch(e){}
+  }
+  return false
+ }
  function markReady(){
   if(S.route!=='player')return;
   state.ready=true;var status=document.getElementById('player-status');if(status)status.style.display='none';
@@ -1188,7 +1196,7 @@ function openPlayer(kind,id,extension,name,from){
   if(!isLive){
    var n=document.getElementById('now-time'),t=document.getElementById('total-time'),seek=document.getElementById('seek');
    if(n)n.textContent=formatTime(pos);if(t)t.textContent=duration>0&&isFinite(duration)?formatTime(duration):'المدة غير متوفرة';
-   if(seek){seek.disabled=!(duration>0&&isFinite(duration))||(state.mode==='direct'&&(!video.seekable||!video.seekable.length));
+   if(seek){seek.disabled=!(duration>0&&isFinite(duration));
     if(document.activeElement!==seek&&duration>0&&isFinite(duration))seek.value=String(Math.max(0,Math.min(1000,Math.round(pos/duration*1000))))}
    if(Date.now()-state.lastSaved>5000&&state.ready){saveResume(kind,id,pos,duration,true);state.lastSaved=Date.now()}
   }
@@ -1253,8 +1261,13 @@ function openPlayer(kind,id,extension,name,from){
   state.recoveries=0;state.recoveryWindow=0;
   var target=Math.max(0,Math.round(Number(raw)||0)),duration=totalDuration();
   if(duration>0&&isFinite(duration))target=Math.min(target,Math.max(0,Math.floor(duration)-2));
-  if((state.mode==='direct'||state.mode==='fullvod')&&(state.mode==='fullvod'||video.seekable&&video.seekable.length)){
+  if(state.mode==='fullvod'||state.mode==='direct'&&nativeCanSeek(target)){
    try{video.currentTime=target;progress();return}catch(e){}
+  }
+  if(state.mode==='direct'){
+   state.directFallback=true;
+   if(isFinite(video.duration)&&video.duration>120&&video.duration<=21600)state.duration=Math.round(video.duration);
+   playerStatus('هذا المصدر لا يسمح بالتقديم إلى '+formatTime(target)+' مباشرة؛ جار فتح مشغّل الأفلام…')
   }
   // Restart transcoding at the requested absolute time, never silently at 0.
   if(state.ready)saveResume(kind,id,realPos(),duration,true);
@@ -1290,9 +1303,11 @@ function openPlayer(kind,id,extension,name,from){
    state.directSeekCheck=null;
    if(S.route!=='player'||state.mode!=='direct'||state.directFallback||isLive)return;
    if(!(video.duration>120&&isFinite(video.duration)))return;
-   var ranges=video.seekable;
-   if(!ranges||ranges.length===0){
-    playerStatus('المصدر يعمل دون تقديم؛ جار التحويل إلى مشغّل الأفلام الكامل…');
+   // Some sources expose only a short, moving video range despite reporting
+   // a full movie duration. Test a distant timestamp, not just range count.
+   var probe=Math.max(video.duration*0.75,video.currentTime+120);
+   if(!nativeCanSeek(Math.min(probe,video.duration-10))){
+    playerStatus('المصدر يتيح دقائق محدودة فقط؛ جار التحويل إلى مشغّل الأفلام الكامل…');
     state.recoverDirect()
    }
   },3500)
