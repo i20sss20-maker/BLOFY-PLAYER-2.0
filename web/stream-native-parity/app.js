@@ -739,7 +739,9 @@ function settingsScreen(){
  '<section class="setting-panel"><h3>حالة مشغّل الفيديو</h3><p>تحقق من جاهزية خادم الأفلام والمسلسلات دون التأثير على اشتراكك أو تشغيل العملاء.</p>'+
   '<button class="btn secondary" id="check-player-health">فحص جاهزية الفيديو</button>'+
   '<p class="small muted" id="player-health-status" role="status" aria-live="polite">الفحص يؤكد جاهزية المحرك، وليس صلاحية كل مصدر فيديو.</p></section>'+
- '<section class="setting-panel"><h3>المفضلة والمتابعة</h3><p>تحفظ هذه النسخة البيانات محليًا في هذا المتصفح فقط؛ المزامنة السحابية مع أندرويد غير مفعلة بعد.</p><button class="btn secondary" data-go="favorites">المفضلة</button></section>'+
+ '<section class="setting-panel"><h3>المفضلة والمتابعة</h3><p>تُحفظ المفضلة وسجل المشاهدة والبحث لهذا الاشتراك فقط على هذا المتصفح. المزامنة مع أندرويد غير مفعلة بعد.</p>'+
+  '<button class="btn secondary" data-go="favorites">المفضلة</button> '+
+  '<button class="btn secondary" id="clear-watch-history">مسح سجل المشاهدة والبحث</button></section>'+
  '<section class="setting-panel"><h3>حساب BLOFY</h3><p>الخروج من هذا الجهاز فقط، دون التأثير على التطبيقات الأصلية.</p><button class="btn danger" id="logout">تسجيل الخروج</button></section></div>'+
  '<div id="page-status" class="info" style="margin-top:20px">BLOFY STREAM Web — نسخة مطابقة قيد التطوير.</div>');
  document.getElementById('refresh-content').onclick=function(){refreshCatalog(true)};
@@ -755,6 +757,12 @@ function settingsScreen(){
     box.textContent='تعذر فحص مشغّل الفيديو الآن. هذا لا يعني انتهاء اشتراكك؛ حاول مجددًا بعد قليل.'
    }
   })
+ };
+ document.getElementById('clear-watch-history').onclick=function(){
+  if(!window.confirm('حذف سجل المشاهدة وعمليات البحث لهذا الاشتراك من هذا المتصفح فقط؟ لن تُحذف المفضلة أو الاشتراك.'))return;
+  S.watch={};S.recentSearches=[];
+  profileSave('watch',S.watch);profileSave('recentSearches',S.recentSearches);
+  setStatus('تم حذف سجل المشاهدة والبحث المحلي لهذا الاشتراك؛ المفضلة محفوظة.')
  };
  document.getElementById('logout').onclick=function(){api('POST','/api/logout',{},function(){login('تم تسجيل الخروج')})}
 }
