@@ -873,6 +873,10 @@ function knownDuration(kind,id,item){
  */
 function playFullVod(video,kind,id,ext,track,duration,state,ready){
  var seconds=Math.round(duration),path='/api/vodfull/'+kind+'/'+id+'/'+ext+'/'+track+'/'+seconds;
+ var firstAt=Math.max(0,Math.min(seconds-2,Math.round(Number(state.resume)||0)));
+ // Tell the seekable VOD worker which chunk is required first, before Hls.js
+ // requests segments. Other chunks are still produced only when requested.
+ var playlist=path+'/index.m3u8?at='+firstAt;
  // A retry of the same full VOD session must NOT issue asynchronous /stop:
  // the delayed stop response could kill the newly started retry.
  var sameSession=!!(S.play&&S.play.stopUrl===path+'/stop');
@@ -909,7 +913,7 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
   fail('تعذر تشغيل هذا المصدر كفيلم قابل للتقديم. المصدر قد لا يدعم الوصول إلى مواضع الملف.')
  };
  function attachNative(){
-  video.src=path+'/index.m3u8';
+  video.src=playlist;
   try{var p=video.play();if(p&&p.catch)p.catch(function(){if(alive())playerStatus('اضغط تشغيل للمتابعة')})}
   catch(e){fail('تعذر بدء الفيلم')}
  }
@@ -951,7 +955,7 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
     if(recovery<1&&detail.type===window.Hls.ErrorTypes.MEDIA_ERROR){recovery++;try{hls.recoverMediaError()}catch(e){};return}
     fail('فشل الوصول إلى جزء من الفيلم. قد يمنع المصدر التقديم إلى هذا الموضع. ارجع وحاول عنوانًا آخر.')
    });
-   hls.attachMedia(video);hls.loadSource(path+'/index.m3u8')
+   hls.attachMedia(video);hls.loadSource(playlist)
   }catch(e){fail('تعذر تهيئة مشغّل الأفلام')}
  })
 }
