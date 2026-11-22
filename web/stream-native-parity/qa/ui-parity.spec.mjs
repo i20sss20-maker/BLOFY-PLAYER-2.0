@@ -5,7 +5,8 @@ const movie={stream_id:11,name:'فيلم تجريبي',category_id:'1',container
 const series={series_id:21,name:'مسلسل تجريبي',category_id:'3',cover:'https://example.com/show.jpg'};
 const channel={stream_id:31,name:'قناة اختبار',category_id:'4',stream_icon:'https://example.com/channel.jpg'};
 const episode={id:55,title:'الحلقة التجريبية',episode_num:1,container_extension:'mp4',info:{duration_secs:60}};
-const kinds={movie:[movie],series:[series],live:[channel]};
+const channel2={stream_id:32,name:'قناة ثانية',category_id:'4',stream_icon:'https://example.com/channel2.jpg'};
+const kinds={movie:[movie],series:[series],live:[channel,channel2]};
 test.beforeEach(async({page})=>{
  await page.route('**/api/session',async route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,active:true})}));
  await page.route('**/api/page?*',async route=>{
@@ -63,6 +64,16 @@ test('live screen has three panes and channel click selects video without page c
  await page.locator('[data-channel="31"]').click();
  await expect(page.locator('#live-title')).toHaveText('قناة اختبار');
  expect(errors).toEqual([]);
+});
+test('switching channels and leaving live releases the old media worker session',async({page})=>{
+ const stops=[];page.on('request',req=>{if(req.method()==='POST'&&req.url().includes('/api/hls/live/')&&req.url().endsWith('/stop'))stops.push(req.url())});
+ await page.goto('http://127.0.0.1:3000/');
+ await page.locator('[data-go="live"]').first().click();
+ await page.locator('[data-channel="31"]').click();
+ await page.locator('[data-channel="32"]').click();
+ await expect.poll(()=>stops.length).toBeGreaterThanOrEqual(1);
+ await page.locator('[data-go="movie"]').first().click();
+ await expect.poll(()=>stops.length).toBeGreaterThanOrEqual(2);
 });
 test('VOD MP4 can open real HTML5 media; restart-from-zero overrides stored position',async({page})=>{
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
