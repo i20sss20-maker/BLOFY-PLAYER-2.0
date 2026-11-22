@@ -927,6 +927,7 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
  stopPlayback(!sameSession);
  var rec={video:video,kind:kind,id:id,preview:false,engine:null,stopUrl:stopUrl,hlsKey:null,ready:false,timer:null,stallTimer:null,pendingRecovery:false};
  S.play=rec;state.mode='fullvod';state.offset=0;state.duration=seconds;state.ready=false;state.didResume=false;
+ var badge=document.getElementById('player-mode-badge');if(badge)badge.textContent='VOD كامل • تقديم وترجيع';
  diagnose(kind,'vod_full_start','fullvod',0);
  video.autoplay=true;video.muted=false;video.defaultMuted=false;video.controls=false;
  playerStatus('جار فتح الفيلم الكامل مع التقديم والترجيع…');
@@ -1050,6 +1051,7 @@ function playVodSegments(video,kind,id,ext,track,start,state,ready){
  var newStop='/api/vod/'+key+'/stop',sameSession=!!(S.play&&S.play.stopUrl===newStop);
  state.ready=false;stopPlayback(!sameSession);
  state.mode='vodhls';state.offset=at;state.didResume=true;
+ var badge=document.getElementById('player-mode-badge');if(badge)badge.textContent='HLS مؤقت • مدة غير مؤكدة';
  var rec={video:video,kind:kind,id:id,preview:false,engine:null,stopUrl:'/api/vod/'+key+'/stop',hlsKey:null,ready:false,started:Date.now(),timer:null};
  S.play=rec;
  diagnose(kind,'vod_fallback','vodhls',0);
@@ -1150,7 +1152,7 @@ function openPlayer(kind,id,extension,name,from){
  rememberView();S.previousBeforePlayer={route:S.route,kind:kind,id:id};S.route='player';
  app.innerHTML='<section class="player-overlay" id="player-root"><video id="player-media" '+(isLive?'controls':'')+' autoplay playsinline webkit-playsinline></video>'+
  '<div class="player-loading" id="player-status">جار تجهيز المشغّل…</div>'+
- '<div class="player-hud"><div class="player-title">'+esc(name||title(item))+'</div>'+
+ '<div class="player-hud"><div class="player-title">'+esc(name||title(item))+' <span class="player-mode-badge" id="player-mode-badge" aria-live="polite">'+(isLive?'بث مباشر':'جار فحص وضع التشغيل')+'</span></div>'+
  (isLive?'':'<div class="player-time"><span id="now-time">00:00:00</span><span id="total-time">--:--</span></div><input id="seek" type="range" min="0" max="1000" value="0" step="1" class="seek-line" disabled>')+
  '<div class="player-actions"><button class="btn secondary" id="player-back">↶ رجوع</button><button class="btn" id="player-toggle">⏯ تشغيل / إيقاف</button>'+
  (isLive?'':'<button class="btn secondary" id="player-skip-back">−30 ثانية</button><button class="btn secondary" id="player-skip-forward">+30 ثانية</button><button class="btn secondary" id="player-skip-forward5">+5 دقائق</button><button class="btn secondary" id="player-restart">↺ من البداية</button>')+
@@ -1297,6 +1299,7 @@ function openPlayer(kind,id,extension,name,from){
  };
  function startDirect(){
   state.mode='direct';state.offset=0;state.didResume=false;state.ready=false;
+  var badge=document.getElementById('player-mode-badge');if(badge)badge.textContent='MP4 • جار فحص إمكانية التقديم';
   video.src='/api/media/'+enc(kind)+'/'+enc(id)+'.'+enc(ext);
   try{var ret=video.play();if(ret&&ret.catch)ret.catch(function(){playerStatus('اضغط ▶ لتشغيل الفيديو')})}catch(e){}
  }
@@ -1308,6 +1311,8 @@ function openPlayer(kind,id,extension,name,from){
   // HTML5 can decode MP4 yet have NO seekable byte ranges: in that case the
   // film looks like live streaming. Try the full VOD engine automatically.
   if(state.directSeekCheck)clearTimeout(state.directSeekCheck);
+  var badge=document.getElementById('player-mode-badge');
+  if(badge&&nativeCanSeek(Math.max(0,Math.min(video.duration-10,video.duration*0.75))))badge.textContent='MP4 • قابل للتقديم';
   state.directSeekCheck=setTimeout(function(){
    state.directSeekCheck=null;
    if(S.route!=='player'||state.mode!=='direct'||state.directFallback||isLive)return;
