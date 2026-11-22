@@ -10,6 +10,9 @@ let active=0;
 const MAX_JOBS=2;
 
 const hlsSessions=new Map();
+const metadataSources=new Map();
+const durationCache=new Map();
+const DURATION_CACHE_MS=20*60*1000;
 const hlsRoot=join(tmpdir(),'blofy-vidaa-hls-sessions');
 const hardTTL=9*60*1000;
 function hlsKey(bearer,kind,id,ext,track){return createHmac('sha256',SECRET).update([bearer,kind,id,ext,track].join('\x00')).digest('hex').slice(0,40)}
@@ -142,7 +145,7 @@ async function localSource(req,url){
  if(peer!=='127.0.0.1'&&peer!=='::1'&&peer!=='::ffff:127.0.0.1')return json(403,{error:'local_only'});
  const m=url.pathname.match(/^\/_source\/([a-f0-9]{40})$/);
  if(!m)return json(404,{error:'unknown_source'});
- const session=hlsSessions.get(m[1]);
+ const session=hlsSessions.get(m[1])||metadataSources.get(m[1]);
  if(!session||session.stopped||!session.bearer)return json(410,{error:'source_session_expired'});
  const target=BASE+session.kind+'/'+session.id+'.'+session.ext;
  const headers={Authorization:session.bearer,'Accept':'*/*','accept-encoding':'identity'};
@@ -175,6 +178,35 @@ async function probeVodMetadata(session){
  })();
  return session.metaPromise;
 }
+// Probe without opening a transcoding session: /meta may arrive before the HLS manifest
+// or after a previous play session was closed. Duration is never inferred from live HLS.
+async function independentVodMetadata({bearer,kind,id,ext,track}){
+ const cacheKey=vodKey(bearer,kind,id,ext,track,0);
+ const now=Date.now(),cached=durationCache.get(cacheKey);
+ if(cached&&cached.expires>now)return cached.value;
+ if(cached&&cached.promise)return cached.promise;
+ if(durationCache.size>160){
+  for(const [k,v] of durationCache)if(!v.promise&&v.expires<now)durationCache.delete(k);
+  if(durationCache.size>160)durationCache.delete(durationCache.keys().next().value)
+ }
+ const key=createHmac('sha256',SECRET).update(['metadata',bearer,kind,id,ext,track].join('\x00')).digest('hex').slice(0,40);
+ const session={key,kind,id,ext,track,bearer,stopped:false,metaPromise:null};
+ const promise=(async()=>{
+  metadataSources.set(key,session);
+  try{return await probeVodMetadata(session)}
+  finally{metadataSources.delete(key);session.stopped=true}
+ })();
+ durationCache.set(cacheKey,{promise,expires:now+DURATION_CACHE_MS});
+ try{
+  const value=await promise;
+  durationCache.set(cacheKey,{value,expires:Date.now()+(value.durationSec?DURATION_CACHE_MS:60*1000)});
+  return value
+ }catch{
+  const value={ok:true,durationSec:null,reason:'source_probe_failed'};
+  durationCache.set(cacheKey,{value,expires:Date.now()+60*1000});
+  return value
+ }
+}
 async function startVod({bearer,kind,id,ext,track,start,key}){
  // Replace older positions for this same account/title to avoid wasting transcoding slots.
  for(const s of Array.from(hlsSessions.values()))if(s.vod&&s.bearer===bearer&&s.key!==key)stopHls(s,'title_or_position_changed');
@@ -189,7 +221,8 @@ async function startVod({bearer,kind,id,ext,track,start,key}){
  try{
   const src='http://127.0.0.1:'+Number(Bun.env.PORT||3000)+'/_source/'+key;
   const args=['-hide_banner','-loglevel','warning','-nostdin','-analyzeduration','2000000','-probesize','2000000',
-   '-ss',String(start),'-readrate','1.5','-i',src,
+   '-reconnect','1','-reconnect_streamed','1','-reconnect_on_network_error','1','-reconnect_delay_max','2',
+   '-ss',String(start),'-readrate','2','-i',src,
    '-map','0:v:0','-map','0:a:'+track+'?',
    '-c:v','libx264','-preset','ultrafast','-profile:v','baseline','-level','3.1','-pix_fmt','yuv420p',
    '-vf','scale=854:480:force_original_aspect_ratio=decrease:force_divisible_by=2,fps=25',
@@ -197,7 +230,7 @@ async function startVod({bearer,kind,id,ext,track,start,key}){
    '-c:a','aac','-profile:a','aac_low','-b:a','96k','-ac','2','-ar','48000',
    '-f','hls','-hls_time','1','-hls_segment_type','mpegts',
    '-hls_segment_filename',join(dir,'seg-%06d.ts'),
-   '-hls_list_size','24','-hls_delete_threshold','60','-hls_flags','delete_segments+independent_segments+temp_file',
+   '-hls_list_size','0','-hls_playlist_type','event','-hls_flags','independent_segments+temp_file',
    join(dir,'index.m3u8')];
   const proc=Bun.spawn([FFMPEG,...args],{stdin:'ignore',stdout:'ignore',stderr:'pipe',signal:abort.signal});
   session.proc=proc;
@@ -221,10 +254,10 @@ async function vodRequest(req,url){
  if(file==='stop'&&req.method==='POST'){const sess=hlsSessions.get(key);if(sess)stopHls(sess,'user_stopped');return json(200,{ok:true})}
  if(req.method!=='GET')return json(405,{error:'method_not_allowed'});
  let sess=hlsSessions.get(key);
+ if(file==='meta')return json(200,await independentVodMetadata({bearer,kind,id,ext,track}));
  if(!sess&&file!=='index.m3u8')return json(410,{error:'vod_session_expired'});
  if(!sess){const created=await startVod({bearer,kind,id,ext,track,start,key});if(created.error)return json(created.status||502,{error:created.error});sess=created.session}
  touchHls(sess);
- if(file==='meta')return json(200,await probeVodMetadata(sess));
  const success=await awaitHlsFile(sess,file,file==='index.m3u8'?25000:11000);
  if(!success)return json(sess.error?502:504,{error:sess.error||'vod_initial_segment_pending'});
  if(file==='index.m3u8'){
