@@ -867,7 +867,9 @@ function openPlayer(kind,id,extension,name,from){
  '<div class="player-actions"><button class="btn secondary" id="player-back">↶ رجوع</button><button class="btn" id="player-toggle">⏯ تشغيل / إيقاف</button>'+
  (isLive?'':'<button class="btn secondary" id="player-skip-back">−30 ثانية</button><button class="btn secondary" id="player-skip-forward">+30 ثانية</button><button class="btn secondary" id="player-skip-forward5">+5 دقائق</button><button class="btn secondary" id="player-restart">↺ من البداية</button>')+
  (nextEpisode?'<button class="btn secondary" id="player-next-episode">الحلقة التالية ⏭</button>':'')+
- '<button class="btn secondary" id="player-audio">◉ الصوت</button></div></div></section>';
+ '<button class="btn secondary" id="player-audio" aria-label="تغيير المسار الصوتي">🔊 الصوت</button>'+
+ (isLive?'':'<button class="btn secondary" id="player-speed">السرعة 1×</button>')+
+ '<button class="btn secondary" id="player-fullscreen">⛶ ملء الشاشة</button></div></div></section>';
  var video=document.getElementById('player-media'),state={kind:kind,id:id,ext:ext,video:video,name:name,offset:0,
  mode:isLive?'hls':'direct',resume:resume,duration:knownDuration(kind,id,item),didResume:false,ready:false,track:0,lastSaved:0,
   art:art(item)||prior&&prior.art||'',seriesId:kind==='series'&&S.item&&S.item.id||''};
@@ -953,16 +955,31 @@ function openPlayer(kind,id,extension,name,from){
  }
  state.seekTo=seekTo;
  state.toggle=function(){if(video.paused){var p=video.play();if(p&&p.catch)p.catch(function(){})}else video.pause()};
+ state.recoverDirect=function(){
+  if(state.mode!=='direct'||S.route!=='player'||state.directFallback)return;
+  state.directFallback=true;
+  var position=Math.max(resume,video.currentTime||0);
+  playerStatus('جار فتح مصدر متوافق لتقديم الفيلم…');
+  startVod(position)
+ };
  function startDirect(){
-  state.mode='direct';state.offset=0;state.didResume=false;video.onerror=null;
+  state.mode='direct';state.offset=0;state.didResume=false;state.ready=false;
   video.src='/api/media/'+enc(kind)+'/'+enc(id)+'.'+enc(ext);
   try{var ret=video.play();if(ret&&ret.catch)ret.catch(function(){playerStatus('اضغط ▶ لتشغيل الفيديو')})}catch(e){}
  }
- video.onloadedmetadata=function(){if(state.mode==='direct')progress()};
+ video.onloadedmetadata=function(){if(state.mode==='direct'){progress();if(state.directTimer)clearTimeout(state.directTimer)}};
+ video.onwaiting=video.onstalled=function(){
+  if(state.mode!=='direct'||video.paused||state.directFallback||!S.userVerified)return;
+  if(state.directTimer)clearTimeout(state.directTimer);
+  state.directTimer=setTimeout(function(){
+   state.directTimer=null;
+   if(state.mode==='direct'&&!video.paused&&video.readyState<3)state.recoverDirect()
+  },14000)
+ };
  video.ontimeupdate=progress;video.onpause=function(){progress();if(state.ready&&!isLive)saveResume(kind,id,realPos(),totalDuration(),true)};
- video.onplaying=function(){markReady()};
+ video.onplaying=function(){if(state.directTimer){clearTimeout(state.directTimer);state.directTimer=null}markReady()};
  video.onerror=function(){
-  if(state.mode==='direct'&&!isLive){var at=Math.max(resume,realPos());playerStatus('تعذر المصدر الأصلي. جار فتح نسخة قابلة لاستكمال المشاهدة…');startVod(at)}
+  if(state.mode==='direct'&&!isLive)state.recoverDirect();
   else playerStatus('تعذّر تشغيل هذا المصدر.',true)
  };
  document.getElementById('player-back').onclick=closePlayer;
@@ -974,11 +991,34 @@ function openPlayer(kind,id,extension,name,from){
   else{state.ready=false;startVod(0)}
  };
  document.getElementById('player-audio').onclick=function(){
-  state.track=(state.track+1)%4;
-  if(isLive){state.track=0;playerStatus('تغيير المسار الصوتي للبث غير معتمد بعد، وسيستمر استخدام المسار الافتراضي.');}
-  else if(state.mode==='vodhls'){state.track=0;playerStatus('تغيير مسار صوت الفيلم يحتاج قراءة المسارات الفعلية من المصدر.');}
-  else {state.track=0;playerStatus('تبديل المسار الصوتي في المشغّل الأصلي يعتمد على دعم المتصفح.');}
-  this.innerText='◉ الصوت '+(state.track+1)
+  var tracks=video.audioTracks,engine=S.play&&S.play.engine;
+  if(tracks&&tracks.length>1){
+   var current=-1;for(var a=0;a<tracks.length;a++)if(tracks[a].enabled){current=a;break}
+   var next=(current+1)%tracks.length;
+   for(var j=0;j<tracks.length;j++)tracks[j].enabled=j===next;
+   playerStatus('تم اختيار المسار الصوتي '+(next+1));
+   this.textContent='🔊 الصوت '+(next+1);
+   return
+  }
+  if(engine&&engine.audioTracks&&engine.audioTracks.length>1){
+   engine.audioTrack=(engine.audioTrack+1)%engine.audioTracks.length;
+   this.textContent='🔊 الصوت '+(engine.audioTrack+1);playerStatus('تم تغيير مسار الصوت');
+   return
+  }
+  this.textContent='🔊 المسار الافتراضي';
+  playerStatus('هذا المصدر لا يعرض مسارات صوتية إضافية في المتصفح.')
+ };
+ var speeds=[1,1.25,1.5,2,0.75],speedBtn=document.getElementById('player-speed');
+ if(speedBtn)speedBtn.onclick=function(){
+  var idx=speeds.indexOf(video.playbackRate),next=speeds[(idx+1)%speeds.length];
+  video.playbackRate=next;this.textContent='السرعة '+next+'×'
+ };
+ document.getElementById('player-fullscreen').onclick=function(){
+  var el=document.getElementById('player-root');
+  if(document.fullscreenElement&&document.exitFullscreen){document.exitFullscreen();return}
+  var request=el&&(el.requestFullscreen||el.webkitRequestFullscreen||el.msRequestFullscreen);
+  if(request){try{var p=request.call(el);if(p&&p.catch)p.catch(function(){playerStatus('تعذر فتح ملء الشاشة')})}catch(e){playerStatus('ملء الشاشة غير مدعوم على هذا الجهاز')}}
+  else playerStatus('ملء الشاشة غير مدعوم على هذا الجهاز')
  };
  var back30=document.getElementById('player-skip-back'),forward30=document.getElementById('player-skip-forward');
  if(back30)back30.onclick=function(){seekTo(realPos()-30)};
