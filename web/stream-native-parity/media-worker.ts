@@ -391,6 +391,49 @@ async function fullVodRequest(req,url){
  catch{return json(502,{error:'vod_segment_read_failed'})}
 }
 
+
+/* Validate full-VOD seek on synthetic files only; no customer data is used. */
+function fullVodSeekSelfTest(){
+ const dir=join(hlsRoot,'full-vod-selftest');
+ try{
+  mkdirSync(dir,{recursive:true});const input=join(dir,'test.mkv');
+  const seed=Bun.spawnSync([FFMPEG,'-hide_banner','-loglevel','error','-nostdin','-f','lavfi','-i',
+   'testsrc=size=320x180:rate=25','-f','lavfi','-i','sine=frequency=440:sample_rate=48000',
+   '-t','14','-c:v','libx264','-preset','ultrafast','-pix_fmt','yuv420p',
+   '-c:a','aac','-b:a','96k',input],{stdout:'pipe',stderr:'pipe',timeout:20000});
+  if(seed.exitCode!==0)return {ok:false,stage:'synthetic_source'};
+  for(const start of [0,8]){
+   const args=['-hide_banner','-loglevel','error','-nostdin','-ss',String(start),'-i',input,
+    '-t','4','-map','0:v:0','-map','0:a:0?','-c:v','libx264','-preset','ultrafast',
+    '-profile:v','baseline','-level','3.1','-pix_fmt','yuv420p',
+    '-vf','scale=854:480:force_original_aspect_ratio=decrease:force_divisible_by=2,fps=25',
+    '-g','100','-keyint_min','100','-sc_threshold','0',
+    '-force_key_frames','expr:gte(t,n_forced*4)','-c:a','aac','-b:a','96k','-ac','2','-ar','48000',
+    '-output_ts_offset',String(start),'-f','hls','-hls_time','4',
+    '-hls_segment_type','mpegts','-hls_list_size','0','-hls_playlist_type','vod',
+    '-start_number',String(start/4),'-hls_flags','independent_segments+temp_file',
+    '-hls_segment_filename',join(dir,'seg-%06d.ts'),join(dir,'chunk-'+start+'.m3u8')];
+   const chunk=Bun.spawnSync([FFMPEG,...args],{stdout:'pipe',stderr:'pipe',timeout:20000});
+   if(chunk.exitCode!==0)return {ok:false,stage:'seek_chunk_'+start}
+  }
+  const first=join(dir,'seg-000000.ts'),seek=join(dir,'seg-000002.ts');
+  if(!existsSync(first)||!existsSync(seek))return {ok:false,stage:'missing_segment'};
+  const readTimestamp=file=>{
+   const pr=Bun.spawnSync(['/usr/bin/ffprobe','-v','error','-show_entries',
+    'format=start_time','-of','default=noprint_wrappers=1:nokey=1',file],
+    {stdout:'pipe',stderr:'ignore',timeout:8000});
+   return pr.exitCode===0?Number(new TextDecoder().decode(pr.stdout).trim()):NaN
+  };
+  const startTime=readTimestamp(first),seekTime=readTimestamp(seek),manifest=fullVodManifest(14);
+  const correct=Number.isFinite(startTime)&&Number.isFinite(seekTime)&&seekTime-startTime>6.5&&
+   manifest.includes('#EXT-X-ENDLIST')&&(manifest.match(/#EXTINF:/g)||[]).length===4&&
+   tsCodecs(readFileSync(first)).video&&tsCodecs(readFileSync(seek)).audio;
+  return {ok:correct,stage:correct?'verified_full_vod_seek':'timeline_error',
+   segments:4,offsetSeconds:Number((seekTime-startTime).toFixed(1))}
+ }catch{return {ok:false,stage:'synthetic_test_failed'}}
+ finally{try{rmSync(dir,{recursive:true,force:true})}catch{}}
+}
+
 function tsCodecs(buffer){
  let pmt=-1,video=false,audio=false;
  for(let off=0;off+188<=buffer.length&&off<188*500;off+=188){
@@ -437,6 +480,7 @@ function hlsSelfTest(){
  finally{try{rmSync(dir,{recursive:true,force:true})}catch{}}
 }
 let hlsCheck=null;
+let vodSeekCheck=null;
 
 async function syntheticPipeTest(){
  const dir=join(tmpdir(),'blofy-vidaa-pipetest');
@@ -473,7 +517,10 @@ const server=Bun.serve({port:Number(Bun.env.PORT||3000),idleTimeout:255,async fe
  if(path==='/health'&&req.method==='GET'){
   let status=false;try{const proc=Bun.spawnSync([FFMPEG,'-version'],{stdout:'pipe',stderr:'ignore',timeout:3000});status=proc.exitCode===0}catch{}
   if(!hlsCheck&&status){hlsCheck=hlsSelfTest();console.info('VIDAA_HLS_SELFTEST',hlsCheck)}
-  return json(status&&SECRET.length===64&&hlsCheck?.ok?200:503,{ok:status&&SECRET.length===64&&!!hlsCheck?.ok,service:'blofy-vidaa-media-compat',ffmpegAvailable:status,hls:hlsCheck,activeJobs:active,limit:MAX_JOBS})
+  if(!vodSeekCheck&&status&&hlsCheck?.ok){vodSeekCheck=fullVodSeekSelfTest();console.info('BLOFY_FULL_VOD_SELFTEST',vodSeekCheck)}
+  const ok=status&&SECRET.length===64&&!!hlsCheck?.ok&&!!vodSeekCheck?.ok;
+  return json(ok?200:503,{ok,service:'blofy-vidaa-media-compat',ffmpegAvailable:status,
+   hls:hlsCheck,vodSeek:vodSeekCheck,activeJobs:active,limit:MAX_JOBS})
  }
  if(path.startsWith('/hls/'))return hlsRequest(req,url);
  if(req.method!=='GET')return json(405,{error:'method_not_allowed'});
