@@ -224,7 +224,7 @@ function home(){
   var shelfSeries=show.length?'<section class="shelf"><div class="shelf-title"><h2>أحدث المسلسلات</h2><button class="btn secondary" data-go="series">عرض الكل</button></div>'+shelves(show,'series')+'</section>':'';
   var recent=Object.keys(S.watch).map(function(key){var parts=key.split(':'),item=findItem(parts[0],parts[1]);return item?{kind:parts[0],item:item,pos:S.watch[key]}:null}).filter(Boolean).sort(function(a,b){return b.pos.updated-a.pos.updated}).slice(0,12);
   var watch=recent.length?'<section class="shelf"><div class="shelf-title"><h2>أكمل المشاهدة</h2></div><div class="h-scroll">'+recent.map(function(r){return posterCard(r.item,r.kind)}).join('')+'</div></section>':'';
-  var target=document.getElementById('home-content');if(target)target.innerHTML=hero+shortcuts+watch+shelfMovies+shelfSeries;
+  var target=document.getElementById('home-content');if(target){target.innerHTML=hero+shortcuts+watch+shelfMovies+shelfSeries;restoreView('home')}
  }
  if(!movies){pending++;getListing('movie','all',function(st,d){movies=d||{items:[]};pending--;draw()})}
  if(!series){pending++;getListing('series','all',function(st,d){series=d||{items:[]};pending--;draw()})}
@@ -233,12 +233,23 @@ function home(){
 function catalog(kind){
  S.kind=kind;var cat=S.cat[kind]||'all';
  shell(kindName(kind),'<div id="catalog-root">'+loading(kindName(kind))+'</div>');
+ // Do not block the content grid on slower category metadata.
+ getListing(kind,cat,function(st,listing){
+  if(S.route!==kind||(S.cat[kind]||'all')!==cat)return;
+  var root=document.getElementById('catalog-root');if(!root)return;
+  if(st!==200||!listing){
+   root.innerHTML='<div class="info error">تعذر تحميل المحتوى. <button class="btn secondary" data-reload="'+kind+'">إعادة المحاولة</button></div>';
+   return
+  }
+  buildCatalog(kind,listing)
+ });
  categories(kind,function(){
-  getListing(kind,cat,function(st,listing){
-   if(S.route!==kind)return;
-   if(st!==200||!listing){document.getElementById('catalog-root').innerHTML='<div class="info error">تعذر تحميل المحتوى. <button class="btn secondary" data-reload="'+kind+'">إعادة المحاولة</button></div>';return}
-   buildCatalog(kind,listing)
-  })
+  if(S.route!==kind||(S.cat[kind]||'all')!==cat)return;
+  var panel=document.querySelector('#catalog-root .cat-rail');if(!panel)return;
+  var oldScroll=panel.querySelector('.pane-scroll'),y=oldScroll?oldScroll.scrollTop:0;
+  panel.outerHTML=categoryRail(kind);
+  var next=document.querySelector('#catalog-root .cat-rail .pane-scroll');
+  if(next)next.scrollTop=y
  })
 }
 function categoryRail(kind){
@@ -251,6 +262,7 @@ function categoryRail(kind){
 function currentListing(){return S.loaded[keyOf(S.kind,S.cat[S.kind]||'all')]||{items:[],hasMore:false,nextOffset:0}}
 function buildCatalog(kind,listing){
  var host=document.getElementById('catalog-root');if(!host)return;var source=listing.items||[];
+ if(host.querySelector('.catalog'))rememberView();
  if(kind==='live'){
   host.innerHTML='<div class="catalog">'+categoryRail(kind)+
   '<section class="channels"><div class="pane-head"><strong>القنوات</strong><small>'+source.length+' قناة محمّلة</small></div>'+
@@ -273,6 +285,7 @@ function buildCatalog(kind,listing){
   '<div style="margin-top:20px;text-align:center"><button class="btn secondary" data-more="'+kind+'" '+(!listing.hasMore?'disabled':'')+'>عرض المزيد</button></div></section></div>';
   enrichPosters(kind,sorted.slice(0,10))
  }
+ restoreView(kind)
 }
 function enrichPosters(kind,source){
  if(kind!=='movie'&&kind!=='series')return;
@@ -405,7 +418,7 @@ function episodesScreen(opts){
    '<span class="episode-meta">الموسم '+esc(S.selectedSeason)+(pct?' • شاهدت '+pct+'٪':'')+'</span>'+
    (pct?'<span class="episode-progress"><i style="width:'+pct+'%"></i></span>':'')+'</span></button>'
   }).join('')+'</section></div>';
-  document.getElementById('episodes-root').innerHTML=html;
+  document.getElementById('episodes-root').innerHTML=html;restoreView('episodes');
  }
  if(S.episodes&&S.episodes.episodes)finish(S.episodes);
  else api('GET','/api/catalog?action=get_series_info&series_id='+enc(id),null,function(st,d){if(st===200)finish(d);else document.getElementById('episodes-root').innerHTML='<div class="info error">تعذر جلب الحلقات، حاول مرة أخرى.</div>'})
@@ -413,7 +426,7 @@ function episodesScreen(opts){
 function favoritesScreen(){
  shell('المفضلة','<div id="fav-root"></div>');var keys=Object.keys(S.library),html='';
  for(var i=0;i<keys.length;i++){var p=keys[i].split(':'),item=findItem(p[0],p[1]);if(item&&S.library[keys[i]])html+=posterCard(item,p[0])}
- document.getElementById('fav-root').innerHTML=html?'<div class="poster-grid">'+html+'</div>':'<div class="empty-state">أضف أفلامك ومسلسلاتك وقنواتك المفضلة حتى تظهر هنا.</div>'
+ document.getElementById('fav-root').innerHTML=html?'<div class="poster-grid">'+html+'</div>':'<div class="empty-state">أضف أفلامك ومسلسلاتك وقنواتك المفضلة حتى تظهر هنا.</div>';restoreView('favorites')
 }
 function collectionsScreen(){
  shell('التصنيفات','<div class="story-row"><button class="story" data-go="movie"><strong>أفلام</strong><small>جميع أنواع الأفلام</small></button>'+
@@ -427,7 +440,7 @@ function searchScreen(){
  '<div class="search-tabs"><span class="chip primary">القنوات</span><span class="chip primary">الأفلام</span><span class="chip primary">المسلسلات</span></div>'+
  '<p id="search-status" class="muted">أدخل اسم المحتوى لعرض النتائج من BLOFY</p><div id="search-result" class="search-result-grid"></div></section>');
  document.getElementById('search-input').oninput=function(){var q=this.value.trim();if(S.searchTimer)clearTimeout(S.searchTimer);
- if(q.length<2){document.getElementById('search-result').innerHTML='';document.getElementById('search-status').textContent='اكتب حرفين على الأقل';return}
+ if(q.length<2){++S.searchToken;document.getElementById('search-result').innerHTML='';document.getElementById('search-status').textContent='اكتب حرفين على الأقل';return}
  var token=++S.searchToken;document.getElementById('search-status').textContent='جار البحث في المكتبة…';
  S.searchTimer=setTimeout(function(){searchNow(q,token)},370)
  };
