@@ -272,3 +272,11 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible,.remote-focus{
 @media(prefers-reduced-motion:reduce){
  .player-overlay .player-hud{transition:none;will-change:auto}
 }
+
+
+/* Visual truth: the badge reflects the active VOD/direct/temporary pipeline. */
+.player-mode-badge{display:inline-flex;vertical-align:middle;white-space:normal;
+ margin-inline-start:10px;padding:4px 9px;border:1px solid #7cdbd684;
+ border-radius:999px;color:#aefff0;background:#0e555bde;
+ font:600 11px/1.5 system-ui,sans-serif;letter-spacing:0}
+@media(max-width:730px){.player-mode-badge{font-size:10px;margin-inline-start:4px;padding:3px 6px}}
