@@ -1,19 +1,177 @@
 
 import ffmpegPath from 'ffmpeg-static@5.2.0';
-import { timingSafeEqual } from 'node:crypto';
+import { timingSafeEqual, createHmac } from 'node:crypto';
+import { mkdirSync, rmSync, existsSync, readdirSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 const FFMPEG=String(ffmpegPath||'');
 const SECRET=String(Bun.env.VIDAA_COMPAT_KEY||'');
 const BASE='https://blofyplayer.com/api/v1/stream/media/';
 let active=0;
 const MAX_JOBS=2;
+
+const hlsSessions=new Map();
+const hlsRoot=join(tmpdir(),'blofy-vidaa-hls-sessions');
+const hardTTL=9*60*1000;
+function hlsKey(bearer,kind,id,ext,track){return createHmac('sha256',SECRET).update([bearer,kind,id,ext,track].join('\x00')).digest('hex').slice(0,40)}
+function touchHls(session){
+ session.lastAccess=Date.now();if(session.idleTimer)clearTimeout(session.idleTimer);
+ session.idleTimer=setTimeout(()=>stopHls(session,'idle_timeout'),110000);
+ session.idleTimer.unref?.();
+}
+function stopHls(session,reason){
+ if(!session||session.stopped)return;session.stopped=true;
+ if(session.idleTimer)clearTimeout(session.idleTimer);
+ if(session.hardTimer)clearTimeout(session.hardTimer);
+ hlsSessions.delete(session.key);
+ try{session.abort.abort()}catch{}
+ try{session.proc?.kill()}catch{}
+ releaseHls(session);
+ try{rmSync(session.dir,{recursive:true,force:true})}catch{}
+ if(reason!=='idle_timeout'&&reason!=='session_expired')console.info('VIDAA_HLS_SESSION_END',{kind:session.kind,reason})
+}
+function releaseHls(session){if(!session.released){session.released=true;active=Math.max(0,active-1)}}
+const nap=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+async function awaitHlsFile(session,filename,limitMs){
+ const until=Date.now()+limitMs;
+ while(Date.now()<until){
+  if(session.stopped)return false;
+  if(existsSync(join(session.dir,filename)))return true;
+  if(session.finished)return false;
+  await nap(220);
+ }
+ return false;
+}
+function hlsError(status,error){return json(status,{ok:false,error})}
+async function startHls({bearer,kind,id,ext,track,key}){
+ if(active>=MAX_JOBS)return {error:'hls_capacity',status:429};
+ active++;
+ const abort=new AbortController(),dir=join(hlsRoot,key);
+ const session={key,kind,id,ext,track,dir,abort,startedAt:Date.now(),stopped:false,released:false,finished:false,proc:null,lastAccess:Date.now(),error:null};
+ hlsSessions.set(key,session);
+ mkdirSync(dir,{recursive:true});
+ touchHls(session);
+ session.hardTimer=setTimeout(()=>stopHls(session,'session_expired'),hardTTL);
+ session.hardTimer.unref?.();
+ const target=BASE+kind+'/'+id+'.'+ext;
+ try{
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),16000);
+  let upstream;
+  try{upstream=await fetch(target,{method:'GET',headers:{Authorization:bearer,Accept:'*/*','accept-encoding':'identity'},redirect:'manual',signal:controller.signal})}
+  finally{clearTimeout(timeout)}
+  if(!upstream.ok||!upstream.body){const status=upstream.status;stopHls(session,'upstream_'+status);return {error:status===401?'invalid_session':status===404?'media_missing':status>=300&&status<400?'media_redirect_unsupported':'media_upstream_error',status:status===401?401:502}}
+  const videoArgs=['-c:v','libx264','-preset','ultrafast','-tune','zerolatency','-profile:v','baseline','-level','3.1','-pix_fmt','yuv420p','-vf','scale=854:480:force_original_aspect_ratio=decrease:force_divisible_by=2,fps=25','-g','50','-keyint_min','50','-sc_threshold','0','-b:v','900k','-maxrate','1100k','-bufsize','1800k'];
+  const args=['-hide_banner','-loglevel','warning','-nostdin','-analyzeduration','4000000','-probesize','4000000','-fflags','+genpts','-i','pipe:0',
+   '-map','0:v:0','-map','0:a:'+track+'?',...videoArgs,'-c:a','aac','-profile:a','aac_low','-b:a','96k','-ac','2','-ar','48000',
+   '-f','hls','-hls_time','2','-hls_segment_type','mpegts','-hls_segment_filename',join(dir,'seg-%06d.ts')];
+  if(kind==='live')args.push('-hls_list_size','5','-hls_flags','delete_segments+independent_segments');
+  else args.push('-hls_list_size','0','-hls_playlist_type','event','-hls_flags','independent_segments');
+  args.push(join(dir,'index.m3u8'));
+  const proc=Bun.spawn([FFMPEG,...args],{stdin:upstream.body,stdout:'ignore',stderr:'pipe',signal:abort.signal});
+  session.proc=proc;
+  (async()=>{try{
+   let err='';const stream=proc.stderr?.getReader?.();if(!stream)return;
+   while(true){const part=await stream.read();if(part.done)break;if(err.length<3500)err+=new TextDecoder().decode(part.value).slice(0,1000)}
+   if(err)session.error=/Stream map|matches no streams/i.test(err)?'source_missing_video':/Invalid data/i.test(err)?'invalid_source_data':/encoder/i.test(err)?'encoder_failure':'transcode_error';
+  }catch{}})();
+  proc.exited.then(code=>{
+   session.finished=true;
+   if(code!==0&&!session.stopped)console.warn('VIDAA_HLS_FFMPEG_EXIT',{kind,code,reason:session.error||'nonzero_exit'});
+   if(!existsSync(join(dir,'index.m3u8'))){session.error=session.error||'ffmpeg_no_playlist';stopHls(session,session.error)}
+   else {releaseHls(session);touchHls(session)}
+  }).catch(()=>{session.finished=true;session.error='process_crashed';stopHls(session,session.error)});
+  return {session};
+ }catch(err){stopHls(session,'fetch_or_spawn_error');return {error:'hls_start_failed',status:502}}
+}
+async function hlsRequest(req,url){
+ if(!SECRET||!secureEquals(req.headers.get('x-compat-secret'),SECRET))return hlsError(403,'forbidden');
+ const stop=url.pathname.match(/^\/hls\/(live|movie|series)\/([1-9][0-9]{0,14})\/(ts|mkv|mp4|avi|mov)\/([0-3])\/stop$/);
+ if(req.method==='POST'&&stop){
+  const bearer=req.headers.get('authorization')||'';
+  if(!/^Bearer v1\.[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/.test(bearer))return hlsError(401,'authorization_missing');
+  const key=hlsKey(bearer,stop[1],stop[2],stop[3],stop[4]);
+  const activeSession=hlsSessions.get(key);if(activeSession)stopHls(activeSession,'viewer_stopped');
+  return json(200,{ok:true});
+ }
+ if(req.method!=='GET')return hlsError(405,'method_not_allowed');
+ if(!SECRET||!secureEquals(req.headers.get('x-compat-secret'),SECRET))return hlsError(403,'forbidden');
+ const match=url.pathname.match(/^\/hls\/(live|movie|series)\/([1-9][0-9]{0,14})\/(ts|mkv|mp4|avi|mov)\/([0-3])\/(index\.m3u8|seg-[0-9]{6}\.ts)$/);
+ if(!match)return hlsError(404,'hls_invalid_resource');
+ const bearer=req.headers.get('authorization')||'';
+ if(!/^Bearer v1\.[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/.test(bearer))return hlsError(401,'authorization_missing');
+ const [whole,kind,id,ext,track,filename]=match;
+ const key=hlsKey(bearer,kind,id,ext,track);
+ let sess=hlsSessions.get(key);
+ if(!sess&&filename!=='index.m3u8')return hlsError(404,'hls_session_missing');
+ if(!sess){const start=await startHls({bearer,kind,id,ext,track,key});if(start.error)return hlsError(start.status,start.error);sess=start.session}
+ touchHls(sess);
+ const ready=await awaitHlsFile(sess,filename,filename==='index.m3u8'?25000:11000);
+ if(!ready)return hlsError(sess.error?502:504,sess.error||'hls_segment_timeout');
+ try{
+  const data=readFileSync(join(sess.dir,filename));
+  if(!data.length)return hlsError(503,'hls_file_empty');
+  const playlist=filename==='index.m3u8';
+  const headers={'Content-Type':playlist?'application/vnd.apple.mpegurl':'video/mp2t','Cache-Control':'no-store, private','X-Content-Type-Options':'nosniff'};
+  return new Response(data,{status:200,headers});
+ }catch{return hlsError(502,'hls_read_failed')}
+}
+function tsCodecs(buffer){
+ let pmt=-1,video=false,audio=false;
+ for(let off=0;off+188<=buffer.length&&off<188*500;off+=188){
+  if(buffer[off]!==0x47)break;
+  const pid=((buffer[off+1]&31)<<8)|buffer[off+2];
+  const ac=(buffer[off+3]>>4)&3;
+  if(ac!==1&&ac!==3)continue;
+  let at=off+4;
+  if(ac===3){const len=buffer[at];at+=1+len}
+  if(at>=off+188)continue;
+  if(buffer[off+1]&64){const ptr=buffer[at];at+=1+ptr}
+  if(at+13>off+188)continue;
+  if(pid===0&&buffer[at]===0x00){
+   const length=((buffer[at+1]&15)<<8)|buffer[at+2];
+   const stop=Math.min(at+3+length-4,off+188);
+   for(let k=at+8;k+4<=stop;k+=4){const program=(buffer[k]<<8)|buffer[k+1];if(program){pmt=((buffer[k+2]&31)<<8)|buffer[k+3];break}}
+  }
+  if(pid===pmt&&buffer[at]===0x02){
+   const sl=((buffer[at+1]&15)<<8)|buffer[at+2],pi=((buffer[at+10]&15)<<8)|buffer[at+11];
+   const stop=Math.min(at+3+sl-4,off+188);
+   for(let k=at+12+pi;k+5<=stop;){const type=buffer[k],es=((buffer[k+3]&15)<<8)|buffer[k+4];if(type===0x1b)video=true;if(type===0x0f)audio=true;k+=5+es}
+   if(video&&audio)break
+  }
+ }
+ return {video,audio}
+}
+function hlsSelfTest(){
+ const dir=join(hlsRoot,'selftest');
+ try{
+  mkdirSync(dir,{recursive:true});
+  const args=['-hide_banner','-loglevel','error','-nostdin','-f','lavfi','-i','testsrc=size=320x180:rate=25','-f','lavfi','-i','sine=frequency=440:sample_rate=48000',
+   '-t','4','-map','0:v:0','-map','1:a:0','-c:v','libx264','-preset','ultrafast','-profile:v','baseline','-level','3.1','-pix_fmt','yuv420p',
+   '-vf','scale=854:480:force_original_aspect_ratio=decrease:force_divisible_by=2,fps=25','-g','50','-keyint_min','50','-sc_threshold','0',
+   '-c:a','aac','-b:a','96k','-ac','2','-ar','48000','-f','hls','-hls_time','2','-hls_list_size','0','-hls_playlist_type','vod',
+   '-hls_segment_filename',join(dir,'seg-%06d.ts'),join(dir,'index.m3u8')];
+  const proc=Bun.spawnSync([FFMPEG,...args],{stdout:'pipe',stderr:'pipe',timeout:20000});
+  if(proc.exitCode!==0)return {ok:false,stage:'encoding',exit:proc.exitCode};
+  const manifest=readFileSync(join(dir,'index.m3u8'),'utf8');
+  const segments=readdirSync(dir).filter(x=>/^seg-\d{6}\.ts$/.test(x));
+  if(!manifest.startsWith('#EXTM3U')||segments.length<2)return {ok:false,stage:'manifest_or_segments'};
+  const media=tsCodecs(readFileSync(join(dir,segments[0])));
+  return {ok:!!media.video&&!!media.audio,stage:'verified_ts',video:media.video?'h264':'missing',audio:media.audio?'aac':'missing',segments:segments.length};
+ }catch(e){return {ok:false,stage:'runtime_failure'}}
+ finally{try{rmSync(dir,{recursive:true,force:true})}catch{}}
+}
+let hlsCheck=null;
 function json(status,obj){return new Response(JSON.stringify(obj),{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}})}
 function secureEquals(a,b){const x=Buffer.from(String(a)),y=Buffer.from(String(b));return x.length===y.length&&x.length===64&&timingSafeEqual(x,y)}
 const server=Bun.serve({port:Number(Bun.env.PORT||3000),idleTimeout:255,async fetch(req){
  const url=new URL(req.url),path=url.pathname;
  if(path==='/health'&&req.method==='GET'){
   let status=false;try{const proc=Bun.spawnSync([FFMPEG,'-version'],{stdout:'pipe',stderr:'ignore',timeout:3000});status=proc.exitCode===0}catch{}
-  return json(status&&SECRET.length===64?200:503,{ok:status&&SECRET.length===64,service:'blofy-vidaa-media-compat',ffmpegAvailable:status,activeJobs:active,limit:MAX_JOBS})
+  if(!hlsCheck&&status){hlsCheck=hlsSelfTest();console.info('VIDAA_HLS_SELFTEST',hlsCheck)}
+  return json(status&&SECRET.length===64&&hlsCheck?.ok?200:503,{ok:status&&SECRET.length===64&&!!hlsCheck?.ok,service:'blofy-vidaa-media-compat',ffmpegAvailable:status,hls:hlsCheck,activeJobs:active,limit:MAX_JOBS})
  }
+ if(path.startsWith('/hls/'))return hlsRequest(req,url);
  if(req.method!=='GET')return json(405,{error:'method_not_allowed'});
  if(!SECRET||!secureEquals(req.headers.get('x-compat-secret'),SECRET))return json(403,{error:'forbidden'});
  const m=path.match(/^\/convert\/(live|movie|series)\/([1-9][0-9]{0,14})\.(ts|mkv|mp4|avi|mov)$/);
