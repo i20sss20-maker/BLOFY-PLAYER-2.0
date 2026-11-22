@@ -755,7 +755,14 @@ function playVodSegments(video,kind,id,ext,track,start,state,ready){
    if(!alive())return;
    if(st===200&&r&&Number(r.durationSec)>0){
     state.duration=Math.round(Number(r.durationSec));
-    if(state.onDuration)state.onDuration()
+    if(state.onDuration)state.onDuration();
+    if(state.duration>=120&&state.duration<=21600&&state.mode==='vodhls'){
+     var actual=Math.max(at,at+Math.max(0,video.currentTime||0));
+     state.resume=Math.round(actual);
+     // One-time migration from temporary streaming preview to a seekable full VOD.
+     playFullVod(video,kind,id,ext,track,state.duration,state,ready);
+     return
+    }
    }else if(state.onDuration)state.onDuration()
   })
  }
