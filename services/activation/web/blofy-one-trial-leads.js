@@ -85,7 +85,7 @@
     const action=el('td');
     const open=el('button','👤 ملف وتواصل','one-trial-lead-open');
     open.type='button';
-    open.addEventListener('click',()=>openLead(item));
+    open.addEventListener('click',()=>void openLead(item));
     action.append(open);
     row.append(name,email,type,el('td',date(item.claimedAt)),activation,contact,action);
     table.append(row);
@@ -139,7 +139,22 @@
    const node=el('div','','one-trial-lead-detail');
    node.append(el('small',label),el('strong',value||'—'));return node;
   }
-  function openLead(row){
+  async function openLead(snapshot){
+   if(busy)return;
+   // A consent withdrawal must take effect before showing an outreach link:
+   // refresh this exact voucher from the server instead of trusting an old tab.
+   let row;
+   try{
+    const latest=await api('/api/v1/admin/store/trials/leads',{
+     q:snapshot.voucherId,sku:'all',state:'all',offset:0
+    });
+    row=latest.items?.find(item=>item.voucherId===snapshot.voucherId);
+    if(!row)throw Error('تعذر التحقق من حالة العميل الحالية.');
+   }catch(error){
+    notice.textContent='تعذر فتح الملف: '+error.message+
+     ' · حدّث القائمة قبل استخدام بيانات التواصل.';
+    return;
+   }
    if(busy)return;
    selected=row;
    const person=row.customer||{};
@@ -208,6 +223,11 @@
        result.followupStatus!==status)throw Error('لم يتأكد حفظ المتابعة.');
     $('one-trial-lead-detail-status').textContent='✓ تم حفظ حالة المتابعة دون إرسال رسائل.';
     selected.followupStatus=status;selected.followupNote=note;
+    if(status==='do_not_contact'){
+     const link=$('one-trial-lead-whatsapp');
+     link.hidden=true;link.removeAttribute('href');
+     $('one-trial-lead-followup-status').querySelector('option[value="offer_sent"]').disabled=true;
+    }
     // Refresh after leaving the modal to avoid overwriting a form mid-save.
    }catch(error){$('one-trial-lead-detail-status').textContent='تعذر الحفظ: '+error.message;}
    finally{
