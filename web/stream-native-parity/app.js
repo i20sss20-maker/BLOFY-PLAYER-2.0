@@ -398,6 +398,17 @@ function diagnose(kind,phase,mode,code){
  api('POST','/api/player-diagnostic',payload,function(){})
 }
 
+function shouldUseNativeHls(video){
+ if(!video||!video.canPlayType||!video.canPlayType('application/vnd.apple.mpegurl'))return false;
+ // Chrome and Edge sometimes report "maybe" here yet fail to decode MPEG-TS
+ // with MEDIA_ERR_SRC_NOT_SUPPORTED (4). Use Hls.js/MSE on these browsers.
+ var ua=(navigator.userAgent||'');
+ var apple=/Safari/i.test(ua)&&!/Chrome|Chromium|CriOS|Edg|OPR|FxiOS/i.test(ua);
+ var tv=/VIDAA|Hisense/i.test(ua);
+ var mse=!!(window.MediaSource&&window.MediaSource.isTypeSupported);
+ return apple||tv||!mse
+}
+
 function loadHls(done){
  if(window.Hls){done(true);return}
  if(S.hlsState==='loading'){S.hlsCallbacks.push(done);return}
@@ -426,12 +437,18 @@ function playHls(video,kind,id,extension,track,statusElement,preview){
  function status(text){if(!alive())return;if(statusElement)statusElement.textContent=text;else playerStatus(text)}
  video.onerror=function(){if(alive()){status('تعذر تشغيل HLS على هذا الجهاز (رمز '+(video.error?video.error.code:0)+').');if(!preview)playerStatus('فشل التشغيل بتنسيق HLS. تأكد من اتصالك أو جرّب مصدر MP4 قابل للتقديم.',true)}};
  video.onplaying=function(){if(!alive())return;record.ready=true;status(preview?'● المعاينة تعمل':'● تشغيل HLS');};
- if(video.canPlayType&&video.canPlayType('application/vnd.apple.mpegurl')){
+ if(shouldUseNativeHls(video)){
   video.src=manifest;try{var p=video.play();if(p&&p.catch)p.catch(function(){status('اضغط ▶ في المشغّل')})}catch(e){}return
  }
  loadHls(function(ok){
   if(!alive())return;
-  if(!ok||!window.Hls||!window.Hls.isSupported()){status('المتصفح لا يدعم HLS ولا Media Source Extensions.');return}
+  if(!ok||!window.Hls||!window.Hls.isSupported()){
+   // Only try native HLS if the browser genuinely advertises it.
+   if(video.canPlayType&&video.canPlayType('application/vnd.apple.mpegurl')){
+    video.src=manifest;try{video.play()}catch(e){};return
+   }
+   status('تعذر تحميل مشغّل HLS أو المتصفح لا يدعم MSE.');return
+  }
   try{
    var engine=new window.Hls({enableWorker:false,lowLatencyMode:false,liveSyncDurationCount:2,manifestLoadingTimeOut:25000,fragLoadingTimeOut:25000,maxBufferLength:20});record.engine=engine;
    engine.on(window.Hls.Events.MANIFEST_PARSED,function(){if(!alive())return;try{var p=video.play();if(p&&p.catch)p.catch(function(){status('اضغط تشغيل ▶')})}catch(e){}});
@@ -473,12 +490,17 @@ function playVodSegments(video,kind,id,ext,track,start,state,ready){
  video.onerror=function(){diagnose(kind,'media_error','video',video.error&&video.error.code);fail('لم ينجح تشغيل الفيلم من هذا الموضع. السبب قد يكون المصدر أو صيغة الفيديو؛ لا تعِد بدءه تلقائيًا من الصفر.')};
  video.onplaying=function(){if(!alive())return;rec.ready=true;ready();};
  video.onwaiting=function(){if(alive()&&rec.ready)playerStatus('جار تحميل المقطع التالي من الفيلم…')};
- if(video.canPlayType&&video.canPlayType('application/vnd.apple.mpegurl')){
+ if(shouldUseNativeHls(video)){
   video.src=manifest;try{var promise=video.play();if(promise&&promise.catch)promise.catch(function(){fail('اضغط ▶ داخل المشغّل للبدء')})}catch(e){}return
  }
  loadHls(function(ok){
   if(!alive())return;
-  if(!ok||!window.Hls||!window.Hls.isSupported()){fail('المتصفح لا يدعم HLS أو MSE، والتشغيل الأصلي غير مدعوم.');return}
+  if(!ok||!window.Hls||!window.Hls.isSupported()){
+   if(video.canPlayType&&video.canPlayType('application/vnd.apple.mpegurl')){
+    video.src=manifest;try{video.play()}catch(e){};return
+   }
+   fail('تعذر تحميل مشغّل HLS أو المتصفح لا يدعم MSE.');return
+  }
   try{
    var engine=new window.Hls({enableWorker:false,liveSyncDurationCount:2,maxBufferLength:25,manifestLoadingTimeOut:25000,fragLoadingTimeOut:25000});
    rec.engine=engine;
