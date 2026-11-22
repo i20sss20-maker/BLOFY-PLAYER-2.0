@@ -11,7 +11,7 @@ const MAX_JOBS=2;
 
 const hlsSessions=new Map();
 const hlsRoot=join(tmpdir(),'blofy-vidaa-hls-sessions');
-const hardTTL=9*60*1000;
+const hardTTL=6*60*60*1000;
 function hlsKey(bearer,kind,id,ext,track){return createHmac('sha256',SECRET).update([bearer,kind,id,ext,track].join('\x00')).digest('hex').slice(0,40)}
 function touchHls(session){
  session.lastAccess=Date.now();if(session.idleTimer)clearTimeout(session.idleTimer);
