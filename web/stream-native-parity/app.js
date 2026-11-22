@@ -788,6 +788,7 @@ function cleanupPlayer(){
  if(S.playerView){
   if(S.playerView.directTimer){clearTimeout(S.playerView.directTimer);S.playerView.directTimer=null}
   if(S.playerView.directSeekCheck){clearTimeout(S.playerView.directSeekCheck);S.playerView.directSeekCheck=null}
+  if(S.playerView.directSeekVerify){clearTimeout(S.playerView.directSeekVerify);S.playerView.directSeekVerify=null}
   if(S.playerView.hudTimer){clearTimeout(S.playerView.hudTimer);S.playerView.hudTimer=null}
  }
  stopPlayback(true)
@@ -1206,6 +1207,18 @@ function openPlayer(kind,id,extension,name,from){
   }
   return false
  }
+ function verifyDirectSeek(target){
+  if(state.directSeekVerify){clearTimeout(state.directSeekVerify);state.directSeekVerify=null}
+  state.directSeekVerify=setTimeout(function(){
+   state.directSeekVerify=null;
+   if(S.route!=='player'||state.mode!=='direct'||state.directFallback)return;
+   if(Math.abs(Math.max(0,Number(video.currentTime)||0)-target)>8){
+    state.resume=target;
+    playerStatus('لم يصل المشغّل الأصلي إلى الموضع المختار؛ جار استخدام مشغّل الفيديو الكامل…');
+    state.recoverDirect()
+   }
+  },4200)
+ }
  function markReady(){
   if(S.route!=='player')return;
   state.ready=true;var status=document.getElementById('player-status');if(status)status.style.display='none';
@@ -1214,7 +1227,7 @@ function openPlayer(kind,id,extension,name,from){
    var checkpoint=Math.min(resume,Math.max(0,video.duration-5));
    state.didResume=true;
    if(nativeCanSeek(checkpoint)){
-    try{video.currentTime=checkpoint}catch(e){state.recoverDirect()}
+    try{video.currentTime=checkpoint;verifyDirectSeek(checkpoint)}catch(e){state.recoverDirect()}
    }else{
     // Never discard a saved checkpoint because a pseudo-live source advertises
     // only the first minute as seekable.
@@ -1295,7 +1308,12 @@ function openPlayer(kind,id,extension,name,from){
   var target=Math.max(0,Math.round(Number(raw)||0)),duration=totalDuration();
   if(duration>0&&isFinite(duration))target=Math.min(target,Math.max(0,Math.floor(duration)-2));
   if(state.mode==='fullvod'||state.mode==='direct'&&nativeCanSeek(target)){
-   try{video.currentTime=target;progress();return}catch(e){}
+   try{
+    if(state.mode==='direct'){resume=target;state.resume=target}
+    video.currentTime=target;
+    if(state.mode==='direct')verifyDirectSeek(target);
+    progress();return
+   }catch(e){}
   }
   if(state.mode==='direct'){
    state.directFallback=true;
@@ -1313,6 +1331,7 @@ function openPlayer(kind,id,extension,name,from){
   if(state.mode!=='direct'||S.route!=='player'||state.directFallback)return;
   state.directFallback=true;
   if(state.directSeekCheck){clearTimeout(state.directSeekCheck);state.directSeekCheck=null}
+  if(state.directSeekVerify){clearTimeout(state.directSeekVerify);state.directSeekVerify=null}
   if(state.directTimer){clearTimeout(state.directTimer);state.directTimer=null}
   if(isFinite(video.duration)&&video.duration>120&&video.duration<=21600)state.duration=Math.round(video.duration);
   var position=Math.max(resume,state.resume||0,video.currentTime||0);
