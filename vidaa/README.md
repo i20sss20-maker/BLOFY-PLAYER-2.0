@@ -1,4 +1,22 @@
-# BLOFY STREAM — VIDAA + Web Preview v0.5
+# BLOFY STREAM — VIDAA + Web Preview v0.6
+
+## Playback incident / root-cause fix — 2026-11-22
+
+**Observed:** v0.5 live HLS requests returned HTTP 502. Railway logged FFmpeg process exit code **139 (SIGSEGV)** and `ffmpeg_no_playlist`. The initial worker `ffmpeg-static@5.2.0` even crashed reading a **locally generated, valid H.264/AAC MPEG-TS test file**, both with async Bun.spawn and sync file-input conversion. This isolated the fault to its static binary's MPEG-TS input handling — not the television interface.
+
+**Remediation:** created separate private Railway service `blofy-vidaa-hls-dynamic` using Debian **dynamic-linked FFmpeg 7.1.5** (Dockerfile at `vidaa/hls-dynamic/Dockerfile`). It retains the same bearer authorization, internal secret, resource caps and short-lived HLS sessions. Main app now routes its HLS/compatibility endpoints to `http://blofy-vidaa-hls-dynamic.railway.internal:8080` and displays **v0.6**.
+
+**Validation completed:**
+- Success: FFmpeg system binary HLS self-test writes multiple MPEG-TS segments, inspected as H.264 + AAC.
+- Success: system FFmpeg remuxed a synthetic H.264/AAC TS source after the old static binary failed the identical test with SIGSEGV.
+- Success: system FFmpeg decoded that TS into H.264/AAC HLS using synchronous subprocess.
+- Success: Bun asynchronous FFmpeg `stdin: ReadableStream` decoded the synthetic TS and produced H.264/AAC HLS, exit code 0, no signal.
+- Success: Railway service deployments online with no current crash reports.
+- **Not yet passed:** real authorized channel, movie/episode playback with audible sound on user browser / Toshiba hardware. Do not report as production-ready until these tests pass. The earlier v0.5 real channel HTTP 502s predate the dynamic worker switch.
+
+The original Android customer services and builds remain unchanged. The older static worker is retained temporarily for rollback visibility but is no longer selected by the web app.
+
+---
 
 ## New HLS pilot (2026-11-22)
 
