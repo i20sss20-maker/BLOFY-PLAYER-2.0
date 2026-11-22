@@ -645,24 +645,43 @@ function knownDuration(kind,id,item){
 }
 function playVodSegments(video,kind,id,ext,track,start,state,ready){
  var at=Math.max(0,Math.round(start||0)),key=kind+'/'+id+'/'+ext+'/'+track+'/'+at,manifest='/api/vod/'+key+'/index.m3u8';
- stopPlayback(true);
- state.mode='vodhls';state.offset=at;state.ready=false;state.didResume=true;
+ state.ready=false;stopPlayback(true);
+ state.mode='vodhls';state.offset=at;state.didResume=true;
  var rec={video:video,kind:kind,id:id,preview:false,engine:null,stopUrl:'/api/vod/'+key+'/stop',hlsKey:null,ready:false,started:Date.now(),timer:null};
  S.play=rec;
  playerStatus('جار فتح الفيلم من '+formatTime(at)+' بصيغة H.264 / AAC…');
  video.autoplay=true;video.muted=false;video.defaultMuted=false;video.controls=false;
  function alive(){return S.play===rec&&S.route==='player'}
- // Probe the actual source duration, not the short live HLS window.
- api('GET','/api/vod/'+key+'/meta',null,function(st,r){
-  if(!alive())return;
-  if(st===200&&r&&Number(r.durationSec)>0){
-   state.duration=Math.round(Number(r.durationSec));
-   if(state.onDuration)state.onDuration();
-  }
- });
+ // Source duration lookup is independent of transcoding and safe before first segment.
+ if(!(state.duration>0)&&!state.durationPending){
+  state.durationPending=true;
+  api('GET','/api/vod/'+key+'/meta',null,function(st,r){
+   state.durationPending=false;
+   if(!alive())return;
+   if(st===200&&r&&Number(r.durationSec)>0){
+    state.duration=Math.round(Number(r.durationSec));
+    if(state.onDuration)state.onDuration()
+   }else if(state.onDuration)state.onDuration()
+  })
+ }
  function fail(text){if(alive()){if(rec.timer)clearTimeout(rec.timer);playerStatus(text,true)}}
+ function interrupted(detail){
+  if(!alive())return;
+  var current=Math.max(at,at+Math.max(0,video.currentTime||0)-1);
+  var now=Date.now();
+  if(!state.recoveryWindow||now-state.recoveryWindow>180000){state.recoveryWindow=now;state.recoveries=0}
+  if((state.recoveries||0)>=2){
+   fail('انقطع مصدر الفيديو أكثر من مرة. موضع المشاهدة محفوظ؛ ارجع ثم افتح العنوان مجددًا.');
+   return
+  }
+  state.recoveries++;
+  if(state.ready)saveResume(kind,id,current,state.duration,true);
+  playerStatus('انقطع مصدر الفيديو مؤقتًا. جار استكمال المشاهدة من '+formatTime(current)+'…');
+  var delay=state.recoveries*650;
+  setTimeout(function(){if(alive())playVodSegments(video,kind,id,ext,track,Math.round(current),state,ready)},delay)
+ }
  rec.timer=setTimeout(function(){if(alive()&&!rec.ready){diagnose(kind,'startup_timeout','video',video.readyState||0);playerStatus('الفيلم يستغرق وقتًا أطول من المتوقع للتجهيز. جار محاولة تحميل المقاطع الأولى…')}} ,18000);
- video.onerror=function(){diagnose(kind,'media_error','video',video.error&&video.error.code);fail('لم ينجح تشغيل الفيلم من هذا الموضع. السبب قد يكون المصدر أو صيغة الفيديو؛ لا تعِد بدءه تلقائيًا من الصفر.')};
+ video.onerror=function(){if(!alive())return;diagnose(kind,'media_error','video',video.error&&video.error.code);interrupted('media_error')};
  video.onplaying=function(){if(!alive())return;rec.ready=true;if(rec.timer)clearTimeout(rec.timer);ready();};
  video.onwaiting=function(){if(alive()&&rec.ready)playerStatus('جار تحميل المقطع التالي من الفيلم…')};
  if(shouldUseNativeHls(video)){
@@ -686,9 +705,13 @@ function playVodSegments(video,kind,id,ext,track,start,state,ready){
    engine.on(window.Hls.Events.ERROR,function(event,detail){
     if(!alive()||!detail||!detail.fatal)return;
     diagnose(kind,'hls_error','video',0);
-    if(recovered<2&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){recovered++;engine.startLoad();return}
-    if(recovered<1&&detail.type===window.Hls.ErrorTypes.MEDIA_ERROR){recovered++;engine.recoverMediaError();return}
-    fail('فشل تشغيل الفيلم: '+String(detail.details||detail.type).slice(0,55))
+    if(recovered<1&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){
+     recovered++;try{engine.startLoad()}catch(e){};return
+    }
+    if(recovered<1&&detail.type===window.Hls.ErrorTypes.MEDIA_ERROR){
+     recovered++;try{engine.recoverMediaError()}catch(e){};return
+    }
+    interrupted(String(detail.details||detail.type).slice(0,80))
    });
    engine.attachMedia(video);engine.loadSource(manifest)
   }catch(e){fail('تعذر فتح محرك الفيلم على هذا المتصفح')}
@@ -704,7 +727,7 @@ function openPlayer(kind,id,extension,name,from){
  '<div class="player-hud"><div class="player-title">'+esc(name||title(item))+'</div>'+
  (isLive?'':'<div class="player-time"><span id="now-time">00:00:00</span><span id="total-time">--:--</span></div><input id="seek" type="range" min="0" max="1000" value="0" step="1" class="seek-line" disabled>')+
  '<div class="player-actions"><button class="btn secondary" id="player-back">↶ رجوع</button><button class="btn" id="player-toggle">⏯ تشغيل / إيقاف</button>'+
- (isLive?'':'<button class="btn secondary" id="player-skip-back">−30 ثانية</button><button class="btn secondary" id="player-skip-forward">+30 ثانية</button><button class="btn secondary" id="player-restart">↺ من البداية</button>')+
+ (isLive?'':'<button class="btn secondary" id="player-skip-back">−30 ثانية</button><button class="btn secondary" id="player-skip-forward">+30 ثانية</button><button class="btn secondary" id="player-skip-forward5">+5 دقائق</button><button class="btn secondary" id="player-restart">↺ من البداية</button>')+
  '<button class="btn secondary" id="player-audio">◉ الصوت</button></div></div></section>';
  var video=document.getElementById('player-media'),state={kind:kind,id:id,ext:ext,video:video,name:name,offset:0,
  mode:isLive?'hls':'direct',resume:resume,duration:knownDuration(kind,id,item),didResume:false,ready:false,track:0,lastSaved:0};
@@ -722,7 +745,7 @@ function openPlayer(kind,id,extension,name,from){
   var pos=realPos(),duration=totalDuration();
   if(!isLive){
    var n=document.getElementById('now-time'),t=document.getElementById('total-time'),seek=document.getElementById('seek');
-   if(n)n.textContent=formatTime(pos);if(t)t.textContent=duration>0&&isFinite(duration)?formatTime(duration):'--:--';
+   if(n)n.textContent=formatTime(pos);if(t)t.textContent=duration>0&&isFinite(duration)?formatTime(duration):'المدة غير متوفرة';
    if(seek){seek.disabled=!(duration>0&&isFinite(duration))||(state.mode==='direct'&&(!video.seekable||!video.seekable.length));
     if(document.activeElement!==seek&&duration>0&&isFinite(duration))seek.value=String(Math.max(0,Math.min(1000,Math.round(pos/duration*1000))))}
    if(Date.now()-state.lastSaved>5000&&state.ready){saveResume(kind,id,pos,duration,true);state.lastSaved=Date.now()}
@@ -732,6 +755,7 @@ function openPlayer(kind,id,extension,name,from){
  function startVod(at){playVodSegments(video,kind,id,ext,state.track,at,state,markReady)}
  function seekTo(raw){
   if(isLive)return;
+  state.recoveries=0;state.recoveryWindow=0;
   var target=Math.max(0,Math.round(Number(raw)||0)),duration=totalDuration();
   if(duration>0&&isFinite(duration))target=Math.min(target,Math.max(0,Math.floor(duration)-2));
   if(state.mode==='direct'&&video.seekable&&video.seekable.length){
@@ -773,6 +797,8 @@ function openPlayer(kind,id,extension,name,from){
  var back30=document.getElementById('player-skip-back'),forward30=document.getElementById('player-skip-forward');
  if(back30)back30.onclick=function(){seekTo(realPos()-30)};
  if(forward30)forward30.onclick=function(){seekTo(realPos()+30)};
+ var forward5=document.getElementById('player-skip-forward5');
+ if(forward5)forward5.onclick=function(){seekTo(realPos()+300)};
  var seek=document.getElementById('seek');
  if(seek)seek.onchange=function(){
   var duration=totalDuration(),target=Math.round(duration*Number(this.value)/1000);
