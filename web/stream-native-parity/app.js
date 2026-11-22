@@ -76,7 +76,12 @@ function shell(pageTitle,markup){
 function loading(label){return '<div class="empty-state"><div class="skeleton" style="width:48px;height:48px;border-radius:50%;margin:0 auto 12px"></div>جار تحميل '+esc(label)+' من المكتبة…</div>'}
 function navigate(route,opts,replace){
  if(!S.userVerified&&route!=='login'){login('يرجى تفعيل الكود أولًا');return}
- if(S.route==='player'&&route!=='player')cleanupPlayer();
+ // Release any live preview session before leaving its page (not just full-screen player).
+ if(S.play&&(S.route==='player'||S.route==='live')&&route!==S.route)cleanupPlayer();
+ if(S.route==='player'&&route!=='player'&&S.playerView&&S.playerView.video){
+  try{S.playerView.video.pause();S.playerView.video.removeAttribute('src');S.playerView.video.load()}catch(e){}
+  S.playerView=null;
+ }
  if(route==='login'){login();return}
  if(!replace&&S.route!==route)S.history.push({route:S.route,opts:{kind:S.kind}});
  S.route=route;
@@ -241,7 +246,8 @@ function selectChannel(id,activate){
 function beginPreview(item){
  var video=document.getElementById('live-video'),box=document.getElementById('live-status'),empty=document.getElementById('preview-empty');if(!video)return;
  var id=itemId(item,'live');if(S.livePreview===id&&S.play&&S.play.preview)return;
- stopPlayback(false);
+ // Always send /stop for the previous preview before acquiring a new FFmpeg slot.
+ stopPlayback(true);
  S.livePreview=id;
  if(empty)empty.style.display='none';
  playHls(video,'live',id,'ts',0,box,true)
@@ -403,6 +409,7 @@ function loadHls(done){
 }
 function stopPlayback(sendStop){
  if(!S.play)return;var old=S.play;S.play=null;
+ if(old.preview)S.livePreview=null;
  try{if(old.timer)clearInterval(old.timer)}catch(e){}
  if(old.engine){try{old.engine.destroy()}catch(e){}}
  try{if(old.video){old.video.pause();old.video.removeAttribute('src');old.video.load()}}catch(e){}
@@ -589,7 +596,10 @@ function clickHandler(event){
  if(!node||node===document.body)return;
  var go=node.getAttribute('data-go'),cat=node.getAttribute('data-cat'),det=node.getAttribute('data-details'),ch=node.getAttribute('data-channel'),more=node.getAttribute('data-more'),season=node.getAttribute('data-season'),watch=node.getAttribute('data-watch'),ep=node.getAttribute('data-episodes'),fav=node.getAttribute('data-favorite');
  if(go){navigate(go);return}
- if(cat){var parts=cat.split(':'),kind=parts[0];S.cat[kind]=parts[1];S.selected=null;if(S.play&&S.play.preview)stopPlayback(true);catalog(kind);return}
+ if(cat){var parts=cat.split(':'),kind=parts[0];
+  S.cat[kind]=parts[1];S.selected=null;S.livePreview=null;
+  if(S.play&&S.play.preview)stopPlayback(true);
+  catalog(kind);return}
  if(det){var sep=det.indexOf(':'),kind=det.slice(0,sep),id=det.slice(sep+1);navigate('detail',{kind:kind,id:id});return}
  if(ch){selectChannel(ch,true);return}
  if(more){loadMore(more);return}
