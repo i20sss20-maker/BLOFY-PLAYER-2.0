@@ -271,7 +271,6 @@ function fullVodManifest(duration){
  const lines=['#EXTM3U','#EXT-X-VERSION:3','#EXT-X-TARGETDURATION:4',
   '#EXT-X-MEDIA-SEQUENCE:0','#EXT-X-PLAYLIST-TYPE:VOD','#EXT-X-INDEPENDENT-SEGMENTS'];
  for(let i=0;i<count;i++){
-  if(i&&i%FULL_CHUNK_SEGMENTS===0)lines.push('#EXT-X-DISCONTINUITY');
   lines.push('#EXTINF:'+Math.min(FULL_SEGMENT_SECONDS,duration-i*FULL_SEGMENT_SECONDS).toFixed(3)+',');
   lines.push('seg-'+String(i).padStart(6,'0')+'.ts')
  }
@@ -301,7 +300,7 @@ function fullVodChunk(session,first){
  '-g','100','-keyint_min','100','-sc_threshold','0','-force_key_frames','expr:gte(t,n_forced*4)',
  '-b:v','900k','-maxrate','1100k','-bufsize','1800k',
  '-c:a','aac','-b:a','96k','-ac','2','-ar','48000',
- '-f','hls','-hls_time','4','-hls_segment_type','mpegts',
+ '-output_ts_offset',String(begin),'-f','hls','-hls_time','4','-hls_segment_type','mpegts',
  '-hls_list_size','0','-hls_playlist_type','vod','-start_number',String(first),
  '-hls_flags','independent_segments+temp_file',
  '-hls_segment_filename',join(session.dir,'seg-%06d.ts'),join(session.dir,'chunk-'+first+'.m3u8')];
