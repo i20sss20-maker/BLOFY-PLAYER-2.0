@@ -23,6 +23,10 @@ button[disabled]{opacity:.55;cursor:wait}.submit{margin-top:18px;width:100%}
 .confirm input{width:21px;height:21px;flex-shrink:0;accent-color:#8964f6;
  margin-top:3px}
 #result-help{font-size:14px;color:#adcce0}
+#copy-all{display:block;width:100%;font-size:clamp(13px,2.8vw,16px);letter-spacing:0}
+#copy-m3u{display:block;width:100%;min-height:46px;margin-top:12px;
+ border:1px solid #5372a0;background:#202e4c}
+#hide-result{margin-top:12px}
 @media(max-width:500px){body{padding:10px}.card{padding:20px 16px}}
 </style></head><body><main class="card">
 <div class="brand"><span class="mark"></span>BLOFY · STREAM + XTREAM</div>
@@ -34,6 +38,6 @@ button[disabled]{opacity:.55;cursor:wait}.submit{margin-top:18px;width:100%}
 <button id="submit" class="submit" type="submit">🔓 استخراج بيانات Xtream</button></form>
 <div id="message" class="status hide" role="status" aria-live="polite"></div>
 <section id="result" class="result hide" aria-live="polite"><h2 id="result-title">بيانات Xtream الخاصة بك ✓</h2>
-<p id="result-help">هذه بيانات Xtream لنفس كود BLOFY؛ لا تتم إضافة مدة أو اشتراك جديد عند الاسترجاع.</p><div id="fields"></div><button id="copy-all" class="submit" type="button">نسخ جميع بيانات Xtream</button><button id="hide-result" class="copy" type="button">إخفاء بيانات الدخول</button><p class="fine">تُخفى بيانات Xtream تلقائيًا بعد 90 ثانية أو عند مغادرة التبويب لحماية حسابك. استرجعها من حسابك الموثّق عند الحاجة؛ لا تُحفظ في التخزين المحلي.</p></section>
+<p id="result-help">هذه بيانات Xtream لنفس كود BLOFY؛ لا تتم إضافة مدة أو اشتراك جديد عند الاسترجاع.</p><div id="fields"></div><button id="copy-all" class="submit" type="button">📋 نسخ بيانات Xtream فقط (Host + Username + Password)</button><button id="copy-m3u" class="copy" type="button">🔗 نسخ رابط M3U فقط</button><button id="hide-result" class="copy" type="button">إخفاء بيانات الدخول</button><p class="fine">تُخفى بيانات Xtream تلقائيًا بعد 90 ثانية أو عند مغادرة التبويب لحماية حسابك. استرجعها من حسابك الموثّق عند الحاجة؛ لا تُحفظ في التخزين المحلي.</p></section>
 <p class="fine" id="hint">المدعوم: كود BLOFY الرقمي (8–12 رقمًا) أو كود BLOFY القديم المعتمد (24 خانة سداسية). <b>ليس رمز اقتران الأجهزة المكوّن من 6 أرقام، ولا أكواد مزوّدين خارجيين غير مسجلة في نظام BLOFY.</b> إذا كان الكود مستخدمًا مسبقًا، يلزم حساب المتجر الموثّق المرتبط به أو موافقة الدعم على الاسترجاع. <a href="/store/account" style="color:#c5bcff">تسجيل الدخول إلى حسابي</a> · <a href="/store/contact" style="color:#c5bcff">الدعم</a>.</p>
-</main><script src="/stream/activate.js?v=20261122-universal-v1" defer></script></body></html>
+</main><script src="/stream/activate.js?v=20261122-xtream-copy-separate-v2" defer></script></body></html>
