@@ -379,7 +379,7 @@ function stopPlayback(sendStop){
  try{if(old.timer)clearInterval(old.timer)}catch(e){}
  if(old.engine){try{old.engine.destroy()}catch(e){}}
  try{if(old.video){old.video.pause();old.video.removeAttribute('src');old.video.load()}}catch(e){}
- if(sendStop!==false&&old.hlsKey)api('POST','/api/hls/'+old.hlsKey+'/stop',{},function(){})
+ if(sendStop!==false&&(old.hlsKey||old.stopUrl))api('POST',old.stopUrl||'/api/hls/'+old.hlsKey+'/stop',{},function(){})
 }
 function cleanupPlayer(){stopPlayback(true)}
 function playerStatus(message,error){var el=document.getElementById('player-status');if(el){el.textContent=message;el.className=error?'player-error':'player-loading'}}
@@ -406,10 +406,63 @@ function playHls(video,kind,id,extension,track,statusElement,preview){
   }catch(e){status('تعذر إعداد مشغّل HLS')}
  })
 }
+
+function durationSeconds(value){
+ if(typeof value==='number'&&value>0)return value;
+ if(typeof value!=='string')return 0;
+ if(/^[0-9]+$/.test(value))return Number(value);
+ var tokens=value.split(':');if(tokens.length<2||tokens.length>3)return 0;
+ var seconds=0;for(var j=0;j<tokens.length;j++)seconds=seconds*60+Number(tokens[j]);
+ return isFinite(seconds)&&seconds>0?seconds:0
+}
+function knownDuration(kind,id,item){
+ var opts=[item&&item.duration_secs,item&&item.duration,S.item&&S.item.info&&S.item.info.info&&S.item.info.info.duration_secs,
+ S.item&&S.item.info&&S.item.info.info&&S.item.info.info.duration];
+ if(kind==='series'&&S.episodes&&S.episodes.episodes){
+  var eps=parseEpisodes(S.episodes);
+  for(var i=0;i<eps.length;i++)if(String(eps[i].id)===String(id)){opts.push(eps[i].info&&eps[i].info.duration_secs,eps[i].duration_secs,eps[i].info&&eps[i].info.duration);break}
+ }
+ for(var k=0;k<opts.length;k++){var sec=durationSeconds(opts[k]);if(sec>0)return sec}
+ var saved=getResume(kind,id);
+ return saved&&saved.duration||0
+}
+function playVodSegments(video,kind,id,ext,track,start,state,ready){
+ var at=Math.max(0,Math.round(start||0)),key=kind+'/'+id+'/'+ext+'/'+track+'/'+at,manifest='/api/vod/'+key+'/index.m3u8';
+ stopPlayback(true);
+ state.mode='vodhls';state.offset=at;state.ready=false;state.didResume=true;
+ var rec={video:video,kind:kind,id:id,preview:false,engine:null,stopUrl:'/api/vod/'+key+'/stop',hlsKey:null,ready:false,started:Date.now()};
+ S.play=rec;
+ playerStatus('جار فتح الفيلم من '+formatTime(at)+' بصيغة H.264 / AAC…');
+ video.autoplay=true;video.muted=false;video.defaultMuted=false;video.controls=true;
+ function alive(){return S.play===rec&&S.route==='player'}
+ function fail(text){if(alive()){playerStatus(text,true)}}
+ video.onerror=function(){fail('لم ينجح فتح الفيديو من هذا الموضع. قد لا يدعم المصدر طلبات Range أو توجد مشكلة في التحويل.')};
+ video.onplaying=function(){if(!alive())return;rec.ready=true;ready();};
+ video.onwaiting=function(){if(alive()&&rec.ready)playerStatus('جار تحميل المقطع التالي من الفيلم…')};
+ if(video.canPlayType&&video.canPlayType('application/vnd.apple.mpegurl')){
+  video.src=manifest;try{var promise=video.play();if(promise&&promise.catch)promise.catch(function(){fail('اضغط ▶ داخل المشغّل للبدء')})}catch(e){}return
+ }
+ loadHls(function(ok){
+  if(!alive())return;
+  if(!ok||!window.Hls||!window.Hls.isSupported()){fail('المتصفح لا يدعم HLS أو MSE، والتشغيل الأصلي غير مدعوم.');return}
+  try{
+   var engine=new window.Hls({enableWorker:false,liveSyncDurationCount:2,maxBufferLength:25,manifestLoadingTimeOut:25000,fragLoadingTimeOut:25000});
+   rec.engine=engine;
+   engine.on(window.Hls.Events.MANIFEST_PARSED,function(){
+    if(!alive())return;try{var p=video.play();if(p&&p.catch)p.catch(function(){playerStatus('اضغط ▶ لتشغيل الفيلم')})}catch(e){}
+   });
+   engine.on(window.Hls.Events.ERROR,function(event,detail){
+    if(!alive()||!detail||!detail.fatal)return;
+    fail('فشل تشغيل الفيلم: '+String(detail.details||detail.type).slice(0,55))
+   });
+   engine.attachMedia(video);engine.loadSource(manifest)
+  }catch(e){fail('تعذر فتح محرك الفيلم على هذا المتصفح')}
+ })
+}
 function openPlayer(kind,id,extension,name,from){
  var item=findItem(kind,id)||S.item&&S.item.data,ext=String(extension||item&&item.container_extension||(kind==='live'?'ts':'mp4')).toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,8);
  if(['ts','mp4','mkv','avi','mov'].indexOf(ext)<0)ext=kind==='live'?'ts':'mp4';
- var initial=Math.max(0,Number(from)||0),isLive=kind==='live',resume=initial||getResume(kind,id)&&getResume(kind,id).position||0;
+ var initial=Math.max(0,Number(from)||0),isLive=kind==='live',prior=getResume(kind,id),resume=initial>0?initial:prior&&prior.position||0;
  S.previousBeforePlayer={route:S.route,kind:kind,id:id};S.route='player';
  app.innerHTML='<section class="player-overlay" id="player-root"><video id="player-media" controls autoplay playsinline webkit-playsinline></video>'+
  '<div class="player-loading" id="player-status">جار تجهيز المشغّل…</div>'+
@@ -418,57 +471,80 @@ function openPlayer(kind,id,extension,name,from){
  '<div class="player-actions"><button class="btn secondary" id="player-back">↶ رجوع</button><button class="btn" id="player-toggle">⏯ تشغيل / إيقاف</button>'+
  (isLive?'':'<button class="btn secondary" id="player-restart">↺ من البداية</button>')+
  '<button class="btn secondary" id="player-audio">◉ الصوت</button></div></div></section>';
- var video=document.getElementById('player-media'),state={kind:kind,id:id,ext:ext,video:video,name:name,offset:0,mode:isLive?'hls':'direct',resume:resume,ready:false,historySaved:false,track:0,lastSaved:0,hlsKey:null};
+ var video=document.getElementById('player-media'),state={kind:kind,id:id,ext:ext,video:video,name:name,offset:0,
+ mode:isLive?'hls':'direct',resume:resume,duration:knownDuration(kind,id,item),didResume:false,ready:false,track:0,lastSaved:0};
+ function realPos(){return state.mode==='vodhls'?state.offset+Math.max(0,video.currentTime||0):video.currentTime||0}
+ function totalDuration(){return state.mode==='vodhls'?state.duration:(isFinite(video.duration)&&video.duration>0?video.duration:state.duration)}
  function markReady(){
+  if(S.route!=='player')return;
   state.ready=true;var status=document.getElementById('player-status');if(status)status.style.display='none';
-  if(!isLive&&state.mode==='direct'&&resume>30&&isFinite(video.duration)&&video.duration>0&&video.seekable&&video.seekable.length){
-   try{video.currentTime=Math.min(resume,video.duration-5)}catch(e){}
+  if(!isLive&&state.mode==='direct'&&!state.didResume&&resume>30&&isFinite(video.duration)&&video.duration>0&&video.seekable&&video.seekable.length){
+   state.didResume=true;try{video.currentTime=Math.min(resume,Math.max(0,video.duration-5))}catch(e){}
   }
  }
  function progress(){
   if(S.route!=='player')return;
-  var pos=(video.currentTime||0)+state.offset,duration=video.duration;
+  var pos=realPos(),duration=totalDuration();
   if(isFinite(duration)&&duration>0&&!isLive){
-   var n=document.getElementById('now-time'),t=document.getElementById('total-time'),s=document.getElementById('seek');
+   var n=document.getElementById('now-time'),t=document.getElementById('total-time'),seek=document.getElementById('seek');
    if(n)n.textContent=formatTime(pos);if(t)t.textContent=formatTime(duration);
-   if(s){s.disabled=!video.seekable||!video.seekable.length;if(document.activeElement!==s)s.value=String(Math.max(0,Math.min(1000,Math.round(pos/duration*1000))))}
+   if(seek){seek.disabled=(state.mode==='direct'&&(!video.seekable||!video.seekable.length));if(document.activeElement!==seek)seek.value=String(Math.max(0,Math.min(1000,Math.round(pos/duration*1000))))}
    if(Date.now()-state.lastSaved>5000&&state.ready){saveResume(kind,id,pos,duration,true);state.lastSaved=Date.now()}
   }
  }
- video.onloadedmetadata=markReady;
- video.onplaying=function(){markReady();video.muted=false;};
- video.ontimeupdate=progress;
- video.onpause=progress;
- video.onerror=function(){
-  if(state.mode==='direct'&&!isLive){
-   state.mode='compatible';video.removeAttribute('src');video.load();
-   playerStatus('المصدر لا يدعم التشغيل المباشر. جار تجربة AAC؛ تقديم الفيديو قد لا يكون متاحًا على هذا المسار.');
-   video.src='/api/compatible/'+enc(kind)+'/'+enc(id)+'.'+enc(ext)+'?mode=audio&track='+state.track;
-   var ret=video.play();if(ret&&ret.catch)ret.catch(function(){playerStatus('تعذر تشغيل المصدر بصيغته الحالية. نحتاج مسار VOD مع فهرس تقديم مستقل.',true)})
-  }else playerStatus('الصيغة غير مدعومة أو تعذّر الوصول للمصدر.',true)
- };
- var backBtn=document.getElementById('player-back');backBtn.onclick=closePlayer;
- document.getElementById('player-toggle').onclick=function(){if(video.paused)video.play();else video.pause()};
- var restart=document.getElementById('player-restart');if(restart)restart.onclick=function(){if(state.mode==='direct'&&video.seekable&&video.seekable.length){video.currentTime=0;delete S.watch[progressKey(kind,id)];writeJson('blofy_web_watch_v2',S.watch)}else playerStatus('البدء من الصفر يحتاج مصدر فيديو قابلًا للتقديم.',true)};
- var audio=document.getElementById('player-audio');audio.onclick=function(){state.track=(state.track+1)%4;if(isLive){playHls(video,kind,id,'ts',state.track,document.getElementById('player-status'),false)}else if(state.mode==='compatible'){video.src='/api/compatible/'+enc(kind)+'/'+enc(id)+'.'+enc(ext)+'?mode=audio&track='+state.track;video.play()}else playerStatus('في التشغيل الأصلي يستخدم الجهاز المسار الصوتي الافتراضي.');audio.innerText='◉ الصوت '+(state.track+1)};
- var seek=document.getElementById('seek');if(seek){seek.onchange=function(){if(video.seekable&&video.seekable.length&&isFinite(video.duration)){try{video.currentTime=Math.round(video.duration*Number(this.value)/1000)}catch(e){}}else playerStatus('المصدر غير قابل للتقديم. لا يمكن استكماله من موضع مختلف في هذا الوضع.',true)}}
- if(isLive){playHls(video,kind,id,'ts',0,document.getElementById('player-status'),false)}
- else{
+ function startVod(at){playVodSegments(video,kind,id,ext,state.track,at,state,markReady)}
+ function startDirect(){
+  state.mode='direct';state.offset=0;state.didResume=false;video.onerror=null;
   video.src='/api/media/'+enc(kind)+'/'+enc(id)+'.'+enc(ext);
-  try{var result=video.play();if(result&&result.catch)result.catch(function(){playerStatus('اضغط ▶ لتشغيل الفيديو')})}catch(e){}
+  try{var ret=video.play();if(ret&&ret.catch)ret.catch(function(){playerStatus('اضغط ▶ لتشغيل الفيديو')})}catch(e){}
  }
+ video.onloadedmetadata=function(){if(state.mode==='direct')markReady()};
+ video.ontimeupdate=progress;video.onpause=progress;
+ video.onplaying=function(){markReady()};
+ video.onerror=function(){
+  if(state.mode==='direct'&&!isLive){playerStatus('تعذر المصدر الأصلي. جار فتح نسخة قابلة لاستكمال المشاهدة…');startVod(resume)}
+  else playerStatus('تعذّر تشغيل هذا المصدر.',true)
+ };
+ document.getElementById('player-back').onclick=closePlayer;
+ document.getElementById('player-toggle').onclick=function(){if(video.paused){var p=video.play();if(p&&p.catch)p.catch(function(){})}else video.pause()};
+ var restart=document.getElementById('player-restart');if(restart)restart.onclick=function(){
+  delete S.watch[progressKey(kind,id)];writeJson('blofy_web_watch_v2',S.watch);resume=0;
+  if(state.mode==='vodhls'){startVod(0)}
+  else if(video.seekable&&video.seekable.length){try{video.currentTime=0}catch(e){}}
+  else startVod(0)
+ };
+ document.getElementById('player-audio').onclick=function(){
+  state.track=(state.track+1)%4;
+  if(isLive)playHls(video,kind,id,'ts',state.track,document.getElementById('player-status'),false);
+  else if(state.mode==='vodhls'){var now=realPos();startVod(Math.round(now))}
+  else playerStatus('يستخدم المصدر الأصلي المسار الافتراضي للصوت');
+  this.innerText='◉ الصوت '+(state.track+1)
+ };
+ var seek=document.getElementById('seek');
+ if(seek)seek.onchange=function(){
+  var duration=totalDuration(),target=Math.round(duration*Number(this.value)/1000);
+  if(!(duration>0))return;
+  if(state.mode==='vodhls')startVod(target);
+  else if(video.seekable&&video.seekable.length){try{video.currentTime=target}catch(e){}}
+  else startVod(target)
+ };
+ if(isLive){playHls(video,kind,id,'ts',0,document.getElementById('player-status'),false)}
+ else if(ext==='mp4'){startDirect()}
+ else{startVod(Math.round(resume))}
  S.playerView=state
 }
 function closePlayer(){
  var state=S.playerView;
  if(state&&S.route==='player'&&state.kind!=='live'){
-  var video=state.video;if(video&&state.ready)saveResume(state.kind,state.id,video.currentTime||0,video.duration||0,true)
+  var video=state.video,pos=state.mode==='vodhls'?state.offset+(video.currentTime||0):(video.currentTime||0);
+  var duration=state.mode==='vodhls'?state.duration:(video.duration>0?video.duration:state.duration);
+  if(state.ready)saveResume(state.kind,state.id,pos,duration,true)
  }
  cleanupPlayer();
  var previous=S.previousBeforePlayer||{route:'home'};
  S.playerView=null;S.route=previous.route==='player'?'home':previous.route;
- if(previous.route==='detail'){navigate('detail',{kind:previous.kind,id:previous.id},true)}
- else if(previous.route==='episodes'){navigate('episodes',{id:S.item&&S.item.id},true)}
+ if(previous.route==='detail')navigate('detail',{kind:previous.kind,id:previous.id},true);
+ else if(previous.route==='episodes')navigate('episodes',{id:S.item&&S.item.id},true);
  else navigate(previous.route||'home',{},true)
 }
 function clickHandler(event){
