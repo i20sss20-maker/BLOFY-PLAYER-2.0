@@ -247,9 +247,12 @@ function catalog(kind){
   if(S.route!==kind||(S.cat[kind]||'all')!==cat)return;
   var panel=document.querySelector('#catalog-root .cat-rail');if(!panel)return;
   var oldScroll=panel.querySelector('.pane-scroll'),y=oldScroll?oldScroll.scrollTop:0;
+  var focused=S.keyboardMode&&panel.contains(document.activeElement);
+  var prevFocus=focused?focusIdentity(document.activeElement):null;
   panel.outerHTML=categoryRail(kind);
   var next=document.querySelector('#catalog-root .cat-rail .pane-scroll');
-  if(next)next.scrollTop=y
+  if(next)next.scrollTop=y;
+  if(focused){var target=findFocus(prevFocus)||document.querySelector('.cat-item.selected');if(target)target.focus()}
  })
 }
 function categoryRail(kind){
@@ -400,6 +403,7 @@ function saveResume(kind,id,pos,duration,ready){
 function details(o){
  var k=o.kind||S.kind,id=String(o.id||''),item=findItem(k,id)||o.item;
  if(!item){navigate(k,{},true);return}
+ if(k==='series'&&S.item&&S.item.id!==id)S.episodes=null;
  S.item={kind:k,id:id,data:item};S.kind=k;S.route='detail';
  shell(title(item),'<div id="detail-root">'+loading('تفاصيل المحتوى')+'</div>');
  function show(extra){
@@ -484,23 +488,38 @@ function searchScreen(){
  document.getElementById('search-input').oninput=function(){var q=this.value.trim();if(S.searchTimer)clearTimeout(S.searchTimer);
  if(q.length<2){++S.searchToken;document.getElementById('search-result').innerHTML='';document.getElementById('search-status').textContent='اكتب حرفين على الأقل';return}
  var token=++S.searchToken;document.getElementById('search-status').textContent='جار البحث في المكتبة…';
- S.searchTimer=setTimeout(function(){searchNow(q,token)},370)
+ S.searchTimer=setTimeout(function(){searchNow(q,token)},260)
  };
  document.getElementById('search-input').focus()
 }
 function searchNow(q,token){
- var kinds=['live','movie','series'],responses=[],pending=3;
- for(var i=0;i<kinds.length;i++)(function(k){pageRequest(k,'all',0,20,function(st,p){
-  pending--;if(st===200&&p){responses.push({kind:k,items:p.items});var key=keyOf(k,'search');
-   S.loaded[key]=S.loaded[key]||{items:[]};
-   for(var a=0;a<p.items.length;a++)if(!findItem(k,itemId(p.items[a],k)))S.loaded[key].items.push(p.items[a]);
-  }
-  if(pending===0&&token===S.searchToken&&S.route==='search'){
-   var html=responses.map(function(v){return v.items.map(function(item){return posterCard(item,v.kind)}).join('')}).join('');
-   document.getElementById('search-result').innerHTML=html||'<div class="empty-state">لم يتم العثور على نتائج لهذا البحث.</div>';
-   document.getElementById('search-status').textContent='نتائج البحث: '+responses.reduce(function(n,p){return n+p.items.length},0);
-  }
- },q)})(kinds[i])
+ var kinds=['live','movie','series'],responses={live:[],movie:[],series:[]},pending=3;
+ function draw(){
+  if(token!==S.searchToken||S.route!=='search')return;
+  var output=document.getElementById('search-result'),status=document.getElementById('search-status');
+  if(!output||!status)return;
+  var count=0,html=kinds.map(function(kind){
+   var cards=responses[kind];count+=cards.length;
+   return cards.map(function(item){return posterCard(item,kind)}).join('')
+  }).join('');
+  output.innerHTML=html||(pending===0?'<div class="empty-state">لم يتم العثور على نتائج لهذا البحث.</div>':'');
+  status.textContent=(count?'تم العثور على '+count+' نتيجة':'جار البحث')+(pending?' • استكمال باقي المكتبة…':'')
+ }
+ for(var i=0;i<kinds.length;i++)(function(k){
+  pageRequest(k,'all',0,20,function(st,p){
+   if(token!==S.searchToken||S.route!=='search')return;
+   pending--;
+   if(st===200&&p){
+    responses[k]=p.items;
+    var key=keyOf(k,'search');S.loaded[key]=S.loaded[key]||{items:[]};
+    for(var a=0;a<p.items.length;a++){
+     var item=p.items[a],id=itemId(item,k);
+     if(!findItem(k,id))S.loaded[key].items.push(item)
+    }
+   }
+   draw()
+  },q)
+ })(kinds[i])
 }
 function aiScreen(){
  shell('الذكاء الاصطناعي','<div class="info">واجهة المحادثة الذكية في نسخة أندرويد تعتمد على خدمة مخصصة. لم أربطها بالويب حتى الآن حتى لا تظهر لك إجابات وهمية. بإمكانك استخدام البحث المباشر في المكتبة الآن.</div>'+
