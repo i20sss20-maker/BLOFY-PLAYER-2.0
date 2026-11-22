@@ -135,6 +135,23 @@ if(p==='/api/catalog'&&method==='GET'){
 
 
 
+if(p.startsWith('/api/vodfull/')&&(method==='GET'||method==='POST')){
+ if(!h)return json(401,{error:'activation_required'});
+ const match=p.match(/^\/api\/vodfull\/(movie|series)\/([1-9][0-9]{0,14})\/(mkv|mp4|avi|mov|ts)\/([0-3])\/([0-9]{3,5})\/(index\.m3u8|seg-[0-9]{6}\.ts|stop)$/);
+ if(!match)return json(400,{error:'invalid_full_vod_path'});
+ const duration=Number(match[5]);
+ if(!Number.isSafeInteger(duration)||duration<120||duration>21600)return json(400,{error:'invalid_full_vod_duration'});
+ if(method==='POST'&&match[6]!=='stop'||method==='GET'&&match[6]==='stop')return json(405,{error:'method_not_allowed'});
+ const secret=String(Bun.env.VIDAA_COMPAT_KEY||'');
+ if(!/^[a-f0-9]{64}$/i.test(secret))return json(503,{error:'vod_worker_not_configured'});
+ const target='http://blofy-stream-web-vod-seek-pilot.railway.internal:8080/vodfull/'+match.slice(1).join('/');
+ try{
+  const response=await fetch(target,{method,headers:{'Authorization':h.Authorization,'X-Compat-Secret':secret},redirect:'manual',signal:req.signal});
+  if(response.status>=300&&response.status<400)return json(502,{error:'vod_worker_redirect_rejected'});
+  if(!response.ok){let error='vod_unavailable';try{error=(await response.json()).error||error}catch{};return json(response.status,{error})}
+  return new Response(response.body,{status:200,headers:noCache({'Content-Type':match[6].endsWith('m3u8')?'application/vnd.apple.mpegurl':match[6]==='stop'?'application/json':'video/mp2t','Accept-Ranges':'none'})})
+ }catch{return json(502,{error:'vod_worker_unreachable'})}
+}
 if(p.startsWith('/api/vod/')&&(method==='GET'||method==='POST')){
  if(!h)return json(401,{error:'activation_required'});
  const match=p.match(/^\/api\/vod\/(movie|series)\/([1-9][0-9]{0,14})\/(mkv|mp4|avi|mov|ts)\/([0-3])\/([0-9]{1,6})\/(index\.m3u8|seg-[0-9]{6}\.ts|meta|stop)$/);
