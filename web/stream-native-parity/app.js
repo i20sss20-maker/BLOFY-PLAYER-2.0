@@ -8,7 +8,7 @@
 var app=document.getElementById('app');
 var S={route:'boot',kind:'movie',cat:{live:'all',movie:'all',series:'all'},cats:{},pages:{},loaded:{},selected:null,livePreview:null,
  item:null,episodes:null,selectedSeason:'1',play:null,history:[],sort:'source',heroIndex:0,searchToken:0,requestNum:0,library:readJson('blofy_web_favorites_v2',{}),
- watch:readJson('blofy_web_watch_v2',{}),favoriteItems:readJson('blofy_web_favorite_items_v1',{}),host:'',userVerified:false,heading:'',loading:false,listingInflight:{},catsInflight:{},views:{},keyboardMode:false,refreshing:false,catalogVersion:null,lastCatalogCheck:0,aiTurns:[],aiBusy:false,aiToken:0,aiSearchTitle:null,searchRequests:[]};
+ watch:readJson('blofy_web_watch_v2',{}),favoriteItems:readJson('blofy_web_favorite_items_v1',{}),host:'',userVerified:false,heading:'',loading:false,listingInflight:{},catsInflight:{},views:{},keyboardMode:false,refreshing:false,catalogVersion:null,lastCatalogCheck:0,aiTurns:[],aiBusy:false,aiToken:0,aiSearchTitle:null,searchRequests:[],searchKind:'all',recentSearches:readJson('blofy_web_recent_searches_v1',[])};
 var NAV=[['home','⌂','الرئيسية'],['live','◉','البث المباشر'],['movie','▣','الأفلام'],['series','▤','المسلسلات'],['collections','▦','التصنيفات'],['favorites','♡','المفضلة'],['search','⌕','البحث'],['ai','✧','الذكاء الاصطناعي'],['settings','⚙','الإعدادات']];
 function readJson(key,backup){try{var value=JSON.parse(localStorage.getItem(key)||'null');return value||backup}catch(e){return backup}}
 function writeJson(key,val){try{localStorage.setItem(key,JSON.stringify(val))}catch(e){}}
@@ -511,9 +511,53 @@ function cancelSearch(){
 }
 function searchScreen(){
  S.route='search';
- shell('البحث','<section class="search-screen"><input id="search-input" class="input" placeholder="ابحث عن فيلم أو مسلسل أو قناة…" autofocus>'+
- '<div class="search-tabs"><span class="chip primary">القنوات</span><span class="chip primary">الأفلام</span><span class="chip primary">المسلسلات</span></div>'+
+ shell('البحث','<section class="search-screen"><div class="search-compose"><input id="search-input" class="input" placeholder="ابحث عن فيلم أو مسلسل أو قناة…" autofocus>'+
+ '<button class="btn" id="search-submit">بحث ⌕</button></div>'+
+ '<div class="search-tabs" id="search-filters">'+
+ '<button class="chip" data-search-kind="all">الكل</button><button class="chip" data-search-kind="live">القنوات</button>'+
+ '<button class="chip" data-search-kind="movie">الأفلام</button><button class="chip" data-search-kind="series">المسلسلات</button></div>'+
+ '<div class="search-recent" id="search-recent"></div>'+
  '<p id="search-status" class="muted">أدخل اسم المحتوى لعرض النتائج من BLOFY</p><div id="search-result" class="search-result-grid"></div></section>');
+ function renderRecent(){
+  var target=document.getElementById('search-recent');if(!target)return;
+  var old=S.recentSearches.slice(0,6);
+  target.innerHTML=old.length?'<div class="row"><span class="small muted">عمليات البحث الأخيرة</span><button id="search-clear" class="chip">مسح</button></div>'+
+   '<div class="search-recent-items">'+old.map(function(v){return '<button class="chip" data-recent-search="'+esc(v)+'">⌕ '+esc(v)+'</button>'}).join('')+'</div>':'';
+  var clear=document.getElementById('search-clear');if(clear)clear.onclick=function(){
+   S.recentSearches=[];writeJson('blofy_web_recent_searches_v1',S.recentSearches);renderRecent()
+  };
+  var buttons=target.querySelectorAll('[data-recent-search]');
+  for(var i=0;i<buttons.length;i++)buttons[i].onclick=function(){
+   var q=this.getAttribute('data-recent-search'),input=document.getElementById('search-input');
+   input.value=q;input.focus();var token=++S.searchToken;searchNow(q,token)
+  }
+ }
+ function setSearchKind(kind){
+  if(['all','live','movie','series'].indexOf(kind)<0)return;
+  S.searchKind=kind;
+  var filters=document.querySelectorAll('[data-search-kind]');
+  for(var i=0;i<filters.length;i++){
+   filters[i].className='chip'+(filters[i].getAttribute('data-search-kind')===kind?' primary':'')
+  }
+  var q=document.getElementById('search-input').value.trim(),token=++S.searchToken;
+  if(q.length>=2)searchNow(q,token)
+ }
+ var filters=document.querySelectorAll('[data-search-kind]');
+ for(var i=0;i<filters.length;i++)filters[i].onclick=function(){setSearchKind(this.getAttribute('data-search-kind'))};
+ function commitSearch(){
+  var q=document.getElementById('search-input').value.trim().slice(0,75);
+  if(q.length<2)return;
+  S.recentSearches=[q].concat(S.recentSearches.filter(function(v){return v!==q})).slice(0,8);
+  writeJson('blofy_web_recent_searches_v1',S.recentSearches);
+  renderRecent();
+  var token=++S.searchToken;searchNow(q,token)
+ }
+ document.getElementById('search-submit').onclick=commitSearch;
+ document.getElementById('search-input').onkeydown=function(e){
+  if((e.keyCode||e.which)===13){e.preventDefault();commitSearch()}
+ };
+ setSearchKind(S.searchKind);
+ renderRecent();
  document.getElementById('search-input').oninput=function(){var q=this.value.trim();if(S.searchTimer)clearTimeout(S.searchTimer);
  if(q.length<2){cancelSearch();document.getElementById('search-result').innerHTML='';document.getElementById('search-status').textContent='اكتب حرفين على الأقل';return}
  var token=++S.searchToken;document.getElementById('search-status').textContent='جار البحث في المكتبة…';
@@ -529,7 +573,8 @@ function searchScreen(){
 function searchNow(q,token){
  var old=S.searchRequests||[];S.searchRequests=[];
  for(var j=0;j<old.length;j++)try{old[j].abort()}catch(e){}
- var kinds=['live','movie','series'],responses={live:[],movie:[],series:[]},pending=3;
+ var kinds=S.searchKind==='all'?['live','movie','series']:[S.searchKind],
+ responses={live:[],movie:[],series:[]},pending=kinds.length;
  function draw(){
   if(token!==S.searchToken||S.route!=='search')return;
   var output=document.getElementById('search-result'),status=document.getElementById('search-status');
