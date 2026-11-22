@@ -235,10 +235,20 @@ async function startVod({bearer,kind,id,ext,track,start,key}){
   const proc=Bun.spawn([FFMPEG,...args],{stdin:'ignore',stdout:'ignore',stderr:'pipe',signal:abort.signal});
   session.proc=proc;
   (async()=>{try{
-   let buf='';const reader=proc.stderr.getReader();while(true){const p=await reader.read();if(p.done)break;if(buf.length<2500)buf+=new TextDecoder().decode(p.value).slice(0,500)}
-   if(buf&&!existsSync(join(dir,'index.m3u8')))session.error=/404|416|range/i.test(buf)?'vod_source_seek_unsupported':/no streams|invalid data/i.test(buf)?'vod_source_invalid':'vod_encoding_failed'
+   let buf='';const reader=proc.stderr.getReader();while(true){const part=await reader.read();if(part.done)break;buf=(buf+new TextDecoder().decode(part.value)).slice(-4000)}
+   if(buf){
+    session.error=/Connection reset|ECONNRESET|Connection timed out|Error in the pull function|End of file|premature/i.test(buf)?'vod_upstream_interrupted':
+     /404|416|range/i.test(buf)?'vod_source_seek_unsupported':
+     /no streams|Invalid data/i.test(buf)?'vod_source_invalid':'vod_encoding_failed'
+   }
   }catch{}})();
-  proc.exited.then(code=>{session.finished=true;releaseHls(session);if(code!==0&&!session.stopped){console.warn('BLOFY_WEB_VOD_FFMPEG_EXIT',{code,reason:session.error||'nonzero'});if(!existsSync(join(dir,'index.m3u8')))stopHls(session,'vod_no_playlist')}}).catch(()=>stopHls(session,'vod_proc_failed'));
+  proc.exited.then(code=>{
+   session.finished=true;session.exitCode=code;releaseHls(session);
+   if(code!==0&&!session.stopped){
+    console.warn('BLOFY_WEB_VOD_FFMPEG_EXIT',{kind:session.kind,code,reason:session.error||'vod_processing_interrupted'});
+    if(!existsSync(join(dir,'index.m3u8')))stopHls(session,'vod_no_playlist')
+   }
+  }).catch(()=>stopHls(session,'vod_proc_failed'));
   return {session};
  }catch(e){stopHls(session,'vod_spawn_failed');return {status:502,error:'vod_spawn_failed'}}
 }
@@ -261,7 +271,8 @@ async function vodRequest(req,url){
  const success=await awaitHlsFile(sess,file,file==='index.m3u8'?25000:11000);
  if(!success)return json(sess.error?502:504,{error:sess.error||'vod_initial_segment_pending'});
  if(file==='index.m3u8'){
-  const manifest=readFileSync(join(sess.dir,'index.m3u8'),'utf8');
+  if(sess.finished&&sess.exitCode!==0)return json(502,{error:sess.error||'vod_processing_interrupted'});
+   const manifest=readFileSync(join(sess.dir,'index.m3u8'),'utf8');
   if(!sess.firstSegmentLogged&&/seg-\d{6}\.ts/.test(manifest)){
    sess.firstSegmentLogged=true;
    console.info('BLOFY_WEB_VOD_FIRST_PLAYLIST',{kind:sess.kind,elapsedMs:Date.now()-sess.startedAt});
