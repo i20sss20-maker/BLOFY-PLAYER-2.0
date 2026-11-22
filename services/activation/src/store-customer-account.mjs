@@ -494,6 +494,69 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
    {'cache-control':'no-store, private','pragma':'no-cache',
     'referrer-policy':'no-referrer','x-content-type-options':'nosniff'});
  }
+ // The universal extractor recovers ALREADY-ACTIVATED credentials only
+ // for the OTP-verified owner of this exact code. Original voucher code
+ // alone is NOT authorization for disclosing an active subscriber's password.
+ async function ownedUniversalXtream(req,res){
+  const customer=await current(req);
+  if(!customer)return json(res,401,{ok:false,error:'stream_extraction_login_required'});
+  if(!maxReveals.consume(requestClientKey(req)+':'+customer.id).allowed)
+   return json(res,429,{ok:false,error:'credential_reveal_rate_limited'});
+  const body=await readJson(req);
+  if(body?.acknowledge!==true)
+   return json(res,400,{ok:false,error:'credential_reveal_confirmation_required'});
+  const proof=streamCodeProof(body?.code,keyHex);
+  if(!proof)return json(res,400,{ok:false,error:'stream_code_invalid'});
+  // Prepare existing paid voucher/cart ownership tables without starting
+  // checkout or changing payments. Trial-only users may have no paid orders.
+  await ensureOpsSchema();
+  const origin=normalizeXtreamPublicOrigin(env.BLOFY_XTREAM_PUBLIC_ORIGIN);
+  if(!origin)return json(res,503,{ok:false,error:'xtream_host_not_ready'});
+  // The trial table is optional if no free stock has ever been created.
+  const trialReady=(await pool.query(
+   "SELECT to_regclass('public.blofy_store_trial_inventory') AS table_name"
+  )).rows[0]?.table_name;
+  const trialExists=trialReady?
+   ` OR EXISTS(SELECT 1 FROM blofy_store_trial_inventory t
+    WHERE t.voucher_id=v.id AND t.customer_id=$1
+     AND t.claimed_at IS NOT NULL)`:'';
+  const sql=`SELECT v.id,v.code_channel,v.duration_days,v.redeemed_at,
+   v.expires_at,v.revoked_at,v.account_id,
+   a.id AS account_identity,a.username,a.credential_vault,a.enabled,
+   a.expires_at AS account_expiry
+   FROM blofy_xtream_gateway_duration_codes v
+   LEFT JOIN blofy_xtream_gateway_accounts a ON a.id=v.account_id
+   WHERE v.code_hash=$2 AND
+    (EXISTS(SELECT 1 FROM (${PAID_OWNED_VOUCHERS_SQL}) paid
+      WHERE paid.voucher_id=v.id)${trialExists})
+   LIMIT 1`;
+  const row=(await pool.query(sql,[customer.id,proof])).rows[0];
+  if(!row)return json(res,404,{ok:false,error:'stream_extraction_not_owned'});
+  if(!row.redeemed_at||!row.account_id)
+   return json(res,409,{ok:false,error:'stream_extraction_not_activated'});
+  const cExpiry=new Date(row.expires_at).getTime();
+  const aExpiry=new Date(row.account_expiry).getTime();
+  if(row.revoked_at||row.enabled!==true||row.account_identity!==row.account_id||
+     !Number.isFinite(cExpiry)||!Number.isFinite(aExpiry)||
+     Math.min(cExpiry,aExpiry)<=Date.now())
+   return json(res,409,{ok:false,error:'subscription_expired_or_disabled'});
+  const password=decryptGatewayAccountPassword(row.account_id,row.credential_vault,keyHex);
+  if(!password||!row.username)
+   return json(res,409,{ok:false,error:'credential_not_recoverable'});
+  const args=new URLSearchParams({
+   username:row.username,password,type:'m3u_plus',output:'ts'
+  });
+  return json(res,200,{
+   ok:true,recovered:true,universalExtraction:true,subscriptionUnchanged:true,
+   originalVoucherPreserved:true,
+   account:{id:row.account_id,
+    activatedAt:new Date(row.redeemed_at).getTime(),
+    expiresAt:Math.min(cExpiry,aExpiry),durationDays:Number(row.duration_days)},
+   credentials:{serverUrl:origin,port:443,username:row.username,password,
+    m3uUrl:origin+'/get.php?'+args.toString()}
+  },{'cache-control':'no-store, private','pragma':'no-cache',
+    'referrer-policy':'no-referrer','x-content-type-options':'nosniff'});
+ }
  async function paymentReceipt(req,res,id){
   const customer=await current(req);
   if(!customer)return json(res,401,{error:'login_required'});
@@ -685,6 +748,7 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
    else if(path==='/api/v1/store/account/profile'&&req.method==='POST')await saveProfile(req,res);
    else if(path==='/api/v1/store/account/claim'&&req.method==='POST')await claim(req,res);
    else if(path==='/api/v1/store/account/preferences'&&req.method==='POST')await preferences(req,res);
+   else if(path==='/api/v1/store/account/extract-xtream'&&req.method==='POST')await ownedUniversalXtream(req,res);
    else if(path==='/api/v1/store/account/marketing-preferences'&&req.method==='POST')await marketingPreferences(req,res);
    else if(path==='/api/v1/store/account/logout'&&req.method==='POST')await logout(req,res);
    else if(path==='/api/v1/store/account'&&req.method==='GET')await account(req,res);
