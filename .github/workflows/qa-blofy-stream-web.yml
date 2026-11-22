@@ -1,0 +1,35 @@
+name: QA BLOFY STREAM Web Native Parity
+on:
+  push:
+    branches: [feature/blofy-stream-web-native-parity-20261122]
+    paths:
+      - web/stream-native-parity/**
+      - .github/workflows/qa-blofy-stream-web.yml
+  workflow_dispatch:
+jobs:
+  ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: cd web/stream-native-parity && npm install --no-audit --no-fund
+      - run: cd web/stream-native-parity && npx playwright install --with-deps chromium
+      - name: Make video fixture
+        run: ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc=size=320x180:rate=25 -f lavfi -i sine=frequency=400:sample_rate=44100 -t 4 -c:v libx264 -preset ultrafast -pix_fmt yuv420p -c:a aac -movflags +faststart -y /tmp/blofy-qa-test.mp4
+      - name: Start isolated local web server
+        run: |
+          cd web/stream-native-parity
+          PORT=3000 VIDAA_SESSION_KEY=$(printf 'a%.0s' {1..64}) VIDAA_COMPAT_KEY=$(printf 'b%.0s' {1..64}) bun run server.ts >/tmp/blofy-web.log 2>&1 &
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:3000/health && break; sleep 1; done
+      - name: Test actual mouse and remote screens
+        run: cd web/stream-native-parity && npx playwright test qa/ui-parity.spec.mjs --reporter=line
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: web-qa-failures
+          path: web/stream-native-parity/test-results
+          retention-days: 2
