@@ -75,6 +75,26 @@ test('switching channels and leaving live releases the old media worker session'
  await page.locator('[data-go="movie"]').first().click();
  await expect.poll(()=>stops.length).toBeGreaterThanOrEqual(2);
 });
+test('Chrome uses local Hls.js and decodes H.264/AAC HLS instead of native unsupported source',async({page})=>{
+ const manifest=readFileSync('/tmp/blofy-qa-hls/index.m3u8','utf8');
+ const segments={};
+ for(const name of [...new Set(manifest.match(/seg-\\d{6}\\.ts/g)||[])])segments[name]=readFileSync('/tmp/blofy-qa-hls/'+name);
+ const requested=[];
+ page.on('request',r=>{if(r.url().includes('/vendor/hls.min.js'))requested.push(r.url())});
+ await page.route('**/api/hls/live/31/ts/0/**',async route=>{
+  const name=route.request().url().split('/').pop().split('?')[0];
+  if(name==='index.m3u8')return route.fulfill({status:200,contentType:'application/vnd.apple.mpegurl',body:manifest});
+  if(segments[name])return route.fulfill({status:200,contentType:'video/mp2t',body:segments[name]});
+  return route.fulfill({status:404,body:'not_found'});
+ });
+ await page.goto('http://127.0.0.1:3000/');
+ await page.locator('[data-go="live"]').first().click();
+ await page.locator('[data-channel="31"]').click();
+ await expect.poll(()=>requested.length,{timeout:10000}).toBeGreaterThan(0);
+ await expect.poll(()=>page.locator('#live-video').evaluate(v=>v.readyState),{timeout:18000}).toBeGreaterThan(1);
+ const state=await page.locator('#live-video').evaluate(v=>({ready:v.readyState,error:v.error&&v.error.code,paused:v.paused}));
+ expect(state.error).toBeFalsy();
+});
 test('VOD MP4 can open real HTML5 media; restart-from-zero overrides stored position',async({page})=>{
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  const mp4=readFileSync('/tmp/blofy-qa-test.mp4');
