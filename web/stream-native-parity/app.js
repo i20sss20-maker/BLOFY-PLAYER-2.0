@@ -796,7 +796,16 @@ function playerStatus(message,error){
  var el=document.getElementById('player-status');
  if(el){el.style.display=message?'block':'none';el.textContent=message||'';el.className=error?'player-error':'player-loading'}
  var retry=document.getElementById('player-retry');
- if(retry)retry.style.display=error?'inline-flex':'none'
+ if(retry)retry.style.display=error?'inline-flex':'none';
+ if(error){
+  // An error must always expose its recovery button, even if the cinematic
+  // controls were hidden before the source stopped.
+  var root=document.getElementById('player-root');
+  if(root)root.classList.remove('controls-hidden');
+  if(S.playerView&&S.playerView.hudTimer){
+   clearTimeout(S.playerView.hudTimer);S.playerView.hudTimer=null
+  }
+ }
 }
 function playHls(video,kind,id,extension,track,statusElement,preview){
  stopPlayback(true);
