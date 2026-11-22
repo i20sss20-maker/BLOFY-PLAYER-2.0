@@ -971,6 +971,14 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
   recoverFilm()
  };
  function attachNative(){
+  video.onloadedmetadata=function(){
+   if(!alive())return;
+   if(state.resume>30&&state.resume<seconds-5&&!state.didResume){
+    state.didResume=true;
+    try{video.currentTime=state.resume}catch(e){}
+   }
+   if(state.onDuration)state.onDuration()
+  };
   video.src=playlist;
   try{var p=video.play();if(p&&p.catch)p.catch(function(){if(alive())playerStatus('اضغط تشغيل للمتابعة')})}
   catch(e){fail('تعذر بدء الفيلم')}
@@ -997,10 +1005,9 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
    hls.on(window.Hls.Events.MANIFEST_PARSED,function(){
     if(!alive())return;
     if(state.onDuration)state.onDuration();
+    // startPosition already points Hls.js to the right fragment. Avoid issuing
+    // a second redundant seek before metadata is ready.
     try{
-     if(state.resume>30&&state.resume<seconds-5){
-      video.currentTime=state.resume
-     }
      var p=video.play();
      if(p&&p.catch)p.catch(function(){if(alive())playerStatus('اضغط ▶ لتشغيل الفيلم')})
     }catch(e){playerStatus('اضغط تشغيل للمتابعة')}
