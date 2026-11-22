@@ -206,11 +206,17 @@ if(p.startsWith('/api/vodfull/')&&(method==='GET'||method==='POST')){
  if(!match)return json(400,{error:'invalid_full_vod_path'});
  const duration=Number(match[5]);
  if(!Number.isSafeInteger(duration)||duration<120||duration>21600)return json(400,{error:'invalid_full_vod_duration'});
+ const rawSid=u.searchParams.get('sid')||'';
+ if(rawSid&&!/^[a-f0-9]{24,32}$/i.test(rawSid))return json(400,{error:'invalid_vod_session'});
+ const sid=rawSid.toLowerCase();
  if(method==='POST'&&match[6]!=='stop'||method==='GET'&&match[6]==='stop')return json(405,{error:'method_not_allowed'});
  const secret=String(Bun.env.VIDAA_COMPAT_KEY||'');
  if(!/^[a-f0-9]{64}$/i.test(secret))return json(503,{error:'vod_worker_not_configured'});
  const prefetch=match[6]==='index.m3u8'?Math.max(0,Math.min(duration-2,parseInt(u.searchParams.get('at')||'0',10)||0)):0;
- const target='http://blofy-stream-web-vod-seek-pilot.railway.internal:8080/vodfull/'+match.slice(1).join('/')+(match[6]==='index.m3u8'?'?at='+prefetch:'');
+ const params=new URLSearchParams();
+ if(sid)params.set('sid',sid);
+ if(match[6]==='index.m3u8')params.set('at',String(prefetch));
+ const target='http://blofy-stream-web-vod-seek-pilot.railway.internal:8080/vodfull/'+match.slice(1).join('/')+'?'+params.toString();
  try{
   const response=await fetch(target,{method,headers:{'Authorization':h.Authorization,'X-Compat-Secret':secret},redirect:'manual',signal:req.signal});
   if(response.status>=300&&response.status<400)return json(502,{error:'vod_worker_redirect_rejected'});
