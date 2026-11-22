@@ -369,11 +369,22 @@ async function fullVodRequest(req,url){
  if(!existsSync(filename)){
   const first=Math.floor(index/FULL_CHUNK_SEGMENTS)*FULL_CHUNK_SEGMENTS;
   if(session.chunkStart!==first||session.finished){
+   // The browser can ask for the next chunk before the previous one has ended.
+   // Keep a short sequential tail instead of killing the encoder mid-segment.
+   if(session.proc&&!session.finished&&first===session.chunkStart+FULL_CHUNK_SEGMENTS){
+    const old=session.proc;
+    await Promise.race([old.exited.catch(()=>null),nap(9000)])
+   }
+   if(session.stopped)return json(410,{error:'vod_session_expired'});
    const started=fullVodChunk(session,first);
    if(started.error)return json(started.status||502,{error:started.error})
   }
-  const ready=await awaitHlsFile(session,file,28000);
-  if(!ready)return json(session.finished?502:504,{error:session.error||'vod_segment_not_ready'})
+  const until=Date.now()+28000;
+  while(!existsSync(filename)&&!session.stopped&&session.chunkStart===first&&!session.finished&&Date.now()<until)await nap(170);
+  if(!existsSync(filename)){
+   const why=session.chunkStart!==first?'vod_chunk_replaced':session.error||'vod_segment_not_ready';
+   return json(session.finished?502:504,{error:why})
+  }
  }
  try{return new Response(readFileSync(filename),{status:200,
   headers:{'Content-Type':'video/mp2t','Cache-Control':'private, max-age=3600','X-Content-Type-Options':'nosniff'}})}
