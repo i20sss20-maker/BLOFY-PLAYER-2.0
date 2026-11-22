@@ -344,7 +344,7 @@ function fullVodChunk(session,first){
   session.chunkTimer.unref?.();
   (async()=>{try{let buf='';const reader=proc.stderr.getReader();
    while(true){const next=await reader.read();if(next.done)break;buf=(buf+new TextDecoder().decode(next.value)).slice(-2800)}
-   if(buf)session.error=/Connection reset|ECONNRESET|end of file|timed out/i.test(buf)?'vod_source_connection_lost':
+   if(buf&&!session.error)session.error=/Connection reset|ECONNRESET|end of file|timed out/i.test(buf)?'vod_source_connection_lost':
     /416|range|Invalid data/i.test(buf)?'vod_source_seek_unsupported':'vod_chunk_processing_failed'
   }catch{}})();
   proc.exited.then(code=>{
