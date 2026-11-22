@@ -157,7 +157,7 @@ async function localSource(req,url){
 }
 async function startVod({bearer,kind,id,ext,track,start,key}){
  // Replace older positions for this same account/title to avoid wasting transcoding slots.
- for(const s of hlsSessions.values())if(s.vod&&s.bearer===bearer&&s.kind===kind&&s.id===id&&s.ext===ext&&s.track===track&&s.key!==key)stopHls(s,'position_changed');
+ for(const s of Array.from(hlsSessions.values()))if(s.vod&&s.bearer===bearer&&s.key!==key)stopHls(s,'title_or_position_changed');
  if(active>=MAX_JOBS)return {status:429,error:'vod_capacity'};
  active++;
  const abort=new AbortController(),dir=join(hlsRoot,key);
