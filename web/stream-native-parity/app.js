@@ -927,7 +927,7 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
  stopPlayback(!sameSession);
  var rec={video:video,kind:kind,id:id,preview:false,engine:null,stopUrl:stopUrl,hlsKey:null,ready:false,timer:null,stallTimer:null,pendingRecovery:false};
  S.play=rec;state.mode='fullvod';state.offset=0;state.duration=seconds;state.ready=false;state.didResume=false;
- var badge=document.getElementById('player-mode-badge');if(badge)badge.textContent='VOD كامل • تقديم وترجيع';
+ var badge=document.getElementById('player-mode-badge');if(badge)badge.textContent='وضع VOD • مدة كاملة';
  diagnose(kind,'vod_full_start','fullvod',0);
  video.autoplay=true;video.muted=false;video.defaultMuted=false;video.controls=false;
  playerStatus('جار فتح الفيلم الكامل مع التقديم والترجيع…');
