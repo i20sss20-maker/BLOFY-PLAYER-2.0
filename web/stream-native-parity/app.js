@@ -8,7 +8,7 @@
 var app=document.getElementById('app');
 var S={route:'boot',kind:'movie',cat:{live:'all',movie:'all',series:'all'},cats:{},pages:{},loaded:{},selected:null,livePreview:null,
  item:null,episodes:null,selectedSeason:'1',play:null,history:[],sort:'source',heroIndex:0,searchToken:0,requestNum:0,library:readJson('blofy_web_favorites_v2',{}),
- watch:readJson('blofy_web_watch_v2',{}),favoriteItems:readJson('blofy_web_favorite_items_v1',{}),host:'',userVerified:false,heading:'',loading:false,listingInflight:{},catsInflight:{},views:{},keyboardMode:false,refreshing:false,catalogVersion:null,lastCatalogCheck:0,aiTurns:[],aiBusy:false,aiToken:0,aiSearchTitle:null};
+ watch:readJson('blofy_web_watch_v2',{}),favoriteItems:readJson('blofy_web_favorite_items_v1',{}),host:'',userVerified:false,heading:'',loading:false,listingInflight:{},catsInflight:{},views:{},keyboardMode:false,refreshing:false,catalogVersion:null,lastCatalogCheck:0,aiTurns:[],aiBusy:false,aiToken:0,aiSearchTitle:null,searchRequests:[]};
 var NAV=[['home','⌂','الرئيسية'],['live','◉','البث المباشر'],['movie','▣','الأفلام'],['series','▤','المسلسلات'],['collections','▦','التصنيفات'],['favorites','♡','المفضلة'],['search','⌕','البحث'],['ai','✧','الذكاء الاصطناعي'],['settings','⚙','الإعدادات']];
 function readJson(key,backup){try{var value=JSON.parse(localStorage.getItem(key)||'null');return value||backup}catch(e){return backup}}
 function writeJson(key,val){try{localStorage.setItem(key,JSON.stringify(val))}catch(e){}}
@@ -26,8 +26,9 @@ function api(method,endpoint,payload,cb){
  xhr.setRequestHeader('Accept','application/json');if(method==='POST')xhr.setRequestHeader('Content-Type','application/json');
  xhr.onreadystatechange=function(){if(xhr.readyState===4&&!done){done=true;var json={};try{json=JSON.parse(xhr.responseText)}catch(e){}cb(xhr.status,json)}};
  xhr.onerror=xhr.ontimeout=function(){if(!done){done=true;cb(0,{error:'network_unavailable'})}};
- xhr.send(payload?JSON.stringify(payload):null)
- }catch(e){cb(0,{error:'request_failed'})}
+ xhr.send(payload?JSON.stringify(payload):null);
+  return xhr
+ }catch(e){cb(0,{error:'request_failed'});return null}
 }
 function setStatus(text,error){var box=document.getElementById('page-status')||document.getElementById('login-status');if(box){box.textContent=text;box.className=error?'info error':'info'}}
 function deviceKey(){
@@ -126,6 +127,7 @@ function shell(pageTitle,markup){
 }
 function loading(label){return '<div class="empty-state"><div class="skeleton" style="width:48px;height:48px;border-radius:50%;margin:0 auto 12px"></div>جار تحميل '+esc(label)+' من المكتبة…</div>'}
 function navigate(route,opts,replace){
+ if(S.route==='search'&&route!=='search')cancelSearch();
  if(route!==S.route)rememberView();
  if(!S.userVerified&&route!=='login'){login('يرجى تفعيل الكود أولًا');return}
  // Release any live preview session before leaving its page (not just full-screen player).
@@ -175,7 +177,7 @@ function pageRequest(kind,cat,offset,limit,cb,query){
  var endpoint='/api/page?kind='+enc(kind)+'&offset='+enc(offset||0)+'&limit='+enc(limit||30);
  if(cat&&cat!=='all')endpoint+='&category_id='+enc(cat);
  if(query)endpoint+='&query='+enc(query);
- api('GET',endpoint,null,function(st,result){
+ return api('GET',endpoint,null,function(st,result){
   if(st===401){login('انتهت جلسة الاشتراك');return}
   cb(st,result&&Array.isArray(result.items)?result:null)
  })
@@ -501,13 +503,19 @@ function collectionsScreen(){
  '<button class="story" data-go="live"><strong>القنوات</strong><small>البث المباشر</small></button></div>'+
  '<div class="info" style="margin-top:25px">يعرض هذا القسم تصنيفات المصدر نفسها، دون إنشاء مجموعات وهمية.</div>')
 }
+function cancelSearch(){
+ ++S.searchToken;
+ if(S.searchTimer){clearTimeout(S.searchTimer);S.searchTimer=null}
+ var old=S.searchRequests||[];S.searchRequests=[];
+ for(var i=0;i<old.length;i++)try{old[i].abort()}catch(e){}
+}
 function searchScreen(){
  S.route='search';
  shell('البحث','<section class="search-screen"><input id="search-input" class="input" placeholder="ابحث عن فيلم أو مسلسل أو قناة…" autofocus>'+
  '<div class="search-tabs"><span class="chip primary">القنوات</span><span class="chip primary">الأفلام</span><span class="chip primary">المسلسلات</span></div>'+
  '<p id="search-status" class="muted">أدخل اسم المحتوى لعرض النتائج من BLOFY</p><div id="search-result" class="search-result-grid"></div></section>');
  document.getElementById('search-input').oninput=function(){var q=this.value.trim();if(S.searchTimer)clearTimeout(S.searchTimer);
- if(q.length<2){++S.searchToken;document.getElementById('search-result').innerHTML='';document.getElementById('search-status').textContent='اكتب حرفين على الأقل';return}
+ if(q.length<2){cancelSearch();document.getElementById('search-result').innerHTML='';document.getElementById('search-status').textContent='اكتب حرفين على الأقل';return}
  var token=++S.searchToken;document.getElementById('search-status').textContent='جار البحث في المكتبة…';
  S.searchTimer=setTimeout(function(){searchNow(q,token)},260)
  };
@@ -519,6 +527,8 @@ function searchScreen(){
  }
 }
 function searchNow(q,token){
+ var old=S.searchRequests||[];S.searchRequests=[];
+ for(var j=0;j<old.length;j++)try{old[j].abort()}catch(e){}
  var kinds=['live','movie','series'],responses={live:[],movie:[],series:[]},pending=3;
  function draw(){
   if(token!==S.searchToken||S.route!=='search')return;
@@ -532,7 +542,7 @@ function searchNow(q,token){
   status.textContent=(count?'تم العثور على '+count+' نتيجة':'جار البحث')+(pending?' • استكمال باقي المكتبة…':'')
  }
  for(var i=0;i<kinds.length;i++)(function(k){
-  pageRequest(k,'all',0,20,function(st,p){
+  var xhr=pageRequest(k,'all',0,20,function(st,p){
    if(token!==S.searchToken||S.route!=='search')return;
    pending--;
    if(st===200&&p){
@@ -544,7 +554,8 @@ function searchNow(q,token){
     }
    }
    draw()
-  },q)
+  },q);
+  if(xhr)S.searchRequests.push(xhr)
  })(kinds[i])
 }
 function aiScreen(){
