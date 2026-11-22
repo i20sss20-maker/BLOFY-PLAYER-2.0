@@ -277,6 +277,21 @@ function fullVodManifest(duration){
  lines.push('#EXT-X-ENDLIST');
  return lines.join('\n')+'\n'
 }
+function pruneFullVod(session,near){
+ // Retain the previous two minutes and next four minutes of transcoded media.
+ // The source can be revisited on an absolute seek without storing entire films.
+ if(session.prunedAt&&Date.now()-session.prunedAt<10000)return;
+ session.prunedAt=Date.now();
+ try{
+  const min=Math.max(0,near-36),max=near+60;
+  for(const file of readdirSync(session.dir)){
+   const match=/^seg-(\d{6})\.ts$/.exec(file);
+   if(!match)continue;
+   const n=Number(match[1]);
+   if(n<min||n>max)try{rmSync(join(session.dir,file),{force:true})}catch{}
+  }
+ }catch{}
+}
 function fullVodChunk(session,first){
  if(session.proc&&!session.finished&&session.chunkStart===first)return {ok:true};
  if(session.proc&&!session.finished){
@@ -289,6 +304,7 @@ function fullVodChunk(session,first){
  if(!(seconds>0))return {status:416,error:'vod_out_of_bounds'};
  session.released=false;active++;
  session.finished=false;session.chunkStart=first;session.error=null;session.exitCode=null;
+ pruneFullVod(session,first);
  session.abort=new AbortController();
  const source='http://127.0.0.1:'+Number(Bun.env.PORT||3000)+'/_source/'+session.key;
  const args=['-hide_banner','-loglevel','warning','-nostats','-nostdin','-analyzeduration','2000000','-probesize','2000000',
