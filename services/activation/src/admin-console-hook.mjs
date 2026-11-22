@@ -70,6 +70,8 @@ const assets = new Map([
   ['/blofy-one-xtream-register.js', ['blofy-one-xtream-register.js', 'text/javascript']],
   ['/blofy-one-xtream-credential-edit.js', ['blofy-one-xtream-credential-edit.js', 'text/javascript']],
   ['/blofy-one-code-register.css', ['blofy-one-code-register.css', 'text/css']],
+  ['/blofy-one-trial-leads.js', ['blofy-one-trial-leads.js', 'text/javascript']],
+  ['/blofy-one-trial-leads.css', ['blofy-one-trial-leads.css', 'text/css']],
   ['/blofy-one-store-ops.css', ['blofy-one-store-ops.css', 'text/css']],
   ['/blofy-one-store-ops.js', ['blofy-one-store-ops.js', 'text/javascript']],
   ['/blofy-one-store-sales.js', ['blofy-one-store-sales.js', 'text/javascript']],

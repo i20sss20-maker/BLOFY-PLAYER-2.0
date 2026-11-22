@@ -6,6 +6,7 @@ import crypto from 'node:crypto';
 import {ensureStreamCodeTable,streamNumericCodeLength,randomNumericStreamCode,streamCodeProof} from './xtream-duration-codes.mjs';
 import {encryptStreamCode,decryptStreamCode} from './xtream-code-vault.mjs';
 import {createFixedWindowLimiter,requestClientKey} from './auth-protection.mjs';
+import {listTrialLeads,updateTrialLeadFollowup} from './store-trial-leads.mjs';
 
 export const TRIAL_PLANS=Object.freeze([
  {sku:'trial-stream-1d',channel:'app',name:'تجربة BLOFY STREAM',days:1},
@@ -22,6 +23,7 @@ const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]
 const fail=(code,status=400)=>Object.assign(Error(code),{status});
 const ROUTE='/api/v1/store/trials';
 const ADMIN='/api/v1/admin/store/trials';
+const CONTACT_PREFERENCES=ROUTE+'/contact-preferences';
 
 export function trialStockRequest(body){
  const sku=String(body?.sku||'');
@@ -89,12 +91,13 @@ export function createStoreTrialInventory({
    throw fail('trial_code_channel_mismatch',503);
   return {ok:true,sku:row.sku,channel:plan.channel,durationDays:1,code,
    alreadyClaimed:Boolean(alreadyClaimed),claimedAt:row.claimed_at,
+   marketingOptIn:Boolean(row.marketing_consent_at),
    activatedAt:row.redeemed_at||null,expiresAt:row.expires_at||null,
    message:'تبدأ مدة اليوم الواحد عند أول تفعيل ناجح للكود، وليس عند تخزينه أو طلبه.',
    redeemUrl:plan.channel==='xtream'?'https://blofyplayer.com/stream/activate':null};
  }
  async function findClaim(db,customerId){
-  return (await db.query(`SELECT i.sku,i.claimed_at,v.id,v.code_vault,v.code_hash,
+  return (await db.query(`SELECT i.sku,i.claimed_at,i.marketing_consent_at,v.id,v.code_vault,v.code_hash,
       v.duration_days,v.code_channel,v.redeemed_at,v.expires_at,
       v.id AS voucher_id
     FROM blofy_store_trial_inventory i
@@ -195,6 +198,18 @@ export function createStoreTrialInventory({
      added:0
    }));
    if(!targetRows.some(row=>row.before<threshold)){
+     // Historical claims have no recorded promotional consent; default to none.
+     await db.query('ALTER TABLE blofy_store_trial_inventory ADD COLUMN IF NOT EXISTS marketing_consent_at TIMESTAMPTZ');
+     await db.query("ALTER TABLE blofy_store_trial_inventory ADD COLUMN IF NOT EXISTS followup_status TEXT NOT NULL DEFAULT 'new'");
+     await db.query('ALTER TABLE blofy_store_trial_inventory ADD COLUMN IF NOT EXISTS followup_note TEXT');
+     await db.query('ALTER TABLE blofy_store_trial_inventory ADD COLUMN IF NOT EXISTS followup_updated_at TIMESTAMPTZ');
+     await db.query(`CREATE TABLE IF NOT EXISTS blofy_store_trial_followup_events(
+       id BIGSERIAL PRIMARY KEY,
+       voucher_id UUID NOT NULL REFERENCES blofy_store_trial_inventory(voucher_id) ON DELETE CASCADE,
+       followup_status TEXT NOT NULL,
+       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+     )`);
+     await db.query('CREATE INDEX IF NOT EXISTS idx_blofy_store_trial_leads ON blofy_store_trial_inventory(claimed_at DESC) WHERE claimed_at IS NOT NULL');
      await db.query('COMMIT');
      return {ok:true,generated:0,available:targetRows.map(p=>({sku:p.sku,available:p.before}))};
    }
@@ -255,6 +270,44 @@ export function createStoreTrialInventory({
    recent:recent.rows.map(row=>({sku:row.sku,codeHint:row.code_hint,
     claimedAt:row.claimed_at,activatedAt:row.redeemed_at,expiresAt:row.expires_at}))},NO_CACHE);
  }
+ async function adminLeads(req,res){
+  if(!authorizeAdmin(req,res))return;
+  const body=await readJson(req);
+  await schema();
+  try{return json(res,200,await listTrialLeads(pool,body),NO_CACHE)}
+  catch(error){if(error.status)return json(res,error.status,{error:error.message},NO_CACHE);throw error;}
+ }
+ async function adminFollowup(req,res){
+  if(!authorizeAdmin(req,res))return;
+  const body=await readJson(req);
+  await schema();
+  try{return json(res,200,await updateTrialLeadFollowup(pool,body),NO_CACHE)}
+  catch(error){if(error.status)return json(res,error.status,{error:error.message},NO_CACHE);throw error;}
+ }
+ async function contactPreferences(req,res){
+  if(!enabled)return json(res,503,{error:'trials_unavailable'},NO_CACHE);
+  if(!ALLOWED_ORIGINS.has(String(req.headers?.origin||''))||
+     req.headers?.['x-blofy-trial']!=='1')
+   return json(res,403,{error:'trial_origin_invalid'},NO_CACHE);
+  if(!/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(
+     String(req.headers?.['content-type']||'')))
+   return json(res,415,{error:'trial_content_type_invalid'},NO_CACHE);
+  if(Number(req.headers?.['content-length']||0)>1000)
+   return json(res,413,{error:'trial_body_too_large'},NO_CACHE);
+  const customer=await getAuthenticatedCustomer(req);
+  if(!customer?.id||!UUID.test(customer.id))
+   return json(res,401,{error:'trial_login_required'},NO_CACHE);
+  const body=await readJson(req);
+  if(typeof body?.marketingOptIn!=='boolean')
+   return json(res,400,{error:'trial_contact_preference_invalid'},NO_CACHE);
+  await schema();
+  const result=await pool.query(`UPDATE blofy_store_trial_inventory
+   SET marketing_consent_at=CASE WHEN $2::boolean THEN NOW() ELSE NULL END
+   WHERE customer_id=$1 AND claimed_at IS NOT NULL RETURNING marketing_consent_at`,
+   [customer.id,body.marketingOptIn]);
+  if(result.rowCount!==1)return json(res,404,{error:'trial_not_claimed'},NO_CACHE);
+  return json(res,200,{ok:true,marketingOptIn:Boolean(result.rows[0]?.marketing_consent_at)},NO_CACHE);
+ }
  async function claim(req,res){
   if(!enabled)return json(res,503,{error:'trials_unavailable'},NO_CACHE);
   if(!ALLOWED_ORIGINS.has(String(req.headers?.origin||''))||
@@ -274,8 +327,12 @@ export function createStoreTrialInventory({
   if(env.BLOFY_CUSTOMER_PROFILE_REQUIRED==='true'&&
      (!customer.full_name||!customer.phone_e164))
    return json(res,403,{error:'trial_profile_required'},NO_CACHE);
-  const plan=trialStockRequest(await readJson(req));
+  const payload=await readJson(req);
+  const plan=trialStockRequest(payload);
   if(!plan)return json(res,400,{error:'trial_product_invalid'},NO_CACHE);
+  if(payload?.marketingOptIn!==undefined&&
+     typeof payload.marketingOptIn!=='boolean')
+   return json(res,400,{error:'trial_marketing_preference_invalid'},NO_CACHE);
   await schema();
   const db=await pool.connect();
   let issued;
@@ -303,9 +360,10 @@ export function createStoreTrialInventory({
      [plan.sku])).rows[0];
     if(!next)throw fail('trial_out_of_stock',409);
     await db.query(`UPDATE blofy_store_trial_inventory
-      SET customer_id=$2,claimed_at=NOW()
+      SET customer_id=$2,claimed_at=NOW(),
+       marketing_consent_at=CASE WHEN $3::boolean THEN NOW() ELSE NULL END
       WHERE voucher_id=$1 AND customer_id IS NULL`,
-      [next.voucher_id,customer.id]);
+      [next.voucher_id,customer.id,payload.marketingOptIn===true]);
     const row=await findClaim(db,customer.id);
     issued=renderClaim(row,false);
    }
@@ -321,14 +379,17 @@ export function createStoreTrialInventory({
  }
  const handler=async function handle(req,res,url){
   const path=url.pathname;
-  if(![ROUTE+'/availability',ROUTE+'/mine',ROUTE+'/claim',
-        ADMIN+'/summary',ADMIN+'/generate'].includes(path))return false;
+  if(![ROUTE+'/availability',ROUTE+'/mine',ROUTE+'/claim',CONTACT_PREFERENCES,
+        ADMIN+'/summary',ADMIN+'/generate',ADMIN+'/leads',ADMIN+'/leads/followup'].includes(path))return false;
   if(path===ROUTE+'/availability'&&req.method==='GET')await publicAvailability(req,res);
   else if(path===ROUTE+'/mine'&&req.method==='GET')await mine(req,res);
   else if(path===ROUTE+'/claim'&&req.method==='POST')await claim(req,res);
+  else if(path===CONTACT_PREFERENCES&&req.method==='POST')await contactPreferences(req,res);
+  else if(path===ADMIN+'/leads'&&req.method==='POST')await adminLeads(req,res);
+  else if(path===ADMIN+'/leads/followup'&&req.method==='POST')await adminFollowup(req,res);
   else if(path===ADMIN+'/summary'&&req.method==='GET')await adminSummary(req,res);
   else if(path===ADMIN+'/generate'&&req.method==='POST')await generate(req,res);
-  else json(res,405,{error:'method_not_allowed'},{...NO_CACHE,allow:path.endsWith('claim')||path.endsWith('generate')?'POST':'GET'});
+  else json(res,405,{error:'method_not_allowed'},{...NO_CACHE,allow:path.endsWith('availability')||path.endsWith('mine')||path.endsWith('summary')?'GET':'POST'});
   return true;
  };
  handler.autoRefillTrials=autoRefillTrials;

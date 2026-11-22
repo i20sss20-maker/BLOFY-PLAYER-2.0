@@ -1,0 +1,53 @@
+/* BLOFY ONE customer trial enquiries: scoped operator-only CRM. */
+.one-trial-leads{margin-top:28px;padding:21px 20px;border:1px solid #4a7588;
+ border-radius:17px;background:linear-gradient(125deg,#122e43,#0e2436)}
+.one-trial-leads .one-section-heading{display:flex;gap:15px;align-items:center;
+ justify-content:space-between;flex-wrap:wrap}
+.one-trial-leads .one-section-heading h3{font-size:clamp(18px,2vw,25px);
+ color:#c8ffed;margin:5px 0}
+.one-trial-leads .one-footnote{font-size:13px;line-height:1.9;color:#c1dada}
+.one-trial-leads-filters{display:flex;flex-wrap:wrap;align-items:end;gap:10px;margin:17px 0}
+.one-trial-leads-filters label{display:grid;gap:6px;font-size:12px;color:#dceef1;
+ flex:1 1 160px}
+.one-trial-leads-filters label:first-child{flex:2 1 220px}
+.one-trial-leads-filters input,.one-trial-leads-filters select{
+ background:#092739;color:#fff;border:1px solid #58899b;
+ border-radius:10px;padding:11px;min-height:45px;width:100%;font:inherit}
+.one-trial-leads button,.one-trial-lead-dialog button{
+ padding:9px 12px;border:1px solid #549393;border-radius:10px;
+ background:#215e64;color:#f7fffc;font:inherit;cursor:pointer;
+ min-height:42px}
+.one-trial-leads button:hover,.one-trial-lead-dialog button:hover{background:#2f7278}
+.one-trial-leads button:focus-visible,.one-trial-lead-dialog button:focus-visible{
+ outline:3px solid #8af2c5;outline-offset:2px}
+.one-trial-leads button:disabled,.one-trial-lead-dialog button:disabled{
+ opacity:.5;cursor:not-allowed}
+.one-trial-leads table{min-width:1150px}
+.one-trial-leads td{vertical-align:top}
+.one-trial-leads td small{display:block;margin-top:7px;font-size:11px;color:#bddad5;
+ line-height:1.6;overflow-wrap:anywhere}
+.one-trial-leads td strong{overflow-wrap:anywhere}
+#one-trial-leads-status{font-size:13px;color:#c4fae8;line-height:1.9}
+.one-trial-lead-dialog{max-width:920px}
+.one-trial-lead-details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+ gap:12px;margin:16px 0}
+.one-trial-lead-detail{border:1px solid #4b6e86;border-radius:10px;padding:10px 13px;
+ min-width:0;background:#13354a;display:grid;gap:7px}
+.one-trial-lead-detail small{color:#b0d3d3;font-size:12px}
+.one-trial-lead-detail strong{color:#f4fbf9;font-weight:650;overflow-wrap:anywhere}
+.one-trial-lead-actions{display:flex;flex-wrap:wrap;gap:10px;margin:13px 0}
+.one-trial-lead-actions a{display:inline-flex;align-items:center;min-height:42px;
+ text-decoration:none;padding:10px 15px;border:1px solid #5a9e99;
+ border-radius:10px;background:#24645e;color:#fff}
+.one-trial-lead-actions a[hidden]{display:none!important}
+#one-trial-lead-followup-form{display:grid;gap:13px;margin-top:20px}
+#one-trial-lead-followup-form label{display:grid;gap:8px;color:#e1f0ed;font-size:13px}
+#one-trial-lead-followup-form select,#one-trial-lead-followup-form textarea{
+ width:100%;min-height:43px;border:1px solid #58899b;
+ background:#092739;color:#fff;border-radius:9px;padding:10px;font:inherit}
+#one-trial-lead-detail-status{color:#c8ffeb;font-size:13px;line-height:1.8}
+@media(max-width:700px){
+ .one-trial-leads{padding:11px}
+ .one-trial-lead-details{grid-template-columns:1fr}
+ .one-trial-leads-filters label{flex:1 1 100%}
+}
