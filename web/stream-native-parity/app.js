@@ -8,7 +8,7 @@
 var app=document.getElementById('app');
 var S={route:'boot',kind:'movie',cat:{live:'all',movie:'all',series:'all'},cats:{},pages:{},loaded:{},selected:null,livePreview:null,
  item:null,episodes:null,selectedSeason:'1',play:null,history:[],sort:'source',heroIndex:0,searchToken:0,requestNum:0,library:readJson('blofy_web_favorites_v2',{}),
- watch:readJson('blofy_web_watch_v2',{}),host:'',userVerified:false,heading:'',loading:false};
+ watch:readJson('blofy_web_watch_v2',{}),host:'',userVerified:false,heading:'',loading:false,listingInflight:{},catsInflight:{},views:{},keyboardMode:false};
 var NAV=[['home','⌂','الرئيسية'],['live','◉','البث المباشر'],['movie','▣','الأفلام'],['series','▤','المسلسلات'],['collections','▦','التصنيفات'],['favorites','♡','المفضلة'],['search','⌕','البحث'],['ai','✧','الذكاء الاصطناعي'],['settings','⚙','الإعدادات']];
 function readJson(key,backup){try{var value=JSON.parse(localStorage.getItem(key)||'null');return value||backup}catch(e){return backup}}
 function writeJson(key,val){try{localStorage.setItem(key,JSON.stringify(val))}catch(e){}}
@@ -62,6 +62,57 @@ function redeem(){
   else setStatus(st===409?'الكود مرتبط بجهاز مختلف':st===429?'محاولات كثيرة. جرّب لاحقًا.':'تعذّر تفعيل الاشتراك. تحقق من الكود والاتصال.',true)
  })
 }
+// Remember the exact scroll/focus position so returning from a title never jumps to the top.
+function viewKey(route){
+ route=route||S.route;
+ if(route==='movie'||route==='series'||route==='live')return route+':'+(S.cat[route]||'all');
+ if(route==='detail')return 'detail:'+(S.item?S.item.kind+':'+S.item.id:'');
+ if(route==='episodes')return 'episodes:'+(S.item&&S.item.id||'');
+ return route
+}
+function focusIdentity(node){
+ if(!node||node===document.body)return null;
+ var keys=['data-cat','data-channel','data-details','data-watch','data-more','data-season','data-go','data-episodes','data-sort','data-favorite','data-back'];
+ for(var i=0;i<keys.length;i++)if(node.hasAttribute&&node.hasAttribute(keys[i]))return [keys[i],node.getAttribute(keys[i])];
+ if(node.id)return ['id',node.id];
+ return null
+}
+function findFocus(identity){
+ if(!identity)return null;
+ if(identity[0]==='id')return document.getElementById(identity[1]);
+ var nodes=document.querySelectorAll('['+identity[0]+']');
+ for(var i=0;i<nodes.length;i++)if(nodes[i].getAttribute(identity[0])===identity[1])return nodes[i];
+ return null
+}
+function rememberView(){
+ if(S.route==='player'||S.route==='boot'||S.route==='login')return;
+ var root=document.getElementById('workspace');
+ if(!root)return;
+ var key=viewKey(),view={scroll:root.scrollTop,focus:focusIdentity(document.activeElement),parts:{}};
+ var scrollers=root.querySelectorAll('.pane-scroll,.poster-panel,.h-scroll,.episode-list');
+ for(var i=0;i<scrollers.length;i++)view.parts[i]=[scrollers[i].scrollTop,scrollers[i].scrollLeft];
+ S.views[key]=view
+}
+function restoreView(route,preferred){
+ var key=viewKey(route);
+ setTimeout(function(){
+  if(S.route!==route||viewKey()!==key)return;
+  var entry=S.views[key],root=document.getElementById('workspace');
+  if(!root)return;
+  // Focus only for remote/keyboard use; mouse users keep natural pointer focus.
+  var target=findFocus(preferred||(entry&&entry.focus));
+  if(!target&&S.keyboardMode){
+   target=root.querySelector('.cat-item.selected,.detail-actions .btn,.hero-actions .btn,.poster,.channel-item,.story,.episode-row,.btn:not([disabled])')||
+    document.querySelector('.rail-link.active');
+  }
+  if(target&&S.keyboardMode){try{target.focus({preventScroll:true})}catch(e){target.focus()}}
+  if(entry){
+   var scrollers=root.querySelectorAll('.pane-scroll,.poster-panel,.h-scroll,.episode-list');
+   for(var i=0;i<scrollers.length;i++)if(entry.parts[i]){scrollers[i].scrollTop=entry.parts[i][0];scrollers[i].scrollLeft=entry.parts[i][1]}
+   root.scrollTop=entry.scroll||0
+  }else if(root)root.scrollTop=0
+ },0)
+}
 function navHtml(){
  return '<aside class="rail"><div class="brand">BLOFY<em>STREAM</em></div>'+
  NAV.map(function(v){return '<button class="rail-link '+(S.route===v[0]?'active':'')+'" data-go="'+v[0]+'"><span class="symbol">'+v[1]+'</span><span>'+v[2]+'</span></button>'}).join('')+
@@ -69,12 +120,13 @@ function navHtml(){
 }
 function shell(pageTitle,markup){
  S.heading=pageTitle;app.innerHTML='<div class="app screen-appear">'+navHtml()+'<main class="workspace" id="workspace">'+
- '<div class="toolbar"><h1>'+esc(pageTitle)+'</h1><div class="row"><span class="toolbar-note">BLOFY STREAM · WEB</span><button class="btn secondary" data-go="search">⌕ بحث</button></div></div>'+
+ '<div class="toolbar"><h1>'+esc(pageTitle)+'</h1><div class="row">'+(S.route==='home'?'':'<button class="btn secondary back-nav" data-back="1">↶ رجوع</button>')+'<button class="btn secondary" data-go="search">⌕ بحث</button></div></div>'+
  '<div id="screen">'+markup+'</div></main></div>';
- setTimeout(function(){var first=document.querySelector('.rail-link.active')||document.querySelector('button');if(first&&document.activeElement===document.body)first.focus()},50)
+ // Pages restore their own controls after data arrives rather than focusing the sidebar.
 }
 function loading(label){return '<div class="empty-state"><div class="skeleton" style="width:48px;height:48px;border-radius:50%;margin:0 auto 12px"></div>جار تحميل '+esc(label)+' من المكتبة…</div>'}
 function navigate(route,opts,replace){
+ if(route!==S.route)rememberView();
  if(!S.userVerified&&route!=='login'){login('يرجى تفعيل الكود أولًا');return}
  // Release any live preview session before leaving its page (not just full-screen player).
  if(S.play&&(S.route==='player'||S.route==='live')&&route!==S.route)cleanupPlayer();
@@ -83,7 +135,13 @@ function navigate(route,opts,replace){
   S.playerView=null;
  }
  if(route==='login'){login();return}
- if(!replace&&S.route!==route)S.history.push({route:S.route,opts:{kind:S.kind}});
+ if(!replace&&S.route!==route){
+  var options={kind:S.kind};
+  if(S.route==='detail'&&S.item)options={kind:S.item.kind,id:S.item.id};
+  else if(S.route==='episodes'&&S.item)options={id:S.item.id};
+  S.history.push({route:S.route,opts:options});
+  if(S.history.length>30)S.history.shift()
+ }
  S.route=route;
  if(route==='home')home();
  else if(route==='live'||route==='movie'||route==='series')catalog(route);
@@ -104,9 +162,13 @@ function back(){
 }
 function categories(kind,done){
  if(S.cats[kind]){done(S.cats[kind]);return}
+ if(S.catsInflight[kind]){S.catsInflight[kind].push(done);return}
+ S.catsInflight[kind]=[done];
  api('GET','/api/catalog?action=get_'+(kind==='movie'?'vod':kind)+'_categories',null,function(st,result){
+  var waiting=S.catsInflight[kind]||[];delete S.catsInflight[kind];
   if(st===401){login('انتهت جلسة الاشتراك');return}
-  S.cats[kind]=st===200&&Array.isArray(result)?result:[];done(S.cats[kind])
+  if(st===200&&Array.isArray(result))S.cats[kind]=result;
+  for(var i=0;i<waiting.length;i++)waiting[i](S.cats[kind]||[])
  })
 }
 function pageRequest(kind,cat,offset,limit,cb,query){
@@ -122,9 +184,16 @@ function keyOf(kind,cat){return kind+':'+(cat||'all')}
 function getListing(kind,cat,cb,force){
  var key=keyOf(kind,cat);
  if(!force&&S.loaded[key]){cb(200,S.loaded[key]);return}
- pageRequest(kind,cat,0,36,function(st,r){if(st===200&&r){S.loaded[key]=r;cb(st,r)}else cb(st,null)})
+ if(!force&&S.listingInflight[key]){S.listingInflight[key].push(cb);return}
+ if(!force)S.listingInflight[key]=[cb];
+ pageRequest(kind,cat,0,36,function(st,r){
+  var waiting=force?[cb]:(S.listingInflight[key]||[cb]);
+  if(!force)delete S.listingInflight[key];
+  if(st===200&&r)S.loaded[key]=r;
+  for(var i=0;i<waiting.length;i++)waiting[i](st,st===200?r:null)
+ })
 }
-function safeImg(pic,cls){return pic?'<img class="'+(cls||'')+'" loading="lazy" alt="" src="'+esc(pic)+'">':''}
+function safeImg(pic,cls){return pic?'<img class="'+(cls||'')+'" loading="lazy" decoding="async" alt="" src="'+esc(pic)+'">':''}
 function posterCard(item,kind){
  var id=itemId(item,kind),name=title(item),image=art(item),key=kind+':'+id,mark=S.watch[key],percent=mark&&mark.duration>0?Math.round(100*mark.position/mark.duration):0;
  return '<button class="poster" data-details="'+esc(kind)+':'+esc(id)+'" title="'+esc(name)+'">'+
