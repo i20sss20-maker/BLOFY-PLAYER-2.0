@@ -51,12 +51,13 @@ if(p==='/api/redeem'&&method==='POST'){
  }catch(e){return json(502,{error:'تعذّر الاتصال بخادم التفعيل'})}
 }
 if(p==='/vendor/hls.min.js'&&method==='GET'){
- for(const url of ['https://cdn.jsdelivr.net/npm/hls.js@1.5.20/dist/hls.min.js','https://unpkg.com/hls.js@1.5.20/dist/hls.min.js']){
-  try{const r=await fetch(url,{redirect:'error',signal:AbortSignal.timeout(9000)});
-   if(r.ok&&r.body)return new Response(r.body,{status:200,headers:{'Content-Type':'application/javascript; charset=utf-8','Cache-Control':'public,max-age=21600','X-Content-Type-Options':'nosniff'}})
-  }catch(e){}
- }
- return json(503,{error:'hls_library_unavailable'})
+ const asset=Bun.file(new URL('./node_modules/hls.js/dist/hls.min.js',import.meta.url));
+ if(!await asset.exists())return json(503,{error:'hls_player_not_installed'});
+ return new Response(asset,{status:200,headers:{
+  'Content-Type':'application/javascript; charset=utf-8',
+  'Cache-Control':'public,max-age=3600',
+  'X-Content-Type-Options':'nosniff'
+ }});
 }
 
 const h=auth(req);if(!h)return json(401,{ok:false,error:'activation_required'});
