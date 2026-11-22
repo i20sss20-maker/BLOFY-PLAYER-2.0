@@ -649,6 +649,86 @@ function knownDuration(kind,id,item){
  var saved=getResume(kind,id);
  return saved&&saved.duration||0
 }
+
+/* Real full-length VOD player. EXT-X-ENDLIST exposes the entire runtime to
+ * Hls.js from the first manifest. A fragment requested after a seek is
+ * transcoded on demand at that absolute movie position by the worker.
+ * Unknown-length sources still use the bounded legacy streaming fallback.
+ */
+function playFullVod(video,kind,id,ext,track,duration,state,ready){
+ stopPlayback(true);
+ var seconds=Math.round(duration),path='/api/vodfull/'+kind+'/'+id+'/'+ext+'/'+track+'/'+seconds;
+ var rec={video:video,kind:kind,id:id,preview:false,engine:null,stopUrl:path+'/stop',hlsKey:null,ready:false,timer:null};
+ S.play=rec;state.mode='fullvod';state.offset=0;state.duration=seconds;state.ready=false;
+ video.autoplay=true;video.muted=false;video.defaultMuted=false;video.controls=false;
+ playerStatus('جار فتح الفيلم الكامل مع التقديم والترجيع…');
+ function alive(){return S.route==='player'&&S.play===rec}
+ function fail(msg){
+  if(!alive())return;
+  if(rec.timer)clearTimeout(rec.timer);
+  playerStatus(msg,true)
+ }
+ rec.timer=setTimeout(function(){
+  if(alive()&&!rec.ready)playerStatus('جار تجهيز الفيديو من المصدر…')
+ },16000);
+ video.onplaying=function(){
+  if(!alive())return;
+  rec.ready=true;if(rec.timer)clearTimeout(rec.timer);
+  ready()
+ };
+ video.onwaiting=function(){
+  if(alive()&&rec.ready)playerStatus('جار تحميل الجزء المطلوب من الفيلم…')
+ };
+ video.onended=function(){
+  if(!alive())return;
+  saveResume(kind,id,seconds,seconds,true);
+  playerStatus('اكتملت المشاهدة')
+ };
+ video.onerror=function(){
+  diagnose(kind,'media_error','video',video.error&&video.error.code);
+  fail('تعذر تشغيل هذا المصدر كفيلم قابل للتقديم. المصدر قد لا يدعم الوصول إلى مواضع الملف.')
+ };
+ function attachNative(){
+  video.src=path+'/index.m3u8';
+  try{var p=video.play();if(p&&p.catch)p.catch(function(){if(alive())playerStatus('اضغط تشغيل للمتابعة')})}
+  catch(e){fail('تعذر بدء الفيلم')}
+ }
+ if(shouldUseNativeHls(video)){attachNative();return}
+ loadHls(function(ok){
+  if(!alive())return;
+  if(!ok||!window.Hls||!window.Hls.isSupported()){
+   if(video.canPlayType&&video.canPlayType('application/vnd.apple.mpegurl')){attachNative();return}
+   fail('المتصفح لا يدعم تشغيل ملفات HLS القابلة للتقديم.');return
+  }
+  try{
+   var hls=new window.Hls({enableWorker:false,lowLatencyMode:false,maxBufferLength:36,
+    maxMaxBufferLength:70,maxBufferHole:1,fragLoadingTimeOut:35000,manifestLoadingTimeOut:30000,
+    fragLoadingMaxRetry:2,manifestLoadingMaxRetry:2});
+   rec.engine=hls;
+   hls.on(window.Hls.Events.MANIFEST_PARSED,function(){
+    if(!alive())return;
+    if(state.onDuration)state.onDuration();
+    try{
+     if(state.resume>30&&state.resume<seconds-5){
+      video.currentTime=state.resume
+     }
+     var p=video.play();
+     if(p&&p.catch)p.catch(function(){if(alive())playerStatus('اضغط ▶ لتشغيل الفيلم')})
+    }catch(e){playerStatus('اضغط تشغيل للمتابعة')}
+   });
+   var recovery=0;
+   hls.on(window.Hls.Events.ERROR,function(event,detail){
+    if(!alive()||!detail||!detail.fatal)return;
+    diagnose(kind,'hls_error','video',0);
+    if(recovery<1&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){recovery++;try{hls.startLoad()}catch(e){};return}
+    if(recovery<1&&detail.type===window.Hls.ErrorTypes.MEDIA_ERROR){recovery++;try{hls.recoverMediaError()}catch(e){};return}
+    fail('فشل الوصول إلى جزء من الفيلم. قد يمنع المصدر التقديم إلى هذا الموضع. ارجع وحاول عنوانًا آخر.')
+   });
+   hls.attachMedia(video);hls.loadSource(path+'/index.m3u8')
+  }catch(e){fail('تعذر تهيئة مشغّل الأفلام')}
+ })
+}
+
 function playVodSegments(video,kind,id,ext,track,start,state,ready){
  var at=Math.max(0,Math.round(start||0)),key=kind+'/'+id+'/'+ext+'/'+track+'/'+at,manifest='/api/vod/'+key+'/index.m3u8';
  state.ready=false;stopPlayback(true);
@@ -774,13 +854,20 @@ function openPlayer(kind,id,extension,name,from){
   }
  }
  state.onDuration=progress;
- function startVod(at){playVodSegments(video,kind,id,ext,state.track,at,state,markReady)}
+ function startVod(at){
+  if(state.duration>=120&&state.duration<=21600){
+   state.resume=Math.max(0,Math.round(at||0));
+   playFullVod(video,kind,id,ext,state.track,state.duration,state,markReady)
+  }else{
+   playVodSegments(video,kind,id,ext,state.track,at,state,markReady)
+  }
+ }
  function seekTo(raw){
   if(isLive)return;
   state.recoveries=0;state.recoveryWindow=0;
   var target=Math.max(0,Math.round(Number(raw)||0)),duration=totalDuration();
   if(duration>0&&isFinite(duration))target=Math.min(target,Math.max(0,Math.floor(duration)-2));
-  if(state.mode==='direct'&&video.seekable&&video.seekable.length){
+  if((state.mode==='direct'||state.mode==='fullvod')&&(state.mode==='fullvod'||video.seekable&&video.seekable.length)){
    try{video.currentTime=target;progress();return}catch(e){}
   }
   // Restart transcoding at the requested absolute time, never silently at 0.
