@@ -124,7 +124,7 @@ function getListing(kind,cat,cb,force){
  if(!force&&S.loaded[key]){cb(200,S.loaded[key]);return}
  pageRequest(kind,cat,0,36,function(st,r){if(st===200&&r){S.loaded[key]=r;cb(st,r)}else cb(st,null)})
 }
-function safeImg(pic,cls){return pic?'<img class="'+(cls||'')+'" loading="lazy" alt="" src="'+esc(pic)+'" onerror="this.style.display=\'none\'">':''}
+function safeImg(pic,cls){return pic?'<img class="'+(cls||'')+'" loading="lazy" alt="" src="'+esc(pic)+'">':''}
 function posterCard(item,kind){
  var id=itemId(item,kind),name=title(item),image=art(item),key=kind+':'+id,mark=S.watch[key],percent=mark&&mark.duration>0?Math.round(100*mark.position/mark.duration):0;
  return '<button class="poster" data-details="'+esc(kind)+':'+esc(id)+'" title="'+esc(name)+'">'+
@@ -290,7 +290,7 @@ function details(o){
   var genre=Array.isArray(gen)?gen.join(' • '):String(gen||'');
   var root=document.getElementById('detail-root');if(!root)return;
   root.innerHTML='<div class="detail-backdrop">'+safeImg(backdrop)+'</div><div class="detail-content">'+
-  (artwork?'<img class="detail-poster" src="'+esc(artwork)+'" alt="" onerror="this.style.visibility=\'hidden\'">':'<div class="detail-poster"></div>')+
+  (artwork?'<img class="detail-poster" src="'+esc(artwork)+'" alt="" >':'<div class="detail-poster"></div>')+
   '<div class="detail-body"><span class="chip primary">'+(k==='movie'?'فيلم':'مسلسل')+'</span><h2 class="detail-title">'+esc(title(item))+'</h2>'+
   '<div class="detail-subtitle">'+esc([genre,year,rating].filter(Boolean).join(' • '))+'</div><p class="detail-plot">'+esc(plot)+'</p>'+
   '<div class="detail-actions">'+buttons+'</div>'+
