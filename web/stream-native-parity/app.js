@@ -7,11 +7,27 @@
 'use strict';
 var app=document.getElementById('app');
 var S={route:'boot',kind:'movie',cat:{live:'all',movie:'all',series:'all'},cats:{},pages:{},loaded:{},selected:null,livePreview:null,
- item:null,episodes:null,selectedSeason:'1',play:null,history:[],sort:'source',heroIndex:0,searchToken:0,requestNum:0,library:readJson('blofy_web_favorites_v2',{}),
- watch:readJson('blofy_web_watch_v2',{}),favoriteItems:readJson('blofy_web_favorite_items_v1',{}),host:'',userVerified:false,heading:'',loading:false,listingInflight:{},catsInflight:{},views:{},keyboardMode:false,refreshing:false,catalogVersion:null,lastCatalogCheck:0,aiTurns:[],aiBusy:false,aiToken:0,aiSearchTitle:null,searchRequests:[],searchKind:'all',recentSearches:readJson('blofy_web_recent_searches_v1',[])};
+ item:null,episodes:null,selectedSeason:'1',play:null,history:[],sort:'source',heroIndex:0,searchToken:0,requestNum:0,library:{},
+ watch:{},favoriteItems:{},profileKey:'',host:'',userVerified:false,heading:'',loading:false,listingInflight:{},catsInflight:{},views:{},keyboardMode:false,refreshing:false,catalogVersion:null,lastCatalogCheck:0,aiTurns:[],aiBusy:false,aiToken:0,aiSearchTitle:null,searchRequests:[],searchKind:'all',recentSearches:[]};
 var NAV=[['home','⌂','الرئيسية'],['live','◉','البث المباشر'],['movie','▣','الأفلام'],['series','▤','المسلسلات'],['collections','▦','التصنيفات'],['favorites','♡','المفضلة'],['search','⌕','البحث'],['ai','✧','الذكاء الاصطناعي'],['settings','⚙','الإعدادات']];
 function readJson(key,backup){try{var value=JSON.parse(localStorage.getItem(key)||'null');return value||backup}catch(e){return backup}}
 function writeJson(key,val){try{localStorage.setItem(key,JSON.stringify(val))}catch(e){}}
+function profileStorageKey(name){return 'blofy_web_profile_v1:'+S.profileKey+':'+name}
+function profileSave(name,value){if(S.profileKey)writeJson(profileStorageKey(name),value)}
+function useProfile(id){
+ if(!/^[a-f0-9]{24}$/.test(String(id||'')))return false;
+ var changed=S.profileKey!==id;
+ S.profileKey=id;
+ S.library=readJson(profileStorageKey('favorites'),{});
+ S.watch=readJson(profileStorageKey('watch'),{});
+ S.favoriteItems=readJson(profileStorageKey('favoriteItems'),{});
+ S.recentSearches=readJson(profileStorageKey('recentSearches'),[]);
+ if(changed){
+  S.loaded={};S.cats={};S.pages={};S.item=null;S.episodes=null;S.views={};S.aiTurns=[];
+  S.selected=null;S.livePreview=null;S.listingInflight={};S.catsInflight={}
+ }
+ return true
+}
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 function enc(s){return encodeURIComponent(String(s==null?'':s))}
 function urlPic(raw){if(Array.isArray(raw))raw=raw[0];if(typeof raw!=='string')return '';var s=raw.trim();if(!/^https?:\/\/[^\s<>]+$/i.test(s))return '';if(/[?&](username|password|token|api_key|auth)=/i.test(s))return '';if(s.slice(0,5)==='http:')s='https:'+s.slice(5);return s}
@@ -43,6 +59,9 @@ function deviceKey(){
 }
 function login(message){
  cleanupPlayer();S.route='login';S.userVerified=false;S.history=[];
+ S.profileKey='';S.library={};S.watch={};S.favoriteItems={};S.recentSearches=[];
+ S.loaded={};S.cats={};S.pages={};S.item=null;S.episodes=null;S.views={};S.aiTurns=[];
+ S.listingInflight={};S.catsInflight={};S.selected=null;S.livePreview=null;
  app.innerHTML='<div class="login-screen screen-appear"><div class="login-panel">'+
  '<div class="login-brand">BLOFY<small>STREAM</small></div><p>أدخل كود BLOFY STREAM لعرض مكتبتك</p>'+
  '<input class="input" id="activation-code" placeholder="كود التفعيل" maxlength="24" inputmode="numeric" autocomplete="off" autofocus>'+
@@ -59,7 +78,8 @@ function redeem(){
  var btn=document.getElementById('redeem');btn.disabled=true;setStatus('جار التحقق من التفعيل…');
  api('POST','/api/redeem',{code:code,deviceKey:deviceKey()},function(st,r){
   btn.disabled=false;
-  if(st===200&&r.ok){S.userVerified=true;navigate('home',{},true)}
+  if(st===200&&r.ok&&useProfile(r.profileKey)){S.userVerified=true;navigate('home',{},true)}
+   else if(st===200&&r.ok){setStatus('تم التفعيل ولكن تعذر تهيئة البيانات المحلية للحساب. حاول تحديث الصفحة.',true)}
   else setStatus(st===409?'الكود مرتبط بجهاز مختلف':st===429?'محاولات كثيرة. جرّب لاحقًا.':'تعذّر تفعيل الاشتراك. تحقق من الكود والاتصال.',true)
  })
 }
@@ -421,7 +441,7 @@ function saveResume(kind,id,pos,duration,ready){
    for(var i=0;i<keys.length-160;i++)delete S.watch[keys[i]]
   }
  }
- writeJson('blofy_web_watch_v2',S.watch)
+ profileSave('watch',S.watch)
 }
 function details(o){
  var k=o.kind||S.kind,id=String(o.id||''),item=findItem(k,id)||o.item;
@@ -524,7 +544,7 @@ function searchScreen(){
   target.innerHTML=old.length?'<div class="row"><span class="small muted">عمليات البحث الأخيرة</span><button id="search-clear" class="chip">مسح</button></div>'+
    '<div class="search-recent-items">'+old.map(function(v){return '<button class="chip" data-recent-search="'+esc(v)+'">⌕ '+esc(v)+'</button>'}).join('')+'</div>':'';
   var clear=document.getElementById('search-clear');if(clear)clear.onclick=function(){
-   S.recentSearches=[];writeJson('blofy_web_recent_searches_v1',S.recentSearches);renderRecent()
+   S.recentSearches=[];profileSave('recentSearches',S.recentSearches);renderRecent()
   };
   var buttons=target.querySelectorAll('[data-recent-search]');
   for(var i=0;i<buttons.length;i++)buttons[i].onclick=function(){
@@ -548,7 +568,7 @@ function searchScreen(){
   var q=document.getElementById('search-input').value.trim().slice(0,75);
   if(q.length<2)return;
   S.recentSearches=[q].concat(S.recentSearches.filter(function(v){return v!==q})).slice(0,8);
-  writeJson('blofy_web_recent_searches_v1',S.recentSearches);
+  profileSave('recentSearches',S.recentSearches);
   renderRecent();
   var token=++S.searchToken;searchNow(q,token)
  }
@@ -1416,7 +1436,7 @@ function openPlayer(kind,id,extension,name,from){
   else startVod(Math.round(realPos()))
  };
  var restart=document.getElementById('player-restart');if(restart)restart.onclick=function(){
-  delete S.watch[progressKey(kind,id)];writeJson('blofy_web_watch_v2',S.watch);resume=0;
+  delete S.watch[progressKey(kind,id)];profileSave('watch',S.watch);resume=0;
   if(state.mode==='direct'&&video.seekable&&video.seekable.length){try{video.currentTime=0}catch(e){}}
   else if(state.mode==='fullvod'){try{video.currentTime=0}catch(e){startVod(0)}}
   else{state.ready=false;startVod(0)}
@@ -1554,8 +1574,8 @@ function clickHandler(event){
     S.favoriteItems[fav]=record
    }
   }else delete S.favoriteItems[fav];
-  writeJson('blofy_web_favorites_v2',S.library);
-  writeJson('blofy_web_favorite_items_v1',S.favoriteItems);
+  profileSave('favorites',S.library);
+  profileSave('favoriteItems',S.favoriteItems);
   if(S.route==='detail'&&S.item)details({kind:S.item.kind,id:S.item.id});else favoritesScreen();
   return
  }
@@ -1641,7 +1661,7 @@ document.addEventListener('visibilitychange',function(){
  if(document.hidden)persistPlaybackCheckpoint()
 });
 api('GET','/api/session',null,function(st,json){
- if(st===200&&json.active){S.userVerified=true;navigate('home',{},true);setTimeout(checkCatalogVersion,25000)}
+ if(st===200&&json.active&&useProfile(json.profileKey)){S.userVerified=true;navigate('home',{},true);setTimeout(checkCatalogVersion,25000)}
  else login('أدخل كود اشتراك BLOFY STREAM للتفعيل')
 });
 setInterval(checkCatalogVersion,10*60*1000);
