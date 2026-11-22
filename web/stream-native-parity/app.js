@@ -728,7 +728,16 @@ function formatTime(seconds){seconds=Math.max(0,Math.floor(Number(seconds)||0));
 
 function diagnose(kind,phase,mode,code){
  if(!S.userVerified)return;
- var payload={kind:kind==='live'?'live':kind==='series'?'series':'movie',mode:mode||'direct',phase:phase,errorCode:Math.max(0,Math.min(9,Number(code)||0))};
+ var p=S.playerView;
+ var actualMode=p&&p.kind===kind?p.mode:mode||'direct';
+ if(['direct','audio','video','fullvod','vodhls','hls','mpegts'].indexOf(actualMode)<0)actualMode=mode||'video';
+ var itemId=p&&p.kind===kind?p.id:kind==='live'?S.selected:'';
+ var video=p&&p.kind===kind?p.video:null;
+ var position=p&&p.kind===kind?(p.mode==='vodhls'?p.offset:0)+Number(video&&video.currentTime||0):0;
+ var payload={kind:kind==='live'?'live':kind==='series'?'series':'movie',
+  mode:actualMode,phase:phase,errorCode:Math.max(0,Math.min(9,Number(code)||0)),
+  itemId:String(itemId||''),position:Math.max(0,Math.round(position)),
+  duration:Math.max(0,Math.round(Number(p&&p.duration)||0))};
  api('POST','/api/player-diagnostic',payload,function(){})
 }
 
@@ -884,6 +893,7 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
  stopPlayback(!sameSession);
  var rec={video:video,kind:kind,id:id,preview:false,engine:null,stopUrl:path+'/stop',hlsKey:null,ready:false,timer:null};
  S.play=rec;state.mode='fullvod';state.offset=0;state.duration=seconds;state.ready=false;
+ diagnose(kind,'vod_full_start','fullvod',0);
  video.autoplay=true;video.muted=false;video.defaultMuted=false;video.controls=false;
  playerStatus('جار فتح الفيلم الكامل مع التقديم والترجيع…');
  function alive(){return S.route==='player'&&S.play===rec}
@@ -968,6 +978,7 @@ function playVodSegments(video,kind,id,ext,track,start,state,ready){
  state.mode='vodhls';state.offset=at;state.didResume=true;
  var rec={video:video,kind:kind,id:id,preview:false,engine:null,stopUrl:'/api/vod/'+key+'/stop',hlsKey:null,ready:false,started:Date.now(),timer:null};
  S.play=rec;
+ diagnose(kind,'vod_fallback','vodhls',0);
  playerStatus('جار فتح الفيلم من '+formatTime(at)+' بصيغة H.264 / AAC…');
  video.autoplay=true;video.muted=false;video.defaultMuted=false;video.controls=false;
  function alive(){return S.play===rec&&S.route==='player'}
@@ -1219,6 +1230,7 @@ function openPlayer(kind,id,extension,name,from){
  document.getElementById('player-back').onclick=closePlayer;
  document.getElementById('player-toggle').onclick=state.toggle;
  document.getElementById('player-retry').onclick=function(){
+  diagnose(kind,'vod_retry',state.mode,0);
   playerStatus('جار إعادة اتصال المشغّل…');
   if(isLive)playHls(video,kind,id,'ts',0,document.getElementById('player-status'),false);
   else startVod(Math.round(realPos()))
