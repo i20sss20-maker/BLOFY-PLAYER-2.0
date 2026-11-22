@@ -1,4 +1,4 @@
-import { createCipheriv,createDecipheriv,randomBytes } from 'node:crypto';
+import { createCipheriv,createDecipheriv,createHmac,randomBytes } from 'node:crypto';
 const HTML=await Bun.file(new URL('./index.html',import.meta.url)).text()
 const ORIGIN='https://blofyplayer.com';
 const KEY_HEX=String(Bun.env.VIDAA_SESSION_KEY||'');
@@ -101,8 +101,16 @@ if(p==='/api/ai/interpret'&&method==='POST'){
 if(p==='/api/player-diagnostic'&&method==='POST'){
  let data;try{if(Number(req.headers.get('content-length')||0)>700)return json(413,{error:'too_large'});data=await req.json()}catch{return json(400,{error:'invalid_diagnostic'})}
  const kind=String(data?.kind||''),mode=String(data?.mode||''),phase=String(data?.phase||''),errorCode=Number(data?.errorCode)||0;
- if(!['live','movie','series'].includes(kind)||!['direct','audio','video'].includes(mode)||!['media_error','mpegts_error','startup_timeout','play_rejected','hls_error'].includes(phase)||errorCode<0||errorCode>9)return json(400,{error:'invalid_diagnostic'});
- console.info('BLOFY_VIDAA_PLAYBACK_DIAG',{kind,mode,phase,errorCode});
+ if(!['live','movie','series'].includes(kind)||
+  !['direct','audio','video','fullvod','vodhls','hls','mpegts'].includes(mode)||
+  !['media_error','mpegts_error','startup_timeout','play_rejected','hls_error','vod_fallback','vod_full_start','vod_retry'].includes(phase)||
+  errorCode<0||errorCode>9)return json(400,{error:'invalid_diagnostic'});
+ const rawId=String(data?.itemId||'');
+ const itemRef=/^[1-9][0-9]{0,14}$/.test(rawId)&&KEY?
+  createHmac('sha256',KEY).update(kind+':'+rawId).digest('hex').slice(0,12):null;
+ const pos=Math.max(0,Math.min(21600,Math.round(Number(data?.position)||0)));
+ const duration=Math.max(0,Math.min(21600,Math.round(Number(data?.duration)||0)));
+ console.info('BLOFY_VIDAA_PLAYBACK_DIAG',{kind,mode,phase,errorCode,itemRef,position:pos,duration});
  return json(200,{ok:true});
 }
 if(p==='/api/session'&&method==='GET'){
