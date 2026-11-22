@@ -285,6 +285,7 @@ function buildCatalog(kind,listing){
   '<div style="margin-top:20px;text-align:center"><button class="btn secondary" data-more="'+kind+'" '+(!listing.hasMore?'disabled':'')+'>عرض المزيد</button></div></section></div>';
   enrichPosters(kind,sorted.slice(0,10))
  }
+ bindMoreOnScroll(kind);
  restoreView(kind)
 }
 function enrichPosters(kind,source){
@@ -335,13 +336,53 @@ function beginPreview(item){
  playHls(video,'live',id,'ts',0,box,true)
 }
 function loadMore(kind){
- var c=S.cat[kind]||'all',key=keyOf(kind,c),listing=S.loaded[key];
- if(!listing||!listing.hasMore)return;
- var btn=document.querySelector('[data-more="'+kind+'"]');if(btn){btn.disabled=true;btn.innerText='جار التحميل…'}
- pageRequest(kind,c,listing.nextOffset||listing.items.length,36,function(st,result){
-  if(st===200&&result&&S.route===kind){listing.items=listing.items.concat(result.items);listing.nextOffset=result.nextOffset;listing.hasMore=result.hasMore;buildCatalog(kind,listing)}
-  else if(btn){btn.disabled=false;btn.innerText='تعذر التحميل، حاول مرة أخرى'}
+ var cat=S.cat[kind]||'all',key=keyOf(kind,cat),listing=S.loaded[key];
+ if(!listing||!listing.hasMore||listing.loadingMore)return;
+ listing.loadingMore=true;
+ var btn=document.querySelector('[data-more="'+kind+'"]');
+ if(btn){btn.disabled=true;btn.textContent='جار تحميل المزيد…'}
+ pageRequest(kind,cat,listing.nextOffset||listing.items.length,36,function(st,result){
+  listing.loadingMore=false;
+  if(st!==200||!result||S.route!==kind||(S.cat[kind]||'all')!==cat){
+   if(btn&&S.route===kind){btn.disabled=false;btn.textContent='تعذر التحميل، حاول مرة أخرى'}
+   return
+  }
+  var seen={};for(var i=0;i<listing.items.length;i++)seen[itemId(listing.items[i],kind)]=true;
+  var next=result.items.filter(function(item){var id=itemId(item,kind);if(seen[id])return false;seen[id]=true;return true});
+  listing.items=listing.items.concat(next);listing.nextOffset=result.nextOffset;
+  listing.hasMore=!!result.hasMore&&next.length>0;
+  var list=kind==='live'?document.getElementById('channel-list'):(S.sort==='source'?document.querySelector('.poster-panel .poster-grid'):null);
+  if(!list){buildCatalog(kind,listing);return}
+  // Incremental append keeps the existing focus, scroll position and live preview player.
+  if(kind==='live'){
+   list.insertAdjacentHTML('beforeend',next.map(function(item){
+    var id=itemId(item,'live'),pic=art(item);
+    return '<button class="channel-item" data-channel="'+esc(id)+'">'+(pic?safeImg(pic,'channel-image'):'<span class="channel-image"></span>')+
+      '<span class="channel-name"><strong>'+esc(title(item))+'</strong><small>شاهد الآن</small></span><span class="accent">▶</span></button>'
+   }).join(''))
+  }else{
+   list.insertAdjacentHTML('beforeend',next.map(function(item){return posterCard(item,kind)}).join(''));
+   enrichPosters(kind,next.slice(0,8))
+  }
+  var count=document.querySelector(kind==='live'?'.channels .pane-head small':'.poster-panel-header small');
+  if(count)count.textContent=listing.items.length+(kind==='live'?' قناة محمّلة':' عنوان محمّل • تصفح الملصقات');
+  if(btn){btn.disabled=!listing.hasMore;btn.textContent=listing.hasMore?'عرض المزيد':'تم عرض المحتوى'}
  })
+}
+function bindMoreOnScroll(kind){
+ var panel=document.querySelector(kind==='live'?'#channel-list':'.poster-panel');
+ if(!panel)return;
+ var queued=false;
+ panel.addEventListener('scroll',function(){
+  if(queued||S.route!==kind)return;
+  queued=true;
+  setTimeout(function(){
+   queued=false;
+   if(S.route!==kind||panel.scrollHeight-panel.scrollTop-panel.clientHeight>480)return;
+   var button=document.querySelector('[data-more="'+kind+'"]');
+   if(button&&!button.disabled)loadMore(kind)
+  },130)
+ },{passive:true})
 }
 function progressKey(k,id){return k+':'+id}
 function getResume(k,id){return S.watch[progressKey(k,id)]||null}
@@ -380,6 +421,7 @@ function details(o){
   '<div class="detail-actions">'+buttons+'</div>'+
   (hasResume?'<div class="detail-stat">آخر مشاهدة: '+formatTime(resume.position)+(resume.duration?' من '+formatTime(resume.duration):'')+'</div>'+(resume.duration?'<span class="progress-meter"><i style="width:'+Math.round(resume.position/resume.duration*100)+'%"></i></span>':''):'')+
   '</div></div><section id="related-root"></section>';
+  restoreView('detail');
  }
  show();
  var endpoint=k==='movie'?'get_vod_info&vod_id=':'get_series_info&series_id=';
