@@ -10,6 +10,12 @@ function unseal(s){try{if(!KEY||!s)return null;const v=Buffer.from(s,'base64url'
 function token(req){const m=String(req.headers.get('cookie')||'').match(/(?:^|;\s*)bv_session=([^;]+)/);return m?unseal(m[1]):null}
 function auth(req){const t=token(req);return t?{'Authorization':'Bearer '+t,'Accept':'application/json','Cache-Control':'no-store'}:null}
 function noCache(extra={}){return {'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer',...extra}}
+function normalizeSearch(text){
+ return String(text||'').toLowerCase().normalize('NFKC')
+  .replace(/[\u064b-\u065f\u0670\u0640]/g,'')
+  .replace(/[\u0622\u0623\u0625\u0671]/g,'ا')
+  .replace(/\u0649/g,'ي').replace(/\u0624/g,'و').replace(/\u0626/g,'ي')
+}
 const allowed=new Set(['get_live_categories','get_live_streams','get_vod_categories','get_vod_streams','get_series_categories','get_series','get_vod_info','get_series_info','get_short_epg','get_blofy_catalog_version']);
 const server=Bun.serve({port:Number(Bun.env.PORT||3000),idleTimeout:255,async fetch(req){
 const u=new URL(req.url);const p=u.pathname;const method=req.method;
@@ -106,15 +112,19 @@ if(p==='/api/session'&&method==='GET'){
 if(p==='/api/page'&&method==='GET'){
  const k=u.searchParams.get('kind'),action=k==='live'?'get_live_streams':k==='movie'?'get_vod_streams':k==='series'?'get_series':null;
  if(!action)return json(400,{error:'invalid_kind'});
- const cat=u.searchParams.get('category_id')||'',query=(u.searchParams.get('query')||'').trim().toLowerCase().slice(0,75);
+ const cat=u.searchParams.get('category_id')||'',query=normalizeSearch((u.searchParams.get('query')||'').trim().slice(0,75));
  if(cat&&!/^[0-9]{1,18}$/.test(cat))return json(400,{error:'invalid_category'});
  const offset=Math.max(0,Math.min(10000,parseInt(u.searchParams.get('offset')||'0',10)||0));
  const limit=Math.max(1,Math.min(48,parseInt(u.searchParams.get('limit')||'30',10)||30));
  const target=new URL(ORIGIN+'/player_api.php');target.searchParams.set('action',action);
  if(cat)target.searchParams.set('category_id',cat);
  let upstream=null,reader=null;
+ const controller=new AbortController();
+ const timer=setTimeout(()=>controller.abort(),100000);
+ const abort=()=>controller.abort();
+ req.signal.addEventListener('abort',abort,{once:true});
  try{
-  upstream=await fetch(target,{headers:{...h,'accept-encoding':'identity'},redirect:'manual',signal:AbortSignal.timeout(100000)});
+  upstream=await fetch(target,{headers:{...h,'accept-encoding':'identity'},redirect:'manual',signal:controller.signal});
   if(!upstream.ok||!upstream.body)return json(upstream.status>=400?upstream.status:502,{error:'catalog_unavailable'});
   reader=upstream.body.getReader();
   const decoder=new TextDecoder(),matches=[];
@@ -141,7 +151,7 @@ if(p==='/api/page'&&method==='GET'){
     capturing=false;
     try{
      const item=JSON.parse(textBuffer);
-     if((!cat||String(item.category_id||'')===cat)&&(!query||String(item.name||item.title||'').toLowerCase().includes(query))){
+     if((!cat||String(item.category_id||'')===cat)&&(!query||normalizeSearch(item.name||item.title||'').includes(query))){
       if(matched>=offset){
        if(matches.length>=limit){hasMore=true;done=true;break}
        matches.push(item);
@@ -155,6 +165,7 @@ if(p==='/api/page'&&method==='GET'){
   try{await reader.cancel()}catch(e){}
   return json(200,{items:matches,hasMore,nextOffset:offset+matches.length,kind:k});
  }catch(e){try{await reader?.cancel()}catch{};return json(502,{error:'catalog_page_failed'})}
+ finally{clearTimeout(timer);req.signal.removeEventListener('abort',abort)}
 }
 
 if(p==='/api/catalog'&&method==='GET'){
