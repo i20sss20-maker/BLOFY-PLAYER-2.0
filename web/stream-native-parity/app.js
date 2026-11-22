@@ -761,7 +761,10 @@ function stopPlayback(sendStop){
  if(sendStop!==false&&(old.hlsKey||old.stopUrl))api('POST',old.stopUrl||'/api/hls/'+old.hlsKey+'/stop',{},function(){})
 }
 function cleanupPlayer(){
- if(S.playerView&&S.playerView.directTimer){clearTimeout(S.playerView.directTimer);S.playerView.directTimer=null}
+ if(S.playerView){
+  if(S.playerView.directTimer){clearTimeout(S.playerView.directTimer);S.playerView.directTimer=null}
+  if(S.playerView.directSeekCheck){clearTimeout(S.playerView.directSeekCheck);S.playerView.directSeekCheck=null}
+ }
  stopPlayback(true)
 }
 function playerStatus(message,error){
@@ -1159,6 +1162,9 @@ function openPlayer(kind,id,extension,name,from){
  state.recoverDirect=function(){
   if(state.mode!=='direct'||S.route!=='player'||state.directFallback)return;
   state.directFallback=true;
+  if(state.directSeekCheck){clearTimeout(state.directSeekCheck);state.directSeekCheck=null}
+  if(state.directTimer){clearTimeout(state.directTimer);state.directTimer=null}
+  if(isFinite(video.duration)&&video.duration>120&&video.duration<=21600)state.duration=Math.round(video.duration);
   var position=Math.max(resume,video.currentTime||0);
   playerStatus('جار فتح مصدر متوافق لتقديم الفيلم…');
   startVod(position)
@@ -1168,7 +1174,25 @@ function openPlayer(kind,id,extension,name,from){
   video.src='/api/media/'+enc(kind)+'/'+enc(id)+'.'+enc(ext);
   try{var ret=video.play();if(ret&&ret.catch)ret.catch(function(){playerStatus('اضغط ▶ لتشغيل الفيديو')})}catch(e){}
  }
- video.onloadedmetadata=function(){if(state.mode==='direct'){progress();if(state.directTimer)clearTimeout(state.directTimer)}};
+ video.onloadedmetadata=function(){
+  if(state.mode!=='direct')return;
+  if(state.directTimer){clearTimeout(state.directTimer);state.directTimer=null}
+  if(isFinite(video.duration)&&video.duration>120&&video.duration<=21600)state.duration=Math.round(video.duration);
+  progress();
+  // HTML5 can decode MP4 yet have NO seekable byte ranges: in that case the
+  // film looks like live streaming. Try the full VOD engine automatically.
+  if(state.directSeekCheck)clearTimeout(state.directSeekCheck);
+  state.directSeekCheck=setTimeout(function(){
+   state.directSeekCheck=null;
+   if(S.route!=='player'||state.mode!=='direct'||state.directFallback||isLive)return;
+   if(!(video.duration>120&&isFinite(video.duration)))return;
+   var ranges=video.seekable;
+   if(!ranges||ranges.length===0){
+    playerStatus('المصدر يعمل دون تقديم؛ جار التحويل إلى مشغّل الأفلام الكامل…');
+    state.recoverDirect()
+   }
+  },3500)
+ };
  video.onwaiting=video.onstalled=function(){
   if(state.mode!=='direct'||video.paused||state.directFallback||!S.userVerified)return;
   playerStatus('جار تعبئة مخزن الفيديو…');
