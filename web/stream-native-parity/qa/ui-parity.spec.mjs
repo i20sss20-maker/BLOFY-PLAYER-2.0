@@ -66,6 +66,7 @@ test('live screen has three panes and channel click selects video without page c
 test('VOD MP4 can open real HTML5 media; restart-from-zero overrides stored position',async({page})=>{
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  const mp4=readFileSync('/tmp/blofy-qa-test.mp4');
+ const network=[];page.on('response',r=>{if(/api\/(?:vod|media)/.test(r.url()))network.push({url:r.url().split('?')[0],status:r.status()})});page.on('requestfailed',r=>{if(/api\/(?:vod|media)/.test(r.url()))network.push({url:r.url().split('?')[0],failed:r.failure()})});
  await page.route('**/api/media/movie/11.mp4',async route=>{
   const range=route.request().headers()['range'];let start=0,end=mp4.length-1,status=200;
   if(range){const m=range.match(/bytes=(\d+)-(\d*)/);if(m){start=Number(m[1]);end=m[2]?Math.min(Number(m[2]),end):end;status=206}}
@@ -77,7 +78,10 @@ test('VOD MP4 can open real HTML5 media; restart-from-zero overrides stored posi
  await page.locator('[data-details="movie:11"]').click();
  await page.locator('[data-watch="movie:11"]').first().click();
  await expect(page.locator('#player-root')).toBeVisible();
- await expect.poll(()=>page.locator('video').evaluate(v=>v.readyState)).toBeGreaterThan(0);
+ await page.waitForTimeout(1100);
+ console.log('BLOFY QA VIDEO STATE',JSON.stringify(await page.locator('#player-media').evaluate(v=>({src:v.currentSrc,ready:v.readyState,network:v.networkState,error:v.error&&{code:v.error.code,message:v.error.message},duration:v.duration,paused:v.paused,seekable:v.seekable.length}))));
+ console.log('BLOFY QA MEDIA REQUESTS',JSON.stringify(network));
+ await expect.poll(()=>page.locator('video').evaluate(v=>v.readyState),{timeout:5000}).toBeGreaterThan(0);
  await page.locator('#player-restart').click();
  await expect(page.locator('#player-root')).toBeVisible();
  await page.locator('#player-back').click();
