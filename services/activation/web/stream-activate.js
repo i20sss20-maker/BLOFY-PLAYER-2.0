@@ -147,14 +147,22 @@
     'انقطع الاتصال. ربما اكتمل التفعيل دون وصول النتيجة؛ تحقّق من حسابك قبل إعادة المحاولة.');
   }finally{pending=false;button.disabled=false;}
  });
+ // "نسخ بيانات Xtream" is only the three fields a player asks for.
+ // The M3U playlist URL is a separate choice: never append it to copy-all.
  $('copy-all').addEventListener('click',async()=>{
   if(!credentials||section.classList.contains('hide'))return;
   try{
    await navigator.clipboard.writeText('Host: '+credentials.serverUrl+
-    '\nUsername: '+credentials.username+'\nPassword: '+credentials.password+
-    '\nM3U: '+credentials.m3uUrl);
-   show('✓ تم نسخ بيانات Xtream. لا تشاركها إلا مع صاحب الاشتراك.',true);
+    '\nUsername: '+credentials.username+'\nPassword: '+credentials.password);
+   show('✓ تم نسخ Host واسم المستخدم وكلمة المرور فقط، بدون رابط M3U.',true);
   }catch{show('تعذر النسخ التلقائي؛ انسخ كل حقل على حدة.');}
+ });
+ $('copy-m3u').addEventListener('click',async()=>{
+  if(!credentials||section.classList.contains('hide')||!credentials.m3uUrl)return;
+  try{
+   await navigator.clipboard.writeText(credentials.m3uUrl);
+   show('✓ تم نسخ رابط M3U وحده، بدون بيانات Xtream المنفصلة.',true);
+  }catch{show('تعذر نسخ رابط M3U تلقائيًا؛ استخدم زر النسخ بجانب الرابط.');}
  });
  $('hide-result').addEventListener('click',hideSecrets);
  document.addEventListener('visibilitychange',()=>{if(document.hidden)hideSecrets();});
