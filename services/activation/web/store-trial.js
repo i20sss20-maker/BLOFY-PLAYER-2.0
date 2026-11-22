@@ -47,6 +47,8 @@
  function showOwned(trial){
   if(!trial||typeof trial.code!=='string')return;
   owned=trial;
+  $('trial-marketing-result-opt-in').checked=trial.marketingOptIn===true;
+  $('trial-marketing-consent').hidden=true;
   $('trial-result-code').textContent=trial.code;
   $('trial-result-channel').textContent=trial.channel==='app'?'BLOFY STREAM':'Xtream';
   $('trial-result-message').textContent=trial.alreadyClaimed?
@@ -110,7 +112,7 @@
   busy=true;buttons(false);notice('جارٍ تخصيص كود تجريبي لحسابك...');
   try{
    const result=await api('/api/v1/store/trials/claim',{
-    method:'POST',body:JSON.stringify({sku})
+    method:'POST',body:JSON.stringify({sku,marketingOptIn:$('trial-marketing-opt-in').checked===true})
    });
    if(result.ok&&result.code)showOwned(result);
    else notice('لم يتم تأكيد تخصيص الكود؛ راجع الحساب أو تواصل مع الدعم.','error');
@@ -124,6 +126,27 @@
  }
  document.querySelectorAll('[data-trial-claim]').forEach(b=>
   b.addEventListener('click',()=>void claim(b.dataset.trialClaim)));
+ $('trial-marketing-save').addEventListener('click',async()=>{
+  if(!owned||busy)return;
+  const selected=$('trial-marketing-result-opt-in').checked===true;
+  const button=$('trial-marketing-save'),message=$('trial-marketing-status');
+  button.disabled=true;
+  message.textContent='جارٍ حفظ اختيارك…';
+  try{
+   const updated=await api('/api/v1/store/trials/contact-preferences',{
+    method:'POST',body:JSON.stringify({marketingOptIn:selected})
+   });
+   if(updated.ok!==true||updated.marketingOptIn!==selected)
+    throw Error('تعذر تأكيد حفظ التفضيل.');
+   owned.marketingOptIn=selected;
+   message.textContent=selected?
+    '✓ تم حفظ موافقتك الاختيارية على عروض BLOFY. يمكنك إيقافها في أي وقت.':
+    '✓ تم إلغاء موافقتك على رسائل العروض.';
+  }catch(error){
+   $('trial-marketing-result-opt-in').checked=owned?.marketingOptIn===true;
+   message.textContent='تعذر حفظ التفضيل: '+error.message;
+  }finally{button.disabled=false;}
+ });
  $('trial-copy').addEventListener('click',async()=>{
   const code=$('trial-result-code').textContent;
   if(!code)return;
