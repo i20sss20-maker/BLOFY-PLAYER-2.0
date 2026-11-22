@@ -906,7 +906,7 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
  var sameSession=!!(S.play&&S.play.stopUrl===path+'/stop');
  state.ready=false;
  stopPlayback(!sameSession);
- var rec={video:video,kind:kind,id:id,preview:false,engine:null,stopUrl:path+'/stop',hlsKey:null,ready:false,timer:null};
+ var rec={video:video,kind:kind,id:id,preview:false,engine:null,stopUrl:path+'/stop',hlsKey:null,ready:false,timer:null,stallTimer:null,pendingRecovery:false};
  S.play=rec;state.mode='fullvod';state.offset=0;state.duration=seconds;state.ready=false;
  diagnose(kind,'vod_full_start','fullvod',0);
  video.autoplay=true;video.muted=false;video.defaultMuted=false;video.controls=false;
@@ -915,7 +915,36 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
  function fail(msg){
   if(!alive())return;
   if(rec.timer)clearTimeout(rec.timer);
+  if(rec.stallTimer)clearTimeout(rec.stallTimer);
   playerStatus(msg,true)
+ }
+ function recoverFilm(){
+  if(!alive()||rec.pendingRecovery)return;
+  var now=Date.now();
+  if(!state.fullRecoveryStart||now-state.fullRecoveryStart>180000){
+   state.fullRecoveryStart=now;state.fullRecoveryCount=0
+  }
+  if((state.fullRecoveryCount||0)>=2){
+   fail('المصدر توقف عدة مرات. تم حفظ مكانك؛ استخدم إعادة المحاولة أو اختر محتوى آخر.');
+   return
+  }
+  rec.pendingRecovery=true;state.fullRecoveryCount++;
+  var resumeAt=Math.max(0,Math.floor(video.currentTime||state.resume||0)-1);
+  if(state.ready)saveResume(kind,id,resumeAt,seconds,true);
+  state.resume=resumeAt;
+  diagnose(kind,'vod_retry','fullvod',0);
+  playerStatus('انقطع المصدر مؤقتًا؛ جار استكمال الفيلم من '+formatTime(resumeAt)+'…');
+  setTimeout(function(){
+   if(alive())playFullVod(video,kind,id,ext,track,seconds,state,ready)
+  },Math.min(1800,state.fullRecoveryCount*650))
+ }
+ function checkStall(){
+  if(!alive()||video.paused)return;
+  if(rec.stallTimer)clearTimeout(rec.stallTimer);
+  rec.stallTimer=setTimeout(function(){
+   rec.stallTimer=null;
+   if(alive()&&!video.paused&&video.readyState<3)recoverFilm()
+  },13000)
  }
  rec.timer=setTimeout(function(){
   if(alive()&&!rec.ready)playerStatus('جار تجهيز الفيديو من المصدر…')
@@ -923,10 +952,13 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
  video.onplaying=function(){
   if(!alive())return;
   rec.ready=true;if(rec.timer)clearTimeout(rec.timer);
+  if(rec.stallTimer){clearTimeout(rec.stallTimer);rec.stallTimer=null}
   ready()
  };
- video.onwaiting=function(){
-  if(alive()&&rec.ready)playerStatus('جار تحميل الجزء المطلوب من الفيلم…')
+ video.onwaiting=video.onstalled=function(){
+  if(!alive()||video.paused)return;
+  playerStatus('جار تحميل الجزء المطلوب من الفيلم…');
+  checkStall()
  };
  video.onended=function(){
   if(!alive())return;
@@ -934,8 +966,9 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
   playerStatus('اكتملت المشاهدة')
  };
  video.onerror=function(){
+  if(!alive())return;
   diagnose(kind,'media_error','video',video.error&&video.error.code);
-  fail('تعذر تشغيل هذا المصدر كفيلم قابل للتقديم. المصدر قد لا يدعم الوصول إلى مواضع الملف.')
+  recoverFilm()
  };
  function attachNative(){
   video.src=playlist;
@@ -978,7 +1011,7 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
     diagnose(kind,'hls_error','video',0);
     if(recovery<1&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){recovery++;try{hls.startLoad()}catch(e){};return}
     if(recovery<1&&detail.type===window.Hls.ErrorTypes.MEDIA_ERROR){recovery++;try{hls.recoverMediaError()}catch(e){};return}
-    fail('فشل الوصول إلى جزء من الفيلم. قد يمنع المصدر التقديم إلى هذا الموضع. ارجع وحاول عنوانًا آخر.')
+    recoverFilm()
    });
    hls.attachMedia(video);hls.loadSource(playlist)
   }catch(e){fail('تعذر تهيئة مشغّل الأفلام')}
