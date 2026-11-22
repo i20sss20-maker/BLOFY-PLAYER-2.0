@@ -846,7 +846,7 @@ function durationSeconds(value,unit){
  return n>=1&&n<=21600?Math.round(n):0
 }
 function knownDuration(kind,id,item){
- var opts=[],movieResponse=kind==='movie'&&S.item&&S.item.info,
+ var opts=[],movieResponse=kind==='movie'&&S.item&&S.item.kind==='movie'&&String(S.item.id)===String(id)&&S.item.info,
  movieInfo=movieResponse&&movieResponse.info,movieData=movieResponse&&movieResponse.movie_data;
  // Episode-specific duration must win over a series' parent metadata.
  if(kind==='series'&&S.episodes&&S.episodes.episodes){
@@ -1107,8 +1107,12 @@ function openPlayer(kind,id,extension,name,from){
   var settled=false;
   function launch(){if(settled||S.route!=='player')return;settled=true;startVod(at)}
   var timeout=setTimeout(launch,4200);
+  var episodeParent=kind==='series'&&(
+   (prior&&prior.seriesId)||
+   (S.item&&S.item.kind==='series'&&S.episodes&&parseEpisodes(S.episodes).some(function(ep){return String(ep.id)===String(id)})?S.item.id:'')
+  );
   var endpoint=kind==='movie'?'get_vod_info&vod_id='+enc(id):
-   (kind==='series'&&S.item&&S.item.id?'get_series_info&series_id='+enc(S.item.id):'');
+   (kind==='series'&&episodeParent?'get_series_info&series_id='+enc(episodeParent):'');
   if(!endpoint){clearTimeout(timeout);launch();return}
   playerStatus('جار قراءة معلومات الفيلم لتفعيل التقديم والترجيع…');
   api('GET','/api/catalog?action='+endpoint,null,function(st,result){
