@@ -1035,7 +1035,20 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
    var recovery=0;
    hls.on(window.Hls.Events.ERROR,function(event,detail){
     if(!alive()||!detail||!detail.fatal)return;
+    var status=Number(detail.response&&detail.response.code||detail.networkDetails&&detail.networkDetails.status||0);
     diagnose(kind,'hls_error','video',0);
+    if(status===416){
+     fail('مصدر هذا الفيلم لا يدعم الوصول إلى الجزء المطلوب. التقديم يحتاج ملفًا يدعم القراءة العشوائية؛ إعادة المحاولة لن تصلح المصدر.');
+     return
+    }
+    if(status===401||status===403){
+     fail('تعذر تفويض الوصول إلى ملف الفيلم. تحقق من اشتراكك ثم أعد فتح المحتوى.');
+     return
+    }
+    if(status===429){
+     fail('خادم معالجة الفيديو مشغول حاليًا. تم حفظ مكان المشاهدة؛ حاول لاحقًا.');
+     return
+    }
     if(recovery<1&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){recovery++;try{hls.startLoad()}catch(e){};return}
     if(recovery<1&&detail.type===window.Hls.ErrorTypes.MEDIA_ERROR){recovery++;try{hls.recoverMediaError()}catch(e){};return}
     recoverFilm()
