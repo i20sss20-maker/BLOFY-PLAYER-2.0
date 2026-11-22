@@ -821,7 +821,7 @@ function clickHandler(event){
  if(node.getAttribute('data-sort')){S.sort=S.sort==='source'?'new':S.sort==='new'?'alpha':'source';buildCatalog(S.kind,currentListing());return}
  if(ep){navigate('episodes',{id:ep});return}
  if(season){S.selectedSeason=season;episodesScreen({id:S.item&&S.item.id});return}
- if(fav){S.library[fav]=!S.library[fav];writeJson('blofy_web_favorites_v2',S.library);if(S.route==='detail'&&S.item)details({kind:S.item.kind,id:S.item.id});else favoritesScreen();return}
+ if(fav){rememberView();S.library[fav]=!S.library[fav];writeJson('blofy_web_favorites_v2',S.library);if(S.route==='detail'&&S.item)details({kind:S.item.kind,id:S.item.id});else favoritesScreen();return}
  if(watch){var a=watch.split(':'),kind=a[0],id=a[1],it=findItem(kind,id),ext=node.getAttribute('data-ext')||(it&&it.container_extension)||'mp4',name=node.getAttribute('data-name')||title(it);openPlayer(kind,id,ext,name,Number(node.getAttribute('data-from'))||0);return}
  if(node.hasAttribute('data-preview-play')){var x=findItem('live',S.selected);if(x)beginPreview(x);return}
  if(node.hasAttribute('data-preview-full')){var live=findItem('live',S.selected);if(live)openPlayer('live',S.selected,'ts',title(live),0);return}
@@ -877,7 +877,18 @@ function directional(e){
   e.preventDefault()
  }
 }
-document.addEventListener('pointerdown',function(){S.keyboardMode=false},true);
+document.addEventListener('pointerdown',function(){
+ S.keyboardMode=false;
+ var old=document.querySelector('.remote-focus');if(old)old.classList.remove('remote-focus')
+},true);
+document.addEventListener('focusin',function(e){
+ var old=document.querySelector('.remote-focus');
+ if(old&&old!==e.target)old.classList.remove('remote-focus');
+ if(S.keyboardMode&&e.target&&e.target.classList)e.target.classList.add('remote-focus')
+},true);
+document.addEventListener('focusout',function(e){
+ if(e.target&&e.target.classList)e.target.classList.remove('remote-focus')
+},true);
 document.addEventListener('click',clickHandler,false);
 document.addEventListener('keydown',directional,false);
 window.addEventListener('beforeunload',function(){
