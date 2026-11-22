@@ -907,7 +907,7 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
  state.ready=false;
  stopPlayback(!sameSession);
  var rec={video:video,kind:kind,id:id,preview:false,engine:null,stopUrl:path+'/stop',hlsKey:null,ready:false,timer:null,stallTimer:null,pendingRecovery:false};
- S.play=rec;state.mode='fullvod';state.offset=0;state.duration=seconds;state.ready=false;
+ S.play=rec;state.mode='fullvod';state.offset=0;state.duration=seconds;state.ready=false;state.didResume=false;
  diagnose(kind,'vod_full_start','fullvod',0);
  video.autoplay=true;video.muted=false;video.defaultMuted=false;video.controls=false;
  playerStatus('جار فتح الفيلم الكامل مع التقديم والترجيع…');
