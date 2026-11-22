@@ -8,7 +8,7 @@
 var app=document.getElementById('app');
 var S={route:'boot',kind:'movie',cat:{live:'all',movie:'all',series:'all'},cats:{},pages:{},loaded:{},selected:null,livePreview:null,
  item:null,episodes:null,selectedSeason:'1',play:null,history:[],sort:'source',heroIndex:0,searchToken:0,requestNum:0,library:{},
- watch:{},favoriteItems:{},profileKey:'',host:'',userVerified:false,heading:'',loading:false,listingInflight:{},catsInflight:{},views:{},keyboardMode:false,refreshing:false,catalogVersion:null,lastCatalogCheck:0,aiTurns:[],aiBusy:false,aiToken:0,aiSearchTitle:null,searchRequests:[],searchKind:'all',recentSearches:[]};
+ watch:{},favoriteItems:{},profileKey:'',accountEpoch:0,host:'',userVerified:false,heading:'',loading:false,listingInflight:{},catsInflight:{},views:{},keyboardMode:false,refreshing:false,catalogVersion:null,lastCatalogCheck:0,aiTurns:[],aiBusy:false,aiToken:0,aiSearchTitle:null,searchRequests:[],searchKind:'all',recentSearches:[]};
 var NAV=[['home','⌂','الرئيسية'],['live','◉','البث المباشر'],['movie','▣','الأفلام'],['series','▤','المسلسلات'],['collections','▦','التصنيفات'],['favorites','♡','المفضلة'],['search','⌕','البحث'],['ai','✧','الذكاء الاصطناعي'],['settings','⚙','الإعدادات']];
 function readJson(key,backup){try{var value=JSON.parse(localStorage.getItem(key)||'null');return value||backup}catch(e){return backup}}
 function writeJson(key,val){try{localStorage.setItem(key,JSON.stringify(val))}catch(e){}}
@@ -17,6 +17,7 @@ function profileSave(name,value){if(S.profileKey)writeJson(profileStorageKey(nam
 function useProfile(id){
  if(!/^[a-f0-9]{24}$/.test(String(id||'')))return false;
  var changed=S.profileKey!==id;
+ if(changed)S.accountEpoch++;
  S.profileKey=id;
  S.library=readJson(profileStorageKey('favorites'),{});
  S.watch=readJson(profileStorageKey('watch'),{});
@@ -37,11 +38,16 @@ function kindName(k){return k==='live'?'البث المباشر':k==='movie'?'ا
 function itemId(x,k){return String(x?(k==='series'?(x.series_id||x.id):(x.stream_id||x.id))||'':'')}
 function findItem(k,id){var sets=[];var keys=Object.keys(S.loaded);for(var i=0;i<keys.length;i++)if(keys[i].indexOf(k+':')===0)sets.push(S.loaded[keys[i]].items||[]);for(var a=0;a<sets.length;a++)for(var b=0;b<sets[a].length;b++)if(itemId(sets[a][b],k)===id)return sets[a][b];return S.favoriteItems[k+':'+id]||null}
 function api(method,endpoint,payload,cb){
- var xhr=new XMLHttpRequest(),done=false;
+ var xhr=new XMLHttpRequest(),done=false,epoch=S.accountEpoch;
  try{xhr.open(method,endpoint,true);xhr.withCredentials=true;xhr.timeout=40000;
  xhr.setRequestHeader('Accept','application/json');if(method==='POST')xhr.setRequestHeader('Content-Type','application/json');
- xhr.onreadystatechange=function(){if(xhr.readyState===4&&!done){done=true;var json={};try{json=JSON.parse(xhr.responseText)}catch(e){}cb(xhr.status,json)}};
- xhr.onerror=xhr.ontimeout=function(){if(!done){done=true;cb(0,{error:'network_unavailable'})}};
+ xhr.onreadystatechange=function(){if(xhr.readyState===4&&!done){done=true;
+   if(epoch!==S.accountEpoch)return;
+   var json={};try{json=JSON.parse(xhr.responseText)}catch(e){}cb(xhr.status,json)
+  }};
+ xhr.onerror=xhr.ontimeout=function(){if(!done){done=true;
+   if(epoch===S.accountEpoch)cb(0,{error:'network_unavailable'})
+  }};
  xhr.send(payload?JSON.stringify(payload):null);
   return xhr
  }catch(e){cb(0,{error:'request_failed'});return null}
@@ -58,6 +64,7 @@ function deviceKey(){
  return key
 }
 function login(message){
+ S.accountEpoch++;
  cleanupPlayer();S.route='login';S.userVerified=false;S.history=[];
  S.profileKey='';S.library={};S.watch={};S.favoriteItems={};S.recentSearches=[];
  S.loaded={};S.cats={};S.pages={};S.item=null;S.episodes=null;S.views={};S.aiTurns=[];
