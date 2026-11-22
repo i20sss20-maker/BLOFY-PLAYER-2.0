@@ -25,6 +25,7 @@ function stopHls(session,reason){
  if(!session||session.stopped)return;session.stopped=true;
  if(session.idleTimer)clearTimeout(session.idleTimer);
  if(session.hardTimer)clearTimeout(session.hardTimer);
+ if(session.chunkTimer){clearTimeout(session.chunkTimer);session.chunkTimer=null}
  hlsSessions.delete(session.key);
  try{session.abort.abort()}catch{}
  try{session.proc?.kill()}catch{}
@@ -312,6 +313,7 @@ function fullVodChunk(session,first){
  if(!(seconds>0))return {status:416,error:'vod_out_of_bounds'};
  session.released=false;active++;
  session.finished=false;session.chunkStart=first;session.error=null;session.exitCode=null;
+ if(session.chunkTimer){clearTimeout(session.chunkTimer);session.chunkTimer=null}
  pruneFullVod(session,first);
  session.abort=new AbortController();
  const source='http://127.0.0.1:'+Number(Bun.env.PORT||3000)+'/_source/'+session.key;
@@ -331,6 +333,15 @@ function fullVodChunk(session,first){
  try{
   const proc=Bun.spawn([FFMPEG,...args],{stdin:'ignore',stdout:'ignore',stderr:'pipe',signal:session.abort.signal});
   session.proc=proc;const began=Date.now();
+  // Bound a hung upstream or FFmpeg process; two stalled conversions
+  // otherwise exhaust the entire pilot's capacity.
+  session.chunkTimer=setTimeout(()=>{
+   if(session.stopped||session.proc!==proc||session.finished)return;
+   session.error='vod_chunk_deadline_exceeded';
+   console.warn('BLOFY_FULL_VOD_CHUNK_TIMEOUT',{kind:session.kind,first});
+   try{proc.kill()}catch{}
+  },75000);
+  session.chunkTimer.unref?.();
   (async()=>{try{let buf='';const reader=proc.stderr.getReader();
    while(true){const next=await reader.read();if(next.done)break;buf=(buf+new TextDecoder().decode(next.value)).slice(-2800)}
    if(buf)session.error=/Connection reset|ECONNRESET|end of file|timed out/i.test(buf)?'vod_source_connection_lost':
@@ -338,10 +349,14 @@ function fullVodChunk(session,first){
   }catch{}})();
   proc.exited.then(code=>{
    if(session.proc!==proc)return;
+   if(session.chunkTimer){clearTimeout(session.chunkTimer);session.chunkTimer=null}
    session.finished=true;session.exitCode=code;releaseHls(session);
    if(code!==0&&!session.stopped)console.warn('BLOFY_FULL_VOD_CHUNK_ERROR',{kind:session.kind,code,reason:session.error||'vod_chunk_interrupted'});
    else if(!session.stopped)console.info('BLOFY_FULL_VOD_CHUNK_OK',{kind:session.kind,first,elapsedMs:Date.now()-began})
-  }).catch(()=>{if(session.proc===proc){session.finished=true;session.error='vod_chunk_crashed';releaseHls(session)}});
+  }).catch(()=>{if(session.proc===proc){
+   if(session.chunkTimer){clearTimeout(session.chunkTimer);session.chunkTimer=null}
+   session.finished=true;session.error='vod_chunk_crashed';releaseHls(session)
+  }});
   return {ok:true}
  }catch{session.finished=true;session.error='vod_chunk_start_failed';releaseHls(session);return {status:502,error:'vod_chunk_start_failed'}}
 }
@@ -400,7 +415,7 @@ async function fullVodRequest(req,url){
     const old=session.proc;
     await Promise.race([old.exited.catch(()=>null),nap(9000)])
    }
-   if(session.stopped)return json(410,{error:'vod_session_expired'});
+   if(session.stopped||req.signal.aborted)return json(410,{error:'vod_request_cancelled'});
    // Capacity bursts should queue briefly instead of immediately failing the
    // film. Never exceed the two encoder slots or wait beyond Hls.js timeout.
    if(active>=MAX_JOBS&&session.released){
@@ -409,12 +424,14 @@ async function fullVodRequest(req,url){
     if(session.stopped||req.signal.aborted)return json(410,{error:'vod_request_cancelled'})
    }
    if(session.chunkStart!==first||session.finished){
+    if(req.signal.aborted)return json(410,{error:'vod_request_cancelled'});
     const started=fullVodChunk(session,first);
     if(started.error)return json(started.status||502,{error:started.error})
    }
   }
   const until=Date.now()+28000;
-  while(!existsSync(filename)&&!session.stopped&&session.chunkStart===first&&!session.finished&&Date.now()<until)await nap(170);
+  while(!existsSync(filename)&&!session.stopped&&!req.signal.aborted&&session.chunkStart===first&&!session.finished&&Date.now()<until)await nap(170);
+  if(req.signal.aborted)return json(410,{error:'vod_request_cancelled'});
   if(!existsSync(filename)){
    const why=session.chunkStart!==first?'vod_chunk_replaced':session.error||'vod_segment_not_ready';
    return json(session.finished?502:504,{error:why})
