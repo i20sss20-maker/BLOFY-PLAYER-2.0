@@ -254,3 +254,21 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible,.remote-focus{
  .search-compose .btn{min-width:69px;padding:7px;font-size:11px}
  .search-tabs .chip{min-width:60px}
 }
+
+
+/* Fullscreen cinematic playback: controls disappear after inactivity and reappear
+ * on touch, mouse or TV D-pad. Keep error/loading messages visible. */
+.player-overlay .player-hud{
+ transition:opacity 180ms ease,transform 180ms ease;
+ will-change:opacity,transform
+}
+.player-overlay.controls-hidden .player-hud:not(:focus-within){
+ opacity:0;visibility:hidden;pointer-events:none;transform:translateY(18px)
+}
+.player-overlay.controls-hidden .player-hud:focus-within{
+ opacity:1;visibility:visible;pointer-events:auto;transform:none
+}
+.player-overlay>video{cursor:default}
+@media(prefers-reduced-motion:reduce){
+ .player-overlay .player-hud{transition:none;will-change:auto}
+}
