@@ -344,7 +344,7 @@ function fullVodChunk(session,first){
   session.chunkTimer.unref?.();
   (async()=>{try{let buf='';const reader=proc.stderr.getReader();
    while(true){const next=await reader.read();if(next.done)break;buf=(buf+new TextDecoder().decode(next.value)).slice(-2800)}
-   if(buf&&!session.error)session.error=/Connection reset|ECONNRESET|end of file|timed out/i.test(buf)?'vod_source_connection_lost':
+   if(buf&&session.proc===proc&&!session.error)session.error=/Connection reset|ECONNRESET|end of file|timed out/i.test(buf)?'vod_source_connection_lost':
     /\b416\b|range not satisfiable|source_range_unavailable/i.test(buf)?'vod_source_seek_unsupported':'vod_chunk_processing_failed'
   }catch{}})();
   proc.exited.then(code=>{
@@ -409,11 +409,16 @@ async function fullVodRequest(req,url){
  if(!existsSync(filename)){
   const first=Math.floor(index/FULL_CHUNK_SEGMENTS)*FULL_CHUNK_SEGMENTS;
   if(session.chunkStart!==first||session.finished){
-   // The browser can ask for the next chunk before the previous one has ended.
-   // Keep a short sequential tail instead of killing the encoder mid-segment.
+   // Hls.js can prefetch next 24 seconds before the previous encoder exits.
+   // Never kill a still-encoding adjacent chunk; that can corrupt a segment
+   // that is already being fetched, causing an avoidable black screen.
    if(session.proc&&!session.finished&&first===session.chunkStart+FULL_CHUNK_SEGMENTS){
-    const old=session.proc;
-    await Promise.race([old.exited.catch(()=>null),nap(9000)])
+    const old=session.proc,deadline=Date.now()+14000;
+    while(session.proc===old&&!session.finished&&!session.stopped&&!req.signal.aborted&&Date.now()<deadline)await nap(180);
+    if(session.stopped||req.signal.aborted)return json(410,{error:'vod_request_cancelled'});
+    if(session.proc===old&&!session.finished){
+     return json(503,{error:'vod_previous_chunk_still_encoding',retryAfter:2})
+    }
    }
    if(session.stopped||req.signal.aborted)return json(410,{error:'vod_request_cancelled'});
    // Capacity bursts should queue briefly instead of immediately failing the
