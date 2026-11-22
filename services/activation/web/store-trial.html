@@ -8,8 +8,8 @@
 <meta name="robots" content="index,follow">
 <link rel="canonical" href="https://blofyplayer.com/store/trial">
 <link rel="icon" href="/blofy-logo.png">
-<link rel="stylesheet" href="/store/trial.css?v=1">
-<script src="/store/trial.js?v=20261119-guides-v2" defer></script>
+<link rel="stylesheet" href="/store/trial.css?v=20261122-leads-v1">
+<script src="/store/trial.js?v=20261122-leads-v1" defer></script>
 <title>تجربة مجانية لمدة يوم | BLOFY STREAM وXtream</title>
 </head>
 <body>
@@ -29,6 +29,11 @@
 <section class="trial-status" aria-labelledby="trial-status-title">
  <div><small class="eyebrow">مخزون التجارب</small><h2 id="trial-status-title">اختر طريقة التجربة</h2><p>عدد الأكواد الجاهزة يتحدث من الخادم. لا يتم عرض الأكواد السرية للزوار.</p></div>
  <button id="trial-refresh" type="button" class="btn btn-outline">↻ تحديث المخزون</button>
+</section>
+<section class="trial-marketing-consent" id="trial-marketing-consent" aria-label="الموافقة الاختيارية على العروض">
+ <label><input id="trial-marketing-opt-in" type="checkbox" value="yes">
+  <span>أوافق اختيارياً على تواصل BLOFY معي بعروض الاشتراكات عبر رقم الجوال أو البريد المسجل. <b>الموافقة ليست شرطًا للحصول على التجربة</b>، ويمكنني إلغاؤها لاحقًا.</span></label>
+ <small>لن تُرسل أي عروض آليًا بمجرد الموافقة؛ يُحتفظ بالتفضيل لتمكين التواصل المسموح.</small>
 </section>
 <section class="trial-cards" aria-label="باقات التجربة">
  <article class="trial-card" data-product="trial-stream-1d">
@@ -51,7 +56,13 @@
   <div><span>الكود الخاص بك</span><output id="trial-result-code" dir="ltr" aria-live="polite"></output></div>
   <button id="trial-copy" type="button" class="btn btn-outline">نسخ الكود</button>
  </div>
- <div class="trial-result-bottom"><p><b>النوع:</b> <span id="trial-result-channel">—</span></p><p><b>المدة:</b> يوم واحد</p>
+ <div id="trial-marketing-preference" class="trial-marketing-consent trial-marketing-preference">
+ <label><input id="trial-marketing-result-opt-in" type="checkbox">
+  <span>أرغب في استقبال عروض BLOFY عبر الجوال أو البريد (اختياري، ويمكن إلغاء الاشتراك في أي وقت).</span></label>
+ <button id="trial-marketing-save" type="button" class="btn btn-outline">حفظ تفضيل استقبال العروض</button>
+ <p id="trial-marketing-status" role="status" aria-live="polite"></p>
+</div>
+<div class="trial-result-bottom"><p><b>النوع:</b> <span id="trial-result-channel">—</span></p><p><b>المدة:</b> يوم واحد</p>
  <p id="trial-result-dates">يبدأ وقت التجربة عند أول تفعيل ناجح.</p></div>
  <a id="trial-xtream-link" class="btn btn-outline" href="/stream/activate" hidden>فتح صفحة استخراج Xtream ↗</a>
   <div id="trial-claim-guide" class="trial-guide" aria-label="خطوات استخدام كود التجربة"></div>
