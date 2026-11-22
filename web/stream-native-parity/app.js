@@ -716,11 +716,26 @@ function checkCatalogVersion(){
 }
 function settingsScreen(){
  shell('الإعدادات','<div class="settings-grid"><section class="setting-panel"><h3>تحديث المحتوى</h3><p>إعادة قراءة القنوات والأفلام والمسلسلات من خادم BLOFY.</p><button class="btn" id="refresh-content">↻ تحديث المحتوى</button><p id="refresh-progress" role="status" aria-live="polite">فهرس المحتوى يُراجع تلقائيًا عند توفر رقم إصدار جديد.</p></section>'+
- '<section class="setting-panel"><h3>التشغيل</h3><p>البث المباشر يستخدم HLS. الأفلام تُجرّب المصدر الأصلي القابل للتقديم أولًا. التحويل التلقائي محدود حتى نعتمد تقديم الفيلم واستكماله من نفس الموضع.</p></section>'+
+ '<section class="setting-panel"><h3>حالة مشغّل الفيديو</h3><p>تحقق من جاهزية خادم الأفلام والمسلسلات دون التأثير على اشتراكك أو تشغيل العملاء.</p>'+
+  '<button class="btn secondary" id="check-player-health">فحص جاهزية الفيديو</button>'+
+  '<p class="small muted" id="player-health-status" role="status" aria-live="polite">الفحص يؤكد جاهزية المحرك، وليس صلاحية كل مصدر فيديو.</p></section>'+
  '<section class="setting-panel"><h3>المفضلة والمتابعة</h3><p>تحفظ هذه النسخة البيانات محليًا في هذا المتصفح فقط؛ المزامنة السحابية مع أندرويد غير مفعلة بعد.</p><button class="btn secondary" data-go="favorites">المفضلة</button></section>'+
  '<section class="setting-panel"><h3>حساب BLOFY</h3><p>الخروج من هذا الجهاز فقط، دون التأثير على التطبيقات الأصلية.</p><button class="btn danger" id="logout">تسجيل الخروج</button></section></div>'+
  '<div id="page-status" class="info" style="margin-top:20px">BLOFY STREAM Web — نسخة مطابقة قيد التطوير.</div>');
  document.getElementById('refresh-content').onclick=function(){refreshCatalog(true)};
+ document.getElementById('check-player-health').onclick=function(){
+  var button=this,box=document.getElementById('player-health-status');
+  button.disabled=true;box.textContent='جار فحص خادم تشغيل الأفلام والمسلسلات…';
+  api('GET','/api/health/media',null,function(st,result){
+   button.disabled=false;if(!box||S.route!=='settings')return;
+   if(st===200&&result&&result.ok){
+    box.textContent='✓ مشغّل الفيديو جاهز. الاختبار التجريبي للتقديم والبث نجح. العمليات الحالية: '+
+     (result.converting||0)+' من '+(result.capacity||0)+'.';
+   }else{
+    box.textContent='تعذر فحص مشغّل الفيديو الآن. هذا لا يعني انتهاء اشتراكك؛ حاول مجددًا بعد قليل.'
+   }
+  })
+ };
  document.getElementById('logout').onclick=function(){api('POST','/api/logout',{},function(){login('تم تسجيل الخروج')})}
 }
 function fmt(n){return n<10?'0'+n:String(n)}
