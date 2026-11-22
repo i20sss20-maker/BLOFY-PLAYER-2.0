@@ -309,7 +309,7 @@ if(p.indexOf('/api/media/')===0&&(method==='GET'||method==='HEAD')){
   const offset=range&&/^bytes=(\d+)-/.exec(range);
   if(offset&&Number(offset[1])>0&&r.ok){
    const contentRange=r.headers.get('content-range')||'';
-   const firstByte=/^bytes (\d+)-\d+\/\d+$/.exec(contentRange);
+   const firstByte=/^bytes (\d+)-\d+\/(?:\d+|\*)$/.exec(contentRange);
    if(r.status!==206||!firstByte||Number(firstByte[1])!==Number(offset[1])){
     try{await r.body?.cancel()}catch{}
     return json(416,{error:'media_byte_seek_not_supported'})
