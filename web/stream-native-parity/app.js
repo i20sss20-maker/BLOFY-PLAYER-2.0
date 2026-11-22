@@ -788,6 +788,7 @@ function cleanupPlayer(){
  if(S.playerView){
   if(S.playerView.directTimer){clearTimeout(S.playerView.directTimer);S.playerView.directTimer=null}
   if(S.playerView.directSeekCheck){clearTimeout(S.playerView.directSeekCheck);S.playerView.directSeekCheck=null}
+  if(S.playerView.hudTimer){clearTimeout(S.playerView.hudTimer);S.playerView.hudTimer=null}
  }
  stopPlayback(true)
 }
@@ -1143,11 +1144,31 @@ function openPlayer(kind,id,extension,name,from){
  var video=document.getElementById('player-media'),state={kind:kind,id:id,ext:ext,video:video,name:name,offset:0,
  mode:isLive?'hls':'direct',resume:resume,duration:knownDuration(kind,id,item),didResume:false,ready:false,track:0,lastSaved:0,
   art:art(item)||prior&&prior.art||'',seriesId:kind==='series'&&S.item&&S.item.id||''};
+ var root=document.getElementById('player-root'),hud=root.querySelector('.player-hud');
+ function revealControls(){
+  root.classList.remove('controls-hidden');
+  if(state.hudTimer)clearTimeout(state.hudTimer);
+  state.hudTimer=setTimeout(function(){
+   state.hudTimer=null;
+   if(S.route!=='player'||!state.ready||video.paused||!root.isConnected)return;
+   var loading=document.getElementById('player-status');
+   if(loading&&loading.style.display!=='none'&&loading.textContent)return;
+   // TV remote users need to see focused controls before seeking.
+   if(hud.contains(document.activeElement))return;
+   root.classList.add('controls-hidden')
+  },5500)
+ }
+ root.addEventListener('pointermove',revealControls,{passive:true});
+ root.addEventListener('pointerdown',revealControls,{passive:true});
+ root.addEventListener('keydown',revealControls);
+ root.addEventListener('focusin',revealControls);
+ video.addEventListener('click',revealControls);
  function realPos(){return state.mode==='vodhls'?state.offset+Math.max(0,video.currentTime||0):video.currentTime||0}
  function totalDuration(){return state.mode==='vodhls'?state.duration:(isFinite(video.duration)&&video.duration>0?video.duration:state.duration)}
  function markReady(){
   if(S.route!=='player')return;
   state.ready=true;var status=document.getElementById('player-status');if(status)status.style.display='none';
+  revealControls();
   if(!isLive&&state.mode==='direct'&&!state.didResume&&resume>30&&isFinite(video.duration)&&video.duration>0&&video.seekable&&video.seekable.length){
    state.didResume=true;try{video.currentTime=Math.min(resume,Math.max(0,video.duration-5))}catch(e){}
   }
