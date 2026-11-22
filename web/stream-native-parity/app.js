@@ -914,6 +914,26 @@ function freshPlaybackId(){
  return result
 }
 function playFullVod(video,kind,id,ext,track,duration,state,ready){
+ // Xtream providers sometimes permit one source connection per account.
+ // When upgrading a temporary EVENT playlist to full VOD, close that live
+ // transcoder before opening the new one instead of racing two connections.
+ var previous=S.play;
+ if(previous&&previous.stopUrl&&previous.stopUrl.indexOf('/api/vod/')===0){
+  var oldStop=previous.stopUrl;
+  stopPlayback(false);
+  state.ready=false;
+  playerStatus('جار إغلاق اتصال الفيلم المؤقت قبل تفعيل التقديم…');
+  var completed=false;
+  function proceed(){
+   if(completed)return;
+   completed=true;clearTimeout(timeout);
+   if(S.route!=='player'||S.playerView!==state)return;
+   playFullVod(video,kind,id,ext,track,duration,state,ready)
+  }
+  var timeout=setTimeout(proceed,4000);
+  api('POST',oldStop,{},function(){proceed()});
+  return
+ }
  var seconds=Math.round(duration),path='/api/vodfull/'+kind+'/'+id+'/'+ext+'/'+track+'/'+seconds;
  var sid='sid='+state.playbackId;
  var firstAt=Math.max(0,Math.min(seconds-2,Math.round(Number(state.resume)||0)));
