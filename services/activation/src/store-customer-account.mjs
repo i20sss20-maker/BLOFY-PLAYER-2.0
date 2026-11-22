@@ -507,6 +507,9 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
    return json(res,400,{ok:false,error:'credential_reveal_confirmation_required'});
   const proof=streamCodeProof(body?.code,keyHex);
   if(!proof)return json(res,400,{ok:false,error:'stream_code_invalid'});
+  // Prepare existing paid voucher/cart ownership tables without starting
+  // checkout or changing payments. Trial-only users may have no paid orders.
+  await ensureOpsSchema();
   const origin=normalizeXtreamPublicOrigin(env.BLOFY_XTREAM_PUBLIC_ORIGIN);
   if(!origin)return json(res,503,{ok:false,error:'xtream_host_not_ready'});
   // The trial table is optional if no free stock has ever been created.
