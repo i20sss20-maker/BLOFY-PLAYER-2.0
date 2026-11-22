@@ -2596,6 +2596,40 @@ http.createServer = function withBlofyXtreamGateway(listener) {
           'cache-control':'no-store','x-content-type-options':'nosniff'});
         return res.end(asset);
       }
+      // The public browser extraction page accepts ANY unused BLOFY STREAM
+      // or Xtream voucher. It starts the voucher's ORIGINAL period exactly
+      // once, exposes only its own newly minted Xtream credentials, and marks
+      // this same subscription dual-access for later app sign-in.
+      // Existing/used codes stay protected: signed-in ownership check is in
+      // the customer account handler; no anonymous password recovery.
+      if(req.method==='POST'&&url.pathname==='/api/v1/stream/extract'){
+        const allowed=new Set(['https://blofyplayer.com',
+          'https://www.blofyplayer.com','https://api.blofyplayer.com']);
+        if(!allowed.has(String(req.headers?.origin||''))||
+           req.headers?.['x-blofy-extraction']!=='1'||
+           !String(req.headers?.['content-type']||'').toLowerCase().startsWith('application/json'))
+          return json(res,403,{ok:false,error:'stream_extraction_origin_invalid'});
+        const clientRate=streamCodeLimiter.consume(requestClientKey(req));
+        if(!clientRate.allowed)return json(res,429,{
+          ok:false,error:'stream_code_rate_limited'
+        },{'retry-after':String(clientRate.retryAfterSeconds)});
+        const globalRate=streamCodeGlobalLimiter.consume('all_redemptions');
+        if(!globalRate.allowed)return json(res,429,{
+          ok:false,error:'stream_code_rate_limited'
+        },{'retry-after':String(globalRate.retryAfterSeconds)});
+        const data=await readJson(req);
+        if(data?.confirmStart!==true)
+          return json(res,400,{ok:false,error:'stream_extraction_confirmation_required'});
+        await ensureReady();
+        const issued=await streamCodes.redeem(data.code,xtreamOrigin(req),{
+          appOnly:false,webDualAccess:true
+        });
+        return json(res,201,{...issued,universalExtraction:true,
+          originalVoucherPreserved:true},{
+          'referrer-policy':'no-referrer','cache-control':'no-store, private',
+          pragma:'no-cache'
+        });
+      }
       if (req.method === 'POST' && (url.pathname === '/api/v1/stream/redeem' ||
           url.pathname === '/api/v1/stream/app/redeem')) {
         const rate=streamCodeLimiter.consume(requestClientKey(req));
