@@ -1,4 +1,33 @@
-# BLOFY STREAM — VIDAA + Web Preview v0.4
+# BLOFY STREAM — VIDAA + Web Preview v0.5
+
+## New HLS pilot (2026-11-22)
+
+This revision replaces the failed experimental MKV/TS browser pipeline as the default playback path with an **authenticated HLS preview**. The UI now serves same-origin `/api/hls/{kind}/{id}/{extension}/{track}/index.m3u8` and relative `seg-000000.ts` through the existing secure session-cookie gateway. The separate Railway `blofy-vidaa-media-compat-pilot` worker fetches the authorized first-party media with a short-lived Bearer token, transcodes video to **H.264 Baseline 480p** and audio to **AAC-LC stereo**, and writes ephemeral HLS segments. The preview uses native HLS when available, otherwise pinned `hls.js 1.5.20` with Media Source Extensions. It does not expose upstream hosts, Xtream credentials or Bearer tokens to the browser.
+
+The worker limits concurrent conversion jobs to **2**, uses account-scoped HMAC session IDs, has an approximately **9-minute absolute session TTL** plus an idle timeout, and deletes segment files and kills FFmpeg on stop. This is deliberately **not** production scale: memory, temporary storage, CPU, simultaneous viewers, seeking, restarts and long streams still require a durable media-transcoding architecture.
+
+### What is actually verified
+
+- **PASS:** Railway reports both pilot services online and their latest deployments successful.
+- **PASS:** private-worker health synthetic FFmpeg/HLS test generated a valid playlist with at least two TS segments, and MPEG-TS PMT inspection confirmed **H.264 video and AAC audio**. This is synthetic media, not a customer's channel.
+- **PASS:** HLS.js library returned an HTTP 200 from the public app's same-origin vendor route during a controlled temporary POST smoke test (the temporary POST route has been disabled).
+- **NOT VERIFIED:** a complete authenticated real-world BLOFY source HLS transfer through UI → media worker → actual Toshiba/desktop playback, or any actual sound heard by a user.
+- **NOT VERIFIED:** playable output on VIDAA U3 firmware P0219 (native HLS availability and decoding) or clients with neither native HLS nor MSE.
+
+**Do not announce that live TV or audio has been fixed for customers until real sample streams pass with both audio and video on target devices.** The source gateway itself rejects protected direct `.m3u8` with 415; the new HLS worker only uses authorized original TS/MKV/MP4 sources and constructs new browser-compatible playlists privately. Do not claim to have enabled the original Xtream protected HLS route.
+
+### Test procedure for owner
+
+1. On desktop, hard refresh the preview URL; log in with a dedicated test code (avoid device-binding an active customer's subscription).
+2. Test a movie/episode; confirm both actual sound and picture. The first HLS preparation may take several seconds because transcoding must produce a segment.
+3. Test one licensed live channel, the muted preview, unmuted fullscreen, and the return button. Confirm that changing channels stops previous conversion jobs.
+4. If playback fails, inspect user-visible status and `BLOFY_VIDAA_PLAYBACK_DIAG` plus media worker's sanitized `VIDAA_HLS_` logs. No subscription keys or account IDs should appear in those logs.
+5. Only after those pass, repeat on Toshiba VIDAA U3.
+
+Keep the original `BLOFY STREAM` Android app and its customer production services unchanged.
+
+---
+
 
 **Experimental** multi-target web app, developed independently from the Android customer build. Current preview: https://blofy-vidaa-webapp-production.up.railway.app/
 
