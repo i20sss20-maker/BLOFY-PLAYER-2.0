@@ -169,7 +169,7 @@ async function startVod({bearer,kind,id,ext,track,start,key}){
  try{
   const src='http://127.0.0.1:'+Number(Bun.env.PORT||3000)+'/_source/'+key;
   const args=['-hide_banner','-loglevel','warning','-nostdin','-analyzeduration','2000000','-probesize','2000000',
-   '-ss',String(start),'-i',src,
+   '-ss',String(start),'-re','-i',src,
    '-map','0:v:0','-map','0:a:'+track+'?',
    '-c:v','libx264','-preset','ultrafast','-profile:v','baseline','-level','3.1','-pix_fmt','yuv420p',
    '-vf','scale=854:480:force_original_aspect_ratio=decrease:force_divisible_by=2,fps=25',
