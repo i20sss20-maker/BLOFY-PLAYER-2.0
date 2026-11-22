@@ -355,7 +355,7 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
       credentials:{serverUrl,username,password,
         m3uUrl:serverUrl+'/get.php?'+params.toString()}};
   }
-  async function redeem(value,host,{deviceKey=null,appOnly=false}={}){
+  async function redeem(value,host,{deviceKey=null,appOnly=false,webDualAccess=false}={}){
     if(appOnly&&!deviceKey)
       throw Object.assign(Error('stream_code_device_required'),{status:400});
     const proof=streamCodeProof(value,keyHex);
@@ -388,6 +388,24 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
             AND revoked_at IS NULL AND sold_at IS NULL
           RETURNING code_channel`,[row.id])).rows[0];
         if(converted?.code_channel==='app')row.code_channel='app';
+      }
+      // Universal extraction may open Xtream on ONE never-used voucher of
+      // either product. Keep original channel, source and entitlement. Reuse
+      // the existing one-time redemption transaction and account creation.
+      // No used, transferred, expired or partially activated code is changed.
+      if(webDualAccess&&!appOnly&&!row.redeemed_at&&
+         !row.account_id&&!row.expires_at&&!row.redeemed_device_hash&&
+         Number(row.transfer_count||0)===0&&Number(row.extended_days||0)===0&&
+         row.dual_access_enabled!==true){
+        const enabled=(await client.query(`UPDATE blofy_xtream_gateway_duration_codes
+          SET dual_access_enabled=TRUE
+          WHERE id=$1 AND redeemed_at IS NULL AND account_id IS NULL
+           AND expires_at IS NULL AND revoked_at IS NULL
+           AND redeemed_device_hash IS NULL
+          RETURNING dual_access_enabled`,[row.id])).rows?.[0];
+        if(!enabled?.dual_access_enabled)
+         throw Object.assign(Error('stream_code_unavailable'),{status:409});
+        row.dual_access_enabled=true;
       }
       if((row.code_channel||'xtream')!==(appOnly?'app':'xtream')&&
          row.dual_access_enabled!==true)
