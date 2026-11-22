@@ -43,10 +43,15 @@ async function awaitHlsFile(session,filename,limitMs){
 }
 function hlsError(status,error){return json(status,{ok:false,error})}
 async function startHls({bearer,kind,id,ext,track,key}){
+ // In the preview UI each device should own at most one active live stream.
+ // Reclaim old streams for this SAME bearer before capacity checks (prevents /stop request race).
+ for(const old of Array.from(hlsSessions.values())){
+  if(old.kind==='live'&&old.bearer===bearer&&old.key!==key)stopHls(old,'channel_replaced')
+ }
  if(active>=MAX_JOBS)return {error:'hls_capacity',status:429};
  active++;
  const abort=new AbortController(),dir=join(hlsRoot,key);
- const session={key,kind,id,ext,track,dir,abort,startedAt:Date.now(),stopped:false,released:false,finished:false,proc:null,lastAccess:Date.now(),error:null};
+ const session={key,bearer,kind,id,ext,track,dir,abort,startedAt:Date.now(),stopped:false,released:false,finished:false,proc:null,lastAccess:Date.now(),error:null};
  hlsSessions.set(key,session);
  mkdirSync(dir,{recursive:true});
  touchHls(session);
