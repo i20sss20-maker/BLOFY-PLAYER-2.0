@@ -300,7 +300,25 @@ if(p.indexOf('/api/media/')===0&&(method==='GET'||method==='HEAD')){
  const m=p.match(/^\/api\/media\/(live|movie|series)\/([0-9]{1,15})\.(ts|m3u8|mp4|mkv|avi|mov)$/i);if(!m)return json(400,{error:'invalid_media_path'});
  const target=ORIGIN+'/api/v1/stream/media/'+m[1]+'/'+m[2]+'.'+m[3].toLowerCase();
  const headers={'Authorization':h.Authorization,'Accept':'*/*','accept-encoding':'identity'};const range=req.headers.get('range');if(range&&/^bytes=[0-9]*-[0-9]*$/.test(range))headers['range']=range;
- try{const r=await fetch(target,{method,headers,redirect:'manual',signal:req.signal});if(r.status>=300&&r.status<400)return json(502,{error:'media_redirect_unsupported'});let out=noCache({'Content-Type':r.headers.get('content-type')||'application/octet-stream'});for(const k of ['content-length','content-range','accept-ranges']){let v=r.headers.get(k);if(v)out[k]=v}return new Response(method==='HEAD'?null:r.body,{status:r.status,headers:out})}catch{return json(502,{error:'media_upstream_failed'})}
+ try{
+  const r=await fetch(target,{method,headers,redirect:'manual',signal:req.signal});
+  if(r.status>=300&&r.status<400)return json(502,{error:'media_redirect_unsupported'});
+  // Prevent an upstream server from silently ignoring a nonzero Range and
+  // returning the beginning of a movie while the browser shows the seeked time.
+  // Do NOT reject an ordinary bytes=0- request: some providers send 200 for it.
+  const offset=range&&/^bytes=(\d+)-/.exec(range);
+  if(offset&&Number(offset[1])>0&&r.ok){
+   const contentRange=r.headers.get('content-range')||'';
+   const firstByte=/^bytes (\d+)-\d+\/\d+$/.exec(contentRange);
+   if(r.status!==206||!firstByte||Number(firstByte[1])!==Number(offset[1])){
+    try{await r.body?.cancel()}catch{}
+    return json(416,{error:'media_byte_seek_not_supported'})
+   }
+  }
+  let out=noCache({'Content-Type':r.headers.get('content-type')||'application/octet-stream'});
+  for(const k of ['content-length','content-range','accept-ranges']){const v=r.headers.get(k);if(v)out[k]=v}
+  return new Response(method==='HEAD'?null:r.body,{status:r.status,headers:out})
+ }catch{return json(502,{error:'media_upstream_failed'})}
 }
 return json(404,{error:'not_found'});
 }});
