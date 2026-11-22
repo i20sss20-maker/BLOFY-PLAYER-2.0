@@ -104,6 +104,41 @@ test('Chrome uses local Hls.js and decodes H.264/AAC HLS instead of native unsup
  const state=await page.locator('#live-video').evaluate(v=>({ready:v.readyState,error:v.error&&v.error.code,paused:v.paused}));
  expect(state.error).toBeFalsy();
 });
+test('VOD MKV conversion playlist starts in Chrome and resumes from an explicit offset',async({page})=>{
+ movie.container_extension='mkv';movie.duration_secs=240;
+ const text=readFileSync('/tmp/blofy-qa-hls/index.m3u8','utf8');
+ const names=[...new Set(text.match(/seg-[0-9]{6}[.]ts/g)||[])];
+ expect(names.length).toBeGreaterThanOrEqual(2);
+ const segments={};for(const name of names)segments[name]=readFileSync('/tmp/blofy-qa-hls/'+name);
+ let first=0;const errors=[];const requests=[];
+ page.on('pageerror',e=>errors.push(e.message));
+ page.on('response',r=>{if(r.url().includes('/api/vod/'))requests.push({path:r.url().split('/').slice(-1)[0],status:r.status()})});
+ await page.route('**/api/vod/movie/11/mkv/0/0/**',async route=>{
+  const name=route.request().url().split('/').pop().split('?')[0];
+  if(name==='stop')return route.fulfill({status:200,body:'{"ok":true}'});
+  if(name==='index.m3u8'){
+   if(!first)first=Date.now();
+   const available=Math.min(names.length,Math.max(1,1+Math.floor((Date.now()-first)/900)));
+   const body='#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:1\n#EXT-X-MEDIA-SEQUENCE:0\n'+
+    names.slice(0,available).map(name=>'#EXTINF:1.000,\n'+name+'\n').join('');
+   return route.fulfill({status:200,contentType:'application/vnd.apple.mpegurl',body});
+  }
+  if(segments[name])return route.fulfill({status:200,contentType:'video/mp2t',body:segments[name]});
+  return route.fulfill({status:404,body:'missing segment'});
+ });
+ await page.goto('http://127.0.0.1:3000/');
+ await page.locator('[data-go="movie"]').first().click();
+ await page.locator('[data-details="movie:11"]').click();
+ await page.locator('[data-watch="movie:11"]').first().click();
+ await expect(page.locator('#player-root')).toBeVisible();
+ await expect.poll(()=>page.locator('#player-media').evaluate(v=>v.readyState),{timeout:12000}).toBeGreaterThan(1);
+ await expect.poll(()=>page.locator('#player-media').evaluate(v=>v.currentTime),{timeout:10000}).toBeGreaterThan(0.3);
+ const state=await page.locator('#player-media').evaluate(v=>({ready:v.readyState,time:v.currentTime,error:v.error&&v.error.code,paused:v.paused}));
+ console.log('BLOFY VOD HLS STATE',JSON.stringify({state,requests,errors}));
+ expect(state.error).toBeFalsy();expect(errors).toEqual([]);
+ await page.locator('#player-back').click();
+ movie.container_extension='mp4';delete movie.duration_secs;
+});
 test('VOD MP4 can open real HTML5 media; restart-from-zero overrides stored position',async({page})=>{
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  const mp4=readFileSync('/tmp/blofy-qa-test.mp4');
