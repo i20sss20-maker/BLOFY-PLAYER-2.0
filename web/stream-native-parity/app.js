@@ -264,7 +264,9 @@ function loadMore(kind){
 function progressKey(k,id){return k+':'+id}
 function getResume(k,id){return S.watch[progressKey(k,id)]||null}
 function saveResume(kind,id,pos,duration,ready){
- if(kind==='live'||!ready||!(duration>0)||!isFinite(pos)||pos<0)return;
+ if(kind==='live'||!ready||!isFinite(pos)||pos<0)return;
+ duration=isFinite(duration)&&duration>0?duration:0;
+ if(pos<5&&duration===0)return;
  var key=progressKey(kind,id),last=S.watch[key];
  if(pos===0&&last&&last.position>30&&!ready)return;
  if(duration>0&&pos/duration>.96){delete S.watch[key]}else{
@@ -282,7 +284,7 @@ function details(o){
   var info=(extra&&extra.info)||{},artwork=urlPic(info.movie_image||info.cover_big||info.cover||'')||art(item),backdrop=urlPic(info.backdrop_path||info.backdrop||item.backdrop)||artwork;
   var plot=info.plot||info.description||item.plot||'المحتوى متاح ضمن مكتبتك في BLOFY STREAM';
   var gen=info.genre||info.genres||'',year=info.releaseDate||info.release_date||item.release_date||'',rating=info.rating||item.rating||'';
-  var key=k+':'+id,resume=getResume(k,id),hasResume=resume&&resume.position>30&&resume.position/resume.duration<.95;
+  var key=k+':'+id,resume=getResume(k,id),hasResume=resume&&resume.position>30&&(!resume.duration||resume.position/resume.duration<.95);
   var buttons=k==='movie'?'<button class="btn" data-watch="movie:'+esc(id)+'" data-from="'+(hasResume?Math.round(resume.position):0)+'">▶ '+(hasResume?'متابعة المشاهدة':'شاهد الآن')+'</button>'+
    (hasResume?'<button class="btn secondary" data-watch="movie:'+esc(id)+'" data-from="0">ابدأ من البداية</button>':''):
    '<button class="btn" data-episodes="'+esc(id)+'">▤ المواسم والحلقات</button>';
@@ -294,7 +296,7 @@ function details(o){
   '<div class="detail-body"><span class="chip primary">'+(k==='movie'?'فيلم':'مسلسل')+'</span><h2 class="detail-title">'+esc(title(item))+'</h2>'+
   '<div class="detail-subtitle">'+esc([genre,year,rating].filter(Boolean).join(' • '))+'</div><p class="detail-plot">'+esc(plot)+'</p>'+
   '<div class="detail-actions">'+buttons+'</div>'+
-  (hasResume?'<div class="detail-stat">آخر مشاهدة: '+formatTime(resume.position)+' من '+formatTime(resume.duration)+'</div><span class="progress-meter"><i style="width:'+Math.round(resume.position/resume.duration*100)+'%"></i></span>':'')+
+  (hasResume?'<div class="detail-stat">آخر مشاهدة: '+formatTime(resume.position)+(resume.duration?' من '+formatTime(resume.duration):'')+'</div>'+(resume.duration?'<span class="progress-meter"><i style="width:'+Math.round(resume.position/resume.duration*100)+'%"></i></span>':''):'')+
   '</div></div><section id="related-root"></section>';
  }
  show();
@@ -481,14 +483,15 @@ function playVodSegments(video,kind,id,ext,track,start,state,ready){
  var at=Math.max(0,Math.round(start||0)),key=kind+'/'+id+'/'+ext+'/'+track+'/'+at,manifest='/api/vod/'+key+'/index.m3u8';
  stopPlayback(true);
  state.mode='vodhls';state.offset=at;state.ready=false;state.didResume=true;
- var rec={video:video,kind:kind,id:id,preview:false,engine:null,stopUrl:'/api/vod/'+key+'/stop',hlsKey:null,ready:false,started:Date.now()};
+ var rec={video:video,kind:kind,id:id,preview:false,engine:null,stopUrl:'/api/vod/'+key+'/stop',hlsKey:null,ready:false,started:Date.now(),timer:null};
  S.play=rec;
  playerStatus('جار فتح الفيلم من '+formatTime(at)+' بصيغة H.264 / AAC…');
  video.autoplay=true;video.muted=false;video.defaultMuted=false;video.controls=true;
  function alive(){return S.play===rec&&S.route==='player'}
- function fail(text){if(alive()){playerStatus(text,true)}}
+ function fail(text){if(alive()){if(rec.timer)clearTimeout(rec.timer);playerStatus(text,true)}}
+ rec.timer=setTimeout(function(){if(alive()&&!rec.ready){diagnose(kind,'startup_timeout','video',video.readyState||0);playerStatus('الفيلم يستغرق وقتًا أطول من المتوقع للتجهيز. جار محاولة تحميل المقاطع الأولى…')}} ,18000);
  video.onerror=function(){diagnose(kind,'media_error','video',video.error&&video.error.code);fail('لم ينجح تشغيل الفيلم من هذا الموضع. السبب قد يكون المصدر أو صيغة الفيديو؛ لا تعِد بدءه تلقائيًا من الصفر.')};
- video.onplaying=function(){if(!alive())return;rec.ready=true;ready();};
+ video.onplaying=function(){if(!alive())return;rec.ready=true;if(rec.timer)clearTimeout(rec.timer);ready();};
  video.onwaiting=function(){if(alive()&&rec.ready)playerStatus('جار تحميل المقطع التالي من الفيلم…')};
  if(shouldUseNativeHls(video)){
   video.src=manifest;try{var promise=video.play();if(promise&&promise.catch)promise.catch(function(){fail('اضغط ▶ داخل المشغّل للبدء')})}catch(e){}return
@@ -502,7 +505,7 @@ function playVodSegments(video,kind,id,ext,track,start,state,ready){
    fail('تعذر تحميل مشغّل HLS أو المتصفح لا يدعم MSE.');return
   }
   try{
-   var engine=new window.Hls({enableWorker:false,liveSyncDurationCount:2,maxBufferLength:25,manifestLoadingTimeOut:25000,fragLoadingTimeOut:25000});
+   var engine=new window.Hls({enableWorker:false,lowLatencyMode:false,startPosition:0,liveSyncDurationCount:1,maxBufferLength:30,manifestLoadingTimeOut:25000,fragLoadingTimeOut:25000});
    rec.engine=engine;
    engine.on(window.Hls.Events.MANIFEST_PARSED,function(){
     if(!alive())return;try{var p=video.play();if(p&&p.catch)p.catch(function(){playerStatus('اضغط ▶ لتشغيل الفيلم')})}catch(e){}
@@ -527,7 +530,7 @@ function openPlayer(kind,id,extension,name,from){
  app.innerHTML='<section class="player-overlay" id="player-root"><video id="player-media" controls autoplay playsinline webkit-playsinline></video>'+
  '<div class="player-loading" id="player-status">جار تجهيز المشغّل…</div>'+
  '<div class="player-hud"><div class="player-title">'+esc(name||title(item))+'</div>'+
- (isLive?'':'<div class="player-time"><span id="now-time">00:00:00</span><span id="total-time">00:00:00</span></div><input id="seek" type="range" min="0" max="1000" value="0" step="1" class="seek-line">')+
+ (isLive?'':'<div class="player-time"><span id="now-time">00:00:00</span><span id="total-time">--:--</span></div><input id="seek" type="range" min="0" max="1000" value="0" step="1" class="seek-line" disabled>')+
  '<div class="player-actions"><button class="btn secondary" id="player-back">↶ رجوع</button><button class="btn" id="player-toggle">⏯ تشغيل / إيقاف</button>'+
  (isLive?'':'<button class="btn secondary" id="player-restart">↺ من البداية</button>')+
  '<button class="btn secondary" id="player-audio">◉ الصوت</button></div></div></section>';
@@ -545,10 +548,11 @@ function openPlayer(kind,id,extension,name,from){
  function progress(){
   if(S.route!=='player')return;
   var pos=realPos(),duration=totalDuration();
-  if(isFinite(duration)&&duration>0&&!isLive){
+  if(!isLive){
    var n=document.getElementById('now-time'),t=document.getElementById('total-time'),seek=document.getElementById('seek');
-   if(n)n.textContent=formatTime(pos);if(t)t.textContent=formatTime(duration);
-   if(seek){seek.disabled=(state.mode==='direct'&&(!video.seekable||!video.seekable.length));if(document.activeElement!==seek)seek.value=String(Math.max(0,Math.min(1000,Math.round(pos/duration*1000))))}
+   if(n)n.textContent=formatTime(pos);if(t)t.textContent=duration>0&&isFinite(duration)?formatTime(duration):'--:--';
+   if(seek){seek.disabled=!(duration>0&&isFinite(duration))||(state.mode==='direct'&&(!video.seekable||!video.seekable.length));
+    if(document.activeElement!==seek&&duration>0&&isFinite(duration))seek.value=String(Math.max(0,Math.min(1000,Math.round(pos/duration*1000))))}
    if(Date.now()-state.lastSaved>5000&&state.ready){saveResume(kind,id,pos,duration,true);state.lastSaved=Date.now()}
   }
  }
@@ -598,7 +602,7 @@ function closePlayer(){
  if(state&&S.route==='player'&&state.kind!=='live'){
   var video=state.video,pos=state.mode==='vodhls'?state.offset+(video.currentTime||0):(video.currentTime||0);
   var duration=state.mode==='vodhls'?state.duration:(video.duration>0?video.duration:state.duration);
-  if(state.ready&&duration>0)saveResume(state.kind,state.id,pos,duration,true)
+  if(state.ready)saveResume(state.kind,state.id,pos,duration,true)
  }
  cleanupPlayer();
  var previous=S.previousBeforePlayer||{route:'home'};
