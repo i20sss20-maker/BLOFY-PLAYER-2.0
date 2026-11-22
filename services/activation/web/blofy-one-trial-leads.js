@@ -121,6 +121,7 @@
     leads=data.items.filter(row=>row&&UUID.test(String(row.voucherId||'')));
     matched=Number(data.matched)||0;nextOffset=data.nextOffset;
     render();
+    notice.textContent='✓ تم تحميل '+matched+' طلب تجربة موثّق من الموقع. التاريخ والوقت بتوقيت السعودية.';
    }catch(error){
     leads=[];matched=0;nextOffset=null;
     table.replaceChildren();
