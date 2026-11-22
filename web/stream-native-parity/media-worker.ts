@@ -169,15 +169,15 @@ async function startVod({bearer,kind,id,ext,track,start,key}){
  try{
   const src='http://127.0.0.1:'+Number(Bun.env.PORT||3000)+'/_source/'+key;
   const args=['-hide_banner','-loglevel','warning','-nostdin','-analyzeduration','2000000','-probesize','2000000',
-   '-ss',String(start),'-re','-i',src,
+   '-ss',String(start),'-readrate','1.5','-i',src,
    '-map','0:v:0','-map','0:a:'+track+'?',
    '-c:v','libx264','-preset','ultrafast','-profile:v','baseline','-level','3.1','-pix_fmt','yuv420p',
    '-vf','scale=854:480:force_original_aspect_ratio=decrease:force_divisible_by=2,fps=25',
-   '-g','50','-keyint_min','50','-sc_threshold','0','-b:v','900k','-maxrate','1100k','-bufsize','1800k',
+   '-g','25','-keyint_min','25','-sc_threshold','0','-b:v','900k','-maxrate','1100k','-bufsize','1800k',
    '-c:a','aac','-profile:a','aac_low','-b:a','96k','-ac','2','-ar','48000',
-   '-f','hls','-hls_time','2','-hls_segment_type','mpegts',
+   '-f','hls','-hls_time','1','-hls_segment_type','mpegts',
    '-hls_segment_filename',join(dir,'seg-%06d.ts'),
-   '-hls_list_size','12','-hls_delete_threshold','36','-hls_flags','delete_segments+independent_segments+temp_file',
+   '-hls_list_size','24','-hls_delete_threshold','60','-hls_flags','delete_segments+independent_segments+temp_file',
    join(dir,'index.m3u8')];
   const proc=Bun.spawn([FFMPEG,...args],{stdin:'ignore',stdout:'ignore',stderr:'pipe',signal:abort.signal});
   session.proc=proc;
@@ -208,6 +208,10 @@ async function vodRequest(req,url){
  if(!success)return json(sess.error?502:504,{error:sess.error||'vod_initial_segment_pending'});
  if(file==='index.m3u8'){
   const manifest=readFileSync(join(sess.dir,'index.m3u8'),'utf8');
+  if(!sess.firstSegmentLogged&&/seg-\\d{6}\\.ts/.test(manifest)){
+   sess.firstSegmentLogged=true;
+   console.info('BLOFY_WEB_VOD_FIRST_PLAYLIST',{kind:sess.kind,elapsedMs:Date.now()-sess.startedAt});
+  }
   const first=(manifest.match(/seg-\d{6}\.ts/)||[])[0];
   if(first&&!existsSync(join(sess.dir,first)))return json(503,{error:'vod_playlist_not_ready'});
  }
