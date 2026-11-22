@@ -78,7 +78,7 @@ test('switching channels and leaving live releases the old media worker session'
 test('Chrome uses local Hls.js and decodes H.264/AAC HLS instead of native unsupported source',async({page})=>{
  const manifest=readFileSync('/tmp/blofy-qa-hls/index.m3u8','utf8');
  const segments={};
- for(const name of [...new Set(manifest.match(/seg-\\d{6}\\.ts/g)||[])])segments[name]=readFileSync('/tmp/blofy-qa-hls/'+name);
+ for(const name of [...new Set(manifest.match(/seg-[0-9]{6}[.]ts/g)||[])])segments[name]=readFileSync('/tmp/blofy-qa-hls/'+name);
  const requested=[];
  page.on('request',r=>{if(r.url().includes('/vendor/hls.min.js'))requested.push(r.url())});
  await page.route('**/api/hls/live/31/ts/0/**',async route=>{
