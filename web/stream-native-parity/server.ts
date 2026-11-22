@@ -21,7 +21,7 @@ if(method==='GET'&&(p==='/app.js'||p==='/styles.css'||p==='/manifest.webmanifest
  if(!await asset.exists())return json(404,{error:'static_asset_missing'});
  return new Response(asset,{headers:noCache({'Content-Type':mime})});
 }
-if(p==='/'&&method==='GET')return new Response(HTML,{status:200,headers:noCache({'Content-Type':'text/html; charset=utf-8','Content-Security-Policy':"default-src 'self' https: data:; script-src 'self'; style-src 'self'; img-src 'self' https: data:; media-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"})});
+if(p==='/'&&method==='GET')return new Response(HTML,{status:200,headers:noCache({'Content-Type':'text/html; charset=utf-8','Content-Security-Policy':"default-src 'self' https: data:; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; media-src 'self' blob:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"})});
 
 
 if(p==='/app.webmanifest'&&method==='GET'){
