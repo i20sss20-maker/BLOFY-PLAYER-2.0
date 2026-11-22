@@ -164,7 +164,7 @@ async function startVod({bearer,kind,id,ext,track,start,key}){
  const session={key,vod:true,kind,id,ext,track,start,bearer,dir,abort,startedAt:Date.now(),stopped:false,released:false,finished:false,proc:null,lastAccess:Date.now(),error:null};
  hlsSessions.set(key,session);
  mkdirSync(dir,{recursive:true});touchHls(session);
- session.hardTimer=setTimeout(()=>stopHls(session,'session_expired'),75*60*1000);
+ session.hardTimer=setTimeout(()=>stopHls(session,'session_expired'),4*60*60*1000);
  session.hardTimer.unref?.();
  try{
   const src='http://127.0.0.1:'+Number(Bun.env.PORT||3000)+'/_source/'+key;
