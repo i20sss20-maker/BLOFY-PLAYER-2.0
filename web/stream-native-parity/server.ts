@@ -61,6 +61,37 @@ if(p==='/vendor/hls.min.js'&&method==='GET'){
 }
 
 const h=auth(req);if(!h)return json(401,{ok:false,error:'activation_required'});
+if(p==='/api/ai/interpret'&&method==='POST'){
+ // Same authenticated first-party gateway used by native STREAM Android.
+ // Credentials remain server-side in the encrypted HttpOnly session cookie.
+ if(!h)return json(401,{ok:false,error:'activation_required'});
+ let payload={};
+ try{
+  if(Number(req.headers.get('content-length')||0)>2048)return json(413,{ok:false,error:'request_too_large'});
+  payload=await req.json()
+ }catch{return json(400,{ok:false,error:'invalid_request'})}
+ const text=String(payload.text||'').trim().slice(0,160),locale=payload.locale==='en'?'en':'ar';
+ if(text.length<3||text.length>160)return json(400,{ok:false,error:'invalid_ai_query'});
+ try{
+  const endpoint='https://blofy-ai-gateway-production.up.railway.app/v1/search/interpret';
+  const response=await fetch(endpoint,{method:'POST',redirect:'manual',headers:{
+   'Content-Type':'application/json; charset=utf-8','Authorization':h.Authorization,'Accept':'application/json',
+   'Cache-Control':'no-store'},body:JSON.stringify({text,locale}),signal:AbortSignal.timeout(24000)});
+  if(response.status>=300&&response.status<400)return json(502,{ok:false,error:'ai_redirect_rejected'});
+  if(!response.ok)return json([401,403,429].includes(response.status)?response.status:503,
+   {ok:false,error:response.status===429?'ai_rate_limit':response.status===401||response.status===403?'subscription_expired':'ai_unavailable'});
+  const raw=await response.text();
+  if(raw.length>32000)return json(502,{ok:false,error:'ai_response_too_large'});
+  let data;try{data=JSON.parse(raw)}catch{return json(502,{ok:false,error:'ai_bad_response'})}
+  if(!data||data.ok!==true)return json(502,{ok:false,error:'ai_bad_response'});
+  const clean=(v,max)=>typeof v==='string'?v.slice(0,max):'';
+  return json(200,{ok:true,reply:clean(data.reply,240),intent:clean(data.intent,30),title:clean(data.title,110),
+   genre:clean(data.genre,35),person:clean(data.person,90),
+   year:Number.isInteger(Number(data.year))&&Number(data.year)>=1900&&Number(data.year)<=2035?Number(data.year):null,
+   suggestedTitles:(Array.isArray(data.suggestedTitles)?data.suggestedTitles:[])
+    .filter(x=>typeof x==='string'&&x.trim().length>=3).slice(0,12).map(x=>x.trim().slice(0,105))})
+ }catch{return json(503,{ok:false,error:'ai_unavailable'})}
+}
 if(p==='/api/player-diagnostic'&&method==='POST'){
  let data;try{if(Number(req.headers.get('content-length')||0)>700)return json(413,{error:'too_large'});data=await req.json()}catch{return json(400,{error:'invalid_diagnostic'})}
  const kind=String(data?.kind||''),mode=String(data?.mode||''),phase=String(data?.phase||''),errorCode=Number(data?.errorCode)||0;
