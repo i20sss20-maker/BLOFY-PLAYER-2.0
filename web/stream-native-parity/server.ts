@@ -28,6 +28,19 @@ if(p==='/app.webmanifest'&&method==='GET'){
  return new Response(JSON.stringify({id:'/',name:'BLOFY STREAM',short_name:'BLOFY',description:'BLOFY STREAM Web & VIDAA experimental edition',start_url:'/',scope:'/',display:'standalone',orientation:'landscape',background_color:'#09090c',theme_color:'#0b0b10',lang:'ar',dir:'rtl',icons:[{src:'/app-icon.svg',sizes:'any',type:'image/svg+xml',purpose:'any'}]}),{headers:{'Content-Type':'application/manifest+json; charset=utf-8','Cache-Control':'public,max-age=3600'}})
 }
 if(p==='/app-icon.svg'&&method==='GET')return new Response("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"512\" height=\"512\" viewBox=\"0 0 512 512\"><defs><linearGradient id=\"g\" x1=\"0\" x2=\"1\" y1=\"0\" y2=\"1\"><stop stop-color=\"#49303a\"/><stop offset=\"1\" stop-color=\"#080a0f\"/></linearGradient></defs><rect width=\"512\" height=\"512\" rx=\"96\" fill=\"url(#g)\"/><rect x=\"40\" y=\"40\" width=\"432\" height=\"432\" rx=\"72\" fill=\"none\" stroke=\"#d6ad79\" stroke-width=\"8\"/><text x=\"256\" y=\"270\" text-anchor=\"middle\" font-family=\"Arial,sans-serif\" font-size=\"121\" font-weight=\"bold\" letter-spacing=\"5\" fill=\"#efc587\">BLOFY</text><text x=\"256\" y=\"331\" text-anchor=\"middle\" font-family=\"Arial,sans-serif\" font-size=\"44\" letter-spacing=\"18\" fill=\"#e8c18d\">STREAM</text></svg>",{headers:{'Content-Type':'image/svg+xml; charset=utf-8','Cache-Control':'public,max-age=86400','X-Content-Type-Options':'nosniff'}});
+
+if(p==='/__parity_selftest'&&method==='POST'){
+ try{
+  const script=await Bun.file(new URL('./app.js',import.meta.url)).text();
+  const style=await Bun.file(new URL('./styles.css',import.meta.url)).text();
+  const page=await Bun.file(new URL('./index.html',import.meta.url)).text();
+  new Function(script);
+  const secure=Boolean(KEY)&&/^[a-f0-9]{64}$/i.test(String(Bun.env.VIDAA_COMPAT_KEY||''));
+  const correct=style.includes('--bg:#06161d')&&style.includes('--accent:#46e4d0')&&style.includes('.catalog')&&style.includes('.player-overlay')&&page.includes('/app.js');
+  console.info('BLOFY_NATIVE_PARITY_CHECK',{compiled:true,secure,styled:correct,jsBytes:script.length,cssBytes:style.length});
+  return json(secure&&correct?200:503,{ok:secure&&correct,jsCompiled:true,styleFromAndroid:correct,secretsConfigured:secure})
+ }catch(e){console.error('BLOFY_NATIVE_PARITY_CHECK_FAILED',String(e.name||'Error'));return json(503,{ok:false})}
+}
 if(p==='/health'&&method==='GET')return json(200,{ok:true,app:'blofy-stream-web-native-parity',ready:Boolean(KEY),version:'0.1.0-native-parity'});
 
 if(p==='/vendor/mpegts.js'&&method==='GET'){
