@@ -737,6 +737,11 @@ function openPlayer(kind,id,extension,name,from){
  var item=findItem(kind,id)||S.item&&S.item.data,ext=String(extension||item&&item.container_extension||(kind==='live'?'ts':'mp4')).toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,8);
  if(['ts','mp4','mkv','avi','mov'].indexOf(ext)<0)ext=kind==='live'?'ts':'mp4';
  var explicitStart=from!==undefined&&from!==null&&from!=='';var initial=Math.max(0,Number(from)||0),isLive=kind==='live',prior=getResume(kind,id),resume=explicitStart?initial:(prior&&prior.position||0);
+ var nextEpisode=null;
+ if(kind==='series'&&S.episodes&&S.episodes.episodes){
+  var episodeList=parseEpisodes(S.episodes).sort(function(a,b){return Number(a.__season)-Number(b.__season)||Number(a.episode_num||0)-Number(b.episode_num||0)});
+  for(var ix=0;ix<episodeList.length-1;ix++)if(String(episodeList[ix].id)===String(id)){nextEpisode=episodeList[ix+1];break}
+ }
  rememberView();S.previousBeforePlayer={route:S.route,kind:kind,id:id};S.route='player';
  app.innerHTML='<section class="player-overlay" id="player-root"><video id="player-media" '+(isLive?'controls':'')+' autoplay playsinline webkit-playsinline></video>'+
  '<div class="player-loading" id="player-status">جار تجهيز المشغّل…</div>'+
@@ -744,6 +749,7 @@ function openPlayer(kind,id,extension,name,from){
  (isLive?'':'<div class="player-time"><span id="now-time">00:00:00</span><span id="total-time">--:--</span></div><input id="seek" type="range" min="0" max="1000" value="0" step="1" class="seek-line" disabled>')+
  '<div class="player-actions"><button class="btn secondary" id="player-back">↶ رجوع</button><button class="btn" id="player-toggle">⏯ تشغيل / إيقاف</button>'+
  (isLive?'':'<button class="btn secondary" id="player-skip-back">−30 ثانية</button><button class="btn secondary" id="player-skip-forward">+30 ثانية</button><button class="btn secondary" id="player-skip-forward5">+5 دقائق</button><button class="btn secondary" id="player-restart">↺ من البداية</button>')+
+ (nextEpisode?'<button class="btn secondary" id="player-next-episode">الحلقة التالية ⏭</button>':'')+
  '<button class="btn secondary" id="player-audio">◉ الصوت</button></div></div></section>';
  var video=document.getElementById('player-media'),state={kind:kind,id:id,ext:ext,video:video,name:name,offset:0,
  mode:isLive?'hls':'direct',resume:resume,duration:knownDuration(kind,id,item),didResume:false,ready:false,track:0,lastSaved:0};
@@ -815,6 +821,15 @@ function openPlayer(kind,id,extension,name,from){
  if(forward30)forward30.onclick=function(){seekTo(realPos()+30)};
  var forward5=document.getElementById('player-skip-forward5');
  if(forward5)forward5.onclick=function(){seekTo(realPos()+300)};
+ var nextBtn=document.getElementById('player-next-episode');
+ if(nextBtn&&nextEpisode)nextBtn.onclick=function(){
+  if(state.ready)saveResume(kind,id,realPos(),totalDuration(),true);
+  var previous=S.previousBeforePlayer||{route:'episodes',kind:'series',id:id};
+  cleanupPlayer();S.playerView=null;S.route='episodes';
+  var nextId=String(nextEpisode.id),checkpoint=getResume('series',nextId);
+  openPlayer('series',nextId,nextEpisode.container_extension||'mp4',nextEpisode.title||'الحلقة '+(nextEpisode.episode_num||''),checkpoint&&checkpoint.position>30?checkpoint.position:0);
+  S.previousBeforePlayer=previous;
+ };
  var seek=document.getElementById('seek');
  if(seek)seek.onchange=function(){
   var duration=totalDuration(),target=Math.round(duration*Number(this.value)/1000);
