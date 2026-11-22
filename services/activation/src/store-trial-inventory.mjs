@@ -379,14 +379,17 @@ export function createStoreTrialInventory({
  }
  const handler=async function handle(req,res,url){
   const path=url.pathname;
-  if(![ROUTE+'/availability',ROUTE+'/mine',ROUTE+'/claim',
-        ADMIN+'/summary',ADMIN+'/generate'].includes(path))return false;
+  if(![ROUTE+'/availability',ROUTE+'/mine',ROUTE+'/claim',CONTACT_PREFERENCES,
+        ADMIN+'/summary',ADMIN+'/generate',ADMIN+'/leads',ADMIN+'/leads/followup'].includes(path))return false;
   if(path===ROUTE+'/availability'&&req.method==='GET')await publicAvailability(req,res);
   else if(path===ROUTE+'/mine'&&req.method==='GET')await mine(req,res);
   else if(path===ROUTE+'/claim'&&req.method==='POST')await claim(req,res);
+  else if(path===CONTACT_PREFERENCES&&req.method==='POST')await contactPreferences(req,res);
+  else if(path===ADMIN+'/leads'&&req.method==='POST')await adminLeads(req,res);
+  else if(path===ADMIN+'/leads/followup'&&req.method==='POST')await adminFollowup(req,res);
   else if(path===ADMIN+'/summary'&&req.method==='GET')await adminSummary(req,res);
   else if(path===ADMIN+'/generate'&&req.method==='POST')await generate(req,res);
-  else json(res,405,{error:'method_not_allowed'},{...NO_CACHE,allow:path.endsWith('claim')||path.endsWith('generate')?'POST':'GET'});
+  else json(res,405,{error:'method_not_allowed'},{...NO_CACHE,allow:path.endsWith('availability')||path.endsWith('mine')||path.endsWith('summary')?'GET':'POST'});
   return true;
  };
  handler.autoRefillTrials=autoRefillTrials;
