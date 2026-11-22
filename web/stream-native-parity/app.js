@@ -632,13 +632,19 @@ function durationSeconds(value){
  return isFinite(seconds)&&seconds>0?seconds:0
 }
 function knownDuration(kind,id,item){
- var movieInfo=kind==='movie'&&S.item&&S.item.info&&S.item.info.info;
- var opts=[item&&item.duration_secs,item&&item.duration,item&&item.info&&item.info.duration_secs,item&&item.info&&item.info.duration,
- movieInfo&&movieInfo.duration_secs,movieInfo&&movieInfo.duration];
+ var opts=[],movieInfo=kind==='movie'&&S.item&&S.item.info&&S.item.info.info;
+ // Episode-specific duration must win over a series' parent metadata.
  if(kind==='series'&&S.episodes&&S.episodes.episodes){
   var eps=parseEpisodes(S.episodes);
-  for(var i=0;i<eps.length;i++)if(String(eps[i].id)===String(id)){opts.push(eps[i].info&&eps[i].info.duration_secs,eps[i].duration_secs,eps[i].info&&eps[i].info.duration);break}
+  for(var i=0;i<eps.length;i++)if(String(eps[i].id)===String(id)){
+   var ep=eps[i],ei=ep.info||{};
+   opts.push(ep.duration_secs,ei.duration_secs,ep.duration,ei.duration);
+   break
+  }
  }
+ opts=opts.concat([item&&item.duration_secs,item&&item.duration,
+  item&&item.info&&item.info.duration_secs,item&&item.info&&item.info.duration,
+  movieInfo&&movieInfo.duration_secs,movieInfo&&movieInfo.duration]);
  for(var k=0;k<opts.length;k++){var sec=durationSeconds(opts[k]);if(sec>0)return sec}
  var saved=getResume(kind,id);
  return saved&&saved.duration||0
@@ -684,6 +690,16 @@ function playVodSegments(video,kind,id,ext,track,start,state,ready){
  video.onerror=function(){if(!alive())return;diagnose(kind,'media_error','video',video.error&&video.error.code);interrupted('media_error')};
  video.onplaying=function(){if(!alive())return;rec.ready=true;if(rec.timer)clearTimeout(rec.timer);ready();};
  video.onwaiting=function(){if(alive()&&rec.ready)playerStatus('جار تحميل المقطع التالي من الفيلم…')};
+ video.onended=function(){
+  if(!alive())return;
+  var absolute=at+Math.max(0,video.currentTime||0),duration=state.duration||0;
+  if(duration>0&&absolute<duration-60){
+   interrupted('unexpected_end');
+  }else{
+   saveResume(kind,id,duration||absolute,duration||absolute,true);
+   playerStatus('اكتملت المشاهدة')
+  }
+ };
  if(shouldUseNativeHls(video)){
   video.src=manifest;try{var promise=video.play();if(promise&&promise.catch)promise.catch(function(){fail('اضغط ▶ داخل المشغّل للبدء')})}catch(e){}return
  }
