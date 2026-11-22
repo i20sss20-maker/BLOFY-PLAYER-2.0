@@ -50,7 +50,7 @@ function login(message){
  var button=document.getElementById('redeem');
  button.onclick=redeem;
  document.getElementById('activation-code').onkeydown=function(e){if((e.keyCode||e.which)===13)redeem()};
- setTimeout(function(){document.getElementById('activation-code')?.focus()},70)
+ setTimeout(function(){(document.getElementById('activation-code')||{focus:function(){}}).focus()},70)
 }
 function redeem(){
  var code=(document.getElementById('activation-code').value||'').replace(/[\s-]/g,'').toUpperCase();
@@ -444,7 +444,7 @@ function openPlayer(kind,id,extension,name,from){
    state.mode='compatible';video.removeAttribute('src');video.load();
    playerStatus('المصدر لا يدعم التشغيل المباشر. جار تجربة AAC؛ تقديم الفيديو قد لا يكون متاحًا على هذا المسار.');
    video.src='/api/compatible/'+enc(kind)+'/'+enc(id)+'.'+enc(ext)+'?mode=audio&track='+state.track;
-   video.play().catch(function(){playerStatus('تعذر تشغيل المصدر بصيغته الحالية. نحتاج مسار VOD مع فهرس تقديم مستقل.',true)})
+   var ret=video.play();if(ret&&ret.catch)ret.catch(function(){playerStatus('تعذر تشغيل المصدر بصيغته الحالية. نحتاج مسار VOD مع فهرس تقديم مستقل.',true)})
   }else playerStatus('الصيغة غير مدعومة أو تعذّر الوصول للمصدر.',true)
  };
  var backBtn=document.getElementById('player-back');backBtn.onclick=closePlayer;
