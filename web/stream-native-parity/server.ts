@@ -98,6 +98,21 @@ if(p==='/api/ai/interpret'&&method==='POST'){
     .filter(x=>typeof x==='string'&&x.trim().length>=3).slice(0,12).map(x=>x.trim().slice(0,105))})
  }catch{return json(503,{ok:false,error:'ai_unavailable'})}
 }
+if(p==='/api/health/media'&&method==='GET'){
+ // Authenticated read-only status; do not expose the media gateway secret.
+ const secret=String(Bun.env.VIDAA_COMPAT_KEY||'');
+ if(!/^[a-f0-9]{64}$/i.test(secret))return json(503,{ok:false,player:'unconfigured'});
+ try{
+  const res=await fetch('http://blofy-stream-web-vod-seek-pilot.railway.internal:8080/health',
+   {headers:{'X-Compat-Secret':secret},redirect:'manual',signal:AbortSignal.timeout(12000)});
+  if(!res.ok)return json(503,{ok:false,player:'unavailable'});
+  const info=await res.json();
+  const ok=info.ok===true&&info.vodSeek?.ok===true&&info.hls?.ok===true;
+  const used=Math.max(0,Number(info.activeJobs)||0),limit=Math.max(0,Number(info.limit)||0);
+  return json(ok?200:503,{ok,player:ok?'ready':'degraded',vodSeek:info.vodSeek?.ok===true,
+   hls:info.hls?.ok===true,converting:Math.round(used),capacity:Math.round(limit)});
+ }catch{return json(503,{ok:false,player:'unreachable'})}
+}
 if(p==='/api/player-diagnostic'&&method==='POST'){
  let data;try{if(Number(req.headers.get('content-length')||0)>700)return json(413,{error:'too_large'});data=await req.json()}catch{return json(400,{error:'invalid_diagnostic'})}
  const kind=String(data?.kind||''),mode=String(data?.mode||''),phase=String(data?.phase||''),errorCode=Number(data?.errorCode)||0;
