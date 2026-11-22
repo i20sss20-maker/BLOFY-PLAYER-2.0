@@ -8,7 +8,7 @@
 var app=document.getElementById('app');
 var S={route:'boot',kind:'movie',cat:{live:'all',movie:'all',series:'all'},cats:{},pages:{},loaded:{},selected:null,livePreview:null,
  item:null,episodes:null,selectedSeason:'1',play:null,history:[],sort:'source',heroIndex:0,searchToken:0,requestNum:0,library:readJson('blofy_web_favorites_v2',{}),
- watch:readJson('blofy_web_watch_v2',{}),favoriteItems:readJson('blofy_web_favorite_items_v1',{}),host:'',userVerified:false,heading:'',loading:false,listingInflight:{},catsInflight:{},views:{},keyboardMode:false,refreshing:false,catalogVersion:null,lastCatalogCheck:0};
+ watch:readJson('blofy_web_watch_v2',{}),favoriteItems:readJson('blofy_web_favorite_items_v1',{}),host:'',userVerified:false,heading:'',loading:false,listingInflight:{},catsInflight:{},views:{},keyboardMode:false,refreshing:false,catalogVersion:null,lastCatalogCheck:0,aiTurns:[],aiBusy:false,aiToken:0,aiSearchTitle:null};
 var NAV=[['home','⌂','الرئيسية'],['live','◉','البث المباشر'],['movie','▣','الأفلام'],['series','▤','المسلسلات'],['collections','▦','التصنيفات'],['favorites','♡','المفضلة'],['search','⌕','البحث'],['ai','✧','الذكاء الاصطناعي'],['settings','⚙','الإعدادات']];
 function readJson(key,backup){try{var value=JSON.parse(localStorage.getItem(key)||'null');return value||backup}catch(e){return backup}}
 function writeJson(key,val){try{localStorage.setItem(key,JSON.stringify(val))}catch(e){}}
@@ -511,7 +511,12 @@ function searchScreen(){
  var token=++S.searchToken;document.getElementById('search-status').textContent='جار البحث في المكتبة…';
  S.searchTimer=setTimeout(function(){searchNow(q,token)},260)
  };
- document.getElementById('search-input').focus()
+ document.getElementById('search-input').focus();
+ if(S.aiSearchTitle){
+  var text=S.aiSearchTitle;S.aiSearchTitle=null;
+  var input=document.getElementById('search-input');input.value=text;
+  if(text.length>=2){var token=++S.searchToken;searchNow(text,token)}
+ }
 }
 function searchNow(q,token){
  var kinds=['live','movie','series'],responses={live:[],movie:[],series:[]},pending=3;
@@ -543,8 +548,65 @@ function searchNow(q,token){
  })(kinds[i])
 }
 function aiScreen(){
- shell('الذكاء الاصطناعي','<div class="info">واجهة المحادثة الذكية في نسخة أندرويد تعتمد على خدمة مخصصة. لم أربطها بالويب حتى الآن حتى لا تظهر لك إجابات وهمية. بإمكانك استخدام البحث المباشر في المكتبة الآن.</div>'+
- '<div style="margin-top:16px"><button class="btn" data-go="search">انتقل إلى البحث</button></div>')
+ S.route='ai';
+ shell('مساعد BLOFY الذكي','<section class="ai-chat-screen" aria-label="محادثة مساعد BLOFY">'+
+  '<div class="ai-note">المساعد يستخدم خدمة BLOFY نفسها الموجودة في تطبيق Android. الاقتراحات تُعرض كبحث داخل مكتبتك، وليست روابط لمحتوى غير متحقق.</div>'+
+  '<div class="ai-thread" id="ai-thread" role="log" aria-live="polite"></div>'+
+  '<div class="ai-prompts" id="ai-prompts"><button class="chip" data-ai-prompt="اقترح أفلام أكشن">أفلام أكشن</button>'+
+  '<button class="chip" data-ai-prompt="رشح لي مسلسل كوميدي">مسلسلات كوميدية</button>'+
+  '<button class="chip" data-ai-prompt="اقترح فيلم رعب جديد">أفلام رعب جديدة</button></div>'+
+  '<div class="ai-compose"><input class="input" id="ai-text" maxlength="160" placeholder="اسأل عن فيلم أو مسلسل ترغب بمشاهدته…" autocomplete="off">'+
+  '<button class="btn" id="ai-send">إرسال ⟵</button></div>'+
+  '<p class="muted small">الذكاء الاصطناعي قد يخطئ. اضغط على العنوان لعرض النتائج الفعلية في مكتبتك.</p></section>');
+ function render(){
+  if(S.route!=='ai')return;
+  var box=document.getElementById('ai-thread');if(!box)return;
+  var turns=S.aiTurns.slice(-16);
+  box.innerHTML=turns.map(function(turn){
+   var suggestions=(turn.suggestions||[]).map(function(t){
+    return '<button class="chip ai-result" data-ai-result="'+esc(t)+'">⌕ '+esc(t)+'</button>'
+   }).join('');
+   return '<div class="ai-bubble '+(turn.user?'mine':'assistant')+'"><strong>'+(turn.user?'أنت':'BLOFY AI')+'</strong>'+
+    '<p>'+esc(turn.text)+'</p>'+(suggestions?'<div class="ai-links">'+suggestions+'</div>':'')+'</div>'
+  }).join('')+(S.aiBusy?'<div class="ai-bubble assistant"><strong>BLOFY AI</strong><p>جار تحليل طلبك…</p></div>':'');
+  box.scrollTop=box.scrollHeight
+ }
+ if(!S.aiTurns.length)S.aiTurns.push({user:false,text:'أهلًا بك في مساعد BLOFY. أخبرني بنوع الأفلام أو المسلسلات التي تحبها، وسأقترح عناوين للبحث عنها في مكتبتك.'});
+ render();
+ function ask(text){
+  var query=String(text||'').trim().slice(0,160);
+  if(query.length<3||S.aiBusy)return;
+  S.aiBusy=true;var token=++S.aiToken;
+  S.aiTurns.push({user:true,text:query});
+  document.getElementById('ai-text').value='';
+  render();
+  api('POST','/api/ai/interpret',{text:query,locale:document.documentElement.lang==='en'?'en':'ar'},function(st,data){
+   if(token!==S.aiToken)return;
+   S.aiBusy=false;
+   if(st===200&&data&&data.ok){
+    var suggestions=Array.isArray(data.suggestedTitles)?data.suggestedTitles.slice(0,10):[];
+    if(data.title&&suggestions.indexOf(data.title)<0)suggestions.unshift(data.title);
+    S.aiTurns.push({user:false,text:String(data.reply||'اضغط على أحد العناوين للبحث عنه في مكتبة BLOFY.').slice(0,240),suggestions:suggestions})
+   }else{
+    var message=st===429?'تم الوصول إلى حد الطلبات مؤقتًا. جرب بعد قليل.':
+     st===401||st===403?'انتهت جلسة الاشتراك. افتح الإعدادات وتحقق من التفعيل.':
+     'خدمة المساعد غير متاحة حاليًا. يمكنك استخدام البحث المباشر من القائمة.';
+    S.aiTurns.push({user:false,text:message})
+   }
+   if(S.aiTurns.length>18)S.aiTurns=S.aiTurns.slice(-18);
+   render()
+  })
+ }
+ document.getElementById('ai-send').onclick=function(){ask(document.getElementById('ai-text').value)};
+ document.getElementById('ai-text').onkeydown=function(e){if((e.keyCode||e.which)===13){e.preventDefault();ask(this.value)}};
+ document.getElementById('ai-prompts').onclick=function(e){
+  var t=e.target.getAttribute('data-ai-prompt');if(t)ask(t)
+ };
+ document.getElementById('ai-thread').onclick=function(e){
+  var node=e.target;
+  while(node&&node!==this&&!node.getAttribute('data-ai-result'))node=node.parentNode;
+  if(node&&node!==this){var title=node.getAttribute('data-ai-result');S.aiSearchTitle=title;navigate('search')}
+ };
 }
 function refreshCatalog(manual){
  if(S.refreshing||!S.userVerified)return;
