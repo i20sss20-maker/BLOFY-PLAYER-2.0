@@ -1446,7 +1446,12 @@ function openPlayer(kind,id,extension,name,from){
   state.directSeekCheck=setTimeout(function(){
    state.directSeekCheck=null;
    if(S.route!=='player'||state.mode!=='direct'||state.directFallback||isLive)return;
-   if(!(video.duration>120&&isFinite(video.duration)))return;
+   if(!(video.duration>120&&isFinite(video.duration))){
+    // A non-live movie/episode advertised as 60 seconds or Infinity is not
+    // a usable full-length VOD timeline. Resolve its actual Xtream runtime.
+    playerStatus('المدة الظاهرة غير كاملة؛ جار قراءة مدة الفيلم من المصدر…');
+    state.recoverDirect();return
+   }
    // Some sources expose only a short, moving video range despite reporting
    // a full movie duration. Test a distant timestamp, not just range count.
    var probe=Math.max(video.duration*0.75,video.currentTime+120);
