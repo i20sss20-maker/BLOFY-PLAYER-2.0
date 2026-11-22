@@ -155,6 +155,26 @@ async function localSource(req,url){
   return new Response(req.method==='HEAD'?null:res.body,{status:res.status,headers:h})
  }catch{return json(502,{error:'upstream_source_unavailable'})}
 }
+async function probeVodMetadata(session){
+ if(session.metaPromise)return session.metaPromise;
+ session.metaPromise=(async()=>{
+  let proc=null,timer=null;
+  try{
+   const src='http://127.0.0.1:'+Number(Bun.env.PORT||3000)+'/_source/'+session.key;
+   proc=Bun.spawn(['/usr/bin/ffprobe','-v','error','-probesize','2000000','-analyzeduration','2000000','-show_entries','format=duration:stream=duration','-of','json',src],{stdin:'ignore',stdout:'pipe',stderr:'ignore'});
+   const expired=new Promise(resolve=>{timer=setTimeout(()=>{try{proc.kill()}catch{}resolve(-1)},13000)});
+   const code=await Promise.race([proc.exited,expired]);
+   if(timer)clearTimeout(timer);
+   if(code!==0)return {ok:true,durationSec:null,reason:'source_metadata_unavailable'};
+   const data=JSON.parse((await new Response(proc.stdout).text()).slice(0,20000));
+   const values=[data?.format?.duration,...(data?.streams||[]).map(x=>x.duration)].map(Number).filter(x=>Number.isFinite(x)&&x>0&&x<172800);
+   const durationSec=values.length?Math.round(Math.max(...values)):null;
+   return {ok:true,durationSec,reason:durationSec?'source_probe':'source_duration_unknown'};
+  }catch{return {ok:true,durationSec:null,reason:'source_probe_failed'}}
+  finally{if(timer)clearTimeout(timer);try{proc?.kill()}catch{}}
+ })();
+ return session.metaPromise;
+}
 async function startVod({bearer,kind,id,ext,track,start,key}){
  // Replace older positions for this same account/title to avoid wasting transcoding slots.
  for(const s of Array.from(hlsSessions.values()))if(s.vod&&s.bearer===bearer&&s.key!==key)stopHls(s,'title_or_position_changed');
@@ -191,7 +211,7 @@ async function startVod({bearer,kind,id,ext,track,start,key}){
 }
 async function vodRequest(req,url){
  if(!SECRET||!secureEquals(req.headers.get('x-compat-secret'),SECRET))return json(403,{error:'forbidden'});
- const match=url.pathname.match(/^\/vod\/(movie|series)\/([1-9][0-9]{0,14})\/(mkv|mp4|avi|mov|ts)\/([0-3])\/([0-9]{1,6})\/(index\.m3u8|seg-[0-9]{6}\.ts|stop)$/);
+ const match=url.pathname.match(/^\/vod\/(movie|series)\/([1-9][0-9]{0,14})\/(mkv|mp4|avi|mov|ts)\/([0-3])\/([0-9]{1,6})\/(index\.m3u8|seg-[0-9]{6}\.ts|meta|stop)$/);
  if(!match)return json(404,{error:'invalid_vod_path'});
  const [,kind,id,ext,track,rawStart,file]=match,start=Number(rawStart);
  if(!Number.isSafeInteger(start)||start<0||start>172800)return json(400,{error:'invalid_vod_position'});
@@ -204,6 +224,7 @@ async function vodRequest(req,url){
  if(!sess&&file!=='index.m3u8')return json(410,{error:'vod_session_expired'});
  if(!sess){const created=await startVod({bearer,kind,id,ext,track,start,key});if(created.error)return json(created.status||502,{error:created.error});sess=created.session}
  touchHls(sess);
+ if(file==='meta')return json(200,await probeVodMetadata(sess));
  const success=await awaitHlsFile(sess,file,file==='index.m3u8'?25000:11000);
  if(!success)return json(sess.error?502:504,{error:sess.error||'vod_initial_segment_pending'});
  if(file==='index.m3u8'){
