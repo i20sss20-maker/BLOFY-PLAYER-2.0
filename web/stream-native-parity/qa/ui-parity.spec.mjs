@@ -79,8 +79,11 @@ test('Chrome uses local Hls.js and decodes H.264/AAC HLS instead of native unsup
  const manifest=readFileSync('/tmp/blofy-qa-hls/index.m3u8','utf8');
  const segments={};
  for(const name of [...new Set(manifest.match(/seg-[0-9]{6}[.]ts/g)||[])])segments[name]=readFileSync('/tmp/blofy-qa-hls/'+name);
- const requested=[];
+ const requested=[],responses=[],errors=[];
  page.on('request',r=>{if(r.url().includes('/vendor/hls.min.js'))requested.push(r.url())});
+ page.on('response',r=>{if(r.url().includes('/vendor/hls')||r.url().includes('/api/hls/'))responses.push({url:r.url().split('/').slice(-2).join('/'),status:r.status()})});
+ page.on('pageerror',e=>errors.push('page:'+e.message));
+ page.on('console',m=>{if(m.type()==='error'||m.type()==='warning')errors.push('console:'+m.text().slice(0,250))});
  await page.route('**/api/hls/live/31/ts/0/**',async route=>{
   const name=route.request().url().split('/').pop().split('?')[0];
   if(name==='index.m3u8')return route.fulfill({status:200,contentType:'application/vnd.apple.mpegurl',body:manifest});
@@ -91,7 +94,13 @@ test('Chrome uses local Hls.js and decodes H.264/AAC HLS instead of native unsup
  await page.locator('[data-go="live"]').first().click();
  await page.locator('[data-channel="31"]').click();
  await expect.poll(()=>requested.length,{timeout:10000}).toBeGreaterThan(0);
- await expect.poll(()=>page.locator('#live-video').evaluate(v=>v.readyState),{timeout:18000}).toBeGreaterThan(1);
+ await page.waitForTimeout(4000);
+ console.log('BLOFY HLS DIAGNOSTICS',JSON.stringify({
+  responses,errors,
+  player:await page.locator('#live-video').evaluate(v=>({ready:v.readyState,error:v.error&&{code:v.error.code,message:v.error.message},currentSrc:v.currentSrc,muted:v.muted,paused:v.paused,network:v.networkState,canMse:!!window.MediaSource,hasHls:!!window.Hls,hlsSupported:!!(window.Hls&&window.Hls.isSupported()),currentTime:v.currentTime})),
+  status:await page.locator('#live-status').textContent()
+ }));
+ await expect.poll(()=>page.locator('#live-video').evaluate(v=>v.readyState),{timeout:14000}).toBeGreaterThan(1);
  const state=await page.locator('#live-video').evaluate(v=>({ready:v.readyState,error:v.error&&v.error.code,paused:v.paused}));
  expect(state.error).toBeFalsy();
 });
