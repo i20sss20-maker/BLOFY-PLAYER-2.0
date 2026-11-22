@@ -36,7 +36,7 @@ test('copy Xtream never includes M3U URL; M3U button copies only the playlist UR
  };
  const window={addEventListener:()=>{}};
  const ctx={document,window,navigator:{clipboard:{writeText:async x=>clipboard.push(x)}},
-  setTimeout:()=>1,clearTimeout:()=>{},URL,URLSearchParams,Date,Intl,
+  setTimeout:()=>1,clearTimeout:()=>{},AbortController,URL,URLSearchParams,Date,Intl,
   fetch:async()=>({ok:true,status:201,json:async()=>({
    ok:true,universalExtraction:true,originalVoucherPreserved:true,
    recovered:false,account:{durationDays:30,activatedAt:Date.now(),
