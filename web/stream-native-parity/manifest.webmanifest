@@ -1,0 +1,13 @@
+{
+  "id": "/",
+  "name": "BLOFY STREAM",
+  "short_name": "BLOFY",
+  "description": "BLOFY STREAM Web",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#06161d",
+  "theme_color": "#46e4d0",
+  "lang": "ar",
+  "dir": "rtl"
+}
