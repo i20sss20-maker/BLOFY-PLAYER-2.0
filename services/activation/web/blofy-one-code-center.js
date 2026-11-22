@@ -88,6 +88,42 @@
     '<p id="one-trial-status" role="status" aria-live="polite"></p>',
     '<div class="one-trial-links"><a href="/#products" target="_blank" rel="noopener">خيار تجربة اليوم داخل الاشتراكات ↗</a>',
     '<a href="/store/trial" target="_blank" rel="noopener">صفحة طلب التجربة للعملاء ↗</a></div>',
+    '<section id="one-trial-leads" class="one-trial-leads" aria-labelledby="one-trial-leads-title">',
+    '<div class="one-section-heading"><div><span class="one-kicker">VERIFIED TRIAL CLAIMS · FOLLOW-UP</span>',
+    '<h3 id="one-trial-leads-title">👤 سجل العملاء الذين طلبوا تجربة من الموقع</h3></div>',
+    '<button type="button" id="one-trial-leads-refresh">↻ تحديث العملاء</button></div>',
+    '<p class="one-footnote">تظهر طلبات التجربة المرتبطة بحسابات بريد موثّقة فقط، مع الاسم والجوال والبريد ووقت الطلب الدقيق بتوقيت السعودية، وحالة التفعيل. لا يظهر مخزون الأكواد غير المسلّمة كعملاء.</p>',
+    '<form id="one-trial-leads-search" class="one-trial-leads-filters" autocomplete="off">',
+    '<label>بحث باسم العميل أو الجوال أو البريد<input id="one-trial-leads-query" type="search" maxlength="100" placeholder="ابحث عن عميل أو رقم 05…" spellcheck="false"></label>',
+    '<label>نوع التجربة<select id="one-trial-leads-sku"><option value="all">النوعان</option><option value="trial-stream-1d">BLOFY STREAM</option><option value="trial-xtream-1d">Xtream</option></select></label>',
+    '<label>حالة التفعيل<select id="one-trial-leads-state"><option value="all">كل الحالات</option><option value="unactivated">لم يفعّل</option><option value="active">فعّال</option><option value="expired">منتهي</option><option value="revoked">ملغى</option></select></label>',
+    '<button type="submit">⌕ بحث</button></form>',
+    '<p id="one-trial-leads-status" role="status" aria-live="polite">افتح سجل العملاء لقراءة الطلبات الفعلية من قاعدة BLOFY.</p>',
+    '<div class="one-register-table-wrap" tabindex="0" role="region" aria-label="العملاء الذين حجزوا تجربة من BLOFY">',
+    '<table class="one-register-table"><thead><tr>',
+    '<th>اسم العميل</th><th>الجوال والبريد</th><th>التجربة</th><th>وقت الطلب (السعودية)</th><th>التفعيل</th><th>التواصل والعروض</th><th>التفاصيل</th>',
+    '</tr></thead><tbody id="one-trial-leads-rows"><tr><td colspan="7">جارٍ قراءة الطلبات…</td></tr></tbody></table></div>',
+    '<div class="one-register-pagination"><button id="one-trial-leads-prev" type="button" disabled>← السابق</button>',
+    '<span id="one-trial-leads-page">—</span><button id="one-trial-leads-next" type="button" disabled>التالي →</button></div>',
+    '<p class="one-footnote">التواصل التسويقي وإرسال العروض يتطلب موافقة صريحة من العميل. طلبات التجربة السابقة دون موافقة مسجلة تُعرض للمراجعة فقط، ولا تُعامل كموافقة على العروض.</p>',
+    '</section>',
+    '<dialog id="one-trial-lead-dialog" class="one-register-dialog one-trial-lead-dialog" aria-labelledby="one-trial-lead-title">',
+    '<div class="one-register-dialog-header"><h3 id="one-trial-lead-title">ملف العميل التجريبي</h3>',
+    '<button type="button" id="one-trial-lead-close">✕ إغلاق</button></div>',
+    '<div id="one-trial-lead-info" class="one-trial-lead-details"></div>',
+    '<div class="one-trial-lead-actions"><button id="one-trial-lead-copy-phone" type="button">📋 نسخ الجوال</button>',
+    '<button id="one-trial-lead-copy-email" type="button">📋 نسخ البريد</button>',
+    '<a id="one-trial-lead-whatsapp" target="_blank" rel="noopener noreferrer" hidden>↗ واتساب للعروض بعد الموافقة</a></div>',
+    '<form id="one-trial-lead-followup-form" autocomplete="off">',
+    '<label>حالة المتابعة<select id="one-trial-lead-followup-status">',
+    '<option value="new">جديد · لم نتواصل</option><option value="contacted">تم التواصل</option>',
+    '<option value="offer_sent">تم إرسال عرض (يتطلب موافقة العروض)</option>',
+    '<option value="converted">تحول إلى مشترك</option><option value="do_not_contact">عدم التواصل</option>',
+    '</select></label>',
+    '<label>ملاحظة للمتابعة فقط<textarea id="one-trial-lead-followup-note" rows="3" maxlength="250" placeholder="موعد المتابعة أو خلاصة التواصل — بدون كلمات مرور أو أكواد"></textarea></label>',
+    '<div class="one-trial-lead-actions"><button id="one-trial-lead-followup-save" type="submit">✓ حفظ المتابعة</button>',
+    '<button id="one-trial-lead-followup-cancel" type="button">إلغاء</button></div></form>',
+    '<p id="one-trial-lead-detail-status" role="status" aria-live="polite"></p></dialog>',
     '<div class="one-trial-history"><strong>أحدث الأكواد المسلّمة للعملاء (مخفية جزئيًا)</strong>',
     '<div id="one-trial-recent">لم يُحمّل سجل التجارب بعد.</div></div>'
   ].join('');
@@ -344,7 +380,7 @@
     selected=id;
     for(const el of [issue,legacy,ledger,registry,inventory,trialPanel])el.hidden=el.id!==id;
     if(id==='one-inventory'){void loadStock();void loadOperationsOverview();}
-    if(id==='one-trial-stock')void loadTrialStock();
+    if(id==='one-trial-stock'){void loadTrialStock();dispatchEvent(new CustomEvent('blofy-one:trial-leads-visible'));}
     if(id==='one-code-register')dispatchEvent(new CustomEvent('blofy-one:code-register-visible'));
     for(const button of buttons){
       const active=button.dataset.oneCodesTab===id;
