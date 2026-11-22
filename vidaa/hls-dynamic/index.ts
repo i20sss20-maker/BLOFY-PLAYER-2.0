@@ -60,11 +60,11 @@ async function startHls({bearer,kind,id,ext,track,key}){
   try{upstream=await fetch(target,{method:'GET',headers:{Authorization:bearer,Accept:'*/*','accept-encoding':'identity'},redirect:'manual',signal:controller.signal})}
   finally{clearTimeout(timeout)}
   if(!upstream.ok||!upstream.body){const status=upstream.status;stopHls(session,'upstream_'+status);return {error:status===401?'invalid_session':status===404?'media_missing':status>=300&&status<400?'media_redirect_unsupported':'media_upstream_error',status:status===401?401:502}}
-  const videoArgs=['-c:v','libx264','-preset','ultrafast','-tune','zerolatency','-profile:v','baseline','-level','3.1','-pix_fmt','yuv420p','-vf','scale=854:480:force_original_aspect_ratio=decrease:force_divisible_by=2,fps=25','-g','50','-keyint_min','50','-sc_threshold','0','-b:v','900k','-maxrate','1100k','-bufsize','1800k'];
-  const args=['-hide_banner','-loglevel','warning','-nostdin','-analyzeduration','4000000','-probesize','4000000','-fflags','+genpts','-i','pipe:0',
+  const videoArgs=['-c:v','libx264','-preset','ultrafast','-tune','zerolatency','-profile:v','baseline','-level','3.1','-pix_fmt','yuv420p','-vf','scale=854:480:force_original_aspect_ratio=decrease:force_divisible_by=2,fps=25','-g','25','-keyint_min','25','-sc_threshold','0','-b:v','900k','-maxrate','1100k','-bufsize','1800k'];
+  const args=['-hide_banner','-loglevel','warning','-nostdin','-analyzeduration','1200000','-probesize','1200000','-fflags','+genpts',...(kind==='live'?['-re']:[]),'-i','pipe:0',
    '-map','0:v:0','-map','0:a:'+track+'?',...videoArgs,'-c:a','aac','-profile:a','aac_low','-b:a','96k','-ac','2','-ar','48000',
-   '-f','hls','-hls_time','2','-hls_segment_type','mpegts','-hls_segment_filename',join(dir,'seg-%06d.ts')];
-  if(kind==='live')args.push('-hls_list_size','5','-hls_flags','delete_segments+independent_segments');
+   '-f','hls','-hls_time','1','-hls_segment_type','mpegts','-hls_segment_filename',join(dir,'seg-%06d.ts')];
+  if(kind==='live')args.push('-hls_list_size','8','-hls_delete_threshold','24','-hls_flags','delete_segments+independent_segments+temp_file');
   else args.push('-hls_list_size','0','-hls_playlist_type','event','-hls_flags','independent_segments');
   args.push(join(dir,'index.m3u8'));
   const proc=Bun.spawn([FFMPEG,...args],{stdin:upstream.body,stdout:'ignore',stderr:'pipe',signal:abort.signal});
@@ -105,7 +105,20 @@ async function hlsRequest(req,url){
  if(!sess&&filename!=='index.m3u8')return hlsError(404,'hls_session_missing');
  if(!sess){const start=await startHls({bearer,kind,id,ext,track,key});if(start.error)return hlsError(start.status,start.error);sess=start.session}
  touchHls(sess);
- const ready=await awaitHlsFile(sess,filename,filename==='index.m3u8'?25000:11000);
+ const ready=await awaitHlsFile(sess,filename,filename==='index.m3u8'?25000:8000);
+ if(ready&&filename==='index.m3u8'&&kind==='live'){
+  // Avoid exposing an initialized playlist before its first segment is committed.
+  const playlistText=readFileSync(join(sess.dir,filename),'utf8');
+  const firstSegment=(playlistText.match(/seg-\d{6}\.ts/g)||[])[0];
+  if(firstSegment&&!existsSync(join(sess.dir,firstSegment))){
+   const available=await awaitHlsFile(sess,firstSegment,4500);
+   if(!available)return hlsError(503,'hls_playlist_not_ready');
+  }
+ }
+ if(ready&&/^seg-\d{6}\.ts$/.test(filename)&&!sess.firstSegmentLogged){
+  sess.firstSegmentLogged=true;
+  console.info('VIDAA_HLS_FIRST_SEGMENT',{kind:sess.kind,elapsedMs:Date.now()-sess.startedAt});
+ }
  if(!ready)return hlsError(sess.error?502:504,sess.error||'hls_segment_timeout');
  try{
   const data=readFileSync(join(sess.dir,filename));
