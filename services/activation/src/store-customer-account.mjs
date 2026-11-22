@@ -8,6 +8,7 @@ import {decryptGatewayAccountPassword} from './xtream-account-vault.mjs';
 import {normalizeXtreamPublicOrigin} from './xtream-public-origin.mjs';
 import {streamCodeProof} from './xtream-duration-codes.mjs';
 import {createCustomerReminderEngine} from './store-customer-reminders.mjs';
+import {preparePaidLeadSchema,listPaidLeads,updatePaidLeadFollowup} from './store-paid-leads.mjs';
 import {buildStorePaymentReceipt,createStoreReceiptEmailEngine} from './store-order-receipts.mjs';
 import {classifyResendFailure,checkResendSender} from './store-customer-resend.mjs';
 import {createStoreSubscriptionAdmin} from './store-subscription-admin.mjs';
@@ -143,6 +144,8 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
       'created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),last_login_at TIMESTAMPTZ)');
     await db.query('ALTER TABLE blofy_store_customers ADD COLUMN IF NOT EXISTS full_name TEXT');
     await db.query('ALTER TABLE blofy_store_customers ADD COLUMN IF NOT EXISTS phone_e164 TEXT');
+    // Optional BLOFY promotional offers; reminders use a different consent flag.
+    await db.query('ALTER TABLE blofy_store_customers ADD COLUMN IF NOT EXISTS marketing_consent_at TIMESTAMPTZ');
     await db.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_blofy_store_customer_phone_unique '+
       'ON blofy_store_customers(phone_e164) WHERE phone_e164 IS NOT NULL');
     await db.query('CREATE TABLE IF NOT EXISTS blofy_store_customer_challenges ('+
@@ -191,7 +194,7 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
  async function current(req){
   const token=cookieToken(req);
   if(!token)return null;
-  const result=await pool.query('SELECT c.id,c.email,c.alerts_opt_in,c.full_name,c.phone_e164 FROM blofy_store_customer_sessions s '+
+  const result=await pool.query('SELECT c.id,c.email,c.alerts_opt_in,c.marketing_consent_at,c.full_name,c.phone_e164 FROM blofy_store_customer_sessions s '+
     'JOIN blofy_store_customers c ON c.id=s.customer_id '+
     'WHERE s.token_hash=$1 AND s.expires_at>NOW() LIMIT 1',[sha(token)]);
   return result.rows[0]||null;
@@ -205,6 +208,7 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
     'JOIN blofy_store_geidea_orders o ON o.id=m.order_id WHERE m.customer_id=$1 '+
     'ORDER BY o.created_at DESC LIMIT 100',[customer.id])).rows;
   return json(res,200,{customerId:customer.id,email:customer.email,fullName:customer.full_name||'',phone:customer.phone_e164||'',profileComplete:completeProfile(customer),profileRequired,alertsOptIn:customer.alerts_opt_in,
+   marketingOptIn:Boolean(customer.marketing_consent_at),
     orders:orders.map(o=>({orderId:o.id,orderNumber:o.public_order_number||publicOrderNumber(o.id,o.created_at),
       status:o.status,sku:o.sku,items:o.cart_items||null,amountMinor:o.amount_minor,
       currency:o.currency,createdAt:o.created_at,paidAt:o.paid_at}))});
@@ -610,6 +614,45 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
   return json(res,200,{ok:true,alertsOptIn:body.alertsOptIn,
     delivery:reminderEngine.configured?'email_when_eligible':'dashboard_only'});
  }
+ async function marketingPreferences(req,res){
+  const customer=await current(req);
+  if(!customer)return json(res,401,{error:'login_required'});
+  const body=await readJson(req);
+  if(typeof body?.marketingOptIn!=='boolean')
+   return json(res,400,{error:'invalid_marketing_preferences'});
+  const updated=await pool.query(`UPDATE blofy_store_customers
+   SET marketing_consent_at=CASE WHEN $2::boolean THEN NOW() ELSE NULL END
+   WHERE id=$1 RETURNING marketing_consent_at`,[customer.id,body.marketingOptIn]);
+  if(updated.rowCount!==1)return json(res,404,{error:'customer_not_found'});
+  return json(res,200,{ok:true,marketingOptIn:Boolean(updated.rows[0].marketing_consent_at),
+   promotionalMessagesSent:0},
+   {'cache-control':'no-store, private','referrer-policy':'no-referrer'});
+ }
+ let paidLeadsReady=null;
+ async function ensurePaidLeads(){
+  if(!paidLeadsReady)paidLeadsReady=(async()=>{
+    await schema();
+    await ensureOpsSchema();
+    await preparePaidLeadSchema(pool);
+  })().catch(error=>{paidLeadsReady=null;throw error});
+  return paidLeadsReady;
+ }
+ async function paidLeads(req,res,route){
+  if(!authorizeAdmin(req,res))return;
+  if(!browserMutation(req,res,json))return;
+  await ensurePaidLeads();
+  const body=await readJson(req);
+  const safeHeaders={'cache-control':'no-store, private','referrer-policy':'no-referrer'};
+  try{
+   const payload=route==='followup'?
+    await updatePaidLeadFollowup(pool,body):
+    await listPaidLeads(pool,body);
+   return json(res,200,payload,safeHeaders);
+  }catch(error){
+   if(error.status)return json(res,error.status,{error:error.message},safeHeaders);
+   throw error;
+  }
+ }
  async function logout(req,res){
   const token=cookieToken(req);
   if(token)await pool.query('DELETE FROM blofy_store_customer_sessions WHERE token_hash=$1',[sha(token)]);
@@ -624,6 +667,12 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
    if(!authorizeAdmin(req,res))return true;
    await adminSummary(req,res);return true;
   }
+  if(req.method==='POST'&&path==='/api/v1/admin/store/paid-leads'){
+   await paidLeads(req,res,'list');return true;
+  }
+  if(req.method==='POST'&&path==='/api/v1/admin/store/paid-leads/followup'){
+   await paidLeads(req,res,'followup');return true;
+  }
   if(!path.startsWith('/api/v1/store/account'))return false;
   if(!enabled){json(res,503,{error:'customer_accounts_disabled'});return true;}
   if(req.method==='POST'&&!browserMutation(req,res,json))return true;
@@ -636,6 +685,7 @@ export function createStoreCustomerHandlers({pool,json,readJson,keyHex,
    else if(path==='/api/v1/store/account/profile'&&req.method==='POST')await saveProfile(req,res);
    else if(path==='/api/v1/store/account/claim'&&req.method==='POST')await claim(req,res);
    else if(path==='/api/v1/store/account/preferences'&&req.method==='POST')await preferences(req,res);
+   else if(path==='/api/v1/store/account/marketing-preferences'&&req.method==='POST')await marketingPreferences(req,res);
    else if(path==='/api/v1/store/account/logout'&&req.method==='POST')await logout(req,res);
    else if(path==='/api/v1/store/account'&&req.method==='GET')await account(req,res);
    else if(path==='/api/v1/store/account/alerts'&&req.method==='GET')await alerts(req,res);
