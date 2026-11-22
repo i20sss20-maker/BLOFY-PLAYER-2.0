@@ -29,6 +29,12 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
       - name: Make video fixture
         run: ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc=size=320x180:rate=25 -f lavfi -i sine=frequency=400:sample_rate=44100 -t 4 -c:v libx264 -preset ultrafast -pix_fmt yuv420p -c:a aac -movflags +faststart -y /tmp/blofy-qa-test.mp4
+      - name: Generate real browser-decodable HLS fixtures
+        run: |
+          mkdir -p /tmp/blofy-qa-hls
+          ffmpeg -hide_banner -loglevel error -i /tmp/blofy-qa-test.mp4 -c copy -f hls -hls_time 1 -hls_list_size 0 -hls_segment_filename '/tmp/blofy-qa-hls/seg-%06d.ts' -y /tmp/blofy-qa-hls/index.m3u8
+          test -s /tmp/blofy-qa-hls/index.m3u8
+          test -s /tmp/blofy-qa-hls/seg-000000.ts
       - name: Start isolated local web server
         run: |
           cd web/stream-native-parity
