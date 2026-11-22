@@ -208,7 +208,7 @@ async function vodRequest(req,url){
  if(!success)return json(sess.error?502:504,{error:sess.error||'vod_initial_segment_pending'});
  if(file==='index.m3u8'){
   const manifest=readFileSync(join(sess.dir,'index.m3u8'),'utf8');
-  if(!sess.firstSegmentLogged&&/seg-\\d{6}\\.ts/.test(manifest)){
+  if(!sess.firstSegmentLogged&&/seg-\d{6}\.ts/.test(manifest)){
    sess.firstSegmentLogged=true;
    console.info('BLOFY_WEB_VOD_FIRST_PLAYLIST',{kind:sess.kind,elapsedMs:Date.now()-sess.startedAt});
   }
