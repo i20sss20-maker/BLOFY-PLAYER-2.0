@@ -881,7 +881,8 @@ function openPlayer(kind,id,extension,name,from){
   if(!endpoint){clearTimeout(timeout);launch();return}
   playerStatus('جار قراءة معلومات الفيلم لتفعيل التقديم والترجيع…');
   api('GET','/api/catalog?action='+endpoint,null,function(st,result){
-   if(settled||S.route!=='player')return;
+   if(S.route!=='player')return;
+   var alreadyStarted=settled;
    clearTimeout(timeout);
    if(st===200&&result){
     if(kind==='movie'){
@@ -898,6 +899,12 @@ function openPlayer(kind,id,extension,name,from){
       break
      }
     }
+   }
+   // Metadata may arrive after the short startup timeout.
+   // Upgrade the still-live EVENT fallback to real VOD at the same movie time.
+   if(alreadyStarted){
+    if(state.duration>=120&&state.duration<=21600&&state.mode==='vodhls')startVod(realPos());
+    return
    }
    launch()
   })
