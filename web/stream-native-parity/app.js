@@ -810,6 +810,7 @@ function cleanupPlayer(){
   if(S.playerView.directSeekCheck){clearTimeout(S.playerView.directSeekCheck);S.playerView.directSeekCheck=null}
   if(S.playerView.directSeekVerify){clearTimeout(S.playerView.directSeekVerify);S.playerView.directSeekVerify=null}
   if(S.playerView.hudTimer){clearTimeout(S.playerView.hudTimer);S.playerView.hudTimer=null}
+  if(S.playerView.releaseWakeLock)S.playerView.releaseWakeLock()
  }
  stopPlayback(true)
 }
@@ -1220,6 +1221,26 @@ function openPlayer(kind,id,extension,name,from){
  mode:isLive?'hls':'direct',resume:resume,duration:knownDuration(kind,id,item),didResume:false,ready:false,track:0,lastSaved:0,
   art:art(item)||prior&&prior.art||'',seriesId:kind==='series'&&S.item&&S.item.id||'',playbackId:freshPlaybackId()};
  var root=document.getElementById('player-root'),hud=root.querySelector('.player-hud');
+ function releaseWakeLock(){
+  var lock=state.wakeLock;state.wakeLock=null;
+  if(lock&&lock.release){try{var p=lock.release();if(p&&p.catch)p.catch(function(){})}catch(e){}}
+ }
+ function acquireWakeLock(){
+  if(!navigator.wakeLock||!navigator.wakeLock.request||document.hidden||video.paused||
+   S.route!=='player'||state.wakeLock||state.wakeLockPending)return;
+  state.wakeLockPending=true;
+  try{
+   var promise=navigator.wakeLock.request('screen');
+   if(promise&&promise.then)promise.then(function(lock){
+    state.wakeLockPending=false;
+    if(S.route==='player'&&S.playerView===state&&!video.paused&&!document.hidden)state.wakeLock=lock;
+    else if(lock&&lock.release){var p=lock.release();if(p&&p.catch)p.catch(function(){})}
+   }).catch(function(){state.wakeLockPending=false});
+   else state.wakeLockPending=false
+  }catch(e){state.wakeLockPending=false}
+ }
+ state.releaseWakeLock=releaseWakeLock;
+ state.acquireWakeLock=acquireWakeLock;
  function revealControls(){
   root.classList.remove('controls-hidden');
   if(state.hudTimer)clearTimeout(state.hudTimer);
@@ -1264,6 +1285,7 @@ function openPlayer(kind,id,extension,name,from){
   if(S.route!=='player')return;
   state.ready=true;var status=document.getElementById('player-status');if(status)status.style.display='none';
   revealControls();
+  acquireWakeLock();
   if(!isLive&&state.mode==='direct'&&!state.didResume&&resume>30&&isFinite(video.duration)&&video.duration>0){
    var checkpoint=Math.min(resume,Math.max(0,video.duration-5));
    state.didResume=true;
@@ -1421,7 +1443,10 @@ function openPlayer(kind,id,extension,name,from){
    if(state.mode==='direct'&&!video.paused&&video.readyState<3)state.recoverDirect()
   },14000)
  };
- video.ontimeupdate=progress;video.onpause=function(){progress();if(state.ready&&!isLive)saveResume(kind,id,realPos(),totalDuration(),true)};
+ video.ontimeupdate=progress;video.onpause=function(){
+  releaseWakeLock();progress();
+  if(state.ready&&!isLive)saveResume(kind,id,realPos(),totalDuration(),true)
+ };
  video.onplaying=function(){if(state.directTimer){clearTimeout(state.directTimer);state.directTimer=null}markReady()};
  video.onerror=function(){
   if(state.mode==='direct'&&!isLive)state.recoverDirect();
@@ -1658,7 +1683,10 @@ function persistPlaybackCheckpoint(){
 window.addEventListener('beforeunload',persistPlaybackCheckpoint);
 window.addEventListener('pagehide',persistPlaybackCheckpoint);
 document.addEventListener('visibilitychange',function(){
- if(document.hidden)persistPlaybackCheckpoint()
+ if(document.hidden){
+  persistPlaybackCheckpoint();
+  if(S.playerView&&S.playerView.releaseWakeLock)S.playerView.releaseWakeLock()
+ }else if(S.playerView&&S.playerView.acquireWakeLock)S.playerView.acquireWakeLock()
 });
 api('GET','/api/session',null,function(st,json){
  if(st===200&&json.active&&useProfile(json.profileKey)){S.userVerified=true;navigate('home',{},true);setTimeout(checkCatalogVersion,25000)}
