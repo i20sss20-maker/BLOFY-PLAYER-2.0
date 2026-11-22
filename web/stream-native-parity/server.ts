@@ -9,6 +9,12 @@ function seal(token){if(!KEY)throw new Error('SESSION_KEY_MISSING');const iv=ran
 function unseal(s){try{if(!KEY||!s)return null;const v=Buffer.from(s,'base64url');if(v.length<30||v.length>500)return null;const c=createDecipheriv('aes-256-gcm',KEY,v.subarray(0,12));c.setAuthTag(v.subarray(12,28));return Buffer.concat([c.update(v.subarray(28)),c.final()]).toString('utf8')}catch{return null}}
 function token(req){const m=String(req.headers.get('cookie')||'').match(/(?:^|;\s*)bv_session=([^;]+)/);return m?unseal(m[1]):null}
 function auth(req){const t=token(req);return t?{'Authorization':'Bearer '+t,'Accept':'application/json','Cache-Control':'no-store'}:null}
+function profileKey(accessToken){
+ // Derive an opaque client-storage partition from the active device token;
+ // the token itself remains exclusively in the encrypted HttpOnly cookie.
+ if(!KEY||!accessToken)return null;
+ return createHmac('sha256',KEY).update('BLOFY-WEB-PROFILE-V1\0'+String(accessToken)).digest('hex').slice(0,24)
+}
 function noCache(extra={}){return {'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer',...extra}}
 function normalizeSearch(text){
  return String(text||'').toLowerCase().normalize('NFKC')
@@ -53,7 +59,8 @@ if(p==='/api/redeem'&&method==='POST'){
  if(!/^(?:[0-9]{8,12}|[A-F0-9]{24})$/.test(code)||!/^[a-f0-9]{64}$/.test(key))return json(400,{error:'كود أو جهاز غير صالح'});
  try{const r=await fetch(ORIGIN+'/api/v1/stream/app/redeem',{method:'POST',headers:{'Content-Type':CT,'Accept':'application/json'},body:JSON.stringify({code,deviceKey:key}),redirect:'manual',signal:AbortSignal.timeout(20000)});
  let v={};try{v=await r.json()}catch{}if(!r.ok||!v.ok||typeof v.accessToken!=='string'||!/^v1\.[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/.test(v.accessToken))return json(r.status===409?409:r.status===429?429:400,{ok:false,error:r.status===409?'الكود مستخدم أو مربوط بجهاز آخر':r.status===429?'محاولات كثيرة، حاول لاحقًا':'تعذّر تفعيل الكود'});
- return json(200,{ok:true,activatedAt:v.account?.activatedAt||null,expiresAt:v.account?.expiresAt||null},{'Set-Cookie':'bv_session='+seal(v.accessToken)+'; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000'});
+ return json(200,{ok:true,activatedAt:v.account?.activatedAt||null,expiresAt:v.account?.expiresAt||null,
+   profileKey:profileKey(v.accessToken)},{'Set-Cookie':'bv_session='+seal(v.accessToken)+'; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000'});
  }catch(e){return json(502,{error:'تعذّر الاتصال بخادم التفعيل'})}
 }
 if(p==='/vendor/hls.min.js'&&method==='GET'){
@@ -130,7 +137,8 @@ if(p==='/api/player-diagnostic'&&method==='POST'){
  return json(200,{ok:true});
 }
 if(p==='/api/session'&&method==='GET'){
- try{const r=await fetch(ORIGIN+'/api/v1/stream/app/session',{headers:h,redirect:'manual',signal:AbortSignal.timeout(15000)});if(!r.ok)return json(r.status===403?403:401,{active:false});const v=await r.json();return json(200,{ok:!!v.ok,active:!!v.active,daysRemaining:v.daysRemaining??null,expiresAt:v.expiresAt??null})}catch{return json(502,{active:false,error:'session_unavailable'})}
+ try{const r=await fetch(ORIGIN+'/api/v1/stream/app/session',{headers:h,redirect:'manual',signal:AbortSignal.timeout(15000)});if(!r.ok)return json(r.status===403?403:401,{active:false});const v=await r.json();return json(200,{ok:!!v.ok,active:!!v.active,daysRemaining:v.daysRemaining??null,expiresAt:v.expiresAt??null,
+   profileKey:v.active?profileKey(token(req)):null})}catch{return json(502,{active:false,error:'session_unavailable'})}
 }
 
 if(p==='/api/page'&&method==='GET'){
