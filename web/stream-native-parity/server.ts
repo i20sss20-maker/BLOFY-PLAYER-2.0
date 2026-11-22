@@ -137,7 +137,7 @@ if(p==='/api/catalog'&&method==='GET'){
 
 if(p.startsWith('/api/vod/')&&(method==='GET'||method==='POST')){
  if(!h)return json(401,{error:'activation_required'});
- const match=p.match(/^\/api\/vod\/(movie|series)\/([1-9][0-9]{0,14})\/(mkv|mp4|avi|mov|ts)\/([0-3])\/([0-9]{1,6})\/(index\.m3u8|seg-[0-9]{6}\.ts|stop)$/);
+ const match=p.match(/^\/api\/vod\/(movie|series)\/([1-9][0-9]{0,14})\/(mkv|mp4|avi|mov|ts)\/([0-3])\/([0-9]{1,6})\/(index\.m3u8|seg-[0-9]{6}\.ts|meta|stop)$/);
  if(!match)return json(400,{error:'invalid_vod_path'});
  if(method==='POST'&&match[6]!=='stop')return json(405,{error:'invalid_method'});
  if(method==='GET'&&match[6]==='stop')return json(405,{error:'invalid_method'});
@@ -150,7 +150,7 @@ if(p.startsWith('/api/vod/')&&(method==='GET'||method==='POST')){
   const response=await fetch(target,{method,headers:{'Authorization':h.Authorization,'X-Compat-Secret':secret},redirect:'manual',signal:req.signal});
   if(response.status>=300&&response.status<400)return json(502,{error:'vod_worker_redirect_rejected'});
   if(!response.ok){let error='vod_unavailable';try{error=(await response.json()).error||error}catch{};return json(response.status,{error})}
-  return new Response(response.body,{status:200,headers:noCache({'Content-Type':match[6].endsWith('m3u8')?'application/vnd.apple.mpegurl':match[6]==='stop'?'application/json':'video/mp2t','Accept-Ranges':'none'})})
+  return new Response(response.body,{status:200,headers:noCache({'Content-Type':match[6].endsWith('m3u8')?'application/vnd.apple.mpegurl':(match[6]==='stop'||match[6]==='meta')?'application/json':'video/mp2t','Accept-Ranges':'none'})})
  }catch{return json(502,{error:'vod_worker_unreachable'})}
 }
 if(p.startsWith('/api/hls/')&&method==='POST'){
