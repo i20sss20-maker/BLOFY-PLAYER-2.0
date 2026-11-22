@@ -23,6 +23,8 @@ jobs:
           node-version: '22'
       - run: cd web/stream-native-parity && npm install --no-audit --no-fund
       - run: cd web/stream-native-parity && npx playwright install --with-deps chromium
+      - name: Install full Google Chrome for H.264/AAC codec verification
+        run: cd web/stream-native-parity && npx playwright install chrome
       - name: Install FFmpeg for deterministic sample playback
         run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
       - name: Make video fixture
