@@ -274,13 +274,13 @@ async function vodRequest(req,url){
  * Synthetic timeline includes true duration, not a live growing HLS window.
  */
 const FULL_SEGMENT_SECONDS=4, FULL_CHUNK_SEGMENTS=6;
-function fullVodManifest(duration){
+function fullVodManifest(duration,sid){
  const count=Math.ceil(duration/FULL_SEGMENT_SECONDS);
  const lines=['#EXTM3U','#EXT-X-VERSION:3','#EXT-X-TARGETDURATION:4',
   '#EXT-X-MEDIA-SEQUENCE:0','#EXT-X-PLAYLIST-TYPE:VOD','#EXT-X-INDEPENDENT-SEGMENTS'];
  for(let i=0;i<count;i++){
   lines.push('#EXTINF:'+Math.min(FULL_SEGMENT_SECONDS,duration-i*FULL_SEGMENT_SECONDS).toFixed(3)+',');
-  lines.push('seg-'+String(i).padStart(6,'0')+'.ts')
+  lines.push('seg-'+String(i).padStart(6,'0')+'.ts'+(sid?'?sid='+sid:''))
  }
  lines.push('#EXT-X-ENDLIST');
  return lines.join('\n')+'\n'
@@ -351,9 +351,14 @@ async function fullVodRequest(req,url){
  if(!m)return json(404,{error:'invalid_full_vod_path'});
  const [all,kind,id,ext,rawTrack,rawDuration,file]=m,track=Number(rawTrack),duration=Number(rawDuration);
  if(!Number.isInteger(duration)||duration<120||duration>21600)return json(400,{error:'invalid_vod_duration'});
+ const requestedSid=url.searchParams.get('sid')||'';
+ if(requestedSid&&!/^[a-f0-9]{24,32}$/i.test(requestedSid))return json(400,{error:'invalid_vod_session'});
+ const sid=requestedSid.toLowerCase();
  const bearer=req.headers.get('authorization')||'';
  if(!/^Bearer v1\.[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/.test(bearer))return json(401,{error:'authorization_missing'});
- const key=vodKey(bearer,kind,id,ext,track,'full-'+duration);
+ // Do not let two screens using the same subscription terminate or seek
+ // each other's transcoder. Credentials remain mandatory for all requests.
+ const key=vodKey(bearer,kind,id,ext,track,'full-'+duration+(sid?'-'+sid:''));
  if(file==='stop'){
   if(req.method!=='POST')return json(405,{error:'method_not_allowed'});
   const existing=hlsSessions.get(key);if(existing)stopHls(existing,'viewer_stopped');
@@ -380,7 +385,7 @@ async function fullVodRequest(req,url){
    const result=fullVodChunk(session,first);
    if(result.error)console.warn('BLOFY_FULL_VOD_PREFETCH_SKIPPED',{kind,reason:result.error})
   }
-  return new Response(fullVodManifest(duration),{status:200,
+  return new Response(fullVodManifest(duration,sid),{status:200,
    headers:{'Content-Type':'application/vnd.apple.mpegurl','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}})
  }
  const index=Number(file.slice(4,10));
