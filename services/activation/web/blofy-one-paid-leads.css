@@ -1,0 +1,56 @@
+/* BLOFY ONE · paid buyers & marketing-aware follow-up, mobile-friendly */
+.one-paid-leads{border:1px solid #38657a;background:linear-gradient(140deg,#102d42,#102334);
+ padding:21px;margin:27px 0 16px;border-radius:17px;scroll-margin-top:25px}
+.one-paid-leads .one-section-heading{display:flex;align-items:center;
+ justify-content:space-between;flex-wrap:wrap;gap:16px}
+.one-paid-leads h3{font-size:clamp(20px,2vw,27px);color:#c4fcec;margin:4px 0}
+.one-paid-leads .one-footnote{font-size:13px;line-height:1.85;color:#c3d9e3}
+.one-paid-leads-filters{display:flex;flex-wrap:wrap;align-items:end;gap:11px;
+ border:1px solid #305063;border-radius:13px;background:#102135;padding:15px;margin:18px 0}
+.one-paid-leads-filters label{display:grid;gap:7px;flex:1 1 135px;
+ color:#d6e9f4;font-size:13px}
+.one-paid-leads-filters label:first-child{flex:2 1 230px}
+.one-paid-leads-filters input,.one-paid-leads-filters select{
+ width:100%;min-height:44px;border-radius:9px;background:#0d2132;
+ border:1px solid #466f82;padding:9px 12px;color:#fff;font:inherit}
+.one-paid-leads button,.one-paid-lead-dialog button{
+ min-height:42px;padding:9px 15px;border:1px solid #578f99;
+ border-radius:10px;background:#245b66;color:#e4fffa;cursor:pointer;font:inherit}
+.one-paid-leads button:hover,.one-paid-lead-dialog button:hover{background:#347683}
+.one-paid-leads button:disabled,.one-paid-lead-dialog button:disabled{opacity:.5;cursor:not-allowed}
+.one-paid-leads button:focus-visible,.one-paid-lead-dialog button:focus-visible{
+ outline:3px solid #8ff6dc;outline-offset:2px}
+.one-paid-leads-table{min-width:1210px}
+.one-paid-leads-table td{vertical-align:top;max-width:260px;overflow-wrap:anywhere}
+.one-paid-leads-table small{display:block;margin-top:6px;font-size:11px;color:#bdd7df;line-height:1.6}
+.one-paid-leads-table strong{overflow-wrap:anywhere}
+#one-paid-leads-status{font-size:13px;line-height:1.8;color:#bcfae6}
+.one-paid-lead-dialog{width:min(94vw,930px);max-height:90vh;overflow:auto;
+ margin:auto;padding:24px;color:#f8ffff;border:1px solid #649aa5;
+ border-radius:16px;background:#102a3f;box-shadow:0 20px 50px #001a2bbd}
+.one-paid-lead-dialog::backdrop{background:#001019b8}
+.one-paid-lead-dialog-head{display:flex;justify-content:space-between;
+ align-items:center;gap:12px;flex-wrap:wrap}
+.one-paid-lead-dialog h3{margin:4px 0;font-size:24px}
+.one-paid-lead-detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+ gap:12px;margin:20px 0}
+.one-paid-lead-detail{background:#193d50;border:1px solid #4f7e8b;
+ padding:12px 14px;border-radius:10px;display:grid;gap:8px;min-width:0}
+.one-paid-lead-detail small{color:#b8d9df;font-size:12px}
+.one-paid-lead-detail strong{overflow-wrap:anywhere;line-height:1.7}
+.one-paid-lead-actions{display:flex;flex-wrap:wrap;gap:9px;margin:14px 0}
+.one-paid-lead-actions a{display:inline-flex;align-items:center;min-height:42px;
+ text-decoration:none;color:#eafffa;background:#28665f;border:1px solid #67a5a0;
+ border-radius:10px;padding:10px 15px}
+.one-paid-lead-actions a[hidden]{display:none}
+#one-paid-lead-followup-form{display:grid;gap:13px;margin-top:15px}
+#one-paid-lead-followup-form label{display:grid;gap:8px;font-size:13px;color:#d9f1f0}
+#one-paid-lead-followup-form select,#one-paid-lead-followup-form textarea{
+ width:100%;min-height:45px;color:#f1ffff;background:#112e40;
+ border:1px solid #5b8692;border-radius:10px;padding:11px;font:inherit}
+#one-paid-lead-detail-status{font-size:13px;line-height:1.8;color:#b6f1df}
+@media(max-width:730px){.one-paid-leads{padding:11px}
+ .one-paid-leads-filters{padding:10px}
+ .one-paid-leads-filters label{flex:1 1 100%}
+ .one-paid-lead-detail-grid{grid-template-columns:1fr}
+ .one-paid-lead-dialog{padding:13px}}
