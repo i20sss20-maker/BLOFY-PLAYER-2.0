@@ -49,9 +49,32 @@ Home hero + horizontally scrolling shelves; sidebar/DPAD; live categories on rig
 - Real-world MKV seeking and resumption require upstream Range support and have not passed an actual subscriber playback test. Seeking past the buffered range may fail for sources that ignore Range; do not claim this is fixed based on synthetic test files.
 - Real live TV and audio playback in VIDAA U3 must be verified on the Toshiba (a browser that lacks HLS/MSE still cannot play all sources).
 - Resume/favorites currently save **locally in the browser**, not synced to the native Android account.
-- AI chat, offline downloads, subtitles/audio track mapping, EPG/catch-up, profiles and parental restrictions need real integration.
+- AI chat is now wired through the **existing first-party native STREAM AI interpretation gateway**, with search-link suggestions. Subscriber-authorized AI behavior is not yet verified end to end. Offline downloads, subtitle tracks, EPG/catch-up, profiles and parental restrictions remain unported; audio selection works only where the browser supplies real additional tracks.
 - Provider metadata image fallback may be incomplete on some series, and catalog first loads may depend on upstream response.
 - The web transcoding pilot is limited to **two concurrent FFmpeg jobs**. It must not be offered publicly until scale tests, rate limiting, licensing checks, and safe caching are complete.
+
+
+## Engineering improvements — 23 November 2026
+
+- **True full-film HLS mode:** a declared-duration VOD playlist with `#EXT-X-ENDLIST` and on-demand absolute-time 4-second chunks. The previous short, growing event playlist is retained **only** as an explicit fallback when duration is unknown; it must never be represented as the entire film.
+- **Seeking and recovery:** backwards/forwards jumps, 5-minute skip, checkpoint resume, per-episode duration priority, next-episode navigation, direct-MP4 failure fallback and manual retry at the last playback position.
+- **Resilience:** bounded chunk source connections, transparent buffering status, reconnect attempts, source-range validation, sequential chunk protection, bounded temporary segment retention, and no forced restart at zero for recoverable errors.
+- **Native-like browsing:** responsive sidebar/bottom navigation, D-pad focus, preserved grid and category scroll, fast incremental loading, real search filters and remembered recent searches. Arabic normalization handles common writing variants.
+- **Account convenience:** movie and episode continue-watching cards and favorite poster metadata survive page refresh **locally in this browser**. The manual content refresh now actually reads the server, with step progress; optional catalog version polling triggers quiet refresh when supported.
+- **AI assistant:** separate chat UI proxies to the same authenticated AI gateway as STREAM Android; no gateway/model keys in the web client. Suggested titles link to authenticated **catalog search**, not to fabricated playback links.
+- **Playback utilities:** full-screen mode, playback speed, and switching real additional browser/HLS audio tracks when present. Unavailable tracks are not falsely claimed.
+
+### Verification already performed
+
+- Railway web app and independent VOD worker deployed with health checks; the Android production build was not modified.
+- The worker's startup synthetic VOD self-test produced H.264/AAC MPEG-TS segments from two **different absolute positions**, with an 8-second timestamp offset and a complete end-listed playlist.
+- Railway runtime has reported successful `BLOFY_FULL_VOD_CHUNK_OK` events for authenticated real-content requests, and HTTP 200 replies on the new `/api/vodfull/` path. These observations **do not** prove a full feature-length title can be watched and seeked without failures.
+- JavaScript parsing passed for the web UI and worker. Browser and platform checks on actual TVs/iPhones, subscribed AI calls, 20+ minute playback, file format variations, and multiple concurrent subscribers are still release gates.
+
+### Still not at full Android parity
+
+The web pilot cannot reuse Android's Media3/VLC engines unchanged. Full-resolution 4K playback, native downloads/offline persistence, subtitles and multiple audio streams where the upstream source does not expose them, cloud synchronization with Android, EPG, profiles and strong large-scale concurrency remain outstanding. The VOD pilot is restricted to two concurrent FFmpeg processes and is **not approved for public mass rollout**. Actual title-level seeking requires the authorized source to support random byte access.
+
 
 ## Deployment & safety
 
