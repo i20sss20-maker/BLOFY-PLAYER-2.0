@@ -85,7 +85,7 @@ export async function listTrialLeads(pool,body={}){
 export async function updateTrialLeadFollowup(pool,body={}){
  const voucherId=String(body?.voucherId||''),
   followupStatus=String(body?.followupStatus||''),
-  note=String(body?.note??'').trim();
+  note=String(body?.note??'').trim().replace(/[\r\n\t]+/g,' ');
  if(!UUID.test(voucherId)||!FOLLOWUPS.has(followupStatus)||
     note.length>250||hasControl(note))
   throw err('trial_followup_invalid');
