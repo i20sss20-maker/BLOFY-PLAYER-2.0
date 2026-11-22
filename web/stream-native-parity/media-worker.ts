@@ -15,7 +15,10 @@ const hardTTL=9*60*1000;
 function hlsKey(bearer,kind,id,ext,track){return createHmac('sha256',SECRET).update([bearer,kind,id,ext,track].join('\x00')).digest('hex').slice(0,40)}
 function touchHls(session){
  session.lastAccess=Date.now();if(session.idleTimer)clearTimeout(session.idleTimer);
- session.idleTimer=setTimeout(()=>stopHls(session,'idle_timeout'),110000);
+ // Full-duration VOD generates chunks only on demand. Pausing longer than
+ // two minutes must not invalidate its segment URL when playback resumes.
+ const idleMs=session.fullVod?25*60*1000:110000;
+ session.idleTimer=setTimeout(()=>stopHls(session,'idle_timeout'),idleMs);
  session.idleTimer.unref?.();
 }
 function stopHls(session,reason){
@@ -168,8 +171,13 @@ async function localSource(req,url){
  * The /meta request therefore shares one authorized upstream connection with HLS.
  */
 async function startVod({bearer,kind,id,ext,track,start,key}){
- // Replace older positions for this same account/title to avoid wasting transcoding slots.
- for(const s of Array.from(hlsSessions.values()))if(s.vod&&s.bearer===bearer&&s.key!==key)stopHls(s,'title_or_position_changed');
+ // Replace old legacy transcodes for the SAME title only; never terminate
+ // another movie, or a VOD session in use on another page/device.
+ for(const s of Array.from(hlsSessions.values())){
+  if(!s.vod||s.fullVod||s.key===key||s.bearer!==bearer)continue;
+  if(s.kind===kind&&String(s.id)===String(id)&&s.track===track)
+   stopHls(s,'legacy_position_changed')
+ }
  if(active>=MAX_JOBS)return {status:429,error:'vod_capacity'};
  active++;
  const abort=new AbortController(),dir=join(hlsRoot,key);
