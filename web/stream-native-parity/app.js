@@ -869,8 +869,12 @@ function knownDuration(kind,id,item){
  * Unknown-length sources still use the bounded legacy streaming fallback.
  */
 function playFullVod(video,kind,id,ext,track,duration,state,ready){
- stopPlayback(true);
  var seconds=Math.round(duration),path='/api/vodfull/'+kind+'/'+id+'/'+ext+'/'+track+'/'+seconds;
+ // A retry of the same full VOD session must NOT issue asynchronous /stop:
+ // the delayed stop response could kill the newly started retry.
+ var sameSession=!!(S.play&&S.play.stopUrl===path+'/stop');
+ state.ready=false;
+ stopPlayback(!sameSession);
  var rec={video:video,kind:kind,id:id,preview:false,engine:null,stopUrl:path+'/stop',hlsKey:null,ready:false,timer:null};
  S.play=rec;state.mode='fullvod';state.offset=0;state.duration=seconds;state.ready=false;
  video.autoplay=true;video.muted=false;video.defaultMuted=false;video.controls=false;
@@ -951,7 +955,9 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
 
 function playVodSegments(video,kind,id,ext,track,start,state,ready){
  var at=Math.max(0,Math.round(start||0)),key=kind+'/'+id+'/'+ext+'/'+track+'/'+at,manifest='/api/vod/'+key+'/index.m3u8';
- state.ready=false;stopPlayback(true);
+ // Retry the same timestamp without racing against an older asynchronous /stop.
+ var newStop='/api/vod/'+key+'/stop',sameSession=!!(S.play&&S.play.stopUrl===newStop);
+ state.ready=false;stopPlayback(!sameSession);
  state.mode='vodhls';state.offset=at;state.didResume=true;
  var rec={video:video,kind:kind,id:id,preview:false,engine:null,stopUrl:'/api/vod/'+key+'/stop',hlsKey:null,ready:false,started:Date.now(),timer:null};
  S.play=rec;
