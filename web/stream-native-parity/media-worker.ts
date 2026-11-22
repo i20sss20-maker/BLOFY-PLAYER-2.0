@@ -345,7 +345,7 @@ function fullVodChunk(session,first){
   (async()=>{try{let buf='';const reader=proc.stderr.getReader();
    while(true){const next=await reader.read();if(next.done)break;buf=(buf+new TextDecoder().decode(next.value)).slice(-2800)}
    if(buf&&!session.error)session.error=/Connection reset|ECONNRESET|end of file|timed out/i.test(buf)?'vod_source_connection_lost':
-    /416|range|Invalid data/i.test(buf)?'vod_source_seek_unsupported':'vod_chunk_processing_failed'
+    /\b416\b|range not satisfiable|source_range_unavailable/i.test(buf)?'vod_source_seek_unsupported':'vod_chunk_processing_failed'
   }catch{}})();
   proc.exited.then(code=>{
    if(session.proc!==proc)return;
@@ -434,7 +434,8 @@ async function fullVodRequest(req,url){
   if(req.signal.aborted)return json(410,{error:'vod_request_cancelled'});
   if(!existsSync(filename)){
    const why=session.chunkStart!==first?'vod_chunk_replaced':session.error||'vod_segment_not_ready';
-   return json(session.finished?502:504,{error:why})
+   const code=why==='vod_source_seek_unsupported'?416:session.finished?502:504;
+   return json(code,{error:why})
   }
  }
  try{return new Response(readFileSync(filename),{status:200,
