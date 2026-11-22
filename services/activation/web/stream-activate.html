@@ -1,7 +1,7 @@
 <!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
-<title>تفعيل واستخراج Xtream | BLOFY</title>
+<title>استخراج بيانات Xtream من كود BLOFY STREAM أو Xtream | BLOFY</title>
 <style>
 :root{color-scheme:dark;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#080d19;color:#f3f6ff}
 *{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 80% 0,#26326c77,transparent 45%),linear-gradient(150deg,#090c17,#101a32 70%,#090c17);display:flex;align-items:center;justify-content:center;padding:24px}
@@ -17,15 +17,23 @@ button[disabled]{opacity:.55;cursor:wait}.submit{margin-top:18px;width:100%}
 .result{margin-top:19px;border-top:1px solid #344461;padding-top:18px}.row{border:1px solid #2b3b59;border-radius:11px;padding:12px;margin:9px 0;background:#091429}
 .row small{display:block;color:#96aacc;margin-bottom:6px}.row strong{direction:ltr;display:block;overflow-wrap:anywhere;text-align:left;font-size:14px;user-select:all}
 .copy{background:#253652;margin-top:10px;min-height:36px;padding:6px 12px}.fine{margin-top:20px;font-size:12px;color:#8a9ebd}.hide{display:none}
+.confirm{display:flex;align-items:flex-start;gap:11px;margin-top:21px;
+ border-radius:13px;border:1px solid #465d8c;background:#101f3d;
+ padding:15px;font-size:13px;line-height:1.8;font-weight:500;color:#e5e9ff}
+.confirm input{width:21px;height:21px;flex-shrink:0;accent-color:#8964f6;
+ margin-top:3px}
+#result-help{font-size:14px;color:#adcce0}
+@media(max-width:500px){body{padding:10px}.card{padding:20px 16px}}
 </style></head><body><main class="card">
-<div class="brand"><span class="mark"></span>BLOFY · XTREAM</div>
-<h1>تفعيل واستخراج اشتراك Xtream</h1>
-<p>اشتريت اشتراك Xtream؟ أدخل الكود الذي وصلك بعد الدفع. <b>تبدأ المدة عند أول تفعيل ناجح فقط</b>، وليس وقت الشراء. أما كود BLOFY STREAM فيُفعّل داخل التطبيق.</p>
-<form id="form" autocomplete="off"><label for="code">كود التفعيل</label>
+<div class="brand"><span class="mark"></span>BLOFY · STREAM + XTREAM</div>
+<h1>استخراج بيانات Xtream لأي كود BLOFY</h1>
+<p>عندك كود <b>BLOFY STREAM</b> أو <b>Xtream</b>؟ ضعه هنا لاستخراج Host واسم المستخدم وكلمة المرور ورابط M3U لنفس الاشتراك. <b>الكود الجديد يبدأ اشتراكه عند أول تفعيل ناجح فقط</b>، وليس وقت الشراء، ولن تحصل على اشتراك إضافي.</p>
+<form id="form" autocomplete="off"><label for="code">كود BLOFY STREAM أو Xtream</label>
 <input id="code" name="code" type="text" inputmode="numeric" pattern="[0-9٠-٩۰-۹A-Fa-f\\s-]{8,32}" spellcheck="false" autocapitalize="characters" maxlength="32" minlength="8" required placeholder="مثال: 83914527" aria-describedby="hint">
-<button id="submit" class="submit" type="submit">تفعيل واستخراج Xtream</button></form>
+<label class="confirm"><input id="confirm-start" type="checkbox" required> أفهم أن أول استخراج لكود جديد سيُفعّل نفس الاشتراك وتبدأ مدته، وأن الحساب المستخدم مسبقًا يحتاج إثبات ملكيته لاسترجاع البيانات.</label>
+<button id="submit" class="submit" type="submit">🔓 استخراج بيانات Xtream</button></form>
 <div id="message" class="status hide" role="status" aria-live="polite"></div>
-<section id="result" class="result hide" aria-live="polite"><h2>تم تفعيل اشتراكك بنجاح ✓</h2>
-<p>احتفظ ببيانات الدخول. إذا كان اشتراكك مرتبطًا بحساب المتجر تستطيع استرجاعها بعد تسجيل الدخول والتحقق من ملكيته.</p><div id="fields"></div><button id="copy-all" class="submit" type="button">نسخ جميع بيانات Xtream</button><button id="hide-result" class="copy" type="button">إخفاء بيانات الدخول</button><p class="fine">تُخفى بيانات Xtream تلقائيًا بعد 90 ثانية أو عند مغادرة التبويب لحماية حسابك. استرجعها من حسابك الموثّق عند الحاجة؛ لا تُحفظ في التخزين المحلي.</p></section>
-<p class="fine" id="hint">استخدم كود Xtream الأصلي (8–12 رقمًا أو الكود القديم المعتمد)، وليس رمز اقتران الأجهزة ذي 6 أرقام. <a href="/store/account" style="color:#c5bcff">حسابي واشتراكاتي</a> · <a href="/store/contact" style="color:#c5bcff">الدعم</a>.</p>
-</main><script src="/stream/activate.js" defer></script></body></html>
+<section id="result" class="result hide" aria-live="polite"><h2 id="result-title">بيانات Xtream الخاصة بك ✓</h2>
+<p id="result-help">هذه بيانات Xtream لنفس كود BLOFY؛ لا تتم إضافة مدة أو اشتراك جديد عند الاسترجاع.</p><div id="fields"></div><button id="copy-all" class="submit" type="button">نسخ جميع بيانات Xtream</button><button id="hide-result" class="copy" type="button">إخفاء بيانات الدخول</button><p class="fine">تُخفى بيانات Xtream تلقائيًا بعد 90 ثانية أو عند مغادرة التبويب لحماية حسابك. استرجعها من حسابك الموثّق عند الحاجة؛ لا تُحفظ في التخزين المحلي.</p></section>
+<p class="fine" id="hint">المدعوم: كود BLOFY الرقمي (8–12 رقمًا) أو كود BLOFY القديم المعتمد (24 خانة سداسية). <b>ليس رمز اقتران الأجهزة المكوّن من 6 أرقام، ولا أكواد مزوّدين خارجيين غير مسجلة في نظام BLOFY.</b> إذا كان الكود مستخدمًا مسبقًا، يلزم حساب المتجر الموثّق المرتبط به أو موافقة الدعم على الاسترجاع. <a href="/store/account" style="color:#c5bcff">تسجيل الدخول إلى حسابي</a> · <a href="/store/contact" style="color:#c5bcff">الدعم</a>.</p>
+</main><script src="/stream/activate.js?v=20261122-universal-v1" defer></script></body></html>
