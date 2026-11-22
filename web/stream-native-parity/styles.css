@@ -238,3 +238,19 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible,.remote-focus{
  .ai-compose .btn{min-width:72px;padding:7px;font-size:12px}
  .ai-chat-screen>.muted{display:none}
 }
+
+/* Search parity: real filters, quick recent searches, responsive controls. */
+.search-compose{display:flex;gap:9px;align-items:stretch;margin-bottom:12px}
+.search-compose .input{min-width:0;flex:1;margin-bottom:0}
+.search-compose .btn{min-width:94px}
+.search-tabs{flex-wrap:wrap}
+.search-tabs .chip{min-height:38px;min-width:74px;font-size:12px;cursor:pointer}
+.search-recent{margin:5px 0 14px}
+.search-recent .row{justify-content:space-between;margin-bottom:7px}
+.search-recent-items{display:flex;gap:7px;flex-wrap:wrap}
+.search-recent-items .chip{cursor:pointer;min-height:36px}
+@media(max-width:730px){
+ .search-compose{gap:5px}
+ .search-compose .btn{min-width:69px;padding:7px;font-size:11px}
+ .search-tabs .chip{min-width:60px}
+}
