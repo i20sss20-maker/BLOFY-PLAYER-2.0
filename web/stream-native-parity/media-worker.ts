@@ -369,8 +369,20 @@ async function fullVodRequest(req,url){
   session.hardTimer=setTimeout(()=>stopHls(session,'session_expired'),4*60*60*1000);session.hardTimer.unref?.()
  }
  touchHls(session);
- if(file==='index.m3u8')return new Response(fullVodManifest(duration),{status:200,
-  headers:{'Content-Type':'application/vnd.apple.mpegurl','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
+ if(file==='index.m3u8'){
+  const atText=url.searchParams.get('at')||'0';
+  const at=/^\d{1,6}$/.test(atText)?Number(atText):0;
+  // A first manifest identifies the initial seek position. Start preparation
+  // before the browser requests its first segment, without opening another
+  // connection to the provider or restarting an already active session.
+  if(session.chunkStart<0&&active<MAX_JOBS){
+   const first=Math.floor(Math.min(duration-1,at)/(FULL_SEGMENT_SECONDS*FULL_CHUNK_SEGMENTS))*FULL_CHUNK_SEGMENTS;
+   const result=fullVodChunk(session,first);
+   if(result.error)console.warn('BLOFY_FULL_VOD_PREFETCH_SKIPPED',{kind,reason:result.error})
+  }
+  return new Response(fullVodManifest(duration),{status:200,
+   headers:{'Content-Type':'application/vnd.apple.mpegurl','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}})
+ }
  const index=Number(file.slice(4,10));
  if(!Number.isSafeInteger(index)||index>=Math.ceil(duration/FULL_SEGMENT_SECONDS))return json(416,{error:'vod_segment_outside_duration'});
  const filename=join(session.dir,file);
