@@ -171,13 +171,13 @@ async function syntheticPipeTest(){
   const bytes=readFileSync(src);
   const input=new ReadableStream({start(controller){controller.enqueue(new Uint8Array(bytes));controller.close()}});
   const stderr=[];
-  const args=['-hide_banner','-loglevel','error','-nostdin','-i',src,'-map','0:v:0','-map','0:a:0','-c','copy','-f','mpegts',join(dir,'copy.ts')];
+  const args=['-hide_banner','-loglevel','error','-nostdin','-i',src,'-map','0:v:0','-map','0:a:0','-c:v','libx264','-preset','ultrafast','-pix_fmt','yuv420p','-c:a','aac','-b:a','96k','-ac','2','-f','hls','-hls_time','1','-hls_segment_filename',join(dir,'p-%06d.ts'),out];
     const proc=Bun.spawnSync([FFMPEG,...args],{stdout:'pipe',stderr:'pipe',timeout:16000});
   const exit=proc.exitCode==null?-99:proc.exitCode;
   const messages=Buffer.from(proc.stderr||[]).toString('utf8').slice(0,1000);
-  const output=join(dir,'copy.ts'),created=existsSync(output),size=created?readFileSync(output).length:0;
+  const created=existsSync(out),size=created?readFileSync(out).length:0;
   const error=/Segmentation fault|signal 11/i.test(messages)?'segfault':/Invalid data/i.test(messages)?'invalid_input':/Could not find|matches no streams/i.test(messages)?'stream_map':'other_or_none';
-  return {ok:exit===0&&created&&size>30,stage:'copy_remux',exit,signal:proc.signalCode??null,created,size,sourceBytes:bytes.length,error};
+  return {ok:exit===0&&created&&size>30&&readdirSync(dir).some(f=>/^p-\d{6}\.ts$/.test(f)),stage:'decode_transcode_hls',exit,signal:proc.signalCode??null,created,size,sourceBytes:bytes.length,error};
  }catch(e){return {ok:false,stage:'pipe_test_failed',error:String(e?.name||'runtime_error')}}
  finally{try{rmSync(dir,{recursive:true,force:true})}catch{}}
 }
