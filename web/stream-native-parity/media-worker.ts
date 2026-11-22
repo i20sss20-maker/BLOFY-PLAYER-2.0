@@ -261,6 +261,110 @@ async function vodRequest(req,url){
  }catch{return json(502,{error:'vod_segment_unavailable'})}
 }
 
+
+/* Full-length VOD: fixed VOD playlist, indexed on-demand transcoding.
+ * Synthetic timeline includes true duration, not a live growing HLS window.
+ */
+const FULL_SEGMENT_SECONDS=4, FULL_CHUNK_SEGMENTS=6;
+function fullVodManifest(duration){
+ const count=Math.ceil(duration/FULL_SEGMENT_SECONDS);
+ const lines=['#EXTM3U','#EXT-X-VERSION:3','#EXT-X-TARGETDURATION:4',
+  '#EXT-X-MEDIA-SEQUENCE:0','#EXT-X-PLAYLIST-TYPE:VOD','#EXT-X-INDEPENDENT-SEGMENTS'];
+ for(let i=0;i<count;i++){
+  if(i&&i%FULL_CHUNK_SEGMENTS===0)lines.push('#EXT-X-DISCONTINUITY');
+  lines.push('#EXTINF:'+Math.min(FULL_SEGMENT_SECONDS,duration-i*FULL_SEGMENT_SECONDS).toFixed(3)+',');
+  lines.push('seg-'+String(i).padStart(6,'0')+'.ts')
+ }
+ lines.push('#EXT-X-ENDLIST');
+ return lines.join('\n')+'\n'
+}
+function fullVodChunk(session,first){
+ if(session.proc&&!session.finished&&session.chunkStart===first)return {ok:true};
+ if(session.proc&&!session.finished){
+  try{session.proc.kill()}catch{}
+  releaseHls(session)
+ }
+ if(active>=MAX_JOBS)return {status:429,error:'vod_capacity'};
+ const begin=first*FULL_SEGMENT_SECONDS;
+ const seconds=Math.min(session.duration-begin,FULL_CHUNK_SEGMENTS*FULL_SEGMENT_SECONDS);
+ if(!(seconds>0))return {status:416,error:'vod_out_of_bounds'};
+ session.released=false;active++;
+ session.finished=false;session.chunkStart=first;session.error=null;session.exitCode=null;
+ session.abort=new AbortController();
+ const source='http://127.0.0.1:'+Number(Bun.env.PORT||3000)+'/_source/'+session.key;
+ const args=['-hide_banner','-loglevel','warning','-nostats','-nostdin','-analyzeduration','2000000','-probesize','2000000',
+ '-reconnect','1','-reconnect_streamed','1','-reconnect_on_network_error','1','-reconnect_delay_max','2',
+ '-ss',String(begin),'-i',source,'-t',String(seconds),
+ '-map','0:v:0','-map','0:a:'+session.track+'?',
+ '-c:v','libx264','-preset','ultrafast','-profile:v','baseline','-level','3.1','-pix_fmt','yuv420p',
+ '-vf','scale=854:480:force_original_aspect_ratio=decrease:force_divisible_by=2,fps=25',
+ '-g','100','-keyint_min','100','-sc_threshold','0','-force_key_frames','expr:gte(t,n_forced*4)',
+ '-b:v','900k','-maxrate','1100k','-bufsize','1800k',
+ '-c:a','aac','-b:a','96k','-ac','2','-ar','48000',
+ '-f','hls','-hls_time','4','-hls_segment_type','mpegts',
+ '-hls_list_size','0','-hls_playlist_type','vod','-start_number',String(first),
+ '-hls_flags','independent_segments+temp_file',
+ '-hls_segment_filename',join(session.dir,'seg-%06d.ts'),join(session.dir,'chunk-'+first+'.m3u8')];
+ try{
+  const proc=Bun.spawn([FFMPEG,...args],{stdin:'ignore',stdout:'ignore',stderr:'pipe',signal:session.abort.signal});
+  session.proc=proc;const began=Date.now();
+  (async()=>{try{let buf='';const reader=proc.stderr.getReader();
+   while(true){const next=await reader.read();if(next.done)break;buf=(buf+new TextDecoder().decode(next.value)).slice(-2800)}
+   if(buf)session.error=/Connection reset|ECONNRESET|end of file|timed out/i.test(buf)?'vod_source_connection_lost':
+    /416|range|Invalid data/i.test(buf)?'vod_source_seek_unsupported':'vod_chunk_processing_failed'
+  }catch{}})();
+  proc.exited.then(code=>{
+   if(session.proc!==proc)return;
+   session.finished=true;session.exitCode=code;releaseHls(session);
+   if(code!==0&&!session.stopped)console.warn('BLOFY_FULL_VOD_CHUNK_ERROR',{kind:session.kind,code,reason:session.error||'vod_chunk_interrupted'});
+   else if(!session.stopped)console.info('BLOFY_FULL_VOD_CHUNK_OK',{kind:session.kind,first,elapsedMs:Date.now()-began})
+  }).catch(()=>{if(session.proc===proc){session.finished=true;session.error='vod_chunk_crashed';releaseHls(session)}});
+  return {ok:true}
+ }catch{session.finished=true;session.error='vod_chunk_start_failed';releaseHls(session);return {status:502,error:'vod_chunk_start_failed'}}
+}
+async function fullVodRequest(req,url){
+ if(!SECRET||!secureEquals(req.headers.get('x-compat-secret'),SECRET))return json(403,{error:'forbidden'});
+ const m=url.pathname.match(/^\/vodfull\/(movie|series)\/([1-9][0-9]{0,14})\/(mkv|mp4|avi|mov|ts)\/([0-3])\/([0-9]{3,5})\/(index\.m3u8|seg-[0-9]{6}\.ts|stop)$/);
+ if(!m)return json(404,{error:'invalid_full_vod_path'});
+ const [all,kind,id,ext,rawTrack,rawDuration,file]=m,track=Number(rawTrack),duration=Number(rawDuration);
+ if(!Number.isInteger(duration)||duration<120||duration>21600)return json(400,{error:'invalid_vod_duration'});
+ const bearer=req.headers.get('authorization')||'';
+ if(!/^Bearer v1\.[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/.test(bearer))return json(401,{error:'authorization_missing'});
+ const key=vodKey(bearer,kind,id,ext,track,'full-'+duration);
+ if(file==='stop'){
+  if(req.method!=='POST')return json(405,{error:'method_not_allowed'});
+  const existing=hlsSessions.get(key);if(existing)stopHls(existing,'viewer_stopped');
+  return json(200,{ok:true})
+ }
+ if(req.method!=='GET')return json(405,{error:'method_not_allowed'});
+ let session=hlsSessions.get(key);
+ if(!session){
+  const dir=join(hlsRoot,key);mkdirSync(dir,{recursive:true});
+  session={key,vod:true,fullVod:true,kind,id,ext,track,duration,bearer,dir,abort:new AbortController(),
+   proc:null,chunkStart:-1,stopped:false,released:true,finished:true,exitCode:0,lastAccess:Date.now()};
+  hlsSessions.set(key,session);
+  session.hardTimer=setTimeout(()=>stopHls(session,'session_expired'),4*60*60*1000);session.hardTimer.unref?.()
+ }
+ touchHls(session);
+ if(file==='index.m3u8')return new Response(fullVodManifest(duration),{status:200,
+  headers:{'Content-Type':'application/vnd.apple.mpegurl','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
+ const index=Number(file.slice(4,10));
+ if(!Number.isSafeInteger(index)||index>=Math.ceil(duration/FULL_SEGMENT_SECONDS))return json(416,{error:'vod_segment_outside_duration'});
+ const filename=join(session.dir,file);
+ if(!existsSync(filename)){
+  const first=Math.floor(index/FULL_CHUNK_SEGMENTS)*FULL_CHUNK_SEGMENTS;
+  if(session.chunkStart!==first||session.finished){
+   const started=fullVodChunk(session,first);
+   if(started.error)return json(started.status||502,{error:started.error})
+  }
+  const ready=await awaitHlsFile(session,file,28000);
+  if(!ready)return json(session.finished?502:504,{error:session.error||'vod_segment_not_ready'})
+ }
+ try{return new Response(readFileSync(filename),{status:200,
+  headers:{'Content-Type':'video/mp2t','Cache-Control':'private, max-age=3600','X-Content-Type-Options':'nosniff'}})}
+ catch{return json(502,{error:'vod_segment_read_failed'})}
+}
+
 function tsCodecs(buffer){
  let pmt=-1,video=false,audio=false;
  for(let off=0;off+188<=buffer.length&&off<188*500;off+=188){
@@ -335,6 +439,7 @@ const server=Bun.serve({port:Number(Bun.env.PORT||3000),idleTimeout:255,async fe
  const url=new URL(req.url),path=url.pathname;
  if(path.startsWith('/_source/'))return localSource(req,url);
  if(path.startsWith('/vod/'))return vodRequest(req,url);
+ if(path.startsWith('/vodfull/'))return fullVodRequest(req,url);
  if(path==='/internal-pipe-test'&&req.method==='GET'){
  if(!SECRET||!secureEquals(req.headers.get('x-compat-secret'),SECRET))return json(403,{error:'forbidden'});
  const check=await syntheticPipeTest();console.info('VIDAA_SYNTHETIC_PIPE_TEST',check);return json(check.ok?200:503,check)
