@@ -198,7 +198,7 @@ test('an unlinked code, wrong code, or missing login cannot disclose credentials
  assert.ok(!JSON.stringify(incorrect).includes('A_SecretTest123'));
 });
 test('expired, inactive and not-yet-activated codes cannot recover secrets',async()=>{
- for(const options of [{enabled:false},{expiry:now-1000},{redeemed:false}]){
+ for(const options of [{enabled:false},{expiry:Date.now()-86400000},{redeemed:false}]){
   const response=await customerFixture(options).call({code,acknowledge:true});
   assert.equal(response.status,409);
   assert.equal(response.body.credentials,undefined);
