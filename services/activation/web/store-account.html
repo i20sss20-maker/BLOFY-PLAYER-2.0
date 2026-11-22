@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="/store/cart.css?v=4">
 <link rel="stylesheet" href="/store/checkout-theme.css?v=1">
 <link rel="stylesheet" href="/store/visual.css?v=20261119-orders-guide-v3">
-<script defer src="/store/account.js?v=20261119-profile-v3"></script>
+<script defer src="/store/account.js?v=20261122-paid-leads-v1"></script>
 <style>
 .subscription-state{display:inline-flex;align-items:center;border-radius:999px;font-weight:700;font-size:12px;padding:5px 11px;margin:6px 0;border:1px solid #ccd4d8;background:#f3f4f6;color:#4b5563}
 .subscription-state-active{background:#e4f7ed;border-color:#97d7b5;color:#176039}
@@ -121,7 +121,13 @@
 <p id="subscriptions-note" class="hint" role="status" aria-live="polite">جارٍ قراءة اشتراكاتك الموثقة...</p>
 <div id="subscriptions" aria-live="polite"></div>
 </div>
-<div class="card" id="account-expiry">
+<div class="card" id="account-offers">
+ <h2>عروض BLOFY الاختيارية</h2>
+ <p>يمكنك اختيار استقبال عروض الاشتراكات من BLOFY على بريدك الإلكتروني أو رقم الجوال المسجل. <strong>الموافقة اختيارية ولا تؤثر على الشراء أو التجربة أو استمرار الاشتراك.</strong> لا يتم إرسال رسائل تلقائية بمجرد اختيارها ويمكنك إلغاء الموافقة هنا في أي وقت.</p>
+ <label class="toggle"><input type="checkbox" id="account-marketing-optin"> أوافق على التواصل معي بعروض BLOFY عبر الجوال أو البريد المسجل.</label>
+ <output id="account-marketing-status" role="status" aria-live="polite"></output>
+ </div>
+ <div class="card" id="account-expiry">
 <h2>تذكير انتهاء الاشتراك</h2>
 <p>تظهر تنبيهات الاشتراكات التي ستنتهي خلال 7 أيام داخل حسابك. يمكنك تفعيل رسالة بريد إلكتروني واحدة لكل اشتراك عند قرب انتهائه بعد تشغيل خدمة التنبيهات رسميًا. لا تُرسل رسائل واتساب تلقائية.</p>
 <label class="toggle"><input type="checkbox" id="reminder-optin"> أوافق على استلام تنبيه انتهاء الاشتراك عبر البريد الإلكتروني، ويمكنني إلغاء الموافقة في أي وقت.</label>
