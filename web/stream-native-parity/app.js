@@ -1412,4 +1412,11 @@ api('GET','/api/session',null,function(st,json){
  else login('أدخل كود اشتراك BLOFY STREAM للتفعيل')
 });
 setInterval(checkCatalogVersion,10*60*1000);
+// Optional installable web shell. The worker never caches subscription tokens,
+// API responses, movie streams or account content.
+if('serviceWorker' in navigator&&window.isSecureContext){
+ window.addEventListener('load',function(){
+  navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(function(){})
+ })
+}
 })();
