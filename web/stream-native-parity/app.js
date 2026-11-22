@@ -1268,7 +1268,15 @@ function openPlayer(kind,id,extension,name,from){
  root.addEventListener('focusin',revealControls);
  video.addEventListener('click',revealControls);
  function realPos(){return state.mode==='vodhls'?state.offset+Math.max(0,video.currentTime||0):video.currentTime||0}
- function totalDuration(){return state.mode==='vodhls'?state.duration:(isFinite(video.duration)&&video.duration>0?video.duration:state.duration)}
+ function totalDuration(){
+  // The full-length VOD manifest is authoritative. On some TV engines
+  // <video>.duration incorrectly reports only the current 24s HLS chunk.
+  if(state.mode==='fullvod'||state.mode==='vodhls')return state.duration;
+  if(state.duration>=120&&state.duration<=21600)return state.duration;
+  var observed=Number(video.duration);
+  // Do not display a "one-minute movie" when a pseudo-live MP4 reports 60s.
+  return isFinite(observed)&&observed>=120&&observed<=21600?observed:0
+ }
  function nativeCanSeek(target){
   var ranges=video.seekable;
   if(!ranges||!ranges.length)return false;
@@ -1388,7 +1396,7 @@ function openPlayer(kind,id,extension,name,from){
   }
   if(state.mode==='direct'){
    state.directFallback=true;
-   if(isFinite(video.duration)&&video.duration>120&&video.duration<=21600)state.duration=Math.round(video.duration);
+   // A nonseekable MP4 reports untrusted duration. Prefer Xtream metadata.
    playerStatus('هذا المصدر لا يسمح بالتقديم إلى '+formatTime(target)+' مباشرة؛ جار فتح مشغّل الأفلام…')
   }
   // Resolve Xtream metadata before converting MP4 to the temporary EVENT
@@ -1407,7 +1415,6 @@ function openPlayer(kind,id,extension,name,from){
   if(state.directSeekCheck){clearTimeout(state.directSeekCheck);state.directSeekCheck=null}
   if(state.directSeekVerify){clearTimeout(state.directSeekVerify);state.directSeekVerify=null}
   if(state.directTimer){clearTimeout(state.directTimer);state.directTimer=null}
-  if(isFinite(video.duration)&&video.duration>120&&video.duration<=21600)state.duration=Math.round(video.duration);
   var position=Math.max(resume,state.resume||0,video.currentTime||0);
   playerStatus('جار فتح مصدر متوافق لتقديم الفيلم…');
   if(state.duration>=120)startVod(position);
@@ -1422,13 +1429,20 @@ function openPlayer(kind,id,extension,name,from){
  video.onloadedmetadata=function(){
   if(state.mode!=='direct')return;
   if(state.directTimer){clearTimeout(state.directTimer);state.directTimer=null}
-  if(isFinite(video.duration)&&video.duration>120&&video.duration<=21600)state.duration=Math.round(video.duration);
+  var observed=Number(video.duration);
+  // Retain the browser estimate only as a hint. Never override the verified
+  // catalog duration unless the source really exposes seekable byte ranges.
+  if(isFinite(observed)&&observed>=120&&observed<=21600)state.directDurationHint=Math.round(observed);
   progress();
   // HTML5 can decode MP4 yet have NO seekable byte ranges: in that case the
   // film looks like live streaming. Try the full VOD engine automatically.
   if(state.directSeekCheck)clearTimeout(state.directSeekCheck);
   var badge=document.getElementById('player-mode-badge');
-  if(badge&&nativeCanSeek(Math.max(0,Math.min(video.duration-10,video.duration*0.75))))badge.textContent='MP4 • قابل للتقديم';
+  var far=state.directDurationHint&&Math.max(0,Math.min(state.directDurationHint-10,state.directDurationHint*0.75));
+  if(badge&&far>0&&nativeCanSeek(far)){
+   badge.textContent='MP4 • قابل للتقديم';
+   if(!(state.duration>=120))state.duration=state.directDurationHint
+  }
   state.directSeekCheck=setTimeout(function(){
    state.directSeekCheck=null;
    if(S.route!=='player'||state.mode!=='direct'||state.directFallback||isLive)return;
@@ -1439,6 +1453,8 @@ function openPlayer(kind,id,extension,name,from){
    if(!nativeCanSeek(Math.min(probe,video.duration-10))){
     playerStatus('المصدر يتيح دقائق محدودة فقط؛ جار التحويل إلى مشغّل الأفلام الكامل…');
     state.recoverDirect()
+   }else if(state.directDurationHint>=120&&!(state.duration>=120)){
+    state.duration=state.directDurationHint;progress()
    }
   },3500)
  };
