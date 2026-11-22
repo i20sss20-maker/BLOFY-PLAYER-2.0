@@ -153,6 +153,14 @@ async function localSource(req,url){
  try{
   const res=await fetch(target,{method:req.method,headers,redirect:'manual',signal:req.signal});
   if(res.status>=300&&res.status<400)return json(502,{error:'upstream_redirect_rejected'});
+  // Do not pretend a seek succeeded if the source ignored a nonzero byte-range.
+  // It would otherwise replay the beginning while the UI shows a later timestamp.
+  const offset=range&&/^bytes=(\d+)-/.exec(range);
+  if(offset&&Number(offset[1])>0){
+   if(res.status!==206){try{res.body?.cancel()}catch{};return json(416,{error:'vod_source_range_unavailable'})}
+   const contentRange=res.headers.get('content-range')||'';
+   if(!contentRange.startsWith('bytes '+offset[1]+'-')){try{res.body?.cancel()}catch{};return json(502,{error:'vod_source_range_mismatch'})}
+  }
   const h=new Headers({'Cache-Control':'no-store, private','Content-Type':res.headers.get('content-type')||'application/octet-stream'});
   for(const k of ['content-range','content-length','accept-ranges'])if(res.headers.get(k))h.set(k,res.headers.get(k));
   return new Response(req.method==='HEAD'?null:res.body,{status:res.status,headers:h})
@@ -265,6 +273,10 @@ async function vodRequest(req,url){
  if(req.method!=='GET')return json(405,{error:'method_not_allowed'});
  let sess=hlsSessions.get(key);
  if(file==='meta')return json(200,await independentVodMetadata({bearer,kind,id,ext,track}));
+ // Allow the same absolute position to be retried after an interrupted source.
+ if(file==='index.m3u8'&&sess&&sess.finished&&sess.exitCode!==0){
+  stopHls(sess,'vod_retry_after_interruption');sess=null
+ }
  if(!sess&&file!=='index.m3u8')return json(410,{error:'vod_session_expired'});
  if(!sess){const created=await startVod({bearer,kind,id,ext,track,start,key});if(created.error)return json(created.status||502,{error:created.error});sess=created.session}
  touchHls(sess);
