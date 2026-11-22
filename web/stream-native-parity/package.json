@@ -4,5 +4,8 @@
   "type": "module",
   "devDependencies": {
     "@playwright/test": "1.56.1"
+  },
+  "dependencies": {
+    "hls.js": "1.5.20"
   }
 }
