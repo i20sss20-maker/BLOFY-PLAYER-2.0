@@ -396,8 +396,17 @@ async function fullVodRequest(req,url){
     await Promise.race([old.exited.catch(()=>null),nap(9000)])
    }
    if(session.stopped)return json(410,{error:'vod_session_expired'});
-   const started=fullVodChunk(session,first);
-   if(started.error)return json(started.status||502,{error:started.error})
+   // Capacity bursts should queue briefly instead of immediately failing the
+   // film. Never exceed the two encoder slots or wait beyond Hls.js timeout.
+   if(active>=MAX_JOBS&&session.released){
+    const until=Date.now()+4000;
+    while(active>=MAX_JOBS&&!session.stopped&&!req.signal.aborted&&Date.now()<until)await nap(160);
+    if(session.stopped||req.signal.aborted)return json(410,{error:'vod_request_cancelled'})
+   }
+   if(session.chunkStart!==first||session.finished){
+    const started=fullVodChunk(session,first);
+    if(started.error)return json(started.status||502,{error:started.error})
+   }
   }
   const until=Date.now()+28000;
   while(!existsSync(filename)&&!session.stopped&&session.chunkStart===first&&!session.finished&&Date.now()<until)await nap(170);
