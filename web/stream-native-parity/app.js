@@ -905,18 +905,27 @@ function knownDuration(kind,id,item){
  * transcoded on demand at that absolute movie position by the worker.
  * Unknown-length sources still use the bounded legacy streaming fallback.
  */
+function freshPlaybackId(){
+ var bytes=new Uint8Array(16),hex='0123456789abcdef',result='';
+ if(window.crypto&&window.crypto.getRandomValues)window.crypto.getRandomValues(bytes);
+ else for(var k=0;k<bytes.length;k++)bytes[k]=Math.floor(Math.random()*256);
+ for(var i=0;i<bytes.length;i++)result+=hex[(bytes[i]>>4)&15]+hex[bytes[i]&15];
+ return result
+}
 function playFullVod(video,kind,id,ext,track,duration,state,ready){
  var seconds=Math.round(duration),path='/api/vodfull/'+kind+'/'+id+'/'+ext+'/'+track+'/'+seconds;
+ var sid='sid='+state.playbackId;
  var firstAt=Math.max(0,Math.min(seconds-2,Math.round(Number(state.resume)||0)));
  // Tell the seekable VOD worker which chunk is required first, before Hls.js
  // requests segments. Other chunks are still produced only when requested.
- var playlist=path+'/index.m3u8?at='+firstAt;
+ var playlist=path+'/index.m3u8?'+sid+'&at='+firstAt;
+ var stopUrl=path+'/stop?'+sid;
  // A retry of the same full VOD session must NOT issue asynchronous /stop:
  // the delayed stop response could kill the newly started retry.
- var sameSession=!!(S.play&&S.play.stopUrl===path+'/stop');
+ var sameSession=!!(S.play&&S.play.stopUrl===stopUrl);
  state.ready=false;
  stopPlayback(!sameSession);
- var rec={video:video,kind:kind,id:id,preview:false,engine:null,stopUrl:path+'/stop',hlsKey:null,ready:false,timer:null,stallTimer:null,pendingRecovery:false};
+ var rec={video:video,kind:kind,id:id,preview:false,engine:null,stopUrl:stopUrl,hlsKey:null,ready:false,timer:null,stallTimer:null,pendingRecovery:false};
  S.play=rec;state.mode='fullvod';state.offset=0;state.duration=seconds;state.ready=false;state.didResume=false;
  diagnose(kind,'vod_full_start','fullvod',0);
  video.autoplay=true;video.muted=false;video.defaultMuted=false;video.controls=false;
@@ -1152,7 +1161,7 @@ function openPlayer(kind,id,extension,name,from){
  '<button class="btn secondary" id="player-retry" style="display:none">⟳ إعادة المحاولة</button></div></div></section>';
  var video=document.getElementById('player-media'),state={kind:kind,id:id,ext:ext,video:video,name:name,offset:0,
  mode:isLive?'hls':'direct',resume:resume,duration:knownDuration(kind,id,item),didResume:false,ready:false,track:0,lastSaved:0,
-  art:art(item)||prior&&prior.art||'',seriesId:kind==='series'&&S.item&&S.item.id||''};
+  art:art(item)||prior&&prior.art||'',seriesId:kind==='series'&&S.item&&S.item.id||'',playbackId:freshPlaybackId()};
  var root=document.getElementById('player-root'),hud=root.querySelector('.player-hud');
  function revealControls(){
   root.classList.remove('controls-hidden');
