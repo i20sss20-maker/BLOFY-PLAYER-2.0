@@ -1259,7 +1259,7 @@ function openPlayer(kind,id,extension,name,from){
  function startWithMetadata(at){
   if(state.duration>=120||kind==='live'){startVod(at);return}
   var settled=false;
-  function launch(){if(settled||S.route!=='player')return;settled=true;startVod(at)}
+  function launch(){if(settled||S.route!=='player'||S.playerView!==state)return;settled=true;startVod(at)}
   var timeout=setTimeout(launch,4200);
   var episodeParent=kind==='series'&&(
    (prior&&prior.seriesId)||
@@ -1270,7 +1270,7 @@ function openPlayer(kind,id,extension,name,from){
   if(!endpoint){clearTimeout(timeout);launch();return}
   playerStatus('جار قراءة معلومات الفيلم لتفعيل التقديم والترجيع…');
   api('GET','/api/catalog?action='+endpoint,null,function(st,result){
-   if(S.route!=='player')return;
+   if(S.route!=='player'||S.playerView!==state)return;
    var alreadyStarted=settled;
    clearTimeout(timeout);
    if(st===200&&result){
@@ -1320,9 +1320,12 @@ function openPlayer(kind,id,extension,name,from){
    if(isFinite(video.duration)&&video.duration>120&&video.duration<=21600)state.duration=Math.round(video.duration);
    playerStatus('هذا المصدر لا يسمح بالتقديم إلى '+formatTime(target)+' مباشرة؛ جار فتح مشغّل الأفلام…')
   }
-  // Restart transcoding at the requested absolute time, never silently at 0.
+  // Resolve Xtream metadata before converting MP4 to the temporary EVENT
+  // playlist. Previously direct-MP4 failures bypassed metadata entirely,
+  // leaving episodes looking like one-minute live television.
   if(state.ready)saveResume(kind,id,realPos(),duration,true);
-  startVod(target);
+  if(state.mode==='direct'&&!(state.duration>=120))startWithMetadata(target);
+  else startVod(target);
   playerStatus('جار فتح المقطع عند '+formatTime(target)+'…');
  }
  state.seekTo=seekTo;
@@ -1336,7 +1339,8 @@ function openPlayer(kind,id,extension,name,from){
   if(isFinite(video.duration)&&video.duration>120&&video.duration<=21600)state.duration=Math.round(video.duration);
   var position=Math.max(resume,state.resume||0,video.currentTime||0);
   playerStatus('جار فتح مصدر متوافق لتقديم الفيلم…');
-  startVod(position)
+  if(state.duration>=120)startVod(position);
+  else startWithMetadata(position)
  };
  function startDirect(){
   state.mode='direct';state.offset=0;state.didResume=false;state.ready=false;
