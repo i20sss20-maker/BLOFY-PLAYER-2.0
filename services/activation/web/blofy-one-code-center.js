@@ -356,7 +356,7 @@
     ['legacy-xtream','⌕ فحص الكود القديم'],
     ['stream-management','▤ حسابات Xtream'],
     ['one-inventory','▥ مخزون البيع'],
-    ['one-trial-stock','🎁 الأكواد التجريبية · يوم']
+    ['one-trial-stock','🎁 التجارب والعملاء · متابعة']
   ];
   for(const [id,name] of definitions){
     const button=document.createElement('button');
