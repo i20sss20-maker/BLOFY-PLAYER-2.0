@@ -270,6 +270,44 @@ export function createStoreTrialInventory({
    recent:recent.rows.map(row=>({sku:row.sku,codeHint:row.code_hint,
     claimedAt:row.claimed_at,activatedAt:row.redeemed_at,expiresAt:row.expires_at}))},NO_CACHE);
  }
+ async function adminLeads(req,res){
+  if(!authorizeAdmin(req,res))return;
+  const body=await readJson(req);
+  await schema();
+  try{return json(res,200,await listTrialLeads(pool,body),NO_CACHE)}
+  catch(error){if(error.status)return json(res,error.status,{error:error.message},NO_CACHE);throw error;}
+ }
+ async function adminFollowup(req,res){
+  if(!authorizeAdmin(req,res))return;
+  const body=await readJson(req);
+  await schema();
+  try{return json(res,200,await updateTrialLeadFollowup(pool,body),NO_CACHE)}
+  catch(error){if(error.status)return json(res,error.status,{error:error.message},NO_CACHE);throw error;}
+ }
+ async function contactPreferences(req,res){
+  if(!enabled)return json(res,503,{error:'trials_unavailable'},NO_CACHE);
+  if(!ALLOWED_ORIGINS.has(String(req.headers?.origin||''))||
+     req.headers?.['x-blofy-trial']!=='1')
+   return json(res,403,{error:'trial_origin_invalid'},NO_CACHE);
+  if(!/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(
+     String(req.headers?.['content-type']||'')))
+   return json(res,415,{error:'trial_content_type_invalid'},NO_CACHE);
+  if(Number(req.headers?.['content-length']||0)>1000)
+   return json(res,413,{error:'trial_body_too_large'},NO_CACHE);
+  const customer=await getAuthenticatedCustomer(req);
+  if(!customer?.id||!UUID.test(customer.id))
+   return json(res,401,{error:'trial_login_required'},NO_CACHE);
+  const body=await readJson(req);
+  if(typeof body?.marketingOptIn!=='boolean')
+   return json(res,400,{error:'trial_contact_preference_invalid'},NO_CACHE);
+  await schema();
+  const result=await pool.query(`UPDATE blofy_store_trial_inventory
+   SET marketing_consent_at=CASE WHEN $2::boolean THEN NOW() ELSE NULL END
+   WHERE customer_id=$1 AND claimed_at IS NOT NULL RETURNING marketing_consent_at`,
+   [customer.id,body.marketingOptIn]);
+  if(result.rowCount!==1)return json(res,404,{error:'trial_not_claimed'},NO_CACHE);
+  return json(res,200,{ok:true,marketingOptIn:Boolean(result.rows[0]?.marketing_consent_at)},NO_CACHE);
+ }
  async function claim(req,res){
   if(!enabled)return json(res,503,{error:'trials_unavailable'},NO_CACHE);
   if(!ALLOWED_ORIGINS.has(String(req.headers?.origin||''))||
@@ -289,8 +327,12 @@ export function createStoreTrialInventory({
   if(env.BLOFY_CUSTOMER_PROFILE_REQUIRED==='true'&&
      (!customer.full_name||!customer.phone_e164))
    return json(res,403,{error:'trial_profile_required'},NO_CACHE);
-  const plan=trialStockRequest(await readJson(req));
+  const payload=await readJson(req);
+  const plan=trialStockRequest(payload);
   if(!plan)return json(res,400,{error:'trial_product_invalid'},NO_CACHE);
+  if(payload?.marketingOptIn!==undefined&&
+     typeof payload.marketingOptIn!=='boolean')
+   return json(res,400,{error:'trial_marketing_preference_invalid'},NO_CACHE);
   await schema();
   const db=await pool.connect();
   let issued;
@@ -318,9 +360,10 @@ export function createStoreTrialInventory({
      [plan.sku])).rows[0];
     if(!next)throw fail('trial_out_of_stock',409);
     await db.query(`UPDATE blofy_store_trial_inventory
-      SET customer_id=$2,claimed_at=NOW()
+      SET customer_id=$2,claimed_at=NOW(),
+       marketing_consent_at=CASE WHEN $3::boolean THEN NOW() ELSE NULL END
       WHERE voucher_id=$1 AND customer_id IS NULL`,
-      [next.voucher_id,customer.id]);
+      [next.voucher_id,customer.id,payload.marketingOptIn===true]);
     const row=await findClaim(db,customer.id);
     issued=renderClaim(row,false);
    }
