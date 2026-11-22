@@ -91,3 +91,9 @@ The web pilot cannot reuse Android's Media3/VLC engines unchanged. Full-resoluti
 - Live code-only activation server, static assets, JS compilation, STREAM CSS source tokens and secret configuration passed a non-customer synthetic self-test.
 - VOD worker startup/health can run without customer credentials; full end-to-end Range seek with actual subscribed content and audio/video requires further validation.
 - UI was ported by reading source code; pixel-by-pixel comparison against a running physical Android TV is still required before calling it visually identical.
+
+### Concurrent VOD sessions — 23 November 2026
+
+Every opened film or episode now has a **new, random 128-bit client playback ID** (SID). The SID is part of the manifest request, every HLS media segment URL, and the stop URL. The internal VOD worker includes the SID in its HMAC-derived session key, in addition to the bearer and title. This means that two independent tabs/devices using the same authorized subscription cannot seek, restart, or terminate each other's active VOD session. Requests without SID remain accepted for previous preview clients; malformed SID is rejected. Authentication remains mandatory and the SID is not a substitute for account authorization.
+
+**Verification:** syntax checks for client, API and worker; unit manifest checks for both legacy and SID-aware media URLs; deployment SUCCESS of web and worker with worker's synthetic seek health check passing. **Not yet proved:** simultaneous playback on two subscribed physical devices for a full movie or shared-network congestion under load. The existing MAX_JOBS capacity (2) still limits parallel transcodes. Do not roll out to public customers without live-source and load tests.
