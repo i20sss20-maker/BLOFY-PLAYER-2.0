@@ -1,5 +1,6 @@
 import {test,expect} from '@playwright/test';
 import {readFileSync} from 'node:fs';
+test.use({channel:'chrome'});
 const movie={stream_id:11,name:'فيلم تجريبي',category_id:'1',container_extension:'mp4',stream_icon:'https://example.com/movie.jpg'};
 const series={series_id:21,name:'مسلسل تجريبي',category_id:'3',cover:'https://example.com/show.jpg'};
 const channel={stream_id:31,name:'قناة اختبار',category_id:'4',stream_icon:'https://example.com/channel.jpg'};
