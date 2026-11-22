@@ -381,6 +381,7 @@
    view(true);
    if(showProfileRequired(data)){tell('أكمل الاسم ورقم الجوال للمتابعة.');return;}
    $('reminder-optin').checked=data.alertsOptIn===true;
+   $('account-marketing-optin').checked=data.marketingOptIn===true;
    updateOrderOverview();
    renderOrders();
    view(true);tell('حسابك جاهز.');
@@ -536,7 +537,24 @@
   }catch(e){tell(statusMessage(e));}
   finally{button.disabled=false;}
  });
- $('reminder-optin').addEventListener('change',async function(){
+ $('account-marketing-optin').addEventListener('change',async function(){
+  this.disabled=true;
+  const chosen=this.checked;
+  const display=$('account-marketing-status');
+  display.textContent='جارٍ حفظ اختيار استقبال العروض…';
+  try{
+   const updated=await api('/marketing-preferences',{marketingOptIn:chosen});
+   if(updated.ok!==true||updated.marketingOptIn!==chosen)
+    throw Error('تعذر التأكد من حفظ التفضيل.');
+   display.textContent=chosen?
+    '✓ تم حفظ موافقتك الاختيارية. يمكنك إيقاف عروض BLOFY من هنا متى شئت.':
+    '✓ تم إلغاء الموافقة على عروض BLOFY. لن تُعتبر موافقًا على التواصل التسويقي.';
+  }catch(error){
+   this.checked=!chosen;
+   display.textContent=statusMessage(error);
+  }finally{this.disabled=false;}
+ });
+  $('reminder-optin').addEventListener('change',async function(){
   this.disabled=true;
   try{
    const response=await api('/preferences',{alertsOptIn:this.checked});
