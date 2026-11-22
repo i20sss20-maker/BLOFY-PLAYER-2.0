@@ -8,7 +8,7 @@
 var app=document.getElementById('app');
 var S={route:'boot',kind:'movie',cat:{live:'all',movie:'all',series:'all'},cats:{},pages:{},loaded:{},selected:null,livePreview:null,
  item:null,episodes:null,selectedSeason:'1',play:null,history:[],sort:'source',heroIndex:0,searchToken:0,requestNum:0,library:readJson('blofy_web_favorites_v2',{}),
- watch:readJson('blofy_web_watch_v2',{}),favoriteItems:readJson('blofy_web_favorite_items_v1',{}),host:'',userVerified:false,heading:'',loading:false,listingInflight:{},catsInflight:{},views:{},keyboardMode:false};
+ watch:readJson('blofy_web_watch_v2',{}),favoriteItems:readJson('blofy_web_favorite_items_v1',{}),host:'',userVerified:false,heading:'',loading:false,listingInflight:{},catsInflight:{},views:{},keyboardMode:false,refreshing:false,catalogVersion:null,lastCatalogCheck:0};
 var NAV=[['home','⌂','الرئيسية'],['live','◉','البث المباشر'],['movie','▣','الأفلام'],['series','▤','المسلسلات'],['collections','▦','التصنيفات'],['favorites','♡','المفضلة'],['search','⌕','البحث'],['ai','✧','الذكاء الاصطناعي'],['settings','⚙','الإعدادات']];
 function readJson(key,backup){try{var value=JSON.parse(localStorage.getItem(key)||'null');return value||backup}catch(e){return backup}}
 function writeJson(key,val){try{localStorage.setItem(key,JSON.stringify(val))}catch(e){}}
@@ -546,13 +546,63 @@ function aiScreen(){
  shell('الذكاء الاصطناعي','<div class="info">واجهة المحادثة الذكية في نسخة أندرويد تعتمد على خدمة مخصصة. لم أربطها بالويب حتى الآن حتى لا تظهر لك إجابات وهمية. بإمكانك استخدام البحث المباشر في المكتبة الآن.</div>'+
  '<div style="margin-top:16px"><button class="btn" data-go="search">انتقل إلى البحث</button></div>')
 }
+function refreshCatalog(manual){
+ if(S.refreshing||!S.userVerified)return;
+ S.refreshing=true;
+ var kinds=['live','movie','series'],errors=[],done=0;
+ var button=document.getElementById('refresh-content');
+ if(button)button.disabled=true;
+ function notify(message){
+  var box=document.getElementById('refresh-progress');
+  if(box)box.textContent=message
+ }
+ notify('جار تحديث المحتوى • 0٪');
+ function finish(){
+  S.refreshing=false;if(button)button.disabled=false;
+  if(!errors.length){
+   // Keep the existing screen stable; lists are reused when user opens them.
+   S.cats={};S.pages={};S.catsInflight={};
+   notify('✓ اكتمل تحديث القنوات والأفلام والمسلسلات — 100٪');
+  }else notify('تم تحديث '+(3-errors.length)+' من 3 أقسام. تعذر: '+errors.join('، ')+' — حاول مرة أخرى');
+ }
+ function next(){
+  if(done===kinds.length){finish();return}
+  var kind=kinds[done],label=kindName(kind);
+  notify('جار تحديث '+label+' • '+Math.round(done/3*100)+'٪');
+  pageRequest(kind,'all',0,36,function(st,result){
+   if(st===200&&result){
+    S.loaded[keyOf(kind,'all')]=result;
+    // Other category caches are invalidated lazily, without disrupting a playing video.
+    var keys=Object.keys(S.loaded);
+    for(var i=0;i<keys.length;i++)if(keys[i].indexOf(kind+':')===0&&keys[i]!==kind+':all')delete S.loaded[keys[i]];
+   }else errors.push(label);
+   done++;next()
+  })
+ }
+ next()
+}
+function checkCatalogVersion(){
+ if(!S.userVerified||S.refreshing||S.route==='player'||document.hidden)return;
+ var now=Date.now();if(now-S.lastCatalogCheck<10*60*1000)return;S.lastCatalogCheck=now;
+ api('GET','/api/catalog?action=get_blofy_catalog_version',null,function(st,v){
+  if(st!==200||!v)return;
+  var raw=v.version||v.epoch||v.catalogVersion||v.revision||v.lastModified;
+  if(!raw||typeof raw!=='string'&&typeof raw!=='number')return;
+  var version=String(raw);
+  if(S.catalogVersion&&S.catalogVersion!==version){
+   // Refresh in the background only while browsing non-live pages; never interrupt playback.
+   refreshCatalog(false)
+  }
+  S.catalogVersion=version
+ })
+}
 function settingsScreen(){
- shell('الإعدادات','<div class="settings-grid"><section class="setting-panel"><h3>تحديث المحتوى</h3><p>إعادة قراءة القنوات والأفلام والمسلسلات من خادم BLOFY.</p><button class="btn" id="refresh-content">↻ تحديث المحتوى</button></section>'+
+ shell('الإعدادات','<div class="settings-grid"><section class="setting-panel"><h3>تحديث المحتوى</h3><p>إعادة قراءة القنوات والأفلام والمسلسلات من خادم BLOFY.</p><button class="btn" id="refresh-content">↻ تحديث المحتوى</button><p id="refresh-progress" role="status" aria-live="polite">فهرس المحتوى يُراجع تلقائيًا عند توفر رقم إصدار جديد.</p></section>'+
  '<section class="setting-panel"><h3>التشغيل</h3><p>البث المباشر يستخدم HLS. الأفلام تُجرّب المصدر الأصلي القابل للتقديم أولًا. التحويل التلقائي محدود حتى نعتمد تقديم الفيلم واستكماله من نفس الموضع.</p></section>'+
  '<section class="setting-panel"><h3>المفضلة والمتابعة</h3><p>تحفظ هذه النسخة البيانات محليًا في هذا المتصفح فقط؛ المزامنة السحابية مع أندرويد غير مفعلة بعد.</p><button class="btn secondary" data-go="favorites">المفضلة</button></section>'+
  '<section class="setting-panel"><h3>حساب BLOFY</h3><p>الخروج من هذا الجهاز فقط، دون التأثير على التطبيقات الأصلية.</p><button class="btn danger" id="logout">تسجيل الخروج</button></section></div>'+
  '<div id="page-status" class="info" style="margin-top:20px">BLOFY STREAM Web — نسخة مطابقة قيد التطوير.</div>');
- document.getElementById('refresh-content').onclick=function(){S.cats={};S.loaded={};S.pages={};setStatus('تم تحديث فهرس المحتوى المحلي. ستحمّل الصفحات أحدث القوائم عند فتحها.')};
+ document.getElementById('refresh-content').onclick=function(){refreshCatalog(true)};
  document.getElementById('logout').onclick=function(){api('POST','/api/logout',{},function(){login('تم تسجيل الخروج')})}
 }
 function fmt(n){return n<10?'0'+n:String(n)}
@@ -1172,5 +1222,9 @@ window.addEventListener('beforeunload',function(){
   saveResume(p.kind,p.id,(p.mode==='vodhls'?p.offset:0)+(v.currentTime||0),p.mode==='vodhls'?p.duration:(isFinite(v.duration)?v.duration:p.duration),true)
  }
 });
-api('GET','/api/session',null,function(st,json){if(st===200&&json.active){S.userVerified=true;navigate('home',{},true)}else login('أدخل كود اشتراك BLOFY STREAM للتفعيل')});
+api('GET','/api/session',null,function(st,json){
+ if(st===200&&json.active){S.userVerified=true;navigate('home',{},true);setTimeout(checkCatalogVersion,25000)}
+ else login('أدخل كود اشتراك BLOFY STREAM للتفعيل')
+});
+setInterval(checkCatalogVersion,10*60*1000);
 })();
