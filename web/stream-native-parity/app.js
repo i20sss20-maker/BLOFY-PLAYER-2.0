@@ -1308,7 +1308,7 @@ function openPlayer(kind,id,extension,name,from){
   );
   var endpoint=kind==='movie'?'get_vod_info&vod_id='+enc(id):
    (kind==='series'&&episodeParent?'get_series_info&series_id='+enc(episodeParent):'');
-  if(!endpoint){clearTimeout(timeout);launch();return}
+  if(!endpoint){clearTimeout(timeout);setTimeout(launch,0);return}
   playerStatus('جار قراءة معلومات الفيلم لتفعيل التقديم والترجيع…');
   api('GET','/api/catalog?action='+endpoint,null,function(st,result){
    if(S.route!=='player'||S.playerView!==state)return;
