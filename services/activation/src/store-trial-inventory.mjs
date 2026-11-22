@@ -6,6 +6,7 @@ import crypto from 'node:crypto';
 import {ensureStreamCodeTable,streamNumericCodeLength,randomNumericStreamCode,streamCodeProof} from './xtream-duration-codes.mjs';
 import {encryptStreamCode,decryptStreamCode} from './xtream-code-vault.mjs';
 import {createFixedWindowLimiter,requestClientKey} from './auth-protection.mjs';
+import {listTrialLeads,updateTrialLeadFollowup} from './store-trial-leads.mjs';
 
 export const TRIAL_PLANS=Object.freeze([
  {sku:'trial-stream-1d',channel:'app',name:'تجربة BLOFY STREAM',days:1},
@@ -22,6 +23,7 @@ const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]
 const fail=(code,status=400)=>Object.assign(Error(code),{status});
 const ROUTE='/api/v1/store/trials';
 const ADMIN='/api/v1/admin/store/trials';
+const CONTACT_PREFERENCES=ROUTE+'/contact-preferences';
 
 export function trialStockRequest(body){
  const sku=String(body?.sku||'');
@@ -89,12 +91,13 @@ export function createStoreTrialInventory({
    throw fail('trial_code_channel_mismatch',503);
   return {ok:true,sku:row.sku,channel:plan.channel,durationDays:1,code,
    alreadyClaimed:Boolean(alreadyClaimed),claimedAt:row.claimed_at,
+   marketingOptIn:Boolean(row.marketing_consent_at),
    activatedAt:row.redeemed_at||null,expiresAt:row.expires_at||null,
    message:'تبدأ مدة اليوم الواحد عند أول تفعيل ناجح للكود، وليس عند تخزينه أو طلبه.',
    redeemUrl:plan.channel==='xtream'?'https://blofyplayer.com/stream/activate':null};
  }
  async function findClaim(db,customerId){
-  return (await db.query(`SELECT i.sku,i.claimed_at,v.id,v.code_vault,v.code_hash,
+  return (await db.query(`SELECT i.sku,i.claimed_at,i.marketing_consent_at,v.id,v.code_vault,v.code_hash,
       v.duration_days,v.code_channel,v.redeemed_at,v.expires_at,
       v.id AS voucher_id
     FROM blofy_store_trial_inventory i
@@ -195,6 +198,18 @@ export function createStoreTrialInventory({
      added:0
    }));
    if(!targetRows.some(row=>row.before<threshold)){
+     // Historical claims have no recorded promotional consent; default to none.
+     await db.query('ALTER TABLE blofy_store_trial_inventory ADD COLUMN IF NOT EXISTS marketing_consent_at TIMESTAMPTZ');
+     await db.query("ALTER TABLE blofy_store_trial_inventory ADD COLUMN IF NOT EXISTS followup_status TEXT NOT NULL DEFAULT 'new'");
+     await db.query('ALTER TABLE blofy_store_trial_inventory ADD COLUMN IF NOT EXISTS followup_note TEXT');
+     await db.query('ALTER TABLE blofy_store_trial_inventory ADD COLUMN IF NOT EXISTS followup_updated_at TIMESTAMPTZ');
+     await db.query(`CREATE TABLE IF NOT EXISTS blofy_store_trial_followup_events(
+       id BIGSERIAL PRIMARY KEY,
+       voucher_id UUID NOT NULL REFERENCES blofy_store_trial_inventory(voucher_id) ON DELETE CASCADE,
+       followup_status TEXT NOT NULL,
+       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+     )`);
+     await db.query('CREATE INDEX IF NOT EXISTS idx_blofy_store_trial_leads ON blofy_store_trial_inventory(claimed_at DESC) WHERE claimed_at IS NOT NULL');
      await db.query('COMMIT');
      return {ok:true,generated:0,available:targetRows.map(p=>({sku:p.sku,available:p.before}))};
    }
