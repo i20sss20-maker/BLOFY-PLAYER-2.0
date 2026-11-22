@@ -34,6 +34,8 @@
 <link rel="stylesheet" href="/blofy-one-store-ops.css?v=20261118-v2">
 <script src="/blofy-one-store-ops.js?v=20261118-v1" defer></script>
 <script src="/blofy-one-store-sales.js?v=20261118-v1" defer></script>
+<link rel="stylesheet" href="/blofy-one-paid-leads.css?v=20261122-v1">
+<script src="/blofy-one-paid-leads.js?v=20261122-v1" defer></script>
 <link rel="stylesheet" href="/blofy-one-launch.css?v=20261118-v1">
 <script src="/blofy-one-launch.js?v=20261118-v1" defer></script>
 <link rel="stylesheet" href="/blofy-one-capacity.css?v=20261118-v1">
@@ -53,7 +55,7 @@
     <a href="#stream-management"><span aria-hidden="true">◈</span> حسابات STREAM وXtream</a>
     <a href="#legacy-xtream"><span aria-hidden="true">⇄</span> استرجاع الأكواد</a>
     <a href="#one-distributors"><span aria-hidden="true">♙</span> الموزعون</a>
-    <a href="#one-store-sales"><span aria-hidden="true">▣</span> طلبات المتجر والمبيعات</a>
+    <a href="#one-store-sales"><span aria-hidden="true">▣</span> المبيعات والعملاء المشترون</a>
     <a href="#one-renewal-ops"><span aria-hidden="true">◈</span> التجديدات والمدفوعات</a>
     <a href="#one-sales"><span aria-hidden="true">◫</span> تقارير مبيعات PLAYER</a>
     <a href="#one-growth"><span aria-hidden="true">◷</span> التسويق ونمو المبيعات</a>
@@ -393,6 +395,59 @@
         <button type="button" id="one-store-sales-next" disabled>التالي</button>
       </div>
       <p class="one-footnote">الطلب «مدفوع» يعني أن حالته مسجلة مدفوعة داخل BLOFY، وليس إثبات تسوية بنكية أو وصول الأكواد للبريد. للطلبات المعلّقة لا تُعد الدفع أو تصدر أكوادًا يدويًا قبل التحقق من Geidea وسجلات التسليم.</p>
+
+      <section id="one-paid-leads" class="one-paid-leads" aria-labelledby="one-paid-leads-title">
+        <div class="one-section-heading"><div><span class="one-kicker">PAID CUSTOMERS · CONTACTS & FOLLOW-UP</span>
+          <h3 id="one-paid-leads-title">👤 العملاء المشترون من متجر BLOFY</h3></div>
+          <button id="one-paid-leads-refresh" type="button">↻ تحديث المشترين</button></div>
+        <p class="one-footnote">طلبات الشراء المسجلة «مدفوعة» فقط، بالاسم والجوال والبريد عندما يكون الطلب مرتبطًا بحساب العميل الموثّق. طلبات الزوار القديمة دون حساب تظهر من دون اختلاق بيانات تواصل.</p>
+        <form id="one-paid-leads-search-form" class="one-paid-leads-filters" autocomplete="off">
+          <label>اسم أو جوال أو بريد أو رقم الطلب<input id="one-paid-leads-query" type="search"
+            maxlength="100" placeholder="ابحث عن المشتري أو الطلب" spellcheck="false"></label>
+          <label>المنتج<select id="one-paid-leads-channel"><option value="all">كل المشتريات</option>
+            <option value="app">STREAM والسلة</option><option value="xtream">Xtream والسلة</option></select></label>
+          <label>حالة المتابعة<select id="one-paid-leads-followup"><option value="all">جميع الحالات</option>
+            <option value="new">جديد</option><option value="contacted">تم التواصل</option>
+            <option value="offer_sent">عرض مرسل</option><option value="converted">جدد الاشتراك</option>
+            <option value="do_not_contact">عدم التواصل</option></select></label>
+          <button type="submit">⌕ بحث</button>
+        </form>
+        <p id="one-paid-leads-status" role="status" aria-live="polite">جارٍ قراءة المشترين الفعليين…</p>
+        <div class="one-renewal-table-wrap" tabindex="0" role="region" aria-label="سجل مشترين BLOFY المدفوع">
+          <table class="one-renewal-table one-paid-leads-table">
+            <thead><tr><th>اسم العميل</th><th>الجوال والبريد</th><th>الطلب والمنتج</th>
+              <th>المبلغ</th><th>وقت الدفع</th><th>التفعيل والمتابعة</th><th>الإجراءات</th></tr></thead>
+            <tbody id="one-paid-leads-rows"><tr><td colspan="7">جارٍ جلب الطلبات المدفوعة…</td></tr></tbody>
+          </table>
+        </div>
+        <div class="one-renewal-pager"><button id="one-paid-leads-prev" type="button" disabled>← السابق</button>
+          <span id="one-paid-leads-page">—</span>
+          <button id="one-paid-leads-next" type="button" disabled>التالي →</button></div>
+        <p class="one-footnote">المراسلة بالعروض تتطلب موافقة العميل الصريحة؛ المشترون السابقون بلا موافقة مسجلة غير مشتركين في التسويق. لا رسائل تلقائية من هذه الصفحة.</p>
+      </section>
+      <dialog id="one-paid-lead-dialog" class="one-paid-lead-dialog" aria-labelledby="one-paid-lead-title">
+        <div class="one-paid-lead-dialog-head"><h3 id="one-paid-lead-title">ملف العميل المشتري</h3>
+          <button id="one-paid-lead-close" type="button">✕ إغلاق</button></div>
+        <div id="one-paid-lead-detail-grid" class="one-paid-lead-detail-grid"></div>
+        <div class="one-paid-lead-actions">
+          <button id="one-paid-lead-copy-phone" type="button">📋 نسخ الجوال</button>
+          <button id="one-paid-lead-copy-email" type="button">📋 نسخ البريد</button>
+          <a id="one-paid-lead-whatsapp" target="_blank" rel="noopener noreferrer" hidden>↗ واتساب بعد الموافقة</a>
+        </div>
+        <form id="one-paid-lead-followup-form" autocomplete="off">
+          <label>حالة المتابعة<select id="one-paid-lead-followup-state">
+            <option value="new">جديد</option><option value="contacted">تم التواصل</option>
+            <option value="offer_sent">تم إرسال عرض (بعد موافقة العميل)</option>
+            <option value="converted">تم تجديد الاشتراك</option>
+            <option value="do_not_contact">عدم التواصل</option></select></label>
+          <label>ملاحظة داخل الإدارة<textarea id="one-paid-lead-note" maxlength="250" rows="3"
+            placeholder="ملخص المتابعة دون كلمات مرور أو أكواد"></textarea></label>
+          <div class="one-paid-lead-actions">
+            <button id="one-paid-lead-save" type="submit">✓ حفظ المتابعة</button>
+            <button id="one-paid-lead-cancel" type="button">إلغاء</button>
+          </div>
+        </form><p id="one-paid-lead-detail-status" role="status" aria-live="polite"></p>
+      </dialog>
     </section>
     <section class="one-overview one-renewal-ops" id="one-renewal-ops" aria-labelledby="one-renewal-ops-title">
       <div class="one-section-heading">
