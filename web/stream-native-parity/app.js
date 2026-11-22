@@ -820,13 +820,27 @@ function playHls(video,kind,id,extension,track,statusElement,preview){
  })
 }
 
-function durationSeconds(value){
- if(typeof value==='number'&&value>0)return value;
- if(typeof value!=='string')return 0;
- if(/^[0-9]+$/.test(value))return Number(value);
- var tokens=value.split(':');if(tokens.length<2||tokens.length>3)return 0;
- var seconds=0;for(var j=0;j<tokens.length;j++)seconds=seconds*60+Number(tokens[j]);
- return isFinite(seconds)&&seconds>0?seconds:0
+function durationSeconds(value,unit){
+ if(value===null||value===undefined||value==='')return 0;
+ var raw=typeof value==='number'?value:typeof value==='string'?value.trim():NaN;
+ if(typeof raw==='string'&&raw.indexOf(':')>=0){
+  var parts=raw.split(':');
+  if(parts.length<2||parts.length>3)return 0;
+  var seconds=0;
+  for(var i=0;i<parts.length;i++){
+   if(!/^\d{1,3}$/.test(parts[i]))return 0;
+   var part=Number(parts[i]);
+   if(i>0&&part>=60)return 0;
+   seconds=seconds*60+part
+  }
+  return seconds>0&&seconds<=21600?seconds:0
+ }
+ if(typeof raw==='string'&&!/^\d+(?:\.\d+)?$/.test(raw))return 0;
+ var n=Number(raw);
+ if(!isFinite(n)||n<=0)return 0;
+ // Xtream duration_secs reports seconds; plain duration often reports minutes.
+ if(unit!=='seconds'&&n<=240)n*=60;
+ return n>=1&&n<=21600?Math.round(n):0
 }
 function knownDuration(kind,id,item){
  var opts=[],movieResponse=kind==='movie'&&S.item&&S.item.info,
@@ -836,17 +850,17 @@ function knownDuration(kind,id,item){
   var eps=parseEpisodes(S.episodes);
   for(var i=0;i<eps.length;i++)if(String(eps[i].id)===String(id)){
    var ep=eps[i],ei=ep.info||{};
-   opts.push(ep.duration_secs,ei.duration_secs,ep.duration,ei.duration);
+   opts.push([ep.duration_secs,'seconds'],[ei.duration_secs,'seconds'],[ep.duration,'duration'],[ei.duration,'duration']);
    break
   }
  }
- opts=opts.concat([item&&item.duration_secs,item&&item.duration,
-  item&&item.info&&item.info.duration_secs,item&&item.info&&item.info.duration,
-  movieInfo&&movieInfo.duration_secs,movieInfo&&movieInfo.duration,
-  movieData&&movieData.duration_secs,movieData&&movieData.duration]);
- for(var k=0;k<opts.length;k++){var sec=durationSeconds(opts[k]);if(sec>0)return sec}
+ opts=opts.concat([[item&&item.duration_secs,'seconds'],[item&&item.duration,'duration'],
+  [item&&item.info&&item.info.duration_secs,'seconds'],[item&&item.info&&item.info.duration,'duration'],
+  [movieInfo&&movieInfo.duration_secs,'seconds'],[movieInfo&&movieInfo.duration,'duration'],
+  [movieData&&movieData.duration_secs,'seconds'],[movieData&&movieData.duration,'duration']]);
+ for(var k=0;k<opts.length;k++){var sec=durationSeconds(opts[k][0],opts[k][1]);if(sec>=120)return sec}
  var saved=getResume(kind,id);
- return saved&&saved.duration||0
+ return saved&&saved.duration>=300&&saved.duration<=21600?saved.duration:0
 }
 
 /* Real full-length VOD player. EXT-X-ENDLIST exposes the entire runtime to
@@ -1096,14 +1110,18 @@ function openPlayer(kind,id,extension,name,from){
     if(kind==='movie'){
      if(S.item&&S.item.kind==='movie'&&S.item.id===id)S.item.info=result;
      var info=result.info||{},data=result.movie_data||{};
-     var opts=[info.duration_secs,info.duration,data.duration_secs,data.duration,result.duration_secs,result.duration];
-     for(var i=0;i<opts.length;i++){var d=durationSeconds(opts[i]);if(d>=120){state.duration=d;break}}
+     var opts=[[info.duration_secs,'seconds'],[info.duration,'duration'],
+      [data.duration_secs,'seconds'],[data.duration,'duration'],
+      [result.duration_secs,'seconds'],[result.duration,'duration']];
+     for(var i=0;i<opts.length;i++){var d=durationSeconds(opts[i][0],opts[i][1]);if(d>=120){state.duration=d;break}}
     }else if(kind==='series'){
      S.episodes=result;
      var eps=parseEpisodes(result);
      for(var j=0;j<eps.length;j++)if(String(eps[j].id)===String(id)){
-      var episode=eps[j],extra=episode.info||{},options=[extra.duration_secs,episode.duration_secs,extra.duration,episode.duration];
-      for(var k=0;k<options.length;k++){var d2=durationSeconds(options[k]);if(d2>=120){state.duration=d2;break}}
+      var episode=eps[j],extra=episode.info||{},options=[
+       [extra.duration_secs,'seconds'],[episode.duration_secs,'seconds'],
+       [extra.duration,'duration'],[episode.duration,'duration']];
+      for(var k=0;k<options.length;k++){var d2=durationSeconds(options[k][0],options[k][1]);if(d2>=120){state.duration=d2;break}}
       break
      }
     }
