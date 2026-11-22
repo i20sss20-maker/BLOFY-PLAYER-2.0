@@ -46,10 +46,42 @@ const server=Bun.serve({port:Number(Bun.env.PORT||3000),idleTimeout:255,async fe
   if(live)args.push('-f','mpegts','-mpegts_flags','+resend_headers','pipe:1');
   else args.push('-movflags','+frag_keyframe+empty_moov+default_base_moof','-f','mp4','pipe:1');
   const proc=Bun.spawn([FFMPEG,...args],{stdin:src.body,stdout:'pipe',stderr:'pipe',signal:controller.signal});
-  proc.exited.then(()=>{release();controller.abort()}).catch(()=>release());
-  const cleanup=()=>{try{proc.kill()}catch{};controller.abort();release()};
+  const stderrTask=(async()=>{try{
+   const message=(await new Response(proc.stderr).text()).slice(0,1200);
+   if(message)console.warn('VIDAA_COMPAT_FFMPEG',{
+    kind,mode,code: /Invalid data found|Invalid argument/i.test(message)?'bad_input':
+      /Could not find codec|Unknown encoder|Error while opening encoder/i.test(message)?'encoder_error':
+      /error decoding|corrupt input|Invalid NAL/i.test(message)?'decode_error':
+      /Output file does not contain any stream/i.test(message)?'empty_stream':'ffmpeg_processing_error'});
+  }catch(e){}})();
+  let stopped=false;
+  const cleanup=()=>{if(stopped)return;stopped=true;try{proc.kill()}catch{};controller.abort();release()};
   req.signal.addEventListener('abort',cleanup,{once:true});
-  return new Response(proc.stdout,{status:200,headers:{'Content-Type':live?'video/mp2t':'video/mp4','Cache-Control':'no-store, private','X-Content-Type-Options':'nosniff','Accept-Ranges':'none','X-Blofy-Compat':'aac-'+mode}});
+  const reader=proc.stdout.getReader();
+  let timer=null;
+  const first=await Promise.race([
+   reader.read(),
+   new Promise(resolve=>{timer=setTimeout(()=>resolve({timeout:true}),22000)})
+  ]);
+  if(timer)clearTimeout(timer);
+  if(first.timeout){cleanup();try{await reader.cancel()}catch{};return json(504,{error:'compat_first_byte_timeout'})}
+  if(first.done||!first.value||first.value.byteLength===0){
+   const exit=await Promise.race([proc.exited,new Promise(resolve=>setTimeout(()=>resolve(-1),1200))]).catch(()=>-1);
+   console.warn('VIDAA_COMPAT_ZERO_OUTPUT',{kind,mode,exitCode:exit});
+   cleanup();try{await reader.cancel()}catch{};
+   return json(422,{error:'compat_zero_output',exitCode:Number.isInteger(exit)?exit:null})
+  }
+  const body=new ReadableStream({
+   start(ctrl){ctrl.enqueue(first.value)},
+   async pull(ctrl){try{
+     const n=await reader.read();
+     if(n.done){ctrl.close();release();controller.abort()}
+     else ctrl.enqueue(n.value);
+   }catch(err){ctrl.error(err);cleanup()}},
+   cancel(){cleanup();try{reader.cancel()}catch{}}
+  });
+  proc.exited.then(exitCode=>{if(exitCode!==0)console.warn('VIDAA_COMPAT_PROC_EXIT',{kind,mode,code:exitCode});release()}).catch(()=>release());
+  return new Response(body,{status:200,headers:{'Content-Type':live?'video/mp2t':'video/mp4','Cache-Control':'no-store, private','X-Content-Type-Options':'nosniff','Accept-Ranges':'none','X-Blofy-Compat':'aac-'+mode}});
  }catch(err){controller.abort();release();return json(502,{error:'compat_conversion_failed'})}
 }});
 console.info('VIDAA media compatibility worker running',server.port,FFMPEG?'ffmpeg resolved':'ffmpeg unresolved');
