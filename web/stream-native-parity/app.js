@@ -8,7 +8,7 @@
 var app=document.getElementById('app');
 var S={route:'boot',kind:'movie',cat:{live:'all',movie:'all',series:'all'},cats:{},pages:{},loaded:{},selected:null,livePreview:null,
  item:null,episodes:null,selectedSeason:'1',play:null,history:[],sort:'source',heroIndex:0,searchToken:0,requestNum:0,library:readJson('blofy_web_favorites_v2',{}),
- watch:readJson('blofy_web_watch_v2',{}),host:'',userVerified:false,heading:'',loading:false,listingInflight:{},catsInflight:{},views:{},keyboardMode:false};
+ watch:readJson('blofy_web_watch_v2',{}),favoriteItems:readJson('blofy_web_favorite_items_v1',{}),host:'',userVerified:false,heading:'',loading:false,listingInflight:{},catsInflight:{},views:{},keyboardMode:false};
 var NAV=[['home','⌂','الرئيسية'],['live','◉','البث المباشر'],['movie','▣','الأفلام'],['series','▤','المسلسلات'],['collections','▦','التصنيفات'],['favorites','♡','المفضلة'],['search','⌕','البحث'],['ai','✧','الذكاء الاصطناعي'],['settings','⚙','الإعدادات']];
 function readJson(key,backup){try{var value=JSON.parse(localStorage.getItem(key)||'null');return value||backup}catch(e){return backup}}
 function writeJson(key,val){try{localStorage.setItem(key,JSON.stringify(val))}catch(e){}}
@@ -19,7 +19,7 @@ function art(x){if(!x)return '';var arr=[x.stream_icon,x.cover_big,x.cover,x.mov
 function title(x){return x&&(x.name||x.title||x.episode_name)||'بدون عنوان'}
 function kindName(k){return k==='live'?'البث المباشر':k==='movie'?'الأفلام':k==='series'?'المسلسلات':'BLOFY STREAM'}
 function itemId(x,k){return String(x?(k==='series'?(x.series_id||x.id):(x.stream_id||x.id))||'':'')}
-function findItem(k,id){var sets=[];var keys=Object.keys(S.loaded);for(var i=0;i<keys.length;i++)if(keys[i].indexOf(k+':')===0)sets.push(S.loaded[keys[i]].items||[]);for(var a=0;a<sets.length;a++)for(var b=0;b<sets[a].length;b++)if(itemId(sets[a][b],k)===id)return sets[a][b];return null}
+function findItem(k,id){var sets=[];var keys=Object.keys(S.loaded);for(var i=0;i<keys.length;i++)if(keys[i].indexOf(k+':')===0)sets.push(S.loaded[keys[i]].items||[]);for(var a=0;a<sets.length;a++)for(var b=0;b<sets[a].length;b++)if(itemId(sets[a][b],k)===id)return sets[a][b];return S.favoriteItems[k+':'+id]||null}
 function api(method,endpoint,payload,cb){
  var xhr=new XMLHttpRequest(),done=false;
  try{xhr.open(method,endpoint,true);xhr.withCredentials=true;xhr.timeout=40000;
@@ -222,8 +222,18 @@ function home(){
    '<button class="story" data-go="search"><strong>⌕ البحث</strong><small>ابحث في المكتبة</small></button></div></div>';
   var shelfMovies=film.length?'<section class="shelf"><div class="shelf-title"><h2>أحدث الأفلام</h2><button class="btn secondary" data-go="movie">عرض الكل</button></div>'+shelves(film,'movie')+'</section>':'';
   var shelfSeries=show.length?'<section class="shelf"><div class="shelf-title"><h2>أحدث المسلسلات</h2><button class="btn secondary" data-go="series">عرض الكل</button></div>'+shelves(show,'series')+'</section>':'';
-  var recent=Object.keys(S.watch).map(function(key){var parts=key.split(':'),item=findItem(parts[0],parts[1]);return item?{kind:parts[0],item:item,pos:S.watch[key]}:null}).filter(Boolean).sort(function(a,b){return b.pos.updated-a.pos.updated}).slice(0,12);
-  var watch=recent.length?'<section class="shelf"><div class="shelf-title"><h2>أكمل المشاهدة</h2></div><div class="h-scroll">'+recent.map(function(r){return posterCard(r.item,r.kind)}).join('')+'</div></section>':'';
+  var recent=Object.keys(S.watch).map(function(key){
+   var pos=S.watch[key]||{},split=key.indexOf(':'),kind=key.slice(0,split),id=key.slice(split+1);
+   if(split<0||(kind!=='movie'&&kind!=='series')||!(pos.position>30)||pos.duration>0&&pos.position/pos.duration>.95)return null;
+   var item=findItem(kind,id),name=pos.name||item&&title(item),poster=pos.art||art(item);
+   return name?{kind:kind,id:id,name:name,poster:poster,ext:pos.ext||item&&item.container_extension||'mp4',pos:pos}:null
+  }).filter(Boolean).sort(function(a,b){return (b.pos.updated||0)-(a.pos.updated||0)}).slice(0,12);
+  var watch=recent.length?'<section class="shelf"><div class="shelf-title"><h2>أكمل المشاهدة</h2></div><div class="h-scroll">'+recent.map(function(r){
+   var pct=r.pos.duration>0?Math.round(100*r.pos.position/r.pos.duration):0;
+   return '<button class="poster" data-watch="'+esc(r.kind)+':'+esc(r.id)+'" data-ext="'+esc(r.ext)+'" data-name="'+esc(r.name)+'" data-from="'+r.pos.position+'" title="'+esc(r.name)+'">'+
+   '<span class="poster-art">'+safeImg(r.poster)+'<span class="no-poster">'+esc(r.name)+'</span></span>'+
+   '<span class="poster-caption"><strong>'+esc(r.name)+'</strong><span>متابعة من '+formatTime(r.pos.position)+(pct?' • '+pct+'٪':'')+'</span></span></button>'
+  }).join('')+'</div></section>':'';
   var target=document.getElementById('home-content');if(target){target.innerHTML=hero+shortcuts+watch+shelfMovies+shelfSeries;restoreView('home')}
  }
  if(!movies){pending++;getListing('movie','all',function(st,d){movies=d||{items:[]};pending--;draw()})}
@@ -396,7 +406,18 @@ function saveResume(kind,id,pos,duration,ready){
  // A new player starting at zero must not overwrite a real checkpoint.
  if(pos<5&&(duration===0||(last&&last.position>30)))return;
  if(duration>0&&pos/duration>.96){delete S.watch[key]}else{
- S.watch[key]={position:Math.round(pos),duration:Math.round(duration),updated:Date.now()}
+  var info=S.playerView&&S.playerView.kind===kind&&String(S.playerView.id)===String(id)?S.playerView:null;
+  var entry={position:Math.round(pos),duration:Math.round(duration),updated:Date.now()},old=last||{};
+  entry.name=String(info&&info.name||old.name||'').slice(0,140);
+  entry.ext=String(info&&info.ext||old.ext||'mp4').slice(0,8);
+  entry.art=urlPic(info&&info.art||old.art||'');
+  entry.seriesId=String(info&&info.seriesId||old.seriesId||'').slice(0,18);
+  S.watch[key]=entry;
+  var keys=Object.keys(S.watch);
+  if(keys.length>160){
+   keys.sort(function(a,b){return (S.watch[a].updated||0)-(S.watch[b].updated||0)});
+   for(var i=0;i<keys.length-160;i++)delete S.watch[keys[i]]
+  }
  }
  writeJson('blofy_web_watch_v2',S.watch)
 }
@@ -471,7 +492,7 @@ function episodesScreen(opts){
 }
 function favoritesScreen(){
  shell('المفضلة','<div id="fav-root"></div>');var keys=Object.keys(S.library),html='';
- for(var i=0;i<keys.length;i++){var p=keys[i].split(':'),item=findItem(p[0],p[1]);if(item&&S.library[keys[i]])html+=posterCard(item,p[0])}
+ for(var i=0;i<keys.length;i++){var p=keys[i].split(':'),item=findItem(p[0],p[1])||S.favoriteItems[keys[i]];if(item&&S.library[keys[i]])html+=posterCard(item,p[0])}
  document.getElementById('fav-root').innerHTML=html?'<div class="poster-grid">'+html+'</div>':'<div class="empty-state">أضف أفلامك ومسلسلاتك وقنواتك المفضلة حتى تظهر هنا.</div>';restoreView('favorites')
 }
 function collectionsScreen(){
@@ -848,7 +869,8 @@ function openPlayer(kind,id,extension,name,from){
  (nextEpisode?'<button class="btn secondary" id="player-next-episode">الحلقة التالية ⏭</button>':'')+
  '<button class="btn secondary" id="player-audio">◉ الصوت</button></div></div></section>';
  var video=document.getElementById('player-media'),state={kind:kind,id:id,ext:ext,video:video,name:name,offset:0,
- mode:isLive?'hls':'direct',resume:resume,duration:knownDuration(kind,id,item),didResume:false,ready:false,track:0,lastSaved:0};
+ mode:isLive?'hls':'direct',resume:resume,duration:knownDuration(kind,id,item),didResume:false,ready:false,track:0,lastSaved:0,
+  art:art(item)||prior&&prior.art||'',seriesId:kind==='series'&&S.item&&S.item.id||''};
  function realPos(){return state.mode==='vodhls'?state.offset+Math.max(0,video.currentTime||0):video.currentTime||0}
  function totalDuration(){return state.mode==='vodhls'?state.duration:(isFinite(video.duration)&&video.duration>0?video.duration:state.duration)}
  function markReady(){
@@ -1020,7 +1042,21 @@ function clickHandler(event){
  if(node.getAttribute('data-sort')){S.sort=S.sort==='source'?'new':S.sort==='new'?'alpha':'source';buildCatalog(S.kind,currentListing());return}
  if(ep){navigate('episodes',{id:ep});return}
  if(season){S.selectedSeason=season;episodesScreen({id:S.item&&S.item.id});return}
- if(fav){rememberView();S.library[fav]=!S.library[fav];writeJson('blofy_web_favorites_v2',S.library);if(S.route==='detail'&&S.item)details({kind:S.item.kind,id:S.item.id});else favoritesScreen();return}
+ if(fav){
+  rememberView();S.library[fav]=!S.library[fav];
+  if(S.library[fav]){
+   var split=fav.indexOf(':'),kind=fav.slice(0,split),id=fav.slice(split+1),item=findItem(kind,id)||S.item&&S.item.data;
+   if(item){
+    var record={id:id,name:String(title(item)).slice(0,160),stream_icon:art(item),container_extension:item.container_extension||'mp4'};
+    if(kind==='series')record.series_id=id;else record.stream_id=id;
+    S.favoriteItems[fav]=record
+   }
+  }else delete S.favoriteItems[fav];
+  writeJson('blofy_web_favorites_v2',S.library);
+  writeJson('blofy_web_favorite_items_v1',S.favoriteItems);
+  if(S.route==='detail'&&S.item)details({kind:S.item.kind,id:S.item.id});else favoritesScreen();
+  return
+ }
  if(watch){var a=watch.split(':'),kind=a[0],id=a[1],it=findItem(kind,id),ext=node.getAttribute('data-ext')||(it&&it.container_extension)||'mp4',name=node.getAttribute('data-name')||title(it);openPlayer(kind,id,ext,name,Number(node.getAttribute('data-from'))||0);return}
  if(node.hasAttribute('data-preview-play')){var x=findItem('live',S.selected);if(x)beginPreview(x);return}
  if(node.hasAttribute('data-preview-full')){var live=findItem('live',S.selected);if(live)openPlayer('live',S.selected,'ts',title(live),0);return}
