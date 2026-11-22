@@ -715,8 +715,16 @@ function stopPlayback(sendStop){
  try{if(old.video){old.video.pause();old.video.removeAttribute('src');old.video.load()}}catch(e){}
  if(sendStop!==false&&(old.hlsKey||old.stopUrl))api('POST',old.stopUrl||'/api/hls/'+old.hlsKey+'/stop',{},function(){})
 }
-function cleanupPlayer(){stopPlayback(true)}
-function playerStatus(message,error){var el=document.getElementById('player-status');if(el){el.textContent=message;el.className=error?'player-error':'player-loading'}}
+function cleanupPlayer(){
+ if(S.playerView&&S.playerView.directTimer){clearTimeout(S.playerView.directTimer);S.playerView.directTimer=null}
+ stopPlayback(true)
+}
+function playerStatus(message,error){
+ var el=document.getElementById('player-status');
+ if(el){el.style.display=message?'block':'none';el.textContent=message||'';el.className=error?'player-error':'player-loading'}
+ var retry=document.getElementById('player-retry');
+ if(retry)retry.style.display=error?'inline-flex':'none'
+}
 function playHls(video,kind,id,extension,track,statusElement,preview){
  stopPlayback(true);
  var key=kind+'/'+id+'/'+extension+'/'+track,manifest='/api/hls/'+key+'/index.m3u8',record={video:video,kind:kind,id:id,hlsKey:key,preview:!!preview,engine:null,timer:null,stallTimer:null,retries:0,ready:false,started:Date.now()};
@@ -992,7 +1000,8 @@ function openPlayer(kind,id,extension,name,from){
  (nextEpisode?'<button class="btn secondary" id="player-next-episode">الحلقة التالية ⏭</button>':'')+
  '<button class="btn secondary" id="player-audio" aria-label="تغيير المسار الصوتي">🔊 الصوت</button>'+
  (isLive?'':'<button class="btn secondary" id="player-speed">السرعة 1×</button>')+
- '<button class="btn secondary" id="player-fullscreen">⛶ ملء الشاشة</button></div></div></section>';
+ '<button class="btn secondary" id="player-fullscreen">⛶ ملء الشاشة</button>'+
+ '<button class="btn secondary" id="player-retry" style="display:none">⟳ إعادة المحاولة</button></div></div></section>';
  var video=document.getElementById('player-media'),state={kind:kind,id:id,ext:ext,video:video,name:name,offset:0,
  mode:isLive?'hls':'direct',resume:resume,duration:knownDuration(kind,id,item),didResume:false,ready:false,track:0,lastSaved:0,
   art:art(item)||prior&&prior.art||'',seriesId:kind==='series'&&S.item&&S.item.id||''};
@@ -1093,6 +1102,7 @@ function openPlayer(kind,id,extension,name,from){
  video.onloadedmetadata=function(){if(state.mode==='direct'){progress();if(state.directTimer)clearTimeout(state.directTimer)}};
  video.onwaiting=video.onstalled=function(){
   if(state.mode!=='direct'||video.paused||state.directFallback||!S.userVerified)return;
+  playerStatus('جار تعبئة مخزن الفيديو…');
   if(state.directTimer)clearTimeout(state.directTimer);
   state.directTimer=setTimeout(function(){
    state.directTimer=null;
@@ -1107,6 +1117,11 @@ function openPlayer(kind,id,extension,name,from){
  };
  document.getElementById('player-back').onclick=closePlayer;
  document.getElementById('player-toggle').onclick=state.toggle;
+ document.getElementById('player-retry').onclick=function(){
+  playerStatus('جار إعادة اتصال المشغّل…');
+  if(isLive)playHls(video,kind,id,'ts',0,document.getElementById('player-status'),false);
+  else startVod(Math.round(realPos()))
+ };
  var restart=document.getElementById('player-restart');if(restart)restart.onclick=function(){
   delete S.watch[progressKey(kind,id)];writeJson('blofy_web_watch_v2',S.watch);resume=0;
   if(state.mode==='direct'&&video.seekable&&video.seekable.length){try{video.currentTime=0}catch(e){}}
