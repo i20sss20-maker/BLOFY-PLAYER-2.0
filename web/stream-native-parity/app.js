@@ -201,13 +201,33 @@ function buildCatalog(kind,listing){
  }
 }
 function enrichPosters(kind,source){
- if(kind!=='movie')return;
- var queue=source.filter(function(x){return !art(x)&&!x.__cover_checked}).slice(0,8),at=0,count=0;
+ if(kind!=='movie'&&kind!=='series')return;
+ // Recover source metadata artwork only for a bounded visible window.
+ var queue=source.filter(function(x){return !art(x)&&!x.__cover_checked}).slice(0,16),at=0,inflight=0;
  function pump(){
-  while(at<queue.length&&count<2){var item=queue[at++];item.__cover_checked=true;count++;
-   (function(x){api('GET','/api/catalog?action=get_vod_info&vod_id='+enc(itemId(x,'movie')),null,function(st,res){
-    count--;if(st===200&&res&&res.info){var pic=urlPic(res.info.movie_image||res.info.cover_big||res.info.cover||'');if(pic){x.movie_image=pic;var id=itemId(x,'movie'),buttons=document.querySelectorAll('[data-details="movie:'+id+'"]');for(var b=0;b<buttons.length;b++){var image=buttons[b].querySelector('.poster-art');if(image&&!image.querySelector('img')){var img=document.createElement('img');img.src=pic;image.insertBefore(img,image.firstChild)}}}}pump()
-   })})(item)
+  while(at<queue.length&&inflight<2){
+   var item=queue[at++];item.__cover_checked=true;inflight++;
+   (function(x){
+    var id=itemId(x,kind),action=kind==='movie'?'get_vod_info&vod_id=':'get_series_info&series_id=';
+    api('GET','/api/catalog?action='+action+enc(id),null,function(st,res){
+     inflight--;
+     if(st===200&&res){
+      var data=res.info||res.movie_data||res;
+      var cover=urlPic(data.movie_image||data.cover_big||data.cover||data.poster||data.poster_path||data.backdrop_path||'');
+      if(cover){
+       x.movie_image=cover;
+       var buttons=document.querySelectorAll('[data-details="'+kind+':'+id+'"]');
+       for(var j=0;j<buttons.length;j++){
+        var holder=buttons[j].querySelector('.poster-art');
+        if(holder&&!holder.querySelector('img')){
+         var image=document.createElement('img');image.loading='lazy';image.alt='';image.src=cover;holder.insertBefore(image,holder.firstChild);
+        }
+       }
+      }
+     }
+     pump();
+    });
+   })(item)
   }
  }pump()
 }
