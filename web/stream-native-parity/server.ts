@@ -99,6 +99,7 @@ if(p==='/api/ai/interpret'&&method==='POST'){
  }catch{return json(503,{ok:false,error:'ai_unavailable'})}
 }
 if(p==='/api/health/media'&&method==='GET'){
+ if(!h)return json(401,{error:'activation_required'});
  // Authenticated read-only status; do not expose the media gateway secret.
  const secret=String(Bun.env.VIDAA_COMPAT_KEY||'');
  if(!/^[a-f0-9]{64}$/i.test(secret))return json(503,{ok:false,player:'unconfigured'});
