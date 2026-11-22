@@ -1197,8 +1197,17 @@ function openPlayer(kind,id,extension,name,from){
   if(S.route!=='player')return;
   state.ready=true;var status=document.getElementById('player-status');if(status)status.style.display='none';
   revealControls();
-  if(!isLive&&state.mode==='direct'&&!state.didResume&&resume>30&&isFinite(video.duration)&&video.duration>0&&video.seekable&&video.seekable.length){
-   state.didResume=true;try{video.currentTime=Math.min(resume,Math.max(0,video.duration-5))}catch(e){}
+  if(!isLive&&state.mode==='direct'&&!state.didResume&&resume>30&&isFinite(video.duration)&&video.duration>0){
+   var checkpoint=Math.min(resume,Math.max(0,video.duration-5));
+   state.didResume=true;
+   if(nativeCanSeek(checkpoint)){
+    try{video.currentTime=checkpoint}catch(e){state.recoverDirect()}
+   }else{
+    // Never discard a saved checkpoint because a pseudo-live source advertises
+    // only the first minute as seekable.
+    state.resume=checkpoint;
+    state.recoverDirect()
+   }
   }
  }
  function progress(){
@@ -1293,7 +1302,7 @@ function openPlayer(kind,id,extension,name,from){
   if(state.directSeekCheck){clearTimeout(state.directSeekCheck);state.directSeekCheck=null}
   if(state.directTimer){clearTimeout(state.directTimer);state.directTimer=null}
   if(isFinite(video.duration)&&video.duration>120&&video.duration<=21600)state.duration=Math.round(video.duration);
-  var position=Math.max(resume,video.currentTime||0);
+  var position=Math.max(resume,state.resume||0,video.currentTime||0);
   playerStatus('جار فتح مصدر متوافق لتقديم الفيلم…');
   startVod(position)
  };
@@ -1531,11 +1540,17 @@ document.addEventListener('focusout',function(e){
 },true);
 document.addEventListener('click',clickHandler,false);
 document.addEventListener('keydown',directional,false);
-window.addEventListener('beforeunload',function(){
- if(S.playerView&&S.playerView.ready&&S.playerView.kind!=='live'){
-  var p=S.playerView,v=p.video;
-  saveResume(p.kind,p.id,(p.mode==='vodhls'?p.offset:0)+(v.currentTime||0),p.mode==='vodhls'?p.duration:(isFinite(v.duration)?v.duration:p.duration),true)
- }
+function persistPlaybackCheckpoint(){
+ var p=S.playerView;
+ if(!p||!p.ready||p.kind==='live')return;
+ var v=p.video,pos=(p.mode==='vodhls'?p.offset:0)+Math.max(0,Number(v.currentTime)||0);
+ var duration=p.mode==='vodhls'?p.duration:(isFinite(v.duration)&&v.duration>0?v.duration:p.duration);
+ saveResume(p.kind,p.id,pos,duration,true)
+}
+window.addEventListener('beforeunload',persistPlaybackCheckpoint);
+window.addEventListener('pagehide',persistPlaybackCheckpoint);
+document.addEventListener('visibilitychange',function(){
+ if(document.hidden)persistPlaybackCheckpoint()
 });
 api('GET','/api/session',null,function(st,json){
  if(st===200&&json.active){S.userVerified=true;navigate('home',{},true);setTimeout(checkCatalogVersion,25000)}
