@@ -69,7 +69,8 @@ test('VOD MP4 can open real HTML5 media; restart-from-zero overrides stored posi
  await page.route('**/api/media/movie/11.mp4',async route=>{
   const range=route.request().headers()['range'];let start=0,end=mp4.length-1,status=200;
   if(range){const m=range.match(/bytes=(\d+)-(\d*)/);if(m){start=Number(m[1]);end=m[2]?Math.min(Number(m[2]),end):end;status=206}}
-  await route.fulfill({status,headers:{'Content-Type':'video/mp4','Accept-Ranges':'bytes','Content-Range':status===206?'bytes '+start+'-'+end+'/'+mp4.length:undefined,'Content-Length':String(end-start+1)},body:mp4.subarray(start,end+1)});
+  const headers={'Content-Type':'video/mp4','Accept-Ranges':'bytes','Content-Length':String(end-start+1)};if(status===206)headers['Content-Range']='bytes '+start+'-'+end+'/'+mp4.length;
+  await route.fulfill({status,headers,body:mp4.subarray(start,end+1)});
  });
  await page.goto('http://127.0.0.1:3000/');
  await page.locator('[data-go="movie"]').first().click();
