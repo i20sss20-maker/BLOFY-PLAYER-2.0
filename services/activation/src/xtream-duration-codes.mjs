@@ -407,6 +407,12 @@ export function createStreamDurationCodes({pool,keyHex,clock=Date.now,
          throw Object.assign(Error('stream_code_unavailable'),{status:409});
         row.dual_access_enabled=true;
       }
+      // Do not disclose whether a previously device-bound STREAM code has
+      // a linked Xtream account. Owner recovery is handled by OTP instead.
+      if(webDualAccess&&row.redeemed_at&&
+         (row.code_channel||'xtream')==='app'&&
+         row.dual_access_enabled!==true)
+        throw Object.assign(Error('stream_code_unavailable'),{status:409});
       if((row.code_channel||'xtream')!==(appOnly?'app':'xtream')&&
          row.dual_access_enabled!==true)
         throw Object.assign(Error('stream_code_wrong_product'),{status:409});
