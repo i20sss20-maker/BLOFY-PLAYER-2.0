@@ -387,10 +387,11 @@ test('guarded same-bearer live fan-out shares one encoder but isolates each view
  const shareBegin=source.indexOf('function liveShareGroupKey('),shareEnd=source.indexOf('\nasync function hlsRequest(',shareBegin);
  const stopBegin=source.indexOf('function stopHls('),stopEnd=source.indexOf('\nfunction releaseHls(',stopBegin);
  assert.ok(hlsBegin>=0&&hlsEnd>hlsBegin&&shareBegin>hlsEnd&&shareEnd>shareBegin&&stopBegin>0&&stopEnd>stopBegin);
- const secret='f'.repeat(64),hlsSessions=new Map(),sharedLiveGroups=new Map();
+ const secret='f'.repeat(64),hlsSessions=new Map(),sharedLiveGroups=new Map(),
+  pendingSharedLiveViewers=new Map();
  let started=0,killCount=0,abortCount=0,removed=[];
  const bearer='Bearer pilot-A',other='Bearer pilot-B';
- const context={createHmac:crypto.createHmac,SECRET:secret,hlsSessions,sharedLiveGroups,
+ const context={createHmac:crypto.createHmac,SECRET:secret,hlsSessions,sharedLiveGroups,pendingSharedLiveViewers,
   MAX_SHARED_LIVE_VIEWERS:4,
   Bun:{env:{VIDAA_LIVE_SHARE_SAME_BEARER:'1'}},
   touchHls(session){session.lastAccess=Date.now()},
@@ -470,11 +471,12 @@ test('authenticated HLS manifest and segments fan out to two SID viewers using o
   sh=source.indexOf('function liveShareGroupKey('),shEnd=source.indexOf('\nasync function hlsRequest(',sh),
   hr=source.indexOf('async function hlsRequest('),hrEnd=source.indexOf('\n/* Web VOD seek experiment',hr);
  assert.ok(b>=0&&e>b&&st>e&&stEnd>st&&sh>stEnd&&shEnd>sh&&hr>=shEnd&&hrEnd>hr);
- const secret='b'.repeat(64),hlsSessions=new Map(),sharedLiveGroups=new Map();
+ const secret='b'.repeat(64),hlsSessions=new Map(),sharedLiveGroups=new Map(),
+  pendingSharedLiveViewers=new Map();
  let startups=0,sourceClosed=0;
  const auth='Bearer v1.00000000-0000-0000-0000-000000000000.'+'B'.repeat(43);
  const ctx={
-  SECRET:secret,createHmac:crypto.createHmac,hlsSessions,sharedLiveGroups,MAX_SHARED_LIVE_VIEWERS:4,
+  SECRET:secret,createHmac:crypto.createHmac,hlsSessions,sharedLiveGroups,pendingSharedLiveViewers,MAX_SHARED_LIVE_VIEWERS:4,
   Bun:{env:{VIDAA_LIVE_SHARE_SAME_BEARER:'1'}},
   Response,Buffer,Date,console:{info(){},warn(){}},
   clearTimeout(){},rmSync(){},
@@ -527,8 +529,8 @@ test('same-bearer fan-out is off by default and max four authenticated viewers',
  const begin=source.indexOf('function liveShareGroupKey('),end=source.indexOf('\nasync function hlsRequest(',begin);
  assert.ok(begin>0&&end>begin);
  const hlsBegin=source.indexOf('function hlsKey('),hlsEnd=source.indexOf('\nfunction touchHls(',hlsBegin);
- const map=new Map(),groups=new Map(),env={},ctx={
-  createHmac:crypto.createHmac,SECRET:'d'.repeat(64),Bun:{env},hlsSessions:map,sharedLiveGroups:groups,
+ const map=new Map(),groups=new Map(),pendingSharedLiveViewers=new Map(),env={},ctx={
+  createHmac:crypto.createHmac,SECRET:'d'.repeat(64),Bun:{env},hlsSessions:map,sharedLiveGroups:groups,pendingSharedLiveViewers,
   MAX_SHARED_LIVE_VIEWERS:4,touchHls(){},startHls:async args=>{
    const producer={key:args.key,kind:'live',dir:'/temp',stopped:false};map.set(args.key,producer);return {session:producer}
   }
@@ -607,7 +609,7 @@ test('authenticated compatibility HLS GET and STOP stay isolated from source-cop
  const originalKey=hmac(bearer,'live','31','ts','0'),compatKey=hmac(bearer,'live','31','ts','0',true);
  const map=new Map(),started=[],stopped=[];
  const ctx={
-  SECRET:secret,hlsSessions:map,hlsKey:hmac,Buffer,Response,
+  SECRET:secret,hlsSessions:map,hlsKey:hmac,Buffer,Response,cancelPendingSharedLiveViewer:()=>false,
   secureEquals:()=>true,join:(...args)=>args.join('/'),
   readFileSync:(file,encoding)=>encoding==='utf8'?'#EXTM3U\n#EXT-X-VERSION:3\n':Buffer.from('#EXTM3U\n#EXT-X-VERSION:3\n'),
   existsSync:()=>true,touchHls(){},awaitHlsFile:async()=>true,staleLiveManifest:()=>false,
