@@ -67,14 +67,15 @@ function stopHls(session,reason){
  if(session.idleTimer)clearTimeout(session.idleTimer);
  if(session.hardTimer)clearTimeout(session.hardTimer);
  if(session.chunkTimer){clearTimeout(session.chunkTimer);session.chunkTimer=null}
- // A stale decoder/stop callback must never remove a newer session on the
- // same subscriber+channel key.
- if(hlsSessions.get(session.key)===session)hlsSessions.delete(session.key);
+ // A delayed stop can race a new session with the SAME key and directory.
+ // Never delete the replacement session's playlist or segments.
+ const ownsFiles=hlsSessions.get(session.key)===session;
+ if(ownsFiles)hlsSessions.delete(session.key);
  try{session.abort.abort()}catch{}
  try{session.sourceController?.abort()}catch{}
  try{session.proc?.kill()}catch{}
  releaseHls(session);
- try{rmSync(session.dir,{recursive:true,force:true})}catch{}
+ if(ownsFiles)try{rmSync(session.dir,{recursive:true,force:true})}catch{}
  if(reason!=='idle_timeout'&&reason!=='session_expired')console.info('VIDAA_HLS_SESSION_END',{kind:session.kind,reason})
 }
 function releaseHls(session){if(!session.released){session.released=true;active=Math.max(0,active-1)}}
@@ -173,7 +174,11 @@ async function startHls({bearer,kind,id,ext,track,key,forceCompat=false}){
   session.videoMode=losslessVideo?'source_copy':'compatibility_transcode';
   const videoArgs=losslessVideo?['-c:v','copy']:compatibleVideoArgs(kind);
   const args=['-hide_banner','-loglevel','warning','-nostdin','-analyzeduration','1200000','-probesize','1200000','-fflags','+genpts','-i','pipe:0',
-   '-map','0:v:0','-map','0:a:'+track+'?',...videoArgs,'-c:a','aac','-profile:a','aac_low','-b:a','160k','-ac','2','-ar','48000',
+   '-map','0:v:0','-map','0:a:'+track+'?',...videoArgs,
+   // Correct audio PTS discontinuities by inserting/dropping samples rather
+   // than changing playback rate and making speech sound oddly pitched.
+   '-af','aresample=async=1:min_hard_comp=0.100:first_pts=0',
+   '-c:a','aac','-profile:a','aac_low','-b:a','160k','-ac','2','-ar','48000',
    '-f','hls','-hls_time','1','-hls_segment_type','mpegts','-hls_segment_filename',join(dir,'seg-%06d.ts')];
   if(kind==='live')args.push('-hls_list_size','8','-hls_delete_threshold','24','-hls_flags','delete_segments+independent_segments+temp_file');
   else args.push('-hls_list_size','0','-hls_playlist_type','event','-hls_flags','independent_segments');
@@ -195,7 +200,8 @@ async function startHls({bearer,kind,id,ext,track,key,forceCompat=false}){
    try{controller.abort()}catch{}
    session.sourceController=null;
    session.finished=true;
-   if(code!==0&&!session.stopped)console.warn('VIDAA_HLS_FFMPEG_EXIT',{kind,code,reason:session.error||'nonzero_exit'});
+   if(session.stopped||hlsSessions.get(key)!==session){releaseHls(session);return}
+   if(code!==0)console.warn('VIDAA_HLS_FFMPEG_EXIT',{kind,code,reason:session.error||'nonzero_exit'});
    if(!existsSync(join(dir,'index.m3u8'))){session.error=session.error||'ffmpeg_no_playlist';stopHls(session,session.error)}
    else {releaseHls(session);touchHls(session)}
   }).catch(()=>{session.finished=true;session.error='process_crashed';stopHls(session,session.error)});
