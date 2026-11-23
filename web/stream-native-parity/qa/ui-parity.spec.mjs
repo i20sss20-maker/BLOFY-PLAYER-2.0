@@ -103,6 +103,11 @@ test('Chrome uses local Hls.js and decodes H.264/AAC HLS instead of native unsup
  await expect.poll(()=>page.locator('#live-video').evaluate(v=>v.readyState),{timeout:14000}).toBeGreaterThan(1);
  const state=await page.locator('#live-video').evaluate(v=>({ready:v.readyState,error:v.error&&v.error.code,paused:v.paused}));
  expect(state.error).toBeFalsy();
+ await page.locator('[data-preview-full]').click();
+ await expect(page.locator('#player-root')).toBeVisible();
+ await expect.poll(()=>page.locator('#player-media').evaluate(v=>v.readyState),{timeout:14000}).toBeGreaterThan(1);
+ await expect(page.locator('#player-status')).toBeHidden({timeout:10000});
+ await expect(page.locator('#player-toggle')).toBeVisible();
 });
 test('unknown-duration MKV VOD fallback decodes a temporary HLS playlist',async({page})=>{
  movie.container_extension='mkv';delete movie.duration_secs;
