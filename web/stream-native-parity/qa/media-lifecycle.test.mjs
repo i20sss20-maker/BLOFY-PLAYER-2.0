@@ -205,6 +205,62 @@ test('temporary live origin failures emit bounded HTTP retry hints and gradual w
   'proxy must preserve worker retry hint without leaking untrusted response headers');
 });
 
+test('HLS expired sequence is a fast 410 only for deleted live TS segments',()=>{
+ const start=source.indexOf('function expiredLiveSegment('),end=source.indexOf('\nfunction staleLiveManifest(',start);
+ assert.ok(start>0&&end>start,'live segment expiration detector exists');
+ let playlist='#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:120\n#EXTINF:1,\nseg-000120.ts\n';
+ const files=new Set(['/live/index.m3u8','/live/seg-000107.ts']);
+ const ctx={
+  join:(...parts)=>parts.join('/'),
+  existsSync:(path)=>files.has(path),
+  readFileSync:(path)=>{assert.equal(path,'/live/index.m3u8');return playlist}
+ };
+ const expired=vm.runInNewContext(source.slice(start,end)+';\nexpiredLiveSegment',ctx);
+ const live={kind:'live',dir:'/live',stopped:false};
+ assert.equal(expired(live,'seg-000107.ts'),false,'still-existing segment remains playable');
+ files.delete('/live/seg-000107.ts');
+ assert.equal(expired(live,'seg-000107.ts'),true,'missing segment below media sequence cannot return');
+ assert.equal(expired(live,'seg-000120.ts'),false,'current playlist segment can still arrive');
+ assert.equal(expired(live,'seg-000121.ts'),false,'future segment must not be incorrectly evicted');
+ assert.equal(expired({...live,kind:'movie'},'seg-000107.ts'),false,'VOD is not a sliding live playlist');
+ assert.equal(expired({...live,stopped:true},'seg-000107.ts'),false);
+ assert.equal(expired(live,'index.m3u8'),false);
+ playlist='#EXTM3U\n#EXTINF:1,\nseg-000130.ts\n';
+ assert.equal(expired(live,'seg-000120.ts'),true,'fallback uses first filename if sequence header missing');
+ files.delete('/live/index.m3u8');
+ assert.equal(expired(live,'seg-000107.ts'),false,'playlist absence is not proof of eviction');
+ const startHandler=source.indexOf('async function hlsRequest('),endHandler=source.indexOf('\n/* Web VOD seek experiment',startHandler);
+ assert.match(source.slice(startHandler,endHandler),/hlsError\(410,'hls_segment_evicted'\)/,
+  'an expired segment must be rejected instead of waiting eight seconds');
+});
+
+test('HLS.js resyncs its live edge on a 410, with bounded retries and no unnecessary source teardown',()=>{
+ const start=playerSource.indexOf('function liveExpiredSegmentRecovery('),
+  end=playerSource.indexOf('\nfunction liveOriginRetryMs(',start);
+ assert.ok(start>0&&end>start);
+ const recover=vm.runInNewContext(playerSource.slice(start,end)+';\nliveExpiredSegmentRecovery',{});
+ let stopped=0,loaded=[],position=45;
+ const engine={liveSyncPosition:70,stopLoad(){stopped++},startLoad(x){loaded.push(x)}};
+ const video={readyState:4,get currentTime(){return position},set currentTime(v){position=v}};
+ const record={};
+ assert.equal(recover(record,engine,video,10000),'resync');
+ assert.equal(position,70,'video seeks to freshest live sync position');
+ assert.equal(stopped,1);assert.deepEqual(loaded,[-1]);
+ assert.equal(recover(record,engine,video,12000),'cooling','duplicate 410 is throttled');
+ assert.equal(stopped,1,'duplicate HLS 410 does not trigger another load');
+ assert.equal(recover(record,engine,video,14000),'resync');
+ assert.equal(recover(record,engine,video,19000),'restart','third gap asks outer recovery to refresh stale HLS connection');
+ assert.equal(stopped,2,'bounded two in-place resyncs before restart');
+ assert.equal(recover(record,engine,video,50000),'resync','edge-resync window resets after thirty seconds');
+ const fail={};
+ assert.equal(recover(fail,{liveSyncPosition:55},video,10000),'restart',
+  'missing engine API falls back to normal controlled reconnect');
+ const index=playerSource.indexOf('engine.on(window.Hls.Events.ERROR');
+ assert.ok(index>0);
+ assert.match(playerSource.slice(index,index+700),/code===410/,
+  'HLS NETWORK_ERROR handler handles expired segment before generic fatal reconnect');
+});
+
 test('worker identifies stale live manifests but never expires VOD or healthy live files',()=>{
  const begin=source.indexOf('function staleLiveManifest(');
  const end=source.indexOf('\n/**',begin);
@@ -617,7 +673,7 @@ test('authenticated HLS manifest and segments fan out to two SID viewers using o
   noteLiveSourceHealthy(){},
   releaseHls(s){s.released=true},join:(...p)=>p.join('/'),
   secureEquals:()=>true,staleLiveManifest:()=>false,
-  touchHls(){},awaitHlsFile:async()=>true,existsSync:()=>true,
+  touchHls(){},awaitHlsFile:async()=>true,existsSync:()=>true,expiredLiveSegment:()=>false,
   readFileSync:(path,encoding)=>encoding==='utf8'?
    '#EXTM3U\n#EXT-X-VERSION:3\n#EXTINF:1,\nseg-000001.ts\n':
    Buffer.from(path.endsWith('.ts')?'video':'#EXTM3U\n#EXTINF:1,\nseg-000001.ts\n'),
@@ -747,7 +803,8 @@ test('authenticated compatibility HLS GET and STOP stay isolated from source-cop
   SECRET:secret,hlsSessions:map,hlsKey:hmac,Buffer,Response,cancelPendingSharedLiveViewer:()=>false,
   secureEquals:()=>true,join:(...args)=>args.join('/'),
   readFileSync:(file,encoding)=>encoding==='utf8'?'#EXTM3U\n#EXT-X-VERSION:3\n':Buffer.from('#EXTM3U\n#EXT-X-VERSION:3\n'),
-  existsSync:()=>true,touchHls(){},awaitHlsFile:async()=>true,staleLiveManifest:()=>false,
+  existsSync:()=>true,touchHls(){},awaitHlsFile:async()=>true,
+  expiredLiveSegment:()=>false,staleLiveManifest:()=>false,
   liveShareAllowed:()=>false,liveSourceIdentity:()=> 'synthetic-source',
   liveSourceRetryMs:()=>0,noteLiveSourceHealthy(){},
   hlsError:(status,error)=>({status,error}),
