@@ -27,10 +27,12 @@ def die(reason):
     raise SystemExit(2)
 
 
-def cmd(args, timeout=120):
-    # No subprocess stderr or stdout revealed; actual DB data are private.
-    return subprocess.run(args, check=True, stdout=subprocess.PIPE,
-                          stderr=subprocess.PIPE, timeout=timeout,
+def cmd(args, timeout=120, capture=False):
+    # Do not capture pipe handles inherited by the local PostgreSQL daemon:
+    # pg_ctl would complete but communicate() can otherwise block forever.
+    return subprocess.run(args, check=True,
+                          stdout=subprocess.PIPE if capture else subprocess.DEVNULL,
+                          stderr=subprocess.DEVNULL, timeout=timeout,
                           env={**os.environ, "PGPASSWORD": ""})
 
 
@@ -97,7 +99,7 @@ def main():
                 n = cmd(["psql", "-h", str(sock), "-U", "postgres",
                          "-d", "restore_audit", "-qAt", "-c",
                          "SELECT count(*) FROM pg_catalog.pg_tables WHERE schemaname NOT IN ('pg_catalog','information_schema')"],
-                        timeout=45)
+                        timeout=45, capture=True)
                 table_count = int(n.stdout.decode("ascii", "strict").strip())
                 if table_count <= 0:
                     raise ValueError("no_user_tables_after_restore")
