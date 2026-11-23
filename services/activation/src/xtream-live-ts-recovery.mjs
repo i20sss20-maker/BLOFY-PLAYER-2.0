@@ -169,6 +169,13 @@ export async function* liveTsRecoveryBytes({
         'accept-encoding':'identity'
        },timeoutMs:12000,signal:requestSignal});
       }finally{clearTimeout(timer)}
+      // One transient upstream 5xx must not immediately terminate a paying
+      // viewer's already-open TS response. Retry ONLY this short allowlist,
+      // within the existing two-attempt/client and source-wide rate caps.
+      // Never retry authorization, rate limits, missing media, invalid MIME,
+      // non-open-ended streams or bad MPEG-TS packet probes.
+      if([500,502,503,504].includes(reply?.status))
+       throw Error('live_ts_reconnect_transient_http');
       if(!plainOpenEnded(reply))throw Error('live_ts_reconnect_denied');
       temporaryReader=reply.body.getReader();
       const probe=await readWithin(temporaryReader,ctl,15000);
