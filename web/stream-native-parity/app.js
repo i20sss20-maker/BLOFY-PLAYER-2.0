@@ -1259,10 +1259,10 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
   },120000);
   status(preview?'● المعاينة تعمل':'● تشغيل البث');
   if(!preview&&S.route==='player'&&S.playerView&&S.playerView.video===video){
-   var state=S.playerView;state.ready=true;
+   var state=S.playerView,firstPlay=!state.ready;state.ready=true;
    if(state.stats&&!state.stats.firstFrameAt)state.stats.firstFrameAt=Date.now();
    if(statusElement)statusElement.style.display='none';
-   if(state.revealControls)state.revealControls()
+   if(firstPlay&&state.revealControls)state.revealControls()
   }
  };
  video.onwaiting=video.onstalled=function(){
@@ -2065,9 +2065,9 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  }
  function markReady(){
   if(S.route!=='player')return;
-  state.ready=true;var status=document.getElementById('player-status');if(status)status.style.display='none';
+  var firstReady=!state.ready;state.ready=true;var status=document.getElementById('player-status');if(status)status.style.display='none';
   if(state.directStartupTimer){clearTimeout(state.directStartupTimer);state.directStartupTimer=null}
-  revealControls();
+  if(firstReady)revealControls();
   acquireWakeLock();
   if(!isLive&&state.mode==='direct'&&!state.didResume&&resume>30){
    // Checkpoints must not be clamped to a misleading 60-second native preview.
