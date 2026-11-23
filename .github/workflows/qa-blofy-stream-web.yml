@@ -22,6 +22,8 @@ jobs:
         with:
           node-version: '22'
       - run: cd web/stream-native-parity && npm install --no-audit --no-fund
+      - name: Verify long-running HLS sessions and safe worker idle expiry
+        run: cd web/stream-native-parity && node --test qa/media-lifecycle.test.mjs
       - run: cd web/stream-native-parity && npx playwright install --with-deps chromium
       - name: Install full Google Chrome for H.264/AAC codec verification
         run: cd web/stream-native-parity && npx playwright install chrome
