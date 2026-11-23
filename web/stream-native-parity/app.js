@@ -1496,10 +1496,14 @@ function openPlayer(kind,id,extension,name,from){
   (kind==='series'&&S.episodes&&S.episodes.info||null);
  var overview=String(detail&&(detail.plot||detail.description)||item&&(item.plot||item.description)||'').trim().slice(0,950);
  var attributes=detail?[detail.genre||detail.genres||'',detail.releaseDate||detail.release_date||'',detail.rating||''].filter(Boolean).join(' • '):'';
- var nextEpisode=null;
+ var nextEpisode=null,previousEpisode=null;
  if(kind==='series'&&S.episodes&&S.episodes.episodes){
   var episodeList=parseEpisodes(S.episodes).sort(function(a,b){return Number(a.__season)-Number(b.__season)||Number(a.episode_num||0)-Number(b.episode_num||0)});
-  for(var ix=0;ix<episodeList.length-1;ix++)if(String(episodeList[ix].id)===String(id)){nextEpisode=episodeList[ix+1];break}
+  for(var ix=0;ix<episodeList.length;ix++)if(String(episodeList[ix].id)===String(id)){
+   if(ix>0)previousEpisode=episodeList[ix-1];
+   if(ix+1<episodeList.length)nextEpisode=episodeList[ix+1];
+   break
+  }
  }
  rememberView();S.previousBeforePlayer={route:S.route,kind:kind,id:id};
  pushBrowserStep('player',{kind:kind,id:id,extension:ext,name:name,from:resume});
@@ -1511,6 +1515,7 @@ function openPlayer(kind,id,extension,name,from){
  '<div class="player-actions"><button class="btn secondary" id="player-back">↶ رجوع</button><button class="btn" id="player-toggle">⏯ تشغيل / إيقاف</button>'+ 
  (isLive?'<button class="btn secondary" id="player-channel-prev">⏮ القناة السابقة</button><button class="btn secondary" id="player-channel-next">القناة التالية ⏭</button>':'')+
  (isLive?'':'<button class="btn secondary" id="player-skip-back">−30 ثانية</button><button class="btn secondary" id="player-skip-forward">+30 ثانية</button><button class="btn secondary" id="player-skip-forward5">+5 دقائق</button><button class="btn secondary" id="player-jump-toggle" aria-controls="player-jump-panel" aria-expanded="false">↪ دقيقة محددة</button><button class="btn secondary" id="player-restart">↺ من البداية</button>')+
+ (previousEpisode?'<button class="btn secondary" id="player-previous-episode">⏮ الحلقة السابقة</button>':'')+
  (nextEpisode?'<button class="btn secondary" id="player-next-episode">الحلقة التالية ⏭</button>':'')+
  '<button class="btn secondary" id="player-mute" aria-label="كتم الصوت">🔈 كتم</button>'+ 
  '<button class="btn secondary" id="player-audio" aria-label="تغيير المسار الصوتي">🔊 الصوت</button>'+
@@ -2159,16 +2164,20 @@ function openPlayer(kind,id,extension,name,from){
  if(forward30)forward30.onclick=function(){state.seekBy(30)};
  var forward5=document.getElementById('player-skip-forward5');
  if(forward5)forward5.onclick=function(){state.seekBy(300)};
- var nextBtn=document.getElementById('player-next-episode');
- if(nextBtn&&nextEpisode)nextBtn.onclick=function(){
+ function jumpEpisode(targetEpisode){
+  if(!targetEpisode||S.route!=='player')return;
   if(state.ready)saveResume(kind,id,checkpointPosition(state),totalDuration(),true);
   var previous=S.previousBeforePlayer||{route:'episodes',kind:'series',id:id};
   recordPlaybackQuality(state);
   cleanupPlayer();S.playerView=null;S.route='episodes';
-  var nextId=String(nextEpisode.id),checkpoint=getResume('series',nextId);
-  openPlayer('series',nextId,nextEpisode.container_extension||'mp4',nextEpisode.title||'الحلقة '+(nextEpisode.episode_num||''),checkpoint&&checkpoint.position>30?checkpoint.position:0);
+  var selectedId=String(targetEpisode.id),checkpoint=getResume('series',selectedId);
+  openPlayer('series',selectedId,targetEpisode.container_extension||'mp4',
+   targetEpisode.title||'الحلقة '+(targetEpisode.episode_num||''),checkpoint&&checkpoint.position>30?checkpoint.position:0);
   S.previousBeforePlayer=previous;
- };
+ }
+ var nextBtn=document.getElementById('player-next-episode'),previousBtn=document.getElementById('player-previous-episode');
+ if(nextBtn&&nextEpisode)nextBtn.onclick=function(){jumpEpisode(nextEpisode)};
+ if(previousBtn&&previousEpisode)previousBtn.onclick=function(){jumpEpisode(previousEpisode)};
  var seek=document.getElementById('seek');
  if(seek)seek.onchange=function(){
   var duration=totalDuration(),target=Math.round(duration*Number(this.value)/1000);
