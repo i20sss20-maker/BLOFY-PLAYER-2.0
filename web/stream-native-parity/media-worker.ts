@@ -10,9 +10,10 @@ let active=0;
 const MAX_JOBS=2;
 /* Pilot quality profiles: never enlarge a low-resolution source.
  * The previous forced 854x480 / 900 kbit/s severely degraded every HD film
- * and channel. 720p is the compatibility-first default; 1080p requires a
- * deliberate preview-worker opt-in after CPU, buffering, and TV validation.
- * Both use bounded CRF+VBV to avoid unbounded bitrate spikes.
+ * and channel. Live compatibility defaults to 720p; movies/series on the
+ * isolated preview worker default to 1080p (reversible by environment).
+ * Both have bounded CRF+VBV to avoid unlimited bitrate spikes.
+ * Final release still requires per-device CPU/decoder and long-play testing.
  */
 function videoQualityProfile(kind){
  const envName=kind==='live'?'VIDAA_LIVE_VIDEO_PROFILE':'VIDAA_VOD_VIDEO_PROFILE';
