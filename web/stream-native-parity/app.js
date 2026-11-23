@@ -1526,12 +1526,13 @@ function openPlayer(kind,id,extension,name,from){
   state.recoveries=0;state.recoveryWindow=0;
   var target=Math.max(0,Math.round(Number(raw)||0)),duration=totalDuration();
   if(duration>0&&isFinite(duration))target=Math.min(target,Math.max(0,Math.floor(duration)-2));
+  state.lastSeekTarget=target;state.lastSeekAt=Date.now();
   if(state.mode==='fullvod'||state.mode==='direct'&&nativeCanSeek(target)){
    try{
     if(state.mode==='direct'){resume=target;state.resume=target;state.requestedSeek=target}
     video.currentTime=target;
     if(state.mode==='direct')verifyDirectSeek(target);
-    progress();return
+    progress();return target
    }catch(e){}
   }
   if(state.mode==='direct'){
@@ -1549,8 +1550,15 @@ function openPlayer(kind,id,extension,name,from){
   if(state.mode==='direct'&&!(state.duration>=120))startWithMetadata(target);
   else startVod(target);
   playerStatus('جار فتح المقطع عند '+formatTime(target)+'…');
+  return target
  }
  state.seekTo=seekTo;
+ state.seekBy=function(delta){
+  // On TV and keyboard, key repeats arrive before the transcoder can
+  // advance video.currentTime. Build on the previous requested time.
+  var recent=Date.now()-(state.lastSeekAt||0)<4500&&isFinite(state.lastSeekTarget);
+  return seekTo((recent?state.lastSeekTarget:realPos())+delta)
+ };
  state.toggle=function(){if(video.paused){var p=video.play();if(p&&p.catch)p.catch(function(){})}else video.pause()};
  state.recoverDirect=function(){
   if(state.mode!=='direct'||S.route!=='player'||state.directFallback)return;
@@ -1718,10 +1726,10 @@ function openPlayer(kind,id,extension,name,from){
   else playerStatus('ملء الشاشة غير مدعوم على هذا الجهاز')
  };
  var back30=document.getElementById('player-skip-back'),forward30=document.getElementById('player-skip-forward');
- if(back30)back30.onclick=function(){seekTo(realPos()-30)};
- if(forward30)forward30.onclick=function(){seekTo(realPos()+30)};
+ if(back30)back30.onclick=function(){state.seekBy(-30)};
+ if(forward30)forward30.onclick=function(){state.seekBy(30)};
  var forward5=document.getElementById('player-skip-forward5');
- if(forward5)forward5.onclick=function(){seekTo(realPos()+300)};
+ if(forward5)forward5.onclick=function(){state.seekBy(300)};
  var nextBtn=document.getElementById('player-next-episode');
  if(nextBtn&&nextEpisode)nextBtn.onclick=function(){
   if(state.ready)saveResume(kind,id,realPos(),totalDuration(),true);
@@ -1832,13 +1840,16 @@ function directional(e){
   if(S.route==='login')return;
   e.preventDefault();back();return
  }
- if(S.route==='player'&&!editable){
+ if(S.route==='player'&&(!editable||document.activeElement&&document.activeElement.id==='seek')){
   var p=S.playerView,active=document.activeElement;
   if(code===32&&p&&p.toggle&&(!active||active===document.body||active===p.video)){
    e.preventDefault();p.toggle();return
   }
-  if(p&&p.kind!=='live'&&p.seekTo&&(code===37||code===39)&&(!active||active===document.body||active===p.video)){
-   e.preventDefault();p.seekTo((p.mode==='vodhls'?p.offset:0)+(p.video.currentTime||0)+(code===37?-10:10));return
+  if(p&&p.kind!=='live'&&p.seekBy&&(code===37||code===39)&&
+   ((!active||active===document.body||active===p.video)||active.id==='seek')){
+   // Keep focus on the time slider. Old TV browsers otherwise treat arrows
+   // as navigation and jump away instead of seeking.
+   e.preventDefault();p.seekBy(code===37?-30:30);return
   }
  }
  if(!editable&&S.userVerified&&!e.ctrlKey&&!e.altKey&&!e.metaKey&&code===191&&S.route!=='player'){
