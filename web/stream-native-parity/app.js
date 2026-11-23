@@ -963,6 +963,7 @@ function settingsScreen(){
  '<section class="setting-panel"><h3>المفضلة والمتابعة</h3><p>تُحفظ المفضلة وسجل المشاهدة والبحث لهذا الاشتراك فقط على هذا المتصفح. المزامنة مع أندرويد غير مفعلة بعد.</p>'+
   '<button class="btn secondary" data-go="favorites">المفضلة</button> '+
   '<button class="btn secondary" id="clear-watch-history">مسح سجل المشاهدة والبحث</button></section>'+
+ '<section class="setting-panel"><h3>توافق Toshiba / VIDAA</h3><p>اختبر دعم الشاشة للملء الكامل، وتشغيل HLS والترميزات داخل هذا المتصفح.</p><button class="btn secondary" id="test-tv-capabilities">فحص توافق التلفزيون</button><p class="small muted" id="tv-capabilities-result" role="status" aria-live="polite">هذه نتيجة فحص المتصفح المحلي؛ لا تثبت نجاح بث Xtream الفعلي.</p></section>'+ 
  '<section class="setting-panel"><h3>حساب BLOFY</h3><p>الخروج من هذا الجهاز فقط، دون التأثير على التطبيقات الأصلية.</p><button class="btn danger" id="logout">تسجيل الخروج</button></section></div>'+
  '<div id="page-status" class="info" style="margin-top:20px">BLOFY STREAM Web — نسخة مطابقة قيد التطوير.</div>');
  document.getElementById('refresh-content').onclick=function(){refreshCatalog(true)};
@@ -985,10 +986,41 @@ function settingsScreen(){
   if(box)box.textContent='تم حذف بيانات التشخيص لهذا الاشتراك من المتصفح.'
  };
  document.getElementById('clear-watch-history').onclick=function(){
-  if(!window.confirm('حذف سجل المشاهدة وعمليات البحث لهذا الاشتراك من هذا المتصفح فقط؟ لن تُحذف المفضلة أو الاشتراك.'))return;
-  S.watch={};S.recentSearches=[];
-  profileSave('watch',S.watch);profileSave('recentSearches',S.recentSearches);
-  setStatus('تم حذف سجل المشاهدة والبحث المحلي لهذا الاشتراك؛ المفضلة محفوظة.')
+  var trigger=this,existing=document.getElementById('watch-clear-confirm');
+  if(existing){existing.remove();trigger.focus();return}
+  var panel=document.createElement('div');
+  panel.id='watch-clear-confirm';panel.className='settings-inline-confirm';
+  panel.innerHTML='<p>هل تريد حذف سجل المشاهدة والبحث من هذا الجهاز فقط؟ المفضلة والاشتراك لن يتأثرا.</p>'+
+   '<button type="button" class="btn danger" id="watch-clear-accept">تأكيد الحذف</button> '+
+   '<button type="button" class="btn secondary" id="watch-clear-cancel">إلغاء</button>';
+  trigger.parentNode.appendChild(panel);
+  panel.querySelector('#watch-clear-accept').onclick=function(){
+   S.watch={};S.recentSearches=[];
+   profileSave('watch',S.watch);profileSave('recentSearches',S.recentSearches);
+   panel.remove();setStatus('تم حذف سجل المشاهدة والبحث المحلي؛ المفضلة محفوظة.');
+   trigger.focus()
+  };
+  panel.querySelector('#watch-clear-cancel').onclick=function(){panel.remove();trigger.focus()};
+  panel.querySelector('#watch-clear-cancel').focus()
+ };
+ var tvTest=document.getElementById('test-tv-capabilities');
+ if(tvTest)tvTest.onclick=function(){
+  var target=document.getElementById('tv-capabilities-result'),device=document.createElement('video');
+  var ua=navigator.userAgent||'';
+  var vidaa=/VIDAA|Hisense/i.test(ua);
+  var hls='غير معروف',mp4='غير معروف';
+  try{hls=device.canPlayType('application/vnd.apple.mpegurl')||'غير مدعوم'}catch(e){}
+  try{mp4=device.canPlayType('video/mp4; codecs="avc1.42E01E,mp4a.40.2"')||'غير مدعوم'}catch(e){}
+  var hasFullscreen=!!(document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen||
+    document.documentElement.mozRequestFullScreen||document.documentElement.msRequestFullscreen);
+  var mse=!!(window.MediaSource&&window.MediaSource.isTypeSupported);
+  var width=Math.round(Number(window.innerWidth)||0),height=Math.round(Number(window.innerHeight)||0);
+  target.textContent='بيئة الجهاز: '+(vidaa?'VIDAA/Hisense محتمل':'لم يتم التعرف على VIDAA من المتصفح')+
+   ' • حجم نافذة العرض: '+width+'×'+height+
+   ' • ملء الشاشة الأصلي: '+(hasFullscreen?'واجهة برمجية متوفرة':'قد يحتاج وضع ملء الصفحة البديل')+
+   ' • HLS الأصلي: '+hls+' • HLS عبر MSE: '+(mse?'متاح مبدئيًا':'غير متاح')+
+   ' • H.264/AAC: '+mp4+
+   '. يلزم تشغيل فيديو حقيقي وتجربة ريموت توشيبا لاعتماد التوافق.'
  };
  document.getElementById('logout').onclick=function(){api('POST','/api/logout',{},function(){login('تم تسجيل الخروج')})}
 }
