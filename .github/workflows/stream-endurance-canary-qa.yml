@@ -1,0 +1,37 @@
+name: BLOFY STREAM isolated decoder endurance canary QA
+on:
+  push:
+    branches:
+      - qa/live-decoder-endurance-canary-20261123
+    paths:
+      - 'ops/stream-endurance/**'
+      - '.github/workflows/stream-endurance-canary-qa.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  synthetic-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create local licensed synthetic video and audio (no upstream traffic)
+        run: |
+          python3 -m py_compile ops/stream-endurance/endurance_probe.py
+          command -v ffmpeg
+          ffmpeg -y -hide_banner -loglevel error \
+            -f lavfi -i testsrc=size=320x180:rate=12 \
+            -f lavfi -i sine=frequency=500:sample_rate=44100 \
+            -t 10 -c:v libx264 -preset ultrafast -pix_fmt yuv420p \
+            -c:a aac /tmp/blofy-canary-synthetic.mp4
+      - name: Decode two concurrent synthetic sessions for five seconds
+        run: |
+          python3 ops/stream-endurance/endurance_probe.py \
+            --source /tmp/blofy-canary-synthetic.mp4 \
+            --duration 5 --clients 2 --realtime --require-audio \
+            --restarts 0 --report /tmp/blofy-canary-report.json
+      - name: State explicit validation boundary
+        if: always()
+        run: |
+          echo 'Synthetic decoder QA only. No production channel, client or provider was probed.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Successful synthetic CI is NOT real broadcast reliability evidence.' >> "$GITHUB_STEP_SUMMARY"
