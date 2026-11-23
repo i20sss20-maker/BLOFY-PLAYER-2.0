@@ -322,5 +322,10 @@ test('gateway logs rounded media gap and never includes account, credential or U
  assert.match(segment,/gapBucketMs=Number.isFinite\(interruptionMs\)/);
  assert.match(segment,/Math.round\(interruptionMs\/500\)\*500/);
  assert.match(segment,/BLOFY_LIVE_TS_RECOVERED/);
- assert.doesNotMatch(segment,/password|username|accountId|credentials|target\.href|clientIp/);
+ const logStart=segment.indexOf("console.info('BLOFY_LIVE_TS_RECOVERED',JSON.stringify({");
+ assert.ok(logStart>=0,'recovery events are emitted as one JSON log entry');
+ const logEnd=segment.indexOf('}));',logStart);
+ assert.ok(logEnd>logStart,'JSON log is properly terminated');
+ const logPayload=segment.slice(logStart,logEnd+4);
+ assert.doesNotMatch(logPayload,/password|username|accountId|credentials|target\.href|clientIp/);
 });
