@@ -35,3 +35,28 @@ The CI workflow now also runs `local_hls_canary.py` using a locally generated 32
 All sources/clients are synthetic and remain on the test runner; **no Railway or customer playback is changed**. Startup times in this local test begin from a primed HLS playlist, so they do not establish genuine cold-start TTFF on a device. A 503 transport interruption is not identical to killing a remote upstream encoder, and an FFmpeg process restart is not proof of BLOFY in-app recovery. Reports are sanitized and uploaded as CI artifacts for seven days.
 
 The transport-blackout test **allows the expected frame gaps during the injected outage** and requires successful frames after recovery. Production acceptance must separately bound the duration/frequency of gaps and test full source interruption on approved feeds and on real client hardware.
+
+### Physical synthetic source shutdown / HLS continuity
+
+A third CI stage runs **three readers for 28 seconds** and stops the local FFmpeg HLS publisher for five seconds, then starts it again. Unlike the 503 blackout, this actually halts media generation. The test now checks that a *completed* segment is advertised in the HLS playlist after restart, and that the playlist contains the required `#EXT-X-DISCONTINUITY` marker when timestamps reset. It rejects a merely-created but incomplete .ts file as recovery proof. The report includes both source-publication readiness and observed audio/video frame recovery.
+
+The 503 stage also confirms there were HTTP media requests actually rejected during its outage; a fake outage that blocked no clients fails. Both synthetic scenarios permit the *expected* temporary interruption and report its duration instead of falsely claiming zero downtime.
+
+### Client-device GO/NO-GO gate (not populated yet)
+
+`qa_release_gate.py` is a **fail-closed policy checker** for future anonymized, independently verified BLOFY client-decoder telemetry. It does not create or ingest customer telemetry itself, and no production client was changed by this PR.
+
+A supplied local JSON report must have:
+- `schemaVersion: 1`, `scope: "client_decoder"`;
+- `requiredCohorts`, e.g. `["android_tv|stc_wifi","web_vidaa|stc_wifi","windows|broadband"]`;
+- `sessions`, each containing `cohort`, `durationSeconds`, `firstDecodedFrameMs`, `decodedVideoFrames`, `decodedAudioFrames`, `videoGapsOver3s`, `audioGapsOver3s`, `testOutageInjected`, and (only if a controlled test occurred) `outageRecoveryMs`.
+
+Each cohort requires at least **three sessions lasting >= 300 seconds**, decoded video and expected audio, no >3-second audio/video gaps, startup p95 <= 6000 ms, and at least one controlled test outage recovered in <= 10000 ms (p95). Missing cohorts, incomplete metrics, silent audio, HTTP-only reports and short sessions all yield **NO-GO**. The 3-session minimum is a QA canary threshold, *not* statistical proof of large-scale commercial reliability; raise it for the actual rollout.
+
+Example (data supplied privately by an operator, never raw device IDs or source secrets):
+
+```sh
+python3 ops/stream-endurance/qa_release_gate.py /private/sanitized-client-report.json --report /tmp/go-no-go.json
+```
+
+The checker validates the input format and thresholds **but cannot attest who collected or signed the input**. Production still requires verified on-device observability and a human-reviewed rollout decision. Do not use the synthetic CI reports as `client_decoder` evidence.
