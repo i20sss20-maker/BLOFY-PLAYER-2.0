@@ -1415,6 +1415,31 @@ function liveCapacityRetryMs(attempt){
  var n=Math.min(5,Math.max(1,Math.floor(Number(attempt)||1)));
  return 2500+n*2200
 }
+/* Private, bounded on-device incident trail. Never store a URL, channel ID,
+ * token, account identifier or source error string in the troubleshooting
+ * report. It is a small evidence window, not remote telemetry.
+ */
+function recordLiveIncident(code,now){
+ var names={
+  playing:'الصورة بدأت تعمل',buffering:'انتظار مقاطع البث',
+  decoder_paused:'توقف مفاجئ في المشغل',picture_freeze:'تجمد الصورة',
+  reconnect:'بدء استعادة اتصال القناة',decoder_error:'خطأ فك ترميز الصورة',
+  source_error:'فشل مؤقت في اتصال المصدر',encoder_capacity:'المحرك مشغول',
+  live_edge_resync:'تجاوز مقطع قديم إلى البث الحي',
+  channel_switch:'تغيير القناة'
+ };
+ if(!Object.prototype.hasOwnProperty.call(names,code))return false;
+ var st=S.playerView&&S.playerView.stats;
+ if(S.route!=='player'||!S.playerView||S.playerView.kind!=='live'||!st)return false;
+ var at=Number(now);
+ if(!Number.isFinite(at)||at<0)at=Date.now();
+ var events=Array.isArray(st.liveEvents)?st.liveEvents:(st.liveEvents=[]);
+ var previous=events[events.length-1];
+ if(previous&&previous.code===code&&at-previous.at<3000)return false;
+ events.push({code:code,at:at});
+ if(events.length>12)events.splice(0,events.length-12);
+ return true
+}
 function liveUnexpectedPause(record,video,userPaused,hidden,now){
  if(userPaused||hidden||video.seeking||(!video.paused&&!video.ended)){
   record.unexpectedPauseAt=0;return false
@@ -1549,7 +1574,8 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
   record.reconnecting=true;
   if(state.stats){
    state.stats.recoveries=(state.stats.recoveries||0)+1;
-   state.stats.lastRecoveryAt=Date.now()
+   state.stats.lastRecoveryAt=Date.now();
+   recordLiveIncident('reconnect')
   }
   // Recovery order: original-native -> original MSE -> bounded compatibility.
   // Do not sacrifice upstream 4K on the first TV decoder stall.
@@ -1646,6 +1672,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
   probeSourceVideoMode();
   if(!preview&&S.route==='player'&&S.playerView&&S.playerView.video===video){
    var state=S.playerView,firstPlay=!state.ready;state.ready=true;
+   if(firstPlay)recordLiveIncident('playing');
    if(state.stats&&!state.stats.firstFrameAt)state.stats.firstFrameAt=Date.now();
    if(statusElement)statusElement.style.display='none';
    if(firstPlay&&state.revealControls)state.revealControls()
@@ -1653,6 +1680,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
  };
  video.onwaiting=video.onstalled=function(){
   if(!alive()||video.paused)return;
+  if(!preview)recordLiveIncident('buffering');
   if(!record.bufferSince)record.bufferSince=Date.now();
   if(Date.now()-record.bufferSince>36000){recoverConnection();return}
   status(preview?'جار تحميل المعاينة…':'جار تعبئة مخزن البث لتقليل التقطيع…');
@@ -1682,6 +1710,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
    var intentionalPause=!preview&&S.playerView&&S.playerView.video===video&&S.playerView.userPaused;
    if(liveUnexpectedPause(record,video,!!intentionalPause,document.hidden,now)){
     status('توقف مشغّل الفيديو دون طلب؛ جار إعادة اتصال القناة…');
+    if(!preview)recordLiveIncident('decoder_paused');
     recoverConnection();return
    }
    if(video.paused||video.ended||video.seeking||document.hidden){
@@ -1691,6 +1720,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
    if(progress.advanced)return;
    if(progress.idleMs>=16000){
     diagnose('live','startup_timeout','hls',0);
+    if(!preview)recordLiveIncident('picture_freeze');
     recoverConnection()
    }else if(progress.idleMs>=6500&&!record.bufferSince){
     record.bufferSince=Date.now();
@@ -1726,6 +1756,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
     if(!alive()||!detail)return;
     var code=Number(detail.response&&detail.response.code)||0;
     if(code===410&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){
+     if(!preview)recordLiveIncident('live_edge_resync');
      var edgeAction=liveExpiredSegmentRecovery(record,engine,video,Date.now());
      if(edgeAction==='restart')recoverConnection();
      else if(edgeAction==='resync')status('تأخرت بعض مقاطع البث؛ جار الانتقال إلى البث المباشر…');
@@ -1735,6 +1766,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
     diagnose('live','hls_error','video',0);
     if(record.ultra&&(code===429||code===503)&&setCompatibility(true,true))return;
     if(code===429){
+     if(!preview)recordLiveIncident('encoder_capacity');
      // Only two worker slots exist on the pilot. Back off instead of
      // burning connection attempts, which could cut off healthy viewers.
      record.capacityRetries=(record.capacityRetries||0)+1;
@@ -1750,6 +1782,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
      return
     }
     if((code===502||code===503||code===504)&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){
+     if(!preview)recordLiveIncident('source_error');
      record.originRetries=(record.originRetries||0)+1;
      if(record.originRetries>5){recoverConnection();return}
      var delay=liveOriginRetryMs(record.originRetries);
@@ -1766,6 +1799,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
      record.retries++;status('انقطاع مؤقت في البث؛ جار استعادة الاتصال…');try{engine.startLoad()}catch(e){};return;
     }
     if(record.retries<2&&detail.type===window.Hls.ErrorTypes.MEDIA_ERROR){
+     if(!preview)recordLiveIncident('decoder_error');
      record.retries++;status('جار إعادة تهيئة الفيديو…');try{engine.recoverMediaError()}catch(e){};return;
     }
     if(detail.type===window.Hls.ErrorTypes.MEDIA_ERROR&&setCompatibility(true,true))return;
@@ -2255,7 +2289,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  var video=document.getElementById('player-media'),state={kind:kind,id:id,ext:ext,video:video,name:name,offset:0,
  mode:isLive?'hls':'direct',resume:resume,duration:knownDuration(kind,id,item),didResume:false,ready:false,track:0,lastSaved:0,
   art:art(item)||prior&&prior.art||'',seriesId:kind==='series'&&S.item&&S.item.id||'',playbackId:freshPlaybackId(),
-   stats:{openedAt:Date.now(),firstFrameAt:0,bufferEvents:0,bufferMs:0,bufferSince:0,errors:0,recoveries:0,lastRecoveryAt:0,
+   stats:{openedAt:Date.now(),firstFrameAt:0,bufferEvents:0,bufferMs:0,bufferSince:0,errors:0,recoveries:0,lastRecoveryAt:0,liveEvents:[],
     seekAttempts:0,seekReady:0,verifiedSeekFrames:0,seekTimeouts:0,lastSeekMs:null}};
  var toggle=document.getElementById('player-toggle');
  function syncToggle(){
@@ -2418,6 +2452,14 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
     ' • الساقطة: '+(Number.isFinite(drops)?drops:'غير متوفرة'),
    'إعادة الاتصال: '+(st.recoveries||0)+' • أخطاء الفيديو: '+(st.errors||0),
    'انتظار التخزين: '+(st.bufferEvents||0)+' مرة',
+   'آخر أحداث البث (وقت UTC):'+(st.liveEvents&&st.liveEvents.length?
+    st.liveEvents.slice(-6).map(function(item){
+     var labels={playing:'بدأت الصورة',buffering:'انتظار الفيديو',decoder_paused:'توقف المشغل',
+      picture_freeze:'تجمد الصورة',reconnect:'استعادة الاتصال',decoder_error:'فك الترميز',
+      source_error:'المصدر',encoder_capacity:'ازدحام المعالجة',
+      live_edge_resync:'العودة للبث المباشر',channel_switch:'تغيير القناة'};
+     return ' '+new Date(item.at).toISOString().slice(11,19)+' '+(labels[item.code]||'تشغيل')
+    }).join(' ؛ '):' لا توجد أحداث مسجلة'),
    'النتيجة الأولية: '+assessment,
    'ملاحظة: التقرير يستبعد بيانات الاشتراك والروابط؛ النتيجة تقديرية وليست تشخيصًا قطعيًا.'
   ].join(String.fromCharCode(10))
@@ -3244,6 +3286,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    var newId=itemId(next,'live');
    if(!newId||newId===String(id))return;
    id=newId;state.id=id;state.name=title(next);state.ready=false;S.selected=id;S.livePreview=null;
+   if(state.stats){state.stats.liveEvents=[];recordLiveIncident('channel_switch')}
    if(state.refreshFavoriteButton)state.refreshFavoriteButton();
    var qualityPath=document.getElementById('player-source-mode');if(qualityPath)qualityPath.hidden=true;
    var heading=document.getElementById('player-title-text');if(heading)heading.textContent=state.name;
