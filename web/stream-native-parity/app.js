@@ -498,6 +498,15 @@ function bindMoreOnScroll(kind){
   },130)
  },{passive:true})
 }
+function playbackDuration(p){
+ if(!p)return 0;
+ var seconds=Number(p.duration)||0,observed=Number(p.video&&p.video.duration);
+ // Some native TV HLS decoders report a single 24-second chunk rather
+ // than the real runtime. That wrong number must never erase checkpoints.
+ if(p.mode==='fullvod'||p.mode==='vodhls')return seconds>0&&isFinite(seconds)?seconds:0;
+ if(seconds>=120&&seconds<=21600)return seconds;
+ return observed>=120&&observed<=21600&&isFinite(observed)?observed:0
+}
 function progressKey(k,id){return k+':'+id}
 function getResume(k,id){return S.watch[progressKey(k,id)]||null}
 function saveResume(kind,id,pos,duration,ready){
@@ -1347,15 +1356,7 @@ function openPlayer(kind,id,extension,name,from){
  root.addEventListener('focusin',revealControls);
  video.addEventListener('click',revealControls);
  function realPos(){return state.mode==='vodhls'?state.offset+Math.max(0,video.currentTime||0):video.currentTime||0}
- function totalDuration(){
-  // The full-length VOD manifest is authoritative. On some TV engines
-  // <video>.duration incorrectly reports only the current 24s HLS chunk.
-  if(state.mode==='fullvod'||state.mode==='vodhls')return state.duration;
-  if(state.duration>=120&&state.duration<=21600)return state.duration;
-  var observed=Number(video.duration);
-  // Do not display a "one-minute movie" when a pseudo-live MP4 reports 60s.
-  return isFinite(observed)&&observed>=120&&observed<=21600?observed:0
- }
+ function totalDuration(){return playbackDuration(state)}
  function nativeCanSeek(target){
   var ranges=video.seekable;
   if(!ranges||!ranges.length)return false;
@@ -1664,7 +1665,7 @@ function closePlayer(){
  var state=S.playerView;
  if(state&&S.route==='player'&&state.kind!=='live'){
   var video=state.video,pos=state.mode==='vodhls'?state.offset+(video.currentTime||0):(video.currentTime||0);
-  var duration=state.mode==='vodhls'?state.duration:(video.duration>0?video.duration:state.duration);
+  var duration=playbackDuration(state);
   if(state.ready)saveResume(state.kind,state.id,pos,duration,true)
  }
  cleanupPlayer();
@@ -1785,7 +1786,7 @@ function persistPlaybackCheckpoint(){
  var p=S.playerView;
  if(!p||!p.ready||p.kind==='live')return;
  var v=p.video,pos=(p.mode==='vodhls'?p.offset:0)+Math.max(0,Number(v.currentTime)||0);
- var duration=p.mode==='vodhls'?p.duration:(isFinite(v.duration)&&v.duration>0?v.duration:p.duration);
+ var duration=playbackDuration(p);
  saveResume(p.kind,p.id,pos,duration,true)
 }
 window.addEventListener('beforeunload',persistPlaybackCheckpoint);
