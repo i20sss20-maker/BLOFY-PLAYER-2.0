@@ -275,6 +275,32 @@ test('midstream retry never bypasses HTTP denial or invalid TS response',async()
 });
 
 
+
+test('source silence is measured since most recent delivered packet rather than stream start',async()=>{
+ let now=1000,readIndex=0,drop=null;
+ const reader={
+  async read(){
+   if(readIndex++===0)return {done:false,value:ts()};
+   throw Error('transport reset');
+  },
+  async cancel(){},releaseLock(){}
+ };
+ const first=ts();
+ const iter=liveTsRecoveryBytes({
+  first,reader,controller:new AbortController(),target:url,
+  now:()=>now,waitRetry:immediately,
+  onSourceDrop:event=>{drop=event;},
+  fetchImpl:async()=>response()
+ });
+ assert.equal((await iter.next()).value.length,564);
+ now=4000;
+ assert.equal((await iter.next()).value.length,564);
+ now=5500;
+ assert.equal((await iter.next()).value.length,564);
+ assert.equal(drop.durationMs,1500);
+ await iter.return();
+});
+
 test('recovery reports measured media interruption instead of confusing upstream uptime with blackout',async()=>{
  const initial=failingResponse(),reader=initial.body.getReader();
  const first=(await reader.read()).value;
