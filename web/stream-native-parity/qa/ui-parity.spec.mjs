@@ -517,7 +517,8 @@ test('read-only live fan-out health panel exposes no subscriber data and never t
   checks++;
   await route.fulfill({status:200,contentType:'application/json',
    body:JSON.stringify({ok:true,activeJobs:enabled?2:1,capacity:2,
-    sharedLive:{enabled,groups:enabled?1:0,viewers:enabled?2:0,pending:enabled?1:0,maxPerGroup:4}})})
+    sharedLive:{enabled,groups:enabled?1:0,viewers:enabled?2:0,pending:enabled?1:0,maxPerGroup:4},
+    originStability:{coolingSources:enabled?1:0,recentSources:enabled?2:0}})})
  });
  await page.goto('http://127.0.0.1:3000/');
  await page.locator('[data-go="settings"]').first().click();
@@ -532,6 +533,8 @@ test('read-only live fan-out health panel exposes no subscriber data and never t
  await expect(status).toContainText('مفعلة في التجربة');
  await expect(status).toContainText('المشاهدون المشاركون: 2');
  await expect(status).toContainText('بانتظار اتصال المصدر: 1');
+ await expect(status).toContainText('مصادر في تهدئة الاتصال: 1');
+ await expect(status).toContainText('مصادر تعثرت خلال دقيقتين: 2');
  await expect(status).toContainText('المحركات ممتلئة');
  expect(checks).toBe(2);
  expect(await status.textContent()).not.toContain('Bearer ');
