@@ -686,6 +686,7 @@ test('TV diagnostics show redacted source-vs-decoder evidence without credential
  await expect(panel).toContainText('BLOFY STREAM');
  await expect(panel).toContainText('دقة المصدر');
  await expect(panel).toContainText('آخر مقطع HLS');
+ await expect(panel).toContainText('آخر أحداث البث (وقت UTC)');
  await expect(panel).toContainText('النتيجة الأولية');
  const content=await panel.textContent();
  expect(content).not.toContain('Authorization');
