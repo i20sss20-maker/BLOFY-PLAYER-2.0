@@ -26,8 +26,8 @@ test('only pre-response retry paths use jitter; never replay a partially streame
  const src=await readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8');
  const block=src.slice(src.indexOf('async function proxyMedia('),
   src.indexOf('async function handleAuthorizedXtreamHls('));
- assert.match(block,/if \(retryable && !transientRetried && attempt < maxAttempts\) \{[\s\S]*?waitXtreamMediaRetry/);
- assert.match(block,/if \(!res.headersSent && !transientRetried && attempt < maxAttempts/);
+ assert.match(block,/if \(retryable && transientRetried < \(kind==='live'\?2:1\) && attempt < maxAttempts\) \{[\s\S]*?waitXtreamMediaRetry/);
+ assert.match(block,/if \(!res.headersSent && transientRetried < \(kind==='live'\?2:1\) && attempt < maxAttempts && safeReason!==/);
  assert.match(block,/if\(!\(await waitXtreamMediaRetry\(\{attempt,signal:client.signal\}\)\)\)return;/);
  assert.match(block,/if\(res.headersSent\)closedTelemetryRecorded=true/);
  assert.match(block,/if \(!res.destroyed\) res.destroy\(\)/);

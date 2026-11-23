@@ -220,3 +220,52 @@ test('gateway emits sanitized upstream drop category, distinct from successful r
  assert.match(gateway,/BLOFY_LIVE_TS_SOURCE_DROP/);
  assert.match(gateway,/secondsBucket:Number\.isFinite\(durationMs\)/);
 });
+
+
+test('after live EOF a transient 500/502/503/504 gets one bounded recovery retry, then valid TS',async()=>{
+ for(const status of [500,502,503,504]){
+  const initial=failingResponse(),reader=initial.body.getReader();
+  const first=(await reader.read()).value;
+  let calls=0;
+  const iter=liveTsRecoveryBytes({
+   first,reader,controller:new AbortController(),target:url,
+   waitRetry:immediately,
+   fetchImpl:async()=>{
+    calls++;
+    return calls===1?new Response('upstream temporarily unavailable',{status}):response();
+   }
+  });
+  assert.equal((await iter.next()).value.length,564);
+  assert.deepEqual((await iter.next()).value,ts());
+  assert.equal(calls,2,'only one failed 5xx and one successful retry');
+  await iter.return();
+ }
+});
+
+test('repeated upstream 503 exhausts only two attempts; no reconnect storm',async()=>{
+ const initial=failingResponse(),reader=initial.body.getReader();
+ const first=(await reader.read()).value;
+ let calls=0;
+ const iter=liveTsRecoveryBytes({
+  first,reader,controller:new AbortController(),target:url,waitRetry:immediately,
+  fetchImpl:async()=>{calls++;return new Response('temporary outage',{status:503});}
+ });
+ assert.equal((await iter.next()).value.length,564);
+ await assert.rejects(async()=>await iter.next(),/live_ts_reconnect_exhausted/);
+ assert.equal(calls,2);
+});
+
+test('midstream retry never bypasses HTTP denial or invalid TS response',async()=>{
+ for(const status of [401,403,404,429,456,509]){
+  const initial=failingResponse(),reader=initial.body.getReader();
+  const first=(await reader.read()).value;
+  let calls=0;
+  const iter=liveTsRecoveryBytes({
+   first,reader,controller:new AbortController(),target:url,waitRetry:immediately,
+   fetchImpl:async()=>{calls++;return new Response('provider denied',{status});}
+  });
+  assert.equal((await iter.next()).value.length,564);
+  await assert.rejects(async()=>await iter.next(),/live_ts_reconnect_denied/);
+  assert.equal(calls,1);
+ }
+});
