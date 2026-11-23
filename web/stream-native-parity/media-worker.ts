@@ -1046,6 +1046,14 @@ const server=Bun.serve({port:Number(Bun.env.PORT||3000),idleTimeout:255,async fe
   if(!hlsCheck&&status){hlsCheck=hlsSelfTest();console.info('VIDAA_HLS_SELFTEST',hlsCheck)}
   if(!vodSeekCheck&&status&&hlsCheck?.ok){vodSeekCheck=fullVodSeekSelfTest();console.info('BLOFY_FULL_VOD_SELFTEST',vodSeekCheck)}
   const ok=status&&SECRET.length===64&&!!hlsCheck?.ok&&!!vodSeekCheck?.ok;
+  // Aggregate anonymous origin stability counters: no source IDs, tokens,
+  // hostnames, viewer identifiers or channel names leave the worker.
+  const now=Date.now();
+  for(const [key,event] of liveSourceFailureWindows){
+   if(now-event.lastAt>120000)liveSourceFailureWindows.delete(key)
+  }
+  const coolingSources=Array.from(liveSourceFailureWindows.values())
+   .filter(event=>event.retryAt>now).length;
   return json(ok?200:503,{ok,service:'blofy-vidaa-media-compat',ffmpegAvailable:status,
    hls:hlsCheck,vodSeek:vodSeekCheck,activeJobs:active,limit:MAX_JOBS,liveQuality:videoQualityProfile('live').name,vodQuality:videoQualityProfile('movie').name,
    sharedLive:{enabled:String(Bun.env.VIDAA_LIVE_SHARE_SAME_BEARER||'')==='1',
@@ -1053,7 +1061,8 @@ const server=Bun.serve({port:Number(Bun.env.PORT||3000),idleTimeout:255,async fe
      .reduce((sum,group)=>sum+group.viewers.size,0),
     pending:Array.from(sharedLiveGroups.values())
      .reduce((sum,group)=>sum+(group.pendingViewers?.size||0),0),
-    maxPerGroup:MAX_SHARED_LIVE_VIEWERS}})
+    maxPerGroup:MAX_SHARED_LIVE_VIEWERS},
+   originStability:{coolingSources,recentSources:liveSourceFailureWindows.size}})
  }
  if(path.startsWith('/hls/'))return hlsRequest(req,url);
  if(req.method!=='GET')return json(405,{error:'method_not_allowed'});
