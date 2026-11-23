@@ -47,3 +47,14 @@ test('minute watcher is source-specific, durable across replicas and respects im
  assert.match(watcher,/result\?\.details\?\.\[x\.mediaType\]/);
  assert.match(ui,/minuteCatalogWatchStatus/);
 });
+
+test('manual hidden and custom category order survive automatic provider re-import',async()=>{
+ const admin=await readFile(new URL('../src/xtream-admin-hook.mjs',import.meta.url),'utf8');
+ assert.match(admin,/ADD COLUMN IF NOT EXISTS manual_sort BOOLEAN NOT NULL DEFAULT FALSE/);
+ const flush=admin.slice(admin.indexOf('async function flushCategoryBatch('),admin.indexOf('async function flushItemBatch('));
+ assert.match(flush,/CASE WHEN blofy_xtream_categories\.manual_sort/);
+ assert.doesNotMatch(flush,/enabled=EXCLUDED.enabled/);
+ const sort=admin.slice(admin.indexOf('async function autoSortCategories('),admin.indexOf('async function moveCategory('));
+ assert.match(sort,/manual_sort=\$4::boolean/);
+ assert.match(sort,/mode!=='provider'/);
+});
