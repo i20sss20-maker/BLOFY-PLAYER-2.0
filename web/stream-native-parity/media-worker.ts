@@ -428,7 +428,7 @@ async function fullVodRequest(req,url){
    // Never kill a still-encoding adjacent chunk; that can corrupt a segment
    // that is already being fetched, causing an avoidable black screen.
    if(session.proc&&!session.finished&&first===session.chunkStart+FULL_CHUNK_SEGMENTS){
-    const old=session.proc,deadline=Date.now()+14000;
+    const old=session.proc,deadline=Date.now()+26000;
     while(session.proc===old&&!session.finished&&!session.stopped&&!req.signal.aborted&&Date.now()<deadline)await nap(180);
     if(session.stopped||req.signal.aborted)return json(410,{error:'vod_request_cancelled'});
     if(session.proc===old&&!session.finished){
