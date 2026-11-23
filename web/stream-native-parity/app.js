@@ -1173,9 +1173,9 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
  function checkStall(){
   if(!alive()||video.paused)return;
   if(rec.stallTimer)clearTimeout(rec.stallTimer);
-  // A worker may wait 14s for the previous chunk, then up to 28s for a
-  // requested segment. Restarting the full VOD engine after only 13s
-  // repeatedly aborted healthy encoding in progress.
+  // The worker can finish a previous 24-second chunk for up to 26s,
+  // followed by a 28s segment wait. Avoid canceling useful FFmpeg work:
+  // Hls.js handles the 68s fragment deadline before this recovery.
   var observed=Number(video.currentTime)||0;
   rec.stallTimer=setTimeout(function(){
    rec.stallTimer=null;
@@ -1183,18 +1183,19 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
    // Ignore an earlier buffering event if new video frames have arrived.
    if(Math.abs((Number(video.currentTime)||0)-observed)>0.9)return;
    recoverFilm()
-  },48000)
+  },72000)
  }
  rec.timer=setTimeout(function(){
   if(alive()&&!rec.ready)playerStatus('جار تجهيز الفيديو من المصدر…')
  },16000);
  // A source can hang before it emits a video waiting/stalled event. Ensure
  // the initial spinner does not remain forever; allow enough time for a slow
- // on-demand first segment before a bounded recovery attempt.
+ // on-demand first segment before a bounded recovery attempt. Wait beyond
+ // the worker's 75s watchdog so its own timeout governs stalled encoders.
  rec.startupTimer=setTimeout(function(){
   rec.startupTimer=null;
   if(alive()&&!rec.ready&&!video.paused)recoverFilm()
- },58000);
+ },82000);
  video.onplaying=function(){
   if(!alive())return;
   rec.ready=true;if(rec.timer)clearTimeout(rec.timer);
