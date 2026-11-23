@@ -510,6 +510,34 @@ test('preview-to-fullscreen awaits HLS stop acknowledgement before opening a new
 });
 
 
+test('read-only live fan-out health panel exposes no subscriber data and never toggles sharing',async({page})=>{
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ let enabled=false,checks=0;
+ await page.route('**/api/compatible/health',async route=>{
+  checks++;
+  await route.fulfill({status:200,contentType:'application/json',
+   body:JSON.stringify({ok:true,activeJobs:enabled?2:1,capacity:2,
+    sharedLive:{enabled,groups:enabled?1:0,viewers:enabled?2:0,maxPerGroup:4}})})
+ });
+ await page.goto('http://127.0.0.1:3000/');
+ await page.locator('[data-go="settings"]').first().click();
+ const button=page.locator('#check-live-share-health'),status=page.locator('#live-share-health-status');
+ await expect(button).toBeVisible();
+ await button.click();
+ await expect(status).toContainText('معطلة لحماية الاستقرار');
+ await expect(status).toContainText('محركات الفيديو النشطة: 1 من 2');
+ expect(checks).toBe(1);
+ enabled=true;
+ await button.click();
+ await expect(status).toContainText('مفعلة في التجربة');
+ await expect(status).toContainText('المشاهدون المشاركون: 2');
+ await expect(status).toContainText('المحركات ممتلئة');
+ expect(checks).toBe(2);
+ expect(await status.textContent()).not.toContain('Bearer ');
+ expect(await status.textContent()).not.toContain('sid-');
+ expect(errors).toEqual([])
+});
+
 test('VIDAA settings work without browser popup and show local HLS/fullscreen capabilities',async({page})=>{
  const dialogs=[];page.on('dialog',d=>{dialogs.push(d.type());d.dismiss()});
  await page.goto('http://127.0.0.1:3000/');
