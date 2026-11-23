@@ -297,3 +297,13 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible,.remote-focus{
 @media(max-width:730px){.catalog .preview{height:auto;min-height:440px}
  .catalog .preview .preview-video-wrap{min-height:200px;height:210px;flex:none}
  .epg-content{max-height:120px}}
+
+
+/* Live TV schedule in the full-screen player (uses the same safe EPG renderer). */
+.player-live-guide{background:rgba(8,26,32,.88);border:1px solid #89d6cc47;
+ border-radius:12px;padding:9px 12px;max-height:150px;overflow:auto;max-width:600px}
+.player-live-guide .small{display:block;color:#a7e6de;font-size:11px;margin-bottom:4px}
+.player-live-guide .epg-entry{padding:4px 0}
+.player-live-guide .epg-content{max-height:110px}
+@media(max-width:730px){.player-live-guide{max-height:112px;padding:5px 9px}
+ .player-live-guide .epg-entry:nth-of-type(n+4){display:none}}
