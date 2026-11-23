@@ -16,9 +16,11 @@ const MAX_JOBS=2;
  */
 function videoQualityProfile(kind){
  const envName=kind==='live'?'VIDAA_LIVE_VIDEO_PROFILE':'VIDAA_VOD_VIDEO_PROFILE';
- const requested=String(Bun.env[envName]||'720').trim();
+ // Source-copy handles supported H.264 live video without re-encoding.
+ // VOD compatibility must not force a 1080p film into 720p by default.
+ const requested=String(Bun.env[envName]||(kind==='live'?'720':'1080')).trim();
  const name=requested==='1080'?'1080':requested==='480'?'480':'720';
- return name==='1080'?{name,width:1920,height:1080,maxrate:'5800k',bufsize:'9600k',crf:'20',level:'4.1'}:
+ return name==='1080'?{name,width:1920,height:1080,maxrate:'8500k',bufsize:'14000k',crf:'18',level:'4.1'}:
   name==='480'?{name,width:854,height:480,maxrate:'1700k',bufsize:'3100k',crf:'21',level:'3.1'}:
   {name,width:1280,height:720,maxrate:'3400k',bufsize:'6400k',crf:'20',level:'4.0'}
 }
@@ -26,7 +28,8 @@ function compatibleVideoArgs(kind,gopSeconds=1){
  const quality=videoQualityProfile(kind);
  // min(iw)/min(ih) avoids fake upscaling if the source is only SD.
  const filter="scale=w='min(iw,"+quality.width+")':h='min(ih,"+quality.height+")':force_original_aspect_ratio=decrease:force_divisible_by=2";
- return ['-c:v','libx264','-preset','superfast','-tune','zerolatency',
+ return ['-c:v','libx264','-preset',kind==='live'?'superfast':'veryfast',
+  '-tune',kind==='live'?'zerolatency':'film',
   '-profile:v','main','-level',quality.level,'-pix_fmt','yuv420p',
   '-vf',filter,'-g',String(gopSeconds*25),'-keyint_min',String(gopSeconds*25),
   '-sc_threshold','0','-crf',quality.crf,'-maxrate',quality.maxrate,
