@@ -1265,6 +1265,7 @@ function stopPlayback(sendStop){
   }
   if(old.startupTimer)clearTimeout(old.startupTimer);
   if(old.retryTimer)clearTimeout(old.retryTimer);
+  if(old.capacityTimer)clearTimeout(old.capacityTimer);
   if(old.stableTimer)clearTimeout(old.stableTimer);
   if(old.qualityListener&&old.video){old.video.removeEventListener('loadedmetadata',old.qualityListener);old.video.removeEventListener('resize',old.qualityListener)}
  }catch(e){}
@@ -1346,6 +1347,11 @@ function livePlaybackProgress(record,video,now){
  * Only act after the video was playing; honor explicit user Pause and a hidden
  * browser tab. On a TV the player can become paused after a fatal decoder error.
  */
+function liveCapacityRetryMs(attempt){
+ // Shared-source capacity errors must not trigger an immediate request storm.
+ var n=Math.min(5,Math.max(1,Math.floor(Number(attempt)||1)));
+ return 2500+n*2200
+}
 function liveUnexpectedPause(record,video,userPaused,hidden,now){
  if(userPaused||hidden||video.seeking||(!video.paused&&!video.ended)){
   record.unexpectedPauseAt=0;return false
@@ -1650,6 +1656,20 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
     diagnose('live','hls_error','video',0);
     var code=Number(detail.response&&detail.response.code)||0;
     if(record.ultra&&(code===429||code===503)&&setCompatibility(true,true))return;
+    if(code===429&&record.capacityRetries<5){
+     // Only two worker slots exist on the pilot. Back off instead of
+     // burning connection attempts, which could cut off healthy viewers.
+     record.capacityRetries=(record.capacityRetries||0)+1;
+     var delay=liveCapacityRetryMs(record.capacityRetries);
+     status('المحرك مشغول مؤقتًا؛ إعادة المحاولة خلال '+Math.ceil(delay/1000)+' ثوانٍ…');
+     if(record.capacityTimer)clearTimeout(record.capacityTimer);
+     record.capacityTimer=setTimeout(function(){
+      record.capacityTimer=null;
+      if(!alive())return;
+      try{engine.startLoad()}catch(e){recoverConnection()}
+     },delay);
+     return
+    }
     if(record.retries<3&&detail.type===window.Hls.ErrorTypes.NETWORK_ERROR){
      record.retries++;status('انقطاع مؤقت في البث؛ جار استعادة الاتصال…');try{engine.startLoad()}catch(e){};return;
     }
