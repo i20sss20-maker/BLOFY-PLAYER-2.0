@@ -102,3 +102,27 @@ test('source sync checks unique inserted token counts BEFORE any stale-record pr
   assert.match(source,/UPDATE blofy_xtream_categories c SET item_count/);
   assert.doesNotMatch(sync.slice(0,finalize),/DELETE FROM blofy_xtream_/);
 });
+
+test('operator-approved and independently verified provider reduction can be published',()=>{
+  assert.deepEqual(assessXtreamSync({
+    previousItems:30000,importedItems:30,previousCategories:120,
+    importedCategories:3,verifiedPackageReduction:true
+  }),{preserveCategories:false,items:30,categories:3});
+  assert.deepEqual(assessXtreamSync({
+    previousItems:900,importedItems:0,previousCategories:5,
+    importedCategories:0,verifiedPackageReduction:true
+  }),{preserveCategories:false,items:0,categories:0});
+  assert.throws(()=>assessXtreamSync({
+    previousItems:30000,importedItems:30,previousCategories:120,importedCategories:3
+  }),/xtream_catalog_suspicious_drop_preserved/);
+});
+test('package verification reads upstream again and requires exact admin source confirmation',async()=>{
+  const source=await readFile(new URL('../src/xtream-admin-hook.mjs',import.meta.url),'utf8');
+  const ui=await readFile(new URL('../web/sources-admin.js',import.meta.url),'utf8');
+  assert.match(source,/async function verifyProviderPackageReduction\(/);
+  assert.match(source,/xtream_package_second_snapshot_mismatch/);
+  assert.match(source,/await verifyProviderPackageReduction\(row,mediaType,creds,syncToken,importedCount\)/);
+  assert.match(source,/String\(body\.confirmation\|\|''\)!==String\(source\.name\|\|''\)/);
+  assert.match(ui,/action==='sync-package'/);
+  assert.match(ui,/confirmProviderPackage:true,confirmation:confirmName/);
+});

@@ -1661,10 +1661,37 @@ async function syncItems(row, mediaType, creds, syncToken, getM3u) {
   return accepted;
 }
 
+// A provider can deliberately shrink an Xtream package, but an HTTP 200
+// containing a truncated list is not proof of deletion. Verify a SECOND
+// complete upstream listing against the exact distinct imported IDs before
+// allowing an operator-confirmed 90-100% reduction to become visible.
+async function verifyProviderPackageReduction(row,mediaType,creds,syncToken,expectedCount){
+  const rows=await pool.query(`SELECT source_id FROM blofy_xtream_items
+    WHERE server_id=$1 AND media_type=$2 AND sync_token=$3`,[row.id,mediaType,syncToken]);
+  const unmatched=new Set(rows.rows.map(x=>String(x.source_id)));
+  if(unmatched.size!==expectedCount)
+    throw new Error('xtream_package_first_snapshot_mismatch');
+  const response=await checkedFetch(
+    xtreamApiUrl(row.base_url,creds.username,creds.password,TYPE_ACTIONS[mediaType].items),
+    {timeoutMs:180000,sourceId:row.id});
+  let match=true;
+  const seen=new Set();
+  await parseTopLevelJsonArray(response.body,async raw=>{
+    const item=normalizeXtreamItem(mediaType,raw,syncToken);
+    if(!item||seen.has(item.sourceId))return;
+    seen.add(item.sourceId);
+    if(!unmatched.delete(item.sourceId))match=false;
+  });
+  if(!match||unmatched.size!==0||seen.size!==expectedCount)
+    throw new Error('xtream_package_second_snapshot_mismatch');
+  return true;
+}
+
 async function finalizeTypeSync(serverId, mediaType, syncToken,{preserveCategories=false}={}) {
   // A 290k-row catalog must not be deleted in one transaction. That held
   // locks long enough to block source pause/delete, and then timed out.
   // Keep imported rows, prune stale ones in committed bounded batches.
+  let removedItems=0,removedCategories=0;
   for(const table of preserveCategories?['blofy_xtream_items']:['blofy_xtream_items','blofy_xtream_categories']){
     for(;;){
       if(cancelledSources.has(serverId))throw Object.assign(new Error('xtream_sync_cancelled'),{status:409});
@@ -1693,6 +1720,8 @@ async function finalizeTypeSync(serverId, mediaType, syncToken,{preserveCategori
             [serverId,mediaType,JSON.stringify(result.rows)]);
         }
         await client.query('COMMIT');
+        if(table==='blofy_xtream_items')removedItems+=result.rowCount;
+        else removedCategories+=result.rowCount;
       } catch(error) {
         await client.query('ROLLBACK').catch(()=>{});
         throw error;
@@ -1720,6 +1749,7 @@ async function finalizeTypeSync(serverId, mediaType, syncToken,{preserveCategori
     WHERE c.server_id=counts.server_id AND c.media_type=counts.media_type
       AND c.source_category_id=counts.source_category_id
       AND c.item_count IS DISTINCT FROM counts.count`,[serverId,mediaType]);
+  return {removedItems,removedCategories};
 }
 
 async function calculateCounts(serverId) {
@@ -1732,7 +1762,7 @@ async function calculateCounts(serverId) {
   return counts;
 }
 
-async function syncServer(id, requestedTypes = ['live','movie','series']) {
+async function syncServer(id, requestedTypes = ['live','movie','series'], {confirmProviderPackage=false}={}) {
   if (syncLocks.has(id)) throw Object.assign(new Error('xtream_sync_in_progress'), { status: 409 });
   const row = await serverById(id);
   if (!row) throw Object.assign(new Error('xtream_server_not_found'), { status: 404 });
@@ -1782,15 +1812,23 @@ async function syncServer(id, requestedTypes = ['live','movie','series']) {
           (SELECT COUNT(*)::int FROM blofy_xtream_items WHERE server_id=$1 AND media_type=$2 AND sync_token=$3) AS items,
           (SELECT COUNT(*)::int FROM blofy_xtream_categories WHERE server_id=$1 AND media_type=$2 AND sync_token=$3) AS categories`,
           [id,mediaType,syncToken])).rows[0];
+        const previousCount=Number(before.items),importedCount=Number(imported.items);
+        const largeReduction=importedCount===0||
+          (previousCount>=50&&importedCount<Math.ceil(previousCount*0.10));
+        const verifiedPackageReduction=Boolean(confirmProviderPackage&&largeReduction&&
+          await verifyProviderPackageReduction(row,mediaType,creds,syncToken,importedCount));
         const decision=assessXtreamSync({
-          previousItems:Number(before.items),importedItems:Number(imported.items),
-          previousCategories:Number(before.categories),importedCategories:Number(imported.categories)
+          previousItems:previousCount,importedItems:importedCount,
+          previousCategories:Number(before.categories),importedCategories:Number(imported.categories),
+          verifiedPackageReduction
         });
         if (cancelledSources.has(id)) throw Object.assign(new Error('xtream_sync_cancelled'),{status:409});
-        await finalizeTypeSync(id, mediaType, syncToken,{preserveCategories:decision.preserveCategories});
+        const removed=await finalizeTypeSync(id, mediaType, syncToken,{preserveCategories:decision.preserveCategories});
         if(decision.preserveCategories)failures.push(mediaType+': xtream_categories_preserved');
         details[mediaType] = { categories:decision.preserveCategories?Number(before.categories):decision.categories,
-          items:decision.items,preservedOldCategories:decision.preserveCategories };
+          items:decision.items,preservedOldCategories:decision.preserveCategories,
+          removedItems:removed.removedItems,removedCategories:removed.removedCategories,
+          verifiedPackageReduction };
       }catch(error){
         failures.push(mediaType+': '+redactXtreamError(error));
         console.warn('Xtream catalog type failed:',id,mediaType,redactXtreamError(error));
@@ -2090,7 +2128,7 @@ function startSync(id, types, options={}) {
         catch{console.warn('BLOFY_STUDIO_CATALOG_OUTCOME',{code:'operator_outcome_record_failed'});}
       };
       try{
-        const result=await syncServer(id,types);
+        const result=await syncServer(id,types,options);
         await settled(result.partialWarning?'partial':'completed');
         return result;
       }catch(error){
@@ -2102,7 +2140,7 @@ function startSync(id, types, options={}) {
       if(daily)await markDailyCatalogRunning(controlPool,{
        sourceId:id,day:options.day}).catch(()=>{});
       try{
-        const result=await syncServer(id,types);
+        const result=await syncServer(id,types,options);
         if(daily)await recordDailyCatalogOutcome(controlPool,{
          sourceId:id,day:options.day,
          state:result.partialWarning?'partial':'completed'}).catch(()=>{});
@@ -4619,8 +4657,14 @@ http.createServer = function withBlofyXtream(listener) {
           if(!source)return json(res,404,{error:'xtream_server_not_found'});
           if(!source.enabled)return json(res,409,{error:'xtream_source_paused'});
           if(!selected.length)return json(res,400,{error:'xtream_sync_types_invalid'});
-          const job=startSync(id,selected);
-          return json(res, 202, { started: true, queued:job.queued,queuePosition:job.position,id,types:selected });
+          const confirmProviderPackage=body.confirmProviderPackage===true;
+          if(confirmProviderPackage&&(
+            String(body.confirmation||'')!==String(source.name||'')||
+            source.publish_catalog!==true))
+            return json(res,400,{error:'xtream_package_reduction_confirmation_required'});
+          const job=startSync(id,selected,{confirmProviderPackage});
+          return json(res, 202, { started: true, queued:job.queued,queuePosition:job.position,id,types:selected,
+            confirmedPackageReduction:confirmProviderPackage });
         }
       }
 

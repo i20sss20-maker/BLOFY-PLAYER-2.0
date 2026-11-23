@@ -250,6 +250,7 @@ function serverCard(item) {
     [item.enabled ? '⏸ إيقاف المصدر' : '▶ تفعيل المصدر', 'toggle-enabled', item.enabled ? 'button source-toggle-stop' : 'button primary'],
     [item.publishCatalog ? 'إخفاء المحتوى عن العملاء' : 'نشر المحتوى للعملاء', 'toggle-publish', item.publishCatalog ? 'button ghost' : 'button primary'],
     ['⟳ مزامنة المحتوى', 'sync-all', 'button'],
+    ['⚠️ تحديث البكج واعتماد حذف المحتوى', 'sync-package', 'button danger'],
     ['🔎 تشخيص الاتصال الذكي', 'smart-connection', 'button primary'],
     ['فحص الاتصال', 'test', 'button ghost'],
     ['اختبار بث قناة', 'probe-live', 'button ghost'],
@@ -263,6 +264,14 @@ function serverCard(item) {
     buttons.splice(2,0,['⏹ إلغاء المزامنة','cancel-sync','button ghost']);
   }
   buttons.forEach(([text, action, cls]) => {
+    if(action==='sync-package'){
+      const button=make('button',cls,text);
+      button.type='button';button.dataset.action=action;
+      button.title='مزامنة باقة Xtream مع إمكانية إزالة المحتوى المحذوف بعد التحقق من رد المزود مرتين';
+      button.disabled=Boolean(item.syncing);
+      actions.append(button);
+      return;
+    }
     if(action==='retry-unavailable'){
       const button=make('button',cls,text);
       button.type='button';button.dataset.action=action;
@@ -1131,6 +1140,18 @@ async function handleServerAction(item, card, button) {
         // because the follow-up display refresh timed out.
         showMessage('حُفظ طلب الحذف في قاعدة البيانات، لكن تعذّر تأكيد تحديث القائمة: '+readError.message,'error');
       }
+    } else if (action==='sync-package') {
+      const confirmName=window.prompt('تحديث باقة المصدر «'+item.name+'» قد يزيل آلاف العناصر غير الموجودة عند مزود Xtream. سيتحقق الخادم من أي انخفاض كبير بقراءة ثانية قبل اعتماد الحذف. للتأكيد اكتب اسم المصدر كما هو: '+item.name);
+      if(confirmName!==item.name){
+        showMessage('تم إلغاء تحديث البكج: اسم المصدر غير مطابق.');
+        return;
+      }
+      const queued=await api('/api/v1/admin/xtream/servers/'+encodeURIComponent(item.id)+'/sync',{
+        method:'POST',body:JSON.stringify({types:['live','movie','series'],confirmProviderPackage:true,confirmation:confirmName})
+      });
+      showMessage(queued.queued
+        ?'تم قبول تحديث باقة «'+item.name+'» في الانتظار. إزالة المحتوى القديم مشروطة بنجاح التحقق.'
+        :'بدأ تحديث باقة «'+item.name+'». لا يعتبر الحذف مكتملاً قبل انتهاء المزامنة وظهور الأعداد الجديدة.');
     } else if (action.startsWith('sync-')) {
       const type = action === 'sync-all' ? ['live','movie','series'] : [action.replace('sync-', '')];
       const queued=await api(`/api/v1/admin/xtream/servers/${item.id}/sync`, { method: 'POST', body: JSON.stringify({ types: type }) });
