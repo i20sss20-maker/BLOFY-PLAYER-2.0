@@ -2502,6 +2502,8 @@ function directional(e){
   if(editable&&code===8)return;
   if(S.route==='login')return;
   if(S.route==='player'){
+   var choice=document.getElementById('player-choice-panel');
+   if(choice&&!choice.hidden&&S.playerView&&S.playerView.closePlayerChoices){S.playerView.closePlayerChoices();e.preventDefault();return}
    var channels=document.getElementById('player-channel-panel');
    if(channels&&!channels.hidden&&S.playerView&&S.playerView.closeChannels){S.playerView.closeChannels();e.preventDefault();return}
    var panel=document.getElementById('player-more-panel');
