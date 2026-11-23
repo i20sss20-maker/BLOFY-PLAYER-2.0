@@ -8,6 +8,31 @@ const SECRET=String(Bun.env.VIDAA_COMPAT_KEY||'');
 const BASE='https://blofyplayer.com/api/v1/stream/media/';
 let active=0;
 const MAX_JOBS=2;
+/* Pilot quality profiles: never enlarge a low-resolution source.
+ * The previous forced 854x480 / 900 kbit/s severely degraded every HD film
+ * and channel. 720p is the compatibility-first default; 1080p requires a
+ * deliberate preview-worker opt-in after CPU, buffering, and TV validation.
+ * Both use bounded CRF+VBV to avoid unbounded bitrate spikes.
+ */
+function videoQualityProfile(kind){
+ const envName=kind==='live'?'VIDAA_LIVE_VIDEO_PROFILE':'VIDAA_VOD_VIDEO_PROFILE';
+ const requested=String(Bun.env[envName]||'720').trim();
+ const name=requested==='1080'?'1080':requested==='480'?'480':'720';
+ return name==='1080'?{name,width:1920,height:1080,maxrate:'5800k',bufsize:'9600k',crf:'20',level:'4.1'}:
+  name==='480'?{name,width:854,height:480,maxrate:'1700k',bufsize:'3100k',crf:'21',level:'3.1'}:
+  {name,width:1280,height:720,maxrate:'3400k',bufsize:'6400k',crf:'20',level:'4.0'}
+}
+function compatibleVideoArgs(kind,gopSeconds=1){
+ const quality=videoQualityProfile(kind);
+ // min(iw)/min(ih) avoids fake upscaling if the source is only SD.
+ const filter="scale=w='min(iw,"+quality.width+")':h='min(ih,"+quality.height+")':force_original_aspect_ratio=decrease:force_divisible_by=2";
+ return ['-c:v','libx264','-preset','superfast','-tune','zerolatency',
+  '-profile:v','main','-level',quality.level,'-pix_fmt','yuv420p',
+  '-vf',filter,'-g',String(gopSeconds*25),'-keyint_min',String(gopSeconds*25),
+  '-sc_threshold','0','-crf',quality.crf,'-maxrate',quality.maxrate,
+  '-bufsize',quality.bufsize]
+}
+
 
 const hlsSessions=new Map();
 const hlsRoot=join(tmpdir(),'blofy-vidaa-hls-sessions');
@@ -82,9 +107,9 @@ async function startHls({bearer,kind,id,ext,track,key}){
    return {error:'hls_start_cancelled',status:409}
   }
   if(!upstream.ok||!upstream.body){const status=upstream.status;stopHls(session,'upstream_'+status);return {error:status===401?'invalid_session':status===404?'media_missing':status>=300&&status<400?'media_redirect_unsupported':'media_upstream_error',status:status===401?401:502}}
-  const videoArgs=['-c:v','libx264','-preset','ultrafast','-tune','zerolatency','-profile:v','baseline','-level','3.1','-pix_fmt','yuv420p','-vf','scale=854:480:force_original_aspect_ratio=decrease:force_divisible_by=2,fps=25','-g','25','-keyint_min','25','-sc_threshold','0','-b:v','900k','-maxrate','1100k','-bufsize','1800k'];
+  const videoArgs=compatibleVideoArgs(kind);
   const args=['-hide_banner','-loglevel','warning','-nostdin','-analyzeduration','1200000','-probesize','1200000','-fflags','+genpts',...(kind==='live'?['-re']:[]),'-i','pipe:0',
-   '-map','0:v:0','-map','0:a:'+track+'?',...videoArgs,'-c:a','aac','-profile:a','aac_low','-b:a','96k','-ac','2','-ar','48000',
+   '-map','0:v:0','-map','0:a:'+track+'?',...videoArgs,'-c:a','aac','-profile:a','aac_low','-b:a','160k','-ac','2','-ar','48000',
    '-f','hls','-hls_time','1','-hls_segment_type','mpegts','-hls_segment_filename',join(dir,'seg-%06d.ts')];
   if(kind==='live')args.push('-hls_list_size','8','-hls_delete_threshold','24','-hls_flags','delete_segments+independent_segments+temp_file');
   else args.push('-hls_list_size','0','-hls_playlist_type','event','-hls_flags','independent_segments');
@@ -230,10 +255,8 @@ async function startVod({bearer,kind,id,ext,track,start,key}){
    '-reconnect','1','-reconnect_streamed','1','-reconnect_on_network_error','1','-reconnect_delay_max','2',
    '-ss',String(start),'-readrate','2','-i',src,
    '-map','0:v:0','-map','0:a:'+track+'?',
-   '-c:v','libx264','-preset','ultrafast','-profile:v','baseline','-level','3.1','-pix_fmt','yuv420p',
-   '-vf','scale=854:480:force_original_aspect_ratio=decrease:force_divisible_by=2,fps=25',
-   '-g','25','-keyint_min','25','-sc_threshold','0','-b:v','900k','-maxrate','1100k','-bufsize','1800k',
-   '-c:a','aac','-profile:a','aac_low','-b:a','96k','-ac','2','-ar','48000',
+   ...compatibleVideoArgs(kind),
+   '-c:a','aac','-profile:a','aac_low','-b:a','160k','-ac','2','-ar','48000',
    '-f','hls','-hls_time','1','-hls_segment_type','mpegts',
    '-hls_segment_filename',join(dir,'seg-%06d.ts'),
    '-hls_list_size','0','-hls_playlist_type','event','-hls_flags','independent_segments+temp_file',
@@ -382,11 +405,8 @@ function fullVodChunk(session,first){
  '-reconnect','1','-reconnect_streamed','1','-reconnect_on_network_error','1','-reconnect_delay_max','2',
  '-ss',String(begin),'-i',source,'-t',String(seconds),
  '-map','0:v:0','-map','0:a:'+session.track+'?',
- '-c:v','libx264','-preset','ultrafast','-profile:v','baseline','-level','3.1','-pix_fmt','yuv420p',
- '-vf','scale=854:480:force_original_aspect_ratio=decrease:force_divisible_by=2,fps=25',
- '-g','100','-keyint_min','100','-sc_threshold','0','-force_key_frames','expr:gte(t,n_forced*4)',
- '-b:v','900k','-maxrate','1100k','-bufsize','1800k',
- '-c:a','aac','-b:a','96k','-ac','2','-ar','48000',
+ ...compatibleVideoArgs(session.kind,4),'-force_key_frames','expr:gte(t,n_forced*4)',
+ '-c:a','aac','-b:a','160k','-ac','2','-ar','48000',
  '-output_ts_offset',String(begin),'-f','hls','-hls_time','4','-hls_segment_type','mpegts',
  '-hls_list_size','0','-hls_playlist_type','vod','-start_number',String(first),
  '-hls_flags','independent_segments+temp_file',
@@ -675,7 +695,7 @@ const server=Bun.serve({port:Number(Bun.env.PORT||3000),idleTimeout:255,async fe
   if(!vodSeekCheck&&status&&hlsCheck?.ok){vodSeekCheck=fullVodSeekSelfTest();console.info('BLOFY_FULL_VOD_SELFTEST',vodSeekCheck)}
   const ok=status&&SECRET.length===64&&!!hlsCheck?.ok&&!!vodSeekCheck?.ok;
   return json(ok?200:503,{ok,service:'blofy-vidaa-media-compat',ffmpegAvailable:status,
-   hls:hlsCheck,vodSeek:vodSeekCheck,activeJobs:active,limit:MAX_JOBS})
+   hls:hlsCheck,vodSeek:vodSeekCheck,activeJobs:active,limit:MAX_JOBS,liveQuality:videoQualityProfile('live').name,vodQuality:videoQualityProfile('movie').name})
  }
  if(path.startsWith('/hls/'))return hlsRequest(req,url);
  if(req.method!=='GET')return json(405,{error:'method_not_allowed'});
