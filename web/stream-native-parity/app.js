@@ -2273,11 +2273,11 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  if(qualityButton)qualityButton.onclick=function(){
   var engine=S.play&&S.play.engine,levels=engine&&engine.levels||[];
   if(!engine||!levels.length){playerStatus('المصدر يحدد جودة الفيديو تلقائيًا ولا يتيح دقات متعددة.');return}
-  var options=[{name:'تلقائي',selected:Number(engine.currentLevel)<0,
+  var options=[{name:'تلقائي',selected:engine.autoLevelEnabled!==false,
    select:function(){engine.currentLevel=-1;playerStatus('جودة تلقائية')}}];
   for(var i=0;i<levels.length;i++)(function(level,index){
    var name=level.height?level.height+'p':('الجودة '+(index+1));
-   options.push({name:name,selected:engine.currentLevel===index,
+   options.push({name:name,selected:engine.autoLevelEnabled===false&&engine.currentLevel===index,
     select:function(){engine.currentLevel=index;playerStatus('جودة '+name)}})
   })(levels[i],i);
   showPlayerChoices('جودة الفيديو',options,this)
