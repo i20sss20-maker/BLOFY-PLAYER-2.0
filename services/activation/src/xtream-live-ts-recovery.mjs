@@ -158,7 +158,11 @@ export async function* liveTsRecoveryBytes({
      const denied=reconnectBudget.claim();
      if(denied)throw Error(denied);
      failedThisDrop++;attempts++;
-     if(!(await waitRetry({attempt:failedThisDrop,signal:clientSignal})))
+     // Only clean EOF gets the faster first retry. Transport errors,
+     // stalled feeds and a second attempt retain normal backoff.
+     // Existing per-viewer and per-source quotas still apply.
+     if(!(await waitRetry({attempt:failedThisDrop,signal:clientSignal,
+       firstAttemptBaseMs:sourceDropReason==='live_ts_source_eof'?300:700})))
       throw Error('live_ts_client_closed');
      const ctl=new AbortController();
      const requestSignal=clientSignal?AbortSignal.any([ctl.signal,clientSignal]):ctl.signal;
