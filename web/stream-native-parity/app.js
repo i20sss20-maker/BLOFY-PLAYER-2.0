@@ -1315,9 +1315,14 @@ function livePlaybackProgress(record,video,now){
  }catch(e){}
  var advancedTime=Number.isFinite(time)&&Number.isFinite(record.lastMediaTime)&&Math.abs(time-record.lastMediaTime)>0.15;
  var advancedFrames=frames!==null&&record.lastVideoFrames!==null&&record.lastVideoFrames!==undefined&&frames>record.lastVideoFrames;
+ // A live audio clock may keep currentTime moving while the picture freezes.
+ // If real decoded-frame counters are usable, trust them over audio time.
+ // Browsers reporting 0 or unavailable frames retain the time-based fallback.
+ var frameCounterUsable=frames!==null&&frames>=5&&record.lastVideoFrames!==null&&record.lastVideoFrames!==undefined;
+ var visualProgress=frameCounterUsable?advancedFrames:(advancedTime||advancedFrames);
  if(Number.isFinite(time))record.lastMediaTime=time;
  if(frames!==null)record.lastVideoFrames=frames;
- if(advancedTime||advancedFrames){
+ if(visualProgress){
   record.lastProgressAt=now;record.bufferSince=0;record.stallChecks=0;
   return {advanced:true,idleMs:0}
  }
