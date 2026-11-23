@@ -1094,13 +1094,14 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
   function finish(status){
    if(settled)return;settled=true;clearTimeout(timer);
    if(S.hlsStopEpoch!==token||!video.isConnected||!S.userVerified)return;
-   if(preview&&S.livePreview!==String(id))return;
+   if(preview&&(S.route!=='live'||String(S.selected)!==String(id)))return;
    if(!preview&&(S.route!=='player'||!S.playerView||S.playerView.video!==video||String(S.playerView.id)!==String(id)))return;
    if(status!==200&&status!==404){
     if(!preview)playerStatus('لم يؤكد الخادم إغلاق البث السابق. اضغط إعادة المحاولة.',true);
     else if(statusElement)statusElement.textContent='تعذر تحديث الاتصال، حاول ثانية.';
     return
    }
+   if(preview)S.livePreview=String(id);
    playHls(video,kind,id,extension,track,statusElement,preview,recoveryAttempt)
   }
   api('POST','/api/hls/'+key+'/stop',{},function(st){finish(st)});
@@ -1139,7 +1140,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
  video.onerror=function(){if(alive()){status('تعذر تشغيل HLS على هذا الجهاز (رمز '+(video.error?video.error.code:0)+').');if(!preview)recoverConnection()}};
  video.onplaying=function(){
   if(!alive())return;
-  record.ready=true;record.retries=0;record.stallChecks=0;
+  record.ready=true;record.retries=0;record.stallChecks=0;record.bufferSince=0;
   if(record.startupTimer){clearTimeout(record.startupTimer);record.startupTimer=null}
   if(record.stallTimer){clearTimeout(record.stallTimer);record.stallTimer=null}
   if(record.stableTimer)clearTimeout(record.stableTimer);
@@ -1157,6 +1158,8 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
  };
  video.onwaiting=video.onstalled=function(){
   if(!alive()||video.paused)return;
+  if(!record.bufferSince)record.bufferSince=Date.now();
+  if(!preview&&Date.now()-record.bufferSince>36000){recoverConnection();return}
   status(preview?'جار تحميل المعاينة…':'جار تعبئة مخزن البث لتقليل التقطيع…');
   if(record.stallTimer)clearTimeout(record.stallTimer);
   record.stallTimer=setTimeout(function(){
