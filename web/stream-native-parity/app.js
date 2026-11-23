@@ -1185,7 +1185,18 @@ function settingsScreen(){
    ' • ملء الشاشة الأصلي: '+(hasFullscreen?'واجهة برمجية متوفرة':'قد يحتاج وضع ملء الصفحة البديل')+
    ' • HLS الأصلي: '+hls+' • HLS عبر MSE: '+(mse?'متاح مبدئيًا':'غير متاح')+
    ' • H.264/AAC: '+mp4+
-   '. يلزم تشغيل فيديو حقيقي وتجربة ريموت توشيبا لاعتماد التوافق.'
+   '. يلزم تشغيل فيديو حقيقي وتجربة ريموت توشيبا لاعتماد التوافق.';
+  api('GET','/api/compatible/health',null,function(st,data){
+   if(!target||!target.isConnected)return;
+   if(st!==200||!data||!data.ok){
+    target.textContent+=' • خادم الوسائط: تعذّر فحص حالته الآن';
+    return
+   }
+   target.textContent+=' • الحد الأعلى لتحويل البث: '+(data.liveQuality||'غير معروف')+'p'+
+    ' • الحد الأعلى لتحويل الأفلام: '+(data.vodQuality||'غير معروف')+'p'+
+    ' • مشغلات التحويل النشطة: '+(Number(data.activeJobs)||0)+' / '+(Number(data.capacity)||0)+
+    '. قد يستخدم الفيديو الأصلي دقة أعلى عند تشغيله دون تحويل.'
+  })
  };
  document.getElementById('logout').onclick=function(){api('POST','/api/logout',{},function(){login('تم تسجيل الخروج')})}
 }
