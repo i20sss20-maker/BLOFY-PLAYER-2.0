@@ -46,6 +46,12 @@ jobs:
             --duration 26 --viewers 4 \
             --outage-at 8 --outage-seconds 6 \
             --report /tmp/blofy-hls-blackout.json
+      - name: Physically stop and restart synthetic HLS encoder for three concurrent readers
+        run: |
+          python3 ops/stream-endurance/local_hls_canary.py \
+            --duration 28 --viewers 3 \
+            --outage-at 8 --outage-seconds 5 --outage-mode source \
+            --report /tmp/blofy-hls-source-restart.json
       - name: Archive sanitized synthetic QoE evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -55,6 +61,7 @@ jobs:
             /tmp/blofy-canary-report.json
             /tmp/blofy-hls-clean.json
             /tmp/blofy-hls-blackout.json
+            /tmp/blofy-hls-source-restart.json
           if-no-files-found: warn
           retention-days: 7
       - name: State explicit validation boundary
