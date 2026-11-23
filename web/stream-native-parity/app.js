@@ -643,6 +643,7 @@ function details(o){
   buttons+='<button class="btn secondary" data-favorite="'+k+':'+esc(id)+'">'+(S.library[key]?'♥ إزالة من المفضلة':'♡ المفضلة')+'</button>';
   var genre=Array.isArray(gen)?gen.join(' • '):String(gen||'');
   var root=document.getElementById('detail-root');if(!root)return;
+  var savedFocus=root.contains(document.activeElement)?focusIdentity(document.activeElement):null;
   root.innerHTML='<div class="detail-backdrop">'+safeImg(backdrop)+'</div><div class="detail-content">'+
   (artwork?'<img class="detail-poster" src="'+esc(artwork)+'" alt="" >':'<div class="detail-poster"></div>')+
   '<div class="detail-body"><span class="chip primary">'+(k==='movie'?'فيلم':'مسلسل')+'</span><h2 class="detail-title">'+esc(title(item))+'</h2>'+
@@ -651,6 +652,7 @@ function details(o){
   (hasResume?'<div class="detail-stat">آخر مشاهدة: '+formatTime(resume.position)+(resume.duration?' من '+formatTime(resume.duration):'')+'</div>'+(resume.duration?'<span class="progress-meter"><i style="width:'+Math.round(resume.position/resume.duration*100)+'%"></i></span>':''):'')+
   '</div></div><section id="related-root"></section>';
   restoreView('detail');
+  if(savedFocus&&S.keyboardMode){var target=findFocus(savedFocus);if(target)try{target.focus({preventScroll:true})}catch(e){target.focus()}}
  }
  show();
  var endpoint=k==='movie'?'get_vod_info&vod_id=':'get_series_info&series_id=';
@@ -685,7 +687,7 @@ function episodesScreen(opts){
    var eid=String(x.id||''),name=x.title||'الحلقة '+(x.episode_num||i+1),extension=x.container_extension||'mp4';
    var w=getResume('series',eid),pct=w&&w.duration?Math.round(w.position/w.duration*100):0;
    return '<button class="episode-row" data-watch="series:'+esc(eid)+'" data-ext="'+esc(extension)+'" data-name="'+esc(name)+'" data-from="'+(w&&w.position>30?Math.round(w.position):0)+'">'+
-   '<span class="episode-art">'+(art(x.info)||art(x)||art(item)?safeImg(art(x.info)||art(x)||art(item),'episode-cover'):'<span class="episode-placeholder">▤</span>')+'</span><span class="episode-copy"><strong class="episode-name">الحلقة '+esc(x.episode_num||i+1)+' — '+esc(name)+'</strong>'+
+   '<span class="episode-art">'+(art(x.info)||art(x)||art(item)?safeImg(art(x.info)||art(x)||art(item),'episode-cover'):'')+'<span class="episode-placeholder">▤</span>'+'</span><span class="episode-copy"><strong class="episode-name">الحلقة '+esc(x.episode_num||i+1)+' — '+esc(name)+'</strong>'+
    '<span class="episode-meta">الموسم '+esc(S.selectedSeason)+
    (x.info&&x.info.duration||x.duration?' • '+esc(String(x.info&&x.info.duration||x.duration).slice(0,30)):'')+
    (pct?' • متابعة '+pct+'٪':' • اضغط للمشاهدة')+'</span>'+
@@ -2276,6 +2278,10 @@ function directional(e){
   var p=S.playerView,active=document.activeElement;
   if(code===32&&p&&p.toggle&&(!active||active===document.body||active===p.video)){
    e.preventDefault();p.toggle();return
+  }
+  if(p&&p.kind==='live'&&p.switchChannel&&(code===38||code===40)&&
+   (!active||active===document.body||active===p.video)){
+   e.preventDefault();p.switchChannel(code===38?-1:1);return
   }
   if(p&&p.kind!=='live'&&p.seekBy&&(code===37||code===39)&&
    ((!active||active===document.body||active===p.video)||active.id==='seek')){
