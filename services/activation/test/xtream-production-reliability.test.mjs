@@ -12,9 +12,13 @@ test('production Xtream gateway waits for real media before responding to client
   const media=gateway.slice(gateway.indexOf('async function proxyMedia('),gateway.indexOf('function playerServerInfo('));
   assert.match(media,/setTimeout\(\(\) => controller.abort\(new Error\('headers_timeout'\)\), 12000\)/);
   assert.match(media,/await readChunk\(15000\)/);
-  assert.match(media,/await readChunk\(45000\)/);
+  assert.match(media,/await readChunk\(xtreamMediaReadIdleMs\(kind\)\)/);
   assert.match(media,/const first = await readChunk/);
-  assert.ok(media.indexOf('const first = await readChunk')<media.indexOf('res.writeHead(response.status, outputHeaders);\n        const stream'));
+  const firstByteAt=media.indexOf('const first = await readChunk');
+  const responseWriteAt=media.indexOf('res.writeHead(response.status, outputHeaders);',firstByteAt);
+  assert.ok(firstByteAt>0&&responseWriteAt>firstByteAt,
+    'the customer must not receive 200 headers until initial media bytes are validated');
+  assert.match(media.slice(firstByteAt,responseWriteAt),/safeLiveTsRecoveryStart/);
   assert.match(media,/\[408,500,502,503,504\]/);
   assert.match(media,/req.once\('aborted', abort\)/);
   assert.match(media,/res.once\('close', onClose\)/);
