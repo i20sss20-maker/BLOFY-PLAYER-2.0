@@ -15,18 +15,22 @@ const MAX_JOBS=2;
  * Both have bounded CRF+VBV to avoid unlimited bitrate spikes.
  * Final release still requires per-device CPU/decoder and long-play testing.
  */
-function videoQualityProfile(kind){
+function videoQualityProfile(kind, override){
  const envName=kind==='live'?'VIDAA_LIVE_VIDEO_PROFILE':'VIDAA_VOD_VIDEO_PROFILE';
  // Source-copy handles supported H.264 live video without re-encoding.
  // VOD compatibility must not force a 1080p film into 720p by default.
- const requested=String(Bun.env[envName]||(kind==='live'?'720':'1080')).trim();
- const name=requested==='1080'?'1080':requested==='480'?'480':'720';
- return name==='1080'?{name,width:1920,height:1080,maxrate:'8500k',bufsize:'14000k',crf:'18',level:'4.1'}:
+ const requested=String(override||Bun.env[envName]||(kind==='live'?'720':'1080')).trim();
+ const name=requested==='2160'?'2160':requested==='1080'?'1080':requested==='480'?'480':'720';
+ // UHD conversion is strictly opt-in in the isolated preview: at most one 4K
+ // encoder, and no upscaling low-resolution sources. Original H264 copy does
+ // not require UHD transcoding and keeps true 4K/8K frames if supported.
+ return name==='2160'?{name,width:3840,height:2160,maxrate:'20000k',bufsize:'36000k',crf:'18',level:'5.2'}:
+  name==='1080'?{name,width:1920,height:1080,maxrate:'8500k',bufsize:'14000k',crf:'18',level:'4.1'}:
   name==='480'?{name,width:854,height:480,maxrate:'1700k',bufsize:'3100k',crf:'21',level:'3.1'}:
   {name,width:1280,height:720,maxrate:'3400k',bufsize:'6400k',crf:'20',level:'4.0'}
 }
-function compatibleVideoArgs(kind,gopSeconds=1){
- const quality=videoQualityProfile(kind);
+function compatibleVideoArgs(kind,gopSeconds=1,profileOverride){
+ const quality=videoQualityProfile(kind,profileOverride);
  // min(iw)/min(ih) avoids fake upscaling if the source is only SD.
  const filter="scale=w='min(iw,"+quality.width+")':h='min(ih,"+quality.height+")':force_original_aspect_ratio=decrease:force_divisible_by=2";
  return ['-c:v','libx264','-preset',kind==='live'?'superfast':'veryfast',
@@ -41,9 +45,10 @@ function compatibleVideoArgs(kind,gopSeconds=1){
 const hlsSessions=new Map();
 const hlsRoot=join(tmpdir(),'blofy-vidaa-hls-sessions');
 const hardTTL=9*60*1000;
-function hlsKey(bearer,kind,id,ext,track,forceCompat){
+function hlsKey(bearer,kind,id,ext,track,forceCompat,ultra=false){
  const fields=[bearer,kind,id,ext,track];
- if(forceCompat)fields.push('compat');
+ if(ultra)fields.push('ultra');
+ else if(forceCompat)fields.push('compat');
  return createHmac('sha256',SECRET).update(fields.join('\x00')).digest('hex').slice(0,40)
 }
 function touchHls(session){
@@ -155,13 +160,17 @@ function streamInputVideoDimensions(log){
  return ''
 }
 
-async function startHls({bearer,kind,id,ext,track,key,forceCompat=false}){
+async function startHls({bearer,kind,id,ext,track,key,forceCompat=false,ultra=false}){
  if(active>=MAX_JOBS)return {error:'hls_capacity',status:429};
+ // A 4K software encoder can exhaust CPU and harm other preview viewers.
+ // The full server has only two encoding slots; allow one UHD job at a time.
+ if(ultra&&Array.from(hlsSessions.values()).some(s=>s.ultra&&!s.stopped))
+  return {error:'ultra_capacity',status:429};
  active++;
  // One unique directory per decoder instance; a retired FFmpeg process
  // cannot overwrite a fresh channel playlist while it is shutting down.
  const abort=new AbortController(),dir=join(hlsRoot,key+'-'+randomBytes(6).toString('hex'));
- const session={key,kind,id,ext,track,dir,abort,startedAt:Date.now(),stopped:false,released:false,finished:false,proc:null,lastAccess:Date.now(),error:null,legacyHls:true};
+ const session={key,kind,id,ext,track,dir,abort,ultra:!!ultra,startedAt:Date.now(),stopped:false,released:false,finished:false,proc:null,lastAccess:Date.now(),error:null,legacyHls:true};
  hlsSessions.set(key,session);
  mkdirSync(dir,{recursive:true});
  touchHls(session);
@@ -191,8 +200,8 @@ async function startHls({bearer,kind,id,ext,track,key,forceCompat=false}){
   // Stream-copy genuine H.264 live video; it avoids the 720p ceiling and
   // removes the lossy second encoding. Only AAC needs compatibility encoding.
   const losslessVideo=!forceCompat&&sourceInput.copyVideo;
-  session.videoMode=losslessVideo?'source_copy':'compatibility_transcode';
-  const videoArgs=losslessVideo?['-c:v','copy']:compatibleVideoArgs(kind);
+  session.videoMode=losslessVideo?'source_copy':ultra?'ultra_transcode':'compatibility_transcode';
+  const videoArgs=losslessVideo?['-c:v','copy']:compatibleVideoArgs(kind,1,ultra?'2160':undefined);
   const args=['-hide_banner','-loglevel','info','-nostats','-nostdin','-analyzeduration','1200000','-probesize','1200000','-fflags','+genpts','-i','pipe:0',
    '-map','0:v:0','-map','0:a:'+track+'?',...videoArgs,
    // Correct audio PTS discontinuities by inserting/dropping samples rather
@@ -240,25 +249,25 @@ async function startHls({bearer,kind,id,ext,track,key,forceCompat=false}){
 }
 async function hlsRequest(req,url){
  if(!SECRET||!secureEquals(req.headers.get('x-compat-secret'),SECRET))return hlsError(403,'forbidden');
- const stop=url.pathname.match(/^\/hls\/(live|movie|series)\/([1-9][0-9]{0,14})\/(ts|mkv|mp4|avi|mov)\/([0-3])\/(?:(compat)\/)?stop$/);
+ const stop=url.pathname.match(/^\/hls\/(live|movie|series)\/([1-9][0-9]{0,14})\/(ts|mkv|mp4|avi|mov)\/([0-3])\/(?:(compat|ultra)\/)?stop$/);
  if(req.method==='POST'&&stop){
   const bearer=req.headers.get('authorization')||'';
   if(!/^Bearer v1\.[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/.test(bearer))return hlsError(401,'authorization_missing');
-  const key=hlsKey(bearer,stop[1],stop[2],stop[3],stop[4],stop[5]==='compat');
+  const key=hlsKey(bearer,stop[1],stop[2],stop[3],stop[4],!!stop[5],stop[5]==='ultra');
   const activeSession=hlsSessions.get(key);if(activeSession)stopHls(activeSession,'viewer_stopped');
   return json(200,{ok:true});
  }
  if(req.method!=='GET')return hlsError(405,'method_not_allowed');
  if(!SECRET||!secureEquals(req.headers.get('x-compat-secret'),SECRET))return hlsError(403,'forbidden');
- const match=url.pathname.match(/^\/hls\/(live|movie|series)\/([1-9][0-9]{0,14})\/(ts|mkv|mp4|avi|mov)\/([0-3])\/(?:(compat)\/)?(index\.m3u8|seg-[0-9]{6}\.ts)$/);
+ const match=url.pathname.match(/^\/hls\/(live|movie|series)\/([1-9][0-9]{0,14})\/(ts|mkv|mp4|avi|mov)\/([0-3])\/(?:(compat|ultra)\/)?(index\.m3u8|seg-[0-9]{6}\.ts)$/);
  if(!match)return hlsError(404,'hls_invalid_resource');
  const bearer=req.headers.get('authorization')||'';
  if(!/^Bearer v1\.[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/.test(bearer))return hlsError(401,'authorization_missing');
  const [whole,kind,id,ext,track,compat,filename]=match;
- const key=hlsKey(bearer,kind,id,ext,track,compat==='compat');
+ const key=hlsKey(bearer,kind,id,ext,track,!!compat,compat==='ultra');
  let sess=hlsSessions.get(key);
  if(!sess&&filename!=='index.m3u8')return hlsError(404,'hls_session_missing');
- if(!sess){const start=await startHls({bearer,kind,id,ext,track,key,forceCompat:compat==='compat'});if(start.error)return hlsError(start.status,start.error);sess=start.session}
+ if(!sess){const start=await startHls({bearer,kind,id,ext,track,key,forceCompat:!!compat,ultra:compat==='ultra'});if(start.error)return hlsError(start.status,start.error);sess=start.session}
  touchHls(sess);
  const ready=await awaitHlsFile(sess,filename,filename==='index.m3u8'?25000:8000);
  if(ready&&filename==='index.m3u8'&&kind==='live'){
