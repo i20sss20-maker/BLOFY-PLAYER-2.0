@@ -29,6 +29,13 @@ jobs:
         run: cd web/stream-native-parity && npx playwright install chrome
       - name: Install FFmpeg for deterministic sample playback
         run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - name: Verify H264 preserves real UHD 3840x2160 pixels through HLS packaging
+        run: |
+          mkdir -p /tmp/blofy-qa-4k
+          ffmpeg -hide_banner -loglevel error -nostdin -f lavfi -i color=c=blue:size=3840x2160:rate=2 -t 2 -c:v libx264 -preset ultrafast -pix_fmt yuv420p -g 2 -f hls -hls_time 1 -hls_list_size 0 -hls_segment_filename '/tmp/blofy-qa-4k/seg-%06d.ts' -y /tmp/blofy-qa-4k/index.m3u8
+          test -s /tmp/blofy-qa-4k/seg-000000.ts
+          measured=$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 /tmp/blofy-qa-4k/seg-000000.ts | head -n 1)
+          test "$measured" = "3840,2160"
       - name: Verify 11-minute live audio keeps natural commentator pitch
         run: cd web/stream-native-parity && node --test qa/audio-11min.test.mjs
       - name: Make video fixture
