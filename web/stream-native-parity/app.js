@@ -1552,6 +1552,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  '<div class="player-hud native-stream-hud">'+
  '<div class="native-player-topline"><button class="native-player-back" id="player-back" type="button">↶ رجوع</button>'+
  '<span class="native-player-eyebrow">BLOFY '+(isLive?'LIVE':kind==='series'?'SERIES':'CINEMA')+'</span>'+
+ (isLive?'<button class="native-player-channels" id="player-channels-toggle" type="button" aria-label="قائمة القنوات">☷ القنوات</button>':'')+
  '<button class="native-player-more" id="player-options-toggle" type="button" aria-expanded="false" aria-controls="player-more-panel" aria-label="المزيد من الخيارات" title="المزيد من الخيارات">⋯</button></div>'+
  '<div class="player-title"><span id="player-title-text">'+esc(name||title(item))+'</span> <span class="player-mode-badge" id="player-mode-badge" aria-live="polite">'+(isLive?'بث مباشر':'جار تجهيز الفيديو')+'</span></div>'+
  (isLive?'<section class="player-live-guide" aria-label="برنامج القناة"><span class="small">دليل البرامج</span><div id="player-live-epg" role="status" aria-live="polite">جار قراءة دليل القناة…</div></section>':
@@ -1580,7 +1581,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  '<input id="player-jump-minute" type="number" inputmode="numeric" min="0" max="359" step="1" required placeholder="مثلاً 10">'+
  '<button class="btn" type="submit">انتقال</button><button class="btn secondary" type="button" id="player-jump-cancel">إلغاء</button>'+
  '<small>القفز يعتمد على دعم المصدر للقراءة العشوائية؛ بعض مصادر Xtream قد لا تسمح به.</small></form>')+
- '</div></section>';
+ '</div>'+ (isLive?'<aside id="player-channel-panel" class="native-channel-panel" hidden aria-label="قائمة القنوات"></aside>':'')+'</section>';
  var video=document.getElementById('player-media'),state={kind:kind,id:id,ext:ext,video:video,name:name,offset:0,
  mode:isLive?'hls':'direct',resume:resume,duration:knownDuration(kind,id,item),didResume:false,ready:false,track:0,lastSaved:0,
   art:art(item)||prior&&prior.art||'',seriesId:kind==='series'&&S.item&&S.item.id||'',playbackId:freshPlaybackId(),
