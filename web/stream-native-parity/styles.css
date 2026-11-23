@@ -559,3 +559,41 @@ html.blofy-tv-immersive,body.blofy-tv-immersive{
 .settings-inline-confirm p{color:#e1fff8;margin:0 0 12px;font-size:13px;line-height:1.8}
 .settings-inline-confirm .btn{min-height:39px;margin-bottom:5px}
 #tv-capabilities-result{line-height:1.9;overflow-wrap:anywhere}
+
+
+/* Independent TV catalog pages: hide the app-wide navigation, let the only
+ * category list span the right side and give the preview the freed-up width. */
+.app.catalog-app{width:100%;max-width:none}
+.catalog-app .workspace{flex:1;width:100%;max-width:none;min-width:0}
+.catalog-app .toolbar{padding-inline:3px}
+.catalog-app .catalog{height:calc(100vh - 115px);height:calc(100dvh - 115px)}
+.catalog-app .catalog .cat-rail{width:18%;min-width:170px}
+.catalog-app .catalog .channels{width:30%;min-width:245px}
+.catalog-app .catalog .preview{min-width:0;flex:1}
+.catalog-app .catalog.posters .poster-panel{flex:1;min-width:0}
+.catalog-app .catalog.posters .poster-grid{grid-template-columns:repeat(auto-fill,minmax(145px,1fr))}
+.catalog-app .toolbar .row{flex-wrap:wrap}
+.catalog-inline-empty{margin:18px 12px;padding:18px 13px;color:var(--muted);
+ border:1px dashed #65c5c268;border-radius:12px;text-align:center;font-size:13px}
+#catalog-update-status:not([hidden]){border:1px solid #38bfbc6d;background:#10343bf0;
+ color:#d6fff4;position:absolute;z-index:4;top:76px;left:32px;max-width:50%;
+ padding:8px 13px;border-radius:10px;font-size:12px;pointer-events:none}
+#catalog-update-status[hidden]{display:none}
+@media(max-width:1080px){
+ .catalog-app .catalog .cat-rail{width:22%;min-width:135px}
+ .catalog-app .catalog .channels{width:33%;min-width:185px}
+ .catalog-app .catalog.posters .poster-grid{grid-template-columns:repeat(auto-fill,minmax(120px,1fr))}
+}
+@media(max-width:730px){
+ .app.catalog-app{height:100vh;height:100dvh;display:flex;flex-direction:column}
+ .catalog-app .workspace{width:100%;min-height:0;order:0;padding:10px 12px 22px}
+ .catalog-app .catalog,.catalog-app .catalog.posters{height:auto;min-height:0}
+ .catalog-app .catalog .cat-rail,.catalog-app .catalog.posters .cat-rail{
+  width:100%;min-width:0;height:auto
+ }
+ .catalog-app .catalog .channels{width:100%;min-width:0;height:330px}
+ .catalog-app .catalog .preview{width:100%;height:auto;min-height:360px}
+ .catalog-app .catalog.posters .poster-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .catalog-app .catalog-home{display:inline-flex}
+ #catalog-update-status:not([hidden]){top:60px;left:16px;right:16px;max-width:none}
+}
