@@ -76,7 +76,7 @@ test('persistent live delay catches up once without disrupting a healthy source'
  assert.equal(video.currentTime,130,'seek targets HLS.js live sync position');
  video.currentTime=100;engine.liveSyncPosition=145;video.seekable.end=()=>147;
  assert.equal(catchUp(record,engine,video,20500,false,false),false);
- assert.equal(catchUp(record,engine,video,30000,false,false),'90-second cool-down suppresses repeated jumping');
+ assert.equal(catchUp(record,engine,video,30000,false,false),false,'90-second cool-down suppresses repeated jumping');
  assert.equal(video.currentTime,100);
  assert.equal(catchUp(record,engine,video,109001,false,false),true,'after cool-down, another persistent lag can recover');
  assert.equal(video.currentTime,145);
