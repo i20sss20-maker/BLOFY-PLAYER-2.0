@@ -609,3 +609,6 @@ html.blofy-tv-immersive,body.blofy-tv-immersive{
 }
 .player-resolution-badge[hidden]{display:none!important}
 @media(max-width:730px){.player-resolution-badge{font-size:10px;white-space:normal;line-height:1.45}}
+
+/* Actual decoded resolution inside the selected live-channel preview. */
+.live-preview-quality{color:#b8f4ed;font-size:12px;font-weight:700;margin:8px 0 10px;padding:6px 9px;background:#062e38;border:1px solid #53b5ad66;border-radius:9px;direction:rtl}
