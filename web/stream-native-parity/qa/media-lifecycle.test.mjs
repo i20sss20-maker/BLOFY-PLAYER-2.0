@@ -78,6 +78,30 @@ test('HLS 429 capacity retry uses capped backoff and never hammers the shared so
  assert.match(playerSource,/record\.capacityRetries=0/,'good segments reset the backoff');
 });
 
+test('private live incident timeline is bounded, local-only and never captures account data',()=>{
+ const start=playerSource.indexOf('function recordLiveIncident(');
+ const end=playerSource.indexOf('\nfunction liveUnexpectedPause(',start);
+ assert.ok(start>0&&end>start,'on-device incident timeline is available');
+ const st={liveEvents:[]};
+ const S={route:'player',playerView:{kind:'live',stats:st}};
+ const track=vm.runInNewContext(playerSource.slice(start,end)+';\nrecordLiveIncident',{S,Date});
+ assert.equal(track('playing',1000),true);
+ assert.equal(track('playing',1200),false,'duplicate HLS onplaying events are suppressed');
+ assert.equal(track('source_error',1300),true);
+ assert.equal(track('Authorization: Bearer secret https://provider.example',1500),false,'arbitrary strings never enter the report');
+ assert.equal(st.liveEvents.length,2);
+ assert.deepEqual(st.liveEvents.map(x=>x.code),['playing','source_error']);
+ for(let i=0;i<30;i++)track('reconnect',4000+i*3200);
+ assert.equal(st.liveEvents.length,12,'event buffer is capped at twelve');
+ assert.equal(st.liveEvents.at(-1).at,4000+29*3200);
+ assert.ok(st.liveEvents.every(x=>Object.keys(x).sort().join(',')==='at,code'),'events have only type and timestamp');
+ S.route='settings';
+ assert.equal(track('buffering',150000),false,'nonplayer screens cannot be logged');
+ S.route='player';S.playerView.kind='movie';
+ assert.equal(track('buffering',150000),false,'VOD is never mixed into live diagnostics');
+ assert.match(playerSource,/آخر أحداث البث \(وقت UTC\)/);
+});
+
 test('unexpected paused/ended TV live decoder recovers without overriding user Pause',()=>{
  const start=playerSource.indexOf('function liveUnexpectedPause(');
  const end=playerSource.indexOf('\nfunction playHls(',start);
