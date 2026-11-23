@@ -10,7 +10,7 @@ umask 077
 : "${BLOFY_BACKUP_KMS_KEY_ID:?Dedicated AWS KMS key ARN required}"
 : "${AWS_REGION:?AWS_REGION required}"
 
-for cmd in pg_dump pg_restore aws sha256sum stat mktemp; do
+for cmd in python3 pg_dump pg_restore aws sha256sum stat mktemp; do
   command -v "$cmd" >/dev/null || {
     echo "backup_dependency_missing:${cmd}" >&2; exit 1;
   }
@@ -29,9 +29,9 @@ chmod 700 "$dir"
 trap 'rm -rf -- "$dir"' EXIT
 dump="${dir}/backup.dump"
 
-# pg_dump is a consistent, read-only snapshot. Use PGDATABASE rather than
-# passing the credential-bearing connection URI in command line argv.
-PGDATABASE="$DATABASE_URL" pg_dump \
+# pg_dump creates a consistent read-only snapshot. Parse the URL into libpq
+# environment variables without exposing credentials in the process argv.
+python3 "$(dirname "$0")/exec-with-postgres-dsn.py" pg_dump \
   --format=custom --no-owner --no-acl --file="$dump"
 
 # This validates archive TOC readability only, NOT a complete restore.
