@@ -19,6 +19,8 @@ import tv.blofy.player.core.diagnostics.PlaybackDiagnostics
 import tv.blofy.player.core.diagnostics.PlaybackDiagnosticsUploader
 import tv.blofy.player.core.diagnostics.PlaybackMetric
 import tv.blofy.player.core.network.TransportFactory
+import tv.blofy.player.BuildConfig
+import tv.blofy.player.core.identity.StreamCodeSession
 import tv.blofy.player.core.provider.ProviderProfile
 
 @OptIn(markerClass = [UnstableApi::class])
@@ -212,7 +214,12 @@ class BlofyPlaybackSession(
                 stalledForMs = stalledForMs,
                 nowMs = now,
                 lastRecoveryAtMs = lastLiveStallRecoveryAtMs,
-                recoveries = liveStallRecoveries
+                recoveries = liveStallRecoveries,
+                graceMs = PlaybackRecoveryPolicy.liveBufferGraceMs(
+                    isCodeOnlyGateway = BuildConfig.CODE_ONLY_LOGIN &&
+                        profile.providerKey == StreamCodeSession.providerId,
+                    wasReady = lastReadyAtMs > 0L
+                )
             )
         ) {
             liveStallRecoveries++
