@@ -293,3 +293,19 @@ test('series player navigates both directions across available episodes',async({
  await page.locator('#player-previous-episode').click();
  await expect(page.locator('#player-title-text')).toContainText('الحلقة الأولى');
 });
+
+test('poster loads a valid secondary cover if the primary Xtream icon fails',async({page})=>{
+ const first=movie.stream_icon,second=movie.cover;
+ movie.stream_icon='https://example.com/invalid-cover.jpg';
+ movie.cover='https://example.com/alternate-cover.png';
+ const tiny=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAOQK3wAAAABJRU5ErkJggg==','base64');
+ await page.route('https://example.com/alternate-cover.png',async route=>{
+  await route.fulfill({status:200,contentType:'image/png',body:tiny});
+ });
+ await page.goto('http://127.0.0.1:3000/');
+ const artwork=page.locator('.poster[data-details="movie:11"] .poster-art img').first();
+ await expect(artwork).toBeVisible();
+ await expect.poll(()=>artwork.getAttribute('src'),{timeout:7000}).toContain('alternate-cover.png');
+ movie.stream_icon=first;
+ if(second===undefined)delete movie.cover;else movie.cover=second;
+});
