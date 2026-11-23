@@ -1,0 +1,32 @@
+name: BLOFY STREAM verify private off-site backup (manual)
+on:
+  workflow_dispatch:
+    inputs:
+      object_key:
+        description: 'Exact object key inside trusted private S3 backup bucket (no credentials)'
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: blofy-backup
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PostgreSQL 18 and AWS clients
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-18 awscli
+      - name: Verify KMS ciphertext and downloaded PostgreSQL archive locally
+        env:
+          BLOFY_BACKUP_S3_BUCKET: ${{ secrets.BLOFY_BACKUP_S3_BUCKET }}
+          BLOFY_BACKUP_OBJECT_KEY: ${{ inputs.object_key }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.BLOFY_BACKUP_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.BLOFY_BACKUP_AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ vars.BLOFY_BACKUP_AWS_REGION }}
+        run: bash services/activation/scripts/verify-s3-backup.sh
+      - name: Warn that isolated restore is separate
+        run: |
+          echo 'Archive integrity is not database restoration. Independently restore to a disposable, nonproduction PostgreSQL service.' >> "$GITHUB_STEP_SUMMARY"
