@@ -2264,6 +2264,82 @@ if(process.env.BLOFY_XTREAM_PACKAGE_SYNC_ONCE_KEY){
   operatorRetryTimer.unref?.();
 }
 
+// One-time operator-authorized reconciliation of a named LIVE package category.
+// Scope is the single approved saleh source, with EXACT name matching only.
+// This hides the category from BLOFY customers; it NEVER deletes a provider
+// category or edits customer subscriptions, codes or upstream credentials.
+async function operatorHideRemovedLiveCategory(){
+  const enabled=process.env.BLOFY_XTREAM_CATEGORY_HIDE_ONCE_ENABLED==='1';
+  const requested=String(process.env.BLOFY_XTREAM_CATEGORY_HIDE_ONCE_NAME||'').trim();
+  if(!enabled||requested.toLowerCase()!=='bein ss')return;
+  const approved=await approvedSalehMirrorSource();
+  if(!approved.ok)return console.warn('BLOFY_XTREAM_CATEGORY_HIDE_ONCE',JSON.stringify({
+    code:'approved_source_missing'}));
+  const source=await serverById(approved.sourceId);
+  if(!source||String(source.name||'').trim().toLowerCase()!=='saleh'||
+      !source.enabled||!source.publish_catalog)return;
+  const sourceId=source.id;
+  const before=await controlPool.query(`SELECT source_category_id,name,enabled,item_count
+    FROM blofy_xtream_categories WHERE server_id=$1 AND media_type='live'
+      AND lower(btrim(name))=lower($2)`,[sourceId,requested]);
+  const nearby=await controlPool.query(`SELECT name,enabled,item_count
+    FROM blofy_xtream_categories WHERE server_id=$1 AND media_type='live'
+      AND lower(name) LIKE '%bein%' AND lower(name) LIKE '%ss%'
+    ORDER BY name LIMIT 15`,[sourceId]);
+  // Check which category list the saved Xtream source actually receives.
+  // This is read-only metadata: no media requests or provider configuration.
+  let upstream={checked:false,status:null,matching:0,nearby:0};
+  try{
+    const creds=decryptCredentials(source);
+    const response=await checkedFetch(
+      xtreamApiUrl(source.base_url,creds.username,creds.password,'get_live_categories'),
+      {timeoutMs:30000,sourceId});
+    let matching=0,near=0;
+    await parseTopLevelJsonArray(response.body,async raw=>{
+      const c=normalizeXtreamCategory('live',raw,'audit');
+      if(!c)return;
+      const norm=c.name.trim().toLowerCase();
+      if(norm==='bein ss')matching++;
+      if(norm.includes('bein')&&norm.includes('ss'))near++;
+    });
+    upstream={checked:true,status:response.status,matching,nearby:near};
+  }catch{
+    upstream={checked:false,status:null,matching:0,nearby:0};
+  }
+  // Never hide a fuzzy match. If the exact category has already disappeared
+  // from the imported catalogue, no write is required.
+  let updated=0;
+  if(before.rows.length){
+    const change=await controlPool.query(`UPDATE blofy_xtream_categories
+      SET enabled=FALSE,updated_at=NOW()
+      WHERE server_id=$1 AND media_type='live'
+        AND lower(btrim(name))=lower($2) AND enabled=TRUE
+      RETURNING source_category_id`,[sourceId,requested]);
+    updated=change.rowCount;
+  }
+  const after=await controlPool.query(`SELECT
+      COUNT(*)::int AS matched,
+      COUNT(*) FILTER(WHERE enabled=TRUE)::int AS still_visible
+    FROM blofy_xtream_categories
+    WHERE server_id=$1 AND media_type='live'
+      AND lower(btrim(name))=lower($2)`,[sourceId,requested]);
+  console.info('BLOFY_XTREAM_CATEGORY_HIDE_ONCE',JSON.stringify({
+    code:'category_reconciled',sourceId,category:'bein ss',
+    localMatched:before.rows.length,localWasVisible:before.rows.filter(x=>x.enabled).length,
+    localItemCount:before.rows.reduce((n,x)=>n+Number(x.item_count||0),0),
+    updated,remainingVisible:Number(after.rows[0]?.still_visible||0),
+    upstream,nearbyLocalCount:nearby.rows.length,
+    nearbyNames:nearby.rows.map(x=>({name:x.name,visible:x.enabled})),
+    sourceCredentialsUnchanged:true,subscriptionCodesUnchanged:true
+  }));
+}
+if(process.env.BLOFY_XTREAM_CATEGORY_HIDE_ONCE_ENABLED==='1'){
+  const timer=setTimeout(()=>{void operatorHideRemovedLiveCategory()
+    .catch(e=>console.warn('BLOFY_XTREAM_CATEGORY_HIDE_ONCE',
+      JSON.stringify({code:'category_reconcile_failed',reason:redactXtreamError(e)})));},15000);
+  timer.unref?.();
+}
+
 // One-off READ-ONLY ledger preflight. Creates only the transfer-intake
 // metadata table if absent; no intent rows, source video, uploads or copies.
 if(process.env.BLOFY_STREAM_MIRROR_INTAKE_DB_SMOKE_ON_BOOT==='1'){
