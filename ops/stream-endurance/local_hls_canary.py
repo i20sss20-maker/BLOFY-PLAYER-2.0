@@ -57,7 +57,7 @@ async def writer(root):
         '-g', '12', '-keyint_min', '12', '-sc_threshold', '0',
         '-c:a', 'aac', '-b:a', '64k', '-f', 'hls', '-hls_time', '1',
         '-hls_list_size', '6',
-        '-hls_flags', 'append_list+delete_segments+omit_endlist',
+        '-hls_flags', 'append_list+discont_start+delete_segments+omit_endlist',
         '-hls_segment_filename', str(root / 'part_%05d.ts'),
         str(root / 'live.m3u8')
     ]
@@ -65,8 +65,12 @@ async def writer(root):
                                                 stderr=asyncio.subprocess.DEVNULL)
 
 def newest_segment(root):
-    segments = sorted(root.glob('part_*.ts'))
-    return segments[-1].name if segments else None
+    manifest = root/'live.m3u8'
+    if not manifest.exists():
+        return None
+    lines = manifest.read_text(errors='replace').splitlines()
+    segments = [line.strip() for line in lines if line.strip().endswith('.ts')]
+    return segments[-1] if segments else None
 
 
 async def wait_new_segment(root, before, timeout=12):
@@ -192,13 +196,19 @@ async def canary(args):
                     outage['active'] = False
                 else:
                     # An actual encoder stop/restart, restricted to this synthetic fixture.
-                    before = newest_segment(root)
                     await stop(source)
                     source = None
+                    # The encoder's stop may finish a final segment; compare
+                    # against the *finalized manifest* after it exits.
+                    before = newest_segment(root)
                     await asyncio.sleep(args.outage_seconds)
+                    outage['publisherStartAt'] = time.monotonic()
                     source = await writer(root)
                     new = await wait_new_segment(root, before)
                     outage['publisherRestarted'] = (new != before)
+                    outage['publisherReadyMs'] = round((time.monotonic()-outage['publisherStartAt'])*1000)
+                    outage['manifestDiscontinuity'] = '#EXT-X-DISCONTINUITY' in (
+                        root/'live.m3u8').read_text(errors='replace')
                 outage['resumedAt'] = time.monotonic()
             reports = await asyncio.gather(*watching)
         finally:
@@ -210,7 +220,8 @@ async def canary(args):
     ready = len(starts)==args.viewers and all(r['firstAudioMs'] is not None for r in reports)
     blocked = outage.get('blockedRequests', 0)
     injection_verified = (blocked > 0 if args.outage_mode == 'transport'
-                          else outage.get('publisherRestarted', False))
+                          else outage.get('publisherRestarted', False)
+                          and outage.get('manifestDiscontinuity', False))
     if args.outage_at:
         passed = (ready and injection_verified and len(rtts)==args.viewers and
                   all(r['postResumeAudioMs'] is not None for r in reports) and
@@ -228,6 +239,8 @@ async def canary(args):
         'syntheticOutageSeconds': args.outage_seconds if args.outage_at else 0,
         'injectionVerified': injection_verified if args.outage_at else None,
         'http503DuringBlackout': blocked,
+        'publisherReadyMs': outage.get('publisherReadyMs'),
+        'hlsManifestDiscontinuityOnRestart': outage.get('manifestDiscontinuity'),
         'firstVideoP95Ms': percentile(starts, .95),
         'postResumeVideoP95Ms': percentile(rtts, .95),
         'decodedVideoFrames': sum(r['videoFrames'] for r in reports),
