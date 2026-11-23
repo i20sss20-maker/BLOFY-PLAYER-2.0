@@ -1709,12 +1709,17 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
                 sourceId:row.server_id,kind:'live'
               }));
             },
-            onReconnect:({attempt:reconnection})=>{
-              // Count recoveries in the operator's real playback metrics.
-              // An HTTP 200 alone cannot reveal mid-response source drops.
-              observe('recovered',{reason:'live_ts_recovered',attempts:reconnection});
+            onReconnect:({attempt:reconnection,interruptionMs,
+              retriesThisDrop,sourceDropReason})=>{
+              // HTTP 200 and reconnect success do not prove frame/audio
+              // continuity. Report only rounded, non-sensitive gap timings.
+              const gapBucketMs=Number.isFinite(interruptionMs)?
+                Math.round(interruptionMs/500)*500:null;
+              observe('recovered',{reason:'live_ts_recovered',
+                attempts:reconnection,interruptionMs:gapBucketMs});
               console.info('BLOFY_LIVE_TS_RECOVERED',{
                 state:'same_source_valid_ts',attempt:reconnection,
+                gapBucketMs,retriesThisDrop,sourceDropReason,
                 kind,sourceId:row.server_id,customerCutover:false
               });
             }

@@ -202,7 +202,8 @@ test('production telemetry records live reconnects and admin renders them withou
   readFile(new URL('../src/xtream-gateway-hook.mjs',import.meta.url),'utf8'),
   readFile(new URL('../web/sources-admin.js',import.meta.url),'utf8')
  ]);
- assert.match(gateway,/observe\('recovered',\{reason:'live_ts_recovered',attempts:reconnection\}\)/);
+ assert.match(gateway,/observe\('recovered',\{reason:'live_ts_recovered',[\s\S]*?attempts:reconnection,interruptionMs:gapBucketMs\}\)/);
+ assert.match(gateway,/BLOFY_LIVE_TS_RECOVERED[\s\S]*?gapBucketMs,retriesThisDrop,sourceDropReason/);
  assert.match(ui,/m\.liveTsRecoverySuccesses/);
  assert.match(ui,/m\.liveTsRecoveryExhausted/);
  assert.match(ui,/m\.liveTsRecoveryRateLimited/);
