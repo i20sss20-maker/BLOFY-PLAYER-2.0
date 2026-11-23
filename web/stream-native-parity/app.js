@@ -1163,11 +1163,15 @@ function settingsScreen(){
     groups=Math.max(0,Math.min(100,Number(share.groups)||0)),
     viewers=Math.max(0,Math.min(400,Number(share.viewers)||0)),
     pending=Math.max(0,Math.min(400,Number(share.pending)||0)),
+    recovering=Math.max(0,Math.min(256,Number(data.originStability&&data.originStability.coolingSources)||0)),
+    affected=Math.max(0,Math.min(256,Number(data.originStability&&data.originStability.recentSources)||0)),
     active=Math.max(0,Math.min(100,Number(data.activeJobs)||0)),
     cap=Math.max(0,Math.min(100,Number(data.capacity)||0));
    target.textContent='مشاركة المصدر لنفس الاشتراك: '+(enabled?'مفعلة في التجربة':'معطلة لحماية الاستقرار')+
     ' • مجموعات البث: '+groups+' • المشاهدون المشاركون: '+viewers+
     ' • بانتظار اتصال المصدر: '+pending+
+    ' • مصادر في تهدئة الاتصال: '+recovering+
+    ' • مصادر تعثرت خلال دقيقتين: '+affected+
     ' • محركات الفيديو النشطة: '+active+' من '+cap+
     (cap&&active>=cap?' • المحركات ممتلئة حاليًا؛ قد يلزم الانتظار عند فتح قناة جديدة.':'')+
     ' • هذه أرقام حالة المحرك فقط، وليست قياسًا لجودة الصورة على جهازك.'
