@@ -5,6 +5,43 @@ import vm from 'node:vm';
 import crypto from 'node:crypto';
 
 const source=readFileSync(new URL('../media-worker.ts',import.meta.url),'utf8');
+const playerSource=readFileSync(new URL('../app.js',import.meta.url),'utf8');
+
+test('frozen VIDEO at readyState=4 is detected from real pixel/playhead progress',()=>{
+ const start=playerSource.indexOf('function livePlaybackProgress(');
+ const end=playerSource.indexOf('\nfunction playHls(',start);
+ assert.ok(start>0&&end>start,'live progress watchdog helper is present');
+ const sample=vm.runInNewContext(playerSource.slice(start,end)+';\nlivePlaybackProgress',{});
+ const rec={started:1000,lastProgressAt:1000,lastMediaTime:61,lastVideoFrames:500,bufferSince:2000,stallChecks:2};
+ const video={readyState:4,currentTime:61,getVideoPlaybackQuality:()=>({totalVideoFrames:500})};
+ assert.equal(sample(rec,video,20000).advanced,false);
+ assert.equal(sample(rec,video,20000).idleMs,19000,'readyState=4 does not conceal a frozen frame');
+ video.currentTime=62;
+ assert.equal(sample(rec,video,21000).advanced,true);
+ assert.equal(rec.bufferSince,0);
+ assert.equal(rec.stallChecks,0);
+ video.currentTime=62;
+ video.getVideoPlaybackQuality=()=>({totalVideoFrames:502});
+ assert.equal(sample(rec,video,23200).advanced,true,'decoded frames also count if TV playhead is imprecise');
+});
+
+test('worker identifies stale live manifests but never expires VOD or healthy live files',()=>{
+ const begin=source.indexOf('function staleLiveManifest(');
+ const end=source.indexOf('\n/**',begin);
+ assert.ok(begin>0&&end>begin);
+ let mtime=1000;
+ const isStale=vm.runInNewContext(source.slice(begin,end)+';\nstaleLiveManifest',{
+  statSync:()=>({mtimeMs:mtime}),Number
+ });
+ const live={kind:'live',startedAt:1000,stopped:false};
+ assert.equal(isStale(live,'/live/index.m3u8',25000),true,'source stopped updating for 24s');
+ assert.equal(isStale(live,'/live/index.m3u8',12000),false);
+ assert.equal(isStale({...live,kind:'movie'},'/vod/index.m3u8',25000),false);
+ assert.equal(isStale({...live,stopped:true},'/live/index.m3u8',25000),false);
+ mtime=22000;
+ assert.equal(isStale(live,'/live/index.m3u8',25000),false,'playlist still advancing');
+});
+
 const start=source.indexOf('function touchHls(session){');
 const end=source.indexOf('\nfunction stopHls(',start);
 assert.ok(start>=0&&end>start,'hls timeout lifecycle is present');
