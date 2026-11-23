@@ -491,3 +491,21 @@ test('VIDAA settings work without browser popup and show local HLS/fullscreen ca
  await expect(page.locator('#page-status')).toContainText('تم حذف سجل المشاهدة');
  expect(dialogs).toEqual([]);
 });
+
+
+test('Hls.js vendor loader retries after transient TV Wi-Fi script failure',async({page})=>{
+ let loads=0;
+ await page.route('**/vendor/hls.min.js',async route=>{
+  loads++;
+  if(loads===1)return route.fulfill({status:503,contentType:'text/plain',body:'temporary_network_issue'});
+  return route.fallback()
+ });
+ await page.goto('http://127.0.0.1:3000/');
+ await page.locator('[data-go="live"]').first().click();
+ await page.locator('[data-channel="31"]').click();
+ await expect.poll(()=>loads,{timeout:10000}).toBe(1);
+ await expect(page.locator('#live-status')).toContainText('تعذر تحميل مشغّل HLS',{timeout:10000});
+ await page.locator('[data-channel="32"]').click();
+ await expect.poll(()=>loads,{timeout:10000}).toBe(2);
+ await expect.poll(()=>page.evaluate(()=>typeof window.Hls),{timeout:10000}).toBe('function');
+});
