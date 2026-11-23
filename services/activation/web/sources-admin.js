@@ -1321,6 +1321,37 @@ function renderCategoryManager(){
     target.append(make('p','muted','تم عرض أول 240 قسمًا. ابحث بالاسم للوصول إلى البقية.'));
 }
 
+async function restoreProviderCategoryOrder(){
+ const serverId=el('catalogServer').value,mediaType=el('catalogType').value;
+ const button=el('categoryRestoreProviderBtn');
+ if(!serverId||!state.categories.length){
+  showMessage('اختر مصدرًا ونوع محتوى يحتوي على أقسام أولًا.','error');return;
+ }
+ const source=state.xtreamServers.find(x=>x.id===serverId)?.name||'المصدر';
+ if(!window.confirm('إرجاع ترتيب أقسام '+source+' الأصلي من Xtream ('+
+  state.categories.length+' قسم)؟ ستبقى الأقسام المخفية مخفية.'))return;
+ button.disabled=true;const oldLabel=button.textContent;
+ button.textContent='جارٍ جلب ترتيب السيرفر…';
+ try{
+  const result=await api('/api/v1/admin/xtream/categories/auto-sort',{
+   method:'POST',body:JSON.stringify({serverId,mediaType,mode:'provider'})
+  });
+  await loadCategories();
+  showMessage(result.unchanged?'الترتيب يطابق السيرفر الأصلي بالفعل.':
+   '✅ تم استرجاع ترتيب '+Number(result.updated||0).toLocaleString('en-US')+
+   ' قسمًا كما هي في Xtream، مع بقاء الإخفاء.');
+ }catch(error){
+  const message={
+   xtream_provider_order_catalog_out_of_date:'الأقسام تغيرت لدى المزود. زامن محتوى المصدر أولًا ثم أعد المحاولة.',
+   xtream_provider_order_fetch_failed:'فشل جلب الترتيب الأصلي من مزود Xtream. لم يتغير ترتيبك.',
+   xtream_provider_order_unavailable:'مزود Xtream لم يُرجع قائمة أقسام صالحة.',
+   xtream_provider_order_invalid_response:'مزود Xtream أعاد بيانات أقسام غير صالحة. لم يتغير ترتيبك.',
+   xtream_category_busy_retry:'المصدر مشغول؛ حاول بعد انتهاء المزامنة.'
+  };
+  showMessage('تعذر استعادة ترتيب السيرفر: '+(message[error.message]||error.message),'error');
+ }finally{button.disabled=false;button.textContent=oldLabel;}
+}
+
 async function autoSortCurrentCategories(){
   const serverId=el('catalogServer').value,mediaType=el('catalogType').value;
   const mode=el('categoryAutoSortMode').value,button=el('categoryAutoSortBtn');
@@ -2441,6 +2472,7 @@ for(const [id,grouped] of [['categoryGroupedView',true],['categoryFlatView',fals
   });
 }
 el('categoryAutoSortBtn').addEventListener('click',autoSortCurrentCategories);
+el('categoryRestoreProviderBtn').addEventListener('click',restoreProviderCategoryOrder);
 el('categoryManagerRows').addEventListener('click',event=>{
   const button=event.target.closest('button[data-action][data-category-id]');
   if(button)changeCategory(button).catch(error=>showMessage('تعذر حفظ الفئة: '+error.message,'error'));

@@ -88,7 +88,7 @@ import {ensureAiScanSchema,recordAiAnalyzedBatch,getAiScanProgress} from './stre
 import {fullCatalogCategoryOrder,summarizeFullCatalogCoverage} from './stream-ai-full-sort.mjs';
 import { normalizeXtreamDetails,mergedXtreamMetadata } from './xtream-item-details.mjs';
 import { tmdbConfigured,validatedTmdbId,fetchTmdbDetails } from './xtream-tmdb.mjs';
-import { sortXtreamCategories } from './xtream-category-sort.mjs';
+import { sortXtreamCategories,sortXtreamCategoriesLikeProvider } from './xtream-category-sort.mjs';
 import {createStudioPro} from './xtream-studio-pro.mjs';
 import {normalizeXtreamEpg} from './xtream-epg.mjs';
 import {normalizeStudioName,normalizeStudioItemEdit,readStudioLogoRequest} from './xtream-studio-policy.mjs';
@@ -3030,11 +3030,50 @@ async function patchCategory(serverId, mediaType, categoryId, enabled) {
   return result.rows[0];
 }
 
+// Fetch original category positions using the configured Xtream source
+// credentials. Do this before taking a database lock. No media is requested.
+async function fetchXtreamOriginalCategoryOrder(serverId,mediaType){
+ const source=await serverById(serverId);
+ if(!source?.enabled)throw Object.assign(
+  new Error('xtream_provider_order_source_unavailable'),{status:409});
+ const credentials=decryptCredentials(source);
+ let response;
+ try{
+  response=await checkedFetch(xtreamApiUrl(source.base_url,
+   credentials.username,credentials.password,TYPE_ACTIONS[mediaType].categories),
+   {timeoutMs:60000,sourceId:serverId});
+ }catch{
+  throw Object.assign(new Error('xtream_provider_order_fetch_failed'),{status:503});
+ }
+ const providerOrder=new Map();
+ let position=0;
+ try{
+  await parseTopLevelJsonArray(response.body,async raw=>{
+   const c=normalizeXtreamCategory(mediaType,raw,'provider_restore');
+   if(!c)return;
+   position++;
+   if(position>1500)throw Error('xtream_provider_order_too_many');
+   if(!providerOrder.has(c.sourceCategoryId))
+    providerOrder.set(c.sourceCategoryId,{
+     order:xtreamProviderOrder(raw,position,'category'),index:position
+    });
+  });
+ }catch{
+  throw Object.assign(new Error('xtream_provider_order_invalid_response'),{status:409});
+ }
+ if(!providerOrder.size)throw Object.assign(
+  new Error('xtream_provider_order_unavailable'),{status:409});
+ return providerOrder;
+}
+
 // Operator-triggered, transactional reordering only. No catalog rows,
 // visibility, subscriber entitlements or upstream credentials are touched.
 async function autoSortCategories(serverId,mediaType,mode){
-  if(!validUuid(serverId)||!validType(mediaType)||!['popular','alphabetical','smart','sports_first','news_first','kids_first'].includes(mode))
+  if(!validUuid(serverId)||!validType(mediaType)||!['popular','alphabetical','smart','sports_first','news_first','kids_first','provider'].includes(mode))
     throw Object.assign(new Error('xtream_category_sort_invalid'),{status:400});
+  // Read upstream before PostgreSQL transaction: no long network waits under lock.
+  const providerOrder=mode==='provider'
+    ?await fetchXtreamOriginalCategoryOrder(serverId,mediaType):null;
   const client=await pool.connect();
   try{
     await client.query('BEGIN');
@@ -3052,7 +3091,9 @@ async function autoSortCategories(serverId,mediaType,mode){
       return{updated:0,mode,unchanged:true};
     }
     const current=records.rows.map(row=>String(row.source_category_id));
-    const ordered=sortXtreamCategories(records.rows,mode);
+    const ordered=mode==='provider'
+      ?sortXtreamCategoriesLikeProvider(records.rows,providerOrder)
+      :sortXtreamCategories(records.rows,mode);
     const unchanged=current.every((id,index)=>id===ordered[index]);
     if(!unchanged){
       await client.query(`UPDATE blofy_xtream_categories c
@@ -3062,6 +3103,7 @@ async function autoSortCategories(serverId,mediaType,mode){
         [serverId,mediaType,ordered]);
     }
     await client.query('COMMIT');
+    if(!unchanged)await bumpXtreamCatalogRevision(pool,serverId,'operator_edit');
     return{updated:ordered.length,mode,unchanged};
   }catch(error){
     await client.query('ROLLBACK').catch(()=>{});
