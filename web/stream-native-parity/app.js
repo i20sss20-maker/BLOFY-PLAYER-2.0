@@ -509,6 +509,10 @@ function recordPlaybackQuality(p){
   startupMs:st.firstFrameAt?Math.max(0,Math.min(120000,st.firstFrameAt-st.openedAt)):null,
   bufferingEvents:Math.max(0,Math.min(999,st.bufferEvents||0)),
   bufferingMs:Math.max(0,Math.min(3600000,Math.round(bufferMs))),
+  seekAttempts:Math.max(0,Math.min(999,st.seekAttempts||0)),
+  seekReady:Math.max(0,Math.min(999,st.seekReady||0)),
+  seekTimeouts:Math.max(0,Math.min(999,st.seekTimeouts||0)),
+  lastSeekMs:isFinite(st.lastSeekMs)?Math.max(0,Math.min(120000,st.lastSeekMs)):null,
   errors:Math.max(0,Math.min(99,st.errors||0)),
   stoppedAt:now};
  S.lastPlaybackDiag=result;
@@ -846,6 +850,10 @@ function settingsScreen(){
   ' • بداية التشغيل: '+(diag.startupMs===null?'لم تبدأ':(diag.startupMs/1000).toFixed(1)+' ث')+
   ' • مرات الانتظار: '+(diag.bufferingEvents||0)+
   ' • زمن الانتظار: '+Math.round((diag.bufferingMs||0)/1000)+' ث'+
+  ' • طلبات التقديم: '+(diag.seekAttempts||0)+
+  ' • التقديم الذي وصل للمكان المطلوب: '+(diag.seekReady||0)+
+  ' • حالات انتظار تجاوزت 30 ثانية: '+(diag.seekTimeouts||0)+
+  ' • زمن آخر تقديم ناجح: '+(diag.lastSeekMs===null?'غير متوفر':(diag.lastSeekMs/1000).toFixed(1)+' ث')+
   ' • أخطاء الوسائط: '+(diag.errors||0)+'.';
  shell('الإعدادات','<div class="settings-grid"><section class="setting-panel"><h3>تحديث المحتوى</h3><p>إعادة قراءة القنوات والأفلام والمسلسلات من خادم BLOFY.</p><button class="btn" id="refresh-content">↻ تحديث المحتوى</button><p id="refresh-progress" role="status" aria-live="polite">فهرس المحتوى يُراجع تلقائيًا عند توفر رقم إصدار جديد.</p></section>'+
  '<section class="setting-panel"><h3>حالة مشغّل الفيديو</h3><p>تحقق من جاهزية خادم الأفلام والمسلسلات دون التأثير على اشتراكك أو تشغيل العملاء.</p>'+
@@ -939,6 +947,9 @@ function cleanupPlayer(){
   if(S.playerView.directSeekVerify){clearTimeout(S.playerView.directSeekVerify);S.playerView.directSeekVerify=null}
   if(S.playerView.directStartupTimer){clearTimeout(S.playerView.directStartupTimer);S.playerView.directStartupTimer=null}
   if(S.playerView.liveEpgTimer){clearTimeout(S.playerView.liveEpgTimer);S.playerView.liveEpgTimer=null}
+  if(S.playerView.seekWatchdog){clearTimeout(S.playerView.seekWatchdog);S.playerView.seekWatchdog=null}
+  if(S.playerView.seekLogTimer){clearTimeout(S.playerView.seekLogTimer);S.playerView.seekLogTimer=null}
+  S.playerView.pendingSeek=null;
   if(S.playerView.hudTimer){clearTimeout(S.playerView.hudTimer);S.playerView.hudTimer=null}
   if(S.playerView.releaseWakeLock)S.playerView.releaseWakeLock()
  }
@@ -1350,16 +1361,57 @@ function openPlayer(kind,id,extension,name,from){
  var video=document.getElementById('player-media'),state={kind:kind,id:id,ext:ext,video:video,name:name,offset:0,
  mode:isLive?'hls':'direct',resume:resume,duration:knownDuration(kind,id,item),didResume:false,ready:false,track:0,lastSaved:0,
   art:art(item)||prior&&prior.art||'',seriesId:kind==='series'&&S.item&&S.item.id||'',playbackId:freshPlaybackId(),
-   stats:{openedAt:Date.now(),firstFrameAt:0,bufferEvents:0,bufferMs:0,bufferSince:0,errors:0}};
+   stats:{openedAt:Date.now(),firstFrameAt:0,bufferEvents:0,bufferMs:0,bufferSince:0,errors:0,
+    seekAttempts:0,seekReady:0,seekTimeouts:0,lastSeekMs:null}};
  function onBufferEvent(){
   var stats=state.stats;
   if(S.route!=='player'||S.playerView!==state||video.paused||!stats.firstFrameAt)return;
   if(!stats.bufferSince){stats.bufferEvents++;stats.bufferSince=Date.now()}
  }
+ function confirmSeek(){
+  var pending=state.pendingSeek;
+  if(!pending||S.route!=='player'||S.playerView!==state||video.readyState<2||video.seeking)return;
+  var now=Date.now(),actual=state.mode==='vodhls'?
+   state.offset+Math.max(0,Number(video.currentTime)||0):Math.max(0,Number(video.currentTime)||0);
+  if(Math.abs(actual-pending.target)>8)return;
+  if(state.seekWatchdog){clearTimeout(state.seekWatchdog);state.seekWatchdog=null}
+  if(state.seekLogTimer){clearTimeout(state.seekLogTimer);state.seekLogTimer=null}
+  if(!pending.logged)diagnose(kind,'vod_seek_request',state.mode,0);
+  state.pendingSeek=null;
+  state.stats.seekReady++;
+  state.stats.lastSeekMs=Math.max(0,now-pending.startedAt);
+  diagnose(kind,'vod_seek_ready',state.mode,0)
+ }
+ function startSeekCheck(target){
+  if(isLive)return;
+  var now=Date.now(),wasPending=!!state.pendingSeek;
+  if(!wasPending)state.stats.seekAttempts++;
+  if(state.seekWatchdog)clearTimeout(state.seekWatchdog);
+  if(state.seekLogTimer)clearTimeout(state.seekLogTimer);
+  var pending={target:target,startedAt:now,logged:false};
+  state.pendingSeek=pending;
+  state.seekLogTimer=setTimeout(function(){
+   state.seekLogTimer=null;
+   if(S.route!=='player'||S.playerView!==state||state.pendingSeek!==pending)return;
+   pending.logged=true;
+   diagnose(kind,'vod_seek_request',state.mode,0)
+  },320);
+  state.seekWatchdog=setTimeout(function(){
+   state.seekWatchdog=null;
+   if(S.route!=='player'||S.playerView!==state||state.pendingSeek!==pending)return;
+   state.pendingSeek=null;
+   state.stats.seekTimeouts++;
+   if(state.seekLogTimer){clearTimeout(state.seekLogTimer);state.seekLogTimer=null}
+   if(!pending.logged)diagnose(kind,'vod_seek_request',state.mode,0);
+   diagnose(kind,'vod_seek_timeout',state.mode,0);
+   playerStatus('التقديم يستغرق وقتًا أطول من المتوقع. سيستمر المشغّل بالمحاولة، ويمكنك إعادة التشغيل إذا لم يتحرك الفيديو.')
+  },30000)
+ }
  function onPlayingEvent(){
   var stats=state.stats,now=Date.now();
   if(!stats.firstFrameAt)stats.firstFrameAt=now;
   if(stats.bufferSince){stats.bufferMs+=Math.max(0,now-stats.bufferSince);stats.bufferSince=0}
+  confirmSeek()
  }
  function onPauseEvent(){
   var stats=state.stats;
@@ -1368,6 +1420,8 @@ function openPlayer(kind,id,extension,name,from){
  video.addEventListener('waiting',onBufferEvent);
  video.addEventListener('stalled',onBufferEvent);
  video.addEventListener('playing',onPlayingEvent);
+ video.addEventListener('seeked',confirmSeek);
+ video.addEventListener('canplay',confirmSeek);
  video.addEventListener('pause',onPauseEvent);
  video.addEventListener('error',function(){state.stats.errors++});
  var root=document.getElementById('player-root'),hud=root.querySelector('.player-hud');
@@ -1527,6 +1581,7 @@ function openPlayer(kind,id,extension,name,from){
   var target=Math.max(0,Math.round(Number(raw)||0)),duration=totalDuration();
   if(duration>0&&isFinite(duration))target=Math.min(target,Math.max(0,Math.floor(duration)-2));
   state.lastSeekTarget=target;state.lastSeekAt=Date.now();
+  startSeekCheck(target);
   if(state.mode==='fullvod'||state.mode==='direct'&&nativeCanSeek(target)){
    try{
     if(state.mode==='direct'){resume=target;state.resume=target;state.requestedSeek=target}
