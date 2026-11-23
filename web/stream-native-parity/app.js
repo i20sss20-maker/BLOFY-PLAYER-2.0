@@ -1062,6 +1062,7 @@ function cleanupPlayer(){
   S.playerView.pendingSeek=null;
   if(S.playerView.hudTimer){clearTimeout(S.playerView.hudTimer);S.playerView.hudTimer=null}
   if(S.playerView.releaseWakeLock)S.playerView.releaseWakeLock()
+  if(S.playerView.cleanupFullscreen)S.playerView.cleanupFullscreen()
  }
  stopPlayback(true)
 }
@@ -1553,6 +1554,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  '<div class="native-player-topline"><button class="native-player-back" id="player-back" type="button">↶ رجوع</button>'+
  '<span class="native-player-eyebrow">BLOFY '+(isLive?'LIVE':kind==='series'?'SERIES':'CINEMA')+'</span>'+
  (isLive?'<button class="native-player-channels" id="player-channels-toggle" type="button" aria-label="قائمة القنوات">☷ القنوات</button>':'')+
+ '<button class="native-player-fullscreen" id="player-fullscreen" type="button" aria-label="ملء الشاشة" aria-pressed="false" title="ملء الشاشة">⛶ ملء الشاشة</button>'+ 
  '<button class="native-player-more" id="player-options-toggle" type="button" aria-expanded="false" aria-controls="player-more-panel" aria-label="المزيد من الخيارات" title="المزيد من الخيارات">⋯</button></div>'+
  '<div class="player-title"><span id="player-title-text">'+esc(name||title(item))+'</span> <span class="player-mode-badge" id="player-mode-badge" aria-live="polite">'+(isLive?'بث مباشر':'جار تجهيز الفيديو')+'</span></div>'+
  (isLive?'<section class="player-live-guide" aria-label="برنامج القناة"><span class="small">دليل البرامج</span><div id="player-live-epg" role="status" aria-live="polite">جار قراءة دليل القناة…</div></section>':
@@ -1571,7 +1573,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  '</div>'+
  '<section class="player-more-panel" id="player-more-panel" hidden aria-label="خيارات إضافية">'+
  (isLive?'':'<button class="btn secondary" id="player-skip-forward5">+5 دقائق</button><button class="btn secondary" id="player-jump-toggle" aria-controls="player-jump-panel" aria-expanded="false">↪ الانتقال لدقيقة</button><button class="btn secondary" id="player-restart">↺ من البداية</button><button class="btn secondary" id="player-speed">السرعة 1×</button>')+
- '<button class="btn secondary" id="player-fullscreen">⛶ ملء الشاشة</button>'+
+
  '<button class="btn secondary" id="player-health-toggle" aria-expanded="false" aria-controls="player-health-panel">حالة التشغيل</button>'+
  (isLive?'':'<button class="btn secondary" id="player-info-toggle" aria-expanded="false" aria-controls="player-info-panel">ⓘ معلومات المحتوى</button>')+'</section>'+
  (isLive?'':'<section class="player-info-panel" id="player-info-panel" hidden><strong>تفاصيل المحتوى</strong>'+
@@ -2287,13 +2289,76 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   var idx=speeds.indexOf(video.playbackRate),next=speeds[(idx+1)%speeds.length];
   video.playbackRate=next;this.textContent='السرعة '+next+'×'
  };
- document.getElementById('player-fullscreen').onclick=function(){
-  var el=document.getElementById('player-root');
-  if(document.fullscreenElement&&document.exitFullscreen){document.exitFullscreen();return}
-  var request=el&&(el.requestFullscreen||el.webkitRequestFullscreen||el.msRequestFullscreen);
-  if(request){try{var p=request.call(el);if(p&&p.catch)p.catch(function(){playerStatus('تعذر فتح ملء الشاشة')})}catch(e){playerStatus('ملء الشاشة غير مدعوم على هذا الجهاز')}}
-  else playerStatus('ملء الشاشة غير مدعوم على هذا الجهاز')
+
+ // VIDAA packaged web apps run chromeless. For the TV browser use Fullscreen
+ // API when allowed, and an honest viewport-only fallback when blocked.
+ var fullButton=document.getElementById('player-fullscreen');
+ function nativeFullOwner(){return document.fullscreenElement||document.webkitFullscreenElement||
+  document.mozFullScreenElement||document.msFullscreenElement||null}
+ function isNativeFull(){return nativeFullOwner()===root||nativeFullOwner()===video||!!video.webkitDisplayingFullscreen}
+ function isFull(){return isNativeFull()||root.classList.contains('tv-immersive')}
+ function updateFullButton(){
+  if(!fullButton||!fullButton.isConnected)return;
+  var on=isFull();
+  fullButton.textContent=on?'⤢ تصغير':'⛶ ملء الشاشة';
+  fullButton.setAttribute('aria-label',on?'الخروج من ملء الشاشة':'ملء الشاشة');
+  fullButton.setAttribute('aria-pressed',String(on));
+  fullButton.title=on?'الخروج من ملء الشاشة':'ملء الشاشة'
+ }
+ function enterViewportMode(){
+  if(!root.isConnected||S.route!=='player')return;
+  root.classList.add('tv-immersive');
+  document.documentElement.classList.add('blofy-tv-immersive');
+  document.body.classList.add('blofy-tv-immersive');
+  updateFullButton();
+  var hint=document.getElementById('player-control-hint');
+  if(hint)hint.textContent='وضع ملء الصفحة • قد يُظهر متصفح التلفزيون شريط النظام'
+ }
+ function exitFull(){
+  var owner=nativeFullOwner(),exit=document.exitFullscreen||document.webkitExitFullscreen||
+    document.mozCancelFullScreen||document.msExitFullscreen;
+  if(owner&&exit){try{var p=exit.call(document);if(p&&p.catch)p.catch(function(){})}catch(err){}}
+  if(video.webkitDisplayingFullscreen&&video.webkitExitFullscreen){try{video.webkitExitFullscreen()}catch(err){}}
+  root.classList.remove('tv-immersive');
+  document.documentElement.classList.remove('blofy-tv-immersive');
+  document.body.classList.remove('blofy-tv-immersive');
+  updateFullButton()
+ }
+ function toggleFull(){
+  if(isFull()){exitFull();return}
+  var request=root.requestFullscreen||root.webkitRequestFullscreen||root.mozRequestFullScreen||root.msRequestFullscreen;
+  if(request){
+   try{
+    var p=request.call(root);
+    if(p&&p.then){
+     p.then(function(){updateFullButton()},function(){
+      if(video.webkitEnterFullscreen){try{video.webkitEnterFullscreen();updateFullButton();return}catch(err){}}
+      enterViewportMode()
+     })
+    }else setTimeout(function(){
+     if(!isNativeFull()&&S.route==='player')enterViewportMode();
+     else updateFullButton()
+    },600);
+    return
+   }catch(err){}
+  }
+  if(video.webkitEnterFullscreen){try{video.webkitEnterFullscreen();updateFullButton();return}catch(err){}}
+  enterViewportMode()
+ }
+ state.isFullscreen=isFull;state.exitFullscreen=exitFull;state.toggleFullscreen=toggleFull;
+ if(fullButton)fullButton.onclick=toggleFull;
+ function fullscreenChanged(){updateFullButton()}
+ var events=['fullscreenchange','webkitfullscreenchange','mozfullscreenchange','MSFullscreenChange'];
+ events.forEach(function(e){document.addEventListener(e,fullscreenChanged)});
+ video.addEventListener('webkitbeginfullscreen',fullscreenChanged);
+ video.addEventListener('webkitendfullscreen',fullscreenChanged);
+ state.cleanupFullscreen=function(){
+  events.forEach(function(e){document.removeEventListener(e,fullscreenChanged)});
+  video.removeEventListener('webkitbeginfullscreen',fullscreenChanged);
+  video.removeEventListener('webkitendfullscreen',fullscreenChanged);
+  exitFull()
  };
+ updateFullButton();
  var back30=document.getElementById('player-skip-back'),forward30=document.getElementById('player-skip-forward');
  if(back30)back30.onclick=function(){state.seekBy(-10)};
  if(forward30)forward30.onclick=function(){state.seekBy(10)};
@@ -2512,6 +2577,9 @@ function directional(e){
    if(info&&!info.hidden){info.hidden=true;var infoBtn=document.getElementById('player-info-toggle');if(infoBtn)infoBtn.setAttribute('aria-expanded','false');e.preventDefault();return}
    var jump=document.getElementById('player-jump-panel');
    if(jump&&!jump.hidden){jump.hidden=true;e.preventDefault();return}
+   if(S.playerView&&S.playerView.isFullscreen&&S.playerView.isFullscreen()){
+    e.preventDefault();S.playerView.exitFullscreen();return
+   }
   }
   e.preventDefault();back();return
  }
@@ -2529,6 +2597,22 @@ function directional(e){
     panelButtons[targetIndex].scrollIntoView({block:'nearest'});
     return
    }
+  }
+ }
+ if(S.route==='player'&&!editable){
+  var transport=S.playerView;
+  if(code===70&&transport&&transport.toggleFullscreen){e.preventDefault();transport.toggleFullscreen();return}
+  if((code===415||code===19||code===179)&&transport){
+   e.preventDefault();
+   if(code===415&&!transport.video.paused)return;
+   if(code===19&&transport.video.paused)return;
+   transport.toggle();return
+  }
+  if((code===412||code===417)&&transport&&transport.kind!=='live'&&transport.seekBy){
+   e.preventDefault();transport.seekBy(code===412?-10:10);return
+  }
+  if((code===427||code===428)&&transport&&transport.kind==='live'&&transport.switchChannel){
+   e.preventDefault();transport.switchChannel(code===427?1:-1);return
   }
  }
  if(S.route==='player'&&(!editable||document.activeElement&&document.activeElement.id==='seek')){
