@@ -126,6 +126,9 @@ const KEY_HEX = String(process.env.BLOFY_PLAYLIST_ENCRYPTION_KEY || '').trim();
 const pool = new pg.Pool({
   ...databaseOptions(DATABASE_URL),
   max: 5,
+  // Gateway item lookups must not allocate large parallel-query DSM segments.
+  // Keep this scoped to the gateway pool so other database workloads are unchanged.
+  options: '-c max_parallel_workers_per_gather=0',
   connectionTimeoutMillis: 5000,
   idleTimeoutMillis: 15000,
   statement_timeout: 30000
