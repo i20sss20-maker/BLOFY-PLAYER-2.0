@@ -1296,18 +1296,23 @@ await importReleaseArtifactIfConfigured({
 }).catch(error => {
   console.error('STREAM artifact import failed:', error?.message || error);
 });
-await importReleaseArtifactIfConfigured({
-  url: STREAM_NEXT_ARTIFACT_ZIP_URL,
-  entry: STREAM_NEXT_ARTIFACT_ENTRY,
-  sha256: STREAM_NEXT_ARTIFACT_SHA256
-}).catch(error => {
-  // Do not promote a missing or unverified candidate in the public catalog.
-  console.error('STREAM NEXT artifact import failed:', error?.message || error);
-});
+// The NEXT STREAM build is an optional QA candidate, not an active installer.
+// Its remote ZIP fetch can take up to 120 seconds and must not block Railway
+// readiness or cause a 502 for existing customer release.json downloads.
+// Keep the current public release artifact imports above readiness.
 let stopScheduledRefresh = () => {};
 let mirrorTimer = null;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`BLOFY Azure update distribution listening on ${PORT}`);
+  // Only after the listener is ready: this does not promote or expose a
+  // candidate until the existing hash-verified import completes.
+  void importReleaseArtifactIfConfigured({
+    url: STREAM_NEXT_ARTIFACT_ZIP_URL,
+    entry: STREAM_NEXT_ARTIFACT_ENTRY,
+    sha256: STREAM_NEXT_ARTIFACT_SHA256
+  }).catch(error => {
+    console.error('STREAM NEXT artifact import failed:', error?.message || error);
+  });
   stopScheduledRefresh = scheduleManagedAppRefresh();
   // Best-effort background backup, after readiness. It is never an
   // importer/host cutover and cannot block health or customer downloads.
