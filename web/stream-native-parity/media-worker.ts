@@ -50,6 +50,10 @@ const sharedLiveGroups=new Map();
  // Pending registrations are per authorized SID. A viewer leaving during
  // upstream-header wait must not be resurrected after the delayed fetch.
 const pendingSharedLiveViewers=new Map();
+// Per authorized origin/channel failure budget. These identifiers are HMACs
+// (not subscriber names, codes or upstream URLs), expire quickly and are capped.
+const liveSourceFailureWindows=new Map();
+const MAX_LIVE_SOURCE_WINDOWS=256;
 const MAX_SHARED_LIVE_VIEWERS=4;
 const hlsRoot=join(tmpdir(),'blofy-vidaa-hls-sessions');
 const hardTTL=9*60*1000;
@@ -62,6 +66,36 @@ function hlsKey(bearer,kind,id,ext,track,forceCompat,ultra=false,viewerSid=''){
  if(ultra)fields.push('ultra');
  else if(forceCompat)fields.push('compat');
  return createHmac('sha256',SECRET).update(fields.join('\x00')).digest('hex').slice(0,40)
+}
+function liveSourceIdentity(bearer,kind,id,ext,track,forceCompat,ultra){
+ return hlsKey(bearer,kind,id,ext,track,forceCompat,ultra,'');
+}
+function liveSourceRetryMs(identity,now=Date.now()){
+ const entry=liveSourceFailureWindows.get(identity);
+ if(!entry)return 0;
+ if(now-entry.lastAt>120000){
+  liveSourceFailureWindows.delete(identity);
+  return 0
+ }
+ return Math.max(0,entry.retryAt-now)
+}
+function recordLiveSourceFailure(session,reason,now=Date.now()){
+ if(session.kind!=='live'||!session.sourceIdentity)return;
+ if(!['live_source_finished','stale_manifest','ffmpeg_no_playlist','process_crashed',
+  'fetch_or_spawn_error','hls_source_failed'].includes(reason)&&!/^upstream_5[0-9]{2}$/.test(reason))return;
+ const key=session.sourceIdentity,old=liveSourceFailureWindows.get(key);
+ const repeated=old&&now-old.lastAt<120000&&now-session.startedAt<90000;
+ const failures=repeated?Math.min(6,old.failures+1):1;
+ const delay=Math.min(30000,1600*Math.pow(2,failures-1));
+ if(liveSourceFailureWindows.has(key))liveSourceFailureWindows.delete(key);
+ liveSourceFailureWindows.set(key,{failures,lastAt:now,retryAt:now+delay});
+ // A bounded memory budget prevents huge catalogs from retaining per-code keys.
+ if(liveSourceFailureWindows.size>MAX_LIVE_SOURCE_WINDOWS)
+  liveSourceFailureWindows.delete(liveSourceFailureWindows.keys().next().value)
+}
+function noteLiveSourceHealthy(session,now=Date.now()){
+ if(session.kind==='live'&&session.sourceIdentity&&now-session.startedAt>90000)
+  liveSourceFailureWindows.delete(session.sourceIdentity)
 }
 function touchHls(session){
  session.lastAccess=Date.now();if(session.idleTimer)clearTimeout(session.idleTimer);
@@ -81,6 +115,7 @@ function touchHls(session){
 }
 function stopHls(session,reason){
  if(!session||session.stopped)return;
+ if(!session.sharedAlias)recordLiveSourceFailure(session,reason);
  if(session.sharedAlias){
   // A viewer-specific stop drops one ref, NEVER another viewer's decoder.
   session.stopped=true;
@@ -142,7 +177,12 @@ async function awaitHlsFile(session,filename,limitMs){
  }
  return false;
 }
-function hlsError(status,error){return json(status,{ok:false,error})}
+function hlsError(status,error,retryAfterSeconds=0){
+ const seconds=Math.max(0,Math.min(30,Number(retryAfterSeconds)||0));
+ if(seconds)return new Response(JSON.stringify({ok:false,error,retryAfterSeconds:seconds}),
+  {status,headers:{'Content-Type':'application/json','Cache-Control':'no-store, private','Retry-After':String(seconds)}});
+ return json(status,{ok:false,error})
+}
 /* An FFmpeg pipe can stay open after upstream stops emitting packets.
  * The previous playlist keeps returning 200 and fools a TV into waiting
  * indefinitely. Detect stale LIVE output, then close its source and encoder;
@@ -229,7 +269,8 @@ async function startHls({bearer,kind,id,ext,track,key,forceCompat=false,ultra=fa
  // One unique directory per decoder instance; a retired FFmpeg process
  // cannot overwrite a fresh channel playlist while it is shutting down.
  const abort=new AbortController(),dir=join(hlsRoot,key+'-'+randomBytes(6).toString('hex'));
- const session={key,kind,id,ext,track,dir,abort,ultra:!!ultra,startedAt:Date.now(),stopped:false,released:false,finished:false,proc:null,lastAccess:Date.now(),error:null,legacyHls:true};
+ const session={key,kind,id,ext,track,dir,abort,ultra:!!ultra,startedAt:Date.now(),stopped:false,released:false,finished:false,proc:null,lastAccess:Date.now(),error:null,legacyHls:true,
+  sourceIdentity:kind==='live'?liveSourceIdentity(bearer,kind,id,ext,track,forceCompat,ultra):''};
  hlsSessions.set(key,session);
  mkdirSync(dir,{recursive:true});
  touchHls(session);
@@ -432,6 +473,14 @@ async function hlsRequest(req,url){
  if(!sess&&filename!=='index.m3u8')return hlsError(404,'hls_session_missing');
  if(!sess){
   const args={bearer,kind,id,ext,track,key,viewerSid,forceCompat:!!compat,ultra:compat==='ultra'};
+  // Prevent a source that closes immediately from being reopened dozens
+  // of times a minute. Other accounts/channels are never throttled.
+  const group=liveShareAllowed(kind,viewerSid)?
+   sharedLiveGroups.get(liveShareGroupKey(bearer,kind,id,ext,track,!!compat,compat==='ultra')):null;
+  if(kind==='live'&&!group){
+   const wait=liveSourceRetryMs(liveSourceIdentity(bearer,kind,id,ext,track,!!compat,compat==='ultra'));
+   if(wait>0)return hlsError(503,'hls_origin_backoff',Math.ceil(wait/1000))
+  }
   const start=liveShareAllowed(kind,viewerSid)?await startSharedLiveViewer(args):await startHls(args);
   if(start.error)return hlsError(start.status,start.error);
   sess=start.session
@@ -441,6 +490,7 @@ async function hlsRequest(req,url){
  const owner=sess.sharedProducer||sess;
  touchHls(sess);
  if(owner!==sess)touchHls(owner);
+ if(kind==='live')noteLiveSourceHealthy(owner);
  const ready=await awaitHlsFile(owner,filename,filename==='index.m3u8'?25000:8000);
  if(ready&&filename==='index.m3u8'&&kind==='live'){
   // Avoid exposing an initialized playlist before its first segment is committed.
