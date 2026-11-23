@@ -1349,6 +1349,12 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
   video.addEventListener('resize',record.qualityListener);
   record.qualityListener()
  }
+ // Always play live at 1x: a stale playback speed must not pitch-shift voices.
+ if(kind==='live'){
+  video.defaultPlaybackRate=1;video.playbackRate=1;
+  if('preservesPitch' in video)video.preservesPitch=true;
+  if('webkitPreservesPitch' in video)video.webkitPreservesPitch=true
+ }
  video.muted=!!preview;video.defaultMuted=!!preview;video.autoplay=true;video.playsInline=true;video.controls=false;
  function alive(){return S.play===record}
  function setCompatibility(force,automatic){
@@ -1946,7 +1952,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  (kind==='series'?'':playerControl('player-favorite','favorite','إضافة إلى المفضلة'))+
  '</div>'+
  '<section class="player-more-panel" id="player-more-panel" hidden aria-label="خيارات إضافية">'+
- (isLive?'':'<button class="btn secondary" id="player-skip-forward5">+5 دقائق</button><button class="btn secondary" id="player-jump-toggle" aria-controls="player-jump-panel" aria-expanded="false">↪ الانتقال لدقيقة</button><button class="btn secondary" id="player-restart">↺ من البداية</button><button class="btn secondary" id="player-speed">السرعة 1×</button>')+
+ (isLive?'':'<button class="btn secondary" id="player-skip-forward5">+5 دقائق</button><button class="btn secondary" id="player-jump-toggle" aria-controls="player-jump-panel" aria-expanded="false">↪ الانتقال لدقيقة</button><button class="btn secondary" id="player-restart">↺ من البداية</button><button class="btn secondary" id="player-speed"'+(isLive?' hidden disabled':'')+'>السرعة 1×</button>')+
 
  '<button class="btn secondary" id="player-health-toggle" aria-expanded="false" aria-controls="player-health-panel">حالة التشغيل</button>'+
  (isLive?'':'<button class="btn secondary" id="player-info-toggle" aria-expanded="false" aria-controls="player-info-panel">ⓘ معلومات المحتوى</button>')+'</section>'+
