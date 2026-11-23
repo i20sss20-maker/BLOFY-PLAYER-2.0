@@ -161,8 +161,16 @@ function navHtml(){
  '<div class="rail-foot">BLOFY STREAM · WEB</div></aside>'
 }
 function shell(pageTitle,markup){
- S.heading=pageTitle;app.innerHTML='<div class="app screen-appear">'+navHtml()+'<main class="workspace" id="workspace">'+
- '<div class="toolbar"><h1>'+esc(pageTitle)+'</h1><div class="row">'+(S.route==='home'?'':'<button class="btn secondary back-nav" data-back="1">↶ رجوع</button>')+'<button class="btn secondary" data-go="search">⌕ بحث</button></div></div>'+
+ var catalogPage=S.route==='live'||S.route==='movie'||S.route==='series';
+ S.heading=pageTitle;
+ // Each catalog is its own wide TV screen. The global app sidebar belongs
+ // to Home, not to the Live/Movies/Series list, as in the native TV workflow.
+ app.innerHTML='<div class="app screen-appear'+(catalogPage?' catalog-app':'')+'">'+
+ (catalogPage?'':navHtml())+'<main class="workspace" id="workspace">'+
+ '<div class="toolbar"><h1>'+esc(pageTitle)+'</h1><div class="row">'+
+ (S.route==='home'?'':'<button class="btn secondary back-nav" data-back="1">↶ رجوع</button>')+
+ (catalogPage?'<button class="btn secondary catalog-home" data-go="home">⌂ الرئيسية</button>':'')+
+ '<button class="btn secondary" data-go="search">⌕ بحث</button></div></div>'+
  '<div id="screen">'+markup+'</div></main></div>';
  // Pages restore their own controls after data arrives rather than focusing the sidebar.
 }
@@ -397,6 +405,104 @@ function buildCatalog(kind,listing){
  bindMoreOnScroll(kind);
  restoreView(kind)
 }
+
+/* Update a category without destroying the shell, TV focus, or the live
+ * preview <video>. Replacing #catalog-root previously flashed the page,
+ * restarted HLS and lost the D-pad position on every category press.
+ */
+function renderCategoryItems(kind,listing){
+ var source=listing&&Array.isArray(listing.items)?listing.items:[];
+ if(kind==='live'){
+  var list=document.getElementById('channel-list'),pane=document.querySelector('.channels');
+  if(!list||!pane)return false;
+  list.innerHTML=source.length?source.map(function(x){
+   var id=itemId(x,'live'),pic=art(x);
+   return '<button class="channel-item" data-channel="'+esc(id)+'">'+
+    (pic?safeImg(x,'channel-image'):'<span class="channel-image"></span>')+
+    '<span class="channel-name"><strong>'+esc(title(x))+'</strong><small>شاهد الآن</small></span><span class="accent">▶</span></button>'
+  }).join(''):'<p class="catalog-inline-empty">لا توجد قنوات في هذا التصنيف.</p>';
+  list.scrollTop=0;
+  var counter=pane.querySelector('.pane-head small');
+  if(counter)counter.textContent=source.length+' قناة محمّلة';
+  var more=pane.querySelector('[data-more="live"]');
+  if(more){more.disabled=!listing.hasMore;more.textContent=listing.hasMore?'عرض المزيد':'تم عرض المحتوى'}
+  // Keep the same preview video element while selecting a channel in the
+  // new list. beginPreview serializes STOP before the next upstream starts.
+  var next=source.find(function(x){return itemId(x,'live')===String(S.selected)})||source[0];
+  if(next){
+   S.selected=itemId(next,'live');
+   selectChannel(S.selected,true)
+  }else{
+   S.selected=null;S.livePreview=null;
+   if(S.play&&S.play.preview)stopPlayback(true);
+   var empty=document.getElementById('preview-empty');
+   if(empty){empty.style.display='';empty.textContent='لا توجد قناة للمعاينة في هذا التصنيف'}
+   var heading=document.getElementById('live-title');
+   if(heading)heading.textContent='المعاينة المباشرة';
+   var details=document.getElementById('live-desc');
+   if(details)details.textContent='اختر تصنيفًا يحتوي على قنوات';
+   var status=document.getElementById('live-status');
+   if(status)status.textContent='';
+  }
+  return true
+ }
+ var grid=document.querySelector('.poster-panel .poster-grid');
+ if(!grid)return false;
+ var sorted=source.slice();
+ if(S.sort==='alpha')sorted.sort(function(a,b){return title(a).localeCompare(title(b))});
+ if(S.sort==='new')sorted.sort(function(a,b){return Number(b.added||0)-Number(a.added||0)});
+ grid.innerHTML=sorted.length?sorted.map(function(x){return posterCard(x,kind)}).join(''):
+  '<p class="catalog-inline-empty">لا يوجد محتوى في هذا التصنيف.</p>';
+ var count=document.querySelector('.poster-panel-header small');
+ if(count)count.textContent=sorted.length+' عنوان محمّل • تصفح الملصقات';
+ var moreButton=document.querySelector('.poster-panel [data-more="'+kind+'"]');
+ if(moreButton){moreButton.disabled=!listing.hasMore;moreButton.textContent=listing.hasMore?'عرض المزيد':'تم عرض المحتوى'}
+ var sortButton=document.querySelector('.poster-panel [data-sort]');
+ if(sortButton)sortButton.textContent=S.sort==='alpha'?'أبجدي':S.sort==='new'?'الأحدث':'ترتيب المصدر';
+ var scroller=document.querySelector('.poster-panel');
+ if(scroller)scroller.scrollTop=0;
+ enrichPosters(kind,sorted.slice(0,10));
+ return true
+}
+function changeCatalogCategory(kind,category){
+ if(S.route!==kind||!document.querySelector('#catalog-root .catalog'))return;
+ if((S.cat[kind]||'all')===category&&!S.categoryLoadFailed)return;
+ S.categoryLoadFailed=false;
+ rememberView();
+ S.cat[kind]=category;
+ var epoch=(S.categoryEpoch||0)+1;S.categoryEpoch=epoch;
+ var panel=document.querySelector('#catalog-root .cat-rail');
+ if(panel){
+  var buttons=panel.querySelectorAll('[data-cat]');
+  for(var i=0;i<buttons.length;i++){
+   var active=buttons[i].getAttribute('data-cat')===kind+':'+category;
+   buttons[i].classList.toggle('selected',active);
+   buttons[i].setAttribute('aria-pressed',active?'true':'false')
+  }
+ }
+ // This local status does not touch the video or global layout.
+ var root=document.getElementById('catalog-root'),badge=document.getElementById('catalog-update-status');
+ if(!badge&&root){badge=document.createElement('div');badge.id='catalog-update-status';
+  badge.setAttribute('role','status');badge.setAttribute('aria-live','polite');
+  root.insertBefore(badge,root.firstChild)}
+ if(badge){badge.hidden=false;badge.textContent='جار عرض التصنيف…'}
+ var catalog=root&&root.querySelector('.catalog');
+ if(catalog)catalog.setAttribute('aria-busy','true');
+ getListing(kind,category,function(st,listing){
+  if(S.route!==kind||(S.cat[kind]||'all')!==category||S.categoryEpoch!==epoch||
+   !root||!root.isConnected)return;
+  if(catalog)catalog.removeAttribute('aria-busy');
+  if(st!==200||!listing){
+   S.categoryLoadFailed=true;
+   if(badge){badge.textContent='تعذر تحميل التصنيف. اختره مرة أخرى للمحاولة.';badge.hidden=false}
+   // Remain on previous media rows, rather than blanking the screen.
+   return
+  }
+  renderCategoryItems(kind,listing);
+  if(badge){badge.hidden=true;badge.textContent=''}
+ })
+}
+
 function enrichPosters(kind,source){
  if(kind!=='movie'&&kind!=='series')return;
  // Recover source metadata artwork only for a bounded visible window.
@@ -2745,16 +2851,16 @@ function clickHandler(event){
  if(node.hasAttribute('data-back')){back();return}
  if(go){if(go!==S.route)navigate(go);return}
  if(cat){var parts=cat.split(':'),kind=parts[0];
-  if(S.cat[kind]===parts[1])return;
-  rememberView();S.cat[kind]=parts[1];S.selected=null;S.livePreview=null;
-  if(S.play&&S.play.preview)stopPlayback(true);
-  catalog(kind);return}
+  changeCatalogCategory(kind,parts[1]||'all');return}
  if(det){var sep=det.indexOf(':'),kind=det.slice(0,sep),id=det.slice(sep+1);
   if(kind==='live'){var channel=findItem('live',id);openPlayer('live',id,'ts',title(channel),0);return}
   navigate('detail',{kind:kind,id:id});return}
  if(ch){selectChannel(ch,true);return}
  if(more){loadMore(more);return}
- if(node.getAttribute('data-sort')){S.sort=S.sort==='source'?'new':S.sort==='new'?'alpha':'source';buildCatalog(S.kind,currentListing());return}
+ if(node.getAttribute('data-sort')){
+  S.sort=S.sort==='source'?'new':S.sort==='new'?'alpha':'source';
+  renderCategoryItems(S.kind,currentListing());return
+ }
  if(ep){navigate('episodes',{id:ep});return}
  if(season){S.selectedSeason=season;episodesScreen({id:S.item&&S.item.id});return}
  if(fav){
