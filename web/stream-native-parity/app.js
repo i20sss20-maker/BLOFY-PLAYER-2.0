@@ -2262,7 +2262,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    'انتظار التخزين: '+(st.bufferEvents||0)+' مرة',
    'النتيجة الأولية: '+assessment,
    'ملاحظة: التقرير يستبعد بيانات الاشتراك والروابط؛ النتيجة تقديرية وليست تشخيصًا قطعيًا.'
-  ].join('\\n')
+  ].join(String.fromCharCode(10))
  }
  var diagnosticToggle=document.getElementById('player-diagnostic-toggle');
  if(diagnosticToggle)diagnosticToggle.onclick=function(){
