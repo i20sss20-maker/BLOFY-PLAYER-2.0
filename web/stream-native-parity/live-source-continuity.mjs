@@ -172,5 +172,5 @@ export function liveTsSameSourceContinuity({
    try{reader?.cancel()}catch{}
    try{reader?.releaseLock()}catch{}
   }
- })
+ },{highWaterMark:0})
 }
