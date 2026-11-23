@@ -15,6 +15,7 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.datasource.HttpDataSource
 import tv.blofy.player.core.diagnostics.PlaybackDiagnostics
 import tv.blofy.player.core.diagnostics.PlaybackDiagnosticsUploader
 import tv.blofy.player.core.diagnostics.PlaybackMetric
@@ -120,11 +121,23 @@ class BlofyPlaybackSession(
                         automaticRetries = 0
                     }
                     lastReadyAtMs = 0L
-                    if (automaticRetries < MAX_AUTOMATIC_RETRIES) {
+                    val maxErrorRetries = PlaybackRecoveryPolicy.maxErrorRetries(
+                        isCodeOnlyGateway = BuildConfig.CODE_ONLY_LOGIN &&
+                            profile.providerKey == StreamCodeSession.providerId,
+                        contentKind = contentKind,
+                        errorCodeName = error.errorCodeName,
+                        httpStatus = transientHttpCode(error)
+                    )
+                    if (automaticRetries < maxErrorRetries) {
                         automaticRetries++
-                        // A short delay gives the prior socket time to close.
-                        // Paused playback is re-prepared but remains paused.
-                        retryHandler.postDelayed({ retrySameUrl() }, ERROR_RETRY_DELAY_MS)
+                        // One additional bounded resume path for transient
+                        // code-only VOD: same URL, same account, same seek
+                        // position. No unsafe ETag-free byte splicing or
+                        // wider retries for 401/403/404/decoder failures.
+                        val delay = PlaybackRecoveryPolicy.errorRetryDelayMs(
+                            retry = automaticRetries, maxRetries = maxErrorRetries
+                        )
+                        retryHandler.postDelayed({ retrySameUrl() }, delay)
                     } else {
                         val failedUrl = currentMediaItem?.localConfiguration?.uri?.toString().orEmpty()
                         if (failedUrl.isNotBlank()) {
@@ -241,7 +254,7 @@ class BlofyPlaybackSession(
     private fun playInternalFallback(url: String) {
         // Existing error fallback behavior stays unchanged. The stall watchdog never selects this path.
         fallbackState.markUrlAttempted(url)
-        automaticRetries = MAX_AUTOMATIC_RETRIES
+        automaticRetries = PlaybackRecoveryPolicy.STREAM_VOD_NETWORK_RETRIES
         lastReadyAtMs = 0L
         firstFrameRecorded = false
         resetLiveStallTimer(keepPosition = false)
@@ -250,6 +263,18 @@ class BlofyPlaybackSession(
         player.setMediaItem(mediaItem(url))
         player.prepare()
         player.playWhenReady = true
+    }
+
+    private fun transientHttpCode(error: PlaybackException): Int? {
+        // Media3 may wrap the HTTP response exception in a source exception.
+        // Look only at the typed status; never inspect/log raw URLs or headers.
+        var reason: Throwable? = error
+        repeat(5) {
+            if (reason is HttpDataSource.InvalidResponseCodeException)
+                return (reason as HttpDataSource.InvalidResponseCodeException).responseCode
+            reason = reason?.cause
+        }
+        return null
     }
 
     private fun mediaItem(url: String): MediaItem = MediaItem.Builder()
@@ -269,8 +294,7 @@ class BlofyPlaybackSession(
     }
 
     private companion object {
-        const val MAX_AUTOMATIC_RETRIES = 1
-        const val ERROR_RETRY_DELAY_MS = 600L
+
         const val LIVE_STALL_WATCHDOG_INTERVAL_MS = 4_000L
     }
 
