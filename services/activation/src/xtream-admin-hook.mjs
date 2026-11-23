@@ -2328,7 +2328,7 @@ async function operatorHideRemovedLiveCategory(){
   // clients may continue showing a cached copy even for newly issued codes.
   // The source and customer credentials remain unchanged.
   const catalogRevision=before.rows.length
-    ?await bumpXtreamCatalogRevision(controlPool,sourceId,'operator_category_visibility')
+    ?await bumpXtreamCatalogRevision(controlPool,sourceId,'operator_edit')
     :null;
   console.info('BLOFY_XTREAM_CATEGORY_HIDE_ONCE',JSON.stringify({
     code:'category_reconciled',sourceId,category:requested,
