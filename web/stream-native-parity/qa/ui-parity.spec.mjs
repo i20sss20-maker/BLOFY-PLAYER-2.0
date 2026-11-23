@@ -647,6 +647,7 @@ test('TV quality picker changes original source to codec-compatible HLS with sto
  await page.locator('[data-preview-full]').click();
  await expect(page.locator('#player-root')).toBeVisible({timeout:10000});
  await expect.poll(()=>page.locator('#player-media').evaluate(v=>v.readyState),{timeout:12000}).toBeGreaterThan(1);
+ await expect(page.locator('#player-resolution')).toContainText('المصدر 3840x2160',{timeout:12000});
  await page.locator('#player-quality').click();
  await expect(page.locator('#player-choice-panel')).toBeVisible();
  await expect(page.locator('[data-choice-index="1"]')).toContainText('متوافق');
