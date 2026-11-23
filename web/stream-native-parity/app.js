@@ -1318,7 +1318,10 @@ function livePlaybackProgress(record,video,now){
  // A live audio clock may keep currentTime moving while the picture freezes.
  // If real decoded-frame counters are usable, trust them over audio time.
  // Browsers reporting 0 or unavailable frames retain the time-based fallback.
- var frameCounterUsable=frames!==null&&frames>=5&&record.lastVideoFrames!==null&&record.lastVideoFrames!==undefined;
+ // Some TV firmwares expose a non-changing frame counter. Only trust it
+ // after seeing that this specific decoder has advanced it at least once.
+ if(advancedFrames)record.frameCounterObserved=true;
+ var frameCounterUsable=!!record.frameCounterObserved&&frames!==null&&frames>=5;
  var visualProgress=frameCounterUsable?advancedFrames:(advancedTime||advancedFrames);
  if(Number.isFinite(time))record.lastMediaTime=time;
  if(frames!==null)record.lastVideoFrames=frames;
