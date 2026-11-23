@@ -175,6 +175,12 @@ test('known-duration MKV uses full VOD HLS rather than a one-minute live-style p
  await expect.poll(()=>page.locator('#player-media').evaluate(v=>v.readyState),{timeout:16000}).toBeGreaterThan(1);
  const state=await page.locator('#player-media').evaluate(v=>({ready:v.readyState,error:v.error&&v.error.code}));
  expect(state.error).toBeFalsy();expect(errors).toEqual([]);
+ await page.locator('#player-quality').click();
+ await expect(page.locator('#player-choice-panel')).toBeVisible();
+ await expect(page.locator('.native-player-choice-item').first()).toContainText('تلقائي');
+ await page.keyboard.press('Escape');
+ await expect(page.locator('#player-choice-panel')).toBeHidden();
+ await expect(page.locator('#player-root')).toBeVisible();
  movie.container_extension='mp4';delete movie.duration_secs;
 });
 test('VOD MP4 can open real HTML5 media; restart-from-zero overrides stored position',async({page})=>{
