@@ -288,7 +288,9 @@ if(p==='/api/compatible/health'&&method==='GET'){
   if(!/^http:\/\/blofy-vidaa-(?:media-compat-pilot|hls-dynamic)\.railway\.internal:8080$/.test(host))return json(503,{error:'compat_not_configured'});
   const r=await fetch(host+'/health',{redirect:'manual',signal:AbortSignal.timeout(5000)});
   if(!r.ok)return json(503,{error:'compat_worker_unavailable'});
-  const data=await r.json();return json(data.ok?200:503,{ok:!!data.ok,ffmpegAvailable:!!data.ffmpegAvailable,activeJobs:data.activeJobs,capacity:data.limit});
+  const data=await r.json();return json(data.ok?200:503,{ok:!!data.ok,ffmpegAvailable:!!data.ffmpegAvailable,activeJobs:data.activeJobs,capacity:data.limit,
+   liveQuality:['480','720','1080'].includes(String(data.liveQuality))?String(data.liveQuality):'unknown',
+   vodQuality:['480','720','1080'].includes(String(data.vodQuality))?String(data.vodQuality):'unknown'});
  }catch(e){return json(503,{error:'compat_worker_unreachable'})}
 }
 if(p.indexOf('/api/compatible/')===0&&method==='GET'){
