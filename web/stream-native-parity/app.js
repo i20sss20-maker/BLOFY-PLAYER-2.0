@@ -953,7 +953,11 @@ function loadHls(done){
 function stopPlayback(sendStop){
  if(!S.play)return;var old=S.play;S.play=null;
  if(old.preview)S.livePreview=null;
- try{if(old.timer)clearInterval(old.timer);if(old.stallTimer)clearTimeout(old.stallTimer)}catch(e){}
+ try{
+  if(old.timer)clearTimeout(old.timer);
+  if(old.stallTimer)clearTimeout(old.stallTimer);
+  if(old.startupTimer)clearTimeout(old.startupTimer)
+ }catch(e){}
  if(old.engine){try{old.engine.destroy()}catch(e){}}
  try{if(old.video){old.video.pause();old.video.removeAttribute('src');old.video.load()}}catch(e){}
  if(sendStop!==false&&(old.hlsKey||old.stopUrl))api('POST',old.stopUrl||'/api/hls/'+old.hlsKey+'/stop',{},function(){})
@@ -1138,6 +1142,7 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
   if(!alive())return;
   if(rec.timer)clearTimeout(rec.timer);
   if(rec.stallTimer)clearTimeout(rec.stallTimer);
+  if(rec.startupTimer)clearTimeout(rec.startupTimer);
   playerStatus(msg,true)
  }
  function recoverFilm(){
@@ -1183,9 +1188,17 @@ function playFullVod(video,kind,id,ext,track,duration,state,ready){
  rec.timer=setTimeout(function(){
   if(alive()&&!rec.ready)playerStatus('جار تجهيز الفيديو من المصدر…')
  },16000);
+ // A source can hang before it emits a video waiting/stalled event. Ensure
+ // the initial spinner does not remain forever; allow enough time for a slow
+ // on-demand first segment before a bounded recovery attempt.
+ rec.startupTimer=setTimeout(function(){
+  rec.startupTimer=null;
+  if(alive()&&!rec.ready&&!video.paused)recoverFilm()
+ },58000);
  video.onplaying=function(){
   if(!alive())return;
   rec.ready=true;if(rec.timer)clearTimeout(rec.timer);
+  if(rec.startupTimer){clearTimeout(rec.startupTimer);rec.startupTimer=null}
   if(rec.stallTimer){clearTimeout(rec.stallTimer);rec.stallTimer=null}
   ready()
  };
@@ -1622,6 +1635,11 @@ function openPlayer(kind,id,extension,name,from){
   var target=Math.max(0,Math.round(Number(raw)||0)),duration=totalDuration();
   if(duration>0&&isFinite(duration))target=Math.min(target,Math.max(0,Math.floor(duration)-2));
   state.lastSeekTarget=target;state.lastSeekAt=Date.now();
+  if(target<5){
+   // Explicitly scrubbing back to the beginning is different from a
+   // newly opened player briefly reporting currentTime=0.
+   delete S.watch[progressKey(kind,id)];profileSave('watch',S.watch)
+  }
   startSeekCheck(target);
   if(state.mode==='fullvod'||state.mode==='direct'&&nativeCanSeek(target)){
    try{
