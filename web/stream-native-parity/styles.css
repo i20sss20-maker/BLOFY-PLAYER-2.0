@@ -372,3 +372,80 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible,.remote-focus{
  .episode-name{font-size:13px;line-height:1.4}
  .episode-meta{font-size:11px}
 }
+
+
+/* Android STREAM PlayerActivity HUD parity (native dock, 52dp focus controls,
+   uncluttered 10s transport, subtitle/audio/quality/favorite actions).
+   Optional web-only diagnostics live behind the ⋯ menu, not in the dock. */
+.player-hud.native-stream-hud{
+ padding:clamp(12px,2.4vh,30px) clamp(13px,3.2vw,37px) max(17px,env(safe-area-inset-bottom));
+ gap:9px;max-height:72dvh;overflow-y:auto;overscroll-behavior:contain;
+ background:linear-gradient(0deg,rgba(4,10,15,.98) 0%,rgba(5,14,20,.9) 57%,transparent 100%);
+ scrollbar-width:thin
+}
+.native-player-topline{display:flex;gap:12px;justify-content:space-between;align-items:center;min-height:37px}
+.native-player-eyebrow{color:var(--accent);font-size:11px;font-weight:850;letter-spacing:.13em;direction:ltr}
+.native-player-back,.native-player-more{color:var(--white);background:#123340e0;border:1px solid #7abeb86b;
+ border-radius:13px;min-height:38px;padding:6px 13px;font:700 12px inherit;cursor:pointer}
+.native-player-more{font-size:22px;font-weight:800;line-height:1;padding:0 13px}
+.native-stream-hud .player-title{font-size:clamp(15px,1.65vw,20px);font-weight:800;line-height:1.45;
+ overflow-wrap:anywhere}
+.native-player-timeline{display:flex;gap:11px;align-items:center;width:100%;min-height:34px}
+.native-player-timeline>span{display:block;flex:0 0 58px;direction:ltr;text-align:center;
+ font-size:12px;font-variant-numeric:tabular-nums;color:#d9e9e8}
+.native-player-timeline .seek-line{flex:1;min-width:0;margin:0;min-height:29px;cursor:pointer}
+.native-player-hint{min-height:21px;text-align:center;color:#aae9e3;font-size:11px;line-height:1.6}
+.native-stream-hud .native-player-dock{display:flex;direction:ltr;align-items:center;justify-content:center;
+ align-self:center;width:max-content;max-width:100%;gap:8px;flex-wrap:nowrap;
+ overflow-x:auto;overflow-y:hidden;scroll-snap-type:x proximity;
+ border:1px solid #91c3c058;background:rgba(12,19,25,.92);
+ border-radius:23px;padding:8px 10px;scrollbar-width:thin;overscroll-behavior-inline:contain}
+.native-player-control{display:inline-flex;flex:0 0 52px;align-items:center;justify-content:center;
+ width:52px;height:52px;padding:11px;color:#fff;cursor:pointer;
+ background:rgba(31,41,49,.8);border:1px solid #8aa7a64f;border-radius:18px;
+ scroll-snap-align:center;transition:background-color 95ms ease,border-color 95ms ease,transform 95ms ease}
+.native-player-control.native-player-primary{background:linear-gradient(125deg,#13777f,#0d4757);
+ border-color:#6ccfc2a6;flex-basis:60px;width:60px}
+.native-player-control:hover,.native-player-control:focus-visible,.native-player-control.remote-focus{
+ background:linear-gradient(135deg,#20717c,#103c47);border:2px solid #e8fffc;outline:0;
+ transform:scale(1.035);box-shadow:0 0 0 2px #42decd2f}
+.native-player-control:focus-visible .native-player-icon{color:#fff}
+.native-player-control.native-player-liked .native-player-icon{fill:#46e4d048;color:#69f3db}
+.native-player-icon{display:block;width:25px;height:25px;flex:none;pointer-events:none}
+.native-player-control.native-player-primary .native-player-icon{width:29px;height:29px}
+.native-player-more:focus-visible,.native-player-back:focus-visible{
+ outline:2px solid #e8fffc;outline-offset:2px;background:#165967}
+.player-more-panel{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;
+ gap:7px;padding:12px;max-width:min(100%,880px);margin:1px auto;
+ background:#0b2530e8;border:1px solid #62c9ba70;border-radius:15px}
+.player-more-panel[hidden]{display:none!important}
+.player-more-panel .btn{font-size:12px;min-height:38px}
+.player-retry{position:absolute;z-index:204;top:43%;left:50%;transform:translate(-50%,-50%);
+ background:#10303b;border:1px solid var(--accent)}
+.native-stream-hud .player-live-guide{background:#0a2533d9;border:1px solid #72b9b36a;
+ max-width:min(100%,650px)}
+.native-stream-hud .player-info-panel,.native-stream-hud .player-health-panel{
+ max-width:min(100%,900px);margin-inline:auto}
+.native-stream-hud .player-jump-panel{margin-inline:auto}
+@media(max-width:730px){
+ .player-hud.native-stream-hud{max-height:70dvh;gap:6px;padding:8px 9px max(10px,env(safe-area-inset-bottom))}
+ .native-player-topline{min-height:29px}
+ .native-player-back,.native-player-more{min-height:32px}
+ .native-player-eyebrow{font-size:10px}
+ .native-stream-hud .player-title{font-size:14px}
+ .native-stream-hud .native-player-dock{gap:5px;padding:5px 6px;border-radius:17px;
+  max-width:100%;justify-content:flex-start}
+ .native-player-control{flex-basis:43px;width:43px;height:43px;padding:9px;border-radius:13px}
+ .native-player-control.native-player-primary{flex-basis:49px;width:49px}
+ .native-player-icon{width:21px;height:21px}
+ .native-player-control.native-player-primary .native-player-icon{width:25px;height:25px}
+ .native-player-timeline>span{flex-basis:46px;font-size:10px}
+ .native-player-hint{min-height:17px;font-size:10px}
+ .player-more-panel{padding:8px;gap:5px}
+}
+@media(max-height:440px) and (orientation:landscape){
+ .player-hud.native-stream-hud{max-height:86dvh;padding:5px 12px;gap:4px}
+ .native-stream-hud .player-live-guide{max-height:61px}
+ .native-player-hint{display:none}
+}
+@media(prefers-reduced-motion:reduce){.native-player-control{transition:none!important}}
