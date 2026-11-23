@@ -43,7 +43,7 @@ test('displayed-frame heartbeat detects freeze even when video and audio clocks 
  assert.equal(check(r,v,20000).advanced,true,'first presented callback is evidence of moving picture');
  v.currentTime=47;
  assert.equal(check(r,v,22000).advanced,false,'audio clock alone is not visual progress');
- assert.equal(check(r,v,40000).idleMs,21000,'16-second freeze watchdog may restart this decoder');
+ assert.equal(check(r,v,40000).idleMs,20000,'16-second freeze watchdog may restart this decoder');
  r.lastPresentedFrameAt=40500;
  assert.equal(check(r,v,41000).advanced,true,'new displayed frame resets timeout');
  assert.equal(check(r,v,42000).advanced,false);
