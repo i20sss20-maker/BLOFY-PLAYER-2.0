@@ -527,6 +527,8 @@ function checkpointPosition(p){
  if(p.seekDebounce&&p.lastSeekTarget!==undefined&&p.lastSeekTarget!==null)
   desired=p.lastSeekTarget;
  else if(pending&&now-pending.startedAt<55000)desired=pending.target;
+ else if(p.seekIncomplete&&p.lastSeekTarget!==undefined&&p.lastSeekTarget!==null&&
+  now-(p.lastSeekAt||0)<120000)desired=p.lastSeekTarget;
  if(desired!==null&&desired!==undefined&&isFinite(Number(desired))){
   var runtime=playbackDuration(p),position=Math.max(0,Number(desired));
   if(runtime>0)position=Math.min(position,Math.max(0,runtime-2));
@@ -1529,6 +1531,8 @@ function openPlayer(kind,id,extension,name,from){
  video.addEventListener('playing',onPlayingEvent);
  video.addEventListener('seeked',confirmSeek);
  video.addEventListener('canplay',confirmSeek);
+ video.addEventListener('loadeddata',confirmSeek);
+ video.addEventListener('timeupdate',confirmSeek);
  video.addEventListener('pause',onPauseEvent);
  video.addEventListener('error',function(){state.stats.errors++});
  var root=document.getElementById('player-root'),hud=root.querySelector('.player-hud');
@@ -1624,7 +1628,10 @@ function openPlayer(kind,id,extension,name,from){
    if(n)n.textContent=formatTime(pos);if(t)t.textContent=duration>0&&isFinite(duration)?formatTime(duration):'المدة غير متوفرة';
    if(seek){seek.disabled=!(duration>0&&isFinite(duration));
     if(document.activeElement!==seek&&duration>0&&isFinite(duration))seek.value=String(Math.max(0,Math.min(1000,Math.round(pos/duration*1000))))}
-   if(!state.pendingSeek&&!state.seekDebounce&&Date.now()-state.lastSaved>5000&&state.ready){
+   // Seek-timeout can clear pendingSeek while the browser still displays
+   // the desired time rather than decoded frames. Do not treat that as watched.
+   if(!state.pendingSeek&&!state.seekDebounce&&!state.seekIncomplete&&
+    Date.now()-state.lastSaved>5000&&state.ready){
     saveResume(kind,id,pos,duration,true);state.lastSaved=Date.now()
    }
   }
