@@ -81,7 +81,7 @@ import { readXtreamGatewayJsonResponse } from './xtream-gateway-response.mjs';
 import {configuredXtreamPublicOrigin} from './xtream-public-origin.mjs';
 import {probeXtreamAccountCompatibility} from './xtream-compatibility-probe.mjs';
 import {rewriteXtreamHlsManifest,readXtreamHlsManifest,
-  unsealXtreamHlsTicket} from './xtream-hls-playback.mjs';
+  unsealXtreamHlsTicket,refreshExpiredXtreamHlsTicket} from './xtream-hls-playback.mjs';
 import { createXtreamHealthSnapshot } from './xtream-health-snapshot.mjs';
 import {relayEligible,issueStreamRelayGrant} from './xtream-stream-relay-bridge.mjs';
 import {permittedLicensedLiveFanout,permittedSharedLivePilot,
@@ -1847,12 +1847,28 @@ async function handleAuthorizedXtreamHls(req,res,match){
   const [,_whole,username,password,gatewayId,ticket]=match;
   const account=await authenticate(username,password,{touch:false});
   if(!account)return text(res,401,'Unauthorized');
-  const token=unsealXtreamHlsTicket(ticket,{keyHex:KEY_HEX});
+  let token=unsealXtreamHlsTicket(ticket,{keyHex:KEY_HEX});
+  // Some IPTV clients refresh an HLS variant or audio playlist using the
+  // original short-lived URI indefinitely. Once its ticket expires, redirect
+  // only after real customer authentication and source/category validation.
+  const renewed=!token?refreshExpiredXtreamHlsTicket(ticket,{keyHex:KEY_HEX}):null;
+  if(!token&&renewed)
+    token={a:renewed.accountId,g:renewed.gatewayId,s:renewed.sourceId};
   if(!token||token.a!==String(account.id)||token.g!==String(gatewayId))
     return text(res,403,'Invalid HLS ticket');
   const row=await gatewayItemById('live',gatewayId,account.source_id||null);
   if(!row||!row.server_enabled||String(row.server_id)!==token.s)
     return text(res,404,'Stream not found');
+  if(renewed){
+    // Never return expired provider URLs; a 307 keeps playlist/segment URI
+    // semantics and is issued only to an already authorized, active viewer.
+    const destination=xtreamOrigin(req)+'/hls/'+
+      encodeURIComponent(username)+'/'+encodeURIComponent(password)+'/'+
+      encodeURIComponent(String(gatewayId))+'/'+renewed.ticket;
+    res.writeHead(307,{'location':destination,'cache-control':'no-store, private',
+      'referrer-policy':'no-referrer','x-content-type-options':'nosniff'});
+    return res.end();
+  }
   let response;
   try{
     const target=new URL(token.u);
@@ -1881,7 +1897,8 @@ async function handleAuthorizedXtreamHls(req,res,match){
         manifest,playlistUrl:response.url||target.href,
         publicOrigin:configuredXtreamPublicOrigin(xtreamOrigin(req)),
         username,password,accountId:account.id,gatewayId,
-        sourceId:row.server_id,depth:token.d,keyHex:KEY_HEX
+        sourceId:row.server_id,depth:token.d,keyHex:KEY_HEX,
+        sessionStartedAt:token.b
       });
       const body=Buffer.from(rewritten,'utf8');
       res.writeHead(200,{'content-type':'application/vnd.apple.mpegurl; charset=utf-8',

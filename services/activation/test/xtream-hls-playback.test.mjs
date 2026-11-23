@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {sealXtreamHlsTicket,unsealXtreamHlsTicket,
-  rewriteXtreamHlsManifest,readXtreamHlsManifest} from '../src/xtream-hls-playback.mjs';
+  rewriteXtreamHlsManifest,readXtreamHlsManifest,
+  refreshExpiredXtreamHlsTicket} from '../src/xtream-hls-playback.mjs';
 
 const keyHex='a'.repeat(64);
 const accountId='550e8400-e29b-41d4-a716-446655440000';
@@ -44,6 +45,10 @@ test('HLS tickets reject tampering and expire without revealing provider address
   const altered=ticket.slice(0,offset)+(ticket[offset]==='A'?'B':'A')+ticket.slice(offset+1);
   assert.equal(unsealXtreamHlsTicket(altered,{keyHex,now}),null);
   assert.equal(unsealXtreamHlsTicket(ticket,{keyHex,now:now+13*60*1000}),null);
+  const renewal=refreshExpiredXtreamHlsTicket(ticket,{keyHex,now:now+13*60*1000});
+  assert.equal(typeof renewal?.ticket,'string');
+  assert.equal(unsealXtreamHlsTicket(renewal.ticket,{keyHex,now:now+13*60*1000}).a,accountId);
+  assert.equal(refreshExpiredXtreamHlsTicket(ticket,{keyHex,now:now+13*60*60*1000}),null);
 });
 test('HLS playlists cannot point to localhost, file URLs or unbounded loops',()=>{
   const base={...args,now,manifest:'#EXTM3U\nfile:///etc/passwd',
@@ -58,4 +63,20 @@ test('HLS bounded reader accepts UTF-8 chunks',async()=>{
   }});
   const result=await readXtreamHlsManifest(stream.getReader());
   assert.equal(result,'#EXTM3U\nsegment.ts\n');
+});
+
+test('recursive HLS variants retain initial session deadline; old tickets cannot renew forever',()=>{
+ const original=sealXtreamHlsTicket({keyHex,accountId,sourceId,gatewayId,now,
+   url:'https://cdn.example.com/live/master.m3u8'});
+ const rotated=refreshExpiredXtreamHlsTicket(original,{keyHex,now:now+13*60*1000});
+ assert.ok(rotated?.ticket);
+ const second=unsealXtreamHlsTicket(rotated.ticket,{keyHex,now:now+13*60*1000});
+ const playlist=rewriteXtreamHlsManifest({...args,now:now+13*60*1000,
+  depth:second.d,sessionStartedAt:second.b,
+  manifest:'#EXTM3U\nchild.m3u8',
+  playlistUrl:'https://cdn.example.com/live/variant.m3u8'});
+ const child=playlist.match(/\/hls\/AbCd1234\/abcDEF123456\/1312444\/([A-Za-z0-9_-]+)/)?.[1];
+ assert.ok(child);
+ assert.equal(unsealXtreamHlsTicket(child,{keyHex,now:now+13*60*1000}).b,now);
+ assert.equal(refreshExpiredXtreamHlsTicket(rotated.ticket,{keyHex,now:now+12*60*60*1000+1}),null);
 });
