@@ -11,6 +11,11 @@ on:
       - web/stream-native-parity/**
       - .github/workflows/qa-blofy-stream-web.yml
   workflow_dispatch:
+# Keep only the newest experimental QA run; obsolete push checks previously
+# piled up downloading browsers and apt packages while the site was iterating.
+concurrency:
+  group: blofy-native-web-qa-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   ui:
     runs-on: ubuntu-24.04
@@ -27,8 +32,14 @@ jobs:
       - run: cd web/stream-native-parity && npx playwright install --with-deps chromium
       - name: Install full Google Chrome for H.264/AAC codec verification
         run: cd web/stream-native-parity && npx playwright install chrome
-      - name: Install FFmpeg for deterministic sample playback
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - name: Install FFmpeg only if absent from the runner
+        run: |
+          if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v ffprobe >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq ffmpeg
+          fi
+          ffmpeg -version | head -n 1
+          ffprobe -version | head -n 1
       - name: Verify H264 preserves real UHD 3840x2160 pixels through HLS packaging
         run: |
           mkdir -p /tmp/blofy-qa-4k
