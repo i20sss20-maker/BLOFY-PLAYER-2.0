@@ -54,6 +54,7 @@ export BLOFY_BACKUP_S3_BUCKET="blofy-qa-private-test"
 export BLOFY_BACKUP_KMS_KEY_ID="arn:aws:kms:us-east-1:000000000000:key/synthetic-only"
 export AWS_REGION="us-east-1"
 export PGPASSWORD="postgres"
+export PGHOST="127.0.0.1" PGPORT="5432" PGUSER="postgres"
 
 bash services/activation/scripts/backup-to-s3.sh > "$root/upload.log"
 key="$(sed -n 's/^object_key=//p' "$root/upload.log")"
