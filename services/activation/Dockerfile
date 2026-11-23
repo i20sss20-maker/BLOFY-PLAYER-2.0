@@ -5,6 +5,10 @@ RUN npm install --omit=dev
 COPY schema.sql ./schema.sql
 COPY src ./src
 COPY web ./web
+# Minute catalog polling must be safe and build-verified before production.
+# This test uses synthetic in-memory Xtream lists, never provider credentials.
+COPY test/xtream-minute-catalog-watch.test.mjs ./test/xtream-minute-catalog-watch.test.mjs
+RUN node --check src/xtream-minute-catalog-watch.mjs && node --check src/xtream-admin-hook.mjs && node --check web/sources-admin.js && node --test test/xtream-minute-catalog-watch.test.mjs
 # Block any deployment with broken shared-live licensing, two-code limits,
 # redirect grants or source authorization. No provider network calls.
 COPY test/xtream-licensed-live-fanout.test.mjs ./test/xtream-licensed-live-fanout.test.mjs
