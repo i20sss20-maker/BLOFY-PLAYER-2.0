@@ -3,6 +3,7 @@ import {pathToFileURL} from 'node:url';
 import {pipeline} from 'node:stream/promises';
 import {S3Client,HeadObjectCommand,GetObjectCommand} from '@aws-sdk/client-s3';
 import {SIGNED_APKS,resolveSignedApk,resolveRange,keyOf} from './signed-release-policy.mjs';
+import {createStreamFeedCanary} from './stream-feed-cache.mjs';
 
 const HEADERS={
   'x-content-type-options':'nosniff','x-frame-options':'DENY',
@@ -56,6 +57,7 @@ export function createSignedApkGateway({
     !Number.isSafeInteger(maxActive)||maxActive<1||maxActive>256)
     throw Error('apk_edge_invalid_dependencies');
   let ready=false,active=0,checkedAt=null,draining=false;
+  const releaseFeed=createStreamFeedCanary();
   const verify=async()=>{
     ready=false;
     for(const pin of pins){
@@ -89,6 +91,17 @@ export function createSignedApkGateway({
     }
     if(!['GET','HEAD'].includes(req.method))
       return errorResponse(res,405,'method_not_allowed',{allow:'GET, HEAD'});
+    // Independent metadata preview. Existing customer updater routes and
+    // pinned APK delivery remain unchanged until a separately verified cutover.
+    if(url.pathname==='/_canary/stream/release.json'){
+      if(url.search||draining)return errorResponse(res,503,'feed_temporarily_unavailable');
+      const result=await releaseFeed.read();
+      if(!result)return errorResponse(res,503,'feed_temporarily_unavailable',{'retry-after':'5'});
+      return res.writeHead(200,{...HEADERS,'content-type':'application/json; charset=utf-8',
+        'content-length':Buffer.byteLength(result.body),'cache-control':'no-store',
+        'x-blofy-feed-cache':result.stale?'stale':'fresh'})
+        .end(req.method==='HEAD'?undefined:result.body);
+    }
     const pin=resolveSignedApk(url.pathname,pins);
     if(!pin||url.search)return errorResponse(res,404,'not_found');
     if(!ready||draining)return errorResponse(res,503,'storage_not_ready',{'retry-after':'5'});
@@ -138,7 +151,7 @@ export function createSignedApkGateway({
   server.on('clientError',(_err,socket)=>{
     if(socket.writable)socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n');
   });
-  return {server,verify,state:()=>({ready,active,maxActive,checkedAt}),
+  return {server,verify,releaseFeed,state:()=>({ready,active,maxActive,checkedAt}),
     drain:()=>{draining=true;server.close();server.closeIdleConnections?.();}};
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
@@ -151,6 +164,8 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   gateway.server.listen(port,'0.0.0.0',async()=>{
     try{
       await gateway.verify();
+      // Prime the independent feed without blocking signed APK readiness.
+      void gateway.releaseFeed.prime();
       console.info('BLOFY_APK_EDGE',JSON.stringify({
         ok:true,mode:'canary_not_customer_cutover',pinned:SIGNED_APKS.length
       }));
