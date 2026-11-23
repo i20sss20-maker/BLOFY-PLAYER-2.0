@@ -30,7 +30,7 @@ function compatibleVideoArgs(kind,gopSeconds=1){
  const filter="scale=w='min(iw,"+quality.width+")':h='min(ih,"+quality.height+")':force_original_aspect_ratio=decrease:force_divisible_by=2";
  return ['-c:v','libx264','-preset',kind==='live'?'superfast':'veryfast',
   '-tune',kind==='live'?'zerolatency':'film',
-  '-profile:v','main','-level',quality.level,'-pix_fmt','yuv420p',
+  '-profile:v','main',...(kind==='live'?['-level',quality.level]:[]),'-pix_fmt','yuv420p',
   '-vf',filter,'-g',String(gopSeconds*25),'-keyint_min',String(gopSeconds*25),
   '-sc_threshold','0','-crf',quality.crf,'-maxrate',quality.maxrate,
   '-bufsize',quality.bufsize]
