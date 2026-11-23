@@ -448,6 +448,65 @@ test('guarded same-bearer live fan-out shares one encoder but isolates each view
  stop(differentMode.session,'viewer_stopped');
 });
 
+test('authenticated HLS manifest and segments fan out to two SID viewers using one real session keyspace',async()=>{
+ const b=source.indexOf('function hlsKey('),e=source.indexOf('\nfunction touchHls(',b),
+  st=source.indexOf('function stopHls('),stEnd=source.indexOf('\nfunction releaseHls(',st),
+  sh=source.indexOf('function liveShareGroupKey('),shEnd=source.indexOf('\nasync function hlsRequest(',sh),
+  hr=source.indexOf('async function hlsRequest('),hrEnd=source.indexOf('\n/* Web VOD seek experiment',hr);
+ assert.ok(b>=0&&e>b&&st>e&&stEnd>st&&sh>stEnd&&shEnd>sh&&hr>=shEnd&&hrEnd>hr);
+ const secret='b'.repeat(64),hlsSessions=new Map(),sharedLiveGroups=new Map();
+ let startups=0,sourceClosed=0;
+ const auth='Bearer v1.00000000-0000-0000-0000-000000000000.'+'B'.repeat(43);
+ const ctx={
+  SECRET:secret,createHmac:crypto.createHmac,hlsSessions,sharedLiveGroups,MAX_SHARED_LIVE_VIEWERS:4,
+  Bun:{env:{VIDAA_LIVE_SHARE_SAME_BEARER:'1'}},
+  Response,Buffer,Date,console:{info(){},warn(){}},
+  clearTimeout(){},rmSync(){},
+  releaseHls(s){s.released=true},join:(...p)=>p.join('/'),
+  secureEquals:()=>true,staleLiveManifest:()=>false,
+  touchHls(){},awaitHlsFile:async()=>true,existsSync:()=>true,
+  readFileSync:(path,encoding)=>encoding==='utf8'?
+   '#EXTM3U\n#EXT-X-VERSION:3\n#EXTINF:1,\nseg-000001.ts\n':
+   Buffer.from(path.endsWith('.ts')?'video':'#EXTM3U\n#EXTINF:1,\nseg-000001.ts\n'),
+  json:(status,body)=>({status,body}),
+  hlsError:(status,error)=>({status,error}),
+  startHls:async({key,kind})=>{
+   startups++;
+   const producer={key,kind,dir:'/tmp/encoder-'+startups,stopped:false,
+    sourceDimensions:'3840x2160',videoMode:'source_copy',
+    abort:{abort(){sourceClosed++}},proc:{kill(){}},released:false};
+   hlsSessions.set(key,producer);
+   return {session:producer}
+  }
+ };
+ const code=source.slice(b,e)+'\n'+source.slice(st,stEnd)+'\n'+source.slice(sh,shEnd)+'\n'+source.slice(hr,hrEnd)+
+  ';\n({hlsRequest,liveShareAllowed})';
+ const runner=vm.runInNewContext(code,ctx);
+ const headers={get(key){return key==='authorization'?auth:key==='x-compat-secret'?secret:null}};
+ const makeReq=(method)=>({method,headers}),sidA='a'.repeat(32),sidB='b'.repeat(32);
+ const url=(sid,file)=>new URL('http://worker/hls/live/31/ts/0/sid-'+sid+'/'+file);
+ const [a,bresp]=await Promise.all([
+  runner.hlsRequest(makeReq('GET'),url(sidA,'index.m3u8')),
+  runner.hlsRequest(makeReq('GET'),url(sidB,'index.m3u8'))
+ ]);
+ assert.equal(a.status,200);assert.equal(bresp.status,200);
+ assert.equal(a.headers.get('x-blofy-source-resolution'),'3840x2160');
+ assert.equal(bresp.headers.get('x-blofy-video-mode'),'source_copy');
+ assert.equal(startups,1,'shared live source starts once');
+ assert.equal(sharedLiveGroups.size,1);
+ assert.equal(hlsSessions.size,3,'two independent aliases plus one hidden encoder owner');
+ const firstStop=await runner.hlsRequest(makeReq('POST'),url(sidA,'stop'));
+ assert.equal(firstStop.status,200);
+ assert.equal(sourceClosed,0,'stopping first viewer retains source for second viewer');
+ const data=await runner.hlsRequest(makeReq('GET'),url(sidB,'seg-000001.ts'));
+ assert.equal(data.status,200,'remaining viewer reads same shared video without restarting');
+ assert.equal(startups,1);
+ const lastStop=await runner.hlsRequest(makeReq('POST'),url(sidB,'stop'));
+ assert.equal(lastStop.status,200);assert.equal(sourceClosed,1);
+ assert.equal(sharedLiveGroups.size,0);
+ assert.equal(hlsSessions.size,0,'source is cleaned when final viewer stops');
+});
+
 test('same-bearer fan-out is off by default and max four authenticated viewers',async()=>{
  const begin=source.indexOf('function liveShareGroupKey('),end=source.indexOf('\nasync function hlsRequest(',begin);
  assert.ok(begin>0&&end>begin);
