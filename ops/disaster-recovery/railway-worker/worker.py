@@ -109,6 +109,41 @@ def decrypt_file(source, target, key):
         dst.write(decryptor.finalize())  # InvalidTag on corruption
 
 
+# Short machine-readable, non-customer receipt is stored ONLY in the private
+# bucket. A separate read-only cron verifier can check archive freshness and
+# HEAD metadata even when Railway drops short-lived job stdout.
+LATEST_RECEIPT_KEY = "blofy-dr/status/latest-verified.json"
+RECEIPT_SCHEMA = "blofy-dr-receipt-v1"
+
+
+def publish_verified_receipt(client, bucket, archive_key, sha256, object_bytes, at=None):
+    if at is None:
+        at = datetime.now(timezone.utc)
+    receipt = {
+        "schema": RECEIPT_SCHEMA,
+        "verified_at": at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "archive_key": archive_key,
+        "encrypted_sha256": sha256,
+        "object_bytes": int(object_bytes),
+        "upload_head_verified": True,
+        "downloaded_checksum_verified": True,
+        "decrypt_and_archive_verified": True,
+        "full_database_restore_verified": False,
+    }
+    body = json.dumps(receipt, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    if len(body) > 4096:
+        raise ValueError("backup_receipt_too_large")
+    client.put_object(Bucket=bucket, Key=LATEST_RECEIPT_KEY, Body=body,
+                      ContentType="application/json", CacheControl="no-store")
+    stored = client.get_object(Bucket=bucket, Key=LATEST_RECEIPT_KEY)
+    if int(stored.get("ContentLength", -1)) != len(body):
+        raise ValueError("backup_receipt_remote_length_mismatch")
+    downloaded = stored["Body"].read(4097)
+    if downloaded != body:
+        raise ValueError("backup_receipt_remote_body_mismatch")
+    return receipt
+
+
 def main():
     if os.getenv("BLOFY_BACKUP_ENABLED") != "true":
         fail("backup_disabled_by_default")
@@ -178,6 +213,10 @@ def main():
                            check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
             if digest_file(restored) != digest_file(dump):
                 raise ValueError("decrypted_dump_mismatch")
+            # Only after all previous remote/download/decrypt checks succeeded
+            # persist a private receipt that a separate cron can validate.
+            publish_verified_receipt(client, bucket, object_key,
+                                     ciphertext_sha, encrypted_bytes)
             # Publish only non-sensitive backup audit evidence.
             print(json.dumps({
                 "ok": True, "kind": "private_cross_region_encrypted_backup",
