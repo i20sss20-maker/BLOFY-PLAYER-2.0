@@ -1588,7 +1588,13 @@ function openPlayer(kind,id,extension,name,from){
   video.onerror=null;video.onloadedmetadata=null;video.onended=null;
   try{video.pause();video.removeAttribute('src');video.load()}catch(e){}
  }
- function startVod(at){
+ function startVod(at,metadataGeneration){
+  // Late Xtream info requests must not reopen an older seek position.
+  // Only the metadata request that launched the current fallback may keep
+  // its generation; all other restarts invalidate pending metadata.
+  if(metadataGeneration===undefined||(metadataGeneration!==state.mediaGeneration)){
+   state.mediaGeneration=(state.mediaGeneration||0)+1
+  }
   releaseDirectSource();
   if(state.duration>=120&&state.duration<=21600){
    state.resume=Math.max(0,Math.round(at||0));
@@ -1600,8 +1606,13 @@ function openPlayer(kind,id,extension,name,from){
  function startWithMetadata(at){
   if(state.duration>=120||kind==='live'){startVod(at);return}
   releaseDirectSource();
+  var requestGeneration=state.mediaGeneration=(state.mediaGeneration||0)+1;
   var settled=false;
-  function launch(){if(settled||S.route!=='player'||S.playerView!==state)return;settled=true;startVod(at)}
+  function launch(){
+   if(settled||S.route!=='player'||S.playerView!==state||requestGeneration!==state.mediaGeneration)return;
+   settled=true;
+   startVod(at,requestGeneration)
+  }
   var timeout=setTimeout(launch,4200);
   var episodeParent=kind==='series'&&(
    (prior&&prior.seriesId)||
@@ -1612,7 +1623,7 @@ function openPlayer(kind,id,extension,name,from){
   if(!endpoint){clearTimeout(timeout);setTimeout(launch,0);return}
   playerStatus('جار قراءة معلومات الفيلم لتفعيل التقديم والترجيع…');
   api('GET','/api/catalog?action='+endpoint,null,function(st,result){
-   if(S.route!=='player'||S.playerView!==state)return;
+   if(S.route!=='player'||S.playerView!==state||requestGeneration!==state.mediaGeneration)return;
    var alreadyStarted=settled;
    clearTimeout(timeout);
    if(st===200&&result){
