@@ -6,6 +6,7 @@ import crypto from 'node:crypto';
 
 const source=readFileSync(new URL('../media-worker.ts',import.meta.url),'utf8');
 const playerSource=readFileSync(new URL('../app.js',import.meta.url),'utf8');
+const serverSource=readFileSync(new URL('../server.ts',import.meta.url),'utf8');
 
 test('frozen VIDEO at readyState=4 is detected from real pixel/playhead progress',()=>{
  const start=playerSource.indexOf('function livePlaybackProgress(');
@@ -350,6 +351,36 @@ test('source-preserving live H264 TS probe keeps ALL incoming bytes and chooses 
  assert.equal(raw.copyVideo,false)
 });
 
+
+test('web HLS proxy validates optional playback SID and preserves legacy URL group positions',()=>{
+ const post=serverSource.indexOf("if(p.startsWith('/api/hls/')&&method==='POST'){");
+ const get=serverSource.indexOf("if(p.startsWith('/api/hls/')&&method==='GET'){");
+ assert.ok(post>0&&get>post);
+ function parser(begin,label){
+  const anchor=label==='stop'?'const m=p.match(':'const match=p.match(';
+  const start=serverSource.indexOf(anchor,begin),end=serverSource.indexOf(');',start);
+  assert.ok(start>=begin&&end>start&&end-start<350);
+  const name=label==='stop'?'m':'match';
+  return new Function('p',serverSource.slice(start,end+2)+'\nreturn '+name+';');
+ }
+ const matchStop=parser(post,'stop'),matchGet=parser(get,'get');
+ const sid='a'.repeat(32);
+ const legacy=matchGet('/api/hls/live/31/ts/0/index.m3u8');
+ assert.ok(legacy&&legacy[7]==='index.m3u8');
+ assert.equal(legacy[5],undefined);
+ const modern=matchGet('/api/hls/live/31/ts/0/sid-'+sid+'/compat/seg-000034.ts');
+ assert.ok(modern);
+ assert.equal(modern[5],sid);
+ assert.equal(modern[6],'compat');
+ assert.equal(modern[7],'seg-000034.ts');
+ const stopping=matchStop('/api/hls/live/31/ts/0/sid-'+sid+'/stop');
+ assert.ok(stopping&&stopping[5]===sid&&stopping[6]===undefined);
+ const ultra=matchStop('/api/hls/live/31/ts/0/sid-'+sid+'/ultra/stop');
+ assert.ok(ultra&&ultra[5]===sid&&ultra[6]==='ultra');
+ assert.equal(matchGet('/api/hls/live/31/ts/0/sid-nonsense/index.m3u8'),null);
+ assert.equal(matchStop('/api/hls/live/31/ts/0/sid-'+sid+'/garbage/stop'),null);
+ assert.match(playerSource,/\/sid-'\+freshPlaybackId\(\)/,'web player generates new live SID');
+});
 
 test('source H264 and forced VIDAA compatibility HLS use isolated subscriber session keys',()=>{
  const begin=source.indexOf('function hlsKey(');
