@@ -450,6 +450,15 @@ test('guarded same-bearer live fan-out shares one encoder but isolates each view
  assert.notEqual(differentAccount.session.dir,differentAudio.session.dir);
  const differentMode=await methods.startSharedLiveViewer(request(bearer,a,'1',true));
  assert.equal(started,4,'compatibility transcoder cannot reuse a source-copy producer');
+ const otherSid='c'.repeat(32);
+ const otherViewer=await methods.startSharedLiveViewer(request(other,otherSid));
+ assert.equal(started,4,'same bearer attaches to existing producer');
+ const sharedOrigin=differentAccount.session.sharedProducer;
+ stop(sharedOrigin,'stale_manifest');
+ assert.equal(differentAccount.session.stopped,true,'source failure invalidates first viewer alias');
+ assert.equal(otherViewer.session.stopped,true,'source failure also invalidates second alias');
+ assert.equal(hlsSessions.has(otherViewer.session.key),false);
+ assert.equal(hlsSessions.has(differentAccount.session.key),false);
  stop(differentAccount.session,'viewer_stopped');
  stop(differentAudio.session,'viewer_stopped');
  stop(differentMode.session,'viewer_stopped');
