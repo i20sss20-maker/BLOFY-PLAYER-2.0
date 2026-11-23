@@ -2147,15 +2147,15 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    var next=(current+1)%tracks.length;
    for(var j=0;j<tracks.length;j++)tracks[j].enabled=j===next;
    playerStatus('تم اختيار المسار الصوتي '+(next+1));
-   this.textContent='🔊 الصوت '+(next+1);
+   this.title='المسار الصوتي '+(next+1);
    return
   }
   if(engine&&engine.audioTracks&&engine.audioTracks.length>1){
    engine.audioTrack=(engine.audioTrack+1)%engine.audioTracks.length;
-   this.textContent='🔊 الصوت '+(engine.audioTrack+1);playerStatus('تم تغيير مسار الصوت');
+   this.title='المسار الصوتي '+(engine.audioTrack+1);playerStatus('تم تغيير مسار الصوت');
    return
   }
-  this.textContent='🔊 المسار الافتراضي';
+  this.title='المسار الصوتي الافتراضي';
   playerStatus('هذا المصدر لا يعرض مسارات صوتية إضافية في المتصفح.')
  };
  var subtitleButton=document.getElementById('player-subtitles');
@@ -2170,7 +2170,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    var next=current+1<native.length?current+1:-1;
    for(var k=0;k<native.length;k++)native[k].mode=k===next?'showing':'disabled';
    var label=next<0?'إيقاف':String(native[next].label||native[next].language||('مسار '+(next+1))).slice(0,26);
-   this.textContent='CC '+label;
+   this.title='الترجمة: '+label;
    playerStatus(next<0?'تم إيقاف الترجمة':'الترجمة: '+label);
    return
   }
@@ -2182,11 +2182,11 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    engine.subtitleDisplay=next>=0;
    engine.subtitleTrack=next;
    var label=next<0?'إيقاف':String(tracks[next].name||tracks[next].lang||('مسار '+(next+1))).slice(0,26);
-   this.textContent='CC '+label;
+   this.title='الترجمة: '+label;
    playerStatus(next<0?'تم إيقاف الترجمة':'الترجمة: '+label);
    return
   }
-  this.textContent='CC غير متوفرة';
+  this.title='الترجمة غير متوفرة';
   playerStatus('المصدر الحالي لا يعرض مسارات ترجمة. لا تتوفر ترجمة تلقائية.')
  };
  var speeds=[1,1.25,1.5,2,0.75],speedBtn=document.getElementById('player-speed');
@@ -2240,6 +2240,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    var next=items[(current+step+items.length)%items.length],newId=itemId(next,'live');
    if(!newId||newId===String(id))return;
    id=newId;state.id=id;state.name=title(next);state.ready=false;S.selected=id;S.livePreview=null;
+   if(state.refreshFavoriteButton)state.refreshFavoriteButton();
    var heading=document.getElementById('player-title-text');if(heading)heading.textContent=state.name;
    if(state.liveEpgTimer){clearTimeout(state.liveEpgTimer);state.liveEpgTimer=null}
    var epg=document.getElementById('player-live-epg');if(epg)epg.textContent='جار قراءة دليل القناة…';
