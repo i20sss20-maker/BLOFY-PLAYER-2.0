@@ -23,6 +23,12 @@ test('frozen VIDEO at readyState=4 is detected from real pixel/playhead progress
  video.currentTime=62;
  video.getVideoPlaybackQuality=()=>({totalVideoFrames:502});
  assert.equal(sample(rec,video,23200).advanced,true,'decoded frames also count if TV playhead is imprecise');
+ video.currentTime=80;
+ video.getVideoPlaybackQuality=()=>({totalVideoFrames:502});
+ assert.equal(sample(rec,video,43000).advanced,false,'audio clock must not hide frozen picture');
+ assert.ok(sample(rec,video,43000).idleMs>=19000,'watchdog may recover video even when audio continues');
+ video.getVideoPlaybackQuality=()=>({totalVideoFrames:505});
+ assert.equal(sample(rec,video,45100).advanced,true,'visual progress resets the freeze timer');
 });
 
 test('worker identifies stale live manifests but never expires VOD or healthy live files',()=>{
