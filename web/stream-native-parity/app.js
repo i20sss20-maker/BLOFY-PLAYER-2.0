@@ -1425,7 +1425,8 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
    playerStatus('انقطع مصدر البث. إعادة محاولة تلقائية بعد 25 ثانية أو اضغط إعادة المحاولة.',true);
    record.retryTimer=setTimeout(function(){
     record.retryTimer=null;
-    if(!alive()||S.route!=='player'||!video.isConnected||video.paused)return;
+    if(!alive()||S.route!=='player'||!video.isConnected||state.userPaused)return;
+    // A decoder may set video.paused=true on a fatal error without user input.
     playHls(video,kind,id,extension,track,statusElement,false,0)
    },25000);
    return
@@ -2605,7 +2606,14 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
   },360);
   return target
  };
- state.toggle=function(){if(video.paused){var p=video.play();if(p&&p.catch)p.catch(function(){})}else video.pause()};
+ state.toggle=function(){
+  if(video.paused){
+   state.userPaused=false;
+   var p=video.play();if(p&&p.catch)p.catch(function(){}
+  }else{
+   state.userPaused=true;video.pause()
+  }
+ };
  state.recoverDirect=function(){
   if(state.mode!=='direct'||S.route!=='player'||state.directFallback)return;
   state.directFallback=true;
