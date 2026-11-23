@@ -1535,7 +1535,6 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  (isLive?'':'<button class="btn secondary" id="player-skip-back">−30 ثانية</button><button class="btn secondary" id="player-skip-forward">+30 ثانية</button><button class="btn secondary" id="player-skip-forward5">+5 دقائق</button><button class="btn secondary" id="player-jump-toggle" aria-controls="player-jump-panel" aria-expanded="false">↪ دقيقة محددة</button><button class="btn secondary" id="player-restart">↺ من البداية</button>')+
  (previousEpisode?'<button class="btn secondary" id="player-previous-episode">⏮ الحلقة السابقة</button>':'')+
  (nextEpisode?'<button class="btn secondary" id="player-next-episode">الحلقة التالية ⏭</button>':'')+
- '<button class="btn secondary" id="player-mute" aria-label="كتم الصوت">🔈 كتم</button>'+ 
  '<button class="btn secondary" id="player-audio" aria-label="تغيير المسار الصوتي">🔊 الصوت</button>'+
  (isLive?'':'<button class="btn secondary" id="player-subtitles" aria-label="خيارات الترجمة">CC الترجمة</button><button class="btn secondary" id="player-speed">السرعة 1×</button>')+
  '<button class="btn secondary" id="player-fullscreen">⛶ ملء الشاشة</button>'+
@@ -1564,15 +1563,6 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  video.addEventListener('play',syncToggle);
  video.addEventListener('pause',syncToggle);
  syncToggle();
- var muteToggle=document.getElementById('player-mute');
- function syncMute(){if(!muteToggle)return;var isMuted=video.muted||video.volume===0;
-  muteToggle.textContent=isMuted?'🔇 إلغاء الكتم':'🔈 كتم';
-  muteToggle.setAttribute('aria-pressed',String(isMuted));
-  muteToggle.setAttribute('aria-label',isMuted?'إلغاء كتم الصوت':'كتم الصوت')
- }
- if(muteToggle)muteToggle.onclick=function(){video.muted=!video.muted;if(!video.muted&&video.volume===0)video.volume=0.7;syncMute()};
- video.addEventListener('volumechange',syncMute);
- syncMute();
  var infoToggle=document.getElementById('player-info-toggle');
  if(infoToggle)infoToggle.onclick=function(){
   var panel=document.getElementById('player-info-panel');if(!panel)return;
@@ -2226,9 +2216,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    state.channelSwitchTimer=setTimeout(function(){
     state.channelSwitchTimer=null;
     if(S.route!=='player'||S.playerView!==state)return;
-    var wasMuted=video.muted;
     playHls(video,'live',id,'ts',0,document.getElementById('player-status'),false);
-    video.muted=wasMuted;
     if(state.refreshLiveGuide)state.refreshLiveGuide()
    },260)
   }
