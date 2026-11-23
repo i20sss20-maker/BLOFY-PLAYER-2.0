@@ -32,6 +32,42 @@ test('frozen VIDEO at readyState=4 is detected from real pixel/playhead progress
  assert.equal(sample(rec,video,45100).advanced,true,'visual progress resets the freeze timer');
 });
 
+test('live previews restart automatically but stop after two tries and never resurrect a changed channel',()=>{
+ const start=playerSource.indexOf(' function recoverConnection(){',playerSource.indexOf('function playHls('));
+ const end=playerSource.indexOf('\n record.startupTimer=',start);
+ assert.ok(start>0&&end>start,'HLS recovery function is available');
+ const ctx={
+  preview:true,record:{recoveryAttempt:0,reconnecting:false},video:{isConnected:true},
+  id:31,kind:'live',extension:'ts',track:0,statusElement:null,
+  S:{route:'live',selected:31},alive:()=>true,
+  status(m){ctx.message=m},
+  clearTimeout(){},clearInterval(){},Date,
+  setTimeout(fn,ms){ctx.task={fn,ms};return 1},
+  playHls(...args){ctx.played=args}
+ };
+ const recover=vm.runInNewContext(playerSource.slice(start,end)+';\nrecoverConnection',ctx);
+ recover();
+ assert.equal(ctx.record.reconnecting,true);
+ assert.equal(ctx.task.ms,1200);
+ assert.match(ctx.message,/استعادة معاينة/);
+ ctx.task.fn();
+ assert.equal(ctx.played[6],true,'recovery stays a muted preview');
+ assert.equal(ctx.played[7],1,'first recovery attempt');
+ ctx.played=null;
+ ctx.record={recoveryAttempt:1,reconnecting:false};
+ recover();
+ assert.equal(ctx.task.ms,2400);
+ ctx.S.selected=32;
+ ctx.task.fn();
+ assert.equal(ctx.played,null,'channel switch cancels old preview recovery');
+ ctx.S.selected=31;
+ ctx.record={recoveryAttempt:2,reconnecting:false};
+ ctx.task=null;
+ recover();
+ assert.equal(ctx.task,null,'recovery attempts are bounded');
+ assert.match(ctx.message,/بعد محاولات الاستعادة/);
+});
+
 test('worker identifies stale live manifests but never expires VOD or healthy live files',()=>{
  const begin=source.indexOf('function staleLiveManifest(');
  const end=source.indexOf('\n/**',begin);
