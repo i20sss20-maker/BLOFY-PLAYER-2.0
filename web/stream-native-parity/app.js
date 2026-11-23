@@ -1405,10 +1405,33 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
   }
  }
  function recoverConnection(){
-  if(!alive()||record.reconnecting||preview)return;
+  if(!alive()||record.reconnecting)return;
+  if(preview){
+   if(S.route!=='live'||String(S.selected)!==String(id)||!video.isConnected)return;
+   if(record.recoveryAttempt>=2){
+    status('المعاينة توقفت بعد محاولات الاستعادة؛ افتح القناة أو اخترها مجددًا.');
+    return
+   }
+   record.reconnecting=true;
+   if(record.startupTimer)clearTimeout(record.startupTimer);
+   if(record.stallTimer)clearTimeout(record.stallTimer);
+   if(record.progressWatchdog)clearInterval(record.progressWatchdog);
+   status('جار استعادة معاينة القناة تلقائيًا…');
+   var nextAttempt=record.recoveryAttempt+1;
+   record.retryTimer=setTimeout(function(){
+    record.retryTimer=null;
+    if(!alive()||S.route!=='live'||String(S.selected)!==String(id)||!video.isConnected)return;
+    playHls(video,kind,id,extension,track,statusElement,true,nextAttempt)
+   },1200*nextAttempt);
+   return
+  }
   var state=S.playerView;
   if(S.route!=='player'||!state||state.video!==video||String(state.id)!==String(id))return;
   record.reconnecting=true;
+  if(state.stats){
+   state.stats.recoveries=(state.stats.recoveries||0)+1;
+   state.stats.lastRecoveryAt=Date.now()
+  }
   // Recovery order: original-native -> original MSE -> bounded compatibility.
   // Do not sacrifice upstream 4K on the first TV decoder stall.
   if(record.ultra&&record.recoveryAttempt>=1&&setCompatibility(true,true))return;
@@ -1484,7 +1507,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
    S.preferMseHls=true;
    status('المشغّل الأصلي لا يدعم الترميز؛ جار التحويل إلى مشغّل HLS المتوافق…')
   }else status('تعذر تشغيل HLS على هذا الجهاز (رمز '+(video.error?video.error.code:0)+').');
-  if(!preview)recoverConnection()
+  recoverConnection()
  }};
  video.onplaying=function(){
   if(!alive())return;
@@ -1511,7 +1534,7 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
  video.onwaiting=video.onstalled=function(){
   if(!alive()||video.paused)return;
   if(!record.bufferSince)record.bufferSince=Date.now();
-  if(!preview&&Date.now()-record.bufferSince>36000){recoverConnection();return}
+  if(Date.now()-record.bufferSince>36000){recoverConnection();return}
   status(preview?'جار تحميل المعاينة…':'جار تعبئة مخزن البث لتقليل التقطيع…');
   if(record.stallTimer)clearTimeout(record.stallTimer);
   record.stallTimer=setTimeout(function(){
@@ -1529,10 +1552,12 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
    },14000)
   },8500)
  };
- if(!preview){
-  // Independent timer covers silent stalls with no waiting event.
-  record.progressWatchdog=setInterval(function(){
-   if(!alive()||S.route!=='player'||!record.ready||!video.isConnected)return;
+ // Independent timer covers silent stalls in preview and fullscreen.
+ // Preview restarts are capped to two to protect the upstream connection.
+ record.progressWatchdog=setInterval(function(){
+   if(!alive()||!record.ready||!video.isConnected)return;
+   if(preview&&(S.route!=='live'||String(S.selected)!==String(id)))return;
+   if(!preview&&S.route!=='player')return;
    if(video.paused||video.ended||video.seeking||document.hidden){
     record.lastProgressAt=Date.now();return
    }
@@ -1546,7 +1571,6 @@ function playHls(video,kind,id,extension,track,statusElement,preview,recoveryAtt
     status('تعليق في صورة البث؛ جار استعادة التشغيل تلقائيًا…')
    }
   },2200);
- }
  if(shouldUseNativeHls(video)){
   video.src=manifest;try{var p=video.play();if(p&&p.catch)p.catch(function(){status('اضغط ▶ في المشغّل')})}catch(e){}return
  }
@@ -2055,7 +2079,7 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
  var video=document.getElementById('player-media'),state={kind:kind,id:id,ext:ext,video:video,name:name,offset:0,
  mode:isLive?'hls':'direct',resume:resume,duration:knownDuration(kind,id,item),didResume:false,ready:false,track:0,lastSaved:0,
   art:art(item)||prior&&prior.art||'',seriesId:kind==='series'&&S.item&&S.item.id||'',playbackId:freshPlaybackId(),
-   stats:{openedAt:Date.now(),firstFrameAt:0,bufferEvents:0,bufferMs:0,bufferSince:0,errors:0,
+   stats:{openedAt:Date.now(),firstFrameAt:0,bufferEvents:0,bufferMs:0,bufferSince:0,errors:0,recoveries:0,lastRecoveryAt:0,
     seekAttempts:0,seekReady:0,verifiedSeekFrames:0,seekTimeouts:0,lastSeekMs:null}};
  var toggle=document.getElementById('player-toggle');
  function syncToggle(){
@@ -2161,7 +2185,8 @@ function openPlayer(kind,id,extension,name,from,replacePlayerHistory){
    ['سرعة التشغيل',(Number(video.playbackRate)||1).toFixed(2)+'×'],
    ['سرعة شبكة مقدّرة',bitrate],
    ['بدء الصورة',startup===null?'لم يبدأ':(startup/1000).toFixed(1)+' ثانية'],
-   ['أخطاء المشغل',String(st.errors||0)]
+   ['أخطاء المشغل',String(st.errors||0)],
+   ['استعادات تلقائية',String(st.recoveries||0)]
   ];
   box.innerHTML='<div class="playback-health-head"><strong>مراقبة جودة BLOFY المباشرة</strong>'+
    '<small>'+esc(status4k)+' • قياسات حقيقية وليست اسم القناة</small></div>'+
