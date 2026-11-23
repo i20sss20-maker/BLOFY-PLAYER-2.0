@@ -1677,7 +1677,7 @@ function openPlayer(kind,id,extension,name,from){
   // Resolve Xtream metadata before converting MP4 to the temporary EVENT
   // playlist. Previously direct-MP4 failures bypassed metadata entirely,
   // leaving episodes looking like one-minute live television.
-  if(state.ready&&target>=5)saveResume(kind,id,target,duration,true);
+  if(state.ready&&target>=5)saveResume(kind,id,checkpointPosition(state),duration,true);
   if(state.mode==='direct'&&!(state.duration>=120))startWithMetadata(target);
   else startVod(target);
   playerStatus('جار فتح المقطع عند '+formatTime(target)+'…');
