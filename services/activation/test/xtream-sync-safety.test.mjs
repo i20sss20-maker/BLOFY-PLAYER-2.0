@@ -126,3 +126,13 @@ test('package verification reads upstream again and requires exact admin source 
   assert.match(ui,/action==='sync-package'/);
   assert.match(ui,/confirmProviderPackage:true,confirmation:confirmName/);
 });
+
+test('one-time source package reconciliation is durable and does not repeat on second replica',async()=>{
+  const source=await readFile(new URL('../src/xtream-admin-hook.mjs',import.meta.url),'utf8');
+  assert.match(source,/async function operatorPackageSyncOnce\(/);
+  assert.match(source,/BLOFY_XTREAM_PACKAGE_SYNC_ONCE_KEY/);
+  assert.match(source,/INSERT INTO \$\{table\}\(event_key,source_id\)/);
+  assert.match(source,/ON CONFLICT DO NOTHING RETURNING event_key/);
+  assert.match(source,/confirmProviderPackage:true/);
+  assert.match(source,/onSettled:async\(\{state\}\)=>/);
+});

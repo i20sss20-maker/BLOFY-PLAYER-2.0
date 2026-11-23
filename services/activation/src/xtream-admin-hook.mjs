@@ -1841,6 +1841,8 @@ async function syncServer(id, requestedTypes = ['live','movie','series'], {confi
     await pool.query(`UPDATE blofy_xtream_servers SET status='online',account_info=$2::jsonb,counts=$3::jsonb,last_error=$4,last_test_at=NOW(),last_sync_at=NOW(),updated_at=NOW() WHERE id=$1 AND enabled=TRUE AND deletion_requested_at IS NULL`,
       [id, JSON.stringify(accountInfo), JSON.stringify(counts),partialWarning]);
     const catalogRevision=await bumpXtreamCatalogRevision(pool,id,'sync');
+    if(confirmProviderPackage)console.info('BLOFY_XTREAM_PACKAGE_RECONCILE',JSON.stringify({
+      sourceId:id,counts,details,partial:Boolean(partialWarning),catalogRevision}));
     return { id, counts, details, partialWarning,catalogRevision };
   } catch (error) {
     const message = redactXtreamError(error);
@@ -2195,6 +2197,73 @@ const dailyCatalogStartupTimer=setTimeout(()=>{
    customerCutover:false})));
 },40000);
 dailyCatalogStartupTimer.unref?.();
+// An operator can request one fresh source-bound package reconciliation
+// without borrowing a customer's Xtream credentials or restarting subscribers.
+// Railway replicas use a durable PostgreSQL claim: the same approved key
+// cannot re-run after a crash or redeploy. A failed task is visible in the
+// ledger and must be retried by an explicit new key or the admin button.
+async function operatorPackageSyncOnce(){
+  const key=String(process.env.BLOFY_XTREAM_PACKAGE_SYNC_ONCE_KEY||'').trim();
+  if(!/^operator-package-[a-z0-9_-]{8,64}$/.test(key))return;
+  const selected=await approvedSalehMirrorSource();
+  if(!selected.ok)return;
+  const source=await serverById(selected.sourceId);
+  if(!source||source.enabled!==true||source.publish_catalog!==true||
+      String(source.name||'').trim().toLowerCase()!=='saleh')return;
+  if(syncQueue.has(source.id)||syncLocks.has(source.id))return;
+  const table='blofy_xtream_operator_package_sync';
+  try{
+    await controlPool.query(`CREATE TABLE IF NOT EXISTS ${table} (
+      event_key TEXT PRIMARY KEY,source_id UUID NOT NULL,
+      state TEXT NOT NULL DEFAULT 'claimed',
+      claimed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      completed_at TIMESTAMPTZ)`);
+  }catch(error){
+    if(error?.code!=='23505'||error?.constraint!=='pg_type_typname_nsp_index')throw error;
+    const exists=await controlPool.query('SELECT to_regclass($1::text) AS oid',
+      ['public.'+table]);
+    if(!exists.rows?.[0]?.oid)throw error;
+  }
+  const claimed=await controlPool.query(`INSERT INTO ${table}(event_key,source_id)
+    VALUES($1,$2) ON CONFLICT DO NOTHING RETURNING event_key`,
+    [key,source.id]);
+  if(!claimed.rowCount)return;
+  try{
+    const queued=startSync(source.id,['live','movie','series'],{
+      confirmProviderPackage:true,
+      onSettled:async({state})=>{
+        await controlPool.query(`UPDATE ${table}
+          SET state=$2,completed_at=NOW() WHERE event_key=$1`,
+          [key,state]);
+        console.info('BLOFY_XTREAM_PACKAGE_SYNC_ONCE',JSON.stringify({
+          code:'package_sync_terminal',state,sourceId:source.id}));
+      }
+    });
+    await controlPool.query(`UPDATE ${table} SET state='accepted'
+      WHERE event_key=$1 AND state='claimed'`,[key]);
+    console.info('BLOFY_XTREAM_PACKAGE_SYNC_ONCE',JSON.stringify({
+      code:'package_sync_accepted',sourceId:source.id,queued:queued.queued}));
+  }catch(error){
+    await controlPool.query(`DELETE FROM ${table}
+      WHERE event_key=$1 AND state='claimed'`,[key]).catch(()=>{});
+    console.warn('BLOFY_XTREAM_PACKAGE_SYNC_ONCE',JSON.stringify({
+      code:'package_sync_enqueue_failed',sourceId:source.id,
+      reason:redactXtreamError(error)}));
+  }
+}
+if(process.env.BLOFY_XTREAM_PACKAGE_SYNC_ONCE_KEY){
+  const operatorTimer=setTimeout(()=>{
+    void operatorPackageSyncOnce().catch(()=>console.warn(
+      'BLOFY_XTREAM_PACKAGE_SYNC_ONCE',JSON.stringify({
+        code:'package_sync_boot_failed'})));
+  },20000);
+  operatorTimer.unref?.();
+  const operatorRetryTimer=setInterval(()=>{
+    void operatorPackageSyncOnce().catch(()=>{});
+  },120000);
+  operatorRetryTimer.unref?.();
+}
+
 // One-off READ-ONLY ledger preflight. Creates only the transfer-intake
 // metadata table if absent; no intent rows, source video, uploads or copies.
 if(process.env.BLOFY_STREAM_MIRROR_INTAKE_DB_SMOKE_ON_BOOT==='1'){
