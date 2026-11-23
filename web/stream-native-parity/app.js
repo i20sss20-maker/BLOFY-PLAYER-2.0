@@ -36,7 +36,15 @@ function useProfile(id){
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 function enc(s){return encodeURIComponent(String(s==null?'':s))}
 function urlPic(raw){if(Array.isArray(raw))raw=raw[0];if(typeof raw!=='string')return '';var s=raw.trim();if(!/^https?:\/\/[^\s<>]+$/i.test(s))return '';if(/[?&](username|password|token|api_key|auth)=/i.test(s))return '';if(s.slice(0,5)==='http:')s='https:'+s.slice(5);return s}
-function art(x){if(!x)return '';var arr=[x.stream_icon,x.cover_big,x.cover,x.movie_image,x.poster,x.poster_url,x.thumbnail,x.icon,x.backdrop,x.backdrop_path];for(var i=0;i<arr.length;i++){var p=urlPic(arr[i]);if(p)return p}return ''}
+function artCandidates(x){
+ if(!x)return [];
+ var arr=[x.stream_icon,x.cover_big,x.cover,x.movie_image,x.poster,x.poster_url,x.thumbnail,x.icon,x.backdrop,x.backdrop_path],seen={},result=[];
+ for(var i=0;i<arr.length&&result.length<4;i++){
+  var p=urlPic(arr[i]);if(p&&!seen[p]){seen[p]=true;result.push(p)}
+ }
+ return result
+}
+function art(x){var all=artCandidates(x);return all[0]||''}
 function title(x){return x&&(x.name||x.title||x.episode_name)||'بدون عنوان'}
 function kindName(k){return k==='live'?'البث المباشر':k==='movie'?'الأفلام':k==='series'?'المسلسلات':'BLOFY STREAM'}
 function itemId(x,k){return String(x?(k==='series'?(x.series_id||x.id):(x.stream_id||x.id))||'':'')}
@@ -253,11 +261,18 @@ function getListing(kind,cat,cb,force){
   for(var i=0;i<waiting.length;i++)waiting[i](st,st===200?r:null)
  })
 }
-function safeImg(pic,cls){return pic?'<img class="'+(cls||'')+'" loading="lazy" decoding="async" alt="" src="'+esc(pic)+'">':''}
+function safeImg(pic,cls){
+ var alternatives=[];
+ if(pic&&typeof pic==='object'){
+  alternatives=artCandidates(pic);pic=alternatives.shift()||''
+ }
+ return pic?'<img class="'+(cls||'')+'" loading="lazy" decoding="async" alt="" src="'+esc(pic)+'"'+
+  (alternatives.length?' data-art-fallback="'+esc(JSON.stringify(alternatives))+'"':'')+'>':''
+}
 function posterCard(item,kind){
- var id=itemId(item,kind),name=title(item),image=art(item),key=kind+':'+id,mark=S.watch[key],percent=mark&&mark.duration>0?Math.round(100*mark.position/mark.duration):0;
+ var id=itemId(item,kind),name=title(item),key=kind+':'+id,mark=S.watch[key],percent=mark&&mark.duration>0?Math.round(100*mark.position/mark.duration):0;
  return '<button class="poster" data-details="'+esc(kind)+':'+esc(id)+'" title="'+esc(name)+'">'+
- '<span class="poster-art">'+safeImg(image)+'<span class="no-poster">'+esc(name)+'</span><span class="poster-badge">'+(kind==='series'?'مسلسل':kind==='movie'?'فيلم':'مباشر')+'</span></span>'+
+ '<span class="poster-art">'+safeImg(item)+'<span class="no-poster">'+esc(name)+'</span><span class="poster-badge">'+(kind==='series'?'مسلسل':kind==='movie'?'فيلم':'مباشر')+'</span></span>'+
  '<span class="poster-caption"><strong>'+esc(name)+'</strong><span>'+(percent>3&&percent<95?'متابعة • '+percent+'٪':'BLOFY STREAM')+'</span></span></button>'
 }
 function shelves(items,kind){return '<div class="h-scroll">'+items.slice(0,22).map(function(x){return posterCard(x,kind)}).join('')+'</div>'}
@@ -268,7 +283,7 @@ function home(){
  function draw(){
   if(S.route!=='home')return;
   var film=(movies&&movies.items)||[],show=(series&&series.items)||[],combined=film.concat(show),candidate=combined.length?combined[S.heroIndex%combined.length]:null;
-  var hero=candidate?'<div class="home-hero">'+safeImg(art(candidate),'hero-art')+'<div class="hero-shade"></div><div class="hero-copy">'+
+  var hero=candidate?'<div class="home-hero">'+safeImg(candidate,'hero-art')+'<div class="hero-shade"></div><div class="hero-copy">'+
   '<div class="hero-kicker">'+esc(candidate.series_id?'مسلسل جديد':'أحدث العناوين')+'</div><h2 class="hero-title">'+esc(title(candidate))+'</h2>'+
   '<div class="hero-description">اكتشف أحدث ما أضيف إلى مكتبة BLOFY STREAM، مع تفاصيل ومواسم ومتابعة مشاهدة.</div>'+
   '<div class="hero-actions"><button class="btn" data-details="'+(candidate.series_id?'series:':'movie:')+esc(itemId(candidate,candidate.series_id?'series':'movie'))+'">التفاصيل والمشاهدة</button>'+
@@ -340,7 +355,7 @@ function buildCatalog(kind,listing){
   host.innerHTML='<div class="catalog">'+categoryRail(kind)+
   '<section class="channels"><div class="pane-head"><strong>القنوات</strong><small>'+source.length+' قناة محمّلة</small></div>'+
   '<div class="pane-scroll" id="channel-list">'+source.map(function(x){var id=itemId(x,kind),pic=art(x);return '<button class="channel-item '+(S.selected===id?'selected':'')+'" data-channel="'+esc(id)+'">'+
-  (pic?safeImg(pic,'channel-image'):'<span class="channel-image"></span>')+
+  (pic?safeImg(x,'channel-image'):'<span class="channel-image"></span>')+
   '<span class="channel-name"><strong>'+esc(title(x))+'</strong><small>شاهد الآن</small></span><span class="accent">▶</span></button>'}).join('')+
   '</div><div class="pane-bottom"><button class="btn secondary" data-more="live" '+(!listing.hasMore?'disabled':'')+'>عرض المزيد</button></div></section>'+
   '<section class="preview"><div class="preview-video-wrap"><div class="preview-empty" id="preview-empty"><span>◉</span>اختر قناة لبدء المعاينة</div><video id="live-video" playsinline controls></video></div>'+
@@ -502,7 +517,7 @@ function loadMore(kind){
   if(kind==='live'){
    list.insertAdjacentHTML('beforeend',next.map(function(item){
     var id=itemId(item,'live'),pic=art(item);
-    return '<button class="channel-item" data-channel="'+esc(id)+'">'+(pic?safeImg(pic,'channel-image'):'<span class="channel-image"></span>')+
+    return '<button class="channel-item" data-channel="'+esc(id)+'">'+(pic?safeImg(item,'channel-image'):'<span class="channel-image"></span>')+
       '<span class="channel-name"><strong>'+esc(title(item))+'</strong><small>شاهد الآن</small></span><span class="accent">▶</span></button>'
    }).join(''))
   }else{
@@ -2257,7 +2272,14 @@ function closePlayer(){
 }
 window.addEventListener('error',function(e){
  var target=e&&e.target;
- if(target&&target.tagName==='IMG'){target.style.display='none';return}
+ if(target&&target.tagName==='IMG'){
+  var fallbacks=[];try{fallbacks=JSON.parse(target.getAttribute('data-art-fallback')||'[]')}catch(err){}
+  if(Array.isArray(fallbacks)&&fallbacks.length){
+   var next=fallbacks.shift();target.setAttribute('data-art-fallback',JSON.stringify(fallbacks));
+   target.src=next;return
+  }
+  target.style.display='none';return
+ }
  if(S.route!=='login')diagnose(S.kind,'play_rejected','direct',0);
 },true);
 
