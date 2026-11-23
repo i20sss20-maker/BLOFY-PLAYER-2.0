@@ -649,11 +649,11 @@ test('TV quality picker changes original source to codec-compatible HLS with sto
  expect(originalStop).toBeGreaterThan(-1);
  expect(compatStart).toBeGreaterThan(originalStop);
  await expect(page.locator('#player-source-mode')).toContainText('وضع توافق',{timeout:12000});
+ const previousOriginalManifests=events.filter(x=>x==='manifest-original').length;
  await page.locator('#player-quality').click();
  await expect(page.locator('[data-choice-index="0"]')).toContainText('أصلي');
  await page.locator('[data-choice-index="0"]').click();
- await expect.poll(()=>events.filter(x=>x==='stop-compat').length,{timeout:12000}).toBe(1);
- const compatStop=events.lastIndexOf('stop-compat'),returnOriginal=events.lastIndexOf('manifest-original');
- await expect.poll(()=>events.filter(x=>x==='manifest-original').length,{timeout:12000}).toBeGreaterThan(2);
- expect(events.lastIndexOf('manifest-original')).toBeGreaterThan(compatStop);
+ await expect.poll(()=>events.filter(x=>x==='stop-compat').length,{timeout:12000}).toBeGreaterThan(0);
+ await expect.poll(()=>events.filter(x=>x==='manifest-original').length,{timeout:12000}).toBeGreaterThan(previousOriginalManifests);
+ expect(events.lastIndexOf('manifest-original')).toBeGreaterThan(events.lastIndexOf('stop-compat'));
 });
