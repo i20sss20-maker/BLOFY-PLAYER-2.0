@@ -27,6 +27,7 @@ export async function fingerprintXtreamListing({mediaType,load,maxItems=350000}=
  if(!MINUTE_MEDIA_TYPES.includes(mediaType)||typeof load!=='function')
   throw new Error('minute_catalog_invalid_type');
  const hash=createHash('sha256');
+ const inventory=Buffer.alloc(32); // order-insensitive IDs, unlike metadata/order fingerprint
  hash.update('blofy-xtream-listing-v1\n'+mediaType+'\n');
  const counts={categories:0,items:0};
  for(const kind of ['categories','items']){
@@ -49,10 +50,17 @@ export async function fingerprintXtreamListing({mediaType,load,maxItems=350000}=
     :[next.sourceId,next.categoryId,next.name,next.iconUrl,
       next.containerExtension,next.metadata,pos];
    hash.update(JSON.stringify(record)+'\n');
+   // Stream IDs, not titles or EPG metadata, decide whether new/deleted
+   // content must be imported immediately. XOR is order-independent and
+   // requires a fixed 32-byte accumulator even for a 300k-item provider.
+   const id=(kind==='categories'?'c:':'i:')+
+     (kind==='categories'?next.sourceCategoryId:next.sourceId);
+   const digest=createHash('sha256').update(id).digest();
+   for(let i=0;i<32;i++)inventory[i]^=digest[i];
   });
  }
  if(!counts.items)throw new Error('xtream_catalog_empty_preserved');
- return {mediaType,hash:hash.digest('hex'),...counts};
+ return {mediaType,hash:hash.digest('hex'),inventoryHash:inventory.toString('hex'),...counts};
 }
 
 export function createMinuteCatalogWatcher({
@@ -82,10 +90,12 @@ export function createMinuteCatalogWatcher({
     await client.query(`CREATE TABLE IF NOT EXISTS ${FINGERPRINTS}(
       source_id UUID NOT NULL REFERENCES blofy_xtream_servers(id) ON DELETE CASCADE,
       media_type TEXT NOT NULL CHECK(media_type IN ('live','movie','series')),
-      fingerprint TEXT NOT NULL,item_count INTEGER NOT NULL,
+      fingerprint TEXT NOT NULL,inventory_fingerprint TEXT,item_count INTEGER NOT NULL,
       category_count INTEGER NOT NULL,
       synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       PRIMARY KEY(source_id,media_type))`);
+    await client.query(`ALTER TABLE ${FINGERPRINTS}
+      ADD COLUMN IF NOT EXISTS inventory_fingerprint TEXT`);
     await client.query('COMMIT');
    }catch(error){await client.query('ROLLBACK').catch(()=>{});throw error}
    finally{client.release();}
@@ -163,7 +173,8 @@ export function createMinuteCatalogWatcher({
       WHERE source_id=$1 AND lease_token=$2`,[source.id,token]).catch(()=>{});
    },30000);
    heartbeat.unref?.();
-   const known=await db.query(`SELECT media_type,fingerprint,item_count
+   const known=await db.query(`SELECT media_type,fingerprint,inventory_fingerprint,
+     item_count,category_count,synced_at
      FROM ${FINGERPRINTS} WHERE source_id=$1`,[source.id]);
    const prior=new Map(known.rows.map(r=>[r.media_type,r]));
    const changed=[],failures=[],counts={};
@@ -178,7 +189,25 @@ export function createMinuteCatalogWatcher({
       failures.push(type+':suspicious_drop_preserved');
       continue;
      }
-     if(!prev||prev.fingerprint!==snapshot.hash)changed.push(snapshot);
+     if(prev&&!prev.inventory_fingerprint&&prev.fingerprint===snapshot.hash){
+       // Upgrade old fingerprints without rewriting an unchanged 300k catalog.
+       await db.query(`UPDATE ${FINGERPRINTS}
+         SET inventory_fingerprint=$3 WHERE source_id=$1 AND media_type=$2
+           AND inventory_fingerprint IS NULL`,
+        [source.id,type,snapshot.inventoryHash]);
+       prev.inventory_fingerprint=snapshot.inventoryHash;
+     }
+     const structural=!prev||
+       prev.inventory_fingerprint!==snapshot.inventoryHash||
+       Number(prev.item_count)!==snapshot.items||
+       Number(prev.category_count)!==snapshot.categories;
+     const detailsChanged=Boolean(prev&&prev.fingerprint!==snapshot.hash);
+     // A provider may reorder live rows or vary EPG-related fields every
+     // minute. Scan every minute, but avoid massive DB rewrites for jitter.
+     // New/removed IDs are still imported right away even at equal counts.
+     const metadataDue=!prev||!Number.isFinite(new Date(prev.synced_at).getTime())||
+       Date.now()-new Date(prev.synced_at).getTime()>=10*60_000;
+     if(structural||(detailsChanged&&metadataDue))changed.push(snapshot);
     }catch(error){
      failures.push(type+':'+safeError(error));
     }
@@ -210,12 +239,14 @@ export function createMinuteCatalogWatcher({
      const succeeded=changed.filter(x=>result?.details?.[x.mediaType]);
      for(const entry of succeeded){
       await db.query(`INSERT INTO ${FINGERPRINTS}
-        (source_id,media_type,fingerprint,item_count,category_count,synced_at)
-        VALUES($1,$2,$3,$4,$5,NOW())
+        (source_id,media_type,fingerprint,inventory_fingerprint,item_count,category_count,synced_at)
+        VALUES($1,$2,$3,$4,$5,$6,NOW())
         ON CONFLICT(source_id,media_type) DO UPDATE SET
-          fingerprint=EXCLUDED.fingerprint,item_count=EXCLUDED.item_count,
+          fingerprint=EXCLUDED.fingerprint,
+          inventory_fingerprint=EXCLUDED.inventory_fingerprint,
+          item_count=EXCLUDED.item_count,
           category_count=EXCLUDED.category_count,synced_at=NOW()`,
-       [sourceId,entry.mediaType,entry.hash,entry.items,entry.categories]);
+       [sourceId,entry.mediaType,entry.hash,entry.inventoryHash,entry.items,entry.categories]);
      }
      await db.query(`UPDATE ${TABLE}
        SET lease_token=NULL,lease_until=NULL,next_check_at=NOW(),
