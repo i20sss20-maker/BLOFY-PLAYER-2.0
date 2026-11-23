@@ -1715,13 +1715,17 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
               // continuity. Report only rounded, non-sensitive gap timings.
               const gapBucketMs=Number.isFinite(interruptionMs)?
                 Math.round(interruptionMs/500)*500:null;
+              // Playback metrics accept durationMs. Passing interruptionMs
+              // previously discarded the measured gap silently.
               observe('recovered',{reason:'live_ts_recovered',
-                attempts:reconnection,interruptionMs:gapBucketMs});
-              console.info('BLOFY_LIVE_TS_RECOVERED',{
+                attempts:reconnection,durationMs:gapBucketMs});
+              // One JSON line lets alarms correlate gaps to a source.
+              // Do not log subscriber IDs, provider URLs or credentials.
+              console.info('BLOFY_LIVE_TS_RECOVERED',JSON.stringify({
                 state:'same_source_valid_ts',attempt:reconnection,
                 gapBucketMs,retriesThisDrop,sourceDropReason,
                 kind,sourceId:row.server_id,customerCutover:false
-              });
+              }));
             }
           })):
           Readable.from((async function* () {
