@@ -1436,11 +1436,14 @@ async function proxyMedia(req, res, kind, username, password, gatewayId, request
       client.signal.addEventListener('abort', cancel, { once: true });
       let reader = null, response = null;
       try {
-        let timer = setTimeout(() => controller.abort(new Error('headers_timeout')), 12000);
+        // Allow slow VOD origins more time to send headers without delaying live TV.
+        // Retry and client-disconnect budgets remain unchanged.
+        const headerTimeoutMs = kind === 'live' ? 12000 : 18000;
+        let timer = setTimeout(() => controller.abort(new Error('headers_timeout')), headerTimeoutMs);
         try {
           response = await checkedFetch(mediaFetchTarget, {
             method: req.method === 'HEAD' ? 'HEAD' : 'GET',
-            timeoutMs: 12000, headers, signal: controller.signal
+            timeoutMs: headerTimeoutMs, headers, signal: controller.signal
           });
         } finally { clearTimeout(timer); }
         if (!(response.ok || response.status === 206)) {
