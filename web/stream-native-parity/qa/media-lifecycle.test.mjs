@@ -206,7 +206,7 @@ test('late stop of an old stream never deletes the replacement session with the 
  assert.ok(begin>=0&&end>begin);
  const map=new Map(),removed=[];
  const context={
-  hlsSessions:map,active:1,
+  hlsSessions:map,active:1,recordLiveSourceFailure(){},
   clearTimeout(){},
   rmSync(path){removed.push(path)},
   console:{info(){}}
@@ -230,6 +230,7 @@ test('cancelled upstream header fetch cannot start FFmpeg after a viewer stops w
  const map=new Map();
  const context={
   MAX_JOBS:2,active:0,hlsSessions:map,hlsRoot:'/fake',hardTTL:540000,
+  liveSourceIdentity:()=> 'synthetic-source',
   BASE:'https://example.invalid/source/',
   join:(...args)=>args.join('/'),
   mkdirSync(){},touchHls(){},clearTimeout(){},
@@ -392,6 +393,7 @@ test('guarded same-bearer live fan-out shares one encoder but isolates each view
  let started=0,killCount=0,abortCount=0,removed=[];
  const bearer='Bearer pilot-A',other='Bearer pilot-B';
  const context={createHmac:crypto.createHmac,SECRET:secret,hlsSessions,sharedLiveGroups,pendingSharedLiveViewers,
+  recordLiveSourceFailure(){},
   MAX_SHARED_LIVE_VIEWERS:4,
   Bun:{env:{VIDAA_LIVE_SHARE_SAME_BEARER:'1'}},
   touchHls(session){session.lastAccess=Date.now()},
@@ -478,6 +480,7 @@ test('stop during slow upstream startup cancels only that SID and closes final o
   MAX_SHARED_LIVE_VIEWERS:4,
   Bun:{env:{VIDAA_LIVE_SHARE_SAME_BEARER:'1'}},
   clearTimeout(){},rmSync(){},console:{info(){}},touchHls(){},
+  recordLiveSourceFailure(){},
   releaseHls(owner){owner.released=true},
   startHls({key,kind}){
    let resolve;
@@ -539,7 +542,9 @@ test('authenticated HLS manifest and segments fan out to two SID viewers using o
   SECRET:secret,createHmac:crypto.createHmac,hlsSessions,sharedLiveGroups,pendingSharedLiveViewers,MAX_SHARED_LIVE_VIEWERS:4,
   Bun:{env:{VIDAA_LIVE_SHARE_SAME_BEARER:'1'}},
   Response,Buffer,Date,console:{info(){},warn(){}},
-  clearTimeout(){},rmSync(){},
+  clearTimeout(){},rmSync(){},recordLiveSourceFailure(){},
+  liveSourceIdentity:()=> 'synthetic-source',liveSourceRetryMs:()=>0,
+  noteLiveSourceHealthy(){},
   releaseHls(s){s.released=true},join:(...p)=>p.join('/'),
   secureEquals:()=>true,staleLiveManifest:()=>false,
   touchHls(){},awaitHlsFile:async()=>true,existsSync:()=>true,
@@ -644,7 +649,7 @@ test('stopping a live HLS session closes the upstream stream after fetch headers
  const end=source.indexOf('\nconst nap=',begin);
  const code=source.slice(begin,end);
  const map=new Map(),ctx={
-  hlsSessions:map,active:1,clearTimeout(){},rmSync(){},console:{info(){}}
+  hlsSessions:map,active:1,clearTimeout(){},rmSync(){},console:{info(){}},recordLiveSourceFailure(){}
  };
  const stop=vm.runInNewContext(code+';\nstopHls',ctx);
  const upstream=new AbortController(),worker=new AbortController(),key='active-h264';
@@ -673,7 +678,8 @@ test('authenticated compatibility HLS GET and STOP stay isolated from source-cop
   secureEquals:()=>true,join:(...args)=>args.join('/'),
   readFileSync:(file,encoding)=>encoding==='utf8'?'#EXTM3U\n#EXT-X-VERSION:3\n':Buffer.from('#EXTM3U\n#EXT-X-VERSION:3\n'),
   existsSync:()=>true,touchHls(){},awaitHlsFile:async()=>true,staleLiveManifest:()=>false,
-  liveShareAllowed:()=>false,
+  liveShareAllowed:()=>false,liveSourceIdentity:()=> 'synthetic-source',
+  liveSourceRetryMs:()=>0,noteLiveSourceHealthy(){},
   hlsError:(status,error)=>({status,error}),
   json:(status,value)=>({status,value}),
   startHls:async args=>{
