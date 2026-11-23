@@ -1092,7 +1092,7 @@ async function handleServerAction(item, card, button) {
         short_ends:'انتهاء سريع للبث',
         client_closures:'انقطاع من جهة العميل أو الوسيط',
         provider_limit:'حساب المصدر بلغ حد الاتصالات',
-        provider_restreaм_not_confirmed:'إعادة البث الجماعي غير مؤكدة لدى المصدر',
+        provider_restream_not_confirmed:'إعادة البث الجماعي غير مؤكدة لدى المصدر',
         provider_denials:'المزود يرفض بعض الاتصالات',
         insufficient_samples:'البيانات غير كافية لتأكيد الثبات'
       };
